@@ -2,8 +2,8 @@
  * Per-daemon billing, the client half (task J, design §6.2).
  *
  * EVERY NUMBER HERE COMES FROM THE SERVER. The allowance, what is used, the
- * burn rate, when it runs out, each size's multiplier and price, and the disk
- * fee are read from GetCurrentUserComputeUsage's §6.1 fields and ListPlans'
+ * burn rate, when it runs out, each size's multiplier and price, and the
+ * storage price are read from GetCurrentUserComputeUsage's §6.1 fields and ListPlans'
  * `daemonPricing` — never restated. A client that knew "Large is 4×" would be
  * the second definition the design exists to prevent, and it would be wrong
  * the day the catalog changed.
@@ -23,14 +23,16 @@ export interface DaemonSizePriceLike {
   multiplier: bigint | number;
   /** Exact decimal string, cents per wall-clock hour. */
   hourlyPriceCents: string;
+  /** The size's one disk, in GiB: what a plan of this size includes. */
   storageGib: bigint | number;
 }
 
 /** The server's per-daemon price list (ListPlansResponse.daemon_pricing). */
 export interface DaemonPricingLike {
   sizes: DaemonSizePriceLike[];
-  /** Exact decimal string, cents per GiB-month. */
-  suspendedDiskCentsPerGibMonth: string;
+  /** Exact decimal string, cents per GiB-month of disk above the plan's
+   * included storage, running or suspended. */
+  storageCentsPerGibMonth: string;
   placeholder: boolean;
 }
 
@@ -133,15 +135,12 @@ export function centsDecimalToDollars(cents: string): string {
   return `$${(value / 100).toFixed(2)}`;
 }
 
-/**
- * The monthly suspended-disk fee for `storageGib` GiB: storage × the per-GiB-
- * month fee. "$6.25/mo".
- */
-export function suspendedFeeLabel(pricing: DaemonPricingLike | undefined, storageGib: number): string | null {
-  if (!pricing || storageGib <= 0) return null;
-  const perGib = Number(pricing.suspendedDiskCentsPerGibMonth);
+/** Monthly storage cost of `gib` GiB at the server's price: "$6.25/mo". */
+export function storageCostLabel(pricing: DaemonPricingLike | undefined, gib: number): string | null {
+  if (!pricing || gib <= 0) return null;
+  const perGib = Number(pricing.storageCentsPerGibMonth);
   if (!Number.isFinite(perGib)) return null;
-  return `${centsDecimalToDollars(String(perGib * storageGib))}/mo`;
+  return `${centsDecimalToDollars(String(perGib * gib))}/mo`;
 }
 
 /**
@@ -157,8 +156,8 @@ export function hourlyPriceShort(pricing: DaemonPricingLike | undefined, size: s
   return `${centsDecimalToDollars(row.hourlyPriceCents)}/hr`;
 }
 
-/** Running time and retained disks have separate meters. */
-export const MACHINE_BILLING_POLICY = "Running machines use included hours, even when idle. Suspended machines use no hours but keep their disk, billed until deleted.";
+/** Running time and disk have separate meters. */
+export const MACHINE_BILLING_POLICY = "Running machines use included hours, even when idle. Suspended machines use none. Your plan includes storage across all machines; disk beyond it is billed running or suspended.";
 
 /**
  * Hours of `size` that `includedSmallHours` buys: the plan's allowance is in
@@ -198,17 +197,46 @@ export function machinePricingFootnote(hours: string | null): string {
   return `${hours ? `Includes ${hours} hours a month. ` : ""}Extra hours and storage are billed separately.`;
 }
 
-/** DaemonDisk stays in DATA GiB, including after whole-disk billing (#1000).
- * The server price list minus included data gives the allowance: zero before
- * cutover, the configured docker/cache allowance after it. Never hardcode it.
- */
-export function diskAllowanceGib(pricing: DaemonPricingLike | undefined, size: string, includedGib: number): number | null {
-  const row = pricing?.sizes.find((s) => s.size === size);
-  return row && includedGib > 0 ? Math.max(0, Number(row.storageGib) - includedGib) : null;
+/** A machine's disk as provisioned, in GiB: one disk, used for anything. */
+export function provisionedDiskGib(disk: { capacityGib: number } | undefined): number | null {
+  return disk && disk.capacityGib > 0 ? disk.capacityGib : null;
 }
 
-export function provisionedDiskGib(pricing: DaemonPricingLike | undefined, size: string, disk: { capacityGib: number; includedGib: number } | undefined): number | null {
-  if (!disk || disk.capacityGib <= 0) return null;
-  const allowance = diskAllowanceGib(pricing, size, disk.includedGib);
-  return allowance === null ? null : disk.capacityGib + allowance;
+/** The storage slice of a usage response. */
+export interface StorageUsageLike {
+  provisionedGib: bigint | number;
+  includedGib: bigint | number;
+  extraGib: bigint | number;
+  costCents: string;
+  projectedCostCents: string;
+}
+
+/** The storage card's one number: "75 GB", with "60 GB included" beside it. */
+export function storageCard(storage: StorageUsageLike | undefined): { value: string; detail: string; extraCost: string | null } | null {
+  if (!storage) return null;
+  const extra = Number(storage.extraGib);
+  return {
+    value: `${Number(storage.provisionedGib)} GB`,
+    detail: `${Number(storage.includedGib)} GB included`,
+    extraCost: extra > 0 ? `${centsDecimalToDollars(storage.projectedCostCents)} this period for ${extra} GB extra` : null,
+  };
+}
+
+/** The projected bill's one number: "$27.40". Null when unmeasured or absent. */
+export function projectedBillLabel(usage: { usageMeasured: boolean; projectedPeriodTotalCents?: string } | undefined): string | null {
+  if (!usage || !usage.usageMeasured || !usage.projectedPeriodTotalCents) return null;
+  return centsDecimalToDollars(usage.projectedPeriodTotalCents);
+}
+
+/**
+ * Paused because included hours ran out: nothing left in the plan or a coupon,
+ * and overage is off. The one state where "Turn on overage" is the fix.
+ */
+export function hoursRanOut(
+  usage: (DaemonUsageLike & { grantedSmallDaemonSecondsRemaining?: bigint | number }) | undefined,
+  overageEnabled: boolean,
+): boolean {
+  if (!usage || !usage.usageMeasured || overageEnabled) return false;
+  return Number(usage.includedSmallDaemonSeconds) > 0 && Number(usage.remainingSmallDaemonSeconds) <= 0 &&
+    Number(usage.grantedSmallDaemonSecondsRemaining ?? 0) <= 0;
 }

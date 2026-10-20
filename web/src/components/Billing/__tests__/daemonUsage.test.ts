@@ -8,7 +8,10 @@ import {
   remainingHeadline,
   runsOutLabel,
   sizeHours,
-  suspendedFeeLabel,
+  storageCostLabel,
+  storageCard,
+  projectedBillLabel,
+  hoursRanOut,
   type DaemonPricingLike,
   type DaemonUsageLike,
 } from "../daemonUsage";
@@ -28,7 +31,7 @@ const pricing: DaemonPricingLike = {
     { size: "xl", multiplier: 8n, hourlyPriceCents: "104.0000", storageGib: 200n },
     { size: "2xl", multiplier: 16n, hourlyPriceCents: "208.0000", storageGib: 400n },
   ],
-  suspendedDiskCentsPerGibMonth: "25.0000",
+  storageCentsPerGibMonth: "25.0000",
   placeholder: true,
 };
 
@@ -137,9 +140,31 @@ describe("hours in the footnote", () => {
     expect(planOwnSizeHours(pricing, ["small"], undefined)).toBeNull();
   });
 
-  it("prices a suspended disk from the server's per-GiB fee", () => {
-    expect(suspendedFeeLabel(pricing, 25)).toBe("$6.25/mo");
-    expect(suspendedFeeLabel(pricing, 0)).toBeNull();
+  it("prices storage from the server's per-GiB price", () => {
+    expect(storageCostLabel(pricing, 25)).toBe("$6.25/mo");
+    expect(storageCostLabel(pricing, 0)).toBeNull();
+  });
+
+  it("shows storage as one number, with the included amount and any extra cost", () => {
+    expect(storageCard({ provisionedGib: 60n, includedGib: 60n, extraGib: 0n, costCents: "0", projectedCostCents: "0" }))
+      .toEqual({ value: "60 GB", detail: "60 GB included", extraCost: null });
+    expect(storageCard({ provisionedGib: 120n, includedGib: 60n, extraGib: 60n, costCents: "500", projectedCostCents: "1500.0000" })?.extraCost)
+      .toBe("$15.00 this period for 60 GB extra");
+    expect(storageCard(undefined)).toBeNull();
+  });
+
+  it("projects the bill only from a measured response", () => {
+    expect(projectedBillLabel({ usageMeasured: true, projectedPeriodTotalCents: "2740.5000" })).toBe("$27.41");
+    expect(projectedBillLabel({ usageMeasured: false, projectedPeriodTotalCents: "2740" })).toBeNull();
+    expect(projectedBillLabel({ usageMeasured: true })).toBeNull();
+  });
+
+  it("calls machines paused only when hours, coupon hours and overage are all gone", () => {
+    expect(hoursRanOut(usage({ remainingSmallDaemonSeconds: 0n }), false)).toBe(true);
+    expect(hoursRanOut(usage({ remainingSmallDaemonSeconds: 0n }), true)).toBe(false);
+    expect(hoursRanOut(usage({ remainingSmallDaemonSeconds: 3600n }), false)).toBe(false);
+    expect(hoursRanOut({ ...usage({ remainingSmallDaemonSeconds: 0n }), grantedSmallDaemonSecondsRemaining: 60n }, false)).toBe(false);
+    expect(hoursRanOut(usage({ usageMeasured: false }), false)).toBe(false);
   });
 });
 

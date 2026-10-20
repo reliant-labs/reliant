@@ -391,8 +391,8 @@ export type GrowDaemonDiskRequest = Message<"controlplane.v1.GrowDaemonDiskReque
   daemonId: string;
 
   /**
-   * The disk's new DATA size in GiB: an absolute target, not a delta, so a
-   * retry is safe. A multiple of 10, larger than the current size.
+   * The disk's new size in GiB: an absolute target, not a delta, so a retry
+   * is safe. A multiple of 10, larger than the current size.
    *
    * @generated from field: int32 storage_gib = 2;
    */
@@ -670,9 +670,8 @@ export const DaemonService: GenService<{
     output: typeof ResizeDaemonResponseSchema;
   },
   /**
-   * GrowDaemonDisk grows a MANAGED daemon's disk so it holds storage_gib of
-   * data; the docker/cache allowance is added on top, and the whole disk is
-   * billed. Disks only grow: a smaller target is InvalidArgument, the current
+   * GrowDaemonDisk grows a MANAGED daemon's one disk to storage_gib. Disk
+   * above the org's pooled allowance is billed as storage. Disks only grow: a smaller target is InvalidArgument, the current
    * size is a successful no-op. Running or suspended: the cloud disk grows at
    * once, and a running machine uses the space after its next restart.
    *

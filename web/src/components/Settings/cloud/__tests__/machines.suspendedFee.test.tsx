@@ -3,13 +3,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 /**
- * Per-daemon billing task J (design §6.2, "Machines list"): a SUSPENDED
- * machine still holds its disk, and the disk is billed — so each one shows
- * "$X/mo while suspended" beside Delete, the only control that stops it. The
- * fee is the size's disk (the server's one storage number) × the server's
- * per-GiB-month price; the client restates neither.
- *
- * FAILS ON main: the machines list showed no suspended fee at all.
+ * A SUSPENDED machine still holds its disk, and disk counts toward the org's
+ * pooled storage (pricing v2) — so each suspended row shows its disk size
+ * beside Delete, the only control that frees it. There is no separate
+ * "suspended fee": storage costs the same running or suspended, and the
+ * storage total lives on the billing page.
  */
 
 const mocks = vi.hoisted(() => ({
@@ -43,7 +41,7 @@ vi.mock('@/hooks/useCloudBillingQueries', () => ({
           { size: 'small', multiplier: 1n, hourlyPriceCents: '13.0000', storageGib: 25n },
           { size: 'large', multiplier: 4n, hourlyPriceCents: '52.0000', storageGib: 180n },
         ],
-        suspendedDiskCentsPerGibMonth: '25.0000',
+        storageCentsPerGibMonth: '25.0000',
         placeholder: true,
       },
     },
@@ -157,7 +155,7 @@ const managed = (name: string, status: number, size: string) => ({
   size,
 })
 
-describe('MachinesSection — suspended disk fee (J)', () => {
+describe('MachinesSection — suspended machine disk', () => {
   beforeEach(() => {
     mocks.caps.cloudDaemons = true
     vi.clearAllMocks()
@@ -173,7 +171,7 @@ describe('MachinesSection — suspended disk fee (J)', () => {
     mocks.listDaemonTokens.mockResolvedValue([])
   })
 
-  it('shows the monthly disk fee beside Delete for a suspended machine, and not for a running one', async () => {
+  it('shows the disk beside Delete for a suspended machine, and not for a running one', async () => {
     mocks.listDaemons.mockResolvedValue({
       daemons: [
         managed('parked-large', DaemonStatus.SUSPENDED, 'large'),
@@ -184,10 +182,10 @@ describe('MachinesSection — suspended disk fee (J)', () => {
 
     await screen.findByText('parked-large')
     const fees = screen.getAllByTestId('machine-suspended-fee')
-    // 100 GiB × $0.25/GiB-month = $25.00/mo — only the suspended one.
+    // Only the suspended one; its one provisioned disk, no per-machine fee.
     expect(fees).toHaveLength(1)
-    expect(await screen.findByText(/300 GiB disk · \$75.00\/mo while suspended until deleted/)).toBeInTheDocument()
-    expect(fees[0]).toHaveTextContent('$75.00/mo while suspended')
+    expect(await screen.findByText(/200 GB disk/)).toBeInTheDocument()
+    expect(fees[0]).not.toHaveTextContent(/while suspended/)
     const row = screen.getByText('parked-large').closest('tr')!
     expect(within(row).getByTestId('machine-suspended-fee')).toBeInTheDocument()
   })

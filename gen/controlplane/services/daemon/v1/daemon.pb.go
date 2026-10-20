@@ -853,8 +853,8 @@ func (x *ResizeDaemonResponse) GetDaemon() *v1.Daemon {
 type GrowDaemonDiskRequest struct {
 	state    protoimpl.MessageState `protogen:"open.v1"`
 	DaemonId string                 `protobuf:"bytes,1,opt,name=daemon_id,json=daemonId,proto3" json:"daemon_id,omitempty"`
-	// The disk's new DATA size in GiB: an absolute target, not a delta, so a
-	// retry is safe. A multiple of 10, larger than the current size.
+	// The disk's new size in GiB: an absolute target, not a delta, so a retry
+	// is safe. A multiple of 10, larger than the current size.
 	StorageGib    int32 `protobuf:"varint,2,opt,name=storage_gib,json=storageGib,proto3" json:"storage_gib,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

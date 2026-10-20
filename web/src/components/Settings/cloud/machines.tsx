@@ -106,11 +106,9 @@ import { getComputeEligibility } from "@/services/controlPlane/billing";
 import { useGoToBilling } from "@/hooks/useGoToBilling";
 import { useComputeUsage, usePlans } from "@/hooks/useCloudBillingQueries";
 import {
-  hourlyPriceShort,
   machinePricingFootnote,
   planOwnSizeHours,
   provisionedDiskGib,
-  diskAllowanceGib,
   type DaemonPricingLike,
 } from "@/components/Billing/daemonUsage";
 import { formatMachineSpec } from "@/components/Billing/machineSpecs";
@@ -1755,7 +1753,7 @@ function EnvironmentDetail({
         await cycleMachine();
       } catch (e) {
         throw new Error(
-          `The disk is growing to ${targetGib} GiB, but the restart failed: ${describeError(e)}. ` +
+          `The disk is growing to ${targetGib} GB, but the restart failed: ${describeError(e)}. ` +
             "Restart the machine to use the space.",
         );
       }
@@ -1767,8 +1765,8 @@ function EnvironmentDetail({
       const name = daemon ? daemonDisplayName(daemon) : "The machine";
       toast.success(
         restart
-          ? `${name} restarted with a ${targetGib} GiB disk`
-          : `Growing ${name}'s disk to ${targetGib} GiB`,
+          ? `${name} restarted with a ${targetGib} GB disk`
+          : `Growing ${name}'s disk to ${targetGib} GB`,
       );
     },
     onError: (e) => {
@@ -1832,8 +1830,7 @@ function EnvironmentDetail({
   // would be live: not on a FAILED machine, nor one still starting.
   const restartPlan = daemon ? lifecyclePlan(daemon, null) : null;
   const restartable = Boolean(restartPlan?.offer.includes("restart") && restartPlan.disabledReason === null);
-  const allowance = daemon && disk ? diskAllowanceGib(pricing, daemon.size, disk.includedGib) : null;
-  const growNotice = allowance === null ? null : diskGrowStatus(disk, daemon ? daemon.status !== DaemonStatus.SUSPENDED : false, allowance);
+  const growNotice = disk ? diskGrowStatus(disk, daemon ? daemon.status !== DaemonStatus.SUSPENDED : false) : null;
   // The registry list is what proves the machine exists; the control-plane
   // spec is an extra half that only a cloud build has.
   const loading = listQ.isLoading || (cloud && daemonQ.isLoading);
@@ -1981,7 +1978,7 @@ function EnvironmentDetail({
                         value={
                           (disk?.requestedGib || spec?.storageSize) && (
                             <span className="inline-flex items-baseline gap-2">
-                              {provisionedDiskGib(pricing, daemon.size, disk) !== null ? `${provisionedDiskGib(pricing, daemon.size, disk)} GiB disk` : "Disk size unavailable"}
+                              {provisionedDiskGib(disk) !== null ? `${provisionedDiskGib(disk)} GB disk` : "Disk size unavailable"}
                               {canGrowDisk && (
                                 <button
                                   type="button"
@@ -2088,10 +2085,7 @@ function EnvironmentDetail({
               open={growOpen}
               machineName={daemonDisplayName(daemon)}
               currentGib={disk.requestedGib}
-              provisionedGib={provisionedDiskGib(pricing, daemon.size, disk)}
-              includedGib={disk.includedGib}
-              allowanceGib={diskAllowanceGib(pricing, daemon.size, disk.includedGib)}
-              hourlyLabel={hourlyPriceShort(pricing, daemon.size)}
+              provisionedGib={provisionedDiskGib(disk)}
               maxGib={maxDiskGib}
               limitLoading={eligibilityQ.isLoading}
               running={daemon.status !== DaemonStatus.SUSPENDED}

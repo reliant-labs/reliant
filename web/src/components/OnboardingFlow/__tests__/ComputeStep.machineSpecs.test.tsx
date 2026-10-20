@@ -129,7 +129,7 @@ vi.mock("@/hooks/useCloudBillingQueries", () => ({
           { size: "large", multiplier: 4n, hourlyPriceCents: "52", storageGib: 100n },
           { size: "xl", multiplier: 8n, hourlyPriceCents: "104", storageGib: 200n },
         ],
-        suspendedDiskCentsPerGibMonth: "25",
+        storageCentsPerGibMonth: "25",
         placeholder: false,
       },
     },

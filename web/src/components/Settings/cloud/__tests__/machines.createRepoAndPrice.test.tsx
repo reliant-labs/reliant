@@ -323,7 +323,7 @@ describe("create-machine size prices", () => {
         { size: "small", multiplier: 1n, hourlyPriceCents: "17.0000", storageGib: 25n },
         { size: "medium", multiplier: 2n, hourlyPriceCents: "41", storageGib: 50n },
       ],
-      suspendedDiskCentsPerGibMonth: "25",
+      storageCentsPerGibMonth: "25",
       placeholder: false,
     };
     const user = userEvent.setup();

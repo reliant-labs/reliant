@@ -15,7 +15,7 @@ import {
 
 const defaults = {
   enabled: false,
-  pricing: { sizes: [{ size: 'small', hourlyPriceCents: '13', multiplier: 1, storageGib: 120 }], suspendedDiskCentsPerGibMonth: '25', placeholder: false },
+  pricing: { sizes: [{ size: 'small', hourlyPriceCents: '13', multiplier: 1, storageGib: 120 }], storageCentsPerGibMonth: '25', placeholder: false },
   overageSpentCents: 0,
   monthlyPriceCents: 4000, // $40/mo
   onSave: vi.fn(),
@@ -133,7 +133,21 @@ describe('ComputeOverageControl', () => {
     renderControl({ enabled: true, budgetCents: 2000n })
     expect(screen.getAllByText(/small: \$0.13\/hr/)).toHaveLength(2)
     expect(screen.queryByText(/extra minutes/)).not.toBeInTheDocument()
-    expect(screen.getByText(/billed until deleted/)).toBeInTheDocument()
+    expect(screen.getByText(/disk beyond it is billed running or suspended/)).toBeInTheDocument()
+  })
+
+  it('shows storage as its own always-on line, outside the cap', () => {
+    renderControl({ enabled: true, budgetCents: 2000n, storage: { includedGib: 60, extraGib: 20 } })
+    expect(screen.getByTestId('overage-storage-line')).toHaveTextContent(
+      'Storage: $5.00/mo for 20 GB beyond your included 60 GB — billed separately, not limited by this cap.',
+    )
+  })
+
+  it('says what storage is included when nothing is extra', () => {
+    renderControl({ enabled: false, storage: { includedGib: 80, extraGib: 0 } })
+    expect(screen.getByTestId('overage-storage-line')).toHaveTextContent(
+      'Storage: 80 GB included, then $0.25/GB-month — billed separately, not limited by this cap.',
+    )
   })
 
   it('shows overage spend against the cap so the ceiling and the distance to it are one glance', () => {

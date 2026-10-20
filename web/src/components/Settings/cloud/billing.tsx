@@ -77,8 +77,11 @@ import { MachinePricingLine, PlanTiles, commonPlanHours } from "@/components/Bil
 import {
   asOfLabel,
   burnLabel,
+  hoursRanOut,
+  projectedBillLabel,
   remainingHeadline,
   runsOutLabel,
+  storageCard,
 } from "@/components/Billing/daemonUsage";
 import { deriveMachineOptions } from "@/components/Billing/machineOptions";
 import { MACHINE_BURST } from "@/components/Billing/machineSpecs";
@@ -98,6 +101,7 @@ import {
 import { CreditBand } from "./overview/CreditBand";
 import { ComputeBand } from "./overview/ComputeBand";
 import { StatusLine } from "./overview/StatusLine";
+import { BillSummary } from "./overview/BillSummary";
 // Credit's budget control — the wallet twin of ComputeOverageControl. Until it
 // landed here, the auto-recharge RPCs had exactly one caller (OutOfCreditModal),
 // so the feature was offered only after the user had already run out.
@@ -857,6 +861,18 @@ function OverviewTab({
           {/* One sentence, both products, before any bar is read. */}
           <StatusLine parts={statusParts} />
 
+          {/* What this period will cost, what disk holds, and the one-click
+              fix when machines are paused for want of hours. */}
+          <BillSummary
+            projected={projectedBillLabel(usage ?? undefined)}
+            storage={usage?.usageMeasured ? storageCard(usage.storage) : null}
+            hoursRanOut={hoursRanOut(usage ?? undefined, computeUi.overageEnabled)}
+            turningOnOverage={overageMutation.isPending}
+            onTurnOnOverage={() =>
+              handleSaveOverage({ enabled: true, budgetCents: subscription?.budgetCents })
+            }
+          />
+
           {/* ── AI credit: a meter that drains ────────────────────────── */}
           <CreditBand
             balance={creditUi.balance}
@@ -939,6 +955,14 @@ function OverviewTab({
                 pricing={plansQ.data?.daemonPricing}
                 overageSpentCents={computeUi.overageSpentCents}
                 monthlyPriceCents={computeUi.monthlyPriceCents}
+                storage={
+                  usage?.usageMeasured && usage.storage
+                    ? {
+                        includedGib: Number(usage.storage.includedGib),
+                        extraGib: Number(usage.storage.extraGib),
+                      }
+                    : undefined
+                }
                 disabled={disabled}
                 saving={overageMutation.isPending}
                 disabledReason={reason}
@@ -1542,7 +1566,7 @@ function UsagePanel() {
               redeemed grant is a one-time bucket that carries over. */}
           {summary.grantedMinutesRemaining > 0 && (
             <UsageStat
-              label="Coupon minutes remaining"
+              label="Coupon hours remaining"
               value={formatMachineMinutesShort(
                 summary.grantedMinutesRemaining,
               )}

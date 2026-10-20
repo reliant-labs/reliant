@@ -3695,12 +3695,21 @@ type GetCurrentUserComputeUsageResponse struct {
 	ExhaustsAt *timestamppb.Timestamp `protobuf:"bytes,16,opt,name=exhausts_at,json=exhaustsAt,proto3" json:"exhausts_at,omitempty"`
 	// Running usage per size this period, cheapest first.
 	BySize []*SizeUsage `protobuf:"bytes,17,rep,name=by_size,json=bySize,proto3" json:"by_size,omitempty"`
-	// Suspended-disk usage this period. Billed outside the overage cap (Q4).
-	SuspendedDisk *SuspendedDiskUsage `protobuf:"bytes,18,opt,name=suspended_disk,json=suspendedDisk,proto3" json:"suspended_disk,omitempty"`
 	// The last meter tick this answer includes ("as of HH:MM").
 	MeasuredThrough *timestamppb.Timestamp `protobuf:"bytes,19,opt,name=measured_through,json=measuredThrough,proto3" json:"measured_through,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// Machine disk this period: provisioned vs the plan's pooled allowance, and
+	// what the excess costs. Billed running or suspended, outside the compute
+	// overage cap. Unset when usage_measured is false.
+	Storage *StorageUsage `protobuf:"bytes,20,opt,name=storage,proto3" json:"storage,omitempty"`
+	// What this period's invoice is projected to total, in cents, as an exact
+	// decimal string: the plan's monthly price + compute overage so far +
+	// storage so far + the current excess disk carried to period end. Hosted
+	// infrastructure overage is not included. Empty when usage_measured is false.
+	ProjectedPeriodTotalCents string `protobuf:"bytes,21,opt,name=projected_period_total_cents,json=projectedPeriodTotalCents,proto3" json:"projected_period_total_cents,omitempty"`
+	// The subscribed plan's monthly price, in cents (0 with no plan).
+	PlanPriceCents int64 `protobuf:"varint,22,opt,name=plan_price_cents,json=planPriceCents,proto3" json:"plan_price_cents,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *GetCurrentUserComputeUsageResponse) Reset() {
@@ -3852,18 +3861,32 @@ func (x *GetCurrentUserComputeUsageResponse) GetBySize() []*SizeUsage {
 	return nil
 }
 
-func (x *GetCurrentUserComputeUsageResponse) GetSuspendedDisk() *SuspendedDiskUsage {
-	if x != nil {
-		return x.SuspendedDisk
-	}
-	return nil
-}
-
 func (x *GetCurrentUserComputeUsageResponse) GetMeasuredThrough() *timestamppb.Timestamp {
 	if x != nil {
 		return x.MeasuredThrough
 	}
 	return nil
+}
+
+func (x *GetCurrentUserComputeUsageResponse) GetStorage() *StorageUsage {
+	if x != nil {
+		return x.Storage
+	}
+	return nil
+}
+
+func (x *GetCurrentUserComputeUsageResponse) GetProjectedPeriodTotalCents() string {
+	if x != nil {
+		return x.ProjectedPeriodTotalCents
+	}
+	return ""
+}
+
+func (x *GetCurrentUserComputeUsageResponse) GetPlanPriceCents() int64 {
+	if x != nil {
+		return x.PlanPriceCents
+	}
+	return 0
 }
 
 // SizeUsage is one size's running usage within a period (design §6.1).
@@ -3957,38 +3980,44 @@ func (x *SizeUsage) GetOverageCostCents() string {
 	return ""
 }
 
-// SuspendedDiskUsage is the disk-fee half of a period (design §6.1). Despite
-// the name it covers every billed disk GiB: the whole disk of a suspended
-// machine, and the part of a running machine's disk above its size's standard
-// (a grown disk; the hourly price includes the standard). Same fee, one meter.
-type SuspendedDiskUsage struct {
+// StorageUsage is machine disk against the plan's pooled allowance
+// (docs/design/pricing-v2.md §5). Every GiB of disk the org's machines hold,
+// running or suspended, counts; the plan includes its own size's disk; the
+// rest bills at the storage price continuously.
+type StorageUsage struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// billed disk GiB × seconds this period.
-	GibSeconds int64 `protobuf:"varint,1,opt,name=gib_seconds,json=gibSeconds,proto3" json:"gib_seconds,omitempty"`
-	// gib_seconds priced at the catalog's GiB-month fee (a month = 30 days),
-	// in cents, as an exact decimal string rounded half-up to 4 places.
-	CostCents string `protobuf:"bytes,2,opt,name=cost_cents,json=costCents,proto3" json:"cost_cents,omitempty"`
-	// billed disk GiB right now: suspended machines' disks plus running
-	// machines' disk above their standard.
-	CurrentGib    int64 `protobuf:"varint,3,opt,name=current_gib,json=currentGib,proto3" json:"current_gib,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// Total provisioned disk of the org's machines right now, in GiB.
+	ProvisionedGib int64 `protobuf:"varint,1,opt,name=provisioned_gib,json=provisionedGib,proto3" json:"provisioned_gib,omitempty"`
+	// The plan's pooled allowance, in GiB (0 with no plan).
+	IncludedGib int64 `protobuf:"varint,2,opt,name=included_gib,json=includedGib,proto3" json:"included_gib,omitempty"`
+	// max(0, provisioned − included): what bills right now.
+	ExtraGib int64 `protobuf:"varint,3,opt,name=extra_gib,json=extraGib,proto3" json:"extra_gib,omitempty"`
+	// Billed excess GiB × seconds so far this period.
+	ExtraGibSeconds int64 `protobuf:"varint,4,opt,name=extra_gib_seconds,json=extraGibSeconds,proto3" json:"extra_gib_seconds,omitempty"`
+	// extra_gib_seconds priced, in cents, exact decimal rounded half-up to 4 dp.
+	CostCents string `protobuf:"bytes,5,opt,name=cost_cents,json=costCents,proto3" json:"cost_cents,omitempty"`
+	// cost_cents plus extra_gib carried to the end of the period.
+	ProjectedCostCents string `protobuf:"bytes,6,opt,name=projected_cost_cents,json=projectedCostCents,proto3" json:"projected_cost_cents,omitempty"`
+	// The price per GiB-month (730 hours), in cents, exact decimal.
+	CentsPerGibMonth string `protobuf:"bytes,7,opt,name=cents_per_gib_month,json=centsPerGibMonth,proto3" json:"cents_per_gib_month,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
-func (x *SuspendedDiskUsage) Reset() {
-	*x = SuspendedDiskUsage{}
+func (x *StorageUsage) Reset() {
+	*x = StorageUsage{}
 	mi := &file_services_billing_v1_billing_proto_msgTypes[63]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *SuspendedDiskUsage) String() string {
+func (x *StorageUsage) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*SuspendedDiskUsage) ProtoMessage() {}
+func (*StorageUsage) ProtoMessage() {}
 
-func (x *SuspendedDiskUsage) ProtoReflect() protoreflect.Message {
+func (x *StorageUsage) ProtoReflect() protoreflect.Message {
 	mi := &file_services_billing_v1_billing_proto_msgTypes[63]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -4000,30 +4029,58 @@ func (x *SuspendedDiskUsage) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use SuspendedDiskUsage.ProtoReflect.Descriptor instead.
-func (*SuspendedDiskUsage) Descriptor() ([]byte, []int) {
+// Deprecated: Use StorageUsage.ProtoReflect.Descriptor instead.
+func (*StorageUsage) Descriptor() ([]byte, []int) {
 	return file_services_billing_v1_billing_proto_rawDescGZIP(), []int{63}
 }
 
-func (x *SuspendedDiskUsage) GetGibSeconds() int64 {
+func (x *StorageUsage) GetProvisionedGib() int64 {
 	if x != nil {
-		return x.GibSeconds
+		return x.ProvisionedGib
 	}
 	return 0
 }
 
-func (x *SuspendedDiskUsage) GetCostCents() string {
+func (x *StorageUsage) GetIncludedGib() int64 {
+	if x != nil {
+		return x.IncludedGib
+	}
+	return 0
+}
+
+func (x *StorageUsage) GetExtraGib() int64 {
+	if x != nil {
+		return x.ExtraGib
+	}
+	return 0
+}
+
+func (x *StorageUsage) GetExtraGibSeconds() int64 {
+	if x != nil {
+		return x.ExtraGibSeconds
+	}
+	return 0
+}
+
+func (x *StorageUsage) GetCostCents() string {
 	if x != nil {
 		return x.CostCents
 	}
 	return ""
 }
 
-func (x *SuspendedDiskUsage) GetCurrentGib() int64 {
+func (x *StorageUsage) GetProjectedCostCents() string {
 	if x != nil {
-		return x.CurrentGib
+		return x.ProjectedCostCents
 	}
-	return 0
+	return ""
+}
+
+func (x *StorageUsage) GetCentsPerGibMonth() string {
+	if x != nil {
+		return x.CentsPerGibMonth
+	}
+	return ""
 }
 
 type GetCurrentUserComputeEligibilityRequest struct {
@@ -4686,7 +4743,7 @@ const file_services_billing_v1_billing_proto_rawDesc = "" +
 	"\aminutes\x18\x02 \x01(\x01R\aminutes\"K\n" +
 	"!GetCurrentUserComputeUsageRequest\x12\x1b\n" +
 	"\x06period\x18\x01 \x01(\tH\x00R\x06period\x88\x01\x01B\t\n" +
-	"\a_period\"\x8c\t\n" +
+	"\a_period\"\xfa\t\n" +
 	"\"GetCurrentUserComputeUsageResponse\x12)\n" +
 	"\x10included_minutes\x18\x01 \x01(\x05R\x0fincludedMinutes\x12!\n" +
 	"\fused_minutes\x18\x02 \x01(\x01R\vusedMinutes\x12'\n" +
@@ -4707,9 +4764,11 @@ const file_services_billing_v1_billing_proto_rawDesc = "" +
 	"\x12running_multiplier\x18\x0f \x01(\x03R\x11runningMultiplier\x12;\n" +
 	"\vexhausts_at\x18\x10 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"exhaustsAt\x123\n" +
-	"\aby_size\x18\x11 \x03(\v2\x1a.controlplane.v1.SizeUsageR\x06bySize\x12J\n" +
-	"\x0esuspended_disk\x18\x12 \x01(\v2#.controlplane.v1.SuspendedDiskUsageR\rsuspendedDisk\x12E\n" +
-	"\x10measured_through\x18\x13 \x01(\v2\x1a.google.protobuf.TimestampR\x0fmeasuredThrough\"\x82\x02\n" +
+	"\aby_size\x18\x11 \x03(\v2\x1a.controlplane.v1.SizeUsageR\x06bySize\x12E\n" +
+	"\x10measured_through\x18\x13 \x01(\v2\x1a.google.protobuf.TimestampR\x0fmeasuredThrough\x127\n" +
+	"\astorage\x18\x14 \x01(\v2\x1d.controlplane.v1.StorageUsageR\astorage\x12?\n" +
+	"\x1cprojected_period_total_cents\x18\x15 \x01(\tR\x19projectedPeriodTotalCents\x12(\n" +
+	"\x10plan_price_cents\x18\x16 \x01(\x03R\x0eplanPriceCentsJ\x04\b\x12\x10\x13R\x0esuspended_disk\"\x82\x02\n" +
 	"\tSizeUsage\x12\x12\n" +
 	"\x04size\x18\x01 \x01(\tR\x04size\x12\x1e\n" +
 	"\n" +
@@ -4718,14 +4777,16 @@ const file_services_billing_v1_billing_proto_rawDesc = "" +
 	"\x0frunning_seconds\x18\x03 \x01(\x03R\x0erunningSeconds\x12A\n" +
 	"\x1dincluded_small_daemon_seconds\x18\x04 \x01(\x03R\x1aincludedSmallDaemonSeconds\x12'\n" +
 	"\x0foverage_seconds\x18\x05 \x01(\x03R\x0eoverageSeconds\x12,\n" +
-	"\x12overage_cost_cents\x18\x06 \x01(\tR\x10overageCostCents\"u\n" +
-	"\x12SuspendedDiskUsage\x12\x1f\n" +
-	"\vgib_seconds\x18\x01 \x01(\x03R\n" +
-	"gibSeconds\x12\x1d\n" +
+	"\x12overage_cost_cents\x18\x06 \x01(\tR\x10overageCostCents\"\xa3\x02\n" +
+	"\fStorageUsage\x12'\n" +
+	"\x0fprovisioned_gib\x18\x01 \x01(\x03R\x0eprovisionedGib\x12!\n" +
+	"\fincluded_gib\x18\x02 \x01(\x03R\vincludedGib\x12\x1b\n" +
+	"\textra_gib\x18\x03 \x01(\x03R\bextraGib\x12*\n" +
+	"\x11extra_gib_seconds\x18\x04 \x01(\x03R\x0fextraGibSeconds\x12\x1d\n" +
 	"\n" +
-	"cost_cents\x18\x02 \x01(\tR\tcostCents\x12\x1f\n" +
-	"\vcurrent_gib\x18\x03 \x01(\x03R\n" +
-	"currentGib\")\n" +
+	"cost_cents\x18\x05 \x01(\tR\tcostCents\x120\n" +
+	"\x14projected_cost_cents\x18\x06 \x01(\tR\x12projectedCostCents\x12-\n" +
+	"\x13cents_per_gib_month\x18\a \x01(\tR\x10centsPerGibMonth\")\n" +
 	"'GetCurrentUserComputeEligibilityRequest\"\x80\x03\n" +
 	"(GetCurrentUserComputeEligibilityResponse\x12\x1a\n" +
 	"\beligible\x18\x01 \x01(\bR\beligible\x12@\n" +
@@ -4877,7 +4938,7 @@ var file_services_billing_v1_billing_proto_goTypes = []any{
 	(*GetCurrentUserComputeUsageRequest)(nil),                  // 63: controlplane.v1.GetCurrentUserComputeUsageRequest
 	(*GetCurrentUserComputeUsageResponse)(nil),                 // 64: controlplane.v1.GetCurrentUserComputeUsageResponse
 	(*SizeUsage)(nil),                                          // 65: controlplane.v1.SizeUsage
-	(*SuspendedDiskUsage)(nil),                                 // 66: controlplane.v1.SuspendedDiskUsage
+	(*StorageUsage)(nil),                                       // 66: controlplane.v1.StorageUsage
 	(*GetCurrentUserComputeEligibilityRequest)(nil),            // 67: controlplane.v1.GetCurrentUserComputeEligibilityRequest
 	(*GetCurrentUserComputeEligibilityResponse)(nil),           // 68: controlplane.v1.GetCurrentUserComputeEligibilityResponse
 	(*GetInvoicePreviewRequest)(nil),                           // 69: controlplane.v1.GetInvoicePreviewRequest
@@ -4943,8 +5004,8 @@ var file_services_billing_v1_billing_proto_depIdxs = []int32{
 	62, // 41: controlplane.v1.GetCurrentUserComputeUsageResponse.by_day:type_name -> controlplane.v1.ComputeUsageByDay
 	82, // 42: controlplane.v1.GetCurrentUserComputeUsageResponse.exhausts_at:type_name -> google.protobuf.Timestamp
 	65, // 43: controlplane.v1.GetCurrentUserComputeUsageResponse.by_size:type_name -> controlplane.v1.SizeUsage
-	66, // 44: controlplane.v1.GetCurrentUserComputeUsageResponse.suspended_disk:type_name -> controlplane.v1.SuspendedDiskUsage
-	82, // 45: controlplane.v1.GetCurrentUserComputeUsageResponse.measured_through:type_name -> google.protobuf.Timestamp
+	82, // 44: controlplane.v1.GetCurrentUserComputeUsageResponse.measured_through:type_name -> google.protobuf.Timestamp
+	66, // 45: controlplane.v1.GetCurrentUserComputeUsageResponse.storage:type_name -> controlplane.v1.StorageUsage
 	2,  // 46: controlplane.v1.GetCurrentUserComputeEligibilityResponse.reason:type_name -> controlplane.v1.ComputeIneligibleReason
 	3,  // 47: controlplane.v1.BillingService.ListPlans:input_type -> controlplane.v1.ListPlansRequest
 	5,  // 48: controlplane.v1.BillingService.GetPlan:input_type -> controlplane.v1.GetPlanRequest

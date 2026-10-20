@@ -62,41 +62,24 @@ export function diskGrowRange(currentGib: number, maxGib: number): DiskGrowRange
 }
 
 export interface DiskGrowPrice {
-  /**
-   * "+$2.50/mo": what the grow adds to the bill. It is the same running or
-   * stopped, because a disk is never smaller than the size its hourly price
-   * includes (requested_gib is max(standard, grown)), so every added GiB is
-   * billed in both states.
-   */
+  /** The most the grow adds a month: "+$5.00/mo". */
   added: string;
-  /** A running machine's disk charge at the new size: "$22.50/mo". */
-  running: string;
-  /** The GiB that charge covers: the part above `includedGib`. */
-  runningGib: number;
-  /** The whole disk's charge while the machine is stopped: "$42.50/mo". */
-  stopped: string;
 }
 
 /**
- * The price of growing a disk from `currentGib` to `targetGib`, at the
- * server's per-GiB-month disk rate. Null without a price list, so the modal
- * shows no price rather than a guessed one.
+ * What growing a disk from `currentGib` to `targetGib` can add, at the
+ * server's storage price: "+$5.00/mo". Storage is pooled across the org's
+ * machines, so this is the most it adds (none of it, while the org is under
+ * its plan's included storage). Null without a price list.
  */
 export function diskGrowPrice(
-  pricing: Pick<DaemonPricingLike, "suspendedDiskCentsPerGibMonth"> | undefined,
-  { currentGib, targetGib, includedGib }: { currentGib: number; targetGib: number; includedGib: number },
+  pricing: Pick<DaemonPricingLike, "storageCentsPerGibMonth"> | undefined,
+  { currentGib, targetGib }: { currentGib: number; targetGib: number },
 ): DiskGrowPrice | null {
   if (!pricing) return null;
-  const centsPerGib = Number(pricing.suspendedDiskCentsPerGibMonth);
+  const centsPerGib = Number(pricing.storageCentsPerGibMonth);
   if (!Number.isFinite(centsPerGib)) return null;
-  const monthly = (gib: number) => `${centsDecimalToDollars(String(centsPerGib * gib))}/mo`;
-  const runningGib = Math.max(0, targetGib - includedGib);
-  return {
-    added: `+${monthly(Math.max(0, targetGib - currentGib))}`,
-    running: monthly(runningGib),
-    runningGib,
-    stopped: monthly(targetGib),
-  };
+  return { added: `+${centsDecimalToDollars(String(centsPerGib * Math.max(0, targetGib - currentGib)))}/mo` };
 }
 
 /** The slice of control-plane's DaemonDisk the status reads. */
@@ -121,11 +104,11 @@ export type DiskGrowStatus =
  * A usable size of zero means unknown, for example a pod built before the
  * operator recorded it, and is never read as a disk the guest cannot use.
  */
-export function diskGrowStatus(disk: DiskLike | undefined, running: boolean, allowanceGib = 0): DiskGrowStatus | null {
+export function diskGrowStatus(disk: DiskLike | undefined, running: boolean): DiskGrowStatus | null {
   if (!disk) return null;
-  if (disk.state === DaemonDiskState.EXPANDING) return { kind: "expanding", targetGib: disk.requestedGib + allowanceGib };
+  if (disk.state === DaemonDiskState.EXPANDING) return { kind: "expanding", targetGib: disk.requestedGib };
   if (disk.state === DaemonDiskState.FAILED) {
-    return { kind: "failed", targetGib: disk.requestedGib + allowanceGib, message: disk.message };
+    return { kind: "failed", targetGib: disk.requestedGib, message: disk.message };
   }
   if (running && disk.usableGib > 0 && disk.capacityGib > disk.usableGib) {
     return { kind: "restart-to-use", extraGib: disk.capacityGib - disk.usableGib };

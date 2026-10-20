@@ -42,31 +42,18 @@ describe('diskGrowRange', () => {
 })
 
 describe('diskGrowPrice', () => {
-  const pricing = { suspendedDiskCentsPerGibMonth: '25.0000' }
+  const pricing = { storageCentsPerGibMonth: '25.0000' }
 
-  it('prices the added GiB, the running excess and the whole stopped disk', () => {
-    // An xl machine (160 GiB included) grown from 160 to 200 GiB at 25¢/GiB-month.
-    expect(diskGrowPrice(pricing, { currentGib: 160, targetGib: 200, includedGib: 160 })).toEqual({
-      added: '+$10.00/mo',
-      running: '$10.00/mo',
-      runningGib: 40,
-      stopped: '$50.00/mo',
-    })
-  })
-
-  it('bills a running machine only for the disk above what its hourly price includes', () => {
-    // Already grown past the standard: the running charge covers all of it.
-    expect(diskGrowPrice(pricing, { currentGib: 120, targetGib: 130, includedGib: 80 })).toMatchObject({
-      added: '+$2.50/mo',
-      running: '$12.50/mo',
-      runningGib: 50,
-    })
+  it('prices a grow at the most it adds: the GB added, at the storage price', () => {
+    // Storage is pooled across the org, so this is a ceiling, not a promise.
+    expect(diskGrowPrice(pricing, { currentGib: 160, targetGib: 200 })).toEqual({ added: '+$10.00/mo' })
+    expect(diskGrowPrice(pricing, { currentGib: 120, targetGib: 130 })).toEqual({ added: '+$2.50/mo' })
   })
 
   it('shows no price without a price list, rather than a guessed one', () => {
-    expect(diskGrowPrice(undefined, { currentGib: 160, targetGib: 170, includedGib: 160 })).toBeNull()
+    expect(diskGrowPrice(undefined, { currentGib: 160, targetGib: 170 })).toBeNull()
     expect(
-      diskGrowPrice({ suspendedDiskCentsPerGibMonth: 'n/a' }, { currentGib: 160, targetGib: 170, includedGib: 160 }),
+      diskGrowPrice({ storageCentsPerGibMonth: 'n/a' }, { currentGib: 160, targetGib: 170 }),
     ).toBeNull()
   })
 })

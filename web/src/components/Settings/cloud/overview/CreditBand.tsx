@@ -224,8 +224,8 @@ export function CreditBand({
             />
             <p className="mt-2 text-xs text-muted-foreground">
               One box, either kind of code — a coupon can add account credit or
-              machine minutes, and we&apos;ll tell you which one it applied.
-              Machine minutes show up under Compute, and are spent after your
+              machine hours, and we&apos;ll tell you which one it applied.
+              Machine hours show up under Compute, and are spent after your
               plan&apos;s included hours.
             </p>
           </div>
