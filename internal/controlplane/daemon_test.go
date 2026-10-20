@@ -38,11 +38,11 @@ func serveDaemonService(t *testing.T, rec *resumeRecorder) string {
 
 // The resume goes to controlplane.v1.DaemonService — the route control-plane
 // serves — carrying the caller's token as the Bearer it derives the owner from.
-func TestDaemonClient_ResumeDaemonCallsControlPlaneDaemonServiceAsTheCaller(t *testing.T) {
+func TestResumeDaemon_CallsControlPlaneDaemonServiceAsTheCaller(t *testing.T) {
 	rec := &resumeRecorder{}
 	url := serveDaemonService(t, rec)
 
-	if err := NewDaemonClient(url).ResumeDaemon(context.Background(), " rlat_bound ", "daemon-1"); err != nil {
+	if err := New(Deps{BaseURL: url}).ResumeDaemon(context.Background(), " rlat_bound ", "daemon-1"); err != nil {
 		t.Fatalf("ResumeDaemon: %v", err)
 	}
 	if rec.gotAuth != "Bearer rlat_bound" {
@@ -55,11 +55,11 @@ func TestDaemonClient_ResumeDaemonCallsControlPlaneDaemonServiceAsTheCaller(t *t
 
 // Callers branch on the Connect code (FailedPrecondition: not suspended), so
 // it must survive the client unwrapped.
-func TestDaemonClient_ResumeDaemonKeepsTheControlPlaneCode(t *testing.T) {
+func TestResumeDaemon_KeepsTheControlPlaneCode(t *testing.T) {
 	rec := &resumeRecorder{err: connect.NewError(connect.CodeFailedPrecondition, nil)}
 	url := serveDaemonService(t, rec)
 
-	err := NewDaemonClient(url).ResumeDaemon(context.Background(), "jwt", "daemon-1")
+	err := New(Deps{BaseURL: url}).ResumeDaemon(context.Background(), "jwt", "daemon-1")
 	if got := connect.CodeOf(err); got != connect.CodeFailedPrecondition {
 		t.Fatalf("code = %v (err %v), want FailedPrecondition", got, err)
 	}

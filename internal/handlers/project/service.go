@@ -95,7 +95,7 @@ type Router interface {
 }
 
 // CloneDispatcher asks the control plane to clone a repository onto one of
-// the caller's daemons. controlplane.Client implements it.
+// the caller's daemons. controlplane.Service implements it.
 type CloneDispatcher interface {
 	CloneRepoOntoDaemon(ctx context.Context, jwt string, req controlplane.CloneRepoRequest) (controlplane.CloneRepoResult, error)
 }

@@ -22,9 +22,8 @@
 // the interchangeable parts of waking a workspace (WorkspaceWaker,
 // DaemonReadiness, DaemonResumer), recording and re-resolving a grant
 // (AuditSink, GrantResolver) and limiting it (CallLimiter). Each has its
-// production implementation here; tests substitute others, and
-// controlplane.DaemonClient satisfies DaemonResumer directly. `forge generate`
-// writes a mock of each into mock_gen.go. The interfaces the package only
+// production implementation here, and tests substitute others. `forge
+// generate` writes a mock of each into mock_gen.go. The interfaces the package only
 // consumes (CommandSender, AttachmentReader, BindingStore,
 // CredentialIntrospector, OAuthTokenValidator) stay beside their consumers.
 //

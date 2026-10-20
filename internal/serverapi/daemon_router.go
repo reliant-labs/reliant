@@ -23,7 +23,7 @@ import (
 func daemonRouterOptions(repo db.Repository, cpURL string) []toolexec.NATSRouterOption {
 	opts := []toolexec.NATSRouterOption{toolexec.WithDatabase(repo)}
 	if cpURL != "" {
-		opts = append(opts, toolexec.WithDaemonResumer(controlplane.NewDaemonClient(cpURL)))
+		opts = append(opts, toolexec.WithDaemonResumer(controlplane.New(controlplane.Deps{BaseURL: cpURL})))
 	}
 	return opts
 }

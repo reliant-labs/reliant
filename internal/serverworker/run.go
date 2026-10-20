@@ -343,20 +343,26 @@ func Run(ctx context.Context, opts Options) error {
 	// 10. Tool execution routing via NATS
 	// -----------------------------------------------------------------
 	daemonRouterOpts := []toolexec.NATSRouterOption{toolexec.WithDatabase(repo)}
-	if cpURL := opts.ControlPlane.URL; cpURL != "" {
+	if cp := opts.ControlPlane; cp.Hosted() {
+		cpDeps := controlplane.Deps{BaseURL: cp.URL}
+		if secret := cp.InternalServiceSecret; secret != "" {
+			cpDeps.Sign = func() (string, error) { return auth.SignInternalServiceToken(secret) }
+		}
+		cpAdapter := controlplane.New(cpDeps)
 		// Daemon records come from repo; the control plane is wired only to
 		// resume a suspended managed machine (see serverapi's
 		// daemonRouterOptions).
 		daemonRouterOpts = append(daemonRouterOpts,
-			toolexec.WithDaemonResumer(controlplane.NewDaemonClient(cpURL)),
+			toolexec.WithDaemonResumer(cpAdapter),
 			// The worker alone may fall back to a trigger's delegated
 			// token: an unattended fire has no user JWT.
 			toolexec.WithControlPlaneCredentials(automationcred.New(automationcred.Deps{Keys: repo})))
 		// A run that resumes after a hold wakes its machine as the worker
 		// (the owner's session token may have expired meanwhile); see
-		// toolexec.RunWaker.
-		if rr := controlplane.NewRunResumeClient(opts.ControlPlane, auth.SignInternalServiceToken); rr != nil {
-			daemonRouterOpts = append(daemonRouterOpts, toolexec.WithRunResumer(rr))
+		// toolexec.RunWaker. That needs the worker's internal-service
+		// identity; without one, WakeForRun wakes with the owner's token.
+		if cpDeps.Sign != nil {
+			daemonRouterOpts = append(daemonRouterOpts, toolexec.WithRunResumer(cpAdapter))
 		}
 	}
 	router := toolexec.NewNATSDaemonRouter(nc, daemonRouterOpts...)

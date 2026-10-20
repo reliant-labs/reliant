@@ -1,9 +1,3 @@
-// Leaf utility package: the exported surface is concrete helpers over the
-// stdlib or the OS, with no collaborator to fake and no second implementation.
-// An interface here would have exactly one implementor and one caller shape,
-// which is indirection without a seam.
-//
-//forge:exclude-contract: thin HTTP client type for control-plane account endpoints; consumers declare the narrow interface they need
 package controlplane
 
 import (
@@ -15,6 +9,7 @@ import (
 	"connectrpc.com/connect"
 	accesstokenv1 "github.com/reliant-labs/reliant/gen/controlplane/services/access_token/v1"
 	accesstokenv1connect "github.com/reliant-labs/reliant/gen/controlplane/services/access_token/v1/controlplanev1connect"
+	daemonv1connect "github.com/reliant-labs/reliant/gen/controlplane/services/daemon/v1/controlplanev1connect"
 	gitcredentialv1 "github.com/reliant-labs/reliant/gen/controlplane/services/git_credential/v1"
 	gitcredentialv1connect "github.com/reliant-labs/reliant/gen/controlplane/services/git_credential/v1/controlplanev1connect"
 	userv1 "github.com/reliant-labs/reliant/gen/controlplane/services/user/v1"
@@ -92,48 +87,6 @@ const (
 	daemonResourceKind = "daemon"
 )
 
-type Client interface {
-	// MintLLMKey mints the caller's LLM gateway key for deviceName, atomically
-	// revoking that device's previous key.
-	MintLLMKey(ctx context.Context, jwt, deviceName string) (LLMKey, error)
-
-	// MintDaemonResumeToken mints the caller's delegated automation credential
-	// for ONE daemon: a daemon-bound `daemon:resume` token that can resolve
-	// and wake that daemon and nothing else. Rotate replaces the previous
-	// token for the same name, so re-minting never accumulates live secrets.
-	MintDaemonResumeToken(ctx context.Context, jwt, daemonID, name string) (DaemonResumeToken, error)
-
-	// RevokeDaemonResumeTokens revokes every live `daemon:resume` token the
-	// caller holds that is bound to daemonID.
-	RevokeDaemonResumeTokens(ctx context.Context, jwt, daemonID string) error
-
-	// PreviewAccountDeletionWallet asks the control plane what deleting the
-	// caller's account would refund and forfeit. Changes nothing.
-	PreviewAccountDeletionWallet(ctx context.Context, jwt string) (*AccountDeletionWalletQuote, error)
-
-	// DeleteCurrentUserAccount asks the control plane to settle the caller's
-	// wallet (refund paid credit, forfeit promotional credit) and tombstone
-	// their platform account (billing identity, daemons, PII), forwarding the
-	// caller's own JWT.
-	//
-	// Non-empty Blockers means the control plane REFUSED and destroyed
-	// nothing — the caller must surface the blockers and stop. An error means
-	// the call itself failed; a connect.CodeUnavailable error means a refund's
-	// outcome could not be confirmed and nothing else was deleted, so the
-	// caller may retry.
-	DeleteCurrentUserAccount(ctx context.Context, jwt string) (*AccountDeletionResult, error)
-
-	// CloneRepoOntoDaemon asks the control plane to clone a repo onto one of
-	// the caller's daemons, using the git credential IT holds — reliant has
-	// no access to the user's GitHub token, which is why this is a call and
-	// not something reliant does itself.
-	//
-	// It returns once the clone is QUEUED, not once it has run: the control
-	// plane enqueues durably so a daemon that is asleep or booting is still
-	// a valid target. Queued=true means the checkout does not exist yet.
-	CloneRepoOntoDaemon(ctx context.Context, jwt string, req CloneRepoRequest) (CloneRepoResult, error)
-}
-
 // CloneRepoRequest asks the control plane to clone a repo onto a daemon.
 type CloneRepoRequest struct {
 	DaemonID string
@@ -158,26 +111,39 @@ type CloneRepoResult struct {
 	DaemonName string
 }
 
-type connectClient struct {
+// client is the Service over the control plane at baseURL.
+type client struct {
 	httpClient *http.Client
 	baseURL    string
+	sign       func() (string, error)
+
+	accessTokens   accesstokenv1connect.AccessTokenServiceClient
+	users          userv1connect.UserServiceClient
+	gitCredentials gitcredentialv1connect.GitCredentialServiceClient
+	daemons        daemonv1connect.DaemonServiceClient
 }
 
-func NewClient(baseURL string) Client {
-	trimmed := strings.TrimSpace(baseURL)
-	if trimmed == "" {
-		trimmed = getBaseURL()
+// New returns the adapter for the control plane at deps.BaseURL.
+//
+// forge:constructor
+func New(deps Deps) Service {
+	baseURL := strings.TrimRight(strings.TrimSpace(deps.BaseURL), "/")
+	if baseURL == "" {
+		baseURL = defaultBaseURL
 	}
-	return &connectClient{
-		httpClient: &http.Client{Timeout: 30 * time.Second},
-		baseURL:    strings.TrimRight(trimmed, "/"),
+	httpClient := deps.HTTPClient
+	if httpClient == nil {
+		httpClient = &http.Client{Timeout: 30 * time.Second}
 	}
-}
-
-// getBaseURL is the control plane a client given no base URL dials: the
-// local default, for development against a control plane on this machine.
-func getBaseURL() string {
-	return defaultBaseURL
+	return &client{
+		httpClient:     httpClient,
+		baseURL:        baseURL,
+		sign:           deps.Sign,
+		accessTokens:   accesstokenv1connect.NewAccessTokenServiceClient(httpClient, baseURL),
+		users:          userv1connect.NewUserServiceClient(httpClient, baseURL),
+		gitCredentials: gitcredentialv1connect.NewGitCredentialServiceClient(httpClient, baseURL),
+		daemons:        daemonv1connect.NewDaemonServiceClient(httpClient, baseURL),
+	}
 }
 
 // Endpoint is how a server process reaches the control plane hosting its
@@ -197,19 +163,7 @@ type Endpoint struct {
 // Hosted reports whether a control plane is configured.
 func (e Endpoint) Hosted() bool { return e.URL != "" }
 
-func (c *connectClient) accessTokenClient() accesstokenv1connect.AccessTokenServiceClient {
-	return accesstokenv1connect.NewAccessTokenServiceClient(c.httpClient, c.baseURL)
-}
-
-func (c *connectClient) userClient() userv1connect.UserServiceClient {
-	return userv1connect.NewUserServiceClient(c.httpClient, c.baseURL)
-}
-
-func (c *connectClient) gitCredentialClient() gitcredentialv1connect.GitCredentialServiceClient {
-	return gitcredentialv1connect.NewGitCredentialServiceClient(c.httpClient, c.baseURL)
-}
-
-func (c *connectClient) CloneRepoOntoDaemon(ctx context.Context, jwt string, in CloneRepoRequest) (CloneRepoResult, error) {
+func (c *client) CloneRepoOntoDaemon(ctx context.Context, jwt string, in CloneRepoRequest) (CloneRepoResult, error) {
 	req := connect.NewRequest(&gitcredentialv1.CloneRepoRequest{
 		DaemonId:  in.DaemonID,
 		GitRepo:   in.CloneURL,
@@ -218,7 +172,7 @@ func (c *connectClient) CloneRepoOntoDaemon(ctx context.Context, jwt string, in 
 		RequestId: in.RequestID,
 	})
 	attachAuthorization(req, "Bearer "+strings.TrimSpace(jwt))
-	resp, err := c.gitCredentialClient().CloneRepo(ctx, req)
+	resp, err := c.gitCredentials.CloneRepo(ctx, req)
 	if err != nil {
 		return CloneRepoResult{}, err
 	}
@@ -229,10 +183,10 @@ func (c *connectClient) CloneRepoOntoDaemon(ctx context.Context, jwt string, in 
 	}, nil
 }
 
-func (c *connectClient) PreviewAccountDeletionWallet(ctx context.Context, jwt string) (*AccountDeletionWalletQuote, error) {
+func (c *client) PreviewAccountDeletionWallet(ctx context.Context, jwt string) (*AccountDeletionWalletQuote, error) {
 	req := connect.NewRequest(&userv1.PreviewAccountDeletionRequest{})
 	attachAuthorization(req, "Bearer "+strings.TrimSpace(jwt))
-	resp, err := c.userClient().PreviewAccountDeletion(ctx, req)
+	resp, err := c.users.PreviewAccountDeletion(ctx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -248,10 +202,10 @@ func (c *connectClient) PreviewAccountDeletionWallet(ctx context.Context, jwt st
 	}, nil
 }
 
-func (c *connectClient) DeleteCurrentUserAccount(ctx context.Context, jwt string) (*AccountDeletionResult, error) {
+func (c *client) DeleteCurrentUserAccount(ctx context.Context, jwt string) (*AccountDeletionResult, error) {
 	req := connect.NewRequest(&userv1.DeleteCurrentUserAccountRequest{})
 	attachAuthorization(req, "Bearer "+strings.TrimSpace(jwt))
-	resp, err := c.userClient().DeleteCurrentUserAccount(ctx, req)
+	resp, err := c.users.DeleteCurrentUserAccount(ctx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -283,14 +237,14 @@ func refundDestinations(in []*userv1.WalletRefundDestination) []RefundDestinatio
 	return out
 }
 
-func (c *connectClient) MintLLMKey(ctx context.Context, jwt, deviceName string) (LLMKey, error) {
+func (c *client) MintLLMKey(ctx context.Context, jwt, deviceName string) (LLMKey, error) {
 	req := connect.NewRequest(&accesstokenv1.CreateMyTokenRequest{
 		Name:   deviceName,
 		Scopes: []string{"llm:invoke"},
 		Rotate: true,
 	})
 	attachAuthorization(req, "Bearer "+strings.TrimSpace(jwt))
-	resp, err := c.accessTokenClient().CreateMyToken(ctx, req)
+	resp, err := c.accessTokens.CreateMyToken(ctx, req)
 	if err != nil {
 		return LLMKey{}, err
 	}
@@ -300,7 +254,7 @@ func (c *connectClient) MintLLMKey(ctx context.Context, jwt, deviceName string) 
 	}, nil
 }
 
-func (c *connectClient) MintDaemonResumeToken(ctx context.Context, jwt, daemonID, name string) (DaemonResumeToken, error) {
+func (c *client) MintDaemonResumeToken(ctx context.Context, jwt, daemonID, name string) (DaemonResumeToken, error) {
 	req := connect.NewRequest(&accesstokenv1.CreateMyTokenRequest{
 		Name:     name,
 		Scopes:   []string{daemonResumeScope},
@@ -308,18 +262,18 @@ func (c *connectClient) MintDaemonResumeToken(ctx context.Context, jwt, daemonID
 		Rotate:   true,
 	})
 	attachAuthorization(req, "Bearer "+strings.TrimSpace(jwt))
-	resp, err := c.accessTokenClient().CreateMyToken(ctx, req)
+	resp, err := c.accessTokens.CreateMyToken(ctx, req)
 	if err != nil {
 		return DaemonResumeToken{}, err
 	}
 	return DaemonResumeToken{Plaintext: strings.TrimSpace(resp.Msg.GetSecret())}, nil
 }
 
-func (c *connectClient) RevokeDaemonResumeTokens(ctx context.Context, jwt, daemonID string) error {
+func (c *client) RevokeDaemonResumeTokens(ctx context.Context, jwt, daemonID string) error {
 	scope := daemonResumeScope
 	listReq := connect.NewRequest(&accesstokenv1.ListMyTokensRequest{Scope: &scope})
 	attachAuthorization(listReq, "Bearer "+strings.TrimSpace(jwt))
-	listed, err := c.accessTokenClient().ListMyTokens(ctx, listReq)
+	listed, err := c.accessTokens.ListMyTokens(ctx, listReq)
 	if err != nil {
 		return err
 	}
@@ -333,7 +287,7 @@ func (c *connectClient) RevokeDaemonResumeTokens(ctx context.Context, jwt, daemo
 		}
 		revokeReq := connect.NewRequest(&accesstokenv1.RevokeMyTokenRequest{Id: tok.GetId()})
 		attachAuthorization(revokeReq, "Bearer "+strings.TrimSpace(jwt))
-		if _, err := c.accessTokenClient().RevokeMyToken(ctx, revokeReq); err != nil && firstErr == nil {
+		if _, err := c.accessTokens.RevokeMyToken(ctx, revokeReq); err != nil && firstErr == nil {
 			firstErr = err
 		}
 	}

@@ -8,8 +8,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
-	"time"
 
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
@@ -21,39 +19,12 @@ import (
 // and field names it relies on.
 const runResumePath = "/controlplane.v1.DaemonInternalService/ResumeDaemonForRun"
 
-// RunResumeClient wakes a run owner's suspended machine for a run that resumes
-// after a hold, with this process's internal-service identity rather than the
-// owner's session token, which may have expired while the run was held.
-// control-plane still runs the owner's own resume gates (ownership, workspace
-// limit, funding).
-type RunResumeClient struct {
-	baseURL string
-	http    *http.Client
-	sign    func() (string, error)
-}
-
-// NewRunResumeClient returns a client for the control plane at endpoint, or
-// nil when it has no URL or no internal-service secret to sign with.
-func NewRunResumeClient(endpoint Endpoint, sign func(secret string) (string, error)) *RunResumeClient {
-	base := strings.TrimRight(strings.TrimSpace(endpoint.URL), "/")
-	secret := endpoint.InternalServiceSecret
-	if base == "" || secret == "" || sign == nil {
-		return nil
+// ResumeDaemonForRun implements Service; see its contract. It presents the
+// bearer Deps.Sign mints, never the owner's.
+func (c *client) ResumeDaemonForRun(ctx context.Context, userID, daemonID string) (bool, error) {
+	if c.sign == nil {
+		return false, fmt.Errorf("controlplane: no internal-service identity to wake a machine for a run: %w", toolexec.ErrRunResumeUnsupported)
 	}
-	return &RunResumeClient{
-		baseURL: base,
-		http:    &http.Client{Timeout: 30 * time.Second},
-		sign:    func() (string, error) { return sign(secret) },
-	}
-}
-
-var _ toolexec.RunResumer = (*RunResumeClient)(nil)
-
-// ResumeDaemonForRun asks control-plane to wake daemonID for userID's resuming
-// run. A control plane without the door (404, or Unimplemented) answers with
-// toolexec.ErrRunResumeUnsupported. Other refusals carry control-plane's
-// client-safe message.
-func (c *RunResumeClient) ResumeDaemonForRun(ctx context.Context, userID, daemonID string) (bool, error) {
 	bearer, err := c.sign()
 	if err != nil {
 		return false, fmt.Errorf("controlplane: signing internal-service token: %w", err)
@@ -70,7 +41,7 @@ func (c *RunResumeClient) ResumeDaemonForRun(ctx context.Context, userID, daemon
 	req.Header.Set("Connect-Protocol-Version", "1")
 	req.Header.Set("Authorization", "Bearer "+bearer)
 
-	resp, err := c.http.Do(req)
+	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		return false, fmt.Errorf("controlplane: ResumeDaemonForRun(%s): %w", daemonID, err)
 	}

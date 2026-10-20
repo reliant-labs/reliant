@@ -21,6 +21,13 @@ import (
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
+// LLMKeyMinter is the slice of the controlplane adapter SyncReliantProvider
+// uses: it mints the caller's LLM gateway key for one device, rotating that
+// device's previous key.
+type LLMKeyMinter interface {
+	MintLLMKey(ctx context.Context, jwt, deviceName string) (controlplane.LLMKey, error)
+}
+
 // Deps holds dependencies for the settings service. internal/grpc/server.go
 // constructs it today; forge's composition root takes over in P3c
 // (research/forge-migration/PLAN.md). The rpc methods on *Service are where
@@ -34,8 +41,8 @@ type Deps struct {
 	// hand it to drivers.HasStaleReliantKey, which takes the whole thing.
 	Repo db.Repository
 	// ControlPlane mints the Reliant provider's LLM key (SyncReliantProvider).
-	// server.go passes the deployment's client.
-	ControlPlane controlplane.Client
+	// server.go passes the deployment's controlplane adapter.
+	ControlPlane LLMKeyMinter
 	// ExchangeClaudeCode trades a Claude OAuth authorization code for tokens.
 	// server.go passes claude.ExchangeClaudeAuthorizationCode; a test passes a
 	// fake so CompleteClaudeOAuth never reaches Anthropic's token endpoint.

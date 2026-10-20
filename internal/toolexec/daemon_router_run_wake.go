@@ -33,7 +33,7 @@ import (
 // neither EnsureAwake nor WakeForRun.
 
 // RunResumer wakes a run owner's suspended machine on the run's behalf.
-// Declared here, at the consumer; *controlplane.RunResumeClient implements it.
+// Declared here, at the consumer; controlplane.Service implements it.
 //
 // resumed reports whether this call started the wake (false: already up or on
 // its way). An error wrapping ErrRunResumeUnsupported means the control plane
