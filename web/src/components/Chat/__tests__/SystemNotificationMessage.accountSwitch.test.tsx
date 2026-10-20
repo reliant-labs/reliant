@@ -1,5 +1,5 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SystemNotificationMessage } from "../SystemNotificationMessage";
 import type { Message } from "../../../api/client";
 import { ContentBlockType, DisplayStyle, MessageRole } from "../../../gen/reliant/v1/chat_pb";
@@ -17,6 +17,17 @@ function notice(text: string, displayStyle: DisplayStyle = DisplayStyle.WARNING)
 }
 
 describe("SystemNotificationMessage — account and provider switches", () => {
+  // A reset time that is not "today" renders with a weekday ("resets Mon 3:40 PM"),
+  // so the assertions depend on the clock. Pin "now" one minute before the reset:
+  // the same local day in every real time zone (no zone sits at UTC+8:20).
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-19T15:39:00Z"));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("bolds the account names of an account switch", () => {
     const { container } = render(
       <SystemNotificationMessage
