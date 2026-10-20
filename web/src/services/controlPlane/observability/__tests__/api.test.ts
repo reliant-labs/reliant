@@ -195,6 +195,9 @@ describe("traces and panels", () => {
       columns: ["requests"],
       rows: [{ group: { "span.name": "a/B" }, values: [12] }],
       series: [{ label: "ratio", group: { "service.name": "api" }, points: [{ time: ts(window.startMs), value: 0.02 }], value: 0 }],
+      funnelSteps: [],
+      issues: [],
+      sessions: [],
     });
     const panel = {
       id: "p",
@@ -215,6 +218,36 @@ describe("traces and panels", () => {
     expect(req.panel).toMatchObject({ id: "p", ratio: true, groupBy: ["service.name"], series: [{ agg: "count", where: [{ field: "span.status", op: "eq", value: "error", values: [] }] }, { label: "requests" }] });
     expect(result.series[0]).toMatchObject({ label: "ratio", group: { "service.name": "api" }, timestamps: [window.startMs / 1000], values: [0.02] });
     expect(result.rows[0]).toEqual({ group: { "span.name": "a/B" }, values: [12] });
+  });
+
+  it("sends a funnel's steps and a sessions panel's has-error, and maps the browser kinds back (C7)", async () => {
+    client.queryPanel.mockResolvedValue({
+      panelId: "f",
+      kind: "funnel",
+      unit: "",
+      stepSeconds: 0,
+      truncated: false,
+      columns: [],
+      rows: [],
+      series: [],
+      funnelSteps: [{ event: "view", count: 10n, rateFromFirst: 1, rateFromPrevious: 1 }, { event: "buy", count: 4n, rateFromFirst: 0.4, rateFromPrevious: 0.4 }],
+      issues: [{ serviceName: "web", stackHash: "18446744073709551615", exceptionType: "TypeError", message: "x", urlPath: "/c", serviceVersion: "b1", events: 3n, sessions: 2n, firstSeen: ts(window.startMs), lastSeen: ts(window.endMs), sampleTraceId: "t", sampleSessionId: "s" }],
+      sessions: [{ sessionId: "s", serviceName: "web", serviceVersion: "b1", envId: "env-1", userId: "", entryPath: "/", start: ts(window.startMs), end: ts(window.endMs), pageViews: 5n, interactions: 9n, errors: 1n, hasReplay: true }],
+    });
+    const result = await queryPanel({
+      ...env,
+      window,
+      panel: { id: "f", title: "Funnel", kind: "funnel", signal: "traces", series: [], funnel: { steps: ["view", "buy"], window: "1h" } },
+      services: [],
+      stepSeconds: 0,
+    });
+    expect(client.queryPanel.mock.calls[0][0].panel).toMatchObject({ kind: "funnel", funnel: { steps: ["view", "buy"], window: "1h", by: "" }, hasError: false });
+    expect(result.funnelSteps).toEqual([
+      { event: "view", count: 10, rateFromFirst: 1, rateFromPrevious: 1 },
+      { event: "buy", count: 4, rateFromFirst: 0.4, rateFromPrevious: 0.4 },
+    ]);
+    expect(result.issues[0]).toMatchObject({ stackHash: "18446744073709551615", events: 3, sessions: 2, firstSeenMs: window.startMs, lastSeenMs: window.endMs });
+    expect(result.sessions[0]).toMatchObject({ pageViews: 5, errors: 1, hasReplay: true, startMs: window.startMs });
   });
 });
 
@@ -277,7 +310,7 @@ describe("query scope v2 (contract K1)", () => {
     // A group without a summary is dropped, not drawn as zeros.
     expect(traces.redGroups).toEqual([{ group: { "service.version": "v2" }, red: expect.objectContaining({ traceCount: 10, errorRate: 0.1 }) }]);
 
-    client.queryPanel.mockResolvedValue({ panelId: "p", kind: "line", unit: "", stepSeconds: 60, truncated: false, columns: [], rows: [], series: [] });
+    client.queryPanel.mockResolvedValue({ panelId: "p", kind: "line", unit: "", stepSeconds: 60, truncated: false, columns: [], rows: [], series: [], funnelSteps: [], issues: [], sessions: [] });
     const panel = { id: "p", title: "t", kind: "line", signal: "traces", series: [{ label: "n", agg: "count" }], groupBy: ["service.name"] };
     await queryPanel({ ...env, window, panel, services: [], stepSeconds: 0, groupBy: ["deployment.environment.name", "service.version"] });
     const req = client.queryPanel.mock.calls[0][0];

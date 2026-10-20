@@ -114,11 +114,13 @@ export interface UPlotChartProps {
   markers?: readonly ChartMarker[];
   /** Stretches to shade (alerts firing). Sparklines draw them too, without labels. */
   bands?: readonly ChartBand[];
+  /** uPlot's own legend (series and the value under the cursor). Default: every chart but a sparkline. */
+  legend?: boolean;
 }
 
 const NO_BANDS: readonly ChartBand[] = [];
 
-export function UPlotChart({ timestamps, series, unit, height, label, compact = false, className, markers: own, bands = NO_BANDS }: UPlotChartProps) {
+export function UPlotChart({ timestamps, series, unit, height, label, compact = false, className, markers: own, bands = NO_BANDS, legend }: UPlotChartProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const themeVersion = useThemeVersion();
   const inherited = useContext(ObsChartMarkersContext);
@@ -146,7 +148,7 @@ export function UPlotChart({ timestamps, series, unit, height, label, compact = 
       height,
       pxAlign: false,
       cursor: compact ? { show: false } : { drag: { x: false, y: false } },
-      legend: { show: !compact },
+      legend: { show: legend ?? !compact },
       // The x axis reaches a marker in the last (or first) bucket's span: a
       // promotion 10 minutes ago is in the window even when the newest
       // bucket starts 20 minutes ago.
@@ -219,7 +221,7 @@ export function UPlotChart({ timestamps, series, unit, height, label, compact = 
       observer?.disconnect();
       chart?.destroy();
     };
-  }, [data, series, timestamps.length, height, unit, compact, themeVersion, markers, shown]);
+  }, [data, series, timestamps.length, height, unit, compact, themeVersion, markers, shown, legend]);
 
   const caption = [describeSeries(series, unit), describeMarkers(markers), describeBands(shown)].filter(Boolean).join(" ");
 

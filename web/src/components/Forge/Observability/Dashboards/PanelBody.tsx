@@ -320,6 +320,8 @@ function LineChart({
         label={panel.title}
         compact={compact}
         bands={bands}
+        // The drill-down legend below names the series; uPlot's would repeat them.
+        legend={!compact && !onDrill}
       />
       {!compact && onDrill && current.length > 0 && (
         <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1" data-testid="obs-panel-legend">
