@@ -23,24 +23,6 @@ type Querier interface {
 	// report success. RowsAffected is what callers must check (see
 	// CancelQueuedAgentMessage in agent_message_store.go).
 	CancelQueuedAgentMessage(ctx context.Context, arg CancelQueuedAgentMessageParams) (int64, error)
-	// Move every DESCENDANT workflow record owned by a parent to the terminal
-	// status the parent itself reached. Called when a workflow ends, to drain the
-	// children (spawn children, thread records, etc.) that are not yet terminal.
-	//
-	// The stop reason is the caller's, not a constant. Writing a fixed "completed"
-	// here laundered every terminated run into a finished one: a cancel terminated
-	// 23 descendants mid-flight and recorded all 23 as COMPLETED, so any later
-	// count of completed units over-counted by the whole subtree. A descendant of
-	// a cancelled run was cancelled; a descendant of a failed run did not complete
-	// either. The stop reason already distinguishes them — nothing new needs
-	// inventing, the write just has to stop discarding what it knows.
-	//
-	// Recursive: a spawn's own spawns (grandchildren and deeper) must end too — a
-	// one-level cascade leaves them active/paused forever, which keeps the chat
-	// permanently "active" in chats_with_activity and (for paused rows) permanently
-	// exempt from the progress watchdog.
-	// Matches every LIVE descendant: active (state 2) and paused (3/3).
-	CascadeTerminalStatusToDescendants(ctx context.Context, arg CascadeTerminalStatusToDescendantsParams) error
 	// The thread-lifecycle counterpart to CascadeTerminalStatusToDescendants
 	// (workflows.sql). threads.status is otherwise written ONLY by
 	// ThreadStatusActivity on the live path (thread_status.go) -- so an abnormal
@@ -93,18 +75,6 @@ type Querier interface {
 	// messages: a peer agent's spawn_send is not the human's to reclaim, and the
 	// UI never offered it.
 	ClaimQueuedAgentMessagesForThread(ctx context.Context, arg ClaimQueuedAgentMessagesForThreadParams) ([]AgentMessage, error)
-	// Leases up to `max` undispatched events whose lease is free or expired.
-	// SKIP LOCKED lets several relays drain the queue without handing the same
-	// row to two of them.
-	ClaimRunEvents(ctx context.Context, arg ClaimRunEventsParams) ([]RunEvent, error)
-	// Atomically update workflow lifecycle only if the current one matches
-	// expected. Returns the updated row if swapped, sql.ErrNoRows if it did not
-	// match.
-	//
-	// The comparison is over the PAIR: two rows that are both STOPPED but stopped
-	// for different reasons are different statuses, and a swap expecting one must
-	// not win against the other.
-	CompareAndSwapWorkflowStatus(ctx context.Context, arg CompareAndSwapWorkflowStatusParams) (Workflow, error)
 	// Settles an intent row. Only an intent row settles: a ledger entry is never
 	// rewritten after the fact, so a duplicate completion is a no-op.
 	CompleteIntegrationWrite(ctx context.Context, arg CompleteIntegrationWriteParams) (int64, error)
@@ -126,9 +96,6 @@ type Querier interface {
 	CountMessagesByContextWindowUpToSeq(ctx context.Context, arg CountMessagesByContextWindowUpToSeqParams) (int64, error)
 	// Count messages in a thread (uses denormalized thread_id)
 	CountMessagesByThread(ctx context.Context, threadID string) (int64, error)
-	// Pending approvals and questions in the chat other than exclude_id. Zero
-	// means the item being created is the one that blocks the run.
-	CountOtherPendingBlockers(ctx context.Context, arg CountOtherPendingBlockersParams) (int32, error)
 	CountQueuedAgentMessagesForThread(ctx context.Context, toThreadID string) (int64, error)
 	CountThreadsInConversation(ctx context.Context, chatID string) (int64, error)
 	CountWorkflowDraftsByUser(ctx context.Context, userID string) (int64, error)
@@ -158,12 +125,6 @@ type Querier interface {
 	CreateMessageOnce(ctx context.Context, arg CreateMessageOnceParams) (int64, error)
 	CreateProject(ctx context.Context, arg CreateProjectParams) error
 	CreateRepo(ctx context.Context, arg CreateRepoParams) error
-	// run_events: the outbox for workflow-event triggers. See the migration
-	// 20261005010407_run_events.sql for the model.
-	// DO NOTHING on a dedupe_key that already exists: the first row for a
-	// transition is the record, and an activity retry must not add a second.
-	CreateRunEvent(ctx context.Context, arg CreateRunEventParams) (int64, error)
-	CreateStepExecution(ctx context.Context, arg CreateStepExecutionParams) (StepExecution, error)
 	CreateThread(ctx context.Context, arg CreateThreadParams) (Thread, error)
 	CreateTrigger(ctx context.Context, arg CreateTriggerParams) error
 	// DO NOTHING rather than DO UPDATE: the first row for a (kind, dedupe_key) is
@@ -171,7 +132,6 @@ type Querier interface {
 	// outcome. The affected-row count is what tells the caller whether it won the
 	// race (1) or a prior firing already exists (0).
 	CreateTriggerEvent(ctx context.Context, arg CreateTriggerEventParams) (int64, error)
-	CreateWorkflow(ctx context.Context, arg CreateWorkflowParams) (Workflow, error)
 	// Workflow Drafts - Simplified user-owned workflows
 	// Workflows are owned by users and available across all projects
 	// Project-specific workflows come from .reliant/workflows/*.yaml files (read-only)
@@ -187,7 +147,6 @@ type Querier interface {
 	DeleteChat(ctx context.Context, id string) error
 	DeleteContextWindow(ctx context.Context, id string) error
 	DeleteContextWindowsByThread(ctx context.Context, threadID string) error
-	DeleteDispatchedRunEventsBefore(ctx context.Context, dispatchedAt sql.NullTime) (int64, error)
 	DeleteMessage(ctx context.Context, id string) error
 	DeleteProject(ctx context.Context, arg DeleteProjectParams) error
 	DeleteProjectDaemon(ctx context.Context, arg DeleteProjectDaemonParams) error
@@ -197,7 +156,6 @@ type Querier interface {
 	// refreshed_at) no longer reports: a repository they lost, an installation
 	// they left. Also the whole set when a refresh finds the credential gone.
 	DeleteStaleIntegrationAccess(ctx context.Context, arg DeleteStaleIntegrationAccessParams) (int64, error)
-	DeleteStepExecutionsForWorkflow(ctx context.Context, workflowID string) error
 	DeleteThread(ctx context.Context, id string) error
 	DeleteThreadsByConversation(ctx context.Context, chatID string) error
 	DeleteTrigger(ctx context.Context, id string) error
@@ -207,14 +165,11 @@ type Querier interface {
 	// be able to take its id; a queued or delivered row is never touched.
 	DeleteUndeliveredAgentMessage(ctx context.Context, arg DeleteUndeliveredAgentMessageParams) (int64, error)
 	DeleteVisibilityOverride(ctx context.Context, arg DeleteVisibilityOverrideParams) error
-	DeleteWorkflow(ctx context.Context, id string) error
-	DeleteWorkflowCheckpoint(ctx context.Context, workflowID string) error
 	DeleteWorkflowDraft(ctx context.Context, id string) (DeleteWorkflowDraftRow, error)
 	DeleteWorkflowDraftBySlug(ctx context.Context, arg DeleteWorkflowDraftBySlugParams) (DeleteWorkflowDraftBySlugRow, error)
 	DeleteWorkflowScenario(ctx context.Context, id string) error
 	// Delete all scenarios for a workflow draft (used when deleting drafts)
 	DeleteWorkflowScenariosByDraft(ctx context.Context, workflowDraftID sql.NullString) error
-	DeleteWorkflowsByChat(ctx context.Context, chatID string) error
 	DeleteWorktree(ctx context.Context, id string) error
 	DismissInboxItems(ctx context.Context, arg DismissInboxItemsParams) error
 	EnqueueAgentMessage(ctx context.Context, arg EnqueueAgentMessageParams) error
@@ -274,31 +229,6 @@ type Querier interface {
 	// success; last_error is cleared on success.
 	FinishIntegrationAccessRefresh(ctx context.Context, arg FinishIntegrationAccessRefreshParams) error
 	GetAgentMessage(ctx context.Context, id string) (AgentMessage, error)
-	// Get all step executions in a workflow (for full history reconstruction)
-	GetAllStepExecutionsForWorkflow(ctx context.Context, workflowID string) ([]StepExecution, error)
-	// The steps the chat timeline renders, for ChatService/GetWorkflowExecutions
-	// in its BASIC view. GetStepExecutionsForChat is the FULL view.
-	//
-	// The timeline draws an activity indicator for each USER-FACING step and
-	// reads, for each, whether its "-save" sibling recorded a message (then the
-	// step renders AS that message). Nothing else. On chat 8bb0a875 that is 6 of
-	// 93,568 step rows: 56.8 MB of JSON / ~1s of SQL for the full read against a
-	// few kB / ~6ms here.
-	//
-	// The activity list is a LITERAL, unlike GetStepExecutionsForChat's
-	// parameter: the planner proves a query is covered by a partial index only
-	// from a predicate it can see at plan time, and a bound array is not one.
-	// With the literal it uses idx_step_executions_user_facing (96 kB); without
-	// it, a seq scan over every step row. The literal MUST equal
-	// workflowmodel.InternalActivities and the index predicate;
-	// TestUserFacingStepIndexPredicateMatchesInternalActivities pins all three.
-	//
-	// The second arm finds each visible step's "-save" sibling by
-	// (workflow_id, step_id || '-save', loop scope) through idx_step_executions_saves.
-	// Loop scope is matched with IS NOT DISTINCT FROM so iteration 3's step never
-	// picks up iteration 2's save, and NULL (not in a loop) matches NULL.
-	// Save rows carry no output_json, as in the FULL view.
-	GetBasicStepExecutionsForChat(ctx context.Context, chatID string) ([]GetBasicStepExecutionsForChatRow, error)
 	GetChat(ctx context.Context, id string) (ChatsWithActivity, error)
 	// NOTE: there is deliberately no MAX(sequence_number)+1 allocator here.
 	// Sequence numbers come from the chat's row in update_stream_counters; see
@@ -426,56 +356,6 @@ type Querier interface {
 	GetRepoByProjectAndPath(ctx context.Context, arg GetRepoByProjectAndPathParams) (Repo, error)
 	// Get the root thread for a chat (no parent)
 	GetRootThread(ctx context.Context, chatID string) (Thread, error)
-	// Get effective workflow lifecycle for a single chat.
-	// Returns ACTIVE if ANY real workflow (root or child) is active.
-	// Returns STOPPED/PAUSED if ANY real workflow is paused (and none active).
-	// Otherwise returns the most recent root workflow's own lifecycle.
-	// Every row in workflows is now a real workflow execution: thread lifecycle
-	// lives on threads.status, so the "thread:*"/"fork:*" name filters this query
-	// used to carry are gone along with the records they excluded.
-	GetRootWorkflowStatusForChat(ctx context.Context, chatID string) (GetRootWorkflowStatusForChatRow, error)
-	GetRunEvent(ctx context.Context, id string) (RunEvent, error)
-	GetRunEventByDedupe(ctx context.Context, dedupeKey string) (RunEvent, error)
-	GetStepExecution(ctx context.Context, id string) (StepExecution, error)
-	// Get all executions of a specific step in a workflow (for CEL history queries)
-	GetStepExecutions(ctx context.Context, arg GetStepExecutionsParams) ([]StepExecution, error)
-	// Every step of every workflow of one chat, in one round trip, for
-	// ChatService/GetWorkflowExecutions.
-	//
-	// This replaces a loop that ran GetAllStepExecutionsForWorkflow once per
-	// workflow: 83 queries for the worst real chat, each a SELECT * that dragged
-	// output_json along. Measured on the dev database, chat abe58f03-…: the 83
-	// serial round trips took 2.61s of a pool with 8 connections, so a single
-	// sidebar refetch could monopolize it and stall every other RPC.
-	//
-	// output_json is read for almost no row, and that is the whole point. It is why
-	// this table is 905 MB against a 361 MB heap — TOASTed out of line, so touching
-	// it costs extra reads per row — and the two things clients need from it are
-	// obtained without touching it for the rows that dominate:
-	//
-	//   * the saved message id of a "-save" step arrives as saved_message_id, a
-	//     generated column (migration 20260929162546). Extracting it from
-	//     output_json here instead measured ~520ms against ~42ms, essentially all
-	//     of it detoasting 37 MB of JSON to recover 16k UUIDs.
-	//   * the rich context ActivityIndicator and the workflow viewer's Output panel
-	//     render is still selected in full, but ONLY for user-facing activities.
-	//     That is what makes it affordable: of this chat's 32,023 steps, 32,013 are
-	//     internal plumbing (SaveMessage / CallLLM / ExecuteTools), and the ten
-	//     that remain total 23 kB. Measured cost of including them: ~45ms vs ~42ms
-	//     for selecting no output_json at all.
-	//
-	// The internal-activity list is a PARAMETER, not a literal, so the set lives in
-	// exactly one Go place (workflowmodel.InternalActivities) and cannot drift from
-	// the frontend's INTERNAL_ACTIVITIES, which decides the same question for the
-	// same reason in activityIndicators.ts. A row whose activity is in the list is
-	// one the UI never renders output for; if the two lists disagree, the symptom is
-	// an activity indicator with no context rather than an error, which is the kind
-	// of divergence nothing would catch.
-	//
-	// ORDER BY (workflow_id, created_at) matches idx_step_executions_chat_read, so
-	// the sort proceeds incrementally over already-ordered groups instead of
-	// spilling to disk, and every scalar column below is covered by that index.
-	GetStepExecutionsForChat(ctx context.Context, arg GetStepExecutionsForChatParams) ([]GetStepExecutionsForChatRow, error)
 	// The report holding one spawn's slot, read when a write to the slot was
 	// refused: the same sender is a retry (idempotent), a different one is a
 	// second spawn under the same id, whose report cannot be stored.
@@ -524,9 +404,6 @@ type Querier interface {
 	// Get a usable workflow by slug (for runtime loading)
 	GetUsableWorkflowBySlug(ctx context.Context, arg GetUsableWorkflowBySlugParams) (GetUsableWorkflowBySlugRow, error)
 	GetVisibilityOverride(ctx context.Context, arg GetVisibilityOverrideParams) (bool, error)
-	GetWorkflow(ctx context.Context, id string) (Workflow, error)
-	GetWorkflowByThread(ctx context.Context, arg GetWorkflowByThreadParams) (Workflow, error)
-	GetWorkflowCheckpoint(ctx context.Context, workflowID string) (WorkflowCheckpoint, error)
 	GetWorkflowDraft(ctx context.Context, id string) (GetWorkflowDraftRow, error)
 	// Check if a workflow with this exact name exists for the user
 	// Used for duplicate name validation (different from slug check)
@@ -544,19 +421,10 @@ type Querier interface {
 	// able to use the same key without colliding.
 	GetWorktreeByIdempotencyKey(ctx context.Context, arg GetWorktreeByIdempotencyKeyParams) (Worktree, error)
 	GetWorktreeByPath(ctx context.Context, path string) (Worktree, error)
-	// Whether the user owns at least one enabled trigger of the kind. The emitter
-	// asks this before writing an outbox row, so users without workflow-event
-	// triggers never pay for one.
-	HasEnabledTriggerOfKind(ctx context.Context, arg HasEnabledTriggerOfKindParams) (bool, error)
 	// Whether any message in this context window precedes before_seq. Used to
 	// compute hasMore for the cursor-bounded read without fetching the rows.
 	HasMessagesBeforeInContextWindow(ctx context.Context, arg HasMessagesBeforeInContextWindowParams) (bool, error)
 	IsCommandFavorite(ctx context.Context, arg IsCommandFavoriteParams) (int32, error)
-	// Newest run of each workflow name. Same columns and display_state as ListRuns.
-	// Archived runs count: an automation archives each run it finishes
-	// successfully, so leaving them out would make a healthy automation's
-	// workflow read as never having run.
-	LastRunPerWorkflow(ctx context.Context, arg LastRunPerWorkflowParams) ([]LastRunPerWorkflowRow, error)
 	// Every enabled integration trigger of one integration whose OWNER can see
 	// the event's (account, resource) per a snapshot refreshed after
 	// fresh_after. A stale snapshot routes nothing: access is only trusted while
@@ -607,7 +475,6 @@ type Querier interface {
 	ListChatsWaitingForMachine(ctx context.Context, userID string) ([]ListChatsWaitingForMachineRow, error)
 	// Get all threads that fork from a given thread (direct children only)
 	ListChildThreads(ctx context.Context, parentThreadID sql.NullString) ([]Thread, error)
-	ListChildWorkflows(ctx context.Context, parentID sql.NullString) ([]Workflow, error)
 	ListCommandFavorites(ctx context.Context, arg ListCommandFavoritesParams) ([]string, error)
 	ListContentBlocks(ctx context.Context, messageID string) ([]MessageContentBlock, error)
 	ListContentBlocksForMessages(ctx context.Context, messageIds []string) ([]MessageContentBlock, error)
@@ -749,27 +616,6 @@ type Querier interface {
 	// run_chat_id is set.
 	ListRecentTriggerFirings(ctx context.Context, arg ListRecentTriggerFiringsParams) ([]ListRecentTriggerFiringsRow, error)
 	ListReposByProject(ctx context.Context, projectID string) ([]Repo, error)
-	ListRootWorkflows(ctx context.Context, chatID string) ([]Workflow, error)
-	// List root workflows (parent_id IS NULL) at a specific lifecycle.
-	// Root workflows are the entry points that need dedicated workers.
-	ListRootWorkflowsByStatus(ctx context.Context, arg ListRootWorkflowsByStatusParams) ([]Workflow, error)
-	// The cross-cutting run list (RunService.ListRuns, list_runs tool).
-	//
-	// A run is a chat row (chat id == root workflow id), so the list is
-	// chats_with_activity joined to its root workflow and, for automation-fired
-	// runs, to the trigger. display_state is the one status vocabulary the UI
-	// shows, derived once in chats_with_activity.display_state so a filter on it
-	// and the label a row carries cannot disagree:
-	//   1 queued       no root workflow row yet, or PENDING
-	//   2 running      ACTIVE
-	//   3 needs-input  ACTIVE and activity = awaiting input (2)
-	//   8 waiting-for-machine  ACTIVE and activity = waiting for daemon (5)
-	//   4 paused       STOPPED, stop_reason PAUSED (3)
-	//   5 completed    STOPPED, stop_reason COMPLETED (1)
-	//   6 failed       STOPPED, stop_reason FAILED (2)
-	//   7 cancelled    STOPPED, stop_reason CANCELLED (4)
-	// Every filter argument is nullable or an array: an unset one must not narrow.
-	ListRuns(ctx context.Context, arg ListRunsParams) ([]ListRunsRow, error)
 	// Every spawn call a thread has issued, joined to the child's live workflow
 	// and thread rows. tool_calls.thread_id is the PARENT's thread — see
 	// ListStrandedSpawnToolCalls above for the same join anchor — so this needs
@@ -835,17 +681,6 @@ type Querier interface {
 	// fire workflow for them was never started (the receiver crashed between the
 	// insert and the start) or died. The redriver restarts their fires.
 	ListStalePendingTriggerEvents(ctx context.Context, arg ListStalePendingTriggerEventsParams) ([]TriggerEvent, error)
-	// The full record of a chat's steps — inputs, output and error included — for
-	// ChatService/ListStepExecutions, which the builder's Run tab reads when the
-	// author inspects one step of a run.
-	//
-	// This is the one read that ships output_json for internal activities too:
-	// CallLLM's output IS the step's answer and tool calls. It is affordable
-	// because it is scoped. Given a node_path, only that node and what ran inside
-	// it (an Agent step's own turns, a loop body) are read; the newest rows win
-	// when the limit cuts. Rows written before node_path existed fall back to
-	// their step id, so a node's older history still answers.
-	ListStepExecutionRecordsForChat(ctx context.Context, arg ListStepExecutionRecordsForChatParams) ([]ListStepExecutionRecordsForChatRow, error)
 	// The async-spawn counterpart to ListStrandedSpawnToolCalls above (spec:
 	// async-spawn-and-agent-messaging.md, §7.1). A background=true spawn
 	// (dispatchSpawnBackground/workflow.go) writes tool_calls.status = 6
@@ -960,10 +795,6 @@ type Querier interface {
 	// matched as stored on the row (the slug or builtin:// ref the activation
 	// named).
 	ListWorkflowTriggerActivations(ctx context.Context, arg ListWorkflowTriggerActivationsParams) ([]Trigger, error)
-	ListWorkflowsByChat(ctx context.Context, chatID string) ([]Workflow, error)
-	// List all workflows at a specific lifecycle (e.g. ACTIVE, or STOPPED/PAUSED).
-	// Used for startup recovery to restart workers for active workflows.
-	ListWorkflowsByStatus(ctx context.Context, arg ListWorkflowsByStatusParams) ([]Workflow, error)
 	// Live workspaces by default. include_archived adds archived ones after them
 	// (server-internal callers that must see every row); archived_only lists only
 	// the archived ones, most recently archived first. main_only narrows to the
@@ -982,10 +813,6 @@ type Querier interface {
 	// cleanup_metadata is only ever NULL or JSON we wrote, but the cast sits inside
 	// a CASE so a hand-edited value cannot fail the whole listing.
 	ListWorktreesForReclaim(ctx context.Context) ([]ListWorktreesForReclaimRow, error)
-	// Row-locks the chat for the rest of the transaction. Serializes the "was the
-	// run already blocked?" check across concurrent approval and question
-	// creations in the same chat.
-	LockChatForRunEvent(ctx context.Context, id string) (string, error)
 	// Row lock on the trigger for the rest of the transaction. Serializes the
 	// overlap check with the launch it guards across concurrent fires.
 	LockTrigger(ctx context.Context, id string) (string, error)
@@ -1041,11 +868,6 @@ type Querier interface {
 	// drain did not win are moved. delivered_at is deliberately left NULL -- the
 	// absence of a delivery time IS the record that no delivery occurred.
 	MarkQueuedAgentMessagesUndeliveredForThread(ctx context.Context, toThreadID string) (int64, error)
-	MarkRunEventDispatched(ctx context.Context, arg MarkRunEventDispatchedParams) error
-	// Pause all active workflows for a chat.
-	// Used when pausing a chat to ensure child workflows (e.g., agent threads) are also paused,
-	// so the chats_with_activity view correctly reports the chat as paused.
-	PauseRunningWorkflowsByChat(ctx context.Context, chatID string) error
 	// Drops grants nobody has re-confirmed since before: they no longer route
 	// (routing requires a recent refresh) and their owner has no trigger left
 	// to refresh them for.
@@ -1086,99 +908,8 @@ type Querier interface {
 	// count alone cannot say which run, which chat, or how that run ended — the
 	// reconciler needs the ids to ask Temporal and to log something actionable.
 	ReapOrphanedThreads(ctx context.Context) ([]ReapOrphanedThreadsRow, error)
-	// Enforce the invariant CascadeTerminalStatusToDescendants asserts from the
-	// other direction: a workflow whose PARENT is terminal is not running.
-	//
-	// CascadeTerminalStatusToDescendants only runs when the write path that moved a
-	// parent to a terminal status remembers to call it. Several do not, and each
-	// omission strands the whole subtree at running (2) / paused (6) forever:
-	// nothing else ever revisits those rows, because the reconciler skips every
-	// workflow with a parent_id (its lifecycle is the parent's job) and
-	// `workflow ps` filters on status alone, so the orphans are reported as live
-	// runs next to real ones.
-	//
-	// The known omissions this repairs are TerminateWorkflow paths. A terminate is
-	// a hard kill: the workflow's own completion handler never runs, so the
-	// cascade its terminal-status activity would have performed never happens.
-	// Every caller is expected to cascade for itself — this is the backstop that
-	// keeps one forgotten call site from stranding rows permanently.
-	//
-	// Anchored on ANY terminal parent, not just roots, so a terminal mid-tree
-	// spawn drains its own subtree. Inherits the terminal ANCESTOR's stop reason,
-	// which is what the direct cascade writes, so a row reaped here stays
-	// indistinguishable from one cascaded there — including the distinction
-	// between a run that finished and one that was terminated.
-	//
-	// "Terminal parent" is STOPPED for a reason other than PAUSED: a paused parent
-	// has not ended, and reaping its children would kill a run that is coming back.
-	//
-	// Returns each workflow it moved. Whether a reap is a bug depends on how the
-	// run ended, and a count cannot say which run that was — the reconciler needs
-	// the ids to ask Temporal and to log something actionable.
-	ReapOrphanedWorkflowDescendants(ctx context.Context) ([]ReapOrphanedWorkflowDescendantsRow, error)
 	RemoveCommandFavorite(ctx context.Context, arg RemoveCommandFavoriteParams) error
 	RestoreInboxItems(ctx context.Context, arg RestoreInboxItemsParams) error
-	// Resume all paused workflows for a chat.
-	// Used when resuming a chat to ensure child workflows are also resumed.
-	ResumeWorkflowsByChat(ctx context.Context, chatID string) error
-	// Move every DESCENDANT workflow row that was LIVE at a reset point back to
-	// active, AND the threads those rows own, AND the root's own thread — in one
-	// statement — reporting how many of each it moved. The inverse of
-	// CascadeTerminalStatusToDescendants + CascadeTerminalStatusToThreadSubtree
-	// for a subtree that is coming BACK, and the write that was missing entirely
-	// from reset-and-replay.
-	//
-	// Why a subtree needs reviving at all: every sub-agent runs INLINE in the
-	// root's single Temporal execution, but each owns its own workflows row
-	// (parent_id = the root) and its own threads row. Killing the root therefore
-	// killed the sub-agents, and the reaps stamped their rows failed. Resetting
-	// the root REBUILDS those same sub-agents by replay -- no new rows are
-	// created -- but the only write that moves a row back to running is
-	// WorkflowStatusActivity's "started" arm, and a child that was already
-	// running at the reset point never re-executes that activity: it is in the
-	// replayed history. So the children stayed "failed" while actively working,
-	// and the UI showed live agents as failed. Measured: six of them, chat
-	// abe58f03, dev-docs/incidents/2026-09-29-reconciler-false-wedge.md.
-	//
-	// The predicate is a time window, because the reset point is the only thing
-	// that distinguishes work the new run will redo from work it will merely
-	// replay:
-	//
-	//   created_at <= T            the row existed at the reset point. A row
-	//                              created AFTER it re-runs its own "started"
-	//                              activity on the new run and self-revives --
-	//                              reviving it here would be a guess about a run
-	//                              that has not happened yet.
-	//   completed_at IS NULL
-	//     OR completed_at > T      it had not finished by the reset point. A
-	//                              descendant that genuinely ended BEFORE T --
-	//                              for any reason, success or failure -- has its
-	//                              completion in the replayed history and must
-	//                              stay ended. One that ended after T was killed
-	//                              by the interruption (or will re-execute its
-	//                              tail), and is live again in the new run.
-	//
-	// Only rows STOPPED for a reason other than paused are touched. Paused rows
-	// (3/3) are ResumeWorkflowsByChat's business and un-pausing them here would
-	// resume a run the user deliberately parked; active and pending rows are
-	// already correct, and clearing a live row's bookkeeping is not recoverable.
-	//
-	// Recursive over parent_id, same shape as
-	// CascadeTerminalStatusToDescendants: a sub-agent's own sub-agents were
-	// killed by the same terminate and are rebuilt by the same replay.
-	//
-	// The thread half is a data-modifying CTE reading the workflow half's
-	// RETURNING rather than a second statement, for two reasons. It cannot
-	// re-derive the set afterwards -- once those rows are active they no longer
-	// match the terminal predicate -- and one statement is one atomic write, so
-	// no reconciler pass can observe the workflows revived with their threads
-	// still failed. The root's OWN thread (id = the root's workflow id) is
-	// unioned in: it was stamped terminal by the same kill, and the root does
-	// not re-run its "started" activity either, so nothing else brings it back.
-	//
-	// Guarded to terminal thread statuses (3,4,5) exactly as ReviveThread is: a
-	// thread already running or paused keeps its live bookkeeping.
-	ReviveSubtreeLiveAt(ctx context.Context, arg ReviveSubtreeLiveAtParams) (ReviveSubtreeLiveAtRow, error)
 	// Move a thread back to running because a new run has started on it.
 	//
 	// The exact inverse of CascadeTerminalStatusToThreadSubtree below, and the
@@ -1259,11 +990,6 @@ type Querier interface {
 	// Move a draft between 'draft' and 'complete'. The caller validates before
 	// marking complete; this query only records the decision.
 	SetWorkflowDraftStatus(ctx context.Context, arg SetWorkflowDraftStatusParams) (SetWorkflowDraftStatusRow, error)
-	// Record the run's verdict (Node.outcome of the terminal node it reached).
-	// Written once at completion and never reconciled from Temporal, unlike status:
-	// a graph that routes to its `failed` node is a COMPLETED Temporal execution,
-	// so the verdict has nowhere else to live.
-	SetWorkflowOutcome(ctx context.Context, arg SetWorkflowOutcomeParams) (Workflow, error)
 	// Records the verdict on an inbound event that did NOT launch. Conditional on
 	// pending, so it can never overwrite a launch that won a race.
 	SettlePendingTriggerEvent(ctx context.Context, arg SettlePendingTriggerEventParams) (int64, error)
@@ -1298,23 +1024,9 @@ type Querier interface {
 	UpdateWorkflowDraftDefinition(ctx context.Context, arg UpdateWorkflowDraftDefinitionParams) (UpdateWorkflowDraftDefinitionRow, error)
 	// Set or update the forked_from origin
 	UpdateWorkflowForkedFrom(ctx context.Context, arg UpdateWorkflowForkedFromParams) (UpdateWorkflowForkedFromRow, error)
-	// Update workflow name (only allowed while the run is still PENDING)
-	UpdateWorkflowName(ctx context.Context, arg UpdateWorkflowNameParams) (Workflow, error)
 	UpdateWorkflowScenario(ctx context.Context, arg UpdateWorkflowScenarioParams) (WorkflowScenario, error)
 	// Update the cached run result
 	UpdateWorkflowScenarioResult(ctx context.Context, arg UpdateWorkflowScenarioResultParams) (WorkflowScenario, error)
-	// Update workflow lifecycle with conditional timestamp handling:
-	// - Stopped for good (completed/failed/cancelled): set completed_at
-	// - Active/Pending: clear completed_at
-	// - Stopped-but-paused: leave completed_at alone; the run has not ended.
-	UpdateWorkflowStatus(ctx context.Context, arg UpdateWorkflowStatusParams) (Workflow, error)
-	// Record when a worker was started for this workflow.
-	// Clears worker_stopped_at since worker is now running.
-	// Used for reconciler race condition fix: skip stuck check for recently started workers.
-	UpdateWorkflowWorkerStarted(ctx context.Context, id string) error
-	// Record when a worker was stopped for this workflow.
-	// Used for tracking worker lifecycle (e.g., during pause).
-	UpdateWorkflowWorkerStopped(ctx context.Context, id string) error
 	// `path` is settable because asynchronous creation only learns the on-disk
 	// location after the daemon reports it: the row is inserted as CREATING with
 	// an empty path, then settled here — as is `failure_reason`, when it settles
@@ -1366,10 +1078,6 @@ type Querier interface {
 	// status_since moves only when status changes, so it is the start of the
 	// current status episode however often the source is polled.
 	UpsertTriggerRegistration(ctx context.Context, arg UpsertTriggerRegistrationParams) error
-	// Workflow position checkpoints (resume-at-position support).
-	// One row per workflow ID. Written at cheap boundaries: top-level node entry
-	// and per loop iteration for top-level loop nodes.
-	UpsertWorkflowCheckpoint(ctx context.Context, arg UpsertWorkflowCheckpointParams) error
 	// Create or update a workflow draft
 	// Unique on (user_id, slug)
 	UpsertWorkflowDraft(ctx context.Context, arg UpsertWorkflowDraftParams) (UpsertWorkflowDraftRow, error)

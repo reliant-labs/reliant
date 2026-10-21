@@ -71,7 +71,16 @@ service DomainService {
   // This FREES THE HOSTNAME for another org to claim, which is the only
   // self-service escape from a CONFLICT: the org that holds it lets go.
   rpc DeleteDomain(DeleteDomainRequest) returns (DeleteDomainResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "delete"
+        target: {
+          kind: "domain"
+          id: "domain_id"
+        }
+      }
+    };
   }
   // VerifyDomain checks DNS right now rather than waiting for the poller.
   //
@@ -80,7 +89,17 @@ service DomainService {
   // record wants an answer in a second, and the backoff that keeps a
   // week-old domain cheap would otherwise make them wait an hour.
   rpc VerifyDomain(VerifyDomainRequest) returns (VerifyDomainResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "verify"
+        target: {
+          kind: "domain"
+          id: "domain_id"
+          label: "response.domain.hostname"
+        }
+      }
+    };
   }
 
   // CreateDomainBinding points a domain at an environment and a target,
@@ -97,7 +116,17 @@ service DomainService {
   // Its verification survives, so re-binding later costs no DNS work and no
   // new certificate.
   rpc DeleteDomainBinding(DeleteDomainBindingRequest) returns (DeleteDomainBindingResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "delete"
+        target: {
+          kind: "domain_binding"
+          id: "binding_id"
+        }
+        detail: ["domain_id"]
+      }
+    };
   }
   // ListDomainBindings returns the caller org's bindings, optionally only
   // those in one environment.

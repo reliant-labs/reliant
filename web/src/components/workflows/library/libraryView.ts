@@ -15,14 +15,15 @@
  *     split the most relevant rows across headings (§2.2). LastRunPerWorkflow
  *     is already fetched for the rows' Last run column, so it costs nothing.
  *   - "Needs attention" is pinned on top: every workflow with an automation
- *     whose health is FAILING. A row there is taken OUT of its section, never
- *     listed twice, as on the Automations tab (automationGrouping.ts).
+ *     in this project that needs the user (lib/automationHealth.ts — Broken,
+ *     Needs setup, Can't start, Failing, …). A row there is taken OUT of its
+ *     section, never listed twice, as on the Automations tab.
  */
 
 import type { InvalidWorkflow, WorkflowResponse } from "@/api/workflow-grpc";
 import type { RunSummary } from "@/api/run-grpc";
 import type { Trigger } from "@/api/trigger-grpc";
-import { automationHealth } from "@/lib/automationHealth";
+import { automationHealth, worstHealth, type AutomationHealthDisplay } from "@/lib/automationHealth";
 import type { LibrarySortKey, LibrarySourceKey } from "@/routeSchemas";
 import { normalizeWorkflowRef } from "../../workflow/useWorkflowInputs";
 import { workflowDisplayName } from "../../../lib/workflowDisplayName";
@@ -77,8 +78,8 @@ export interface LibraryView {
   buildingBlocks: WorkflowResponse[];
   /** Per workflow ref (normalized): how many automations run it. */
   automationCounts: Map<string, number>;
-  /** Per workflow ref (normalized): how many of those are FAILING. */
-  failingCounts: Map<string, number>;
+  /** Per workflow ref (normalized): the worst health of the automations that run it. */
+  worstHealth: Map<string, AutomationHealthDisplay>;
   /** The search or source left nothing, though the library is not empty. */
   noMatches: boolean;
 }
@@ -91,14 +92,18 @@ const SOURCE_LABEL: Record<"yours" | "builtin", string> = {
 };
 
 /**
- * The Automations column's text. `null` means none, which the cell renders as
- * a dash under the column's label — the dash means "no automation runs this
- * workflow", and it is only legible because the column is labelled.
+ * The "Turned on" column's text: the worst state of what runs the workflow in
+ * this project, in the health vocabulary's words, or Off for a workflow that
+ * could run by itself and does not. `null` means it declares nothing to turn
+ * on and nothing runs it: the cell is a dash under the column's label.
  */
-export function automationsSummary(count: number, failing = 0): string | null {
-  if (count <= 0) return null;
-  const base = `${count} ${count === 1 ? "automation" : "automations"}`;
-  return failing > 0 ? `${base} · ${failing} failing` : base;
+export function turnedOnSummary(
+  health: AutomationHealthDisplay | undefined,
+  declaresTriggers: boolean,
+): { text: string; attention: boolean } | null {
+  if (!health) return declaresTriggers ? { text: "Off", attention: false } : null;
+  if (health.needsAttention || health.key === "paused") return { text: health.label, attention: health.needsAttention };
+  return { text: "On", attention: false };
 }
 
 function matches(query: string, ...fields: (string | undefined)[]): boolean {
@@ -115,13 +120,13 @@ export function libraryView({
   sort = "name",
 }: LibraryViewInput): LibraryView {
   const automationCounts = new Map<string, number>();
-  const failingCounts = new Map<string, number>();
+  const worst = new Map<string, AutomationHealthDisplay>();
   for (const trigger of triggers) {
     const key = normalizeWorkflowRef(trigger.workflow);
     automationCounts.set(key, (automationCounts.get(key) ?? 0) + 1);
-    if (automationHealth(trigger).key === "failing") {
-      failingCounts.set(key, (failingCounts.get(key) ?? 0) + 1);
-    }
+    const health = automationHealth(trigger);
+    const before = worst.get(key);
+    worst.set(key, before ? worstHealth([before, health])! : health);
   }
 
   const query = q?.trim().toLowerCase() ?? "";
@@ -149,7 +154,7 @@ export function libraryView({
   const inSource = searched
     .filter((w) => (w.source === "builtin" ? showBuiltin : showYours))
     .sort(sort === "recent" ? byRecentRun : byName);
-  const isFailing = (w: WorkflowResponse) => (failingCounts.get(normalizeWorkflowRef(w.name)) ?? 0) > 0;
+  const isFailing = (w: WorkflowResponse) => !!worst.get(normalizeWorkflowRef(w.name))?.needsAttention;
   const attention = inSource.filter(isFailing);
   const rest = inSource.filter((w) => !isFailing(w));
 
@@ -185,7 +190,7 @@ export function libraryView({
     invalid: visibleInvalid,
     buildingBlocks,
     automationCounts,
-    failingCounts,
+    worstHealth: worst,
     noMatches: narrowed && shown === 0 && workflows.length + invalid.length > 0,
   };
 }

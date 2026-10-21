@@ -2,7 +2,8 @@
 
 /**
  * The Workflows area's chrome (WORKFLOW_UI.md §1.2): a left sidebar —
- * Library · Runs · Automations — a header bar with the project scope and the
+ * Library · Automations · Runs, Automations badged with how many need you —
+ * a header bar with the project scope and the
  * exit, and project resolution. It is the layout route every `/workflows/*`
  * page renders inside, so a cross-link between sections (workflow → its runs,
  * run → its automation, automation → its workflow) stays inside one shell.
@@ -34,7 +35,7 @@
  * never a dead end.
  */
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { Outlet, useLocation, useNavigate, useSearch } from "@tanstack/react-router";
 import { Activity, ArrowLeft, CalendarClock, Check, ChevronDown, Library, X } from "lucide-react";
 
@@ -50,6 +51,8 @@ import {
   type WorkflowsTab,
 } from "@/lib/workflowsArea";
 import { useProjectStore } from "@/store/projectStore";
+import { useTriggers } from "@/hooks/trigger-queries";
+import { automationUnits, unitsNeedingYou } from "@/lib/automationUnits";
 import { Dropdown } from "../ui/Dropdown";
 import { Tooltip } from "../ui/Tooltip";
 
@@ -84,12 +87,18 @@ export function WorkflowsShell({ pathname, children }: { pathname: string; child
   // The project rides along between sections, so switching keeps context.
   const search = useSearch({ strict: false }) as { project?: string };
   const { trafficLightPadding } = useTitleBarChrome({ collapsedPadding: "0px" });
+  const [collapsed, setCollapsed] = useNarrowRail();
 
   // The button always leaves the area. Escape steps to the logical parent: a
   // detail page's list, or out of the area from a list.
   const leave = useCallback(() => void navigate({ to: "/", search: {} }), [navigate]);
   const stepBack = useCallback(() => void navigate(getParentRouteNavigateOptions(pathname)), [navigate, pathname]);
   useEscapeToLeave(stepBack);
+
+  // Automations carries how many automations need the user, in every project:
+  // the same set its "Needs you" lists.
+  const triggers = useTriggers();
+  const needYou = useMemo(() => unitsNeedingYou(automationUnits(triggers.data ?? [])).length, [triggers.data]);
 
   const navItems = useMemo(() => {
     const query = search.project ? `?${new URLSearchParams({ project: search.project }).toString()}` : "";
@@ -100,9 +109,13 @@ export function WorkflowsShell({ pathname, children }: { pathname: string; child
         href: `${tab.path}${query}`,
         active: tab.key === activeTab,
         icon: <Icon className="h-4 w-4" aria-hidden="true" />,
+        badge:
+          tab.key === "automations" && needYou > 0
+            ? ({ type: "count", value: needYou, tone: "danger", label: `${needYou} ${needYou === 1 ? "automation needs" : "automations need"} you` } as const)
+            : undefined,
       };
     });
-  }, [activeTab, search.project]);
+  }, [activeTab, search.project, needYou]);
 
   return (
     <div className="h-screen w-full" data-testid="workflows-shell">
@@ -121,6 +134,8 @@ export function WorkflowsShell({ pathname, children }: { pathname: string; child
           </div>
         }
         navItems={navItems}
+        collapsed={collapsed}
+        onToggle={() => setCollapsed((c) => !c)}
         // Automations always span every project, so a project scope there
         // would claim a filter that is not applied.
         headerContent={<WorkflowsHeader onClose={leave} showProject={activeTab !== "automations"} />}
@@ -130,6 +145,25 @@ export function WorkflowsShell({ pathname, children }: { pathname: string; child
       </SidebarLayout>
     </div>
   );
+}
+
+/**
+ * On a phone the sidebar starts as the icon rail: a 240px sidebar leaves a
+ * 390px screen 150px for the page. It follows the viewport across the `sm`
+ * breakpoint; the toggle still expands it on demand.
+ */
+function useNarrowRail(): [boolean, Dispatch<SetStateAction<boolean>>] {
+  const query = "(max-width: 639px)";
+  const narrow = () => typeof window !== "undefined" && typeof window.matchMedia === "function" && window.matchMedia(query).matches;
+  const [collapsed, setCollapsed] = useState(narrow);
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
+    const media = window.matchMedia(query);
+    const onChange = () => setCollapsed(media.matches);
+    media.addEventListener?.("change", onChange);
+    return () => media.removeEventListener?.("change", onChange);
+  }, []);
+  return [collapsed, setCollapsed];
 }
 
 /**

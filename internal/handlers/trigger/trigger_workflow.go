@@ -37,6 +37,9 @@ type enableStep struct {
 	// the changed settings of an existing one. Nil with existing means its
 	// settings already match and it only needs resuming.
 	def *reliantv1.TriggerDefinition
+	// warnings are what reachability checking found worth telling the person
+	// once the enable has succeeded.
+	warnings []string
 }
 
 // EnableWorkflow enables every trigger a workflow declares, or none of them,
@@ -105,7 +108,7 @@ func (s *Service) EnableWorkflow(
 		name := wt.GetName()
 		results[i] = &reliantv1.WorkflowTriggerResult{Trigger: name}
 		if existing := activations[name]; existing != nil {
-			step, err := s.existingActivationStep(ctx, userID, wt, msg, existing, overrides[name], taken)
+			step, err := s.existingActivationStep(ctx, userID, wf, wt, msg, existing, overrides[name], taken)
 			if err != nil {
 				results[i].Outcome = reliantv1.WorkflowTriggerOutcome_WORKFLOW_TRIGGER_OUTCOME_FAILED
 				results[i].Message = connectMessage(err)
@@ -125,6 +128,7 @@ func (s *Service) EnableWorkflow(
 			continue
 		}
 
+		var warnings []string
 		def, err := s.workflowActivationDefinition(wt, msg, prefix+" · "+name, overrides[name])
 		if err == nil {
 			if taken[def.Name] {
@@ -136,7 +140,9 @@ func (s *Service) EnableWorkflow(
 				var row *core.Trigger
 				if row, err = s.triggerFromDefinition(ctx, userID, def, nil); err == nil {
 					row.Enabled = true
-					err = s.refreshTriggerAccess(ctx, row)
+					if err = s.refreshTriggerAccess(ctx, row); err == nil {
+						warnings, err = s.checkReachability(ctx, userID, wf, wt, msg, row)
+					}
 				}
 			}
 		}
@@ -147,7 +153,7 @@ func (s *Service) EnableWorkflow(
 			continue
 		}
 		taken[def.Name] = true
-		steps[i] = &enableStep{name: name, def: def}
+		steps[i] = &enableStep{name: name, def: def, warnings: warnings}
 	}
 	if failed {
 		for i, r := range results {
@@ -172,6 +178,11 @@ func (s *Service) EnableWorkflow(
 			return connect.NewResponse(&reliantv1.EnableWorkflowResponse{Results: results}), nil
 		}
 	}
+	for i, step := range steps {
+		if step != nil {
+			results[i].Warnings = step.warnings
+		}
+	}
 	return connect.NewResponse(&reliantv1.EnableWorkflowResponse{Enabled: true, Results: results}), nil
 }
 
@@ -183,6 +194,7 @@ func (s *Service) EnableWorkflow(
 func (s *Service) existingActivationStep(
 	ctx context.Context,
 	userID string,
+	wf *reliantv1.Workflow,
 	wt *reliantv1.WorkflowTrigger,
 	msg *reliantv1.EnableWorkflowRequest,
 	existing *core.Trigger,
@@ -212,13 +224,17 @@ func (s *Service) existingActivationStep(
 	if err := s.refreshTriggerAccess(ctx, row); err != nil {
 		return nil, err
 	}
-	if sameActivationSettings(row, existing) {
-		if existing.Enabled {
-			return nil, nil
-		}
-		return &enableStep{name: name, existing: existing}, nil
+	if sameActivationSettings(row, existing) && existing.Enabled {
+		return nil, nil
 	}
-	return &enableStep{name: name, existing: existing, def: def}, nil
+	warnings, err := s.checkReachability(ctx, userID, wf, wt, msg, row)
+	if err != nil {
+		return nil, err
+	}
+	if sameActivationSettings(row, existing) {
+		return &enableStep{name: name, existing: existing, warnings: warnings}, nil
+	}
+	return &enableStep{name: name, existing: existing, def: def, warnings: warnings}, nil
 }
 
 // sameActivationSettings reports whether two rows of one activation hold the

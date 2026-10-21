@@ -326,7 +326,7 @@ func Run(ctx context.Context, opts Options) error {
 	// same table; both processes must use it or neither can read the other's
 	// histories. The api-server owns the schema, so it also owns GC (the
 	// payload-gc node).
-	payloadStore := claimcheck.NewPostgresStore(repo.DB.SQLDB())
+	payloadStore := claimcheck.NewPostgresStore(repo.ORM())
 	gcHorizon := opts.PayloadGCHorizon
 	if gcHorizon <= 0 {
 		gcHorizon = claimcheck.DefaultGCHorizon

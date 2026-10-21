@@ -123,7 +123,7 @@ describe("AutomationsListPage", () => {
 
     renderAtRoute(<AutomationsListPage />);
 
-    const row = await screen.findByTestId("automation-row-trig-1");
+    const row = await screen.findByTestId("automation-unit-custom:trig-1");
     expect(within(row).getByRole("link", { name: "Morning triage" })).toHaveAttribute(
       "href",
       "/workflows/automations/trig-1",
@@ -134,7 +134,7 @@ describe("AutomationsListPage", () => {
     expect(within(row).getByText("Completed")).toBeInTheDocument();
     expect(within(row).getByText("3 hours ago")).toBeInTheDocument();
     expect(within(row).getByText("in 2 hours")).toBeInTheDocument();
-    expect(within(row).getByRole("switch", { name: "Morning triage enabled" })).toHaveAttribute(
+    expect(within(row).getByRole("switch", { name: "Morning triage in Reliant on" })).toHaveAttribute(
       "aria-checked",
       "true",
     );
@@ -151,7 +151,7 @@ describe("AutomationsListPage", () => {
 
     renderAtRoute(<AutomationsListPage />);
 
-    const row = await screen.findByTestId("automation-row-trig-1");
+    const row = await screen.findByTestId("automation-unit-custom:trig-1");
     expect(within(row).getByText("Reliant · No machine")).toBeInTheDocument();
     expect(within(row).queryByText(/daemon/i)).not.toBeInTheDocument();
   });
@@ -161,7 +161,7 @@ describe("AutomationsListPage", () => {
 
     renderAtRoute(<AutomationsListPage />);
 
-    const row = await screen.findByTestId("automation-row-trig-1");
+    const row = await screen.findByTestId("automation-unit-custom:trig-1");
     // On the very first render with data, not after some store fills in.
     expect(within(row).getByText("Reliant · MacBook")).toBeInTheDocument();
     // The page reads the store for the CURRENT project only (whose library
@@ -190,14 +190,14 @@ describe("AutomationsListPage", () => {
 
     renderAtRoute(<AutomationsListPage />);
 
-    const row = await screen.findByTestId("automation-row-trig-1");
+    const row = await screen.findByTestId("automation-unit-custom:trig-1");
     const failed = within(row).getByText("Failed");
     expect(failed.closest("[data-run-status]")).toHaveAttribute("data-run-status", "failed");
     expect(within(row).queryByText("Launched")).toBeNull();
     expect(row.querySelector('[class*="bg-success"]')).toBeNull();
   });
 
-  it("a firing that never became a run keeps the event's own words", async () => {
+  it("a firing that never became a run is Can't start, under Needs you, with the reason and Open settings", async () => {
     listTriggers.mockResolvedValue({
       triggers: [
         protoTrigger({
@@ -213,8 +213,10 @@ describe("AutomationsListPage", () => {
 
     renderAtRoute(<AutomationsListPage />);
 
-    const row = await screen.findByTestId("automation-row-trig-1");
-    expect(within(row).getByText("Failed to launch")).toBeInTheDocument();
+    const row = await screen.findByTestId("needs-you-custom:trig-1");
+    expect(within(row).getByText("Can't start")).toBeInTheDocument();
+    expect(within(row).getByText("model unavailable")).toBeInTheDocument();
+    expect(within(row).getByRole("button", { name: "Open settings for Morning triage in Reliant" })).toBeInTheDocument();
   });
 
   it("shows a never-run, paused trigger as Paused with no next fire", async () => {
@@ -231,7 +233,7 @@ describe("AutomationsListPage", () => {
 
     renderAtRoute(<AutomationsListPage />);
 
-    const row = await screen.findByTestId("automation-row-trig-1");
+    const row = await screen.findByTestId("automation-unit-custom:trig-1");
     expect(within(row).getByText("Never run")).toBeInTheDocument();
     expect(within(row).getByText("Paused")).toBeInTheDocument();
     expect(within(row).getByText("Next run: none")).toBeInTheDocument();
@@ -262,32 +264,51 @@ describe("AutomationsListPage", () => {
 
     renderAtRoute(<AutomationsListPage />);
 
-    const attention = await screen.findByTestId("automation-group-needs-attention");
-    expect(within(attention).getByRole("heading", { name: "Needs attention" })).toBeInTheDocument();
-    const ids = within(attention)
+    const needsYou = await screen.findByTestId("automations-needs-you");
+    expect(within(needsYou).getByRole("heading", { name: "Needs you" })).toBeInTheDocument();
+    const ids = within(needsYou)
       .getAllByRole("listitem")
       .map((li) => li.getAttribute("data-testid"));
-    expect(ids).toEqual(["automation-row-fail", "automation-row-wait", "automation-row-skip"]);
-    expect(within(attention).getByText("2 failed in a row")).toBeInTheDocument();
-    // Health and the last run both say it: the run is blocked, so the
-    // automation is too.
-    const waitingRow = within(attention).getByTestId("automation-row-wait");
-    expect(waitingRow).toHaveAttribute("data-health", "waiting_for_machine");
-    expect(within(waitingRow).getAllByText("Waiting for machine")).toHaveLength(2);
-    expect(within(attention).getByText("Skipping")).toBeInTheDocument();
-    // Each automation appears once on the page.
-    expect(screen.getAllByTestId("automation-row-fail")).toHaveLength(1);
+    expect(ids).toEqual(["needs-you-custom:fail", "needs-you-custom:wait", "needs-you-custom:skip"]);
+    expect(within(needsYou).getByText("2 failed in a row")).toBeInTheDocument();
+    // Each row carries its one call to action.
+    expect(within(needsYou).getByRole("button", { name: "Open last run for Broken in Reliant" })).toBeInTheDocument();
+    expect(within(needsYou).getByRole("button", { name: "Open run for Sleepy in Reliant" })).toBeInTheDocument();
+    expect(within(needsYou).getByRole("button", { name: "See why for Skipper in Reliant" })).toBeInTheDocument();
+    expect(within(needsYou).getByTestId("needs-you-custom:wait")).toHaveAttribute("data-health", "waiting_for_machine");
+    // Each automation appears once on the page, and the counts say so.
+    expect(screen.queryByTestId("automation-unit-custom:fail")).toBeNull();
     expect(within(screen.getByTestId("automation-group-workflow:builtin://agent")).getAllByRole("listitem")).toHaveLength(1);
+    const counts = screen.getByTestId("automation-counts");
+    expect(within(counts).getByRole("link", { name: /3\s*need you/ })).toHaveAttribute("href", "#needs-you");
   });
 
-  it("has no Needs attention group when nothing needs attention", async () => {
+  it("shows a workflow turned on in a project as one automation, linking to its workflow page", async () => {
+    listTriggers.mockResolvedValue({
+      triggers: [
+        protoTrigger({ id: "a1", name: "PR review · pr-opened", workflow: "builtin://autopilot-pr-review", workflowTrigger: "pr-opened" }),
+        protoTrigger({ id: "a2", name: "PR review · pr-ready", workflow: "builtin://autopilot-pr-review", workflowTrigger: "pr-ready" }),
+      ],
+    });
+
+    renderAtRoute(<AutomationsListPage />);
+
+    const row = await screen.findByTestId("automation-unit-autopilot-pr-review::proj-1");
+    expect(within(row).getByRole("link", { name: "Autopilot Pr Review" }).getAttribute("href")).toBe(
+      "/workflows/library/builtin%3A%2F%2Fautopilot-pr-review?project=proj-1#automation-proj-1",
+    );
+    expect(within(row).getByText("2 triggers")).toBeInTheDocument();
+    expect(screen.getAllByRole("switch")).toHaveLength(1);
+  });
+
+  it("has no Needs you section when nothing needs the user", async () => {
     listTriggers.mockResolvedValue({ triggers: [protoTrigger()] });
 
     renderAtRoute(<AutomationsListPage />);
 
-    await screen.findByTestId("automation-row-trig-1");
-    expect(screen.queryByTestId("automation-group-needs-attention")).toBeNull();
-    expect(screen.queryByText("Needs attention")).toBeNull();
+    await screen.findByTestId("automation-unit-custom:trig-1");
+    expect(screen.queryByTestId("automations-needs-you")).toBeNull();
+    expect(screen.queryByText("Needs you")).toBeNull();
   });
 
   it("groups by workflow by default and by project on request", async () => {
@@ -301,10 +322,11 @@ describe("AutomationsListPage", () => {
 
     renderAtRoute(<AutomationsListPage />);
 
-    await screen.findByTestId("automation-row-a");
+    await screen.findByTestId("automation-unit-custom:a");
     expect(screen.getByRole("button", { name: "Workflow" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent)).toEqual([
       "Coming up",
+      "On",
       "Agent",
       "Triage",
     ]);
@@ -313,6 +335,7 @@ describe("AutomationsListPage", () => {
     expect(screen.getByRole("button", { name: "Project" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent)).toEqual([
       "Coming up",
+      "On",
       "Alpha",
       "Zeta",
     ]);
@@ -328,7 +351,7 @@ describe("AutomationsListPage", () => {
 
     listTriggers.mockResolvedValueOnce({ triggers: [protoTrigger({ enabled: false })] });
     renderAtRoute(<AutomationsListPage />);
-    await screen.findByTestId("automation-row-trig-1");
+    await screen.findByTestId("automation-unit-custom:trig-1");
     expect(screen.queryByTestId("coming-up-timeline")).toBeNull();
   });
 
@@ -340,13 +363,13 @@ describe("AutomationsListPage", () => {
     setTriggerEnabled.mockReturnValue(new Promise((resolve) => (answer = resolve)));
 
     renderAtRoute(<AutomationsListPage />);
-    const toggle = await screen.findByRole("switch", { name: "Morning triage enabled" });
+    const toggle = await screen.findByRole("switch", { name: "Morning triage in Reliant on" });
     await userEvent.click(toggle);
 
     await waitFor(() => expect(setTriggerEnabled).toHaveBeenCalledTimes(1));
     expect(setTriggerEnabled.mock.calls[0]![0]).toMatchObject({ id: "trig-1", enabled: false });
     // Optimistic: the switch moves before the server answers.
-    expect(screen.getByRole("switch", { name: "Morning triage enabled" })).toHaveAttribute(
+    expect(screen.getByRole("switch", { name: "Morning triage in Reliant on" })).toHaveAttribute(
       "aria-checked",
       "false",
     );
@@ -355,7 +378,7 @@ describe("AutomationsListPage", () => {
     listTriggers.mockResolvedValue({ triggers: [protoTrigger({ enabled: false })] });
     answer(create(SetTriggerEnabledResponseSchema, { trigger: protoTrigger({ enabled: false }) }));
     await waitFor(() => expect(listTriggers).toHaveBeenCalledTimes(2));
-    expect(screen.getByRole("switch", { name: "Morning triage enabled" })).toHaveAttribute(
+    expect(screen.getByRole("switch", { name: "Morning triage in Reliant on" })).toHaveAttribute(
       "aria-checked",
       "false",
     );
@@ -366,26 +389,27 @@ describe("AutomationsListPage", () => {
     setTriggerEnabled.mockRejectedValue(new Error("boom"));
 
     renderAtRoute(<AutomationsListPage />);
-    await userEvent.click(await screen.findByRole("switch", { name: "Morning triage enabled" }));
+    await userEvent.click(await screen.findByRole("switch", { name: "Morning triage in Reliant on" }));
 
     await waitFor(() => expect(setTriggerEnabled).toHaveBeenCalledTimes(1));
     await waitFor(() =>
-      expect(screen.getByRole("switch", { name: "Morning triage enabled" })).toHaveAttribute(
+      expect(screen.getByRole("switch", { name: "Morning triage in Reliant on" })).toHaveAttribute(
         "aria-checked",
         "true",
       ),
     );
   });
 
-  it("explains automations and offers to create one when there are none", async () => {
+  it("points to the Library when nothing runs by itself, and still offers a custom automation", async () => {
     listTriggers.mockResolvedValue({ triggers: [] });
 
     renderAtRoute(<AutomationsListPage />);
 
-    expect(await screen.findByRole("heading", { name: "Nothing runs on its own yet" })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Browse workflows" })).toHaveAttribute("href", "/workflows/library");
+    expect(await screen.findByRole("heading", { name: "Nothing runs by itself yet." })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Browse the Library" })).toHaveAttribute("href", "/workflows/library");
     expect(screen.queryByTestId("coming-up-timeline")).toBeNull();
-    await userEvent.click(screen.getByRole("button", { name: "New automation" }));
+    expect(screen.queryByText("Not enabled yet")).toBeNull();
+    await userEvent.click(within(screen.getByTestId("automations-empty")).getByRole("button", { name: "Custom automation" }));
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
   });
 
@@ -397,6 +421,6 @@ describe("AutomationsListPage", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("Automations could not be loaded.");
     listTriggers.mockResolvedValue({ triggers: [protoTrigger()] });
     await userEvent.click(screen.getByRole("button", { name: "Try again" }));
-    expect(await screen.findByTestId("automation-row-trig-1")).toBeInTheDocument();
+    expect(await screen.findByTestId("automation-unit-custom:trig-1")).toBeInTheDocument();
   });
 });

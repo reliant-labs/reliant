@@ -190,10 +190,11 @@ func unmarshalStrictMessage(node *yaml.Node, msg protoreflect.Message) error {
 	return nil
 }
 
+const integrationSourceName protoreflect.FullName = "reliant.v1.IntegrationSource"
+
 const (
-	integrationSourceName      protoreflect.FullName = "reliant.v1.IntegrationSource"
-	integrationMatchField                            = "match"
-	integrationMatchInputField                       = "match_input"
+	integrationMatchField      = "match"
+	integrationMatchInputField = "match_input"
 )
 
 // setIntegrationMatch reads an integration source's `match:` mapping. An entry

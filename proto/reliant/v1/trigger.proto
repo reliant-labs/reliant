@@ -260,7 +260,9 @@ enum TriggerHealthStatus {
   // NEEDS_SETUP: the activation's stored params do not satisfy the workflow's
   // current inputs (a required input has no value). Computed on read; the
   // fix is to finish setup, not to repair the workflow. BROKEN takes
-  // precedence.
+  // precedence; NEEDS_SETUP takes precedence over every firing-derived
+  // status, because nothing the activation fires can launch until it is
+  // fixed. health.setup_issues says which inputs.
   TRIGGER_HEALTH_STATUS_NEEDS_SETUP = 6;
 }
 
@@ -279,8 +281,23 @@ message TriggerHealth {
 
   // What went wrong in the most recent failure in the window: the launch
   // error for a FAILED firing, or a short description of the failed run.
-  // Empty when the window holds no failure.
+  // Empty when the window holds no failure. For NEEDS_SETUP it reads
+  // "needs setup: repos is required".
   string last_failure_detail = 4;
+
+  // NEEDS_SETUP only: what is missing or invalid, one entry per workflow
+  // input, in input-name order, so a client can focus the field.
+  repeated TriggerSetupIssue setup_issues = 5;
+}
+
+// TriggerSetupIssue is one input an activation's params do not satisfy.
+message TriggerSetupIssue {
+  // The workflow input the issue is about.
+  string input = 1;
+
+  // What is wrong, as a sentence that names the input: "repos is required",
+  // "input 'repos' requires at least 1 item(s)".
+  string message = 2;
 }
 
 // TriggerEventRun is the run a launched firing started, as of now.
@@ -973,6 +990,11 @@ message WorkflowTriggerResult {
 
   // A webhook trigger's token, for ENABLED only. Shown once, never again.
   WebhookCredential webhook = 5;
+
+  // Facts worth knowing about an enable that went through: a value that could
+  // not be checked for reachability because the integration errored, or one
+  // the acting identity cannot write to. Never set on a refusal.
+  repeated string warnings = 6;
 }
 
 // EnableWorkflowResponse is the response for EnableWorkflow.

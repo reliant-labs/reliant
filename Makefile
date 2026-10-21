@@ -464,6 +464,9 @@ $(SQLC_BIN):
 
 sqlc: $(SQLC_BIN)
 	@echo "$(YELLOW)Generating database code with sqlc $(SQLC_VERSION)...$(NC)"
+	@# sqlc never deletes a file it no longer writes: clear the per-query output
+	@# first, so deleting a queries/*.sql file (P5b) deletes its Go too.
+	@rm -f internal/db/postgres/generated/*.sql.go
 	@$(SQLC_BIN) generate
 	@echo "$(GREEN)✅ Database code generated$(NC)"
 
