@@ -1,0 +1,14 @@
+# Pull request opened: the projection of the GitHub `pull_request.opened` webhook.
+id: pull_request.opened
+event: pull_request.opened
+display_name: Pull request opened
+summary: A pull request was opened.
+description: >-
+  Fires when a pull request is opened. Match base_branch to watch one target
+  branch, or branch for the head branch.
+keywords: [pr, pull request, review, code review]
+attributes:
+  - { group: pr }
+data:
+  number: integer
+  pull_request: { kind: object, object: pr }

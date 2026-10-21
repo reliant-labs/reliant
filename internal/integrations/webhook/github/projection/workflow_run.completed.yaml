@@ -1,0 +1,43 @@
+# Workflow run completed: the projection of the GitHub `workflow_run.completed` webhook.
+id: workflow_run.completed
+event: workflow_run.completed
+display_name: Workflow run completed
+summary: A GitHub Actions workflow run finished.
+description: >-
+  Fires when a workflow run completes. Match conclusion (success, failure,
+  cancelled, ...) and branch, e.g. conclusion: failure and branch: main to
+  react to a broken main.
+keywords: [actions, ci, build, failed, workflow]
+attributes:
+  - { name: conclusion, description: "The run's conclusion.", example: failure, from: workflow_run.conclusion }
+  - { name: branch, description: The branch the run was for., example: main, from: workflow_run.head_branch }
+  - { name: workflow, description: "The workflow's name.", example: CI, from: workflow_run.name }
+data:
+  workflow:
+    kind: object
+    fields:
+      id: integer
+      name: string
+      path: string
+  workflow_run:
+    kind: object
+    fields:
+      id: integer
+      name: string
+      run_number: integer
+      run_attempt: integer
+      event: string
+      status: string
+      conclusion: string
+      head_branch: string
+      head_sha: string
+      html_url: string
+      actor: { kind: object, object: user }
+      run_started_at: string
+      updated_at: string
+      head_commit:
+        kind: object
+        fields:
+          id: string
+          message: { kind: string, cap: true }
+      pull_requests: { kind: integers, pluck: number }

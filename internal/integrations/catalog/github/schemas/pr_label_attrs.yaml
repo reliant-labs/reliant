@@ -1,7 +1,0 @@
-- { $ref: attr_repository.yaml }
-- { $ref: attr_installation.yaml }
-- { $ref: attr_sender.yaml }
-- { $ref: attr_action.yaml }
-- { $ref: attr_branch.yaml }
-- { $ref: attr_base_branch.yaml }
-- { name: label, description: The label that was added., example: "agent:re-review" }

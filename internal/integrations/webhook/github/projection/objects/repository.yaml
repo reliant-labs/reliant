@@ -1,0 +1,8 @@
+fields:
+  id: integer
+  full_name: string
+  name: string
+  owner: { kind: string, from: owner.login }
+  private: boolean
+  html_url: string
+  default_branch: string

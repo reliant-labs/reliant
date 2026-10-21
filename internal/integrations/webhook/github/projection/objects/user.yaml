@@ -1,0 +1,7 @@
+# A GitHub account. Login and id only: the login is what a human reads, the id
+# is what never changes.
+absent: "null"
+fields:
+  login: string
+  id: integer
+  type: string

@@ -1,0 +1,18 @@
+# Pull request labeled: the projection of the GitHub `pull_request.labeled` webhook.
+id: pull_request.labeled
+event: pull_request.labeled
+display_name: Pull request labeled
+summary: A label was added to a pull request.
+description: >-
+  Fires when a label is added to a pull request. Match `label` to react to
+  one label, e.g. label: agent:re-review, and base_branch or branch to
+  narrow by branch. The label is also data.label; the full set is
+  data.pull_request.labels.
+keywords: [pr, label, tag, triage, re-review]
+attributes:
+  - { group: pr }
+  - { name: label, description: The label that was added., example: "agent:re-review", from: label.name }
+data:
+  number: integer
+  label: { kind: string, from: label.name, description: The label that was added or removed. }
+  pull_request: { kind: object, object: pr }

@@ -1,0 +1,26 @@
+# Review requested: the projection of the GitHub `pull_request.review_requested` webhook.
+id: pull_request.review_requested
+event: pull_request.review_requested
+display_name: Review requested
+summary: Someone's review was requested on a pull request.
+description: >-
+  Fires when a review is requested from a user or a team. Match
+  requested_reviewer (a login, or a team's slug) to react to requests for
+  one reviewer.
+keywords: [pr, review, reviewer, code review]
+attributes:
+  - { group: pr }
+  - name: requested_reviewer
+    description: The requested reviewer's login, or the team's slug.
+    example: octocat
+    from: [requested_reviewer.login, requested_team.slug]
+data:
+  number: integer
+  pull_request: { kind: object, object: pr }
+  requested_reviewer: { kind: object, object: user, omit_empty: true }
+  requested_team:
+    kind: object
+    omit_empty: true
+    fields:
+      name: string
+      slug: string

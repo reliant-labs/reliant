@@ -1,0 +1,17 @@
+# Pull request unlabeled: the projection of the GitHub `pull_request.unlabeled` webhook.
+id: pull_request.unlabeled
+event: pull_request.unlabeled
+display_name: Pull request unlabeled
+summary: A label was removed from a pull request.
+description: >-
+  Fires when a label is removed from a pull request. Match `label` to react
+  to one label. data.label is the label removed; data.pull_request.labels is
+  what remains.
+keywords: [pr, label, untag, remove label]
+attributes:
+  - { group: pr }
+  - { name: label, description: The label that was removed., example: "agent:re-review", from: label.name }
+data:
+  number: integer
+  label: { kind: string, from: label.name, description: The label that was added or removed. }
+  pull_request: { kind: object, object: pr }

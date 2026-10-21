@@ -1,0 +1,55 @@
+# The GitHub projection: what of a webhook body the parser keeps, and the
+# schema that says so. tools/integrationgen turns this directory, the pinned
+# upstream schema below and the shared attribute declarations in the catalog
+# into zz_projection_gen.go and the catalog's events/ and *_schema.yaml.
+# Authoring guide: dev-docs/integration-manifests.md ("Webhook events").
+provider: github
+package: github
+catalog: internal/integrations/catalog/github
+
+# Hand-written funcs the specs may name (attributes' `hook:`).
+hooks: hooks.go
+
+# Every kept path is checked against this definition of the event. A bump is a
+# new file, a new version and sha256 here, then `make generate-integrations`.
+upstream:
+  package: "@octokit/webhooks-schemas"
+  version: 7.6.1
+  file: tools/integrationgen/upstream/octokit-webhooks-schemas/schema.json
+  sha256: ff15ae017ba3b877a44f636806155f986f7b707b31aa7eebde6da1d3366f2840
+
+# The recorded payload is a trimmed copy of the webhook body. GitHub's are large
+# (a push carries every commit's file lists; every object carries a dozen API
+# URLs) and mostly irrelevant to a run, and the event row, the seed message and
+# a CEL filter all read it. What is kept is what an agent acts on and a filter
+# tests: numbers, titles, bodies, states, refs, logins and the html_url a human
+# opens. Emails and API-only URLs are dropped, long text is capped, and the whole
+# payload has a hard size bound.
+caps:
+  text_bytes: 16384 # one text field (an issue body, a comment)
+  data_bytes: 65536 # the encoded payload; past it a shrink rule cuts a list down
+  list_items: 50 # labels, assignees and the like
+  truncated_suffix: "… [truncated]"
+  lists:
+    commits: 20 # a push's commit list (GitHub sends at most 20)
+
+# What every event carries. The parser sets these attributes from the delivery's
+# routing envelope; the data fields are projected like any other.
+envelope:
+  attributes:
+    - use: repository
+    - use: installation
+    - use: sender
+    - use: action
+  data_first:
+    action: string
+  data:
+    repository: { kind: object, object: repository }
+    sender: { kind: object, object: user }
+
+attribute_groups:
+  # The pull request's branches, so a trigger can match them on every pull
+  # request event.
+  pr:
+    - { use: branch, from: pull_request.head.ref }
+    - { use: base_branch, from: pull_request.base.ref }

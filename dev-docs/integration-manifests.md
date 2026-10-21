@@ -76,17 +76,119 @@ whole mapping it appears in. It replaces YAML anchors, which cannot cross files.
 
 ## Webhook events and their data schema
 
-An event's `data:` is the JSON Schema of `trigger.payload.data`. The provider parser
-(`internal/integrations/webhook/<id>`) produces it, and
-`TestEmittedDataConformsToTheDeclaredSchema` (github) holds the two together: every
-recorded fixture's emitted `Data` must validate against its event's schema, every
-emitted property at any depth must be declared, and every declared property must be
-produced by some fixture. To add a property, add it to the parser, the schema and a
-fixture in `webhook/github/testdata`.
+An event's `data:` is the JSON Schema of `trigger.payload.data`. For GitHub it is
+**generated**, together with the Go that fills it, from one source:
+
+```
+internal/integrations/webhook/github/projection/
+  provider.yaml            the pinned upstream schema, the caps, the envelope every event carries
+  objects/<name>.yaml      a projected object several events share (user, pr, issue, ...)
+  <trigger id>.yaml        one event: its catalog prose, attributes and data
+tools/integrationgen/upstream/octokit-webhooks-schemas/schema.json   the vendored upstream schema
+```
+
+`make generate-integrations` (part of `make generate`) turns that into
+
+| Output | Replaces |
+|---|---|
+| `webhook/github/zz_projection_gen.go`: the `mappings` table and one attrs and one data func per event | the hand-written projections in `data.go` |
+| `catalog/github/events/<id>.yaml`: attributes and the closed `data` schema | the hand-written event fragments |
+| `catalog/github/schemas/<object>_schema.yaml` | the hand-written object schemas |
+| the `triggers:` list of `catalog/github/manifest.yaml` (a new event is appended) | |
+
+Schema and parser come from the same lines of a spec, so they cannot drift. What
+stays by hand: the parser's routing (`parse.go`: the envelope, access, revocations,
+our own bot), the helpers the generated code is written in (`data.go`), the shared
+attribute declarations (`schemas/attr_*.yaml`), and the named hooks (`hooks.go`).
+`TestEmittedDataConformsToTheDeclaredSchema` still holds the emitted `Data` to the
+schema, now as a check on the generator and on the fixtures.
+
+### What a spec says
+
+```yaml
+# projection/pull_request.closed.yaml
+id: pull_request.closed            # the trigger id; the file is named for it
+event: pull_request.closed         # <X-GitHub-Event>.<action>, or the bare event (push)
+display_name: Pull request closed
+summary: A pull request was closed or merged.
+description: >-
+  Fires when a pull request is closed. Match merged: "true" for merges only.
+keywords: [pr, merged, merge]
+attributes:
+  - { group: pr }                  # branch + base_branch, defined once in provider.yaml
+  - { name: merged, description: '"true" when the pull request was merged.', example: "true", from: pull_request.merged, kind: boolean }
+data:
+  number: integer
+  pull_request: { kind: object, object: pr }     # a shared objects/pr.yaml
+```
+
+The envelope (`repository`, `installation_id`, `sender`, `action` attributes; `action`,
+`repository`, `sender` data) is added to every event; `omit: [action]` drops one.
+
+**Field kinds** (`data:` and `objects/*.yaml`; a bare word is a kind):
+
+| Kind | Emits |
+|---|---|
+| `string` | the text at `from:` (default: the field name); `cap: true` cuts it at `caps.text_bytes`; `lower: true`; `omit_empty: true` leaves it out when empty; `enum:` is schema-only |
+| `integer` | the JSON number as an int64; `omit_empty: true` leaves it out when absent |
+| `boolean` | `value == true` |
+| `present` | true when the value is a JSON object (a marker such as `issue.pull_request`) |
+| `names` / `integers` | the `pluck:` key of each element of a list, at most `caps.list_items` |
+| `strings` | a list of strings, at most `caps.list_items` |
+| `object` | `object: <name>` (a shared object) or inline `fields:`; `omit_empty: true` drops it when the source is not an object |
+| `list` | `object: <name>` per element, at most `max: <caps.lists key>` |
+
+`optional: <why>` on a field excuses it from existing in every event's upstream
+definition (a pull request in a review event is slimmer than a full one); it must
+still exist in at least one. `unchecked: <why>` excuses a field from the upstream
+check entirely.
+
+**Attributes** are strings. `from:` is the payload path (several are tried in order);
+`kind: boolean` or `hook: <name>` yield `"true"`/`"false"`; `lower:` and
+`strip_prefix:` shape a string. `use: <name>` stands for a shared declaration in
+`catalog/github/schemas/attr_<name>.yaml`. A hook is a `func(any) bool` in
+`webhook/github/hooks.go` (`mentionsReliant`, `isObject`, `isSet`); logic that is
+not a projection stays Go, named from the spec.
+
+`shrink:` (push) says how an oversized payload is cut to `caps.data_bytes`: the list
+loses the `drop` keys of each element, then elements from the end, and `flag` is set.
+
+### Adding an event
+
+1. Add the fixture: a recorded delivery as `webhook/github/testdata/<event>.<action>.json`
+   (the file name starts with the `X-GitHub-Event` header).
+2. Add `projection/<trigger id>.yaml` as above. Reuse `objects/` and the attribute
+   groups; a new shared shape is a new `objects/<name>.yaml`.
+3. `make generate-integrations`. It fails, naming the file and the path, if a kept path
+   does not exist in the event's upstream definition (`issues$opened`, `push$event`) or
+   upstream types it differently than the kind can read.
+4. `go test ./internal/integrations/...`: conformance requires the fixture to produce
+   every declared property, so a field no fixture exercises is a gap to fill.
+
+No Go, no catalog YAML and no manifest edit by hand.
+
+### Bumping the upstream schema
+
+The upstream schema is a check, not a source of types: nothing is copied out of it.
+It pins what GitHub says the payload contains, so a bump surfaces every field the
+projection keeps that moved.
+
+1. Download the new `schema.json` over the vendored one (`npm pack @octokit/webhooks-schemas@<v>`)
+   and update `upstream.version` and `upstream.sha256` in `provider.yaml` (the generator
+   refuses a file whose hash is not the pinned one). Update the notice in `LICENSES.txt`.
+2. `make generate-integrations`. A renamed, removed or retyped field fails with the event,
+   the spec and the path. Fix the spec (a rename is `from:`; a field GitHub dropped leaves
+   the payload, which is a manifest `version` bump) and rerun. A new upstream event or field
+   changes nothing until a spec asks for it.
+3. `go test ./internal/integrations/...`: the conformance test runs the fixtures through the
+   regenerated projection. Re-record fixtures if GitHub's shape changed.
+
+`TestRepositoryGeneratedFilesAreCurrent` (and `go run ./tools/integrationgen -check`) fail
+when a generated file differs from what the specs produce.
 
 ## Checking a change
 
 ```
-make generate-manifest-schema
-go test ./internal/integrations/...
+make generate-manifest-schema generate-integrations
+go test ./internal/integrations/... ./tools/integrationgen/...
 ```
