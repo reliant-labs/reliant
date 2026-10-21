@@ -17,6 +17,7 @@
  *   …&compare=period|release  &range=24h  &service=api  &tv=1  &version=2
  *   …&env=all|staging|dev
  *   …&case=empty|read-only|error|loading|not-set-up|no-telemetry
+ *   …&alert=ratio|p95|grouped|formula|gauge|sql|heatmap|counter|funnel   "Create alert from this panel", for a sample panel
  *   …&dark=1&scheme=pure-black
  */
 
@@ -27,6 +28,7 @@ import { Code } from "@connectrpc/connect";
 
 import { ObservabilityApiProvider, type ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import type { DashboardRef } from "@/services/controlPlane/observability/dashboardTypes";
+import type { Panel } from "@/services/controlPlane/observability/types";
 
 import { ConsolePreviewShell } from "../../../Console/ConsolePreviewShell";
 import { withSearch, type ConsolePage } from "../../../Console/paths";
@@ -35,6 +37,7 @@ import { ObservabilityHome } from "../../Home/ObservabilityHome";
 import type { ObsSearch } from "../../obsSearch";
 import { compareParam, isDashboardPageKind, rangeParam, refreshParam, type DashboardSearch } from "../dashboardModel";
 import { DashboardsList, type DashboardsSearch } from "../DashboardsList";
+import { AlertFromPanelDialog } from "../AlertFromPanelDialog";
 import { DashboardView } from "../DashboardView";
 
 const BASE = "/forge-dashboards-preview";
@@ -68,6 +71,7 @@ type PreviewSearch = DashboardsSearch &
     dash?: string;
     env?: string;
     case?: string;
+    alert?: string;
     dark?: boolean | string | number;
     scheme?: string;
     range?: string;
@@ -77,6 +81,43 @@ type PreviewSearch = DashboardsSearch &
   };
 
 const CONTROL = "rounded-md border border-border bg-surface px-2 py-1 text-sm text-ink";
+
+/** The fixture environments, prod with the rules a project would have declared in its main.k. */
+const ALERT_ENVS = FIXTURE_ENVS.map((e) =>
+  e.name === "prod"
+    ? {
+        ...e,
+        declared: {
+          alerts: [
+            { alert: "OrdersBacklog", expr: "SELECT 1 AS value", for: "10m", interval: "1m", keepFiringFor: "", labels: { severity: "critical" }, annotations: {}, source: "user" as const, defaultId: "" },
+            { alert: "ServiceSilent", expr: "SELECT 1 AS value", for: "5m", interval: "1m", keepFiringFor: "", labels: { severity: "warning" }, annotations: {}, source: "default" as const, defaultId: "service-silent" },
+          ],
+          alertRoutes: [],
+          observability: null,
+        },
+      }
+    : { ...e },
+);
+
+/** Panels the fixture dashboards do not have, for looking at the alert dialog on each kind. */
+const ALERT_SAMPLES: Record<string, Panel> = {
+  p95: { id: "p95", title: "p95 checkout", kind: "number", signal: "traces", where: [{ field: "span.kind", op: "eq", value: "server" }, { field: "span.name", op: "eq", value: "orders.v1.OrdersService/CreateOrder" }], series: [{ label: "p95", agg: "quantile", quantile: 0.95, field: "span.duration" }], unit: "ms" },
+  ratio: { id: "error-rate", title: "Checkout error rate", kind: "line", signal: "traces", ratio: true, unit: "percent", where: [{ field: "span.kind", op: "eq", value: "server" }], groupBy: ["service.name"], series: [{ label: "errors", agg: "count", where: [{ field: "span.status", op: "eq", value: "error" }] }, { label: "requests", agg: "count" }] },
+  grouped: { id: "slowest", title: "Slowest routes", kind: "table", signal: "traces", where: [{ field: "span.kind", op: "eq", value: "server" }], groupBy: ["span.name"], series: [{ label: "p95", agg: "quantile", quantile: 0.95, field: "span.duration" }, { label: "requests", agg: "count" }] },
+  formula: { id: "failed-pct", title: "Failed requests, percent", kind: "line", signal: "traces", formula: "A / B * 100", groupBy: ["service.name"], series: [{ label: "failed", agg: "count", where: [{ field: "span.status", op: "eq", value: "error" }] }, { label: "all", agg: "count" }] },
+  gauge: { id: "goroutines", title: "Goroutines", kind: "line", signal: "metrics", groupBy: ["service.name"], series: [{ label: "goroutines", agg: "max", field: "go.goroutine.count", metricType: "gauge" }] },
+  sql: {
+    id: "slow-queries",
+    title: "Slow database calls",
+    kind: "sql",
+    signal: "",
+    series: [],
+    sql: "SELECT ServiceName AS service,\n       quantile(0.95)(Duration) / 1e6 AS value\nFROM otel_traces\nWHERE Timestamp >= {from:DateTime64(9)} AND Timestamp < {to:DateTime64(9)}\n  AND SpanAttributes['db.system'] != ''\n  AND (empty({services:Array(String)}) OR has({services:Array(String)}, ServiceName))\nGROUP BY service",
+  },
+  heatmap: { id: "latency-dist", title: "Latency distribution", kind: "heatmap", signal: "traces", series: [{ label: "latency", agg: "count", field: "span.duration" }], unit: "ms" },
+  counter: { id: "requests", title: "Requests", kind: "line", signal: "metrics", series: [{ label: "requests", agg: "sum", field: "rpc.server.calls", metricType: "sum" }] },
+  funnel: { id: "conversion", title: "Conversion", kind: "funnel", signal: "traces", series: [], funnel: { steps: ["begin_checkout", "purchase"], window: "1h", by: "session" } },
+};
 
 /** An API whose every call never answers: the loading state, held. */
 function pending(api: ObservabilityApi): ObservabilityApi {
@@ -221,6 +262,16 @@ export default function DashboardsPreview() {
           )}
         </ObservabilityApiProvider>
       </QueryClientProvider>
+      {search.alert && ALERT_SAMPLES[search.alert] && (
+        <AlertFromPanelDialog
+          panel={ALERT_SAMPLES[search.alert]}
+          dashboardTitle="Checkout latency"
+          environments={ALERT_ENVS}
+          env={env}
+          services={search.service ? [search.service] : []}
+          onClose={() => go({ alert: undefined })}
+        />
+      )}
     </ConsolePreviewShell>
   );
 }

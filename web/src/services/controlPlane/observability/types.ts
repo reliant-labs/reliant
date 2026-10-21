@@ -343,7 +343,7 @@ export interface SeriesIntent {
 
 /** traces | metrics | logs */
 export type Signal = string;
-/** number | line | table | search | funnel | issues | sessions */
+/** number | line | table | bar | heatmap | sql | search | funnel | issues | sessions */
 export type PanelKind = string;
 
 /**
@@ -374,6 +374,12 @@ export interface Panel {
   funnel?: PanelFunnel;
   /** sessions panels only: keep the sessions that hit an error. */
   hasError?: boolean;
+  /** line and number panels: plot this expression over the series ("A / B * 100"; A is series[0]). */
+  formula?: string;
+  /** table and bar panels: keep the top `limit` groups by the first series. */
+  limit?: number;
+  /** sql panels only: one read-only SELECT, under the alert-rule guard and limits. */
+  sql?: string;
   unit?: Unit;
   /** Grid columns out of 24. */
   width?: number;

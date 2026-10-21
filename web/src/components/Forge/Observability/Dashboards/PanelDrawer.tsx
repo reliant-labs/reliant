@@ -27,6 +27,7 @@ import { Plus, Trash2, X } from "lucide-react";
 import { usePanelQuery } from "@/hooks/observability-queries";
 import { useEscapeLayer } from "@/hooks/useEscapeLayer";
 import type { ObsScope, Panel, Predicate, SeriesIntent, Unit } from "@/services/controlPlane/observability/types";
+import type { ObsEnvironment } from "../obsPlace";
 import type { RangePreset } from "@/services/controlPlane/observability/window";
 import { RANGE_LABELS } from "@/services/controlPlane/observability/window";
 import { cn } from "@/lib/utils";
@@ -57,6 +58,8 @@ import {
   type AggPreset,
   type Visualization,
 } from "./panelBuilder";
+import { AlertFromPanelDialog, CreateAlertButton } from "./AlertFromPanelDialog";
+import { unsupportedReason } from "./alertSnippet";
 import { PanelBody } from "./PanelBody";
 import { BUTTON_PRIMARY, BUTTON_SECONDARY, BUTTON_SMALL, ICON_BUTTON } from "./parts";
 
@@ -69,6 +72,9 @@ export interface PanelDrawerProps {
   scope: ObsScope | null;
   range: RangePreset;
   services: string[];
+  /** The project's recorded environments, and the one the dashboard looks at, for "Create alert". */
+  environments: readonly ObsEnvironment[];
+  env: string;
   /** The scope, in words, for the preview's caption. */
   scopeLabel: string;
   /** The workspace version being edited (Save writes the next one). */
@@ -94,7 +100,7 @@ function useDebounced<T>(value: T, ms: number): T {
   return settled;
 }
 
-export function PanelDrawer({ mode, panel: initial, dashboardTitle, scope, range, services, scopeLabel, version, envScope, saving, error, onCancel, onSave }: PanelDrawerProps) {
+export function PanelDrawer({ mode, panel: initial, dashboardTitle, scope, range, services, environments, env, scopeLabel, version, envScope, saving, error, onCancel, onSave }: PanelDrawerProps) {
   const [draft, setDraft] = useState<Panel>(initial);
   const [tab, setTab] = useState<"builder" | "spec">(mode === "view" ? "spec" : "builder");
   const escape = useEscapeLayer(true, onCancel);
@@ -104,6 +110,9 @@ export function PanelDrawer({ mode, panel: initial, dashboardTitle, scope, range
   const preview = usePanelQuery(scope, range, settled, services, [], { enabled: previewable });
   const readOnly = mode === "view";
   const titleId = useId();
+  const [alerting, setAlerting] = useState(false);
+  // A panel that can never be an alert (a heatmap, a funnel) still opens the dialog, which says why.
+  const incomplete = problems.length > 0 && unsupportedReason(draft) === null;
 
   return (
     <div className="fixed inset-0 z-[60] flex justify-end" data-testid="panel-drawer" data-mode={mode}>
@@ -149,9 +158,16 @@ export function PanelDrawer({ mode, panel: initial, dashboardTitle, scope, range
 
         <div className="flex-1 space-y-5 overflow-y-auto px-5 py-4">
           <section aria-label="Live preview" className="space-y-1.5">
-            <p className="text-xs text-ink-muted">
-              Live preview · {scopeLabel} · {RANGE_LABELS[range].toLowerCase()}
-            </p>
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-xs text-ink-muted">
+                Live preview · {scopeLabel} · {RANGE_LABELS[range].toLowerCase()}
+              </p>
+              <CreateAlertButton
+                onClick={() => setAlerting(true)}
+                disabled={incomplete}
+                title={incomplete ? "Finish the panel first: an alert is written from a complete panel." : "Write this panel's query as a KCL alert rule"}
+              />
+            </div>
             <div className="rounded-lg border border-border/60 bg-surface-sunken p-3" data-testid="panel-drawer-preview">
               <p className="mb-2 truncate text-sm font-medium text-ink">{draft.title || "Untitled panel"}</p>
               {previewable ? (
@@ -194,6 +210,7 @@ export function PanelDrawer({ mode, panel: initial, dashboardTitle, scope, range
           )}
         </footer>
       </aside>
+      {alerting && <AlertFromPanelDialog panel={draft} dashboardTitle={dashboardTitle} environments={environments} env={env} services={services} onClose={() => setAlerting(false)} />}
     </div>
   );
 }
