@@ -35,8 +35,13 @@ type WorkerConfig struct {
 	// the rules). Each role declares its own, so one role's may differ.
 	PreStopDelay    *durationpb.Duration `protobuf:"bytes,18,opt,name=pre_stop_delay,json=preStopDelay,proto3" json:"pre_stop_delay,omitempty"`
 	ShutdownTimeout *durationpb.Duration `protobuf:"bytes,19,opt,name=shutdown_timeout,json=shutdownTimeout,proto3" json:"shutdown_timeout,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// The probe paths on HEALTH_PORT, read as GatewayConfig's are (its comment
+	// has the rules): /health and /ready are what control-plane probes
+	// (RELIANT_PROBES), /healthz and /readyz forge's.
+	LivenessPaths  string `protobuf:"bytes,20,opt,name=liveness_paths,json=livenessPaths,proto3" json:"liveness_paths,omitempty"`
+	ReadinessPaths string `protobuf:"bytes,21,opt,name=readiness_paths,json=readinessPaths,proto3" json:"readiness_paths,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *WorkerConfig) Reset() {
@@ -97,11 +102,25 @@ func (x *WorkerConfig) GetShutdownTimeout() *durationpb.Duration {
 	return nil
 }
 
+func (x *WorkerConfig) GetLivenessPaths() string {
+	if x != nil {
+		return x.LivenessPaths
+	}
+	return ""
+}
+
+func (x *WorkerConfig) GetReadinessPaths() string {
+	if x != nil {
+		return x.ReadinessPaths
+	}
+	return ""
+}
+
 var File_config_v1_worker_config_proto protoreflect.FileDescriptor
 
 const file_config_v1_worker_config_proto_rawDesc = "" +
 	"\n" +
-	"\x1dconfig/v1/worker_config.proto\x12\tconfig.v1\x1a\x14forge/v1/forge.proto\x1a\x1egoogle/protobuf/duration.proto\"\xa3\x06\n" +
+	"\x1dconfig/v1/worker_config.proto\x12\tconfig.v1\x1a\x14forge/v1/forge.proto\x1a\x1egoogle/protobuf/duration.proto\"\xbb\b\n" +
 	"\fWorkerConfig\x12a\n" +
 	"\vhealth_port\x18\x0e \x01(\x05B@\x82\xce\x18<\n" +
 	"\vHEALTH_PORT\x12\vhealth-port\x1a\x048081*\x1aHealth check endpoint portR\n" +
@@ -114,7 +133,11 @@ const file_config_v1_worker_config_proto_rawDesc = "" +
 	"\x0epre_stop_delay\x18\x12 \x01(\v2\x19.google.protobuf.DurationBi\x82\xce\x18e\n" +
 	"\x0ePRE_STOP_DELAY\x1a\x025s*OHow long to keep serving after readiness flips at shutdown (negative: no pause)R\fpreStopDelay\x12\x98\x01\n" +
 	"\x10shutdown_timeout\x18\x13 \x01(\v2\x19.google.protobuf.DurationBR\x82\xce\x18N\n" +
-	"\x10SHUTDOWN_TIMEOUT\x1a\x0330s*5Budget for graceful shutdown after the pre-stop pauseR\x0fshutdownTimeout:\x1d\xca\xc1\x18\x19\n" +
+	"\x10SHUTDOWN_TIMEOUT\x1a\x0330s*5Budget for graceful shutdown after the pre-stop pauseR\x0fshutdownTimeout\x12\x88\x01\n" +
+	"\x0eliveness_paths\x18\x14 \x01(\tBa\x82\xce\x18]\n" +
+	"\x0eLIVENESS_PATHS\x1a\x10/health,/healthz*9Liveness probe paths on the health port (comma-separated)R\rlivenessPaths\x12\x8a\x01\n" +
+	"\x0freadiness_paths\x18\x15 \x01(\tBa\x82\xce\x18]\n" +
+	"\x0fREADINESS_PATHS\x1a\x0e/ready,/readyz*:Readiness probe paths on the health port (comma-separated)R\x0ereadinessPaths:\x1d\xca\xc1\x18\x19\n" +
 	"\areliant\x12\x06server\x12\x06workerJ\x04\b\x01\x10\x02J\x04\b\n" +
 	"\x10\vJ\x04\b\v\x10\fJ\x04\b\f\x10\rJ\x04\b\r\x10\x0eJ\x04\b\x10\x10\x11J\x04\b\x11\x10\x12J\x04\b(\x10)J\x04\b2\x103J\x04\b3\x104J\x04\b<\x10=J\x04\bF\x10GJ\x04\bZ\x10[R\rcontrol_planeR\bdatabaseR\x04natsR\btemporalR\x05drainR\bdata_dirR\x10streaming_driverR\fintegrationsR\robservabilityR\x06sentryR\tanalyticsR\x03llmR\apreviewB8Z6github.com/reliant-labs/reliant/gen/config/v1;configv1b\x06proto3"
 

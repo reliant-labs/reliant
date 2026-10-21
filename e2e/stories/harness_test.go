@@ -111,7 +111,7 @@ func requireStack(t *testing.T) *Stack {
 			return
 		}
 
-		// Global registries, mirroring serverworker.Run.
+		// Global registries, mirroring the worker root (internal/app ProcessSettings).
 		if err := models.InitGlobalRegistryWithUserConfig(nil); err != nil {
 			stackErr = fmt.Errorf("init model registry: %w", err)
 			return
@@ -242,7 +242,7 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 	}
 
 	// The launcher a trigger fire launches through, built the way the worker
-	// builds it (serverworker.Run). nil prober: triggers never ask for a
+	// builds it (internal/app NewRunLauncher). nil prober: triggers never ask for a
 	// greenfield probe.
 	pause := workflow.NewPauseService(s.Temporal, s.Repo)
 	triggerLauncher := launch.NewLauncher(s.Repo, threads.NewService(s.Repo), s.Temporal,

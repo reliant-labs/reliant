@@ -107,7 +107,7 @@ func (r *daemonRunningRouter) received(toolCallID string) (string, bool) {
 	return input, ok
 }
 
-// workerExecutor is the worker's executor as serverworker wires it: daemon
+// workerExecutor is the worker's executor as the worker root wires it (internal/app NewRemoteExecutor): daemon
 // tools go to the router, server tools run in-process on the worker's factory.
 func workerExecutor(router toolexec.DaemonRouter, repo db.Repository) toolexec.ToolExecutor {
 	executor := toolexec.NewRemoteExecutor(router)

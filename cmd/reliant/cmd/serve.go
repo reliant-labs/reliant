@@ -4,7 +4,8 @@
 //
 // What a process RUNS is one root of the composition graph
 // (internal/app/graph_gen.go): `reliant server gateway` runs the gateway root
-// (internal/app/roots_gateway.go), and every //forge:root in internal/app
+// (internal/app/roots_gateway.go), `reliant server worker` the worker root
+// (internal/app/roots_worker.go), and every //forge:root in internal/app
 // gets a command of its own (roots_gen.go, generated). Each node is
 // constructed once, from its own Deps, in internal/app/compose.go.
 //
@@ -14,7 +15,8 @@
 // with boot probes while dependencies come up, install telemetry under the
 // role's service name, then run the root until a signal — readiness flips to
 // draining, the pre-stop pause runs, and every node drains and closes in
-// reverse dependency order inside the shutdown budget, telemetry flushed last.
+// reverse dependency order inside the shutdown budget, pending error reports
+// and telemetry flushed last.
 //
 // No root migrates here: the api-server owns the schema, and the database
 // provider of every other role waits for it (db.MigrateWait).
@@ -35,6 +37,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/observability"
 	"github.com/reliant-labs/reliant/internal/runenv"
+	"github.com/reliant-labs/reliant/internal/telemetry"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
@@ -50,6 +53,7 @@ type rootPolicy struct {
 // rootPolicies is each root's policy, by root name.
 var rootPolicies = map[string]rootPolicy{
 	"gateway": {serviceName: "daemon-gateway", logFile: "daemon-gateway.log"},
+	"worker":  {serviceName: "reliant-temporal-worker", logFile: "temporal-worker.log"},
 }
 
 // runRoot runs one root (roots_gen.go hands it the root a command names):
@@ -131,7 +135,7 @@ func runRoot(ctx context.Context, deps Deps, root rootSpec) error {
 		Drainer:       drainer,
 		Logger:        logger,
 		FailurePolicy: skCfg.FailurePolicy,
-		Flush:         func(context.Context) error { return obs.Shutdown() },
+		Flush:         flushTelemetry(obs),
 	}); err != nil {
 		return fmt.Errorf("%s: %w", policy.serviceName, err)
 	}
@@ -139,11 +143,23 @@ func runRoot(ctx context.Context, deps Deps, root rootSpec) error {
 	return nil
 }
 
+// flushTelemetry is the root's last step, after every node has stopped: the
+// pending Sentry events (a no-op where no reporter is installed), then the
+// OTel providers. Product events need no flush: each is written to the log as
+// it happens.
+func flushTelemetry(obs *observability.Provider) func(context.Context) error {
+	return func(context.Context) error {
+		telemetry.Flush(5)
+		return obs.Shutdown()
+	}
+}
+
 // serverkitConfig projects reliant's configs onto the vendor-neutral
 // serverkit.Config: the probe address, the drain budget, pprof and the probe
 // paths, from the command config of the role the root runs as.
 //
-// The probe address is HEALTH_PORT on BIND_ADDRESS, plain HTTP: the shared
+// The gateway's probe address is HEALTH_PORT on BIND_ADDRESS, the worker's
+// HEALTH_PORT on every address (it has no BIND_ADDRESS), plain HTTP: the shared
 // `tls` block (ServerTLSConfig) is the role listeners', and never turns TLS on
 // here — kubelet, the GKE health check and docker-compose probe it in
 // plaintext. (forge's own `port` field is the API port, which for reliant is
@@ -172,6 +188,20 @@ func serverkitConfig(cfg *config.Config, configs rootConfigs) (serverkit.Config,
 		skCfg.Probes.Ready = serverkit.ProbePathList(c.GetReadinessPaths())
 		// Zero is serverkit's default (5s / 30s), negative none: the rule
 		// forge's grace-period arithmetic applies to the same variables.
+		skCfg.PreStopDelay = c.GetPreStopDelay().AsDuration()
+		skCfg.ShutdownTimeout = c.GetShutdownTimeout().AsDuration()
+	}
+	if c := configs.WorkerConfig; c != nil {
+		if err := app.CheckPorts(app.Port{Name: "HEALTH_PORT (--health-port)", Port: c.GetHealthPort()}); err != nil {
+			return serverkit.Config{}, err
+		}
+		skCfg.Addr = fmt.Sprintf(":%d", c.GetHealthPort())
+		skCfg.Probes.Live = serverkit.ProbePathList(c.GetLivenessPaths())
+		skCfg.Probes.Ready = serverkit.ProbePathList(c.GetReadinessPaths())
+		// Nothing routes to the worker, so its pre-stop pause buys nothing —
+		// the Temporal worker keeps polling through it — and PRE_STOP_DELAY=-1s
+		// on the workload removes it. The budget bounds the Temporal worker's
+		// drain, which must fit the pod's grace period.
 		skCfg.PreStopDelay = c.GetPreStopDelay().AsDuration()
 		skCfg.ShutdownTimeout = c.GetShutdownTimeout().AsDuration()
 	}

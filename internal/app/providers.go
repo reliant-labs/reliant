@@ -6,7 +6,8 @@
 // `func New<X>(<X>Deps) (T, error)` is a node of the composition graph. forge
 // resolves each <X>Deps field by type (another node, or one of the graph's
 // inputs: g.Ctx, g.Log, g.ServerCfg, g.Probes, and the configs the root's
-// command loads — g.ServerProcessConfig, g.DatabaseConfig, g.GatewayConfig),
+// command loads — g.ServerProcessConfig, g.DatabaseConfig, g.GatewayConfig,
+// g.WorkerConfig),
 // and compose.go holds the value expressions. Nothing here opens anything
 // eagerly: a process builds only what its root reaches.
 //
@@ -24,19 +25,36 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net"
+	"net/http"
+	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/reliant-labs/forge/pkg/serverkit"
+	"go.temporal.io/sdk/client"
 
 	configv1 "github.com/reliant-labs/reliant/gen/config/v1"
+	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/certs"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/debugserver"
+	"github.com/reliant-labs/reliant/internal/integrations/webhook"
+	"github.com/reliant-labs/reliant/internal/integrations/webhook/github"
+	"github.com/reliant-labs/reliant/internal/llm/drivers"
+	"github.com/reliant-labs/reliant/internal/llm/models"
+	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/natsutil"
 	"github.com/reliant-labs/reliant/internal/streaming"
+	"github.com/reliant-labs/reliant/internal/telemetry"
+	"github.com/reliant-labs/reliant/internal/temporal"
+	"github.com/reliant-labs/reliant/internal/temporal/claimcheck"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
+	"github.com/reliant-labs/reliant/internal/vault"
+	v2workflow "github.com/reliant-labs/reliant/internal/workflow"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
@@ -239,4 +257,345 @@ type PprofDeps struct {
 // role's config names an address: it serves a debug surface with no auth.
 func NewPprof(d PprofDeps) (*serverkit.Pprof, error) {
 	return serverkit.NewPprof(d.ServerCfg, d.Logger), nil
+}
+
+// DebugServer is the localhost-only diagnostics listener (debugserver: pprof,
+// the DB write-queue gauges, metrics) as a node: it serves until the stop
+// walk reaches it.
+type DebugServer struct {
+	addr string
+	srv  *http.Server
+}
+
+// DebugServerDeps is the diagnostics port (PPROF_PORT).
+type DebugServerDeps struct {
+	Port int32
+}
+
+// NewDebugServer is the listener on 127.0.0.1:PPROF_PORT. PPROF_PORT=0 serves
+// none: the node is absent.
+func NewDebugServer(d DebugServerDeps) (*DebugServer, error) {
+	if err := CheckPprofPort(d.Port); err != nil {
+		return nil, err
+	}
+	if d.Port == 0 {
+		logging.Info("Debug server (pprof) disabled", "pprof_port", 0)
+		return nil, nil
+	}
+	addr := debugserver.Addr(int(d.Port))
+	return &DebugServer{addr: addr, srv: &http.Server{Addr: addr, Handler: debugserver.Handler(), ReadHeaderTimeout: 10 * time.Second}}, nil
+}
+
+// Run serves until ctx ends. A bind failure is logged, not returned: a
+// process without a profiler still does its job, and failing it over one
+// would be the wrong trade.
+func (s *DebugServer) Run(ctx context.Context) error {
+	ln, err := net.Listen("tcp", s.addr)
+	if err != nil {
+		logging.ErrorContext(ctx, "debug server failed", "address", s.addr, "error", err)
+		<-ctx.Done()
+		return nil
+	}
+	logging.InfoContext(ctx, "Starting debug server (pprof)", "address", s.addr)
+	stop := context.AfterFunc(ctx, func() { _ = s.srv.Close() })
+	defer stop()
+	if err := s.srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		logging.ErrorContext(ctx, "debug server failed", "address", s.addr, "error", err)
+	}
+	return nil
+}
+
+// Close stops the listener. A profile in flight is cut off: nothing here is
+// worth holding the process's stop for.
+func (s *DebugServer) Close(context.Context) error { return s.srv.Close() }
+
+// IntegrationSettingsDeps is the shared integrations config.
+type IntegrationSettingsDeps struct {
+	Integrations *configv1.IntegrationsConfig
+}
+
+// NewIntegrationSettings is the integrations config as the server packages
+// take it (Integrations): read and validated once, for every node that needs
+// a part of it — the vault key, the webhook registry, the OAuth clients, the
+// GitHub App.
+func NewIntegrationSettings(d IntegrationSettingsDeps) (*IntegrationSettings, error) {
+	s, err := Integrations(d.Integrations)
+	if err != nil {
+		return nil, err
+	}
+	return &s, nil
+}
+
+// ProcessSettings records that the process-wide settings that need nothing
+// but config are installed: what the LLM layer, the preview URLs, the model
+// registry and the GitHub App bot read from package state. A root lists it
+// as its LAST field, so it is built before any other node — none can observe
+// the settings unset — and a value they refuse stops the process before
+// anything is dialled.
+type ProcessSettings struct{}
+
+// ProcessSettingsDeps is the config the process-wide settings come from.
+type ProcessSettingsDeps struct {
+	DataDir      string
+	LLM          *configv1.LLMConfig
+	Preview      *configv1.PreviewConfig
+	Integrations *IntegrationSettings
+}
+
+// NewProcessSettings installs the config-only process globals.
+func NewProcessSettings(d ProcessSettingsDeps) (*ProcessSettings, error) {
+	llmSettings, err := LLMSettings(d.LLM)
+	if err != nil {
+		return nil, err
+	}
+	preview, err := PreviewSettings(d.Preview)
+	if err != nil {
+		return nil, err
+	}
+	// Activities locate files under the data directory through it.
+	if err := os.Setenv("RELIANT_DATA_DIR", d.DataDir); err != nil {
+		logging.Warn("Failed to set RELIANT_DATA_DIR env var", "error", err)
+	}
+	// The LLM layer's process settings, before anything can call a model.
+	drivers.Configure(llmSettings)
+	tools.ConfigurePreviewURLs(preview)
+	if err := models.InitGlobalRegistryWithUserConfig(nil); err != nil {
+		return nil, fmt.Errorf("failed to initialize model registry: %w", err)
+	}
+	// Which integration events are our own writes.
+	github.ConfigureBot(d.Integrations.GitHubBot)
+	return &ProcessSettings{}, nil
+}
+
+// ProcessRuntime records that the process-wide state that needs the
+// database is installed: the LLM drivers' per-user API keys and Reliant-key
+// healer, product analytics and the error reporter.
+type ProcessRuntime struct {
+	// KeyHealer re-mints a user's Reliant key the control plane refused; nil
+	// self-hosted. Only the api-server runs its background sweep.
+	KeyHealer *drivers.ReliantKeyHealer
+}
+
+// ProcessRuntimeDeps is what that state reads. Settings orders it after the
+// config-only globals (drivers.Configure before the key provider).
+type ProcessRuntimeDeps struct {
+	Settings      *ProcessSettings
+	Repo          *DBRepo
+	ControlPlane  *configv1.ControlPlaneConfig
+	Analytics     *configv1.AnalyticsConfig
+	Sentry        *configv1.SentryConfig
+	Observability *configv1.ObservabilityConfig
+}
+
+// NewProcessRuntime installs the database-backed process globals.
+func NewProcessRuntime(d ProcessRuntimeDeps) (*ProcessRuntime, error) {
+	sentry, err := SentrySettings(d.Sentry, d.Observability)
+	if err != nil {
+		return nil, err
+	}
+	cp := ControlPlaneEndpoint(d.ControlPlane)
+	repo := d.Repo.Repo
+	// LLM drivers resolve per-user keys from the database.
+	drivers.InitializeAPIKeyProvider(repo)
+	healer := drivers.InstallReliantKeyHealer(repo, cp.URL, cp.InternalServiceSecret)
+	analytics.Start(AnalyticsSettings(d.Analytics), repo)
+	// Sentry in prod (when SENTRY_DSN is set), a no-op in dev and test; the
+	// root policy flushes it after the last node stopped.
+	telemetry.SetReporter(telemetry.NewReporter(sentry))
+	return &ProcessRuntime{KeyHealer: healer}, nil
+}
+
+// PayloadStoreDeps is the database the claim-checked payloads live in.
+type PayloadStoreDeps struct {
+	Repo *DBRepo
+}
+
+// NewPayloadStore is where large Temporal payloads are claim-checked: the
+// shared temporal_payload_blobs table (its GC runs in the api-server). Every
+// process's Temporal client must use the same store, or histories become
+// unreadable across them.
+func NewPayloadStore(d PayloadStoreDeps) (*claimcheck.PostgresStore, error) {
+	return claimcheck.NewPostgresStore(d.Repo.Repo.ORM()), nil
+}
+
+// TemporalClient is the process's client of the external Temporal server.
+type TemporalClient struct{ Client client.Client }
+
+// TemporalClientDeps is the server, and the boot context the first dial
+// waits under.
+type TemporalClientDeps struct {
+	Ctx          context.Context
+	Temporal     *configv1.TemporalConfig
+	PayloadStore *claimcheck.PostgresStore
+}
+
+// NewTemporalClient dials Temporal. A server that is not up YET is a wait,
+// not a crash: the first dial retries with backoff (serverkit.RetryConnect),
+// and /readyz names "temporal" as pending meanwhile.
+func NewTemporalClient(d TemporalClientDeps) (*TemporalClient, error) {
+	host, port, namespace := TemporalEndpoint(d.Temporal)
+	if host == "" {
+		return nil, errors.New("config: TEMPORAL_HOST is required")
+	}
+	if err := CheckPorts(Port{Name: "TEMPORAL_PORT (--temporal-port)", Port: int32(port)}); err != nil {
+		return nil, err
+	}
+	var c client.Client
+	err := serverkit.RetryConnect(d.Ctx, serverkit.ConnectPolicy{Name: "temporal", Logger: slog.Default()}, func(ctx context.Context) error {
+		dialed, err := temporal.NewExternalClient(ctx, temporal.ExternalClientConfig{
+			Host:         host,
+			Port:         port,
+			Namespace:    namespace,
+			PayloadStore: d.PayloadStore,
+		})
+		if err != nil {
+			return err
+		}
+		c = dialed
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to Temporal: %w", err)
+	}
+	logging.Info("Connected to external Temporal server", "host", host, "port", port)
+	return &TemporalClient{Client: c}, nil
+}
+
+// Ready fails while the Temporal server does not answer its health check.
+func (t *TemporalClient) Ready(ctx context.Context) error {
+	_, err := t.Client.CheckHealth(ctx, &client.CheckHealthRequest{})
+	return err
+}
+
+// Close closes the client, after every node that reports through it.
+func (t *TemporalClient) Close(context.Context) error {
+	t.Client.Close()
+	return nil
+}
+
+// StreamingHub is the streaming hub: ephemeral LLM deltas, from the worker
+// that produces them to the api-server replica a client is attached to.
+type StreamingHub struct{ Hub streaming.StreamingHub }
+
+// StreamingHubDeps is the hub's transport. NATS orders it after the
+// process's connection, whose first connect waits for the server.
+type StreamingHubDeps struct {
+	NATS   *NATSConn
+	Server *configv1.NatsConfig
+	Driver string
+}
+
+// NewStreamingHub builds the hub (STREAMING_DRIVER, on NATS_URL).
+func NewStreamingHub(d StreamingHubDeps) (*StreamingHub, error) {
+	driver, err := streaming.ParseStreamingDriver(d.Driver)
+	if err != nil {
+		return nil, fmt.Errorf("invalid STREAMING_DRIVER %q: %w", d.Driver, err)
+	}
+	hub, err := streaming.NewStreamingHub(streaming.StreamingConfig{Driver: driver, NATS: NATSEndpoint(d.Server)})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create streaming hub: %w", err)
+	}
+	logging.Info("Streaming hub initialized", "driver", d.Driver)
+	return &StreamingHub{Hub: hub}, nil
+}
+
+// Ready fails while the hub's transport is down.
+func (s *StreamingHub) Ready(context.Context) error {
+	if !s.Hub.IsConnected() {
+		return errors.New("disconnected")
+	}
+	return nil
+}
+
+// Close closes the hub, after every node that streams through it.
+func (s *StreamingHub) Close(context.Context) error { return s.Hub.Close() }
+
+// ChatUpdateHub is the chat-updates hub on NATS subject chat.updates, the
+// one the api-server's chat streams subscribe to.
+type ChatUpdateHub struct {
+	*streaming.NATSUpdateHub[db.ChatUpdate]
+}
+
+// ChatUpdateHubDeps is the connection the hub publishes on.
+type ChatUpdateHubDeps struct {
+	NATS *NATSConn
+}
+
+// NewChatUpdateHub builds the chat-updates hub.
+func NewChatUpdateHub(d ChatUpdateHubDeps) (*ChatUpdateHub, error) {
+	return &ChatUpdateHub{streaming.NewNATSUpdateHub[db.ChatUpdate](d.NATS.Conn, "chat.updates", "ChatUpdate")}, nil
+}
+
+// Close closes the hub, before the connection it publishes on.
+func (h *ChatUpdateHub) Close(context.Context) error { return h.NATSUpdateHub.Close() }
+
+// RepoUpdateFeed records that the repository publishes what it writes: each
+// user and chat update goes out on its hub, to the web clients watching it.
+type RepoUpdateFeed struct{}
+
+// RepoUpdateFeedDeps is the repository and the hubs it publishes on.
+type RepoUpdateFeedDeps struct {
+	Repo  *DBRepo
+	Users *UserUpdateHub
+	Chats *ChatUpdateHub
+}
+
+// NewRepoUpdateFeed wires the repository's update notifiers to the hubs.
+func NewRepoUpdateFeed(d RepoUpdateFeedDeps) (*RepoUpdateFeed, error) {
+	d.Repo.Repo.SetUpdateNotifiers(
+		func(update *db.UserUpdate) {
+			d.Users.Publish(context.Background(), streaming.UpdateEvent[db.UserUpdate]{
+				Key: update.UserID, SequenceNumber: update.SequenceNumber, Payload: *update,
+			})
+		},
+		func(chatID string, seqNum int64, update db.ChatUpdate) {
+			d.Chats.Publish(context.Background(), streaming.UpdateEvent[db.ChatUpdate]{
+				Key: chatID, SequenceNumber: seqNum, Payload: update,
+			})
+		},
+	)
+	logging.Info("Update hubs initialized (NATS)")
+	return &RepoUpdateFeed{}, nil
+}
+
+// VaultDeps is what boots the credential vault.
+type VaultDeps struct {
+	Ctx          context.Context
+	Repo         *DBRepo
+	ControlPlane *configv1.ControlPlaneConfig
+	DataDir      string
+	Integrations *IntegrationSettings
+}
+
+// NewVault boots the credential vault: its key is required when hosted and
+// generated when self-hosted. A missing or malformed key fails startup.
+func NewVault(d VaultDeps) (vault.Service, error) {
+	return db.BootVault(d.Ctx, d.Repo.Repo, ControlPlaneEndpoint(d.ControlPlane).Hosted(), d.DataDir, d.Integrations.VaultKey)
+}
+
+// PauseServiceDeps is what pauses and resumes runs.
+type PauseServiceDeps struct {
+	Temporal *TemporalClient
+	Repo     *DBRepo
+}
+
+// NewPauseService pauses and resumes runs through their workflows.
+func NewPauseService(d PauseServiceDeps) (*v2workflow.PauseService, error) {
+	return v2workflow.NewPauseService(d.Temporal.Client, d.Repo.Repo), nil
+}
+
+// TriggerPollersDeps is which integrations this deployment serves.
+type TriggerPollersDeps struct {
+	Integrations *IntegrationSettings
+}
+
+// NewTriggerPollers is the integration registry: which integrations are
+// polled, and which deliver events at all. The api-server and the worker
+// build the same one, so they agree.
+func NewTriggerPollers(d TriggerPollersDeps) (*webhook.Registry, error) {
+	registry, err := webhook.RegistryFor(d.Integrations.Webhooks)
+	if err != nil {
+		return nil, fmt.Errorf("integration pollers: %w", err)
+	}
+	return registry, nil
 }

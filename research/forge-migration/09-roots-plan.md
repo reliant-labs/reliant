@@ -353,6 +353,40 @@ Your order (a)→(b)→(c)→(d)→(e) holds with **three changes**:
   today. After R4 the reconciler injects those keys in compose.go by type. A lane adding a new
   Deps type adds its provider in its own `internal/app/providers_<lane>.go`, which avoids
   conflicts in `providers.go`.
+- **As landed:** `internal/app/roots_worker.go` declares `Worker` (`migrate=wait`;
+  field order = stop order: temporal worker, workflow-event relay, account-usage poller,
+  write-ledger prune, account recorder, then the infrastructure as fields of their own —
+  streaming hub, Temporal client, the update feed, the debug server — and last `Runtime`
+  and `Settings`, so they are built first). `PlanWorker().Stop()` is pinned verbatim by
+  `TestWorkerStopsTakingWorkFirst` (today's five nodes, then streaming_hub,
+  temporal_client, chat_update_hub, user_update_hub, nats_conn, debug_server, db_repo,
+  probe_listener); readiness (db_repo, nats_conn, temporal_client, streaming_hub,
+  temporal_worker) by `TestWorkerReadiness`. The infrastructure needs root fields too,
+  not only the recorder: reached first through the Temporal worker or a loop, it would
+  stop between them. Shared providers added to `providers.go`: IntegrationSettings (one
+  parse of IntegrationsConfig), ProcessSettings (the config-only globals:
+  drivers.Configure, preview URLs, model registry, GitHub bot, RELIANT_DATA_DIR — a node
+  rather than `runRoot` policy, so the reach sees their config), ProcessRuntime (key
+  provider + healer, analytics, Sentry), PayloadStore, TemporalClient (the first dial
+  retries like NATS; `/ready` names `temporal` meanwhile), StreamingHub, ChatUpdateHub,
+  RepoUpdateFeed, Vault, PauseService, TriggerPollers, DebugServer (debugserver's
+  handler as a node with Run/Close). The worker's own are in
+  `providers_worker.go` (with `serverworker/connections.go` and its tests); its variants
+  are distinct types marked `//forge:root-only worker` (WorkerDaemonRouter,
+  WorkerChat/Run/Trigger, WorkerToolsFactory, WorkerCatalogSearch,
+  WorkerIntegrationCredentials, RemoteExecutor, the loops, the Temporal worker). That
+  marker is forge #1095: a distinct type alone did not keep the delegated-token router
+  out of the api's handlers — resolution fills an interface-typed Deps field with any
+  single assignable node, and generate had written `g.WorkerDaemonRouter()` into the
+  daemon, terminal and background handlers. `WorkerConfig` gained env-only
+  `LIVENESS_PATHS`/`READINESS_PATHS`; the probe address is `:HEALTH_PORT` (the worker
+  has no BIND_ADDRESS). `runRoot` flushes Sentry before OTel for every root. The shared
+  config conversions (integrations, LLM, preview, analytics, Sentry, Temporal) moved from
+  `cmd` to `internal/app/server_config.go`. Re-pinned to forge `2472900c` (#1095, and
+  #1096: what `runRoot` reads is each root's reach, so `ROOTS` now carries the
+  observability vars and the worker's HEALTH_PORT; `//forge:group server` in
+  `internal/app/roots.go` is the `server` command's help, so `mergeServerRoles` only
+  adds `server api`).
 
 ### R5: (d) api root *(needs R3; develop in parallel with R4, land after it)*
 - Everything in §1.4. `internal/grpc/server.go`'s `NewAPI`, `Config`, `validate` and

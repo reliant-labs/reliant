@@ -12,10 +12,11 @@
 //
 // The server roles are roots of the composition graph (internal/app): each
 // root's command comes from rootCommands (roots_gen.go, generated) and runs
-// under the process policy in serve.go. Today only `reliant server gateway` is
-// a root; `reliant server api|worker` still construct themselves (server.go)
-// and are merged under the generated `server` command (mergeServerRoles) until
-// they become roots too (research/forge-migration/09-roots-plan.md, R4/R5).
+// under the process policy in serve.go. Today `reliant server gateway` and
+// `reliant server worker` are roots; `reliant server api` still constructs
+// itself (server.go) and is merged under the generated `server` command
+// (mergeServerRoles) until it becomes a root too
+// (research/forge-migration/09-roots-plan.md, R5).
 // metrics.go and internal/metrics stay declined (.forge/scaffolded.json):
 // they would add a `reliant metrics` command to a surface pinned by
 // help_text_test and command_surface_test.

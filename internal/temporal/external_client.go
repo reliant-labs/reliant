@@ -41,7 +41,7 @@ func NewExternalClient(ctx context.Context, cfg ExternalClientConfig) (client.Cl
 	if err != nil {
 		return nil, err
 	}
-	return client.Dial(opts)
+	return client.DialContext(ctx, opts)
 }
 
 // externalClientOptions is NewExternalClient's client.Options, split out so a

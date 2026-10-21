@@ -23,7 +23,7 @@ func (c *recordReadCounter) GetProjectConfigRecord(ctx context.Context, projectI
 	return c.Repo.GetProjectConfigRecord(ctx, projectID)
 }
 
-// The worker's wiring (serverworker): a cached provider over the real
+// The worker's wiring (internal/app NewStoredConfigProvider): a cached provider over the real
 // repository. N CallLLM turns read and parse the multi-MB record once, and a
 // daemon push — written by whichever server holds the daemon's connection —
 // is picked up on the very next turn through the version column.

@@ -12,7 +12,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/observability"
 	"github.com/reliant-labs/reliant/internal/runenv"
 	"github.com/reliant-labs/reliant/internal/serverapi"
-	"github.com/reliant-labs/reliant/internal/serverworker"
 	"github.com/reliant-labs/reliant/internal/telemetry"
 )
 
@@ -39,7 +38,7 @@ func observabilityOf(t *testing.T) map[string]observability.Settings {
 	t.Helper()
 	var api serverapi.Options
 	require.NoError(t, loadServerAPIConfig(roleCommand(t, "api"), &api))
-	var worker serverworker.Options
+	var worker workerOptions
 	require.NoError(t, loadServerWorkerConfig(roleCommand(t, "worker"), &worker))
 	gateway, err := loadGatewayRole(roleCommand(t, "gateway"))
 	require.NoError(t, err)
@@ -89,7 +88,7 @@ func TestSentryEnvContract(t *testing.T) {
 	t.Setenv("SENTRY_ENABLED", "true")
 	t.Setenv("SENTRY_ENVIRONMENT", "production")
 	t.Setenv("SENTRY_TRACES_SAMPLE_RATE", "0.1")
-	var worker serverworker.Options
+	var worker workerOptions
 	require.NoError(t, loadServerWorkerConfig(roleCommand(t, "worker"), &worker))
 	assert.Equal(t, telemetry.SentryConfig{Enabled: true, DSN: "https://public@example.ingest.sentry.io/1",
 		Environment: "production", TracesSampleRate: 0.1}, worker.Sentry)
@@ -115,7 +114,7 @@ func TestObservabilityMisconfigurationFailsBoot(t *testing.T) {
 	t.Run("SENTRY_TRACES_SAMPLE_RATE=1.5", func(t *testing.T) {
 		isolateObservabilityEnv(t)
 		t.Setenv("SENTRY_TRACES_SAMPLE_RATE", "1.5")
-		var worker serverworker.Options
+		var worker workerOptions
 		err := loadServerWorkerConfig(roleCommand(t, "worker"), &worker)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "SENTRY_TRACES_SAMPLE_RATE")

@@ -1,5 +1,5 @@
 [
-  serverworker.Options {
+  cmd.workerOptions {
     DatabaseDriver: "postgres"
     DatabaseURL: "postgres://reliant:pw@db.surface.test:5432/reliant"
     DatabaseDirectURL: "postgres://reliant:pw@db-direct.surface.test:5432/reliant"
@@ -19,7 +19,15 @@
       Password: "nats-pass"
     }
     StreamingDriver: "nats"
-    HealthPort: 18082
+    HealthAddr: ":18082"
+    LivenessPaths: [
+      "/live"
+      "/health"
+    ]
+    ReadinessPaths: [
+      "/ready"
+      "/ready2"
+    ]
     PreStopDelay: 11s
     ShutdownTimeout: 43s
     PprofPort: 16061

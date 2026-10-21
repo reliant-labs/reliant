@@ -22,7 +22,6 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/forgepb"
 	"github.com/reliant-labs/reliant/internal/serverapi"
-	"github.com/reliant-labs/reliant/internal/serverworker"
 )
 
 var updateServerRoleSurface = flag.Bool("update-server-role-surface", false,
@@ -80,7 +79,7 @@ func comparableOptions(opts any) any {
 		got := clients(o.Webhooks.OAuthClients)
 		o.Webhooks.OAuthClients = nil
 		return []any{o, got}
-	case serverworker.Options:
+	case workerOptions:
 		got := clients(o.Webhooks.OAuthClients)
 		o.Webhooks.OAuthClients = nil
 		return []any{o, got}

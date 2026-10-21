@@ -14,7 +14,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/natsutil"
 	"github.com/reliant-labs/reliant/internal/serverapi"
-	"github.com/reliant-labs/reliant/internal/serverworker"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
@@ -52,8 +51,8 @@ func isolateServerRoleEnv(t *testing.T) {
 
 // serverRole runs what one server role's RunE does with its typed config,
 // after parsing args, and returns the Options it would hand its package
-// (serverapi/serverworker.Options), or for the gateway, what its root gets
-// (gatewayRole).
+// (serverapi.Options), or for the roots, what each root gets (workerOptions,
+// gatewayRole).
 type serverRole struct {
 	path []string
 	load func(t *testing.T, args ...string) (any, error)
@@ -66,7 +65,7 @@ var serverRoles = []serverRole{
 		return opts, err
 	}},
 	{path: []string{"server", "worker"}, load: func(t *testing.T, args ...string) (any, error) {
-		var opts serverworker.Options
+		var opts workerOptions
 		err := loadServerWorkerConfig(findServerCmd(t, "worker", args...), &opts)
 		return opts, err
 	}},
@@ -107,8 +106,10 @@ func TestServerRoleDefaults(t *testing.T) {
 
 	opts, err := serverRoles[1].load(t)
 	require.NoError(t, err)
-	worker := opts.(serverworker.Options)
-	assert.Equal(t, 8081, worker.HealthPort)
+	worker := opts.(workerOptions)
+	assert.Equal(t, ":8081", worker.HealthAddr, "the worker probes on every address: it has no BIND_ADDRESS")
+	assert.Equal(t, []string{"/health", "/healthz"}, worker.LivenessPaths, "control-plane probes /health")
+	assert.Equal(t, []string{"/ready", "/readyz"}, worker.ReadinessPaths, "control-plane probes /ready")
 	assert.Equal(t, 6060, worker.PprofPort)
 	assert.Equal(t, "./data", worker.DataDir)
 
@@ -300,7 +301,7 @@ func drainOf(t *testing.T, role serverRole) (preStop, shutdown time.Duration) {
 	switch o := opts.(type) {
 	case serverapi.Options:
 		return o.PreStopDelay, o.ShutdownTimeout
-	case serverworker.Options:
+	case workerOptions:
 		return o.PreStopDelay, o.ShutdownTimeout
 	case gatewayRole:
 		return o.server.PreStopDelay, o.server.ShutdownTimeout
@@ -332,7 +333,7 @@ func TestServerRoleDatabasePool(t *testing.T) {
 		switch o := opts.(type) {
 		case serverapi.Options:
 			assert.Equal(t, want, o.DatabasePool, "api")
-		case serverworker.Options:
+		case workerOptions:
 			assert.Equal(t, want, o.DatabasePool, "worker")
 		case gatewayRole:
 			assert.Equal(t, want, o.pool, "gateway")

@@ -66,7 +66,7 @@ func wireCatalogSearch(repo *db.Repo, hosted bool) (*catalogindex.Service, error
 // delegatedAvailable reports which delegated brokers the worker registers.
 // The api-server holds no brokers (credentials resolve on the worker), so it
 // mirrors the worker's rule: the control-plane GitHub broker exists exactly
-// when a control plane is configured (serverworker.newIntegrationCredentials).
+// when a control plane is configured (internal/app NewWorkerIntegrationCredentials).
 func delegatedAvailable(hosted bool) connections.DelegatedAvailable {
 	return func(brokerID string) (bool, string) {
 		if brokerID == ghdelegated.BrokerID {

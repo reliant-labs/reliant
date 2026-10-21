@@ -9,9 +9,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/reliant/internal/app"
 	"github.com/reliant-labs/reliant/internal/integrations/webhook/github"
 	"github.com/reliant-labs/reliant/internal/serverapi"
-	"github.com/reliant-labs/reliant/internal/serverworker"
 )
 
 // integrationsEnv is every variable IntegrationsConfig reads, plus the OAuth
@@ -61,23 +61,23 @@ func TestIntegrationsEnvContract(t *testing.T) {
 
 	var api serverapi.Options
 	require.NoError(t, loadServerAPIConfig(serverCmd(t, "api"), &api))
-	var worker serverworker.Options
+	var worker workerOptions
 	require.NoError(t, loadServerWorkerConfig(serverCmd(t, "worker"), &worker))
 
-	for role, got := range map[string]integrationSettings{
-		"api":    {api.PublicURL, api.VaultKey, api.Webhooks, api.GitHubAppSlug, api.GitHubBot},
-		"worker": {worker.PublicURL, worker.VaultKey, worker.Webhooks, worker.GitHubAppSlug, worker.GitHubBot},
+	for role, got := range map[string]app.IntegrationSettings{
+		"api":    {PublicURL: api.PublicURL, VaultKey: api.VaultKey, Webhooks: api.Webhooks, GitHubAppSlug: api.GitHubAppSlug, GitHubBot: api.GitHubBot},
+		"worker": {PublicURL: worker.PublicURL, VaultKey: worker.VaultKey, Webhooks: worker.Webhooks, GitHubAppSlug: worker.GitHubAppSlug, GitHubBot: worker.GitHubBot},
 	} {
-		assert.Equal(t, "https://reliant.example", got.publicURL, role)
-		assert.Equal(t, "v1:a2V5", got.vaultKey, role)
-		assert.Equal(t, "slack-secret", got.webhooks.SlackSigningSecret, role)
-		assert.Equal(t, "gh-secret", got.webhooks.GitHubWebhookSecret, role)
-		assert.Equal(t, "https://reliant.example", got.webhooks.PublicURL, role)
-		assert.Equal(t, "test-secret", got.webhooks.TestIntegrationSecret, role)
-		assert.Equal(t, "reliant-labs", got.gitHubAppSlug, role)
-		assert.Equal(t, github.OurBot{ID: 42}, got.gitHubBot, role)
-		require.NotNil(t, got.webhooks.OAuthClients, role)
-		id, secret := got.webhooks.OAuthClients("gmail")
+		assert.Equal(t, "https://reliant.example", got.PublicURL, role)
+		assert.Equal(t, "v1:a2V5", got.VaultKey, role)
+		assert.Equal(t, "slack-secret", got.Webhooks.SlackSigningSecret, role)
+		assert.Equal(t, "gh-secret", got.Webhooks.GitHubWebhookSecret, role)
+		assert.Equal(t, "https://reliant.example", got.Webhooks.PublicURL, role)
+		assert.Equal(t, "test-secret", got.Webhooks.TestIntegrationSecret, role)
+		assert.Equal(t, "reliant-labs", got.GitHubAppSlug, role)
+		assert.Equal(t, github.OurBot{ID: 42}, got.GitHubBot, role)
+		require.NotNil(t, got.Webhooks.OAuthClients, role)
+		id, secret := got.Webhooks.OAuthClients("gmail")
 		assert.Equal(t, "gmail-id", id, role)
 		assert.Equal(t, "gmail-secret", secret, role)
 	}

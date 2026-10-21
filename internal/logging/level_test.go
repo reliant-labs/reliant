@@ -70,8 +70,8 @@ func TestRetiredDebugFlagsDoNotRaiseTheLevel(t *testing.T) {
 
 const refusedDebugMessage = "DEBUG logging requested but ignored: environment is prod"
 
-// setupLikeAServer installs the logger the way serverapi, serverworker and
-// servergateway do — Setup with GetLogLevel's answer for the same settings —
+// setupLikeAServer installs the logger the way serverapi and the server
+// roots' process policy (cmd/reliant/cmd/serve.go) do — Setup with GetLogLevel's answer for the same settings —
 // and returns what it wrote after one DEBUG and one INFO line.
 func setupLikeAServer(t *testing.T, s Settings) string {
 	t.Helper()

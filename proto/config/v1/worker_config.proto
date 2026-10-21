@@ -48,4 +48,18 @@ message WorkerConfig {
     default_value: "30s"
     description: "Budget for graceful shutdown after the pre-stop pause"
   }];
+
+  // The probe paths on HEALTH_PORT, read as GatewayConfig's are (its comment
+  // has the rules): /health and /ready are what control-plane probes
+  // (RELIANT_PROBES), /healthz and /readyz forge's.
+  string liveness_paths = 20 [(forge.v1.config) = {
+    env_var: "LIVENESS_PATHS"
+    default_value: "/health,/healthz"
+    description: "Liveness probe paths on the health port (comma-separated)"
+  }];
+  string readiness_paths = 21 [(forge.v1.config) = {
+    env_var: "READINESS_PATHS"
+    default_value: "/ready,/readyz"
+    description: "Readiness probe paths on the health port (comma-separated)"
+  }];
 }

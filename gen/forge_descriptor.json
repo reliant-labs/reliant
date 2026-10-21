@@ -39513,6 +39513,34 @@
           "Sensitive": false,
           "Category": "",
           "ProtoFile": "config/v1/worker_config.proto"
+        },
+        {
+          "Name": "liveness_paths",
+          "GoName": "LivenessPaths",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "LIVENESS_PATHS",
+          "Flag": "",
+          "DefaultValue": "/health,/healthz",
+          "Required": false,
+          "Description": "Liveness probe paths on the health port (comma-separated)",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "config/v1/worker_config.proto"
+        },
+        {
+          "Name": "readiness_paths",
+          "GoName": "ReadinessPaths",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "READINESS_PATHS",
+          "Flag": "",
+          "DefaultValue": "/ready,/readyz",
+          "Required": false,
+          "Description": "Readiness probe paths on the health port (comma-separated)",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "config/v1/worker_config.proto"
         }
       ],
       "Binary": "reliant",
@@ -39539,7 +39567,7 @@
     "config/v1/preview_config.proto": "a8620fb35910b249c3b1bc0767fb615bdf699624526d7a237c62cb490fb9c425",
     "config/v1/preview_url_config.proto": "fa0cc5f673ae266457eaa39150abaf020bfdda8d7395f54c47fef893a8653d4d",
     "config/v1/server_config.proto": "ccf8db8ce398db64bf8f74386ad35612bf7fb9419ee55ade9e8acf86dbd46235",
-    "config/v1/worker_config.proto": "b1b71b542b5f671aea986824f2c2d8643ff2f7f6e05029b3b79b889988586d04",
+    "config/v1/worker_config.proto": "996b513dffbdddd6fde8289e20d7f8524a0a94f09305341294e83ccf19884b09",
     "reliant/v1/account.proto": "d7e5ce0de4321d271532eb749a53e2001e692bdf208a4b7b71d4816673eebf35",
     "reliant/v1/annotations.proto": "378abb26b00cc86e8b14aef65e3e78467130da6a7787cd66b9a7d59ade949b57",
     "reliant/v1/approval.proto": "4ebbca862a2a5f88bb7f603d52d09933c296cbdc89e55d2abd1f58b76ecad6ce",

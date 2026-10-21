@@ -22,7 +22,7 @@ import (
 // provider — cached per config version — not by reading the whole config row
 // and re-parsing every skill on each call (18 MB per skill call in prod).
 //
-// The provider here is the worker's own wiring (serverworker/run.go) over the
+// The provider here is the worker's own wiring (internal/app NewStoredConfigProvider) over the
 // same spy repository, so its one fill per config version is counted too:
 // three skill calls make one whole-row read in all, not three.
 func TestSkillToolReadsSkillsThroughTheConfigProvider(t *testing.T) {

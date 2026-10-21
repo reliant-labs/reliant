@@ -57,9 +57,9 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge cloud`](#reliant-forge-cloud) | Talk to the hosted control plane an environment declares |
 | [`reliant forge cloud identity`](#reliant-forge-cloud-identity) | Inspect managed identity and administer its users |
 | [`reliant forge cloud identity delete`](#reliant-forge-cloud-identity-delete) | Delete a user's account (org admin; asks first) |
-| [`reliant forge cloud identity invite`](#reliant-forge-cloud-identity-invite) | Create an account (or grant roles) and ask for an invitation email (org admin) |
+| [`reliant forge cloud identity invite`](#reliant-forge-cloud-identity-invite) | Create an account (or grant roles) and issue a password-set code (org admin) |
 | [`reliant forge cloud identity lock`](#reliant-forge-cloud-identity-lock) | Block a user from signing in (org admin) |
-| [`reliant forge cloud identity reset`](#reliant-forge-cloud-identity-reset) | Email a user a link to set a new password (org admin) |
+| [`reliant forge cloud identity reset`](#reliant-forge-cloud-identity-reset) | Issue a user a one-time password-set code (org admin) |
 | [`reliant forge cloud identity revoke-sessions`](#reliant-forge-cloud-identity-revoke-sessions) | End a user's sign-in sessions (org admin) |
 | [`reliant forge cloud identity set-roles`](#reliant-forge-cloud-identity-set-roles) | Replace a user's console-managed roles (org admin) |
 | [`reliant forge cloud identity status`](#reliant-forge-cloud-identity-status) | Show managed-identity state, issuer and delivery metadata |
@@ -1489,13 +1489,15 @@ a flag. The environment must already exist in this project.
 
 --user takes a user id or an exact email address (see 'users').
 
-Inviting creates the account (or grants roles to an existing one) and asks the
-instance to email a code. No mail is sent unless the environment declares smtp
-in KCL: without it the call succeeds and delivers nothing, so hand the person a
-password-set code through a channel you control (the deploy/managed-identity
-skill, "What an invitation does, and does not, do"). There is no password
-option, seed account or implicit recipient. Roles managed
-in deploy/kcl/identity.k (members_from = "declared") are read-only here.
+Inviting creates the account (or grants roles to an existing one) and, for an
+account with no credential yet, issues a one-time password-set code; reset
+issues one for any account. The code is emailed only where the environment
+declares smtp in KCL ('status' shows "Mail:"). Without smtp the control plane
+refuses both rather than send nothing: pass --return-code to have the code
+handed back, and deliver it yourself through a channel you control. The code is
+a credential. There is no password option, seed account or implicit recipient.
+Roles managed in deploy/kcl/identity.k (members_from = "declared") are
+read-only here.
 
 ```
 reliant forge cloud identity
@@ -1506,9 +1508,9 @@ reliant forge cloud identity
 | Command | Description |
 |---------|-------------|
 | [`delete`](#reliant-forge-cloud-identity-delete) | Delete a user's account (org admin; asks first) |
-| [`invite`](#reliant-forge-cloud-identity-invite) | Create an account (or grant roles) and ask for an invitation email (org admin) |
+| [`invite`](#reliant-forge-cloud-identity-invite) | Create an account (or grant roles) and issue a password-set code (org admin) |
 | [`lock`](#reliant-forge-cloud-identity-lock) | Block a user from signing in (org admin) |
-| [`reset`](#reliant-forge-cloud-identity-reset) | Email a user a link to set a new password (org admin) |
+| [`reset`](#reliant-forge-cloud-identity-reset) | Issue a user a one-time password-set code (org admin) |
 | [`revoke-sessions`](#reliant-forge-cloud-identity-revoke-sessions) | End a user's sign-in sessions (org admin) |
 | [`set-roles`](#reliant-forge-cloud-identity-set-roles) | Replace a user's console-managed roles (org admin) |
 | [`status`](#reliant-forge-cloud-identity-status) | Show managed-identity state, issuer and delivery metadata |
@@ -1542,14 +1544,16 @@ reliant forge cloud identity delete <env> --user <id|email> [flags]
 
 #### reliant forge cloud identity invite
 
-Create an account (or grant roles) and ask for an invitation email (org admin)
+Create an account (or grant roles) and issue a password-set code (org admin)
 
 Invite this explicit email address; repeat --role for multiple roles.
-The account is created and the instance is asked to email a code, but mail
-goes out only when the environment declares smtp; otherwise nothing is sent and
-the person needs a password-set code from you. An existing account receives the requested roles (created=false). The server refuses unknown
-or declared/read-only roles, a credential without identity:manage and an
-identity that is not ready. Such a refusal is an error, never a fallback to a seeded password.
+An existing account receives the requested roles (created=false). An account
+with no credential yet is issued a one-time password-set code: emailed where
+the environment declares smtp, or, with --return-code, printed here for you to
+deliver. Without smtp and without --return-code the control plane refuses the
+invitation before writing anything. The server also refuses unknown or
+declared/read-only roles, a credential without identity:manage and an identity
+that is not ready. A refusal is an error, never a fallback to a seeded password.
 
 ```
 reliant forge cloud identity invite <env> --email <address> --role <role> [flags]
@@ -1561,6 +1565,7 @@ reliant forge cloud identity invite <env> --email <address> --role <role> [flags
 |------|------|---------|-------------|
 | `--email` | `string` | - | Explicit recipient email address (required; never inferred) |
 | `--json` | `bool` | - | Emit machine-readable JSON (never credentials) |
+| `--return-code` | `bool` | - | Print the password-set code instead of emailing it (it is a credential; needed where the environment declares no smtp) |
 | `--role` | `stringArray` | `[]` | Console-managed role to grant (required; repeat for multiple roles) |
 | `--token` | `string` | - | Credential to use, ahead of the env var, stored login and session helper |
 
@@ -1588,10 +1593,14 @@ reliant forge cloud identity lock <env> --user <id|email> [flags]
 
 #### reliant forge cloud identity reset
 
-Email a user a link to set a new password (org admin)
+Issue a user a one-time password-set code (org admin)
 
-Email the user a link to set a new password. Whether the environment's identity
-can send mail at all is shown by `forge cloud identity status`.
+Issue the user a one-time password-set code. It is emailed as a reset link
+where the environment declares smtp; with --return-code it is printed here
+instead, for you to deliver over a channel you control (it is a credential).
+Without smtp ('status' shows "Mail: none") the control plane refuses a reset
+without --return-code rather than send nothing. The user's current password
+keeps working until the code is redeemed.
 
 ```
 reliant forge cloud identity reset <env> --user <id|email> [flags]
@@ -1602,6 +1611,7 @@ reliant forge cloud identity reset <env> --user <id|email> [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--json` | `bool` | - | Emit machine-readable JSON (never credentials) |
+| `--return-code` | `bool` | - | Print the password-set code instead of emailing it (it is a credential; needed where the environment declares no smtp) |
 | `--token` | `string` | - | Credential to use, ahead of the env var, stored login and session helper |
 | `--user` | `string` | - | The user, by user id or exact email address (required) |
 
@@ -6208,6 +6218,7 @@ reliant forge lint [paths...] [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--allow-skip` | `stringArray` | `[]` | Accept that a gating lane may NOT run here, by name and with a reason: LANE[,LANE...]=REASON (repeatable), e.g. --allow-skip 'frontend-typecheck=frontends typecheck in the web job'. A gating lane that could not run (a tool missing, a frontend with no node_modules) fails forge lint otherwise; an accepted one is listed as SKIPPED (allowed) in the verdict. forge.yaml lint.allow_skip is the project-level form. Accepts only could-not-run: a lane that ran and found problems still fails |
 | `--check` | `bool` | - | Report only: write nothing, print the diff each fix would apply, and exit non-zero if any is pending. The default; beats --fix (also spelled --no-fix) |
 | `--closed-sets` | `bool` | - | Fail when a CHECK declared forge:closed-set `<set>` does not list exactly that Go set, and print the migration that fixes it |
 | `--column-markers` | `bool` | - | Fail on a COMMENT ON TABLE/VIEW/COLUMN/CONSTRAINT carrying a forge: marker that object does not read |
@@ -6239,7 +6250,7 @@ reliant forge lint [paths...] [flags]
 | `--skip-frontends` | `bool` | - | Skip the whole frontend lane (eslint/stylelint + TypeScript typecheck + static-export) for a backend-only gate that needs no Node toolchain |
 | `--slow-tests` | `bool` | - | Fail on a Go test that does slow work without being marked slow — execs go/forge/kcl/node/npm/git/docker/…, drives containers, or dials an external host, with no testkit.Slow(t, why) or testing.Short() guard on its path — so it runs in the blocking -short tier, and a file its child process reads is invisible to the test cache |
 | `--static-export` | `bool` | - | For each Next.js frontend that must build to a static export (forge.yaml output: static, or bound to forge.OnHosted / OnBucket / OnFirebase in any env), report with file:line what the export cannot serve. FAILS on what next build refuses (a dynamic route without generateStaticParams, server actions, next/headers, next/image without images.unoptimized, a build that is not an export); WARNS on what it silently drops (middleware, non-GET route handlers, ungated rewrites/redirects/headers, a bucket-bound export without trailingSlash) |
-| `--strict` | `bool` | - | Escalate advisory findings to errors so they fail the build / CI: RPCs missing a (forge.v1.method) auth-posture annotation, and any lane that could NOT run (frontend typecheck or eslint with deps not installed; typed-config guardrail when golangci-lint never reported) |
+| `--strict` | `bool` | - | Escalate advisory findings to errors so they fail the build / CI: RPCs missing a (forge.v1.method) auth-posture annotation, contract refusals in a tree with no forge.yaml, and an advisory lane's own could-not-run report (the typed-config guardrail when golangci-lint never reported). Not needed for a gating lane that could NOT run: that always fails, unless --allow-skip accepts it |
 | `--tests` | `bool` | - | Run test-convention rules (handler-tests-use-tdd + frontend-hook-tests; warnings only) |
 | `--time-bucketing` | `bool` | - | Flag a two-argument date_trunc over a TIMESTAMPTZ column — postgres truncates it in the SESSION timezone, which the driver sets from the client host, so every bucketed total is attributed to the wrong day by an amount that changes with the deploy host. Pin the zone: date_trunc('day', col, 'UTC') (warnings only) |
 | `--tracing` | `bool` | - | Report where a request's trace is cut: a log call made with a context in scope but not passed it (no trace_id), an *http.Client or database pool opened without forge's traced constructors, a contract package constructed without its generated decorator. With --fix, rewrites every log call to its ...Context form and every undecorated contract construction to NewInstrumented; forge.yaml lint.tracing.log_wrappers adds the project's own logging helpers |

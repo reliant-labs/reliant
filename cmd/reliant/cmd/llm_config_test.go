@@ -12,7 +12,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/serverapi"
-	"github.com/reliant-labs/reliant/internal/serverworker"
 )
 
 var llmEnv = []string{
@@ -43,7 +42,7 @@ func llmOf(t *testing.T) (api, worker drivers.Settings, err error) {
 	}
 	workerCmd, _, ferr := NewRootCmd().Find([]string{"server", "worker"})
 	require.NoError(t, ferr)
-	var w serverworker.Options
+	var w workerOptions
 	err = loadServerWorkerConfig(workerCmd, &w)
 	return a.LLM, w.LLM, err
 }

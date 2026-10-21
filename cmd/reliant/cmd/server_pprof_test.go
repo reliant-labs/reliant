@@ -6,8 +6,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/reliant-labs/reliant/internal/serverworker"
 )
 
 // PPROF_PORT=0 turns the API server's and the worker's diagnostics listener
@@ -22,7 +20,7 @@ func TestServerPprofPortZeroIsOff(t *testing.T) {
 
 	opts, err := serverRoles[1].load(t)
 	require.NoError(t, err)
-	assert.Zero(t, opts.(serverworker.Options).PprofPort)
+	assert.Zero(t, opts.(workerOptions).PprofPort)
 }
 
 // A PPROF_PORT that is neither 0 nor a TCP port still stops the server at

@@ -22,7 +22,7 @@ import (
 // A tool has no business knowing what a launcher or a workflow engine is, and
 // the packages that implement these (internal/launch, internal/runs) depend on
 // this one, so the tools take narrow interfaces declared here and the wiring
-// (internal/serverworker, internal/serverapi) supplies the implementation. A
+// (internal/app's worker root, internal/serverapi) supplies the implementation. A
 // nil implementation is valid: the daemon runtime has no Temporal connection,
 // and each tool then says it is unavailable rather than pretending.
 

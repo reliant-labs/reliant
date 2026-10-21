@@ -10,7 +10,6 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/serverapi"
-	"github.com/reliant-labs/reliant/internal/serverworker"
 )
 
 var analyticsEnv = []string{"RELIANT_ANALYTICS_DISABLED"}
@@ -31,7 +30,7 @@ func TestAnalyticsEnvContract(t *testing.T) {
 		require.NoError(t, loadServerAPIConfig(apiCmd, &api))
 		workerCmd, _, err := NewRootCmd().Find([]string{"server", "worker"})
 		require.NoError(t, err)
-		var worker serverworker.Options
+		var worker workerOptions
 		require.NoError(t, loadServerWorkerConfig(workerCmd, &worker))
 		return api.Analytics, worker.Analytics
 	}

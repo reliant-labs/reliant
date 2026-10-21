@@ -10,7 +10,6 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/serverapi"
-	"github.com/reliant-labs/reliant/internal/serverworker"
 )
 
 // The preview settings control-plane sets on the API server and the worker
@@ -32,7 +31,7 @@ func TestPreviewEnvContract(t *testing.T) {
 		}
 		workerCmd, _, err := NewRootCmd().Find([]string{"server", "worker"})
 		require.NoError(t, err)
-		var worker serverworker.Options
+		var worker workerOptions
 		err = loadServerWorkerConfig(workerCmd, &worker)
 		return api.Preview, worker.Preview, err
 	}

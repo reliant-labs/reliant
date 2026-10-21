@@ -14,7 +14,6 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/serverapi"
-	"github.com/reliant-labs/reliant/internal/serverworker"
 )
 
 // controlPlaneEnv is every variable ControlPlaneConfig reads.
@@ -29,7 +28,7 @@ var controlPlaneRoles = map[string]func(*cobra.Command) (controlplane.Endpoint, 
 		return opts.ControlPlane, err
 	},
 	"server worker": func(cmd *cobra.Command) (controlplane.Endpoint, error) {
-		var opts serverworker.Options
+		var opts workerOptions
 		err := loadServerWorkerConfig(cmd, &opts)
 		return opts.ControlPlane, err
 	},

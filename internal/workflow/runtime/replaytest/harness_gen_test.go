@@ -195,7 +195,7 @@ func requireStack(t *testing.T) *Stack {
 			return
 		}
 
-		// Global registries, mirroring serverworker.Run.
+		// Global registries, mirroring the worker root (internal/app ProcessSettings).
 		if err := models.InitGlobalRegistryWithUserConfig(nil); err != nil {
 			stackErr = fmt.Errorf("init model registry: %w", err)
 			return

@@ -1,8 +1,9 @@
 // Copyright (c) 2025 Reliant Labs
 
-package serverworker
+package app
 
 import (
+	"context"
 	"testing"
 
 	"github.com/reliant-labs/reliant/internal/controlplane"
@@ -11,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/integrations/catalog"
+	"github.com/reliant-labs/reliant/internal/integrations/catalogindex"
 	"github.com/reliant-labs/reliant/internal/integrations/connauth"
 	"github.com/reliant-labs/reliant/internal/integrations/ghdelegated"
 	"github.com/reliant-labs/reliant/internal/integrations/manifest"
@@ -19,7 +21,7 @@ import (
 // Hosted (a control plane is configured): GitHub tokens come from
 // control-plane, through the delegated source.
 func TestIntegrationCredentials_HostedUsesControlPlane(t *testing.T) {
-	src, err := newIntegrationCredentials(nil, controlplane.Endpoint{URL: "http://admin-server:8090", InternalServiceSecret: "s"})
+	src, err := newWorkerIntegrationCredentials(nil, controlplane.Endpoint{URL: "http://admin-server:8090", InternalServiceSecret: "s"})
 	require.NoError(t, err)
 	cs, ok := src.(connauth.Service)
 	require.True(t, ok)
@@ -31,14 +33,14 @@ func TestIntegrationCredentials_HostedUsesControlPlane(t *testing.T) {
 // reliant's own GitHub provider — which would tell every hosted user their
 // GitHub is not connected.
 func TestIntegrationCredentials_HostedWithoutSecretFailsBoot(t *testing.T) {
-	_, err := newIntegrationCredentials(nil, controlplane.Endpoint{URL: "http://admin-server:8090"})
+	_, err := newWorkerIntegrationCredentials(nil, controlplane.Endpoint{URL: "http://admin-server:8090"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "INTERNAL_SERVICE_SECRET")
 }
 
 // Self-hosted: saved connections only; `github` is reliant's own provider.
 func TestIntegrationCredentials_SelfHostedIsSavedConnections(t *testing.T) {
-	src, err := newIntegrationCredentials(nil, controlplane.Endpoint{})
+	src, err := newWorkerIntegrationCredentials(nil, controlplane.Endpoint{})
 	require.NoError(t, err)
 	cs, ok := src.(connauth.Service)
 	require.True(t, ok)
@@ -49,7 +51,7 @@ func TestIntegrationCredentials_SelfHostedIsSavedConnections(t *testing.T) {
 // The poll activity is handed the same source integration actions use, so a
 // poll resolves a credential exactly as an action node would.
 func TestTriggerCredentialsIsTheIntegrationSource(t *testing.T) {
-	src, err := newIntegrationCredentials(nil, controlplane.Endpoint{})
+	src, err := newWorkerIntegrationCredentials(nil, controlplane.Endpoint{})
 	require.NoError(t, err)
 	got := triggerCredentials(src)
 	require.NotNil(t, got)
@@ -72,4 +74,28 @@ func TestGitHubManifestNamesTheRegisteredBroker(t *testing.T) {
 	m, ok := manifest.Method(a.Manifest.GetConnection(), manifest.AuthDelegated)
 	require.True(t, ok)
 	assert.Equal(t, ghdelegated.BrokerID, m.GetDelegated().GetBroker())
+}
+
+// The worker's search_integrations reports GitHub as connected exactly when
+// this worker registered the control-plane broker its action node would
+// authenticate through, and never otherwise.
+func TestCatalogSearch_DelegatedFollowsTheWorkersBrokers(t *testing.T) {
+	ctx := context.Background()
+	var noConnections catalogindex.ConnectionLister
+
+	hosted, err := newWorkerIntegrationCredentials(nil, controlplane.Endpoint{URL: "http://admin-server:8090", InternalServiceSecret: "s"})
+	require.NoError(t, err)
+	svc, err := newWorkerCatalogSearch(noConnections, hosted)
+	require.NoError(t, err)
+	usable, err := svc.Usable(ctx, "")
+	require.NoError(t, err)
+	assert.True(t, usable["github"], "hosted: GitHub is served by the control-plane broker")
+
+	selfHosted, err := newWorkerIntegrationCredentials(nil, controlplane.Endpoint{})
+	require.NoError(t, err)
+	svc, err = newWorkerCatalogSearch(noConnections, selfHosted)
+	require.NoError(t, err)
+	usable, err = svc.Usable(ctx, "")
+	require.NoError(t, err)
+	assert.False(t, usable["github"], "self-hosted: GitHub needs a saved connection")
 }
