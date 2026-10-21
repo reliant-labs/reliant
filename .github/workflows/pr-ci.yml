@@ -81,6 +81,12 @@ permissions:
 
 env:
   NODE_VERSION: '24'
+  # `|`, not `,`: fall back to the module's origin on ANY proxy error, not
+  # only a 404. A Go job fetches whatever the module cache lacks (a go.sum
+  # change, a cold cache) with many fetches in flight, and one transient
+  # proxy.golang.org stream reset failed five test binaries at once with
+  # "[setup failed]" (run 39676414820).
+  GOPROXY: https://proxy.golang.org|direct
 
 jobs:
   # ── What does this change reach? ──────────────────────────────────────────
