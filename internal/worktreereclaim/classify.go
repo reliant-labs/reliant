@@ -679,42 +679,35 @@ func (m *commitMemo) put(key string, merged bool) {
 	m.answers[key] = memoAnswer{merged, m.now()}
 }
 
-// dataHold lists ignored files that are not known to be rebuildable. They are
-// the user's data (a ./data directory, .env files, sqlite databases, a local
-// postgres under .forge/hostinfra); only a person may delete them.
+// dataHold lists ignored files that are the user's data (a ./data directory,
+// .env files, sqlite databases, a local postgres under .forge/hostinfra): not
+// rebuildable, not generated, and not a copy of the source checkout's file
+// (dataWalk). Only a person may delete them.
 func dataHold(ctx context.Context, checkout string, nested []string) verdict {
 	out, err := git(ctx, checkout, nil, "ls-files", "-z", "--others", "--ignored", "--exclude-standard", "--directory")
 	if err != nil {
 		return verdict{ReasonUnverified, "could not list ignored files: " + err.Error()}
 	}
-	var data []string
+	walk := newDataWalk(ctx, checkout, nested)
 	for _, e := range strings.Split(out, "\x00") {
-		if e == "" {
-			continue
-		}
-		unrecognizedIgnored(checkout, e, &data)
-	}
-	var kept []string
-	for _, d := range data {
-		full := filepath.Join(checkout, filepath.FromSlash(d))
-		inNested := false
-		for _, n := range nested {
-			if samePath(full, n) || within(n, full) {
-				inNested = true
-			}
-		}
-		if !inNested {
-			kept = append(kept, d)
+		if e != "" {
+			walk.visit(e)
 		}
 	}
-	if len(kept) == 0 {
+	if len(walk.out) == 0 {
 		return verdict{}
 	}
-	shown := kept
+	shown := walk.out
 	if len(shown) > 3 {
 		shown = shown[:3]
 	}
-	return verdict{ReasonData, "ignored files that are not rebuildable: " + strings.Join(shown, ", ")}
+	detail := "ignored files that are not rebuildable: " + strings.Join(shown, ", ")
+	if source := walk.source(); source != "" {
+		// Say how to free it: these exist only here, and a copy identical to
+		// the source checkout's would not hold it.
+		detail += " (not in " + source + ", or different there)"
+	}
+	return verdict{ReasonData, detail}
 }
 
 // untrackedBytes sums the size of untracked, non-ignored files: what a

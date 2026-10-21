@@ -26,6 +26,18 @@ export function kclString(value: string): string {
   return `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n").replace(/\$\{/g, "\\${")}"`;
 }
 
+/**
+ * A KCL string literal for SQL: one line stays a plain string; several become a
+ * triple-quoted block, so the query reads as written. The first newline after
+ * the opening quotes is dropped by the `\\` and the closing quotes sit on their
+ * own line.
+ */
+export function kclText(value: string): string {
+  if (!value.includes("\n")) return kclString(value);
+  const body = value.replace(/\\/g, "\\\\").replace(/\$\{/g, "\\${").replace(/"""/g, '""\\"');
+  return `"""\\\n${body.replace(/\n+$/, "")}\n"""`;
+}
+
 const IDENT = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
 function kclKey(key: string): string {
@@ -54,7 +66,7 @@ function indent(text: string, by: string): string {
 
 /** The forge.AlertRule block that declares a rule. Fields left at their defaults (interval 1m) are left out. */
 export function alertRuleKcl(rule: DeclaredAlertRule): string {
-  const lines = [`alert = ${kclString(rule.alert)}`, `expr = ${kclString(rule.expr)}`];
+  const lines = [`alert = ${kclString(rule.alert)}`, `expr = ${kclText(rule.expr)}`];
   if (rule.for && rule.for !== "5m") lines.push(`"for" = ${kclString(rule.for)}`);
   if (rule.interval && rule.interval !== "1m") lines.push(`interval = ${kclString(rule.interval)}`);
   if (rule.keepFiringFor) lines.push(`keep_firing_for = ${kclString(rule.keepFiringFor)}`);
