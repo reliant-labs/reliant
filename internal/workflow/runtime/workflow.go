@@ -861,6 +861,13 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		return nil, fmt.Errorf("parse workflow for validation: %w", err)
 	}
 
+	// The on_failure handler is armed as soon as the definition parses, before
+	// input validation or template resolution can fail: a run that dies there
+	// is still a failed run, and the handler is what tells someone. Template
+	// resolution leaves on_failure untouched (it is runtime-evaluated), so the
+	// parsed definition's handler is the handler the resolved one carries.
+	onFailureHandler = wfWithPlaceholders.GetOnFailure()
+
 	// STEP 5.5: Validate and apply defaults from workflow input schemas
 	// This ensures all inputs with defaults are available for CEL evaluation
 	// Use AllInputs() to include grouped inputs (e.g., Implementer.model, Reviewer.temperature)

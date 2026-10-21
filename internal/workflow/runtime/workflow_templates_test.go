@@ -874,3 +874,64 @@ nodes:
 	})
 
 }
+
+// Inside a node, a template that reads a namespace the pre-run pass does not
+// have (nodes, iter, output, outputs, failure) is left for node execution
+// whatever key it sits under, so no node field needs listing to be safe. One
+// that reads only inputs and workflow still resolves now.
+func TestResolveWorkflowTemplates_DefersByScopeInsideNodes(t *testing.T) {
+	t.Parallel()
+	raw := map[string]interface{}{
+		"name": "scoped",
+		"nodes": []interface{}{
+			map[string]interface{}{
+				"id": "n",
+				// An invented field that is in no deny-list.
+				"some_future_field": map[string]interface{}{
+					"later": "{{ nodes.prev.data.sha }}",
+					"loop":  "x-{{ iter.item }}",
+					"now":   "{{ inputs.who }}",
+				},
+			},
+		},
+	}
+	got, err := ResolveWorkflowTemplates(raw, map[string]interface{}{"who": "ada"}, nil)
+	require.NoError(t, err)
+	field := got["nodes"].([]interface{})[0].(map[string]interface{})["some_future_field"].(map[string]interface{})
+	assert.Equal(t, "{{ nodes.prev.data.sha }}", field["later"])
+	assert.Equal(t, "x-{{ iter.item }}", field["loop"])
+	assert.Equal(t, "ada", field["now"])
+}
+
+// An action node's `with:` is evaluated when the node runs, even where it
+// reads only inputs: a node that never runs must not fail the run.
+func TestResolveWorkflowTemplates_ActionWithIsLazy(t *testing.T) {
+	t.Parallel()
+	raw := map[string]interface{}{
+		"name": "lazy",
+		"nodes": []interface{}{
+			map[string]interface{}{
+				"id":   "a",
+				"type": "action",
+				"with": map[string]interface{}{"owner": "{{ inputs.repo.split('/')[0] }}"},
+			},
+		},
+	}
+	got, err := ResolveWorkflowTemplates(raw, map[string]interface{}{"repo": ""}, nil)
+	require.NoError(t, err)
+	with := got["nodes"].([]interface{})[0].(map[string]interface{})["with"].(map[string]interface{})
+	assert.Equal(t, "{{ inputs.repo.split('/')[0] }}", with["owner"])
+}
+
+// A template that does not parse is an error, never silently deferred.
+func TestResolveWorkflowTemplates_MalformedTemplateInNodeIsAnError(t *testing.T) {
+	t.Parallel()
+	raw := map[string]interface{}{
+		"name": "bad",
+		"nodes": []interface{}{
+			map[string]interface{}{"id": "n", "label": "{{ nodes.x. }}"},
+		},
+	}
+	_, err := ResolveWorkflowTemplates(raw, map[string]interface{}{}, nil)
+	require.Error(t, err)
+}

@@ -1280,6 +1280,15 @@ jobs:
           echo "forge lint: $( [ "${#args[@]}" -gt 0 ] && echo "$(( ${#args[@]} / 2 )) changed file(s)" || echo "whole project")"
           forge lint --no-fix "${args[@]}"
 
+      # The composition graph is a whole-project fact: --scope skips the graph
+      # lane, yet a change to forge.yaml's lint.rules, internal/app or any Deps
+      # struct can leave a node reachable from no root in a file the PR never
+      # touched. It costs ~7s (no type-check), so a scoped PR runs it
+      # unscoped instead of leaving it to main's whole-project lint.
+      - name: Composition graph (PR, whole project)
+        if: needs.changes.outputs.lint_scope != ''
+        run: forge lint --no-fix --graph
+
       - name: Report the analysis cache size
         if: ${{ !cancelled() }}
         run: du -sh "${GOLANGCI_LINT_CACHE}" 2>/dev/null || echo "no golangci-lint cache at ${GOLANGCI_LINT_CACHE}"
