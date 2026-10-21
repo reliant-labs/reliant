@@ -1,7 +1,7 @@
 # The GitHub projection: what of a webhook body the parser keeps, and the
 # schema that says so. tools/integrationgen turns this directory, the pinned
 # upstream schema below and the shared attribute declarations in the catalog
-# into zz_projection_gen.go and the catalog's events/ and *_schema.yaml.
+# into zz_projection_generated.go and the catalog's events/ and *_schema.yaml.
 # Authoring guide: dev-docs/integration-manifests.md ("Webhook events").
 provider: github
 package: github

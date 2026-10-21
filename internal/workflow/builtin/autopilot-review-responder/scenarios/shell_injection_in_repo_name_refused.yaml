@@ -1,8 +1,10 @@
 name: shell_injection_in_repo_name_refused
 description: >-
-  A repo name that is listed but is not a plain owner/name never reaches a shell command.
+  A repo name that is not a plain owner/name never reaches a shell command, at two layers: `repos` is a
+  github.repository, so the input is refused outright; and a `repo` the event supplies that is not in `repos`
+  is refused by the check node (see shell_injection_in_event_repo_refused).
 inputs: {"repos": ["a/b;rm -rf x"], "trusted_ids": [], "repo": "a/b;rm -rf x", "pr_number": 55, "event": "review by x", "owner_id": "225976313"}
 expect:
-  outcome: completed
-  completed: [check, invalid]
-  not_reached: [rounds]
+  outcome: error
+  error_contains: "not a valid github.repository"
+  not_reached: [check, rounds]

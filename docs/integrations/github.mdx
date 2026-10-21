@@ -87,6 +87,29 @@ inputs:
 
 An agent can read any of them with `get_integration_schema github.repository`.
 
+**Where the types come from.** `github.repository` lists the repositories the Reliant GitHub App is installed on that you can see, not every repository your account can reach (`repo.list_for_user`). That is deliberate: it is the set GitHub events are delivered for, so a repository you can pick is one an automation can fire for. Each option carries whether you can push there, and when a workflow writes as the Reliant bot the picker warns about repositories where you lack push access, because the bot writes only where you can. A stored value that is no longer listed (the App was removed, the repository renamed) stays visible, marked as no longer reachable, until you change it.
+
+**Types on events.** Event attributes carry types too: `repository` is a `github.repository`, `label` a `github.label`, and `sender_id` a `github.user` (the numeric id of whoever acted). A trigger can scope by an input of the matching type, and validation checks the two agree:
+
+```yaml
+inputs:
+  repos:
+    type: github.repository
+    multi: true
+    required: true
+    min_items: 1
+triggers:
+  - name: pr-opened
+    integration:
+      integration: github
+      events: [pull_request.opened]
+      match: {repository: {input: repos}}   # only the repositories the user picked
+```
+
+The event is routed only when its `repository` is one of the input's values, so an event for any other repository is dropped before anything is recorded, and a scope with no values matches nothing. Mark the input `required` so it must be chosen when the automation is turned on; an automation missing it shows **Needs setup**. `match` entries combine: a literal (`is_pull_request: "true"`) and an input scope can sit side by side, and the trigger's `filter` still runs afterwards for anything a scope cannot say (drafts, labels, who sent it).
+
+`github.user` values are numeric ids as strings, so `trigger.sender.id in trigger.activation.params.trusted_ids` works unchanged.
+
 ### Labels: add and remove, don't replace
 
 `issue.update` sets the **whole** label list. Two runs that each read the labels, change them and write them back can undo each other. `issue.labels.add` and `issue.labels.remove` each send one request for one label and GitHub applies it on its own, so use them to claim a task (`agent:in-progress`) or release it. `issue.labels.remove` on a label the issue does not carry fails with *not found*.
@@ -137,7 +160,7 @@ Automation runs have nobody watching them, so an unattended run is not handed an
 
 Each event's payload is declared, so `get_integration_schema` lists it and validation checks a trigger's `filter`, `inputs` and `prompt` against it: reading a top-level key the event never carries (`data.issue` on an inline diff comment) is an error before the trigger fires. Lists of names, such as `issue.labels` and `pull_request.labels`, hold strings.
 
-You can narrow a trigger with `match`. Every event carries `repository` (`owner/name`), `installation_id`, `sender` and `action`; individual events add more:
+You can narrow a trigger with `match`, either to a fixed value (`repository: acme/app`) or to an input's values (`repository: {input: repos}`, see [Value types](#value-types)). Every event carries `repository` (`owner/name`), `installation_id`, `sender`, `sender_id` (the numeric id of whoever acted, which survives a rename) and `action`; individual events add more:
 
 | Attribute | On |
 |-----------|----|

@@ -1,8 +1,10 @@
 name: shell_injection_in_repo_name_refused
 description: >-
-  A repo name that is in `repos` but is not a plain owner/name never reaches a shell command.
+  A repo name that is not a plain owner/name never reaches a shell command, at two layers: `repos` is a
+  github.repository, so the input is refused outright; and a `repo` the event supplies that is not in `repos`
+  is refused by the check node.
 inputs: {"repos": ["a/b;rm -rf x"], "repo": "a/b;rm -rf x", "issue_number": 7, "via": "label", "owner_id": "225976313"}
 expect:
-  outcome: completed
-  completed: [check, invalid]
-  not_reached: [labels, issue, lease, wt, dir]
+  outcome: error
+  error_contains: "not a valid github.repository"
+  not_reached: [check, labels, issue, lease, wt, dir]
