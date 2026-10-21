@@ -143,7 +143,7 @@ func absorbPendingWakes(ctx workflow.Context, tracker *ChildWorkflowTracker) {
 			return
 		}
 		if sig.Thread != "" {
-			tracker.notifyThreadWake(sig.Thread)
+			tracker.recordThreadWake(sig)
 		}
 	}
 }

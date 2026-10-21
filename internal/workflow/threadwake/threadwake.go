@@ -73,7 +73,14 @@ const (
 // not an execution of its own), so the signal is always addressed to the
 // chat's workflow and this field is the only thing that selects which thread's
 // gate actually wakes. A signal naming a sub-thread must not wake its parent.
+//
+// FromUser marks input a person sent (SendMessage, SendAgentMessage), as
+// opposed to another agent (spawn_send). Unlike Reason it IS dispatch: a
+// thread waiting on the user's answer to an ask_user question stops waiting
+// for the user's own new input, and keeps waiting through an agent's. A
+// signal from before the field existed decodes as false.
 type Signal struct {
-	Thread string `json:"thread,omitempty"`
-	Reason Reason `json:"reason,omitempty"`
+	Thread   string `json:"thread,omitempty"`
+	Reason   Reason `json:"reason,omitempty"`
+	FromUser bool   `json:"from_user,omitempty"`
 }

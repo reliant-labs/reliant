@@ -286,6 +286,13 @@ type ChildWorkflowTracker struct {
 	// on a hint rather than on known input — see setSpeculativeTurn.
 	speculativeTurns map[string]bool
 
+	// userInputs counts, per recipient thread, the thread wakes a PERSON
+	// rang (ThreadWakeSignal.FromUser) — a subset of threadWakes. An ask_user
+	// wait yields to these and not to another agent's spawn_send: the user
+	// sending something else is an answer of sorts, a peer agent's message
+	// is not. See ask_user_yield.go.
+	userInputs map[string]int
+
 	// threadWakes counts, per RECIPIENT thread, how many "there is something
 	// for you to react to" notifications have arrived since the tracker was
 	// created. Incremented by setupThreadWakeHandler from the
@@ -518,7 +525,33 @@ func (t *ChildWorkflowTracker) notifyThreadWake(thread string) {
 // read the same way detachedCompletionCount is: snapshot before blocking,
 // compare against the live value to detect a new arrival.
 func (t *ChildWorkflowTracker) threadWakeCount(thread string) int {
+	if t == nil {
+		return 0
+	}
 	return t.threadWakes[thread]
+}
+
+// recordThreadWake counts one thread-wake signal: a wake for its thread, and
+// user input for it when a person sent it (ThreadWakeSignal.FromUser).
+func (t *ChildWorkflowTracker) recordThreadWake(sig ThreadWakeSignal) {
+	t.notifyThreadWake(sig.Thread)
+	if !sig.FromUser {
+		return
+	}
+	if t.userInputs == nil {
+		t.userInputs = make(map[string]int)
+	}
+	t.userInputs[sig.Thread]++
+}
+
+// userInputCount returns how many of thread's wakes were input from a person
+// so far — the subset of threadWakeCount an ask_user wait yields to.
+// Monotonic, and read the same way: snapshot, then compare.
+func (t *ChildWorkflowTracker) userInputCount(thread string) int {
+	if t == nil {
+		return 0
+	}
+	return t.userInputs[thread]
 }
 
 // recordTurnStart marks that thread is beginning a loop turn, whose call_llm
@@ -2830,9 +2863,9 @@ func setupThreadWakeHandler(ctx workflow.Context, childTracker *ChildWorkflowTra
 			if sig.Thread == "" {
 				continue
 			}
-			childTracker.notifyThreadWake(sig.Thread)
+			childTracker.recordThreadWake(sig)
 			logger.Info("[ThreadWake] Wake notification received",
-				"workflowID", workflowID, "thread", sig.Thread, "reason", string(sig.Reason))
+				"workflowID", workflowID, "thread", sig.Thread, "reason", string(sig.Reason), "fromUser", sig.FromUser)
 			// The doorbell of a sub-agent that stopped on a failure has no
 			// parked gate behind it: the agent's loop has exited. What it
 			// rang for is a message to that agent, and a message resumes it.
@@ -4440,13 +4473,20 @@ func executeToolsWithSpawnSupport(
 			}
 		}
 
-		// Execute ask_user tool calls inline (question system)
+		// Execute ask_user tool calls inline (question system). The wait
+		// yields to new input for the asking thread — a message or an
+		// interrupt — so it needs the thread's doorbell and interrupt epoch.
+		askThreadInput := askUserThreadInput{
+			tracker:   childTracker,
+			interrupt: resolveThreadInterrupt(threadInterruptFactory, nil, rtx.Thread),
+		}
 		for _, askTC := range split.askUserToolCalls {
 			result := executeAskUserInline(
 				gCtx, askTC,
 				rtx.ChatID, rtx.WorkflowID, rtx.Thread,
 				rtx.StepID, rtx.LoopNodeID, rtx.LoopIteration,
 				IsUnattended(workflowInputs),
+				askThreadInput,
 				logger,
 			)
 			combinedResults = append(combinedResults, result)
@@ -4468,6 +4508,11 @@ func executeToolsWithSpawnSupport(
 // executeAskUserInline handles an ask_user tool call by creating a question record
 // and waiting for a signal, using the same QuestionCreate/signal.question system
 // as the DAG ask_question node.
+//
+// The wait also ends when the asking thread is given something else to react
+// to — a message to it, or an interrupt of it (see awaitAskUserYield). The
+// question is then resolved unanswered and the model is told why, so the loop
+// reaches its next call_llm, which is what delivers the message.
 func executeAskUserInline(
 	ctx workflow.Context,
 	tc *reliantv1.ToolCallMsg,
@@ -4475,6 +4520,7 @@ func executeAskUserInline(
 	stepID, loopNodeID string,
 	loopIteration int,
 	unattended bool,
+	thread askUserThreadInput,
 	logger log.Logger,
 ) map[string]interface{} {
 	const questionTimeout = 24 * time.Hour
@@ -4606,7 +4652,7 @@ func executeAskUserInline(
 		}
 	}
 
-	// STEP 3: Wait for signal or timeout
+	// STEP 3: Wait for an answer, new input for the thread, or timeout
 	signalName := "signal.question." + createOutput.QuestionID
 	signalCh := workflow.GetSignalChannel(ctx, signalName)
 	timeoutCtx, cancelTimer := withScopedCancel(ctx)
@@ -4615,8 +4661,7 @@ func executeAskUserInline(
 	selector := workflow.NewSelector(ctx)
 	var action string
 	var responseData string
-
-	selector.AddReceive(signalCh, func(ch workflow.ReceiveChannel, more bool) {
+	receiveAnswer := func(ch workflow.ReceiveChannel) {
 		var signalData map[string]interface{}
 		ch.Receive(ctx, &signalData)
 		if a, ok := signalData["action"].(string); ok {
@@ -4625,6 +4670,10 @@ func executeAskUserInline(
 		if rd, ok := signalData["response_data"].(string); ok {
 			responseData = rd
 		}
+	}
+
+	selector.AddReceive(signalCh, func(ch workflow.ReceiveChannel, more bool) {
+		receiveAnswer(ch)
 		cancelTimer()
 	})
 
@@ -4632,7 +4681,30 @@ func executeAskUserInline(
 		action = "timeout"
 	})
 
+	yieldCtx, stopYieldWatch := workflow.WithCancel(ctx)
+	yieldCh := awaitAskUserYield(yieldCtx, createOutput.QuestionID, threadID, thread)
+	var yield askUserYield
+	selector.AddReceive(yieldCh, func(ch workflow.ReceiveChannel, more bool) {
+		ch.Receive(ctx, &yield)
+		cancelTimer()
+	})
+
 	selector.Select(ctx)
+	stopYieldWatch()
+
+	// An answer that landed in the same moment as the yield wins: the user
+	// did answer, and the answer is what the model asked for.
+	if yield != askUserYieldNone && signalCh.Len() > 0 {
+		receiveAnswer(signalCh)
+		yield = askUserYieldNone
+	}
+
+	// STEP 3b: The thread was given new input instead of an answer. Close the
+	// question, so it stops reading as pending, and hand the model a result
+	// that says what happened; its next call_llm reads the input.
+	if yield != askUserYieldNone {
+		return resolveYieldedAskUser(ctx, toolCallID, createOutput.QuestionID, yield, logger)
+	}
 
 	// STEP 4: On timeout, resolve in DB
 	if action == "timeout" {

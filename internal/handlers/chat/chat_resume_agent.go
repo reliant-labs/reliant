@@ -39,11 +39,9 @@ type stoppedAgentResumability struct {
 	// refusal is the user-facing reason it cannot, "" when it can.
 	refusal string
 	// runLive is whether the chat's run is live (running, pending or
-	// paused): it holds the agent's params, and resumes it in place.
+	// paused): it holds the agent's params, and resumes it in place. A
+	// paused run is resumed by the message first (resumePausedRunForMessage).
 	runLive bool
-	// runPaused is whether that run is paused: the agent resumes when the
-	// chat does.
-	runPaused bool
 }
 
 // isResumableStoppedAgent reports whether thread is a sub-agent that stopped
@@ -68,7 +66,6 @@ func (s *Service) stoppedAgentResumability(ctx context.Context, chat *db.Chat, t
 	var r stoppedAgentResumability
 	if rootRun, err := s.deps.Repo.GetWorkflow(ctx, chat.MainThreadID()); err == nil && rootRun != nil {
 		r.runLive = rootRun.Status.Live()
-		r.runPaused = rootRun.Status.IsStopped() && rootRun.Status.StopReason == core.StopReasonPaused
 	}
 
 	if thread.ParentThreadID != nil && *thread.ParentThreadID != chat.MainThreadID() {
@@ -101,15 +98,9 @@ func (s *Service) canResumeStoppedAgent(ctx context.Context, chat *db.Chat, thre
 
 // stoppedAgentResumeReceipt is the receipt for a message that resumes a
 // sub-agent that had stopped on an error. As honest as queuedReceipt: queued
-// is not read. A paused run resumes the agent only when the chat resumes.
-func stoppedAgentResumeReceipt(runPaused bool) string {
-	receipt := "Queued. This agent had stopped on an error; your message resumes it where it stopped, " +
-		"and it will read it at its first turn — it has not been read yet."
-	if runPaused {
-		receipt += " This chat is paused, so the agent resumes when the chat does."
-	}
-	return receipt
-}
+// is not read.
+const stoppedAgentResumeReceipt = "Queued. This agent had stopped on an error; your message resumes it where it stopped, " +
+	"and it will read it at its first turn — it has not been read yet."
 
 // stoppedAgentRunStartedReceipt is the receipt when the chat had no run and
 // one was started to resume the agent.
@@ -129,7 +120,7 @@ func (s *Service) resumeStoppedAgent(ctx context.Context, userID string, chat *d
 	if err := s.notifyThreadWake(ctx, chat, threadID, threadwake.ReasonMailbox); err == nil {
 		return connect.NewResponse(&reliantv1.SendAgentMessageResponse{
 			Success: true,
-			Message: stoppedAgentResumeReceipt(r.runPaused),
+			Message: stoppedAgentResumeReceipt,
 		}), nil
 	}
 	if s.chatRunClosed(ctx, chat) {
@@ -209,7 +200,7 @@ func (s *Service) startRunResumingStoppedAgent(ctx context.Context, userID strin
 		}
 		return connect.NewResponse(&reliantv1.SendAgentMessageResponse{
 			Success: true,
-			Message: stoppedAgentResumeReceipt(false),
+			Message: stoppedAgentResumeReceipt,
 		}), nil
 	}
 

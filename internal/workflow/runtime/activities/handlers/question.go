@@ -52,6 +52,11 @@ type QuestionResolveInput struct {
 // QuestionResolveOutput is the output from the QuestionResolve activity.
 type QuestionResolveOutput struct {
 	Success bool `json:"success"`
+	// AlreadyResolved reports that the question was no longer pending, so it
+	// was left as it was: the user's answer, if there was one, is kept and
+	// returned in ResponseData rather than overwritten with this resolution.
+	AlreadyResolved bool   `json:"already_resolved,omitempty"`
+	ResponseData    string `json:"response_data,omitempty"`
 }
 
 // ============================================================================
@@ -247,7 +252,8 @@ func (a *QuestionCreateActivity) Execute(ctx context.Context, input QuestionCrea
 // ============================================================================
 
 // QuestionResolveActivity resolves a question record in the DB. Used by the workflow
-// when the signal timer expires (timeout case).
+// when it stops waiting on a question without an answer: the signal timer
+// expired, or (ask_user) the asking thread was messaged or interrupted.
 type QuestionResolveActivity struct {
 	repo db.Repository
 }
@@ -295,6 +301,19 @@ func (a *QuestionResolveActivity) Execute(ctx context.Context, input QuestionRes
 	if err != nil {
 		logger.Warn("[QuestionResolve] Failed to load question for update emission",
 			"questionID", input.QuestionID, "error", err)
+	}
+
+	// The workflow resolves a question it stopped waiting on (timeout, or new
+	// input for the asking thread). If the user answered it first, keep that
+	// answer: overwriting it would erase the one record of what they chose.
+	if question != nil && question.Status != db.QuestionStatusPending {
+		logger.Info("[QuestionResolve] Question already resolved; keeping its answer",
+			"questionID", input.QuestionID)
+		out := QuestionResolveOutput{Success: true, AlreadyResolved: true}
+		if question.ResponseData != nil {
+			out.ResponseData = *question.ResponseData
+		}
+		return out, nil
 	}
 
 	if err := a.repo.ResolveQuestion(ctx, input.QuestionID, responseData); err != nil {

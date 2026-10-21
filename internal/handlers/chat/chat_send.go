@@ -750,29 +750,7 @@ func (s *Service) SendMessage(
 					runID = *chat.RunID
 				}
 
-				// The input update the run resumes with: the param/preset
-				// update validated above and the run's own model pin, each
-				// moved off a provider that cannot serve it (#685) — even
-				// when this send carries no model at all (resumeInputUpdate).
-				runInputs := s.runInputsForSend(ctx, workflowID, runID)
-				inputUpdate, modelNotices, modelMoves := s.resumeInputUpdate(ctx, userID, req.Msg.ChatId, chat.ProjectID, existingWorkflow.WorkflowName, workflowID,
-					s.underSelection(ctx, chat.ID, existingWorkflow.WorkflowName, stateUpdate), runInputs)
-				inputUpdate = s.withProviderPolicy(ctx, userID, chat, runInputs, inputUpdate)
-
-				// Only add "params changed" message if params actually changed from current workflow state
-				if len(inputUpdate) > 0 && (runInputs == nil || inputsDiffer(runInputs, inputUpdate)) {
-					hiddenStyle := int32(reliantv1.DisplayStyle_DISPLAY_STYLE_HIDDEN)
-					_, err := s.deps.Repo.SaveMessageToThread(ctx, req.Msg.ChatId, targetThread, int32(reliantv1.MessageRole_MESSAGE_ROLE_SYSTEM), "Some of your params have changed, which may include mode, tools, temperature, or something else. Please continue as planned.", &workflowID, nil, &hiddenStyle)
-					if err != nil {
-						logging.WarnContext(ctx, "Failed to save system message about param changes", "error", err, "chatID", req.Msg.ChatId)
-					}
-				}
-
-				// Resume the run. The service signals a live execution,
-				// reset-replays a dead-but-replayable one, and refreshes the
-				// chat's run id when a reset minted a new one — and whichever
-				// run wakes gets the input update first.
-				outcome, resumeErr := s.runs.Resume(ctx, req.Msg.ChatId, inputUpdate)
+				outcome, resumeErr := s.resumePausedRun(ctx, userID, chat, existingWorkflow.WorkflowName, targetThread, stateUpdate, req.Msg.WorkflowParams)
 				if resumeErr != nil {
 					// The resume is the step that actually restarts the run.
 					// Swallowing this failure and returning
@@ -795,21 +773,6 @@ func (s *Service) SendMessage(
 					resumeThread = existingWorkflow.Thread
 					// Fall through to start a new workflow below
 					break
-				}
-				// Told only now: the run that has the moved models is awake.
-				// A fresh run (above) makes and announces its own.
-				s.postModelFallbackNotices(ctx, req.Msg.ChatId, workflowID, targetThread, modelNotices)
-				_, _ = s.recordSelection(ctx, userID, chat, existingWorkflow.WorkflowName, req.Msg.WorkflowParams, inputUpdate, modelMoves, 0)
-
-				// The run is awake. Correct the DB status now that the
-				// authoritative step has succeeded. Best-effort on purpose: if
-				// this write loses a serialization race, the workflow's own
-				// "started"/Resumed notification and the reconciler both still
-				// converge it, and a stale row is not worth failing a request
-				// that already did the important part.
-				if err := s.deps.Repo.UpdateWorkflowStatus(ctx, workflowID, db.Active()); err != nil {
-					logging.WarnContext(ctx, "Resumed workflow but failed to mark it running — status will be corrected by the workflow or the reconciler",
-						"error", err, "workflowID", workflowID, "chatID", req.Msg.ChatId)
 				}
 
 				if outcome.RunID != "" {
@@ -1480,8 +1443,10 @@ func (s *Service) SendAgentMessage(
 	// user-facing path.
 	//
 	// PENDING and PAUSED count as live — see WorkflowStatus.Live. A message
-	// queued to either IS drained when the run starts or resumes, and
-	// refusing it would lose a message that would have arrived.
+	// queued to a pending run is drained when the run starts; one queued to a
+	// paused run resumes it below (resumePausedRunForMessage) and is drained
+	// at the thread's next turn. Refusing either would lose a message that
+	// would have arrived.
 	//
 	// A workflow row that cannot be read fails open (owningWorkflow logs it):
 	// it is not proof the agent is idle, and wrongly refusing loses the
@@ -1549,6 +1514,13 @@ func (s *Service) SendAgentMessage(
 		if state, stateErr := s.runs.State(ctx, chat.MainThreadID()); stateErr == nil && state.Exists && state.IsRunning {
 			return connect.NewResponse(&reliantv1.SendAgentMessageResponse{Success: true, Message: queuedReceipt}), nil
 		}
+	}
+
+	// A paused chat takes no turn until it is resumed, and the doorbell below
+	// does not resume it. A message is the user asking the chat to go on, so
+	// it resumes the run first, as SendMessage does.
+	if refused, err := s.resumePausedRunForMessage(ctx, userID, chat, req.Msg.ThreadId, msg.ID); refused != nil || err != nil {
+		return refused, err
 	}
 
 	switch {
@@ -1642,9 +1614,12 @@ func (s *Service) notifyThreadWake(ctx context.Context, chat *db.Chat, threadID 
 	if chat.WorkflowID != nil && *chat.WorkflowID != "" {
 		workflowID = *chat.WorkflowID
 	}
+	// Every caller is delivering a person's input, so the doorbell says so:
+	// a thread waiting on the user's answer to a question yields to it.
 	if err := s.deps.Temporal.SignalWorkflow(ctx, workflowID, "", v2.ThreadWakeSignalName, v2.ThreadWakeSignal{
-		Thread: threadID,
-		Reason: reason,
+		Thread:   threadID,
+		Reason:   reason,
+		FromUser: true,
 	}); err != nil {
 		logging.WarnContext(ctx, "Could not wake thread",
 			"error", err, "chatID", chat.ID, "threadID", threadID, "workflowID", workflowID, "reason", string(reason))
