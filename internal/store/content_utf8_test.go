@@ -1,15 +1,17 @@
 // Copyright (c) 2025 Reliant Labs
-package db
+package store
 
 import (
 	"strings"
 	"testing"
 	"unicode/utf8"
+
+	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
 func TestNormalizeContentBlock_ReplacesInvalidUTF8(t *testing.T) {
 	invalid := "before\xe2..after"
-	block := &MessageContentBlock{
+	block := &core.MessageContentBlock{
 		Content:          &invalid,
 		ToolName:         &invalid,
 		ToolInput:        &invalid,
@@ -20,7 +22,7 @@ func TestNormalizeContentBlock_ReplacesInvalidUTF8(t *testing.T) {
 		WorkflowRunID:    &invalid,
 	}
 
-	normalizeContentBlock(block)
+	NormalizeContentBlock(block)
 
 	for name, text := range map[string]*string{
 		"content":           block.Content,
@@ -47,9 +49,9 @@ func TestNormalizeContentBlock_ReplacesInvalidUTF8(t *testing.T) {
 
 func TestNormalizeContentBlock_LeavesValidPointersUntouched(t *testing.T) {
 	value := "valid"
-	block := &MessageContentBlock{Content: &value}
+	block := &core.MessageContentBlock{Content: &value}
 
-	normalizeContentBlock(block)
+	NormalizeContentBlock(block)
 
 	if block.Content != &value {
 		t.Fatal("valid content pointer changed")

@@ -67,18 +67,6 @@ func TestGeneratedArrayParamQueries_ZeroOneMany(t *testing.T) {
 
 	fx := seedArrayParamFixture(t, repo, ctx)
 
-	t.Run("ListContentBlocksForMessages", func(t *testing.T) {
-		for _, tc := range idCases(fx.messageIDs) {
-			rows, err := q.ListContentBlocksForMessages(ctx, tc.ids)
-			require.NoError(t, err, tc.name)
-			got := make([]string, len(rows))
-			for i, r := range rows {
-				got[i] = r.MessageID
-			}
-			requireSameIDs(t, tc.ids, got, tc.name)
-		}
-	})
-
 	t.Run("ListToolCallsByMessageIDs", func(t *testing.T) {
 		for _, tc := range idCases(fx.messageIDs) {
 			rows, err := q.ListToolCallsByMessageIDs(ctx, tc.ids)

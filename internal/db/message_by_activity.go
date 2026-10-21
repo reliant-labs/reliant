@@ -3,11 +3,13 @@ package db
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
+
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
-// GetMessageByActivityID retrieves a message by chat_id and activity_id
+// GetMessageByActivityID retrieves a message by chat_id and activity_id, or
+// (nil, nil) when none exists.
 func (r *Repo) GetMessageByActivityID(ctx context.Context, chatID, activityID string) (*Message, error) {
 	if chatID == "" {
 		return nil, fmt.Errorf("chatID cannot be empty")
@@ -15,32 +17,11 @@ func (r *Repo) GetMessageByActivityID(ctx context.Context, chatID, activityID st
 	if activityID == "" {
 		return nil, fmt.Errorf("activityID cannot be empty")
 	}
-
-	tx := r.DB.DB(ctx)
-	query := `
-		SELECT id, chat_id, ordinal, context_window_id, role,
-		       model, agent, token_count, cost,
-		       workflow_id, run_id, node_id, node_path, activity_id, created_at, updated_at
-		FROM messages
-		WHERE chat_id = ? AND activity_id = ?
-		LIMIT 1
-	`
-	query = r.bindQuery(query)
-	var msg Message
-	err := tx.QueryRowContext(ctx, query, chatID, activityID).Scan(
-		&msg.ID, &msg.ChatID, &msg.Ordinal, &msg.ContextWindowID, &msg.Role,
-		&msg.Model, &msg.Agent, &msg.TokenCount, &msg.Cost,
-		&msg.WorkflowID, &msg.RunID, &msg.NodeID, &msg.NodePath, &msg.ActivityID, &msg.CreatedAt, &msg.UpdatedAt,
-	)
-
-	if err == sql.ErrNoRows {
-		return nil, nil // Not found - this is OK for idempotency checks
-	}
+	msg, err := store.FindMessageByActivity(ctx, r.ORM(), chatID, "", activityID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get message by activity ID: %w", err)
 	}
-
-	return &msg, nil
+	return msg, nil
 }
 
 // GetMessageByWorkflowAndActivityID retrieves a message by chat_id, workflow_id, and activity_id.
@@ -56,30 +37,9 @@ func (r *Repo) GetMessageByWorkflowAndActivityID(ctx context.Context, chatID, wo
 	if activityID == "" {
 		return nil, fmt.Errorf("activityID cannot be empty")
 	}
-
-	tx := r.DB.DB(ctx)
-	query := `
-		SELECT id, chat_id, ordinal, context_window_id, role,
-		       model, agent, token_count, cost,
-		       workflow_id, run_id, node_id, node_path, activity_id, created_at, updated_at
-		FROM messages
-		WHERE chat_id = ? AND workflow_id = ? AND activity_id = ?
-		LIMIT 1
-	`
-	query = r.bindQuery(query)
-	var msg Message
-	err := tx.QueryRowContext(ctx, query, chatID, workflowID, activityID).Scan(
-		&msg.ID, &msg.ChatID, &msg.Ordinal, &msg.ContextWindowID, &msg.Role,
-		&msg.Model, &msg.Agent, &msg.TokenCount, &msg.Cost,
-		&msg.WorkflowID, &msg.RunID, &msg.NodeID, &msg.NodePath, &msg.ActivityID, &msg.CreatedAt, &msg.UpdatedAt,
-	)
-
-	if err == sql.ErrNoRows {
-		return nil, nil // Not found - this is OK for idempotency checks
-	}
+	msg, err := store.FindMessageByActivity(ctx, r.ORM(), chatID, workflowID, activityID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get message by workflow and activity ID: %w", err)
 	}
-
-	return &msg, nil
+	return msg, nil
 }
