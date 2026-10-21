@@ -12,7 +12,7 @@
 # deploy time: `user: root` in compose or securityContext in k8s.
 
 # ── Build ────────────────────────────────────────────────────────────────────
-# golang:1.27.0-BOOKWORM (glibc), pinned by digest, pulled via the GCP Artifact
+# golang:1.27.3-BOOKWORM (glibc), pinned by digest, pulled via the GCP Artifact
 # Registry pull-through cache (dodges Docker Hub's per-IP rate limit).
 #
 # The builder's libc is load-bearing, not incidental. CGO_ENABLED=0 does NOT
@@ -35,7 +35,7 @@
 # /usr/lib/aarch64-linux-gnu/. scripts/check-image-interp.sh enforces this in
 # CI, because a build-only check cannot see it — the image builds fine and
 # only fails at exec.
-FROM --platform=$BUILDPLATFORM us-docker.pkg.dev/reliant-nonprod-490701/dockerhub/library/golang@sha256:ded31c68586d2e49e760acc2e65a884b23d032e9bbbed0ae0c55abd3fcaf4452 AS builder
+FROM --platform=$BUILDPLATFORM us-docker.pkg.dev/reliant-nonprod-490701/dockerhub/library/golang@sha256:5c3e9b43cfd3bb95c7937462e29d87ada57b481a96fa23ad0eb61778d7a00110 AS builder
 ARG TARGETARCH
 RUN apt-get update && apt-get install -y --no-install-recommends git && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
