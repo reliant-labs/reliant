@@ -35,6 +35,13 @@
 //	}
 package store
 
+import (
+	"context"
+
+	"github.com/reliant-labs/forge/pkg/orm"
+	"github.com/uptrace/bun"
+)
+
 // ConnectorGrantExtra carries fields on ConnectorGrant that are NOT columns — computed
 // values, transient state, anything derived rather than stored. ConnectorGrant is
 // embedded on ConnectorGrantExtra (see connector_grant_orm.go), so a field added here is a field on
@@ -45,4 +52,63 @@ package store
 // persist them — `bun:"-"` is Bun's own idiom for a field it must never
 // bind or scan.
 type ConnectorGrantExtra struct {
+}
+
+// Connector grant queries the generated CRUD does not cover (P5b lane L5).
+// internal/connectorgrant maps the rows onto its own Grant.
+
+// GetLiveConnectorGrant returns a grant by id only while it is live — not
+// revoked and not expired — or orm.ErrNoRows, so a revoked or expired grant
+// cannot be re-resolved.
+func GetLiveConnectorGrant(ctx context.Context, db orm.Context, id string) (*ConnectorGrant, error) {
+	var row ConnectorGrant
+	err := db.Bun().NewSelect().Model(&row).
+		Where("? = ?", bun.Ident(ConnectorGrantFieldID), id).
+		Where("? IS NULL", bun.Ident(ConnectorGrantFieldRevokedAt)).
+		Where("(? IS NULL OR ? > now())", bun.Ident(ConnectorGrantFieldExpiresAt), bun.Ident(ConnectorGrantFieldExpiresAt)).
+		Scan(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &row, nil
+}
+
+// RevokeConnectorGrant marks the user's live grant revoked and reports
+// whether it did, so a repeated revoke is distinguishable from one that took
+// effect. Scoped by user so a caller can never revoke someone else's grant
+// by guessing an id.
+func RevokeConnectorGrant(ctx context.Context, db orm.Context, userID, id string) (bool, error) {
+	res, err := db.Bun().NewUpdate().Model((*ConnectorGrant)(nil)).
+		Set("? = now()", bun.Ident(ConnectorGrantFieldRevokedAt)).
+		Set("? = now()", bun.Ident(ConnectorGrantFieldUpdatedAt)).
+		Where("? = ?", bun.Ident(ConnectorGrantFieldUserID), userID).
+		Where("? = ?", bun.Ident(ConnectorGrantFieldID), id).
+		Where("? IS NULL", bun.Ident(ConnectorGrantFieldRevokedAt)).
+		Exec(ctx)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n > 0, err
+}
+
+// TouchConnectorGrant stamps last use. It is telemetry: updated_at is left
+// alone, and a missing grant is no error.
+func TouchConnectorGrant(ctx context.Context, db orm.Context, id string) error {
+	_, err := db.Bun().NewUpdate().Model((*ConnectorGrant)(nil)).
+		Set("? = now()", bun.Ident(ConnectorGrantFieldLastUsedAt)).
+		Where("? = ?", bun.Ident(ConnectorGrantFieldID), id).
+		Exec(ctx)
+	return err
+}
+
+// SetConnectorGrantTokenPrefix records the display prefix of a grant's
+// credential once it is minted.
+func SetConnectorGrantTokenPrefix(ctx context.Context, db orm.Context, id, prefix string) error {
+	_, err := db.Bun().NewUpdate().Model((*ConnectorGrant)(nil)).
+		Set("? = ?", bun.Ident(ConnectorGrantFieldTokenPrefix), prefix).
+		Set("? = now()", bun.Ident(ConnectorGrantFieldUpdatedAt)).
+		Where("? = ?", bun.Ident(ConnectorGrantFieldID), id).
+		Exec(ctx)
+	return err
 }

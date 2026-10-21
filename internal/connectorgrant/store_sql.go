@@ -4,35 +4,37 @@ package connectorgrant
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
+
+	"github.com/reliant-labs/forge/pkg/orm"
+	"github.com/reliant-labs/forge/pkg/svcerr"
+
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
-// DBTX is the subset of database/sql this store needs, so it can run against
-// either a *sql.DB or a transaction.
-type DBTX interface {
-	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
-	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
-	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
-}
-
-// SQLStore is the Postgres-backed Store.
+// SQLStore is the Postgres-backed Store, over the forge ORM's generated
+// stores and the connector queries in internal/store. It maps those rows onto
+// this package's types.
 type SQLStore struct {
-	db DBTX
+	db orm.Context
 }
 
-// NewSQLStore returns a Store backed by db.
-func NewSQLStore(db DBTX) *SQLStore {
-	return &SQLStore{db: db}
+// Deps is what the SQL store runs on.
+type Deps struct {
+	// DB is the forge ORM handle. A call made with a ctx carrying a
+	// transaction joins it.
+	DB orm.Context
 }
 
-const grantColumns = `
-	id, user_id, daemon_id, name, token_prefix,
-	allowed_tools, path_root, exec_mode, exec_allowlist,
-	expires_at, last_used_at, revoked_at, created_at, updated_at`
+// NewSQLStore returns the Postgres-backed Store.
+//
+//forge:constructor
+func NewSQLStore(deps Deps) Store {
+	return &SQLStore{db: deps.DB}
+}
 
 // CreateGrant inserts a grant.
 //
@@ -57,19 +59,12 @@ func (s *SQLStore) CreateGrant(ctx context.Context, g *Grant) error {
 		g.CreatedAt = now
 	}
 	g.UpdatedAt = now
-
-	const query = `
-		INSERT INTO connector_grants (
-			id, user_id, daemon_id, name, token_prefix,
-			allowed_tools, path_root, exec_mode, exec_allowlist,
-			expires_at, created_at, updated_at
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`
-
-	if _, err := s.db.ExecContext(ctx, query,
-		g.ID, g.UserID, g.DaemonID, g.Name, g.TokenPrefix,
-		tools, g.PathRoot, string(g.ExecMode), allowlist,
-		g.ExpiresAt, g.CreatedAt, g.UpdatedAt,
-	); err != nil {
+	row := &store.ConnectorGrant{
+		ID: g.ID, UserID: g.UserID, DaemonID: g.DaemonID, Name: g.Name, TokenPrefix: g.TokenPrefix,
+		AllowedTools: tools, PathRoot: g.PathRoot, ExecMode: string(g.ExecMode), ExecAllowlist: allowlist,
+		ExpiresAt: g.ExpiresAt, CreatedAt: g.CreatedAt, UpdatedAt: g.UpdatedAt,
+	}
+	if err := store.CreateConnectorGrant(ctx, s.db, row); err != nil {
 		return fmt.Errorf("create connector grant: %w", err)
 	}
 	return nil
@@ -114,83 +109,64 @@ func validateGrant(g *Grant) error {
 // GetGrant fetches one of the user's grants, including revoked ones so the UI
 // can show history.
 func (s *SQLStore) GetGrant(ctx context.Context, userID, id string) (*Grant, error) {
-	query := `SELECT ` + grantColumns + ` FROM connector_grants WHERE user_id = $1 AND id = $2`
-	g, err := scanGrant(s.db.QueryRowContext(ctx, query, userID, id))
+	row, err := store.GetConnectorGrantByID(ctx, s.db, id)
+	if errors.Is(err, svcerr.ErrNotFound) || (err == nil && row.UserID != userID) {
+		return nil, ErrNotFound
+	}
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, ErrNotFound
-		}
 		return nil, fmt.Errorf("get connector grant: %w", err)
 	}
-	return g, nil
+	return grantFromRow(row)
 }
 
 // GetGrantByID returns a live grant by id, with the same liveness filtering as
 // credential lookup so a revoked or expired grant cannot be re-resolved.
 func (s *SQLStore) GetGrantByID(ctx context.Context, id string) (*Grant, error) {
-	query := `SELECT ` + grantColumns + `
-		FROM connector_grants
-		WHERE id = $1
-		  AND revoked_at IS NULL
-		  AND (expires_at IS NULL OR expires_at > now())`
-
-	g, err := scanGrant(s.db.QueryRowContext(ctx, query, id))
+	row, err := store.GetLiveConnectorGrant(ctx, s.db, id)
+	if errors.Is(err, orm.ErrNoRows) {
+		return nil, ErrNotFound
+	}
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, ErrNotFound
-		}
 		return nil, fmt.Errorf("get connector grant by id: %w", err)
 	}
-	return g, nil
+	return grantFromRow(row)
 }
 
 // ListGrantsByUser returns a user's grants, newest first.
 func (s *SQLStore) ListGrantsByUser(ctx context.Context, userID string) ([]*Grant, error) {
-	query := `SELECT ` + grantColumns + ` FROM connector_grants WHERE user_id = $1 ORDER BY created_at DESC`
-
-	rows, err := s.db.QueryContext(ctx, query, userID)
+	rows, err := store.ListConnectorGrant(ctx, s.db,
+		orm.WhereEq(store.ConnectorGrantFieldUserID, userID),
+		orm.WithOrderBy(store.ConnectorGrantFieldCreatedAt, orm.Desc))
 	if err != nil {
 		return nil, fmt.Errorf("list connector grants: %w", err)
 	}
-	defer func() { _ = rows.Close() }()
-
 	var grants []*Grant
-	for rows.Next() {
-		g, err := scanGrantRows(rows)
+	for _, row := range rows {
+		g, err := grantFromRow(row)
 		if err != nil {
 			return nil, err
 		}
 		grants = append(grants, g)
 	}
-	return grants, rows.Err()
+	return grants, nil
 }
 
 // RevokeGrant marks a grant revoked. It reports whether a live grant was
 // changed, so a repeated revoke is distinguishable from one that took effect.
+// It is scoped by user so a caller can never revoke someone else's grant by
+// guessing an id.
 func (s *SQLStore) RevokeGrant(ctx context.Context, userID, id string) (bool, error) {
-	// Scoped by user_id so a caller can never revoke someone else's grant by
-	// guessing an id.
-	const query = `
-		UPDATE connector_grants
-		SET revoked_at = now(), updated_at = now()
-		WHERE user_id = $1 AND id = $2 AND revoked_at IS NULL`
-
-	res, err := s.db.ExecContext(ctx, query, userID, id)
+	revoked, err := store.RevokeConnectorGrant(ctx, s.db, userID, id)
 	if err != nil {
 		return false, fmt.Errorf("revoke connector grant: %w", err)
 	}
-	affected, err := res.RowsAffected()
-	if err != nil {
-		return false, nil
-	}
-	return affected > 0, nil
+	return revoked, nil
 }
 
 // TouchGrant stamps last use. Failures are the caller's to ignore: this is
 // telemetry, and it must never fail a tool call.
 func (s *SQLStore) TouchGrant(ctx context.Context, id string) error {
-	const query = `UPDATE connector_grants SET last_used_at = now() WHERE id = $1`
-	if _, err := s.db.ExecContext(ctx, query, id); err != nil {
+	if err := store.TouchConnectorGrant(ctx, s.db, id); err != nil {
 		return fmt.Errorf("touch connector grant: %w", err)
 	}
 	return nil
@@ -219,16 +195,12 @@ func (s *SQLStore) RecordAudit(ctx context.Context, rec *AuditRecord) error {
 		status = AuditCompleted
 	}
 
-	const query = `
-		INSERT INTO connector_audit_log (
-			id, grant_id, user_id, daemon_id, tool_name, command_type,
-			arguments, denied, error_message, duration_ms, status, created_at
-		) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`
-
-	if _, err := s.db.ExecContext(ctx, query,
-		rec.ID, rec.GrantID, rec.UserID, rec.DaemonID, rec.ToolName, rec.CommandType,
-		args, rec.Denied, nullString(rec.ErrorMsg), rec.DurationMS, status, createdAt,
-	); err != nil {
+	duration := int32(rec.DurationMS) //nolint:gosec // a tool call's duration in ms
+	if err := store.CreateConnectorAuditLog(ctx, s.db, &store.ConnectorAuditLog{
+		ID: rec.ID, GrantID: rec.GrantID, UserID: rec.UserID, DaemonID: rec.DaemonID,
+		ToolName: rec.ToolName, CommandType: rec.CommandType, Arguments: args, Denied: rec.Denied,
+		ErrorMessage: nullString(rec.ErrorMsg), DurationMs: &duration, Status: status, CreatedAt: createdAt,
+	}); err != nil {
 		return fmt.Errorf("record connector audit: %w", err)
 	}
 	return nil
@@ -243,12 +215,8 @@ func (s *SQLStore) CompleteAudit(ctx context.Context, id, status, errMsg string,
 		return errors.New("audit record id is required")
 	}
 
-	const query = `
-		UPDATE connector_audit_log
-		SET status = $2, error_message = $3, duration_ms = $4, denied = ($2 = 'denied')
-		WHERE id = $1 AND status = 'started'`
-
-	if _, err := s.db.ExecContext(ctx, query, id, status, nullString(errMsg), durationMS); err != nil {
+	duration := int32(durationMS) //nolint:gosec // a tool call's duration in ms
+	if err := store.CompleteConnectorAudit(ctx, s.db, id, status, nullString(errMsg), duration); err != nil {
 		return fmt.Errorf("complete connector audit: %w", err)
 	}
 	return nil
@@ -256,116 +224,66 @@ func (s *SQLStore) CompleteAudit(ctx context.Context, id, status, errMsg string,
 
 // ListAuditByUser returns a user's recent connector activity.
 func (s *SQLStore) ListAuditByUser(ctx context.Context, userID string, limit int) ([]*AuditRecord, error) {
-	const query = `
-		SELECT id, grant_id, user_id, daemon_id, tool_name, command_type,
-		       arguments, denied, error_message, duration_ms, status, created_at
-		FROM connector_audit_log
-		WHERE user_id = $1
-		ORDER BY created_at DESC
-		LIMIT $2`
-	return s.queryAudit(ctx, query, userID, clampLimit(limit))
+	return s.listAudit(ctx, limit, orm.WhereEq(store.ConnectorAuditLogFieldUserID, userID))
 }
 
 // ListAuditByGrant returns activity for one connector. It is scoped by user so
 // a grant id alone does not expose another user's log.
 func (s *SQLStore) ListAuditByGrant(ctx context.Context, userID, grantID string, limit int) ([]*AuditRecord, error) {
-	const query = `
-		SELECT id, grant_id, user_id, daemon_id, tool_name, command_type,
-		       arguments, denied, error_message, duration_ms, status, created_at
-		FROM connector_audit_log
-		WHERE user_id = $1 AND grant_id = $2
-		ORDER BY created_at DESC
-		LIMIT $3`
-	return s.queryAudit(ctx, query, userID, grantID, clampLimit(limit))
+	return s.listAudit(ctx, limit,
+		orm.WhereEq(store.ConnectorAuditLogFieldUserID, userID),
+		orm.WhereEq(store.ConnectorAuditLogFieldGrantID, grantID))
 }
 
-func (s *SQLStore) queryAudit(ctx context.Context, query string, args ...any) ([]*AuditRecord, error) {
-	rows, err := s.db.QueryContext(ctx, query, args...)
+func (s *SQLStore) listAudit(ctx context.Context, limit int, filters ...orm.QueryOption) ([]*AuditRecord, error) {
+	opts := append(filters,
+		orm.WithOrderBy(store.ConnectorAuditLogFieldCreatedAt, orm.Desc),
+		orm.WithLimit(clampLimit(limit)))
+	rows, err := store.ListConnectorAuditLog(ctx, s.db, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("list connector audit: %w", err)
 	}
-	defer func() { _ = rows.Close() }()
-
 	var out []*AuditRecord
-	for rows.Next() {
-		var (
-			rec      AuditRecord
-			argBytes []byte
-			errMsg   sql.NullString
-			duration sql.NullInt64
-		)
-		if err := rows.Scan(
-			&rec.ID, &rec.GrantID, &rec.UserID, &rec.DaemonID, &rec.ToolName, &rec.CommandType,
-			&argBytes, &rec.Denied, &errMsg, &duration, &rec.Status, &rec.CreatedAt,
-		); err != nil {
-			return nil, fmt.Errorf("scan connector audit: %w", err)
+	for _, row := range rows {
+		rec := &AuditRecord{
+			ID: row.ID, GrantID: row.GrantID, UserID: row.UserID, DaemonID: row.DaemonID,
+			ToolName: row.ToolName, CommandType: row.CommandType, Arguments: row.Arguments,
+			Denied: row.Denied, Status: row.Status, CreatedAt: row.CreatedAt,
 		}
-		rec.Arguments = argBytes
-		rec.ErrorMsg = errMsg.String
-		rec.DurationMS = int(duration.Int64)
-		out = append(out, &rec)
+		if row.ErrorMessage != nil {
+			rec.ErrorMsg = *row.ErrorMessage
+		}
+		if row.DurationMs != nil {
+			rec.DurationMS = int(*row.DurationMs)
+		}
+		out = append(out, rec)
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
-// rowScanner unifies *sql.Row and *sql.Rows for the shared scan path.
-type rowScanner interface {
-	Scan(dest ...any) error
-}
-
-func scanGrant(row rowScanner) (*Grant, error) { return scanGrantFrom(row) }
-
-func scanGrantRows(rows *sql.Rows) (*Grant, error) { return scanGrantFrom(rows) }
-
-func scanGrantFrom(row rowScanner) (*Grant, error) {
-	var (
-		g         Grant
-		tools     []byte
-		allowlist []byte
-		execMode  string
-		expires   sql.NullTime
-		lastUsed  sql.NullTime
-		revoked   sql.NullTime
-	)
-
-	if err := row.Scan(
-		&g.ID, &g.UserID, &g.DaemonID, &g.Name, &g.TokenPrefix,
-		&tools, &g.PathRoot, &execMode, &allowlist,
-		&expires, &lastUsed, &revoked, &g.CreatedAt, &g.UpdatedAt,
-	); err != nil {
-		return nil, err
+func grantFromRow(row *store.ConnectorGrant) (*Grant, error) {
+	g := &Grant{
+		ID: row.ID, UserID: row.UserID, DaemonID: row.DaemonID, Name: row.Name, TokenPrefix: row.TokenPrefix,
+		PathRoot: row.PathRoot, ExecMode: ExecMode(row.ExecMode),
+		ExpiresAt: row.ExpiresAt, LastUsedAt: row.LastUsedAt, RevokedAt: row.RevokedAt,
+		CreatedAt: row.CreatedAt, UpdatedAt: row.UpdatedAt,
 	}
-
-	if err := json.Unmarshal(tools, &g.AllowedTools); err != nil {
+	if err := json.Unmarshal(row.AllowedTools, &g.AllowedTools); err != nil {
 		return nil, fmt.Errorf("decode allowed tools for grant %s: %w", g.ID, err)
 	}
-	if len(allowlist) > 0 {
-		if err := json.Unmarshal(allowlist, &g.ExecAllowlist); err != nil {
+	if len(row.ExecAllowlist) > 0 {
+		if err := json.Unmarshal(row.ExecAllowlist, &g.ExecAllowlist); err != nil {
 			return nil, fmt.Errorf("decode exec allowlist for grant %s: %w", g.ID, err)
 		}
 	}
-
-	g.ExecMode = ExecMode(execMode)
-	g.ExpiresAt = timePtr(expires)
-	g.LastUsedAt = timePtr(lastUsed)
-	g.RevokedAt = timePtr(revoked)
-
-	return &g, nil
+	return g, nil
 }
 
-func timePtr(t sql.NullTime) *time.Time {
-	if !t.Valid {
-		return nil
-	}
-	v := t.Time
-	return &v
-}
-
-func nullString(s string) any {
+func nullString(s string) *string {
 	if s == "" {
 		return nil
 	}
-	return s
+	return &s
 }
 
 func orEmpty(items []string) []string {
@@ -393,8 +311,7 @@ func clampLimit(limit int) int {
 // SetTokenPrefix records the display prefix of a grant's credential once it
 // is minted (the grant row must exist first: the credential is bound to it).
 func (s *SQLStore) SetTokenPrefix(ctx context.Context, id, prefix string) error {
-	if _, err := s.db.ExecContext(ctx,
-		`UPDATE connector_grants SET token_prefix = $2, updated_at = now() WHERE id = $1`, id, prefix); err != nil {
+	if err := store.SetConnectorGrantTokenPrefix(ctx, s.db, id, prefix); err != nil {
 		return fmt.Errorf("record connector credential prefix: %w", err)
 	}
 	return nil

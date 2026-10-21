@@ -267,6 +267,17 @@ stays as it is and shrinks one aggregate lane at a time; the lanes are in
    (A one-column stamp through `Update<E>` reads every other column back;
    pass `crud.NoReadBack()` when the caller does not need the row.)
 
+   **Porting a hand-SQL transaction keeps its isolation.** `RunTx` of either
+   layer is SERIALIZABLE by default; a hand store's `db.BeginTx(ctx, nil)`
+   was READ COMMITTED. A transaction whose correctness comes from row locks
+   (`SELECT … FOR UPDATE`, advisory locks) rather than snapshot isolation
+   says so with `RunTxWithOptions(ctx, orm.TxOptions{Isolation:
+   orm.IsolationReadCommitted}, …)` — under SERIALIZABLE the loser of a lock
+   race fails with 40001 instead of reading the winner's write. One that
+   runs a side effect it must not repeat (a token refresh over the network)
+   also sets `MaxAttempts: 1`. `internal/store/connection_repo_ext.go`'s
+   `connectionTx` is both.
+
 8. **Consumers depend on the least they use (P6).** A port never widens a
    dependency. A handler, service or workflow that needs persistence
    declares, in its own package, an interface listing only the methods it

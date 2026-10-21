@@ -450,11 +450,12 @@ type IntegrationWrite struct {
 	Correlation  json.RawMessage `json:"correlation"`
 	ObjectID     string          `json:"object_id"`
 	ObjectUrl    string          `json:"object_url"`
-	Status       string          `json:"status"`
-	Ambiguous    bool            `json:"ambiguous"`
-	Error        string          `json:"error"`
-	CreatedAt    time.Time       `json:"created_at"`
-	CompletedAt  sql.NullTime    `json:"completed_at"`
+	// forge:go-type=github.com/reliant-labs/reliant/internal/db/core;core.IntegrationWriteStatus
+	Status      string       `json:"status"`
+	Ambiguous   bool         `json:"ambiguous"`
+	Error       string       `json:"error"`
+	CreatedAt   time.Time    `json:"created_at"`
+	CompletedAt sql.NullTime `json:"completed_at"`
 }
 
 type ItemDefault struct {

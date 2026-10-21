@@ -7,7 +7,6 @@ package pgdb
 import (
 	"context"
 	"database/sql"
-	"time"
 )
 
 type Querier interface {
@@ -44,10 +43,6 @@ type Querier interface {
 	// status IN (2, 6) is the same fail-closed guard the workflow cascade
 	// applies: an already-terminal thread is left untouched.
 	CascadeTerminalStatusToThreadSubtree(ctx context.Context, arg CascadeTerminalStatusToThreadSubtreeParams) error
-	// Takes the refresh lease for (user, integration) when no other replica
-	// holds it and the last attempt is older than due_before. One row per pair;
-	// the insert covers a pair never refreshed.
-	ClaimIntegrationAccessRefresh(ctx context.Context, arg ClaimIntegrationAccessRefreshParams) (int64, error)
 	// The launcher adopts an inbound event the receiver recorded: the row moves
 	// from pending to launched (chat attached later in the same transaction) and
 	// takes the launch's start record as its payload. The outcome predicate is
@@ -69,9 +64,6 @@ type Querier interface {
 	// messages: a peer agent's spawn_send is not the human's to reclaim, and the
 	// UI never offered it.
 	ClaimQueuedAgentMessagesForThread(ctx context.Context, arg ClaimQueuedAgentMessagesForThreadParams) ([]AgentMessage, error)
-	// Settles an intent row. Only an intent row settles: a ledger entry is never
-	// rewritten after the fact, so a duplicate completion is a no-op.
-	CompleteIntegrationWrite(ctx context.Context, arg CompleteIntegrationWriteParams) (int64, error)
 	// Chats the user launched through this kind of event whose ROOT run is still
 	// live: pending (1), active (2), or stopped-because-paused (state 3, stop
 	// reason 3). The inner joins drop events whose chat was deleted or never got a
@@ -81,11 +73,6 @@ type Querier interface {
 	CountThreadsInConversation(ctx context.Context, chatID string) (int64, error)
 	CreateChat(ctx context.Context, arg CreateChatParams) error
 	CreateContextWindow(ctx context.Context, arg CreateContextWindowParams) (ContextWindow, error)
-	// The write ledger. See the migration 20261014055046_integration_writes.sql
-	// for the model: an intent row is written before an integration action's
-	// request, completed after, and read when an event arrives to say whether
-	// Reliant caused it.
-	CreateIntegrationWrite(ctx context.Context, arg CreateIntegrationWriteParams) error
 	CreateThread(ctx context.Context, arg CreateThreadParams) (Thread, error)
 	CreateTrigger(ctx context.Context, arg CreateTriggerParams) error
 	// DO NOTHING rather than DO UPDATE: the first row for a (kind, dedupe_key) is
@@ -96,10 +83,6 @@ type Querier interface {
 	DeleteChat(ctx context.Context, id string) error
 	DeleteContextWindow(ctx context.Context, id string) error
 	DeleteContextWindowsByThread(ctx context.Context, threadID string) error
-	// Drops what the user could see before but this refresh (stamped
-	// refreshed_at) no longer reports: a repository they lost, an installation
-	// they left. Also the whole set when a refresh finds the credential gone.
-	DeleteStaleIntegrationAccess(ctx context.Context, arg DeleteStaleIntegrationAccessParams) (int64, error)
 	DeleteThread(ctx context.Context, id string) error
 	DeleteThreadsByConversation(ctx context.Context, chatID string) error
 	DeleteTrigger(ctx context.Context, id string) error
@@ -162,9 +145,6 @@ type Querier interface {
 	// The slot is (chat_id, tool_call_id), not tool_call_id: the id is the model
 	// provider's, so two chats can each have a spawn under it.
 	EnqueueSpawnReport(ctx context.Context, arg EnqueueSpawnReportParams) (EnqueueSpawnReportRow, error)
-	// Releases the lease and records the outcome. refreshed_at moves only on
-	// success; last_error is cleared on success.
-	FinishIntegrationAccessRefresh(ctx context.Context, arg FinishIntegrationAccessRefreshParams) error
 	GetAgentMessage(ctx context.Context, id string) (AgentMessage, error)
 	GetChat(ctx context.Context, id string) (ChatsWithActivity, error)
 	GetChatWithUserCheck(ctx context.Context, arg GetChatWithUserCheckParams) (ChatsWithActivity, error)
@@ -172,10 +152,6 @@ type Querier interface {
 	GetContextWindowBySequence(ctx context.Context, arg GetContextWindowBySequenceParams) (ContextWindow, error)
 	// Get context window with thread info for resolution
 	GetContextWindowWithThread(ctx context.Context, id string) (GetContextWindowWithThreadRow, error)
-	GetIntegrationAccessRefresh(ctx context.Context, arg GetIntegrationAccessRefreshParams) (IntegrationAccessRefresh, error)
-	// The write that created (or is) one object, newest first. Served by
-	// idx_integration_writes_object.
-	GetIntegrationWriteByObject(ctx context.Context, arg GetIntegrationWriteByObjectParams) (IntegrationWrite, error)
 	// Get the most recent context window for a thread (highest sequence)
 	GetLatestContextWindow(ctx context.Context, threadID string) (ContextWindow, error)
 	// The overlap check ("is this trigger's previous run still going?") asks for
@@ -207,6 +183,8 @@ type Querier interface {
 	GetTriggerRegistration(ctx context.Context, triggerID string) (TriggerRegistration, error)
 	// Only the webhook receiver reads these. They are never rendered.
 	GetTriggerWebhookCredentials(ctx context.Context, id string) (GetTriggerWebhookCredentialsRow, error)
+	// Access-gated routing for app-level provider events. See the migration
+	// 20261005061008_integration_event_access.sql for the model.
 	// Every enabled integration trigger of one integration whose OWNER can see
 	// the event's (account, resource) per a snapshot refreshed after
 	// fresh_after. A stale snapshot routes nothing: access is only trusted while
@@ -290,9 +268,6 @@ type Querier interface {
 	//   waiting machine: a_text daemon_id, b_text daemon name; item_key is the chat
 	//                    id and the block's start, so a later block is a new item
 	ListInboxPending(ctx context.Context, arg ListInboxPendingParams) ([]ListInboxPendingRow, error)
-	// The users with at least one enabled trigger of an integration: whose
-	// access the periodic refresher keeps fresh.
-	ListIntegrationTriggerOwners(ctx context.Context, integration string) ([]string, error)
 	// Every ENABLED integration trigger for one integration, with its
 	// connection's routing identity. The inner join drops triggers whose
 	// connection is gone, revoked or belongs to someone else: an event can only
@@ -302,11 +277,6 @@ type Querier interface {
 	// Ordering is load-bearing: messages must be delivered in the order they
 	// were sent.
 	ListQueuedAgentMessagesForThread(ctx context.Context, toThreadID string) ([]AgentMessage, error)
-	// Writes into one scope since a time, newest first, that could still be the
-	// cause of an arriving event: pending, completed, or failed with an unknown
-	// outcome. A definite rejection (a 4xx) changed nothing and so caused nothing.
-	// Served by idx_integration_writes_scope_recent.
-	ListRecentIntegrationWrites(ctx context.Context, arg ListRecentIntegrationWritesParams) ([]IntegrationWrite, error)
 	// The newest per_trigger firings of each named trigger, with their runs, in ONE
 	// query. This is what health and last_event are computed from, so listing N
 	// triggers costs one extra query rather than N. Same run_display_state table as
@@ -401,11 +371,6 @@ type Querier interface {
 	// drain did not win are moved. delivered_at is deliberately left NULL -- the
 	// absence of a delivery time IS the record that no delivery occurred.
 	MarkQueuedAgentMessagesUndeliveredForThread(ctx context.Context, toThreadID string) (int64, error)
-	// Drops grants nobody has re-confirmed since before: they no longer route
-	// (routing requires a recent refresh) and their owner has no trigger left
-	// to refresh them for.
-	PruneIntegrationAccess(ctx context.Context, before time.Time) (int64, error)
-	PruneIntegrationWrites(ctx context.Context, before time.Time) (int64, error)
 	// Enforce the invariant CascadeTerminalStatusToThreadSubtree asserts from
 	// the other direction: a thread whose WORKFLOW is terminal is not running.
 	// The thread-status mirror of ReapOrphanedWorkflowDescendants (workflows.sql)
@@ -467,11 +432,6 @@ type Querier interface {
 	// thread's bookkeeping. Reports rows moved so the caller can log a real
 	// revival without a second read.
 	ReviveThread(ctx context.Context, id string) (int64, error)
-	// The provider says access ended. Empty arguments are wildcards, but at least
-	// the account or the subject is always given by the caller: an installation
-	// removed (account), a repository removed from it (account + resource), a
-	// member removed (subject, optionally narrowed to an account).
-	RevokeIntegrationAccess(ctx context.Context, arg RevokeIntegrationAccessParams) (int64, error)
 	SearchChats(ctx context.Context, arg SearchChatsParams) ([]ChatsWithActivity, error)
 	// Backfills the envelope pointer on rows this drain already claimed.
 	//
@@ -537,17 +497,6 @@ type Querier interface {
 	UpdateTrigger(ctx context.Context, arg UpdateTriggerParams) (int64, error)
 	UpdateTriggerEventOutcome(ctx context.Context, arg UpdateTriggerEventOutcomeParams) (int64, error)
 	UpdateTriggerEventPayload(ctx context.Context, arg UpdateTriggerEventPayloadParams) (int64, error)
-	// Access-gated routing for app-level provider events. See the migration
-	// 20261005061008_integration_event_access.sql for the model.
-	// Records one refresh's findings: every (account, resource) the user's own
-	// credential can see now, all stamped with the same refreshed_at. The caller
-	// then deletes what this refresh did not see (DeleteStaleIntegrationAccess),
-	// in the same transaction.
-	// Three parallel arrays zipped by position (one unnest each, joined on
-	// ordinality: sqlc cannot type the multi-argument unnest).
-	// Monotonic: a slower refresh that started earlier never stamps an older
-	// time over a newer refresh's.
-	UpsertIntegrationAccess(ctx context.Context, arg UpsertIntegrationAccessParams) error
 	// status_since moves only when status changes, so it is the start of the
 	// current status episode however often the source is polled.
 	UpsertTriggerRegistration(ctx context.Context, arg UpsertTriggerRegistrationParams) error

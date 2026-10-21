@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/reliant-labs/reliant/internal/db/core"
 	postgresstore "github.com/reliant-labs/reliant/internal/db/postgres"
 	"github.com/reliant-labs/reliant/internal/vault"
 )
@@ -36,12 +35,6 @@ func BootVault(ctx context.Context, repo *Repo, hosted bool, dataDir, key string
 		slog.WarnContext(ctx, "copying legacy credentials into provider accounts failed; will retry next boot", "error", err)
 	}
 	return v, nil
-}
-
-// Connections returns the store for user connections (the credential vault's
-// metadata and ciphertext tables).
-func (r *Repo) Connections() core.ConnectionStore {
-	return postgresstore.NewConnectionStore(r.DB.SQLDB())
 }
 
 // sealAPIKeys enables sealing, backfills legacy rows, and finalizes the

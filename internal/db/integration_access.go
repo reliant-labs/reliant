@@ -3,14 +3,13 @@ package db
 
 import (
 	"context"
-	"database/sql"
-	"errors"
 	"fmt"
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 	postgresstore "github.com/reliant-labs/reliant/internal/db/postgres"
 	pgdb "github.com/reliant-labs/reliant/internal/db/postgres/generated"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // Access-gated routing for app-level provider events. The model is in the
@@ -19,53 +18,15 @@ import (
 // provider credential recently reported that resource as visible.
 
 // ReplaceIntegrationAccess records a refresh: the user's grants for the
-// integration become exactly grants, all stamped at. It is one transaction,
-// so routing never sees a half-replaced set — in particular never the moment
-// between dropping a lost repository and writing the rest.
+// integration become exactly grants, all stamped at, in one transaction.
 func (r *Repo) ReplaceIntegrationAccess(ctx context.Context, userID, integrationID, subjectID string, at time.Time, grants []core.IntegrationAccessGrant) error {
-	if userID == "" || integrationID == "" {
-		return errors.New("integration access: user and integration are required")
-	}
-	accounts := make([]string, 0, len(grants))
-	resources := make([]string, 0, len(grants))
-	labels := make([]string, 0, len(grants))
-	for _, g := range grants {
-		if g.AccountKey == "" || g.ResourceKey == "" {
-			return fmt.Errorf("integration access: a grant needs an account and a resource, got %+v", g)
-		}
-		accounts = append(accounts, g.AccountKey)
-		resources = append(resources, g.ResourceKey)
-		labels = append(labels, g.ResourceLabel)
-	}
-	at = at.UTC()
-	return r.RunTx(ctx, func(ctx context.Context) error {
-		q := pgdb.New(r.DB.DB(ctx))
-		if len(grants) > 0 {
-			if err := q.UpsertIntegrationAccess(ctx, pgdb.UpsertIntegrationAccessParams{
-				UserID: userID, IntegrationID: integrationID, SubjectID: subjectID, RefreshedAt: at,
-				AccountKeys: accounts, ResourceKeys: resources, ResourceLabels: labels,
-			}); err != nil {
-				return fmt.Errorf("record integration access: %w", err)
-			}
-		}
-		if _, err := q.DeleteStaleIntegrationAccess(ctx, pgdb.DeleteStaleIntegrationAccessParams{
-			UserID: userID, IntegrationID: integrationID, RefreshedAt: at,
-		}); err != nil {
-			return fmt.Errorf("drop lost integration access: %w", err)
-		}
-		return nil
-	})
+	return store.ReplaceIntegrationAccess(ctx, r.ORM(), userID, integrationID, subjectID, at, grants)
 }
 
 // RevokeIntegrationAccess deletes the grants a provider revocation names, for
 // every user. It returns how many it removed.
 func (r *Repo) RevokeIntegrationAccess(ctx context.Context, integrationID string, rev core.IntegrationAccessRevocation) (int64, error) {
-	if integrationID == "" || (rev.AccountKey == "" && rev.SubjectID == "") {
-		return 0, fmt.Errorf("integration access: a revocation must name an account or a subject, got %+v", rev)
-	}
-	n, err := pgdb.New(r.DB.DB(ctx)).RevokeIntegrationAccess(ctx, pgdb.RevokeIntegrationAccessParams{
-		IntegrationID: integrationID, AccountKey: rev.AccountKey, ResourceKey: rev.ResourceKey, SubjectID: rev.SubjectID,
-	})
+	n, err := store.RevokeIntegrationAccess(ctx, r.ORM(), integrationID, rev)
 	if err != nil {
 		return 0, fmt.Errorf("revoke integration access: %w", err)
 	}
@@ -76,6 +37,10 @@ func (r *Repo) RevokeIntegrationAccess(ctx context.Context, integrationID string
 // about (account, resource) reaches: those whose owner holds a grant for it
 // refreshed at or after freshAfter, and whose named connection (if any) is
 // the owner's and active.
+//
+// It is the one integration-access query still on sqlc: it returns whole
+// trigger rows, and their mapping onto core.Trigger moves with the triggers
+// aggregate (P5b lane L4), which ports it.
 func (r *Repo) ListAccessRoutedTriggers(ctx context.Context, integration, account, resource string, freshAfter time.Time) ([]*core.Trigger, error) {
 	rows, err := pgdb.New(r.DB.DB(ctx)).ListAccessRoutedTriggers(ctx, pgdb.ListAccessRoutedTriggersParams{
 		Integration: integration, AccountKey: account, ResourceKey: resource, FreshAfter: freshAfter.UTC(),
@@ -97,7 +62,7 @@ func (r *Repo) ListAccessRoutedTriggers(ctx context.Context, integration, accoun
 // ListIntegrationTriggerOwners lists the users with an enabled trigger of the
 // integration: whose access the refresher keeps fresh.
 func (r *Repo) ListIntegrationTriggerOwners(ctx context.Context, integration string) ([]string, error) {
-	owners, err := pgdb.New(r.DB.DB(ctx)).ListIntegrationTriggerOwners(ctx, integration)
+	owners, err := store.ListIntegrationTriggerOwners(ctx, r.ORM(), integration)
 	if err != nil {
 		return nil, fmt.Errorf("list integration trigger owners: %w", err)
 	}
@@ -109,25 +74,21 @@ func (r *Repo) ListIntegrationTriggerOwners(ctx context.Context, integration str
 // attempt was before dueBefore. claimed=false means another replica has it,
 // or it is not due.
 func (r *Repo) ClaimIntegrationAccessRefresh(ctx context.Context, userID, integrationID string, now, leaseUntil, dueBefore time.Time) (bool, error) {
-	n, err := pgdb.New(r.DB.DB(ctx)).ClaimIntegrationAccessRefresh(ctx, pgdb.ClaimIntegrationAccessRefreshParams{
-		UserID: userID, IntegrationID: integrationID, LeasedUntil: leaseUntil.UTC(), Now: now.UTC(), DueBefore: dueBefore.UTC(),
-	})
+	claimed, err := store.ClaimIntegrationAccessRefresh(ctx, r.ORM(), userID, integrationID, now, leaseUntil, dueBefore)
 	if err != nil {
 		return false, fmt.Errorf("claim integration access refresh: %w", err)
 	}
-	return n > 0, nil
+	return claimed, nil
 }
 
 // FinishIntegrationAccessRefresh releases the lease and records the outcome:
 // refreshErr nil is a success at at.
 func (r *Repo) FinishIntegrationAccessRefresh(ctx context.Context, userID, integrationID string, at time.Time, refreshErr error) error {
-	params := pgdb.FinishIntegrationAccessRefreshParams{
-		Ok: refreshErr == nil, At: at.UTC(), UserID: userID, IntegrationID: integrationID,
-	}
+	lastError := ""
 	if refreshErr != nil {
-		params.LastError = truncateString(refreshErr.Error(), 500)
+		lastError = truncateString(refreshErr.Error(), 500)
 	}
-	if err := pgdb.New(r.DB.DB(ctx)).FinishIntegrationAccessRefresh(ctx, params); err != nil {
+	if err := store.FinishIntegrationAccessRefresh(ctx, r.ORM(), userID, integrationID, at, refreshErr == nil, lastError); err != nil {
 		return fmt.Errorf("finish integration access refresh: %w", err)
 	}
 	return nil
@@ -136,24 +97,7 @@ func (r *Repo) FinishIntegrationAccessRefresh(ctx context.Context, userID, integ
 // GetIntegrationAccessRefresh returns the refresh bookkeeping, or
 // sql.ErrNoRows when the pair was never refreshed.
 func (r *Repo) GetIntegrationAccessRefresh(ctx context.Context, userID, integrationID string) (*core.IntegrationAccessRefresh, error) {
-	row, err := pgdb.New(r.DB.DB(ctx)).GetIntegrationAccessRefresh(ctx, pgdb.GetIntegrationAccessRefreshParams{
-		UserID: userID, IntegrationID: integrationID,
-	})
-	if err != nil {
-		return nil, err
-	}
-	return &core.IntegrationAccessRefresh{
-		UserID: row.UserID, IntegrationID: row.IntegrationID,
-		RefreshedAt: nullTimePtr(row.RefreshedAt), LastError: row.LastError, LastAttemptAt: nullTimePtr(row.LastAttemptAt),
-	}, nil
-}
-
-func nullTimePtr(t sql.NullTime) *time.Time {
-	if !t.Valid {
-		return nil
-	}
-	v := t.Time.UTC()
-	return &v
+	return store.GetIntegrationAccessRefresh(ctx, r.ORM(), userID, integrationID)
 }
 
 func truncateString(s string, n int) string {
@@ -165,7 +109,7 @@ func truncateString(s string, n int) string {
 
 // PruneIntegrationAccess deletes grants last refreshed before before.
 func (r *Repo) PruneIntegrationAccess(ctx context.Context, before time.Time) (int64, error) {
-	n, err := pgdb.New(r.DB.DB(ctx)).PruneIntegrationAccess(ctx, before.UTC())
+	n, err := store.PruneIntegrationAccess(ctx, r.ORM(), before)
 	if err != nil {
 		return 0, fmt.Errorf("prune integration access: %w", err)
 	}

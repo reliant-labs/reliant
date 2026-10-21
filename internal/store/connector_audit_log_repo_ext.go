@@ -35,6 +35,13 @@
 //	}
 package store
 
+import (
+	"context"
+
+	"github.com/reliant-labs/forge/pkg/orm"
+	"github.com/uptrace/bun"
+)
+
 // ConnectorAuditLogExtra carries fields on ConnectorAuditLog that are NOT columns — computed
 // values, transient state, anything derived rather than stored. ConnectorAuditLog is
 // embedded on ConnectorAuditLogExtra (see connector_audit_log_orm.go), so a field added here is a field on
@@ -45,4 +52,19 @@ package store
 // persist them — `bun:"-"` is Bun's own idiom for a field it must never
 // bind or scan.
 type ConnectorAuditLogExtra struct {
+}
+
+// CompleteConnectorAudit resolves an intent row with its outcome. Scoped to
+// rows still started, so a late or duplicated completion cannot overwrite an
+// outcome already recorded (P5b lane L5).
+func CompleteConnectorAudit(ctx context.Context, db orm.Context, id, status string, errMsg *string, durationMS int32) error {
+	_, err := db.Bun().NewUpdate().Model((*ConnectorAuditLog)(nil)).
+		Set("? = ?", bun.Ident(ConnectorAuditLogFieldStatus), status).
+		Set("? = ?", bun.Ident(ConnectorAuditLogFieldErrorMessage), errMsg).
+		Set("? = ?", bun.Ident(ConnectorAuditLogFieldDurationMs), orm.Arg(durationMS)).
+		Set("? = (? = 'denied')", bun.Ident(ConnectorAuditLogFieldDenied), status).
+		Where("? = ?", bun.Ident(ConnectorAuditLogFieldID), id).
+		Where("? = 'started'", bun.Ident(ConnectorAuditLogFieldStatus)).
+		Exec(ctx)
+	return err
 }

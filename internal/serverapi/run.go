@@ -529,7 +529,7 @@ func Run(ctx context.Context, opts Options) error {
 		ControlPlane:        opts.ControlPlane,
 		Database:            repo,
 		SQL:                 repo.DB.SQLDB(),
-		ConnectorGrants:     connectorgrant.NewSQLStore(repo.DB.SQLDB()),
+		ConnectorGrants:     connectorgrant.NewSQLStore(connectorgrant.Deps{DB: repo.ORM()}),
 		ToolsFactory:        toolsFactory,
 		TemporalClient:      temporalClient,
 		StreamingHub:        streamingHub,
