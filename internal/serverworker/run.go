@@ -448,7 +448,7 @@ func Run(ctx context.Context, opts Options) error {
 		// generate_video executes in the worker; the api-server only reads its
 		// catalog metadata. The job store is what makes a render resumable.
 		VideoGeneratorResolver: resolveVideoGenerator,
-		VideoJobs:              videojobs.NewSQLStore(repo.DB.SQLDB()),
+		VideoJobs:              videojobs.NewSQLStore(repo.ORM()),
 		// run_scenario / write_scenario execute on the real runtime via the
 		// scenario runner; injected because the runner imports this package's
 		// dependents.

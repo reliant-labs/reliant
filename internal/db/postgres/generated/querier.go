@@ -144,7 +144,6 @@ type Querier interface {
 	// request, completed after, and read when an event arrives to say whether
 	// Reliant caused it.
 	CreateIntegrationWrite(ctx context.Context, arg CreateIntegrationWriteParams) error
-	CreateItemDefault(ctx context.Context, arg CreateItemDefaultParams) error
 	// Creates a message in the new schema (uses context_window_id, has display_style)
 	CreateMessage(ctx context.Context, arg CreateMessageParams) error
 	// ON CONFLICT DO NOTHING for idempotent message creation
@@ -157,30 +156,13 @@ type Querier interface {
 	// two different sends racing for one seq) still raises and the transaction
 	// retries as before.
 	CreateMessageOnce(ctx context.Context, arg CreateMessageOnceParams) (int64, error)
-	CreatePreset(ctx context.Context, arg CreatePresetParams) (Preset, error)
 	CreateProject(ctx context.Context, arg CreateProjectParams) error
-	// The project-scoped counterpart. project_id is NOT NULL here, so the table's
-	// own UNIQUE (user_id, project_id, key) constraint is a usable conflict target.
-	CreateProjectSetting(ctx context.Context, arg CreateProjectSettingParams) error
 	CreateRepo(ctx context.Context, arg CreateRepoParams) error
 	// run_events: the outbox for workflow-event triggers. See the migration
 	// 20261005010407_run_events.sql for the model.
 	// DO NOTHING on a dedupe_key that already exists: the first row for a
 	// transition is the record, and an activity retry must not add a second.
 	CreateRunEvent(ctx context.Context, arg CreateRunEventParams) (int64, error)
-	// Upsert, not a plain insert. A setting is identified by (user_id, project_id,
-	// key), so writing the same key twice must REPLACE the value rather than add a
-	// second row.
-	//
-	// The table's UNIQUE (user_id, project_id, key) constraint does not achieve
-	// that on its own: project_id is NULL for every user-level setting, and in SQL
-	// NULL is never equal to NULL, so the constraint simply does not apply to the
-	// rows we write most. Every save appended a duplicate, and ListSettings
-	// (ORDER BY key) then returned them in an arbitrary order, letting a stale
-	// value overwrite the current one on load. Hence the accompanying partial
-	// unique index on (user_id, key) WHERE project_id IS NULL, which is what this
-	// ON CONFLICT target resolves against.
-	CreateSetting(ctx context.Context, arg CreateSettingParams) error
 	CreateStepExecution(ctx context.Context, arg CreateStepExecutionParams) (StepExecution, error)
 	CreateThread(ctx context.Context, arg CreateThreadParams) (Thread, error)
 	CreateTrigger(ctx context.Context, arg CreateTriggerParams) error
@@ -205,20 +187,12 @@ type Querier interface {
 	DeleteChat(ctx context.Context, id string) error
 	DeleteContextWindow(ctx context.Context, id string) error
 	DeleteContextWindowsByThread(ctx context.Context, threadID string) error
-	DeleteDefaultPresetAssignment(ctx context.Context, arg DeleteDefaultPresetAssignmentParams) error
 	DeleteDispatchedRunEventsBefore(ctx context.Context, dispatchedAt sql.NullTime) (int64, error)
 	DeleteMessage(ctx context.Context, id string) error
-	DeletePreset(ctx context.Context, id string) error
-	// Delete by user and slug (global scope)
-	DeletePresetBySlug(ctx context.Context, arg DeletePresetBySlugParams) error
-	// Delete by user, slug, and project scope
-	DeletePresetBySlugAndProject(ctx context.Context, arg DeletePresetBySlugAndProjectParams) error
 	DeleteProject(ctx context.Context, arg DeleteProjectParams) error
 	DeleteProjectDaemon(ctx context.Context, arg DeleteProjectDaemonParams) error
 	DeleteRepo(ctx context.Context, id string) error
 	DeleteReposByProject(ctx context.Context, projectID string) error
-	DeleteSetting(ctx context.Context, id string) error
-	DeleteSettingByKey(ctx context.Context, arg DeleteSettingByKeyParams) error
 	// Drops what the user could see before but this refresh (stamped
 	// refreshed_at) no longer reports: a repository they lost, an installation
 	// they left. Also the whole set when a refresh finds the credential gone.
@@ -343,12 +317,10 @@ type Querier interface {
 	GetContextWindowWithThread(ctx context.Context, id string) (GetContextWindowWithThreadRow, error)
 	// Get the maximum context_window.sequence for a thread (current context after compactions)
 	GetCurrentContextSequence(ctx context.Context, threadID string) (int64, error)
-	GetDefaultPresetAssignments(ctx context.Context, workflowName string) ([]GetDefaultPresetAssignmentsRow, error)
 	GetIntegrationAccessRefresh(ctx context.Context, arg GetIntegrationAccessRefreshParams) (IntegrationAccessRefresh, error)
 	// The write that created (or is) one object, newest first. Served by
 	// idx_integration_writes_object.
 	GetIntegrationWriteByObject(ctx context.Context, arg GetIntegrationWriteByObjectParams) (IntegrationWrite, error)
-	GetItemDefault(ctx context.Context, arg GetItemDefaultParams) (GetItemDefaultRow, error)
 	// Get the max context_window.sequence for a thread
 	GetLatestContextSequenceByThread(ctx context.Context, threadID string) (interface{}, error)
 	// Get the most recent context window for a thread (highest sequence)
@@ -445,11 +417,6 @@ type Querier interface {
 	// Get all messages in a specific context window
 	// Ordered by seq for deterministic ordering
 	GetNodeMessages(ctx context.Context, contextWindowID string) ([]Message, error)
-	GetPreset(ctx context.Context, id string) (Preset, error)
-	// Lookup by user and slug (global scope when project_id IS NULL)
-	GetPresetBySlug(ctx context.Context, arg GetPresetBySlugParams) (Preset, error)
-	// Lookup by user, slug, and project scope
-	GetPresetBySlugAndProject(ctx context.Context, arg GetPresetBySlugAndProjectParams) (Preset, error)
 	GetProject(ctx context.Context, id string) (Project, error)
 	GetProjectByPath(ctx context.Context, path string) (Project, error)
 	GetProjectByPathAndUser(ctx context.Context, arg GetProjectByPathAndUserParams) (Project, error)
@@ -469,7 +436,6 @@ type Querier interface {
 	GetRootWorkflowStatusForChat(ctx context.Context, chatID string) (GetRootWorkflowStatusForChatRow, error)
 	GetRunEvent(ctx context.Context, id string) (RunEvent, error)
 	GetRunEventByDedupe(ctx context.Context, dedupeKey string) (RunEvent, error)
-	GetSetting(ctx context.Context, arg GetSettingParams) (Setting, error)
 	GetStepExecution(ctx context.Context, id string) (StepExecution, error)
 	// Get all executions of a specific step in a workflow (for CEL history queries)
 	GetStepExecutions(ctx context.Context, arg GetStepExecutionsParams) ([]StepExecution, error)
@@ -666,7 +632,6 @@ type Querier interface {
 	// Archived workspaces the daemon declined to remove on its own, for the
 	// storage inbox item.
 	ListHeldWorktreesForUser(ctx context.Context, userID string) ([]ListHeldWorktreesForUserRow, error)
-	ListHiddenItemDefaults(ctx context.Context, itemType int32) ([]ListHiddenItemDefaultsRow, error)
 	// The Inbox: everything waiting on one user, across every chat and project
 	// (research/WORKFLOW_UI.md §8). One UNION ALL so the read is one round trip;
 	// every branch is scoped by c.user_id / t.user_id, never by a request value.
@@ -704,7 +669,6 @@ type Querier interface {
 	// reach a trigger through its own owner's live connection. Status is returned
 	// rather than filtered so a caller can tell needs_reauth apart.
 	ListIntegrationTriggers(ctx context.Context, integration string) ([]ListIntegrationTriggersRow, error)
-	ListItemDefaults(ctx context.Context, itemType int32) ([]ListItemDefaultsRow, error)
 	// Every background spawn issued anywhere inside one root execution that is
 	// still open: tool_calls.status = 6 (backgrounded) and no terminal report in
 	// its parent's mailbox. A background spawn is a goroutine inside the ROOT's
@@ -742,8 +706,6 @@ type Querier interface {
 	// (uncursored) snapshot's own window, which is unbounded above because spawn
 	// threads out-write and out-live the main thread -- see ListRecentChatWindow.
 	ListMessagesInContextWindowRange(ctx context.Context, arg ListMessagesInContextWindowRangeParams) ([]Message, error)
-	// List presets by tag for a user
-	ListPresetsByTag(ctx context.Context, arg ListPresetsByTagParams) ([]Preset, error)
 	ListProjectDaemonsForDaemon(ctx context.Context, daemonID string) ([]ProjectDaemon, error)
 	ListProjectDaemonsForProject(ctx context.Context, projectID string) ([]ProjectDaemon, error)
 	ListProjects(ctx context.Context, arg ListProjectsParams) ([]Project, error)
@@ -808,14 +770,6 @@ type Querier interface {
 	//   7 cancelled    STOPPED, stop_reason CANCELLED (4)
 	// Every filter argument is nullable or an array: an unset one must not narrow.
 	ListRuns(ctx context.Context, arg ListRunsParams) ([]ListRunsRow, error)
-	// ORDER BY key, updated_at: key alone is not a total order, so any duplicate
-	// rows came back in an arbitrary sequence and the client — which loads rows
-	// into localStorage one after another — could end up keeping a stale value.
-	// The upsert above plus the partial unique index mean duplicates should no
-	// longer exist; ordering by updated_at as well guarantees that if any survive,
-	// the NEWEST wins rather than whichever the planner happened to emit last.
-	ListSettings(ctx context.Context, arg ListSettingsParams) ([]Setting, error)
-	ListSettingsByKey(ctx context.Context, arg ListSettingsByKeyParams) ([]Setting, error)
 	// Every spawn call a thread has issued, joined to the child's live workflow
 	// and thread rows. tool_calls.thread_id is the PARENT's thread — see
 	// ListStrandedSpawnToolCalls above for the same join anchor — so this needs
@@ -995,12 +949,6 @@ type Querier interface {
 	// is ListAllTriggers, a separate query so "no user" can never be reached by
 	// passing an empty string.
 	ListTriggers(ctx context.Context, arg ListTriggersParams) ([]ListTriggersRow, error)
-	// List all presets for a user (both global and project-specific)
-	ListUserPresets(ctx context.Context, userID string) ([]Preset, error)
-	// List presets for a specific project (includes both global and project-specific)
-	ListUserPresetsByProject(ctx context.Context, arg ListUserPresetsByProjectParams) ([]Preset, error)
-	// List only global (user-wide) presets
-	ListUserPresetsGlobal(ctx context.Context, userID string) ([]Preset, error)
 	ListVisibilityOverrides(ctx context.Context, arg ListVisibilityOverridesParams) ([]ListVisibilityOverridesRow, error)
 	// List all workflows for a user, ordered by most recently updated
 	ListWorkflowDraftsByUser(ctx context.Context, userID string) ([]ListWorkflowDraftsByUserRow, error)
@@ -1288,7 +1236,6 @@ type Querier interface {
 	// of two that race exactly one sees the row change.
 	SetChatQueuedForMachine(ctx context.Context, arg SetChatQueuedForMachineParams) (int64, error)
 	SetCompactionSummaryMessage(ctx context.Context, arg SetCompactionSummaryMessageParams) (ContextWindow, error)
-	SetDefaultPresetAssignment(ctx context.Context, arg SetDefaultPresetAssignmentParams) error
 	// Records how the run a trigger fired ended, on the chat's launch event (the
 	// same earliest-event rule as GetTriggerEventByChatID).
 	SetLaunchEventRunStatus(ctx context.Context, arg SetLaunchEventRunStatusParams) (int64, error)
@@ -1331,10 +1278,8 @@ type Querier interface {
 	UpdateChatTitle(ctx context.Context, arg UpdateChatTitleParams) error
 	UpdateContentBlock(ctx context.Context, arg UpdateContentBlockParams) error
 	UpdateMessage(ctx context.Context, arg UpdateMessageParams) error
-	UpdatePreset(ctx context.Context, arg UpdatePresetParams) (Preset, error)
 	UpdateProject(ctx context.Context, arg UpdateProjectParams) error
 	UpdateRepo(ctx context.Context, arg UpdateRepoParams) error
-	UpdateSetting(ctx context.Context, arg UpdateSettingParams) error
 	// Update fork point when the fork's target message changes (e.g., parent compacts)
 	UpdateThreadForkPoint(ctx context.Context, arg UpdateThreadForkPointParams) (Thread, error)
 	// Record thread lifecycle. Replaces the "thread:<node>" workflow records that
@@ -1387,8 +1332,6 @@ type Querier interface {
 	// Monotonic: a slower refresh that started earlier never stamps an older
 	// time over a newer refresh's.
 	UpsertIntegrationAccess(ctx context.Context, arg UpsertIntegrationAccessParams) error
-	// Insert or update a preset
-	UpsertPreset(ctx context.Context, arg UpsertPresetParams) (Preset, error)
 	// Records a COMPLETED clone. install_state is forced to 'installed' rather
 	// than left to the column default, so a row that was previously 'installing'
 	// or 'failed' is corrected when the clone finally lands.
