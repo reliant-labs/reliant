@@ -30,6 +30,10 @@ type promptShape struct {
 	system    []uint64 // one hash per system prompt, in request order
 	msgs      []uint64 // one hash per history message, in request order
 	kinds     []string // coarse kind per history message, parallel to msgs
+	// mcpToolsSource is where the request's MCP tools came from (live,
+	// stale-last-known-good, none, unrequested). Not part of the fingerprint:
+	// it explains a toolsChanged, it does not decide one.
+	mcpToolsSource tools.MCPToolsSource
 }
 
 func computePromptShape(model string, systemPrompts []string, history []message.Message, toolList []tools.Tool) promptShape {
@@ -205,6 +209,7 @@ func (s promptShape) logFields(d shapeDiff) []any {
 	fields := []any{
 		"toolsHash", fmt.Sprintf("%08x", uint32(s.toolsHash)),
 		"toolCount", s.toolCount,
+		"mcpToolsSource", string(s.mcpToolsSource),
 		"systemHashes", strings.Join(systemHashes, ","),
 		"historyMsgs", len(s.msgs),
 		"shapeKnown", d.Known,

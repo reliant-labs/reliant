@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -57,6 +59,29 @@ type daemonMCPRuntime struct {
 	router   DaemonRouter
 	userID   string
 	selector *DaemonSelector
+}
+
+// MCPListIdentity names whose listing this is: the user, and the daemon the
+// selector points at. Two callers with the same project path but a different
+// user or daemon see different servers, so they must never share a cached list
+// (tools.MCPListIdentity). A nil selector is "default resolution", a distinct
+// identity of its own.
+func (r *daemonMCPRuntime) MCPListIdentity() string {
+	var b strings.Builder
+	b.WriteString("user=")
+	b.WriteString(r.userID)
+	if s := r.selector; s != nil {
+		fmt.Fprintf(&b, "|id=%s|name=%s|type=%s", s.ID, s.Name, s.Type)
+		keys := make([]string, 0, len(s.Labels))
+		for k := range s.Labels {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			fmt.Fprintf(&b, "|label:%s=%s", k, s.Labels[k])
+		}
+	}
+	return b.String()
 }
 
 func (r *daemonMCPRuntime) send(ctx context.Context, commandType string, payload []byte, timeoutMs int32) ([]byte, error) {

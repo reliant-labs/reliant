@@ -15,6 +15,12 @@ import (
 // ToolsOptions contains all potential dependency injection parameters for tools
 type ToolsOptions struct {
 	MCPProjectPath string // Optional MCP project scope path for MCP tool discovery/calls
+	// MCPToolCache remembers the last successful MCP tool listing per scope and
+	// caller, so a request made while the machine is suspended or starting
+	// carries the same tools array as the one before it. Optional:
+	// NewToolsFactory supplies one, and every factory cloned from this one
+	// shares it.
+	MCPToolCache *MCPToolCache
 	// ControlPlaneURL is the control plane hosting this deployment, "" when it
 	// is self-hosted (the daemon, tests). It picks the dial policy of the web
 	// tools (netguard.ForDeployment): a hosted deployment's shared worker must
@@ -116,6 +122,9 @@ func NewToolsFactory(opts *ToolsOptions) *ToolsFactory {
 		opts = &ToolsOptions{}
 	}
 
+	if opts.MCPToolCache == nil {
+		opts.MCPToolCache = NewMCPToolCache()
+	}
 	f := &ToolsFactory{opts: opts}
 
 	// Initialize MCP provider lazily; execution-time MCP runtime is resolved from tool context.
@@ -124,6 +133,7 @@ func NewToolsFactory(opts *ToolsOptions) *ToolsFactory {
 	} else {
 		f.mcpProvider = NewMCPToolProvider()
 	}
+	f.mcpProvider.WithCache(opts.MCPToolCache)
 
 	return f
 }
@@ -137,10 +147,15 @@ func (f *ToolsFactory) ToolFor(def ToolDefinition) Tool {
 
 // GetMCPTools returns MCP tools from this factory's provider using the given runtime.
 func (f *ToolsFactory) GetMCPTools(runtime MCPRuntime) []Tool {
+	return f.GetMCPToolSet(runtime).Tools
+}
+
+// GetMCPToolSet is GetMCPTools with where the tools came from.
+func (f *ToolsFactory) GetMCPToolSet(runtime MCPRuntime) MCPToolSet {
 	if f.mcpProvider == nil {
-		return []Tool{}
+		return MCPToolSet{Tools: []Tool{}, Source: MCPToolsUnrequested}
 	}
-	return f.mcpProvider.GetTools(runtime)
+	return f.mcpProvider.GetToolSet(runtime)
 }
 
 // GetRepo returns the repository dependency used by this factory.
