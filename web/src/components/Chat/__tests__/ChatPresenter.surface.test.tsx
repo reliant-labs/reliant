@@ -69,6 +69,15 @@ vi.mock("../ResumeDaemonPill", () => ({
 vi.mock("../BackgroundWorkPill", () => ({
   BackgroundWorkPill: () => null,
 }));
+
+// ChatPresenter reads the chat's pending questions to tell whether the thread
+// in view is waiting on the user; none is pending here.
+vi.mock("../../../hooks/approval-queries", async () => {
+  const actual = await vi.importActual<
+    typeof import("../../../hooks/approval-queries")
+  >("../../../hooks/approval-queries");
+  return { ...actual, usePendingQuestions: () => ({ data: [] }) };
+});
 // The presenter reads the chat row; this suite is about the surface gate.
 vi.mock("../../../hooks/chat-queries", async () => {
   const actual = await vi.importActual<

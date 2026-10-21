@@ -57,6 +57,15 @@ vi.mock("../ResumeDaemonPill", () => ({ ResumeDaemonPill: () => null }));
 vi.mock("../OomKillBanner", () => ({ OomKillBanner: () => null }));
 vi.mock("../DiskPressureBanner", () => ({ DiskPressureBanner: () => null }));
 vi.mock("../BackgroundWorkPill", () => ({ BackgroundWorkPill: () => null }));
+
+// ChatPresenter reads the chat's pending questions to tell whether the thread
+// in view is waiting on the user; none is pending here.
+vi.mock("../../../hooks/approval-queries", async () => {
+  const actual = await vi.importActual<
+    typeof import("../../../hooks/approval-queries")
+  >("../../../hooks/approval-queries");
+  return { ...actual, usePendingQuestions: () => ({ data: [] }) };
+});
 vi.mock("../QueuedMessages", () => ({ QueuedMessages: () => null }));
 vi.mock("../thread-views", () => ({ InterleavedTimeline: () => <div data-testid="timeline" /> }));
 vi.mock("../../workflow/WorkflowViewerPanel", () => ({ WorkflowViewerPanel: () => null }));
