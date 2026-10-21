@@ -23,6 +23,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/instanceid"
 	"github.com/reliant-labs/reliant/internal/llm/tools/shell"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/observability"
 	"github.com/reliant-labs/reliant/internal/osutil"
 	"github.com/reliant-labs/reliant/internal/toolexec/bootstrap"
 	"github.com/reliant-labs/reliant/internal/toolexec/daemonruntime"
@@ -832,6 +833,7 @@ To switch back to an account whose token is already stored:
 			// rotate the same file.
 			setupToolsDaemonLogging(dataDir, verbose, host.Managed(), logSettings(base))
 			defer logging.Close() //nolint:errcheck
+			observability.InstallPropagation()
 
 			// The daemon runtime publishes the record `daemon status` and
 			// `daemon stop` read (PID, binary identity, gateway-stream state);

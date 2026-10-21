@@ -22,6 +22,8 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
@@ -1720,12 +1722,21 @@ func (d *daemonClient) runHeartbeats(ctx context.Context, s *gatewaySession, liv
 
 // executeTool runs one tool request that arrived on session s, and hands its
 // result to sendToolResult, which holds it until a gateway acknowledges it.
+// dispatchContext is the root context for executing req: it continues the
+// trace context of the request that dispatched the call (the gateway injects
+// it into ToolRequest.trace_context), so every log line written for the
+// execution carries that trace's trace_id. A request with none is a bare
+// background context.
+func dispatchContext(req *reliantv1.ToolRequest) context.Context {
+	return otel.GetTextMapPropagator().Extract(context.Background(), propagation.MapCarrier(req.GetTraceContext()))
+}
+
 func (d *daemonClient) executeTool(s *gatewaySession, req *reliantv1.ToolRequest) {
 	if req == nil {
 		return
 	}
 
-	execCtx, cancel := context.WithCancel(context.Background())
+	execCtx, cancel := context.WithCancel(dispatchContext(req))
 	// Registered under both ids. request_id is the transport's correlation key
 	// (a fresh timestamp per dispatch, known only to the server that sent it);
 	// tool_call_id is the LLM's identifier, and the only one a user cancelling

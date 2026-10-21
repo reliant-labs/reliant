@@ -2422,8 +2422,12 @@ type ToolRequest struct {
 	ContentBlockId string                 `protobuf:"bytes,5,opt,name=content_block_id,json=contentBlockId,proto3" json:"content_block_id,omitempty"` // Database content block ID
 	ContextJson    string                 `protobuf:"bytes,6,opt,name=context_json,json=contextJson,proto3" json:"context_json,omitempty"`            // JSON-encoded execution context
 	TimeoutMs      int32                  `protobuf:"varint,8,opt,name=timeout_ms,json=timeoutMs,proto3" json:"timeout_ms,omitempty"`                 // Timeout in milliseconds
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// W3C trace context (traceparent, tracestate, baggage) of the request that
+	// dispatched this call, injected by the gateway. The daemon continues it, so
+	// its log lines for the execution carry the dispatching trace's trace_id.
+	TraceContext  map[string]string `protobuf:"bytes,9,rep,name=trace_context,json=traceContext,proto3" json:"trace_context,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ToolRequest) Reset() {
@@ -2503,6 +2507,13 @@ func (x *ToolRequest) GetTimeoutMs() int32 {
 		return x.TimeoutMs
 	}
 	return 0
+}
+
+func (x *ToolRequest) GetTraceContext() map[string]string {
+	if x != nil {
+		return x.TraceContext
+	}
+	return nil
 }
 
 // ServerHeartbeat is sent periodically to keep connection alive
@@ -5081,7 +5092,7 @@ const file_reliant_v1_tools_daemon_proto_rawDesc = "" +
 	"\x10deadline_unix_ms\x18\x01 \x01(\x03R\x0edeadlineUnixMs\".\n" +
 	"\rToolResultAck\x12\x1d\n" +
 	"\n" +
-	"request_id\x18\x01 \x01(\tR\trequestId\"\xf6\x01\n" +
+	"request_id\x18\x01 \x01(\tR\trequestId\"\x87\x03\n" +
 	"\vToolRequest\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12\x1b\n" +
@@ -5093,7 +5104,11 @@ const file_reliant_v1_tools_daemon_proto_rawDesc = "" +
 	"\x10content_block_id\x18\x05 \x01(\tR\x0econtentBlockId\x12!\n" +
 	"\fcontext_json\x18\x06 \x01(\tR\vcontextJson\x12\x1d\n" +
 	"\n" +
-	"timeout_ms\x18\b \x01(\x05R\ttimeoutMs\"e\n" +
+	"timeout_ms\x18\b \x01(\x05R\ttimeoutMs\x12N\n" +
+	"\rtrace_context\x18\t \x03(\v2).reliant.v1.ToolRequest.TraceContextEntryR\ftraceContext\x1a?\n" +
+	"\x11TraceContextEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"e\n" +
 	"\x0fServerHeartbeat\x12\x1c\n" +
 	"\ttimestamp\x18\x01 \x01(\x03R\ttimestamp\x124\n" +
 	"\x16acked_daemon_heartbeat\x18\x02 \x01(\x03R\x14ackedDaemonHeartbeat\"\x9b\x01\n" +
@@ -5336,7 +5351,7 @@ func file_reliant_v1_tools_daemon_proto_rawDescGZIP() []byte {
 }
 
 var file_reliant_v1_tools_daemon_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_reliant_v1_tools_daemon_proto_msgTypes = make([]protoimpl.MessageInfo, 61)
+var file_reliant_v1_tools_daemon_proto_msgTypes = make([]protoimpl.MessageInfo, 62)
 var file_reliant_v1_tools_daemon_proto_goTypes = []any{
 	(FileChangeType)(0),                     // 0: reliant.v1.FileChangeType
 	(DiskGuardState)(0),                     // 1: reliant.v1.DiskGuardState
@@ -5399,9 +5414,10 @@ var file_reliant_v1_tools_daemon_proto_goTypes = []any{
 	nil,                                     // 58: reliant.v1.LocalModelHTTPRequest.HeadersEntry
 	nil,                                     // 59: reliant.v1.LocalModelHTTPChunk.HeadersEntry
 	nil,                                     // 60: reliant.v1.DaemonRegister.LabelsEntry
-	nil,                                     // 61: reliant.v1.ProjectConfigSnapshot.McpConfigsEntry
-	nil,                                     // 62: reliant.v1.ProjectConfigSnapshot.RepoMemoriesMdEntry
-	nil,                                     // 63: reliant.v1.IndexedSkill.MetadataEntry
+	nil,                                     // 61: reliant.v1.ToolRequest.TraceContextEntry
+	nil,                                     // 62: reliant.v1.ProjectConfigSnapshot.McpConfigsEntry
+	nil,                                     // 63: reliant.v1.ProjectConfigSnapshot.RepoMemoriesMdEntry
+	nil,                                     // 64: reliant.v1.IndexedSkill.MetadataEntry
 }
 var file_reliant_v1_tools_daemon_proto_depIdxs = []int32{
 	13, // 0: reliant.v1.DaemonMessage.register:type_name -> reliant.v1.DaemonRegister
@@ -5449,33 +5465,34 @@ var file_reliant_v1_tools_daemon_proto_depIdxs = []int32{
 	9,  // 42: reliant.v1.ServerMessage.local_model_refresh:type_name -> reliant.v1.LocalModelRefresh
 	21, // 43: reliant.v1.ServerMessage.drain:type_name -> reliant.v1.GatewayDrain
 	22, // 44: reliant.v1.ServerMessage.tool_result_ack:type_name -> reliant.v1.ToolResultAck
-	30, // 45: reliant.v1.LoadProjectConfigsResponse.snapshot:type_name -> reliant.v1.ProjectConfigSnapshot
-	61, // 46: reliant.v1.ProjectConfigSnapshot.mcp_configs:type_name -> reliant.v1.ProjectConfigSnapshot.McpConfigsEntry
-	35, // 47: reliant.v1.ProjectConfigSnapshot.workflows:type_name -> reliant.v1.IndexedWorkflow
-	36, // 48: reliant.v1.ProjectConfigSnapshot.presets:type_name -> reliant.v1.IndexedPreset
-	37, // 49: reliant.v1.ProjectConfigSnapshot.scenarios:type_name -> reliant.v1.IndexedScenario
-	38, // 50: reliant.v1.ProjectConfigSnapshot.skills:type_name -> reliant.v1.IndexedSkill
-	62, // 51: reliant.v1.ProjectConfigSnapshot.repo_memories_md:type_name -> reliant.v1.ProjectConfigSnapshot.RepoMemoriesMdEntry
-	32, // 52: reliant.v1.ProjectConfigDelta.changed_files:type_name -> reliant.v1.ChangedFile
-	30, // 53: reliant.v1.ProjectConfigDelta.snapshot_if_compacted:type_name -> reliant.v1.ProjectConfigSnapshot
-	0,  // 54: reliant.v1.ChangedFile.change_type:type_name -> reliant.v1.FileChangeType
-	63, // 55: reliant.v1.IndexedSkill.metadata:type_name -> reliant.v1.IndexedSkill.MetadataEntry
-	40, // 56: reliant.v1.ProjectDiscovery.projects:type_name -> reliant.v1.DiscoveredProject
-	48, // 57: reliant.v1.DaemonCommandRequest.policy:type_name -> reliant.v1.ConnectorPolicy
-	2,  // 58: reliant.v1.TerminalSessionEvent.event_type:type_name -> reliant.v1.TerminalSessionEvent.EventType
-	5,  // 59: reliant.v1.ToolsDaemonService.ConnectDaemon:input_type -> reliant.v1.DaemonMessage
-	19, // 60: reliant.v1.ToolsDaemonService.ConnectGateway:input_type -> reliant.v1.ServerMessage
-	43, // 61: reliant.v1.ToolsDaemonService.ReportToolResult:input_type -> reliant.v1.ReportToolResultRequest
-	3,  // 62: reliant.v1.ToolsDaemonService.WhoAmI:input_type -> reliant.v1.WhoAmIRequest
-	19, // 63: reliant.v1.ToolsDaemonService.ConnectDaemon:output_type -> reliant.v1.ServerMessage
-	5,  // 64: reliant.v1.ToolsDaemonService.ConnectGateway:output_type -> reliant.v1.DaemonMessage
-	44, // 65: reliant.v1.ToolsDaemonService.ReportToolResult:output_type -> reliant.v1.ReportToolResultResponse
-	4,  // 66: reliant.v1.ToolsDaemonService.WhoAmI:output_type -> reliant.v1.WhoAmIResponse
-	63, // [63:67] is the sub-list for method output_type
-	59, // [59:63] is the sub-list for method input_type
-	59, // [59:59] is the sub-list for extension type_name
-	59, // [59:59] is the sub-list for extension extendee
-	0,  // [0:59] is the sub-list for field type_name
+	61, // 45: reliant.v1.ToolRequest.trace_context:type_name -> reliant.v1.ToolRequest.TraceContextEntry
+	30, // 46: reliant.v1.LoadProjectConfigsResponse.snapshot:type_name -> reliant.v1.ProjectConfigSnapshot
+	62, // 47: reliant.v1.ProjectConfigSnapshot.mcp_configs:type_name -> reliant.v1.ProjectConfigSnapshot.McpConfigsEntry
+	35, // 48: reliant.v1.ProjectConfigSnapshot.workflows:type_name -> reliant.v1.IndexedWorkflow
+	36, // 49: reliant.v1.ProjectConfigSnapshot.presets:type_name -> reliant.v1.IndexedPreset
+	37, // 50: reliant.v1.ProjectConfigSnapshot.scenarios:type_name -> reliant.v1.IndexedScenario
+	38, // 51: reliant.v1.ProjectConfigSnapshot.skills:type_name -> reliant.v1.IndexedSkill
+	63, // 52: reliant.v1.ProjectConfigSnapshot.repo_memories_md:type_name -> reliant.v1.ProjectConfigSnapshot.RepoMemoriesMdEntry
+	32, // 53: reliant.v1.ProjectConfigDelta.changed_files:type_name -> reliant.v1.ChangedFile
+	30, // 54: reliant.v1.ProjectConfigDelta.snapshot_if_compacted:type_name -> reliant.v1.ProjectConfigSnapshot
+	0,  // 55: reliant.v1.ChangedFile.change_type:type_name -> reliant.v1.FileChangeType
+	64, // 56: reliant.v1.IndexedSkill.metadata:type_name -> reliant.v1.IndexedSkill.MetadataEntry
+	40, // 57: reliant.v1.ProjectDiscovery.projects:type_name -> reliant.v1.DiscoveredProject
+	48, // 58: reliant.v1.DaemonCommandRequest.policy:type_name -> reliant.v1.ConnectorPolicy
+	2,  // 59: reliant.v1.TerminalSessionEvent.event_type:type_name -> reliant.v1.TerminalSessionEvent.EventType
+	5,  // 60: reliant.v1.ToolsDaemonService.ConnectDaemon:input_type -> reliant.v1.DaemonMessage
+	19, // 61: reliant.v1.ToolsDaemonService.ConnectGateway:input_type -> reliant.v1.ServerMessage
+	43, // 62: reliant.v1.ToolsDaemonService.ReportToolResult:input_type -> reliant.v1.ReportToolResultRequest
+	3,  // 63: reliant.v1.ToolsDaemonService.WhoAmI:input_type -> reliant.v1.WhoAmIRequest
+	19, // 64: reliant.v1.ToolsDaemonService.ConnectDaemon:output_type -> reliant.v1.ServerMessage
+	5,  // 65: reliant.v1.ToolsDaemonService.ConnectGateway:output_type -> reliant.v1.DaemonMessage
+	44, // 66: reliant.v1.ToolsDaemonService.ReportToolResult:output_type -> reliant.v1.ReportToolResultResponse
+	4,  // 67: reliant.v1.ToolsDaemonService.WhoAmI:output_type -> reliant.v1.WhoAmIResponse
+	64, // [64:68] is the sub-list for method output_type
+	60, // [60:64] is the sub-list for method input_type
+	60, // [60:60] is the sub-list for extension type_name
+	60, // [60:60] is the sub-list for extension extendee
+	0,  // [0:60] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_tools_daemon_proto_init() }
@@ -5530,7 +5547,7 @@ func file_reliant_v1_tools_daemon_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_v1_tools_daemon_proto_rawDesc), len(file_reliant_v1_tools_daemon_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   61,
+			NumMessages:   62,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -15,6 +15,8 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
 
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/serverkit"
@@ -2605,6 +2607,7 @@ func (s *Service) SendToolRequest(ctx context.Context, userID, daemonID string, 
 		ContentBlockId: request.ContentBlockID,
 		ContextJson:    contextJSON,
 		TimeoutMs:      int32(request.TimeoutMs),
+		TraceContext:   traceContextOf(ctx),
 	}
 
 	msg := &reliantv1.ServerMessage{
@@ -2901,6 +2904,7 @@ func (s *Service) sendToolRequestToConn(ctx context.Context, conn *daemonConnect
 		ContentBlockId: request.ContentBlockID,
 		ContextJson:    contextJSON,
 		TimeoutMs:      int32(request.TimeoutMs),
+		TraceContext:   traceContextOf(ctx),
 	}
 
 	msg := &reliantv1.ServerMessage{
@@ -3325,4 +3329,16 @@ func isNotFoundErr(err error) bool {
 	}
 	errText := strings.ToLower(err.Error())
 	return strings.Contains(errText, "not found") || strings.Contains(errText, "no rows")
+}
+
+// traceContextOf is ctx's W3C trace context as a ToolRequest carries it, so
+// the daemon executing the call continues the trace that dispatched it. Nil
+// when ctx carries none.
+func traceContextOf(ctx context.Context) map[string]string {
+	carrier := propagation.MapCarrier{}
+	otel.GetTextMapPropagator().Inject(ctx, carrier)
+	if len(carrier) == 0 {
+		return nil
+	}
+	return carrier
 }
