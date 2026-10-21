@@ -824,12 +824,13 @@ type ThreadProviderAccount struct {
 }
 
 type ToolCall struct {
-	ID                  string         `json:"id"`
-	ChatID              string         `json:"chat_id"`
-	ThreadID            sql.NullString `json:"thread_id"`
-	MessageID           sql.NullString `json:"message_id"`
-	ToolName            string         `json:"tool_name"`
-	Input               []byte         `json:"input"`
+	ID        string         `json:"id"`
+	ChatID    string         `json:"chat_id"`
+	ThreadID  sql.NullString `json:"thread_id"`
+	MessageID sql.NullString `json:"message_id"`
+	ToolName  string         `json:"tool_name"`
+	Input     []byte         `json:"input"`
+	// forge:go-type=github.com/reliant-labs/reliant/internal/db/core;core.ToolCallStatus
 	Status              int32          `json:"status"`
 	ErrorMessage        sql.NullString `json:"error_message"`
 	ChildWorkflowID     sql.NullString `json:"child_workflow_id"`
@@ -923,11 +924,13 @@ type UserUpdate struct {
 	ProjectID      sql.NullString `json:"project_id"`
 	WorktreeID     sql.NullString `json:"worktree_id"`
 	ChatID         sql.NullString `json:"chat_id"`
-	UpdateType     int32          `json:"update_type"`
-	EntityType     int32          `json:"entity_type"`
-	EntityID       string         `json:"entity_id"`
-	Data           string         `json:"data"`
-	CreatedAt      time.Time      `json:"created_at"`
+	// forge:go-type=github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1.UserUpdateType
+	UpdateType int32 `json:"update_type"`
+	// forge:go-type=github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1.EntityType
+	EntityType int32     `json:"entity_type"`
+	EntityID   string    `json:"entity_id"`
+	Data       string    `json:"data"`
+	CreatedAt  time.Time `json:"created_at"`
 }
 
 type VaultKey struct {

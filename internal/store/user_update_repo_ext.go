@@ -1,39 +1,93 @@
 // yours: scaffolded once, never touched again — forge will not overwrite this file.
 //
-// This is the custom-query seam for UserUpdate. The generated user_update_orm.go is
-// Tier-1 (a live projection of the migrations, regenerated every run);
-// hand-written queries that outgrow the generated CRUD belong HERE, in a
-// sibling file forge never rewrites. You have three building blocks:
-//
-//  1. The generated repo + delegates: userUpdateRepo (a *crud.Repo[UserUpdate]) and the
-//     package-level GetUserUpdateByID / ListUserUpdate / CreateUserUpdate / UpdateUserUpdate / DeleteUserUpdate
-//     functions — compose orm.QueryOption filters (orm.WhereEq,
-//     orm.WhereILikeAny, orm.WithOrderBy, orm.WithLimit) onto List/Count.
-//  2. Raw SQL via the Bun handle: db.Bun() (bun.IDB) gives you
-//     NewSelect()/NewRaw()/bun.Raw — for joins, aggregates, CTEs, or
-//     anything the builder can't express. Scan into the generated
-//     UserUpdate struct (or your own row type).
-//  3. orm.Context: every query takes one. Take no transaction parameter:
-//     called with the ctx that s.deps.DB.RunTx hands its fn, a method
-//     here (db.Bun() builders and raw SQL included) joins that
-//     transaction; with any other ctx it runs on the pool.
-//
-// Example (uncomment and adapt):
-//
-//	func FindUserUpdateBy(ctx context.Context, db orm.Context, /* args */) ([]*UserUpdate, error) {
-//		var rows []*UserUpdate
-//		err := db.Bun().NewSelect().Model(&rows).
-//			Where("user_id = ?", /* value */).
-//			Scan(ctx)
-//		return rows, err
-//	}
-//
-// Or reuse the generated repo for a filtered list:
-//
-//	func ActiveUserUpdates(ctx context.Context, db orm.Context) ([]*UserUpdate, error) {
-//		return ListUserUpdate(ctx, db, orm.WhereEq("user_id", true))
-//	}
+// This is the custom-query seam for UserUpdate: the per-user ledger the global
+// WebSocket replays from. Every function takes and returns internal/db/core
+// types.
 package store
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"time"
+
+	"github.com/reliant-labs/forge/pkg/orm"
+
+	"github.com/reliant-labs/reliant/internal/db/core"
+)
+
+// AppendUserUpdate allocates the user's next update sequence and writes
+// update under it, in the transaction ctx carries (it refuses without one: see
+// AllocateUpdateSequence). It sets update.SequenceNumber, and update.ID to
+// "<user>-<seq>" unless the caller chose one, and stamps CreatedAt.
+func AppendUserUpdate(ctx context.Context, db orm.Context, update *core.UserUpdate, callerChoseID bool) error {
+	seq, err := AllocateUpdateSequence(ctx, db, UpdateStreamUser, update.UserID)
+	if err != nil {
+		return fmt.Errorf("failed to get next user sequence number: %w", err)
+	}
+	update.SequenceNumber = seq
+	if !callerChoseID {
+		update.ID = fmt.Sprintf("%s-%d", update.UserID, seq)
+	}
+	update.CreatedAt = time.Now().UTC()
+	if err := CreateUserUpdate(ctx, db, &UserUpdate{
+		ID:             update.ID,
+		UserID:         update.UserID,
+		SequenceNumber: update.SequenceNumber,
+		ProjectID:      update.ProjectID,
+		WorktreeID:     update.WorktreeID,
+		ChatID:         update.ChatID,
+		UpdateType:     update.UpdateType,
+		EntityType:     update.EntityType,
+		EntityID:       update.EntityID,
+		Data:           string(update.Data),
+		CreatedAt:      update.CreatedAt,
+	}); err != nil {
+		return fmt.Errorf("failed to insert user update: %w", err)
+	}
+	return nil
+}
+
+// LatestUserUpdateSequence is the highest sequence number a user's ledger
+// holds, 0 for a user with none.
+func LatestUserUpdateSequence(ctx context.Context, db orm.Context, userID string) (int64, error) {
+	var seq int64
+	err := db.Bun().NewSelect().Model((*UserUpdate)(nil)).
+		ColumnExpr("COALESCE(MAX(sequence_number), 0)").
+		Where("user_id = ?", userID).
+		Scan(ctx, &seq)
+	return seq, err
+}
+
+// UserUpdatesSince is a user's updates after sinceSeq, ascending, at most
+// limit of them.
+func UserUpdatesSince(ctx context.Context, db orm.Context, userID string, sinceSeq int64, limit int) ([]core.UserUpdate, error) {
+	rows, err := ListUserUpdate(ctx, db,
+		orm.WhereEq(UserUpdateFieldUserID, userID),
+		orm.WhereGt(UserUpdateFieldSequenceNumber, sinceSeq),
+		orm.WithOrderBy(UserUpdateFieldSequenceNumber, orm.Asc),
+		orm.WithLimit(limit))
+	if err != nil {
+		return nil, err
+	}
+	updates := make([]core.UserUpdate, len(rows))
+	for i, row := range rows {
+		updates[i] = core.UserUpdate{
+			ID:             row.ID,
+			UserID:         row.UserID,
+			SequenceNumber: row.SequenceNumber,
+			ProjectID:      row.ProjectID,
+			WorktreeID:     row.WorktreeID,
+			ChatID:         row.ChatID,
+			UpdateType:     row.UpdateType,
+			EntityType:     row.EntityType,
+			EntityID:       row.EntityID,
+			Data:           json.RawMessage(row.Data),
+			CreatedAt:      row.CreatedAt,
+		}
+	}
+	return updates, nil
+}
 
 // UserUpdateExtra carries fields on UserUpdate that are NOT columns — computed
 // values, transient state, anything derived rather than stored. UserUpdate is

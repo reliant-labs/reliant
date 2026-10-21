@@ -350,5 +350,4 @@ type ChatStore interface {
 	// parked waiting for a machine.
 	ListChatsWaitingForMachine(ctx context.Context, userID string) ([]WaitingForMachineRun, error)
 	ListArchivedChats(ctx context.Context, userID string) ([]*ArchivedChatInfo, error)
-	CreateChatUpdate(ctx context.Context, update ChatUpdate) error
 }

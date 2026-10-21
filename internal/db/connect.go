@@ -13,6 +13,7 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"go.opentelemetry.io/otel/attribute"
 
+	"github.com/reliant-labs/forge/pkg/observe/dbtrace"
 	"github.com/reliant-labs/forge/pkg/serverkit"
 
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -216,7 +217,7 @@ const sessionPoolMaxOpen = 2
 // nothing. It pings once so a wrong DirectURL fails startup, not the first
 // sweep an hour later.
 func openSessionPool(url string) (*sql.DB, error) {
-	pool, err := sql.Open("pgx", url)
+	pool, err := dbtrace.Open("pgx", url)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open the direct (session) database pool: %w", err)
 	}

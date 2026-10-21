@@ -13,6 +13,8 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib" // registers the "pgx" database/sql driver
 	"github.com/spf13/cobra"
 
+	"github.com/reliant-labs/forge/pkg/observe/dbtrace"
+
 	configv1 "github.com/reliant-labs/reliant/gen/config/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/pkg/config"
@@ -95,7 +97,7 @@ refused with nothing applied. ` + "`db migrate status`" + ` previews which.`,
 			// different set than this binary embeds — a mismatch worth failing
 			// the Job over, because every waiter is about to block on exactly
 			// this set.
-			sqlDB, err := sql.Open("pgx", migrationURL)
+			sqlDB, err := dbtrace.Open("pgx", migrationURL)
 			if err != nil {
 				return fmt.Errorf("verify schema after migrate: %w", err)
 			}
@@ -148,7 +150,7 @@ very deadlock the schema wait produces.`,
 
 			// Deliberately NOT ConnectWithConfig: both of its policies act on
 			// the schema (apply, or block until current).
-			sqlDB, err := sql.Open("pgx", migrationURL)
+			sqlDB, err := dbtrace.Open("pgx", migrationURL)
 			if err != nil {
 				return fmt.Errorf("open database: %w", err)
 			}

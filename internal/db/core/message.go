@@ -1,7 +1,6 @@
 package core
 
 import (
-	"context"
 	"time"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -82,69 +81,4 @@ type MessageListOptions struct {
 	ContextWindowID *string // Direct context window ID filter (takes precedence)
 	Limit           int
 	Offset          int
-}
-
-// MessageStore is the shared contract for message persistence across drivers.
-type MessageStore interface {
-	CreateMessage(ctx context.Context, msg *Message) error
-	CreateMessageIfNotExists(ctx context.Context, msg *Message) error
-	// CreateMessageOnce inserts msg unless a row already holds its id, and
-	// reports which happened. The id is the arbiter between racing writers of
-	// one message: exactly one of them creates it, and the rest get
-	// created=false instead of an error.
-	CreateMessageOnce(ctx context.Context, msg *Message) (created bool, err error)
-	GetMessage(ctx context.Context, id string) (*Message, error)
-	GetNextOrdinal(ctx context.Context, threadID string) (int64, error)
-	// GetNextSeq returns the next seq for a message being written to threadID in
-	// chatID. threadID is required because a branched chat displays inherited
-	// history it does not own; the allocator has to clear that history's seqs or
-	// the branch restarts at 0 and new messages sort beneath everything shown
-	// above them. See 20260802000000_add_message_seq.sql.
-	GetNextSeq(ctx context.Context, chatID, threadID string) (int64, error)
-	ListMessages(ctx context.Context, chatID string, opts MessageListOptions, listContextWindowIDsByThread func(context.Context, string) ([]string, error)) ([]*Message, error)
-	// ListRecentTranscriptSiblingMessages returns, ascending, the newest
-	// `limit` messages with seq >= fromSeq on threads other than mainThreadID
-	// that are not spawn threads — the sibling rows the chat transcript renders
-	// inline. Spawn threads render as a tool-call card that fetches its own
-	// thread, so the chat snapshot never ships their transcripts.
-	ListRecentTranscriptSiblingMessages(ctx context.Context, chatID, mainThreadID string, fromSeq int64, limit int) ([]*Message, error)
-	// CountMessagesInChat is the true total, so a bounded read can still report
-	// an honest count.
-	CountMessagesInChat(ctx context.Context, chatID string) (int, error)
-	GetLatestMessageInThread(ctx context.Context, threadID string) (*Message, error)
-	// ThreadAwaitsReply reports whether a thread's latest turn — its newest
-	// message that is not a system note — is a user message.
-	ThreadAwaitsReply(ctx context.Context, threadID string) (bool, error)
-	GetLatestContextSequenceByThread(ctx context.Context, threadID string) (int64, error)
-	GetLatestMessageWithTokensInThread(ctx context.Context, threadID string, contextSequence int) (*Message, error)
-	CountMessagesInThread(ctx context.Context, threadID string) (int, error)
-	// CountMessagesByContextWindow is the row count of a single context
-	// window, for CW-chain-aware totals that don't require fetching rows.
-	CountMessagesByContextWindow(ctx context.Context, contextWindowID string) (int, error)
-	// CountMessagesByContextWindowUpToSeq counts messages in a context window
-	// with seq <= maxSeq -- the count-only mirror of the fork filter in
-	// resolveMessagesFromCW (a forked child inherits its direct parent CW's
-	// messages only up to the fork point).
-	CountMessagesByContextWindowUpToSeq(ctx context.Context, contextWindowID string, maxSeq int64) (int, error)
-	// ListRecentMessagesInContextWindowBeforeSeq returns the newest `limit`
-	// messages in a single context window strictly before beforeSeq (0 means
-	// unbounded), ascending. Bounds the read in SQL for the common (unforked)
-	// case instead of fetching the whole context window.
-	ListRecentMessagesInContextWindowBeforeSeq(ctx context.Context, contextWindowID string, beforeSeq int64, limit int) ([]*Message, error)
-	// HasMessagesBeforeInContextWindow reports whether any message in this
-	// context window precedes beforeSeq, for computing hasMore without
-	// fetching rows.
-	HasMessagesBeforeInContextWindow(ctx context.Context, contextWindowID string, beforeSeq int64) (bool, error)
-	// ListMessagesInContextWindowRange returns messages in a single context
-	// window with seq >= fromSeq, ascending. toSeq is an exclusive upper
-	// bound, or nil for unbounded above.
-	ListMessagesInContextWindowRange(ctx context.Context, contextWindowID string, fromSeq int64, toSeq *int64) ([]*Message, error)
-	CreateContentBlock(ctx context.Context, block *MessageContentBlock) error
-	CreateContentBlockIfNotExists(ctx context.Context, block *MessageContentBlock) error
-	GetContentBlock(ctx context.Context, id string) (*MessageContentBlock, error)
-	ListContentBlocks(ctx context.Context, messageID string) ([]*MessageContentBlock, error)
-	ListContentBlocksForMessages(ctx context.Context, messageIDs []string) ([]*MessageContentBlock, error)
-	UpdateContentBlock(ctx context.Context, block *MessageContentBlock) error
-	AppendToContentBlock(ctx context.Context, blockID string, delta string) error
-	UpdateMessage(ctx context.Context, msg *Message) error
 }

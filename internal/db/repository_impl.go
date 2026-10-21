@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/reliant-labs/forge/pkg/orm"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	postgresstore "github.com/reliant-labs/reliant/internal/db/postgres"
@@ -111,7 +112,7 @@ func (r *Repo) CreateMessage(ctx context.Context, msg *Message) error {
 	if msg.ChatID == "" {
 		return fmt.Errorf("message ChatID cannot be empty")
 	}
-	return r.messages.CreateMessage(ctx, msg)
+	return store.InsertMessage(ctx, r.ORM(), msg)
 }
 
 // CreateMessageIfNotExists creates a message record if it doesn't already exist (INSERT OR IGNORE).
@@ -128,7 +129,8 @@ func (r *Repo) CreateMessageIfNotExists(ctx context.Context, msg *Message) error
 	if msg.ChatID == "" {
 		return fmt.Errorf("message ChatID cannot be empty")
 	}
-	return r.messages.CreateMessageIfNotExists(ctx, msg)
+	_, err := store.InsertMessageOnce(ctx, r.ORM(), msg)
+	return err
 }
 
 // CreateMessageOnce creates a message record unless a row already holds its id,
@@ -147,7 +149,7 @@ func (r *Repo) CreateMessageOnce(ctx context.Context, msg *Message) (bool, error
 	if msg.ChatID == "" {
 		return false, fmt.Errorf("message ChatID cannot be empty")
 	}
-	return r.messages.CreateMessageOnce(ctx, msg)
+	return store.InsertMessageOnce(ctx, r.ORM(), msg)
 }
 
 // SaveMessageToThread atomically creates a message with text and optional image content blocks.
@@ -460,7 +462,14 @@ func (r *Repo) GetMessage(ctx context.Context, id string) (*Message, error) {
 	if id == "" {
 		return nil, fmt.Errorf("message ID cannot be empty")
 	}
-	return r.messages.GetMessage(ctx, id)
+	msg, err := store.FindMessage(ctx, r.ORM(), id)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get message: %w", err)
+	}
+	if msg == nil {
+		return nil, fmt.Errorf("message not found: %s", id)
+	}
+	return msg, nil
 }
 
 func (r *Repo) GetNextOrdinal(ctx context.Context, threadID string) (int64, error) {
@@ -471,7 +480,7 @@ func (r *Repo) GetNextOrdinal(ctx context.Context, threadID string) (int64, erro
 	// Get the next ordinal from messages in this thread (all context windows)
 	// NOTE: For workflow forks, each workflow has its own ordinal space.
 	// Context inheritance is handled separately at LLM context resolution time.
-	return r.messages.GetNextOrdinal(ctx, threadID)
+	return store.NextOrdinalInThread(ctx, r.ORM(), threadID)
 }
 
 // GetNextSeq returns the next chat-global seq for a chat. See
@@ -481,7 +490,7 @@ func (r *Repo) GetNextSeq(ctx context.Context, chatID, threadID string) (int64, 
 	if chatID == "" {
 		return 0, fmt.Errorf("chat ID cannot be empty")
 	}
-	return r.messages.GetNextSeq(ctx, chatID, threadID)
+	return store.NextSeqInChat(ctx, r.ORM(), chatID, threadID)
 }
 
 func (r *Repo) ListMessages(ctx context.Context, chatID string, opts MessageListOptions) ([]*Message, error) {
@@ -489,17 +498,7 @@ func (r *Repo) ListMessages(ctx context.Context, chatID string, opts MessageList
 		return nil, fmt.Errorf("chat ID cannot be empty")
 	}
 
-	return r.messages.ListMessages(ctx, chatID, opts, func(ctx context.Context, threadID string) ([]string, error) {
-		contextWindows, err := r.ListContextWindowsByThread(ctx, threadID)
-		if err != nil {
-			return nil, err
-		}
-		ids := make([]string, len(contextWindows))
-		for i, cw := range contextWindows {
-			ids[i] = cw.ID
-		}
-		return ids, nil
-	})
+	return store.ListMessages(ctx, r.ORM(), chatID, opts)
 }
 
 func (r *Repo) ListRecentTranscriptSiblingMessages(ctx context.Context, chatID, mainThreadID string, fromSeq int64, limit int) ([]*Message, error) {
@@ -510,7 +509,7 @@ func (r *Repo) ListRecentTranscriptSiblingMessages(ctx context.Context, chatID, 
 		return nil, fmt.Errorf("main thread ID cannot be empty")
 	}
 
-	return r.messages.ListRecentTranscriptSiblingMessages(ctx, chatID, mainThreadID, fromSeq, limit)
+	return store.ListRecentTranscriptSiblingMessages(ctx, r.ORM(), chatID, mainThreadID, fromSeq, limit)
 }
 
 func (r *Repo) CountMessagesInChat(ctx context.Context, chatID string) (int, error) {
@@ -518,7 +517,7 @@ func (r *Repo) CountMessagesInChat(ctx context.Context, chatID string) (int, err
 		return 0, fmt.Errorf("chat ID cannot be empty")
 	}
 
-	return r.messages.CountMessagesInChat(ctx, chatID)
+	return r.countMessages(ctx, orm.WhereEq(store.MessageFieldChatID, chatID))
 }
 
 func (r *Repo) CountMessagesByContextWindow(ctx context.Context, contextWindowID string) (int, error) {
@@ -526,7 +525,7 @@ func (r *Repo) CountMessagesByContextWindow(ctx context.Context, contextWindowID
 		return 0, fmt.Errorf("context window ID cannot be empty")
 	}
 
-	return r.messages.CountMessagesByContextWindow(ctx, contextWindowID)
+	return r.countMessages(ctx, orm.WhereEq(store.MessageFieldContextWindowID, contextWindowID))
 }
 
 func (r *Repo) CountMessagesByContextWindowUpToSeq(ctx context.Context, contextWindowID string, maxSeq int64) (int, error) {
@@ -534,7 +533,7 @@ func (r *Repo) CountMessagesByContextWindowUpToSeq(ctx context.Context, contextW
 		return 0, fmt.Errorf("context window ID cannot be empty")
 	}
 
-	return r.messages.CountMessagesByContextWindowUpToSeq(ctx, contextWindowID, maxSeq)
+	return r.countMessages(ctx, orm.WhereEq(store.MessageFieldContextWindowID, contextWindowID), orm.WhereLte(store.MessageFieldSeq, maxSeq))
 }
 
 func (r *Repo) ListRecentMessagesInContextWindowBeforeSeq(ctx context.Context, contextWindowID string, beforeSeq int64, limit int) ([]*Message, error) {
@@ -542,7 +541,7 @@ func (r *Repo) ListRecentMessagesInContextWindowBeforeSeq(ctx context.Context, c
 		return nil, fmt.Errorf("context window ID cannot be empty")
 	}
 
-	return r.messages.ListRecentMessagesInContextWindowBeforeSeq(ctx, contextWindowID, beforeSeq, limit)
+	return store.ListRecentMessagesInContextWindowBeforeSeq(ctx, r.ORM(), contextWindowID, beforeSeq, limit)
 }
 
 func (r *Repo) HasMessagesBeforeInContextWindow(ctx context.Context, contextWindowID string, beforeSeq int64) (bool, error) {
@@ -550,7 +549,7 @@ func (r *Repo) HasMessagesBeforeInContextWindow(ctx context.Context, contextWind
 		return false, fmt.Errorf("context window ID cannot be empty")
 	}
 
-	return r.messages.HasMessagesBeforeInContextWindow(ctx, contextWindowID, beforeSeq)
+	return store.HasMessagesBeforeInContextWindow(ctx, r.ORM(), contextWindowID, beforeSeq)
 }
 
 func (r *Repo) ListMessagesInContextWindowRange(ctx context.Context, contextWindowID string, fromSeq int64, toSeq *int64) ([]*Message, error) {
@@ -558,7 +557,7 @@ func (r *Repo) ListMessagesInContextWindowRange(ctx context.Context, contextWind
 		return nil, fmt.Errorf("context window ID cannot be empty")
 	}
 
-	return r.messages.ListMessagesInContextWindowRange(ctx, contextWindowID, fromSeq, toSeq)
+	return store.ListMessagesInContextWindowRange(ctx, r.ORM(), contextWindowID, fromSeq, toSeq)
 }
 
 func (r *Repo) GetLatestMessageInThread(ctx context.Context, threadID string) (*Message, error) {
@@ -566,14 +565,18 @@ func (r *Repo) GetLatestMessageInThread(ctx context.Context, threadID string) (*
 		return nil, fmt.Errorf("thread ID cannot be empty")
 	}
 
-	return r.messages.GetLatestMessageInThread(ctx, threadID)
+	return store.LatestMessageInThread(ctx, r.ORM(), threadID)
 }
 
 func (r *Repo) ThreadAwaitsReply(ctx context.Context, threadID string) (bool, error) {
 	if threadID == "" {
 		return false, fmt.Errorf("thread ID cannot be empty")
 	}
-	return r.messages.ThreadAwaitsReply(ctx, threadID)
+	turn, err := store.LatestTurnInThread(ctx, r.ORM(), threadID)
+	if err != nil {
+		return false, fmt.Errorf("failed to get latest turn: %w", err)
+	}
+	return turn != nil && turn.Role == reliantv1.MessageRole_MESSAGE_ROLE_USER, nil
 }
 
 func (r *Repo) GetMaxContextSequenceInThread(ctx context.Context, threadID string) (int, error) {
@@ -581,7 +584,7 @@ func (r *Repo) GetMaxContextSequenceInThread(ctx context.Context, threadID strin
 		return 0, fmt.Errorf("thread ID cannot be empty")
 	}
 
-	maxSeq, err := r.messages.GetLatestContextSequenceByThread(ctx, threadID)
+	maxSeq, err := r.GetMaxSequenceForThread(ctx, threadID)
 	if err != nil {
 		return 0, fmt.Errorf("failed to get max context sequence: %w", err)
 	}
@@ -631,7 +634,7 @@ func (r *Repo) GetLatestMessageWithTokensInThread(ctx context.Context, threadID 
 		return nil, fmt.Errorf("thread ID cannot be empty")
 	}
 
-	return r.messages.GetLatestMessageWithTokensInThread(ctx, threadID, contextSequence)
+	return store.LatestMessageWithTokens(ctx, r.ORM(), threadID, int64(contextSequence), nil)
 }
 
 func (r *Repo) CountMessagesInThread(ctx context.Context, threadID string) (int, error) {
@@ -639,7 +642,7 @@ func (r *Repo) CountMessagesInThread(ctx context.Context, threadID string) (int,
 		return 0, fmt.Errorf("thread ID cannot be empty")
 	}
 
-	return r.messages.CountMessagesInThread(ctx, threadID)
+	return r.countMessages(ctx, orm.WhereEq(store.MessageFieldThreadID, threadID))
 }
 
 // GetMessagesByContextWindow loads messages from a specific context window.
@@ -701,8 +704,7 @@ func (r *Repo) CreateContentBlock(ctx context.Context, block *MessageContentBloc
 	if block.MessageID == "" {
 		return fmt.Errorf("content block MessageID cannot be empty")
 	}
-	normalizeContentBlock(block)
-	return r.messages.CreateContentBlock(ctx, block)
+	return store.InsertContentBlock(ctx, r.ORM(), block)
 }
 
 func (r *Repo) CreateContentBlockIfNotExists(ctx context.Context, block *MessageContentBlock) error {
@@ -715,15 +717,21 @@ func (r *Repo) CreateContentBlockIfNotExists(ctx context.Context, block *Message
 	if block.MessageID == "" {
 		return fmt.Errorf("content block MessageID cannot be empty")
 	}
-	normalizeContentBlock(block)
-	return r.messages.CreateContentBlockIfNotExists(ctx, block)
+	return store.InsertContentBlockOnce(ctx, r.ORM(), block)
 }
 
 func (r *Repo) GetContentBlock(ctx context.Context, id string) (*MessageContentBlock, error) {
 	if id == "" {
 		return nil, fmt.Errorf("content block ID cannot be empty")
 	}
-	return r.messages.GetContentBlock(ctx, id)
+	block, err := store.FindContentBlock(ctx, r.ORM(), id)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get content block: %w", err)
+	}
+	if block == nil {
+		return nil, fmt.Errorf("content block not found: %s", id)
+	}
+	return block, nil
 }
 
 // GetContentBlockByToolCallID finds a content block by its tool_call_id
@@ -732,69 +740,28 @@ func (r *Repo) GetContentBlockByToolCallID(ctx context.Context, toolCallID strin
 	if toolCallID == "" {
 		return nil, fmt.Errorf("tool call ID cannot be empty")
 	}
-
-	// Query for tool_call block with the given tool_call_id
-	query := `SELECT id, message_id, position, block_type, content, tool_name, tool_input,
-	                 tool_call_id, is_error, version, created_at, updated_at
-	          FROM message_content_blocks
-	          WHERE tool_call_id = ? AND block_type = ?
-	          LIMIT 1`
-	query = r.bindQuery(query)
-	toolCallBlockType := int32(reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TOOL_CALL)
-
-	var block MessageContentBlock
-	var content, toolName, toolInput, toolCallIDResult *string
-	var isError *bool
-	var version *int64
-
-	err := r.DB.QueryRowContext(ctx, query, toolCallID, toolCallBlockType).Scan(
-		&block.ID,
-		&block.MessageID,
-		&block.Position,
-		&block.BlockType,
-		&content,
-		&toolName,
-		&toolInput,
-		&toolCallIDResult,
-		&isError,
-		&version,
-		&block.CreatedAt,
-		&block.UpdatedAt,
-	)
-
+	block, err := store.FindToolBlock(ctx, r.ORM(), toolCallID, reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TOOL_CALL)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("tool call not found: %s", toolCallID)
-		}
 		return nil, fmt.Errorf("failed to get content block by tool_call_id: %w", err)
 	}
-
-	// Assign nullable fields
-	block.Content = content
-	block.ToolName = toolName
-	block.ToolInput = toolInput
-	block.ToolCallID = toolCallIDResult
-	block.IsError = isError
-	if version != nil {
-		intVer := int(*version)
-		block.Version = &intVer
+	if block == nil {
+		return nil, fmt.Errorf("tool call not found: %s", toolCallID)
 	}
-
-	return &block, nil
+	return block, nil
 }
 
 func (r *Repo) ListContentBlocks(ctx context.Context, messageID string) ([]*MessageContentBlock, error) {
 	if messageID == "" {
 		return nil, fmt.Errorf("message ID cannot be empty")
 	}
-	return r.messages.ListContentBlocks(ctx, messageID)
+	return store.ListContentBlocks(ctx, r.ORM(), messageID)
 }
 
 func (r *Repo) ListContentBlocksForMessages(ctx context.Context, messageIDs []string) ([]*MessageContentBlock, error) {
 	if len(messageIDs) == 0 {
 		return []*MessageContentBlock{}, nil
 	}
-	return r.messages.ListContentBlocksForMessages(ctx, messageIDs)
+	return store.ListContentBlocksForMessages(ctx, r.ORM(), messageIDs)
 }
 
 func (r *Repo) UpdateContentBlock(ctx context.Context, block *MessageContentBlock) error {
@@ -804,21 +771,14 @@ func (r *Repo) UpdateContentBlock(ctx context.Context, block *MessageContentBloc
 	if block.ID == "" {
 		return fmt.Errorf("content block ID cannot be empty")
 	}
-	normalizeContentBlock(block)
-
-	return r.messages.UpdateContentBlock(ctx, block)
+	return store.UpdateContentBlockBody(ctx, r.ORM(), block)
 }
 
 func (r *Repo) AppendToContentBlock(ctx context.Context, blockID string, delta string) error {
 	if blockID == "" {
 		return fmt.Errorf("content block ID cannot be empty")
 	}
-	delta = validUTF8(delta)
-	if delta == "" {
-		return nil
-	}
-
-	return r.messages.AppendToContentBlock(ctx, blockID, delta)
+	return store.AppendToContentBlock(ctx, r.ORM(), blockID, delta)
 }
 
 // AppendContentBlockDelta appends text delta to a content block's content field
@@ -829,18 +789,7 @@ func (r *Repo) AppendContentBlockDelta(ctx context.Context, chatID string, block
 	if blockID == "" {
 		return fmt.Errorf("content block ID cannot be empty")
 	}
-	delta = validUTF8(delta)
-	if delta == "" {
-		return nil // Nothing to append
-	}
-
-	query := `UPDATE message_content_blocks
-		SET content = COALESCE(content, '') || ?,
-		    updated_at = CURRENT_TIMESTAMP
-		WHERE id = ?`
-	query = r.bindQuery(query)
-	_, err := r.DB.ExecContext(ctx, query, delta, blockID)
-	return err
+	return store.AppendContentDelta(ctx, r.ORM(), blockID, delta)
 }
 
 // AppendToolInputDelta appends JSON delta to a content block's tool_input field
@@ -851,18 +800,7 @@ func (r *Repo) AppendToolInputDelta(ctx context.Context, chatID string, blockID 
 	if blockID == "" {
 		return fmt.Errorf("content block ID cannot be empty")
 	}
-	delta = validUTF8(delta)
-	if delta == "" {
-		return nil // Nothing to append
-	}
-
-	query := `UPDATE message_content_blocks
-		SET tool_input = COALESCE(tool_input, '') || ?,
-		    updated_at = CURRENT_TIMESTAMP
-		WHERE id = ?`
-	query = r.bindQuery(query)
-	_, err := r.DB.ExecContext(ctx, query, delta, blockID)
-	return err
+	return store.AppendToolInputDelta(ctx, r.ORM(), blockID, delta)
 }
 
 // UpdateMessage updates a message (implements Repository interface)
@@ -874,7 +812,7 @@ func (r *Repo) UpdateMessage(ctx context.Context, msg *Message) error {
 		return fmt.Errorf("message ID cannot be empty")
 	}
 
-	return r.messages.UpdateMessage(ctx, msg)
+	return store.UpdateMessageUsage(ctx, r.ORM(), msg.ID, msg.TokenCount, msg.Cost)
 }
 
 // UpdateMessageFields updates a message with the provided map of field updates
@@ -882,29 +820,7 @@ func (r *Repo) UpdateMessageFields(ctx context.Context, messageID string, update
 	if messageID == "" {
 		return fmt.Errorf("message ID cannot be empty")
 	}
-	if len(updates) == 0 {
-		return nil // Nothing to update
-	}
-
-	// Build dynamic UPDATE query
-	setClauses := []string{}
-	args := []interface{}{}
-
-	for field, value := range updates {
-		setClauses = append(setClauses, field+" = ?")
-		args = append(args, value)
-	}
-
-	// Always update the updated_at timestamp so WebSocket polling detects the change
-	setClauses = append(setClauses, "updated_at = CURRENT_TIMESTAMP")
-
-	// Add messageID as final parameter
-	args = append(args, messageID)
-
-	query := `UPDATE messages SET ` + strings.Join(setClauses, ", ") + ` WHERE id = ?`
-	query = r.bindQuery(query)
-	_, err := r.DB.ExecContext(ctx, query, args...)
-	return err
+	return store.UpdateMessageFields(ctx, r.ORM(), messageID, updates)
 }
 
 // MarkMessageBlocksComplete marks all content blocks for a message as complete
@@ -915,26 +831,15 @@ func (r *Repo) MarkMessageBlocksComplete(ctx context.Context, messageID string) 
 		return fmt.Errorf("message ID cannot be empty")
 	}
 
-	now := time.Now().UTC()
-	query := `
-		UPDATE message_content_blocks
-		SET updated_at = ?
-		WHERE message_id = ?
-	`
-	query = r.bindQuery(query)
-
-	result, err := r.DB.ExecContext(ctx, query, now, messageID)
+	blocks, err := store.TouchMessageBlocks(ctx, r.ORM(), messageID)
 	if err != nil {
 		return fmt.Errorf("failed to mark blocks complete: %w", err)
 	}
-
-	rowsAffected, err := result.RowsAffected()
-	if err == nil && rowsAffected > 0 {
+	if blocks > 0 {
 		logging.DebugContext(ctx, "Marked message blocks as complete",
 			"messageID", messageID,
-			"blocksUpdated", rowsAffected)
+			"blocksUpdated", blocks)
 	}
-
 	return nil
 }
 
@@ -943,11 +848,7 @@ func (r *Repo) DeleteMessage(ctx context.Context, messageID string) error {
 	if messageID == "" {
 		return fmt.Errorf("message ID cannot be empty")
 	}
-
-	query := `DELETE FROM messages WHERE id = ?`
-	query = r.bindQuery(query)
-	_, err := r.DB.ExecContext(ctx, query, messageID)
-	return err
+	return store.RemoveMessage(ctx, r.ORM(), messageID)
 }
 
 // ==================== Approval Methods ====================
@@ -3336,6 +3237,26 @@ func (r *Repo) DeleteAttachment(ctx context.Context, id string) error {
 
 // ==================== Context Usage ====================
 
+// threadTokenCountAt is the token count the thread's context window at
+// contextSeq last reported — its newest message carrying token data, at or
+// before maxSeq when set — or 0 when none has any.
+func (r *Repo) threadTokenCountAt(ctx context.Context, thread string, contextSeq int, maxSeq *int64) (int64, error) {
+	msg, err := store.LatestMessageWithTokens(ctx, r.ORM(), thread, int64(contextSeq), maxSeq)
+	if err != nil || msg == nil || msg.TokenCount == nil {
+		return 0, err
+	}
+	return int64(*msg.TokenCount), nil
+}
+
+// countMessages counts the messages opts select.
+func (r *Repo) countMessages(ctx context.Context, opts ...orm.QueryOption) (int, error) {
+	n, err := store.CountMessage(ctx, r.ORM(), opts...)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count messages: %w", err)
+	}
+	return int(n), nil
+}
+
 // GetContextUsage returns context usage info for the compaction indicator.
 //
 // CONTEXT SEQUENCE RULE:
@@ -3385,13 +3306,7 @@ func (r *Repo) GetThreadTokenCount(ctx context.Context, thread string, maxSeq *i
 	}
 
 	// Query for token count at or before maxSeq
-	var maxSeqSQL sql.NullInt64
-	if maxSeq != nil {
-		maxSeqSQL = sql.NullInt64{Int64: *maxSeq, Valid: true}
-	}
-
-	var localTokens int64
-	localTokens, err = r.tokenCounts.GetThreadTokenCountAtSeq(ctx, thread, int64(contextSeq), maxSeqSQL)
+	localTokens, err := r.threadTokenCountAt(ctx, thread, contextSeq, maxSeq)
 	if err != nil {
 		logging.WarnContext(ctx, "[GetThreadTokenCount] Error querying token count",
 			"thread", thread,
@@ -3446,47 +3361,11 @@ func (r *Repo) GetThreadTokenCount(ctx context.Context, thread string, maxSeq *i
 func (r *Repo) getThreadTokenCountDirect(ctx context.Context, chatID, thread string, maxSeq *int64) (int64, error) {
 	_ = chatID // kept for API compatibility
 
-	// Get context sequence
 	contextSeq, err := r.GetMaxContextSequenceInThread(ctx, thread)
 	if err != nil {
 		contextSeq = 0
 	}
-
-	// Build query
-	var query string
-	var args []interface{}
-	if maxSeq != nil {
-		query = `
-			SELECT CAST(COALESCE(
-				(
-					SELECT COALESCE(token_count, 0)
-					FROM messages m
-					JOIN context_windows cw ON cw.id = m.context_window_id
-					WHERE cw.thread_id = ? AND cw.sequence = ?
-					  AND token_count IS NOT NULL
-					  AND seq <= ?
-					ORDER BY seq DESC
-					LIMIT 1
-				), 0) AS INTEGER)`
-		args = []interface{}{thread, contextSeq, *maxSeq}
-	} else {
-		query = `
-			SELECT CAST(COALESCE(
-				(
-					SELECT COALESCE(token_count, 0)
-					FROM messages m
-					JOIN context_windows cw ON cw.id = m.context_window_id
-					WHERE cw.thread_id = ? AND cw.sequence = ?
-					  AND token_count IS NOT NULL
-					ORDER BY seq DESC
-					LIMIT 1
-				), 0) AS INTEGER)`
-		args = []interface{}{thread, contextSeq}
-	}
-	query = r.bindQuery(query)
-
-	var tokens int64
-	err = r.DB.QueryRowContext(ctx, query, args...).Scan(&tokens)
+	tokens, err := r.threadTokenCountAt(ctx, thread, contextSeq, maxSeq)
 	if err != nil {
 		return 0, nil
 	}

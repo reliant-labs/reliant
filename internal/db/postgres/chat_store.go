@@ -204,18 +204,6 @@ func (s *chatStore) ListArchivedChats(ctx context.Context, userID string) ([]*co
 	return archivedChatInfosFromRows(rows), nil
 }
 
-func (s *chatStore) CreateChatUpdate(ctx context.Context, update core.ChatUpdate) error {
-	return s.q.CreateChatUpdate(ctx, pgdb.CreateChatUpdateParams{
-		ID:             update.ID,
-		ChatID:         update.ChatID,
-		SequenceNumber: update.SequenceNumber,
-		UpdateType:     int32(update.UpdateType),
-		EntityID:       update.EntityID,
-		Data:           string(update.Data),
-		CreatedAt:      update.CreatedAt,
-	})
-}
-
 func chatNullInt32ToChatState(ni sql.NullInt32) core.ChatState {
 	if ni.Valid {
 		return core.ChatState(ni.Int32)

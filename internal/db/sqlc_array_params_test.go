@@ -67,42 +67,6 @@ func TestGeneratedArrayParamQueries_ZeroOneMany(t *testing.T) {
 
 	fx := seedArrayParamFixture(t, repo, ctx)
 
-	t.Run("ListContentBlocksForMessages", func(t *testing.T) {
-		for _, tc := range idCases(fx.messageIDs) {
-			rows, err := q.ListContentBlocksForMessages(ctx, tc.ids)
-			require.NoError(t, err, tc.name)
-			got := make([]string, len(rows))
-			for i, r := range rows {
-				got[i] = r.MessageID
-			}
-			requireSameIDs(t, tc.ids, got, tc.name)
-		}
-	})
-
-	t.Run("ListToolCallsByMessageIDs", func(t *testing.T) {
-		for _, tc := range idCases(fx.messageIDs) {
-			rows, err := q.ListToolCallsByMessageIDs(ctx, tc.ids)
-			require.NoError(t, err, tc.name)
-			got := make([]string, len(rows))
-			for i, r := range rows {
-				got[i] = r.MessageID.String
-			}
-			requireSameIDs(t, tc.ids, got, tc.name)
-		}
-	})
-
-	t.Run("ListToolCallResultsByMessageIDs", func(t *testing.T) {
-		for _, tc := range idCases(fx.messageIDs) {
-			rows, err := q.ListToolCallResultsByMessageIDs(ctx, tc.ids)
-			require.NoError(t, err, tc.name)
-			got := make([]string, len(rows))
-			for i, r := range rows {
-				got[i] = r.MessageID.String
-			}
-			requireSameIDs(t, tc.ids, got, tc.name)
-		}
-	})
-
 	// The two writes run in order on the same rows: claim, then backfill the
 	// envelope pointer on exactly what was claimed — the drain's sequence.
 	t.Run("MarkAgentMessagesDelivered+SetAgentMessagesDeliveredMessageID", func(t *testing.T) {
