@@ -36,7 +36,7 @@ func wireInputOptions(repo *db.Repo, tokens *connections.TokenSource, cp control
 	if err != nil {
 		return nil, err
 	}
-	return inputoptions.New(inputoptions.Deps{
+	return inputoptions.NewInstrumented(inputoptions.Deps{
 		Types:       idx,
 		Runner:      httpaction.NewRunner(netguard.New()),
 		Credentials: creds,
