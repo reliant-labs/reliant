@@ -66,6 +66,7 @@ import (
 	workflowhandler "github.com/reliant-labs/reliant/internal/handlers/workflow"
 	"github.com/reliant-labs/reliant/internal/handlers/worktree"
 	"github.com/reliant-labs/reliant/internal/integrations/catalogindex"
+	"github.com/reliant-labs/reliant/internal/integrations/inputoptions"
 	"github.com/reliant-labs/reliant/internal/integrations/webhook"
 	"github.com/reliant-labs/reliant/internal/llm/accountlimits"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
@@ -221,6 +222,15 @@ type Config struct {
 	// Required.
 	CatalogSearch *catalogindex.Service
 
+	// InputOptions backs CatalogService.ListInputOptions. Optional: without it
+	// the rpc answers Unimplemented.
+	InputOptions inputoptions.Service
+
+	// TriggerOptions checks, when an automation is enabled, that the values
+	// picked for its integration inputs can be reached. Optional: without it
+	// enabling checks nothing.
+	TriggerOptions trigger.OptionsChecker
+
 	// OAuthRoutes mounts the browser half of the connection OAuth broker
 	// (/integrations/oauth/{provider}/{start,callback}). Required.
 	OAuthRoutes *connections.OAuthHTTP
@@ -337,6 +347,12 @@ func NewAPI(cfg *Config) (*API, error) {
 	if err != nil {
 		return nil, fmt.Errorf("task service: %w", err)
 	}
+	// Assigned only when set: a nil interface stored in a Deps field would
+	// pass the handler's nil checks.
+	var catalogInputOptions catalog.InputOptions
+	if cfg.InputOptions != nil {
+		catalogInputOptions = cfg.InputOptions
+	}
 	catalogService, err := catalog.New(catalog.Deps{
 		Logger:             handlerLogger,
 		Config:             handlerConfig,
@@ -344,6 +360,7 @@ func NewAPI(cfg *Config) (*API, error) {
 		TagPrefs:           database,
 		LocalModels:        local.NewRepoDirectory(database),
 		Search:             cfg.CatalogSearch,
+		InputOptions:       catalogInputOptions,
 		IntegrationMethods: catalog.IntegrationMethodsFrom(cfg.Connections),
 	})
 	if err != nil {
@@ -660,6 +677,9 @@ func NewAPI(cfg *Config) (*API, error) {
 	}
 	if in.Vault != nil {
 		triggerDeps.Sealer = in.Vault
+	}
+	if cfg.TriggerOptions != nil {
+		triggerDeps.Options = cfg.TriggerOptions
 	}
 	triggerDeps.Access = make(map[string]trigger.IntegrationAccess, len(in.Access))
 	for id, a := range in.Access {

@@ -44,6 +44,10 @@ type Result struct {
 	Data       map[string]any
 	// ConnectionID is the connection the call was authenticated with, for audit.
 	ConnectionID string
+	// Truncated is set when a paginated walk stopped at its page limit with
+	// more pages still to read: the list is a prefix, so an item's absence
+	// from it proves nothing.
+	Truncated bool
 }
 
 // Runner executes actions through a guarded HTTP client, and dispatches
@@ -121,7 +125,9 @@ func (r *Runner) run(ctx context.Context, m *reliantv1.IntegrationManifest, a *r
 		return run.result, nil
 	}
 	if req.GetPagination() != nil {
-		return success(run.last, map[string]any{"items": run.items}), nil
+		res := success(run.last, map[string]any{"items": run.items})
+		res.Truncated = run.truncated
+		return res, nil
 	}
 	selected, err := selectPage(run.last)
 	if err != nil {
@@ -147,6 +153,8 @@ type requestRun struct {
 	last *page
 	// result is set when the request failed: it is the action's answer.
 	result *Result
+	// truncated: the walk hit max_pages with another page still to read.
+	truncated bool
 }
 
 // request performs req, following its pages. selectPage shapes each page of a
@@ -332,6 +340,7 @@ func (r *Runner) request(ctx context.Context, env callEnv, req *reliantv1.HttpRe
 	// re-encoding its query could reorder or re-escape what the provider
 	// signed or parses positionally.
 	var followed *url.URL
+	truncated := false
 	for i := 0; i < maxPages; i++ {
 		if pg != nil && pg.GetStyle() == "page" {
 			query.Set(pg.GetPageParam(), strconv.FormatInt(pageNum, 10))
@@ -380,6 +389,9 @@ func (r *Runner) request(ctx context.Context, env callEnv, req *reliantv1.HttpRe
 		if !more {
 			break
 		}
+		if i == maxPages-1 {
+			truncated = true
+		}
 		if next != nil {
 			if err := checkURL(next, allowed, anyHost); err != nil {
 				return nil, fmt.Errorf("pagination link refused: %w", err)
@@ -390,7 +402,7 @@ func (r *Runner) request(ctx context.Context, env callEnv, req *reliantv1.HttpRe
 			followed = next
 		}
 	}
-	return &requestRun{items: items, last: last}, nil
+	return &requestRun{items: items, last: last, truncated: truncated}, nil
 }
 
 type page struct {

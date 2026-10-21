@@ -236,6 +236,20 @@ func (r *Resolver) ForCall(ctx context.Context, call CallSite, ref Ref) (*Resolv
 	})
 }
 
+// ForUser resolves ref for userID acting as themselves, outside any run: a
+// picker listing the values of a typed input. It applies every rule ForCall
+// does (the user's own connection only, a foreign or missing id reads like
+// none, for that integration, active, refreshed, the use audited with the user
+// as actor); only the owner differs, being the authenticated caller instead of
+// a run record's. Server placement is the caller's to enforce, as ForCall's is
+// by CallSite.
+func (r *Resolver) ForUser(ctx context.Context, userID string, ref Ref) (*Resolved, error) {
+	if userID == "" {
+		return nil, newError(CodeFailedPrecondition, "no user to resolve a connection for")
+	}
+	return r.resolve(ctx, userID, ref, core.ConnectionEvent{Actor: ActorUser(userID)})
+}
+
 // ForTrigger resolves the connection a trigger listens through, for a use
 // that has no run: a poll.
 //

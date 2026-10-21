@@ -353,3 +353,22 @@ func RenderWith(s string, vars map[string]any) (any, error) {
 	}
 	return b.String(), nil
 }
+
+// Prepare compiles expr once, over the named variables, for a caller that
+// evaluates it over many inputs (one projection over every item of a list).
+// The returned function takes values for the variables.
+func Prepare(expr string, names ...string) (func(vars map[string]any) (any, error), error) {
+	ast, err := Compile(expr, names...)
+	if err != nil {
+		return nil, err
+	}
+	e, err := envFor(names)
+	if err != nil {
+		return nil, err
+	}
+	prg, err := e.Program(ast)
+	if err != nil {
+		return nil, err
+	}
+	return func(vars map[string]any) (any, error) { return eval(prg, expr, vars) }, nil
+}

@@ -5,6 +5,7 @@ package catalogindex
 import (
 	"sort"
 
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/integrations/manifest"
 )
 
@@ -59,4 +60,15 @@ func (idx *Index) ScopeTypes(ref string) map[string]string {
 		out[key] = manifest.QualifyTypeRef(e.IntegrationID(), sc.GetType())
 	}
 	return out
+}
+
+// Lookup returns the type ref names with the manifest that declares it, for a
+// consumer that runs the type's option source (ok is false for an unknown
+// ref).
+func (idx *Index) Lookup(ref string) (*reliantv1.IntegrationManifest, *reliantv1.TypeSpec, bool) {
+	e, ok := idx.Type(ref)
+	if !ok {
+		return nil, nil, false
+	}
+	return e.Manifest, e.Type, true
 }

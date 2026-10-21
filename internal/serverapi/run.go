@@ -317,6 +317,10 @@ func Run(ctx context.Context, opts Options) error {
 	if err != nil {
 		return err
 	}
+	inputOptions, err := wireInputOptions(repo, conns.tokens, opts.ControlPlane)
+	if err != nil {
+		return err
+	}
 
 	// API key provider (allows LLM drivers to resolve per-user keys from DB)
 	drivers.InitializeAPIKeyProvider(repo)
@@ -509,6 +513,8 @@ func Run(ctx context.Context, opts Options) error {
 		Auth:           authSettings,
 		Connections:    conns.service,
 		CatalogSearch:  catalogSearch,
+		InputOptions:   inputOptions,
+		TriggerOptions: optionsChecker{svc: inputOptions},
 		OAuthRoutes:    conns.oauth,
 		TriggerInbound: triggerInbound,
 		TriggerSenders: triggerSenders,
