@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -289,7 +290,7 @@ func TestIntegrationWriteLedgerOutlivesTheCallersTransaction(t *testing.T) {
 	ledger := env.Repo.IntegrationWrites()
 	rollback := errors.New("roll back")
 
-	err := env.Repo.RunTx(ctx, func(ctx context.Context) error {
+	err := env.Repo.RunTx(ctx, orm.Serializable, func(ctx context.Context) error {
 		if err := ledger.CreateIntegrationWrite(ctx, ledgerWrite("w-tx", "github:acme/app", time.Now().UTC())); err != nil {
 			return err
 		}

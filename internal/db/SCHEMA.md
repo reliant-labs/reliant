@@ -234,7 +234,7 @@ splits it. The rules every query follows:
    either side is joined by both, and Repository and store calls mix in one:
 
    ```go
-   err := repo.RunTx(ctx, func(ctx context.Context) error { // or repo.ORM().RunTx
+   err := repo.RunTx(ctx, orm.Serializable, func(ctx context.Context) error { // or repo.ORM().RunTx
        if err := repo.UpsertProjectDaemon(ctx, projectID, daemonID, path, nil); err != nil { // Repository
            return err
        }
@@ -245,9 +245,39 @@ splits it. The rules every query follows:
    Pass the ctx the closure receives to every call; the handle stays the
    plain client (`repo.ORM()`, never a `*orm.Tx`). A nested `RunTx` of
    either kind joins. The layer that OPENS the transaction owns its retry:
-   `Repo.RunTx` keeps its ladder (40001/40P01, plus 23505 and 25P02);
+   `Repo.RunTx` keeps its ladder (40001/40P01, plus 23505, 25P02 and 40002);
    `orm.Client.RunTx` retries 40001/40P01 only, so keep `Repo.RunTx` around
-   a transaction that relied on the other two until its port decides.
+   a transaction that relied on the others until its port decides.
+
+   **`Repo.RunTx` takes the ORM's policy, and the policy's budget drives the
+   ladder.** `Repo.RunTx(ctx, policy, fn)` takes the same `orm.TxPolicy` as
+   `orm.Client.RunTx` — `orm.Serializable`, `orm.ReadCommitted`, or a
+   refinement (`.WithMaxAttempts(n)`, `.WithReadOnly()`) — with no default:
+   a blank level is refused (`orm.ErrInvalidTxOptions`) naming the call site.
+   It is the Repository's one transaction primitive; `RunTxReadOnly` is sugar
+   for `orm.Serializable.WithReadOnly()`, as on the ORM client. The two
+   compose like this: the policy's `MaxAttempts` is the TOTAL number of
+   times `fn` runs (begin failures included), and the Repository's ladder
+   (`isRetryableError`) decides which failures spend an attempt, with
+   `calculateBackoff` between them. So:
+
+   | policy | runs `fn` | retried on |
+   |---|---|---|
+   | `orm.Serializable` | up to 7 (`orm.DefaultTxMaxAttempts`, = `maxRetries`+1) | the whole ladder |
+   | `orm.Serializable.WithMaxAttempts(1)` | once; the raw error comes back verbatim (a contention measurement) | nothing |
+   | `orm.ReadCommitted` | once | nothing |
+   | `orm.ReadCommitted.WithMaxAttempts(orm.DefaultTxMaxAttempts)` | up to 7 | the whole ladder — 23505/40P01 are what READ COMMITTED can still raise |
+
+   The ladder is the same at every level: the level decides how much budget a
+   caller asks for, not which SQLSTATEs count. A failure the ladder does not
+   accept, or the last attempt's, is returned verbatim. The last row is what
+   the Repository's READ COMMITTED writers (`CreateUserUpdate`,
+   `SaveMessageAtomic`, `MutateChatSelection`, the daemon registry, the
+   workflow drafts) name, keeping the budget they had before the level
+   became explicit. `Repo.RunTx` is declared `//forge:tx-opener level-arg=1`
+   (and the detached `WrappedDBTX.BeginTxWithOptions` likewise), so `forge
+   lint`'s `forgeconv-tx-lock-under-serializable` judges its calls as it
+   judges `orm.Client.RunTx`'s.
    `runAfterCommit` is `orm.AfterCommit`, so post-commit effects registered
    by either layer run once, after the commit that keeps them. A lock that
    needs its own transaction uses `BeginDetached` (or the Repository's
@@ -258,16 +288,16 @@ splits it. The rules every query follows:
    (A one-column stamp through `Update<E>` reads every other column back;
    pass `crud.NoReadBack()` when the caller does not need the row.)
 
-   **Porting a hand-SQL transaction keeps its isolation.** The forge ORM has
-   no default level: every `orm` opener names one (`RunTx(ctx,
-   orm.Serializable, fn)`, `BeginDetached(ctx, orm.ReadCommitted)`). The
-   Repository's own `Repo.RunTx` is SERIALIZABLE by default; a hand store's
-   `db.BeginTx(ctx, nil)` was READ COMMITTED. A transaction whose correctness
+   **Porting a hand-SQL transaction keeps its isolation.** Neither layer has
+   a default level: every opener names one (`RunTx(ctx, orm.Serializable,
+   fn)`, `BeginDetached(ctx, orm.ReadCommitted)`, `repo.RunTx(ctx,
+   orm.Serializable, fn)`). A hand store's `db.BeginTx(ctx, nil)` was READ
+   COMMITTED. A transaction whose correctness
    comes from row locks (`SELECT … FOR UPDATE`, advisory locks) rather than
    snapshot isolation names `orm.ReadCommitted` (one attempt) — under
    SERIALIZABLE the loser of a lock race fails with 40001 instead of reading
-   the winner's write; `forge lint --conventions` reports an orm
-   SERIALIZABLE transaction that takes a lock
+   the winner's write; `forge lint --conventions` reports a SERIALIZABLE
+   transaction — `orm` or `Repo.RunTx` — that takes a lock
    (`forgeconv-tx-lock-under-serializable`). One that may survive a deadlock
    says so with `orm.ReadCommitted.WithMaxAttempts(n)`; one that runs a side
    effect it must not repeat (a token refresh over the network) keeps one
@@ -282,7 +312,7 @@ splits it. The rules every query follows:
    `Env.HoldLocks` (the winner, committed once the transaction under test is
    queued behind it) — `TestMergeWorktreeCleanupMetadataLoserReadsTheWinnersWrite`
    is the pattern. A nested opener joins the outer transaction at the
-   OUTER's level, whatever options it passes.
+   OUTER's level, whatever policy it passes (the policy is still validated).
 
 8. **Consumers depend on the least they use (P6).** A port never widens a
    dependency. A handler, service or workflow that needs persistence

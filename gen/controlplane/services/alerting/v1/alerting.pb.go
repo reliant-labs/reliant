@@ -32,6 +32,11 @@ const (
 	ReceiverType_RECEIVER_TYPE_PAGERDUTY   ReceiverType = 4
 	// The Reliant console and desktop app. Every org has one implicitly.
 	ReceiverType_RECEIVER_TYPE_RELIANT_INAPP ReceiverType = 5
+	// A Reliant Autopilot automation (alert triage). Provisioned by reliant
+	// when its owner enables the automation, never created here; it reaches
+	// every alert of the org that passes its filter without an env route.
+	// Read-only in this service: disable the automation in Reliant to remove it.
+	ReceiverType_RECEIVER_TYPE_AUTOPILOT ReceiverType = 6
 )
 
 // Enum value maps for ReceiverType.
@@ -43,6 +48,7 @@ var (
 		3: "RECEIVER_TYPE_EMAIL",
 		4: "RECEIVER_TYPE_PAGERDUTY",
 		5: "RECEIVER_TYPE_RELIANT_INAPP",
+		6: "RECEIVER_TYPE_AUTOPILOT",
 	}
 	ReceiverType_value = map[string]int32{
 		"RECEIVER_TYPE_UNSPECIFIED":   0,
@@ -51,6 +57,7 @@ var (
 		"RECEIVER_TYPE_EMAIL":         3,
 		"RECEIVER_TYPE_PAGERDUTY":     4,
 		"RECEIVER_TYPE_RELIANT_INAPP": 5,
+		"RECEIVER_TYPE_AUTOPILOT":     6,
 	}
 )
 
@@ -2101,14 +2108,15 @@ const file_services_alerting_v1_alerting_proto_rawDesc = "" +
 	"\x06org_id\x18\x01 \x01(\tR\x05orgId\x12\x10\n" +
 	"\x03ids\x18\x02 \x03(\tR\x03ids\"7\n" +
 	"\x1dMarkNotificationsReadResponse\x12\x16\n" +
-	"\x06marked\x18\x01 \x01(\x05R\x06marked*\xb8\x01\n" +
+	"\x06marked\x18\x01 \x01(\x05R\x06marked*\xd5\x01\n" +
 	"\fReceiverType\x12\x1d\n" +
 	"\x19RECEIVER_TYPE_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x13RECEIVER_TYPE_SLACK\x10\x01\x12\x19\n" +
 	"\x15RECEIVER_TYPE_WEBHOOK\x10\x02\x12\x17\n" +
 	"\x13RECEIVER_TYPE_EMAIL\x10\x03\x12\x1b\n" +
 	"\x17RECEIVER_TYPE_PAGERDUTY\x10\x04\x12\x1f\n" +
-	"\x1bRECEIVER_TYPE_RELIANT_INAPP\x10\x052\xb8\t\n" +
+	"\x1bRECEIVER_TYPE_RELIANT_INAPP\x10\x05\x12\x1b\n" +
+	"\x17RECEIVER_TYPE_AUTOPILOT\x10\x062\xb8\t\n" +
 	"\x0fAlertingService\x12^\n" +
 	"\rListReceivers\x12%.controlplane.v1.ListReceiversRequest\x1a&.controlplane.v1.ListReceiversResponse\x12a\n" +
 	"\x0eCreateReceiver\x12&.controlplane.v1.CreateReceiverRequest\x1a'.controlplane.v1.CreateReceiverResponse\x12a\n" +

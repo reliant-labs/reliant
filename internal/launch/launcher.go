@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/orm"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/client"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -373,7 +374,7 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 	// twice. Group them in one transaction so any failure leaves nothing
 	// behind (no orphan chat, no thread-less chat, no announcement for a
 	// chat that doesn't exist).
-	if err := l.repo.RunTx(ctx, func(txCtx context.Context) error {
+	if err := l.repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
 		if spec.Guard != nil {
 			reason, err := spec.Guard(txCtx)
 			if err != nil {
@@ -597,7 +598,7 @@ func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed 
 		}
 	}
 
-	if err := l.repo.RunTx(ctx, func(txCtx context.Context) error {
+	if err := l.repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
 		cur, err := l.repo.GetChat(txCtx, chat.ID)
 		if err != nil {
 			return fmt.Errorf("failed to reload chat: %w", err)

@@ -8,6 +8,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/reliant-labs/forge/pkg/orm"
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -32,7 +33,7 @@ type Deps struct {
 
 // Repository is the slice of db.Repository the approval handlers use.
 type Repository interface {
-	RunTx(ctx context.Context, f func(ctx context.Context) error) error
+	RunTx(ctx context.Context, policy orm.TxPolicy, f func(ctx context.Context) error) error
 
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	CreateChatUpdate(ctx context.Context, chatID string, updateType pb.ChatUpdateType, entityID string, data string) error

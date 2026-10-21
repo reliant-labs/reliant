@@ -5,6 +5,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/orm"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/chatselection"
 	core "github.com/reliant-labs/reliant/internal/db/core"
@@ -522,10 +523,6 @@ type Repository interface {
 	// history reachable through a fork's context-window chain.
 	SeedSeqCounterForFork(ctx context.Context, chatID, forkAtContextWindowID string) error
 
-	// RunTxNoRetry runs one transaction attempt with no retry ladder, so a
-	// serialization conflict surfaces verbatim instead of being absorbed.
-	RunTxNoRetry(ctx context.Context, f func(ctx context.Context) error) error
-
 	// Question methods
 	CreateQuestion(ctx context.Context, question *Question) error
 	GetQuestionByID(ctx context.Context, id string) (*Question, error)
@@ -900,14 +897,15 @@ type Repository interface {
 
 	// Transactions
 	//
-	// RunTx is read-write SERIALIZABLE. RunTxReadOnly runs READ ONLY
-	// DEFERRABLE, which takes NO predicate locks and cannot fail with
-	// SQLSTATE 40001 — prefer it for read paths, since under SERIALIZABLE a
-	// read's predicate locks are what abort concurrent writers on unrelated
-	// rows. See TxOptions for the full rationale.
-	RunTx(ctx context.Context, f func(ctx context.Context) error) error
+	// RunTx runs f at the level policy names (orm.Serializable,
+	// orm.ReadCommitted[.WithMaxAttempts(n)]); there is no default.
+	// RunTxReadOnly runs SERIALIZABLE READ ONLY DEFERRABLE, which takes NO
+	// predicate locks and cannot fail with SQLSTATE 40001 — prefer it for
+	// read paths, since under SERIALIZABLE a read's predicate locks are what
+	// abort concurrent writers on unrelated rows. See Repo.RunTx and
+	// Repo.RunTxReadOnly for the full rationale.
+	RunTx(ctx context.Context, policy orm.TxPolicy, f func(ctx context.Context) error) error
 	RunTxReadOnly(ctx context.Context, f func(ctx context.Context) error) error
-	RunTxWithOptions(ctx context.Context, opts TxOptions, f func(ctx context.Context) error) error
 
 	// Lifecycle
 	Close() error

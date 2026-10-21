@@ -10,6 +10,7 @@ import (
 
 	"go.temporal.io/api/workflowservice/v1"
 
+	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/reliant/internal/db"
 )
 
@@ -40,7 +41,7 @@ type Repository interface {
 	ClearUsageLimitWait(ctx context.Context, chatID, threadID string, now time.Time) error
 	// RunTx runs f in one transaction; a terminal status and its cascade
 	// commit together.
-	RunTx(ctx context.Context, f func(ctx context.Context) error) error
+	RunTx(ctx context.Context, policy orm.TxPolicy, f func(ctx context.Context) error) error
 }
 
 // TemporalClient is the subset of the Temporal SDK client this service needs.

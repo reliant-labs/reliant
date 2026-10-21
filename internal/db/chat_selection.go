@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/reliant/internal/chatselection"
 	"github.com/reliant-labs/reliant/internal/store"
 )
@@ -35,7 +36,7 @@ func (r *Repo) MutateChatSelection(ctx context.Context, chatID string, mutate fu
 		return nil, fmt.Errorf("chat ID cannot be empty")
 	}
 	var out *chatselection.Selection
-	err := r.RunTxWithOptions(ctx, TxOptions{Isolation: IsolationReadCommitted}, func(txCtx context.Context) error {
+	err := r.RunTx(ctx, orm.ReadCommitted.WithMaxAttempts(orm.DefaultTxMaxAttempts), func(txCtx context.Context) error {
 		if err := store.LockChatSelection(txCtx, r.ORM(), chatID); err != nil {
 			return err
 		}

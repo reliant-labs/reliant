@@ -237,7 +237,7 @@ func TestLockChatForRunEventSerializesAcrossLayers(t *testing.T) {
 	<-locked
 	acquired := make(chan time.Time, 1)
 	go func() {
-		_ = env.Repo.RunTx(ctx, func(ctx context.Context) error {
+		_ = env.Repo.RunTx(ctx, orm.Serializable, func(ctx context.Context) error {
 			if err := env.Repo.LockChatForRunEvent(ctx, "chat-rowlock"); err != nil {
 				t.Errorf("twin lock: %v", err)
 			}

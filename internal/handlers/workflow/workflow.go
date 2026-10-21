@@ -13,6 +13,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/orm"
 	"google.golang.org/protobuf/proto"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -1233,7 +1234,7 @@ func (s *Service) DeleteWorkflow(
 	// an automation of a deleted workflow can never run, it is only a broken
 	// row that later blocks enabling the workflow's replacement.
 	var removed []*core.Trigger
-	err = s.deps.Repo.RunTx(ctx, func(ctx context.Context) error {
+	err = s.deps.Repo.RunTx(ctx, orm.Serializable, func(ctx context.Context) error {
 		var err error
 		if removed, err = s.automationsOfDeletedWorkflow(ctx, userID, slug); err != nil {
 			return err

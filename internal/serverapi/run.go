@@ -18,6 +18,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -509,15 +510,21 @@ func Run(ctx context.Context, opts Options) error {
 		return err
 	}
 
+	// Webhook triggers declared `source: alerting` are delivered to by the
+	// control plane's alerting: TriggerService provisions their receivers and
+	// the trigger reconciler sweeps them. Self-hosted, they are plain webhooks.
+	triggerAlerting := wireTriggerAlerting(repo, opts.ControlPlane, opts.PublicURL)
+
 	api, err := grpcserver.NewAPI(&grpcserver.Config{
-		Auth:           authSettings,
-		Connections:    conns.service,
-		CatalogSearch:  catalogSearch,
-		InputOptions:   inputOptions,
-		TriggerOptions: optionsChecker{svc: inputOptions},
-		OAuthRoutes:    conns.oauth,
-		TriggerInbound: triggerInbound,
-		TriggerSenders: triggerSenders,
+		Auth:            authSettings,
+		Connections:     conns.service,
+		CatalogSearch:   catalogSearch,
+		InputOptions:    inputOptions,
+		TriggerOptions:  optionsChecker{svc: inputOptions},
+		OAuthRoutes:     conns.oauth,
+		TriggerInbound:  triggerInbound,
+		TriggerSenders:  triggerSenders,
+		TriggerAlerting: triggerAlerting,
 		// Connector/MCP surface. PUBLIC_URL is this server's externally
 		// reachable base URL, used to tell a user where to point a
 		// third-party MCP client and to build the OAuth discovery document.
@@ -596,7 +603,7 @@ func Run(ctx context.Context, opts Options) error {
 		nc:                nc,
 		worktreeSweeper:   api.WorktreeSweeper(),
 		scheduleSyncer:    scheduleSyncer,
-		triggerReconciler: triggers.NewReconciler(repo, triggers.LaunchWorkflows{Repo: repo}, scheduleSyncer),
+		triggerReconciler: triggers.NewReconciler(repo, triggers.LaunchWorkflows{Repo: repo}, scheduleSyncer).WithAlerting(triggerAlerting),
 		triggerRedriver:   triggers.NewRedriver(repo, temporalClient, v2workflow.SharedTaskQueue),
 		listener:          listener,
 	})
@@ -880,4 +887,30 @@ func resolveImageGenerator(ctx context.Context, userID string, selector models.M
 // narrow interface the generate_video tool declares.
 func resolveVideoGenerator(ctx context.Context, userID string, selector models.ModelSelector) (tools.VideoGenerator, error) {
 	return drivers.ResolveVideoGenerator(ctx, userID, selector)
+}
+
+// wireTriggerAlerting builds the provisioner of `source: alerting` webhook
+// triggers' alert receivers, or nil without a control plane. The calls are
+// internal-service signed: the sweep runs with no caller, and a resumed
+// trigger's owner may have no live session.
+func wireTriggerAlerting(repo *db.Repo, cp controlplane.Endpoint, publicURL string) *triggers.Alerting {
+	if !cp.Hosted() {
+		return nil
+	}
+	secret := cp.InternalServiceSecret
+	if secret == "" {
+		logging.Warn("alert-triage automations are plain webhooks here: RELIANT_CONTROL_PLANE_URL is set but INTERNAL_SERVICE_SECRET is not")
+		return nil
+	}
+	if strings.TrimSpace(publicURL) == "" {
+		// The control plane's Alertmanager needs an absolute URL to post to;
+		// a bare /hooks path would be refused at every enable.
+		logging.Warn("alert-triage automations are plain webhooks here: PUBLIC_URL is not set, so Alertmanager has no URL to deliver to")
+		return nil
+	}
+	receivers := controlplane.New(controlplane.Deps{
+		BaseURL: cp.URL,
+		Sign:    func() (string, error) { return auth.SignInternalServiceToken(secret) },
+	})
+	return triggers.NewAlerting(receivers, repo, publicURL)
 }

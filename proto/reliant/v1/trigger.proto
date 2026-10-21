@@ -356,6 +356,23 @@ message WebhookSource {
   // Optional HMAC verification for senders that sign their deliveries.
   // Configuring it adds a way in; it does not disable the token.
   WebhookHmac hmac = 1;
+
+  // Who delivers to this webhook, when Reliant wires the sender itself.
+  //
+  //   ""          whatever the user points at it: Enable shows the URL and the
+  //               token once, and the user configures the sender.
+  //   "alerting"  the control plane's alerting (Alertmanager). On a hosted
+  //               deployment, enabling the activation provisions an Autopilot
+  //               receiver in the owner's organization that delivers every
+  //               alert of the project's environments that passes its filter,
+  //               and disabling or deleting it removes the receiver. The token
+  //               goes to the control plane and is never shown. A deployment
+  //               with no control plane treats it as "": a plain webhook.
+  //
+  // Only a workflow's declared trigger may set it; an ad hoc trigger is
+  // refused, because Reliant reconciles provisioned receivers against
+  // activations.
+  string source = 2;
 }
 
 // WebhookHmac describes how a sender signs a webhook body. The signature is
@@ -610,6 +627,12 @@ message Trigger {
   // UNSPECIFIED on a stored trigger: an activation made before identities
   // existed reads as OWNER.
   ActingIdentity acting_identity = 28;
+
+  // Read-only: Reliant delivers to this webhook itself (WebhookSource.source
+  // on a deployment that can provision it), so there is no URL or token for
+  // the user to configure, and RotateWebhookToken re-provisions rather than
+  // returning a token.
+  bool webhook_managed = 29;
 }
 
 // TriggerEvent is one firing — the durable record of intent to launch, written
@@ -802,7 +825,8 @@ message RotateWebhookTokenResponse {
   // The trigger after the rotation.
   Trigger trigger = 1;
 
-  // The new token, which is never shown again.
+  // The new token, which is never shown again. Unset for a managed webhook
+  // (Trigger.webhook_managed): the new token went to the sender directly.
   WebhookCredential webhook = 2;
 }
 
@@ -989,6 +1013,8 @@ message WorkflowTriggerResult {
   Trigger activation = 4;
 
   // A webhook trigger's token, for ENABLED only. Shown once, never again.
+  // Unset for a managed webhook (Trigger.webhook_managed): Reliant gave the
+  // token to the sender itself.
   WebhookCredential webhook = 5;
 
   // Facts worth knowing about an enable that went through: a value that could

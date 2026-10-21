@@ -230,7 +230,7 @@ func (r *Repo) saveMessageToThread(ctx context.Context, chatID, thread string, r
 
 	var savedMsg *Message
 	created := true
-	err := r.RunTx(ctx, func(txCtx context.Context) error {
+	err := r.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
 		// The transaction is retried on a serialization conflict, and a retry
 		// starts over.
 		savedMsg, created = nil, true
@@ -2641,7 +2641,7 @@ func (r *Repo) CreateWorkflow(ctx context.Context, workflow *Workflow) error {
 		return fmt.Errorf("workflow cannot be nil")
 	}
 
-	return r.RunTx(ctx, func(txCtx context.Context) error {
+	return r.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
 		if err := store.InsertWorkflowIfAbsent(txCtx, r.ORM(), workflow); err != nil {
 			return err
 		}
@@ -2681,7 +2681,7 @@ func (r *Repo) GetRootWorkflowStatusForChats(ctx context.Context, chatIDs []stri
 
 func (r *Repo) CompareAndSwapWorkflowStatus(ctx context.Context, id string, newStatus, expectedStatus WorkflowStatus) (bool, error) {
 	var swapped bool
-	err := r.RunTx(ctx, func(txCtx context.Context) error {
+	err := r.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
 		ok, err := store.CompareAndSwapWorkflowStatus(txCtx, r.ORM(), id, newStatus, expectedStatus)
 		if err != nil {
 			return err
@@ -2703,7 +2703,7 @@ func (r *Repo) CompareAndSwapWorkflowStatus(ctx context.Context, id string, newS
 }
 
 func (r *Repo) UpdateWorkflowStatus(ctx context.Context, id string, status WorkflowStatus) error {
-	return r.RunTx(ctx, func(txCtx context.Context) error {
+	return r.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
 		if err := store.UpdateWorkflowStatus(txCtx, r.ORM(), id, status); err != nil {
 			return err
 		}
@@ -2795,7 +2795,7 @@ func (r *Repo) ReviveSubtreeLiveAt(ctx context.Context, rootWorkflowID string, a
 }
 
 func (r *Repo) PauseRunningWorkflowsByChat(ctx context.Context, chatID string) error {
-	return r.RunTx(ctx, func(txCtx context.Context) error {
+	return r.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
 		if err := store.PauseRunningWorkflowsByChat(txCtx, r.ORM(), chatID); err != nil {
 			return err
 		}
@@ -2804,7 +2804,7 @@ func (r *Repo) PauseRunningWorkflowsByChat(ctx context.Context, chatID string) e
 }
 
 func (r *Repo) ResumeWorkflowsByChat(ctx context.Context, chatID string) error {
-	return r.RunTx(ctx, func(txCtx context.Context) error {
+	return r.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
 		if err := store.ResumeWorkflowsByChat(txCtx, r.ORM(), chatID); err != nil {
 			return err
 		}
@@ -3458,14 +3458,13 @@ func (r *Repo) DeleteContextWindowsByThread(ctx context.Context, threadID string
 // slug. It is deliberately not retryable: the conflict is permanent, not a race.
 var ErrWorkflowSlugTaken = errors.New("workflow slug already taken")
 
-// workflowDraftTxOptions: each draft write is one single-row write plus the
+// runWorkflowDraftTx: each draft write is one single-row write plus the
 // user_updates insert, which allocates from the per-user counter row and so
 // needs READ COMMITTED (see CreateUserUpdate). Under SERIALIZABLE it would
-// abort against any concurrent update for the same user.
-var workflowDraftTxOptions = TxOptions{Isolation: IsolationReadCommitted}
-
+// abort against any concurrent update for the same user. The Repository's
+// ladder still re-runs it on the failures it retries.
 func (r *Repo) runWorkflowDraftTx(ctx context.Context, f func(txCtx context.Context) error) error {
-	return r.RunTxWithOptions(ctx, workflowDraftTxOptions, f)
+	return r.RunTx(ctx, orm.ReadCommitted.WithMaxAttempts(orm.DefaultTxMaxAttempts), f)
 }
 
 // mapWorkflowSlugConflict turns a unique violation on workflow_drafts into

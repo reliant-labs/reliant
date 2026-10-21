@@ -6,6 +6,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/tdd"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -22,7 +23,7 @@ func TestDeleteWorkflow_Generated(t *testing.T) {
 	store := draftsRepo(callerDraft(t, slug))
 	store.DeleteWorkflowDraftBySlugFunc = func(context.Context, string, string) error { return nil }
 	store.ListTriggersFunc = func(context.Context, core.TriggerFilters) ([]*core.Trigger, error) { return nil, nil }
-	store.RunTxFunc = func(ctx context.Context, f func(context.Context) error) error { return f(ctx) }
+	store.RunTxFunc = func(ctx context.Context, _ orm.TxPolicy, f func(context.Context) error) error { return f(ctx) }
 	svc := workflow.NewTestWorkflow(t, workflow.WithWorkflowDeps(workflow.Deps{Repo: store}))
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.DeleteWorkflowRequest, pb.DeleteWorkflowResponse]{

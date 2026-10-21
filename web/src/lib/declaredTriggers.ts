@@ -65,6 +65,15 @@ export function scheduleOf(trigger: DeclaredTrigger): DeclaredSchedule | undefin
   return { cron: [...(value.cron ?? [])], interval: value.interval || undefined, timezone: value.timezone || undefined };
 }
 
+/**
+ * A webhook the control plane's alerting delivers to (`webhook: {source:
+ * alerting}`). On a hosted deployment Reliant wires the sender itself, so the
+ * user gets no token to copy (Trigger.webhookManaged says whether it did).
+ */
+export function isAlertingWebhook(trigger: DeclaredTrigger): boolean {
+  return sourceValue<{ source?: string }>(trigger, "webhook")?.source === "alerting";
+}
+
 export function integrationOf(trigger: DeclaredTrigger): DeclaredIntegration | undefined {
   const value = sourceValue<{
     integration?: string;
@@ -285,7 +294,7 @@ export function describeDeclaredSource(
       return describeSchedule({ cron: schedule.cron, interval: schedule.interval, timezone: schedule.timezone || "UTC" });
     }
     case "webhook":
-      return "Webhook";
+      return isAlertingWebhook(trigger) ? "Your organization's alerts" : "Webhook";
     case "integration":
       return describeIntegrationEvents(integrationOf(trigger)!, naming);
     case "workflowEvent": {

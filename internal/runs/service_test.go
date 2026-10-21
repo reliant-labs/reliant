@@ -12,6 +12,7 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 
+	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/workflow"
 	"github.com/stretchr/testify/assert"
@@ -131,7 +132,7 @@ func (f *fakeRepo) ClearUsageLimitWait(_ context.Context, chatID, threadID strin
 }
 
 // RunTx runs f inline; the fake has no transactions.
-func (f *fakeRepo) RunTx(ctx context.Context, fn func(context.Context) error) error {
+func (f *fakeRepo) RunTx(ctx context.Context, _ orm.TxPolicy, fn func(context.Context) error) error {
 	return fn(ctx)
 }
 

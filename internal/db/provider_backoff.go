@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
 )
@@ -86,7 +87,7 @@ func (r *Repo) RecordUsageLimitWait(ctx context.Context, chatID, threadID, provi
 	if probing {
 		reason = ReasonUsageLimitProbe
 	}
-	return r.RunTx(ctx, func(txCtx context.Context) error {
+	return r.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
 		if err := store.RecordUsageLimitWait(txCtx, r.ORM(), chatID, threadID, provider, reason, resumeAt, now); err != nil {
 			return fmt.Errorf("failed to record usage-limit wait: %w", err)
 		}
@@ -102,7 +103,7 @@ func (r *Repo) ClearUsageLimitWait(ctx context.Context, chatID, threadID string,
 	if chatID == "" {
 		return fmt.Errorf("chat ID cannot be empty")
 	}
-	return r.RunTx(ctx, func(txCtx context.Context) error {
+	return r.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
 		n, err := store.ClearUsageLimitWait(txCtx, r.ORM(), chatID, threadID, now)
 		if err != nil {
 			return fmt.Errorf("failed to clear usage-limit wait: %w", err)

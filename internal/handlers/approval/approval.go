@@ -9,6 +9,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/orm"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -146,7 +147,7 @@ func (s *Service) Approve(
 	}
 
 	// Dual-write: Update approval status AND create chat_update atomically
-	err = s.deps.Repo.RunTx(ctx, func(txCtx context.Context) error {
+	err = s.deps.Repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
 		// Update approval status
 		if err := s.deps.Repo.UpdateApprovalStatus(txCtx, approval.ID, int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_APPROVED), nil, actionTaken, nil); err != nil {
 			return fmt.Errorf("failed to update approval status: %w", err)
@@ -240,7 +241,7 @@ func (s *Service) Deny(
 	}
 
 	// Dual-write: Update approval status AND create chat_update atomically
-	err = s.deps.Repo.RunTx(ctx, func(txCtx context.Context) error {
+	err = s.deps.Repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
 		// Update approval status
 		if err := s.deps.Repo.UpdateApprovalStatus(txCtx, approval.ID, int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_DENIED), denialReasonPtr, actionTaken, nil); err != nil {
 			return fmt.Errorf("failed to update approval status: %w", err)
@@ -349,7 +350,7 @@ func (s *Service) BatchApprove(
 		}
 
 		// Dual-write: Update approval status AND create chat_update atomically
-		err = s.deps.Repo.RunTx(ctx, func(txCtx context.Context) error {
+		err = s.deps.Repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
 			// Update approval status
 			if err := s.deps.Repo.UpdateApprovalStatus(txCtx, approval.ID, int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_APPROVED), nil, actionTaken, nil); err != nil {
 				return fmt.Errorf("failed to update approval status: %w", err)
@@ -457,7 +458,7 @@ func (s *Service) BatchDeny(
 		}
 
 		// Dual-write: Update approval status AND create chat_update atomically
-		err = s.deps.Repo.RunTx(ctx, func(txCtx context.Context) error {
+		err = s.deps.Repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
 			// Update approval status
 			if err := s.deps.Repo.UpdateApprovalStatus(txCtx, approval.ID, int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_DENIED), denialReasonPtr, actionTaken, nil); err != nil {
 				return fmt.Errorf("failed to update approval status: %w", err)
@@ -604,7 +605,7 @@ func (s *Service) createDenialMessage(ctx context.Context, chatID string, denial
 	isError := true
 	denialContent := denialReason
 
-	err = s.deps.Repo.RunTx(ctx, func(txCtx context.Context) error {
+	err = s.deps.Repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
 		// Create the tool message (same context_window as the assistant message)
 		msg := &db.Message{
 			ID:              messageID,

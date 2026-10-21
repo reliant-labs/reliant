@@ -10,6 +10,7 @@ import (
 
 	enums "go.temporal.io/api/enums/v1"
 
+	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/workflow"
@@ -411,7 +412,7 @@ func (s *Service) Reconcile(ctx context.Context, workflowID string, dbStatus, te
 	// The status and the cascade commit together: written apart, the
 	// reconciler's thread reap could run between them and close the threads
 	// itself, reporting a cascade that was one statement away as a missed one.
-	err := s.repo.RunTx(ctx, func(txCtx context.Context) error {
+	err := s.repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
 		if err := s.repo.UpdateWorkflowStatus(txCtx, workflowID, temporalStatus); err != nil {
 			return err
 		}
@@ -465,7 +466,7 @@ func (s *Service) markTerminated(ctx context.Context, workflowID string) error {
 
 	// The terminate ran no workflow code, so this is the only cascade the run
 	// gets — in the same commit as its status, like every terminal write.
-	return s.repo.RunTx(ctx, func(txCtx context.Context) error {
+	return s.repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
 		swapped, err := s.repo.CompareAndSwapWorkflowStatus(txCtx, workflowID, db.Cancelled(), wf.Status)
 		if err != nil {
 			return fmt.Errorf("mark terminated workflow %s: %w", workflowID, err)

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/orm"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/actingidentity"
 	cfgpkg "github.com/reliant-labs/reliant/internal/config"
@@ -1083,7 +1084,7 @@ func (a *ExecuteToolsActivity) upsertTerminalToolCall(
 	detached, cancel := detachedForTerminalWrite(ctx)
 	defer cancel()
 
-	if err := a.repo.RunTx(detached, func(txCtx context.Context) error {
+	if err := a.repo.RunTx(detached, orm.Serializable, func(txCtx context.Context) error {
 		if err := a.upsertToolCallTx(txCtx, tec, status, opts); err != nil {
 			return err
 		}

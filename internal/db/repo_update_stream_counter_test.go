@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+
+	"github.com/reliant-labs/forge/pkg/orm"
 )
 
 func TestUpdateStreamCountersAreScoped(t *testing.T) {
@@ -49,7 +51,7 @@ func TestUserUpdateCounterRollsBackWithLedgerWrite(t *testing.T) {
 
 	ctx := context.Background()
 	rollback := errors.New("force rollback")
-	err := repo.RunTx(ctx, func(txCtx context.Context) error {
+	err := repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
 		if err := repo.CreateUserUpdate(txCtx, &UserUpdate{
 			UserID:     "rollback-user",
 			UpdateType: UserUpdateNotification,
@@ -87,7 +89,7 @@ func TestChatUpdateCounterRollsBackWithLedgerWrite(t *testing.T) {
 	ctx := context.Background()
 	const chatID = "rollback-chat"
 	rollback := errors.New("force rollback")
-	err := repo.RunTx(ctx, func(txCtx context.Context) error {
+	err := repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
 		if err := repo.CreateChatUpdate(txCtx, chatID, UpdateTypeInfo, "discarded", `{}`); err != nil {
 			return err
 		}
@@ -179,7 +181,7 @@ func TestUpdateNotificationsRunOnlyAfterOutermostCommit(t *testing.T) {
 
 	ctx := context.Background()
 	rollback := errors.New("force rollback")
-	err := repo.RunTx(ctx, func(txCtx context.Context) error {
+	err := repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
 		if err := repo.CreateUserUpdate(txCtx, &UserUpdate{
 			UserID:     "notification-user",
 			UpdateType: UserUpdateNotification,
@@ -204,7 +206,7 @@ func TestUpdateNotificationsRunOnlyAfterOutermostCommit(t *testing.T) {
 		t.Fatalf("rolled-back transaction published notifications: user=%d chat=%d", userNotifications, chatNotifications)
 	}
 
-	err = repo.RunTx(ctx, func(txCtx context.Context) error {
+	err = repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
 		if err := repo.CreateUserUpdate(txCtx, &UserUpdate{
 			UserID:     "notification-user",
 			UpdateType: UserUpdateNotification,

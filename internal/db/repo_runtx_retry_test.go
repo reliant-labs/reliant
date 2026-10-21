@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/reliant-labs/forge/pkg/orm"
 )
 
 // The existing retry tests (repo_retry_test.go) cover isRetryableError and the
@@ -49,7 +50,7 @@ func TestRunTx_RetriesUntilSuccess(t *testing.T) {
 
 	attempts := 0
 	start := time.Now()
-	err := repo.RunTx(context.Background(), func(ctx context.Context) error {
+	err := repo.RunTx(context.Background(), orm.Serializable, func(ctx context.Context) error {
 		attempts++
 		if attempts < 3 {
 			return serializationFailure()
@@ -71,7 +72,8 @@ func TestRunTx_RetriesUntilSuccess(t *testing.T) {
 	}
 }
 
-// The retry budget must be bounded and must match maxRetries. An unbounded
+// The retry budget must be bounded and must match orm.Serializable's — the
+// same maxRetries+1 attempts RunTx ran before it took a level. An unbounded
 // retry loop under contention is worse than failing: it holds a connection and
 // multiplies the load that caused the conflict.
 func TestRunTx_StopsAtMaxRetries(t *testing.T) {
@@ -80,7 +82,7 @@ func TestRunTx_StopsAtMaxRetries(t *testing.T) {
 	recordRetryBackoff(repo)
 
 	attempts := 0
-	err := repo.RunTx(context.Background(), func(ctx context.Context) error {
+	err := repo.RunTx(context.Background(), orm.Serializable, func(ctx context.Context) error {
 		attempts++
 		return serializationFailure()
 	})
@@ -89,10 +91,72 @@ func TestRunTx_StopsAtMaxRetries(t *testing.T) {
 		t.Fatal("RunTx must fail once the retry budget is exhausted")
 	}
 	// maxRetries is the number of RETRIES, so the initial attempt plus
-	// maxRetries retries = maxRetries+1 total invocations.
+	// maxRetries retries = maxRetries+1 total invocations: the budget
+	// orm.Serializable carries.
+	if maxRetries+1 != orm.DefaultTxMaxAttempts {
+		t.Fatalf("orm.Serializable carries %d attempts, but this Repository sized its ladder at %d", orm.DefaultTxMaxAttempts, maxRetries+1)
+	}
 	if want := maxRetries + 1; attempts != want {
 		t.Fatalf("expected %d total attempts (1 initial + %d retries), got %d",
 			want, maxRetries, attempts)
+	}
+}
+
+// The policy's attempt budget bounds the ladder at every level, and the
+// ladder decides what spends it: a unique violation (23505) is retried at
+// READ COMMITTED when the caller asked for attempts, and one attempt returns
+// the raw conflict verbatim — what a contention measurement needs.
+func TestRunTx_BudgetFollowsThePolicy(t *testing.T) {
+	repo, cleanup := setupTestDB(t)
+	defer cleanup()
+	recordRetryBackoff(repo)
+
+	uniqueViolation := func() error {
+		return &pgconn.PgError{Code: "23505", Message: "duplicate key value violates unique constraint", Severity: "ERROR"}
+	}
+	for _, tc := range []struct {
+		name   string
+		policy orm.TxPolicy
+		fail   func() error
+		want   int
+	}{
+		{"serializable", orm.Serializable, serializationFailure, orm.DefaultTxMaxAttempts},
+		{"serializable, one attempt", orm.Serializable.WithMaxAttempts(1), serializationFailure, 1},
+		{"read committed", orm.ReadCommitted, serializationFailure, 1},
+		{"read committed, 3 attempts", orm.ReadCommitted.WithMaxAttempts(3), uniqueViolation, 3},
+		{"read committed, the full budget", orm.ReadCommitted.WithMaxAttempts(orm.DefaultTxMaxAttempts), uniqueViolation, orm.DefaultTxMaxAttempts},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			attempts := 0
+			var last error
+			err := repo.RunTx(context.Background(), tc.policy, func(ctx context.Context) error {
+				attempts++
+				last = tc.fail()
+				return last
+			})
+			if attempts != tc.want {
+				t.Fatalf("ran %d attempts, want %d", attempts, tc.want)
+			}
+			if err != last {
+				t.Fatalf("the last attempt's error must come back verbatim, got %v", err)
+			}
+		})
+	}
+}
+
+// A policy that names no level is refused before anything is begun, naming
+// the line that called RunTx.
+func TestRunTx_RefusesAPolicyWithNoLevel(t *testing.T) {
+	ran := false
+	err := (&Repo{}).RunTx(context.Background(), orm.Isolation(0), func(context.Context) error { ran = true; return nil })
+	if !errors.Is(err, orm.ErrInvalidTxOptions) {
+		t.Fatalf("RunTx(unset level) = %v, want orm.ErrInvalidTxOptions", err)
+	}
+	if !strings.Contains(err.Error(), "repo_runtx_retry_test.go") {
+		t.Errorf("err = %q, want it to name this file's call site", err)
+	}
+	if ran {
+		t.Fatal("f ran despite a policy with no level")
 	}
 }
 
@@ -105,7 +169,7 @@ func TestRunTx_DoesNotRetryNonRetryable(t *testing.T) {
 
 	sentinel := errors.New("business rule violated")
 	attempts := 0
-	err := repo.RunTx(context.Background(), func(ctx context.Context) error {
+	err := repo.RunTx(context.Background(), orm.Serializable, func(ctx context.Context) error {
 		attempts++
 		return sentinel
 	})
@@ -134,7 +198,7 @@ func TestRunTx_ExhaustionPreservesErrorChain(t *testing.T) {
 	defer cleanup()
 	recordRetryBackoff(repo)
 
-	err := repo.RunTx(context.Background(), func(ctx context.Context) error {
+	err := repo.RunTx(context.Background(), orm.Serializable, func(ctx context.Context) error {
 		return serializationFailure()
 	})
 	if err == nil {
@@ -164,9 +228,9 @@ func TestRunTx_NestedDoesNotRetryIndependently(t *testing.T) {
 	outerAttempts := 0
 	innerAttempts := 0
 
-	err := repo.RunTx(context.Background(), func(outerCtx context.Context) error {
+	err := repo.RunTx(context.Background(), orm.Serializable, func(outerCtx context.Context) error {
 		outerAttempts++
-		return repo.RunTx(outerCtx, func(innerCtx context.Context) error {
+		return repo.RunTx(outerCtx, orm.Serializable, func(innerCtx context.Context) error {
 			innerAttempts++
 			if outerAttempts < 2 {
 				return serializationFailure()
@@ -197,7 +261,7 @@ func TestRunTx_BacksOffBetweenRetries(t *testing.T) {
 	defer cleanup()
 	backoffs := recordRetryBackoff(repo)
 
-	_ = repo.RunTx(context.Background(), func(ctx context.Context) error {
+	_ = repo.RunTx(context.Background(), orm.Serializable, func(ctx context.Context) error {
 		return serializationFailure()
 	})
 
@@ -222,7 +286,7 @@ func TestRunTx_HonorsContextCancellation(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	attempts := 0
-	err := repo.RunTx(ctx, func(txCtx context.Context) error {
+	err := repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
 		attempts++
 		cancel() // caller gives up during the first attempt
 		return serializationFailure()
@@ -255,7 +319,7 @@ func TestRunTx_ExhaustionReturnsUnflattenedError(t *testing.T) {
 	defer cleanup()
 	recordRetryBackoff(repo)
 
-	err := repo.RunTx(context.Background(), func(ctx context.Context) error {
+	err := repo.RunTx(context.Background(), orm.Serializable, func(ctx context.Context) error {
 		return serializationFailure()
 	})
 	if err == nil {

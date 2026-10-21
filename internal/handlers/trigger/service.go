@@ -83,6 +83,14 @@ type Deps struct {
 	// enabling checks shapes only.
 	// forge:optional-dep
 	Options OptionsChecker
+
+	// Alerting wires the control plane's alert receiver of a webhook
+	// trigger declared `source: alerting`: provisioned on enable (with a
+	// token the user never sees), removed on pause and delete. Nil
+	// (self-hosted, no control plane) leaves such a trigger a plain webhook
+	// whose token Enable shows once.
+	// forge:optional-dep
+	Alerting AlertingProvisioner
 }
 
 // Syncer is the schedule backend the handlers converge onto. Declared here,

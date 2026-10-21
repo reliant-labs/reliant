@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/orm"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -96,7 +97,7 @@ func (a *DrainAgentMessagesActivity) Execute(ctx context.Context, input DrainAge
 	// partial delivery (envelope written, bodies lost, rows still queued) is
 	// not a state any reader has to cope with.
 	var envelopeMessageID string
-	err = a.repo.RunTx(ctx, func(txCtx context.Context) error {
+	err = a.repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
 		// Claim the rows BEFORE writing anything they would produce.
 		//
 		// The list above is a plain read outside this transaction, so two drains

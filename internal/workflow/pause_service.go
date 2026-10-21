@@ -11,6 +11,7 @@ import (
 	enums "go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/client"
 
+	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/observability"
@@ -261,7 +262,7 @@ func (ps *PauseService) reconcileTerminalStatus(ctx context.Context, workflowID 
 	// reconciler's thread reap could run between them and close the threads
 	// itself, reporting a cascade that was one statement away as a missed one.
 	status := db.Stopped(reason)
-	err = ps.database.RunTx(ctx, func(txCtx context.Context) error {
+	err = ps.database.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
 		if err := ps.database.UpdateWorkflowStatus(txCtx, workflowID, status); err != nil {
 			return err
 		}

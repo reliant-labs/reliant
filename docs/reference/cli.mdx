@@ -2520,6 +2520,13 @@ Examples:
   forge db migration new add_preferences --context
   forge db migration new add_preferences --dsn "$DATABASE_URL"
   forge db migration new add_retired_at --backward-compatible "additive column the previous release never reads"
+  forge db migration new --closed-set access_tokens_scopes
+
+--closed-set `<constraint>` writes the migration `forge lint --closed-sets` prints for a
+CHECK declared 'forge:closed-set `<set>`' whose value list differs from the set:
+the CHECK replaced whole with the set's values, the declaration re-issued, and
+the compatibility line (a widening is backward-compatible, a narrowing breaks
+rollback). The name defaults to `<constraint>`_closed_set.
 
 ```
 reliant forge db migration new [name] [flags]
@@ -2531,6 +2538,7 @@ reliant forge db migration new [name] [flags]
 |------|------|---------|-------------|
 | `--backward-compatible` | `string` | - | declare that the previous release keeps working on this schema, and `why` (writes "-- forge:backward-compatible — `<why>`") |
 | `--breaks-rollback` | `string` | - | declare that the previous release deliberately does NOT keep working on this schema, and `why` (writes "-- forge:breaks-rollback `<why>`") |
+| `--closed-set` | `string` | - | write the migration that brings the forge:closed-set CHECK named `constraint` back to its set (what `forge lint --closed-sets` prints) |
 | `--context` | `bool` | - | write the schema, the previous migration and the history into the file's header instead of a pointer to them |
 | `--dir` | `string` | - | Migrations directory (default: forge.yaml database.migrations_dir, else db/migrations; a relative path resolves against the project root, not the CWD) |
 | `--dsn` | `string` | - | Database connection string for live schema introspection (implies --context) |
@@ -6048,6 +6056,7 @@ reliant forge lint [paths...] [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--check` | `bool` | - | Report only: write nothing, print the diff each fix would apply, and exit non-zero if any is pending. The default; beats --fix (also spelled --no-fix) |
+| `--closed-sets` | `bool` | - | Fail when a CHECK declared forge:closed-set `<set>` does not list exactly that Go set, and print the migration that fixes it |
 | `--column-markers` | `bool` | - | Fail on a COMMENT ON TABLE/VIEW/COLUMN/CONSTRAINT carrying a forge: marker that object does not read |
 | `--computed-fields` | `bool` | - | Flag a forge:computed field that no non-generated Go file assigns — nothing populates it, so the insert takes the column default. FAILS the build, except while the service still holds forge-scaffolded unwired rpc stubs (then a warning naming them) |
 | `--config-deps` | `bool` | - | Flag scalar Deps fields — scalars are configuration; declare a `<Component>`Config block in proto/config and take it as a typed field (warnings only) |
@@ -7094,6 +7103,9 @@ Pick a project kind with --kind:
                             no proto/services, no deploy/.
   --kind library            Pure Go module: pkg/`<name>`/ skeleton, no cmd/,
                             no CI workflows by default.
+  --kind site               A static site: adopt the frontend at the root of
+                            the current directory (with --in-place). Writes
+                            forge.yaml and deploy/kcl envs only — no Go.
 
 Use --disable to turn features off at creation time. Each is pinned off in
 forge.yaml's features: block, so a later change to the tree does not turn it
@@ -7154,7 +7166,7 @@ reliant forge project new [project-name] --mod [module-path] [flags]
 | `--go-version` | `string` | - | Go version to use in go.mod (e.g., 1.24); defaults to detected version |
 | `--harness` | `string` | `reliant` | AI harness conventions to scaffold for. Each writes a memory file; Forge never writes skill files for any harness. reliant (default): reliant.md — skills are read from the forge binary ('forge skill search|load') and discovered via forge.yaml. claude: CLAUDE.md. For non-reliant harnesses, add your own skill telling the agent to run 'forge skill search `<query>`'. cursor: .cursorrules. copilot: .github/copilot-instructions.md. codex: AGENTS.md. Recorded as 'harness:' in forge.yaml and honored by every later generate |
 | `--in-place` | `bool` | - | Create project in current directory instead of a new subdirectory |
-| `--kind` | `string` | `service` | Project kind: service (default), cli, library |
+| `--kind` | `string` | - | Project kind: service (default), cli, library, site (adopt the static frontend at this directory's root, with --in-place) |
 | `--link-forge` | `bool` | - | Bridge the project to the forge checkout this binary was built from (gitignored go.work 'use' + .forge-link/ for the web runtime). Off by default; required for a service scaffold from an unreleased forge build (also: FORGE_LINK_FORGE=1) |
 | `--mod` | `string` | - | Go module path (e.g., github.com/example/my-project). Defaults to example.com/`<name>`, so a first project needs no flag; set it to the path you will publish under |
 | `--name` | `string` | - | Project name. Same as the positional arg, and the way to name an --in-place project whose directory (a worktree, a branch checkout) is not the product name; defaults to the directory name |

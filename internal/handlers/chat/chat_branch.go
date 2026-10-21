@@ -9,6 +9,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/orm"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -301,7 +302,7 @@ func (s *Service) BranchChat(
 	// (no Temporal/network calls), so it can all join one transaction: any
 	// failure leaves no orphan chat, no thread-less chat, no half-copied
 	// plan, and no announcement for a chat that doesn't exist.
-	if err := s.deps.Repo.RunTx(ctx, func(txCtx context.Context) error {
+	if err := s.deps.Repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
 		if err := s.deps.Repo.CreateChat(txCtx, branchChat); err != nil {
 			return fmt.Errorf("failed to create branch: %w", err)
 		}

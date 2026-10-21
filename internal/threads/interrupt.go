@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -219,7 +220,7 @@ func (s *Service) recordToolCallCancelled(ctx context.Context, call *db.ToolCall
 		updated.ErrorMessage = &errMsg
 	}
 
-	if err := s.repo.RunTx(detached, func(txCtx context.Context) error {
+	if err := s.repo.RunTx(detached, orm.Serializable, func(txCtx context.Context) error {
 		if err := s.repo.UpsertToolCall(txCtx, &updated); err != nil {
 			return err
 		}

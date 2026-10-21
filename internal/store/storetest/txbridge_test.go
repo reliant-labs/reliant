@@ -61,7 +61,7 @@ func committedRows(t *testing.T, env *storetest.Env, tag string) (daemons, chats
 
 func TestRepoRunTxRollsBackStoreAndSQLCWritesTogether(t *testing.T) {
 	env := storetest.New(t)
-	err := env.Repo.RunTx(context.Background(), func(ctx context.Context) error {
+	err := env.Repo.RunTx(context.Background(), orm.Serializable, func(ctx context.Context) error {
 		if !orm.InTx(ctx) {
 			t.Error("the ctx Repo.RunTx hands its fn carries no forge transaction")
 		}
@@ -108,7 +108,7 @@ func TestStoreRunTxRollsBackStoreAndSQLCWritesTogether(t *testing.T) {
 // while an observer on the pool sees neither until it commits.
 func TestEachLayerSeesTheOthersUncommittedWrite(t *testing.T) {
 	env := storetest.New(t)
-	err := env.Repo.RunTx(context.Background(), func(ctx context.Context) error {
+	err := env.Repo.RunTx(context.Background(), orm.Serializable, func(ctx context.Context) error {
 		if err := writeBoth(ctx, env, "visible"); err != nil {
 			return err
 		}
@@ -149,7 +149,8 @@ func TestNoSelfDeadlockOnARowTheTransactionLocked(t *testing.T) {
 	t.Run("Repo.RunTx locks, the store writes", func(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		err := env.Repo.RunTx(ctx, func(ctx context.Context) error {
+		// forge:lint-disable-next-line forgeconv-tx-lock-under-serializable: one writer, no contention — the row lock exists only so a store write on a second connection would block on it, which is what this test proves does not happen
+		err := env.Repo.RunTx(ctx, orm.Serializable, func(ctx context.Context) error {
 			if _, err := env.Repo.DB.DB(ctx).ExecContext(ctx, `SELECT 1 FROM chats WHERE id = $1 FOR UPDATE`, "chat-locked"); err != nil {
 				return err
 			}

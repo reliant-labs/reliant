@@ -62,13 +62,19 @@ func TestTransactionOpenersBeginAtTheirLevel(t *testing.T) {
 		want string
 		run  func(ctx context.Context) error
 	}{
-		// The Repository's own transactions: SERIALIZABLE unless asked.
-		{"Repo.RunTx", serializable, func(ctx context.Context) error { return p.Repo.RunTx(ctx, noop) }},
+		// The Repository's own transactions: at the level each names
+		// (Repo.RunTx has no default, as the ORM has none).
+		{"Repo.RunTx", serializable, func(ctx context.Context) error { return p.Repo.RunTx(ctx, orm.Serializable, noop) }},
 		{"Repo.RunTxReadOnly", serializable, func(ctx context.Context) error { return p.Repo.RunTxReadOnly(ctx, noop) }},
-		{"Repo.RunTxNoRetry", serializable, func(ctx context.Context) error { return p.Repo.RunTxNoRetry(ctx, noop) }},
-		{"Repo.RunTxWithOptions(read committed)", readCommitted, func(ctx context.Context) error {
-			return p.Repo.RunTxWithOptions(ctx, db.TxOptions{Isolation: db.IsolationReadCommitted}, noop)
+		// One SERIALIZABLE attempt: a contention measurement.
+		{"Repo.RunTx(orm.Serializable.WithMaxAttempts(1))", serializable, func(ctx context.Context) error {
+			return p.Repo.RunTx(ctx, orm.Serializable.WithMaxAttempts(1), noop)
 		}},
+		// READ COMMITTED with the Repository ladder's full budget.
+		{"Repo.RunTx(orm.ReadCommitted.WithMaxAttempts(orm.DefaultTxMaxAttempts))", readCommitted, func(ctx context.Context) error {
+			return p.Repo.RunTx(ctx, orm.ReadCommitted.WithMaxAttempts(orm.DefaultTxMaxAttempts), noop)
+		}},
+		{"Repo.RunTx(orm.ReadCommitted)", readCommitted, func(ctx context.Context) error { return p.Repo.RunTx(ctx, orm.ReadCommitted, noop) }},
 		// The ORM has no default level; orm.Serializable is what the
 		// codemod spelled for every RunTx that used to inherit one, and a
 		// lock-based port must name orm.ReadCommitted instead.
@@ -94,6 +100,10 @@ func TestTransactionOpenersBeginAtTheirLevel(t *testing.T) {
 		}},
 		{"Repo.RemoveDaemon", readCommitted, func(ctx context.Context) error {
 			_, _, err := p.Repo.RemoveDaemon(ctx, "daemon-none")
+			return err
+		}},
+		{"Repo.ApplyDaemonRegistrySnapshot", readCommitted, func(ctx context.Context) error {
+			_, err := p.Repo.ApplyDaemonRegistrySnapshot(ctx, db.RegistrySnapshotApply{UserID: storetest.SeedUserID})
 			return err
 		}},
 		{"Repo.CreateWorkflowDraft", readCommitted, func(ctx context.Context) error {
@@ -172,10 +182,10 @@ func TestTransactionOpenersBeginAtTheirLevel(t *testing.T) {
 	}
 
 	// A transaction joined is not begun: an inner opener inherits the outer
-	// transaction's level, whatever it asks for (RunTxWithOptions).
+	// transaction's level, whatever it asks for (Repo.RunTx).
 	t.Run("a read committed opener inside Repo.RunTx joins it", func(t *testing.T) {
 		p.Reset()
-		err := p.Repo.RunTx(context.Background(), func(ctx context.Context) error {
+		err := p.Repo.RunTx(context.Background(), orm.Serializable, func(ctx context.Context) error {
 			return store.MergeWorktreeCleanupMetadata(ctx, p.ORM, "wt-iso", func(*core.CleanupMetadata, bool) bool { return false })
 		})
 		if err != nil {
@@ -199,7 +209,7 @@ func TestTransactionOpenersBeginAtTheirLevel(t *testing.T) {
 		v := vault.New(vault.Deps{DB: p.ORM, Keys: vault.NewEnvKeyWrapper(ring)})
 		p.Reset()
 		var sealed []byte
-		err = p.Repo.RunTx(context.Background(), func(ctx context.Context) error {
+		err = p.Repo.RunTx(context.Background(), orm.Serializable, func(ctx context.Context) error {
 			var err error
 			sealed, err = v.Seal(ctx, vault.UserTenant("iso-tenant"), []byte("x"), []byte("a"))
 			return err
@@ -227,7 +237,7 @@ func TestTransactionOpenersBeginAtTheirLevel(t *testing.T) {
 	t.Run("the write ledger inside Repo.RunTx runs outside it", func(t *testing.T) {
 		p.Reset()
 		rollback := errors.New("roll the caller back")
-		err := p.Repo.RunTx(context.Background(), func(ctx context.Context) error {
+		err := p.Repo.RunTx(context.Background(), orm.Serializable, func(ctx context.Context) error {
 			if err := p.Repo.IntegrationWrites().CreateIntegrationWrite(ctx, &core.IntegrationWrite{
 				ID: "iw-iso", UserID: "iso-user", ChatID: "iso-chat", Integration: "github", Action: "issue.comment",
 				Actor: core.IntegrationActorOwner, Scope: "github:acme/app", Target: "github:acme/app",

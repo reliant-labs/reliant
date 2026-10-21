@@ -593,6 +593,9 @@ func (s *Service) RetireDeletedTriggers(ctx context.Context, deleted []*core.Tri
 					"trigger_id", t.ID, "error", err)
 			}
 		}
+		if s.managed(t) {
+			s.retireAlerting(ctx, t.ID)
+		}
 		h := holder{t.UserID, t.DaemonID}
 		if t.DaemonID != "" && !released[h] {
 			released[h] = true

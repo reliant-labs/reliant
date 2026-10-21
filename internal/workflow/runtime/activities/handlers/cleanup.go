@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/orm"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -97,7 +98,7 @@ func (a *CleanupActivity) Execute(ctx context.Context, input CleanupInput) (Clea
 	cancelledCount := 0
 	for _, approval := range pendingApprovals {
 		// Update status to cancelled
-		err := a.repo.RunTx(ctx, func(txCtx context.Context) error {
+		err := a.repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
 			// Update approval status (nil for actionTaken since this is a system cancellation)
 			if err := a.repo.UpdateApprovalStatus(txCtx, approval.ID, int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_DENIED), nil, nil, nil); err != nil {
 				return fmt.Errorf("failed to update approval status: %w", err)

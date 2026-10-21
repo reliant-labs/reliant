@@ -8,6 +8,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/reliant-labs/forge/pkg/orm"
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -66,7 +67,7 @@ type Repository interface {
 	// What deleting a workflow does to the automations that run it.
 	ListTriggers(ctx context.Context, f core.TriggerFilters) ([]*core.Trigger, error)
 	DeleteTrigger(ctx context.Context, id string) error
-	RunTx(ctx context.Context, f func(ctx context.Context) error) error
+	RunTx(ctx context.Context, policy orm.TxPolicy, f func(ctx context.Context) error) error
 
 	ListVisibilityOverrides(ctx context.Context, userID string, itemType int32) (map[string]bool, error)
 	ListHiddenItemDefaults(ctx context.Context, itemType int32) ([]string, error)
