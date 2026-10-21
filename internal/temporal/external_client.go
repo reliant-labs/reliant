@@ -8,9 +8,11 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/observe/temporalotel"
 	"github.com/reliant-labs/reliant/internal/instanceid"
 	"github.com/reliant-labs/reliant/internal/temporal/claimcheck"
 	"go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/interceptor"
 	"go.temporal.io/sdk/log"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/keepalive"
@@ -35,8 +37,18 @@ type ExternalClientConfig struct {
 // This is used by the standalone api-server and temporal-worker services.
 // It uses the same FlexibleDataConverter and keepalive settings as the embedded client.
 func NewExternalClient(ctx context.Context, cfg ExternalClientConfig) (client.Client, error) {
+	opts, err := externalClientOptions(cfg)
+	if err != nil {
+		return nil, err
+	}
+	return client.Dial(opts)
+}
+
+// externalClientOptions is NewExternalClient's client.Options, split out so a
+// test can check them without a Temporal server.
+func externalClientOptions(cfg ExternalClientConfig) (client.Options, error) {
 	if cfg.Host == "" {
-		return nil, fmt.Errorf("temporal host is required")
+		return client.Options{}, fmt.Errorf("temporal host is required")
 	}
 	if cfg.Port == 0 {
 		cfg.Port = 7233
@@ -78,5 +90,15 @@ func NewExternalClient(ctx context.Context, cfg ExternalClientConfig) (client.Cl
 		opts.Logger = NewSDKLogger(slog.Default())
 	}
 
-	return client.Dial(opts)
+	// One interceptor on the client traces both sides: StartWorkflow and
+	// SignalWithStart inject the caller's span into the workflow header, and
+	// every worker built from this client continues it, so the request, the
+	// workflow and its activities are one trace.
+	tracing, err := temporalotel.NewInterceptor(temporalotel.Options{})
+	if err != nil {
+		return client.Options{}, err
+	}
+	opts.Interceptors = []interceptor.ClientInterceptor{tracing}
+
+	return opts, nil
 }

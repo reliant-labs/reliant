@@ -234,7 +234,7 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 		Identity:                 instanceid.WorkerIdentity(),
 		DeadlockDetectionTimeout: 30 * time.Second,
 		Interceptors: append([]interceptor.WorkerInterceptor{
-			observability.NewOTelWorkerInterceptor(),
+			observability.NewMetricsWorkerInterceptor(),
 			newActivityRelease(),
 		}, cfg.WorkflowInterceptors...),
 	}

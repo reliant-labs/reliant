@@ -87,7 +87,7 @@ func TestReplayRecordedHistory(t *testing.T) {
 			// claim-check references.
 			replayer, err := worker.NewWorkflowReplayerWithOptions(worker.WorkflowReplayerOptions{
 				DataConverter:            rtemporal.NewFlexibleDataConverter(converterOpts...),
-				Interceptors:             []interceptor.WorkerInterceptor{observability.NewOTelWorkerInterceptor()},
+				Interceptors:             []interceptor.WorkerInterceptor{observability.NewMetricsWorkerInterceptor()},
 				DisableDeadlockDetection: true,
 				EnableLoggingInReplay:    os.Getenv("REPLAY_VERBOSE") == "1",
 			})

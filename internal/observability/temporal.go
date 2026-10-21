@@ -5,82 +5,60 @@ import (
 	"context"
 	"time"
 
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/codes"
-	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/interceptor"
 	"go.temporal.io/sdk/workflow"
 )
 
-var temporalTracer = otel.Tracer("reliant.temporal")
-
-// NewOTelWorkerInterceptor returns a Temporal WorkerInterceptor that creates
-// OTel spans and records Prometheus metrics for activity and workflow execution.
-func NewOTelWorkerInterceptor() interceptor.WorkerInterceptor {
-	return &otelWorkerInterceptor{}
+// NewMetricsWorkerInterceptor returns a Temporal WorkerInterceptor that
+// records Prometheus metrics for activity and workflow execution.
+//
+// It opens no spans. Tracing is forge's temporalotel interceptor, installed
+// once on the Temporal client (internal/temporal.NewExternalClient): it
+// continues the caller's trace through the workflow header into every
+// activity, which a worker-side interceptor cannot do — it never sees the
+// header, so its activity spans were each a trace of their own.
+func NewMetricsWorkerInterceptor() interceptor.WorkerInterceptor {
+	return &metricsWorkerInterceptor{}
 }
 
-type otelWorkerInterceptor struct {
+type metricsWorkerInterceptor struct {
 	interceptor.WorkerInterceptorBase
 }
 
-func (o *otelWorkerInterceptor) InterceptActivity(ctx context.Context, next interceptor.ActivityInboundInterceptor) interceptor.ActivityInboundInterceptor {
-	return &otelActivityInbound{ActivityInboundInterceptorBase: interceptor.ActivityInboundInterceptorBase{Next: next}}
+func (o *metricsWorkerInterceptor) InterceptActivity(ctx context.Context, next interceptor.ActivityInboundInterceptor) interceptor.ActivityInboundInterceptor {
+	return &metricsActivityInbound{ActivityInboundInterceptorBase: interceptor.ActivityInboundInterceptorBase{Next: next}}
 }
 
-func (o *otelWorkerInterceptor) InterceptWorkflow(ctx workflow.Context, next interceptor.WorkflowInboundInterceptor) interceptor.WorkflowInboundInterceptor {
-	return &otelWorkflowInbound{WorkflowInboundInterceptorBase: interceptor.WorkflowInboundInterceptorBase{Next: next}}
+func (o *metricsWorkerInterceptor) InterceptWorkflow(ctx workflow.Context, next interceptor.WorkflowInboundInterceptor) interceptor.WorkflowInboundInterceptor {
+	return &metricsWorkflowInbound{WorkflowInboundInterceptorBase: interceptor.WorkflowInboundInterceptorBase{Next: next}}
 }
 
 // ─── Activity Interceptor ───────────────────────────────────────────────────
 
-type otelActivityInbound struct {
+type metricsActivityInbound struct {
 	interceptor.ActivityInboundInterceptorBase
 }
 
-func (a *otelActivityInbound) ExecuteActivity(ctx context.Context, in *interceptor.ExecuteActivityInput) (interface{}, error) {
-	actInfo := activity.GetInfo(ctx)
-	actType := actInfo.ActivityType.Name
-
-	ctx, span := temporalTracer.Start(ctx, "temporal.activity."+actType,
-		trace.WithAttributes(
-			attribute.String("temporal.activity.type", actType),
-			attribute.String("temporal.workflow.id", actInfo.WorkflowExecution.ID),
-			attribute.String("temporal.workflow.run_id", actInfo.WorkflowExecution.RunID),
-		),
-		trace.WithSpanKind(trace.SpanKindInternal),
-	)
-	defer span.End()
+func (a *metricsActivityInbound) ExecuteActivity(ctx context.Context, in *interceptor.ExecuteActivityInput) (interface{}, error) {
+	actType := activity.GetInfo(ctx).ActivityType.Name
 
 	start := time.Now()
 	result, err := a.Next.ExecuteActivity(ctx, in)
-	duration := time.Since(start).Seconds()
-
-	TemporalActivityDuration.WithLabelValues(actType).Observe(duration)
-
-	if err != nil {
-		span.RecordError(err)
-		span.SetStatus(codes.Error, err.Error())
-	} else {
-		span.SetStatus(codes.Ok, "")
-	}
+	TemporalActivityDuration.WithLabelValues(actType).Observe(time.Since(start).Seconds())
 
 	return result, err
 }
 
 // ─── Workflow Interceptor ───────────────────────────────────────────────────
 
-type otelWorkflowInbound struct {
+type metricsWorkflowInbound struct {
 	interceptor.WorkflowInboundInterceptorBase
 }
 
-func (w *otelWorkflowInbound) ExecuteWorkflow(ctx workflow.Context, in *interceptor.ExecuteWorkflowInput) (interface{}, error) {
+func (w *metricsWorkflowInbound) ExecuteWorkflow(ctx workflow.Context, in *interceptor.ExecuteWorkflowInput) (interface{}, error) {
 	wfType := workflow.GetInfo(ctx).WorkflowType.Name
 
-	// Workflow code runs in a deterministic sandbox — real OTel spans (which
-	// perform I/O) are forbidden. We record Prometheus counters only.
 	result, err := w.Next.ExecuteWorkflow(ctx, in)
 
 	status := "completed"
