@@ -13,8 +13,8 @@ import (
 )
 
 // fakeTemporalWorker mimics the SDK's AggregatedWorker: Start is memoized,
-// Run blocks until its interrupt or until the worker stops, Stop is
-// idempotent and closes the stop channel first, and Start after Stop panics.
+// Stop is idempotent and closes the stop channel first, Start after Stop
+// panics, and a fatal error calls OnFatalError and then Stop.
 type fakeTemporalWorker struct {
 	startGate chan struct{} // nil: Start returns at once
 	startErr  error
@@ -23,12 +23,16 @@ type fakeTemporalWorker struct {
 	starts, stopsBegun atomic.Int32
 	stopOnce           sync.Once
 	stopC              chan struct{}
-	fatal              atomic.Pointer[error]
+	onFatalError       func(error)
+	fatal              <-chan error
 }
 
 func newFakeTemporalWorker() *fakeTemporalWorker {
-	return &fakeTemporalWorker{stopC: make(chan struct{})}
+	onFatalError, fatal := fatalErrorSink()
+	return &fakeTemporalWorker{stopC: make(chan struct{}), onFatalError: onFatalError, fatal: fatal}
 }
+
+func newFakeWorker(f *fakeTemporalWorker) *Worker { return newWorker(f, f.fatal) }
 
 func (f *fakeTemporalWorker) Start() error {
 	select {
@@ -40,21 +44,6 @@ func (f *fakeTemporalWorker) Start() error {
 		<-f.startGate
 	}
 	return f.startErr
-}
-
-func (f *fakeTemporalWorker) Run(interrupt <-chan interface{}) error {
-	if err := f.Start(); err != nil {
-		return err
-	}
-	select {
-	case <-interrupt:
-		f.Stop()
-	case <-f.stopC:
-		if err := f.fatal.Load(); err != nil {
-			return *err
-		}
-	}
-	return nil
 }
 
 func (f *fakeTemporalWorker) Stop() {
@@ -70,7 +59,7 @@ func (f *fakeTemporalWorker) Stop() {
 }
 
 func (f *fakeTemporalWorker) failFatally(err error) {
-	f.fatal.Store(&err)
+	f.onFatalError(err)
 	f.Stop()
 }
 
@@ -99,7 +88,7 @@ func awaitReady(t *testing.T, w *Worker) {
 
 func TestWorkerDrainStopsARunningWorker(t *testing.T) {
 	fake := newFakeTemporalWorker()
-	w := newWorker(fake)
+	w := newFakeWorker(fake)
 	require.Error(t, w.Ready(context.Background()), "not ready before it runs")
 
 	ran := runInBackground(context.Background(), w)
@@ -108,11 +97,13 @@ func TestWorkerDrainStopsARunningWorker(t *testing.T) {
 	require.NoError(t, w.Drain(context.Background()))
 	require.NoError(t, requireReturns(t, ran), "a drained worker's Run is a clean stop")
 	require.EqualValues(t, 1, fake.stopsBegun.Load())
+	// A second Start (the SDK's Run makes one) panics if a stop beat it.
+	require.EqualValues(t, 1, fake.starts.Load(), "Start runs once")
 }
 
 func TestWorkerStopsWhenItsRunContextEnds(t *testing.T) {
 	fake := newFakeTemporalWorker()
-	w := newWorker(fake)
+	w := newFakeWorker(fake)
 	ctx, cancel := context.WithCancel(context.Background())
 	ran := runInBackground(ctx, w)
 	awaitReady(t, w)
@@ -124,7 +115,7 @@ func TestWorkerStopsWhenItsRunContextEnds(t *testing.T) {
 
 func TestWorkerDrainBeforeRunNeverStartsIt(t *testing.T) {
 	fake := newFakeTemporalWorker()
-	w := newWorker(fake)
+	w := newFakeWorker(fake)
 
 	require.NoError(t, w.Drain(context.Background()))
 	require.NoError(t, w.Run(context.Background()))
@@ -137,7 +128,7 @@ func TestWorkerDrainBeforeRunNeverStartsIt(t *testing.T) {
 func TestWorkerDrainWaitsForAStartInFlight(t *testing.T) {
 	fake := newFakeTemporalWorker()
 	fake.startGate = make(chan struct{})
-	w := newWorker(fake)
+	w := newFakeWorker(fake)
 	ran := runInBackground(context.Background(), w)
 	require.Eventually(t, func() bool { return fake.starts.Load() == 1 }, 5*time.Second, time.Millisecond)
 
@@ -153,13 +144,14 @@ func TestWorkerDrainWaitsForAStartInFlight(t *testing.T) {
 	require.NoError(t, <-drained)
 	require.NoError(t, requireReturns(t, ran))
 	require.EqualValues(t, 1, fake.stopsBegun.Load())
+	require.EqualValues(t, 1, fake.starts.Load(), "Start runs once")
 }
 
 func TestWorkerDrainIsBoundedByTheShutdownBudget(t *testing.T) {
 	fake := newFakeTemporalWorker()
 	fake.stopGate = make(chan struct{})
 	defer close(fake.stopGate)
-	w := newWorker(fake)
+	w := newFakeWorker(fake)
 	ran := runInBackground(context.Background(), w)
 	awaitReady(t, w)
 
@@ -174,20 +166,21 @@ func TestWorkerDrainIsBoundedByTheShutdownBudget(t *testing.T) {
 
 func TestWorkerRunReturnsAFatalWorkerError(t *testing.T) {
 	fake := newFakeTemporalWorker()
-	w := newWorker(fake)
+	w := newFakeWorker(fake)
 	ran := runInBackground(context.Background(), w)
 	awaitReady(t, w)
 
 	fatal := errors.New("namespace not found")
 	fake.failFatally(fatal)
 	require.ErrorIs(t, requireReturns(t, ran), fatal)
+	require.EqualValues(t, 1, fake.starts.Load(), "Start runs once")
 	require.NoError(t, w.Drain(context.Background()), "draining a worker that already stopped is a no-op")
 }
 
 func TestWorkerRunReturnsAStartFailure(t *testing.T) {
 	fake := newFakeTemporalWorker()
 	fake.startErr = errors.New("temporal unreachable")
-	w := newWorker(fake)
+	w := newFakeWorker(fake)
 
 	require.ErrorIs(t, w.Run(context.Background()), fake.startErr)
 	require.ErrorContains(t, w.Ready(context.Background()), "failed to start")

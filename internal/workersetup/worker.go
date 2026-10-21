@@ -9,18 +9,24 @@ import (
 )
 
 // temporalWorker is the part of the SDK's worker.Worker the component drives.
+//
+// Not the SDK's Run: it calls Start again, and Start panics once the worker
+// has stopped — even though the first Start succeeded — so a Drain or a fatal
+// error landing between this component's Start and that one crashed the
+// process. The component calls Start exactly once and learns of a fatal error
+// from worker.Options.OnFatalError instead.
 type temporalWorker interface {
 	Start() error
-	Run(interruptCh <-chan interface{}) error
 	Stop()
 }
 
 // Worker is the Temporal worker as a supervised component (a
 // lifecyclekit.Runner, Drainer and Readier):
 //
-//   - Run starts polling the task queue and returns once the worker has
-//     stopped: when Drain stopped it, when ctx ended (it stops the worker
-//     itself), or on a fatal worker error, which it returns.
+//   - Run starts polling the task queue and returns once the worker is
+//     stopping: when Drain begins (Drain waits for the stop), when ctx
+//     ended (it stops the worker itself), or on a fatal worker error, which
+//     it returns.
 //   - Drain stops polling and gives in-flight activities
 //     activityReleaseGrace to finish; then activityRelease cancels the ones
 //     still running, and they report a retryable failure, which releases
@@ -34,23 +40,37 @@ type temporalWorker interface {
 // readiness flip; the process's supervisor decides when Drain runs.
 type Worker struct {
 	worker temporalWorker
+	fatal  <-chan error // the SDK's fatal error (OnFatalError); it stops itself
 
 	mu       sync.Mutex
-	running  bool // Run has begun starting the worker
-	draining bool // Drain has begun: a Run that has not begun must not start
+	running  bool          // Run has begun starting the worker
+	draining chan struct{} // closed when Drain begins: a Run that has not begun must not start
 
 	startDone chan struct{} // closed once Start has returned
 	started   bool          // Start returned nil; written before startDone closes
 }
 
-func newWorker(w temporalWorker) *Worker {
-	return &Worker{worker: w, startDone: make(chan struct{})}
+// newWorker wraps w, whose fatal errors arrive on fatal.
+func newWorker(w temporalWorker, fatal <-chan error) *Worker {
+	return &Worker{worker: w, fatal: fatal, draining: make(chan struct{}), startDone: make(chan struct{})}
 }
 
-// Run starts the worker and blocks until it stops (see Worker).
+// fatalErrorSink is the worker.Options.OnFatalError for a Worker reading
+// the returned channel. The SDK reports at most one fatal error.
+func fatalErrorSink() (onFatalError func(error), fatal <-chan error) {
+	c := make(chan error, 1)
+	return func(err error) {
+		select {
+		case c <- err:
+		default:
+		}
+	}, c
+}
+
+// Run starts the worker and blocks until it is stopping (see Worker).
 func (w *Worker) Run(ctx context.Context) error {
 	w.mu.Lock()
-	if w.draining {
+	if w.isDraining() {
 		w.mu.Unlock()
 		return nil
 	}
@@ -64,24 +84,25 @@ func (w *Worker) Run(ctx context.Context) error {
 		return fmt.Errorf("start temporal worker: %w", err)
 	}
 
-	interrupt := make(chan interface{})
-	stop := context.AfterFunc(ctx, func() { close(interrupt) })
-	defer stop()
-	// Start is memoized: Run reuses the start above and blocks until the
-	// interrupt or until the worker stops (Drain's Stop, or a fatal error).
-	if err := w.worker.Run(interrupt); err != nil {
-		return fmt.Errorf("temporal worker: %w", err)
+	select {
+	case <-w.draining:
+		return nil // Drain stops it
+	case err := <-w.fatal:
+		return fmt.Errorf("temporal worker: %w", err) // the SDK stops it
+	case <-ctx.Done():
+		if !w.isDraining() {
+			w.worker.Stop()
+		}
+		return nil
 	}
-	if ctx.Err() == nil && !w.isDraining() {
-		return errors.New("temporal worker stopped without being asked to")
-	}
-	return nil
 }
 
 // Drain stops the worker, bounded by ctx (see Worker).
 func (w *Worker) Drain(ctx context.Context) error {
 	w.mu.Lock()
-	w.draining = true
+	if !w.isDraining() {
+		close(w.draining)
+	}
 	running := w.running
 	w.mu.Unlock()
 	if !running {
@@ -125,7 +146,10 @@ func (w *Worker) Ready(context.Context) error {
 }
 
 func (w *Worker) isDraining() bool {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	return w.draining
+	select {
+	case <-w.draining:
+		return true
+	default:
+		return false
+	}
 }
