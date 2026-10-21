@@ -15,7 +15,6 @@ type Querier interface {
 	// A daemon that found a workspace's directory on its disk has proven it owns
 	// it. Rows created before daemon_id was recorded get it filled in here, once.
 	AdoptWorktreeDaemon(ctx context.Context, arg AdoptWorktreeDaemonParams) error
-	AppendToContentBlock(ctx context.Context, arg AppendToContentBlockParams) error
 	ArchiveWorktree(ctx context.Context, id string) error
 	// Conditional on status = 1 so this can never delete a row that has already
 	// been drained -- the caller and the agent's own drain loop are racing for
@@ -83,43 +82,16 @@ type Querier interface {
 	// reason 3). The inner joins drop events whose chat was deleted or never got a
 	// root workflow, neither of which can be running.
 	CountLiveLaunchedRuns(ctx context.Context, arg CountLiveLaunchedRunsParams) (int64, error)
-	// True total message count for a chat, so a bounded snapshot can report an
-	// honest `total` rather than the length of the window it happened to send.
-	CountMessagesByChat(ctx context.Context, chatID string) (int64, error)
-	// Count messages in a specific context window
-	CountMessagesByContextWindow(ctx context.Context, contextWindowID string) (int64, error)
-	// Count messages in a specific context window up to and including a seq
-	// bound. Mirrors the fork filter in resolveMessagesFromCW (messages from
-	// the direct parent CW keep only seq <= ForkAtMessageID's seq) but as a
-	// COUNT instead of a row fetch, so CW-chain-aware totals can be computed
-	// without materializing the chain.
-	CountMessagesByContextWindowUpToSeq(ctx context.Context, arg CountMessagesByContextWindowUpToSeqParams) (int64, error)
-	// Count messages in a thread (uses denormalized thread_id)
-	CountMessagesByThread(ctx context.Context, threadID string) (int64, error)
 	CountQueuedAgentMessagesForThread(ctx context.Context, toThreadID string) (int64, error)
 	CountThreadsInConversation(ctx context.Context, chatID string) (int64, error)
 	CreateChat(ctx context.Context, arg CreateChatParams) error
 	CreateChatUpdate(ctx context.Context, arg CreateChatUpdateParams) error
-	CreateContentBlock(ctx context.Context, arg CreateContentBlockParams) error
-	CreateContentBlockIfNotExists(ctx context.Context, arg CreateContentBlockIfNotExistsParams) error
 	CreateContextWindow(ctx context.Context, arg CreateContextWindowParams) (ContextWindow, error)
 	// The write ledger. See the migration 20261014055046_integration_writes.sql
 	// for the model: an intent row is written before an integration action's
 	// request, completed after, and read when an event arrives to say whether
 	// Reliant caused it.
 	CreateIntegrationWrite(ctx context.Context, arg CreateIntegrationWriteParams) error
-	// Creates a message in the new schema (uses context_window_id, has display_style)
-	CreateMessage(ctx context.Context, arg CreateMessageParams) error
-	// ON CONFLICT DO NOTHING for idempotent message creation
-	CreateMessageIfNotExists(ctx context.Context, arg CreateMessageIfNotExistsParams) error
-	// A user's send names its message (client_message_id), so a repeat of that send
-	// arrives with an id that is already taken. ON CONFLICT (id) DO NOTHING is the
-	// arbiter between two such repeats racing each other: exactly one inserts, the
-	// other affects zero rows and reports that instead of failing. Only the id
-	// conflict is absorbed; any other unique violation (messages_chat_seq_key,
-	// two different sends racing for one seq) still raises and the transaction
-	// retries as before.
-	CreateMessageOnce(ctx context.Context, arg CreateMessageOnceParams) (int64, error)
 	CreateProject(ctx context.Context, arg CreateProjectParams) error
 	CreateRepo(ctx context.Context, arg CreateRepoParams) error
 	CreateThread(ctx context.Context, arg CreateThreadParams) (Thread, error)
@@ -134,7 +106,6 @@ type Querier interface {
 	DeleteChat(ctx context.Context, id string) error
 	DeleteContextWindow(ctx context.Context, id string) error
 	DeleteContextWindowsByThread(ctx context.Context, threadID string) error
-	DeleteMessage(ctx context.Context, id string) error
 	DeleteProject(ctx context.Context, arg DeleteProjectParams) error
 	DeleteProjectDaemon(ctx context.Context, arg DeleteProjectDaemonParams) error
 	DeleteRepo(ctx context.Context, id string) error
@@ -220,29 +191,16 @@ type Querier interface {
 	GetChatUpdates(ctx context.Context, arg GetChatUpdatesParams) ([]ChatUpdate, error)
 	GetChatUpdatesSince(ctx context.Context, arg GetChatUpdatesSinceParams) ([]ChatUpdate, error)
 	GetChatWithUserCheck(ctx context.Context, arg GetChatWithUserCheckParams) (ChatsWithActivity, error)
-	GetContentBlock(ctx context.Context, id string) (MessageContentBlock, error)
 	GetContextWindow(ctx context.Context, id string) (ContextWindow, error)
 	GetContextWindowBySequence(ctx context.Context, arg GetContextWindowBySequenceParams) (ContextWindow, error)
-	// Get the token count for a specific context window
-	GetContextWindowTokenCount(ctx context.Context, contextWindowID string) (int64, error)
 	// Get context window with thread info for resolution
 	GetContextWindowWithThread(ctx context.Context, id string) (GetContextWindowWithThreadRow, error)
-	// Get the maximum context_window.sequence for a thread (current context after compactions)
-	GetCurrentContextSequence(ctx context.Context, threadID string) (int64, error)
 	GetIntegrationAccessRefresh(ctx context.Context, arg GetIntegrationAccessRefreshParams) (IntegrationAccessRefresh, error)
 	// The write that created (or is) one object, newest first. Served by
 	// idx_integration_writes_object.
 	GetIntegrationWriteByObject(ctx context.Context, arg GetIntegrationWriteByObjectParams) (IntegrationWrite, error)
-	// Get the max context_window.sequence for a thread
-	GetLatestContextSequenceByThread(ctx context.Context, threadID string) (interface{}, error)
 	// Get the most recent context window for a thread (highest sequence)
 	GetLatestContextWindow(ctx context.Context, threadID string) (ContextWindow, error)
-	// Get latest message in a specific context window
-	GetLatestMessageByContextWindow(ctx context.Context, contextWindowID string) (Message, error)
-	// Get latest message in a thread (uses denormalized thread_id)
-	GetLatestMessageByThread(ctx context.Context, threadID string) (Message, error)
-	// Get the latest message with token data in a thread at a specific context sequence
-	GetLatestMessageWithTokensByThread(ctx context.Context, arg GetLatestMessageWithTokensByThreadParams) (Message, error)
 	// The latest spawn run of the sub-agent on one thread: the spawn tool call
 	// that started it, joined to that run's workflow row, the thread, and the
 	// thread's own worktree. What a message needs to resume a sub-agent that
@@ -263,72 +221,10 @@ type Querier interface {
 	// the latest 'launched' event; the detail view asks for the latest of any
 	// outcome. A NULL outcome means no filter.
 	GetLatestTriggerEvent(ctx context.Context, arg GetLatestTriggerEventParams) (TriggerEvent, error)
-	// The role of the latest TURN in a thread: its newest message that is not a
-	// system note (role 3). Notes the server posts about a run, and the hidden
-	// "params changed" note a send can write after the user's message, are not
-	// turns, so they must not make an unanswered message look answered.
-	GetLatestTurnRoleByThread(ctx context.Context, threadID string) (int32, error)
 	// The one unarchived row holding a name; worktrees_project_id_name_live_key
 	// guarantees there is at most one.
 	GetLiveWorktreeByName(ctx context.Context, arg GetLiveWorktreeByNameParams) (Worktree, error)
 	GetMaxSequenceForThread(ctx context.Context, threadID string) (interface{}, error)
-	GetMessage(ctx context.Context, id string) (Message, error)
-	GetMessageByActivityID(ctx context.Context, arg GetMessageByActivityIDParams) (Message, error)
-	// Get all messages in a context window
-	GetMessagesByContextWindow(ctx context.Context, contextWindowID string) ([]Message, error)
-	// Get messages for a thread at a specific context sequence
-	GetMessagesByThreadAndSequence(ctx context.Context, arg GetMessagesByThreadAndSequenceParams) ([]Message, error)
-	// Get all messages for a thread across all context windows
-	// Useful for UI display showing full history
-	GetMessagesForThread(ctx context.Context, threadID string) ([]GetMessagesForThreadRow, error)
-	// Get messages with their content blocks in a single query for efficiency
-	// Returns denormalized rows that need to be assembled into message objects
-	GetMessagesWithContentBlocks(ctx context.Context, contextWindowID string) ([]GetMessagesWithContentBlocksRow, error)
-	// Get next ordinal for a specific context window
-	GetNextOrdinalByContextWindow(ctx context.Context, contextWindowID string) (int32, error)
-	// Get next ordinal for a thread (uses denormalized thread_id)
-	GetNextOrdinalByThread(ctx context.Context, threadID string) (int32, error)
-	// Get next seq for a chat (chat-global total order; see
-	// 20260802000000_add_message_seq.sql for why this exists alongside ordinal).
-	//
-	// A branched chat DISPLAYS its parent's history but does not own those rows —
-	// they still carry the parent chat_id, resolved on read through the context
-	// window chain. Allocating from this chat's rows alone therefore restarts a
-	// branch at seq 0, and every message the user sends lands numerically beneath
-	// the ~900 inherited messages shown above it: the reply is saved and streamed
-	// correctly but renders at the top of the transcript, which reads as "my
-	// message never arrived".
-	//
-	// The high-water mark has to span the whole context-window chain the branch
-	// resolves, not just its own rows. Walking the chain here keeps the allocator
-	// honest without teaching every caller about forks.
-	//
-	// The two halves are deliberately SEPARATE max lookups combined with GREATEST,
-	// rather than the single `WHERE chat_id = $1 OR context_window_id IN (...)`
-	// this used to be. An OR across two different columns cannot use either
-	// index, so that form degraded into a FULL SEQUENTIAL SCAN of messages —
-	// measured at 35ms over 221k rows, against an index-driven 1.7ms for this
-	// version.
-	//
-	// Speed is the lesser reason. Every transaction here runs at SERIALIZABLE, and
-	// a sequential scan takes a predicate lock covering the ENTIRE table, so this
-	// allocator conflicted with every concurrent message insert anywhere in the
-	// system — not merely those in the same chat. That is what surfaced to users
-	// as "failed to save mailbox envelope: ... could not serialize access due to
-	// read/write dependencies among transactions (SQLSTATE 40001)" while several
-	// spawns were saving messages at once. Restricting each branch to an index
-	// narrows the predicate lock to the rows actually consulted.
-	//
-	// `= ANY(ARRAY(...))` rather than `IN (SELECT ...)`: Postgres will not push a
-	// recursive-CTE reference down into an index condition, so the IN form
-	// re-introduced the seq scan. Materializing the chain into an array lets the
-	// planner use idx_messages_context_window_ordinal.
-	GetNextSeqByChat(ctx context.Context, arg GetNextSeqByChatParams) (int32, error)
-	// Get all content blocks for messages in a specific context window
-	GetNodeContentBlocks(ctx context.Context, contextWindowID string) ([]GetNodeContentBlocksRow, error)
-	// Get all messages in a specific context window
-	// Ordered by seq for deterministic ordering
-	GetNodeMessages(ctx context.Context, contextWindowID string) ([]Message, error)
 	GetProject(ctx context.Context, id string) (Project, error)
 	GetProjectByPath(ctx context.Context, path string) (Project, error)
 	GetProjectByPathAndUser(ctx context.Context, arg GetProjectByPathAndUserParams) (Project, error)
@@ -344,21 +240,6 @@ type Querier interface {
 	GetTerminalSpawnReport(ctx context.Context, arg GetTerminalSpawnReportParams) (AgentMessage, error)
 	GetThread(ctx context.Context, id string) (Thread, error)
 	GetThreadByWorkflow(ctx context.Context, workflowID sql.NullString) (Thread, error)
-	// Get the token count from the most recent message with token data at or before maxSeq.
-	// This is THE UNIFIED function for getting token counts.
-	//
-	// Parameters:
-	//   $1: thread ID
-	//   $2: context sequence (from context_windows.sequence)
-	//   $3: maxSeq (optional - pass NULL for current/latest)
-	//
-	// Returns 0 if no messages have token data.
-	// For fork resolution: pass the fork message's seq to get tokens at that point.
-	// $3 is a fork cursor, not the ordering key -- it bounds how much of the
-	// parent's history the fork inherited. It moved from ordinal to seq with
-	// 20260803010000_fork_points_reference_messages.sql, which made fork points
-	// message references; seq is the chat-global order every other read path uses.
-	GetThreadTokenCountAtSeq(ctx context.Context, arg GetThreadTokenCountAtSeqParams) (int64, error)
 	// Get thread with parent info for fork chain resolution
 	GetThreadWithParent(ctx context.Context, id string) (GetThreadWithParentRow, error)
 	GetToolCall(ctx context.Context, id string) (ToolCall, error)
@@ -389,9 +270,6 @@ type Querier interface {
 	// able to use the same key without colliding.
 	GetWorktreeByIdempotencyKey(ctx context.Context, arg GetWorktreeByIdempotencyKeyParams) (Worktree, error)
 	GetWorktreeByPath(ctx context.Context, path string) (Worktree, error)
-	// Whether any message in this context window precedes before_seq. Used to
-	// compute hasMore for the cursor-bounded read without fetching the rows.
-	HasMessagesBeforeInContextWindow(ctx context.Context, arg HasMessagesBeforeInContextWindowParams) (bool, error)
 	IsCommandFavorite(ctx context.Context, arg IsCommandFavoriteParams) (int32, error)
 	// Every enabled integration trigger of one integration whose OWNER can see
 	// the event's (account, resource) per a snapshot refreshed after
@@ -444,8 +322,6 @@ type Querier interface {
 	// Get all threads that fork from a given thread (direct children only)
 	ListChildThreads(ctx context.Context, parentThreadID sql.NullString) ([]Thread, error)
 	ListCommandFavorites(ctx context.Context, arg ListCommandFavoritesParams) ([]string, error)
-	ListContentBlocks(ctx context.Context, messageID string) ([]MessageContentBlock, error)
-	ListContentBlocksForMessages(ctx context.Context, messageIds []string) ([]MessageContentBlock, error)
 	ListContextWindowsByThread(ctx context.Context, threadID string) ([]ContextWindow, error)
 	// Which of the candidate item ids this user has dismissed.
 	ListDismissedInboxItemIDs(ctx context.Context, arg ListDismissedInboxItemIDsParams) ([]string, error)
@@ -533,14 +409,6 @@ type Querier interface {
 	// checkouts, at or under that directory. Scoped by user because another
 	// tenant's rows say nothing about this user's directories.
 	ListLiveWorktreePathsForUser(ctx context.Context, userID string) ([]ListLiveWorktreePathsForUserRow, error)
-	ListMessages(ctx context.Context, chatID string) ([]Message, error)
-	// Messages in a single context window with seq >= from_seq, ascending, and
-	// optionally seq < to_seq (NULL means unbounded above). Used to bound a
-	// sibling thread's read to the seq span the main thread's window actually
-	// covers, instead of that thread's entire history. NULL mirrors the initial
-	// (uncursored) snapshot's own window, which is unbounded above because spawn
-	// threads out-write and out-live the main thread -- see ListRecentChatWindow.
-	ListMessagesInContextWindowRange(ctx context.Context, arg ListMessagesInContextWindowRangeParams) ([]Message, error)
 	ListProjectDaemonsForDaemon(ctx context.Context, daemonID string) ([]ProjectDaemon, error)
 	ListProjectDaemonsForProject(ctx context.Context, projectID string) ([]ProjectDaemon, error)
 	ListProjects(ctx context.Context, arg ListProjectsParams) ([]Project, error)
@@ -552,31 +420,6 @@ type Querier interface {
 	// outcome. A definite rejection (a 4xx) changed nothing and so caused nothing.
 	// Served by idx_integration_writes_scope_recent.
 	ListRecentIntegrationWrites(ctx context.Context, arg ListRecentIntegrationWritesParams) ([]IntegrationWrite, error)
-	// Most recent N messages within a single thread. Returned DESC; reverse to
-	// restore ascending order.
-	ListRecentMessagesByThread(ctx context.Context, arg ListRecentMessagesByThreadParams) ([]Message, error)
-	// The newest `limit` messages in a single context window, strictly before
-	// before_seq (0 means unbounded -- the newest page). Returned DESC so the
-	// LIMIT keeps the newest rows; callers must reverse to restore ascending
-	// order. Paired with HasMessagesBeforeInContextWindow for the cursor path's
-	// hasMore check.
-	ListRecentMessagesInContextWindowBeforeSeq(ctx context.Context, arg ListRecentMessagesInContextWindowBeforeSeqParams) ([]Message, error)
-	// The chat snapshot's sibling-thread rows: the newest row_limit messages at or
-	// above from_seq that belong to neither the main thread (read separately,
-	// through its context-window chain) nor any spawn thread.
-	//
-	// Spawn threads are excluded outright. A spawn renders as one tool-call card
-	// in its parent's transcript, and the card reads its child thread through
-	// ListMessages(thread_id) when it is expanded, so spawn rows in the snapshot
-	// are never rendered from. They were also most of it: spawn threads out-write
-	// the main thread by an order of magnitude, so a chat-wide newest-N carried
-	// whichever partial spawn transcripts happened to sit at the top of the seq
-	// range (636KB of a 2.3MB snapshot on a real 55k-message chat).
-	//
-	// What remains are the threads the transcript renders inline (workflow-node
-	// and fork threads), bounded so a node-heavy chat cannot balloon the payload.
-	// Returned DESC so the LIMIT keeps the newest rows; callers reverse.
-	ListRecentTranscriptSiblingMessages(ctx context.Context, arg ListRecentTranscriptSiblingMessagesParams) ([]Message, error)
 	// The newest per_trigger firings of each named trigger, with their runs, in ONE
 	// query. This is what health and last_event are computed from, so listing N
 	// triggers costs one extra query rather than N. Same run_display_state table as
@@ -960,8 +803,6 @@ type Querier interface {
 	UpdateChatActiveDaemon(ctx context.Context, arg UpdateChatActiveDaemonParams) error
 	UpdateChatSelectedPresets(ctx context.Context, arg UpdateChatSelectedPresetsParams) error
 	UpdateChatTitle(ctx context.Context, arg UpdateChatTitleParams) error
-	UpdateContentBlock(ctx context.Context, arg UpdateContentBlockParams) error
-	UpdateMessage(ctx context.Context, arg UpdateMessageParams) error
 	UpdateProject(ctx context.Context, arg UpdateProjectParams) error
 	UpdateRepo(ctx context.Context, arg UpdateRepoParams) error
 	// Update fork point when the fork's target message changes (e.g., parent compacts)

@@ -48,8 +48,9 @@ lint:
         # internal/logging helpers listed under tracing.log_wrappers below.
         # raw-http-client is done: plain outbound HTTP goes through
         # observe.NewHTTPClient, Connect clients through observe.NewClientStack.
+        # raw-sql-open is done: every pool opens through dbtrace (or
+        # serverkit.OpenDB); the test-only provisioning pools carry reasons.
         forge-tracing-contract-uninstrumented: warn
-        forge-tracing-raw-sql-open: warn
     tracing:
         # internal/logging's ctx-less helpers write through slog without the
         # request's context, so their lines carry no trace_id. Listing them

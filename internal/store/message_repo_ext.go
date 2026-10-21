@@ -1,39 +1,510 @@
 // yours: scaffolded once, never touched again — forge will not overwrite this file.
 //
-// This is the custom-query seam for Message. The generated message_orm.go is
-// Tier-1 (a live projection of the migrations, regenerated every run);
-// hand-written queries that outgrow the generated CRUD belong HERE, in a
-// sibling file forge never rewrites. You have three building blocks:
+// This is the custom-query seam for Message: the message reads and writes of
+// internal/db's Repository, ported off sqlc (P5b lane L1a). Every function
+// takes and returns internal/db/core types; the generated Message row stays
+// inside this package (internal/db/SCHEMA.md, "Porting onto the forge ORM").
 //
-//  1. The generated repo + delegates: messageRepo (a *crud.Repo[Message]) and the
-//     package-level GetMessageByID / ListMessage / CreateMessage / UpdateMessage / DeleteMessage
-//     functions — compose orm.QueryOption filters (orm.WhereEq,
-//     orm.WhereILikeAny, orm.WithOrderBy, orm.WithLimit) onto List/Count.
-//  2. Raw SQL via the Bun handle: db.Bun() (bun.IDB) gives you
-//     NewSelect()/NewRaw()/bun.Raw — for joins, aggregates, CTEs, or
-//     anything the builder can't express. Scan into the generated
-//     Message struct (or your own row type).
-//  3. orm.Context: every query takes one. Take no transaction parameter:
-//     called with the ctx that s.deps.DB.RunTx hands its fn, a method
-//     here (db.Bun() builders and raw SQL included) joins that
-//     transaction; with any other ctx it runs on the pool.
-//
-// Example (uncomment and adapt):
-//
-//	func FindMessageBy(ctx context.Context, db orm.Context, /* args */) ([]*Message, error) {
-//		var rows []*Message
-//		err := db.Bun().NewSelect().Model(&rows).
-//			Where("chat_id = ?", /* value */).
-//			Scan(ctx)
-//		return rows, err
-//	}
-//
-// Or reuse the generated repo for a filtered list:
-//
-//	func ActiveMessages(ctx context.Context, db orm.Context) ([]*Message, error) {
-//		return ListMessage(ctx, db, orm.WhereEq("chat_id", true))
-//	}
+// The building blocks, in the order SCHEMA.md prefers them: the generated
+// delegates (CreateMessage, GetMessageByID, ListMessage, CountMessage, …)
+// with orm.QueryOption filters; the bun builder off db.Bun() where a
+// predicate or a join is composed; and NewRaw for the statements whose value
+// is that they are one hand-tuned statement (NextSeqInChat's fork-chain walk,
+// SaveMessageAtomic). Every function takes no transaction parameter: called
+// with a ctx that carries a transaction (Repo.RunTx or orm RunTx), it joins
+// it.
 package store
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"slices"
+	"strings"
+	"time"
+	"unicode/utf8"
+
+	"github.com/reliant-labs/forge/pkg/crud"
+	"github.com/reliant-labs/forge/pkg/orm"
+	"github.com/reliant-labs/forge/pkg/svcerr"
+	"github.com/uptrace/bun"
+
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/db/core"
+)
+
+// InsertMessage writes msg as a new row. The caller allocates ordinal and
+// seq; a collision on either is a unique violation the caller's transaction
+// retries.
+func InsertMessage(ctx context.Context, db orm.Context, msg *core.Message) error {
+	return CreateMessage(ctx, db, messageRow(msg))
+}
+
+// InsertMessageOnce writes msg unless a row already holds its id, and
+// reports which happened. ON CONFLICT (id) DO NOTHING is the arbiter between
+// two writers of one message (a client-named send repeated, an activity
+// retried): exactly one inserts. Only the id conflict is absorbed; any other
+// unique violation (messages_chat_seq_key: two different writes racing for
+// one seq) still raises, and the caller's transaction retries. The row is
+// written exactly as given — created_at and updated_at included.
+func InsertMessageOnce(ctx context.Context, db orm.Context, msg *core.Message) (bool, error) {
+	res, err := db.Bun().NewInsert().Model(messageRow(msg)).On("CONFLICT (id) DO NOTHING").Exec(ctx)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return n > 0, nil
+}
+
+// FindMessage reads one message by id, or nil when no row holds it.
+func FindMessage(ctx context.Context, db orm.Context, id string) (*core.Message, error) {
+	row, err := GetMessageByID(ctx, db, id)
+	if err != nil {
+		if isMissing(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return messageFromRow(row), nil
+}
+
+// FindMessageByActivity reads the message a Temporal activity wrote into a
+// chat — the idempotency key of an activity retry — or nil. workflowID
+// narrows it to one workflow's activity ("" means any): child workflows of
+// one chat reuse activity ids.
+func FindMessageByActivity(ctx context.Context, db orm.Context, chatID, workflowID, activityID string) (*core.Message, error) {
+	opts := []orm.QueryOption{
+		orm.WhereEq(MessageFieldChatID, chatID),
+		orm.WhereEq(MessageFieldActivityID, activityID),
+	}
+	if workflowID != "" {
+		opts = append(opts, orm.WhereEq(MessageFieldWorkflowID, workflowID))
+	}
+	return firstMessage(ListMessage(ctx, db, append(opts, orm.WithLimit(1))...))
+}
+
+// NextOrdinalInThread is one past the thread's highest ordinal (0 for an
+// empty thread).
+func NextOrdinalInThread(ctx context.Context, db orm.Context, threadID string) (int64, error) {
+	var next int64
+	err := db.Bun().NewSelect().Model((*Message)(nil)).
+		ColumnExpr("COALESCE(MAX(ordinal), -1) + 1").
+		Where("thread_id = ?", threadID).
+		Scan(ctx, &next)
+	return next, err
+}
+
+// nextSeqInChatSQL is one past the highest seq a message written to threadID
+// in chatID must clear.
+//
+// A branched chat DISPLAYS its parent's history but does not own those rows —
+// they still carry the parent chat_id, resolved on read through the context
+// window chain. Allocating from this chat's rows alone therefore restarts a
+// branch at seq 0, and every message the user sends lands numerically beneath
+// the inherited messages shown above it: the reply is saved and streamed
+// correctly but renders at the top of the transcript, which reads as "my
+// message never arrived". So the high-water mark spans the whole
+// context-window chain the thread resolves.
+//
+// The two halves are deliberately SEPARATE max lookups combined with
+// GREATEST, not one `WHERE chat_id = … OR context_window_id IN (…)`: an OR
+// across two columns can use neither index, which degraded into a full
+// sequential scan of messages (35ms over 221k rows, against 1.7ms) and, under
+// SERIALIZABLE, a predicate lock over the whole table that conflicted with
+// every concurrent message insert in the system. `= ANY(ARRAY(…))` rather
+// than `IN (SELECT …)`: Postgres will not push a recursive-CTE reference into
+// an index condition, so the IN form re-introduced the seq scan;
+// materializing the chain into an array lets the planner use
+// idx_messages_context_window_ordinal.
+const nextSeqInChatSQL = `
+WITH RECURSIVE chain AS (
+    SELECT cw.id, cw.parent_context_window_id
+    FROM context_windows cw
+    WHERE cw.thread_id = ?1
+    UNION
+    SELECT parent.id, parent.parent_context_window_id
+    FROM context_windows parent
+    JOIN chain ON chain.parent_context_window_id = parent.id
+)
+SELECT COALESCE(
+    GREATEST(
+        (SELECT MAX(m.seq) FROM messages m WHERE m.chat_id = ?0),
+        (SELECT MAX(m.seq) FROM messages m
+          WHERE m.context_window_id = ANY(ARRAY(SELECT id FROM chain)))
+    ),
+    -1
+) + 1
+`
+
+// NextSeqInChat is the next chat-global seq for a message written to
+// threadID in chatID (see nextSeqInChatSQL). SaveMessageAtomic allocates from
+// message_order_counters instead; this serves the writers that still
+// allocate for themselves.
+func NextSeqInChat(ctx context.Context, db orm.Context, chatID, threadID string) (int64, error) {
+	var next int64
+	err := db.Bun().NewRaw(nextSeqInChatSQL, chatID, threadID).Scan(ctx, &next)
+	return next, err
+}
+
+// ListMessages reads a chat's messages in seq order, narrowed by opts: one
+// context window (ContextWindowID, which wins), one thread at one context
+// sequence (Thread + ContextSequence), or every context window of one thread
+// (Thread). Offset and Limit page the result; a zero Limit is unbounded.
+func ListMessages(ctx context.Context, db orm.Context, chatID string, opts core.MessageListOptions) ([]*core.Message, error) {
+	var rows []*Message
+	q := db.Bun().NewSelect().Model(&rows)
+	switch {
+	case opts.ContextWindowID != nil:
+		q = q.Where("messages.context_window_id = ?", *opts.ContextWindowID)
+	case opts.Thread != nil && opts.ContextSequence != nil:
+		q = q.Join("JOIN context_windows AS cw ON cw.id = messages.context_window_id").
+			Where("cw.thread_id = ?", *opts.Thread).
+			Where("cw.sequence = ?", int64(*opts.ContextSequence))
+	default:
+		q = q.Where("messages.chat_id = ?", chatID)
+		if opts.Thread != nil {
+			q = q.Where("messages.context_window_id IN (?)",
+				db.Bun().NewSelect().Model((*ContextWindow)(nil)).Column("id").Where("thread_id = ?", *opts.Thread))
+		}
+	}
+	q = q.OrderExpr("messages.seq ASC")
+	if opts.Offset > 0 {
+		q = q.Offset(int64(opts.Offset))
+	}
+	if opts.Limit > 0 {
+		q = q.Limit(int64(opts.Limit))
+	}
+	if err := q.Scan(ctx); err != nil {
+		return nil, fmt.Errorf("failed to list messages: %w", err)
+	}
+	return messagesFromRows(rows), nil
+}
+
+// ListRecentTranscriptSiblingMessages is the chat snapshot's sibling-thread
+// rows, ascending: the newest limit messages at or above fromSeq that belong
+// to neither the main thread (read separately, through its context-window
+// chain) nor any spawn thread.
+//
+// Spawn threads are excluded outright. A spawn renders as one tool-call card
+// in its parent's transcript, and the card reads its child thread when it is
+// expanded, so spawn rows in the snapshot are never rendered from. They were
+// also most of it: spawn threads out-write the main thread by an order of
+// magnitude (636KB of a 2.3MB snapshot on a real 55k-message chat). What
+// remains are the threads the transcript renders inline (workflow-node and
+// fork threads), bounded so a node-heavy chat cannot balloon the payload.
+// Read DESC, against messages_chat_seq_key walked backward, so the LIMIT
+// keeps the newest rows.
+func ListRecentTranscriptSiblingMessages(ctx context.Context, db orm.Context, chatID, mainThreadID string, fromSeq int64, limit int) ([]*core.Message, error) {
+	if limit <= 0 {
+		return []*core.Message{}, nil
+	}
+	spawnThreads := db.Bun().NewSelect().Model((*Thread)(nil)).Column("id").
+		Where("chat_id = ?", chatID).
+		Where("origin = ?", "spawn")
+	var rows []*Message
+	err := db.Bun().NewSelect().Model(&rows).
+		Where("chat_id = ?", chatID).
+		Where("thread_id <> ?", mainThreadID).
+		Where("seq >= ?", fromSeq).
+		Where("thread_id NOT IN (?)", spawnThreads).
+		OrderExpr("seq DESC").
+		Limit(int64(limit)).
+		Scan(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list recent transcript sibling messages: %w", err)
+	}
+	slices.Reverse(rows)
+	return messagesFromRows(rows), nil
+}
+
+// LatestMessageInThread is the thread's newest message by seq, or nil.
+func LatestMessageInThread(ctx context.Context, db orm.Context, threadID string) (*core.Message, error) {
+	return firstMessage(ListMessage(ctx, db,
+		orm.WhereEq(MessageFieldThreadID, threadID),
+		orm.WithOrderBy(MessageFieldSeq, orm.Desc),
+		orm.WithLimit(1)))
+}
+
+// LatestTurnInThread is the thread's newest TURN — its newest message that
+// is not a system note — or nil. Notes the server posts about a run, and the
+// hidden "params changed" note a send can write after the user's message,
+// are not turns, so they never make an unanswered message look answered.
+func LatestTurnInThread(ctx context.Context, db orm.Context, threadID string) (*core.Message, error) {
+	return firstMessage(ListMessage(ctx, db,
+		orm.WhereEq(MessageFieldThreadID, threadID),
+		orm.WhereNotEq(MessageFieldRole, reliantv1.MessageRole_MESSAGE_ROLE_SYSTEM),
+		orm.WithOrderBy(MessageFieldSeq, orm.Desc),
+		orm.WithLimit(1)))
+}
+
+// LatestMessageWithTokens is the newest message carrying token data in the
+// thread's context window at contextSequence, at or before maxSeq when it is
+// set, or nil. Its token_count is the context size the LLM last reported,
+// which is how the thread's token count is read; maxSeq is a fork cursor
+// (the fork message's seq), bounding how much of the parent's history a fork
+// inherited.
+func LatestMessageWithTokens(ctx context.Context, db orm.Context, threadID string, contextSequence int64, maxSeq *int64) (*core.Message, error) {
+	row := new(Message)
+	q := db.Bun().NewSelect().Model(row).
+		Join("JOIN context_windows AS cw ON cw.id = messages.context_window_id").
+		Where("cw.thread_id = ?", threadID).
+		Where("cw.sequence = ?", contextSequence).
+		Where("messages.token_count IS NOT NULL")
+	if maxSeq != nil {
+		q = q.Where("messages.seq <= ?", *maxSeq)
+	}
+	err := q.OrderExpr("messages.seq DESC").Limit(1).Scan(ctx)
+	if err != nil {
+		if isMissing(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get latest message with tokens: %w", err)
+	}
+	return messageFromRow(row), nil
+}
+
+// ListRecentMessagesInContextWindowBeforeSeq is the newest limit messages of
+// one context window strictly before beforeSeq (0 means unbounded: the newest
+// page), ascending. Bounded in SQL for the common (unforked) case instead of
+// fetching the whole context window.
+func ListRecentMessagesInContextWindowBeforeSeq(ctx context.Context, db orm.Context, contextWindowID string, beforeSeq int64, limit int) ([]*core.Message, error) {
+	if limit <= 0 {
+		return []*core.Message{}, nil
+	}
+	opts := []orm.QueryOption{orm.WhereEq(MessageFieldContextWindowID, contextWindowID)}
+	if beforeSeq != 0 {
+		opts = append(opts, orm.WhereLt(MessageFieldSeq, beforeSeq))
+	}
+	rows, err := ListMessage(ctx, db, append(opts, orm.WithOrderBy(MessageFieldSeq, orm.Desc), orm.WithLimit(limit))...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list recent messages in context window before seq: %w", err)
+	}
+	slices.Reverse(rows)
+	return messagesFromRows(rows), nil
+}
+
+// HasMessagesBeforeInContextWindow reports whether any message of the
+// context window precedes beforeSeq: the cursor read's hasMore, without
+// fetching rows.
+func HasMessagesBeforeInContextWindow(ctx context.Context, db orm.Context, contextWindowID string, beforeSeq int64) (bool, error) {
+	exists, err := db.Bun().NewSelect().Model((*Message)(nil)).
+		Where("context_window_id = ?", contextWindowID).
+		Where("seq < ?", beforeSeq).
+		Exists(ctx)
+	if err != nil {
+		return false, fmt.Errorf("failed to check for messages before seq: %w", err)
+	}
+	return exists, nil
+}
+
+// ListMessagesInContextWindowRange is one context window's messages with
+// seq >= fromSeq and, when toSeq is set, seq < toSeq, ascending. It bounds a
+// sibling thread's read to the seq span the main thread's window covers,
+// instead of that thread's entire history; nil mirrors the initial
+// (uncursored) snapshot's own window, unbounded above because spawn threads
+// out-write and out-live the main thread.
+func ListMessagesInContextWindowRange(ctx context.Context, db orm.Context, contextWindowID string, fromSeq int64, toSeq *int64) ([]*core.Message, error) {
+	opts := []orm.QueryOption{
+		orm.WhereEq(MessageFieldContextWindowID, contextWindowID),
+		orm.WhereGte(MessageFieldSeq, fromSeq),
+	}
+	if toSeq != nil {
+		opts = append(opts, orm.WhereLt(MessageFieldSeq, *toSeq))
+	}
+	rows, err := ListMessage(ctx, db, append(opts, orm.WithOrderBy(MessageFieldSeq, orm.Asc))...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list messages in context window range: %w", err)
+	}
+	return messagesFromRows(rows), nil
+}
+
+// UpdateMessageUsage records what a message cost: the context size the LLM
+// reported (token_count) and its price. A message that does not exist is
+// not an error.
+func UpdateMessageUsage(ctx context.Context, db orm.Context, id string, tokenCount *int, cost *float64) error {
+	row := &Message{ID: id, TokenCount: intToInt64Ptr(tokenCount), Cost: cost}
+	err := messageRepo.UpdateMasked(ctx, db, row, []string{MessageFieldTokenCount, MessageFieldCost}, crud.NoReadBack())
+	if errors.Is(err, orm.ErrNoRows) {
+		return nil
+	}
+	return err
+}
+
+// UpdateMessageFields sets the named columns of one message (and stamps
+// updated_at, which the live view polls for). Column names are the caller's,
+// quoted as identifiers.
+func UpdateMessageFields(ctx context.Context, db orm.Context, id string, fields map[string]any) error {
+	if len(fields) == 0 {
+		return nil
+	}
+	q := db.Bun().NewUpdate().Model((*Message)(nil))
+	for _, col := range sortedKeys(fields) {
+		q = q.Set("? = ?", bun.Ident(col), fields[col])
+	}
+	_, err := q.Set("updated_at = CURRENT_TIMESTAMP").Where("id = ?", id).Exec(ctx)
+	return err
+}
+
+// RemoveMessage deletes one message; its content blocks go with it (ON
+// DELETE CASCADE). A message that does not exist is not an error.
+func RemoveMessage(ctx context.Context, db orm.Context, id string) error {
+	err := DeleteMessage(ctx, db, id)
+	if errors.Is(err, orm.ErrNoRows) {
+		return nil
+	}
+	return err
+}
+
+// LastThreadActivityByChat maps every thread of a chat to the timestamp of
+// its newest message: messages are the only durable per-thread progress
+// evidence the schema has (step executions and checkpoints exist for the
+// ROOT run only), so this is how a quiet thread is told from a working one.
+func LastThreadActivityByChat(ctx context.Context, db orm.Context, chatID string) (map[string]time.Time, error) {
+	var rows []struct {
+		ThreadID string    `bun:"thread_id"`
+		Last     time.Time `bun:"last"`
+	}
+	err := db.Bun().NewSelect().Model((*Message)(nil)).
+		Column("thread_id").
+		ColumnExpr("MAX(created_at) AS last").
+		Where("chat_id = ?", chatID).
+		Group("thread_id").
+		Scan(ctx, &rows)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read thread activity: %w", err)
+	}
+	activity := make(map[string]time.Time, len(rows))
+	for _, r := range rows {
+		activity[r.ThreadID] = r.Last
+	}
+	return activity, nil
+}
+
+// isMissing reports a read or write that found no row: sql.ErrNoRows from a
+// scan or a zero-row write, or the generated Get's svcerr.NotFound.
+func isMissing(err error) bool {
+	return errors.Is(err, orm.ErrNoRows) || svcerr.IsNotFound(err)
+}
+
+// firstMessage maps the first row of a ListMessage result, or nil.
+func firstMessage(rows []*Message, err error) (*core.Message, error) {
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 {
+		return nil, nil
+	}
+	return messageFromRow(rows[0]), nil
+}
+
+// messageRow is msg as a messages row. Free text is made valid UTF-8 on the
+// way in (see validUTF8).
+func messageRow(msg *core.Message) *Message {
+	return &Message{
+		ID:                msg.ID,
+		ChatID:            msg.ChatID,
+		Ordinal:           msg.Ordinal,
+		Seq:               msg.Seq,
+		ThreadID:          msg.ThreadID,
+		ContextWindowID:   msg.ContextWindowID,
+		Role:              msg.Role,
+		DisplayStyle:      msg.DisplayStyle,
+		Model:             validUTF8Ptr(msg.Model),
+		Agent:             validUTF8Ptr(msg.Agent),
+		TokenCount:        intToInt64Ptr(msg.TokenCount),
+		Cost:              msg.Cost,
+		WorkflowID:        validUTF8Ptr(msg.WorkflowID),
+		RunID:             validUTF8Ptr(msg.RunID),
+		NodeID:            validUTF8Ptr(msg.NodeID),
+		NodePath:          validUTF8Ptr(msg.NodePath),
+		ActivityID:        validUTF8Ptr(msg.ActivityID),
+		ProviderAccountID: msg.ProviderAccountID,
+		CreatedAt:         msg.CreatedAt,
+		UpdatedAt:         msg.UpdatedAt,
+	}
+}
+
+func messageFromRow(row *Message) *core.Message {
+	return &core.Message{
+		ID:                row.ID,
+		ChatID:            row.ChatID,
+		Ordinal:           row.Ordinal,
+		Seq:               row.Seq,
+		ThreadID:          row.ThreadID,
+		ContextWindowID:   row.ContextWindowID,
+		Role:              row.Role,
+		DisplayStyle:      row.DisplayStyle,
+		Model:             row.Model,
+		Agent:             row.Agent,
+		TokenCount:        int64ToIntPtr(row.TokenCount),
+		Cost:              row.Cost,
+		WorkflowID:        row.WorkflowID,
+		RunID:             row.RunID,
+		NodeID:            row.NodeID,
+		NodePath:          row.NodePath,
+		ActivityID:        row.ActivityID,
+		ProviderAccountID: row.ProviderAccountID,
+		CreatedAt:         row.CreatedAt,
+		UpdatedAt:         row.UpdatedAt,
+	}
+}
+
+func messagesFromRows(rows []*Message) []*core.Message {
+	out := make([]*core.Message, len(rows))
+	for i, row := range rows {
+		out[i] = messageFromRow(row)
+	}
+	return out
+}
+
+// validUTF8 protects the database boundary from raw subprocess and provider
+// bytes that reached a Go string without being valid text. PostgreSQL text
+// rejects malformed UTF-8, so one bad byte must not make an entire message
+// write fail. Valid text returns unchanged.
+func validUTF8(text string) string {
+	if utf8.ValidString(text) {
+		return text
+	}
+	return strings.ToValidUTF8(text, "\uFFFD")
+}
+
+// validUTF8Ptr is validUTF8 through a pointer, keeping a valid value's
+// pointer as it is.
+func validUTF8Ptr(text *string) *string {
+	if text == nil || utf8.ValidString(*text) {
+		return text
+	}
+	v := validUTF8(*text)
+	return &v
+}
+
+func intToInt64Ptr(i *int) *int64 {
+	if i == nil {
+		return nil
+	}
+	v := int64(*i)
+	return &v
+}
+
+func int64ToIntPtr(i *int64) *int {
+	if i == nil {
+		return nil
+	}
+	v := int(*i)
+	return &v
+}
+
+func sortedKeys(m map[string]any) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
+	return keys
+}
 
 // MessageExtra carries fields on Message that are NOT columns — computed
 // values, transient state, anything derived rather than stored. Message is
