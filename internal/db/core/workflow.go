@@ -144,8 +144,8 @@ type WorkflowStore interface {
 	// and the root's own thread, and reports how many of each it moved. The
 	// inverse of CascadeTerminalStatusToDescendants (and its thread twin)
 	// for a subtree a reset-and-replay is bringing back — see
-	// queries/workflows.sql for why the predicate is a time window and why
-	// both halves are one statement.
+	// internal/store/workflow_repo_ext.go for why the predicate is a time
+	// window and why both halves are one statement.
 	ReviveSubtreeLiveAt(ctx context.Context, rootWorkflowID string, at time.Time) (workflowsRevived, threadsRevived int64, err error)
 	DeleteWorkflow(ctx context.Context, id string) error
 	DeleteWorkflowsByChat(ctx context.Context, chatID string) error
