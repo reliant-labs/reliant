@@ -7,8 +7,6 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
-	postgresstore "github.com/reliant-labs/reliant/internal/db/postgres"
-	pgdb "github.com/reliant-labs/reliant/internal/db/postgres/generated"
 	"github.com/reliant-labs/reliant/internal/store"
 )
 
@@ -37,26 +35,8 @@ func (r *Repo) RevokeIntegrationAccess(ctx context.Context, integrationID string
 // about (account, resource) reaches: those whose owner holds a grant for it
 // refreshed at or after freshAfter, and whose named connection (if any) is
 // the owner's and active.
-//
-// It is the one integration-access query still on sqlc: it returns whole
-// trigger rows, and their mapping onto core.Trigger moves with the triggers
-// aggregate (P5b lane L4), which ports it.
 func (r *Repo) ListAccessRoutedTriggers(ctx context.Context, integration, account, resource string, freshAfter time.Time) ([]*core.Trigger, error) {
-	rows, err := pgdb.New(r.DB.DB(ctx)).ListAccessRoutedTriggers(ctx, pgdb.ListAccessRoutedTriggersParams{
-		Integration: integration, AccountKey: account, ResourceKey: resource, FreshAfter: freshAfter.UTC(),
-	})
-	if err != nil {
-		return nil, fmt.Errorf("list access-routed triggers: %w", err)
-	}
-	out := make([]*core.Trigger, 0, len(rows))
-	for _, row := range rows {
-		t, err := postgresstore.TriggerFromRow(row.Trigger)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, t)
-	}
-	return out, nil
+	return store.ListAccessRoutedTriggers(ctx, r.ORM(), integration, account, resource, freshAfter)
 }
 
 // ListIntegrationTriggerOwners lists the users with an enabled trigger of the

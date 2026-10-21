@@ -115,7 +115,6 @@ type Repo struct {
 	threads         core.ThreadStore
 	contextWindows  core.ContextWindowStore
 	workflowCatalog core.WorkflowCatalogStore
-	triggers        core.TriggerStore
 	inbox           core.InboxStore
 	runEvents       core.RunEventStore
 
@@ -176,7 +175,6 @@ func NewRepoWithDriver(db *sql.DB, driver DatabaseDriver) (*Repo, error) {
 		threads:         postgresstore.NewThreadStore(pgQueries),
 		contextWindows:  postgresstore.NewContextWindowStore(pgQueries),
 		workflowCatalog: postgresstore.NewWorkflowCatalogStore(client),
-		triggers:        postgresstore.NewTriggerStore(pgQueries),
 		inbox:           postgresstore.NewInboxStore(pgQueries),
 		runEvents:       postgresstore.NewRunEventStore(client),
 	}, nil

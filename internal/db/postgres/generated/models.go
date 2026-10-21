@@ -860,11 +860,12 @@ type ToolCallResult struct {
 }
 
 type Trigger struct {
-	ID                  string          `json:"id"`
-	UserID              string          `json:"user_id"`
-	ProjectID           string          `json:"project_id"`
-	WorktreeID          sql.NullString  `json:"worktree_id"`
-	Name                string          `json:"name"`
+	ID         string         `json:"id"`
+	UserID     string         `json:"user_id"`
+	ProjectID  string         `json:"project_id"`
+	WorktreeID sql.NullString `json:"worktree_id"`
+	Name       string         `json:"name"`
+	// forge:go-type=github.com/reliant-labs/reliant/internal/db/core;core.TriggerKind
 	Kind                string          `json:"kind"`
 	Enabled             bool            `json:"enabled"`
 	Workflow            string          `json:"workflow"`
@@ -882,17 +883,20 @@ type Trigger struct {
 	WebhookSecretSealed []byte          `json:"webhook_secret_sealed"`
 	WorkflowTrigger     sql.NullString  `json:"workflow_trigger"`
 	NoMachine           bool            `json:"no_machine"`
-	ActingIdentity      string          `json:"acting_identity"`
+	// forge:go-type=github.com/reliant-labs/reliant/internal/db/core;core.ActingIdentity
+	ActingIdentity string `json:"acting_identity"`
 }
 
 type TriggerEvent struct {
-	ID            string                `json:"id"`
-	TriggerID     sql.NullString        `json:"trigger_id"`
-	UserID        string                `json:"user_id"`
-	Kind          string                `json:"kind"`
-	DedupeKey     string                `json:"dedupe_key"`
-	OccurredAt    time.Time             `json:"occurred_at"`
-	Payload       json.RawMessage       `json:"payload"`
+	ID        string         `json:"id"`
+	TriggerID sql.NullString `json:"trigger_id"`
+	UserID    string         `json:"user_id"`
+	// forge:go-type=github.com/reliant-labs/reliant/internal/db/core;core.TriggerEventKind
+	Kind       string          `json:"kind"`
+	DedupeKey  string          `json:"dedupe_key"`
+	OccurredAt time.Time       `json:"occurred_at"`
+	Payload    json.RawMessage `json:"payload"`
+	// forge:go-type=github.com/reliant-labs/reliant/internal/db/core;core.TriggerEventOutcome
 	Outcome       string                `json:"outcome"`
 	OutcomeDetail string                `json:"outcome_detail"`
 	ChatID        sql.NullString        `json:"chat_id"`
