@@ -66,7 +66,9 @@ const USERS: IdentityUsersPage = {
 };
 
 function code(overrides: Partial<IdentityPasswordCode> = {}): IdentityPasswordCode {
-  return { code: CODE, expiresAtMs: NOW + 3_600_000, resetUrl: LINK, ...overrides };
+  // Two hours from the moment the fake answers, so "in 2h" holds however long
+  // the render takes (an hour exactly would read "60m" a millisecond later).
+  return { code: CODE, expiresAtMs: Date.now() + 2 * 3_600_000, resetUrl: LINK, ...overrides };
 }
 
 function fakeApi(overrides: Partial<IdentityApi> = {}): IdentityApi {
@@ -139,7 +141,7 @@ describe("IdentityTab with no mail delivery", () => {
 
     const dialog = await screen.findByRole("dialog", { name: "Password reset link for alice@acme.test" });
     expect(within(dialog).getByTestId("identity-code-link")).toHaveValue(LINK);
-    expect(within(dialog).getByTestId("identity-code-dialog")).toHaveTextContent("expires in 1h");
+    expect(within(dialog).getByTestId("identity-code-dialog")).toHaveTextContent("expires in 2h");
 
     await user.click(within(dialog).getByRole("button", { name: "Copy" }));
     expect(await navigator.clipboard.readText()).toBe(LINK);
