@@ -76,16 +76,8 @@ func TestResumeSignalsBeforeMarkingRunning(t *testing.T) {
 	}
 	branch := body[start : start+end]
 
-	signalAt := strings.Index(branch, "s.runs.Resume(")
-	require.Positive(t, signalAt, "the paused branch must resume via the run-lifecycle service")
-
-	markRunningAt := strings.Index(branch, "db.Active())")
-	require.Positive(t, markRunningAt, "the paused branch must mark the workflow running")
-
-	assert.Less(t, signalAt, markRunningAt,
-		"ResumeWorkflow must be called BEFORE the workflow is marked running — "+
-			"marking first means a failed DB write aborts the request without ever "+
-			"signalling, leaving the run parked while the UI shows it active")
+	require.Contains(t, branch, "s.resumePausedRun(",
+		"the paused branch must resume through resumePausedRun, which SendAgentMessage shares")
 
 	// The save transaction must not carry the status flip: anything inside it
 	// can abort the request before the signal is sent.
@@ -98,6 +90,30 @@ func TestResumeSignalsBeforeMarkingRunning(t *testing.T) {
 	assert.NotContains(t, saveTx, "UpdateWorkflowStatus",
 		"the status flip must live outside the message-save transaction, or a "+
 			"failure there blocks the resume signal entirely")
+
+	// And inside resumePausedRun, the signal comes before the status flip.
+	shared := resumePausedRunSource(t)
+	signalAt := strings.Index(shared, "s.runs.Resume(")
+	require.Positive(t, signalAt, "resumePausedRun must resume via the run-lifecycle service")
+	markRunningAt := strings.Index(shared, "db.Active())")
+	require.Positive(t, markRunningAt, "resumePausedRun must mark the workflow running")
+	assert.Less(t, signalAt, markRunningAt,
+		"ResumeWorkflow must be called BEFORE the workflow is marked running — "+
+			"marking first means a failed DB write aborts the request without ever "+
+			"signalling, leaving the run parked while the UI shows it active")
+}
+
+// resumePausedRunSource is the body of resumePausedRun.
+func resumePausedRunSource(t *testing.T) string {
+	t.Helper()
+	src, err := os.ReadFile("chat_resume_paused.go")
+	require.NoError(t, err)
+	body := string(src)
+	start := strings.Index(body, "func (s *Service) resumePausedRun(")
+	require.Positive(t, start, "resumePausedRun not found")
+	end := strings.Index(body[start:], "\n}\n")
+	require.Positive(t, end, "could not delimit resumePausedRun")
+	return body[start : start+end]
 }
 
 // A failed resume must be REPORTED, not logged and papered over. Returning
@@ -105,12 +121,17 @@ func TestResumeSignalsBeforeMarkingRunning(t *testing.T) {
 // active while nothing is executing — the message is saved, the UI shows work
 // in progress, and the run is still parked.
 func TestFailedResumeIsReportedNotSwallowed(t *testing.T) {
+	shared := resumePausedRunSource(t)
+	at := strings.Index(shared, "s.runs.Resume(")
+	require.Positive(t, at, "resume call not found")
+	assert.Contains(t, shared[at:], "return outcome, err",
+		"resumePausedRun must hand a resume failure back to its caller")
+
 	src, err := os.ReadFile("chat_send.go")
 	require.NoError(t, err)
-
 	body := string(src)
-	at := strings.Index(body, "s.runs.Resume(")
-	require.Positive(t, at, "resume call not found")
+	at = strings.Index(body, "s.resumePausedRun(")
+	require.Positive(t, at, "resumePausedRun call not found")
 
 	// Look at the error handling immediately following the resume call.
 	window := body[at:min(at+1600, len(body))]

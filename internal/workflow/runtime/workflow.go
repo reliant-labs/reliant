@@ -4474,8 +4474,9 @@ func executeToolsWithSpawnSupport(
 		}
 
 		// Execute ask_user tool calls inline (question system). The wait
-		// yields to new input for the asking thread — a message or an
-		// interrupt — so it needs the thread's doorbell and interrupt epoch.
+		// yields to the user's new input for the asking thread — a message
+		// or an interrupt — so it needs the thread's doorbell and interrupt
+		// epoch.
 		askThreadInput := askUserThreadInput{
 			tracker:   childTracker,
 			interrupt: resolveThreadInterrupt(threadInterruptFactory, nil, rtx.Thread),
@@ -4509,10 +4510,10 @@ func executeToolsWithSpawnSupport(
 // and waiting for a signal, using the same QuestionCreate/signal.question system
 // as the DAG ask_question node.
 //
-// The wait also ends when the asking thread is given something else to react
-// to — a message to it, or an interrupt of it (see awaitAskUserYield). The
-// question is then resolved unanswered and the model is told why, so the loop
-// reaches its next call_llm, which is what delivers the message.
+// The wait also ends when the user gives the asking thread something else to
+// react to — a message to it, or an interrupt of it (see awaitAskUserYield).
+// The question is then resolved unanswered and the model is told why, so the
+// loop reaches its next call_llm, which is what delivers the message.
 func executeAskUserInline(
 	ctx workflow.Context,
 	tc *reliantv1.ToolCallMsg,

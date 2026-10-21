@@ -87,3 +87,45 @@ func TestQuestionResolveActivity_EmitsResolvedUpdate(t *testing.T) {
 		"a timed-out question must be announced as resolved, or the expired gate "+
 			"replays to every client that opens this chat afterwards")
 }
+
+// The workflow resolves a question it stopped waiting on — its timeout, or the
+// user messaging or interrupting the asking thread instead. If the user's
+// answer reached the row first, that answer is kept and handed back, not
+// overwritten with an empty resolution.
+func TestQuestionResolveActivity_KeepsAnAnswerThatGotThereFirst(t *testing.T) {
+	repo, cleanup := db.SetupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	chatID := uuid.NewString()
+	require.NoError(t, repo.CreateChat(ctx, &db.Chat{
+		ID: chatID, Title: "answered gate", ProjectID: "test-project", UserID: "test-user",
+		CreatedAt: now, UpdatedAt: now, LastActive: now,
+	}))
+	questionID := uuid.NewString()
+	require.NoError(t, repo.CreateQuestion(ctx, &db.Question{
+		ID: questionID, ChatID: chatID, WorkflowID: "wf-1", ThreadID: chatID,
+		StepID: "ask", Status: db.QuestionStatusPending, CreatedAt: now,
+	}))
+	answer := `{"answers":[{"question":"Which style?","selected":["Bold"]}]}`
+	require.NoError(t, repo.ResolveQuestion(ctx, questionID, &answer))
+
+	resolveActivity := NewQuestionResolveActivity(repo)
+	suite := &temporaltest.WorkflowTestSuite{}
+	env := suite.NewTestActivityEnvironment()
+	env.RegisterActivity(resolveActivity.Execute)
+
+	result, err := env.ExecuteActivity(resolveActivity.Execute, QuestionResolveInput{QuestionID: questionID})
+	require.NoError(t, err)
+	var out QuestionResolveOutput
+	require.NoError(t, result.Get(&out))
+	require.True(t, out.AlreadyResolved, "a question that is no longer pending must be reported as such")
+	require.Equal(t, answer, out.ResponseData, "the user's answer must be handed back")
+
+	q, err := repo.GetQuestionByID(ctx, questionID)
+	require.NoError(t, err)
+	require.NotNil(t, q.ResponseData)
+	require.Equal(t, answer, *q.ResponseData, "the user's answer must not be overwritten")
+}
