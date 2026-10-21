@@ -77,6 +77,12 @@ type Deps struct {
 	// Unavailable.
 	// forge:optional-dep
 	Senders map[string]SenderDirectory
+
+	// Options checks, at enable time, that the values picked for an
+	// integration input can be reached (see OptionsChecker). Without it
+	// enabling checks shapes only.
+	// forge:optional-dep
+	Options OptionsChecker
 }
 
 // Syncer is the schedule backend the handlers converge onto. Declared here,

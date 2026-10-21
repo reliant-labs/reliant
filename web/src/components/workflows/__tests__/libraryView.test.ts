@@ -11,16 +11,23 @@ import { describe, expect, it } from "vitest";
 import type { RunSummary } from "@/api/run-grpc";
 import type { Trigger, TriggerHealthStatusKey } from "@/api/trigger-grpc";
 import type { InvalidWorkflow, WorkflowResponse } from "@/api/workflow-grpc";
-import { automationsDeletedWith, automationsSummary, deletedAutomationsSentence, libraryView } from "../library/libraryView";
+import { automationsDeletedWith, deletedAutomationsSentence, libraryView, turnedOnSummary } from "../library/libraryView";
+import { automationHealth } from "@/lib/automationHealth";
 
-describe("automationsSummary (the Library's Automations column)", () => {
-  it("is null for none — the cell's dash under a labelled column", () => {
-    expect(automationsSummary(0)).toBeNull();
+describe("turnedOnSummary (the Library's Turned on column)", () => {
+  const h = (status: "healthy" | "failing" | "needs_setup", enabled = true) =>
+    automationHealth({ enabled, health: { status, consecutiveFailures: 2, consecutiveSkips: 0, lastFailureDetail: "" } });
+  it("is null when nothing could run it by itself — the cell's dash under a labelled column", () => {
+    expect(turnedOnSummary(undefined, false)).toBeNull();
   });
-  it("counts, and names the failing ones", () => {
-    expect(automationsSummary(1)).toBe("1 automation");
-    expect(automationsSummary(2)).toBe("2 automations");
-    expect(automationsSummary(2, 1)).toBe("2 automations · 1 failing");
+  it("says Off for a workflow that declares triggers and is not on here", () => {
+    expect(turnedOnSummary(undefined, true)).toEqual({ text: "Off", attention: false });
+  });
+  it("says On when all is well, and the worst state in the health vocabulary's words otherwise", () => {
+    expect(turnedOnSummary(h("healthy"), true)).toEqual({ text: "On", attention: false });
+    expect(turnedOnSummary(h("needs_setup"), true)).toEqual({ text: "Needs setup", attention: true });
+    expect(turnedOnSummary(h("failing"), true)).toEqual({ text: "2 failed in a row", attention: true });
+    expect(turnedOnSummary(h("healthy", false), true)).toEqual({ text: "Paused", attention: false });
   });
 });
 
@@ -127,7 +134,7 @@ describe("libraryView", () => {
     expect(names(builtinOnly)).toEqual({ all: ["builtin://planner", "builtin://agent"] });
   });
 
-  it("pins workflows with a FAILING automation under Needs attention, out of their section", () => {
+  it("pins workflows whose automation needs the user under Needs attention, out of their section", () => {
     const triggers = [
       trigger("t1", "triage", "failing"),
       trigger("t2", "triage", "healthy"),
@@ -143,8 +150,8 @@ describe("libraryView", () => {
     });
     expect(view.sections[0]!.label).toBe("Needs attention");
     expect(view.automationCounts.get("triage")).toBe(2);
-    expect(view.failingCounts.get("triage")).toBe(1);
-    expect(view.failingCounts.get("release-notes")).toBeUndefined();
+    expect(view.worstHealth.get("triage")?.key).toBe("failing");
+    expect(view.worstHealth.get("release-notes")?.key).toBe("paused");
     // A builtin's automations match on its stored ref.
     expect(view.automationCounts.get("agent")).toBe(1);
   });

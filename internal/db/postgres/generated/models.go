@@ -723,10 +723,11 @@ type Repo struct {
 }
 
 type RunEvent struct {
-	ID           string          `json:"id"`
-	UserID       string          `json:"user_id"`
-	ChatID       string          `json:"chat_id"`
-	WorkflowName string          `json:"workflow_name"`
+	ID           string `json:"id"`
+	UserID       string `json:"user_id"`
+	ChatID       string `json:"chat_id"`
+	WorkflowName string `json:"workflow_name"`
+	// forge:go-type=github.com/reliant-labs/reliant/internal/db/core;core.RunEventOutcome
 	Outcome      string          `json:"outcome"`
 	DedupeKey    string          `json:"dedupe_key"`
 	Payload      json.RawMessage `json:"payload"`
@@ -1006,7 +1007,8 @@ type WorkflowDraft struct {
 	CreatedAt   time.Time      `json:"created_at"`
 	UpdatedAt   time.Time      `json:"updated_at"`
 	Version     int64          `json:"version"`
-	Status      string         `json:"status"`
+	// forge:go-type=github.com/reliant-labs/reliant/internal/db/core;core.WorkflowDraftStatus
+	Status string `json:"status"`
 }
 
 type WorkflowScenario struct {

@@ -1,39 +1,57 @@
 // yours: scaffolded once, never touched again — forge will not overwrite this file.
 //
-// This is the custom-query seam for TemporalPayloadBlob. The generated temporal_payload_blob_orm.go is
-// Tier-1 (a live projection of the migrations, regenerated every run);
-// hand-written queries that outgrow the generated CRUD belong HERE, in a
-// sibling file forge never rewrites. You have three building blocks:
-//
-//  1. The generated repo + delegates: temporalPayloadBlobRepo (a *crud.Repo[TemporalPayloadBlob]) and the
-//     package-level GetTemporalPayloadBlobByID / ListTemporalPayloadBlob / CreateTemporalPayloadBlob / UpdateTemporalPayloadBlob / DeleteTemporalPayloadBlob
-//     functions — compose orm.QueryOption filters (orm.WhereEq,
-//     orm.WhereILikeAny, orm.WithOrderBy, orm.WithLimit) onto List/Count.
-//  2. Raw SQL via the Bun handle: db.Bun() (bun.IDB) gives you
-//     NewSelect()/NewRaw()/bun.Raw — for joins, aggregates, CTEs, or
-//     anything the builder can't express. Scan into the generated
-//     TemporalPayloadBlob struct (or your own row type).
-//  3. orm.Context: every query takes one. Take no transaction parameter:
-//     called with the ctx that s.deps.DB.RunTx hands its fn, a method
-//     here (db.Bun() builders and raw SQL included) joins that
-//     transaction; with any other ctx it runs on the pool.
-//
-// Example (uncomment and adapt):
-//
-//	func FindTemporalPayloadBlobBy(ctx context.Context, db orm.Context, /* args */) ([]*TemporalPayloadBlob, error) {
-//		var rows []*TemporalPayloadBlob
-//		err := db.Bun().NewSelect().Model(&rows).
-//			Where("data = ?", /* value */).
-//			Scan(ctx)
-//		return rows, err
-//	}
-//
-// Or reuse the generated repo for a filtered list:
-//
-//	func ActiveTemporalPayloadBlobs(ctx context.Context, db orm.Context) ([]*TemporalPayloadBlob, error) {
-//		return ListTemporalPayloadBlob(ctx, db, orm.WhereEq("data", true))
-//	}
+// The temporal_payload_blobs queries (P5b lane L2): the content-addressed
+// claim-check store behind internal/temporal/claimcheck, which keeps large
+// payloads out of Temporal histories.
 package store
+
+import (
+	"context"
+	"time"
+
+	"github.com/reliant-labs/forge/pkg/orm"
+)
+
+// PutTemporalPayloadBlob upserts a blob. Content-addressed, so a conflict
+// means identical bytes: only the retention stamp is refreshed.
+func PutTemporalPayloadBlob(ctx context.Context, db orm.Context, key string, data []byte, rawSize int) error {
+	_, err := db.Bun().NewInsert().
+		Model(&TemporalPayloadBlob{Key: key, Data: data, SizeBytes: int32(rawSize)}).
+		On("CONFLICT (key) DO UPDATE").
+		Set("last_referenced_at = NOW()").
+		Returning("NULL").
+		Exec(ctx)
+	return err
+}
+
+// TemporalPayloadBlobData reads a blob's bytes. A miss is svcerr.NotFound.
+// It deliberately leaves last_referenced_at alone: a read is on the
+// workflow-task path, and the GC horizon already outlives every history that
+// can reference the blob (claimcheck.DefaultGCHorizon).
+func TemporalPayloadBlobData(ctx context.Context, db orm.Context, key string) ([]byte, error) {
+	row, err := GetTemporalPayloadBlobByID(ctx, db, key)
+	if err != nil {
+		return nil, err
+	}
+	return row.Data, nil
+}
+
+// DeleteExpiredTemporalPayloadBlobs deletes up to batch blobs not referenced
+// within horizon, returning how many it deleted. Callers loop until a batch
+// comes back short, so a large backlog never holds one long lock.
+func DeleteExpiredTemporalPayloadBlobs(ctx context.Context, db orm.Context, horizon time.Duration, batch int) (int64, error) {
+	expired := db.Bun().NewSelect().Model((*TemporalPayloadBlob)(nil)).
+		Column("key").
+		Where("last_referenced_at < NOW() - make_interval(secs => ?)", horizon.Seconds()).
+		Limit(int64(batch))
+	res, err := db.Bun().NewDelete().Model((*TemporalPayloadBlob)(nil)).
+		Where("key IN (?)", expired).
+		Exec(ctx)
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
 
 // TemporalPayloadBlobExtra carries fields on TemporalPayloadBlob that are NOT columns — computed
 // values, transient state, anything derived rather than stored. TemporalPayloadBlob is

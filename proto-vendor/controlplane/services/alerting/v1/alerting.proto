@@ -54,7 +54,18 @@ service AlertingService {
   // UpdateReceiver changes a receiver's settings and/or replaces its secret.
   // The name and type are immutable (routes name receivers).
   rpc UpdateReceiver(UpdateReceiverRequest) returns (UpdateReceiverResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "update"
+        target: {
+          kind: "receiver"
+          id: "id"
+          label: "response.receiver.name"
+        }
+        scope: "org_id"
+      }
+    };
   }
 
   // DeleteReceiver removes a receiver. Refused while an env route still names
@@ -66,7 +77,10 @@ service AlertingService {
   // TestReceiver sends a synthetic alert that is routed to exactly this
   // receiver, and reports whether Alertmanager accepted it.
   rpc TestReceiver(TestReceiverRequest) returns (TestReceiverResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "sends a test notification; changes nothing"}
+    };
   }
 
   // CreateSilence mutes matching alerts of THIS org until ends_at.
@@ -84,7 +98,17 @@ service AlertingService {
 
   // ExpireSilence ends one of the org's silences now.
   rpc ExpireSilence(ExpireSilenceRequest) returns (ExpireSilenceResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "expire"
+        target: {
+          kind: "silence"
+          id: "id"
+        }
+        scope: "org_id"
+      }
+    };
   }
 
   // ListAlerts returns the org's pending and firing alert instances.
@@ -114,7 +138,10 @@ service AlertingService {
   // MarkNotificationsRead marks notifications read (all of the org's unread
   // when ids is empty).
   rpc MarkNotificationsRead(MarkNotificationsReadRequest) returns (MarkNotificationsReadResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "per-user read state of the notification inbox"}
+    };
   }
 }
 

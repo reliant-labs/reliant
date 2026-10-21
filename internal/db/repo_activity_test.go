@@ -337,8 +337,8 @@ func TestEmitChatActivityIfChanged_TransitionRunningToIdle(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 // completeWorkflowNow drives a workflow to a terminal status through the
-// production path, which is what stamps completed_at (see the CASE in
-// queries/workflows.sql). The ERROR branch compares those timestamps, so a
+// production path, which is what stamps completed_at (see setWorkflowStatus
+// in internal/store/workflow_repo_ext.go). The ERROR branch compares those timestamps, so a
 // fixture that only INSERTed rows would not exercise it.
 func completeWorkflowNow(t *testing.T, repo *Repo, id string, status WorkflowStatus) {
 	t.Helper()

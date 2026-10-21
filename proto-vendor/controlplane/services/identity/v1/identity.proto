@@ -64,39 +64,117 @@ service IdentityService {
   // InviteUser creates the account if needed, grants the console-managed roles
   // and has the instance email the invitee a link to set a credential.
   rpc InviteUser(InviteIdentityUserRequest) returns (InviteIdentityUserResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "invite"
+        target: {
+          kind: "app_user"
+          id: "response.user_id"
+          label: "email"
+        }
+        env: "environment_id"
+        scope: "org_id"
+      }
+    };
   }
 
   // SetUserRoles replaces the user's console-managed roles. Declared roles are
   // left as they are.
   rpc SetUserRoles(SetIdentityUserRolesRequest) returns (SetIdentityUserRolesResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "set_roles"
+        target: {
+          kind: "app_user"
+          id: "user_id"
+        }
+        env: "environment_id"
+        scope: "org_id"
+      }
+    };
   }
 
   // SendPasswordReset emails the user a link to set a new password.
   rpc SendPasswordReset(SendIdentityPasswordResetRequest) returns (SendIdentityPasswordResetResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "send_password_reset"
+        target: {
+          kind: "app_user"
+          id: "user_id"
+        }
+        env: "environment_id"
+        scope: "org_id"
+      }
+    };
   }
 
   // LockUser blocks sign-in for the user. Reversible with UnlockUser.
   rpc LockUser(LockIdentityUserRequest) returns (LockIdentityUserResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "lock"
+        target: {
+          kind: "app_user"
+          id: "user_id"
+        }
+        env: "environment_id"
+        scope: "org_id"
+      }
+    };
   }
 
   rpc UnlockUser(UnlockIdentityUserRequest) returns (UnlockIdentityUserResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "unlock"
+        target: {
+          kind: "app_user"
+          id: "user_id"
+        }
+        env: "environment_id"
+        scope: "org_id"
+      }
+    };
   }
 
   // DeleteUser removes the account. A user who holds a declared role is
   // refused: the next reconcile would recreate them.
   rpc DeleteUser(DeleteIdentityUserRequest) returns (DeleteIdentityUserResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "delete"
+        target: {
+          kind: "app_user"
+          id: "user_id"
+        }
+        env: "environment_id"
+        scope: "org_id"
+      }
+    };
   }
 
   // RevokeSessions ends the user's sign-in sessions. Access tokens already
   // issued stay valid until they expire.
   rpc RevokeSessions(RevokeIdentitySessionsRequest) returns (RevokeIdentitySessionsResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "revoke_sessions"
+        target: {
+          kind: "app_user"
+          id: "user_id"
+        }
+        env: "environment_id"
+        scope: "org_id"
+      }
+    };
   }
 
   // RequestExport returns a signed, short-lived download URL for the
@@ -105,7 +183,18 @@ service IdentityService {
   // Unimplemented until on-demand export lands. FailedPrecondition where export
   // is not enabled for this deployment.
   rpc RequestExport(RequestIdentityExportRequest) returns (RequestIdentityExportResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "request_export"
+        target: {
+          kind: "identity_export"
+          id: "environment_id"
+        }
+        env: "environment_id"
+        scope: "org_id"
+      }
+    };
   }
 
   // GetExportURL returns a fresh signed URL for the export that already exists

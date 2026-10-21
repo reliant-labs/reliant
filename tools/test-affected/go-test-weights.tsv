@@ -37,7 +37,7 @@
 4.6	github.com/reliant-labs/reliant/internal/handlers/connection
 4.4	github.com/reliant-labs/reliant/internal/handlers/preset
 4.3	github.com/reliant-labs/reliant/internal/tokenauthority
-4.3	github.com/reliant-labs/reliant/cmd/reliant/commands
+4.3	github.com/reliant-labs/reliant/cmd/reliant/cmd
 4.2	github.com/reliant-labs/reliant/internal/temporal/temporaltest
 4.1	github.com/reliant-labs/reliant/internal/skills/catalog
 4.1	github.com/reliant-labs/reliant/internal/integrations/catalog/github

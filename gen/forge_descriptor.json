@@ -10792,6 +10792,12 @@
           {
             "name": "last_failure_detail",
             "kind": "string"
+          },
+          {
+            "name": "setup_issues",
+            "kind": "message",
+            "type_name": "reliant.v1.TriggerSetupIssue",
+            "repeated": true
           }
         ],
         "reliant.v1.TriggerSender": [
@@ -10810,6 +10816,16 @@
           {
             "name": "verified",
             "kind": "bool"
+          }
+        ],
+        "reliant.v1.TriggerSetupIssue": [
+          {
+            "name": "input",
+            "kind": "string"
+          },
+          {
+            "name": "message",
+            "kind": "string"
           }
         ],
         "reliant.v1.UpdateTriggerRequest": [
@@ -10938,6 +10954,11 @@
             "name": "webhook",
             "kind": "message",
             "type_name": "reliant.v1.WebhookCredential"
+          },
+          {
+            "name": "warnings",
+            "kind": "string",
+            "repeated": true
           }
         ]
       },
@@ -10982,6 +11003,7 @@
         "reliant.v1.TriggerFailure": "reliant/v1/trigger.proto",
         "reliant.v1.TriggerHealth": "reliant/v1/trigger.proto",
         "reliant.v1.TriggerSender": "reliant/v1/trigger.proto",
+        "reliant.v1.TriggerSetupIssue": "reliant/v1/trigger.proto",
         "reliant.v1.UpdateTriggerRequest": "reliant/v1/trigger.proto",
         "reliant.v1.UpdateTriggerResponse": "reliant/v1/trigger.proto",
         "reliant.v1.WebhookCredential": "reliant/v1/trigger.proto",
@@ -18975,6 +18997,14 @@
             "kind": "int32"
           }
         ],
+        "reliant.v1.InboxAutomationNeedsSetup": [
+          {
+            "name": "issues",
+            "kind": "message",
+            "type_name": "reliant.v1.TriggerSetupIssue",
+            "repeated": true
+          }
+        ],
         "reliant.v1.InboxItem": [
           {
             "name": "kind",
@@ -19061,6 +19091,12 @@
             "name": "storage",
             "kind": "message",
             "type_name": "reliant.v1.InboxStorage",
+            "oneof": "payload"
+          },
+          {
+            "name": "automation_needs_setup",
+            "kind": "message",
+            "type_name": "reliant.v1.InboxAutomationNeedsSetup",
             "oneof": "payload"
           }
         ],
@@ -19189,6 +19225,22 @@
           {
             "name": "last_failure_detail",
             "kind": "string"
+          },
+          {
+            "name": "setup_issues",
+            "kind": "message",
+            "type_name": "reliant.v1.TriggerSetupIssue",
+            "repeated": true
+          }
+        ],
+        "reliant.v1.TriggerSetupIssue": [
+          {
+            "name": "input",
+            "kind": "string"
+          },
+          {
+            "name": "message",
+            "kind": "string"
           }
         ]
       },
@@ -19204,6 +19256,7 @@
         "reliant.v1.InboxApproval": "reliant/v1/inbox.proto",
         "reliant.v1.InboxAutomationFailing": "reliant/v1/inbox.proto",
         "reliant.v1.InboxAutomationLaunchFailed": "reliant/v1/inbox.proto",
+        "reliant.v1.InboxAutomationNeedsSetup": "reliant/v1/inbox.proto",
         "reliant.v1.InboxItem": "reliant/v1/inbox.proto",
         "reliant.v1.InboxQuestion": "reliant/v1/inbox.proto",
         "reliant.v1.InboxRunFinished": "reliant/v1/inbox.proto",
@@ -19213,7 +19266,8 @@
         "reliant.v1.ListInboxResponse": "reliant/v1/inbox.proto",
         "reliant.v1.RestoreInboxItemRequest": "reliant/v1/inbox.proto",
         "reliant.v1.RestoreInboxItemResponse": "reliant/v1/inbox.proto",
-        "reliant.v1.TriggerHealth": "reliant/v1/trigger.proto"
+        "reliant.v1.TriggerHealth": "reliant/v1/trigger.proto",
+        "reliant.v1.TriggerSetupIssue": "reliant/v1/trigger.proto"
       },
       "Enums": {
         "reliant.v1.ApprovalType": [
@@ -19238,7 +19292,8 @@
           "INBOX_ITEM_KIND_AUTOMATION_FAILING",
           "INBOX_ITEM_KIND_AUTOMATION_LAUNCH_FAILED",
           "INBOX_ITEM_KIND_RUN_FINISHED",
-          "INBOX_ITEM_KIND_STORAGE"
+          "INBOX_ITEM_KIND_STORAGE",
+          "INBOX_ITEM_KIND_AUTOMATION_NEEDS_SETUP"
         ],
         "reliant.v1.TriggerHealthStatus": [
           "TRIGGER_HEALTH_STATUS_UNSPECIFIED",
@@ -19273,7 +19328,8 @@
           4,
           5,
           6,
-          7
+          7,
+          8
         ],
         "reliant.v1.TriggerHealthStatus": [
           0,
@@ -39762,7 +39818,7 @@
   "sources": {
     "config/v1/analytics_config.proto": "2093382e19e6c0a59f28913b76fae435017337a229b93f167599e3198207fc94",
     "config/v1/api_server_config.proto": "1ae01f909bdfee18e653cfb0c695784d9c602fba24a25100fd22fde3a0711711",
-    "config/v1/cli_config.proto": "969eac8061aac3370d808aeec0907a948f6f1c7d6c2b3bbdbf1d67830e8adf46",
+    "config/v1/cli_config.proto": "5acd17311a1d616f1f6e54ee6d9c30a9ddf6c78474fd0308e80f2db99d71a55e",
     "config/v1/config.proto": "c873c25d565a973afe746cc17710f51652517db44137e24eba21daf4b8a13c23",
     "config/v1/control_plane_config.proto": "d461d08a8932926bc6dbd8f40c84e9d259c1007b424c6b945de40196830ac1ea",
     "config/v1/daemon_config.proto": "f50c66d5ee9c77735c670ce26b18216923002fee9f455a5db8ee013a4e0cb545",
@@ -39789,7 +39845,7 @@
     "reliant/v1/daemon_registry.proto": "3907ab3737af202ca408a7449f4b08d66be5137e99316f2fc226e991f1dbc699",
     "reliant/v1/filesystem.proto": "140d121cbc7cebc799860129abf98389a867d0b128fbe36b0d6c000bf9b92a6d",
     "reliant/v1/forge.proto": "a065ade3885e8671952b6908f2986727eb1b4b478304dfe7772bc62be4078a00",
-    "reliant/v1/inbox.proto": "b4e2898835d31a4b8990fcc50aaa39f1d6b43ed497685dd96da7f6ce949459e3",
+    "reliant/v1/inbox.proto": "27964969ffaeafe7621bb6739018d03d83b67dc6e60e19be1b264c06227b34ea",
     "reliant/v1/integration.proto": "4d2d14d32cabb184847d04eb32d49a8e3e4dd9bcf4bb2c227a665801e4c5995f",
     "reliant/v1/mcp.proto": "d27eec630292113ac64b4b2e3468e72516d1f5c211dbfe536c2730e43ed2efd1",
     "reliant/v1/message.proto": "bd01e3101e743d989c4facc477eedf924055f89a83a2c1d84aaa027ca1e7bfb8",
@@ -39811,7 +39867,7 @@
     "reliant/v1/token.proto": "df7f634505ef8d0da2882feb4fe31865d541b2593df0c069159f2b6440e5f63e",
     "reliant/v1/tool_call.proto": "b5861a934a2b119031b609eb10cf77e6ba8ccce474d1bb0edbf5cd9fed56cc95",
     "reliant/v1/tools_daemon.proto": "ed355efab8f065a289e7de67224236af37e8b4fcd2770e1de66120cf45b1aaf4",
-    "reliant/v1/trigger.proto": "6f1ce6c9f918fe5f5a44e9c39f939c7d804d7d4b07f4cc427b11fa91e361f1ea",
+    "reliant/v1/trigger.proto": "cdf7e534edff89945c8ace69553eb1d2d69b47e4244a9f71f160912be9c8fbd7",
     "reliant/v1/workflow.proto": "bd8fa927bf1b9842617fda4c7d56e346ff6ee6d89247178752fb10b9c4f18c86",
     "reliant/v1/workflow_v2.proto": "ab25a4ea3cdfdc1ab731f8eefde4fe45325da51d03e2f93ec1c1023b5e36eaf7",
     "reliant/v1/worktree.proto": "ce353c761192377e35feb5ab9aa68f2b52981f0982b746f7597e51b7648fa24b"

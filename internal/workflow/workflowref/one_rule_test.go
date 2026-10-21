@@ -30,8 +30,8 @@ const repoRoot = "../../.."
 var entryPoints = []struct {
 	file, mustCall, surface string
 }{
-	{"cmd/reliant/commands/workflow.go", "workflowref.Resolve(", "CLI: validate, validate-tree and the scenario runner resolve refs"},
-	{"cmd/reliant/commands/workflow.go", "workflowref.ReadLayout(", "CLI: workflow and scenario discovery"},
+	{"cmd/reliant/cmd/workflow.go", "workflowref.Resolve(", "CLI: validate, validate-tree and the scenario runner resolve refs"},
+	{"cmd/reliant/cmd/workflow.go", "workflowref.ReadLayout(", "CLI: workflow and scenario discovery"},
 	{"internal/toolexec/daemonruntime/runtime.go", "workflowref.ReadLayout(", "app: the daemon indexes .reliant/workflows for the server"},
 	{"internal/workflow/workflowsource/workflowsource.go", "workflowref.Resolve(", "app: every server-side resolution"},
 	{"internal/workflow/runtime/activities/handlers/load_workflow.go", "workflowsource.Resolve(", "app: the runtime's LoadWorkflow activity"},

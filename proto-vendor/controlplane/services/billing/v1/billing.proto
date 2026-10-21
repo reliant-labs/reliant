@@ -34,10 +34,16 @@ service BillingService {
     option (forge.v1.method) = {auth_required: true};
   }
   rpc CreateCurrentUserCheckoutSession(CreateCurrentUserCheckoutSessionRequest) returns (CreateCurrentUserCheckoutSessionResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "personal account and billing self-service, not org activity; audit_log records it"}
+    };
   }
   rpc CreateCurrentUserBillingPortalSession(CreateCurrentUserBillingPortalSessionRequest) returns (CreateCurrentUserBillingPortalSessionResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "personal account and billing self-service, not org activity; audit_log records it"}
+    };
   }
   rpc ListCurrentUserInvoices(ListCurrentUserInvoicesRequest) returns (ListCurrentUserInvoicesResponse) {
     option (forge.v1.method) = {auth_required: true};
@@ -50,7 +56,10 @@ service BillingService {
   // (GrantCurrentUserWelcomeCredit removed. There is no signup wallet credit:
   // LLM credit is redeemed from a coupon, RedeemCoupon.)
   rpc CreateCurrentUserWalletTopupSession(CreateCurrentUserWalletTopupSessionRequest) returns (CreateCurrentUserWalletTopupSessionResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "personal account and billing self-service, not org activity; audit_log records it"}
+    };
   }
   // CreateCurrentUserWalletTopupPaymentIntent mints a PaymentIntent for a
   // top-up the user confirms in OUR page with Stripe Elements, rather than in
@@ -63,7 +72,10 @@ service BillingService {
   // Confirmation is the browser's, entitlement is still the webhook's. A
   // succeeded confirmation reported by the client grants nothing on its own.
   rpc CreateCurrentUserWalletTopupPaymentIntent(CreateCurrentUserWalletTopupPaymentIntentRequest) returns (CreateCurrentUserWalletTopupPaymentIntentResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "personal account and billing self-service, not org activity; audit_log records it"}
+    };
   }
 
   // GetCurrentUserWalletTopupQuote prices a top-up WITHOUT minting anything at
@@ -93,7 +105,10 @@ service BillingService {
   // Idempotent per (coupon, org): a second redemption of the same code by the
   // same org is refused rather than credited twice.
   rpc RedeemCoupon(RedeemCouponRequest) returns (RedeemCouponResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "personal account and billing self-service, not org activity; audit_log records it"}
+    };
   }
 
   // Reliant managed-LLM access (per-user).
@@ -101,10 +116,16 @@ service BillingService {
     option (forge.v1.method) = {auth_required: true};
   }
   rpc RepairCurrentUserReliantAccess(RepairCurrentUserReliantAccessRequest) returns (RepairCurrentUserReliantAccessResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "personal account and billing self-service, not org activity; audit_log records it"}
+    };
   }
   rpc RotateCurrentUserReliantAccess(RotateCurrentUserReliantAccessRequest) returns (RotateCurrentUserReliantAccessResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "personal account and billing self-service, not org activity; audit_log records it"}
+    };
   }
   rpc GetCurrentUserReliantOverview(GetCurrentUserReliantOverviewRequest) returns (GetCurrentUserReliantOverviewResponse) {
     option (forge.v1.method) = {auth_required: true};
@@ -115,7 +136,10 @@ service BillingService {
   // user preference, never inferred from wallet balance, org membership, or
   // provisioning state. A funded user may still prefer their own API key.
   rpc SetCurrentUserReliantEnabled(SetCurrentUserReliantEnabledRequest) returns (SetCurrentUserReliantEnabledResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "personal account and billing self-service, not org activity; audit_log records it"}
+    };
   }
 
   // Workspace compute plan (per-user).
@@ -123,14 +147,20 @@ service BillingService {
     option (forge.v1.method) = {auth_required: true};
   }
   rpc SetCurrentUserComputeOverage(SetCurrentUserComputeOverageRequest) returns (SetCurrentUserComputeOverageResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "personal account and billing self-service, not org activity; audit_log records it"}
+    };
   }
 
   // Deploy (infrastructure) overage ceiling — the cpu/memory/storage twin of
   // the compute pair above. Separate from it because the two cap different
   // products through different gates; see SetCurrentUserInfraOverageRequest.
   rpc SetCurrentUserInfraOverage(SetCurrentUserInfraOverageRequest) returns (SetCurrentUserInfraOverageResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "personal account and billing self-service, not org activity; audit_log records it"}
+    };
   }
   // Everything the deploy overage surface renders from, in one call:
   // consumption, allowance, the customer's cap, and the current ladder rung
@@ -155,7 +185,10 @@ service BillingService {
   // the plan this one supersedes — remains the webhook's, on the signal that
   // confirms the money actually moved.
   rpc CreateCurrentUserComputeSubscriptionIntent(CreateCurrentUserComputeSubscriptionIntentRequest) returns (CreateCurrentUserComputeSubscriptionIntentResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "personal account and billing self-service, not org activity; audit_log records it"}
+    };
   }
 
   // AI credit auto-recharge: refill the wallet from a saved card when the
@@ -168,7 +201,10 @@ service BillingService {
     option (forge.v1.method) = {auth_required: true};
   }
   rpc SetCurrentUserWalletAutoRecharge(SetCurrentUserWalletAutoRechargeRequest) returns (SetCurrentUserWalletAutoRechargeResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "personal account and billing self-service, not org activity; audit_log records it"}
+    };
   }
   // Begins saving a card for off-session use. Moves no money.
   //
@@ -176,12 +212,18 @@ service BillingService {
   // path, where this is a read rather than a collection) OR a SetupIntent
   // client secret to mount with Stripe.js — never both.
   rpc CreateCurrentUserWalletPaymentMethodSetup(CreateCurrentUserWalletPaymentMethodSetupRequest) returns (CreateCurrentUserWalletPaymentMethodSetupResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "personal account and billing self-service, not org activity; audit_log records it"}
+    };
   }
   // Records a card the user just saved. The server reads the card's details
   // back from Stripe; the client sends only the payment method ID.
   rpc ConfirmCurrentUserWalletPaymentMethod(ConfirmCurrentUserWalletPaymentMethodRequest) returns (ConfirmCurrentUserWalletPaymentMethodResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "personal account and billing self-service, not org activity; audit_log records it"}
+    };
   }
   rpc GetCurrentUserComputeUsage(GetCurrentUserComputeUsageRequest) returns (GetCurrentUserComputeUsageResponse) {
     option (forge.v1.method) = {auth_required: true};
@@ -220,7 +262,10 @@ service BillingService {
     option (forge.v1.method) = {auth_required: true};
   }
   rpc UpdateBillingEmail(UpdateBillingEmailRequest) returns (UpdateBillingEmailResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "personal account and billing self-service, not org activity; audit_log records it"}
+    };
   }
 }
 
