@@ -22,12 +22,20 @@ func (r *Repo) GetChatSelection(ctx context.Context, chatID string) (*chatselect
 // MutateChatSelection is chatselection.Store.MutateChatSelection: one writer of
 // a chat's record at a time, so a read-modify-write cannot lose an edit. The
 // advisory lock covers the first write too, when there is no row to lock.
+//
+// The lock is the whole guarantee, so the transaction is READ COMMITTED
+// (SCHEMA.md rule 7): a writer queued behind another takes its read's snapshot
+// after the lock, so it sees the winner's commit. Under SERIALIZABLE the
+// snapshot is taken at the lock statement, before the wait, so the loser fails
+// with 40001 and lands only on a retry, until contention exhausts them
+// (TestChatSelectionConcurrentWritersLoseNothing). mutate may still run more
+// than once — a deadlock (40P01) is retried — which its contract allows.
 func (r *Repo) MutateChatSelection(ctx context.Context, chatID string, mutate func(current *chatselection.Selection) (*chatselection.Selection, error)) (*chatselection.Selection, error) {
 	if chatID == "" {
 		return nil, fmt.Errorf("chat ID cannot be empty")
 	}
 	var out *chatselection.Selection
-	err := r.RunTx(ctx, func(txCtx context.Context) error {
+	err := r.RunTxWithOptions(ctx, TxOptions{Isolation: IsolationReadCommitted}, func(txCtx context.Context) error {
 		if err := store.LockChatSelection(txCtx, r.ORM(), chatID); err != nil {
 			return err
 		}

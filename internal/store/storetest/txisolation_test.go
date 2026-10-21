@@ -75,10 +75,6 @@ func TestTransactionOpenersBeginAtTheirLevel(t *testing.T) {
 		{"Repo.CreateChatUpdate", serializable, func(ctx context.Context) error {
 			return p.Repo.CreateChatUpdate(ctx, "chat-iso", reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_MESSAGE, "e", `{}`)
 		}},
-		{"Repo.MutateChatSelection", serializable, func(ctx context.Context) error {
-			_, err := p.Repo.MutateChatSelection(ctx, "chat-iso", func(cur *chatselection.Selection) (*chatselection.Selection, error) { return cur, nil })
-			return err
-		}},
 		// An upsert plus a stale-row delete; the 40001 retry is harmless
 		// (no effect outside the database).
 		{"Repo.ReplaceIntegrationAccess", serializable, func(ctx context.Context) error {
@@ -102,6 +98,13 @@ func TestTransactionOpenersBeginAtTheirLevel(t *testing.T) {
 				ID: "wd-iso", UserID: storetest.SeedUserID, Name: "Iso", Slug: "iso",
 				Definition: "name: iso\n", Status: core.WorkflowDraftStatusDraft, CreatedAt: now, UpdatedAt: now,
 			})
+		}},
+		// The advisory lock serializes a chat's writers; under SERIALIZABLE
+		// the loser's snapshot predates the wait and it fails with 40001
+		// (TestChatSelectionConcurrentWritersLoseNothing).
+		{"Repo.MutateChatSelection", readCommitted, func(ctx context.Context) error {
+			_, err := p.Repo.MutateChatSelection(ctx, "chat-iso", func(cur *chatselection.Selection) (*chatselection.Selection, error) { return cur, nil })
+			return err
 		}},
 		{"Repo.MergeWorktreeCleanupMetadata", readCommitted, func(ctx context.Context) error {
 			return p.Repo.MergeWorktreeCleanupMetadata(ctx, "wt-iso", func(*core.CleanupMetadata, bool) bool { return false })
