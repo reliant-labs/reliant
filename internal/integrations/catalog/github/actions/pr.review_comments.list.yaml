@@ -1,0 +1,81 @@
+# yaml-language-server: $schema=../../../manifest/schema/action.schema.json
+id: pr.review_comments.list
+display_name: List pull request inline comments
+summary: The comments left on lines of a pull request's diff, optionally only those since a time.
+description: >-
+  List the inline review comments on a pull request: comments attached to a
+  line of the diff, including replies, oldest first. Each carries the file
+  path, line, the diff hunk it points at, the review it belongs to
+  (review_id) and, for a reply, the comment it answers (in_reply_to_id;
+  reply to a thread by passing its first comment's id to
+  pr.review_comment.reply). Pass since, an ISO 8601 time, to get only
+  comments created or edited after it. Follows GitHub's pagination up to
+  1000 comments. line is null when the commented line is no longer in the
+  diff (the comment is outdated); original_line is where it was.
+keywords: [pull request, pr, review comments, inline, diff, line, thread, list, since, responder]
+placement: server
+mutates: false
+tool:
+  expose: true
+params:
+  type: object
+  additionalProperties: false
+  required: [owner, repo, pull_number]
+  properties:
+    owner: { $ref: ../schemas/owner.yaml }
+    repo: { $ref: ../schemas/repo.yaml }
+    pull_number: { $ref: ../schemas/pull_number.yaml }
+    since: { $ref: ../schemas/since.yaml }
+    connection: { $ref: ../schemas/connection.yaml }
+request:
+  method: GET
+  path: /repos/{{ params.owner }}/{{ params.repo }}/pulls/{{ params.pull_number }}/comments
+  query: { per_page: "100" }
+  query_expr: '{?"since": params.?since}'
+  pagination: { style: link_header, max_pages: 10 }
+  max_response_bytes: 5242880
+  errors: { $ref: ../schemas/github_errors.yaml }
+output:
+  select: >-
+    response.map(c, {"id": c.id,
+                     "node_id": c.?node_id.orValue(null),
+                     "review_id": c.?pull_request_review_id.orValue(null),
+                     "in_reply_to_id": c.?in_reply_to_id.orValue(null),
+                     "path": c.?path.orValue(null),
+                     "line": c.?line.orValue(null),
+                     "original_line": c.?original_line.orValue(null),
+                     "side": c.?side.orValue(null),
+                     "commit_id": c.?commit_id.orValue(null),
+                     "diff_hunk": c.?diff_hunk.orValue(null),
+                     "body": type(c.?body.orValue(null)) == string ? c.body : "",
+                     "html_url": c.?html_url.orValue(null),
+                     "user": c.?user.?login.orValue(null),
+                     "user_id": c.?user.?id.orValue(null),
+                     "author_association": c.?author_association.orValue(null),
+                     "created_at": c.?created_at.orValue(null),
+                     "updated_at": c.?updated_at.orValue(null)})
+  schema:
+    type: object
+    properties:
+      items:
+        type: array
+        items:
+          type: object
+          properties:
+            id: { type: integer }
+            node_id: { type: [string, "null"] }
+            review_id: { type: [integer, "null"], description: The review this comment belongs to. }
+            in_reply_to_id: { type: [integer, "null"], description: The comment this one replies to; null for the first comment of a thread. }
+            path: { type: [string, "null"] }
+            line: { type: [integer, "null"], description: The line in the diff; null when the comment is outdated. }
+            original_line: { type: [integer, "null"] }
+            side: { type: [string, "null"], description: "LEFT (removed line) or RIGHT (added or unchanged)." }
+            commit_id: { type: [string, "null"] }
+            diff_hunk: { type: [string, "null"] }
+            body: { type: string }
+            html_url: { type: [string, "null"] }
+            user: { type: [string, "null"] }
+            user_id: { type: [integer, "null"] }
+            author_association: { type: [string, "null"] }
+            created_at: { type: [string, "null"] }
+            updated_at: { type: [string, "null"] }

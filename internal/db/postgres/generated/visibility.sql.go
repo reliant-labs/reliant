@@ -7,36 +7,7 @@ package pgdb
 
 import (
 	"context"
-	"database/sql"
 )
-
-const createItemDefault = `-- name: CreateItemDefault :exec
-INSERT INTO item_defaults (id, item_type, slug, is_hidden, reason, created_at, updated_at)
-VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
-ON CONFLICT (item_type, slug) DO UPDATE SET
-    is_hidden = excluded.is_hidden,
-    reason = excluded.reason,
-    updated_at = NOW()
-`
-
-type CreateItemDefaultParams struct {
-	ID       string         `json:"id"`
-	ItemType int32          `json:"item_type"`
-	Slug     string         `json:"slug"`
-	IsHidden bool           `json:"is_hidden"`
-	Reason   sql.NullString `json:"reason"`
-}
-
-func (q *Queries) CreateItemDefault(ctx context.Context, arg CreateItemDefaultParams) error {
-	_, err := q.db.ExecContext(ctx, createItemDefault,
-		arg.ID,
-		arg.ItemType,
-		arg.Slug,
-		arg.IsHidden,
-		arg.Reason,
-	)
-	return err
-}
 
 const deleteAllVisibilityOverrides = `-- name: DeleteAllVisibilityOverrides :exec
 DELETE FROM visibility_overrides
@@ -51,22 +22,6 @@ type DeleteAllVisibilityOverridesParams struct {
 
 func (q *Queries) DeleteAllVisibilityOverrides(ctx context.Context, arg DeleteAllVisibilityOverridesParams) error {
 	_, err := q.db.ExecContext(ctx, deleteAllVisibilityOverrides, arg.UserID, arg.ItemType)
-	return err
-}
-
-const deleteDefaultPresetAssignment = `-- name: DeleteDefaultPresetAssignment :exec
-DELETE FROM default_preset_assignments
-WHERE workflow_name = $1
-    AND group_name = $2
-`
-
-type DeleteDefaultPresetAssignmentParams struct {
-	WorkflowName string `json:"workflow_name"`
-	GroupName    string `json:"group_name"`
-}
-
-func (q *Queries) DeleteDefaultPresetAssignment(ctx context.Context, arg DeleteDefaultPresetAssignmentParams) error {
-	_, err := q.db.ExecContext(ctx, deleteDefaultPresetAssignment, arg.WorkflowName, arg.GroupName)
 	return err
 }
 
@@ -88,63 +43,6 @@ func (q *Queries) DeleteVisibilityOverride(ctx context.Context, arg DeleteVisibi
 	return err
 }
 
-const getDefaultPresetAssignments = `-- name: GetDefaultPresetAssignments :many
-SELECT group_name, preset_slug FROM default_preset_assignments
-WHERE workflow_name = $1
-ORDER BY group_name
-`
-
-type GetDefaultPresetAssignmentsRow struct {
-	GroupName  string `json:"group_name"`
-	PresetSlug string `json:"preset_slug"`
-}
-
-func (q *Queries) GetDefaultPresetAssignments(ctx context.Context, workflowName string) ([]GetDefaultPresetAssignmentsRow, error) {
-	rows, err := q.db.QueryContext(ctx, getDefaultPresetAssignments, workflowName)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []GetDefaultPresetAssignmentsRow{}
-	for rows.Next() {
-		var i GetDefaultPresetAssignmentsRow
-		if err := rows.Scan(&i.GroupName, &i.PresetSlug); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const getItemDefault = `-- name: GetItemDefault :one
-SELECT is_hidden, reason FROM item_defaults
-WHERE item_type = $1
-    AND slug = $2
-`
-
-type GetItemDefaultParams struct {
-	ItemType int32  `json:"item_type"`
-	Slug     string `json:"slug"`
-}
-
-type GetItemDefaultRow struct {
-	IsHidden bool           `json:"is_hidden"`
-	Reason   sql.NullString `json:"reason"`
-}
-
-func (q *Queries) GetItemDefault(ctx context.Context, arg GetItemDefaultParams) (GetItemDefaultRow, error) {
-	row := q.db.QueryRowContext(ctx, getItemDefault, arg.ItemType, arg.Slug)
-	var i GetItemDefaultRow
-	err := row.Scan(&i.IsHidden, &i.Reason)
-	return i, err
-}
-
 const getVisibilityOverride = `-- name: GetVisibilityOverride :one
 SELECT is_visible FROM visibility_overrides
 WHERE user_id = $1
@@ -163,76 +61,6 @@ func (q *Queries) GetVisibilityOverride(ctx context.Context, arg GetVisibilityOv
 	var is_visible bool
 	err := row.Scan(&is_visible)
 	return is_visible, err
-}
-
-const listHiddenItemDefaults = `-- name: ListHiddenItemDefaults :many
-SELECT slug, reason FROM item_defaults
-WHERE item_type = $1
-    AND is_hidden = true
-ORDER BY slug
-`
-
-type ListHiddenItemDefaultsRow struct {
-	Slug   string         `json:"slug"`
-	Reason sql.NullString `json:"reason"`
-}
-
-func (q *Queries) ListHiddenItemDefaults(ctx context.Context, itemType int32) ([]ListHiddenItemDefaultsRow, error) {
-	rows, err := q.db.QueryContext(ctx, listHiddenItemDefaults, itemType)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []ListHiddenItemDefaultsRow{}
-	for rows.Next() {
-		var i ListHiddenItemDefaultsRow
-		if err := rows.Scan(&i.Slug, &i.Reason); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listItemDefaults = `-- name: ListItemDefaults :many
-SELECT slug, is_hidden, reason FROM item_defaults
-WHERE item_type = $1
-ORDER BY slug
-`
-
-type ListItemDefaultsRow struct {
-	Slug     string         `json:"slug"`
-	IsHidden bool           `json:"is_hidden"`
-	Reason   sql.NullString `json:"reason"`
-}
-
-func (q *Queries) ListItemDefaults(ctx context.Context, itemType int32) ([]ListItemDefaultsRow, error) {
-	rows, err := q.db.QueryContext(ctx, listItemDefaults, itemType)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []ListItemDefaultsRow{}
-	for rows.Next() {
-		var i ListItemDefaultsRow
-		if err := rows.Scan(&i.Slug, &i.IsHidden, &i.Reason); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
 }
 
 const listVisibilityOverrides = `-- name: ListVisibilityOverrides :many
@@ -273,31 +101,6 @@ func (q *Queries) ListVisibilityOverrides(ctx context.Context, arg ListVisibilit
 		return nil, err
 	}
 	return items, nil
-}
-
-const setDefaultPresetAssignment = `-- name: SetDefaultPresetAssignment :exec
-INSERT INTO default_preset_assignments (id, workflow_name, group_name, preset_slug, created_at, updated_at)
-VALUES ($1, $2, $3, $4, NOW(), NOW())
-ON CONFLICT (workflow_name, group_name) DO UPDATE SET
-    preset_slug = excluded.preset_slug,
-    updated_at = NOW()
-`
-
-type SetDefaultPresetAssignmentParams struct {
-	ID           string `json:"id"`
-	WorkflowName string `json:"workflow_name"`
-	GroupName    string `json:"group_name"`
-	PresetSlug   string `json:"preset_slug"`
-}
-
-func (q *Queries) SetDefaultPresetAssignment(ctx context.Context, arg SetDefaultPresetAssignmentParams) error {
-	_, err := q.db.ExecContext(ctx, setDefaultPresetAssignment,
-		arg.ID,
-		arg.WorkflowName,
-		arg.GroupName,
-		arg.PresetSlug,
-	)
-	return err
 }
 
 const setVisibilityOverride = `-- name: SetVisibilityOverride :exec

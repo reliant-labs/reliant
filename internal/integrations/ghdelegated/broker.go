@@ -68,7 +68,7 @@ func (b *broker) Credential(ctx context.Context, ownerUserID string) (httpaction
 		// Transient (control-plane or GitHub unreachable). The error text
 		// cannot carry the token — it was never received — but it is logged
 		// rather than surfaced, so a control-plane URL never reaches a user.
-		b.logger.Warn("fetching delegated GitHub token from control-plane failed", "err", err)
+		b.logger.WarnContext(ctx, "fetching delegated GitHub token from control-plane failed", "err", err)
 		return nil, &httpaction.CredentialError{Code: httpaction.CodeUnavailable,
 			Message: "could not get a GitHub token right now; try again", Err: err}
 	}

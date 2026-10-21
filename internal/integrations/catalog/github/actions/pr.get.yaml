@@ -1,0 +1,83 @@
+# yaml-language-server: $schema=../../../manifest/schema/action.schema.json
+id: pr.get
+display_name: Get pull request
+summary: Read a pull request, including its head and base refs and mergeability.
+description: >-
+  Return one pull request: title, body, state, draft and merged flags, the
+  head and base refs (branch, sha, repository) and mergeability. mergeable
+  is null while GitHub is still computing it; read again shortly.
+  mergeable_state is GitHub's summary (clean, dirty, blocked, behind,
+  unstable, unknown, ...).
+keywords: [pull request, pr, read, details, branch, mergeable, review]
+placement: server
+mutates: false
+tool:
+  expose: true
+params:
+  type: object
+  additionalProperties: false
+  required: [owner, repo, pull_number]
+  properties:
+    owner: { $ref: ../schemas/owner.yaml }
+    repo: { $ref: ../schemas/repo.yaml }
+    pull_number: { $ref: ../schemas/pull_number.yaml }
+    connection: { $ref: ../schemas/connection.yaml }
+request:
+  method: GET
+  path: /repos/{{ params.owner }}/{{ params.repo }}/pulls/{{ params.pull_number }}
+  errors: { $ref: ../schemas/github_errors.yaml }
+output:
+  select: >-
+    {"number": response.number,
+     "id": response.id,
+     "title": response.title,
+     "body": response.?body.orValue(null),
+     "state": response.state,
+     "draft": response.?draft.orValue(null),
+     "merged": response.?merged.orValue(false),
+     "mergeable": response.?mergeable.orValue(null),
+     "mergeable_state": response.?mergeable_state.orValue(null),
+     "rebaseable": response.?rebaseable.orValue(null),
+     "html_url": response.html_url,
+     "user": response.?user.?login.orValue(null),
+     "head": {"ref": response.head.ref, "sha": response.head.sha,
+              "label": response.head.?label.orValue(null),
+              "repo": response.head.?repo.?full_name.orValue(null)},
+     "base": {"ref": response.base.ref, "sha": response.base.sha,
+              "label": response.base.?label.orValue(null),
+              "repo": response.base.?repo.?full_name.orValue(null)},
+     "merge_commit_sha": response.?merge_commit_sha.orValue(null),
+     "commits": response.?commits.orValue(null),
+     "additions": response.?additions.orValue(null),
+     "deletions": response.?deletions.orValue(null),
+     "changed_files": response.?changed_files.orValue(null),
+     "created_at": response.?created_at.orValue(null),
+     "updated_at": response.?updated_at.orValue(null),
+     "closed_at": response.?closed_at.orValue(null),
+     "merged_at": response.?merged_at.orValue(null)}
+  schema:
+    type: object
+    properties:
+      number: { type: integer }
+      id: { type: integer }
+      title: { type: string }
+      body: { type: [string, "null"] }
+      state: { type: string, enum: [open, closed] }
+      draft: { type: [boolean, "null"] }
+      merged: { type: boolean }
+      mergeable: { type: [boolean, "null"], description: Null while GitHub computes it. }
+      mergeable_state: { type: [string, "null"] }
+      rebaseable: { type: [boolean, "null"] }
+      html_url: { type: string }
+      user: { type: [string, "null"] }
+      head: { $ref: ../schemas/pr_ref.yaml }
+      base: { $ref: ../schemas/pr_ref.yaml }
+      merge_commit_sha: { type: [string, "null"] }
+      commits: { type: [integer, "null"] }
+      additions: { type: [integer, "null"] }
+      deletions: { type: [integer, "null"] }
+      changed_files: { type: [integer, "null"] }
+      created_at: { type: [string, "null"] }
+      updated_at: { type: [string, "null"] }
+      closed_at: { type: [string, "null"] }
+      merged_at: { type: [string, "null"] }

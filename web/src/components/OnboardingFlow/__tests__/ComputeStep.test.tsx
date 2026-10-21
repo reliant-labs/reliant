@@ -65,7 +65,7 @@ type CloudEligibilityReturn = {
   eligible: boolean;
   reason: string | null;
   isLoading: boolean;
-  grantedMinutesRemaining: number;
+  grantedSmallDaemonSecondsRemaining: number;
   refetch: () => void;
 };
 
@@ -74,7 +74,7 @@ const mockUseCloudEligibility = vi.fn<() => CloudEligibilityReturn>(() => ({
   eligible: true,
   reason: null,
   isLoading: false,
-  grantedMinutesRemaining: 0,
+  grantedSmallDaemonSecondsRemaining: 0,
   refetch: mockRefetchCloudEligibility,
 }));
 
@@ -141,7 +141,7 @@ type RedeemCouponResult = {
   newBalanceCents: number;
   kind: RedeemedCouponKind;
   computeMinutes: number;
-  newComputeMinutesRemaining: number;
+  newGrantedSmallDaemonSecondsRemaining: number;
 };
 const mockRedeemMutate = vi.fn<
   (
@@ -251,7 +251,7 @@ beforeEach(() => {
     eligible: true,
     reason: null,
     isLoading: false,
-    grantedMinutesRemaining: 0,
+    grantedSmallDaemonSecondsRemaining: 0,
     refetch: mockRefetchCloudEligibility,
   });
 });
@@ -368,7 +368,7 @@ describe("ComputeStep cloud eligibility + coupon redemption", () => {
       eligible: false,
       reason: "No compute plan yet",
       isLoading: false,
-      grantedMinutesRemaining: 0,
+      grantedSmallDaemonSecondsRemaining: 0,
       refetch: mockRefetchCloudEligibility,
     });
 
@@ -396,7 +396,7 @@ describe("ComputeStep cloud eligibility + coupon redemption", () => {
         eligible,
         reason: eligible ? null : "No compute plan yet",
         isLoading: false,
-        grantedMinutesRemaining: 0,
+        grantedSmallDaemonSecondsRemaining: 0,
         refetch: mockRefetchCloudEligibility,
       });
 
@@ -422,7 +422,7 @@ describe("ComputeStep cloud eligibility + coupon redemption", () => {
       eligible: false,
       reason: "No compute plan yet",
       isLoading: false,
-      grantedMinutesRemaining: 0,
+      grantedSmallDaemonSecondsRemaining: 0,
       refetch: mockRefetchCloudEligibility,
     });
 
@@ -453,7 +453,7 @@ describe("ComputeStep cloud eligibility + coupon redemption", () => {
       eligible: false,
       reason: "No compute plan yet",
       isLoading: false,
-      grantedMinutesRemaining: 0,
+      grantedSmallDaemonSecondsRemaining: 0,
       refetch: mockRefetchCloudEligibility,
     });
 
@@ -469,7 +469,7 @@ describe("ComputeStep cloud eligibility + coupon redemption", () => {
       eligible: true,
       reason: null,
       isLoading: false,
-      grantedMinutesRemaining: 0,
+      grantedSmallDaemonSecondsRemaining: 0,
       refetch: mockRefetchCloudEligibility,
     });
 
@@ -485,7 +485,7 @@ describe("ComputeStep cloud eligibility + coupon redemption", () => {
       eligible: false,
       reason: "No compute plan yet",
       isLoading: false,
-      grantedMinutesRemaining: 0,
+      grantedSmallDaemonSecondsRemaining: 0,
       refetch: mockRefetchCloudEligibility,
     });
     mockRedeemMutate.mockImplementation((_code, callbacks) => {
@@ -495,7 +495,7 @@ describe("ComputeStep cloud eligibility + coupon redemption", () => {
         newBalanceCents: 0,
         kind: RedeemedCouponKind.COMPUTE_MINUTES,
         computeMinutes: 600,
-        newComputeMinutesRemaining: 600,
+        newGrantedSmallDaemonSecondsRemaining: 36000,
       });
     });
 
@@ -520,7 +520,7 @@ describe("ComputeStep cloud eligibility + coupon redemption", () => {
       eligible: false,
       reason: "No compute plan yet",
       isLoading: false,
-      grantedMinutesRemaining: 0,
+      grantedSmallDaemonSecondsRemaining: 0,
       refetch: mockRefetchCloudEligibility,
     });
     mockRedeemMutate.mockImplementation((_code, callbacks) => {
@@ -570,7 +570,7 @@ describe("ComputeStep cloud eligibility + coupon redemption", () => {
       eligible: false,
       reason: "Your free trial has ended",
       isLoading: false,
-      grantedMinutesRemaining: 0,
+      grantedSmallDaemonSecondsRemaining: 0,
       refetch: mockRefetchCloudEligibility,
     });
 
@@ -602,7 +602,7 @@ describe("ComputeStep cloud eligibility + coupon redemption", () => {
       eligible: true, // the server says this user may run a machine
       reason: null,
       isLoading: false,
-      grantedMinutesRemaining: 0,
+      grantedSmallDaemonSecondsRemaining: 0,
       refetch: mockRefetchCloudEligibility,
     });
 
@@ -628,7 +628,7 @@ describe("ComputeStep cloud eligibility + coupon redemption", () => {
       eligible: false,
       reason: null, // server sent a reason this build has no copy for
       isLoading: false,
-      grantedMinutesRemaining: 0,
+      grantedSmallDaemonSecondsRemaining: 0,
       refetch: mockRefetchCloudEligibility,
     });
 
@@ -656,7 +656,7 @@ describe("ComputeStep cloud eligibility + coupon redemption", () => {
       eligible: true,
       reason: null,
       isLoading: false,
-      grantedMinutesRemaining: 0,
+      grantedSmallDaemonSecondsRemaining: 0,
       refetch: mockRefetchCloudEligibility,
     });
 

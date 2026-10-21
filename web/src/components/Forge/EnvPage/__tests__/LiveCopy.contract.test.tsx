@@ -27,7 +27,6 @@ import { Code, ConnectError } from "@connectrpc/connect";
 import type { LiveEnv } from "@/services/forge/live";
 
 import { LiveReleases } from "../LiveReleases";
-import { LiveWorkloads } from "../LiveWorkloads";
 import { CloudNotice } from "../../SourceNotices";
 
 /**
@@ -131,43 +130,6 @@ describe("the releases timeline", () => {
     );
     expect(container.textContent ?? "").not.toMatch(/git log/i);
     expect(container.textContent ?? "").not.toMatch(/\.forge\/promotions/);
-  });
-});
-
-describe("the workloads section", () => {
-  it("names nothing internal in any state", () => {
-    const states: Array<Parameters<typeof LiveWorkloads>[0]> = [
-      { env: liveEnv(), status: undefined, isLoading: true, error: null },
-      { env: liveEnv(), status: undefined, isLoading: false, error: null },
-      { env: liveEnv(), status: undefined, isLoading: false, error: new Error("rpc failed") },
-      { env: liveEnv({ kind: "local" }), status: undefined, isLoading: false, error: null },
-      {
-        env: liveEnv({ kind: "self_managed", declaredShape: null }),
-        status: undefined,
-        isLoading: false,
-        error: null,
-      },
-    ];
-
-    for (const props of states) {
-      const { container, unmount } = render(<LiveWorkloads {...props} />);
-      expectNoInternalNouns(container.textContent ?? "");
-      unmount();
-    }
-  });
-
-  it("names the environment, not our infrastructure, when it could not load", () => {
-    render(
-      <LiveWorkloads
-        env={liveEnv({ name: "prod" })}
-        status={undefined}
-        isLoading={false}
-        error={new Error("rpc failed")}
-      />
-    );
-    const text = screen.getByTestId("live-workloads-error").textContent ?? "";
-    expect(text).toMatch(/couldn't load what's running in prod/i);
-    expect(text).toMatch(/try again/i);
   });
 });
 

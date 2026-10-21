@@ -25,6 +25,9 @@ import type { InvalidWorkflow, WorkflowResponse } from "@/api/workflow-grpc";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useLastRunPerWorkflow } from "@/hooks/run-queries";
 import { useTriggers } from "@/hooks/trigger-queries";
+import { triggerRunsWorkflow } from "@/lib/triggerRail";
+import type { DeclaredTrigger } from "@/lib/declaredTriggers";
+import { WorkflowSetupDialog } from "../../Automations/WorkflowSetupDialog";
 import { WORKFLOWS_LIBRARY_PATH } from "@/lib/workflowsArea";
 import type { LibrarySearch, LibrarySortKey, LibrarySourceKey } from "@/routeSchemas";
 import {
@@ -51,7 +54,7 @@ import { splitFindings } from "../../workflow/workflowDraftStatus";
 import { FilterSearch, SelectFilter } from "../FilterMenu";
 import { WORKFLOW_SOURCE_LABEL } from "../WorkflowSourceBadge";
 import { libraryColumns, type LibraryTableRow, type WorkflowRowAction, type WorkflowRowItem } from "./WorkflowRow";
-import { automationsDeletedWith, deletedAutomationsSentence, libraryView } from "./libraryView";
+import { automationsDeletedWith, deletedAutomationsSentence, libraryView, turnedOnSummary } from "./libraryView";
 import type { Trigger } from "@/api/trigger-grpc";
 
 type SourceChoice = LibrarySourceKey | "all";
@@ -289,6 +292,7 @@ function LibraryBody({ projectId }: { projectId: string }) {
   const lastRuns = useLastRunPerWorkflow(projectId);
   const triggers = useTriggers(projectId);
   const [runRef, setRunRef] = useState<string | null>(null);
+  const [settingUp, setSettingUp] = useState<WorkflowResponse | null>(null);
   // The workflow whose Delete is being confirmed.
   const [deleting, setDeleting] = useState<WorkflowResponse | null>(null);
 
@@ -424,13 +428,18 @@ function LibraryBody({ projectId }: { projectId: string }) {
 
   const toTableRow = (workflow: WorkflowResponse, attention = false): LibraryTableRow => {
     const ref = normalizeWorkflowRef(workflow.name);
+    const health = view.worstHealth.get(ref);
+    const declares = (workflow.triggers?.length ?? 0) > 0;
+    const runsHere = (triggers.data ?? []).filter((t) => t.workflowTrigger && triggerRunsWorkflow(t, workflow.name));
+    const needing = health?.needsAttention && health.cta ? (triggers.data ?? []).filter((t) => triggerRunsWorkflow(t, workflow.name)) : [];
     return {
       workflow: toItem(workflow),
       lastRun: lastRuns.data?.get(workflow.name),
-      automationCount: view.automationCounts.get(ref) ?? 0,
-      failingAutomationCount: view.failingCounts.get(ref) ?? 0,
+      turnedOn: turnedOnSummary(health, declares),
       attention,
       onRun: workflow.status === "draft" ? undefined : () => setRunRef(workflow.name),
+      onSetUp: declares && runsHere.length === 0 && workflow.status !== "draft" ? () => setSettingUp(workflow) : undefined,
+      cta: needing.length > 0 ? { spec: health!.cta!, triggers: needing, projectId } : undefined,
       actions: actionsFor(workflow),
     };
   };
@@ -446,8 +455,8 @@ function LibraryBody({ projectId }: { projectId: string }) {
       {attentionCount > 0 && (
         <p className="flex items-center gap-1.5 text-xs text-warning-ink" role="status">
           <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
-          {attentionCount === 1 ? "1 workflow needs" : `${attentionCount} workflows need`} attention: an automation that
-          runs it has failed twice or more in a row. Pinned to the top.
+          {attentionCount === 1 ? "1 workflow needs" : `${attentionCount} workflows need`} you: what runs it here is broken,
+          not set up, or keeps failing. Pinned to the top.
         </p>
       )}
 
@@ -537,6 +546,19 @@ function LibraryBody({ projectId }: { projectId: string }) {
           });
         }}
       />
+
+      {settingUp && (
+        <WorkflowSetupDialog
+          open
+          onClose={() => setSettingUp(null)}
+          workflowRef={settingUp.name}
+          workflowTitle={workflowDisplayName(settingUp)}
+          declared={(settingUp.triggers ?? []) as DeclaredTrigger[]}
+          defaultProjectId={projectId}
+          mode="setup"
+          showOpenWorkflow
+        />
+      )}
 
       <RunNowDialog
         open={runRef !== null}

@@ -1,0 +1,10 @@
+>-
+  {"number": response.number,
+   "id": response.id,
+   "node_id": response.?node_id.orValue(null),
+   "html_url": response.html_url,
+   "title": response.title,
+   "state": response.state,
+   "draft": response.?draft.orValue(false),
+   "head_sha": response.?head.?sha.orValue(null),
+   "base_ref": response.?base.?ref.orValue(null)}

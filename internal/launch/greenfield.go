@@ -31,7 +31,7 @@ func (l *Launcher) WantsGreenfieldProbe(ctx context.Context, chat *db.Chat) bool
 	}
 	count, err := l.repo.CountMessagesInChat(ctx, chat.ID)
 	if err != nil {
-		logging.Warn("Greenfield probe: could not count chat messages; skipping",
+		logging.WarnContext(ctx, "Greenfield probe: could not count chat messages; skipping",
 			"error", err, "chatID", chat.ID)
 		return false
 	}

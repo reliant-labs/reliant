@@ -39,11 +39,13 @@ const (
 	inboxLaunchFailedPrefix      = "automation_launch_failed:"
 	inboxRunFinishedPrefix       = "run_finished:"
 	inboxStoragePrefix           = "storage:"
+	inboxNeedsSetupPrefix        = "automation_needs_setup:"
 )
 
 var inboxItemPrefixes = []string{
 	inboxApprovalPrefix, inboxQuestionPrefix, inboxWaitingForMachinePrefix,
 	inboxFailingPrefix, inboxLaunchFailedPrefix, inboxRunFinishedPrefix, inboxStoragePrefix,
+	inboxNeedsSetupPrefix,
 }
 
 // maxInboxDismissBatch bounds one Dismiss/Restore call ("Dismiss all" on a
@@ -97,6 +99,12 @@ func (s *Service) ListInbox(
 		logging.WarnContext(ctx, "Failed to compute storage inbox items", "error", err)
 	}
 	items = append(items, storage...)
+	needsSetup, err := s.needsSetupAutomations(ctx, userID)
+	if err != nil {
+		// Advisory like storage: the badge and the other sections still work.
+		logging.WarnContext(ctx, "Failed to compute needs-setup automations for inbox", "error", err)
+	}
+	items = append(items, needsSetup...)
 
 	items, err = s.dropDismissed(ctx, userID, items)
 	if err != nil {
@@ -292,6 +300,55 @@ func (s *Service) failingAutomations(ctx context.Context, userID string) ([]*rel
 			WorkflowName: t.Workflow,
 			WaitingSince: streak.First.Event.OccurredAt.UTC().Format(time.RFC3339Nano),
 			Payload:      &reliantv1.InboxItem_AutomationFailing{AutomationFailing: payload},
+		})
+	}
+	return out, nil
+}
+
+// needsSetupAutomations returns one item per enabled workflow automation whose
+// params leave a required input unset (triggers.NeedsSetupHealth, the same rule
+// Trigger.health reads), so a workflow update or a legacy `{}` activation that
+// the person did not just touch still reaches them. The item leaves the list
+// the moment setup is finished, because it is recomputed on every read. A
+// paused automation is the person's choice and not nagged about; an automation
+// whose declaration is broken is BROKEN, not a setup matter.
+func (s *Service) needsSetupAutomations(ctx context.Context, userID string) ([]*reliantv1.InboxItem, error) {
+	stored, err := s.deps.Repo.ListTriggers(ctx, core.TriggerFilters{UserID: userID})
+	if err != nil {
+		return nil, err
+	}
+	workflows := triggers.NewCachedWorkflows(triggers.LaunchWorkflows{Repo: s.deps.Repo})
+	var out []*reliantv1.InboxItem
+	for _, t := range stored {
+		if !t.Enabled || t.WorkflowTrigger == nil {
+			continue
+		}
+		decl, err := triggers.ResolveDeclaration(ctx, workflows, t)
+		if err != nil {
+			continue
+		}
+		issues := triggers.SetupIssues(decl, t)
+		if len(issues) == 0 {
+			continue
+		}
+		wire := make([]*reliantv1.TriggerSetupIssue, len(issues))
+		inputs := make([]string, len(issues))
+		for i, issue := range issues {
+			wire[i] = &reliantv1.TriggerSetupIssue{Input: issue.Input, Message: issue.Message}
+			inputs[i] = issue.Input
+		}
+		out = append(out, &reliantv1.InboxItem{
+			Kind: reliantv1.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_NEEDS_SETUP,
+			// The missing inputs are part of the identity: dismissing "needs
+			// repos" does not hide "now also needs team".
+			ItemId:       inboxNeedsSetupPrefix + t.ID + ":" + strings.Join(inputs, ","),
+			TriggerId:    t.ID,
+			TriggerName:  t.Name,
+			ProjectId:    t.ProjectID,
+			ProjectName:  t.ProjectName,
+			WorkflowName: t.Workflow,
+			WaitingSince: t.UpdatedAt.UTC().Format(time.RFC3339Nano),
+			Payload:      &reliantv1.InboxItem_AutomationNeedsSetup{AutomationNeedsSetup: &reliantv1.InboxAutomationNeedsSetup{Issues: wire}},
 		})
 	}
 	return out, nil

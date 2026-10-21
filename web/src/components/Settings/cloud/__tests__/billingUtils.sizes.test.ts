@@ -47,8 +47,7 @@ function plan(
       maxLlmKeys: 1,
       requestsPerMin: 0,
       allowedDaemonSizes: [],
-      daemonComputeIncludedMinutes: 0,
-      daemonOveragePerMinuteCents: 0,
+      includedSmallDaemonHours: 0n,
       ...limits,
     },
   } as unknown as Plan;

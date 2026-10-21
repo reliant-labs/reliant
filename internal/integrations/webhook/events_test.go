@@ -187,3 +187,32 @@ func TestEventsNeverRouteToAConnectionWithNoAccount(t *testing.T) {
 }
 
 var _ = context.Background
+
+// A trigger scoped by a typed input hears only the repositories its activation
+// holds. An event outside the scope, and any event for an empty or unprojected
+// scope, reaches no intake: no row is written for it.
+func TestEventsRouteOnlyInScope(t *testing.T) {
+	env := newEventsEnv(t, "https://api.example.com")
+	scoped := func(id string, any map[string][]string) *core.Trigger {
+		return integrationTrigger(t, id, "alice", core.IntegrationConfig{
+			Events:     []string{"issues.opened"},
+			MatchInput: map[string]string{"repository": "repos"},
+			MatchAny:   any,
+		}, "")
+	}
+	env.route(scoped("in-scope", map[string][]string{"repository": {"acme/app", "acme/web"}}), "100", core.ConnectionStatusActive)
+	env.route(scoped("other-scope", map[string][]string{"repository": {"acme/other"}}), "100", core.ConnectionStatusActive)
+	env.route(scoped("empty-scope", map[string][]string{"repository": {}}), "100", core.ConnectionStatusActive)
+	env.route(scoped("unprojected", nil), "100", core.ConnectionStatusActive)
+	env.route(integrationTrigger(t, "unscoped", "alice", core.IntegrationConfig{Events: []string{"issues.opened"}}, ""), "100", core.ConnectionStatusActive)
+
+	rec := env.deliver(t, issueOpened("delivery-1", "100", "acme/app"))
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	assert.Equal(t, []string{"in-scope", "unscoped"}, env.intake.triggerIDs(),
+		"only the in-scope and the unscoped triggers are handed the event")
+
+	rec = env.deliver(t, issueOpened("delivery-2", "100", "acme/elsewhere"))
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	assert.Equal(t, []string{"in-scope", "unscoped", "unscoped"}, env.intake.triggerIDs(),
+		"an event outside every scope is handed to no scoped trigger; only the unscoped one hears it")
+}

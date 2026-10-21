@@ -180,6 +180,12 @@ vi.mock("../../../store/projectStore", () => {
 vi.mock("../../../lib/analytics", () => ({ trackEvent: vi.fn() }));
 vi.mock("../OnboardingChecklist", () => ({ OnboardingChecklist: () => null }));
 
+// Imported statically, after the mocks (vitest hoists vi.mock above it): a
+// dynamic import inside the first test made that test pay for loading the
+// wizard's whole module graph, and on a loaded machine it hit the 10s test
+// timeout.
+import { OnboardingWizard } from "../OnboardingWizard";
+
 // ── Test router ──────────────────────────────────────────────────────────
 
 const searchSchema = z.object({
@@ -216,11 +222,6 @@ function makeRouter(initialEntries: string[], Wizard: React.ComponentType<any>) 
   });
 }
 
-async function loadWizard(): Promise<React.ComponentType<any>> {
-  const mod = await import("../OnboardingWizard");
-  return (mod as any).OnboardingWizard;
-}
-
 // ── Tests ────────────────────────────────────────────────────────────────
 
 describe("OnboardingWizard — no starter-picker gate", () => {
@@ -237,8 +238,7 @@ describe("OnboardingWizard — no starter-picker gate", () => {
   // The reported symptom, as a test: a fresh user lands on `/` with the tour
   // param set and must see step 1 without first answering a starter question.
   it("shows the tour immediately for a project with zero chats", async () => {
-    const Wizard = await loadWizard();
-    const router = makeRouter(["/?tour=chat-and-sidebars"], Wizard);
+    const router = makeRouter(["/?tour=chat-and-sidebars"], OnboardingWizard);
     render(React.createElement(RouterProvider as any, { router }));
 
     await waitFor(() =>
@@ -248,8 +248,7 @@ describe("OnboardingWizard — no starter-picker gate", () => {
 
   // Same for the project route, the other place NewChatView mounts.
   it("shows the tour on /project/$id with zero chats", async () => {
-    const Wizard = await loadWizard();
-    const router = makeRouter(["/project/p1?tour=chat-and-sidebars"], Wizard);
+    const router = makeRouter(["/project/p1?tour=chat-and-sidebars"], OnboardingWizard);
     render(React.createElement(RouterProvider as any, { router }));
 
     await waitFor(() =>

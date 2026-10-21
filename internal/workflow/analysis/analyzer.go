@@ -854,6 +854,14 @@ func defaultInputValue(input *reliantv1.Input) (interface{}, bool) {
 		if value := defaultStructValue(input); value != nil {
 			return value, true
 		}
+	default:
+		// An integration's input (`github.repository`) holds a plain value:
+		// its default is the config's, whatever the type.
+		if model.IsIntegrationInput(input) {
+			if value := model.GetInputDefault(input); value != nil {
+				return value, true
+			}
+		}
 	}
 	return nil, false
 }

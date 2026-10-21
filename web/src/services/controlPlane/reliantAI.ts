@@ -165,8 +165,8 @@ export interface RedeemCouponResult {
   kind: RedeemedCouponKind;
   /** COMPUTE_MINUTES only: daemon compute minutes granted by this redemption. */
   computeMinutes: number;
-  /** COMPUTE_MINUTES only: org's total unspent granted compute minutes after this redemption. */
-  newComputeMinutesRemaining: number;
+  /** COMPUTE_MINUTES only: org's total unspent grant balance after this redemption, in small-daemon-seconds. */
+  newGrantedSmallDaemonSecondsRemaining: number;
 }
 
 /**
@@ -188,6 +188,6 @@ export async function redeemCoupon(code: string): Promise<RedeemCouponResult> {
     newBalanceCents: Number(res.newBalanceCents),
     kind: res.kind,
     computeMinutes: Number(res.computeMinutes),
-    newComputeMinutesRemaining: Number(res.newComputeMinutesRemaining),
+    newGrantedSmallDaemonSecondsRemaining: Number(res.newGrantedSmallDaemonSecondsRemaining),
   };
 }

@@ -32,7 +32,7 @@ vi.mock("@/hooks/useOnboardingQueries", () => ({
     eligible: false,
     reason: null,
     isLoading: false,
-    grantedMinutesRemaining: 0,
+    grantedSmallDaemonSecondsRemaining: 0,
     refetch: vi.fn(),
   }),
   computeIneligibleCopy: () => "",

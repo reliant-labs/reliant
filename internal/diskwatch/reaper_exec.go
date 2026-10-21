@@ -64,10 +64,10 @@ func runReaperProcess(ctx context.Context, bin string, args []string) (reaperRun
 		return reaperRun{}, fmt.Errorf("start %s: %w", filepath.Base(bin), err)
 	}
 	if err := osutil.LowerChildPriority(cmd.Process.Pid); err != nil {
-		logging.Debug("[diskwatch] Failed to lower storage reaper priority", "pid", cmd.Process.Pid, "error", err)
+		logging.DebugContext(ctx, "[diskwatch] Failed to lower storage reaper priority", "pid", cmd.Process.Pid, "error", err)
 	}
 	if err := osutil.LowerChildIOPriority(cmd.Process.Pid); err != nil {
-		logging.Debug("[diskwatch] Failed to lower storage reaper I/O priority", "pid", cmd.Process.Pid, "error", err)
+		logging.DebugContext(ctx, "[diskwatch] Failed to lower storage reaper I/O priority", "pid", cmd.Process.Pid, "error", err)
 	}
 
 	runErr := cmd.Wait()

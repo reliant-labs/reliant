@@ -4,7 +4,8 @@
  * THE CONSOLE'S URLS (research/console-v3/PROPOSAL.md §3.2), and the mapping
  * from every URL the console used to have onto them.
  *
- *   /forge/p/:project                         Overview (project home)
+ *   /forge/p/:project                         Overview (project home, with the workloads)
+ *   /forge/p/:project/workloads/:env/:name    one workload in one environment
  *   /forge/p/:project/releases                Releases
  *   /forge/p/:project/releases/:version       one release (its DORA strip is on Releases, D9)
  *   /forge/p/:project/observability           Observability overview
@@ -63,6 +64,8 @@ export function isObsNavView(value: string | undefined): value is ObsNavView {
 /** Every page of the console, as the nav and the breadcrumb name it. */
 export type ConsolePage =
   | { kind: "overview" }
+  /** One workload. Its environment is in the path: a workload is one per environment, and so are its actions. */
+  | { kind: "workload"; env: string; name: string }
   | { kind: "releases" }
   | { kind: "release"; version: string }
   | { kind: "observability" }
@@ -87,6 +90,8 @@ export function consolePath(project: string, page: ConsolePage): string {
   switch (page.kind) {
     case "overview":
       return base;
+    case "workload":
+      return `${base}/workloads/${encodeURIComponent(page.env)}/${encodeURIComponent(page.name)}`;
     case "releases":
       return `${base}/releases`;
     case "release":
@@ -136,6 +141,8 @@ export function consolePageOf(pathname: string): { project: string; page: Consol
     switch (section) {
       case undefined:
         return { kind: "overview" };
+      case "workloads":
+        return sub && dashKind && !dashKey ? { kind: "workload", env: safeDecode(sub), name: safeDecode(dashKind) } : null;
       case "releases":
         return sub ? { kind: "release", version: safeDecode(sub) } : { kind: "releases" };
       case "observability":
@@ -161,7 +168,7 @@ export function consolePageOf(pathname: string): { project: string; page: Consol
 
 /** Whether a page has an environment in its path, so the top-bar scope does not apply to it. */
 export function pinnedEnvOf(page: ConsolePage): string | null {
-  return page.kind === "environment" ? page.env : null;
+  return page.kind === "environment" || page.kind === "workload" ? page.env : null;
 }
 
 /**
@@ -181,18 +188,16 @@ export function withSearch(path: string, search: Record<string, unknown> = {}): 
 /**
  * Where an Observability view lives now. The panel still speaks in views
  * (obsSearch.ts) — its links say "open Logs", "open Traces" — and this turns
- * each into the page that hosts it: the nav entries under Observability, the
- * project Overview for Workloads (the overview is the project home merged
- * with workloads) and Project settings for Usage (decision D9). Delivery is
- * no view any more: its DORA figures are the Releases page's strip.
+ * each into the page that hosts it: the nav entries under Observability and
+ * Project settings for Usage (decision D9). Workloads and Delivery are no
+ * views any more: the workloads are the Overview's own tables (with a page
+ * per workload), and the DORA figures are the Releases page's strip.
  */
 export function pageOfObsView(view: ObsView | undefined): ConsolePage {
   switch (view) {
     case undefined:
     case "overview":
       return { kind: "observability" };
-    case "workloads":
-      return { kind: "overview" };
     case "usage":
       return { kind: "settings" };
     default:
@@ -205,8 +210,6 @@ export function obsViewOfPage(page: ConsolePage): ObsView | null {
   switch (page.kind) {
     case "observability":
       return "overview";
-    case "overview":
-      return "workloads";
     case "settings":
       return "usage";
     case "obs-view":
@@ -239,10 +242,25 @@ export function carriedObsSearch(search: Record<string, unknown>): Record<string
 
 // ── The retired URLs ────────────────────────────────────────────────────────
 
+/**
+ * What a retired Observability URL carried: the current keys, plus the
+ * retired `view=workloads` and the `workload` it had open.
+ */
+export type LegacyObsSearch = Omit<ObsSearch, "view"> & { view?: ObsView | "workloads"; workload?: string };
+
 /** What a legacy `/forge/env/:env` URL carried. */
-export interface LegacyEnvSearch extends ObsSearch {
+export interface LegacyEnvSearch extends LegacyObsSearch {
   tab?: string;
   secret?: string;
+}
+
+/**
+ * The retired Workloads view → the Overview (where the workloads are now), or
+ * the workload's own page when the URL names it and one environment.
+ */
+function legacyWorkloadsTarget(project: string, env: string, workload: string | undefined): string {
+  if (workload && env !== "all") return withSearch(consolePath(project, { kind: "workload", env, name: workload }), { env });
+  return withSearch(consolePath(project, { kind: "overview" }), { env, q: workload });
 }
 
 /**
@@ -263,6 +281,7 @@ export function legacyEnvTarget(project: string, env: string, search: LegacyEnvS
     case "secrets":
       return withSearch(consolePath(project, { kind: "secrets" }), { env, secret: search.secret });
     case "observability":
+      if (search.view === "workloads") return legacyWorkloadsTarget(project, env, search.workload);
       return withSearch(consolePath(project, pageOfObsView(search.view)), {
         env,
         ...carriedObsSearch(search as Record<string, unknown>),
@@ -277,7 +296,8 @@ export function legacyEnvTarget(project: string, env: string, search: LegacyEnvS
 }
 
 /** `/forge/observability?view=…&envs=…` → the page hosting that view, scoped. */
-export function legacyObservabilityTarget(project: string, search: ObsSearch): string {
+export function legacyObservabilityTarget(project: string, search: LegacyObsSearch): string {
+  if (search.view === "workloads") return legacyWorkloadsTarget(project, envScopeOfEnvs(search.envs), search.workload);
   return withSearch(consolePath(project, pageOfObsView(search.view)), {
     env: envScopeOfEnvs(search.envs),
     ...carriedObsSearch(search as Record<string, unknown>),

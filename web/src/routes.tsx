@@ -92,6 +92,8 @@ const DashboardsPreview = lazyRoute(
   () => import('./components/Forge/Observability/Dashboards/__preview__/DashboardsPreview'), 'default')
 const ReleasesPreview = lazyRoute(
   () => import('./components/Forge/Releases/__preview__/ReleasesPreview'), 'default')
+const WorkloadsPreview = lazyRoute(
+  () => import('./components/Forge/Workloads/__preview__/WorkloadsPreview'), 'default')
 const SettingsPage = lazyRoute(
   () => import('./components/Settings/SettingsPage'), 'SettingsPage')
 const ConnectorConsentPage = lazyRoute(
@@ -149,7 +151,9 @@ const ForgeLayout = lazyRoute(
 const ConsoleLayout = lazyRoute(
   () => import('./components/Forge/Console/ConsoleLayout'), 'ConsoleLayout')
 const ForgeConsoleOverviewPage = lazyRoute(
-  () => import('./components/Forge/Console/ConsolePages'), 'OverviewPage')
+  () => import('./components/Forge/Workloads/WorkloadPages'), 'OverviewPage')
+const ForgeConsoleWorkloadPage = lazyRoute(
+  () => import('./components/Forge/Workloads/WorkloadPages'), 'WorkloadPage')
 const ForgeConsoleReleasesPage = lazyRoute(
   () => import('./components/Forge/Releases/ReleasesPages'), 'ReleasesPage')
 const ForgeConsoleReleasePage = lazyRoute(
@@ -535,6 +539,15 @@ const forgeReleasesPreviewRoute = createRoute({
 // The Observability home, Dashboards and a dashboard, inside the real console
 // chrome, against the fixture app and an in-memory DashboardService — every
 // state in every scheme, no backend.
+// The Overview (with the workloads) and a workload, inside the real console
+// chrome, against the workload fixtures — every state in every scheme, no
+// backend.
+const forgeWorkloadsPreviewRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/forge-workloads-preview',
+  component: () => <DevOnlyRoute><WorkloadsPreview /></DevOnlyRoute>,
+})
+
 const forgeDashboardsPreviewRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/forge-dashboards-preview',
@@ -656,6 +669,7 @@ const forgeConsoleRoutes = createForgeConsoleRoutes(() => authenticatedLayoutRou
   layout: ForgeLayout,
   console: gated(ConsoleLayout),
   overview: gated(ForgeConsoleOverviewPage),
+  workload: gated(ForgeConsoleWorkloadPage),
   releases: gated(ForgeConsoleReleasesPage),
   release: gated(ForgeConsoleReleasePage),
   observability: gated(ForgeConsoleObservabilityPage),
@@ -825,6 +839,7 @@ const routeTree = rootRoute.addChildren([
   forgeObservabilityPreviewRoute,
   consolePrimitivesPreviewRoute,
   forgeReleasesPreviewRoute,
+  forgeWorkloadsPreviewRoute,
   forgeDashboardsPreviewRoute,
   projectPickerRedirectRoute,
   mobileIndexRoute,

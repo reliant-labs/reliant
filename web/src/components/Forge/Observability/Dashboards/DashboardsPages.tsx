@@ -28,6 +28,7 @@ import type { DashboardRef } from "@/services/controlPlane/observability/dashboa
 import { DEFAULT_RANGE } from "@/services/controlPlane/observability/window";
 
 import { useForgeConsole } from "../../Console/consoleContext";
+import { ENV_ALL } from "../../Console/envScope";
 import { CloudNotice } from "../../SourceNotices";
 import type { ObsEnvironment } from "../obsPlace";
 import type { ObsSearch } from "../obsSearch";
@@ -73,7 +74,12 @@ function useObservabilityHrefs(): DashboardHrefs & ObservabilityHomeHrefs {
       releases: href({ kind: "releases" }),
       release: (version: string) => href({ kind: "release", version }),
       trace: (traceId: string) => href({ kind: "obs-view", view: "traces" }, { trace: traceId, range: "7d" }),
-      workload: (name: string, envName?: string | null) => href({ kind: "overview" }, { workload: name, env: envName ?? env }),
+      // A workload is one per environment: with every environment in scope
+      // and none named, the Overview filtered to it lets the reader pick one.
+      workload: (name: string, envName?: string | null) => {
+        const where = envName ?? env;
+        return where === ENV_ALL ? href({ kind: "overview" }, { q: name }) : href({ kind: "workload", env: where, name });
+      },
       dashboard: (ref: DashboardRef, search: DashboardSearch = {}) =>
         ref.kind === "template" ? href({ kind: "obs-view", view: "dashboards" }) : href({ kind: "dashboard", dashKind: ref.kind, key: ref.key }, { ...search }),
     }),

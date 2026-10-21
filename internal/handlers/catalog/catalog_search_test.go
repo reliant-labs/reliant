@@ -381,13 +381,19 @@ func TestGetCatalogEntry_EveryEmbeddedEntryConverts(t *testing.T) {
 		case reliantv1.CatalogEntryKind_CATALOG_ENTRY_KIND_TRIGGER:
 			assert.NotNil(t, e.GetPayloadSchema(), s.GetRef())
 			assert.Nil(t, e.GetParamsSchema(), s.GetRef())
+		case reliantv1.CatalogEntryKind_CATALOG_ENTRY_KIND_TYPE:
+			assert.NotNil(t, e.GetValueSchema(), s.GetRef())
+			assert.Nil(t, e.GetParamsSchema(), s.GetRef())
+			assert.Nil(t, e.GetPayloadSchema(), s.GetRef())
 		default:
 			assert.NotNil(t, e.GetParamsSchema(), s.GetRef())
 			assert.Nil(t, e.GetPayloadSchema(), s.GetRef())
+			assert.Nil(t, e.GetValueSchema(), s.GetRef())
 		}
 	}
 	assert.Positive(t, kinds[reliantv1.CatalogEntryKind_CATALOG_ENTRY_KIND_ACTION])
 	assert.Positive(t, kinds[reliantv1.CatalogEntryKind_CATALOG_ENTRY_KIND_TRIGGER], "the embedded catalog ships triggers (Slack)")
+	assert.Positive(t, kinds[reliantv1.CatalogEntryKind_CATALOG_ENTRY_KIND_TYPE], "the embedded catalog ships value types (GitHub)")
 }
 
 const catalogTriggerFixture = `
@@ -441,4 +447,36 @@ func TestGetCatalogEntry_TriggerCarriesItsPayloadSchema(t *testing.T) {
 	props := e.GetPayloadSchema().AsMap()["properties"].(map[string]any)
 	assert.Contains(t, props["data"].(map[string]any)["properties"], "alert")
 	assert.Equal(t, map[string]any{"type": "string", "const": "pager"}, props["integration"])
+}
+
+// A value type is an entry of its own kind; its full entry carries the value
+// schema and neither params, output nor payload.
+func TestCatalogServesValueTypes(t *testing.T) {
+	idx := catalogindex.MustBuiltin()
+	svc := NewTestCatalog(t, WithCatalogDeps(Deps{Search: catalogindex.NewService(idx, fakeCatalogConnections{}, nil)}))
+
+	list, err := svc.SearchCatalog(asUser("bob"), connect.NewRequest(&reliantv1.SearchCatalogRequest{
+		Kinds: []reliantv1.CatalogEntryKind{reliantv1.CatalogEntryKind_CATALOG_ENTRY_KIND_TYPE}, PageSize: 100,
+	}))
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []string{"github.repository", "github.label", "github.user", "github.installation"}, entryRefs(list.Msg.GetEntries()))
+	for _, e := range list.Msg.GetEntries() {
+		assert.Equal(t, reliantv1.CatalogEntryKind_CATALOG_ENTRY_KIND_TYPE, e.GetKind())
+	}
+
+	got, err := svc.GetCatalogEntry(asUser("bob"), connect.NewRequest(&reliantv1.GetCatalogEntryRequest{Ref: "github.repository"}))
+	require.NoError(t, err)
+	e := got.Msg.GetEntry()
+	assert.Equal(t, reliantv1.CatalogEntryKind_CATALOG_ENTRY_KIND_TYPE, e.GetSummary().GetKind())
+	assert.Equal(t, "github", e.GetSummary().GetIntegration().GetId())
+	require.NotNil(t, e.GetValueSchema())
+	assert.Equal(t, "string", e.GetValueSchema().AsMap()["type"])
+	assert.Nil(t, e.GetParamsSchema())
+	assert.Nil(t, e.GetOutputSchema())
+	assert.Nil(t, e.GetPayloadSchema())
+
+	// An action entry carries no value schema.
+	action, err := svc.GetCatalogEntry(asUser("bob"), connect.NewRequest(&reliantv1.GetCatalogEntryRequest{Ref: "github/user.get@1"}))
+	require.NoError(t, err)
+	assert.Nil(t, action.Msg.GetEntry().GetValueSchema())
 }

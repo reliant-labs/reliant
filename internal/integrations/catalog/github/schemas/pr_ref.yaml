@@ -1,0 +1,6 @@
+type: object
+properties:
+  ref: { type: string, description: The branch name. }
+  sha: { type: string }
+  label: { type: [string, "null"], description: "owner:branch" }
+  repo: { type: [string, "null"], description: The repository's full_name (null if a fork was deleted). }

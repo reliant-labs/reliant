@@ -168,7 +168,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge ledger import`](#reliant-forge-ledger-import) | Import a ledger from a checkout's committed history, or from another ledger directory |
 | [`reliant forge ledger show`](#reliant-forge-ledger-show) | Print this machine's ledger records — promotions, applies and local sessions |
 | [`reliant forge ledger where`](#reliant-forge-ledger-where) | Print which backend holds an environment's ledger, and the declaration that chose it |
-| [`reliant forge lint`](#reliant-forge-lint) | Run linters on the project (auto-fixes formatting in place first; --no-fix to only check) |
+| [`reliant forge lint`](#reliant-forge-lint) | Run linters on the project (auto-fixes formatting in place first; report-only under CI or --check) |
 | [`reliant forge login`](#reliant-forge-login) | Authenticate to the control plane(s) this project declares |
 | [`reliant forge logout`](#reliant-forge-logout) | Forget the stored credential for this project's control plane(s) |
 | [`reliant forge observe`](#reliant-forge-observe) | Read back what the local observability stack collected |
@@ -891,7 +891,7 @@ reliant forge
 | [`generate`](#reliant-forge-generate) | Generate code from proto files |
 | [`kcl`](#reliant-forge-kcl) | Evaluate this project's KCL directly |
 | [`ledger`](#reliant-forge-ledger) | Move and inspect deploy ledgers |
-| [`lint`](#reliant-forge-lint) | Run linters on the project (auto-fixes formatting in place first; --no-fix to only check) |
+| [`lint`](#reliant-forge-lint) | Run linters on the project (auto-fixes formatting in place first; report-only under CI or --check) |
 | [`login`](#reliant-forge-login) | Authenticate to the control plane(s) this project declares |
 | [`logout`](#reliant-forge-logout) | Forget the stored credential for this project's control plane(s) |
 | [`observe`](#reliant-forge-observe) | Read back what the local observability stack collected |
@@ -5862,7 +5862,7 @@ reliant forge ledger where <environment> [flags]
 
 ### reliant forge lint
 
-Run linters on the project (auto-fixes formatting in place first; --no-fix to only check)
+Run linters on the project (auto-fixes formatting in place first; report-only under CI or --check)
 
 Run various linters on the Forge project.
 
@@ -5887,12 +5887,22 @@ runs each frontend's own prettier over the src/ files you own (never
 generated or forge-refreshed ones), and runs eslint --fix on frontends — so
 mechanical formatting never surfaces as a gating error. It never rewrites a
 file the project's own formatter gate accepts. Under --scope it touches only
-files inside the scope. Pass --no-fix to gate only and mutate nothing (CI /
-read-only checks); --json is always detect-only.
+files inside the scope, and naming Go package paths (forge lint ./internal/x/...)
+likewise confines the fixers to those packages — the frontend formatter does
+not run then. Only a bare forge lint rewrites the whole project.
+
+REPORT-ONLY. When the CI environment variable is set (GitHub Actions, GitLab
+and the rest set it), or --check (also spelled --no-fix) is passed, forge lint
+writes NOTHING: it prints the diff each fix would have applied and exits
+non-zero if any is pending, so CI fails on unformatted code instead of
+repairing a checkout that is thrown away. --fix forces fixing even under CI;
+--json is always detect-only.
 
 Examples:
   forge lint                     # Auto-fix deterministic-safe issues, then gate
-  forge lint --no-fix            # Gate only; mutate nothing (CI / read-only)
+  forge lint --check             # Report only: print the diffs, mutate nothing
+  CI=1 forge lint                # Same, from the environment (CI sets it)
+  CI=1 forge lint --fix          # Fix even under CI
   forge lint --skip-frontends    # Backend-only gate; no Node toolchain needed
   forge lint --contract          # Run contract interface enforcement linter
   forge lint --db                # Run DB entity lint rules
@@ -5999,6 +6009,7 @@ reliant forge lint [paths...] [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--check` | `bool` | - | Report only: write nothing, print the diff each fix would apply, and exit non-zero if any is pending. The default when CI is set (also spelled --no-fix) |
 | `--column-markers` | `bool` | - | Flag COMMENT ON COLUMN/CONSTRAINT text containing forge: that matches no known column marker (warnings only) |
 | `--computed-fields` | `bool` | - | Flag a forge:computed field that no non-generated Go file assigns — nothing populates it, so the insert takes the column default. FAILS the build, except while the service still holds forge-scaffolded unwired rpc stubs (then a warning naming them) |
 | `--config-deps` | `bool` | - | Flag scalar Deps fields — scalars are configuration; declare a `<Component>`Config block in proto/config and take it as a typed field (warnings only) |
@@ -6006,7 +6017,7 @@ reliant forge lint [paths...] [flags]
 | `--contract` | `bool` | - | Run contract interface enforcement linter |
 | `--conventions` | `bool` | - | Run forge convention rules on proto files |
 | `--create-nullability` | `bool` | - | Fail when a field's optional label disagrees between an entity message and its Create`<Entity>`Request — the flattened request drops write presence silently |
-| `--fix` | `bool` | - | Deprecated: auto-fix of deterministic-safe issues is now the default; this flag is a no-op kept for back-compat (use --no-fix to opt out) |
+| `--fix` | `bool` | - | Apply the deterministic-safe fixes (Go formatting, golangci autofixes, frontend prettier, eslint --fix) even when CI is set; they are the default everywhere else |
 | `--fixture-drift` | `bool` | - | Execute every literal fixture statement in a scaffolded handlers_crud_test.go against the current schema — migrations applied to a shadow postgres, each statement run in a rolled-back transaction — and report postgres's own error for each one it rejects: a GENERATED column, a UNIQUE collision, a dangling foreign key, a CHECK a later migration added (warnings only) |
 | `--frontend-stores` | `bool` | - | Flag Zustand stores that import generated Connect clients (warnings only) |
 | `--gate-json` | `string` | - | Also write this run's result to `FILE` as a gate document, for `forge gate record` or `forge env deploy --gate`. A FILE, not a stdout mode: the findings and the exit code are unchanged. |
@@ -6016,13 +6027,13 @@ reliant forge lint [paths...] [flags]
 | `--help-dev` | `bool` | - | List maintainer/debug flags hidden from --help |
 | `--json` | `bool` | - | Output findings as JSON (see lint_json.go header for the schema; exit code matches text mode) |
 | `--migration-safety` | `bool` | - | Run SQL migration safety checks |
-| `--no-fix` | `bool` | - | Skip the deterministic-safe auto-fix pre-pass (Go formatting, golangci autofixes, frontend prettier, eslint --fix); gate only and mutate nothing (CI / read-only) |
+| `--no-fix` | `bool` | - | Same as --check: write nothing, print the diff each fix would apply, and fail if any is pending |
 | `--optional-deps-guard` | `bool` | - | Flag unguarded derefs of // forge:optional-dep Deps fields (warnings only; suppress with // forge:optional-checked on the deref line) |
 | `--proto-markers` | `bool` | - | Flag .proto comments containing forge: that match no known proto marker — a misspelled marker is inert and warns nowhere (warnings only) |
 | `--proto-options` | `bool` | - | Flag (forge.v1.*) annotation fields this forge binary's descriptors do not define — a retired or misspelled option field compiles under buf and is read by nothing (warnings only) |
-| `--quiet`, `-q` | `bool` | - | Print only what failed: a one-line summary per failing linter, its error findings, and the verdict as the LAST line (a clean run is one line). Auto-fix still rewrites files in place, silently (--no-fix to only check); combines with the targeted flags and --scope |
+| `--quiet`, `-q` | `bool` | - | Print only what failed: a one-line summary per failing linter, its error findings, and the verdict as the LAST line (a clean run is one line). Auto-fix still rewrites files in place, silently, unless CI is set or --check (--no-fix) is passed; combines with the targeted flags and --scope |
 | `--read-only-fields` | `bool` | - | Flag a forge:read-only field whose column nothing populates — no non-generated Go file assigns it, no meaningful DEFAULT, not GENERATED — so every row ships as the type's zero with no error anywhere. FAILS the build, except while the service still holds forge-scaffolded unwired rpc stubs (then a warning naming them) |
-| `--scope` | `stringSlice` | `[]` | Report only findings in files under `PATH` (repeatable or comma-separated, project-relative). Go linters run on PATH's packages only; file-anchored linters report only findings under PATH; whole-project linters (frontend lint, graph, component-drift, config-reach) cannot be scoped, are skipped, and are named in the verdict. Auto-fix still rewrites files in place, only those under PATH (--no-fix to only check) |
+| `--scope` | `stringSlice` | `[]` | Report only findings in files under `PATH` (repeatable or comma-separated, project-relative). Go linters run on PATH's packages only; file-anchored linters report only findings under PATH; whole-project linters (frontend lint, graph, component-drift, config-reach) cannot be scoped, are skipped, and are named in the verdict. Auto-fix still rewrites files in place, only those under PATH, unless CI is set or --check (--no-fix) is passed |
 | `--show-suppressed` | `bool` | - | List every suppression the project declares, with file:line, what it covers and the stated reason: forge.yaml lint.rules (off/warn) and contracts.exclude, //forge:exclude-contract markers, forge:lint-disable* and nolint directives, and the migration and optional-dep pragmas. Read-only: runs no linter and exits 0; combines with --json and --scope |
 | `--skip-frontends` | `bool` | - | Skip the whole frontend lane (eslint/stylelint + TypeScript typecheck + static-export) for a backend-only gate that needs no Node toolchain |
 | `--slow-tests` | `bool` | - | Fail on a Go test that does slow work without being marked slow — execs go/forge/kcl/node/npm/git/docker/…, drives containers, or dials an external host, with no testkit.Slow(t, why) or testing.Short() guard on its path — so it runs in the blocking -short tier, and a file its child process reads is invisible to the test cache |

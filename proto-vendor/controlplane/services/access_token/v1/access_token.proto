@@ -26,7 +26,17 @@ service AccessTokenService {
   // CreateToken mints an ORG automation token (no acting user) — CI deploy,
   // secret management. Caller: an org admin's human session.
   rpc CreateToken(CreateTokenRequest) returns (CreateTokenResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "create"
+        target: {
+          kind: "access_token"
+          id: "response.token.id"
+          label: "response.token.name"
+        }
+      }
+    };
   }
   // ListTokens lists the caller org's tokens. Never a plaintext.
   rpc ListTokens(ListTokensRequest) returns (ListTokensResponse) {
@@ -37,6 +47,14 @@ service AccessTokenService {
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
+      activity: {
+        verb: "revoke"
+        target: {
+          kind: "access_token"
+          id: "id"
+          label: "response.token.name"
+        }
+      }
     };
   }
 
@@ -44,7 +62,18 @@ service AccessTokenService {
   // (reliant:api), a daemon credential (daemon:connect), an LLM key
   // (llm:invoke). Caller: a human session. The org is the caller's primary org.
   rpc CreateMyToken(CreateMyTokenRequest) returns (CreateMyTokenResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "create"
+        target: {
+          kind: "access_token"
+          id: "response.token.id"
+          label: "response.token.name"
+        }
+        detail: ["ephemeral"]
+      }
+    };
   }
   // ListMyTokens lists tokens acting as the caller.
   rpc ListMyTokens(ListMyTokensRequest) returns (ListMyTokensResponse) {
@@ -55,6 +84,13 @@ service AccessTokenService {
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
+      activity: {
+        verb: "revoke"
+        target: {
+          kind: "access_token"
+          id: "id"
+        }
+      }
     };
   }
   // UpdateMyToken changes one of the caller's own tokens' name and scopes.
@@ -65,7 +101,17 @@ service AccessTokenService {
   // editing is never a way to widen past what the user holds. Rotation is
   // deliberately not an operation here — it is mint-new plus revoke-old.
   rpc UpdateMyToken(UpdateMyTokenRequest) returns (UpdateMyTokenResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "update"
+        target: {
+          kind: "access_token"
+          id: "id"
+          label: "response.token.name"
+        }
+      }
+    };
   }
 
   // ExchangeToken is the ON-DEMAND ELEVATION a machine credential acting as a
@@ -83,7 +129,10 @@ service AccessTokenService {
   // inherits the caller's binding: cluster:manage cannot ride a daemon binding,
   // so a managed daemon's credential can never obtain it.
   rpc ExchangeToken(ExchangeTokenRequest) returns (ExchangeTokenResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "mints a short-lived session token for the CLI; audit_log records it"}
+    };
   }
 
   // ── MEMBER PERMISSIONS ──────────────────────────────────────────────
@@ -109,7 +158,16 @@ service AccessTokenService {
   // yourself, which is what stops permission administration from being a
   // path to every other permission.
   rpc UpdateOrgMemberGrants(UpdateOrgMemberGrantsRequest) returns (UpdateOrgMemberGrantsResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "set_grants"
+        target: {
+          kind: "member"
+          id: "user_id"
+        }
+      }
+    };
   }
 }
 

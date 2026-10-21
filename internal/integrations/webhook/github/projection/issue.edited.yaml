@@ -1,0 +1,16 @@
+# Issue edited: the projection of the GitHub `issues.edited` webhook.
+id: issue.edited
+event: issues.edited
+display_name: Issue edited
+summary: An issue's title or body was edited.
+description: >-
+  Fires when an issue's title or body changes. data.changes carries the
+  previous title and/or body under `from`.
+data:
+  issue: { kind: object, object: issue }
+  changes:
+    kind: object
+    omit_empty: true
+    fields:
+      title: { kind: object, omit_empty: true, require: from, fields: { from: { kind: string, cap: true } } }
+      body: { kind: object, omit_empty: true, require: from, fields: { from: { kind: string, cap: true } } }

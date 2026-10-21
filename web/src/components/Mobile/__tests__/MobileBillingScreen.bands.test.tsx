@@ -66,20 +66,19 @@ beforeEach(() => {
         priceCents: 4700n,
         structuredLimits: {
           allowedDaemonSizes: ["small", "medium"],
-          daemonComputeIncludedMinutes: 2460,
-          daemonOveragePerMinuteCents: 0.47,
+          includedSmallDaemonHours: 41n,
         },
       },
     },
   };
   state.usage = {
-    includedMinutes: 2460,
-    usedMinutes: 720,
-    overageMinutes: 0,
+    includedSmallDaemonSeconds: 147600,
+    usedSmallDaemonSeconds: 43200,
+    remainingSmallDaemonSeconds: 104400,
+    runningMultiplier: 0,
     estimatedOverageCostCents: 0,
-    byDay: [],
-    byWorkspace: [],
-    grantedMinutesRemaining: 0,
+    bySize: [],
+    grantedSmallDaemonSecondsRemaining: 0,
     // Not optional. Omitting it makes the fixture describe a response no
     // measuring server sends, and the screen would correctly refuse to draw
     // hours for it — so a fixture without this flag tests the degraded path
@@ -155,8 +154,7 @@ describe("the phone distinguishes the two products too", () => {
           priceCents: 4700n,
           structuredLimits: {
             allowedDaemonSizes: [],
-            daemonComputeIncludedMinutes: 0,
-            daemonOveragePerMinuteCents: 0,
+            includedSmallDaemonHours: 0n,
           },
         },
       },
@@ -194,13 +192,13 @@ describe("the phone distinguishes the two products too", () => {
    */
   it("withholds hours used when the server did not measure", () => {
     state.usage = {
-      includedMinutes: 2460,
-      usedMinutes: 0,
-      overageMinutes: 0,
+      includedSmallDaemonSeconds: 147600,
+      usedSmallDaemonSeconds: 0,
+      remainingSmallDaemonSeconds: 147600,
+      runningMultiplier: 0,
       estimatedOverageCostCents: 0,
-      byDay: [],
-      byWorkspace: [],
-      grantedMinutesRemaining: 0,
+      bySize: [],
+      grantedSmallDaemonSecondsRemaining: 0,
       usageMeasured: false,
     };
     renderScreen();
@@ -212,13 +210,13 @@ describe("the phone distinguishes the two products too", () => {
 
   it("still prints 0.0 h used for a genuine zero", () => {
     state.usage = {
-      includedMinutes: 2460,
-      usedMinutes: 0,
-      overageMinutes: 0,
+      includedSmallDaemonSeconds: 147600,
+      usedSmallDaemonSeconds: 0,
+      remainingSmallDaemonSeconds: 147600,
+      runningMultiplier: 0,
       estimatedOverageCostCents: 0,
-      byDay: [],
-      byWorkspace: [],
-      grantedMinutesRemaining: 0,
+      bySize: [],
+      grantedSmallDaemonSecondsRemaining: 0,
       usageMeasured: true,
     };
     renderScreen();

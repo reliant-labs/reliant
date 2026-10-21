@@ -22,7 +22,7 @@ import type { CompareWindow } from "./deliveryScope";
  * Dashboards are not one either: native dashboards are console pages of their
  * own (Observability › Dashboards, decision DB).
  */
-export const OBS_VIEWS = ["overview", "alerts", "logs", "traces", "workloads", "profiles", "usage"] as const;
+export const OBS_VIEWS = ["overview", "alerts", "logs", "traces", "profiles", "usage"] as const;
 export type ObsView = (typeof OBS_VIEWS)[number];
 
 export const OBS_VIEW_LABELS: Record<ObsView, string> = {
@@ -30,7 +30,6 @@ export const OBS_VIEW_LABELS: Record<ObsView, string> = {
   alerts: "Alerts",
   logs: "Logs",
   traces: "Traces",
-  workloads: "Workloads",
   profiles: "Profiles",
   usage: "Usage",
 };
@@ -78,9 +77,6 @@ export interface ObsSearch {
   f?: string[];
   /** Up to three keys every aggregating view splits its series by. */
   groupBy?: string[];
-  /** Workloads: the workload open in detail, and optionally one container of it. */
-  workload?: string;
-  container?: string;
   /** Alerts: which part of the area is open. Absent: what is firing. */
   alerts?: AlertsTab;
   /** Alerts → Rules: the rule open in detail, `<env name>/<rule>`. */
@@ -117,8 +113,6 @@ export const OBS_SEARCH_KEYS = [
   "envs",
   "f",
   "groupBy",
-  "workload",
-  "container",
   "alerts",
   "rule",
   "compare",

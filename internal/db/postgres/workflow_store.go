@@ -2,455 +2,164 @@ package postgres
 
 import (
 	"context"
-	"database/sql"
-	"fmt"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/orm"
+
 	"github.com/reliant-labs/reliant/internal/db/core"
 	pgdb "github.com/reliant-labs/reliant/internal/db/postgres/generated"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 )
 
-type workflowStore struct{ q pgdb.Querier }
+// workflowStore is core.WorkflowStore. The workflows, workflow_checkpoints
+// and step_executions halves run on the forge ORM (internal/store's
+// workflow_repo_ext.go, workflow_checkpoint_repo_ext.go and
+// step_execution_repo_ext.go); every call joins the transaction ctx carries.
+type workflowStore struct {
+	db orm.Context
+	// P5b L3: the command favorites, still sqlc (queries/command_favorites.sql).
+	q pgdb.Querier
+}
 
-// NewWorkflowStore creates the Postgres workflow store implementation.
-func NewWorkflowStore(q pgdb.Querier) core.WorkflowStore { return &workflowStore{q: q} }
+// NewWorkflowStore creates the workflow store implementation.
+func NewWorkflowStore(db orm.Context, q pgdb.Querier) core.WorkflowStore {
+	return &workflowStore{db: db, q: q}
+}
 
 func (s *workflowStore) CreateWorkflow(ctx context.Context, workflow *core.Workflow) error {
-	_, err := s.q.CreateWorkflow(ctx, pgdb.CreateWorkflowParams{
-		ID:              workflow.ID,
-		ParentID:        ptrToNullString(workflow.ParentID),
-		ChatID:          workflow.ChatID,
-		WorkflowName:    workflow.WorkflowName,
-		Thread:          workflow.Thread,
-		State:           int32(workflow.Status.State),
-		StopReason:      int32(workflow.Status.StopReason),
-		SpawnedByNodeID: ptrToNullString(workflow.SpawnedByNodeID),
-		LoopIteration:   workflowPtrToNullInt64(workflow.LoopIteration),
-		CreatedAt:       workflow.CreatedAt,
-		CompletedAt:     workflowPtrToNullTime(workflow.CompletedAt),
-		OwnerUserID:     ptrToNullString(workflow.OwnerUserID),
-	})
-	// CreateWorkflow uses INSERT ... ON CONFLICT (id) DO NOTHING, so an existing
-	// workflow ID is a no-op that returns no row (sql.ErrNoRows). This is the
-	// expected idempotent path for inline/loop child workflows that reuse the
-	// parent's workflow ID — treat it as success. Critically, DO NOTHING does not
-	// error at the Postgres level, so it does not abort the surrounding
-	// transaction (unlike a raw duplicate-key violation, SQLSTATE 25P02).
-	if err == sql.ErrNoRows {
-		return nil
-	}
-	return err
+	return store.InsertWorkflowIfAbsent(ctx, s.db, workflow)
 }
 
 func (s *workflowStore) GetWorkflow(ctx context.Context, id string) (*core.Workflow, error) {
-	row, err := s.q.GetWorkflow(ctx, id)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("workflow not found: %s", id)
-		}
-		return nil, err
-	}
-	return workflowFromPG(row), nil
+	return store.LoadWorkflow(ctx, s.db, id)
 }
 
 func (s *workflowStore) GetWorkflowByThread(ctx context.Context, chatID, thread string) (*core.Workflow, error) {
-	row, err := s.q.GetWorkflowByThread(ctx, pgdb.GetWorkflowByThreadParams{ChatID: chatID, Thread: thread})
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, nil
-		}
-		return nil, err
-	}
-	return workflowFromPG(row), nil
+	return store.FindWorkflowByThread(ctx, s.db, chatID, thread)
 }
 
 func (s *workflowStore) ListWorkflowsByChat(ctx context.Context, chatID string) ([]*core.Workflow, error) {
-	rows, err := s.q.ListWorkflowsByChat(ctx, chatID)
-	if err != nil {
-		return nil, err
-	}
-	return workflowsFromPG(rows), nil
+	return store.ListChatWorkflows(ctx, s.db, chatID)
 }
 
 func (s *workflowStore) ListChildWorkflows(ctx context.Context, parentID string) ([]*core.Workflow, error) {
-	rows, err := s.q.ListChildWorkflows(ctx, sql.NullString{String: parentID, Valid: true})
-	if err != nil {
-		return nil, err
-	}
-	return workflowsFromPG(rows), nil
+	return store.ListChildWorkflows(ctx, s.db, parentID)
 }
 
 func (s *workflowStore) ListRootWorkflows(ctx context.Context, chatID string) ([]*core.Workflow, error) {
-	rows, err := s.q.ListRootWorkflows(ctx, chatID)
-	if err != nil {
-		return nil, err
-	}
-	return workflowsFromPG(rows), nil
+	return store.ListRootWorkflows(ctx, s.db, chatID)
 }
 
 func (s *workflowStore) GetRootWorkflowStatusForChats(ctx context.Context, chatIDs []string) (map[string]core.WorkflowStatus, error) {
-	result := make(map[string]core.WorkflowStatus, len(chatIDs))
-	for _, chatID := range chatIDs {
-		row, err := s.q.GetRootWorkflowStatusForChat(ctx, chatID)
-		if err != nil {
-			if err == sql.ErrNoRows {
-				continue
-			}
-			return nil, err
-		}
-		// The query returns CASE expressions, which sqlc types as interface{};
-		// the driver hands back int32 or int64 depending on the branch.
-		state, stateOK := coerceInt32(row.State)
-		reason, reasonOK := coerceInt32(row.StopReason)
-		if !stateOK || !reasonOK {
-			continue
-		}
-		result[row.ChatID] = core.WorkflowStatus{
-			State:      core.WorkflowState(state),
-			StopReason: core.WorkflowStopReason(reason),
-		}
-	}
-	return result, nil
-}
-
-// coerceInt32 narrows the untyped integer a CASE expression scans into.
-func coerceInt32(v interface{}) (int32, bool) {
-	switch n := v.(type) {
-	case int32:
-		return n, true
-	case int64:
-		return int32(n), true
-	default:
-		return 0, false
-	}
+	return store.RootWorkflowStatusForChats(ctx, s.db, chatIDs)
 }
 
 func (s *workflowStore) CompareAndSwapWorkflowStatus(ctx context.Context, id string, newStatus, expectedStatus core.WorkflowStatus) (bool, error) {
-	// The swap is conditioned on BOTH halves of the expected status: two rows
-	// that are each STOPPED for different reasons are different statuses, and
-	// a CAS expecting one must not win against the other.
-	_, err := s.q.CompareAndSwapWorkflowStatus(ctx, pgdb.CompareAndSwapWorkflowStatusParams{
-		State:        int32(newStatus.State),
-		StopReason:   int32(newStatus.StopReason),
-		ID:           id,
-		State_2:      int32(expectedStatus.State),
-		StopReason_2: int32(expectedStatus.StopReason),
-	})
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return false, nil
-		}
-		return false, err
-	}
-	return true, nil
+	return store.CompareAndSwapWorkflowStatus(ctx, s.db, id, newStatus, expectedStatus)
 }
 
 func (s *workflowStore) UpdateWorkflowStatus(ctx context.Context, id string, status core.WorkflowStatus) error {
-	_, err := s.q.UpdateWorkflowStatus(ctx, pgdb.UpdateWorkflowStatusParams{
-		State:      int32(status.State),
-		StopReason: int32(status.StopReason),
-		ID:         id,
-	})
-	return err
+	return store.UpdateWorkflowStatus(ctx, s.db, id, status)
 }
 
 func (s *workflowStore) SetWorkflowOutcome(ctx context.Context, id string, outcome string) error {
-	_, err := s.q.SetWorkflowOutcome(ctx, pgdb.SetWorkflowOutcomeParams{
-		Outcome: sql.NullString{String: outcome, Valid: outcome != ""},
-		ID:      id,
-	})
-	return err
+	return store.SetWorkflowOutcome(ctx, s.db, id, outcome)
 }
 
 func (s *workflowStore) UpdateWorkflowName(ctx context.Context, id string, workflowName string) error {
-	_, err := s.q.UpdateWorkflowName(ctx, pgdb.UpdateWorkflowNameParams{WorkflowName: workflowName, ID: id})
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return fmt.Errorf("cannot update workflow name: workflow not found or status is not pending")
-		}
-		return err
-	}
-	return nil
+	return store.RenamePendingWorkflow(ctx, s.db, id, workflowName)
 }
 
-// CascadeTerminalStatusToDescendants drains a finished run's subtree. Only the
-// stop reason is passed: every descendant it touches becomes STOPPED by
-// definition, so the state is implied and the reason is the part that must not
-// be laundered (a descendant of a cancelled run was cancelled, not completed).
 func (s *workflowStore) CascadeTerminalStatusToDescendants(ctx context.Context, parentWorkflowID string, reason core.WorkflowStopReason) error {
-	return s.q.CascadeTerminalStatusToDescendants(ctx, pgdb.CascadeTerminalStatusToDescendantsParams{
-		ParentID:   sql.NullString{String: parentWorkflowID, Valid: true},
-		StopReason: int32(reason),
-	})
+	return store.CascadeTerminalStatusToDescendants(ctx, s.db, parentWorkflowID, reason)
 }
 
 func (s *workflowStore) ReapOrphanedWorkflowDescendants(ctx context.Context) ([]core.ReapedWorkflow, error) {
-	rows, err := s.q.ReapOrphanedWorkflowDescendants(ctx)
-	if err != nil {
-		return nil, err
-	}
-	reaped := make([]core.ReapedWorkflow, 0, len(rows))
-	for _, row := range rows {
-		reaped = append(reaped, core.ReapedWorkflow{
-			WorkflowID: row.WorkflowID,
-			ChatID:     row.ChatID,
-			StopReason: core.WorkflowStopReason(row.StopReason),
-		})
-	}
-	return reaped, nil
+	return store.ReapOrphanedWorkflowDescendants(ctx, s.db)
 }
 
-// ReviveSubtreeLiveAt brings back the descendants a reset-and-replay is about
-// to re-execute, and their threads, in one statement. Reported as two counts
-// because the caller logs what it repaired.
 func (s *workflowStore) ReviveSubtreeLiveAt(ctx context.Context, rootWorkflowID string, at time.Time) (workflowsRevived, threadsRevived int64, err error) {
-	row, err := s.q.ReviveSubtreeLiveAt(ctx, pgdb.ReviveSubtreeLiveAtParams{
-		RootWorkflowID: rootWorkflowID,
-		ResetPoint:     at,
-	})
-	if err != nil {
-		return 0, 0, err
-	}
-	return row.WorkflowsRevived, row.ThreadsRevived, nil
+	return store.ReviveSubtreeLiveAt(ctx, s.db, rootWorkflowID, at)
 }
 
 func (s *workflowStore) PauseRunningWorkflowsByChat(ctx context.Context, chatID string) error {
-	return s.q.PauseRunningWorkflowsByChat(ctx, chatID)
+	return store.PauseRunningWorkflowsByChat(ctx, s.db, chatID)
 }
 
 func (s *workflowStore) ResumeWorkflowsByChat(ctx context.Context, chatID string) error {
-	return s.q.ResumeWorkflowsByChat(ctx, chatID)
+	return store.ResumeWorkflowsByChat(ctx, s.db, chatID)
 }
 
 func (s *workflowStore) DeleteWorkflow(ctx context.Context, id string) error {
-	return s.q.DeleteWorkflow(ctx, id)
+	return store.RemoveWorkflow(ctx, s.db, id)
 }
 
 func (s *workflowStore) DeleteWorkflowsByChat(ctx context.Context, chatID string) error {
-	return s.q.DeleteWorkflowsByChat(ctx, chatID)
+	return store.RemoveChatWorkflows(ctx, s.db, chatID)
 }
 
 func (s *workflowStore) ListWorkflowsByStatus(ctx context.Context, status core.WorkflowStatus) ([]*core.Workflow, error) {
-	rows, err := s.q.ListWorkflowsByStatus(ctx, pgdb.ListWorkflowsByStatusParams{
-		State:      int32(status.State),
-		StopReason: int32(status.StopReason),
-	})
-	if err != nil {
-		return nil, err
-	}
-	return workflowsFromPG(rows), nil
+	return store.ListWorkflowsByStatus(ctx, s.db, status)
 }
 
 func (s *workflowStore) ListRootWorkflowsByStatus(ctx context.Context, status core.WorkflowStatus) ([]*core.Workflow, error) {
-	rows, err := s.q.ListRootWorkflowsByStatus(ctx, pgdb.ListRootWorkflowsByStatusParams{
-		State:      int32(status.State),
-		StopReason: int32(status.StopReason),
-	})
-	if err != nil {
-		return nil, err
-	}
-	return workflowsFromPG(rows), nil
+	return store.ListRootWorkflowsByStatus(ctx, s.db, status)
 }
 
 func (s *workflowStore) UpdateWorkflowWorkerStarted(ctx context.Context, workflowID string) error {
-	return s.q.UpdateWorkflowWorkerStarted(ctx, workflowID)
+	return store.MarkWorkflowWorkerStarted(ctx, s.db, workflowID)
 }
 
 func (s *workflowStore) UpdateWorkflowWorkerStopped(ctx context.Context, workflowID string) error {
-	return s.q.UpdateWorkflowWorkerStopped(ctx, workflowID)
+	return store.MarkWorkflowWorkerStopped(ctx, s.db, workflowID)
 }
 
 func (s *workflowStore) UpsertWorkflowCheckpoint(ctx context.Context, checkpoint *core.WorkflowCheckpoint) error {
-	return s.q.UpsertWorkflowCheckpoint(ctx, pgdb.UpsertWorkflowCheckpointParams{
-		WorkflowID:    checkpoint.WorkflowID,
-		ChatID:        checkpoint.ChatID,
-		NodeID:        checkpoint.NodeID,
-		LoopIteration: checkpoint.LoopIteration,
-	})
+	return store.SaveWorkflowCheckpoint(ctx, s.db, checkpoint)
 }
 
 func (s *workflowStore) GetWorkflowCheckpoint(ctx context.Context, workflowID string) (*core.WorkflowCheckpoint, error) {
-	row, err := s.q.GetWorkflowCheckpoint(ctx, workflowID)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			// No checkpoint is a normal state (fresh workflow, or already
-			// cleared) — callers treat nil as "no recorded position".
-			return nil, nil
-		}
-		return nil, err
-	}
-	return &core.WorkflowCheckpoint{
-		WorkflowID:    row.WorkflowID,
-		ChatID:        row.ChatID,
-		NodeID:        row.NodeID,
-		LoopIteration: row.LoopIteration,
-		UpdatedAt:     row.UpdatedAt,
-	}, nil
+	return store.LoadWorkflowCheckpoint(ctx, s.db, workflowID)
 }
 
 func (s *workflowStore) DeleteWorkflowCheckpoint(ctx context.Context, workflowID string) error {
-	return s.q.DeleteWorkflowCheckpoint(ctx, workflowID)
+	return store.ClearWorkflowCheckpoint(ctx, s.db, workflowID)
 }
 
 func (s *workflowStore) CreateStepExecution(ctx context.Context, exec *core.StepExecution) error {
-	_, err := s.q.CreateStepExecution(ctx, pgdb.CreateStepExecutionParams{
-		ID:            exec.ID,
-		WorkflowID:    exec.WorkflowID,
-		StepID:        exec.StepID,
-		ActivityName:  exec.ActivityName,
-		OutputJson:    exec.OutputJSON,
-		ExitCode:      exec.ExitCode,
-		Success:       workflowSuccessBoolToNullInt64(exec.Success),
-		DurationMs:    exec.DurationMs,
-		LoopNodeID:    exec.LoopNodeID,
-		LoopIteration: exec.LoopIteration,
-		CreatedAt:     exec.CreatedAt,
-		InputJson:     exec.InputJSON,
-		ErrorMessage:  exec.ErrorMessage,
-		Attempt:       exec.Attempt,
-		NodePath:      exec.NodePath,
-	})
-	return err
+	return store.InsertStepExecution(ctx, s.db, exec)
 }
 
-// ListStepExecutionRecordsForChat reads a chat's full step records, scoped to
-// a node when nodePath is set. See queries/step_executions.sql.
 func (s *workflowStore) ListStepExecutionRecordsForChat(ctx context.Context, chatID, nodePath string, limit int) ([]*core.StepExecution, error) {
-	rows, err := s.q.ListStepExecutionRecordsForChat(ctx, pgdb.ListStepExecutionRecordsForChatParams{
-		ChatID:   chatID,
-		NodePath: nodePath,
-		RowLimit: int32(limit),
-	})
-	if err != nil {
-		return nil, err
-	}
-	items := make([]*core.StepExecution, len(rows))
-	for i, row := range rows {
-		items[i] = stepExecutionFromPG(pgdb.StepExecution{
-			ID:            row.ID,
-			WorkflowID:    row.WorkflowID,
-			StepID:        row.StepID,
-			ActivityName:  row.ActivityName,
-			OutputJson:    row.OutputJson,
-			ExitCode:      row.ExitCode,
-			Success:       row.Success,
-			DurationMs:    row.DurationMs,
-			CreatedAt:     row.CreatedAt,
-			LoopNodeID:    row.LoopNodeID,
-			LoopIteration: row.LoopIteration,
-			InputJson:     row.InputJson,
-			ErrorMessage:  row.ErrorMessage,
-			Attempt:       row.Attempt,
-			NodePath:      row.NodePath,
-		})
-	}
-	return items, nil
+	return store.ListStepExecutionRecordsForChat(ctx, s.db, chatID, nodePath, limit)
 }
 
 func (s *workflowStore) GetStepExecution(ctx context.Context, id string) (*core.StepExecution, error) {
-	row, err := s.q.GetStepExecution(ctx, id)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("step execution not found: %s", id)
-		}
-		return nil, err
-	}
-	return stepExecutionFromPG(row), nil
+	return store.LoadStepExecution(ctx, s.db, id)
 }
 
 func (s *workflowStore) GetStepExecutionsByWorkflow(ctx context.Context, workflowID string) ([]*core.StepExecution, error) {
-	rows, err := s.q.GetAllStepExecutionsForWorkflow(ctx, workflowID)
-	if err != nil {
-		return nil, err
-	}
-	items := make([]*core.StepExecution, len(rows))
-	for i, row := range rows {
-		items[i] = stepExecutionFromPG(row)
-	}
-	return items, nil
+	return store.ListWorkflowStepExecutions(ctx, s.db, workflowID)
 }
 
-// GetStepExecutionsForChat loads every step of every workflow of one chat in a
-// single query. See queries/step_executions.sql for why output_json is not part
-// of it.
+// GetStepExecutionsForChat is the FULL view: output only for user-facing
+// activities. model.InternalActivities crosses into SQL here and only here.
 func (s *workflowStore) GetStepExecutionsForChat(ctx context.Context, chatID string) ([]*core.ChatStepExecution, error) {
-	rows, err := s.q.GetStepExecutionsForChat(ctx, pgdb.GetStepExecutionsForChatParams{
-		ChatID: chatID,
-		// The one place this set crosses into SQL. See its doc comment for
-		// why it is a parameter rather than a literal in the query.
-		InternalActivities: model.InternalActivities,
-	})
-	if err != nil {
-		return nil, err
-	}
-	items := make([]*core.ChatStepExecution, len(rows))
-	for i, row := range rows {
-		items[i] = chatStepExecutionFromPG(row.ID, row.WorkflowID, row.StepID, row.ActivityName,
-			row.ExitCode, row.Success, row.DurationMs, row.LoopNodeID, row.LoopIteration,
-			row.CreatedAt, row.SavedMessageID, row.OutputJson)
-	}
-	return items, nil
+	return store.ListChatStepExecutions(ctx, s.db, chatID, model.InternalActivities)
 }
 
-// GetBasicStepExecutionsForChat loads only the steps the chat timeline
-// renders. Its activity list is a literal in the SQL, not a parameter; see
-// queries/step_executions.sql.
 func (s *workflowStore) GetBasicStepExecutionsForChat(ctx context.Context, chatID string) ([]*core.ChatStepExecution, error) {
-	rows, err := s.q.GetBasicStepExecutionsForChat(ctx, chatID)
-	if err != nil {
-		return nil, err
-	}
-	items := make([]*core.ChatStepExecution, len(rows))
-	for i, row := range rows {
-		items[i] = chatStepExecutionFromPG(row.ID, row.WorkflowID, row.StepID, row.ActivityName,
-			row.ExitCode, row.Success, row.DurationMs, row.LoopNodeID, row.LoopIteration,
-			row.CreatedAt, row.SavedMessageID, row.OutputJson)
-	}
-	return items, nil
-}
-
-func chatStepExecutionFromPG(
-	id, workflowID, stepID, activityName string,
-	exitCode, successInt, durationMs sql.NullInt64,
-	loopNodeID sql.NullString, loopIteration sql.NullInt64,
-	createdAt time.Time, savedMessageID sql.NullString, outputJSON string,
-) *core.ChatStepExecution {
-	var success sql.NullBool
-	if successInt.Valid {
-		success = sql.NullBool{Bool: successInt.Int64 != 0, Valid: true}
-	}
-	return &core.ChatStepExecution{
-		ID:             id,
-		WorkflowID:     workflowID,
-		StepID:         stepID,
-		ActivityName:   activityName,
-		ExitCode:       exitCode,
-		Success:        success,
-		DurationMs:     durationMs,
-		LoopNodeID:     loopNodeID,
-		LoopIteration:  loopIteration,
-		CreatedAt:      createdAt,
-		SavedMessageID: savedMessageID,
-		OutputJSON:     outputJSON,
-	}
+	return store.ListBasicChatStepExecutions(ctx, s.db, chatID)
 }
 
 func (s *workflowStore) GetStepExecutionsByStep(ctx context.Context, workflowID, stepID string) ([]*core.StepExecution, error) {
-	rows, err := s.q.GetStepExecutions(ctx, pgdb.GetStepExecutionsParams{WorkflowID: workflowID, StepID: stepID})
-	if err != nil {
-		return nil, err
-	}
-	items := make([]*core.StepExecution, len(rows))
-	for i, row := range rows {
-		items[i] = stepExecutionFromPG(row)
-	}
-	return items, nil
+	return store.ListStepExecutionsByStep(ctx, s.db, workflowID, stepID)
 }
 
 func (s *workflowStore) DeleteStepExecutionsByWorkflow(ctx context.Context, workflowID string) error {
-	return s.q.DeleteStepExecutionsForWorkflow(ctx, workflowID)
+	return store.RemoveWorkflowStepExecutions(ctx, s.db, workflowID)
 }
 
 func (s *workflowStore) ListCommandFavorites(ctx context.Context, userID, projectID string) ([]string, error) {
@@ -472,94 +181,4 @@ func (s *workflowStore) RemoveCommandFavorite(ctx context.Context, userID, proje
 		ProjectID:  projectID,
 		CommandKey: commandKey,
 	})
-}
-
-func workflowFromPG(row pgdb.Workflow) *core.Workflow {
-	return &core.Workflow{
-		ID:              row.ID,
-		ParentID:        nullStringToPtr(row.ParentID),
-		ChatID:          row.ChatID,
-		WorkflowName:    row.WorkflowName,
-		Thread:          row.Thread,
-		Status:          core.WorkflowStatus{State: core.WorkflowState(row.State), StopReason: core.WorkflowStopReason(row.StopReason)},
-		SpawnedByNodeID: nullStringToPtr(row.SpawnedByNodeID),
-		LoopIteration:   workflowNullInt64ToPtr(row.LoopIteration),
-		CreatedAt:       row.CreatedAt,
-		CompletedAt:     workflowNullTimeToPtr(row.CompletedAt),
-		WorkerStartedAt: workflowNullTimeToPtr(row.WorkerStartedAt),
-		WorkerStoppedAt: workflowNullTimeToPtr(row.WorkerStoppedAt),
-		Outcome:         nullStringToPtr(row.Outcome),
-		OwnerUserID:     nullStringToPtr(row.OwnerUserID),
-	}
-}
-
-func workflowsFromPG(rows []pgdb.Workflow) []*core.Workflow {
-	items := make([]*core.Workflow, len(rows))
-	for i, row := range rows {
-		items[i] = workflowFromPG(row)
-	}
-	return items
-}
-
-func stepExecutionFromPG(row pgdb.StepExecution) *core.StepExecution {
-	var success sql.NullBool
-	if row.Success.Valid {
-		success = sql.NullBool{Bool: row.Success.Int64 != 0, Valid: true}
-	}
-	return &core.StepExecution{
-		ID:             row.ID,
-		WorkflowID:     row.WorkflowID,
-		StepID:         row.StepID,
-		ActivityName:   row.ActivityName,
-		OutputJSON:     row.OutputJson,
-		ExitCode:       row.ExitCode,
-		Success:        success,
-		DurationMs:     row.DurationMs,
-		LoopNodeID:     row.LoopNodeID,
-		LoopIteration:  row.LoopIteration,
-		CreatedAt:      row.CreatedAt,
-		SavedMessageID: row.SavedMessageID,
-		InputJSON:      row.InputJson,
-		ErrorMessage:   row.ErrorMessage,
-		Attempt:        row.Attempt,
-		NodePath:       row.NodePath,
-	}
-}
-
-func workflowPtrToNullTime(t *time.Time) sql.NullTime {
-	if t != nil {
-		return sql.NullTime{Time: *t, Valid: true}
-	}
-	return sql.NullTime{}
-}
-
-func workflowNullTimeToPtr(nt sql.NullTime) *time.Time {
-	if nt.Valid {
-		return &nt.Time
-	}
-	return nil
-}
-
-func workflowPtrToNullInt64(v *int64) sql.NullInt64 {
-	if v != nil {
-		return sql.NullInt64{Int64: *v, Valid: true}
-	}
-	return sql.NullInt64{}
-}
-
-func workflowNullInt64ToPtr(v sql.NullInt64) *int64 {
-	if v.Valid {
-		return &v.Int64
-	}
-	return nil
-}
-
-func workflowSuccessBoolToNullInt64(success sql.NullBool) sql.NullInt64 {
-	if !success.Valid {
-		return sql.NullInt64{}
-	}
-	if success.Bool {
-		return sql.NullInt64{Int64: 1, Valid: true}
-	}
-	return sql.NullInt64{Int64: 0, Valid: true}
 }

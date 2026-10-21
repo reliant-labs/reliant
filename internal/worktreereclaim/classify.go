@@ -6,8 +6,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 )
 
 // verdict is what the classifier concluded about one checkout (or workspace).
@@ -142,15 +145,22 @@ func classifyCheckout(ctx context.Context, checkout, baseBranch string, nested [
 	if err != nil {
 		return verdict{ReasonUnverified, err.Error()}
 	}
-	pushed, err := headIsSafe(ctx, checkout, head, baseBranch, probe)
+	// Which refs hold HEAD, remote and saved for this worktree (savedCommits,
+	// or a snapshot taken on HEAD), in one walk.
+	saved := ""
+	if worktreeID != "" {
+		saved = SnapshotRefPrefix(worktreeID)
+	}
+	onRemote, onSaved, err := refsContaining(ctx, checkout, head, saved)
 	if err != nil {
 		return verdict{ReasonUnverified, err.Error()}
 	}
-	if !pushed && worktreeID != "" {
-		// Saved for this worktree (savedCommits, or a snapshot taken on HEAD).
-		if pushed, err = savedUnder(ctx, checkout, head, SnapshotRefPrefix(worktreeID)); err != nil {
-			return verdict{ReasonUnverified, err.Error()}
-		}
+	pushed, err := headIsSafe(ctx, checkout, head, baseBranch, onRemote, probe)
+	if err != nil {
+		return verdict{ReasonUnverified, err.Error()}
+	}
+	if !pushed && onSaved {
+		pushed = true
 	}
 	if !pushed {
 		return verdict{ReasonUnpushed, "HEAD is not on any remote branch and its work is not in " + describeBase(baseBranch) + " (neither as commits nor as an equivalent patch)"}
@@ -160,7 +170,7 @@ func classifyCheckout(ctx context.Context, checkout, baseBranch string, nested [
 	if err != nil {
 		return verdict{ReasonUnverified, err.Error()}
 	}
-	tips, err = tipsNotOnBase(ctx, checkout, baseBranch, tips)
+	tips, err = tipsNotOnBase(ctx, checkout, baseBranch, tips, probe.memo)
 	if err != nil {
 		return verdict{ReasonUnverified, err.Error()}
 	}
@@ -179,10 +189,10 @@ func classifyCheckout(ctx context.Context, checkout, baseBranch string, nested [
 // automatic path (saveCommits) and a confirmed clean-up save to a ref. Tips
 // dropped here are never saved: nothing prunes refs/reliant/wip, and a ref
 // pins its objects forever.
-func tipsNotOnBase(ctx context.Context, checkout, baseBranch string, tips []string) ([]string, error) {
+func tipsNotOnBase(ctx context.Context, checkout, baseBranch string, tips []string, memo *commitMemo) ([]string, error) {
 	var lost []string
 	for _, tip := range tips {
-		merged, err := inBase(ctx, checkout, tip, baseBranch)
+		merged, err := inBase(ctx, checkout, tip, baseBranch, memo)
 		if err != nil {
 			return nil, err
 		}
@@ -193,13 +203,28 @@ func tipsNotOnBase(ctx context.Context, checkout, baseBranch string, tips []stri
 	return lost, nil
 }
 
-// savedUnder reports whether a ref under prefix contains commit.
-func savedUnder(ctx context.Context, checkout, commit, prefix string) (bool, error) {
-	out, err := git(ctx, checkout, nil, "for-each-ref", "--contains", commit, "--count=1", "--format=%(refname)", strings.TrimSuffix(prefix, "/"))
-	if err != nil {
-		return false, err
+// refsContaining reports whether a remote ref, and whether a ref under prefix
+// (none when prefix is ""), contains commit: one `for-each-ref --contains`
+// over both namespaces.
+func refsContaining(ctx context.Context, checkout, commit, prefix string) (onRemote, underPrefix bool, err error) {
+	args := []string{"for-each-ref", "--contains", commit, "--format=%(refname)", "refs/remotes"}
+	saved := strings.TrimSuffix(prefix, "/")
+	if saved != "" {
+		args = append(args, saved)
 	}
-	return out != "", nil
+	out, err := git(ctx, checkout, nil, args...)
+	if err != nil {
+		return false, false, err
+	}
+	for _, ref := range strings.Fields(out) {
+		switch {
+		case strings.HasPrefix(ref, "refs/remotes/"):
+			onRemote = true
+		case saved != "" && (ref == saved || strings.HasPrefix(ref, saved+"/")):
+			underPrefix = true
+		}
+	}
+	return onRemote, underPrefix, nil
 }
 
 // mergeProbe is the part of "is this work preserved" that needs the network. A
@@ -213,6 +238,8 @@ type mergeProbe struct {
 	// fetchBase refreshes the remote-tracking copy of the base branch, which is
 	// where a merge made since this clone last fetched would appear.
 	fetchBase func(ctx context.Context, checkout, base string)
+	// memo remembers inBase answers; nil remembers nothing.
+	memo *commitMemo
 }
 
 // headIsSafe reports whether HEAD's work is preserved somewhere other than this
@@ -230,15 +257,13 @@ type mergeProbe struct {
 // finds nothing the base is refreshed (probe.fetchBase) and checked once more.
 // A false return means the work exists only here. An error means git could not
 // say, and the caller holds the worktree.
-func headIsSafe(ctx context.Context, checkout, head, baseBranch string, probe mergeProbe) (bool, error) {
-	onRemote, err := git(ctx, checkout, nil, "for-each-ref", "--contains", head, "--count=1", "--format=%(refname)", "refs/remotes")
-	if err != nil {
-		return false, err
-	}
-	if onRemote != "" {
+//
+// onRemote is whether a remote ref contains HEAD (refsContaining).
+func headIsSafe(ctx context.Context, checkout, head, baseBranch string, onRemote bool, probe mergeProbe) (bool, error) {
+	if onRemote {
 		return true, nil
 	}
-	if merged, err := inBase(ctx, checkout, head, baseBranch); err != nil || merged {
+	if merged, err := inBase(ctx, checkout, head, baseBranch, probe.memo); err != nil || merged {
 		return merged, err
 	}
 	if probe.prMerged != nil {
@@ -248,22 +273,42 @@ func headIsSafe(ctx context.Context, checkout, head, baseBranch string, probe me
 	}
 	if probe.fetchBase != nil && baseBranch != "" {
 		probe.fetchBase(ctx, checkout, baseBranch)
-		return inBase(ctx, checkout, head, baseBranch)
+		return inBase(ctx, checkout, head, baseBranch, probe.memo)
 	}
 	return false, nil
 }
 
 // inBase reports whether head's work is in the base branch as this clone has
 // it: head is an ancestor of it, or every change head makes is there by patch.
-func inBase(ctx context.Context, checkout, head, baseBranch string) (bool, error) {
-	refs := baseRefs(ctx, checkout, baseBranch)
-	for _, ref := range refs {
-		if _, err := git(ctx, checkout, nil, "merge-base", "--is-ancestor", head, ref); err == nil {
+//
+// The refs are resolved afresh every time (a fetch moves them); what is asked
+// of the commits they resolve to is remembered in memo, because the answer is
+// a property of those commits alone and the reaper asks it of the same pair
+// up to four times a pass.
+func inBase(ctx context.Context, checkout, head, baseBranch string, memo *commitMemo) (bool, error) {
+	bases := baseRefs(ctx, checkout, baseBranch)
+	if len(bases) == 0 {
+		return false, nil
+	}
+	key := memo.key(ctx, checkout, head, bases)
+	if merged, ok := memo.get(key); ok {
+		return merged, nil
+	}
+	merged, err := inBaseUncached(ctx, checkout, head, bases)
+	if err == nil {
+		memo.put(key, merged)
+	}
+	return merged, err
+}
+
+func inBaseUncached(ctx context.Context, checkout, head string, bases []string) (bool, error) {
+	for _, base := range bases {
+		if _, err := git(ctx, checkout, nil, "merge-base", "--is-ancestor", head, base); err == nil {
 			return true, nil
 		}
 	}
-	for _, ref := range refs {
-		merged, err := patchesOnBase(ctx, checkout, ref, head)
+	for _, base := range bases {
+		merged, err := patchesOnBase(ctx, checkout, base, head)
 		if err != nil {
 			return false, err
 		}
@@ -456,9 +501,12 @@ func worktreeOnlyShas(ctx context.Context, checkout string) ([]string, error) {
 			shas = append(shas, s)
 		}
 	}
-	admin, err := git(ctx, checkout, nil, "rev-parse", "--absolute-git-dir")
-	if err != nil {
-		return nil, err
+	admin, ok := linkedAdminDir(checkout)
+	if !ok {
+		var err error
+		if admin, err = git(ctx, checkout, nil, "rev-parse", "--absolute-git-dir"); err != nil {
+			return nil, err
+		}
 	}
 	if b, err := os.ReadFile(filepath.Join(admin, "logs", "HEAD")); err == nil {
 		for _, line := range strings.Split(string(b), "\n") {
@@ -485,7 +533,11 @@ func worktreeOnlyShas(ctx context.Context, checkout string) ([]string, error) {
 		add(s)
 	}
 	// A detached HEAD is the only thing naming its commit.
-	if _, err := git(ctx, checkout, nil, "symbolic-ref", "-q", "HEAD"); err != nil {
+	if symbolic, sha, ok := headFromFiles(admin); ok {
+		if !symbolic {
+			add(sha) // cat-file below drops it if it names no commit, as rev-parse did
+		}
+	} else if _, err := git(ctx, checkout, nil, "symbolic-ref", "-q", "HEAD"); err != nil {
 		if head, herr := git(ctx, checkout, nil, "rev-parse", "--verify", "HEAD^{commit}"); herr == nil {
 			add(head)
 		}
@@ -536,18 +588,95 @@ func describeBase(base string) string {
 	return base
 }
 
-// baseRefs lists the existing refs HEAD may be merged into, remote first.
+// baseRefs resolves the refs HEAD may be merged into, remote first, to the
+// commits they name now; a ref that does not exist, or names no commit, is
+// left out. One for-each-ref reads both; a ref that names a tag is peeled by
+// rev-parse, as `<ref>^{commit}` always was.
 func baseRefs(ctx context.Context, checkout, base string) []string {
 	if base == "" {
 		return nil
 	}
-	var refs []string
-	for _, c := range []string{"refs/remotes/origin/" + base, "refs/heads/" + base} {
-		if _, err := git(ctx, checkout, nil, "rev-parse", "--verify", "--quiet", c+"^{commit}"); err == nil {
-			refs = append(refs, c)
+	want := []string{"refs/remotes/origin/" + base, "refs/heads/" + base}
+	out, err := git(ctx, checkout, nil, append([]string{"for-each-ref", "--format=%(refname) %(objectname) %(objecttype)"}, want...)...)
+	if err != nil {
+		return nil
+	}
+	type named struct{ sha, kind string }
+	found := map[string]named{}
+	for _, line := range strings.Split(out, "\n") {
+		if f := strings.Fields(line); len(f) == 3 {
+			found[f[0]] = named{f[1], f[2]}
 		}
 	}
-	return refs
+	var shas []string
+	for _, ref := range want {
+		n, ok := found[ref]
+		switch {
+		case !ok:
+		case n.kind == "commit":
+			if !slices.Contains(shas, n.sha) { // both name one commit: one answer
+				shas = append(shas, n.sha)
+			}
+		default:
+			if sha, err := git(ctx, checkout, nil, "rev-parse", "--verify", "--quiet", ref+"^{commit}"); err == nil {
+				shas = append(shas, sha)
+			}
+		}
+	}
+	return shas
+}
+
+// commitMemo remembers whether a commit's work is in a base, keyed by the
+// repository and the commit ids involved, for commitMemoTTL: long enough to
+// span a sweep's two phases, short enough that a change to the repository's
+// diff configuration (which patch comparison reads) is soon seen. A nil memo
+// remembers nothing.
+type commitMemo struct {
+	mu      sync.Mutex
+	answers map[string]memoAnswer
+	now     func() time.Time
+}
+
+type memoAnswer struct {
+	merged bool
+	at     time.Time
+}
+
+const (
+	commitMemoTTL = 10 * time.Minute
+	commitMemoCap = 4096
+)
+
+func (m *commitMemo) key(ctx context.Context, checkout, head string, bases []string) string {
+	if m == nil {
+		return ""
+	}
+	return commonDirKey(ctx, checkout) + "\x00" + head + "\x00" + strings.Join(bases, ",")
+}
+
+func (m *commitMemo) get(key string) (bool, bool) {
+	if m == nil {
+		return false, false
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	a, ok := m.answers[key]
+	if !ok || m.now().Sub(a.at) >= commitMemoTTL {
+		return false, false
+	}
+	return a.merged, true
+}
+
+func (m *commitMemo) put(key string, merged bool) {
+	if m == nil {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.answers == nil || len(m.answers) >= commitMemoCap {
+		m.answers = map[string]memoAnswer{}
+	}
+	m.answers[key] = memoAnswer{merged, m.now()}
 }
 
 // dataHold lists ignored files that are not known to be rebuildable. They are

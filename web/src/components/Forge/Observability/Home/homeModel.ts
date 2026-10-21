@@ -10,13 +10,12 @@
 import type { AlertInstance } from "@/services/controlPlane/observability/alertingTypes";
 import type { Panel, ServiceHealth, Workload } from "@/services/controlPlane/observability/types";
 
+import { HEALTH_STATUS } from "../../Workloads/health";
 import { ENV_KEY } from "../attributes";
 import type { ChartBand } from "../charts/UPlotChart";
 
 /** An error rate at or above this needs attention. */
 export const ERROR_RATE_ATTENTION = 0.05;
-/** Restarts in the window at or above this read as crash-looping. */
-const CRASH_RESTARTS = 3;
 
 export type HealthTone = "danger" | "warning" | "success" | "neutral";
 
@@ -27,11 +26,17 @@ export interface ServiceRow {
   health: ServiceHealth;
   workload: Workload | null;
   tone: HealthTone;
-  /** The word beside the dot: Crash-looping, Degraded, Healthy, No workload data. */
+  /**
+   * The word beside the dot: the workload's server verdict (Crash-looping,
+   * Degraded, Healthy…), or — with no workload telemetry — the signal alone
+   * (Alert firing, Errors elevated) or No workload data, never a verdict.
+   */
   status: string;
   /** Why, in a few words, when it is not healthy. */
   reason: string | null;
   alertsFiring: number;
+  /** No verdict, but an alert firing or a high error rate: ranked with the rows that need attention. */
+  signal?: boolean;
 }
 
 /** The labels an alert names its service by, in the order the rule packs use them. */
@@ -42,11 +47,10 @@ export function alertService(alert: Pick<AlertInstance, "labels">): string | und
 
 /**
  * One row per service (per environment, when every environment is in
- * scope), with a status derived from what the page has: crash-looping when
- * its containers restarted repeatedly; degraded when its error rate is high,
- * it restarted, Kubernetes warned about it, or an alert about it is firing;
- * healthy otherwise. Reliant's own operator telemetry is not a service of
- * the project and is left out.
+ * scope). Its status is its workload's server-side verdict; a service with no
+ * workload telemetry is degraded when its error rate is high or an alert about
+ * it is firing, healthy otherwise. Reliant's own operator telemetry is not a
+ * service of the project and is left out.
  */
 export function serviceRows(
   services: readonly ServiceHealth[],
@@ -62,37 +66,43 @@ export function serviceRows(
       const firing = alerts.filter(
         (a) => a.state === "firing" && alertService(a) === health.name && (env === null || envNameOf(a.envId) === env)
       ).length;
-      const restarts = workload?.restartsInWindow ?? 0;
-      const lastReason = workload?.containers.find((c) => c.lastTerminatedReason)?.lastTerminatedReason ?? "";
-      let tone: HealthTone = workload || health.requestCount > 0 ? "success" : "neutral";
-      let status = workload || health.requestCount > 0 ? "Healthy" : "No workload data";
-      let reason: string | null = null;
-      if (restarts >= CRASH_RESTARTS) {
-        tone = "danger";
-        status = "Crash-looping";
-        reason = `${restarts} restarts${lastReason ? ` · ${lastReason}` : ""}`;
-      } else if (health.errorRate >= ERROR_RATE_ATTENTION || restarts > 0 || workload?.latestWarning || firing > 0) {
-        tone = "warning";
-        status = "Degraded";
-        reason =
-          firing > 0
-            ? `${firing} alert${firing === 1 ? "" : "s"} firing`
-            : health.errorRate >= ERROR_RATE_ATTENTION
-              ? "high error rate"
-              : restarts > 0
-                ? `${restarts} restart${restarts === 1 ? "" : "s"}${lastReason ? ` · ${lastReason}` : ""}`
-                : (workload?.latestWarning?.reason ?? null);
+      const signal =
+        firing > 0 ? `${firing} alert${firing === 1 ? "" : "s"} firing` : health.errorRate >= ERROR_RATE_ATTENTION ? "high error rate" : null;
+      // A workload's status word is the server's verdict (WorkloadHealth), the
+      // one the Overview and the workload page show, so the pages cannot
+      // disagree. Alerts and the error rate are the request side of it: they
+      // rank the row (byAttention) and say why, without inventing a verdict.
+      if (workload) {
+        const verdict = HEALTH_STATUS[workload.health];
+        return {
+          name: health.name,
+          env,
+          health,
+          workload,
+          tone: verdict.tone,
+          status: verdict.label,
+          reason: workload.healthReason || signal,
+          alertsFiring: firing,
+        };
       }
-      return { name: health.name, env, health, workload, tone, status, reason, alertsFiring: firing };
+      // No workload telemetry (a service outside Kubernetes, or before the
+      // node agent reports): there is no verdict, and none is invented. The
+      // row says the SIGNAL it has, in words the server's verdict never uses
+      // and in the neutral tone, so it cannot be read as "Degraded". It still
+      // ranks among the rows that need looking at (byAttention).
+      const status = firing > 0 ? `${firing === 1 ? "Alert" : "Alerts"} firing` : health.errorRate >= ERROR_RATE_ATTENTION ? "Errors elevated" : "No workload data";
+      return { name: health.name, env, health, workload, tone: "neutral", status, reason: signal, alertsFiring: firing, signal: !!signal };
     });
 }
 
 const RANK: Record<HealthTone, number> = { danger: 0, warning: 1, success: 2, neutral: 3 };
+/** A row with no verdict but a firing alert or a high error rate ranks with the degraded ones, after them. */
+const rankOf = (row: ServiceRow) => (row.signal ? 1.5 : RANK[row.tone]);
 
 /** What needs attention first: the worst status, then the most firing alerts, then the highest error rate, then the busiest. */
 export function byAttention(a: ServiceRow, b: ServiceRow): number {
   return (
-    RANK[a.tone] - RANK[b.tone] ||
+    rankOf(a) - rankOf(b) ||
     b.alertsFiring - a.alertsFiring ||
     b.health.errorRate - a.health.errorRate ||
     b.health.requestCount - a.health.requestCount ||

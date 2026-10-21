@@ -55,7 +55,7 @@ func (s *Service) ListCommands(ctx context.Context, rootDir string) (*CommandLis
 	opts := DefaultDiscoveryOptions()
 	dirs, err := DiscoverDirectories(ctx, rootDir, opts)
 	if err != nil {
-		logging.Error("Error discovering directories",
+		logging.ErrorContext(ctx, "Error discovering directories",
 			"root", rootDir,
 			"error", err)
 		// Fall back to just root directory
@@ -95,7 +95,7 @@ func (s *Service) ListCommands(ctx context.Context, rootDir string) (*CommandLis
 
 			commands, err := adapter.Parse(ctx, dir)
 			if err != nil {
-				logging.Error("Error parsing package file",
+				logging.ErrorContext(ctx, "Error parsing package file",
 					"type", adapter.Type(),
 					"dir", dir,
 					"error", err)

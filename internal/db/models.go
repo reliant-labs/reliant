@@ -70,31 +70,8 @@ type Project = core.Project
 // model. Tracks per-daemon clones of a Project.
 type ProjectDaemon = core.ProjectDaemon
 
-// ProjectConfigRecord stores daemon-pushed configuration for a project.
-// This table is part of cloud-refactor scaffolding and may not exist in all runtimes yet.
-type ProjectConfigRecord struct {
-	ID                   string
-	ProjectID            string
-	DaemonID             string
-	UserConfigYAML       *string
-	ProjectConfigYAML    *string
-	LocalConfigYAML      *string
-	GlobalMemoryMD       *string
-	ProjectMemoryMD      *string
-	MCPConfigs           *string
-	ProjectWorkflowsJSON *string
-	ProjectPresetsJSON   *string
-	ProjectScenariosJSON *string
-	ProjectSkillsJSON    *string
-	RepoMemoriesJSON     *string
-	// RuntimeType is the serving daemon's runtime/sandbox type ("kata",
-	// "gvisor"); nil for local/unknown daemons. Captured from the pushing
-	// daemon's registration label at config-snapshot persist time.
-	RuntimeType *string
-	PushedAt    time.Time
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
-}
+// ProjectConfigRecord is an alias to the shared core project config record.
+type ProjectConfigRecord = core.ProjectConfigRecord
 
 // CleanupMetadata is an alias to the shared core cleanup metadata model.
 type CleanupMetadata = core.CleanupMetadata

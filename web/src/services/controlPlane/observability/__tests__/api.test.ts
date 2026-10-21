@@ -10,7 +10,17 @@ import { create } from "@bufbuild/protobuf";
 import { TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError } from "@connectrpc/connect";
 
-import { AttributeOp, Signal, SortOrder, WorkloadMetric } from "@/gen/controlplane/services/observability/v1/observability_pb";
+import {
+  AttributeOp,
+  Signal,
+  SortOrder,
+  WorkloadHealth,
+  WorkloadJobResult,
+  WorkloadMetric,
+  WorkloadPodState,
+  WorkloadReleaseBasis,
+} from "@/gen/controlplane/services/observability/v1/observability_pb";
+import { WorkloadKind } from "@/gen/controlplane/controlplane/v1/deploy_pb";
 
 import {
   composeLogQuery,
@@ -355,8 +365,11 @@ describe("workloads (customer metadata, contract K2)", () => {
               memory: { latest: 500, p95: 510 },
             },
           ],
+          pods: [],
         },
       ],
+      jobs: [],
+      jobsTruncated: false,
     });
     const { workloads } = await listWorkloads({ ...env, window });
     const [w] = workloads;
@@ -386,6 +399,7 @@ describe("workloads (customer metadata, contract K2)", () => {
       events: [],
       imageChanges: [],
       versionChanges: [{ envId: "env-1", serviceVersion: "v2", firstSeen: ts(window.startMs), lastSeen: ts(window.endMs) }],
+      workloads: [],
     });
     const detail = await getWorkload({ ...env, window, workload: "api" });
     expect(client.getWorkload.mock.calls[0][0]).toMatchObject({ workload: "api", container: "", stepSeconds: 0 });
@@ -393,5 +407,131 @@ describe("workloads (customer metadata, contract K2)", () => {
       { envId: "env-1", container: "api", metric: "memory_limit_utilization", unit: "1", timestamps: [window.startMs / 1000], values: [0.9] },
     ]);
     expect(detail.versionChanges[0]).toEqual({ envId: "env-1", serviceVersion: "v2", firstSeenMs: window.startMs, lastSeenMs: window.endMs });
+  });
+});
+
+describe("workloads: the server's verdict, pods, jobs and the declaration (console v3)", () => {
+  const wire = (over: Record<string, unknown> = {}) => ({
+    envId: "env-1",
+    envName: "prod",
+    workload: "api",
+    namespace: "shop",
+    serviceVersion: "",
+    replicasObserved: 1,
+    restartsInWindow: 14n,
+    containers: [],
+    kind: WorkloadKind.STATEFUL_SET,
+    health: WorkloadHealth.CRASH_LOOPING,
+    healthReason: "restarted 14x, last exit OOMKilled",
+    readyReplicas: 0,
+    desiredReplicas: 2,
+    releaseVersion: "v1.7.44",
+    releaseBasis: WorkloadReleaseBasis.PROMOTION,
+    pods: [],
+    ...over,
+  });
+
+  it("maps kind, the health verdict and its reason, replicas and the release with its basis", async () => {
+    client.listWorkloads.mockResolvedValue({ truncated: false, workloads: [wire(), wire({ health: 42, kind: 0, readyReplicas: undefined, desiredReplicas: undefined, releaseVersion: "", releaseBasis: WorkloadReleaseBasis.DIGEST })], jobs: [], jobsTruncated: false });
+    const { workloads } = await listWorkloads({ ...env, window });
+    expect(workloads[0]).toMatchObject({
+      kind: "statefulset",
+      health: "crash_looping",
+      healthReason: "restarted 14x, last exit OOMKilled",
+      readyReplicas: 0,
+      desiredReplicas: 2,
+      releaseVersion: "v1.7.44",
+      releaseBasis: "promotion",
+      pods: [],
+      declared: null,
+    });
+    // A verdict this build does not know reads as unknown; unset replicas stay null, not 0;
+    // no release means no basis, whatever the wire says.
+    expect(workloads[1]).toMatchObject({ kind: "unknown", health: "unknown", readyReplicas: null, desiredReplicas: null, releaseBasis: "none" });
+  });
+
+  it("maps Job runs, keeping a running one's finish and duration unknown", async () => {
+    client.listWorkloads.mockResolvedValue({
+      truncated: false,
+      workloads: [],
+      jobsTruncated: true,
+      jobs: [
+        { envId: "env-1", envName: "prod", name: "cp-migrate-b9e1", workload: "cp-migrate", result: WorkloadJobResult.FAILED, reason: "BackoffLimitExceeded", releaseVersion: "v1.7.44", startedAt: ts(window.startMs), finishedAt: ts(window.startMs + 41_000), durationSeconds: 41n },
+        { envId: "env-1", envName: "prod", name: "cp-provision-1", workload: "", result: WorkloadJobResult.RUNNING, reason: "", releaseVersion: "", startedAt: ts(window.endMs), durationSeconds: 0n },
+      ],
+    });
+    const res = await listWorkloads({ ...env, window });
+    expect(res.jobsTruncated).toBe(true);
+    expect(res.jobs[0]).toEqual({
+      envId: "env-1",
+      envName: "prod",
+      name: "cp-migrate-b9e1",
+      workload: "cp-migrate",
+      result: "failed",
+      reason: "BackoffLimitExceeded",
+      releaseVersion: "v1.7.44",
+      startedAtMs: window.startMs,
+      finishedAtMs: window.startMs + 41_000,
+      durationSeconds: 41,
+    });
+    // A run with no declared workload name is filed under its own name.
+    expect(res.jobs[1]).toMatchObject({ workload: "cp-provision-1", result: "running", finishedAtMs: null, durationSeconds: 0 });
+  });
+
+  it("maps GetWorkload's summaries: pods (an unreported node stays empty) and the declared spec, by name only", async () => {
+    client.getWorkload.mockResolvedValue({
+      stepSeconds: 60,
+      truncated: false,
+      series: [],
+      events: [],
+      imageChanges: [],
+      versionChanges: [],
+      workloads: [
+        wire({
+          pods: [
+            { name: "api-1", uid: "u1", state: WorkloadPodState.RUNNING, restarts: 14n, lastExitReason: "OOMKilled", lastExitAt: ts(window.endMs - 60_000), node: "", firstSeen: ts(window.startMs), lastSeen: ts(window.endMs), ageIsLowerBound: true },
+            { name: "api-0", uid: "u0", state: WorkloadPodState.GONE, restarts: 0n, lastExitReason: "", node: "node-a", ageIsLowerBound: false },
+          ],
+          declared: {
+            name: "api",
+            kind: WorkloadKind.STATEFUL_SET,
+            specRecorded: true,
+            replicas: 2,
+            cpuRequestMillicores: 250n,
+            cpuLimitMillicores: 1000n,
+            memoryRequestBytes: 268435456n,
+            memoryLimitBytes: 1073741824n,
+            ports: [{ name: "http", port: 8080, protocol: "tcp" }],
+            envNames: ["DATABASE_URL", "LOG_LEVEL"],
+            image: "ghcr.io/acme/api@sha256:abc",
+            sourcePath: "deploy/kcl/prod/main.k",
+            sourceRepo: "https://github.com/acme/shop",
+            sourceCommit: "992bb09",
+            bundleId: "b1",
+          },
+        }),
+      ],
+    });
+    const detail = await getWorkload({ ...env, window, workload: "api" });
+    const [w] = detail.workloads;
+    expect(w.pods[0]).toMatchObject({ state: "running", restarts: 14, lastExitReason: "OOMKilled", node: "", firstSeenMs: window.startMs, ageIsLowerBound: true });
+    expect(w.pods[1]).toMatchObject({ state: "gone", lastExitAtMs: null, firstSeenMs: null, node: "node-a" });
+    expect(w.declared).toEqual({
+      name: "api",
+      kind: "statefulset",
+      specRecorded: true,
+      replicas: 2,
+      cpuRequestMillicores: 250,
+      cpuLimitMillicores: 1000,
+      memoryRequestBytes: 268435456,
+      memoryLimitBytes: 1073741824,
+      ports: [{ name: "http", port: 8080, protocol: "tcp" }],
+      envNames: ["DATABASE_URL", "LOG_LEVEL"],
+      image: "ghcr.io/acme/api@sha256:abc",
+      sourcePath: "deploy/kcl/prod/main.k",
+      sourceRepo: "https://github.com/acme/shop",
+      sourceCommit: "992bb09",
+      bundleId: "b1",
+    });
   });
 });

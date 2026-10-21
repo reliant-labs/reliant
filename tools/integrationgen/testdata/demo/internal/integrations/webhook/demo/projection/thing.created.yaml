@@ -1,0 +1,22 @@
+id: thing.created
+event: thing.created
+display_name: Thing created
+summary: A thing was created.
+description: >-
+  Fires when a thing is created. Match owner to react to one person's things,
+  and has_notes to pick the ones that carry notes.
+keywords: [thing, new]
+attributes:
+  - { group: owned }
+  - { name: has_notes, description: '"true" when the thing has notes.', example: "true", from: thing.notes, hook: hasNotes }
+  - { name: ref_name, description: The ref without its prefix., example: main, from: thing.name, strip_prefix: "refs/heads/" }
+data:
+  thing:
+    kind: object
+    fields:
+      id: integer
+      name: { kind: string, cap: true }
+      notes: { kind: string, cap: true, omit_empty: true }
+      owner: { kind: object, object: user }
+      tags: { kind: names, pluck: name, description: Tag names. }
+      draft: boolean

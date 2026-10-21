@@ -1,0 +1,97 @@
+# yaml-language-server: $schema=../../../manifest/schema/action.schema.json
+id: issue.update
+display_name: Update issue
+summary: Change an issue's state, labels, assignees, title or body.
+description: >-
+  Edit an issue (or a pull request's issue fields). Only the fields you
+  pass change; pass at least one. labels and assignees REPLACE the current
+  set; pass an empty list to clear them. Close with state closed and an
+  optional state_reason.
+keywords: [issue, edit, close, reopen, label, assign, triage]
+placement: server
+mutates: true
+tool:
+  expose: true
+# The params stay a plain object schema (no anyOf / if-then): it is also
+# the agent tool's input schema, and model providers reject or rewrite
+# top-level combinators. An update naming no field sends `{}`, which
+# GitHub answers with the unchanged issue.
+params:
+  type: object
+  additionalProperties: false
+  required: [owner, repo, issue_number]
+  properties:
+    owner: { $ref: ../schemas/owner.yaml }
+    repo: { $ref: ../schemas/repo.yaml }
+    issue_number: { $ref: ../schemas/issue_number.yaml }
+    title:
+      type: string
+      minLength: 1
+      title: New title
+      description: Replaces the issue's title. Omit to keep it.
+      examples: ["Login page loops back to sign-in after SSO"]
+    body:
+      type: string
+      title: New body
+      description: Replaces the issue's description, in GitHub-flavored markdown. Omit to keep it.
+      examples: ["Fixed in #57; closing."]
+    state:
+      type: string
+      enum: [open, closed]
+      title: State
+      description: Open or close the issue.
+    state_reason:
+      type: string
+      enum: [completed, not_planned, reopened]
+      title: State reason
+      description: Why the state changed; only sent along with State.
+    labels:
+      type: array
+      items: { type: string }
+      title: Labels
+      description: The complete new set of label names. It replaces the current labels, so include any to keep.
+      examples: [["bug", "fixed"]]
+    assignees:
+      type: array
+      items: { type: string }
+      title: Assignees
+      description: The complete new set of GitHub usernames to assign. It replaces the current assignees.
+      examples: [["octocat"]]
+    connection: { $ref: ../schemas/connection.yaml }
+request:
+  method: PATCH
+  path: /repos/{{ params.owner }}/{{ params.repo }}/issues/{{ params.issue_number }}
+  # Absent params are left out, not sent as null: a null body clears it.
+  body_expr: >-
+    {?"title": params.?title,
+     ?"body": params.?body,
+     ?"state": params.?state,
+     ?"state_reason": params.?state.hasValue() ? params.?state_reason : optional.none(),
+     ?"labels": params.?labels,
+     ?"assignees": params.?assignees}
+  errors: { $ref: ../schemas/github_errors.yaml }
+output:
+  select: >-
+    {"number": response.number,
+     "id": response.id,
+     "node_id": response.?node_id.orValue(null),
+     "title": response.title,
+     "state": response.state,
+     "state_reason": response.?state_reason.orValue(null),
+     "html_url": response.html_url,
+     "labels": type(response.?labels.orValue(null)) == list ?
+       response.labels.map(l, type(l) == string ? l : l.name) : [],
+     "assignees": type(response.?assignees.orValue(null)) == list ?
+       response.assignees.map(a, a.login) : []}
+  schema:
+    type: object
+    properties:
+      number: { type: integer }
+      id: { type: integer }
+      node_id: { type: [string, "null"] }
+      title: { type: string }
+      state: { type: string, enum: [open, closed] }
+      state_reason: { type: [string, "null"] }
+      html_url: { type: string }
+      labels: { type: array, items: { type: string } }
+      assignees: { type: array, items: { type: string } }

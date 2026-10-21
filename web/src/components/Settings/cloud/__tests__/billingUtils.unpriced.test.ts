@@ -39,7 +39,7 @@ function computePlan(id: string, priceCents: bigint): Plan {
     displayOrder: 0,
     structuredLimits: {
       allowedDaemonSizes: ["small"],
-      daemonComputeIncludedMinutes: 1000,
+      includedSmallDaemonHours: 17n,
     } as PlanLimits,
   } as Plan;
 }

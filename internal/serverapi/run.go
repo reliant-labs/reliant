@@ -326,7 +326,7 @@ func Run(ctx context.Context, opts Options) error {
 	// same table; both processes must use it or neither can read the other's
 	// histories. The api-server owns the schema, so it also owns GC (the
 	// payload-gc node).
-	payloadStore := claimcheck.NewPostgresStore(repo.DB.SQLDB())
+	payloadStore := claimcheck.NewPostgresStore(repo.ORM())
 	gcHorizon := opts.PayloadGCHorizon
 	if gcHorizon <= 0 {
 		gcHorizon = claimcheck.DefaultGCHorizon
@@ -365,7 +365,7 @@ func Run(ctx context.Context, opts Options) error {
 		// generate_video executes in the worker; the api-server only reads its
 		// catalog metadata. The job store is what makes a render resumable.
 		VideoGeneratorResolver: resolveVideoGenerator,
-		VideoJobs:              videojobs.NewSQLStore(repo.DB.SQLDB()),
+		VideoJobs:              videojobs.NewSQLStore(repo.ORM()),
 		// run_scenario / write_scenario execute on the real runtime via the
 		// scenario runner; injected because the runner imports this package's
 		// dependents.

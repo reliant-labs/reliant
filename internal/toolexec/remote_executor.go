@@ -345,7 +345,7 @@ func (e *RemoteExecutor) executeOnDaemon(ctx context.Context, req *ToolRequest, 
 		cancelCtx, cancel := context.WithTimeout(WithDaemonSelector(context.WithoutCancel(ctx), req.DaemonSelector), daemonCancelPushTimeout)
 		defer cancel()
 		if err := e.router.SendToolExecutionCancel(cancelCtx, req.UserID, req.ToolCallID, "tool execution abandoned"); err != nil {
-			logging.Warn("Could not tell the daemon to stop an abandoned tool; it may run to completion",
+			logging.WarnContext(ctx, "Could not tell the daemon to stop an abandoned tool; it may run to completion",
 				"error", err, "toolCallID", req.ToolCallID, "toolName", req.ToolName)
 		}
 	}()

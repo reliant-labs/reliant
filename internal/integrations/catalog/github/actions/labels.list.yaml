@@ -1,0 +1,49 @@
+# yaml-language-server: $schema=../../../manifest/schema/action.schema.json
+id: labels.list
+display_name: List repository labels
+summary: Every label in a repository, with its color and description.
+description: >-
+  List the labels defined in a repository (not the labels on one issue),
+  following GitHub's pagination up to 1000 labels. Use it to check which of
+  a set of labels already exist.
+keywords: [label, labels, list, repository, existing, colors]
+placement: server
+mutates: false
+tool:
+  expose: true
+params:
+  type: object
+  additionalProperties: false
+  required: [owner, repo]
+  properties:
+    owner: { $ref: ../schemas/owner.yaml }
+    repo: { $ref: ../schemas/repo.yaml }
+    connection: { $ref: ../schemas/connection.yaml }
+request:
+  method: GET
+  path: /repos/{{ params.owner }}/{{ params.repo }}/labels
+  query: { per_page: "100" }
+  pagination: { style: link_header, max_pages: 10 }
+  errors: { $ref: ../schemas/github_errors.yaml }
+output:
+  select: >-
+    response.map(l, {"id": l.?id.orValue(null),
+                     "node_id": l.?node_id.orValue(null),
+                     "name": l.name,
+                     "color": l.?color.orValue(null),
+                     "description": l.?description.orValue(null),
+                     "default": l.?default.orValue(false)})
+  schema:
+    type: object
+    properties:
+      items:
+        type: array
+        items:
+          type: object
+          properties:
+            id: { type: [integer, "null"] }
+            node_id: { type: [string, "null"] }
+            name: { type: string }
+            color: { type: [string, "null"] }
+            description: { type: [string, "null"] }
+            default: { type: boolean, description: One of GitHub's default labels. }

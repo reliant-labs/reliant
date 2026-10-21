@@ -70,10 +70,12 @@ type ApiKey struct {
 }
 
 type Approval struct {
-	ID                 string         `json:"id"`
-	ChatID             string         `json:"chat_id"`
-	ApprovalType       int32          `json:"approval_type"`
-	EntityID           string         `json:"entity_id"`
+	ID     string `json:"id"`
+	ChatID string `json:"chat_id"`
+	// forge:go-type=github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1.ApprovalType
+	ApprovalType int32  `json:"approval_type"`
+	EntityID     string `json:"entity_id"`
+	// forge:go-type=github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1.ApprovalStatus
 	Status             int32          `json:"status"`
 	DenialReason       sql.NullString `json:"denial_reason"`
 	Title              string         `json:"title"`
@@ -453,7 +455,8 @@ type IntegrationWrite struct {
 }
 
 type ItemDefault struct {
-	ID        string         `json:"id"`
+	ID string `json:"id"`
+	// forge:go-type=github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1.HiddenItemType
 	ItemType  int32          `json:"item_type"`
 	Slug      string         `json:"slug"`
 	IsHidden  bool           `json:"is_hidden"`
@@ -558,13 +561,15 @@ type Plan struct {
 	ID          string         `json:"id"`
 	Title       string         `json:"title"`
 	Description sql.NullString `json:"description"`
-	Status      int32          `json:"status"`
-	CreatedAt   time.Time      `json:"created_at"`
-	UpdatedAt   time.Time      `json:"updated_at"`
-	CompletedAt sql.NullTime   `json:"completed_at"`
-	Complexity  sql.NullInt32  `json:"complexity"`
-	ProjectID   sql.NullString `json:"project_id"`
-	ThreadID    string         `json:"thread_id"`
+	// forge:go-type=github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1.PlanStatus
+	Status      int32        `json:"status"`
+	CreatedAt   time.Time    `json:"created_at"`
+	UpdatedAt   time.Time    `json:"updated_at"`
+	CompletedAt sql.NullTime `json:"completed_at"`
+	// forge:go-type=github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1.PlanComplexity
+	Complexity sql.NullInt32  `json:"complexity"`
+	ProjectID  sql.NullString `json:"project_id"`
+	ThreadID   string         `json:"thread_id"`
 }
 
 type Preset struct {
@@ -718,10 +723,11 @@ type Repo struct {
 }
 
 type RunEvent struct {
-	ID           string          `json:"id"`
-	UserID       string          `json:"user_id"`
-	ChatID       string          `json:"chat_id"`
-	WorkflowName string          `json:"workflow_name"`
+	ID           string `json:"id"`
+	UserID       string `json:"user_id"`
+	ChatID       string `json:"chat_id"`
+	WorkflowName string `json:"workflow_name"`
+	// forge:go-type=github.com/reliant-labs/reliant/internal/db/core;core.RunEventOutcome
 	Outcome      string          `json:"outcome"`
 	DedupeKey    string          `json:"dedupe_key"`
 	Payload      json.RawMessage `json:"payload"`
@@ -767,19 +773,21 @@ type Task struct {
 	ParentTaskID sql.NullString `json:"parent_task_id"`
 	Title        string         `json:"title"`
 	Description  sql.NullString `json:"description"`
-	Status       int32          `json:"status"`
-	Position     int64          `json:"position"`
-	CreatedAt    time.Time      `json:"created_at"`
-	UpdatedAt    time.Time      `json:"updated_at"`
-	CompletedAt  sql.NullTime   `json:"completed_at"`
-	Metadata     sql.NullString `json:"metadata"`
-	Assignee     sql.NullString `json:"assignee"`
+	// forge:go-type=github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1.TaskStatus
+	Status      int32          `json:"status"`
+	Position    int64          `json:"position"`
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
+	CompletedAt sql.NullTime   `json:"completed_at"`
+	Metadata    sql.NullString `json:"metadata"`
+	Assignee    sql.NullString `json:"assignee"`
 }
 
 type TaskDependency struct {
-	ID             string    `json:"id"`
-	FromTaskID     string    `json:"from_task_id"`
-	ToTaskID       string    `json:"to_task_id"`
+	ID         string `json:"id"`
+	FromTaskID string `json:"from_task_id"`
+	ToTaskID   string `json:"to_task_id"`
+	// forge:go-type=github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1.DependencyType
 	DependencyType int32     `json:"dependency_type"`
 	CreatedAt      time.Time `json:"created_at"`
 }
@@ -999,7 +1007,8 @@ type WorkflowDraft struct {
 	CreatedAt   time.Time      `json:"created_at"`
 	UpdatedAt   time.Time      `json:"updated_at"`
 	Version     int64          `json:"version"`
-	Status      string         `json:"status"`
+	// forge:go-type=github.com/reliant-labs/reliant/internal/db/core;core.WorkflowDraftStatus
+	Status string `json:"status"`
 }
 
 type WorkflowScenario struct {

@@ -1,0 +1,14 @@
+# Issue assigned: the projection of the GitHub `issues.assigned` webhook.
+id: issue.assigned
+event: issues.assigned
+display_name: Issue assigned
+summary: Someone was assigned to an issue.
+description: >-
+  Fires when a user is assigned to an issue. Match `assignee` to react to
+  one person.
+keywords: [assign, owner]
+attributes:
+  - { name: assignee, description: Login of the user who was assigned., example: octocat, from: assignee.login }
+data:
+  assignee: { kind: object, object: user }
+  issue: { kind: object, object: issue }

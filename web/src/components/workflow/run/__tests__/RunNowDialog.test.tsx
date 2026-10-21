@@ -288,7 +288,7 @@ describe("RunNowDialog", () => {
       listWorkflows.mockResolvedValue(listing({ triggers: [] }));
       renderDialog(<RunNowDialog open onClose={vi.fn()} projectId="proj-1" workflowRef="triage" />);
       await screen.findByLabelText("Label");
-      expect(screen.queryByText("Replay a past event")).toBeNull();
+      expect(screen.queryByRole("radio", { name: "A recent event" })).toBeNull();
       expect(listReplayEvents).not.toHaveBeenCalled();
     });
 
@@ -310,7 +310,7 @@ describe("RunNowDialog", () => {
       const user = userEvent.setup();
       renderDialog(<RunNowDialog open onClose={vi.fn()} projectId="proj-1" workflowRef="triage" />);
 
-      await user.click(await screen.findByLabelText("Replay a past event"));
+      await user.click(await screen.findByRole("radio", { name: "A recent event" }));
       // Two triggers: the replay says which one read the event.
       await user.selectOptions(await screen.findByLabelText("Through trigger"), "new-issue");
       const picker = await screen.findByLabelText("Past event");
@@ -354,7 +354,7 @@ describe("RunNowDialog", () => {
       const user = userEvent.setup();
       renderDialog(<RunNowDialog open onClose={vi.fn()} projectId="proj-1" workflowRef="triage" />);
 
-      await user.click(await screen.findByLabelText("Replay a past event"));
+      await user.click(await screen.findByRole("radio", { name: "A recent event" }));
       await user.selectOptions(await screen.findByLabelText("Through trigger"), "new-issue");
       await waitFor(() => expect(previewReplay).toHaveBeenCalled());
       const before = previewReplay.mock.calls.length;
@@ -374,7 +374,7 @@ describe("RunNowDialog", () => {
       const user = userEvent.setup();
       renderDialog(<RunNowDialog open onClose={vi.fn()} projectId="proj-1" workflowRef="triage" />);
 
-      await user.click(await screen.findByLabelText("Replay a past event"));
+      await user.click(await screen.findByRole("radio", { name: "A recent event" }));
       await user.selectOptions(await screen.findByLabelText("Through trigger"), "new-issue");
       fill(screen.getByLabelText("Event payload (JSON)"), "[1, 2");
       expect(await screen.findByText(/Not valid JSON/)).toBeInTheDocument();
@@ -391,7 +391,7 @@ describe("RunNowDialog", () => {
       const user = userEvent.setup();
       renderDialog(<RunNowDialog open onClose={vi.fn()} projectId="proj-1" workflowRef="triage" />);
 
-      await user.click(await screen.findByLabelText("Replay a past event"));
+      await user.click(await screen.findByRole("radio", { name: "A recent event" }));
       await user.selectOptions(await screen.findByLabelText("Through trigger"), "new-issue");
       expect(await screen.findByText(/could not read its inputs from this event/)).toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Run now" })).toBeDisabled();
@@ -400,7 +400,7 @@ describe("RunNowDialog", () => {
     it("says so when the workflow has collected no events yet, and still lets one be written", async () => {
       const user = userEvent.setup();
       renderDialog(<RunNowDialog open onClose={vi.fn()} projectId="proj-1" workflowRef="triage" />);
-      await user.click(await screen.findByLabelText("Replay a past event"));
+      await user.click(await screen.findByRole("radio", { name: "A recent event" }));
       expect(await screen.findByText(/No events yet/)).toBeInTheDocument();
       expect(screen.getByLabelText("Event payload (JSON)")).toBeEnabled();
     });

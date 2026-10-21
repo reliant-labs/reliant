@@ -61,8 +61,9 @@ describe("the Observability home", () => {
     const { navigateTo } = renderHome();
     const table = await screen.findByTestId("observability-services");
     const rows = await within(table).findAllByTestId(/^observability-service-/);
-    expect(rows.map((r) => r.getAttribute("data-tone"))).toEqual(["danger", "success"]);
-    expect(rows[0]).toHaveTextContent("Crash-looping");
+    // The status is the workload's server-side verdict: prod's api restarted 3x with every replica ready, so degraded.
+    expect(rows.map((r) => r.getAttribute("data-tone"))).toEqual(["warning", "success"]);
+    expect(rows[0]).toHaveTextContent("Degraded");
     await user.click(rows[1].querySelector("td:nth-child(4)")!);
     expect(navigateTo).toHaveBeenCalledWith("/workloads/worker");
   });
@@ -117,25 +118,35 @@ describe("what needs attention", () => {
     errorTrend: [],
     ...over,
   });
-  const workload = (name: string, restarts: number): Workload =>
-    ({ envId: "env-prod", envName: "prod", workload: name, namespace: "", serviceVersion: "", replicasObserved: 1, restartsInWindow: restarts, containers: [], latestWarning: null }) as unknown as Workload;
+  const workload = (name: string, health: Workload["health"], healthReason = ""): Workload =>
+    ({ envId: "env-prod", envName: "prod", workload: name, namespace: "", serviceVersion: "", replicasObserved: 1, restartsInWindow: 5, containers: [], latestWarning: null, health, healthReason }) as unknown as Workload;
   const alert = (service: string): AlertInstance => ({ envId: "env-prod", rule: "X", fingerprint: service, labels: { service }, annotations: {}, state: "firing", activeAtMs: null, firingAtMs: null, lastEvalAtMs: null, lastValue: 1 });
 
-  it("puts crash-looping first, then degraded (alerts firing before a high error rate), then healthy, then no data", () => {
+  it("puts crash-looping first, then the signals (alerts firing before a high error rate), then the rest", () => {
     const rows = serviceRows(
       [health("quiet", { requestCount: 0 }), health("ok"), health("noisy", { errorRate: 0.2 }), health("paged"), health("looping"), health("operator", { operatorData: true })],
-      [workload("looping", 5)],
+      [workload("looping", "crash_looping", "restarted 5x, last exit OOMKilled")],
       [alert("paged")],
       () => "prod"
     ).sort(byAttention);
-    expect(rows.map((r) => [r.name, r.status])).toEqual([
-      ["looping", "Crash-looping"],
-      ["paged", "Degraded"],
-      ["noisy", "Degraded"],
-      ["ok", "Healthy"],
-      ["quiet", "No workload data"],
+    // Only "looping" has a workload, so only it has a verdict. The others say
+    // their signal, in words and a tone the verdict never uses.
+    expect(rows.map((r) => [r.name, r.status, r.tone])).toEqual([
+      ["looping", "Crash-looping", "danger"],
+      ["paged", "Alert firing", "neutral"],
+      ["noisy", "Errors elevated", "neutral"],
+      ["ok", "No workload data", "neutral"],
+      ["quiet", "No workload data", "neutral"],
     ]);
     expect(rows[1].reason).toBe("1 alert firing");
+    // The workload's verdict and its reason are the server's, never re-derived from restarts.
+    expect(rows[0].reason).toBe("restarted 5x, last exit OOMKilled");
+  });
+
+  it("takes a workload's word from its verdict even when the request side is quiet", () => {
+    const [row] = serviceRows([health("api", { errorRate: 0.2 })], [workload("api", "healthy")], [], () => "prod");
+    // Healthy pods, but a high error rate: the verdict stands, the error rate says why it ranks.
+    expect(row).toMatchObject({ status: "Healthy", tone: "success", reason: "high error rate" });
   });
 
   it("derives the error rate and the firing count per bucket", () => {

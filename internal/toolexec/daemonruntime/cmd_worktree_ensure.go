@@ -158,7 +158,7 @@ func (e *workspaceEnsurer) ensure(ctx context.Context, req toolexec.WorkspaceEns
 		// every checkout, but a single deleted nested repo is rebuilt alone.
 		var ok bool
 		if ok, reason = repairWorkspace(ctx, root, req, missing); ok {
-			logging.Info("worktree.ensure: recreated a missing workspace from its branch",
+			logging.InfoContext(ctx, "worktree.ensure: recreated a missing workspace from its branch",
 				"path", root, "branch", req.Branch, "worktree_id", req.WorktreeID, "checkouts", checkoutRels(missing))
 			rec.announce(toolexec.WorkspaceNotice{
 				Kind:          toolexec.NoticeRepaired,
@@ -178,7 +178,7 @@ func (e *workspaceEnsurer) ensure(ctx context.Context, req toolexec.WorkspaceEns
 	if rootOK && len(missing) < len(checkouts) {
 		rels := checkoutRels(missing)
 		if prev := rec.notice; prev == nil || prev.Kind != toolexec.NoticeIncomplete || !slices.Equal(prev.Checkouts, rels) {
-			logging.Warn("worktree.ensure: workspace is missing checkouts that could not be recreated",
+			logging.WarnContext(ctx, "worktree.ensure: workspace is missing checkouts that could not be recreated",
 				"path", root, "branch", req.Branch, "missing", rels, "reason", reason)
 			rec.announce(toolexec.WorkspaceNotice{
 				Kind:          toolexec.NoticeIncomplete,
@@ -195,7 +195,7 @@ func (e *workspaceEnsurer) ensure(ctx context.Context, req toolexec.WorkspaceEns
 
 	dir := e.fallbackDir(req.FallbackPath, root)
 	if prev := rec.notice; prev == nil || prev.Kind != toolexec.NoticeFallback || prev.RunningIn != dir {
-		logging.Warn("worktree.ensure: workspace is missing and could not be recreated; running elsewhere",
+		logging.WarnContext(ctx, "worktree.ensure: workspace is missing and could not be recreated; running elsewhere",
 			"path", root, "branch", req.Branch, "fallback", dir, "reason", reason)
 		rec.announce(toolexec.WorkspaceNotice{
 			Kind:          toolexec.NoticeFallback,

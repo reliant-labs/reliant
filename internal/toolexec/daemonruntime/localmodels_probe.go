@@ -231,7 +231,7 @@ func (p *localModelProber) probeEndpoint(ctx context.Context, id, root, source, 
 		ShowCache:      p.showCache,
 		UnknownContext: localModelUnknownCtx,
 		OnContext: func(model string, context int64, rule string) {
-			logging.Debug(logPrefix+" Local model context", "endpoint", id, "model", model, "context", context, "rule", rule)
+			logging.DebugContext(ctx, logPrefix+" Local model context", "endpoint", id, "model", model, "context", context, "rule", rule)
 		},
 	})
 	ep.Source = source

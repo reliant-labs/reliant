@@ -3,6 +3,7 @@ package triggers
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -270,9 +271,64 @@ func DeclaredTriggerNames(wf *reliantv1.Workflow) []string {
 	return names
 }
 
-// Projection is what t's row should cache of decl.
-func (d *Declaration) Projection() core.TriggerProjection {
-	return core.TriggerProjection{Config: d.Source.Config, Filter: d.Filter}
+// Projection is what an activation's row should cache of its declaration,
+// given the params it holds: the source config with the typed scope resolved
+// (see ProjectedConfig), and the filter.
+func (d *Declaration) Projection(params map[string]any) core.TriggerProjection {
+	return core.TriggerProjection{Config: d.ProjectedConfig(params), Filter: d.Filter}
+}
+
+// ProjectedConfig is the config to store for an activation holding params. It
+// is the declaration's, plus, for an integration source scoped by
+// `match: {attribute: {input: name}}`, MatchAny: the values each scoped
+// input holds in the activation's params (defaults applied), which is what
+// routing checks an event against before any row is written. It is a
+// projection like the filter: it is rewritten whenever the params or the
+// declaration change, and fire paths still read the declaration.
+func (d *Declaration) ProjectedConfig(params map[string]any) json.RawMessage {
+	if d.Source.Kind != core.TriggerKindIntegration {
+		return d.Source.Config
+	}
+	var cfg core.IntegrationConfig
+	if err := json.Unmarshal(d.Source.Config, &cfg); err != nil || len(cfg.MatchInput) == 0 {
+		return d.Source.Config
+	}
+	resolved := d.activationParams(params)
+	cfg.MatchAny = make(map[string][]string, len(cfg.MatchInput))
+	for attr, input := range cfg.MatchInput {
+		cfg.MatchAny[attr] = scopeValues(resolved[input])
+	}
+	raw, err := json.Marshal(cfg)
+	if err != nil {
+		// Without MatchAny the scope matches nothing, which is the safe side.
+		return d.Source.Config
+	}
+	return raw
+}
+
+// scopeValues is the values an input holds, as the strings an attribute is
+// compared with: a multi input's items, or a single input's value. Empty
+// strings are no value.
+func scopeValues(v any) []string {
+	var items []any
+	switch x := v.(type) {
+	case nil:
+	case []any:
+		items = x
+	case []string:
+		for _, s := range x {
+			items = append(items, s)
+		}
+	default:
+		items = []any{x}
+	}
+	out := make([]string, 0, len(items))
+	for _, item := range items {
+		if s, ok := item.(string); ok && s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 // MergeDeclaredInputs evaluates a declaration's inputs against the event and

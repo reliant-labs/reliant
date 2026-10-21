@@ -1,0 +1,62 @@
+# yaml-language-server: $schema=../../../manifest/schema/action.schema.json
+id: pr.update
+display_name: Update pull request
+summary: Change a pull request's title, body, base branch, or close or reopen it.
+description: >-
+  Edit a pull request. Only the fields you pass change; pass at least one.
+  state closed closes it without merging and open reopens it. Changing
+  base retargets the pull request to another branch. Labels and assignees
+  are changed through issue.labels.add, issue.labels.remove and
+  issue.update, since a pull request is an issue too. Merging is not an
+  action here: a person merges. Returns the pull request's number, id,
+  node id and URL.
+keywords: [pull request, pr, edit, update, retitle, close, reopen, retarget, base]
+placement: server
+mutates: true
+tool:
+  expose: true
+params:
+  type: object
+  additionalProperties: false
+  required: [owner, repo, pull_number]
+  properties:
+    owner: { $ref: ../schemas/owner.yaml }
+    repo: { $ref: ../schemas/repo.yaml }
+    pull_number: { $ref: ../schemas/pull_number.yaml }
+    title:
+      type: string
+      minLength: 1
+      title: New title
+      description: Replaces the title. Omit to keep it.
+      examples: ["Fix the save crash (#42)"]
+    body:
+      type: string
+      title: New body
+      description: Replaces the description, in GitHub-flavored markdown. Omit to keep it.
+      examples: ["Fixes #42.\n\nRe-tested on main."]
+    state:
+      type: string
+      enum: [open, closed]
+      title: State
+      description: closed closes the pull request without merging; open reopens it.
+    base:
+      type: string
+      minLength: 1
+      maxLength: 255
+      title: Base branch
+      description: Retarget the pull request to this branch.
+      examples: ["release-1.2"]
+    connection: { $ref: ../schemas/connection.yaml }
+request:
+  method: PATCH
+  path: /repos/{{ params.owner }}/{{ params.repo }}/pulls/{{ params.pull_number }}
+  # Absent params are left out, not sent as null.
+  body_expr: >-
+    {?"title": params.?title,
+     ?"body": params.?body,
+     ?"state": params.?state,
+     ?"base": params.?base}
+  errors: { $ref: ../schemas/github_errors.yaml }
+output:
+  select: { $ref: ../schemas/pr_write_select.yaml }
+  schema: { $ref: ../schemas/pr_write_schema.yaml }

@@ -233,7 +233,7 @@ func (f *PreviewForwarder) upstreamError(w http.ResponseWriter, r *http.Request,
 		// Client went away; nothing to write.
 		return
 	}
-	logging.Warn(previewLogPrefix+" Upstream error", "port", port, "path", r.URL.Path, "error", err)
+	logging.WarnContext(r.Context(), previewLogPrefix+" Upstream error", "port", port, "path", r.URL.Path, "error", err)
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	w.Header().Set("X-Reliant-Preview-Error", "upstream")
 	w.WriteHeader(http.StatusBadGateway)

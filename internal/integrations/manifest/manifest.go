@@ -63,16 +63,41 @@ var (
 const MaxTimeoutSeconds = 120
 
 var (
-	idPattern     = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
-	actionPattern = regexp.MustCompile(`^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$`)
-	toolPattern   = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,64}$`)
-	methods       = map[string]bool{"GET": true, "POST": true, "PUT": true, "PATCH": true, "DELETE": true}
+	IDPattern       = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
+	ActionIDPattern = regexp.MustCompile(`^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$`)
+	ToolNamePattern = regexp.MustCompile(`^[a-zA-Z0-9_-]{1,64}$`)
+)
+
+// HTTPMethods are the request methods an action may use.
+var HTTPMethods = []string{"GET", "POST", "PUT", "PATCH", "DELETE"}
+
+// PaginationStyles are the values of pagination.style.
+var PaginationStyles = []string{"link_header", "cursor", "page", "next_url"}
+
+// Placements are the values of an action's placement.
+var Placements = []string{PlacementServer, PlacementAny, PlacementDaemon}
+
+// MaxResponseBytesLimit bounds request.max_response_bytes; MaxPaginationPages
+// bounds pagination.max_pages.
+const (
+	MaxResponseBytesLimit = 10 << 20
+	MaxPaginationPages    = 100
 )
 
 // Parse decodes and validates one manifest document.
 func Parse(data []byte, trust Trust) (*reliantv1.IntegrationManifest, error) {
+	var root yaml.Node
+	if err := yaml.Unmarshal(data, &root); err != nil {
+		return nil, fmt.Errorf("manifest yaml: %w", err)
+	}
+	return parseNode(&root, trust)
+}
+
+// parseNode decodes and validates a manifest from its YAML tree, which
+// LoadFS assembles from fragments before it gets here.
+func parseNode(root *yaml.Node, trust Trust) (*reliantv1.IntegrationManifest, error) {
 	var doc any
-	if err := yaml.Unmarshal(data, &doc); err != nil {
+	if err := root.Decode(&doc); err != nil {
 		return nil, fmt.Errorf("manifest yaml: %w", err)
 	}
 	asJSON, err := json.Marshal(normalize(doc))
@@ -83,7 +108,7 @@ func Parse(data []byte, trust Trust) (*reliantv1.IntegrationManifest, error) {
 	if err := (protojson.UnmarshalOptions{DiscardUnknown: false}).Unmarshal(asJSON, m); err != nil {
 		return nil, fmt.Errorf("manifest: %w", err)
 	}
-	if err := fillParamOrder(data, m); err != nil {
+	if err := fillParamOrder(root, m); err != nil {
 		return nil, fmt.Errorf("manifest %q: %w", m.GetId(), err)
 	}
 	if err := Validate(m, trust); err != nil {
@@ -96,12 +121,8 @@ func Parse(data []byte, trust Trust) (*reliantv1.IntegrationManifest, error) {
 // YAML declares them. Decoding into maps (and then a Struct) loses it, and the
 // declared order is the one a form should list params in: an author puts
 // Channel and Text before Blocks for a reason.
-func fillParamOrder(data []byte, m *reliantv1.IntegrationManifest) error {
-	var root yaml.Node
-	if err := yaml.Unmarshal(data, &root); err != nil {
-		return fmt.Errorf("manifest yaml: %w", err)
-	}
-	actions := yamlChild(yamlDocument(&root), "actions")
+func fillParamOrder(root *yaml.Node, m *reliantv1.IntegrationManifest) error {
+	actions := yamlChild(yamlDocument(root), "actions")
 	for i, a := range m.GetActions() {
 		if len(a.GetParamOrder()) > 0 {
 			return fmt.Errorf("action %q: param_order is derived from the order of params.properties; do not set it", a.GetId())
@@ -176,8 +197,9 @@ func normalize(v any) any {
 	}
 }
 
-// LoadFS loads every <dir>/manifest.yaml under fsys. Manifests are returned
-// sorted by id then version, and an id@version pair may appear only once.
+// LoadFS loads every manifest under fsys: <dir>/manifest.yaml, plus the
+// fragments beside it (see Assemble). Manifests are returned sorted by id then
+// version, and an id@version pair may appear only once.
 func LoadFS(fsys fs.FS, trust Trust) ([]*reliantv1.IntegrationManifest, error) {
 	files, err := fs.Glob(fsys, "*/manifest*.yaml")
 	if err != nil {
@@ -186,11 +208,11 @@ func LoadFS(fsys fs.FS, trust Trust) ([]*reliantv1.IntegrationManifest, error) {
 	seen := map[string]string{}
 	var out []*reliantv1.IntegrationManifest
 	for _, file := range files {
-		data, err := fs.ReadFile(fsys, file)
+		root, err := assemble(fsys, file)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("%s: %w", file, err)
 		}
-		m, err := Parse(data, trust)
+		m, err := parseNode(root, trust)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", file, err)
 		}
@@ -210,6 +232,9 @@ func LoadFS(fsys fs.FS, trust Trust) ([]*reliantv1.IntegrationManifest, error) {
 		}
 		return out[i].GetVersion() < out[j].GetVersion()
 	})
+	if err := CheckTypeRefs(out); err != nil {
+		return nil, err
+	}
 	return out, nil
 }
 
@@ -223,8 +248,8 @@ func ToolName(m *reliantv1.IntegrationManifest, a *reliantv1.ActionSpec) string 
 
 // Validate applies the load-time rules.
 func Validate(m *reliantv1.IntegrationManifest, trust Trust) error {
-	if !idPattern.MatchString(m.GetId()) {
-		return fmt.Errorf("id %q must match %s", m.GetId(), idPattern)
+	if !IDPattern.MatchString(m.GetId()) {
+		return fmt.Errorf("id %q must match %s", m.GetId(), IDPattern)
 	}
 	if m.GetVersion() < 1 {
 		return fmt.Errorf("version must be >= 1 (the manifest major version)")
@@ -241,6 +266,9 @@ func Validate(m *reliantv1.IntegrationManifest, trust Trust) error {
 		return fmt.Errorf("at least one action or trigger is required")
 	}
 	if err := validateTriggers(m); err != nil {
+		return err
+	}
+	if err := validateTypes(m); err != nil {
 		return err
 	}
 	ids := map[string]bool{}
@@ -279,8 +307,8 @@ func parseHTTPS(raw string) (*url.URL, error) {
 }
 
 func validateAction(m *reliantv1.IntegrationManifest, a *reliantv1.ActionSpec, conn *reliantv1.ConnectionSpec, allowed map[string]bool, trust Trust) error {
-	if !actionPattern.MatchString(a.GetId()) {
-		return fmt.Errorf("id must match %s", actionPattern)
+	if !ActionIDPattern.MatchString(a.GetId()) {
+		return fmt.Errorf("id must match %s", ActionIDPattern)
 	}
 	switch a.GetKind() {
 	case "", "call":
@@ -298,8 +326,8 @@ func validateAction(m *reliantv1.IntegrationManifest, a *reliantv1.ActionSpec, c
 	default:
 		return fmt.Errorf("unknown placement %q", a.GetPlacement())
 	}
-	if a.GetTool().GetName() != "" && !toolPattern.MatchString(a.GetTool().GetName()) {
-		return fmt.Errorf("tool.name %q must match %s", a.GetTool().GetName(), toolPattern)
+	if a.GetTool().GetName() != "" && !ToolNamePattern.MatchString(a.GetTool().GetName()) {
+		return fmt.Errorf("tool.name %q must match %s", a.GetTool().GetName(), ToolNamePattern)
 	}
 	if strings.ContainsAny(a.GetSummary(), "\r\n") || len(a.GetSummary()) > 200 {
 		return fmt.Errorf("summary must be one line of at most 200 characters")
@@ -324,7 +352,7 @@ func validateAction(m *reliantv1.IntegrationManifest, a *reliantv1.ActionSpec, c
 	}
 	if a.GetExecutor() != "" {
 		if _, ok := ExecutorName(a); !ok {
-			return fmt.Errorf("executor %q must be go:<name> (%s)", a.GetExecutor(), executorPattern)
+			return fmt.Errorf("executor %q must be go:<name> (%s)", a.GetExecutor(), ExecutorPattern)
 		}
 		if a.GetRequest() != nil {
 			return fmt.Errorf("executor and request are mutually exclusive")
@@ -352,7 +380,61 @@ func validateAction(m *reliantv1.IntegrationManifest, a *reliantv1.ActionSpec, c
 			return err
 		}
 	}
+	if fo := req.GetFanOut(); fo != nil {
+		if err := validateFanOut(fo, a, conn, allowed); err != nil {
+			return fmt.Errorf("request.fan_out: %w", err)
+		}
+	}
 	return validateOutput(a.GetOutput(), req.GetPagination())
+}
+
+// DefaultFanOutItems and MaxFanOutItems bound the parents a fan-out walks.
+const (
+	DefaultFanOutItems = 50
+	MaxFanOutItems     = 200
+)
+
+// validateFanOut applies the rules of a walk: both requests page (the output is
+// a list), the walk is one level deep, and the per-parent request is held to
+// the same host rules as the first.
+func validateFanOut(fo *reliantv1.FanOutSpec, a *reliantv1.ActionSpec, conn *reliantv1.ConnectionSpec, allowed map[string]bool) error {
+	req := a.GetRequest()
+	if req.GetPagination() == nil {
+		return fmt.Errorf("the request lists the parents and must paginate (pagination: ...), even for a single page")
+	}
+	if fo.GetItems() == "" {
+		return fmt.Errorf("items is required: the CEL over each page that yields the list of parents")
+	}
+	if err := tmpl.ValidateExpr(fo.GetItems()); err != nil {
+		return fmt.Errorf("items: %w", err)
+	}
+	if fo.GetMaxItems() < 0 || fo.GetMaxItems() > MaxFanOutItems {
+		return fmt.Errorf("max_items must be 0..%d", MaxFanOutItems)
+	}
+	child := fo.GetRequest()
+	if child == nil {
+		return fmt.Errorf("request is required: what runs once for each parent")
+	}
+	if child.GetFanOut() != nil {
+		return fmt.Errorf("request may not fan out again; a walk is one level deep")
+	}
+	if child.GetPagination() == nil {
+		return fmt.Errorf("request must paginate (pagination: ...), even for a single page: its pages are concatenated")
+	}
+	if err := validateRequest(child); err != nil {
+		return fmt.Errorf("request: %w", err)
+	}
+	if a.GetPlacement() != PlacementDaemon {
+		if err := checkHost(child, conn, allowed); err != nil {
+			return fmt.Errorf("request: %w", err)
+		}
+	}
+	for _, s := range fo.GetSkipStatus() {
+		if s < 400 || s > 599 {
+			return fmt.Errorf("skip_status %d must be an error status (400..599)", s)
+		}
+	}
+	return nil
 }
 
 // validateEnumTemplate checks an enum-like request field at load time: a
@@ -385,13 +467,13 @@ func validateRequest(req *reliantv1.HttpRequestSpec) error {
 		if err := tmpl.Validate(method); err != nil {
 			return fmt.Errorf("request.method: %w", err)
 		}
-	} else if !methods[method] {
+	} else if !slices.Contains(HTTPMethods, method) {
 		return fmt.Errorf("request.method %q must be one of GET, POST, PUT, PATCH, DELETE", method)
 	}
 	if req.GetTimeoutSeconds() < 0 || req.GetTimeoutSeconds() > MaxTimeoutSeconds {
 		return fmt.Errorf("request.timeout_seconds must be 0..%d", MaxTimeoutSeconds)
 	}
-	if req.GetMaxResponseBytes() < 0 || req.GetMaxResponseBytes() > 10<<20 {
+	if req.GetMaxResponseBytes() < 0 || req.GetMaxResponseBytes() > MaxResponseBytesLimit {
 		return fmt.Errorf("request.max_response_bytes must be 0..10485760")
 	}
 	for _, s := range []string{req.GetUrl(), req.GetPath()} {
@@ -503,8 +585,8 @@ func validateBodyTemplates(v any) error {
 }
 
 func validatePagination(p *reliantv1.PaginationSpec) error {
-	if p.GetMaxPages() < 0 || p.GetMaxPages() > 100 {
-		return fmt.Errorf("pagination.max_pages must be 0..100")
+	if p.GetMaxPages() < 0 || p.GetMaxPages() > MaxPaginationPages {
+		return fmt.Errorf("pagination.max_pages must be 0..%d", MaxPaginationPages)
 	}
 	switch p.GetStyle() {
 	case "link_header":

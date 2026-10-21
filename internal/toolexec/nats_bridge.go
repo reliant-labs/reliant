@@ -607,7 +607,7 @@ func (b *NATSToolBridge) respondDaemonCommand(ctx context.Context, msg *nats.Msg
 	chunks, err := publishReply(b.nc, msg.Reply, respData)
 	switch {
 	case errors.Is(err, errReplyExceedsAbsoluteCap):
-		logging.Error("[NATSToolBridge] Daemon command reply exceeds absolute reply cap",
+		logging.ErrorContext(ctx, "[NATSToolBridge] Daemon command reply exceeds absolute reply cap",
 			"commandType", req.CommandType, "requestID", req.RequestID,
 			"replyBytes", len(respData), "cap", int64(maxChunkedReplyBytes))
 		errResp, _ := json.Marshal(map[string]interface{}{
@@ -615,16 +615,16 @@ func (b *NATSToolBridge) respondDaemonCommand(ctx context.Context, msg *nats.Msg
 			"error_message": oversizeNATSPayloadError("response", len(respData), maxChunkedReplyBytes, oversizeReplyHint),
 		})
 		if rerr := msg.Respond(errResp); rerr != nil {
-			logging.Error("[NATSToolBridge] Failed to publish oversize-reply error for daemon command",
+			logging.ErrorContext(ctx, "[NATSToolBridge] Failed to publish oversize-reply error for daemon command",
 				"commandType", req.CommandType, "requestID", req.RequestID, "error", rerr)
 		}
 		return
 	case err != nil:
-		logging.Error("[NATSToolBridge] Failed to publish daemon command reply",
+		logging.ErrorContext(ctx, "[NATSToolBridge] Failed to publish daemon command reply",
 			"commandType", req.CommandType, "requestID", req.RequestID,
 			"replyBytes", len(respData), "error", err)
 	case chunks > 1:
-		logging.Debug("[NATSToolBridge] Chunked oversize daemon command reply",
+		logging.DebugContext(ctx, "[NATSToolBridge] Chunked oversize daemon command reply",
 			"commandType", req.CommandType, "requestID", req.RequestID,
 			"replyBytes", len(respData), "chunks", chunks, "maxPayload", b.nc.MaxPayload())
 	}
@@ -656,7 +656,7 @@ func (b *NATSToolBridge) respondToolRequestSync(ctx context.Context, msg *nats.M
 	chunks, err := publishReply(b.nc, msg.Reply, respData)
 	switch {
 	case errors.Is(err, errReplyExceedsAbsoluteCap):
-		logging.Error("[NATSToolBridge] Tool sync reply exceeds absolute reply cap",
+		logging.ErrorContext(ctx, "[NATSToolBridge] Tool sync reply exceeds absolute reply cap",
 			"toolName", request.ToolName, "requestID", request.RequestID,
 			"replyBytes", len(respData), "cap", int64(maxChunkedReplyBytes))
 		oversizeMsg := oversizeNATSPayloadError("tool result", len(respData), maxChunkedReplyBytes, oversizeReplyHint)
@@ -669,16 +669,16 @@ func (b *NATSToolBridge) respondToolRequestSync(ctx context.Context, msg *nats.M
 			ErrorCode:    "RESPONSE_TOO_LARGE",
 		})
 		if rerr := msg.Respond(errResp); rerr != nil {
-			logging.Error("[NATSToolBridge] Failed to publish oversize-reply error for tool sync request",
+			logging.ErrorContext(ctx, "[NATSToolBridge] Failed to publish oversize-reply error for tool sync request",
 				"toolName", request.ToolName, "requestID", request.RequestID, "error", rerr)
 		}
 		return
 	case err != nil:
-		logging.Error("[NATSToolBridge] Failed to publish tool sync reply",
+		logging.ErrorContext(ctx, "[NATSToolBridge] Failed to publish tool sync reply",
 			"toolName", request.ToolName, "requestID", request.RequestID,
 			"replyBytes", len(respData), "error", err)
 	case chunks > 1:
-		logging.Debug("[NATSToolBridge] Chunked oversize tool sync reply",
+		logging.DebugContext(ctx, "[NATSToolBridge] Chunked oversize tool sync reply",
 			"toolName", request.ToolName, "requestID", request.RequestID,
 			"replyBytes", len(respData), "chunks", chunks, "maxPayload", b.nc.MaxPayload())
 	}
@@ -709,12 +709,12 @@ func (b *NATSToolBridge) finishDaemonConnected(daemonCtx context.Context, userID
 	// the server has the subscriptions finds no responder.
 	if b.nc != nil {
 		if err := b.nc.FlushTimeout(drainFlushTimeout); err != nil {
-			logging.Warn("[NATSToolBridge] Could not confirm a daemon's subscriptions",
+			logging.WarnContext(daemonCtx, "[NATSToolBridge] Could not confirm a daemon's subscriptions",
 				"userID", userID, "daemonID", daemonID, "error", err)
 		}
 	}
 
-	logging.Info("[NATSToolBridge] Subscribing to daemon subjects",
+	logging.InfoContext(daemonCtx, "[NATSToolBridge] Subscribing to daemon subjects",
 		"userID", userID, "daemonID", daemonID, "count", len(subs))
 
 	// Drain any pending commands queued before this daemon was online, then
@@ -830,19 +830,19 @@ func (b *NATSToolBridge) OnDaemonDisconnected(userID, daemonID string) {
 // process-output subscribe flow.
 func (b *NATSToolBridge) startTerminalOutputForwarder(userCtx context.Context, userID, daemonID, sessionID string) {
 	if sessionID == "" {
-		logging.Warn("[NATSToolBridge] Empty sessionID for terminal output forwarder", "userID", userID)
+		logging.WarnContext(userCtx, "[NATSToolBridge] Empty sessionID for terminal output forwarder", "userID", userID)
 		return
 	}
 
 	outputCh, unsub, err := b.mgr.SubscribeTerminalOutput(userID, daemonID, sessionID)
 	if err != nil {
-		logging.Warn("[NATSToolBridge] Failed to subscribe to terminal output for forwarding",
+		logging.WarnContext(userCtx, "[NATSToolBridge] Failed to subscribe to terminal output for forwarding",
 			"error", err, "userID", userID, "sessionID", sessionID)
 		return
 	}
 
 	subject := daemonSubject(terminalOutputSubject, userID, daemonID) + "." + sessionID
-	logging.Debug("[NATSToolBridge] Starting terminal output forwarder",
+	logging.DebugContext(userCtx, "[NATSToolBridge] Starting terminal output forwarder",
 		"userID", userID, "sessionID", sessionID, "subject", subject)
 
 	b.wg.Add(1)
@@ -860,11 +860,11 @@ func (b *NATSToolBridge) startTerminalOutputForwarder(userCtx context.Context, u
 				}
 				data, err := json.Marshal(evt)
 				if err != nil {
-					logging.Error("[NATSToolBridge] Failed to marshal terminal output event", "error", err)
+					logging.ErrorContext(userCtx, "[NATSToolBridge] Failed to marshal terminal output event", "error", err)
 					continue
 				}
 				if err := b.nc.Publish(subject, data); err != nil {
-					logging.Warn("[NATSToolBridge] Failed to publish terminal output to NATS",
+					logging.WarnContext(userCtx, "[NATSToolBridge] Failed to publish terminal output to NATS",
 						"error", err, "subject", subject)
 					return
 				}
@@ -880,13 +880,13 @@ func (b *NATSToolBridge) startTerminalOutputForwarder(userCtx context.Context, u
 func (b *NATSToolBridge) startProcessOutputForwarder(userCtx context.Context, userID, daemonID, processID string, newOnly bool) {
 	outputCh, unsub, err := b.mgr.SubscribeProcessOutput(userID, daemonID, processID, newOnly)
 	if err != nil {
-		logging.Warn("[NATSToolBridge] Failed to subscribe to process output for forwarding",
+		logging.WarnContext(userCtx, "[NATSToolBridge] Failed to subscribe to process output for forwarding",
 			"error", err, "userID", userID, "processID", processID)
 		return
 	}
 
 	subject := processOutputSubject + "." + userID + "." + processID
-	logging.Debug("[NATSToolBridge] Starting process output forwarder",
+	logging.DebugContext(userCtx, "[NATSToolBridge] Starting process output forwarder",
 		"userID", userID, "processID", processID, "subject", subject)
 
 	b.wg.Add(1)
@@ -904,11 +904,11 @@ func (b *NATSToolBridge) startProcessOutputForwarder(userCtx context.Context, us
 				}
 				data, err := json.Marshal(evt)
 				if err != nil {
-					logging.Error("[NATSToolBridge] Failed to marshal process output event", "error", err)
+					logging.ErrorContext(userCtx, "[NATSToolBridge] Failed to marshal process output event", "error", err)
 					continue
 				}
 				if err := b.nc.Publish(subject, data); err != nil {
-					logging.Warn("[NATSToolBridge] Failed to publish process output to NATS",
+					logging.WarnContext(userCtx, "[NATSToolBridge] Failed to publish process output to NATS",
 						"error", err, "subject", subject)
 					return
 				}
@@ -1057,7 +1057,7 @@ func pendingDrainConsumer(ctx context.Context, stream jetstream.Stream, name, su
 	if !errors.Is(err, jetstream.ErrConsumerNotFound) {
 		// Not "missing" — still try to create/attach; CreateOrUpdate is
 		// idempotent and the create below surfaces a real outage.
-		logging.Debug("[NATSToolBridge] Pending commands consumer lookup failed; attaching via create",
+		logging.DebugContext(ctx, "[NATSToolBridge] Pending commands consumer lookup failed; attaching via create",
 			"consumer", name, "error", err)
 	}
 	// DAEMON_PENDING_COMMANDS is WorkQueue retention: one consumer per filter
@@ -1096,11 +1096,11 @@ func (b *NATSToolBridge) drainPendingCommands(ctx context.Context, userID, daemo
 	stream, err := b.js.Stream(ctx, "DAEMON_PENDING_COMMANDS")
 	if err != nil {
 		if errors.Is(err, jetstream.ErrStreamNotFound) {
-			logging.Debug("[NATSToolBridge] DAEMON_PENDING_COMMANDS stream not found, skipping drain",
+			logging.DebugContext(ctx, "[NATSToolBridge] DAEMON_PENDING_COMMANDS stream not found, skipping drain",
 				"daemonID", daemonID)
 			return
 		}
-		logging.Warn("[NATSToolBridge] Failed to look up DAEMON_PENDING_COMMANDS stream",
+		logging.WarnContext(ctx, "[NATSToolBridge] Failed to look up DAEMON_PENDING_COMMANDS stream",
 			"daemonID", daemonID, "error", err)
 		return
 	}
@@ -1112,7 +1112,7 @@ func (b *NATSToolBridge) drainPendingCommands(ctx context.Context, userID, daemo
 	consumerName := "pending-drain-" + sanitizePendingSubjectToken(daemonID)
 	consumer, err := pendingDrainConsumer(ctx, stream, consumerName, subject)
 	if err != nil {
-		logging.Warn("[NATSToolBridge] Failed to create pending commands consumer",
+		logging.WarnContext(ctx, "[NATSToolBridge] Failed to create pending commands consumer",
 			"daemonID", daemonID, "consumer", consumerName, "error", err)
 		return
 	}
@@ -1139,7 +1139,7 @@ func (b *NATSToolBridge) drainPendingCommands(ctx context.Context, userID, daemo
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 				break
 			}
-			logging.Warn("[NATSToolBridge] Error fetching pending commands",
+			logging.WarnContext(ctx, "[NATSToolBridge] Error fetching pending commands",
 				"daemonID", daemonID, "error", err)
 			break
 		}
@@ -1159,7 +1159,7 @@ func (b *NATSToolBridge) drainPendingCommands(ctx context.Context, userID, daemo
 				UserID string `json:"user_id"`
 			}
 			if err := json.Unmarshal(msg.Data(), &envelope); err != nil {
-				logging.Warn("[NATSToolBridge] Failed to unmarshal pending command",
+				logging.WarnContext(ctx, "[NATSToolBridge] Failed to unmarshal pending command",
 					"daemonID", daemonID, "error", err)
 				_ = msg.Ack()
 				continue
@@ -1167,7 +1167,7 @@ func (b *NATSToolBridge) drainPendingCommands(ctx context.Context, userID, daemo
 
 			if !pendingEnvelopeOwnerMatches(envelope.UserID, userID) {
 				// envelopeUserID "" means the enqueuer never stamped an owner.
-				logging.Warn("[NATSToolBridge] Terminating pending command not queued for this connection's user",
+				logging.WarnContext(ctx, "[NATSToolBridge] Terminating pending command not queued for this connection's user",
 					"daemonID", daemonID, "connectionUserID", userID, "envelopeUserID", envelope.UserID,
 					"commandType", envelope.CommandType, "requestID", envelope.RequestID)
 				_ = msg.Term()
@@ -1222,13 +1222,13 @@ func (b *NATSToolBridge) drainPendingCommands(ctx context.Context, userID, daemo
 					numDelivered = md.NumDelivered
 				}
 				if numDelivered >= maxPendingCommandDeliveries {
-					logging.Error("[NATSToolBridge] Dropping pending command after max delivery attempts",
+					logging.ErrorContext(ctx, "[NATSToolBridge] Dropping pending command after max delivery attempts",
 						"daemonID", daemonID, "commandType", envelope.CommandType,
 						"requestID", envelope.RequestID, "numDelivered", numDelivered, "error", err)
 					_ = msg.Ack()
 					continue
 				}
-				logging.Warn("[NATSToolBridge] Failed to dispatch pending command; leaving un-acked for redelivery",
+				logging.WarnContext(ctx, "[NATSToolBridge] Failed to dispatch pending command; leaving un-acked for redelivery",
 					"daemonID", daemonID, "commandType", envelope.CommandType,
 					"requestID", envelope.RequestID, "numDelivered", numDelivered, "error", err)
 				_ = msg.NakWithDelay(pendingCommandRedeliveryDelay)
@@ -1248,7 +1248,7 @@ func (b *NATSToolBridge) drainPendingCommands(ctx context.Context, userID, daemo
 	}
 
 	if dispatched > 0 {
-		logging.Info("[NATSToolBridge] Drained pending commands",
+		logging.InfoContext(ctx, "[NATSToolBridge] Drained pending commands",
 			"daemonID", daemonID, "count", dispatched)
 	}
 }

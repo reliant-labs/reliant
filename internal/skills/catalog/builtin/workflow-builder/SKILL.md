@@ -715,6 +715,7 @@ condition: "nodes.check.exit_code == 0"
 | `enum` | Dropdown with predefined values |
 | `group` | Input group for organizing related inputs with preset matching |
 | `integer` | Whole number input with optional min/max |
+| `integration` | Value an integration defines, written type: <integration>.<type> (for example github.repository); multi makes it a list |
 | `message` | Primary user message/prompt input |
 | `model` | Model selector dropdown |
 | `number` | Decimal number input with optional min/max |

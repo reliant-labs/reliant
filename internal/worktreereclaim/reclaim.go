@@ -77,6 +77,7 @@ type Reclaimer struct {
 	cwdCache []string
 	cwdAt    time.Time
 	repairs  repairState
+	memo     *commitMemo
 }
 
 type cachedSize struct {
@@ -116,7 +117,12 @@ const netTTL = 10 * time.Minute
 // answer is kept for the same (branch, head). A "merged" answer can never
 // become false for the same head, so it is kept for good.
 func (r *Reclaimer) probe() mergeProbe {
-	p := mergeProbe{}
+	r.mu.Lock()
+	if r.memo == nil {
+		r.memo = &commitMemo{now: r.now}
+	}
+	p := mergeProbe{memo: r.memo}
+	r.mu.Unlock()
 	if r.PRMerged != nil {
 		p.prMerged = func(ctx context.Context, checkout, branch, head string) bool {
 			key := "pr\x00" + commonDirKey(ctx, checkout) + "\x00" + branch + "\x00" + head

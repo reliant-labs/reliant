@@ -49,7 +49,7 @@ func TestNewPicksExactlyOneStore(t *testing.T) {
 }
 
 // The control plane comes from the role config (ControlPlaneConfig), loaded
-// and trimmed by the entrypoint; cmd/reliant/commands
+// and trimmed by the entrypoint; cmd/reliant/cmd
 // TestControlPlaneEnvContract pins the variables.
 func TestDepsFor(t *testing.T) {
 	cfg := DepsFor(controlplane.Endpoint{URL: "http://admin-server:8090", InternalServiceSecret: "s"}, nil)

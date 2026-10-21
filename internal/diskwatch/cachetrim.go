@@ -241,11 +241,11 @@ func (w *Watcher) TrimCaches(ctx context.Context, urgent bool) TrimResult {
 func (w *Watcher) trimNativeCaches(ctx context.Context, urgent, measureMod bool, trigger string) (out []CacheTrimResult) {
 	defer func() {
 		if r := recover(); r != nil {
-			logging.Warn("[diskwatch] Cache trim panicked", "trigger", trigger, "panic", fmt.Sprint(r))
+			logging.WarnContext(ctx, "[diskwatch] Cache trim panicked", "trigger", trigger, "panic", fmt.Sprint(r))
 		}
 	}()
 	if w.systemEnv && testing.Testing() {
-		logging.Warn("[diskwatch] Refusing to trim this machine's real caches under go test (give the Watcher an Environment)")
+		logging.WarnContext(ctx, "[diskwatch] Refusing to trim this machine's real caches under go test (give the Watcher an Environment)")
 		return nil
 	}
 	cfg := w.cacheTrimConfig()

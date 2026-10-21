@@ -1,0 +1,5 @@
+type: integer
+minimum: 1
+title: Issue number
+description: The issue's number as shown after the # (a pull request's number works too).
+examples: [42]

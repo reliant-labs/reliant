@@ -211,6 +211,12 @@ func (d *Dispatcher) fire(ctx context.Context, trigger *core.Trigger, spec Spec,
 		return d.record(ctx, trigger, ev, chain, core.TriggerEventSkipped, reason)
 	}
 
+	// An activation that is not set up cannot launch (its run would fail its
+	// first input check), and its filter reads the params that are missing.
+	if issues := triggers.SetupIssues(spec.Declaration, trigger); len(issues) > 0 {
+		return d.record(ctx, trigger, ev, chain, core.TriggerEventSkipped, triggers.SetupDetail(issues))
+	}
+
 	next := chain.Extend(trigger.ID, ev.ChatID)
 	launchEv := d.buildEvent(trigger, ev, next)
 

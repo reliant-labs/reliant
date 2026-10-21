@@ -223,7 +223,7 @@ func (s *Service) SaveMessage(ctx context.Context, opts SaveMessageOpts) (*SaveM
 	} else {
 		contextUsage, err := s.repo.GetContextUsage(ctx, opts.ChatID, opts.Thread)
 		if err != nil {
-			slog.Warn("Failed to get context usage for token count", "error", err)
+			slog.WarnContext(ctx, "Failed to get context usage for token count", "error", err)
 		} else if contextUsage != nil {
 			threadTokenCount = int(contextUsage.ThreadTokenCount)
 			compactionThreshold = int(contextUsage.CompactionThreshold)
@@ -294,7 +294,7 @@ func (s *Service) SaveMessage(ctx context.Context, opts SaveMessageOpts) (*SaveM
 		WasExisting:      false,
 	}
 
-	slog.Debug("[SaveMessage] Created",
+	slog.DebugContext(ctx, "[SaveMessage] Created",
 		"messageID", result.MessageID,
 		"role", opts.Role,
 		"ordinal", result.Ordinal,
@@ -411,7 +411,7 @@ func (s *Service) checkExistingMessage(ctx context.Context, opts SaveMessageOpts
 	if existingMsg != nil {
 		// On first attempt, return existing message
 		if opts.AttemptNumber == 1 {
-			slog.Debug("SaveMessage: Found existing message from same attempt",
+			slog.DebugContext(ctx, "SaveMessage: Found existing message from same attempt",
 				"messageID", existingMsg.ID,
 				"attemptNumber", opts.AttemptNumber)
 
@@ -433,7 +433,7 @@ func (s *Service) checkExistingMessage(ctx context.Context, opts SaveMessageOpts
 		}
 
 		// On retry, delete incomplete message and recreate
-		slog.Warn("SaveMessage: Deleting incomplete message from failed attempt",
+		slog.WarnContext(ctx, "SaveMessage: Deleting incomplete message from failed attempt",
 			"messageID", existingMsg.ID,
 			"attemptNumber", opts.AttemptNumber)
 		if err := s.repo.DeleteMessage(ctx, existingMsg.ID); err != nil {
@@ -471,7 +471,7 @@ func (s *Service) checkExistingMessageByID(ctx context.Context, opts SaveMessage
 		return nil, nil
 	}
 
-	slog.Debug("SaveMessage: Converging on the row already written under this pre-allocated id",
+	slog.DebugContext(ctx, "SaveMessage: Converging on the row already written under this pre-allocated id",
 		"messageID", existing.ID,
 		"existingActivityID", ptr.From(existing.ActivityID),
 		"incomingActivityID", ptr.From(opts.ActivityID),
@@ -755,12 +755,12 @@ func (s *Service) buildToolAttachmentBlock(ctx context.Context, messageID, attac
 
 	att, err := s.repo.GetAttachment(ctx, attachmentID)
 	if err != nil {
-		slog.Warn("[SaveMessage] Failed to load tool result attachment; skipping its content block",
+		slog.WarnContext(ctx, "[SaveMessage] Failed to load tool result attachment; skipping its content block",
 			"error", err, "attachment_id", attachmentID, "message_id", messageID)
 		return db.MessageContentBlock{}, false
 	}
 	if att == nil {
-		slog.Warn("[SaveMessage] Tool result attachment not found; skipping its content block",
+		slog.WarnContext(ctx, "[SaveMessage] Tool result attachment not found; skipping its content block",
 			"attachment_id", attachmentID, "message_id", messageID)
 		return db.MessageContentBlock{}, false
 	}
@@ -769,7 +769,7 @@ func (s *Service) buildToolAttachmentBlock(ctx context.Context, messageID, attac
 	// block type only says "render this attachment", and the UI splits the two
 	// by MIME. Replay to the model drops it (see messageconv.ContentBlockToPart).
 	if att.AttachmentType != string(attachment.TypeImage) && att.AttachmentType != string(attachment.TypeVideo) {
-		slog.Warn("[SaveMessage] Tool result attachment is not an image or video; skipping its content block",
+		slog.WarnContext(ctx, "[SaveMessage] Tool result attachment is not an image or video; skipping its content block",
 			"attachment_id", attachmentID, "attachment_type", att.AttachmentType, "message_id", messageID)
 		return db.MessageContentBlock{}, false
 	}
@@ -830,7 +830,7 @@ func (s *Service) buildChatUpdateData(ctx context.Context, opts SaveMessageOpts,
 	// whole run.
 	toolCallsByID := make(map[string]*db.ToolCall)
 	if calls, err := s.repo.ListToolCallsByMessageIDs(ctx, []string{messageID}); err != nil {
-		slog.Warn("failed to load tool calls for chat_update", "error", err, "message_id", messageID)
+		slog.WarnContext(ctx, "failed to load tool calls for chat_update", "error", err, "message_id", messageID)
 	} else {
 		for _, call := range calls {
 			toolCallsByID[call.ID] = call
@@ -844,7 +844,7 @@ func (s *Service) buildChatUpdateData(ctx context.Context, opts SaveMessageOpts,
 	if len(attachmentIDs) > 0 {
 		attachmentsData, err := s.repo.GetAttachmentsByIDs(ctx, attachmentIDs)
 		if err != nil {
-			slog.Warn("Failed to fetch attachments for chat_update", "error", err)
+			slog.WarnContext(ctx, "Failed to fetch attachments for chat_update", "error", err)
 		} else {
 			attachmentMap := make(map[string]*db.Attachment)
 			for _, att := range attachmentsData {
@@ -860,7 +860,7 @@ func (s *Service) buildChatUpdateData(ctx context.Context, opts SaveMessageOpts,
 						"url":       fmt.Sprintf("/api/attachments/%s", att.ID),
 					})
 				} else {
-					slog.Warn("attachment not found in database, skipping",
+					slog.WarnContext(ctx, "attachment not found in database, skipping",
 						"attachment_id", attID,
 						"message_id", messageID,
 					)
@@ -900,7 +900,7 @@ func (s *Service) buildChatUpdateData(ctx context.Context, opts SaveMessageOpts,
 
 	updateDataJSON, err := json.Marshal(updateData)
 	if err != nil {
-		slog.Error("[SaveMessage] Failed to marshal chat_update data",
+		slog.ErrorContext(ctx, "[SaveMessage] Failed to marshal chat_update data",
 			"error", err,
 			"chat_id", opts.ChatID,
 			"message_id", messageID)

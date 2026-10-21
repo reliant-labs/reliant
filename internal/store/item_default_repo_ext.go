@@ -35,6 +35,50 @@
 //	}
 package store
 
+import (
+	"context"
+	"database/sql"
+
+	"github.com/reliant-labs/forge/pkg/orm"
+
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/db/core"
+)
+
+// GetItemDefault returns the system default visibility of a builtin workflow
+// or preset, or sql.ErrNoRows when it has none.
+func GetItemDefault(ctx context.Context, db orm.Context, itemType int32, slug string) (*core.ItemDefault, error) {
+	rows, err := ListItemDefault(ctx, db,
+		orm.WhereEq(ItemDefaultFieldItemType, reliantv1.HiddenItemType(itemType)),
+		orm.WhereEq(ItemDefaultFieldSlug, slug),
+		orm.WithLimit(1))
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 {
+		return nil, sql.ErrNoRows
+	}
+	row := rows[0]
+	return &core.ItemDefault{ItemType: itemType, Slug: slug, IsHidden: row.IsHidden, Reason: row.Reason}, nil
+}
+
+// ListHiddenItemDefaults returns the slugs of the items of itemType hidden by
+// default, in order.
+func ListHiddenItemDefaults(ctx context.Context, db orm.Context, itemType int32) ([]string, error) {
+	rows, err := ListItemDefault(ctx, db,
+		orm.WhereEq(ItemDefaultFieldItemType, reliantv1.HiddenItemType(itemType)),
+		orm.WhereEq(ItemDefaultFieldIsHidden, true),
+		orm.WithOrderBy(ItemDefaultFieldSlug, orm.Asc))
+	if err != nil {
+		return nil, err
+	}
+	slugs := make([]string, len(rows))
+	for i, row := range rows {
+		slugs[i] = row.Slug
+	}
+	return slugs, nil
+}
+
 // ItemDefaultExtra carries fields on ItemDefault that are NOT columns — computed
 // values, transient state, anything derived rather than stored. ItemDefault is
 // embedded on ItemDefaultExtra (see item_default_orm.go), so a field added here is a field on

@@ -183,6 +183,7 @@ function renderAt(initialEntry: string) {
     layout: ForgeLayout,
     console: ConsoleLayout,
     overview: probe("overview"),
+    workload: probe("workload"),
     releases: probe("releases"),
     release: probe("release"),
     observability: probe("observability"),

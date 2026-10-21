@@ -26,7 +26,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { Code, ConnectError } from "@connectrpc/connect";
-import { AlertTriangle, CalendarX, CheckCircle2, ChevronDown, HardDrive, HelpCircle, MonitorPause, Shield, X } from "lucide-react";
+import { AlertTriangle, CalendarX, CheckCircle2, ChevronDown, HardDrive, HelpCircle, MonitorPause, Settings2, Shield, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { api } from "@/api/client";
@@ -34,7 +34,9 @@ import { InboxItemKind, type InboxItem as InboxItemData, type InboxStorage as In
 import { answerQuestion } from "@/hooks/approval-queries";
 import { inboxKeys, removeInboxItems } from "@/hooks/inbox-queries";
 import { useResumeDaemon } from "@/hooks/useOnboardingQueries";
-import { useSetTriggerEnabled } from "@/hooks/trigger-queries";
+import { useSetTriggerEnabled, useTriggerById } from "@/hooks/trigger-queries";
+import { automationHref, workflowPageHref } from "@/lib/workflowsArea";
+import { SetupDialogFor } from "../Automations/SetupDialogFor";
 import { useGoToBilling } from "@/hooks/useGoToBilling";
 import { isQuotaResumeError, resumeErrorMessage } from "@/lib/daemon-resume";
 import { formatAbsoluteTime, formatRelativeTime } from "@/lib/relativeTime";
@@ -210,6 +212,8 @@ function KindIcon({ kind }: { kind: InboxItemKind }) {
       return <AlertTriangle className={cn(className, "text-destructive-ink")} aria-label="Automation failing" />;
     case InboxItemKind.AUTOMATION_LAUNCH_FAILED:
       return <CalendarX className={cn(className, "text-destructive")} aria-label="Automation could not start" />;
+    case InboxItemKind.AUTOMATION_NEEDS_SETUP:
+      return <Settings2 className={cn(className, "text-warning-ink")} aria-label="Automation needs setup" />;
     case InboxItemKind.RUN_FINISHED:
       return <CheckCircle2 className={cn(className, "text-success-ink")} aria-label="Run finished" />;
     case InboxItemKind.STORAGE:
@@ -243,14 +247,50 @@ function SubjectLink({ item }: { item: InboxItemData }) {
       </Link>
     );
   }
-  if (item.triggerId) {
+  if (item.triggerId) return <AutomationSubjectLink triggerId={item.triggerId} name={name} />;
+  return <span className={subjectClass}>{name}</span>;
+}
+
+/**
+ * An automation item names the automation: a workflow automation opens on its
+ * workflow's page, scrolled to it (where it is configured); a custom one on
+ * its own page. The trigger is read from the list cache to know which.
+ */
+function AutomationSubjectLink({ triggerId, name }: { triggerId: string; name: string }) {
+  const trigger = useTriggerById(triggerId);
+  if (trigger?.workflowTrigger) {
     return (
-      <Link to="/workflows/automations/$triggerId" params={{ triggerId: item.triggerId }} className={subjectClass} title={name}>
+      <a href={automationHref(trigger)} className={subjectClass} title={name}>
         {name}
-      </Link>
+      </a>
     );
   }
-  return <span className={subjectClass}>{name}</span>;
+  return (
+    <Link to="/workflows/automations/$triggerId" params={{ triggerId }} className={subjectClass} title={name}>
+      {name}
+    </Link>
+  );
+}
+
+/** "Open settings" for a workflow automation that can't start; its own page for a custom one. */
+function LaunchFailedAction({ triggerId }: { triggerId: string }) {
+  const trigger = useTriggerById(triggerId);
+  const [open, setOpen] = useState(false);
+  if (trigger?.workflowTrigger) {
+    return (
+      <>
+        <button type="button" className={actionButtonClass} onClick={() => setOpen(true)}>
+          Open settings
+        </button>
+        {open && <SetupDialogFor workflowRef={trigger.workflow} projectId={trigger.projectId} mode="settings" onClose={() => setOpen(false)} />}
+      </>
+    );
+  }
+  return (
+    <Link to="/workflows/automations/$triggerId" params={{ triggerId }} className={actionButtonClass}>
+      Edit automation
+    </Link>
+  );
 }
 
 /** The one-line detail after the name, and its full text for the tooltip. */
@@ -277,6 +317,10 @@ function rowDetail(item: InboxItemData): { node: ReactNode; title: string } | nu
     }
     case "storage": {
       const text = storageDetail(payload.value);
+      return text ? { node: text, title: text } : null;
+    }
+    case "automationNeedsSetup": {
+      const text = payload.value.issues.map((issue) => sentenceCase(issue.message)).join(" · ");
       return text ? { node: text, title: text } : null;
     }
     case "automationLaunchFailed": {
@@ -358,10 +402,14 @@ function InlineAction({ item, expanded, onToggle, onRaceOrError }: InlineActionP
     case "automationFailing":
       return <FailingAutomationAction triggerId={item.triggerId} lastRunChatId={payload.value.lastRunChatId} />;
     case "automationLaunchFailed":
+      return <LaunchFailedAction triggerId={item.triggerId} />;
+    case "automationNeedsSetup":
+      // The workflow page's automation is where "Finish setup" renders; the
+      // item carries everything the link needs, so it needs no list lookup.
       return (
-        <Link to="/workflows/automations/$triggerId" params={{ triggerId: item.triggerId }} className={actionButtonClass}>
-          Edit automation
-        </Link>
+        <a href={workflowPageHref(item.workflowName, item.projectId, { automation: true })} className={actionButtonClass}>
+          Finish setup
+        </a>
       );
     case "storage":
       return (

@@ -10,7 +10,7 @@
  * on screen. The tabs now follow what a reader asks (envTabs.ts), and the
  * boundary is held per tab instead:
  *
- *   Overview · Observability · Identity
+ *   Overview · Identity
  *   Releases · Activity
  *   Secrets · Domains               the control plane only (design §8.0,
  *                                   O-14). Render with the daemon asleep.
@@ -63,9 +63,7 @@ import { environments } from "@/services/forge/topology";
 import { useProjectStore } from "@/store/projectStore";
 
 import { DeployDialog } from "../Deploy/DeployDialog";
-import { OBS_SEARCH_KEYS, type ObsNavigate, type ObsSearch } from "../Observability/obsSearch";
 import { useForgeConsole } from "../Console/consoleContext";
-import { pageOfObsView } from "../Console/paths";
 import { PromoteDialog } from "../Promote/PromoteDialog";
 import { CloudNotice } from "../SourceNotices";
 import { EnvLifecycleControls } from "./EnvLifecycleControls";
@@ -76,7 +74,6 @@ import { QueuedDeployBanner } from "./QueuedDeployBanner";
 import {
   ActivityTab,
   DomainsTab,
-  ObservabilityTab,
   OverviewTab,
   ReleasesTab,
   RunningTab,
@@ -87,12 +84,7 @@ import { resolveTab, tabNeedsDaemon, tabParam, tabsFor, type EnvTab } from "./en
 export function ForgeEnvPage() {
   const navigate = useNavigate();
   const { env: envName } = useParams({ from: "/_authenticated/_forge/forge/p/$project/environments/$env" });
-  const {
-    secret: secretParam,
-    tab: tabSearch,
-    env: _scope,
-    ...obsSearch
-  } = useSearch({ from: "/_authenticated/_forge/forge/p/$project/environments/$env" });
+  const { secret: secretParam, tab: tabSearch } = useSearch({ from: "/_authenticated/_forge/forge/p/$project/environments/$env" });
   // The console says which project this is (consoleContext.ts): the forge
   // project the URL names, and the Reliant project that declares it — null
   // when none here does, and then there is no daemon to ask.
@@ -191,38 +183,10 @@ export function ForgeEnvPage() {
       setClicked({ tab: next, fromUrl: tabSearch });
       void navigate({
         to: ".",
-        search: (prev: Record<string, unknown>) => {
-          const kept: Record<string, unknown> = { ...prev, tab: tabParam(next, lifecycle) };
-          if (next !== "observability") for (const key of OBS_SEARCH_KEYS) delete kept[key];
-          return kept;
-        },
+        search: (prev: Record<string, unknown>) => ({ ...prev, tab: tabParam(next, lifecycle) }),
       });
     },
     [navigate, lifecycle, tabSearch]
-  );
-
-  // The Observability tab's own URL keys (obsSearch.ts), merged over the rest.
-  // Filter changes replace the entry; opening a trace or switching view pushes
-  // one, so Back returns to the list the reader came from.
-  const navigateObs = useCallback<ObsNavigate>(
-    (next, options) => {
-      void navigate({
-        to: ".",
-        search: (prev: Record<string, unknown>) => ({ ...prev, ...next }),
-        replace: options?.replace,
-      });
-    },
-    [navigate]
-  );
-
-  // "Compare across environments": the same view in the project's area, this
-  // environment selected to start with.
-  const openObservabilityArea = useCallback(
-    (search: ObsSearch) => {
-      const { view, envs: _envs, ...rest } = search;
-      void navigate({ href: href(pageOfObsView(view), { ...rest, env: envName }) });
-    },
-    [navigate, href, envName]
   );
 
   const openDomainsScreen = useCallback(() => {
@@ -372,9 +336,6 @@ export function ForgeEnvPage() {
             envName={envName}
             live={liveEnv}
             liveLoading={live.isLoading}
-            status={cloudStatus.data}
-            statusLoading={cloudStatus.isLoading}
-            statusError={cloudStatus.error as Error | null}
             forgeEnv={forgeEnv}
             daemon={daemon}
             projectId={projectId}
@@ -383,15 +344,7 @@ export function ForgeEnvPage() {
             domainsLoading={domains.isLoading}
             onOpenDomains={() => selectTab("domains")}
             onManageDomains={openDomainsScreen}
-          />
-        ) : tab === "observability" ? (
-          <ObservabilityTab
-            envName={envName}
-            live={liveEnv}
-            liveLoading={live.isLoading}
-            search={obsSearch}
-            navigate={navigateObs}
-            onWiden={openObservabilityArea}
+            workloadsHref={href({ kind: "overview" }, { env: envName })}
           />
         ) : tab === "identity" ? (
           <IdentityTab

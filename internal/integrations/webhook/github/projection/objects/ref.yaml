@@ -1,0 +1,4 @@
+fields:
+  ref: string
+  sha: string
+  label: string

@@ -21,16 +21,25 @@ service UserService {
     option (forge.v1.method) = {auth_required: true};
   }
   rpc UpdateProfile(UpdateProfileRequest) returns (UpdateProfileResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "personal account and billing self-service, not org activity; audit_log records it"}
+    };
   }
   rpc CompleteOnboarding(CompleteOnboardingRequest) returns (CompleteOnboardingResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "personal account and billing self-service, not org activity; audit_log records it"}
+    };
   }
 
   // PreviewAccountDeletion reports whether the caller's control-plane account
   // can be deleted, and what they must resolve first if not. Changes nothing.
   rpc PreviewAccountDeletion(PreviewAccountDeletionRequest) returns (PreviewAccountDeletionResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "personal account and billing self-service, not org activity; audit_log records it"}
+    };
   }
 
   // DeleteCurrentUserAccount tombstones the caller's control-plane account:
@@ -52,7 +61,10 @@ service UserService {
   // nothing else was deleted, and retrying is safe (it replays the same
   // refund rather than issuing another).
   rpc DeleteCurrentUserAccount(DeleteCurrentUserAccountRequest) returns (DeleteCurrentUserAccountResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "personal account and billing self-service, not org activity; audit_log records it"}
+    };
   }
 }
 

@@ -1,0 +1,5 @@
+type: string
+pattern: "^[A-Za-z0-9][A-Za-z0-9-]{0,38}$"
+title: Repository owner
+description: The user or organization that owns the repository, the first part of owner/repo.
+examples: ["octocat"]

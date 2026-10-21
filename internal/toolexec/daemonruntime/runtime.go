@@ -241,7 +241,7 @@ func Start(ctx context.Context, opts StartOptions) error {
 	}
 	defer func() {
 		if releaseErr := lock.Release(); releaseErr != nil {
-			logging.Warn(logPrefix+" Failed to release daemon data dir claim", "error", releaseErr)
+			logging.WarnContext(ctx, logPrefix+" Failed to release daemon data dir claim", "error", releaseErr)
 		}
 	}()
 
@@ -275,11 +275,11 @@ func Start(ctx context.Context, opts StartOptions) error {
 		ServerMode: opts.BootstrapConfig.ServerMode,
 		Managed:    opts.Host.Managed(),
 	}); stateErr != nil {
-		logging.Warn(logPrefix+" Failed to write daemon runtime state", "error", stateErr)
+		logging.WarnContext(ctx, logPrefix+" Failed to write daemon runtime state", "error", stateErr)
 	}
 	defer func() {
 		if clearErr := daemonstate.Clear(opts.BootstrapConfig.DataDir); clearErr != nil {
-			logging.Warn(logPrefix+" Failed to clear daemon runtime state", "error", clearErr)
+			logging.WarnContext(ctx, logPrefix+" Failed to clear daemon runtime state", "error", clearErr)
 		}
 	}()
 
@@ -333,9 +333,9 @@ func Start(ctx context.Context, opts StartOptions) error {
 		forwarder := NewPreviewForwarder(rpcPort)
 		previewPort := previewListenPort(opts.Host.FrontendPort)
 		if err := forwarder.Start(fmt.Sprintf(":%d", previewPort)); err != nil {
-			logging.Warn(logPrefix+" preview forwarder failed to start (previews of loopback-bound servers will 502)", "error", err)
+			logging.WarnContext(ctx, logPrefix+" preview forwarder failed to start (previews of loopback-bound servers will 502)", "error", err)
 		} else {
-			logging.Info(logPrefix+" preview forwarder started", "addr", forwarder.Addr().String())
+			logging.InfoContext(ctx, logPrefix+" preview forwarder started", "addr", forwarder.Addr().String())
 			go func() {
 				<-ctx.Done()
 				shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -354,7 +354,7 @@ func Start(ctx context.Context, opts StartOptions) error {
 	}
 
 	if opts.BootstrapConfig.ServerMode {
-		logging.Info(logPrefix+" Starting in server mode (listening for gateway)",
+		logging.InfoContext(ctx, logPrefix+" Starting in server mode (listening for gateway)",
 			"daemonID", client.daemonID,
 			"userID", client.userID,
 			"cwd", client.cwd,
@@ -370,7 +370,7 @@ func Start(ctx context.Context, opts StartOptions) error {
 		return nil
 	}
 
-	logging.Info(logPrefix+" Starting in-process tools daemon runtime",
+	logging.InfoContext(ctx, logPrefix+" Starting in-process tools daemon runtime",
 		"daemonID", client.daemonID,
 		"userID", client.userID,
 		"cwd", client.cwd,
@@ -806,7 +806,7 @@ func (d *daemonClient) run(ctx context.Context) error {
 			}
 			if isFatalError(err) {
 				d.recordStreamStopped(err.Error())
-				logging.Error(logPrefix+" Fatal error — not reconnecting",
+				logging.ErrorContext(ctx, logPrefix+" Fatal error — not reconnecting",
 					"error", err,
 					"code", connect.CodeOf(err).String(),
 					"grpc_url", d.bootCfg.GRPCURL,
@@ -862,7 +862,7 @@ func (d *daemonClient) run(ctx context.Context) error {
 				rej := d.rejections.rejected()
 				switch {
 				case rej.first:
-					logging.Error(logPrefix+" Rejected: credentials not accepted — retrying. "+
+					logging.ErrorContext(ctx, logPrefix+" Rejected: credentials not accepted — retrying. "+
 						"Causes, in order of likelihood: the daemon's PAT is stale and the "+
 						"supervisor has not re-minted it yet; the gateway is validating against a "+
 						"DIFFERENT database than the one the PAT was minted into (compare the "+
@@ -874,7 +874,7 @@ func (d *daemonClient) run(ctx context.Context) error {
 						"grpc_url", d.bootCfg.GRPCURL,
 					)
 				case rej.emit:
-					logging.Error(logPrefix+" Credentials still not accepted",
+					logging.ErrorContext(ctx, logPrefix+" Credentials still not accepted",
 						"error", err,
 						"code", connect.CodeOf(err).String(),
 						"rejections", rej.total,
@@ -882,7 +882,7 @@ func (d *daemonClient) run(ctx context.Context) error {
 						"grpc_url", d.bootCfg.GRPCURL,
 					)
 				default:
-					logging.Debug(logPrefix+" Credentials not accepted; retrying",
+					logging.DebugContext(ctx, logPrefix+" Credentials not accepted; retrying",
 						"rejections", rej.total, "delay", delay)
 				}
 			} else {
@@ -898,9 +898,9 @@ func (d *daemonClient) run(ctx context.Context) error {
 					"grpc_url", d.bootCfg.GRPCURL,
 				)
 				if dec.emit {
-					logging.Log(dec.level, logPrefix+" Session ended; reconnecting", attrs...)
+					logging.LogContext(ctx, dec.level, logPrefix+" Session ended; reconnecting", attrs...)
 				} else {
-					logging.Debug(logPrefix+" Session ended; reconnecting", attrs...)
+					logging.DebugContext(ctx, logPrefix+" Session ended; reconnecting", attrs...)
 				}
 			}
 		}
@@ -930,7 +930,7 @@ func (d *daemonClient) run(ctx context.Context) error {
 func (d *daemonClient) runSession(ctx context.Context) error {
 	baseURL := d.gatewayURL
 
-	logging.Info(logPrefix+" Connecting to gateway", "url", baseURL)
+	logging.InfoContext(ctx, logPrefix+" Connecting to gateway", "url", baseURL)
 
 	stream := d.gatewayClient.ConnectDaemon(ctx)
 
@@ -1029,7 +1029,7 @@ func (d *daemonClient) runSession(ctx context.Context) error {
 			case now := <-ticker.C:
 				if err := liveness.check(now); err != nil {
 					deadStream.Store(&err)
-					logging.Warn(logPrefix+" Gateway stream is dead; ending the session to reconnect", "reason", err.Error())
+					logging.WarnContext(ctx, logPrefix+" Gateway stream is dead; ending the session to reconnect", "reason", err.Error())
 					// Same close the cancellation path uses: it unparks the
 					// Receive below without touching the send half.
 					_ = stream.CloseResponse()
@@ -1064,7 +1064,7 @@ func (d *daemonClient) runSession(ctx context.Context) error {
 	go func() {
 		defer end()
 		if err := d.receiveSession(ctx, s, stream, liveness, &deadStream); err != nil && ctx.Err() == nil {
-			logging.Debug(logPrefix+" Drained gateway stream ended", "error", err)
+			logging.DebugContext(ctx, logPrefix+" Drained gateway stream ended", "error", err)
 		}
 	}()
 	return err
@@ -1114,7 +1114,7 @@ func (d *daemonClient) receiveSession(
 			continue
 		}
 		if err := d.handleServerMessage(ctx, s, msg); err != nil {
-			logging.Warn(logPrefix+" Failed handling server message", "error", err)
+			logging.WarnContext(ctx, logPrefix+" Failed handling server message", "error", err)
 		}
 	}
 }
@@ -1178,7 +1178,7 @@ func (d *daemonClient) handleServerMessage(ctx context.Context, s *gatewaySessio
 			d.recordStream(daemonstate.StreamConnected, "")
 			d.rejections.reset()
 			if failures, outage := d.reconnects.recovered(); failures > 0 {
-				logging.Info(logPrefix+" Gateway stream recovered",
+				logging.InfoContext(ctx, logPrefix+" Gateway stream recovered",
 					"failed_attempts", failures, "disconnected_for_ms", outage.Milliseconds())
 			}
 			d.localModelMgr().signalRegistered()
@@ -1194,7 +1194,7 @@ func (d *daemonClient) handleServerMessage(ctx context.Context, s *gatewaySessio
 				// (e.g. exec.bg_list) can stamp ProcessInfo.DaemonID for preview URLs.
 				SetDaemonIdentity(id)
 				logging.SetDaemonID(id)
-				logging.Info(logPrefix+" Daemon identity assigned by gateway", "daemonID", id)
+				logging.InfoContext(ctx, logPrefix+" Daemon identity assigned by gateway", "daemonID", id)
 				// Persist the assigned id per-origin so it survives restarts and
 				// hostname changes; next reconnect re-asserts it in Register.
 				d.persistDaemonID(m.RegistrationAck.DaemonId)
@@ -1228,7 +1228,7 @@ func (d *daemonClient) handleServerMessage(ctx context.Context, s *gatewaySessio
 							return // session over; the next ack asks again
 						}
 						if err := d.sendLoadProjectConfigResponse(projectPath, uuid.New().String()); err != nil {
-							logging.Warn(logPrefix+" Failed responding to registration requested project load", "projectPath", projectPath, "error", err)
+							logging.WarnContext(ctx, logPrefix+" Failed responding to registration requested project load", "projectPath", projectPath, "error", err)
 						}
 					}
 				}(requested)
@@ -2188,7 +2188,7 @@ func (d *daemonClient) runProjectWatcher(ctx context.Context, projectPath string
 		snapshot, err := d.projectSnapshot(projectPath)
 		if err != nil || snapshot == nil {
 			if err != nil {
-				logging.Warn(logPrefix+" Failed to build project snapshot for watcher", "projectPath", projectPath, "error", err)
+				logging.WarnContext(ctx, logPrefix+" Failed to build project snapshot for watcher", "projectPath", projectPath, "error", err)
 			}
 			return
 		}
@@ -2790,7 +2790,7 @@ func (d *daemonClient) ensureMCPServersLoadedForRequest(ctx context.Context, req
 		return projectPath
 	}
 
-	logging.Warn(logPrefix+" MCP server autoload completed with failures",
+	logging.WarnContext(ctx, logPrefix+" MCP server autoload completed with failures",
 		"projectPath", projectPath,
 		"failedServers", loadResult.FailedServers,
 	)

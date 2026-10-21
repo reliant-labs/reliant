@@ -4,7 +4,7 @@ import { Cpu } from "lucide-react";
 
 import { Button } from "../ui";
 import type { ComputeCapacity } from "../billingUtils";
-import { formatMachineMinutesShort } from "@/lib/formatMachineMinutes";
+import { formatMachineSecondsShort } from "@/lib/formatMachineMinutes";
 import { cn } from "@/lib/utils";
 
 /**
@@ -71,7 +71,8 @@ export interface ComputeBandProps {
   /** What tiers/sizes this plan may run — a PLAN fact, not a per-dimension one. */
   allowedSizesLabel: string | null;
   dimensions: ComputeBandDimension[];
-  grantedMinutesRemaining: number;
+  /** Unspent coupon grant balance, in small-daemon-seconds. */
+  grantedSmallDaemonSecondsRemaining: number;
   /** The plan row arrived without its detail — see isPlanDetailUnavailable. */
   planDetailUnavailable: boolean;
   usageUnavailable: boolean;
@@ -86,7 +87,7 @@ export function ComputeBand({
   renewsOnLabel,
   allowedSizesLabel,
   dimensions,
-  grantedMinutesRemaining,
+  grantedSmallDaemonSecondsRemaining,
   planDetailUnavailable,
   usageUnavailable,
   onChangePlan,
@@ -245,7 +246,7 @@ export function ComputeBand({
             time you HAVE, and someone who redeemed a code before subscribing
             has some with no plan at all. Nesting it under the plan hid it from
             exactly the user most likely to be looking for it. */}
-        {grantedMinutesRemaining > 0 && (
+        {grantedSmallDaemonSecondsRemaining >= 60 && (
           <div className="flex flex-col gap-1 rounded-md border border-border/60 bg-background px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="font-medium text-foreground">Coupon hours</p>
@@ -255,7 +256,7 @@ export function ComputeBand({
               </p>
             </div>
             <span className="font-medium text-foreground">
-              {formatMachineMinutesShort(grantedMinutesRemaining)}
+              {formatMachineSecondsShort(grantedSmallDaemonSecondsRemaining)}
             </span>
           </div>
         )}
@@ -315,24 +316,14 @@ function CapacityBar({
   includedHoursLabel: string | null;
   estimatedOverageCostLabel: string | null;
 }) {
-  if (capacity.state === "unlimited") {
-    return (
-      <p className="text-sm text-muted-foreground">
-        <span className="font-medium text-foreground">{usedHoursLabel}</span>{" "}
-        used · unlimited hours included
-      </p>
-    );
-  }
-
   return (
     <div>
       <div className="flex flex-col gap-1 text-sm sm:flex-row sm:items-baseline sm:justify-between">
         <span className="font-medium text-foreground">
           {usedHoursLabel} used
         </span>
-        <span className="text-muted-foreground">
-          {includedHoursLabel} included
-        </span>
+        {/* The label carries its own noun ("41.0 h included"). */}
+        <span className="text-muted-foreground">{includedHoursLabel}</span>
       </div>
 
       <div className="mt-2 flex items-center gap-1">

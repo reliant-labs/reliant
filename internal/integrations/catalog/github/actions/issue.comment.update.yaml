@@ -1,0 +1,51 @@
+# yaml-language-server: $schema=../../../manifest/schema/action.schema.json
+id: issue.comment.update
+display_name: Edit issue or pull request comment
+summary: Replace the text of an existing comment on an issue or a pull request's conversation.
+description: >-
+  Edit a comment by id. body REPLACES the whole text, so read the current
+  one first (issue.comment.list) to change part of it. The id is what
+  issue.comment, issue.comment.list or an issue_comment.created event
+  gives; pull request conversation comments are issue comments too.
+  Inline diff comments (on a line of the diff) are a different resource
+  and cannot be edited here. The connection's account can edit only
+  comments it may edit on GitHub. Returns the comment's id, node id and
+  URL.
+keywords: [comment, edit, update, change, rewrite, status comment, issue, pull request]
+placement: server
+mutates: true
+tool:
+  expose: true
+params:
+  type: object
+  additionalProperties: false
+  required: [owner, repo, comment_id, body]
+  properties:
+    owner: { $ref: ../schemas/owner.yaml }
+    repo: { $ref: ../schemas/repo.yaml }
+    comment_id: { $ref: ../schemas/comment_id.yaml }
+    body:
+      type: string
+      minLength: 1
+      title: New text
+      description: The comment's new text, in GitHub-flavored markdown. It replaces the current text.
+      examples: ["Status: fix is up in #57."]
+    connection: { $ref: ../schemas/connection.yaml }
+request:
+  method: PATCH
+  path: /repos/{{ params.owner }}/{{ params.repo }}/issues/comments/{{ params.comment_id }}
+  body_expr: '{"body": params.body}'
+  errors: { $ref: ../schemas/github_errors.yaml }
+output:
+  select: >-
+    {"id": response.id,
+     "node_id": response.?node_id.orValue(null),
+     "html_url": response.html_url,
+     "updated_at": response.?updated_at.orValue(null)}
+  schema:
+    type: object
+    properties:
+      id: { type: integer }
+      node_id: { type: [string, "null"] }
+      html_url: { type: string }
+      updated_at: { type: [string, "null"] }

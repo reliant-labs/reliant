@@ -4,8 +4,10 @@ package triggers
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -84,8 +86,8 @@ func (r *Reconciler) ReconcileAll(ctx context.Context) (ReconcileReport, error) 
 			errs = append(errs, fmt.Errorf("trigger %s: %w", t.ID, err))
 			continue
 		}
-		p := decl.Projection()
-		if bytes.Equal(p.Config, t.Config) && p.Filter == t.Filter {
+		p := decl.Projection(t.Params)
+		if sameConfig(p.Config, t.Config) && p.Filter == t.Filter {
 			continue
 		}
 		if err := r.store.SetTriggerProjection(ctx, t.ID, p); err != nil {
@@ -96,13 +98,27 @@ func (r *Reconciler) ReconcileAll(ctx context.Context) (ReconcileReport, error) 
 			continue
 		}
 		report.Updated++
-		if r.syncer != nil && syncs(t.Kind) && !bytes.Equal(p.Config, t.Config) {
+		if r.syncer != nil && syncs(t.Kind) && !sameConfig(p.Config, t.Config) {
 			if err := r.syncer.Sync(ctx, t.ID); err != nil {
 				errs = append(errs, fmt.Errorf("trigger %s: reconverge schedule: %w", t.ID, err))
 			}
 		}
 	}
 	return report, errors.Join(errs...)
+}
+
+// sameConfig reports whether two stored configs say the same thing. A config
+// read back from jsonb is normalized (key order, spacing), so the bytes of one
+// just written rarely equal the bytes it was written from.
+func sameConfig(a, b json.RawMessage) bool {
+	if bytes.Equal(a, b) {
+		return true
+	}
+	var x, y any
+	if json.Unmarshal(a, &x) != nil || json.Unmarshal(b, &y) != nil {
+		return false
+	}
+	return reflect.DeepEqual(x, y)
 }
 
 // Run sweeps every ReconcileInterval until ctx ends, starting immediately.

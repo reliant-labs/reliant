@@ -4,27 +4,27 @@
  * The bodies of an environment page's tabs. See envTabs.ts for which
  * environment gets which, and which tabs read the daemon.
  *
- * Every panel is built from existing pieces — LiveState, LiveWorkloads,
- * LiveReleases, LiveSecretsSection, DevStackPanel, RegisterEnvPanel —
+ * Every panel is built from existing pieces — LiveState, LiveReleases,
+ * LiveSecretsSection, DevStackPanel, RegisterEnvPanel —
  * re-grouped by the question they
  * answer. Sections are forge-ui Cards with a CardHeader, rather than three
  * hand-rolled copies of the same heading-and-rule.
  */
 
-import { lazy, Suspense, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Play, RefreshCw } from "lucide-react";
 
 import Card, { CardHeader } from "@/components/forge-ui/card";
+import Link from "@/components/forge-ui/link";
 import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
 import { Button } from "@/components/ui/Button";
 import type { DomainsState } from "@/hooks/forge-domain-queries";
 import { isForgeAPIDisabled } from "@/lib/forgeApiDisabled";
-import type { CloudEnvStatus, CloudPromotion } from "@/services/forge/cloudEnvs";
+import type { CloudPromotion } from "@/services/forge/cloudEnvs";
 import { declaredNotBuilt, isPlacedKind, neverBuilt, type LiveConvergence, type LiveEnv } from "@/services/forge/live";
 import { devStackRunsHere, type DaemonSide } from "@/services/forge/environments";
 import type { ForgeEnvStatusReport } from "@/services/forge/status";
 import type { ForgeOutcome, ForgeTopologyEnv } from "@/services/forge/topology";
-import { isChunkLoadError, staleChunkModule } from "@/lib/lazyRoute";
 
 import { formatTimestamp } from "../Overview/EnvironmentTable";
 import { RegisterEnvPanel } from "../Preview/RegisterEnvPanel";
@@ -35,19 +35,6 @@ import { LiveActivity } from "./LiveActivity";
 import { LiveReleases } from "./LiveReleases";
 import { LiveSecretsSection } from "./LiveSecretsSection";
 import { LiveState } from "./LiveState";
-import { LiveWorkloads } from "./LiveWorkloads";
-import type { ObsNavigate, ObsSearch } from "../Observability/obsSearch";
-
-// The whole Observability area — uPlot, TanStack Table, the waterfall, every
-// view — is its own chunk, fetched the first time the tab opens. A chunk gone
-// after a deploy resolves to lazyRoute's reload-once screen, never a reload
-// from inside render.
-const ObservabilityPanel = lazy(() =>
-  import("../Observability/ObservabilityPanel").catch((error: unknown) => {
-    if (!isChunkLoadError(error)) throw error;
-    return staleChunkModule(error, "default") as unknown as typeof import("../Observability/ObservabilityPanel");
-  })
-);
 
 /** A titled section. */
 export function Panel({
@@ -86,56 +73,12 @@ function PanelSkeleton({ testId, rows = 3 }: { testId: string; rows?: number }) 
   );
 }
 
-// ── Observability (control plane) ───────────────────────────────────────────
-
-export function ObservabilityTab({
-  envName,
-  live,
-  liveLoading,
-  search,
-  navigate,
-  onWiden,
-}: {
-  envName: string;
-  live: LiveEnv | null;
-  liveLoading: boolean;
-  search: ObsSearch;
-  navigate: ObsNavigate;
-  /** The project's Observability area, carrying this view: the env tab is a pre-filtered deep link into it. */
-  onWiden?: (search: ObsSearch) => void;
-}) {
-  if (liveLoading && !live) return <PanelSkeleton testId="obs-tab-loading" rows={4} />;
-  // Telemetry is filed under the control plane's environment id (the env_id
-  // its telemetry token carries), so an environment it has no record of has
-  // nothing filed under it yet.
-  if (!live) {
-    return (
-      <p
-        data-testid="obs-unregistered"
-        className="rounded-lg border border-dashed border-border bg-background px-4 py-5 text-sm text-muted-foreground"
-      >
-        Reliant has no record of <span className="font-mono text-foreground">{envName}</span>, so no telemetry is
-        filed under it. Register it from the Overview tab; once it is deployed through Reliant, its logs, traces and
-        metrics appear here.
-      </p>
-    );
-  }
-  return (
-    <Suspense fallback={<PanelSkeleton testId="obs-tab-loading" rows={4} />}>
-      <ObservabilityPanel place={{ kind: "env", env: { id: live.id, name: envName, declared: live.declaredShape }, onWiden }} search={search} navigate={navigate} />
-    </Suspense>
-  );
-}
-
 // ── Overview (deployed env) ─────────────────────────────────────────────────
 
 export interface OverviewTabProps {
   envName: string;
   live: LiveEnv | null;
   liveLoading: boolean;
-  status: CloudEnvStatus | undefined;
-  statusLoading: boolean;
-  statusError: Error | null;
   /** forge's own ledger row for this env, when the daemon answered. */
   forgeEnv: ForgeTopologyEnv | null;
   daemon: DaemonSide;
@@ -146,6 +89,8 @@ export interface OverviewTabProps {
   domainsLoading: boolean;
   onOpenDomains: () => void;
   onManageDomains: () => void;
+  /** The Overview scoped to this environment: where its services and jobs are. */
+  workloadsHref: string;
 }
 
 export function OverviewTab(props: OverviewTabProps) {
@@ -230,16 +175,16 @@ export function OverviewTab(props: OverviewTabProps) {
         )}
       </Panel>
 
-      <Panel
-        title="Workloads"
-        description={
-          isPlacedKind(live.kind)
-            ? "Observed by Reliant."
-            : "What this environment's configuration declares — Reliant does not place workloads on your own cluster."
-        }
-        testId="section-workloads"
-      >
-        <LiveWorkloads env={live} status={props.status} isLoading={props.statusLoading} error={props.statusError} />
+      {/* The workloads themselves — health, pods, releases, restarts — are the
+          Overview's (one place, every environment), not a second copy here. */}
+      <Panel title="Workloads" testId="section-workloads">
+        <p className="text-sm text-muted-foreground">
+          {props.envName}&apos;s services and jobs, their health and their pods are on the{" "}
+          <Link href={props.workloadsHref} className="text-foreground underline underline-offset-2" data-testid="env-workloads-link">
+            Overview, scoped to {props.envName}
+          </Link>
+          .
+        </p>
       </Panel>
 
       {/* A summary of what serves this env; the Domains tab has the full

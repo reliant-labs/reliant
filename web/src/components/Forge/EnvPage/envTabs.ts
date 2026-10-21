@@ -10,7 +10,7 @@
  *
  * The boundary still holds — per TAB:
  *
- *   overview  observability  identity
+ *   overview  identity
  *   releases  activity
  *   secrets   domains               the control plane only. Render with the
  *                                   daemon asleep, from any browser.
@@ -26,12 +26,11 @@
  * in one list, the observations pushed the releases apart and a burst of them
  * buried the history a reader opened the tab for.
  *
- * OBSERVABILITY sits beside Overview because it answers the next question
- * ("it's deployed — is it healthy?"). A local environment has none: `forge env
- * up` runs its own ClickStack on the developer's machine, and the hosted store
- * this tab reads only receives telemetry from deployed environments.
+ * There is no Observability tab: an environment's workloads, their health and
+ * its telemetry are the project's Overview and Observability pages, scoped to
+ * it (decision D1) — one place for each, not a second copy per environment.
  *
- * IDENTITY sits beside them for the same reason: "who can sign in to it?" is a
+ * IDENTITY sits beside Overview: "who can sign in to it?" is a
  * question about the running environment, answered by the control plane's
  * identity reconciler with no daemon. A local environment has the tab too, but
  * its IdP is forge's dev IdP on the developer's machine, which reports nothing
@@ -46,7 +45,6 @@ import type { EnvLifecycle } from "@/services/forge/roster";
 
 export type EnvTab =
   | "overview"
-  | "observability"
   | "identity"
   | "running"
   | "releases"
@@ -63,7 +61,6 @@ export interface EnvTabSpec {
 
 const SPECS: Record<EnvTab, EnvTabSpec> = {
   overview: { id: "overview", label: "Overview", needsDaemon: false },
-  observability: { id: "observability", label: "Observability", needsDaemon: false },
   identity: { id: "identity", label: "Identity", needsDaemon: false },
   running: { id: "running", label: "Running", needsDaemon: true },
   releases: { id: "releases", label: "Releases", needsDaemon: false },
@@ -76,7 +73,7 @@ export function tabsFor(lifecycle: EnvLifecycle): EnvTabSpec[] {
   const ids: EnvTab[] =
     lifecycle === "local"
       ? ["running", "identity", "secrets"]
-      : ["overview", "observability", "identity", "releases", "activity", "secrets", "domains"];
+      : ["overview", "identity", "releases", "activity", "secrets", "domains"];
   return ids.map((id) => SPECS[id]);
 }
 

@@ -1,0 +1,5 @@
+type: integer
+minimum: 1
+title: Pull request number
+description: The pull request's number as shown after the #.
+examples: [57]

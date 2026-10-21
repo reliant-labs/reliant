@@ -41,7 +41,7 @@ func usableIntegrations(ctx context.Context, factory *tools.ToolsFactory, chat *
 	defer cancel()
 	usable, err := factory.UsableIntegrations(ctx, chat.ID, thread, reached)
 	if err != nil {
-		slog.Warn("[CallLLM] Could not establish which integrations the run's owner can use; withholding the rest",
+		slog.WarnContext(ctx, "[CallLLM] Could not establish which integrations the run's owner can use; withholding the rest",
 			"chatID", chat.ID, "thread", thread, "integrations", reached, "usable", usable, "error", err)
 	}
 	return usable

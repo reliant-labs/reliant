@@ -32,9 +32,16 @@ import {
   ObservabilityService,
   Signal as WireSignal,
   SortOrder,
+  WorkloadHealth as WireWorkloadHealth,
+  WorkloadJobResult as WireWorkloadJobResult,
   WorkloadMetric as WireWorkloadMetric,
+  WorkloadPodState as WireWorkloadPodState,
+  WorkloadReleaseBasis as WireWorkloadReleaseBasis,
   type ResourceUsage as WireResourceUsage,
+  type Workload as WireWorkload,
   type WorkloadEvent as WireWorkloadEvent,
+  type WorkloadJob as WireWorkloadJob,
+  type WorkloadPod as WireWorkloadPod,
   type PanelSchema,
   type LogRecord as WireLogRecord,
   type Span as WireSpan,
@@ -42,11 +49,20 @@ import {
   type TraceRedSummary as WireRed,
   type TraceSummary as WireTraceSummary,
 } from "@/gen/controlplane/services/observability/v1/observability_pb";
+import { WorkloadKind as WireWorkloadKind, type DeclaredWorkload as WireDeclaredWorkload } from "@/gen/controlplane/controlplane/v1/deploy_pb";
 
 import { getControlPlaneClient } from "../client";
 import type {
   AttributeFilter,
   AttributeOp,
+  DeclaredWorkload,
+  Workload,
+  WorkloadHealth,
+  WorkloadJob,
+  WorkloadJobResult,
+  WorkloadKind,
+  WorkloadPod,
+  WorkloadReleaseBasis,
   GetWorkloadRequest,
   ListAttributeValuesRequest,
   ListAttributeValuesResult,
@@ -544,30 +560,133 @@ function mapEvent(e: WireWorkloadEvent): WorkloadEvent {
   };
 }
 
+const WORKLOAD_KIND: Record<WireWorkloadKind, WorkloadKind> = {
+  [WireWorkloadKind.UNSPECIFIED]: "unknown",
+  [WireWorkloadKind.DEPLOYMENT]: "deployment",
+  [WireWorkloadKind.STATEFUL_SET]: "statefulset",
+  [WireWorkloadKind.DAEMON_SET]: "daemonset",
+  [WireWorkloadKind.CRON_JOB]: "cronjob",
+  [WireWorkloadKind.JOB]: "job",
+};
+
+const WORKLOAD_HEALTH: Record<WireWorkloadHealth, WorkloadHealth> = {
+  [WireWorkloadHealth.UNSPECIFIED]: "unknown",
+  [WireWorkloadHealth.HEALTHY]: "healthy",
+  [WireWorkloadHealth.DEGRADED]: "degraded",
+  [WireWorkloadHealth.CRASH_LOOPING]: "crash_looping",
+  [WireWorkloadHealth.PENDING]: "pending",
+  [WireWorkloadHealth.SUSPENDED]: "suspended",
+  [WireWorkloadHealth.UNKNOWN]: "unknown",
+};
+
+const RELEASE_BASIS: Record<WireWorkloadReleaseBasis, WorkloadReleaseBasis> = {
+  [WireWorkloadReleaseBasis.UNSPECIFIED]: "none",
+  [WireWorkloadReleaseBasis.DIGEST]: "digest",
+  [WireWorkloadReleaseBasis.PROMOTION]: "promotion",
+};
+
+const JOB_RESULT: Record<WireWorkloadJobResult, WorkloadJobResult> = {
+  [WireWorkloadJobResult.UNSPECIFIED]: "unknown",
+  [WireWorkloadJobResult.RUNNING]: "running",
+  [WireWorkloadJobResult.SUCCEEDED]: "succeeded",
+  [WireWorkloadJobResult.FAILED]: "failed",
+};
+
+// A value this build does not know (a newer server) reads as unknown, never as undefined.
+const kindOf = (k: WireWorkloadKind): WorkloadKind => WORKLOAD_KIND[k] ?? "unknown";
+const healthOf = (h: WireWorkloadHealth): WorkloadHealth => WORKLOAD_HEALTH[h] ?? "unknown";
+const msOrNull = (ts: Timestamp | undefined): number | null => (ts ? msOf(ts) : null);
+
+function mapPod(p: WireWorkloadPod): WorkloadPod {
+  return {
+    name: p.name,
+    uid: p.uid,
+    state: p.state === WireWorkloadPodState.RUNNING ? "running" : p.state === WireWorkloadPodState.GONE ? "gone" : "unknown",
+    restarts: Number(p.restarts),
+    lastExitReason: p.lastExitReason,
+    lastExitAtMs: msOrNull(p.lastExitAt),
+    node: p.node,
+    firstSeenMs: msOrNull(p.firstSeen),
+    lastSeenMs: msOrNull(p.lastSeen),
+    ageIsLowerBound: p.ageIsLowerBound,
+    latestWarning: p.latestWarning ? mapEvent(p.latestWarning) : null,
+  };
+}
+
+function mapDeclared(d: WireDeclaredWorkload): DeclaredWorkload {
+  return {
+    name: d.name,
+    kind: kindOf(d.kind),
+    specRecorded: d.specRecorded,
+    replicas: d.replicas ?? null,
+    cpuRequestMillicores: Number(d.cpuRequestMillicores),
+    cpuLimitMillicores: Number(d.cpuLimitMillicores),
+    memoryRequestBytes: Number(d.memoryRequestBytes),
+    memoryLimitBytes: Number(d.memoryLimitBytes),
+    ports: d.ports.map((p) => ({ name: p.name, port: p.port, protocol: p.protocol })),
+    envNames: [...d.envNames],
+    image: d.image,
+    sourcePath: d.sourcePath,
+    sourceRepo: d.sourceRepo,
+    sourceCommit: d.sourceCommit,
+    bundleId: d.bundleId,
+  };
+}
+
+function mapWorkload(w: WireWorkload): Workload {
+  return {
+    envId: w.envId,
+    envName: w.envName,
+    workload: w.workload,
+    namespace: w.namespace,
+    serviceVersion: w.serviceVersion,
+    replicasObserved: w.replicasObserved,
+    restartsInWindow: Number(w.restartsInWindow),
+    latestWarning: w.latestWarning ? mapEvent(w.latestWarning) : null,
+    containers: w.containers.map((c) => ({
+      container: c.container,
+      imageName: c.imageName,
+      imageTag: c.imageTag,
+      restartsInWindow: Number(c.restartsInWindow),
+      lastTerminatedReason: c.lastTerminatedReason,
+      lastTerminatedAtMs: c.lastTerminatedAt ? msOf(c.lastTerminatedAt) : null,
+      cpu: mapUsage(c.cpu),
+      memory: mapUsage(c.memory),
+    })),
+    kind: kindOf(w.kind),
+    health: healthOf(w.health),
+    healthReason: w.healthReason,
+    readyReplicas: w.readyReplicas ?? null,
+    desiredReplicas: w.desiredReplicas ?? null,
+    releaseVersion: w.releaseVersion,
+    releaseBasis: w.releaseVersion ? (RELEASE_BASIS[w.releaseBasis] ?? "none") : "none",
+    pods: w.pods.map(mapPod),
+    declared: w.declared ? mapDeclared(w.declared) : null,
+  };
+}
+
+function mapJob(j: WireWorkloadJob): WorkloadJob {
+  return {
+    envId: j.envId,
+    envName: j.envName,
+    name: j.name,
+    workload: j.workload || j.name,
+    result: JOB_RESULT[j.result] ?? "unknown",
+    reason: j.reason,
+    releaseVersion: j.releaseVersion,
+    startedAtMs: msOrNull(j.startedAt),
+    finishedAtMs: msOrNull(j.finishedAt),
+    durationSeconds: Number(j.durationSeconds),
+  };
+}
+
 export async function listWorkloads(req: ObsScope & { window: TimeWindow; services?: string[] }): Promise<ListWorkloadsResult> {
   const res = await client().listWorkloads({ scope: scope(req, req.window, req.services) });
   return {
     truncated: res.truncated,
-    workloads: res.workloads.map((w) => ({
-      envId: w.envId,
-      envName: w.envName,
-      workload: w.workload,
-      namespace: w.namespace,
-      serviceVersion: w.serviceVersion,
-      replicasObserved: w.replicasObserved,
-      restartsInWindow: Number(w.restartsInWindow),
-      latestWarning: w.latestWarning ? mapEvent(w.latestWarning) : null,
-      containers: w.containers.map((c) => ({
-        container: c.container,
-        imageName: c.imageName,
-        imageTag: c.imageTag,
-        restartsInWindow: Number(c.restartsInWindow),
-        lastTerminatedReason: c.lastTerminatedReason,
-        lastTerminatedAtMs: c.lastTerminatedAt ? msOf(c.lastTerminatedAt) : null,
-        cpu: mapUsage(c.cpu),
-        memory: mapUsage(c.memory),
-      })),
-    })),
+    workloads: res.workloads.map(mapWorkload),
+    jobs: res.jobs.map(mapJob),
+    jobsTruncated: res.jobsTruncated,
   };
 }
 
@@ -611,5 +730,6 @@ export async function getWorkload(req: GetWorkloadRequest): Promise<WorkloadDeta
       firstSeenMs: msOf(c.firstSeen),
       lastSeenMs: msOf(c.lastSeen),
     })),
+    workloads: res.workloads.map(mapWorkload),
   };
 }

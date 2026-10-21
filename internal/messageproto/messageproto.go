@@ -283,7 +283,7 @@ func AssembleForDisplay(
 	toolCallStatusByCallID := make(map[string]*db.ToolCall)
 	calls, err := toolCalls.ListToolCallsByMessageIDs(ctx, messageIDs)
 	if err != nil {
-		logging.Warn("Failed to list tool calls for messages", "error", err, "messageCount", len(messageIDs))
+		logging.WarnContext(ctx, "Failed to list tool calls for messages", "error", err, "messageCount", len(messageIDs))
 	} else {
 		for _, call := range calls {
 			toolCallStatusByCallID[call.ID] = call
@@ -303,7 +303,7 @@ func AssembleForDisplay(
 	if len(blockToolCallIDs) > 0 {
 		byID, err := toolCalls.ListToolCallsByIDs(ctx, blockToolCallIDs)
 		if err != nil {
-			logging.Warn("Failed to list tool calls by id", "error", err, "count", len(blockToolCallIDs))
+			logging.WarnContext(ctx, "Failed to list tool calls by id", "error", err, "count", len(blockToolCallIDs))
 		} else {
 			for _, call := range byID {
 				toolCallStatusByCallID[call.ID] = call

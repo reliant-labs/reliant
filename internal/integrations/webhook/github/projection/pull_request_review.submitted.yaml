@@ -1,0 +1,25 @@
+# Pull request review submitted: the projection of the GitHub `pull_request_review.submitted` webhook.
+id: pull_request_review.submitted
+event: pull_request_review.submitted
+display_name: Pull request review submitted
+summary: A review was submitted on a pull request.
+description: >-
+  Fires when a reviewer submits a review. Match state (approved,
+  changes_requested or commented) to react to one outcome.
+keywords: [pr, review, approved, changes requested]
+attributes:
+  - { group: pr }
+  - { name: state, description: "The review's state: approved, changes_requested or commented.", example: approved, from: review.state, lower: true }
+data:
+  pull_request: { kind: object, object: pr }
+  review:
+    kind: object
+    fields:
+      id: integer
+      state: { kind: string, lower: true }
+      body: { kind: string, cap: true }
+      html_url: string
+      user: { kind: object, object: user }
+      commit_id: string
+      submitted_at: string
+      author_association: string

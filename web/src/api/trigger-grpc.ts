@@ -178,7 +178,7 @@ export interface ResolvedSender {
 }
 
 /** TriggerHealthStatus; UNSPECIFIED (an older server) reads as unknown. */
-export type TriggerHealthStatusKey = "healthy" | "degraded" | "failing" | "broken" | "unknown";
+export type TriggerHealthStatusKey = "healthy" | "degraded" | "failing" | "broken" | "needs_setup" | "unknown";
 
 /** The server's read-only health summary. Rules: TriggerHealthStatus in trigger.proto. */
 /** Who an automation's integration writes speak as. */
@@ -389,6 +389,8 @@ function healthStatusFromProto(status: TriggerHealthStatus): TriggerHealthStatus
       return "failing";
     case TriggerHealthStatus.BROKEN:
       return "broken";
+    case TriggerHealthStatus.NEEDS_SETUP:
+      return "needs_setup";
     default:
       return "unknown";
   }
@@ -636,6 +638,7 @@ export function isTriggerNotFound(error: unknown): boolean {
 export type WorkflowTriggerOutcomeKind =
   | "enabled"
   | "resumed"
+  | "updated"
   | "alreadyEnabled"
   | "failed"
   | "notEnabled"
@@ -681,6 +684,8 @@ export interface EnableWorkflowInput {
   message?: string;
   namePrefix?: string;
   overrides?: WorkflowTriggerOverrideInput[];
+  /** Unset: the owner for a new activation, unchanged for an existing one. */
+  actingIdentity?: ActingIdentityKey;
 }
 
 export interface DisableWorkflowResult {
@@ -691,6 +696,7 @@ export interface DisableWorkflowResult {
 const OUTCOME_KIND: Partial<Record<WorkflowTriggerOutcome, WorkflowTriggerOutcomeKind>> = {
   [WorkflowTriggerOutcome.ENABLED]: "enabled",
   [WorkflowTriggerOutcome.RESUMED]: "resumed",
+  [WorkflowTriggerOutcome.UPDATED]: "updated",
   [WorkflowTriggerOutcome.ALREADY_ENABLED]: "alreadyEnabled",
   [WorkflowTriggerOutcome.FAILED]: "failed",
   [WorkflowTriggerOutcome.NOT_ENABLED]: "notEnabled",
@@ -778,6 +784,7 @@ export const triggerGrpc = {
         notifyOnComplete: input.notifyOnComplete ?? false,
         message: input.message ?? "",
         namePrefix: input.namePrefix ?? "",
+        actingIdentity: actingIdentityToProto(input.actingIdentity),
         overrides: (input.overrides ?? []).map((o) => ({
           trigger: o.trigger,
           name: o.name,

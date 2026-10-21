@@ -94,7 +94,7 @@ func (x *CLIConfig) GetMachine() *CLIMachineConfig {
 }
 
 // CLIConnectionConfig selects the server a command talks to and the bearer it
-// presents (cmd/reliant/commands/connection.go has the precedence).
+// presents (cmd/reliant/cmd/connection.go has the precedence).
 type CLIConnectionConfig struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The defaults are Reliant's hosted endpoints, so a `go install` build works

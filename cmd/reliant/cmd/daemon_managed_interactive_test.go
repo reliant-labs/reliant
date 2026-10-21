@@ -1,0 +1,102 @@
+// Copyright (c) 2025 Reliant Labs
+package cmd
+
+import (
+	"testing"
+)
+
+// TestManagedDaemonIsNeverInteractive is the second half of the 2026-09-30
+// prod fix, and it is defence in depth rather than the root-cause fix.
+//
+// The root cause was a malformed credentials file (see
+// internal/auth/managed_daemon_credentials_test.go). But what turned "the
+// credential did not load" into a 30-minute user-visible outage was the
+// FALLBACK: `daemon start` decided it was unregistered and ran the INTERACTIVE
+// browser login inside a headless pod. It printed
+//
+//	Opening your browser to log in.
+//	    https://admin.reliantapi.com/oauth/authorize?...
+//
+// into its container log, blocked 5 minutes on a browser that cannot exist,
+// exited non-zero, and crash-looped — forever, because nothing about the
+// situation changes on a restart.
+//
+// A managed daemon has no human at a keyboard and no browser, by construction.
+// Interactive login is not merely unlikely to succeed there; it CANNOT succeed.
+// So the platform-stated identity must imply non-interactive, and the existing
+// await-credentials path (publish StreamAwaitingCredentials, poll disk) is the
+// correct behaviour: it stays resident and recovers by itself the moment a
+// valid credential is mounted, instead of burning a 5-minute timeout per
+// restart and reporting nothing.
+//
+// This does NOT weaken the local CLI. `reliant daemon start` on a laptop sets
+// no RELIANT_DAEMON_TYPE and keeps its interactive login.
+func TestManagedDaemonIsNeverInteractive(t *testing.T) {
+	cases := []struct {
+		name       string
+		daemonType string
+		args       []string // `daemon start` command-line flags
+		envFlag    string
+		want       bool
+	}{
+		{
+			name:       "managed pod implies non-interactive",
+			daemonType: "managed",
+			want:       true,
+		},
+		{
+			name:       "a laptop keeps interactive login",
+			daemonType: "",
+			want:       false,
+		},
+		{
+			name:       "self_hosted keeps interactive login",
+			daemonType: "self_hosted",
+			want:       false,
+		},
+		{
+			name:       "managed cannot be forced interactive by env",
+			daemonType: "managed",
+			envFlag:    "false",
+			want:       true,
+		},
+		{
+			name:       "managed cannot be forced interactive by flag",
+			daemonType: "managed",
+			args:       []string{"--non-interactive=false"},
+			want:       true,
+		},
+		{
+			name:       "env opts a laptop out of browser login",
+			daemonType: "",
+			envFlag:    "true",
+			want:       true,
+		},
+		{
+			name:       "explicit --non-interactive still wins on a laptop",
+			daemonType: "",
+			args:       []string{"--non-interactive"},
+			want:       true,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Always set both, empty included: a case that says "no daemon
+			// type" must mean it even when the host (a workspace pod) exports
+			// RELIANT_DAEMON_TYPE=managed.
+			t.Setenv("RELIANT_DAEMON_TYPE", tc.daemonType)
+			t.Setenv("RELIANT_DAEMON_NON_INTERACTIVE", tc.envFlag)
+
+			cfg, err := loadDaemonConfig(daemonCommandWithArgs(t, "start", tc.args...))
+			if err != nil {
+				t.Fatalf("loading daemon start config: %v", err)
+			}
+			got := daemonNonInteractive(cfg.GetNonInteractive(), daemonHost(cfg).Managed())
+			if got != tc.want {
+				t.Errorf("non-interactive = %v, want %v (daemon_type=%q env=%q args=%v)",
+					got, tc.want, tc.daemonType, tc.envFlag, tc.args)
+			}
+		})
+	}
+}

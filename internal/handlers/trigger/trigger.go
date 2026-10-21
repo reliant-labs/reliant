@@ -310,6 +310,12 @@ func (s *Service) SetTriggerEnabled(
 		return nil, connect.NewError(connect.CodeUnavailable, errors.New("the schedule backend is unavailable"))
 	}
 	if req.Msg.Enabled {
+		// Turning an activation back on is not a way around setup: its params
+		// are checked against the workflow as it is now, because the workflow
+		// may have gained a required input while it was paused.
+		if err := s.requireSetupComplete(ctx, trigger); err != nil {
+			return nil, err
+		}
 		enabling := *trigger
 		enabling.Enabled = true
 		if err := s.refreshTriggerAccess(ctx, &enabling); err != nil {
@@ -346,6 +352,11 @@ func (s *Service) FireTrigger(
 ) (*connect.Response[reliantv1.FireTriggerResponse], error) {
 	trigger, err := s.ownedTrigger(ctx, req.Msg.Id)
 	if err != nil {
+		return nil, err
+	}
+	// Run now launches with the activation's params, so one that is not set up
+	// would start a run that fails its first input check. Say so up front.
+	if err := s.requireSetupComplete(ctx, trigger); err != nil {
 		return nil, err
 	}
 	if trigger.Kind.IsEventDriven() {
@@ -665,6 +676,8 @@ func (s *Service) triggerFromDefinition(
 		// The row's filter is the declaration's, as of now: a projection the
 		// fire path re-reads from the workflow.
 		trigger.Filter = decl.Filter
+		// ...and so is the typed scope, resolved from the params just validated.
+		trigger.Config = decl.ProjectedConfig(trigger.Params)
 	}
 	return trigger, nil
 }
@@ -747,10 +760,12 @@ func (s *Service) resolveActivation(ctx context.Context, userID string, def *rel
 		}
 	}
 	// Params are what filters, inputs and prompts read as activation.params,
-	// so a misspelt or mistyped one would match nothing on every event.
-	if problems := validation.ValidateParams(wf.GetInputs(), triggers.ParamsFromProto(def.Params)); len(problems) > 0 {
+	// so a misspelt or mistyped one would match nothing on every event, and a
+	// required input nobody supplied would fail every run it launched. Every
+	// write of an activation passes through here, so none can store either.
+	if issues := validation.ValidateActivationParams(wf.GetInputs(), decl.Inputs, triggers.ParamsFromProto(def.Params)); len(issues) > 0 {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
-			"params: %s", strings.Join(problems, "; ")))
+			"params: %s", joinIssues(issues)))
 	}
 	return decl, nil
 }
@@ -830,7 +845,8 @@ func (s *Service) renderWithWorkflows(ctx context.Context, t *core.Trigger, firi
 	if t.WorkflowTrigger == nil {
 		return proto
 	}
-	if _, err := triggers.ResolveDeclaration(ctx, workflows, t); err != nil {
+	decl, err := triggers.ResolveDeclaration(ctx, workflows, t)
+	if err != nil {
 		var declErr *triggers.DeclarationError
 		if errors.As(err, &declErr) {
 			proto.Health = triggers.BrokenHealth(declErr)
@@ -839,8 +855,45 @@ func (s *Service) renderWithWorkflows(ctx context.Context, t *core.Trigger, firi
 			// about the trigger, so its firings still describe it.
 			logging.WarnContext(ctx, "could not resolve a trigger's declaration", "trigger_id", t.ID, "error", err)
 		}
+		return proto
+	}
+	// Broken wins over this (a broken declaration cannot be set up); this wins
+	// over everything the firings say, because nothing launches until the
+	// activation is finished.
+	if needsSetup := triggers.NeedsSetupHealth(decl, t); needsSetup != nil {
+		proto.Health = needsSetup
 	}
 	return proto
+}
+
+// requireSetupComplete refuses to turn on or run an activation whose params do
+// not satisfy its workflow as it is now (triggers.SetupIssues). An ad hoc
+// trigger, an activation whose declaration is broken, and a workflow that
+// cannot be read right now are not a setup matter and pass: they are reported
+// where they are (BROKEN health, the launch).
+func (s *Service) requireSetupComplete(ctx context.Context, t *core.Trigger) error {
+	if t.WorkflowTrigger == nil {
+		return nil
+	}
+	decl, err := triggers.ResolveDeclaration(ctx, triggers.LaunchWorkflows{Repo: s.deps.Repo}, t)
+	if err != nil {
+		return nil
+	}
+	issues := triggers.SetupIssues(decl, t)
+	if len(issues) == 0 {
+		return nil
+	}
+	return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
+		"%s. Finish setting up %q before turning it on or running it", triggers.SetupDetail(issues), t.Name))
+}
+
+// joinIssues is issues as one sentence list: "repos is required; team ...".
+func joinIssues(issues []validation.ParamIssue) string {
+	msgs := make([]string, len(issues))
+	for i, issue := range issues {
+		msgs[i] = issue.Message
+	}
+	return strings.Join(msgs, "; ")
 }
 
 // renderFirings renders a trigger from its row, recent firings and (for a

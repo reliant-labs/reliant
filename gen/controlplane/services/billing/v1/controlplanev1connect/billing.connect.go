@@ -122,9 +122,6 @@ const (
 	// BillingServiceGetUsageSummaryProcedure is the fully-qualified name of the BillingService's
 	// GetUsageSummary RPC.
 	BillingServiceGetUsageSummaryProcedure = "/controlplane.v1.BillingService/GetUsageSummary"
-	// BillingServiceGetComputeUsageProcedure is the fully-qualified name of the BillingService's
-	// GetComputeUsage RPC.
-	BillingServiceGetComputeUsageProcedure = "/controlplane.v1.BillingService/GetComputeUsage"
 	// BillingServiceGetInvoicePreviewProcedure is the fully-qualified name of the BillingService's
 	// GetInvoicePreview RPC.
 	BillingServiceGetInvoicePreviewProcedure = "/controlplane.v1.BillingService/GetInvoicePreview"
@@ -254,7 +251,6 @@ type BillingServiceClient interface {
 	GetCurrentUserComputeEligibility(context.Context, *connect.Request[v1.GetCurrentUserComputeEligibilityRequest]) (*connect.Response[v1.GetCurrentUserComputeEligibilityResponse], error)
 	// Misc per-org reads that callers expect on the public surface.
 	GetUsageSummary(context.Context, *connect.Request[v1.GetUsageSummaryRequest]) (*connect.Response[v1.GetUsageSummaryResponse], error)
-	GetComputeUsage(context.Context, *connect.Request[v1.GetComputeUsageRequest]) (*connect.Response[v1.GetComputeUsageResponse], error)
 	GetInvoicePreview(context.Context, *connect.Request[v1.GetInvoicePreviewRequest]) (*connect.Response[v1.GetInvoicePreviewResponse], error)
 	// Per-user billing email. UpdateBillingEmail persists a CONFIRMED billing
 	// address (empty clears it) and, until an emailed confirmation exists,
@@ -446,12 +442,6 @@ func NewBillingServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(billingServiceMethods.ByName("GetUsageSummary")),
 			connect.WithClientOptions(opts...),
 		),
-		getComputeUsage: connect.NewClient[v1.GetComputeUsageRequest, v1.GetComputeUsageResponse](
-			httpClient,
-			baseURL+BillingServiceGetComputeUsageProcedure,
-			connect.WithSchema(billingServiceMethods.ByName("GetComputeUsage")),
-			connect.WithClientOptions(opts...),
-		),
 		getInvoicePreview: connect.NewClient[v1.GetInvoicePreviewRequest, v1.GetInvoicePreviewResponse](
 			httpClient,
 			baseURL+BillingServiceGetInvoicePreviewProcedure,
@@ -503,7 +493,6 @@ type billingServiceClient struct {
 	getCurrentUserComputeUsage                 *connect.Client[v1.GetCurrentUserComputeUsageRequest, v1.GetCurrentUserComputeUsageResponse]
 	getCurrentUserComputeEligibility           *connect.Client[v1.GetCurrentUserComputeEligibilityRequest, v1.GetCurrentUserComputeEligibilityResponse]
 	getUsageSummary                            *connect.Client[v1.GetUsageSummaryRequest, v1.GetUsageSummaryResponse]
-	getComputeUsage                            *connect.Client[v1.GetComputeUsageRequest, v1.GetComputeUsageResponse]
 	getInvoicePreview                          *connect.Client[v1.GetInvoicePreviewRequest, v1.GetInvoicePreviewResponse]
 	getCurrentUserBillingEmail                 *connect.Client[v1.GetCurrentUserBillingEmailRequest, v1.GetCurrentUserBillingEmailResponse]
 	updateBillingEmail                         *connect.Client[v1.UpdateBillingEmailRequest, v1.UpdateBillingEmailResponse]
@@ -663,11 +652,6 @@ func (c *billingServiceClient) GetUsageSummary(ctx context.Context, req *connect
 	return c.getUsageSummary.CallUnary(ctx, req)
 }
 
-// GetComputeUsage calls controlplane.v1.BillingService.GetComputeUsage.
-func (c *billingServiceClient) GetComputeUsage(ctx context.Context, req *connect.Request[v1.GetComputeUsageRequest]) (*connect.Response[v1.GetComputeUsageResponse], error) {
-	return c.getComputeUsage.CallUnary(ctx, req)
-}
-
 // GetInvoicePreview calls controlplane.v1.BillingService.GetInvoicePreview.
 func (c *billingServiceClient) GetInvoicePreview(ctx context.Context, req *connect.Request[v1.GetInvoicePreviewRequest]) (*connect.Response[v1.GetInvoicePreviewResponse], error) {
 	return c.getInvoicePreview.CallUnary(ctx, req)
@@ -801,7 +785,6 @@ type BillingServiceHandler interface {
 	GetCurrentUserComputeEligibility(context.Context, *connect.Request[v1.GetCurrentUserComputeEligibilityRequest]) (*connect.Response[v1.GetCurrentUserComputeEligibilityResponse], error)
 	// Misc per-org reads that callers expect on the public surface.
 	GetUsageSummary(context.Context, *connect.Request[v1.GetUsageSummaryRequest]) (*connect.Response[v1.GetUsageSummaryResponse], error)
-	GetComputeUsage(context.Context, *connect.Request[v1.GetComputeUsageRequest]) (*connect.Response[v1.GetComputeUsageResponse], error)
 	GetInvoicePreview(context.Context, *connect.Request[v1.GetInvoicePreviewRequest]) (*connect.Response[v1.GetInvoicePreviewResponse], error)
 	// Per-user billing email. UpdateBillingEmail persists a CONFIRMED billing
 	// address (empty clears it) and, until an emailed confirmation exists,
@@ -989,12 +972,6 @@ func NewBillingServiceHandler(svc BillingServiceHandler, opts ...connect.Handler
 		connect.WithSchema(billingServiceMethods.ByName("GetUsageSummary")),
 		connect.WithHandlerOptions(opts...),
 	)
-	billingServiceGetComputeUsageHandler := connect.NewUnaryHandler(
-		BillingServiceGetComputeUsageProcedure,
-		svc.GetComputeUsage,
-		connect.WithSchema(billingServiceMethods.ByName("GetComputeUsage")),
-		connect.WithHandlerOptions(opts...),
-	)
 	billingServiceGetInvoicePreviewHandler := connect.NewUnaryHandler(
 		BillingServiceGetInvoicePreviewProcedure,
 		svc.GetInvoicePreview,
@@ -1071,8 +1048,6 @@ func NewBillingServiceHandler(svc BillingServiceHandler, opts ...connect.Handler
 			billingServiceGetCurrentUserComputeEligibilityHandler.ServeHTTP(w, r)
 		case BillingServiceGetUsageSummaryProcedure:
 			billingServiceGetUsageSummaryHandler.ServeHTTP(w, r)
-		case BillingServiceGetComputeUsageProcedure:
-			billingServiceGetComputeUsageHandler.ServeHTTP(w, r)
 		case BillingServiceGetInvoicePreviewProcedure:
 			billingServiceGetInvoicePreviewHandler.ServeHTTP(w, r)
 		case BillingServiceGetCurrentUserBillingEmailProcedure:
@@ -1198,10 +1173,6 @@ func (UnimplementedBillingServiceHandler) GetCurrentUserComputeEligibility(conte
 
 func (UnimplementedBillingServiceHandler) GetUsageSummary(context.Context, *connect.Request[v1.GetUsageSummaryRequest]) (*connect.Response[v1.GetUsageSummaryResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.BillingService.GetUsageSummary is not implemented"))
-}
-
-func (UnimplementedBillingServiceHandler) GetComputeUsage(context.Context, *connect.Request[v1.GetComputeUsageRequest]) (*connect.Response[v1.GetComputeUsageResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.BillingService.GetComputeUsage is not implemented"))
 }
 
 func (UnimplementedBillingServiceHandler) GetInvoicePreview(context.Context, *connect.Request[v1.GetInvoicePreviewRequest]) (*connect.Response[v1.GetInvoicePreviewResponse], error) {

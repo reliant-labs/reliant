@@ -186,7 +186,7 @@ func (t *tokenRefreshTransport) RoundTrip(req *http.Request) (*http.Response, er
 	if resp.StatusCode == http.StatusUnauthorized && t.opts.TokenReloader != nil {
 		stored, rerr := t.opts.TokenReloader()
 		if rerr != nil {
-			logging.Warn("Claude API returned 401 and reloading persisted tokens failed",
+			logging.WarnContext(req.Context(), "Claude API returned 401 and reloading persisted tokens failed",
 				"error", rerr, "user_id", t.opts.UserID)
 			return resp, nil
 		}
@@ -209,7 +209,7 @@ func (t *tokenRefreshTransport) RoundTrip(req *http.Request) (*http.Response, er
 			// Body not replayable; the adopted token still fixes future requests.
 			return resp, nil
 		}
-		logging.Warn("Claude API returned 401 but the store has newer OAuth tokens; retrying once with rotated token",
+		logging.WarnContext(req.Context(), "Claude API returned 401 but the store has newer OAuth tokens; retrying once with rotated token",
 			"user_id", t.opts.UserID)
 		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
 		_ = resp.Body.Close()

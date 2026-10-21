@@ -47,7 +47,7 @@ func init() {
 // -----------------------------------------------------------------------------
 // HOW FORGE IS INVOKED, AND WHY IT IS A SUBPROCESS OF OURSELVES
 //
-// Reliant embeds forge's whole CLI already (cmd/reliant/commands/forge.go is a
+// Reliant embeds forge's whole CLI already (cmd/reliant/cmd/forge.go is a
 // 12-line wrapper around forgecli.NewRootCmd), so the obvious route is to drive
 // that cobra tree in-process. That route was tried and rejected on evidence —
 // three separate blockers, each independently fatal:

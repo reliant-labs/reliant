@@ -50,6 +50,7 @@ func emptyLoose(t *testing.T, commonDir, id string) {
 }
 
 func TestRepair_EmptyLooseObjectWithPackedCopyIsRemovedAndNothingIsLost(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	common := filepath.Join(f.project, ".git")
 	blob := run(t, f.project, "rev-parse", "HEAD:a.txt")
@@ -73,6 +74,7 @@ func TestRepair_EmptyLooseObjectWithPackedCopyIsRemovedAndNothingIsLost(t *testi
 }
 
 func TestRepair_EmptyLooseObjectStillReferencedIsReportedLost(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	common := filepath.Join(f.project, ".git")
 	write(t, filepath.Join(f.project, "b.txt"), "two\n")
@@ -101,6 +103,7 @@ func TestRepair_EmptyLooseObjectStillReferencedIsReportedLost(t *testing.T) {
 }
 
 func TestRepair_StaleGCLogIsRemovedFromAHealthyRepository(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	common := filepath.Join(f.project, ".git")
 	write(t, filepath.Join(common, "gc.log"), "warning: There are too many unreachable loose objects\n")
@@ -116,6 +119,7 @@ func TestRepair_StaleGCLogIsRemovedFromAHealthyRepository(t *testing.T) {
 }
 
 func TestRepair_TornWorktreeIndexIsRebuiltWithoutTouchingTheWorkingTree(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name string
 		tear func(t *testing.T, index string)
@@ -130,6 +134,7 @@ func TestRepair_TornWorktreeIndexIsRebuiltWithoutTouchingTheWorkingTree(t *testi
 		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			f := newFixture(t)
 			w := f.worktree("w1", "feat/torn")
 			write(t, filepath.Join(w.Path, "a.txt"), "edited\n") // unstaged edit
@@ -163,6 +168,7 @@ func TestRepair_TornWorktreeIndexIsRebuiltWithoutTouchingTheWorkingTree(t *testi
 }
 
 func TestRepair_MainCheckoutIndexIsRebuilt(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	common := filepath.Join(f.project, ".git")
 	write(t, filepath.Join(common, "index"), "")
@@ -178,6 +184,7 @@ func TestRepair_MainCheckoutIndexIsRebuilt(t *testing.T) {
 }
 
 func TestRepair_IntactIndexesAndFreshDamageAreLeftAlone(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	w := f.worktree("w1", "feat/ok")
 	admin := filepath.Join(f.project, ".git", "worktrees", "w1")
@@ -196,6 +203,7 @@ func TestRepair_IntactIndexesAndFreshDamageAreLeftAlone(t *testing.T) {
 }
 
 func TestRepair_EmptyHEADIsRestoredFromTheReflog(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	w := f.worktree("w1", "feat/head")
 	head := run(t, w.Path, "rev-parse", "HEAD")
@@ -217,6 +225,7 @@ func TestRepair_EmptyHEADIsRestoredFromTheReflog(t *testing.T) {
 }
 
 func TestRepair_StaleTempPacksAndLocksAreRemoved(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	common := filepath.Join(f.project, ".git")
 	tmpPack := filepath.Join(common, "objects", "pack", "tmp_pack_abc123")
@@ -239,6 +248,7 @@ func TestRepair_StaleTempPacksAndLocksAreRemoved(t *testing.T) {
 }
 
 func TestRepair_RegistrationsOfGoneCheckoutsArePrunedOnlyWhenReliantOwnsThem(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	gone := f.worktree("gone", "feat/gone")          // reliant lock, directory removed
 	foreign := f.worktree("foreign", "feat/foreign") // user lock, directory removed
@@ -275,6 +285,7 @@ func TestRepair_RegistrationsOfGoneCheckoutsArePrunedOnlyWhenReliantOwnsThem(t *
 }
 
 func TestRepair_MissingRootPrunesNothing(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	f.worktree("w1", "feat/a")
 	// The whole worktree volume is missing: unmounted, not deleted.
@@ -288,6 +299,7 @@ func TestRepair_MissingRootPrunesNothing(t *testing.T) {
 }
 
 func TestRepair_BusyCheckoutIsNotPruned(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	w := f.worktree("w1", "feat/a")
 	if err := os.RemoveAll(w.Path); err != nil {
@@ -301,6 +313,7 @@ func TestRepair_BusyCheckoutIsNotPruned(t *testing.T) {
 }
 
 func TestDiscoverCommonDirs(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	f.worktree("w1", "feat/a")
 	f.worktree("w2", "feat/b")
@@ -315,6 +328,7 @@ func TestDiscoverCommonDirs(t *testing.T) {
 // reaches a damaged repository between daemon starts, so it repairs first —
 // once per RepairInterval — and reports through OnRepair.
 func TestReconcile_RepairsTheParentRepositoryBeforeReadingIt(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	f.idle()
 	w := f.worktree("w1", "feat/a")

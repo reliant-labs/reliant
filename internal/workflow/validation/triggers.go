@@ -36,9 +36,15 @@ var triggerNamePattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9_-]{0,62}[a-z0-9])
 // PayloadSchemas is the JSON Schema of trigger.payload for one event type
 // (manifest.TriggerPayloadSchema), one per declared trigger that delivers
 // it; none when nothing declares it.
+//
+// EventAttributes are the routing attributes one event type carries: name ->
+// the qualified value type (`github.repository`) the attribute is declared
+// with, "" for a plain string. An attribute a trigger declares for the event
+// is present; one it does not declare is absent.
 type IntegrationIndex interface {
 	TriggerTypes(integration string) (eventTypes, attributes []string, ok bool)
 	PayloadSchemas(integration, eventType string) []map[string]any
+	EventAttributes(integration, eventType string) map[string]string
 }
 
 // catalogIntegrations is the IntegrationIndex over the embedded catalog.
@@ -88,6 +94,44 @@ func (catalogIntegrations) PayloadSchemas(integration, eventType string) []map[s
 	return out
 }
 
+func (catalogIntegrations) EventAttributes(integration, eventType string) map[string]string {
+	c, err := catalog.Builtin()
+	if err != nil {
+		return nil
+	}
+	out := map[string]string{}
+	for _, m := range c.Manifests() {
+		if m.GetId() != integration {
+			continue
+		}
+		for _, ts := range m.GetTriggers() {
+			delivers := false
+			for _, ev := range ts.GetEvents() {
+				if ev == eventType {
+					delivers = true
+					break
+				}
+			}
+			if !delivers {
+				continue
+			}
+			for _, a := range ts.GetAttributes() {
+				out[a.GetName()] = qualifyTypeRef(integration, a.GetType())
+			}
+		}
+	}
+	return out
+}
+
+// qualifyTypeRef writes a manifest's type reference as `<integration>.<id>`:
+// an attribute names a type of its own manifest by its bare id.
+func qualifyTypeRef(integration, ref string) string {
+	if ref == "" || strings.Contains(ref, ".") {
+		return ref
+	}
+	return integration + "." + ref
+}
+
 func validateTriggers(wf *reliantv1.Workflow, opts *ValidationOptions, integrations IntegrationIndex, result *Result) {
 	triggers := wf.GetTriggers()
 	if len(triggers) == 0 {
@@ -131,10 +175,11 @@ func validateTriggers(wf *reliantv1.Workflow, opts *ValidationOptions, integrati
 		var payloads []map[string]any
 		declaredBy := ""
 		if src != nil && wt.GetIntegration() != nil {
-			validateTriggerIntegration(wt.GetIntegration(), path, integrations, result)
+			validateTriggerIntegration(wt, declaredInputs, path, integrations, result)
+			warnLegacyScopeFilter(wt, declaredInputs, path, integrations, result)
 			payloads, declaredBy = integrationPayloads(wt.GetIntegration(), integrations)
 		}
-		shape := newPayloadShape(triggerspec.ParamsSchema(triggerspec.ParamsInputs(declaredInputs, wt.GetInputs())), payloads, declaredBy)
+		shape := newPayloadShape(triggerspec.ParamsSchema(triggerspec.ParamsInputs(declaredInputs, wt.GetInputs()), opts.valueTypes()), payloads, declaredBy)
 
 		if filter := strings.TrimSpace(wt.GetFilter()); filter != "" {
 			if wt.GetSchedule() != nil {
@@ -156,7 +201,7 @@ func validateTriggers(wf *reliantv1.Workflow, opts *ValidationOptions, integrati
 		}
 		validateTriggerDedupe(wt, path, result)
 		validateTriggerInputs(wt.GetInputs(), declaredInputs, path, shape, result)
-		warnUnmappedRequiredInputs(wt.GetInputs(), declaredInputs, path, result)
+		warnUnmappedRequiredInputs(wt.GetInputs(), scopeInputNames(wt), declaredInputs, path, result)
 		if err := triggerspec.CompilePrompt(wt.GetPrompt()); err != nil {
 			result.AddErrorWithSuggestion(CategoryTrigger, path, "prompt", strings.TrimPrefix(err.Error(), "prompt: "),
 				"a prompt reads only `trigger` (e.g. Triage #{{ trigger.payload.data.issue.number }}); the run's inputs and nodes do not exist yet")
@@ -258,18 +303,17 @@ func (s *payloadShape) report(result *Result, path []string, field, expr string,
 // warnUnmappedRequiredInputs points out a required input that only an event
 // or a param can supply and that this trigger does not map: every activation
 // would have to set it in params, or every firing fails input validation.
-// Only plain value inputs are considered; a model, message, preset, group or
-// tools input is normally supplied by presets or the launch itself.
-func warnUnmappedRequiredInputs(mapped map[string]string, declared map[string]*reliantv1.Input, path []string, result *Result) {
+// An input that scopes this trigger (match_input) is not flagged: choosing it
+// is what turning the automation on asks for. Only plain value inputs are considered; a model, message, preset, group or
+// tools input is normally supplied by presets or the launch itself. An
+// integration input is a plain value, so it is considered.
+func warnUnmappedRequiredInputs(mapped map[string]string, scoping map[string]bool, declared map[string]*reliantv1.Input, path []string, result *Result) {
 	var missing []string
 	for name, input := range declared {
-		if _, ok := mapped[name]; ok || !model.IsInputRequired(input) {
+		if _, ok := mapped[name]; ok || scoping[name] || !model.IsInputRequired(input) {
 			continue
 		}
-		switch input.GetConfig().(type) {
-		case *reliantv1.Input_StringInput, *reliantv1.Input_IntegerInput, *reliantv1.Input_NumberInput,
-			*reliantv1.Input_BooleanInput, *reliantv1.Input_EnumInput, *reliantv1.Input_ArrayInput,
-			*reliantv1.Input_ObjectInput:
+		if isSuppliedByParams(input) {
 			missing = append(missing, name)
 		}
 	}
@@ -280,6 +324,15 @@ func warnUnmappedRequiredInputs(mapped map[string]string, declared map[string]*r
 	result.AddWarning(CategoryTrigger, path, "inputs", fmt.Sprintf(
 		"required input(s) %s are not mapped from the event, so every activation must set them in params or each firing fails; map them here, or give them a default",
 		strings.Join(missing, ", ")))
+}
+
+// scopeInputNames are the workflow inputs a trigger's typed scope reads.
+func scopeInputNames(wt *reliantv1.WorkflowTrigger) map[string]bool {
+	out := map[string]bool{}
+	for _, input := range wt.GetIntegration().GetMatchInput() {
+		out[strings.TrimSpace(input)] = true
+	}
+	return out
 }
 
 // addTriggerSourceError reports a source the shared rules rejected, under
@@ -314,7 +367,8 @@ func asConfigError(err error, target **triggerspec.ConfigError) bool {
 	return ok
 }
 
-func validateTriggerIntegration(src *reliantv1.IntegrationSource, path []string, integrations IntegrationIndex, result *Result) {
+func validateTriggerIntegration(wt *reliantv1.WorkflowTrigger, wfInputs map[string]*reliantv1.Input, path []string, integrations IntegrationIndex, result *Result) {
+	src := wt.GetIntegration()
 	id := strings.TrimSpace(src.GetIntegration())
 	types, attrs, ok := integrations.TriggerTypes(id)
 	if !ok {
@@ -328,9 +382,14 @@ func validateTriggerIntegration(src *reliantv1.IntegrationSource, path []string,
 			Message:    fmt.Sprintf("%q is not in the integration catalog, so its events cannot be checked; activating this trigger will fail unless this server receives %s events", id, id),
 			Suggestion: "search_integrations(kind: trigger) lists what exists",
 		})
+		if len(src.GetMatchInput()) > 0 {
+			result.AddWarning(CategoryTrigger, path, "integration.match",
+				fmt.Sprintf("%q is not in the integration catalog, so the types of its attributes cannot be checked against the inputs that scope this trigger", id))
+		}
 		return
 	}
 	if len(types) == 0 {
+		validateTriggerScope(wt, wfInputs, path, id, nil, integrations, result)
 		return
 	}
 	var unknown []string
@@ -365,6 +424,141 @@ func validateTriggerIntegration(src *reliantv1.IntegrationSource, path []string,
 			result.AddError(CategoryTrigger, path, "integration.match."+key,
 				fmt.Sprintf("%s events carry no %q attribute, so this trigger would never fire (attributes: %s)", id, key, known))
 		}
+	}
+	var delivered []string
+	for _, ev := range src.GetEvents() {
+		ev = strings.TrimSpace(ev)
+		for _, t := range uniqueSorted(types) {
+			if eventMatches(ev, t) {
+				delivered = append(delivered, t)
+			}
+		}
+	}
+	validateTriggerScope(wt, wfInputs, path, id, uniqueSorted(delivered), integrations, result)
+}
+
+// validateTriggerScope checks `match: {attribute: {input: name}}` (match_input).
+// A scope narrows by an attribute's declared type, so for every event the
+// trigger listens to:
+//
+//   - the attribute must be one that event carries, with a value type;
+//   - the input must be an integration input of that same type, single or
+//     multi; and it must not be one the trigger sets from the event, because
+//     then the event would scope itself;
+//   - the input should be required: an unset scope matches nothing.
+//
+// events are the concrete event types the source's patterns name; none when
+// the integration declares none.
+func validateTriggerScope(wt *reliantv1.WorkflowTrigger, declared map[string]*reliantv1.Input, path []string, integration string, events []string, integrations IntegrationIndex, result *Result) {
+	scope := wt.GetIntegration().GetMatchInput()
+	attrs := make([]string, 0, len(scope))
+	for attr := range scope {
+		attrs = append(attrs, attr)
+	}
+	sort.Strings(attrs)
+	for _, attr := range attrs {
+		field := "integration.match." + attr
+		name := scope[attr]
+
+		input, ok := declared[name]
+		switch {
+		case !ok:
+			result.AddErrorWithSuggestion(CategoryTrigger, path, field,
+				fmt.Sprintf("input %q is not a declared input of this workflow", name), declaredInputsHint(declared))
+			continue
+		case !model.IsIntegrationInput(input):
+			result.AddErrorWithSuggestion(CategoryTrigger, path, field,
+				fmt.Sprintf("input %q is a %s, and a scope needs an input typed by the integration (for example type: github.repository, multi: true)", name, input.GetType()),
+				"get_integration_schema shows the types an integration defines")
+			continue
+		}
+		if _, mapped := wt.GetInputs()[name]; mapped {
+			result.AddErrorWithSuggestion(CategoryTrigger, path, field,
+				fmt.Sprintf("input %q is set from the event by this trigger's inputs, so it cannot scope that same event", name),
+				"scope by a different input, or stop mapping "+name+" from the event")
+			continue
+		}
+
+		attrTypes := scopeAttributeTypes(integration, attr, events, integrations)
+		for _, ev := range events {
+			t, carried := attrTypes[ev]
+			switch {
+			case !carried:
+				result.AddError(CategoryTrigger, path, field,
+					fmt.Sprintf("%s event %s carries no %q attribute, so it cannot be scoped by it", integration, ev, attr))
+			case t == "":
+				result.AddErrorWithSuggestion(CategoryTrigger, path, field,
+					fmt.Sprintf("attribute %q of %s has no value type, so %q cannot be checked against it", attr, ev, name),
+					"declare a type on the attribute in the integration's manifest; until then compare it in the filter")
+			case t != input.GetType():
+				result.AddErrorWithSuggestion(CategoryTrigger, path, field,
+					fmt.Sprintf("input %q is a %s, but attribute %q of %s is a %s", name, input.GetType(), attr, ev, t),
+					fmt.Sprintf("declare %s as type: %s", name, t))
+			default:
+				continue
+			}
+			break // one finding per entry: the same cause repeats for every event
+		}
+		if len(events) == 0 && len(scope) > 0 {
+			result.AddWarning(CategoryTrigger, path, field,
+				fmt.Sprintf("%s declares no events, so the type of attribute %q cannot be checked against input %q", integration, attr, name))
+		}
+		if !model.IsInputRequired(input) {
+			result.AddWarning(CategoryTrigger, path, field,
+				fmt.Sprintf("input %q is optional, and while it is unset this trigger matches nothing; mark it required: true (and drop its default) so it must be chosen when the automation is turned on", name))
+		}
+	}
+}
+
+// scopeAttributeTypes is the declared type of attribute for each event, for
+// the events that carry it.
+func scopeAttributeTypes(integration, attr string, events []string, integrations IntegrationIndex) map[string]string {
+	out := make(map[string]string, len(events))
+	for _, ev := range events {
+		if types := integrations.EventAttributes(integration, ev); types != nil {
+			if t, ok := types[attr]; ok {
+				out[ev] = t
+			}
+		}
+	}
+	return out
+}
+
+// legacyScopeFilter finds a filter that scopes by hand: an attribute of the
+// event tested for membership in an activation param, the pattern a typed
+// scope replaces.
+var legacyScopeFilter = regexp.MustCompile(
+	`trigger\.payload\.attributes(?:\.([A-Za-z_][A-Za-z0-9_]*)|\[\s*['"]([A-Za-z_][A-Za-z0-9_]*)['"]\s*\])\s+in\s+trigger\.activation\.params\.([A-Za-z_][A-Za-z0-9_]*)`)
+
+// warnLegacyScopeFilter points a filter that tests an event attribute for
+// membership in a param at the typed scope. Such a filter works, but an event
+// outside the list still costs a skipped row per activation, and an empty
+// list silently matches nothing.
+func warnLegacyScopeFilter(wt *reliantv1.WorkflowTrigger, declared map[string]*reliantv1.Input, path []string, integrations IntegrationIndex, result *Result) {
+	filter := strings.TrimSpace(wt.GetFilter())
+	if filter == "" {
+		return
+	}
+	src := wt.GetIntegration()
+	id := strings.TrimSpace(src.GetIntegration())
+	for _, m := range legacyScopeFilter.FindAllStringSubmatch(filter, -1) {
+		attr, param := m[1], m[3]
+		if attr == "" {
+			attr = m[2]
+		}
+		if _, ok := declared[param]; !ok || src.GetMatchInput()[attr] == param {
+			continue
+		}
+		typed := "a typed input"
+		for _, ev := range src.GetEvents() {
+			if t := integrations.EventAttributes(id, strings.TrimSpace(ev))[attr]; t != "" {
+				typed = "type: " + t
+				break
+			}
+		}
+		result.AddWarning(CategoryTrigger, path, "filter", fmt.Sprintf(
+			"the filter compares trigger.payload.attributes.%s with the input %s; declare %s as %s and scope with `match: {%s: {input: %s}}` so events outside it are dropped before they are recorded, and an unset list is caught when the automation is turned on",
+			attr, param, param, typed, attr, param))
 	}
 }
 

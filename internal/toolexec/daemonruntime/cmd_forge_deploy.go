@@ -1079,7 +1079,7 @@ func handleForgeDeployPlanStart(ctx context.Context, payload []byte) ([]byte, er
 	claim.start(job)
 	startForgeDeployJob(job, req.planOnlyArgs())
 
-	logging.Info("forge deploy plan-only started", "handle", job.handle, "env", env)
+	logging.InfoContext(ctx, "forge deploy plan-only started", "handle", job.handle, "env", env)
 
 	return json.Marshal(forgeDeployStartResponse{
 		forgeResponseMeta: forgeResponseMeta{IsForgeProject: true, Supported: true, ForgeVersion: version.Forge()},
@@ -1352,7 +1352,7 @@ func handleForgeDeployStart(ctx context.Context, payload []byte) ([]byte, error)
 	claim.start(job)
 	startForgeDeployJob(job, applyArgs)
 
-	logging.Info("forge deploy started",
+	logging.InfoContext(ctx, "forge deploy started",
 		"handle", job.handle,
 		"env", env,
 		"declared_context", facts.Guard.DeclaredContext,

@@ -262,7 +262,7 @@ func Run(ctx context.Context, opts Options) error {
 		Host:         opts.TemporalHost,
 		Port:         opts.TemporalPort,
 		Namespace:    opts.TemporalNamespace,
-		PayloadStore: claimcheck.NewPostgresStore(repo.DB.SQLDB()),
+		PayloadStore: claimcheck.NewPostgresStore(repo.ORM()),
 	})
 	if err != nil {
 		return fmt.Errorf("failed to connect to Temporal: %w", err)
@@ -448,7 +448,7 @@ func Run(ctx context.Context, opts Options) error {
 		// generate_video executes in the worker; the api-server only reads its
 		// catalog metadata. The job store is what makes a render resumable.
 		VideoGeneratorResolver: resolveVideoGenerator,
-		VideoJobs:              videojobs.NewSQLStore(repo.DB.SQLDB()),
+		VideoJobs:              videojobs.NewSQLStore(repo.ORM()),
 		// run_scenario / write_scenario execute on the real runtime via the
 		// scenario runner; injected because the runner imports this package's
 		// dependents.
