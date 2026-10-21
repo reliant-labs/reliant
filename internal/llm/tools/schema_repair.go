@@ -26,7 +26,9 @@ import (
 // The repair is deliberately narrow:
 //   - It only fires AFTER validation has already failed.
 //   - It only rewrites a string value when the schema at that exact position
-//     expects an array or object (never when the schema accepts a string).
+//     expects an array or object (never when the schema accepts a string), or
+//     expects an integer/number/boolean and the string is exactly one (see
+//     schema_repair_scalar.go).
 //   - It walks the schema recursively (properties, items,
 //     additionalProperties), so nested stringified values are repaired too
 //     (e.g. a stringified array at $.deck.slides).
@@ -102,8 +104,9 @@ func ValidateJSONWithRepair(toolName, jsonStr string, schemaJSON []byte) (string
 
 	if len(repairedPaths) == 0 && len(renamedKeys) == 0 {
 		// Nothing repairable (e.g. the string isn't valid JSON of the expected
-		// type, or the schema expects a string) — fail with the original error.
-		return jsonStr, fmt.Errorf("validation failed: %w", valErr)
+		// type, or the schema expects a string) — fail with the original error,
+		// plus a plain statement of each type mismatch.
+		return jsonStr, withTypeHints(fmt.Errorf("validation failed: %w", valErr), inputData, schemaMap)
 	}
 
 	// Telemetry: log every repair, even if re-validation still fails — the
@@ -125,7 +128,7 @@ func ValidateJSONWithRepair(toolName, jsonStr string, schemaJSON []byte) (string
 		// Repair fired but the input is still invalid for other reasons —
 		// report the post-repair error (it's the more actionable one) and
 		// hand back the original input.
-		return jsonStr, fmt.Errorf("validation failed: %w", err)
+		return jsonStr, withTypeHints(fmt.Errorf("validation failed: %w", err), repairedData, schemaMap)
 	}
 
 	repairedJSON, err := json.Marshal(repairedData)
@@ -181,6 +184,12 @@ func repairValueAgainstSchema(value interface{}, schema map[string]interface{}, 
 					*repairedPaths = append(*repairedPaths, path)
 					value = parsed
 					break
+				}
+			}
+			if _, still := value.(string); still {
+				if coerced, ok := coerceScalarString(s, expected); ok {
+					*repairedPaths = append(*repairedPaths, path)
+					value = coerced
 				}
 			}
 		}

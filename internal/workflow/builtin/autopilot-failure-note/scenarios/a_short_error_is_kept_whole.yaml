@@ -1,0 +1,14 @@
+name: a_short_error_is_kept_whole
+description: An error within the cap is posted unchanged, with no ellipsis.
+inputs: {"repo": "reliant-labs/forge", "number": 101, "kind": "pr", "workflow_name": "autopilot-pr-review", "what": "the review", "error": "the reviewer finished without submitting a review", "retry": "x"}
+events:
+  - node: head
+    output: {"is_error": false, "data": {"head": {"sha": "0123456789abcdef0123456789abcdef01234567"}}}
+  - node: comments
+    output: {"is_error": false, "data": {"items": []}}
+  - node: post
+    output: {"is_error": false, "data": {"id": 9}}
+expect:
+  outcome: completed
+  node_outputs:
+    detail: {text: "the reviewer finished without submitting a review"}

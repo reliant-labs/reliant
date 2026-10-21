@@ -335,3 +335,47 @@ func findSubstring(s, substr string) bool {
 	}
 	return false
 }
+
+// Regression: in prod the reviewer called submit_review with
+// {"defects": "2", "risks": "0"}; validation rejected the quoted integers
+// three times in a row and the run failed.
+func TestExecuteResponseToolInline_StringifiedScalars(t *testing.T) {
+	schema := map[string]interface{}{
+		"type":     "object",
+		"required": []interface{}{"verdict", "defects", "risks"},
+		"properties": map[string]interface{}{
+			"verdict": map[string]interface{}{"type": "string"},
+			"defects": map[string]interface{}{"type": "integer"},
+			"risks":   map[string]interface{}{"type": "integer"},
+		},
+	}
+
+	t.Run("stringified integers succeed and flow through as numbers", func(t *testing.T) {
+		result := executeResponseToolInline("call-1", "submit_review",
+			`{"verdict":"approve","defects":"2","risks":"0"}`, schema)
+		if result.IsError {
+			t.Fatalf("expected success, got error: %s", result.Content)
+		}
+		for _, want := range []string{`"defects":2`, `"risks":0`} {
+			if !containsString(result.Content, want) {
+				t.Errorf("content %q should contain %q", result.Content, want)
+			}
+			if !containsString(result.Metadata, want) {
+				t.Errorf("metadata %q should contain %q", result.Metadata, want)
+			}
+		}
+	})
+
+	t.Run("an unparseable value is rejected with an actionable message", func(t *testing.T) {
+		result := executeResponseToolInline("call-2", "submit_review",
+			`{"verdict":"approve","defects":"two","risks":0}`, schema)
+		if !result.IsError {
+			t.Fatalf("expected an error, got %s", result.Content)
+		}
+		for _, want := range []string{"defects must be of type integer", `string "two"`, "without quotes"} {
+			if !containsString(result.Content, want) {
+				t.Errorf("content %q should contain %q", result.Content, want)
+			}
+		}
+	})
+}

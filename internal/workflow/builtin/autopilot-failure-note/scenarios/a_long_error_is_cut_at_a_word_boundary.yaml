@@ -1,0 +1,17 @@
+name: a_long_error_is_cut_at_a_word_boundary
+description: >-
+  An error longer than the 240-character cap is cut at the last space inside the cap and ends with an ellipsis,
+  never in the middle of a word ("... submit_review: Respons.").
+inputs: {"repo": "reliant-labs/forge", "number": 101, "kind": "pr", "workflow_name": "autopilot-pr-review", "what": "the review", "error": "the agent's tool calls failed 3 times in a row with the same error, so the run was ended instead of retrying again: submit_review: Response tool schema validation failed: validation failed: validating root: validating /properties/defects: type: 2 has type string, want integer", "retry": "x"}
+events:
+  - node: head
+    output: {"is_error": false, "data": {"head": {"sha": "0123456789abcdef0123456789abcdef01234567"}}}
+  - node: comments
+    output: {"is_error": false, "data": {"items": []}}
+  - node: post
+    output: {"is_error": false, "data": {"id": 9}}
+expect:
+  outcome: completed
+  completed: [detail, post, final]
+  node_outputs:
+    detail: {text: "the agent's tool calls failed 3 times in a row with the same error, so the run was ended instead of retrying again: submit_review: Response tool schema validation failed: validation failed: validating root: validating /properties/defects:…"}

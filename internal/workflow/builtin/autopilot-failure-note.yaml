@@ -70,6 +70,17 @@ nodes:
       key: "{{ inputs.kind == 'pr' ? nodes.sha.value : 'issue-' + string(inputs.number) }}"
       marker: "{{ '<!-- autopilot-failure ' + inputs.workflow_name + ':' + (inputs.kind == 'pr' ? nodes.sha.value : 'issue-' + string(inputs.number)) + ' -->' }}"
 
+  # The error is cut at a word boundary (a hard cut left "...submit_review: Respons."). A cut
+  # needs a space in the back half of the window, else a long unbroken token is cut mid-token.
+  - id: detail
+    type: compute
+    outputs:
+      text: >-
+        {{ size(inputs.error) <= 240 ? inputs.error
+             : (inputs.error.substring(0, 240).lastIndexOf(' ') > 120
+                 ? inputs.error.substring(0, inputs.error.substring(0, 240).lastIndexOf(' '))
+                 : inputs.error.substring(0, 240)) + '…' }}
+
   - id: comments
     type: action
     uses: github/issue.comment.list@1
@@ -95,7 +106,7 @@ nodes:
       body: |
         {{ nodes.subject.marker }}
         <!-- autopilot -->
-        🤖 Autopilot couldn't complete {{ inputs.what }}{{ inputs.kind == 'pr' && nodes.subject.key != 'unknown' ? ' for `' + nodes.subject.key.substring(0, math.least(7, size(nodes.subject.key))) + '`' : '' }}{{ inputs.error != '' ? ': ' + inputs.error.substring(0, math.least(240, size(inputs.error))) : '' }}.{{ inputs.retry != '' ? ' ' + inputs.retry : '' }}
+        🤖 Autopilot couldn't complete {{ inputs.what }}{{ inputs.kind == 'pr' && nodes.subject.key != 'unknown' ? ' for `' + nodes.subject.key.substring(0, math.least(7, size(nodes.subject.key))) + '`' : '' }}{{ inputs.error != '' ? ': ' + nodes.detail.text : '' }}.{{ inputs.retry != '' ? ' ' + inputs.retry : '' }}
 
   - id: final
     type: compute
@@ -111,6 +122,8 @@ edges:
   - from: sha
     default: subject
   - from: subject
+    default: detail
+  - from: detail
     default: comments
   - from: comments
     default: existing
