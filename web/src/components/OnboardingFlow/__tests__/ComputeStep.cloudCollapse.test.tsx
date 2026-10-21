@@ -23,7 +23,7 @@ vi.mock("@/hooks/useOnboardingQueries", () => ({
     eligible: false,
     reason: null,
     isLoading: false,
-    grantedMinutesRemaining: 0,
+    grantedSmallDaemonSecondsRemaining: 0,
     refetch: vi.fn(),
   }),
   computeIneligibleCopy: () => "",
@@ -40,8 +40,7 @@ vi.mock("@/hooks/useCloudBillingQueries", () => ({
           priceCents: 2000n,
           structuredLimits: {
             allowedDaemonSizes: ["small"],
-            daemonComputeIncludedMinutes: 1020,
-            daemonOveragePerMinuteCents: 2,
+            includedSmallDaemonHours: 17n,
           },
         },
       ],

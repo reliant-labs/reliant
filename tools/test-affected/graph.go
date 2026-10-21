@@ -256,11 +256,16 @@ var dbHelpers = []string{"SetupTestDB", "NewTestRepo", "resolveTestDSN", "DATABA
 // way filepath.Join(root, "deploy", "kcl") spells a path); whether it walks
 // the whole tree; and whether its tests use the DB helpers. It over-approximates
 // on purpose: a package selected for no reason costs seconds; one wrongly
-// skipped costs a broken main.
+// skipped costs a broken main. The one place it does not is a Join whose
+// anchor it can see (literalCandidates): there the anchor decides.
 func scanSources(g *Graph, pkgDirs map[string]string, tracked []string) {
 	tr := newTrackedIndex(tracked)
+	relDirs := make(map[string]string, len(g.DirPkg))
+	for rel, pkg := range g.DirPkg {
+		relDirs[pkg] = rel
+	}
 	for pkg, dir := range pkgDirs {
-		src := readPackageSources(dir)
+		src := readPackageSources(dir, relDirs[pkg])
 		if src.walker {
 			g.Walkers[pkg] = true
 		}
@@ -293,13 +298,16 @@ func newTrackedIndex(tracked []string) *trackedIndex {
 	return t
 }
 
-// resolve maps a literal to the tracked file or directory it names.
-func (t *trackedIndex) resolve(c string) (string, bool) {
+// resolve maps a literal to the tracked file or directory it names. An
+// unanchored literal may be relative to anywhere, so its leading ./ and ../
+// are dropped; an anchored one is already repo-relative, and a path that
+// climbs out of the repo names nothing in it.
+func (t *trackedIndex) resolve(c string, anchored bool) (string, bool) {
 	// A path literal has no whitespace; prose is not a read.
 	if strings.ContainsAny(c, " \t\n") {
 		return "", false
 	}
-	for strings.HasPrefix(c, "../") || strings.HasPrefix(c, "./") {
+	for !anchored && (strings.HasPrefix(c, "../") || strings.HasPrefix(c, "./")) {
 		c = strings.TrimPrefix(strings.TrimPrefix(c, "../"), "./")
 	}
 	c = path.Clean(c)
@@ -320,19 +328,19 @@ func (t *trackedIndex) resolve(c string) (string, bool) {
 	return "", false
 }
 
-func (t *trackedIndex) reads(cands []string) []string {
+func (t *trackedIndex) reads(cands []candidate) []string {
 	seen := map[string]bool{}
 	var reads []string
 	for _, c := range cands {
-		dirArg := strings.HasPrefix(c, "dir:")
-		r, ok := t.resolve(strings.TrimPrefix(c, "dir:"))
+		r, ok := t.resolve(c.path, c.anchored)
 		if !ok {
 			continue
 		}
 		// A bare word ("deploy", "api", "docs", "db") is also a label or a
-		// table: it names a directory only as an argument of a path call;
-		// alone it counts only when it is a real file at the repo root.
-		if !strings.Contains(r, "/") && !dirArg && !t.files[r] {
+		// table: it names a directory only as an argument of a path call
+		// or when its anchor is known; alone it counts only when it is a
+		// real file at the repo root.
+		if !strings.Contains(r, "/") && !c.anchored && !c.dirArg && !t.files[r] {
 			continue
 		}
 		if !seen[r] {
@@ -345,23 +353,37 @@ func (t *trackedIndex) reads(cands []string) []string {
 }
 
 type pkgSources struct {
-	candidates  []string
+	candidates  []candidate
 	locatesRoot bool
 	walker      bool
 	db          bool
+}
+
+// candidate is a string of a package's sources that may name a repo path.
+type candidate struct {
+	path string
+	// anchored: path is repo-relative because its anchor is known (joined
+	// onto the repo root or the package directory), so any tracked file or
+	// directory it names is a read, bare words included.
+	anchored bool
+	// dirArg: a lone literal argument of a path call whose anchor is unknown.
+	dirArg bool
 }
 
 var rootMarkers = []string{
 	"repoRoot(", "RepoRoot(", "repoRootFromTest(", "runtime.Caller(", `".."`, `"../`, "git rev-parse", "findRoot", `"go.mod"`, "os.Getwd(",
 }
 
-func readPackageSources(dir string) pkgSources {
+// readPackageSources scans the Go files of the package in dir, whose
+// repo-relative directory is rel.
+func readPackageSources(dir, rel string) pkgSources {
 	var out pkgSources
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return out
 	}
 	fset := token.NewFileSet()
+	var files []*ast.File
 	for _, e := range entries {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), ".go") {
 			continue
@@ -393,39 +415,125 @@ func readPackageSources(dir string) pkgSources {
 		if err != nil {
 			continue
 		}
-		out.candidates = append(out.candidates, literalCandidates(f)...)
+		files = append(files, f)
+	}
+	rf := findRootFacts(files)
+	for _, f := range files {
+		out.candidates = append(out.candidates, literalCandidates(f, rel, rf)...)
 	}
 	return out
 }
 
 // literalCandidates lists the strings of one file that may name a repo path.
-func literalCandidates(f *ast.File) []string {
-	var cands []string
-	ast.Inspect(f, func(n ast.Node) bool {
-		switch x := n.(type) {
-		case *ast.CallExpr:
-			cands = append(cands, callCandidates(x)...)
-		case *ast.BasicLit:
-			if s, ok := strLit(x); ok {
-				cands = append(cands, s)
-			}
+//
+// A Join is judged by its anchor, the first argument, because that is the
+// directory the literals after it are relative to:
+//
+//   - literals from the first argument on are relative to the package
+//     directory, where go test runs: filepath.Join("..", "..", "web", "src")
+//     in internal/grpc names web/src;
+//   - literals joined onto the repo root (rootFacts.locates) name that path
+//     under the root: filepath.Join(repoRoot(t), "scripts", name) names
+//     scripts;
+//   - literals joined onto anything else (t.TempDir(), a fixture's checkout,
+//     a workspace) name a path under that directory, not in this repo, and
+//     are no read at all: filepath.Join(ws, "web") is a fixture's web
+//     checkout, not web/.
+//
+// Every other literal is judged alone, as it always was: a multi-segment
+// literal that matches a tracked path is a read wherever it is anchored, and a
+// bare word only when it is a file at the repo root.
+func literalCandidates(f *ast.File, rel string, rf *rootFacts) []candidate {
+	var cands []candidate
+	for _, decl := range f.Decls {
+		local := map[string]bool{}
+		if fd, ok := decl.(*ast.FuncDecl); ok && fd.Body != nil {
+			local = rf.localRoots(fd.Body)
 		}
-		return true
-	})
+		judged := map[*ast.BasicLit]bool{}
+		ast.Inspect(decl, func(n ast.Node) bool {
+			switch x := n.(type) {
+			case *ast.CallExpr:
+				if isJoinCall(x) {
+					cands = append(cands, joinCandidates(x, rel, rf, local)...)
+					for _, a := range x.Args {
+						if b, ok := a.(*ast.BasicLit); ok {
+							judged[b] = true
+						}
+					}
+				} else {
+					cands = append(cands, callCandidates(x)...)
+				}
+			case *ast.BasicLit:
+				if s, ok := strLit(x); ok && !judged[x] {
+					cands = append(cands, candidate{path: s})
+				}
+			}
+			return true
+		})
+	}
 	return cands
 }
 
+// joinCandidates is what one Join names, by its anchor (literalCandidates).
+// Only the literals right after the anchor count: a run after a second
+// non-literal argument is under a directory nothing here knows.
+func joinCandidates(x *ast.CallExpr, rel string, rf *rootFacts, local map[string]bool) []candidate {
+	if len(x.Args) == 0 {
+		return nil
+	}
+	lits := func(from int) []string {
+		var run []string
+		for _, a := range x.Args[from:] {
+			s, ok := rf.literal(a)
+			if !ok {
+				break
+			}
+			run = append(run, s)
+		}
+		return run
+	}
+	if run := lits(0); len(run) > 0 {
+		joined := path.Join(run...)
+		if path.IsAbs(joined) {
+			return nil // under /, not in this repo
+		}
+		cands := []candidate{{path: path.Join(rel, joined), anchored: true}}
+		if strings.Contains(joined, "/") {
+			// The joined path may be handed to a child that runs at the
+			// repo root: a full tracked path is a read wherever it runs.
+			cands = append(cands, candidate{path: joined})
+		}
+		return cands
+	}
+	if run := lits(1); len(run) > 0 && rf.locates(x.Args[0], local) {
+		return []candidate{{path: path.Join(run...), anchored: true}}
+	}
+	return nil
+}
+
+// isJoinCall is filepath.Join or path.Join.
+func isJoinCall(c *ast.CallExpr) bool {
+	sel, ok := c.Fun.(*ast.SelectorExpr)
+	if !ok || sel.Sel.Name != "Join" {
+		return false
+	}
+	id, ok := sel.X.(*ast.Ident)
+	return ok && (id.Name == "filepath" || id.Name == "path")
+}
+
 // callCandidates joins the consecutive literal arguments of one call into the
-// path they spell: filepath.Join(root, "deploy", "kcl") names deploy/kcl.
-func callCandidates(x *ast.CallExpr) []string {
-	var cands, run []string
+// path they spell: readRepoFile(t, "deploy", "kcl") names deploy/kcl.
+func callCandidates(x *ast.CallExpr) []candidate {
+	var cands []candidate
+	var run []string
 	pathy := isPathCall(x)
 	flush := func() {
 		switch {
 		case len(run) > 1:
-			cands = append(cands, strings.Join(run, "/"))
+			cands = append(cands, candidate{path: strings.Join(run, "/")})
 		case len(run) == 1 && pathy && len(x.Args) > 1:
-			cands = append(cands, "dir:"+run[0])
+			cands = append(cands, candidate{path: run[0], dirArg: true})
 		}
 		run = nil
 	}

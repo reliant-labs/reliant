@@ -29,7 +29,7 @@ const mocks = vi.hoisted(() => ({
     eligible: true,
     reason: 0,
     hasActiveSubscription: true,
-    grantedMinutesRemaining: 0,
+    grantedSmallDaemonSecondsRemaining: 0,
     planName: 'Compute Small',
     allowedDaemonSizes: ['small'],
   })),
@@ -139,7 +139,7 @@ describe('MachinesSection', () => {
       eligible: true,
       reason: 0,
       hasActiveSubscription: true,
-      grantedMinutesRemaining: 0,
+      grantedSmallDaemonSecondsRemaining: 0,
       planName: 'Compute Small',
       allowedDaemonSizes: ['small'],
     })

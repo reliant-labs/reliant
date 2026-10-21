@@ -24,7 +24,7 @@ const mocks = vi.hoisted(() => ({
     eligible: true,
     reason: 0,
     hasActiveSubscription: true,
-    grantedMinutesRemaining: 0,
+    grantedSmallDaemonSecondsRemaining: 0,
     planName: 'Compute Large',
     allowedDaemonSizes: ['small', 'medium', 'large'],
   })),
@@ -224,7 +224,7 @@ describe('machine detail — resize', () => {
       eligible: true,
       reason: 0,
       hasActiveSubscription: true,
-      grantedMinutesRemaining: 0,
+      grantedSmallDaemonSecondsRemaining: 0,
       planName: 'Compute XL',
       allowedDaemonSizes: ['small', 'medium', 'large', 'xl'],
     })

@@ -60,3 +60,15 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+
+3. Zitadel (https://github.com/zitadel/zitadel)
+-----------------------------------------------
+
+Zitadel is licensed under the GNU Affero General Public License v3.0 only
+(https://github.com/zitadel/zitadel/blob/v4.19.5/LICENSE). Reliant's hosted
+managed identity (sign-in for deployed environments) runs the unmodified
+upstream Zitadel v4.19.5 container image as a separate service, which Reliant
+reaches only through its HTTP and gRPC APIs. Reliant does not include or link
+any Zitadel server code. Source for that release:
+https://github.com/zitadel/zitadel/tree/v4.19.5

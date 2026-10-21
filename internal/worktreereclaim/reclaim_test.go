@@ -58,13 +58,9 @@ func newFixture(t *testing.T) *fixture {
 		t.Fatal(err)
 	}
 	f := &fixture{t: t, project: filepath.Join(base, "project"), origin: filepath.Join(base, "origin.git"), root: filepath.Join(base, "worktrees")}
-	run(t, base, "init", "-q", "--bare", "-b", "main", f.origin)
-	run(t, base, "init", "-q", "-b", "main", f.project)
-	write(t, filepath.Join(f.project, "a.txt"), "one\n")
-	run(t, f.project, "add", ".")
-	run(t, f.project, "commit", "-q", "-m", "init")
-	run(t, f.project, "remote", "add", "origin", f.origin)
-	run(t, f.project, "push", "-q", "origin", "main")
+	// A bare origin and a project on main with one commit pushed to it, copied
+	// from a template built once (fixture_template_test.go).
+	copyFixtureTemplate(t, base)
 	if err := os.MkdirAll(f.root, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -147,6 +143,7 @@ func ignore(t *testing.T, f *fixture, patterns string) {
 }
 
 func TestReconcile_CleanMergedIsRemoved(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	f.idle()
 	w := f.worktree("w1", "feat/a")
@@ -165,6 +162,7 @@ func TestReconcile_CleanMergedIsRemoved(t *testing.T) {
 
 // B2: ignored files are potentially work. Rebuildable output goes; data holds.
 func TestReconcile_RebuildableIgnoredFilesDoNotBlock(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	f.idle()
 	ignore(t, f, "node_modules/\ndist/\n")
@@ -177,6 +175,7 @@ func TestReconcile_RebuildableIgnoredFilesDoNotBlock(t *testing.T) {
 }
 
 func TestReconcile_IgnoredDataHoldsTheWorktree(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	f.idle()
 	ignore(t, f, "data/\n.env*\n*.db\n*.sqlite\nsecrets/\n.forge/\nweird/\n")
@@ -201,6 +200,7 @@ func TestReconcile_IgnoredDataHoldsTheWorktree(t *testing.T) {
 }
 
 func TestReconcile_DirtyIsHeld(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	f.idle()
 	for name, mutate := range map[string]func(Worktree){
@@ -221,6 +221,7 @@ func TestReconcile_DirtyIsHeld(t *testing.T) {
 
 // B3
 func TestReconcile_SkipWorktreeAndAssumeUnchangedEditsAreDirty(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	f.idle()
 	for _, flag := range []string{"--skip-worktree", "--assume-unchanged"} {
@@ -248,6 +249,7 @@ func snapshotHas(t *testing.T, f *fixture, r Result, file, content string) bool 
 }
 
 func TestReconcile_UnpushedCommitIsHeld_ThenSafeOnceMergedOrPushed(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	f.idle()
 	w := f.worktree("w3", "feat/c")
@@ -264,6 +266,7 @@ func TestReconcile_UnpushedCommitIsHeld_ThenSafeOnceMergedOrPushed(t *testing.T)
 }
 
 func TestReconcile_InUseIsHeld_AndRecheckedRightBeforeRemoval(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	f.idle()
 	w := f.worktree("w4", "feat/d")
@@ -287,6 +290,7 @@ func TestReconcile_InUseIsHeld_AndRecheckedRightBeforeRemoval(t *testing.T) {
 }
 
 func TestReconcile_CwdProbeFailureFailsClosed(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	f.idle()
 	w := f.worktree("w5", "feat/e")
@@ -298,6 +302,7 @@ func TestReconcile_CwdProbeFailureFailsClosed(t *testing.T) {
 
 // S3: the automatic path waits out an idle floor; the confirmed one does not.
 func TestReconcile_IdleFloorAppliesToAutoOnly(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	f.r.IdleFloor = time.Hour
 	w := f.worktree("w6", "feat/f")
@@ -311,6 +316,7 @@ func TestReconcile_IdleFloorAppliesToAutoOnly(t *testing.T) {
 }
 
 func TestReconcile_ForeignLockIsUnmanaged(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	f.idle()
 	w := f.worktree("w7", "feat/g")
@@ -323,6 +329,7 @@ func TestReconcile_ForeignLockIsUnmanaged(t *testing.T) {
 
 // S2: a directory locked for ANOTHER row's id is not this row's to remove.
 func TestReconcile_DirectoryLockedForAnotherRowIsNeverRemoved(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	f.idle()
 	w := f.worktree("active-row", "feat/shared")
@@ -338,6 +345,7 @@ func TestReconcile_DirectoryLockedForAnotherRowIsNeverRemoved(t *testing.T) {
 // S1: the fence. An unarchive re-locks as active; a request already in flight
 // must then refuse to remove.
 func TestFence_UnarchiveInvalidatesInFlightRemoval(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	f.idle()
 	w := f.worktree("fence1", "feat/fence1")
@@ -362,6 +370,7 @@ func TestFence_UnarchiveInvalidatesInFlightRemoval(t *testing.T) {
 }
 
 func TestFence_ReArchiveWithNewFenceSupersedesTheOld(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	f.idle()
 	w := f.worktree("fence2", "feat/fence2")
@@ -376,6 +385,7 @@ func TestFence_ReArchiveWithNewFenceSupersedesTheOld(t *testing.T) {
 }
 
 func TestReconcile_PathOutsideRootIsForeign(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	got := f.one(Worktree{ID: "x", Path: f.project, State: StateArchived})
 	if got.Outcome != OutcomeForeign || !exists(filepath.Join(f.project, ".git")) {
@@ -384,6 +394,7 @@ func TestReconcile_PathOutsideRootIsForeign(t *testing.T) {
 }
 
 func TestReconcile_MainCheckoutUnderRootIsRefused(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	f.idle()
 	inside := filepath.Join(f.root, "clone")
@@ -396,6 +407,7 @@ func TestReconcile_MainCheckoutUnderRootIsRefused(t *testing.T) {
 
 // S10: a missing root is an unmounted volume, not evidence of absence.
 func TestReconcile_MissingRootIsForeignNotGone(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	r := &Reclaimer{Root: filepath.Join(t.TempDir(), "not-mounted"), Cwds: f.r.Cwds}
 	got := r.Reconcile(context.Background(), Request{Worktrees: []Worktree{{ID: "x", Path: filepath.Join(r.Root, "proj", "x"), State: StateArchived, Fence: "1"}}}).Results[0]
@@ -405,6 +417,7 @@ func TestReconcile_MissingRootIsForeignNotGone(t *testing.T) {
 }
 
 func TestReconcile_MissingDirectoryPrunesRegistrationAndReportsGone(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	w := f.worktree("w8", "feat/h")
 	run(t, f.project, "worktree", "unlock", w.Path)
@@ -423,6 +436,7 @@ func TestReconcile_MissingDirectoryPrunesRegistrationAndReportsGone(t *testing.T
 // S10 + S5: when the directory is gone, saved work from an earlier clean-up is
 // reported so the server never loses its refs.
 func TestReconcile_GoneReportsEarlierSnapshotRefs(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	run(t, f.project, "update-ref", "refs/reliant/wip/w9/root/1-aa", run(t, f.project, "rev-parse", "HEAD"))
 	w := Worktree{ID: "w9", Path: filepath.Join(f.root, "proj", "w9"), State: StateArchived, Fence: "1", Checkouts: []Checkout{{RepoPath: f.project}}}
@@ -433,6 +447,7 @@ func TestReconcile_GoneReportsEarlierSnapshotRefs(t *testing.T) {
 }
 
 func TestReconcile_ActiveWorktreesAreLockedAndNeverRemoved(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	path := filepath.Join(f.root, "proj", "w10")
 	run(t, f.project, "worktree", "add", "-q", "-b", "feat/i", path, "main")
@@ -447,6 +462,7 @@ func TestReconcile_ActiveWorktreesAreLockedAndNeverRemoved(t *testing.T) {
 }
 
 func TestReconcile_ActiveOnlyPassNeverListsProcesses(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	path := filepath.Join(f.root, "proj", "w11")
 	run(t, f.project, "worktree", "add", "-q", "-b", "feat/j", path, "main")
@@ -462,6 +478,7 @@ func TestReconcile_ActiveOnlyPassNeverListsProcesses(t *testing.T) {
 // R-S1: there is no re-lock cache. A worktree that someone unlocked is locked
 // again by the very next request.
 func TestLockActive_AlwaysRewritesTheLock(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	path := filepath.Join(f.root, "proj", "w12")
 	run(t, f.project, "worktree", "add", "-q", "-b", "feat/k", path, "main")
@@ -476,6 +493,7 @@ func TestLockActive_AlwaysRewritesTheLock(t *testing.T) {
 
 // B1: files at a multi-repo workspace root are work.
 func TestReconcile_MultiRepoRootFilesHoldTheWorkspace(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	f.idle()
 	ws := filepath.Join(f.root, "proj", "taxes-237184bf")
@@ -500,6 +518,8 @@ func TestReconcile_MultiRepoRootFilesHoldTheWorkspace(t *testing.T) {
 }
 
 func TestReconcile_MultiRepoWorkspaceWithOnlyEmptyDirsBetweenIsRemoved(t *testing.T) {
+	t.Parallel()
+	heavyUnderShort(t, "~100 git processes: three reclaim passes over a two-checkout workspace")
 	f := newFixture(t)
 	f.idle()
 	ws := filepath.Join(f.root, "proj", "ws1")
@@ -527,6 +547,7 @@ func TestReconcile_MultiRepoWorkspaceWithOnlyEmptyDirsBetweenIsRemoved(t *testin
 
 // B4: a repository inside the worktree, at any depth, in ignored or skip dirs.
 func TestReconcile_NestedRepositoryHoldsAtAnyDepth(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	f.idle()
 	ignore(t, f, "tmp/\nnode_modules/\n")
@@ -558,6 +579,7 @@ func TestReconcile_NestedRepositoryHoldsAtAnyDepth(t *testing.T) {
 
 // B4: the snapshot itself refuses to record a gitlink as a stand-in.
 func TestSnapshot_RefusesAGitlinkStandIn(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	w := f.worktree("gl", "feat/gl")
 	nested := filepath.Join(w.Path, "lib")
@@ -571,6 +593,7 @@ func TestSnapshot_RefusesAGitlinkStandIn(t *testing.T) {
 }
 
 func TestSubmoduleIsHeldNotRemoved(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	f.idle()
 	base := filepath.Dir(f.project)
@@ -590,6 +613,7 @@ func TestSubmoduleIsHeldNotRemoved(t *testing.T) {
 }
 
 func TestSnapshotRemove_SavesWorkThenRemoves(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	ignore(t, f, "node_modules/\n")
 	w := f.worktree("w13", "feat/l")
@@ -628,6 +652,7 @@ func TestSnapshotRemove_SavesWorkThenRemoves(t *testing.T) {
 }
 
 func TestSnapshot_DoesNotTouchHeadIndexOrFiles(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	w := f.worktree("w14", "feat/m")
 	write(t, filepath.Join(w.Path, "a.txt"), "edited\n")
@@ -648,6 +673,8 @@ func TestSnapshot_DoesNotTouchHeadIndexOrFiles(t *testing.T) {
 
 // S11: refs are unique and never overwritten, even within one nanosecond tick.
 func TestSnapshot_RefsAreUniqueAndNeverOverwritten(t *testing.T) {
+	t.Parallel()
+	heavyUnderShort(t, "~230 git processes: twenty snapshots in a row")
 	f := newFixture(t)
 	w := f.worktree("w15", "feat/n")
 	write(t, filepath.Join(w.Path, "u.txt"), "u\n")
@@ -676,6 +703,7 @@ func TestSnapshot_RefsAreUniqueAndNeverOverwritten(t *testing.T) {
 
 // S3: the work changes between the snapshot and the removal.
 func TestSnapshotRemove_WorkChangedAfterSnapshotIsNotRemoved(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	w := f.worktree("w16", "feat/o")
 	write(t, filepath.Join(w.Path, "u.txt"), "v1\n")
@@ -694,6 +722,7 @@ func TestSnapshotRemove_WorkChangedAfterSnapshotIsNotRemoved(t *testing.T) {
 
 // S3: no --force. git itself refuses a dirty checkout at removal time.
 func TestRemoval_NeverForcesPastGit(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	f.idle()
 	w := f.worktree("w17", "feat/p")
@@ -713,6 +742,7 @@ func TestRemoval_NeverForcesPastGit(t *testing.T) {
 }
 
 func TestSnapshotRemove_InUseIsLeftAlone(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	w := f.worktree("w18", "feat/q")
 	write(t, filepath.Join(w.Path, "u.txt"), "u\n")
@@ -727,6 +757,7 @@ func TestSnapshotRemove_InUseIsLeftAlone(t *testing.T) {
 }
 
 func TestSnapshotRemove_TooLargeIsHeld(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	w := f.worktree("w19", "feat/r")
 	big := make([]byte, 1<<20)
@@ -740,6 +771,7 @@ func TestSnapshotRemove_TooLargeIsHeld(t *testing.T) {
 }
 
 func TestReconcile_KeepFilesNeverRemoves(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	f.idle()
 	w := f.worktree("w20", "feat/s")
@@ -760,6 +792,7 @@ func TestReconcile_KeepFilesNeverRemoves(t *testing.T) {
 }
 
 func TestReconcile_EmptyHuskIsRemovedButAnyFileKeepsIt(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	f.idle()
 	root := filepath.Join(f.root, "proj", "husk")
@@ -778,6 +811,8 @@ func TestReconcile_EmptyHuskIsRemovedButAnyFileKeepsIt(t *testing.T) {
 
 // S8: operations on one path serialize.
 func TestReclaimer_SerializesOperationsPerPath(t *testing.T) {
+	t.Parallel()
+	heavyUnderShort(t, "~100 git processes: eight reclaim passes over one worktree, which it serializes")
 	f := newFixture(t)
 	f.idle()
 	w := f.worktree("w21", "feat/t")
@@ -800,6 +835,7 @@ func TestReclaimer_SerializesOperationsPerPath(t *testing.T) {
 
 // The real lsof probe parses on this OS (no LLM, no network).
 func TestProcessCwds_RealProbeSeesThisProcess(t *testing.T) {
+	t.Parallel()
 	cwds, err := ProcessCwds(context.Background())
 	if err != nil {
 		t.Skipf("process listing unavailable here: %v", err)

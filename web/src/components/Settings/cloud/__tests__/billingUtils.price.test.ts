@@ -55,27 +55,24 @@ function plan(
       maxLlmKeys: 1,
       requestsPerMin: 0,
       allowedDaemonSizes: [],
-      daemonComputeIncludedMinutes: 0,
-      daemonOveragePerMinuteCents: 0,
+      includedSmallDaemonHours: 0n,
       ...limits,
     },
   } as unknown as Plan;
 }
 
 describe("derivePlanDisplay reads the server, not a table", () => {
-  it("returns the server's price, overage, minutes and sizes verbatim", () => {
+  it("returns the server's price, included hours and sizes verbatim", () => {
     const d = derivePlanDisplay(
       plan("plan_compute_medium", {
         priceCents: 4000n,
         allowedDaemonSizes: ["small", "medium"],
-        daemonComputeIncludedMinutes: 2500,
-        daemonOveragePerMinuteCents: 0.4,
+        includedSmallDaemonHours: 320n,
       }),
     );
 
     expect(d.monthlyPriceCents).toBe(4000);
-    expect(d.overageCentsPerMinute).toBe(0.4);
-    expect(d.includedMinutes).toBe(2500);
+    expect(d.includedSmallDaemonHours).toBe(320);
     expect(d.allowedSizes).toEqual(["small", "medium"]);
   });
 
@@ -89,14 +86,12 @@ describe("derivePlanDisplay reads the server, not a table", () => {
     const d = derivePlanDisplay(
       plan("plan_compute_medium", {
         priceCents: 5500n,
-        daemonOveragePerMinuteCents: 0.55,
-        daemonComputeIncludedMinutes: 3000,
+        includedSmallDaemonHours: 410n,
       }),
     );
 
     expect(d.monthlyPriceCents).toBe(5500);
-    expect(d.overageCentsPerMinute).toBe(0.55);
-    expect(d.includedMinutes).toBe(3000);
+    expect(d.includedSmallDaemonHours).toBe(410);
   });
 
   /**
@@ -113,16 +108,6 @@ describe("derivePlanDisplay reads the server, not a table", () => {
   it("reports an absent plan as unavailable", () => {
     expect(derivePlanDisplay(null).monthlyPriceCents).toBeNull();
     expect(derivePlanDisplay(undefined).monthlyPriceCents).toBeNull();
-  });
-
-  it("preserves the unlimited sentinel instead of clamping it", () => {
-    const d = derivePlanDisplay(
-      plan("plan_compute_xl", {
-        priceCents: 16000n,
-        daemonComputeIncludedMinutes: -1,
-      }),
-    );
-    expect(d.includedMinutes).toBe(-1);
   });
 });
 

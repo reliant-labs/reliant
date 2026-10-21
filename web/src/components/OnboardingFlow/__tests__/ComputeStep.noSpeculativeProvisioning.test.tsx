@@ -53,7 +53,7 @@ const mockUseCloudEligibility = vi.fn(() => ({
   eligible: true,
   reason: null as string | null,
   isLoading: false,
-  grantedMinutesRemaining: 0,
+  grantedSmallDaemonSecondsRemaining: 0,
   refetch: mockRefetchCloudEligibility,
 }));
 
@@ -85,7 +85,7 @@ type RedeemCouponResult = {
   newBalanceCents: number;
   kind: RedeemedCouponKind;
   computeMinutes: number;
-  newComputeMinutesRemaining: number;
+  newGrantedSmallDaemonSecondsRemaining: number;
 };
 const mockRedeemMutate = vi.fn<
   (
@@ -140,7 +140,7 @@ function setEligible(eligible: boolean, reason: string | null = null) {
     eligible,
     reason,
     isLoading: false,
-    grantedMinutesRemaining: eligible ? 600 : 0,
+    grantedSmallDaemonSecondsRemaining: eligible ? 36000 : 0,
     refetch: mockRefetchCloudEligibility,
   });
 }
@@ -153,7 +153,7 @@ function redeemsComputeCoupon() {
       newBalanceCents: 0,
       kind: RedeemedCouponKind.COMPUTE_MINUTES,
       computeMinutes: 600,
-      newComputeMinutesRemaining: 600,
+      newGrantedSmallDaemonSecondsRemaining: 36000,
     });
   });
 }

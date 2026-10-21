@@ -636,6 +636,7 @@ export function isTriggerNotFound(error: unknown): boolean {
 export type WorkflowTriggerOutcomeKind =
   | "enabled"
   | "resumed"
+  | "updated"
   | "alreadyEnabled"
   | "failed"
   | "notEnabled"
@@ -681,6 +682,8 @@ export interface EnableWorkflowInput {
   message?: string;
   namePrefix?: string;
   overrides?: WorkflowTriggerOverrideInput[];
+  /** Unset: the owner for a new activation, unchanged for an existing one. */
+  actingIdentity?: ActingIdentityKey;
 }
 
 export interface DisableWorkflowResult {
@@ -691,6 +694,7 @@ export interface DisableWorkflowResult {
 const OUTCOME_KIND: Partial<Record<WorkflowTriggerOutcome, WorkflowTriggerOutcomeKind>> = {
   [WorkflowTriggerOutcome.ENABLED]: "enabled",
   [WorkflowTriggerOutcome.RESUMED]: "resumed",
+  [WorkflowTriggerOutcome.UPDATED]: "updated",
   [WorkflowTriggerOutcome.ALREADY_ENABLED]: "alreadyEnabled",
   [WorkflowTriggerOutcome.FAILED]: "failed",
   [WorkflowTriggerOutcome.NOT_ENABLED]: "notEnabled",
@@ -778,6 +782,7 @@ export const triggerGrpc = {
         notifyOnComplete: input.notifyOnComplete ?? false,
         message: input.message ?? "",
         namePrefix: input.namePrefix ?? "",
+        actingIdentity: actingIdentityToProto(input.actingIdentity),
         overrides: (input.overrides ?? []).map((o) => ({
           trigger: o.trigger,
           name: o.name,

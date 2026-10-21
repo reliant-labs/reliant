@@ -62,6 +62,9 @@ const (
 	// CatalogServiceListCatalogIntegrationsProcedure is the fully-qualified name of the
 	// CatalogService's ListCatalogIntegrations RPC.
 	CatalogServiceListCatalogIntegrationsProcedure = "/reliant.v1.CatalogService/ListCatalogIntegrations"
+	// CatalogServiceListInputOptionsProcedure is the fully-qualified name of the CatalogService's
+	// ListInputOptions RPC.
+	CatalogServiceListInputOptionsProcedure = "/reliant.v1.CatalogService/ListInputOptions"
 )
 
 // CatalogServiceClient is a client for the reliant.v1.CatalogService service.
@@ -97,6 +100,12 @@ type CatalogServiceClient interface {
 	// hundreds of integrations holds only what it has scrolled to;
 	// SearchCatalog with `integration` set lists one integration's entries.
 	ListCatalogIntegrations(context.Context, *connect.Request[v1.ListCatalogIntegrationsRequest]) (*connect.Response[v1.ListCatalogIntegrationsResponse], error)
+	// ListInputOptions lists the values a picker can offer for an
+	// integration-defined input type (`github.repository`): it runs the type's
+	// options list action as the caller, through the connection they chose, and
+	// projects each item to an option. It reads only; an unknown type is
+	// NOT_FOUND.
+	ListInputOptions(context.Context, *connect.Request[v1.ListInputOptionsRequest]) (*connect.Response[v1.ListInputOptionsResponse], error)
 }
 
 // NewCatalogServiceClient constructs a client for the reliant.v1.CatalogService service. By
@@ -164,6 +173,12 @@ func NewCatalogServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(catalogServiceMethods.ByName("ListCatalogIntegrations")),
 			connect.WithClientOptions(opts...),
 		),
+		listInputOptions: connect.NewClient[v1.ListInputOptionsRequest, v1.ListInputOptionsResponse](
+			httpClient,
+			baseURL+CatalogServiceListInputOptionsProcedure,
+			connect.WithSchema(catalogServiceMethods.ByName("ListInputOptions")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -178,6 +193,7 @@ type catalogServiceClient struct {
 	searchCatalog           *connect.Client[v1.SearchCatalogRequest, v1.SearchCatalogResponse]
 	getCatalogEntry         *connect.Client[v1.GetCatalogEntryRequest, v1.GetCatalogEntryResponse]
 	listCatalogIntegrations *connect.Client[v1.ListCatalogIntegrationsRequest, v1.ListCatalogIntegrationsResponse]
+	listInputOptions        *connect.Client[v1.ListInputOptionsRequest, v1.ListInputOptionsResponse]
 }
 
 // ListModels calls reliant.v1.CatalogService.ListModels.
@@ -225,6 +241,11 @@ func (c *catalogServiceClient) ListCatalogIntegrations(ctx context.Context, req 
 	return c.listCatalogIntegrations.CallUnary(ctx, req)
 }
 
+// ListInputOptions calls reliant.v1.CatalogService.ListInputOptions.
+func (c *catalogServiceClient) ListInputOptions(ctx context.Context, req *connect.Request[v1.ListInputOptionsRequest]) (*connect.Response[v1.ListInputOptionsResponse], error) {
+	return c.listInputOptions.CallUnary(ctx, req)
+}
+
 // CatalogServiceHandler is an implementation of the reliant.v1.CatalogService service.
 type CatalogServiceHandler interface {
 	// ListModels returns all available models filtered by user's configured API keys
@@ -258,6 +279,12 @@ type CatalogServiceHandler interface {
 	// hundreds of integrations holds only what it has scrolled to;
 	// SearchCatalog with `integration` set lists one integration's entries.
 	ListCatalogIntegrations(context.Context, *connect.Request[v1.ListCatalogIntegrationsRequest]) (*connect.Response[v1.ListCatalogIntegrationsResponse], error)
+	// ListInputOptions lists the values a picker can offer for an
+	// integration-defined input type (`github.repository`): it runs the type's
+	// options list action as the caller, through the connection they chose, and
+	// projects each item to an option. It reads only; an unknown type is
+	// NOT_FOUND.
+	ListInputOptions(context.Context, *connect.Request[v1.ListInputOptionsRequest]) (*connect.Response[v1.ListInputOptionsResponse], error)
 }
 
 // NewCatalogServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -321,6 +348,12 @@ func NewCatalogServiceHandler(svc CatalogServiceHandler, opts ...connect.Handler
 		connect.WithSchema(catalogServiceMethods.ByName("ListCatalogIntegrations")),
 		connect.WithHandlerOptions(opts...),
 	)
+	catalogServiceListInputOptionsHandler := connect.NewUnaryHandler(
+		CatalogServiceListInputOptionsProcedure,
+		svc.ListInputOptions,
+		connect.WithSchema(catalogServiceMethods.ByName("ListInputOptions")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/reliant.v1.CatalogService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case CatalogServiceListModelsProcedure:
@@ -341,6 +374,8 @@ func NewCatalogServiceHandler(svc CatalogServiceHandler, opts ...connect.Handler
 			catalogServiceGetCatalogEntryHandler.ServeHTTP(w, r)
 		case CatalogServiceListCatalogIntegrationsProcedure:
 			catalogServiceListCatalogIntegrationsHandler.ServeHTTP(w, r)
+		case CatalogServiceListInputOptionsProcedure:
+			catalogServiceListInputOptionsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -384,4 +419,8 @@ func (UnimplementedCatalogServiceHandler) GetCatalogEntry(context.Context, *conn
 
 func (UnimplementedCatalogServiceHandler) ListCatalogIntegrations(context.Context, *connect.Request[v1.ListCatalogIntegrationsRequest]) (*connect.Response[v1.ListCatalogIntegrationsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.CatalogService.ListCatalogIntegrations is not implemented"))
+}
+
+func (UnimplementedCatalogServiceHandler) ListInputOptions(context.Context, *connect.Request[v1.ListInputOptionsRequest]) (*connect.Response[v1.ListInputOptionsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.CatalogService.ListInputOptions is not implemented"))
 }

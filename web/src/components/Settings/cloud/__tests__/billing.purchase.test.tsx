@@ -101,9 +101,7 @@ const PLANS = [
     displayOrder: 1,
     structuredLimits: {
       allowedDaemonSizes: ["small"],
-      daemonComputeIncludedMinutes: 1200,
       includedSmallDaemonHours: 20n,
-      daemonOveragePerMinuteCents: 0.25,
     },
   },
   {
@@ -114,9 +112,7 @@ const PLANS = [
     displayOrder: 2,
     structuredLimits: {
       allowedDaemonSizes: ["small", "medium"],
-      daemonComputeIncludedMinutes: 2600,
       includedSmallDaemonHours: 80n,
-      daemonOveragePerMinuteCents: 0.47,
     },
   },
   {
@@ -127,9 +123,7 @@ const PLANS = [
     displayOrder: 3,
     structuredLimits: {
       allowedDaemonSizes: ["small", "medium", "large"],
-      daemonComputeIncludedMinutes: 5200,
       includedSmallDaemonHours: 320n,
-      daemonOveragePerMinuteCents: 0.91,
     },
   },
 ];

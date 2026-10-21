@@ -10,6 +10,7 @@ import (
 // Regenerable tool output in a checkout does not hold it: forge's scratch and
 // generate cache, a project's pinned tools, and its scratch tmp/.
 func TestReconcile_ToolOutputIsRegenerable(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("builds 7 git fixtures; TestRebuildablePath_Entries covers the rule under -short")
 	}
@@ -37,6 +38,7 @@ func TestReconcile_ToolOutputIsRegenerable(t *testing.T) {
 // tree, and data git lists inside tmp/ (one with a tracked file, so git does
 // not collapse it) is still data.
 func TestReconcile_RegenerableEntriesDoNotCoverData(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("builds 3 git fixtures; TestRebuildablePath_Entries covers the rule under -short")
 	}
@@ -61,6 +63,7 @@ func TestReconcile_RegenerableEntriesDoNotCoverData(t *testing.T) {
 }
 
 func TestRebuildablePath_Entries(t *testing.T) {
+	t.Parallel()
 	for p, want := range map[string]bool{
 		".forge/tmp/":                  true,
 		".forge/tmp/x/y":               true,
@@ -98,6 +101,7 @@ func preCommitClone(t *testing.T, checkout, rel string) string {
 // pre-commit's hook clones under <checkout>/.tools/pre-commit are regenerable:
 // they do not make the checkout a nested repository, and removal takes them.
 func TestReconcile_PreCommitClonesUnderToolsAreRegenerable(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	f.idle()
 	ignore(t, f, ".tools/\n")
@@ -114,6 +118,7 @@ func TestReconcile_PreCommitClonesUnderToolsAreRegenerable(t *testing.T) {
 // git does not ignore, a clone deeper down, and a repository anywhere else
 // (including the now-regenerable tmp/) is still a nested repository.
 func TestReconcile_OtherNestedRepositoriesStillHold(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("builds 5 git fixtures; TestRebuildablePath_Entries covers the rule under -short")
 	}
@@ -125,6 +130,7 @@ func TestReconcile_OtherNestedRepositoriesStillHold(t *testing.T) {
 		"pre-commit-at": {".tools/\n", ".tools/pre-commit"},
 	} {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			f := newFixture(t)
 			f.idle()
 			ignore(t, f, tc.ignore)
@@ -142,6 +148,7 @@ func TestReconcile_OtherNestedRepositoriesStillHold(t *testing.T) {
 }
 
 func TestToolClone_NeedsAnOwnerThatIgnoresIt(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	ignore(t, f, ".tools/\n")
 	w := f.worktree("owner", "feat/owner")

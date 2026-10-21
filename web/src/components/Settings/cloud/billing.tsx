@@ -19,8 +19,6 @@ import {
   Button,
   Card,
   CardContent,
-  CardHeader,
-  CardTitle,
   EmptyState,
   PageHeader,
   Table,
@@ -54,7 +52,6 @@ import {
   formatBillingError,
   formatCentsAsDollars,
   formatCurrencyFromWalletFields,
-  formatDayLabel,
   formatTimestampDate,
   getWalletBalanceState,
   getWalletWarning,
@@ -78,16 +75,18 @@ import {
   asOfLabel,
   burnLabel,
   hoursRanOut,
+  overageSmallDaemonSeconds,
   projectedBillLabel,
   remainingHeadline,
   runsOutLabel,
+  sizeName,
   storageCard,
 } from "@/components/Billing/daemonUsage";
 import { deriveMachineOptions } from "@/components/Billing/machineOptions";
 import { MACHINE_BURST } from "@/components/Billing/machineSpecs";
 import { LinkIdentityModal } from "@/components/Billing/LinkIdentityModal";
 import { WalletTopupCheckout } from "@/components/Billing/WalletTopupCheckout";
-import { formatMachineMinutesShort } from "@/lib/formatMachineMinutes";
+import { formatMachineSecondsShort } from "@/lib/formatMachineMinutes";
 import { buildCheckoutReturnUrls, openCheckout } from "@/lib/stripeCheckout";
 import {
   VISIBLE_BILLING_TABS,
@@ -625,26 +624,15 @@ function OverviewTab({
     // "measured zero" — the direction that withholds rather than asserts.
     const usageFailed = (!!usageQ.error && !usage) || (!!usage && !usage.usageMeasured);
 
-    const includedMinutes = usage?.includedMinutes ?? d.includedMinutes;
-    // Only ever read when `usageFailed` is false. Every consumer below is
-    // gated on it, so no unmeasured zero reaches a label.
-    const usedMinutes = usage?.usedMinutes ?? 0;
-
-    // Per-daemon billing (design §6.2): when the server sent the §6.1
-    // fields, the card speaks SMALL-DAEMON-HOURS and the bar fills in them.
-    // measured_through is the discriminator — a server that fills §6.1 always
-    // sets it, and an older one never does — so an old server keeps the
-    // minute model below unchanged. Old fields are never mixed into the new
-    // reading.
-    const sdh = usage?.measuredThrough ? usage : undefined;
-    const sdhIncluded = sdh ? Number(sdh.includedSmallDaemonSeconds) : 0;
+    // The card speaks SMALL-DAEMON-HOURS (design §6.2) and the bar fills in
+    // them. Only ever read when `usageFailed` is false: every consumer below
+    // is gated on it, so no unmeasured zero reaches a label.
+    const sdh = usage && !usageFailed ? usage : undefined;
+    const sdhIncluded = sdh
+      ? Number(sdh.includedSmallDaemonSeconds)
+      : d.includedSmallDaemonHours * 3600;
     const sdhUsed = sdh ? Number(sdh.usedSmallDaemonSeconds) : 0;
-    const sdhOverage = sdh
-      ? sdh.bySize.reduce(
-          (sum, row) => sum + Number(row.overageSeconds) * Number(row.multiplier),
-          0,
-        )
-      : 0;
+    const sdhOverage = sdh ? overageSmallDaemonSeconds(sdh) : 0;
 
     return {
       planName: plan?.name ?? null,
@@ -657,39 +645,26 @@ function OverviewTab({
         : null,
       // Degraded and absent both suppress these rather than rendering a
       // confident zero — `0 h / mo` was the whole complaint.
-      includedHoursLabel:
-        degraded || includedMinutes < 0
-          ? null
-          : sdh
-            ? `${(sdhIncluded / 3600).toFixed(1)} h included`
-            : `${Math.round(includedMinutes / 60)} h included`,
+      includedHoursLabel: degraded
+        ? null
+        : `${(sdhIncluded / 3600).toFixed(1)} h included`,
       // null when unmeasured, NOT "0.0 h". Every consumer already treats null
       // as "render nothing", which is the same discipline `includedHoursLabel`
       // above uses for a plan whose detail did not load.
       usedHoursLabel:
-        degraded || usageFailed
-          ? null
-          : sdh
-            ? `${(sdhUsed / 3600).toFixed(1)} h`
-            : `${(usedMinutes / 60).toFixed(1)} h`,
+        degraded || usageFailed ? null : `${(sdhUsed / 3600).toFixed(1)} h`,
       allowedSizesLabel: degraded ? null : formatAllowedSizes(d.allowedSizes),
       overageRateLabel: "Varies by machine size",
       capacity:
         degraded || usageFailed
           ? null
-          : sdh
-            ? // The same band, filled in SDS: used against included, overage
-              // as its own segment (Σ overage seconds × multiplier).
-              deriveComputeCapacity({
-                usedMinutes: sdhUsed,
-                includedMinutes: sdhIncluded,
-                overageMinutes: sdhOverage,
-              })
-            : deriveComputeCapacity({
-                usedMinutes,
-                includedMinutes,
-                overageMinutes: usage?.overageMinutes ?? 0,
-              }),
+          : // Used against included, overage as its own segment
+            // (Σ overage seconds × multiplier).
+            deriveComputeCapacity({
+              used: sdhUsed,
+              included: sdhIncluded,
+              overage: sdhOverage,
+            }),
       smallDaemon: sdh
         ? {
             headline: usageFailed ? null : remainingHeadline(sdh),
@@ -703,16 +678,17 @@ function OverviewTab({
       // so far" from a server that measured nothing is the same lie as
       // "0.0 h used", in the currency the user actually cares about.
       estimatedOverageCostLabel:
-        !usageFailed && usage && (sdh ? sdhOverage > 0 : usage.overageMinutes > 0)
-          ? formatCentsAsDollars(usage.estimatedOverageCostCents ?? 0)
+        sdh && sdhOverage > 0
+          ? formatCentsAsDollars(sdh.estimatedOverageCostCents ?? 0)
           : null,
-      grantedMinutesRemaining: usage?.grantedMinutesRemaining ?? 0,
+      grantedSmallDaemonSecondsRemaining: Number(
+        usage?.grantedSmallDaemonSecondsRemaining ?? 0,
+      ),
       overageEnabled: subscription?.overageEnabled ?? false,
       // The overage control needs the raw numbers, not the formatted labels:
-      // it converts a dollar limit to minutes live, and measures spend against
-      // the cap. undefined budgetCents means no cap is stored.
+      // it measures spend against the cap. undefined budgetCents means no cap
+      // is stored.
       budgetCents: subscription?.budgetCents,
-      overageCentsPerMinute: d.overageCentsPerMinute,
       // The overage control shows spend against the cap. null, not 0:
       // unmeasured rendered as zero spent tells a user their whole limit is
       // still available.
@@ -943,7 +919,7 @@ function OverviewTab({
                 smallDaemon: computeUi.smallDaemon,
               },
             ]}
-            grantedMinutesRemaining={computeUi.grantedMinutesRemaining}
+            grantedSmallDaemonSecondsRemaining={computeUi.grantedSmallDaemonSecondsRemaining}
             planDetailUnavailable={computeUi.planDetailUnavailable}
             usageUnavailable={computeUi.usageUnavailable}
             onChangePlan={onGoToPlans}
@@ -1487,56 +1463,26 @@ function InvoicesPanel() {
 // ── Usage ───────────────────────────────────────────────────────────────
 
 function UsagePanel() {
-  const [period, setPeriod] = useState<"current" | "previous">("current");
-  const usageQ = useComputeUsage(period);
+  const usageQ = useComputeUsage("current");
   const data = usageQ.data ?? null;
+  const measured = !!data && data.usageMeasured;
 
   const summary = useMemo(
     () => ({
-      includedHours: (data?.includedMinutes ?? 0) / 60,
-      usedHours: (data?.usedMinutes ?? 0) / 60,
-      overageHours: (data?.overageMinutes ?? 0) / 60,
+      includedHours: Number(data?.includedSmallDaemonSeconds ?? 0) / 3600,
+      usedHours: Number(data?.usedSmallDaemonSeconds ?? 0) / 3600,
+      overageHours: data ? overageSmallDaemonSeconds(data) / 3600 : 0,
       overageCost: formatCentsAsDollars(data?.estimatedOverageCostCents ?? 0),
-      grantedMinutesRemaining: data?.grantedMinutesRemaining ?? 0,
+      grantedSecondsRemaining: Number(data?.grantedSmallDaemonSecondsRemaining ?? 0),
     }),
     [data],
   );
 
-  const byDayMax = useMemo(() => {
-    if (!data?.byDay?.length) return 0;
-    return Math.max(...data.byDay.map((e) => e.minutes ?? 0));
-  }, [data]);
-
-  const sortedWorkspaces = useMemo(() => {
-    if (!data?.byWorkspace?.length) return [];
-    return [...data.byWorkspace].sort(
-      (a, b) => (b.minutes ?? 0) - (a.minutes ?? 0),
-    );
-  }, [data]);
-
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h3 className="text-sm font-semibold leading-none tracking-tight text-foreground">
-          Compute usage
-        </h3>
-        <div className="inline-flex w-full rounded-md border border-border p-1 sm:w-auto">
-          {(["current", "previous"] as const).map((p) => (
-            <button
-              key={p}
-              type="button"
-              onClick={() => setPeriod(p)}
-              className={`rounded px-3 py-1.5 text-sm font-medium transition-colors ${
-                period === p
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {p === "current" ? "Current" : "Previous"}
-            </button>
-          ))}
-        </div>
-      </div>
+      <h3 className="text-sm font-semibold leading-none tracking-tight text-foreground">
+        Compute usage this period
+      </h3>
 
       {usageQ.error && (
         <ErrorBanner
@@ -1552,6 +1498,11 @@ function UsagePanel() {
           title="No usage data"
           description="Usage appears here once your machines start running."
         />
+      ) : !measured ? (
+        // Withheld by SAYING so: a zero here would read as "ran nothing".
+        <p className="text-sm text-muted-foreground">
+          Usage is unavailable right now.
+        </p>
       ) : (
         <>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -1564,85 +1515,48 @@ function UsagePanel() {
           {/* Coupon grant is deliberately outside the four period stats above:
               included/used/overage all reset with the billing period, while a
               redeemed grant is a one-time bucket that carries over. */}
-          {summary.grantedMinutesRemaining > 0 && (
+          {summary.grantedSecondsRemaining >= 60 && (
             <UsageStat
               label="Coupon hours remaining"
-              value={formatMachineMinutesShort(
-                summary.grantedMinutesRemaining,
-              )}
+              value={formatMachineSecondsShort(summary.grantedSecondsRemaining)}
               hint="One-time bonus machine time from a redeemed coupon. Does not renew each period; used after your included hours, before overage."
             />
           )}
 
-          <Card>
-            <CardHeader>
-              <CardTitle>Daily usage</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {data.byDay.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  No daily usage recorded yet.
-                </p>
-              ) : (
-                <div className="flex h-48 items-end gap-1">
-                  {data.byDay.map((entry, idx) => {
-                    const minutes = entry.minutes ?? 0;
-                    const heightPct = byDayMax > 0 ? (minutes / byDayMax) * 100 : 0;
-                    return (
-                      <div
-                        key={idx}
-                        className="flex flex-1 flex-col items-center gap-1"
-                      >
-                        <div
-                          title={`${formatDayLabel(entry.day)}: ${minutes.toFixed(1)} min`}
-                          className="w-full rounded-t bg-primary/70 transition-all hover:bg-primary"
-                          style={{
-                            height: `${Math.max(heightPct, minutes > 0 ? 2 : 0)}%`,
-                          }}
-                        />
-                        <span className="text-2xs text-muted-foreground">
-                          {formatDayLabel(entry.day)}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
           <div>
             <h4 className="mb-2 text-sm font-semibold text-foreground">
-              By machine
+              By machine size
             </h4>
-            {sortedWorkspaces.length === 0 ? (
+            {data.bySize.length === 0 ? (
               <EmptyState
                 icon={Server}
                 title="No machine usage"
-                description="No machine usage in this period."
+                description="No machine has run this period."
               />
             ) : (
               <Table>
                 <Thead>
                   <Tr>
-                    <Th>Machine</Th>
                     <Th>Size</Th>
-                    <Th className="text-right">Minutes</Th>
-                    <Th className="text-right">Overage min</Th>
+                    <Th className="text-right">Running h</Th>
+                    <Th className="text-right">Overage h</Th>
+                    <Th className="text-right">Overage cost</Th>
                   </Tr>
                 </Thead>
                 <Tbody>
-                  {sortedWorkspaces.map((w) => (
-                    <Tr key={w.workspaceId}>
+                  {data.bySize.map((row) => (
+                    <Tr key={row.size}>
                       <Td className="font-medium text-foreground">
-                        {w.workspaceName || w.workspaceId.slice(0, 8)}
+                        {sizeName(row.size)}
                       </Td>
-                      <Td className="capitalize text-muted-foreground">
-                        {w.size || "—"}
-                      </Td>
-                      <Td className="text-right">{(w.minutes ?? 0).toFixed(1)}</Td>
                       <Td className="text-right">
-                        {(w.overageMinutes ?? 0).toFixed(1)}
+                        {(Number(row.runningSeconds) / 3600).toFixed(1)}
+                      </Td>
+                      <Td className="text-right">
+                        {(Number(row.overageSeconds) / 3600).toFixed(1)}
+                      </Td>
+                      <Td className="text-right">
+                        {formatCentsAsDollars(Number(row.overageCostCents))}
                       </Td>
                     </Tr>
                   ))}
