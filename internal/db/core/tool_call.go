@@ -1,7 +1,6 @@
 package core
 
 import (
-	"context"
 	"errors"
 	"time"
 )
@@ -128,70 +127,6 @@ type ToolCallResult struct {
 // result still reaches its own conversation (that lives in its messages); it
 // only goes without the durable status row.
 var ErrToolCallIDInAnotherChat = errors.New("tool call id is already used by a call in another chat")
-
-// ToolCallStore is the shared contract for tool call persistence across
-// drivers.
-type ToolCallStore interface {
-	// UpsertToolCall writes a tool call, replacing any existing row with the
-	// same id. Upsert rather than insert because the callers are Temporal
-	// activities, which retry: a retry that re-sent the same call must
-	// converge on the same row instead of failing on the primary key. A row
-	// recorded for another chat is never replaced: the write fails with
-	// ErrToolCallIDInAnotherChat.
-	UpsertToolCall(ctx context.Context, call *ToolCall) error
-	// UpsertToolCallResult writes a result for chatID's call, replacing any
-	// existing row for the same call. Same retry-idempotency reasoning as
-	// UpsertToolCall. Fails with ErrToolCallIDInAnotherChat unless the call
-	// exists and is chatID's: a result belongs to its call's chat, and the
-	// writer has to prove it is that chat.
-	UpsertToolCallResult(ctx context.Context, chatID string, result *ToolCallResult) error
-	GetToolCall(ctx context.Context, id string) (*ToolCall, error)
-	// GetToolCallResult reads the recorded result for a single call, or nil
-	// if none was ever written (e.g. a terminal call whose result write lost
-	// a race, or a historical Cancelled row that predates durable status).
-	GetToolCallResult(ctx context.Context, toolCallID string) (*ToolCallResult, error)
-	// GetToolCallResultForMessage reads the result of the call that
-	// assistant message messageID carries, or nil. The id alone can name
-	// another chat's call; the message cannot.
-	GetToolCallResultForMessage(ctx context.Context, toolCallID, messageID string) (*ToolCallResult, error)
-	ListToolCallsByChat(ctx context.Context, chatID string) ([]*ToolCall, error)
-	// ListToolCallsByMessageIDs and ListToolCallResultsByMessageIDs are the
-	// batch reads the message read path needs: loading a page of messages
-	// must not issue one query per message.
-	ListToolCallsByMessageIDs(ctx context.Context, messageIDs []string) ([]*ToolCall, error)
-	ListToolCallResultsByMessageIDs(ctx context.Context, messageIDs []string) ([]*ToolCallResult, error)
-	// ListToolCallsByIDs reads calls by their own primary key.
-	//
-	// The by-message read above depends on tool_calls.message_id, which is a
-	// link the writer has to remember to set; when a live writer did not have
-	// a message in hand, that column was NULL and the by-message query could
-	// not see the row at all. A block always carries its tool_call_id, so
-	// keying off it is the lookup that cannot miss. Readers use both and
-	// merge (see messageproto.AssembleForDisplay).
-	ListToolCallsByIDs(ctx context.Context, toolCallIDs []string) ([]*ToolCall, error)
-	// ListLiveToolCallsByChat reads a chat's non-terminal calls (pending,
-	// executing, backgrounded) without touching its terminal history.
-	ListLiveToolCallsByChat(ctx context.Context, chatID string) ([]*ToolCall, error)
-	// ListStrandedSpawnToolCalls reads spawn calls whose child workflow has
-	// reached a terminal status but which never received a result — the join
-	// from a finished sub-agent back to its parent, broken by a worker that
-	// died between the two writes. Cleanup cannot find these: it is scoped to
-	// the thread of the workflow that is ENDING, and a stranded row belongs to
-	// the still-live parent's thread.
-	ListStrandedSpawnToolCalls(ctx context.Context) ([]*ToolCall, error)
-	// ListStrandedBackgroundSpawnToolCalls is the async-spawn counterpart to
-	// ListStrandedSpawnToolCalls: a background=true spawn writes its
-	// tool_calls row to status 6 (backgrounded) with a result AT DISPATCH
-	// TIME, so it can never match the sync query's anchor. This one is
-	// anchored on the mailbox instead — see the SQL comment for the full
-	// reasoning (spec: async-spawn-and-agent-messaging.md, §7.1).
-	ListStrandedBackgroundSpawnToolCalls(ctx context.Context) ([]*StrandedBackgroundSpawn, error)
-	// ListBackgroundedProcessToolCalls reads every backgrounded call whose
-	// outcome lives in a daemon's process table (status 6, no child
-	// workflow), for the reconciler sweep that closes them once the process
-	// has ended.
-	ListBackgroundedProcessToolCalls(ctx context.Context) ([]*BackgroundedProcessCall, error)
-}
 
 // StrandedBackgroundSpawn is one backgrounded spawn call whose child
 // workflow reached a terminal status while the call itself is still marked

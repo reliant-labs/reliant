@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // GetLatestNonMessageUpdatesPerEntity is fast only because it can walk
@@ -54,12 +55,11 @@ func TestSnapshotHeadsQueryUsesPartialIndexUnderGenericPlan(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	// The exact SQL the repository runs, with ? rewritten to $n as it is there.
-	query := (&Repo{driver: DriverPostgres}).bindQuery(snapshotHeadsQuery)
-	_, err = conn.ExecContext(ctx, `PREPARE snapshot_heads(text, text, text, text) AS `+query)
+	// The exact SQL the repository runs.
+	_, err = conn.ExecContext(ctx, `PREPARE snapshot_heads(text) AS `+store.SnapshotHeadsSQL)
 	require.NoError(t, err)
 
-	plan := explainLines(t, ctx, conn, `EXPLAIN EXECUTE snapshot_heads('chat', 'chat', 'chat', 'chat')`)
+	plan := explainLines(t, ctx, conn, `EXPLAIN EXECUTE snapshot_heads('chat')`)
 
 	// The index name appearing anywhere is NOT the property: the thread and
 	// question read can use it too, so a plan whose skip scan had fallen back
@@ -115,7 +115,7 @@ func probeUsesIndex(plan, index string) bool {
 	return false // no probe in the plan at all: the query shape changed
 }
 
-// The literals in snapshotHeadsQuery are enum values written out by hand, and
+// The literals in store.SnapshotHeadsSQL are enum values written out by hand, and
 // each migration's index predicate is another copy. If the enum is renumbered,
 // or an index predicate edited, the query would silently read the wrong set of
 // rows or lose the index. Pin them all together.
@@ -141,14 +141,14 @@ func TestSnapshotHeadsQueryMatchesPartialIndex(t *testing.T) {
 
 	skipScanTypes := append(append(append([]reliantv1.ChatUpdateType{}, indexExcluded...), rekeyed...), liveOnly...)
 	skipScan := "update_type NOT IN (" + joinEnum(skipScanTypes) + ")"
-	require.Equal(t, 2, strings.Count(snapshotHeadsQuery, skipScan),
+	require.Equal(t, 2, strings.Count(store.SnapshotHeadsSQL, skipScan),
 		"both halves of the skip scan must exclude exactly %s", skipScan)
 	// The partial index is usable only if the skip scan's predicate implies
 	// its predicate, i.e. every type the index excludes is excluded here too.
 	require.Subset(t, skipScanTypes, indexExcluded,
 		"the skip scan must exclude at least everything idx_chat_updates_snapshot_heads excludes")
-	require.Contains(t, snapshotHeadsQuery, "update_type IN ("+joinEnum(rekeyed)+")")
-	require.Contains(t, snapshotHeadsQuery,
+	require.Contains(t, store.SnapshotHeadsSQL, "update_type IN ("+joinEnum(rekeyed)+")")
+	require.Contains(t, store.SnapshotHeadsSQL,
 		"WHEN update_type = "+strconv.Itoa(int(reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_QUESTION))+" THEN")
 
 	migration, err := FS.ReadFile("migrations/postgres/20261004010819_bound_chat_open_reads.sql")

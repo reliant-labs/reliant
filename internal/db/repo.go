@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
-	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -21,6 +20,7 @@ import (
 	pgdb "github.com/reliant-labs/reliant/internal/db/postgres/generated"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/observability"
+	"github.com/reliant-labs/reliant/internal/store"
 	"go.temporal.io/sdk/activity"
 )
 
@@ -819,119 +819,28 @@ func (w *WrappedDBTX) queryContextWithRetry(ctx context.Context, query string, a
 // GetLatestUpdateSequence returns the latest sequence number for a given chat
 // This is used by polling clients to check if they're in sync
 func (r *Repo) GetLatestUpdateSequence(ctx context.Context, chatID string) (int64, error) {
-	var sequence sql.NullInt64
-
-	query := `
-		SELECT MAX(sequence_number)
-		FROM chat_updates
-		WHERE chat_id = ?
-	`
-	query = r.bindQuery(query)
-
-	err := r.DB.DB(ctx).QueryRowContext(ctx, query, chatID).Scan(&sequence)
-	if err != nil {
-		return 0, err
-	}
-
-	if !sequence.Valid {
-		return 0, nil // No updates yet
-	}
-
-	return sequence.Int64, nil
-}
-
-const (
-	updateStreamKindUser = "user"
-	updateStreamKindChat = "chat"
-)
-
-// allocateUpdateSequence advances one logical stream's transactional counter.
-//
-// The counter update and the ledger insert MUST share a transaction. The row
-// lock is what prevents N+1 from committing before N, and rolling the
-// transaction back must roll both the counter and ledger row back together.
-// Keeping this primitive transaction-only makes it impossible for a future
-// caller to accidentally consume a cursor outside the durable write.
-func (r *Repo) allocateUpdateSequence(ctx context.Context, streamKind, streamID string) (int64, error) {
-	if !r.DB.inTx(ctx) {
-		return 0, fmt.Errorf("allocate %s update sequence: transaction required", streamKind)
-	}
-
-	var nextSeq int64
-	query := `
-		INSERT INTO update_stream_counters (
-			stream_kind, stream_id, last_assigned_seq
-		) VALUES (?, ?, 1)
-		ON CONFLICT (stream_kind, stream_id) DO UPDATE
-		SET last_assigned_seq = update_stream_counters.last_assigned_seq + 1
-		RETURNING last_assigned_seq
-	`
-	query = r.bindQuery(query)
-
-	err := r.DB.DB(ctx).QueryRowContext(ctx, query, streamKind, streamID).Scan(&nextSeq)
-	if err != nil {
-		return 0, fmt.Errorf("allocate %s update sequence: %w", streamKind, err)
-	}
-	return nextSeq, nil
+	return store.LatestChatUpdateSequence(ctx, r.ORM(), chatID)
 }
 
 // CreateChatUpdate creates a new chat update (for dual-write pattern)
 // This operation is atomic - the sequence number generation and insert happen in a transaction
 // to prevent race conditions when multiple parallel operations try to create updates.
 func (r *Repo) CreateChatUpdate(ctx context.Context, chatID string, updateType reliantv1.ChatUpdateType, entityID string, data string) error {
-	var chatUpdate ChatUpdate
-
-	// Wrap in transaction to make sequence number generation + insert atomic
-	// This prevents UNIQUE constraint violations when parallel goroutines try to create updates
-	err := r.RunTx(ctx, func(ctx context.Context) error {
-		// Get next sequence number within the transaction
-		nextSeq, err := r.allocateUpdateSequence(ctx, updateStreamKindChat, chatID)
-		if err != nil {
-			return fmt.Errorf("failed to get next sequence number: %w", err)
-		}
-
-		// Generate ID
-		updateID := fmt.Sprintf("%s-%d", chatID, nextSeq)
-
-		// UTC, not local. chat_updates.created_at is TIMESTAMP WITHOUT TIME
-		// ZONE, so the driver drops the offset and keeps the wall clock: a
-		// local time.Now() is stored as its local reading and then read back
-		// and serialized as RFC3339 with a "Z". The value does not become
-		// wrong at the format step — it is already wrong here, and no consumer
-		// can recover it. Every sibling writer in this file already does this.
-		createdAt := time.Now().UTC()
-
-		chatUpdate = ChatUpdate{
-			ID:             updateID,
-			ChatID:         chatID,
-			SequenceNumber: nextSeq,
-			UpdateType:     updateType,
-			EntityID:       entityID,
-			Data:           json.RawMessage(data),
-			CreatedAt:      createdAt,
-		}
-
-		err = r.chats.CreateChatUpdate(ctx, chatUpdate)
+	// The allocation and the insert share one transaction: the counter's row
+	// lock is what keeps sequence order equal to commit order, and a rollback
+	// must take both back (store.AllocateUpdateSequence).
+	return r.RunTx(ctx, func(ctx context.Context) error {
+		chatUpdate, err := store.AppendChatUpdate(ctx, r.ORM(), chatID, updateType, entityID, data)
 		if err != nil {
 			return err
 		}
-
 		if r.onChatUpdate != nil {
-			committedUpdate := chatUpdate
-			if err := runAfterCommit(ctx, func() {
-				r.onChatUpdate(chatID, committedUpdate.SequenceNumber, committedUpdate)
-			}); err != nil {
-				return err
-			}
+			return runAfterCommit(ctx, func() {
+				r.onChatUpdate(chatID, chatUpdate.SequenceNumber, chatUpdate)
+			})
 		}
-
 		return nil
 	})
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
 
 // GetLatestNonMessageUpdatesPerEntity returns, for each entity in a chat, only
@@ -1048,110 +957,11 @@ func (r *Repo) GetLatestNonMessageUpdatesPerEntity(ctx context.Context, chatID s
 	// of the chat's whole history: measured >20s (cancelled) on the dev copy.
 	// TestSnapshotHeadsQueryMatchesPartialIndex pins these literals to the
 	// enum values and to both index predicates in the migrations.
-	query := r.bindQuery(snapshotHeadsQuery)
-
-	rows, err := r.DB.DB(ctx).QueryContext(ctx, query, chatID, chatID, chatID, chatID)
-	if err != nil {
-		return nil, err
-	}
-	return scanSnapshotHeads(rows)
-}
-
-// snapshotHeadsQuery is GetLatestNonMessageUpdatesPerEntity's SQL. A
-// package-level constant so the partial-index test can read exactly what runs.
-//
-//	1 = MESSAGE, 4 = TOOL_CALL, 19 = STREAM_FINALIZED  (idx_chat_updates_snapshot_heads excludes these)
-//	3 = THREAD, 18 = QUESTION                          (re-keyed, read separately via idx_chat_updates_snapshot_rekeyed)
-//	20 = AGENT_MESSAGES_DRAINED                        (live-only; still in the index, filtered by the probe)
-//
-// The skip scan's list must stay a SUPERSET of the heads index's predicate,
-// or the planner cannot prove the query implies it and loses the index.
-const snapshotHeadsQuery = `
-		WITH RECURSIVE heads AS (
-			(SELECT entity_id, sequence_number
-			   FROM chat_updates
-			  WHERE chat_id = ? AND update_type NOT IN (1, 4, 19, 3, 18, 20)
-			  ORDER BY entity_id, sequence_number DESC
-			  LIMIT 1)
-			UNION ALL
-			SELECT nxt.entity_id, nxt.sequence_number
-			  FROM heads h
-			  CROSS JOIN LATERAL (
-				SELECT entity_id, sequence_number
-				  FROM chat_updates
-				 WHERE chat_id = ? AND update_type NOT IN (1, 4, 19, 3, 18, 20)
-				   AND entity_id > h.entity_id
-				 ORDER BY entity_id, sequence_number DESC
-				 LIMIT 1) nxt
-		),
-		rekeyed AS (
-			SELECT DISTINCT ON (dedup_key) id, sequence_number
-			FROM (
-				SELECT
-					id,
-					sequence_number,
-					CASE
-						WHEN update_type = 18 THEN left(entity_id, length(entity_id) - position('-' in reverse(entity_id)))
-						ELSE 'thread:' || COALESCE(NULLIF(data::jsonb->>'thread', ''), entity_id)
-					END AS dedup_key
-				FROM chat_updates
-				WHERE chat_id = ? AND update_type IN (3, 18)
-			) k
-			ORDER BY dedup_key, sequence_number DESC
-		)
-		SELECT
-			cu.id,
-			cu.chat_id,
-			cu.sequence_number,
-			cu.update_type,
-			cu.entity_id,
-			cu.data,
-			cu.created_at
-		FROM (
-			SELECT sequence_number FROM heads
-			UNION
-			SELECT sequence_number FROM rekeyed
-		) picked
-		JOIN chat_updates cu ON cu.chat_id = ? AND cu.sequence_number = picked.sequence_number
-		ORDER BY cu.sequence_number
-	`
-
-func scanSnapshotHeads(rows *sql.Rows) ([]ChatUpdate, error) {
-	defer rows.Close()
-
-	updates := []ChatUpdate{}
-	for rows.Next() {
-		var update ChatUpdate
-		var dataJSON string
-
-		if err := rows.Scan(
-			&update.ID,
-			&update.ChatID,
-			&update.SequenceNumber,
-			&update.UpdateType,
-			&update.EntityID,
-			&dataJSON,
-			&update.CreatedAt,
-		); err != nil {
-			return nil, err
-		}
-
-		// No message-update enrichment here: this query excludes them by
-		// construction, which is the entire point.
-		update.Data = json.RawMessage(dataJSON)
-		updates = append(updates, update)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
-	// DISTINCT ON forces ORDER BY entity_id; restore sequence order so
-	// consumers see updates in the order they were emitted.
-	sort.Slice(updates, func(i, j int) bool {
-		return updates[i].SequenceNumber < updates[j].SequenceNumber
-	})
-
-	return updates, nil
+	//
+	// The statement and the literal-vs-parameter reasoning are
+	// store.SnapshotHeadsSQL's; TestSnapshotHeadsQueryMatchesPartialIndex
+	// pins its literals to the enum values and to both index predicates.
+	return store.LatestNonMessageUpdatesPerEntity(ctx, r.ORM(), chatID)
 }
 
 // GetUpdatesSince returns all updates since a given sequence number
@@ -1163,49 +973,12 @@ func (r *Repo) GetUpdatesSince(ctx context.Context, chatID string, sinceSeq int6
 		limit = 100
 	}
 
-	query := `
-		SELECT
-			id,
-			chat_id,
-			sequence_number,
-			update_type,
-			entity_id,
-			data,
-			created_at
-		FROM chat_updates
-		WHERE chat_id = ? AND sequence_number > ?
-		ORDER BY sequence_number ASC
-		LIMIT ?
-	`
-	query = r.bindQuery(query)
-
-	rows, err := r.DB.DB(ctx).QueryContext(ctx, query, chatID, sinceSeq, limit)
+	updates, err := store.ChatUpdatesSince(ctx, r.ORM(), chatID, sinceSeq, limit)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	var updates []ChatUpdate
-	for rows.Next() {
-		var update ChatUpdate
-		var dataJSON string
-
-		err := rows.Scan(
-			&update.ID,
-			&update.ChatID,
-			&update.SequenceNumber,
-			&update.UpdateType,
-			&update.EntityID,
-			&dataJSON,
-			&update.CreatedAt,
-		)
-		if err != nil {
-			return nil, err
-		}
-
-		// Parse JSON data field
-		update.Data = json.RawMessage(dataJSON)
-
+	for i := range updates {
+		update := &updates[i]
 		// Enrich message updates with content blocks
 		if update.UpdateType == reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_MESSAGE {
 			// Check if this is a minimal message update (not already enriched)
@@ -1213,7 +986,7 @@ func (r *Repo) GetUpdatesSince(ctx context.Context, chatID string, sinceSeq int6
 			if err := json.Unmarshal(update.Data, &dataMap); err == nil {
 				// Only enrich if content_blocks is missing
 				if _, hasContentBlocks := dataMap["content_blocks"]; !hasContentBlocks {
-					enrichedData, err := r.EnrichMessageUpdate(ctx, update)
+					enrichedData, err := r.EnrichMessageUpdate(ctx, *update)
 					if err != nil {
 						// Log error but continue with original data
 						logging.WarnContext(ctx, "Failed to enrich message update",
@@ -1226,21 +999,8 @@ func (r *Repo) GetUpdatesSince(ctx context.Context, chatID string, sinceSeq int6
 				}
 			}
 		}
-
-		updates = append(updates, update)
 	}
-
-	if updates == nil {
-		updates = []ChatUpdate{} // Return empty slice instead of nil
-	}
-
-	// COMPREHENSIVE LOGGING - what we found
-	updateTypes := make(map[reliantv1.ChatUpdateType]int)
-	for _, update := range updates {
-		updateTypes[update.UpdateType]++
-	}
-
-	return updates, rows.Err()
+	return updates, nil
 }
 
 // EnrichMessageUpdate adds content blocks to a message update
@@ -1445,25 +1205,7 @@ func GetActivityInfo(ctx context.Context) (activityID string, workflowRunID stri
 
 // GetLatestUserUpdateSequence returns the latest sequence number for a user's updates
 func (r *Repo) GetLatestUserUpdateSequence(ctx context.Context, userID string) (int64, error) {
-	var sequence sql.NullInt64
-
-	query := `
-		SELECT MAX(sequence_number)
-		FROM user_updates
-		WHERE user_id = ?
-	`
-	query = r.bindQuery(query)
-
-	err := r.DB.DB(ctx).QueryRowContext(ctx, query, userID).Scan(&sequence)
-	if err != nil {
-		return 0, err
-	}
-
-	if !sequence.Valid {
-		return 0, nil // No updates yet
-	}
-
-	return sequence.Int64, nil
+	return store.LatestUserUpdateSequence(ctx, r.ORM(), userID)
 }
 
 // CreateUserUpdate creates a new user update for the global WebSocket.
@@ -1504,58 +1246,18 @@ func (r *Repo) CreateUserUpdate(ctx context.Context, update *UserUpdate) error {
 	// failed attempt rolls back and the retried attempt obtains the then-current
 	// next value.
 	callerSuppliedID := update.ID != ""
-	err := r.RunTxWithOptions(ctx, TxOptions{Isolation: IsolationReadCommitted}, func(txCtx context.Context) error {
-		// Get next sequence number within the transaction for atomicity.
-		nextSeq, err := r.allocateUpdateSequence(txCtx, updateStreamKindUser, update.UserID)
-		if err != nil {
-			return fmt.Errorf("failed to get next user sequence number: %w", err)
+	return r.RunTxWithOptions(ctx, TxOptions{Isolation: IsolationReadCommitted}, func(txCtx context.Context) error {
+		if err := store.AppendUserUpdate(txCtx, r.ORM(), update, callerSuppliedID); err != nil {
+			return err
 		}
-		update.SequenceNumber = nextSeq
-
-		if !callerSuppliedID {
-			update.ID = fmt.Sprintf("%s-%d", update.UserID, nextSeq)
-		}
-
-		query := `
-			INSERT INTO user_updates (
-				id, user_id, sequence_number, project_id, worktree_id, chat_id,
-				update_type, entity_type, entity_id, data, created_at
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		`
-		query = r.bindQuery(query)
-
-		_, err = r.DB.ExecContext(txCtx, query,
-			update.ID,
-			update.UserID,
-			update.SequenceNumber,
-			update.ProjectID,
-			update.WorktreeID,
-			update.ChatID,
-			int64(update.UpdateType),
-			int64(update.EntityType),
-			update.EntityID,
-			string(update.Data),
-			time.Now().UTC(),
-		)
-		if err != nil {
-			return fmt.Errorf("failed to insert user update: %w", err)
-		}
-
 		if r.onUserUpdate != nil {
 			committedUpdate := *update
-			if err := runAfterCommit(txCtx, func() {
+			return runAfterCommit(txCtx, func() {
 				r.onUserUpdate(&committedUpdate)
-			}); err != nil {
-				return err
-			}
+			})
 		}
 		return nil
 	})
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
 
 // GetUserUpdatesSince returns all user updates since a given sequence number
@@ -1563,63 +1265,7 @@ func (r *Repo) GetUserUpdatesSince(ctx context.Context, userID string, sinceSeq 
 	if limit <= 0 {
 		limit = 100
 	}
-
-	query := `
-		SELECT
-			id, user_id, sequence_number, project_id, worktree_id, chat_id,
-			update_type, entity_type, entity_id, data, created_at
-		FROM user_updates
-		WHERE user_id = ? AND sequence_number > ?
-		ORDER BY sequence_number ASC
-		LIMIT ?
-	`
-	query = r.bindQuery(query)
-
-	rows, err := r.DB.DB(ctx).QueryContext(ctx, query, userID, sinceSeq, limit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var updates []UserUpdate
-	for rows.Next() {
-		var update UserUpdate
-		var projectID, worktreeID, chatID sql.NullString
-		var dataJSON string
-		var updateTypeInt, entityTypeInt int64
-
-		err := rows.Scan(
-			&update.ID,
-			&update.UserID,
-			&update.SequenceNumber,
-			&projectID,
-			&worktreeID,
-			&chatID,
-			&updateTypeInt,
-			&entityTypeInt,
-			&update.EntityID,
-			&dataJSON,
-			&update.CreatedAt,
-		)
-		if err != nil {
-			return nil, err
-		}
-
-		update.ProjectID = nullStringToPtr(projectID)
-		update.WorktreeID = nullStringToPtr(worktreeID)
-		update.ChatID = nullStringToPtr(chatID)
-		update.UpdateType = UserUpdateType(updateTypeInt)
-		update.EntityType = UserUpdateEntityType(entityTypeInt)
-		update.Data = json.RawMessage(dataJSON)
-
-		updates = append(updates, update)
-	}
-
-	if updates == nil {
-		updates = []UserUpdate{}
-	}
-
-	return updates, rows.Err()
+	return store.UserUpdatesSince(ctx, r.ORM(), userID, sinceSeq, limit)
 }
 
 // UpdateChatState updates a chat's state and emits a user update

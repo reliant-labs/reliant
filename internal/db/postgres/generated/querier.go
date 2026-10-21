@@ -85,7 +85,6 @@ type Querier interface {
 	CountQueuedAgentMessagesForThread(ctx context.Context, toThreadID string) (int64, error)
 	CountThreadsInConversation(ctx context.Context, chatID string) (int64, error)
 	CreateChat(ctx context.Context, arg CreateChatParams) error
-	CreateChatUpdate(ctx context.Context, arg CreateChatUpdateParams) error
 	CreateContextWindow(ctx context.Context, arg CreateContextWindowParams) (ContextWindow, error)
 	// The write ledger. See the migration 20261014055046_integration_writes.sql
 	// for the model: an intent row is written before an integration action's
@@ -183,13 +182,6 @@ type Querier interface {
 	FinishIntegrationAccessRefresh(ctx context.Context, arg FinishIntegrationAccessRefreshParams) error
 	GetAgentMessage(ctx context.Context, id string) (AgentMessage, error)
 	GetChat(ctx context.Context, id string) (ChatsWithActivity, error)
-	// NOTE: there is deliberately no MAX(sequence_number)+1 allocator here.
-	// Sequence numbers come from the chat's row in update_stream_counters; see
-	// allocateUpdateSequence in internal/db/repo.go and migration
-	// 20260814130000_scoped_update_stream_counters.sql. The counter and this insert
-	// share a transaction so sequence order and commit order cannot diverge.
-	GetChatUpdates(ctx context.Context, arg GetChatUpdatesParams) ([]ChatUpdate, error)
-	GetChatUpdatesSince(ctx context.Context, arg GetChatUpdatesSinceParams) ([]ChatUpdate, error)
 	GetChatWithUserCheck(ctx context.Context, arg GetChatWithUserCheckParams) (ChatsWithActivity, error)
 	GetContextWindow(ctx context.Context, id string) (ContextWindow, error)
 	GetContextWindowBySequence(ctx context.Context, arg GetContextWindowBySequenceParams) (ContextWindow, error)
@@ -201,22 +193,6 @@ type Querier interface {
 	GetIntegrationWriteByObject(ctx context.Context, arg GetIntegrationWriteByObjectParams) (IntegrationWrite, error)
 	// Get the most recent context window for a thread (highest sequence)
 	GetLatestContextWindow(ctx context.Context, threadID string) (ContextWindow, error)
-	// The latest spawn run of the sub-agent on one thread: the spawn tool call
-	// that started it, joined to that run's workflow row, the thread, and the
-	// thread's own worktree. What a message needs to resume a sub-agent that
-	// stopped on a failure, read from durable rows alone, so it does not depend on
-	// the execution that saw it stop still being alive (see
-	// db.Repo.GetStoppedSpawnAgent).
-	//
-	// One thread can carry several runs: spawn(agent_id=...) resumes an agent as a
-	// new workflow row on the same thread, while a message resumes it on the row it
-	// stopped with. The newest row is the agent's current state; an older failure
-	// that was resumed since is history, not a stopped agent.
-	//
-	// spawn_depth counts the run's ancestors up its workflow tree: 1 for a spawn
-	// the root issued, 2 for one a top-level spawn issued, and so on. The walk is
-	// bounded so a malformed parent cycle cannot recurse forever.
-	GetLatestSpawnRunForThread(ctx context.Context, arg GetLatestSpawnRunForThreadParams) (GetLatestSpawnRunForThreadRow, error)
 	// The overlap check ("is this trigger's previous run still going?") asks for
 	// the latest 'launched' event; the detail view asks for the latest of any
 	// outcome. A NULL outcome means no filter.
@@ -242,14 +218,6 @@ type Querier interface {
 	GetThreadByWorkflow(ctx context.Context, workflowID sql.NullString) (Thread, error)
 	// Get thread with parent info for fork chain resolution
 	GetThreadWithParent(ctx context.Context, id string) (GetThreadWithParentRow, error)
-	GetToolCall(ctx context.Context, id string) (ToolCall, error)
-	GetToolCallResult(ctx context.Context, toolCallID string) (ToolCallResult, error)
-	// The result of the call one assistant message carries. History recovery
-	// reads this rather than GetToolCallResult: an id alone can name another
-	// chat's call, but a call's message is its own, and message ids are ours.
-	// Branched chats included — an inherited message keeps its id, and so does
-	// the call record pointing at it.
-	GetToolCallResultForMessage(ctx context.Context, arg GetToolCallResultForMessageParams) (ToolCallResult, error)
 	// Joins the display names so a trigger can be shown without a second lookup.
 	// LEFT JOINs: a daemon id is not a foreign key, and an absent name must not
 	// hide the trigger.
@@ -291,19 +259,6 @@ type Querier interface {
 	// automation archives its own runs once they succeed; those are history in
 	// Runs (ListRuns with include_archived), not chats the user put away.
 	ListArchivedChats(ctx context.Context, userID string) ([]ListArchivedChatsRow, error)
-	// Every backgrounded call whose outcome lives in a daemon's process table:
-	// status 6 with no child workflow. Spawns are excluded — their outcome is the
-	// child workflow, which ListStrandedBackgroundSpawnToolCalls reconciles.
-	//
-	// Read by the reconciler's background-process sweep, which asks each owning
-	// daemon whether the process is still running and closes the call when it is
-	// not. daemon_id and background_process_id are NULL on rows written before
-	// they were recorded; the sweep closes those only when the user's daemons
-	// prove the process gone, so they are returned too.
-	//
-	// Served by idx_tool_calls_chat_live (status IN (1,2,6)), which stays small
-	// once the sweep keeps status 6 honest.
-	ListBackgroundedProcessToolCalls(ctx context.Context) ([]ListBackgroundedProcessToolCallsRow, error)
 	ListChats(ctx context.Context, arg ListChatsParams) ([]ChatsWithActivity, error)
 	// Chats whose root run the daemon-offline breaker paused and nothing has
 	// resumed, oldest first. The root run must still read paused: a marker left
@@ -380,29 +335,6 @@ type Querier interface {
 	// reach a trigger through its own owner's live connection. Status is returned
 	// rather than filtered so a caller can tell needs_reauth apart.
 	ListIntegrationTriggers(ctx context.Context, integration string) ([]ListIntegrationTriggersRow, error)
-	// Every background spawn issued anywhere inside one root execution that is
-	// still open: tool_calls.status = 6 (backgrounded) and no terminal report in
-	// its parent's mailbox. A background spawn is a goroutine inside the ROOT's
-	// Temporal execution — at every depth — so when that execution dies (the
-	// history-limit terminate is the case this exists for) these are exactly the
-	// spawns the coarse fresh restart must relaunch.
-	//
-	// Walks the workflow tree from the root: a spawn's child row carries the id
-	// of the workflow that ISSUED it as parent_id (the root for a top-level spawn,
-	// the spawning child's id for a nested one). Deliberately NOT filtered on the
-	// child rows' state: the reconciler's reap may already have marked them
-	// terminal, and that is an echo of the root dying, not of the child
-	// finishing. A spawn the stranded-spawn repair already closed has left status
-	// 6 and has a report, so it is not returned — its parent was told, and
-	// relaunching it would report twice. Ordered parents-before-children (depth),
-	// then by id, so a relaunch registers an issuing spawn before its own.
-	ListLiveBackgroundSpawnsForWorkflow(ctx context.Context, rootWorkflowID string) ([]ListLiveBackgroundSpawnsForWorkflowRow, error)
-	// A chat's non-terminal calls (pending/executing/backgrounded). The snapshot
-	// needs these even when their message is outside the window, because their
-	// status is still changing and no block it ships can carry it. Served by the
-	// partial idx_tool_calls_chat_live (a few dozen rows database-wide) instead of
-	// a scan of the chat's ~25k terminal calls.
-	ListLiveToolCallsByChat(ctx context.Context, chatID string) ([]ToolCall, error)
 	// Every path one user's unarchived worktree rows claim, with the project that
 	// says where each row's checkouts sit. An archived row's directory may only be
 	// removed when none of the SAME user's live rows has its path, or one of its
@@ -427,126 +359,10 @@ type Querier interface {
 	// run_chat_id is set.
 	ListRecentTriggerFirings(ctx context.Context, arg ListRecentTriggerFiringsParams) ([]ListRecentTriggerFiringsRow, error)
 	ListReposByProject(ctx context.Context, projectID string) ([]Repo, error)
-	// Every spawn call a thread has issued, joined to the child's live workflow
-	// and thread rows. tool_calls.thread_id is the PARENT's thread — see
-	// ListStrandedSpawnToolCalls above for the same join anchor — so this needs
-	// no new column. LEFT JOIN throughout: a child_workflow_id can be set before
-	// CreateWorkflowWithThread's activity has landed the workflow/thread rows
-	// (a narrow window right after dispatch), and a caller listing mid-race
-	// should see the call as pending rather than get an empty result.
-	//
-	// w.thread (not tc.child_workflow_id) is the join key into threads: for a
-	// RESUMED spawn (agent_id set), child_workflow_id names the workflow
-	// executing THIS call, which is a fresh id each resumption, while w.thread is
-	// the pre-existing thread being resumed — the one spawn_status/spawn_send
-	// must address. CreateWorkflowWithThread always sets Workflow.Thread to the
-	// child thread id, new or resumed, so this join is correct in both cases.
-	// workflows.created_at and completed_at are NOT NULL in their own table, so
-	// sqlc types them as plain (non-nullable) Go fields regardless of this LEFT
-	// JOIN -- scanning the NULL a missing/not-yet-created child would produce
-	// crashes at runtime. tc.requested_at already carries "when was this spawn
-	// issued", so workflow_created_at is omitted rather than selected and left
-	// to crash the first time a caller lists mid-dispatch-race.
-	//
-	// child_workflow_id is selected ALONGSIDE child_thread_id because for a
-	// resumed spawn they differ and both are needed: the thread is what a cancel
-	// signal names, while the workflow row id is what a status reconcile must
-	// CAS. Deriving either from the other is not possible — see spawn_stop.
-	//
-	// issuing_message_ordinal places the spawn in the parent's transcript. A chat
-	// BRANCHED from the parent inherits the parent's history only up to its fork
-	// point, so this is what decides which of the parent's spawns the branch
-	// inherited (ListInheritedSpawnChildren). messages.ordinal is per-thread, and
-	// the issuing message is always in tc.thread_id, so it compares directly with
-	// the fork point's ordinal. NULL when the call was recorded before its
-	// assistant message was finalized.
-	ListSpawnChildrenForThread(ctx context.Context, threadID sql.NullString) ([]ListSpawnChildrenForThreadRow, error)
-	// The report slots a spawn's resumed runs have written (<tool_call_id>#resume-N,
-	// see runtime.SpawnHandoff.ReportID). The next resume numbers its slot past
-	// the highest: a slot already holding a report drops a second one as a
-	// duplicate (idx_agent_messages_one_terminal_report_per_chat_spawn).
-	ListSpawnResumeReportIDs(ctx context.Context, arg ListSpawnResumeReportIDsParams) ([]string, error)
-	// The spawn tool call behind each child thread in one chat, for the reconnect
-	// snapshot: it is what the background-work pill's cancel button addresses, and
-	// threads has no spawned_by_tool_call_id column to read it from.
-	//
-	// w.thread (not tc.child_workflow_id) is the join key into the thread, for the
-	// same reason ListSpawnChildrenForThread uses it: for a RESUMED spawn,
-	// child_workflow_id names the workflow executing THIS call — a fresh id each
-	// resumption — while w.thread is the pre-existing thread being resumed, which
-	// is the thread the UI actually shows.
-	//
-	// A resumed spawn yields SEVERAL rows for one child thread (one per
-	// resumption, observed up to 6). requested_at ASC is load-bearing: the caller
-	// folds these into a map, so ascending order leaves the most recent call as
-	// the surviving value — which is the one still executing and therefore the one
-	// a cancel must address.
-	//
-	// Deliberately narrow. The snapshot needs ~1 row per spawn, and a busy chat
-	// holds ~10k tool calls whose input jsonb is large; selecting tool_calls.* and
-	// filtering in Go would haul all of that over the wire on every page load.
-	// Measured on the busiest real chat: 60 rows in 1.9ms via
-	// idx_tool_calls_child_workflow_id, against 10,622 tool calls.
-	ListSpawnToolCallIDsByChildThread(ctx context.Context, chatID string) ([]ListSpawnToolCallIDsByChildThreadRow, error)
 	// Inbound events recorded but not yet settled, older than the cutoff: the
 	// fire workflow for them was never started (the receiver crashed between the
 	// insert and the start) or died. The redriver restarts their fires.
 	ListStalePendingTriggerEvents(ctx context.Context, arg ListStalePendingTriggerEventsParams) ([]TriggerEvent, error)
-	// The async-spawn counterpart to ListStrandedSpawnToolCalls above (spec:
-	// async-spawn-and-agent-messaging.md, §7.1). A background=true spawn
-	// (dispatchSpawnBackground/workflow.go) writes tool_calls.status = 6
-	// (backgrounded) AND its tool_call_results row AT DISPATCH TIME, before the
-	// child has done any work -- so neither "status IN (1,2)" nor
-	// "NOT EXISTS(tool_call_results)" can ever match one, no matter how long its
-	// child has been finished with nothing delivered to the parent. The durable
-	// anchor moves to the mailbox: the detached goroutine that runs the child's
-	// turns reports its outcome by enqueueing a terminal-kind (2=completion,
-	// 3=cancelled, 4=failed) agent_messages row addressed to the parent thread,
-	// keyed by tool_call_id (see EnqueueAgentMessageIfAbsent). A worker that
-	// dies between the child reaching a terminal workflow status and that
-	// enqueue landing leaves the exact same silent-drop shape the sync repair
-	// exists for, just with the join anchor moved from tool_call_results to
-	// agent_messages.
-	//
-	// Same fail-closed discipline as the sync version: a child that is still LIVE
-	// — active, or stopped only because it is paused — is never returned, because
-	// fabricating a completion for a live spawn writes a lie into the parent's
-	// mailbox that no later pass can distinguish from a real one. A missing
-	// report is recoverable; an invented one is not.
-	//
-	// has_report: a terminal child whose report DID land is still returned while
-	// its row sits at status 6. The report and the status are written by
-	// different code (the detached goroutine enqueues; nothing on that path moves
-	// the row), so "reported" never implied "closed" — and filtering reported
-	// calls out made the close unreachable for exactly the spawns that finished
-	// normally. Observed: toolu_013CJA3i on chat 8bb0a875 still backgrounded two
-	// days after its child stopped and its kind=4 report was delivered. The
-	// caller enqueues only when has_report is false, and closes the row either
-	// way.
-	ListStrandedBackgroundSpawnToolCalls(ctx context.Context) ([]ListStrandedBackgroundSpawnToolCallsRow, error)
-	// Spawn tool calls whose child workflow is terminal but which never received a
-	// result: the join from a finished sub-agent back to its parent, broken.
-	//
-	// executeSpawnInline writes the child's terminal workflow status and the
-	// parent's tool-call result as two separate activities. A worker that dies
-	// between them leaves the child correctly recorded as finished and the parent's
-	// call stuck at pending (1) / executing (2) forever. Nothing revisits it:
-	// Cleanup only runs when a workflow reaches an abnormal terminal path, and it
-	// is scoped to the ENDING workflow's own thread — the stranded row belongs to
-	// the still-live PARENT's thread, so it is outside every scope that cleans.
-	// Observed on real data: a child failed at 22:16:54 (a worker restart is in the
-	// logs at 22:08) and its parent's spawn call was still "executing" 49 hours
-	// later, with the sub-agent's work silently dropped.
-	//
-	// Anchored on the same durable evidence callIsStillLive already trusts —
-	// tool_calls.child_workflow_id joined to the child's status — so a row
-	// returned here is dead by exactly the rule cleanup applies one call at a time.
-	// Fails CLOSED in the same direction: a child that is still LIVE — active, or
-	// stopped only because it is paused — is never returned, because fabricating a
-	// failure for a live spawn writes a lie into conversation history that no
-	// later pass can distinguish from a real one. A missing result is recoverable;
-	// an invented one is not.
-	ListStrandedSpawnToolCalls(ctx context.Context) ([]ToolCall, error)
 	ListThreadsByConversation(ctx context.Context, chatID string) ([]Thread, error)
 	// Threads in a chat with a given origin (e.g. every spawn thread).
 	ListThreadsByOrigin(ctx context.Context, arg ListThreadsByOriginParams) ([]Thread, error)
@@ -565,21 +381,6 @@ type Querier interface {
 	// Terminal thread statuses mirror CHAT_WORKFLOW_STATUS: 3=completed,
 	// 4=failed, 5=cancelled, 7=expired (see core.ThreadStatusIsTerminal).
 	ListThreadsWithOrphanedAgentMessages(ctx context.Context) ([]string, error)
-	ListToolCallResultsByMessageIDs(ctx context.Context, messageIds []string) ([]ToolCallResult, error)
-	ListToolCallsByChat(ctx context.Context, chatID string) ([]ToolCall, error)
-	// Reads calls by primary key. The lookup that cannot miss: a tool-call block
-	// always carries its tool_call_id, whereas tool_calls.message_id is a link a
-	// writer has to remember to set.
-	ListToolCallsByIDs(ctx context.Context, ids []string) ([]ToolCall, error)
-	ListToolCallsByMessageIDs(ctx context.Context, messageIds []string) ([]ToolCall, error)
-	// Every grant a tool call recorded in one chat, per thread: what a load_tool
-	// result granted, written with that result (UpsertToolCallResult). The coarse
-	// fresh restart rebuilds each thread's grants from these rows, because the
-	// dead execution's in-memory record of them died with it. A chat is one root
-	// execution and its sub-agents, each on its own thread, so the thread keys
-	// the grants exactly as the workflow keys them. Ordered so the merge is
-	// deterministic.
-	ListToolGrantsForChat(ctx context.Context, chatID string) ([]ListToolGrantsForChatRow, error)
 	// Newest first, keyset on (occurred_at, id) so a firing recorded mid-pagination
 	// can neither repeat nor be skipped; two fires can share an occurred_at, and id
 	// breaks the tie. Served by idx_trigger_events_trigger_occurred_id.
@@ -844,29 +645,6 @@ type Querier interface {
 	// is where the checkout WILL be, not where it is. install_request_id ties the
 	// row to the queued command so the outcome can find it.
 	UpsertQueuedProjectDaemon(ctx context.Context, arg UpsertQueuedProjectDaemonParams) error
-	// Activities that create/update a tool call retry on failure, so the write
-	// must be idempotent: a retry re-sending the same id updates the row in
-	// place instead of erroring on the primary key.
-	//
-	// Only in place for the SAME chat. The id is the model provider's, and a
-	// provider can hand two chats the same one; the row belongs to whichever chat
-	// recorded it first. A write for another chat updates nothing (0 rows), which
-	// the store reports as core.ErrToolCallIDInAnotherChat. chat_id was never in
-	// the SET list, so before this guard such a write produced a row that still
-	// claimed the first chat while carrying the second chat's thread, input and
-	// status.
-	UpsertToolCall(ctx context.Context, arg UpsertToolCallParams) (int64, error)
-	// A result belongs to its call (the foreign key), and so to the call's chat.
-	// The EXISTS is what makes the writer prove it is that chat: a result written
-	// for chat B under an id chat A's call holds would otherwise satisfy the
-	// foreign key against A's call and replace A's result. Writes nothing (0 rows)
-	// when the call is not this chat's or does not exist; the store reports both
-	// as core.ErrToolCallIDInAnotherChat.
-	//
-	// granted_tools travels with content: a rewrite of the result (an error
-	// replacing it, a repair) replaces what the call granted, so the grants
-	// always describe the result the model reads.
-	UpsertToolCallResult(ctx context.Context, arg UpsertToolCallResultParams) (int64, error)
 	// status_since moves only when status changes, so it is the start of the
 	// current status episode however often the source is polled.
 	UpsertTriggerRegistration(ctx context.Context, arg UpsertTriggerRegistrationParams) error

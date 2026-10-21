@@ -3,45 +3,17 @@ package db
 
 import (
 	"context"
-	"database/sql"
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
-	"time"
 
-	pgdb "github.com/reliant-labs/reliant/internal/db/postgres/generated"
+	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // SpawnChild is one spawn call a thread has issued, joined to the state of
-// the child it names. ChildThreadID/ChildWorkflowID/WorkflowStatus/ThreadTitle
-// are nil when the child's workflow+thread rows have not landed yet (a narrow
-// window right after dispatch, before CreateWorkflowWithThread's activity
-// commits) — callers should treat that as "still starting", not as an error.
-//
-// ChildThreadID and ChildWorkflowID are BOTH carried because they are the same
-// value only for a first spawn. A resumed spawn (spawn with agent_id) keeps the
-// original thread id and gets a fresh workflow row per resumption, so code that
-// addresses a spawn needs to know which identity it is holding: the thread is
-// what a cancel signal names, the workflow row id is what a status write must
-// target. Neither is derivable from the other.
-type SpawnChild struct {
-	ToolCallID        string
-	ToolCallStatus    int32
-	ToolInput         []byte
-	RequestedAt       time.Time
-	CompletedAt       *time.Time
-	ChildThreadID     *string
-	ChildWorkflowID   *string
-	WorkflowStatus    *WorkflowStatus
-	WorkflowCompleted *time.Time
-	ThreadTitle       *string
-	// IssuingMessageOrdinal is the ordinal, in the issuing thread, of the
-	// assistant message that made this spawn call. Nil when the call was
-	// recorded before that message was finalized. It is what decides whether
-	// a chat branched from the issuer inherited the spawn.
-	IssuingMessageOrdinal *int64
-}
+// the child it names (core.SpawnChild).
+type SpawnChild = core.SpawnChild
 
 // InheritedSpawnChild is a sub-agent spawned by a conversation the caller's
 // chat was BRANCHED from, before the branch point.
@@ -159,27 +131,7 @@ func (r *Repo) SpawnToolCallIDsByChildThread(ctx context.Context, chatID string)
 	if chatID == "" {
 		return nil, fmt.Errorf("chat ID cannot be empty")
 	}
-	if r.DB == nil {
-		return nil, fmt.Errorf("repository has no database connection")
-	}
-
-	rows, err := pgdb.New(r.DB.DB(ctx)).ListSpawnToolCallIDsByChildThread(ctx, chatID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list spawn tool call ids: %w", err)
-	}
-
-	// Rows arrive requested_at ASC, and a resumed spawn contributes one row
-	// per resumption for the same thread. Overwriting therefore leaves the
-	// most recent call as the value — the one still executing, and the one a
-	// cancel must address.
-	byThread := make(map[string]string, len(rows))
-	for _, row := range rows {
-		if row.ChildThreadID == "" || row.ToolCallID == "" {
-			continue
-		}
-		byThread[row.ChildThreadID] = row.ToolCallID
-	}
-	return byThread, nil
+	return store.SpawnToolCallIDsByChildThread(ctx, r.ORM(), chatID)
 }
 
 // ListSpawnChildren returns every spawn call issued BY threadID, in request
@@ -191,78 +143,12 @@ func (r *Repo) ListSpawnChildren(ctx context.Context, threadID string) ([]*Spawn
 	if threadID == "" {
 		return nil, fmt.Errorf("thread ID cannot be empty")
 	}
-	if r.DB == nil {
-		return nil, fmt.Errorf("repository has no database connection")
-	}
-
-	dbtx := r.DB.DB(ctx)
-	rows, err := pgdb.New(dbtx).ListSpawnChildrenForThread(ctx, sql.NullString{String: threadID, Valid: true})
-	if err != nil {
-		return nil, fmt.Errorf("failed to list spawn children: %w", err)
-	}
-
-	children := make([]*SpawnChild, 0, len(rows))
-	for _, row := range rows {
-		child := &SpawnChild{
-			ToolCallID:     row.ToolCallID,
-			ToolCallStatus: row.ToolCallStatus,
-			ToolInput:      row.ToolInput,
-			RequestedAt:    row.RequestedAt,
-		}
-		if row.CompletedAt.Valid {
-			t := row.CompletedAt.Time
-			child.CompletedAt = &t
-		}
-		if row.ChildThreadID.Valid {
-			s := row.ChildThreadID.String
-			child.ChildThreadID = &s
-		}
-		if row.ChildWorkflowID.Valid {
-			s := row.ChildWorkflowID.String
-			child.ChildWorkflowID = &s
-		}
-		// state and stop_reason arrive from the same LEFT JOIN, so either both
-		// are present or the child's workflow row has not landed yet.
-		if row.WorkflowState.Valid {
-			status := WorkflowStatus{
-				State:      WorkflowState(row.WorkflowState.Int32),
-				StopReason: WorkflowStopReason(row.WorkflowStopReason.Int32),
-			}
-			child.WorkflowStatus = &status
-		}
-		if row.WorkflowCompletedAt.Valid {
-			t := row.WorkflowCompletedAt.Time
-			child.WorkflowCompleted = &t
-		}
-		if row.ThreadTitle.Valid {
-			s := row.ThreadTitle.String
-			child.ThreadTitle = &s
-		}
-		if row.IssuingMessageOrdinal.Valid {
-			ordinal := row.IssuingMessageOrdinal.Int64
-			child.IssuingMessageOrdinal = &ordinal
-		}
-		children = append(children, child)
-	}
-	return children, nil
+	return store.ListSpawnChildren(ctx, r.ORM(), threadID)
 }
 
 // LiveBackgroundSpawn is one background spawn still open inside a root
-// execution — backgrounded, with no terminal report to its parent. See
-// ListLiveBackgroundSpawns.
-type LiveBackgroundSpawn struct {
-	ToolCallID string
-	// ParentThreadID is the thread that issued the spawn (the mailbox
-	// recipient of its eventual report).
-	ParentThreadID    string
-	ToolInput         []byte
-	ChildWorkflowID   string
-	ChildThreadID     string
-	IssuingWorkflowID string
-	// Depth is 0 for a spawn issued by the root, 1 for one issued by a
-	// top-level spawn, and so on.
-	Depth int
-}
+// execution (core.LiveBackgroundSpawn).
+type LiveBackgroundSpawn = core.LiveBackgroundSpawn
 
 // StoppedSpawnAgent is a sub-agent that stopped on a failure — its step's
 // retries exhausted, a provider error, a usage limit — and has not run since:
@@ -316,52 +202,40 @@ func (r *Repo) GetStoppedSpawnAgent(ctx context.Context, chatID, threadID string
 	if chatID == "" || threadID == "" {
 		return nil, fmt.Errorf("chat ID and thread ID are required")
 	}
-	if r.DB == nil {
-		return nil, fmt.Errorf("repository has no database connection")
+	run, err := store.LatestSpawnRunForThread(ctx, r.ORM(), chatID, threadID)
+	if err != nil || run == nil {
+		return nil, err
 	}
-	q := pgdb.New(r.DB.DB(ctx))
-	row, err := q.GetLatestSpawnRunForThread(ctx, pgdb.GetLatestSpawnRunForThreadParams{
-		ChatID:   chatID,
-		ThreadID: threadID,
-	})
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, fmt.Errorf("failed to read the latest spawn run of thread %s: %w", threadID, err)
-	}
-	stopped := row.ThreadOrigin == string(ThreadOriginSpawn) &&
-		row.ThreadStatus == ThreadStatusFailed &&
-		WorkflowState(row.WorkflowState) == WorkflowStateStopped &&
-		WorkflowStopReason(row.WorkflowStopReason) == StopReasonFailed
-	if !stopped || row.ParentThreadID == "" {
+	stopped := run.ThreadOrigin == ThreadOriginSpawn &&
+		run.ThreadStatus == ThreadStatusFailed &&
+		run.WorkflowStatus.State == WorkflowStateStopped &&
+		run.WorkflowStatus.StopReason == StopReasonFailed
+	if !stopped || run.ParentThreadID == "" {
 		return nil, nil
 	}
 
-	slots, err := q.ListSpawnResumeReportIDs(ctx, pgdb.ListSpawnResumeReportIDsParams{
-		ChatID:     chatID,
-		SlotPrefix: row.ToolCallID + resumeSlotSeparator,
-	})
+	slot := run.ToolCallID + resumeSlotSeparator
+	slots, err := store.SpawnResumeReportIDs(ctx, r.ORM(), chatID, slot)
 	if err != nil {
-		return nil, fmt.Errorf("failed to list the resume reports of spawn %s: %w", row.ToolCallID, err)
+		return nil, err
 	}
 	resumes := 0
-	for _, slot := range slots {
-		n, convErr := strconv.Atoi(strings.TrimPrefix(slot, row.ToolCallID+resumeSlotSeparator))
+	for _, id := range slots {
+		n, convErr := strconv.Atoi(strings.TrimPrefix(id, slot))
 		if convErr == nil && n > resumes {
 			resumes = n
 		}
 	}
 
 	return &StoppedSpawnAgent{
-		ToolCallID:        row.ToolCallID,
-		ParentThreadID:    row.ParentThreadID,
-		ToolInput:         string(row.ToolInput),
+		ToolCallID:        run.ToolCallID,
+		ParentThreadID:    run.ParentThreadID,
+		ToolInput:         string(run.ToolInput),
 		ChildThreadID:     threadID,
-		ChildWorkflowID:   row.ChildWorkflowID,
-		IssuingWorkflowID: row.IssuingWorkflowID,
-		SpawnDepth:        int(row.SpawnDepth),
-		WorktreePath:      row.WorktreePath,
+		ChildWorkflowID:   run.ChildWorkflowID,
+		IssuingWorkflowID: run.IssuingWorkflowID,
+		SpawnDepth:        run.SpawnDepth,
+		WorktreePath:      run.WorktreePath,
 		Resumes:           resumes,
 	}, nil
 }
@@ -374,29 +248,5 @@ func (r *Repo) ListLiveBackgroundSpawns(ctx context.Context, rootWorkflowID stri
 	if rootWorkflowID == "" {
 		return nil, fmt.Errorf("root workflow ID cannot be empty")
 	}
-	if r.DB == nil {
-		return nil, fmt.Errorf("repository has no database connection")
-	}
-	rows, err := pgdb.New(r.DB.DB(ctx)).ListLiveBackgroundSpawnsForWorkflow(ctx, rootWorkflowID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list live background spawns: %w", err)
-	}
-	spawns := make([]*LiveBackgroundSpawn, 0, len(rows))
-	for _, row := range rows {
-		if !row.ParentThreadID.Valid || row.ParentThreadID.String == "" {
-			// No recipient to report to; relaunching it would produce a
-			// report nobody can be addressed.
-			continue
-		}
-		spawns = append(spawns, &LiveBackgroundSpawn{
-			ToolCallID:        row.ToolCallID,
-			ParentThreadID:    row.ParentThreadID.String,
-			ToolInput:         row.ToolInput,
-			ChildWorkflowID:   row.ChildWorkflowID,
-			ChildThreadID:     row.ChildThreadID,
-			IssuingWorkflowID: row.IssuingWorkflowID,
-			Depth:             int(row.Depth),
-		})
-	}
-	return spawns, nil
+	return store.ListLiveBackgroundSpawns(ctx, r.ORM(), rootWorkflowID)
 }
