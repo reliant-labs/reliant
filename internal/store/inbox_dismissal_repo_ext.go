@@ -70,8 +70,11 @@ import (
 // page cannot open a chat whose project is gone. A LEFT JOIN here listed those
 // as dead "This run doesn't exist" items. Likewise a blocking item of a run
 // that completed (stop_reason 1) or was cancelled (4) can never be answered —
-// nothing expires it when the run stops — so it is not listed either. A failed
-// (2) or paused (3) run is resumable and keeps its items.
+// nothing expires it when the run stops — so it is not listed either, and the
+// same holds for the run that ASKED it (pending_input_gates names it): a
+// sub-agent that completed or was cancelled leaves a question nobody can
+// answer, while its root run goes on. A failed (2) or paused (3) run is
+// resumable and keeps its items.
 //
 // Generic payload columns (a_text, b_text, a_int) carry the kind-specific bits:
 //
@@ -108,6 +111,9 @@ SELECT * FROM (
     JOIN projects p ON p.id = c.project_id AND p.user_id = c.user_id
     LEFT JOIN triggers t ON t.id = c.trigger_id
     WHERE a.status = 1
+      AND NOT EXISTS (
+          SELECT 1 FROM pending_input_gates g
+          WHERE g.kind = 'approval' AND g.id = a.id AND g.run_state = 3 AND g.run_stop_reason IN (1, 4))
       AND c.user_id = $1::text
       AND c.state IS DISTINCT FROM 3
       AND NOT (c.root_workflow_state = 3 AND c.root_workflow_stop_reason IN (1, 4))
@@ -134,6 +140,9 @@ SELECT * FROM (
     JOIN projects p ON p.id = c.project_id AND p.user_id = c.user_id
     LEFT JOIN triggers t ON t.id = c.trigger_id
     WHERE q.status = 1
+      AND NOT EXISTS (
+          SELECT 1 FROM pending_input_gates g
+          WHERE g.kind = 'question' AND g.id = q.id AND g.run_state = 3 AND g.run_stop_reason IN (1, 4))
       AND c.user_id = $1::text
       AND c.state IS DISTINCT FROM 3
       AND NOT (c.root_workflow_state = 3 AND c.root_workflow_stop_reason IN (1, 4))

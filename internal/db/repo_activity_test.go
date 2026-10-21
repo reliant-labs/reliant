@@ -463,7 +463,7 @@ func TestUserUpdateSequencesStrictlyIncrease(t *testing.T) {
 	ctx := context.Background()
 	var seqs []int64
 	for i := 0; i < 8; i++ {
-		if err := repo.emitChatActivityChanged(ctx, chatID, i%5); err != nil {
+		if err := repo.emitChatActivityChanged(ctx, chatID, ChatActivityState{Activity: i % 5}); err != nil {
 			t.Fatalf("emitChatActivityChanged(%d): %v", i, err)
 		}
 		updates := activityUpdatesForChat(t, repo, chatID)
@@ -517,7 +517,7 @@ func TestConcurrentUserUpdatesDoNotSerializationConflict(t *testing.T) {
 		go func(chatID string) {
 			defer wg.Done()
 			for n := 0; n < writesPerWriter; n++ {
-				if err := repo.emitChatActivityChanged(context.Background(), chatID, n%5); err != nil {
+				if err := repo.emitChatActivityChanged(context.Background(), chatID, ChatActivityState{Activity: n % 5}); err != nil {
 					errCh <- err
 					return
 				}

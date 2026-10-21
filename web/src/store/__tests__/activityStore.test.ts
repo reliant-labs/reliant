@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   useActivityStore,
   ChatActivity,
+  activityToDotState,
   isBusyActivity,
 } from "../activityStore";
 
@@ -164,6 +165,67 @@ describe("activityStore", () => {
       expect(isBusyActivity(ChatActivity.QUEUED_FOR_MACHINE)).toBe(false);
       expect(isBusyActivity(ChatActivity.IDLE)).toBe(false);
       expect(isBusyActivity(undefined)).toBe(false);
+    });
+  });
+
+  // ---- working threads -----------------------------------------------------
+  // An AWAITING_INPUT chat can still have agents running; the count rides
+  // every channel with the activity and under the same sequence claim.
+
+  describe("working threads", () => {
+    beforeEach(() => {
+      useActivityStore.setState({
+        entries: new Map(),
+        activities: new Map(),
+        workingThreads: new Map(),
+        maxSeenSeq: 0,
+      });
+    });
+
+    it("a stream event carries the count beside the activity", () => {
+      useActivityStore.getState().applyStreamActivity("c1", ChatActivity.AWAITING_INPUT, 3, 2);
+      const s = useActivityStore.getState();
+      expect(s.activities.get("c1")).toBe(ChatActivity.AWAITING_INPUT);
+      expect(s.workingThreads.get("c1")).toBe(2);
+    });
+
+    it("a count change alone with the same activity is applied", () => {
+      useActivityStore.getState().applyStreamActivity("c1", ChatActivity.AWAITING_INPUT, 3, 2);
+      useActivityStore.getState().applyStreamActivity("c1", ChatActivity.AWAITING_INPUT, 4, 1);
+      expect(useActivityStore.getState().workingThreads.get("c1")).toBe(1);
+    });
+
+    it("a stale event cannot overwrite a newer count", () => {
+      useActivityStore.getState().applyStreamActivity("c1", ChatActivity.AWAITING_INPUT, 9, 0);
+      useActivityStore.getState().applyStreamActivity("c1", ChatActivity.AWAITING_INPUT, 5, 3);
+      expect(useActivityStore.getState().workingThreads.get("c1")).toBeUndefined();
+    });
+
+    it("a list snapshot and a chat snapshot carry it too", () => {
+      useActivityStore.getState().applyListActivities(
+        new Map([["c1", ChatActivity.AWAITING_INPUT], ["c2", ChatActivity.RUNNING]]),
+        5,
+        new Map([["c1", 2]]),
+      );
+      let s = useActivityStore.getState();
+      expect(s.workingThreads.get("c1")).toBe(2);
+      expect(s.workingThreads.get("c2")).toBeUndefined();
+
+      useActivityStore.getState().applyChatSnapshot("c1", ChatActivity.AWAITING_INPUT, 6, 0);
+      s = useActivityStore.getState();
+      expect(s.workingThreads.get("c1")).toBeUndefined();
+    });
+
+    it("an optimistic write keeps the known count, and IDLE clears it", () => {
+      useActivityStore.getState().applyStreamActivity("c1", ChatActivity.AWAITING_INPUT, 3, 2);
+      useActivityStore.getState().setActivity("c1", ChatActivity.RUNNING);
+      expect(useActivityStore.getState().workingThreads.get("c1")).toBe(2);
+      useActivityStore.getState().setActivity("c1", ChatActivity.IDLE);
+      expect(useActivityStore.getState().workingThreads.get("c1")).toBeUndefined();
+    });
+
+    it("needs-input is its own dot state, not unread's", () => {
+      expect(activityToDotState(ChatActivity.AWAITING_INPUT)).toBe("awaiting_input");
     });
   });
 });

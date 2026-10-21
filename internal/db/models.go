@@ -45,6 +45,7 @@ const (
 
 // Chat represents a top-level conversation.
 type Chat = core.Chat
+type ChatActivityState = core.ChatActivityState
 
 // ArchivedChatInfo represents an archived chat with worktree information.
 type ArchivedChatInfo = core.ArchivedChatInfo

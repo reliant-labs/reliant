@@ -137,6 +137,7 @@ function chat(overrides: Partial<{
   title: string;
   worktreeId: string;
   activity: ChatActivity;
+  workingThreads: number;
   needsRecovery: boolean;
   unread: boolean;
   lastMessageAt: string;
@@ -147,6 +148,7 @@ function chat(overrides: Partial<{
     title: "Untitled",
     worktreeId: "wt-main",
     activity: ChatActivity.IDLE,
+    workingThreads: 0,
     needsRecovery: false,
     unread: false,
     lastMessageAt: "2024-01-01T00:00:00.000Z",
@@ -254,7 +256,21 @@ describe("MobileChatList", () => {
     const rows = screen.getAllByText(/Older, needs attention|Newer, idle/);
     expect(rows[0]).toHaveTextContent("Older, needs attention");
     expect(rows[1]).toHaveTextContent("Newer, idle");
+    expect(screen.getByText("Needs your input")).toBeInTheDocument();
+  });
+
+  it("shows needs-input apart from unread and failure, with the agents still running", () => {
+    useChatListWithWorkspaces.mockReturnValue(listOf([
+        chat({ id: "c1", title: "Asking", activity: ChatActivity.AWAITING_INPUT, workingThreads: 2 }),
+        chat({ id: "c2", title: "Failed", activity: ChatActivity.ERROR, unread: true }),
+      ]));
+
+    renderList();
+    expect(screen.getByTestId("mobile-chat-needs-input")).toHaveTextContent("Needs your input");
+    expect(screen.getByTestId("mobile-chat-still-running")).toHaveAccessibleName("2 agents still running");
+    // A failure keeps its own words, and its unread dot is no longer hidden.
     expect(screen.getByText("Needs you")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Unread" })).toBeInTheDocument();
   });
 
   it("collapses and expands a group", async () => {

@@ -1273,12 +1273,14 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         // watermark, so a list value only overwrites an entry set by a
         // stream event / optimistic write with a newer-or-equal seq claim.
         const serverActivities = new Map<string, ChatActivity>();
+        const serverWorkingThreads = new Map<string, number>();
         for (const chat of apiChatMap.values()) {
           serverActivities.set(chat.id, (chat.activity ?? 0) as ChatActivity);
+          if (chat.workingThreads > 0) serverWorkingThreads.set(chat.id, chat.workingThreads);
         }
         useActivityStore
           .getState()
-          .applyListActivities(serverActivities, lastUserUpdateSequence);
+          .applyListActivities(serverActivities, lastUserUpdateSequence, serverWorkingThreads);
         // Remove entries for chats no longer returned by the server
         // (deleted or moved to another project). An optimistically-created
         // chat may not be in the server list yet but is already homed in the
@@ -3851,7 +3853,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       const serverActivity = (chat.activity ?? 0) as ChatActivity;
       useActivityStore
         .getState()
-        .applyChatSnapshot(chatId, serverActivity, baselineSeq);
+        .applyChatSnapshot(chatId, serverActivity, baselineSeq, chat.workingThreads ?? 0);
     } catch (error) {
       logger.error("Failed to check chat status:", error);
     }

@@ -1041,13 +1041,20 @@ function handleChatActivityChanged(update: UserUpdate) {
   const { chat_id } = update;
   if (!chat_id) return;
 
-  const data = update.data as { chat_id: string; activity: number; timestamp: string };
+  const data = update.data as {
+    chat_id: string;
+    activity: number;
+    working_threads?: number;
+    timestamp: string;
+  };
 
   const activity = (data.activity ?? 0) as ChatActivity;
+  const workingThreads = data.working_threads ?? 0;
 
   logger.info(`${LOG_PREFIX} Chat activity changed`, {
     chatId: chat_id.slice(0, 8),
     activity,
+    workingThreads,
     seq: update.sequence_number,
   });
 
@@ -1057,7 +1064,7 @@ function handleChatActivityChanged(update: UserUpdate) {
   // number decides precedence against list/get snapshot writes — no clocks.
   useActivityStore
     .getState()
-    .applyStreamActivity(chat_id, activity, update.sequence_number);
+    .applyStreamActivity(chat_id, activity, update.sequence_number, workingThreads);
 
   // The wait's reset time and provider live on the chat, not on the activity
   // event (which carries only the number). A run entering the wait needs them;

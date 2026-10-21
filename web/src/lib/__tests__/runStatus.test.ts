@@ -14,6 +14,7 @@ import {
   WorkflowStopReason,
 } from "../../gen/reliant/v1/chat_pb";
 import {
+  chatListIndicators,
   isLiveRunStatus,
   isUnattendedLaunchKind,
   launchKindDisplay,
@@ -395,5 +396,51 @@ describe("isUnattendedLaunchKind: core.TriggerEventKind.Unattended, mirrored", (
     expect(isUnattendedLaunchKind(null)).toBe(false);
     expect(isUnattendedLaunchKind(undefined)).toBe(false);
     expect(isUnattendedLaunchKind("future.kind")).toBe(false);
+  });
+});
+
+describe("chatListIndicators: needs-input, running and unread are separate signals", () => {
+  it("a chat waiting on the user with agents still running shows both, and is not unread", () => {
+    const ind = chatListIndicators({ activity: ChatActivity.AWAITING_INPUT, workingThreads: 2, unread: false });
+    expect(ind.needsInput?.label).toBe("Needs your input · 2 agents still running");
+    expect(ind.status?.key).toBe("running");
+    expect(ind.status?.pulse).toBe(true);
+    expect(ind.unread).toBe(false);
+  });
+
+  it("a chat waiting on the user with nothing else running has no run dot", () => {
+    const ind = chatListIndicators({ activity: ChatActivity.AWAITING_INPUT, workingThreads: 0, unread: false });
+    expect(ind.needsInput?.label).toBe("Needs your input");
+    expect(ind.status).toBeNull();
+  });
+
+  it("one agent still running reads in the singular", () => {
+    const ind = chatListIndicators({ activity: ChatActivity.AWAITING_INPUT, workingThreads: 1, unread: true });
+    expect(ind.needsInput?.label).toBe("Needs your input · 1 agent still running");
+    expect(ind.unread).toBe(true);
+  });
+
+  it("unread alone is not needs-input", () => {
+    const ind = chatListIndicators({ activity: ChatActivity.IDLE, workingThreads: 0, unread: true });
+    expect(ind.needsInput).toBeNull();
+    expect(ind.status).toBeNull();
+    expect(ind.unread).toBe(true);
+  });
+
+  it.each([
+    [ChatActivity.RUNNING, "running"],
+    [ChatActivity.PAUSED, "paused"],
+    [ChatActivity.ERROR, "failed"],
+    [ChatActivity.WAITING_FOR_DAEMON, "waiting_for_machine"],
+  ] as const)("any other activity (%s) is the run dot alone", (activity, key) => {
+    const ind = chatListIndicators({ activity, workingThreads: 3, unread: false });
+    expect(ind.needsInput).toBeNull();
+    expect(ind.status?.key).toBe(key);
+  });
+
+  it("runStatusFromActivity says agents are still running beside a question", () => {
+    expect(runStatusFromActivity(ChatActivity.AWAITING_INPUT, 2)?.label).toBe("Needs you · 2 agents still running");
+    expect(runStatusFromActivity(ChatActivity.AWAITING_INPUT, 2)?.key).toBe("needs_you");
+    expect(runStatusFromActivity(ChatActivity.RUNNING, 2)?.label).toBe("Running");
   });
 });

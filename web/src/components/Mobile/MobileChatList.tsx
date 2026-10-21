@@ -41,6 +41,7 @@ import {
   GitBranch,
   GitBranchPlus,
   Loader2,
+  MessageCircleQuestion,
   MessageSquarePlus,
 } from "lucide-react";
 import { GroupedVirtuoso } from "react-virtuoso";
@@ -56,6 +57,7 @@ import { useProjectStore } from "../../store/projectStore";
 import { useWorktreeStore } from "../../store/worktreeStore";
 import { cn } from "../../lib/utils";
 import { isChatBusy, needsUserAttention } from "../../lib/chatSendState";
+import { chatListIndicators, stillRunningPhrase } from "../../lib/runStatus";
 import { relativeTime } from "./relativeTime";
 import { MobileMenuButton } from "./MobileMenuButton";
 import {
@@ -201,6 +203,13 @@ function ChatRow({ chat, isLast }: { chat: Chat; isLast: boolean }) {
   const state = { activity: chat.activity, needsRecovery: chat.needsRecovery };
   const attention = needsUserAttention(state);
   const busy = isChatBusy(state);
+  // Needs-input is its own pill, distinct from a failure's "Needs you" and
+  // from unread, and it does not hide the agents still running beside it.
+  const { needsInput, status } = chatListIndicators({
+    activity: chat.activity,
+    workingThreads: chat.workingThreads,
+    unread: chat.unread,
+  });
 
   return (
     <div className="px-4">
@@ -224,9 +233,10 @@ function ChatRow({ chat, isLast }: { chat: Chat; isLast: boolean }) {
             chat gaining an unread dot shifts its own title sideways while
             its neighbours stay put. */}
         <span className="flex w-2 shrink-0 justify-center">
-          {chat.unread && !attention && (
+          {chat.unread && (
             <span
               className="h-2 w-2 rounded-full bg-primary"
+              role="img"
               aria-label="Unread"
             />
           )}
@@ -242,7 +252,27 @@ function ChatRow({ chat, isLast }: { chat: Chat; isLast: boolean }) {
           </span>
 
           <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
-            {attention ? (
+            {needsInput ? (
+              <>
+                <span
+                  className="flex items-center gap-1 rounded-full bg-warning/10 px-1.5 py-0.5 font-medium text-warning-ink"
+                  data-testid="mobile-chat-needs-input"
+                >
+                  <MessageCircleQuestion className="h-3 w-3" aria-hidden="true" />
+                  Needs your input
+                </span>
+                {status && (
+                  <span
+                    className="flex items-center gap-1 rounded-full bg-primary/10 px-1.5 py-0.5 font-medium text-primary"
+                    data-testid="mobile-chat-still-running"
+                    aria-label={stillRunningPhrase(chat.workingThreads)}
+                  >
+                    <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+                    {chat.workingThreads} running
+                  </span>
+                )}
+              </>
+            ) : attention ? (
               <span className="flex items-center gap-1 rounded-full bg-destructive/10 px-1.5 py-0.5 font-medium text-destructive-ink">
                 <AlertCircle className="h-3 w-3" />
                 Needs you

@@ -81,6 +81,14 @@ module, `web/src/lib/runStatus.ts`, and have all of them read it.
 | `STOPPED` / `CANCELLED` | Cancelled | `neutral` | `neutral` |
 | any + daemon pending (§9) | Waiting for machine | `pending` | `warning` |
 
+`AWAITING_INPUT` counts only a question or approval whose asking run is not
+completed, failed or cancelled (a paused run still counts), and it travels
+with `Chat.working_threads`, the threads still running beside it. A chat list
+row shows the two separately from unread (`chatListIndicators` in
+`runStatus.ts`): a question glyph in `warning-ink` labelled "Needs your input"
+(plus "· 2 agents still running" and the running dot when any are), and the
+unread dot only for unread messages.
+
 Trigger-event outcomes keep their own words, because they describe a firing
 rather than a run: **Launched**, **Skipped** (with reason), **Failed to
 launch** (with reason). A *launched* event points at a run, and that run then

@@ -1,8 +1,12 @@
 /**
  * Activity Store — single source of truth for chat activity state.
  *
- * Each chat has exactly one ChatActivity value (from proto).
- * The sidebar, thinking indicator, and all other consumers read from here.
+ * Each chat has exactly one ChatActivity value (from proto), plus the count
+ * of its threads still working (Chat.working_threads): an AWAITING_INPUT chat
+ * can need the user while other agents keep running, which one enum value
+ * cannot say. Both travel together on every channel below and share one
+ * sequence claim. The sidebar, thinking indicator, and all other consumers
+ * read from here.
  *
  * Populated from three channels, ordered by user-update sequence number
  * (per-user monotonic counter assigned transactionally on the server):
@@ -40,14 +44,14 @@ export { ChatActivity } from "../gen/reliant/v1/chat_pb";
 // Coarse activity classes the sidebar and keyboard navigation sort, group and
 // filter by. What a user READS for an activity (label, color) is not here: it
 // is lib/runStatus's runStatusFromActivity.
-export type DotState = "idle" | "thinking" | "awaiting_approval" | "error" | "paused";
+export type DotState = "idle" | "thinking" | "awaiting_input" | "error" | "paused";
 
 export function activityToDotState(activity: ChatActivity): DotState {
   switch (activity) {
     case ChatActivity.RUNNING:
       return "thinking";
     case ChatActivity.AWAITING_INPUT:
-      return "awaiting_approval";
+      return "awaiting_input";
     case ChatActivity.ERROR:
       return "error";
     case ChatActivity.PAUSED:
@@ -59,6 +63,8 @@ export function activityToDotState(activity: ChatActivity): DotState {
 
 interface ActivityEntry {
   activity: ChatActivity;
+  /** Threads still working (Chat.working_threads); 0 when unknown. */
+  workingThreads: number;
   /** User-update sequence that set this value (see module doc for rules). */
   seq: number;
 }
@@ -67,6 +73,8 @@ interface ActivityState {
   entries: Map<string, ActivityEntry>;
   /** Convenience projection — just the activity values (for consumers). */
   activities: Map<string, ChatActivity>;
+  /** Convenience projection — working-thread counts, for chats that have any. */
+  workingThreads: Map<string, number>;
   /**
    * Highest server-derived sequence observed (stream event seqs and list
    * watermarks). Optimistic writes are tagged maxSeenSeq + 1 but do NOT
@@ -74,53 +82,81 @@ interface ActivityState {
    * writes can never inflate entry seqs past what the server will assign.
    */
   maxSeenSeq: number;
-  /** Local optimistic write for instant feedback on a user action. */
+  /**
+   * Local optimistic write for instant feedback on a user action. Keeps the
+   * known working-thread count, except that IDLE has none.
+   */
   setActivity: (chatId: string, activity: ChatActivity) => void;
   /** Write from a CHAT_ACTIVITY_CHANGED stream event carrying its seq. */
   applyStreamActivity: (
     chatId: string,
     activity: ChatActivity,
     seq: number,
+    workingThreads?: number,
   ) => void;
-  /** Bulk write from a ListChats snapshot with its watermark. */
+  /**
+   * Bulk write from a ListChats snapshot with its watermark. A chat missing
+   * from serverWorkingThreads has none working.
+   */
   applyListActivities: (
     serverActivities: Map<string, ChatActivity>,
     watermark: number,
+    serverWorkingThreads?: Map<string, number>,
   ) => void;
   /** Write from a GetChat snapshot; baselineSeq = maxSeenSeq before fetch. */
   applyChatSnapshot: (
     chatId: string,
     activity: ChatActivity,
     baselineSeq: number,
+    workingThreads?: number,
   ) => void;
   removeActivity: (chatId: string) => void;
 }
 
-function buildActivitiesProjection(
-  entries: Map<string, ActivityEntry>,
-): Map<string, ChatActivity> {
-  const m = new Map<string, ChatActivity>();
-  for (const [id, e] of entries) m.set(id, e.activity);
-  return m;
+function buildProjections(entries: Map<string, ActivityEntry>): {
+  activities: Map<string, ChatActivity>;
+  workingThreads: Map<string, number>;
+} {
+  const activities = new Map<string, ChatActivity>();
+  const workingThreads = new Map<string, number>();
+  for (const [id, e] of entries) {
+    activities.set(id, e.activity);
+    if (e.workingThreads > 0) workingThreads.set(id, e.workingThreads);
+  }
+  return { activities, workingThreads };
+}
+
+function sameEntry(a: ActivityEntry | undefined, b: ActivityEntry): boolean {
+  return (
+    a !== undefined &&
+    a.activity === b.activity &&
+    a.workingThreads === b.workingThreads &&
+    a.seq === b.seq
+  );
 }
 
 export const useActivityStore = create<ActivityState>((set) => ({
   entries: new Map(),
   activities: new Map(),
+  workingThreads: new Map(),
   maxSeenSeq: 0,
 
   setActivity: (chatId, activity) =>
     set((state) => {
       const existing = state.entries.get(chatId);
-      const seq = state.maxSeenSeq + 1;
+      const entry: ActivityEntry = {
+        activity,
+        workingThreads: activity === ChatActivity.IDLE ? 0 : (existing?.workingThreads ?? 0),
+        seq: state.maxSeenSeq + 1,
+      };
       // Skip if nothing changes — prevents unnecessary re-renders
-      if (existing?.activity === activity && existing.seq === seq) return state;
+      if (sameEntry(existing, entry)) return state;
       const next = new Map(state.entries);
-      next.set(chatId, { activity, seq });
-      return { entries: next, activities: buildActivitiesProjection(next) };
+      next.set(chatId, entry);
+      return { entries: next, ...buildProjections(next) };
     }),
 
-  applyStreamActivity: (chatId, activity, seq) =>
+  applyStreamActivity: (chatId, activity, seq, workingThreads = 0) =>
     set((state) => {
       const existing = state.entries.get(chatId);
       if (seq > 0 && existing && seq < existing.seq) {
@@ -131,30 +167,37 @@ export const useActivityStore = create<ActivityState>((set) => ({
       const maxSeenSeq = Math.max(state.maxSeenSeq, seq);
       // seq <= 0 means a malformed/ephemeral event — apply defensively
       // (matches pre-sequence behavior) but preserve the entry's seq.
-      const entrySeq = seq > 0 ? seq : (existing?.seq ?? 0);
-      if (existing?.activity === activity && existing.seq === entrySeq) {
+      const entry: ActivityEntry = {
+        activity,
+        workingThreads,
+        seq: seq > 0 ? seq : (existing?.seq ?? 0),
+      };
+      if (sameEntry(existing, entry)) {
         return maxSeenSeq === state.maxSeenSeq ? state : { maxSeenSeq };
       }
       const next = new Map(state.entries);
-      next.set(chatId, { activity, seq: entrySeq });
+      next.set(chatId, entry);
       return {
         entries: next,
-        activities: buildActivitiesProjection(next),
+        ...buildProjections(next),
         maxSeenSeq,
       };
     }),
 
-  applyListActivities: (serverActivities, watermark) =>
+  applyListActivities: (serverActivities, watermark, serverWorkingThreads) =>
     set((state) => {
       let changed = false;
       const next = new Map(state.entries);
       for (const [chatId, activity] of serverActivities) {
         const existing = next.get(chatId);
         if (existing && watermark <= existing.seq) continue;
-        if (existing?.activity === activity && existing.seq === watermark) {
-          continue;
-        }
-        next.set(chatId, { activity, seq: watermark });
+        const entry: ActivityEntry = {
+          activity,
+          workingThreads: serverWorkingThreads?.get(chatId) ?? 0,
+          seq: watermark,
+        };
+        if (sameEntry(existing, entry)) continue;
+        next.set(chatId, entry);
         changed = true;
       }
       const maxSeenSeq = Math.max(state.maxSeenSeq, watermark);
@@ -163,21 +206,20 @@ export const useActivityStore = create<ActivityState>((set) => ({
       }
       return {
         entries: next,
-        activities: buildActivitiesProjection(next),
+        ...buildProjections(next),
         maxSeenSeq,
       };
     }),
 
-  applyChatSnapshot: (chatId, activity, baselineSeq) =>
+  applyChatSnapshot: (chatId, activity, baselineSeq, workingThreads = 0) =>
     set((state) => {
       const existing = state.entries.get(chatId);
       if (existing && baselineSeq < existing.seq) return state;
-      if (existing?.activity === activity && existing.seq === baselineSeq) {
-        return state;
-      }
+      const entry: ActivityEntry = { activity, workingThreads, seq: baselineSeq };
+      if (sameEntry(existing, entry)) return state;
       const next = new Map(state.entries);
-      next.set(chatId, { activity, seq: baselineSeq });
-      return { entries: next, activities: buildActivitiesProjection(next) };
+      next.set(chatId, entry);
+      return { entries: next, ...buildProjections(next) };
     }),
 
   removeActivity: (chatId) =>
@@ -185,7 +227,7 @@ export const useActivityStore = create<ActivityState>((set) => ({
       if (!state.entries.has(chatId)) return state;
       const next = new Map(state.entries);
       next.delete(chatId);
-      return { entries: next, activities: buildActivitiesProjection(next) };
+      return { entries: next, ...buildProjections(next) };
     }),
 }));
 
@@ -198,6 +240,11 @@ export function useChatActivity(chatId: string): ChatActivity {
   return useActivityStore(
     (s) => s.activities.get(chatId) ?? ChatActivity.IDLE,
   );
+}
+
+/** How many of a chat's threads are still working. Defaults to 0. */
+export function useChatWorkingThreads(chatId: string): number {
+  return useActivityStore((s) => s.workingThreads.get(chatId) ?? 0);
 }
 
 /**

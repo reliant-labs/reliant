@@ -451,8 +451,12 @@ func (ContentBlockType) EnumDescriptor() ([]byte, []int) {
 type ChatActivity int32
 
 const (
-	ChatActivity_CHAT_ACTIVITY_IDLE           ChatActivity = 0
-	ChatActivity_CHAT_ACTIVITY_RUNNING        ChatActivity = 1
+	ChatActivity_CHAT_ACTIVITY_IDLE    ChatActivity = 0
+	ChatActivity_CHAT_ACTIVITY_RUNNING ChatActivity = 1
+	// A pending question or approval the user can still answer: its thread's run
+	// has not completed, failed or been cancelled (a paused run still counts).
+	// Outranks every other state; Chat.working_threads says whether other
+	// threads are still running meanwhile.
 	ChatActivity_CHAT_ACTIVITY_AWAITING_INPUT ChatActivity = 2
 	ChatActivity_CHAT_ACTIVITY_ERROR          ChatActivity = 3
 	ChatActivity_CHAT_ACTIVITY_PAUSED         ChatActivity = 4
@@ -814,9 +818,16 @@ type Chat struct {
 	// BranchChat; unset for a chat with
 	// no worktree_id (it runs in the project's main workspace, which
 	// ListChatsResponse.main_worktree carries) and when the row is gone.
-	Worktree      *WorktreeSummary `protobuf:"bytes,41,opt,name=worktree,proto3" json:"worktree,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Worktree *WorktreeSummary `protobuf:"bytes,41,opt,name=worktree,proto3" json:"worktree,omitempty"`
+	// How many of the chat's threads are doing work right now: a live run that is
+	// not blocked on the user (no pending question or approval of its own) and
+	// not only waiting on sub-agents of its own. Orthogonal to activity, which
+	// folds the chat into one state: an AWAITING_INPUT chat with working_threads
+	// > 0 needs the user AND still has agents running. Also carried by the
+	// CHAT_ACTIVITY_CHANGED update ("working_threads").
+	WorkingThreads int32 `protobuf:"varint,42,opt,name=working_threads,json=workingThreads,proto3" json:"working_threads,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *Chat) Reset() {
@@ -1050,6 +1061,13 @@ func (x *Chat) GetWorktree() *WorktreeSummary {
 		return x.Worktree
 	}
 	return nil
+}
+
+func (x *Chat) GetWorkingThreads() int32 {
+	if x != nil {
+		return x.WorkingThreads
+	}
+	return 0
 }
 
 // ChatSelection is the server-side record of what the composer chose for a chat.
@@ -6801,7 +6819,7 @@ var File_reliant_v1_chat_proto protoreflect.FileDescriptor
 const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\n" +
 	"\x15reliant/v1/chat.proto\x12\n" +
-	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x17reliant/v1/common.proto\x1a\x19reliant/v1/worktree.proto\"\xe5\v\n" +
+	"reliant.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x17reliant/v1/common.proto\x1a\x19reliant/v1/worktree.proto\"\x8e\f\n" +
 	"\x04Chat\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\x12\x14\n" +
@@ -6842,7 +6860,8 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"R\x12usageLimitProvider\x88\x01\x01\x12.\n" +
 	"\x13usage_limit_probing\x18' \x01(\bR\x11usageLimitProbing\x127\n" +
 	"\tselection\x18( \x01(\v2\x19.reliant.v1.ChatSelectionR\tselection\x127\n" +
-	"\bworktree\x18) \x01(\v2\x1b.reliant.v1.WorktreeSummaryR\bworktree\x1aB\n" +
+	"\bworktree\x18) \x01(\v2\x1b.reliant.v1.WorktreeSummaryR\bworktree\x12'\n" +
+	"\x0fworking_threads\x18* \x01(\x05R\x0eworkingThreads\x1aB\n" +
 	"\x14SelectedPresetsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\x0e\n" +

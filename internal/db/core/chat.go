@@ -209,6 +209,12 @@ type Chat struct {
 	// UsageLimitResumesAt is only the next probe.
 	UsageLimitProbing bool `json:"usage_limit_probing,omitempty"`
 
+	// WorkingThreads is how many of the chat's threads are doing work right
+	// now: a live run not blocked on the user and not only waiting on its own
+	// sub-agents. Orthogonal to Activity — an AWAITING_INPUT chat with
+	// WorkingThreads > 0 needs the user and is still running.
+	WorkingThreads int `json:"working_threads,omitempty"`
+
 	// RootStatus is the lifecycle of the chat's ROOT workflow — the row whose
 	// id is WorkflowID. It travels with every chat read because callers that
 	// ask "is this chat paused" or "has this chat started yet" are asking
@@ -310,4 +316,12 @@ type PausedForMachineChat struct {
 type WaitingForMachineRun struct {
 	ChatID     string
 	WorkflowID string
+}
+
+// ChatActivityState is what the chats_with_activity view derives for one chat
+// that the activity stream carries: its folded activity (a reliantv1.ChatActivity
+// value) and how many of its threads are working (Chat.WorkingThreads).
+type ChatActivityState struct {
+	Activity       int
+	WorkingThreads int
 }

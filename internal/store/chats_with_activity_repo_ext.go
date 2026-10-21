@@ -198,17 +198,29 @@ func ListArchivedChats(ctx context.Context, db orm.Context, userID string) ([]*c
 }
 
 // GetChatActivity returns the chat's computed activity (0, IDLE, when the view
-// has none). It runs after every write that can move a chat's activity, so it
-// selects the one column through the raw passthrough with a bound $1: the
-// view is inlined into the query, so only the activity expression is
-// evaluated, and the statement text is the same on every call.
+// has none).
 func GetChatActivity(ctx context.Context, db orm.Context, chatID string) (int, error) {
-	var activity int
-	err := db.QueryRow(ctx, `SELECT COALESCE(activity, 0) FROM chats_with_activity WHERE id = $1`, chatID).Scan(&activity)
+	state, err := GetChatActivityState(ctx, db, chatID)
 	if err != nil {
-		return 0, fmt.Errorf("failed to get chat activity: %w", err)
+		return 0, err
 	}
-	return activity, nil
+	return state.Activity, nil
+}
+
+// GetChatActivityState returns the chat's computed activity and working-thread
+// count. It runs after every write that can move either, so it selects the two
+// columns through the raw passthrough with a bound $1: the view is inlined
+// into the query, so only those expressions are evaluated, and the statement
+// text is the same on every call.
+func GetChatActivityState(ctx context.Context, db orm.Context, chatID string) (core.ChatActivityState, error) {
+	var state core.ChatActivityState
+	err := db.QueryRow(ctx,
+		`SELECT COALESCE(activity, 0), COALESCE(working_threads, 0) FROM chats_with_activity WHERE id = $1`,
+		chatID).Scan(&state.Activity, &state.WorkingThreads)
+	if err != nil {
+		return core.ChatActivityState{}, fmt.Errorf("failed to get chat activity: %w", err)
+	}
+	return state, nil
 }
 
 func chatsFromView(rows []*ChatsWithActivity) []*core.Chat {
@@ -253,6 +265,9 @@ func chatFromView(row *ChatsWithActivity) *core.Chat {
 		UsageLimitResumesAt:  row.UsageLimitResumesAt,
 		UsageLimitProvider:   chatViewString(row.UsageLimitProvider),
 		UsageLimitProbing:    row.UsageLimitProbing != nil && *row.UsageLimitProbing,
+	}
+	if row.WorkingThreads != nil {
+		chat.WorkingThreads = int(*row.WorkingThreads)
 	}
 	if row.State != nil {
 		chat.State = *row.State

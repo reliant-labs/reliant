@@ -180,8 +180,15 @@ function stoppedStatus(stopReason: WorkflowStopReason, outcome?: string): RunSta
  * The status of a chat's run from its live activity alone, for surfaces that
  * track activity (the sidebar, via activityStore) and not the lifecycle pair.
  * Returns null for an idle chat: there is nothing in progress to report.
+ *
+ * `workingThreads` is Chat.working_threads. It only changes the words of an
+ * AWAITING_INPUT chat: one that needs the user while other agents keep
+ * running says so, instead of reading as if everything had stopped.
  */
-export function runStatusFromActivity(activity: ChatActivity): RunStatusDisplay | null {
+export function runStatusFromActivity(
+  activity: ChatActivity,
+  workingThreads = 0,
+): RunStatusDisplay | null {
   const overlay = overlayFor({ activity });
   if (overlay !== null) return OVERLAY_ROWS[overlay];
 
@@ -189,7 +196,9 @@ export function runStatusFromActivity(activity: ChatActivity): RunStatusDisplay 
     case ChatActivity.RUNNING:
       return LIFECYCLE_ROWS.running;
     case ChatActivity.AWAITING_INPUT:
-      return LIFECYCLE_ROWS.needs_you;
+      return workingThreads > 0
+        ? { ...LIFECYCLE_ROWS.needs_you, label: `${LIFECYCLE_ROWS.needs_you.label} · ${stillRunningPhrase(workingThreads)}` }
+        : LIFECYCLE_ROWS.needs_you;
     case ChatActivity.PAUSED:
       return LIFECYCLE_ROWS.paused;
     case ChatActivity.ERROR:
@@ -197,6 +206,56 @@ export function runStatusFromActivity(activity: ChatActivity): RunStatusDisplay 
     default:
       return null;
   }
+}
+
+const NEEDS_INPUT_LABEL = "Needs your input";
+
+/** "1 agent still running", "3 agents still running". */
+export function stillRunningPhrase(workingThreads: number): string {
+  return workingThreads === 1 ? "1 agent still running" : `${workingThreads} agents still running`;
+}
+
+/**
+ * What a chat list row shows for a chat. Three independent signals, each with
+ * its own indicator, because a chat can carry all three at once and the old
+ * single red dot made "needs your input" indistinguishable from "unread" and
+ * hid that work was still running:
+ *
+ *   - needsInput: a question or approval the user can answer now
+ *     (AWAITING_INPUT). Its label also says when agents are still running.
+ *   - status: the run dot. For a chat that needs input it is the running dot
+ *     when threads are still working, and absent when none are (the
+ *     needs-input indicator already says everything is waiting on the user).
+ *   - unread: there are messages the user has not read.
+ */
+export interface ChatListIndicators {
+  needsInput: { label: string } | null;
+  status: RunStatusDisplay | null;
+  unread: boolean;
+}
+
+export function chatListIndicators(input: {
+  activity: ChatActivity;
+  workingThreads: number;
+  unread: boolean;
+}): ChatListIndicators {
+  if (input.activity === ChatActivity.AWAITING_INPUT) {
+    const working = input.workingThreads > 0;
+    return {
+      needsInput: {
+        label: working
+          ? `${NEEDS_INPUT_LABEL} · ${stillRunningPhrase(input.workingThreads)}`
+          : NEEDS_INPUT_LABEL,
+      },
+      status: working ? LIFECYCLE_ROWS.running : null,
+      unread: input.unread,
+    };
+  }
+  return {
+    needsInput: null,
+    status: runStatusFromActivity(input.activity),
+    unread: input.unread,
+  };
 }
 
 /**

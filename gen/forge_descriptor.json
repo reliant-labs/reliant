@@ -6546,6 +6546,10 @@
             "name": "worktree",
             "kind": "message",
             "type_name": "reliant.v1.WorktreeSummary"
+          },
+          {
+            "name": "working_threads",
+            "kind": "int32"
           }
         ],
         "reliant.v1.ChatPlan": [
@@ -39602,7 +39606,7 @@
     "reliant/v1/attachment.proto": "61fa803dd43b3e1f790ab13de3eeeced908b97c6076ea3154180dbd9b5018085",
     "reliant/v1/background.proto": "84c4c5ccc39bbf99e46126262da13cb89b19337af1fe573b63f56d6d0e8e7eba",
     "reliant/v1/catalog.proto": "1ab34bbac8b863cb035b9fca4c0d622d8d293b4f78f905ee27eb47ae36fc38e6",
-    "reliant/v1/chat.proto": "cd28fab6e9bf23b6ccb54308c160bdb91acff4dd403aea76b47646efe317f7a1",
+    "reliant/v1/chat.proto": "3087be1887db21683dfdc1b5d55914aa7e1743a5df5754009cd060f1ae2249b7",
     "reliant/v1/common.proto": "3f55240c147956015c9adabf3237b53a6925c6ec20ec90344237a8d7c8357ba1",
     "reliant/v1/connection.proto": "31ef55ce12e0a3862f02156e159049a5f84142b7f9978f2c5c939afa52a50b64",
     "reliant/v1/connector.proto": "604b069c652292d84d3c220ad54815a01b9d28670accd4fc75b042ffae8efcfe",

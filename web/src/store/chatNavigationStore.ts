@@ -43,21 +43,26 @@ import { sortChats, compareChatGroups } from "../lib/chatListOrder";
  * Whether a chat is blocked on the user.
  *
  * Three ways a chat can want you, and they are deliberately treated alike by
- * the triage shortcut: it is waiting on an approval, it failed and needs a
- * decision, or it has said something you have not read. This is the same rule
- * the sidebar's "Needs Attention" sort uses, kept in one place so the shortcut
+ * the triage shortcut and the sidebar's "Needs Attention" sort: it is waiting
+ * on a question or approval you can answer, it failed and needs a decision, or
+ * it has said something you have not read. Agents still running elsewhere in
+ * the chat (Chat.working_threads) do not change it: a chat that needs your
+ * input needs it whatever else is going on. Kept in one place so the shortcut
  * and the list can never disagree about what is waiting.
  */
+export function activityNeedsAttention(activity: ChatActivity, unread: boolean): boolean {
+  return (
+    activity === ChatActivity.AWAITING_INPUT ||
+    activity === ChatActivity.ERROR ||
+    unread
+  );
+}
+
 export function chatNeedsAttention(
   chat: Chat,
   activities: Map<string, ChatActivity>,
 ): boolean {
-  const activity = activities.get(chat.id) ?? ChatActivity.IDLE;
-  return (
-    activity === ChatActivity.AWAITING_INPUT ||
-    activity === ChatActivity.ERROR ||
-    chat.unread
-  );
+  return activityNeedsAttention(activities.get(chat.id) ?? ChatActivity.IDLE, chat.unread);
 }
 
 async function selectChatWithWorktreeContext(chat: Chat): Promise<void> {
@@ -101,13 +106,8 @@ async function getOrderedChatList(): Promise<Chat[]> {
   // so the order here cannot disagree with what is rendered.
   const getWorktreeForChat = (chat: Chat) => workspaceOfChat(chat, mainWorktree);
 
-  // Helper to check if chat is awaiting approval
-  const isAwaitingApproval = (chatId: string) =>
-    (activities.get(chatId) ?? ChatActivity.IDLE) === ChatActivity.AWAITING_INPUT;
-
-  // Helper to check if chat needs attention
-  const needsAttention = (chat: Chat) =>
-    isAwaitingApproval(chat.id) || chat.unread;
+  // The sidebar sorts by the same rule, so keyboard order matches the list.
+  const needsAttention = (chat: Chat) => chatNeedsAttention(chat, activities);
 
   // Compute activity state from activityStore (SINGLE SOURCE OF TRUTH)
   const getChatActivityState = (chat: Chat) => {
@@ -128,7 +128,7 @@ async function getOrderedChatList(): Promise<Chat[]> {
       const activityState = getChatActivityState(chat);
       // Map activityState to filter states
       if (filters.states!.includes("needs_attention")) {
-        return chat.unread || activityState === "awaiting_approval";
+        return chat.unread || activityState === "awaiting_input";
       }
       if (filters.states!.includes("active")) {
         return activityState === "thinking";

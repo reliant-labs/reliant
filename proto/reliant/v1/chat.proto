@@ -107,6 +107,10 @@ enum ContentBlockType {
 enum ChatActivity {
   CHAT_ACTIVITY_IDLE = 0;
   CHAT_ACTIVITY_RUNNING = 1;
+  // A pending question or approval the user can still answer: its thread's run
+  // has not completed, failed or been cancelled (a paused run still counts).
+  // Outranks every other state; Chat.working_threads says whether other
+  // threads are still running meanwhile.
   CHAT_ACTIVITY_AWAITING_INPUT = 2;
   CHAT_ACTIVITY_ERROR = 3;
   CHAT_ACTIVITY_PAUSED = 4;
@@ -369,6 +373,13 @@ message Chat {
   // no worktree_id (it runs in the project's main workspace, which
   // ListChatsResponse.main_worktree carries) and when the row is gone.
   WorktreeSummary worktree = 41;
+  // How many of the chat's threads are doing work right now: a live run that is
+  // not blocked on the user (no pending question or approval of its own) and
+  // not only waiting on sub-agents of its own. Orthogonal to activity, which
+  // folds the chat into one state: an AWAITING_INPUT chat with working_threads
+  // > 0 needs the user AND still has agents running. Also carried by the
+  // CHAT_ACTIVITY_CHANGED update ("working_threads").
+  int32 working_threads = 42;
 }
 
 // ChatSelection is the server-side record of what the composer chose for a chat.

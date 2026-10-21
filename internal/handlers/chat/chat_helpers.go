@@ -175,6 +175,7 @@ func chatToProto(c *db.Chat) *reliantv1.Chat {
 		proto.ActiveDaemonId = c.ActiveDaemonID
 	}
 	proto.NoMachine = c.NoMachine
+	proto.WorkingThreads = int32(c.WorkingThreads)
 	if c.UsageLimitResumesAt != nil {
 		resumes := c.UsageLimitResumesAt.UTC().Format(time.RFC3339)
 		proto.UsageLimitResumesAt = &resumes

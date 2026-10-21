@@ -21,25 +21,28 @@ func (r *Repo) GetChatActivity(ctx context.Context, chatID string) (int, error) 
 // and emits a chat_activity_changed event. Dedup is handled on the frontend
 // (activityStore skips no-op updates), so we always emit here.
 func (r *Repo) emitChatActivityIfChanged(ctx context.Context, chatID string) error {
-	activity, err := r.GetChatActivity(ctx, chatID)
+	state, err := store.GetChatActivityState(ctx, r.ORM(), chatID)
 	if err != nil {
 		return err
 	}
-	return r.emitChatActivityChanged(ctx, chatID, activity)
+	return r.emitChatActivityChanged(ctx, chatID, state)
 }
 
 // emitChatActivityChanged builds a UserUpdate with UpdateType 6
-// (CHAT_ACTIVITY_CHANGED) and persists it via CreateUserUpdate.
-func (r *Repo) emitChatActivityChanged(ctx context.Context, chatID string, activity int) error {
+// (CHAT_ACTIVITY_CHANGED) and persists it via CreateUserUpdate. It carries the
+// working-thread count beside the activity: the two change on the same writes,
+// and a chat can need the user while other threads still run.
+func (r *Repo) emitChatActivityChanged(ctx context.Context, chatID string, state ChatActivityState) error {
 	chat, err := r.GetChat(ctx, chatID)
 	if err != nil {
 		return fmt.Errorf("failed to get chat for activity event: %w", err)
 	}
 
 	updateData := map[string]interface{}{
-		"chat_id":   chatID,
-		"activity":  activity,
-		"timestamp": time.Now().UTC().Format(time.RFC3339),
+		"chat_id":         chatID,
+		"activity":        state.Activity,
+		"working_threads": state.WorkingThreads,
+		"timestamp":       time.Now().UTC().Format(time.RFC3339),
 	}
 
 	updateDataJSON, err := json.Marshal(updateData)
@@ -64,7 +67,8 @@ func (r *Repo) emitChatActivityChanged(ctx context.Context, chatID string, activ
 
 	logging.DebugContext(ctx, "[ActivityEvent] Emitted chat_activity_changed",
 		"chatID", chatID,
-		"activity", activity,
+		"activity", state.Activity,
+		"workingThreads", state.WorkingThreads,
 	)
 
 	return nil

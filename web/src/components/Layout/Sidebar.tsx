@@ -39,6 +39,7 @@ import {
   Workflow,
   Boxes,
   Activity,
+  MessageCircleQuestion,
 } from "lucide-react";
 import { useChatStore } from "../../store/chatStore";
 import { useChat, useChatListWithWorkspaces, useArchivedChats, useDeleteChat, useRenameChat, useUnarchiveChat } from "../../hooks/chat-queries";
@@ -52,7 +53,7 @@ import { InboxNavItem } from "../inbox/InboxNavItem";
 import type { RunsSearch } from "../../routeSchemas";
 import { isForgeUIEnabled } from "../../lib/forgeFeature";
 import { useMarkUnread } from "../../hooks/message-queries";
-import { useChatNavigationStore } from "../../store/chatNavigationStore";
+import { activityNeedsAttention, useChatNavigationStore } from "../../store/chatNavigationStore";
 import { useWorktreeStore } from "../../store/worktreeStore";
 import { useProcessStore } from "../../store/processStore";
 import { useProjectStore } from "../../store/projectStore";
@@ -70,7 +71,7 @@ import {
 import { sortChats, compareChatGroups } from "../../lib/chatListOrder";
 import { Dropdown } from "../ui/Dropdown";
 import { RunStatusDot } from "../ui/RunStatusIndicator";
-import { launchKindDisplay, runStatusFromActivity } from "../../lib/runStatus";
+import { chatListIndicators, launchKindDisplay } from "../../lib/runStatus";
 import {
   useActivityStore,
   activityToDotState,
@@ -217,13 +218,15 @@ interface ChatWithActivity extends Chat {
   activityState: ChatActivityState;
   /** The live activity itself; the dot's label and color come from lib/runStatus. */
   liveActivity: ChatActivity;
+  /** Threads still working (Chat.working_threads), from activityStore. */
+  liveWorkingThreads: number;
   priority: number;
   lastActivity?: string;
 }
 
-/** A chat is blocked on the user when it is awaiting approval, or unread. */
+/** The navigation store's rule, so keyboard triage walks the list as sorted. */
 const chatNeedsAttention = (chat: ChatWithActivity) =>
-  chat.activityState === "awaiting_approval" || chat.unread;
+  activityNeedsAttention(chat.liveActivity, chat.unread);
 
 // Shared utility - avoids duplicate definitions in ChatItem/ArchivedChatItem
 function getRelativeTime(timestamp: string): string {
@@ -275,9 +278,14 @@ const ChatItem = memo(function ChatItem({
   onArchiveChat,
 }: ChatItemProps) {
   const isActive = activeChatId === chat.id;
-  const runStatus = runStatusFromActivity(chat.liveActivity);
-  const showStatusDot = chat.activityState !== "idle" && chat.activityState !== "awaiting_approval";
-  const showNotificationBadge = chat.unread || chat.activityState === "awaiting_approval";
+  // Needs-input, the run dot and unread are separate indicators: a chat can
+  // need an answer while other agents keep running, and either is a different
+  // thing from having unread messages.
+  const { needsInput, status: runStatus, unread } = chatListIndicators({
+    activity: chat.liveActivity,
+    workingThreads: chat.liveWorkingThreads,
+    unread: chat.unread,
+  });
   const chatTitle = chat.title || "New chat";
   const isEditing = editingChatId === chat.id;
   const relativeTime = getRelativeTime(chat.updatedAt || chat.createdAt);
@@ -289,25 +297,51 @@ const ChatItem = memo(function ChatItem({
         "group relative flex w-full cursor-pointer items-center gap-2 overflow-hidden rounded-md border-l-2 border-transparent px-2.5 py-1.5 text-left font-sans text-xs transition-all duration-150",
         isActive
           ? "border-primary bg-primary/10 text-foreground font-semibold"
-          : showStatusDot
-            ? "border-success/30 bg-success/5 text-foreground hover:bg-success/10"
-            : "bg-transparent text-foreground/80 hover:bg-muted/50 hover:text-foreground",
+          : needsInput
+            ? "border-warning/40 bg-warning/5 text-foreground hover:bg-warning/10"
+            : runStatus
+              ? "border-success/30 bg-success/5 text-foreground hover:bg-success/10"
+              : "bg-transparent text-foreground/80 hover:bg-muted/50 hover:text-foreground",
         "active:scale-[0.99]"
       )}
       onClick={() => onChatClick(chat)}
       onContextMenu={(e) => onContextMenu(e, chat)}
     >
-      {showNotificationBadge && (
-        <Tooltip 
-          content={chat.activityState === "awaiting_approval" ? "Approval needed" : "New activity"} 
-          placement="top" 
-          delay={300}
-        >
-          <div className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-destructive ring-2 ring-card" />
+      {unread && (
+        <Tooltip content="Unread messages" placement="top" delay={300}>
+          <div
+            className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-destructive ring-2 ring-card"
+            data-testid={`chat-unread-dot-${chat.id}`}
+            role="img"
+            aria-label="Unread messages"
+          />
         </Tooltip>
       )}
 
-      {showStatusDot && runStatus && (
+      {needsInput && (
+        <div
+          className="relative flex-shrink-0 group-hover:scale-110 transition-transform duration-200"
+          data-testid={`chat-needs-input-${chat.id}`}
+          data-activity-state={chat.activityState}
+        >
+          <Tooltip content={needsInput.label} placement="left" delay={300}>
+            <span role="img" aria-label={needsInput.label} className="flex">
+              <MessageCircleQuestion className="h-3.5 w-3.5 text-warning-ink" aria-hidden="true" />
+              {/* Agents still running beside the question: the running dot,
+                  tucked into the glyph's corner. The label above says it. */}
+              {runStatus && (
+                <span
+                  className="absolute -bottom-1 -right-1 h-2 w-2 rounded-full bg-success ring-2 ring-card animate-pulse motion-reduce:animate-none"
+                  data-testid={`chat-needs-input-running-${chat.id}`}
+                  aria-hidden="true"
+                />
+              )}
+            </span>
+          </Tooltip>
+        </div>
+      )}
+
+      {!needsInput && runStatus && (
         <div 
           className="flex-shrink-0 group-hover:scale-110 transition-transform duration-200"
           data-testid={`chat-activity-dot-${chat.id}`}
@@ -733,6 +767,7 @@ function SidebarComponent({
   const markUnreadMutation = useMarkUnread();
   const unarchiveMutation = useUnarchiveChat();
   const activities = useActivityStore((state) => state.activities);
+  const workingThreads = useActivityStore((state) => state.workingThreads);
   // Archived chats from React Query (auto-fetches)
   const { data: archivedChats = [] } = useArchivedChats();
   
@@ -826,7 +861,7 @@ function SidebarComponent({
 
       // Priority calculation for sorting (only truly active chats float to top)
       let priority = 0;
-      if (activityState === "awaiting_approval") priority += 1000; // Highest - needs user action
+      if (activityState === "awaiting_input") priority += 1000; // Highest - needs user action
       if (activityState === "thinking") priority += 800; // AI actively working
       if (activityState === "error") priority += 400; // Errors need attention
       // Unread chats get a boost (but lower than active work)
@@ -836,11 +871,12 @@ function SidebarComponent({
         ...chat,
         activityState,
         liveActivity,
+        liveWorkingThreads: workingThreads.get(chat.id) ?? 0,
         priority,
         lastActivity: chat.updatedAt,
       };
     });
-  }, [chats, getChatActivity]);
+  }, [chats, getChatActivity, workingThreads]);
 
   // Every workspace the list names, by id: the group headers' context menus
   // read a path from here.
@@ -894,6 +930,7 @@ function SidebarComponent({
       ...chat,
       activityState: "idle" as const,
       liveActivity: ChatActivity.IDLE,
+      liveWorkingThreads: 0,
       priority: 0,
       lastActivity: chat.updatedAt,
     }));
@@ -919,10 +956,10 @@ function SidebarComponent({
       const group = worktreeGroupsMap.get(groupId)!;
       group.chats.push(chat);
 
-      // Check if any chat in group requires immediate action (awaiting_approval)
-      // Only awaiting_approval should cause groups to float - other activity states
+      // Check if any chat in group requires immediate action (awaiting_input)
+      // Only awaiting_input should cause groups to float - other activity states
       // get visual indicators but don't change sort order
-      if (chat.activityState === "awaiting_approval") {
+      if (chat.activityState === "awaiting_input") {
         group.hasActivity = true;
       }
     });
