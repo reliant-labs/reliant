@@ -1,40 +1,55 @@
 // yours: scaffolded once, never touched again — forge will not overwrite this file.
 //
-// This is the custom-query seam for UpdateStreamCounter. The generated update_stream_counter_orm.go is
-// Tier-1 (a live projection of the migrations, regenerated every run);
-// hand-written queries that outgrow the generated CRUD belong HERE, in a
-// sibling file forge never rewrites. You have three building blocks:
-//
-//  1. The generated repo + delegates: updateStreamCounterRepo (a *crud.Repo[UpdateStreamCounter]) and the
-//     package-level GetUpdateStreamCounterByPK / ListUpdateStreamCounter / CreateUpdateStreamCounter / UpsertUpdateStreamCounter, keyed by
-//     the whole composite key (stream_kind, stream_id), plus UpdateUpdateStreamCounter / DeleteUpdateStreamCounterByPK
-//     functions — compose orm.QueryOption filters (orm.WhereEq,
-//     orm.WhereILikeAny, orm.WithOrderBy, orm.WithLimit) onto List/Count.
-//  2. Raw SQL via the Bun handle: db.Bun() (bun.IDB) gives you
-//     NewSelect()/NewRaw()/bun.Raw — for joins, aggregates, CTEs, or
-//     anything the builder can't express. Scan into the generated
-//     UpdateStreamCounter struct (or your own row type).
-//  3. orm.Context: every query takes one. Take no transaction parameter:
-//     called with the ctx that s.deps.DB.RunTx hands its fn, a method
-//     here (db.Bun() builders and raw SQL included) joins that
-//     transaction; with any other ctx it runs on the pool.
-//
-// Example (uncomment and adapt):
-//
-//	func FindUpdateStreamCounterBy(ctx context.Context, db orm.Context, /* args */) ([]*UpdateStreamCounter, error) {
-//		var rows []*UpdateStreamCounter
-//		err := db.Bun().NewSelect().Model(&rows).
-//			Where("last_assigned_seq = ?", /* value */).
-//			Scan(ctx)
-//		return rows, err
-//	}
-//
-// Or reuse the generated repo for a filtered list:
-//
-//	func ActiveUpdateStreamCounters(ctx context.Context, db orm.Context) ([]*UpdateStreamCounter, error) {
-//		return ListUpdateStreamCounter(ctx, db, orm.WhereEq("last_assigned_seq", true))
-//	}
+// This is the custom-query seam for UpdateStreamCounter: one transactional
+// sequence allocator per logical update stream (stream_kind 'chat' or 'user',
+// keyed by (stream_kind, stream_id)). SaveMessageAtomic allocates a chat's
+// next update inside its one statement; every other chat_updates and
+// user_updates writer allocates here. Read a counter with the generated
+// GetUpdateStreamCounterByPK.
 package store
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/reliant-labs/forge/pkg/orm"
+)
+
+// Update stream kinds (update_stream_counters_kind_check).
+const (
+	UpdateStreamChat = "chat"
+	UpdateStreamUser = "user"
+)
+
+// allocateUpdateSequenceSQL advances one stream's counter and returns the
+// number it assigned. Bound parameters through the raw passthrough, not bun's
+// formatter: it runs for every chat and user update, and a formatted text is a
+// new prepared statement per stream id.
+const allocateUpdateSequenceSQL = `
+INSERT INTO update_stream_counters (stream_kind, stream_id, last_assigned_seq)
+VALUES ($1, $2, 1)
+ON CONFLICT (stream_kind, stream_id) DO UPDATE
+SET last_assigned_seq = update_stream_counters.last_assigned_seq + 1
+RETURNING last_assigned_seq
+`
+
+// AllocateUpdateSequence advances one logical stream's transactional counter.
+//
+// The counter update and the ledger insert MUST share a transaction. The row
+// lock is what prevents N+1 from committing before N, and rolling the
+// transaction back must roll both the counter and ledger row back together.
+// Refusing outside a transaction makes it impossible for a caller to consume a
+// cursor outside the durable write.
+func AllocateUpdateSequence(ctx context.Context, db orm.Context, streamKind, streamID string) (int64, error) {
+	if !orm.InTx(ctx) {
+		return 0, fmt.Errorf("allocate %s update sequence: transaction required", streamKind)
+	}
+	var next int64
+	if err := db.QueryRow(ctx, allocateUpdateSequenceSQL, streamKind, streamID).Scan(&next); err != nil {
+		return 0, fmt.Errorf("allocate %s update sequence: %w", streamKind, err)
+	}
+	return next, nil
+}
 
 // UpdateStreamCounterExtra carries fields on UpdateStreamCounter that are NOT columns — computed
 // values, transient state, anything derived rather than stored. UpdateStreamCounter is

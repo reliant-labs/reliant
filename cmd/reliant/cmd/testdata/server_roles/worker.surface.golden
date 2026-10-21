@@ -1,0 +1,80 @@
+# env: every variable of every config `reliant server worker` loads
+DATABASE_DIRECT_URL kind=string flag="" default="" required=false optional=true sensitive=true allowed=[] aliases=[]
+DATABASE_DRIVER kind=string flag="db-driver" default="postgres" required=false optional=false sensitive=false allowed=[postgres] aliases=[]
+DATABASE_URL kind=string flag="" default="" required=true optional=false sensitive=true allowed=[] aliases=[]
+DATA_DIR kind=string flag="data-dir" default="./data" required=false optional=false sensitive=false allowed=[] aliases=[]
+DB_CONNECT_TIMEOUT kind=google.protobuf.Duration flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
+DISABLE_TLS kind=bool flag="disable-tls" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
+FORGE_STORAGE_POLICY kind=string flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
+HEALTH_PORT kind=int32 flag="health-port" default="8081" required=false optional=false sensitive=false allowed=[] aliases=[]
+INTERNAL_SERVICE_SECRET kind=string flag="" default="" required=false optional=true sensitive=true allowed=[] aliases=[]
+LOG_FORMAT kind=string flag="log-format" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
+NATS_PASSWORD kind=string flag="" default="" required=false optional=true sensitive=true allowed=[] aliases=[]
+NATS_URL kind=string flag="" default="" required=true optional=false sensitive=true allowed=[] aliases=[]
+NATS_USER kind=string flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
+OTEL_ENABLED kind=bool flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
+OTEL_EXPORTER_OTLP_ENDPOINT kind=string flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
+PPROF_PORT kind=int32 flag="pprof-port" default="6060" required=false optional=false sensitive=false allowed=[] aliases=[]
+PRE_STOP_DELAY kind=google.protobuf.Duration flag="" default="5s" required=false optional=false sensitive=false allowed=[] aliases=[]
+PROMETHEUS_ENABLED kind=bool flag="" default="true" required=false optional=false sensitive=false allowed=[] aliases=[]
+PROXY_HOST kind=string flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
+PUBLIC_URL kind=string flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
+RELIANT_ANALYTICS_DISABLED kind=bool flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
+RELIANT_API_BASE_URL kind=string flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
+RELIANT_CONTROL_PLANE_URL kind=string flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[CONTROL_PLANE_API_URL(deprecated=true values=map[]) CONTROL_PLANE_BASE_URL(deprecated=true values=map[])]
+RELIANT_DB_MAX_IDLE_CONNS kind=int32 flag="" default="10" required=false optional=false sensitive=false allowed=[] aliases=[]
+RELIANT_DB_MAX_OPEN_CONNS kind=int32 flag="" default="25" required=false optional=false sensitive=false allowed=[] aliases=[]
+RELIANT_DB_SCHEMA_WAIT_SECONDS kind=int32 flag="" default="300" required=false optional=false sensitive=false allowed=[] aliases=[]
+RELIANT_DEBUG_OPENAI_RESPONSES_INPUT kind=bool flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
+RELIANT_DEBUG_OPENAI_TOOL_SCHEMAS kind=bool flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
+RELIANT_ENV kind=string flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[NODE_ENV(deprecated=false values=map[])]
+RELIANT_GITHUB_APP_SLUG kind=string flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
+RELIANT_GITHUB_BOT_LOGIN kind=string flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
+RELIANT_GITHUB_BOT_USER_ID kind=int64 flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
+RELIANT_GITHUB_WEBHOOK_SECRET kind=string flag="" default="" required=false optional=true sensitive=true allowed=[] aliases=[]
+RELIANT_LLM_STREAM_CONTENT_STALL_TIMEOUT kind=google.protobuf.Duration flag="" default="5m" required=false optional=false sensitive=false allowed=[] aliases=[]
+RELIANT_LLM_STREAM_IDLE_TIMEOUT kind=google.protobuf.Duration flag="" default="90s" required=false optional=false sensitive=false allowed=[] aliases=[]
+RELIANT_LLM_STREAM_MID_BLOCK_STALL_TIMEOUT kind=google.protobuf.Duration flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
+RELIANT_LLM_STREAM_PROGRESS_TIMEOUT kind=google.protobuf.Duration flag="" default="10m" required=false optional=false sensitive=false allowed=[] aliases=[]
+RELIANT_LOG_LEVEL kind=string flag="log-level" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
+RELIANT_OAUTH_*_CLIENT_ID kind=map flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
+RELIANT_OAUTH_*_CLIENT_SECRET kind=map flag="" default="" required=false optional=false sensitive=true allowed=[] aliases=[]
+RELIANT_SLACK_SIGNING_SECRET kind=string flag="" default="" required=false optional=true sensitive=true allowed=[] aliases=[]
+RELIANT_STORAGE_REAPER kind=string flag="" default="auto" required=false optional=false sensitive=false allowed=[auto on off] aliases=[]
+RELIANT_STORAGE_REAPER_INTERVAL kind=string flag="" default="1h" required=false optional=false sensitive=false allowed=[] aliases=[]
+RELIANT_STORAGE_REAPER_PRESSURE_INTERVAL kind=string flag="" default="10m" required=false optional=false sensitive=false allowed=[] aliases=[]
+RELIANT_TEST_INTEGRATION_SECRET kind=string flag="" default="" required=false optional=true sensitive=true allowed=[] aliases=[]
+RELIANT_VAULT_KEY kind=string flag="" default="" required=false optional=true sensitive=true allowed=[] aliases=[]
+SENTRY_DSN kind=string flag="" default="" required=false optional=true sensitive=true allowed=[] aliases=[]
+SENTRY_ENABLED kind=bool flag="" default="true" required=false optional=false sensitive=false allowed=[] aliases=[]
+SENTRY_ENVIRONMENT kind=string flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[ENVIRONMENT(deprecated=false values=map[])]
+SENTRY_TRACES_SAMPLE_RATE kind=double flag="" default="0" required=false optional=false sensitive=false allowed=[] aliases=[]
+SHUTDOWN_TIMEOUT kind=google.protobuf.Duration flag="" default="30s" required=false optional=false sensitive=false allowed=[] aliases=[]
+STREAMING_DRIVER kind=string flag="streaming-driver" default="nats" required=false optional=false sensitive=false allowed=[nats] aliases=[]
+TEMPORAL_HOST kind=string flag="temporal-host" default="localhost" required=false optional=false sensitive=false allowed=[] aliases=[]
+TEMPORAL_NAMESPACE kind=string flag="temporal-namespace" default="reliant" required=false optional=false sensitive=false allowed=[] aliases=[]
+TEMPORAL_PORT kind=int32 flag="temporal-port" default="7233" required=false optional=false sensitive=false allowed=[] aliases=[]
+TLS_CERT_FILE kind=string flag="tls-cert" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
+TLS_KEY_FILE kind=string flag="tls-key" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
+VERTEXAI_LOCATION kind=string flag="" default="us-central1" required=false optional=false sensitive=false allowed=[] aliases=[]
+VERTEXAI_PROJECT kind=string flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
+WORKSPACE_BASE_DOMAIN kind=string flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
+WORKSPACE_URL_PORT kind=int32 flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
+WORKSPACE_URL_SCHEME kind=string flag="" default="https" required=false optional=false sensitive=false allowed=[http https] aliases=[]
+
+# flags: every flag the command accepts
+--config shorthand="" type=string default=""
+--data-dir shorthand="" type=string default="./data"
+--db-driver shorthand="" type=string default="postgres"
+--disable-tls shorthand="" type=bool default="false"
+--health-port shorthand="" type=int32 default="8081"
+--log-format shorthand="" type=string default=""
+--log-level shorthand="" type=string default=""
+--pprof-port shorthand="" type=int32 default="6060"
+--streaming-driver shorthand="" type=string default="nats"
+--temporal-host shorthand="" type=string default="localhost"
+--temporal-namespace shorthand="" type=string default="reliant"
+--temporal-port shorthand="" type=int32 default="7233"
+--tls-cert shorthand="" type=string default=""
+--tls-key shorthand="" type=string default=""
+--verbose shorthand="v" type=bool default="false"

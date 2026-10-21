@@ -869,7 +869,7 @@ type threadSnapshotMetadata struct {
 	title        string
 	workflowID   string
 	originNodeID string
-	status       int32
+	status       core.ThreadStatus
 	completedAt  *time.Time
 	// spawnedByToolCallID is the spawn tool call that started this thread,
 	// recovered from tool_calls.child_workflow_id rather than from the

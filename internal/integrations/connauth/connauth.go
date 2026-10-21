@@ -261,6 +261,10 @@ func (s *source) delegated(ctx context.Context, req httpaction.CredentialRequest
 		}
 		return nil, &httpaction.CredentialError{Code: httpaction.CodeInternal, Message: "could not resolve the run owner", Err: err}
 	}
+	return brokerCredential(ctx, broker, owner)
+}
+
+func brokerCredential(ctx context.Context, broker DelegatedBroker, owner string) (httpaction.Credential, error) {
 	cred, err := broker.Credential(ctx, owner)
 	if err != nil {
 		var ce *httpaction.CredentialError
@@ -296,4 +300,43 @@ func mapError(err error) error {
 		code = httpaction.CodeInvalidArgument
 	}
 	return &httpaction.CredentialError{Code: code, Message: ce.Message, Err: err}
+}
+
+// ForUser implements Service.
+func (s *source) ForUser(userID string) httpaction.CredentialSource {
+	return userSource{s: s, userID: userID}
+}
+
+// userSource authenticates one user's own reads.
+type userSource struct {
+	s      *source
+	userID string
+}
+
+func (u userSource) Credential(ctx context.Context, req httpaction.CredentialRequest) (httpaction.Credential, error) {
+	if u.s == nil || u.s.resolver == nil {
+		return nil, &httpaction.CredentialError{Code: httpaction.CodeFailedPrecondition, Message: "connections are not available in this process"}
+	}
+	if u.userID == "" {
+		return nil, &httpaction.CredentialError{Code: httpaction.CodeFailedPrecondition, Message: "no user to resolve a connection for"}
+	}
+	if !req.ServerPlaced {
+		return nil, &httpaction.CredentialError{Code: httpaction.CodeFailedPrecondition, Message: connections.ErrDaemonPlacement.Error(), Err: connections.ErrDaemonPlacement}
+	}
+	// A listing reads. A write through this door would carry the caller's
+	// credential with nothing of a run's audit around it, so it is refused
+	// here as well as where the manifest is loaded.
+	if req.Mutates {
+		return nil, &httpaction.CredentialError{Code: httpaction.CodeInvalidArgument, Message: fmt.Sprintf("%s/%s changes external state, which a picker never does", req.IntegrationID, req.ActionID)}
+	}
+	resolved, err := u.s.resolver.ForUser(ctx, u.userID, connections.Ref{ConnectionID: req.ConnectionID, IntegrationID: req.IntegrationID})
+	if err == nil {
+		return credential{r: resolved}, nil
+	}
+	if req.ConnectionID == "" && isNoConnection(err) {
+		if broker, ok := u.s.delegatedBroker(req.Connection); ok {
+			return brokerCredential(ctx, broker, u.userID)
+		}
+	}
+	return nil, mapError(err)
 }

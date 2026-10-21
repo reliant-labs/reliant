@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"log/slog"
 
-	"github.com/reliant-labs/reliant/internal/db/core"
-	postgresstore "github.com/reliant-labs/reliant/internal/db/postgres"
 	"github.com/reliant-labs/reliant/internal/vault"
 )
 
@@ -22,7 +20,7 @@ func BootVault(ctx context.Context, repo *Repo, hosted bool, dataDir, key string
 		Hosted:  hosted,
 		Key:     key,
 		DataDir: dataDir,
-		DB:      repo.DB.SQLDB(),
+		DB:      repo.ORM(),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("vault: %w", err)
@@ -33,24 +31,16 @@ func BootVault(ctx context.Context, repo *Repo, hosted bool, dataDir, key string
 	// Copy the legacy credential tables into provider_accounts, once. A failure must never stop
 	// the server, and the marker is only written on success, so the next boot retries.
 	if _, _, err := repo.MigrateLegacyCredentials(ctx); err != nil {
-		slog.Warn("copying legacy credentials into provider accounts failed; will retry next boot", "error", err)
+		slog.WarnContext(ctx, "copying legacy credentials into provider accounts failed; will retry next boot", "error", err)
 	}
 	return v, nil
-}
-
-// Connections returns the store for user connections (the credential vault's
-// metadata and ciphertext tables).
-func (r *Repo) Connections() core.ConnectionStore {
-	return postgresstore.NewConnectionStore(r.DB.SQLDB())
 }
 
 // sealAPIKeys enables sealing, backfills legacy rows, and finalizes the
 // api_keys contract. Readers are sealed-only, so a row left unsealed would be
 // unreadable; refuse to start rather than serve with it.
-func sealAPIKeys(ctx context.Context, repo *Repo, sealer postgresstore.CredentialSealer) error {
-	if err := repo.EnableCredentialSealing(sealer); err != nil {
-		return err
-	}
+func sealAPIKeys(ctx context.Context, repo *Repo, sealer CredentialSealer) error {
+	repo.EnableCredentialSealing(sealer)
 	sealed, err := repo.BackfillAPIKeys(ctx, 200)
 	if err != nil {
 		return fmt.Errorf("vault: backfilling api_keys: %w", err)
@@ -65,6 +55,6 @@ func sealAPIKeys(ctx context.Context, repo *Repo, sealer postgresstore.Credentia
 	if err := repo.ValidateAPIKeysSealedConstraint(ctx); err != nil {
 		return fmt.Errorf("vault: validating api_keys sealed constraint: %w", err)
 	}
-	slog.Info("vault ready", "api_keys_sealed_now", sealed)
+	slog.InfoContext(ctx, "vault ready", "api_keys_sealed_now", sealed)
 	return nil
 }

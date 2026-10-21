@@ -84,13 +84,32 @@ service DeployService {
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
+      activity: {
+        verb: "create"
+        target: {
+          kind: "deploy_tenant"
+          id: "response.tenant.org_id"
+          label: "slug"
+        }
+      }
     };
   }
 
   // --- Environments ---------------------------------------------------
 
   rpc CreateEnvironment(CreateDeployEnvironmentRequest) returns (CreateDeployEnvironmentResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "create"
+        target: {
+          kind: "environment"
+          id: "response.environment.id"
+          label: "response.environment.name"
+        }
+        env: "response.environment.id"
+      }
+    };
   }
   rpc GetEnvironment(GetDeployEnvironmentRequest) returns (GetDeployEnvironmentResponse) {
     option (forge.v1.method) = {auth_required: true};
@@ -99,14 +118,37 @@ service DeployService {
     option (forge.v1.method) = {auth_required: true};
   }
   rpc UpdateEnvironment(UpdateDeployEnvironmentRequest) returns (UpdateDeployEnvironmentResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "update"
+        target: {
+          kind: "environment"
+          id: "environment_id"
+          label: "response.environment.name"
+        }
+        env: "environment_id"
+      }
+    };
   }
   // DeleteEnvironment tears down the environment and its namespace. Refuses
   // with FailedPrecondition while the environment still has deployments,
   // unless force is set — deleting a namespace out from under running
   // workloads is the kind of thing a user should have to say twice.
   rpc DeleteEnvironment(DeleteDeployEnvironmentRequest) returns (DeleteDeployEnvironmentResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "delete"
+        target: {
+          kind: "environment"
+          id: "environment_id"
+        }
+        env: "environment_id"
+        detail: ["delete_data"]
+        writer: ACTIVITY_WRITER_HANDLER
+      }
+    };
   }
   // ListRetainedDatabases lists the caller's org's databases that outlived a
   // deleted environment (DeleteEnvironment without delete_data). Their data
@@ -144,13 +186,33 @@ service DeployService {
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
+      activity: {
+        verb: "create"
+        target: {
+          kind: "environment"
+          id: "response.environment.id"
+          label: "response.environment.name"
+        }
+        env: "response.environment.id"
+      }
     };
   }
 
   // --- Deployments ----------------------------------------------------
 
   rpc CreateDeployment(CreateDeploymentRequest) returns (CreateDeploymentResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "create"
+        target: {
+          kind: "workload"
+          id: "response.deployment.id"
+          label: "response.deployment.name"
+        }
+        env: "response.deployment.environment_id"
+      }
+    };
   }
   rpc GetDeployment(GetDeploymentRequest) returns (GetDeploymentResponse) {
     option (forge.v1.method) = {auth_required: true};
@@ -162,10 +224,30 @@ service DeployService {
   // here rather than through Scale, because changing what a replica reserves
   // changes the bill in a way that adding replicas at a known size does not.
   rpc UpdateDeployment(UpdateDeploymentRequest) returns (UpdateDeploymentResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "update"
+        target: {
+          kind: "workload"
+          id: "deployment_id"
+          label: "response.deployment.name"
+        }
+        env: "response.deployment.environment_id"
+      }
+    };
   }
   rpc DeleteDeployment(DeleteDeploymentRequest) returns (DeleteDeploymentResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "delete"
+        target: {
+          kind: "workload"
+          id: "deployment_id"
+        }
+      }
+    };
   }
 
   // --- Lifecycle operations -------------------------------------------
@@ -187,6 +269,21 @@ service DeployService {
     option (forge.v1.method) = {
       auth_required: true
       idempotency_key: true
+      activity: {
+        verb: "promote"
+        target: {
+          kind: "release"
+          id: "version"
+          label: "version"
+        }
+        env: "environment_id"
+        detail: [
+          "response.promotion.kind",
+          "response.promotion.from_environment_name",
+          "note",
+          "response.promotion.id"
+        ]
+      }
     };
   }
 
@@ -207,7 +304,19 @@ service DeployService {
   // A suspend is the tenant's own. It is NOT the same as the environment's
   // automatic scale-to-zero, and neither one stops storage.
   rpc Scale(ScaleDeploymentRequest) returns (ScaleDeploymentResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "scale"
+        target: {
+          kind: "workload"
+          id: "deployment_id"
+          label: "response.deployment.name"
+        }
+        env: "response.deployment.environment_id"
+        detail: ["run_state"]
+      }
+    };
   }
 
   // SetEnvironmentRunState suspends or resumes EVERY live deployment of an
@@ -219,7 +328,18 @@ service DeployService {
   // refused with the billing reason instead. ADMIN, like Scale and
   // DeleteEnvironment.
   rpc SetEnvironmentRunState(SetEnvironmentRunStateRequest) returns (SetEnvironmentRunStateResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "set_run_state"
+        target: {
+          kind: "environment"
+          id: "environment_id"
+        }
+        env: "environment_id"
+        detail: ["run_state"]
+      }
+    };
   }
 
   // RestartWorkload asks the platform to restart one workload's pods, one at a
@@ -241,7 +361,18 @@ service DeployService {
   // Idempotent within a second: a repeat returns the same request time rather
   // than rolling the pods twice.
   rpc RestartWorkload(RestartWorkloadRequest) returns (RestartWorkloadResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "restart"
+        target: {
+          kind: "workload"
+          id: "response.deployment_id"
+          label: "workload"
+        }
+        env: "environment_id"
+      }
+    };
   }
 
   // GetStatus returns the deployment with BOTH halves — declared and
@@ -260,7 +391,10 @@ service DeployService {
   // transient disconnect a gap of milliseconds instead of a re-read of the
   // whole buffer.
   rpc StreamLogs(StreamDeploymentLogsRequest) returns (stream StreamDeploymentLogsResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "reads only: computes and returns, changes nothing"}
+    };
   }
 
   // --- Releases and history -------------------------------------------
@@ -287,6 +421,18 @@ service DeployService {
     option (forge.v1.method) = {
       auth_required: true
       idempotency_key: true
+      activity: {
+        verb: "cut"
+        target: {
+          kind: "release"
+          id: "response.release.version"
+          label: "response.release.version"
+        }
+        detail: [
+          "project",
+          "git_commit"
+        ]
+      }
     };
   }
 
@@ -319,7 +465,10 @@ service DeployService {
   // it adds; the other way round sets commits.reverts and lists what moving
   // to it takes away.
   rpc CompareReleases(CompareDeployReleasesRequest) returns (CompareDeployReleasesResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "reads only: computes and returns, changes nothing"}
+    };
   }
 
   // --- Rollout, evidence and runs -------------------------------------
@@ -355,6 +504,19 @@ service DeployService {
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
+      activity: {
+        verb: "record_check"
+        target: {
+          kind: "check"
+          id: "gate.name"
+          label: "gate.name"
+        }
+        detail: [
+          "gate.status",
+          "gate.summary",
+          "promotion_id"
+        ]
+      }
     };
   }
 
@@ -418,6 +580,7 @@ service DeployService {
     option (forge.v1.method) = {
       auth_required: true
       idempotency_key: true
+      activity: {none: "records the rendered bundle a promotion then applies; the promotion is the activity"}
     };
   }
 
@@ -496,7 +659,10 @@ service DeployService {
   // the plan rather than trusting the one the caller approved. That is what
   // makes the digest a guarantee instead of a claim.
   rpc PlanDeploy(PlanDeployRequest) returns (PlanDeployResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "dry run: computes a plan, changes nothing"}
+    };
   }
 
   // CheckDeployCapacity answers "would this org be allowed to run this?" —
@@ -514,7 +680,10 @@ service DeployService {
   // static count, and a refusal carries no hold link (there is no environment
   // to link it to).
   rpc CheckDeployCapacity(CheckDeployCapacityRequest) returns (CheckDeployCapacityResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "reads only: computes and returns, changes nothing"}
+    };
   }
 
   // ReportLocalSession upserts one `forge env up` worktree's presence.
@@ -528,7 +697,10 @@ service DeployService {
   // plane being reachable is a worse product than one with a gap in a
   // dashboard.
   rpc ReportLocalSession(ReportLocalSessionRequest) returns (ReportLocalSessionResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "dev-loop telemetry about a local session"}
+    };
   }
 
   // ImportLedger loads a project's existing file-based deploy history into the
@@ -556,6 +728,17 @@ service DeployService {
     option (forge.v1.method) = {
       auth_required: true
       idempotency_key: true
+      activity: {
+        verb: "import"
+        target: {
+          kind: "ledger"
+          id: "project"
+        }
+        detail: [
+          "source",
+          "project"
+        ]
+      }
     };
   }
 

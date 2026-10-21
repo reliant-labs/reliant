@@ -1,0 +1,131 @@
+[
+  serverapi.Options {
+    GRPCPort: 19091
+    PprofPort: 16061
+    BindAddress: "127.0.0.2"
+    DatabaseDriver: "postgres"
+    DatabaseURL: "postgres://reliant:pw@db.surface.test:5432/reliant"
+    DatabaseDirectURL: "postgres://reliant:pw@db-direct.surface.test:5432/reliant"
+    DatabasePool: db.Pool {
+      MaxOpenConns: 41
+      MaxIdleConns: 17
+      ConnectTimeout: 47s
+      SchemaWait: 2m3s
+    }
+    DataDir: "/surface/data"
+    TemporalHost: "temporal.surface.test"
+    TemporalPort: 7299
+    TemporalNamespace: "surface"
+    NATS: natsutil.Endpoint {
+      URL: "nats://nats.surface.test:4223"
+      User: "nats-user"
+      Password: "nats-pass"
+    }
+    StreamingDriver: "nats"
+    HealthPort: 18082
+    PreStopDelay: 11s
+    ShutdownTimeout: 43s
+    CORSAllowedOrigins: [
+      "http://one.surface.test"
+      "http://two.surface.test"
+    ]
+    AllowedEmailDomains: [
+      "a.surface.test"
+      "b.surface.test"
+    ]
+    DisableForgeAPI: true
+    TLSCertFile: "/tls/surface.crt"
+    TLSKeyFile: "/tls/surface.key"
+    DisableTLS: true
+    JWTPublicKey: "-----BEGIN PUBLIC KEY-----surface"
+    JWTPublicKeyFile: "/keys/jwt.pem"
+    JWKSURL: "https://jwks.surface.test/keys"
+    AuthMode: "apikey"
+    AuthAPIKey: "api-key"
+    RequireEmailVerifiedClaim: true
+    AuthorizationServer: "https://as.surface.test"
+    OAuthProvider: auth.Provider {
+      URL: "https://auth.surface.test"
+      Key: "sb_publishable_surface"
+    }
+    OAuthIssuers: [
+      "https://iss1.surface.test"
+      "https://iss2.surface.test"
+    ]
+    MaxUploadSize: 4242
+    WorktreeAutoArchive: "on"
+    Log: logging.Settings {
+      Level: "warn"
+      Format: "json"
+    }
+    ControlPlane: controlplane.Endpoint {
+      URL: "http://cp.surface.test:8080"
+      InternalServiceSecret: "cp-secret"
+    }
+    PublicURL: "https://public.surface.test"
+    VaultKey: "v1:c3VyZmFjZS12YXVsdC1rZXktMzItYnl0ZXMtbG9uZyE="
+    Webhooks: webhook.RegistryConfig {
+      SlackSigningSecret: "slack-signing"
+      GitHubWebhookSecret: "gh-webhook"
+      OAuthClients: func(set=false)
+      PublicURL: "https://public.surface.test"
+      TestIntegrationSecret: "test-integration"
+    }
+    GitHubAppSlug: "surface-app"
+    GitHubBot: github.OurBot {
+      ID: 4242
+      Login: ""
+    }
+    Observability: observability.Settings {
+      Environment: "surface"
+      OTLPEndpoint: "http://otel.surface.test:4318"
+      OTLPEnabled: true
+      PrometheusEnabled: false
+    }
+    Sentry: telemetry.SentryConfig {
+      DSN: "https://key@o0.ingest.sentry.io/42"
+      Environment: "surface"
+      Release: ""
+      Debug: false
+      Enabled: true
+      TracesSampleRate: 0.25
+    }
+    Analytics: analytics.Settings {
+      Disabled: true
+    }
+    LLM: drivers.Settings {
+      StreamTimeouts: llm.StreamTimeouts {
+        Idle: 1m31s
+        ContentStall: 6m0s
+        Progress: 11m0s
+        MidBlock: 3m0s
+      }
+      ReliantBaseURL: "https://llm.surface.test"
+      VertexProject: "surface-project"
+      VertexLocation: "europe-west4"
+      DebugOpenAIResponsesInput: true
+      DebugOpenAIToolSchemas: true
+    }
+    PayloadGCHorizon: 99h0m0s
+    Preview: tools.PreviewSettings {
+      ProxyHost: "proxy.surface.test"
+      WorkspaceBaseDomain: "ws.surface.test"
+      WorkspaceURLScheme: "http"
+      WorkspaceURLPort: 8443
+    }
+  }
+  {
+    github: [
+      "gh-client"
+      "gh-secret"
+    ]
+    gmail: [
+      ""
+      ""
+    ]
+    slack: [
+      "slack-client"
+      ""
+    ]
+  }
+]

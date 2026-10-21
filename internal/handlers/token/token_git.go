@@ -53,15 +53,15 @@ func (s *Service) GetGitToken(
 	tok, err := s.deps.GitTokens.UserAccessToken(ctx, userID, provider)
 	switch {
 	case errors.Is(err, gitcredentialclient.ErrNotConnected):
-		slog.Info("git token refused", "user_id", userID, "provider", provider, "outcome", reasonGitNotConnected)
+		slog.InfoContext(ctx, "git token refused", "user_id", userID, "provider", provider, "outcome", reasonGitNotConnected)
 		return nil, gitError(connect.CodeFailedPrecondition, reasonGitNotConnected,
 			"connect your "+provider+" account in Reliant first")
 	case errors.Is(err, gitcredentialclient.ErrNeedsReconnect):
-		slog.Info("git token refused", "user_id", userID, "provider", provider, "outcome", reasonGitNeedsReconnect)
+		slog.InfoContext(ctx, "git token refused", "user_id", userID, "provider", provider, "outcome", reasonGitNeedsReconnect)
 		return nil, gitError(connect.CodeFailedPrecondition, reasonGitNeedsReconnect,
 			"your "+provider+" connection expired; reconnect it in Reliant")
 	case err != nil:
-		slog.Error("git token unavailable", "user_id", userID, "provider", provider, "outcome", "unavailable")
+		slog.ErrorContext(ctx, "git token unavailable", "user_id", userID, "provider", provider, "outcome", "unavailable")
 		return nil, connect.NewError(connect.CodeUnavailable, errors.New("git token service unavailable; retry"))
 	}
 
@@ -70,13 +70,13 @@ func (s *Service) GetGitToken(
 		resp.AccessToken = access
 		return nil
 	}); err != nil || resp.AccessToken == "" {
-		slog.Error("git token empty", "user_id", userID, "provider", provider, "outcome", "unavailable")
+		slog.ErrorContext(ctx, "git token empty", "user_id", userID, "provider", provider, "outcome", "unavailable")
 		return nil, connect.NewError(connect.CodeUnavailable, errors.New("git token service unavailable; retry"))
 	}
 	if tok.ExpiresAt != nil {
 		resp.ExpiresAt = tok.ExpiresAt.UTC().Format(time.RFC3339)
 	}
-	slog.Info("git token issued", "user_id", userID, "provider", provider, "outcome", "ok")
+	slog.InfoContext(ctx, "git token issued", "user_id", userID, "provider", provider, "outcome", "ok")
 	return connect.NewResponse(resp), nil
 }
 
@@ -101,7 +101,7 @@ func (s *Service) daemonCredential(ctx context.Context, header http.Header) (*fa
 			"this Reliant credential is no longer valid; sign in to Reliant again"))
 	}
 	if err != nil {
-		slog.Error("token authority failed", "op", "git-token-introspect", "error", tokenauthority.Describe(err))
+		slog.ErrorContext(ctx, "token authority failed", "op", "git-token-introspect", "error", tokenauthority.Describe(err))
 		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("token service unavailable"))
 	}
 	if strings.TrimSpace(subject.ActingUserID) == "" {

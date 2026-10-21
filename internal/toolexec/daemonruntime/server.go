@@ -32,7 +32,7 @@ func (s *daemonServer) ConnectGateway(
 	ctx context.Context,
 	stream *connect.BidiStream[reliantv1.ServerMessage, reliantv1.DaemonMessage],
 ) error {
-	logging.Info(serverLogPrefix + " Gateway connected")
+	logging.InfoContext(ctx, serverLogPrefix+" Gateway connected")
 
 	d := s.client
 
@@ -79,7 +79,7 @@ func (s *daemonServer) ConnectGateway(
 	}()
 
 	if err := d.sendProjectDiscovery(sess); err != nil {
-		logging.Warn(serverLogPrefix+" Failed to send project discovery", "error", err)
+		logging.WarnContext(ctx, serverLogPrefix+" Failed to send project discovery", "error", err)
 	}
 
 	heartbeatCtx, cancelHeartbeat := context.WithCancel(ctx)
@@ -92,14 +92,14 @@ func (s *daemonServer) ConnectGateway(
 	for {
 		msg, err := stream.Receive()
 		if err != nil {
-			logging.Info(serverLogPrefix+" Gateway stream ended", "error", err)
+			logging.InfoContext(ctx, serverLogPrefix+" Gateway stream ended", "error", err)
 			return nil
 		}
 		if msg == nil {
 			continue
 		}
 		if err := d.handleServerMessage(ctx, sess, msg); err != nil {
-			logging.Warn(serverLogPrefix+" Failed handling server message", "error", err)
+			logging.WarnContext(ctx, serverLogPrefix+" Failed handling server message", "error", err)
 		}
 	}
 }
@@ -138,7 +138,7 @@ func (d *daemonClient) runServerMode(ctx context.Context) error {
 		IdleTimeout:       transport.ServerIdleTimeout,
 	}
 
-	logging.Info(serverLogPrefix+" Listening for gateway connections",
+	logging.InfoContext(ctx, serverLogPrefix+" Listening for gateway connections",
 		"addr", addr,
 	)
 
@@ -152,7 +152,7 @@ func (d *daemonClient) runServerMode(ctx context.Context) error {
 
 	select {
 	case <-ctx.Done():
-		logging.Info(serverLogPrefix + " Shutting down server")
+		logging.InfoContext(ctx, serverLogPrefix+" Shutting down server")
 		// Close only reports failures of the already-doomed listener and
 		// connections; ctx.Err() is the outcome the caller acts on.
 		_ = srv.Close()

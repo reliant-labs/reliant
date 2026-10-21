@@ -158,7 +158,7 @@ func (l *Launcher) ChatSelectionParams(ctx context.Context, chatID, workflowName
 	}
 	sel, err := l.repo.GetChatSelection(ctx, chatID)
 	if err != nil {
-		logging.Warn("Could not read the chat's selection; building the run without it", "chatID", chatID, "error", err)
+		logging.WarnContext(ctx, "Could not read the chat's selection; building the run without it", "chatID", chatID, "error", err)
 		return nil
 	}
 	if sel == nil || sel.WorkflowName != workflowName || len(sel.Params) == 0 {
@@ -217,11 +217,11 @@ func (l *Launcher) buildWorkflowInputs(
 	for k := range send {
 		userParamKeys = append(userParamKeys, k)
 	}
-	logging.Debug("[buildWorkflowInputs] Starting", "workflow", workflowName, "selectedPresets", selectedPresets, "userParamKeys", userParamKeys, "selectionKeys", len(selection))
+	logging.DebugContext(ctx, "[buildWorkflowInputs] Starting", "workflow", workflowName, "selectedPresets", selectedPresets, "userParamKeys", userParamKeys, "selectionKeys", len(selection))
 	if len(selectedPresets) > 0 {
 		initialData = l.applyPresets(ctx, userID, projectID, initialData, selectedPresets)
 	} else {
-		logging.Debug("[buildWorkflowInputs] No presets selected")
+		logging.DebugContext(ctx, "[buildWorkflowInputs] No presets selected")
 	}
 
 	// The chat's selection and the send's params override preset values.
@@ -240,7 +240,7 @@ func (l *Launcher) buildWorkflowInputs(
 		// from a request would let a client claim a session daemon, a trigger
 		// event, or that nobody is watching its run.
 		if workflow.RuntimeInjectedInputs[key] {
-			logging.Warn("[buildWorkflowInputs] Ignoring a client param that names an engine-injected input", "key", key)
+			logging.WarnContext(ctx, "[buildWorkflowInputs] Ignoring a client param that names an engine-injected input", "key", key)
 			continue
 		}
 
@@ -273,7 +273,7 @@ func (l *Launcher) buildWorkflowInputs(
 		NormalizeModelInputs(initialData, protoInputs)
 	}
 
-	logging.Debug("[buildWorkflowInputs] Final resolved", "tools", initialData["tools"])
+	logging.DebugContext(ctx, "[buildWorkflowInputs] Final resolved", "tools", initialData["tools"])
 
 	// Add project_path to workflow inputs so spawned workflows can load presets
 	// This flows through: workflow.go -> StepExecutor -> executeSpawnInline -> InlineWorkflowExecutor
@@ -300,11 +300,11 @@ func (l *Launcher) applyPresets(ctx context.Context, userID, projectID string, d
 		}
 		p, err := loadPreset(presetName)
 		if err != nil {
-			logging.Warn("Failed to load preset", "preset", presetName, "group", groupName, "error", err)
+			logging.WarnContext(ctx, "Failed to load preset", "preset", presetName, "group", groupName, "error", err)
 			continue
 		}
 		data = preset.ApplyToInputs(p, data, groupName)
-		logging.Debug("[buildWorkflowInputs] Applied preset", "preset", presetName, "group", groupName, "tools_after_preset", data["tools"])
+		logging.DebugContext(ctx, "[buildWorkflowInputs] Applied preset", "preset", presetName, "group", groupName, "tools_after_preset", data["tools"])
 	}
 	return data
 }
@@ -349,7 +349,7 @@ func (l *Launcher) BuildStateUpdateForActiveWorkflow(
 	}
 	for key, value := range paramValues(requestParams) {
 		if workflow.RuntimeInjectedInputs[key] {
-			logging.Warn("[buildStateUpdate] Ignoring a client param that names an engine-injected input", "key", key)
+			logging.WarnContext(ctx, "[buildStateUpdate] Ignoring a client param that names an engine-injected input", "key", key)
 			continue
 		}
 		update[key] = value
@@ -378,7 +378,7 @@ func (l *Launcher) LoadWorkflowInputsForBuild(ctx context.Context, userID, workf
 		UserID: userID, ProjectID: projectID, DraftRoot: workflowName,
 	}, workflowName)
 	if err != nil {
-		logging.Warn("Could not load workflow inputs for build", "workflow", workflowName, "error", err)
+		logging.WarnContext(ctx, "Could not load workflow inputs for build", "workflow", workflowName, "error", err)
 		return nil
 	}
 	return resolved.Workflow.GetInputs()
@@ -397,7 +397,7 @@ func (l *Launcher) ValidateWorkflowInputs(ctx context.Context, userID, workflowN
 		UserID: userID, ProjectID: projectID, DraftRoot: workflowName,
 	}, workflowName)
 	if err != nil {
-		logging.Warn("Could not load workflow for input validation", "workflow", workflowName, "error", err)
+		logging.WarnContext(ctx, "Could not load workflow for input validation", "workflow", workflowName, "error", err)
 		return nil
 	}
 	wf := resolved.Workflow
@@ -457,7 +457,7 @@ func (l *Launcher) ValidateWorkflowInputs(ctx context.Context, userID, workflowN
 	for inputPath, selector := range modelSelectors {
 		if err := drivers.ValidateModelSelector(ctx, userID, selector); err != nil {
 			if errors.Is(err, drivererrors.ErrNoServableProvider) {
-				logging.Info("Model input has no servable provider now; leaving it to the run to explain",
+				logging.InfoContext(ctx, "Model input has no servable provider now; leaving it to the run to explain",
 					"input", inputPath, "workflow", workflowName, "reason", err.Error())
 				continue
 			}

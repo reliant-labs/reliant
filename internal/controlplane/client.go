@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"github.com/reliant-labs/forge/pkg/observe"
 	accesstokenv1 "github.com/reliant-labs/reliant/gen/controlplane/services/access_token/v1"
 	accesstokenv1connect "github.com/reliant-labs/reliant/gen/controlplane/services/access_token/v1/controlplanev1connect"
 	daemonv1connect "github.com/reliant-labs/reliant/gen/controlplane/services/daemon/v1/controlplanev1connect"
@@ -131,23 +132,32 @@ func New(deps Deps) Service {
 	if baseURL == "" {
 		baseURL = defaultBaseURL
 	}
-	httpClient := deps.HTTPClient
+	// Two clients by default, because the two kinds of call are traced at
+	// different layers: the plain POST (run_resume.go) by the transport, the
+	// Connect rpcs by the otelconnect interceptor. An otelhttp transport under
+	// the Connect clients would nest a duplicate span under every rpc.
+	httpClient, rpcClient := deps.HTTPClient, deps.HTTPClient
+	var rpcOpts []connect.ClientOption
 	if httpClient == nil {
-		httpClient = &http.Client{Timeout: 30 * time.Second}
+		httpClient = observe.NewHTTPClient(observe.HTTPClientOptions{Timeout: 30 * time.Second})
+		rpcClient = httpClient
+		if stack, err := observe.NewClientStack(observe.ClientStackDeps{Timeout: 30 * time.Second}); err == nil {
+			rpcClient, rpcOpts = stack.HTTPClient, stack.ClientOptions
+		}
 	}
 	return &client{
 		httpClient:     httpClient,
 		baseURL:        baseURL,
 		sign:           deps.Sign,
-		accessTokens:   accesstokenv1connect.NewAccessTokenServiceClient(httpClient, baseURL),
-		users:          userv1connect.NewUserServiceClient(httpClient, baseURL),
-		gitCredentials: gitcredentialv1connect.NewGitCredentialServiceClient(httpClient, baseURL),
-		daemons:        daemonv1connect.NewDaemonServiceClient(httpClient, baseURL),
+		accessTokens:   accesstokenv1connect.NewAccessTokenServiceClient(rpcClient, baseURL, rpcOpts...),
+		users:          userv1connect.NewUserServiceClient(rpcClient, baseURL, rpcOpts...),
+		gitCredentials: gitcredentialv1connect.NewGitCredentialServiceClient(rpcClient, baseURL, rpcOpts...),
+		daemons:        daemonv1connect.NewDaemonServiceClient(rpcClient, baseURL, rpcOpts...),
 	}
 }
 
 // Endpoint is how a server process reaches the control plane hosting its
-// deployment: the role config's ControlPlaneConfig
+// deployment: ServerProcessConfig's ControlPlaneConfig
 // (proto/config/v1/control_plane_config.proto), loaded once by the entrypoint
 // and handed down. The zero Endpoint is a self-hosted deployment, with no
 // control plane — never a localhost default, which would turn "not hosted"

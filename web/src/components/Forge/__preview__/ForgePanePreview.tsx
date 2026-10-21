@@ -51,11 +51,11 @@ import {
   MonitoringSettingsPage,
   ObservabilityOverviewPage,
   ObservabilityViewPage,
-  OverviewPage,
   ProjectSettingsPage,
   SecretsPage,
 } from "../Console/ConsolePages";
 import { ReleasePage, ReleasesPage } from "../Releases/ReleasesPages";
+import { OverviewPage, WorkloadPage } from "../Workloads/WorkloadPages";
 import {
   ForgeLandingRoute,
   LegacyCommandRoute,
@@ -429,6 +429,7 @@ function buildRouter(path: string) {
     layout: ForgeLayout,
     console: ConsoleLayout,
     overview: OverviewPage,
+    workload: WorkloadPage,
     releases: ReleasesPage,
     release: ReleasePage,
     observability: ObservabilityOverviewPage,

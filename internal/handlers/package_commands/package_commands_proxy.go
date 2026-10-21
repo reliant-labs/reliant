@@ -23,7 +23,7 @@ const pkgListCommandsTimeoutMs = 30000
 // discovery must run there — not on the api-server, where the path does not
 // exist and discovery silently found nothing.
 func (s *Service) daemon() daemoncmd.Service {
-	return daemoncmd.New(daemoncmd.Deps{Sender: s.deps.Router})
+	return daemoncmd.NewInstrumented(daemoncmd.Deps{Sender: s.deps.Router})
 }
 
 // pkgListCommandsCmd mirrors daemonruntime.pkgListCommandsRequest.

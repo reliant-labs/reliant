@@ -35,6 +35,13 @@
 //	}
 package store
 
+import (
+	"context"
+
+	"github.com/reliant-labs/forge/pkg/orm"
+	"github.com/uptrace/bun"
+)
+
 // ConnectorClientBindingExtra carries fields on ConnectorClientBinding that are NOT columns — computed
 // values, transient state, anything derived rather than stored. ConnectorClientBinding is
 // embedded on ConnectorClientBindingExtra (see connector_client_binding_orm.go), so a field added here is a field on
@@ -45,4 +52,55 @@ package store
 // persist them — `bun:"-"` is Bun's own idiom for a field it must never
 // bind or scan.
 type ConnectorClientBindingExtra struct {
+}
+
+// Connector client binding queries (P5b lane L5): which connector an OAuth
+// client acts through.
+
+// GetLiveConnectorClientBinding returns the connector a client was authorized
+// to use, or orm.ErrNoRows. Only a live grant resolves: a binding to a
+// revoked or expired connector is absent.
+func GetLiveConnectorClientBinding(ctx context.Context, db orm.Context, userID, clientID string) (*ConnectorClientBinding, error) {
+	var row ConnectorClientBinding
+	err := db.Bun().NewSelect().Model(&row).
+		Join("JOIN connector_grants AS g ON g.id = ?", bun.Ident("connector_client_bindings.grant_id")).
+		Where("? = ?", bun.Ident("connector_client_bindings.user_id"), userID).
+		Where("? = ?", bun.Ident("connector_client_bindings.client_id"), clientID).
+		Where("g.revoked_at IS NULL").
+		Where("(g.expires_at IS NULL OR g.expires_at > now())").
+		Scan(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &row, nil
+}
+
+// PutConnectorClientBinding records the user's choice for a client: a
+// re-consent MOVES the client to another connector (ON CONFLICT on the
+// client), never adds a second authorization.
+func PutConnectorClientBinding(ctx context.Context, db orm.Context, b *ConnectorClientBinding) error {
+	_, err := db.Bun().NewInsert().Model(b).
+		Column(ConnectorClientBindingFieldID, ConnectorClientBindingFieldUserID, ConnectorClientBindingFieldClientID,
+			ConnectorClientBindingFieldGrantID, ConnectorClientBindingFieldClientName).
+		On("CONFLICT (user_id, client_id) DO UPDATE").
+		Set("grant_id = EXCLUDED.grant_id").
+		Set("client_name = EXCLUDED.client_name").
+		Set("updated_at = now()").
+		Exec(ctx)
+	return err
+}
+
+// UnbindConnectorClient removes a client's authorization and reports
+// whether there was one. It leaves the grant alone: one connector may serve
+// several clients.
+func UnbindConnectorClient(ctx context.Context, db orm.Context, userID, clientID string) (bool, error) {
+	res, err := db.Bun().NewDelete().Model((*ConnectorClientBinding)(nil)).
+		Where("? = ?", bun.Ident(ConnectorClientBindingFieldUserID), userID).
+		Where("? = ?", bun.Ident(ConnectorClientBindingFieldClientID), clientID).
+		Exec(ctx)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n > 0, err
 }

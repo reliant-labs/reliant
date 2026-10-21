@@ -1,0 +1,11 @@
+# Issue closed: the projection of the GitHub `issues.closed` webhook.
+id: issue.closed
+event: issues.closed
+display_name: Issue closed
+summary: An issue was closed.
+description: >-
+  Fires when an issue is closed, as completed or as not planned
+  (issue.state_reason).
+keywords: [resolved, done]
+data:
+  issue: { kind: object, object: issue }

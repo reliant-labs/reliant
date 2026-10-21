@@ -11,8 +11,8 @@
  * It also pins the removal of a second invented price. The size tiers here
  * carried a hardcoded "$0.02/min … $0.16/min" table — the same defect class as
  * the per-plan-id price tables that were deleted from billingUtils, and worse
- * placed, because it sat on the button that spends the money. The only rate
- * the server states is the plan's overage rate, so that is what may be shown.
+ * placed, because it sat on the button that spends the money. The only prices
+ * shown are the ones the server states.
  */
 
 import { render, screen, waitFor, within } from "@testing-library/react";
@@ -109,16 +109,14 @@ import { MachinesSection } from "@/components/Settings/cloud/machines";
 /**
  * Server eligibility for a SUBSCRIBED caller whose plan allows these sizes.
  *
- * Sizes come off the eligibility response, not off the subscription. The
- * subscription is still fetched, but only for the overage rate it states —
- * see `withOverageRate`.
+ * Sizes come off the eligibility response, not off the subscription.
  */
 function subscribedTo(allowedDaemonSizes: string[]) {
   return {
     eligible: true,
     reason: 0,
     hasActiveSubscription: true,
-    grantedMinutesRemaining: 0,
+    grantedSmallDaemonSecondsRemaining: 0,
     planName: "Beta",
     allowedDaemonSizes,
   };
@@ -130,14 +128,14 @@ function subscribedTo(allowedDaemonSizes: string[]) {
  * page used to be unable to see at all.
  */
 function couponFundedWith(
-  grantedMinutesRemaining: number,
+  grantedSmallDaemonSecondsRemaining: number,
   allowedDaemonSizes = ["small"],
 ) {
   return {
     eligible: true,
     reason: 0,
     hasActiveSubscription: false,
-    grantedMinutesRemaining,
+    grantedSmallDaemonSecondsRemaining,
     planName: "",
     allowedDaemonSizes,
   };
@@ -149,14 +147,14 @@ function notFunded() {
     eligible: false,
     reason: 2, // NO_SUBSCRIPTION
     hasActiveSubscription: false,
-    grantedMinutesRemaining: 0,
+    grantedSmallDaemonSecondsRemaining: 0,
     planName: "",
     allowedDaemonSizes: ["small"],
   };
 }
 
-/** The subscription payload, which exists here only to state an overage rate. */
-function withOverageRate(overageCentsPerMinute: number) {
+/** A subscription payload: a plan that runs small and medium. */
+function subscription() {
   return {
     plan: {
       id: "tier_beta",
@@ -165,8 +163,7 @@ function withOverageRate(overageCentsPerMinute: number) {
       displayOrder: 2,
       structuredLimits: {
         allowedDaemonSizes: ["small", "medium"],
-        daemonComputeIncludedMinutes: 2600,
-        daemonOveragePerMinuteCents: overageCentsPerMinute,
+        includedSmallDaemonHours: 43n,
       },
     },
   };
@@ -207,7 +204,7 @@ beforeEach(() => {
   mocks.listDaemons.mockResolvedValue({ daemons: [] });
   mocks.listDaemonTokens.mockResolvedValue([]);
   // The subscription is no longer the gate, so it defaults to "none" and each
-  // test that cares about the overage rate opts in explicitly.
+  // test that wants one opts in explicitly.
   mocks.getComputeSubscription.mockResolvedValue(null);
 });
 
@@ -318,12 +315,10 @@ describe("no invented per-size price", () => {
     mocks.getComputeEligibility.mockResolvedValue(
       subscribedTo(["small", "medium"]),
     );
-    mocks.getComputeSubscription.mockResolvedValue(withOverageRate(0.47));
+    mocks.getComputeSubscription.mockResolvedValue(subscription());
     const user = userEvent.setup();
     const { modal } = await openCreateModal(user);
 
-    // $0.0047/min — a value no hardcoded tier table ever held.
-    expect(within(modal).queryByText(/\$0\.005\/min/)).not.toBeInTheDocument();
     // No price list: the footnote states no hours it cannot derive.
     expect(within(modal).getByTestId("size-pricing-note")).toHaveTextContent(
       /^Extra hours and storage are billed separately\.$/,
@@ -349,7 +344,7 @@ describe("no invented per-size price", () => {
  */
 describe("a coupon with no subscription can create a machine", () => {
   it("offers New Machine to a grant-funded caller with no subscription", async () => {
-    mocks.getComputeEligibility.mockResolvedValue(couponFundedWith(1200));
+    mocks.getComputeEligibility.mockResolvedValue(couponFundedWith(72000));
     mocks.getComputeSubscription.mockResolvedValue(null);
     renderSection();
 
@@ -362,7 +357,7 @@ describe("a coupon with no subscription can create a machine", () => {
   });
 
   it("offers small only — a coupon buys machine time, not a bigger machine", async () => {
-    mocks.getComputeEligibility.mockResolvedValue(couponFundedWith(1200));
+    mocks.getComputeEligibility.mockResolvedValue(couponFundedWith(72000));
     mocks.getComputeSubscription.mockResolvedValue(null);
     const user = userEvent.setup();
     const { sizes } = await openCreateModal(user);
@@ -376,7 +371,7 @@ describe("a coupon with no subscription can create a machine", () => {
   });
 
   it("creates the machine at small", async () => {
-    mocks.getComputeEligibility.mockResolvedValue(couponFundedWith(1200));
+    mocks.getComputeEligibility.mockResolvedValue(couponFundedWith(72000));
     mocks.getComputeSubscription.mockResolvedValue(null);
     const user = userEvent.setup();
     const { modal } = await openCreateModal(user);

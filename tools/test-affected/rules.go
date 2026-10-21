@@ -22,7 +22,7 @@ var allLanes = []lane{laneGo, laneWeb, laneElectron, laneForgeGen}
 
 // forgeInputs are the paths `forge generate` reads (protos, migrations,
 // contract.go interfaces, package directives in doc.go, handler packages, the
-// pins and the sqlc hook's inputs) or writes (gen/, *_gen.go, the handler
+// pins) or writes (gen/, *_gen.go, the handler
 // mocks and harnesses, deploy/observability, .forge's records). A change to
 // one runs the forge-generate lane: a hand edit of an output is drift too.
 //
@@ -31,8 +31,8 @@ var allLanes = []lane{laneGo, laneWeb, laneElectron, laneForgeGen}
 // The blind spot is a `//forge:` directive in a Go file that is not doc.go;
 // CI's "forge generate is a no-op" job checks the whole tree regardless.
 var forgeInputs = []string{
-	"forge.yaml", "go.mod", "go.sum", "buf.yaml", "buf.gen.yaml", "sqlc.yaml",
-	"proto/**", "db/**", "internal/db/postgres/queries/**", "internal/db/postgres/generated/**",
+	"forge.yaml", "go.mod", "go.sum", "buf.yaml", "buf.gen.yaml",
+	"proto/**", "db/**",
 	"**/contract.go", "**/doc.go", "**/*_gen.go", "internal/handlers/**",
 	"gen/**", "pkg/config/**", "deploy/**",
 	".forge/hashes.json", ".forge/scaffolded.json", ".forge/disowned.json",
@@ -131,7 +131,7 @@ var rules = []rule{
 		id: "global-config",
 		patterns: []string{
 			"Makefile", "forge.yaml", "buf.yaml", "buf.gen.yaml", "buf.gen-go-only.yaml",
-			"buf.gen.controlplane.yaml", "sqlc.yaml",
+			"buf.gen.controlplane.yaml",
 		},
 		full:   allLanes,
 		reason: "build or generation configuration changed (a subset cannot judge it)",

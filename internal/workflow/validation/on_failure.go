@@ -104,7 +104,7 @@ func validateOnFailureCEL(wf *reliantv1.Workflow, mainCtx *WorkflowTypeContext, 
 	ctx.NodeTypes = copyStringMap(mainCtx.NodeTypes)
 	ctx.NodeOutputs = copyOutputsMap(mainCtx.NodeOutputs)
 	ctx.ConditionalNodes = copyStringMap(mainCtx.ConditionalNodes)
-	own := BuildWorkflowTypeContext(handler, nil)
+	own := buildWorkflowTypeContext(handler, nil, mainCtx.valueTypes())
 	if own != nil {
 		for id, t := range own.NodeTypes {
 			ctx.NodeTypes[id] = t

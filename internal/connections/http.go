@@ -46,7 +46,7 @@ func (h *OAuthHTTP) callback(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		// With no flow there is nowhere to send the browser, so the page says
 		// what happened instead. Nothing from the request is echoed.
-		slog.Warn("oauth callback not relayed", "integration", provider, "class", httpErrorClass(err))
+		slog.WarnContext(r.Context(), "oauth callback not relayed", "integration", provider, "class", httpErrorClass(err))
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.WriteHeader(httpStatus(err))
 		_ = callbackErrorPage.Execute(w, errorMessage(err))

@@ -13,6 +13,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/reliant-labs/forge/pkg/observe"
 )
 
 const managedDriverID = "reliant"
@@ -46,7 +48,7 @@ func NewManaged(config Config) (*ManagedClient, error) {
 	}
 	client := config.HTTPClient
 	if client == nil {
-		client = &http.Client{Timeout: 5 * time.Minute}
+		client = observe.NewHTTPClient(observe.HTTPClientOptions{Timeout: 5 * time.Minute})
 	}
 	return &ManagedClient{config: config, http: client}, nil
 }

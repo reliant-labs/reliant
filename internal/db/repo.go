@@ -8,19 +8,15 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
-	"sort"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/reliant-labs/forge/pkg/orm"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	core "github.com/reliant-labs/reliant/internal/db/core"
-	postgresstore "github.com/reliant-labs/reliant/internal/db/postgres"
-	pgdb "github.com/reliant-labs/reliant/internal/db/postgres/generated"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/observability"
+	"github.com/reliant-labs/reliant/internal/store"
 	"go.temporal.io/sdk/activity"
 )
 
@@ -104,28 +100,10 @@ type UserUpdateNotifier func(update *UserUpdate)
 type ChatUpdateNotifier func(chatID string, seqNum int64, update ChatUpdate)
 
 type Repo struct {
-	DB              *WrappedDBTX
-	driver          DatabaseDriver
-	planTasks       core.PlanTaskStore
-	chats           core.ChatStore
-	runs            core.RunStore
-	messages        core.MessageStore
-	approvals       core.ApprovalStore
-	agentMessages   core.AgentMessageStore
-	projects        core.ProjectStore
-	worktrees       core.WorktreeStore
-	repos           core.RepoStore
-	settings        core.SettingStore
-	accounts        *postgresstore.AccountStore
-	attachments     core.AttachmentStore
-	workflows       core.WorkflowStore
-	threads         core.ThreadStore
-	contextWindows  core.ContextWindowStore
-	workflowCatalog core.WorkflowCatalogStore
-	triggers        core.TriggerStore
-	inbox           core.InboxStore
-	runEvents       core.RunEventStore
-	tokenCounts     tokenCountStore
+	DB       *WrappedDBTX
+	driver   DatabaseDriver
+	apiKeys  *apiKeyStore
+	accounts *accountStore
 
 	// session is the DatabaseConfig.DirectURL pool, for work that needs a
 	// Postgres session to itself. Nil means DB already has session
@@ -167,38 +145,11 @@ func NewRepoWithDriver(db *sql.DB, driver DatabaseDriver) (*Repo, error) {
 	if err != nil {
 		return nil, fmt.Errorf("orm client: %w", err)
 	}
-	q := &WrappedDBTX{db: db, orm: client}
-	pgQueries := pgdb.New(q)
-
-	tokenCounts := newSQLTokenCountStore(q, func(query string) string {
-		return (&Repo{driver: driver}).bindQuery(query)
-	})
-
 	return &Repo{
-		DB:            q,
-		driver:        driver,
-		accounts:      postgresstore.NewProviderAccountStore(db),
-		planTasks:     postgresstore.NewPlanTaskStore(pgQueries),
-		chats:         postgresstore.NewChatStore(pgQueries, q),
-		runs:          postgresstore.NewRunStore(pgQueries),
-		messages:      postgresstore.NewMessageStore(pgQueries, q),
-		approvals:     postgresstore.NewApprovalStore(pgQueries),
-		agentMessages: postgresstore.NewAgentMessageStore(pgQueries, q),
-		projects:      postgresstore.NewProjectStore(pgQueries),
-		worktrees:     postgresstore.NewWorktreeStore(pgQueries),
-		repos:         postgresstore.NewRepoStore(pgQueries),
-		settings: postgresstore.NewSettingStore(pgQueries, q, func(query string) string {
-			return (&Repo{driver: DriverPostgres}).bindQuery(query)
-		}),
-		attachments:     postgresstore.NewAttachmentStore(pgQueries, q),
-		workflows:       postgresstore.NewWorkflowStore(pgQueries),
-		threads:         postgresstore.NewThreadStore(pgQueries),
-		contextWindows:  postgresstore.NewContextWindowStore(pgQueries),
-		workflowCatalog: postgresstore.NewWorkflowCatalogStore(pgQueries),
-		triggers:        postgresstore.NewTriggerStore(pgQueries),
-		inbox:           postgresstore.NewInboxStore(pgQueries),
-		runEvents:       postgresstore.NewRunEventStore(pgQueries),
-		tokenCounts:     tokenCounts,
+		DB:       &WrappedDBTX{db: db, orm: client},
+		driver:   driver,
+		apiKeys:  newAPIKeyStore(client),
+		accounts: newAccountStore(client),
 	}, nil
 }
 
@@ -217,30 +168,6 @@ func (r *Repo) ORM() *orm.Client {
 func (r *Repo) SetUpdateNotifiers(onUser UserUpdateNotifier, onChat ChatUpdateNotifier) {
 	r.onUserUpdate = onUser
 	r.onChatUpdate = onChat
-}
-
-// bindQuery rewrites generic '?' placeholders into Postgres-style positional
-// placeholders when running with the Postgres driver.
-func (r *Repo) bindQuery(query string) string {
-	if r.driver != DriverPostgres {
-		return query
-	}
-
-	var builder strings.Builder
-	builder.Grow(len(query) + 16)
-	argIndex := 1
-
-	for _, ch := range query {
-		if ch == '?' {
-			builder.WriteByte('$')
-			builder.WriteString(strconv.Itoa(argIndex))
-			argIndex++
-			continue
-		}
-		builder.WriteRune(ch)
-	}
-
-	return builder.String()
 }
 
 func NewRepoFromConfig(cfg DatabaseConfig) (*Repo, error) {
@@ -721,7 +648,7 @@ func (w *WrappedDBTX) BeginTxWithOptions(ctx context.Context, opts TxOptions) (*
 }
 
 // SQLDB exposes the underlying pool for stores that own their SQL rather than
-// going through sqlc-generated queries (see internal/connectorgrant). It
+// going through the Repository (see internal/connectorgrant). It
 // deliberately ignores any ambient transaction: callers of this are
 // self-contained stores, not participants in a caller's transaction.
 func (w *WrappedDBTX) SQLDB() *sql.DB {
@@ -738,10 +665,6 @@ func (w *WrappedDBTX) Ping(ctx context.Context) error {
 
 func (w *WrappedDBTX) ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
 	return w.execContextWithRetry(ctx, query, args...)
-}
-
-func (w *WrappedDBTX) PrepareContext(ctx context.Context, query string) (*sql.Stmt, error) {
-	return w.DB(ctx).PrepareContext(ctx, query)
 }
 
 func (w *WrappedDBTX) QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
@@ -833,119 +756,28 @@ func (w *WrappedDBTX) queryContextWithRetry(ctx context.Context, query string, a
 // GetLatestUpdateSequence returns the latest sequence number for a given chat
 // This is used by polling clients to check if they're in sync
 func (r *Repo) GetLatestUpdateSequence(ctx context.Context, chatID string) (int64, error) {
-	var sequence sql.NullInt64
-
-	query := `
-		SELECT MAX(sequence_number)
-		FROM chat_updates
-		WHERE chat_id = ?
-	`
-	query = r.bindQuery(query)
-
-	err := r.DB.DB(ctx).QueryRowContext(ctx, query, chatID).Scan(&sequence)
-	if err != nil {
-		return 0, err
-	}
-
-	if !sequence.Valid {
-		return 0, nil // No updates yet
-	}
-
-	return sequence.Int64, nil
-}
-
-const (
-	updateStreamKindUser = "user"
-	updateStreamKindChat = "chat"
-)
-
-// allocateUpdateSequence advances one logical stream's transactional counter.
-//
-// The counter update and the ledger insert MUST share a transaction. The row
-// lock is what prevents N+1 from committing before N, and rolling the
-// transaction back must roll both the counter and ledger row back together.
-// Keeping this primitive transaction-only makes it impossible for a future
-// caller to accidentally consume a cursor outside the durable write.
-func (r *Repo) allocateUpdateSequence(ctx context.Context, streamKind, streamID string) (int64, error) {
-	if !r.DB.inTx(ctx) {
-		return 0, fmt.Errorf("allocate %s update sequence: transaction required", streamKind)
-	}
-
-	var nextSeq int64
-	query := `
-		INSERT INTO update_stream_counters (
-			stream_kind, stream_id, last_assigned_seq
-		) VALUES (?, ?, 1)
-		ON CONFLICT (stream_kind, stream_id) DO UPDATE
-		SET last_assigned_seq = update_stream_counters.last_assigned_seq + 1
-		RETURNING last_assigned_seq
-	`
-	query = r.bindQuery(query)
-
-	err := r.DB.DB(ctx).QueryRowContext(ctx, query, streamKind, streamID).Scan(&nextSeq)
-	if err != nil {
-		return 0, fmt.Errorf("allocate %s update sequence: %w", streamKind, err)
-	}
-	return nextSeq, nil
+	return store.LatestChatUpdateSequence(ctx, r.ORM(), chatID)
 }
 
 // CreateChatUpdate creates a new chat update (for dual-write pattern)
 // This operation is atomic - the sequence number generation and insert happen in a transaction
 // to prevent race conditions when multiple parallel operations try to create updates.
 func (r *Repo) CreateChatUpdate(ctx context.Context, chatID string, updateType reliantv1.ChatUpdateType, entityID string, data string) error {
-	var chatUpdate ChatUpdate
-
-	// Wrap in transaction to make sequence number generation + insert atomic
-	// This prevents UNIQUE constraint violations when parallel goroutines try to create updates
-	err := r.RunTx(ctx, func(ctx context.Context) error {
-		// Get next sequence number within the transaction
-		nextSeq, err := r.allocateUpdateSequence(ctx, updateStreamKindChat, chatID)
-		if err != nil {
-			return fmt.Errorf("failed to get next sequence number: %w", err)
-		}
-
-		// Generate ID
-		updateID := fmt.Sprintf("%s-%d", chatID, nextSeq)
-
-		// UTC, not local. chat_updates.created_at is TIMESTAMP WITHOUT TIME
-		// ZONE, so the driver drops the offset and keeps the wall clock: a
-		// local time.Now() is stored as its local reading and then read back
-		// and serialized as RFC3339 with a "Z". The value does not become
-		// wrong at the format step — it is already wrong here, and no consumer
-		// can recover it. Every sibling writer in this file already does this.
-		createdAt := time.Now().UTC()
-
-		chatUpdate = ChatUpdate{
-			ID:             updateID,
-			ChatID:         chatID,
-			SequenceNumber: nextSeq,
-			UpdateType:     updateType,
-			EntityID:       entityID,
-			Data:           json.RawMessage(data),
-			CreatedAt:      createdAt,
-		}
-
-		err = r.chats.CreateChatUpdate(ctx, chatUpdate)
+	// The allocation and the insert share one transaction: the counter's row
+	// lock is what keeps sequence order equal to commit order, and a rollback
+	// must take both back (store.AllocateUpdateSequence).
+	return r.RunTx(ctx, func(ctx context.Context) error {
+		chatUpdate, err := store.AppendChatUpdate(ctx, r.ORM(), chatID, updateType, entityID, data)
 		if err != nil {
 			return err
 		}
-
 		if r.onChatUpdate != nil {
-			committedUpdate := chatUpdate
-			if err := runAfterCommit(ctx, func() {
-				r.onChatUpdate(chatID, committedUpdate.SequenceNumber, committedUpdate)
-			}); err != nil {
-				return err
-			}
+			return runAfterCommit(ctx, func() {
+				r.onChatUpdate(chatID, chatUpdate.SequenceNumber, chatUpdate)
+			})
 		}
-
 		return nil
 	})
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
 
 // GetLatestNonMessageUpdatesPerEntity returns, for each entity in a chat, only
@@ -1062,110 +894,11 @@ func (r *Repo) GetLatestNonMessageUpdatesPerEntity(ctx context.Context, chatID s
 	// of the chat's whole history: measured >20s (cancelled) on the dev copy.
 	// TestSnapshotHeadsQueryMatchesPartialIndex pins these literals to the
 	// enum values and to both index predicates in the migrations.
-	query := r.bindQuery(snapshotHeadsQuery)
-
-	rows, err := r.DB.DB(ctx).QueryContext(ctx, query, chatID, chatID, chatID, chatID)
-	if err != nil {
-		return nil, err
-	}
-	return scanSnapshotHeads(rows)
-}
-
-// snapshotHeadsQuery is GetLatestNonMessageUpdatesPerEntity's SQL. A
-// package-level constant so the partial-index test can read exactly what runs.
-//
-//	1 = MESSAGE, 4 = TOOL_CALL, 19 = STREAM_FINALIZED  (idx_chat_updates_snapshot_heads excludes these)
-//	3 = THREAD, 18 = QUESTION                          (re-keyed, read separately via idx_chat_updates_snapshot_rekeyed)
-//	20 = AGENT_MESSAGES_DRAINED                        (live-only; still in the index, filtered by the probe)
-//
-// The skip scan's list must stay a SUPERSET of the heads index's predicate,
-// or the planner cannot prove the query implies it and loses the index.
-const snapshotHeadsQuery = `
-		WITH RECURSIVE heads AS (
-			(SELECT entity_id, sequence_number
-			   FROM chat_updates
-			  WHERE chat_id = ? AND update_type NOT IN (1, 4, 19, 3, 18, 20)
-			  ORDER BY entity_id, sequence_number DESC
-			  LIMIT 1)
-			UNION ALL
-			SELECT nxt.entity_id, nxt.sequence_number
-			  FROM heads h
-			  CROSS JOIN LATERAL (
-				SELECT entity_id, sequence_number
-				  FROM chat_updates
-				 WHERE chat_id = ? AND update_type NOT IN (1, 4, 19, 3, 18, 20)
-				   AND entity_id > h.entity_id
-				 ORDER BY entity_id, sequence_number DESC
-				 LIMIT 1) nxt
-		),
-		rekeyed AS (
-			SELECT DISTINCT ON (dedup_key) id, sequence_number
-			FROM (
-				SELECT
-					id,
-					sequence_number,
-					CASE
-						WHEN update_type = 18 THEN left(entity_id, length(entity_id) - position('-' in reverse(entity_id)))
-						ELSE 'thread:' || COALESCE(NULLIF(data::jsonb->>'thread', ''), entity_id)
-					END AS dedup_key
-				FROM chat_updates
-				WHERE chat_id = ? AND update_type IN (3, 18)
-			) k
-			ORDER BY dedup_key, sequence_number DESC
-		)
-		SELECT
-			cu.id,
-			cu.chat_id,
-			cu.sequence_number,
-			cu.update_type,
-			cu.entity_id,
-			cu.data,
-			cu.created_at
-		FROM (
-			SELECT sequence_number FROM heads
-			UNION
-			SELECT sequence_number FROM rekeyed
-		) picked
-		JOIN chat_updates cu ON cu.chat_id = ? AND cu.sequence_number = picked.sequence_number
-		ORDER BY cu.sequence_number
-	`
-
-func scanSnapshotHeads(rows *sql.Rows) ([]ChatUpdate, error) {
-	defer rows.Close()
-
-	updates := []ChatUpdate{}
-	for rows.Next() {
-		var update ChatUpdate
-		var dataJSON string
-
-		if err := rows.Scan(
-			&update.ID,
-			&update.ChatID,
-			&update.SequenceNumber,
-			&update.UpdateType,
-			&update.EntityID,
-			&dataJSON,
-			&update.CreatedAt,
-		); err != nil {
-			return nil, err
-		}
-
-		// No message-update enrichment here: this query excludes them by
-		// construction, which is the entire point.
-		update.Data = json.RawMessage(dataJSON)
-		updates = append(updates, update)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
-	// DISTINCT ON forces ORDER BY entity_id; restore sequence order so
-	// consumers see updates in the order they were emitted.
-	sort.Slice(updates, func(i, j int) bool {
-		return updates[i].SequenceNumber < updates[j].SequenceNumber
-	})
-
-	return updates, nil
+	//
+	// The statement and the literal-vs-parameter reasoning are
+	// store.SnapshotHeadsSQL's; TestSnapshotHeadsQueryMatchesPartialIndex
+	// pins its literals to the enum values and to both index predicates.
+	return store.LatestNonMessageUpdatesPerEntity(ctx, r.ORM(), chatID)
 }
 
 // GetUpdatesSince returns all updates since a given sequence number
@@ -1177,49 +910,12 @@ func (r *Repo) GetUpdatesSince(ctx context.Context, chatID string, sinceSeq int6
 		limit = 100
 	}
 
-	query := `
-		SELECT
-			id,
-			chat_id,
-			sequence_number,
-			update_type,
-			entity_id,
-			data,
-			created_at
-		FROM chat_updates
-		WHERE chat_id = ? AND sequence_number > ?
-		ORDER BY sequence_number ASC
-		LIMIT ?
-	`
-	query = r.bindQuery(query)
-
-	rows, err := r.DB.DB(ctx).QueryContext(ctx, query, chatID, sinceSeq, limit)
+	updates, err := store.ChatUpdatesSince(ctx, r.ORM(), chatID, sinceSeq, limit)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	var updates []ChatUpdate
-	for rows.Next() {
-		var update ChatUpdate
-		var dataJSON string
-
-		err := rows.Scan(
-			&update.ID,
-			&update.ChatID,
-			&update.SequenceNumber,
-			&update.UpdateType,
-			&update.EntityID,
-			&dataJSON,
-			&update.CreatedAt,
-		)
-		if err != nil {
-			return nil, err
-		}
-
-		// Parse JSON data field
-		update.Data = json.RawMessage(dataJSON)
-
+	for i := range updates {
+		update := &updates[i]
 		// Enrich message updates with content blocks
 		if update.UpdateType == reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_MESSAGE {
 			// Check if this is a minimal message update (not already enriched)
@@ -1227,7 +923,7 @@ func (r *Repo) GetUpdatesSince(ctx context.Context, chatID string, sinceSeq int6
 			if err := json.Unmarshal(update.Data, &dataMap); err == nil {
 				// Only enrich if content_blocks is missing
 				if _, hasContentBlocks := dataMap["content_blocks"]; !hasContentBlocks {
-					enrichedData, err := r.EnrichMessageUpdate(ctx, update)
+					enrichedData, err := r.EnrichMessageUpdate(ctx, *update)
 					if err != nil {
 						// Log error but continue with original data
 						logging.WarnContext(ctx, "Failed to enrich message update",
@@ -1240,21 +936,8 @@ func (r *Repo) GetUpdatesSince(ctx context.Context, chatID string, sinceSeq int6
 				}
 			}
 		}
-
-		updates = append(updates, update)
 	}
-
-	if updates == nil {
-		updates = []ChatUpdate{} // Return empty slice instead of nil
-	}
-
-	// COMPREHENSIVE LOGGING - what we found
-	updateTypes := make(map[reliantv1.ChatUpdateType]int)
-	for _, update := range updates {
-		updateTypes[update.UpdateType]++
-	}
-
-	return updates, rows.Err()
+	return updates, nil
 }
 
 // EnrichMessageUpdate adds content blocks to a message update
@@ -1421,14 +1104,6 @@ func (r *Repo) EnrichMessageUpdate(ctx context.Context, update ChatUpdate) (json
 
 // IsChatBusy removed - use Temporal client to query running workflows for a chat
 
-// Null type conversion helpers
-func nullStringToPtr(ns sql.NullString) *string {
-	if ns.Valid {
-		return &ns.String
-	}
-	return nil
-}
-
 // =============================================================================
 // Activity Idempotency Helpers
 // =============================================================================
@@ -1459,25 +1134,7 @@ func GetActivityInfo(ctx context.Context) (activityID string, workflowRunID stri
 
 // GetLatestUserUpdateSequence returns the latest sequence number for a user's updates
 func (r *Repo) GetLatestUserUpdateSequence(ctx context.Context, userID string) (int64, error) {
-	var sequence sql.NullInt64
-
-	query := `
-		SELECT MAX(sequence_number)
-		FROM user_updates
-		WHERE user_id = ?
-	`
-	query = r.bindQuery(query)
-
-	err := r.DB.DB(ctx).QueryRowContext(ctx, query, userID).Scan(&sequence)
-	if err != nil {
-		return 0, err
-	}
-
-	if !sequence.Valid {
-		return 0, nil // No updates yet
-	}
-
-	return sequence.Int64, nil
+	return store.LatestUserUpdateSequence(ctx, r.ORM(), userID)
 }
 
 // CreateUserUpdate creates a new user update for the global WebSocket.
@@ -1518,58 +1175,18 @@ func (r *Repo) CreateUserUpdate(ctx context.Context, update *UserUpdate) error {
 	// failed attempt rolls back and the retried attempt obtains the then-current
 	// next value.
 	callerSuppliedID := update.ID != ""
-	err := r.RunTxWithOptions(ctx, TxOptions{Isolation: IsolationReadCommitted}, func(txCtx context.Context) error {
-		// Get next sequence number within the transaction for atomicity.
-		nextSeq, err := r.allocateUpdateSequence(txCtx, updateStreamKindUser, update.UserID)
-		if err != nil {
-			return fmt.Errorf("failed to get next user sequence number: %w", err)
+	return r.RunTxWithOptions(ctx, TxOptions{Isolation: IsolationReadCommitted}, func(txCtx context.Context) error {
+		if err := store.AppendUserUpdate(txCtx, r.ORM(), update, callerSuppliedID); err != nil {
+			return err
 		}
-		update.SequenceNumber = nextSeq
-
-		if !callerSuppliedID {
-			update.ID = fmt.Sprintf("%s-%d", update.UserID, nextSeq)
-		}
-
-		query := `
-			INSERT INTO user_updates (
-				id, user_id, sequence_number, project_id, worktree_id, chat_id,
-				update_type, entity_type, entity_id, data, created_at
-			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		`
-		query = r.bindQuery(query)
-
-		_, err = r.DB.ExecContext(txCtx, query,
-			update.ID,
-			update.UserID,
-			update.SequenceNumber,
-			update.ProjectID,
-			update.WorktreeID,
-			update.ChatID,
-			int64(update.UpdateType),
-			int64(update.EntityType),
-			update.EntityID,
-			string(update.Data),
-			time.Now().UTC(),
-		)
-		if err != nil {
-			return fmt.Errorf("failed to insert user update: %w", err)
-		}
-
 		if r.onUserUpdate != nil {
 			committedUpdate := *update
-			if err := runAfterCommit(txCtx, func() {
+			return runAfterCommit(txCtx, func() {
 				r.onUserUpdate(&committedUpdate)
-			}); err != nil {
-				return err
-			}
+			})
 		}
 		return nil
 	})
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
 
 // GetUserUpdatesSince returns all user updates since a given sequence number
@@ -1577,63 +1194,7 @@ func (r *Repo) GetUserUpdatesSince(ctx context.Context, userID string, sinceSeq 
 	if limit <= 0 {
 		limit = 100
 	}
-
-	query := `
-		SELECT
-			id, user_id, sequence_number, project_id, worktree_id, chat_id,
-			update_type, entity_type, entity_id, data, created_at
-		FROM user_updates
-		WHERE user_id = ? AND sequence_number > ?
-		ORDER BY sequence_number ASC
-		LIMIT ?
-	`
-	query = r.bindQuery(query)
-
-	rows, err := r.DB.DB(ctx).QueryContext(ctx, query, userID, sinceSeq, limit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var updates []UserUpdate
-	for rows.Next() {
-		var update UserUpdate
-		var projectID, worktreeID, chatID sql.NullString
-		var dataJSON string
-		var updateTypeInt, entityTypeInt int64
-
-		err := rows.Scan(
-			&update.ID,
-			&update.UserID,
-			&update.SequenceNumber,
-			&projectID,
-			&worktreeID,
-			&chatID,
-			&updateTypeInt,
-			&entityTypeInt,
-			&update.EntityID,
-			&dataJSON,
-			&update.CreatedAt,
-		)
-		if err != nil {
-			return nil, err
-		}
-
-		update.ProjectID = nullStringToPtr(projectID)
-		update.WorktreeID = nullStringToPtr(worktreeID)
-		update.ChatID = nullStringToPtr(chatID)
-		update.UpdateType = UserUpdateType(updateTypeInt)
-		update.EntityType = UserUpdateEntityType(entityTypeInt)
-		update.Data = json.RawMessage(dataJSON)
-
-		updates = append(updates, update)
-	}
-
-	if updates == nil {
-		updates = []UserUpdate{}
-	}
-
-	return updates, rows.Err()
+	return store.UserUpdatesSince(ctx, r.ORM(), userID, sinceSeq, limit)
 }
 
 // UpdateChatState updates a chat's state and emits a user update
@@ -1659,19 +1220,8 @@ func (r *Repo) UpdateChatState(ctx context.Context, chatID string, state ChatSta
 
 	// Update the chat state
 	now := time.Now().UTC()
-	query := `
-		UPDATE chats
-		SET state = ?, 
-		    archived_worktree_name = COALESCE(archived_worktree_name, ?),
-		    updated_at = ?,
-		    last_active = ?
-		WHERE id = ?
-	`
-	query = r.bindQuery(query)
-
-	_, err = r.DB.ExecContext(ctx, query, int32(state), archivedWorktreeName, now, now, chatID)
-	if err != nil {
-		return fmt.Errorf("failed to update chat state: %w", err)
+	if err := store.UpdateChatState(ctx, r.ORM(), chatID, state, archivedWorktreeName, now); err != nil {
+		return err
 	}
 
 	// Create user update for the state change
@@ -1726,7 +1276,7 @@ func (r *Repo) UpdateChatState(ctx context.Context, chatID string, state ChatSta
 // UpdateChatActiveDaemon sets the active daemon for a chat session.
 // When daemonID is nil, the active daemon is cleared (revert to default resolution).
 func (r *Repo) UpdateChatActiveDaemon(ctx context.Context, chatID string, daemonID *string) error {
-	return r.chats.UpdateChatActiveDaemon(ctx, chatID, daemonID)
+	return store.UpdateChatActiveDaemon(ctx, r.ORM(), chatID, daemonID)
 }
 
 // SetChatAdopted adopts or un-adopts a chat for its owner. It reports whether
@@ -1736,7 +1286,7 @@ func (r *Repo) UpdateChatActiveDaemon(ctx context.Context, chatID string, daemon
 func (r *Repo) SetChatAdopted(ctx context.Context, chatID, userID string, adopted bool) (bool, error) {
 	var owned bool
 	err := r.RunTx(ctx, func(txCtx context.Context) error {
-		ok, err := r.chats.SetChatAdopted(txCtx, chatID, userID, adopted)
+		ok, err := store.SetChatAdopted(txCtx, r.ORM(), chatID, userID, adopted)
 		if err != nil || !ok {
 			return err
 		}
@@ -1752,7 +1302,7 @@ func (r *Repo) SetChatAdopted(ctx context.Context, chatID, userID string, adopte
 // UPDATE that matches no row.
 func (r *Repo) SetChatDaemonBlocked(ctx context.Context, chatID string, blocked bool) error {
 	return r.RunTx(ctx, func(txCtx context.Context) error {
-		changed, err := r.chats.SetChatDaemonBlocked(txCtx, chatID, blocked)
+		changed, err := store.SetChatDaemonBlocked(txCtx, r.ORM(), chatID, blocked)
 		if err != nil || !changed {
 			return err
 		}
@@ -1768,7 +1318,7 @@ func (r *Repo) SetChatQueuedForMachine(ctx context.Context, chatID string, queue
 	var changed bool
 	err := r.RunTx(ctx, func(txCtx context.Context) error {
 		var err error
-		changed, err = r.chats.SetChatQueuedForMachine(txCtx, chatID, queued)
+		changed, err = store.SetChatQueuedForMachine(txCtx, r.ORM(), chatID, queued)
 		if err != nil || !changed {
 			return err
 		}
@@ -1780,25 +1330,25 @@ func (r *Repo) SetChatQueuedForMachine(ctx context.Context, chatID string, queue
 // ListChatsQueuedForMachine lists chats holding a message queued for their
 // machine; see the Repository interface.
 func (r *Repo) ListChatsQueuedForMachine(ctx context.Context, userID string, limit int) ([]QueuedForMachineChat, error) {
-	return r.chats.ListChatsQueuedForMachine(ctx, userID, limit)
+	return store.ListChatsQueuedForMachine(ctx, r.ORM(), userID, limit)
 }
 
 // SetChatPausedForMachine records (or clears) that the daemon-offline breaker
 // paused the chat's run, and reports whether the stored value changed.
 func (r *Repo) SetChatPausedForMachine(ctx context.Context, chatID string, paused bool) (bool, error) {
-	return r.chats.SetChatPausedForMachine(ctx, chatID, paused)
+	return store.SetChatPausedForMachine(ctx, r.ORM(), chatID, paused)
 }
 
 // ListChatsPausedForMachine lists chats the breaker paused; see the Repository
 // interface.
 func (r *Repo) ListChatsPausedForMachine(ctx context.Context, userID string, limit int) ([]PausedForMachineChat, error) {
-	return r.chats.ListChatsPausedForMachine(ctx, userID, limit)
+	return store.ListChatsPausedForMachine(ctx, r.ORM(), userID, limit)
 }
 
 // ListChatsWaitingForMachine lists a user's chats whose live root run is
 // parked waiting for a machine.
 func (r *Repo) ListChatsWaitingForMachine(ctx context.Context, userID string) ([]WaitingForMachineRun, error) {
-	return r.chats.ListChatsWaitingForMachine(ctx, userID)
+	return store.ListChatsWaitingForMachine(ctx, r.ORM(), userID)
 }
 
 // UpdateChatUnread sets the unread flag on a chat and emits a user update.
@@ -1808,18 +1358,8 @@ func (r *Repo) UpdateChatUnread(ctx context.Context, chatID string, unread bool,
 		return fmt.Errorf("failed to get chat: %w", err)
 	}
 
-	unreadInt := 0
-	if unread {
-		unreadInt = 1
-	}
-
-	now := time.Now().UTC()
-	query := `UPDATE chats SET unread = ?, updated_at = ? WHERE id = ?`
-	query = r.bindQuery(query)
-
-	_, err = r.DB.ExecContext(ctx, query, unreadInt, now, chatID)
-	if err != nil {
-		return fmt.Errorf("failed to update chat unread: %w", err)
+	if err := store.UpdateChatUnread(ctx, r.ORM(), chatID, unread); err != nil {
+		return err
 	}
 
 	updateData := map[string]interface{}{

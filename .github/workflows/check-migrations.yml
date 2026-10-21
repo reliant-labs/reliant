@@ -10,7 +10,6 @@ on:
       - "scripts/check-migrations.sh"
       - "cmd/check-migrations/**"
       - "internal/db/migrationcheck/**"
-      - "sqlc.yaml"
   push:
     branches:
       - main
@@ -22,7 +21,6 @@ on:
       - "scripts/check-migrations.sh"
       - "cmd/check-migrations/**"
       - "internal/db/migrationcheck/**"
-      - "sqlc.yaml"
 
 # A newer push to a PR obsoletes the run in progress; a run on main finishes.
 concurrency:

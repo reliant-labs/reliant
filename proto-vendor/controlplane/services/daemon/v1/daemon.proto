@@ -18,7 +18,10 @@ option go_package = "github.com/reliant-labs/control-plane/gen/services/daemon/v
 
 service DaemonService {
   rpc CreateDaemon(CreateDaemonRequest) returns (CreateDaemonResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "reliant workspace surface (daemons, workspace projects, LLM keys), not a forge console change; audit_log records it"}
+    };
   }
   rpc GetDaemon(GetDaemonRequest) returns (GetDaemonResponse) {
     option (forge.v1.method) = {auth_required: true};
@@ -27,16 +30,28 @@ service DaemonService {
     option (forge.v1.method) = {auth_required: true};
   }
   rpc UpdateDaemon(UpdateDaemonRequest) returns (UpdateDaemonResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "reliant workspace surface (daemons, workspace projects, LLM keys), not a forge console change; audit_log records it"}
+    };
   }
   rpc DeleteDaemon(DeleteDaemonRequest) returns (DeleteDaemonResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "reliant workspace surface (daemons, workspace projects, LLM keys), not a forge console change; audit_log records it"}
+    };
   }
   rpc SuspendDaemon(SuspendDaemonRequest) returns (SuspendDaemonResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "reliant workspace surface (daemons, workspace projects, LLM keys), not a forge console change; audit_log records it"}
+    };
   }
   rpc ResumeDaemon(ResumeDaemonRequest) returns (ResumeDaemonResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "reliant workspace surface (daemons, workspace projects, LLM keys), not a forge console change; audit_log records it"}
+    };
   }
   // ResizeDaemon changes a MANAGED daemon's machine size — the one path that
   // does. The daemon must be SUSPENDED (FailedPrecondition otherwise): like
@@ -51,7 +66,10 @@ service DaemonService {
   // is a successful no-op. Disks only grow: a downsize keeps the larger disk,
   // which is billed at its bound capacity.
   rpc ResizeDaemon(ResizeDaemonRequest) returns (ResizeDaemonResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "reliant workspace surface (daemons, workspace projects, LLM keys), not a forge console change; audit_log records it"}
+    };
   }
   // GrowDaemonDisk grows a MANAGED daemon's one disk to storage_gib. Disk
   // above the org's pooled allowance is billed as storage. Disks only grow: a smaller target is InvalidArgument, the current
@@ -63,13 +81,22 @@ service DaemonService {
   // none) and by the same funding ladder as create and resume. Design:
   // docs/design/workspace-disk-resize.md.
   rpc GrowDaemonDisk(GrowDaemonDiskRequest) returns (GrowDaemonDiskResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "reliant workspace surface (daemons, workspace projects, LLM keys), not a forge console change; audit_log records it"}
+    };
   }
   rpc SetPortAccess(SetPortAccessRequest) returns (SetPortAccessResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "reliant workspace surface (daemons, workspace projects, LLM keys), not a forge console change; audit_log records it"}
+    };
   }
   rpc RemovePortAccess(RemovePortAccessRequest) returns (RemovePortAccessResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "reliant workspace surface (daemons, workspace projects, LLM keys), not a forge console change; audit_log records it"}
+    };
   }
   rpc ListPortAccessRules(ListPortAccessRulesRequest) returns (ListPortAccessRulesResponse) {
     option (forge.v1.method) = {auth_required: true};
@@ -80,7 +107,10 @@ service DaemonService {
   // it. Only AUTHENTICATED and PUBLIC are valid; a PUBLIC default makes every
   // unruled listening port world-reachable by URL.
   rpc SetDefaultPortAccess(SetDefaultPortAccessRequest) returns (SetDefaultPortAccessResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "reliant workspace surface (daemons, workspace projects, LLM keys), not a forge console change; audit_log records it"}
+    };
   }
 }
 

@@ -5,71 +5,94 @@
 
 import type { GenFile, GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
-import type { DatabaseConfig } from "./server_config_pb";
-import { file_config_v1_server_config } from "./server_config_pb";
 import { file_forge_v1_forge } from "../../forge/v1/forge_pb";
+import type { Duration } from "@bufbuild/protobuf/wkt";
+import { file_google_protobuf_duration } from "@bufbuild/protobuf/wkt";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
  * Describes the file config/v1/db_config.proto.
  */
 export const file_config_v1_db_config: GenFile = /*@__PURE__*/
-  fileDesc("Chljb25maWcvdjEvZGJfY29uZmlnLnByb3RvEgljb25maWcudjEiYAoRRGJNaWdyYXRlVXBDb25maWcSKwoIZGF0YWJhc2UYASABKAsyGS5jb25maWcudjEuRGF0YWJhc2VDb25maWc6HsrBGBoKB3JlbGlhbnQSAmRiEgdtaWdyYXRlEgJ1cCJoChVEYk1pZ3JhdGVTdGF0dXNDb25maWcSKwoIZGF0YWJhc2UYASABKAsyGS5jb25maWcudjEuRGF0YWJhc2VDb25maWc6IsrBGB4KB3JlbGlhbnQSAmRiEgdtaWdyYXRlEgZzdGF0dXMiZgoURGJNaWdyYXRlRm9yY2VDb25maWcSKwoIZGF0YWJhc2UYASABKAsyGS5jb25maWcudjEuRGF0YWJhc2VDb25maWc6IcrBGB0KB3JlbGlhbnQSAmRiEgdtaWdyYXRlEgVmb3JjZUI4WjZnaXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9jb25maWcvdjE7Y29uZmlndjFiBnByb3RvMw", [file_config_v1_server_config, file_forge_v1_forge]);
+  fileDesc("Chljb25maWcvdjEvZGJfY29uZmlnLnByb3RvEgljb25maWcudjEi3wYKDkRhdGFiYXNlQ29uZmlnEkUKDGRhdGFiYXNlX3VybBgBIAEoCUIvgs4YKwoMREFUQUJBU0VfVVJMIAEqF1Bvc3RncmVzIGNvbm5lY3Rpb24gVVJMMAESmwEKE2RhdGFiYXNlX2RpcmVjdF91cmwYAiABKAlCfoLOGHoKE0RBVEFCQVNFX0RJUkVDVF9VUkwqX1Nlc3Npb24tY2FwYWJsZSBQb3N0Z3JlcyBVUkwgZm9yIHNlc3Npb24tc2NvcGVkIHdvcmssIHdoZW4gREFUQUJBU0VfVVJMIGlzIGEgdHJhbnNhY3Rpb24gcG9vbGVyMAFQARJpCg9kYXRhYmFzZV9kcml2ZXIYAyABKAlCUILOGEwKD0RBVEFCQVNFX0RSSVZFUhIJZGItZHJpdmVyGghwb3N0Z3JlcyoaRGF0YWJhc2UgZHJpdmVyIChwb3N0Z3JlcylKCHBvc3RncmVzEl4KEWRiX21heF9vcGVuX2Nvbm5zGAQgASgFQkOCzhg/ChlSRUxJQU5UX0RCX01BWF9PUEVOX0NPTk5TGgIyNSoeTW9zdCBvcGVuIGRhdGFiYXNlIGNvbm5lY3Rpb25zEmgKEWRiX21heF9pZGxlX2Nvbm5zGAUgASgFQk2CzhhJChlSRUxJQU5UX0RCX01BWF9JRExFX0NPTk5TGgIxMCooTW9zdCBpZGxlIGRhdGFiYXNlIGNvbm5lY3Rpb25zIGtlcHQgb3BlbhKQAQoSZGJfY29ubmVjdF90aW1lb3V0GAYgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uQlmCzhhVChJEQl9DT05ORUNUX1RJTUVPVVQqP0hvdyBsb25nIHRoZSBzdGFydHVwIHBpbmcgcmV0cmllcyBhIGRhdGFiYXNlIHRoYXQgaXMgbm90IHVwIHlldBJ4ChZkYl9zY2hlbWFfd2FpdF9zZWNvbmRzGAcgASgFQliCzhhUCh5SRUxJQU5UX0RCX1NDSEVNQV9XQUlUX1NFQ09ORFMaAzMwMCotU2Vjb25kcyB0byB3YWl0IGZvciB0aGUgc2NoZW1hIHRvIGJlIG1pZ3JhdGVkOibKwRgiCgdyZWxpYW50GggKBnNlcnZlchoNCgJkYgoHbWlncmF0ZUI4WjZnaXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9jb25maWcvdjE7Y29uZmlndjFiBnByb3RvMw", [file_forge_v1_forge, file_google_protobuf_duration]);
 
 /**
- * DbMigrateUpConfig is `reliant db migrate up`'s config.
+ * DatabaseConfig is the Postgres a process connects to, and how it sizes its
+ * pool and waits on it. It is a SUBTREE config over `server` and `db
+ * migrate`, so every server role and every migration command load ONE
+ * declaration of it: a migration Job and the API server cannot disagree
+ * about which database they mean. Its flags are persistent on both commands.
  *
- * @generated from message config.v1.DbMigrateUpConfig
+ * Its fields carry forge's process-config names (database_url,
+ * db_max_open_conns, db_max_idle_conns, db_connect_timeout), which forge's
+ * scaffolded serve policy reads from whichever loaded config declares them;
+ * the leaves forge has no name for (the direct URL, the driver, the schema
+ * wait) take the same prefixes. The env vars are unchanged. The rules every
+ * config here follows are in config.proto's header.
+ *
+ * @generated from message config.v1.DatabaseConfig
  */
-export type DbMigrateUpConfig = Message<"config.v1.DbMigrateUpConfig"> & {
+export type DatabaseConfig = Message<"config.v1.DatabaseConfig"> & {
   /**
-   * @generated from field: config.v1.DatabaseConfig database = 1;
+   * The connection URL. A secret: it carries the password, so it has no flag
+   * (a flag's value is in the shell history and in `ps`).
+   *
+   * @generated from field: string database_url = 1;
    */
-  database?: DatabaseConfig | undefined;
+  databaseUrl: string;
+
+  /**
+   * A session-capable URL for the same database, for session-scoped work
+   * (advisory locks, migrations): set it when database_url is a
+   * transaction-pooling PgBouncer. Unset: database_url already has session
+   * semantics.
+   *
+   * @generated from field: string database_direct_url = 2;
+   */
+  databaseDirectUrl: string;
+
+  /**
+   * The only driver is postgres; the knob remains because deployments set it.
+   *
+   * @generated from field: string database_driver = 3;
+   */
+  databaseDriver: string;
+
+  /**
+   * The connection pool's size. Dev caps both low: its Postgres is shared by
+   * every parallel stack on the machine.
+   *
+   * @generated from field: int32 db_max_open_conns = 4;
+   */
+  dbMaxOpenConns: number;
+
+  /**
+   * @generated from field: int32 db_max_idle_conns = 5;
+   */
+  dbMaxIdleConns: number;
+
+  /**
+   * How long the startup ping keeps retrying a database that is not up yet.
+   * It must stay inside the deployment's startup probe window. Unset:
+   * forge serverkit's default.
+   *
+   * @generated from field: google.protobuf.Duration db_connect_timeout = 6;
+   */
+  dbConnectTimeout?: Duration | undefined;
+
+  /**
+   * How long a process that waits for the schema (the worker, the gateway)
+   * waits for the API server or `reliant db migrate up` to apply it.
+   *
+   * @generated from field: int32 db_schema_wait_seconds = 7;
+   */
+  dbSchemaWaitSeconds: number;
 };
 
 /**
- * Describes the message config.v1.DbMigrateUpConfig.
- * Use `create(DbMigrateUpConfigSchema)` to create a new message.
+ * Describes the message config.v1.DatabaseConfig.
+ * Use `create(DatabaseConfigSchema)` to create a new message.
  */
-export const DbMigrateUpConfigSchema: GenMessage<DbMigrateUpConfig> = /*@__PURE__*/
+export const DatabaseConfigSchema: GenMessage<DatabaseConfig> = /*@__PURE__*/
   messageDesc(file_config_v1_db_config, 0);
-
-/**
- * DbMigrateStatusConfig is `reliant db migrate status`'s config.
- *
- * @generated from message config.v1.DbMigrateStatusConfig
- */
-export type DbMigrateStatusConfig = Message<"config.v1.DbMigrateStatusConfig"> & {
-  /**
-   * @generated from field: config.v1.DatabaseConfig database = 1;
-   */
-  database?: DatabaseConfig | undefined;
-};
-
-/**
- * Describes the message config.v1.DbMigrateStatusConfig.
- * Use `create(DbMigrateStatusConfigSchema)` to create a new message.
- */
-export const DbMigrateStatusConfigSchema: GenMessage<DbMigrateStatusConfig> = /*@__PURE__*/
-  messageDesc(file_config_v1_db_config, 1);
-
-/**
- * DbMigrateForceConfig is `reliant db migrate force`'s config.
- *
- * @generated from message config.v1.DbMigrateForceConfig
- */
-export type DbMigrateForceConfig = Message<"config.v1.DbMigrateForceConfig"> & {
-  /**
-   * @generated from field: config.v1.DatabaseConfig database = 1;
-   */
-  database?: DatabaseConfig | undefined;
-};
-
-/**
- * Describes the message config.v1.DbMigrateForceConfig.
- * Use `create(DbMigrateForceConfigSchema)` to create a new message.
- */
-export const DbMigrateForceConfigSchema: GenMessage<DbMigrateForceConfig> = /*@__PURE__*/
-  messageDesc(file_config_v1_db_config, 2);
 

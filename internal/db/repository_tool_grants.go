@@ -5,15 +5,13 @@ import (
 	"context"
 	"fmt"
 
-	pgdb "github.com/reliant-labs/reliant/internal/db/postgres/generated"
+	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
-// ToolGrant is what one recorded tool result granted its thread. See
-// ListToolGrants.
-type ToolGrant struct {
-	ThreadID string
-	Tools    []string
-}
+// ToolGrant is what one recorded tool result granted its thread
+// (core.ToolGrant).
+type ToolGrant = core.ToolGrant
 
 // ListToolGrants returns every grant a tool result in chatID recorded, one
 // entry per result, ordered by thread. A load_tool result records its grants
@@ -25,16 +23,5 @@ func (r *Repo) ListToolGrants(ctx context.Context, chatID string) ([]*ToolGrant,
 	if chatID == "" {
 		return nil, fmt.Errorf("chat ID cannot be empty")
 	}
-	if r.DB == nil {
-		return nil, fmt.Errorf("repository has no database connection")
-	}
-	rows, err := pgdb.New(r.DB.DB(ctx)).ListToolGrantsForChat(ctx, chatID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list tool grants: %w", err)
-	}
-	grants := make([]*ToolGrant, 0, len(rows))
-	for _, row := range rows {
-		grants = append(grants, &ToolGrant{ThreadID: row.ThreadID, Tools: row.GrantedTools})
-	}
-	return grants, nil
+	return store.ListToolGrants(ctx, r.ORM(), chatID)
 }

@@ -1,0 +1,73 @@
+# yaml-language-server: $schema=../../../manifest/schema/action.schema.json
+id: users.search
+display_name: Search GitHub users
+summary: Find GitHub accounts by login or name.
+description: >-
+  Search GitHub user accounts with GitHub's search syntax (a login prefix or a
+  name). Returns each account's numeric id, which is what to store: a login can
+  be renamed and then claimed by someone else, the id never is. Returns one
+  page; ask for the next with page. GitHub allows about thirty searches a
+  minute.
+keywords: [user, users, account, people, search, login, picker]
+placement: server
+mutates: false
+params:
+  type: object
+  additionalProperties: false
+  required: [q]
+  properties:
+    q:
+      type: string
+      minLength: 1
+      maxLength: 256
+      title: Search
+      description: A login or name, optionally with GitHub qualifiers (type:user, in:login, in:name).
+      examples: [octo]
+    per_page:
+      type: integer
+      minimum: 1
+      maximum: 100
+      default: 20
+      title: Results per page
+      description: How many results to return, 1 to 100.
+      examples: [20]
+    page:
+      type: integer
+      minimum: 1
+      default: 1
+      title: Page
+      description: Which page of results, from 1.
+      examples: [2]
+    connection: { $ref: ../schemas/connection.yaml }
+request:
+  method: GET
+  path: /search/users
+  query:
+    q: "{{ params.q }}"
+    per_page: "{{ params.per_page }}"
+    page: "{{ params.page }}"
+  errors: { $ref: ../schemas/github_errors.yaml }
+output:
+  select: >-
+    {"total_count": response.total_count,
+     "incomplete_results": response.?incomplete_results.orValue(false),
+     "items": response.items.map(u, {"id": u.id,
+                                     "login": u.login,
+                                     "type": u.?type.orValue(null),
+                                     "html_url": u.?html_url.orValue(null),
+                                     "avatar_url": u.?avatar_url.orValue(null)})}
+  schema:
+    type: object
+    properties:
+      total_count: { type: integer }
+      incomplete_results: { type: boolean }
+      items:
+        type: array
+        items:
+          type: object
+          properties:
+            id: { type: integer }
+            login: { type: string }
+            type: { type: [string, "null"], description: User, Organization or Bot. }
+            html_url: { type: [string, "null"] }
+            avatar_url: { type: [string, "null"] }

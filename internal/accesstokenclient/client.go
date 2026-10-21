@@ -13,6 +13,7 @@ import (
 	"time"
 
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
+	"github.com/reliant-labs/forge/pkg/observe"
 
 	"github.com/reliant-labs/reliant/internal/auth"
 )
@@ -43,7 +44,7 @@ type Client struct {
 func New(deps Deps) Service {
 	httpClient := deps.HTTPClient
 	if httpClient == nil {
-		httpClient = &http.Client{Timeout: 10 * time.Second}
+		httpClient = observe.NewHTTPClient(observe.HTTPClientOptions{Timeout: 10 * time.Second})
 	}
 	return &Client{
 		baseURL: strings.TrimRight(strings.TrimSpace(deps.BaseURL), "/"),

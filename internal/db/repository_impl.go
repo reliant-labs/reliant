@@ -13,11 +13,13 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/reliant-labs/forge/pkg/orm"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
-	postgresstore "github.com/reliant-labs/reliant/internal/db/postgres"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/store"
+	"github.com/reliant-labs/reliant/internal/workflow/model"
 )
 
 // Ensure *Repo implements Repository interface at compile time
@@ -29,7 +31,7 @@ func (r *Repo) CreateChat(ctx context.Context, chat *Chat) error {
 	if chat == nil {
 		return fmt.Errorf("chat cannot be nil")
 	}
-	return r.chats.CreateChat(ctx, chat)
+	return store.InsertChat(ctx, r.ORM(), chat)
 }
 
 func (r *Repo) GetChat(ctx context.Context, id string) (*Chat, error) {
@@ -37,7 +39,7 @@ func (r *Repo) GetChat(ctx context.Context, id string) (*Chat, error) {
 		return nil, fmt.Errorf("chat ID cannot be empty")
 	}
 
-	return r.chats.GetChat(ctx, id)
+	return store.GetChat(ctx, r.ORM(), id)
 }
 
 func (r *Repo) GetChatWithUserCheck(ctx context.Context, id string, userID string) (*Chat, error) {
@@ -48,15 +50,15 @@ func (r *Repo) GetChatWithUserCheck(ctx context.Context, id string, userID strin
 		return nil, fmt.Errorf("user ID cannot be empty")
 	}
 
-	return r.chats.GetChatWithUserCheck(ctx, id, userID)
+	return store.GetChatWithUserCheck(ctx, r.ORM(), id, userID)
 }
 
 func (r *Repo) ListChats(ctx context.Context, filters ChatFilters) ([]*Chat, error) {
-	return r.chats.ListChats(ctx, filters)
+	return store.ListChats(ctx, r.ORM(), filters)
 }
 
 func (r *Repo) SearchChats(ctx context.Context, filters ChatSearchFilters) ([]*Chat, error) {
-	return r.chats.SearchChats(ctx, filters)
+	return store.SearchChats(ctx, r.ORM(), filters)
 }
 
 func (r *Repo) UpdateChat(ctx context.Context, chat *Chat) error {
@@ -66,26 +68,26 @@ func (r *Repo) UpdateChat(ctx context.Context, chat *Chat) error {
 	if chat.ID == "" {
 		return fmt.Errorf("chat ID cannot be empty")
 	}
-	return r.chats.UpdateChat(ctx, chat)
+	return store.SaveChat(ctx, r.ORM(), chat)
 }
 
 func (r *Repo) DeleteChat(ctx context.Context, id string) error {
 	if id == "" {
 		return fmt.Errorf("chat ID cannot be empty")
 	}
-	return r.chats.DeleteChat(ctx, id)
+	return store.RemoveChat(ctx, r.ORM(), id)
 }
 
 func (r *Repo) ListArchivedChats(ctx context.Context, userID string) ([]*ArchivedChatInfo, error) {
-	return r.chats.ListArchivedChats(ctx, userID)
+	return store.ListArchivedChats(ctx, r.ORM(), userID)
 }
 
 func (r *Repo) ListRuns(ctx context.Context, filters RunListFilters) ([]*RunListItem, bool, error) {
-	return r.runs.ListRuns(ctx, filters)
+	return store.ListRuns(ctx, r.ORM(), filters)
 }
 
 func (r *Repo) LastRunPerWorkflow(ctx context.Context, filters RunListFilters) ([]*RunListItem, error) {
-	return r.runs.LastRunPerWorkflow(ctx, filters)
+	return store.LastRunPerWorkflow(ctx, r.ORM(), filters)
 }
 
 // ==================== Messages ====================
@@ -110,7 +112,7 @@ func (r *Repo) CreateMessage(ctx context.Context, msg *Message) error {
 	if msg.ChatID == "" {
 		return fmt.Errorf("message ChatID cannot be empty")
 	}
-	return r.messages.CreateMessage(ctx, msg)
+	return store.InsertMessage(ctx, r.ORM(), msg)
 }
 
 // CreateMessageIfNotExists creates a message record if it doesn't already exist (INSERT OR IGNORE).
@@ -127,7 +129,8 @@ func (r *Repo) CreateMessageIfNotExists(ctx context.Context, msg *Message) error
 	if msg.ChatID == "" {
 		return fmt.Errorf("message ChatID cannot be empty")
 	}
-	return r.messages.CreateMessageIfNotExists(ctx, msg)
+	_, err := store.InsertMessageOnce(ctx, r.ORM(), msg)
+	return err
 }
 
 // CreateMessageOnce creates a message record unless a row already holds its id,
@@ -146,7 +149,7 @@ func (r *Repo) CreateMessageOnce(ctx context.Context, msg *Message) (bool, error
 	if msg.ChatID == "" {
 		return false, fmt.Errorf("message ChatID cannot be empty")
 	}
-	return r.messages.CreateMessageOnce(ctx, msg)
+	return store.InsertMessageOnce(ctx, r.ORM(), msg)
 }
 
 // SaveMessageToThread atomically creates a message with text and optional image content blocks.
@@ -459,7 +462,14 @@ func (r *Repo) GetMessage(ctx context.Context, id string) (*Message, error) {
 	if id == "" {
 		return nil, fmt.Errorf("message ID cannot be empty")
 	}
-	return r.messages.GetMessage(ctx, id)
+	msg, err := store.FindMessage(ctx, r.ORM(), id)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get message: %w", err)
+	}
+	if msg == nil {
+		return nil, fmt.Errorf("message not found: %s", id)
+	}
+	return msg, nil
 }
 
 func (r *Repo) GetNextOrdinal(ctx context.Context, threadID string) (int64, error) {
@@ -470,7 +480,7 @@ func (r *Repo) GetNextOrdinal(ctx context.Context, threadID string) (int64, erro
 	// Get the next ordinal from messages in this thread (all context windows)
 	// NOTE: For workflow forks, each workflow has its own ordinal space.
 	// Context inheritance is handled separately at LLM context resolution time.
-	return r.messages.GetNextOrdinal(ctx, threadID)
+	return store.NextOrdinalInThread(ctx, r.ORM(), threadID)
 }
 
 // GetNextSeq returns the next chat-global seq for a chat. See
@@ -480,7 +490,7 @@ func (r *Repo) GetNextSeq(ctx context.Context, chatID, threadID string) (int64, 
 	if chatID == "" {
 		return 0, fmt.Errorf("chat ID cannot be empty")
 	}
-	return r.messages.GetNextSeq(ctx, chatID, threadID)
+	return store.NextSeqInChat(ctx, r.ORM(), chatID, threadID)
 }
 
 func (r *Repo) ListMessages(ctx context.Context, chatID string, opts MessageListOptions) ([]*Message, error) {
@@ -488,17 +498,7 @@ func (r *Repo) ListMessages(ctx context.Context, chatID string, opts MessageList
 		return nil, fmt.Errorf("chat ID cannot be empty")
 	}
 
-	return r.messages.ListMessages(ctx, chatID, opts, func(ctx context.Context, threadID string) ([]string, error) {
-		contextWindows, err := r.ListContextWindowsByThread(ctx, threadID)
-		if err != nil {
-			return nil, err
-		}
-		ids := make([]string, len(contextWindows))
-		for i, cw := range contextWindows {
-			ids[i] = cw.ID
-		}
-		return ids, nil
-	})
+	return store.ListMessages(ctx, r.ORM(), chatID, opts)
 }
 
 func (r *Repo) ListRecentTranscriptSiblingMessages(ctx context.Context, chatID, mainThreadID string, fromSeq int64, limit int) ([]*Message, error) {
@@ -509,7 +509,7 @@ func (r *Repo) ListRecentTranscriptSiblingMessages(ctx context.Context, chatID, 
 		return nil, fmt.Errorf("main thread ID cannot be empty")
 	}
 
-	return r.messages.ListRecentTranscriptSiblingMessages(ctx, chatID, mainThreadID, fromSeq, limit)
+	return store.ListRecentTranscriptSiblingMessages(ctx, r.ORM(), chatID, mainThreadID, fromSeq, limit)
 }
 
 func (r *Repo) CountMessagesInChat(ctx context.Context, chatID string) (int, error) {
@@ -517,7 +517,7 @@ func (r *Repo) CountMessagesInChat(ctx context.Context, chatID string) (int, err
 		return 0, fmt.Errorf("chat ID cannot be empty")
 	}
 
-	return r.messages.CountMessagesInChat(ctx, chatID)
+	return r.countMessages(ctx, orm.WhereEq(store.MessageFieldChatID, chatID))
 }
 
 func (r *Repo) CountMessagesByContextWindow(ctx context.Context, contextWindowID string) (int, error) {
@@ -525,7 +525,7 @@ func (r *Repo) CountMessagesByContextWindow(ctx context.Context, contextWindowID
 		return 0, fmt.Errorf("context window ID cannot be empty")
 	}
 
-	return r.messages.CountMessagesByContextWindow(ctx, contextWindowID)
+	return r.countMessages(ctx, orm.WhereEq(store.MessageFieldContextWindowID, contextWindowID))
 }
 
 func (r *Repo) CountMessagesByContextWindowUpToSeq(ctx context.Context, contextWindowID string, maxSeq int64) (int, error) {
@@ -533,7 +533,7 @@ func (r *Repo) CountMessagesByContextWindowUpToSeq(ctx context.Context, contextW
 		return 0, fmt.Errorf("context window ID cannot be empty")
 	}
 
-	return r.messages.CountMessagesByContextWindowUpToSeq(ctx, contextWindowID, maxSeq)
+	return r.countMessages(ctx, orm.WhereEq(store.MessageFieldContextWindowID, contextWindowID), orm.WhereLte(store.MessageFieldSeq, maxSeq))
 }
 
 func (r *Repo) ListRecentMessagesInContextWindowBeforeSeq(ctx context.Context, contextWindowID string, beforeSeq int64, limit int) ([]*Message, error) {
@@ -541,7 +541,7 @@ func (r *Repo) ListRecentMessagesInContextWindowBeforeSeq(ctx context.Context, c
 		return nil, fmt.Errorf("context window ID cannot be empty")
 	}
 
-	return r.messages.ListRecentMessagesInContextWindowBeforeSeq(ctx, contextWindowID, beforeSeq, limit)
+	return store.ListRecentMessagesInContextWindowBeforeSeq(ctx, r.ORM(), contextWindowID, beforeSeq, limit)
 }
 
 func (r *Repo) HasMessagesBeforeInContextWindow(ctx context.Context, contextWindowID string, beforeSeq int64) (bool, error) {
@@ -549,7 +549,7 @@ func (r *Repo) HasMessagesBeforeInContextWindow(ctx context.Context, contextWind
 		return false, fmt.Errorf("context window ID cannot be empty")
 	}
 
-	return r.messages.HasMessagesBeforeInContextWindow(ctx, contextWindowID, beforeSeq)
+	return store.HasMessagesBeforeInContextWindow(ctx, r.ORM(), contextWindowID, beforeSeq)
 }
 
 func (r *Repo) ListMessagesInContextWindowRange(ctx context.Context, contextWindowID string, fromSeq int64, toSeq *int64) ([]*Message, error) {
@@ -557,7 +557,7 @@ func (r *Repo) ListMessagesInContextWindowRange(ctx context.Context, contextWind
 		return nil, fmt.Errorf("context window ID cannot be empty")
 	}
 
-	return r.messages.ListMessagesInContextWindowRange(ctx, contextWindowID, fromSeq, toSeq)
+	return store.ListMessagesInContextWindowRange(ctx, r.ORM(), contextWindowID, fromSeq, toSeq)
 }
 
 func (r *Repo) GetLatestMessageInThread(ctx context.Context, threadID string) (*Message, error) {
@@ -565,14 +565,18 @@ func (r *Repo) GetLatestMessageInThread(ctx context.Context, threadID string) (*
 		return nil, fmt.Errorf("thread ID cannot be empty")
 	}
 
-	return r.messages.GetLatestMessageInThread(ctx, threadID)
+	return store.LatestMessageInThread(ctx, r.ORM(), threadID)
 }
 
 func (r *Repo) ThreadAwaitsReply(ctx context.Context, threadID string) (bool, error) {
 	if threadID == "" {
 		return false, fmt.Errorf("thread ID cannot be empty")
 	}
-	return r.messages.ThreadAwaitsReply(ctx, threadID)
+	turn, err := store.LatestTurnInThread(ctx, r.ORM(), threadID)
+	if err != nil {
+		return false, fmt.Errorf("failed to get latest turn: %w", err)
+	}
+	return turn != nil && turn.Role == reliantv1.MessageRole_MESSAGE_ROLE_USER, nil
 }
 
 func (r *Repo) GetMaxContextSequenceInThread(ctx context.Context, threadID string) (int, error) {
@@ -580,7 +584,7 @@ func (r *Repo) GetMaxContextSequenceInThread(ctx context.Context, threadID strin
 		return 0, fmt.Errorf("thread ID cannot be empty")
 	}
 
-	maxSeq, err := r.messages.GetLatestContextSequenceByThread(ctx, threadID)
+	maxSeq, err := r.GetMaxSequenceForThread(ctx, threadID)
 	if err != nil {
 		return 0, fmt.Errorf("failed to get max context sequence: %w", err)
 	}
@@ -630,7 +634,7 @@ func (r *Repo) GetLatestMessageWithTokensInThread(ctx context.Context, threadID 
 		return nil, fmt.Errorf("thread ID cannot be empty")
 	}
 
-	return r.messages.GetLatestMessageWithTokensInThread(ctx, threadID, contextSequence)
+	return store.LatestMessageWithTokens(ctx, r.ORM(), threadID, int64(contextSequence), nil)
 }
 
 func (r *Repo) CountMessagesInThread(ctx context.Context, threadID string) (int, error) {
@@ -638,7 +642,7 @@ func (r *Repo) CountMessagesInThread(ctx context.Context, threadID string) (int,
 		return 0, fmt.Errorf("thread ID cannot be empty")
 	}
 
-	return r.messages.CountMessagesInThread(ctx, threadID)
+	return r.countMessages(ctx, orm.WhereEq(store.MessageFieldThreadID, threadID))
 }
 
 // GetMessagesByContextWindow loads messages from a specific context window.
@@ -700,8 +704,7 @@ func (r *Repo) CreateContentBlock(ctx context.Context, block *MessageContentBloc
 	if block.MessageID == "" {
 		return fmt.Errorf("content block MessageID cannot be empty")
 	}
-	normalizeContentBlock(block)
-	return r.messages.CreateContentBlock(ctx, block)
+	return store.InsertContentBlock(ctx, r.ORM(), block)
 }
 
 func (r *Repo) CreateContentBlockIfNotExists(ctx context.Context, block *MessageContentBlock) error {
@@ -714,15 +717,21 @@ func (r *Repo) CreateContentBlockIfNotExists(ctx context.Context, block *Message
 	if block.MessageID == "" {
 		return fmt.Errorf("content block MessageID cannot be empty")
 	}
-	normalizeContentBlock(block)
-	return r.messages.CreateContentBlockIfNotExists(ctx, block)
+	return store.InsertContentBlockOnce(ctx, r.ORM(), block)
 }
 
 func (r *Repo) GetContentBlock(ctx context.Context, id string) (*MessageContentBlock, error) {
 	if id == "" {
 		return nil, fmt.Errorf("content block ID cannot be empty")
 	}
-	return r.messages.GetContentBlock(ctx, id)
+	block, err := store.FindContentBlock(ctx, r.ORM(), id)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get content block: %w", err)
+	}
+	if block == nil {
+		return nil, fmt.Errorf("content block not found: %s", id)
+	}
+	return block, nil
 }
 
 // GetContentBlockByToolCallID finds a content block by its tool_call_id
@@ -731,69 +740,28 @@ func (r *Repo) GetContentBlockByToolCallID(ctx context.Context, toolCallID strin
 	if toolCallID == "" {
 		return nil, fmt.Errorf("tool call ID cannot be empty")
 	}
-
-	// Query for tool_call block with the given tool_call_id
-	query := `SELECT id, message_id, position, block_type, content, tool_name, tool_input,
-	                 tool_call_id, is_error, version, created_at, updated_at
-	          FROM message_content_blocks
-	          WHERE tool_call_id = ? AND block_type = ?
-	          LIMIT 1`
-	query = r.bindQuery(query)
-	toolCallBlockType := int32(reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TOOL_CALL)
-
-	var block MessageContentBlock
-	var content, toolName, toolInput, toolCallIDResult *string
-	var isError *bool
-	var version *int64
-
-	err := r.DB.QueryRowContext(ctx, query, toolCallID, toolCallBlockType).Scan(
-		&block.ID,
-		&block.MessageID,
-		&block.Position,
-		&block.BlockType,
-		&content,
-		&toolName,
-		&toolInput,
-		&toolCallIDResult,
-		&isError,
-		&version,
-		&block.CreatedAt,
-		&block.UpdatedAt,
-	)
-
+	block, err := store.FindToolBlock(ctx, r.ORM(), toolCallID, reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TOOL_CALL)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("tool call not found: %s", toolCallID)
-		}
 		return nil, fmt.Errorf("failed to get content block by tool_call_id: %w", err)
 	}
-
-	// Assign nullable fields
-	block.Content = content
-	block.ToolName = toolName
-	block.ToolInput = toolInput
-	block.ToolCallID = toolCallIDResult
-	block.IsError = isError
-	if version != nil {
-		intVer := int(*version)
-		block.Version = &intVer
+	if block == nil {
+		return nil, fmt.Errorf("tool call not found: %s", toolCallID)
 	}
-
-	return &block, nil
+	return block, nil
 }
 
 func (r *Repo) ListContentBlocks(ctx context.Context, messageID string) ([]*MessageContentBlock, error) {
 	if messageID == "" {
 		return nil, fmt.Errorf("message ID cannot be empty")
 	}
-	return r.messages.ListContentBlocks(ctx, messageID)
+	return store.ListContentBlocks(ctx, r.ORM(), messageID)
 }
 
 func (r *Repo) ListContentBlocksForMessages(ctx context.Context, messageIDs []string) ([]*MessageContentBlock, error) {
 	if len(messageIDs) == 0 {
 		return []*MessageContentBlock{}, nil
 	}
-	return r.messages.ListContentBlocksForMessages(ctx, messageIDs)
+	return store.ListContentBlocksForMessages(ctx, r.ORM(), messageIDs)
 }
 
 func (r *Repo) UpdateContentBlock(ctx context.Context, block *MessageContentBlock) error {
@@ -803,21 +771,14 @@ func (r *Repo) UpdateContentBlock(ctx context.Context, block *MessageContentBloc
 	if block.ID == "" {
 		return fmt.Errorf("content block ID cannot be empty")
 	}
-	normalizeContentBlock(block)
-
-	return r.messages.UpdateContentBlock(ctx, block)
+	return store.UpdateContentBlockBody(ctx, r.ORM(), block)
 }
 
 func (r *Repo) AppendToContentBlock(ctx context.Context, blockID string, delta string) error {
 	if blockID == "" {
 		return fmt.Errorf("content block ID cannot be empty")
 	}
-	delta = validUTF8(delta)
-	if delta == "" {
-		return nil
-	}
-
-	return r.messages.AppendToContentBlock(ctx, blockID, delta)
+	return store.AppendToContentBlock(ctx, r.ORM(), blockID, delta)
 }
 
 // AppendContentBlockDelta appends text delta to a content block's content field
@@ -828,18 +789,7 @@ func (r *Repo) AppendContentBlockDelta(ctx context.Context, chatID string, block
 	if blockID == "" {
 		return fmt.Errorf("content block ID cannot be empty")
 	}
-	delta = validUTF8(delta)
-	if delta == "" {
-		return nil // Nothing to append
-	}
-
-	query := `UPDATE message_content_blocks
-		SET content = COALESCE(content, '') || ?,
-		    updated_at = CURRENT_TIMESTAMP
-		WHERE id = ?`
-	query = r.bindQuery(query)
-	_, err := r.DB.ExecContext(ctx, query, delta, blockID)
-	return err
+	return store.AppendContentDelta(ctx, r.ORM(), blockID, delta)
 }
 
 // AppendToolInputDelta appends JSON delta to a content block's tool_input field
@@ -850,18 +800,7 @@ func (r *Repo) AppendToolInputDelta(ctx context.Context, chatID string, blockID 
 	if blockID == "" {
 		return fmt.Errorf("content block ID cannot be empty")
 	}
-	delta = validUTF8(delta)
-	if delta == "" {
-		return nil // Nothing to append
-	}
-
-	query := `UPDATE message_content_blocks
-		SET tool_input = COALESCE(tool_input, '') || ?,
-		    updated_at = CURRENT_TIMESTAMP
-		WHERE id = ?`
-	query = r.bindQuery(query)
-	_, err := r.DB.ExecContext(ctx, query, delta, blockID)
-	return err
+	return store.AppendToolInputDelta(ctx, r.ORM(), blockID, delta)
 }
 
 // UpdateMessage updates a message (implements Repository interface)
@@ -873,7 +812,7 @@ func (r *Repo) UpdateMessage(ctx context.Context, msg *Message) error {
 		return fmt.Errorf("message ID cannot be empty")
 	}
 
-	return r.messages.UpdateMessage(ctx, msg)
+	return store.UpdateMessageUsage(ctx, r.ORM(), msg.ID, msg.TokenCount, msg.Cost)
 }
 
 // UpdateMessageFields updates a message with the provided map of field updates
@@ -881,29 +820,7 @@ func (r *Repo) UpdateMessageFields(ctx context.Context, messageID string, update
 	if messageID == "" {
 		return fmt.Errorf("message ID cannot be empty")
 	}
-	if len(updates) == 0 {
-		return nil // Nothing to update
-	}
-
-	// Build dynamic UPDATE query
-	setClauses := []string{}
-	args := []interface{}{}
-
-	for field, value := range updates {
-		setClauses = append(setClauses, field+" = ?")
-		args = append(args, value)
-	}
-
-	// Always update the updated_at timestamp so WebSocket polling detects the change
-	setClauses = append(setClauses, "updated_at = CURRENT_TIMESTAMP")
-
-	// Add messageID as final parameter
-	args = append(args, messageID)
-
-	query := `UPDATE messages SET ` + strings.Join(setClauses, ", ") + ` WHERE id = ?`
-	query = r.bindQuery(query)
-	_, err := r.DB.ExecContext(ctx, query, args...)
-	return err
+	return store.UpdateMessageFields(ctx, r.ORM(), messageID, updates)
 }
 
 // MarkMessageBlocksComplete marks all content blocks for a message as complete
@@ -914,26 +831,15 @@ func (r *Repo) MarkMessageBlocksComplete(ctx context.Context, messageID string) 
 		return fmt.Errorf("message ID cannot be empty")
 	}
 
-	now := time.Now().UTC()
-	query := `
-		UPDATE message_content_blocks
-		SET updated_at = ?
-		WHERE message_id = ?
-	`
-	query = r.bindQuery(query)
-
-	result, err := r.DB.ExecContext(ctx, query, now, messageID)
+	blocks, err := store.TouchMessageBlocks(ctx, r.ORM(), messageID)
 	if err != nil {
 		return fmt.Errorf("failed to mark blocks complete: %w", err)
 	}
-
-	rowsAffected, err := result.RowsAffected()
-	if err == nil && rowsAffected > 0 {
+	if blocks > 0 {
 		logging.DebugContext(ctx, "Marked message blocks as complete",
 			"messageID", messageID,
-			"blocksUpdated", rowsAffected)
+			"blocksUpdated", blocks)
 	}
-
 	return nil
 }
 
@@ -942,18 +848,14 @@ func (r *Repo) DeleteMessage(ctx context.Context, messageID string) error {
 	if messageID == "" {
 		return fmt.Errorf("message ID cannot be empty")
 	}
-
-	query := `DELETE FROM messages WHERE id = ?`
-	query = r.bindQuery(query)
-	_, err := r.DB.ExecContext(ctx, query, messageID)
-	return err
+	return store.RemoveMessage(ctx, r.ORM(), messageID)
 }
 
 // ==================== Approval Methods ====================
 
 // CreateApproval creates a new approval record and emits an activity event if the activity changed.
 func (r *Repo) CreateApproval(ctx context.Context, approval *Approval) error {
-	if err := r.approvals.CreateApproval(ctx, approval); err != nil {
+	if err := store.CreateApprovalIfAbsent(ctx, r.ORM(), approval); err != nil {
 		return err
 	}
 	// Activity may have changed from RUNNING → AWAITING_INPUT
@@ -962,22 +864,22 @@ func (r *Repo) CreateApproval(ctx context.Context, approval *Approval) error {
 
 // GetApproval retrieves an approval by ID
 func (r *Repo) GetApproval(ctx context.Context, id string) (*Approval, error) {
-	return r.approvals.GetApproval(ctx, id)
+	return store.GetApproval(ctx, r.ORM(), id)
 }
 
 // GetApprovalByEntityID retrieves an approval by its entity_id
 func (r *Repo) GetApprovalByEntityID(ctx context.Context, entityID string) (*Approval, error) {
-	return r.approvals.GetApprovalByEntityID(ctx, entityID)
+	return store.GetApprovalByEntityID(ctx, r.ORM(), entityID)
 }
 
 // ListPendingApprovalsByChat retrieves all pending approvals for a chat
 func (r *Repo) ListPendingApprovalsByChat(ctx context.Context, chatID string) ([]*Approval, error) {
-	return r.approvals.ListPendingApprovalsByChat(ctx, chatID)
+	return store.ListPendingApprovalsByChat(ctx, r.ORM(), chatID)
 }
 
 // ListApprovalsByChat retrieves all approvals for a chat (including resolved)
 func (r *Repo) ListApprovalsByChat(ctx context.Context, chatID string) ([]*Approval, error) {
-	return r.approvals.ListApprovalsByChat(ctx, chatID)
+	return store.ListApprovalsByChat(ctx, r.ORM(), chatID)
 }
 
 // UpdateApprovalStatus updates the status of an approval and emits an activity event if the activity changed.
@@ -988,7 +890,7 @@ func (r *Repo) UpdateApprovalStatus(ctx context.Context, id string, status int32
 		resolvedAt = &now
 	}
 
-	if err := r.approvals.UpdateApprovalStatus(ctx, id, status, denialReason, actionTaken, metadata, resolvedAt); err != nil {
+	if err := store.UpdateApprovalStatus(ctx, r.ORM(), id, status, denialReason, actionTaken, metadata, resolvedAt); err != nil {
 		return err
 	}
 
@@ -1019,7 +921,7 @@ func (r *Repo) CreateProject(ctx context.Context, project *Project) error {
 		return fmt.Errorf("project path cannot be empty")
 	}
 
-	return r.projects.CreateProject(ctx, project)
+	return store.InsertProject(ctx, r.ORM(), project)
 }
 
 func (r *Repo) GetProject(ctx context.Context, id string) (*Project, error) {
@@ -1027,7 +929,7 @@ func (r *Repo) GetProject(ctx context.Context, id string) (*Project, error) {
 		return nil, fmt.Errorf("project ID cannot be empty")
 	}
 
-	return r.projects.GetProject(ctx, id)
+	return store.GetProject(ctx, r.ORM(), id)
 }
 
 func (r *Repo) GetProjectByPath(ctx context.Context, path string) (*Project, error) {
@@ -1035,7 +937,7 @@ func (r *Repo) GetProjectByPath(ctx context.Context, path string) (*Project, err
 		return nil, fmt.Errorf("project path cannot be empty")
 	}
 
-	return r.projects.GetProjectByPath(ctx, path)
+	return store.GetProjectByPath(ctx, r.ORM(), path)
 }
 
 func (r *Repo) GetProjectByPathAndUser(ctx context.Context, path, userID string) (*Project, error) {
@@ -1046,7 +948,7 @@ func (r *Repo) GetProjectByPathAndUser(ctx context.Context, path, userID string)
 		return nil, fmt.Errorf("user ID cannot be empty")
 	}
 
-	return r.projects.GetProjectByPathAndUser(ctx, path, userID)
+	return store.GetProjectByPathAndUser(ctx, r.ORM(), path, userID)
 }
 
 func (r *Repo) GetProjectByRemoteURLAndUser(ctx context.Context, remoteURL, userID string) (*Project, error) {
@@ -1057,7 +959,7 @@ func (r *Repo) GetProjectByRemoteURLAndUser(ctx context.Context, remoteURL, user
 		return nil, fmt.Errorf("user ID cannot be empty")
 	}
 
-	return r.projects.GetProjectByRemoteURLAndUser(ctx, remoteURL, userID)
+	return store.GetProjectByRemoteURLAndUser(ctx, r.ORM(), remoteURL, userID)
 }
 
 func (r *Repo) GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*Project, error) {
@@ -1068,11 +970,11 @@ func (r *Repo) GetProjectWithUserCheck(ctx context.Context, id string, userID st
 		return nil, fmt.Errorf("user ID cannot be empty")
 	}
 
-	return r.projects.GetProjectWithUserCheck(ctx, id, userID)
+	return store.GetProjectWithUserCheck(ctx, r.ORM(), id, userID)
 }
 
 func (r *Repo) ListProjects(ctx context.Context, filters ProjectFilters) ([]*Project, error) {
-	return r.projects.ListProjects(ctx, filters)
+	return store.ListProjects(ctx, r.ORM(), filters)
 }
 
 func (r *Repo) UpdateProject(ctx context.Context, project *Project, userID string) error {
@@ -1083,7 +985,7 @@ func (r *Repo) UpdateProject(ctx context.Context, project *Project, userID strin
 		return fmt.Errorf("project ID cannot be empty")
 	}
 
-	return r.projects.UpdateProject(ctx, project, userID)
+	return store.ReplaceProject(ctx, r.ORM(), project, userID)
 }
 
 func (r *Repo) SetProjectForgeName(ctx context.Context, id, userID, forgeProjectName string) (bool, error) {
@@ -1093,20 +995,20 @@ func (r *Repo) SetProjectForgeName(ctx context.Context, id, userID, forgeProject
 	if strings.TrimSpace(forgeProjectName) == "" {
 		return false, fmt.Errorf("forge project name cannot be empty")
 	}
-	return r.projects.SetProjectForgeName(ctx, id, userID, forgeProjectName)
+	return store.SetProjectForgeName(ctx, r.ORM(), id, userID, forgeProjectName)
 }
 func (r *Repo) TouchProject(ctx context.Context, id string, userID string) error {
 	if id == "" {
 		return fmt.Errorf("project ID cannot be empty")
 	}
-	return r.projects.TouchProject(ctx, id, userID)
+	return store.TouchProject(ctx, r.ORM(), id, userID)
 }
 
 func (r *Repo) DeleteProject(ctx context.Context, id string, userID string) error {
 	if id == "" {
 		return fmt.Errorf("project ID cannot be empty")
 	}
-	return r.projects.DeleteProject(ctx, id, userID)
+	return store.DeleteUserProject(ctx, r.ORM(), id, userID)
 }
 
 // =============================================================================
@@ -1123,7 +1025,7 @@ func (r *Repo) UpsertProjectDaemon(ctx context.Context, projectID, daemonID, pat
 	if path == "" {
 		return fmt.Errorf("path cannot be empty")
 	}
-	return r.projects.UpsertProjectDaemon(ctx, projectID, daemonID, path, defaultBranch)
+	return store.RecordProjectDaemonInstalled(ctx, r.ORM(), projectID, daemonID, path, defaultBranch)
 }
 
 // UpsertQueuedProjectDaemon records a clone that is queued but has not run.
@@ -1142,7 +1044,7 @@ func (r *Repo) UpsertQueuedProjectDaemon(ctx context.Context, projectID, daemonI
 		// the project would sit in "installing" forever.
 		return fmt.Errorf("request ID cannot be empty for a queued clone")
 	}
-	return r.projects.UpsertQueuedProjectDaemon(ctx, projectID, daemonID, path, defaultBranch, requestID)
+	return store.RecordProjectDaemonQueued(ctx, r.ORM(), projectID, daemonID, path, defaultBranch, requestID)
 }
 
 // ResolveQueuedProjectDaemon applies the outcome the daemon reported.
@@ -1150,7 +1052,7 @@ func (r *Repo) ResolveQueuedProjectDaemon(ctx context.Context, requestID, instal
 	if requestID == "" {
 		return fmt.Errorf("request ID cannot be empty")
 	}
-	return r.projects.ResolveQueuedProjectDaemon(ctx, requestID, installErr)
+	return store.ResolveQueuedProjectDaemon(ctx, r.ORM(), requestID, installErr)
 }
 
 // MarkProjectDaemonInstalled settles a queued clone from a filesystem
@@ -1159,21 +1061,21 @@ func (r *Repo) MarkProjectDaemonInstalled(ctx context.Context, projectID, daemon
 	if projectID == "" || daemonID == "" {
 		return fmt.Errorf("project ID and daemon ID cannot be empty")
 	}
-	return r.projects.MarkProjectDaemonInstalled(ctx, projectID, daemonID)
+	return store.MarkProjectDaemonInstalled(ctx, r.ORM(), projectID, daemonID)
 }
 
 func (r *Repo) ListProjectDaemonsForProject(ctx context.Context, projectID string) ([]*core.ProjectDaemon, error) {
 	if projectID == "" {
 		return nil, fmt.Errorf("project ID cannot be empty")
 	}
-	return r.projects.ListProjectDaemonsForProject(ctx, projectID)
+	return store.ListProjectDaemonsForProject(ctx, r.ORM(), projectID)
 }
 
 func (r *Repo) ListProjectDaemonsForDaemon(ctx context.Context, daemonID string) ([]*core.ProjectDaemon, error) {
 	if daemonID == "" {
 		return nil, fmt.Errorf("daemon ID cannot be empty")
 	}
-	return r.projects.ListProjectDaemonsForDaemon(ctx, daemonID)
+	return store.ListProjectDaemonsForDaemon(ctx, r.ORM(), daemonID)
 }
 
 func (r *Repo) DeleteProjectDaemon(ctx context.Context, projectID, daemonID string) error {
@@ -1183,7 +1085,7 @@ func (r *Repo) DeleteProjectDaemon(ctx context.Context, projectID, daemonID stri
 	if daemonID == "" {
 		return fmt.Errorf("daemon ID cannot be empty")
 	}
-	return r.projects.DeleteProjectDaemon(ctx, projectID, daemonID)
+	return store.RemoveProjectDaemon(ctx, r.ORM(), projectID, daemonID)
 }
 
 // ErrDaemonOwnedByAnotherUser is returned when a daemon write names an id whose
@@ -1201,57 +1103,21 @@ func (r *Repo) UpsertDaemon(ctx context.Context, daemon *Daemon) error {
 	if daemon.UserID == "" {
 		return fmt.Errorf("daemon user ID cannot be empty")
 	}
-
 	now := time.Now().UTC()
-	query := `
-		INSERT INTO daemons (
-			id,
-			user_id,
-			hostname,
-			platform,
-			capabilities,
-			project_paths,
-			daemon_type,
-			created_at,
-			updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT(id) DO UPDATE SET
-			hostname = COALESCE(excluded.hostname, daemons.hostname),
-			platform = COALESCE(excluded.platform, daemons.platform),
-			capabilities = COALESCE(excluded.capabilities, daemons.capabilities),
-			project_paths = COALESCE(excluded.project_paths, daemons.project_paths),
-			daemon_type = COALESCE(excluded.daemon_type, daemons.daemon_type),
-			updated_at = excluded.updated_at
-		WHERE daemons.user_id = excluded.user_id
-	`
-	query = r.bindQuery(query)
-
 	createdAt := daemon.CreatedAt
 	if createdAt.IsZero() {
 		createdAt = now
 	}
-
-	res, err := r.DB.ExecContext(ctx, query,
-		daemon.ID,
-		daemon.UserID,
-		daemon.Hostname,
-		daemon.Platform,
-		daemon.Capabilities,
-		daemon.ProjectPaths,
-		daemon.DaemonType,
-		createdAt,
-		now,
-	)
+	wrote, err := store.UpsertDaemonRegistration(ctx, r.ORM(), daemon, createdAt, now)
 	if err != nil {
 		return fmt.Errorf("failed to upsert daemon %s: %w", daemon.ID, err)
 	}
 	// The conflict branch only fires for the row's own owner, so a conflict
 	// against a different owner writes nothing — in a single statement, with
 	// no read-then-write window.
-	if n, nErr := res.RowsAffected(); nErr == nil && n == 0 {
+	if !wrote {
 		return fmt.Errorf("%w: daemon %s", ErrDaemonOwnedByAnotherUser, daemon.ID)
 	}
-
 	return nil
 }
 
@@ -1259,107 +1125,11 @@ func (r *Repo) GetDaemon(ctx context.Context, id string) (*Daemon, error) {
 	if id == "" {
 		return nil, fmt.Errorf("daemon ID cannot be empty")
 	}
-
-	query := `
-		SELECT
-			id,
-			user_id,
-			hostname,
-			platform,
-			capabilities,
-			project_paths,
-			daemon_type,
-			name,
-			created_at,
-			updated_at,
-			lifecycle_phase,
-			size,
-			last_status_message,
-			last_status_changed_at,
-			last_oom_killed_at,
-			oom_kill_count
-		FROM daemons
-		WHERE id = ?
-		LIMIT 1
-	`
-	query = r.bindQuery(query)
-
-	var (
-		daemon       Daemon
-		hostname     sql.NullString
-		platform     sql.NullString
-		capabilities sql.NullString
-		projectPaths sql.NullString
-		daemonType   sql.NullString
-		lifecycle    daemonLifecycleScan
-	)
-
-	err := r.DB.QueryRowContext(ctx, query, id).Scan(
-		&daemon.ID,
-		&daemon.UserID,
-		&hostname,
-		&platform,
-		&capabilities,
-		&projectPaths,
-		&daemonType,
-		&daemon.Name,
-		&daemon.CreatedAt,
-		&daemon.UpdatedAt,
-		&lifecycle.phase,
-		&lifecycle.size,
-		&lifecycle.statusMessage,
-		&lifecycle.statusChangedAt,
-		&lifecycle.oomKilledAt,
-		&lifecycle.oomKillCount,
-	)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, err
-		}
+	d, err := store.GetDaemon(ctx, r.ORM(), id)
+	if err != nil && err != sql.ErrNoRows {
 		return nil, fmt.Errorf("failed to get daemon %s: %w", id, err)
 	}
-
-	daemon.Hostname = nullStringToPtr(hostname)
-	daemon.Platform = nullStringToPtr(platform)
-	daemon.Capabilities = nullStringToPtr(capabilities)
-	daemon.ProjectPaths = nullStringToPtr(projectPaths)
-	daemon.DaemonType = nullStringToPtr(daemonType)
-	lifecycle.applyTo(&daemon)
-
-	return &daemon, nil
-}
-
-// daemonLifecycleScan holds the nullable lifecycle columns during a row scan.
-// It exists so the two daemon SELECTs (GetDaemon and ListDaemonsByUserID)
-// cannot interpret the same six columns differently — the bug that motivated
-// consolidating the daemon list in the first place was two readers of the same
-// concept disagreeing.
-type daemonLifecycleScan struct {
-	phase           sql.NullString
-	size            sql.NullString
-	statusMessage   sql.NullString
-	statusChangedAt sql.NullTime
-	oomKilledAt     sql.NullTime
-	oomKillCount    sql.NullInt32
-}
-
-func (s daemonLifecycleScan) applyTo(d *Daemon) {
-	d.LifecyclePhase = nullStringToPtr(s.phase)
-	d.Size = nullStringToPtr(s.size)
-	if s.statusMessage.Valid {
-		d.LastStatusMessage = s.statusMessage.String
-	}
-	if s.statusChangedAt.Valid {
-		t := s.statusChangedAt.Time
-		d.LastStatusChangedAt = &t
-	}
-	if s.oomKilledAt.Valid {
-		t := s.oomKilledAt.Time
-		d.LastOOMKilledAt = &t
-	}
-	if s.oomKillCount.Valid {
-		d.OOMKillCount = s.oomKillCount.Int32
-	}
+	return d, err
 }
 
 // ApplyDaemonLifecycle mirrors one control-plane lifecycle event onto an
@@ -1372,141 +1142,28 @@ func (s daemonLifecycleScan) applyTo(d *Daemon) {
 // the guard holds across every replica and every retry, not only within one
 // consumer goroutine.
 func (r *Repo) ApplyDaemonLifecycle(ctx context.Context, lc DaemonLifecycleUpdate) (bool, error) {
-	return r.applyDaemonLifecycle(ctx, r.DB, lc)
-}
-
-// applyDaemonLifecycle is ApplyDaemonLifecycle against any executor, so the
-// registry snapshot applies lifecycle with the same guard inside its own
-// transaction.
-func (r *Repo) applyDaemonLifecycle(ctx context.Context, ex execer, lc DaemonLifecycleUpdate) (bool, error) {
 	if lc.DaemonID == "" {
 		return false, fmt.Errorf("daemon ID cannot be empty")
 	}
 	if lc.ChangedAt.IsZero() {
 		return false, fmt.Errorf("lifecycle changed_at cannot be zero")
 	}
-
-	// COALESCE on size/oom: a lifecycle event that omits them is reporting a
-	// phase change, not asserting the machine has no size and has never been
-	// OOM-killed. Phase and status message are authoritative per event.
-	query := `
-		UPDATE daemons
-		SET
-			lifecycle_phase = ?,
-			size = COALESCE(NULLIF(?, ''), size),
-			last_status_message = ?,
-			last_status_changed_at = ?,
-			last_oom_killed_at = COALESCE(?, last_oom_killed_at),
-			oom_kill_count = GREATEST(oom_kill_count, ?),
-			updated_at = CURRENT_TIMESTAMP
-		WHERE id = ?
-		  AND (lifecycle_phase IS NULL OR last_status_changed_at IS NULL OR last_status_changed_at < ?)
-	`
-	query = r.bindQuery(query)
-
-	res, err := ex.ExecContext(ctx, query,
-		lc.Phase,
-		lc.Size,
-		lc.StatusMessage,
-		lc.ChangedAt,
-		lc.LastOOMKilledAt,
-		lc.OOMKillCount,
-		lc.DaemonID,
-		lc.ChangedAt,
-	)
+	applied, err := store.ApplyDaemonLifecycle(ctx, r.ORM(), lc)
 	if err != nil {
 		return false, fmt.Errorf("failed to apply daemon lifecycle for %s: %w", lc.DaemonID, err)
 	}
-	n, err := res.RowsAffected()
-	if err != nil {
-		return false, fmt.Errorf("failed reading lifecycle update result for %s: %w", lc.DaemonID, err)
-	}
-	return n > 0, nil
+	return applied, nil
 }
 
 func (r *Repo) ListDaemonsByUserID(ctx context.Context, userID string) ([]*Daemon, error) {
 	if userID == "" {
 		return nil, fmt.Errorf("user ID cannot be empty")
 	}
-
-	query := `
-		SELECT
-			id,
-			user_id,
-			hostname,
-			platform,
-			capabilities,
-			project_paths,
-			daemon_type,
-			name,
-			created_at,
-			updated_at,
-			lifecycle_phase,
-			size,
-			last_status_message,
-			last_status_changed_at,
-			last_oom_killed_at,
-			oom_kill_count
-		FROM daemons
-		WHERE user_id = ?
-		ORDER BY updated_at DESC
-	`
-	query = r.bindQuery(query)
-
-	rows, err := r.DB.QueryContext(ctx, query, userID)
+	daemons, err := store.ListDaemonsByUserID(ctx, r.ORM(), userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list daemons for user %s: %w", userID, err)
 	}
-	defer rows.Close()
-
-	var result []*Daemon
-	for rows.Next() {
-		var (
-			daemon       Daemon
-			hostname     sql.NullString
-			platform     sql.NullString
-			capabilities sql.NullString
-			projectPaths sql.NullString
-			daemonType   sql.NullString
-			lifecycle    daemonLifecycleScan
-		)
-
-		if err := rows.Scan(
-			&daemon.ID,
-			&daemon.UserID,
-			&hostname,
-			&platform,
-			&capabilities,
-			&projectPaths,
-			&daemonType,
-			&daemon.Name,
-			&daemon.CreatedAt,
-			&daemon.UpdatedAt,
-			&lifecycle.phase,
-			&lifecycle.size,
-			&lifecycle.statusMessage,
-			&lifecycle.statusChangedAt,
-			&lifecycle.oomKilledAt,
-			&lifecycle.oomKillCount,
-		); err != nil {
-			return nil, fmt.Errorf("failed to scan daemon row: %w", err)
-		}
-
-		daemon.Hostname = nullStringToPtr(hostname)
-		daemon.Platform = nullStringToPtr(platform)
-		daemon.Capabilities = nullStringToPtr(capabilities)
-		daemon.ProjectPaths = nullStringToPtr(projectPaths)
-		daemon.DaemonType = nullStringToPtr(daemonType)
-		lifecycle.applyTo(&daemon)
-
-		result = append(result, &daemon)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("failed iterating daemon rows: %w", err)
-	}
-
-	return result, nil
+	return daemons, nil
 }
 
 func (r *Repo) UpsertDaemonAttachment(ctx context.Context, att *DaemonAttachment) error {
@@ -1529,34 +1186,13 @@ func (r *Repo) UpsertDaemonAttachment(ctx context.Context, att *DaemonAttachment
 	if att.LastStreamActivity.IsZero() {
 		att.LastStreamActivity = now
 	}
-	// Re-attachment resets memory telemetry and detected ports: a new stream
-	// means a fresh daemon session, and readings from the previous one are
-	// stale.
-	query := `
-		INSERT INTO daemon_attachment (daemon_id, user_id, source, pod_ip, pod_port, attached_at, last_stream_activity)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT (daemon_id) DO UPDATE SET
-			user_id = EXCLUDED.user_id,
-			source = EXCLUDED.source,
-			pod_ip = EXCLUDED.pod_ip,
-			pod_port = EXCLUDED.pod_port,
-			attached_at = EXCLUDED.attached_at,
-			last_stream_activity = EXCLUDED.last_stream_activity,
-			memory_used_bytes = 0,
-			memory_limit_bytes = 0,
-			memory_pressure = FALSE,
-			detected_ports = '[]'
-		WHERE daemon_attachment.user_id = EXCLUDED.user_id
-		   OR EXISTS (SELECT 1 FROM daemons d WHERE d.id = EXCLUDED.daemon_id AND d.user_id = EXCLUDED.user_id)
-	`
-	query = r.bindQuery(query)
-	res, err := r.DB.ExecContext(ctx, query, att.DaemonID, att.UserID, string(att.Source), att.PodIP, att.PodPort, att.AttachedAt, att.LastStreamActivity)
+	wrote, err := store.UpsertDaemonAttachment(ctx, r.ORM(), att)
 	if err != nil {
 		return fmt.Errorf("upserting daemon attachment: %w", err)
 	}
 	// A different user's lease is only replaceable by the daemon row's owner
 	// (which heals a lease a past hijack left behind).
-	if n, nErr := res.RowsAffected(); nErr == nil && n == 0 {
+	if !wrote {
 		return fmt.Errorf("%w: attachment for daemon %s", ErrDaemonOwnedByAnotherUser, att.DaemonID)
 	}
 	return nil
@@ -1603,24 +1239,7 @@ func (r *Repo) RenewDaemonAttachment(ctx context.Context, att *DaemonAttachment)
 	if att.AttachedAt.IsZero() || att.LastStreamActivity.IsZero() {
 		return false, fmt.Errorf("renewing daemon attachment requires attached_at and last_stream_activity")
 	}
-	// xmax = 0 holds only for a row this statement inserted.
-	query := r.bindQuery(`
-		INSERT INTO daemon_attachment (daemon_id, user_id, source, pod_ip, pod_port, attached_at, last_stream_activity)
-		SELECT ?, ?, ?, ?, ?, ?, ?
-		WHERE EXISTS (SELECT 1 FROM daemons d WHERE d.id = ? AND d.user_id = ?)
-		ON CONFLICT (daemon_id) DO UPDATE SET
-			last_stream_activity = GREATEST(daemon_attachment.last_stream_activity, EXCLUDED.last_stream_activity),
-			attached_at = GREATEST(daemon_attachment.attached_at, EXCLUDED.attached_at)
-		WHERE daemon_attachment.user_id = EXCLUDED.user_id
-		RETURNING (xmax = 0)
-	`)
-	err = r.DB.QueryRowContext(ctx, query,
-		att.DaemonID, att.UserID, string(att.Source), att.PodIP, att.PodPort, att.AttachedAt, att.LastStreamActivity,
-		att.DaemonID, att.UserID,
-	).Scan(&created)
-	if errors.Is(err, sql.ErrNoRows) {
-		return false, nil // not the caller's to renew; see above
-	}
+	created, err = store.RenewDaemonAttachment(ctx, r.ORM(), att)
 	if err != nil {
 		return false, fmt.Errorf("renewing daemon attachment: %w", err)
 	}
@@ -1636,9 +1255,7 @@ func (r *Repo) UpdateDaemonAttachmentMemory(ctx context.Context, daemonID string
 	if daemonID == "" {
 		return fmt.Errorf("daemon ID cannot be empty")
 	}
-	query := `UPDATE daemon_attachment SET memory_used_bytes = ?, memory_limit_bytes = ?, memory_pressure = ? WHERE daemon_id = ?`
-	query = r.bindQuery(query)
-	if _, err := r.DB.ExecContext(ctx, query, usedBytes, limitBytes, pressure, daemonID); err != nil {
+	if err := store.SetDaemonAttachmentMemory(ctx, r.ORM(), daemonID, usedBytes, limitBytes, pressure); err != nil {
 		return fmt.Errorf("updating daemon attachment memory: %w", err)
 	}
 	return nil
@@ -1653,16 +1270,7 @@ func (r *Repo) UpdateDaemonAttachmentPorts(ctx context.Context, daemonID string,
 	if daemonID == "" {
 		return fmt.Errorf("daemon ID cannot be empty")
 	}
-	if ports == nil {
-		ports = []uint32{}
-	}
-	encoded, err := json.Marshal(ports)
-	if err != nil {
-		return fmt.Errorf("encoding detected ports: %w", err)
-	}
-	query := `UPDATE daemon_attachment SET detected_ports = ? WHERE daemon_id = ?`
-	query = r.bindQuery(query)
-	if _, err := r.DB.ExecContext(ctx, query, string(encoded), daemonID); err != nil {
+	if err := store.SetDaemonAttachmentPorts(ctx, r.ORM(), daemonID, ports); err != nil {
 		return fmt.Errorf("updating daemon attachment ports: %w", err)
 	}
 	return nil
@@ -1675,8 +1283,7 @@ func (r *Repo) SetDaemonLocalModels(ctx context.Context, daemonID string, invent
 	if daemonID == "" {
 		return fmt.Errorf("daemon ID cannot be empty")
 	}
-	query := r.bindQuery(`UPDATE daemons SET local_models = ? WHERE id = ?`)
-	if _, err := r.DB.ExecContext(ctx, query, inventoryJSON, daemonID); err != nil {
+	if err := store.SetDaemonLocalModels(ctx, r.ORM(), daemonID, inventoryJSON); err != nil {
 		return fmt.Errorf("updating daemon local models: %w", err)
 	}
 	return nil
@@ -1690,22 +1297,11 @@ func (r *Repo) ListDaemonLocalModels(ctx context.Context, userID string) (map[st
 	if userID == "" {
 		return nil, fmt.Errorf("user ID cannot be empty")
 	}
-	query := r.bindQuery(`SELECT id, local_models FROM daemons WHERE user_id = ? AND local_models <> ''`)
-	rows, err := r.DB.QueryContext(ctx, query, userID)
+	inventories, err := store.ListDaemonLocalModels(ctx, r.ORM(), userID)
 	if err != nil {
 		return nil, fmt.Errorf("listing daemon local models for user %s: %w", userID, err)
 	}
-	defer rows.Close()
-
-	inventories := make(map[string]string)
-	for rows.Next() {
-		var daemonID, inventoryJSON string
-		if err := rows.Scan(&daemonID, &inventoryJSON); err != nil {
-			return nil, fmt.Errorf("scanning daemon local models: %w", err)
-		}
-		inventories[daemonID] = inventoryJSON
-	}
-	return inventories, rows.Err()
+	return inventories, nil
 }
 
 // GetSettingValue returns a user-level setting's value, and whether it is set.
@@ -1753,8 +1349,7 @@ func (r *Repo) SetDaemonStorageState(ctx context.Context, daemonID string, state
 	if daemonID == "" {
 		return fmt.Errorf("daemon ID cannot be empty")
 	}
-	query := r.bindQuery(`UPDATE daemons SET storage_state = ? WHERE id = ?`)
-	if _, err := r.DB.ExecContext(ctx, query, stateJSON, daemonID); err != nil {
+	if err := store.SetDaemonStorageState(ctx, r.ORM(), daemonID, stateJSON); err != nil {
 		return fmt.Errorf("updating daemon storage state: %w", err)
 	}
 	return nil
@@ -1766,11 +1361,7 @@ func (r *Repo) GetDaemonStorageState(ctx context.Context, daemonID string) (stri
 	if daemonID == "" {
 		return "", fmt.Errorf("daemon ID cannot be empty")
 	}
-	var state string
-	err := r.DB.QueryRowContext(ctx, r.bindQuery(`SELECT storage_state FROM daemons WHERE id = ?`), daemonID).Scan(&state)
-	if errors.Is(err, sql.ErrNoRows) {
-		return "", nil
-	}
+	state, err := store.GetDaemonStorageState(ctx, r.ORM(), daemonID)
 	if err != nil {
 		return "", fmt.Errorf("reading daemon storage state: %w", err)
 	}
@@ -1783,21 +1374,11 @@ func (r *Repo) ListDaemonStorageState(ctx context.Context, userID string) (map[s
 	if userID == "" {
 		return nil, fmt.Errorf("user ID cannot be empty")
 	}
-	query := r.bindQuery(`SELECT id, storage_state FROM daemons WHERE user_id = ? AND storage_state <> ''`)
-	rows, err := r.DB.QueryContext(ctx, query, userID)
+	states, err := store.ListDaemonStorageState(ctx, r.ORM(), userID)
 	if err != nil {
 		return nil, fmt.Errorf("listing daemon storage state for user %s: %w", userID, err)
 	}
-	defer rows.Close()
-	states := make(map[string]string)
-	for rows.Next() {
-		var daemonID, stateJSON string
-		if err := rows.Scan(&daemonID, &stateJSON); err != nil {
-			return nil, fmt.Errorf("scanning daemon storage state: %w", err)
-		}
-		states[daemonID] = stateJSON
-	}
-	return states, rows.Err()
+	return states, nil
 }
 
 // ReleaseDaemonAttachment deletes the lease a stream session created when
@@ -1830,18 +1411,7 @@ func (r *Repo) ReleaseDaemonAttachment(ctx context.Context, daemonID string, att
 	if attachedAt.IsZero() {
 		return fmt.Errorf("releasing daemon attachment %s requires the session's attached_at", daemonID)
 	}
-	query := r.bindQuery(`
-		WITH released AS (
-			DELETE FROM daemon_attachment
-			WHERE daemon_id = ? AND attached_at <= ?
-			RETURNING daemon_id, last_stream_activity
-		)
-		UPDATE daemons d
-		SET last_seen_at = GREATEST(d.last_seen_at, released.last_stream_activity)
-		FROM released
-		WHERE d.id = released.daemon_id
-	`)
-	if _, err := r.DB.ExecContext(ctx, query, daemonID, attachedAt); err != nil {
+	if err := store.ReleaseDaemonAttachment(ctx, r.ORM(), daemonID, attachedAt); err != nil {
 		return fmt.Errorf("releasing daemon attachment: %w", err)
 	}
 	return nil
@@ -1859,24 +1429,11 @@ func (r *Repo) DaemonLastSeenAt(ctx context.Context, userID, daemonID string) (t
 	if userID == "" || daemonID == "" {
 		return time.Time{}, fmt.Errorf("daemon last-seen lookup requires user ID and daemon ID")
 	}
-	query := r.bindQuery(`
-		SELECT GREATEST(d.last_seen_at, a.last_stream_activity)
-		FROM daemons d
-		LEFT JOIN daemon_attachment a ON a.daemon_id = d.id AND a.user_id = d.user_id
-		WHERE d.id = ? AND d.user_id = ?
-	`)
-	var seen sql.NullTime
-	err := r.DB.QueryRowContext(ctx, query, daemonID, userID).Scan(&seen)
-	if errors.Is(err, sql.ErrNoRows) {
-		return time.Time{}, nil
-	}
+	seen, err := store.DaemonLastSeenAt(ctx, r.ORM(), userID, daemonID)
 	if err != nil {
 		return time.Time{}, fmt.Errorf("reading daemon last seen: %w", err)
 	}
-	if !seen.Valid {
-		return time.Time{}, nil
-	}
-	return seen.Time, nil
+	return seen, nil
 }
 
 // DeleteStaleDaemonAttachments removes attachment rows whose reachability
@@ -1901,18 +1458,9 @@ func (r *Repo) DeleteStaleDaemonAttachments(ctx context.Context, olderThan time.
 	if olderThan <= 0 {
 		return 0, fmt.Errorf("stale threshold must be positive")
 	}
-	cutoff := time.Now().UTC().Add(-olderThan)
-	query := `DELETE FROM daemon_attachment WHERE last_stream_activity < ?`
-	query = r.bindQuery(query)
-	res, err := r.DB.ExecContext(ctx, query, cutoff)
+	n, err := store.DeleteStaleDaemonAttachments(ctx, r.ORM(), time.Now().UTC().Add(-olderThan))
 	if err != nil {
 		return 0, fmt.Errorf("deleting stale daemon attachments: %w", err)
-	}
-	n, err := res.RowsAffected()
-	if err != nil {
-		// Row count is advisory (logging only); a driver that can't report
-		// it must not turn a successful GC into a failure.
-		return 0, nil
 	}
 	return n, nil
 }
@@ -1921,18 +1469,7 @@ func (r *Repo) IsDaemonAttached(ctx context.Context, userID string, staleThresho
 	if userID == "" {
 		return false, fmt.Errorf("user ID cannot be empty")
 	}
-	cutoff := time.Now().UTC().Add(-staleThreshold)
-	query := `SELECT 1 FROM daemon_attachment WHERE user_id = ? AND last_stream_activity > ? LIMIT 1`
-	query = r.bindQuery(query)
-	var n int
-	err := r.DB.QueryRowContext(ctx, query, userID, cutoff).Scan(&n)
-	if err == sql.ErrNoRows {
-		return false, nil
-	}
-	if err != nil {
-		return false, fmt.Errorf("checking daemon attachment: %w", err)
-	}
-	return true, nil
+	return store.IsUserDaemonAttached(ctx, r.ORM(), userID, time.Now().UTC().Add(-staleThreshold))
 }
 
 // IsDaemonIDAttached reports whether the daemon has a fresh attachment lease.
@@ -1940,38 +1477,16 @@ func (r *Repo) IsDaemonIDAttached(ctx context.Context, daemonID string, staleThr
 	if daemonID == "" {
 		return false, fmt.Errorf("daemon ID cannot be empty")
 	}
-	cutoff := time.Now().UTC().Add(-staleThreshold)
-	query := `SELECT 1 FROM daemon_attachment WHERE daemon_id = ? AND last_stream_activity > ? LIMIT 1`
-	query = r.bindQuery(query)
-	var n int
-	err := r.DB.QueryRowContext(ctx, query, daemonID, cutoff).Scan(&n)
-	if err == sql.ErrNoRows {
-		return false, nil
-	}
-	if err != nil {
-		return false, fmt.Errorf("checking daemon attachment: %w", err)
-	}
-	return true, nil
+	return store.IsDaemonIDAttached(ctx, r.ORM(), daemonID, time.Now().UTC().Add(-staleThreshold))
 }
 
-// attachmentColumns is the shared SELECT column list matching
-// listAttachments' scan order.
-const attachmentColumns = `daemon_id, user_id, source, pod_ip, pod_port, attached_at, last_stream_activity, memory_used_bytes, memory_limit_bytes, memory_pressure, detected_ports`
-
 func (r *Repo) ListOutboundAttachments(ctx context.Context) ([]*DaemonAttachment, error) {
-	return r.listAttachments(ctx, `
-		SELECT `+attachmentColumns+`
-		FROM daemon_attachment
-		WHERE source = 'outbound'
-	`)
+	return store.ListOutboundAttachments(ctx, r.ORM())
 }
 
 // ListAllDaemonAttachments returns every attachment row regardless of source.
 func (r *Repo) ListAllDaemonAttachments(ctx context.Context) ([]*DaemonAttachment, error) {
-	return r.listAttachments(ctx, `
-		SELECT `+attachmentColumns+`
-		FROM daemon_attachment
-	`)
+	return store.ListAllDaemonAttachments(ctx, r.ORM())
 }
 
 // ListFreshDaemonAttachmentsForUser returns the user's attachment rows whose
@@ -1982,83 +1497,14 @@ func (r *Repo) ListFreshDaemonAttachmentsForUser(ctx context.Context, userID str
 	if userID == "" {
 		return nil, fmt.Errorf("user ID cannot be empty")
 	}
-	cutoff := time.Now().UTC().Add(-staleThreshold)
-	return r.listAttachments(ctx, `
-		SELECT `+attachmentColumns+`
-		FROM daemon_attachment
-		WHERE user_id = ? AND last_stream_activity > ?
-	`, userID, cutoff)
-}
-
-// listAttachments runs an attachment-shaped SELECT and scans the rows. Shared
-// by the attachment list methods so the scan logic (nullable pod_ip /
-// pod_port) lives in one place.
-func (r *Repo) listAttachments(ctx context.Context, query string, args ...any) ([]*DaemonAttachment, error) {
-	query = r.bindQuery(query)
-	rows, err := r.DB.QueryContext(ctx, query, args...)
-	if err != nil {
-		return nil, fmt.Errorf("listing attachments: %w", err)
-	}
-	defer rows.Close()
-
-	var result []*DaemonAttachment
-	for rows.Next() {
-		var (
-			att           DaemonAttachment
-			source        string
-			podIP         sql.NullString
-			podPort       sql.NullInt64
-			detectedPorts string
-		)
-		if err := rows.Scan(&att.DaemonID, &att.UserID, &source, &podIP, &podPort, &att.AttachedAt, &att.LastStreamActivity, &att.MemoryUsedBytes, &att.MemoryLimitBytes, &att.MemoryPressure, &detectedPorts); err != nil {
-			return nil, fmt.Errorf("scanning attachment: %w", err)
-		}
-		att.Source = DaemonAttachmentSource(source)
-		if podIP.Valid {
-			v := podIP.String
-			att.PodIP = &v
-		}
-		if podPort.Valid {
-			v := int(podPort.Int64)
-			att.PodPort = &v
-		}
-		// detected_ports is JSON-encoded; a decode failure degrades to "no
-		// ports" rather than failing the liveness read.
-		if detectedPorts != "" && detectedPorts != "[]" {
-			_ = json.Unmarshal([]byte(detectedPorts), &att.DetectedPorts)
-		}
-		result = append(result, &att)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterating attachments: %w", err)
-	}
-	return result, nil
+	return store.ListFreshDaemonAttachmentsForUser(ctx, r.ORM(), userID, time.Now().UTC().Add(-staleThreshold))
 }
 
 func (r *Repo) ListAttachedDaemonIDsForUser(ctx context.Context, userID string, staleThreshold time.Duration) ([]string, error) {
 	if userID == "" {
 		return nil, fmt.Errorf("user ID cannot be empty")
 	}
-	cutoff := time.Now().UTC().Add(-staleThreshold)
-	query := `SELECT daemon_id FROM daemon_attachment WHERE user_id = ? AND last_stream_activity > ?`
-	query = r.bindQuery(query)
-	rows, err := r.DB.QueryContext(ctx, query, userID, cutoff)
-	if err != nil {
-		return nil, fmt.Errorf("listing attached daemon ids: %w", err)
-	}
-	defer rows.Close()
-	var ids []string
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			return nil, fmt.Errorf("scanning attached daemon id: %w", err)
-		}
-		ids = append(ids, id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterating attached daemon ids: %w", err)
-	}
-	return ids, nil
+	return store.ListAttachedDaemonIDsForUser(ctx, r.ORM(), userID, time.Now().UTC().Add(-staleThreshold))
 }
 
 func (r *Repo) UpsertProjectConfigRecord(ctx context.Context, record *ProjectConfigRecord) error {
@@ -2075,190 +1521,47 @@ func (r *Repo) UpsertProjectConfigRecord(ctx context.Context, record *ProjectCon
 		return fmt.Errorf("daemon ID cannot be empty")
 	}
 
-	now := time.Now().UTC()
-	pushedAt := record.PushedAt
-	if pushedAt.IsZero() {
-		pushedAt = now
-	}
-	createdAt := record.CreatedAt
-	if createdAt.IsZero() {
-		createdAt = now
-	}
-
-	query := `
-		INSERT INTO project_configs (
-			id,
-			project_id,
-			daemon_id,
-			user_config_yaml,
-			project_config_yaml,
-			local_config_yaml,
-			global_memory_md,
-			project_memory_md,
-			mcp_configs,
-			project_workflows_json,
-			project_presets_json,
-			project_scenarios_json,
-			project_skills_json,
-			repo_memories_json,
-			runtime_type,
-			pushed_at,
-			created_at,
-			updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT(project_id) DO UPDATE SET
-			daemon_id = excluded.daemon_id,
-			user_config_yaml = excluded.user_config_yaml,
-			project_config_yaml = excluded.project_config_yaml,
-			local_config_yaml = excluded.local_config_yaml,
-			global_memory_md = excluded.global_memory_md,
-			project_memory_md = excluded.project_memory_md,
-			mcp_configs = excluded.mcp_configs,
-			project_workflows_json = excluded.project_workflows_json,
-			project_presets_json = excluded.project_presets_json,
-			project_scenarios_json = excluded.project_scenarios_json,
-			project_skills_json = excluded.project_skills_json,
-			repo_memories_json = excluded.repo_memories_json,
-			runtime_type = excluded.runtime_type,
-			pushed_at = excluded.pushed_at,
-			updated_at = excluded.updated_at
-	`
-	query = r.bindQuery(query)
-
-	_, err := r.DB.ExecContext(ctx, query,
-		record.ID,
-		record.ProjectID,
-		record.DaemonID,
-		record.UserConfigYAML,
-		record.ProjectConfigYAML,
-		record.LocalConfigYAML,
-		record.GlobalMemoryMD,
-		record.ProjectMemoryMD,
-		record.MCPConfigs,
-		record.ProjectWorkflowsJSON,
-		record.ProjectPresetsJSON,
-		record.ProjectScenariosJSON,
-		record.ProjectSkillsJSON,
-		record.RepoMemoriesJSON,
-		record.RuntimeType,
-		pushedAt,
-		createdAt,
-		now,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to upsert project config record for project %s: %w", record.ProjectID, err)
-	}
-
-	return nil
+	return store.UpsertProjectConfigRecord(ctx, r.ORM(), record)
 }
 
+// GetProjectConfigRecord reads the project's whole config record, or
+// sql.ErrNoRows, unwrapped. A caller that needs one part of it reads that
+// column instead (see store.GetProjectConfigRecord).
 func (r *Repo) GetProjectConfigRecord(ctx context.Context, projectID string) (*ProjectConfigRecord, error) {
 	if projectID == "" {
 		return nil, fmt.Errorf("project ID cannot be empty")
 	}
-
-	query := `
-		SELECT
-			id,
-			project_id,
-			daemon_id,
-			user_config_yaml,
-			project_config_yaml,
-			local_config_yaml,
-			global_memory_md,
-			project_memory_md,
-			mcp_configs,
-			project_workflows_json,
-			project_presets_json,
-			project_scenarios_json,
-			project_skills_json,
-			repo_memories_json,
-			runtime_type,
-			pushed_at,
-			created_at,
-			updated_at
-		FROM project_configs
-		WHERE project_id = ?
-		LIMIT 1
-	`
-	query = r.bindQuery(query)
-
-	var record ProjectConfigRecord
-	err := r.DB.QueryRowContext(ctx, query, projectID).Scan(
-		&record.ID,
-		&record.ProjectID,
-		&record.DaemonID,
-		&record.UserConfigYAML,
-		&record.ProjectConfigYAML,
-		&record.LocalConfigYAML,
-		&record.GlobalMemoryMD,
-		&record.ProjectMemoryMD,
-		&record.MCPConfigs,
-		&record.ProjectWorkflowsJSON,
-		&record.ProjectPresetsJSON,
-		&record.ProjectScenariosJSON,
-		&record.ProjectSkillsJSON,
-		&record.RepoMemoriesJSON,
-		&record.RuntimeType,
-		&record.PushedAt,
-		&record.CreatedAt,
-		&record.UpdatedAt,
-	)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, err
-		}
-		return nil, fmt.Errorf("failed to load project config record for project %s: %w", projectID, err)
-	}
-
-	return &record, nil
+	return store.GetProjectConfigRecord(ctx, r.ORM(), projectID)
 }
 
 // GetProjectWorkflowsJSON reads one column of the project config record: the
-// synced .reliant/workflows. See getProjectConfigColumn for why it exists.
-func (r *Repo) GetProjectWorkflowsJSON(ctx context.Context, projectID string) (*string, error) {
-	return r.getProjectConfigColumn(ctx, projectID, "project_workflows_json")
-}
-
-// GetProjectPresetsJSON reads one column of the project config record: the
-// synced .reliant/presets. See getProjectConfigColumn for why it exists.
-func (r *Repo) GetProjectPresetsJSON(ctx context.Context, projectID string) (*string, error) {
-	return r.getProjectConfigColumn(ctx, projectID, "project_presets_json")
-}
-
-// GetProjectMCPConfigsJSON reads one column of the project config record: the
-// stored scoped MCP configs. See getProjectConfigColumn for why it exists.
-func (r *Repo) GetProjectMCPConfigsJSON(ctx context.Context, projectID string) (*string, error) {
-	return r.getProjectConfigColumn(ctx, projectID, "mcp_configs")
-}
-
-// getProjectConfigColumn reads a single column of a project's config record.
-// Like GetProjectConfigRecord it returns sql.ErrNoRows, unwrapped, when the
+// synced .reliant/workflows. It returns sql.ErrNoRows, unwrapped, when the
 // project has no record.
-//
-// The whole row is the wrong read for anything that needs one part of it. It
-// carries every skill body and repo memory the daemon indexed, recursively
-// across nested repos: a workspace of ~30 checkouts of the same repos synced an
-// 18 MB row, nearly all of it project_skills_json. Workflow resolution and
-// preset loading need a column that is empty or a few KB, yet read that row
-// three or more times per send — measured in prod as ~95% of SendMessage,
-// StartChat and UpdateWorkflowParams wall time (p50 1.7s / 2.3s / 1.0s).
-//
-// column is one of the fixed names above, never caller input.
-func (r *Repo) getProjectConfigColumn(ctx context.Context, projectID, column string) (*string, error) {
+func (r *Repo) GetProjectWorkflowsJSON(ctx context.Context, projectID string) (*string, error) {
 	if projectID == "" {
 		return nil, fmt.Errorf("project ID cannot be empty")
 	}
-	query := r.bindQuery(`SELECT ` + column + ` FROM project_configs WHERE project_id = ? LIMIT 1`)
+	return store.GetProjectWorkflowsJSON(ctx, r.ORM(), projectID)
+}
 
-	var value *string
-	if err := r.DB.QueryRowContext(ctx, query, projectID).Scan(&value); err != nil {
-		if err == sql.ErrNoRows {
-			return nil, err
-		}
-		return nil, fmt.Errorf("failed to load %s for project %s: %w", column, projectID, err)
+// GetProjectPresetsJSON reads one column of the project config record: the
+// synced .reliant/presets. It returns sql.ErrNoRows, unwrapped, when the
+// project has no record.
+func (r *Repo) GetProjectPresetsJSON(ctx context.Context, projectID string) (*string, error) {
+	if projectID == "" {
+		return nil, fmt.Errorf("project ID cannot be empty")
 	}
-	return value, nil
+	return store.GetProjectPresetsJSON(ctx, r.ORM(), projectID)
+}
+
+// GetProjectMCPConfigsJSON reads one column of the project config record: the
+// stored scoped MCP configs. It returns sql.ErrNoRows, unwrapped, when the
+// project has no record.
+func (r *Repo) GetProjectMCPConfigsJSON(ctx context.Context, projectID string) (*string, error) {
+	if projectID == "" {
+		return nil, fmt.Errorf("project ID cannot be empty")
+	}
+	return store.GetProjectMCPConfigsJSON(ctx, r.ORM(), projectID)
 }
 
 func (r *Repo) CreateWorktree(ctx context.Context, worktree *Worktree) error {
@@ -2271,21 +1574,21 @@ func (r *Repo) CreateWorktree(ctx context.Context, worktree *Worktree) error {
 	if worktree.Name == "" {
 		return fmt.Errorf("worktree name cannot be empty")
 	}
-	return r.worktrees.CreateWorktree(ctx, worktree)
+	return store.InsertWorktree(ctx, r.ORM(), worktree)
 }
 
 func (r *Repo) GetWorktree(ctx context.Context, id string) (*Worktree, error) {
 	if id == "" {
 		return nil, fmt.Errorf("worktree ID cannot be empty")
 	}
-	return r.worktrees.GetWorktree(ctx, id)
+	return store.GetWorktree(ctx, r.ORM(), id)
 }
 
 func (r *Repo) GetWorktreeByPath(ctx context.Context, path string) (*Worktree, error) {
 	if path == "" {
 		return nil, fmt.Errorf("worktree path cannot be empty")
 	}
-	return r.worktrees.GetWorktreeByPath(ctx, path)
+	return store.GetWorktreeByPath(ctx, r.ORM(), path)
 }
 
 func (r *Repo) GetWorktreeByIdempotencyKey(ctx context.Context, projectID, key string) (*Worktree, error) {
@@ -2294,29 +1597,29 @@ func (r *Repo) GetWorktreeByIdempotencyKey(ctx context.Context, projectID, key s
 	if projectID == "" || key == "" {
 		return nil, nil
 	}
-	return r.worktrees.GetWorktreeByIdempotencyKey(ctx, projectID, key)
+	return store.GetWorktreeByIdempotencyKey(ctx, r.ORM(), projectID, key)
 }
 
 func (r *Repo) GetLiveWorktreeByName(ctx context.Context, projectID, name string) (*Worktree, error) {
 	if projectID == "" || name == "" {
 		return nil, nil
 	}
-	return r.worktrees.GetLiveWorktreeByName(ctx, projectID, name)
+	return store.GetLiveWorktreeByName(ctx, r.ORM(), projectID, name)
 }
 
 func (r *Repo) ListWorktreesByBranch(ctx context.Context, projectID, branch string) ([]*Worktree, error) {
 	if projectID == "" || branch == "" {
 		return nil, nil
 	}
-	return r.worktrees.ListWorktreesByBranch(ctx, projectID, branch)
+	return store.ListWorktreesByBranch(ctx, r.ORM(), projectID, branch)
 }
 
 func (r *Repo) ListWorktrees(ctx context.Context, filters WorktreeFilters) ([]*Worktree, error) {
-	return r.worktrees.ListWorktrees(ctx, filters)
+	return store.ListWorktrees(ctx, r.ORM(), filters)
 }
 
 func (r *Repo) ListWorktreesByIDs(ctx context.Context, ids []string) ([]*Worktree, error) {
-	return r.worktrees.ListWorktreesByIDs(ctx, ids)
+	return store.ListWorktreesByIDs(ctx, r.ORM(), ids)
 }
 
 func (r *Repo) UpdateWorktree(ctx context.Context, worktree *Worktree) error {
@@ -2327,7 +1630,7 @@ func (r *Repo) UpdateWorktree(ctx context.Context, worktree *Worktree) error {
 		return fmt.Errorf("worktree ID cannot be empty")
 	}
 
-	return r.worktrees.UpdateWorktree(ctx, worktree)
+	return store.ReplaceWorktree(ctx, r.ORM(), worktree)
 }
 
 func (r *Repo) UpdateWorktreeCleanupMetadata(ctx context.Context, id string, metadata *CleanupMetadata) error {
@@ -2335,18 +1638,18 @@ func (r *Repo) UpdateWorktreeCleanupMetadata(ctx context.Context, id string, met
 		return fmt.Errorf("worktree ID cannot be empty")
 	}
 
-	return r.worktrees.UpdateWorktreeCleanupMetadata(ctx, id, metadata)
+	return store.SetWorktreeCleanupMetadata(ctx, r.ORM(), id, metadata)
 }
 
 func (r *Repo) ListWorktreesForReclaim(ctx context.Context) ([]*core.ReclaimCandidate, error) {
-	return r.worktrees.ListWorktreesForReclaim(ctx)
+	return store.ListWorktreesForReclaim(ctx, r.ORM())
 }
 
 func (r *Repo) ListLiveWorktreePathsForUser(ctx context.Context, userID string) ([]core.WorktreePath, error) {
 	if userID == "" {
 		return nil, fmt.Errorf("user ID cannot be empty")
 	}
-	return r.worktrees.ListLiveWorktreePathsForUser(ctx, userID)
+	return store.ListLiveWorktreePathsForUser(ctx, r.ORM(), userID)
 }
 
 // MergeWorktreeCleanupMetadata is a read-modify-write of one row's
@@ -2355,66 +1658,42 @@ func (r *Repo) MergeWorktreeCleanupMetadata(ctx context.Context, id string, fn f
 	if id == "" {
 		return fmt.Errorf("worktree ID cannot be empty")
 	}
-	tx, err := r.DB.SQLDB().BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	var raw sql.NullString
-	var deletedAt sql.NullTime
-	if err := tx.QueryRowContext(ctx, `SELECT cleanup_metadata, deleted_at FROM worktrees WHERE id = $1 FOR UPDATE`, id).Scan(&raw, &deletedAt); err != nil {
-		return err
-	}
-	meta := CleanupMetadata{}
-	if raw.Valid && raw.String != "" {
-		_ = json.Unmarshal([]byte(raw.String), &meta)
-	}
-	if !fn(&meta, deletedAt.Valid) {
-		return nil
-	}
-	encoded, err := json.Marshal(meta)
-	if err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `UPDATE worktrees SET cleanup_metadata = $2, updated_at = NOW() WHERE id = $1`, id, string(encoded)); err != nil {
-		return err
-	}
-	return tx.Commit()
+	return store.MergeWorktreeCleanupMetadata(ctx, r.ORM(), id, fn)
 }
 
 func (r *Repo) AdoptWorktreeDaemon(ctx context.Context, id, daemonID string) error {
 	if id == "" || daemonID == "" {
 		return fmt.Errorf("worktree and daemon IDs cannot be empty")
 	}
-	return r.worktrees.AdoptWorktreeDaemon(ctx, id, daemonID)
+	return store.AdoptWorktreeDaemon(ctx, r.ORM(), id, daemonID)
 }
 
 func (r *Repo) ListHeldWorktreesForUser(ctx context.Context, userID string) ([]*core.HeldWorktree, error) {
 	if userID == "" {
 		return nil, fmt.Errorf("user ID cannot be empty")
 	}
-	return r.worktrees.ListHeldWorktreesForUser(ctx, userID)
+	return store.ListHeldWorktreesForUser(ctx, r.ORM(), userID)
 }
 
 func (r *Repo) DeleteWorktree(ctx context.Context, id string) error {
 	if id == "" {
 		return fmt.Errorf("worktree ID cannot be empty")
 	}
-	return r.worktrees.DeleteWorktree(ctx, id)
+	return store.RemoveWorktree(ctx, r.ORM(), id)
 }
 
 func (r *Repo) ArchiveWorktree(ctx context.Context, id string) error {
 	if id == "" {
 		return fmt.Errorf("worktree ID cannot be empty")
 	}
-	return r.worktrees.ArchiveWorktree(ctx, id)
+	return store.ArchiveWorktree(ctx, r.ORM(), id)
 }
 
 func (r *Repo) UnarchiveWorktree(ctx context.Context, id string) error {
 	if id == "" {
 		return fmt.Errorf("worktree ID cannot be empty")
 	}
-	return r.worktrees.UnarchiveWorktree(ctx, id)
+	return store.UnarchiveWorktree(ctx, r.ORM(), id)
 }
 
 // =============================================================================
@@ -2431,28 +1710,28 @@ func (r *Repo) CreateRepo(ctx context.Context, repo *core.Repo) error {
 	if repo.ProjectID == "" {
 		return fmt.Errorf("repo project_id cannot be empty")
 	}
-	return r.repos.CreateRepo(ctx, repo)
+	return store.InsertRepo(ctx, r.ORM(), repo)
 }
 
 func (r *Repo) GetRepo(ctx context.Context, id string) (*core.Repo, error) {
 	if id == "" {
 		return nil, fmt.Errorf("repo ID cannot be empty")
 	}
-	return r.repos.GetRepo(ctx, id)
+	return store.GetRepo(ctx, r.ORM(), id)
 }
 
 func (r *Repo) GetRepoByProjectAndPath(ctx context.Context, projectID, relativePath string) (*core.Repo, error) {
 	if projectID == "" {
 		return nil, fmt.Errorf("project ID cannot be empty")
 	}
-	return r.repos.GetRepoByProjectAndPath(ctx, projectID, relativePath)
+	return store.GetRepoByProjectAndPath(ctx, r.ORM(), projectID, relativePath)
 }
 
 func (r *Repo) ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error) {
 	if projectID == "" {
 		return nil, fmt.Errorf("project ID cannot be empty")
 	}
-	return r.repos.ListReposByProject(ctx, projectID)
+	return store.ListReposByProject(ctx, r.ORM(), projectID)
 }
 
 func (r *Repo) UpdateRepo(ctx context.Context, repo *core.Repo) error {
@@ -2462,17 +1741,15 @@ func (r *Repo) UpdateRepo(ctx context.Context, repo *core.Repo) error {
 	if repo.ID == "" {
 		return fmt.Errorf("repo ID cannot be empty")
 	}
-	return r.repos.UpdateRepo(ctx, repo)
+	return store.ReplaceRepo(ctx, r.ORM(), repo)
 }
 
 func (r *Repo) DeleteRepo(ctx context.Context, id string) error {
 	if id == "" {
 		return fmt.Errorf("repo ID cannot be empty")
 	}
-	return r.repos.DeleteRepo(ctx, id)
+	return store.RemoveRepo(ctx, r.ORM(), id)
 }
-
-// Plans and Tasks methods are provided by the embedded pgdb.Querier
 
 func (r *Repo) CreateSetting(ctx context.Context, setting *Setting) error {
 	if setting == nil {
@@ -2488,7 +1765,7 @@ func (r *Repo) CreateSetting(ctx context.Context, setting *Setting) error {
 		return fmt.Errorf("setting key cannot be empty")
 	}
 
-	return r.settings.CreateSetting(ctx, setting)
+	return store.UpsertSetting(ctx, r.ORM(), setting)
 }
 
 func (r *Repo) GetSetting(ctx context.Context, userID string, projectID *string, key string) (*Setting, error) {
@@ -2499,7 +1776,7 @@ func (r *Repo) GetSetting(ctx context.Context, userID string, projectID *string,
 		return nil, fmt.Errorf("setting key cannot be empty")
 	}
 
-	return r.settings.GetSetting(ctx, userID, projectID, key)
+	return store.GetSetting(ctx, r.ORM(), userID, projectID, key)
 }
 
 func (r *Repo) ListSettings(ctx context.Context, userID string, projectID *string) ([]*Setting, error) {
@@ -2507,7 +1784,7 @@ func (r *Repo) ListSettings(ctx context.Context, userID string, projectID *strin
 		return nil, fmt.Errorf("user_id cannot be empty")
 	}
 
-	return r.settings.ListSettings(ctx, userID, projectID)
+	return store.ListSettings(ctx, r.ORM(), userID, projectID)
 }
 
 func (r *Repo) ListSettingsByKey(ctx context.Context, userID string, keyPattern string) ([]*Setting, error) {
@@ -2518,7 +1795,7 @@ func (r *Repo) ListSettingsByKey(ctx context.Context, userID string, keyPattern 
 		return nil, fmt.Errorf("key pattern cannot be empty")
 	}
 
-	return r.settings.ListSettingsByKey(ctx, userID, keyPattern)
+	return store.ListSettingsByKey(ctx, r.ORM(), userID, keyPattern)
 }
 
 func (r *Repo) UpdateSetting(ctx context.Context, setting *Setting) error {
@@ -2529,14 +1806,14 @@ func (r *Repo) UpdateSetting(ctx context.Context, setting *Setting) error {
 		return fmt.Errorf("setting ID cannot be empty")
 	}
 
-	return r.settings.UpdateSetting(ctx, setting)
+	return store.ReplaceSettingValue(ctx, r.ORM(), setting)
 }
 
 func (r *Repo) DeleteSetting(ctx context.Context, id string) error {
 	if id == "" {
 		return fmt.Errorf("setting ID cannot be empty")
 	}
-	return r.settings.DeleteSetting(ctx, id)
+	return store.RemoveSetting(ctx, r.ORM(), id)
 }
 
 // ==================== Settings Helper Methods ====================
@@ -2647,21 +1924,21 @@ func (r *Repo) GetAutomationToken(ctx context.Context, userID, daemonID string) 
 	if userID == "" || daemonID == "" {
 		return "", fmt.Errorf("user_id and daemon_id cannot be empty")
 	}
-	return r.settings.GetAutomationToken(ctx, userID, daemonID)
+	return r.apiKeys.GetAutomationToken(ctx, userID, daemonID)
 }
 
 func (r *Repo) SetAutomationToken(ctx context.Context, userID, daemonID, token string) error {
 	if userID == "" || daemonID == "" {
 		return fmt.Errorf("user_id and daemon_id cannot be empty")
 	}
-	return r.settings.SetAutomationToken(ctx, userID, daemonID, token)
+	return r.apiKeys.SetAutomationToken(ctx, userID, daemonID, token)
 }
 
 func (r *Repo) DeleteAutomationToken(ctx context.Context, userID, daemonID string) error {
 	if userID == "" || daemonID == "" {
 		return fmt.Errorf("user_id and daemon_id cannot be empty")
 	}
-	return r.settings.DeleteAutomationToken(ctx, userID, daemonID)
+	return r.apiKeys.DeleteAutomationToken(ctx, userID, daemonID)
 }
 
 // ==================== Visibility Methods ====================
@@ -2678,7 +1955,7 @@ func (r *Repo) GetVisibilityOverride(ctx context.Context, userID string, itemTyp
 		return nil, fmt.Errorf("slug cannot be empty")
 	}
 
-	return r.settings.GetVisibilityOverride(ctx, userID, itemType, slug)
+	return store.GetVisibilityOverride(ctx, r.ORM(), userID, reliantv1.HiddenItemType(itemType), slug)
 }
 
 // ListVisibilityOverrides returns all user overrides for a given item type.
@@ -2690,7 +1967,7 @@ func (r *Repo) ListVisibilityOverrides(ctx context.Context, userID string, itemT
 		return nil, fmt.Errorf("item_type must be WORKFLOW (1) or PRESET (2)")
 	}
 
-	return r.settings.ListVisibilityOverrides(ctx, userID, itemType)
+	return store.ListVisibilityOverrides(ctx, r.ORM(), userID, reliantv1.HiddenItemType(itemType))
 }
 
 // SetVisibilityOverride sets a user's visibility preference for an item.
@@ -2705,7 +1982,7 @@ func (r *Repo) SetVisibilityOverride(ctx context.Context, userID string, itemTyp
 		return fmt.Errorf("slug cannot be empty")
 	}
 
-	return r.settings.SetVisibilityOverride(ctx, userID, itemType, slug, isVisible)
+	return store.SetVisibilityOverride(ctx, r.ORM(), userID, reliantv1.HiddenItemType(itemType), slug, isVisible)
 }
 
 // DeleteVisibilityOverride removes a user's visibility override, reverting to default.
@@ -2720,7 +1997,7 @@ func (r *Repo) DeleteVisibilityOverride(ctx context.Context, userID string, item
 		return fmt.Errorf("slug cannot be empty")
 	}
 
-	return r.settings.DeleteVisibilityOverride(ctx, userID, itemType, slug)
+	return store.RemoveVisibilityOverride(ctx, r.ORM(), userID, reliantv1.HiddenItemType(itemType), slug)
 }
 
 // GetItemDefault returns the system default visibility for an item.
@@ -2732,7 +2009,7 @@ func (r *Repo) GetItemDefault(ctx context.Context, itemType int32, slug string) 
 		return nil, fmt.Errorf("slug cannot be empty")
 	}
 
-	return r.settings.GetItemDefault(ctx, itemType, slug)
+	return store.GetItemDefault(ctx, r.ORM(), itemType, slug)
 }
 
 // ListHiddenItemDefaults returns all items that are hidden by default.
@@ -2741,7 +2018,7 @@ func (r *Repo) ListHiddenItemDefaults(ctx context.Context, itemType int32) ([]st
 		return nil, fmt.Errorf("item_type must be WORKFLOW (1) or PRESET (2)")
 	}
 
-	return r.settings.ListHiddenItemDefaults(ctx, itemType)
+	return store.ListHiddenItemDefaults(ctx, r.ORM(), itemType)
 }
 
 // IsItemVisible determines if an item should be visible to a user.
@@ -2773,7 +2050,7 @@ func (r *Repo) GetDefaultPresetAssignments(ctx context.Context, workflowName str
 		return nil, fmt.Errorf("workflow_name cannot be empty")
 	}
 
-	return r.settings.GetDefaultPresetAssignments(ctx, workflowName)
+	return store.GetDefaultPresetAssignments(ctx, r.ORM(), workflowName)
 }
 
 func (r *Repo) CreatePlan(ctx context.Context, plan *Plan) error {
@@ -2787,7 +2064,7 @@ func (r *Repo) CreatePlan(ctx context.Context, plan *Plan) error {
 		return fmt.Errorf("title is required")
 	}
 
-	return r.planTasks.CreatePlan(ctx, plan)
+	return store.InsertPlan(ctx, r.ORM(), plan)
 }
 
 func (r *Repo) GetPlan(ctx context.Context, id string) (*Plan, error) {
@@ -2795,7 +2072,7 @@ func (r *Repo) GetPlan(ctx context.Context, id string) (*Plan, error) {
 		return nil, fmt.Errorf("plan ID cannot be empty")
 	}
 
-	return r.planTasks.GetPlan(ctx, id)
+	return store.GetPlan(ctx, r.ORM(), id)
 }
 
 func (r *Repo) GetPlanByThreadID(ctx context.Context, threadID string) (*Plan, error) {
@@ -2803,7 +2080,7 @@ func (r *Repo) GetPlanByThreadID(ctx context.Context, threadID string) (*Plan, e
 		return nil, fmt.Errorf("thread ID cannot be empty")
 	}
 
-	return r.planTasks.GetPlanByThreadID(ctx, threadID)
+	return store.GetPlanByThreadID(ctx, r.ORM(), threadID)
 }
 
 func (r *Repo) ListPlansByThread(ctx context.Context, threadID string) ([]*Plan, error) {
@@ -2811,7 +2088,7 @@ func (r *Repo) ListPlansByThread(ctx context.Context, threadID string) ([]*Plan,
 		return nil, fmt.Errorf("thread ID cannot be empty")
 	}
 
-	return r.planTasks.ListPlansByThread(ctx, threadID)
+	return store.ListPlansByThread(ctx, r.ORM(), threadID)
 }
 
 func (r *Repo) ListPlansByChatID(ctx context.Context, chatID string) ([]*Plan, error) {
@@ -2819,7 +2096,7 @@ func (r *Repo) ListPlansByChatID(ctx context.Context, chatID string) ([]*Plan, e
 		return nil, fmt.Errorf("chat ID cannot be empty")
 	}
 
-	return r.planTasks.ListPlansByChatID(ctx, chatID)
+	return store.ListPlansByChatID(ctx, r.ORM(), chatID)
 }
 
 func (r *Repo) ListPlansByProject(ctx context.Context, projectID string) ([]*Plan, error) {
@@ -2827,7 +2104,7 @@ func (r *Repo) ListPlansByProject(ctx context.Context, projectID string) ([]*Pla
 		return nil, fmt.Errorf("project ID cannot be empty")
 	}
 
-	return r.planTasks.ListPlansByProject(ctx, projectID)
+	return store.ListPlansByProject(ctx, r.ORM(), projectID)
 }
 
 func (r *Repo) UpdatePlan(ctx context.Context, plan *Plan) error {
@@ -2838,7 +2115,7 @@ func (r *Repo) UpdatePlan(ctx context.Context, plan *Plan) error {
 		return fmt.Errorf("plan ID cannot be empty")
 	}
 
-	return r.planTasks.UpdatePlan(ctx, plan)
+	return store.ReplacePlan(ctx, r.ORM(), plan)
 }
 
 func (r *Repo) UpdatePlanStatus(ctx context.Context, id string, status int32, completedAt *time.Time) error {
@@ -2846,14 +2123,14 @@ func (r *Repo) UpdatePlanStatus(ctx context.Context, id string, status int32, co
 		return fmt.Errorf("plan ID cannot be empty")
 	}
 
-	return r.planTasks.UpdatePlanStatus(ctx, id, status, completedAt)
+	return store.UpdatePlanStatus(ctx, r.ORM(), id, status, completedAt)
 }
 
 func (r *Repo) DeletePlan(ctx context.Context, id string) error {
 	if id == "" {
 		return fmt.Errorf("plan ID cannot be empty")
 	}
-	return r.planTasks.DeletePlan(ctx, id)
+	return store.RemovePlan(ctx, r.ORM(), id)
 }
 
 // ==================== Tasks ====================
@@ -2869,7 +2146,7 @@ func (r *Repo) CreateTask(ctx context.Context, task *Task) error {
 		return fmt.Errorf("title is required")
 	}
 
-	return r.planTasks.CreateTask(ctx, task)
+	return store.InsertTask(ctx, r.ORM(), task)
 }
 
 func (r *Repo) GetTask(ctx context.Context, id string) (*Task, error) {
@@ -2877,7 +2154,7 @@ func (r *Repo) GetTask(ctx context.Context, id string) (*Task, error) {
 		return nil, fmt.Errorf("task ID cannot be empty")
 	}
 
-	return r.planTasks.GetTask(ctx, id)
+	return store.GetTask(ctx, r.ORM(), id)
 }
 
 func (r *Repo) GetTaskByPosition(ctx context.Context, planID string, position int) (*Task, error) {
@@ -2901,7 +2178,7 @@ func (r *Repo) ListTasksByPlan(ctx context.Context, planID string) ([]*Task, err
 		return nil, fmt.Errorf("plan ID cannot be empty")
 	}
 
-	return r.planTasks.ListTasksByPlan(ctx, planID)
+	return store.ListTasksByPlan(ctx, r.ORM(), planID)
 }
 
 func (r *Repo) ListTasksByParent(ctx context.Context, parentID string) ([]*Task, error) {
@@ -2978,7 +2255,7 @@ func (r *Repo) UpdateTask(ctx context.Context, task *Task) error {
 		return fmt.Errorf("task ID cannot be empty")
 	}
 
-	return r.planTasks.UpdateTask(ctx, task)
+	return store.ReplaceTask(ctx, r.ORM(), task)
 }
 
 func (r *Repo) UpdateTaskStatus(ctx context.Context, id string, status int32, completedAt *time.Time) error {
@@ -2992,14 +2269,14 @@ func (r *Repo) UpdateTaskStatus(ctx context.Context, id string, status int32, co
 		completedAt = &now
 	}
 
-	return r.planTasks.UpdateTaskStatus(ctx, id, status, completedAt)
+	return store.UpdateTaskStatus(ctx, r.ORM(), id, status, completedAt)
 }
 
 func (r *Repo) DeleteTask(ctx context.Context, id string) error {
 	if id == "" {
 		return fmt.Errorf("task ID cannot be empty")
 	}
-	return r.planTasks.DeleteTask(ctx, id)
+	return store.RemoveTask(ctx, r.ORM(), id)
 }
 
 // ==================== Task Dependencies ====================
@@ -3014,49 +2291,49 @@ func (r *Repo) CreateTaskDependency(ctx context.Context, dep *TaskDependency) er
 	if dep.FromTaskID == dep.ToTaskID {
 		return fmt.Errorf("a task cannot depend on itself")
 	}
-	return r.planTasks.CreateTaskDependency(ctx, dep)
+	return store.InsertTaskDependency(ctx, r.ORM(), dep)
 }
 
 func (r *Repo) GetTaskDependency(ctx context.Context, id string) (*TaskDependency, error) {
 	if id == "" {
 		return nil, fmt.Errorf("dependency ID cannot be empty")
 	}
-	return r.planTasks.GetTaskDependency(ctx, id)
+	return store.GetTaskDependency(ctx, r.ORM(), id)
 }
 
 func (r *Repo) ListTaskDependenciesByTask(ctx context.Context, taskID string) ([]*TaskDependency, error) {
 	if taskID == "" {
 		return nil, fmt.Errorf("task ID cannot be empty")
 	}
-	return r.planTasks.ListTaskDependenciesByTask(ctx, taskID)
+	return store.ListTaskDependenciesByTask(ctx, r.ORM(), taskID)
 }
 
 func (r *Repo) ListBlockersForTask(ctx context.Context, taskID string) ([]*TaskDependency, error) {
 	if taskID == "" {
 		return nil, fmt.Errorf("task ID cannot be empty")
 	}
-	return r.planTasks.ListBlockersForTask(ctx, taskID)
+	return store.ListBlockersForTask(ctx, r.ORM(), taskID)
 }
 
 func (r *Repo) ListDependenciesByPlan(ctx context.Context, planID string) ([]*TaskDependency, error) {
 	if planID == "" {
 		return nil, fmt.Errorf("plan ID cannot be empty")
 	}
-	return r.planTasks.ListDependenciesByPlan(ctx, planID)
+	return store.ListDependenciesByPlan(ctx, r.ORM(), planID)
 }
 
 func (r *Repo) DeleteTaskDependency(ctx context.Context, id string) error {
 	if id == "" {
 		return fmt.Errorf("dependency ID cannot be empty")
 	}
-	return r.planTasks.DeleteTaskDependency(ctx, id)
+	return store.RemoveTaskDependency(ctx, r.ORM(), id)
 }
 
 func (r *Repo) DeleteTaskDependencyByPair(ctx context.Context, fromTaskID, toTaskID string, depType int32) error {
 	if fromTaskID == "" || toTaskID == "" || depType == 0 {
 		return fmt.Errorf("from_task_id, to_task_id, and dependency_type are required")
 	}
-	return r.planTasks.DeleteTaskDependencyByPair(ctx, fromTaskID, toTaskID, depType)
+	return store.DeleteTaskDependencyByPair(ctx, r.ORM(), fromTaskID, toTaskID, depType)
 }
 
 // ==================== Background Processes ====================
@@ -3077,248 +2354,50 @@ func (r *Repo) CreateBackgroundProcess(ctx context.Context, process *BackgroundP
 	if process.StartedAt.IsZero() {
 		process.StartedAt = time.Now()
 	}
-
-	_, err := r.DB.ExecContext(ctx, `
-		INSERT INTO background_processes (
-			id, pid, command, working_dir, worktree_id, project_id, chat_id, user_id,
-			status, exit_code, started_at, ended_at, signature, source_type,
-			package_type, command_name, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		process.ID, process.PID, process.Command, process.WorkingDir,
-		process.WorktreeID, process.ProjectID, process.ChatID, process.UserID,
-		process.Status, process.ExitCode, process.StartedAt, process.EndedAt,
-		process.Signature, process.SourceType, process.PackageType, process.CommandName,
-		process.CreatedAt, process.UpdatedAt,
-	)
-	if err == nil {
-		return nil
-	}
-	query := `
-		INSERT INTO background_processes (
-			id, pid, command, working_dir, worktree_id, project_id, chat_id, user_id,
-			status, exit_code, started_at, ended_at, signature, source_type,
-			package_type, command_name, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-	query = r.bindQuery(query)
-	_, err = r.DB.ExecContext(ctx, query,
-		process.ID, process.PID, process.Command, process.WorkingDir,
-		process.WorktreeID, process.ProjectID, process.ChatID, process.UserID,
-		process.Status, process.ExitCode, process.StartedAt, process.EndedAt,
-		process.Signature, process.SourceType, process.PackageType, process.CommandName,
-		process.CreatedAt, process.UpdatedAt,
-	)
-	return err
+	return store.InsertBackgroundProcess(ctx, r.ORM(), process)
 }
 
 func (r *Repo) GetBackgroundProcess(ctx context.Context, id string) (*BackgroundProcess, error) {
 	if id == "" {
 		return nil, fmt.Errorf("process ID cannot be empty")
 	}
-
-	query := `
-		SELECT id, pid, command, working_dir, worktree_id, project_id, chat_id, user_id,
-			status, exit_code, started_at, ended_at, signature, source_type,
-			package_type, command_name, created_at, updated_at
-		FROM background_processes WHERE id = ?`
-	query = r.bindQuery(query)
-	row := r.DB.QueryRowContext(ctx, query, id)
-
-	return scanBackgroundProcess(row)
+	return store.GetBackgroundProcess(ctx, r.ORM(), id)
 }
 
 func (r *Repo) ListBackgroundProcesses(ctx context.Context, filters BackgroundProcessFilters) ([]*BackgroundProcess, error) {
-	query := `
-		SELECT id, pid, command, working_dir, worktree_id, project_id, chat_id, user_id,
-			status, exit_code, started_at, ended_at, signature, source_type,
-			package_type, command_name, created_at, updated_at
-		FROM background_processes WHERE 1=1`
-	args := []interface{}{}
-
-	if filters.UserID != "" {
-		query += " AND user_id = ?"
-		args = append(args, filters.UserID)
-	}
-	if filters.WorktreeID != nil {
-		query += " AND worktree_id = ?"
-		args = append(args, *filters.WorktreeID)
-	}
-	if filters.ProjectID != nil {
-		query += " AND project_id = ?"
-		args = append(args, *filters.ProjectID)
-	}
-	if filters.ChatID != nil {
-		query += " AND chat_id = ?"
-		args = append(args, *filters.ChatID)
-	}
-	if filters.Status != nil {
-		query += " AND status = ?"
-		args = append(args, *filters.Status)
-	}
-	if filters.SourceType != nil {
-		query += " AND source_type = ?"
-		args = append(args, string(*filters.SourceType))
-	}
-
-	query += " ORDER BY started_at DESC"
-
-	if filters.Limit > 0 {
-		query += " LIMIT ?"
-		args = append(args, filters.Limit)
-	}
-	if filters.Offset > 0 {
-		query += " OFFSET ?"
-		args = append(args, filters.Offset)
-	}
-
-	query = r.bindQuery(query)
-
-	rows, err := r.DB.QueryContext(ctx, query, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var processes []*BackgroundProcess
-	for rows.Next() {
-		process, err := scanBackgroundProcessFromRows(rows)
-		if err != nil {
-			return nil, err
-		}
-		processes = append(processes, process)
-	}
-
-	return processes, rows.Err()
+	return store.ListBackgroundProcesses(ctx, r.ORM(), filters)
 }
 
 func (r *Repo) UpdateBackgroundProcessStatus(ctx context.Context, id string, status BackgroundProcessStatus, exitCode *int, endedAt *time.Time) error {
 	if id == "" {
 		return fmt.Errorf("process ID cannot be empty")
 	}
-
-	query := `
-		UPDATE background_processes
-		SET status = ?, exit_code = ?, ended_at = ?, updated_at = ?
-		WHERE id = ?`
-	query = r.bindQuery(query)
-	_, err := r.DB.ExecContext(ctx, query,
-		status, exitCode, endedAt, time.Now(), id,
-	)
-	return err
+	return store.SetBackgroundProcessStatus(ctx, r.ORM(), id, status, exitCode, endedAt)
 }
 
 func (r *Repo) UpdateBackgroundProcessPID(ctx context.Context, id string, pid int, signature string) error {
 	if id == "" {
 		return fmt.Errorf("process ID cannot be empty")
 	}
-
-	query := `
-		UPDATE background_processes
-		SET pid = ?, signature = ?, updated_at = ?
-		WHERE id = ?`
-	query = r.bindQuery(query)
-	_, err := r.DB.ExecContext(ctx, query,
-		pid, signature, time.Now(), id,
-	)
-	return err
+	return store.SetBackgroundProcessPID(ctx, r.ORM(), id, pid, signature)
 }
 
 func (r *Repo) GetRunningBackgroundProcesses(ctx context.Context) ([]*BackgroundProcess, error) {
-	rows, err := r.DB.QueryContext(ctx, `
-		SELECT id, pid, command, working_dir, worktree_id, project_id, chat_id, user_id,
-			status, exit_code, started_at, ended_at, signature, source_type,
-			package_type, command_name, created_at, updated_at
-		FROM background_processes
-		WHERE status = ?`, BgProcessStatusRunning)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var processes []*BackgroundProcess
-	for rows.Next() {
-		process, err := scanBackgroundProcessFromRows(rows)
-		if err != nil {
-			return nil, err
-		}
-		processes = append(processes, process)
-	}
-
-	return processes, rows.Err()
+	return store.ListRunningBackgroundProcesses(ctx, r.ORM())
 }
 
 func (r *Repo) MarkStaleProcesses(ctx context.Context, processIDs []string) error {
-	if len(processIDs) == 0 {
-		return nil
-	}
-
-	placeholders := make([]string, len(processIDs))
-	for i := range processIDs {
-		placeholders[i] = "?"
-	}
-
-	args := make([]interface{}, len(processIDs)+3)
-	args[0] = BgProcessStatusStale
-	args[1] = time.Now()
-	args[2] = time.Now()
-	for i, id := range processIDs {
-		args[i+3] = id
-	}
-
-	query := fmt.Sprintf(`
-		UPDATE background_processes
-		SET status = ?, ended_at = ?, updated_at = ?
-		WHERE id IN (%s)`,
-		strings.Join(placeholders, ","),
-	)
-	query = r.bindQuery(query)
-
-	_, err := r.DB.ExecContext(ctx, query, args...)
-	return err
+	return store.MarkStaleBackgroundProcesses(ctx, r.ORM(), processIDs)
 }
 
 func (r *Repo) CleanupOldBackgroundProcesses(ctx context.Context, olderThan time.Time) (int64, error) {
-	query := `
-		DELETE FROM background_processes
-		WHERE status IN (?, ?, ?, ?, ?)
-			AND ended_at < ?`
-	query = r.bindQuery(query)
-	result, err := r.DB.ExecContext(ctx, query,
-		BgProcessStatusCompleted,
-		BgProcessStatusFailed,
-		BgProcessStatusKilled,
-		BgProcessStatusKilledExternally,
-		BgProcessStatusStale,
-		olderThan,
-	)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected()
+	return store.DeleteEndedBackgroundProcesses(ctx, r.ORM(), olderThan)
 }
 
 // ==================== Background Process Output ====================
 
 func (r *Repo) CreateBackgroundProcessOutputBatch(ctx context.Context, lines []BackgroundProcessOutputLine) error {
-	if len(lines) == 0 {
-		return nil
-	}
-
-	// Build a single multi-row INSERT for efficiency.
-	// Each row has 4 value placeholders: (process_id, seq, stream, line)
-	var b strings.Builder
-	b.WriteString("INSERT INTO background_process_output (process_id, seq, stream, line) VALUES ")
-	args := make([]interface{}, 0, len(lines)*4)
-	for i, line := range lines {
-		if i > 0 {
-			b.WriteString(", ")
-		}
-		b.WriteString("(?, ?, ?, ?)")
-		args = append(args, line.ProcessID, line.Seq, line.Stream, line.Line)
-	}
-
-	query := r.bindQuery(b.String())
-	_, err := r.DB.ExecContext(ctx, query, args...)
-	return err
+	return store.InsertBackgroundProcessOutput(ctx, r.ORM(), lines)
 }
 
 func (r *Repo) GetBackgroundProcessOutput(ctx context.Context, processID string, afterSeq int64, limit int) ([]BackgroundProcessOutputLine, error) {
@@ -3328,155 +2407,48 @@ func (r *Repo) GetBackgroundProcessOutput(ctx context.Context, processID string,
 	if limit <= 0 {
 		limit = 10000
 	}
-
-	query := `
-		SELECT id, process_id, seq, stream, line, created_at
-		FROM background_process_output
-		WHERE process_id = ? AND seq > ?
-		ORDER BY seq ASC
-		LIMIT ?`
-	query = r.bindQuery(query)
-	rows, err := r.DB.QueryContext(ctx, query, processID, afterSeq, limit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var result []BackgroundProcessOutputLine
-	for rows.Next() {
-		var line BackgroundProcessOutputLine
-		if err := rows.Scan(&line.ID, &line.ProcessID, &line.Seq, &line.Stream, &line.Line, &line.CreatedAt); err != nil {
-			return nil, err
-		}
-		result = append(result, line)
-	}
-	return result, rows.Err()
-}
-
-// scanBackgroundProcess scans a single row into a BackgroundProcess
-func scanBackgroundProcess(row *sql.Row) (*BackgroundProcess, error) {
-	var p BackgroundProcess
-	var pid, exitCode sql.NullInt64
-	var worktreeID, projectID, chatID, signature, packageType, commandName sql.NullString
-	var endedAt sql.NullTime
-
-	err := row.Scan(
-		&p.ID, &pid, &p.Command, &p.WorkingDir,
-		&worktreeID, &projectID, &chatID, &p.UserID,
-		&p.Status, &exitCode, &p.StartedAt, &endedAt,
-		&signature, &p.SourceType, &packageType, &commandName,
-		&p.CreatedAt, &p.UpdatedAt,
-	)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("process not found")
-		}
-		return nil, err
-	}
-
-	if pid.Valid {
-		pidInt := int(pid.Int64)
-		p.PID = &pidInt
-	}
-	if exitCode.Valid {
-		exitCodeInt := int(exitCode.Int64)
-		p.ExitCode = &exitCodeInt
-	}
-	if worktreeID.Valid {
-		p.WorktreeID = &worktreeID.String
-	}
-	if projectID.Valid {
-		p.ProjectID = &projectID.String
-	}
-	if chatID.Valid {
-		p.ChatID = &chatID.String
-	}
-	if signature.Valid {
-		p.Signature = &signature.String
-	}
-	if packageType.Valid {
-		p.PackageType = &packageType.String
-	}
-	if commandName.Valid {
-		p.CommandName = &commandName.String
-	}
-	if endedAt.Valid {
-		p.EndedAt = &endedAt.Time
-	}
-
-	return &p, nil
-}
-
-// scanBackgroundProcessFromRows scans a row from sql.Rows into a BackgroundProcess
-func scanBackgroundProcessFromRows(rows *sql.Rows) (*BackgroundProcess, error) {
-	var p BackgroundProcess
-	var pid, exitCode sql.NullInt64
-	var worktreeID, projectID, chatID, signature, packageType, commandName sql.NullString
-	var endedAt sql.NullTime
-
-	err := rows.Scan(
-		&p.ID, &pid, &p.Command, &p.WorkingDir,
-		&worktreeID, &projectID, &chatID, &p.UserID,
-		&p.Status, &exitCode, &p.StartedAt, &endedAt,
-		&signature, &p.SourceType, &packageType, &commandName,
-		&p.CreatedAt, &p.UpdatedAt,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	if pid.Valid {
-		pidInt := int(pid.Int64)
-		p.PID = &pidInt
-	}
-	if exitCode.Valid {
-		exitCodeInt := int(exitCode.Int64)
-		p.ExitCode = &exitCodeInt
-	}
-	if worktreeID.Valid {
-		p.WorktreeID = &worktreeID.String
-	}
-	if projectID.Valid {
-		p.ProjectID = &projectID.String
-	}
-	if chatID.Valid {
-		p.ChatID = &chatID.String
-	}
-	if signature.Valid {
-		p.Signature = &signature.String
-	}
-	if packageType.Valid {
-		p.PackageType = &packageType.String
-	}
-	if commandName.Valid {
-		p.CommandName = &commandName.String
-	}
-	if endedAt.Valid {
-		p.EndedAt = &endedAt.Time
-	}
-
-	return &p, nil
+	return store.ReadBackgroundProcessOutput(ctx, r.ORM(), processID, afterSeq, limit)
 }
 
 // ==================== Attachments ====================
 
 func (r *Repo) CreateAttachment(ctx context.Context, attachment *Attachment) error {
-	return r.attachments.CreateAttachment(ctx, attachment)
+	return store.InsertAttachment(ctx, r.ORM(), attachment)
 }
 
 func (r *Repo) GetAttachment(ctx context.Context, id string) (*Attachment, error) {
-	return r.attachments.GetAttachment(ctx, id)
+	return store.GetAttachment(ctx, r.ORM(), id)
 }
 
 func (r *Repo) GetAttachmentsByIDs(ctx context.Context, ids []string) ([]*Attachment, error) {
-	return r.attachments.GetAttachmentsByIDs(ctx, ids)
+	return store.GetAttachmentsByIDs(ctx, r.ORM(), ids)
 }
 
 func (r *Repo) DeleteAttachment(ctx context.Context, id string) error {
-	return r.attachments.DeleteAttachment(ctx, id)
+	return store.RemoveAttachment(ctx, r.ORM(), id)
 }
 
 // ==================== Context Usage ====================
+
+// threadTokenCountAt is the token count the thread's context window at
+// contextSeq last reported — its newest message carrying token data, at or
+// before maxSeq when set — or 0 when none has any.
+func (r *Repo) threadTokenCountAt(ctx context.Context, thread string, contextSeq int, maxSeq *int64) (int64, error) {
+	msg, err := store.LatestMessageWithTokens(ctx, r.ORM(), thread, int64(contextSeq), maxSeq)
+	if err != nil || msg == nil || msg.TokenCount == nil {
+		return 0, err
+	}
+	return int64(*msg.TokenCount), nil
+}
+
+// countMessages counts the messages opts select.
+func (r *Repo) countMessages(ctx context.Context, opts ...orm.QueryOption) (int, error) {
+	n, err := store.CountMessage(ctx, r.ORM(), opts...)
+	if err != nil {
+		return 0, fmt.Errorf("failed to count messages: %w", err)
+	}
+	return int(n), nil
+}
 
 // GetContextUsage returns context usage info for the compaction indicator.
 //
@@ -3527,13 +2499,7 @@ func (r *Repo) GetThreadTokenCount(ctx context.Context, thread string, maxSeq *i
 	}
 
 	// Query for token count at or before maxSeq
-	var maxSeqSQL sql.NullInt64
-	if maxSeq != nil {
-		maxSeqSQL = sql.NullInt64{Int64: *maxSeq, Valid: true}
-	}
-
-	var localTokens int64
-	localTokens, err = r.tokenCounts.GetThreadTokenCountAtSeq(ctx, thread, int64(contextSeq), maxSeqSQL)
+	localTokens, err := r.threadTokenCountAt(ctx, thread, contextSeq, maxSeq)
 	if err != nil {
 		logging.WarnContext(ctx, "[GetThreadTokenCount] Error querying token count",
 			"thread", thread,
@@ -3588,47 +2554,11 @@ func (r *Repo) GetThreadTokenCount(ctx context.Context, thread string, maxSeq *i
 func (r *Repo) getThreadTokenCountDirect(ctx context.Context, chatID, thread string, maxSeq *int64) (int64, error) {
 	_ = chatID // kept for API compatibility
 
-	// Get context sequence
 	contextSeq, err := r.GetMaxContextSequenceInThread(ctx, thread)
 	if err != nil {
 		contextSeq = 0
 	}
-
-	// Build query
-	var query string
-	var args []interface{}
-	if maxSeq != nil {
-		query = `
-			SELECT CAST(COALESCE(
-				(
-					SELECT COALESCE(token_count, 0)
-					FROM messages m
-					JOIN context_windows cw ON cw.id = m.context_window_id
-					WHERE cw.thread_id = ? AND cw.sequence = ?
-					  AND token_count IS NOT NULL
-					  AND seq <= ?
-					ORDER BY seq DESC
-					LIMIT 1
-				), 0) AS INTEGER)`
-		args = []interface{}{thread, contextSeq, *maxSeq}
-	} else {
-		query = `
-			SELECT CAST(COALESCE(
-				(
-					SELECT COALESCE(token_count, 0)
-					FROM messages m
-					JOIN context_windows cw ON cw.id = m.context_window_id
-					WHERE cw.thread_id = ? AND cw.sequence = ?
-					  AND token_count IS NOT NULL
-					ORDER BY seq DESC
-					LIMIT 1
-				), 0) AS INTEGER)`
-		args = []interface{}{thread, contextSeq}
-	}
-	query = r.bindQuery(query)
-
-	var tokens int64
-	err = r.DB.QueryRowContext(ctx, query, args...).Scan(&tokens)
+	tokens, err := r.threadTokenCountAt(ctx, thread, contextSeq, maxSeq)
 	if err != nil {
 		return 0, nil
 	}
@@ -3712,7 +2642,7 @@ func (r *Repo) CreateWorkflow(ctx context.Context, workflow *Workflow) error {
 	}
 
 	return r.RunTx(ctx, func(txCtx context.Context) error {
-		if err := r.workflows.CreateWorkflow(txCtx, workflow); err != nil {
+		if err := store.InsertWorkflowIfAbsent(txCtx, r.ORM(), workflow); err != nil {
 			return err
 		}
 		if workflow.ChatID != "" {
@@ -3723,36 +2653,36 @@ func (r *Repo) CreateWorkflow(ctx context.Context, workflow *Workflow) error {
 }
 
 func (r *Repo) GetWorkflow(ctx context.Context, id string) (*Workflow, error) {
-	return r.workflows.GetWorkflow(ctx, id)
+	return store.LoadWorkflow(ctx, r.ORM(), id)
 }
 
 func (r *Repo) GetWorkflowByThread(ctx context.Context, chatID, thread string) (*Workflow, error) {
-	return r.workflows.GetWorkflowByThread(ctx, chatID, thread)
+	return store.FindWorkflowByThread(ctx, r.ORM(), chatID, thread)
 }
 
 func (r *Repo) ListWorkflowsByChat(ctx context.Context, chatID string) ([]*Workflow, error) {
-	return r.workflows.ListWorkflowsByChat(ctx, chatID)
+	return store.ListChatWorkflows(ctx, r.ORM(), chatID)
 }
 
 func (r *Repo) ListChildWorkflows(ctx context.Context, parentID string) ([]*Workflow, error) {
-	return r.workflows.ListChildWorkflows(ctx, parentID)
+	return store.ListChildWorkflows(ctx, r.ORM(), parentID)
 }
 
 func (r *Repo) ListRootWorkflows(ctx context.Context, chatID string) ([]*Workflow, error) {
-	return r.workflows.ListRootWorkflows(ctx, chatID)
+	return store.ListRootWorkflows(ctx, r.ORM(), chatID)
 }
 
 func (r *Repo) GetRootWorkflowStatusForChats(ctx context.Context, chatIDs []string) (map[string]WorkflowStatus, error) {
 	if len(chatIDs) == 0 {
 		return make(map[string]WorkflowStatus), nil
 	}
-	return r.workflows.GetRootWorkflowStatusForChats(ctx, chatIDs)
+	return store.RootWorkflowStatusForChats(ctx, r.ORM(), chatIDs)
 }
 
 func (r *Repo) CompareAndSwapWorkflowStatus(ctx context.Context, id string, newStatus, expectedStatus WorkflowStatus) (bool, error) {
 	var swapped bool
 	err := r.RunTx(ctx, func(txCtx context.Context) error {
-		ok, err := r.workflows.CompareAndSwapWorkflowStatus(txCtx, id, newStatus, expectedStatus)
+		ok, err := store.CompareAndSwapWorkflowStatus(txCtx, r.ORM(), id, newStatus, expectedStatus)
 		if err != nil {
 			return err
 		}
@@ -3774,7 +2704,7 @@ func (r *Repo) CompareAndSwapWorkflowStatus(ctx context.Context, id string, newS
 
 func (r *Repo) UpdateWorkflowStatus(ctx context.Context, id string, status WorkflowStatus) error {
 	return r.RunTx(ctx, func(txCtx context.Context) error {
-		if err := r.workflows.UpdateWorkflowStatus(txCtx, id, status); err != nil {
+		if err := store.UpdateWorkflowStatus(txCtx, r.ORM(), id, status); err != nil {
 			return err
 		}
 		wf, err := r.GetWorkflow(txCtx, id)
@@ -3794,7 +2724,7 @@ func (r *Repo) UpdateWorkflowStatus(ctx context.Context, id string, status Workf
 // carry "the work did not pass". No chat-activity emit: the outcome does not
 // change whether the chat is busy, only what the finished run means.
 func (r *Repo) SetWorkflowOutcome(ctx context.Context, id string, outcome string) error {
-	return r.workflows.SetWorkflowOutcome(ctx, id, outcome)
+	return store.SetWorkflowOutcome(ctx, r.ORM(), id, outcome)
 }
 
 // EnsureWorkflowRunning is a lightweight idempotent check: if the workflow
@@ -3833,7 +2763,7 @@ func (r *Repo) EnsureWorkflowRunning(ctx context.Context, workflowID, chatID str
 // UpdateWorkflowName updates the workflow name. Only allowed when status is 'pending'.
 // Returns error if workflow doesn't exist or status is not pending.
 func (r *Repo) UpdateWorkflowName(ctx context.Context, id string, workflowName string) error {
-	return r.workflows.UpdateWorkflowName(ctx, id, workflowName)
+	return store.RenamePendingWorkflow(ctx, r.ORM(), id, workflowName)
 }
 
 // CascadeTerminalStatusToDescendants moves every descendant workflow record
@@ -3841,31 +2771,32 @@ func (r *Repo) UpdateWorkflowName(ctx context.Context, id string, workflowName s
 // when a workflow ends, to drain the children (spawn children, thread records,
 // etc.) that are still running or paused.
 func (r *Repo) CascadeTerminalStatusToDescendants(ctx context.Context, parentWorkflowID string, reason WorkflowStopReason) error {
-	return r.workflows.CascadeTerminalStatusToDescendants(ctx, parentWorkflowID, reason)
+	return store.CascadeTerminalStatusToDescendants(ctx, r.ORM(), parentWorkflowID, reason)
 }
 
 // ReapOrphanedWorkflowDescendants ends running/paused workflows whose parent is
 // already terminal, at the terminal ancestor's status, returning the rows
 // repaired. See the Repository interface for why the backstop is needed.
 func (r *Repo) ReapOrphanedWorkflowDescendants(ctx context.Context) ([]ReapedWorkflow, error) {
-	return r.workflows.ReapOrphanedWorkflowDescendants(ctx)
+	return store.ReapOrphanedWorkflowDescendants(ctx, r.ORM())
 }
 
 // ReviveSubtreeLiveAt brings a reset-and-replayed run's subtree back to life:
 // every descendant workflow row that was live at the reset point, the threads
 // those rows own, and the root's own thread. See the Repository interface for
-// why a resume has to do this, and queries/workflows.sql for the predicate and
-// for why both halves are a single atomic statement.
+// why a resume has to do this, and internal/store/workflow_repo_ext.go
+// (reviveSubtreeLiveAtSQL) for the predicate and for why both halves are a
+// single atomic statement.
 func (r *Repo) ReviveSubtreeLiveAt(ctx context.Context, rootWorkflowID string, at time.Time) (workflowsRevived, threadsRevived int64, err error) {
 	if rootWorkflowID == "" {
 		return 0, 0, fmt.Errorf("root workflow ID cannot be empty")
 	}
-	return r.workflows.ReviveSubtreeLiveAt(ctx, rootWorkflowID, at)
+	return store.ReviveSubtreeLiveAt(ctx, r.ORM(), rootWorkflowID, at)
 }
 
 func (r *Repo) PauseRunningWorkflowsByChat(ctx context.Context, chatID string) error {
 	return r.RunTx(ctx, func(txCtx context.Context) error {
-		if err := r.workflows.PauseRunningWorkflowsByChat(txCtx, chatID); err != nil {
+		if err := store.PauseRunningWorkflowsByChat(txCtx, r.ORM(), chatID); err != nil {
 			return err
 		}
 		return r.emitChatActivityIfChanged(txCtx, chatID)
@@ -3874,7 +2805,7 @@ func (r *Repo) PauseRunningWorkflowsByChat(ctx context.Context, chatID string) e
 
 func (r *Repo) ResumeWorkflowsByChat(ctx context.Context, chatID string) error {
 	return r.RunTx(ctx, func(txCtx context.Context) error {
-		if err := r.workflows.ResumeWorkflowsByChat(txCtx, chatID); err != nil {
+		if err := store.ResumeWorkflowsByChat(txCtx, r.ORM(), chatID); err != nil {
 			return err
 		}
 		return r.emitChatActivityIfChanged(txCtx, chatID)
@@ -3882,17 +2813,17 @@ func (r *Repo) ResumeWorkflowsByChat(ctx context.Context, chatID string) error {
 }
 
 func (r *Repo) DeleteWorkflow(ctx context.Context, id string) error {
-	return r.workflows.DeleteWorkflow(ctx, id)
+	return store.RemoveWorkflow(ctx, r.ORM(), id)
 }
 
 func (r *Repo) DeleteWorkflowsByChat(ctx context.Context, chatID string) error {
-	return r.workflows.DeleteWorkflowsByChat(ctx, chatID)
+	return store.RemoveChatWorkflows(ctx, r.ORM(), chatID)
 }
 
 // ==================== Triggers ====================
 //
-// Every method here goes through r.triggers, whose queries run against
-// WrappedDBTX.DB(ctx) — so they pick up an ambient RunTx transaction
+// Every method here delegates to internal/store over r.ORM(), which joins the
+// transaction ctx carries — so they pick up an ambient RunTx transaction
 // automatically. That is what lets the launcher write the trigger event row in
 // the SAME transaction as the chat it launches: either both commit or neither
 // does, and there is no window where a chat exists with nothing recording why.
@@ -3901,32 +2832,32 @@ func (r *Repo) CreateTrigger(ctx context.Context, t *core.Trigger) error {
 	if t == nil {
 		return fmt.Errorf("trigger cannot be nil")
 	}
-	return r.triggers.CreateTrigger(ctx, t)
+	return store.InsertTrigger(ctx, r.ORM(), t)
 }
 
 func (r *Repo) GetTrigger(ctx context.Context, id string) (*core.Trigger, error) {
 	if id == "" {
 		return nil, fmt.Errorf("trigger ID cannot be empty")
 	}
-	return r.triggers.GetTrigger(ctx, id)
+	return store.GetTrigger(ctx, r.ORM(), id)
 }
 
 func (r *Repo) ListTriggers(ctx context.Context, f core.TriggerFilters) ([]*core.Trigger, error) {
 	if f.UserID == "" {
 		return nil, fmt.Errorf("user ID cannot be empty; use ListAllTriggers to list every user's triggers")
 	}
-	return r.triggers.ListTriggers(ctx, f)
+	return store.ListTriggersForUser(ctx, r.ORM(), f)
 }
 
 func (r *Repo) ListAllTriggers(ctx context.Context) ([]*core.Trigger, error) {
-	return r.triggers.ListAllTriggers(ctx)
+	return store.ListAllTriggers(ctx, r.ORM())
 }
 
 func (r *Repo) LockTrigger(ctx context.Context, id string) error {
 	if id == "" {
 		return fmt.Errorf("trigger ID cannot be empty")
 	}
-	return r.triggers.LockTrigger(ctx, id)
+	return store.LockTrigger(ctx, r.ORM(), id)
 }
 
 func (r *Repo) UpdateTrigger(ctx context.Context, t *core.Trigger) error {
@@ -3936,39 +2867,32 @@ func (r *Repo) UpdateTrigger(ctx context.Context, t *core.Trigger) error {
 	if t.ID == "" {
 		return fmt.Errorf("trigger ID cannot be empty")
 	}
-	return r.triggers.UpdateTrigger(ctx, t)
+	return store.ReplaceTrigger(ctx, r.ORM(), t)
 }
 
 func (r *Repo) DeleteTrigger(ctx context.Context, id string) error {
 	if id == "" {
 		return fmt.Errorf("trigger ID cannot be empty")
 	}
-	return r.triggers.DeleteTrigger(ctx, id)
+	return store.RemoveTrigger(ctx, r.ORM(), id)
 }
 
 func (r *Repo) SetTriggerEnabled(ctx context.Context, id string, enabled bool) error {
 	if id == "" {
 		return fmt.Errorf("trigger ID cannot be empty")
 	}
-	return r.triggers.SetTriggerEnabled(ctx, id, enabled)
+	return store.SetTriggerEnabled(ctx, r.ORM(), id, enabled)
 }
 
 func (r *Repo) SetTriggerProjection(ctx context.Context, id string, p core.TriggerProjection) error {
 	if id == "" {
 		return fmt.Errorf("trigger ID cannot be empty")
 	}
-	return r.triggers.SetTriggerProjection(ctx, id, p)
-}
-
-func (r *Repo) ListWorkflowTriggerActivations(ctx context.Context, userID, workflow string) ([]*core.Trigger, error) {
-	if userID == "" {
-		return nil, fmt.Errorf("user ID cannot be empty")
-	}
-	return r.triggers.ListWorkflowTriggerActivations(ctx, userID, workflow)
+	return store.SetTriggerProjection(ctx, r.ORM(), id, p)
 }
 
 func (r *Repo) ListAllWorkflowTriggerActivations(ctx context.Context) ([]*core.Trigger, error) {
-	return r.triggers.ListAllWorkflowTriggerActivations(ctx)
+	return store.ListAllWorkflowTriggerActivations(ctx, r.ORM())
 }
 
 func (r *Repo) CreateTriggerEvent(ctx context.Context, ev *core.TriggerEvent) (bool, error) {
@@ -3981,56 +2905,56 @@ func (r *Repo) CreateTriggerEvent(ctx context.Context, ev *core.TriggerEvent) (b
 		// second real firing would silently report "already launched".
 		return false, fmt.Errorf("trigger event dedupe key cannot be empty")
 	}
-	return r.triggers.CreateTriggerEvent(ctx, ev)
+	return store.InsertTriggerEventIfAbsent(ctx, r.ORM(), ev)
 }
 
 func (r *Repo) GetTriggerEventByDedupe(ctx context.Context, kind core.TriggerEventKind, dedupeKey string) (*core.TriggerEvent, error) {
 	if dedupeKey == "" {
 		return nil, fmt.Errorf("trigger event dedupe key cannot be empty")
 	}
-	return r.triggers.GetTriggerEventByDedupe(ctx, kind, dedupeKey)
+	return store.GetTriggerEventByDedupe(ctx, r.ORM(), kind, dedupeKey)
 }
 
 func (r *Repo) GetTriggerEventByChatID(ctx context.Context, chatID string) (*core.TriggerEvent, error) {
 	if chatID == "" {
 		return nil, fmt.Errorf("chat ID cannot be empty")
 	}
-	return r.triggers.GetTriggerEventByChatID(ctx, chatID)
+	return store.GetTriggerEventByChatID(ctx, r.ORM(), chatID)
 }
 
 func (r *Repo) GetTriggerEventByChat(ctx context.Context, kind core.TriggerEventKind, chatID string) (*core.TriggerEvent, error) {
 	if chatID == "" {
 		return nil, fmt.Errorf("chat ID cannot be empty")
 	}
-	return r.triggers.GetTriggerEventByChat(ctx, kind, chatID)
+	return store.GetTriggerEventByChat(ctx, r.ORM(), kind, chatID)
 }
 
 func (r *Repo) CountLiveLaunchedRuns(ctx context.Context, userID string, kind core.TriggerEventKind) (int, error) {
 	if userID == "" {
 		return 0, fmt.Errorf("user ID cannot be empty")
 	}
-	return r.triggers.CountLiveLaunchedRuns(ctx, userID, kind)
+	return store.CountLiveLaunchedRuns(ctx, r.ORM(), userID, kind)
 }
 
 func (r *Repo) UpdateTriggerEventOutcome(ctx context.Context, id string, outcome core.TriggerEventOutcome, detail string, chatID *string) error {
 	if id == "" {
 		return fmt.Errorf("trigger event ID cannot be empty")
 	}
-	return r.triggers.UpdateTriggerEventOutcome(ctx, id, outcome, detail, chatID)
+	return store.UpdateTriggerEventOutcome(ctx, r.ORM(), id, outcome, detail, chatID)
 }
 
 func (r *Repo) SetLaunchEventRunStatus(ctx context.Context, chatID, status string) error {
 	if chatID == "" {
 		return fmt.Errorf("chat ID cannot be empty")
 	}
-	return r.triggers.SetLaunchEventRunStatus(ctx, chatID, status)
+	return store.SetLaunchEventRunStatus(ctx, r.ORM(), chatID, status)
 }
 
 func (r *Repo) UpdateTriggerEventPayload(ctx context.Context, id string, payload map[string]any) error {
 	if id == "" {
 		return fmt.Errorf("trigger event ID cannot be empty")
 	}
-	return r.triggers.UpdateTriggerEventPayload(ctx, id, payload)
+	return store.UpdateTriggerEventPayload(ctx, r.ORM(), id, payload)
 }
 
 func (r *Repo) ListTriggerEvents(ctx context.Context, f core.TriggerEventFilters) ([]*core.TriggerEventWithRun, bool, error) {
@@ -4040,35 +2964,35 @@ func (r *Repo) ListTriggerEvents(ctx context.Context, f core.TriggerEventFilters
 	if f.UserID == "" {
 		return nil, false, fmt.Errorf("user ID cannot be empty")
 	}
-	return r.triggers.ListTriggerEvents(ctx, f)
+	return store.ListTriggerEventsPage(ctx, r.ORM(), f)
 }
 
 func (r *Repo) ListInboxPending(ctx context.Context, userID string) ([]*core.InboxPending, error) {
 	if userID == "" {
 		return nil, fmt.Errorf("user ID cannot be empty")
 	}
-	return r.inbox.ListInboxPending(ctx, userID)
+	return store.ListInboxPending(ctx, r.ORM(), userID)
 }
 
 func (r *Repo) ListDismissedInboxItemIDs(ctx context.Context, userID string, itemIDs []string) (map[string]bool, error) {
 	if userID == "" {
 		return nil, fmt.Errorf("user ID cannot be empty")
 	}
-	return r.inbox.ListDismissedInboxItemIDs(ctx, userID, itemIDs)
+	return store.ListDismissedInboxItemIDs(ctx, r.ORM(), userID, itemIDs)
 }
 
 func (r *Repo) DismissInboxItems(ctx context.Context, userID string, itemIDs []string, at time.Time) error {
 	if userID == "" {
 		return fmt.Errorf("user ID cannot be empty")
 	}
-	return r.inbox.DismissInboxItems(ctx, userID, itemIDs, at)
+	return store.DismissInboxItems(ctx, r.ORM(), userID, itemIDs, at)
 }
 
 func (r *Repo) RestoreInboxItems(ctx context.Context, userID string, itemIDs []string) error {
 	if userID == "" {
 		return fmt.Errorf("user ID cannot be empty")
 	}
-	return r.inbox.RestoreInboxItems(ctx, userID, itemIDs)
+	return store.RestoreInboxItems(ctx, r.ORM(), userID, itemIDs)
 }
 
 func (r *Repo) CreateRunEvent(ctx context.Context, ev *core.RunEvent) (bool, error) {
@@ -4080,140 +3004,136 @@ func (r *Repo) CreateRunEvent(ctx context.Context, ev *core.RunEvent) (bool, err
 		// and the second real event would silently read as a retry.
 		return false, fmt.Errorf("run event dedupe key cannot be empty")
 	}
-	return r.runEvents.CreateRunEvent(ctx, ev)
+	return store.InsertRunEvent(ctx, r.ORM(), ev)
 }
 
 func (r *Repo) GetRunEvent(ctx context.Context, id string) (*core.RunEvent, error) {
 	if id == "" {
 		return nil, fmt.Errorf("run event ID cannot be empty")
 	}
-	return r.runEvents.GetRunEvent(ctx, id)
+	return store.LoadRunEvent(ctx, r.ORM(), id)
 }
 
 func (r *Repo) GetRunEventByDedupe(ctx context.Context, dedupeKey string) (*core.RunEvent, error) {
 	if dedupeKey == "" {
 		return nil, fmt.Errorf("run event dedupe key cannot be empty")
 	}
-	return r.runEvents.GetRunEventByDedupe(ctx, dedupeKey)
+	return store.LoadRunEventByDedupe(ctx, r.ORM(), dedupeKey)
 }
 
 func (r *Repo) HasEnabledTriggerOfKind(ctx context.Context, userID string, kind core.TriggerKind) (bool, error) {
 	if userID == "" {
 		return false, fmt.Errorf("user ID cannot be empty")
 	}
-	return r.runEvents.HasEnabledTriggerOfKind(ctx, userID, kind)
+	return store.HasEnabledTriggerOfKind(ctx, r.ORM(), userID, kind)
 }
 
 func (r *Repo) LockChatForRunEvent(ctx context.Context, chatID string) error {
 	if chatID == "" {
 		return fmt.Errorf("chat ID cannot be empty")
 	}
-	return r.runEvents.LockChatForRunEvent(ctx, chatID)
+	return store.LockChatForRunEvent(ctx, r.ORM(), chatID)
 }
 
 func (r *Repo) CountOtherPendingBlockers(ctx context.Context, chatID, excludeID string) (int, error) {
 	if chatID == "" {
 		return 0, fmt.Errorf("chat ID cannot be empty")
 	}
-	return r.runEvents.CountOtherPendingBlockers(ctx, chatID, excludeID)
+	return store.CountOtherPendingBlockers(ctx, r.ORM(), chatID, excludeID)
 }
 
 func (r *Repo) ClaimRunEvents(ctx context.Context, now, leaseUntil time.Time, max int) ([]*core.RunEvent, error) {
 	if max <= 0 {
 		return nil, nil
 	}
-	return r.runEvents.ClaimRunEvents(ctx, now, leaseUntil, max)
+	return store.ClaimRunEvents(ctx, r.ORM(), now, leaseUntil, max)
 }
 
 func (r *Repo) MarkRunEventDispatched(ctx context.Context, id string, at time.Time) error {
 	if id == "" {
 		return fmt.Errorf("run event ID cannot be empty")
 	}
-	return r.runEvents.MarkRunEventDispatched(ctx, id, at)
+	return store.MarkRunEventDispatched(ctx, r.ORM(), id, at)
 }
 
 func (r *Repo) DeleteDispatchedRunEventsBefore(ctx context.Context, cutoff time.Time) (int64, error) {
-	return r.runEvents.DeleteDispatchedRunEventsBefore(ctx, cutoff)
+	return store.DeleteDispatchedRunEventsBefore(ctx, r.ORM(), cutoff)
 }
 
 func (r *Repo) RecentTriggerFirings(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error) {
 	if userID == "" {
 		return nil, fmt.Errorf("user ID cannot be empty")
 	}
-	return r.triggers.RecentTriggerFirings(ctx, userID, triggerIDs, perTrigger)
+	return store.RecentTriggerFirings(ctx, r.ORM(), userID, triggerIDs, perTrigger)
 }
 
 func (r *Repo) FiringsSinceLastSuccess(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error) {
 	if userID == "" {
 		return nil, fmt.Errorf("user ID cannot be empty")
 	}
-	return r.triggers.FiringsSinceLastSuccess(ctx, userID, triggerIDs, perTrigger)
+	return store.FiringsSinceLastSuccess(ctx, r.ORM(), userID, triggerIDs, perTrigger)
 }
 
 func (r *Repo) GetLatestTriggerEvent(ctx context.Context, triggerID string, outcome *core.TriggerEventOutcome) (*core.TriggerEvent, error) {
 	if triggerID == "" {
 		return nil, fmt.Errorf("trigger ID cannot be empty")
 	}
-	return r.triggers.GetLatestTriggerEvent(ctx, triggerID, outcome)
+	return store.GetLatestTriggerEvent(ctx, r.ORM(), triggerID, outcome)
 }
 
 func (r *Repo) SetTriggerWebhookTokenHash(ctx context.Context, id string, hash []byte) error {
 	if id == "" {
 		return fmt.Errorf("trigger ID cannot be empty")
 	}
-	return r.triggers.SetTriggerWebhookTokenHash(ctx, id, hash)
+	return store.SetTriggerWebhookTokenHash(ctx, r.ORM(), id, hash)
 }
 
 func (r *Repo) SetTriggerWebhookSecret(ctx context.Context, id string, sealed []byte) error {
 	if id == "" {
 		return fmt.Errorf("trigger ID cannot be empty")
 	}
-	return r.triggers.SetTriggerWebhookSecret(ctx, id, sealed)
+	return store.SetTriggerWebhookSecret(ctx, r.ORM(), id, sealed)
 }
 
 func (r *Repo) GetTriggerWebhookCredentials(ctx context.Context, id string) (*core.TriggerWebhookCredentials, error) {
 	if id == "" {
 		return nil, core.ErrTriggerNotFound
 	}
-	return r.triggers.GetTriggerWebhookCredentials(ctx, id)
+	return store.GetTriggerWebhookCredentials(ctx, r.ORM(), id)
 }
 
 func (r *Repo) ListIntegrationTriggers(ctx context.Context, integration string) ([]*core.IntegrationTriggerRoute, error) {
-	return r.triggers.ListIntegrationTriggers(ctx, integration)
+	return store.ListIntegrationTriggers(ctx, r.ORM(), integration)
 }
 
 func (r *Repo) ListStalePendingTriggerEvents(ctx context.Context, olderThan time.Time, limit int) ([]*core.TriggerEvent, error) {
-	return r.triggers.ListStalePendingTriggerEvents(ctx, olderThan, limit)
+	return store.ListStalePendingTriggerEvents(ctx, r.ORM(), olderThan, limit)
 }
 
 func (r *Repo) ClaimPendingTriggerEvent(ctx context.Context, id string, payload map[string]any) (bool, error) {
-	return r.triggers.ClaimPendingTriggerEvent(ctx, id, payload)
+	return store.ClaimPendingTriggerEvent(ctx, r.ORM(), id, payload)
 }
 
 func (r *Repo) SettlePendingTriggerEvent(ctx context.Context, id string, outcome core.TriggerEventOutcome, detail string) (bool, error) {
-	return r.triggers.SettlePendingTriggerEvent(ctx, id, outcome, detail)
+	return store.SettlePendingTriggerEvent(ctx, r.ORM(), id, outcome, detail)
 }
 
 func (r *Repo) GetTriggerRegistration(ctx context.Context, triggerID string) (*core.TriggerRegistration, error) {
-	return r.triggers.GetTriggerRegistration(ctx, triggerID)
+	return store.GetTriggerRegistration(ctx, r.ORM(), triggerID)
 }
 
 func (r *Repo) ListTriggerRegistrations(ctx context.Context, userID string, triggerIDs []string) (map[string]*core.TriggerRegistration, error) {
 	if userID == "" {
 		return nil, fmt.Errorf("user ID cannot be empty")
 	}
-	return r.triggers.ListTriggerRegistrations(ctx, userID, triggerIDs)
+	return store.ListTriggerRegistrationsForUser(ctx, r.ORM(), userID, triggerIDs)
 }
 
 func (r *Repo) UpsertTriggerRegistration(ctx context.Context, reg *core.TriggerRegistration) error {
 	if reg == nil || reg.TriggerID == "" {
 		return fmt.Errorf("trigger registration needs a trigger ID")
 	}
-	return r.triggers.UpsertTriggerRegistration(ctx, reg)
-}
-
-func (r *Repo) DeleteTriggerRegistration(ctx context.Context, triggerID string) error {
-	return r.triggers.DeleteTriggerRegistration(ctx, triggerID)
+	return store.UpsertTriggerRegistration(ctx, r.ORM(), reg)
 }
 
 // ==================== Step Executions ====================
@@ -4223,7 +3143,7 @@ func (r *Repo) CreateStepExecution(ctx context.Context, exec *StepExecution) err
 		return fmt.Errorf("step execution cannot be nil")
 	}
 
-	return r.workflows.CreateStepExecution(ctx, exec)
+	return store.InsertStepExecution(ctx, r.ORM(), exec)
 }
 
 func (r *Repo) GetStepExecution(ctx context.Context, id string) (*StepExecution, error) {
@@ -4231,39 +3151,41 @@ func (r *Repo) GetStepExecution(ctx context.Context, id string) (*StepExecution,
 		return nil, fmt.Errorf("step execution ID cannot be empty")
 	}
 
-	return r.workflows.GetStepExecution(ctx, id)
+	return store.LoadStepExecution(ctx, r.ORM(), id)
 }
 
 func (r *Repo) GetBasicStepExecutionsForChat(ctx context.Context, chatID string) ([]*ChatStepExecution, error) {
-	return r.workflows.GetBasicStepExecutionsForChat(ctx, chatID)
+	return store.ListBasicChatStepExecutions(ctx, r.ORM(), chatID)
 }
 
+// GetStepExecutionsForChat is the FULL view: output only for user-facing
+// activities. model.InternalActivities crosses into SQL here and only here.
 func (r *Repo) GetStepExecutionsForChat(ctx context.Context, chatID string) ([]*ChatStepExecution, error) {
-	return r.workflows.GetStepExecutionsForChat(ctx, chatID)
+	return store.ListChatStepExecutions(ctx, r.ORM(), chatID, model.InternalActivities)
 }
 
 func (r *Repo) ListStepExecutionRecordsForChat(ctx context.Context, chatID, nodePath string, limit int) ([]*StepExecution, error) {
-	return r.workflows.ListStepExecutionRecordsForChat(ctx, chatID, nodePath, limit)
+	return store.ListStepExecutionRecordsForChat(ctx, r.ORM(), chatID, nodePath, limit)
 }
 
 func (r *Repo) GetStepExecutionsByWorkflow(ctx context.Context, workflowID string) ([]*StepExecution, error) {
-	return r.workflows.GetStepExecutionsByWorkflow(ctx, workflowID)
+	return store.ListWorkflowStepExecutions(ctx, r.ORM(), workflowID)
 }
 
 func (r *Repo) GetStepExecutionsByStep(ctx context.Context, workflowID, stepID string) ([]*StepExecution, error) {
-	return r.workflows.GetStepExecutionsByStep(ctx, workflowID, stepID)
+	return store.ListStepExecutionsByStep(ctx, r.ORM(), workflowID, stepID)
 }
 
 func (r *Repo) DeleteStepExecutionsByWorkflow(ctx context.Context, workflowID string) error {
-	return r.workflows.DeleteStepExecutionsByWorkflow(ctx, workflowID)
+	return store.RemoveWorkflowStepExecutions(ctx, r.ORM(), workflowID)
 }
 
 func (r *Repo) ListWorkflowsByStatus(ctx context.Context, status WorkflowStatus) ([]*Workflow, error) {
-	return r.workflows.ListWorkflowsByStatus(ctx, status)
+	return store.ListWorkflowsByStatus(ctx, r.ORM(), status)
 }
 
 func (r *Repo) ListRootWorkflowsByStatus(ctx context.Context, status WorkflowStatus) ([]*Workflow, error) {
-	return r.workflows.ListRootWorkflowsByStatus(ctx, status)
+	return store.ListRootWorkflowsByStatus(ctx, r.ORM(), status)
 }
 
 // ==================== Workflow Checkpoints ====================
@@ -4274,29 +3196,29 @@ func (r *Repo) UpsertWorkflowCheckpoint(ctx context.Context, checkpoint *Workflo
 	if checkpoint == nil {
 		return fmt.Errorf("checkpoint cannot be nil")
 	}
-	return r.workflows.UpsertWorkflowCheckpoint(ctx, checkpoint)
+	return store.SaveWorkflowCheckpoint(ctx, r.ORM(), checkpoint)
 }
 
 // GetWorkflowCheckpoint returns the recorded position for a workflow ID, or
 // (nil, nil) when no checkpoint exists.
 func (r *Repo) GetWorkflowCheckpoint(ctx context.Context, workflowID string) (*WorkflowCheckpoint, error) {
-	return r.workflows.GetWorkflowCheckpoint(ctx, workflowID)
+	return store.LoadWorkflowCheckpoint(ctx, r.ORM(), workflowID)
 }
 
 func (r *Repo) DeleteWorkflowCheckpoint(ctx context.Context, workflowID string) error {
-	return r.workflows.DeleteWorkflowCheckpoint(ctx, workflowID)
+	return store.ClearWorkflowCheckpoint(ctx, r.ORM(), workflowID)
 }
 
 // UpdateWorkflowWorkerStarted records when a worker was started for a workflow.
 // This is used by the reconciler to skip stuck-check for recently started workers.
 func (r *Repo) UpdateWorkflowWorkerStarted(ctx context.Context, workflowID string) error {
-	return r.workflows.UpdateWorkflowWorkerStarted(ctx, workflowID)
+	return store.MarkWorkflowWorkerStarted(ctx, r.ORM(), workflowID)
 }
 
 // UpdateWorkflowWorkerStopped records when a worker was stopped for a workflow.
 // This tracks the worker lifecycle for pause/resume scenarios.
 func (r *Repo) UpdateWorkflowWorkerStopped(ctx context.Context, workflowID string) error {
-	return r.workflows.UpdateWorkflowWorkerStopped(ctx, workflowID)
+	return store.MarkWorkflowWorkerStopped(ctx, r.ORM(), workflowID)
 }
 
 // ==================== Threads ====================
@@ -4312,70 +3234,70 @@ func (r *Repo) CreateThread(ctx context.Context, thread *Thread) (*Thread, error
 	if thread.ChatID == "" {
 		return nil, fmt.Errorf("chat ID cannot be empty")
 	}
-	return r.threads.CreateThread(ctx, thread)
+	return store.InsertThread(ctx, r.ORM(), thread)
 }
 
 func (r *Repo) GetThread(ctx context.Context, id string) (*Thread, error) {
 	if id == "" {
 		return nil, fmt.Errorf("thread ID cannot be empty")
 	}
-	return r.threads.GetThread(ctx, id)
+	return store.GetThread(ctx, r.ORM(), id)
 }
 
 func (r *Repo) GetThreadByWorkflow(ctx context.Context, workflowID string) (*Thread, error) {
 	if workflowID == "" {
 		return nil, fmt.Errorf("workflow ID cannot be empty")
 	}
-	return r.threads.GetThreadByWorkflow(ctx, workflowID)
+	return store.GetThreadByWorkflow(ctx, r.ORM(), workflowID)
 }
 
 func (r *Repo) GetRootThread(ctx context.Context, chatID string) (*Thread, error) {
 	if chatID == "" {
 		return nil, fmt.Errorf("chat ID cannot be empty")
 	}
-	return r.threads.GetRootThread(ctx, chatID)
+	return store.GetRootThread(ctx, r.ORM(), chatID)
 }
 
 func (r *Repo) GetThreadWithParent(ctx context.Context, id string) (*Thread, *string, error) {
 	if id == "" {
 		return nil, nil, fmt.Errorf("thread ID cannot be empty")
 	}
-	return r.threads.GetThreadWithParent(ctx, id)
+	return store.GetThreadWithParent(ctx, r.ORM(), id)
 }
 
 func (r *Repo) ListThreadsByConversation(ctx context.Context, chatID string) ([]*Thread, error) {
 	if chatID == "" {
 		return nil, fmt.Errorf("chat ID cannot be empty")
 	}
-	return r.threads.ListThreadsByConversation(ctx, chatID)
+	return store.ListThreadsByConversation(ctx, r.ORM(), chatID)
 }
 
 func (r *Repo) ListChildThreads(ctx context.Context, parentThreadID string) ([]*Thread, error) {
 	if parentThreadID == "" {
 		return nil, fmt.Errorf("parent thread ID cannot be empty")
 	}
-	return r.threads.ListChildThreads(ctx, parentThreadID)
+	return store.ListChildThreads(ctx, r.ORM(), parentThreadID)
 }
 
 func (r *Repo) UpdateThreadWorkflow(ctx context.Context, threadID, workflowID string) (*Thread, error) {
 	if threadID == "" {
 		return nil, fmt.Errorf("thread ID cannot be empty")
 	}
-	return r.threads.UpdateThreadWorkflow(ctx, threadID, workflowID)
+	return store.UpdateThreadWorkflow(ctx, r.ORM(), threadID, workflowID)
 }
 
 func (r *Repo) UpdateThreadForkPoint(ctx context.Context, threadID string, forkAtMessageID *string) (*Thread, error) {
 	if threadID == "" {
 		return nil, fmt.Errorf("thread ID cannot be empty")
 	}
-	return r.threads.UpdateThreadForkPoint(ctx, threadID, forkAtMessageID)
+	return store.UpdateThreadForkPoint(ctx, r.ORM(), threadID, forkAtMessageID)
 }
 
-func (r *Repo) UpdateThreadStatus(ctx context.Context, threadID string, status int32, completedAt *time.Time) (*Thread, error) {
+func (r *Repo) UpdateThreadStatus(ctx context.Context, threadID string, status ThreadStatus, completedAt *time.Time) (*Thread, error) {
 	if threadID == "" {
 		return nil, fmt.Errorf("thread ID cannot be empty")
 	}
-	return r.threads.UpdateThreadStatus(ctx, threadID, status, completedAt)
+	return store.UpdateThreadStatus(ctx, r.ORM(), threadID, status, completedAt)
 }
 
 // ReviveThread moves a terminal thread back to running because a new run has
@@ -4385,7 +3307,7 @@ func (r *Repo) ReviveThread(ctx context.Context, threadID string) (int64, error)
 	if threadID == "" {
 		return 0, fmt.Errorf("thread ID cannot be empty")
 	}
-	return r.threads.ReviveThread(ctx, threadID)
+	return store.ReviveThread(ctx, r.ORM(), threadID)
 }
 
 // CascadeTerminalStatusToThreadSubtree closes every thread owned by
@@ -4405,42 +3327,42 @@ func (r *Repo) CascadeTerminalStatusToThreadSubtree(ctx context.Context, workflo
 	if !terminal {
 		return nil
 	}
-	return r.threads.CascadeTerminalStatusToThreadSubtree(ctx, workflowID, threadStatus)
+	return store.CascadeTerminalStatusToThreadSubtree(ctx, r.ORM(), workflowID, threadStatus)
 }
 
 // ReapOrphanedThreads ends running/paused threads whose workflow is already
 // terminal, at the workflow's own status, returning the rows repaired. See
 // the Repository interface for why the backstop is needed.
 func (r *Repo) ReapOrphanedThreads(ctx context.Context) ([]ReapedThread, error) {
-	return r.threads.ReapOrphanedThreads(ctx)
+	return store.ReapOrphanedThreads(ctx, r.ORM())
 }
 
 func (r *Repo) ListThreadsByOrigin(ctx context.Context, conversationID string, origin ThreadOrigin) ([]*Thread, error) {
 	if conversationID == "" {
 		return nil, fmt.Errorf("conversation ID cannot be empty")
 	}
-	return r.threads.ListThreadsByOrigin(ctx, conversationID, origin)
+	return store.ListThreadsByOrigin(ctx, r.ORM(), conversationID, origin)
 }
 
 func (r *Repo) DeleteThread(ctx context.Context, id string) error {
 	if id == "" {
 		return fmt.Errorf("thread ID cannot be empty")
 	}
-	return r.threads.DeleteThread(ctx, id)
+	return store.RemoveThread(ctx, r.ORM(), id)
 }
 
 func (r *Repo) DeleteThreadsByConversation(ctx context.Context, chatID string) error {
 	if chatID == "" {
 		return fmt.Errorf("chat ID cannot be empty")
 	}
-	return r.threads.DeleteThreadsByConversation(ctx, chatID)
+	return store.DeleteThreadsByConversation(ctx, r.ORM(), chatID)
 }
 
 func (r *Repo) CountThreadsInConversation(ctx context.Context, chatID string) (int64, error) {
 	if chatID == "" {
 		return 0, fmt.Errorf("chat ID cannot be empty")
 	}
-	return r.threads.CountThreadsInConversation(ctx, chatID)
+	return store.CountThreadsInConversation(ctx, r.ORM(), chatID)
 }
 
 // ==================== Context Windows ====================
@@ -4456,77 +3378,77 @@ func (r *Repo) CreateContextWindow(ctx context.Context, cw *ContextWindow) (*Con
 	if cw.ThreadID == "" {
 		return nil, fmt.Errorf("thread ID cannot be empty")
 	}
-	return r.contextWindows.CreateContextWindow(ctx, cw)
+	return store.InsertContextWindow(ctx, r.ORM(), cw)
 }
 
 func (r *Repo) GetContextWindow(ctx context.Context, id string) (*ContextWindow, error) {
 	if id == "" {
 		return nil, fmt.Errorf("context window ID cannot be empty")
 	}
-	return r.contextWindows.GetContextWindow(ctx, id)
+	return store.GetContextWindow(ctx, r.ORM(), id)
 }
 
 func (r *Repo) GetLatestContextWindow(ctx context.Context, threadID string) (*ContextWindow, error) {
 	if threadID == "" {
 		return nil, fmt.Errorf("thread ID cannot be empty")
 	}
-	return r.contextWindows.GetLatestContextWindow(ctx, threadID)
+	return store.GetLatestContextWindow(ctx, r.ORM(), threadID)
 }
 
 func (r *Repo) GetContextWindowBySequence(ctx context.Context, threadID string, sequence int) (*ContextWindow, error) {
 	if threadID == "" {
 		return nil, fmt.Errorf("thread ID cannot be empty")
 	}
-	return r.contextWindows.GetContextWindowBySequence(ctx, threadID, sequence)
+	return store.GetContextWindowBySequence(ctx, r.ORM(), threadID, sequence)
 }
 
 func (r *Repo) ListForkedThreadIDs(ctx context.Context, threadIDs []string) ([]string, error) {
 	if len(threadIDs) == 0 {
 		return nil, nil
 	}
-	return r.contextWindows.ListForkedThreadIDs(ctx, threadIDs)
+	return store.ListForkedThreadIDs(ctx, r.ORM(), threadIDs)
 }
 
 func (r *Repo) GetContextWindowWithThread(ctx context.Context, id string) (*ContextWindow, string, *string, *string, error) {
 	if id == "" {
 		return nil, "", nil, nil, fmt.Errorf("context window ID cannot be empty")
 	}
-	return r.contextWindows.GetContextWindowWithThread(ctx, id)
+	return store.GetContextWindowWithThread(ctx, r.ORM(), id)
 }
 
 func (r *Repo) ListContextWindowsByThread(ctx context.Context, threadID string) ([]*ContextWindow, error) {
 	if threadID == "" {
 		return nil, fmt.Errorf("thread ID cannot be empty")
 	}
-	return r.contextWindows.ListContextWindowsByThread(ctx, threadID)
+	return store.ListContextWindowsByThread(ctx, r.ORM(), threadID)
 }
 
 func (r *Repo) GetMaxSequenceForThread(ctx context.Context, threadID string) (int, error) {
 	if threadID == "" {
 		return 0, fmt.Errorf("thread ID cannot be empty")
 	}
-	return r.contextWindows.GetMaxSequenceForThread(ctx, threadID)
+	return store.GetMaxSequenceForThread(ctx, r.ORM(), threadID)
 }
 
 func (r *Repo) SetCompactionSummaryMessage(ctx context.Context, cwID, messageID string) (*ContextWindow, error) {
 	if cwID == "" {
 		return nil, fmt.Errorf("context window ID cannot be empty")
 	}
-	return r.contextWindows.SetCompactionSummaryMessage(ctx, cwID, messageID)
+	return store.SetCompactionSummaryMessage(ctx, r.ORM(), cwID, messageID)
 }
 
 func (r *Repo) DeleteContextWindow(ctx context.Context, id string) error {
 	if id == "" {
 		return fmt.Errorf("context window ID cannot be empty")
 	}
-	return r.contextWindows.DeleteContextWindow(ctx, id)
+	return store.RemoveContextWindow(ctx, r.ORM(), id)
 }
 
 func (r *Repo) DeleteContextWindowsByThread(ctx context.Context, threadID string) error {
 	if threadID == "" {
 		return fmt.Errorf("thread ID cannot be empty")
 	}
-	return r.contextWindows.DeleteContextWindowsByThread(ctx, threadID)
+	return store.DeleteContextWindowsByThread(ctx, r.ORM(), threadID)
 }
 
 // ==================== Workflow Drafts ==
@@ -4562,7 +3484,7 @@ func (r *Repo) CreateWorkflowDraft(ctx context.Context, draft *WorkflowDraft) er
 		return fmt.Errorf("draft cannot be nil")
 	}
 	return r.runWorkflowDraftTx(ctx, func(txCtx context.Context) error {
-		if err := r.workflowCatalog.CreateWorkflowDraft(txCtx, draft); err != nil {
+		if err := store.InsertWorkflowDraft(txCtx, r.ORM(), draft); err != nil {
 			return mapWorkflowSlugConflict(err, draft.Slug)
 		}
 		return r.publishWorkflowDraftUpdatedByID(txCtx, draft.ID)
@@ -4575,7 +3497,7 @@ func (r *Repo) UpsertWorkflowDraft(ctx context.Context, draft *WorkflowDraft) (*
 	}
 	var saved *WorkflowDraft
 	err := r.runWorkflowDraftTx(ctx, func(txCtx context.Context) error {
-		row, err := r.workflowCatalog.UpsertWorkflowDraft(txCtx, draft)
+		row, err := store.UpsertWorkflowDraftBySlug(txCtx, r.ORM(), draft)
 		if err != nil {
 			return mapWorkflowSlugConflict(err, draft.Slug)
 		}
@@ -4619,7 +3541,7 @@ func (r *Repo) publishWorkflowDraftUpdated(ctx context.Context, draft *WorkflowD
 }
 
 func (r *Repo) publishWorkflowDraftUpdatedByID(ctx context.Context, id string) error {
-	row, err := r.workflowCatalog.GetWorkflowDraft(ctx, id)
+	row, err := store.LoadWorkflowDraft(ctx, r.ORM(), id)
 	if err != nil {
 		return err
 	}
@@ -4627,7 +3549,7 @@ func (r *Repo) publishWorkflowDraftUpdatedByID(ctx context.Context, id string) e
 }
 
 func (r *Repo) GetWorkflowDraft(ctx context.Context, id string) (*WorkflowDraft, error) {
-	row, err := r.workflowCatalog.GetWorkflowDraft(ctx, id)
+	row, err := store.LoadWorkflowDraft(ctx, r.ORM(), id)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, fmt.Errorf("workflow draft not found: %s", id)
@@ -4638,15 +3560,15 @@ func (r *Repo) GetWorkflowDraft(ctx context.Context, id string) (*WorkflowDraft,
 }
 
 func (r *Repo) GetWorkflowDraftBySlug(ctx context.Context, userID, slug string) (*WorkflowDraft, error) {
-	return r.workflowCatalog.GetWorkflowDraftBySlug(ctx, userID, slug)
+	return store.FindWorkflowDraftBySlug(ctx, r.ORM(), userID, slug)
 }
 
 func (r *Repo) GetWorkflowDraftByName(ctx context.Context, userID, name string) (*WorkflowDraft, error) {
-	return r.workflowCatalog.GetWorkflowDraftByName(ctx, userID, name)
+	return store.FindWorkflowDraftByName(ctx, r.ORM(), userID, name)
 }
 
 func (r *Repo) GetWorkflowDraftBySourcePath(ctx context.Context, userID, sourcePath string) (*WorkflowDraft, error) {
-	return r.workflowCatalog.GetWorkflowDraftBySourcePath(ctx, userID, sourcePath)
+	return store.FindWorkflowDraftBySourcePath(ctx, r.ORM(), userID, sourcePath)
 }
 
 // GetUsableWorkflowBySlug returns the runnable (complete, visible) workflow
@@ -4654,11 +3576,11 @@ func (r *Repo) GetWorkflowDraftBySourcePath(ctx context.Context, userID, sourceP
 // slug is reported as *WorkflowDraftNotRunnableError rather than hidden behind
 // "not found": the workflow exists, and the fix is to mark it complete.
 func (r *Repo) GetUsableWorkflowBySlug(ctx context.Context, userID, slug string) (*WorkflowDraft, error) {
-	usable, err := r.workflowCatalog.GetUsableWorkflowBySlug(ctx, userID, slug)
+	usable, err := store.FindUsableWorkflowBySlug(ctx, r.ORM(), userID, slug)
 	if err != nil || usable != nil {
 		return usable, err
 	}
-	draft, err := r.workflowCatalog.GetWorkflowDraftBySlug(ctx, userID, slug)
+	draft, err := store.FindWorkflowDraftBySlug(ctx, r.ORM(), userID, slug)
 	if err != nil {
 		return nil, err
 	}
@@ -4669,7 +3591,7 @@ func (r *Repo) GetUsableWorkflowBySlug(ctx context.Context, userID, slug string)
 }
 
 func (r *Repo) ListWorkflowDraftsByUser(ctx context.Context, userID string) ([]*WorkflowDraft, error) {
-	return r.workflowCatalog.ListWorkflowDraftsByUser(ctx, userID)
+	return store.ListUserWorkflowDrafts(ctx, r.ORM(), userID)
 }
 
 func (r *Repo) UpdateWorkflowDraft(ctx context.Context, draft *WorkflowDraft) error {
@@ -4677,7 +3599,7 @@ func (r *Repo) UpdateWorkflowDraft(ctx context.Context, draft *WorkflowDraft) er
 		return fmt.Errorf("draft cannot be nil")
 	}
 	return r.runWorkflowDraftTx(ctx, func(txCtx context.Context) error {
-		if err := r.workflowCatalog.UpdateWorkflowDraft(txCtx, draft); err != nil {
+		if err := store.ReplaceWorkflowDraft(txCtx, r.ORM(), draft); err != nil {
 			return mapWorkflowSlugConflict(err, draft.Slug)
 		}
 		return r.publishWorkflowDraftUpdatedByID(txCtx, draft.ID)
@@ -4686,7 +3608,7 @@ func (r *Repo) UpdateWorkflowDraft(ctx context.Context, draft *WorkflowDraft) er
 
 func (r *Repo) UpdateWorkflowDraftDefinition(ctx context.Context, id string, name string, slug string, definition string, status WorkflowDraftStatus) error {
 	return r.runWorkflowDraftTx(ctx, func(txCtx context.Context) error {
-		if err := r.workflowCatalog.UpdateWorkflowDraftDefinition(txCtx, id, name, slug, definition, status); err != nil {
+		if err := store.SetWorkflowDraftDefinition(txCtx, r.ORM(), id, name, slug, definition, status); err != nil {
 			return mapWorkflowSlugConflict(err, slug)
 		}
 		return r.publishWorkflowDraftUpdatedByID(txCtx, id)
@@ -4696,7 +3618,7 @@ func (r *Repo) UpdateWorkflowDraftDefinition(ctx context.Context, id string, nam
 func (r *Repo) SetWorkflowDraftStatus(ctx context.Context, id string, status WorkflowDraftStatus) (*WorkflowDraft, error) {
 	var saved *WorkflowDraft
 	err := r.runWorkflowDraftTx(ctx, func(txCtx context.Context) error {
-		row, err := r.workflowCatalog.SetWorkflowDraftStatus(txCtx, id, status)
+		row, err := store.SetWorkflowDraftStatus(txCtx, r.ORM(), id, status)
 		if err != nil {
 			return err
 		}
@@ -4712,7 +3634,7 @@ func (r *Repo) SetWorkflowDraftStatus(ctx context.Context, id string, status Wor
 func (r *Repo) SetWorkflowDraftHidden(ctx context.Context, id string, isHidden bool) (*WorkflowDraft, error) {
 	var saved *WorkflowDraft
 	err := r.runWorkflowDraftTx(ctx, func(txCtx context.Context) error {
-		row, err := r.workflowCatalog.SetWorkflowDraftHidden(txCtx, id, isHidden)
+		row, err := store.SetWorkflowDraftHidden(txCtx, r.ORM(), id, isHidden)
 		if err != nil {
 			return err
 		}
@@ -4730,7 +3652,7 @@ func (r *Repo) SetWorkflowDraftHidden(ctx context.Context, id string, isHidden b
 // delete are one atomic statement. Deleting a missing draft is a silent no-op.
 func (r *Repo) DeleteWorkflowDraft(ctx context.Context, id string) error {
 	return r.runWorkflowDraftTx(ctx, func(txCtx context.Context) error {
-		deleted, err := r.workflowCatalog.DeleteWorkflowDraft(txCtx, id)
+		deleted, err := store.RemoveWorkflowDraft(txCtx, r.ORM(), id)
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil
 		}
@@ -4743,7 +3665,7 @@ func (r *Repo) DeleteWorkflowDraft(ctx context.Context, id string) error {
 
 func (r *Repo) DeleteWorkflowDraftBySlug(ctx context.Context, userID, slug string) error {
 	return r.runWorkflowDraftTx(ctx, func(txCtx context.Context) error {
-		deleted, err := r.workflowCatalog.DeleteWorkflowDraftBySlug(txCtx, userID, slug)
+		deleted, err := store.RemoveWorkflowDraftBySlug(txCtx, r.ORM(), userID, slug)
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil
 		}
@@ -4755,17 +3677,17 @@ func (r *Repo) DeleteWorkflowDraftBySlug(ctx context.Context, userID, slug strin
 }
 
 func (r *Repo) WorkflowSlugExists(ctx context.Context, userID, slug string) (bool, error) {
-	return r.workflowCatalog.WorkflowSlugExists(ctx, userID, slug)
+	return store.WorkflowSlugExists(ctx, r.ORM(), userID, slug)
 }
 
 func (r *Repo) CountWorkflowDraftsByUser(ctx context.Context, userID string) (int64, error) {
-	return r.workflowCatalog.CountWorkflowDraftsByUser(ctx, userID)
+	return store.CountUserWorkflowDrafts(ctx, r.ORM(), userID)
 }
 
 func (r *Repo) UpdateWorkflowForkedFrom(ctx context.Context, draftID string, forkedFrom string) (*WorkflowDraft, error) {
 	var saved *WorkflowDraft
 	err := r.runWorkflowDraftTx(ctx, func(txCtx context.Context) error {
-		row, err := r.workflowCatalog.UpdateWorkflowForkedFrom(txCtx, draftID, forkedFrom)
+		row, err := store.SetWorkflowDraftForkedFrom(txCtx, r.ORM(), draftID, forkedFrom)
 		if err != nil {
 			return err
 		}
@@ -4781,55 +3703,55 @@ func (r *Repo) UpdateWorkflowForkedFrom(ctx context.Context, draftID string, for
 // ==================== Preset Repository ====================
 
 func (r *Repo) CreatePreset(ctx context.Context, preset *Preset) (*Preset, error) {
-	return r.workflowCatalog.CreatePreset(ctx, preset)
+	return store.InsertPreset(ctx, r.ORM(), preset)
 }
 
 func (r *Repo) UpsertPreset(ctx context.Context, preset *Preset) (*Preset, error) {
-	return r.workflowCatalog.UpsertPreset(ctx, preset)
+	return store.UpsertPreset(ctx, r.ORM(), preset)
 }
 
 func (r *Repo) GetPreset(ctx context.Context, id string) (*Preset, error) {
-	return r.workflowCatalog.GetPreset(ctx, id)
+	return store.GetPreset(ctx, r.ORM(), id)
 }
 
 func (r *Repo) GetPresetBySlug(ctx context.Context, userID, slug string) (*Preset, error) {
-	return r.workflowCatalog.GetPresetBySlug(ctx, userID, slug)
+	return store.GetPresetBySlug(ctx, r.ORM(), userID, slug)
 }
 
 func (r *Repo) GetPresetBySlugAndProject(ctx context.Context, userID, slug, projectID string) (*Preset, error) {
-	return r.workflowCatalog.GetPresetBySlugAndProject(ctx, userID, slug, projectID)
+	return store.GetPresetBySlugAndProject(ctx, r.ORM(), userID, slug, projectID)
 }
 
 func (r *Repo) ListUserPresets(ctx context.Context, userID string) ([]*Preset, error) {
-	return r.workflowCatalog.ListUserPresets(ctx, userID)
+	return store.ListUserPresets(ctx, r.ORM(), userID)
 }
 
 func (r *Repo) ListUserPresetsGlobal(ctx context.Context, userID string) ([]*Preset, error) {
-	return r.workflowCatalog.ListUserPresetsGlobal(ctx, userID)
+	return store.ListUserPresetsGlobal(ctx, r.ORM(), userID)
 }
 
 func (r *Repo) ListUserPresetsByProject(ctx context.Context, userID, projectID string) ([]*Preset, error) {
-	return r.workflowCatalog.ListUserPresetsByProject(ctx, userID, projectID)
+	return store.ListUserPresetsByProject(ctx, r.ORM(), userID, projectID)
 }
 
 func (r *Repo) ListPresetsByTag(ctx context.Context, userID, tag, projectID string) ([]*Preset, error) {
-	return r.workflowCatalog.ListPresetsByTag(ctx, userID, tag, projectID)
+	return store.ListPresetsByTag(ctx, r.ORM(), userID, tag, projectID)
 }
 
 func (r *Repo) UpdatePreset(ctx context.Context, preset *Preset) (*Preset, error) {
-	return r.workflowCatalog.UpdatePreset(ctx, preset)
+	return store.ReplacePreset(ctx, r.ORM(), preset)
 }
 
 func (r *Repo) DeletePreset(ctx context.Context, id string) error {
-	return r.workflowCatalog.DeletePreset(ctx, id)
+	return store.RemovePreset(ctx, r.ORM(), id)
 }
 
 func (r *Repo) DeletePresetBySlug(ctx context.Context, userID, slug string) error {
-	return r.workflowCatalog.DeletePresetBySlug(ctx, userID, slug)
+	return store.DeletePresetBySlug(ctx, r.ORM(), userID, slug)
 }
 
 func (r *Repo) DeletePresetBySlugAndProject(ctx context.Context, userID, slug, projectID string) error {
-	return r.workflowCatalog.DeletePresetBySlugAndProject(ctx, userID, slug, projectID)
+	return store.DeletePresetBySlugAndProject(ctx, r.ORM(), userID, slug, projectID)
 }
 
 // ==================== Workflow Scenario Repository ====================
@@ -4838,56 +3760,56 @@ func (r *Repo) CreateWorkflowScenario(ctx context.Context, scenario *WorkflowSce
 	if scenario == nil {
 		return fmt.Errorf("scenario cannot be nil")
 	}
-	return r.workflowCatalog.CreateWorkflowScenario(ctx, scenario)
+	return store.InsertWorkflowScenario(ctx, r.ORM(), scenario)
 }
 
 func (r *Repo) GetWorkflowScenario(ctx context.Context, id string) (*WorkflowScenario, error) {
-	return r.workflowCatalog.GetWorkflowScenario(ctx, id)
+	return store.FindWorkflowScenario(ctx, r.ORM(), id)
 }
 
 func (r *Repo) GetWorkflowScenarioByName(ctx context.Context, workflowDraftID string, name string) (*WorkflowScenario, error) {
-	return r.workflowCatalog.GetWorkflowScenarioByName(ctx, workflowDraftID, name)
+	return store.FindWorkflowScenarioByName(ctx, r.ORM(), workflowDraftID, name)
 }
 
 func (r *Repo) ListWorkflowScenariosByDraft(ctx context.Context, workflowDraftID string) ([]*WorkflowScenario, error) {
-	return r.workflowCatalog.ListWorkflowScenariosByDraft(ctx, workflowDraftID)
+	return store.ListDraftWorkflowScenarios(ctx, r.ORM(), workflowDraftID)
 }
 
 func (r *Repo) ListWorkflowScenariosByUser(ctx context.Context, userID string) ([]*WorkflowScenario, error) {
-	return r.workflowCatalog.ListWorkflowScenariosByUser(ctx, userID)
+	return store.ListUserWorkflowScenarios(ctx, r.ORM(), userID)
 }
 
 func (r *Repo) UpdateWorkflowScenario(ctx context.Context, scenario *WorkflowScenario) error {
 	if scenario == nil {
 		return fmt.Errorf("scenario cannot be nil")
 	}
-	return r.workflowCatalog.UpdateWorkflowScenario(ctx, scenario)
+	return store.ReplaceWorkflowScenario(ctx, r.ORM(), scenario)
 }
 
 func (r *Repo) UpdateWorkflowScenarioResult(ctx context.Context, id string, status string, result string) error {
-	return r.workflowCatalog.UpdateWorkflowScenarioResult(ctx, id, status, result)
+	return store.RecordWorkflowScenarioResult(ctx, r.ORM(), id, status, result)
 }
 
 func (r *Repo) DeleteWorkflowScenario(ctx context.Context, id string) error {
-	return r.workflowCatalog.DeleteWorkflowScenario(ctx, id)
+	return store.RemoveWorkflowScenario(ctx, r.ORM(), id)
 }
 
 func (r *Repo) DeleteWorkflowScenariosByDraft(ctx context.Context, workflowDraftID string) error {
-	return r.workflowCatalog.DeleteWorkflowScenariosByDraft(ctx, workflowDraftID)
+	return store.RemoveDraftWorkflowScenarios(ctx, r.ORM(), workflowDraftID)
 }
 
 // ==================== Command Favorites ====================
 
 func (r *Repo) ListCommandFavorites(ctx context.Context, userID, projectID string) ([]string, error) {
-	return r.workflows.ListCommandFavorites(ctx, userID, projectID)
+	return store.ListCommandFavorites(ctx, r.ORM(), userID, projectID)
 }
 
 func (r *Repo) AddCommandFavorite(ctx context.Context, userID, projectID, commandKey string) error {
-	return r.workflows.AddCommandFavorite(ctx, userID, projectID, commandKey)
+	return store.AddCommandFavorite(ctx, r.ORM(), userID, projectID, commandKey)
 }
 
 func (r *Repo) RemoveCommandFavorite(ctx context.Context, userID, projectID, commandKey string) error {
-	return r.workflows.RemoveCommandFavorite(ctx, userID, projectID, commandKey)
+	return store.RemoveCommandFavorite(ctx, r.ORM(), userID, projectID, commandKey)
 }
 
 // ==================== Questions ====================
@@ -4899,31 +3821,9 @@ func (r *Repo) CreateQuestion(ctx context.Context, question *Question) error {
 	if question.ID == "" {
 		return fmt.Errorf("question ID cannot be empty")
 	}
-
-	query := `INSERT INTO questions (id, chat_id, workflow_id, temporal_workflow_id, thread_id, step_id, loop_node_id, loop_iteration, status, metadata, response_data, created_at, resolved_at, tool_call_id)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-	query = r.bindQuery(query)
-
-	_, err := r.DB.DB(ctx).ExecContext(ctx, query,
-		question.ID,
-		question.ChatID,
-		question.WorkflowID,
-		question.TemporalWorkflowID,
-		question.ThreadID,
-		question.StepID,
-		question.LoopNodeID,
-		question.LoopIteration,
-		question.Status,
-		question.Metadata,
-		question.ResponseData,
-		question.CreatedAt,
-		question.ResolvedAt,
-		question.ToolCallID,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to create question: %w", err)
+	if err := store.InsertQuestion(ctx, r.ORM(), question); err != nil {
+		return err
 	}
-
 	_ = r.emitChatActivityIfChanged(ctx, question.ChatID)
 	return nil
 }
@@ -4932,88 +3832,26 @@ func (r *Repo) GetQuestionByID(ctx context.Context, id string) (*Question, error
 	if id == "" {
 		return nil, fmt.Errorf("question ID cannot be empty")
 	}
-
-	query := `SELECT id, chat_id, workflow_id, temporal_workflow_id, thread_id, step_id, loop_node_id, loop_iteration, status, metadata, response_data, created_at, resolved_at, tool_call_id
-		FROM questions WHERE id = ?`
-	query = r.bindQuery(query)
-
-	var q Question
-	err := r.DB.DB(ctx).QueryRowContext(ctx, query, id).Scan(
-		&q.ID, &q.ChatID, &q.WorkflowID, &q.TemporalWorkflowID, &q.ThreadID, &q.StepID,
-		&q.LoopNodeID, &q.LoopIteration, &q.Status, &q.Metadata, &q.ResponseData,
-		&q.CreatedAt, &q.ResolvedAt, &q.ToolCallID,
-	)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, fmt.Errorf("failed to get question: %w", err)
-	}
-	return &q, nil
+	return store.GetQuestion(ctx, r.ORM(), id)
 }
 
 func (r *Repo) GetPendingQuestionByChatID(ctx context.Context, chatID string) (*Question, error) {
 	if chatID == "" {
 		return nil, fmt.Errorf("chat ID cannot be empty")
 	}
-
-	query := `SELECT id, chat_id, workflow_id, temporal_workflow_id, thread_id, step_id, loop_node_id, loop_iteration, status, metadata, response_data, created_at, resolved_at, tool_call_id
-		FROM questions WHERE chat_id = ? AND status = 1 ORDER BY created_at DESC LIMIT 1`
-	query = r.bindQuery(query)
-
-	var q Question
-	err := r.DB.DB(ctx).QueryRowContext(ctx, query, chatID).Scan(
-		&q.ID, &q.ChatID, &q.WorkflowID, &q.TemporalWorkflowID, &q.ThreadID, &q.StepID,
-		&q.LoopNodeID, &q.LoopIteration, &q.Status, &q.Metadata, &q.ResponseData,
-		&q.CreatedAt, &q.ResolvedAt, &q.ToolCallID,
-	)
-	if err == sql.ErrNoRows {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, fmt.Errorf("failed to get pending question: %w", err)
-	}
-	return &q, nil
+	return store.GetPendingQuestionByChatID(ctx, r.ORM(), chatID)
 }
 
 func (r *Repo) GetQuestionsByWorkflowStepIteration(ctx context.Context, workflowID, stepID string, iteration int) ([]*Question, error) {
-	query := `SELECT id, chat_id, workflow_id, temporal_workflow_id, thread_id, step_id, loop_node_id, loop_iteration, status, metadata, response_data, created_at, resolved_at, tool_call_id
-		FROM questions WHERE workflow_id = ? AND step_id = ? AND loop_iteration = ?`
-	query = r.bindQuery(query)
-
-	rows, err := r.DB.DB(ctx).QueryContext(ctx, query, workflowID, stepID, iteration)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get questions by workflow step iteration: %w", err)
-	}
-	defer rows.Close()
-
-	var questions []*Question
-	for rows.Next() {
-		var q Question
-		if err := rows.Scan(
-			&q.ID, &q.ChatID, &q.WorkflowID, &q.TemporalWorkflowID, &q.ThreadID, &q.StepID,
-			&q.LoopNodeID, &q.LoopIteration, &q.Status, &q.Metadata, &q.ResponseData,
-			&q.CreatedAt, &q.ResolvedAt, &q.ToolCallID,
-		); err != nil {
-			return nil, fmt.Errorf("failed to scan question: %w", err)
-		}
-		questions = append(questions, &q)
-	}
-	return questions, rows.Err()
+	return store.ListQuestionsByWorkflowStepIteration(ctx, r.ORM(), workflowID, stepID, iteration)
 }
 
 func (r *Repo) ResolveQuestion(ctx context.Context, id string, responseData *string) error {
 	if id == "" {
 		return fmt.Errorf("question ID cannot be empty")
 	}
-
-	now := time.Now().UTC()
-	query := `UPDATE questions SET status = 2, response_data = ?, resolved_at = ? WHERE id = ?`
-	query = r.bindQuery(query)
-
-	_, err := r.DB.DB(ctx).ExecContext(ctx, query, responseData, now, id)
-	if err != nil {
-		return fmt.Errorf("failed to resolve question: %w", err)
+	if err := store.ResolveQuestion(ctx, r.ORM(), id, responseData, time.Now().UTC()); err != nil {
+		return err
 	}
 
 	// Emit activity change
@@ -5032,70 +3870,32 @@ func generateID() string {
 	return uuid.New().String()
 }
 
-// apiKeySealing is the optional sealing surface of the api_keys store.
-type apiKeySealing interface {
-	SetSealer(postgresstore.CredentialSealer)
-	BackfillAPIKeys(ctx context.Context, batch int) (int, error)
-	CountUnsealedAPIKeys(ctx context.Context) (int64, error)
-	ValidateAPIKeysSealedConstraint(ctx context.Context) error
-}
-
-// EnableCredentialSealing gives the settings store its vault; without one,
-// provider API keys and provider sign-in tokens (Claude, Codex, Copilot,
-// Antigravity) cannot be read or written. Call once at boot, before serving.
-func (r *Repo) EnableCredentialSealing(sealer postgresstore.CredentialSealer) error {
-	s, ok := r.settings.(apiKeySealing)
-	if !ok {
-		return fmt.Errorf("settings store does not support api key sealing")
-	}
-	s.SetSealer(sealer)
+// EnableCredentialSealing gives the api_keys and provider_accounts stores
+// their vault; without one, automation tokens and provider credentials cannot
+// be read or written. Call once at boot, before serving.
+func (r *Repo) EnableCredentialSealing(sealer CredentialSealer) {
+	r.apiKeys.SetSealer(sealer)
 	r.accounts.SetSealer(sealer)
-	return nil
 }
 
 // BackfillAPIKeys seals legacy plaintext api_keys rows. Idempotent; returns the
 // number of rows sealed. Requires EnableCredentialSealing.
 func (r *Repo) BackfillAPIKeys(ctx context.Context, batch int) (int, error) {
-	s, ok := r.settings.(apiKeySealing)
-	if !ok {
-		return 0, fmt.Errorf("settings store does not support api key sealing")
-	}
-	return s.BackfillAPIKeys(ctx, batch)
+	return r.apiKeys.BackfillAPIKeys(ctx, batch)
 }
 
 // CountUnsealedAPIKeys returns count(api_keys WHERE api_key_sealed IS NULL).
 func (r *Repo) CountUnsealedAPIKeys(ctx context.Context) (int64, error) {
-	s, ok := r.settings.(apiKeySealing)
-	if !ok {
-		return 0, fmt.Errorf("settings store does not support api key sealing")
-	}
-	return s.CountUnsealedAPIKeys(ctx)
+	return r.apiKeys.CountUnsealedAPIKeys(ctx)
 }
 
 // ValidateAPIKeysSealedConstraint validates the api_key_sealed NOT NULL check.
 func (r *Repo) ValidateAPIKeysSealedConstraint(ctx context.Context) error {
-	s, ok := r.settings.(apiKeySealing)
-	if !ok {
-		return fmt.Errorf("settings store does not support api key sealing")
-	}
-	return s.ValidateAPIKeysSealedConstraint(ctx)
+	return r.apiKeys.ValidateAPIKeysSealedConstraint(ctx)
 }
 
 // ListUserIDsWithProviderAccount returns every user holding an account for provider, without
 // opening (decrypting) any of them.
 func (r *Repo) ListUserIDsWithProviderAccount(ctx context.Context, provider string) ([]string, error) {
-	rows, err := r.DB.QueryContext(ctx, "SELECT DISTINCT user_id FROM provider_accounts WHERE provider = $1 ORDER BY user_id", provider)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var ids []string
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		ids = append(ids, id)
-	}
-	return ids, rows.Err()
+	return r.accounts.ListUserIDsWithProviderAccount(ctx, provider)
 }

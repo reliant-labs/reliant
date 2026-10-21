@@ -2228,17 +2228,17 @@ func (a *CallLLMActivity) getAvailableTools(ctx context.Context, chat *db.Chat, 
 		// scope.
 		shellPlatform := resolveShellPlatform(ctx, a.repo, chat, worktreeDaemonID)
 		projectScopedToolsFactory = projectScopedToolsFactory.WithShellPlatform(shellPlatform)
-		slog.Debug("[CallLLM] Resolved shell platform for tool descriptions",
+		slog.DebugContext(ctx, "[CallLLM] Resolved shell platform for tool descriptions",
 			"chatID", chat.ID, "platform", string(shellPlatform))
 
 		// Inject skills loaded via the project config so the skill tool never
 		// touches the filesystem on the server side. execute_tools reads the
 		// same config row for the skill tool it runs.
 		if projectCfg != nil && len(projectCfg.Skills) > 0 {
-			slog.Debug("[CallLLM] Injecting skills into tools factory", "skillCount", len(projectCfg.Skills))
+			slog.DebugContext(ctx, "[CallLLM] Injecting skills into tools factory", "skillCount", len(projectCfg.Skills))
 			projectScopedToolsFactory = projectScopedToolsFactory.WithSkills(projectCfg.Skills)
 		} else {
-			slog.Debug("[CallLLM] No skills available", "projectCfgNil", projectCfg == nil)
+			slog.DebugContext(ctx, "[CallLLM] No skills available", "projectCfgNil", projectCfg == nil)
 		}
 	}
 

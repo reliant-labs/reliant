@@ -149,7 +149,7 @@ func NewHTTPHandler(deps HTTPDeps) (http.Handler, error) {
 			Limiter:  limiter,
 		})
 		if err != nil {
-			logger.Error("mcpserver: could not build server for session",
+			logger.ErrorContext(r.Context(), "mcpserver: could not build server for session",
 				"grantID", sess.GrantID, "error", err)
 			return nil
 		}
@@ -347,7 +347,7 @@ func oauthClientID(r *http.Request) string {
 // touch records use. Telemetry, so a failure must never fail the request.
 func (a *connectorAuth) touch(r *http.Request, grantID string) {
 	if err := a.store.TouchGrant(r.Context(), grantID); err != nil {
-		a.logger.Debug("mcpserver: could not stamp grant last-used", "grantID", grantID, "error", err)
+		a.logger.DebugContext(r.Context(), "mcpserver: could not stamp grant last-used", "grantID", grantID, "error", err)
 	}
 }
 
@@ -468,7 +468,7 @@ func (a *storeAudit) Begin(ctx context.Context, entry AuditEntry) string {
 	}
 
 	if err := a.store.RecordAudit(writeCtx, rec); err != nil {
-		a.logger.Error("mcpserver: failed to record connector audit entry",
+		a.logger.ErrorContext(ctx, "mcpserver: failed to record connector audit entry",
 			"grantID", entry.GrantID, "tool", entry.ToolName, "denied", entry.Denied, "error", err)
 		return ""
 	}
@@ -492,7 +492,7 @@ func (a *storeAudit) Complete(ctx context.Context, id string, denied bool, errMs
 	if err := a.store.CompleteAudit(writeCtx, id, status, errMsg, int(duration.Milliseconds())); err != nil {
 		// The intent row survives in 'started', which is the correct residue:
 		// it says a command was dispatched and never accounted for.
-		a.logger.Error("mcpserver: failed to complete connector audit entry",
+		a.logger.ErrorContext(ctx, "mcpserver: failed to complete connector audit entry",
 			"auditID", id, "error", err)
 	}
 }

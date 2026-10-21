@@ -111,7 +111,7 @@ func (r *Refresher) Refresh(ctx context.Context, userID string) error {
 func (r *Refresher) RefreshDue(ctx context.Context) {
 	owners, err := r.store.ListIntegrationTriggerOwners(ctx, IntegrationID)
 	if err != nil {
-		r.logger.Warn("listing GitHub trigger owners failed", "error", err)
+		r.logger.WarnContext(ctx, "listing GitHub trigger owners failed", "error", err)
 		return
 	}
 	for _, userID := range owners {
@@ -121,7 +121,7 @@ func (r *Refresher) RefreshDue(ctx context.Context) {
 		now := r.now().UTC()
 		ok, err := r.store.ClaimIntegrationAccessRefresh(ctx, userID, IntegrationID, now, now.Add(leaseFor), now.Add(-RefreshInterval))
 		if err != nil {
-			r.logger.Warn("claiming a GitHub access refresh failed", "user_id", userID, "error", err)
+			r.logger.WarnContext(ctx, "claiming a GitHub access refresh failed", "user_id", userID, "error", err)
 			continue
 		}
 		if !ok {
@@ -129,14 +129,14 @@ func (r *Refresher) RefreshDue(ctx context.Context) {
 		}
 		refreshErr := r.Refresh(ctx, userID)
 		if refreshErr != nil {
-			r.logger.Warn("GitHub access refresh failed", "user_id", userID, "permanent", IsPermanent(refreshErr), "error", refreshErr)
+			r.logger.WarnContext(ctx, "GitHub access refresh failed", "user_id", userID, "permanent", IsPermanent(refreshErr), "error", refreshErr)
 		}
 		if err := r.store.FinishIntegrationAccessRefresh(context.WithoutCancel(ctx), userID, IntegrationID, r.now().UTC(), refreshErr); err != nil {
-			r.logger.Warn("recording a GitHub access refresh failed", "user_id", userID, "error", err)
+			r.logger.WarnContext(ctx, "recording a GitHub access refresh failed", "user_id", userID, "error", err)
 		}
 	}
 	if _, err := r.store.PruneIntegrationAccess(ctx, r.now().Add(-pruneAfter)); err != nil {
-		r.logger.Warn("pruning stale GitHub access failed", "error", err)
+		r.logger.WarnContext(ctx, "pruning stale GitHub access failed", "error", err)
 	}
 }
 

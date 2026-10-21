@@ -35,6 +35,6 @@ type eventLog interface {
 
 func appendBestEffort(ctx context.Context, log eventLog, ev core.ConnectionEvent) {
 	if err := log.AppendConnectionEvent(context.WithoutCancel(ctx), ev); err != nil {
-		slog.Warn("connection audit event not recorded", "kind", ev.Kind, "connection_id", ev.ConnectionID, "error", err)
+		slog.WarnContext(ctx, "connection audit event not recorded", "kind", ev.Kind, "connection_id", ev.ConnectionID, "error", err)
 	}
 }

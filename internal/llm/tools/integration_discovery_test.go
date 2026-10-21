@@ -234,3 +234,34 @@ func TestGetIntegrationSchemaTool_RendersATriggersPayloadAndUsage(t *testing.T) 
 	assert.Contains(t, c, "trigger.payload.data.")
 	assert.NotContains(t, c, "## Params")
 }
+
+// A value type is found with kind "type" and read by its qualified ref: this is
+// how an agent learns what `type: github.repository` is before it writes the
+// input, instead of declaring an unchecked array of strings.
+func TestIntegrationDiscoveryTools_ValueTypes(t *testing.T) {
+	f := NewToolsFactory(nil)
+
+	found := runDiscoveryTool(t, f.SearchIntegrations(), "u", SearchIntegrationsParams{Query: "repository", Kind: "type"})
+	require.False(t, found.IsError, found.Content)
+	assert.Contains(t, found.Content, "`github.repository`")
+	assert.Contains(t, found.Content, "| type |")
+	assert.NotContains(t, found.Content, "github/repo.get@1", "a type search returns types only")
+
+	resp := runDiscoveryTool(t, f.GetIntegrationSchema(), "u", GetIntegrationSchemaParams{Ref: "github.repository"})
+	require.False(t, resp.IsError, resp.Content)
+	c := resp.Content
+	assert.Contains(t, c, "(`github.repository`)")
+	assert.Contains(t, c, "Kind: type")
+	assert.Contains(t, c, "## Value (one value of this type)")
+	assert.Contains(t, c, `"pattern"`)
+	assert.Contains(t, c, "`github/app.installation_repositories.list@1`", "says where the options come from")
+	assert.Contains(t, c, "- `installation`: a `github.installation` (optional)")
+	assert.Contains(t, c, "type: github.repository\n    multi: true")
+	assert.NotContains(t, c, "## Params", "a type has no params")
+
+	label := runDiscoveryTool(t, f.GetIntegrationSchema(), "u", GetIntegrationSchemaParams{Ref: "github.label"})
+	require.False(t, label.IsError, label.Content)
+	assert.Contains(t, label.Content, "a value that is not in the list is also accepted")
+	assert.Contains(t, label.Content, "- `repository`: a `github.repository` (required)")
+	assert.Contains(t, label.Content, "scope:\n      repository: <name of an input of type github.repository>")
+}

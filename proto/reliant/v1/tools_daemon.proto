@@ -500,6 +500,10 @@ message ToolRequest {
   string content_block_id = 5; // Database content block ID
   string context_json = 6; // JSON-encoded execution context
   int32 timeout_ms = 8; // Timeout in milliseconds
+  // W3C trace context (traceparent, tracestate, baggage) of the request that
+  // dispatched this call, injected by the gateway. The daemon continues it, so
+  // its log lines for the execution carry the dispatching trace's trace_id.
+  map<string, string> trace_context = 9;
 }
 
 // ServerHeartbeat is sent periodically to keep connection alive

@@ -127,13 +127,6 @@ test.describe('observability console', () => {
     await page.getByTestId('obs-value-v1.8.3').click();
     await expect(page.getByTestId('obs-filter-chip')).toContainText('v1.8.3');
 
-    // Workloads: customer metadata, and one workload across environments.
-    await page.getByTestId('obs-view-workloads').click();
-    await expect(page.getByTestId('obs-workload-prod-api').getByTestId('obs-exit-reason')).toHaveText('OOMKilled');
-    await page.getByTestId('obs-workload-prod-api').getByRole('button', { name: 'api' }).click();
-    await expect(page.getByTestId('obs-workload-detail')).toBeVisible();
-    await expect(page.getByTestId('obs-workload-events')).toContainText('OOMKilling');
-
     expect(errors).toEqual([]);
   });
 

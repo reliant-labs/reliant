@@ -1,7 +1,6 @@
 package core
 
 import (
-	"context"
 	"time"
 )
 
@@ -34,13 +33,17 @@ const (
 	ThreadOriginNode ThreadOrigin = "node"
 )
 
-// Thread lifecycle statuses. These mirror CHAT_WORKFLOW_STATUS so a thread's
-// state is directly comparable to its workflow's.
+// ThreadStatus is a thread's lifecycle state (threads.status). The values
+// mirror the retired CHAT_WORKFLOW_STATUS numbering so a thread's state reads
+// the same as the workflow statuses it was split from.
+type ThreadStatus int32
+
+// Thread lifecycle statuses.
 const (
-	ThreadStatusRunning   int32 = 2
-	ThreadStatusCompleted int32 = 3
-	ThreadStatusFailed    int32 = 4
-	ThreadStatusCancelled int32 = 5
+	ThreadStatusRunning   ThreadStatus = 2
+	ThreadStatusCompleted ThreadStatus = 3
+	ThreadStatusFailed    ThreadStatus = 4
+	ThreadStatusCancelled ThreadStatus = 5
 	// Value 7 (expired) is retired: nothing ever wrote it. Temporal's
 	// TIMED_OUT is deliberately recorded as a failure.
 )
@@ -54,7 +57,7 @@ const (
 // stay running: closing them would make a resumable run's threads read as
 // finished, which is what ThreadStatusIsTerminal's callers use to refuse
 // message delivery.
-func ThreadStatusForStopReason(reason WorkflowStopReason) (status int32, terminal bool) {
+func ThreadStatusForStopReason(reason WorkflowStopReason) (status ThreadStatus, terminal bool) {
 	switch reason {
 	case StopReasonCompleted:
 		return ThreadStatusCompleted, true
@@ -72,7 +75,7 @@ func ThreadStatusForStopReason(reason WorkflowStopReason) (status int32, termina
 // queues into a thread's mailbox (spawn_send, the human-facing
 // SendAgentMessage RPC) so "has this agent finished" is answered the same
 // way everywhere.
-func ThreadStatusIsTerminal(status int32) bool {
+func ThreadStatusIsTerminal(status ThreadStatus) bool {
 	switch status {
 	case ThreadStatusCompleted, ThreadStatusFailed, ThreadStatusCancelled:
 		return true
@@ -82,7 +85,7 @@ func ThreadStatusIsTerminal(status int32) bool {
 }
 
 // ThreadStatusLabel renders a thread status for display in error messages.
-func ThreadStatusLabel(status int32) string {
+func ThreadStatusLabel(status ThreadStatus) string {
 	switch status {
 	case ThreadStatusRunning:
 		return "running"
@@ -122,8 +125,8 @@ type Thread struct {
 
 	// Status is the thread's lifecycle state, owned by the thread itself
 	// rather than by a synthetic "thread:<node>" workflow record.
-	Status      int32      `json:"status"`
-	CompletedAt *time.Time `json:"completed_at,omitempty"`
+	Status      ThreadStatus `json:"status"`
+	CompletedAt *time.Time   `json:"completed_at,omitempty"`
 
 	// WorktreeID is the workspace this thread's tools run in when it is not
 	// the chat's: set on a sub-agent spawned with a `worktree`. Nil means the
@@ -145,62 +148,11 @@ type ContextWindow struct {
 	CreatedAt                  time.Time `json:"created_at"`
 }
 
-// ThreadStore is the shared contract for thread persistence across drivers.
-type ThreadStore interface {
-	CreateThread(ctx context.Context, thread *Thread) (*Thread, error)
-	GetThread(ctx context.Context, id string) (*Thread, error)
-	GetThreadByWorkflow(ctx context.Context, workflowID string) (*Thread, error)
-	GetRootThread(ctx context.Context, chatID string) (*Thread, error)
-	GetThreadWithParent(ctx context.Context, id string) (*Thread, *string, error)
-	ListThreadsByConversation(ctx context.Context, chatID string) ([]*Thread, error)
-	ListChildThreads(ctx context.Context, parentThreadID string) ([]*Thread, error)
-	UpdateThreadWorkflow(ctx context.Context, threadID, workflowID string) (*Thread, error)
-	UpdateThreadForkPoint(ctx context.Context, threadID string, forkAtMessageID *string) (*Thread, error)
-	UpdateThreadStatus(ctx context.Context, threadID string, status int32, completedAt *time.Time) (*Thread, error)
-	// ReviveThread moves a terminal thread back to running because a new run
-	// has started on it, clearing the previous turn's completed_at. The
-	// inverse of CascadeTerminalStatusToThreadSubtree — see
-	// queries/threads.sql for why a reused main thread needs it.
-	ReviveThread(ctx context.Context, threadID string) (int64, error)
-	ListThreadsByOrigin(ctx context.Context, chatID string, origin ThreadOrigin) ([]*Thread, error)
-	DeleteThread(ctx context.Context, id string) error
-	DeleteThreadsByConversation(ctx context.Context, chatID string) error
-	CountThreadsInConversation(ctx context.Context, chatID string) (int64, error)
-	// CascadeTerminalStatusToThreadSubtree closes every thread owned by
-	// workflowID or any of its descendants to the terminal status the
-	// workflow subtree just reached. The thread-lifecycle counterpart of
-	// WorkflowStore's CascadeTerminalStatusToDescendants — see
-	// queries/threads.sql for why.
-	CascadeTerminalStatusToThreadSubtree(ctx context.Context, workflowID string, status int32) error
-	// ReapOrphanedThreads ends every running/paused thread whose workflow is
-	// already terminal, at the workflow's own status, and returns the rows it
-	// moved. The backstop for a write path that reached a terminal workflow
-	// status without cascading to the thread.
-	ReapOrphanedThreads(ctx context.Context) ([]ReapedThread, error)
-}
-
 // ReapedThread is one thread ReapOrphanedThreads closed: the thread, its chat,
 // the workflow whose terminal status it was missing, and the status it took.
 type ReapedThread struct {
 	ThreadID   string
 	ChatID     string
 	WorkflowID string
-	Status     int32
-}
-
-// ContextWindowStore is the shared contract for context-window persistence across drivers.
-type ContextWindowStore interface {
-	CreateContextWindow(ctx context.Context, cw *ContextWindow) (*ContextWindow, error)
-	GetContextWindow(ctx context.Context, id string) (*ContextWindow, error)
-	GetLatestContextWindow(ctx context.Context, threadID string) (*ContextWindow, error)
-	GetContextWindowBySequence(ctx context.Context, threadID string, sequence int) (*ContextWindow, error)
-	// ListForkedThreadIDs returns which of threadIDs are forks (their
-	// sequence-0 context window links to a parent window), in one query.
-	ListForkedThreadIDs(ctx context.Context, threadIDs []string) ([]string, error)
-	GetContextWindowWithThread(ctx context.Context, id string) (*ContextWindow, string, *string, *string, error)
-	ListContextWindowsByThread(ctx context.Context, threadID string) ([]*ContextWindow, error)
-	GetMaxSequenceForThread(ctx context.Context, threadID string) (int, error)
-	SetCompactionSummaryMessage(ctx context.Context, cwID, messageID string) (*ContextWindow, error)
-	DeleteContextWindow(ctx context.Context, id string) error
-	DeleteContextWindowsByThread(ctx context.Context, threadID string) error
+	Status     ThreadStatus
 }

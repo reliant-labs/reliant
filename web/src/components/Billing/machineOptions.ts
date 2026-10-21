@@ -83,8 +83,6 @@ export function deriveMachineOptions<T extends MachineCatalogPlan>(
       detail: formatMachineSpec(size),
       size,
       monthlyPriceCents: display.monthlyPriceCents,
-      includedMinutes: display.includedMinutes,
-      overageCentsPerMinute: display.overageCentsPerMinute,
       includedHours: sizeHours(
         pricing,
         size,

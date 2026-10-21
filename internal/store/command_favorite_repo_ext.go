@@ -35,6 +35,14 @@
 //	}
 package store
 
+import (
+	"context"
+	"fmt"
+
+	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/orm"
+)
+
 // CommandFavoriteExtra carries fields on CommandFavorite that are NOT columns — computed
 // values, transient state, anything derived rather than stored. CommandFavorite is
 // embedded on CommandFavoriteExtra (see command_favorite_orm.go), so a field added here is a field on
@@ -45,4 +53,44 @@ package store
 // persist them — `bun:"-"` is Bun's own idiom for a field it must never
 // bind or scan.
 type CommandFavoriteExtra struct {
+}
+
+// ListCommandFavorites returns the command keys the user starred in the
+// project, oldest first.
+func ListCommandFavorites(ctx context.Context, db orm.Context, userID, projectID string) ([]string, error) {
+	rows, err := ListCommandFavorite(ctx, db,
+		orm.WhereEq(CommandFavoriteFieldUserID, userID),
+		orm.WhereEq(CommandFavoriteFieldProjectID, projectID),
+		orm.WithOrderBy(CommandFavoriteFieldCreatedAt, orm.Asc))
+	if err != nil {
+		return nil, fmt.Errorf("failed to list command favorites: %w", err)
+	}
+	keys := make([]string, len(rows))
+	for i, row := range rows {
+		keys[i] = row.CommandKey
+	}
+	return keys, nil
+}
+
+// AddCommandFavorite stars a command; starring one already starred is a
+// no-op.
+func AddCommandFavorite(ctx context.Context, db orm.Context, userID, projectID, commandKey string) error {
+	row := &CommandFavorite{
+		ID: uuid.New().String(), UserID: userID, ProjectID: projectID, CommandKey: commandKey,
+	}
+	_, err := db.Bun().NewInsert().Model(row).
+		Value(CommandFavoriteFieldCreatedAt, "NOW()").
+		On("CONFLICT (user_id, project_id, command_key) DO NOTHING").
+		Exec(ctx)
+	return err
+}
+
+// RemoveCommandFavorite unstars a command; one not starred is a no-op.
+func RemoveCommandFavorite(ctx context.Context, db orm.Context, userID, projectID, commandKey string) error {
+	_, err := db.Bun().NewDelete().Model((*CommandFavorite)(nil)).
+		Where("user_id = ?", userID).
+		Where("project_id = ?", projectID).
+		Where("command_key = ?", commandKey).
+		Exec(ctx)
+	return err
 }

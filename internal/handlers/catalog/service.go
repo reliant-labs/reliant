@@ -14,6 +14,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/integrations/catalogindex"
+	"github.com/reliant-labs/reliant/internal/integrations/inputoptions"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/local"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/pkg/config"
@@ -46,6 +47,12 @@ type Deps struct {
 	// Unimplemented, which only a composition with no index (a test) does.
 	// forge:optional-dep
 	Search Searcher
+	// InputOptions backs ListInputOptions: it lists the values of an
+	// integration-defined input type as the caller. Without it the rpc answers
+	// Unimplemented, which only a composition with no option source (a test)
+	// does.
+	// forge:optional-dep
+	InputOptions InputOptions
 	// IntegrationMethods reports, for one integration, each declared auth
 	// method with whether this deployment offers it (IntegrationMethodsFrom).
 	// Without it GetCatalogEntry reports every method as available with no
@@ -79,6 +86,13 @@ type Searcher interface {
 	Search(ctx context.Context, userID string, q catalogindex.Query) (*catalogindex.Result, error)
 	Get(ctx context.Context, userID, ref string) (*catalogindex.Entry, bool, error)
 	ListIntegrations(ctx context.Context, userID string, q catalogindex.IntegrationQuery) (*catalogindex.IntegrationResult, error)
+}
+
+// InputOptions is what ListInputOptions needs: the option service, declared
+// here where it is consumed. inputoptions.Service implements it.
+type InputOptions interface {
+	List(ctx context.Context, req inputoptions.ListRequest) (*inputoptions.ListResult, error)
+	Resolve(ctx context.Context, req inputoptions.ResolveRequest) (*inputoptions.Resolution, error)
 }
 
 // validateDeps returns an error if any required Deps field is nil. The

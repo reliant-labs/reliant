@@ -3,6 +3,7 @@ package httpaction
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -647,5 +648,48 @@ func TestQueryExprListBecomesRepeatedParam(t *testing.T) {
 	}
 	if _, err := r.Run(context.Background(), m, a, map[string]any{"labels": []any{map[string]any{"x": 1}}}); err == nil {
 		t.Error("a list of objects is not a query value")
+	}
+}
+
+// A walk that stopped at max_pages with more to read says so, so a caller that
+// reads "not in the list" as "gone" can tell a prefix from the whole.
+func TestPaginationReportsATruncatedWalk(t *testing.T) {
+	run := func(maxPages, pages int) *Result {
+		srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			n := 1
+			if c := r.URL.Query().Get("cursor"); c != "" {
+				_, _ = fmt.Sscanf(c, "c%d", &n)
+			}
+			next := "null"
+			if n < pages {
+				next = fmt.Sprintf(`"c%d"`, n+1)
+			}
+			_, _ = fmt.Fprintf(w, `{"items":[%d],"next":%s}`, n, next)
+		}))
+		defer srv.Close()
+		m, a := mustParse(t, manifestFor(srv.URL, fmt.Sprintf(`    params: { type: object }
+    request:
+      method: GET
+      path: /list
+      pagination: { style: cursor, cursor_param: cursor, next_cursor: "response.next", max_pages: %d }
+    output: { select: "response.items" }
+`, maxPages)))
+		r := newRunner()
+		r.client.Transport.(*http.Transport).TLSClientConfig = srv.Client().Transport.(*http.Transport).TLSClientConfig
+		res, err := r.Run(context.Background(), m, a, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return res
+	}
+
+	if res := run(2, 5); !res.Truncated || len(res.Data["items"].([]any)) != 2 {
+		t.Errorf("a walk cut at max_pages is truncated: %+v", res)
+	}
+	if res := run(5, 3); res.Truncated || len(res.Data["items"].([]any)) != 3 {
+		t.Errorf("a walk that reached the end is complete: %+v", res)
+	}
+	if res := run(3, 3); res.Truncated {
+		t.Errorf("a list that ends exactly at max_pages is complete: %+v", res)
 	}
 }

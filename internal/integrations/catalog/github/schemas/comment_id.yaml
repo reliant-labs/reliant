@@ -1,0 +1,5 @@
+type: integer
+minimum: 1
+title: Comment id
+description: The comment's numeric id (the number after issuecomment- in its URL).
+examples: [555]

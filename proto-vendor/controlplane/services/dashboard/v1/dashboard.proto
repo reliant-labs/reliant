@@ -78,13 +78,40 @@ service DashboardService {
   // version. Optimistic: a stale base_version is Aborted (version_conflict)
   // and writes nothing.
   rpc SaveDashboard(SaveDashboardRequest) returns (SaveDashboardResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "save"
+        target: {
+          kind: "dashboard"
+          id: "slug"
+          label: "response.summary.title"
+        }
+        scope: "org_id"
+        detail: [
+          "project_id",
+          "message"
+        ]
+      }
+    };
   }
 
   // SaveAsCopy forks a release dashboard, a template or another workspace
   // dashboard into a NEW workspace dashboard (version 1, forked_from set).
   rpc SaveAsCopy(SaveAsCopyRequest) returns (SaveAsCopyResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "copy"
+        target: {
+          kind: "dashboard"
+          id: "slug"
+          label: "title"
+        }
+        scope: "org_id"
+        detail: ["project_id"]
+      }
+    };
   }
 
   // ListDashboardVersions is a dashboard's history, newest first. For a
@@ -100,13 +127,39 @@ service DashboardService {
   // RestoreDashboardVersion saves an old version's spec as the NEW current
   // version (history is append-only; nothing is rewritten).
   rpc RestoreDashboardVersion(RestoreDashboardVersionRequest) returns (RestoreDashboardVersionResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "restore"
+        target: {
+          kind: "dashboard"
+          id: "ref.key"
+          label: "response.summary.title"
+        }
+        scope: "org_id"
+        detail: [
+          "ref.project_id",
+          "version"
+        ]
+      }
+    };
   }
 
   // ArchiveDashboard hides a workspace dashboard and frees its slug. Its
   // versions are kept.
   rpc ArchiveDashboard(ArchiveDashboardRequest) returns (ArchiveDashboardResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "archive"
+        target: {
+          kind: "dashboard"
+          id: "ref.key"
+        }
+        scope: "org_id"
+        detail: ["ref.project_id"]
+      }
+    };
   }
 
   // StarDashboard / UnstarDashboard mark a dashboard for the CALLER only. Both
@@ -115,6 +168,7 @@ service DashboardService {
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
+      activity: {none: "per-user preference"}
     };
   }
 
@@ -122,6 +176,8 @@ service DashboardService {
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
+
+      activity: {none: "per-user preference"}
     };
   }
 
@@ -131,6 +187,7 @@ service DashboardService {
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
+      activity: {none: "per-user recently-viewed list"}
     };
   }
 
@@ -150,7 +207,21 @@ service DashboardService {
   // GitHub pull-request path is not wired yet: pr_url stays empty, and the
   // console offers the download.
   rpc PromoteDashboardToCode(PromoteDashboardToCodeRequest) returns (PromoteDashboardToCodeResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "promote_to_code"
+        target: {
+          kind: "dashboard"
+          id: "ref.key"
+        }
+        scope: "org_id"
+        detail: [
+          "ref.project_id",
+          "response.pr_url"
+        ]
+      }
+    };
   }
 }
 

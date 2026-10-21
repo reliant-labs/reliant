@@ -146,6 +146,24 @@ export function launchFailedItem(overrides: Partial<InboxItem> = {}): InboxItem 
   });
 }
 
+export function needsSetupItem(overrides: Partial<InboxItem> = {}): InboxItem {
+  return create(InboxItemSchema, {
+    kind: InboxItemKind.AUTOMATION_NEEDS_SETUP,
+    itemId: "automation_needs_setup:trg-4:repos",
+    triggerId: "trg-4",
+    triggerName: "Autopilot · PR review",
+    projectId: "proj-1",
+    projectName: "reliant",
+    workflowName: "builtin://autopilot-pr-review",
+    waitingSince: new Date(Date.now() - 30 * 60_000).toISOString(),
+    payload: {
+      case: "automationNeedsSetup",
+      value: { issues: [{ input: "repos", message: "repos is required" }] },
+    },
+    ...overrides,
+  });
+}
+
 export function runFinishedItem(overrides: Partial<InboxItem> = {}): InboxItem {
   return create(InboxItemSchema, {
     ...base,

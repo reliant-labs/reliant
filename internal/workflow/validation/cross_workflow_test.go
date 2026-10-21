@@ -217,6 +217,7 @@ func TestValidateInputsAgainstSchema_PresetAware(t *testing.T) {
 				tt.schema,
 				tt.presetLoader,
 				nil, // no parent workflow for these unit tests
+				nil,
 				result,
 			)
 

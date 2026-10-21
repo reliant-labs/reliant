@@ -10,6 +10,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/reliant-labs/forge/pkg/observe"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -229,7 +230,7 @@ func FetchGitHubUser(ctx context.Context, accessToken string) (GitHubUser, error
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 	req.Header.Set("Accept", "application/vnd.github+json")
 	req.Header.Set("User-Agent", "reliant")
-	resp, err := (&http.Client{Timeout: 10 * time.Second}).Do(req)
+	resp, err := observe.NewHTTPClient(observe.HTTPClientOptions{Timeout: 10 * time.Second}).Do(req)
 	if err != nil {
 		return id, err
 	}

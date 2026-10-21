@@ -45,7 +45,7 @@ var generatorMode bool
 //     (internal/temporal/external_client.go). The replayer must use the same
 //     converter or payload decoding diverges from production.
 //   - Interceptors: production worker.Options.Interceptors is
-//     [observability.NewOTelWorkerInterceptor()] (internal/workersetup/setup.go).
+//     [observability.NewMetricsWorkerInterceptor()] (internal/workersetup/setup.go).
 //     Its workflow inbound is a pass-through today, but it is mirrored so a
 //     future interceptor that issues workflow commands is covered by this test.
 //     workflowPanicInjector follows it, as it did on the generator's worker:
@@ -62,7 +62,7 @@ func newProductionMirroredReplayer(t *testing.T) worker.WorkflowReplayer {
 
 	replayer, err := worker.NewWorkflowReplayerWithOptions(worker.WorkflowReplayerOptions{
 		DataConverter:            rtemporal.NewFlexibleDataConverter(),
-		Interceptors:             []interceptor.WorkerInterceptor{observability.NewOTelWorkerInterceptor(), &workflowPanicInjector{}},
+		Interceptors:             []interceptor.WorkerInterceptor{observability.NewMetricsWorkerInterceptor(), &workflowPanicInjector{}},
 		DisableDeadlockDetection: true,
 	})
 	if err != nil {

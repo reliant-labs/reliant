@@ -1,0 +1,62 @@
+# yaml-language-server: $schema=../../../manifest/schema/action.schema.json
+id: pr.reviews.list
+display_name: List pull request reviews
+summary: The reviews submitted on a pull request, with verdicts and summaries.
+description: >-
+  List the reviews on a pull request, oldest first: who reviewed, the
+  verdict (APPROVED, CHANGES_REQUESTED, COMMENTED, DISMISSED or PENDING),
+  the summary text, and the commit reviewed. Pending reviews are visible
+  only to their author. The comments inside a review are listed by
+  pr.review_comments.list (match on review_id). Follows GitHub's
+  pagination up to 1000 reviews.
+keywords: [pull request, pr, reviews, list, approved, changes requested, verdict, reviewer]
+placement: server
+mutates: false
+tool:
+  expose: true
+params:
+  type: object
+  additionalProperties: false
+  required: [owner, repo, pull_number]
+  properties:
+    owner: { $ref: ../schemas/owner.yaml }
+    repo: { $ref: ../schemas/repo.yaml }
+    pull_number: { $ref: ../schemas/pull_number.yaml }
+    connection: { $ref: ../schemas/connection.yaml }
+request:
+  method: GET
+  path: /repos/{{ params.owner }}/{{ params.repo }}/pulls/{{ params.pull_number }}/reviews
+  query: { per_page: "100" }
+  pagination: { style: link_header, max_pages: 10 }
+  max_response_bytes: 5242880
+  errors: { $ref: ../schemas/github_errors.yaml }
+output:
+  select: >-
+    response.map(r, {"id": r.id,
+                     "node_id": r.?node_id.orValue(null),
+                     "state": r.state,
+                     "body": type(r.?body.orValue(null)) == string ? r.body : "",
+                     "html_url": r.?html_url.orValue(null),
+                     "user": r.?user.?login.orValue(null),
+                     "user_id": r.?user.?id.orValue(null),
+                     "author_association": r.?author_association.orValue(null),
+                     "commit_id": r.?commit_id.orValue(null),
+                     "submitted_at": r.?submitted_at.orValue(null)})
+  schema:
+    type: object
+    properties:
+      items:
+        type: array
+        items:
+          type: object
+          properties:
+            id: { type: integer }
+            node_id: { type: [string, "null"] }
+            state: { type: string, description: "APPROVED, CHANGES_REQUESTED, COMMENTED, DISMISSED or PENDING." }
+            body: { type: string }
+            html_url: { type: [string, "null"] }
+            user: { type: [string, "null"], description: The reviewer's login (null for a deleted account). }
+            user_id: { type: [integer, "null"], description: The reviewer's numeric user id, which is never reused. }
+            author_association: { type: [string, "null"] }
+            commit_id: { type: [string, "null"] }
+            submitted_at: { type: [string, "null"] }

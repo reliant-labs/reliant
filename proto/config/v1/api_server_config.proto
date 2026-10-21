@@ -2,27 +2,26 @@ syntax = "proto3";
 
 package config.v1;
 
-import "config/v1/analytics_config.proto";
-import "config/v1/control_plane_config.proto";
-import "config/v1/integrations_config.proto";
-import "config/v1/llm_config.proto";
-import "config/v1/observability_config.proto";
-import "config/v1/preview_config.proto";
-import "config/v1/server_config.proto";
 import "forge/v1/forge.proto";
 import "google/protobuf/duration.proto";
 
 option go_package = "github.com/reliant-labs/reliant/gen/config/v1;configv1";
 
 // ApiServerConfig is the `reliant server api` process's own config: the knobs
-// only the API server reads. It loads alongside the root ReliantConfig
+// only the API server reads. It loads alongside the root ReliantConfig and the
+// `server` subtree configs, ServerProcessConfig and DatabaseConfig
 // (config.proto, whose header has the rules every config here follows).
-//
 message ApiServerConfig {
   option (forge.v1.binary_config) = {
     binary: "reliant"
     command: ["server", "api"]
   };
+
+  // The blocks every server role shares moved to ServerProcessConfig and
+  // DatabaseConfig.
+  reserved 5, 10, 11, 12, 13, 14, 19, 20, 40, 50, 51, 60, 70, 90;
+  reserved "control_plane", "database", "nats", "temporal", "tls", "drain", "data_dir",
+    "streaming_driver", "integrations", "observability", "sentry", "analytics", "llm", "preview";
 
   // How the API server validates a caller's JWT. Any one of these is enough.
   // A PEM given directly wins over a file.
@@ -51,8 +50,6 @@ message ApiServerConfig {
     description: "Comma-separated email domains allowed to sign in (none allows all)"
   }];
 
-  ControlPlaneConfig control_plane = 5;
-
   // Turns the forge RPC surface (ForgeService) off at this server: every forge
   // rpc then answers FailedPrecondition, saying the forge API is disabled in
   // this deployment. A kill switch, so unset means ON. StartDeploy applies to
@@ -68,18 +65,15 @@ message ApiServerConfig {
     description: "Turn the forge RPC surface off at this server (its rpcs answer FailedPrecondition)"
   }];
 
-  DatabaseConfig database = 10;
-  NatsConfig nats = 11;
-  TemporalConfig temporal = 12;
-  ServerTLSConfig tls = 13;
-  DrainConfig drain = 14;
-
   int32 grpc_port = 15 [(forge.v1.config) = {
     env_var: "GRPC_PORT"
     flag: "grpc-port"
     default_value: "9090"
     description: "gRPC/ConnectRPC listen port"
   }];
+  // The probe listener (/health, /ready). Not forge's `port`, which names
+  // the port a process serves its API on: reliant's API is GRPC_PORT, and
+  // HEALTH_PORT's default differs per role. The serve policy maps it.
   int32 health_port = 16 [(forge.v1.config) = {
     env_var: "HEALTH_PORT"
     flag: "health-port"
@@ -97,22 +91,6 @@ message ApiServerConfig {
     flag: "bind-address"
     default_value: "0.0.0.0"
     description: "Network address to bind to"
-  }];
-  string data_dir = 19 [(forge.v1.config) = {
-    env_var: "DATA_DIR"
-    flag: "data-dir"
-    default_value: "./data"
-    description: "Data directory for logs and certs"
-  }];
-
-  // How live deltas fan out across replicas. nats is the only driver; the
-  // knob remains because deployments set it.
-  string streaming_driver = 20 [(forge.v1.config) = {
-    env_var: "STREAMING_DRIVER"
-    flag: "streaming-driver"
-    default_value: "nats"
-    allowed_values: ["nats"]
-    description: "Streaming driver (nats)"
   }];
 
   // The browser origins allowed to call the API, comma-separated; "*"
@@ -200,11 +178,6 @@ message ApiServerConfig {
     default_value: "sb_publishable_KKiB3B0EdEv7nguwKfEE5A_iY9rVXod"
     description: "OAuth provider publishable (public) key for the desktop sign-in"
   }];
-  IntegrationsConfig integrations = 40;
-  ObservabilityConfig observability = 50;
-  SentryConfig sentry = 51;
-  AnalyticsConfig analytics = 60;
-  LLMConfig llm = 70;
   // How long an unreferenced Temporal payload blob is kept before the API
   // server's hourly GC deletes it. It must exceed the longest workflow run
   // plus the namespace's history retention (internal/temporal/claimcheck).
@@ -213,5 +186,22 @@ message ApiServerConfig {
     default_value: "720h"
     description: "How long an unreferenced Temporal payload blob is kept"
   }];
-  PreviewConfig preview = 90;
+
+  // The rollout drain budget. control-plane sets both on every server
+  // workload, and forge derives the pod's terminationGracePeriodSeconds from
+  // them, so a process that ignores them cannot stay inside the grace period
+  // it was given. Both follow the rule forge's grace-period arithmetic applies
+  // to them (pkg/deploy drainSeconds): zero is the default and negative is
+  // none. Both are Go durations ("30s"); a bare number stops the server at
+  // load. They carry forge's names, which its serve policy reads.
+  google.protobuf.Duration pre_stop_delay = 22 [(forge.v1.config) = {
+    env_var: "PRE_STOP_DELAY"
+    default_value: "5s"
+    description: "How long to keep serving after readiness flips at shutdown (negative: no pause)"
+  }];
+  google.protobuf.Duration shutdown_timeout = 23 [(forge.v1.config) = {
+    env_var: "SHUTDOWN_TIMEOUT"
+    default_value: "30s"
+    description: "Budget for graceful shutdown after the pre-stop pause"
+  }];
 }

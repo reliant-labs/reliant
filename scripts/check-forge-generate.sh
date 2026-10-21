@@ -64,9 +64,10 @@ if [ -n "${FORGE:-}" ]; then
   forge=("${FORGE}")
 else
   # GOPRIVATE: a fresh pseudo-version is not on proxy.golang.org yet
-  # (scripts/pin-forge.sh). GOFLAGS is cleared because `go run pkg@version`
-  # refuses a repo-level -mod setting.
-  forge=(env GOPRIVATE="${GOPRIVATE:-github.com/reliant-labs/*}" GOFLAGS= go run "github.com/reliant-labs/forge/cmd/forge@${pin}")
+  # (scripts/pin-forge.sh). GOFLAGS is reset to just -trimpath because `go run
+  # pkg@version` refuses a repo-level -mod setting, and an empty one would drop
+  # -trimpath under a toolchain switched by go.mod (see the Makefile's GOFLAGS).
+  forge=(env GOPRIVATE="${GOPRIVATE:-github.com/reliant-labs/*}" GOFLAGS=-trimpath go run "github.com/reliant-labs/forge/cmd/forge@${pin}")
 fi
 
 # buf is resolved from PATH by forge; BUF names the Makefile's pinned build.

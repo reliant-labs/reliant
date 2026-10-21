@@ -10,6 +10,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/observe/natsotel"
+
 	"connectrpc.com/connect"
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
@@ -631,7 +633,7 @@ func (r *NATSDaemonRouter) Wake(ctx context.Context, userID string, selector *Da
 		// Not known to be suspended: the resume only hedged against a lagging
 		// mirror, and its failure says nothing the NATS request will not. Route
 		// exactly as resolution would have.
-		logging.Info("[DaemonRouter] speculative resume of an unattached managed daemon failed; routing to it as-is",
+		logging.InfoContext(ctx, "[DaemonRouter] speculative resume of an unattached managed daemon failed; routing to it as-is",
 			"user_id", userID, "daemon_id", rec.id, "error", err)
 		daemonID, err := routableDaemonID(userID, selector, rec, found, sawDaemonRecord)
 		return WakeResult{DaemonID: daemonID}, err
@@ -658,7 +660,7 @@ func (r *NATSDaemonRouter) resume(ctx context.Context, userID string, selector *
 	}
 	if err := r.resumer.ResumeDaemon(ctx, token, daemonID); err != nil {
 		if connect.CodeOf(err) == connect.CodeFailedPrecondition {
-			logging.Info("[DaemonRouter] control plane does not hold the daemon as suspended; treating it as awake",
+			logging.InfoContext(ctx, "[DaemonRouter] control plane does not hold the daemon as suspended; treating it as awake",
 				"user_id", userID, "daemon_id", daemonID, "error", err)
 			return false, nil
 		}
@@ -802,7 +804,7 @@ func (r *NATSDaemonRouter) isDaemonOnlineViaNATS(ctx context.Context, userID str
 		return false, nil // No daemon found → offline.
 	}
 	subject := daemonSubject(toolOnlineSubject, userID, daemonID)
-	reqMsg := observability.NATSPublishMsg(ctx, subject, nil)
+	reqMsg := natsotel.NewMsg(ctx, subject, nil)
 	start := time.Now()
 	msg, err := r.nc.RequestMsg(reqMsg, 2*time.Second)
 	observability.NATSRequestDuration.WithLabelValues("tools.online").Observe(time.Since(start).Seconds())
@@ -831,7 +833,7 @@ func (r *NATSDaemonRouter) SendToolRequest(ctx context.Context, userID string, r
 	}
 	subject := daemonSubject(toolRequestSubject, userID, daemonID)
 	r.inflight.record(userID, daemonID, request.RequestID, request.ToolCallID)
-	msg := observability.NATSPublishMsg(ctx, subject, payload)
+	msg := natsotel.NewMsg(ctx, subject, payload)
 	if err := r.nc.PublishMsg(msg); err != nil {
 		observability.NATSErrorsTotal.WithLabelValues("tools.request", "publish").Inc()
 		return err
@@ -858,7 +860,7 @@ func (r *NATSDaemonRouter) sendCancelToDaemon(ctx context.Context, userID, daemo
 		return err
 	}
 	subject := daemonSubject(toolCancelSubject, userID, daemonID)
-	msg := observability.NATSPublishMsg(ctx, subject, payload)
+	msg := natsotel.NewMsg(ctx, subject, payload)
 	if err := r.nc.PublishMsg(msg); err != nil {
 		observability.NATSErrorsTotal.WithLabelValues("tools.cancel", "publish").Inc()
 		return err
@@ -884,7 +886,7 @@ func (r *NATSDaemonRouter) SendToolExecutionBackground(ctx context.Context, user
 		return err
 	}
 	subject := daemonSubject(toolBackgroundSubj, userID, daemonID)
-	msg := observability.NATSPublishMsg(ctx, subject, payload)
+	msg := natsotel.NewMsg(ctx, subject, payload)
 	if err := r.nc.PublishMsg(msg); err != nil {
 		observability.NATSErrorsTotal.WithLabelValues("tools.background", "publish").Inc()
 		return err
@@ -926,7 +928,7 @@ func (r *NATSDaemonRouter) SendKillProcess(ctx context.Context, userID, processI
 		return fmt.Errorf("resolving daemon for kill: %w", err)
 	}
 	subject := daemonSubject(daemonKillSubject, userID, daemonID)
-	reqMsg := observability.NATSPublishMsg(ctx, subject, payload)
+	reqMsg := natsotel.NewMsg(ctx, subject, payload)
 	start := time.Now()
 	msg, err := r.nc.RequestMsg(reqMsg, 10*time.Second)
 	observability.NATSRequestDuration.WithLabelValues("daemon.process.kill").Observe(time.Since(start).Seconds())
@@ -1118,7 +1120,7 @@ func (r *NATSDaemonRouter) sendDaemonCommandData(ctx context.Context, userID, da
 		err error
 	}
 	subject := daemonSubject(daemonCommandSubject, userID, daemonID)
-	reqMsg := observability.NATSPublishMsg(ctx, subject, data)
+	reqMsg := natsotel.NewMsg(ctx, subject, data)
 	resultCh := make(chan natsResult, 1)
 	start := time.Now()
 	go func() {
@@ -1146,7 +1148,7 @@ func (r *NATSDaemonRouter) sendDaemonCommandData(ctx context.Context, userID, da
 			// file-tree poll of a closed laptop a WARN: 830 in six hours.
 			reqErr := daemonRequestError(
 				fmt.Sprintf("daemon command %s (subject %s, timeout %s)", commandType, subject, timeout), res.err)
-			logging.Warn("[DaemonRouter] daemon command failed",
+			logging.WarnContext(ctx, "[DaemonRouter] daemon command failed",
 				"subject", subject, "commandType", commandType,
 				"payloadBytes", len(data), "timeout", timeout.String(),
 				"elapsed", time.Since(start).Round(time.Millisecond).String(),
@@ -1307,7 +1309,7 @@ func (r *NATSDaemonRouter) toolRequestRoundTrip(ctx context.Context, userID, dae
 	}
 	defer inbox.close()
 
-	reqMsg := observability.NATSPublishMsg(ctx, daemonSubject(toolRequestSyncSubject, userID, daemonID), payload)
+	reqMsg := natsotel.NewMsg(ctx, daemonSubject(toolRequestSyncSubject, userID, daemonID), payload)
 	reqMsg.Reply = inbox.subject
 	start := time.Now()
 	forget := r.inflight.record(userID, daemonID, request.RequestID, request.ToolCallID)
@@ -1364,7 +1366,7 @@ func (r *NATSDaemonRouter) SendLoadProjectConfigs(ctx context.Context, userID st
 		return fmt.Errorf("resolving daemon for config load: %w", err)
 	}
 	subject := daemonSubject(configLoadSubject, userID, resolvedDaemonID)
-	msg := observability.NATSPublishMsg(ctx, subject, payload)
+	msg := natsotel.NewMsg(ctx, subject, payload)
 	if err := r.nc.PublishMsg(msg); err != nil {
 		observability.NATSErrorsTotal.WithLabelValues("daemon.config.load", "publish").Inc()
 		return err
@@ -1386,7 +1388,7 @@ func (r *NATSDaemonRouter) SendWatchProjectConfigs(ctx context.Context, userID s
 		return fmt.Errorf("resolving daemon for config watch: %w", err)
 	}
 	subject := daemonSubject(configWatchSubject, userID, resolvedDaemonID)
-	msg := observability.NATSPublishMsg(ctx, subject, payload)
+	msg := natsotel.NewMsg(ctx, subject, payload)
 	if err := r.nc.PublishMsg(msg); err != nil {
 		observability.NATSErrorsTotal.WithLabelValues("daemon.config.watch", "publish").Inc()
 		return err
@@ -1408,7 +1410,7 @@ func (r *NATSDaemonRouter) SendTerminalInput(ctx context.Context, userID string,
 		return fmt.Errorf("resolving daemon for terminal input: %w", err)
 	}
 	subject := daemonSubject(terminalInputSubject, userID, resolvedDaemonID) + "." + sessionID
-	msg := observability.NATSPublishMsg(ctx, subject, payload)
+	msg := natsotel.NewMsg(ctx, subject, payload)
 	if err := r.nc.PublishMsg(msg); err != nil {
 		observability.NATSErrorsTotal.WithLabelValues("daemon.terminal.input", "publish").Inc()
 		return err
@@ -1431,7 +1433,7 @@ func (r *NATSDaemonRouter) SendTerminalResize(ctx context.Context, userID string
 		return fmt.Errorf("resolving daemon for terminal resize: %w", err)
 	}
 	subject := daemonSubject(terminalResizeSubject, userID, resolvedDaemonID) + "." + sessionID
-	msg := observability.NATSPublishMsg(ctx, subject, payload)
+	msg := natsotel.NewMsg(ctx, subject, payload)
 	if err := r.nc.PublishMsg(msg); err != nil {
 		observability.NATSErrorsTotal.WithLabelValues("daemon.terminal.resize", "publish").Inc()
 		return err
@@ -1477,7 +1479,7 @@ func (r *NATSDaemonRouter) SubscribeTerminalOutput(ctx context.Context, userID s
 		return nil, nil, err
 	}
 	subscribeSubject := daemonSubject(terminalSubscribeSubject, userID, resolvedDaemonID) + "." + sessionID
-	subMsg := observability.NATSPublishMsg(ctx, subscribeSubject, reqPayload)
+	subMsg := natsotel.NewMsg(ctx, subscribeSubject, reqPayload)
 	if err := r.nc.PublishMsg(subMsg); err != nil {
 		observability.NATSErrorsTotal.WithLabelValues("daemon.terminal.subscribe", "publish").Inc()
 		_ = sub.Unsubscribe()
@@ -1505,7 +1507,7 @@ func (r *NATSDaemonRouter) SubscribeProcessOutput(ctx context.Context, userID st
 		return nil, nil, fmt.Errorf("resolving daemon for process subscribe: %w", err)
 	}
 	subject := daemonSubject(processOutputSubscribeSubject, userID, resolvedDaemonID)
-	subMsg := observability.NATSPublishMsg(ctx, subject, reqPayload)
+	subMsg := natsotel.NewMsg(ctx, subject, reqPayload)
 	if err := r.nc.PublishMsg(subMsg); err != nil {
 		observability.NATSErrorsTotal.WithLabelValues("daemon.process.subscribe", "publish").Inc()
 		return nil, nil, fmt.Errorf("publish process output subscribe request via NATS: %w", err)
@@ -1608,7 +1610,7 @@ func (r *NATSDaemonRouter) EnqueueDaemonCommand(ctx context.Context, userID, com
 		// '>', '*' or ' ' would publish to a subject the consumer never matches.
 		subject := pendingSubjectPrefix + sanitizePendingSubjectToken(d.ID)
 		if _, pubErr := js.Publish(ctx, subject, envelope); pubErr != nil {
-			logging.Warn("EnqueueDaemonCommand: JetStream publish failed",
+			logging.WarnContext(ctx, "EnqueueDaemonCommand: JetStream publish failed",
 				"userID", userID, "daemonID", d.ID, "subject", subject,
 				"commandType", commandType, "error", pubErr)
 			continue

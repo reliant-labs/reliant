@@ -16,8 +16,10 @@ option go_package = "github.com/reliant-labs/control-plane/gen/controlplane/v1;c
 // id never appears on this surface, in either direction: the reconciler maps
 // the pair to the instance itself, and admin-server never learns which one.
 //
-// NOTHING HERE IS A SECRET. Status and user listings carry identifiers and
-// states only; the one URL (an export download) is signed and short-lived.
+// NOTHING HERE IS A SECRET except IdentityPasswordCode, which a caller gets
+// only by asking for it (return_code). Status and user listings carry
+// identifiers and states only; the one URL (an export download) is signed and
+// short-lived.
 
 // IdentityState is where an environment's identity instance stands in the
 // reconciler's state machine.
@@ -46,6 +48,33 @@ enum IdentityDeliveryState {
   IDENTITY_DELIVERY_STATE_UNBOUND = 4;
   IDENTITY_DELIVERY_STATE_WITHDRAWN = 5;
   IDENTITY_DELIVERY_STATE_DISABLED = 6;
+}
+
+// IdentityMailDelivery is whether an environment's identity instance can send
+// mail: invitations and password-reset links.
+enum IdentityMailDelivery {
+  IDENTITY_MAIL_DELIVERY_UNSPECIFIED = 0;
+  // No mail is sent: the environment declares no smtp in its
+  // forge.ManagedIdentity, and the platform provides no relay. InviteUser and
+  // SendPasswordReset then refuse unless the caller asks for the code back
+  // (return_code) and delivers it another way.
+  IDENTITY_MAIL_DELIVERY_NONE = 1;
+  // The environment's own SMTP server (forge.ManagedIdentity smtp).
+  IDENTITY_MAIL_DELIVERY_SMTP = 2;
+}
+
+// IdentityPasswordCode is a one-time code that sets a user's password, handed
+// back to an admin who asked for it (return_code) so they can deliver it
+// themselves. It is a credential: it is never logged or audited.
+message IdentityPasswordCode {
+  string code = 1;
+  // An estimate: the instance's default password-code lifetime (1h) from the
+  // moment it was issued. Redeeming it later is refused.
+  google.protobuf.Timestamp expires_at = 2;
+  // The environment's own reset page with the code filled in, the link an
+  // email would have carried. Empty when the environment's identity declares
+  // no application login URI or domain to build it from.
+  string reset_url = 3;
 }
 
 enum IdentityUserState {

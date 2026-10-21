@@ -287,7 +287,7 @@ describe("AutomationDetail", () => {
     expect(deleteTrigger.mock.calls[0]![0]).toMatchObject({ id: "trig-1" });
   });
 
-  it("explains a broken activation and offers the two fixes", async () => {
+  it("frames a workflow automation's trigger as its history: shared settings, no Edit, Remove only when broken", async () => {
     const user = userEvent.setup();
     deleteTrigger.mockResolvedValue({});
     getTrigger.mockResolvedValue(
@@ -305,13 +305,22 @@ describe("AutomationDetail", () => {
     );
     renderAtRoute(<AutomationDetail triggerId="trig-1" />, "/workflows/automations/trig-1");
 
-    const notice = await screen.findByText(/This automation can't run: “nightly” no longer works./);
-    const alert = notice.closest('[role="alert"]') as HTMLElement;
-    expect(within(alert).getByText(/the workflow no longer declares it/)).toBeInTheDocument();
-    expect(within(alert).getByRole("link", { name: "Edit workflow" })).toHaveAttribute("href", "/workflow/triage-new-issues");
+    expect(await screen.findByRole("heading", { level: 1, name: "nightly history" })).toBeInTheDocument();
+    const banner = screen.getByTestId("shared-settings-banner");
+    expect(within(banner).getByRole("link", { name: "Open settings" })).toHaveAttribute(
+      "href",
+      "/workflows/library/triage-new-issues?project=proj-1#automation-proj-1",
+    );
+    expect(screen.queryByRole("button", { name: "Edit" })).toBeNull();
 
-    await user.click(within(alert).getByRole("button", { name: "Remove activation" }));
-    await user.click(within(screen.getByRole("dialog", { name: "Remove Morning triage?" })).getByRole("button", { name: "Remove activation" }));
+    const notice = screen.getByTestId("automation-state-notice");
+    expect(notice).toHaveAttribute("data-state", "broken");
+    expect(within(notice).getByText(/the workflow no longer declares it/)).toBeInTheDocument();
+    expect(within(notice).getByRole("button", { name: "Open workflow" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Remove trigger" }));
+    const dialog = await screen.findByRole("dialog");
+    await user.click(within(dialog).getAllByRole("button").find((b) => /Delete|Remove/.test(b.textContent ?? ""))!);
     await waitFor(() => expect(deleteTrigger).toHaveBeenCalledTimes(1));
   });
 });

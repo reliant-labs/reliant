@@ -12,6 +12,7 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/migratekit"
 	"github.com/reliant-labs/forge/pkg/migratekit/compat"
+	"github.com/reliant-labs/forge/pkg/observe/dbtrace"
 
 	forgedb "github.com/reliant-labs/reliant/db"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -94,7 +95,7 @@ type MigrateResult struct {
 // schema ahead of this binary that was not declared backward-compatible
 // (*migratekit.SchemaAheadError).
 func Migrate(ctx context.Context, dsn string, logger *slog.Logger) (MigrateResult, error) {
-	pool, err := sql.Open("pgx", dsn)
+	pool, err := dbtrace.Open("pgx", dsn)
 	if err != nil {
 		return MigrateResult{}, fmt.Errorf("open migration connection: %w", err)
 	}

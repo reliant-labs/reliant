@@ -8,19 +8,13 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
-// GetChatActivity queries the chats_with_activity view to get the computed
-// activity for a chat. Returns 0 (IDLE) if no activity exists.
+// GetChatActivity returns the computed activity the chats_with_activity view
+// derives for a chat: 0 (IDLE) if it has none.
 func (r *Repo) GetChatActivity(ctx context.Context, chatID string) (int, error) {
-	query := `SELECT COALESCE(activity, 0) FROM chats_with_activity WHERE id = ?`
-	query = r.bindQuery(query)
-
-	var activity int
-	if err := r.DB.DB(ctx).QueryRowContext(ctx, query, chatID).Scan(&activity); err != nil {
-		return 0, fmt.Errorf("failed to get chat activity: %w", err)
-	}
-	return activity, nil
+	return store.GetChatActivity(ctx, r.ORM(), chatID)
 }
 
 // emitChatActivityIfChanged queries the current computed activity for a chat

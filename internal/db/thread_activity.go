@@ -3,9 +3,10 @@ package db
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"time"
+
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // LastThreadActivityByChat returns, for every thread of a chat, the timestamp of
@@ -24,25 +25,5 @@ func (r *Repo) LastThreadActivityByChat(ctx context.Context, chatID string) (map
 	if chatID == "" {
 		return nil, fmt.Errorf("chat ID cannot be empty")
 	}
-
-	query := r.bindQuery(`SELECT thread_id, MAX(created_at) FROM messages WHERE chat_id = ? GROUP BY thread_id`)
-
-	rows, err := r.DB.DB(ctx).QueryContext(ctx, query, chatID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read thread activity: %w", err)
-	}
-	defer rows.Close()
-
-	activity := map[string]time.Time{}
-	for rows.Next() {
-		var threadID string
-		var last sql.NullTime
-		if err := rows.Scan(&threadID, &last); err != nil {
-			return nil, fmt.Errorf("failed to scan thread activity: %w", err)
-		}
-		if last.Valid {
-			activity[threadID] = last.Time
-		}
-	}
-	return activity, rows.Err()
+	return store.LastThreadActivityByChat(ctx, r.ORM(), chatID)
 }

@@ -675,7 +675,7 @@ type Repository interface {
 	// `at` is the reset point's event time; it is what separates work the
 	// new run will redo from work it will only replay. Paused rows are out
 	// of scope (ResumeWorkflowsByChat owns those). See
-	// queries/workflows.sql for the full predicate.
+	// internal/store/workflow_repo_ext.go for the full predicate.
 	ReviveSubtreeLiveAt(ctx context.Context, rootWorkflowID string, at time.Time) (workflowsRevived, threadsRevived int64, err error)
 	PauseRunningWorkflowsByChat(ctx context.Context, chatID string) error // Pause all running workflows for a chat
 	ResumeWorkflowsByChat(ctx context.Context, chatID string) error       // Resume all paused workflows for a chat
@@ -716,7 +716,7 @@ type Repository interface {
 	ListChildThreads(ctx context.Context, parentThreadID string) ([]*Thread, error)
 	UpdateThreadWorkflow(ctx context.Context, threadID, workflowID string) (*Thread, error)
 	UpdateThreadForkPoint(ctx context.Context, threadID string, forkAtMessageID *string) (*Thread, error)
-	UpdateThreadStatus(ctx context.Context, threadID string, status int32, completedAt *time.Time) (*Thread, error)
+	UpdateThreadStatus(ctx context.Context, threadID string, status ThreadStatus, completedAt *time.Time) (*Thread, error)
 	// ReviveThread moves a terminal thread back to running because a new run
 	// has started on it, and clears the completed_at of the turn that ended.
 	// The inverse of CascadeTerminalStatusToThreadSubtree below, and the
@@ -824,7 +824,6 @@ type Repository interface {
 	DeleteTrigger(ctx context.Context, id string) error
 	SetTriggerEnabled(ctx context.Context, id string, enabled bool) error
 	SetTriggerProjection(ctx context.Context, id string, p core.TriggerProjection) error
-	ListWorkflowTriggerActivations(ctx context.Context, userID, workflow string) ([]*core.Trigger, error)
 	ListAllWorkflowTriggerActivations(ctx context.Context) ([]*core.Trigger, error)
 
 	// Trigger events - one row per firing. The insert is ON CONFLICT
@@ -880,7 +879,6 @@ type Repository interface {
 	GetTriggerRegistration(ctx context.Context, triggerID string) (*core.TriggerRegistration, error)
 	ListTriggerRegistrations(ctx context.Context, userID string, triggerIDs []string) (map[string]*core.TriggerRegistration, error)
 	UpsertTriggerRegistration(ctx context.Context, reg *core.TriggerRegistration) error
-	DeleteTriggerRegistration(ctx context.Context, triggerID string) error
 
 	// Step Executions (for CEL history queries)
 	CreateStepExecution(ctx context.Context, exec *StepExecution) error
@@ -940,17 +938,8 @@ type ProjectFilters = core.ProjectFilters
 // WorktreeFilters contains options for filtering worktrees.
 type WorktreeFilters = core.WorktreeFilters
 
-// BackgroundProcessFilters contains options for filtering background processes
-type BackgroundProcessFilters struct {
-	UserID     string
-	WorktreeID *string
-	ProjectID  *string
-	ChatID     *string
-	Status     *BackgroundProcessStatus
-	SourceType *BackgroundProcessSourceType
-	Limit      int
-	Offset     int
-}
+// BackgroundProcessFilters contains options for filtering background processes.
+type BackgroundProcessFilters = core.BackgroundProcessFilters
 
 // Attachment represents a file attachment.
 // Kept as a facade alias for external API compatibility.

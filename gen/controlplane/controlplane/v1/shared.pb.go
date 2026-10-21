@@ -1443,36 +1443,23 @@ func (x *Product) GetDescription() string {
 
 // MeteredDimension describes one billable, usage-metered resource axis: a
 // unit of consumption, a per-period included allowance, and the rate
-// charged once that allowance is exhausted.
-//
-// M0.6 introduces this shape with exactly one instance per compute plan —
-// daemon compute, carrying the same facts allowed_daemon_sizes /
-// daemon_compute_included_minutes / daemon_overage_per_minute_cents below
-// already conveyed. Those scalar fields are UNCHANGED and remain the
-// authoritative wire values for existing clients; metered_dimensions is an
-// additive projection of the same data, in the collection shape later
-// dimensions (CPU, memory, storage, egress, CDN) will land in without
-// requiring another scalar-field-per-dimension expansion.
+// charged once that allowance is exhausted. Today these are the
+// infrastructure (deploy) dimensions; daemon compute is priced per size by
+// ListPlans' daemon_pricing.
 type MeteredDimension struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Stable identifier, e.g. "daemon_compute". Not user-facing.
+	// Stable identifier, e.g. "infra_cpu". Not user-facing.
 	Id string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	// Unit the allowance and rate are denominated in, e.g. "minutes".
+	// Unit the allowance and rate are denominated in, e.g. "vcpu_hours".
 	Unit string `protobuf:"bytes,2,opt,name=unit,proto3" json:"unit,omitempty"`
-	// Per-period allowance in Unit. -1 means unlimited (the catalog's
-	// existing sentinel); enforcement code must clamp this to zero itself
-	// (see planlimits.IncludedComputeMinutes) rather than trusting this raw
-	// value, which display code preserves as -1 on purpose.
+	// Per-period allowance in Unit.
 	IncludedAllowance float64 `protobuf:"fixed64,3,opt,name=included_allowance,json=includedAllowance,proto3" json:"included_allowance,omitempty"`
 	// Per-Unit charge once the allowance is exhausted.
 	OverageRateCents float64 `protobuf:"fixed64,4,opt,name=overage_rate_cents,json=overageRateCents,proto3" json:"overage_rate_cents,omitempty"`
-	// Tiers/sizes this dimension may run as. Only meaningful for
-	// tier-gated dimensions (daemon compute's machine sizes); empty for a
-	// dimension with no such restriction. For daemon_compute specifically,
-	// empty means deny-all — the same contract allowed_daemon_sizes above
-	// already carries.
+	// Tiers/sizes this dimension may run as; empty for a dimension with no
+	// such restriction (every infrastructure dimension today).
 	AllowedTiers []string `protobuf:"bytes,5,rep,name=allowed_tiers,json=allowedTiers,proto3" json:"allowed_tiers,omitempty"`
-	// Presentation label, e.g. "Compute". Not enforcement.
+	// Presentation label, e.g. "CPU". Not enforcement.
 	DisplayName   string `protobuf:"bytes,6,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -1667,20 +1654,10 @@ type PlanLimits struct {
 	// Machine sizes this plan may run. EMPTY MEANS DENY ALL, including
 	// "small" — it is not "no restriction".
 	AllowedDaemonSizes []string `protobuf:"bytes,9,rep,name=allowed_daemon_sizes,json=allowedDaemonSizes,proto3" json:"allowed_daemon_sizes,omitempty"`
-	// Monthly included compute minutes. -1 means unlimited.
-	DaemonComputeIncludedMinutes int32 `protobuf:"varint,10,opt,name=daemon_compute_included_minutes,json=daemonComputeIncludedMinutes,proto3" json:"daemon_compute_included_minutes,omitempty"`
-	// Per-minute charge once included minutes are exhausted. Fractional
-	// cents are normal (0.2 = a fifth of a cent per minute), hence double.
-	DaemonOveragePerMinuteCents float64 `protobuf:"fixed64,11,opt,name=daemon_overage_per_minute_cents,json=daemonOveragePerMinuteCents,proto3" json:"daemon_overage_per_minute_cents,omitempty"`
-	// The same allowances above, reshaped into a collection so a future
-	// dimension (CPU, memory, storage, egress, CDN) is one more entry here
-	// rather than three more scalar fields on this message. See
-	// MeteredDimension's own comment for why both shapes coexist right now.
-	//
-	// As of P1 this carries daemon compute PLUS the infrastructure
-	// dimensions declared below — the "future dimension" this shape was
-	// built for. The scalar fields remain the parsed representation and the
-	// enforcement inputs; metered_dimensions stays a derived view.
+	// The infrastructure allowances below, reshaped into a collection so a
+	// future dimension is one more entry here rather than more scalar fields
+	// on this message. The scalar fields remain the parsed representation and
+	// the enforcement inputs; metered_dimensions is a derived view.
 	MeteredDimensions []*MeteredDimension `protobuf:"bytes,12,rep,name=metered_dimensions,json=meteredDimensions,proto3" json:"metered_dimensions,omitempty"`
 	// Included vCPU-hours per period. Metered from resources.requests.cpu
 	// times running replicas, so scale-to-zero genuinely stops this meter.
@@ -1818,20 +1795,6 @@ func (x *PlanLimits) GetAllowedDaemonSizes() []string {
 		return x.AllowedDaemonSizes
 	}
 	return nil
-}
-
-func (x *PlanLimits) GetDaemonComputeIncludedMinutes() int32 {
-	if x != nil {
-		return x.DaemonComputeIncludedMinutes
-	}
-	return 0
-}
-
-func (x *PlanLimits) GetDaemonOveragePerMinuteCents() float64 {
-	if x != nil {
-		return x.DaemonOveragePerMinuteCents
-	}
-	return 0
 }
 
 func (x *PlanLimits) GetMeteredDimensions() []*MeteredDimension {
@@ -3878,8 +3841,7 @@ const file_controlplane_v1_shared_proto_rawDesc = "" +
 	"\x18notify_threshold_percent\x18\x01 \x01(\x01R\x16notifyThresholdPercent\x12.\n" +
 	"\x13overage_grace_hours\x18\x02 \x01(\x05R\x11overageGraceHours\x12,\n" +
 	"\x12suspend_on_overage\x18\x03 \x01(\bR\x10suspendOnOverage\x12A\n" +
-	"\x1dnon_suspendable_dimension_ids\x18\x04 \x03(\tR\x1anonSuspendableDimensionIds\"\x84\n" +
-	"\n" +
+	"\x1dnon_suspendable_dimension_ids\x18\x04 \x03(\tR\x1anonSuspendableDimensionIds\"\xc5\t\n" +
 	"\n" +
 	"PlanLimits\x12\x1b\n" +
 	"\tmax_seats\x18\x01 \x01(\x05R\bmaxSeats\x12%\n" +
@@ -3888,10 +3850,7 @@ const file_controlplane_v1_shared_proto_rawDesc = "" +
 	"\fmax_llm_keys\x18\x04 \x01(\x05R\n" +
 	"maxLlmKeys\x12(\n" +
 	"\x10requests_per_min\x18\a \x01(\x05R\x0erequestsPerMin\x120\n" +
-	"\x14allowed_daemon_sizes\x18\t \x03(\tR\x12allowedDaemonSizes\x12E\n" +
-	"\x1fdaemon_compute_included_minutes\x18\n" +
-	" \x01(\x05R\x1cdaemonComputeIncludedMinutes\x12D\n" +
-	"\x1fdaemon_overage_per_minute_cents\x18\v \x01(\x01R\x1bdaemonOveragePerMinuteCents\x12P\n" +
+	"\x14allowed_daemon_sizes\x18\t \x03(\tR\x12allowedDaemonSizes\x12P\n" +
 	"\x12metered_dimensions\x18\f \x03(\v2!.controlplane.v1.MeteredDimensionR\x11meteredDimensions\x12,\n" +
 	"\x12included_cpu_hours\x18\r \x01(\x01R\x10includedCpuHours\x123\n" +
 	"\x16cpu_overage_rate_cents\x18\x0e \x01(\x01R\x13cpuOverageRateCents\x129\n" +
@@ -3906,7 +3865,8 @@ const file_controlplane_v1_shared_proto_rawDesc = "" +
 	"\x16max_daemon_storage_gib\x18# \x01(\x05R\x13maxDaemonStorageGib\x12!\n" +
 	"\fmachine_size\x18$ \x01(\tR\vmachineSize\x124\n" +
 	"\x16machine_included_hours\x18% \x01(\x03R\x14machineIncludedHours\x12?\n" +
-	"\x1cmachine_included_storage_gib\x18& \x01(\x03R\x19machineIncludedStorageGib\"\xd1\x01\n" +
+	"\x1cmachine_included_storage_gib\x18& \x01(\x03R\x19machineIncludedStorageGibJ\x04\b\n" +
+	"\x10\vJ\x04\b\v\x10\fR\x1fdaemon_compute_included_minutesR\x1fdaemon_overage_per_minute_cents\"\xd1\x01\n" +
 	"\rDaemonPricing\x126\n" +
 	"\x05sizes\x18\x01 \x03(\v2 .controlplane.v1.DaemonSizePriceR\x05sizes\x12 \n" +
 	"\vplaceholder\x18\x03 \x01(\bR\vplaceholder\x12<\n" +

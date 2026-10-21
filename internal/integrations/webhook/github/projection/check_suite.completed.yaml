@@ -1,0 +1,28 @@
+# Check suite completed: the projection of the GitHub `check_suite.completed` webhook.
+id: check_suite.completed
+event: check_suite.completed
+display_name: Check suite completed
+summary: Every check on a commit finished.
+description: >-
+  Fires when all the checks of one App on a commit complete. Match
+  conclusion, branch and app (github-actions for Actions). One event per App
+  per commit, so it suits "CI finished on this branch" better than
+  check_run.completed.
+keywords: [check, suite, status, commit]
+attributes:
+  - { name: conclusion, description: "The suite's conclusion.", example: success, from: check_suite.conclusion }
+  - { name: branch, description: The branch the commit is on., example: main, from: check_suite.head_branch }
+  - { name: app, description: The slug of the GitHub App that ran the checks., example: github-actions, from: check_suite.app.slug }
+data:
+  check_suite:
+    kind: object
+    fields:
+      id: integer
+      status: string
+      conclusion: string
+      head_sha: string
+      head_branch: string
+      app: { kind: object, object: app }
+      created_at: string
+      updated_at: string
+      pull_requests: { kind: integers, pluck: number }

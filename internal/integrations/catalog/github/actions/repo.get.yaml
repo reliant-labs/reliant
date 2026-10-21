@@ -1,0 +1,60 @@
+# yaml-language-server: $schema=../../../manifest/schema/action.schema.json
+id: repo.get
+display_name: Get repository
+summary: A repository's metadata, including its default branch.
+description: >-
+  Return one repository: full name, description, visibility, default
+  branch, primary language, topics, and whether the connection can push.
+  Read default_branch before browsing code on a branch nobody named.
+keywords: [repository, repo, metadata, default branch, details, about]
+placement: server
+mutates: false
+tool:
+  expose: true
+params:
+  type: object
+  additionalProperties: false
+  required: [owner, repo]
+  properties:
+    owner: { $ref: ../schemas/owner.yaml }
+    repo: { $ref: ../schemas/repo.yaml }
+    connection: { $ref: ../schemas/connection.yaml }
+request:
+  method: GET
+  path: /repos/{{ params.owner }}/{{ params.repo }}
+  errors: { $ref: ../schemas/github_errors.yaml }
+output:
+  select: >-
+    {"id": response.id,
+     "full_name": response.full_name,
+     "name": response.name,
+     "owner": response.owner.login,
+     "description": response.?description.orValue(null),
+     "private": response.private,
+     "visibility": response.?visibility.orValue(null),
+     "default_branch": response.default_branch,
+     "language": response.?language.orValue(null),
+     "topics": type(response.?topics.orValue(null)) == list ? response.topics : [],
+     "archived": response.?archived.orValue(false),
+     "fork": response.?fork.orValue(false),
+     "html_url": response.html_url,
+     "pushed_at": response.?pushed_at.orValue(null),
+     "can_push": response.?permissions.?push.orValue(false)}
+  schema:
+    type: object
+    properties:
+      id: { type: integer }
+      full_name: { type: string, description: "owner/name" }
+      name: { type: string }
+      owner: { type: string }
+      description: { type: [string, "null"] }
+      private: { type: boolean }
+      visibility: { type: [string, "null"], description: "public, private or internal." }
+      default_branch: { type: string }
+      language: { type: [string, "null"] }
+      topics: { type: array, items: { type: string } }
+      archived: { type: boolean }
+      fork: { type: boolean }
+      html_url: { type: string }
+      pushed_at: { type: [string, "null"] }
+      can_push: { type: boolean }

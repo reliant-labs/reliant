@@ -16,10 +16,10 @@ import (
 // exercise the temporal_payload_blobs migration.
 
 func TestPostgresStorePutGet(t *testing.T) {
-	_, sqlDB, cleanup := db.SetupTestDBWithRawDB(t)
+	repo, _, cleanup := db.SetupTestDBWithRawDB(t)
 	defer cleanup()
 	ctx := context.Background()
-	store := claimcheck.NewPostgresStore(sqlDB)
+	store := claimcheck.NewPostgresStore(repo.ORM())
 
 	if err := store.Put(ctx, "sha256:aa", []byte("one"), 3); err != nil {
 		t.Fatalf("Put: %v", err)
@@ -38,9 +38,9 @@ func TestPostgresStorePutGet(t *testing.T) {
 }
 
 func TestPostgresStoreCodecRoundTrip(t *testing.T) {
-	_, sqlDB, cleanup := db.SetupTestDBWithRawDB(t)
+	repo, sqlDB, cleanup := db.SetupTestDBWithRawDB(t)
 	defer cleanup()
-	store := claimcheck.NewPostgresStore(sqlDB)
+	store := claimcheck.NewPostgresStore(repo.ORM())
 
 	large := &commonpb.Payload{
 		Metadata: map[string][]byte{"encoding": []byte("json/plain")},
@@ -67,10 +67,10 @@ func TestPostgresStoreCodecRoundTrip(t *testing.T) {
 }
 
 func TestPostgresStoreGC(t *testing.T) {
-	_, sqlDB, cleanup := db.SetupTestDBWithRawDB(t)
+	repo, sqlDB, cleanup := db.SetupTestDBWithRawDB(t)
 	defer cleanup()
 	ctx := context.Background()
-	store := claimcheck.NewPostgresStore(sqlDB)
+	store := claimcheck.NewPostgresStore(repo.ORM())
 
 	// 2500 stale rows spans three delete batches; 3 fresh rows must survive.
 	if _, err := sqlDB.Exec(`

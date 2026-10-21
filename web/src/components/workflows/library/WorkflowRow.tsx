@@ -2,8 +2,10 @@
 
 /**
  * The Library table's columns (WORKFLOW_UI.md §2.2): what a workflow is,
- * where it comes from, whether it is in use — how many automations run it,
- * how its last run went — and Run….
+ * where it comes from, whether it is turned on in this project (and the worst
+ * state of what runs it), how its last run went — and Run…, plus Set up for a
+ * workflow that could run by itself and does not yet
+ * (automation-ux-spec.md §2.1).
  *
  * A real table with a header row and fixed column widths (forge-ui
  * DataTable, `layout="fixed"`), not per-row grids. The rows used to size
@@ -30,7 +32,9 @@ import { DraftStatusBadge } from "../../workflow/DraftStatusBadge";
 import { stripWorkflowRefPrefix, workflowDisplayName } from "../../../lib/workflowDisplayName";
 import { RowMenu, type RowMenuAction } from "../RowMenu";
 import { WORKFLOW_SOURCE_LABEL, WorkflowBadge, WorkflowSourceBadge, type WorkflowSource } from "../WorkflowSourceBadge";
-import { automationsSummary } from "./libraryView";
+import type { AutomationCtaSpec } from "@/lib/automationHealth";
+import type { Trigger } from "@/api/trigger-grpc";
+import { AutomationCta } from "../../Automations/AutomationCta";
 
 export type WorkflowRowAction = RowMenuAction;
 
@@ -51,14 +55,16 @@ export interface LibraryTableRow extends Record<string, unknown> {
   workflow: WorkflowRowItem;
   /** The workflow's newest run, from LastRunPerWorkflow. */
   lastRun?: RunSummary;
-  /** How many automations run this workflow. */
-  automationCount: number;
-  /** How many of those are FAILING; says why the row is pinned on top. */
-  failingAutomationCount: number;
+  /** The "Turned on" cell; null when there is nothing to turn on and nothing runs it. */
+  turnedOn: { text: string; attention: boolean } | null;
   /** Pinned under "Needs attention". */
   attention: boolean;
   /** Opens Run…; absent for a workflow that cannot run (a draft). */
   onRun?: () => void;
+  /** Opens Set up; present for a workflow that declares triggers and is not on here. */
+  onSetUp?: () => void;
+  /** The state's call to action, when what runs it here needs the user. */
+  cta?: { spec: AutomationCtaSpec; triggers: Trigger[]; projectId: string };
   actions: WorkflowRowAction[];
 }
 
@@ -92,10 +98,10 @@ export function libraryColumns(project?: string) {
       render: (_: unknown, row: LibraryTableRow) => <WorkflowSourceBadge source={row.workflow.source} />,
     },
     {
-      key: "automations",
-      header: "Automations",
+      key: "turnedOn",
+      header: "Turned on",
       width: "10rem",
-      render: (_: unknown, row: LibraryTableRow) => <AutomationsCell row={row} />,
+      render: (_: unknown, row: LibraryTableRow) => <TurnedOnCell row={row} />,
     },
     {
       key: "lastRun",
@@ -111,7 +117,7 @@ export function libraryColumns(project?: string) {
       key: "actions",
       header: "Actions",
       srHeader: true,
-      width: "7rem",
+      width: "12rem",
       className: "text-right",
       render: (_: unknown, row: LibraryTableRow) => <ActionsCell row={row} />,
     },
@@ -150,26 +156,24 @@ function NameCell({ row, project }: { row: LibraryTableRow; project?: string }) 
   );
 }
 
-function AutomationsCell({ row }: { row: LibraryTableRow }) {
-  const summary = automationsSummary(row.automationCount, row.failingAutomationCount);
-  if (!summary) {
+function TurnedOnCell({ row }: { row: LibraryTableRow }) {
+  if (!row.turnedOn) {
     return (
-      <span data-testid="workflow-row-automations" className="text-xs text-muted-foreground">
-        <Tooltip content="No automation runs this workflow" placement="top" delay={300} wrapperClassName="inline-flex">
+      <span data-testid="workflow-row-turned-on" className="text-xs text-muted-foreground">
+        <Tooltip content="It declares no triggers, and nothing runs it by itself" placement="top" delay={300} wrapperClassName="inline-flex">
           <span aria-hidden="true">—</span>
         </Tooltip>
-        <span className="sr-only">None</span>
+        <span className="sr-only">Not applicable</span>
       </span>
     );
   }
   return (
-    <span data-testid="workflow-row-automations" className="block truncate text-xs text-muted-foreground" title={summary}>
-      {`${row.automationCount} ${row.automationCount === 1 ? "automation" : "automations"}`}
-      {row.failingAutomationCount > 0 && (
-        <span className="text-destructive-ink" data-testid="workflow-row-failing">
-          {` · ${row.failingAutomationCount} failing`}
-        </span>
-      )}
+    <span
+      data-testid="workflow-row-turned-on"
+      className={`block truncate text-xs ${row.turnedOn.attention ? "text-destructive-ink" : "text-muted-foreground"}`}
+      title={row.turnedOn.text}
+    >
+      {row.turnedOn.text}
     </span>
   );
 }
@@ -179,6 +183,27 @@ function ActionsCell({ row }: { row: LibraryTableRow }) {
   const qualifier = workflowRowQualifier(row.workflow);
   return (
     <div className="flex items-center justify-end gap-1">
+      {row.cta ? (
+        <AutomationCta
+          cta={row.cta.spec}
+          triggers={row.cta.triggers}
+          workflowRef={row.workflow.name}
+          projectId={row.cta.projectId}
+          subject={displayName}
+          className="h-7 px-2 text-xs"
+        />
+      ) : (
+        row.onSetUp && (
+          <button
+            type="button"
+            onClick={row.onSetUp}
+            aria-label={`Set up ${displayName} (${qualifier})`}
+            className="inline-flex h-7 items-center rounded-md border border-border px-2 text-xs font-medium text-foreground transition-colors hover:bg-muted/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+          >
+            Set up
+          </button>
+        )
+      )}
       {row.onRun && (
         <button
           type="button"

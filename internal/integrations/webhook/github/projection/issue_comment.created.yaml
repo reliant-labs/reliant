@@ -1,0 +1,26 @@
+# Issue or pull request comment: the projection of the GitHub `issue_comment.created` webhook.
+id: issue_comment.created
+event: issue_comment.created
+display_name: Issue or pull request comment
+summary: A comment was posted on an issue or pull request.
+description: >-
+  Fires when someone comments on an issue or a pull request's conversation.
+  Match mentions_reliant: "true" to react only to comments that mention
+  @reliant, and is_pull_request to pick issues or pull requests. Comments
+  written by GitHub Apps (including this one) never fire, so a run that
+  comments cannot trigger itself.
+keywords: [comment, reply, mention, reliant]
+attributes:
+  - { name: mentions_reliant, description: "\"true\" when the comment mentions @reliant.", example: "true", from: comment.body, hook: mentionsReliant }
+  - { name: is_pull_request, description: "\"true\" when the comment is on a pull request.", example: "false", from: issue.pull_request, hook: isObject }
+data:
+  issue: { kind: object, object: issue }
+  comment:
+    kind: object
+    fields:
+      id: integer
+      body: { kind: string, cap: true }
+      html_url: string
+      user: { kind: object, object: user }
+      author_association: string
+      created_at: string

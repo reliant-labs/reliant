@@ -14,7 +14,6 @@ import { defaultParseSearch, defaultStringifySearch } from "@tanstack/react-rout
 import {
   forgeConsoleDashboardSearchSchema,
   forgeConsoleDashboardsSearchSchema,
-  forgeConsoleEnvSearchSchema,
   forgeObservabilitySearchSchema,
 } from "@/routeSchemas";
 
@@ -137,8 +136,8 @@ describe("the URL round trip", () => {
   });
 
   it("survives values that look like JSON (a numeric service, a boolean-looking version)", () => {
-    const { parsed } = throughTheUrl({ service: "123", f: ["service.version:true", "http.response.status_code:500"], workload: "007" });
-    expect(parsed).toMatchObject({ service: "123", f: ["service.version:true", "http.response.status_code:500"], workload: "007" });
+    const { parsed } = throughTheUrl({ service: "123", f: ["service.version:true", "http.response.status_code:500"] });
+    expect(parsed).toMatchObject({ service: "123", f: ["service.version:true", "http.response.status_code:500"] });
   });
 
   it("drops a bad value instead of failing the route", () => {
@@ -151,16 +150,11 @@ describe("the URL round trip", () => {
     expect(parsed).toEqual({ envs: ["prod"] });
   });
 
-  it("is the same shape on the env page, so a link moves between the two places", () => {
-    const search: ObsSearch = { view: "workloads", workload: "api", container: "api", groupBy: ["service.version"], f: ["status:error"] };
-    expect(throughTheUrl({ tab: "observability", ...search }, forgeConsoleEnvSearchSchema).parsed).toEqual({ tab: "observability", ...search });
-  });
-
   it("lists every key the area owns, so leaving the tab clears them all", () => {
     expect([...OBS_SEARCH_KEYS].sort()).toEqual(
       [
-        "alerts", "cmpWindow", "compare", "container", "envs", "errors", "f", "groupBy",
-        "live", "minDuration", "profileType", "q", "range", "rule", "service", "severity", "span", "trace", "view", "workload",
+        "alerts", "cmpWindow", "compare", "envs", "errors", "f", "groupBy",
+        "live", "minDuration", "profileType", "q", "range", "rule", "service", "severity", "span", "trace", "view",
       ].sort()
     );
   });

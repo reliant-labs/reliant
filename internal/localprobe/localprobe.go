@@ -22,6 +22,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/observe"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 )
 
@@ -126,7 +127,8 @@ type prober struct {
 func New(deps Deps) Service {
 	client := deps.HTTPClient
 	if client == nil {
-		client = &http.Client{}
+		// No client timeout: every probe bounds itself with its own context.
+		client = observe.NewHTTPClient(observe.HTTPClientOptions{Timeout: -1})
 	}
 	return &prober{client: client}
 }

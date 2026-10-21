@@ -43,12 +43,23 @@ FORGE_MOD="github.com/reliant-labs/forge"
 # than relying on the caller's environment so the script is fast on a fresh
 # machine and in CI, not only on a laptop that happens to export it.
 export GOPRIVATE="${GOPRIVATE:-github.com/reliant-labs/*}"
+
+cd "$(git rev-parse --show-toplevel)"
+
+# The GOFLAGS go would use here — the environment's, `go env -w`, or
+# $GOROOT/go.env — with -trimpath merged in, as the Makefile's GOFLAGS block
+# does. An exported GOFLAGS replaces every lower layer, so appending to
+# "${GOFLAGS:-}" alone dropped the workspace's go.env -trimpath and every
+# build below compiled into worktree-private cache entries.
+trimmed_goflags="$(go env GOFLAGS 2>/dev/null)"
+case " ${trimmed_goflags} " in
+  (*" -trimpath"*|*" --trimpath"*) ;;
+  (*) trimmed_goflags="${trimmed_goflags:+${trimmed_goflags} }-trimpath" ;;
+esac
 # `go get` needs -mod=mod to write go.mod; a repo-level -mod=readonly in
 # GOFLAGS would otherwise make this fail with a confusing "updates to go.mod
 # needed" instead of doing the one thing it exists to do.
-export GOFLAGS="${GOFLAGS:-} -mod=mod"
-
-cd "$(git rev-parse --show-toplevel)"
+export GOFLAGS="${trimmed_goflags} -mod=mod"
 
 require_line() { sed -n "s|^[[:space:]]*$1[[:space:]]\{1,\}\(v[^[:space:]]*\).*|\1|p" go.mod | head -1; }
 
@@ -150,10 +161,11 @@ make --no-print-directory generate-all
 # forge's own outputs (descriptor, mocks, vendored protos, generated config)
 # come from the PINNED forge, never whatever `forge` is on PATH: `go run
 # module@version` builds exactly the version go.mod now records. GOFLAGS is
-# cleared because -mod is not allowed with module@version; FORGE_NO_HOOKS
-# keeps it from touching git hook activation.
+# reset to just -trimpath because -mod is not allowed with module@version
+# (and an empty one would drop -trimpath under a switched toolchain);
+# FORGE_NO_HOOKS keeps it from touching git hook activation.
 echo "==> forge generate (${after_forge})"
-GOFLAGS= FORGE_NO_HOOKS=1 go run "${FORGE_MOD}/cmd/forge@${after_forge}" generate
+GOFLAGS=-trimpath FORGE_NO_HOOKS=1 go run "${FORGE_MOD}/cmd/forge@${after_forge}" generate
 
 echo
 echo "pinned forge -> ${source_desc} (${sha})"

@@ -13,7 +13,7 @@ vi.mock('@/hooks/useCloudBillingQueries', () => ({
 vi.mock('@/services/controlPlane/billing', () => ({
   getComputeEligibility: vi.fn(async () => ({
     eligible: true, reason: 0, hasActiveSubscription: true,
-    grantedMinutesRemaining: 0, planName: 'Compute Small', allowedDaemonSizes: ['small'],
+    grantedSmallDaemonSecondsRemaining: 0, planName: 'Compute Small', allowedDaemonSizes: ['small'],
   })),
 }))
 vi.mock('@/lib/event-context', () => ({

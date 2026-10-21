@@ -34,6 +34,7 @@ import type { InputDef } from "@/lib/inputHelpers";
 import { useWorkflowPresets } from "@/store/globalDataStore";
 import { usePreferencesStore } from "@/store/preferencesStore";
 import { WorkflowInputGroup } from "../WorkflowInputGroup";
+import { TypedInputsProvider } from "../inputs/TypedInputField";
 import { useWorkflowDefinition } from "../useWorkflowDefinition";
 import { errorTextClass, fieldClass, hintClass, labelClass } from "./runFormStyles";
 import {
@@ -99,6 +100,10 @@ export interface RunWorkflowFormProps {
    * which the server refuses as params (they would be overwritten every fire).
    */
   excludeInputs?: readonly string[];
+  /** The host renders the workspace itself (the setup dialog's "Where it runs"). */
+  hideWorktree?: boolean;
+  /** No "Inputs" heading: the host's section already names them. */
+  hideInputsLabel?: boolean;
   disabled?: boolean;
 }
 
@@ -114,6 +119,8 @@ export function RunWorkflowForm({
   offerNoMachine = false,
   noMachineBlocker,
   excludeInputs,
+  hideWorktree = false,
+  hideInputsLabel = false,
   disabled = false,
 }: RunWorkflowFormProps) {
   const ids = useId();
@@ -143,6 +150,19 @@ export function RunWorkflowForm({
   valueRef.current = value;
 
   const groupNames = useMemo(() => groupNamesOf(inputGroups), [inputGroups]);
+  // A typed input scoped by a sibling ("labels of the chosen repositories")
+  // names that sibling by its label and type.
+  const typedInputs = useMemo(() => {
+    const inputLabels: Record<string, string> = {};
+    const inputTypes: Record<string, string> = {};
+    for (const group of allInputGroups) {
+      for (const input of group.inputs) {
+        inputLabels[input.name] = inputDefToSchema(input.name, input.schema).label;
+        if (input.schema.type) inputTypes[input.name] = input.schema.type;
+      }
+    }
+    return { inputLabels, inputTypes };
+  }, [allInputGroups]);
   const schemaByName = useMemo(() => {
     const map = new Map<string, InputDef>();
     for (const group of inputGroups) {
@@ -265,13 +285,15 @@ export function RunWorkflowForm({
 
   return (
     <div className="space-y-4">
-      <WorktreeField
-        id={fieldId("worktree")}
-        projectId={projectId}
-        worktreeId={value.worktreeId}
-        disabled={disabled}
-        onChange={(worktreeId) => onChange({ ...valueRef.current, worktreeId })}
-      />
+      {!hideWorktree && (
+        <WorktreeField
+          id={fieldId("worktree")}
+          projectId={projectId}
+          worktreeId={value.worktreeId}
+          disabled={disabled}
+          onChange={(worktreeId) => onChange({ ...valueRef.current, worktreeId })}
+        />
+      )}
 
       {showMachinePicker && (
         <MachineField
@@ -286,7 +308,7 @@ export function RunWorkflowForm({
       )}
 
       <div>
-        <span id={fieldId("inputs-label")} className={labelClass}>
+        <span id={fieldId("inputs-label")} className={hideInputsLabel ? "sr-only" : labelClass}>
           Inputs
         </span>
         {!workflowRef ? (
@@ -305,6 +327,7 @@ export function RunWorkflowForm({
         ) : inputGroups.length === 0 ? (
           <p className={hintClass}>This workflow takes no inputs.</p>
         ) : (
+          <TypedInputsProvider value={typedInputs}>
           <CardInset
             padding="none"
             className="cpv2-scope"
@@ -329,6 +352,7 @@ export function RunWorkflowForm({
               );
             })}
           </CardInset>
+          </TypedInputsProvider>
         )}
         {showValidation && missing.length > 0 && (
           <p className={errorTextClass} role="alert">
@@ -349,7 +373,7 @@ interface WorktreeFieldProps {
   onChange: (worktreeId: string | undefined) => void;
 }
 
-function WorktreeField({ id, projectId, worktreeId, disabled, onChange }: WorktreeFieldProps) {
+export function WorktreeField({ id, projectId, worktreeId, disabled, onChange }: WorktreeFieldProps) {
   // One page at a time: a project can hold hundreds of workspaces agents
   // created, and the form needs none of them until the user opens the list.
   const worktreesQuery = useInfiniteQuery({

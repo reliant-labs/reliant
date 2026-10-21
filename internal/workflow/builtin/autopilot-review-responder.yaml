@@ -15,15 +15,18 @@ automation_only: true
 
 inputs:
   repos:
-    type: array
-    default: []
-    description: "The repositories to respond in, as owner/name. Nothing else is ever touched."
+    type: github.repository
+    multi: true
+    required: true
+    min_items: 1
+    description: "The repositories to respond in. Nothing else is ever touched."
   trusted_ids:
-    type: array
+    type: github.user
+    multi: true
     default: []
     description: >-
-      GitHub numeric user ids (as strings, e.g. "583231") whose review comments the agent acts on, besides
-      you. Never logins. Everyone else's feedback is ignored.
+      People whose review comments the agent acts on, besides you. Stored as GitHub numeric user ids, never
+      logins. Everyone else's feedback is ignored.
   model:
     type: model
     description: The authoring model. The reviewer uses a different tag, so it can disagree.
@@ -36,19 +39,23 @@ inputs:
     max: 10
     description: Rounds of changes per PR before it is labelled blocked and left to a human
   authored_label:
-    type: string
+    type: github.label
+    scope: {repository: repos}
     default: "agent:authored"
     description: PRs the issue worker opened carry this label; the responder acts on them
   respond_label:
-    type: string
+    type: github.label
+    scope: {repository: repos}
     default: "agent:respond"
     description: Add this label to any other PR to have the responder look after it
   working_label:
-    type: string
+    type: github.label
+    scope: {repository: repos}
     default: "agent:working"
     description: Mirrors the lease while a run holds the PR
   blocked_label:
-    type: string
+    type: github.label
+    scope: {repository: repos}
     default: "agent:blocked"
     description: Put on the PR when the round cap is reached or a round fails
   lease_minutes:
@@ -98,9 +105,9 @@ triggers:
     integration:
       integration: github
       events: [pull_request_review.submitted]
+      match: {repository: {input: repos}}
     filter: >-
-      trigger.payload.attributes.repository in trigger.activation.params.repos
-      && trigger.payload.attributes.state in ['changes_requested', 'commented']
+      trigger.payload.attributes.state in ['changes_requested', 'commented']
       && has(trigger.payload.data.pull_request.labels)
       && (trigger.activation.params.authored_label in trigger.payload.data.pull_request.labels
           || trigger.activation.params.respond_label in trigger.payload.data.pull_request.labels)
@@ -122,9 +129,9 @@ triggers:
     integration:
       integration: github
       events: [pull_request_review_comment.created]
+      match: {repository: {input: repos}}
     filter: >-
-      trigger.payload.attributes.repository in trigger.activation.params.repos
-      && (trigger.activation.params.authored_label in trigger.payload.data.pull_request.labels
+      (trigger.activation.params.authored_label in trigger.payload.data.pull_request.labels
           || trigger.activation.params.respond_label in trigger.payload.data.pull_request.labels)
       && !trigger.origin.caused_by_reliant
       && trigger.sender.verified && trigger.sender.id != ''
@@ -143,9 +150,9 @@ triggers:
       events: [issue_comment.created]
       match:
         is_pull_request: "true"
+        repository: {input: repos}
     filter: >-
-      trigger.payload.attributes.repository in trigger.activation.params.repos
-      && has(trigger.payload.data.issue.labels)
+      has(trigger.payload.data.issue.labels)
       && (trigger.activation.params.authored_label in trigger.payload.data.issue.labels
           || trigger.activation.params.respond_label in trigger.payload.data.issue.labels)
       && !trigger.origin.caused_by_reliant

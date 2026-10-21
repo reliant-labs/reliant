@@ -1,14 +1,13 @@
 package core
 
 import (
-	"context"
 	"time"
 )
 
 // RunDisplayState is the single status a user reads for a run, folded from the
 // root workflow's (state, stop_reason) and the chat's activity. The values are
-// the reliantv1.RunDisplayState wire values; the SQL in queries/runs.sql
-// derives them with the same table.
+// the reliantv1.RunDisplayState wire values; the run list
+// (internal/store/run_list.go) derives them with the same table.
 type RunDisplayState int32
 
 const (
@@ -88,14 +87,4 @@ type RunListItem struct {
 
 	// Archived is whether the run's chat is archived.
 	Archived bool
-}
-
-// RunStore reads the cross-cutting run list.
-type RunStore interface {
-	// ListRuns returns up to filters.Limit runs, newest first, and whether more
-	// follow.
-	ListRuns(ctx context.Context, filters RunListFilters) ([]*RunListItem, bool, error)
-	// LastRunPerWorkflow returns each workflow name's newest run, ordered by
-	// workflow name. Only UserID, ProjectID and Workflows of the filters apply.
-	LastRunPerWorkflow(ctx context.Context, filters RunListFilters) ([]*RunListItem, error)
 }

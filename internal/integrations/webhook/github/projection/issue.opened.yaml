@@ -1,0 +1,11 @@
+# Issue opened: the projection of the GitHub `issues.opened` webhook.
+id: issue.opened
+event: issues.opened
+display_name: Issue opened
+summary: An issue was opened in a repository.
+description: >-
+  Fires when an issue is opened in a repository the App is installed on and
+  you can see.
+keywords: [new issue, ticket, bug report]
+data:
+  issue: { kind: object, object: issue }

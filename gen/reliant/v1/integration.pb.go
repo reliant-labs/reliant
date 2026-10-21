@@ -291,10 +291,13 @@ type TypeOptionsSpec struct {
 	// and must be placeable on the server.
 	Action string `protobuf:"bytes,1,opt,name=action,proto3" json:"action,omitempty"`
 	// Params are templates for the action's parameters, keyed by param name.
-	// They may read `scope.<key>`, `query` and `page_token`.
+	// They may read `scope.<key>`, `query` and `page_token`. A template that
+	// renders to null leaves its param out, so an optional param follows an
+	// optional scope.
 	Params map[string]string `protobuf:"bytes,2,rep,name=params,proto3" json:"params,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	// Items is CEL over the action's output yielding the list of items. Empty
-	// means the output itself is the list.
+	// Items is CEL over `output` (the action's output data) yielding the list
+	// of items. Empty means `output.items`, which is what every list action
+	// that paginates returns.
 	Items string `protobuf:"bytes,3,opt,name=items,proto3" json:"items,omitempty"`
 	// Value, Label, Description and Group are CEL over `item`. Value is the
 	// stored value and is required; Label defaults to Value.
@@ -1822,7 +1825,10 @@ type HttpRequestSpec struct {
 	// host rules and credential pinning as the first request) or "return": a
 	// 3xx is the action's result, status and Location header included, rather
 	// than followed or treated as a failure. A template may be used.
-	Redirects     string `protobuf:"bytes,17,opt,name=redirects,proto3" json:"redirects,omitempty"`
+	Redirects string `protobuf:"bytes,17,opt,name=redirects,proto3" json:"redirects,omitempty"`
+	// FanOut makes the action a walk: this request lists parents (it must
+	// paginate), and fan_out.request then runs once per parent. See FanOutSpec.
+	FanOut        *FanOutSpec `protobuf:"bytes,18,opt,name=fan_out,json=fanOut,proto3" json:"fan_out,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1976,6 +1982,100 @@ func (x *HttpRequestSpec) GetRedirects() string {
 	return ""
 }
 
+func (x *HttpRequestSpec) GetFanOut() *FanOutSpec {
+	if x != nil {
+		return x.FanOut
+	}
+	return nil
+}
+
+// FanOutSpec turns one request into a walk over a list and what hangs off each
+// of its items (GitHub: the user's installations, then the repositories of
+// each). The enclosing request lists the parents, one page at a time, exactly
+// as a paginated request does. `request` then runs once per parent, in order,
+// and the action's output.select shapes each of ITS pages. The parent is
+// `params.parent` in the per-parent request's templates and in output.select.
+// The action's output is the concatenation of every parent's items.
+type FanOutSpec struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Items is CEL over each page of the parent request (`response`, `params`)
+	// yielding the list of parents. A parent is usually an object whose fields
+	// the per-parent request reads.
+	Items string `protobuf:"bytes,1,opt,name=items,proto3" json:"items,omitempty"`
+	// MaxItems bounds the parents (default 50, max 200). More is an error, not a
+	// silent cut: a walk that quietly drops half of its parents reads as
+	// complete.
+	MaxItems int32 `protobuf:"varint,2,opt,name=max_items,json=maxItems,proto3" json:"max_items,omitempty"`
+	// Request runs once per parent. It must paginate, and it may not itself fan
+	// out.
+	Request *HttpRequestSpec `protobuf:"bytes,3,opt,name=request,proto3" json:"request,omitempty"`
+	// SkipStatus lists statuses of a non-retryable failure of the per-parent
+	// request that drop that parent instead of failing the action: the parent
+	// went away (or stopped being visible) between the two listings. A
+	// retryable failure (a rate limit) always fails the action.
+	SkipStatus    []int32 `protobuf:"varint,4,rep,packed,name=skip_status,json=skipStatus,proto3" json:"skip_status,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FanOutSpec) Reset() {
+	*x = FanOutSpec{}
+	mi := &file_reliant_v1_integration_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FanOutSpec) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FanOutSpec) ProtoMessage() {}
+
+func (x *FanOutSpec) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_integration_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FanOutSpec.ProtoReflect.Descriptor instead.
+func (*FanOutSpec) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *FanOutSpec) GetItems() string {
+	if x != nil {
+		return x.Items
+	}
+	return ""
+}
+
+func (x *FanOutSpec) GetMaxItems() int32 {
+	if x != nil {
+		return x.MaxItems
+	}
+	return 0
+}
+
+func (x *FanOutSpec) GetRequest() *HttpRequestSpec {
+	if x != nil {
+		return x.Request
+	}
+	return nil
+}
+
+func (x *FanOutSpec) GetSkipStatus() []int32 {
+	if x != nil {
+		return x.SkipStatus
+	}
+	return nil
+}
+
 // PaginationSpec follows pages and concatenates each page's selected list.
 type PaginationSpec struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -2005,7 +2105,7 @@ type PaginationSpec struct {
 
 func (x *PaginationSpec) Reset() {
 	*x = PaginationSpec{}
-	mi := &file_reliant_v1_integration_proto_msgTypes[19]
+	mi := &file_reliant_v1_integration_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2017,7 +2117,7 @@ func (x *PaginationSpec) String() string {
 func (*PaginationSpec) ProtoMessage() {}
 
 func (x *PaginationSpec) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_integration_proto_msgTypes[19]
+	mi := &file_reliant_v1_integration_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2030,7 +2130,7 @@ func (x *PaginationSpec) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PaginationSpec.ProtoReflect.Descriptor instead.
 func (*PaginationSpec) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{19}
+	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *PaginationSpec) GetStyle() string {
@@ -2115,7 +2215,7 @@ type ErrorRule struct {
 
 func (x *ErrorRule) Reset() {
 	*x = ErrorRule{}
-	mi := &file_reliant_v1_integration_proto_msgTypes[20]
+	mi := &file_reliant_v1_integration_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2127,7 +2227,7 @@ func (x *ErrorRule) String() string {
 func (*ErrorRule) ProtoMessage() {}
 
 func (x *ErrorRule) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_integration_proto_msgTypes[20]
+	mi := &file_reliant_v1_integration_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2140,7 +2240,7 @@ func (x *ErrorRule) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ErrorRule.ProtoReflect.Descriptor instead.
 func (*ErrorRule) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{20}
+	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *ErrorRule) GetStatus() int32 {
@@ -2209,7 +2309,7 @@ type OutputSpec struct {
 
 func (x *OutputSpec) Reset() {
 	*x = OutputSpec{}
-	mi := &file_reliant_v1_integration_proto_msgTypes[21]
+	mi := &file_reliant_v1_integration_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2221,7 +2321,7 @@ func (x *OutputSpec) String() string {
 func (*OutputSpec) ProtoMessage() {}
 
 func (x *OutputSpec) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_integration_proto_msgTypes[21]
+	mi := &file_reliant_v1_integration_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2234,7 +2334,7 @@ func (x *OutputSpec) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OutputSpec.ProtoReflect.Descriptor instead.
 func (*OutputSpec) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{21}
+	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *OutputSpec) GetSelect() string {
@@ -2293,7 +2393,7 @@ type TriggerSpec struct {
 
 func (x *TriggerSpec) Reset() {
 	*x = TriggerSpec{}
-	mi := &file_reliant_v1_integration_proto_msgTypes[22]
+	mi := &file_reliant_v1_integration_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2305,7 +2405,7 @@ func (x *TriggerSpec) String() string {
 func (*TriggerSpec) ProtoMessage() {}
 
 func (x *TriggerSpec) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_integration_proto_msgTypes[22]
+	mi := &file_reliant_v1_integration_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2318,7 +2418,7 @@ func (x *TriggerSpec) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TriggerSpec.ProtoReflect.Descriptor instead.
 func (*TriggerSpec) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{22}
+	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *TriggerSpec) GetId() string {
@@ -2396,7 +2496,7 @@ type TriggerAttribute struct {
 
 func (x *TriggerAttribute) Reset() {
 	*x = TriggerAttribute{}
-	mi := &file_reliant_v1_integration_proto_msgTypes[23]
+	mi := &file_reliant_v1_integration_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2408,7 +2508,7 @@ func (x *TriggerAttribute) String() string {
 func (*TriggerAttribute) ProtoMessage() {}
 
 func (x *TriggerAttribute) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_integration_proto_msgTypes[23]
+	mi := &file_reliant_v1_integration_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2421,7 +2521,7 @@ func (x *TriggerAttribute) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TriggerAttribute.ProtoReflect.Descriptor instead.
 func (*TriggerAttribute) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{23}
+	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *TriggerAttribute) GetName() string {
@@ -2620,7 +2720,7 @@ const file_reliant_v1_integration_proto_rawDesc = "" +
 	"\bToolSpec\x12\x16\n" +
 	"\x06expose\x18\x01 \x01(\bR\x06expose\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
-	"\x04tags\x18\x03 \x03(\tR\x04tags\"\x9f\x06\n" +
+	"\x04tags\x18\x03 \x03(\tR\x04tags\"\xd0\x06\n" +
 	"\x0fHttpRequestSpec\x12\x16\n" +
 	"\x06method\x18\x01 \x01(\tR\x06method\x12\x10\n" +
 	"\x03url\x18\x02 \x01(\tR\x03url\x12\x12\n" +
@@ -2643,14 +2743,22 @@ const file_reliant_v1_integration_proto_rawDesc = "" +
 	"bodyFormat\x12!\n" +
 	"\ftimeout_expr\x18\x0f \x01(\tR\vtimeoutExpr\x12'\n" +
 	"\x0fresponse_format\x18\x10 \x01(\tR\x0eresponseFormat\x12\x1c\n" +
-	"\tredirects\x18\x11 \x01(\tR\tredirects\x1a8\n" +
+	"\tredirects\x18\x11 \x01(\tR\tredirects\x12/\n" +
+	"\afan_out\x18\x12 \x01(\v2\x16.reliant.v1.FanOutSpecR\x06fanOut\x1a8\n" +
 	"\n" +
 	"QueryEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a:\n" +
 	"\fHeadersEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xe0\x01\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x97\x01\n" +
+	"\n" +
+	"FanOutSpec\x12\x14\n" +
+	"\x05items\x18\x01 \x01(\tR\x05items\x12\x1b\n" +
+	"\tmax_items\x18\x02 \x01(\x05R\bmaxItems\x125\n" +
+	"\arequest\x18\x03 \x01(\v2\x1b.reliant.v1.HttpRequestSpecR\arequest\x12\x1f\n" +
+	"\vskip_status\x18\x04 \x03(\x05R\n" +
+	"skipStatus\"\xe0\x01\n" +
 	"\x0ePaginationSpec\x12\x14\n" +
 	"\x05style\x18\x01 \x01(\tR\x05style\x12\x1b\n" +
 	"\tmax_pages\x18\x02 \x01(\x05R\bmaxPages\x12!\n" +
@@ -2705,7 +2813,7 @@ func file_reliant_v1_integration_proto_rawDescGZIP() []byte {
 	return file_reliant_v1_integration_proto_rawDescData
 }
 
-var file_reliant_v1_integration_proto_msgTypes = make([]protoimpl.MessageInfo, 33)
+var file_reliant_v1_integration_proto_msgTypes = make([]protoimpl.MessageInfo, 34)
 var file_reliant_v1_integration_proto_goTypes = []any{
 	(*IntegrationManifest)(nil), // 0: reliant.v1.IntegrationManifest
 	(*TypeSpec)(nil),            // 1: reliant.v1.TypeSpec
@@ -2726,38 +2834,39 @@ var file_reliant_v1_integration_proto_goTypes = []any{
 	(*ActionSpec)(nil),          // 16: reliant.v1.ActionSpec
 	(*ToolSpec)(nil),            // 17: reliant.v1.ToolSpec
 	(*HttpRequestSpec)(nil),     // 18: reliant.v1.HttpRequestSpec
-	(*PaginationSpec)(nil),      // 19: reliant.v1.PaginationSpec
-	(*ErrorRule)(nil),           // 20: reliant.v1.ErrorRule
-	(*OutputSpec)(nil),          // 21: reliant.v1.OutputSpec
-	(*TriggerSpec)(nil),         // 22: reliant.v1.TriggerSpec
-	(*TriggerAttribute)(nil),    // 23: reliant.v1.TriggerAttribute
-	nil,                         // 24: reliant.v1.TypeOptionsSpec.ParamsEntry
-	nil,                         // 25: reliant.v1.TypeOptionsSpec.AnnotationsEntry
-	nil,                         // 26: reliant.v1.TypeOptionsSpec.ScopeEntry
-	nil,                         // 27: reliant.v1.TypeResolveSpec.ParamsEntry
-	nil,                         // 28: reliant.v1.ConnectionSpec.DefaultHeadersEntry
-	nil,                         // 29: reliant.v1.OAuth2Auth.AuthorizeParamsEntry
-	nil,                         // 30: reliant.v1.IdentityProbe.HeadersEntry
-	nil,                         // 31: reliant.v1.HttpRequestSpec.QueryEntry
-	nil,                         // 32: reliant.v1.HttpRequestSpec.HeadersEntry
-	(*structpb.Struct)(nil),     // 33: google.protobuf.Struct
-	(*structpb.Value)(nil),      // 34: google.protobuf.Value
+	(*FanOutSpec)(nil),          // 19: reliant.v1.FanOutSpec
+	(*PaginationSpec)(nil),      // 20: reliant.v1.PaginationSpec
+	(*ErrorRule)(nil),           // 21: reliant.v1.ErrorRule
+	(*OutputSpec)(nil),          // 22: reliant.v1.OutputSpec
+	(*TriggerSpec)(nil),         // 23: reliant.v1.TriggerSpec
+	(*TriggerAttribute)(nil),    // 24: reliant.v1.TriggerAttribute
+	nil,                         // 25: reliant.v1.TypeOptionsSpec.ParamsEntry
+	nil,                         // 26: reliant.v1.TypeOptionsSpec.AnnotationsEntry
+	nil,                         // 27: reliant.v1.TypeOptionsSpec.ScopeEntry
+	nil,                         // 28: reliant.v1.TypeResolveSpec.ParamsEntry
+	nil,                         // 29: reliant.v1.ConnectionSpec.DefaultHeadersEntry
+	nil,                         // 30: reliant.v1.OAuth2Auth.AuthorizeParamsEntry
+	nil,                         // 31: reliant.v1.IdentityProbe.HeadersEntry
+	nil,                         // 32: reliant.v1.HttpRequestSpec.QueryEntry
+	nil,                         // 33: reliant.v1.HttpRequestSpec.HeadersEntry
+	(*structpb.Struct)(nil),     // 34: google.protobuf.Struct
+	(*structpb.Value)(nil),      // 35: google.protobuf.Value
 }
 var file_reliant_v1_integration_proto_depIdxs = []int32{
 	7,  // 0: reliant.v1.IntegrationManifest.connection:type_name -> reliant.v1.ConnectionSpec
 	16, // 1: reliant.v1.IntegrationManifest.actions:type_name -> reliant.v1.ActionSpec
-	22, // 2: reliant.v1.IntegrationManifest.triggers:type_name -> reliant.v1.TriggerSpec
+	23, // 2: reliant.v1.IntegrationManifest.triggers:type_name -> reliant.v1.TriggerSpec
 	1,  // 3: reliant.v1.IntegrationManifest.types:type_name -> reliant.v1.TypeSpec
-	33, // 4: reliant.v1.TypeSpec.value:type_name -> google.protobuf.Struct
+	34, // 4: reliant.v1.TypeSpec.value:type_name -> google.protobuf.Struct
 	2,  // 5: reliant.v1.TypeSpec.options:type_name -> reliant.v1.TypeOptionsSpec
-	24, // 6: reliant.v1.TypeOptionsSpec.params:type_name -> reliant.v1.TypeOptionsSpec.ParamsEntry
-	25, // 7: reliant.v1.TypeOptionsSpec.annotations:type_name -> reliant.v1.TypeOptionsSpec.AnnotationsEntry
+	25, // 6: reliant.v1.TypeOptionsSpec.params:type_name -> reliant.v1.TypeOptionsSpec.ParamsEntry
+	26, // 7: reliant.v1.TypeOptionsSpec.annotations:type_name -> reliant.v1.TypeOptionsSpec.AnnotationsEntry
 	3,  // 8: reliant.v1.TypeOptionsSpec.warnings:type_name -> reliant.v1.TypeWarningSpec
 	4,  // 9: reliant.v1.TypeOptionsSpec.paging:type_name -> reliant.v1.TypeOptionsPaging
-	26, // 10: reliant.v1.TypeOptionsSpec.scope:type_name -> reliant.v1.TypeOptionsSpec.ScopeEntry
+	27, // 10: reliant.v1.TypeOptionsSpec.scope:type_name -> reliant.v1.TypeOptionsSpec.ScopeEntry
 	6,  // 11: reliant.v1.TypeOptionsSpec.resolve:type_name -> reliant.v1.TypeResolveSpec
-	27, // 12: reliant.v1.TypeResolveSpec.params:type_name -> reliant.v1.TypeResolveSpec.ParamsEntry
-	28, // 13: reliant.v1.ConnectionSpec.default_headers:type_name -> reliant.v1.ConnectionSpec.DefaultHeadersEntry
+	28, // 12: reliant.v1.TypeResolveSpec.params:type_name -> reliant.v1.TypeResolveSpec.ParamsEntry
+	29, // 13: reliant.v1.ConnectionSpec.default_headers:type_name -> reliant.v1.ConnectionSpec.DefaultHeadersEntry
 	8,  // 14: reliant.v1.ConnectionSpec.auth:type_name -> reliant.v1.AuthMethod
 	14, // 15: reliant.v1.ConnectionSpec.connection_params:type_name -> reliant.v1.ConnectionParam
 	15, // 16: reliant.v1.ConnectionSpec.probe:type_name -> reliant.v1.IdentityProbe
@@ -2765,27 +2874,29 @@ var file_reliant_v1_integration_proto_depIdxs = []int32{
 	11, // 18: reliant.v1.AuthMethod.api_key:type_name -> reliant.v1.ApiKeyAuth
 	12, // 19: reliant.v1.AuthMethod.basic:type_name -> reliant.v1.BasicAuth
 	13, // 20: reliant.v1.AuthMethod.delegated:type_name -> reliant.v1.DelegatedAuth
-	29, // 21: reliant.v1.OAuth2Auth.authorize_params:type_name -> reliant.v1.OAuth2Auth.AuthorizeParamsEntry
+	30, // 21: reliant.v1.OAuth2Auth.authorize_params:type_name -> reliant.v1.OAuth2Auth.AuthorizeParamsEntry
 	10, // 22: reliant.v1.OAuth2Auth.revoke:type_name -> reliant.v1.RevokeSpec
-	30, // 23: reliant.v1.IdentityProbe.headers:type_name -> reliant.v1.IdentityProbe.HeadersEntry
+	31, // 23: reliant.v1.IdentityProbe.headers:type_name -> reliant.v1.IdentityProbe.HeadersEntry
 	17, // 24: reliant.v1.ActionSpec.tool:type_name -> reliant.v1.ToolSpec
-	33, // 25: reliant.v1.ActionSpec.params:type_name -> google.protobuf.Struct
+	34, // 25: reliant.v1.ActionSpec.params:type_name -> google.protobuf.Struct
 	18, // 26: reliant.v1.ActionSpec.request:type_name -> reliant.v1.HttpRequestSpec
-	21, // 27: reliant.v1.ActionSpec.output:type_name -> reliant.v1.OutputSpec
-	31, // 28: reliant.v1.HttpRequestSpec.query:type_name -> reliant.v1.HttpRequestSpec.QueryEntry
-	32, // 29: reliant.v1.HttpRequestSpec.headers:type_name -> reliant.v1.HttpRequestSpec.HeadersEntry
-	34, // 30: reliant.v1.HttpRequestSpec.body:type_name -> google.protobuf.Value
-	19, // 31: reliant.v1.HttpRequestSpec.pagination:type_name -> reliant.v1.PaginationSpec
-	20, // 32: reliant.v1.HttpRequestSpec.errors:type_name -> reliant.v1.ErrorRule
-	33, // 33: reliant.v1.OutputSpec.schema:type_name -> google.protobuf.Struct
-	23, // 34: reliant.v1.TriggerSpec.attributes:type_name -> reliant.v1.TriggerAttribute
-	33, // 35: reliant.v1.TriggerSpec.data:type_name -> google.protobuf.Struct
-	5,  // 36: reliant.v1.TypeOptionsSpec.ScopeEntry.value:type_name -> reliant.v1.TypeScopeSpec
-	37, // [37:37] is the sub-list for method output_type
-	37, // [37:37] is the sub-list for method input_type
-	37, // [37:37] is the sub-list for extension type_name
-	37, // [37:37] is the sub-list for extension extendee
-	0,  // [0:37] is the sub-list for field type_name
+	22, // 27: reliant.v1.ActionSpec.output:type_name -> reliant.v1.OutputSpec
+	32, // 28: reliant.v1.HttpRequestSpec.query:type_name -> reliant.v1.HttpRequestSpec.QueryEntry
+	33, // 29: reliant.v1.HttpRequestSpec.headers:type_name -> reliant.v1.HttpRequestSpec.HeadersEntry
+	35, // 30: reliant.v1.HttpRequestSpec.body:type_name -> google.protobuf.Value
+	20, // 31: reliant.v1.HttpRequestSpec.pagination:type_name -> reliant.v1.PaginationSpec
+	21, // 32: reliant.v1.HttpRequestSpec.errors:type_name -> reliant.v1.ErrorRule
+	19, // 33: reliant.v1.HttpRequestSpec.fan_out:type_name -> reliant.v1.FanOutSpec
+	18, // 34: reliant.v1.FanOutSpec.request:type_name -> reliant.v1.HttpRequestSpec
+	34, // 35: reliant.v1.OutputSpec.schema:type_name -> google.protobuf.Struct
+	24, // 36: reliant.v1.TriggerSpec.attributes:type_name -> reliant.v1.TriggerAttribute
+	34, // 37: reliant.v1.TriggerSpec.data:type_name -> google.protobuf.Struct
+	5,  // 38: reliant.v1.TypeOptionsSpec.ScopeEntry.value:type_name -> reliant.v1.TypeScopeSpec
+	39, // [39:39] is the sub-list for method output_type
+	39, // [39:39] is the sub-list for method input_type
+	39, // [39:39] is the sub-list for extension type_name
+	39, // [39:39] is the sub-list for extension extendee
+	0,  // [0:39] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_integration_proto_init() }
@@ -2805,7 +2916,7 @@ func file_reliant_v1_integration_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_v1_integration_proto_rawDesc), len(file_reliant_v1_integration_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   33,
+			NumMessages:   34,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

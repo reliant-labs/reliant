@@ -234,7 +234,7 @@ func TestContinueQueued_WedgedRunsUnansweredMessageStartsOneRunAtTheCheckpoint(t
 	now := time.Now().UTC()
 	_, err := f.repo.UpdateThreadStatus(f.ctx, f.threadID, db.ThreadStatusFailed, &now)
 	require.NoError(t, err)
-	threadStatusAtStart := int32(-1)
+	threadStatusAtStart := db.ThreadStatus(-1)
 	f.temporal.onStart = func() {
 		thread, err := f.repo.GetThread(f.ctx, f.threadID)
 		require.NoError(t, err)

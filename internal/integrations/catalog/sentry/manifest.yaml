@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=../../manifest/schema/manifest.schema.json
 # Sentry. Authored from Sentry's API and integration-platform documentation
 # (docs.sentry.io/api, /api/auth, /api/ratelimits,
 # /organization/integrations/integration-platform and its webhooks pages),

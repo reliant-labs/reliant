@@ -40,7 +40,7 @@ func Validate(ctx context.Context, repo Reader, userID, projectID, daemonID stri
 
 	installs, err := repo.ListProjectDaemonsForProject(ctx, projectID)
 	if err != nil {
-		logging.Error("daemon choice database error", "op", "list project daemons", "error", err)
+		logging.ErrorContext(ctx, "daemon choice database error", "op", "list project daemons", "error", err)
 		return connect.NewError(connect.CodeInternal, errors.New("database error"))
 	}
 	if len(installs) == 0 {

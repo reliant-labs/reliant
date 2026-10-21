@@ -5,7 +5,7 @@
 - Go (the version in `go.mod`; code generation downloads it if yours differs)
 - Node.js 20.19+
 - Make, and Python 3 for the generated docs pages
-- Go dev tools: [air](https://github.com/air-verse/air) (hot reload), [goose](https://github.com/pressly/goose) (migrations), [sqlc](https://sqlc.dev/) (query generation)
+- Go dev tools: [air](https://github.com/air-verse/air) (hot reload), [goose](https://github.com/pressly/goose) (migrations)
 
 ## Development Setup
 
@@ -48,16 +48,16 @@ To check that a rebuilt CLI is the one on your `PATH`, run `reliant --version`.
 
 ## Code generation
 
-Everything generated is committed: protobuf code (`gen/`, `web/src/gen/`), sqlc
-output, and the reference docs (`generated/docs-source/`, `docs/reference/`,
+Everything generated is committed: protobuf code (`gen/`, `web/src/gen/`), the
+forge ORM projection (`internal/store/*_gen.go`), and the reference docs (`generated/docs-source/`, `docs/reference/`,
 the workflow-builder skill). CI's **Generated code is up to date** job runs
 `make generate-all` on every PR that can move a generator input (anything but a
 frontend-, electron- or CI-only change) and fails on any diff. So after changing an
-input — a `.proto`, a query or migration, a tool, a model, a CLI command, the
+input — a `.proto`, a migration, a tool, a model, a CLI command, the
 forge pin — regenerate and commit the result in the same change:
 
 ```bash
-make generate-all      # everything: protobuf (Go + TS), sqlc, docs
+make generate-all      # everything: protobuf (Go + TS), docs
 make proto-generate    # protobuf only (Go + TS, including the control-plane client)
 make generate          # everything except the reliant TypeScript protobufs
 make help              # every individual generate-* target
@@ -65,7 +65,7 @@ make help              # every individual generate-* target
 
 `make generate-all` does not run forge. What forge projects — the generated
 mocks, `gen/forge_descriptor.json`, the per-service test harnesses,
-`deploy/observability/` — is checked by the same job's **forge generate is a no-op** step:
+`deploy/observability/`, the ORM in `internal/store` — is checked by the same job's **forge generate is a no-op** step:
 after changing a `.proto`, a `contract.go` interface, a migration or the forge
 pin, run
 
@@ -84,7 +84,6 @@ generator runs comes from the machine:
 | buf | `BUF_VERSION` in the Makefile, built from source into `~/go/bin/buf-<version>` on first use |
 | protoc-gen-go, protoc-gen-connect-go | `tool` directives in `go.mod`, run with `go tool` |
 | protoc-gen-es | `tools/protoc-gen-es/package-lock.json`, installed by `make` on first use |
-| sqlc | `SQLC_VERSION` in the Makefile |
 | Go toolchain | `go.mod`: generation sets `GOTOOLCHAIN` to its version |
 
 Every buf plugin is local, so generation never touches the Buf Schema Registry:

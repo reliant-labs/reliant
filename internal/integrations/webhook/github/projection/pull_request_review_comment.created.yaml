@@ -1,0 +1,43 @@
+# Pull request inline comment: the projection of the GitHub `pull_request_review_comment.created` webhook.
+id: pull_request_review_comment.created
+event: pull_request_review_comment.created
+display_name: Pull request inline comment
+summary: A comment was left on a line of a pull request's diff.
+description: >-
+  Fires when someone comments on a line of a pull request's diff, or replies
+  in such a thread, including the comments of a review as it is submitted
+  (each comment fires on its own). Conversation-tab comments are
+  issue_comment.created instead. Match mentions_reliant: "true" for comments
+  that mention @reliant and is_reply: "false" for the first comment of a
+  thread. data.comment has the file path, line, side, the diff hunk and
+  review id; reply with github/pr.review_comment.reply using
+  data.comment.id. Comments written by GitHub Apps (including this one)
+  never fire, so a run that replies cannot trigger itself.
+keywords: [pr, review comment, inline, diff, line, thread, responder, address feedback]
+attributes:
+  - { group: pr }
+  - { name: mentions_reliant, description: "\"true\" when the comment mentions @reliant.", example: "true", from: comment.body, hook: mentionsReliant }
+  - { name: is_reply, description: "\"true\" when the comment replies to another in its thread.", example: "false", from: comment.in_reply_to_id, hook: isSet }
+data:
+  pull_request: { kind: object, object: pr }
+  comment:
+    kind: object
+    fields:
+      id: integer
+      body: { kind: string, cap: true }
+      html_url: string
+      user: { kind: object, object: user }
+      author_association: string
+      path: string
+      # line is null once the commented line has left the diff, and a reply has
+      # no in_reply_to_id of its own to read when it starts a thread: both are
+      # left out rather than recorded as zero.
+      line: { kind: integer, omit_empty: true, description: The line in the diff; absent when the comment is outdated. }
+      original_line: { kind: integer, omit_empty: true }
+      side: { kind: string, description: LEFT or RIGHT. }
+      subject_type: { kind: string, description: line or file. }
+      commit_id: string
+      diff_hunk: { kind: string, cap: true }
+      in_reply_to_id: { kind: integer, omit_empty: true, description: The comment this replies to; absent for the first comment of a thread. }
+      pull_request_review_id: integer
+      created_at: string

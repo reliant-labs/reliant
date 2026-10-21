@@ -64,7 +64,7 @@ func (s accountRouterStore) RecentAssignmentCounts(ctx context.Context, accountI
 func accountRouting(repo db.Repository, recorder handlers.AccountLimitRecorder) *handlers.AccountRouting {
 	store := accountRouterStore{repo: repo}
 	return &handlers.AccountRouting{
-		Router:      accountrouter.New(accountrouter.Deps{Store: store}),
+		Router:      accountrouter.NewInstrumented(accountrouter.Deps{Store: store}),
 		Store:       store,
 		Settings:    repo,
 		DriverFor:   accountDriverFor,

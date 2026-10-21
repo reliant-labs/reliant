@@ -96,11 +96,11 @@ func ParamsInputs(inputs map[string]*reliantv1.Input, mapped map[string]string) 
 // (ParamsInputs). It is closed: a param no input declares is a misspelling,
 // and a read of one is rejected when the workflow is checked rather than
 // failing on every firing.
-func ParamsSchema(inputs map[string]*reliantv1.Input) map[string]any {
+func ParamsSchema(inputs map[string]*reliantv1.Input, types ValueTypes) map[string]any {
 	props := make(map[string]any, len(inputs))
 	for name, input := range inputs {
 		if input != nil {
-			props[name] = inputSchema(input)
+			props[name] = InputSchema(input, types)
 		}
 	}
 	return map[string]any{
@@ -111,9 +111,39 @@ func ParamsSchema(inputs map[string]*reliantv1.Input) map[string]any {
 	}
 }
 
-func inputSchema(input *reliantv1.Input) map[string]any {
+// ValueTypes resolves the value schema of an input type an integration defines
+// (`github.repository`). It is declared here, by its consumer, so this package
+// never learns what an integration or its catalog is.
+type ValueTypes interface {
+	// ValueSchema is the JSON Schema of ONE value of the type; ok is false when
+	// no integration declares ref.
+	ValueSchema(ref string) (schema map[string]any, ok bool)
+}
+
+// stringValueSchema is what a value of an integration type is taken to be when
+// the type cannot be resolved: a plain string, which is what nearly every type
+// is. The unknown type is reported where the workflow is validated; typing the
+// reads of it as strings here avoids a second, misleading error on each.
+var stringValueSchema = map[string]any{"type": "string"}
+
+// InputSchema is the JSON Schema of the value an input holds: a scalar's own
+// type, and for an integration type the type's value schema, wrapped in an
+// array when the input is multi.
+func InputSchema(input *reliantv1.Input, types ValueTypes) map[string]any {
 	if nested := model.GetGroupInputs(input); nested != nil {
-		return ParamsSchema(nested)
+		return ParamsSchema(nested, types)
+	}
+	if cfg := input.GetIntegrationInput(); cfg != nil {
+		item := stringValueSchema
+		if types != nil {
+			if schema, ok := types.ValueSchema(input.GetType()); ok && schema != nil {
+				item = schema
+			}
+		}
+		if cfg.GetMulti() {
+			return map[string]any{"type": "array", "items": item}
+		}
+		return item
 	}
 	switch input.GetType() {
 	case "string", "message":

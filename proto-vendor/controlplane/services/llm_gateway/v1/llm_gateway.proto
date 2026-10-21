@@ -18,7 +18,10 @@ option go_package = "github.com/reliant-labs/control-plane/gen/services/llm_gate
 
 service LLMGatewayService {
   rpc CreateLLMKey(CreateLLMKeyRequest) returns (CreateLLMKeyResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "reliant workspace surface (daemons, workspace projects, LLM keys), not a forge console change; audit_log records it"}
+    };
   }
   rpc ListLLMKeys(ListLLMKeysRequest) returns (ListLLMKeysResponse) {
     option (forge.v1.method) = {auth_required: true};
@@ -27,10 +30,16 @@ service LLMGatewayService {
     option (forge.v1.method) = {auth_required: true};
   }
   rpc RevokeLLMKey(RevokeLLMKeyRequest) returns (RevokeLLMKeyResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "reliant workspace surface (daemons, workspace projects, LLM keys), not a forge console change; audit_log records it"}
+    };
   }
   rpc RotateLLMKey(RotateLLMKeyRequest) returns (RotateLLMKeyResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {none: "reliant workspace surface (daemons, workspace projects, LLM keys), not a forge console change; audit_log records it"}
+    };
   }
   rpc GetLLMSpend(GetLLMSpendRequest) returns (GetLLMSpendResponse) {
     option (forge.v1.method) = {auth_required: true};

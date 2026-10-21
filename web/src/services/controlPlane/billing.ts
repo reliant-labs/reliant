@@ -39,7 +39,8 @@ export interface ComputeEligibility {
   eligible: boolean;
   reason: ComputeIneligibleReason;
   hasActiveSubscription: boolean;
-  grantedMinutesRemaining: number;
+  /** Unspent coupon grant balance, in small-daemon-seconds. */
+  grantedSmallDaemonSecondsRemaining: number;
   planName: string;
   /**
    * The daemon sizes the server will actually let this caller start, resolved
@@ -77,7 +78,7 @@ export async function getComputeEligibility(): Promise<ComputeEligibility> {
     hasActiveSubscription: res.hasActiveSubscription,
     // Wire value is bigint (int64); the UI works in numbers, matching the
     // neighbouring compute-usage wrapper's convention.
-    grantedMinutesRemaining: Number(res.grantedMinutesRemaining),
+    grantedSmallDaemonSecondsRemaining: Number(res.grantedSmallDaemonSecondsRemaining),
     planName: res.planName,
     allowedDaemonSizes: res.allowedDaemonSizes,
     maxDaemonStorageGib: res.maxDaemonStorageGib,

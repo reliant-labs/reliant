@@ -20,7 +20,7 @@ It is the first thing to run before pushing. It does not replace the full lane
 | Go | `go test -short -timeout 60s <pkgs>` (cached, no `-race`) | the changed package, **plus every package whose test binary imports it** |
 | web | `npx vitest run <files>` in `web/` | every vitest file that imports a changed module, transitively |
 | electron | `npm test` in `electron/` | any change under `electron/`, or a changed file an electron test names |
-| forge-generate | `make forge-generate-check`, first: forge.yaml's pinned `forge generate`, failing (and naming each file) if it changed anything | a change to something forge reads or writes: `proto/**`, `db/**`, a `contract.go` or `doc.go`, `internal/handlers/**`, `*_gen.go`, `gen/**`, `deploy/**`, the sqlc queries, `forge.yaml`, `go.mod`/`go.sum`, `buf.yaml`/`buf.gen.yaml`/`sqlc.yaml` (`forgeInputs` in `rules.go`) |
+| forge-generate | `make forge-generate-check`, first: forge.yaml's pinned `forge generate`, failing (and naming each file) if it changed anything | a change to something forge reads or writes: `proto/**`, `db/**`, a `contract.go` or `doc.go`, `internal/handlers/**`, `*_gen.go`, `gen/**`, `deploy/**`, `forge.yaml`, `go.mod`/`go.sum`, `buf.yaml`/`buf.gen.yaml` (`forgeInputs` in `rules.go`) |
 
 The forge-generate lane is CI's **forge generate is a no-op** job, run locally.
 It leaves what it regenerated in your tree, so the fix is to commit those
@@ -57,7 +57,7 @@ rule claims and no Go package owns runs **everything** (fail-safe).
 | `go.mod`, `go.sum`, `tools/tools.go` | **Go: full** |
 | `package.json`, lockfiles at the root | **web and electron: full** |
 | `web/package.json`, `vite.config.ts`, `tsconfig*.json`, `tailwind`/`postcss` config, `web/src/test/setup.ts` | **web: full** |
-| `Makefile`, `forge.yaml`, `buf*.yaml`, `sqlc.yaml` | **everything: full** |
+| `Makefile`, `forge.yaml`, `buf*.yaml` | **everything: full** |
 | `proto/**` that is not a `.proto` | **Go and web: full** |
 | a deleted web module | **web: full** (its importers can no longer be found) |
 | anything else | **everything: full** |
@@ -71,6 +71,32 @@ selector scans each package's Go sources for string literals that name a tracked
 repo path (`filepath.Join(root, "deploy", "kcl")`) and selects those packages
 when that path changes. It over-approximates on purpose: a test run for no
 reason costs seconds, a test wrongly skipped costs a red main.
+
+What counts as naming a path (`scanSources`, `literalCandidates` in
+`tools/test-affected/graph.go`):
+
+- **A `filepath.Join` / `path.Join` is judged by its anchor**, the first
+  argument, because that is the directory the literals after it are relative to
+  (package string constants count as literals):
+  - joined from the first argument on, the path is relative to the package
+    directory, where `go test` runs: `filepath.Join("..", "..", "web", "src")` in
+    `internal/grpc` names `web/src`;
+  - joined onto the repo root, it names that path under the root:
+    `filepath.Join(repoRoot(t), "scripts", name)` names `scripts/`. The root is
+    whatever the package's sources derive from `os.Getwd()`,
+    `runtime.Caller`, `filepath.Abs("<relative>")`, a `".."`,
+    `git rev-parse --show-toplevel`, or a function, variable or struct field
+    that returns or holds one of those (`rootfacts.go`);
+  - joined onto anything else (`t.TempDir()`, a fixture's checkout, a parameter)
+    it names a directory outside the repo and is **no read at all**:
+    `filepath.Join(ws, "web")` builds a fixture's `web` checkout, not a read of
+    `web/`. Before this rule such fixtures made every web-only diff run their
+    Go packages.
+- **Any other literal is judged alone**: a multi-segment one that is a tracked
+  file or directory (`"deploy/kcl/main.k"` in a table) is a read wherever it is
+  used, and a bare word (`"web"`, `"db"`) only when it is a file at the repo
+  root (`"go.mod"`) or the lone literal argument of another path call
+  (`readTree(root, "deploy")`).
 
 **Web.** vitest's own `related` mode builds the same graph by transforming every
 test file: `vitest list --changed` took 65 seconds of wall time and 26 seconds of
@@ -91,6 +117,10 @@ cannot see).
 
 - A Go test that builds a path at run time from non-literal parts reads a file
   the scan cannot name. It still runs when its own package or a dependency changes.
+  So does one that joins literals onto a root it was handed as a parameter
+  (`func readUnder(root string) { filepath.Join(root, "web") }`): a parameter
+  is not traced back to its callers, so name the path in the caller, or join it
+  onto `repoRoot(t)` where it is read.
 - A web test that reads a file through a variable path. The marker scan
   (`readFileSync`, `readdirSync`, `process.cwd()`, `__dirname`) selects any test
   that reads files and names the changed file as a literal.
@@ -164,7 +194,7 @@ waits for. Nothing a PR skips is deleted; it runs on the next push to main.
   10 GB, and per-shard caches did not fit it. Refresh the weights when a shard
   runs much longer than the others: `gh run view <run-id> --log | go run
   ./tools/test-affected weights > tools/test-affected/go-test-weights.tsv`.
-- **Other jobs**: `Lint (forge)` (`forge lint --no-fix` at the pinned forge,
+- **Other jobs**: `Lint (forge)` (`forge lint`, report-only, at the pinned forge,
   with forge's pinned golangci-lint and main's golangci-lint analysis cache;
   blocks; run it locally before pushing a Go or proto change), web
   lint/typecheck/build, vitest (`Web (vitest K/N)`, one shard for up to 150

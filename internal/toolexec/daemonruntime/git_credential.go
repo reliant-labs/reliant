@@ -173,7 +173,7 @@ func wireGlobalGitCredentialHelper(ctx context.Context, argv []string) error {
 func healLeakedGitCredentials(ctx context.Context, projectsDir, home string) (remotes, lines int) {
 	found, err := repo.Discover(ctx, projectsDir, 0)
 	if err != nil {
-		logging.Warn(logPrefix+" git token heal: could not scan projects", "error", err)
+		logging.WarnContext(ctx, logPrefix+" git token heal: could not scan projects", "error", err)
 	}
 	for _, f := range found {
 		dir := filepath.Join(projectsDir, f.RelativePath)
@@ -182,7 +182,7 @@ func healLeakedGitCredentials(ctx context.Context, projectsDir, home string) (re
 	if home != "" {
 		n, err := pruneGitCredentialsFile(filepath.Join(home, ".git-credentials"))
 		if err != nil {
-			logging.Warn(logPrefix+" git token heal: could not clean .git-credentials", "error", err)
+			logging.WarnContext(ctx, logPrefix+" git token heal: could not clean .git-credentials", "error", err)
 		}
 		lines = n
 	}
@@ -221,7 +221,7 @@ func healRemoteURLs(ctx context.Context, dir string) int {
 		// --fixed-value pins the replacement to this exact (secret) value, so
 		// a multi-valued key keeps its other entries.
 		if err := exec.CommandContext(ctx, "git", "-C", dir, "config", "--local", "--fixed-value", key, clean, val).Run(); err != nil {
-			logging.Warn(logPrefix+" git token heal: could not rewrite a remote URL", "repo", dir, "key", key)
+			logging.WarnContext(ctx, logPrefix+" git token heal: could not rewrite a remote URL", "repo", dir, "key", key)
 			continue
 		}
 		n++

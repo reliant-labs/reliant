@@ -27,6 +27,7 @@ import type {
   ResourceUsage,
   Workload,
   WorkloadDetail,
+  WorkloadHealth,
   WorkloadEvent,
   WorkloadMetric,
   WorkloadSeries,
@@ -659,6 +660,21 @@ function usage(latest: number, p95: number, limit: number | null, request: numbe
 
 const MiB = 1024 * 1024;
 
+/** The server-side summary fields of a fixture workload (kind, the health verdict, replicas, release). */
+function summary(health: WorkloadHealth, healthReason: string, ready: number, desired: number, release: string) {
+  return {
+    kind: "deployment" as const,
+    health,
+    healthReason,
+    readyReplicas: ready,
+    desiredReplicas: desired,
+    releaseVersion: release,
+    releaseBasis: "digest" as const,
+    pods: [],
+    declared: null,
+  };
+}
+
 /**
  * Per environment, an `api` (prod's last restart was an OOMKill, its memory
  * near the limit), a `worker` (crash-looping in staging) and a `web` with no
@@ -690,6 +706,7 @@ export function fixtureWorkloads(scope: Pick<ObsScope, "envIds">, now: number): 
         replicasObserved: prod ? 3 : 1,
         restartsInWindow: prod ? 3 : 0,
         latestWarning: prod ? event("OOMKilling", "Memory cgroup out of memory: Killed process 1 (api)", 14, 3, "api", "api") : null,
+        ...summary(prod ? "degraded" : "healthy", prod ? "restarted 3x, last exit OOMKilled" : "", prod ? 3 : 1, prod ? 3 : 1, version),
         containers: [
           {
             container: "api",
@@ -712,6 +729,7 @@ export function fixtureWorkloads(scope: Pick<ObsScope, "envIds">, now: number): 
         replicasObserved: 1,
         restartsInWindow: staging ? 11 : 0,
         latestWarning: staging ? event("BackOff", "Back-off restarting failed container worker in pod worker-7d9f8c-x1", 2, 11, "worker", "worker") : null,
+        ...summary(staging ? "crash_looping" : "healthy", staging ? "restarted 11x, last exit Error" : "", staging ? 0 : 1, 1, version),
         containers: [
           {
             container: "worker",
@@ -734,6 +752,7 @@ export function fixtureWorkloads(scope: Pick<ObsScope, "envIds">, now: number): 
         replicasObserved: 2,
         restartsInWindow: 0,
         latestWarning: null,
+        ...summary("healthy", "", 2, 2, version),
         containers: [
           {
             container: "web",
@@ -791,7 +810,7 @@ export function fixtureWorkloadDetail(scope: Pick<ObsScope, "envIds">, workload:
     }
   });
   events.sort((a, b) => b.timeMs - a.timeMs);
-  return { series, events, imageChanges, versionChanges, stepSeconds: Math.round((window.endMs - window.startMs) / 1000 / 40), truncated: false };
+  return { series, events, imageChanges, versionChanges, stepSeconds: Math.round((window.endMs - window.startMs) / 1000 / 40), truncated: false, workloads: rows };
 }
 
 export interface FixtureOptions extends AlertingFixtureOptions, DeliveryFixtureOptions, DashboardFixtureOptions {
@@ -905,9 +924,9 @@ export function createFixtureApi(options: FixtureOptions = {}): ObservabilityApi
       }),
     listWorkloads: (req) =>
       call("ListWorkloads", req, () => {
-        if (options.empty) return { workloads: [], truncated: false };
+        if (options.empty) return { workloads: [], truncated: false, jobs: [], jobsTruncated: false };
         const all = fixtureWorkloads(req, req.window.endMs);
-        return { workloads: req.services?.length ? all.filter((w) => req.services!.includes(w.workload)) : all, truncated: false };
+        return { workloads: req.services?.length ? all.filter((w) => req.services!.includes(w.workload)) : all, truncated: false, jobs: [], jobsTruncated: false };
       }),
     getWorkload: (req) => call("GetWorkload", req, () => fixtureWorkloadDetail(req, req.workload, req.container, req.window)),
   };

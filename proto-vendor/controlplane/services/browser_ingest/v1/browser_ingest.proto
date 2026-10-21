@@ -70,6 +70,15 @@ service BrowserIngestService {
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
+      activity: {
+        verb: "provision"
+        target: {
+          kind: "browser_ingest_key"
+          id: "response.key.id"
+          label: "frontend"
+        }
+        env: "environment_id"
+      }
     };
   }
 
@@ -94,6 +103,13 @@ service BrowserIngestService {
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
+      activity: {
+        verb: "revoke"
+        target: {
+          kind: "browser_ingest_key"
+          id: "key_id"
+        }
+      }
     };
   }
 }

@@ -108,12 +108,12 @@ func (e *OriginEnricher) match(ctx context.Context, integration string, echo *pr
 		case err == nil && echoableBy(w, echo):
 			return w, core.OriginExact
 		case err != nil && !errors.Is(err, core.ErrIntegrationWriteNotFound):
-			slog.Warn("origin: could not read the write ledger by object", "scope", echo.Scope, "error", err)
+			slog.WarnContext(ctx, "origin: could not read the write ledger by object", "scope", echo.Scope, "error", err)
 		}
 	}
 	recent, err := e.ledger.ListRecentIntegrationWrites(ctx, integration, echo.Scope, e.now().Add(-IntentWindow), 50)
 	if err != nil {
-		slog.Warn("origin: could not read the write ledger", "scope", echo.Scope, "error", err)
+		slog.WarnContext(ctx, "origin: could not read the write ledger", "scope", echo.Scope, "error", err)
 		return nil, core.OriginNone
 	}
 	for _, w := range recent {
@@ -200,7 +200,7 @@ func (e *OriginEnricher) fromWrite(ctx context.Context, trigger *core.Trigger, w
 			// An unreadable lineage must not silently become depth 0, which would
 			// let a chain grow unbounded: treat it as AT the cap, which refuses to
 			// launch from it.
-			slog.Warn("origin: could not read the writing run's lineage; treating it as at the cap",
+			slog.WarnContext(ctx, "origin: could not read the writing run's lineage; treating it as at the cap",
 				"run_id", w.ChatID, "error", err)
 			chain = make(lineage.Lineage, lineage.MaxDepth)
 		}

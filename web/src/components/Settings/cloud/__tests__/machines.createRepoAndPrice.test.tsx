@@ -46,7 +46,7 @@ const mocks = vi.hoisted(() => ({
     eligible: true,
     reason: 0,
     hasActiveSubscription: true,
-    grantedMinutesRemaining: 0,
+    grantedSmallDaemonSecondsRemaining: 0,
     planName: "Compute Medium",
     allowedDaemonSizes: ["small", "medium"],
   })),

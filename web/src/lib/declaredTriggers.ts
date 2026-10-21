@@ -34,6 +34,8 @@ export interface DeclaredIntegration {
   integration: string;
   events: string[];
   match: Record<string, string>;
+  /** Event attribute → the workflow input whose values scope it (`match: {repository: {input: repos}}`). */
+  matchInput: Record<string, string>;
   pollInterval?: string;
 }
 
@@ -64,12 +66,19 @@ export function scheduleOf(trigger: DeclaredTrigger): DeclaredSchedule | undefin
 }
 
 export function integrationOf(trigger: DeclaredTrigger): DeclaredIntegration | undefined {
-  const value = sourceValue<{ integration?: string; events?: string[]; match?: Record<string, string>; pollInterval?: string }>(trigger, "integration");
+  const value = sourceValue<{
+    integration?: string;
+    events?: string[];
+    match?: Record<string, string>;
+    matchInput?: Record<string, string>;
+    pollInterval?: string;
+  }>(trigger, "integration");
   if (!value) return undefined;
   return {
     integration: value.integration ?? "",
     events: [...(value.events ?? [])],
     match: { ...(value.match ?? {}) },
+    matchInput: { ...(value.matchInput ?? {}) },
     pollInterval: value.pollInterval || undefined,
   };
 }

@@ -48,7 +48,7 @@ func userChainInterceptors(t *testing.T) []connect.Interceptor {
 }
 
 // The API listener's chain, outermost first: forge's layers (the trace span,
-// profile labels, recovery, request id, logging, tracing, metrics), reliant's
+// profile labels, the traceresponse header, recovery, request id, logging, tracing, metrics), reliant's
 // budgets in forge's Deadline slot, the authenticator, then reliant's domain
 // whitelist, forge's activity stream and its stream drain innermost. There is
 // no error reporter: a failed RPC reaches Sentry once, as forge's "rpc
@@ -59,11 +59,11 @@ func TestUserChainOrder(t *testing.T) {
 	require.Equal(t, serverkit.AudienceUser, chain.Audience())
 
 	got := chain.Interceptors()
-	require.Len(t, got, 12)
+	require.Len(t, got, 13)
 	require.IsType(t, &otelconnect.Interceptor{}, got[0], "the trace span opens outermost")
-	require.IsType(t, serverkit.Deadline{}, got[7], "the deadline wraps authentication")
-	require.IsType(t, &interceptors.DomainWhitelistInterceptor{}, got[9], "the domain whitelist reads the user auth stashed")
-	require.Equal(t, reflect.TypeOf(serverkit.StreamDrainInterceptor()), reflect.TypeOf(got[11]),
+	require.IsType(t, serverkit.Deadline{}, got[8], "the deadline wraps authentication")
+	require.IsType(t, &interceptors.DomainWhitelistInterceptor{}, got[10], "the domain whitelist reads the user auth stashed")
+	require.Equal(t, reflect.TypeOf(serverkit.StreamDrainInterceptor()), reflect.TypeOf(got[12]),
 		"the stream drain is innermost, so logging records the status the client received")
 }
 

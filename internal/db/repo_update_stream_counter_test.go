@@ -157,19 +157,6 @@ func TestConcurrentChatUpdatesAreContiguous(t *testing.T) {
 	}
 }
 
-func TestUpdateSequenceAllocatorsRequireLedgerTransaction(t *testing.T) {
-	repo, cleanup := setupTestDB(t)
-	defer cleanup()
-
-	ctx := context.Background()
-	if _, err := repo.allocateUpdateSequence(ctx, updateStreamKindUser, "unbound-user"); err == nil {
-		t.Fatal("user sequence allocation outside transaction succeeded")
-	}
-	if _, err := repo.allocateUpdateSequence(ctx, updateStreamKindChat, "unbound-chat"); err == nil {
-		t.Fatal("chat sequence allocation outside transaction succeeded")
-	}
-}
-
 func TestUpdateNotificationsRunOnlyAfterOutermostCommit(t *testing.T) {
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()

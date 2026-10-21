@@ -11,43 +11,52 @@ automation_only: true
 
 inputs:
   repos:
-    type: array
-    default: []
-    description: "The repositories to work issues in, as owner/name. Nothing else is ever touched."
+    type: github.repository
+    multi: true
+    required: true
+    min_items: 1
+    description: "The repositories to work issues in. Nothing else is ever touched."
   trusted_ids:
-    type: array
+    type: github.user
+    multi: true
     default: []
     description: >-
-      GitHub numeric user ids (as strings, e.g. "583231") who may opt an issue in, besides you. Never logins:
-      a login can be renamed and claimed by someone else. Only their labels, @reliant mentions and comments
-      ever reach the agent.
+      People who may opt an issue in, besides you. Stored as GitHub numeric user ids, never logins: a login can
+      be renamed and claimed by someone else. Only their labels, @reliant mentions and comments ever reach
+      the agent.
   model:
     type: model
     description: The authoring model. The reviewer uses a different tag, so it can disagree.
     default:
       tags: [flagship]
   ready_label:
-    type: string
+    type: github.label
+    scope: {repository: repos}
     default: "agent:ready"
     description: Labelling an issue with this opts it in
   working_label:
-    type: string
+    type: github.label
+    scope: {repository: repos}
     default: "agent:working"
     description: Mirrors the lease while a run holds the issue
   in_review_label:
-    type: string
+    type: github.label
+    scope: {repository: repos}
     default: "agent:in-review"
     description: Put on the issue and its PR once a PR is open
   blocked_label:
-    type: string
+    type: github.label
+    scope: {repository: repos}
     default: "agent:blocked"
     description: Put on the issue when the attempt failed
   punted_label:
-    type: string
+    type: github.label
+    scope: {repository: repos}
     default: "agent:punted"
     description: Put on the issue when it was unclear, too large, or needs something the agent must not do
   authored_label:
-    type: string
+    type: github.label
+    scope: {repository: repos}
     default: "agent:authored"
     description: Put on the PR it opens. The review responder acts on PRs that carry it
   lease_minutes:
@@ -97,9 +106,9 @@ triggers:
     integration:
       integration: github
       events: [issues.labeled]
+      match: {repository: {input: repos}}
     filter: >-
-      trigger.payload.attributes.repository in trigger.activation.params.repos
-      && trigger.payload.data.label == trigger.activation.params.ready_label
+      trigger.payload.data.label == trigger.activation.params.ready_label
       && trigger.sender.verified && trigger.sender.id != ''
       && (trigger.sender.id == trigger.activation.owner.github_id
           || trigger.sender.id in trigger.activation.params.trusted_ids)
@@ -119,9 +128,9 @@ triggers:
       match:
         mentions_reliant: "true"
         is_pull_request: "false"
+        repository: {input: repos}
     filter: >-
-      trigger.payload.attributes.repository in trigger.activation.params.repos
-      && trigger.sender.verified && trigger.sender.id != ''
+      trigger.sender.verified && trigger.sender.id != ''
       && (trigger.sender.id == trigger.activation.owner.github_id
           || trigger.sender.id in trigger.activation.params.trusted_ids)
       && !(has(trigger.payload.data.issue.state) && trigger.payload.data.issue.state == 'closed')

@@ -90,7 +90,7 @@ type Config struct {
 	IntegrationCredentials httpaction.CredentialSource
 
 	// ControlPlaneURL is the control plane hosting this deployment, "" when it
-	// is self-hosted (the role config's ControlPlaneConfig). It decides which
+	// is self-hosted (ServerProcessConfig's ControlPlaneConfig). It decides which
 	// addresses a user-supplied model endpoint may resolve to.
 	ControlPlaneURL string
 	// WriteLedger records the action node's mutating integration calls, so an
@@ -163,7 +163,10 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	v2activities.RegisterAll(registry, activityDeps)
 
 	// Create shared worker with standard options
+	onFatalError, fatal := fatalErrorSink()
 	workerOpts := worker.Options{
+		// How Worker.Run learns the worker died; see temporalWorker.
+		OnFatalError:                     onFatalError,
 		StickyScheduleToStartTimeout:     5 * time.Second,
 		MaxConcurrentWorkflowTaskPollers: 5,
 		MaxConcurrentActivityTaskPollers: 10,
@@ -234,7 +237,7 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 		Identity:                 instanceid.WorkerIdentity(),
 		DeadlockDetectionTimeout: 30 * time.Second,
 		Interceptors: append([]interceptor.WorkerInterceptor{
-			observability.NewOTelWorkerInterceptor(),
+			observability.NewMetricsWorkerInterceptor(),
 			newActivityRelease(),
 		}, cfg.WorkflowInterceptors...),
 	}
@@ -312,7 +315,7 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 		)
 	}
 
-	return newWorker(w), registry, nil
+	return newWorker(w, fatal), registry, nil
 }
 
 // TaskQueueName returns the task queue name that would be used by a worker with the given config.

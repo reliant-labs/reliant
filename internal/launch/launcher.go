@@ -337,7 +337,7 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 	}
 	chatCreatedJSON, marshalErr := json.Marshal(chatCreatedData)
 	if marshalErr != nil {
-		logging.Error("Failed to marshal chat_created data", "error", marshalErr, "chatID", chatID)
+		logging.ErrorContext(ctx, "Failed to marshal chat_created data", "error", marshalErr, "chatID", chatID)
 	}
 
 	eventRow := newEventRow(ev, userID, chatID, workflowName, worktreeID, startRecord{
@@ -454,7 +454,7 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 		if errors.Is(err, ErrClientMessageReused) {
 			return nil, ErrClientMessageReused
 		}
-		logging.Error("Failed to create chat", "error", err, "chatID", chatID)
+		logging.ErrorContext(ctx, "Failed to create chat", "error", err, "chatID", chatID)
 		return nil, &InternalError{Reason: "failed to create chat", Err: err}
 	}
 
@@ -680,7 +680,7 @@ func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed 
 		if errors.Is(err, ErrClientMessageReused) {
 			return nil, ErrClientMessageReused
 		}
-		logging.Error("Failed to start pending chat", "error", err, "chatID", chat.ID)
+		logging.ErrorContext(ctx, "Failed to start pending chat", "error", err, "chatID", chat.ID)
 		return nil, &InternalError{Reason: "failed to start chat", Err: err}
 	}
 
@@ -1110,7 +1110,7 @@ func (l *Launcher) start(ctx context.Context, p startParams) (*Result, error) {
 	// it would hand the caller a committed chat that may never run.
 	workflowRun, err := l.temporal.ExecuteWorkflow(ctx, workflowOptions, v2.DynamicWorkflow, workflowInput)
 	if err != nil {
-		logging.Error("Failed to start workflow", "error", err, "chatID", chatID)
+		logging.ErrorContext(ctx, "Failed to start workflow", "error", err, "chatID", chatID)
 		return nil, &InternalError{Reason: "failed to start workflow", Err: err}
 	}
 
@@ -1123,13 +1123,13 @@ func (l *Launcher) start(ctx context.Context, p startParams) (*Result, error) {
 	// The run's own later write to active is a no-op on an active row. A lost
 	// CAS means the run already got there first.
 	if _, err := l.repo.CompareAndSwapWorkflowStatus(ctx, workflowID, db.Active(), db.Pending()); err != nil {
-		logging.Warn("Failed to mark launched workflow active", "error", err, "chatID", chatID)
+		logging.WarnContext(ctx, "Failed to mark launched workflow active", "error", err, "chatID", chatID)
 	}
 
 	// Fetch created chat
 	startedChat, err := l.repo.GetChat(ctx, chatID)
 	if err != nil {
-		logging.Error("Failed to fetch started chat", "error", err, "chatID", chatID)
+		logging.ErrorContext(ctx, "Failed to fetch started chat", "error", err, "chatID", chatID)
 		return nil, &InternalError{Reason: "failed to fetch created chat", Err: err}
 	}
 
@@ -1156,7 +1156,7 @@ func (l *Launcher) startTitleGeneration(ctx context.Context, p startParams) <-ch
 		defer close(done)
 		defer func() {
 			if r := recover(); r != nil {
-				logging.Error("Title generation start panicked", "panic", r, "chatID", chatID)
+				logging.ErrorContext(ctx, "Title generation start panicked", "panic", r, "chatID", chatID)
 			}
 		}()
 		options := client.StartWorkflowOptions{
@@ -1169,7 +1169,7 @@ func (l *Launcher) startTitleGeneration(ctx context.Context, p startParams) <-ch
 			"first_message": p.userContent,
 		}
 		if _, err := l.temporal.ExecuteWorkflow(ctx, options, "GenerateTitleWorkflow", input); err != nil {
-			logging.Error("Failed to start title generation workflow", "error", err, "chatID", chatID)
+			logging.ErrorContext(ctx, "Failed to start title generation workflow", "error", err, "chatID", chatID)
 		}
 	}()
 	return done
@@ -1244,7 +1244,7 @@ func (l *Launcher) recordStartSelection(ctx context.Context, userID string, chat
 	if len(patch) == 0 {
 		return nil
 	}
-	if _, err := chatselection.New(l.repo).Merge(ctx, chat.ID, userID, workflowName, patch, 0); err != nil {
+	if _, err := chatselection.NewInstrumented(l.repo).Merge(ctx, chat.ID, userID, workflowName, patch, 0); err != nil {
 		return fmt.Errorf("failed to record the chat's selection: %w", err)
 	}
 	return nil

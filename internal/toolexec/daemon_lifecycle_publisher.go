@@ -14,6 +14,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/observe/natsotel"
+
 	"github.com/nats-io/nats.go"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/observability"
@@ -63,7 +65,7 @@ func (p *DaemonLifecyclePublisher) publish(ctx context.Context, eventType, userI
 		return
 	}
 	if userID == "" || daemonID == "" {
-		logging.Warn("[DaemonLifecyclePublisher] Skipping daemon lifecycle event with missing identity", "type", eventType, "userID", userID, "daemonID", daemonID)
+		logging.WarnContext(ctx, "[DaemonLifecyclePublisher] Skipping daemon lifecycle event with missing identity", "type", eventType, "userID", userID, "daemonID", daemonID)
 		return
 	}
 
@@ -76,16 +78,16 @@ func (p *DaemonLifecyclePublisher) publish(ctx context.Context, eventType, userI
 	}
 	data, err := json.Marshal(evt)
 	if err != nil {
-		logging.Error("[DaemonLifecyclePublisher] Failed to marshal daemon lifecycle event", "error", err, "type", eventType, "daemonID", daemonID)
+		logging.ErrorContext(ctx, "[DaemonLifecyclePublisher] Failed to marshal daemon lifecycle event", "error", err, "type", eventType, "daemonID", daemonID)
 		return
 	}
 
 	subject := fmt.Sprintf("%s.%s", daemonEventsSubjectPrefix, eventType)
-	msg := observability.NATSPublishMsg(ctx, subject, data)
+	msg := natsotel.NewMsg(ctx, subject, data)
 	if err := p.nc.PublishMsg(msg); err != nil {
-		logging.Error("[DaemonLifecyclePublisher] Failed to publish daemon lifecycle event", "error", err, "subject", subject, "daemonID", daemonID)
+		logging.ErrorContext(ctx, "[DaemonLifecyclePublisher] Failed to publish daemon lifecycle event", "error", err, "subject", subject, "daemonID", daemonID)
 		return
 	}
 	observability.NATSPublishTotal.WithLabelValues("daemon.lifecycle").Inc()
-	logging.Debug("[DaemonLifecyclePublisher] Published daemon lifecycle event", "type", eventType, "userID", userID, "daemonID", daemonID)
+	logging.DebugContext(ctx, "[DaemonLifecyclePublisher] Published daemon lifecycle event", "type", eventType, "userID", userID, "daemonID", daemonID)
 }

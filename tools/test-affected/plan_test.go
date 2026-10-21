@@ -247,7 +247,7 @@ func TestForgeInputsRunForgeGenerate(t *testing.T) {
 		"proto/reliant/v1/chat.proto", "db/migrations/20261101000000_x.up.sql", "internal/vault/contract.go",
 		"internal/vault/doc.go", "internal/handlers/chat/rpc_send.go", "internal/vault/mock_gen.go",
 		"gen/forge_descriptor.json", "deploy/observability/x.json", ".forge/hashes.json",
-		"internal/db/postgres/queries/chats.sql", "forge.yaml", "go.mod",
+		"forge.yaml", "go.mod",
 	} {
 		pl := classify(p)
 		if !pl.ForgeGen.Full {
@@ -494,6 +494,22 @@ func TestRunnerFullLanesRunEverything(t *testing.T) {
 	}
 	if len(got) != 2 || !strings.HasSuffix(got[0], "./...") || got[1] != "npx vitest run" {
 		t.Fatalf("full lanes = %v", got)
+	}
+}
+
+// A FULL lane is a whole-module run and queues for a host heavy slot; a scoped
+// run is the inner loop and never does.
+func TestRunnerRunsOnlyFullLanesInAHeavySlot(t *testing.T) {
+	r := &runner{root: "/repo", slot: []string{"forge", "slot", "run", "--class", "heavy", "--"}}
+	for _, s := range r.steps(classify("go.mod", "web/package.json"), laneSet("go,web")) {
+		if joined := strings.Join(s.argv, " "); !strings.HasPrefix(joined, "forge slot run --class heavy -- ") {
+			t.Errorf("full step %q runs outside a heavy slot: %s", s.name, joined)
+		}
+	}
+	for _, s := range r.steps(classify("internal/leaf/leaf.go", "web/src/lib/leaf.ts"), laneSet("go,web")) {
+		if s.argv[0] == "forge" {
+			t.Errorf("scoped step %q queues for a heavy slot: %s", s.name, strings.Join(s.argv, " "))
+		}
 	}
 }
 

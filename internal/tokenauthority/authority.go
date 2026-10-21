@@ -1,11 +1,11 @@
 package tokenauthority
 
 import (
-	"database/sql"
 	"errors"
 	"fmt"
 
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
+	"github.com/reliant-labs/forge/pkg/orm"
 
 	"github.com/reliant-labs/reliant/internal/accesstokenclient"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -18,7 +18,7 @@ var ErrInactive = accesstokenclient.ErrInactive
 
 // DepsFor is the Deps for a deployment hosted by cp (the zero Endpoint is
 // self-hosted), with db for the self-hosted store.
-func DepsFor(cp controlplane.Endpoint, db *sql.DB) Deps {
+func DepsFor(cp controlplane.Endpoint, db orm.Context) Deps {
 	return Deps{
 		ControlPlaneURL:       cp.URL,
 		InternalServiceSecret: cp.InternalServiceSecret,
@@ -43,7 +43,7 @@ func New(deps Deps) (Authority, Mode, error) {
 				"a hosted reliant validates every machine credential through control-plane and cannot do so unauthenticated")
 		}
 		secret := deps.InternalServiceSecret
-		return accesstokenclient.New(accesstokenclient.Deps{
+		return accesstokenclient.NewInstrumented(accesstokenclient.Deps{
 			BaseURL: deps.ControlPlaneURL,
 			Sign:    func() (string, error) { return auth.SignInternalServiceToken(secret) },
 		}), ModeControlPlane, nil

@@ -6,29 +6,21 @@ import (
 	"fmt"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
-	postgresstore "github.com/reliant-labs/reliant/internal/db/postgres"
-	pgdb "github.com/reliant-labs/reliant/internal/db/postgres/generated"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
-// toolCalls builds the tool call store against the connection or transaction
-// bound to ctx.
-//
-// The other stores are constructed once in NewRepo and held as struct fields,
-// which pins them to the raw *sql.DB. That is fine for them, but tool call
-// writes are made from inside the transactions that persist a message and its
-// content blocks -- a call written outside that transaction would be visible
-// (or lost) independently of the message it belongs to, which is exactly the
-// call/result desynchronization these tables exist to prevent. Resolving the
-// DBTX per request routes the write into the ambient transaction when there
-// is one; WrappedDBTX.DB falls back to the pool when there is not.
-func (r *Repo) toolCalls(ctx context.Context) (core.ToolCallStore, error) {
-	if r.DB == nil {
-		return nil, fmt.Errorf("repository has no database connection")
-	}
-	dbtx := r.DB.DB(ctx)
-	return postgresstore.NewToolCallStore(pgdb.New(dbtx), dbtx), nil
-}
+// The tool call methods run on internal/store (tool_call_repo_ext.go,
+// tool_call_result_repo_ext.go) with the ctx they are given, so a call or
+// result written inside the transaction that persists its message joins it: a
+// call written outside that transaction would be visible (or lost)
+// independently of the message it belongs to, which is exactly the call/result
+// desynchronization these tables exist to prevent.
 
+// UpsertToolCall writes a tool call, replacing any existing row with the same
+// id. Upsert rather than insert because the callers are Temporal activities,
+// which retry: a retry that re-sent the same call must converge on the same
+// row instead of failing on the primary key. A row recorded for another chat
+// is never replaced: the write fails with core.ErrToolCallIDInAnotherChat.
 func (r *Repo) UpsertToolCall(ctx context.Context, call *ToolCall) error {
 	if call == nil {
 		return fmt.Errorf("tool call cannot be nil")
@@ -44,16 +36,14 @@ func (r *Repo) UpsertToolCall(ctx context.Context, call *ToolCall) error {
 	if call.Status == core.ToolCallStatusCompleted && call.CompletedAt == nil {
 		return fmt.Errorf("completed tool call requires completed_at")
 	}
-
-	store, err := r.toolCalls(ctx)
-	if err != nil {
-		return err
-	}
-	return store.UpsertToolCall(ctx, call)
+	return store.UpsertToolCall(ctx, r.ORM(), call)
 }
 
-// UpsertToolCallResult records the result of chatID's call. See
-// core.ToolCallStore: a call recorded for another chat is never written.
+// UpsertToolCallResult writes a result for chatID's call, replacing any
+// existing row for the same call (same retry-idempotency reasoning as
+// UpsertToolCall). Fails with core.ErrToolCallIDInAnotherChat unless the call
+// exists and is chatID's: a result belongs to its call's chat, and the writer
+// has to prove it is that chat.
 func (r *Repo) UpsertToolCallResult(ctx context.Context, chatID string, result *ToolCallResult) error {
 	if result == nil {
 		return fmt.Errorf("tool call result cannot be nil")
@@ -64,128 +54,121 @@ func (r *Repo) UpsertToolCallResult(ctx context.Context, chatID string, result *
 	if chatID == "" {
 		return fmt.Errorf("chat ID is required")
 	}
-
-	store, err := r.toolCalls(ctx)
-	if err != nil {
-		return err
-	}
-	return store.UpsertToolCallResult(ctx, chatID, result)
+	return store.UpsertToolCallResult(ctx, r.ORM(), chatID, result)
 }
 
 // GetToolCallResultForMessage reads the result of the call that assistant
-// message messageID carries, or nil.
+// message messageID carries, or nil. The id alone can name another chat's
+// call; the message cannot.
 func (r *Repo) GetToolCallResultForMessage(ctx context.Context, toolCallID, messageID string) (*ToolCallResult, error) {
 	if toolCallID == "" || messageID == "" {
 		return nil, fmt.Errorf("tool call ID and message ID are required")
 	}
-
-	store, err := r.toolCalls(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return store.GetToolCallResultForMessage(ctx, toolCallID, messageID)
+	return store.FindToolCallResultForMessage(ctx, r.ORM(), toolCallID, messageID)
 }
 
 func (r *Repo) GetToolCall(ctx context.Context, id string) (*ToolCall, error) {
 	if id == "" {
 		return nil, fmt.Errorf("tool call ID cannot be empty")
 	}
-
-	store, err := r.toolCalls(ctx)
+	call, err := store.FindToolCall(ctx, r.ORM(), id)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get tool call: %w", err)
 	}
-	return store.GetToolCall(ctx, id)
+	if call == nil {
+		return nil, fmt.Errorf("tool call not found: %s", id)
+	}
+	return call, nil
 }
 
+// GetToolCallResult reads the recorded result for a single call, or nil if
+// none was ever written (e.g. a terminal call whose result write lost a race,
+// or a historical Cancelled row that predates durable status).
 func (r *Repo) GetToolCallResult(ctx context.Context, toolCallID string) (*ToolCallResult, error) {
 	if toolCallID == "" {
 		return nil, fmt.Errorf("tool call ID cannot be empty")
 	}
-
-	store, err := r.toolCalls(ctx)
+	result, err := store.FindToolCallResult(ctx, r.ORM(), toolCallID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to get tool call result: %w", err)
 	}
-	return store.GetToolCallResult(ctx, toolCallID)
+	return result, nil
 }
 
 func (r *Repo) ListToolCallsByChat(ctx context.Context, chatID string) ([]*ToolCall, error) {
 	if chatID == "" {
 		return nil, fmt.Errorf("chat ID cannot be empty")
 	}
-
-	store, err := r.toolCalls(ctx)
+	calls, err := store.ListToolCallsByChat(ctx, r.ORM(), chatID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to list tool calls by chat: %w", err)
 	}
-	return store.ListToolCallsByChat(ctx, chatID)
+	return calls, nil
 }
 
+// ListToolCallsByMessageIDs and ListToolCallResultsByMessageIDs are the batch
+// reads the message read path needs: loading a page of messages must not
+// issue one query per message.
 func (r *Repo) ListToolCallsByMessageIDs(ctx context.Context, messageIDs []string) ([]*ToolCall, error) {
-	if len(messageIDs) == 0 {
-		return []*ToolCall{}, nil
-	}
-
-	store, err := r.toolCalls(ctx)
+	calls, err := store.ListToolCallsByMessageIDs(ctx, r.ORM(), messageIDs)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to list tool calls for messages: %w", err)
 	}
-	return store.ListToolCallsByMessageIDs(ctx, messageIDs)
+	return calls, nil
 }
 
+// ListLiveToolCallsByChat reads a chat's non-terminal calls (pending,
+// executing, backgrounded) without touching its terminal history.
 func (r *Repo) ListLiveToolCallsByChat(ctx context.Context, chatID string) ([]*ToolCall, error) {
-	store, err := r.toolCalls(ctx)
+	calls, err := store.ListLiveToolCallsByChat(ctx, r.ORM(), chatID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to list live tool calls by chat: %w", err)
 	}
-	return store.ListLiveToolCallsByChat(ctx, chatID)
+	return calls, nil
 }
 
+// ListToolCallsByIDs reads calls by their own primary key.
+//
+// The by-message read above depends on tool_calls.message_id, which is a
+// link the writer has to remember to set; when a live writer did not have a
+// message in hand, that column was NULL and the by-message query could not
+// see the row at all. A block always carries its tool_call_id, so keying off
+// it is the lookup that cannot miss. Readers use both and merge (see
+// messageproto.AssembleForDisplay).
 func (r *Repo) ListToolCallsByIDs(ctx context.Context, toolCallIDs []string) ([]*ToolCall, error) {
-	if len(toolCallIDs) == 0 {
-		return []*ToolCall{}, nil
-	}
-
-	store, err := r.toolCalls(ctx)
+	calls, err := store.ListToolCallsByIDs(ctx, r.ORM(), toolCallIDs)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to list tool calls by id: %w", err)
 	}
-	return store.ListToolCallsByIDs(ctx, toolCallIDs)
+	return calls, nil
 }
 
+// ListStrandedSpawnToolCalls reads spawn calls whose child workflow has
+// reached a terminal status but which never received a result — the join
+// from a finished sub-agent back to its parent, broken by a worker that died
+// between the two writes. Cleanup cannot find these: it is scoped to the
+// thread of the workflow that is ENDING, and a stranded row belongs to the
+// still-live parent's thread.
 func (r *Repo) ListStrandedSpawnToolCalls(ctx context.Context) ([]*ToolCall, error) {
-	store, err := r.toolCalls(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return store.ListStrandedSpawnToolCalls(ctx)
+	return store.ListStrandedSpawnToolCalls(ctx, r.ORM())
 }
 
+// ListStrandedBackgroundSpawnToolCalls is the async-spawn counterpart to
+// ListStrandedSpawnToolCalls: a background=true spawn writes its tool_calls
+// row to status 6 (backgrounded) with a result AT DISPATCH TIME, so it can
+// never match the sync query's anchor. This one is anchored on the mailbox
+// instead (spec: async-spawn-and-agent-messaging.md, §7.1).
 func (r *Repo) ListStrandedBackgroundSpawnToolCalls(ctx context.Context) ([]*StrandedBackgroundSpawn, error) {
-	store, err := r.toolCalls(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return store.ListStrandedBackgroundSpawnToolCalls(ctx)
+	return store.ListStrandedBackgroundSpawnToolCalls(ctx, r.ORM())
 }
 
+// ListBackgroundedProcessToolCalls reads every backgrounded call whose
+// outcome lives in a daemon's process table (status 6, no child workflow),
+// for the reconciler sweep that closes them once the process has ended.
 func (r *Repo) ListBackgroundedProcessToolCalls(ctx context.Context) ([]*BackgroundedProcessCall, error) {
-	store, err := r.toolCalls(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return store.ListBackgroundedProcessToolCalls(ctx)
+	return store.ListBackgroundedProcessToolCalls(ctx, r.ORM())
 }
 
 func (r *Repo) ListToolCallResultsByMessageIDs(ctx context.Context, messageIDs []string) ([]*ToolCallResult, error) {
-	if len(messageIDs) == 0 {
-		return []*ToolCallResult{}, nil
-	}
-
-	store, err := r.toolCalls(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return store.ListToolCallResultsByMessageIDs(ctx, messageIDs)
+	return store.ListToolCallResultsByMessageIDs(ctx, r.ORM(), messageIDs)
 }

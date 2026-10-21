@@ -14,6 +14,7 @@ import (
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/worktreesweep"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
@@ -41,6 +42,9 @@ type Deps struct {
 // clean-up read through the same store.
 type Repository interface {
 	worktreesweep.StorageStore
+	// WorkflowResolver reads an activation's workflow, to tell which
+	// automations still need setting up.
+	launch.WorkflowResolver
 
 	ListInboxPending(ctx context.Context, userID string) ([]*core.InboxPending, error)
 	ListDismissedInboxItemIDs(ctx context.Context, userID string, itemIDs []string) (map[string]bool, error)

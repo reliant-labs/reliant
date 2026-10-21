@@ -19,6 +19,7 @@ import (
 // put-back). Simulated by doing exactly what removeOne does up to the move,
 // then running the next ordinary pass.
 func TestReview3_Q1_CrashMidQuarantine(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	f.idle()
 	w := f.worktree("q1", "feat/q1")
@@ -54,6 +55,7 @@ func TestReview3_Q1_CrashMidQuarantine(t *testing.T) {
 // Q2: the put-back move fails because the original path was re-created while
 // the checkout sat in quarantine. Is the stranded copy still locked?
 func TestReview3_Q2_PutBackFailureLeavesItUnlocked(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	f.idle()
 	w := f.worktree("q2", "feat/q2")
@@ -96,6 +98,7 @@ func TestReview3_Q2_PutBackFailureLeavesItUnlocked(t *testing.T) {
 // (root repo "" + nested repo "web"). Deepest-first removal takes the nested
 // one out, then the root's quarantine re-scan expects 1+len(nested) repos.
 func TestReview3_Q3_RootCheckoutWithNestedCheckout(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	f.idle()
 	ignore(t, f, "web/\n")
@@ -127,6 +130,7 @@ func TestReview3_Q3_RootCheckoutWithNestedCheckout(t *testing.T) {
 // none (cmd_worktree.go snapshotRefsFor -> nil), so a snapshot from an EARLIER
 // clean-up is applied again on a later restore.
 func TestReview3_R1_StaleSnapshotReappliedOverNewerCommits(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	ctx := context.Background()
 	w := f.worktree("r1", "feat/r1")
@@ -176,6 +180,7 @@ func TestReview3_R1_StaleSnapshotReappliedOverNewerCommits(t *testing.T) {
 // R2: the same, within ONE lifecycle: the branch moved after the clean-up
 // (committed to from another workspace) before the restore.
 func TestReview3_R2_SnapshotOverAMovedBranch(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	ctx := context.Background()
 	w := f.worktree("r2", "feat/r2")
@@ -214,6 +219,7 @@ func TestReview3_R2_SnapshotOverAMovedBranch(t *testing.T) {
 
 // R3: does ApplySnapshot leave partial writes behind when it fails?
 func TestReview3_R3_FailedApplyLeavesPartialState(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	ctx := context.Background()
 	w := f.worktree("r3", "feat/r3")
@@ -246,6 +252,7 @@ func TestReview3_R3_FailedApplyLeavesPartialState(t *testing.T) {
 
 // P9: an empty ORIG_HEAD in the admin dir.
 func TestReview3_P9_EmptyPseudoRef(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	f.idle()
 	w := f.worktree("p9", "feat/p9")
@@ -280,6 +287,7 @@ func errString(err error) string {
 }
 
 func TestRecoverQuarantined_PutsACrashedCheckoutBack(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	f.idle()
 	w := f.worktree("rq", "feat/rq")
@@ -316,6 +324,7 @@ func TestRecoverQuarantined_PutsACrashedCheckoutBack(t *testing.T) {
 // F8: two Reclaimers on one root (two processes sharing a $HOME) serialize on the
 // row's file lock.
 func TestRowLock_SerializesAcrossReclaimersOnOneRoot(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	other := NewReclaimer(f.r.Root)
 	release, err := f.r.rowLock("row1")
@@ -352,6 +361,7 @@ func TestRowLock_SerializesAcrossReclaimersOnOneRoot(t *testing.T) {
 
 // F10: a marker with no checkout beside it is dropped; one with a checkout is kept.
 func TestRecoverQuarantined_StrayMarkerOnlyWhenNoCheckout(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	root := f.r.quarantineRoot("rowx")
 	if err := os.MkdirAll(filepath.Join(root, "kept-1-aa"), 0o755); err != nil {

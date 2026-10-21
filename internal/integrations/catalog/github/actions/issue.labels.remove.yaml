@@ -1,0 +1,44 @@
+# yaml-language-server: $schema=../../../manifest/schema/action.schema.json
+id: issue.labels.remove
+display_name: Remove a label from an issue or pull request
+summary: Remove one label without touching the others (atomic, unlike issue.update).
+description: >-
+  Remove a single label from an issue or pull request. This is one request
+  that GitHub applies on its own, so it cannot drop a label someone else
+  added at the same moment; issue.update with labels replaces the whole
+  list and can. The label stays in the repository. If the issue does not
+  carry the label GitHub answers 404, and so does this action: a not found
+  here can mean the label was already removed. Returns the issue's labels
+  after the change.
+keywords: [label, remove, delete, untag, unmark, clear, triage, issue, pull request, atomic]
+placement: server
+mutates: true
+tool:
+  expose: true
+params:
+  type: object
+  additionalProperties: false
+  required: [owner, repo, issue_number, label]
+  properties:
+    owner: { $ref: ../schemas/owner.yaml }
+    repo: { $ref: ../schemas/repo.yaml }
+    issue_number: { $ref: ../schemas/issue_number.yaml }
+    label: { $ref: ../schemas/label_name.yaml }
+    connection: { $ref: ../schemas/connection.yaml }
+request:
+  method: DELETE
+  path: /repos/{{ params.owner }}/{{ params.repo }}/issues/{{ params.issue_number }}/labels/{{ params.label }}
+  errors: { $ref: ../schemas/github_errors.yaml }
+output:
+  select: >-
+    {"removed": params.label,
+     "labels": response.map(l, type(l) == string ? l : l.name),
+     "number": params.issue_number,
+     "html_url": "https://github.com/" + params.owner + "/" + params.repo + "/issues/" + string(int(params.issue_number))}
+  schema:
+    type: object
+    properties:
+      removed: { type: string }
+      labels: { type: array, items: { type: string }, description: The issue's labels after the change. }
+      number: { type: integer }
+      html_url: { type: string }

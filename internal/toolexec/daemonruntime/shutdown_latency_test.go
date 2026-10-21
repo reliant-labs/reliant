@@ -89,11 +89,7 @@ func startSilentGateway(t *testing.T) (client *daemonClient, dataDir string) {
 func TestCancelStopsAnIdleDaemonPromptly(t *testing.T) {
 	client, dataDir := startSilentGateway(t)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	stopped := make(chan error, 1)
-	go func() { stopped <- client.run(ctx) }()
+	d := startDaemon(t, client)
 
 	// Cancel only once the gateway has acked, so this measures teardown of an
 	// ESTABLISHED idle stream — the state the daemon is actually in when
@@ -101,12 +97,12 @@ func TestCancelStopsAnIdleDaemonPromptly(t *testing.T) {
 	waitForStream(t, dataDir, daemonstate.StreamConnected)
 
 	start := time.Now()
-	cancel()
+	d.cancel()
 
 	select {
-	case err := <-stopped:
+	case <-d.exited():
 		elapsed := time.Since(start)
-		require.ErrorIs(t, err, context.Canceled,
+		require.ErrorIs(t, d.err, context.Canceled,
 			"a cancelled daemon must report cancellation, not a stream fault")
 		require.Less(t, elapsed, cancelUnblockGrace,
 			"a cancelled daemon took %v to stop against an idle gateway; SIGTERM-to-exit must fit in the sign-in restart budget", elapsed)

@@ -68,6 +68,14 @@ describe("buildConsoleNav", () => {
     const release = buildConsoleNav({ project: "shop", page: { kind: "release", version: "v1.8.2" }, env: "prod", envs: ENVS });
     expect(release.items.find((item) => item.label === "Releases")?.active).toBe(true);
   });
+
+  it("files a workload under the Overview, not under its environment (DECISIONS: Overview › <name>)", () => {
+    const page = { kind: "workload" as const, env: "prod", name: "admin-server" };
+    const nav = buildConsoleNav({ project: "shop", page, env: "prod", envs: ENVS });
+    expect(nav.items.find((item) => item.label === "Overview")?.active).toBe(true);
+    expect(nav.items.find((item) => item.label === "Environments")?.children?.some((child) => child.active)).toBe(false);
+    expect(consoleCrumbs("shop", page, "e2e")).toEqual([{ label: "Overview", href: "/forge/p/shop?env=prod" }, { label: "admin-server" }]);
+  });
 });
 
 describe("starred dashboards in the nav (decision DB)", () => {

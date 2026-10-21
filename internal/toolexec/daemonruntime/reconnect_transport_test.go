@@ -84,9 +84,9 @@ func TestReconnectingDaemonReusesOneGatewayConnection(t *testing.T) {
 
 	client := newDaemonClientForTest(t, t.TempDir(), srv.URL)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go func() { _ = client.run(ctx) }()
+	// When the loop below sees the last session, the daemon may still be
+	// recording it in its data dir; startDaemon waits for it to stop.
+	startDaemon(t, client)
 
 	// Three sessions is enough to tell reuse from per-session dialing, and the
 	// daemon's reconnect backoff (1s, then 2s) keeps it under a few seconds.

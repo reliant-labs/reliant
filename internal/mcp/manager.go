@@ -404,7 +404,7 @@ func (m *Manager) AddServer(ctx context.Context, name string, cfg config.MCPServ
 	if m.role != RoleDaemon && isStdioConfig(cfg) {
 		return fmt.Errorf("MCP server %q: %w", name, ErrStdioOnServer)
 	}
-	logging.Info("Adding MCP server", "name", name, "type", cfg.Type)
+	logging.InfoContext(ctx, "Adding MCP server", "name", name, "type", cfg.Type)
 
 	spawn := func() (Client, error) { return m.clientFactory(name, cfg) }
 
@@ -426,11 +426,11 @@ func (m *Manager) AddServer(ctx context.Context, name string, cfg config.MCPServ
 	}
 
 	if err := client.Initialize(ctx); err != nil {
-		logging.Error("MCP server initialization failed", "name", name, "raw_error", err.Error())
+		logging.ErrorContext(ctx, "MCP server initialization failed", "name", name, "raw_error", err.Error())
 		classifiedErr := classifyMCPStartupError(name, cfg, err)
 
 		if closeErr := client.Close(); closeErr != nil {
-			logging.Warn("Failed to close client after initialization failure", "error", closeErr)
+			logging.WarnContext(ctx, "Failed to close client after initialization failure", "error", closeErr)
 		}
 
 		m.healthMu.Lock()
@@ -463,7 +463,7 @@ func (m *Manager) AddServer(ctx context.Context, name string, cfg config.MCPServ
 	m.healthMu.Unlock()
 
 	if info := client.ServerInfo(); info != nil {
-		logging.Info("MCP server connected",
+		logging.InfoContext(ctx, "MCP server connected",
 			"name", name,
 			"server", info.Name,
 			"version", info.Version,
@@ -1189,7 +1189,7 @@ func (m *Manager) EnsureProjectServersLoaded(ctx context.Context, projectPath st
 		return result
 	}
 
-	logging.Debug("Loading MCP servers from project", "path", normalizedProjectPath, "count", len(servers))
+	logging.DebugContext(ctx, "Loading MCP servers from project", "path", normalizedProjectPath, "count", len(servers))
 
 	// Get currently running servers
 	m.mu.RLock()
@@ -1202,10 +1202,10 @@ func (m *Manager) EnsureProjectServersLoaded(ctx context.Context, projectPath st
 	// Load any servers from config that aren't already running
 	for name, serverCfg := range servers {
 		if !serverCfg.Enabled {
-			logging.Debug("Skipping disabled MCP server from project config", "name", name)
+			logging.DebugContext(ctx, "Skipping disabled MCP server from project config", "name", name)
 			if runningServers[name] {
 				if err := m.RemoveServer(name); err != nil && !strings.Contains(err.Error(), "not found") {
-					logging.Warn("Failed to stop disabled MCP server", "name", name, "error", err)
+					logging.WarnContext(ctx, "Failed to stop disabled MCP server", "name", name, "error", err)
 				}
 			}
 			continue
@@ -1224,7 +1224,7 @@ func (m *Manager) EnsureProjectServersLoaded(ctx context.Context, projectPath st
 		// Check if parent context is cancelled
 		select {
 		case <-ctx.Done():
-			logging.Warn("Context cancelled, skipping remaining MCP servers", "remaining", name)
+			logging.WarnContext(ctx, "Context cancelled, skipping remaining MCP servers", "remaining", name)
 			result.FailedServers = append(result.FailedServers, name)
 			result.Errors[name] = ctx.Err()
 			continue
@@ -1233,7 +1233,7 @@ func (m *Manager) EnsureProjectServersLoaded(ctx context.Context, projectPath st
 
 		if runningServers[name] {
 			m.trackProjectServer(normalizedProjectPath, name)
-			logging.Debug("MCP server already running; associated with requested project scope",
+			logging.DebugContext(ctx, "MCP server already running; associated with requested project scope",
 				"name", name,
 				"projectPath", normalizedProjectPath)
 			result.LoadedServers = append(result.LoadedServers, name)
@@ -1241,16 +1241,16 @@ func (m *Manager) EnsureProjectServersLoaded(ctx context.Context, projectPath st
 		}
 
 		if !m.shouldRetryServerLoad(name) {
-			logging.Debug("Skipping MCP server autoload due to retry cooldown", "name", name)
+			logging.DebugContext(ctx, "Skipping MCP server autoload due to retry cooldown", "name", name)
 			continue
 		}
 
 		// Give first-time package downloads enough time (npx/uvx can be slow)
 		serverCtx, cancel := context.WithTimeout(ctx, defaultProjectServerLoadTimeout)
 
-		logging.Debug("Loading MCP server from project config", "name", name)
+		logging.DebugContext(ctx, "Loading MCP server from project config", "name", name)
 		if err := m.AddServer(serverCtx, name, serverCfg); err != nil {
-			logging.Warn("Failed to load MCP server (will continue without it)", "name", name, "error", err)
+			logging.WarnContext(ctx, "Failed to load MCP server (will continue without it)", "name", name, "error", err)
 			result.FailedServers = append(result.FailedServers, name)
 			result.Errors[name] = err
 		} else {
@@ -1499,12 +1499,12 @@ func (m *Manager) loadProjectServersFromConfig(ctx context.Context, projectPath 
 		// This path is used by the daemon runtime where filesystem access is expected.
 		userServers = configloader.LoadMCPServersFromProjectScopes(projectPath)
 		if len(userServers) == 0 {
-			logging.Warn("Project config resolver is not configured; skipping MCP project autoload", "projectPath", projectPath)
+			logging.WarnContext(ctx, "Project config resolver is not configured; skipping MCP project autoload", "projectPath", projectPath)
 		}
 	} else {
 		cfg, err := resolver(ctx, projectPath)
 		if err != nil {
-			logging.Warn("Failed provider-backed project config resolution; skipping MCP project autoload",
+			logging.WarnContext(ctx, "Failed provider-backed project config resolution; skipping MCP project autoload",
 				"projectPath", projectPath,
 				"error", err)
 			// Fall back to filesystem-based config when the resolver fails.

@@ -6,14 +6,14 @@
 //
 // New hands a test its own database, migrated the production way, reachable
 // through BOTH data layers over ONE pgx pool: the forge ORM client the
-// internal/store queries take, and the hand/sqlc db.Repo they replace. A lane
-// that ports a query asserts the two agree on the same rows (writes through
-// one, reads through the other) until the sqlc twin is deleted; the porting
-// rules are in internal/db/SCHEMA.md.
+// internal/store queries take, and the hand db.Repo facade over them. The
+// query rules are in internal/db/SCHEMA.md.
 //
 // The database is a clone of a template built once per migration set
 // (forge pgtest.NewFromTemplate), so a test pays a CREATE DATABASE … TEMPLATE,
 // not a migration replay. pgtest opens pgx, production's driver.
+//
+//forge:exclude-contract: test harness over a real database, imported only by tests; nothing to fake behind it
 package storetest
 
 import (
@@ -57,12 +57,14 @@ type Env struct {
 	// Repo.ORM(): the two share one transaction, opened from either side
 	// (internal/db/SCHEMA.md, "One transaction, either layer").
 	ORM *orm.Client
-	// Repo is the hand/sqlc Repository over the same pool — the twin a
-	// ported query is checked against. Credential sealing is on, with a
+	// Repo is the hand Repository over the same pool, whose methods wrap
+	// the internal/store queries. Credential sealing is on, with a
 	// throwaway key, as in db.SetupTestDB.
 	Repo *db.Repo
 	// SQL is the shared pgx pool, for raw assertions.
 	SQL *sql.DB
+	// DSN names this test's database, for a second pool on it (Probe).
+	DSN string
 }
 
 // New returns a fresh migrated database for one test. It is DB-backed, so
@@ -93,8 +95,16 @@ func New(tb testing.TB) *Env {
 	if err != nil {
 		tb.Fatalf("storetest: repo: %v", err)
 	}
-	enableSealing(tb, repo, clone)
-	return &Env{ORM: repo.ORM(), Repo: repo, SQL: clone}
+	enableSealing(tb, repo)
+	var name string
+	if err := clone.QueryRow(`SELECT current_database()`).Scan(&name); err != nil {
+		tb.Fatalf("storetest: database name: %v", err)
+	}
+	dsn, err := withDatabase(base, name)
+	if err != nil {
+		tb.Fatalf("storetest: %v", err)
+	}
+	return &Env{ORM: repo.ORM(), Repo: repo, SQL: clone, DSN: dsn}
 }
 
 // buildTemplate migrates the empty template database through db.Migrate —
@@ -122,7 +132,7 @@ func buildTemplate(build *sql.DB, base string) error {
 
 // enableSealing gives the Repo a throwaway vault: provider keys and sign-in
 // tokens exist only sealed, so the twin cannot write them without one.
-func enableSealing(tb testing.TB, repo *db.Repo, conn *sql.DB) {
+func enableSealing(tb testing.TB, repo *db.Repo) {
 	tb.Helper()
 	key := make([]byte, 32)
 	if _, err := rand.Read(key); err != nil {
@@ -132,9 +142,7 @@ func enableSealing(tb testing.TB, repo *db.Repo, conn *sql.DB) {
 	if err != nil {
 		tb.Fatalf("storetest: parse vault key: %v", err)
 	}
-	if err := repo.EnableCredentialSealing(vault.New(vault.Deps{DB: conn, Keys: vault.NewEnvKeyWrapper(ring)})); err != nil {
-		tb.Fatalf("storetest: enable credential sealing: %v", err)
-	}
+	repo.EnableCredentialSealing(vault.NewInstrumented(vault.Deps{DB: repo.ORM(), Keys: vault.NewEnvKeyWrapper(ring)}))
 }
 
 var (

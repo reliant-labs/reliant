@@ -1,0 +1,78 @@
+{
+ "definitions": {
+  "user": {
+   "type": "object",
+   "properties": {
+    "login": {
+     "type": "string"
+    },
+    "id": {
+     "type": "integer"
+    }
+   }
+  },
+  "thing$created": {
+   "type": "object",
+   "properties": {
+    "action": {
+     "type": "string",
+     "enum": [
+      "created"
+     ]
+    },
+    "thing": {
+     "allOf": [
+      {
+       "type": "object",
+       "properties": {
+        "id": {
+         "type": "integer"
+        },
+        "name": {
+         "type": "string"
+        },
+        "notes": {
+         "type": [
+          "string",
+          "null"
+         ]
+        },
+        "owner": {
+         "$ref": "#/definitions/user"
+        },
+        "tags": {
+         "type": "array",
+         "items": {
+          "type": "object",
+          "properties": {
+           "name": {
+            "type": "string"
+           }
+          }
+         }
+        },
+        "draft": {
+         "type": "boolean"
+        }
+       }
+      }
+     ]
+    },
+    "sender": {
+     "$ref": "#/definitions/user"
+    }
+   }
+  },
+  "thing$event": {
+   "type": "object",
+   "properties": {
+    "ref": {
+     "type": "string"
+    },
+    "sender": {
+     "$ref": "#/definitions/user"
+    }
+   }
+  }
+ }
+}

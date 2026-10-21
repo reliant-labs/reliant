@@ -73,7 +73,7 @@ func (l *Launcher) ResolveChatWorktreeID(ctx context.Context, projectID string, 
 		Limit:     worktreeLookupLimit,
 	})
 	if err != nil {
-		logging.Error("Failed to list worktrees while resolving chat worktree", "error", err, "projectID", projectID)
+		logging.ErrorContext(ctx, "Failed to list worktrees while resolving chat worktree", "error", err, "projectID", projectID)
 		return nil, &InternalError{Reason: "failed to resolve project worktree", Err: err}
 	}
 	for _, worktree := range worktrees {
@@ -130,7 +130,7 @@ func (l *Launcher) GetEffectiveCheckout(ctx context.Context, chat *db.Chat) Chec
 			// branch chat against the wrong tree and looks like it worked. Make
 			// the failure visible; the caller still gets project path as a
 			// last resort, but the log names the broken invariant.
-			logging.Error("[getEffectiveWorkingPath] chat has worktree_id but worktree could not be resolved; falling back to project path",
+			logging.ErrorContext(ctx, "[getEffectiveWorkingPath] chat has worktree_id but worktree could not be resolved; falling back to project path",
 				"chatID", chat.ID, "worktreeID", *chat.WorktreeID, "error", err)
 		}
 	}

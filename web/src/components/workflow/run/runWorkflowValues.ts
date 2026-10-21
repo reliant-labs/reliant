@@ -22,7 +22,7 @@
 
 import type { Preset } from "@/api/preset-grpc";
 import type { InputDef } from "@/lib/inputHelpers";
-import { getInputDefault } from "@/lib/inputHelpers";
+import { getInputDefault, getInputMinItems, getInputMulti, isInputMarkedRequired, isIntegrationInput } from "@/lib/inputHelpers";
 import type { InputGroupDef } from "../WorkflowInputGroup";
 
 export interface RunWorkflowValue {
@@ -125,10 +125,13 @@ export function presetFlatValues(
 
 /**
  * Whether the server will reject a run that leaves this input unset — the
- * client mirror of model.IsInputRequired: no default, or a model default that
+ * client mirror of model.IsInputRequired: `required: true`, no default, a
+ * multi input that must hold at least one value, or a model default that
  * selects nothing.
  */
 export function isRequiredInput(schema: InputDef): boolean {
+  if (isInputMarkedRequired(schema)) return true;
+  if (isIntegrationInput(schema) && getInputMulti(schema) && (getInputMinItems(schema) ?? 0) > 0) return true;
   const fallback = getInputDefault(schema);
   if (fallback === undefined || fallback === null) return true;
   if (schema.type === "model" && isPlainObject(fallback)) {
@@ -140,6 +143,7 @@ export function isRequiredInput(schema: InputDef): boolean {
 
 function isEmptyValue(value: unknown): boolean {
   if (value === undefined || value === null || value === "") return true;
+  if (Array.isArray(value)) return value.length === 0;
   if (isPlainObject(value) && "id" in value) return !value.id;
   return false;
 }
@@ -177,6 +181,12 @@ function splitList(text: string): string[] {
  */
 export function coerceInputValue(schema: InputDef, raw: unknown): unknown {
   if (raw === undefined || raw === null) return undefined;
+  // The picker already speaks the stored shape: a string, or a list of them.
+  // An emptied list is "no override", so the default (or the required error) applies.
+  if (isIntegrationInput(schema)) {
+    if (Array.isArray(raw)) return raw.length === 0 ? undefined : raw.map(String);
+    return raw === "" ? undefined : raw;
+  }
   switch (schema.type) {
     case "model":
       if (typeof raw === "string") return raw ? { id: raw } : undefined;

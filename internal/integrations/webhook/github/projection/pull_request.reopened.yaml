@@ -1,0 +1,14 @@
+# Pull request reopened: the projection of the GitHub `pull_request.reopened` webhook.
+id: pull_request.reopened
+event: pull_request.reopened
+display_name: Pull request reopened
+summary: A closed pull request was reopened.
+description: >-
+  Fires when a closed pull request is reopened. Match base_branch or branch
+  like pull_request.opened.
+keywords: [pr, reopen]
+attributes:
+  - { group: pr }
+data:
+  number: integer
+  pull_request: { kind: object, object: pr }

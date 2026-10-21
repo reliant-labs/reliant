@@ -32,7 +32,7 @@ func insertTestWorkflowAt(
 
 // insertTerminalThread creates a threads row owned by workflowID and stamps it
 // terminal, mirroring what the reaps leave behind.
-func insertTerminalThread(t *testing.T, repo *Repo, id, chatID, workflowID string, status int32, completedAt time.Time) {
+func insertTerminalThread(t *testing.T, repo *Repo, id, chatID, workflowID string, status ThreadStatus, completedAt time.Time) {
 	t.Helper()
 	insertTestThreadForWorkflow(t, repo, id, chatID, workflowID, ThreadStatusRunning)
 	if _, err := repo.UpdateThreadStatus(context.Background(), id, status, &completedAt); err != nil {
@@ -154,7 +154,7 @@ func TestReviveSubtreeLiveAt(t *testing.T) {
 		wantState  WorkflowState
 		wantReason WorkflowStopReason
 		threadID   string
-		wantThread int32
+		wantThread ThreadStatus
 	}{
 		{"finished before the reset point", finishedBefore, WorkflowStateStopped, StopReasonCompleted, "th-sr-finished", ThreadStatusCompleted},
 		{"created after the reset point", createdAfter, WorkflowStateStopped, StopReasonFailed, "th-sr-after", ThreadStatusFailed},

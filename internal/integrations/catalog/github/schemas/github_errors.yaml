@@ -1,0 +1,38 @@
+- status: 401
+  retryable: false
+  message: "GitHub rejected the credential ({{ response.?message.orValue('bad credentials') }}): reconnect GitHub in Settings."
+- status: 403
+  when: >-
+    headers[?'x-ratelimit-remaining'].orValue('') == '0' ||
+    headers[?'retry-after'].hasValue() ||
+    (type(response) == map && type(response.?message.orValue(null)) == string &&
+     response.message.matches('(?i)rate limit'))
+  retryable: true
+  message: { $ref: github_rate_limited.yaml }
+- status: 429
+  retryable: true
+  message: { $ref: github_rate_limited.yaml }
+- status: 403
+  retryable: false
+  message: >-
+    GitHub refused the request: {{ response.?message.orValue('forbidden') }}.
+    The connection lacks permission for this action (the GitHub App's
+    permissions, its installation, or your role on the repository).
+- status: 404
+  retryable: false
+  message: >-
+    GitHub returned not found: the resource does not exist, or this
+    connection cannot see it (is the Reliant GitHub App installed on the
+    repository?).
+- status: 410
+  retryable: false
+  message: "GitHub returned gone: {{ response.?message.orValue('this feature is disabled for the repository') }}."
+- status: 422
+  retryable: false
+  message: >-
+    GitHub validation failed: {{ response.?message.orValue('Validation Failed') }}.
+    Errors: {{ type(response) == map && type(response.?errors.orValue(null)) == list ?
+      response.errors.map(e, type(e) == string ? e :
+        (type(e.?field.orValue(null)) == string ? e.field + ': ' : '') +
+        (type(e.?message.orValue(null)) == string ? e.message :
+         type(e.?code.orValue(null)) == string ? e.code : 'invalid')) : [] }}

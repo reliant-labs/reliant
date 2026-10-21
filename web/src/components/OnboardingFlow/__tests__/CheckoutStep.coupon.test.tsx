@@ -118,8 +118,7 @@ vi.mock("@/hooks/useCloudBillingQueries", () => ({
           displayOrder: 1,
           structuredLimits: {
             allowedDaemonSizes: ["small"],
-            daemonComputeIncludedMinutes: 960,
-            daemonOveragePerMinuteCents: 2,
+            includedSmallDaemonHours: 16n,
           },
         },
       ],

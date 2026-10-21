@@ -176,9 +176,9 @@ func systemDocker(getenv func(string) string) dockerAPI {
 	host := strings.TrimSpace(getenv("DOCKER_HOST"))
 	switch {
 	case host == "":
-		return dockerengine.New(dockerengine.Deps{SocketPath: "/var/run/docker.sock"})
+		return dockerengine.NewInstrumented(dockerengine.Deps{SocketPath: "/var/run/docker.sock"})
 	case strings.HasPrefix(host, "unix://"):
-		return dockerengine.New(dockerengine.Deps{SocketPath: strings.TrimPrefix(host, "unix://")})
+		return dockerengine.NewInstrumented(dockerengine.Deps{SocketPath: strings.TrimPrefix(host, "unix://")})
 	default:
 		return nil
 	}

@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/crypto"
+	"github.com/reliant-labs/forge/pkg/observe/dbtrace"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/vault"
 
@@ -147,7 +148,7 @@ func setupTestRepoFrom(t *testing.T, baseDSN, template string) (*Repo, *sql.DB, 
 		t.Fatalf("failed to create per-test database: %v", err)
 	}
 
-	db, err := sql.Open("pgx", dsn)
+	db, err := dbtrace.Open("pgx", dsn)
 	if err != nil {
 		dropTestDB(name)
 		t.Fatalf("failed to open database: %v", err)
@@ -169,9 +170,7 @@ func setupTestRepoFrom(t *testing.T, baseDSN, template string) (*Repo, *sql.DB, 
 	if err != nil {
 		t.Fatalf("parse test vault key: %v", err)
 	}
-	if err := repo.EnableCredentialSealing(vault.New(vault.Deps{DB: db, Keys: vault.NewEnvKeyWrapper(ring)})); err != nil {
-		t.Fatalf("enable api key sealing: %v", err)
-	}
+	repo.EnableCredentialSealing(vault.NewInstrumented(vault.Deps{DB: repo.ORM(), Keys: vault.NewEnvKeyWrapper(ring)}))
 	cleanup := func() {
 		db.Close()
 		dropTestDB(name)
@@ -306,16 +305,25 @@ func requireTestDB() bool {
 // never contacts the server, so without this a dead database surfaces later as
 // a confusing failure inside migration or truncation.
 func probeDSN(dsn string) error {
+	// forge:lint-disable-next-line forge-tracing-raw-sql-open: test-only reachability probe, opened and closed before any test runs
 	conn, err := sql.Open("pgx", dsn)
 	if err != nil {
 		return err
 	}
 	defer conn.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), probeDeadline)
 	defer cancel()
 	return conn.PingContext(ctx)
 }
+
+// probeDeadline bounds the reachability probe. A server that is not there
+// fails at once (connection refused, unknown host), so this only ever waits on
+// a server that IS there but slow: a shared test Postgres under load takes
+// seconds to complete its auth handshake. A 3s guess failed REQUIRE_TEST_DB
+// lanes with "failed SASL auth: timeout" against a healthy server; a test that
+// waits a little longer for its database beats one that fails without running.
+const probeDeadline = 60 * time.Second
 
 // redactDSN strips the password so a failure message can be pasted into an
 // issue without leaking a credential.
@@ -361,6 +369,7 @@ func createTemplateDB(baseDSN string) error {
 	// CREATE DATABASE cannot run inside the target database, so all DDL goes
 	// through a pool on the maintenance database. This pool lives for the whole
 	// process: every per-test create and drop reuses it.
+	// forge:lint-disable-next-line forge-tracing-raw-sql-open: test-only maintenance pool for CREATE/DROP DATABASE, never in a served request
 	admin, err := sql.Open("pgx", baseDSN)
 	if err != nil {
 		return fmt.Errorf("open admin connection: %w", err)
@@ -392,6 +401,7 @@ func createTemplateDB(baseDSN string) error {
 	if _, err := Migrate(context.Background(), templateDSN, slog.New(slog.DiscardHandler)); err != nil {
 		return fmt.Errorf("migrate template database: %w", err)
 	}
+	// forge:lint-disable-next-line forge-tracing-raw-sql-open: test-only template seeding, never in a served request
 	tplDB, err := sql.Open("pgx", templateDSN)
 	if err != nil {
 		return fmt.Errorf("open template database: %w", err)

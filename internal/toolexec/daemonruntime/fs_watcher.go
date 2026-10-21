@@ -27,7 +27,7 @@ func (d *daemonClient) runFileTreeWatcher(ctx context.Context, projectPath strin
 	for {
 		hash, err := hashFileTree(ctx, projectPath)
 		if err != nil {
-			logging.Debug(logPrefix+" File tree hash error", "projectPath", projectPath, "error", err)
+			logging.DebugContext(ctx, logPrefix+" File tree hash error", "projectPath", projectPath, "error", err)
 		} else {
 			if lastHash != "" && hash != lastHash {
 				msg := &reliantv1.DaemonMessage{
@@ -39,7 +39,7 @@ func (d *daemonClient) runFileTreeWatcher(ctx context.Context, projectPath strin
 					},
 				}
 				if err := d.send(msg); err != nil {
-					logging.Warn(logPrefix+" Failed to send file system changed", "projectPath", projectPath, "error", err)
+					logging.WarnContext(ctx, logPrefix+" Failed to send file system changed", "projectPath", projectPath, "error", err)
 				}
 			}
 			lastHash = hash
@@ -138,7 +138,7 @@ func hashWalkDir(ctx context.Context, projectPath string) (string, error) {
 		return "", err
 	}
 	if truncated {
-		logging.Debug(logPrefix+" File tree hash truncated by node budget",
+		logging.DebugContext(ctx, logPrefix+" File tree hash truncated by node budget",
 			"projectPath", projectPath, "maxNodes", filetree.MaxTreeNodes)
 	}
 

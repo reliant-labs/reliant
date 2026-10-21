@@ -1,0 +1,21 @@
+fields:
+  number: integer
+  title: string
+  body: { kind: string, cap: true }
+  state: { kind: string, enum: [open, closed] }
+  draft: boolean
+  merged: { kind: boolean, optional: "present on the full pull request, absent from the slimmer one review events carry" }
+  merged_at: { kind: string, omit_empty: true }
+  merge_commit_sha: { kind: string, omit_empty: true }
+  html_url: string
+  user: { kind: object, object: user }
+  head: { kind: object, object: ref }
+  base: { kind: object, object: ref }
+  labels: { kind: names, pluck: name }
+  requested_reviewers: { kind: names, pluck: login }
+  additions: { kind: integer, omit_empty: true, optional: "present on the full pull request, absent from the slimmer one review events carry" }
+  deletions: { kind: integer, omit_empty: true, optional: "present on the full pull request, absent from the slimmer one review events carry" }
+  changed_files: { kind: integer, omit_empty: true, optional: "present on the full pull request, absent from the slimmer one review events carry" }
+  commits: { kind: integer, omit_empty: true, optional: "present on the full pull request, absent from the slimmer one review events carry" }
+  created_at: string
+  updated_at: string

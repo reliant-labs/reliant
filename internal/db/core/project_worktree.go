@@ -1,7 +1,6 @@
 package core
 
 import (
-	"context"
 	"errors"
 	"time"
 )
@@ -263,86 +262,4 @@ type WorktreeFilters struct {
 	MainOnly bool
 	Limit    int
 	Offset   int
-}
-
-// ProjectStore is the shared contract for project persistence across drivers.
-type ProjectStore interface {
-	CreateProject(ctx context.Context, project *Project) error
-	GetProject(ctx context.Context, id string) (*Project, error)
-	GetProjectByPath(ctx context.Context, path string) (*Project, error)
-	GetProjectByPathAndUser(ctx context.Context, path, userID string) (*Project, error)
-	GetProjectByRemoteURLAndUser(ctx context.Context, remoteURL, userID string) (*Project, error)
-	GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*Project, error)
-	ListProjects(ctx context.Context, filters ProjectFilters) ([]*Project, error)
-	UpdateProject(ctx context.Context, project *Project, userID string) error
-	// SetProjectForgeName records forge's name for a project and marks it a
-	// forge project. Reports whether the row changed; a repeat with the same
-	// name is a no-op, so it is safe to call on every forge read.
-	SetProjectForgeName(ctx context.Context, id, userID, forgeProjectName string) (bool, error)
-	TouchProject(ctx context.Context, id string, userID string) error
-	DeleteProject(ctx context.Context, id string, userID string) error
-
-	// Project ↔ Daemon installations. A row exists for each daemon that has
-	// a local clone of the project.
-	UpsertProjectDaemon(ctx context.Context, projectID, daemonID, path string, defaultBranch *string) error
-	// UpsertQueuedProjectDaemon records a clone that is queued but has not
-	// run; path is where the checkout WILL be.
-	UpsertQueuedProjectDaemon(ctx context.Context, projectID, daemonID, path string, defaultBranch *string, requestID string) error
-	// ResolveQueuedProjectDaemon applies the outcome the daemon reported,
-	// keyed by request id. A non-empty installErr marks the row failed.
-	ResolveQueuedProjectDaemon(ctx context.Context, requestID, installErr string) error
-	// MarkProjectDaemonInstalled settles a queued clone from a filesystem
-	// announcement, which names the path but carries no request id.
-	MarkProjectDaemonInstalled(ctx context.Context, projectID, daemonID string) error
-	ListProjectDaemonsForProject(ctx context.Context, projectID string) ([]*ProjectDaemon, error)
-	ListProjectDaemonsForDaemon(ctx context.Context, daemonID string) ([]*ProjectDaemon, error)
-	DeleteProjectDaemon(ctx context.Context, projectID, daemonID string) error
-}
-
-// WorktreeStore is the shared contract for worktree persistence across drivers.
-type WorktreeStore interface {
-	CreateWorktree(ctx context.Context, worktree *Worktree) error
-	GetWorktree(ctx context.Context, id string) (*Worktree, error)
-	GetWorktreeByPath(ctx context.Context, path string) (*Worktree, error)
-	// GetLiveWorktreeByName returns the project's unarchived worktree called
-	// name, or (nil, nil). At most one exists.
-	GetLiveWorktreeByName(ctx context.Context, projectID, name string) (*Worktree, error)
-	// ListWorktreesByBranch returns every row of the project recorded against
-	// the branch, archived ones included.
-	ListWorktreesByBranch(ctx context.Context, projectID, branch string) ([]*Worktree, error)
-	// GetWorktreeByIdempotencyKey returns a prior create's worktree for this
-	// key, or (nil, nil) when there is none.
-	GetWorktreeByIdempotencyKey(ctx context.Context, projectID, key string) (*Worktree, error)
-	ListWorktrees(ctx context.Context, filters WorktreeFilters) ([]*Worktree, error)
-	// ListWorktreesByIDs returns the rows with these ids, archived ones
-	// included, in no particular order. Unknown ids are skipped.
-	ListWorktreesByIDs(ctx context.Context, ids []string) ([]*Worktree, error)
-	UpdateWorktree(ctx context.Context, worktree *Worktree) error
-	UpdateWorktreeCleanupMetadata(ctx context.Context, id string, metadata *CleanupMetadata) error
-	// ListWorktreesForReclaim returns every non-main workspace that may still
-	// have a directory on its daemon: archived ones to remove, active ones to
-	// lock. Rows whose directory is already settled are excluded.
-	ListWorktreesForReclaim(ctx context.Context) ([]*ReclaimCandidate, error)
-	// AdoptWorktreeDaemon records daemonID on a row that has none. A no-op when
-	// the row already names a daemon.
-	AdoptWorktreeDaemon(ctx context.Context, id, daemonID string) error
-	// ListLiveWorktreePathsForUser returns the path and project of every
-	// unarchived row the user owns.
-	ListLiveWorktreePathsForUser(ctx context.Context, userID string) ([]WorktreePath, error)
-	// ListHeldWorktreesForUser returns the user's archived workspaces a daemon
-	// has recorded as held (not auto-removed) and not yet deleted.
-	ListHeldWorktreesForUser(ctx context.Context, userID string) ([]*HeldWorktree, error)
-	DeleteWorktree(ctx context.Context, id string) error
-	ArchiveWorktree(ctx context.Context, id string) error
-	UnarchiveWorktree(ctx context.Context, id string) error
-}
-
-// RepoStore is the shared contract for nested-repo persistence across drivers.
-type RepoStore interface {
-	CreateRepo(ctx context.Context, repo *Repo) error
-	GetRepo(ctx context.Context, id string) (*Repo, error)
-	GetRepoByProjectAndPath(ctx context.Context, projectID, relativePath string) (*Repo, error)
-	ListReposByProject(ctx context.Context, projectID string) ([]*Repo, error)
-	UpdateRepo(ctx context.Context, repo *Repo) error
-	DeleteRepo(ctx context.Context, id string) error
 }

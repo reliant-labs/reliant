@@ -459,7 +459,7 @@ func (s *Server) handleOAuthStart(w http.ResponseWriter, r *http.Request) {
 		releaseFlow()
 		cancelFlow()
 		if err != nil {
-			logging.Error("OAuth callback failed", "error", err)
+			logging.ErrorContext(r.Context(), "OAuth callback failed", "error", err)
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 			return
 		}

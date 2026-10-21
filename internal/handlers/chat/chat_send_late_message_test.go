@@ -164,7 +164,7 @@ func TestSendMessage_RunThatClosesBeforeItsWakeGetsARunStarted(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	ctx, fx := setupAbsorbFixture(t, repo, "test-user", db.Active())
-	threadStatusAtStart := int32(-1)
+	threadStatusAtStart := db.ThreadStatus(-1)
 	temporal := &closingRunTemporalClient{
 		closeOnWake: true,
 		onClose: func() {
@@ -240,7 +240,7 @@ func TestSendAgentMessage_RunThatClosesBeforeItsWakeGetsARunStarted(t *testing.T
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	ctx, fx := setupAbsorbFixture(t, repo, "test-user", db.Active())
-	threadStatusAtStart := int32(-1)
+	threadStatusAtStart := db.ThreadStatus(-1)
 	temporal := &closingRunTemporalClient{
 		closeOnWake: true,
 		onClose: func() {
@@ -293,7 +293,7 @@ func TestSendAgentMessage_EndedMainRunGetsARunStarted(t *testing.T) {
 	for _, tc := range []struct {
 		name         string
 		runStatus    db.WorkflowStatus
-		threadStatus int32
+		threadStatus db.ThreadStatus
 		// stillOpen is a run Temporal has not closed yet.
 		stillOpen bool
 	}{
@@ -313,7 +313,7 @@ func TestSendAgentMessage_EndedMainRunGetsARunStarted(t *testing.T) {
 				_, err := repo.UpdateThreadStatus(ctx, fx.rootThreadID, tc.threadStatus, &now)
 				require.NoError(t, err)
 			}
-			threadStatusAtStart := int32(-1)
+			threadStatusAtStart := db.ThreadStatus(-1)
 			temporal := &closingRunTemporalClient{
 				closed: !tc.stillOpen,
 				lastInputs: map[string]interface{}{

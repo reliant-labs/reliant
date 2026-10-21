@@ -256,6 +256,19 @@ Your order (a)→(b)→(c)→(d)→(e) holds with **three changes**:
   on `server`, so `reliant server api --db-driver …` still parses. Pin this with a test that
   diffs `reliant server <role> --help` flag sets before and after, and the env-var census per role.
 - **Conflicts:** none with P5b. Lane A (#1123) has merged.
+- **As landed:** `ServerProcessConfig` (server_config.proto) holds every shared block except
+  the database. `DatabaseConfig` (db_config.proto) is a second subtree config, over `server`
+  **and** `db migrate`, so the migration commands load the same declaration (the
+  `DbMigrate*Config` messages are gone). Its leaves are flat and carry forge's serve-field
+  names (`database_url`, `db_max_open_conns`, `db_max_idle_conns`, `db_connect_timeout`), and
+  each role's drain budget is flat `pre_stop_delay` / `shutdown_timeout`, so forge's F2
+  `serverkitConfig` finds them unaided. Two keep reliant's names, and R3's owned
+  `serverkitConfig` maps them: `health_port` (forge's `port` is the API port, which for
+  reliant is `grpc_port`; the probe address must also honour `bind_address`) and the `tls`
+  block (forge's `tls_cert_path` / `tls_key_path` would serve TLS on the probe address, but
+  `HEALTH_PORT` is plaintext). Every env var and flag name is unchanged. Superset only: the
+  gateway now also loads temporal, streaming, integrations, sentry, analytics, llm and
+  preview, and the worker loads tls. Pinned by `cmd/reliant/cmd/server_role_surface_test.go`.
 
 ### R2: (a) the cmd move *(can start now, after the re-pin)*
 - `git mv cmd/reliant/commands cmd/reliant/cmd`, then `package cmd` / `cmd_test`. Update

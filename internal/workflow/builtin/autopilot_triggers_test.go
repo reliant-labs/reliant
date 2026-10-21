@@ -2,6 +2,7 @@
 package builtin_test
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -11,6 +12,8 @@ import (
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/triggers"
 	"github.com/reliant-labs/reliant/internal/triggers/triggerspec"
 	"github.com/reliant-labs/reliant/internal/workflow/builtin"
 	"github.com/reliant-labs/reliant/internal/workflow/celeval"
@@ -65,6 +68,21 @@ func activation(wf *reliantv1.Workflow, wt *reliantv1.WorkflowTrigger, params ma
 		v2.ActivationParams(wf.GetInputs(), wt.GetInputs(), params))
 }
 
+// routed reports whether an event reaches the activation at all: the pre-row
+// gate intake applies before any filter runs, over the config an activation
+// holding params stores (the declaration plus its typed scope resolved from
+// params). The Autopilot pack scopes by repository here, with
+// `match: {repository: {input: repos}}`, not in the filter.
+func routed(t *testing.T, wf *reliantv1.Workflow, trigger string, params map[string]any, eventType string, attrs map[string]string) bool {
+	t.Helper()
+	name := trigger
+	decl, err := triggers.DeclarationIn(wf, &core.Trigger{Workflow: wf.GetName(), WorkflowTrigger: &name, Params: params})
+	require.NoError(t, err)
+	var cfg core.IntegrationConfig
+	require.NoError(t, json.Unmarshal(decl.ProjectedConfig(params), &cfg))
+	return triggers.IntegrationEventMatches(cfg, eventType, attrs)
+}
+
 func sender(id string, verified bool) map[string]any {
 	return map[string]any{"kind": "github", "id": id, "display_name": "someone", "verified": verified}
 }
@@ -83,17 +101,31 @@ func prPayload(repo string, draft bool, labels ...string) map[string]any {
 	}
 }
 
-func TestPRReviewTriggers_RepoAllowlistIsActivationParams(t *testing.T) {
+func TestPRReviewTriggers_RepoScopeIsActivationParams(t *testing.T) {
 	t.Parallel()
 	wf := packWorkflow(t, "autopilot-pr-review")
 	params := map[string]any{"repos": []any{"acme/app"}}
+	opened := func(repo string) map[string]string { return map[string]string{"repository": repo} }
 
-	assert.True(t, matched(t, fire(t, wf, "pr-opened", prPayload("acme/app", false), sender("1", true), params)))
-	assert.False(t, matched(t, fire(t, wf, "pr-opened", prPayload("acme/other", false), sender("1", true), params)),
-		"a repository outside this activation's repos is never reviewed")
+	assert.True(t, routed(t, wf, "pr-opened", params, "pull_request.opened", opened("acme/app")))
+	assert.False(t, routed(t, wf, "pr-opened", params, "pull_request.opened", opened("acme/other")),
+		"a repository outside this activation's repos is never reviewed, and no event row is written for it")
+	assert.False(t, routed(t, wf, "pr-opened", params, "pull_request.opened", map[string]string{}),
+		"an event that does not say which repository it is about never reaches a scoped activation")
 
-	// No repos set: the default is an empty list, which admits nothing instead of everything.
-	assert.False(t, matched(t, fire(t, wf, "pr-opened", prPayload("acme/app", false), sender("1", true), nil)))
+	// Each activation is scoped by its own repos.
+	both := map[string]any{"repos": []any{"acme/app", "acme/other"}}
+	assert.True(t, routed(t, wf, "pr-opened", both, "pull_request.opened", opened("acme/other")))
+
+	// No repos set: the scope is empty and admits nothing instead of everything. (repos is required, so
+	// such an activation is NEEDS_SETUP; see TestAutopilotActivationsWithNoParamsNeedSetup.)
+	assert.False(t, routed(t, wf, "pr-opened", nil, "pull_request.opened", opened("acme/app")))
+	assert.False(t, routed(t, wf, "pr-opened", map[string]any{"repos": []any{}}, "pull_request.opened", opened("acme/app")))
+
+	// The filter no longer carries the repository; the draft and label rules remain.
+	run := fire(t, wf, "pr-opened", prPayload("acme/app", false), sender("1", true), params)
+	assert.True(t, matched(t, run))
+	assert.NotContains(t, triggerNamed(t, wf, "pr-opened").GetFilter(), "params.repos")
 }
 
 func TestPRReviewTriggers_DraftsAndSkipLabel(t *testing.T) {
@@ -155,8 +187,9 @@ func TestPRReviewTriggers_ReReviewCommentTrust(t *testing.T) {
 	assert.False(t, matched(t, fire(t, wf, "re-review-comment", ask, sender("111", false), params)), "an unverified sender is never trusted, even with the owner's id")
 	assert.False(t, matched(t, fire(t, wf, "re-review-comment", commentPayload("acme/app", "looks good"), sender("111", true), params)),
 		"only the exact phrase asks")
-	assert.False(t, matched(t, fire(t, wf, "re-review-comment", commentPayload("acme/other", "/autopilot re-review"), sender("111", true), params)),
+	assert.False(t, routed(t, wf, "re-review-comment", params, "issue_comment.created", map[string]string{"repository": "acme/other", "is_pull_request": "true"}),
 		"and only in an enabled repository")
+	assert.True(t, routed(t, wf, "re-review-comment", params, "issue_comment.created", map[string]string{"repository": "acme/app", "is_pull_request": "true"}))
 
 	// With no trusted_ids set, only the owner can ask.
 	solo := map[string]any{"repos": []any{"acme/app"}}
@@ -198,7 +231,8 @@ func TestIssueWorkerTriggers_OnlyATrustedVerifiedLabelOpensAnIssue(t *testing.T)
 	assert.False(t, matched(t, fire(t, wf, "ready-label", ev, sender("333", true), params)), "a repo admin who is not trusted starts nothing")
 	assert.False(t, matched(t, fire(t, wf, "ready-label", ev, sender("111", false), params)), "verification is required, not just the id")
 	assert.False(t, matched(t, fire(t, wf, "ready-label", labeledIssue("acme/app", "bug"), sender("111", true), params)), "another label opens nothing")
-	assert.False(t, matched(t, fire(t, wf, "ready-label", labeledIssue("acme/other", "agent:ready"), sender("111", true), params)))
+	assert.False(t, routed(t, wf, "ready-label", params, "issues.labeled", map[string]string{"repository": "acme/other"}), "only in an enabled repository")
+	assert.True(t, routed(t, wf, "ready-label", params, "issues.labeled", map[string]string{"repository": "acme/app"}))
 
 	renamed := map[string]any{"repos": []any{"acme/app"}, "ready_label": "ai:go"}
 	assert.True(t, matched(t, fire(t, wf, "ready-label", labeledIssue("acme/app", "ai:go"), sender("111", true), renamed)))
@@ -276,7 +310,8 @@ func TestReviewResponderTriggers_FeedbackTrust(t *testing.T) {
 		"agent:respond opts any PR in")
 	assert.False(t, matched(t, fire(t, wf, "review-submitted", reviewPayload("acme/app", "approved", "x", "agent:authored"), sender("111", true), params)),
 		"an approval is not feedback")
-	assert.False(t, matched(t, fire(t, wf, "review-submitted", reviewPayload("acme/other", "changes_requested", "x", "agent:authored"), sender("111", true), params)))
+	assert.False(t, routed(t, wf, "review-submitted", params, "pull_request_review.submitted", map[string]string{"repository": "acme/other"}), "only in an enabled repository")
+	assert.True(t, routed(t, wf, "review-submitted", params, "pull_request_review.submitted", map[string]string{"repository": "acme/app"}))
 }
 
 func TestReviewResponderTriggers_ItsOwnWritesAreNotFeedbackButTheReviewerIs(t *testing.T) {

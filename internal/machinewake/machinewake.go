@@ -99,14 +99,14 @@ func (w waker) wake(ctx context.Context, userID string, target Target) (string, 
 	defer cancel()
 	res, err := w.resumer.Wake(wakeCtx, userID, selector)
 	if err != nil {
-		logging.Warn("[MachineWake] could not wake the machine a request needed",
+		logging.WarnContext(ctx, "[MachineWake] could not wake the machine a request needed",
 			"error", err, "user_id", userID, "daemon_id", target.DaemonID)
 		return "", false
 	}
 	if !res.Resumed {
 		return "", false
 	}
-	logging.Info("[MachineWake] woke the machine a request needed",
+	logging.InfoContext(ctx, "[MachineWake] woke the machine a request needed",
 		"user_id", userID, "daemon_id", res.DaemonID)
 	return res.DaemonID, true
 }
@@ -123,7 +123,7 @@ func (w waker) ownedBy(ctx context.Context, userID, daemonID string) bool {
 		return false
 	}
 	if daemon.UserID != userID {
-		logging.Warn("[MachineWake] refusing to wake a machine the caller does not own",
+		logging.WarnContext(ctx, "[MachineWake] refusing to wake a machine the caller does not own",
 			"user_id", userID, "daemon_id", daemonID)
 		return false
 	}

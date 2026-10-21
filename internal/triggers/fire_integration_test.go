@@ -4,6 +4,7 @@ package triggers
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -11,6 +12,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/client"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -29,10 +32,19 @@ import (
 
 // flakyStarter fails root-workflow starts while down is set, standing in for
 // Temporal being unreachable after the launch committed.
+//
+// It keys runs by workflow id the way Temporal does, because the launcher
+// relies on that: a launch that loses the race for an event resumes the
+// winner's start (it cannot tell "about to start" from "died before
+// starting"), and USE_EXISTING attaches that second start to the run already
+// going. Counting calls instead of executions made a correct resume look like
+// a second run whenever the loser read the root before the winner marked it
+// active.
 type flakyStarter struct {
-	mu     sync.Mutex
-	down   bool
-	starts int
+	mu      sync.Mutex
+	down    bool
+	starts  int
+	running map[string]string // workflow id -> run id
 }
 
 func (s *flakyStarter) setDown(down bool) {
@@ -50,7 +62,22 @@ func (s *flakyStarter) ExecuteWorkflow(
 		if s.down {
 			return nil, errors.New("temporal unavailable")
 		}
+		// Nothing here ever completes, so a known id is a running execution.
+		if runID, ok := s.running[options.ID]; ok {
+			switch options.WorkflowIDConflictPolicy {
+			case enums.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING:
+				return &stubRun{id: options.ID, runID: runID}, nil
+			case enums.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING:
+			default:
+				return nil, serviceerror.NewWorkflowExecutionAlreadyStarted("workflow already running", "", runID)
+			}
+		}
 		s.starts++
+		if s.running == nil {
+			s.running = make(map[string]string)
+		}
+		s.running[options.ID] = fmt.Sprintf("run-%s-%d", options.ID, s.starts)
+		return &stubRun{id: options.ID, runID: s.running[options.ID]}, nil
 	}
 	return &stubRun{id: options.ID, runID: "run-" + options.ID}, nil
 }

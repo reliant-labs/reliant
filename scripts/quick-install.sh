@@ -22,10 +22,6 @@ if [ ! -d "electron/node_modules" ]; then
     cd electron && npm install && cd "$PROJECT_ROOT"
 fi
 
-# Generate Go code (DB schema + sqlc for both drivers, then docgen)
-echo "📦 Regenerating DB schema and sqlc code (SQLite + Postgres)..."
-(cd "$PROJECT_ROOT" && make db-regenerate)
-
 echo "📦 Generating Go docs/reference code..."
 go run tools/docgen/celref/main.go internal/workflow/v3 internal/workflow/v3/reference/cel_reference.go
 go run tools/docgen/refcheck/main.go

@@ -485,7 +485,7 @@ func (o *OpenaiClient) StreamResponse(ctx context.Context, prompts []string, mes
 				} else if currentContent != "" {
 					// Stream ended without proper completion data but we have content
 					// This can happen with OpenRouter when the stream is interrupted
-					logging.WarnContext(ctx, "Stream ended without completion choices but has content (length: %d) - treating as interrupted stream", len(currentContent))
+					logging.WarnContext(ctx, "Stream ended without completion choices but has content - treating as interrupted stream", "content_length", len(currentContent))
 					// Send an error event to trigger retry
 					eventChan <- llm.DriverEvent{
 						Type:  llm.EventError,

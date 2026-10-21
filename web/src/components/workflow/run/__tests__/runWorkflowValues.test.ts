@@ -64,6 +64,23 @@ describe("required inputs", () => {
     expect(isRequiredInput(input("model", "modelInput", { default: { tags: ["flagship"] } }))).toBe(false);
   });
 
+  it("honours required: true, and a typed list that must hold a value", () => {
+    expect(isRequiredInput(input("string", "stringInput", { base: { required: true } }))).toBe(true);
+    expect(isRequiredInput(input("github.repository", "integrationInput", { multi: true, minItems: 1 }))).toBe(true);
+    expect(isRequiredInput(input("github.user", "integrationInput", { multi: true, default: { kind: { case: "listValue", value: { values: [] } } } }))).toBe(false);
+    // An empty list is missing, not a value: the bug that let `repos: []` turn on.
+    const groups = [{ name: "", label: "", inputs: [{ name: "repos", schema: input("github.repository", "integrationInput", { multi: true, minItems: 1 }) }] }];
+    expect(missingRequiredInputs(groups, { repos: [] }).map((i) => i.name)).toEqual(["repos"]);
+    expect(missingRequiredInputs(groups, { repos: ["acme/api"] })).toEqual([]);
+  });
+
+  it("keeps a typed input's value as the picker gives it; an emptied list is no override", () => {
+    const repos = input("github.repository", "integrationInput", { multi: true });
+    expect(coerceInputValue(repos, ["acme/api"])).toEqual(["acme/api"]);
+    expect(coerceInputValue(repos, [])).toBeUndefined();
+    expect(coerceInputValue(input("github.label", "integrationInput"), "")).toBeUndefined();
+  });
+
   it("counts a value from a preset or an override, and an empty model as unset", () => {
     const groups = [
       {

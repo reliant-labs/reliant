@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/reliant-labs/forge/pkg/crypto"
+	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/vault"
 )
@@ -32,13 +33,23 @@ func newKeyring(t *testing.T, ids ...string) string {
 
 func newVault(t *testing.T) (vault.Service, *sql.DB) {
 	t.Helper()
-	_, raw, cleanup := db.SetupTestDBWithRawDB(t)
+	repo, raw, cleanup := db.SetupTestDBWithRawDB(t)
 	t.Cleanup(cleanup)
 	ring, err := crypto.ParseKeyring(newKeyring(t, "v1"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	return vault.New(vault.Deps{DB: raw, Keys: vault.NewEnvKeyWrapper(ring)}), raw
+	return vault.New(vault.Deps{DB: repo.ORM(), Keys: vault.NewEnvKeyWrapper(ring)}), raw
+}
+
+// ormOver is an ORM client over raw's pool, for a second vault on the same database.
+func ormOver(t *testing.T, raw *sql.DB) orm.Context {
+	t.Helper()
+	c, err := orm.NewClientWithDB(raw, "postgres")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return c
 }
 
 func TestSealOpenRoundTrip(t *testing.T) {
@@ -154,8 +165,44 @@ func TestWrongKEKCannotUnwrap(t *testing.T) {
 		t.Fatal(err)
 	}
 	other, _ := crypto.ParseKeyring(newKeyring(t, "v1"))
-	v2 := vault.New(vault.Deps{DB: h, Keys: vault.NewEnvKeyWrapper(other)})
+	v2 := vault.New(vault.Deps{DB: ormOver(t, h), Keys: vault.NewEnvKeyWrapper(other)})
 	if _, err := v2.Open(ctx, vault.UserTenant("dave"), ct, []byte("a")); err == nil {
 		t.Fatal("a different KEK unwrapped the DEK")
+	}
+}
+
+// TestDEKCommitsOutsideTheCallersTransaction: a tenant's first DEK is written outside any
+// transaction the caller's ctx carries. A caller that seals inside a transaction and then rolls
+// it back must not take the key with it: the vault has already cached the key and sealed under
+// it, so a value sealed then (and stored anywhere that did commit) must still open in a process
+// that never saw the cache.
+func TestDEKCommitsOutsideTheCallersTransaction(t *testing.T) {
+	repo, _, cleanup := db.SetupTestDBWithRawDB(t)
+	t.Cleanup(cleanup)
+	keys := newKeyring(t, "v1")
+	ring, err := crypto.ParseKeyring(keys)
+	if err != nil {
+		t.Fatal(err)
+	}
+	v := vault.New(vault.Deps{DB: repo.ORM(), Keys: vault.NewEnvKeyWrapper(ring)})
+	ctx := context.Background()
+
+	var ct []byte
+	rollback := errors.New("roll back")
+	err = repo.ORM().RunTx(ctx, func(ctx context.Context) error {
+		var err error
+		if ct, err = v.Seal(ctx, vault.UserTenant("erin"), []byte("kept"), []byte("a")); err != nil {
+			return err
+		}
+		return rollback
+	})
+	if !errors.Is(err, rollback) {
+		t.Fatalf("transaction: %v", err)
+	}
+
+	fresh := vault.New(vault.Deps{DB: repo.ORM(), Keys: vault.NewEnvKeyWrapper(ring)})
+	pt, err := fresh.Open(ctx, vault.UserTenant("erin"), ct, []byte("a"))
+	if err != nil || string(pt) != "kept" {
+		t.Fatalf("a fresh vault opened %q, %v; the DEK must survive the caller's rollback", pt, err)
 	}
 }

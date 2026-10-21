@@ -117,7 +117,7 @@ func (m *Manager) toProto(ctx context.Context, row *db.ModelEndpoint) *reliantv1
 	}
 	configured, err := local.DecodeEndpointModels(row.ModelsJSON)
 	if err != nil {
-		logging.Warn("[ModelEndpoints] Unreadable stored models", "endpoint", row.ID, "error", err)
+		logging.WarnContext(ctx, "[ModelEndpoints] Unreadable stored models", "endpoint", row.ID, "error", err)
 	}
 	out.Models = mergeDiscovered(configured, out.Probe)
 	return out
@@ -234,7 +234,7 @@ func (m *Manager) Update(ctx context.Context, userID, id string, in *reliantv1.M
 	// Moved off a daemon (or changed URL on it): drop the stale authorization.
 	if oldDaemonID != "" && (oldDaemonID != n.DaemonID || oldBase != n.BaseURL) {
 		if err := m.revokeFrom(ctx, userID, oldDaemonID, oldBase); err != nil && !errors.Is(err, ErrDaemonOffline) {
-			logging.Warn("[ModelEndpoints] Could not revoke endpoint from previous machine", "daemonID", oldDaemonID, "error", err)
+			logging.WarnContext(ctx, "[ModelEndpoints] Could not revoke endpoint from previous machine", "daemonID", oldDaemonID, "error", err)
 		}
 	}
 	return m.toProto(ctx, row), nil
@@ -252,12 +252,12 @@ func (m *Manager) Delete(ctx context.Context, userID, id string) error {
 	}
 	if row.CredentialConnectionID != nil {
 		if err := m.cfg.Credentials.Delete(ctx, userID, *row.CredentialConnectionID); err != nil {
-			logging.Warn("[ModelEndpoints] Could not delete endpoint credential", "endpoint", id, "error", err)
+			logging.WarnContext(ctx, "[ModelEndpoints] Could not delete endpoint credential", "endpoint", id, "error", err)
 		}
 	}
 	if row.DaemonID != nil {
 		if err := m.revokeFrom(ctx, userID, *row.DaemonID, row.BaseURL); err != nil && !errors.Is(err, ErrDaemonOffline) {
-			logging.Warn("[ModelEndpoints] Could not revoke endpoint from machine", "daemonID", *row.DaemonID, "error", err)
+			logging.WarnContext(ctx, "[ModelEndpoints] Could not revoke endpoint from machine", "daemonID", *row.DaemonID, "error", err)
 		}
 	}
 	return nil
@@ -408,7 +408,7 @@ func (m *Manager) probeDirect(ctx context.Context, row *db.ModelEndpoint, draft 
 	if client == nil {
 		client = &http.Client{Transport: m.cfg.Policy.Transport()}
 	}
-	return localprobe.New(localprobe.Deps{HTTPClient: client}).Probe(ctx, row.ID, target, localprobe.Options{})
+	return localprobe.NewInstrumented(localprobe.Deps{HTTPClient: client}).Probe(ctx, row.ID, target, localprobe.Options{})
 }
 
 // probeViaDaemon authorizes the endpoint on its machine's relay and returns

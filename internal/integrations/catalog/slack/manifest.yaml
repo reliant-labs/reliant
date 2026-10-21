@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=../../manifest/schema/manifest.schema.json
 # Slack. Authored from Slack's Web API and OAuth v2 documentation
 # (docs.slack.dev/reference/methods, docs.slack.dev/authentication).
 #

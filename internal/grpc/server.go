@@ -16,6 +16,7 @@ import (
 	"github.com/go-chi/cors"
 	"github.com/reliant-labs/forge/pkg/mountkit"
 	"github.com/reliant-labs/forge/pkg/oauth2"
+	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/serverkit"
 	"go.temporal.io/sdk/client"
 
@@ -66,6 +67,7 @@ import (
 	workflowhandler "github.com/reliant-labs/reliant/internal/handlers/workflow"
 	"github.com/reliant-labs/reliant/internal/handlers/worktree"
 	"github.com/reliant-labs/reliant/internal/integrations/catalogindex"
+	"github.com/reliant-labs/reliant/internal/integrations/inputoptions"
 	"github.com/reliant-labs/reliant/internal/integrations/webhook"
 	"github.com/reliant-labs/reliant/internal/llm/accountlimits"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
@@ -181,6 +183,10 @@ type Config struct {
 	// self-hosted token store when TokenAuthority is nil.
 	SQL *sql.DB
 
+	// ORM is the forge ORM client over Database's pool. The self-hosted
+	// token store runs on it when TokenAuthority is nil.
+	ORM orm.Context
+
 	// ConnectorGrants stores connector grants, their audit log and the OAuth
 	// client bindings. Required. ConnectorService manages them and the /mcp
 	// endpoint resolves every call through them.
@@ -220,6 +226,15 @@ type Config struct {
 	// the integration catalog index plus each caller's connection state.
 	// Required.
 	CatalogSearch *catalogindex.Service
+
+	// InputOptions backs CatalogService.ListInputOptions. Optional: without it
+	// the rpc answers Unimplemented.
+	InputOptions inputoptions.Service
+
+	// TriggerOptions checks, when an automation is enabled, that the values
+	// picked for its integration inputs can be reached. Optional: without it
+	// enabling checks nothing.
+	TriggerOptions trigger.OptionsChecker
 
 	// OAuthRoutes mounts the browser half of the connection OAuth broker
 	// (/integrations/oauth/{provider}/{start,callback}). Required.
@@ -337,6 +352,12 @@ func NewAPI(cfg *Config) (*API, error) {
 	if err != nil {
 		return nil, fmt.Errorf("task service: %w", err)
 	}
+	// Assigned only when set: a nil interface stored in a Deps field would
+	// pass the handler's nil checks.
+	var catalogInputOptions catalog.InputOptions
+	if cfg.InputOptions != nil {
+		catalogInputOptions = cfg.InputOptions
+	}
 	catalogService, err := catalog.New(catalog.Deps{
 		Logger:             handlerLogger,
 		Config:             handlerConfig,
@@ -344,6 +365,7 @@ func NewAPI(cfg *Config) (*API, error) {
 		TagPrefs:           database,
 		LocalModels:        local.NewRepoDirectory(database),
 		Search:             cfg.CatalogSearch,
+		InputOptions:       catalogInputOptions,
 		IntegrationMethods: catalog.IntegrationMethodsFrom(cfg.Connections),
 	})
 	if err != nil {
@@ -353,7 +375,7 @@ func NewAPI(cfg *Config) (*API, error) {
 	// user's behalf; self-hosted leaves ControlPlane nil.
 	var projectControlPlane project.CloneDispatcher
 	if cfg.ControlPlane.Hosted() {
-		projectControlPlane = controlplane.New(controlplane.Deps{BaseURL: cfg.ControlPlane.URL})
+		projectControlPlane = controlplane.NewInstrumented(controlplane.Deps{BaseURL: cfg.ControlPlane.URL})
 	}
 	projectService, err := project.New(project.Deps{
 		Logger:       handlerLogger,
@@ -440,7 +462,7 @@ func NewAPI(cfg *Config) (*API, error) {
 		Logger:                  handlerLogger,
 		Config:                  handlerConfig,
 		Repo:                    database,
-		ControlPlane:            controlplane.New(controlplane.Deps{BaseURL: cfg.ControlPlane.URL}),
+		ControlPlane:            controlplane.NewInstrumented(controlplane.Deps{BaseURL: cfg.ControlPlane.URL}),
 		ExchangeClaudeCode:      claude.ExchangeClaudeAuthorizationCode,
 		ExchangeCodexCode:       codex.ExchangeCodexAuthorizationCode,
 		ExchangeAntigravityCode: antigravity.ExchangeAntigravityAuthorizationCode,
@@ -566,7 +588,7 @@ func NewAPI(cfg *Config) (*API, error) {
 		if secret == "" {
 			return nil, errors.New("git tokens: RELIANT_CONTROL_PLANE_URL is set but INTERNAL_SERVICE_SECRET is not")
 		}
-		gitTokens = gitcredentialclient.New(gitcredentialclient.Deps{
+		gitTokens = gitcredentialclient.NewInstrumented(gitcredentialclient.Deps{
 			BaseURL: cp.URL,
 			Sign:    func() (string, error) { return auth.SignInternalServiceToken(secret) },
 		})
@@ -661,13 +683,16 @@ func NewAPI(cfg *Config) (*API, error) {
 	if in.Vault != nil {
 		triggerDeps.Sealer = in.Vault
 	}
+	if cfg.TriggerOptions != nil {
+		triggerDeps.Options = cfg.TriggerOptions
+	}
 	triggerDeps.Access = make(map[string]trigger.IntegrationAccess, len(in.Access))
 	for id, a := range in.Access {
 		triggerDeps.Access[id] = a
 	}
 	triggerDeps.Syncer, triggerDeps.Fires = trigger.TemporalBackend(cfg.TemporalClient, database, cfg.SharedTaskQueue, polled)
 	if cfg.ControlPlane.Hosted() {
-		triggerDeps.ControlPlane = controlplane.New(controlplane.Deps{BaseURL: cfg.ControlPlane.URL})
+		triggerDeps.ControlPlane = controlplane.NewInstrumented(controlplane.Deps{BaseURL: cfg.ControlPlane.URL})
 	}
 	triggerService, err := trigger.New(triggerDeps)
 	if err != nil {
@@ -755,7 +780,7 @@ func NewAPI(cfg *Config) (*API, error) {
 	// deployment fail deletion against a control plane that isn't there.
 	var accountControlPlane account.ControlPlane
 	if cfg.ControlPlane.Hosted() {
-		accountControlPlane = controlplane.New(controlplane.Deps{BaseURL: cfg.ControlPlane.URL})
+		accountControlPlane = controlplane.NewInstrumented(controlplane.Deps{BaseURL: cfg.ControlPlane.URL})
 	}
 	accountService, err := account.New(account.Deps{
 		Logger:       handlerLogger,
@@ -1198,7 +1223,7 @@ func securityHeaders(next http.Handler) http.Handler {
 
 // resolveTokenAuthority returns the deployment's ONE token authority: the
 // configured one, else control-plane or the local store as the environment
-// dictates (the self-hosted store keeps its tokens in cfg.SQL). A
+// dictates (the self-hosted store keeps its tokens through cfg.ORM). A
 // misconfiguration (control-plane URL without its secret) fails server start
 // loudly rather than serving a surface that can mint nothing.
 func resolveTokenAuthority(cfg *Config) (tokenauthority.Authority, tokenauthority.Mode, error) {
@@ -1207,7 +1232,7 @@ func resolveTokenAuthority(cfg *Config) (tokenauthority.Authority, tokenauthorit
 		// control-plane-side clipping is enabled for it.
 		return cfg.TokenAuthority, "", nil
 	}
-	authority, mode, err := tokenauthority.New(tokenauthority.DepsFor(cfg.ControlPlane, cfg.SQL))
+	authority, mode, err := tokenauthority.New(tokenauthority.DepsFor(cfg.ControlPlane, cfg.ORM))
 	if err != nil {
 		return nil, "", fmt.Errorf("token authority: %w", err)
 	}

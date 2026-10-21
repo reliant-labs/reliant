@@ -35,6 +35,82 @@
 //	}
 package store
 
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"fmt"
+	"time"
+
+	"github.com/reliant-labs/forge/pkg/orm"
+	"github.com/uptrace/bun"
+
+	"github.com/reliant-labs/reliant/internal/db/core"
+)
+
+// OAuth authorization state: single-use and session-bound, one row per
+// authorization in flight (P5b lane L5, with the connection store it
+// served).
+
+// InsertOAuthFlow records f.
+func InsertOAuthFlow(ctx context.Context, db orm.Context, f *core.OAuthFlow) error {
+	params, err := encodeConnectionParams(f.Params)
+	if err != nil {
+		return err
+	}
+	return CreateOauthFlow(ctx, db, &OauthFlow{
+		StateHash: f.StateHash, UserID: f.UserID, SessionIDHash: f.SessionIDHash, IntegrationID: f.IntegrationID,
+		PkceVerifierSealed: f.PKCEVerifierSealed, RedirectAfter: emptyToNil(f.RedirectAfter),
+		ReconnectConnectionID: emptyToNil(f.ReconnectConnectionID), ConnectionName: emptyToNil(f.ConnectionName),
+		ExpiresAt: f.ExpiresAt, Params: params, ReturnTo: emptyToNil(f.ReturnTo),
+	})
+}
+
+// PeekOAuthFlow returns an unexpired, unconsumed flow without consuming it;
+// anything else is core.ErrOAuthFlowInvalid.
+func PeekOAuthFlow(ctx context.Context, db orm.Context, stateHash []byte, now time.Time) (*core.OAuthFlow, error) {
+	var row OauthFlow
+	err := db.Bun().NewSelect().Model(&row).
+		Where("? = ?", bun.Ident(OauthFlowFieldStateHash), stateHash).
+		Where("? IS NULL", bun.Ident(OauthFlowFieldConsumedAt)).
+		Where("? > ?", bun.Ident(OauthFlowFieldExpiresAt), now).
+		Scan(ctx)
+	return oauthFlowToCore(&row, err)
+}
+
+// ConsumeOAuthFlow marks an unexpired, unconsumed flow consumed and returns
+// it; anything else is core.ErrOAuthFlowInvalid. It is one statement: the
+// compare-and-swap on consumed_at is what makes the state single-use even
+// under concurrent replays.
+func ConsumeOAuthFlow(ctx context.Context, db orm.Context, stateHash []byte, now time.Time) (*core.OAuthFlow, error) {
+	var row OauthFlow
+	err := db.Bun().NewRaw(`
+		UPDATE oauth_flows SET consumed_at = ?1
+		 WHERE state_hash = ?0 AND consumed_at IS NULL AND expires_at > ?1
+		RETURNING *`, stateHash, now).
+		Scan(ctx, &row)
+	return oauthFlowToCore(&row, err)
+}
+
+func oauthFlowToCore(row *OauthFlow, err error) (*core.OAuthFlow, error) {
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, core.ErrOAuthFlowInvalid
+	}
+	if err != nil {
+		return nil, err
+	}
+	params, err := decodeConnectionParams(row.Params)
+	if err != nil {
+		return nil, fmt.Errorf("oauth flow params: %w", err)
+	}
+	return &core.OAuthFlow{
+		StateHash: row.StateHash, UserID: row.UserID, SessionIDHash: row.SessionIDHash, IntegrationID: row.IntegrationID,
+		PKCEVerifierSealed: row.PkceVerifierSealed, RedirectAfter: deref(row.RedirectAfter),
+		ReconnectConnectionID: deref(row.ReconnectConnectionID), ConnectionName: deref(row.ConnectionName),
+		Params: params, ReturnTo: deref(row.ReturnTo), ExpiresAt: row.ExpiresAt,
+	}, nil
+}
+
 // OauthFlowExtra carries fields on OauthFlow that are NOT columns — computed
 // values, transient state, anything derived rather than stored. OauthFlow is
 // embedded on OauthFlowExtra (see oauth_flow_orm.go), so a field added here is a field on

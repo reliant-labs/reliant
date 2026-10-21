@@ -1,0 +1,1 @@
+{ name: sender_id, type: user, description: "Numeric GitHub id of the user who acted, as a string; empty when the delivery names no sender. Unlike sender it survives a rename, so match on this to scope by person.", example: "583231" }

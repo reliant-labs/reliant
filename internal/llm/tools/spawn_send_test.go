@@ -22,7 +22,7 @@ func seedSpawnRelationship(
 	repo db.Repository,
 	ctx context.Context,
 	chatID string,
-	childThreadStatus int32,
+	childThreadStatus db.ThreadStatus,
 ) (parentThreadID, childThreadID, toolCallID string) {
 	t.Helper()
 	now := time.Now()

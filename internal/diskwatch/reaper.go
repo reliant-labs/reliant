@@ -196,10 +196,10 @@ func (w *Watcher) RunReaper(ctx context.Context) {
 	}
 	cfg := w.reaperConfig()
 	if !cfg.Enabled {
-		logging.Info("[diskwatch] Storage reaper schedule disabled (RELIANT_STORAGE_REAPER=auto runs it on managed daemons only; on enables, off disables)")
+		logging.InfoContext(ctx, "[diskwatch] Storage reaper schedule disabled (RELIANT_STORAGE_REAPER=auto runs it on managed daemons only; on enables, off disables)")
 		return
 	}
-	logging.Info("[diskwatch] Storage reaper scheduled", "interval", cfg.Interval, "pressure_interval", cfg.PressureInterval, "policy", w.reaperPolicyPath(cfg))
+	logging.InfoContext(ctx, "[diskwatch] Storage reaper scheduled", "interval", cfg.Interval, "pressure_interval", cfg.PressureInterval, "policy", w.reaperPolicyPath(cfg))
 	ticker := time.NewTicker(reaperPollInterval)
 	defer ticker.Stop()
 	for {
@@ -325,6 +325,7 @@ type autoGCRecord struct {
 	Error           string    `json:"error"`
 	CutOffLayers    []string  `json:"cut_off_layers"`
 	BackedOffLayers []string  `json:"backed_off_layers"`
+	OverBudget      []string  `json:"over_budget"`
 }
 
 func readAutoGCRecord(policyPath string) (autoGCRecord, error) {
@@ -356,6 +357,9 @@ type ReaperResult struct {
 	CutOff, BackedOff []string
 	// Failed is the layers that errored.
 	Failed []string
+	// OverBudget describes each cache forge could not bring under its size
+	// budget because more than the budget is younger than its safety floor.
+	OverBudget []string
 }
 
 // reaperPass runs the reaper once and logs the outcome. The caller holds the
@@ -364,7 +368,7 @@ type ReaperResult struct {
 func (w *Watcher) reaperPass(ctx context.Context, policyPath, trigger string) (res ReaperResult) {
 	defer func() {
 		if r := recover(); r != nil {
-			logging.Warn("[diskwatch] Storage reaper pass panicked", "trigger", trigger, "panic", fmt.Sprint(r))
+			logging.WarnContext(ctx, "[diskwatch] Storage reaper pass panicked", "trigger", trigger, "panic", fmt.Sprint(r))
 		}
 	}()
 	budget := w.reaper.budget
@@ -390,16 +394,16 @@ func (w *Watcher) reaperPass(ctx context.Context, policyPath, trigger string) (r
 
 	switch {
 	case err != nil && ctx.Err() != nil:
-		logging.Warn("[diskwatch] Storage reaper pass stopped; forge resumes on the next pass", "trigger", trigger, "after", elapsed, "budget", budget, "error", ctx.Err())
+		logging.WarnContext(ctx, "[diskwatch] Storage reaper pass stopped; forge resumes on the next pass", "trigger", trigger, "after", elapsed, "budget", budget, "error", ctx.Err())
 		return res
 	case err != nil:
-		logging.Warn("[diskwatch] Storage reaper could not run (is forge available in this binary?)", "trigger", trigger, "error", err)
+		logging.WarnContext(ctx, "[diskwatch] Storage reaper could not run (is forge available in this binary?)", "trigger", trigger, "error", err)
 		return res
 	}
 	res.Ran = true
 
 	if run.ExitCode != 0 && strings.Contains(run.Stderr, reaperBusyMarker) {
-		logging.Info("[diskwatch] Storage reaper skipped: another storage pass holds forge's lock", "trigger", trigger)
+		logging.InfoContext(ctx, "[diskwatch] Storage reaper skipped: another storage pass holds forge's lock", "trigger", trigger)
 		return res
 	}
 
@@ -407,6 +411,14 @@ func (w *Watcher) reaperPass(ctx context.Context, policyPath, trigger string) (r
 	fresh := recErr == nil && !rec.At.Before(start.Add(-time.Second))
 	if fresh {
 		res.CutOff, res.BackedOff, res.Failed = rec.CutOffLayers, rec.BackedOffLayers, rec.FailedLayers
+		res.OverBudget = rec.OverBudget
+	}
+	// A budget no trim can reach is a finding, not a failed pass: the cache
+	// fills faster than its entries age past forge's safety floor, so the
+	// fix is the fill (usually builds without -trimpath). WARN on every pass
+	// until it is fixed; it is otherwise only in the DEBUG output tail.
+	for _, finding := range res.OverBudget {
+		logging.WarnContext(ctx, "[diskwatch] Storage reaper: a cache is over a budget no trim can reach", "trigger", trigger, "finding", finding)
 	}
 	fields := []any{
 		"trigger", trigger, "after", elapsed, "freed", FormatBytes(res.Freed),
@@ -419,7 +431,7 @@ func (w *Watcher) reaperPass(ctx context.Context, policyPath, trigger string) (r
 		if fresh && rec.Error != "" {
 			fields = append(fields, "error", rec.Error)
 		}
-		logging.Warn("[diskwatch] Storage reaper pass failed", fields...)
+		logging.WarnContext(ctx, "[diskwatch] Storage reaper pass failed", fields...)
 	case !fresh:
 		// Exit 0 but forge's summary is missing or unreadable: the pass ran, but
 		// what it skipped is unknown. Say so rather than report a clean result.
@@ -428,12 +440,12 @@ func (w *Watcher) reaperPass(ctx context.Context, policyPath, trigger string) (r
 			reason = recErr.Error()
 		}
 		fields = append(fields, "record", reason)
-		logging.Warn("[diskwatch] Storage reaper pass finished but its summary is unreadable", fields...)
+		logging.WarnContext(ctx, "[diskwatch] Storage reaper pass finished but its summary is unreadable", fields...)
 	default:
-		logging.Info("[diskwatch] Storage reaper pass finished", fields...)
+		logging.InfoContext(ctx, "[diskwatch] Storage reaper pass finished", fields...)
 	}
 	if out := strings.TrimSpace(run.Stdout); out != "" {
-		logging.Debug("[diskwatch] Storage reaper output (tail)", "trigger", trigger, "output", out)
+		logging.DebugContext(ctx, "[diskwatch] Storage reaper output (tail)", "trigger", trigger, "output", out)
 	}
 	return res
 }

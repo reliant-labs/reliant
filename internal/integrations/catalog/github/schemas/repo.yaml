@@ -1,0 +1,7 @@
+type: string
+# Letters, digits, ., -, _ with at least one that is not a dot.
+pattern: "^[A-Za-z0-9._-]*[A-Za-z0-9_-][A-Za-z0-9._-]*$"
+maxLength: 100
+title: Repository name
+description: The repository's name without the owner or .git, the second part of owner/repo.
+examples: ["hello-world"]

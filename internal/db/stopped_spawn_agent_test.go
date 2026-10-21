@@ -27,7 +27,7 @@ func TestGetStoppedSpawnAgent(t *testing.T) {
 	insertTestWorkflowWithParent(t, repo, root, chatID, nil, Completed())
 
 	now := time.Now().UTC()
-	spawnThread := func(id, parent string, status int32, worktreeID *string) {
+	spawnThread := func(id, parent string, status ThreadStatus, worktreeID *string) {
 		t.Helper()
 		if _, err := repo.CreateThread(ctx, &Thread{
 			ID: id, ChatID: chatID, ParentThreadID: &parent, Origin: ThreadOriginSpawn,

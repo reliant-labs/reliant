@@ -123,7 +123,7 @@ func (r *Recorder) BeginPush(ctx context.Context, p Push) (*PushIntent, error) {
 			// Rows already written stay as intents; settle them failed so they
 			// do not sit open claiming a push that never happened.
 			(&PushIntent{rec: r, rows: rows[:i]}).Settle(ctx, PushOutcome{Error: "intent could not be recorded"})
-			slog.Warn("integration write ledger: could not record a push intent; the push was not made",
+			slog.WarnContext(ctx, "integration write ledger: could not record a push intent; the push was not made",
 				"repo", repo, "branch", p.Branch, "run_id", p.RunID, "error", err)
 			return nil, fmt.Errorf("Reliant could not record this push before making it, so nothing was pushed: %w", err) //nolint:staticcheck // ST1005: shown to the user verbatim, as a sentence.
 		}
@@ -155,7 +155,7 @@ func (i *PushIntent) Settle(ctx context.Context, out PushOutcome) {
 		// on the push event looks the row up by.
 		res.ObjectID = w.ObjectID
 		if _, err := i.rec.store.CompleteIntegrationWrite(ctx, w.ID, res); err != nil {
-			slog.Warn("integration write ledger: could not settle a push; its intent row stays open",
+			slog.WarnContext(ctx, "integration write ledger: could not settle a push; its intent row stays open",
 				"write_id", w.ID, "error", err)
 		}
 	}

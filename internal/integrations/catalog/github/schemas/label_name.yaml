@@ -1,0 +1,9 @@
+type: string
+minLength: 1
+maxLength: 50
+# At least one character that is not a dot, so the name can never be
+# the "." or ".." path segment that survives percent-escaping.
+pattern: "^.*[^.].*$"
+title: Label
+description: One label name, exactly as it is spelled on GitHub.
+examples: ["agent:in-progress"]

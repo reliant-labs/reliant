@@ -1,0 +1,71 @@
+# yaml-language-server: $schema=../../../manifest/schema/action.schema.json
+id: pr.review.create
+display_name: Review pull request
+summary: Submit a pull request review that comments, approves or requests changes.
+description: >-
+  Submit a review on a pull request with a verdict: COMMENT (the default),
+  APPROVE, or REQUEST_CHANGES. body is required for COMMENT and
+  REQUEST_CHANGES. The review is submitted immediately, never left
+  pending. Pass commit_id to pin the review to the commit you read
+  (pr.get head.sha); otherwise GitHub uses the latest commit.
+keywords: [pull request, pr, review, approve, request changes, code review]
+placement: server
+mutates: true
+tool:
+  expose: true
+params:
+  type: object
+  additionalProperties: false
+  # event is not required: its default (COMMENT) fills it in.
+  required: [owner, repo, pull_number]
+  properties:
+    owner: { $ref: ../schemas/owner.yaml }
+    repo: { $ref: ../schemas/repo.yaml }
+    pull_number: { $ref: ../schemas/pull_number.yaml }
+    event:
+      type: string
+      enum: [COMMENT, APPROVE, REQUEST_CHANGES]
+      default: COMMENT
+      title: Verdict
+      description: COMMENT leaves feedback, APPROVE approves, REQUEST_CHANGES blocks merging until resolved.
+    body:
+      type: string
+      minLength: 1
+      title: Review summary
+      description: The review's top-level comment, in GitHub-flavored markdown. Required unless the verdict is APPROVE.
+      examples: ["Looks good overall; one question about the retry loop in client.go."]
+    commit_id:
+      type: string
+      pattern: "^[0-9a-f]{7,64}$"
+      title: Commit SHA
+      description: The commit being reviewed. Defaults to the pull request's latest commit.
+      examples: ["6dcb09b5b57875f334f61aebed695e2e4193db5e"]
+    connection: { $ref: ../schemas/connection.yaml }
+# "body is required for COMMENT and REQUEST_CHANGES" is GitHub's rule, and
+# its 422 names the field; an if/then here would not survive as a tool
+# input schema.
+request:
+  method: POST
+  path: /repos/{{ params.owner }}/{{ params.repo }}/pulls/{{ params.pull_number }}/reviews
+  body_expr: >-
+    {"event": params.event,
+     ?"body": params.?body,
+     ?"commit_id": params.?commit_id}
+  errors: { $ref: ../schemas/github_errors.yaml }
+output:
+  select: >-
+    {"id": response.id,
+     "node_id": response.?node_id.orValue(null),
+     "state": response.state,
+     "html_url": response.html_url,
+     "submitted_at": response.?submitted_at.orValue(null),
+     "commit_id": response.?commit_id.orValue(null)}
+  schema:
+    type: object
+    properties:
+      id: { type: integer }
+      node_id: { type: [string, "null"] }
+      state: { type: string, description: "APPROVED, CHANGES_REQUESTED or COMMENTED." }
+      html_url: { type: string }
+      submitted_at: { type: [string, "null"] }
+      commit_id: { type: [string, "null"] }

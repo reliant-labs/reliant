@@ -308,7 +308,7 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 	// creation: the reconcile pass locks every active worktree on its next run.
 	if req.WorktreeID != "" {
 		if err := worktreereclaim.LockCheckout(ctx, worktreePath, req.WorktreeID); err != nil {
-			logging.Warn("worktree created but not locked; reconcile will retry",
+			logging.WarnContext(ctx, "worktree created but not locked; reconcile will retry",
 				"worktree_path", worktreePath, "error", err)
 		}
 	}
@@ -316,7 +316,7 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 	// A new workspace waits on this whole command; say how long git took, so
 	// a slow create can be told apart from a slow copy (worktree.copy_paths
 	// logs its own time).
-	logging.Info("worktree checked out",
+	logging.InfoContext(ctx, "worktree checked out",
 		"worktree_path", worktreePath,
 		"base_branch", req.BaseBranch,
 		"start_point", startPoint,
@@ -473,11 +473,11 @@ func fetchOriginBranch(ctx context.Context, repoPath, branch string) bool {
 	cmd.Dir = repoPath
 	cmd.Env = gitCredentialEnv(append(os.Environ(), "GIT_TERMINAL_PROMPT=0")) //nolint:forbidigo // passes this process environment to a child process; not configuration
 	if out, err := cmd.CombinedOutput(); err != nil {
-		logging.Info("worktree base branch not found on origin",
+		logging.InfoContext(ctx, "worktree base branch not found on origin",
 			"repo_path", repoPath, "base_branch", branch, "output", strings.TrimSpace(string(out)), "error", err)
 		return false
 	}
-	logging.Info("fetched worktree base branch from origin", "repo_path", repoPath, "base_branch", branch)
+	logging.InfoContext(ctx, "fetched worktree base branch from origin", "repo_path", repoPath, "base_branch", branch)
 	return true
 }
 
@@ -574,7 +574,7 @@ func handleWorktreeAdoptMove(ctx context.Context, payload []byte) ([]byte, error
 	}
 	if req.WorktreeID != "" {
 		if err := worktreereclaim.LockCheckout(ctx, dest, req.WorktreeID); err != nil {
-			logging.Warn("adopted worktree moved but not locked; reconcile will retry", "worktree_path", dest, "error", err)
+			logging.WarnContext(ctx, "adopted worktree moved but not locked; reconcile will retry", "worktree_path", dest, "error", err)
 		}
 	}
 	return json.Marshal(worktreeAdoptMoveResponse{
@@ -1085,7 +1085,7 @@ func handleWorktreeDiscoverRepos(ctx context.Context, payload []byte) ([]byte, e
 	for _, repo := range req.Repos {
 		entries, err := listRepoLinkedWorktrees(ctx, repo)
 		if err != nil {
-			logging.Warn("worktree.discover_repos: list failed", "repo", repo.Path, "error", err)
+			logging.WarnContext(ctx, "worktree.discover_repos: list failed", "repo", repo.Path, "error", err)
 			continue
 		}
 	next:
@@ -1308,7 +1308,7 @@ func recreateWorktree(ctx context.Context, req worktreeRecreateRequest) worktree
 				continue
 			}
 			if err := worktreereclaim.RestoreCheckout(ctx, dest, req.WorktreeID, req.Fence); err != nil {
-				logging.Warn("worktree recreated but not locked; reconcile will retry", "worktree_path", dest, "error", err)
+				logging.WarnContext(ctx, "worktree recreated but not locked; reconcile will retry", "worktree_path", dest, "error", err)
 			}
 		}
 	}
@@ -1337,11 +1337,11 @@ func recreateWorktree(ctx context.Context, req worktreeRecreateRequest) worktree
 					resp.SnapshotFailed = append(resp.SnapshotFailed, repo.Rel)
 					resp.Output += fmt.Sprintf("saved work for %q was not re-applied: %v\n", repo.Rel, err)
 				}
-				logging.Warn("worktree recreated but its snapshot was not applied", "ref", ref, "error", err)
+				logging.WarnContext(ctx, "worktree recreated but its snapshot was not applied", "ref", ref, "error", err)
 				continue
 			}
 			if err := worktreereclaim.RetireAppliedRef(ctx, repo.RepoPath, ref); err != nil {
-				logging.Warn("snapshot applied but its ref could not be retired", "ref", ref, "error", err)
+				logging.WarnContext(ctx, "snapshot applied but its ref could not be retired", "ref", ref, "error", err)
 			}
 		}
 	}
@@ -1397,7 +1397,7 @@ func dropStaleRegistration(ctx context.Context, repoPath, dest string) {
 	rm := exec.CommandContext(ctx, "git", "worktree", "remove", "--force", "--force", registered)
 	rm.Dir = repoPath
 	if out, err := rm.CombinedOutput(); err != nil {
-		logging.Warn("could not drop a stale worktree registration", "repo", repoPath, "path", registered, "error", err, "output", strings.TrimSpace(string(out)))
+		logging.WarnContext(ctx, "could not drop a stale worktree registration", "repo", repoPath, "path", registered, "error", err, "output", strings.TrimSpace(string(out)))
 	}
 }
 
@@ -2648,7 +2648,7 @@ func repairSharedClones(ctx context.Context) {
 			repaired++
 		}
 	}
-	logging.Info(logPrefix+" [gitrepair] Startup crash repair finished", "repositories", len(repos), "repaired", repaired)
+	logging.InfoContext(ctx, logPrefix+" [gitrepair] Startup crash repair finished", "repositories", len(repos), "repaired", repaired)
 }
 
 // logRepairReport logs one repository's repair: what was fixed at INFO,

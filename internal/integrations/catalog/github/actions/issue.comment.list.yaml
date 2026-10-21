@@ -1,0 +1,64 @@
+# yaml-language-server: $schema=../../../manifest/schema/action.schema.json
+id: issue.comment.list
+display_name: List issue or pull request comments
+summary: Read the conversation comments on an issue or pull request, optionally only those changed since a time.
+description: >-
+  List the comments on an issue, or on a pull request's conversation tab
+  (pass the PR number as issue_number), oldest first. Pass since, an ISO
+  8601 time such as 2026-01-02T03:04:05Z, to get only comments created or
+  edited after it, so a recurring run reads what is new. Follows GitHub's
+  pagination up to 1000 comments; narrow with since for busier threads.
+  Each comment carries its id, node id, author login and numeric user id.
+  Inline diff comments are listed by pr.review_comments.list and review
+  summaries by pr.reviews.list.
+keywords: [comment, comments, list, read, thread, conversation, since, new, issue, pull request]
+placement: server
+mutates: false
+tool:
+  expose: true
+params:
+  type: object
+  additionalProperties: false
+  required: [owner, repo, issue_number]
+  properties:
+    owner: { $ref: ../schemas/owner.yaml }
+    repo: { $ref: ../schemas/repo.yaml }
+    issue_number: { $ref: ../schemas/issue_number.yaml }
+    since: { $ref: ../schemas/since.yaml }
+    connection: { $ref: ../schemas/connection.yaml }
+request:
+  method: GET
+  path: /repos/{{ params.owner }}/{{ params.repo }}/issues/{{ params.issue_number }}/comments
+  query: { per_page: "100" }
+  query_expr: '{?"since": params.?since}'
+  pagination: { style: link_header, max_pages: 10 }
+  max_response_bytes: 5242880
+  errors: { $ref: ../schemas/github_errors.yaml }
+output:
+  select: >-
+    response.map(c, {"id": c.id,
+                     "node_id": c.?node_id.orValue(null),
+                     "body": type(c.?body.orValue(null)) == string ? c.body : "",
+                     "html_url": c.html_url,
+                     "user": c.?user.?login.orValue(null),
+                     "user_id": c.?user.?id.orValue(null),
+                     "author_association": c.?author_association.orValue(null),
+                     "created_at": c.?created_at.orValue(null),
+                     "updated_at": c.?updated_at.orValue(null)})
+  schema:
+    type: object
+    properties:
+      items:
+        type: array
+        items:
+          type: object
+          properties:
+            id: { type: integer }
+            node_id: { type: [string, "null"] }
+            body: { type: string }
+            html_url: { type: string }
+            user: { type: [string, "null"], description: The author's login (null for a deleted account). }
+            user_id: { type: [integer, "null"], description: The author's numeric user id, which is never reused. }
+            author_association: { type: [string, "null"] }
+            created_at: { type: [string, "null"] }
+            updated_at: { type: [string, "null"] }

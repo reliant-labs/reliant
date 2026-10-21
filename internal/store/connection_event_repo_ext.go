@@ -35,6 +35,56 @@
 //	}
 package store
 
+import (
+	"context"
+
+	"github.com/reliant-labs/forge/pkg/orm"
+
+	"github.com/reliant-labs/reliant/internal/db/core"
+)
+
+// A connection's append-only audit trail (P5b lane L5).
+
+// AppendConnectionEvent records ev; its id and time are the database's.
+func AppendConnectionEvent(ctx context.Context, db orm.Context, ev core.ConnectionEvent) error {
+	return CreateConnectionEvent(ctx, db, &ConnectionEvent{
+		ConnectionID: ev.ConnectionID, UserID: ev.UserID, Kind: ev.Kind,
+		RunID: emptyToNil(ev.RunID), NodeID: emptyToNil(ev.NodeID), ToolCallID: emptyToNil(ev.ToolCallID),
+		Actor: ev.Actor,
+	})
+}
+
+// ListConnectionEvents pages the user's events of one connection, newest
+// first: limit of them (100 when unset or above 500), older than beforeID
+// when it is set.
+func ListConnectionEvents(ctx context.Context, db orm.Context, userID, id string, limit int, beforeID int64) ([]core.ConnectionEvent, error) {
+	if limit <= 0 || limit > 500 {
+		limit = 100
+	}
+	opts := []orm.QueryOption{
+		orm.WhereEq(ConnectionEventFieldConnectionID, id),
+		orm.WhereEq(ConnectionEventFieldUserID, userID),
+		orm.WithOrderBy(ConnectionEventFieldID, orm.Desc),
+		orm.WithLimit(limit),
+	}
+	if beforeID != 0 {
+		opts = append(opts, orm.WhereLt(ConnectionEventFieldID, beforeID))
+	}
+	rows, err := ListConnectionEvent(ctx, db, opts...)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]core.ConnectionEvent, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, core.ConnectionEvent{
+			ID: row.ID, ConnectionID: row.ConnectionID, UserID: row.UserID, Kind: row.Kind,
+			RunID: deref(row.RunID), NodeID: deref(row.NodeID), ToolCallID: deref(row.ToolCallID),
+			Actor: row.Actor, At: row.At,
+		})
+	}
+	return out, nil
+}
+
 // ConnectionEventExtra carries fields on ConnectionEvent that are NOT columns — computed
 // values, transient state, anything derived rather than stored. ConnectionEvent is
 // embedded on ConnectionEventExtra (see connection_event_orm.go), so a field added here is a field on

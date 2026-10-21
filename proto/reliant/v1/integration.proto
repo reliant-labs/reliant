@@ -74,10 +74,13 @@ message TypeOptionsSpec {
   // and must be placeable on the server.
   string action = 1;
   // Params are templates for the action's parameters, keyed by param name.
-  // They may read `scope.<key>`, `query` and `page_token`.
+  // They may read `scope.<key>`, `query` and `page_token`. A template that
+  // renders to null leaves its param out, so an optional param follows an
+  // optional scope.
   map<string, string> params = 2;
-  // Items is CEL over the action's output yielding the list of items. Empty
-  // means the output itself is the list.
+  // Items is CEL over `output` (the action's output data) yielding the list
+  // of items. Empty means `output.items`, which is what every list action
+  // that paginates returns.
   string items = 3;
   // Value, Label, Description and Group are CEL over `item`. Value is the
   // stored value and is required; Label defaults to Value.
@@ -425,6 +428,35 @@ message HttpRequestSpec {
   // 3xx is the action's result, status and Location header included, rather
   // than followed or treated as a failure. A template may be used.
   string redirects = 17;
+  // FanOut makes the action a walk: this request lists parents (it must
+  // paginate), and fan_out.request then runs once per parent. See FanOutSpec.
+  FanOutSpec fan_out = 18;
+}
+
+// FanOutSpec turns one request into a walk over a list and what hangs off each
+// of its items (GitHub: the user's installations, then the repositories of
+// each). The enclosing request lists the parents, one page at a time, exactly
+// as a paginated request does. `request` then runs once per parent, in order,
+// and the action's output.select shapes each of ITS pages. The parent is
+// `params.parent` in the per-parent request's templates and in output.select.
+// The action's output is the concatenation of every parent's items.
+message FanOutSpec {
+  // Items is CEL over each page of the parent request (`response`, `params`)
+  // yielding the list of parents. A parent is usually an object whose fields
+  // the per-parent request reads.
+  string items = 1;
+  // MaxItems bounds the parents (default 50, max 200). More is an error, not a
+  // silent cut: a walk that quietly drops half of its parents reads as
+  // complete.
+  int32 max_items = 2;
+  // Request runs once per parent. It must paginate, and it may not itself fan
+  // out.
+  HttpRequestSpec request = 3;
+  // SkipStatus lists statuses of a non-retryable failure of the per-parent
+  // request that drop that parent instead of failing the action: the parent
+  // went away (or stopped being visible) between the two listings. A
+  // retryable failure (a rate limit) always fails the action.
+  repeated int32 skip_status = 4;
 }
 
 // PaginationSpec follows pages and concatenates each page's selected list.

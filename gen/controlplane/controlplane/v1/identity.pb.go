@@ -163,6 +163,62 @@ func (IdentityDeliveryState) EnumDescriptor() ([]byte, []int) {
 	return file_controlplane_v1_identity_proto_rawDescGZIP(), []int{1}
 }
 
+// IdentityMailDelivery is whether an environment's identity instance can send
+// mail: invitations and password-reset links.
+type IdentityMailDelivery int32
+
+const (
+	IdentityMailDelivery_IDENTITY_MAIL_DELIVERY_UNSPECIFIED IdentityMailDelivery = 0
+	// No mail is sent: the environment declares no smtp in its
+	// forge.ManagedIdentity, and the platform provides no relay. InviteUser and
+	// SendPasswordReset then refuse unless the caller asks for the code back
+	// (return_code) and delivers it another way.
+	IdentityMailDelivery_IDENTITY_MAIL_DELIVERY_NONE IdentityMailDelivery = 1
+	// The environment's own SMTP server (forge.ManagedIdentity smtp).
+	IdentityMailDelivery_IDENTITY_MAIL_DELIVERY_SMTP IdentityMailDelivery = 2
+)
+
+// Enum value maps for IdentityMailDelivery.
+var (
+	IdentityMailDelivery_name = map[int32]string{
+		0: "IDENTITY_MAIL_DELIVERY_UNSPECIFIED",
+		1: "IDENTITY_MAIL_DELIVERY_NONE",
+		2: "IDENTITY_MAIL_DELIVERY_SMTP",
+	}
+	IdentityMailDelivery_value = map[string]int32{
+		"IDENTITY_MAIL_DELIVERY_UNSPECIFIED": 0,
+		"IDENTITY_MAIL_DELIVERY_NONE":        1,
+		"IDENTITY_MAIL_DELIVERY_SMTP":        2,
+	}
+)
+
+func (x IdentityMailDelivery) Enum() *IdentityMailDelivery {
+	p := new(IdentityMailDelivery)
+	*p = x
+	return p
+}
+
+func (x IdentityMailDelivery) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (IdentityMailDelivery) Descriptor() protoreflect.EnumDescriptor {
+	return file_controlplane_v1_identity_proto_enumTypes[2].Descriptor()
+}
+
+func (IdentityMailDelivery) Type() protoreflect.EnumType {
+	return &file_controlplane_v1_identity_proto_enumTypes[2]
+}
+
+func (x IdentityMailDelivery) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use IdentityMailDelivery.Descriptor instead.
+func (IdentityMailDelivery) EnumDescriptor() ([]byte, []int) {
+	return file_controlplane_v1_identity_proto_rawDescGZIP(), []int{2}
+}
+
 type IdentityUserState int32
 
 const (
@@ -203,11 +259,11 @@ func (x IdentityUserState) String() string {
 }
 
 func (IdentityUserState) Descriptor() protoreflect.EnumDescriptor {
-	return file_controlplane_v1_identity_proto_enumTypes[2].Descriptor()
+	return file_controlplane_v1_identity_proto_enumTypes[3].Descriptor()
 }
 
 func (IdentityUserState) Type() protoreflect.EnumType {
-	return &file_controlplane_v1_identity_proto_enumTypes[2]
+	return &file_controlplane_v1_identity_proto_enumTypes[3]
 }
 
 func (x IdentityUserState) Number() protoreflect.EnumNumber {
@@ -216,7 +272,75 @@ func (x IdentityUserState) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use IdentityUserState.Descriptor instead.
 func (IdentityUserState) EnumDescriptor() ([]byte, []int) {
-	return file_controlplane_v1_identity_proto_rawDescGZIP(), []int{2}
+	return file_controlplane_v1_identity_proto_rawDescGZIP(), []int{3}
+}
+
+// IdentityPasswordCode is a one-time code that sets a user's password, handed
+// back to an admin who asked for it (return_code) so they can deliver it
+// themselves. It is a credential: it is never logged or audited.
+type IdentityPasswordCode struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Code  string                 `protobuf:"bytes,1,opt,name=code,proto3" json:"code,omitempty"`
+	// An estimate: the instance's default password-code lifetime (1h) from the
+	// moment it was issued. Redeeming it later is refused.
+	ExpiresAt *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	// The environment's own reset page with the code filled in, the link an
+	// email would have carried. Empty when the environment's identity declares
+	// no application login URI or domain to build it from.
+	ResetUrl      string `protobuf:"bytes,3,opt,name=reset_url,json=resetUrl,proto3" json:"reset_url,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *IdentityPasswordCode) Reset() {
+	*x = IdentityPasswordCode{}
+	mi := &file_controlplane_v1_identity_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IdentityPasswordCode) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IdentityPasswordCode) ProtoMessage() {}
+
+func (x *IdentityPasswordCode) ProtoReflect() protoreflect.Message {
+	mi := &file_controlplane_v1_identity_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IdentityPasswordCode.ProtoReflect.Descriptor instead.
+func (*IdentityPasswordCode) Descriptor() ([]byte, []int) {
+	return file_controlplane_v1_identity_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *IdentityPasswordCode) GetCode() string {
+	if x != nil {
+		return x.Code
+	}
+	return ""
+}
+
+func (x *IdentityPasswordCode) GetExpiresAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return nil
+}
+
+func (x *IdentityPasswordCode) GetResetUrl() string {
+	if x != nil {
+		return x.ResetUrl
+	}
+	return ""
 }
 
 // IdentityApp is one registered application. A client id is not a secret.
@@ -233,7 +357,7 @@ type IdentityApp struct {
 
 func (x *IdentityApp) Reset() {
 	*x = IdentityApp{}
-	mi := &file_controlplane_v1_identity_proto_msgTypes[0]
+	mi := &file_controlplane_v1_identity_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -245,7 +369,7 @@ func (x *IdentityApp) String() string {
 func (*IdentityApp) ProtoMessage() {}
 
 func (x *IdentityApp) ProtoReflect() protoreflect.Message {
-	mi := &file_controlplane_v1_identity_proto_msgTypes[0]
+	mi := &file_controlplane_v1_identity_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -258,7 +382,7 @@ func (x *IdentityApp) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IdentityApp.ProtoReflect.Descriptor instead.
 func (*IdentityApp) Descriptor() ([]byte, []int) {
-	return file_controlplane_v1_identity_proto_rawDescGZIP(), []int{0}
+	return file_controlplane_v1_identity_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *IdentityApp) GetName() string {
@@ -298,7 +422,7 @@ type IdentityDelivery struct {
 
 func (x *IdentityDelivery) Reset() {
 	*x = IdentityDelivery{}
-	mi := &file_controlplane_v1_identity_proto_msgTypes[1]
+	mi := &file_controlplane_v1_identity_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -310,7 +434,7 @@ func (x *IdentityDelivery) String() string {
 func (*IdentityDelivery) ProtoMessage() {}
 
 func (x *IdentityDelivery) ProtoReflect() protoreflect.Message {
-	mi := &file_controlplane_v1_identity_proto_msgTypes[1]
+	mi := &file_controlplane_v1_identity_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -323,7 +447,7 @@ func (x *IdentityDelivery) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IdentityDelivery.ProtoReflect.Descriptor instead.
 func (*IdentityDelivery) Descriptor() ([]byte, []int) {
-	return file_controlplane_v1_identity_proto_rawDescGZIP(), []int{1}
+	return file_controlplane_v1_identity_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *IdentityDelivery) GetKind() string {
@@ -390,7 +514,7 @@ type IdentityRole struct {
 
 func (x *IdentityRole) Reset() {
 	*x = IdentityRole{}
-	mi := &file_controlplane_v1_identity_proto_msgTypes[2]
+	mi := &file_controlplane_v1_identity_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -402,7 +526,7 @@ func (x *IdentityRole) String() string {
 func (*IdentityRole) ProtoMessage() {}
 
 func (x *IdentityRole) ProtoReflect() protoreflect.Message {
-	mi := &file_controlplane_v1_identity_proto_msgTypes[2]
+	mi := &file_controlplane_v1_identity_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -415,7 +539,7 @@ func (x *IdentityRole) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IdentityRole.ProtoReflect.Descriptor instead.
 func (*IdentityRole) Descriptor() ([]byte, []int) {
-	return file_controlplane_v1_identity_proto_rawDescGZIP(), []int{2}
+	return file_controlplane_v1_identity_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *IdentityRole) GetKey() string {
@@ -461,7 +585,7 @@ type IdentityUser struct {
 
 func (x *IdentityUser) Reset() {
 	*x = IdentityUser{}
-	mi := &file_controlplane_v1_identity_proto_msgTypes[3]
+	mi := &file_controlplane_v1_identity_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -473,7 +597,7 @@ func (x *IdentityUser) String() string {
 func (*IdentityUser) ProtoMessage() {}
 
 func (x *IdentityUser) ProtoReflect() protoreflect.Message {
-	mi := &file_controlplane_v1_identity_proto_msgTypes[3]
+	mi := &file_controlplane_v1_identity_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -486,7 +610,7 @@ func (x *IdentityUser) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IdentityUser.ProtoReflect.Descriptor instead.
 func (*IdentityUser) Descriptor() ([]byte, []int) {
-	return file_controlplane_v1_identity_proto_rawDescGZIP(), []int{3}
+	return file_controlplane_v1_identity_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *IdentityUser) GetUserId() string {
@@ -535,7 +659,12 @@ var File_controlplane_v1_identity_proto protoreflect.FileDescriptor
 
 const file_controlplane_v1_identity_proto_rawDesc = "" +
 	"\n" +
-	"\x1econtrolplane/v1/identity.proto\x12\x0fcontrolplane.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\x86\x01\n" +
+	"\x1econtrolplane/v1/identity.proto\x12\x0fcontrolplane.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\x82\x01\n" +
+	"\x14IdentityPasswordCode\x12\x12\n" +
+	"\x04code\x18\x01 \x01(\tR\x04code\x129\n" +
+	"\n" +
+	"expires_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\texpiresAt\x12\x1b\n" +
+	"\treset_url\x18\x03 \x01(\tR\bresetUrl\"\x86\x01\n" +
 	"\vIdentityApp\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1b\n" +
 	"\tclient_id\x18\x02 \x01(\tR\bclientId\x12F\n" +
@@ -582,7 +711,11 @@ const file_controlplane_v1_identity_proto_rawDesc = "" +
 	"\x1fIDENTITY_DELIVERY_STATE_FAILING\x10\x03\x12#\n" +
 	"\x1fIDENTITY_DELIVERY_STATE_UNBOUND\x10\x04\x12%\n" +
 	"!IDENTITY_DELIVERY_STATE_WITHDRAWN\x10\x05\x12$\n" +
-	" IDENTITY_DELIVERY_STATE_DISABLED\x10\x06*\xbb\x01\n" +
+	" IDENTITY_DELIVERY_STATE_DISABLED\x10\x06*\x80\x01\n" +
+	"\x14IdentityMailDelivery\x12&\n" +
+	"\"IDENTITY_MAIL_DELIVERY_UNSPECIFIED\x10\x00\x12\x1f\n" +
+	"\x1bIDENTITY_MAIL_DELIVERY_NONE\x10\x01\x12\x1f\n" +
+	"\x1bIDENTITY_MAIL_DELIVERY_SMTP\x10\x02*\xbb\x01\n" +
 	"\x11IdentityUserState\x12#\n" +
 	"\x1fIDENTITY_USER_STATE_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bIDENTITY_USER_STATE_INVITED\x10\x01\x12\x1e\n" +
@@ -603,29 +736,32 @@ func file_controlplane_v1_identity_proto_rawDescGZIP() []byte {
 	return file_controlplane_v1_identity_proto_rawDescData
 }
 
-var file_controlplane_v1_identity_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_controlplane_v1_identity_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_controlplane_v1_identity_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
+var file_controlplane_v1_identity_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_controlplane_v1_identity_proto_goTypes = []any{
 	(IdentityState)(0),            // 0: controlplane.v1.IdentityState
 	(IdentityDeliveryState)(0),    // 1: controlplane.v1.IdentityDeliveryState
-	(IdentityUserState)(0),        // 2: controlplane.v1.IdentityUserState
-	(*IdentityApp)(nil),           // 3: controlplane.v1.IdentityApp
-	(*IdentityDelivery)(nil),      // 4: controlplane.v1.IdentityDelivery
-	(*IdentityRole)(nil),          // 5: controlplane.v1.IdentityRole
-	(*IdentityUser)(nil),          // 6: controlplane.v1.IdentityUser
-	(*timestamppb.Timestamp)(nil), // 7: google.protobuf.Timestamp
+	(IdentityMailDelivery)(0),     // 2: controlplane.v1.IdentityMailDelivery
+	(IdentityUserState)(0),        // 3: controlplane.v1.IdentityUserState
+	(*IdentityPasswordCode)(nil),  // 4: controlplane.v1.IdentityPasswordCode
+	(*IdentityApp)(nil),           // 5: controlplane.v1.IdentityApp
+	(*IdentityDelivery)(nil),      // 6: controlplane.v1.IdentityDelivery
+	(*IdentityRole)(nil),          // 7: controlplane.v1.IdentityRole
+	(*IdentityUser)(nil),          // 8: controlplane.v1.IdentityUser
+	(*timestamppb.Timestamp)(nil), // 9: google.protobuf.Timestamp
 }
 var file_controlplane_v1_identity_proto_depIdxs = []int32{
-	7, // 0: controlplane.v1.IdentityApp.broker_expires_at:type_name -> google.protobuf.Timestamp
-	1, // 1: controlplane.v1.IdentityDelivery.state:type_name -> controlplane.v1.IdentityDeliveryState
-	7, // 2: controlplane.v1.IdentityDelivery.last_verified_at:type_name -> google.protobuf.Timestamp
-	2, // 3: controlplane.v1.IdentityUser.state:type_name -> controlplane.v1.IdentityUserState
-	7, // 4: controlplane.v1.IdentityUser.created_at:type_name -> google.protobuf.Timestamp
-	5, // [5:5] is the sub-list for method output_type
-	5, // [5:5] is the sub-list for method input_type
-	5, // [5:5] is the sub-list for extension type_name
-	5, // [5:5] is the sub-list for extension extendee
-	0, // [0:5] is the sub-list for field type_name
+	9, // 0: controlplane.v1.IdentityPasswordCode.expires_at:type_name -> google.protobuf.Timestamp
+	9, // 1: controlplane.v1.IdentityApp.broker_expires_at:type_name -> google.protobuf.Timestamp
+	1, // 2: controlplane.v1.IdentityDelivery.state:type_name -> controlplane.v1.IdentityDeliveryState
+	9, // 3: controlplane.v1.IdentityDelivery.last_verified_at:type_name -> google.protobuf.Timestamp
+	3, // 4: controlplane.v1.IdentityUser.state:type_name -> controlplane.v1.IdentityUserState
+	9, // 5: controlplane.v1.IdentityUser.created_at:type_name -> google.protobuf.Timestamp
+	6, // [6:6] is the sub-list for method output_type
+	6, // [6:6] is the sub-list for method input_type
+	6, // [6:6] is the sub-list for extension type_name
+	6, // [6:6] is the sub-list for extension extendee
+	0, // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_controlplane_v1_identity_proto_init() }
@@ -638,8 +774,8 @@ func file_controlplane_v1_identity_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_controlplane_v1_identity_proto_rawDesc), len(file_controlplane_v1_identity_proto_rawDesc)),
-			NumEnums:      3,
-			NumMessages:   4,
+			NumEnums:      4,
+			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

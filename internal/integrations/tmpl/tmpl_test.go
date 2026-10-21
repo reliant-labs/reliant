@@ -129,3 +129,22 @@ func TestHasExpr(t *testing.T) {
 		t.Fatal("HasExpr wrong")
 	}
 }
+
+func TestPrepareCompilesOnceAndEvaluatesManyTimes(t *testing.T) {
+	e, err := Prepare("item.private ? 'private' : 'public'", "item")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for in, want := range map[bool]string{true: "private", false: "public"} {
+		got, err := e(map[string]any{"item": map[string]any{"private": in}})
+		if err != nil || got != want {
+			t.Errorf("private=%v: got %v, %v", in, got, err)
+		}
+	}
+	if _, err := Prepare("item.", "item"); err == nil {
+		t.Error("a bad expression is refused at Prepare, not at the first item")
+	}
+	if _, err := e(map[string]any{"item": 7}); err == nil {
+		t.Error("an item the expression cannot read is an error, not a zero value")
+	}
+}

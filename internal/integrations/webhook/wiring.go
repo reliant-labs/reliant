@@ -130,7 +130,7 @@ func RegistryFor(cfg RegistryConfig) (*Registry, error) {
 		if err != nil {
 			return nil, err
 		}
-		p, err := gmail.New(gmail.Deps{BaseURL: m.GetConnection().GetBaseUrl(), Runner: httpaction.NewRunner(netguard.New())})
+		p, err := gmail.NewInstrumented(gmail.Deps{BaseURL: m.GetConnection().GetBaseUrl(), Runner: httpaction.NewRunner(netguard.New())})
 		if err != nil {
 			return nil, err
 		}

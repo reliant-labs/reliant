@@ -16,6 +16,8 @@ import (
 	"runtime"
 	"strings"
 	"time"
+
+	"github.com/reliant-labs/forge/pkg/observe"
 )
 
 // ErrAuthNotConfigured is returned when OAuth is attempted with no provider
@@ -229,7 +231,7 @@ func exchangeCodeForTokens(ctx context.Context, serverURL, anonKey, code, verifi
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("apikey", anonKey)
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := observe.NewHTTPClient(observe.HTTPClientOptions{}).Do(req)
 	if err != nil {
 		return nil, err
 	}

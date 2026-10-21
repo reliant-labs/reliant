@@ -29,7 +29,7 @@ There might be 10 reliant processes running at a time, each for a different feat
 ## Database (Postgres only)
 
 - Migrations are forge migrations in `db/migrations/` (`<YYYYMMDDHHMMSS>_<name>.up.sql`, forward only, applied by forge's migrator). Create them with `make migration NAME=<name>` — never hand-write the version. Each one says whether the previous release survives it: `-- forge:backward-compatible — <why>` (the default; expand/contract) or `-- forge:breaks-rollback <why>`, enforced by `forge lint --migration-safety`. One file runs as one transaction; a `CREATE INDEX CONCURRENTLY` must be the only statement in its file (see `internal/db/SCHEMA.md`). `internal/db/migrations/postgres` is goose's frozen history, kept only for the goose bridge that catches old databases up: never add to or edit it.
-- sqlc reads `db/migrations` directly: regenerate it (`make sqlc`) after a migration; keep generated/query artifacts in sync.
+- The forge ORM projects the applied schema into `internal/store`: after a migration run the pinned `forge generate` (`make forge-generate-check`) and commit what it writes. Queries live in `internal/store/<entity>_repo_ext.go`; `internal/db` is the hand Repository facade over them (rules: `internal/db/SCHEMA.md`). There is no sqlc.
 - Key tables: `chats`, `messages`, `message_content_blocks` (text, tool calls), `workflows`, `projects`, `worktrees`.
 - Two dev Postgres servers — not drift, different stacks: **5433** is this repo's own docker-compose (`make postgres-up`, `scripts/dev.sh`, the Make test targets); **5434** is the control-plane `forge env up` stack's, database `reliant`, holding real data — read-only, never drop or mutate it.
 

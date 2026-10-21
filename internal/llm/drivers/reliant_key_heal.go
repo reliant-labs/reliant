@@ -200,7 +200,7 @@ func InstallReliantKeyHealer(repo *db.Repo, baseURL, internalSecret string) *Rel
 	if baseURL == "" || internalSecret == "" {
 		return nil
 	}
-	minter := accesstokenclient.New(accesstokenclient.Deps{
+	minter := accesstokenclient.NewInstrumented(accesstokenclient.Deps{
 		BaseURL: baseURL,
 		Sign:    func() (string, error) { return auth.SignInternalServiceToken(internalSecret) },
 	})

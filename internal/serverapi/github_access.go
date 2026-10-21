@@ -62,7 +62,7 @@ func wireGitHubSenders(repo *db.Repo, keys vault.Service, cp controlplane.Endpoi
 		return nil, err
 	}
 	return map[string]trigger.SenderDirectory{
-		ghusers.IntegrationID: gitHubSenders{dir: ghusers.New(ghusers.Deps{Tokens: tokens})},
+		ghusers.IntegrationID: gitHubSenders{dir: ghusers.NewInstrumented(ghusers.Deps{Tokens: tokens})},
 	}, nil
 }
 
@@ -96,7 +96,7 @@ func gitHubTokenSource(repo *db.Repo, keys vault.Service, cp controlplane.Endpoi
 			return nil, errors.New("github triggers: RELIANT_CONTROL_PLANE_URL is set but INTERNAL_SERVICE_SECRET is not; " +
 				"hosted GitHub tokens come from control-plane and cannot be fetched unauthenticated")
 		}
-		return ghaccess.NewDelegatedTokens(gitcredentialclient.New(gitcredentialclient.Deps{
+		return ghaccess.NewDelegatedTokens(gitcredentialclient.NewInstrumented(gitcredentialclient.Deps{
 			BaseURL: cp.URL,
 			Sign:    func() (string, error) { return auth.SignInternalServiceToken(secret) },
 		})), nil

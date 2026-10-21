@@ -301,6 +301,9 @@ func jsonSchemaMapToFieldInfo(name string, schema map[string]interface{}) *Field
 
 // protoInputTypeName returns a human-readable type name for a proto input.
 func protoInputTypeName(input *reliantv1.Input) string {
+	if isIntegrationInput(input) {
+		return integrationTypeName(input)
+	}
 	switch input.GetType() {
 	case "string":
 		return "string"
@@ -645,11 +648,17 @@ func levenshtein(a, b string) int {
 // BuildWorkflowTypeContext creates a WorkflowTypeContext from a proto V2Workflow.
 // This provides type information for CEL compilation-based validation.
 func BuildWorkflowTypeContext(wf *reliantv1.Workflow, loader WorkflowLoader) *WorkflowTypeContext {
+	return buildWorkflowTypeContext(wf, loader, nil)
+}
+
+func buildWorkflowTypeContext(wf *reliantv1.Workflow, loader WorkflowLoader, vt ValueTypes) *WorkflowTypeContext {
 	if wf == nil {
 		return nil
 	}
+	vt = typesOrDefault(vt)
 
 	ctx := &WorkflowTypeContext{
+		ValueTypes:       vt,
 		InputFields:      make(map[string]*FieldInfo),
 		InputGroups:      make(map[string]map[string]*FieldInfo),
 		NodeOutputs:      make(map[string]map[string]*FieldInfo),
@@ -667,11 +676,11 @@ func BuildWorkflowTypeContext(wf *reliantv1.Workflow, loader WorkflowLoader) *Wo
 		if model.IsGroupInput(input) {
 			groupFields := make(map[string]*FieldInfo)
 			for fieldName, nested := range model.GetGroupInputs(input) {
-				groupFields[fieldName] = protoInputToFieldInfo(fieldName, nested)
+				groupFields[fieldName] = protoInputToFieldInfo(fieldName, nested, vt)
 			}
 			ctx.InputGroups[name] = groupFields
 		} else {
-			ctx.InputFields[name] = protoInputToFieldInfo(name, input)
+			ctx.InputFields[name] = protoInputToFieldInfo(name, input, vt)
 		}
 	}
 
@@ -730,12 +739,16 @@ func BuildWorkflowTypeContext(wf *reliantv1.Workflow, loader WorkflowLoader) *Wo
 }
 
 // protoInputToFieldInfo converts a proto V2Input to FieldInfo.
-func protoInputToFieldInfo(name string, input *reliantv1.Input) *FieldInfo {
+func protoInputToFieldInfo(name string, input *reliantv1.Input, vt ValueTypes) *FieldInfo {
 	info := &FieldInfo{Name: name}
 	if input == nil {
 		info.Kind = reflect.Interface
 		info.IsDynamic = true
 		return info
+	}
+
+	if isIntegrationInput(input) {
+		return integrationFieldInfo(name, input, vt)
 	}
 
 	switch input.GetType() {
@@ -2725,10 +2738,14 @@ func (tc *SchemaTypeChecker) CheckCELExpressionWithSchema(expr string, celAst *c
 // by compiling it in the environment the runtime evaluates it in (see
 // cel_sites.go), then running the guard analysis (guarded_access.go).
 func ValidateCELWithCompilation(wf *reliantv1.Workflow, result *Result, loader WorkflowLoader) {
+	validateCELWithTypes(wf, result, loader, nil)
+}
+
+func validateCELWithTypes(wf *reliantv1.Workflow, result *Result, loader WorkflowLoader, vt ValueTypes) {
 	// The compile pass below drops syntax errors; this is where they are
 	// reported, with a position. Run it first and unconditionally.
 	validateTemplateSyntax(wf, result)
-	typeCtx := BuildWorkflowTypeContext(wf, loader)
+	typeCtx := buildWorkflowTypeContext(wf, loader, vt)
 	if typeCtx == nil {
 		return
 	}

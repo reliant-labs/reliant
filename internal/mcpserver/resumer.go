@@ -51,7 +51,7 @@ func NewControlPlaneResumer(baseURL string) *ControlPlaneResumer {
 	if trimmed == "" {
 		return nil
 	}
-	return &ControlPlaneResumer{client: controlplane.New(controlplane.Deps{BaseURL: trimmed})}
+	return &ControlPlaneResumer{client: controlplane.NewInstrumented(controlplane.Deps{BaseURL: trimmed})}
 }
 
 // ResumeDaemon asks the control plane to wake daemonID on the user's behalf.

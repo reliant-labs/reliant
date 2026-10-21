@@ -132,8 +132,7 @@ const HEALTHY_SUB = {
       displayOrder: 2,
       structuredLimits: {
         allowedDaemonSizes: ["small", "medium"],
-        daemonComputeIncludedMinutes: 2460,
-        daemonOveragePerMinuteCents: 0.47,
+        includedSmallDaemonHours: 41n,
       },
     },
   },
@@ -151,21 +150,20 @@ const DEGRADED_SUB = {
       displayOrder: 2,
       structuredLimits: {
         allowedDaemonSizes: [],
-        daemonComputeIncludedMinutes: 0,
-        daemonOveragePerMinuteCents: 0,
+        includedSmallDaemonHours: 0n,
       },
     },
   },
 };
 
 const USAGE = {
-  includedMinutes: 2460,
-  usedMinutes: 720,
-  overageMinutes: 0,
+  includedSmallDaemonSeconds: 147600,
+  usedSmallDaemonSeconds: 43200,
+  remainingSmallDaemonSeconds: 104400,
+  runningMultiplier: 0,
   estimatedOverageCostCents: 0,
-  byDay: [],
-  byWorkspace: [],
-  grantedMinutesRemaining: 0,
+  bySize: [],
+  grantedSmallDaemonSecondsRemaining: 0,
   // Not optional. A response without this flag is one the server could not
   // measure, and the band correctly refuses to draw hours for it — so a
   // fixture that omits it silently tests the degraded path while claiming to
@@ -248,7 +246,7 @@ describe("AI credit and compute are two regions, not two identical cards", () =>
     // Compute: hours against a ceiling, with a renewal date. No balance.
     const compute = within(computeBand());
     expect(compute.getByText(/12\.0 h/)).toBeInTheDocument();
-    expect(compute.getByText(/41 h included/i)).toBeInTheDocument();
+    expect(compute.getByText(/41\.0 h included/i)).toBeInTheDocument();
     expect(compute.getByText(/renews/i)).toBeInTheDocument();
     expect(compute.queryByText("$18.40")).toBeNull();
   });

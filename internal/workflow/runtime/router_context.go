@@ -201,40 +201,7 @@ func buildRoutingResponseSchema(candidates []routerWorkflowInfo) map[string]inte
 
 // getInputDescription extracts the human-readable description from an Input proto.
 func getInputDescription(input *reliantv1.Input) string {
-	if input == nil {
-		return ""
-	}
-	switch cfg := input.GetConfig().(type) {
-	case *reliantv1.Input_StringInput:
-		return cfg.StringInput.GetBase().GetDescription()
-	case *reliantv1.Input_NumberInput:
-		return cfg.NumberInput.GetBase().GetDescription()
-	case *reliantv1.Input_IntegerInput:
-		return cfg.IntegerInput.GetBase().GetDescription()
-	case *reliantv1.Input_BooleanInput:
-		return cfg.BooleanInput.GetBase().GetDescription()
-	case *reliantv1.Input_EnumInput:
-		return cfg.EnumInput.GetBase().GetDescription()
-	case *reliantv1.Input_ModelInput:
-		return cfg.ModelInput.GetBase().GetDescription()
-	case *reliantv1.Input_MessageInput:
-		return cfg.MessageInput.GetBase().GetDescription()
-	case *reliantv1.Input_AttachmentsInput:
-		return cfg.AttachmentsInput.GetBase().GetDescription()
-	case *reliantv1.Input_ToolsInput:
-		return cfg.ToolsInput.GetBase().GetDescription()
-	case *reliantv1.Input_ArrayInput:
-		return cfg.ArrayInput.GetBase().GetDescription()
-	case *reliantv1.Input_ObjectInput:
-		return cfg.ObjectInput.GetBase().GetDescription()
-	case *reliantv1.Input_AnyInput:
-		return cfg.AnyInput.GetBase().GetDescription()
-	case *reliantv1.Input_GroupInput:
-		return cfg.GroupInput.GetBase().GetDescription()
-	case *reliantv1.Input_PresetInput:
-		return cfg.PresetInput.GetBase().GetDescription()
-	}
-	return ""
+	return model.GetInputBase(input).GetDescription()
 }
 
 // getInputTypeDetails returns type-specific constraints as a human-readable string.
@@ -254,6 +221,20 @@ func getInputTypeDetails(input *reliantv1.Input) string {
 		}
 		if cfg.NumberInput.GetMax() != 0 {
 			parts = append(parts, fmt.Sprintf("max: %g", cfg.NumberInput.GetMax()))
+		}
+		if len(parts) > 0 {
+			return strings.Join(parts, ", ")
+		}
+	case *reliantv1.Input_IntegrationInput:
+		var parts []string
+		if cfg.IntegrationInput.GetMulti() {
+			parts = append(parts, "multi")
+		}
+		if cfg.IntegrationInput.MinItems != nil {
+			parts = append(parts, fmt.Sprintf("min_items: %d", cfg.IntegrationInput.GetMinItems()))
+		}
+		if cfg.IntegrationInput.MaxItems != nil {
+			parts = append(parts, fmt.Sprintf("max_items: %d", cfg.IntegrationInput.GetMaxItems()))
 		}
 		if len(parts) > 0 {
 			return strings.Join(parts, ", ")

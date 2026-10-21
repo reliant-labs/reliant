@@ -35,7 +35,7 @@ func TestReviveThread(t *testing.T) {
 	// turn on the same thread exactly like a completed one.
 	for _, tc := range []struct {
 		name   string
-		status int32
+		status ThreadStatus
 	}{
 		{"previous turn completed", ThreadStatusCompleted},
 		{"previous turn failed", ThreadStatusFailed},
@@ -90,10 +90,10 @@ func TestReviveThread_LeavesLiveThreadsAlone(t *testing.T) {
 
 	for _, tc := range []struct {
 		name   string
-		status int32
+		status ThreadStatus
 	}{
 		{"already running", ThreadStatusRunning},
-		{"paused and resumable", int32(6)},
+		{"paused and resumable", ThreadStatus(6)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			wfID := "wf-revive-live-" + tc.name

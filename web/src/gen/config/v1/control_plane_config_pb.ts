@@ -16,8 +16,8 @@ export const file_config_v1_control_plane_config: GenFile = /*@__PURE__*/
 
 /**
  * ControlPlaneConfig is how a server process reaches the control plane that
- * hosts this deployment. Every server role composes it (ApiServerConfig,
- * WorkerConfig, GatewayConfig); the daemon and the CLI do not read it.
+ * hosts this deployment. Every server role reads it, through
+ * ServerProcessConfig; the daemon and the CLI do not.
  *
  * Its presence is what makes a deployment HOSTED: with no url, reliant is
  * self-hosted, and every consumer takes its self-hosted path (the local token

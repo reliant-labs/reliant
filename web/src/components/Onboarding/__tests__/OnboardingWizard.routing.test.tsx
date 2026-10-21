@@ -188,15 +188,12 @@ vi.mock("../OnboardingChecklist", () => ({
   OnboardingChecklist: () => null,
 }));
 
-
-// ─── Lazy wizard import ──────────────────────────────────────────────────────
-
-async function loadWizard(): Promise<React.ComponentType<any> | null> {
-  // Left unguarded on purpose: an import failure should surface as the real
-  // module error, which is exactly what an uncaught rejection already gives.
-  const mod = await import("../OnboardingWizard");
-  return (mod as any).OnboardingWizard ?? null;
-}
+// Imported statically, after the mocks (vitest hoists vi.mock above it): a
+// dynamic import inside the first test made that test pay for loading the
+// wizard's whole module graph, and on a loaded machine it hit the 10s test
+// timeout.
+import { OnboardingWizard } from "../OnboardingWizard";
+import { trackEvent } from "../../../lib/analytics";
 
 // ─── Test router ─────────────────────────────────────────────────────────────
 
@@ -268,12 +265,7 @@ describe("OnboardingWizard URL gating", () => {
   });
 
   it("renders nothing when no ?tour param is present", async () => {
-    const Wizard = await loadWizard();
-    if (!Wizard) {
-      expect.fail("OnboardingWizard not importable");
-      return;
-    }
-    const router = makeRouter(["/"], Wizard);
+    const router = makeRouter(["/"], OnboardingWizard);
     render(React.createElement(RouterProvider as any, { router }));
     await waitFor(() =>
       expect(screen.getByTestId("index")).toBeInTheDocument()
@@ -285,12 +277,7 @@ describe("OnboardingWizard URL gating", () => {
   });
 
   it("renders the multi-spotlight step when at /?tour=chat-and-sidebars", async () => {
-    const Wizard = await loadWizard();
-    if (!Wizard) {
-      expect.fail("OnboardingWizard not importable");
-      return;
-    }
-    const router = makeRouter(["/?tour=chat-and-sidebars"], Wizard);
+    const router = makeRouter(["/?tour=chat-and-sidebars"], OnboardingWizard);
     render(React.createElement(RouterProvider as any, { router }));
     await waitFor(() => {
       // The chat-and-sidebars step renders the OnboardingNavBar with step 1/7.
@@ -299,12 +286,7 @@ describe("OnboardingWizard URL gating", () => {
   });
 
   it("renders an 'Open Workflows' modal when on / but tour=workflow-hub", async () => {
-    const Wizard = await loadWizard();
-    if (!Wizard) {
-      expect.fail("OnboardingWizard not importable");
-      return;
-    }
-    const router = makeRouter(["/?tour=workflow-hub"], Wizard);
+    const router = makeRouter(["/?tour=workflow-hub"], OnboardingWizard);
     render(React.createElement(RouterProvider as any, { router }));
     await waitFor(() =>
       expect(screen.getByRole("button", { name: /open workflows/i })).toBeInTheDocument()
@@ -315,12 +297,7 @@ describe("OnboardingWizard URL gating", () => {
   });
 
   it("clicking 'Open Workflows' navigates to the Library with the tour param preserved", async () => {
-    const Wizard = await loadWizard();
-    if (!Wizard) {
-      expect.fail("OnboardingWizard not importable");
-      return;
-    }
-    const router = makeRouter(["/?tour=workflow-hub"], Wizard);
+    const router = makeRouter(["/?tour=workflow-hub"], OnboardingWizard);
     render(React.createElement(RouterProvider as any, { router }));
 
     const button = await waitFor(() =>
@@ -339,12 +316,7 @@ describe("OnboardingWizard URL gating", () => {
   });
 
   it("renders the spotlight branch (not the open-page modal) at /workflows/library?tour=workflow-hub", async () => {
-    const Wizard = await loadWizard();
-    if (!Wizard) {
-      expect.fail("OnboardingWizard not importable");
-      return;
-    }
-    const router = makeRouter(["/workflows/library?tour=workflow-hub"], Wizard);
+    const router = makeRouter(["/workflows/library?tour=workflow-hub"], OnboardingWizard);
     render(React.createElement(RouterProvider as any, { router }));
     await waitFor(() =>
       expect(screen.getByTestId("workflow-hub-page")).toBeInTheDocument()
@@ -363,12 +335,7 @@ describe("OnboardingWizard URL gating", () => {
       "/workflow/builtin%3A%2F%2Fget-it-right?drill=attempt&tour=workflow-builder";
 
     it("labels its button Finish and offers no Skip tour", async () => {
-      const Wizard = await loadWizard();
-      if (!Wizard) {
-        expect.fail("OnboardingWizard not importable");
-        return;
-      }
-      const router = makeRouter([lastStepUrl], Wizard);
+      const router = makeRouter([lastStepUrl], OnboardingWizard);
       render(React.createElement(RouterProvider as any, { router }));
 
       expect(await screen.findByRole("button", { name: /finish/i })).toBeInTheDocument();
@@ -378,15 +345,9 @@ describe("OnboardingWizard URL gating", () => {
     });
 
     it("Finish records completion and lands the user on their project chat", async () => {
-      const Wizard = await loadWizard();
-      if (!Wizard) {
-        expect.fail("OnboardingWizard not importable");
-        return;
-      }
-      const { trackEvent } = await import("../../../lib/analytics");
       vi.mocked(trackEvent).mockClear();
 
-      const router = makeRouter([lastStepUrl], Wizard);
+      const router = makeRouter([lastStepUrl], OnboardingWizard);
       render(React.createElement(RouterProvider as any, { router }));
       await userEvent.click(await screen.findByRole("button", { name: /finish/i }));
 
@@ -404,12 +365,7 @@ describe("OnboardingWizard URL gating", () => {
     });
 
     it("earlier steps still say Next", async () => {
-      const Wizard = await loadWizard();
-      if (!Wizard) {
-        expect.fail("OnboardingWizard not importable");
-        return;
-      }
-      const router = makeRouter(["/?tour=workflow-controls"], Wizard);
+      const router = makeRouter(["/?tour=workflow-controls"], OnboardingWizard);
       render(React.createElement(RouterProvider as any, { router }));
 
       expect(await screen.findByRole("button", { name: /^next/i })).toBeInTheDocument();
