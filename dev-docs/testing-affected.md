@@ -72,6 +72,32 @@ repo path (`filepath.Join(root, "deploy", "kcl")`) and selects those packages
 when that path changes. It over-approximates on purpose: a test run for no
 reason costs seconds, a test wrongly skipped costs a red main.
 
+What counts as naming a path (`scanSources`, `literalCandidates` in
+`tools/test-affected/graph.go`):
+
+- **A `filepath.Join` / `path.Join` is judged by its anchor**, the first
+  argument, because that is the directory the literals after it are relative to
+  (package string constants count as literals):
+  - joined from the first argument on, the path is relative to the package
+    directory, where `go test` runs: `filepath.Join("..", "..", "web", "src")` in
+    `internal/grpc` names `web/src`;
+  - joined onto the repo root, it names that path under the root:
+    `filepath.Join(repoRoot(t), "scripts", name)` names `scripts/`. The root is
+    whatever the package's sources derive from `os.Getwd()`,
+    `runtime.Caller`, `filepath.Abs("<relative>")`, a `".."`,
+    `git rev-parse --show-toplevel`, or a function, variable or struct field
+    that returns or holds one of those (`rootfacts.go`);
+  - joined onto anything else (`t.TempDir()`, a fixture's checkout, a parameter)
+    it names a directory outside the repo and is **no read at all**:
+    `filepath.Join(ws, "web")` builds a fixture's `web` checkout, not a read of
+    `web/`. Before this rule such fixtures made every web-only diff run their
+    Go packages.
+- **Any other literal is judged alone**: a multi-segment one that is a tracked
+  file or directory (`"deploy/kcl/main.k"` in a table) is a read wherever it is
+  used, and a bare word (`"web"`, `"db"`) only when it is a file at the repo
+  root (`"go.mod"`) or the lone literal argument of another path call
+  (`readTree(root, "deploy")`).
+
 **Web.** vitest's own `related` mode builds the same graph by transforming every
 test file: `vitest list --changed` took 65 seconds of wall time and 26 seconds of
 CPU just to name the files, before running any, on a loaded machine.
@@ -91,6 +117,10 @@ cannot see).
 
 - A Go test that builds a path at run time from non-literal parts reads a file
   the scan cannot name. It still runs when its own package or a dependency changes.
+  So does one that joins literals onto a root it was handed as a parameter
+  (`func readUnder(root string) { filepath.Join(root, "web") }`): a parameter
+  is not traced back to its callers, so name the path in the caller, or join it
+  onto `repoRoot(t)` where it is read.
 - A web test that reads a file through a variable path. The marker scan
   (`readFileSync`, `readdirSync`, `process.cwd()`, `__dirname`) selects any test
   that reads files and names the changed file as a literal.

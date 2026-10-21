@@ -48,6 +48,8 @@ func savedAt(t *testing.T, f *fixture, refs []string, kind, sha string) string {
 // A detached HEAD with commits no branch or remote has: the commits are saved
 // under a ref, then the worktree is removed.
 func TestReconcile_DetachedUnpushedCommitsAreSavedThenRemoved(t *testing.T) {
+	t.Parallel()
+	heavyUnderShort(t, "~140 git processes: a full reclaim that saves a detached commit")
 	f := newFixture(t)
 	f.idle()
 	w := f.worktree("det", "feat/det")
@@ -73,6 +75,8 @@ func TestReconcile_DetachedUnpushedCommitsAreSavedThenRemoved(t *testing.T) {
 
 // A branch with commits on no remote: saved and removed; the branch survives.
 func TestReconcile_UnpushedBranchCommitsAreSavedThenRemoved(t *testing.T) {
+	t.Parallel()
+	heavyUnderShort(t, "~140 git processes: a full reclaim that saves an unpushed commit")
 	f := newFixture(t)
 	f.idle()
 	w := f.worktree("br", "feat/br")
@@ -92,6 +96,8 @@ func TestReconcile_UnpushedBranchCommitsAreSavedThenRemoved(t *testing.T) {
 // Commits only the worktree's own reflog reaches (here: reset away) are saved
 // before its admin directory, and with it the reflog, goes.
 func TestReconcile_ReflogOnlyCommitsAreSavedThenRemoved(t *testing.T) {
+	t.Parallel()
+	heavyUnderShort(t, "~100 git processes: a full reclaim that saves a reflog-only commit")
 	f := newFixture(t)
 	f.idle()
 	w := f.worktree("rl", "feat/rl")
@@ -108,6 +114,7 @@ func TestReconcile_ReflogOnlyCommitsAreSavedThenRemoved(t *testing.T) {
 
 // Saving is idempotent: a second pass reuses the refs it made.
 func TestSaveCommits_ReusesItsRefs(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	w := f.worktree("idem", "feat/idem")
 	commit(t, w.Path, "x.txt", "x\n")
@@ -126,6 +133,7 @@ func TestSaveCommits_ReusesItsRefs(t *testing.T) {
 
 // Uncommitted work still holds: nothing is saved and nothing removed.
 func TestReconcile_DirtyStillHoldsWithUnpushedCommits(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	f.idle()
 	w := f.worktree("dirty-up", "feat/dirty-up")
@@ -144,6 +152,7 @@ func TestReconcile_DirtyStillHoldsWithUnpushedCommits(t *testing.T) {
 
 // "Keep everything" removes nothing, so nothing is saved either.
 func TestReconcile_KeepEverythingDoesNotSaveOrRemove(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	f.idle()
 	w := f.worktree("keep-up", "feat/keep-up")

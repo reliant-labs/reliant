@@ -17,15 +17,13 @@ import (
 // whole change lands on main as ONE new commit, and the PR branch is deleted.
 func (f *fixture) squashMerge(branch string) {
 	f.t.Helper()
-	// Work on a throwaway clone of origin so the project's own checkout, which
-	// the worktrees hang off, is untouched: merging happens on the server.
-	srv := filepath.Join(f.t.TempDir(), "server")
-	run(f.t, filepath.Dir(srv), "clone", "-q", f.origin, srv)
-	run(f.t, srv, "config", "user.name", "gh")
-	run(f.t, srv, "config", "user.email", "gh@e.com")
-	run(f.t, srv, "merge", "--squash", "origin/"+branch)
-	run(f.t, srv, "commit", "-q", "-m", "squash of "+branch+" (#1)")
-	run(f.t, srv, "push", "-q", "origin", "main")
+	// Merge on the server itself, so the project's own checkout, which the
+	// worktrees hang off, is untouched. Plumbing in the bare origin makes the
+	// commit `merge --squash` would (the same three-way tree, one parent) in
+	// four processes; a clone, merge, commit and push was nineteen.
+	tree := run(f.t, f.origin, "merge-tree", "--write-tree", "main", branch)
+	squash := run(f.t, f.origin, "commit-tree", "-p", "main", "-m", "squash of "+branch+" (#1)", tree)
+	run(f.t, f.origin, "update-ref", "refs/heads/main", squash)
 	run(f.t, f.origin, "branch", "-D", branch)
 }
 
@@ -52,6 +50,7 @@ func (f *fixture) pruned(w Worktree) {
 }
 
 func TestMerged_SquashMergedBranchWithItsRemoteBranchDeletedIsReaped(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	f.idle()
 	w := f.worktree("sq", "feat/sq")
@@ -78,6 +77,7 @@ func TestMerged_SquashMergedBranchWithItsRemoteBranchDeletedIsReaped(t *testing.
 }
 
 func TestMerged_RebaseMergedBranchIsReaped(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	f.idle()
 	w := f.worktree("rb", "feat/rb")
@@ -105,6 +105,7 @@ func TestMerged_RebaseMergedBranchIsReaped(t *testing.T) {
 }
 
 func TestMerged_AnUnpushedLocalCommitIsStillHeld(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	f.idle()
 	w := f.worktree("lc", "feat/lc")
@@ -125,6 +126,7 @@ func TestMerged_AnUnpushedLocalCommitIsStillHeld(t *testing.T) {
 }
 
 func TestMerged_APurelyLocalBranchNeverPushedIsHeld(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	f.idle()
 	w := f.worktree("lo", "feat/lo")
@@ -135,6 +137,7 @@ func TestMerged_APurelyLocalBranchNeverPushedIsHeld(t *testing.T) {
 }
 
 func TestMerged_ADirtyCheckoutIsHeldEvenWhenItsBranchWasSquashMerged(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	f.idle()
 	w := f.worktree("dm", "feat/dm")
@@ -151,6 +154,7 @@ func TestMerged_ADirtyCheckoutIsHeldEvenWhenItsBranchWasSquashMerged(t *testing.
 }
 
 func TestMerged_InUseAndRecentlyActiveStillHoldAMergedWorktree(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	f.idle()
 	w := f.worktree("iu", "feat/iu")
@@ -173,6 +177,7 @@ func TestMerged_InUseAndRecentlyActiveStillHoldAMergedWorktree(t *testing.T) {
 // A user-locked worktree (someone else's `git worktree lock`) is never theirs
 // to reap, merged or not.
 func TestMerged_ALockedByTheUserWorktreeIsNotReaped(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	f.idle()
 	w := f.worktree("ul", "feat/ul")
@@ -191,6 +196,8 @@ func TestMerged_ALockedByTheUserWorktreeIsNotReaped(t *testing.T) {
 // worktree even when no patch on the local base matches (the clone has not
 // fetched the merge); a different head does not.
 func TestMerged_AMergedPullRequestForExactlyThisHeadFreesTheWorktree(t *testing.T) {
+	t.Parallel()
+	heavyUnderShort(t, "~140 git processes: a verdict, then a full reclaim of unmerged history")
 	f := newFixture(t)
 	f.idle()
 	w := f.worktree("pr", "feat/pr")
@@ -223,6 +230,7 @@ func TestMerged_AMergedPullRequestForExactlyThisHeadFreesTheWorktree(t *testing.
 // The base is refreshed before concluding the work is unmerged: the merge may
 // have happened since this clone last fetched.
 func TestMerged_TheBaseIsFetchedBeforeConcludingItIsUnmerged(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	f.idle()
 	w := f.worktree("ft", "feat/ft")
@@ -247,6 +255,7 @@ func TestMerged_TheBaseIsFetchedBeforeConcludingItIsUnmerged(t *testing.T) {
 // reverted since; what counts is the patch, so a squash of DIFFERENT content
 // must not match.
 func TestMerged_ADifferentChangeOnMainDoesNotCountAsMerged(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	f.idle()
 	w := f.worktree("df", "feat/df")
@@ -271,6 +280,8 @@ func TestMerged_ADifferentChangeOnMainDoesNotCountAsMerged(t *testing.T) {
 // squash-merged and one with unpushed work holds the whole thing, and naming
 // the checkout that is not done.
 func TestMerged_AMultiRepoWorkspaceNeedsEveryCheckoutDone(t *testing.T) {
+	t.Parallel()
+	heavyUnderShort(t, "~190 git processes: two checkouts, two squash merges, a verdict and a full reclaim")
 	f := newFixture(t)
 	f.idle()
 	ws := filepath.Join(f.root, "proj", "multi")
@@ -311,6 +322,7 @@ func TestMerged_AMultiRepoWorkspaceNeedsEveryCheckoutDone(t *testing.T) {
 // changes to one path would look identical. A branch that touches a binary file
 // is therefore never recognised by patch, and stays held.
 func TestMerged_ABranchThatTouchesABinaryFileIsNotRecognisedByPatch(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	f.idle()
 	w := f.worktree("bn", "feat/bn")
@@ -334,6 +346,7 @@ func TestMerged_ABranchThatTouchesABinaryFileIsNotRecognisedByPatch(t *testing.T
 }
 
 func TestMerged_PatchesOnBaseHandlesWhatItCannotCompare(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	w := f.worktree("pb", "feat/pb")
 	ctx := context.Background()

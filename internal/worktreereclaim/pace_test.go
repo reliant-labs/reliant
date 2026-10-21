@@ -20,6 +20,7 @@ func (f *fixture) probeIdle(w Worktree) Result {
 // An active worktree is reported finished only when everything the automatic
 // removal needs holds, with the longer floor. The daemon never removes it.
 func TestIdleDone_ReportsOnlyAFinishedWorktree(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	f.idle()
 	w := f.worktree("done", "feat/done")
@@ -35,6 +36,7 @@ func TestIdleDone_ReportsOnlyAFinishedWorktree(t *testing.T) {
 }
 
 func TestIdleDone_RefusesEverythingNotFinished(t *testing.T) {
+	t.Parallel()
 	cases := map[string]func(t *testing.T, f *fixture, w Worktree){
 		"untracked file": func(t *testing.T, f *fixture, w Worktree) { write(t, filepath.Join(w.Path, "wip.txt"), "x\n") },
 		"modified file":  func(t *testing.T, f *fixture, w Worktree) { write(t, filepath.Join(w.Path, "a.txt"), "changed\n") },
@@ -55,6 +57,7 @@ func TestIdleDone_RefusesEverythingNotFinished(t *testing.T) {
 	}
 	for name, setup := range cases {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			f := newFixture(t)
 			f.idle()
 			w := f.worktree("x", "feat/x")
@@ -71,6 +74,7 @@ func TestIdleDone_RefusesEverythingNotFinished(t *testing.T) {
 }
 
 func TestIdleDone_RecentlyTouchedIsNotFinished(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	f.r.Now = func() time.Time { return time.Now().Add(2 * time.Hour) } // past the removal floor, well short of the active one
 	f.r.IdleFloor = time.Hour
@@ -81,6 +85,7 @@ func TestIdleDone_RecentlyTouchedIsNotFinished(t *testing.T) {
 }
 
 func TestIdleDone_NeedsTheServerToAsk(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	f.idle()
 	w := f.worktree("quiet", "feat/quiet")
@@ -92,6 +97,7 @@ func TestIdleDone_NeedsTheServerToAsk(t *testing.T) {
 }
 
 func TestIdleDone_AWorktreeBeingRestoredIsNeverProbed(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	f.idle()
 	w := f.worktree("rest", "feat/rest")
@@ -104,13 +110,20 @@ func TestIdleDone_AWorktreeBeingRestoredIsNeverProbed(t *testing.T) {
 // One worktree stalled inside a check must cost its own row, not the budget the
 // others need: the request ends by its deadline and the stalled one is
 // reported as timed out, not held.
+//
+// The stalled check ends only at the real deadline, so the budget is what the
+// two healthy worktrees get for their phase one. It was 6s, which a loaded
+// machine spends on ~40 git processes: both came back deferred too. 30s is
+// that work with room to spare, and is spent in parallel with the package.
 func TestReconcile_AStalledWorktreeIsDeferredAndTheOthersFinish(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("waits out a real request deadline; skipped under -short")
 	}
+	const budget = 30 * time.Second
 	f := newFixture(t)
 	f.idle()
-	f.r.Budget = 6 * time.Second
+	f.r.Budget = budget
 	var first atomic.Bool
 	f.r.Cwds = func(ctx context.Context) ([]string, error) {
 		if first.CompareAndSwap(false, true) {
@@ -127,7 +140,7 @@ func TestReconcile_AStalledWorktreeIsDeferredAndTheOthersFinish(t *testing.T) {
 	}
 	start := time.Now()
 	resp := f.r.Reconcile(context.Background(), Request{Worktrees: ws})
-	if d := time.Since(start); d > 20*time.Second {
+	if d := time.Since(start); d > budget+14*time.Second {
 		t.Fatalf("the request overran its budget: %v", d)
 	}
 	var deferred, claimed int
@@ -152,6 +165,7 @@ func TestReconcile_AStalledWorktreeIsDeferredAndTheOthersFinish(t *testing.T) {
 }
 
 func TestReconcile_ResultsKeepRequestOrder(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	f.idle()
 	var ws []Worktree
@@ -171,6 +185,7 @@ func TestReconcile_ResultsKeepRequestOrder(t *testing.T) {
 // A rebase or amend leaves the old tip in the worktree's reflog, on no branch.
 // Its change is on main, so losing the name loses nothing.
 func TestOrphan_TipWhoseWorkIsOnBaseDoesNotHold(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	f.idle()
 	w := f.worktree("rb", "feat/rb")
@@ -194,6 +209,8 @@ func TestOrphan_TipWhoseWorkIsOnBaseDoesNotHold(t *testing.T) {
 // A tip whose work is nowhere else is reported as unreachable history; the
 // automatic pass saves it under a ref before removing (see backup_test.go).
 func TestOrphan_TipWithWorkNotOnBaseIsSavedBeforeRemoval(t *testing.T) {
+	t.Parallel()
+	heavyUnderShort(t, "~130 git processes: a verdict, then a full reclaim that saves an orphaned tip")
 	f := newFixture(t)
 	f.idle()
 	w := f.worktree("lost", "feat/lost")
@@ -218,6 +235,8 @@ func TestOrphan_TipWithWorkNotOnBaseIsSavedBeforeRemoval(t *testing.T) {
 // With three repos per workspace and dozens of workspaces, the same origin was
 // fetched and the same PR looked up over and over inside one pass.
 func TestProbe_NetworkChecksAreSharedPerRepo(t *testing.T) {
+	t.Parallel()
+	heavyUnderShort(t, "~450 git processes: three full reclaim passes over two worktrees with unpushed commits")
 	f := newFixture(t)
 	var fetches, lookups atomic.Int32
 	f.r.FetchBase = func(context.Context, string, string) { fetches.Add(1) }
@@ -241,6 +260,7 @@ func TestProbe_NetworkChecksAreSharedPerRepo(t *testing.T) {
 }
 
 func TestProbe_AMergedAnswerIsKeptButANoIsRetried(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t)
 	now := time.Now()
 	f.r.Now = func() time.Time { return now }
@@ -267,6 +287,7 @@ func TestProbe_AMergedAnswerIsKeptButANoIsRetried(t *testing.T) {
 }
 
 func TestReasonRank_EveryReasonIsRanked(t *testing.T) {
+	t.Parallel()
 	for _, r := range []HeldReason{ReasonUnmanaged, ReasonNestedRepo, ReasonInUse, ReasonOutsideFiles, ReasonData, ReasonUnverified, ReasonTooLarge, ReasonDirty, ReasonUnpushed, ReasonUnreachable} {
 		if reasonRank(r) == 0 {
 			t.Errorf("%s has no rank, so a multi-repo worktree could report it as safe", r)
