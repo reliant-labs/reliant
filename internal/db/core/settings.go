@@ -55,9 +55,4 @@ type SettingStore interface {
 	GetAutomationToken(ctx context.Context, userID, daemonID string) (string, error)
 	SetAutomationToken(ctx context.Context, userID, daemonID, token string) error
 	DeleteAutomationToken(ctx context.Context, userID, daemonID string) error
-
-	GetVisibilityOverride(ctx context.Context, userID string, itemType int32, slug string) (*bool, error)
-	ListVisibilityOverrides(ctx context.Context, userID string, itemType int32) (map[string]bool, error)
-	SetVisibilityOverride(ctx context.Context, userID string, itemType int32, slug string, isVisible bool) error
-	DeleteVisibilityOverride(ctx context.Context, userID string, itemType int32, slug string) error
 }

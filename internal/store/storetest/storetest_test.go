@@ -74,7 +74,7 @@ func TestGeneratedStoreRoundTripsAgainstPostgres(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetProjectDaemonByPK: %v", err)
 	}
-	if pd.Path != "/srv/checkout" || pd.InstallState != string(core.ProjectInstallInstalled) || pd.ClonedAt.IsZero() {
+	if pd.Path != "/srv/checkout" || pd.InstallState != core.ProjectInstallInstalled || pd.ClonedAt.IsZero() {
 		t.Fatalf("GetProjectDaemonByPK = {Path %q, InstallState %q, ClonedAt %v}, want {/srv/checkout, installed, set}", pd.Path, pd.InstallState, pd.ClonedAt)
 	}
 

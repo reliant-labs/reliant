@@ -921,7 +921,7 @@ func (r *Repo) CreateProject(ctx context.Context, project *Project) error {
 		return fmt.Errorf("project path cannot be empty")
 	}
 
-	return r.projects.CreateProject(ctx, project)
+	return store.InsertProject(ctx, r.ORM(), project)
 }
 
 func (r *Repo) GetProject(ctx context.Context, id string) (*Project, error) {
@@ -929,7 +929,7 @@ func (r *Repo) GetProject(ctx context.Context, id string) (*Project, error) {
 		return nil, fmt.Errorf("project ID cannot be empty")
 	}
 
-	return r.projects.GetProject(ctx, id)
+	return store.GetProject(ctx, r.ORM(), id)
 }
 
 func (r *Repo) GetProjectByPath(ctx context.Context, path string) (*Project, error) {
@@ -937,7 +937,7 @@ func (r *Repo) GetProjectByPath(ctx context.Context, path string) (*Project, err
 		return nil, fmt.Errorf("project path cannot be empty")
 	}
 
-	return r.projects.GetProjectByPath(ctx, path)
+	return store.GetProjectByPath(ctx, r.ORM(), path)
 }
 
 func (r *Repo) GetProjectByPathAndUser(ctx context.Context, path, userID string) (*Project, error) {
@@ -948,7 +948,7 @@ func (r *Repo) GetProjectByPathAndUser(ctx context.Context, path, userID string)
 		return nil, fmt.Errorf("user ID cannot be empty")
 	}
 
-	return r.projects.GetProjectByPathAndUser(ctx, path, userID)
+	return store.GetProjectByPathAndUser(ctx, r.ORM(), path, userID)
 }
 
 func (r *Repo) GetProjectByRemoteURLAndUser(ctx context.Context, remoteURL, userID string) (*Project, error) {
@@ -959,7 +959,7 @@ func (r *Repo) GetProjectByRemoteURLAndUser(ctx context.Context, remoteURL, user
 		return nil, fmt.Errorf("user ID cannot be empty")
 	}
 
-	return r.projects.GetProjectByRemoteURLAndUser(ctx, remoteURL, userID)
+	return store.GetProjectByRemoteURLAndUser(ctx, r.ORM(), remoteURL, userID)
 }
 
 func (r *Repo) GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*Project, error) {
@@ -970,11 +970,11 @@ func (r *Repo) GetProjectWithUserCheck(ctx context.Context, id string, userID st
 		return nil, fmt.Errorf("user ID cannot be empty")
 	}
 
-	return r.projects.GetProjectWithUserCheck(ctx, id, userID)
+	return store.GetProjectWithUserCheck(ctx, r.ORM(), id, userID)
 }
 
 func (r *Repo) ListProjects(ctx context.Context, filters ProjectFilters) ([]*Project, error) {
-	return r.projects.ListProjects(ctx, filters)
+	return store.ListProjects(ctx, r.ORM(), filters)
 }
 
 func (r *Repo) UpdateProject(ctx context.Context, project *Project, userID string) error {
@@ -985,7 +985,7 @@ func (r *Repo) UpdateProject(ctx context.Context, project *Project, userID strin
 		return fmt.Errorf("project ID cannot be empty")
 	}
 
-	return r.projects.UpdateProject(ctx, project, userID)
+	return store.ReplaceProject(ctx, r.ORM(), project, userID)
 }
 
 func (r *Repo) SetProjectForgeName(ctx context.Context, id, userID, forgeProjectName string) (bool, error) {
@@ -995,20 +995,20 @@ func (r *Repo) SetProjectForgeName(ctx context.Context, id, userID, forgeProject
 	if strings.TrimSpace(forgeProjectName) == "" {
 		return false, fmt.Errorf("forge project name cannot be empty")
 	}
-	return r.projects.SetProjectForgeName(ctx, id, userID, forgeProjectName)
+	return store.SetProjectForgeName(ctx, r.ORM(), id, userID, forgeProjectName)
 }
 func (r *Repo) TouchProject(ctx context.Context, id string, userID string) error {
 	if id == "" {
 		return fmt.Errorf("project ID cannot be empty")
 	}
-	return r.projects.TouchProject(ctx, id, userID)
+	return store.TouchProject(ctx, r.ORM(), id, userID)
 }
 
 func (r *Repo) DeleteProject(ctx context.Context, id string, userID string) error {
 	if id == "" {
 		return fmt.Errorf("project ID cannot be empty")
 	}
-	return r.projects.DeleteProject(ctx, id, userID)
+	return store.DeleteUserProject(ctx, r.ORM(), id, userID)
 }
 
 // =============================================================================
@@ -1025,7 +1025,7 @@ func (r *Repo) UpsertProjectDaemon(ctx context.Context, projectID, daemonID, pat
 	if path == "" {
 		return fmt.Errorf("path cannot be empty")
 	}
-	return r.projects.UpsertProjectDaemon(ctx, projectID, daemonID, path, defaultBranch)
+	return store.RecordProjectDaemonInstalled(ctx, r.ORM(), projectID, daemonID, path, defaultBranch)
 }
 
 // UpsertQueuedProjectDaemon records a clone that is queued but has not run.
@@ -1044,7 +1044,7 @@ func (r *Repo) UpsertQueuedProjectDaemon(ctx context.Context, projectID, daemonI
 		// the project would sit in "installing" forever.
 		return fmt.Errorf("request ID cannot be empty for a queued clone")
 	}
-	return r.projects.UpsertQueuedProjectDaemon(ctx, projectID, daemonID, path, defaultBranch, requestID)
+	return store.RecordProjectDaemonQueued(ctx, r.ORM(), projectID, daemonID, path, defaultBranch, requestID)
 }
 
 // ResolveQueuedProjectDaemon applies the outcome the daemon reported.
@@ -1052,7 +1052,7 @@ func (r *Repo) ResolveQueuedProjectDaemon(ctx context.Context, requestID, instal
 	if requestID == "" {
 		return fmt.Errorf("request ID cannot be empty")
 	}
-	return r.projects.ResolveQueuedProjectDaemon(ctx, requestID, installErr)
+	return store.ResolveQueuedProjectDaemon(ctx, r.ORM(), requestID, installErr)
 }
 
 // MarkProjectDaemonInstalled settles a queued clone from a filesystem
@@ -1061,21 +1061,21 @@ func (r *Repo) MarkProjectDaemonInstalled(ctx context.Context, projectID, daemon
 	if projectID == "" || daemonID == "" {
 		return fmt.Errorf("project ID and daemon ID cannot be empty")
 	}
-	return r.projects.MarkProjectDaemonInstalled(ctx, projectID, daemonID)
+	return store.MarkProjectDaemonInstalled(ctx, r.ORM(), projectID, daemonID)
 }
 
 func (r *Repo) ListProjectDaemonsForProject(ctx context.Context, projectID string) ([]*core.ProjectDaemon, error) {
 	if projectID == "" {
 		return nil, fmt.Errorf("project ID cannot be empty")
 	}
-	return r.projects.ListProjectDaemonsForProject(ctx, projectID)
+	return store.ListProjectDaemonsForProject(ctx, r.ORM(), projectID)
 }
 
 func (r *Repo) ListProjectDaemonsForDaemon(ctx context.Context, daemonID string) ([]*core.ProjectDaemon, error) {
 	if daemonID == "" {
 		return nil, fmt.Errorf("daemon ID cannot be empty")
 	}
-	return r.projects.ListProjectDaemonsForDaemon(ctx, daemonID)
+	return store.ListProjectDaemonsForDaemon(ctx, r.ORM(), daemonID)
 }
 
 func (r *Repo) DeleteProjectDaemon(ctx context.Context, projectID, daemonID string) error {
@@ -1085,7 +1085,7 @@ func (r *Repo) DeleteProjectDaemon(ctx context.Context, projectID, daemonID stri
 	if daemonID == "" {
 		return fmt.Errorf("daemon ID cannot be empty")
 	}
-	return r.projects.DeleteProjectDaemon(ctx, projectID, daemonID)
+	return store.RemoveProjectDaemon(ctx, r.ORM(), projectID, daemonID)
 }
 
 // ErrDaemonOwnedByAnotherUser is returned when a daemon write names an id whose
@@ -2030,21 +2030,21 @@ func (r *Repo) CreateWorktree(ctx context.Context, worktree *Worktree) error {
 	if worktree.Name == "" {
 		return fmt.Errorf("worktree name cannot be empty")
 	}
-	return r.worktrees.CreateWorktree(ctx, worktree)
+	return store.InsertWorktree(ctx, r.ORM(), worktree)
 }
 
 func (r *Repo) GetWorktree(ctx context.Context, id string) (*Worktree, error) {
 	if id == "" {
 		return nil, fmt.Errorf("worktree ID cannot be empty")
 	}
-	return r.worktrees.GetWorktree(ctx, id)
+	return store.GetWorktree(ctx, r.ORM(), id)
 }
 
 func (r *Repo) GetWorktreeByPath(ctx context.Context, path string) (*Worktree, error) {
 	if path == "" {
 		return nil, fmt.Errorf("worktree path cannot be empty")
 	}
-	return r.worktrees.GetWorktreeByPath(ctx, path)
+	return store.GetWorktreeByPath(ctx, r.ORM(), path)
 }
 
 func (r *Repo) GetWorktreeByIdempotencyKey(ctx context.Context, projectID, key string) (*Worktree, error) {
@@ -2053,29 +2053,29 @@ func (r *Repo) GetWorktreeByIdempotencyKey(ctx context.Context, projectID, key s
 	if projectID == "" || key == "" {
 		return nil, nil
 	}
-	return r.worktrees.GetWorktreeByIdempotencyKey(ctx, projectID, key)
+	return store.GetWorktreeByIdempotencyKey(ctx, r.ORM(), projectID, key)
 }
 
 func (r *Repo) GetLiveWorktreeByName(ctx context.Context, projectID, name string) (*Worktree, error) {
 	if projectID == "" || name == "" {
 		return nil, nil
 	}
-	return r.worktrees.GetLiveWorktreeByName(ctx, projectID, name)
+	return store.GetLiveWorktreeByName(ctx, r.ORM(), projectID, name)
 }
 
 func (r *Repo) ListWorktreesByBranch(ctx context.Context, projectID, branch string) ([]*Worktree, error) {
 	if projectID == "" || branch == "" {
 		return nil, nil
 	}
-	return r.worktrees.ListWorktreesByBranch(ctx, projectID, branch)
+	return store.ListWorktreesByBranch(ctx, r.ORM(), projectID, branch)
 }
 
 func (r *Repo) ListWorktrees(ctx context.Context, filters WorktreeFilters) ([]*Worktree, error) {
-	return r.worktrees.ListWorktrees(ctx, filters)
+	return store.ListWorktrees(ctx, r.ORM(), filters)
 }
 
 func (r *Repo) ListWorktreesByIDs(ctx context.Context, ids []string) ([]*Worktree, error) {
-	return r.worktrees.ListWorktreesByIDs(ctx, ids)
+	return store.ListWorktreesByIDs(ctx, r.ORM(), ids)
 }
 
 func (r *Repo) UpdateWorktree(ctx context.Context, worktree *Worktree) error {
@@ -2086,7 +2086,7 @@ func (r *Repo) UpdateWorktree(ctx context.Context, worktree *Worktree) error {
 		return fmt.Errorf("worktree ID cannot be empty")
 	}
 
-	return r.worktrees.UpdateWorktree(ctx, worktree)
+	return store.ReplaceWorktree(ctx, r.ORM(), worktree)
 }
 
 func (r *Repo) UpdateWorktreeCleanupMetadata(ctx context.Context, id string, metadata *CleanupMetadata) error {
@@ -2094,18 +2094,18 @@ func (r *Repo) UpdateWorktreeCleanupMetadata(ctx context.Context, id string, met
 		return fmt.Errorf("worktree ID cannot be empty")
 	}
 
-	return r.worktrees.UpdateWorktreeCleanupMetadata(ctx, id, metadata)
+	return store.SetWorktreeCleanupMetadata(ctx, r.ORM(), id, metadata)
 }
 
 func (r *Repo) ListWorktreesForReclaim(ctx context.Context) ([]*core.ReclaimCandidate, error) {
-	return r.worktrees.ListWorktreesForReclaim(ctx)
+	return store.ListWorktreesForReclaim(ctx, r.ORM())
 }
 
 func (r *Repo) ListLiveWorktreePathsForUser(ctx context.Context, userID string) ([]core.WorktreePath, error) {
 	if userID == "" {
 		return nil, fmt.Errorf("user ID cannot be empty")
 	}
-	return r.worktrees.ListLiveWorktreePathsForUser(ctx, userID)
+	return store.ListLiveWorktreePathsForUser(ctx, r.ORM(), userID)
 }
 
 // MergeWorktreeCleanupMetadata is a read-modify-write of one row's
@@ -2114,66 +2114,42 @@ func (r *Repo) MergeWorktreeCleanupMetadata(ctx context.Context, id string, fn f
 	if id == "" {
 		return fmt.Errorf("worktree ID cannot be empty")
 	}
-	tx, err := r.DB.SQLDB().BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	var raw sql.NullString
-	var deletedAt sql.NullTime
-	if err := tx.QueryRowContext(ctx, `SELECT cleanup_metadata, deleted_at FROM worktrees WHERE id = $1 FOR UPDATE`, id).Scan(&raw, &deletedAt); err != nil {
-		return err
-	}
-	meta := CleanupMetadata{}
-	if raw.Valid && raw.String != "" {
-		_ = json.Unmarshal([]byte(raw.String), &meta)
-	}
-	if !fn(&meta, deletedAt.Valid) {
-		return nil
-	}
-	encoded, err := json.Marshal(meta)
-	if err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `UPDATE worktrees SET cleanup_metadata = $2, updated_at = NOW() WHERE id = $1`, id, string(encoded)); err != nil {
-		return err
-	}
-	return tx.Commit()
+	return store.MergeWorktreeCleanupMetadata(ctx, r.ORM(), id, fn)
 }
 
 func (r *Repo) AdoptWorktreeDaemon(ctx context.Context, id, daemonID string) error {
 	if id == "" || daemonID == "" {
 		return fmt.Errorf("worktree and daemon IDs cannot be empty")
 	}
-	return r.worktrees.AdoptWorktreeDaemon(ctx, id, daemonID)
+	return store.AdoptWorktreeDaemon(ctx, r.ORM(), id, daemonID)
 }
 
 func (r *Repo) ListHeldWorktreesForUser(ctx context.Context, userID string) ([]*core.HeldWorktree, error) {
 	if userID == "" {
 		return nil, fmt.Errorf("user ID cannot be empty")
 	}
-	return r.worktrees.ListHeldWorktreesForUser(ctx, userID)
+	return store.ListHeldWorktreesForUser(ctx, r.ORM(), userID)
 }
 
 func (r *Repo) DeleteWorktree(ctx context.Context, id string) error {
 	if id == "" {
 		return fmt.Errorf("worktree ID cannot be empty")
 	}
-	return r.worktrees.DeleteWorktree(ctx, id)
+	return store.RemoveWorktree(ctx, r.ORM(), id)
 }
 
 func (r *Repo) ArchiveWorktree(ctx context.Context, id string) error {
 	if id == "" {
 		return fmt.Errorf("worktree ID cannot be empty")
 	}
-	return r.worktrees.ArchiveWorktree(ctx, id)
+	return store.ArchiveWorktree(ctx, r.ORM(), id)
 }
 
 func (r *Repo) UnarchiveWorktree(ctx context.Context, id string) error {
 	if id == "" {
 		return fmt.Errorf("worktree ID cannot be empty")
 	}
-	return r.worktrees.UnarchiveWorktree(ctx, id)
+	return store.UnarchiveWorktree(ctx, r.ORM(), id)
 }
 
 // =============================================================================
@@ -2190,28 +2166,28 @@ func (r *Repo) CreateRepo(ctx context.Context, repo *core.Repo) error {
 	if repo.ProjectID == "" {
 		return fmt.Errorf("repo project_id cannot be empty")
 	}
-	return r.repos.CreateRepo(ctx, repo)
+	return store.InsertRepo(ctx, r.ORM(), repo)
 }
 
 func (r *Repo) GetRepo(ctx context.Context, id string) (*core.Repo, error) {
 	if id == "" {
 		return nil, fmt.Errorf("repo ID cannot be empty")
 	}
-	return r.repos.GetRepo(ctx, id)
+	return store.GetRepo(ctx, r.ORM(), id)
 }
 
 func (r *Repo) GetRepoByProjectAndPath(ctx context.Context, projectID, relativePath string) (*core.Repo, error) {
 	if projectID == "" {
 		return nil, fmt.Errorf("project ID cannot be empty")
 	}
-	return r.repos.GetRepoByProjectAndPath(ctx, projectID, relativePath)
+	return store.GetRepoByProjectAndPath(ctx, r.ORM(), projectID, relativePath)
 }
 
 func (r *Repo) ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error) {
 	if projectID == "" {
 		return nil, fmt.Errorf("project ID cannot be empty")
 	}
-	return r.repos.ListReposByProject(ctx, projectID)
+	return store.ListReposByProject(ctx, r.ORM(), projectID)
 }
 
 func (r *Repo) UpdateRepo(ctx context.Context, repo *core.Repo) error {
@@ -2221,14 +2197,14 @@ func (r *Repo) UpdateRepo(ctx context.Context, repo *core.Repo) error {
 	if repo.ID == "" {
 		return fmt.Errorf("repo ID cannot be empty")
 	}
-	return r.repos.UpdateRepo(ctx, repo)
+	return store.ReplaceRepo(ctx, r.ORM(), repo)
 }
 
 func (r *Repo) DeleteRepo(ctx context.Context, id string) error {
 	if id == "" {
 		return fmt.Errorf("repo ID cannot be empty")
 	}
-	return r.repos.DeleteRepo(ctx, id)
+	return store.RemoveRepo(ctx, r.ORM(), id)
 }
 
 // Plans and Tasks methods are provided by the embedded pgdb.Querier
@@ -2437,7 +2413,7 @@ func (r *Repo) GetVisibilityOverride(ctx context.Context, userID string, itemTyp
 		return nil, fmt.Errorf("slug cannot be empty")
 	}
 
-	return r.settings.GetVisibilityOverride(ctx, userID, itemType, slug)
+	return store.GetVisibilityOverride(ctx, r.ORM(), userID, reliantv1.HiddenItemType(itemType), slug)
 }
 
 // ListVisibilityOverrides returns all user overrides for a given item type.
@@ -2449,7 +2425,7 @@ func (r *Repo) ListVisibilityOverrides(ctx context.Context, userID string, itemT
 		return nil, fmt.Errorf("item_type must be WORKFLOW (1) or PRESET (2)")
 	}
 
-	return r.settings.ListVisibilityOverrides(ctx, userID, itemType)
+	return store.ListVisibilityOverrides(ctx, r.ORM(), userID, reliantv1.HiddenItemType(itemType))
 }
 
 // SetVisibilityOverride sets a user's visibility preference for an item.
@@ -2464,7 +2440,7 @@ func (r *Repo) SetVisibilityOverride(ctx context.Context, userID string, itemTyp
 		return fmt.Errorf("slug cannot be empty")
 	}
 
-	return r.settings.SetVisibilityOverride(ctx, userID, itemType, slug, isVisible)
+	return store.SetVisibilityOverride(ctx, r.ORM(), userID, reliantv1.HiddenItemType(itemType), slug, isVisible)
 }
 
 // DeleteVisibilityOverride removes a user's visibility override, reverting to default.
@@ -2479,7 +2455,7 @@ func (r *Repo) DeleteVisibilityOverride(ctx context.Context, userID string, item
 		return fmt.Errorf("slug cannot be empty")
 	}
 
-	return r.settings.DeleteVisibilityOverride(ctx, userID, itemType, slug)
+	return store.RemoveVisibilityOverride(ctx, r.ORM(), userID, reliantv1.HiddenItemType(itemType), slug)
 }
 
 // GetItemDefault returns the system default visibility for an item.
@@ -4617,15 +4593,15 @@ func (r *Repo) DeleteWorkflowScenariosByDraft(ctx context.Context, workflowDraft
 // ==================== Command Favorites ====================
 
 func (r *Repo) ListCommandFavorites(ctx context.Context, userID, projectID string) ([]string, error) {
-	return r.workflows.ListCommandFavorites(ctx, userID, projectID)
+	return store.ListCommandFavorites(ctx, r.ORM(), userID, projectID)
 }
 
 func (r *Repo) AddCommandFavorite(ctx context.Context, userID, projectID, commandKey string) error {
-	return r.workflows.AddCommandFavorite(ctx, userID, projectID, commandKey)
+	return store.AddCommandFavorite(ctx, r.ORM(), userID, projectID, commandKey)
 }
 
 func (r *Repo) RemoveCommandFavorite(ctx context.Context, userID, projectID, commandKey string) error {
-	return r.workflows.RemoveCommandFavorite(ctx, userID, projectID, commandKey)
+	return store.RemoveCommandFavorite(ctx, r.ORM(), userID, projectID, commandKey)
 }
 
 // ==================== Questions ====================

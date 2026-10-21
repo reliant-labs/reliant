@@ -11,11 +11,6 @@ import (
 )
 
 type Querier interface {
-	AddCommandFavorite(ctx context.Context, arg AddCommandFavoriteParams) error
-	// A daemon that found a workspace's directory on its disk has proven it owns
-	// it. Rows created before daemon_id was recorded get it filled in here, once.
-	AdoptWorktreeDaemon(ctx context.Context, arg AdoptWorktreeDaemonParams) error
-	ArchiveWorktree(ctx context.Context, id string) error
 	// Conditional on status = 1 so this can never delete a row that has already
 	// been drained -- the caller and the agent's own drain loop are racing for
 	// the same row, and only the DELETE that actually matched status = 1 may
@@ -91,8 +86,6 @@ type Querier interface {
 	// request, completed after, and read when an event arrives to say whether
 	// Reliant caused it.
 	CreateIntegrationWrite(ctx context.Context, arg CreateIntegrationWriteParams) error
-	CreateProject(ctx context.Context, arg CreateProjectParams) error
-	CreateRepo(ctx context.Context, arg CreateRepoParams) error
 	CreateThread(ctx context.Context, arg CreateThreadParams) (Thread, error)
 	CreateTrigger(ctx context.Context, arg CreateTriggerParams) error
 	// DO NOTHING rather than DO UPDATE: the first row for a (kind, dedupe_key) is
@@ -100,15 +93,9 @@ type Querier interface {
 	// outcome. The affected-row count is what tells the caller whether it won the
 	// race (1) or a prior firing already exists (0).
 	CreateTriggerEvent(ctx context.Context, arg CreateTriggerEventParams) (int64, error)
-	CreateWorktree(ctx context.Context, arg CreateWorktreeParams) error
-	DeleteAllVisibilityOverrides(ctx context.Context, arg DeleteAllVisibilityOverridesParams) error
 	DeleteChat(ctx context.Context, id string) error
 	DeleteContextWindow(ctx context.Context, id string) error
 	DeleteContextWindowsByThread(ctx context.Context, threadID string) error
-	DeleteProject(ctx context.Context, arg DeleteProjectParams) error
-	DeleteProjectDaemon(ctx context.Context, arg DeleteProjectDaemonParams) error
-	DeleteRepo(ctx context.Context, id string) error
-	DeleteReposByProject(ctx context.Context, projectID string) error
 	// Drops what the user could see before but this refresh (stamped
 	// refreshed_at) no longer reports: a repository they lost, an installation
 	// they left. Also the whole set when a refresh finds the credential gone.
@@ -121,8 +108,6 @@ type Querier interface {
 	// reached it. A repeat of the send that wrote it is a fresh send, and has to
 	// be able to take its id; a queued or delivered row is never touched.
 	DeleteUndeliveredAgentMessage(ctx context.Context, arg DeleteUndeliveredAgentMessageParams) (int64, error)
-	DeleteVisibilityOverride(ctx context.Context, arg DeleteVisibilityOverrideParams) error
-	DeleteWorktree(ctx context.Context, id string) error
 	DismissInboxItems(ctx context.Context, arg DismissInboxItemsParams) error
 	EnqueueAgentMessage(ctx context.Context, arg EnqueueAgentMessageParams) error
 	// The stranded-background-spawn sweep's write half (spec §7.1). ON CONFLICT
@@ -197,17 +182,7 @@ type Querier interface {
 	// the latest 'launched' event; the detail view asks for the latest of any
 	// outcome. A NULL outcome means no filter.
 	GetLatestTriggerEvent(ctx context.Context, arg GetLatestTriggerEventParams) (TriggerEvent, error)
-	// The one unarchived row holding a name; worktrees_project_id_name_live_key
-	// guarantees there is at most one.
-	GetLiveWorktreeByName(ctx context.Context, arg GetLiveWorktreeByNameParams) (Worktree, error)
 	GetMaxSequenceForThread(ctx context.Context, threadID string) (interface{}, error)
-	GetProject(ctx context.Context, id string) (Project, error)
-	GetProjectByPath(ctx context.Context, path string) (Project, error)
-	GetProjectByPathAndUser(ctx context.Context, arg GetProjectByPathAndUserParams) (Project, error)
-	GetProjectByRemoteURLAndUser(ctx context.Context, arg GetProjectByRemoteURLAndUserParams) (Project, error)
-	GetProjectWithUserCheck(ctx context.Context, arg GetProjectWithUserCheckParams) (Project, error)
-	GetRepo(ctx context.Context, id string) (Repo, error)
-	GetRepoByProjectAndPath(ctx context.Context, arg GetRepoByProjectAndPathParams) (Repo, error)
 	// Get the root thread for a chat (no parent)
 	GetRootThread(ctx context.Context, chatID string) (Thread, error)
 	// The report holding one spawn's slot, read when a write to the slot was
@@ -232,13 +207,6 @@ type Querier interface {
 	GetTriggerRegistration(ctx context.Context, triggerID string) (TriggerRegistration, error)
 	// Only the webhook receiver reads these. They are never rendered.
 	GetTriggerWebhookCredentials(ctx context.Context, id string) (GetTriggerWebhookCredentialsRow, error)
-	GetVisibilityOverride(ctx context.Context, arg GetVisibilityOverrideParams) (bool, error)
-	GetWorktree(ctx context.Context, id string) (Worktree, error)
-	// Scoped by project because the key is client-generated; two projects must be
-	// able to use the same key without colliding.
-	GetWorktreeByIdempotencyKey(ctx context.Context, arg GetWorktreeByIdempotencyKeyParams) (Worktree, error)
-	GetWorktreeByPath(ctx context.Context, path string) (Worktree, error)
-	IsCommandFavorite(ctx context.Context, arg IsCommandFavoriteParams) (int32, error)
 	// Every enabled integration trigger of one integration whose OWNER can see
 	// the event's (account, resource) per a snapshot refreshed after
 	// fresh_after. A stale snapshot routes nothing: access is only trusted while
@@ -276,7 +244,6 @@ type Querier interface {
 	ListChatsWaitingForMachine(ctx context.Context, userID string) ([]ListChatsWaitingForMachineRow, error)
 	// Get all threads that fork from a given thread (direct children only)
 	ListChildThreads(ctx context.Context, parentThreadID sql.NullString) ([]Thread, error)
-	ListCommandFavorites(ctx context.Context, arg ListCommandFavoritesParams) ([]string, error)
 	ListContextWindowsByThread(ctx context.Context, threadID string) ([]ContextWindow, error)
 	// Which of the candidate item ids this user has dismissed.
 	ListDismissedInboxItemIDs(ctx context.Context, arg ListDismissedInboxItemIDsParams) ([]string, error)
@@ -295,9 +262,6 @@ type Querier interface {
 	// window links to a parent window. One round trip for a whole chat, where
 	// GetContextWindowBySequence(thread, 0) cost one per workflow.
 	ListForkedThreadIDs(ctx context.Context, threadIds []string) ([]string, error)
-	// Archived workspaces the daemon declined to remove on its own, for the
-	// storage inbox item.
-	ListHeldWorktreesForUser(ctx context.Context, userID string) ([]ListHeldWorktreesForUserRow, error)
 	// The Inbox: everything waiting on one user, across every chat and project
 	// (research/WORKFLOW_UI.md §8). One UNION ALL so the read is one round trip;
 	// every branch is scoped by c.user_id / t.user_id, never by a request value.
@@ -335,15 +299,6 @@ type Querier interface {
 	// reach a trigger through its own owner's live connection. Status is returned
 	// rather than filtered so a caller can tell needs_reauth apart.
 	ListIntegrationTriggers(ctx context.Context, integration string) ([]ListIntegrationTriggersRow, error)
-	// Every path one user's unarchived worktree rows claim, with the project that
-	// says where each row's checkouts sit. An archived row's directory may only be
-	// removed when none of the SAME user's live rows has its path, or one of its
-	// checkouts, at or under that directory. Scoped by user because another
-	// tenant's rows say nothing about this user's directories.
-	ListLiveWorktreePathsForUser(ctx context.Context, userID string) ([]ListLiveWorktreePathsForUserRow, error)
-	ListProjectDaemonsForDaemon(ctx context.Context, daemonID string) ([]ProjectDaemon, error)
-	ListProjectDaemonsForProject(ctx context.Context, projectID string) ([]ProjectDaemon, error)
-	ListProjects(ctx context.Context, arg ListProjectsParams) ([]Project, error)
 	// Ordering is load-bearing: messages must be delivered in the order they
 	// were sent.
 	ListQueuedAgentMessagesForThread(ctx context.Context, toThreadID string) ([]AgentMessage, error)
@@ -358,7 +313,6 @@ type Querier interface {
 	// ListTriggerEvents above. run_display_state is meaningful only when
 	// run_chat_id is set.
 	ListRecentTriggerFirings(ctx context.Context, arg ListRecentTriggerFiringsParams) ([]ListRecentTriggerFiringsRow, error)
-	ListReposByProject(ctx context.Context, projectID string) ([]Repo, error)
 	// Inbound events recorded but not yet settled, older than the cutoff: the
 	// fire workflow for them was never started (the receiver crashed between the
 	// insert and the start) or died. The redriver restarts their fires.
@@ -396,29 +350,10 @@ type Querier interface {
 	// is ListAllTriggers, a separate query so "no user" can never be reached by
 	// passing an empty string.
 	ListTriggers(ctx context.Context, arg ListTriggersParams) ([]ListTriggersRow, error)
-	ListVisibilityOverrides(ctx context.Context, arg ListVisibilityOverridesParams) ([]ListVisibilityOverridesRow, error)
 	// One user's activations of a workflow's declared triggers. The workflow is
 	// matched as stored on the row (the slug or builtin:// ref the activation
 	// named).
 	ListWorkflowTriggerActivations(ctx context.Context, arg ListWorkflowTriggerActivationsParams) ([]Trigger, error)
-	// Live workspaces by default. include_archived adds archived ones after them
-	// (server-internal callers that must see every row); archived_only lists only
-	// the archived ones, most recently archived first. main_only narrows to the
-	// project's main workspace.
-	ListWorktrees(ctx context.Context, arg ListWorktreesParams) ([]Worktree, error)
-	// Every row, archived included, recorded against a branch: an archived row's
-	// checkout or branch may outlive the archive.
-	ListWorktreesByBranch(ctx context.Context, arg ListWorktreesByBranchParams) ([]Worktree, error)
-	// One round trip for the workspaces a page of chats points at, archived ones
-	// included: a chat's workspace being archived must not hide the chat.
-	ListWorktreesByIDs(ctx context.Context, ids []string) ([]Worktree, error)
-	// Every workspace whose directory a daemon may still hold: not main, has a
-	// path, and not already known to be removed. Status 5 is CREATING and 6 is
-	// FAILED (WorktreeStatus in worktree.proto); neither has a directory yet. Archived rows are the ones to remove; the rest are locked as
-	// reliant-owned. owner_user_id lets the sweep find the daemon's connection.
-	// cleanup_metadata is only ever NULL or JSON we wrote, but the cast sits inside
-	// a CASE so a hand-edited value cannot fail the whole listing.
-	ListWorktreesForReclaim(ctx context.Context) ([]ListWorktreesForReclaimRow, error)
 	// Row lock on the trigger for the rest of the transaction. Serializes the
 	// overlap check with the launch it guards across concurrent fires.
 	LockTrigger(ctx context.Context, id string) (string, error)
@@ -436,14 +371,6 @@ type Querier interface {
 	// Without this the drain was idempotent only by luck of timing. See
 	// specs/interrupt-pause-spec.md.
 	MarkAgentMessagesDelivered(ctx context.Context, arg MarkAgentMessagesDeliveredParams) ([]string, error)
-	// The daemon reported the queued clone failed. Matched on request id because
-	// the failure notification carries no project id.
-	MarkProjectDaemonInstallFailed(ctx context.Context, arg MarkProjectDaemonInstallFailedParams) error
-	// Settles a queued clone from the daemon's filesystem announcement, which
-	// carries the path but no request id. A no-op for rows already installed.
-	MarkProjectDaemonInstalled(ctx context.Context, arg MarkProjectDaemonInstalledParams) error
-	// The daemon reported the queued clone succeeded.
-	MarkProjectDaemonInstalledByRequest(ctx context.Context, installRequestID string) error
 	// Marks every queued message for a thread that has not yet cut a waiting tool
 	// call short, and reports how many it marked. Non-zero is execute_tools' signal
 	// to end the thread's preemptable calls (ToolDefinition.Preemptable) so the
@@ -514,7 +441,6 @@ type Querier interface {
 	// count alone cannot say which run, which chat, or how that run ended — the
 	// reconciler needs the ids to ask Temporal and to log something actionable.
 	ReapOrphanedThreads(ctx context.Context) ([]ReapOrphanedThreadsRow, error)
-	RemoveCommandFavorite(ctx context.Context, arg RemoveCommandFavoriteParams) error
 	RestoreInboxItems(ctx context.Context, arg RestoreInboxItemsParams) error
 	// Move a thread back to running because a new run has started on it.
 	//
@@ -576,10 +502,6 @@ type Querier interface {
 	// Records how the run a trigger fired ended, on the chat's launch event (the
 	// same earliest-event rule as GetTriggerEventByChatID).
 	SetLaunchEventRunStatus(ctx context.Context, arg SetLaunchEventRunStatusParams) (int64, error)
-	// Records forge's name for a project (forge.yaml `name`) and marks it a forge
-	// project. A no-op — zero rows, no updated_at churn — when both already hold,
-	// so callers can run it on every successful forge read.
-	SetProjectForgeName(ctx context.Context, arg SetProjectForgeNameParams) (int64, error)
 	SetTriggerEnabled(ctx context.Context, arg SetTriggerEnabledParams) (int64, error)
 	// Refreshes an activation's projection of its workflow's declaration: the
 	// config and filter routing and the schedule syncer read. The kind is not
@@ -591,12 +513,9 @@ type Querier interface {
 	// The token hash has its own write path: no definition update can touch it,
 	// and rotating it is one statement.
 	SetTriggerWebhookTokenHash(ctx context.Context, arg SetTriggerWebhookTokenHashParams) (int64, error)
-	SetVisibilityOverride(ctx context.Context, arg SetVisibilityOverrideParams) error
 	// Records the verdict on an inbound event that did NOT launch. Conditional on
 	// pending, so it can never overwrite a launch that won a race.
 	SettlePendingTriggerEvent(ctx context.Context, arg SettlePendingTriggerEventParams) (int64, error)
-	TouchProject(ctx context.Context, arg TouchProjectParams) error
-	UnarchiveWorktree(ctx context.Context, id string) error
 	UpdateChat(ctx context.Context, arg UpdateChatParams) error
 	// Pinning a daemon puts the chat on a machine, so it ends no-machine in the same
 	// write (chats_no_machine_has_no_daemon_check). Clearing the daemon never sets
@@ -604,8 +523,6 @@ type Querier interface {
 	UpdateChatActiveDaemon(ctx context.Context, arg UpdateChatActiveDaemonParams) error
 	UpdateChatSelectedPresets(ctx context.Context, arg UpdateChatSelectedPresetsParams) error
 	UpdateChatTitle(ctx context.Context, arg UpdateChatTitleParams) error
-	UpdateProject(ctx context.Context, arg UpdateProjectParams) error
-	UpdateRepo(ctx context.Context, arg UpdateRepoParams) error
 	// Update fork point when the fork's target message changes (e.g., parent compacts)
 	UpdateThreadForkPoint(ctx context.Context, arg UpdateThreadForkPointParams) (Thread, error)
 	// Record thread lifecycle. Replaces the "thread:<node>" workflow records that
@@ -620,12 +537,6 @@ type Querier interface {
 	UpdateTrigger(ctx context.Context, arg UpdateTriggerParams) (int64, error)
 	UpdateTriggerEventOutcome(ctx context.Context, arg UpdateTriggerEventOutcomeParams) (int64, error)
 	UpdateTriggerEventPayload(ctx context.Context, arg UpdateTriggerEventPayloadParams) (int64, error)
-	// `path` is settable because asynchronous creation only learns the on-disk
-	// location after the daemon reports it: the row is inserted as CREATING with
-	// an empty path, then settled here — as is `failure_reason`, when it settles
-	// FAILED.
-	UpdateWorktree(ctx context.Context, arg UpdateWorktreeParams) error
-	UpdateWorktreeCleanupMetadata(ctx context.Context, arg UpdateWorktreeCleanupMetadataParams) error
 	// Access-gated routing for app-level provider events. See the migration
 	// 20261005061008_integration_event_access.sql for the model.
 	// Records one refresh's findings: every (account, resource) the user's own
@@ -637,14 +548,6 @@ type Querier interface {
 	// Monotonic: a slower refresh that started earlier never stamps an older
 	// time over a newer refresh's.
 	UpsertIntegrationAccess(ctx context.Context, arg UpsertIntegrationAccessParams) error
-	// Records a COMPLETED clone. install_state is forced to 'installed' rather
-	// than left to the column default, so a row that was previously 'installing'
-	// or 'failed' is corrected when the clone finally lands.
-	UpsertProjectDaemon(ctx context.Context, arg UpsertProjectDaemonParams) error
-	// Records a clone that has been QUEUED for a daemon but has not run. The path
-	// is where the checkout WILL be, not where it is. install_request_id ties the
-	// row to the queued command so the outcome can find it.
-	UpsertQueuedProjectDaemon(ctx context.Context, arg UpsertQueuedProjectDaemonParams) error
 	// status_since moves only when status changes, so it is the start of the
 	// current status episode however often the source is polled.
 	UpsertTriggerRegistration(ctx context.Context, arg UpsertTriggerRegistrationParams) error

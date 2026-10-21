@@ -179,10 +179,6 @@ type WorkflowStore interface {
 	// that node and everything that ran inside it.
 	ListStepExecutionRecordsForChat(ctx context.Context, chatID, nodePath string, limit int) ([]*StepExecution, error)
 	DeleteStepExecutionsByWorkflow(ctx context.Context, workflowID string) error
-
-	ListCommandFavorites(ctx context.Context, userID, projectID string) ([]string, error)
-	AddCommandFavorite(ctx context.Context, userID, projectID, commandKey string) error
-	RemoveCommandFavorite(ctx context.Context, userID, projectID, commandKey string) error
 }
 
 // ReapedWorkflow is one workflow ReapOrphanedWorkflowDescendants closed: the

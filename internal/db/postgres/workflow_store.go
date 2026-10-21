@@ -4,11 +4,9 @@ import (
 	"context"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/orm"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
-	pgdb "github.com/reliant-labs/reliant/internal/db/postgres/generated"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 )
@@ -19,13 +17,11 @@ import (
 // step_execution_repo_ext.go); every call joins the transaction ctx carries.
 type workflowStore struct {
 	db orm.Context
-	// P5b L3: the command favorites, still sqlc (queries/command_favorites.sql).
-	q pgdb.Querier
 }
 
 // NewWorkflowStore creates the workflow store implementation.
-func NewWorkflowStore(db orm.Context, q pgdb.Querier) core.WorkflowStore {
-	return &workflowStore{db: db, q: q}
+func NewWorkflowStore(db orm.Context) core.WorkflowStore {
+	return &workflowStore{db: db}
 }
 
 func (s *workflowStore) CreateWorkflow(ctx context.Context, workflow *core.Workflow) error {
@@ -160,25 +156,4 @@ func (s *workflowStore) GetStepExecutionsByStep(ctx context.Context, workflowID,
 
 func (s *workflowStore) DeleteStepExecutionsByWorkflow(ctx context.Context, workflowID string) error {
 	return store.RemoveWorkflowStepExecutions(ctx, s.db, workflowID)
-}
-
-func (s *workflowStore) ListCommandFavorites(ctx context.Context, userID, projectID string) ([]string, error) {
-	return s.q.ListCommandFavorites(ctx, pgdb.ListCommandFavoritesParams{UserID: userID, ProjectID: projectID})
-}
-
-func (s *workflowStore) AddCommandFavorite(ctx context.Context, userID, projectID, commandKey string) error {
-	return s.q.AddCommandFavorite(ctx, pgdb.AddCommandFavoriteParams{
-		ID:         uuid.New().String(),
-		UserID:     userID,
-		ProjectID:  projectID,
-		CommandKey: commandKey,
-	})
-}
-
-func (s *workflowStore) RemoveCommandFavorite(ctx context.Context, userID, projectID, commandKey string) error {
-	return s.q.RemoveCommandFavorite(ctx, pgdb.RemoveCommandFavoriteParams{
-		UserID:     userID,
-		ProjectID:  projectID,
-		CommandKey: commandKey,
-	})
 }

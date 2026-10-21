@@ -35,6 +35,20 @@
 //	}
 package store
 
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/reliant-labs/forge/pkg/orm"
+	"github.com/uptrace/bun"
+
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/db/core"
+)
+
 // WorktreeExtra carries fields on Worktree that are NOT columns — computed
 // values, transient state, anything derived rather than stored. Worktree is
 // embedded on WorktreeExtra (see worktree_orm.go), so a field added here is a field on
@@ -45,4 +59,478 @@ package store
 // persist them — `bun:"-"` is Bun's own idiom for a field it must never
 // bind or scan.
 type WorktreeExtra struct {
+}
+
+// worktrees.deleted_at is the ARCHIVE stamp, and forge projects any
+// deleted_at column as bun's ,soft_delete (forge friction: there is no
+// opt-out). An archived workspace is still a row callers address — read,
+// update, unarchive, sweep — so every query here that must see one says
+// WhereAllWithDeleted, and the one hard delete says ForceDelete. The
+// generated GetWorktreeByID / ListWorktree / UpdateWorktree / DeleteWorktree
+// would silently skip archived rows (or archive instead of deleting), which
+// is why only the live-row lookup below uses one.
+
+// liveNameIndex is the partial unique index that holds a worktree name for
+// the project's unarchived rows.
+const liveNameIndex = WorktreeConstraintProjectIDNameLiveKey
+
+// nameTakenOr turns a violation of the live-name index into
+// core.ErrWorktreeNameTaken and leaves any other error alone.
+func nameTakenOr(err error) error {
+	var pg *pgconn.PgError
+	if errors.As(err, &pg) && pg.Code == "23505" && pg.ConstraintName == liveNameIndex {
+		return core.ErrWorktreeNameTaken
+	}
+	return err
+}
+
+// InsertWorktree stores a new worktree with the timestamps the caller set.
+// A builder insert rather than CreateWorktree, which re-stamps updated_at
+// over the caller's value (forge friction, being fixed in forge). A second
+// live worktree with the same name in the project is
+// core.ErrWorktreeNameTaken.
+func InsertWorktree(ctx context.Context, db orm.Context, w *core.Worktree) error {
+	// cleanup_metadata and failure_reason are written only by the later
+	// settle and sweep writes; a new row takes their column defaults.
+	_, err := db.Bun().NewInsert().Model(worktreeFromCore(w)).
+		ExcludeColumn(WorktreeFieldCleanupMetadata, WorktreeFieldFailureReason).
+		Exec(ctx)
+	return nameTakenOr(err)
+}
+
+// GetWorktree returns the worktree, archived or not; a missing one wraps
+// core.ErrWorktreeNotFound.
+func GetWorktree(ctx context.Context, db orm.Context, id string) (*core.Worktree, error) {
+	w, err := firstWorktree(ctx, db, func(q *bun.SelectQuery) { q.Where("id = ?", id) })
+	if err != nil {
+		return nil, fmt.Errorf("failed to get worktree: %w", err)
+	}
+	if w == nil {
+		return nil, fmt.Errorf("%w: %s", core.ErrWorktreeNotFound, id)
+	}
+	return w, nil
+}
+
+// GetWorktreeByPath returns a worktree, archived or not, at path.
+func GetWorktreeByPath(ctx context.Context, db orm.Context, path string) (*core.Worktree, error) {
+	w, err := firstWorktree(ctx, db, func(q *bun.SelectQuery) { q.Where("path = ?", path) })
+	if err != nil {
+		return nil, fmt.Errorf("failed to get worktree by path: %w", err)
+	}
+	if w == nil {
+		return nil, fmt.Errorf("worktree not found: %s", path)
+	}
+	return w, nil
+}
+
+// GetWorktreeByIdempotencyKey returns the worktree a previous create already
+// produced for this key, or nil when there is none. Scoped by project
+// because the key is client-generated.
+func GetWorktreeByIdempotencyKey(ctx context.Context, db orm.Context, projectID, key string) (*core.Worktree, error) {
+	return firstWorktree(ctx, db, func(q *bun.SelectQuery) {
+		q.Where("project_id = ?", projectID).Where("idempotency_key = ?", key)
+	})
+}
+
+// GetLiveWorktreeByName returns the one unarchived worktree holding a name,
+// or nil; worktrees_project_id_name_live_key guarantees there is at most
+// one. The generated list's soft-delete filter is exactly "unarchived".
+func GetLiveWorktreeByName(ctx context.Context, db orm.Context, projectID, name string) (*core.Worktree, error) {
+	rows, err := ListWorktree(ctx, db,
+		orm.WhereEq(WorktreeFieldProjectID, projectID),
+		orm.WhereEq(WorktreeFieldName, name),
+		orm.WithLimit(1))
+	if err != nil || len(rows) == 0 {
+		return nil, err
+	}
+	return worktreeToCore(rows[0]), nil
+}
+
+// ListWorktreesByBranch returns every worktree, archived included, recorded
+// against a branch: an archived row's checkout or branch may outlive the
+// archive.
+func ListWorktreesByBranch(ctx context.Context, db orm.Context, projectID, branch string) ([]*core.Worktree, error) {
+	var rows []*Worktree
+	err := db.Bun().NewSelect().Model(&rows).WhereAllWithDeleted().
+		Where("project_id = ?", projectID).
+		Where("branch = ?", branch).
+		Scan(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return worktreesToCore(rows), nil
+}
+
+// ListWorktrees lists live workspaces by default. IncludeArchived adds the
+// archived ones after them; ArchivedOnly lists only the archived ones, most
+// recently archived first; MainOnly narrows to the project's main
+// workspace. A zero limit is 100.
+func ListWorktrees(ctx context.Context, db orm.Context, f core.WorktreeFilters) ([]*core.Worktree, error) {
+	limit := f.Limit
+	if limit == 0 {
+		limit = 100
+	}
+	var rows []*Worktree
+	q := db.Bun().NewSelect().Model(&rows).WhereAllWithDeleted()
+	if f.ProjectID != nil {
+		q.Where("project_id = ?", *f.ProjectID)
+	}
+	if f.ChatID != nil {
+		q.Where("chat_id = ?", *f.ChatID)
+	}
+	if f.Status != nil {
+		q.Where("status = ?", *f.Status)
+	}
+	if f.MainOnly {
+		q.Where("is_main")
+	}
+	switch {
+	case f.ArchivedOnly:
+		q.Where("deleted_at IS NOT NULL")
+	case !f.IncludeArchived:
+		q.Where("deleted_at IS NULL")
+	}
+	err := q.OrderExpr("(deleted_at IS NOT NULL), is_main DESC, COALESCE(deleted_at, last_active) DESC, id").
+		Limit(int64(limit)).
+		Offset(int64(f.Offset)).
+		Scan(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list worktrees: %w", err)
+	}
+	return worktreesToCore(rows), nil
+}
+
+// ListWorktreesByIDs returns the named worktrees, archived ones included: a
+// chat's workspace being archived must not hide the chat.
+func ListWorktreesByIDs(ctx context.Context, db orm.Context, ids []string) ([]*core.Worktree, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	var rows []*Worktree
+	err := db.Bun().NewSelect().Model(&rows).WhereAllWithDeleted().
+		Where("id IN (?)", bun.List(ids)).
+		Scan(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list worktrees by id: %w", err)
+	}
+	return worktreesToCore(rows), nil
+}
+
+// ReplaceWorktree rewrites a worktree's mutable columns, archived or not,
+// and stamps updated_at. Path is among them because asynchronous creation
+// only learns the on-disk location after the daemon reports it: the row is
+// inserted as CREATING with an empty path and settled here — as is
+// failure_reason, when it settles FAILED. A missing worktree is not an
+// error.
+func ReplaceWorktree(ctx context.Context, db orm.Context, w *core.Worktree) error {
+	_, err := db.Bun().NewUpdate().Model(worktreeFromCore(w)).WhereAllWithDeleted().
+		Column(WorktreeFieldName, WorktreeFieldBranch, WorktreeFieldStatus, WorktreeFieldBaseBranch,
+			WorktreeFieldBaseBranches, WorktreeFieldLastActive, WorktreeFieldPath, WorktreeFieldFailureReason).
+		Set("updated_at = NOW()").
+		Where("id = ?", w.ID).
+		Exec(ctx)
+	return err
+}
+
+// SetWorktreeCleanupMetadata replaces a worktree's cleanup metadata (nil
+// clears it) and stamps updated_at.
+func SetWorktreeCleanupMetadata(ctx context.Context, db orm.Context, id string, metadata *core.CleanupMetadata) error {
+	encoded, err := encodeCleanupMetadata(metadata)
+	if err != nil {
+		return err
+	}
+	_, err = db.Bun().NewUpdate().Model((*Worktree)(nil)).WhereAllWithDeleted().
+		Set("cleanup_metadata = ?", encoded).
+		Set("updated_at = NOW()").
+		Where("id = ?", id).
+		Exec(ctx)
+	return err
+}
+
+// MergeWorktreeCleanupMetadata is a read-modify-write of one row's
+// cleanup_metadata under SELECT ... FOR UPDATE, so settle, sweep and clean-up
+// running on different replicas never lose each other's updates. fn gets the
+// stored metadata and whether the row is archived; it returns false to write
+// nothing. fn may run more than once (the transaction retries a
+// serialization failure), each time on a fresh copy of the stored value.
+func MergeWorktreeCleanupMetadata(ctx context.Context, db orm.Context, id string, fn func(m *core.CleanupMetadata, archived bool) bool) error {
+	return db.RunTx(ctx, func(ctx context.Context) error {
+		var row Worktree
+		err := db.Bun().NewSelect().Model(&row).WhereAllWithDeleted().
+			Column(WorktreeFieldCleanupMetadata, WorktreeFieldDeletedAt).
+			Where("id = ?", id).
+			For("UPDATE").
+			Scan(ctx)
+		if err != nil {
+			return err
+		}
+		meta := core.CleanupMetadata{}
+		if row.CleanupMetadata != nil && *row.CleanupMetadata != "" {
+			_ = json.Unmarshal([]byte(*row.CleanupMetadata), &meta)
+		}
+		if !fn(&meta, row.DeletedAt != nil) {
+			return nil
+		}
+		return SetWorktreeCleanupMetadata(ctx, db, id, &meta)
+	})
+}
+
+// cleanupMetadataPending is true while a row's directory may still be on
+// disk: it has no cleanup metadata saying directory_deleted. The jsonb cast
+// sits inside a CASE so a hand-edited value cannot fail the whole listing.
+const cleanupMetadataPending = `(CASE WHEN worktrees.cleanup_metadata IS NULL OR worktrees.cleanup_metadata = '' THEN false
+	ELSE COALESCE((worktrees.cleanup_metadata::jsonb ->> 'directory_deleted')::boolean, false) END) = false`
+
+// ListWorktreesForReclaim returns every workspace whose directory a daemon
+// may still hold: not main, has a path, and not already known to be
+// removed. CREATING and FAILED rows have no directory yet. Archived rows are
+// the ones to remove; the rest are locked as reliant-owned. owner_user_id
+// lets the sweep find the daemon's connection. Unbounded — a builder rather
+// than ListAllWorktree, whose unlimited list is silently capped at 10k rows
+// (forge friction, being fixed in forge).
+func ListWorktreesForReclaim(ctx context.Context, db orm.Context) ([]*core.ReclaimCandidate, error) {
+	var rows []worktreeWithProject
+	err := db.Bun().NewSelect().Model(&rows).WhereAllWithDeleted().
+		ColumnExpr("worktrees.*").
+		ColumnExpr("p.user_id AS owner_user_id").
+		ColumnExpr("p.path AS project_path").
+		Join("JOIN projects AS p ON p.id = worktrees.project_id").
+		Where("worktrees.is_main = false").
+		Where("worktrees.path <> ''").
+		Where("worktrees.status NOT IN (?, ?)",
+			reliantv1.WorktreeStatus_WORKTREE_STATUS_CREATING, reliantv1.WorktreeStatus_WORKTREE_STATUS_FAILED).
+		Where(cleanupMetadataPending).
+		OrderExpr("worktrees.last_active DESC").
+		Scan(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list worktrees for reclaim: %w", err)
+	}
+	out := make([]*core.ReclaimCandidate, len(rows))
+	for i := range rows {
+		out[i] = &core.ReclaimCandidate{
+			Worktree:    worktreeToCore(&rows[i].Worktree),
+			OwnerUserID: rows[i].OwnerUserID,
+			ProjectPath: rows[i].ProjectPath,
+		}
+	}
+	return out, nil
+}
+
+// ListHeldWorktreesForUser returns the user's archived workspaces the daemon
+// declined to remove on its own (a held_reason, directory still there),
+// oldest archive first, for the storage inbox item.
+func ListHeldWorktreesForUser(ctx context.Context, db orm.Context, userID string) ([]*core.HeldWorktree, error) {
+	var rows []worktreeWithProject
+	err := db.Bun().NewSelect().Model(&rows).WhereAllWithDeleted().
+		ColumnExpr("worktrees.*").
+		ColumnExpr("p.name AS project_name").
+		ColumnExpr("p.path AS project_path").
+		Join("JOIN projects AS p ON p.id = worktrees.project_id").
+		Where("p.user_id = ?", userID).
+		Where("worktrees.is_main = false").
+		Where("worktrees.deleted_at IS NOT NULL").
+		Where(`(CASE WHEN worktrees.cleanup_metadata IS NULL OR worktrees.cleanup_metadata = '' THEN ''
+			ELSE COALESCE(worktrees.cleanup_metadata::jsonb ->> 'held_reason', '') END) <> ''`).
+		Where(cleanupMetadataPending).
+		OrderExpr("worktrees.deleted_at").
+		Scan(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list held worktrees: %w", err)
+	}
+	out := make([]*core.HeldWorktree, len(rows))
+	for i := range rows {
+		out[i] = &core.HeldWorktree{
+			Worktree:    worktreeToCore(&rows[i].Worktree),
+			ProjectName: rows[i].ProjectName,
+			ProjectPath: rows[i].ProjectPath,
+		}
+	}
+	return out, nil
+}
+
+// worktreeWithProject is a worktree row plus the columns of its project the
+// sweep's listings join in.
+type worktreeWithProject struct {
+	Worktree    `bun:",extend"`
+	OwnerUserID string `bun:"owner_user_id,scanonly"`
+	ProjectName string `bun:"project_name,scanonly"`
+	ProjectPath string `bun:"project_path,scanonly"`
+}
+
+// AdoptWorktreeDaemon records the daemon that found a workspace's directory
+// on its disk, which proves it owns it. Only a row created before daemon_id
+// was recorded is filled in, once.
+func AdoptWorktreeDaemon(ctx context.Context, db orm.Context, id, daemonID string) error {
+	_, err := db.Bun().NewUpdate().Model((*Worktree)(nil)).WhereAllWithDeleted().
+		Set("daemon_id = ?", daemonID).
+		Where("id = ?", id).
+		Where("daemon_id IS NULL").
+		Exec(ctx)
+	return err
+}
+
+// ListLiveWorktreePathsForUser returns every path one user's unarchived
+// worktree rows claim, with the project that says where each row's checkouts
+// sit. Scoped by user because another tenant's rows say nothing about this
+// user's directories.
+func ListLiveWorktreePathsForUser(ctx context.Context, db orm.Context, userID string) ([]core.WorktreePath, error) {
+	var rows []*Worktree
+	err := db.Bun().NewSelect().Model(&rows).WhereAllWithDeleted().
+		Column(WorktreeFieldID, WorktreeFieldPath, WorktreeFieldProjectID).
+		Join("JOIN projects AS p ON p.id = worktrees.project_id").
+		Where("p.user_id = ?", userID).
+		Where("worktrees.deleted_at IS NULL").
+		Where("worktrees.path <> ''").
+		Scan(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list live worktree paths: %w", err)
+	}
+	out := make([]core.WorktreePath, len(rows))
+	for i, r := range rows {
+		out[i] = core.WorktreePath{ID: r.ID, Path: r.Path, ProjectID: r.ProjectID}
+	}
+	return out, nil
+}
+
+// RemoveWorktree hard-deletes the worktree row, archived or not; a missing
+// one is not an error.
+func RemoveWorktree(ctx context.Context, db orm.Context, id string) error {
+	_, err := db.Bun().NewDelete().Model((*Worktree)(nil)).WhereAllWithDeleted().
+		Where("id = ?", id).
+		ForceDelete().
+		Exec(ctx)
+	return err
+}
+
+// ArchiveWorktree stamps the worktree archived as of now.
+func ArchiveWorktree(ctx context.Context, db orm.Context, id string) error {
+	_, err := db.Bun().NewUpdate().Model((*Worktree)(nil)).WhereAllWithDeleted().
+		Set("deleted_at = NOW()").
+		Set("updated_at = NOW()").
+		Where("id = ?", id).
+		Exec(ctx)
+	return err
+}
+
+// UnarchiveWorktree makes the worktree live again; a live worktree that
+// already holds its name is core.ErrWorktreeNameTaken.
+func UnarchiveWorktree(ctx context.Context, db orm.Context, id string) error {
+	_, err := db.Bun().NewUpdate().Model((*Worktree)(nil)).WhereAllWithDeleted().
+		Set("deleted_at = NULL").
+		Set("updated_at = NOW()").
+		Where("id = ?", id).
+		Exec(ctx)
+	return nameTakenOr(err)
+}
+
+// firstWorktree returns the first worktree, archived or not, the filter
+// matches, or nil when none does.
+func firstWorktree(ctx context.Context, db orm.Context, filter func(*bun.SelectQuery)) (*core.Worktree, error) {
+	var rows []*Worktree
+	q := db.Bun().NewSelect().Model(&rows).WhereAllWithDeleted().Limit(1)
+	filter(q)
+	if err := q.Scan(ctx); err != nil || len(rows) == 0 {
+		return nil, err
+	}
+	return worktreeToCore(rows[0]), nil
+}
+
+func worktreeFromCore(w *core.Worktree) *Worktree {
+	status := reliantv1.WorktreeStatus(w.Status)
+	return &Worktree{
+		ID:             w.ID,
+		Name:           w.Name,
+		Path:           w.Path,
+		Branch:         w.Branch,
+		BaseBranch:     w.BaseBranch,
+		BaseBranches:   encodeBaseBranches(w.BaseBranches),
+		ProjectID:      w.ProjectID,
+		ChatID:         w.ChatID,
+		DaemonID:       w.DaemonID,
+		Status:         &status,
+		IdempotencyKey: w.IdempotencyKey,
+		IsMain:         w.IsMain,
+		CreatedAt:      w.CreatedAt,
+		UpdatedAt:      w.UpdatedAt,
+		LastActive:     w.LastActive,
+		DeletedAt:      w.DeletedAt,
+		FailureReason:  w.FailureReason,
+	}
+}
+
+func worktreeToCore(row *Worktree) *core.Worktree {
+	var cleanupMetadata *core.CleanupMetadata
+	if row.CleanupMetadata != nil {
+		var parsed core.CleanupMetadata
+		if err := json.Unmarshal([]byte(*row.CleanupMetadata), &parsed); err == nil {
+			cleanupMetadata = &parsed
+		}
+	}
+	var status int32
+	if row.Status != nil {
+		status = int32(*row.Status)
+	}
+	return &core.Worktree{
+		ID:              row.ID,
+		Name:            row.Name,
+		Path:            row.Path,
+		Branch:          row.Branch,
+		BaseBranch:      row.BaseBranch,
+		BaseBranches:    decodeBaseBranches(row.BaseBranches),
+		ProjectID:       row.ProjectID,
+		ChatID:          row.ChatID,
+		DaemonID:        row.DaemonID,
+		Status:          status,
+		IdempotencyKey:  row.IdempotencyKey,
+		IsMain:          row.IsMain,
+		CreatedAt:       row.CreatedAt,
+		UpdatedAt:       row.UpdatedAt,
+		LastActive:      row.LastActive,
+		DeletedAt:       row.DeletedAt,
+		CleanupMetadata: cleanupMetadata,
+		FailureReason:   row.FailureReason,
+	}
+}
+
+func worktreesToCore(rows []*Worktree) []*core.Worktree {
+	out := make([]*core.Worktree, len(rows))
+	for i, row := range rows {
+		out[i] = worktreeToCore(row)
+	}
+	return out
+}
+
+// encodeBaseBranches stores a per-repo base-branch map as JSON; an empty map
+// is NULL. A map[string]string always marshals.
+func encodeBaseBranches(m map[string]string) *string {
+	if len(m) == 0 {
+		return nil
+	}
+	encoded, _ := json.Marshal(m)
+	s := string(encoded)
+	return &s
+}
+
+func decodeBaseBranches(s *string) map[string]string {
+	if s == nil || *s == "" {
+		return nil
+	}
+	var parsed map[string]string
+	if err := json.Unmarshal([]byte(*s), &parsed); err != nil {
+		return nil
+	}
+	return parsed
+}
+
+// encodeCleanupMetadata stores cleanup metadata as JSON; nil is NULL.
+func encodeCleanupMetadata(m *core.CleanupMetadata) (*string, error) {
+	if m == nil {
+		return nil, nil
+	}
+	encoded, err := json.Marshal(m)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal cleanup metadata: %w", err)
+	}
+	s := string(encoded)
+	return &s, nil
 }

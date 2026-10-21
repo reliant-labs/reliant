@@ -109,9 +109,6 @@ type Repo struct {
 	chats           core.ChatStore
 	runs            core.RunStore
 	agentMessages   core.AgentMessageStore
-	projects        core.ProjectStore
-	worktrees       core.WorktreeStore
-	repos           core.RepoStore
 	settings        core.SettingStore
 	accounts        *postgresstore.AccountStore
 	workflows       core.WorkflowStore
@@ -172,13 +169,10 @@ func NewRepoWithDriver(db *sql.DB, driver DatabaseDriver) (*Repo, error) {
 		chats:         postgresstore.NewChatStore(pgQueries, q),
 		runs:          postgresstore.NewRunStore(client),
 		agentMessages: postgresstore.NewAgentMessageStore(pgQueries, q),
-		projects:      postgresstore.NewProjectStore(pgQueries),
-		worktrees:     postgresstore.NewWorktreeStore(pgQueries),
-		repos:         postgresstore.NewRepoStore(pgQueries),
 		settings: postgresstore.NewSettingStore(pgQueries, q, func(query string) string {
 			return (&Repo{driver: DriverPostgres}).bindQuery(query)
 		}),
-		workflows:       postgresstore.NewWorkflowStore(client, pgQueries),
+		workflows:       postgresstore.NewWorkflowStore(client),
 		threads:         postgresstore.NewThreadStore(pgQueries),
 		contextWindows:  postgresstore.NewContextWindowStore(pgQueries),
 		workflowCatalog: postgresstore.NewWorkflowCatalogStore(client),

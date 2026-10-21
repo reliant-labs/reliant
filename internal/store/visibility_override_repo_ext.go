@@ -35,6 +35,16 @@
 //	}
 package store
 
+import (
+	"context"
+	"fmt"
+
+	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/orm"
+
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+)
+
 // VisibilityOverrideExtra carries fields on VisibilityOverride that are NOT columns — computed
 // values, transient state, anything derived rather than stored. VisibilityOverride is
 // embedded on VisibilityOverrideExtra (see visibility_override_orm.go), so a field added here is a field on
@@ -45,4 +55,64 @@ package store
 // persist them — `bun:"-"` is Bun's own idiom for a field it must never
 // bind or scan.
 type VisibilityOverrideExtra struct {
+}
+
+// GetVisibilityOverride returns the user's visibility override for an item,
+// or nil when there is none.
+func GetVisibilityOverride(ctx context.Context, db orm.Context, userID string, itemType reliantv1.HiddenItemType, slug string) (*bool, error) {
+	rows, err := ListVisibilityOverride(ctx, db,
+		orm.WhereEq(VisibilityOverrideFieldUserID, userID),
+		orm.WhereEq(VisibilityOverrideFieldItemType, itemType),
+		orm.WhereEq(VisibilityOverrideFieldSlug, slug),
+		orm.WithLimit(1))
+	if err != nil {
+		return nil, fmt.Errorf("failed to get visibility override: %w", err)
+	}
+	if len(rows) == 0 {
+		return nil, nil
+	}
+	return &rows[0].IsVisible, nil
+}
+
+// ListVisibilityOverrides returns the user's overrides for an item type,
+// keyed by slug.
+func ListVisibilityOverrides(ctx context.Context, db orm.Context, userID string, itemType reliantv1.HiddenItemType) (map[string]bool, error) {
+	rows, err := ListVisibilityOverride(ctx, db,
+		orm.WhereEq(VisibilityOverrideFieldUserID, userID),
+		orm.WhereEq(VisibilityOverrideFieldItemType, itemType),
+		orm.WithOrderBy(VisibilityOverrideFieldSlug, orm.Asc))
+	if err != nil {
+		return nil, fmt.Errorf("failed to list visibility overrides: %w", err)
+	}
+	out := make(map[string]bool, len(rows))
+	for _, row := range rows {
+		out[row.Slug] = row.IsVisible
+	}
+	return out, nil
+}
+
+// SetVisibilityOverride records the user's visibility preference for an
+// item, replacing any earlier one.
+func SetVisibilityOverride(ctx context.Context, db orm.Context, userID string, itemType reliantv1.HiddenItemType, slug string, isVisible bool) error {
+	row := &VisibilityOverride{
+		ID: uuid.New().String(), UserID: userID, ItemType: itemType, Slug: slug,
+		IsVisible: isVisible,
+	}
+	_, err := db.Bun().NewInsert().Model(row).
+		Value(VisibilityOverrideFieldCreatedAt, "NOW()").
+		On("CONFLICT (user_id, item_type, slug) DO UPDATE").
+		Set("is_visible = EXCLUDED.is_visible").
+		Exec(ctx)
+	return err
+}
+
+// RemoveVisibilityOverride removes the user's override for an item; a
+// missing one is not an error.
+func RemoveVisibilityOverride(ctx context.Context, db orm.Context, userID string, itemType reliantv1.HiddenItemType, slug string) error {
+	_, err := db.Bun().NewDelete().Model((*VisibilityOverride)(nil)).
+		Where("user_id = ?", userID).
+		Where("item_type = ?", itemType).
+		Where("slug = ?", slug).
+		Exec(ctx)
+	return err
 }

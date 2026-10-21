@@ -36,6 +36,15 @@
 //	}
 package store
 
+import (
+	"context"
+	"fmt"
+
+	"github.com/reliant-labs/forge/pkg/orm"
+
+	"github.com/reliant-labs/reliant/internal/db/core"
+)
+
 // ProjectDaemonExtra carries fields on ProjectDaemon that are NOT columns — computed
 // values, transient state, anything derived rather than stored. ProjectDaemon is
 // embedded on ProjectDaemonExtra (see project_daemon_orm.go), so a field added here is a field on
@@ -46,4 +55,135 @@ package store
 // persist them — `bun:"-"` is Bun's own idiom for a field it must never
 // bind or scan.
 type ProjectDaemonExtra struct {
+}
+
+// RecordProjectDaemonInstalled records a COMPLETED clone. install_state is
+// forced to installed rather than left to the column default, so a row that
+// was installing or failed is corrected when the clone finally lands. An
+// existing row keeps its cloned_at, which is why this is not the generated
+// UpsertProjectDaemon (that rewrites every non-key column).
+func RecordProjectDaemonInstalled(ctx context.Context, db orm.Context, projectID, daemonID, path string, defaultBranch *string) error {
+	row := &ProjectDaemon{
+		ProjectID: projectID, DaemonID: daemonID, Path: path, DefaultBranch: defaultBranch,
+		InstallState: core.ProjectInstallInstalled,
+	}
+	_, err := db.Bun().NewInsert().Model(row).
+		Column(ProjectDaemonFieldProjectID, ProjectDaemonFieldDaemonID, ProjectDaemonFieldPath,
+			ProjectDaemonFieldDefaultBranch, ProjectDaemonFieldInstallState).
+		On("CONFLICT (project_id, daemon_id) DO UPDATE").
+		Set("path = EXCLUDED.path").
+		Set("default_branch = EXCLUDED.default_branch").
+		Set("install_state = EXCLUDED.install_state").
+		Set("install_error = ''").
+		Set("install_request_id = ''").
+		Exec(ctx)
+	return err
+}
+
+// RecordProjectDaemonQueued records a clone that has been QUEUED for a
+// daemon but has not run. The path is where the checkout WILL be, not where
+// it is. requestID ties the row to the queued command so the outcome can find
+// it.
+func RecordProjectDaemonQueued(ctx context.Context, db orm.Context, projectID, daemonID, path string, defaultBranch *string, requestID string) error {
+	row := &ProjectDaemon{
+		ProjectID: projectID, DaemonID: daemonID, Path: path, DefaultBranch: defaultBranch,
+		InstallState: core.ProjectInstallInstalling, InstallRequestID: requestID,
+	}
+	_, err := db.Bun().NewInsert().Model(row).
+		Column(ProjectDaemonFieldProjectID, ProjectDaemonFieldDaemonID, ProjectDaemonFieldPath,
+			ProjectDaemonFieldDefaultBranch, ProjectDaemonFieldInstallState,
+			ProjectDaemonFieldInstallError, ProjectDaemonFieldInstallRequestID).
+		On("CONFLICT (project_id, daemon_id) DO UPDATE").
+		Set("path = EXCLUDED.path").
+		Set("default_branch = EXCLUDED.default_branch").
+		Set("install_state = EXCLUDED.install_state").
+		Set("install_error = ''").
+		Set("install_request_id = EXCLUDED.install_request_id").
+		Exec(ctx)
+	return err
+}
+
+// ResolveQueuedProjectDaemon records the outcome the daemon reported for a
+// queued clone. Matched on request id, because the notification carries no
+// project id. A non-empty installErr marks the row failed; otherwise it is
+// installed, as of now.
+func ResolveQueuedProjectDaemon(ctx context.Context, db orm.Context, requestID, installErr string) error {
+	q := db.Bun().NewUpdate().Model((*ProjectDaemon)(nil))
+	if installErr != "" {
+		q = q.Set("install_state = ?", core.ProjectInstallFailed).
+			Set("install_error = ?", installErr)
+	} else {
+		q = q.Set("install_state = ?", core.ProjectInstallInstalled).
+			Set("install_error = ''").
+			Set("cloned_at = NOW()")
+	}
+	_, err := q.Where("install_request_id = ?", requestID).
+		Where("install_request_id <> ''").
+		Exec(ctx)
+	return err
+}
+
+// MarkProjectDaemonInstalled settles a queued clone from the daemon's
+// filesystem announcement, which carries the path but no request id. A no-op
+// for a row already installed.
+func MarkProjectDaemonInstalled(ctx context.Context, db orm.Context, projectID, daemonID string) error {
+	_, err := db.Bun().NewUpdate().Model((*ProjectDaemon)(nil)).
+		Set("install_state = ?", core.ProjectInstallInstalled).
+		Set("install_error = ''").
+		Set("cloned_at = NOW()").
+		Where("project_id = ?", projectID).
+		Where("daemon_id = ?", daemonID).
+		Where("install_state <> ?", core.ProjectInstallInstalled).
+		Exec(ctx)
+	return err
+}
+
+// ListProjectDaemonsForProject returns every daemon the project is (or is
+// being) installed on, oldest clone first.
+func ListProjectDaemonsForProject(ctx context.Context, db orm.Context, projectID string) ([]*core.ProjectDaemon, error) {
+	rows, err := ListProjectDaemon(ctx, db,
+		orm.WhereEq(ProjectDaemonFieldProjectID, projectID),
+		orm.WithOrderBy(ProjectDaemonFieldClonedAt, orm.Asc))
+	if err != nil {
+		return nil, fmt.Errorf("failed to list project_daemons for project: %w", err)
+	}
+	return projectDaemonsToCore(rows), nil
+}
+
+// ListProjectDaemonsForDaemon returns every project installed (or being
+// installed) on the daemon, oldest clone first.
+func ListProjectDaemonsForDaemon(ctx context.Context, db orm.Context, daemonID string) ([]*core.ProjectDaemon, error) {
+	rows, err := ListProjectDaemon(ctx, db,
+		orm.WhereEq(ProjectDaemonFieldDaemonID, daemonID),
+		orm.WithOrderBy(ProjectDaemonFieldClonedAt, orm.Asc))
+	if err != nil {
+		return nil, fmt.Errorf("failed to list project_daemons for daemon: %w", err)
+	}
+	return projectDaemonsToCore(rows), nil
+}
+
+// RemoveProjectDaemon deletes the installation row; a missing one is not an
+// error.
+func RemoveProjectDaemon(ctx context.Context, db orm.Context, projectID, daemonID string) error {
+	if err := DeleteProjectDaemonByPK(ctx, db, projectID, daemonID); err != nil && !isNoRows(err) {
+		return err
+	}
+	return nil
+}
+
+func projectDaemonsToCore(rows []*ProjectDaemon) []*core.ProjectDaemon {
+	out := make([]*core.ProjectDaemon, len(rows))
+	for i, row := range rows {
+		out[i] = &core.ProjectDaemon{
+			ProjectID:        row.ProjectID,
+			DaemonID:         row.DaemonID,
+			Path:             row.Path,
+			DefaultBranch:    row.DefaultBranch,
+			ClonedAt:         row.ClonedAt,
+			InstallState:     row.InstallState,
+			InstallError:     row.InstallError,
+			InstallRequestID: row.InstallRequestID,
+		}
+	}
+	return out
 }

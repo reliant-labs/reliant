@@ -35,6 +35,16 @@
 //	}
 package store
 
+import (
+	"context"
+	"fmt"
+
+	"github.com/reliant-labs/forge/pkg/orm"
+
+	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/gitremote"
+)
+
 // RepoExtra carries fields on Repo that are NOT columns — computed
 // values, transient state, anything derived rather than stored. Repo is
 // embedded on RepoExtra (see repo_orm.go), so a field added here is a field on
@@ -45,4 +55,97 @@ package store
 // persist them — `bun:"-"` is Bun's own idiom for a field it must never
 // bind or scan.
 type RepoExtra struct {
+}
+
+// InsertRepo stores a nested repo with the created_at and updated_at the
+// caller set (zero is the column DEFAULT). A builder insert rather than
+// CreateRepo, which re-stamps updated_at over the caller's value (forge
+// friction, being fixed in forge). A remote URL is stored without
+// credentials.
+func InsertRepo(ctx context.Context, db orm.Context, r *core.Repo) error {
+	row := &Repo{
+		ID:           r.ID,
+		ProjectID:    r.ProjectID,
+		Name:         r.Name,
+		RelativePath: r.RelativePath,
+		RemoteURL:    gitremote.StripCredentialsPtr(r.RemoteURL),
+		CreatedAt:    r.CreatedAt,
+		UpdatedAt:    r.UpdatedAt,
+	}
+	_, err := db.Bun().NewInsert().Model(row).Exec(ctx)
+	return err
+}
+
+// GetRepo returns the repo, or an error naming it when there is none.
+func GetRepo(ctx context.Context, db orm.Context, id string) (*core.Repo, error) {
+	row, err := GetRepoByID(ctx, db, id)
+	if isNoRows(err) {
+		return nil, fmt.Errorf("repo not found: %s", id)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to get repo: %w", err)
+	}
+	return repoToCore(row), nil
+}
+
+// GetRepoByProjectAndPath returns the project's repo at relativePath, or an
+// error naming both when there is none.
+func GetRepoByProjectAndPath(ctx context.Context, db orm.Context, projectID, relativePath string) (*core.Repo, error) {
+	rows, err := ListRepo(ctx, db,
+		orm.WhereEq(RepoFieldProjectID, projectID),
+		orm.WhereEq(RepoFieldRelativePath, relativePath),
+		orm.WithLimit(1))
+	if err != nil {
+		return nil, fmt.Errorf("failed to get repo by project+path: %w", err)
+	}
+	if len(rows) == 0 {
+		return nil, fmt.Errorf("repo not found: project=%s path=%s", projectID, relativePath)
+	}
+	return repoToCore(rows[0]), nil
+}
+
+// ListReposByProject returns the project's repos ordered by relative path.
+func ListReposByProject(ctx context.Context, db orm.Context, projectID string) ([]*core.Repo, error) {
+	rows, err := ListRepo(ctx, db,
+		orm.WhereEq(RepoFieldProjectID, projectID),
+		orm.WithOrderBy(RepoFieldRelativePath, orm.Asc))
+	if err != nil {
+		return nil, fmt.Errorf("failed to list repos: %w", err)
+	}
+	out := make([]*core.Repo, len(rows))
+	for i, row := range rows {
+		out[i] = repoToCore(row)
+	}
+	return out, nil
+}
+
+// ReplaceRepo rewrites the repo's name and remote URL (without credentials)
+// and stamps updated_at. A missing repo is not an error.
+func ReplaceRepo(ctx context.Context, db orm.Context, r *core.Repo) error {
+	row := &Repo{ID: r.ID, Name: r.Name, RemoteURL: gitremote.StripCredentialsPtr(r.RemoteURL)}
+	err := UpdateRepoMasked(ctx, db, row, []string{RepoFieldName, RepoFieldRemoteURL})
+	if err != nil && !isNoRows(err) {
+		return err
+	}
+	return nil
+}
+
+// RemoveRepo deletes the repo; a missing one is not an error.
+func RemoveRepo(ctx context.Context, db orm.Context, id string) error {
+	if err := DeleteRepo(ctx, db, id); err != nil && !isNoRows(err) {
+		return err
+	}
+	return nil
+}
+
+func repoToCore(row *Repo) *core.Repo {
+	return &core.Repo{
+		ID:           row.ID,
+		ProjectID:    row.ProjectID,
+		Name:         row.Name,
+		RelativePath: row.RelativePath,
+		RemoteURL:    gitremote.StripCredentialsPtr(row.RemoteURL),
+		CreatedAt:    row.CreatedAt,
+		UpdatedAt:    row.UpdatedAt,
+	}
 }

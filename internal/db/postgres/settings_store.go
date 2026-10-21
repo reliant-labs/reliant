@@ -186,37 +186,3 @@ func (s *settingStore) BackfillAPIKeys(ctx context.Context, batch int) (int, err
 func oauthTokenAAD(table, userID, column string) []byte {
 	return []byte(table + "\x00" + userID + "\x00" + column)
 }
-
-func (s *settingStore) GetVisibilityOverride(ctx context.Context, userID string, itemType int32, slug string) (*bool, error) {
-	isVisible, err := s.q.GetVisibilityOverride(ctx, pgdb.GetVisibilityOverrideParams{UserID: userID, ItemType: itemType, Slug: slug})
-	if err != nil {
-		return nil, nil
-	}
-	return &isVisible, nil
-}
-
-func (s *settingStore) ListVisibilityOverrides(ctx context.Context, userID string, itemType int32) (map[string]bool, error) {
-	rows, err := s.q.ListVisibilityOverrides(ctx, pgdb.ListVisibilityOverridesParams{UserID: userID, ItemType: itemType})
-	if err != nil {
-		return nil, err
-	}
-	result := make(map[string]bool)
-	for _, row := range rows {
-		result[row.Slug] = row.IsVisible
-	}
-	return result, nil
-}
-
-func (s *settingStore) SetVisibilityOverride(ctx context.Context, userID string, itemType int32, slug string, isVisible bool) error {
-	return s.q.SetVisibilityOverride(ctx, pgdb.SetVisibilityOverrideParams{
-		ID:        uuid.New().String(),
-		UserID:    userID,
-		ItemType:  itemType,
-		Slug:      slug,
-		IsVisible: isVisible,
-	})
-}
-
-func (s *settingStore) DeleteVisibilityOverride(ctx context.Context, userID string, itemType int32, slug string) error {
-	return s.q.DeleteVisibilityOverride(ctx, pgdb.DeleteVisibilityOverrideParams{UserID: userID, ItemType: itemType, Slug: slug})
-}
