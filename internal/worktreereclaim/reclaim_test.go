@@ -86,15 +86,21 @@ func (f *fixture) worktree(id, branch string) Worktree {
 // when it claims, phase two (sent after the server re-reads the row) removes.
 func (f *fixture) one(w Worktree) Result {
 	f.t.Helper()
+	return f.oneIn(context.Background(), w)
+}
+
+// oneIn is one under ctx.
+func (f *fixture) oneIn(ctx context.Context, w Worktree) Result {
+	f.t.Helper()
 	if w.Fence == "" && w.State == StateArchived {
 		w.Fence = "100"
 	}
-	got := f.r.Reconcile(context.Background(), Request{Worktrees: []Worktree{w}}).Results[0]
+	got := f.r.Reconcile(ctx, Request{Worktrees: []Worktree{w}}).Results[0]
 	if got.Outcome != OutcomeClaimed {
 		return got
 	}
 	w.Remove = true
-	return f.r.Reconcile(context.Background(), Request{Worktrees: []Worktree{w}}).Results[0]
+	return f.r.Reconcile(ctx, Request{Worktrees: []Worktree{w}}).Results[0]
 }
 
 // verdict is the automatic path's judgement alone: phase one with "Keep
@@ -519,7 +525,6 @@ func TestReconcile_MultiRepoRootFilesHoldTheWorkspace(t *testing.T) {
 
 func TestReconcile_MultiRepoWorkspaceWithOnlyEmptyDirsBetweenIsRemoved(t *testing.T) {
 	t.Parallel()
-	heavyUnderShort(t, "~100 git processes: three reclaim passes over a two-checkout workspace")
 	f := newFixture(t)
 	f.idle()
 	ws := filepath.Join(f.root, "proj", "ws1")
@@ -674,7 +679,7 @@ func TestSnapshot_DoesNotTouchHeadIndexOrFiles(t *testing.T) {
 // S11: refs are unique and never overwritten, even within one nanosecond tick.
 func TestSnapshot_RefsAreUniqueAndNeverOverwritten(t *testing.T) {
 	t.Parallel()
-	heavyUnderShort(t, "~230 git processes: twenty snapshots in a row")
+	heavyUnderShort(t, "twenty snapshots in a row, ~230 git processes, which is the point of it")
 	f := newFixture(t)
 	w := f.worktree("w15", "feat/n")
 	write(t, filepath.Join(w.Path, "u.txt"), "u\n")
@@ -812,7 +817,6 @@ func TestReconcile_EmptyHuskIsRemovedButAnyFileKeepsIt(t *testing.T) {
 // S8: operations on one path serialize.
 func TestReclaimer_SerializesOperationsPerPath(t *testing.T) {
 	t.Parallel()
-	heavyUnderShort(t, "~100 git processes: eight reclaim passes over one worktree, which it serializes")
 	f := newFixture(t)
 	f.idle()
 	w := f.worktree("w21", "feat/t")

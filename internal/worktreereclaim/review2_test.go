@@ -128,7 +128,7 @@ func TestReview2_N3_RestoreRoundTrip(t *testing.T) {
 // one only from a per-worktree ref (refs/worktree/*), on the AUTO path.
 func TestReview2_N4_PerWorktreeReflogAndRefs(t *testing.T) {
 	t.Parallel()
-	heavyUnderShort(t, "~300 git processes: three worktrees, each through a full reclaim that saves per-worktree history")
+	heavyUnderShort(t, "three worktrees, each through a full reclaim that saves per-worktree history (~200 git processes together)")
 	for _, kind := range []string{"reflog", "worktree-ref", "bisect-ref"} {
 		t.Run(kind, func(t *testing.T) {
 			t.Parallel()
@@ -337,7 +337,6 @@ func TestRelockOfARemovedDirectoryReportsGone(t *testing.T) {
 // path saves them too, then removes: see backup_test.go.)
 func TestReconcile_OrphanHistoryIsReportedAndIsSavedByConfirmed(t *testing.T) {
 	t.Parallel()
-	heavyUnderShort(t, "~100 git processes: a verdict, then a confirmed clean-up that saves orphaned history")
 	f := newFixture(t)
 	f.idle()
 	w := f.worktree("orph", "feat/orph")

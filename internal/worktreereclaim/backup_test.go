@@ -49,7 +49,6 @@ func savedAt(t *testing.T, f *fixture, refs []string, kind, sha string) string {
 // under a ref, then the worktree is removed.
 func TestReconcile_DetachedUnpushedCommitsAreSavedThenRemoved(t *testing.T) {
 	t.Parallel()
-	heavyUnderShort(t, "~140 git processes: a full reclaim that saves a detached commit")
 	f := newFixture(t)
 	f.idle()
 	w := f.worktree("det", "feat/det")
@@ -76,7 +75,6 @@ func TestReconcile_DetachedUnpushedCommitsAreSavedThenRemoved(t *testing.T) {
 // A branch with commits on no remote: saved and removed; the branch survives.
 func TestReconcile_UnpushedBranchCommitsAreSavedThenRemoved(t *testing.T) {
 	t.Parallel()
-	heavyUnderShort(t, "~140 git processes: a full reclaim that saves an unpushed commit")
 	f := newFixture(t)
 	f.idle()
 	w := f.worktree("br", "feat/br")
@@ -97,7 +95,6 @@ func TestReconcile_UnpushedBranchCommitsAreSavedThenRemoved(t *testing.T) {
 // before its admin directory, and with it the reflog, goes.
 func TestReconcile_ReflogOnlyCommitsAreSavedThenRemoved(t *testing.T) {
 	t.Parallel()
-	heavyUnderShort(t, "~100 git processes: a full reclaim that saves a reflog-only commit")
 	f := newFixture(t)
 	f.idle()
 	w := f.worktree("rl", "feat/rl")

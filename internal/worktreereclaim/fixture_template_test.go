@@ -29,12 +29,12 @@ var fixtureTemplate struct {
 }
 
 // heavyUnderShort skips, under -short, a test whose scenario itself drives
-// well over a hundred git processes: full reclaim passes over unpushed or
-// merged history, where the reaper's own checks are most of the work. On a
-// loaded machine a process costs tens of milliseconds, so this handful alone
-// held the package past make test-short's 60s budget. They run in full mode
-// (go test without -short: main and nightly CI, and before committing a change
-// here).
+// well over a hundred git processes. On a loaded machine a process costs tens
+// of milliseconds, so a few of these hold the package past make test-short's
+// 60s budget. Such a test runs in full mode (go test without -short: main and
+// nightly CI, and before committing a change here). Most of what once needed
+// this was the reaper's own git work, since cut (gitbudget_test.go), so reach
+// for it only for a test that is heavy by design.
 func heavyUnderShort(t *testing.T, why string) {
 	t.Helper()
 	if testing.Short() {

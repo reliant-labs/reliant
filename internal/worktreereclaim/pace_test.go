@@ -210,7 +210,6 @@ func TestOrphan_TipWhoseWorkIsOnBaseDoesNotHold(t *testing.T) {
 // automatic pass saves it under a ref before removing (see backup_test.go).
 func TestOrphan_TipWithWorkNotOnBaseIsSavedBeforeRemoval(t *testing.T) {
 	t.Parallel()
-	heavyUnderShort(t, "~130 git processes: a verdict, then a full reclaim that saves an orphaned tip")
 	f := newFixture(t)
 	f.idle()
 	w := f.worktree("lost", "feat/lost")
@@ -236,7 +235,7 @@ func TestOrphan_TipWithWorkNotOnBaseIsSavedBeforeRemoval(t *testing.T) {
 // fetched and the same PR looked up over and over inside one pass.
 func TestProbe_NetworkChecksAreSharedPerRepo(t *testing.T) {
 	t.Parallel()
-	heavyUnderShort(t, "~450 git processes: three full reclaim passes over two worktrees with unpushed commits")
+	heavyUnderShort(t, "three full reclaim passes over two worktrees with unpushed commits (~120 git processes)")
 	f := newFixture(t)
 	var fetches, lookups atomic.Int32
 	f.r.FetchBase = func(context.Context, string, string) { fetches.Add(1) }

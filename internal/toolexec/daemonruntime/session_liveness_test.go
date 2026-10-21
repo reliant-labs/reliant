@@ -175,9 +175,7 @@ func TestDaemonRedialsWhenTheGatewayStopsReadingItsStream(t *testing.T) {
 	client := newDaemonClientForTest(t, t.TempDir(), startGateway(t, gw))
 	client.timing = fastTiming
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go func() { _ = client.run(ctx) }()
+	startDaemon(t, client)
 
 	require.Eventually(t, func() bool { return gw.sessions.Load() >= 2 }, 8*time.Second, 20*time.Millisecond,
 		"the daemon kept a stream the gateway had stopped reading; it must detect the unacknowledged "+
@@ -192,9 +190,7 @@ func TestDaemonKeepsItsSessionWithAGatewayThatNeverAcknowledges(t *testing.T) {
 	client := newDaemonClientForTest(t, t.TempDir(), startGateway(t, gw))
 	client.timing = fastTiming
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go func() { _ = client.run(ctx) }()
+	startDaemon(t, client)
 
 	require.Eventually(t, func() bool { return gw.sessions.Load() == 1 }, 2*time.Second, 10*time.Millisecond)
 	time.Sleep(4 * fastTiming.heartbeatAckTimeout)

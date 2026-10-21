@@ -197,7 +197,6 @@ func TestMerged_ALockedByTheUserWorktreeIsNotReaped(t *testing.T) {
 // fetched the merge); a different head does not.
 func TestMerged_AMergedPullRequestForExactlyThisHeadFreesTheWorktree(t *testing.T) {
 	t.Parallel()
-	heavyUnderShort(t, "~140 git processes: a verdict, then a full reclaim of unmerged history")
 	f := newFixture(t)
 	f.idle()
 	w := f.worktree("pr", "feat/pr")
@@ -281,7 +280,7 @@ func TestMerged_ADifferentChangeOnMainDoesNotCountAsMerged(t *testing.T) {
 // the checkout that is not done.
 func TestMerged_AMultiRepoWorkspaceNeedsEveryCheckoutDone(t *testing.T) {
 	t.Parallel()
-	heavyUnderShort(t, "~190 git processes: two checkouts, two squash merges, a verdict and a full reclaim")
+	heavyUnderShort(t, "two checkouts, two squash merges, a verdict and a full reclaim (~130 git processes)")
 	f := newFixture(t)
 	f.idle()
 	ws := filepath.Join(f.root, "proj", "multi")

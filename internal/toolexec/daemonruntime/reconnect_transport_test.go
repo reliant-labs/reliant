@@ -84,26 +84,9 @@ func TestReconnectingDaemonReusesOneGatewayConnection(t *testing.T) {
 
 	client := newDaemonClientForTest(t, t.TempDir(), srv.URL)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	runDone := make(chan struct{})
-	go func() {
-		defer close(runDone)
-		_ = client.run(ctx)
-	}()
-	// The daemon records each session in its data dir, a t.TempDir, when it
-	// handles the RegistrationAck, and the gateway counts the session as soon
-	// as it SENDS the ack. So when the loop below sees the last session, the
-	// daemon may still be writing daemon-state.json; returning then raced
-	// TempDir's cleanup ("directory not empty"), or recreated the data dir
-	// after it. Stop the daemon and wait for it before anything is removed.
-	defer func() {
-		cancel()
-		select {
-		case <-runDone:
-		case <-time.After(30 * time.Second):
-			t.Error("the daemon did not stop within 30s of its context being cancelled")
-		}
-	}()
+	// When the loop below sees the last session, the daemon may still be
+	// recording it in its data dir; startDaemon waits for it to stop.
+	startDaemon(t, client)
 
 	// Three sessions is enough to tell reuse from per-session dialing, and the
 	// daemon's reconnect backoff (1s, then 2s) keeps it under a few seconds.
