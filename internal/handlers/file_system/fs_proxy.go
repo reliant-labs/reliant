@@ -35,7 +35,7 @@ import (
 // only the NATS router can), and Repo checks the machine is the caller's.
 func (s *Service) wake() machinewake.Service {
 	resumer, _ := s.deps.Router.(machinewake.Resumer)
-	return machinewake.New(machinewake.Deps{Resumer: resumer, Owners: s.deps.Repo})
+	return machinewake.NewInstrumented(machinewake.Deps{Resumer: resumer, Owners: s.deps.Repo})
 }
 
 func (s *Service) getUserID(ctx context.Context) (string, error) {

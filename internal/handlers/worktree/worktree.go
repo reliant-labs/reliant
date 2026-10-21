@@ -49,7 +49,7 @@ const worktreeReadCommandTimeoutMs int32 = 30_000
 // only a router that is also a machinewake.Resumer wakes anything).
 func (s *Service) wake() machinewake.Service {
 	resumer, _ := s.deps.Router.(machinewake.Resumer)
-	return machinewake.New(machinewake.Deps{Resumer: resumer, Owners: s.deps.Repo})
+	return machinewake.NewInstrumented(machinewake.Deps{Resumer: resumer, Owners: s.deps.Repo})
 }
 
 // relockActive tells the owning daemon to lock this worktree's checkouts as

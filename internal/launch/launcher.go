@@ -1244,7 +1244,7 @@ func (l *Launcher) recordStartSelection(ctx context.Context, userID string, chat
 	if len(patch) == 0 {
 		return nil
 	}
-	if _, err := chatselection.New(l.repo).Merge(ctx, chat.ID, userID, workflowName, patch, 0); err != nil {
+	if _, err := chatselection.NewInstrumented(l.repo).Merge(ctx, chat.ID, userID, workflowName, patch, 0); err != nil {
 		return fmt.Errorf("failed to record the chat's selection: %w", err)
 	}
 	return nil

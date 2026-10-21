@@ -131,7 +131,7 @@ type localModelProber struct {
 
 func newLocalModelProber() *localModelProber {
 	return &localModelProber{
-		probes:    localprobe.New(localprobe.Deps{HTTPClient: &http.Client{}}),
+		probes:    localprobe.NewInstrumented(localprobe.Deps{HTTPClient: &http.Client{}}),
 		wellKnown: defaultWellKnownLocalEndpoints(),
 		loadCfg:   loadLocalModelsConfig,
 		showCache: localprobe.NewShowCache(),

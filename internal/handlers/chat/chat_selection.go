@@ -23,7 +23,7 @@ import (
 // not held: it is two words, and a Service built as a struct literal in a test
 // needs no extra wiring.
 func (s *Service) selections() chatselection.Service {
-	return chatselection.New(s.deps.Repo)
+	return chatselection.NewInstrumented(s.deps.Repo)
 }
 
 // recordSelection stores what a send or an edit actually gave the chat's run, so

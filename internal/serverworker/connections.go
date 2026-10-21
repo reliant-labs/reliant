@@ -64,7 +64,7 @@ func newIntegrationCredentials(resolver *connections.Resolver, cp controlplane.E
 	// The same Endpoint BootVault and the token authority are given, so the
 	// worker's notion of "hosted" cannot disagree with theirs.
 	if !cp.Hosted() {
-		return connauth.New(deps), nil
+		return connauth.NewInstrumented(deps), nil
 	}
 	brokers := connauth.NewBrokers()
 	secret := cp.InternalServiceSecret
@@ -72,16 +72,16 @@ func newIntegrationCredentials(resolver *connections.Resolver, cp controlplane.E
 		return nil, errors.New("integrations: RELIANT_CONTROL_PLANE_URL is set but INTERNAL_SERVICE_SECRET is not; " +
 			"hosted GitHub tokens come from control-plane and cannot be fetched unauthenticated")
 	}
-	client := gitcredentialclient.New(gitcredentialclient.Deps{
+	client := gitcredentialclient.NewInstrumented(gitcredentialclient.Deps{
 		BaseURL: cp.URL,
 		Sign:    func() (string, error) { return auth.SignInternalServiceToken(secret) },
 	})
-	broker := ghdelegated.New(ghdelegated.Deps{Tokens: client, Installations: client, Logger: slog.Default().With("component", "ghdelegated")})
+	broker := ghdelegated.NewInstrumented(ghdelegated.Deps{Tokens: client, Installations: client, Logger: slog.Default().With("component", "ghdelegated")})
 	if err := brokers.Register(ghdelegated.BrokerID, broker); err != nil {
 		return nil, fmt.Errorf("integrations: %w", err)
 	}
 	deps.Broker = brokers.Get
-	return connauth.New(deps), nil
+	return connauth.NewInstrumented(deps), nil
 }
 
 // triggerCredentials is what the poll activity resolves a polled trigger's

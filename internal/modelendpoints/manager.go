@@ -408,7 +408,7 @@ func (m *Manager) probeDirect(ctx context.Context, row *db.ModelEndpoint, draft 
 	if client == nil {
 		client = &http.Client{Transport: m.cfg.Policy.Transport()}
 	}
-	return localprobe.New(localprobe.Deps{HTTPClient: client}).Probe(ctx, row.ID, target, localprobe.Options{})
+	return localprobe.NewInstrumented(localprobe.Deps{HTTPClient: client}).Probe(ctx, row.ID, target, localprobe.Options{})
 }
 
 // probeViaDaemon authorizes the endpoint on its machine's relay and returns

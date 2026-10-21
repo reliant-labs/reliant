@@ -353,7 +353,7 @@ func NewAPI(cfg *Config) (*API, error) {
 	// user's behalf; self-hosted leaves ControlPlane nil.
 	var projectControlPlane project.CloneDispatcher
 	if cfg.ControlPlane.Hosted() {
-		projectControlPlane = controlplane.New(controlplane.Deps{BaseURL: cfg.ControlPlane.URL})
+		projectControlPlane = controlplane.NewInstrumented(controlplane.Deps{BaseURL: cfg.ControlPlane.URL})
 	}
 	projectService, err := project.New(project.Deps{
 		Logger:       handlerLogger,
@@ -440,7 +440,7 @@ func NewAPI(cfg *Config) (*API, error) {
 		Logger:                  handlerLogger,
 		Config:                  handlerConfig,
 		Repo:                    database,
-		ControlPlane:            controlplane.New(controlplane.Deps{BaseURL: cfg.ControlPlane.URL}),
+		ControlPlane:            controlplane.NewInstrumented(controlplane.Deps{BaseURL: cfg.ControlPlane.URL}),
 		ExchangeClaudeCode:      claude.ExchangeClaudeAuthorizationCode,
 		ExchangeCodexCode:       codex.ExchangeCodexAuthorizationCode,
 		ExchangeAntigravityCode: antigravity.ExchangeAntigravityAuthorizationCode,
@@ -566,7 +566,7 @@ func NewAPI(cfg *Config) (*API, error) {
 		if secret == "" {
 			return nil, errors.New("git tokens: RELIANT_CONTROL_PLANE_URL is set but INTERNAL_SERVICE_SECRET is not")
 		}
-		gitTokens = gitcredentialclient.New(gitcredentialclient.Deps{
+		gitTokens = gitcredentialclient.NewInstrumented(gitcredentialclient.Deps{
 			BaseURL: cp.URL,
 			Sign:    func() (string, error) { return auth.SignInternalServiceToken(secret) },
 		})
@@ -667,7 +667,7 @@ func NewAPI(cfg *Config) (*API, error) {
 	}
 	triggerDeps.Syncer, triggerDeps.Fires = trigger.TemporalBackend(cfg.TemporalClient, database, cfg.SharedTaskQueue, polled)
 	if cfg.ControlPlane.Hosted() {
-		triggerDeps.ControlPlane = controlplane.New(controlplane.Deps{BaseURL: cfg.ControlPlane.URL})
+		triggerDeps.ControlPlane = controlplane.NewInstrumented(controlplane.Deps{BaseURL: cfg.ControlPlane.URL})
 	}
 	triggerService, err := trigger.New(triggerDeps)
 	if err != nil {
@@ -755,7 +755,7 @@ func NewAPI(cfg *Config) (*API, error) {
 	// deployment fail deletion against a control plane that isn't there.
 	var accountControlPlane account.ControlPlane
 	if cfg.ControlPlane.Hosted() {
-		accountControlPlane = controlplane.New(controlplane.Deps{BaseURL: cfg.ControlPlane.URL})
+		accountControlPlane = controlplane.NewInstrumented(controlplane.Deps{BaseURL: cfg.ControlPlane.URL})
 	}
 	accountService, err := account.New(account.Deps{
 		Logger:       handlerLogger,

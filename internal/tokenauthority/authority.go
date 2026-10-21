@@ -43,7 +43,7 @@ func New(deps Deps) (Authority, Mode, error) {
 				"a hosted reliant validates every machine credential through control-plane and cannot do so unauthenticated")
 		}
 		secret := deps.InternalServiceSecret
-		return accesstokenclient.New(accesstokenclient.Deps{
+		return accesstokenclient.NewInstrumented(accesstokenclient.Deps{
 			BaseURL: deps.ControlPlaneURL,
 			Sign:    func() (string, error) { return auth.SignInternalServiceToken(secret) },
 		}), ModeControlPlane, nil

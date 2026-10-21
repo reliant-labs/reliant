@@ -228,7 +228,7 @@ const (
 // daemon forwards a forge.* command to the caller's daemon, mapping every
 // failure onto a loud Connect error (daemoncmd).
 func (s *Service) daemon() daemoncmd.Service {
-	return daemoncmd.New(daemoncmd.Deps{Sender: s.deps.Router})
+	return daemoncmd.NewInstrumented(daemoncmd.Deps{Sender: s.deps.Router})
 }
 
 // forgeReportReply mirrors daemonruntime.forgeReportResponse.

@@ -146,7 +146,7 @@ func forgeTokenCachePath() string {
 
 // newForgeCredentialService wires the helper over this machine's sessions.
 func newForgeCredentialService(cmd *cobra.Command, pin forgecred.Pin) forgecred.Service {
-	return forgecred.New(forgecred.Deps{
+	return forgecred.NewInstrumented(forgecred.Deps{
 		Sessions: func() ([]forgecred.Session, error) {
 			preferred := ""
 			if conn, err := resolveServer(cmd); err == nil {

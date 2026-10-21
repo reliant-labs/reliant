@@ -132,7 +132,7 @@ func enableSealing(tb testing.TB, repo *db.Repo, conn *sql.DB) {
 	if err != nil {
 		tb.Fatalf("storetest: parse vault key: %v", err)
 	}
-	if err := repo.EnableCredentialSealing(vault.New(vault.Deps{DB: conn, Keys: vault.NewEnvKeyWrapper(ring)})); err != nil {
+	if err := repo.EnableCredentialSealing(vault.NewInstrumented(vault.Deps{DB: conn, Keys: vault.NewEnvKeyWrapper(ring)})); err != nil {
 		tb.Fatalf("storetest: enable credential sealing: %v", err)
 	}
 }
