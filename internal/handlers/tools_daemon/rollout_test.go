@@ -52,7 +52,8 @@ func (c *rolloutCluster) connect() *nats.Conn {
 	return nc
 }
 
-// replica starts one daemon-gateway replica as servergateway.Run wires it.
+// replica starts one daemon-gateway replica as the gateway root (internal/app)
+// wires it.
 func (c *rolloutCluster) replica() *Service {
 	c.t.Helper()
 	nc := c.connect()

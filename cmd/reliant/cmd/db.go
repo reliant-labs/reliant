@@ -16,6 +16,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/observe/dbtrace"
 
 	configv1 "github.com/reliant-labs/reliant/gen/config/v1"
+	"github.com/reliant-labs/reliant/internal/app"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
@@ -215,7 +216,7 @@ records it without checking that the schema is the one it builds.`,
 // (session) URL when one is set, else the URL. The migrator holds
 // session-level locks, which a transaction-pooling PgBouncer cannot keep.
 func migrationURL(cfg *configv1.DatabaseConfig) string {
-	_, url, directURL := databaseSettings(cfg)
+	_, url, directURL := app.DatabaseURLs(cfg)
 	return db.DatabaseConfig{URL: url, DirectURL: directURL}.MigrationURL()
 }
 

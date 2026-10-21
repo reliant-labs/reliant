@@ -1,5 +1,11 @@
 // Copyright (c) 2025 Reliant Labs
 
+// Package servergateway holds the daemon-gateway's own pieces: the outbound
+// daemon connector and the managed-daemon reconciler that drives it, and the
+// /flow-health assertion. The gateway process itself is the `gateway` root of
+// the composition graph (internal/app), which builds these alongside
+// ToolsDaemonService and the NATS bridge.
+//
 // Leaf utility package: the exported surface is concrete helpers over the
 // stdlib or the OS, with no collaborator to fake and no second implementation.
 // An interface here would have exactly one implementor and one caller shape,

@@ -385,7 +385,7 @@ func TestAuthLogin_AsksForForgeCeilingAndRetiresDeposits(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if out, err := runRoot(t, "auth", "login", "--server", cp.srv.URL); err != nil {
+	if out, err := executeRoot(t, "auth", "login", "--server", cp.srv.URL); err != nil {
 		t.Fatalf("auth login: %v\n%s", err, out)
 	}
 	scope := strings.Fields(cp.lastRequest().Get("scope"))
@@ -434,7 +434,7 @@ func TestAuthLogout_ForgetsExchangedTokensKeepsForgeLogin(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if out, err := runRoot(t, "auth", "logout", "--server", server); err != nil {
+	if out, err := executeRoot(t, "auth", "logout", "--server", server); err != nil {
 		t.Fatalf("logout: %v\n%s", err, out)
 	}
 	raw, _ := os.ReadFile(forgeTokenCachePath())

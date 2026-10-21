@@ -238,7 +238,8 @@ type flowHealthResponse struct {
 	Summary     string `json:"summary"`
 }
 
-// flowHealthHandler builds the GET /flow-health handler. It snapshots the
+// FlowHealthHandler builds the GET /flow-health handler, which the gateway
+// root serves on its probe surface (internal/app). It snapshots the
 // streams this gateway holds, reads the attachment registry, runs the pure
 // assertion, and returns 200 (healthy/undetermined) / 503 (unhealthy) with a
 // terse aggregate body.
@@ -248,7 +249,7 @@ type flowHealthResponse struct {
 // absent/invalid falls back to flowHealthStale. Note the knob can only force
 // a fault when this gateway actually holds a stream — with nothing held there
 // is nothing to assert, by design.
-func flowHealthHandler(lister flowHealthAttachmentLister, streams flowHealthStreamSource) http.HandlerFunc {
+func FlowHealthHandler(lister flowHealthAttachmentLister, streams flowHealthStreamSource) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		staleAfter := flowHealthStale
 		if v := r.URL.Query().Get("stale-after"); v != "" {

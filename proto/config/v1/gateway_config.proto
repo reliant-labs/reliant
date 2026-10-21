@@ -63,4 +63,21 @@ message GatewayConfig {
     default_value: "30s"
     description: "Budget for graceful shutdown after the pre-stop pause"
   }];
+
+  // The probe paths on HEALTH_PORT, comma-separated; each list's first path
+  // is the canonical one and the rest are aliases served alike. /health and
+  // /ready are what control-plane probes (RELIANT_PROBES, the GKE health
+  // check, docker-compose); /healthz and /readyz are forge's, which `forge
+  // doctor` and the boot probes' defaults use. No flag: these are a
+  // deployment's contract with its probes, not an operator knob.
+  string liveness_paths = 21 [(forge.v1.config) = {
+    env_var: "LIVENESS_PATHS"
+    default_value: "/health,/healthz"
+    description: "Liveness probe paths on the health port (comma-separated)"
+  }];
+  string readiness_paths = 22 [(forge.v1.config) = {
+    env_var: "READINESS_PATHS"
+    default_value: "/ready,/readyz"
+    description: "Readiness probe paths on the health port (comma-separated)"
+  }];
 }

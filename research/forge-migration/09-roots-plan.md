@@ -314,6 +314,34 @@ Your order (a)→(b)→(c)→(d)→(e) holds with **three changes**:
   `servergateway/nodes_test.go` becomes a stop-order pin over `app.PlanGateway()` (F7).
 - `forge.yaml` `lint.rules`: `forge-graph-unreachable: warn` and `forge-graph-unresolved: warn`
   (F4). These come out in R6.
+- **As landed:** `internal/app/roots_gateway.go` declares `Gateway` (field order = stop order:
+  reconciler, daemon listener, activity subscriber, connection listeners, tool bridge, state
+  derivation, tools-daemon sweeper, flow health, pprof). `PlanGateway().Stop()` is pinned
+  verbatim by `TestGatewayStopsTheHandOverFirst` (today's six nodes, then user_update_hub,
+  nats_conn, db_repo, pprof, probe_listener); the registration order by
+  `TestGatewayConnectionListenersRegisterInOrder`. Names are forge's snake_case node names.
+  Providers in `providers.go` (DBRepo — not `Repo`, which is the `handlers/repo` node —
+  NATSConn, JetStream, UserUpdateHub, TokenAuthority, TLSFiles, Pprof), gateway nodes in
+  `nodes_gateway.go`; the config conversions every role shares moved to
+  `internal/app/server_config.go`, which the hand api/worker loaders call too.
+  `grpc.NewDaemonListener` takes `Routes` (the generated `DaemonRoutes`) instead of the
+  service. `runRoot` (owned `serve.go`) keeps reliant's per-root policy in `rootPolicies`
+  (service name `daemon-gateway`, `daemon-gateway.log`), reliant's observability.Init and
+  its `/metrics`; it never migrates. The probe address is `BIND_ADDRESS:HEALTH_PORT`,
+  plaintext; `GatewayConfig` gained env-only `LIVENESS_PATHS` (`/health,/healthz`) and
+  `READINESS_PATHS` (`/ready,/readyz`); `/flow-health` is `g.Probes.Handle` from
+  `newFlowHealth`. `/health` now answers `ok` instead of JSON (status codes unchanged), and
+  `/ready`'s checks are named by node (`db_repo`, `nats_conn`, `daemon_listener`). NATS is
+  now a wait, not a crash: the first connect retries (`serverkit.RetryConnect`, 5m) with
+  `nats` pending in the boot `/ready`. `forge-graph-unresolved` did not exist to set; only
+  `forge-graph-unreachable: warn`. Forge fixes it needed, in forge #1067: root help from the
+  root's doc comment, root-config flags not re-registered on root commands when `root.go`
+  homes them, forge's optional `nil` placeholders re-resolved (they would otherwise freeze
+  the `system`/`catalog`/`daemon` handlers' optional deps at nil for R5), and a nil guard on
+  `g.Probes` not counting as serving the probes. Still open for R5–R7: the reach analysis
+  does not see `runRoot`'s reads through `root.Configs` (the gateway's `OTEL_*` /
+  `PROMETHEUS_ENABLED` are missing from `ROOTS`), and the generated `server` group command's
+  help is root.go's (`mergeServerRoles`) until forge can declare a group's help.
 
 ### R4: (c) worker root *(needs R3)*
 - Providers and nodes from §1.3, plus the shared Temporal, StreamingHub, ChatUpdateHub,

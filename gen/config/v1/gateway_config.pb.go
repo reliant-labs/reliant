@@ -41,8 +41,16 @@ type GatewayConfig struct {
 	// the rules). Each role declares its own, so one role's may differ.
 	PreStopDelay    *durationpb.Duration `protobuf:"bytes,19,opt,name=pre_stop_delay,json=preStopDelay,proto3" json:"pre_stop_delay,omitempty"`
 	ShutdownTimeout *durationpb.Duration `protobuf:"bytes,20,opt,name=shutdown_timeout,json=shutdownTimeout,proto3" json:"shutdown_timeout,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// The probe paths on HEALTH_PORT, comma-separated; each list's first path
+	// is the canonical one and the rest are aliases served alike. /health and
+	// /ready are what control-plane probes (RELIANT_PROBES, the GKE health
+	// check, docker-compose); /healthz and /readyz are forge's, which `forge
+	// doctor` and the boot probes' defaults use. No flag: these are a
+	// deployment's contract with its probes, not an operator knob.
+	LivenessPaths  string `protobuf:"bytes,21,opt,name=liveness_paths,json=livenessPaths,proto3" json:"liveness_paths,omitempty"`
+	ReadinessPaths string `protobuf:"bytes,22,opt,name=readiness_paths,json=readinessPaths,proto3" json:"readiness_paths,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *GatewayConfig) Reset() {
@@ -117,11 +125,25 @@ func (x *GatewayConfig) GetShutdownTimeout() *durationpb.Duration {
 	return nil
 }
 
+func (x *GatewayConfig) GetLivenessPaths() string {
+	if x != nil {
+		return x.LivenessPaths
+	}
+	return ""
+}
+
+func (x *GatewayConfig) GetReadinessPaths() string {
+	if x != nil {
+		return x.ReadinessPaths
+	}
+	return ""
+}
+
 var File_config_v1_gateway_config_proto protoreflect.FileDescriptor
 
 const file_config_v1_gateway_config_proto_rawDesc = "" +
 	"\n" +
-	"\x1econfig/v1/gateway_config.proto\x12\tconfig.v1\x1a\x14forge/v1/forge.proto\x1a\x1egoogle/protobuf/duration.proto\"\xac\a\n" +
+	"\x1econfig/v1/gateway_config.proto\x12\tconfig.v1\x1a\x14forge/v1/forge.proto\x1a\x1egoogle/protobuf/duration.proto\"\xc4\t\n" +
 	"\rGatewayConfig\x12s\n" +
 	"\vdaemon_port\x18\x0e \x01(\x05BR\x82\xce\x18N\n" +
 	"\x11TOOLS_DAEMON_PORT\x12\vdaemon-port\x1a\x049190*&Daemon bidi-streaming gRPC listen portR\n" +
@@ -139,7 +161,11 @@ const file_config_v1_gateway_config_proto_rawDesc = "" +
 	"\x0epre_stop_delay\x18\x13 \x01(\v2\x19.google.protobuf.DurationBi\x82\xce\x18e\n" +
 	"\x0ePRE_STOP_DELAY\x1a\x025s*OHow long to keep serving after readiness flips at shutdown (negative: no pause)R\fpreStopDelay\x12\x98\x01\n" +
 	"\x10shutdown_timeout\x18\x14 \x01(\v2\x19.google.protobuf.DurationBR\x82\xce\x18N\n" +
-	"\x10SHUTDOWN_TIMEOUT\x1a\x0330s*5Budget for graceful shutdown after the pre-stop pauseR\x0fshutdownTimeout:\x1e\xca\xc1\x18\x1a\n" +
+	"\x10SHUTDOWN_TIMEOUT\x1a\x0330s*5Budget for graceful shutdown after the pre-stop pauseR\x0fshutdownTimeout\x12\x88\x01\n" +
+	"\x0eliveness_paths\x18\x15 \x01(\tBa\x82\xce\x18]\n" +
+	"\x0eLIVENESS_PATHS\x1a\x10/health,/healthz*9Liveness probe paths on the health port (comma-separated)R\rlivenessPaths\x12\x8a\x01\n" +
+	"\x0freadiness_paths\x18\x16 \x01(\tBa\x82\xce\x18]\n" +
+	"\x0fREADINESS_PATHS\x1a\x0e/ready,/readyz*:Readiness probe paths on the health port (comma-separated)R\x0ereadinessPaths:\x1e\xca\xc1\x18\x1a\n" +
 	"\areliant\x12\x06server\x12\agatewayJ\x04\b\x01\x10\x02J\x04\b\n" +
 	"\x10\vJ\x04\b\v\x10\fJ\x04\b\f\x10\rJ\x04\b\r\x10\x0eJ\x04\b\x11\x10\x12J\x04\b2\x103R\rcontrol_planeR\bdatabaseR\x04natsR\x03tlsR\x05drainR\bdata_dirR\robservabilityB8Z6github.com/reliant-labs/reliant/gen/config/v1;configv1b\x06proto3"
 

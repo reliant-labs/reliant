@@ -14,7 +14,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/natsutil"
 	"github.com/reliant-labs/reliant/internal/serverapi"
-	"github.com/reliant-labs/reliant/internal/servergateway"
 	"github.com/reliant-labs/reliant/internal/serverworker"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
@@ -53,7 +52,8 @@ func isolateServerRoleEnv(t *testing.T) {
 
 // serverRole runs what one server role's RunE does with its typed config,
 // after parsing args, and returns the Options it would hand its package
-// (one of serverapi/serverworker/servergateway.Options).
+// (serverapi/serverworker.Options), or for the gateway, what its root gets
+// (gatewayRole).
 type serverRole struct {
 	path []string
 	load func(t *testing.T, args ...string) (any, error)
@@ -71,9 +71,7 @@ var serverRoles = []serverRole{
 		return opts, err
 	}},
 	{path: []string{"server", "gateway"}, load: func(t *testing.T, args ...string) (any, error) {
-		var opts servergateway.Options
-		err := loadServerGatewayConfig(findServerCmd(t, "gateway", args...), &opts)
-		return opts, err
+		return loadGatewayRole(findServerCmd(t, "gateway", args...))
 	}},
 }
 
@@ -116,11 +114,13 @@ func TestServerRoleDefaults(t *testing.T) {
 
 	opts, err = serverRoles[2].load(t)
 	require.NoError(t, err)
-	gateway := opts.(servergateway.Options)
-	assert.Equal(t, 9190, gateway.ToolsDaemonPort)
-	assert.Equal(t, 8080, gateway.HealthPort, "the gateway's health port default differs from the other roles'")
-	assert.Equal(t, "0.0.0.0", gateway.BindAddress)
-	assert.Empty(t, gateway.PprofAddr, "no pprof server unless PPROF_ADDR names one")
+	gateway := opts.(gatewayRole)
+	assert.Equal(t, int32(9190), gateway.gateway.GetDaemonPort())
+	assert.Equal(t, "0.0.0.0:8080", gateway.server.Addr, "the gateway's health port default differs from the other roles'")
+	assert.Equal(t, "0.0.0.0", gateway.gateway.GetBindAddress())
+	assert.Empty(t, gateway.server.PprofAddr, "no pprof server unless PPROF_ADDR names one")
+	assert.Equal(t, []string{"/health", "/healthz"}, gateway.server.Probes.Live, "control-plane probes /health")
+	assert.Equal(t, []string{"/ready", "/readyz"}, gateway.server.Probes.Ready, "control-plane probes /ready")
 }
 
 // TestServerRoleEnvContract pins the names control-plane sets on reliant's
@@ -166,11 +166,12 @@ func TestServerRoleEnvContract(t *testing.T) {
 	t.Setenv("PPROF_ADDR", "0.0.0.0:6060")
 	opts, err := serverRoles[2].load(t)
 	require.NoError(t, err)
-	gateway := opts.(servergateway.Options)
-	assert.Equal(t, 19190, gateway.ToolsDaemonPort)
-	assert.Equal(t, 18081, gateway.HealthPort)
-	assert.Equal(t, "0.0.0.0:6060", gateway.PprofAddr)
-	assert.True(t, gateway.DisableTLS)
+	gateway := opts.(gatewayRole)
+	assert.Equal(t, int32(19190), gateway.gateway.GetDaemonPort())
+	assert.Equal(t, "127.0.0.1:18081", gateway.server.Addr, "HEALTH_PORT on BIND_ADDRESS")
+	assert.Equal(t, "0.0.0.0:6060", gateway.server.PprofAddr)
+	assert.True(t, gateway.process.GetTls().GetDisable())
+	assert.Empty(t, gateway.server.TLSCertPath, "the probe address is plain HTTP whatever the role listeners' TLS")
 }
 
 // A flag still outranks its variable.
@@ -301,8 +302,8 @@ func drainOf(t *testing.T, role serverRole) (preStop, shutdown time.Duration) {
 		return o.PreStopDelay, o.ShutdownTimeout
 	case serverworker.Options:
 		return o.PreStopDelay, o.ShutdownTimeout
-	case servergateway.Options:
-		return o.PreStopDelay, o.ShutdownTimeout
+	case gatewayRole:
+		return o.server.PreStopDelay, o.server.ShutdownTimeout
 	}
 	t.Fatalf("unknown options %T", opts)
 	return 0, 0
@@ -333,8 +334,8 @@ func TestServerRoleDatabasePool(t *testing.T) {
 			assert.Equal(t, want, o.DatabasePool, "api")
 		case serverworker.Options:
 			assert.Equal(t, want, o.DatabasePool, "worker")
-		case servergateway.Options:
-			assert.Equal(t, want, o.DatabasePool, "gateway")
+		case gatewayRole:
+			assert.Equal(t, want, o.pool, "gateway")
 		}
 	}
 

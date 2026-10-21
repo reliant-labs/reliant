@@ -94,7 +94,7 @@ func withFakeLoginBrowser(t *testing.T) {
 	t.Cleanup(func() { loginOpener = prev })
 }
 
-func runRoot(t *testing.T, args ...string) (string, error) {
+func executeRoot(t *testing.T, args ...string) (string, error) {
 	t.Helper()
 	var out bytes.Buffer
 	root := NewRootCmd()
@@ -120,7 +120,7 @@ func TestAuthLogin_WritesTheSharedFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	out, err := runRoot(t, "auth", "login", "--server", cp.srv.URL)
+	out, err := executeRoot(t, "auth", "login", "--server", cp.srv.URL)
 	if err != nil {
 		t.Fatalf("auth login: %v\n%s", err, out)
 	}
@@ -138,11 +138,11 @@ func TestAuthLogin_WritesTheSharedFile(t *testing.T) {
 	}
 
 	// A later command against that server uses it; status reports it.
-	if out, err := runRoot(t, "auth", "status", "--server", cp.srv.URL); err != nil || !strings.Contains(out, "rlat_RELIANTC") {
+	if out, err := executeRoot(t, "auth", "status", "--server", cp.srv.URL); err != nil || !strings.Contains(out, "rlat_RELIANTC") {
 		t.Fatalf("status after login: %v\n%s", err, out)
 	}
 	// logout forgets reliant's entry only.
-	if _, err := runRoot(t, "auth", "logout", "--server", cp.srv.URL); err != nil {
+	if _, err := executeRoot(t, "auth", "logout", "--server", cp.srv.URL); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := credentials.Lookup(path, cp.srv.URL, cliauth.ClientID); err == nil {
@@ -163,7 +163,7 @@ func TestAuthTokenCreate_MintsANamedTokenAndDoesNotStoreIt(t *testing.T) {
 	loginFor(t, cp.srv.URL, "rlat_MYLOGIN")
 	path, _ := cliauth.CredentialsPath()
 
-	out, err := runRoot(t, "auth", "token", "create", "--name", "ci-deploy", "--server", cp.srv.URL)
+	out, err := executeRoot(t, "auth", "token", "create", "--name", "ci-deploy", "--server", cp.srv.URL)
 	if err != nil {
 		t.Fatalf("token create: %v\n%s", err, out)
 	}
@@ -184,7 +184,7 @@ func TestAuthLogin_ServerWithoutDiscoveryFailsClearly(t *testing.T) {
 	isolateCLI(t)
 	srv := httptest.NewServer(http.NotFoundHandler())
 	defer srv.Close()
-	_, err := runRoot(t, "auth", "login", "--server", srv.URL)
+	_, err := executeRoot(t, "auth", "login", "--server", srv.URL)
 	if err == nil || !strings.Contains(err.Error(), "RELIANT_TOKEN") {
 		t.Fatalf("want a no-browser-login error pointing at RELIANT_TOKEN; got %v", err)
 	}
@@ -203,7 +203,7 @@ func TestContextCommandIsGone(t *testing.T) {
 	if root.PersistentFlags().Lookup("context") != nil {
 		t.Fatal("--context must not exist")
 	}
-	if _, err := runRoot(t, "project", "list", "--context", "prod"); err == nil || !strings.Contains(err.Error(), "unknown flag") {
+	if _, err := executeRoot(t, "project", "list", "--context", "prod"); err == nil || !strings.Contains(err.Error(), "unknown flag") {
 		t.Fatalf("--context must be an unknown flag; got %v", err)
 	}
 }

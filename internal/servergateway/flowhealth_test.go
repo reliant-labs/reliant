@@ -187,7 +187,7 @@ func decodeFlowHealth(t *testing.T, rr *httptest.ResponseRecorder) flowHealthRes
 func serveFlowHealth(t *testing.T, lister flowHealthAttachmentLister, streams flowHealthStreamSource, query string) *httptest.ResponseRecorder {
 	t.Helper()
 	rr := httptest.NewRecorder()
-	flowHealthHandler(lister, streams)(rr, httptest.NewRequest(http.MethodGet, "/flow-health"+query, nil))
+	FlowHealthHandler(lister, streams)(rr, httptest.NewRequest(http.MethodGet, "/flow-health"+query, nil))
 	return rr
 }
 

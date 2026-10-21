@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"net/http"
 	"testing"
 	"time"
 
@@ -30,8 +31,8 @@ import (
 // never with the OK a watch stream ends with, and never by cutting the
 // connection.
 
-// drainGateway is the gateway's daemon side as servergateway.Run supervises
-// it: the listener, then the service behind it.
+// drainGateway is the gateway's daemon side as the gateway root
+// (internal/app) supervises it: the listener, then the service behind it.
 type drainGateway struct {
 	listener *DaemonListener
 	service  *tools_daemon.Service
@@ -65,14 +66,31 @@ func startDrainGateway(t *testing.T) (*drainGateway, string, string) {
 }
 
 // newTestDaemonListener builds the daemon listener on a loopback port,
-// authenticating against tokens.
+// authenticating against tokens and serving svc as the gateway's daemon route
+// set does.
 func newTestDaemonListener(t *testing.T, tokens auth.AccessTokenIntrospector, svc *tools_daemon.Service) *DaemonListener {
 	t.Helper()
-	chain, err := NewDaemonChain(DaemonChainDeps{DaemonTokens: tokens})
-	require.NoError(t, err)
-	listener, err := NewDaemonListener(DaemonListenerDeps{BindAddress: "127.0.0.1", Chain: chain, ToolsDaemonService: svc})
+	listener, err := NewDaemonListener(DaemonListenerDeps{BindAddress: "127.0.0.1", Chain: newTestDaemonChain(t, tokens), Routes: toolsDaemonRoutes(svc)})
 	require.NoError(t, err)
 	return listener
+}
+
+// newTestDaemonChain is the daemon chain over tokens.
+func newTestDaemonChain(t *testing.T, tokens auth.AccessTokenIntrospector) *DaemonChain {
+	t.Helper()
+	daemonAuth, err := NewDaemonAuth(tokens)
+	require.NoError(t, err)
+	chain, err := NewDaemonChain(DaemonChainDeps{Auth: daemonAuth})
+	require.NoError(t, err)
+	return chain
+}
+
+// toolsDaemonRoutes mounts svc as internal/app's generated DaemonRoutes does.
+func toolsDaemonRoutes(svc *tools_daemon.Service) serverkit.Routes {
+	return serverkit.RoutesFunc(func(mux *http.ServeMux, opts ...connect.HandlerOption) []string {
+		svc.Register(mux, opts...)
+		return []string{reliantv1connect.ToolsDaemonServiceName}
+	})
 }
 
 // serveDaemonListener binds and runs l, returning its h2c URL. Cleanup closes
