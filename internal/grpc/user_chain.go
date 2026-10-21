@@ -37,7 +37,7 @@ type UserChainDeps struct {
 // NewUserChain builds the API listener's chain. Outermost first:
 //
 //	trace → recovery → request-id → logging → metrics → deadline → auth →
-//	domain whitelist → activity → stream drain
+//	domain whitelist → activity → stream drain → svcerr
 //
 // and, inside it, a mount's own options (machinewake on the worktree and
 // filesystem services, forgeAPIDisabled when the forge API is off).
@@ -72,7 +72,11 @@ type UserChainDeps struct {
 // as Benign is not logged at ERROR, and a drained stream is an expected
 // outcome) and the stream drain are the chain's defaults — the trace span now
 // opens outermost, ahead of recovery and logging, as forge places it, so
-// every log line of a request carries its trace id.
+// every log line of a request carries its trace id. svcerr.Interceptor is not
+// a slot: NewChain always installs it innermost, so a handler's svcerr error
+// reaches the client with its code, and an error nothing recognises reaches
+// it as internal with svcerr.InternalMessage (the original stays on the
+// "rpc failed" record's cause).
 func NewUserChain(deps UserChainDeps) (*UserChain, error) {
 	if deps.Auth == nil {
 		return nil, errors.New("user chain: UserChainDeps.Auth is required")
