@@ -1161,14 +1161,6 @@ func (r *Repo) EnrichMessageUpdate(ctx context.Context, update ChatUpdate) (json
 
 // IsChatBusy removed - use Temporal client to query running workflows for a chat
 
-// Null type conversion helpers
-func nullStringToPtr(ns sql.NullString) *string {
-	if ns.Valid {
-		return &ns.String
-	}
-	return nil
-}
-
 // =============================================================================
 // Activity Idempotency Helpers
 // =============================================================================
