@@ -13,7 +13,7 @@ import { devHarnessPresent } from './devHarness';
 async function openHarness(page: Page, query = '') {
   await page.goto(`/forge-workloads-preview${query}`);
   const overview = page.getByTestId('overview').or(page.getByTestId('workload-detail'));
-  const present = await devHarnessPresent(page, overview);
+  const present = await devHarnessPresent(page, '/forge-workloads-preview', overview);
   test.skip(!present, 'the fixture harness is a dev-build-only route');
 }
 
