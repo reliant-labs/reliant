@@ -109,9 +109,9 @@ jobs:
   # passed.
   #
   # The Go shard matrix is computed here too, by `tools/test-affected shard`:
-  # as FEW shards as keep each under its weight target, at most four, balanced
+  # as FEW shards as keep each under its weight target, at most six, balanced
   # by measured duration. A PR that reaches a handful of packages runs one
-  # shard; the whole module (main, nightly, a CI change) runs four. Every shard
+  # shard; the whole module (main, nightly, a CI change) runs six. Every shard
   # restores the same package cache (the go-cache job), so nothing ties a
   # package to a fixed shard number.
   #
@@ -166,7 +166,7 @@ jobs:
           fetch-depth: 0
 
       # The selector loads the Go package graph (`go list -test -deps`), which
-      # needs the module cache. Restore only: shard 1 saves it on main.
+      # needs the module cache. Restore only: the go-cache job saves it on main.
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
@@ -177,9 +177,9 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ~/go/pkg/mod
-          key: go-mod-${{ runner.os }}-${{ hashFiles('go.sum') }}
+          key: go-mod-nozip-${{ runner.os }}-${{ hashFiles('go.sum') }}
           restore-keys: |
-            go-mod-${{ runner.os }}-
+            go-mod-nozip-${{ runner.os }}-
 
       - name: Classify the change
         id: lanes
@@ -563,9 +563,9 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ~/go/pkg/mod
-          key: go-mod-${{ runner.os }}-${{ hashFiles('go.sum') }}
+          key: go-mod-nozip-${{ runner.os }}-${{ hashFiles('go.sum') }}
           restore-keys: |
-            go-mod-${{ runner.os }}-
+            go-mod-nozip-${{ runner.os }}-
 
       # This job's own cache (the job header).
       - name: Restore Go build cache
@@ -767,13 +767,19 @@ jobs:
           go-version-file: go.mod
           cache: false
 
+      # THE MODULE CACHE TOO, WITHOUT ZIPS. The module cache holds every
+      # module twice: the downloaded .zip and the tree extracted from it. A
+      # build reads only the tree (plus the .ziphash that verifies it), so
+      # the zips are dropped before saving: about half the archive, restored
+      # by every Go job.
       - name: Restore Go module cache
+        id: mod-cache
         uses: actions/cache/restore@v4
         with:
           path: ~/go/pkg/mod
-          key: go-mod-${{ runner.os }}-${{ hashFiles('go.sum') }}
+          key: go-mod-nozip-${{ runner.os }}-${{ hashFiles('go.sum') }}
           restore-keys: |
-            go-mod-${{ runner.os }}-
+            go-mod-nozip-${{ runner.os }}-
 
       - name: Restore Go build cache
         id: build-cache
@@ -824,6 +830,23 @@ jobs:
           path: ~/.cache/go-build
           key: ${{ steps.build-cache.outputs.cache-primary-key }}
 
+      # After the compile above has fetched every module a test imports
+      # (not `go mod download`: over a zip-less cache it re-fetches every zip).
+      - name: Drop the module zips
+        if: steps.mod-cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          du -sh ~/go/pkg/mod
+          find ~/go/pkg/mod/cache/download -name '*.zip' -delete
+          du -sh ~/go/pkg/mod
+
+      - name: Save Go module cache
+        if: steps.mod-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ steps.mod-cache.outputs.cache-primary-key }}
+
   # ── Go unit tests, in two tiers ───────────────────────────────────────────
   #
   #   PR    go test -short over the packages `changes` selected
@@ -847,10 +870,11 @@ jobs:
   #   3. gate-health.yml's main audit fails, and opens an issue, unless main's
   #      newest run has every "Backend (Go, full) N/M" shard, 1 to M, green.
   #
-  # SHARDED ACROSS UP TO FOUR RUNNERS. The suite is CPU-bound on a 4-vCPU
-  # runner, so `changes` splits the selected packages with `tools/test-affected
-  # shard`: as few shards as keep each under its weight target (one for a small
-  # selection, four for the whole module), balanced by measured duration
+  # SHARDED ACROSS UP TO SIX RUNNERS. The suite is CPU-bound on a 4-vCPU
+  # runner, and most of a shard's time is linking and compiling one test
+  # binary per package (shard.go, maxShards), so `changes` splits the selected
+  # packages with `tools/test-affected shard`: as few shards as keep each under
+  # its weight target (one for a small selection, six for the whole module), balanced by measured duration
   # (tools/test-affected/go-test-weights.tsv), slowest packages first. Every
   # package runs in exactly one shard (TestShardPartitionsEveryPackage).
   #
@@ -913,21 +937,16 @@ jobs:
           go-version-file: go.mod
           cache: false
 
-      # One module cache, shared by every Go job and saved only by shard 1
-      # (which main always runs), after `go mod download` has fetched every
-      # module go.mod names.
+      # One module cache, shared by every Go job; the go-cache job saves it
+      # on main. On a miss (a go.sum change) `go test` fetches just the
+      # modules it lacks.
       - name: Restore Go module cache
-        id: mod-cache
         uses: actions/cache/restore@v4
         with:
           path: ~/go/pkg/mod
-          key: go-mod-${{ runner.os }}-${{ hashFiles('go.sum') }}
+          key: go-mod-nozip-${{ runner.os }}-${{ hashFiles('go.sum') }}
           restore-keys: |
-            go-mod-${{ runner.os }}-
-
-      - name: Download Go modules (module cache miss)
-        if: steps.mod-cache.outputs.cache-hit != 'true'
-        run: go mod download
+            go-mod-nozip-${{ runner.os }}-
 
       # The package cache, restore only: the go-cache job saves it on main.
       - name: Restore Go build cache
@@ -1004,16 +1023,6 @@ jobs:
           printf '  %s\n' "${pkgs[@]}"
           go test -timeout=10m -v "${tier_flags[@]}" "${pkgs[@]}"
 
-      # Main only, after the tests: a red run on main still saves, because
-      # the compiled packages are just as reusable. `!cancelled()` lets a
-      # failed test step through; a cancelled run may have a half-written cache.
-      - name: Save Go module cache (main only)
-        if: '!cancelled() && matrix.shard == 1 && github.ref == ''refs/heads/main'' && github.event_name != ''pull_request'' && steps.mod-cache.outputs.cache-hit != ''true'''
-        uses: actions/cache/save@v4
-        with:
-          path: ~/go/pkg/mod
-          key: ${{ steps.mod-cache.outputs.cache-primary-key }}
-
   # ── The new-flake gate ────────────────────────────────────────────────────
   #
   # A test that passes once and fails on a repeat is a flake. This repo's rule
@@ -1062,9 +1071,9 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ~/go/pkg/mod
-          key: go-mod-${{ runner.os }}-${{ hashFiles('go.sum') }}
+          key: go-mod-nozip-${{ runner.os }}-${{ hashFiles('go.sum') }}
           restore-keys: |
-            go-mod-${{ runner.os }}-
+            go-mod-nozip-${{ runner.os }}-
 
       # The package cache, restore only (the go-cache job saves it).
       - name: Restore Go build cache
@@ -1152,9 +1161,9 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ~/go/pkg/mod
-          key: go-mod-${{ runner.os }}-${{ hashFiles('go.sum') }}
+          key: go-mod-nozip-${{ runner.os }}-${{ hashFiles('go.sum') }}
           restore-keys: |
-            go-mod-${{ runner.os }}-
+            go-mod-nozip-${{ runner.os }}-
 
       # golangci-lint reads its dependencies' export data, which the package
       # cache holds. Restore only (the go-cache job saves it).
@@ -1340,9 +1349,9 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ~/go/pkg/mod
-          key: go-mod-${{ runner.os }}-${{ hashFiles('go.sum') }}
+          key: go-mod-nozip-${{ runner.os }}-${{ hashFiles('go.sum') }}
           restore-keys: |
-            go-mod-${{ runner.os }}-
+            go-mod-nozip-${{ runner.os }}-
 
       # The package cache, restore only: the go-cache job compiles what the
       # stories import (with -tags=e2e) into it on main.

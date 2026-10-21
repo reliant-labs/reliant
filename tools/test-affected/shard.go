@@ -61,16 +61,18 @@ const perPackageCost = 2.0
 // to the repository root.
 const weightsFile = "tools/test-affected/go-test-weights.tsv"
 
-// maxShards caps the lane's runners. The whole module (~1400 units of
-// weight) fills four; a fifth runner would wait on the slowest package
-// (~136s by itself) rather than shorten the lane.
-const maxShards = 4
+// maxShards caps the lane's runners. Measured with -debug-actiongraph on
+// four shards of the whole module, a shard's `go test` (123-163s) was
+// mostly per-package fixed cost: linking ~62 test binaries (200-260s of CPU,
+// ~3.3s each) and compiling them, not test bodies. That cost divides with
+// the runner count, so the whole module now fills six; the slowest package
+// (internal/workflow/runtime/activities/handlers, ~100s) still bounds its own.
+const maxShards = 6
 
-// shardTarget is the weight one shard is sized for. go test runs a shard's
-// packages four at a time, so a shard of this weight measured ~120-180s of
-// `go test` on a runner — under the five-minute PR budget with setup and
-// cache restore — and the whole module divides into maxShards of it.
-const shardTarget = 360.0
+// shardTarget is the weight one shard is sized for: the whole module
+// (~1200-1400 units with perPackageCost) divides into maxShards of it, and a
+// PR that reaches a fraction of the module gets proportionally fewer runners.
+const shardTarget = 240.0
 
 // shardCount is how many shards a selection of total weight needs: as few as
 // keep each under target, at least one, at most limit, and never more than

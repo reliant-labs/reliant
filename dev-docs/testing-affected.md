@@ -184,10 +184,10 @@ waits for. Nothing a PR skips is deleted; it runs on the next push to main.
   have separate check histories. `TestCITestTierReachedGoTest`
   (`tools/test-affected/ci_tier_test.go`) fails when the job's declared tier
   (`RELIANT_TEST_TIER`) disagrees with whether `-short` reached `go test`.
-- **The Go tests run in up to 4 shards** (`Backend (Go, short) 1/2`, ...).
+- **The Go tests run in up to 6 shards** (`Backend (Go, short) 1/2`, ...).
   `go list ./... | go run ./tools/test-affected shard` prints the matrix: as
   few shards as keep each under its weight target (one for a PR that reaches a
-  handful of packages, four for the whole module), balanced by measured
+  handful of packages, six for the whole module), balanced by measured
   duration in `tools/test-affected/go-test-weights.tsv`, slowest first. Every
   package runs in exactly one shard whatever the weights say; a stale weights
   file only costs balance. `CI result` fails when a shard did not pass (and on
@@ -197,7 +197,9 @@ waits for. Nothing a PR skips is deleted; it runs on the next push to main.
   invalidates by construction). ~540 MB compressed, restored in ~10-15s; the
   old everything-cache was 3.2 GB and cost 1-4 minutes per job. The codegen
   job keeps its own cache, because the Makefile builds generators with
-  `-trimpath`, a different compile key. Refresh the weights when a shard
+  `-trimpath`, a different compile key. The same job saves the module cache
+  without its `.zip` files (a build reads only the extracted trees), so a
+  PR's `go test` fetches a module only when go.sum moved. Refresh the weights when a shard
   runs much longer than the others: `gh run view <run-id> --log | go run
   ./tools/test-affected weights > tools/test-affected/go-test-weights.tsv`.
 - **The short tier's test Postgres runs without durability** (fsync,
