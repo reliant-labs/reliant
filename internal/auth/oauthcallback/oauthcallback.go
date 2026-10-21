@@ -19,6 +19,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/reliant-labs/forge/pkg/observe"
 )
 
 const (
@@ -167,7 +169,7 @@ var openBrowser = OpenBrowser
 
 // reuseProbeClient asks "is a compatible listener there?" — a local,
 // immediate question, so a short timeout is right.
-var reuseProbeClient = &http.Client{Timeout: 2 * time.Second}
+var reuseProbeClient = observe.NewHTTPClient(observe.HTTPClientOptions{Timeout: 2 * time.Second})
 
 // reuseResultClient waits for the USER to finish signing in on the incumbent
 // listener. That spans human time — logging in, choosing an org, clearing 2FA
@@ -178,7 +180,7 @@ var reuseProbeClient = &http.Client{Timeout: 2 * time.Second}
 // gave up after two seconds, and Run() reported the ORIGINAL bind error
 // ("address already in use") instead of waiting its turn. Bounded only by the
 // caller's context, which is what actually knows when the user gave up.
-var reuseResultClient = &http.Client{}
+var reuseResultClient = observe.NewHTTPClient(observe.HTTPClientOptions{Timeout: -1})
 
 // InferConfig inspects the authorize URL to determine callback settings.
 func InferConfig(authorizeURLTemplate string) CallbackConfig {

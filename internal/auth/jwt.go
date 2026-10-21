@@ -18,6 +18,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/reliant-labs/forge/pkg/observe"
 )
 
 var (
@@ -260,7 +262,7 @@ func LoadJWKS(ctx context.Context, jwksURL string, opts ...ValidatorOption) (*JW
 		return nil, fmt.Errorf("%w: failed to create JWKS request: %v", ErrInvalidPublicKey, err)
 	}
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := observe.NewHTTPClient(observe.HTTPClientOptions{Timeout: 10 * time.Second})
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("%w: failed to fetch JWKS from %s: %v", ErrInvalidPublicKey, jwksURL, err)

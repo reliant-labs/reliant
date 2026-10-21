@@ -14,6 +14,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/observe"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/localprobe"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -46,10 +47,19 @@ type localModelManager struct {
 	slots   chan struct{}
 }
 
+// newLocalRelayClient is the relay's client to the local model server: traced,
+// with no client timeout (a relayed generation streams for as long as it
+// takes; the relay's context bounds it), and it never follows a redirect.
+func newLocalRelayClient() *http.Client {
+	c := observe.NewHTTPClient(observe.HTTPClientOptions{Timeout: -1})
+	c.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	return c
+}
+
 func newLocalModelManager() *localModelManager {
 	return &localModelManager{
 		prober:     newLocalModelProber(),
-		client:     &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }},
+		client:     newLocalRelayClient(),
 		registered: make(chan struct{}, 1),
 		refresh:    make(chan struct{}, 1),
 		relays:     make(map[string]context.CancelFunc),

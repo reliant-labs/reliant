@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/observe"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/integrations/manifest"
 	"github.com/reliant-labs/reliant/internal/vault"
@@ -70,12 +71,11 @@ type HTTPDoer interface {
 // never follows a redirect, since an Authorization header must not be replayed
 // at a host the catalog did not name.
 func NewHTTPClient() *http.Client {
-	return &http.Client{
-		Timeout: 30 * time.Second,
-		CheckRedirect: func(*http.Request, []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
+	c := observe.NewHTTPClient(observe.HTTPClientOptions{Timeout: 30 * time.Second})
+	c.CheckRedirect = func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
 	}
+	return c
 }
 
 // Identity is who a credential acts as at the provider.

@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/observe"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/local"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
@@ -330,7 +331,7 @@ func postJSON(ctx context.Context, u string, body []byte, into any) error {
 }
 
 func doJSON(req *http.Request, into any) error {
-	resp, err := (&http.Client{Timeout: 20 * time.Second}).Do(req)
+	resp, err := observe.NewHTTPClient(observe.HTTPClientOptions{Timeout: 20 * time.Second}).Do(req)
 	if err != nil {
 		return err
 	}
