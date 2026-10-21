@@ -7,6 +7,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+
+	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // The daemons table is a read replica of the control plane's daemon set for
@@ -28,14 +31,7 @@ import (
 // (MACHINE_LIST_BUGS_2026-10-07).
 
 // DaemonIdentity is what the control plane knows about a daemon's existence.
-type DaemonIdentity struct {
-	DaemonID   string
-	UserID     string
-	Name       string
-	DaemonType string
-	// CreatedAt is the control plane's creation time. Zero means "now".
-	CreatedAt time.Time
-}
+type DaemonIdentity = core.DaemonIdentity
 
 // RegistrySnapshotApply is one owner's authoritative daemon set, as applied by
 // ApplyDaemonRegistrySnapshot.
@@ -75,12 +71,6 @@ func (r RegistrySnapshotResult) Changed() bool {
 	return len(r.Upserted) > 0 || len(r.Removed) > 0
 }
 
-// execer is the write surface shared by the pool and a transaction, so the
-// single-row writes below run unchanged inside the snapshot's transaction.
-type execer interface {
-	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
-}
-
 // UpsertDaemonIdentity creates the registry row for a daemon the control plane
 // reports, or brings the name on an existing row up to date. Returns whether a
 // row was written.
@@ -99,10 +89,6 @@ type execer interface {
 // rather than a write — the snapshot re-asserts every daemon on every sweep,
 // and rewriting updated_at each time would reorder the list for nothing.
 func (r *Repo) UpsertDaemonIdentity(ctx context.Context, id DaemonIdentity) (bool, error) {
-	return r.upsertDaemonIdentity(ctx, r.DB, id)
-}
-
-func (r *Repo) upsertDaemonIdentity(ctx context.Context, ex execer, id DaemonIdentity) (bool, error) {
 	if id.DaemonID == "" {
 		return false, fmt.Errorf("daemon ID cannot be empty")
 	}
@@ -114,30 +100,11 @@ func (r *Repo) upsertDaemonIdentity(ctx context.Context, ex execer, id DaemonIde
 	if createdAt.IsZero() {
 		createdAt = now
 	}
-	var daemonType any
-	if id.DaemonType != "" {
-		daemonType = id.DaemonType
-	}
-
-	query := r.bindQuery(`
-		INSERT INTO daemons (id, user_id, name, daemon_type, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?)
-		ON CONFLICT (id) DO UPDATE SET
-			name = COALESCE(NULLIF(excluded.name, ''), daemons.name),
-			daemon_type = COALESCE(daemons.daemon_type, excluded.daemon_type),
-			updated_at = excluded.updated_at
-		WHERE (excluded.name <> '' AND daemons.name IS DISTINCT FROM excluded.name)
-		   OR (daemons.daemon_type IS NULL AND excluded.daemon_type IS NOT NULL)
-	`)
-	res, err := ex.ExecContext(ctx, query, id.DaemonID, id.UserID, id.Name, daemonType, createdAt, now)
+	wrote, err := store.UpsertDaemonIdentity(ctx, r.ORM(), id, createdAt, now)
 	if err != nil {
 		return false, fmt.Errorf("failed to upsert daemon identity %s: %w", id.DaemonID, err)
 	}
-	n, err := res.RowsAffected()
-	if err != nil {
-		return false, fmt.Errorf("failed reading identity upsert result for %s: %w", id.DaemonID, err)
-	}
-	return n > 0, nil
+	return wrote, nil
 }
 
 // RemoveDaemon deletes a daemon's registry row and its attachment lease, and
@@ -172,16 +139,9 @@ func (r *Repo) RemoveDaemon(ctx context.Context, daemonID string) (string, bool,
 // must carry the caller's transaction (RunTx), so the release commits or rolls
 // back with the removal.
 func (r *Repo) removeDaemon(ctx context.Context, daemonID string) (string, bool, error) {
-	if _, err := r.DB.ExecContext(ctx, r.bindQuery(`DELETE FROM daemon_attachment WHERE daemon_id = ?`), daemonID); err != nil {
-		return "", false, fmt.Errorf("deleting attachment for removed daemon %s: %w", daemonID, err)
-	}
-	var userID string
-	err := r.DB.QueryRowContext(ctx, r.bindQuery(`DELETE FROM daemons WHERE id = ? RETURNING user_id`), daemonID).Scan(&userID)
-	if err == sql.ErrNoRows {
-		return "", false, nil
-	}
-	if err != nil {
-		return "", false, fmt.Errorf("deleting daemon %s: %w", daemonID, err)
+	userID, removed, err := store.DeleteDaemonRow(ctx, r.ORM(), daemonID)
+	if err != nil || !removed {
+		return "", false, err
 	}
 	if err := r.releaseDaemonBindings(ctx, daemonID); err != nil {
 		return "", false, err
@@ -235,11 +195,8 @@ func (r *Repo) releaseDaemonBindings(ctx context.Context, daemonID string) error
 	if err := rows.Close(); err != nil {
 		return fmt.Errorf("unpinning chats from removed daemon %s: %w", daemonID, err)
 	}
-	if _, err := r.DB.ExecContext(ctx, r.bindQuery(`UPDATE worktrees SET daemon_id = NULL WHERE daemon_id = ?`), daemonID); err != nil {
-		return fmt.Errorf("releasing worktrees of removed daemon %s: %w", daemonID, err)
-	}
-	if _, err := r.DB.ExecContext(ctx, r.bindQuery(`DELETE FROM project_daemons WHERE daemon_id = ?`), daemonID); err != nil {
-		return fmt.Errorf("deleting project installs on removed daemon %s: %w", daemonID, err)
+	if err := store.ReleaseDaemonFromWorkspaces(ctx, r.ORM(), daemonID); err != nil {
+		return err
 	}
 
 	for _, c := range chats {
@@ -308,14 +265,14 @@ func (r *Repo) applyDaemonRegistrySnapshot(ctx context.Context, snap RegistrySna
 		ident.UserID = snap.UserID
 		keep = append(keep, ident.DaemonID)
 
-		wrote, err := r.upsertDaemonIdentity(ctx, r.DB, ident)
+		wrote, err := r.UpsertDaemonIdentity(ctx, ident)
 		if err != nil {
 			return RegistrySnapshotResult{}, err
 		}
 		if d.Lifecycle != nil {
 			lc := *d.Lifecycle
 			lc.DaemonID = ident.DaemonID
-			applied, err := r.applyDaemonLifecycle(ctx, r.DB, lc)
+			applied, err := r.ApplyDaemonLifecycle(ctx, lc)
 			if err != nil {
 				return RegistrySnapshotResult{}, err
 			}
@@ -326,31 +283,9 @@ func (r *Repo) applyDaemonRegistrySnapshot(ctx context.Context, snap RegistrySna
 		}
 	}
 
-	rows, err := r.DB.QueryContext(ctx, r.bindQuery(`
-		SELECT d.id FROM daemons d
-		WHERE d.user_id = ?
-		  AND NOT (d.id = ANY(COALESCE(?::text[], ARRAY[]::text[])))
-		  AND d.created_at < ?
-		  AND NOT EXISTS (
-			SELECT 1 FROM daemon_attachment a
-			WHERE a.daemon_id = d.id AND a.last_stream_activity > ?
-		  )
-		FOR UPDATE OF d
-	`), snap.UserID, keep, snap.KeepCreatedAfter, snap.KeepAttachedSince)
+	stale, err := store.LockDaemonsAbsentFromSnapshot(ctx, r.ORM(), snap.UserID, keep, snap.KeepCreatedAfter, snap.KeepAttachedSince)
 	if err != nil {
-		return RegistrySnapshotResult{}, fmt.Errorf("listing registry rows absent from snapshot: %w", err)
-	}
-	var stale []string
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			_ = rows.Close()
-			return RegistrySnapshotResult{}, fmt.Errorf("scanning absent registry row: %w", err)
-		}
-		stale = append(stale, id)
-	}
-	if err := rows.Close(); err != nil {
-		return RegistrySnapshotResult{}, fmt.Errorf("closing absent registry rows: %w", err)
+		return RegistrySnapshotResult{}, err
 	}
 	for _, id := range stale {
 		if _, removed, err := r.removeDaemon(ctx, id); err != nil {

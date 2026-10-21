@@ -1103,57 +1103,21 @@ func (r *Repo) UpsertDaemon(ctx context.Context, daemon *Daemon) error {
 	if daemon.UserID == "" {
 		return fmt.Errorf("daemon user ID cannot be empty")
 	}
-
 	now := time.Now().UTC()
-	query := `
-		INSERT INTO daemons (
-			id,
-			user_id,
-			hostname,
-			platform,
-			capabilities,
-			project_paths,
-			daemon_type,
-			created_at,
-			updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT(id) DO UPDATE SET
-			hostname = COALESCE(excluded.hostname, daemons.hostname),
-			platform = COALESCE(excluded.platform, daemons.platform),
-			capabilities = COALESCE(excluded.capabilities, daemons.capabilities),
-			project_paths = COALESCE(excluded.project_paths, daemons.project_paths),
-			daemon_type = COALESCE(excluded.daemon_type, daemons.daemon_type),
-			updated_at = excluded.updated_at
-		WHERE daemons.user_id = excluded.user_id
-	`
-	query = r.bindQuery(query)
-
 	createdAt := daemon.CreatedAt
 	if createdAt.IsZero() {
 		createdAt = now
 	}
-
-	res, err := r.DB.ExecContext(ctx, query,
-		daemon.ID,
-		daemon.UserID,
-		daemon.Hostname,
-		daemon.Platform,
-		daemon.Capabilities,
-		daemon.ProjectPaths,
-		daemon.DaemonType,
-		createdAt,
-		now,
-	)
+	wrote, err := store.UpsertDaemonRegistration(ctx, r.ORM(), daemon, createdAt, now)
 	if err != nil {
 		return fmt.Errorf("failed to upsert daemon %s: %w", daemon.ID, err)
 	}
 	// The conflict branch only fires for the row's own owner, so a conflict
 	// against a different owner writes nothing — in a single statement, with
 	// no read-then-write window.
-	if n, nErr := res.RowsAffected(); nErr == nil && n == 0 {
+	if !wrote {
 		return fmt.Errorf("%w: daemon %s", ErrDaemonOwnedByAnotherUser, daemon.ID)
 	}
-
 	return nil
 }
 
@@ -1161,107 +1125,11 @@ func (r *Repo) GetDaemon(ctx context.Context, id string) (*Daemon, error) {
 	if id == "" {
 		return nil, fmt.Errorf("daemon ID cannot be empty")
 	}
-
-	query := `
-		SELECT
-			id,
-			user_id,
-			hostname,
-			platform,
-			capabilities,
-			project_paths,
-			daemon_type,
-			name,
-			created_at,
-			updated_at,
-			lifecycle_phase,
-			size,
-			last_status_message,
-			last_status_changed_at,
-			last_oom_killed_at,
-			oom_kill_count
-		FROM daemons
-		WHERE id = ?
-		LIMIT 1
-	`
-	query = r.bindQuery(query)
-
-	var (
-		daemon       Daemon
-		hostname     sql.NullString
-		platform     sql.NullString
-		capabilities sql.NullString
-		projectPaths sql.NullString
-		daemonType   sql.NullString
-		lifecycle    daemonLifecycleScan
-	)
-
-	err := r.DB.QueryRowContext(ctx, query, id).Scan(
-		&daemon.ID,
-		&daemon.UserID,
-		&hostname,
-		&platform,
-		&capabilities,
-		&projectPaths,
-		&daemonType,
-		&daemon.Name,
-		&daemon.CreatedAt,
-		&daemon.UpdatedAt,
-		&lifecycle.phase,
-		&lifecycle.size,
-		&lifecycle.statusMessage,
-		&lifecycle.statusChangedAt,
-		&lifecycle.oomKilledAt,
-		&lifecycle.oomKillCount,
-	)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, err
-		}
+	d, err := store.GetDaemon(ctx, r.ORM(), id)
+	if err != nil && err != sql.ErrNoRows {
 		return nil, fmt.Errorf("failed to get daemon %s: %w", id, err)
 	}
-
-	daemon.Hostname = nullStringToPtr(hostname)
-	daemon.Platform = nullStringToPtr(platform)
-	daemon.Capabilities = nullStringToPtr(capabilities)
-	daemon.ProjectPaths = nullStringToPtr(projectPaths)
-	daemon.DaemonType = nullStringToPtr(daemonType)
-	lifecycle.applyTo(&daemon)
-
-	return &daemon, nil
-}
-
-// daemonLifecycleScan holds the nullable lifecycle columns during a row scan.
-// It exists so the two daemon SELECTs (GetDaemon and ListDaemonsByUserID)
-// cannot interpret the same six columns differently — the bug that motivated
-// consolidating the daemon list in the first place was two readers of the same
-// concept disagreeing.
-type daemonLifecycleScan struct {
-	phase           sql.NullString
-	size            sql.NullString
-	statusMessage   sql.NullString
-	statusChangedAt sql.NullTime
-	oomKilledAt     sql.NullTime
-	oomKillCount    sql.NullInt32
-}
-
-func (s daemonLifecycleScan) applyTo(d *Daemon) {
-	d.LifecyclePhase = nullStringToPtr(s.phase)
-	d.Size = nullStringToPtr(s.size)
-	if s.statusMessage.Valid {
-		d.LastStatusMessage = s.statusMessage.String
-	}
-	if s.statusChangedAt.Valid {
-		t := s.statusChangedAt.Time
-		d.LastStatusChangedAt = &t
-	}
-	if s.oomKilledAt.Valid {
-		t := s.oomKilledAt.Time
-		d.LastOOMKilledAt = &t
-	}
-	if s.oomKillCount.Valid {
-		d.OOMKillCount = s.oomKillCount.Int32
-	}
+	return d, err
 }
 
 // ApplyDaemonLifecycle mirrors one control-plane lifecycle event onto an
@@ -1274,141 +1142,28 @@ func (s daemonLifecycleScan) applyTo(d *Daemon) {
 // the guard holds across every replica and every retry, not only within one
 // consumer goroutine.
 func (r *Repo) ApplyDaemonLifecycle(ctx context.Context, lc DaemonLifecycleUpdate) (bool, error) {
-	return r.applyDaemonLifecycle(ctx, r.DB, lc)
-}
-
-// applyDaemonLifecycle is ApplyDaemonLifecycle against any executor, so the
-// registry snapshot applies lifecycle with the same guard inside its own
-// transaction.
-func (r *Repo) applyDaemonLifecycle(ctx context.Context, ex execer, lc DaemonLifecycleUpdate) (bool, error) {
 	if lc.DaemonID == "" {
 		return false, fmt.Errorf("daemon ID cannot be empty")
 	}
 	if lc.ChangedAt.IsZero() {
 		return false, fmt.Errorf("lifecycle changed_at cannot be zero")
 	}
-
-	// COALESCE on size/oom: a lifecycle event that omits them is reporting a
-	// phase change, not asserting the machine has no size and has never been
-	// OOM-killed. Phase and status message are authoritative per event.
-	query := `
-		UPDATE daemons
-		SET
-			lifecycle_phase = ?,
-			size = COALESCE(NULLIF(?, ''), size),
-			last_status_message = ?,
-			last_status_changed_at = ?,
-			last_oom_killed_at = COALESCE(?, last_oom_killed_at),
-			oom_kill_count = GREATEST(oom_kill_count, ?),
-			updated_at = CURRENT_TIMESTAMP
-		WHERE id = ?
-		  AND (lifecycle_phase IS NULL OR last_status_changed_at IS NULL OR last_status_changed_at < ?)
-	`
-	query = r.bindQuery(query)
-
-	res, err := ex.ExecContext(ctx, query,
-		lc.Phase,
-		lc.Size,
-		lc.StatusMessage,
-		lc.ChangedAt,
-		lc.LastOOMKilledAt,
-		lc.OOMKillCount,
-		lc.DaemonID,
-		lc.ChangedAt,
-	)
+	applied, err := store.ApplyDaemonLifecycle(ctx, r.ORM(), lc)
 	if err != nil {
 		return false, fmt.Errorf("failed to apply daemon lifecycle for %s: %w", lc.DaemonID, err)
 	}
-	n, err := res.RowsAffected()
-	if err != nil {
-		return false, fmt.Errorf("failed reading lifecycle update result for %s: %w", lc.DaemonID, err)
-	}
-	return n > 0, nil
+	return applied, nil
 }
 
 func (r *Repo) ListDaemonsByUserID(ctx context.Context, userID string) ([]*Daemon, error) {
 	if userID == "" {
 		return nil, fmt.Errorf("user ID cannot be empty")
 	}
-
-	query := `
-		SELECT
-			id,
-			user_id,
-			hostname,
-			platform,
-			capabilities,
-			project_paths,
-			daemon_type,
-			name,
-			created_at,
-			updated_at,
-			lifecycle_phase,
-			size,
-			last_status_message,
-			last_status_changed_at,
-			last_oom_killed_at,
-			oom_kill_count
-		FROM daemons
-		WHERE user_id = ?
-		ORDER BY updated_at DESC
-	`
-	query = r.bindQuery(query)
-
-	rows, err := r.DB.QueryContext(ctx, query, userID)
+	daemons, err := store.ListDaemonsByUserID(ctx, r.ORM(), userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list daemons for user %s: %w", userID, err)
 	}
-	defer rows.Close()
-
-	var result []*Daemon
-	for rows.Next() {
-		var (
-			daemon       Daemon
-			hostname     sql.NullString
-			platform     sql.NullString
-			capabilities sql.NullString
-			projectPaths sql.NullString
-			daemonType   sql.NullString
-			lifecycle    daemonLifecycleScan
-		)
-
-		if err := rows.Scan(
-			&daemon.ID,
-			&daemon.UserID,
-			&hostname,
-			&platform,
-			&capabilities,
-			&projectPaths,
-			&daemonType,
-			&daemon.Name,
-			&daemon.CreatedAt,
-			&daemon.UpdatedAt,
-			&lifecycle.phase,
-			&lifecycle.size,
-			&lifecycle.statusMessage,
-			&lifecycle.statusChangedAt,
-			&lifecycle.oomKilledAt,
-			&lifecycle.oomKillCount,
-		); err != nil {
-			return nil, fmt.Errorf("failed to scan daemon row: %w", err)
-		}
-
-		daemon.Hostname = nullStringToPtr(hostname)
-		daemon.Platform = nullStringToPtr(platform)
-		daemon.Capabilities = nullStringToPtr(capabilities)
-		daemon.ProjectPaths = nullStringToPtr(projectPaths)
-		daemon.DaemonType = nullStringToPtr(daemonType)
-		lifecycle.applyTo(&daemon)
-
-		result = append(result, &daemon)
-	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("failed iterating daemon rows: %w", err)
-	}
-
-	return result, nil
+	return daemons, nil
 }
 
 func (r *Repo) UpsertDaemonAttachment(ctx context.Context, att *DaemonAttachment) error {
@@ -1431,34 +1186,13 @@ func (r *Repo) UpsertDaemonAttachment(ctx context.Context, att *DaemonAttachment
 	if att.LastStreamActivity.IsZero() {
 		att.LastStreamActivity = now
 	}
-	// Re-attachment resets memory telemetry and detected ports: a new stream
-	// means a fresh daemon session, and readings from the previous one are
-	// stale.
-	query := `
-		INSERT INTO daemon_attachment (daemon_id, user_id, source, pod_ip, pod_port, attached_at, last_stream_activity)
-		VALUES (?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT (daemon_id) DO UPDATE SET
-			user_id = EXCLUDED.user_id,
-			source = EXCLUDED.source,
-			pod_ip = EXCLUDED.pod_ip,
-			pod_port = EXCLUDED.pod_port,
-			attached_at = EXCLUDED.attached_at,
-			last_stream_activity = EXCLUDED.last_stream_activity,
-			memory_used_bytes = 0,
-			memory_limit_bytes = 0,
-			memory_pressure = FALSE,
-			detected_ports = '[]'
-		WHERE daemon_attachment.user_id = EXCLUDED.user_id
-		   OR EXISTS (SELECT 1 FROM daemons d WHERE d.id = EXCLUDED.daemon_id AND d.user_id = EXCLUDED.user_id)
-	`
-	query = r.bindQuery(query)
-	res, err := r.DB.ExecContext(ctx, query, att.DaemonID, att.UserID, string(att.Source), att.PodIP, att.PodPort, att.AttachedAt, att.LastStreamActivity)
+	wrote, err := store.UpsertDaemonAttachment(ctx, r.ORM(), att)
 	if err != nil {
 		return fmt.Errorf("upserting daemon attachment: %w", err)
 	}
 	// A different user's lease is only replaceable by the daemon row's owner
 	// (which heals a lease a past hijack left behind).
-	if n, nErr := res.RowsAffected(); nErr == nil && n == 0 {
+	if !wrote {
 		return fmt.Errorf("%w: attachment for daemon %s", ErrDaemonOwnedByAnotherUser, att.DaemonID)
 	}
 	return nil
@@ -1505,24 +1239,7 @@ func (r *Repo) RenewDaemonAttachment(ctx context.Context, att *DaemonAttachment)
 	if att.AttachedAt.IsZero() || att.LastStreamActivity.IsZero() {
 		return false, fmt.Errorf("renewing daemon attachment requires attached_at and last_stream_activity")
 	}
-	// xmax = 0 holds only for a row this statement inserted.
-	query := r.bindQuery(`
-		INSERT INTO daemon_attachment (daemon_id, user_id, source, pod_ip, pod_port, attached_at, last_stream_activity)
-		SELECT ?, ?, ?, ?, ?, ?, ?
-		WHERE EXISTS (SELECT 1 FROM daemons d WHERE d.id = ? AND d.user_id = ?)
-		ON CONFLICT (daemon_id) DO UPDATE SET
-			last_stream_activity = GREATEST(daemon_attachment.last_stream_activity, EXCLUDED.last_stream_activity),
-			attached_at = GREATEST(daemon_attachment.attached_at, EXCLUDED.attached_at)
-		WHERE daemon_attachment.user_id = EXCLUDED.user_id
-		RETURNING (xmax = 0)
-	`)
-	err = r.DB.QueryRowContext(ctx, query,
-		att.DaemonID, att.UserID, string(att.Source), att.PodIP, att.PodPort, att.AttachedAt, att.LastStreamActivity,
-		att.DaemonID, att.UserID,
-	).Scan(&created)
-	if errors.Is(err, sql.ErrNoRows) {
-		return false, nil // not the caller's to renew; see above
-	}
+	created, err = store.RenewDaemonAttachment(ctx, r.ORM(), att)
 	if err != nil {
 		return false, fmt.Errorf("renewing daemon attachment: %w", err)
 	}
@@ -1538,9 +1255,7 @@ func (r *Repo) UpdateDaemonAttachmentMemory(ctx context.Context, daemonID string
 	if daemonID == "" {
 		return fmt.Errorf("daemon ID cannot be empty")
 	}
-	query := `UPDATE daemon_attachment SET memory_used_bytes = ?, memory_limit_bytes = ?, memory_pressure = ? WHERE daemon_id = ?`
-	query = r.bindQuery(query)
-	if _, err := r.DB.ExecContext(ctx, query, usedBytes, limitBytes, pressure, daemonID); err != nil {
+	if err := store.SetDaemonAttachmentMemory(ctx, r.ORM(), daemonID, usedBytes, limitBytes, pressure); err != nil {
 		return fmt.Errorf("updating daemon attachment memory: %w", err)
 	}
 	return nil
@@ -1555,16 +1270,7 @@ func (r *Repo) UpdateDaemonAttachmentPorts(ctx context.Context, daemonID string,
 	if daemonID == "" {
 		return fmt.Errorf("daemon ID cannot be empty")
 	}
-	if ports == nil {
-		ports = []uint32{}
-	}
-	encoded, err := json.Marshal(ports)
-	if err != nil {
-		return fmt.Errorf("encoding detected ports: %w", err)
-	}
-	query := `UPDATE daemon_attachment SET detected_ports = ? WHERE daemon_id = ?`
-	query = r.bindQuery(query)
-	if _, err := r.DB.ExecContext(ctx, query, string(encoded), daemonID); err != nil {
+	if err := store.SetDaemonAttachmentPorts(ctx, r.ORM(), daemonID, ports); err != nil {
 		return fmt.Errorf("updating daemon attachment ports: %w", err)
 	}
 	return nil
@@ -1577,8 +1283,7 @@ func (r *Repo) SetDaemonLocalModels(ctx context.Context, daemonID string, invent
 	if daemonID == "" {
 		return fmt.Errorf("daemon ID cannot be empty")
 	}
-	query := r.bindQuery(`UPDATE daemons SET local_models = ? WHERE id = ?`)
-	if _, err := r.DB.ExecContext(ctx, query, inventoryJSON, daemonID); err != nil {
+	if err := store.SetDaemonLocalModels(ctx, r.ORM(), daemonID, inventoryJSON); err != nil {
 		return fmt.Errorf("updating daemon local models: %w", err)
 	}
 	return nil
@@ -1592,22 +1297,11 @@ func (r *Repo) ListDaemonLocalModels(ctx context.Context, userID string) (map[st
 	if userID == "" {
 		return nil, fmt.Errorf("user ID cannot be empty")
 	}
-	query := r.bindQuery(`SELECT id, local_models FROM daemons WHERE user_id = ? AND local_models <> ''`)
-	rows, err := r.DB.QueryContext(ctx, query, userID)
+	inventories, err := store.ListDaemonLocalModels(ctx, r.ORM(), userID)
 	if err != nil {
 		return nil, fmt.Errorf("listing daemon local models for user %s: %w", userID, err)
 	}
-	defer rows.Close()
-
-	inventories := make(map[string]string)
-	for rows.Next() {
-		var daemonID, inventoryJSON string
-		if err := rows.Scan(&daemonID, &inventoryJSON); err != nil {
-			return nil, fmt.Errorf("scanning daemon local models: %w", err)
-		}
-		inventories[daemonID] = inventoryJSON
-	}
-	return inventories, rows.Err()
+	return inventories, nil
 }
 
 // GetSettingValue returns a user-level setting's value, and whether it is set.
@@ -1655,8 +1349,7 @@ func (r *Repo) SetDaemonStorageState(ctx context.Context, daemonID string, state
 	if daemonID == "" {
 		return fmt.Errorf("daemon ID cannot be empty")
 	}
-	query := r.bindQuery(`UPDATE daemons SET storage_state = ? WHERE id = ?`)
-	if _, err := r.DB.ExecContext(ctx, query, stateJSON, daemonID); err != nil {
+	if err := store.SetDaemonStorageState(ctx, r.ORM(), daemonID, stateJSON); err != nil {
 		return fmt.Errorf("updating daemon storage state: %w", err)
 	}
 	return nil
@@ -1668,11 +1361,7 @@ func (r *Repo) GetDaemonStorageState(ctx context.Context, daemonID string) (stri
 	if daemonID == "" {
 		return "", fmt.Errorf("daemon ID cannot be empty")
 	}
-	var state string
-	err := r.DB.QueryRowContext(ctx, r.bindQuery(`SELECT storage_state FROM daemons WHERE id = ?`), daemonID).Scan(&state)
-	if errors.Is(err, sql.ErrNoRows) {
-		return "", nil
-	}
+	state, err := store.GetDaemonStorageState(ctx, r.ORM(), daemonID)
 	if err != nil {
 		return "", fmt.Errorf("reading daemon storage state: %w", err)
 	}
@@ -1685,21 +1374,11 @@ func (r *Repo) ListDaemonStorageState(ctx context.Context, userID string) (map[s
 	if userID == "" {
 		return nil, fmt.Errorf("user ID cannot be empty")
 	}
-	query := r.bindQuery(`SELECT id, storage_state FROM daemons WHERE user_id = ? AND storage_state <> ''`)
-	rows, err := r.DB.QueryContext(ctx, query, userID)
+	states, err := store.ListDaemonStorageState(ctx, r.ORM(), userID)
 	if err != nil {
 		return nil, fmt.Errorf("listing daemon storage state for user %s: %w", userID, err)
 	}
-	defer rows.Close()
-	states := make(map[string]string)
-	for rows.Next() {
-		var daemonID, stateJSON string
-		if err := rows.Scan(&daemonID, &stateJSON); err != nil {
-			return nil, fmt.Errorf("scanning daemon storage state: %w", err)
-		}
-		states[daemonID] = stateJSON
-	}
-	return states, rows.Err()
+	return states, nil
 }
 
 // ReleaseDaemonAttachment deletes the lease a stream session created when
@@ -1732,18 +1411,7 @@ func (r *Repo) ReleaseDaemonAttachment(ctx context.Context, daemonID string, att
 	if attachedAt.IsZero() {
 		return fmt.Errorf("releasing daemon attachment %s requires the session's attached_at", daemonID)
 	}
-	query := r.bindQuery(`
-		WITH released AS (
-			DELETE FROM daemon_attachment
-			WHERE daemon_id = ? AND attached_at <= ?
-			RETURNING daemon_id, last_stream_activity
-		)
-		UPDATE daemons d
-		SET last_seen_at = GREATEST(d.last_seen_at, released.last_stream_activity)
-		FROM released
-		WHERE d.id = released.daemon_id
-	`)
-	if _, err := r.DB.ExecContext(ctx, query, daemonID, attachedAt); err != nil {
+	if err := store.ReleaseDaemonAttachment(ctx, r.ORM(), daemonID, attachedAt); err != nil {
 		return fmt.Errorf("releasing daemon attachment: %w", err)
 	}
 	return nil
@@ -1761,24 +1429,11 @@ func (r *Repo) DaemonLastSeenAt(ctx context.Context, userID, daemonID string) (t
 	if userID == "" || daemonID == "" {
 		return time.Time{}, fmt.Errorf("daemon last-seen lookup requires user ID and daemon ID")
 	}
-	query := r.bindQuery(`
-		SELECT GREATEST(d.last_seen_at, a.last_stream_activity)
-		FROM daemons d
-		LEFT JOIN daemon_attachment a ON a.daemon_id = d.id AND a.user_id = d.user_id
-		WHERE d.id = ? AND d.user_id = ?
-	`)
-	var seen sql.NullTime
-	err := r.DB.QueryRowContext(ctx, query, daemonID, userID).Scan(&seen)
-	if errors.Is(err, sql.ErrNoRows) {
-		return time.Time{}, nil
-	}
+	seen, err := store.DaemonLastSeenAt(ctx, r.ORM(), userID, daemonID)
 	if err != nil {
 		return time.Time{}, fmt.Errorf("reading daemon last seen: %w", err)
 	}
-	if !seen.Valid {
-		return time.Time{}, nil
-	}
-	return seen.Time, nil
+	return seen, nil
 }
 
 // DeleteStaleDaemonAttachments removes attachment rows whose reachability
@@ -1803,18 +1458,9 @@ func (r *Repo) DeleteStaleDaemonAttachments(ctx context.Context, olderThan time.
 	if olderThan <= 0 {
 		return 0, fmt.Errorf("stale threshold must be positive")
 	}
-	cutoff := time.Now().UTC().Add(-olderThan)
-	query := `DELETE FROM daemon_attachment WHERE last_stream_activity < ?`
-	query = r.bindQuery(query)
-	res, err := r.DB.ExecContext(ctx, query, cutoff)
+	n, err := store.DeleteStaleDaemonAttachments(ctx, r.ORM(), time.Now().UTC().Add(-olderThan))
 	if err != nil {
 		return 0, fmt.Errorf("deleting stale daemon attachments: %w", err)
-	}
-	n, err := res.RowsAffected()
-	if err != nil {
-		// Row count is advisory (logging only); a driver that can't report
-		// it must not turn a successful GC into a failure.
-		return 0, nil
 	}
 	return n, nil
 }
@@ -1823,18 +1469,7 @@ func (r *Repo) IsDaemonAttached(ctx context.Context, userID string, staleThresho
 	if userID == "" {
 		return false, fmt.Errorf("user ID cannot be empty")
 	}
-	cutoff := time.Now().UTC().Add(-staleThreshold)
-	query := `SELECT 1 FROM daemon_attachment WHERE user_id = ? AND last_stream_activity > ? LIMIT 1`
-	query = r.bindQuery(query)
-	var n int
-	err := r.DB.QueryRowContext(ctx, query, userID, cutoff).Scan(&n)
-	if err == sql.ErrNoRows {
-		return false, nil
-	}
-	if err != nil {
-		return false, fmt.Errorf("checking daemon attachment: %w", err)
-	}
-	return true, nil
+	return store.IsUserDaemonAttached(ctx, r.ORM(), userID, time.Now().UTC().Add(-staleThreshold))
 }
 
 // IsDaemonIDAttached reports whether the daemon has a fresh attachment lease.
@@ -1842,38 +1477,16 @@ func (r *Repo) IsDaemonIDAttached(ctx context.Context, daemonID string, staleThr
 	if daemonID == "" {
 		return false, fmt.Errorf("daemon ID cannot be empty")
 	}
-	cutoff := time.Now().UTC().Add(-staleThreshold)
-	query := `SELECT 1 FROM daemon_attachment WHERE daemon_id = ? AND last_stream_activity > ? LIMIT 1`
-	query = r.bindQuery(query)
-	var n int
-	err := r.DB.QueryRowContext(ctx, query, daemonID, cutoff).Scan(&n)
-	if err == sql.ErrNoRows {
-		return false, nil
-	}
-	if err != nil {
-		return false, fmt.Errorf("checking daemon attachment: %w", err)
-	}
-	return true, nil
+	return store.IsDaemonIDAttached(ctx, r.ORM(), daemonID, time.Now().UTC().Add(-staleThreshold))
 }
 
-// attachmentColumns is the shared SELECT column list matching
-// listAttachments' scan order.
-const attachmentColumns = `daemon_id, user_id, source, pod_ip, pod_port, attached_at, last_stream_activity, memory_used_bytes, memory_limit_bytes, memory_pressure, detected_ports`
-
 func (r *Repo) ListOutboundAttachments(ctx context.Context) ([]*DaemonAttachment, error) {
-	return r.listAttachments(ctx, `
-		SELECT `+attachmentColumns+`
-		FROM daemon_attachment
-		WHERE source = 'outbound'
-	`)
+	return store.ListOutboundAttachments(ctx, r.ORM())
 }
 
 // ListAllDaemonAttachments returns every attachment row regardless of source.
 func (r *Repo) ListAllDaemonAttachments(ctx context.Context) ([]*DaemonAttachment, error) {
-	return r.listAttachments(ctx, `
-		SELECT `+attachmentColumns+`
-		FROM daemon_attachment
-	`)
+	return store.ListAllDaemonAttachments(ctx, r.ORM())
 }
 
 // ListFreshDaemonAttachmentsForUser returns the user's attachment rows whose
@@ -1884,83 +1497,14 @@ func (r *Repo) ListFreshDaemonAttachmentsForUser(ctx context.Context, userID str
 	if userID == "" {
 		return nil, fmt.Errorf("user ID cannot be empty")
 	}
-	cutoff := time.Now().UTC().Add(-staleThreshold)
-	return r.listAttachments(ctx, `
-		SELECT `+attachmentColumns+`
-		FROM daemon_attachment
-		WHERE user_id = ? AND last_stream_activity > ?
-	`, userID, cutoff)
-}
-
-// listAttachments runs an attachment-shaped SELECT and scans the rows. Shared
-// by the attachment list methods so the scan logic (nullable pod_ip /
-// pod_port) lives in one place.
-func (r *Repo) listAttachments(ctx context.Context, query string, args ...any) ([]*DaemonAttachment, error) {
-	query = r.bindQuery(query)
-	rows, err := r.DB.QueryContext(ctx, query, args...)
-	if err != nil {
-		return nil, fmt.Errorf("listing attachments: %w", err)
-	}
-	defer rows.Close()
-
-	var result []*DaemonAttachment
-	for rows.Next() {
-		var (
-			att           DaemonAttachment
-			source        string
-			podIP         sql.NullString
-			podPort       sql.NullInt64
-			detectedPorts string
-		)
-		if err := rows.Scan(&att.DaemonID, &att.UserID, &source, &podIP, &podPort, &att.AttachedAt, &att.LastStreamActivity, &att.MemoryUsedBytes, &att.MemoryLimitBytes, &att.MemoryPressure, &detectedPorts); err != nil {
-			return nil, fmt.Errorf("scanning attachment: %w", err)
-		}
-		att.Source = DaemonAttachmentSource(source)
-		if podIP.Valid {
-			v := podIP.String
-			att.PodIP = &v
-		}
-		if podPort.Valid {
-			v := int(podPort.Int64)
-			att.PodPort = &v
-		}
-		// detected_ports is JSON-encoded; a decode failure degrades to "no
-		// ports" rather than failing the liveness read.
-		if detectedPorts != "" && detectedPorts != "[]" {
-			_ = json.Unmarshal([]byte(detectedPorts), &att.DetectedPorts)
-		}
-		result = append(result, &att)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterating attachments: %w", err)
-	}
-	return result, nil
+	return store.ListFreshDaemonAttachmentsForUser(ctx, r.ORM(), userID, time.Now().UTC().Add(-staleThreshold))
 }
 
 func (r *Repo) ListAttachedDaemonIDsForUser(ctx context.Context, userID string, staleThreshold time.Duration) ([]string, error) {
 	if userID == "" {
 		return nil, fmt.Errorf("user ID cannot be empty")
 	}
-	cutoff := time.Now().UTC().Add(-staleThreshold)
-	query := `SELECT daemon_id FROM daemon_attachment WHERE user_id = ? AND last_stream_activity > ?`
-	query = r.bindQuery(query)
-	rows, err := r.DB.QueryContext(ctx, query, userID, cutoff)
-	if err != nil {
-		return nil, fmt.Errorf("listing attached daemon ids: %w", err)
-	}
-	defer rows.Close()
-	var ids []string
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			return nil, fmt.Errorf("scanning attached daemon id: %w", err)
-		}
-		ids = append(ids, id)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterating attached daemon ids: %w", err)
-	}
-	return ids, nil
+	return store.ListAttachedDaemonIDsForUser(ctx, r.ORM(), userID, time.Now().UTC().Add(-staleThreshold))
 }
 
 func (r *Repo) UpsertProjectConfigRecord(ctx context.Context, record *ProjectConfigRecord) error {
@@ -2812,248 +2356,50 @@ func (r *Repo) CreateBackgroundProcess(ctx context.Context, process *BackgroundP
 	if process.StartedAt.IsZero() {
 		process.StartedAt = time.Now()
 	}
-
-	_, err := r.DB.ExecContext(ctx, `
-		INSERT INTO background_processes (
-			id, pid, command, working_dir, worktree_id, project_id, chat_id, user_id,
-			status, exit_code, started_at, ended_at, signature, source_type,
-			package_type, command_name, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		process.ID, process.PID, process.Command, process.WorkingDir,
-		process.WorktreeID, process.ProjectID, process.ChatID, process.UserID,
-		process.Status, process.ExitCode, process.StartedAt, process.EndedAt,
-		process.Signature, process.SourceType, process.PackageType, process.CommandName,
-		process.CreatedAt, process.UpdatedAt,
-	)
-	if err == nil {
-		return nil
-	}
-	query := `
-		INSERT INTO background_processes (
-			id, pid, command, working_dir, worktree_id, project_id, chat_id, user_id,
-			status, exit_code, started_at, ended_at, signature, source_type,
-			package_type, command_name, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-	query = r.bindQuery(query)
-	_, err = r.DB.ExecContext(ctx, query,
-		process.ID, process.PID, process.Command, process.WorkingDir,
-		process.WorktreeID, process.ProjectID, process.ChatID, process.UserID,
-		process.Status, process.ExitCode, process.StartedAt, process.EndedAt,
-		process.Signature, process.SourceType, process.PackageType, process.CommandName,
-		process.CreatedAt, process.UpdatedAt,
-	)
-	return err
+	return store.InsertBackgroundProcess(ctx, r.ORM(), process)
 }
 
 func (r *Repo) GetBackgroundProcess(ctx context.Context, id string) (*BackgroundProcess, error) {
 	if id == "" {
 		return nil, fmt.Errorf("process ID cannot be empty")
 	}
-
-	query := `
-		SELECT id, pid, command, working_dir, worktree_id, project_id, chat_id, user_id,
-			status, exit_code, started_at, ended_at, signature, source_type,
-			package_type, command_name, created_at, updated_at
-		FROM background_processes WHERE id = ?`
-	query = r.bindQuery(query)
-	row := r.DB.QueryRowContext(ctx, query, id)
-
-	return scanBackgroundProcess(row)
+	return store.GetBackgroundProcess(ctx, r.ORM(), id)
 }
 
 func (r *Repo) ListBackgroundProcesses(ctx context.Context, filters BackgroundProcessFilters) ([]*BackgroundProcess, error) {
-	query := `
-		SELECT id, pid, command, working_dir, worktree_id, project_id, chat_id, user_id,
-			status, exit_code, started_at, ended_at, signature, source_type,
-			package_type, command_name, created_at, updated_at
-		FROM background_processes WHERE 1=1`
-	args := []interface{}{}
-
-	if filters.UserID != "" {
-		query += " AND user_id = ?"
-		args = append(args, filters.UserID)
-	}
-	if filters.WorktreeID != nil {
-		query += " AND worktree_id = ?"
-		args = append(args, *filters.WorktreeID)
-	}
-	if filters.ProjectID != nil {
-		query += " AND project_id = ?"
-		args = append(args, *filters.ProjectID)
-	}
-	if filters.ChatID != nil {
-		query += " AND chat_id = ?"
-		args = append(args, *filters.ChatID)
-	}
-	if filters.Status != nil {
-		query += " AND status = ?"
-		args = append(args, *filters.Status)
-	}
-	if filters.SourceType != nil {
-		query += " AND source_type = ?"
-		args = append(args, string(*filters.SourceType))
-	}
-
-	query += " ORDER BY started_at DESC"
-
-	if filters.Limit > 0 {
-		query += " LIMIT ?"
-		args = append(args, filters.Limit)
-	}
-	if filters.Offset > 0 {
-		query += " OFFSET ?"
-		args = append(args, filters.Offset)
-	}
-
-	query = r.bindQuery(query)
-
-	rows, err := r.DB.QueryContext(ctx, query, args...)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var processes []*BackgroundProcess
-	for rows.Next() {
-		process, err := scanBackgroundProcessFromRows(rows)
-		if err != nil {
-			return nil, err
-		}
-		processes = append(processes, process)
-	}
-
-	return processes, rows.Err()
+	return store.ListBackgroundProcesses(ctx, r.ORM(), filters)
 }
 
 func (r *Repo) UpdateBackgroundProcessStatus(ctx context.Context, id string, status BackgroundProcessStatus, exitCode *int, endedAt *time.Time) error {
 	if id == "" {
 		return fmt.Errorf("process ID cannot be empty")
 	}
-
-	query := `
-		UPDATE background_processes
-		SET status = ?, exit_code = ?, ended_at = ?, updated_at = ?
-		WHERE id = ?`
-	query = r.bindQuery(query)
-	_, err := r.DB.ExecContext(ctx, query,
-		status, exitCode, endedAt, time.Now(), id,
-	)
-	return err
+	return store.SetBackgroundProcessStatus(ctx, r.ORM(), id, status, exitCode, endedAt)
 }
 
 func (r *Repo) UpdateBackgroundProcessPID(ctx context.Context, id string, pid int, signature string) error {
 	if id == "" {
 		return fmt.Errorf("process ID cannot be empty")
 	}
-
-	query := `
-		UPDATE background_processes
-		SET pid = ?, signature = ?, updated_at = ?
-		WHERE id = ?`
-	query = r.bindQuery(query)
-	_, err := r.DB.ExecContext(ctx, query,
-		pid, signature, time.Now(), id,
-	)
-	return err
+	return store.SetBackgroundProcessPID(ctx, r.ORM(), id, pid, signature)
 }
 
 func (r *Repo) GetRunningBackgroundProcesses(ctx context.Context) ([]*BackgroundProcess, error) {
-	rows, err := r.DB.QueryContext(ctx, `
-		SELECT id, pid, command, working_dir, worktree_id, project_id, chat_id, user_id,
-			status, exit_code, started_at, ended_at, signature, source_type,
-			package_type, command_name, created_at, updated_at
-		FROM background_processes
-		WHERE status = ?`, BgProcessStatusRunning)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var processes []*BackgroundProcess
-	for rows.Next() {
-		process, err := scanBackgroundProcessFromRows(rows)
-		if err != nil {
-			return nil, err
-		}
-		processes = append(processes, process)
-	}
-
-	return processes, rows.Err()
+	return store.ListRunningBackgroundProcesses(ctx, r.ORM())
 }
 
 func (r *Repo) MarkStaleProcesses(ctx context.Context, processIDs []string) error {
-	if len(processIDs) == 0 {
-		return nil
-	}
-
-	placeholders := make([]string, len(processIDs))
-	for i := range processIDs {
-		placeholders[i] = "?"
-	}
-
-	args := make([]interface{}, len(processIDs)+3)
-	args[0] = BgProcessStatusStale
-	args[1] = time.Now()
-	args[2] = time.Now()
-	for i, id := range processIDs {
-		args[i+3] = id
-	}
-
-	query := fmt.Sprintf(`
-		UPDATE background_processes
-		SET status = ?, ended_at = ?, updated_at = ?
-		WHERE id IN (%s)`,
-		strings.Join(placeholders, ","),
-	)
-	query = r.bindQuery(query)
-
-	_, err := r.DB.ExecContext(ctx, query, args...)
-	return err
+	return store.MarkStaleBackgroundProcesses(ctx, r.ORM(), processIDs)
 }
 
 func (r *Repo) CleanupOldBackgroundProcesses(ctx context.Context, olderThan time.Time) (int64, error) {
-	query := `
-		DELETE FROM background_processes
-		WHERE status IN (?, ?, ?, ?, ?)
-			AND ended_at < ?`
-	query = r.bindQuery(query)
-	result, err := r.DB.ExecContext(ctx, query,
-		BgProcessStatusCompleted,
-		BgProcessStatusFailed,
-		BgProcessStatusKilled,
-		BgProcessStatusKilledExternally,
-		BgProcessStatusStale,
-		olderThan,
-	)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected()
+	return store.DeleteEndedBackgroundProcesses(ctx, r.ORM(), olderThan)
 }
 
 // ==================== Background Process Output ====================
 
 func (r *Repo) CreateBackgroundProcessOutputBatch(ctx context.Context, lines []BackgroundProcessOutputLine) error {
-	if len(lines) == 0 {
-		return nil
-	}
-
-	// Build a single multi-row INSERT for efficiency.
-	// Each row has 4 value placeholders: (process_id, seq, stream, line)
-	var b strings.Builder
-	b.WriteString("INSERT INTO background_process_output (process_id, seq, stream, line) VALUES ")
-	args := make([]interface{}, 0, len(lines)*4)
-	for i, line := range lines {
-		if i > 0 {
-			b.WriteString(", ")
-		}
-		b.WriteString("(?, ?, ?, ?)")
-		args = append(args, line.ProcessID, line.Seq, line.Stream, line.Line)
-	}
-
-	query := r.bindQuery(b.String())
-	_, err := r.DB.ExecContext(ctx, query, args...)
-	return err
+	return store.InsertBackgroundProcessOutput(ctx, r.ORM(), lines)
 }
 
 func (r *Repo) GetBackgroundProcessOutput(ctx context.Context, processID string, afterSeq int64, limit int) ([]BackgroundProcessOutputLine, error) {
@@ -3063,134 +2409,7 @@ func (r *Repo) GetBackgroundProcessOutput(ctx context.Context, processID string,
 	if limit <= 0 {
 		limit = 10000
 	}
-
-	query := `
-		SELECT id, process_id, seq, stream, line, created_at
-		FROM background_process_output
-		WHERE process_id = ? AND seq > ?
-		ORDER BY seq ASC
-		LIMIT ?`
-	query = r.bindQuery(query)
-	rows, err := r.DB.QueryContext(ctx, query, processID, afterSeq, limit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var result []BackgroundProcessOutputLine
-	for rows.Next() {
-		var line BackgroundProcessOutputLine
-		if err := rows.Scan(&line.ID, &line.ProcessID, &line.Seq, &line.Stream, &line.Line, &line.CreatedAt); err != nil {
-			return nil, err
-		}
-		result = append(result, line)
-	}
-	return result, rows.Err()
-}
-
-// scanBackgroundProcess scans a single row into a BackgroundProcess
-func scanBackgroundProcess(row *sql.Row) (*BackgroundProcess, error) {
-	var p BackgroundProcess
-	var pid, exitCode sql.NullInt64
-	var worktreeID, projectID, chatID, signature, packageType, commandName sql.NullString
-	var endedAt sql.NullTime
-
-	err := row.Scan(
-		&p.ID, &pid, &p.Command, &p.WorkingDir,
-		&worktreeID, &projectID, &chatID, &p.UserID,
-		&p.Status, &exitCode, &p.StartedAt, &endedAt,
-		&signature, &p.SourceType, &packageType, &commandName,
-		&p.CreatedAt, &p.UpdatedAt,
-	)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("process not found")
-		}
-		return nil, err
-	}
-
-	if pid.Valid {
-		pidInt := int(pid.Int64)
-		p.PID = &pidInt
-	}
-	if exitCode.Valid {
-		exitCodeInt := int(exitCode.Int64)
-		p.ExitCode = &exitCodeInt
-	}
-	if worktreeID.Valid {
-		p.WorktreeID = &worktreeID.String
-	}
-	if projectID.Valid {
-		p.ProjectID = &projectID.String
-	}
-	if chatID.Valid {
-		p.ChatID = &chatID.String
-	}
-	if signature.Valid {
-		p.Signature = &signature.String
-	}
-	if packageType.Valid {
-		p.PackageType = &packageType.String
-	}
-	if commandName.Valid {
-		p.CommandName = &commandName.String
-	}
-	if endedAt.Valid {
-		p.EndedAt = &endedAt.Time
-	}
-
-	return &p, nil
-}
-
-// scanBackgroundProcessFromRows scans a row from sql.Rows into a BackgroundProcess
-func scanBackgroundProcessFromRows(rows *sql.Rows) (*BackgroundProcess, error) {
-	var p BackgroundProcess
-	var pid, exitCode sql.NullInt64
-	var worktreeID, projectID, chatID, signature, packageType, commandName sql.NullString
-	var endedAt sql.NullTime
-
-	err := rows.Scan(
-		&p.ID, &pid, &p.Command, &p.WorkingDir,
-		&worktreeID, &projectID, &chatID, &p.UserID,
-		&p.Status, &exitCode, &p.StartedAt, &endedAt,
-		&signature, &p.SourceType, &packageType, &commandName,
-		&p.CreatedAt, &p.UpdatedAt,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	if pid.Valid {
-		pidInt := int(pid.Int64)
-		p.PID = &pidInt
-	}
-	if exitCode.Valid {
-		exitCodeInt := int(exitCode.Int64)
-		p.ExitCode = &exitCodeInt
-	}
-	if worktreeID.Valid {
-		p.WorktreeID = &worktreeID.String
-	}
-	if projectID.Valid {
-		p.ProjectID = &projectID.String
-	}
-	if chatID.Valid {
-		p.ChatID = &chatID.String
-	}
-	if signature.Valid {
-		p.Signature = &signature.String
-	}
-	if packageType.Valid {
-		p.PackageType = &packageType.String
-	}
-	if commandName.Valid {
-		p.CommandName = &commandName.String
-	}
-	if endedAt.Valid {
-		p.EndedAt = &endedAt.Time
-	}
-
-	return &p, nil
+	return store.ReadBackgroundProcessOutput(ctx, r.ORM(), processID, afterSeq, limit)
 }
 
 // ==================== Attachments ====================

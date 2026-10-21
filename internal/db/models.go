@@ -171,94 +171,19 @@ const (
 	SpawnReportAlreadyReported = core.SpawnReportAlreadyReported
 )
 
-// Daemon represents a persisted tools daemon identity registration.
-// Lifecycle state (connection, heartbeat) lives in daemon_attachment.
-// Capabilities and ProjectPaths are JSON-encoded arrays.
-type Daemon struct {
-	ID           string
-	UserID       string
-	Hostname     *string
-	Platform     *string
-	Capabilities *string
-	ProjectPaths *string
-	// DaemonType is the type of daemon: "managed" (cloud-hosted) or
-	// "self_hosted" (user-run local daemon). Empty/nil if undetermined.
-	DaemonType *string
-	// Name is the name the owner gave the machine, mirrored from the control
-	// plane (which owns it). Empty until the control plane has reported one —
-	// a daemon that registered here before any control-plane event, or a
-	// build with no control plane at all. Display falls back to Hostname.
-	Name      string
-	CreatedAt time.Time
-	UpdatedAt time.Time
-
-	// Lifecycle state mirrored from the control plane over
-	// daemon.v1.state.<id>.lifecycle. This service does NOT own these — the
-	// Workspace CR does, and only the control-plane operator watches it. They
-	// are stored so the registry can serve one list carrying both liveness
-	// (derived from daemon_attachment, which this service does own) and
-	// lifecycle. All nil/zero for self-hosted daemons, permanently.
-	//
-	// LifecyclePhase holds the public vocabulary (daemonwire.LifecyclePhase
-	// values), never a raw Kubernetes phase.
-	LifecyclePhase *string
-	Size           *string
-	// LastStatusMessage is shown verbatim in the UI.
-	LastStatusMessage string
-	// LastStatusChangedAt is the ordering key for lifecycle writes: an event
-	// older than this is dropped, which is what makes out-of-order delivery
-	// safe on a newest-wins stream with no redelivery.
-	LastStatusChangedAt *time.Time
-	LastOOMKilledAt     *time.Time
-	OOMKillCount        int32
-}
-
-// DaemonLifecycleUpdate is one control-plane lifecycle observation, as applied
-// to a daemons row by ApplyDaemonLifecycle.
-//
-// ChangedAt is required and load-bearing: it is the ordering key the
-// conditional write compares against, not merely a timestamp to store.
-type DaemonLifecycleUpdate struct {
-	DaemonID        string
-	Phase           string
-	Size            string
-	StatusMessage   string
-	ChangedAt       time.Time
-	LastOOMKilledAt *time.Time
-	OOMKillCount    int32
-}
-
-type DaemonAttachmentSource string
-
-const (
-	DaemonAttachmentSourceInbound  DaemonAttachmentSource = "inbound"
-	DaemonAttachmentSourceOutbound DaemonAttachmentSource = "outbound"
+// Daemon, its lifecycle update and its attachment lease are core's
+// (internal/store maps the daemons and daemon_attachment rows onto them).
+type (
+	Daemon                 = core.Daemon
+	DaemonLifecycleUpdate  = core.DaemonLifecycleUpdate
+	DaemonAttachmentSource = core.DaemonAttachmentSource
+	DaemonAttachment       = core.DaemonAttachment
 )
 
-type DaemonAttachment struct {
-	DaemonID           string
-	UserID             string
-	Source             DaemonAttachmentSource
-	PodIP              *string
-	PodPort            *int
-	AttachedAt         time.Time
-	LastStreamActivity time.Time
-	// Workspace memory telemetry from the daemon heartbeat (cloud daemons in
-	// a cgroup-limited pod). MemoryLimitBytes == 0 means "not reported"
-	// (local daemons without cgroup accounting). MemoryUsedBytes is the
-	// cgroup's unreclaimable memory (memory.current minus the file cache and
-	// reclaimable slab), the basis of MemoryPressure, the daemon's
-	// hysteresis-smoothed pressure bit (asserts at >= 85% of the limit or on
-	// sustained PSI stalls, clears below 75%).
-	MemoryUsedBytes  int64
-	MemoryLimitBytes int64
-	MemoryPressure   bool
-	// DetectedPorts are the loopback/wildcard LISTEN ports the daemon
-	// reported in its heartbeat (what the in-pod preview forwarder can
-	// reach). JSON-encoded in the detected_ports column. Nil/empty when
-	// nothing is listening or the daemon doesn't report (local daemons).
-	DetectedPorts []uint32
-}
+const (
+	DaemonAttachmentSourceInbound  = core.DaemonAttachmentSourceInbound
+	DaemonAttachmentSourceOutbound = core.DaemonAttachmentSourceOutbound
+)
 
 // DiscoveredProject represents a daemon-reported project on disk.
 // This is used for daemon registry scaffolding serialization helpers.
@@ -471,46 +396,19 @@ func BgProcessStatusToString(s BackgroundProcessStatus) string {
 	}
 }
 
-// BackgroundProcessSourceType identifies how the process was started
-type BackgroundProcessSourceType string
-
-const (
-	BgProcessSourceLLM            BackgroundProcessSourceType = "llm"
-	BgProcessSourcePackageCommand BackgroundProcessSourceType = "package_command"
-	BgProcessSourceManual         BackgroundProcessSourceType = "manual"
+// The background process record and its output lines are core's
+// (internal/store maps the background_process* rows onto them).
+type (
+	BackgroundProcessSourceType = core.BackgroundProcessSourceType
+	BackgroundProcessOutputLine = core.BackgroundProcessOutputLine
+	BackgroundProcess           = core.BackgroundProcess
 )
 
-// BackgroundProcessOutputLine represents a single line of process output in the DB.
-type BackgroundProcessOutputLine struct {
-	ID        int64     `json:"id"`
-	ProcessID string    `json:"process_id"`
-	Seq       int64     `json:"seq"`
-	Stream    string    `json:"stream"` // "stdout" or "stderr"
-	Line      string    `json:"line"`
-	CreatedAt time.Time `json:"created_at"`
-}
-
-// BackgroundProcess represents a persisted background process record
-type BackgroundProcess struct {
-	ID          string                      `json:"id"`
-	PID         *int                        `json:"pid,omitempty"`
-	Command     string                      `json:"command"`
-	WorkingDir  string                      `json:"working_dir"`
-	WorktreeID  *string                     `json:"worktree_id,omitempty"`
-	ProjectID   *string                     `json:"project_id,omitempty"`
-	ChatID      *string                     `json:"chat_id,omitempty"`
-	UserID      string                      `json:"user_id"`
-	Status      BackgroundProcessStatus     `json:"status"`
-	ExitCode    *int                        `json:"exit_code,omitempty"`
-	StartedAt   time.Time                   `json:"started_at"`
-	EndedAt     *time.Time                  `json:"ended_at,omitempty"`
-	Signature   *string                     `json:"signature,omitempty"`
-	SourceType  BackgroundProcessSourceType `json:"source_type"`
-	PackageType *string                     `json:"package_type,omitempty"`
-	CommandName *string                     `json:"command_name,omitempty"`
-	CreatedAt   time.Time                   `json:"created_at"`
-	UpdatedAt   time.Time                   `json:"updated_at"`
-}
+const (
+	BgProcessSourceLLM            = core.BgProcessSourceLLM
+	BgProcessSourcePackageCommand = core.BgProcessSourcePackageCommand
+	BgProcessSourceManual         = core.BgProcessSourceManual
+)
 
 // WorkflowStatus is a run's lifecycle: state plus the reason it stopped.
 // Build one with the core constructors (db.Pending(), db.Active(),

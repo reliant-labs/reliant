@@ -940,17 +940,8 @@ type ProjectFilters = core.ProjectFilters
 // WorktreeFilters contains options for filtering worktrees.
 type WorktreeFilters = core.WorktreeFilters
 
-// BackgroundProcessFilters contains options for filtering background processes
-type BackgroundProcessFilters struct {
-	UserID     string
-	WorktreeID *string
-	ProjectID  *string
-	ChatID     *string
-	Status     *BackgroundProcessStatus
-	SourceType *BackgroundProcessSourceType
-	Limit      int
-	Offset     int
-}
+// BackgroundProcessFilters contains options for filtering background processes.
+type BackgroundProcessFilters = core.BackgroundProcessFilters
 
 // Attachment represents a file attachment.
 // Kept as a facade alias for external API compatibility.
