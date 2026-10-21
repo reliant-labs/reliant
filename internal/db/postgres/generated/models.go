@@ -639,9 +639,10 @@ type ProjectDaemon struct {
 }
 
 type ProviderAccount struct {
-	ID                string         `json:"id"`
-	UserID            string         `json:"user_id"`
-	Provider          string         `json:"provider"`
+	ID       string `json:"id"`
+	UserID   string `json:"user_id"`
+	Provider string `json:"provider"`
+	// forge:go-type=github.com/reliant-labs/reliant/internal/db/core;core.AuthKind
 	AuthKind          string         `json:"auth_kind"`
 	IdentityKey       string         `json:"identity_key"`
 	Label             string         `json:"label"`
