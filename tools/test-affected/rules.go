@@ -130,11 +130,21 @@ var rules = []rule{
 	{
 		id: "global-config",
 		patterns: []string{
-			"Makefile", "forge.yaml", "buf.yaml", "buf.gen.yaml", "buf.gen-go-only.yaml",
+			"Makefile", "buf.yaml", "buf.gen.yaml", "buf.gen-go-only.yaml",
 			"buf.gen.controlplane.yaml",
 		},
 		full:   allLanes,
 		reason: "build or generation configuration changed (a subset cannot judge it)",
+	},
+	{
+		// The forge pin (forge_version) and forge's own config reach the Go
+		// code forge generates and lints, and nothing vitest or electron
+		// runs. It changes on every forge bump, several a day, and running
+		// every vitest file for each cost four runners.
+		id:       "forge-config",
+		patterns: []string{"forge.yaml"},
+		full:     []lane{laneGo, laneForgeGen},
+		reason:   "the forge pin or forge's configuration changed",
 	},
 	{
 		id:       "proto-source",

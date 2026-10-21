@@ -194,7 +194,9 @@ func TestPinsAndConfigForceFull(t *testing.T) {
 		{"go.mod", []lane{laneGo, laneForgeGen}},
 		{"go.sum", []lane{laneGo, laneForgeGen}},
 		{"Makefile", allLanes},
-		{"forge.yaml", allLanes},
+		// The forge pin and forge's own config reach Go and codegen, never a
+		// vitest file or electron: a forge bump must not run the whole web lane.
+		{"forge.yaml", []lane{laneGo, laneForgeGen}},
 		{"web/package.json", []lane{laneWeb}},
 		{"web/vite.config.ts", []lane{laneWeb}},
 		{"web/src/test/setup.ts", []lane{laneWeb}},

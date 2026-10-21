@@ -60,7 +60,8 @@ rule claims and no Go package owns runs **everything** (fail-safe).
 | `go.mod`, `go.sum`, `tools/tools.go` | **Go: full** |
 | `package.json`, lockfiles at the root | **web and electron: full** |
 | `web/package.json`, `vite.config.ts`, `tsconfig*.json`, `tailwind`/`postcss` config, `web/src/test/setup.ts` | **web: full** |
-| `Makefile`, `forge.yaml`, `buf*.yaml` | **everything: full** |
+| `Makefile`, `buf*.yaml` | **everything: full** |
+| `forge.yaml` (the forge pin) | Go and forge-generate: full |
 | `proto/**` that is not a `.proto` | **Go and web: full** |
 | a deleted web module | **web: full** (its importers can no longer be found) |
 | anything else | **everything: full** |
@@ -205,16 +206,18 @@ waits for. Nothing a PR skips is deleted; it runs on the next push to main.
 - **The short tier's test Postgres runs without durability** (fsync,
   synchronous_commit and full_page_writes off): per-test template databases
   made the DB-backed packages fsync-bound (internal/db 166s -> 54s). It also
-  passes `-vet=off` (lint vets what the PR changed; main vets everything).
-- **Other jobs**: `Lint (forge)` (`forge lint --no-fix` at the pinned forge;
-  blocks). On a PR it is scoped to the changed files (`forge lint --scope
-  <file>...`, after `go build ./...` so every package still compiles); the
-  whole project when the PR changes linter config (`.golangci.yml`,
-  `buf.yaml`), and always on main. Web lint/typecheck/build, vitest (`Web (vitest K/N)`,
-  one runner per 150 selected files, up to four), Playwright in two shards,
-  the e2e stories, and `Generated code is up to date` (`make generate-all`
-  drift; on main also `forge generate is a no-op`, the forge-generate lane
-  above).
+  passes `-vet=off`: vet, like golangci-lint, runs on main.
+- **Other jobs**: `Lint (forge)` (at the pinned forge; blocks). On a PR:
+  `go build ./...` (every package compiles) and forge's fast gating lanes over
+  the whole project (`forge lint --no-fix --contract --migration-safety
+  --generated-drift --create-nullability --computed-fields --read-only-fields
+  --tracing --graph`, ~12-40s). golangci-lint and buf lint run on main only:
+  golangci-lint took 4-7 minutes even scoped to a few central packages. Run
+  `forge lint` locally before pushing Go or proto changes. Web
+  lint/typecheck/build, vitest (`Web (vitest K/N)`, one runner per 150
+  selected files, up to four), Playwright (one runner), the e2e stories, and
+  `Generated code is up to date` (`make generate-all` drift; on main also
+  `forge generate is a no-op`, the forge-generate lane above).
 - **license-gate and Pin Drift** run on a PR only when it touches a dependency
   manifest, a lockfile, the pin or their own scripts; on main, always.
 - **Caches are saved only on main.** A PR restores main's caches and never
