@@ -62,7 +62,7 @@ export function AutomationListHeader() {
     >
       <span />
       <span>Automation</span>
-      <span>Schedule</span>
+      <span>Starts on</span>
       <span>Health</span>
       <span>Last run</span>
       <span>Next run</span>
@@ -113,7 +113,7 @@ export function AutomationRow({ trigger }: { trigger: Trigger }) {
       {/* Below lg the row is two lines: identity and switch, then the facts. */}
       <div className="order-last col-span-3 flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1 lg:contents">
         <p className="min-w-0 truncate text-xs text-muted-foreground" title={scheduleText}>
-          <span className="sr-only">Schedule: </span>
+          <span className="sr-only">Starts on: </span>
           {scheduleText}
         </p>
 
@@ -124,7 +124,7 @@ export function AutomationRow({ trigger }: { trigger: Trigger }) {
 
         <div className="flex min-w-0 items-center gap-2">
           <span className="sr-only">Last run: </span>
-          <LastRun trigger={trigger} />
+          <LastRun event={trigger.lastEvent} />
         </div>
 
         <div className="min-w-0 truncate text-xs text-muted-foreground">
@@ -146,7 +146,7 @@ export function AutomationRow({ trigger }: { trigger: Trigger }) {
 }
 
 /** The icon for a source: an activation is drawn as the kind it declares. */
-function sourceIcon(source: TriggerSource | undefined) {
+export function sourceIcon(source: TriggerSource | undefined) {
   if (!source) return CircleHelp;
   switch (source.kind) {
     case "schedule":
@@ -195,8 +195,7 @@ export function HealthIndicator({ health }: { health: AutomationHealthDisplay })
  * The last firing, and when it launched a run, that run's own status: a run
  * that launched and then failed reads Failed, never the neutral "Launched".
  */
-function LastRun({ trigger }: { trigger: Trigger }) {
-  const event = trigger.lastEvent;
+export function LastRun({ event }: { event: Trigger["lastEvent"] }) {
   if (!event) return <span className="text-xs text-muted-foreground">Never run</span>;
 
   // "Launched" is shown only when the run behind it is gone (its chat was
@@ -228,7 +227,7 @@ function LastRun({ trigger }: { trigger: Trigger }) {
   );
 }
 
-function NextFire({ trigger }: { trigger: Trigger }) {
+export function NextFire({ trigger }: { trigger: Pick<Trigger, "enabled" | "nextFireAt"> }) {
   if (!trigger.enabled || !trigger.nextFireAt) {
     return (
       <span title={trigger.enabled ? "No upcoming run" : "Paused: nothing is scheduled"}>

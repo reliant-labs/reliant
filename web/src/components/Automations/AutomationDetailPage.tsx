@@ -1,8 +1,16 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * /workflows/automations/$triggerId — one automation: its definition, its controls, and
+ * /workflows/automations/$triggerId — one trigger: its definition, its controls, and
  * the history of every time it fired.
+ *
+ * A custom automation (a hand-made trigger) is configured here: Edit, Delete.
+ * A workflow automation's trigger is not: its settings are shared with the
+ * workflow's other triggers and configured on the workflow page, so this page
+ * is that trigger's HISTORY (automation-ux-spec.md §2.1) — a breadcrumb back
+ * to the automation, a banner that opens its settings, Run now and Pause, and
+ * Remove trigger only for a broken one. A state that needs the user is
+ * called out with its one call to action (AutomationStateNotice).
  *
  * "Run now" is asynchronous on the server: FireTrigger only starts the fire
  * workflow, and the launched (or skipped, or failed) run shows up as a new
@@ -44,7 +52,10 @@ import { OutcomeBadge } from "./OutcomeBadge";
 import { RunStatusBadge } from "../ui/RunStatusIndicator";
 import { useLaunchedRunStatus } from "./useLaunchedRunStatus";
 import { automationMachineLabel, daemonStatusLabel } from "./daemonChoices";
-import { BrokenActivationNotice } from "./BrokenActivationNotice";
+import { AutomationStateNotice } from "./AutomationStateNotice";
+import { automationHealth } from "@/lib/automationHealth";
+import { automationHref } from "@/lib/workflowsArea";
+import { workflowGroupLabel } from "./automationGrouping";
 import { runStatusFromDisplayState } from "@/lib/runStatus";
 import type { RunDisplayState } from "@/gen/reliant/v1/run_pb";
 
@@ -133,6 +144,10 @@ export function AutomationDetail({ triggerId }: { triggerId: string }) {
     );
   }
 
+  const activation = !!trigger.workflowTrigger;
+  const health = automationHealth(trigger);
+  const workflowTitle = workflowGroupLabel(trigger.workflow);
+
   const onRunNow = () => {
     eventCountAtFire.current = eventCount;
     fire.mutate(trigger.id, {
@@ -177,7 +192,24 @@ export function AutomationDetail({ triggerId }: { triggerId: string }) {
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
-          <h1 className="truncate text-2xl font-semibold tracking-tight text-foreground">{trigger.name}</h1>
+          {activation && (
+            <nav aria-label="Breadcrumb" className="mb-1 text-xs text-muted-foreground">
+              <a href="/workflows/automations" className="hover:underline">
+                Automations
+              </a>
+              <span aria-hidden="true"> › </span>
+              <a href={automationHref(trigger)} className="hover:underline">
+                {workflowTitle} in {projectName ?? trigger.projectName ?? "a deleted project"}
+              </a>
+              <span aria-hidden="true"> › </span>
+              <span aria-current="page" className="font-mono">
+                {trigger.workflowTrigger}
+              </span>
+            </nav>
+          )}
+          <h1 className="truncate text-2xl font-semibold tracking-tight text-foreground">
+            {activation ? `${trigger.workflowTrigger} history` : trigger.name}
+          </h1>
           <p className="mt-1 text-sm text-muted-foreground">
             {/* "Reliant on MacBook", but "Reliant · No machine": no machine is not a place to run on. */}
             {projectName ?? "Unknown project"}
@@ -199,21 +231,42 @@ export function AutomationDetail({ triggerId }: { triggerId: string }) {
           >
             Run now
           </Button>
-          <Button variant="outline" leftIcon={<Pencil className="h-4 w-4" />} onClick={() => setEditing(true)}>
-            Edit
-          </Button>
-          <Button
-            variant="destructive"
-            leftIcon={<Trash2 className="h-4 w-4" />}
-            onClick={() => setConfirmingDelete(true)}
-          >
-            Delete
-          </Button>
+          {!activation && (
+            <Button variant="outline" leftIcon={<Pencil className="h-4 w-4" />} onClick={() => setEditing(true)}>
+              Edit
+            </Button>
+          )}
+          {(!activation || health.key === "broken") && (
+            <Button
+              variant="destructive"
+              leftIcon={<Trash2 className="h-4 w-4" />}
+              onClick={() => setConfirmingDelete(true)}
+            >
+              {activation ? "Remove trigger" : "Delete"}
+            </Button>
+          )}
         </div>
       </div>
 
-      {trigger.health.status === "broken" && (
-        <BrokenActivationNotice trigger={trigger} onRemoved={() => void navigate({ to: "/workflows/automations" })} />
+      {activation && (
+        <div
+          className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card px-4 py-3 text-sm"
+          data-testid="shared-settings-banner"
+        >
+          <p className="text-muted-foreground">
+            Settings for this trigger are shared with {workflowTitle}&apos;s other triggers.
+          </p>
+          <a
+            href={automationHref(trigger)}
+            className="rounded-sm text-sm font-medium text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+          >
+            Open settings
+          </a>
+        </div>
+      )}
+
+      {health.needsAttention && (
+        <AutomationStateNotice health={health} triggers={[trigger]} workflowRef={trigger.workflow} projectId={trigger.projectId} />
       )}
 
       <Card padding="lg">

@@ -113,3 +113,8 @@ export function automationHref(trigger: { id: string; workflow: string; workflow
   }
   return `${WORKFLOWS_AUTOMATIONS_PATH}/${encodeURIComponent(trigger.id)}`;
 }
+
+/** The builder for a workflow; a built-in opens read-only there. */
+export function workflowEditHref(workflow: string): string {
+  return `/workflow/${encodeURIComponent(workflow.startsWith("builtin://") ? workflow.slice("builtin://".length) : workflow)}`;
+}

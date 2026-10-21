@@ -55,7 +55,7 @@ import { useWorkflowLibrary } from "@/hooks/workflow-library-queries";
 import { describeSchedule } from "@/lib/cronText";
 import { describeDeclaredSource, integrationOf, promptOf, type DeclaredTrigger } from "@/lib/declaredTriggers";
 import { inputDefToSchema } from "@/lib/nodeFieldAdapter";
-import { getInputMaxItems, getInputMinItems, getInputMulti, isIntegrationInput, type InputDef } from "@/lib/inputHelpers";
+import { getInputDescription, getInputMaxItems, getInputMinItems, getInputMulti, isIntegrationInput, type InputDef } from "@/lib/inputHelpers";
 import { classifyInputs, type SetupInput } from "@/lib/setupInputs";
 import { triggerRunsWorkflow } from "@/lib/triggerRail";
 import { workflowPageHref } from "@/lib/workflowsArea";
@@ -72,7 +72,7 @@ import { ProtoFieldRenderer } from "../workflow/ProtoFieldRenderer";
 import { ConnectionPicker } from "../workflow/connections/ConnectionPicker";
 import { ConnectIntegrationDialog } from "../workflow/connections/ConnectIntegrationDialog";
 import { TypedInputField, TypedInputsProvider } from "../workflow/inputs/TypedInputField";
-import { inputTypeNouns } from "../workflow/inputs/inputTypeNouns";
+import { integrationDisplayName, inputTypeNouns } from "../workflow/inputs/inputTypeNouns";
 import { RunNowDialog } from "../workflow/run/RunNowDialog";
 import { RunWorkflowForm, WorktreeField } from "../workflow/run/RunWorkflowForm";
 import { errorTextClass, fieldClass, hintClass, labelClass, textareaClass } from "../workflow/run/runFormStyles";
@@ -483,7 +483,10 @@ function SetupBody({
   const primaryLabel = mode === "setup" ? "Turn on" : mode === "finish" ? "Save and turn on" : paused ? "Save and resume" : "Save";
   const dialogTitle = mode === "setup" ? `Set up ${title}` : mode === "finish" ? `Finish setting up ${title}` : `${title} in ${projectName}`;
   const integrationEvents = declared.flatMap((t) => integrationOf(t)?.events ?? []);
-  const integrationName = (id: string) => naming.integration(id) || id;
+  const integrationName = (id: string) => {
+    const named = naming.integration(id);
+    return named && named !== id ? named : integrationDisplayName(id);
+  };
   const moreChanged = inputs.more.filter((i) => flat[i.name] !== undefined && value.params && i.name in flattenParams(value.params, groupNames)).length;
   const fieldIds = Object.fromEntries(asked.map((i) => [i.name, fid(`in-${i.name}`)]));
   const typedErrors = Object.fromEntries(asked.map((i) => [i.name, errorFor(i.name)]).filter(([, e]) => e)) as Record<string, string>;
@@ -605,7 +608,10 @@ function SetupBody({
               {inputs.watches.map((input) =>
                 renderInput(
                   input,
-                  input.scopes.length > 0 ? `Only events here start ${input.scopes.length === 1 ? `“${input.scopes[0]}”` : "its triggers"}. Nothing else is touched.` : undefined,
+                  // The author's description says what the scope is for; without one, say it here.
+                  input.scopes.length > 0 && !getInputDescription(input.schema)
+                    ? `Only events here start ${input.scopes.length === 1 ? `“${input.scopes[0]}”` : "its triggers"}. Nothing else is touched.`
+                    : undefined,
                 ),
               )}
             </SetupSection>

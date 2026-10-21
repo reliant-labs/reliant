@@ -153,6 +153,7 @@ export function IntegrationValuePicker(props: IntegrationValuePickerProps) {
   const searchRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const chipRefs = useRef<Array<HTMLButtonElement | null>>([]);
+  const popoverRef = useRef<HTMLDivElement>(null);
 
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -241,6 +242,11 @@ export function IntegrationValuePicker(props: IntegrationValuePickerProps) {
     // Announce when a search settles, not on every keystroke.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, optionsQuery.isFetching, debouncedQuery, optionsQuery.isError]);
+
+  // Inside a scrolling dialog, bring the whole popover into view when it opens.
+  useEffect(() => {
+    if (open && !sheet) popoverRef.current?.scrollIntoView?.({ block: "nearest" });
+  }, [open, sheet]);
 
   // A click outside closes the popover (the sheet covers the screen and has Done).
   useEffect(() => {
@@ -613,6 +619,7 @@ export function IntegrationValuePicker(props: IntegrationValuePickerProps) {
           </PickerSheet>
         ) : (
           <div
+            ref={popoverRef}
             className="absolute left-0 right-0 top-full z-30 mt-1 overflow-hidden rounded-md border border-border bg-card elevation-3 motion-safe:animate-in motion-safe:fade-in-0"
             data-testid="picker-popover"
           >

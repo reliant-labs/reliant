@@ -1,13 +1,20 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * The Automations tab (/workflows/automations) — every automation the user owns, across projects
- * (research/WORKFLOW_UI.md §7.2, decision 10: all projects).
+ * The Automations tab (/workflows/automations): a status overview of what
+ * runs by itself, across every project, and whether it is working
+ * (automation-ux-spec.md §2.1).
  *
- * The page answers "what will run on its own, is it healthy, and what fires
- * next?": the "Coming up" strip on top for the next 24 hours, then the list
- * grouped by workflow or project, with anything failing, waiting or skipping
- * pinned under "Needs attention".
+ *   - Counts: need you · on and healthy · paused · the next scheduled run.
+ *   - "Needs you": every automation in an attention state, each with its one
+ *     call to action as a button on the row.
+ *   - Coming up: what fires in the next 24 hours.
+ *   - Then one row per automation — a workflow turned on in a project, or a
+ *     custom trigger — grouped by workflow or project.
+ *
+ * It lists only what the user turned on. Discovering what COULD run is the
+ * Library's job; showing switched-off workflows here ("Not enabled yet") is
+ * what blurred the two tabs, so it is gone.
  */
 
 import { useMemo, useState } from "react";
@@ -19,33 +26,20 @@ import PageHeader from "../forge-ui/page_header";
 import { Button } from "../ui/Button";
 import { triggerErrorMessage } from "@/api/trigger-grpc";
 import { useTriggers } from "@/hooks/trigger-queries";
-import { useWorkflowLibrary } from "@/hooks/workflow-library-queries";
-import { inactiveWorkflows, type InactiveWorkflow } from "@/lib/triggerRail";
-import { useProjectStore } from "@/store/projectStore";
-import { InactiveDeclaredTriggers } from "./InactiveDeclaredTriggers";
+import { formatAbsoluteTime, formatRelativeTime } from "@/lib/relativeTime";
 import { AutomationFormDialog } from "./AutomationFormDialog";
-import { AutomationGroups, GroupBySwitch } from "./AutomationGroups";
+import { AutomationGroups, GroupBySwitch, NeedsYouList } from "./AutomationGroups";
 import { ComingUpTimeline } from "./ComingUpTimeline";
-import type { AutomationGroupBy } from "./automationGrouping";
+import { automationCounts, automationOverview, type AutomationGroupBy } from "./automationGrouping";
 
 export function AutomationsListPage() {
   const triggersQuery = useTriggers();
   const [creating, setCreating] = useState(false);
   const [groupBy, setGroupBy] = useState<AutomationGroupBy>("workflow");
-  const projectId = useProjectStore((state) => state.currentProject?.id);
-  const library = useWorkflowLibrary(projectId);
 
-  const triggers = triggersQuery.data ?? [];
-  const hasTriggers = triggers.length > 0;
-  // What workflows declare and nothing activates yet. Drafts cannot be
-  // activated, so they are left out.
-  const inactive = useMemo(
-    () =>
-      triggersQuery.data && library.data
-        ? inactiveWorkflows(library.data.workflows.filter((w) => w.status !== "draft"), triggersQuery.data)
-        : [],
-    [triggersQuery.data, library.data],
-  );
+  const triggers = useMemo(() => triggersQuery.data ?? [], [triggersQuery.data]);
+  const overview = useMemo(() => automationOverview(triggers, groupBy), [triggers, groupBy]);
+  const counts = useMemo(() => automationCounts(overview.all), [overview.all]);
 
   return (
     <div className="space-y-4">
@@ -53,19 +47,15 @@ export function AutomationsListPage() {
         <PageHeader
           className=""
           title="Automations"
-          subtitle="Runs that start on a schedule, a webhook or an app event, with no one typing. Each run is recorded so you can review it afterwards."
-          actions={
-            hasTriggers
-              ? [
-                  {
-                    label: "New automation",
-                    variant: "primary",
-                    icon: <Plus className="h-4 w-4" aria-hidden="true" />,
-                    onClick: () => setCreating(true),
-                  },
-                ]
-              : []
-          }
+          subtitle="What runs by itself, across every project, and whether it is working."
+          actions={[
+            {
+              label: "Custom automation",
+              variant: "secondary",
+              icon: <Plus className="h-4 w-4" aria-hidden="true" />,
+              onClick: () => setCreating(true),
+            },
+          ]}
         />
       </div>
 
@@ -79,20 +69,22 @@ export function AutomationsListPage() {
             Try again
           </Button>
         </Card>
-      ) : !hasTriggers ? (
-        <>
-          <NotActiveYet items={inactive} projectId={projectId} />
-          <EmptyAutomations onCreate={() => setCreating(true)} />
-        </>
+      ) : overview.all.length === 0 ? (
+        <EmptyAutomations onCreate={() => setCreating(true)} />
       ) : (
         <>
-          <NotActiveYet items={inactive} projectId={projectId} />
+          <CountsStrip counts={counts} />
+          <NeedsYouList units={overview.needsYou} />
           <ComingUpTimeline triggers={triggers} />
-          {/* The list's own control sits on the list, not in the page header. */}
-          <div className="flex items-center justify-end">
-            <GroupBySwitch value={groupBy} onChange={setGroupBy} />
-          </div>
-          <AutomationGroups triggers={triggers} groupBy={groupBy} />
+          {overview.groups.length > 0 && (
+            <>
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="text-sm font-semibold text-foreground">On</h2>
+                <GroupBySwitch value={groupBy} onChange={setGroupBy} />
+              </div>
+              <AutomationGroups groups={overview.groups} />
+            </>
+          )}
         </>
       )}
 
@@ -101,45 +93,66 @@ export function AutomationsListPage() {
   );
 }
 
-/** The workflows that declare triggers nothing runs yet, each with Enable. */
-function NotActiveYet({ items, projectId }: { items: InactiveWorkflow[]; projectId?: string }) {
-  if (items.length === 0) return null;
+/** Four numbers across the top. "Need you" jumps to the list it counts. */
+function CountsStrip({ counts }: { counts: ReturnType<typeof automationCounts> }) {
+  const cells: Array<{ label: string; value: string; href?: string; title?: string; tone?: string }> = [
+    { label: "need you", value: String(counts.needYou), href: counts.needYou > 0 ? "#needs-you" : undefined, tone: counts.needYou > 0 ? "text-warning-ink" : undefined },
+    { label: "on and healthy", value: String(counts.healthyOn) },
+    { label: "paused", value: String(counts.paused) },
+    {
+      label: "until the next scheduled run",
+      value: counts.nextRunAt ? formatRelativeTime(counts.nextRunAt) : "—",
+      title: counts.nextRunAt ? formatAbsoluteTime(counts.nextRunAt) : "Nothing is scheduled",
+    },
+  ];
   return (
-    <section aria-label="Not enabled yet">
-      <Card padding="none" className="overflow-hidden">
-        <div className="border-b border-border/60 px-4 py-2.5">
-          <h2 className="text-sm font-semibold text-foreground">Not enabled yet</h2>
-          <p className="text-xs text-muted-foreground">
-            Workflows that declare when they should run. Declaring fires nothing: enable a workflow to choose the project, machine and connected accounts its runs use.
-          </p>
-        </div>
-        <InactiveDeclaredTriggers items={items} defaultProjectId={projectId} />
-      </Card>
-    </section>
+    <Card padding="none" className="overflow-hidden" data-testid="automation-counts">
+      <dl className="grid grid-cols-2 divide-border/60 sm:grid-cols-4 sm:divide-x">
+        {cells.map((cell) => {
+          const body = (
+            <>
+              <dd className={`text-2xl font-semibold tabular-nums text-foreground ${cell.tone ?? ""}`}>{cell.value}</dd>
+              <dt className="mt-0.5 text-xs text-muted-foreground">{cell.label}</dt>
+            </>
+          );
+          return (
+            <div key={cell.label} className="flex flex-col-reverse px-4 py-3" title={cell.title}>
+              {cell.href ? (
+                <a href={cell.href} className="flex flex-col-reverse rounded-sm hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40">
+                  {body}
+                </a>
+              ) : (
+                body
+              )}
+            </div>
+          );
+        })}
+      </dl>
+    </Card>
   );
 }
 
 function EmptyAutomations({ onCreate }: { onCreate: () => void }) {
   return (
-    <Card padding="lg" className="flex flex-col items-center px-6 py-14 text-center">
+    <Card padding="lg" className="flex flex-col items-center px-6 py-14 text-center" data-testid="automations-empty">
       <div className="flex h-12 w-12 items-center justify-center rounded-full border border-border/60 bg-background text-muted-foreground">
         <CalendarClock className="h-6 w-6" aria-hidden="true" />
       </div>
-      <h2 className="mt-4 text-base font-semibold text-foreground">Nothing runs on its own yet</h2>
+      <h2 className="mt-4 text-base font-semibold text-foreground">Nothing runs by itself yet.</h2>
       <p className="mt-2 max-w-md text-sm text-muted-foreground">
-        An automation runs a workflow on a schedule, a webhook or an app event, with no one typing:
-        "every weekday at 9 AM, triage new issues". Each run works unattended and is recorded for you to review.
+        Set up a workflow from the Library to run it when something happens — a pull request opens, an issue is labelled — or on a schedule.
+        Every run is recorded for you to review.
       </p>
       <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
-        <Button variant="primary" leftIcon={<Plus className="h-4 w-4" />} onClick={onCreate}>
-          New automation
-        </Button>
         <Link
           to="/workflows/library"
-          className="inline-flex h-9 items-center rounded-md border border-border px-4 text-sm font-medium text-foreground transition-colors hover:bg-muted/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+          className="inline-flex h-9 items-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
         >
-          Browse workflows
+          Browse the Library
         </Link>
+        <Button variant="outline" leftIcon={<Plus className="h-4 w-4" />} onClick={onCreate}>
+          Custom automation
+        </Button>
       </div>
     </Card>
   );
@@ -149,18 +162,8 @@ function EmptyAutomations({ onCreate }: { onCreate: () => void }) {
 function ListSkeleton() {
   return (
     <div aria-busy="true" aria-label="Loading automations" className="space-y-6">
-      <Card padding="none">
-        <div className="border-b border-border/60 px-5 py-3">
-          <div className="h-4 w-24 animate-pulse rounded bg-border motion-reduce:animate-none" />
-        </div>
-        <div className="space-y-2 px-5 py-4">
-          {[0, 1, 2].map((lane) => (
-            <div key={lane} className="flex items-center gap-4">
-              <div className="h-3 w-32 animate-pulse rounded bg-border/80 motion-reduce:animate-none" />
-              <div className="h-5 flex-1 rounded-sm border border-border/60 bg-background" />
-            </div>
-          ))}
-        </div>
+      <Card padding="none" className="h-20">
+        <div className="h-full animate-pulse bg-border/20 motion-reduce:animate-none" />
       </Card>
       <Card padding="none">
         {[0, 1, 2, 3].map((row) => (

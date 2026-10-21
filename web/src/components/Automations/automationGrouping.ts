@@ -1,126 +1,119 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * How the Automations list is grouped and ordered (research/WORKFLOW_UI.md
- * §7.2), kept pure so the order a user sees is pinned by tests.
+ * How the Automations overview is split and ordered (automation-ux-spec.md
+ * §2.1), kept pure so the order a user sees is pinned by tests.
  *
- *   - Group by Workflow (the default) or by Project.
- *   - A "Needs attention" pseudo-group is pinned on top, holding every
- *     Failing / Waiting for machine / Skipping / Degraded row across groups.
- *     It exists only when non-empty. A row that needs attention is listed
- *     there INSTEAD of in its group, never in both: two switches for one
- *     automation on one screen is a trap. A group left empty by that is
- *     dropped.
- *   - Within a group: worst health first, then soonest next fire, then name.
- *   - Groups are ordered by their label.
+ *   - The unit is an AUTOMATION (lib/automationUnits.ts): one workflow turned
+ *     on in one project, or one custom trigger — never one row per trigger.
+ *   - "Needs you" holds every unit in an attention state, worst first. A unit
+ *     there is listed INSTEAD of in its group, never in both.
+ *   - The rest are grouped by Workflow (the default) or by Project; within a
+ *     group, worst health first, then soonest next run, then name. Groups are
+ *     ordered by their label, and a group left empty is dropped.
  */
 
 import type { Trigger } from "@/api/trigger-grpc";
-import { automationHealth, type AutomationHealthDisplay } from "@/lib/automationHealth";
+import { automationUnits, compareUnits, unitNextFireAt, type AutomationUnit } from "@/lib/automationUnits";
 import { getWorkflowDisplayName } from "../workflow/useWorkflowInputs";
 
 export type AutomationGroupBy = "workflow" | "project";
 
-export interface AutomationListEntry {
-  trigger: Trigger;
-  health: AutomationHealthDisplay;
-}
-
 export interface AutomationGroup {
   key: string;
   label: string;
-  entries: AutomationListEntry[];
+  units: AutomationUnit[];
 }
 
-export interface GroupedAutomations {
-  /** Absent when nothing needs attention. */
-  attention?: AutomationGroup;
+export interface AutomationOverview {
+  /** Every unit that needs the user, worst first. */
+  needsYou: AutomationUnit[];
+  /** Everything else, grouped. */
   groups: AutomationGroup[];
+  /** Every unit, for the counts. */
+  all: AutomationUnit[];
 }
-
-export const NEEDS_ATTENTION_KEY = "needs-attention";
 
 /** An empty workflow means the owner's default, resolved at fire time. */
 export function workflowGroupLabel(workflow: string): string {
   return workflow ? getWorkflowDisplayName(workflow, true) : "Default workflow";
 }
 
-function groupKeyAndLabel(trigger: Trigger, by: AutomationGroupBy): [string, string] {
+export function unitWorkflow(unit: AutomationUnit): string {
+  return unit.kind === "workflow" ? unit.workflowRef : unit.trigger.workflow;
+}
+
+export function unitProject(unit: AutomationUnit): { id: string; name: string } {
+  const t = unit.kind === "workflow" ? unit.triggers[0]! : unit.trigger;
+  return { id: t.projectId, name: t.projectName ?? "Deleted project" };
+}
+
+/** What a unit is called on the list: its workflow's title, or a custom trigger's own name. */
+export function unitTitle(unit: AutomationUnit): string {
+  return unit.kind === "workflow" ? workflowGroupLabel(unit.workflowRef) : unit.trigger.name;
+}
+
+function groupKeyAndLabel(unit: AutomationUnit, by: AutomationGroupBy): [string, string] {
   if (by === "project") {
-    return [`project:${trigger.projectId}`, trigger.projectName ?? "Deleted project"];
+    const project = unitProject(unit);
+    return [`project:${project.id}`, project.name];
   }
-  return [`workflow:${trigger.workflow}`, workflowGroupLabel(trigger.workflow)];
+  const workflow = unitWorkflow(unit);
+  return [`workflow:${workflow}`, workflowGroupLabel(workflow)];
 }
 
-function nextFireMs(trigger: Trigger): number {
-  if (!trigger.enabled || !trigger.nextFireAt) return Number.POSITIVE_INFINITY;
-  const time = Date.parse(trigger.nextFireAt);
-  return Number.isNaN(time) ? Number.POSITIVE_INFINITY : time;
+function compareWithin(a: AutomationUnit, b: AutomationUnit): number {
+  const next = (u: AutomationUnit) => {
+    const at = unitNextFireAt(u);
+    return at ? Date.parse(at) : Number.POSITIVE_INFINITY;
+  };
+  return a.health.severity - b.health.severity || next(a) - next(b) || compareUnits(a, b);
 }
 
-export function compareEntries(a: AutomationListEntry, b: AutomationListEntry): number {
-  return (
-    a.health.severity - b.health.severity ||
-    nextFireMs(a.trigger) - nextFireMs(b.trigger) ||
-    a.trigger.name.localeCompare(b.trigger.name) ||
-    a.trigger.id.localeCompare(b.trigger.id)
-  );
-}
-
-export function groupAutomations(triggers: Trigger[], by: AutomationGroupBy): GroupedAutomations {
-  const attention: AutomationListEntry[] = [];
+export function automationOverview(triggers: readonly Trigger[], by: AutomationGroupBy): AutomationOverview {
+  const all = automationUnits(triggers);
+  const needsYou = all.filter((u) => u.health.needsAttention).sort(compareUnits);
   const groups = new Map<string, AutomationGroup>();
-
-  for (const trigger of triggers) {
-    const entry = { trigger, health: automationHealth(trigger) };
-    if (entry.health.needsAttention) {
-      attention.push(entry);
-      continue;
-    }
-    const [key, label] = groupKeyAndLabel(trigger, by);
-    const group = groups.get(key) ?? { key, label, entries: [] };
-    group.entries.push(entry);
+  for (const unit of all) {
+    if (unit.health.needsAttention) continue;
+    const [key, label] = groupKeyAndLabel(unit, by);
+    const group = groups.get(key) ?? { key, label, units: [] };
+    group.units.push(unit);
     groups.set(key, group);
   }
-
-  const sorted = [...groups.values()]
-    .map((group) => ({ ...group, entries: [...group.entries].sort(compareEntries) }))
-    .sort((a, b) => a.label.localeCompare(b.label) || a.key.localeCompare(b.key));
-
   return {
-    attention:
-      attention.length > 0
-        ? { key: NEEDS_ATTENTION_KEY, label: "Needs attention", entries: attention.sort(compareEntries) }
-        : undefined,
-    groups: sorted,
+    needsYou,
+    groups: [...groups.values()]
+      .map((group) => ({ ...group, units: [...group.units].sort(compareWithin) }))
+      .sort((a, b) => a.label.localeCompare(b.label) || a.key.localeCompare(b.key)),
+    all,
   };
 }
 
-export type GroupStateKind = "enabled" | "disabled" | "broken" | "mixed";
-
-/**
- * A group's one-word state for its header: Broken if any automation in it is
- * broken (the worst news wins), else Enabled if all are on, Disabled if none
- * are, Mixed if some are. The Needs attention group is a mixture by
- * construction and has no state.
- */
-export function groupState(entries: AutomationListEntry[]): GroupStateKind {
-  if (entries.some((entry) => entry.health.key === "broken")) return "broken";
-  const on = entries.filter((entry) => entry.trigger.enabled).length;
-  if (on === entries.length) return "enabled";
-  return on === 0 ? "disabled" : "mixed";
+/** "3 automations · 2 on". */
+export function groupSummary(units: readonly AutomationUnit[]): string {
+  const on = units.filter((u) => u.enabled || (u.kind === "workflow" && u.partlyEnabled)).length;
+  return `${units.length} ${units.length === 1 ? "automation" : "automations"} · ${on} on`;
 }
 
-export const GROUP_STATE_LABEL: Record<GroupStateKind, string> = {
-  enabled: "Enabled",
-  disabled: "Disabled",
-  broken: "Broken",
-  mixed: "Partly enabled",
-};
+export interface AutomationCounts {
+  needYou: number;
+  healthyOn: number;
+  paused: number;
+  /** The soonest scheduled run across everything that is on. */
+  nextRunAt?: string;
+}
 
-/** "3 automations · 2 on". */
-export function groupSummary(entries: AutomationListEntry[]): string {
-  const on = entries.filter((entry) => entry.trigger.enabled).length;
-  const noun = entries.length === 1 ? "automation" : "automations";
-  return `${entries.length} ${noun} · ${on} on`;
+export function automationCounts(units: readonly AutomationUnit[]): AutomationCounts {
+  let nextRunAt: string | undefined;
+  for (const unit of units) {
+    const at = unitNextFireAt(unit);
+    if (at && (!nextRunAt || Date.parse(at) < Date.parse(nextRunAt))) nextRunAt = at;
+  }
+  return {
+    needYou: units.filter((u) => u.health.needsAttention).length,
+    healthyOn: units.filter((u) => !u.health.needsAttention && u.health.key !== "paused").length,
+    paused: units.filter((u) => u.health.key === "paused").length,
+    nextRunAt,
+  };
 }

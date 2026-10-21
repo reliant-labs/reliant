@@ -76,6 +76,8 @@ vi.mock("@/hooks/useOnboardingQueries", () => ({
 }));
 vi.mock("@/hooks/trigger-queries", () => ({
   useSetTriggerEnabled: () => ({ mutate: mocks.setEnabled, isPending: false }),
+  // A custom automation: its items link to its own page.
+  useTriggerById: () => undefined,
 }));
 vi.mock("@/hooks/useGoToBilling", () => ({ useGoToBilling: () => vi.fn() }));
 vi.mock("@/hooks/useTitleBarChrome", () => ({

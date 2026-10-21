@@ -34,7 +34,9 @@ import { InboxItemKind, type InboxItem as InboxItemData, type InboxStorage as In
 import { answerQuestion } from "@/hooks/approval-queries";
 import { inboxKeys, removeInboxItems } from "@/hooks/inbox-queries";
 import { useResumeDaemon } from "@/hooks/useOnboardingQueries";
-import { useSetTriggerEnabled } from "@/hooks/trigger-queries";
+import { useSetTriggerEnabled, useTriggerById } from "@/hooks/trigger-queries";
+import { automationHref } from "@/lib/workflowsArea";
+import { SetupDialogFor } from "../Automations/SetupDialogFor";
 import { useGoToBilling } from "@/hooks/useGoToBilling";
 import { isQuotaResumeError, resumeErrorMessage } from "@/lib/daemon-resume";
 import { formatAbsoluteTime, formatRelativeTime } from "@/lib/relativeTime";
@@ -243,14 +245,50 @@ function SubjectLink({ item }: { item: InboxItemData }) {
       </Link>
     );
   }
-  if (item.triggerId) {
+  if (item.triggerId) return <AutomationSubjectLink triggerId={item.triggerId} name={name} />;
+  return <span className={subjectClass}>{name}</span>;
+}
+
+/**
+ * An automation item names the automation: a workflow automation opens on its
+ * workflow's page, scrolled to it (where it is configured); a custom one on
+ * its own page. The trigger is read from the list cache to know which.
+ */
+function AutomationSubjectLink({ triggerId, name }: { triggerId: string; name: string }) {
+  const trigger = useTriggerById(triggerId);
+  if (trigger?.workflowTrigger) {
     return (
-      <Link to="/workflows/automations/$triggerId" params={{ triggerId: item.triggerId }} className={subjectClass} title={name}>
+      <a href={automationHref(trigger)} className={subjectClass} title={name}>
         {name}
-      </Link>
+      </a>
     );
   }
-  return <span className={subjectClass}>{name}</span>;
+  return (
+    <Link to="/workflows/automations/$triggerId" params={{ triggerId }} className={subjectClass} title={name}>
+      {name}
+    </Link>
+  );
+}
+
+/** "Open settings" for a workflow automation that can't start; its own page for a custom one. */
+function LaunchFailedAction({ triggerId }: { triggerId: string }) {
+  const trigger = useTriggerById(triggerId);
+  const [open, setOpen] = useState(false);
+  if (trigger?.workflowTrigger) {
+    return (
+      <>
+        <button type="button" className={actionButtonClass} onClick={() => setOpen(true)}>
+          Open settings
+        </button>
+        {open && <SetupDialogFor workflowRef={trigger.workflow} projectId={trigger.projectId} mode="settings" onClose={() => setOpen(false)} />}
+      </>
+    );
+  }
+  return (
+    <Link to="/workflows/automations/$triggerId" params={{ triggerId }} className={actionButtonClass}>
+      Edit automation
+    </Link>
+  );
 }
 
 /** The one-line detail after the name, and its full text for the tooltip. */
@@ -358,11 +396,7 @@ function InlineAction({ item, expanded, onToggle, onRaceOrError }: InlineActionP
     case "automationFailing":
       return <FailingAutomationAction triggerId={item.triggerId} lastRunChatId={payload.value.lastRunChatId} />;
     case "automationLaunchFailed":
-      return (
-        <Link to="/workflows/automations/$triggerId" params={{ triggerId: item.triggerId }} className={actionButtonClass}>
-          Edit automation
-        </Link>
-      );
+      return <LaunchFailedAction triggerId={item.triggerId} />;
     case "storage":
       return (
         <StorageAction storage={payload.value} label={machineName(payload.value.daemonName, payload.value.daemonId)} />
