@@ -133,13 +133,13 @@
       }
     },
     {
-      "id": "t-rpc-GetPendingQuestion-rate",
+      "id": "t-rpc-ListPendingQuestions-rate",
       "x": 0,
       "y": 12,
       "w": 8,
       "h": 6,
       "config": {
-        "name": "GetPendingQuestion: requests",
+        "name": "ListPendingQuestions: requests",
         "source": "Traces",
         "displayType": "line",
         "select": [
@@ -149,7 +149,7 @@
             "alias": "requests"
           }
         ],
-        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.QuestionService/GetPendingQuestion'",
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.QuestionService/ListPendingQuestions'",
         "whereLanguage": "sql",
         "granularity": "auto",
         "numberFormat": {
@@ -160,13 +160,13 @@
       }
     },
     {
-      "id": "t-rpc-GetPendingQuestion-errors",
+      "id": "t-rpc-ListPendingQuestions-errors",
       "x": 8,
       "y": 12,
       "w": 8,
       "h": 6,
       "config": {
-        "name": "GetPendingQuestion: error rate",
+        "name": "ListPendingQuestions: error rate",
         "source": "Traces",
         "displayType": "line",
         "select": [
@@ -183,7 +183,7 @@
             "alias": "requests"
           }
         ],
-        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.QuestionService/GetPendingQuestion'",
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.QuestionService/ListPendingQuestions'",
         "whereLanguage": "sql",
         "granularity": "auto",
         "seriesReturnType": "ratio",
@@ -194,13 +194,13 @@
       }
     },
     {
-      "id": "t-rpc-GetPendingQuestion-latency",
+      "id": "t-rpc-ListPendingQuestions-latency",
       "x": 16,
       "y": 12,
       "w": 8,
       "h": 6,
       "config": {
-        "name": "GetPendingQuestion: latency",
+        "name": "ListPendingQuestions: latency",
         "source": "Traces",
         "displayType": "line",
         "select": [
@@ -223,7 +223,7 @@
             "alias": "p99"
           }
         ],
-        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.QuestionService/GetPendingQuestion'",
+        "where": "SpanKind IN ('Server', 'SPAN_KIND_SERVER') AND match(SpanName, '^[A-Za-z0-9_.]+/[A-Za-z0-9_]+$') AND SpanName = 'reliant.v1.QuestionService/ListPendingQuestions'",
         "whereLanguage": "sql",
         "granularity": "auto",
         "numberFormat": {

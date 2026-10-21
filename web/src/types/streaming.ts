@@ -254,6 +254,8 @@ export interface QuestionUpdate {
   question_id: string;
   chat_id: string;
   workflow_id: string;
+  /** The thread that asked; the main thread's id is the chat id. */
+  thread_id?: string;
   step_id: string;
   status: "pending" | "resolved";
   metadata?: string;

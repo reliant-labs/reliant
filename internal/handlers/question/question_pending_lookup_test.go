@@ -16,10 +16,10 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 )
 
-// TestGetPendingQuestionRejectsUnknownChat is the regression behind
+// TestListPendingQuestionsRejectsUnknownChat is the regression behind
 // "`workflow questions <short-id>` reports no gate while a gate is open".
 //
-// GetPendingQuestion used to skip the chat-existence check every other
+// The pending-question lookup used to skip the chat-existence check every other
 // supervision RPC performs, so `WHERE chat_id = '<short-id>'` found no row and
 // the handler returned an empty-but-successful response. The CLI cannot tell
 // that apart from a genuinely quiet run, so it prints "No open questions." and
@@ -28,7 +28,7 @@ import (
 // the id is bad, the other says the run is fine.
 //
 // An id that does not name a chat must be an error, not an empty answer.
-func TestGetPendingQuestionRejectsUnknownChat(t *testing.T) {
+func TestListPendingQuestionsRejectsUnknownChat(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -51,8 +51,8 @@ func TestGetPendingQuestionRejectsUnknownChat(t *testing.T) {
 
 	svc := NewTestQuestion(t, WithQuestionDeps(Deps{Repo: repo}))
 
-	get := func(ctx context.Context, id string) (*connect.Response[reliantv1.GetPendingQuestionResponse], error) {
-		return svc.GetPendingQuestion(ctx, connect.NewRequest(&reliantv1.GetPendingQuestionRequest{ChatId: id}))
+	get := func(ctx context.Context, id string) (*connect.Response[reliantv1.ListPendingQuestionsResponse], error) {
+		return svc.ListPendingQuestions(ctx, connect.NewRequest(&reliantv1.ListPendingQuestionsRequest{ChatId: id}))
 	}
 
 	t.Run("short id prefix of a real chat is not found", func(t *testing.T) {
@@ -81,6 +81,61 @@ func TestGetPendingQuestionRejectsUnknownChat(t *testing.T) {
 		// a false negative for a false positive.
 		resp, err := get(ctx, chatID)
 		require.NoError(t, err)
-		assert.Nil(t, resp.Msg.GetQuestion())
+		assert.Empty(t, resp.Msg.GetQuestions())
 	})
+}
+
+// TestListPendingQuestionsReturnsEveryThreadsQuestion is the regression behind
+// a spawned agent that stayed blocked for hours (chat adcee226): spawn A asked
+// a question, spawn B later asked newer ones, and the old single-question
+// lookup (newest from ANY thread, LIMIT 1) only ever surfaced B's. A's
+// question never reached the composer, so the user's reply went to A's
+// mailbox, which a thread parked on a question never drains.
+//
+// Every pending question must come back, oldest first, each naming the thread
+// that asked it, so the client can show the one for the thread in view.
+func TestListPendingQuestionsReturnsEveryThreadsQuestion(t *testing.T) {
+	repo, cleanup := db.SetupTestDB(t)
+	t.Cleanup(cleanup)
+
+	ctx := AuthedContext(t)
+	now := time.Now().UTC().Truncate(time.Second)
+
+	projectID := "test-project-questions-" + uuid.NewString()
+	require.NoError(t, repo.CreateProject(ctx, &db.Project{
+		ID: projectID, UserID: "test-user", Name: "Questions Test Project",
+		Path: t.TempDir(), CreatedAt: now, UpdatedAt: now, LastActive: now,
+	}))
+	chatID := uuid.NewString()
+	require.NoError(t, repo.CreateChat(ctx, &db.Chat{
+		ID: chatID, UserID: "test-user", Title: "Two spawns asking", ProjectID: projectID,
+		State: db.ChatStateIdle, CreatedAt: now, UpdatedAt: now,
+	}))
+
+	ask := func(id, threadID string, status int, at time.Time) {
+		t.Helper()
+		metadata := `{"questions":[{"question":"` + id + `?"}]}`
+		require.NoError(t, repo.CreateQuestion(ctx, &db.Question{
+			ID: id, ChatID: chatID, WorkflowID: "wf-" + threadID, TemporalWorkflowID: chatID,
+			ThreadID: threadID, StepID: "ask_user", Status: status, Metadata: &metadata, CreatedAt: at,
+		}))
+	}
+	spawnA, spawnB := "thread-a-"+uuid.NewString(), "thread-b-"+uuid.NewString()
+	qA, qB, qBDone := uuid.NewString(), uuid.NewString(), uuid.NewString()
+	ask(qA, spawnA, db.QuestionStatusPending, now.Add(-2*time.Hour))
+	ask(qBDone, spawnB, db.QuestionStatusResolved, now.Add(-time.Hour))
+	ask(qB, spawnB, db.QuestionStatusPending, now.Add(-time.Minute))
+
+	svc := NewTestQuestion(t, WithQuestionDeps(Deps{Repo: repo}))
+	resp, err := svc.ListPendingQuestions(ctx, connect.NewRequest(&reliantv1.ListPendingQuestionsRequest{ChatId: chatID}))
+	require.NoError(t, err)
+
+	got := resp.Msg.GetQuestions()
+	require.Len(t, got, 2, "both threads' pending questions, and not the resolved one")
+	assert.Equal(t, qA, got[0].GetQuestionId(), "oldest first: spawn A's question must not be hidden behind B's newer one")
+	assert.Equal(t, spawnA, got[0].GetThreadId())
+	assert.Equal(t, "wf-"+spawnA, got[0].GetWorkflowId())
+	assert.Equal(t, "pending", got[0].GetStatus())
+	assert.Equal(t, qB, got[1].GetQuestionId())
+	assert.Equal(t, spawnB, got[1].GetThreadId())
 }

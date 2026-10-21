@@ -15,8 +15,11 @@ enum QuestionStatus {
 service QuestionService {
   // ResolveQuestion resolves a pending question with the user's answer
   rpc ResolveQuestion(ResolveQuestionRequest) returns (ResolveQuestionResponse) {}
-  // GetPendingQuestion gets the current pending question for a chat
-  rpc GetPendingQuestion(GetPendingQuestionRequest) returns (GetPendingQuestionResponse) {}
+  // ListPendingQuestions lists every pending question in a chat, oldest
+  // first, each naming the thread that asked it. A chat with several spawned
+  // agents can have one question pending per thread, so a client must pick
+  // the one for the thread it is showing rather than "the chat's question".
+  rpc ListPendingQuestions(ListPendingQuestionsRequest) returns (ListPendingQuestionsResponse) {}
 }
 
 message ResolveQuestionRequest {
@@ -29,12 +32,13 @@ message ResolveQuestionResponse {
   bool success = 1;
 }
 
-message GetPendingQuestionRequest {
+message ListPendingQuestionsRequest {
   string chat_id = 1;
 }
 
-message GetPendingQuestionResponse {
-  optional QuestionInfo question = 1;
+message ListPendingQuestionsResponse {
+  // Oldest first. Empty when nothing in the chat is waiting on the user.
+  repeated QuestionInfo questions = 1;
 }
 
 message QuestionInfo {

@@ -112,7 +112,7 @@ func (s *Service) Terminate(ctx context.Context, chatID string) error {
 			"workflowID", workflowID, "error", stateErr)
 	}
 
-	s.voidPendingQuestion(ctx, chatID)
+	s.voidPendingQuestions(ctx, chatID)
 
 	terminator, ok := s.temporal.(TemporalTerminator)
 	if !ok {
@@ -478,34 +478,35 @@ func (s *Service) markTerminated(ctx context.Context, workflowID string) error {
 	})
 }
 
-func (s *Service) voidPendingQuestion(ctx context.Context, chatID string) {
-	q, err := s.repo.GetPendingQuestionByChatID(ctx, chatID)
+func (s *Service) voidPendingQuestions(ctx context.Context, chatID string) {
+	// Every pending question, not the newest: each spawned agent is a thread of
+	// the run being terminated and can be parked on its own question.
+	questions, err := s.repo.ListPendingQuestionsByChat(ctx, chatID)
 	if err != nil {
-		logging.WarnContext(ctx, "[runs] Failed to look up pending question while terminating",
+		logging.WarnContext(ctx, "[runs] Failed to look up pending questions while terminating",
 			"chatID", chatID, "error", err)
-		return
-	}
-	if q == nil {
 		return
 	}
 
 	terminatedResponse := `{"action":"terminated","reason":"workflow terminated by operator"}`
-	if err := s.repo.ResolveQuestion(ctx, q.ID, &terminatedResponse); err != nil {
-		logging.WarnContext(ctx, "[runs] Failed to resolve pending question while terminating",
-			"chatID", chatID, "questionID", q.ID, "error", err)
-		return
-	}
+	for _, q := range questions {
+		if err := s.repo.ResolveQuestion(ctx, q.ID, &terminatedResponse); err != nil {
+			logging.WarnContext(ctx, "[runs] Failed to resolve pending question while terminating",
+				"chatID", chatID, "questionID", q.ID, "error", err)
+			continue
+		}
 
-	if err := s.repo.EmitQuestionUpdate(ctx, q.ChatID, db.QuestionUpdate{
-		QuestionID: q.ID,
-		ChatID:     q.ChatID,
-		WorkflowID: q.WorkflowID,
-		ThreadID:   q.ThreadID,
-		StepID:     q.StepID,
-		Status:     "resolved",
-	}); err != nil {
-		logging.WarnContext(ctx, "[runs] Failed to emit question resolved update while terminating",
-			"chatID", chatID, "questionID", q.ID, "error", err)
+		if err := s.repo.EmitQuestionUpdate(ctx, q.ChatID, db.QuestionUpdate{
+			QuestionID: q.ID,
+			ChatID:     q.ChatID,
+			WorkflowID: q.WorkflowID,
+			ThreadID:   q.ThreadID,
+			StepID:     q.StepID,
+			Status:     "resolved",
+		}); err != nil {
+			logging.WarnContext(ctx, "[runs] Failed to emit question resolved update while terminating",
+				"chatID", chatID, "questionID", q.ID, "error", err)
+		}
 	}
 }
 

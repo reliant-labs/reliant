@@ -30,17 +30,18 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { renderWithQuery } from "../../../test/renderWithQuery";
 import type { ActiveThreadUpdate } from "../../../types/streaming";
 import type { WorkflowExecutionData } from "../../../types/chat";
+import type { QuestionInfo } from "../../../api/question-grpc";
 
 const CHAT_ID = "chat-abc";
 const WORKTREE_ID = "wt-1";
 
-const { usePendingQuestionMock, useWorkflowExecutionsMock } = vi.hoisted(() => ({
-  usePendingQuestionMock: vi.fn(),
+const { usePendingQuestionsMock, useWorkflowExecutionsMock } = vi.hoisted(() => ({
+  usePendingQuestionsMock: vi.fn(),
   useWorkflowExecutionsMock: vi.fn(),
 }));
 
 vi.mock("../../../hooks/approval-queries", () => ({
-  usePendingQuestion: usePendingQuestionMock,
+  usePendingQuestions: usePendingQuestionsMock,
 }));
 
 vi.mock("../../../hooks/useWorkflowExecutions", () => ({
@@ -92,6 +93,19 @@ function workflow(overrides: Partial<WorkflowExecutionData> = {}): WorkflowExecu
   } as WorkflowExecutionData;
 }
 
+function question(overrides: Partial<QuestionInfo> = {}): QuestionInfo {
+  return {
+    question_id: "q1",
+    chat_id: CHAT_ID,
+    workflow_id: "wf-1",
+    thread_id: "thread-1",
+    step_id: "s1",
+    status: "pending",
+    created_at: "",
+    ...overrides,
+  };
+}
+
 function setChatRunning(running: boolean) {
   useActivityStore
     .getState()
@@ -111,7 +125,7 @@ function renderPill(props: Partial<React.ComponentProps<typeof BackgroundWorkPil
 beforeEach(() => {
   vi.restoreAllMocks();
   localStorage.removeItem(DISMISSED_FAILED_AGENTS_KEY);
-  usePendingQuestionMock.mockReturnValue({ data: null });
+  usePendingQuestionsMock.mockReturnValue({ data: [] });
   useWorkflowExecutionsMock.mockReturnValue({ allWorkflows: [] });
   useThreadActivityStore.getState().clearAll();
   useProcessStore.getState().reset();
@@ -270,9 +284,9 @@ describe("BackgroundWorkPill", () => {
       thread({ thread: "thread-a", workflow_id: "wf-a", thread_title: "researcher" }),
       thread({ thread: "thread-b", workflow_id: "wf-b", thread_title: "implementer" }),
     ]);
-    // The question names the workflow that asked it; only that spawn is gated.
-    usePendingQuestionMock.mockReturnValue({
-      data: { question_id: "q1", chat_id: CHAT_ID, workflow_id: "wf-b", step_id: "s1", status: "pending", created_at: "" },
+    // The question names the thread that asked it; only that spawn is gated.
+    usePendingQuestionsMock.mockReturnValue({
+      data: [question({ question_id: "q1", workflow_id: "wf-b", thread_id: "thread-b" })],
     });
 
     renderPill();
@@ -280,6 +294,79 @@ describe("BackgroundWorkPill", () => {
     const pill = screen.getByTestId("background-work-pill");
     expect(pill).toHaveTextContent("implementer waiting on you");
     expect(pill).not.toHaveTextContent("researcher waiting on you");
+  });
+
+  it("calls out every spawn with a pending question, not only the newest", () => {
+    // Chat adcee226: spawn A asked first, spawn B asked later. Only B's
+    // question was ever surfaced and A sat blocked for hours.
+    useThreadActivityStore.getState().setThreads(CHAT_ID, [
+      thread({ thread: "thread-a", workflow_id: "wf-a", thread_title: "researcher" }),
+      thread({ thread: "thread-b", workflow_id: "wf-b", thread_title: "implementer" }),
+    ]);
+    usePendingQuestionsMock.mockReturnValue({
+      data: [
+        question({ question_id: "qA", workflow_id: "wf-a", thread_id: "thread-a" }),
+        question({ question_id: "qB", workflow_id: "wf-b", thread_id: "thread-b" }),
+      ],
+    });
+    const onSelectThread = vi.fn();
+
+    renderPill({ onSelectThread });
+
+    fireEvent.click(screen.getByTestId("background-work-pill"));
+    expect(screen.getByTestId("background-work-pill")).toHaveTextContent("2 agents waiting on you");
+    expect(screen.getByTestId("background-work-spawn-thread-a")).toHaveTextContent("Waiting on your answer");
+    fireEvent.click(screen.getByTestId("background-work-spawn-thread-a"));
+    expect(onSelectThread).toHaveBeenCalledWith("thread-a");
+  });
+
+  it("surfaces the main thread's question while a spawn is in view, and navigates back to it", () => {
+    usePendingQuestionsMock.mockReturnValue({
+      data: [question({ question_id: "q-main", thread_id: CHAT_ID })],
+    });
+    const onSelectThread = vi.fn();
+
+    renderPill({ selectedThreadId: "thread-a", onSelectThread });
+
+    const pill = screen.getByTestId("background-work-pill");
+    expect(pill).toHaveTextContent("Main thread waiting on you");
+    fireEvent.click(pill);
+    fireEvent.click(screen.getByTestId(`background-work-question-${CHAT_ID}`));
+    expect(onSelectThread).toHaveBeenCalledWith(null);
+  });
+
+  it("does not repeat the question of the thread in view: the composer shows it", () => {
+    usePendingQuestionsMock.mockReturnValue({
+      data: [question({ question_id: "q-main", thread_id: CHAT_ID })],
+    });
+
+    renderPill({ selectedThreadId: null });
+
+    expect(screen.queryByTestId("background-work-pill")).toBeNull();
+  });
+
+  it("surfaces a question on a thread with no live spawn row, titled from the workflow tree", () => {
+    useWorkflowExecutionsMock.mockReturnValue({
+      allWorkflows: [
+        workflow({
+          id: "wf-root",
+          thread: CHAT_ID,
+          origin: "main",
+          children: [workflow({ id: "wf-r", thread: "thread-review", threadTitle: "reviewer", origin: "workflow" })],
+        }),
+      ],
+    });
+    usePendingQuestionsMock.mockReturnValue({
+      data: [question({ question_id: "q-r", thread_id: "thread-review", workflow_id: "wf-r" })],
+    });
+    const onSelectThread = vi.fn();
+
+    renderPill({ onSelectThread });
+
+    fireEvent.click(screen.getByTestId("background-work-pill"));
+    fireEvent.click(screen.getByTestId("background-work-question-thread-review"));
+    expect(screen.getByTestId("background-work-pill")).toHaveTextContent("reviewer waiting on you");
+    expect(onSelectThread).toHaveBeenCalledWith("thread-review");
   });
 
   it("keeps showing a running spawn after the chat goes idle", () => {

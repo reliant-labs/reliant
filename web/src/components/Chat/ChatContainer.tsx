@@ -23,7 +23,6 @@ import {
 import {
   usePendingApprovals,
   useApprovals,
-  usePendingQuestion,
 } from "../../hooks/approval-queries";
 import { useGlobalUpdatesStore } from "../../store/globalUpdatesStore";
 import { useIsChatRunning } from "../../store/activityStore";
@@ -94,7 +93,6 @@ export function ChatContainer({ tabId, isFocused = true, hideChatTitle }: ChatCo
   const connectionStatus = useGlobalUpdatesStore((s) => s.connectionStatus);
   const isChatBusy = useIsChatRunning(chatId);
   const { data: pendingApprovals = [] } = usePendingApprovals(chatId);
-  const { data: pendingQuestion } = usePendingQuestion(chatId);
   const isChatSyncing = useIsChatSyncing(chatId);
 
   // Self-healing subscription invariant: this component renders the active
@@ -325,7 +323,6 @@ export function ChatContainer({ tabId, isFocused = true, hideChatTitle }: ChatCo
       isFocused={isFocused}
       workflowExecution={workflowExecution}
       workflowExecutions={workflowExecutions}
-      hasPendingQuestion={!!pendingQuestion}
       onLoadOlderMessages={handleLoadOlderMessages}
       isLoadingOlderMessages={isLoadingOlderMessages}
       hasOlderMessages={hasOlderMessages}

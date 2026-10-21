@@ -3,6 +3,7 @@ package db
 
 import (
 	"context"
+	"slices"
 	"testing"
 	"time"
 )
@@ -100,6 +101,49 @@ func TestPendingQuestionsByThread_NewestPerThread(t *testing.T) {
 	}
 	if q := byThread["thread-a"]; q == nil || q.ID != "q-new" {
 		t.Errorf("thread-a = %+v, want the newest pending question q-new", q)
+	}
+}
+
+// TestListPendingQuestionsByChat_EveryThread pins what the UI reads: every
+// pending question in the chat, oldest first, each with its thread — including
+// an older question from one thread that a sibling's newer question used to
+// hide (GetPendingQuestionByChatID's LIMIT 1), and both of a thread's pending
+// rows rather than only its newest.
+func TestListPendingQuestionsByChat_EveryThread(t *testing.T) {
+	repo, cleanup := SetupTestDB(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	chatID := "chat-list-pending"
+	base := time.Now().UTC().Truncate(time.Second).Add(-time.Hour)
+	insertPendingQuestionTest(t, repo, "q-a", chatID, "thread-a", "ask_user", QuestionStatusPending, base)
+	insertPendingQuestionTest(t, repo, "q-b1", chatID, "thread-b", "ask_user", QuestionStatusResolved, base.Add(5*time.Minute))
+	insertPendingQuestionTest(t, repo, "q-b2", chatID, "thread-b", "ask_user", QuestionStatusPending, base.Add(10*time.Minute))
+	insertPendingQuestionTest(t, repo, "q-b3", chatID, "thread-b", "ask_user", QuestionStatusPending, base.Add(20*time.Minute))
+	insertPendingQuestionTest(t, repo, "q-other", "chat-other-list", "thread-z", "ask_user", QuestionStatusPending, base)
+
+	got, err := repo.ListPendingQuestionsByChat(ctx, chatID)
+	if err != nil {
+		t.Fatalf("ListPendingQuestionsByChat: %v", err)
+	}
+	var ids, threads []string
+	for _, q := range got {
+		ids = append(ids, q.ID)
+		threads = append(threads, q.ThreadID)
+	}
+	if want := []string{"q-a", "q-b2", "q-b3"}; !slices.Equal(ids, want) {
+		t.Fatalf("ids = %v, want %v (every pending question, oldest first, this chat only)", ids, want)
+	}
+	if want := []string{"thread-a", "thread-b", "thread-b"}; !slices.Equal(threads, want) {
+		t.Errorf("threads = %v, want %v", threads, want)
+	}
+
+	empty, err := repo.ListPendingQuestionsByChat(ctx, "chat-nothing-pending")
+	if err != nil {
+		t.Fatalf("ListPendingQuestionsByChat(empty): %v", err)
+	}
+	if len(empty) != 0 {
+		t.Errorf("got %d questions for a quiet chat, want 0", len(empty))
 	}
 }
 

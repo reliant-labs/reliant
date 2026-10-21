@@ -76,7 +76,7 @@ vi.mock("../../../api/client", async () => {
   };
 });
 vi.mock("../../../hooks/approval-queries", () => ({
-  usePendingQuestion: () => ({ data: null, isLoading: false }),
+  usePendingQuestions: () => ({ data: [], isLoading: false }),
 }));
 
 const DEFINITION = {

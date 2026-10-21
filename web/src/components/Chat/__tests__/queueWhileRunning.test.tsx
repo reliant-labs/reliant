@@ -69,7 +69,7 @@ vi.mock("../../../hooks/chat-queries", async () => {
 });
 
 vi.mock("../../../hooks/approval-queries", () => ({
-  usePendingQuestion: () => ({ data: null, isLoading: false }),
+  usePendingQuestions: () => ({ data: [], isLoading: false }),
 }));
 
 // These results feed effect dependency arrays that call setState. Fresh array

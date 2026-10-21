@@ -47,6 +47,8 @@ import { useChat } from "../../hooks/chat-queries";
 import { useQueuedAgentMessages } from "../../hooks/queued-agent-messages";
 import { isUnadoptedAutomation } from "../../lib/sidebarChatList";
 import { unansweredMessage } from "../../lib/awaitingReply";
+import { usePendingQuestions } from "../../hooks/approval-queries";
+import { questionForThread } from "../../lib/pendingQuestions";
 import { chatMachineNotice, resolveChatMachine } from "../../lib/chatMachineNotice";
 import { useWakingMachines } from "../../lib/machineWake";
 import { useDaemonList } from "@/hooks/useOnboardingQueries";
@@ -94,9 +96,6 @@ interface ChatPresenterProps {
   workflowExecution?: WorkflowExecution;
   workflowExecutions?: WorkflowExecution[];
 
-  // Question (ask_user) state
-  hasPendingQuestion?: boolean;
-
   // Scroll-back paging (the initial message snapshot is bounded, so older
   // history is fetched on demand when the user scrolls to the top)
   onLoadOlderMessages?: () => void;
@@ -133,7 +132,6 @@ export const ChatPresenter = memo(function ChatPresenter({
   paneId,
   workflowExecution,
   workflowExecutions,
-  hasPendingQuestion,
   onLoadOlderMessages,
   isLoadingOlderMessages,
   hasOlderMessages,
@@ -187,6 +185,18 @@ export const ChatPresenter = memo(function ChatPresenter({
   // a question drains nothing, so polling it is pure noise), and the
   // "Interrupt & send now" button, which must not be offered when there is no
   // work in flight to stop.
+  //
+  // "A question waits on the user" is about the thread IN VIEW, the same one
+  // the composer answers: a spawned agent parked on its own question does not
+  // stop the main thread from working, and its question surfaces in the
+  // background-work pill instead.
+  const { data: pendingQuestions } = usePendingQuestions(chatId || undefined);
+  const hasPendingQuestion = !!questionForThread(
+    pendingQuestions,
+    chatId || undefined,
+    selectedThreadId,
+    chatForQueue?.workflowId,
+  );
   const isAgentWorking = isChatBusy && !hasPendingQuestion;
 
   // The run is held until its machine comes up (research/QUEUE_UNTIL_DAEMON.md).
@@ -777,6 +787,8 @@ export const ChatPresenter = memo(function ChatPresenter({
         <BackgroundWorkPill
           chatId={chatId || undefined}
           worktreeId={worktreeId ?? undefined}
+          selectedThreadId={selectedThreadId}
+          mainThreadId={chatForQueue?.workflowId}
           onSelectThread={setSelectedThreadId}
           onSelectCommand={handleSelectBackgroundCommand}
         />

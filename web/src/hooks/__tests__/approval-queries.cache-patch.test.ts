@@ -6,7 +6,8 @@ import {
   approvalKeys,
   patchApprovalsCache,
   upsertApprovalInCache,
-  patchPendingQuestionCache,
+  upsertPendingQuestionInCache,
+  removePendingQuestionFromCache,
   questionKeys,
 } from "../approval-queries";
 
@@ -77,20 +78,45 @@ describe("approval cache patching", () => {
 });
 
 describe("pending question cache patching", () => {
-  it("sets and clears the pending question", () => {
-    patchPendingQuestionCache("c1", {
-      question_id: "q1",
+  const question = (id: string, thread: string) =>
+    ({
+      question_id: id,
       chat_id: "c1",
       workflow_id: "w1",
+      thread_id: thread,
       step_id: "s1",
       status: "pending",
       created_at: "",
-    } as never);
-    expect(
-      queryClient.getQueryData(questionKeys.pending("c1")),
-    ).toMatchObject({ question_id: "q1" });
+    }) as const;
 
-    patchPendingQuestionCache("c1", null);
-    expect(queryClient.getQueryData(questionKeys.pending("c1"))).toBeNull();
+  it("keeps every thread's question: a newer one never replaces an older one", () => {
+    upsertPendingQuestionInCache("c1", question("qA", "spawn-a"));
+    upsertPendingQuestionInCache("c1", question("qB", "spawn-b"));
+    expect(
+      queryClient
+        .getQueryData<{ question_id: string }[]>(questionKeys.pendingList("c1"))
+        ?.map((q) => q.question_id),
+    ).toEqual(["qA", "qB"]);
+  });
+
+  it("re-delivery of the same question updates it in place", () => {
+    upsertPendingQuestionInCache("c1", question("qA", "spawn-a"));
+    upsertPendingQuestionInCache("c1", { ...question("qA", "spawn-a"), metadata: "m" });
+    expect(queryClient.getQueryData(questionKeys.pendingList("c1"))).toEqual([
+      { ...question("qA", "spawn-a"), metadata: "m" },
+    ]);
+  });
+
+  it("a resolution removes only the resolved question", () => {
+    // The incident: B's answer cleared the cache, hiding A's still-pending
+    // question, so the reply typed for A went to A's mailbox instead.
+    upsertPendingQuestionInCache("c1", question("qA", "spawn-a"));
+    upsertPendingQuestionInCache("c1", question("qB", "spawn-b"));
+    removePendingQuestionFromCache("c1", "qB");
+    expect(
+      queryClient
+        .getQueryData<{ question_id: string }[]>(questionKeys.pendingList("c1"))
+        ?.map((q) => q.question_id),
+    ).toEqual(["qA"]);
   });
 });

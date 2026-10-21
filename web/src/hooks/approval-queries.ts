@@ -16,8 +16,9 @@ export const approvalKeys = {
 
 export const questionKeys = {
   all: ["questions"] as const,
-  pending: (chatId: string) =>
-    [...questionKeys.all, "pending", chatId] as const,
+  /** Every pending question in a chat, across all its threads, oldest first. */
+  pendingList: (chatId: string) =>
+    [...questionKeys.all, "pending-list", chatId] as const,
 };
 
 // --- Real-time cache patching ---
@@ -71,18 +72,58 @@ export function upsertApprovalInCache(
 }
 
 /**
- * Patch the pending-question cache for a chat from a stream event.
+ * Patch a chat's pending-question list cache. The updater receives the current
+ * list (or [] if absent) and returns the next one. Seeded even when the query
+ * was never populated, so a streamed question isn't lost before the initial
+ * fetch resolves.
  */
-export function patchPendingQuestionCache(
+function patchPendingQuestionsCache(
   chatId: string,
-  question: QuestionInfo | null,
+  updater: (prev: QuestionInfo[]) => QuestionInfo[],
 ): void {
-  queryClient.setQueryData(questionKeys.pending(chatId), question);
+  queryClient.setQueryData<QuestionInfo[]>(
+    questionKeys.pendingList(chatId),
+    (prev) => updater(prev ?? []),
+  );
 }
 
 /**
- * Answer a pending ask_user question by id, then clear that chat's pending
- * question from the cache. Store-free, so the chat composer (through
+ * Add a pending question from a stream event, or replace the cached one with
+ * the same id. Appended, so the list stays oldest first.
+ */
+export function upsertPendingQuestionInCache(
+  chatId: string,
+  question: QuestionInfo,
+): void {
+  patchPendingQuestionsCache(chatId, (prev) => {
+    const idx = prev.findIndex((q) => q.question_id === question.question_id);
+    if (idx >= 0) {
+      const next = [...prev];
+      next[idx] = { ...prev[idx], ...question };
+      return next;
+    }
+    return [...prev, question];
+  });
+}
+
+/**
+ * Drop one resolved question from a chat's pending list. Only that one: other
+ * threads' questions are still waiting.
+ */
+export function removePendingQuestionFromCache(
+  chatId: string,
+  questionId: string,
+): void {
+  patchPendingQuestionsCache(chatId, (prev) =>
+    prev.some((q) => q.question_id === questionId)
+      ? prev.filter((q) => q.question_id !== questionId)
+      : prev,
+  );
+}
+
+/**
+ * Answer a pending ask_user question by id, then drop it from that chat's
+ * pending list. Store-free, so the chat composer (through
  * chatStore.resolveQuestion) and the Inbox, which holds questions from many
  * chats, share one path.
  */
@@ -94,7 +135,7 @@ export async function answerQuestion(
   await resolvePendingQuestion(chatId, questionId, "reply", JSON.stringify(answers));
 }
 
-/** Resolve a question with any action, and clear the chat's pending cache. */
+/** Resolve a question with any action, and drop it from the chat's pending list. */
 export async function resolvePendingQuestion(
   chatId: string,
   questionId: string,
@@ -102,8 +143,8 @@ export async function resolvePendingQuestion(
   responseData?: string,
 ): Promise<void> {
   await questionGrpc.resolveQuestion(questionId, action, responseData);
-  // Optimistically clear the pending question in the React Query cache.
-  patchPendingQuestionCache(chatId, null);
+  // Optimistically drop it; the stream's "resolved" event does the same.
+  removePendingQuestionFromCache(chatId, questionId);
 }
 
 /**
@@ -141,7 +182,7 @@ export async function approveAllPendingApprovals(chatId: string): Promise<void> 
 // patches them live and REPLAYS the ones a chat missed when it is reopened
 // (cursor resume) or re-snapshotted — the latest per entity is in every
 // snapshot. A time-based staleTime added nothing on top of that except a
-// ListApprovalsByChat + GetPendingQuestion pair on every chat open past 30s,
+// ListApprovalsByChat + ListPendingQuestions pair on every chat open past 30s,
 // racing the replay that was already bringing the same answer.
 const streamMaintained = { staleTime: Infinity } as const;
 
@@ -165,10 +206,15 @@ export function usePendingApprovals(chatId?: string) {
   });
 }
 
-export function usePendingQuestion(chatId?: string) {
-  return useQuery<QuestionInfo | null>({
-    queryKey: questionKeys.pending(chatId!),
-    queryFn: () => questionGrpc.getPendingQuestion(chatId!),
+/**
+ * Every pending question in a chat, oldest first, each with the thread that
+ * asked it. Pick the one for the thread in view with questionForThread
+ * (lib/pendingQuestions); never treat the list as "the chat's question".
+ */
+export function usePendingQuestions(chatId?: string) {
+  return useQuery<QuestionInfo[]>({
+    queryKey: questionKeys.pendingList(chatId!),
+    queryFn: () => questionGrpc.listPendingQuestions(chatId!),
     enabled: !!chatId,
     ...streamMaintained,
   });

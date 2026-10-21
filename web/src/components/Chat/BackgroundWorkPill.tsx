@@ -18,6 +18,12 @@
  * holds the plan the agent belongs to); a message sent to the agent from its
  * own thread resumes it directly. Dismissing the row is remembered on this
  * device.
+ *
+ * Every thread that is waiting on the user's answer is reachable from here.
+ * The composer shows only the question of the thread in view, so a spawn's
+ * question (marked on its row) or the main thread's question while a spawn is
+ * in view (its own row) would otherwise be invisible; selecting the row opens
+ * the asking thread, where the composer answers it.
  */
 
 import { Tooltip } from "../ui/Tooltip";
@@ -34,11 +40,16 @@ import {
   type ActiveSpawn,
   type ActiveCommand,
   type FailedSpawn,
+  type WaitingQuestion,
 } from "./useBackgroundWork";
 
 interface BackgroundWorkPillProps {
   chatId?: string;
   worktreeId?: string;
+  /** The thread in view (null = main); the composer already shows its question. */
+  selectedThreadId?: string | null;
+  /** The chat's main thread id (its root workflow id), when known. */
+  mainThreadId?: string | null;
   /** Focus a spawned agent's thread in the timeline. */
   onSelectThread?: (threadId: string | null) => void;
   /** Reveal a running command in the Commands tab. */
@@ -157,6 +168,28 @@ function SpawnRow({
 </Tooltip>
       </span>
     </div>
+  );
+}
+
+function WaitingQuestionRow({
+  waiting,
+  onSelect,
+}: {
+  waiting: WaitingQuestion;
+  onSelect?: (threadId: string | null) => void;
+}) {
+  return (
+    <button
+      type="button"
+      // The main thread is "no side thread selected".
+      onClick={() => onSelect?.(waiting.isMainThread ? null : waiting.threadId)}
+      className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors hover:bg-accent focus:outline-none focus:ring-1 focus:ring-ring"
+      data-testid={`background-work-question-${waiting.threadId}`}
+    >
+      <HelpCircle className="h-3.5 w-3.5 flex-shrink-0 text-amber-500" />
+      <span className="truncate font-medium text-foreground">{waiting.title}</span>
+      <span className="truncate text-amber-500">Waiting on your answer</span>
+    </button>
   );
 }
 
@@ -316,13 +349,13 @@ function CommandRow({
 export function BackgroundWorkPill({
   chatId,
   worktreeId,
+  selectedThreadId,
+  mainThreadId,
   onSelectThread,
   onSelectCommand,
 }: BackgroundWorkPillProps) {
-  const { spawns, failedSpawns, commands, blockedSpawns, hasWork } = useBackgroundWork(
-    chatId,
-    worktreeId,
-  );
+  const { spawns, failedSpawns, commands, blockedSpawns, waitingQuestions, hasWork } =
+    useBackgroundWork(chatId, worktreeId, selectedThreadId, mainThreadId);
   const [isExpanded, setIsExpanded] = useState(false);
   const [dismissed, setDismissed] = useState(readDismissedFailedAgents);
 
@@ -339,7 +372,8 @@ export function BackgroundWorkPill({
     });
   };
   const hasFailed = visibleFailed.length > 0;
-  const hasAnything = hasWork || hasFailed;
+  const hasWaitingQuestions = waitingQuestions.length > 0;
+  const hasAnything = hasWork || hasFailed || hasWaitingQuestions;
 
   const summary = useMemo(() => {
     const parts: string[] = [];
@@ -362,7 +396,13 @@ export function BackgroundWorkPill({
 
   if (!hasAnything) return null;
 
-  const isBlocked = blockedSpawns.length > 0;
+  // Everything waiting on the user: spawn rows marked blocked, plus threads
+  // with a question that no spawn row shows.
+  const waitingTitles = [
+    ...blockedSpawns.map((spawn) => spawn.title),
+    ...waitingQuestions.map((waiting) => waiting.title),
+  ];
+  const isBlocked = waitingTitles.length > 0;
   const failedLabel = `${visibleFailed.length === 1 ? visibleFailed[0].title : `${visibleFailed.length} agents`} stopped`;
 
   return (
@@ -395,7 +435,7 @@ export function BackgroundWorkPill({
           )}
         >
           {isBlocked
-            ? `${blockedSpawns.length === 1 ? blockedSpawns[0].title : `${blockedSpawns.length} agents`} waiting on you`
+            ? `${waitingTitles.length === 1 ? waitingTitles[0] : `${waitingTitles.length} agents`} waiting on you`
             : hasFailed
               ? failedLabel
               : summary}
@@ -418,6 +458,13 @@ export function BackgroundWorkPill({
 
       {isExpanded && (
         <div className="mt-1 flex flex-col gap-0.5">
+          {waitingQuestions.map((waiting) => (
+            <WaitingQuestionRow
+              key={waiting.threadId}
+              waiting={waiting}
+              onSelect={onSelectThread}
+            />
+          ))}
           {visibleFailed.map((spawn) => (
             <FailedSpawnRow
               key={spawn.workflowId}

@@ -30,7 +30,7 @@ vi.mock("../../../hooks/chat-queries", async () => {
   return { ...actual, useChat: () => ({ data: undefined, isLoading: false }), getChatFromCache: () => undefined };
 });
 vi.mock("../../../hooks/approval-queries", () => ({
-  usePendingQuestion: () => ({ data: null, isLoading: false }),
+  usePendingQuestions: () => ({ data: [], isLoading: false }),
 }));
 const NO_PRESETS = { presets: [] as never[], loading: false };
 const NO_MODELS = { models: [] as never[] };

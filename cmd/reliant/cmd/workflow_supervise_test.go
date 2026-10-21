@@ -24,7 +24,7 @@ type fakeQuestionService struct {
 	reliantv1connect.UnimplementedQuestionServiceHandler
 	mu sync.Mutex
 
-	pending *reliantv1.QuestionInfo
+	pending []*reliantv1.QuestionInfo
 
 	gotQuestionID   string
 	gotAction       string
@@ -32,10 +32,10 @@ type fakeQuestionService struct {
 	resolveCalled   bool
 }
 
-func (f *fakeQuestionService) GetPendingQuestion(_ context.Context, _ *connect.Request[reliantv1.GetPendingQuestionRequest]) (*connect.Response[reliantv1.GetPendingQuestionResponse], error) {
+func (f *fakeQuestionService) ListPendingQuestions(_ context.Context, _ *connect.Request[reliantv1.ListPendingQuestionsRequest]) (*connect.Response[reliantv1.ListPendingQuestionsResponse], error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return connect.NewResponse(&reliantv1.GetPendingQuestionResponse{Question: f.pending}), nil
+	return connect.NewResponse(&reliantv1.ListPendingQuestionsResponse{Questions: f.pending}), nil
 }
 
 func (f *fakeQuestionService) ResolveQuestion(_ context.Context, req *connect.Request[reliantv1.ResolveQuestionRequest]) (*connect.Response[reliantv1.ResolveQuestionResponse], error) {
@@ -147,7 +147,7 @@ func askUserQuestion(questionID, stepID, metadata string) *reliantv1.QuestionInf
 func TestAnswerSingleSubQuestion(t *testing.T) {
 	h := newSuperviseHarness(t)
 	meta := `{"type":"ask_user","tool_call_id":"c","questions":[{"question":"Proceed?","options":[{"label":"Continue"},{"label":"Revise"}]}]}`
-	h.question.pending = askUserQuestion("q-1", "ask_question", meta)
+	h.question.pending = []*reliantv1.QuestionInfo{askUserQuestion("q-1", "ask_question", meta)}
 
 	stdout, stderr, err := h.run(t, "", "workflow", "answer", "chat-1", "--select", "Continue")
 	if err != nil {
@@ -176,7 +176,7 @@ func TestAnswerMultiSubQuestionPositional(t *testing.T) {
 	meta := `{"type":"ask_user","questions":[` +
 		`{"question":"Flavor?","options":[{"label":"Vanilla"},{"label":"Chocolate"}]},` +
 		`{"question":"Topping?","options":[{"label":"Sprinkles"},{"label":"Nuts"}],"allow_multiple":true}]}`
-	h.question.pending = askUserQuestion("q-2", "ask", meta)
+	h.question.pending = []*reliantv1.QuestionInfo{askUserQuestion("q-2", "ask", meta)}
 
 	_, stderr, err := h.run(t, "", "workflow", "answer", "chat-1", "--select", "Vanilla", "--select", "Nuts")
 	if err != nil {
@@ -209,7 +209,7 @@ func TestAnswerLabelMatchingOutOfOrder(t *testing.T) {
 	meta := `{"type":"ask_user","questions":[` +
 		`{"question":"Flavor?","options":[{"label":"Vanilla"},{"label":"Chocolate"}]},` +
 		`{"question":"Topping?","options":[{"label":"Sprinkles"},{"label":"Nuts"}]}]}`
-	h.question.pending = askUserQuestion("q-3", "ask", meta)
+	h.question.pending = []*reliantv1.QuestionInfo{askUserQuestion("q-3", "ask", meta)}
 
 	// Provide only one label — must match by which sub-question offers it.
 	_, stderr, err := h.run(t, "", "workflow", "answer", "chat-1", "--select", "Nuts")
@@ -225,7 +225,7 @@ func TestAnswerLabelMatchingOutOfOrder(t *testing.T) {
 func TestAnswerWithFreetext(t *testing.T) {
 	h := newSuperviseHarness(t)
 	meta := `{"type":"ask_user","questions":[{"question":"Anything else?","options":[{"label":"No"}]}]}`
-	h.question.pending = askUserQuestion("q-4", "ask", meta)
+	h.question.pending = []*reliantv1.QuestionInfo{askUserQuestion("q-4", "ask", meta)}
 
 	_, stderr, err := h.run(t, "", "workflow", "answer", "chat-1", "--select", "No", "--text", "add rate limiting")
 	if err != nil {
@@ -239,7 +239,7 @@ func TestAnswerWithFreetext(t *testing.T) {
 func TestAnswerRejectsInvalidOption(t *testing.T) {
 	h := newSuperviseHarness(t)
 	meta := `{"type":"ask_user","questions":[{"question":"Proceed?","options":[{"label":"Continue"}]}]}`
-	h.question.pending = askUserQuestion("q-5", "ask", meta)
+	h.question.pending = []*reliantv1.QuestionInfo{askUserQuestion("q-5", "ask", meta)}
 
 	_, _, err := h.run(t, "", "workflow", "answer", "chat-1", "--select", "Nope")
 	if err == nil {
@@ -262,7 +262,7 @@ func TestAnswerNoPendingQuestion(t *testing.T) {
 func TestAnswerInteractive(t *testing.T) {
 	h := newSuperviseHarness(t)
 	meta := `{"type":"ask_user","questions":[{"question":"Proceed?","options":[{"label":"Continue"},{"label":"Revise"}]}]}`
-	h.question.pending = askUserQuestion("q-6", "ask", meta)
+	h.question.pending = []*reliantv1.QuestionInfo{askUserQuestion("q-6", "ask", meta)}
 
 	// Select option 2 (Revise) via the interactive numeric picker.
 	_, stderr, err := h.run(t, "2\n", "workflow", "answer", "chat-1")
@@ -282,7 +282,7 @@ func TestQuestionsListsSubQuestions(t *testing.T) {
 	meta := `{"type":"ask_user","questions":[` +
 		`{"question":"Flavor?","options":[{"label":"Vanilla","description":"simple"}]},` +
 		`{"question":"Topping?","options":[{"label":"Nuts"}],"allow_multiple":true}]}`
-	h.question.pending = askUserQuestion("q-7", "ask_step", meta)
+	h.question.pending = []*reliantv1.QuestionInfo{askUserQuestion("q-7", "ask_step", meta)}
 
 	stdout, _, err := h.run(t, "", "workflow", "questions", "chat-1")
 	if err != nil {
@@ -310,23 +310,81 @@ func TestQuestionsNonePending(t *testing.T) {
 func TestQuestionsJSON(t *testing.T) {
 	h := newSuperviseHarness(t)
 	meta := `{"type":"ask_user","questions":[{"question":"Proceed?","options":[{"label":"Continue"}]}]}`
-	h.question.pending = askUserQuestion("q-8", "ask", meta)
+	h.question.pending = []*reliantv1.QuestionInfo{askUserQuestion("q-8", "ask", meta)}
 
 	stdout, _, err := h.run(t, "", "workflow", "questions", "chat-1", "--json")
 	if err != nil {
 		t.Fatalf("questions --json failed: %v", err)
 	}
 	var report struct {
-		QuestionID   string `json:"question_id"`
-		SubQuestions []struct {
-			Question string `json:"question"`
-		} `json:"sub_questions"`
+		Questions []struct {
+			QuestionID   string `json:"question_id"`
+			SubQuestions []struct {
+				Question string `json:"question"`
+			} `json:"sub_questions"`
+		} `json:"questions"`
 	}
 	if err := json.Unmarshal([]byte(stdout), &report); err != nil {
 		t.Fatalf("output not JSON: %v (%s)", err, stdout)
 	}
-	if report.QuestionID != "q-8" || len(report.SubQuestions) != 1 || report.SubQuestions[0].Question != "Proceed?" {
+	if len(report.Questions) != 1 {
+		t.Fatalf("json report has %d questions, want 1: %s", len(report.Questions), stdout)
+	}
+	q := report.Questions[0]
+	if q.QuestionID != "q-8" || len(q.SubQuestions) != 1 || q.SubQuestions[0].Question != "Proceed?" {
 		t.Errorf("json report wrong: %+v", report)
+	}
+}
+
+// Each spawned agent can park on its own question, so a chat can have several
+// pending at once. Every one must be listed with its thread — the old single
+// lookup showed only the newest and hid the rest.
+func TestQuestionsListsEveryThreadsQuestion(t *testing.T) {
+	h := newSuperviseHarness(t)
+	metaA := `{"type":"ask_user","questions":[{"question":"Ship spawn A?","options":[{"label":"Yes"}]}]}`
+	metaB := `{"type":"ask_user","questions":[{"question":"Ship spawn B?","options":[{"label":"Yes"}]}]}`
+	qA := askUserQuestion("q-a", "ask", metaA)
+	qA.ThreadId = "thread-a"
+	qB := askUserQuestion("q-b", "ask", metaB)
+	qB.ThreadId = "thread-b"
+	h.question.pending = []*reliantv1.QuestionInfo{qA, qB}
+
+	stdout, _, err := h.run(t, "", "workflow", "questions", "chat-1")
+	if err != nil {
+		t.Fatalf("questions failed: %v", err)
+	}
+	for _, want := range []string{"q-a", "thread-a", "Ship spawn A?", "q-b", "thread-b", "Ship spawn B?"} {
+		if !strings.Contains(stdout, want) {
+			t.Errorf("questions output missing %q:\n%s", want, stdout)
+		}
+	}
+}
+
+// With several questions pending, answering "the" question is ambiguous: the
+// one not chosen stays blocked. The CLI must make the caller pick, and answer
+// exactly the one picked.
+func TestAnswerSeveralPendingRequiresQuestion(t *testing.T) {
+	h := newSuperviseHarness(t)
+	meta := `{"type":"ask_user","questions":[{"question":"Proceed?","options":[{"label":"Continue"}]}]}`
+	qA := askUserQuestion("q-a", "ask", meta)
+	qA.ThreadId = "thread-a"
+	qB := askUserQuestion("q-b", "ask", meta)
+	qB.ThreadId = "thread-b"
+	h.question.pending = []*reliantv1.QuestionInfo{qA, qB}
+
+	_, _, err := h.run(t, "", "workflow", "answer", "chat-1", "--select", "Continue")
+	if err == nil || !strings.Contains(err.Error(), "--question") || !strings.Contains(err.Error(), "thread-a") {
+		t.Fatalf("expected an error naming the pending questions and --question, got %v", err)
+	}
+	if h.question.resolveCalled {
+		t.Fatal("ResolveQuestion must not be called when the target is ambiguous")
+	}
+
+	if _, stderr, err := h.run(t, "", "workflow", "answer", "chat-1", "--question", "q-a", "--select", "Continue"); err != nil {
+		t.Fatalf("answer --question q-a failed: %v (stderr %s)", err, stderr)
+	}
+	if h.question.gotQuestionID != "q-a" {
+		t.Errorf("answered %q, want the older thread's q-a", h.question.gotQuestionID)
 	}
 }
 
@@ -388,7 +446,7 @@ func TestStatusJSON(t *testing.T) {
 		},
 	}
 	meta := `{"type":"ask_user","questions":[{"question":"a","options":[]},{"question":"b","options":[]}]}`
-	h.question.pending = askUserQuestion("q", "s", meta)
+	h.question.pending = []*reliantv1.QuestionInfo{askUserQuestion("q", "s", meta)}
 	h.approval.approvals = []*reliantv1.Approval{
 		{Id: "a1", Status: reliantv1.ApprovalStatus_APPROVAL_STATUS_PENDING},
 		{Id: "a2", Status: reliantv1.ApprovalStatus_APPROVAL_STATUS_APPROVED},

@@ -13,7 +13,7 @@ const { resolveQuestion } = vi.hoisted(() => ({
   resolveQuestion: vi.fn(async (..._args: unknown[]) => ({})),
 }));
 vi.mock("../../../api/question-grpc", () => ({
-  questionGrpc: { resolveQuestion, getPendingQuestion: vi.fn(async () => null) },
+  questionGrpc: { resolveQuestion, listPendingQuestions: vi.fn(async () => []) },
 }));
 
 import { askUserQuestionItems } from "../askUserUtils";
@@ -48,22 +48,27 @@ describe("askUserQuestionItems", () => {
 });
 
 describe("answerQuestion", () => {
-  it("replies with the answers JSON and clears the chat's pending-question cache", async () => {
-    queryClient.setQueryData(questionKeys.pending("chat-1"), { question_id: "q-1" });
+  it("replies with the answers JSON and drops only that question from the chat's pending list", async () => {
+    queryClient.setQueryData(questionKeys.pendingList("chat-1"), [
+      { question_id: "q-1", thread_id: "chat-1" },
+      { question_id: "q-other", thread_id: "spawn-a" },
+    ]);
     const answers = { answers: [{ question: "Ship it?", selected: ["Yes"] }] };
 
     await answerQuestion("chat-1", "q-1", answers);
 
     expect(resolveQuestion).toHaveBeenCalledWith("q-1", "reply", JSON.stringify(answers));
-    expect(queryClient.getQueryData(questionKeys.pending("chat-1"))).toBeNull();
+    expect(queryClient.getQueryData(questionKeys.pendingList("chat-1"))).toEqual([
+      { question_id: "q-other", thread_id: "spawn-a" },
+    ]);
   });
 });
 
 describe("chatStore.resolveQuestion (the chat composer's path)", () => {
-  it("still resolves the question and clears the pending cache", async () => {
-    queryClient.setQueryData(questionKeys.pending("chat-2"), { question_id: "q-2" });
+  it("still resolves the question and drops it from the pending list", async () => {
+    queryClient.setQueryData(questionKeys.pendingList("chat-2"), [{ question_id: "q-2" }]);
     await useChatStore.getState().resolveQuestion("chat-2", "q-2", "reply", '{"answers":[]}');
     expect(resolveQuestion).toHaveBeenCalledWith("q-2", "reply", '{"answers":[]}');
-    expect(queryClient.getQueryData(questionKeys.pending("chat-2"))).toBeNull();
+    expect(queryClient.getQueryData(questionKeys.pendingList("chat-2"))).toEqual([]);
   });
 });

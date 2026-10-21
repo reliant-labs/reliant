@@ -68,7 +68,7 @@ const FAST_READS: ReadonlySet<string> = new Set([
   "reliant.v1.ChatService/ListQueuedAgentMessages",
   "reliant.v1.ChatService/GetThreadWorkflowInputs",
   "reliant.v1.ApprovalService/ListApprovalsByChat",
-  "reliant.v1.QuestionService/GetPendingQuestion",
+  "reliant.v1.QuestionService/ListPendingQuestions",
   "reliant.v1.PlanService/GetPlanByChatId",
   "reliant.v1.TaskService/ListTasks",
   "reliant.v1.RunService/ListRuns",

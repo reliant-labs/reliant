@@ -27,19 +27,19 @@ type fakeRepo struct {
 	workflow    *db.Workflow
 	workflowErr error
 
-	updatedChats       []db.Chat
-	updatedStatuses    map[string]db.WorkflowStatus
-	deletedCheckpoints []string
-	clearedUsageLimit  []string
-	casCalls           []workflowCASCall
-	casErr             error
-	cascadedReason     db.WorkflowStopReason
-	cascadedThread     db.WorkflowStopReason
-	pendingQuestion    *db.Question
-	questionErr        error
-	resolvedQuestionID string
-	resolvedResponse   *string
-	emittedQuestions   []db.QuestionUpdate
+	updatedChats        []db.Chat
+	updatedStatuses     map[string]db.WorkflowStatus
+	deletedCheckpoints  []string
+	clearedUsageLimit   []string
+	casCalls            []workflowCASCall
+	casErr              error
+	cascadedReason      db.WorkflowStopReason
+	cascadedThread      db.WorkflowStopReason
+	pendingQuestions    []*db.Question
+	questionErr         error
+	resolvedQuestionIDs []string
+	resolvedResponse    *string
+	emittedQuestions    []db.QuestionUpdate
 }
 
 type workflowCASCall struct {
@@ -103,16 +103,24 @@ func (f *fakeRepo) CascadeTerminalStatusToThreadSubtree(_ context.Context, _ str
 	return nil
 }
 
-func (f *fakeRepo) GetPendingQuestionByChatID(context.Context, string) (*db.Question, error) {
-	return f.pendingQuestion, f.questionErr
+func (f *fakeRepo) ListPendingQuestionsByChat(context.Context, string) ([]*db.Question, error) {
+	var pending []*db.Question
+	for _, q := range f.pendingQuestions {
+		if q.Status != db.QuestionStatusResolved {
+			pending = append(pending, q)
+		}
+	}
+	return pending, f.questionErr
 }
 
 func (f *fakeRepo) ResolveQuestion(_ context.Context, id string, responseData *string) error {
-	f.resolvedQuestionID = id
+	f.resolvedQuestionIDs = append(f.resolvedQuestionIDs, id)
 	f.resolvedResponse = responseData
-	if f.pendingQuestion != nil && f.pendingQuestion.ID == id {
-		f.pendingQuestion.Status = db.QuestionStatusResolved
-		f.pendingQuestion.ResponseData = responseData
+	for _, q := range f.pendingQuestions {
+		if q.ID == id {
+			q.Status = db.QuestionStatusResolved
+			q.ResponseData = responseData
+		}
 	}
 	return nil
 }
@@ -235,7 +243,12 @@ func fixture(t *testing.T) (*fakeRepo, *fakeTemporal, *fakePause, *Service) {
 func TestTerminate_LiveRunHardTerminatesAndDrainsSubtree(t *testing.T) {
 	repo, temporal, _, svc := fixture(t)
 	repo.workflow = &db.Workflow{ID: "wf-1", Status: db.Active()}
-	repo.pendingQuestion = &db.Question{ID: "q-1", ChatID: "chat-1", WorkflowID: "wf-1", ThreadID: "chat-1", StepID: "ask"}
+	// Every thread of the run dies with it, so a question parked on a spawned
+	// thread is voided too — not only the chat's newest one.
+	repo.pendingQuestions = []*db.Question{
+		{ID: "q-1", ChatID: "chat-1", WorkflowID: "wf-1", ThreadID: "chat-1", StepID: "ask", Status: db.QuestionStatusPending},
+		{ID: "q-2", ChatID: "chat-1", WorkflowID: "wf-spawn", ThreadID: "thread-spawn", StepID: "ask", Status: db.QuestionStatusPending},
+	}
 
 	err := svc.Terminate(context.Background(), "chat-1")
 
@@ -249,11 +262,14 @@ func TestTerminate_LiveRunHardTerminatesAndDrainsSubtree(t *testing.T) {
 	assert.Equal(t, db.Active(), repo.casCalls[0].ExpectedStatus)
 	assert.Equal(t, db.StopReasonCancelled, repo.cascadedReason)
 	assert.Equal(t, db.StopReasonCancelled, repo.cascadedThread)
-	assert.Equal(t, "q-1", repo.resolvedQuestionID)
+	assert.Equal(t, []string{"q-1", "q-2"}, repo.resolvedQuestionIDs)
 	require.NotNil(t, repo.resolvedResponse)
 	assert.Contains(t, *repo.resolvedResponse, "terminated by operator")
-	require.Len(t, repo.emittedQuestions, 1)
-	assert.Equal(t, "resolved", repo.emittedQuestions[0].Status)
+	require.Len(t, repo.emittedQuestions, 2)
+	for _, update := range repo.emittedQuestions {
+		assert.Equal(t, "resolved", update.Status)
+	}
+	assert.Equal(t, "thread-spawn", repo.emittedQuestions[1].ThreadID)
 }
 
 // A terminated run executes no workflow code, so it cannot release its own

@@ -58,7 +58,8 @@ import {
 import { clearLegacyChatParams, peekLegacyChatParams } from "../../lib/legacyChatParams";
 import { pushChatParams } from "../../lib/chatSelection";
 import { Code, ConnectError } from "@connectrpc/connect";
-import { answerQuestion, usePendingQuestion } from "../../hooks/approval-queries";
+import { answerQuestion, usePendingQuestions } from "../../hooks/approval-queries";
+import { questionForThread } from "../../lib/pendingQuestions";
 import type { WorkflowExecution } from "./ExecutionSidebar/types";
 import { getThreadColor, formatNodeId, resolveThreadNameFromActiveThreads } from "./thread-views/threadUtils";
 import { useActiveThreads } from "../../store/threadActivityStore";
@@ -329,9 +330,23 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       });
     }, [prefill, replaceInput]);
 
-    // Question (ask_user) state
-    const pendingQuestionQuery = usePendingQuestion(chatId || undefined);
-    const pendingQuestion = pendingQuestionQuery.data ?? null;
+    // Question (ask_user) state. The question shown and answered here is the
+    // one the thread IN VIEW is parked on — never "the chat's newest": each
+    // spawned agent can park on its own question, and a reply meant for one
+    // thread must not answer (or be queued past) another's. Questions on other
+    // threads surface in the background-work pill, which navigates to them.
+    const pendingQuestionsQuery = usePendingQuestions(chatId || undefined);
+    const questionMainThreadId = useChat(chatId || undefined).data?.workflowId;
+    const pendingQuestion = useMemo(
+      () =>
+        questionForThread(
+          pendingQuestionsQuery.data,
+          chatId,
+          selectedThreadId,
+          questionMainThreadId
+        ),
+      [pendingQuestionsQuery.data, chatId, selectedThreadId, questionMainThreadId]
+    );
     const hasPendingQuestion = !!pendingQuestion;
     const askUserQuestion = useMemo(
       () => askUserQuestionItems(pendingQuestion?.metadata),

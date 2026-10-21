@@ -9714,8 +9714,9 @@ Selecting options:
   --interactive        Prompt for each sub-question's options on the terminal
                        and pick interactively. This is the default when no
                        --select/--text is given.
-  --question <qid>     Target a specific question id (defaults to the pending
-                       one). Must match the currently pending question.
+  --question <qid>     Target a specific question id. Required when several
+                       questions are pending (each spawned agent can park on
+                       its own); 'reliant workflow questions' lists them.
 
 Examples:
   reliant workflow answer <id> --select "Continue"
@@ -9732,7 +9733,7 @@ reliant workflow answer <execution-id> [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--interactive` | `bool` | - | Prompt for each sub-question interactively (default when no --select) |
-| `--question` | `string` | - | Question id to answer (default: the pending question) |
+| `--question` | `string` | - | Question id to answer (required when several are pending) |
 | `--select` | `stringArray` | `[]` | Option label to select (repeatable, one per sub-question) |
 | `--text` | `string` | - | Free-text answer/feedback |
 
@@ -9883,10 +9884,11 @@ reliant workflow pause <execution-id>
 
 List the open question(s) awaiting input on a workflow execution
 
-Fetches the pending question for a workflow execution via
-QuestionService.GetPendingQuestion and prints each sub-question's prompt and
-option labels. A single ask_user question may bundle multiple sub-questions;
-all are shown.
+Fetches every pending question for a workflow execution via
+QuestionService.ListPendingQuestions and prints each one's thread, and each
+sub-question's prompt and option labels. Each spawned agent can be parked on
+its own question, and a single ask_user question may bundle multiple
+sub-questions; all are shown.
 
 Prints "No open questions." and exits 0 when nothing is pending.
 Answer with 'reliant workflow answer <execution-id>'.

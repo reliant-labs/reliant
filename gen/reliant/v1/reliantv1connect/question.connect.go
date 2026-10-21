@@ -38,17 +38,20 @@ const (
 	// QuestionServiceResolveQuestionProcedure is the fully-qualified name of the QuestionService's
 	// ResolveQuestion RPC.
 	QuestionServiceResolveQuestionProcedure = "/reliant.v1.QuestionService/ResolveQuestion"
-	// QuestionServiceGetPendingQuestionProcedure is the fully-qualified name of the QuestionService's
-	// GetPendingQuestion RPC.
-	QuestionServiceGetPendingQuestionProcedure = "/reliant.v1.QuestionService/GetPendingQuestion"
+	// QuestionServiceListPendingQuestionsProcedure is the fully-qualified name of the QuestionService's
+	// ListPendingQuestions RPC.
+	QuestionServiceListPendingQuestionsProcedure = "/reliant.v1.QuestionService/ListPendingQuestions"
 )
 
 // QuestionServiceClient is a client for the reliant.v1.QuestionService service.
 type QuestionServiceClient interface {
 	// ResolveQuestion resolves a pending question with the user's answer
 	ResolveQuestion(context.Context, *connect.Request[v1.ResolveQuestionRequest]) (*connect.Response[v1.ResolveQuestionResponse], error)
-	// GetPendingQuestion gets the current pending question for a chat
-	GetPendingQuestion(context.Context, *connect.Request[v1.GetPendingQuestionRequest]) (*connect.Response[v1.GetPendingQuestionResponse], error)
+	// ListPendingQuestions lists every pending question in a chat, oldest
+	// first, each naming the thread that asked it. A chat with several spawned
+	// agents can have one question pending per thread, so a client must pick
+	// the one for the thread it is showing rather than "the chat's question".
+	ListPendingQuestions(context.Context, *connect.Request[v1.ListPendingQuestionsRequest]) (*connect.Response[v1.ListPendingQuestionsResponse], error)
 }
 
 // NewQuestionServiceClient constructs a client for the reliant.v1.QuestionService service. By
@@ -68,10 +71,10 @@ func NewQuestionServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(questionServiceMethods.ByName("ResolveQuestion")),
 			connect.WithClientOptions(opts...),
 		),
-		getPendingQuestion: connect.NewClient[v1.GetPendingQuestionRequest, v1.GetPendingQuestionResponse](
+		listPendingQuestions: connect.NewClient[v1.ListPendingQuestionsRequest, v1.ListPendingQuestionsResponse](
 			httpClient,
-			baseURL+QuestionServiceGetPendingQuestionProcedure,
-			connect.WithSchema(questionServiceMethods.ByName("GetPendingQuestion")),
+			baseURL+QuestionServiceListPendingQuestionsProcedure,
+			connect.WithSchema(questionServiceMethods.ByName("ListPendingQuestions")),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -79,8 +82,8 @@ func NewQuestionServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 
 // questionServiceClient implements QuestionServiceClient.
 type questionServiceClient struct {
-	resolveQuestion    *connect.Client[v1.ResolveQuestionRequest, v1.ResolveQuestionResponse]
-	getPendingQuestion *connect.Client[v1.GetPendingQuestionRequest, v1.GetPendingQuestionResponse]
+	resolveQuestion      *connect.Client[v1.ResolveQuestionRequest, v1.ResolveQuestionResponse]
+	listPendingQuestions *connect.Client[v1.ListPendingQuestionsRequest, v1.ListPendingQuestionsResponse]
 }
 
 // ResolveQuestion calls reliant.v1.QuestionService.ResolveQuestion.
@@ -88,17 +91,20 @@ func (c *questionServiceClient) ResolveQuestion(ctx context.Context, req *connec
 	return c.resolveQuestion.CallUnary(ctx, req)
 }
 
-// GetPendingQuestion calls reliant.v1.QuestionService.GetPendingQuestion.
-func (c *questionServiceClient) GetPendingQuestion(ctx context.Context, req *connect.Request[v1.GetPendingQuestionRequest]) (*connect.Response[v1.GetPendingQuestionResponse], error) {
-	return c.getPendingQuestion.CallUnary(ctx, req)
+// ListPendingQuestions calls reliant.v1.QuestionService.ListPendingQuestions.
+func (c *questionServiceClient) ListPendingQuestions(ctx context.Context, req *connect.Request[v1.ListPendingQuestionsRequest]) (*connect.Response[v1.ListPendingQuestionsResponse], error) {
+	return c.listPendingQuestions.CallUnary(ctx, req)
 }
 
 // QuestionServiceHandler is an implementation of the reliant.v1.QuestionService service.
 type QuestionServiceHandler interface {
 	// ResolveQuestion resolves a pending question with the user's answer
 	ResolveQuestion(context.Context, *connect.Request[v1.ResolveQuestionRequest]) (*connect.Response[v1.ResolveQuestionResponse], error)
-	// GetPendingQuestion gets the current pending question for a chat
-	GetPendingQuestion(context.Context, *connect.Request[v1.GetPendingQuestionRequest]) (*connect.Response[v1.GetPendingQuestionResponse], error)
+	// ListPendingQuestions lists every pending question in a chat, oldest
+	// first, each naming the thread that asked it. A chat with several spawned
+	// agents can have one question pending per thread, so a client must pick
+	// the one for the thread it is showing rather than "the chat's question".
+	ListPendingQuestions(context.Context, *connect.Request[v1.ListPendingQuestionsRequest]) (*connect.Response[v1.ListPendingQuestionsResponse], error)
 }
 
 // NewQuestionServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -114,18 +120,18 @@ func NewQuestionServiceHandler(svc QuestionServiceHandler, opts ...connect.Handl
 		connect.WithSchema(questionServiceMethods.ByName("ResolveQuestion")),
 		connect.WithHandlerOptions(opts...),
 	)
-	questionServiceGetPendingQuestionHandler := connect.NewUnaryHandler(
-		QuestionServiceGetPendingQuestionProcedure,
-		svc.GetPendingQuestion,
-		connect.WithSchema(questionServiceMethods.ByName("GetPendingQuestion")),
+	questionServiceListPendingQuestionsHandler := connect.NewUnaryHandler(
+		QuestionServiceListPendingQuestionsProcedure,
+		svc.ListPendingQuestions,
+		connect.WithSchema(questionServiceMethods.ByName("ListPendingQuestions")),
 		connect.WithHandlerOptions(opts...),
 	)
 	return "/reliant.v1.QuestionService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case QuestionServiceResolveQuestionProcedure:
 			questionServiceResolveQuestionHandler.ServeHTTP(w, r)
-		case QuestionServiceGetPendingQuestionProcedure:
-			questionServiceGetPendingQuestionHandler.ServeHTTP(w, r)
+		case QuestionServiceListPendingQuestionsProcedure:
+			questionServiceListPendingQuestionsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -139,6 +145,6 @@ func (UnimplementedQuestionServiceHandler) ResolveQuestion(context.Context, *con
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.QuestionService.ResolveQuestion is not implemented"))
 }
 
-func (UnimplementedQuestionServiceHandler) GetPendingQuestion(context.Context, *connect.Request[v1.GetPendingQuestionRequest]) (*connect.Response[v1.GetPendingQuestionResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.QuestionService.GetPendingQuestion is not implemented"))
+func (UnimplementedQuestionServiceHandler) ListPendingQuestions(context.Context, *connect.Request[v1.ListPendingQuestionsRequest]) (*connect.Response[v1.ListPendingQuestionsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.QuestionService.ListPendingQuestions is not implemented"))
 }

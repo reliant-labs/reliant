@@ -54,7 +54,7 @@ import { useMessages } from "../../../hooks/message-queries";
 import {
   useApprovals,
   usePendingApprovals,
-  usePendingQuestion,
+  usePendingQuestions,
 } from "../../../hooks/approval-queries";
 import { useWorkflowExecutions } from "../../../hooks/useWorkflowExecutions";
 import { ChatInput } from "../ChatInput";
@@ -80,7 +80,7 @@ function spyRpcs() {
       } as never),
     },
     { name: "ListApprovalsByChat", spy: vi.spyOn(api.approvals, "listByChat").mockResolvedValue([] as never) },
-    { name: "GetPendingQuestion", spy: vi.spyOn(questionGrpc, "getPendingQuestion").mockResolvedValue(null as never) },
+    { name: "ListPendingQuestions", spy: vi.spyOn(questionGrpc, "listPendingQuestions").mockResolvedValue([] as never) },
     {
       name: "GetWorkflowExecutions",
       spy: vi.spyOn(chatGrpc, "getWorkflowExecutions").mockResolvedValue({ all: [], latest: null } as never),
@@ -122,7 +122,7 @@ function ChatScreenReads({ chatId }: { chatId: string }) {
   useMessages(chatId);
   useApprovals(chatId);
   usePendingApprovals(chatId);
-  usePendingQuestion(chatId);
+  usePendingQuestions(chatId);
   useWorkflowExecutions(chatId);
   return null;
 }
@@ -176,7 +176,7 @@ describe("RPCs issued by opening a chat", () => {
     expect(issued).toEqual({
       ListMessages: 1,
       ListApprovalsByChat: 1,
-      GetPendingQuestion: 1,
+      ListPendingQuestions: 1,
       GetWorkflowExecutions: 1,
       GetWorkflow: 1,
       ListPresetsForWorkflow: 1,

@@ -13,7 +13,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/v1/question.proto.
  */
 export const file_reliant_v1_question: GenFile = /*@__PURE__*/
-  fileDesc("ChlyZWxpYW50L3YxL3F1ZXN0aW9uLnByb3RvEgpyZWxpYW50LnYxImsKFlJlc29sdmVRdWVzdGlvblJlcXVlc3QSEwoLcXVlc3Rpb25faWQYASABKAkSDgoGYWN0aW9uGAIgASgJEhoKDXJlc3BvbnNlX2RhdGEYAyABKAlIAIgBAUIQCg5fcmVzcG9uc2VfZGF0YSIqChdSZXNvbHZlUXVlc3Rpb25SZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIIiwKGUdldFBlbmRpbmdRdWVzdGlvblJlcXVlc3QSDwoHY2hhdF9pZBgBIAEoCSJaChpHZXRQZW5kaW5nUXVlc3Rpb25SZXNwb25zZRIvCghxdWVzdGlvbhgBIAEoCzIYLnJlbGlhbnQudjEuUXVlc3Rpb25JbmZvSACIAQFCCwoJX3F1ZXN0aW9uIrUBCgxRdWVzdGlvbkluZm8SEwoLcXVlc3Rpb25faWQYASABKAkSDwoHY2hhdF9pZBgCIAEoCRITCgt3b3JrZmxvd19pZBgDIAEoCRIPCgdzdGVwX2lkGAQgASgJEg4KBnN0YXR1cxgFIAEoCRISCgpjcmVhdGVkX2F0GAYgASgJEhUKCG1ldGFkYXRhGAcgASgJSACIAQESEQoJdGhyZWFkX2lkGAggASgJQgsKCV9tZXRhZGF0YSpsCg5RdWVzdGlvblN0YXR1cxIfChtRVUVTVElPTl9TVEFUVVNfVU5TUEVDSUZJRUQQABIbChdRVUVTVElPTl9TVEFUVVNfUEVORElORxABEhwKGFFVRVNUSU9OX1NUQVRVU19SRVNPTFZFRBACMtYBCg9RdWVzdGlvblNlcnZpY2USXAoPUmVzb2x2ZVF1ZXN0aW9uEiIucmVsaWFudC52MS5SZXNvbHZlUXVlc3Rpb25SZXF1ZXN0GiMucmVsaWFudC52MS5SZXNvbHZlUXVlc3Rpb25SZXNwb25zZSIAEmUKEkdldFBlbmRpbmdRdWVzdGlvbhIlLnJlbGlhbnQudjEuR2V0UGVuZGluZ1F1ZXN0aW9uUmVxdWVzdBomLnJlbGlhbnQudjEuR2V0UGVuZGluZ1F1ZXN0aW9uUmVzcG9uc2UiAEI6WjhnaXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9yZWxpYW50L3YxO3JlbGlhbnR2MWIGcHJvdG8z");
+  fileDesc("ChlyZWxpYW50L3YxL3F1ZXN0aW9uLnByb3RvEgpyZWxpYW50LnYxImsKFlJlc29sdmVRdWVzdGlvblJlcXVlc3QSEwoLcXVlc3Rpb25faWQYASABKAkSDgoGYWN0aW9uGAIgASgJEhoKDXJlc3BvbnNlX2RhdGEYAyABKAlIAIgBAUIQCg5fcmVzcG9uc2VfZGF0YSIqChdSZXNvbHZlUXVlc3Rpb25SZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIIi4KG0xpc3RQZW5kaW5nUXVlc3Rpb25zUmVxdWVzdBIPCgdjaGF0X2lkGAEgASgJIksKHExpc3RQZW5kaW5nUXVlc3Rpb25zUmVzcG9uc2USKwoJcXVlc3Rpb25zGAEgAygLMhgucmVsaWFudC52MS5RdWVzdGlvbkluZm8itQEKDFF1ZXN0aW9uSW5mbxITCgtxdWVzdGlvbl9pZBgBIAEoCRIPCgdjaGF0X2lkGAIgASgJEhMKC3dvcmtmbG93X2lkGAMgASgJEg8KB3N0ZXBfaWQYBCABKAkSDgoGc3RhdHVzGAUgASgJEhIKCmNyZWF0ZWRfYXQYBiABKAkSFQoIbWV0YWRhdGEYByABKAlIAIgBARIRCgl0aHJlYWRfaWQYCCABKAlCCwoJX21ldGFkYXRhKmwKDlF1ZXN0aW9uU3RhdHVzEh8KG1FVRVNUSU9OX1NUQVRVU19VTlNQRUNJRklFRBAAEhsKF1FVRVNUSU9OX1NUQVRVU19QRU5ESU5HEAESHAoYUVVFU1RJT05fU1RBVFVTX1JFU09MVkVEEAIy3AEKD1F1ZXN0aW9uU2VydmljZRJcCg9SZXNvbHZlUXVlc3Rpb24SIi5yZWxpYW50LnYxLlJlc29sdmVRdWVzdGlvblJlcXVlc3QaIy5yZWxpYW50LnYxLlJlc29sdmVRdWVzdGlvblJlc3BvbnNlIgASawoUTGlzdFBlbmRpbmdRdWVzdGlvbnMSJy5yZWxpYW50LnYxLkxpc3RQZW5kaW5nUXVlc3Rpb25zUmVxdWVzdBooLnJlbGlhbnQudjEuTGlzdFBlbmRpbmdRdWVzdGlvbnNSZXNwb25zZSIAQjpaOGdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL3JlbGlhbnQvdjE7cmVsaWFudHYxYgZwcm90bzM");
 
 /**
  * @generated from message reliant.v1.ResolveQuestionRequest
@@ -64,9 +64,9 @@ export const ResolveQuestionResponseSchema: GenMessage<ResolveQuestionResponse> 
   messageDesc(file_reliant_v1_question, 1);
 
 /**
- * @generated from message reliant.v1.GetPendingQuestionRequest
+ * @generated from message reliant.v1.ListPendingQuestionsRequest
  */
-export type GetPendingQuestionRequest = Message<"reliant.v1.GetPendingQuestionRequest"> & {
+export type ListPendingQuestionsRequest = Message<"reliant.v1.ListPendingQuestionsRequest"> & {
   /**
    * @generated from field: string chat_id = 1;
    */
@@ -74,27 +74,29 @@ export type GetPendingQuestionRequest = Message<"reliant.v1.GetPendingQuestionRe
 };
 
 /**
- * Describes the message reliant.v1.GetPendingQuestionRequest.
- * Use `create(GetPendingQuestionRequestSchema)` to create a new message.
+ * Describes the message reliant.v1.ListPendingQuestionsRequest.
+ * Use `create(ListPendingQuestionsRequestSchema)` to create a new message.
  */
-export const GetPendingQuestionRequestSchema: GenMessage<GetPendingQuestionRequest> = /*@__PURE__*/
+export const ListPendingQuestionsRequestSchema: GenMessage<ListPendingQuestionsRequest> = /*@__PURE__*/
   messageDesc(file_reliant_v1_question, 2);
 
 /**
- * @generated from message reliant.v1.GetPendingQuestionResponse
+ * @generated from message reliant.v1.ListPendingQuestionsResponse
  */
-export type GetPendingQuestionResponse = Message<"reliant.v1.GetPendingQuestionResponse"> & {
+export type ListPendingQuestionsResponse = Message<"reliant.v1.ListPendingQuestionsResponse"> & {
   /**
-   * @generated from field: optional reliant.v1.QuestionInfo question = 1;
+   * Oldest first. Empty when nothing in the chat is waiting on the user.
+   *
+   * @generated from field: repeated reliant.v1.QuestionInfo questions = 1;
    */
-  question?: QuestionInfo | undefined;
+  questions: QuestionInfo[];
 };
 
 /**
- * Describes the message reliant.v1.GetPendingQuestionResponse.
- * Use `create(GetPendingQuestionResponseSchema)` to create a new message.
+ * Describes the message reliant.v1.ListPendingQuestionsResponse.
+ * Use `create(ListPendingQuestionsResponseSchema)` to create a new message.
  */
-export const GetPendingQuestionResponseSchema: GenMessage<GetPendingQuestionResponse> = /*@__PURE__*/
+export const ListPendingQuestionsResponseSchema: GenMessage<ListPendingQuestionsResponse> = /*@__PURE__*/
   messageDesc(file_reliant_v1_question, 3);
 
 /**
@@ -196,14 +198,17 @@ export const QuestionService: GenService<{
     output: typeof ResolveQuestionResponseSchema;
   },
   /**
-   * GetPendingQuestion gets the current pending question for a chat
+   * ListPendingQuestions lists every pending question in a chat, oldest
+   * first, each naming the thread that asked it. A chat with several spawned
+   * agents can have one question pending per thread, so a client must pick
+   * the one for the thread it is showing rather than "the chat's question".
    *
-   * @generated from rpc reliant.v1.QuestionService.GetPendingQuestion
+   * @generated from rpc reliant.v1.QuestionService.ListPendingQuestions
    */
-  getPendingQuestion: {
+  listPendingQuestions: {
     methodKind: "unary";
-    input: typeof GetPendingQuestionRequestSchema;
-    output: typeof GetPendingQuestionResponseSchema;
+    input: typeof ListPendingQuestionsRequestSchema;
+    output: typeof ListPendingQuestionsResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_reliant_v1_question, 0);

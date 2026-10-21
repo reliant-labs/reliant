@@ -93,7 +93,14 @@ func (s *Service) ResolveQuestion(
 	}), nil
 }
 
-// GetPendingQuestion returns the current pending question for a chat.
+// ListPendingQuestions returns every pending question in a chat, oldest first,
+// each carrying the thread that asked it.
+//
+// All of them, not "the chat's question": each spawned agent is a thread that
+// can park on its own ask_user, so one chat can be waiting on the user in
+// several places at once. Returning only the newest hid every older thread's
+// question, and the user's reply to that thread went to its mailbox — which a
+// thread parked on a question never drains.
 //
 // The chat is verified to exist and be the caller's BEFORE the question lookup,
 // which is the difference between "there is no gate" and "that is not a chat".
@@ -101,12 +108,11 @@ func (s *Service) ResolveQuestion(
 // the CLI renders it as "No open questions." with exit 0 — a clean-looking
 // answer that is simply false. Someone supervising a run reads that and walks
 // away from a workflow that is parked on a question. Every other supervision
-// RPC (GetWorkflowExecutions, GetChatUpdates) already verifies; this one was
-// the hole.
-func (s *Service) GetPendingQuestion(
+// RPC (GetWorkflowExecutions, GetChatUpdates) already verifies.
+func (s *Service) ListPendingQuestions(
 	ctx context.Context,
-	req *connect.Request[reliantv1.GetPendingQuestionRequest],
-) (*connect.Response[reliantv1.GetPendingQuestionResponse], error) {
+	req *connect.Request[reliantv1.ListPendingQuestionsRequest],
+) (*connect.Response[reliantv1.ListPendingQuestionsResponse], error) {
 	userID := auth.MustGetUserID(ctx)
 
 	if req.Msg.ChatId == "" {
@@ -118,19 +124,18 @@ func (s *Service) GetPendingQuestion(
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
 	}
 
-	question, err := s.deps.Repo.GetPendingQuestionByChatID(ctx, req.Msg.ChatId)
+	questions, err := s.deps.Repo.ListPendingQuestionsByChat(ctx, req.Msg.ChatId)
 	if err != nil {
-		// No pending question is not an error
-		return connect.NewResponse(&reliantv1.GetPendingQuestionResponse{}), nil
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("list pending questions: %w", err))
 	}
 
-	if question == nil {
-		return connect.NewResponse(&reliantv1.GetPendingQuestionResponse{}), nil
+	resp := &reliantv1.ListPendingQuestionsResponse{
+		Questions: make([]*reliantv1.QuestionInfo, 0, len(questions)),
 	}
-
-	return connect.NewResponse(&reliantv1.GetPendingQuestionResponse{
-		Question: questionToProto(question),
-	}), nil
+	for _, q := range questions {
+		resp.Questions = append(resp.Questions, questionToProto(q))
+	}
+	return connect.NewResponse(resp), nil
 }
 
 // ============================================================================

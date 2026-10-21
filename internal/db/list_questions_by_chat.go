@@ -50,6 +50,23 @@ func (r *Repo) ListQuestionsByChat(ctx context.Context, chatID string) ([]*Quest
 	return store.ListQuestionsByChat(ctx, r.ORM(), chatID)
 }
 
+// ListPendingQuestionsByChat returns every PENDING question in a chat, oldest
+// first. Each carries its thread_id: a chat with several spawned threads can
+// have one question parked per thread, and only the thread id says which
+// agent a question belongs to.
+//
+// This is what the UI reads. GetPendingQuestionByChatID (newest from ANY
+// thread, LIMIT 1) hid every older thread's question — in prod a spawn's
+// question disappeared behind a sibling's newer one, and the user's reply went
+// to the spawn's mailbox, which a thread parked on a question never drains.
+func (r *Repo) ListPendingQuestionsByChat(ctx context.Context, chatID string) ([]*Question, error) {
+	if chatID == "" {
+		return nil, fmt.Errorf("chat ID cannot be empty")
+	}
+
+	return store.ListPendingQuestionsByChat(ctx, r.ORM(), chatID)
+}
+
 // PendingQuestionsByThread returns each thread's newest PENDING question for a
 // chat, keyed by the question's thread id — which is exactly a workflow row's
 // `thread` column, so the result joins straight onto workflow rows.
@@ -68,11 +85,7 @@ func (r *Repo) ListQuestionsByChat(ctx context.Context, chatID string) ([]*Quest
 //
 // Read-only: one SELECT per chat, no mutation.
 func (r *Repo) PendingQuestionsByThread(ctx context.Context, chatID string) (map[string]*Question, error) {
-	if chatID == "" {
-		return nil, fmt.Errorf("chat ID cannot be empty")
-	}
-
-	pending, err := store.ListPendingQuestionsByChat(ctx, r.ORM(), chatID)
+	pending, err := r.ListPendingQuestionsByChat(ctx, chatID)
 	if err != nil {
 		return nil, err
 	}

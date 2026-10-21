@@ -525,20 +525,22 @@ func runWorkflowStatus(cmd *cobra.Command, executionID string, jsonOut bool) err
 		Completed:   root.GetCompletedAt(),
 	}
 
-	// Open questions: GetPendingQuestion returns the single pending question
-	// (which may bundle several sub-questions); count its sub-questions. The
-	// question's thread id is what lets the node tree below mark the ONE thread
-	// that is actually gated instead of leaving every sibling reading RUNNING.
+	// Open questions: one per gated thread, each of which may bundle several
+	// sub-questions; count the sub-questions. Each question's thread id is what
+	// lets the node tree below mark the threads that are actually gated instead
+	// of leaving every sibling reading RUNNING.
 	gateByThread := map[string]string{}
-	if q, err := clients.question.GetPendingQuestion(ctx, connect.NewRequest(&reliantv1.GetPendingQuestionRequest{
+	if q, err := clients.question.ListPendingQuestions(ctx, connect.NewRequest(&reliantv1.ListPendingQuestionsRequest{
 		ChatId: executionID,
 	})); err == nil {
-		if qi := q.Msg.GetQuestion(); qi != nil {
-			report.OpenQuestions = 1
+		for _, qi := range q.Msg.GetQuestions() {
+			open := 1
 			if md, ok := askuser.ParseMetadata(qi.GetMetadata()); ok && len(md.Questions) > 1 {
-				report.OpenQuestions = len(md.Questions)
+				open = len(md.Questions)
 			}
+			report.OpenQuestions += open
 			if qi.GetThreadId() != "" {
+				// Oldest first, so a thread's newest question wins.
 				gateByThread[qi.GetThreadId()] = orDash(qi.GetStepId())
 			}
 		}
@@ -875,8 +877,15 @@ func printStatusNode(w io.Writer, n statusNode, depth int) {
 // ============================================================================
 
 type questionsReport struct {
-	ExecutionID  string             `json:"execution_id"`
-	QuestionID   string             `json:"question_id,omitempty"`
+	ExecutionID string                `json:"execution_id"`
+	Questions   []pendingQuestionView `json:"questions"`
+}
+
+// pendingQuestionView is one pending question: a chat with several spawned
+// agents can have one per thread.
+type pendingQuestionView struct {
+	QuestionID   string             `json:"question_id"`
+	ThreadID     string             `json:"thread_id,omitempty"`
 	StepID       string             `json:"step_id,omitempty"`
 	Stuck        bool               `json:"stuck,omitempty"`
 	SubQuestions []subQuestionValue `json:"sub_questions"`
@@ -898,10 +907,11 @@ func newWorkflowQuestionsCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "questions <execution-id>",
 		Short: "List the open question(s) awaiting input on a workflow execution",
-		Long: `Fetches the pending question for a workflow execution via
-QuestionService.GetPendingQuestion and prints each sub-question's prompt and
-option labels. A single ask_user question may bundle multiple sub-questions;
-all are shown.
+		Long: `Fetches every pending question for a workflow execution via
+QuestionService.ListPendingQuestions and prints each one's thread, and each
+sub-question's prompt and option labels. Each spawned agent can be parked on
+its own question, and a single ask_user question may bundle multiple
+sub-questions; all are shown.
 
 Prints "No open questions." and exits 0 when nothing is pending.
 Answer with 'reliant workflow answer <execution-id>'.`,
@@ -920,37 +930,32 @@ func runWorkflowQuestions(cmd *cobra.Command, executionID string, jsonOut bool) 
 		return err
 	}
 
-	resp, err := clients.question.GetPendingQuestion(cmd.Context(), connect.NewRequest(&reliantv1.GetPendingQuestionRequest{
+	resp, err := clients.question.ListPendingQuestions(cmd.Context(), connect.NewRequest(&reliantv1.ListPendingQuestionsRequest{
 		ChatId: executionID,
 	}))
 	if err != nil {
-		return clients.rpcError(err, "fetching pending question")
+		return clients.rpcError(err, "fetching pending questions")
 	}
 
-	qi := resp.Msg.GetQuestion()
-	if qi == nil {
-		if jsonOut {
-			return printJSONIndent(cmd.OutOrStdout(), questionsReport{ExecutionID: executionID, SubQuestions: []subQuestionValue{}})
+	report := questionsReport{ExecutionID: executionID, Questions: []pendingQuestionView{}}
+	for _, qi := range resp.Msg.GetQuestions() {
+		view := pendingQuestionView{
+			QuestionID:   qi.GetQuestionId(),
+			ThreadID:     qi.GetThreadId(),
+			StepID:       qi.GetStepId(),
+			Stuck:        execfollow.IsStuckStep(qi.GetStepId()),
+			SubQuestions: []subQuestionValue{},
 		}
-		fmt.Fprintln(cmd.OutOrStdout(), "No open questions.")
-		return nil
-	}
-
-	report := questionsReport{
-		ExecutionID:  executionID,
-		QuestionID:   qi.GetQuestionId(),
-		StepID:       qi.GetStepId(),
-		Stuck:        execfollow.IsStuckStep(qi.GetStepId()),
-		SubQuestions: []subQuestionValue{},
-	}
-	if md, ok := askuser.ParseMetadata(qi.GetMetadata()); ok {
-		for _, q := range md.Questions {
-			sv := subQuestionValue{Question: q.Question, AllowMultiple: q.AllowMultiple}
-			for _, o := range q.Options {
-				sv.Options = append(sv.Options, optionValue{Label: o.Label, Description: o.Description})
+		if md, ok := askuser.ParseMetadata(qi.GetMetadata()); ok {
+			for _, q := range md.Questions {
+				sv := subQuestionValue{Question: q.Question, AllowMultiple: q.AllowMultiple}
+				for _, o := range q.Options {
+					sv.Options = append(sv.Options, optionValue{Label: o.Label, Description: o.Description})
+				}
+				view.SubQuestions = append(view.SubQuestions, sv)
 			}
-			report.SubQuestions = append(report.SubQuestions, sv)
 		}
+		report.Questions = append(report.Questions, view)
 	}
 
 	if jsonOut {
@@ -958,19 +963,36 @@ func runWorkflowQuestions(cmd *cobra.Command, executionID string, jsonOut bool) 
 	}
 
 	out := cmd.OutOrStdout()
-	if report.Stuck {
-		fmt.Fprintln(out, "⚠ STUCK ESCALATION — the workflow parked for human help (not a routine review).")
-	}
-	fmt.Fprintf(out, "Open question %s", report.QuestionID)
-	if report.StepID != "" {
-		fmt.Fprintf(out, " (node %s)", report.StepID)
-	}
-	fmt.Fprintln(out)
-	if len(report.SubQuestions) == 0 {
-		fmt.Fprintln(out, "  (question has no structured ask_user prompts — inspect raw metadata via --json)")
+	if len(report.Questions) == 0 {
+		fmt.Fprintln(out, "No open questions.")
 		return nil
 	}
-	for i, sq := range report.SubQuestions {
+	for i, view := range report.Questions {
+		if i > 0 {
+			fmt.Fprintln(out)
+		}
+		printPendingQuestion(out, view)
+	}
+	return nil
+}
+
+func printPendingQuestion(out io.Writer, view pendingQuestionView) {
+	if view.Stuck {
+		fmt.Fprintln(out, "⚠ STUCK ESCALATION — the workflow parked for human help (not a routine review).")
+	}
+	fmt.Fprintf(out, "Open question %s", view.QuestionID)
+	if view.StepID != "" {
+		fmt.Fprintf(out, " (node %s)", view.StepID)
+	}
+	if view.ThreadID != "" {
+		fmt.Fprintf(out, " on thread %s", view.ThreadID)
+	}
+	fmt.Fprintln(out)
+	if len(view.SubQuestions) == 0 {
+		fmt.Fprintln(out, "  (question has no structured ask_user prompts — inspect raw metadata via --json)")
+		return
+	}
+	for i, sq := range view.SubQuestions {
 		multi := ""
 		if sq.AllowMultiple {
 			multi = " (multiple allowed)"
@@ -984,7 +1006,6 @@ func runWorkflowQuestions(cmd *cobra.Command, executionID string, jsonOut bool) 
 			}
 		}
 	}
-	return nil
 }
 
 // ============================================================================
@@ -1018,8 +1039,9 @@ Selecting options:
   --interactive        Prompt for each sub-question's options on the terminal
                        and pick interactively. This is the default when no
                        --select/--text is given.
-  --question <qid>     Target a specific question id (defaults to the pending
-                       one). Must match the currently pending question.
+  --question <qid>     Target a specific question id. Required when several
+                       questions are pending (each spawned agent can park on
+                       its own); 'reliant workflow questions' lists them.
 
 Examples:
   reliant workflow answer <id> --select "Continue"
@@ -1031,7 +1053,7 @@ Examples:
 			return runWorkflowAnswer(cmd, args[0], questionID, selects, text, interactive)
 		},
 	}
-	cmd.Flags().StringVar(&questionID, "question", "", "Question id to answer (default: the pending question)")
+	cmd.Flags().StringVar(&questionID, "question", "", "Question id to answer (required when several are pending)")
 	cmd.Flags().StringArrayVar(&selects, "select", nil, "Option label to select (repeatable, one per sub-question)")
 	cmd.Flags().StringVar(&text, "text", "", "Free-text answer/feedback")
 	cmd.Flags().BoolVar(&interactive, "interactive", false, "Prompt for each sub-question interactively (default when no --select)")
@@ -1045,18 +1067,15 @@ func runWorkflowAnswer(cmd *cobra.Command, executionID, questionID string, selec
 	}
 	ctx := cmd.Context()
 
-	resp, err := clients.question.GetPendingQuestion(ctx, connect.NewRequest(&reliantv1.GetPendingQuestionRequest{
+	resp, err := clients.question.ListPendingQuestions(ctx, connect.NewRequest(&reliantv1.ListPendingQuestionsRequest{
 		ChatId: executionID,
 	}))
 	if err != nil {
-		return clients.rpcError(err, "fetching pending question")
+		return clients.rpcError(err, "fetching pending questions")
 	}
-	qi := resp.Msg.GetQuestion()
-	if qi == nil {
-		return fmt.Errorf("no pending question to answer on execution %s", executionID)
-	}
-	if questionID != "" && questionID != qi.GetQuestionId() {
-		return fmt.Errorf("question %s is not the pending question (pending is %s)", questionID, qi.GetQuestionId())
+	qi, err := pickPendingQuestion(executionID, resp.Msg.GetQuestions(), questionID)
+	if err != nil {
+		return err
 	}
 
 	md, ok := askuser.ParseMetadata(qi.GetMetadata())
@@ -1379,4 +1398,32 @@ func humanDuration(ms int64) string {
 		return fmt.Sprintf("%.1fs", d.Seconds())
 	}
 	return d.Round(time.Second).String()
+}
+
+// pickPendingQuestion chooses the question an answer is for. With one pending
+// question it is that one; with several (spawned agents each parked on their
+// own) the caller must name it with --question, because answering whichever
+// is newest would leave the others' threads blocked.
+func pickPendingQuestion(executionID string, pending []*reliantv1.QuestionInfo, questionID string) (*reliantv1.QuestionInfo, error) {
+	if len(pending) == 0 {
+		return nil, fmt.Errorf("no pending question to answer on execution %s", executionID)
+	}
+	ids := make([]string, 0, len(pending))
+	for _, qi := range pending {
+		if questionID != "" && qi.GetQuestionId() == questionID {
+			return qi, nil
+		}
+		id := qi.GetQuestionId()
+		if qi.GetThreadId() != "" {
+			id += " (thread " + qi.GetThreadId() + ")"
+		}
+		ids = append(ids, id)
+	}
+	if questionID != "" {
+		return nil, fmt.Errorf("question %s is not pending (pending: %s)", questionID, strings.Join(ids, ", "))
+	}
+	if len(pending) > 1 {
+		return nil, fmt.Errorf("%d questions are pending on execution %s; choose one with --question: %s", len(pending), executionID, strings.Join(ids, ", "))
+	}
+	return pending[0], nil
 }

@@ -32,7 +32,7 @@ type Repository interface {
 	DeleteWorkflowCheckpoint(ctx context.Context, workflowID string) error
 	CascadeTerminalStatusToDescendants(ctx context.Context, workflowID string, reason db.WorkflowStopReason) error
 	CascadeTerminalStatusToThreadSubtree(ctx context.Context, workflowID string, reason db.WorkflowStopReason) error
-	GetPendingQuestionByChatID(ctx context.Context, chatID string) (*db.Question, error)
+	ListPendingQuestionsByChat(ctx context.Context, chatID string) ([]*db.Question, error)
 	ResolveQuestion(ctx context.Context, id string, responseData *string) error
 	EmitQuestionUpdate(ctx context.Context, chatID string, update db.QuestionUpdate) error
 	LockChatRunControl(ctx context.Context, chatID string) (release func(), err error)

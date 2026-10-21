@@ -50,13 +50,17 @@ vi.mock("../../../hooks/chat-queries", async () => {
   };
 });
 
-// BackgroundWorkPill (a subject here) also reads the chat's pending question;
-// none is pending. Unmocked, it was a real RPC that settled after the test.
+// ChatPresenter and BackgroundWorkPill (a subject here) read the chat's
+// pending questions; none is pending unless a test says so. Unmocked, it was a
+// real RPC that settled after the test.
+const { pendingQuestions } = vi.hoisted(() => ({
+  pendingQuestions: { current: [] as unknown[] },
+}));
 vi.mock("../../../hooks/approval-queries", async () => {
   const actual = await vi.importActual<
     typeof import("../../../hooks/approval-queries")
   >("../../../hooks/approval-queries");
-  return { ...actual, usePendingQuestion: () => ({ data: null }) };
+  return { ...actual, usePendingQuestions: () => ({ data: pendingQuestions.current }) };
 });
 
 // While the agent works, ChatPresenter reads the machine registry to say
@@ -148,6 +152,7 @@ function renderPresenter(surface: "desktop" | "mobile") {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  pendingQuestions.current = [];
   useThreadActivityStore.getState().clearAll();
   listQueuedAgentMessagesMock.mockResolvedValue({
     messages: [
@@ -238,9 +243,13 @@ describe("the interrupt affordance tracks work in flight, not chat busy-ness", (
   });
 
   it("withholds interrupt while a question waits on the user, but still shows the queue", async () => {
+    // A question on the thread in view (the main thread).
+    pendingQuestions.current = [
+      { question_id: "q1", chat_id: CHAT_ID, workflow_id: "", thread_id: CHAT_ID, step_id: "ask", status: "pending", created_at: "" },
+    ];
     renderWithQuery(
       <SurfaceProvider surface="desktop">
-        <ChatPresenter {...baseProps} hasPendingQuestion={true} />
+        <ChatPresenter {...baseProps} />
       </SurfaceProvider>,
     );
 

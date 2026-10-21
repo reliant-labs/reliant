@@ -206,10 +206,11 @@ func (s *chatUpdateSource) Root(ctx context.Context) (execfollow.RootState, erro
 func (s *chatUpdateSource) Pending(ctx context.Context) ([]execfollow.PendingGate, error) {
 	var gates []execfollow.PendingGate
 
-	if q, err := s.question.GetPendingQuestion(ctx, connect.NewRequest(&reliantv1.GetPendingQuestionRequest{
+	// Every thread's question: spawned agents each park on their own.
+	if q, err := s.question.ListPendingQuestions(ctx, connect.NewRequest(&reliantv1.ListPendingQuestionsRequest{
 		ChatId: s.chatID,
 	})); err == nil {
-		if qi := q.Msg.GetQuestion(); qi != nil {
+		for _, qi := range q.Msg.GetQuestions() {
 			gates = append(gates, execfollow.PendingGate{
 				Kind:     execfollow.GateQuestion,
 				ID:       qi.GetQuestionId(),

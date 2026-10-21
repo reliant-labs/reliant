@@ -21,15 +21,23 @@
  * approval has stopped making progress and needs the user, but the spawn
  * itself is often scrolled far up the timeline by the time that happens.
  * Approvals do not carry a thread id on the wire, so they cannot be pinned
- * to a specific spawn; pending questions carry workflow_id, which the thread
- * records also carry, so those we can attribute exactly.
+ * to a specific spawn; pending questions carry their thread_id (and
+ * workflow_id), so those we attribute exactly.
+ *
+ * Every pending question in the chat is considered, not "the chat's
+ * question": each thread can park on its own, and the composer answers only
+ * the one for the thread in view. A question on any OTHER thread that is not
+ * already a spawn row here (the main thread while a spawn is in view, or a
+ * thread with no live spawn record) is listed as a waiting question, so the
+ * user can always get to it.
  */
 
 import { useMemo } from "react";
 import { useActiveThreads } from "../../store/threadActivityStore";
 import { useProcessStore } from "../../store/processStore";
 import { BackgroundProcessStatus } from "../../api/background-grpc";
-import { usePendingQuestion } from "../../hooks/approval-queries";
+import { usePendingQuestions } from "../../hooks/approval-queries";
+import { questionThreadId, viewedThreadId } from "../../lib/pendingQuestions";
 import { useWorkflowExecutions } from "../../hooks/useWorkflowExecutions";
 import { isWorkflowLive, workflowStoppedBecause } from "../../lib/workflowLifecycle";
 import { WorkflowStopReason } from "../../gen/reliant/v1/chat_pb";
@@ -70,6 +78,18 @@ export interface FailedSpawn {
   failedAt: number | null;
 }
 
+/**
+ * A question waiting on the user on a thread that is neither in view (the
+ * composer already shows that one) nor listed as a live spawn row.
+ */
+export interface WaitingQuestion {
+  questionId: string;
+  /** The asking thread; the chat id for the main thread. */
+  threadId: string;
+  isMainThread: boolean;
+  title: string;
+}
+
 export interface ActiveCommand {
   id: string;
   command: string;
@@ -83,6 +103,8 @@ export interface BackgroundWork {
   commands: ActiveCommand[];
   /** Spawns waiting on the user — the subset worth interrupting for. */
   blockedSpawns: ActiveSpawn[];
+  /** Questions on other threads that no spawn row above already shows. */
+  waitingQuestions: WaitingQuestion[];
   hasWork: boolean;
 }
 
@@ -91,6 +113,7 @@ const EMPTY: BackgroundWork = {
   failedSpawns: [],
   commands: [],
   blockedSpawns: [],
+  waitingQuestions: [],
   hasWork: false,
 };
 
@@ -212,19 +235,38 @@ function workflowForThread(
   return workflows.byThread.get(thread.thread);
 }
 
+/** Find a thread's workflow anywhere in the tree (spawned or not). */
+function workflowOfThread(
+  workflows: WorkflowExecutionData[],
+  threadId: string,
+): WorkflowExecutionData | undefined {
+  for (const workflow of workflows) {
+    if (workflow.thread === threadId) return workflow;
+    const nested = workflowOfThread(workflow.children || [], threadId);
+    if (nested) return nested;
+  }
+  return undefined;
+}
+
 export function useBackgroundWork(
   chatId: string | undefined,
   worktreeId: string | undefined,
+  /** The thread in view (null/undefined = main): its question is the composer's. */
+  selectedThreadId?: string | null,
+  /** The chat's main thread id (its root workflow id), when known. */
+  mainThreadId?: string | null,
 ): BackgroundWork {
   const activeThreads = useActiveThreads(chatId ?? "");
   const processes = useProcessStore((state) => state.processes);
-  const { data: pendingQuestion } = usePendingQuestion(chatId);
+  const { data: pendingQuestions } = usePendingQuestions(chatId);
   const { allWorkflows } = useWorkflowExecutions(chatId ?? null);
-
-  const questionWorkflowId = pendingQuestion?.workflow_id;
 
   return useMemo(() => {
     if (!chatId) return EMPTY;
+
+    const questions = pendingQuestions ?? [];
+    const questionThreads = new Set(questions.map((q) => questionThreadId(q, chatId, mainThreadId)));
+    const questionWorkflows = new Set(questions.map((q) => q.workflow_id).filter(Boolean));
 
     const spawnWorkflows = indexSpawnWorkflows(allWorkflows);
     const spawns: ActiveSpawn[] = [];
@@ -238,12 +280,13 @@ export function useBackgroundWork(
         continue;
       }
 
-      // A pending question names the workflow that asked it, and thread
-      // records carry the same workflow id — so the block attributes to one
-      // exact spawn rather than lighting up every running child.
-      const isBlocked = Boolean(
-        questionWorkflowId && (thread.workflow_id === questionWorkflowId || workflow?.id === questionWorkflowId),
-      );
+      // A pending question names the thread (and workflow) that asked it, so
+      // the block attributes to one exact spawn rather than lighting up every
+      // running child.
+      const isBlocked =
+        questionThreads.has(thread.thread) ||
+        Boolean(thread.workflow_id && questionWorkflows.has(thread.workflow_id)) ||
+        Boolean(workflow?.id && questionWorkflows.has(workflow.id));
 
       spawns.push({
         threadId: thread.thread,
@@ -271,6 +314,26 @@ export function useBackgroundWork(
     // workflow tree refetch catches up.
     const liveSpawns = spawns;
 
+    // Questions no spawn row speaks for, minus the one in the composer. One
+    // entry per thread: a thread waits on one question at a time.
+    const inView = viewedThreadId(chatId, selectedThreadId, mainThreadId);
+    const spawnRows = new Set(liveSpawns.map((spawn) => spawn.threadId));
+    const waitingByThread = new Map<string, WaitingQuestion>();
+    for (const question of questions) {
+      const threadId = questionThreadId(question, chatId, mainThreadId);
+      if (threadId === inView || spawnRows.has(threadId)) continue;
+      const isMainThread = threadId === chatId;
+      waitingByThread.set(threadId, {
+        questionId: question.question_id,
+        threadId,
+        isMainThread,
+        title: isMainThread
+          ? "Main thread"
+          : workflowTitle(workflowOfThread(allWorkflows, threadId)) || "Agent",
+      });
+    }
+    const waitingQuestions = [...waitingByThread.values()];
+
     const commands: ActiveCommand[] = [];
     for (const process of processes) {
       if (process.status !== BackgroundProcessStatus.RUNNING) continue;
@@ -297,14 +360,17 @@ export function useBackgroundWork(
       failedSpawns,
       commands,
       blockedSpawns,
+      waitingQuestions,
       hasWork: liveSpawns.length > 0 || commands.length > 0,
     };
   }, [
     chatId,
     worktreeId,
+    selectedThreadId,
+    mainThreadId,
     activeThreads,
     processes,
-    questionWorkflowId,
+    pendingQuestions,
     allWorkflows,
   ]);
 }

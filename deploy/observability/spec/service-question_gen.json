@@ -191,8 +191,8 @@
         "height": 8
       },
       {
-        "id": "rpc-GetPendingQuestion-rate",
-        "title": "GetPendingQuestion: requests",
+        "id": "rpc-ListPendingQuestions-rate",
+        "title": "ListPendingQuestions: requests",
         "kind": "line",
         "signal": "traces",
         "series": [
@@ -215,7 +215,7 @@
           {
             "field": "span.name",
             "op": "eq",
-            "value": "reliant.v1.QuestionService/GetPendingQuestion"
+            "value": "reliant.v1.QuestionService/ListPendingQuestions"
           }
         ],
         "unit": "count",
@@ -223,8 +223,8 @@
         "height": 6
       },
       {
-        "id": "rpc-GetPendingQuestion-errors",
-        "title": "GetPendingQuestion: error rate",
+        "id": "rpc-ListPendingQuestions-errors",
+        "title": "ListPendingQuestions: error rate",
         "kind": "line",
         "signal": "traces",
         "series": [
@@ -259,7 +259,7 @@
           {
             "field": "span.name",
             "op": "eq",
-            "value": "reliant.v1.QuestionService/GetPendingQuestion"
+            "value": "reliant.v1.QuestionService/ListPendingQuestions"
           }
         ],
         "unit": "percent",
@@ -267,8 +267,8 @@
         "height": 6
       },
       {
-        "id": "rpc-GetPendingQuestion-latency",
-        "title": "GetPendingQuestion: latency",
+        "id": "rpc-ListPendingQuestions-latency",
+        "title": "ListPendingQuestions: latency",
         "kind": "line",
         "signal": "traces",
         "series": [
@@ -305,7 +305,7 @@
           {
             "field": "span.name",
             "op": "eq",
-            "value": "reliant.v1.QuestionService/GetPendingQuestion"
+            "value": "reliant.v1.QuestionService/ListPendingQuestions"
           }
         ],
         "unit": "ms",

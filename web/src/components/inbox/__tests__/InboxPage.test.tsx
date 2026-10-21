@@ -64,7 +64,7 @@ vi.mock("@/api/client", () => ({
   api: { approvals: { approve: mocks.approve, deny: mocks.deny } },
 }));
 vi.mock("@/api/question-grpc", () => ({
-  questionGrpc: { resolveQuestion: mocks.resolveQuestion, getPendingQuestion: vi.fn() },
+  questionGrpc: { resolveQuestion: mocks.resolveQuestion, listPendingQuestions: vi.fn() },
 }));
 vi.mock("@/hooks/useOnboardingQueries", () => ({
   useResumeDaemon: (callbacks: { onError?: (error: unknown) => void } = {}) => ({

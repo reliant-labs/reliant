@@ -121,7 +121,8 @@ import { QUEUED_SENDER_KIND_HUMAN } from "../api/chat-grpc";
 import {
   approvalKeys,
   upsertApprovalInCache,
-  patchPendingQuestionCache,
+  upsertPendingQuestionInCache,
+  removePendingQuestionFromCache,
   resolvePendingQuestion,
 } from "../hooks/approval-queries";
 import {
@@ -1000,7 +1001,7 @@ interface ChatStoreState {
 
   // Tool approvals + pending questions are server data owned by the React
   // Query cache (see hooks/approval-queries.ts): approve/deny via the mutation
-  // hooks, read via useApprovals / usePendingApprovals / usePendingQuestion.
+  // hooks, read via useApprovals / usePendingApprovals / usePendingQuestions.
   // The chat stream patches that cache directly — no store-side copy here.
 
   // Branch chat
@@ -1644,7 +1645,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     })();
 
     // Pending approvals and the pending question are server data owned by the
-    // React Query cache: useApprovals / usePendingApprovals / usePendingQuestion
+    // React Query cache: useApprovals / usePendingApprovals / usePendingQuestions
     // fetch them on mount and the chat stream patches the cache live (see
     // approval-queries.ts). No store-side prefetch needed here.
 
@@ -3449,21 +3450,24 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
           upsertApprovalInCache(chatId, approval);
         });
 
-        // Question updates patch the React Query cache (server data), read
-        // via usePendingQuestion. A "pending" event sets it; "resolved" clears.
+        // Question updates patch the chat's pending-question list (server
+        // data), read via usePendingQuestions. A "pending" event adds that
+        // question; "resolved" removes THAT question only — other threads'
+        // questions are still waiting on the user.
         for (const qu of questionUpdates) {
           if (qu.status === "pending") {
-            patchPendingQuestionCache(chatId, {
+            upsertPendingQuestionInCache(chatId, {
               question_id: qu.question_id,
               chat_id: qu.chat_id,
               workflow_id: qu.workflow_id,
+              thread_id: qu.thread_id ?? "",
               step_id: qu.step_id,
               status: qu.status,
               created_at: "",
               metadata: qu.metadata,
             });
           } else if (qu.status === "resolved") {
-            patchPendingQuestionCache(chatId, null);
+            removePendingQuestionFromCache(chatId, qu.question_id);
           }
         }
 

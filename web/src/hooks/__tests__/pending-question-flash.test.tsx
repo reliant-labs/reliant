@@ -8,19 +8,19 @@ import React from "react";
 // cache/render behavior rather than transport.
 vi.mock("../../api/question-grpc", () => ({
   questionGrpc: {
-    getPendingQuestion: vi.fn(async () => null),
+    listPendingQuestions: vi.fn(async () => []),
     resolveQuestion: vi.fn(async () => ({})),
   },
 }));
 
 import { queryClient } from "../../lib/query-client";
-import { patchPendingQuestionCache, usePendingQuestion } from "../approval-queries";
+import { upsertPendingQuestionInCache, usePendingQuestions } from "../approval-queries";
 
 // Evidence for WHERE the "already-answered ask briefly pops up when I open a
 // chat" flash had to be fixed.
 //
-// The chat stream drives this cache: a "pending" question update sets it,
-// "resolved" clears it. The test below pins the consequence — a stale "pending"
+// The chat stream drives this cache: a "pending" question update adds it,
+// "resolved" removes it. The test below pins the consequence — a stale "pending"
 // that reaches the cache at all IS painted. There is no render-layer guard
 // between the cache and the screen.
 //
@@ -45,6 +45,7 @@ const question = {
   question_id: "q1",
   chat_id: "c1",
   workflow_id: "w1",
+  thread_id: "c1",
   step_id: "s1",
   status: "pending",
   created_at: "",
@@ -59,7 +60,7 @@ describe("pending question visibility on chat open", () => {
     const seen: unknown[] = [];
     const { result } = renderHook(
       () => {
-        const q = usePendingQuestion("c1");
+        const q = usePendingQuestions("c1");
         seen.push(q.data);
         return q;
       },
@@ -70,11 +71,13 @@ describe("pending question visibility on chat open", () => {
 
     // A superseded "pending" arriving on its own — the snapshot replaying an
     // answered question, or a resolve path that never announced itself.
-    patchPendingQuestionCache("c1", question);
-    await waitFor(() => expect(result.current.data).not.toBeNull());
+    upsertPendingQuestionInCache("c1", question);
+    await waitFor(() => expect(result.current.data).toHaveLength(1));
 
     expect(
-      seen.some((v) => (v as { question_id?: string } | null)?.question_id === "q1"),
+      seen.some((v) =>
+        (v as { question_id?: string }[] | undefined)?.some((q) => q.question_id === "q1"),
+      ),
       "a pending question in the cache is rendered with no guard in between, " +
         "which is why the flash must be prevented upstream rather than hidden here",
     ).toBe(true);
