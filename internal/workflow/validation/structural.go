@@ -86,7 +86,8 @@ type validationError struct {
 // =============================================================================
 
 // validateStructure performs all structural validation on the workflow.
-func validateStructure(wf *reliantv1.Workflow, result *Result) {
+func validateStructure(wf *reliantv1.Workflow, types ValueTypes, result *Result) {
+	types = typesOrDefault(types)
 	seenNodeIDs := make(map[string]int)
 	nodeMap := make(map[string]*reliantv1.Node)
 
@@ -115,7 +116,7 @@ func validateStructure(wf *reliantv1.Workflow, result *Result) {
 	// === Input Validation ===
 
 	for inputName, input := range wf.GetInputs() {
-		validateProtoInput(inputName, input, result)
+		validateProtoInput(inputName, input, wf.GetInputs(), types, result)
 	}
 
 	// === Workflow-level Presets Validation ===
@@ -447,15 +448,29 @@ func validateNodeArgs(node *reliantv1.Node, nodePath []string, result *Result) {
 	}
 }
 
-// validateProtoInput validates a proto input definition.
-func validateProtoInput(name string, input *reliantv1.Input, result *Result) {
+// validateProtoInput validates a proto input definition. all is every input of
+// the workflow, which a scoped integration input names its scope sources from.
+func validateProtoInput(name string, input *reliantv1.Input, all map[string]*reliantv1.Input, types ValueTypes, result *Result) {
 	if input == nil {
 		return
 	}
+	path := parsePath("inputs." + name)
+
 	// Type must be set
 	inputType := model.GetInputType(input)
 	if inputType == "" {
 		result.AddError(CategoryStructure, parsePath(fmt.Sprintf("inputs.%s", name)), "", "input type is required")
+		return
+	}
+
+	if model.GetInputBase(input).GetRequired() && model.GetInputDefault(input) != nil {
+		result.AddErrorWithSuggestion(CategoryInput, path, "required",
+			"a required input takes no default: the default would supply the value the author means to demand",
+			"remove the default, or remove required: true; an input with no default is required already")
+	}
+
+	if isIntegrationInput(input) {
+		validateIntegrationInputDecl(path, input, all, types, result)
 	}
 }
 

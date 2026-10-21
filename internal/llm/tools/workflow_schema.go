@@ -90,13 +90,25 @@ func GetInputSchema() *jsonschema.Schema {
 	inputTypeNames := reference.ListInputTypes()
 	sort.Strings(inputTypeNames)
 
+	// The built-in names are a closed set; an integration's type is any
+	// <integration>.<type>, checked against the catalog by workflow validation.
+	builtinNames := make([]string, 0, len(inputTypeNames))
+	for _, n := range inputTypeNames {
+		if n != reference.IntegrationInputTypeName {
+			builtinNames = append(builtinNames, n)
+		}
+	}
+
 	// Build properties
 	props := orderedmap.New[string, *jsonschema.Schema]()
 
 	props.Set("type", &jsonschema.Schema{
 		Type:        "string",
-		Description: "Input type",
-		Enum:        toInterfaceSlice(inputTypeNames),
+		Description: "Input type: a built-in type, or an integration's written <integration>.<type> (for example github.repository)",
+		AnyOf: []*jsonschema.Schema{
+			{Enum: toInterfaceSlice(builtinNames)},
+			{Pattern: `^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$`},
+		},
 	})
 	props.Set("description", &jsonschema.Schema{
 		Type:        "string",

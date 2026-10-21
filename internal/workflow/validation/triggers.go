@@ -134,7 +134,7 @@ func validateTriggers(wf *reliantv1.Workflow, opts *ValidationOptions, integrati
 			validateTriggerIntegration(wt.GetIntegration(), path, integrations, result)
 			payloads, declaredBy = integrationPayloads(wt.GetIntegration(), integrations)
 		}
-		shape := newPayloadShape(triggerspec.ParamsSchema(triggerspec.ParamsInputs(declaredInputs, wt.GetInputs())), payloads, declaredBy)
+		shape := newPayloadShape(triggerspec.ParamsSchema(triggerspec.ParamsInputs(declaredInputs, wt.GetInputs()), opts.valueTypes()), payloads, declaredBy)
 
 		if filter := strings.TrimSpace(wt.GetFilter()); filter != "" {
 			if wt.GetSchedule() != nil {
@@ -259,7 +259,8 @@ func (s *payloadShape) report(result *Result, path []string, field, expr string,
 // or a param can supply and that this trigger does not map: every activation
 // would have to set it in params, or every firing fails input validation.
 // Only plain value inputs are considered; a model, message, preset, group or
-// tools input is normally supplied by presets or the launch itself.
+// tools input is normally supplied by presets or the launch itself. An
+// integration input is a plain value, so it is considered.
 func warnUnmappedRequiredInputs(mapped map[string]string, declared map[string]*reliantv1.Input, path []string, result *Result) {
 	var missing []string
 	for name, input := range declared {
@@ -269,7 +270,7 @@ func warnUnmappedRequiredInputs(mapped map[string]string, declared map[string]*r
 		switch input.GetConfig().(type) {
 		case *reliantv1.Input_StringInput, *reliantv1.Input_IntegerInput, *reliantv1.Input_NumberInput,
 			*reliantv1.Input_BooleanInput, *reliantv1.Input_EnumInput, *reliantv1.Input_ArrayInput,
-			*reliantv1.Input_ObjectInput:
+			*reliantv1.Input_ObjectInput, *reliantv1.Input_IntegrationInput:
 			missing = append(missing, name)
 		}
 	}
