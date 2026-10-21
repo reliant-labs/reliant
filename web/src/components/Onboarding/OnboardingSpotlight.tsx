@@ -8,6 +8,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "../../lib/utils";
+import { useUnmountSafeTimeout } from "../../hooks/useUnmountSafeTimeout";
 import type { SpotlightConfig } from "./types";
 
 // Store last known positions for smooth transitions between steps
@@ -179,6 +180,9 @@ export function OnboardingSpotlight({
   const [isVisible, setIsVisible] = useState(true);
   // Highlight fades in separately from tooltip
   const [highlightVisible, setHighlightVisible] = useState(false);
+  // updatePosition also runs from resize/scroll listeners, so its highlight
+  // fade-in timer is not owned by any one effect: tie it to the component.
+  const scheduleTimeout = useUnmountSafeTimeout();
 
   // Extract spotlight config with defaults
   const spotlightPadding = spotlightConfig?.padding ?? 8;
@@ -244,8 +248,8 @@ export function OnboardingSpotlight({
     };
     setSpotlightRect(newRect);
     // Fade in the highlight after a brief delay
-    setTimeout(() => setHighlightVisible(true), 50);
-  }, [targetSelector, spotlightConfig, shouldDetectBorderRadius]);
+    scheduleTimeout(() => setHighlightVisible(true), 50);
+  }, [targetSelector, spotlightConfig, shouldDetectBorderRadius, scheduleTimeout]);
 
   useEffect(() => {
     if (!spotlightRect) return;
