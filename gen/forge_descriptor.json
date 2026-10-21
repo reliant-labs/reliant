@@ -15132,6 +15132,12 @@
           {
             "name": "timeout_ms",
             "kind": "int32"
+          },
+          {
+            "name": "trace_context",
+            "kind": "map",
+            "map_key_kind": "string",
+            "map_value_kind": "string"
           }
         ],
         "reliant.v1.ToolResponse": [
@@ -39529,7 +39535,7 @@
     "reliant/v1/terminal.proto": "877157ed3b8127ca00b1e49597143a8fdf73d100ebf7867118541c95c809a43f",
     "reliant/v1/token.proto": "df7f634505ef8d0da2882feb4fe31865d541b2593df0c069159f2b6440e5f63e",
     "reliant/v1/tool_call.proto": "b5861a934a2b119031b609eb10cf77e6ba8ccce474d1bb0edbf5cd9fed56cc95",
-    "reliant/v1/tools_daemon.proto": "ed355efab8f065a289e7de67224236af37e8b4fcd2770e1de66120cf45b1aaf4",
+    "reliant/v1/tools_daemon.proto": "619e7af630046ea39abad05dfb538dfaafc7cfcacbe5a413489b2b05260a15d2",
     "reliant/v1/trigger.proto": "cdf7e534edff89945c8ace69553eb1d2d69b47e4244a9f71f160912be9c8fbd7",
     "reliant/v1/workflow.proto": "bd8fa927bf1b9842617fda4c7d56e346ff6ee6d89247178752fb10b9c4f18c86",
     "reliant/v1/workflow_v2.proto": "ab25a4ea3cdfdc1ab731f8eefde4fe45325da51d03e2f93ec1c1023b5e36eaf7",
