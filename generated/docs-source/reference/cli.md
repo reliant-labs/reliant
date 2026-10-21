@@ -55,9 +55,15 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge ci verify-test-run`](#reliant-forge-ci-verify-test-run) | Verify a `go test -json` run actually ran its tests (reads output; runs nothing) |
 | [`reliant forge ci vuln-scan`](#reliant-forge-ci-vuln-scan) | Run vulnerability scanners based on forge.yaml config |
 | [`reliant forge cloud`](#reliant-forge-cloud) | Talk to the hosted control plane an environment declares |
-| [`reliant forge cloud identity`](#reliant-forge-cloud-identity) | Inspect managed identity and invite users to an environment |
-| [`reliant forge cloud identity invite`](#reliant-forge-cloud-identity-invite) | Email an invitation and grant console-managed roles (org admin) |
+| [`reliant forge cloud identity`](#reliant-forge-cloud-identity) | Inspect managed identity and administer its users |
+| [`reliant forge cloud identity delete`](#reliant-forge-cloud-identity-delete) | Delete a user's account (org admin; asks first) |
+| [`reliant forge cloud identity invite`](#reliant-forge-cloud-identity-invite) | Create an account (or grant roles) and ask for an invitation email (org admin) |
+| [`reliant forge cloud identity lock`](#reliant-forge-cloud-identity-lock) | Block a user from signing in (org admin) |
+| [`reliant forge cloud identity reset`](#reliant-forge-cloud-identity-reset) | Email a user a link to set a new password (org admin) |
+| [`reliant forge cloud identity revoke-sessions`](#reliant-forge-cloud-identity-revoke-sessions) | End a user's sign-in sessions (org admin) |
+| [`reliant forge cloud identity set-roles`](#reliant-forge-cloud-identity-set-roles) | Replace a user's console-managed roles (org admin) |
 | [`reliant forge cloud identity status`](#reliant-forge-cloud-identity-status) | Show managed-identity state, issuer and delivery metadata |
+| [`reliant forge cloud identity unlock`](#reliant-forge-cloud-identity-unlock) | Let a locked user sign in again (org admin) |
 | [`reliant forge cloud identity users`](#reliant-forge-cloud-identity-users) | List one page of users and declared roles (no credentials) |
 | [`reliant forge cloud releases`](#reliant-forge-cloud-releases) | List releases from the hosted control plane |
 | [`reliant forge cloud status`](#reliant-forge-cloud-status) | Show the endpoint and credential source for an environment |
@@ -1458,7 +1464,7 @@ reliant forge cloud
 
 | Command | Description |
 |---------|-------------|
-| [`identity`](#reliant-forge-cloud-identity) | Inspect managed identity and invite users to an environment |
+| [`identity`](#reliant-forge-cloud-identity) | Inspect managed identity and administer its users |
 | [`releases`](#reliant-forge-cloud-releases) | List releases from the hosted control plane |
 | [`status`](#reliant-forge-cloud-status) | Show the endpoint and credential source for an environment |
 | [`token`](#reliant-forge-cloud-token) | Mint, list and revoke ORG automation tokens (the CI deploy credential) |
@@ -1467,17 +1473,28 @@ reliant forge cloud
 
 #### reliant forge cloud identity
 
-Inspect managed identity and invite users to an environment
+Inspect managed identity and administer its users
 
 Manage the identity an environment declares in KCL, using its control plane.
 
-Requires a human session (Reliant's session helper or forge login); machine
-credentials are refused by the server. Members may read; invitations require
-an org admin. The organization is resolved from the authenticated server, not
-a token claim or a flag. The environment must already exist in this project.
+Reads (status, users) need identity:read; every verb that changes a user
+(invite, set-roles, reset, lock, unlock, delete, revoke-sessions) needs
+identity:manage and an org admin. Under Reliant, or after forge login, nothing
+extra is needed: when the control plane answers that the credential lacks one of
+those scopes, forge trades it for the scope on demand (an hour, and only while
+the person behind the session holds the grant), as deploy does for deploy:read.
+A --token or the token env var is used exactly as given and must carry the scope.
+The organization is resolved from the authenticated server, not a token claim or
+a flag. The environment must already exist in this project.
 
-Inviting sends an email link for the recipient to set their own credential.
-There is no password option, seed account or implicit recipient. Roles managed
+--user takes a user id or an exact email address (see 'users').
+
+Inviting creates the account (or grants roles to an existing one) and asks the
+instance to email a code. No mail is sent unless the environment declares smtp
+in KCL: without it the call succeeds and delivers nothing, so hand the person a
+password-set code through a channel you control (the deploy/managed-identity
+skill, "What an invitation does, and does not, do"). There is no password
+option, seed account or implicit recipient. Roles managed
 in deploy/kcl/identity.k (members_from = "declared") are read-only here.
 
 ```
@@ -1488,21 +1505,51 @@ reliant forge cloud identity
 
 | Command | Description |
 |---------|-------------|
-| [`invite`](#reliant-forge-cloud-identity-invite) | Email an invitation and grant console-managed roles (org admin) |
+| [`delete`](#reliant-forge-cloud-identity-delete) | Delete a user's account (org admin; asks first) |
+| [`invite`](#reliant-forge-cloud-identity-invite) | Create an account (or grant roles) and ask for an invitation email (org admin) |
+| [`lock`](#reliant-forge-cloud-identity-lock) | Block a user from signing in (org admin) |
+| [`reset`](#reliant-forge-cloud-identity-reset) | Email a user a link to set a new password (org admin) |
+| [`revoke-sessions`](#reliant-forge-cloud-identity-revoke-sessions) | End a user's sign-in sessions (org admin) |
+| [`set-roles`](#reliant-forge-cloud-identity-set-roles) | Replace a user's console-managed roles (org admin) |
 | [`status`](#reliant-forge-cloud-identity-status) | Show managed-identity state, issuer and delivery metadata |
+| [`unlock`](#reliant-forge-cloud-identity-unlock) | Let a locked user sign in again (org admin) |
 | [`users`](#reliant-forge-cloud-identity-users) | List one page of users and declared roles (no credentials) |
+
+---
+
+#### reliant forge cloud identity delete
+
+Delete a user's account (org admin; asks first)
+
+Remove the account. This cannot be undone. A user who holds a declared role is
+refused: the next reconcile would recreate them. Without --yes the command asks
+on the terminal and refuses when stdin is not one.
+
+```
+reliant forge cloud identity delete <env> --user <id|email> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--json` | `bool` | - | Emit machine-readable JSON (never credentials) |
+| `--token` | `string` | - | Credential to use, ahead of the env var, stored login and session helper |
+| `--user` | `string` | - | The user, by user id or exact email address (required) |
+| `--yes`, `-y` | `bool` | - | Delete without asking |
 
 ---
 
 #### reliant forge cloud identity invite
 
-Email an invitation and grant console-managed roles (org admin)
+Create an account (or grant roles) and ask for an invitation email (org admin)
 
 Invite this explicit email address; repeat --role for multiple roles.
-The recipient sets their own credential using the invitation email. An existing
-account receives the requested roles (created=false). The server refuses unknown
-or declared/read-only roles, machine credentials and an identity that is not
-ready. Such a refusal is an error, never a fallback to a seeded password.
+The account is created and the instance is asked to email a code, but mail
+goes out only when the environment declares smtp; otherwise nothing is sent and
+the person needs a password-set code from you. An existing account receives the requested roles (created=false). The server refuses unknown
+or declared/read-only roles, a credential without identity:manage and an
+identity that is not ready. Such a refusal is an error, never a fallback to a seeded password.
 
 ```
 reliant forge cloud identity invite <env> --email <address> --role <role> [flags]
@@ -1516,6 +1563,92 @@ reliant forge cloud identity invite <env> --email <address> --role <role> [flags
 | `--json` | `bool` | - | Emit machine-readable JSON (never credentials) |
 | `--role` | `stringArray` | `[]` | Console-managed role to grant (required; repeat for multiple roles) |
 | `--token` | `string` | - | Credential to use, ahead of the env var, stored login and session helper |
+
+---
+
+#### reliant forge cloud identity lock
+
+Block a user from signing in (org admin)
+
+Block sign-in for the user. Reversible with `forge cloud identity unlock`.
+
+```
+reliant forge cloud identity lock <env> --user <id|email> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--json` | `bool` | - | Emit machine-readable JSON (never credentials) |
+| `--token` | `string` | - | Credential to use, ahead of the env var, stored login and session helper |
+| `--user` | `string` | - | The user, by user id or exact email address (required) |
+
+---
+
+#### reliant forge cloud identity reset
+
+Email a user a link to set a new password (org admin)
+
+Email the user a link to set a new password. Whether the environment's identity
+can send mail at all is shown by `forge cloud identity status`.
+
+```
+reliant forge cloud identity reset <env> --user <id|email> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--json` | `bool` | - | Emit machine-readable JSON (never credentials) |
+| `--token` | `string` | - | Credential to use, ahead of the env var, stored login and session helper |
+| `--user` | `string` | - | The user, by user id or exact email address (required) |
+
+---
+
+#### reliant forge cloud identity revoke-sessions
+
+End a user's sign-in sessions (org admin)
+
+End every sign-in session the user holds. Access tokens already issued stay
+valid until they expire.
+
+```
+reliant forge cloud identity revoke-sessions <env> --user <id|email> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--json` | `bool` | - | Emit machine-readable JSON (never credentials) |
+| `--token` | `string` | - | Credential to use, ahead of the env var, stored login and session helper |
+| `--user` | `string` | - | The user, by user id or exact email address (required) |
+
+---
+
+#### reliant forge cloud identity set-roles
+
+Replace a user's console-managed roles (org admin)
+
+Replace the user's console-managed roles with exactly the --role values. Roles
+the environment declares in deploy/kcl/identity.k are left as they are, and
+naming one is refused. To remove every console-managed role, pass --none.
+
+```
+reliant forge cloud identity set-roles <env> --user <id|email> --role <role> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--json` | `bool` | - | Emit machine-readable JSON (never credentials) |
+| `--none` | `bool` | - | Remove every console-managed role |
+| `--role` | `stringArray` | `[]` | Console-managed role the user should hold (repeat for several) |
+| `--token` | `string` | - | Credential to use, ahead of the env var, stored login and session helper |
+| `--user` | `string` | - | The user, by user id or exact email address (required) |
 
 ---
 
@@ -1533,6 +1666,26 @@ reliant forge cloud identity status <env> [flags]
 |------|------|---------|-------------|
 | `--json` | `bool` | - | Emit machine-readable JSON (never credentials) |
 | `--token` | `string` | - | Credential to use, ahead of the env var, stored login and session helper |
+
+---
+
+#### reliant forge cloud identity unlock
+
+Let a locked user sign in again (org admin)
+
+Undo `forge cloud identity lock`.
+
+```
+reliant forge cloud identity unlock <env> --user <id|email> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--json` | `bool` | - | Emit machine-readable JSON (never credentials) |
+| `--token` | `string` | - | Credential to use, ahead of the env var, stored login and session helper |
+| `--user` | `string` | - | The user, by user id or exact email address (required) |
 
 ---
 
@@ -7176,6 +7329,7 @@ reliant forge project new [project-name] --mod [module-path] [flags]
 | `--service` | `stringSlice` | `[]` | Name(s) of initial Go services (repeatable or comma-separated). Name services after domain entities (item, order), not the binary. Omit to scaffold zero services and add them later via 'forge scaffold service <entity>' |
 | `--skip-tools` | `bool` | - | Skip auto-installing protoc-gen-go / protoc-gen-connect-go (run 'forge tools install' later) |
 | `--verbose`, `-v` | `bool` | - | Print the raw output behind a step forge summarizes in one line (e.g. git's explanation when the initial commit is skipped for want of a git identity) |
+| `--verify` | `bool` | - | Compile the scaffold before returning: the bootstrap generate then ends with its go build check and a render of every deploy env (adds ~1s warm, ~40s on a cold build cache, and saturates the CPU while it runs). Off by default: the scaffold is deterministic and forge's own e2e corpus compiles it, and your first go build or forge generate pays for the same compile |
 
 ---
 
