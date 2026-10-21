@@ -1,0 +1,6 @@
+>-
+  GitHub rate limit exceeded ({{ response.?message.orValue('rate limited') }}).
+  {{ headers[?'retry-after'].hasValue() ? 'Retry after ' + headers['retry-after'] + ' seconds.' :
+     headers[?'x-ratelimit-remaining'].orValue('') == '0' && headers[?'x-ratelimit-reset'].hasValue() ?
+     'Retry after ' + string(timestamp(int(headers['x-ratelimit-reset']))) + '.' :
+     'Retry after at least 60 seconds.' }}

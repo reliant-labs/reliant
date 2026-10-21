@@ -1,0 +1,9 @@
+# yaml-language-server: $schema=../../../manifest/schema/event.schema.json
+id: issue.closed
+display_name: Issue closed
+summary: An issue was closed.
+description: Fires when an issue is closed, as completed or as not planned (issue.state_reason).
+keywords: [resolved, done]
+events: [issues.closed]
+attributes: { $ref: ../schemas/issue_attrs.yaml }
+data: { $ref: ../schemas/issue_data.yaml }

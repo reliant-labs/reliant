@@ -1,0 +1,7 @@
+type: object
+additionalProperties: false
+properties:
+  action: { type: string }
+  issue: { $ref: issue_schema.yaml }
+  repository: { $ref: repository_schema.yaml }
+  sender: { $ref: user_schema.yaml }

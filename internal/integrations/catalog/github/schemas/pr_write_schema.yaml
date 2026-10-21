@@ -1,0 +1,11 @@
+type: object
+properties:
+  number: { type: integer }
+  id: { type: integer }
+  node_id: { type: [string, "null"] }
+  html_url: { type: string }
+  title: { type: string }
+  state: { type: string, enum: [open, closed] }
+  draft: { type: boolean }
+  head_sha: { type: [string, "null"] }
+  base_ref: { type: [string, "null"], description: The branch it targets. }

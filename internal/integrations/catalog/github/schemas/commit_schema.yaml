@@ -1,0 +1,10 @@
+type: object
+properties:
+  id: { type: string }
+  message: { type: string }
+  timestamp: { type: string }
+  url: { type: string }
+  author: { type: object, properties: { name: { type: string }, username: { type: string } } }
+  added: { type: array, items: { type: string } }
+  removed: { type: array, items: { type: string } }
+  modified: { type: array, items: { type: string } }

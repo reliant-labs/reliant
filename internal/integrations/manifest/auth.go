@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/url"
 	"regexp"
+	"slices"
 	"strings"
 
 	gojsonschema "github.com/google/jsonschema-go/jsonschema"
@@ -21,6 +22,18 @@ const (
 	AuthDelegated = "delegated"
 )
 
+// The values each enum-like field of the manifest may take. The validators
+// below and the published JSON Schema (package schema) both read these.
+var (
+	AuthLocations       = []string{"header", "query"}
+	ScopeSeparators     = []string{" ", ","}
+	PKCEMethods         = []string{"S256", "plain"}
+	RevokeMethods       = []string{"POST", "DELETE", "GET"}
+	RevokeClientAuths   = []string{"none", "basic"}
+	RevokeTokenLocation = []string{"form", "json", "query", "bearer"}
+	ProbeMethods        = []string{"GET", "POST"}
+)
+
 // ExecutorPrefix marks an action implemented by a registered Go function.
 const ExecutorPrefix = "go:"
 
@@ -29,13 +42,13 @@ const ExecutorPrefix = "go:"
 const ParamVar = "connection.params."
 
 var (
-	paramNamePattern = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
-	brokerPattern    = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
-	executorPattern  = regexp.MustCompile(`^go:([a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*)$`)
-	keywordPattern   = regexp.MustCompile(`^[a-z0-9][a-z0-9 _.+-]*$`)
-	headerPattern    = regexp.MustCompile(`^[A-Za-z0-9-]+$`)
-	queryNamePattern = regexp.MustCompile(`^[A-Za-z0-9_.-]+$`)
-	urlParamPattern  = regexp.MustCompile(`^\{\{\s*connection\.params\.([a-z][a-z0-9_]*)\s*\}\}$`)
+	ParamNamePattern  = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
+	BrokerPattern     = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
+	ExecutorPattern   = regexp.MustCompile(`^go:([a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*)$`)
+	KeywordPattern    = regexp.MustCompile(`^[a-z0-9][a-z0-9 _.+-]*$`)
+	HeaderNamePattern = regexp.MustCompile(`^[A-Za-z0-9-]+$`)
+	QueryNamePattern  = regexp.MustCompile(`^[A-Za-z0-9_.-]+$`)
+	urlParamPattern   = regexp.MustCompile(`^\{\{\s*connection\.params\.([a-z][a-z0-9_]*)\s*\}\}$`)
 	// hostLabel is one DNS label: what a param may expand to inside a host.
 	hostLabel = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 
@@ -80,7 +93,7 @@ func Method(conn *reliantv1.ConnectionSpec, kind string) (*reliantv1.AuthMethod,
 
 // ExecutorName returns <name> for an action whose executor is "go:<name>".
 func ExecutorName(a *reliantv1.ActionSpec) (string, bool) {
-	m := executorPattern.FindStringSubmatch(a.GetExecutor())
+	m := ExecutorPattern.FindStringSubmatch(a.GetExecutor())
 	if m == nil {
 		return "", false
 	}
@@ -299,8 +312,8 @@ func validateConnection(conn *reliantv1.ConnectionSpec, trust Trust) (allowed ma
 	params := map[string]bool{}
 	for i, p := range conn.GetConnectionParams() {
 		where := fmt.Sprintf("connection.connection_params[%d]", i)
-		if !paramNamePattern.MatchString(p.GetName()) {
-			return nil, false, fmt.Errorf("%s.name %q must match %s", where, p.GetName(), paramNamePattern)
+		if !ParamNamePattern.MatchString(p.GetName()) {
+			return nil, false, fmt.Errorf("%s.name %q must match %s", where, p.GetName(), ParamNamePattern)
 		}
 		if params[p.GetName()] {
 			return nil, false, fmt.Errorf("%s: %q is declared twice", where, p.GetName())
@@ -389,8 +402,8 @@ func validateConnection(conn *reliantv1.ConnectionSpec, trust Trust) (allowed ma
 			if conn.GetAllowAnyPublicHost() {
 				return nil, false, fmt.Errorf("%s: delegated cannot be combined with allow_any_public_host", where)
 			}
-			if !brokerPattern.MatchString(a.GetDelegated().GetBroker()) {
-				return nil, false, fmt.Errorf("%s.delegated.broker %q must match %s", where, a.GetDelegated().GetBroker(), brokerPattern)
+			if !BrokerPattern.MatchString(a.GetDelegated().GetBroker()) {
+				return nil, false, fmt.Errorf("%s.delegated.broker %q must match %s", where, a.GetDelegated().GetBroker(), BrokerPattern)
 			}
 		}
 	}
@@ -416,15 +429,11 @@ func validateOAuth2(o *reliantv1.OAuth2Auth, params map[string]bool) error {
 			return fmt.Errorf("scopes[%d] %q must be one non-empty scope", i, s)
 		}
 	}
-	switch o.GetScopeSeparator() {
-	case "", " ", ",":
-	default:
-		return fmt.Errorf("scope_separator %q must be a space or a comma", o.GetScopeSeparator())
+	if err := checkOneOf("scope_separator", o.GetScopeSeparator(), ScopeSeparators); err != nil {
+		return err
 	}
-	switch o.GetPkce() {
-	case "", "S256", "plain":
-	default:
-		return fmt.Errorf("pkce %q must be S256 or plain", o.GetPkce())
+	if err := checkOneOf("pkce", o.GetPkce(), PKCEMethods); err != nil {
+		return err
 	}
 	if expr := o.GetSenderId(); expr != "" {
 		if err := tmpl.ValidateExpr(expr); err != nil {
@@ -443,22 +452,19 @@ func validateOAuth2(o *reliantv1.OAuth2Auth, params map[string]bool) error {
 		if _, err := checkCatalogURL(r.GetUrl(), params, "client_id"); err != nil {
 			return fmt.Errorf("revoke.url: %w", err)
 		}
-		switch r.GetMethod() {
-		case "", "POST", "DELETE", "GET":
-		default:
-			return fmt.Errorf("revoke.method %q must be POST, DELETE or GET", r.GetMethod())
+		for _, c := range []struct {
+			name, value string
+			allowed     []string
+		}{
+			{"revoke.method", r.GetMethod(), RevokeMethods},
+			{"revoke.client_auth", r.GetClientAuth(), RevokeClientAuths},
+			{"revoke.token_in", r.GetTokenIn(), RevokeTokenLocation},
+		} {
+			if err := checkOneOf(c.name, c.value, c.allowed); err != nil {
+				return err
+			}
 		}
-		switch r.GetClientAuth() {
-		case "", "none", "basic":
-		default:
-			return fmt.Errorf("revoke.client_auth %q must be none or basic", r.GetClientAuth())
-		}
-		switch r.GetTokenIn() {
-		case "", "form", "json", "query", "bearer":
-		default:
-			return fmt.Errorf("revoke.token_in %q must be form, json, query or bearer", r.GetTokenIn())
-		}
-		if r.GetTokenParam() != "" && !queryNamePattern.MatchString(r.GetTokenParam()) {
+		if r.GetTokenParam() != "" && !QueryNamePattern.MatchString(r.GetTokenParam()) {
 			return fmt.Errorf("revoke.token_param %q is not a valid parameter name", r.GetTokenParam())
 		}
 	}
@@ -483,29 +489,28 @@ func validateAPIKey(k *reliantv1.ApiKeyAuth, conn *reliantv1.ConnectionSpec) err
 	if k.GetIn() == "" || k.GetName() == "" {
 		return fmt.Errorf(": in and name are set together")
 	}
+	if err := checkOneOf(".in", k.GetIn(), AuthLocations); err != nil {
+		return err
+	}
 	switch k.GetIn() {
 	case "header":
-		if !headerPattern.MatchString(k.GetName()) {
+		if !HeaderNamePattern.MatchString(k.GetName()) {
 			return fmt.Errorf(".name %q is not a valid header name", k.GetName())
 		}
 		if forbiddenCredentialHeaders[strings.ToLower(k.GetName())] {
 			return fmt.Errorf(".name: header %q cannot carry a credential", k.GetName())
 		}
 	case "query":
-		if !queryNamePattern.MatchString(k.GetName()) {
+		if !QueryNamePattern.MatchString(k.GetName()) {
 			return fmt.Errorf(".name %q is not a valid query parameter name", k.GetName())
 		}
-	default:
-		return fmt.Errorf(".in %q must be header or query", k.GetIn())
 	}
 	return nil
 }
 
 func validateProbe(p *reliantv1.IdentityProbe, conn *reliantv1.ConnectionSpec, params, allowed map[string]bool) error {
-	switch p.GetMethod() {
-	case "", "GET", "POST":
-	default:
-		return fmt.Errorf("connection.probe.method %q must be GET or POST", p.GetMethod())
+	if err := checkOneOf("connection.probe.method", p.GetMethod(), ProbeMethods); err != nil {
+		return err
 	}
 	if (p.GetUrl() == "") == (p.GetPath() == "") {
 		return fmt.Errorf("connection.probe needs exactly one of url or path")
@@ -532,7 +537,7 @@ func validateProbe(p *reliantv1.IdentityProbe, conn *reliantv1.ConnectionSpec, p
 		}
 	}
 	for k, v := range p.GetHeaders() {
-		if !headerPattern.MatchString(k) || strings.ContainsAny(v, "\r\n") || tmpl.HasExpr(v) {
+		if !HeaderNamePattern.MatchString(k) || strings.ContainsAny(v, "\r\n") || tmpl.HasExpr(v) {
 			return fmt.Errorf("connection.probe.headers: %q must be a literal header", k)
 		}
 	}
@@ -560,8 +565,8 @@ func checkPath(p string) error {
 // validateKeywords checks what the catalog search index reads.
 func validateKeywords(where string, kws []string) error {
 	for i, k := range kws {
-		if !keywordPattern.MatchString(k) || len(k) > 40 {
-			return fmt.Errorf("%skeywords[%d] %q must be lower-case words (%s), at most 40 characters", where, i, k, keywordPattern)
+		if !KeywordPattern.MatchString(k) || len(k) > 40 {
+			return fmt.Errorf("%skeywords[%d] %q must be lower-case words (%s), at most 40 characters", where, i, k, KeywordPattern)
 		}
 	}
 	return nil
@@ -582,4 +587,26 @@ func validateSchema(name string, s map[string]any) error {
 		return fmt.Errorf("%s: %w", name, err)
 	}
 	return nil
+}
+
+// checkOneOf refuses a value outside allowed; empty means the field's default.
+// The message lists the values the way the docs do: "a, b or c".
+func checkOneOf(name, value string, allowed []string) error {
+	if value == "" || slices.Contains(allowed, value) {
+		return nil
+	}
+	quoted := make([]string, len(allowed))
+	for i, a := range allowed {
+		quoted[i] = a
+		if a == " " {
+			quoted[i] = "a space"
+		} else if a == "," {
+			quoted[i] = "a comma"
+		}
+	}
+	list := quoted[0]
+	if n := len(quoted); n > 1 {
+		list = strings.Join(quoted[:n-1], ", ") + " or " + quoted[n-1]
+	}
+	return fmt.Errorf("%s %q must be %s", name, value, list)
 }

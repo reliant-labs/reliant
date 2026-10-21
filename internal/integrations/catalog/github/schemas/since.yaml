@@ -1,0 +1,5 @@
+type: string
+pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(Z|[+-][0-9]{2}:[0-9]{2})$"
+title: Since
+description: Only comments updated at or after this ISO 8601 time. Omit for every comment.
+examples: ["2026-01-02T03:04:05Z"]

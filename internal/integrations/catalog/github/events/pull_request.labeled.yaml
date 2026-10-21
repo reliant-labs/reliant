@@ -1,0 +1,13 @@
+# yaml-language-server: $schema=../../../manifest/schema/event.schema.json
+id: pull_request.labeled
+display_name: Pull request labeled
+summary: A label was added to a pull request.
+description: >-
+  Fires when a label is added to a pull request. Match `label` to react
+  to one label, e.g. label: agent:re-review, and base_branch or branch to
+  narrow by branch. The label is also data.label; the full set is
+  data.pull_request.labels.
+keywords: [pr, label, tag, triage, re-review]
+events: [pull_request.labeled]
+attributes: { $ref: ../schemas/pr_label_attrs.yaml }
+data: { $ref: ../schemas/pr_label_data.yaml }

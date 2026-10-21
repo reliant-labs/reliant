@@ -1,0 +1,11 @@
+# yaml-language-server: $schema=../../../manifest/schema/event.schema.json
+id: pull_request.opened
+display_name: Pull request opened
+summary: A pull request was opened.
+description: >-
+  Fires when a pull request is opened. Match base_branch to watch one
+  target branch, or branch for the head branch.
+keywords: [pr, pull request, review, code review]
+events: [pull_request.opened]
+attributes: { $ref: ../schemas/pr_attrs.yaml }
+data: { $ref: ../schemas/pr_data.yaml }

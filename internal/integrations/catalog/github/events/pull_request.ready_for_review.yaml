@@ -1,0 +1,8 @@
+# yaml-language-server: $schema=../../../manifest/schema/event.schema.json
+id: pull_request.ready_for_review
+display_name: Pull request ready for review
+summary: A draft pull request was marked ready for review.
+events: [pull_request.ready_for_review]
+keywords: [pr, draft, review]
+attributes: { $ref: ../schemas/pr_attrs.yaml }
+data: { $ref: ../schemas/pr_data.yaml }

@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=../../manifest/schema/manifest.schema.json
 # Generic HTTP request. No connection and no credentials: the caller supplies
 # the URL and any headers. It is the escape hatch for APIs without a manifest,
 # so it may name any host, and the runtime still refuses private, loopback,

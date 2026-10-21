@@ -1,0 +1,9 @@
+type: object
+properties:
+  id: { type: integer }
+  full_name: { type: string }
+  name: { type: string }
+  owner: { type: string }
+  private: { type: boolean }
+  html_url: { type: string }
+  default_branch: { type: string }

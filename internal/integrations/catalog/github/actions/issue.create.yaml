@@ -1,0 +1,71 @@
+# yaml-language-server: $schema=../../../manifest/schema/action.schema.json
+id: issue.create
+display_name: Create issue
+summary: Open a new issue in a repository.
+description: >-
+  Open an issue in owner/repo with a title and optional markdown body,
+  labels and assignees. Labels that do not exist are created; an assignee
+  without access to the repository fails validation. Returns the issue
+  number, id, node id and URL.
+keywords: [issue, open, file, bug, ticket, report]
+placement: server
+mutates: true
+tool:
+  expose: true
+params:
+  type: object
+  additionalProperties: false
+  required: [owner, repo, title]
+  properties:
+    owner: { $ref: ../schemas/owner.yaml }
+    repo: { $ref: ../schemas/repo.yaml }
+    title:
+      type: string
+      minLength: 1
+      title: Title
+      description: The issue's title.
+      examples: ["Login page loops back to sign-in after SSO"]
+    body:
+      type: string
+      title: Body
+      description: The issue's description, in GitHub-flavored markdown.
+      examples: ["Steps to reproduce:\n1. Sign in with SSO\n2. Land back on /login"]
+    labels:
+      type: array
+      items: { type: string }
+      title: Labels
+      description: Label names to apply; labels that do not exist yet are created.
+      examples: [["bug", "needs-triage"]]
+    assignees:
+      type: array
+      items: { type: string }
+      title: Assignees
+      description: GitHub usernames to assign, without the @.
+      examples: [["octocat"]]
+    connection: { $ref: ../schemas/connection.yaml }
+request:
+  method: POST
+  path: /repos/{{ params.owner }}/{{ params.repo }}/issues
+  body_expr: >-
+    {"title": params.title,
+     ?"body": params.?body,
+     ?"labels": params.?labels,
+     ?"assignees": params.?assignees}
+  errors: { $ref: ../schemas/github_errors.yaml }
+output:
+  select: >-
+    {"number": response.number,
+     "id": response.id,
+     "node_id": response.?node_id.orValue(null),
+     "title": response.title,
+     "state": response.state,
+     "html_url": response.html_url}
+  schema:
+    type: object
+    properties:
+      number: { type: integer, description: The issue number within the repository. }
+      id: { type: integer }
+      node_id: { type: [string, "null"] }
+      title: { type: string }
+      state: { type: string }
+      html_url: { type: string }

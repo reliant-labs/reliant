@@ -1,0 +1,5 @@
+type: object
+properties:
+  login: { type: string }
+  id: { type: integer }
+  type: { type: string }

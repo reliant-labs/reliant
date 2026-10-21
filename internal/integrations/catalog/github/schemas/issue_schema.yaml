@@ -1,0 +1,17 @@
+type: object
+properties:
+  number: { type: integer }
+  title: { type: string }
+  body: { type: string }
+  state: { type: string, enum: [open, closed] }
+  state_reason: { type: string }
+  html_url: { type: string }
+  user: { $ref: user_schema.yaml }
+  labels: { type: array, items: { type: string }, description: Label names. }
+  assignees: { type: array, items: { type: string }, description: Assignee logins. }
+  comments: { type: integer }
+  author_association: { type: string }
+  is_pull_request: { type: boolean }
+  created_at: { type: string }
+  updated_at: { type: string }
+  closed_at: { type: string }

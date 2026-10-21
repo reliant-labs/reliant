@@ -1,0 +1,46 @@
+# yaml-language-server: $schema=../../../manifest/schema/event.schema.json
+id: check_run.completed
+display_name: Check run completed
+summary: A check (a CI job or another App's check) finished.
+description: >-
+  Fires when a check run completes. Match conclusion (success, failure,
+  cancelled, timed_out, ...), branch, name (the check's name) and app (the
+  slug of the App that ran it; github-actions for Actions). Fires once
+  per job, so a busy repository sends many; check_suite.completed is one
+  event for all of a commit's checks, and workflow_run.completed one for
+  a whole Actions workflow.
+keywords: [check, job, status]
+events: [check_run.completed]
+attributes:
+  - { $ref: ../schemas/attr_repository.yaml }
+  - { $ref: ../schemas/attr_installation.yaml }
+  - { $ref: ../schemas/attr_sender.yaml }
+  - { $ref: ../schemas/attr_action.yaml }
+  - { name: conclusion, description: The check's conclusion., example: failure }
+  - { name: branch, description: The branch the check ran on., example: main }
+  - { name: name, description: The check's name., example: build }
+  - { name: app, description: The slug of the GitHub App that ran the check., example: github-actions }
+data:
+  type: object
+  additionalProperties: false
+  properties:
+    action: { type: string }
+    check_run:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        status: { type: string }
+        conclusion: { type: string }
+        head_sha: { type: string }
+        head_branch: { type: string }
+        check_suite_id: { type: integer }
+        html_url: { type: string }
+        details_url: { type: string }
+        started_at: { type: string }
+        completed_at: { type: string }
+        app: { $ref: ../schemas/app_schema.yaml }
+        output: { type: object, properties: { title: { type: string }, summary: { type: string } } }
+        pull_requests: { type: array, items: { type: integer }, description: Numbers of the pull requests the commit belongs to. }
+    repository: { $ref: ../schemas/repository_schema.yaml }
+    sender: { $ref: ../schemas/user_schema.yaml }
