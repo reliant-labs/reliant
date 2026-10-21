@@ -908,7 +908,7 @@ func wireTriggerAlerting(repo *db.Repo, cp controlplane.Endpoint, publicURL stri
 		logging.Warn("alert-triage automations are plain webhooks here: PUBLIC_URL is not set, so Alertmanager has no URL to deliver to")
 		return nil
 	}
-	receivers := controlplane.New(controlplane.Deps{
+	receivers := controlplane.NewInstrumented(controlplane.Deps{
 		BaseURL: cp.URL,
 		Sign:    func() (string, error) { return auth.SignInternalServiceToken(secret) },
 	})

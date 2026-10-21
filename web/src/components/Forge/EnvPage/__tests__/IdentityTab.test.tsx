@@ -61,6 +61,7 @@ function status(overrides: Partial<IdentityStatus> = {}): IdentityStatus {
     refused: "",
     callerCanManage: true,
     exportEnabled: false,
+    mailDelivery: "smtp",
     ...overrides,
   };
 }
@@ -83,9 +84,9 @@ function fakeApi(overrides: Partial<IdentityApi> = {}): IdentityApi {
     currentOrgId: vi.fn(async () => "org-a"),
     getStatus: vi.fn(async () => status()),
     listUsers: vi.fn(async () => USERS),
-    inviteUser: vi.fn(async () => ({ userId: "u-new", created: true })),
+    inviteUser: vi.fn(async () => ({ userId: "u-new", created: true, code: null })),
     setUserRoles: vi.fn(async () => null),
-    sendPasswordReset: vi.fn(async () => {}),
+    sendPasswordReset: vi.fn(async () => null),
     lockUser: vi.fn(async () => {}),
     unlockUser: vi.fn(async () => {}),
     deleteUser: vi.fn(async () => {}),
@@ -247,7 +248,7 @@ describe("IdentityTab", () => {
     await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "End sessions" }));
     await waitFor(() => expect(api.revokeSessions).toHaveBeenCalledWith("org-a", "env-prod", "u-alice"));
 
-    await userEvent.click(within(alice).getByRole("button", { name: "Reset password" }));
+    await userEvent.click(within(alice).getByRole("button", { name: "Email reset" }));
     await waitFor(() => expect(api.sendPasswordReset).toHaveBeenCalledWith("org-a", "env-prod", "u-alice"));
     await userEvent.click(within(screen.getByTestId("identity-user-u-bob")).getByRole("button", { name: "Unlock" }));
     await waitFor(() => expect(api.unlockUser).toHaveBeenCalledWith("org-a", "env-prod", "u-bob"));
@@ -267,9 +268,9 @@ describe("IdentityTab", () => {
     await userEvent.click(send);
 
     await waitFor(() =>
-      expect(api.inviteUser).toHaveBeenCalledWith("org-a", "env-prod", { email: "carol@acme.test", roles: ["viewer"] })
+      expect(api.inviteUser).toHaveBeenCalledWith("org-a", "env-prod", { email: "carol@acme.test", roles: ["viewer"], returnCode: false })
     );
-    expect(toasts.success).toHaveBeenCalledWith("Invited carol@acme.test");
+    expect(toasts.success).toHaveBeenCalledWith("Emailed carol@acme.test an invitation");
   });
 
   it("searches users by email", async () => {

@@ -122,3 +122,12 @@ export function formatAgo(ms: number, now: number = Date.now()): string {
   if (seconds < 86_400) return `${Math.round(seconds / 3600)}h ago`;
   return `${Math.round(seconds / 86_400)}d ago`;
 }
+
+/** "in 21d", "in 3h" — or "expired" once it has passed. formatAgo's forward twin. */
+export function formatIn(ms: number, now: number = Date.now()): string {
+  const seconds = Math.round((ms - now) / 1000);
+  if (seconds <= 0) return "expired";
+  if (seconds < 3600) return `in ${Math.max(1, Math.round(seconds / 60))}m`;
+  if (seconds < 86_400) return `in ${Math.round(seconds / 3600)}h`;
+  return `in ${Math.round(seconds / 86_400)}d`;
+}

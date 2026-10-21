@@ -15,10 +15,17 @@
  * DESTRUCTIVE VERBS ASK FIRST. Delete, lock and revoke-sessions each open a
  * confirmation that says what happens to the person; a password reset only
  * sends an email and unlock only gives access back, so they run at once.
+ *
+ * EMAIL OR A LINK. With smtp declared, invite and reset email the person; an
+ * admin can also take a one-time link instead ("Get reset link", or the
+ * invite's "give me the link" box). With no mail delivery, emailing is not
+ * offered at all — the server would refuse it — and both verbs hand back the
+ * link. The link is a credential and is only ever shown in
+ * IdentityPasswordCodeDialog.
  */
 
 import { useMemo, useState } from "react";
-import { Lock, MailPlus, Search, ShieldCheck, Users } from "lucide-react";
+import { Link2, Lock, MailPlus, Search, ShieldCheck, Users } from "lucide-react";
 
 import Badge from "@/components/forge-ui/badge";
 import ConfirmationDialog from "@/components/forge-ui/confirmation_dialog";
@@ -36,6 +43,7 @@ import { toast } from "@/lib/toast-manager";
 import { cn } from "@/lib/utils";
 
 import { Panel } from "./EnvTabPanels";
+import { IdentityPasswordCodeDialog, type IssuedCode } from "./IdentityPasswordCodeDialog";
 
 export const DECLARED_ROLE_NOTE = "managed in deploy/kcl/identity.k";
 
@@ -80,6 +88,9 @@ export function IdentityUsers({
   // User verbs open the instance with its owner key, which only a ready (or
   // degraded, still serving) instance has.
   const serving = status.state === "ready" || status.state === "degraded";
+  // "unknown" (a server that predates the field) keeps offering email: it is
+  // what that server does.
+  const canEmail = status.mailDelivery !== "none";
 
   const [query, setQuery] = useState("");
   const [state, setState] = useState<IdentityUserFilter["state"]>(undefined);
@@ -96,7 +107,30 @@ export function IdentityUsers({
   const failed = (what: string) => (error: unknown) =>
     toast.warning(`${what}: ${identityErrorMessage(error) || "the server refused it"}`);
 
+  // The only copy of a returned code: dropped when the dialog closes.
+  const [issued, setIssued] = useState<IssuedCode | null>(null);
+
   const reset = useIdentityMutation(orgId, envId, (api, o, e, u: IdentityUser) => api.sendPasswordReset(o, e, u.userId));
+  const resetLink = useIdentityMutation(
+    orgId,
+    envId,
+    (api, o, e, u: IdentityUser) => api.sendPasswordReset(o, e, u.userId, { returnCode: true }),
+    { secret: true }
+  );
+  const getResetLink = (user: IdentityUser) =>
+    resetLink.mutate(user, {
+      onSuccess: (code) =>
+        setIssued(
+          code
+            ? { email: user.email, purpose: "reset", code }
+            : { email: user.email, purpose: "reset", error: new Error("The server returned no code.") }
+        ),
+      onError: (error) => setIssued({ email: user.email, purpose: "reset", error }),
+    });
+  const closeIssued = () => {
+    setIssued(null);
+    resetLink.reset();
+  };
   const lock = useIdentityMutation(orgId, envId, (api, o, e, u: IdentityUser) => api.lockUser(o, e, u.userId));
   const unlock = useIdentityMutation(orgId, envId, (api, o, e, u: IdentityUser) => api.unlockUser(o, e, u.userId));
   const remove = useIdentityMutation(orgId, envId, (api, o, e, u: IdentityUser) => api.deleteUser(o, e, u.userId));
@@ -174,10 +208,12 @@ export function IdentityUsers({
             onEdit={() => setEditing(editing === user.userId ? null : user.userId)}
             orgId={orgId}
             envId={envId}
-            busy={reset.isPending || unlock.isPending}
+            busy={reset.isPending || resetLink.isPending || unlock.isPending}
+            canEmail={canEmail}
             onReset={() =>
-              reset.mutate(user, { onSuccess: done(`Sent ${user.email} a password reset`), onError: failed("Couldn't send the reset") })
+              reset.mutate(user, { onSuccess: done(`Emailed ${user.email} a password reset link`), onError: failed("Couldn't send the reset") })
             }
+            onResetLink={() => getResetLink(user)}
             onUnlock={() => unlock.mutate(user, { onSuccess: done(`${user.email} is unlocked`), onError: failed("Couldn't unlock") })}
             onConfirm={(kind) => setConfirm({ kind, user })}
           />
@@ -237,7 +273,11 @@ export function IdentityUsers({
         )}
       </Panel>
 
-      {canManage && serving && <InvitePanel orgId={orgId} envId={envId} envName={envName} roles={roles} />}
+      {canManage && serving && (
+        <InvitePanel orgId={orgId} envId={envId} envName={envName} roles={roles} canEmail={canEmail} onIssued={setIssued} />
+      )}
+
+      <IdentityPasswordCodeDialog issued={issued} onClose={closeIssued} />
 
       <ConfirmationDialog
         open={!!confirm}
@@ -283,7 +323,9 @@ function UserRow({
   orgId,
   envId,
   busy,
+  canEmail,
   onReset,
+  onResetLink,
   onUnlock,
   onConfirm,
 }: {
@@ -295,7 +337,9 @@ function UserRow({
   orgId: string;
   envId: string;
   busy: boolean;
+  canEmail: boolean;
   onReset: () => void;
+  onResetLink: () => void;
   onUnlock: () => void;
   onConfirm: (kind: Confirm["kind"]) => void;
 }) {
@@ -333,8 +377,20 @@ function UserRow({
             <Button variant="ghost" size="xs" onClick={onEdit} aria-expanded={editing}>
               Roles
             </Button>
-            <Button variant="ghost" size="xs" onClick={onReset} disabled={busy}>
-              Reset password
+            {canEmail && (
+              <Button variant="ghost" size="xs" onClick={onReset} disabled={busy} title="Emails them a link to set a new password">
+                Email reset
+              </Button>
+            )}
+            <Button
+              variant="ghost"
+              size="xs"
+              onClick={onResetLink}
+              disabled={busy}
+              leftIcon={<Link2 className="h-3 w-3" />}
+              title="A one-time link to set their password, for you to hand over"
+            >
+              Get reset link
             </Button>
             {user.state === "locked" ? (
               <Button variant="ghost" size="xs" onClick={onUnlock} disabled={busy}>
@@ -475,16 +531,42 @@ function RoleChecklist({
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-function InvitePanel({ orgId, envId, envName, roles }: { orgId: string; envId: string; envName: string; roles: IdentityRole[] }) {
+function InvitePanel({
+  orgId,
+  envId,
+  envName,
+  roles,
+  canEmail,
+  onIssued,
+}: {
+  orgId: string;
+  envId: string;
+  envName: string;
+  roles: IdentityRole[];
+  canEmail: boolean;
+  onIssued: (issued: IssuedCode) => void;
+}) {
   const [email, setEmail] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [touched, setTouched] = useState(false);
-  const invite = useIdentityMutation(orgId, envId, (api, o, e, args: { email: string; roles: string[] }) => api.inviteUser(o, e, args));
+  // With no mail delivery the link is the only way; with smtp it is opt-in.
+  const [wantLink, setWantLink] = useState(false);
+  const returnCode = !canEmail || wantLink;
+  const invite = useIdentityMutation(
+    orgId,
+    envId,
+    (api, o, e, args: { email: string; roles: string[]; returnCode: boolean }) => api.inviteUser(o, e, args),
+    { secret: true }
+  );
   const valid = EMAIL.test(email.trim());
   return (
     <Panel
       title="Invite"
-      description={`Emails them a link to set a password for ${envName}, if its identity declares smtp (otherwise the invite is refused and says why). An address that already has an account is given the roles instead.`}
+      description={
+        canEmail
+          ? `Emails them a link to set a password for ${envName}, or gives you that link to send yourself. An address that already has an account is given the roles instead.`
+          : `${envName}'s identity sends no email, so nothing is emailed: you get a one-time link that lets them set a password, and send it to them yourself. An address that already has an account is given the roles instead.`
+      }
       testId="identity-invite"
     >
       <form
@@ -493,14 +575,33 @@ function InvitePanel({ orgId, envId, envName, roles }: { orgId: string; envId: s
           event.preventDefault();
           setTouched(true);
           if (!valid) return;
+          const to = email.trim();
+          const clear = () => {
+            setEmail("");
+            setSelected(new Set());
+            setTouched(false);
+            invite.reset();
+          };
           invite.mutate(
-            { email: email.trim(), roles: [...selected] },
+            { email: to, roles: [...selected], returnCode },
             {
               onSuccess: (r) => {
-                toast.success(r.created ? `Invited ${email.trim()}` : `${email.trim()} already had an account; their roles were added`);
-                setEmail("");
-                setSelected(new Set());
-                setTouched(false);
+                clear();
+                if (r.code) {
+                  onIssued({ email: to, purpose: "invite", code: r.code });
+                } else if (!r.created) {
+                  toast.success(
+                    returnCode
+                      ? `${to} already had an account and a password; their roles were added. Use Get reset link if they need a new one.`
+                      : `${to} already had an account; their roles were added`
+                  );
+                } else {
+                  toast.success(returnCode ? `Created ${to}` : `Emailed ${to} an invitation`);
+                }
+              },
+              onError: (error) => {
+                // A refused code is explained in context, with what to do about it.
+                if (returnCode && identityErrorKind(error) === "denied") onIssued({ email: to, purpose: "invite", error });
               },
             }
           );
@@ -522,14 +623,32 @@ function InvitePanel({ orgId, envId, envName, roles }: { orgId: string; envId: s
           {touched && !valid && email && <span className="text-xs text-destructive-ink">That doesn&apos;t look like an email address.</span>}
         </label>
         <RoleChecklist roles={roles} selected={selected} onChange={setSelected} heldDeclared={new Set()} />
-        {invite.error && (
+        {canEmail && (
+          <label className="flex items-start gap-2 text-xs text-foreground">
+            <input
+              type="checkbox"
+              className="mt-0.5"
+              checked={wantLink}
+              onChange={(event) => setWantLink(event.target.checked)}
+              data-testid="identity-invite-want-link"
+            />
+            <span>Give me the link instead of emailing it</span>
+          </label>
+        )}
+        {invite.error && !(returnCode && identityErrorKind(invite.error) === "denied") && (
           <p role="alert" className="text-xs text-destructive-ink">
             {identityErrorMessage(invite.error) || "Couldn't send the invitation."}
           </p>
         )}
         <div className="flex items-center gap-2">
-          <Button type="submit" size="sm" loading={invite.isPending} disabled={!valid} leftIcon={<MailPlus className="h-3.5 w-3.5" />}>
-            Send invitation
+          <Button
+            type="submit"
+            size="sm"
+            loading={invite.isPending}
+            disabled={!valid}
+            leftIcon={returnCode ? <Link2 className="h-3.5 w-3.5" /> : <MailPlus className="h-3.5 w-3.5" />}
+          >
+            {returnCode ? "Invite and get link" : "Send invitation"}
           </Button>
           <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
             <ShieldCheck className="h-3 w-3" aria-hidden="true" />
