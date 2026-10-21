@@ -292,18 +292,21 @@ jobs:
           if [ -n "${matrix}" ]; then shards="$(jq '.include | length' <<< "${matrix}")"; fi
           echo "Go: $(grep -c . <<< "${selected}" || true) of $(grep -c . <<< "${all}") packages selected, ${shards} shard(s)"
 
-          # vitest: everything, a file list, or nothing. A list of up to 150
-          # files runs on one runner; more (or all) on two.
+          # vitest: everything, a file list, or nothing. A runner takes ~0.5s
+          # of jsdom setup and import per FILE (all ~800: 211s on each of two
+          # runners), so files are dealt out at most 150 per runner, up to
+          # four runners; everything gets four (~2 minutes each).
           vitest_files=""
-          if [ "$(jq -r .web.full "${plan}")" = true ]; then
-            out vitest_matrix '{"include":[{"shard":1,"shard_total":2},{"shard":2,"shard_total":2}]}'
-          else
+          n=800
+          if [ "$(jq -r .web.full "${plan}")" != true ]; then
             vitest_files="$(jq -r '.web.tests[]?' "${plan}")"
             n="$(grep -c . <<< "${vitest_files}" || true)"
-            if [ "${n}" -eq 0 ]; then out vitest_matrix ""
-            elif [ "${n}" -le 150 ]; then out vitest_matrix '{"include":[{"shard":1,"shard_total":1}]}'
-            else out vitest_matrix '{"include":[{"shard":1,"shard_total":2},{"shard":2,"shard_total":2}]}'
-            fi
+          fi
+          if [ "${n}" -eq 0 ]; then
+            out vitest_matrix ""
+          else
+            k=$(( (n + 149) / 150 )); k=$(( k > 4 ? 4 : k ))
+            out vitest_matrix "$(jq -cn --argjson k "${k}" '{include: [range(1; $k + 1) | {shard: ., shard_total: $k}]}')"
           fi
           outlines vitest_files "${vitest_files}"
           echo "vitest: full=$(jq -r .web.full "${plan}"), $(grep -c . <<< "${vitest_files}" || true) selected file(s)"
@@ -1377,8 +1380,8 @@ jobs:
   # vitest, over the files `changes` selected (or all of them), split across
   # runners. Most of a runner's time here is per-FILE jsdom setup and module
   # import, not test bodies, so it divides cleanly: `--shard=i/n` gives each
-  # runner a disjoint, deterministic 1/n of the files. A selection of up to 150
-  # files runs on one runner; everything else on two.
+  # runner a disjoint, deterministic 1/n of the files: one runner per 150
+  # selected files, at most four (`changes`).
   web-test:
     name: Web (vitest ${{ matrix.shard }}/${{ matrix.shard_total }})
     needs: changes
