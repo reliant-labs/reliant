@@ -105,14 +105,16 @@ A filter, an `inputs` mapping and a `prompt` can also read the activation they f
 | `trigger.activation.owner.user_id` | The user the activation's runs execute as |
 | `trigger.activation.owner.github_id` | The GitHub user id of the connection the activation listens through, as a string; empty when it has none |
 
-A pack that watches a list of repositories declares an input for it and filters on that input. Each activation then names its own repositories:
+A pack that watches a list of repositories declares a typed input for it and scopes the trigger by that input with `match`. Each activation then names its own repositories:
 
 ```yaml
 name: issue-triage
 inputs:
   repos:
-    type: array
-    default: []
+    type: github.repository
+    multi: true
+    required: true
+    min_items: 1
   team:
     type: string
     default: platform
@@ -124,28 +126,30 @@ triggers:
     integration:
       integration: github
       events: [issues.opened]
-    filter: "trigger.payload.attributes.repository in trigger.activation.params.repos"
+      match: {repository: {input: repos}}
     inputs:
       issue_number: "{{ trigger.payload.data.issue.number }}"
     prompt: "{{ trigger.activation.params.team }} is triaging #{{ trigger.payload.data.issue.number }}"
 ```
 
-Activate it once with `params: {repos: [acme/web, acme/docs], team: frontend}` and again with `params: {repos: [acme/api]}`; an issue in `acme/api` fires only the second. An event that no activation's list admits is recorded as skipped on each, with the filter in the reason.
+Activate it once with `params: {repos: [acme/web, acme/docs], team: frontend}` and again with `params: {repos: [acme/api]}`; an issue in `acme/api` fires only the second. An event for a repository outside an activation's list is dropped before it is recorded, so it leaves no skipped row on that activation. `match: {repository: {input: repos}}` is the declarative scope: the `repository` attribute and the input must have the same type (`github.repository`), and a `filter` is still available for what a scope cannot say.
+
+An input marked `required: true` (or declared with no default) must have a value before an activation can be turned on. Turning one on without it is refused with the missing input named, and an activation that already exists but is missing one (the workflow gained a required input, or it was created before the input was required) shows **Needs setup** instead of a health status, with **Finish setup** opening the dialog where you supply it. An activation in that state does not run.
 
 - `trigger.activation.params` holds the workflow's declared inputs **except the ones the trigger's `inputs` mapping sets from the event** (the event's value always wins, so an activation may not set them).
-- It is what the run will receive: the input's default is applied when the activation does not set it, and each value has its declared type. An unset list with no default is `[]`, so a filter on it matches nothing instead of failing.
-- Validation types it from the workflow's inputs. `trigger.activation.params.repo` for a `repos` input, or a read of a field of a string param, is an error when the workflow is saved.
+- It is what the run will receive: the input's default is applied when the activation does not set it, and each value has its declared type. An optional list with no default is `[]`; a required input is never read unset, because an activation missing one does not run.
+- Validation types it from the workflow's inputs: a `github.repository` input with `multi: true` is a `list<string>`. `trigger.activation.params.repo` for a `repos` input, or a read of a field of a string param, is an error when the workflow is saved.
 - Creating an activation checks its params the same way: a param that names no input (with a "did you mean"), or has the wrong type, is refused.
 - It exists only in a trigger's `filter`, `inputs`, `prompt` and `dedupe_key`. A run's own nodes read `inputs.*`, where the same values arrive, and the rest of `trigger.*`.
 - Try it before activating: `reliant workflow validate --trigger-payload '{...}' --activation-params '{"repos": ["acme/web"]}'` runs every declared trigger against a sample event and sample params, and the `cel_eval` tool and `reliant workflow eval --scope trigger` take `activation_params` too. `--owner-github-id` supplies `trigger.activation.owner.github_id`.
 
 #### Who may start a run
 
-Trust is a CEL filter over data the trigger already has; there is no table of trusted people to maintain. `trigger.sender` is who the source says sent the event, and `trigger.activation.owner.github_id` is you, by the GitHub connection the activation listens through. Both are strings, so a list of trusted ids is an array of strings (`"583231"`, quoted: CEL does not match the number `583231` against the string).
+Trust is a CEL filter over data the trigger already has; there is no table of trusted people to maintain. `trigger.sender` is who the source says sent the event, and `trigger.activation.owner.github_id` is you, by the GitHub connection the activation listens through. Both are strings, so a list of trusted people is a `github.user` input, which stores numeric ids as strings (`"583231"`, quoted: CEL does not match the number `583231` against the string) and is picked by login in the dialog.
 
 ```yaml
 inputs:
-  trusted_ids: {type: array, default: []}
+  trusted_ids: {type: github.user, multi: true, default: []}
 triggers:
   - name: new-issue
     integration: {integration: github, events: [issues.opened]}

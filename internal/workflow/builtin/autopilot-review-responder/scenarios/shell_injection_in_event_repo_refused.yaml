@@ -1,0 +1,7 @@
+name: shell_injection_in_event_repo_refused
+description: A `repo` that is not a plain owner/name, and is not one of the enabled repos, is refused before anything touches a shell.
+inputs: {"repos": ["acme/app"], "trusted_ids": [], "repo": "a/b;rm -rf x", "pr_number": 55, "event": "review by x", "owner_id": "225976313"}
+expect:
+  outcome: completed
+  completed: [check, invalid]
+  not_reached: [rounds]

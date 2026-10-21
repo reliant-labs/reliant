@@ -1,9 +1,9 @@
 name: no_repos_enabled_refuses
-description: With the default empty repos list nothing is reviewed, whatever repo and PR the run is started with.
+description: repos is required, so a run that names no repositories never starts, whatever repo and PR it is told about. An activation without repos is NEEDS_SETUP rather than silently inert.
 inputs:
   repo: reliant-labs/forge
   pr_number: 1
 expect:
-  outcome: completed
-  completed: [check, invalid]
-  not_reached: [me, pr, review, post]
+  outcome: error
+  error_contains: "required input 'repos' is not provided"
+  not_reached: [check, me, pr, review, post]

@@ -29,7 +29,11 @@ The three that touch code form a loop. The issue worker opens a PR labelled `age
 
 ## Turning it on
 
-Open **Workflows → Library**, open the workflow, and choose **Enable**. One dialog turns on every trigger the workflow declares; it asks once for the project, the machine, the GitHub account to listen through and the workflow's inputs (the settings below). An agent can write or edit these workflows but cannot enable them: only you can.
+Open **Workflows → Library**, open the workflow, and choose **Set up**. One dialog turns on every trigger the workflow declares; it asks once for the GitHub account to listen through, **which repositories to watch**, the project, the machine and the workflow's other inputs (the settings below). An agent can write or edit these workflows but cannot turn them on: only you can.
+
+The repositories are picked from a list, not typed. The list is the repositories the Reliant GitHub App is installed on that you can see, which is exactly the set GitHub events are delivered for, so you cannot pick a repository that would never fire. Pick at least one; **Turn on** stays unavailable until you have. The people who may ask for work (`trusted_ids`) are picked by searching GitHub accounts, and each label setting offers the labels of the repositories you picked. If the App is not installed on a repository yet, add it from **Add account or choose repositories** in the GitHub connection and it appears in the list.
+
+An automation that was turned on with no repositories (one created before repositories were required) shows **Needs setup** with a **Finish setup** button that opens the same dialog with its settings filled in. It stays off until you pick repositories; nothing about it is lost.
 
 Enable each workflow you want. They are independent, and none requires the others, though the loop above only closes when all three code workflows are on for the same repositories.
 
@@ -47,10 +51,10 @@ These are the workflows' inputs, so they appear in the Enable dialog with their 
 
 | Setting | Default | What it does |
 |---------|---------|--------------|
-| `repos` | none | The repositories to act in, as `owner/name`. **Nothing else is ever touched.** Empty means the workflow does nothing |
-| `trusted_ids` | none | GitHub numeric user ids (as strings, `"583231"`) allowed to start work, besides you |
+| `repos` | required, at least one | The repositories to act in (`github.repository`, picked from the repositories the App is installed on). **Nothing else is ever touched**, and an event for any other repository is dropped before it is recorded |
+| `trusted_ids` | none | People (`github.user`) allowed to start work, besides you |
 
-`trusted_ids` holds **ids, not logins**: a login can be renamed and then registered by someone else. Find an id with `gh api users/<login> --jq .id`. You are always trusted through the GitHub connection you enabled the workflow with.
+`trusted_ids` is picked by login but **stored as the numeric account id**: a login can be renamed and then registered by someone else, an id never is. You are always trusted through the GitHub connection you enabled the workflow with.
 
 ### PR review
 
@@ -61,7 +65,9 @@ These are the workflows' inputs, so they appear in the Enable dialog with their 
 | `skip_label` | `skip-review` | A PR carrying it is never reviewed |
 | `re_review_label` | `agent:re-review` | Adding it asks for another review; the workflow removes it again afterwards so it can be added again |
 
-PR review covers **every non-draft PR** in `repos` when it is opened or marked ready for review. Add `skip-review` to opt one out. A review can be asked for again by adding the re-review label or by commenting `/autopilot re-review` as you or a trusted person.
+Every label setting is a `github.label`: the picker offers the labels of the repositories you picked, and accepts a name that does not exist yet (the workflow creates it with a colour on first use).
+
+PR review covers **every non-draft PR** in your repositories when it is opened or marked ready for review. Add `skip-review` to opt one out. A review can be asked for again by adding the re-review label or by commenting `/autopilot re-review` as you or a trusted person.
 
 ### Issue worker
 
@@ -104,7 +110,7 @@ Example `service_repos`:
 
 ## Who may start work
 
-Trust is plain [CEL](/reference/cel-expressions) over three things the event already carries, so there is no table to maintain and no settings page:
+Which repositories an event may come from is not part of that check: each trigger declares `match: {repository: {input: repos}}`, so the event is routed only when its repository is one you picked. Who within those repositories may start work is plain [CEL](/reference/cel-expressions) over three things the event already carries, so there is no table to maintain and no settings page:
 
 ```yaml
 trigger.sender.verified && trigger.sender.id != ''
@@ -175,7 +181,7 @@ Logs and traces are not reachable from the investigator unless you give it a too
 
 Nothing here has a budget of its own yet, so this is where your spend comes from:
 
-- **PR review** runs one reviewer per PR, up to 40 turns, on the `powerful` tag with high thinking. It runs for **every** non-draft PR in `repos`, including the ones agents open, so in a busy repository it is the largest line. Use `skip-review` on PRs that do not need it, and consider starting with one quiet repository.
+- **PR review** runs one reviewer per PR, up to 40 turns, on the `powerful` tag with high thinking. It runs for **every** non-draft PR in the repositories you picked, including the ones agents open, so in a busy repository it is the largest line. Use `skip-review` on PRs that do not need it, and consider starting with one quiet repository.
 - **Issue worker** runs an agent for up to 120 turns per issue, plus a retry of up to 60 if the fast checks fail. It runs only for issues someone trusted opted in.
 - **Review responder** runs up to 80 turns per round, three rounds at most per PR, plus a retry.
 - **Alert triage** runs one investigation of up to 45 turns per *new* alert, at most five per notification, nothing for a repeat.

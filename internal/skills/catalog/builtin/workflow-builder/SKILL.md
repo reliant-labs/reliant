@@ -269,6 +269,7 @@ accounts it listens through. One declaration can have many activations (one per 
 ```yaml
 name: triage-new-issues
 inputs:
+  repos: {type: github.repository, multi: true, required: true, min_items: 1}   # typed by the integration; the user picks them when enabling
   issue_number: {type: integer, default: 0}   # required inputs must be mapped by every trigger, or set by the user when enabling
 triggers:
   - name: new-issue                 # unique within the workflow: lowercase, digits, - and _
@@ -276,7 +277,7 @@ triggers:
     integration:                    # exactly ONE source: schedule | webhook | integration | workflow_event
       integration: github
       events: [issues.opened]                    # "issues.*" or "*" also match
-      match: {repository: acme/app}              # event attributes that must be equal
+      match: {repository: {input: repos}}        # scope by an input: only the repositories the user picked. A plain value (repository: acme/app) must equal the attribute
     filter: "!('wontfix' in trigger.payload.data.issue.labels)"
     inputs:
       issue_number: "{{ trigger.payload.data.issue.number }}"
@@ -306,11 +307,30 @@ over the user's params (enabling drops a param it would override).
 neither, enabling is refused. The event is still attached after it as untrusted data.
 
 **`trigger.activation`** is the activation the event fires for, readable in a `filter`, `inputs`, `prompt` and `dedupe_key` (not in nodes, which read `inputs`):
-`trigger.activation.params.<input>`, `.id`, `.owner.user_id`, and `.owner.github_id` (the GitHub user id of the connection it listens through, a string; empty without one). Use it so one declaration serves many activations instead of pasting
-a repo list into the filter: declare `repos: {type: array, default: []}` as an input and write `filter: "trigger.payload.attributes.repository in trigger.activation.params.repos"`; whoever enables the workflow fills in
-`repos` in the Enable dialog's inputs (each activation keeps its own). `params` holds the workflow's inputs except those this trigger's `inputs` map from the event, with defaults applied and declared types, so an unset list is `[]`.
-Validation types it from the workflow's inputs: `trigger.activation.params.repo` for a `repos` input is an error when you save. Trust is a filter, not a table: ids are strings, so
-`trigger.sender.verified && (trigger.sender.id == trigger.activation.owner.github_id || trigger.sender.id in trigger.activation.params.trusted_ids)` admits you and the quoted ids in a `trusted_ids` array input.
+`trigger.activation.params.<input>`, `.id`, `.owner.user_id`, and `.owner.github_id` (the GitHub user id of the connection it listens through, a string; empty without one). One declaration serves many activations, each with its own inputs. `params` holds the workflow's inputs except those this trigger's `inputs` map from the event, with defaults applied and declared types.
+Validation types it from the workflow's inputs: `trigger.activation.params.repo` for a `repos` input is an error when you save.
+
+**Typed inputs: let the integration say what a value is.** An integration defines value types, and an input of that type is a picker in the Enable and Run dialogs, not a text box.
+`get_integration_schema github` lists them; GitHub has `github.repository` (`owner/name`, from the repositories the Reliant GitHub App is installed on that the user can see), `github.label` (scoped to a repository), `github.user` (a numeric account id, stored as a string, never a login) and `github.installation`.
+
+```yaml
+inputs:
+  repos:       {type: github.repository, multi: true, required: true, min_items: 1, description: The repositories to review.}
+  trusted_ids: {type: github.user, multi: true, default: [], description: People who may ask for a re-review, besides you.}
+  skip_label:  {type: github.label, scope: {repository: repos}, default: skip-review}   # offers the labels of the picked repositories
+triggers:
+  - name: pr-opened
+    integration:
+      integration: github
+      events: [pull_request.opened]
+      match: {repository: {input: repos}}
+```
+
+- **Never `type: array` (or `string`) for something an integration has a type for.** A repository list typed `array` is a comma-separated text box with nothing checking it, and the trigger cannot tell it is a repository scope. If you cannot find a type, run `get_integration_schema <integration>`; validation names the types the integration does declare.
+- **Values stay plain JSON**, strings for every GitHub type, so `inputs.repos.exists(r, r == inputs.repo)` and `trigger.sender.id in trigger.activation.params.trusted_ids` keep working. `multi: true` makes it a list (`min_items`/`max_items` bound it); `scope: {repository: repos}` binds the type's scope key to another input.
+- **`required: true`** is explicit: the user cannot turn the automation on until the input has a value, and an existing activation missing one shows "Needs setup" rather than going quiet. A required input takes no `default` (validation says so). An input with no default is required too; give a `default` (`[]` for a list) only when it is truly optional, like `trusted_ids`.
+- **`match: {attribute: {input: name}}` scopes a trigger by an input.** The event is routed only when its attribute is one of the input's values, so an event for any other repository is dropped before a firing is recorded. The attribute and the input must have the same type (`repository` is a `github.repository`; validation checks it), the input must not be one the trigger maps from the event, and it should be `required`. It combines with literal `match:` entries and runs before `filter`. Keep `filter` for what a scope cannot say: drafts, labels, trust. Do not write `trigger.payload.attributes.repository in trigger.activation.params.repos` in a filter; validation warns and points at `match:`.
+- **Trust by id**: `trigger.sender.id` is the GitHub numeric id, a string. `trigger.sender.verified && (trigger.sender.id == trigger.activation.owner.github_id || trigger.sender.id in trigger.activation.params.trusted_ids)` admits you and the people in a `github.user` input. The event attribute `sender_id` (a `github.user`) is the same id: `match: {sender_id: {input: allowed}}` scopes a trigger to the people a `github.user` input lists, on the events that declare `sender_id`. Use the filter, as above, when the owner is trusted without being listed.
 
 **`dedupe_key`** (webhook triggers only) is a `{{ }}` template over `trigger` that names the event a delivery is about. Use
 it for a sender with no idempotency header, such as Alertmanager, which re-sends a group with a changed body: the

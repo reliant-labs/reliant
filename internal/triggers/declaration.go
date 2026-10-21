@@ -195,7 +195,8 @@ func DeclarationIn(wf *reliantv1.Workflow, t *core.Trigger) (*Declaration, error
 // applied, every value coerced to its input's declared type, and an input
 // the trigger maps from the event left out (the event sets it). An input
 // with neither a param nor a default reads as its type's zero ([] for a
-// list), so a filter on an unset list matches nothing rather than failing.
+// list); a required input missing from the params makes the activation
+// NEEDS_SETUP (see SetupIssues) rather than reading as empty.
 // An ad hoc trigger (decl nil) has no declared inputs; its params are as
 // stored.
 func ActivationScope(ctx context.Context, repo any, t *core.Trigger, decl *Declaration, root map[string]any) triggerspec.Scope {
