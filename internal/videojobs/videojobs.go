@@ -7,15 +7,19 @@
 // finished clip's attachment id back to the provider interaction that produced
 // it, which is what conversational edit needs.
 //
-//forge:exclude-contract: SQL-backed record store; its one consumer (the generate_video tool) declares the narrow interface it needs
+//forge:exclude-contract: record store over the generated video_generation_jobs store; its one consumer (the generate_video tool) declares the narrow interface it needs
 package videojobs
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"time"
+
+	"github.com/reliant-labs/forge/pkg/orm"
+	"github.com/reliant-labs/forge/pkg/svcerr"
+
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // State is where a job is in its life.
@@ -49,80 +53,98 @@ type Job struct {
 	UpdatedAt    time.Time
 }
 
-// DBTX is the subset of database/sql the store needs.
-type DBTX interface {
-	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
-	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
-}
+// SQLStore is the Postgres-backed store: video_generation_jobs through the
+// generated internal/store delegates, keyed by tool_call_id.
+type SQLStore struct{ db orm.Context }
 
-// SQLStore is the Postgres-backed store.
-type SQLStore struct{ db DBTX }
+// NewSQLStore returns a store over db (the Repository's ORM client, so a call
+// inside a Repository transaction joins it).
+func NewSQLStore(db orm.Context) *SQLStore { return &SQLStore{db: db} }
 
-// NewSQLStore returns a store over db.
-func NewSQLStore(db DBTX) *SQLStore { return &SQLStore{db: db} }
-
-const jobColumns = `tool_call_id, user_id, chat_id, driver, model_id, api_model, provider_job,
-	state, COALESCE(attachment_id, ''), error_message, created_at, updated_at`
-
-func scanJob(row *sql.Row) (*Job, error) {
-	var job Job
-	var state string
-	err := row.Scan(&job.ToolCallID, &job.UserID, &job.ChatID, &job.Driver, &job.ModelID, &job.APIModel,
-		&job.ProviderJob, &state, &job.AttachmentID, &job.ErrorMessage, &job.CreatedAt, &job.UpdatedAt)
-	if errors.Is(err, sql.ErrNoRows) {
+// GetByToolCall returns the job for a tool call, or (nil, nil) if none.
+func (s *SQLStore) GetByToolCall(ctx context.Context, toolCallID string) (*Job, error) {
+	row, err := store.GetVideoGenerationJobByID(ctx, s.db, toolCallID)
+	if errors.Is(err, svcerr.ErrNotFound) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	job.State = State(state)
-	return &job, nil
-}
-
-// GetByToolCall returns the job for a tool call, or (nil, nil) if none.
-func (s *SQLStore) GetByToolCall(ctx context.Context, toolCallID string) (*Job, error) {
-	return scanJob(s.db.QueryRowContext(ctx,
-		`SELECT `+jobColumns+` FROM video_generation_jobs WHERE tool_call_id = $1`, toolCallID))
+	return jobFromRow(row), nil
 }
 
 // GetByAttachment returns the job that produced an attachment, or (nil, nil).
 func (s *SQLStore) GetByAttachment(ctx context.Context, attachmentID string) (*Job, error) {
-	return scanJob(s.db.QueryRowContext(ctx,
-		`SELECT `+jobColumns+` FROM video_generation_jobs WHERE attachment_id = $1 LIMIT 1`, attachmentID))
+	rows, err := store.ListVideoGenerationJob(ctx, s.db,
+		orm.WhereEq(store.VideoGenerationJobFieldAttachmentID, attachmentID), orm.WithLimit(1))
+	if err != nil || len(rows) == 0 {
+		return nil, err
+	}
+	return jobFromRow(rows[0]), nil
 }
 
-// Create records a freshly submitted job. A second Create for the same tool
-// call is an error: the caller must have looked it up first.
+// Create records a freshly submitted job; created_at and updated_at are the
+// time of the write, set on job too. A second Create for the same tool call
+// is an error: the caller must have looked it up first.
 func (s *SQLStore) Create(ctx context.Context, job *Job) error {
-	now := time.Now().UTC()
 	if job.State == "" {
 		job.State = StateSubmitted
 	}
-	job.CreatedAt, job.UpdatedAt = now, now
-	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO video_generation_jobs
-			(tool_call_id, user_id, chat_id, driver, model_id, api_model, provider_job, state, error_message, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10)`,
-		job.ToolCallID, job.UserID, job.ChatID, job.Driver, job.ModelID, job.APIModel, job.ProviderJob,
-		string(job.State), job.ErrorMessage, now)
-	if err != nil {
+	row := &store.VideoGenerationJob{
+		ToolCallID:   job.ToolCallID,
+		UserID:       job.UserID,
+		ChatID:       job.ChatID,
+		Driver:       job.Driver,
+		ModelID:      job.ModelID,
+		APIModel:     job.APIModel,
+		ProviderJob:  job.ProviderJob,
+		State:        string(job.State),
+		ErrorMessage: job.ErrorMessage,
+	}
+	if err := store.CreateVideoGenerationJob(ctx, s.db, row); err != nil {
 		return fmt.Errorf("record video job: %w", err)
 	}
+	job.CreatedAt, job.UpdatedAt = row.CreatedAt, row.UpdatedAt
 	return nil
 }
 
 // Complete marks the job finished and links the stored clip.
 func (s *SQLStore) Complete(ctx context.Context, toolCallID, attachmentID string) error {
-	_, err := s.db.ExecContext(ctx, `
-		UPDATE video_generation_jobs SET state = $2, attachment_id = $3, updated_at = $4
-		WHERE tool_call_id = $1`, toolCallID, string(StateCompleted), attachmentID, time.Now().UTC())
-	return err
+	return s.update(ctx, &store.VideoGenerationJob{ToolCallID: toolCallID, State: string(StateCompleted), AttachmentID: &attachmentID},
+		store.VideoGenerationJobFieldState, store.VideoGenerationJobFieldAttachmentID)
 }
 
 // Finish moves the job to a terminal non-success state with a reason.
 func (s *SQLStore) Finish(ctx context.Context, toolCallID string, state State, message string) error {
-	_, err := s.db.ExecContext(ctx, `
-		UPDATE video_generation_jobs SET state = $2, error_message = $3, updated_at = $4
-		WHERE tool_call_id = $1`, toolCallID, string(state), message, time.Now().UTC())
-	return err
+	return s.update(ctx, &store.VideoGenerationJob{ToolCallID: toolCallID, State: string(state), ErrorMessage: message},
+		store.VideoGenerationJobFieldState, store.VideoGenerationJobFieldErrorMessage)
+}
+
+// update writes fields (and updated_at). A job that is not there is not an
+// error: there is nothing left to mark.
+func (s *SQLStore) update(ctx context.Context, row *store.VideoGenerationJob, fields ...string) error {
+	if err := store.UpdateVideoGenerationJobMasked(ctx, s.db, row, fields); err != nil && !errors.Is(err, orm.ErrNoRows) {
+		return err
+	}
+	return nil
+}
+
+func jobFromRow(row *store.VideoGenerationJob) *Job {
+	job := &Job{
+		ToolCallID:   row.ToolCallID,
+		UserID:       row.UserID,
+		ChatID:       row.ChatID,
+		Driver:       row.Driver,
+		ModelID:      row.ModelID,
+		APIModel:     row.APIModel,
+		ProviderJob:  row.ProviderJob,
+		State:        State(row.State),
+		ErrorMessage: row.ErrorMessage,
+		CreatedAt:    row.CreatedAt,
+		UpdatedAt:    row.UpdatedAt,
+	}
+	if row.AttachmentID != nil {
+		job.AttachmentID = *row.AttachmentID
+	}
+	return job
 }

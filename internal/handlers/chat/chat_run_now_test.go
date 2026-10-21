@@ -242,3 +242,53 @@ func TestRunNow_UsesTheAuthenticatedUser(t *testing.T) {
 	_, err := f.service.RunNow(other, connect.NewRequest(&reliantv1.RunNowRequest{ProjectId: f.projectID, Workflow: "nightly-digest"}))
 	require.Error(t, err, "another user cannot run test-user's workflow, or in test-user's project")
 }
+
+const runNowRequiredYAML = `name: review
+apiVersion: v2
+inputs:
+  repos:
+    type: array
+    required: true
+    min_items: 1
+    max_items: 2
+  guidance:
+    type: string
+    default: ""
+entry: [echo]
+nodes:
+  - id: echo
+    type: run
+    command: "echo hi"
+`
+
+// Run now launches with the form's inputs, so a required input the person left
+// empty, or a list outside its bounds, is refused before a run exists.
+func TestRunNow_EnforcesRequiredAndItemBounds(t *testing.T) {
+	f := newBuilderTestFixture(t)
+	f.saveWorkflow(t, "test-user", "review", runNowRequiredYAML)
+	repos := func(items ...any) map[string]*structpb.Value {
+		list, err := structpb.NewList(items)
+		require.NoError(t, err)
+		return map[string]*structpb.Value{"repos": structpb.NewListValue(list)}
+	}
+
+	for name, tc := range map[string]struct {
+		inputs map[string]*structpb.Value
+		want   string
+	}{
+		"a required input left out": {nil, "required input 'repos' is not provided"},
+		"fewer than min_items":      {repos(), "at least 1"},
+		"more than max_items":       {repos("a/one", "a/two", "a/three"), "at most 2"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := f.runNow(&reliantv1.RunNowRequest{Workflow: "review", Inputs: tc.inputs})
+			require.Error(t, err)
+			assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+			assert.Contains(t, err.Error(), tc.want)
+		})
+	}
+
+	resp, err := f.runNow(&reliantv1.RunNowRequest{Workflow: "review", Inputs: repos("a/one")})
+	require.NoError(t, err)
+	assert.NotEmpty(t, resp.Msg.GetChat().GetId())
+}

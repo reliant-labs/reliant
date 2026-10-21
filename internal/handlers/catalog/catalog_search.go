@@ -169,6 +169,8 @@ func catalogKindFromProto(k reliantv1.CatalogEntryKind) (catalogindex.Kind, bool
 		return catalogindex.KindAction, true
 	case reliantv1.CatalogEntryKind_CATALOG_ENTRY_KIND_TRIGGER:
 		return catalogindex.KindTrigger, true
+	case reliantv1.CatalogEntryKind_CATALOG_ENTRY_KIND_TYPE:
+		return catalogindex.KindType, true
 	}
 	return 0, false
 }
@@ -179,6 +181,8 @@ func catalogKindToProto(k catalogindex.Kind) reliantv1.CatalogEntryKind {
 		return reliantv1.CatalogEntryKind_CATALOG_ENTRY_KIND_ACTION
 	case catalogindex.KindTrigger:
 		return reliantv1.CatalogEntryKind_CATALOG_ENTRY_KIND_TRIGGER
+	case catalogindex.KindType:
+		return reliantv1.CatalogEntryKind_CATALOG_ENTRY_KIND_TYPE
 	}
 	return reliantv1.CatalogEntryKind_CATALOG_ENTRY_KIND_UNSPECIFIED
 }
@@ -226,6 +230,12 @@ func CatalogEntryToProto(e *catalogindex.Entry, connected bool) (*reliantv1.Cata
 		}
 		if out.OutputSchema, err = structpb.NewStruct(output); err != nil {
 			return nil, fmt.Errorf("output schema: %w", err)
+		}
+	}
+	if value := e.ValueSchema(); value != nil {
+		var err error
+		if out.ValueSchema, err = structpb.NewStruct(value); err != nil {
+			return nil, fmt.Errorf("value schema: %w", err)
 		}
 	}
 	if payload := e.PayloadSchema(); payload != nil {

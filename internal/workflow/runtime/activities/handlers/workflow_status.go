@@ -569,7 +569,7 @@ func (a *WorkflowStatusActivity) markWorkflowStarted(ctx context.Context, input 
 		}
 		if _, err := a.repo.UpdateThreadWorkflow(ctx, thread, input.WorkflowID); err != nil {
 			logging.WarnContext(ctx, "[WorkflowStatus] Failed to update thread workflow_id",
-				db.UpdateTypeThread, thread,
+				"thread", thread,
 				"workflow_id", input.WorkflowID,
 				"error", err)
 		}

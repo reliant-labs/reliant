@@ -390,9 +390,6 @@ function sectionProps(env: LiveEnv | null, overrides: Partial<OverviewTabProps> 
     envName: env?.name ?? "fresh",
     live: env,
     liveLoading: false,
-    status: undefined,
-    statusLoading: false,
-    statusError: null,
     forgeEnv: null,
     // Offline: an unregistered env must still render, and say what it lacks.
     daemon: "offline",
@@ -402,6 +399,7 @@ function sectionProps(env: LiveEnv | null, overrides: Partial<OverviewTabProps> 
     domainsLoading: false,
     onOpenDomains: () => {},
     onManageDomains: () => {},
+    workloadsHref: "/forge/p/shop?env=prod",
     ...overrides,
   } satisfies OverviewTabProps;
 }
@@ -459,11 +457,11 @@ describe("the Overview tab", () => {
   it("no longer claims the platform does not watch a customer's own cluster", () => {
     // The retired copy. The state line is now a reading the platform made, so
     // saying it does not watch would contradict the screen. What remains
-    // kind-specific is only the WORKLOAD list, and its panel says so.
+    // kind-specific was the workload list, which is the Overview's now.
     renderSection(sectionProps(SELF_MANAGED_CONVERGED));
     const workloads = screen.getByTestId("section-workloads");
     expect(workloads.textContent ?? "").not.toMatch(/doesn't watch the cluster/i);
-    expect(workloads).toHaveTextContent(/does not place workloads on your own cluster/i);
+    expect(screen.getByTestId("env-workloads-link")).toBeInTheDocument();
     expect(screen.getByTestId("live-state")).toHaveAttribute("data-observed", "converged");
   });
 });

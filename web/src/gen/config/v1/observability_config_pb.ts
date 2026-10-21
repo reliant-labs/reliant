@@ -17,8 +17,9 @@ export const file_config_v1_observability_config: GenFile = /*@__PURE__*/
 /**
  * ObservabilityConfig is how a server role reports what it is doing: OTLP
  * export, the Prometheus endpoint, and the deployment environment its
- * telemetry is filed under. Every server role composes it. The rules every
- * config here follows are in config.proto's header.
+ * telemetry is filed under. Every server role reads it, through
+ * ServerProcessConfig. The rules every config here follows are in
+ * config.proto's header.
  *
  * @generated from message config.v1.ObservabilityConfig
  */

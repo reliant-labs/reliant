@@ -1,0 +1,15 @@
+# Pull request closed: the projection of the GitHub `pull_request.closed` webhook.
+id: pull_request.closed
+event: pull_request.closed
+display_name: Pull request closed
+summary: A pull request was closed or merged.
+description: >-
+  Fires when a pull request is closed. Match merged: "true" for merges only;
+  pull_request.merged says the same in the payload.
+keywords: [pr, merged, merge]
+attributes:
+  - { group: pr }
+  - { name: merged, description: "\"true\" when the pull request was merged.", example: "true", from: pull_request.merged, kind: boolean }
+data:
+  number: integer
+  pull_request: { kind: object, object: pr }

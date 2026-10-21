@@ -77,7 +77,7 @@ describe("RedeemCouponForm — reliant provider sync", () => {
       newBalanceCents: 2000,
       code: "FREE20",
       computeMinutes: 0,
-      newComputeMinutesRemaining: 0,
+      newGrantedSmallDaemonSecondsRemaining: 0,
     });
 
     await waitFor(() => {
@@ -99,7 +99,7 @@ describe("RedeemCouponForm — reliant provider sync", () => {
       newBalanceCents: 0,
       code: "MACHINE60",
       computeMinutes: 600,
-      newComputeMinutesRemaining: 600,
+      newGrantedSmallDaemonSecondsRemaining: 36000,
     });
 
     // Give any stray async work a tick to (not) run.
@@ -121,7 +121,7 @@ describe("RedeemCouponForm — reliant provider sync", () => {
       newBalanceCents: 2000,
       code: "FREE20",
       computeMinutes: 0,
-      newComputeMinutesRemaining: 0,
+      newGrantedSmallDaemonSecondsRemaining: 0,
     });
 
     // The success message (redemption itself) must still be shown.

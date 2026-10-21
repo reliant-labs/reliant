@@ -1,0 +1,16 @@
+fields:
+  number: integer
+  title: string
+  body: { kind: string, cap: true }
+  state: { kind: string, enum: [open, closed] }
+  state_reason: { kind: string, omit_empty: true }
+  html_url: string
+  user: { kind: object, object: user }
+  labels: { kind: names, pluck: name, description: Label names. }
+  assignees: { kind: names, pluck: login, description: Assignee logins. }
+  comments: integer
+  author_association: string
+  is_pull_request: { kind: present, from: pull_request }
+  created_at: string
+  updated_at: string
+  closed_at: { kind: string, omit_empty: true }

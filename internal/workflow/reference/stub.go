@@ -153,6 +153,11 @@ type InputFieldInfo struct {
 	Description string
 }
 
+// IntegrationInputTypeName is the registry key documenting every input whose
+// type an integration defines. It is not itself a value of `type:`: those are
+// written <integration>.<type>.
+const IntegrationInputTypeName = "integration"
+
 // inputTypes is the registry of input type documentation.
 var inputTypes = make(map[string]InputTypeInfo)
 
@@ -571,6 +576,8 @@ func populateInputTypes() {
 			(&reliantv1.GroupInputConfig{}).ProtoReflect().Descriptor()},
 		{"preset", "PresetInput", "Dynamic preset picker filtered by tags",
 			(&reliantv1.PresetInputConfig{}).ProtoReflect().Descriptor()},
+		{IntegrationInputTypeName, "IntegrationInput", "Value an integration defines, written type: <integration>.<type> (for example github.repository); multi makes it a list",
+			(&reliantv1.IntegrationInputConfig{}).ProtoReflect().Descriptor()},
 	}
 
 	for _, def := range inputDefs {

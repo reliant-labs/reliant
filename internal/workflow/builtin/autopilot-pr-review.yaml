@@ -14,15 +14,18 @@ automation_only: true
 
 inputs:
   repos:
-    type: array
-    default: []
-    description: "The repositories to review pull requests in, as owner/name. Nothing else is ever reviewed."
+    type: github.repository
+    multi: true
+    required: true
+    min_items: 1
+    description: "The repositories to review pull requests in. Nothing else is ever reviewed."
   trusted_ids:
-    type: array
+    type: github.user
+    multi: true
     default: []
     description: >-
-      GitHub numeric user ids (as strings, e.g. "583231") who may ask for a re-review with a comment,
-      besides you. Never logins: a login can be renamed and claimed by someone else.
+      People who may ask for a re-review with a comment, besides you. Stored as GitHub numeric user ids, never
+      logins: a login can be renamed and claimed by someone else.
   review_model:
     type: model
     description: >-
@@ -38,11 +41,13 @@ inputs:
       Extra context for the reviewer: what the repositories are, their conventions, what to ignore.
       Appended to its instructions.
   skip_label:
-    type: string
+    type: github.label
+    scope: {repository: repos}
     default: skip-review
     description: A PR carrying this label is never reviewed
   re_review_label:
-    type: string
+    type: github.label
+    scope: {repository: repos}
     default: "agent:re-review"
     description: Adding this label to a PR asks for another review. It is removed again afterwards
   repo:
@@ -64,9 +69,9 @@ triggers:
     integration:
       integration: github
       events: [pull_request.opened, pull_request.ready_for_review]
+      match: {repository: {input: repos}}
     filter: >-
-      trigger.payload.attributes.repository in trigger.activation.params.repos
-      && !(has(trigger.payload.data.pull_request.draft) && trigger.payload.data.pull_request.draft == true)
+      !(has(trigger.payload.data.pull_request.draft) && trigger.payload.data.pull_request.draft == true)
       && !(trigger.activation.params.skip_label in trigger.payload.data.pull_request.labels)
     inputs:
       repo: "{{ trigger.payload.attributes.repository }}"
@@ -78,9 +83,9 @@ triggers:
     integration:
       integration: github
       events: [pull_request.labeled]
+      match: {repository: {input: repos}}
     filter: >-
-      trigger.payload.attributes.repository in trigger.activation.params.repos
-      && trigger.payload.data.label == trigger.activation.params.re_review_label
+      trigger.payload.data.label == trigger.activation.params.re_review_label
     inputs:
       repo: "{{ trigger.payload.attributes.repository }}"
       pr_number: "{{ trigger.payload.data.pull_request.number }}"
@@ -93,9 +98,9 @@ triggers:
       events: [issue_comment.created]
       match:
         is_pull_request: "true"
+        repository: {input: repos}
     filter: >-
-      trigger.payload.attributes.repository in trigger.activation.params.repos
-      && trigger.sender.verified && trigger.sender.id != ''
+      trigger.sender.verified && trigger.sender.id != ''
       && (trigger.sender.id == trigger.activation.owner.github_id
           || trigger.sender.id in trigger.activation.params.trusted_ids)
       && has(trigger.payload.data.comment.body)

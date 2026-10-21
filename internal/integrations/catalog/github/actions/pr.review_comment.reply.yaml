@@ -1,0 +1,57 @@
+# yaml-language-server: $schema=../../../manifest/schema/action.schema.json
+id: pr.review_comment.reply
+display_name: Reply to a pull request inline comment
+summary: Reply in a review thread on a line of a pull request's diff.
+description: >-
+  Post a reply to an inline review comment, in the same thread. comment_id
+  is the id of a comment in the thread (pr.review_comments.list, or a
+  pull_request_review_comment.created event); GitHub does not nest replies,
+  so replying to a reply lands in the same thread. To start a new thread, or
+  for a conversation-tab comment, use pr.review.create or issue.comment.
+  Returns the reply's id, node id and URL.
+keywords: [pull request, pr, review comment, reply, thread, inline, respond, address]
+placement: server
+mutates: true
+tool:
+  expose: true
+params:
+  type: object
+  additionalProperties: false
+  required: [owner, repo, pull_number, comment_id, body]
+  properties:
+    owner: { $ref: ../schemas/owner.yaml }
+    repo: { $ref: ../schemas/repo.yaml }
+    pull_number: { $ref: ../schemas/pull_number.yaml }
+    comment_id:
+      type: integer
+      minimum: 1
+      title: Comment id
+      description: The inline comment to reply to.
+      examples: [1234]
+    body:
+      type: string
+      minLength: 1
+      title: Reply
+      description: The reply, in GitHub-flavored markdown.
+      examples: ["Good catch, fixed in abc1234."]
+    connection: { $ref: ../schemas/connection.yaml }
+request:
+  method: POST
+  path: /repos/{{ params.owner }}/{{ params.repo }}/pulls/{{ params.pull_number }}/comments/{{ params.comment_id }}/replies
+  body_expr: '{"body": params.body}'
+  errors: { $ref: ../schemas/github_errors.yaml }
+output:
+  select: >-
+    {"id": response.id,
+     "node_id": response.?node_id.orValue(null),
+     "html_url": response.html_url,
+     "in_reply_to_id": response.?in_reply_to_id.orValue(null),
+     "created_at": response.?created_at.orValue(null)}
+  schema:
+    type: object
+    properties:
+      id: { type: integer }
+      node_id: { type: [string, "null"] }
+      html_url: { type: string }
+      in_reply_to_id: { type: [integer, "null"] }
+      created_at: { type: [string, "null"] }

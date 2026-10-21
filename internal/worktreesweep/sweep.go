@@ -208,7 +208,7 @@ func (s *Sweeper) Run(ctx context.Context, interval time.Duration) {
 			return
 		case <-timer.C:
 			if err := s.SweepAsLeader(ctx); err != nil {
-				logging.Warn("[WorktreeSweep] pass failed", "error", err)
+				logging.WarnContext(ctx, "[WorktreeSweep] pass failed", "error", err)
 			}
 			timer.Reset(interval)
 		}
@@ -249,13 +249,13 @@ func (s *Sweeper) Sweep(ctx context.Context) error {
 	for userID, userCands := range byUser {
 		live, err := s.store.ListLiveWorktreePathsForUser(ctx, userID)
 		if err != nil {
-			logging.Warn("[WorktreeSweep] could not list live worktree paths", "userID", userID, "error", err)
+			logging.WarnContext(ctx, "[WorktreeSweep] could not list live worktree paths", "userID", userID, "error", err)
 			continue
 		}
 		liveByUser[userID] = live
 		connected, err := s.store.ListAttachedDaemonIDsForUser(ctx, userID, connectedLease)
 		if err != nil {
-			logging.Warn("[WorktreeSweep] could not list connected daemons", "userID", userID, "error", err)
+			logging.WarnContext(ctx, "[WorktreeSweep] could not list connected daemons", "userID", userID, "error", err)
 			continue
 		}
 		isUp := map[string]bool{}
@@ -267,7 +267,7 @@ func (s *Sweeper) Sweep(ctx context.Context) error {
 		// episode, instead of after their back-off: space is needed, and a
 		// workspace held as in use or recently active may be free by now.
 		if states, err := s.store.ListDaemonStorageState(ctx, userID); err != nil {
-			logging.Warn("[WorktreeSweep] could not read disk reports", "userID", userID, "error", err)
+			logging.WarnContext(ctx, "[WorktreeSweep] could not read disk reports", "userID", userID, "error", err)
 		} else {
 			for id, raw := range states {
 				if ms := diskwatch.Decode(raw).GetGuardSinceMs(); ms > 0 {
@@ -311,7 +311,7 @@ func (s *Sweeper) Sweep(ctx context.Context) error {
 	}
 	wg.Wait()
 	if s.auto != nil {
-		logging.Info("[WorktreeSweep] auto-archive", "mode", string(s.auto.mode), "finished", s.candidates.Load(), "archived", s.archived.Load())
+		logging.InfoContext(ctx, "[WorktreeSweep] auto-archive", "mode", string(s.auto.mode), "finished", s.candidates.Load(), "archived", s.archived.Load())
 	}
 	return nil
 }
@@ -460,7 +460,7 @@ func (s *Sweeper) settleBatch(ctx context.Context, t target, batch []*core.Recla
 	}
 	resp, err := s.send(ctx, t, cmdReconcile, reconcileTimeoutMs, req)
 	if err != nil {
-		logging.Warn("[WorktreeSweep] reconcile failed", "daemonID", t.daemonID, "error", err)
+		logging.WarnContext(ctx, "[WorktreeSweep] reconcile failed", "daemonID", t.daemonID, "error", err)
 		return false
 	}
 
@@ -497,7 +497,7 @@ func (s *Sweeper) settleBatch(ctx context.Context, t target, batch []*core.Recla
 	}
 	resp2, err := s.send(ctx, t, cmdReconcile, reconcileTimeoutMs, worktreereclaim.Request{Worktrees: second})
 	if err != nil {
-		logging.Warn("[WorktreeSweep] removal request failed", "daemonID", t.daemonID, "error", err)
+		logging.WarnContext(ctx, "[WorktreeSweep] removal request failed", "daemonID", t.daemonID, "error", err)
 		return false
 	}
 	for _, r := range resp2.Results {
@@ -576,7 +576,7 @@ func (s *Sweeper) describe(ctx context.Context, cands []*core.ReclaimCandidate, 
 		}
 		repos, err := s.store.ListReposByProject(ctx, projectID)
 		if err != nil {
-			logging.Warn("[WorktreeSweep] could not list repos", "projectID", projectID, "error", err)
+			logging.WarnContext(ctx, "[WorktreeSweep] could not list repos", "projectID", projectID, "error", err)
 			repoFailed[projectID] = true
 		}
 		repoCache[projectID] = repos
@@ -713,7 +713,7 @@ func (s *Sweeper) apply(ctx context.Context, userID, daemonID string, seen *core
 		return
 	case worktreereclaim.OutcomeError:
 		if r.Error != "" {
-			logging.Warn("[WorktreeSweep] daemon could not settle worktree", "worktreeID", seen.ID, "error", r.Error)
+			logging.WarnContext(ctx, "[WorktreeSweep] daemon could not settle worktree", "worktreeID", seen.ID, "error", r.Error)
 		}
 		// Recorded as a hold, so the Inbox shows it and it backs off; it used to
 		// be dropped, which left the row due at the front of every pass.
@@ -731,7 +731,7 @@ func (s *Sweeper) apply(ctx context.Context, userID, daemonID string, seen *core
 	// ownership an unattributed row never had. "gone" proves nothing.
 	if wt.DaemonID == nil && r.Outcome != worktreereclaim.OutcomeGone {
 		if err := s.store.AdoptWorktreeDaemon(ctx, wt.ID, daemonID); err != nil {
-			logging.Warn("[WorktreeSweep] could not record worktree owner", "worktreeID", wt.ID, "error", err)
+			logging.WarnContext(ctx, "[WorktreeSweep] could not record worktree owner", "worktreeID", wt.ID, "error", err)
 		} else {
 			wt.DaemonID = &daemonID
 		}
@@ -821,15 +821,15 @@ func (s *Sweeper) archiveFinished(ctx context.Context, userID string, wt *core.W
 	}
 	s.candidates.Add(1)
 	if a.mode != AutoArchiveOn {
-		logging.Info("[WorktreeSweep] would auto-archive finished worktree", "worktreeID", wt.ID, "name", wt.Name, "path", wt.Path)
+		logging.InfoContext(ctx, "[WorktreeSweep] would auto-archive finished worktree", "worktreeID", wt.ID, "name", wt.Name, "path", wt.Path)
 		return
 	}
 	if err := a.store.ArchiveWorktree(ctx, wt.ID); err != nil {
-		logging.Warn("[WorktreeSweep] could not auto-archive worktree", "worktreeID", wt.ID, "error", err)
+		logging.WarnContext(ctx, "[WorktreeSweep] could not auto-archive worktree", "worktreeID", wt.ID, "error", err)
 		return
 	}
 	s.archived.Add(1)
-	logging.Info("[WorktreeSweep] auto-archived finished worktree", "worktreeID", wt.ID, "name", wt.Name)
+	logging.InfoContext(ctx, "[WorktreeSweep] auto-archived finished worktree", "worktreeID", wt.ID, "name", wt.Name)
 	if a.notify != nil {
 		a.notify(ctx, userID, wt.ProjectID, wt.ID)
 	}
@@ -867,7 +867,7 @@ func (s *Sweeper) deleteBranchIfAsked(ctx context.Context, userID, daemonID stri
 	payload, _ := json.Marshal(map[string]string{"project_path": projectPath, "branch": cur.Branch})
 	raw, err := s.sender.SendDaemonCommandToDaemon(ctx, userID, daemonID, "worktree.delete_branch", payload, reconcileTimeoutMs)
 	if err != nil {
-		logging.Warn("[WorktreeSweep] could not delete branch", "worktreeID", wt.ID, "error", err)
+		logging.WarnContext(ctx, "[WorktreeSweep] could not delete branch", "worktreeID", wt.ID, "error", err)
 		return
 	}
 	var resp struct {
@@ -897,7 +897,7 @@ func (s *Sweeper) mergeMetaIf(ctx context.Context, wt *core.Worktree, fn func(*c
 		return true
 	})
 	if err != nil {
-		logging.Warn("[WorktreeSweep] could not record cleanup state", "worktreeID", wt.ID, "error", err)
+		logging.WarnContext(ctx, "[WorktreeSweep] could not record cleanup state", "worktreeID", wt.ID, "error", err)
 	}
 }
 

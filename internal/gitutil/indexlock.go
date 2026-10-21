@@ -161,13 +161,13 @@ func clearStrandedIndexLock(ctx context.Context, lockPath string, probe holderPr
 
 	if err := os.Remove(lockPath); err != nil {
 		if !os.IsNotExist(err) {
-			logging.Warn("Failed to remove stranded git index lock",
+			logging.WarnContext(ctx, "Failed to remove stranded git index lock",
 				"path", lockPath, "error", err)
 		}
 		return
 	}
 
-	logging.Info("Removed stranded git index lock left by a process that is no longer running",
+	logging.InfoContext(ctx, "Removed stranded git index lock left by a process that is no longer running",
 		"path", lockPath, "age", age.Round(time.Second).String())
 }
 

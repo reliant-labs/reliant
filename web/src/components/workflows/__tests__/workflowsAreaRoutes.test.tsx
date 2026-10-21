@@ -34,6 +34,10 @@ vi.mock("@/hooks/useTitleBarChrome", () => ({
   }),
 }));
 
+// The Automations badge counts what needs the user; by default nothing does.
+const badge = vi.hoisted(() => ({ triggers: [] as unknown[] }));
+vi.mock("@/hooks/trigger-queries", () => ({ useTriggers: () => ({ data: badge.triggers }) }));
+
 // The shell resolves a project on mount; here one is already current.
 vi.mock("@/store/projectStore", () => {
   // One stable state object, as a real store returns between updates.
@@ -112,13 +116,29 @@ describe("Workflows area routes render inside the shell with the right tab", () 
     renderAt(path);
     expect(await screen.findByTestId(`page-${page}`)).toBeInTheDocument();
     expect(activeTab()).toBe(tab);
-    // The three tabs, in order.
+    // The three tabs, in the order of the jobs: find it, turn it on, watch it (O9).
     const nav = screen.getByRole("navigation", { name: "Workflows" });
     expect(within(nav).getAllByRole("link").map((link) => link.textContent)).toEqual([
       "Library",
-      "Runs",
       "Automations",
+      "Runs",
     ]);
+  });
+
+  it("badges Automations with how many automations need you", async () => {
+    const health = (status: string) => ({ status, consecutiveFailures: 0, consecutiveSkips: 0, lastFailureDetail: "" });
+    const base = { name: "x", projectId: "proj-1", enabled: true, workflow: "triage", presets: {}, params: {}, message: "", daemonId: "", noMachine: true, notifyOnComplete: false, actingIdentity: "owner", createdAt: "", updatedAt: "", source: { kind: "unknown" } };
+    badge.triggers = [
+      { ...base, id: "a", workflowTrigger: "nightly", health: health("needs_setup") },
+      { ...base, id: "b", workflowTrigger: "evening", health: health("healthy") },
+      { ...base, id: "c", workflow: "other", health: health("broken") },
+    ];
+    renderAt("/workflows/library");
+    const nav = await screen.findByRole("navigation", { name: "Workflows" });
+    const automations = within(nav).getByRole("link", { name: /Automations/ });
+    // Two automations: the triage one (its worst trigger needs setup) and the broken custom one.
+    expect(automations).toHaveTextContent("2");
+    badge.triggers = [];
   });
 
   it("/workflows lands on the Library and keeps ?project", async () => {

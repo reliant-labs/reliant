@@ -1,33 +1,47 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * The Automations list, grouped (research/WORKFLOW_UI.md §7.2): a pinned
- * "Needs attention" group when anything is failing, waiting or skipping, then
- * one panel per workflow or project. Order and membership are decided in
- * automationGrouping.ts; this file only draws them.
+ * The Automations overview's lists: "Needs you", then one panel per workflow
+ * or project. Order and membership are decided in automationGrouping.ts; this
+ * file only draws them.
  */
 
 import { useId } from "react";
 import { AlertTriangle } from "lucide-react";
 
 import Card from "../forge-ui/card";
-import type { Trigger } from "@/api/trigger-grpc";
+import type { AutomationUnit } from "@/lib/automationUnits";
 import { cn } from "@/lib/utils";
-import { AutomationListHeader, AutomationRow } from "./AutomationRow";
-import {
-  GROUP_STATE_LABEL,
-  groupAutomations,
-  groupState,
-  groupSummary,
-  type AutomationGroup,
-  type AutomationGroupBy,
-} from "./automationGrouping";
+import { AutomationListHeader } from "./AutomationRow";
+import { AutomationUnitRow, NeedsYouRow } from "./AutomationUnitRow";
+import { groupSummary, type AutomationGroup, type AutomationGroupBy } from "./automationGrouping";
 
-export function AutomationGroups({ triggers, groupBy }: { triggers: Trigger[]; groupBy: AutomationGroupBy }) {
-  const { attention, groups } = groupAutomations(triggers, groupBy);
+export function NeedsYouList({ units }: { units: readonly AutomationUnit[] }) {
+  const headingId = useId();
+  if (units.length === 0) return null;
+  return (
+    <section id="needs-you" aria-labelledby={headingId} data-testid="automations-needs-you" className="scroll-mt-24">
+      <Card padding="none" className="overflow-hidden border-warning-border">
+        <div className="flex items-baseline justify-between gap-4 border-b border-border/60 px-4 py-2">
+          <h2 id={headingId} className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-warning-ink">
+            <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+            Needs you
+          </h2>
+          <span className="text-xs text-muted-foreground">{units.length === 1 ? "1 automation" : `${units.length} automations`}</span>
+        </div>
+        <ul aria-labelledby={headingId} className="divide-y divide-border/60">
+          {units.map((unit) => (
+            <NeedsYouRow key={unit.key} unit={unit} />
+          ))}
+        </ul>
+      </Card>
+    </section>
+  );
+}
+
+export function AutomationGroups({ groups }: { groups: readonly AutomationGroup[] }) {
   return (
     <div className="space-y-4">
-      {attention && <GroupPanel group={attention} attention />}
       {groups.map((group) => (
         <GroupPanel key={group.key} group={group} />
       ))}
@@ -35,38 +49,21 @@ export function AutomationGroups({ triggers, groupBy }: { triggers: Trigger[]; g
   );
 }
 
-function GroupPanel({ group, attention = false }: { group: AutomationGroup; attention?: boolean }) {
+function GroupPanel({ group }: { group: AutomationGroup }) {
   const headingId = useId();
   return (
     <section aria-labelledby={headingId} data-testid={`automation-group-${group.key}`}>
-      <Card padding="none" className={cn("overflow-hidden", attention && "border-warning/60")}>
+      <Card padding="none" className="overflow-hidden">
         <div className="flex items-baseline justify-between gap-4 border-b border-border/60 px-4 py-2">
-          <h2
-            id={headingId}
-            className={cn(
-              "flex min-w-0 items-center gap-1.5 truncate text-xs font-semibold uppercase tracking-wide",
-              attention ? "text-warning-ink" : "text-muted-foreground",
-            )}
-          >
-            {attention && <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />}
+          <h2 id={headingId} className={cn("min-w-0 truncate text-xs font-semibold uppercase tracking-wide text-muted-foreground")}>
             {group.label}
           </h2>
-          <span className="shrink-0 text-xs text-muted-foreground">
-            {!attention && (
-              <span
-                data-testid="group-state"
-                className={cn("mr-2 font-medium", groupState(group.entries) === "broken" ? "text-destructive-ink" : "text-foreground")}
-              >
-                {GROUP_STATE_LABEL[groupState(group.entries)]}
-              </span>
-            )}
-            {groupSummary(group.entries)}
-          </span>
+          <span className="shrink-0 text-xs text-muted-foreground">{groupSummary(group.units)}</span>
         </div>
         <AutomationListHeader />
         <ul aria-labelledby={headingId} className="divide-y divide-border/60">
-          {group.entries.map(({ trigger }) => (
-            <AutomationRow key={trigger.id} trigger={trigger} />
+          {group.units.map((unit) => (
+            <AutomationUnitRow key={unit.key} unit={unit} />
           ))}
         </ul>
       </Card>

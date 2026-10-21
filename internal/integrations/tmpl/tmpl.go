@@ -2,7 +2,7 @@
 // Expressions are CEL, the engine's expression language, over the variables
 // params, connection (the resolved connection's non-secret params, as
 // connection.params.<name>), response (parsed JSON body), raw (body text),
-// status and headers. Beyond standard CEL they have optional types,
+// status, headers and parent (a fan-out request's item). Beyond standard CEL they have optional types,
 // base64.decode / base64.encode, and <bytes>.text().
 package tmpl
 
@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"net/url"
 	"reflect"
+	"sort"
 	"strings"
 	"sync"
 	"unicode/utf8"
@@ -38,28 +39,64 @@ var (
 	envOnce sync.Once
 	env     *cel.Env
 	envErr  error
+
+	// custom caches the environments built for other variable sets.
+	custom sync.Map // string -> *cel.Env
 )
+
+// envOptions are what every expression environment has, beyond its variables.
+func envOptions() []cel.EnvOption {
+	return []cel.EnvOption{
+		// Optional syntax: `{?"body": params.?body}` leaves a key out
+		// when the param is absent (a PATCH must not send null), and
+		// `headers[?'retry-after']` reads a header that may be missing.
+		cel.OptionalTypes(),
+		// base64.decode / base64.encode: providers that return file
+		// content (GitHub's contents API) send it base64-encoded.
+		ext.Encoders(),
+		bytesText,
+	}
+}
 
 func celEnv() (*cel.Env, error) {
 	envOnce.Do(func() {
-		env, envErr = cel.NewEnv(
+		opts := []cel.EnvOption{
 			cel.Variable("params", cel.DynType),
 			cel.Variable("connection", cel.DynType),
 			cel.Variable("response", cel.DynType),
 			cel.Variable("status", cel.DynType),
 			cel.Variable("headers", cel.DynType),
 			cel.Variable("raw", cel.StringType),
-			// Optional syntax: `{?"body": params.?body}` leaves a key out
-			// when the param is absent (a PATCH must not send null), and
-			// `headers[?'retry-after']` reads a header that may be missing.
-			cel.OptionalTypes(),
-			// base64.decode / base64.encode: providers that return file
-			// content (GitHub's contents API) send it base64-encoded.
-			ext.Encoders(),
-			bytesText,
-		)
+			// parent is the item a fan-out request is running for; null
+			// everywhere else.
+			cel.Variable("parent", cel.DynType),
+		}
+		env, envErr = cel.NewEnv(append(opts, envOptions()...)...)
 	})
 	return env, envErr
+}
+
+// envFor is the environment over exactly the named variables, all dynamic.
+func envFor(names []string) (*cel.Env, error) {
+	sorted := append([]string(nil), names...)
+	sort.Strings(sorted)
+	key := strings.Join(sorted, ",")
+	if e, ok := custom.Load(key); ok {
+		return e.(*cel.Env), nil
+	}
+	// split, replace, lowerAscii...: a typed value is often taken apart into
+	// pieces (`owner/name`). Action request templates do not get these.
+	opts := make([]cel.EnvOption, 0, len(sorted)+5)
+	opts = append(opts, ext.Strings())
+	for _, n := range sorted {
+		opts = append(opts, cel.Variable(n, cel.DynType))
+	}
+	e, err := cel.NewEnv(append(opts, envOptions()...)...)
+	if err != nil {
+		return nil, err
+	}
+	custom.Store(key, e)
+	return e, nil
 }
 
 // bytesText is `<bytes>.text()`: the bytes as a string when they are text,
@@ -156,7 +193,7 @@ func EvalExpr(expr string, vars map[string]any) (any, error) {
 }
 
 func eval(prg cel.Program, expr string, vars map[string]any) (any, error) {
-	full := map[string]any{"params": map[string]any{}, "connection": map[string]any{"params": map[string]any{}}, "response": nil, "status": int64(0), "headers": map[string]any{}, "raw": ""}
+	full := map[string]any{"params": map[string]any{}, "connection": map[string]any{"params": map[string]any{}}, "response": nil, "status": int64(0), "headers": map[string]any{}, "raw": "", "parent": nil}
 	for k, v := range vars {
 		full[k] = v
 	}
@@ -237,4 +274,82 @@ func stringify(v any) string {
 		}
 		return string(b)
 	}
+}
+
+// The functions below are for expressions that do not run against an HTTP
+// response: a type's option projections read `item`, `scope`, `context` and
+// so on, never `response`. The language is the same; only the variables
+// differ, and every one is dynamic.
+
+// Exprs returns the {{ }} expressions of a template, in order.
+func Exprs(s string) ([]string, error) {
+	segs, err := split(s)
+	if err != nil {
+		return nil, err
+	}
+	var out []string
+	for _, sg := range segs {
+		if sg.isExpr {
+			out = append(out, sg.expr)
+		}
+	}
+	return out, nil
+}
+
+// Compile type-checks expr as an expression over the named variables and
+// returns its checked AST, so a caller can inspect what it reads.
+func Compile(expr string, names ...string) (*cel.Ast, error) {
+	e, err := envFor(names)
+	if err != nil {
+		return nil, err
+	}
+	ast, iss := e.Compile(expr)
+	if iss != nil && iss.Err() != nil {
+		return nil, fmt.Errorf("expression %q: %w", expr, iss.Err())
+	}
+	return ast, nil
+}
+
+// EvalWith evaluates a bare expression over vars; the variable names are
+// vars' keys.
+func EvalWith(expr string, vars map[string]any) (any, error) {
+	names := make([]string, 0, len(vars))
+	for k := range vars {
+		names = append(names, k)
+	}
+	ast, err := Compile(expr, names...)
+	if err != nil {
+		return nil, err
+	}
+	e, _ := envFor(names)
+	prg, err := e.Program(ast)
+	if err != nil {
+		return nil, err
+	}
+	return eval(prg, expr, vars)
+}
+
+// RenderWith is Render over vars (no response, no path escaping). A string
+// that is exactly one expression keeps its native type.
+func RenderWith(s string, vars map[string]any) (any, error) {
+	segs, err := split(s)
+	if err != nil {
+		return nil, err
+	}
+	if len(segs) == 1 && segs[0].isExpr {
+		return EvalWith(segs[0].expr, vars)
+	}
+	var b strings.Builder
+	for _, sg := range segs {
+		if !sg.isExpr {
+			b.WriteString(sg.literal)
+			continue
+		}
+		v, err := EvalWith(sg.expr, vars)
+		if err != nil {
+			return nil, err
+		}
+		b.WriteString(stringify(v))
+	}
+	return b.String(), nil
 }

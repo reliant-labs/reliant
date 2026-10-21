@@ -188,7 +188,7 @@ func (r *NATSDaemonRouter) rideOutDisconnect(
 				return 0, err
 			}
 			waitStart = time.Now()
-			logging.Info("[DaemonRouter] daemon is away; waiting for it to reconnect",
+			logging.InfoContext(ctx, "[DaemonRouter] daemon is away; waiting for it to reconnect",
 				"user_id", userID, "daemon_id", daemonID, "last_seen", seen,
 				"wait_until", deadline, "interrupted", outcome == dispatchInterrupted)
 			if wait.observe != nil {
@@ -201,11 +201,11 @@ func (r *NATSDaemonRouter) rideOutDisconnect(
 		if werr := r.awaitDaemon(ctx, userID, daemonID, deadline, attempts > 1); werr != nil {
 			finish(false)
 			waited := time.Since(waitStart)
-			logging.Info("[DaemonRouter] gave up waiting for the daemon to reconnect",
+			logging.InfoContext(ctx, "[DaemonRouter] gave up waiting for the daemon to reconnect",
 				"user_id", userID, "daemon_id", daemonID, "waited", waited.Round(time.Millisecond), "reason", werr)
 			return waited, err
 		}
-		logging.Info("[DaemonRouter] daemon reconnected; sending the request again",
+		logging.InfoContext(ctx, "[DaemonRouter] daemon reconnected; sending the request again",
 			"user_id", userID, "daemon_id", daemonID, "waited", time.Since(waitStart).Round(time.Millisecond))
 	}
 }
@@ -240,7 +240,7 @@ func (r *NATSDaemonRouter) awaitDaemon(ctx context.Context, userID, daemonID str
 	})
 	if err != nil {
 		// The probe below still finds the daemon, only later.
-		logging.Warn("[DaemonRouter] cannot subscribe to the daemon's connect event; probing only",
+		logging.WarnContext(ctx, "[DaemonRouter] cannot subscribe to the daemon's connect event; probing only",
 			"daemon_id", daemonID, "error", err)
 	} else {
 		defer func() { _ = sub.Unsubscribe() }()
@@ -291,7 +291,7 @@ func (r *NATSDaemonRouter) daemonLastSeen(ctx context.Context, userID, daemonID 
 	}
 	seen, err := r.db.DaemonLastSeenAt(ctx, userID, daemonID)
 	if err != nil {
-		logging.Warn("[DaemonRouter] cannot read when the daemon was last seen; not waiting for it",
+		logging.WarnContext(ctx, "[DaemonRouter] cannot read when the daemon was last seen; not waiting for it",
 			"user_id", userID, "daemon_id", daemonID, "error", err)
 		return time.Time{}
 	}

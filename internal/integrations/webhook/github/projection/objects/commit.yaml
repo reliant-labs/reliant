@@ -1,0 +1,15 @@
+fields:
+  id: string
+  message: { kind: string, cap: true }
+  timestamp: string
+  url: string
+  # Name and username only: the author email is personal data the run has no
+  # use for.
+  author:
+    kind: object
+    fields:
+      name: string
+      username: string
+  added: strings
+  removed: strings
+  modified: strings

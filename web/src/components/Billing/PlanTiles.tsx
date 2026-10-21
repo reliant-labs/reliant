@@ -50,10 +50,6 @@ export interface ComputePlanOption {
   /** The machine size this tile represents, when the caller selects by size. */
   size?: DaemonSizeName;
   monthlyPriceCents: number;
-  /** -1 means unlimited; the tile says so rather than printing a number. */
-  includedMinutes: number;
-  /** Per-minute overage rate, in cents. 0 when the plan defines none. */
-  overageCentsPerMinute: number;
   /** Hours this plan includes at its own size ("160"), for the picker footnote. Never printed on the row. */
   includedHours?: string | null;
 }

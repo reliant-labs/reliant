@@ -10,7 +10,8 @@
  *     /forge/env/$env, /forge/observability,
  *     /forge/domains, /forge/topology, …    → the retired URLs, redirected
  *     /forge/p/$project                     ConsoleLayout: nav, top bar, scope
- *       /                                   Overview
+ *       /                                   Overview (with the workloads)
+ *       /workloads/$env/$name               one workload
  *       /releases, /releases/$version
  *       /observability, /observability/$view
  *       /observability/dashboards, /observability/dashboards/$kind/$key
@@ -30,10 +31,12 @@ import {
   forgeConsoleDashboardsSearchSchema,
   forgeConsoleEnvSearchSchema,
   forgeConsoleObsSearchSchema,
+  forgeConsoleOverviewSearchSchema,
   forgeConsoleReleaseSearchSchema,
   forgeConsoleReleasesSearchSchema,
   forgeConsoleSearchSchema,
   forgeConsoleSecretsSearchSchema,
+  forgeConsoleWorkloadSearchSchema,
   forgeLegacyEnvSearchSchema,
   forgeLegacySearchSchema,
   forgeObservabilitySearchSchema,
@@ -46,6 +49,8 @@ export interface ForgeConsoleComponents {
   /** /forge/p/$project's layout. */
   console: RouteComponent
   overview: RouteComponent
+  /** One workload in one environment (the Overview's detail). */
+  workload: RouteComponent
   releases: RouteComponent
   release: RouteComponent
   observability: RouteComponent
@@ -122,8 +127,14 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
   const overviewRoute = createRoute({
     getParentRoute: () => consoleRoute,
     path: '/',
-    validateSearch: forgeConsoleObsSearchSchema,
+    validateSearch: forgeConsoleOverviewSearchSchema,
     component: components.overview,
+  })
+  const workloadRoute = createRoute({
+    getParentRoute: () => consoleRoute,
+    path: 'workloads/$env/$name',
+    validateSearch: forgeConsoleWorkloadSearchSchema,
+    component: components.workload,
   })
   const releasesRoute = createRoute({
     getParentRoute: () => consoleRoute,
@@ -227,6 +238,7 @@ export function createForgeConsoleRoutes<TParent extends AnyRoute>(
     legacyCommandRoute('/forge/secrets'),
     consoleRoute.addChildren([
       overviewRoute,
+      workloadRoute,
       releasesRoute,
       releaseRoute,
       observabilityRoute,

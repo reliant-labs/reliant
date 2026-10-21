@@ -1,0 +1,11 @@
+# Pull request ready for review: the projection of the GitHub `pull_request.ready_for_review` webhook.
+id: pull_request.ready_for_review
+event: pull_request.ready_for_review
+display_name: Pull request ready for review
+summary: A draft pull request was marked ready for review.
+keywords: [pr, draft, review]
+attributes:
+  - { group: pr }
+data:
+  number: integer
+  pull_request: { kind: object, object: pr }

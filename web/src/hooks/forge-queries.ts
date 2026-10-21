@@ -35,8 +35,8 @@ import {
   hasCloudControlPlane,
   listEnvironmentPromotions,
   listProjectEnvironments,
-  scaleDeployment,
   setEnvironmentRunState,
+  setWorkloadRunState,
   type RunStateRequest,
   type CloudAvailability,
   type CloudEnv,
@@ -1222,10 +1222,11 @@ export function useSetEnvironmentRunState(environmentId: string | null | undefin
   });
 }
 
-export function useScaleDeployment() {
+/** Stop or start one hosted workload (its deployment's run state). */
+export function useSetWorkloadRunState() {
   const invalidate = useInvalidateAfterRunStateWrite();
   return useMutation<void, Error, { deploymentId: string; state: RunStateRequest }>({
-    mutationFn: ({ deploymentId, state }) => scaleDeployment(deploymentId, state),
+    mutationFn: ({ deploymentId, state }) => setWorkloadRunState(deploymentId, state),
     onSuccess: invalidate,
   });
 }

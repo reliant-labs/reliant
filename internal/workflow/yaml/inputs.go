@@ -2,8 +2,11 @@ package wfyaml
 
 import (
 	"fmt"
+	"sort"
+	"strings"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"google.golang.org/protobuf/types/known/structpb"
 	"gopkg.in/yaml.v3"
 )
@@ -23,6 +26,10 @@ func unmarshalInput(node *yaml.Node) (*reliantv1.Input, error) {
 	input.Type = getYAMLFieldString(node, "type")
 	if input.Type == "" {
 		return nil, fmt.Errorf("V2Input: missing 'type' field")
+	}
+
+	if err := checkRequiredFlag(node); err != nil {
+		return nil, err
 	}
 
 	// Dispatch to correct config type
@@ -112,22 +119,68 @@ func unmarshalInput(node *yaml.Node) (*reliantv1.Input, error) {
 		}
 		input.Config = &reliantv1.Input_PresetInput{PresetInput: cfg}
 	default:
-		return nil, fmt.Errorf("V2Input: unknown type %q", input.Type)
+		if !strings.Contains(input.Type, ".") {
+			return nil, fmt.Errorf("V2Input: unknown type %q; valid types are %s, or an integration's type written <integration>.<type> (for example github.repository)",
+				input.Type, strings.Join(model.BuiltinInputTypes, ", "))
+		}
+		if _, _, ok := model.SplitIntegrationType(input.Type); !ok {
+			return nil, fmt.Errorf("V2Input: type %q must be <integration>.<type>, for example github.repository", input.Type)
+		}
+		cfg, err := unmarshalIntegrationInputConfig(node)
+		if err != nil {
+			return nil, err
+		}
+		input.Config = &reliantv1.Input_IntegrationInput{IntegrationInput: cfg}
 	}
 
 	return input, nil
 }
 
-// unmarshalInputBase extracts description, ui and example from a mapping node.
+// unmarshalInputBase extracts description, ui, example and required from a
+// mapping node.
 func unmarshalInputBase(node *yaml.Node) *reliantv1.InputBase {
 	base := &reliantv1.InputBase{}
 	base.Description = getYAMLFieldString(node, "description")
 	base.Ui = getYAMLFieldString(node, "ui")
 	base.Example = getYAMLFieldString(node, "example")
-	if base.Description == "" && base.Ui == "" && base.Example == "" {
+	base.Required = inputRequiredFlag(node)
+	if base.Description == "" && base.Ui == "" && base.Example == "" && !base.Required {
 		return nil
 	}
 	return base
+}
+
+// inputRequiredFlag reads `required: true`. An object input's `required:` is
+// its list of property names (ObjectInputConfig.required), a sequence; only a
+// scalar is the flag.
+func inputRequiredFlag(node *yaml.Node) bool {
+	n := getYAMLField(node, "required")
+	if n == nil || n.Kind != yaml.ScalarNode {
+		return false
+	}
+	var b bool
+	if err := n.Decode(&b); err != nil {
+		return false
+	}
+	return b
+}
+
+// checkRequiredFlag rejects a scalar `required:` that is not a boolean, which
+// inputRequiredFlag would otherwise read as false and so silently make the
+// input optional-looking.
+func checkRequiredFlag(node *yaml.Node) error {
+	n := getYAMLField(node, "required")
+	if n == nil || n.Kind != yaml.ScalarNode {
+		return nil
+	}
+	if getYAMLFieldString(node, "type") == "object" {
+		return fmt.Errorf("V2Input: on type: object, required lists the required property names (required: [a, b]); an object input with no default is required already")
+	}
+	var b bool
+	if err := n.Decode(&b); err != nil {
+		return fmt.Errorf("V2Input: required must be true or false, got %q (a property list is only valid on type: object)", n.Value)
+	}
+	return nil
 }
 
 // unmarshalOptionalString extracts an optional string field from a mapping node.
@@ -364,6 +417,57 @@ func unmarshalArrayInputConfig(node *yaml.Node) (*reliantv1.ArrayInputConfig, er
 	return cfg, nil
 }
 
+// unmarshalIntegrationInputConfig reads an input whose type an integration
+// defines (`type: github.repository`). Whether the type exists is not known
+// here, because the parser has no catalog; validation resolves it.
+func unmarshalIntegrationInputConfig(node *yaml.Node) (*reliantv1.IntegrationInputConfig, error) {
+	typeRef := getYAMLFieldString(node, "type")
+	cfg := &reliantv1.IntegrationInputConfig{
+		Base: unmarshalInputBase(node),
+	}
+	if n := getYAMLField(node, "multi"); n != nil && n.Tag != "!!null" {
+		if err := n.Decode(&cfg.Multi); err != nil {
+			return nil, fmt.Errorf("%s.multi: must be true or false", typeRef)
+		}
+	}
+	for _, f := range []struct {
+		key string
+		dst **int32
+	}{{"min_items", &cfg.MinItems}, {"max_items", &cfg.MaxItems}} {
+		n := getYAMLField(node, f.key)
+		if n == nil || n.Tag == "!!null" {
+			continue
+		}
+		var v int
+		if err := n.Decode(&v); err != nil {
+			return nil, fmt.Errorf("%s.%s: must be an integer, got %q", typeRef, f.key, n.Value)
+		}
+		v32 := int32(v)
+		*f.dst = &v32
+	}
+	if n := getYAMLField(node, "default"); n != nil && n.Tag != "!!null" {
+		v, err := unmarshalStructValue(n)
+		if err != nil {
+			return nil, fmt.Errorf("%s.default: %w", typeRef, err)
+		}
+		cfg.Default = v
+	}
+	if n := getYAMLField(node, "scope"); n != nil && n.Tag != "!!null" {
+		if n.Kind != yaml.MappingNode {
+			return nil, fmt.Errorf("%s.scope: expected a mapping of the type's scope key to the name of another input", typeRef)
+		}
+		cfg.Scope = make(map[string]string, len(n.Content)/2)
+		for i := 0; i < len(n.Content); i += 2 {
+			key, val := n.Content[i], n.Content[i+1]
+			if val.Kind != yaml.ScalarNode || val.Value == "" {
+				return nil, fmt.Errorf("%s.scope.%s: expected the name of another input", typeRef, key.Value)
+			}
+			cfg.Scope[key.Value] = val.Value
+		}
+	}
+	return cfg, nil
+}
+
 func unmarshalObjectInputConfig(node *yaml.Node) (*reliantv1.ObjectInputConfig, error) {
 	cfg := &reliantv1.ObjectInputConfig{
 		Base: unmarshalInputBase(node),
@@ -384,7 +488,7 @@ func unmarshalObjectInputConfig(node *yaml.Node) (*reliantv1.ObjectInputConfig, 
 	}
 	// required
 	reqNode := getYAMLField(node, "required")
-	if reqNode != nil {
+	if reqNode != nil && reqNode.Kind == yaml.SequenceNode {
 		if err := reqNode.Decode(&cfg.Required); err != nil {
 			return nil, fmt.Errorf("object.required: %w", err)
 		}
@@ -697,6 +801,30 @@ func marshalInput(input *reliantv1.Input) (*yaml.Node, error) {
 				m.Content = append(m.Content, scalarNode("default", ""), n)
 			}
 		}
+	default:
+		if cfg := input.GetIntegrationInput(); cfg != nil {
+			marshalInputBase(m, cfg.Base)
+			if cfg.Multi {
+				m.Content = append(m.Content, scalarNode("multi", ""), &yaml.Node{Kind: yaml.ScalarNode, Value: "true", Tag: "!!bool"})
+			}
+			marshalOptionalInt32(m, "min_items", cfg.MinItems)
+			marshalOptionalInt32(m, "max_items", cfg.MaxItems)
+			if len(cfg.Scope) > 0 {
+				keys := make([]string, 0, len(cfg.Scope))
+				for k := range cfg.Scope {
+					keys = append(keys, k)
+				}
+				sort.Strings(keys)
+				scope := &yaml.Node{Kind: yaml.MappingNode}
+				for _, k := range keys {
+					scope.Content = append(scope.Content, scalarNode(k, ""), scalarNode(cfg.Scope[k], ""))
+				}
+				m.Content = append(m.Content, scalarNode("scope", ""), scope)
+			}
+			if cfg.Default != nil {
+				m.Content = append(m.Content, scalarNode("default", ""), marshalStructpbValue(cfg.Default))
+			}
+		}
 	}
 
 	return m, nil
@@ -730,6 +858,9 @@ func marshalInputBase(m *yaml.Node, base *reliantv1.InputBase) {
 	}
 	if base.Example != "" {
 		m.Content = append(m.Content, scalarNode("example", ""), scalarNode(base.Example, ""))
+	}
+	if base.Required {
+		m.Content = append(m.Content, scalarNode("required", ""), &yaml.Node{Kind: yaml.ScalarNode, Value: "true", Tag: "!!bool"})
 	}
 }
 

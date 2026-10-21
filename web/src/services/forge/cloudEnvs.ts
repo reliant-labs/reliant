@@ -249,9 +249,10 @@ export function toCloudPromotion(msg: DeployPromotion): CloudPromotion {
 }
 
 /**
- * One deployment, in forge's hosted-workload shape. Same object
- * HostedWorkloadList already renders from forge's reports, so a workload's
- * verdict, drift and URL read identically whichever source produced them.
+ * One deployment, in forge's hosted-workload shape — the same shape forge's
+ * own reports use, so a workload's verdict, drift and URL read identically
+ * whichever source produced them. The workload page reads its run state, URL,
+ * last error and drift from here.
  */
 function toWorkload(msg: DeploymentStatus): ForgeHostedWorkload {
   const deployment = msg.deployment;
@@ -349,9 +350,37 @@ export async function setEnvironmentRunState(environmentId: string, state: RunSt
   await client().setEnvironmentRunState({ environmentId, runState: runStateEnum(state) });
 }
 
-/** Stop or start ONE deployment. */
-export async function scaleDeployment(deploymentId: string, state: RunStateRequest): Promise<void> {
+/**
+ * Stop or start ONE hosted workload's deployment: its RUN STATE (running or
+ * suspended), which DeployService.Scale carries. Not a replica count — forge's
+ * tiers carry none, and replicas are declared in KCL (decision D6).
+ */
+export async function setWorkloadRunState(deploymentId: string, state: RunStateRequest): Promise<void> {
   await client().scale({ deploymentId, runState: runStateEnum(state) });
+}
+
+/** What the control plane echoes for a restart: the environment it happened IN, so no caller can misread where. */
+export interface RestartedWorkload {
+  environmentId: string;
+  environmentName: string;
+  workload: string;
+  /** When the rolling restart was requested; the pods follow within the tier controller's reconcile. */
+  requestedAt: string | null;
+}
+
+/**
+ * A rolling restart of one workload in one HOSTED environment (decision D6).
+ * The release and declared spec do not change; the control plane audits it.
+ * A self-managed or local environment answers FailedPrecondition.
+ */
+export async function restartWorkload(environmentId: string, workload: string): Promise<RestartedWorkload> {
+  const res = await client().restartWorkload({ environmentId, workload });
+  return {
+    environmentId: res.environmentId,
+    environmentName: res.environmentName,
+    workload: res.workload,
+    requestedAt: res.requestedAt ? timestampDate(res.requestedAt).toISOString() : null,
+  };
 }
 
 /** Tear the environment down. `force` removes its deployments with it. */

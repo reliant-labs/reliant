@@ -47,15 +47,10 @@ const ProviderOAuthMarker = "oauth"
 // else any more: LLM credentials live in provider_accounts.
 const AutomationProviderPrefix = "reliant-automation:"
 
-// SettingStore is the shared contract for settings persistence across drivers.
+// SettingStore is the shared contract for the api_keys automation tokens and
+// the visibility overrides across drivers. Settings, item defaults and
+// default preset assignments are in internal/store.
 type SettingStore interface {
-	CreateSetting(ctx context.Context, setting *Setting) error
-	GetSetting(ctx context.Context, userID string, projectID *string, key string) (*Setting, error)
-	ListSettings(ctx context.Context, userID string, projectID *string) ([]*Setting, error)
-	ListSettingsByKey(ctx context.Context, userID string, keyPattern string) ([]*Setting, error)
-	UpdateSetting(ctx context.Context, setting *Setting) error
-	DeleteSetting(ctx context.Context, id string) error
-
 	// Automation tokens: the daemon:resume credential minted for one (user, daemon), kept in api_keys.
 	GetAutomationToken(ctx context.Context, userID, daemonID string) (string, error)
 	SetAutomationToken(ctx context.Context, userID, daemonID, token string) error
@@ -65,7 +60,4 @@ type SettingStore interface {
 	ListVisibilityOverrides(ctx context.Context, userID string, itemType int32) (map[string]bool, error)
 	SetVisibilityOverride(ctx context.Context, userID string, itemType int32, slug string, isVisible bool) error
 	DeleteVisibilityOverride(ctx context.Context, userID string, itemType int32, slug string) error
-	GetItemDefault(ctx context.Context, itemType int32, slug string) (*ItemDefault, error)
-	ListHiddenItemDefaults(ctx context.Context, itemType int32) ([]string, error)
-	GetDefaultPresetAssignments(ctx context.Context, workflowName string) (map[string]string, error)
 }

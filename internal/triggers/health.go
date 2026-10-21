@@ -3,10 +3,12 @@ package triggers
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/workflow/validation"
 )
 
 // HealthWindow is how many of a trigger's newest firings health is read from.
@@ -74,6 +76,63 @@ func ComputeHealth(firings []*core.TriggerEventWithRun) *reliantv1.TriggerHealth
 		health.Status = reliantv1.TriggerHealthStatus_TRIGGER_HEALTH_STATUS_DEGRADED
 	case anySuccess:
 		health.Status = reliantv1.TriggerHealthStatus_TRIGGER_HEALTH_STATUS_HEALTHY
+	}
+	return health
+}
+
+// SetupIssues are the ways t's stored params fall short of what decl's
+// workflow needs of an activation of it: a required input that this trigger
+// does not map from the event has no value, or a value no longer fits its
+// input. Stored params of inputs the workflow no longer declares are not part
+// of it. It is computed from the workflow as it is now, so a workflow edit
+// that adds a required input turns every existing activation of it into an
+// issue without touching a row. Nil for an ad hoc trigger (decl nil) and for
+// a complete activation.
+func SetupIssues(decl *Declaration, t *core.Trigger) []validation.ParamIssue {
+	if decl == nil || t == nil {
+		return nil
+	}
+	// Only the inputs the workflow declares. A stored param of an input since
+	// removed is not something finishing setup could ask the person to fix;
+	// writes still refuse one, so it only exists on a row written before the
+	// edit.
+	params := make(map[string]any, len(t.Params))
+	for name, value := range t.Params {
+		if decl.WorkflowInputs[name] != nil {
+			params[name] = value
+		}
+	}
+	return validation.ValidateActivationParams(decl.WorkflowInputs, decl.Inputs, params)
+}
+
+// SetupDetail is issues as one line: "needs setup: repos is required". It is
+// what the owner reads in health and in the history of an event the activation
+// could not act on, so the two say the same thing.
+func SetupDetail(issues []validation.ParamIssue) string {
+	msgs := make([]string, len(issues))
+	for i, issue := range issues {
+		msgs[i] = issue.Message
+	}
+	return "needs setup: " + strings.Join(msgs, "; ")
+}
+
+// NeedsSetupHealth is the health of an activation whose params do not satisfy
+// its workflow (SetupIssues): NEEDS_SETUP, with the issues. It replaces the
+// firing-derived status, because nothing the activation receives can launch
+// until it is finished, and it outranks paused/idle states for the same
+// reason: resuming would not make it fire. BROKEN outranks it, since a broken
+// declaration cannot be set up. Nil when the activation is complete.
+func NeedsSetupHealth(decl *Declaration, t *core.Trigger) *reliantv1.TriggerHealth {
+	issues := SetupIssues(decl, t)
+	if len(issues) == 0 {
+		return nil
+	}
+	health := &reliantv1.TriggerHealth{
+		Status:            reliantv1.TriggerHealthStatus_TRIGGER_HEALTH_STATUS_NEEDS_SETUP,
+		LastFailureDetail: SetupDetail(issues),
+	}
+	for _, issue := range issues {
+		health.SetupIssues = append(health.SetupIssues, &reliantv1.TriggerSetupIssue{Input: issue.Input, Message: issue.Message})
 	}
 	return health
 }

@@ -86,6 +86,21 @@ While the agent workflow handles most tasks, Reliant ships additional workflows 
 
 The rest ship as **building blocks**: `structured-agent` (an agent that must answer through a response tool, for structured output), `scope-conversation` (a reusable scoping conversation), and the steps the Autopilot workflows share. They're hidden from the workflow selector, but any workflow can `ref:` them, and they appear under *Building blocks* in the workflow library.
 
+### Inputs an integration defines
+
+A workflow input is usually a string, a number or a choice, but an integration can define its own types: `github.repository`, `github.label` and `github.user` today. An input of such a type is a picker in the Set up and Run dialogs that lists real choices (your repositories, a repository's labels, GitHub accounts) instead of a text box, and the workflow stores plain values (`acme/app`, a label name, a numeric id as a string) so expressions read them like any other string or list.
+
+```yaml
+inputs:
+  repos:
+    type: github.repository
+    multi: true       # a list
+    required: true    # must be chosen before an automation can be turned on
+    min_items: 1
+```
+
+`required: true` is explicit and takes no `default`; an input with no default is required as well, and one with a default (even `[]`) is optional. An [automation](/automations/overview) that is missing a required input shows **Needs setup** and does not run until it is finished. A trigger scopes itself by an input with `match: {repository: {input: repos}}`; see the [GitHub integration](/integrations/github#value-types). Reach for an integration's type whenever it has one for the thing you are asking for: a repository list typed as a plain array is a text box nobody can check.
+
 Multi-phase pipeline workflows can use [node routers](/workflows/routing#node-routing) for phase skipping, letting users jump directly to the relevant phase (planning, implementation, etc.) based on their request.
 
 For patterns you can build yourself, such as plan debates, TDD loops, and triage routers, see [Multi-Agent Patterns](/workflows/patterns).

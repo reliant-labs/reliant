@@ -54,6 +54,7 @@ export function triggersNeedingPrompt(declared: readonly DeclaredTrigger[]): str
 const OUTCOME_TEXT: Record<WorkflowTriggerOutcomeKind, string> = {
   enabled: "Enabled",
   resumed: "Turned back on",
+  updated: "Saved",
   alreadyEnabled: "Already on",
   failed: "Could not enable",
   notEnabled: "Not enabled",

@@ -49,7 +49,7 @@ edges:
 	assert.Equal(t, "", byID["work"], "a node that declares nothing must stay undeclared")
 
 	result := &Result{}
-	validateStructure(wf, result)
+	validateStructure(wf, nil, result)
 	for _, e := range result.Errors() {
 		if strings.Contains(e.Message, "outcome") {
 			t.Fatalf("valid outcome rejected: %s", e.Message)
@@ -70,7 +70,7 @@ nodes:
 	require.NoError(t, err)
 
 	result := &Result{}
-	validateStructure(wf, result)
+	validateStructure(wf, nil, result)
 
 	found := false
 	for _, e := range result.Errors() {
@@ -105,7 +105,7 @@ nodes:
 	require.NoError(t, err)
 
 	result := &Result{}
-	validateStructure(wf, result)
+	validateStructure(wf, nil, result)
 
 	found := false
 	for _, e := range result.Errors() {

@@ -35,6 +35,28 @@
 //	}
 package store
 
+import (
+	"context"
+
+	"github.com/reliant-labs/forge/pkg/orm"
+)
+
+// GetDefaultPresetAssignments returns the workflow's default preset per
+// group: group name to preset slug.
+func GetDefaultPresetAssignments(ctx context.Context, db orm.Context, workflowName string) (map[string]string, error) {
+	rows, err := ListDefaultPresetAssignment(ctx, db,
+		orm.WhereEq(DefaultPresetAssignmentFieldWorkflowName, workflowName),
+		orm.WithOrderBy(DefaultPresetAssignmentFieldGroupName, orm.Asc))
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]string, len(rows))
+	for _, row := range rows {
+		out[row.GroupName] = row.PresetSlug
+	}
+	return out, nil
+}
+
 // DefaultPresetAssignmentExtra carries fields on DefaultPresetAssignment that are NOT columns — computed
 // values, transient state, anything derived rather than stored. DefaultPresetAssignment is
 // embedded on DefaultPresetAssignmentExtra (see default_preset_assignment_orm.go), so a field added here is a field on

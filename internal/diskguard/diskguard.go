@@ -318,10 +318,10 @@ func (g *Guard) reclaim(ctx context.Context, startedAt time.Time, reclaimers []R
 			parts = append(parts, summary)
 		}
 		if err != nil {
-			logging.Warn("[diskguard] Reclaimer stopped", "error", err, "freed", diskwatch.FormatBytes(freed))
+			logging.WarnContext(ctx, "[diskguard] Reclaimer stopped", "error", err, "freed", diskwatch.FormatBytes(freed))
 		}
 	}
-	logging.Info("[diskguard] Reclaimed disk space", "freed", diskwatch.FormatBytes(total), "what", strings.Join(parts, ", "))
+	logging.InfoContext(ctx, "[diskguard] Reclaimed disk space", "freed", diskwatch.FormatBytes(total), "what", strings.Join(parts, ", "))
 
 	g.mu.Lock()
 	g.reclaiming = false

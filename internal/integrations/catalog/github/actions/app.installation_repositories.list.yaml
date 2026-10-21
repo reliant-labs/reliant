@@ -1,0 +1,86 @@
+# yaml-language-server: $schema=../../../manifest/schema/action.schema.json
+id: app.installation_repositories.list
+display_name: List repositories the App can reach
+summary: Repositories the Reliant GitHub App is installed on and you can see.
+description: >-
+  List the repositories that both the Reliant GitHub App is installed on and
+  the connected user can see: GitHub's own intersection, which is exactly the
+  set automations are delivered for (a repository outside it never fires).
+  Walks every installation the user can access, or only installation_id when
+  given, and returns each repository with the installation it came through and
+  can_push, whether the user can write to it. Needs a GitHub App user token, so
+  it works with the hosted connection and an oauth2 connection to a GitHub
+  App, but not with a personal access token (use repo.list_for_user for that).
+  Following pagination, it reads up to 50 installations and 1,000 repositories
+  of each.
+keywords: [repository, repos, installation, app, list, picker, projects]
+placement: server
+mutates: false
+params:
+  type: object
+  additionalProperties: false
+  properties:
+    installation_id:
+      type: integer
+      minimum: 1
+      title: Installation
+      description: Only the repositories of this installation. Omit to list every installation you can access.
+      examples: [98765]
+    connection: { $ref: ../schemas/connection.yaml }
+request:
+  method: GET
+  path: /user/installations
+  query: { per_page: "100" }
+  pagination: { style: link_header, max_pages: 10 }
+  max_response_bytes: 5242880
+  errors: { $ref: ../schemas/github_errors.yaml }
+  fan_out:
+    items: >-
+      has(params.installation_id)
+        ? response.installations.filter(i, i.id == params.installation_id)
+        : response.installations
+    max_items: 50
+    skip_status: [403, 404]
+    request:
+      method: GET
+      path: /user/installations/{{ string(int(parent.id)) }}/repositories
+      query: { per_page: "100" }
+      pagination: { style: link_header, max_pages: 10 }
+      max_response_bytes: 5242880
+      errors: { $ref: ../schemas/github_errors.yaml }
+output:
+  select: >-
+    response.repositories.map(r, {"id": r.id,
+                                  "full_name": r.full_name,
+                                  "name": r.name,
+                                  "owner": r.owner.login,
+                                  "private": r.private,
+                                  "html_url": r.html_url,
+                                  "description": r.?description.orValue(null),
+                                  "default_branch": r.?default_branch.orValue(null),
+                                  "archived": r.?archived.orValue(false),
+                                  "fork": r.?fork.orValue(false),
+                                  "installation_id": parent.id,
+                                  "installation_account": parent.account.login,
+                                  "can_push": r.?permissions.?push.orValue(false)})
+  schema:
+    type: object
+    properties:
+      items:
+        type: array
+        items:
+          type: object
+          properties:
+            id: { type: integer }
+            full_name: { type: string, description: "owner/name" }
+            name: { type: string }
+            owner: { type: string }
+            private: { type: boolean }
+            html_url: { type: string }
+            description: { type: [string, "null"] }
+            default_branch: { type: [string, "null"] }
+            archived: { type: boolean }
+            fork: { type: boolean }
+            installation_id: { type: integer, description: The installation the repository was listed through. }
+            installation_account: { type: string, description: The login of the account that installation is on. }
+            can_push: { type: boolean, description: Whether the connected user can write to the repository. }

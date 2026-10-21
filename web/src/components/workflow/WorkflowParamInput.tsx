@@ -24,7 +24,9 @@ import {
   getInputMax,
   getInputProperties,
   setInputEnumValues,
+  isIntegrationInput,
 } from "../../lib/inputHelpers";
+import { TypedInputField } from "./inputs/TypedInputField";
 
 // JSON Schema property definition
 export interface PropertySchema {
@@ -178,6 +180,23 @@ export function WorkflowParamInput({
       onChange(fallback);
     }
   }, [effectiveSchema, name, onChange, value, thinkingCapability]);
+
+  // A type an integration defines (`github.repository`) is picked from its
+  // options, whatever form this input sits in.
+  if (isIntegrationInput(effectiveSchema)) {
+    return (
+      <div className={className}>
+        <TypedInputField
+          name={name}
+          schema={effectiveSchema}
+          value={value}
+          values={formValues ?? {}}
+          onChange={onChange}
+          disabled={disabled}
+        />
+      </div>
+    );
+  }
 
   // Render appropriate input based on semantic type
   switch (effectiveSchema.type) {

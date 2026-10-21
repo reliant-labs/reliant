@@ -17,6 +17,7 @@ import type { LaunchPlan } from "./components/OnboardingFlow/types";
 import { COMPARE_WINDOWS } from "./components/Forge/Observability/deliveryScope";
 import { COMPARE_MODES, REFRESH_INTERVALS } from "./components/Forge/Observability/Dashboards/dashboardModel";
 import { RELEASE_TABS, STATUS_FILTERS } from "./components/Forge/Releases/releaseModel";
+import { OVERVIEW_KIND_FILTERS, OVERVIEW_STATUS_FILTERS, WORKLOAD_TABS } from "./components/Forge/Workloads/workloadModel";
 import { ALERTS_TABS, OBS_VIEWS, type ObsSearch } from "./components/Forge/Observability/obsSearch";
 import { RANGE_PRESETS } from "./services/controlPlane/observability/window";
 
@@ -523,8 +524,6 @@ export const obsSearchShape = {
   envs: z.array(z.string()).optional().catch(undefined),
   f: z.array(z.string()).optional().catch(undefined),
   groupBy: z.array(z.string()).optional().catch(undefined),
-  workload: z.string().optional().catch(undefined),
-  container: z.string().optional().catch(undefined),
   alerts: z.enum(ALERTS_TABS).optional().catch(undefined),
   rule: z.string().optional().catch(undefined),
   compare: z.string().optional().catch(undefined),
@@ -546,6 +545,29 @@ export type _ObsShapeMatchesSearch = AssertTrue<
 const { view: _view, envs: _envs, ...obsConsoleShape } = obsSearchShape;
 export const forgeConsoleObsSearchSchema = z.object({
   env: envScopeParam,
+  ...obsConsoleShape,
+});
+
+/**
+ * The Overview (project home with the workloads): the scope, the window, and
+ * the services table's filters — text, status (needs attention) and kind.
+ */
+export const forgeConsoleOverviewSearchSchema = z.object({
+  env: envScopeParam,
+  range: z.enum(RANGE_PRESETS).optional().catch(undefined),
+  q: textParam,
+  status: z.enum(OVERVIEW_STATUS_FILTERS).optional().catch(undefined),
+  kind: z.enum(OVERVIEW_KIND_FILTERS).optional().catch(undefined),
+});
+
+/**
+ * One workload: its tab, and the Logs / Traces / Profiles tabs' own keys (the
+ * explorers' vocabulary, as on the Observability pages). The environment is
+ * in the path; `env` is still carried so the way back keeps the scope.
+ */
+export const forgeConsoleWorkloadSearchSchema = z.object({
+  env: envScopeParam,
+  tab: z.enum(WORKLOAD_TABS).optional().catch(undefined),
   ...obsConsoleShape,
 });
 
@@ -582,10 +604,21 @@ export const forgeConsoleDashboardSearchSchema = z.object({
  * The retired /forge/observability: read only to redirect to the page
  * hosting `view`, with `envs` turned into the scope (Console/paths.ts).
  */
+/**
+ * The retired URLs' view: a current view, or the retired `workloads` (the
+ * workloads are the Overview's now, with a page per workload) and the
+ * workload it had open — read only so the redirect lands on the right page.
+ */
+const legacyObsShape = {
+  ...obsSearchShape,
+  view: z.enum([...OBS_VIEWS, "workloads"]).optional().catch(undefined),
+  workload: z.string().optional().catch(undefined),
+};
+
 export const forgeObservabilitySearchSchema = z.object({
   project: z.string().optional(),
   forgeProject: forgeProjectParam,
-  ...obsSearchShape,
+  ...legacyObsShape,
 });
 
 /**
@@ -597,13 +630,13 @@ export const forgeObservabilitySearchSchema = z.object({
  * `running` for a local one — so a bare link to an environment opens whatever
  * that environment leads with.
  *
- * `live`, `preview`, `changes` and `checks` are retired tab names, still
- * accepted so old links land on the default tab rather than failing to parse.
+ * `live`, `preview`, `changes`, `checks` and `observability` are retired tab
+ * names, still accepted so old links land on the default tab rather than
+ * failing to parse.
  */
 const envPageTab = z
   .enum([
     "overview",
-    "observability",
     "identity",
     "running",
     "releases",
@@ -614,6 +647,7 @@ const envPageTab = z
     "checks",
     "live",
     "preview",
+    "observability",
   ])
   .optional();
 
@@ -622,14 +656,12 @@ const envPageTab = z
  * object. The environment is a PATH segment: it is the page's subject, so the
  * top-bar scope (`env`, kept so links out carry it) does not apply to it.
  * `secret` selects one secret's detail in the Secrets tab (see
- * forgeConsoleSecretsSearchSchema), and the Observability tab keeps the
- * panel's own keys.
+ * forgeConsoleSecretsSearchSchema).
  */
 export const forgeConsoleEnvSearchSchema = z.object({
   env: envScopeParam,
   secret: z.string().optional(),
   tab: envPageTab,
-  ...obsSearchShape,
 });
 
 /** The retired /forge/env/$env: read only to redirect (Console/paths.ts legacyEnvTarget). */
@@ -638,7 +670,7 @@ export const forgeLegacyEnvSearchSchema = z.object({
   forgeProject: forgeProjectParam,
   secret: z.string().optional(),
   tab: z.string().optional(),
-  ...obsSearchShape,
+  ...legacyObsShape,
 });
 
 /**

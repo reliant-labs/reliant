@@ -1,0 +1,6 @@
+type: string
+pattern: "^[^/]*[^/.][^/]*(/[^/]*[^/.][^/]*)*$"
+maxLength: 255
+title: Branch, tag or commit
+description: Which version to read. Defaults to the repository's default branch.
+examples: ["main"]

@@ -167,7 +167,7 @@ function endpointKey(serverURL) {
 }
 
 /**
- * Mirror of Go's `shouldSkipTLSVerify` at cmd/reliant/commands/daemon.go:255.
+ * Mirror of Go's `shouldSkipTLSVerify` at cmd/reliant/cmd/daemon.go:255.
  * Localhost HTTPS targets in dev typically use self-signed certs; we mirror
  * the daemon's tolerance so the mint preflight doesn't fail where the daemon
  * itself would have succeeded.

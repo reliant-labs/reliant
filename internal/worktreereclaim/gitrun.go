@@ -11,10 +11,29 @@ import (
 	"strings"
 )
 
+// gitObserverKey carries, in a context, a func told the arguments of every git
+// process started under it. Nothing in production sets one; the tests use it
+// to hold the reaper to a process budget (gitbudget_test.go), because on a
+// loaded machine each git process costs tens of milliseconds. A context value
+// rather than package state, so the counting test runs in parallel with the
+// rest and counts only its own.
+type gitObserverKey struct{}
+
+func withGitObserver(ctx context.Context, observe func(args []string)) context.Context {
+	return context.WithValue(ctx, gitObserverKey{}, observe)
+}
+
+func gitCommand(ctx context.Context, args []string) *exec.Cmd {
+	if observe, ok := ctx.Value(gitObserverKey{}).(func([]string)); ok {
+		observe(args)
+	}
+	return exec.CommandContext(ctx, "git", append([]string{"--no-optional-locks"}, args...)...)
+}
+
 // git runs one git command and returns trimmed stdout. extraEnv entries are
 // appended to the process environment.
 func git(ctx context.Context, dir string, extraEnv []string, args ...string) (string, error) {
-	cmd := exec.CommandContext(ctx, "git", append([]string{"--no-optional-locks"}, args...)...)
+	cmd := gitCommand(ctx, args)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), append([]string{"GIT_TERMINAL_PROMPT=0", "LC_ALL=C"}, extraEnv...)...) //nolint:forbidigo // passes this process environment to a child process; not configuration
 	var stdout, stderr bytes.Buffer
@@ -30,7 +49,7 @@ func git(ctx context.Context, dir string, extraEnv []string, args ...string) (st
 // trimming. Anything whose bytes matter (a patch, a path list separated by NUL)
 // must come through here, never through git().
 func gitRaw(ctx context.Context, dir string, extraEnv []string, args ...string) ([]byte, error) {
-	cmd := exec.CommandContext(ctx, "git", append([]string{"--no-optional-locks"}, args...)...)
+	cmd := gitCommand(ctx, args)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), append([]string{"GIT_TERMINAL_PROMPT=0", "LC_ALL=C"}, extraEnv...)...) //nolint:forbidigo // passes this process environment to a child process; not configuration
 	var stdout, stderr bytes.Buffer
@@ -44,7 +63,7 @@ func gitRaw(ctx context.Context, dir string, extraEnv []string, args ...string) 
 
 // gitStdin runs git with stdin and returns trimmed stdout.
 func gitStdin(ctx context.Context, dir, stdin string, args ...string) (string, error) {
-	cmd := exec.CommandContext(ctx, "git", append([]string{"--no-optional-locks"}, args...)...)
+	cmd := gitCommand(ctx, args)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "LC_ALL=C") //nolint:forbidigo // passes this process environment to a child process; not configuration
 	cmd.Stdin = strings.NewReader(stdin)
@@ -61,6 +80,13 @@ func gitStdin(ctx context.Context, dir, stdin string, args ...string) (string, e
 // parent repository's .git. It is derived from the checkout itself so removal
 // does not depend on the server knowing where the parent repo lives.
 func commonDir(ctx context.Context, checkout string) (string, error) {
+	if d, ok := linkedCommonDir(checkout); ok {
+		return d, nil
+	}
+	return commonDirWithGit(ctx, checkout)
+}
+
+func commonDirWithGit(ctx context.Context, checkout string) (string, error) {
 	return git(ctx, checkout, nil, "rev-parse", "--path-format=absolute", "--git-common-dir")
 }
 

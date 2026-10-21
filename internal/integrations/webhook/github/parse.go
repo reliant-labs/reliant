@@ -147,48 +147,18 @@ type userRef struct {
 	Type  string `json:"type"`
 }
 
-// mapping says how one (X-GitHub-Event, action) becomes an event.
+// mapping says how one (X-GitHub-Event, action) becomes an event. The table is
+// generated from projection/*.yaml (zz_projection_generated.go), which is also where
+// the event's data schema in the catalog comes from.
 type mapping struct {
 	// attrs adds the per-event routing attributes. Every attribute a
 	// trigger declares is set on every event of it: a match on an absent
 	// attribute is a miss.
-	attrs func(raw map[string]any, attrs map[string]string)
-	// data builds the trimmed payload.
-	data func(raw map[string]any) map[string]any
-}
-
-// mappings is every event type the parser emits, keyed "<event>.<action>"
-// (or the bare event for push). The github manifest declares a trigger for
-// each; TestEmittedEventsMatchTheManifest pins that.
-var mappings = map[string]mapping{
-	"issues.opened":    {data: issueData},
-	"issues.closed":    {data: issueData},
-	"issues.edited":    {data: issueEditedData},
-	"issues.labeled":   {attrs: labelAttrs, data: labelData},
-	"issues.unlabeled": {attrs: labelAttrs, data: labelData},
-	"issues.reopened":  {data: issueData},
-	"issues.assigned":  {attrs: assigneeAttrs, data: assigneeData},
-
-	"issue_comment.created": {attrs: commentAttrs, data: commentData},
-
-	"pull_request.opened":           {attrs: prAttrs, data: prData},
-	"pull_request.reopened":         {attrs: prAttrs, data: prData},
-	"pull_request.labeled":          {attrs: prLabelAttrs, data: prLabelData},
-	"pull_request.unlabeled":        {attrs: prLabelAttrs, data: prLabelData},
-	"pull_request.synchronize":      {attrs: prAttrs, data: prSyncData},
-	"pull_request.closed":           {attrs: prClosedAttrs, data: prData},
-	"pull_request.ready_for_review": {attrs: prAttrs, data: prData},
-	"pull_request.review_requested": {attrs: reviewRequestedAttrs, data: reviewRequestedData},
-
-	"pull_request_review.submitted": {attrs: reviewAttrs, data: reviewData},
-
-	"pull_request_review_comment.created": {attrs: reviewCommentAttrs, data: reviewCommentData},
-
-	"push": {attrs: pushAttrs, data: pushData},
-
-	"workflow_run.completed": {attrs: workflowRunAttrs, data: workflowRunData},
-	"check_run.completed":    {attrs: checkRunAttrs, data: checkRunData},
-	"check_suite.completed":  {attrs: checkSuiteAttrs, data: checkSuiteData},
+	attrs func(raw any, attrs map[string]string)
+	// data builds the trimmed payload, the routing envelope's data included.
+	data func(raw any) map[string]any
+	// shrink cuts an oversized payload down; nil for an event that cannot be.
+	shrink *shrinkRule
 }
 
 // EventTypes lists every event type the parser emits, sorted.
@@ -227,6 +197,7 @@ func events(event string, body *payload, receivedAt time.Time) []Event {
 		"repository":      body.Repository.FullName,
 		"installation_id": installation,
 		"sender":          senderLogin(body),
+		"sender_id":       senderID(body),
 	}
 	if event != "push" {
 		attrs["action"] = body.Action
@@ -235,18 +206,13 @@ func events(event string, body *payload, receivedAt time.Time) []Event {
 		m.attrs(body.raw, attrs)
 	}
 	data := m.data(body.raw)
-	data["repository"] = repositoryData(body.raw)
-	data["sender"] = userData(body.raw["sender"])
-	if body.Action != "" {
-		data["action"] = body.Action
-	}
 	return []Event{{
 		Type:        typ,
 		AccountKey:  installation,
 		ResourceKey: strconv.FormatInt(body.Repository.ID, 10),
 		OccurredAt:  occurredAt(body.raw, receivedAt),
 		Attributes:  attrs,
-		Data:        capData(data),
+		Data:        capData(data, m.shrink),
 		Sender:      sender(body),
 		Echo:        echoOf(typ, body.raw, body),
 	}}
@@ -265,13 +231,9 @@ func events(event string, body *payload, receivedAt time.Time) []Event {
 // id (web/src/lib/onlyFromFilter.ts).
 func sender(body *payload) *core.TriggerSender {
 	login := senderLogin(body)
-	id := ""
-	if body.Sender != nil && body.Sender.ID > 0 {
-		id = strconv.FormatInt(body.Sender.ID, 10)
-	}
 	return &core.TriggerSender{
 		Kind:        core.TriggerSenderKindGitHub,
-		ID:          id,
+		ID:          senderID(body),
 		DisplayName: login,
 		Verified:    login != "",
 	}
@@ -293,6 +255,15 @@ func isOurComment(event string, body *payload) bool {
 		return false
 	}
 	return body.Sender != nil && IsOurBot(body.Sender.Type, body.Sender.ID, body.Sender.Login)
+}
+
+// senderID is the sender's numeric GitHub id as a string; empty when the
+// delivery names none (never "0": an id an allowlist could be written to match).
+func senderID(body *payload) string {
+	if body.Sender == nil || body.Sender.ID <= 0 {
+		return ""
+	}
+	return strconv.FormatInt(body.Sender.ID, 10)
 }
 
 func senderLogin(body *payload) string {

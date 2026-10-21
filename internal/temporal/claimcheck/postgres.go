@@ -3,12 +3,14 @@ package claimcheck
 
 import (
 	"context"
-	"database/sql"
-	"errors"
 	"fmt"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/orm"
+	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // DefaultGCHorizon is how long a blob survives after it was last written.
@@ -32,37 +34,32 @@ const (
 	gcBatchSize = 1000
 )
 
-// PostgresStore is a Store over the temporal_payload_blobs table. It takes a
-// bare *sql.DB rather than the repo: internal/temporal must stay importable
-// from below internal/db.
+// PostgresStore is a Store over the temporal_payload_blobs table, through
+// the forge ORM (internal/store's temporal_payload_blob_repo_ext.go). It takes
+// an orm.Context rather than the repo: internal/temporal must stay importable
+// from below internal/db, and internal/store is.
 type PostgresStore struct {
-	db *sql.DB
+	db orm.Context
 }
 
 var _ Store = (*PostgresStore)(nil)
 
 // NewPostgresStore returns a Store backed by db.
-func NewPostgresStore(db *sql.DB) *PostgresStore {
+func NewPostgresStore(db orm.Context) *PostgresStore {
 	return &PostgresStore{db: db}
 }
 
 // Put upserts the blob. Content-addressed, so a conflict means identical
 // bytes: only the retention timestamp is refreshed.
 func (s *PostgresStore) Put(ctx context.Context, key string, data []byte, rawSize int) error {
-	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO temporal_payload_blobs (key, data, size_bytes)
-		VALUES ($1, $2, $3)
-		ON CONFLICT (key) DO UPDATE SET last_referenced_at = NOW()`,
-		key, data, rawSize)
-	return err
+	return store.PutTemporalPayloadBlob(ctx, s.db, key, data, rawSize)
 }
 
 // Get returns the stored blob. See DefaultGCHorizon for why it does not
 // refresh last_referenced_at.
 func (s *PostgresStore) Get(ctx context.Context, key string) ([]byte, error) {
-	var data []byte
-	err := s.db.QueryRowContext(ctx, `SELECT data FROM temporal_payload_blobs WHERE key = $1`, key).Scan(&data)
-	if errors.Is(err, sql.ErrNoRows) {
+	data, err := store.TemporalPayloadBlobData(ctx, s.db, key)
+	if svcerr.IsNotFound(err) {
 		return nil, fmt.Errorf("%w: %s", ErrNotFound, key)
 	}
 	return data, err
@@ -73,17 +70,7 @@ func (s *PostgresStore) Get(ctx context.Context, key string) ([]byte, error) {
 func (s *PostgresStore) DeleteExpired(ctx context.Context, horizon time.Duration) (int64, error) {
 	var total int64
 	for {
-		res, err := s.db.ExecContext(ctx, `
-			DELETE FROM temporal_payload_blobs
-			WHERE key IN (
-				SELECT key FROM temporal_payload_blobs
-				WHERE last_referenced_at < NOW() - make_interval(secs => $1)
-				LIMIT $2
-			)`, horizon.Seconds(), gcBatchSize)
-		if err != nil {
-			return total, err
-		}
-		n, err := res.RowsAffected()
+		n, err := store.DeleteExpiredTemporalPayloadBlobs(ctx, s.db, horizon, gcBatchSize)
 		if err != nil {
 			return total, err
 		}

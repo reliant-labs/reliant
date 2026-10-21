@@ -1,7 +1,7 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * The Observability area: Overview · Logs · Traces · Workloads · Profiles
+ * The Observability area: Overview · Logs · Traces · Profiles
  * over one time window for one SCOPE, Alerts (what fires, the rules
  * each environment declares, silences and receivers), Delivery (releases and
  * DORA, from the release ledger) and Usage (the org's allowance).
@@ -74,12 +74,11 @@ import { useReleaseMarkers } from "./releaseMarkers";
 import { ReleaseStrip } from "./ReleaseStrip";
 import { TracesView } from "./TracesView";
 import { UsageView } from "./UsageView";
-import { WorkloadsView } from "./WorkloadsView";
 
 export type { ObsEnvironment, ObsPlace } from "./obsPlace";
 
 /** The views with time-series charts, where release markers are drawn and listed. */
-const MARKED_VIEWS: readonly ObsView[] = ["overview", "workloads"];
+const MARKED_VIEWS: readonly ObsView[] = ["overview"];
 
 export interface ObservabilityPanelProps {
   place: ObsPlace;
@@ -141,8 +140,6 @@ export default function ObservabilityPanel({ place, search, navigate, chrome = "
       live: undefined,
       errors: undefined,
       minDuration: undefined,
-      workload: undefined,
-      container: undefined,
       alerts: undefined,
       rule: undefined,
       compare: undefined,
@@ -324,17 +321,6 @@ export default function ObservabilityPanel({ place, search, navigate, chrome = "
             spanId={search.span}
             groupBy={groupBy}
             filters={filterTokens}
-            navigate={navigate}
-          />
-        ) : view === "workloads" ? (
-          <WorkloadsView
-            scope={scope}
-            subject={subject}
-            range={range}
-            service={search.service}
-            workload={search.workload}
-            container={search.container}
-            showEnv={place.kind === "project"}
             navigate={navigate}
           />
         ) : (

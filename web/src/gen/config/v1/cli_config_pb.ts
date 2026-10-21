@@ -55,7 +55,7 @@ export const CLIConfigSchema: GenMessage<CLIConfig> = /*@__PURE__*/
 
 /**
  * CLIConnectionConfig selects the server a command talks to and the bearer it
- * presents (cmd/reliant/commands/connection.go has the precedence).
+ * presents (cmd/reliant/cmd/connection.go has the precedence).
  *
  * @generated from message config.v1.CLIConnectionConfig
  */

@@ -2,7 +2,6 @@ package postgres
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"time"
@@ -23,113 +22,6 @@ type settingStore struct {
 // NewSettingStore creates the Postgres settings store implementation.
 func NewSettingStore(q pgdb.Querier, db pgdb.DBTX, bind func(string) string) core.SettingStore {
 	return &settingStore{q: q, db: db, bind: bind}
-}
-
-// CreateSetting writes a setting, replacing any existing value for the same
-// (user, project, key).
-//
-// Two queries rather than one because the conflict target differs. A
-// user-level setting has project_id NULL, which the table's
-// UNIQUE (user_id, project_id, key) cannot match — NULL is never equal to
-// NULL — so it resolves against the partial index added in
-// 20260826000000_settings_dedupe_and_unique_key.sql. A project-scoped setting
-// has a non-NULL project_id and uses the table constraint directly. Postgres
-// requires the ON CONFLICT target to name an index that actually covers the
-// row, so a single statement cannot serve both.
-func (s *settingStore) CreateSetting(ctx context.Context, setting *core.Setting) error {
-	if setting.ProjectID != nil {
-		return s.q.CreateProjectSetting(ctx, pgdb.CreateProjectSettingParams{
-			ID:        setting.ID,
-			UserID:    setting.UserID,
-			ProjectID: settingPtrToNullString(setting.ProjectID),
-			Key:       setting.Key,
-			Value:     setting.Value,
-			ValueType: setting.ValueType,
-			CreatedAt: setting.CreatedAt,
-			UpdatedAt: setting.UpdatedAt,
-		})
-	}
-
-	return s.q.CreateSetting(ctx, pgdb.CreateSettingParams{
-		ID:        setting.ID,
-		UserID:    setting.UserID,
-		ProjectID: settingPtrToNullString(setting.ProjectID),
-		Key:       setting.Key,
-		Value:     setting.Value,
-		ValueType: setting.ValueType,
-		CreatedAt: setting.CreatedAt,
-		UpdatedAt: setting.UpdatedAt,
-	})
-}
-
-func (s *settingStore) GetSetting(ctx context.Context, userID string, projectID *string, key string) (*core.Setting, error) {
-	row, err := s.q.GetSetting(ctx, pgdb.GetSettingParams{UserID: userID, ProjectID: settingPtrToNullString(projectID), Key: key})
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("setting not found: %s", key)
-		}
-		return nil, fmt.Errorf("failed to get setting: %w", err)
-	}
-	return &core.Setting{
-		ID:        row.ID,
-		UserID:    row.UserID,
-		ProjectID: settingNullStringToPtr(row.ProjectID),
-		Key:       row.Key,
-		Value:     row.Value,
-		ValueType: row.ValueType,
-		CreatedAt: row.CreatedAt,
-		UpdatedAt: row.UpdatedAt,
-	}, nil
-}
-
-func (s *settingStore) ListSettings(ctx context.Context, userID string, projectID *string) ([]*core.Setting, error) {
-	rows, err := s.q.ListSettings(ctx, pgdb.ListSettingsParams{UserID: userID, ProjectID: settingPtrToNullString(projectID)})
-	if err != nil {
-		return nil, fmt.Errorf("failed to list settings: %w", err)
-	}
-	settings := make([]*core.Setting, len(rows))
-	for i, row := range rows {
-		settings[i] = &core.Setting{
-			ID:        row.ID,
-			UserID:    row.UserID,
-			ProjectID: settingNullStringToPtr(row.ProjectID),
-			Key:       row.Key,
-			Value:     row.Value,
-			ValueType: row.ValueType,
-			CreatedAt: row.CreatedAt,
-			UpdatedAt: row.UpdatedAt,
-		}
-	}
-	return settings, nil
-}
-
-func (s *settingStore) ListSettingsByKey(ctx context.Context, userID string, keyPattern string) ([]*core.Setting, error) {
-	rows, err := s.q.ListSettingsByKey(ctx, pgdb.ListSettingsByKeyParams{UserID: userID, Key: keyPattern})
-	if err != nil {
-		return nil, fmt.Errorf("failed to list settings by key: %w", err)
-	}
-	settings := make([]*core.Setting, len(rows))
-	for i, row := range rows {
-		settings[i] = &core.Setting{
-			ID:        row.ID,
-			UserID:    row.UserID,
-			ProjectID: settingNullStringToPtr(row.ProjectID),
-			Key:       row.Key,
-			Value:     row.Value,
-			ValueType: row.ValueType,
-			CreatedAt: row.CreatedAt,
-			UpdatedAt: row.UpdatedAt,
-		}
-	}
-	return settings, nil
-}
-
-func (s *settingStore) UpdateSetting(ctx context.Context, setting *core.Setting) error {
-	return s.q.UpdateSetting(ctx, pgdb.UpdateSettingParams{ID: setting.ID, Value: setting.Value, ValueType: setting.ValueType})
-}
-
-func (s *settingStore) DeleteSetting(ctx context.Context, id string) error {
-	return s.q.DeleteSetting(ctx, id)
 }
 
 // CredentialSealer is the slice of the credential vault this store needs for
@@ -327,54 +219,4 @@ func (s *settingStore) SetVisibilityOverride(ctx context.Context, userID string,
 
 func (s *settingStore) DeleteVisibilityOverride(ctx context.Context, userID string, itemType int32, slug string) error {
 	return s.q.DeleteVisibilityOverride(ctx, pgdb.DeleteVisibilityOverrideParams{UserID: userID, ItemType: itemType, Slug: slug})
-}
-
-func (s *settingStore) GetItemDefault(ctx context.Context, itemType int32, slug string) (*core.ItemDefault, error) {
-	row, err := s.q.GetItemDefault(ctx, pgdb.GetItemDefaultParams{ItemType: itemType, Slug: slug})
-	if err != nil {
-		return nil, err
-	}
-	var reason *string
-	if row.Reason.Valid {
-		reason = &row.Reason.String
-	}
-	return &core.ItemDefault{ItemType: itemType, Slug: slug, IsHidden: row.IsHidden, Reason: reason}, nil
-}
-
-func (s *settingStore) ListHiddenItemDefaults(ctx context.Context, itemType int32) ([]string, error) {
-	rows, err := s.q.ListHiddenItemDefaults(ctx, itemType)
-	if err != nil {
-		return nil, err
-	}
-	slugs := make([]string, len(rows))
-	for i, row := range rows {
-		slugs[i] = row.Slug
-	}
-	return slugs, nil
-}
-
-func (s *settingStore) GetDefaultPresetAssignments(ctx context.Context, workflowName string) (map[string]string, error) {
-	rows, err := s.q.GetDefaultPresetAssignments(ctx, workflowName)
-	if err != nil {
-		return nil, err
-	}
-	result := make(map[string]string)
-	for _, row := range rows {
-		result[row.GroupName] = row.PresetSlug
-	}
-	return result, nil
-}
-
-func settingPtrToNullString(s *string) sql.NullString {
-	if s != nil {
-		return sql.NullString{String: *s, Valid: true}
-	}
-	return sql.NullString{Valid: false}
-}
-
-func settingNullStringToPtr(ns sql.NullString) *string {
-	if ns.Valid {
-		return &ns.String
-	}
-	return nil
 }

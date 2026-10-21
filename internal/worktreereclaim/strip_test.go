@@ -33,6 +33,7 @@ func fill(t *testing.T, checkout string) []string {
 // An archived worktree kept for its work loses its regenerable bulk and keeps
 // every tracked, untracked and data file.
 func TestReconcile_HeldWorktreeShedsRegenerableFiles(t *testing.T) {
+	t.Parallel()
 	f := stripFixture(t)
 	w := f.worktree("shed", "feat/shed")
 	bulk := fill(t, w.Path)
@@ -74,6 +75,7 @@ func TestReconcile_HeldWorktreeShedsRegenerableFiles(t *testing.T) {
 // Shedding never deletes a directory that holds a repository: a nested repo
 // inside node_modules keeps node_modules, while dist still goes.
 func TestReconcile_ShedSkipsPathsHoldingARepository(t *testing.T) {
+	t.Parallel()
 	f := stripFixture(t)
 	w := f.worktree("shed-nested", "feat/shed-nested")
 	write(t, filepath.Join(w.Path, "dist", "app.js"), "built\n")
@@ -98,6 +100,7 @@ func TestReconcile_ShedSkipsPathsHoldingARepository(t *testing.T) {
 // Nothing is shed when the hold is about whose the directory is, when the user
 // keeps everything, while it is recently active, or for a live worktree.
 func TestReconcile_ShedOnlyForGenuineHoldsOfIdleArchivedWorktrees(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("builds 5 git fixtures; skipped under -short")
 	}
@@ -116,6 +119,7 @@ func TestReconcile_ShedOnlyForGenuineHoldsOfIdleArchivedWorktrees(t *testing.T) 
 	}
 	for name, mutate := range cases {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			f := stripFixture(t)
 			w := f.worktree("keep-"+name, "feat/keep-"+name)
 			fill(t, w.Path)

@@ -16,7 +16,7 @@ import { create } from "@bufbuild/protobuf";
 
 import { RunDisplayState } from "@/gen/reliant/v1/run_pb";
 import { WorkflowDraftStatus } from "@/gen/reliant/v1/workflow_pb";
-import { TriggerHealthSchema, TriggerHealthStatus, TriggerSchema } from "@/gen/reliant/v1/trigger_pb";
+import { ScheduleSourceSchema, TriggerHealthSchema, TriggerHealthStatus, TriggerSchema, WorkflowTriggerSchema } from "@/gen/reliant/v1/trigger_pb";
 import { libraryResponse, protoRun, protoTrigger, renderWorkflowsPage } from "./workflowsTestUtils";
 
 const mocks = vi.hoisted(() => ({
@@ -86,7 +86,7 @@ describe("LibraryPage", () => {
     expect(within(table).getAllByRole("columnheader").map((th) => th.textContent)).toEqual([
       "Name",
       "Source",
-      "Automations",
+      "Turned on",
       "Last run",
       "Actions",
     ]);
@@ -104,16 +104,16 @@ describe("LibraryPage", () => {
     expect(mocks.listWorkflows).toHaveBeenCalledWith(expect.objectContaining({ projectId: "proj-1", includeHidden: true }));
   });
 
-  it("a workflow with no automation shows a dash under the Automations column, named for screen readers", async () => {
+  it("a workflow that nothing runs and declares no triggers shows a dash under Turned on, named for screen readers", async () => {
     mocks.listTriggers.mockResolvedValue({ triggers: [] });
     renderLibrary();
     const triage = await screen.findByTestId("workflow-row-triage");
-    const cell = within(triage).getByTestId("workflow-row-automations");
+    const cell = within(triage).getByTestId("workflow-row-turned-on");
     await waitFor(() => expect(cell).toHaveTextContent("—"));
-    expect(within(cell).getByText("None")).toHaveClass("sr-only");
+    expect(within(cell).getByText("Not applicable")).toHaveClass("sr-only");
   });
 
-  it("shows each row's last run and automations count", async () => {
+  it("shows each row's last run and whether it is on here", async () => {
     renderLibrary();
     const triage = await screen.findByTestId("workflow-row-triage");
     await waitFor(() =>
@@ -123,11 +123,11 @@ describe("LibraryPage", () => {
       "href",
       "/workflows/runs/chat-tri",
     );
-    expect(within(triage).getByTestId("workflow-row-automations")).toHaveTextContent("2 automations");
+    expect(within(triage).getByTestId("workflow-row-turned-on")).toHaveTextContent("On");
 
     // A builtin's automations match on its stored ref.
     const agent = screen.getByTestId("workflow-row-builtin://agent");
-    await waitFor(() => expect(within(agent).getByTestId("workflow-row-automations")).toHaveTextContent("1 automation"));
+    await waitFor(() => expect(within(agent).getByTestId("workflow-row-turned-on")).toHaveTextContent("On"));
     expect(within(agent).getByTestId("workflow-row-last-run")).toHaveTextContent("Not run yet");
     // One request for every row, never one per workflow.
     expect(mocks.lastRunPerWorkflow).toHaveBeenCalledTimes(1);
@@ -248,9 +248,28 @@ describe("LibraryPage", () => {
     // First, and listed once.
     expect(rows[0]).toHaveAttribute("data-testid", "workflow-row-triage");
     expect(rows.filter((row) => row.getAttribute("data-testid") === "workflow-row-triage")).toHaveLength(1);
-    expect(within(rows[0]!).getByTestId("workflow-row-failing")).toHaveTextContent("1 failing");
+    expect(within(rows[0]!).getByTestId("workflow-row-turned-on")).toHaveTextContent("3 failed in a row");
     expect(within(rows[0]!).getByLabelText("Needs attention")).toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent(/1 workflow needs attention/);
+    // The state's one call to action sits on the row.
+    expect(within(rows[0]!).getByRole("button", { name: "Open last run for Triage" })).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent(/1 workflow needs you/);
+  });
+
+  it("offers Set up on a workflow that could run by itself and is not on here, and says Off", async () => {
+    const library = libraryResponse();
+    library.workflows[1] = {
+      ...library.workflows[1]!,
+      triggers: [create(WorkflowTriggerSchema, { name: "nightly", source: { case: "schedule", value: create(ScheduleSourceSchema, { cron: ["0 6 * * *"], timezone: "UTC" }) } })],
+    } as (typeof library.workflows)[number];
+    mocks.listWorkflows.mockResolvedValue(library);
+    mocks.listTriggers.mockResolvedValue({ triggers: [] });
+    renderLibrary();
+    const triage = await screen.findByTestId("workflow-row-triage");
+    await waitFor(() => expect(within(triage).getByTestId("workflow-row-turned-on")).toHaveTextContent("Off"));
+    await userEvent.click(within(triage).getByRole("button", { name: "Set up Triage (project, triage)" }));
+    expect(await screen.findByRole("form", { name: "Set up Triage" })).toBeInTheDocument();
+    // A workflow that declares nothing has no Set up.
+    expect(within(screen.getByTestId("workflow-row-builtin://agent")).queryByRole("button", { name: /^Set up/ })).toBeNull();
   });
 
   it("a user workflow's menu offers Export and Delete; a built-in's does not", async () => {

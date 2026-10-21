@@ -10,7 +10,6 @@ import (
 	_ "github.com/reliant-labs/forge/pkg/forgepb"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
-	durationpb "google.golang.org/protobuf/types/known/durationpb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -23,49 +22,55 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// DatabaseConfig is the Postgres a process connects to (each server role, and
-// the `reliant db migrate` commands), and how it sizes its pool and waits on
-// it.
-type DatabaseConfig struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// The connection URL. A secret: it carries the password, so it has no flag
-	// (a flag's value is in the shell history and in `ps`).
-	Url string `protobuf:"bytes,1,opt,name=url,proto3" json:"url,omitempty"`
-	// A session-capable URL for the same database, for session-scoped work
-	// (advisory locks, migrations): set it when url is a transaction-pooling
-	// PgBouncer. Unset: url already has session semantics.
-	DirectUrl string `protobuf:"bytes,2,opt,name=direct_url,json=directUrl,proto3" json:"direct_url,omitempty"`
-	// The only driver is postgres; the knob remains because deployments set it.
-	Driver string `protobuf:"bytes,3,opt,name=driver,proto3" json:"driver,omitempty"`
-	// The connection pool's size. Dev caps both low: its Postgres is shared by
-	// every parallel stack on the machine.
-	MaxOpenConns int32 `protobuf:"varint,4,opt,name=max_open_conns,json=maxOpenConns,proto3" json:"max_open_conns,omitempty"`
-	MaxIdleConns int32 `protobuf:"varint,5,opt,name=max_idle_conns,json=maxIdleConns,proto3" json:"max_idle_conns,omitempty"`
-	// How long the startup ping keeps retrying a database that is not up yet.
-	// It must stay inside the deployment's startup probe window. Unset:
-	// forge serverkit's default.
-	ConnectTimeout *durationpb.Duration `protobuf:"bytes,6,opt,name=connect_timeout,json=connectTimeout,proto3" json:"connect_timeout,omitempty"`
-	// How long a process that waits for the schema (the worker, the gateway)
-	// waits for the API server or `reliant db migrate up` to apply it.
-	SchemaWaitSeconds int32 `protobuf:"varint,7,opt,name=schema_wait_seconds,json=schemaWaitSeconds,proto3" json:"schema_wait_seconds,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+// ServerProcessConfig is what every server role (`reliant server
+// api|worker|gateway`) reads the same way: the infrastructure it connects to
+// and the outside world it reports to. It is a SUBTREE config over `server`,
+// so all three roles load ONE declaration of it, and a component they share
+// (the repo, the NATS connection, the control-plane endpoint) has one
+// constructor reading one config in every role, rather than each role's copy
+// of the same block. Its flags are persistent on `server`.
+//
+// A role's own knobs stay on its command config (api_server_config.proto,
+// worker_config.proto, gateway_config.proto): its ports, including
+// HEALTH_PORT, whose default differs per role; its bind address and pprof
+// listener; and its drain budget, which may differ per role. The database a
+// role connects to is DatabaseConfig (db_config.proto), a subtree config of
+// its own because `reliant db migrate` loads it too. The rules every config
+// here follows are in config.proto's header.
+type ServerProcessConfig struct {
+	state        protoimpl.MessageState `protogen:"open.v1"`
+	ControlPlane *ControlPlaneConfig    `protobuf:"bytes,1,opt,name=control_plane,json=controlPlane,proto3" json:"control_plane,omitempty"`
+	Nats         *NatsConfig            `protobuf:"bytes,2,opt,name=nats,proto3" json:"nats,omitempty"`
+	Temporal     *TemporalConfig        `protobuf:"bytes,3,opt,name=temporal,proto3" json:"temporal,omitempty"`
+	Tls          *ServerTLSConfig       `protobuf:"bytes,4,opt,name=tls,proto3" json:"tls,omitempty"`
+	DataDir      string                 `protobuf:"bytes,5,opt,name=data_dir,json=dataDir,proto3" json:"data_dir,omitempty"`
+	// How live deltas fan out across replicas. nats is the only driver; the
+	// knob remains because deployments set it.
+	StreamingDriver string               `protobuf:"bytes,6,opt,name=streaming_driver,json=streamingDriver,proto3" json:"streaming_driver,omitempty"`
+	Integrations    *IntegrationsConfig  `protobuf:"bytes,7,opt,name=integrations,proto3" json:"integrations,omitempty"`
+	Observability   *ObservabilityConfig `protobuf:"bytes,8,opt,name=observability,proto3" json:"observability,omitempty"`
+	Sentry          *SentryConfig        `protobuf:"bytes,9,opt,name=sentry,proto3" json:"sentry,omitempty"`
+	Analytics       *AnalyticsConfig     `protobuf:"bytes,10,opt,name=analytics,proto3" json:"analytics,omitempty"`
+	Llm             *LLMConfig           `protobuf:"bytes,11,opt,name=llm,proto3" json:"llm,omitempty"`
+	Preview         *PreviewConfig       `protobuf:"bytes,12,opt,name=preview,proto3" json:"preview,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
-func (x *DatabaseConfig) Reset() {
-	*x = DatabaseConfig{}
+func (x *ServerProcessConfig) Reset() {
+	*x = ServerProcessConfig{}
 	mi := &file_config_v1_server_config_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *DatabaseConfig) String() string {
+func (x *ServerProcessConfig) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*DatabaseConfig) ProtoMessage() {}
+func (*ServerProcessConfig) ProtoMessage() {}
 
-func (x *DatabaseConfig) ProtoReflect() protoreflect.Message {
+func (x *ServerProcessConfig) ProtoReflect() protoreflect.Message {
 	mi := &file_config_v1_server_config_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -77,58 +82,93 @@ func (x *DatabaseConfig) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use DatabaseConfig.ProtoReflect.Descriptor instead.
-func (*DatabaseConfig) Descriptor() ([]byte, []int) {
+// Deprecated: Use ServerProcessConfig.ProtoReflect.Descriptor instead.
+func (*ServerProcessConfig) Descriptor() ([]byte, []int) {
 	return file_config_v1_server_config_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *DatabaseConfig) GetUrl() string {
+func (x *ServerProcessConfig) GetControlPlane() *ControlPlaneConfig {
 	if x != nil {
-		return x.Url
-	}
-	return ""
-}
-
-func (x *DatabaseConfig) GetDirectUrl() string {
-	if x != nil {
-		return x.DirectUrl
-	}
-	return ""
-}
-
-func (x *DatabaseConfig) GetDriver() string {
-	if x != nil {
-		return x.Driver
-	}
-	return ""
-}
-
-func (x *DatabaseConfig) GetMaxOpenConns() int32 {
-	if x != nil {
-		return x.MaxOpenConns
-	}
-	return 0
-}
-
-func (x *DatabaseConfig) GetMaxIdleConns() int32 {
-	if x != nil {
-		return x.MaxIdleConns
-	}
-	return 0
-}
-
-func (x *DatabaseConfig) GetConnectTimeout() *durationpb.Duration {
-	if x != nil {
-		return x.ConnectTimeout
+		return x.ControlPlane
 	}
 	return nil
 }
 
-func (x *DatabaseConfig) GetSchemaWaitSeconds() int32 {
+func (x *ServerProcessConfig) GetNats() *NatsConfig {
 	if x != nil {
-		return x.SchemaWaitSeconds
+		return x.Nats
 	}
-	return 0
+	return nil
+}
+
+func (x *ServerProcessConfig) GetTemporal() *TemporalConfig {
+	if x != nil {
+		return x.Temporal
+	}
+	return nil
+}
+
+func (x *ServerProcessConfig) GetTls() *ServerTLSConfig {
+	if x != nil {
+		return x.Tls
+	}
+	return nil
+}
+
+func (x *ServerProcessConfig) GetDataDir() string {
+	if x != nil {
+		return x.DataDir
+	}
+	return ""
+}
+
+func (x *ServerProcessConfig) GetStreamingDriver() string {
+	if x != nil {
+		return x.StreamingDriver
+	}
+	return ""
+}
+
+func (x *ServerProcessConfig) GetIntegrations() *IntegrationsConfig {
+	if x != nil {
+		return x.Integrations
+	}
+	return nil
+}
+
+func (x *ServerProcessConfig) GetObservability() *ObservabilityConfig {
+	if x != nil {
+		return x.Observability
+	}
+	return nil
+}
+
+func (x *ServerProcessConfig) GetSentry() *SentryConfig {
+	if x != nil {
+		return x.Sentry
+	}
+	return nil
+}
+
+func (x *ServerProcessConfig) GetAnalytics() *AnalyticsConfig {
+	if x != nil {
+		return x.Analytics
+	}
+	return nil
+}
+
+func (x *ServerProcessConfig) GetLlm() *LLMConfig {
+	if x != nil {
+		return x.Llm
+	}
+	return nil
+}
+
+func (x *ServerProcessConfig) GetPreview() *PreviewConfig {
+	if x != nil {
+		return x.Preview
+	}
+	return nil
 }
 
 // NatsConfig is the NATS server a server role connects to: daemon routing,
@@ -258,7 +298,11 @@ func (x *TemporalConfig) GetNamespace() string {
 }
 
 // ServerTLSConfig is how a server role that terminates TLS itself (the API
-// server, the daemon gateway) serves it.
+// server, the daemon gateway) serves it: on its own listeners, never on the
+// plaintext health port. It keeps its own names rather than forge's
+// tls_cert_path / tls_key_path, which forge's serve policy applies to the
+// probe address — reliant's HEALTH_PORT, which must stay plaintext for the
+// kubelet and the load balancer's HTTP health checks.
 type ServerTLSConfig struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	CertFile      string                 `protobuf:"bytes,1,opt,name=cert_file,json=certFile,proto3" json:"cert_file,omitempty"`
@@ -319,89 +363,29 @@ func (x *ServerTLSConfig) GetDisable() bool {
 	return false
 }
 
-// DrainConfig is a server's rollout drain budget. control-plane sets both on
-// every server workload, and forge derives the pod's
-// terminationGracePeriodSeconds from them, so a process that ignores them
-// cannot stay inside the grace period it was given. Both follow the rule
-// forge's grace-period arithmetic applies to them (pkg/deploy drainSeconds):
-// zero is the default and negative is none. Both are Go durations ("30s"); a
-// bare number stops the server at load.
-type DrainConfig struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// How long the process keeps serving after readiness flips, so load
-	// balancers see the failing probe first. Negative is no pause.
-	PreStopDelay *durationpb.Duration `protobuf:"bytes,1,opt,name=pre_stop_delay,json=preStopDelay,proto3" json:"pre_stop_delay,omitempty"`
-	// Bounds everything after the pre-stop pause.
-	ShutdownTimeout *durationpb.Duration `protobuf:"bytes,2,opt,name=shutdown_timeout,json=shutdownTimeout,proto3" json:"shutdown_timeout,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
-}
-
-func (x *DrainConfig) Reset() {
-	*x = DrainConfig{}
-	mi := &file_config_v1_server_config_proto_msgTypes[4]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *DrainConfig) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*DrainConfig) ProtoMessage() {}
-
-func (x *DrainConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_config_v1_server_config_proto_msgTypes[4]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use DrainConfig.ProtoReflect.Descriptor instead.
-func (*DrainConfig) Descriptor() ([]byte, []int) {
-	return file_config_v1_server_config_proto_rawDescGZIP(), []int{4}
-}
-
-func (x *DrainConfig) GetPreStopDelay() *durationpb.Duration {
-	if x != nil {
-		return x.PreStopDelay
-	}
-	return nil
-}
-
-func (x *DrainConfig) GetShutdownTimeout() *durationpb.Duration {
-	if x != nil {
-		return x.ShutdownTimeout
-	}
-	return nil
-}
-
 var File_config_v1_server_config_proto protoreflect.FileDescriptor
 
 const file_config_v1_server_config_proto_rawDesc = "" +
 	"\n" +
-	"\x1dconfig/v1/server_config.proto\x12\tconfig.v1\x1a\x14forge/v1/forge.proto\x1a\x1egoogle/protobuf/duration.proto\"\xe8\x06\n" +
-	"\x0eDatabaseConfig\x12A\n" +
-	"\x03url\x18\x01 \x01(\tB/\x82\xce\x18+\n" +
-	"\fDATABASE_URL \x01*\x17Postgres connection URL0\x01R\x03url\x12\x9d\x01\n" +
-	"\n" +
-	"direct_url\x18\x02 \x01(\tB~\x82\xce\x18z\n" +
-	"\x13DATABASE_DIRECT_URL*_Session-capable Postgres URL for session-scoped work, when DATABASE_URL is a transaction pooler0\x01P\x01R\tdirectUrl\x12h\n" +
-	"\x06driver\x18\x03 \x01(\tBP\x82\xce\x18L\n" +
-	"\x0fDATABASE_DRIVER\x12\tdb-driver\x1a\bpostgres*\x1aDatabase driver (postgres)J\bpostgresR\x06driver\x12i\n" +
-	"\x0emax_open_conns\x18\x04 \x01(\x05BC\x82\xce\x18?\n" +
-	"\x19RELIANT_DB_MAX_OPEN_CONNS\x1a\x0225*\x1eMost open database connectionsR\fmaxOpenConns\x12s\n" +
-	"\x0emax_idle_conns\x18\x05 \x01(\x05BM\x82\xce\x18I\n" +
-	"\x19RELIANT_DB_MAX_IDLE_CONNS\x1a\x0210*(Most idle database connections kept openR\fmaxIdleConns\x12\x9d\x01\n" +
-	"\x0fconnect_timeout\x18\x06 \x01(\v2\x19.google.protobuf.DurationBY\x82\xce\x18U\n" +
-	"\x12DB_CONNECT_TIMEOUT*?How long the startup ping retries a database that is not up yetR\x0econnectTimeout\x12\x88\x01\n" +
-	"\x13schema_wait_seconds\x18\a \x01(\x05BX\x82\xce\x18T\n" +
-	"\x1eRELIANT_DB_SCHEMA_WAIT_SECONDS\x1a\x03300*-Seconds to wait for the schema to be migratedR\x11schemaWaitSeconds\"\xec\x01\n" +
+	"\x1dconfig/v1/server_config.proto\x12\tconfig.v1\x1a config/v1/analytics_config.proto\x1a$config/v1/control_plane_config.proto\x1a#config/v1/integrations_config.proto\x1a\x1aconfig/v1/llm_config.proto\x1a$config/v1/observability_config.proto\x1a\x1econfig/v1/preview_config.proto\x1a\x14forge/v1/forge.proto\"\xac\x06\n" +
+	"\x13ServerProcessConfig\x12B\n" +
+	"\rcontrol_plane\x18\x01 \x01(\v2\x1d.config.v1.ControlPlaneConfigR\fcontrolPlane\x12)\n" +
+	"\x04nats\x18\x02 \x01(\v2\x15.config.v1.NatsConfigR\x04nats\x125\n" +
+	"\btemporal\x18\x03 \x01(\v2\x19.config.v1.TemporalConfigR\btemporal\x12,\n" +
+	"\x03tls\x18\x04 \x01(\v2\x1a.config.v1.ServerTLSConfigR\x03tls\x12^\n" +
+	"\bdata_dir\x18\x05 \x01(\tBC\x82\xce\x18?\n" +
+	"\bDATA_DIR\x12\bdata-dir\x1a\x06./data*!Data directory for logs and certsR\adataDir\x12x\n" +
+	"\x10streaming_driver\x18\x06 \x01(\tBM\x82\xce\x18I\n" +
+	"\x10STREAMING_DRIVER\x12\x10streaming-driver\x1a\x04nats*\x17Streaming driver (nats)J\x04natsR\x0fstreamingDriver\x12A\n" +
+	"\fintegrations\x18\a \x01(\v2\x1d.config.v1.IntegrationsConfigR\fintegrations\x12D\n" +
+	"\robservability\x18\b \x01(\v2\x1e.config.v1.ObservabilityConfigR\robservability\x12/\n" +
+	"\x06sentry\x18\t \x01(\v2\x17.config.v1.SentryConfigR\x06sentry\x128\n" +
+	"\tanalytics\x18\n" +
+	" \x01(\v2\x1a.config.v1.AnalyticsConfigR\tanalytics\x12&\n" +
+	"\x03llm\x18\v \x01(\v2\x14.config.v1.LLMConfigR\x03llm\x122\n" +
+	"\apreview\x18\f \x01(\v2\x18.config.v1.PreviewConfigR\apreview:\x17\xca\xc1\x18\x13\n" +
+	"\areliant\x1a\b\n" +
+	"\x06server\"\xec\x01\n" +
 	"\n" +
 	"NatsConfig\x125\n" +
 	"\x03url\x18\x01 \x01(\tB#\x82\xce\x18\x1f\n" +
@@ -423,12 +407,7 @@ const file_config_v1_server_config_proto_rawDesc = "" +
 	"\bkey_file\x18\x02 \x01(\tB.\x82\xce\x18*\n" +
 	"\fTLS_KEY_FILE\x12\atls-key*\x11TLS key file pathR\akeyFile\x12Z\n" +
 	"\adisable\x18\x03 \x01(\bB@\x82\xce\x18<\n" +
-	"\vDISABLE_TLS\x12\vdisable-tls* Disable TLS (use plaintext HTTP)R\adisable\"\xd5\x02\n" +
-	"\vDrainConfig\x12\xaa\x01\n" +
-	"\x0epre_stop_delay\x18\x01 \x01(\v2\x19.google.protobuf.DurationBi\x82\xce\x18e\n" +
-	"\x0ePRE_STOP_DELAY\x1a\x025s*OHow long to keep serving after readiness flips at shutdown (negative: no pause)R\fpreStopDelay\x12\x98\x01\n" +
-	"\x10shutdown_timeout\x18\x02 \x01(\v2\x19.google.protobuf.DurationBR\x82\xce\x18N\n" +
-	"\x10SHUTDOWN_TIMEOUT\x1a\x0330s*5Budget for graceful shutdown after the pre-stop pauseR\x0fshutdownTimeoutB8Z6github.com/reliant-labs/reliant/gen/config/v1;configv1b\x06proto3"
+	"\vDISABLE_TLS\x12\vdisable-tls* Disable TLS (use plaintext HTTP)R\adisableB8Z6github.com/reliant-labs/reliant/gen/config/v1;configv1b\x06proto3"
 
 var (
 	file_config_v1_server_config_proto_rawDescOnce sync.Once
@@ -442,24 +421,36 @@ func file_config_v1_server_config_proto_rawDescGZIP() []byte {
 	return file_config_v1_server_config_proto_rawDescData
 }
 
-var file_config_v1_server_config_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_config_v1_server_config_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_config_v1_server_config_proto_goTypes = []any{
-	(*DatabaseConfig)(nil),      // 0: config.v1.DatabaseConfig
+	(*ServerProcessConfig)(nil), // 0: config.v1.ServerProcessConfig
 	(*NatsConfig)(nil),          // 1: config.v1.NatsConfig
 	(*TemporalConfig)(nil),      // 2: config.v1.TemporalConfig
 	(*ServerTLSConfig)(nil),     // 3: config.v1.ServerTLSConfig
-	(*DrainConfig)(nil),         // 4: config.v1.DrainConfig
-	(*durationpb.Duration)(nil), // 5: google.protobuf.Duration
+	(*ControlPlaneConfig)(nil),  // 4: config.v1.ControlPlaneConfig
+	(*IntegrationsConfig)(nil),  // 5: config.v1.IntegrationsConfig
+	(*ObservabilityConfig)(nil), // 6: config.v1.ObservabilityConfig
+	(*SentryConfig)(nil),        // 7: config.v1.SentryConfig
+	(*AnalyticsConfig)(nil),     // 8: config.v1.AnalyticsConfig
+	(*LLMConfig)(nil),           // 9: config.v1.LLMConfig
+	(*PreviewConfig)(nil),       // 10: config.v1.PreviewConfig
 }
 var file_config_v1_server_config_proto_depIdxs = []int32{
-	5, // 0: config.v1.DatabaseConfig.connect_timeout:type_name -> google.protobuf.Duration
-	5, // 1: config.v1.DrainConfig.pre_stop_delay:type_name -> google.protobuf.Duration
-	5, // 2: config.v1.DrainConfig.shutdown_timeout:type_name -> google.protobuf.Duration
-	3, // [3:3] is the sub-list for method output_type
-	3, // [3:3] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	4,  // 0: config.v1.ServerProcessConfig.control_plane:type_name -> config.v1.ControlPlaneConfig
+	1,  // 1: config.v1.ServerProcessConfig.nats:type_name -> config.v1.NatsConfig
+	2,  // 2: config.v1.ServerProcessConfig.temporal:type_name -> config.v1.TemporalConfig
+	3,  // 3: config.v1.ServerProcessConfig.tls:type_name -> config.v1.ServerTLSConfig
+	5,  // 4: config.v1.ServerProcessConfig.integrations:type_name -> config.v1.IntegrationsConfig
+	6,  // 5: config.v1.ServerProcessConfig.observability:type_name -> config.v1.ObservabilityConfig
+	7,  // 6: config.v1.ServerProcessConfig.sentry:type_name -> config.v1.SentryConfig
+	8,  // 7: config.v1.ServerProcessConfig.analytics:type_name -> config.v1.AnalyticsConfig
+	9,  // 8: config.v1.ServerProcessConfig.llm:type_name -> config.v1.LLMConfig
+	10, // 9: config.v1.ServerProcessConfig.preview:type_name -> config.v1.PreviewConfig
+	10, // [10:10] is the sub-list for method output_type
+	10, // [10:10] is the sub-list for method input_type
+	10, // [10:10] is the sub-list for extension type_name
+	10, // [10:10] is the sub-list for extension extendee
+	0,  // [0:10] is the sub-list for field type_name
 }
 
 func init() { file_config_v1_server_config_proto_init() }
@@ -467,13 +458,19 @@ func file_config_v1_server_config_proto_init() {
 	if File_config_v1_server_config_proto != nil {
 		return
 	}
+	file_config_v1_analytics_config_proto_init()
+	file_config_v1_control_plane_config_proto_init()
+	file_config_v1_integrations_config_proto_init()
+	file_config_v1_llm_config_proto_init()
+	file_config_v1_observability_config_proto_init()
+	file_config_v1_preview_config_proto_init()
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_config_v1_server_config_proto_rawDesc), len(file_config_v1_server_config_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   5,
+			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

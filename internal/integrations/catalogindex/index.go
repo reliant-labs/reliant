@@ -44,6 +44,7 @@ type Kind int
 const (
 	KindAction Kind = iota + 1
 	KindTrigger
+	KindType
 )
 
 func (k Kind) String() string {
@@ -52,14 +53,19 @@ func (k Kind) String() string {
 		return "action"
 	case KindTrigger:
 		return "trigger"
+	case KindType:
+		return "type"
 	}
 	return "unknown"
 }
 
-// Entry is one action or trigger type. Entries are shared and immutable; a
-// caller must not modify one.
+// Entry is one action, trigger type or value type. Entries are shared and
+// immutable; a caller must not modify one.
 type Entry struct {
-	// Ref is "<integration>/<id>@<major>", unique across the index.
+	// Ref is "<integration>/<id>@<major>" for an action or trigger, and the
+	// qualified "<integration>.<id>" (github.repository) for a value type:
+	// types are referenced from workflows without a version, so they belong
+	// to the integration's newest manifest. Unique across the index.
 	Ref  string
 	Kind Kind
 	// ID is the action or trigger id within its integration.
@@ -73,6 +79,8 @@ type Entry struct {
 	Action *reliantv1.ActionSpec
 	// Trigger is set for KindTrigger.
 	Trigger *reliantv1.TriggerSpec
+	// Type is set for KindType.
+	Type *reliantv1.TypeSpec
 
 	// AuthKinds are the integration's ways to connect, most preferred first.
 	AuthKinds []string
@@ -114,11 +122,16 @@ type integration struct {
 	authKinds  map[string]bool
 }
 
-// Build indexes every action of every manifest, plus every trigger type the
-// manifests declare. Manifests are expected to have passed the loader; a
+// Build indexes every action of every manifest, plus every trigger type and
+// (from each integration's newest manifest) every value type the manifests
+// declare. Manifests are expected to have passed the loader; a
 // duplicate ref is still refused, since it would make results ambiguous.
 func Build(ms []*reliantv1.IntegrationManifest) (*Index, error) {
 	idx := &Index{byRef: map[string]*Entry{}, integrations: map[string]*integration{}}
+	newest := map[string]int32{}
+	for _, m := range ms {
+		newest[m.GetId()] = max(newest[m.GetId()], m.GetVersion())
+	}
 	for _, m := range ms {
 		authKinds := make([]string, 0, len(m.GetConnection().GetAuth()))
 		for _, a := range m.GetConnection().GetAuth() {
@@ -162,6 +175,22 @@ func Build(ms []*reliantv1.IntegrationManifest) (*Index, error) {
 				Summary:     summaryOf(t.GetSummary(), t.GetDescription()),
 				Description: t.GetDescription(),
 				Manifest:    m, Trigger: t, AuthKinds: authKinds, ConnectionRequired: required,
+			}
+			e.index(append(append([]string{}, t.GetKeywords()...), m.GetKeywords()...), integrationText)
+			if err := idx.add(e); err != nil {
+				return nil, err
+			}
+		}
+		if m.GetVersion() != newest[m.GetId()] {
+			continue
+		}
+		for _, t := range m.GetTypes() {
+			e := &Entry{
+				Ref: manifest.TypeRef(m, t), Kind: KindType, ID: t.GetId(),
+				DisplayName: orDefault(t.GetDisplayName(), t.GetId()),
+				Summary:     summaryOf(t.GetSummary(), t.GetDescription()),
+				Description: t.GetDescription(),
+				Manifest:    m, Type: t, AuthKinds: authKinds, ConnectionRequired: required,
 			}
 			e.index(append(append([]string{}, t.GetKeywords()...), m.GetKeywords()...), integrationText)
 			if err := idx.add(e); err != nil {

@@ -7,7 +7,6 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Code, ConnectError } from "@connectrpc/connect";
 
 const setEnvironmentRunState = vi.fn();
-const scaleDeployment = vi.fn();
 const deleteEnvironment = vi.fn();
 
 vi.mock("@/services/forge/cloudEnvs", async (importOriginal) => {
@@ -15,13 +14,11 @@ vi.mock("@/services/forge/cloudEnvs", async (importOriginal) => {
   return {
     ...actual,
     setEnvironmentRunState: (...args: unknown[]) => setEnvironmentRunState(...args),
-    scaleDeployment: (...args: unknown[]) => scaleDeployment(...args),
     deleteEnvironment: (...args: unknown[]) => deleteEnvironment(...args),
   };
 });
 
 import { EnvLifecycleControls } from "../EnvPage/EnvLifecycleControls";
-import { HostedWorkloadList } from "../HostedWorkloads";
 import { runStateOf } from "../runStateVocabulary";
 import type { CloudEnvStatus } from "@/services/forge/cloudEnvs";
 
@@ -42,7 +39,6 @@ function status(runState: "running" | "suspended", observed = "ready"): CloudEnv
 
 beforeEach(() => {
   setEnvironmentRunState.mockReset().mockResolvedValue(undefined);
-  scaleDeployment.mockReset().mockResolvedValue(undefined);
   deleteEnvironment.mockReset().mockResolvedValue(undefined);
 });
 
@@ -107,22 +103,3 @@ describe("environment controls", () => {
   });
 });
 
-describe("per-workload controls", () => {
-  it("stop calls Scale SUSPENDED for that deployment", async () => {
-    wrap(<HostedWorkloadList envName="prod" workloads={status("running").workloads} runControls />);
-    await userEvent.click(screen.getByTestId("hosted-run-toggle-api"));
-    await waitFor(() => expect(scaleDeployment).toHaveBeenCalledWith("dep_1", "suspended"));
-  });
-
-  it("a stopped workload offers Start and reads 'Stopped by you'", async () => {
-    wrap(<HostedWorkloadList envName="prod" workloads={status("suspended", "suspended").workloads} runControls />);
-    expect(screen.getByText("Stopped by you")).toBeTruthy();
-    await userEvent.click(screen.getByTestId("hosted-run-toggle-api"));
-    await waitFor(() => expect(scaleDeployment).toHaveBeenCalledWith("dep_1", "running"));
-  });
-
-  it("shows no controls without runControls", () => {
-    wrap(<HostedWorkloadList envName="prod" workloads={status("running").workloads} />);
-    expect(screen.queryByTestId("hosted-run-toggle-api")).toBeNull();
-  });
-});

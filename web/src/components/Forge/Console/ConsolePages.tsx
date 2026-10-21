@@ -5,9 +5,9 @@
  * PageHeader with one meta line, then the body).
  *
  * The BODIES are the components the console already had, mounted unchanged
- * where the new IA puts them — the Overview with workloads, Activity and
- * Dashboards get their own designs in later PRs (Releases has its own,
- * ../Releases/ReleasesPages). A
+ * where the new IA puts them — Activity gets its own design in a later PR
+ * (the Overview, Releases and Dashboards have theirs: ../Workloads,
+ * ../Releases, ../Observability/Dashboards). A
  * page shows a placeholder only where nothing existed (Metrics, Monitoring
  * settings).
  *
@@ -32,8 +32,6 @@ import type { RosterEnv } from "@/services/forge/roster";
 import { LiveActivity } from "../EnvPage/LiveActivity";
 import { Panel, SecretsTab } from "../EnvPage/EnvTabPanels";
 import { CloudNotice } from "../SourceNotices";
-import { EnvironmentTable } from "../Overview/EnvironmentTable";
-import { useEnvironmentRows } from "../Overview/EnvironmentsPage";
 import { useForgeConsole } from "./consoleContext";
 import { ENV_ALL, envsInScope } from "./envScope";
 import { DashboardsPage, ObservabilityHomePage } from "../Observability/Dashboards/DashboardsPages";
@@ -128,47 +126,8 @@ function ScopedEnvNote({ scoped, what }: { scoped: RosterEnv | null; what: strin
   );
 }
 
-// ── Overview ────────────────────────────────────────────────────────────────
-
-/**
- * The project home. The decided design merges it with Workloads (env/health
- * strip, KPIs, needs attention, services and jobs); until that lands it is
- * the two parts that exist: the environments in scope, and the workloads
- * view.
- */
-export function OverviewPage() {
-  const { env, roster, href } = useForgeConsole();
-  const navigate = useNavigate();
-  const recorded = useMemo(
-    () => envsInScope(env, roster.envs).flatMap((candidate) => (candidate.source === "backend" && candidate.live ? [candidate.live] : [])),
-    [env, roster.envs]
-  );
-  const rows = useEnvironmentRows(recorded);
-  const openEnv = useCallback(
-    (name: string) => void navigate({ href: href({ kind: "environment", env: name }) }),
-    [navigate, href]
-  );
-
-  return (
-    <Page testId="console-overview">
-      <Header title="Overview" />
-      {roster.isLoading || roster.resolvingName ? (
-        <RosterLoading />
-      ) : (
-        <>
-          <CloudNotice availability={roster.live.data?.availability} detail={roster.live.data?.detail} />
-          {rows.length > 0 && <EnvironmentTable rows={rows} onOpen={openEnv} />}
-        </>
-      )}
-      <section className="space-y-3" aria-labelledby="overview-workloads">
-        <h2 id="overview-workloads" className="text-sm font-medium text-ink">
-          Workloads
-        </h2>
-        <ObservabilityHost view="workloads" />
-      </section>
-    </Page>
-  );
-}
+// The Overview (with the workloads) and a workload are their own pages
+// (../Workloads/WorkloadPages).
 
 // Releases and a release are their own pages (../Releases/ReleasesPages).
 

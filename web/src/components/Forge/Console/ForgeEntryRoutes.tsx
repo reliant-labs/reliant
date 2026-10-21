@@ -23,12 +23,12 @@
 
 import { useParams, useSearch } from "@tanstack/react-router";
 
-import type { ObsSearch } from "../Observability/obsSearch";
 import { ForgeResolve } from "./ForgeResolve";
 import {
   consolePath,
   legacyEnvTarget,
   legacyObservabilityTarget,
+  type LegacyObsSearch,
   withSearch,
   type LegacyEnvSearch,
 } from "./paths";
@@ -48,7 +48,7 @@ export function LegacyEnvRoute() {
 }
 
 export function LegacyObservabilityRoute() {
-  const search = useSearch({ strict: false }) as ResolveSearch & ObsSearch;
+  const search = useSearch({ strict: false }) as ResolveSearch & LegacyObsSearch;
   return <ForgeResolve {...pick(search)} target={(name) => legacyObservabilityTarget(name, search)} />;
 }
 

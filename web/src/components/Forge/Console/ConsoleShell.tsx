@@ -98,11 +98,13 @@ export function buildConsoleNav({ project, page, env, envs, alertsFiring = 0, st
 
   const long = envs.filter((candidate) => !candidate.preview);
   const previews = envs.filter((candidate) => candidate.preview);
-  const pinned = pinnedEnvOf(page);
+  // The environment whose OWN page is open. A workload page pins its
+  // environment too, but it is an Overview page: Environments stays closed.
+  const pinned = page.kind === "environment" ? pinnedEnvOf(page) : null;
 
   return {
     items: [
-      row("Overview", { kind: "overview" }, icon(Home)),
+      row("Overview", { kind: "overview" }, icon(Home), { active: is("overview") || is("workload") }),
       row("Releases", { kind: "releases" }, icon(TagIcon), { active: is("releases") || is("release") }),
       row("Observability", { kind: "observability" }, icon(Gauge), {
         children: OBS_NAV_VIEWS.map((view) => {
@@ -167,6 +169,9 @@ export function consoleCrumbs(project: string, page: ConsolePage, env: string, d
   switch (page.kind) {
     case "overview":
       return [{ label: "Overview" }];
+    case "workload":
+      // The workload's environment is pinned by its path: the trail leads back to the Overview scoped to it.
+      return [{ label: "Overview", href: withSearch(consolePath(project, { kind: "overview" }), { env: page.env }) }, { label: page.name }];
     case "releases":
       return [{ label: "Releases" }];
     case "release":

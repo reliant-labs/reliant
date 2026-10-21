@@ -168,7 +168,7 @@ func (a *SaveMessageActivity) WriteMessage(
 	for _, f := range protoArgs.GetResolvedInjectFiles() {
 		attID, err := a.createInjectFileAttachment(ctx, f)
 		if err != nil {
-			slog.Warn("Failed to create inject file attachment", "filename", f.GetFilename(), "error", err)
+			slog.WarnContext(ctx, "Failed to create inject file attachment", "filename", f.GetFilename(), "error", err)
 			continue
 		}
 		attachments = append(attachments, attID)

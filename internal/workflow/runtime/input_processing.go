@@ -244,6 +244,13 @@ func coerceInputValue(value interface{}, input *reliantv1.Input) (interface{}, b
 		}
 	}
 
+	// An integration input's value is whatever its type's schema says (a string
+	// for nearly every type), already shaped by validation; coercing it by the
+	// dotted type name would find no type and leave it as is, so say so.
+	if model.IsIntegrationInput(input) {
+		return value, true
+	}
+
 	return coerceToType(value, model.GetInputType(input))
 }
 
@@ -276,6 +283,7 @@ func coerceToType(value interface{}, typeName string) (interface{}, bool) {
 //   - integer → 0, number → 0.0, boolean → false
 //   - array, tools, attachments            → []
 //   - object, any                          → {}
+//   - integration types (github.repository) → "" ([] when multi)
 //   - enum, preset                         → "" ([] when multi). Deliberately
 //     NOT the first allowed value: that would silently select a real option
 //     the caller never chose.
@@ -283,6 +291,12 @@ func coerceToType(value interface{}, typeName string) (interface{}, bool) {
 //     "unset" so model resolution falls through to its own default; size(null)
 //     is 0, so it is still safe to test.
 func inputZeroValue(input *reliantv1.Input) interface{} {
+	if model.IsIntegrationInput(input) {
+		if model.IsMultiIntegrationInput(input) {
+			return []interface{}{}
+		}
+		return ""
+	}
 	switch model.GetInputType(input) {
 	case "string", "message":
 		return ""

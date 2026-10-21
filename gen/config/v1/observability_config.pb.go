@@ -24,8 +24,9 @@ const (
 
 // ObservabilityConfig is how a server role reports what it is doing: OTLP
 // export, the Prometheus endpoint, and the deployment environment its
-// telemetry is filed under. Every server role composes it. The rules every
-// config here follows are in config.proto's header.
+// telemetry is filed under. Every server role reads it, through
+// ServerProcessConfig. The rules every config here follows are in
+// config.proto's header.
 type ObservabilityConfig struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The OTLP collector base URL (not a /v1/<signal> path). The forge runtime

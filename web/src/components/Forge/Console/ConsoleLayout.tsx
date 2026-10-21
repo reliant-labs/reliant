@@ -66,16 +66,18 @@ export function switchTarget(project: Project, page: ConsolePage): string {
   const name = (project.forge_project_name ?? "").trim();
   if (!name) return withSearch("/forge", { project: project.id });
   // An environment's page is about an environment the other project may not
-  // have, and a release's (or a dashboard's) about one it cannot have: land
-  // on the list.
-  const same =
+  // have, and a release's, a workload's (or a dashboard's) about one it cannot
+  // have: land on the list.
+  const same: ConsolePage =
     page.kind === "environment"
-      ? { kind: "environments" as const }
-      : page.kind === "release"
-        ? { kind: "releases" as const }
-        : page.kind === "dashboard"
-          ? { kind: "obs-view" as const, view: "dashboards" as const }
-          : page;
+      ? { kind: "environments" }
+      : page.kind === "workload"
+        ? { kind: "overview" }
+        : page.kind === "release"
+          ? { kind: "releases" }
+          : page.kind === "dashboard"
+            ? { kind: "obs-view", view: "dashboards" }
+            : page;
   return consolePath(name, same);
 }
 

@@ -17,14 +17,20 @@ option go_package = "github.com/reliant-labs/reliant/gen/config/v1;configv1";
 //   ReliantConfig        binary root: every process loads it, and its flags
 //                        are persistent on `reliant`, so every subcommand
 //                        accepts them.
+//   <Group>Config        a SUBTREE config (`subtrees: [{path: ["server"]}]`):
+//                        loaded by every command at or below each path, its
+//                        flags persistent there. ServerProcessConfig is what
+//                        every server role shares; DatabaseConfig is the
+//                        server roles' and `db migrate`'s; CLIConfig is the
+//                        end-user commands'.
 //   <Role>Config         one per process (`command: ["server", "api"]`, ...),
-//                        added as each role's reads move here. A process loads
-//                        the root config plus the one config for its own
-//                        command path; command configs do not nest.
+//                        added as each role's reads move here.
 //
-// forge refuses a root config and a command config that declare the same env
-// var or flag, so a block every process reads composes onto the root config,
-// never onto each role.
+// A process loads the root config, every subtree config over its command
+// path, and the one config for its own command path. forge refuses two
+// configs one process loads that declare the same env var or flag, so a block
+// several processes read is declared once, on the config they all load — the
+// root config, or a subtree config over them — never onto each of them.
 //
 // ENV NAMES ARE THE CONTRACT. control-plane sets these variables on reliant
 // processes by name, in KCL and in Go (the workspace operator), so every

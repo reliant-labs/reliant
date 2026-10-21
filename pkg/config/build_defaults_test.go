@@ -59,7 +59,7 @@ func TestProtoDefaultsAreTheHostedEndpoints(t *testing.T) {
 // prod's server host is `api.reliantapi.com`, and the generic derivation
 // prefixes the leading label — inventing `gateway-api.reliantapi.com`, which
 // does not exist. That shipped once already (see deriveGatewayURL in
-// cmd/reliant/commands/connection.go). Declaring the gateway default
+// cmd/reliant/cmd/connection.go). Declaring the gateway default
 // explicitly is what keeps a bare `go install` build off that path.
 func TestGatewayDefaultIsExplicitNotDerived(t *testing.T) {
 	gateway := hostedDefaults(t)["RELIANT_GATEWAY_URL"]

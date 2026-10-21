@@ -91,7 +91,7 @@ func (dc *DaemonConnector) startConnection(parentCtx context.Context, daemonID, 
 	dc.activeConns[daemonID] = connCancel
 	dc.mu.Unlock()
 
-	logging.Info(connectorLogPrefix+" starting outbound connection",
+	logging.InfoContext(parentCtx, connectorLogPrefix+" starting outbound connection",
 		"daemonId", daemonID, "userId", userID, "podIp", podIP, "port", podPort)
 
 	go dc.connectWithRetry(connCtx, daemonID, userID, podIP, podPort)

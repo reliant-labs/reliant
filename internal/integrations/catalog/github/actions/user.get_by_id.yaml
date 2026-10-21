@@ -1,0 +1,42 @@
+# yaml-language-server: $schema=../../../manifest/schema/action.schema.json
+id: user.get_by_id
+display_name: Get GitHub user by id
+summary: Look up a GitHub account by its numeric id.
+description: >-
+  Return the GitHub account with a numeric id: its current login, name and
+  profile URL. The id is what automations store (a login can be renamed and
+  claimed by someone else), so this is how a stored id is shown as a name.
+keywords: [user, account, id, lookup, login, profile]
+placement: server
+mutates: false
+params:
+  type: object
+  additionalProperties: false
+  required: [account_id]
+  properties:
+    account_id:
+      type: integer
+      minimum: 1
+      title: Account id
+      description: The numeric id of the GitHub account.
+      examples: [583231]
+    connection: { $ref: ../schemas/connection.yaml }
+request:
+  method: GET
+  path: /user/{{ string(int(params.account_id)) }}
+  errors: { $ref: ../schemas/github_errors.yaml }
+output:
+  select: >-
+    {"id": response.id,
+     "login": response.login,
+     "type": response.?type.orValue(null),
+     "name": response.?name.orValue(null),
+     "html_url": response.?html_url.orValue(null)}
+  schema:
+    type: object
+    properties:
+      id: { type: integer }
+      login: { type: string }
+      type: { type: [string, "null"], description: User, Organization or Bot. }
+      name: { type: [string, "null"] }
+      html_url: { type: [string, "null"] }

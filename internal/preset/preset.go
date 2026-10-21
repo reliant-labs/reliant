@@ -606,41 +606,7 @@ func GetRequiredParamsForGroup(workflow *reliantv1.Workflow, group string) []str
 
 // isProtoInputHidden checks if a proto V2Input has ui: hidden set.
 func isProtoInputHidden(input *reliantv1.Input) bool {
-	if input == nil {
-		return false
-	}
-	// Check the InputBase.ui field across all input config types
-	switch cfg := input.GetConfig().(type) {
-	case *reliantv1.Input_StringInput:
-		return cfg.StringInput.GetBase().GetUi() == "hidden"
-	case *reliantv1.Input_NumberInput:
-		return cfg.NumberInput.GetBase().GetUi() == "hidden"
-	case *reliantv1.Input_IntegerInput:
-		return cfg.IntegerInput.GetBase().GetUi() == "hidden"
-	case *reliantv1.Input_BooleanInput:
-		return cfg.BooleanInput.GetBase().GetUi() == "hidden"
-	case *reliantv1.Input_EnumInput:
-		return cfg.EnumInput.GetBase().GetUi() == "hidden"
-	case *reliantv1.Input_ModelInput:
-		return cfg.ModelInput.GetBase().GetUi() == "hidden"
-	case *reliantv1.Input_MessageInput:
-		return cfg.MessageInput.GetBase().GetUi() == "hidden"
-	case *reliantv1.Input_AttachmentsInput:
-		return cfg.AttachmentsInput.GetBase().GetUi() == "hidden"
-	case *reliantv1.Input_ToolsInput:
-		return cfg.ToolsInput.GetBase().GetUi() == "hidden"
-	case *reliantv1.Input_ArrayInput:
-		return cfg.ArrayInput.GetBase().GetUi() == "hidden"
-	case *reliantv1.Input_ObjectInput:
-		return cfg.ObjectInput.GetBase().GetUi() == "hidden"
-	case *reliantv1.Input_AnyInput:
-		return cfg.AnyInput.GetBase().GetUi() == "hidden"
-	case *reliantv1.Input_GroupInput:
-		return cfg.GroupInput.GetBase().GetUi() == "hidden"
-	case *reliantv1.Input_PresetInput:
-		return cfg.PresetInput.GetBase().GetUi() == "hidden"
-	}
-	return false
+	return model.GetInputBase(input).GetUi() == "hidden"
 }
 
 // GetGroups returns all group names in a workflow (inputs with type: group).

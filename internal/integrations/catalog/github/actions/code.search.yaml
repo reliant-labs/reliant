@@ -1,0 +1,87 @@
+# yaml-language-server: $schema=../../../manifest/schema/action.schema.json
+id: code.search
+display_name: Search code
+summary: Find code with GitHub code search; returns matching files and the fragments that matched.
+description: >-
+  Search file contents with GitHub's code search syntax. Scope the query
+  with a qualifier, repo:owner/name, org:name or user:name; without one
+  it searches every repository the connection can see. language:, path:
+  and extension: narrow it further, for example
+  "ParseDuration repo:golang/go language:go". Only default branches are
+  indexed, files over 384 KB are not, and GitHub allows about ten code
+  searches a minute, so prefer one precise query over many broad ones.
+keywords: [search, grep, find, code, symbol, definition, usage, references]
+placement: server
+mutates: false
+tool:
+  expose: true
+params:
+  type: object
+  additionalProperties: false
+  required: [q]
+  properties:
+    q:
+      type: string
+      minLength: 1
+      maxLength: 256
+      title: Search
+      description: >-
+        Search terms plus GitHub qualifiers (repo:, org:, language:, path:).
+        At least one search term is required besides the qualifiers.
+      examples: ["ParseDuration repo:golang/go"]
+    per_page:
+      type: integer
+      minimum: 1
+      maximum: 100
+      default: 30
+      title: Results per page
+      description: How many matches to return, 1 to 100.
+      examples: [10]
+    page:
+      type: integer
+      minimum: 1
+      default: 1
+      title: Page
+      description: Which page of results, from 1. GitHub returns at most the first 1,000 matches.
+      examples: [2]
+    connection: { $ref: ../schemas/connection.yaml }
+request:
+  method: GET
+  path: /search/code
+  headers:
+    # Adds text_matches: the fragment of each file that matched.
+    Accept: application/vnd.github.text-match+json
+  query:
+    q: "{{ params.q }}"
+    per_page: "{{ params.per_page }}"
+    page: "{{ params.page }}"
+  max_response_bytes: 5242880
+  errors: { $ref: ../schemas/github_errors.yaml }
+output:
+  select: >-
+    {"total_count": response.total_count,
+     "incomplete_results": response.?incomplete_results.orValue(false),
+     "items": response.items.map(i, {
+       "repository": i.repository.full_name,
+       "path": i.path,
+       "name": i.name,
+       "sha": i.?sha.orValue(null),
+       "html_url": i.html_url,
+       "fragments": type(i.?text_matches.orValue(null)) == list ?
+         i.text_matches.map(m, m.fragment) : []})}
+  schema:
+    type: object
+    properties:
+      total_count: { type: integer }
+      incomplete_results: { type: boolean, description: GitHub timed out before searching everything. }
+      items:
+        type: array
+        items:
+          type: object
+          properties:
+            repository: { type: string, description: "owner/name" }
+            path: { type: string }
+            name: { type: string }
+            sha: { type: [string, "null"] }
+            html_url: { type: string }
+            fragments: { type: array, items: { type: string }, description: The text around each match. }

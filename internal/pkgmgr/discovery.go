@@ -110,7 +110,7 @@ func DiscoverDirectories(ctx context.Context, rootDir string, opts DiscoveryOpti
 		dirs[d] = true
 	}
 
-	logging.Debug("Discovered directories with package files",
+	logging.DebugContext(ctx, "Discovered directories with package files",
 		"root", rootDir,
 		"count", len(dirs))
 

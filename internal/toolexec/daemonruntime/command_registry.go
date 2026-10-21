@@ -50,7 +50,7 @@ func (r *CommandRegistry) Handle(ctx context.Context, commandType string, payloa
 	}
 	defer func() {
 		if rec := recover(); rec != nil {
-			logging.Error("daemon command panicked", "commandType", commandType, "panic", fmt.Sprint(rec), "stack", string(debug.Stack()))
+			logging.ErrorContext(ctx, "daemon command panicked", "commandType", commandType, "panic", fmt.Sprint(rec), "stack", string(debug.Stack()))
 			result, err = nil, fmt.Errorf("command %q failed internally: %v", commandType, rec)
 		}
 	}()

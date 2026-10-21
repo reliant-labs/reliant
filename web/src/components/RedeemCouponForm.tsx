@@ -23,7 +23,7 @@ import {
 import { onboardingService } from "@/services/controlPlane/onboarding";
 import { getEventBus } from "@/lib/events";
 import { logger } from "@/lib/logger";
-import { formatMachineMinutes } from "@/lib/formatMachineMinutes";
+import { formatMachineMinutes, formatMachineSeconds } from "@/lib/formatMachineMinutes";
 import { cn } from "@/lib/utils";
 import { useAccountGate } from "@/hooks/useAccountGate";
 import { ACCOUNT_REQUIRED_COUPON_COPY } from "@/lib/accountRequired";
@@ -115,7 +115,7 @@ export function RedeemCouponForm({
         setRedeemed(
           res.kind === RedeemedCouponKind.COMPUTE_MINUTES
             ? `Added ${formatMachineMinutes(res.computeMinutes)}. ` +
-                `You now have ${formatMachineMinutes(res.newComputeMinutesRemaining)} available.`
+                `You now have ${formatMachineSeconds(res.newGrantedSmallDaemonSecondsRemaining)} available.`
             : `Added $${(res.amountCents / 100).toFixed(2)} to your balance.`,
         );
         setCode("");

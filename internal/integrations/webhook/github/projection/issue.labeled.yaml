@@ -1,0 +1,14 @@
+# Issue labeled: the projection of the GitHub `issues.labeled` webhook.
+id: issue.labeled
+event: issues.labeled
+display_name: Issue labeled
+summary: A label was added to an issue.
+description: >-
+  Fires when a label is added to an issue. Match `label` to react to one
+  label, e.g. label: needs-triage.
+keywords: [label, tag, triage]
+attributes:
+  - { name: label, type: label, description: The label that was added., example: needs-triage, from: label.name }
+data:
+  label: { kind: string, from: label.name, description: The label that was added. }
+  issue: { kind: object, object: issue }

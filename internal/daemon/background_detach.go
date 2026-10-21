@@ -134,12 +134,12 @@ func PollForBackgroundDetach(ctx context.Context, opts DetachOptions) (CommandRe
 				// Adoption failed: the command is still running and still owned
 				// by this call, so fall back to waiting for it. Saying so beats
 				// reporting a background process that does not exist.
-				logging.Warn("[exec] Failed to adopt process into background; continuing in foreground",
+				logging.WarnContext(ctx, "[exec] Failed to adopt process into background; continuing in foreground",
 					"error", adoptErr, "toolCallID", toolCallID)
 				return CommandResult{}, false
 			}
 
-			logging.Debug("[exec] Detached command into background process",
+			logging.DebugContext(ctx, "[exec] Detached command into background process",
 				"processID", process.ID, "toolCallID", toolCallID)
 
 			out := fmt.Sprintf(

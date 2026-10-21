@@ -73,7 +73,7 @@ type Options struct {
 	// (db.DatabaseConfig.DirectURL); empty when DatabaseURL already is one.
 	DatabaseDirectURL string
 	// DatabasePool sizes the pool and bounds the waits on the database
-	// (the role config's DatabaseConfig).
+	// (the server roles' DatabaseConfig).
 	DatabasePool db.Pool
 	DataDir      string
 
@@ -143,7 +143,7 @@ type Options struct {
 	Log logging.Settings
 
 	// ControlPlane is the control plane hosting this deployment; the zero
-	// value is self-hosted (the role config's ControlPlaneConfig).
+	// value is self-hosted (ServerProcessConfig's ControlPlaneConfig).
 	ControlPlane controlplane.Endpoint
 
 	// PublicURL is this deployment's externally reachable base URL
@@ -326,7 +326,7 @@ func Run(ctx context.Context, opts Options) error {
 	// same table; both processes must use it or neither can read the other's
 	// histories. The api-server owns the schema, so it also owns GC (the
 	// payload-gc node).
-	payloadStore := claimcheck.NewPostgresStore(repo.DB.SQLDB())
+	payloadStore := claimcheck.NewPostgresStore(repo.ORM())
 	gcHorizon := opts.PayloadGCHorizon
 	if gcHorizon <= 0 {
 		gcHorizon = claimcheck.DefaultGCHorizon
@@ -365,7 +365,7 @@ func Run(ctx context.Context, opts Options) error {
 		// generate_video executes in the worker; the api-server only reads its
 		// catalog metadata. The job store is what makes a render resumable.
 		VideoGeneratorResolver: resolveVideoGenerator,
-		VideoJobs:              videojobs.NewSQLStore(repo.DB.SQLDB()),
+		VideoJobs:              videojobs.NewSQLStore(repo.ORM()),
 		// run_scenario / write_scenario execute on the real runtime via the
 		// scenario runner; injected because the runner imports this package's
 		// dependents.

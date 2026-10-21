@@ -45,7 +45,7 @@ func saveCommits(ctx context.Context, w Worktree, checkouts []string) ([]string,
 		}
 		tips, err := orphanTips(ctx, c, w.ID)
 		if err == nil {
-			tips, err = tipsNotOnBase(ctx, c, baseFor(w, c), tips)
+			tips, err = tipsNotOnBase(ctx, c, baseFor(w, c), tips, nil)
 		}
 		if err != nil {
 			return refs, err

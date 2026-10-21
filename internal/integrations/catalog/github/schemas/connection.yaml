@@ -1,0 +1,4 @@
+type: string
+description: >-
+  Id of a saved GitHub connection to use. Omit to use your default
+  GitHub connection.

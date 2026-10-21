@@ -6,10 +6,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/integrations/catalogindex"
+	"github.com/reliant-labs/reliant/internal/integrations/manifest"
 	"github.com/reliant-labs/reliant/internal/rctx"
 )
 
@@ -62,7 +64,7 @@ func (f *ToolsFactory) GetIntegrationSchema() Tool {
 
 type SearchIntegrationsParams struct {
 	Query         string `json:"query" jsonschema:"required,description=What you want to do or which service (e.g. 'create github issue'\\, 'send slack message'\\, 'http request'). Words match names\\, keywords and descriptions."`
-	Kind          string `json:"kind,omitempty" jsonschema:"enum=action,enum=trigger,description=Only actions (steps a workflow runs) or only triggers (events that start a run). Omit for both."`
+	Kind          string `json:"kind,omitempty" jsonschema:"enum=action,enum=trigger,enum=type,description=Only actions (steps a workflow runs)\\, only triggers (events that start a run)\\, or only value types (what a workflow input can be\\, e.g. github.repository). Omit for all."`
 	ConnectedOnly bool   `json:"connected_only,omitempty" jsonschema:"description=Only return what the user can use right now without connecting an account first."`
 	Limit         int    `json:"limit,omitempty" jsonschema:"description=Maximum results (default 10\\, max 25)."`
 }
@@ -121,8 +123,10 @@ func (t *searchIntegrationsTool) Execute(ctx *rctx.ToolContext, args SearchInteg
 		q.Kinds = []catalogindex.Kind{catalogindex.KindAction}
 	case "trigger":
 		q.Kinds = []catalogindex.Kind{catalogindex.KindTrigger}
+	case "type":
+		q.Kinds = []catalogindex.Kind{catalogindex.KindType}
 	default:
-		return NewTextErrorResponse(fmt.Sprintf("kind must be \"action\" or \"trigger\", not %q", args.Kind)), nil
+		return NewTextErrorResponse(fmt.Sprintf("kind must be \"action\", \"trigger\" or \"type\", not %q", args.Kind)), nil
 	}
 	userID, _ := auth.GetUserIDFromContext(ctx)
 	res, err := t.search.Search(ctx, userID, q)
@@ -157,7 +161,7 @@ func renderIntegrationSearch(query string, res *catalogindex.Result) string {
 		}
 		fmt.Fprintf(&sb, "| `%s` | %s | %s | %s |\n", e.Ref, e.Kind, tableCell(e.Summary), connected)
 	}
-	sb.WriteString("\nCall get_integration_schema with a ref for its params and output schema.\n")
+	sb.WriteString("\nCall get_integration_schema with a ref for its params and output schema (a type's value schema and what it can be scoped by).\n")
 	return sb.String()
 }
 
@@ -272,6 +276,9 @@ func renderIntegrationSchema(e *catalogindex.Entry, connected bool) string {
 	if e.Kind == catalogindex.KindTrigger {
 		renderTriggerSchema(&sb, e)
 	}
+	if e.Kind == catalogindex.KindType {
+		renderTypeSchema(&sb, e)
+	}
 	return sb.String()
 }
 
@@ -312,6 +319,56 @@ func renderTriggerSchema(sb *strings.Builder, e *catalogindex.Entry) {
 				value = "..."
 			}
 			fmt.Fprintf(sb, "        %s: %s\n", a.GetName(), value)
+		}
+	}
+	sb.WriteString("```\n")
+}
+
+// renderTypeSchema is a value type's half of the schema page: the schema one
+// value matches, where its options come from, and the workflow YAML that
+// declares an input of it.
+func renderTypeSchema(sb *strings.Builder, e *catalogindex.Entry) {
+	sb.WriteString("## Value (one value of this type)\n\n")
+	sb.WriteString("An input of this type holds plain JSON matching this schema; `multi: true` makes it a list of them.\n\n")
+	writeJSONBlock(sb, e.ValueSchema())
+
+	if o := e.Type.GetOptions(); o != nil {
+		sb.WriteString("## Options\n\n")
+		fmt.Fprintf(sb, "A picker lists the values the person choosing can pick with `%s/%s@%d`", e.IntegrationID(), o.GetAction(), e.Manifest.GetVersion())
+		if e.Type.GetFreeText() {
+			sb.WriteString("; a value that is not in the list is also accepted")
+		}
+		sb.WriteString(".\n\n")
+		if len(o.GetScope()) > 0 {
+			sb.WriteString("It is narrowed by other typed values (`scope`):\n\n")
+			keys := make([]string, 0, len(o.GetScope()))
+			for k := range o.GetScope() {
+				keys = append(keys, k)
+			}
+			sort.Strings(keys)
+			for _, k := range keys {
+				sc := o.GetScope()[k]
+				need := "optional"
+				if sc.GetRequired() {
+					need = "required"
+				}
+				fmt.Fprintf(sb, "- `%s`: a `%s` (%s)\n", k, manifest.QualifyTypeRef(e.IntegrationID(), sc.GetType()), need)
+			}
+			sb.WriteString("\n")
+		}
+	}
+
+	sb.WriteString("## Usage\n\n```yaml\ninputs:\n")
+	fmt.Fprintf(sb, "  %s:\n    type: %s\n    multi: true     # omit for a single value\n    required: true\n", nodeIDFor(e.ID), e.Ref)
+	if o := e.Type.GetOptions(); o != nil && len(o.GetScope()) > 0 {
+		keys := make([]string, 0, len(o.GetScope()))
+		for k := range o.GetScope() {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		sb.WriteString("    scope:\n")
+		for _, k := range keys {
+			fmt.Fprintf(sb, "      %s: <name of an input of type %s>\n", k, manifest.QualifyTypeRef(e.IntegrationID(), o.GetScope()[k].GetType()))
 		}
 	}
 	sb.WriteString("```\n")

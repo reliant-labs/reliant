@@ -15,10 +15,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { BillingService } from "@/gen/controlplane/services/billing/v1/billing_pb";
-import type {
-  CheckoutUiMode,
-  GetCurrentUserComputeUsageResponse,
-} from "@/gen/controlplane/services/billing/v1/billing_pb";
+import type { CheckoutUiMode } from "@/gen/controlplane/services/billing/v1/billing_pb";
 import { getControlPlaneClient } from "@/services/controlPlane/client";
 import { useAuthStore } from "@/store/authStore";
 
@@ -105,29 +102,14 @@ export function useWalletOverview() {
 }
 
 /**
- * Compute usage, with `granted_minutes_remaining` narrowed from the wire's
- * bigint (int64) to a plain number so it reads like the neighbouring minute
- * fields. Hoisted to module scope so its identity is stable — an inline
- * `select` would produce a fresh result object on every render and defeat the
- * `useMemo` deps at the call sites.
+ * Compute usage for the CURRENT billing period. The server measures only the
+ * current period (its balance answers "now"), so there is no period to choose.
  */
-export type ComputeUsage = Omit<
-  GetCurrentUserComputeUsageResponse,
-  "grantedMinutesRemaining"
-> & { grantedMinutesRemaining: number };
-
-function selectComputeUsage(
-  data: GetCurrentUserComputeUsageResponse,
-): ComputeUsage {
-  return { ...data, grantedMinutesRemaining: Number(data.grantedMinutesRemaining) };
-}
-
-export function useComputeUsage(period: "current" | "previous", { enabled = true }: { enabled?: boolean } = {}) {
+export function useComputeUsage(period: "current", { enabled = true }: { enabled?: boolean } = {}) {
   return useQuery({
     enabled,
     queryKey: cloudBillingKeys.computeUsage(period),
     queryFn: () => billingClient().getCurrentUserComputeUsage({ period }),
-    select: selectComputeUsage,
     staleTime: 30_000,
   });
 }

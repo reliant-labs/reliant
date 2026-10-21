@@ -7,8 +7,8 @@ import (
 
 // RunDisplayState is the single status a user reads for a run, folded from the
 // root workflow's (state, stop_reason) and the chat's activity. The values are
-// the reliantv1.RunDisplayState wire values; the SQL in queries/runs.sql
-// derives them with the same table.
+// the reliantv1.RunDisplayState wire values; the run list
+// (internal/store/run_list.go) derives them with the same table.
 type RunDisplayState int32
 
 const (

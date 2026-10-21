@@ -16,17 +16,17 @@ import (
 // loader holds those to the same grammar the trigger layer accepts.
 
 var (
-	// eventTypePattern is a provider event type: "issues.opened",
+	// EventTypePattern is a provider event type: "issues.opened",
 	// "app_mention", "message.received". No wildcard: a trigger names exact
 	// types, and IntegrationSource.events adds the ".*" form.
-	eventTypePattern = regexp.MustCompile(`^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$`)
-	// attributePattern is an Event.Attributes / IntegrationSource.match key.
-	attributePattern = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
+	EventTypePattern = regexp.MustCompile(`^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$`)
+	// AttributeNamePattern is an Event.Attributes / IntegrationSource.match key.
+	AttributeNamePattern = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
 )
 
 const (
-	maxTriggerEvents     = 20
-	maxTriggerAttributes = 20
+	MaxTriggerEvents     = 20
+	MaxTriggerAttributes = 20
 )
 
 // Trigger returns the manifest's trigger with id.
@@ -141,8 +141,8 @@ func validateTriggers(m *reliantv1.IntegrationManifest) error {
 }
 
 func validateTrigger(t *reliantv1.TriggerSpec) error {
-	if !actionPattern.MatchString(t.GetId()) {
-		return fmt.Errorf("id must match %s", actionPattern)
+	if !ActionIDPattern.MatchString(t.GetId()) {
+		return fmt.Errorf("id must match %s", ActionIDPattern)
 	}
 	if strings.ContainsAny(t.GetSummary(), "\r\n") || len(t.GetSummary()) > 200 {
 		return fmt.Errorf("summary must be one line of at most 200 characters")
@@ -153,26 +153,26 @@ func validateTrigger(t *reliantv1.TriggerSpec) error {
 	if len(t.GetEvents()) == 0 {
 		return fmt.Errorf("events: name at least one provider event type; a trigger with none can never fire")
 	}
-	if len(t.GetEvents()) > maxTriggerEvents {
-		return fmt.Errorf("events: at most %d", maxTriggerEvents)
+	if len(t.GetEvents()) > MaxTriggerEvents {
+		return fmt.Errorf("events: at most %d", MaxTriggerEvents)
 	}
 	seen := map[string]bool{}
 	for i, ev := range t.GetEvents() {
-		if !eventTypePattern.MatchString(ev) {
-			return fmt.Errorf("events[%d] %q must match %s (exact types; a source adds the \".*\" wildcard)", i, ev, eventTypePattern)
+		if !EventTypePattern.MatchString(ev) {
+			return fmt.Errorf("events[%d] %q must match %s (exact types; a source adds the \".*\" wildcard)", i, ev, EventTypePattern)
 		}
 		if seen[ev] {
 			return fmt.Errorf("events[%d]: duplicate event %q", i, ev)
 		}
 		seen[ev] = true
 	}
-	if len(t.GetAttributes()) > maxTriggerAttributes {
-		return fmt.Errorf("attributes: at most %d", maxTriggerAttributes)
+	if len(t.GetAttributes()) > MaxTriggerAttributes {
+		return fmt.Errorf("attributes: at most %d", MaxTriggerAttributes)
 	}
 	attrs := map[string]bool{}
 	for i, a := range t.GetAttributes() {
-		if !attributePattern.MatchString(a.GetName()) {
-			return fmt.Errorf("attributes[%d].name %q must match %s", i, a.GetName(), attributePattern)
+		if !AttributeNamePattern.MatchString(a.GetName()) {
+			return fmt.Errorf("attributes[%d].name %q must match %s", i, a.GetName(), AttributeNamePattern)
 		}
 		if attrs[a.GetName()] {
 			return fmt.Errorf("duplicate attribute %q", a.GetName())

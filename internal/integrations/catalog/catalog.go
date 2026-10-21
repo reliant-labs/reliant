@@ -15,7 +15,11 @@ import (
 	"github.com/reliant-labs/reliant/internal/integrations/manifest"
 )
 
-//go:embed */manifest.yaml
+// A manifest is <id>/manifest.yaml, alone or with fragments in <id>/actions,
+// events and schemas (manifest.LoadFS); the patterns take every YAML file one
+// and two levels down and leave the Go test files out.
+//
+//go:embed */*.yaml */*/*.yaml
 var embedded embed.FS
 
 // Action is a resolved action with the manifest it belongs to.

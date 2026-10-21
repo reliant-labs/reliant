@@ -43,7 +43,7 @@ func (a *WorkflowStatusActivity) archiveSucceededAutomationRun(ctx context.Conte
 	}
 	chat, err := a.repo.GetChat(ctx, input.ChatID)
 	if err != nil || chat == nil {
-		logging.Warn("[WorkflowStatus] Could not read the chat to archive a finished automation run", "chat_id", input.ChatID, "error", err)
+		logging.WarnContext(ctx, "[WorkflowStatus] Could not read the chat to archive a finished automation run", "chat_id", input.ChatID, "error", err)
 		return
 	}
 	if !archivesWhenSucceeded(chat) {
@@ -53,7 +53,7 @@ func (a *WorkflowStatusActivity) archiveSucceededAutomationRun(ctx context.Conte
 		trigger, err := a.repo.GetTrigger(ctx, *chat.TriggerID)
 		if err != nil && !errors.Is(err, core.ErrTriggerNotFound) {
 			// Unknown policy: leave the run where the person can see it.
-			logging.Warn("[WorkflowStatus] Could not read the automation; leaving its run unarchived", "chat_id", input.ChatID, "trigger_id", *chat.TriggerID, "error", err)
+			logging.WarnContext(ctx, "[WorkflowStatus] Could not read the automation; leaving its run unarchived", "chat_id", input.ChatID, "trigger_id", *chat.TriggerID, "error", err)
 			return
 		}
 		if trigger != nil && trigger.NotifyOnComplete {
@@ -61,7 +61,7 @@ func (a *WorkflowStatusActivity) archiveSucceededAutomationRun(ctx context.Conte
 		}
 	}
 	if err := a.repo.UpdateChatState(ctx, input.ChatID, db.ChatStateArchived, ReasonAutomationSucceeded); err != nil {
-		logging.Warn("[WorkflowStatus] Failed to archive a finished automation run", "chat_id", input.ChatID, "error", err)
+		logging.WarnContext(ctx, "[WorkflowStatus] Failed to archive a finished automation run", "chat_id", input.ChatID, "error", err)
 	}
 }
 

@@ -34,7 +34,7 @@ const { mockRedeemCoupon } = vi.hoisted(() => ({
   mockRedeemCoupon: vi.fn(async () => ({
     kind: 1,
     computeMinutes: 6000,
-    newComputeMinutesRemaining: 6000,
+    newGrantedSmallDaemonSecondsRemaining: 360000,
     amountCents: 0,
   })),
 }));

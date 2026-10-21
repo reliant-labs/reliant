@@ -1,0 +1,77 @@
+// Copyright (c) 2025 Reliant Labs
+package store
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"sync"
+
+	"github.com/reliant-labs/forge/pkg/orm"
+)
+
+// runControlLockTimeout bounds how long a caller waits for another request's
+// run-control critical section. It is a ceiling for a wedged holder, not a
+// budget a healthy one approaches: a pause or a send holds the lock for one
+// Temporal round trip plus a few row writes.
+const runControlLockTimeout = "15s"
+
+// ErrRunControlInTx refuses a run-control lock taken inside a transaction:
+// the lock would be released at THAT transaction's commit, which is not the
+// critical section the caller means.
+var ErrRunControlInTx = errors.New("run-control lock must not be taken inside a transaction")
+
+// LockChatRunControl takes the chat's run-control lock and returns the func
+// that releases it. Release is idempotent.
+//
+// Pause, resume and SendMessage's resume-or-wake routing each pair a Temporal
+// signal with a workflow-status write, and Postgres and Temporal cannot commit
+// together. Unserialized, a send can read the status in the gap between a
+// pause's signal and its write, see "running", and route the message as a
+// wake — which never releases the pause gate. That stranded chat 264b5697 for
+// 4.5 minutes. See runs.Service.LockRunControl.
+//
+// The lock is a Postgres transaction-scoped advisory lock, so it holds across
+// every API server and worker replica sharing this database; its key is the
+// one every release has used, so replicas of the previous release exclude
+// this one. The transaction exists only to own the lock: it is detached
+// (orm BeginDetached), never placed in ctx, so the caller's own reads and
+// writes run (and commit) independently of it. READ COMMITTED keeps it out of
+// the SERIALIZABLE predicate-lock graph.
+//
+// The lock is released by release, or when ctx ends — database/sql rolls the
+// transaction back the moment its context is done, and a request that has
+// gone away no longer needs exclusion. While held, and while waiting, it
+// occupies one pooled connection.
+func LockChatRunControl(ctx context.Context, db orm.Context, chatID string) (release func(), err error) {
+	if db == nil {
+		return nil, errors.New("database connection not initialized")
+	}
+	// A detached transaction inside the caller's would also run on a second
+	// connection, deadlocking against any row the caller holds.
+	if orm.InTx(ctx) {
+		return nil, ErrRunControlInTx
+	}
+
+	tx, err := db.BeginDetached(ctx, orm.TxOptions{Isolation: orm.IsolationReadCommitted})
+	if err != nil {
+		return nil, fmt.Errorf("begin run-control lock transaction: %w", err)
+	}
+	if _, err := tx.Exec(ctx, `SET LOCAL lock_timeout = '`+runControlLockTimeout+`'`); err != nil {
+		_ = tx.Rollback()
+		return nil, fmt.Errorf("set run-control lock timeout: %w", err)
+	}
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, "run-control:"+chatID); err != nil {
+		_ = tx.Rollback()
+		return nil, fmt.Errorf("acquire run-control lock: %w", err)
+	}
+
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			// Nothing was written; rolling back is how the lock is let go.
+			// ErrTxDone just means ctx ending already released it.
+			_ = tx.Rollback()
+		})
+	}, nil
+}

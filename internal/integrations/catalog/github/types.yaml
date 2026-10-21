@@ -1,0 +1,115 @@
+# yaml-language-server: $schema=../../manifest/schema/manifest.schema.json#/$defs/IntegrationManifest/properties/types
+# The value types GitHub defines: what a workflow input or a trigger attribute
+# can be typed as (`github.repository`). A value is plain JSON, a string for
+# every type here; `options` is where a picker gets the values to offer, a
+# read-only list action run as the person choosing.
+- id: repository
+  display_name: Repository
+  summary: A repository the Reliant GitHub App is installed on and you can see, as owner/name.
+  description: >-
+    A GitHub repository, written owner/name. The picker lists the repositories
+    the Reliant GitHub App is installed on that you can see, which is the set
+    automations are delivered for: a repository outside it never fires.
+  keywords: [repository, repo, project, owner]
+  value:
+    type: string
+    pattern: "^[A-Za-z0-9][A-Za-z0-9-]{0,38}/[A-Za-z0-9._-]{1,100}$"
+    maxLength: 140
+    examples: [acme/app]
+  options:
+    action: app.installation_repositories.list
+    params:
+      installation_id: "{{ has(scope.installation) ? dyn(int(scope.installation)) : dyn(null) }}"
+    search: client
+    value: item.full_name
+    label: item.full_name
+    description: "item.private ? 'private' : 'public'"
+    group: item.installation_account
+    annotations:
+      can_push: item.can_push
+      installation_id: item.installation_id
+      archived: item.archived
+    warnings:
+      - when: "context.acting_identity == 'app' && !option.annotations.can_push"
+        message: The Reliant bot can only write where you have push access, so it will not act in this repository.
+    scope:
+      installation: { type: installation }
+
+- id: label
+  display_name: Label
+  summary: A label of a repository.
+  description: >-
+    The name of a label in a repository. A label that does not exist yet is
+    accepted, so a workflow can create it.
+  keywords: [label, tag, triage]
+  value:
+    type: string
+    minLength: 1
+    maxLength: 50
+    examples: [needs-triage]
+  free_text: true
+  options:
+    action: labels.list
+    params:
+      owner: "{{ scope.repository.split('/')[0] }}"
+      repo: "{{ scope.repository.split('/')[1] }}"
+    search: client
+    value: item.name
+    label: item.name
+    description: item.description
+    annotations:
+      color: item.color
+    scope:
+      repository: { type: repository, required: true }
+
+- id: user
+  display_name: GitHub user
+  summary: A GitHub account, stored by its numeric id.
+  description: >-
+    A GitHub account. The value is the numeric account id as a string, never
+    the login: a login can be renamed and then claimed by someone else, the id
+    is assigned once and never reused. The picker searches by login and shows
+    the current login.
+  keywords: [user, person, account, login, author, sender]
+  value:
+    type: string
+    pattern: "^[0-9]{1,20}$"
+    description: GitHub numeric user id, as a string.
+    examples: ["583231"]
+  options:
+    action: users.search
+    search: param:q
+    value: string(int(item.id))
+    label: item.login
+    description: item.type
+    group: item.type
+    annotations:
+      html_url: item.html_url
+      avatar_url: item.avatar_url
+    resolve:
+      action: user.get_by_id
+      params:
+        account_id: "{{ int(value) }}"
+      label: item.login
+      description: item.type
+
+- id: installation
+  display_name: GitHub App installation
+  summary: An account the Reliant GitHub App is installed on.
+  description: >-
+    One installation of the Reliant GitHub App: the user or organization it
+    was installed on. Narrows repository options to that account.
+  keywords: [installation, organization, account, app]
+  value:
+    type: string
+    pattern: "^[0-9]{1,20}$"
+    description: The numeric installation id, as a string.
+    examples: ["98765"]
+  options:
+    action: app.installations.list
+    search: client
+    value: string(int(item.id))
+    label: item.account
+    description: item.account_type
+    annotations:
+      repository_selection: item.repository_selection

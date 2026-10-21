@@ -312,10 +312,18 @@ func probeDSN(dsn string) error {
 	}
 	defer conn.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), probeDeadline)
 	defer cancel()
 	return conn.PingContext(ctx)
 }
+
+// probeDeadline bounds the reachability probe. A server that is not there
+// fails at once (connection refused, unknown host), so this only ever waits on
+// a server that IS there but slow: a shared test Postgres under load takes
+// seconds to complete its auth handshake. A 3s guess failed REQUIRE_TEST_DB
+// lanes with "failed SASL auth: timeout" against a healthy server; a test that
+// waits a little longer for its database beats one that fails without running.
+const probeDeadline = 60 * time.Second
 
 // redactDSN strips the password so a failure message can be pasted into an
 // issue without leaking a credential.

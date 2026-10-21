@@ -49,7 +49,16 @@ service ClusterService {
   // material, and frees its name. REFUSED (FailedPrecondition)
   // while any live environment references the cluster.
   rpc RemoveCluster(RemoveClusterRequest) returns (RemoveClusterResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "remove"
+        target: {
+          kind: "cluster"
+          id: "id"
+        }
+      }
+    };
   }
   // ConnectCluster registers a cluster BY ADDRESS, with no agent in it.
   //
@@ -70,7 +79,17 @@ service ClusterService {
   // something to US, so forge prints the one-time IAM + RBAC grant the owner
   // runs — and it can only print it if it knows which principal to name.
   rpc ConnectCluster(ConnectClusterRequest) returns (ConnectClusterResponse) {
-    option (forge.v1.method) = {auth_required: true};
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "connect"
+        target: {
+          kind: "cluster"
+          id: "response.cluster.id"
+          label: "name"
+        }
+      }
+    };
   }
 }
 

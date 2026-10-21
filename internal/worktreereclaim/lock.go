@@ -19,7 +19,15 @@ type lockInfo struct {
 }
 
 func inspectLock(ctx context.Context, checkout string) (lockInfo, error) {
-	common, err := commonDir(ctx, checkout)
+	if info, ok := lockFromFiles(checkout); ok {
+		return info, nil
+	}
+	return inspectLockWithGit(ctx, checkout)
+}
+
+// inspectLockWithGit is inspectLock asking git (`git worktree list`).
+func inspectLockWithGit(ctx context.Context, checkout string) (lockInfo, error) {
+	common, err := commonDirWithGit(ctx, checkout)
 	if err != nil {
 		return lockInfo{}, err
 	}

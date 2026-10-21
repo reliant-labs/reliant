@@ -1,0 +1,6 @@
+{
+  "$ref": "manifest.schema.json#/$defs/ActionSpec",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "One file of an integration's actions/ directory, named <id>.yaml.",
+  "title": "Reliant integration action"
+}

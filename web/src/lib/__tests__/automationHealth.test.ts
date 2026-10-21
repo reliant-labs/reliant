@@ -1,9 +1,10 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * An automation's health, as research/WORKFLOW_UI.md §7.2 names it, from the
- * server's TriggerHealth plus two client facts: whether the trigger is enabled
- * and whether it has ever fired. Every server status is crossed with both.
+ * An automation's health, as automation-ux-spec.md §4.1 names it, from the
+ * server's TriggerHealth plus client facts: whether the trigger is enabled,
+ * whether it has ever fired and what kind of source it has. Every server
+ * status is crossed with the first two; each state carries one call to action.
  */
 
 import { describe, expect, it } from "vitest";
@@ -41,7 +42,7 @@ describe("automationHealth: every server status × enabled × never fired", () =
       server: "DEGRADED (a failure)",
       health: health("degraded", { consecutiveFailures: 1, lastFailureDetail: "model unavailable" }),
       key: "degraded",
-      label: "Degraded",
+      label: "Recent failure",
     },
     {
       server: "DEGRADED (3 skips)",
@@ -53,13 +54,13 @@ describe("automationHealth: every server status × enabled × never fired", () =
       server: "FAILING",
       health: health("failing", { consecutiveFailures: 4, lastFailureDetail: "run failed" }),
       key: "failing",
-      label: "4 failed",
+      label: "4 failed in a row",
     },
     {
       server: "UNKNOWN",
       health: health("unknown"),
-      key: "new",
-      label: "New",
+      key: "waiting_first_event",
+      label: "Waiting for first event",
       firedOnly: ["no_result", "No result yet"],
     },
   ];
@@ -91,7 +92,7 @@ describe("automationHealth: every server status × enabled × never fired", () =
     expect(dot(health("degraded", { consecutiveSkips: 5 }))).toBe("warning");
     expect(dot(health("degraded", { consecutiveFailures: 1 }))).toBe("warning");
     expect(dot(health("unknown"), true, undefined)).toBe("neutral");
-    expect(dot(health("healthy"), false)).toBe("warning");
+    expect(dot(health("healthy"), false)).toBe("neutral");
   });
 
   it("carries the server's failure detail for a tooltip", () => {
@@ -109,15 +110,16 @@ describe("automationHealth: every server status × enabled × never fired", () =
       health: health("degraded", { consecutiveSkips: 3 }),
       lastEvent: { ...EVENT, outcome: "skipped", outcomeDetail: "previous run still going" },
     });
-    expect(display.detail).toBe("Skipping: previous run still going");
+    expect(display.detail).toBe("Skipped the last 3: previous run still going");
   });
 
-  it("only the problem states need attention", () => {
+  it("only the states the user must act on need them; a single recent failure is a badge", () => {
     const attention = (h: TriggerHealth, enabled = true) =>
       automationHealth({ enabled, health: h, lastEvent: EVENT }).needsAttention;
     expect(attention(health("failing", { consecutiveFailures: 2 }))).toBe(true);
     expect(attention(health("degraded", { consecutiveSkips: 3 }))).toBe(true);
-    expect(attention(health("degraded", { consecutiveFailures: 1 }))).toBe(true);
+    expect(attention(health("degraded", { consecutiveFailures: 1 }))).toBe(false);
+    expect(attention(health("needs_setup"))).toBe(true);
     expect(attention(health("healthy"))).toBe(false);
     expect(attention(health("unknown"))).toBe(false);
     // A paused automation is not firing, so it is not failing anyone.
@@ -180,5 +182,53 @@ describe("automationHealth: broken activations", () => {
     const display = automationHealth({ enabled: false, health: health("broken", { lastFailureDetail: reason }) });
     expect(display.key).toBe("broken");
     expect(display.detail).toBe(`Paused. ${reason}`);
+  });
+});
+
+describe("automationHealth: setup and launch states", () => {
+  it("reads Needs setup with Finish setup, outranking Paused", () => {
+    for (const enabled of [true, false]) {
+      const display = automationHealth({ enabled, health: health("needs_setup", { lastFailureDetail: "Choose at least one repository to watch." }) });
+      expect(display.key).toBe("needs_setup");
+      expect(display.label).toBe("Needs setup");
+      expect(display.detail).toBe("Choose at least one repository to watch.");
+      expect(display.cta).toEqual({ kind: "finish_setup", label: "Finish setup" });
+      expect(display.needsAttention).toBe(true);
+    }
+  });
+
+  it("reads Can't start when the newest firing failed to launch, with the reason", () => {
+    const display = automationHealth({
+      enabled: true,
+      health: health("failing", { consecutiveFailures: 2 }),
+      lastEvent: { ...EVENT, outcome: "failed", outcomeDetail: "GitHub connection was revoked." },
+    });
+    expect(display.key).toBe("cant_start");
+    expect(display.detail).toBe("GitHub connection was revoked.");
+    expect(display.cta?.kind).toBe("fix_settings");
+  });
+
+  it("tells a schedule that has not fired from an event trigger that has not", () => {
+    const schedule = automationHealth({
+      enabled: true,
+      health: health("unknown"),
+      source: { kind: "schedule", schedule: { cron: ["0 9 * * 1"], timezone: "UTC" } } as never,
+      nextFireAt: "2026-10-26T09:00:00Z",
+    });
+    expect(schedule.key).toBe("scheduled");
+    expect(schedule.label).toMatch(/^Next run /);
+    expect(schedule.cta?.kind).toBe("run_now");
+    const event = automationHealth({ enabled: true, health: health("unknown") });
+    expect(event.key).toBe("waiting_first_event");
+    expect(event.cta).toEqual({ kind: "try_now", label: "Try it now" });
+  });
+
+  it("gives every state at most one call to action, and a broken built-in's is Remove trigger", () => {
+    const broken = (workflow: string) => automationHealth({ enabled: true, health: health("broken"), workflow }).cta;
+    expect(broken("builtin://autopilot-pr-review")).toEqual({ kind: "remove_trigger", label: "Remove trigger" });
+    expect(broken("my-flow")).toEqual({ kind: "open_workflow", label: "Open workflow" });
+    expect(automationHealth({ enabled: false, health: health("healthy") }).cta).toEqual({ kind: "resume", label: "Resume" });
+    expect(automationHealth({ enabled: true, health: health("failing", { consecutiveFailures: 2 }), lastEvent: EVENT }).cta?.label).toBe("Open last run");
+    expect(automationHealth({ enabled: true, health: health("healthy"), lastEvent: EVENT }).cta).toBeUndefined();
   });
 });
