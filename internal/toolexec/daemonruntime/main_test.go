@@ -63,16 +63,46 @@ func runIsolated(m *testing.M) int {
 	// A real workspace's repositories live here; the managed heal scans it.
 	managedProjectsDir = filepath.Join(root, "managed-projects")
 
+	gitconfig := filepath.Join(home, ".gitconfig")
+	if err := os.WriteFile(gitconfig, []byte(noAutoMaintenanceConfig), 0o644); err != nil {
+		fmt.Fprintln(os.Stderr, "daemonruntime tests:", err)
+		return 1
+	}
 	for k, v := range map[string]string{
 		"HOME":                home,
 		"XDG_CONFIG_HOME":     filepath.Join(home, ".config"),
-		"GIT_CONFIG_GLOBAL":   filepath.Join(home, ".gitconfig"),
+		"GIT_CONFIG_GLOBAL":   gitconfig,
 		"GIT_CONFIG_SYSTEM":   os.DevNull,
 		"GIT_CONFIG_NOSYSTEM": "1",
 	} {
 		os.Setenv(k, v)
 	}
 	return m.Run()
+}
+
+// Test git never runs automatic maintenance.
+//
+// Since git 2.5x, every commit (and every push a repo receives) ends with
+// `git maintenance run --auto --detach`: a background process that outlives
+// the git command, creates .git/objects/maintenance.lock, and deletes it
+// whenever it finishes. A fixture copied with a directory walk then meets a
+// file that vanishes between the listing and the lstat ("lstat
+// .../repo-template-*/.git/objects/maintenance.lock: no such file or
+// directory"), and a t.TempDir() can be written to while it is being removed.
+// git 2.43 ran the same maintenance in the foreground, which is why this only
+// ever failed in CI. Reproduced with git 2.55: 6 failures in one -count=20
+// run of the worktree tests, every one that lock; none with this config.
+//
+// noAutoMaintenanceConfig turns it off in a git config file, and
+// noAutoMaintenance on one command line, for a build that deliberately
+// ignores the process's git config. -c reaches every git the command spawns,
+// a receive-pack on the far side of a local push included.
+const noAutoMaintenanceConfig = "[maintenance]\n\tauto = false\n[gc]\n\tauto = 0\n"
+
+// noAutoMaintenance prefixes git args with the -c options that turn
+// automatic maintenance off for that one command.
+func noAutoMaintenance(args ...string) []string {
+	return append([]string{"-c", "maintenance.auto=false", "-c", "gc.auto=0"}, args...)
 }
 
 // testWorktreePath is where worktree.create puts workspaceID under the

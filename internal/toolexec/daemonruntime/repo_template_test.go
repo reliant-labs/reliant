@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -74,9 +75,11 @@ func repoFromTemplate(t *testing.T, dst, key string, build func(dir string) erro
 
 // fixtureGit runs git in dir with a fixed config and identity, for building
 // a template: whichever test builds it first may have pointed the process's
-// git config anywhere.
+// git config anywhere. The fixed config has no automatic maintenance, whose
+// detached process would otherwise be adding and removing a lock file in the
+// template while tests copy it (noAutoMaintenanceConfig).
 func fixtureGit(dir string, args ...string) error {
-	cmd := exec.Command("git", args...)
+	cmd := exec.Command("git", noAutoMaintenance(args...)...)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(),
 		"GIT_CONFIG_GLOBAL="+os.DevNull, "GIT_CONFIG_NOSYSTEM=1",
@@ -112,6 +115,47 @@ func buildCommittedRepo(file, content string, branches ...string) func(dir strin
 		}
 		return nil
 	}
+}
+
+// Pins noAutoMaintenanceConfig: neither a template build nor a test's own git
+// under TestMain's config starts `git maintenance run` after a commit. Every
+// git version traces the run it starts (2.43 in the foreground, 2.5x with
+// --detach), so this holds the line on any git, not only the ones that race.
+func TestTestGitRunsNoAutoMaintenance(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not on PATH")
+	}
+	// An absolute GIT_TRACE is a file every git process appends its trace to.
+	traced := func(t *testing.T, run func(dir string)) {
+		t.Helper()
+		trace := filepath.Join(t.TempDir(), "trace")
+		t.Setenv("GIT_TRACE", trace)
+		run(t.TempDir())
+		got, err := os.ReadFile(trace)
+		if err != nil {
+			t.Fatalf("git wrote no trace: %v", err)
+		}
+		if !strings.Contains(string(got), "commit") {
+			t.Fatalf("the trace shows no commit, so it proves nothing:\n%s", got)
+		}
+		if strings.Contains(string(got), "maintenance run") {
+			t.Fatalf("a commit started automatic maintenance:\n%s", got)
+		}
+	}
+
+	t.Run("template build", func(t *testing.T) {
+		traced(t, func(dir string) {
+			if err := buildCommittedRepo("a.txt", "a\n", "b")(dir); err != nil {
+				t.Fatal(err)
+			}
+		})
+	})
+	t.Run("shared config", func(t *testing.T) {
+		traced(t, func(dir string) {
+			rcGit(t, dir, "init", "-q", "-b", "main")
+			rcGit(t, dir, "commit", "-q", "--allow-empty", "-m", "x")
+		})
+	})
 }
 
 // copyTree copies the directories, regular files and symlinks under src to
