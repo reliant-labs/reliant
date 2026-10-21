@@ -11,6 +11,7 @@ import (
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
+	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
@@ -38,6 +39,11 @@ type Deps struct {
 	// StreamingHub is reported not ready while disconnected.
 	// forge:optional-dep
 	StreamingHub ConnectionReporter
+	// OAuthProvider is the provider StartOAuthSignIn logs in through
+	// (RELIANT_AUTH_URL / RELIANT_AUTH_KEY); zero, the sign-in reports it is
+	// not configured.
+	// forge:optional-dep
+	OAuthProvider auth.Provider
 }
 
 // Pinger is the database health check Ready runs.

@@ -42,7 +42,7 @@ import (
 //     nowhere.
 func TestParallelCompete_RefBodyInsideParallelLoopExecutes(t *testing.T) {
 	wf := loadBuiltin(t, "parallel-compete")
-	all := loadScenarios(t, "../../builtin/testdata/parallel-compete_scenarios.yaml")
+	all := loadScenarios(t, "parallel-compete")
 	sc := findScenario(t, all, "parallel_compete_use_winner")
 
 	res := NewRunner(wf).Run(sc)
@@ -81,7 +81,7 @@ func TestParallelCompete_RefBodyInsideParallelLoopExecutes(t *testing.T) {
 // 766,072-iteration runaway).
 func TestUnmockedRefStaysBlackBoxed(t *testing.T) {
 	wf := loadBuiltin(t, "parallel-compete")
-	all := loadScenarios(t, "../../builtin/testdata/parallel-compete_scenarios.yaml")
+	all := loadScenarios(t, "parallel-compete")
 
 	// This scenario mocks `review` as a NODE (not its internals), and never
 	// mentions synthesizer's body at all.

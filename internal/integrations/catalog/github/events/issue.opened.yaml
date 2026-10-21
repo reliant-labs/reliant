@@ -1,0 +1,11 @@
+# yaml-language-server: $schema=../../../manifest/schema/event.schema.json
+id: issue.opened
+display_name: Issue opened
+summary: An issue was opened in a repository.
+description: >-
+  Fires when an issue is opened in a repository the App is installed on and
+  you can see.
+keywords: [new issue, ticket, bug report]
+events: [issues.opened]
+attributes: { $ref: ../schemas/issue_attrs.yaml }
+data: { $ref: ../schemas/issue_data.yaml }

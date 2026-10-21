@@ -9,6 +9,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/serverkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -348,14 +349,14 @@ func (s *heldSender) SendDaemonCommandToDaemon(ctx context.Context, _, _, _ stri
 	return nil, assert.AnError
 }
 
-// S6: Clean up goes through the REAL timeout interceptor. It must return
+// S6: Clean up goes through the REAL deadline slot and budget table. It must return
 // accepted at once, and the work must outlive the request's context.
 func TestCleanupStorage_ReturnsAtOnceAndSurvivesTheRequestContext(t *testing.T) {
 	f, daemonID, wtID := storageFixture(t)
 	sender := &heldSender{release: make(chan struct{}), done: make(chan struct{})}
 	f.withSweeper(t, worktreesweep.New(f.repo, sender))
 
-	ic := interceptors.NewTimeoutInterceptor().Interceptor()
+	ic := serverkit.Deadline{Unary: interceptors.UnaryTimeout, Procedures: interceptors.ProcedureTimeouts()}.WrapUnary
 	reqCtx, cancelReq := context.WithCancel(f.ctx)
 	call := ic(func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
 		return f.inbox.CleanupStorage(ctx, req.(*connect.Request[reliantv1.CleanupStorageRequest]))

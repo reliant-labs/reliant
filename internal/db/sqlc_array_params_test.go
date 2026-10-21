@@ -67,18 +67,6 @@ func TestGeneratedArrayParamQueries_ZeroOneMany(t *testing.T) {
 
 	fx := seedArrayParamFixture(t, repo, ctx)
 
-	t.Run("GetAttachmentsByIDs", func(t *testing.T) {
-		for _, tc := range idCases(fx.attachmentIDs) {
-			rows, err := q.GetAttachmentsByIDs(ctx, tc.ids)
-			require.NoError(t, err, tc.name)
-			got := make([]string, len(rows))
-			for i, r := range rows {
-				got[i] = r.ID
-			}
-			requireSameIDs(t, tc.ids, got, tc.name)
-		}
-	})
-
 	t.Run("ListContentBlocksForMessages", func(t *testing.T) {
 		for _, tc := range idCases(fx.messageIDs) {
 			rows, err := q.ListContentBlocksForMessages(ctx, tc.ids)
@@ -180,7 +168,6 @@ func requireSameIDs(t *testing.T, want, got []string, msg string) {
 }
 
 type arrayParamFixture struct {
-	attachmentIDs     []string // 4
 	messageIDs        []string // 4, each with one content block, one tool call and one result
 	agentMessageIDs   []string // 4, queued
 	envelopeMessageID string
@@ -201,13 +188,6 @@ func seedArrayParamFixture(t *testing.T, repo *Repo, ctx context.Context) arrayP
 
 	for i := 0; i < 5; i++ {
 		decoy := i == 4
-
-		attachmentID := uuid.New().String()
-		require.NoError(t, repo.CreateAttachment(ctx, &Attachment{
-			ID: attachmentID, UserID: "test-user", Filename: "f.txt", Size: 1,
-			MimeType: "text/plain", FilePath: "test-user/f.txt", AttachmentType: "file_reference",
-			CreatedAt: now, UpdatedAt: now,
-		}))
 
 		messageID := uuid.New().String()
 		require.NoError(t, repo.CreateMessage(ctx, &Message{
@@ -238,7 +218,6 @@ func seedArrayParamFixture(t *testing.T, repo *Repo, ctx context.Context) arrayP
 		if decoy {
 			continue
 		}
-		fx.attachmentIDs = append(fx.attachmentIDs, attachmentID)
 		fx.messageIDs = append(fx.messageIDs, messageID)
 		fx.agentMessageIDs = append(fx.agentMessageIDs, agentMessageID)
 	}

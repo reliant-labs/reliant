@@ -406,22 +406,6 @@ func (l *Loader) mergeConfigs(userConfig, projectConfig, localConfig, userMCPCon
 		}
 	}
 
-	// Merge context paths (append all, then deduplicate)
-	merged.ContextPaths = append([]string{}, userConfig.ContextPaths...)
-	merged.ContextPaths = append(merged.ContextPaths, projectConfig.ContextPaths...)
-	merged.ContextPaths = append(merged.ContextPaths, localConfig.ContextPaths...)
-
-	// Deduplicate context paths
-	seen := make(map[string]bool)
-	unique := []string{}
-	for _, path := range merged.ContextPaths {
-		if !seen[path] {
-			seen[path] = true
-			unique = append(unique, path)
-		}
-	}
-	merged.ContextPaths = unique
-
 	// Merge Models config (local > project > user)
 	// Start with user config, overlay with project, then local
 	merged.Models = mergeModelsConfig(userConfig.Models, projectConfig.Models, localConfig.Models)
@@ -452,10 +436,9 @@ func (l *Loader) newDefaultConfig() *config.Config {
 		Data: config.Data{
 			Directory: ".reliant",
 		},
-		WorktreeDir:  getDefaultWorktreeDir(),
-		MCPServers:   make(map[string]config.MCPServer),
-		Debug:        l.opts.Debug,
-		ContextPaths: append([]string{}, config.DefaultContextPaths...),
+		WorktreeDir: getDefaultWorktreeDir(),
+		MCPServers:  make(map[string]config.MCPServer),
+		Debug:       l.opts.Debug,
 	}
 }
 

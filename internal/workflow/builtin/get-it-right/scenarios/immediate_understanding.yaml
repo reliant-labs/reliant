@@ -50,6 +50,7 @@ expect:
   reached:
     - attempt
     - attempt.implement
+    - attempt.join_checks
     - attempt.review
   not_reached:
     - attempt.refactor

@@ -17,9 +17,22 @@ name: license-gate
 # change this gate's verdict; it used to cost every PR two runner slots (and up
 # to 19 minutes of queue). Pushes to main stay unfiltered, so main is judged
 # on every merge whatever the PR touched.
+# Path-filtered on BOTH events. The verdict is a function of the dependency
+# manifests and the allowlists alone, so a push that touches none of them
+# cannot change it; it used to run two jobs on every merge regardless.
 on:
   push:
     branches: [main]
+    paths:
+      - "go.mod"
+      - "go.sum"
+      - "web/package.json"
+      - "web/package-lock.json"
+      - ".license-allowlist"
+      - ".license-allowlist-npm"
+      - "scripts/check-licenses.sh"
+      - "scripts/check-npm-licenses.sh"
+      - ".github/workflows/license-gate.yml"
   pull_request:
     branches: [main]
     paths:

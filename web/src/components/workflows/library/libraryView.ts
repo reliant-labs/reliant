@@ -189,3 +189,39 @@ export function libraryView({
     noMatches: narrowed && shown === 0 && workflows.length + invalid.length > 0,
   };
 }
+
+/** The slug a user workflow is addressed by: "project://My Flow" and "my_flow" are both "my-flow". */
+function workflowSlug(ref: string): string {
+  return ref
+    .trim()
+    .replace(/^project:\/\//, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
+/**
+ * The automations deleting a user workflow takes with it: every one of the
+ * caller's, in any project, that runs it by name. The server deletes the same
+ * set in the same operation (bar an automation in a project that syncs its
+ * own workflow of that name, which keeps running that one).
+ */
+export function automationsDeletedWith(workflow: Pick<WorkflowResponse, "name">, triggers: readonly Trigger[]): Trigger[] {
+  const slug = workflowSlug(workflow.name);
+  if (!slug) return [];
+  return triggers.filter(
+    (trigger) =>
+      !trigger.workflow.startsWith("builtin://") &&
+      workflowSlug(trigger.workflow) === slug,
+  );
+}
+
+/** What the Delete confirmation says happens to the automations that run the workflow. */
+export function deletedAutomationsSentence(automations: readonly Trigger[]): string {
+  if (automations.length === 0) return "";
+  const n = automations.length;
+  const names = automations.slice(0, 3).map((a) => `“${a.name}”`).join(", ");
+  const more = n > 3 ? `, and ${n - 3} more` : "";
+  return `Also deletes ${n === 1 ? "its 1 automation" : `its ${n} automations`}: ${names}${more}.`;
+}

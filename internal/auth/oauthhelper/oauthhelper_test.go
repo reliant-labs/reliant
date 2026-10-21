@@ -103,15 +103,13 @@ func TestStart_PortInUseIsTyped(t *testing.T) {
 	}
 }
 
-// The allowlist must honour RELIANT_WEB_ORIGIN in BOTH hosts (daemon and
-// `auth serve`). Resolving it in only one is how the daemon path would 403 a
+// The allowlist must honour the configured web origins (RELIANT_WEB_ORIGIN,
+// FRONTEND_PORT) in BOTH hosts (daemon and `auth serve`), which both pass
+// WebOrigins. Honouring them in only one is how the daemon path would 403 a
 // request `auth serve` allows, with an error naming the origin and not the
 // reason.
-func TestAllowedOrigins_HonoursEnvAndFrontendPort(t *testing.T) {
-	t.Setenv("RELIANT_WEB_ORIGIN", "http://localhost:4321, http://localhost:4322")
-	t.Setenv("FRONTEND_PORT", "3600")
-
-	allowed := buildAllowedOrigins(nil)
+func TestAllowedOrigins_HonoursWebOriginsAndFrontendPort(t *testing.T) {
+	allowed := buildAllowedOrigins(WebOrigins([]string{"http://localhost:4321", " http://localhost:4322"}, " 3600 "))
 
 	for _, want := range []string{
 		"http://localhost:4321",      // from RELIANT_WEB_ORIGIN
@@ -133,8 +131,15 @@ func TestAllowedOrigins_HonoursEnvAndFrontendPort(t *testing.T) {
 // CORS must be reflected only for allowed origins — never a blanket "*", which
 // would let any page on the internet drive a local OAuth flow.
 func TestCORS_OnlyReflectsAllowedOrigins(t *testing.T) {
-	t.Setenv("RELIANT_WEB_ORIGIN", "http://localhost:4321")
-	srv := startTestServer(t, "daemon")
+	srv, err := Start(Options{Port: freePort(t), Source: "daemon", ExtraOrigins: WebOrigins([]string{"http://localhost:4321"}, "")})
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		_ = srv.Shutdown(ctx)
+	})
 
 	for name, tc := range map[string]struct{ origin, want string }{
 		"allowed":    {"http://localhost:4321", "http://localhost:4321"},

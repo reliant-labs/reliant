@@ -412,3 +412,49 @@ func TestIntegrationEventMatching(t *testing.T) {
 	assert.True(t, IntegrationEventMatches(core.IntegrationConfig{Events: []string{"*"}}, "anything", nil))
 	assert.False(t, IntegrationEventMatches(core.IntegrationConfig{}, "issues.opened", nil), "no events configured matches nothing")
 }
+
+// A typed scope (`match: {repository: {input: repos}}`) is membership of the
+// event's attribute in the values the activation's input holds. An event
+// outside it, or an unset scope, matches nothing: the router drops it before
+// any row exists.
+func TestIntegrationEventMatchingScope(t *testing.T) {
+	scoped := func(any map[string][]string) core.IntegrationConfig {
+		return core.IntegrationConfig{
+			Integration: "github",
+			Events:      []string{"pull_request.opened"},
+			MatchInput:  map[string]string{"repository": "repos"},
+			MatchAny:    any,
+		}
+	}
+	event := func(repo string) map[string]string { return map[string]string{"repository": repo} }
+
+	cfg := scoped(map[string][]string{"repository": {"acme/app", "acme/web"}})
+	assert.True(t, IntegrationEventMatches(cfg, "pull_request.opened", event("acme/app")), "in scope")
+	assert.True(t, IntegrationEventMatches(cfg, "pull_request.opened", event("acme/web")))
+	assert.False(t, IntegrationEventMatches(cfg, "pull_request.opened", event("acme/other")), "out of scope")
+	assert.False(t, IntegrationEventMatches(cfg, "pull_request.opened", event("acme/App")), "membership is exact")
+	assert.False(t, IntegrationEventMatches(cfg, "pull_request.opened", nil), "an event that does not say which repository it is about")
+	assert.False(t, IntegrationEventMatches(cfg, "pull_request.closed", event("acme/app")), "the event type still applies")
+
+	assert.False(t, IntegrationEventMatches(scoped(map[string][]string{"repository": {}}), "pull_request.opened", event("acme/app")),
+		"an empty scope never fires")
+	assert.False(t, IntegrationEventMatches(scoped(nil), "pull_request.opened", event("acme/app")),
+		"a scope with no projection never fires")
+
+	// Literal match and scope apply together, and an unscoped config is unchanged.
+	both := scoped(map[string][]string{"repository": {"acme/app"}})
+	both.Match = map[string]string{"action": "opened"}
+	assert.False(t, IntegrationEventMatches(both, "pull_request.opened", event("acme/app")), "the literal attribute is missing")
+	assert.True(t, IntegrationEventMatches(both, "pull_request.opened", map[string]string{"repository": "acme/app", "action": "opened"}))
+	assert.True(t, IntegrationEventMatches(core.IntegrationConfig{Events: []string{"*"}}, "x", nil), "no scope declared")
+}
+
+func TestIntegrationScopeMissNamesTheAttribute(t *testing.T) {
+	cfg := core.IntegrationConfig{
+		Events: []string{"pull_request.opened"}, MatchInput: map[string]string{"repository": "repos"},
+		MatchAny: map[string][]string{"repository": {"acme/app"}},
+	}
+	assert.Equal(t, "repository", IntegrationScopeMiss(cfg, "pull_request.opened", map[string]string{"repository": "acme/x"}))
+	assert.Empty(t, IntegrationScopeMiss(cfg, "pull_request.opened", map[string]string{"repository": "acme/app"}), "a match is not a miss")
+	assert.Empty(t, IntegrationScopeMiss(cfg, "issues.opened", map[string]string{"repository": "acme/x"}), "a wrong event type never reached the scope")
+}

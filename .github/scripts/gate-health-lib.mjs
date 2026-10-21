@@ -29,3 +29,39 @@ export function badStreak(results) {
   }
   return streak;
 }
+
+/**
+ * Why a run's sharded test tier did not pass, or [] when it did.
+ *
+ * pr-ci.yml runs the Go tests as "<prefix> N/M" shard jobs ("Backend (Go,
+ * full) 1/4" ... "4/4" on main) and M follows the selection. The tier passed
+ * only when every shard 1..M is present and succeeded: a missing shard is a
+ * slice of the module that never ran, and NO shard at all is the full tier
+ * not running (the PR and full tiers silently merging).
+ *
+ * jobs: [{ name, conclusion }] of one run.
+ */
+export function shardedTierProblems(jobs, prefix) {
+  const escaped = prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const shardName = new RegExp(`^${escaped} (\\d+)/(\\d+)$`);
+  const shards = [];
+  for (const job of jobs) {
+    const m = shardName.exec(job.name);
+    if (m) shards.push({ index: Number(m[1]), total: Number(m[2]), conclusion: job.conclusion });
+  }
+  if (shards.length === 0) {
+    return [`it has no \`${prefix} N/M\` job: the tier did not run`];
+  }
+  const totals = [...new Set(shards.map((s) => s.total))];
+  if (totals.length !== 1) {
+    return [`its \`${prefix}\` shards disagree on the shard count (${totals.join(", ")})`];
+  }
+  const total = totals[0];
+  const problems = [];
+  for (let i = 1; i <= total; i++) {
+    const shard = shards.find((s) => s.index === i);
+    if (!shard) problems.push(`\`${prefix} ${i}/${total}\` is missing`);
+    else if (shard.conclusion !== "success") problems.push(`\`${prefix} ${i}/${total}\` concluded \`${shard.conclusion}\``);
+  }
+  return problems;
+}

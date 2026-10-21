@@ -1,0 +1,29 @@
+# yaml-language-server: $schema=../../../manifest/schema/event.schema.json
+id: pull_request.review_requested
+display_name: Review requested
+summary: Someone's review was requested on a pull request.
+description: >-
+  Fires when a review is requested from a user or a team. Match
+  requested_reviewer (a login, or a team's slug) to react to requests
+  for one reviewer.
+keywords: [pr, review, reviewer, code review]
+events: [pull_request.review_requested]
+attributes:
+  - { $ref: ../schemas/attr_repository.yaml }
+  - { $ref: ../schemas/attr_installation.yaml }
+  - { $ref: ../schemas/attr_sender.yaml }
+  - { $ref: ../schemas/attr_action.yaml }
+  - { $ref: ../schemas/attr_branch.yaml }
+  - { $ref: ../schemas/attr_base_branch.yaml }
+  - { name: requested_reviewer, description: "The requested reviewer's login, or the team's slug.", example: octocat }
+data:
+  type: object
+  additionalProperties: false
+  properties:
+    action: { type: string }
+    number: { type: integer }
+    pull_request: { $ref: ../schemas/pr_schema.yaml }
+    requested_reviewer: { $ref: ../schemas/user_schema.yaml }
+    requested_team: { type: object, properties: { name: { type: string }, slug: { type: string } } }
+    repository: { $ref: ../schemas/repository_schema.yaml }
+    sender: { $ref: ../schemas/user_schema.yaml }

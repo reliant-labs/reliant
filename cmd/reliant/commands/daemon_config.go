@@ -13,17 +13,14 @@ import (
 )
 
 // loadDaemonConfig loads `daemon start`'s config (proto/config/v1 DaemonConfig)
-// and refuses one the daemon cannot run with: a value outside a field's
-// allowed set (DAEMON_TLS_MODE, RELIANT_DAEMON_TYPE) or a port that is not a
-// port. The loader has already refused a value that does not parse, so a typo
-// in any daemon setting stops the daemon here, before it claims its data
-// directory or dials anything.
+// and refuses one the daemon cannot run with. The loader refuses a value that
+// does not parse or lies outside a field's allowed set (DAEMON_TLS_MODE,
+// RELIANT_DAEMON_TYPE); this adds a port that is not a port. So a typo in any
+// daemon setting stops the daemon here, before it claims its data directory or
+// dials anything.
 func loadDaemonConfig(cmd *cobra.Command) (*config.DaemonConfig, error) {
 	cfg, err := config.LoadDaemonConfig(cmd)
 	if err != nil {
-		return nil, err
-	}
-	if err := config.ValidateDaemonConfig(cfg); err != nil {
 		return nil, err
 	}
 	for _, p := range []struct {

@@ -31,23 +31,25 @@ Reliant server components.`,
 	}
 
 	// Global persistent flags available to all subcommands. The target-selection
-	// flags (--server/--gateway/--context) are owned by connection.go, which is
-	// the only place their values are read.
+	// flags (--server/--gateway) are CLIConfig's, persistent on each end-user
+	// command group (bindCLIConfig), and connection.go is the only place
+	// their values are read.
 	root.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose output")
-	registerConnectionFlags(root)
 	enableVersionFlag(root)
 	// The root config's leaves (proto/config/v1 ReliantConfig) are persistent
 	// flags as well. A process that reads them loads the config in its own
 	// RunE, so a command that reads none of them never fails on one.
 	config.RegisterReliantConfigFlags(root)
 
-	// Register subcommand groups
+	// Register subcommand groups. The end-user groups carry CLIConfig.
+	daemonCmd, authCmd, projectCmd, workflowCmd, triggerCmd := newDaemonCmd(), newAuthCmd(), newProjectCmd(), newWorkflowCmd(), newTriggerCmd()
+	bindCLIConfig(authCmd, daemonCmd, projectCmd, triggerCmd, workflowCmd)
 	root.AddCommand(newServerCmd())
-	root.AddCommand(newDaemonCmd())
-	root.AddCommand(newAuthCmd())
-	root.AddCommand(newProjectCmd())
-	root.AddCommand(newWorkflowCmd())
-	root.AddCommand(newTriggerCmd())
+	root.AddCommand(daemonCmd)
+	root.AddCommand(authCmd)
+	root.AddCommand(projectCmd)
+	root.AddCommand(workflowCmd)
+	root.AddCommand(triggerCmd)
 	root.AddCommand(newVersionCmd())
 	root.AddCommand(newForgeCmd())
 	root.AddCommand(newPreviewURLCmd())

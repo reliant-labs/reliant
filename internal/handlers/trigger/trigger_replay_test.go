@@ -153,7 +153,7 @@ func TestListReplayEvents_ListsTheCallersActivationsEventsNewestFirst(t *testing
 	require.NoError(t, err)
 
 	resp, err := env.svc.ListReplayEvents(env.ctx, connect.NewRequest(&reliantv1.ListReplayEventsRequest{
-		ProjectId: env.projectID, Workflow: "triage",
+		ProjectId: &env.projectID, Workflow: "triage",
 	}))
 	require.NoError(t, err)
 
@@ -172,7 +172,7 @@ func TestListReplayEvents_LimitsAndHandlesNoActivations(t *testing.T) {
 	env := setupTriggerTest(t)
 	env.saveWorkflow(t, "triage", replayDeclaringYAML)
 
-	empty, err := env.svc.ListReplayEvents(env.ctx, connect.NewRequest(&reliantv1.ListReplayEventsRequest{ProjectId: env.projectID, Workflow: "triage"}))
+	empty, err := env.svc.ListReplayEvents(env.ctx, connect.NewRequest(&reliantv1.ListReplayEventsRequest{ProjectId: &env.projectID, Workflow: "triage"}))
 	require.NoError(t, err)
 	assert.Empty(t, empty.Msg.GetEvents(), "a workflow nobody enabled has no events, and that is not an error")
 
@@ -181,11 +181,11 @@ func TestListReplayEvents_LimitsAndHandlesNoActivations(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		env.seedReplayEvent(t, nightly.Id, base.Add(time.Duration(i)*time.Hour), core.TriggerEventKindSchedule, map[string]any{})
 	}
-	limited, err := env.svc.ListReplayEvents(env.ctx, connect.NewRequest(&reliantv1.ListReplayEventsRequest{ProjectId: env.projectID, Workflow: "triage", Limit: 2}))
+	limited, err := env.svc.ListReplayEvents(env.ctx, connect.NewRequest(&reliantv1.ListReplayEventsRequest{ProjectId: &env.projectID, Workflow: "triage", Limit: 2}))
 	require.NoError(t, err)
 	assert.Len(t, limited.Msg.GetEvents(), 2)
 
-	_, err = env.svc.ListReplayEvents(env.ctx, connect.NewRequest(&reliantv1.ListReplayEventsRequest{ProjectId: env.projectID}))
+	_, err = env.svc.ListReplayEvents(env.ctx, connect.NewRequest(&reliantv1.ListReplayEventsRequest{ProjectId: &env.projectID}))
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err), "workflow is required")
 }

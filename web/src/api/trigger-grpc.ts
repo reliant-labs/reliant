@@ -20,8 +20,7 @@
  * renaming a webhook trigger cannot turn it into an empty schedule.
  */
 
-import { create, toJson, type JsonObject, type MessageInitShape } from "@bufbuild/protobuf";
-import { StructSchema } from "@bufbuild/protobuf/wkt";
+import { create, type JsonObject, type MessageInitShape } from "@bufbuild/protobuf";
 import { Code, ConnectError } from "@connectrpc/connect";
 
 import { grpcClient } from "./grpc-client";
@@ -126,7 +125,7 @@ export interface ReplayCandidate {
   /** The event's kind as ReplayEvent.kind names it ("integration", "webhook", ...). */
   kind: string;
   /** The recorded payload, to show and edit. */
-  payload: Record<string, unknown>;
+  payload: JsonObject;
 }
 
 const REPLAY_KINDS: Partial<Record<TriggerEventKind, string>> = {
@@ -179,7 +178,7 @@ export interface ResolvedSender {
 }
 
 /** TriggerHealthStatus; UNSPECIFIED (an older server) reads as unknown. */
-export type TriggerHealthStatusKey = "healthy" | "degraded" | "failing" | "broken" | "unknown";
+export type TriggerHealthStatusKey = "healthy" | "degraded" | "failing" | "broken" | "needs_setup" | "unknown";
 
 /** The server's read-only health summary. Rules: TriggerHealthStatus in trigger.proto. */
 /** Who an automation's integration writes speak as. */
@@ -390,6 +389,8 @@ function healthStatusFromProto(status: TriggerHealthStatus): TriggerHealthStatus
       return "failing";
     case TriggerHealthStatus.BROKEN:
       return "broken";
+    case TriggerHealthStatus.NEEDS_SETUP:
+      return "needs_setup";
     default:
       return "unknown";
   }
@@ -637,6 +638,7 @@ export function isTriggerNotFound(error: unknown): boolean {
 export type WorkflowTriggerOutcomeKind =
   | "enabled"
   | "resumed"
+  | "updated"
   | "alreadyEnabled"
   | "failed"
   | "notEnabled"
@@ -682,6 +684,8 @@ export interface EnableWorkflowInput {
   message?: string;
   namePrefix?: string;
   overrides?: WorkflowTriggerOverrideInput[];
+  /** Unset: the owner for a new activation, unchanged for an existing one. */
+  actingIdentity?: ActingIdentityKey;
 }
 
 export interface DisableWorkflowResult {
@@ -692,6 +696,7 @@ export interface DisableWorkflowResult {
 const OUTCOME_KIND: Partial<Record<WorkflowTriggerOutcome, WorkflowTriggerOutcomeKind>> = {
   [WorkflowTriggerOutcome.ENABLED]: "enabled",
   [WorkflowTriggerOutcome.RESUMED]: "resumed",
+  [WorkflowTriggerOutcome.UPDATED]: "updated",
   [WorkflowTriggerOutcome.ALREADY_ENABLED]: "alreadyEnabled",
   [WorkflowTriggerOutcome.FAILED]: "failed",
   [WorkflowTriggerOutcome.NOT_ENABLED]: "notEnabled",
@@ -779,6 +784,7 @@ export const triggerGrpc = {
         notifyOnComplete: input.notifyOnComplete ?? false,
         message: input.message ?? "",
         namePrefix: input.namePrefix ?? "",
+        actingIdentity: actingIdentityToProto(input.actingIdentity),
         overrides: (input.overrides ?? []).map((o) => ({
           trigger: o.trigger,
           name: o.name,
@@ -829,7 +835,7 @@ export const triggerGrpc = {
       triggerName: candidate.triggerName,
       event: eventFromProto(candidate.event!),
       kind: eventKindToWire(candidate.event?.kind ?? TriggerEventKind.UNSPECIFIED),
-      payload: (candidate.event?.payload ? (toJson(StructSchema, candidate.event.payload) as JsonObject) : {}) as Record<string, unknown>,
+      payload: candidate.event?.payload ?? {},
     }));
   },
 

@@ -51,7 +51,8 @@ import { splitFindings } from "../../workflow/workflowDraftStatus";
 import { FilterSearch, SelectFilter } from "../FilterMenu";
 import { WORKFLOW_SOURCE_LABEL } from "../WorkflowSourceBadge";
 import { libraryColumns, type LibraryTableRow, type WorkflowRowAction, type WorkflowRowItem } from "./WorkflowRow";
-import { libraryView } from "./libraryView";
+import { automationsDeletedWith, deletedAutomationsSentence, libraryView } from "./libraryView";
+import type { Trigger } from "@/api/trigger-grpc";
 
 type SourceChoice = LibrarySourceKey | "all";
 
@@ -274,10 +275,11 @@ function ImportConflictModal({
  * What Delete removes, named so it cannot be mistaken for another row with
  * the same title: the slug, where it lives, and whether it was published.
  */
-function deleteDescription(workflow: WorkflowResponse): string {
+function deleteDescription(workflow: WorkflowResponse, automations: readonly Trigger[]): string {
   const source = WORKFLOW_SOURCE_LABEL[workflow.source] ?? workflow.source;
   const state = workflow.status === "draft" ? "draft" : "published workflow";
-  return `Deletes the ${state} ${workflow.name} (${source}). Automations that run it will stop finding it. This cannot be undone.`;
+  const alsoDeleted = deletedAutomationsSentence(automations);
+  return `Deletes the ${state} ${workflow.name} (${source}).${alsoDeleted ? ` ${alsoDeleted}` : ""} This cannot be undone.`;
 }
 
 function LibraryBody({ projectId }: { projectId: string }) {
@@ -291,6 +293,12 @@ function LibraryBody({ projectId }: { projectId: string }) {
   const [deleting, setDeleting] = useState<WorkflowResponse | null>(null);
 
   const deleteWorkflow = useDeleteWorkflow(projectId);
+  // Deleting a workflow deletes the automations that run it, in every project.
+  const allTriggers = useTriggers(undefined, { enabled: deleting !== null });
+  const deletedAutomations = useMemo(() => {
+    if (!deleting) return [];
+    return automationsDeletedWith(deleting, allTriggers.data ?? triggers.data ?? []);
+  }, [deleting, allTriggers.data, triggers.data]);
   const copyWorkflow = useCopyWorkflow(projectId);
   const setVisibility = useSetWorkflowVisibility(projectId);
   const defaultWorkflow = usePreferencesStore((state) => state.preferences?.defaultWorkflow);
@@ -513,7 +521,7 @@ function LibraryBody({ projectId }: { projectId: string }) {
       <ConfirmationDialog
         open={deleting !== null}
         title={deleting ? `Delete “${workflowDisplayName(deleting)}”?` : ""}
-        description={deleting ? deleteDescription(deleting) : undefined}
+        description={deleting ? deleteDescription(deleting, deletedAutomations) : undefined}
         confirmLabel="Delete workflow"
         loading={deleteWorkflow.isPending}
         onCancel={() => setDeleting(null)}

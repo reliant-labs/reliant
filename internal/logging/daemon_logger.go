@@ -59,9 +59,7 @@ type DaemonLogConfig struct {
 // daemon's logs are for us, the redactor sits in front of every line, and
 // "prod" is what a laptop and a hosted pod both resolve to when nothing is
 // set, so the servers' prod floor would make DEBUG unreachable exactly where
-// it is needed. Without an explicit request the default is INFO, and the
-// ambient DEBUG=true flags stay capped in prod: those are set in people's
-// shells for other tools and say nothing about the daemon.
+// it is needed. Without an explicit request the default is INFO.
 func DaemonLogLevel(s Settings) (level slog.Level, explicit bool) {
 	if level, ok := explicitLevel(s); ok {
 		return level, true

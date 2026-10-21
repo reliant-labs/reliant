@@ -14,3 +14,14 @@ export function formatMachineMinutesShort(minutes: number): string {
   const hoursLabel = Number.isInteger(hours) ? hours.toString() : hours.toFixed(1);
   return `${hoursLabel} h (Small)`;
 }
+
+/** A grant balance, which the server reports in small-daemon-seconds, as
+ * prose: "10 hours on a Small machine". Whole minutes only. */
+export function formatMachineSeconds(seconds: number): string {
+  return formatMachineMinutes(Math.floor(seconds / 60));
+}
+
+/** formatMachineSeconds' compact form: "10 h (Small)". */
+export function formatMachineSecondsShort(seconds: number): string {
+  return formatMachineMinutesShort(Math.floor(seconds / 60));
+}

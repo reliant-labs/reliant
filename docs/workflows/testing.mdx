@@ -404,7 +404,10 @@ The app lists these scenarios, and the CLI runs the same ones:
 reliant workflow scenario list                 # every project scenario
 reliant workflow scenario run                  # run them all; exit 1 on any failure
 reliant workflow scenario run .reliant/workflows/blog.yaml --verbose
+reliant workflow scenario list --include-builtins  # add the built-in workflows' scenarios
 ```
+
+The built-in workflows keep their scenarios in this same layout, and the CLI carries them, so `--include-builtins` lists or runs them alongside yours from any directory. They are worked examples of every scenario feature on this page.
 
 A scenario file's `name:` defaults to its file name. A file holding several scenarios is an error — split it into one file per scenario. Scenarios in the retired layouts (`scenarios/<file>/` or `<file>_scenarios.yaml`) are also an error, and the message names the directory each file belongs in.
 

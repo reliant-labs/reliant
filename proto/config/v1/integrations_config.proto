@@ -8,15 +8,11 @@ option go_package = "github.com/reliant-labs/reliant/gen/config/v1;configv1";
 
 // IntegrationsConfig is how a server role reaches the outside world on a
 // user's behalf: the credential vault's key, the deployment's public URL, and
-// the deployment-level secrets of the integrations that push events to it.
-// The API server and the worker compose it, so they agree on which
-// integrations deliver events and on how a webhook's URL reads. The rules
-// every config here follows are in config.proto's header.
-//
-// Not here: each integration's OAuth client, RELIANT_OAUTH_<ID>_CLIENT_ID /
-// _CLIENT_SECRET. That family is keyed by the integration catalog — an open
-// set a config message cannot declare field by field — so the entrypoint
-// reads it through connections.OAuthClientsFromEnv.
+// the deployment-level secrets of the integrations that push events to it,
+// and each integration's OAuth client. The API server and the worker compose
+// it, so they agree on which integrations deliver events and on how a
+// webhook's URL reads. The rules every config here follows are in
+// config.proto's header.
 message IntegrationsConfig {
   // This server's externally reachable base URL: where a user points a
   // third-party MCP client, the base of the OAuth discovery document, and the
@@ -77,5 +73,23 @@ message IntegrationsConfig {
     sensitive: true
     optional: true
     description: "Test integration secret (e2e stacks only)"
+  }];
+
+  // Each integration's OAuth client: RELIANT_OAUTH_<ID>_CLIENT_ID and
+  // RELIANT_OAUTH_<ID>_CLIENT_SECRET, keyed by the integration's id in upper
+  // case (connections.OAuthClientEnv). The keys are the integration catalog's,
+  // an open set, so they are env families rather than fields. The prefix is
+  // owned: any other RELIANT_OAUTH_* variable (a misspelt suffix) fails the
+  // load. An integration with neither is not offered.
+  map<string, string> oauth_client_ids = 9 [(forge.v1.config) = {
+    env_prefix: "RELIANT_OAUTH_"
+    env_suffix: "_CLIENT_ID"
+    description: "Integration OAuth client ids, RELIANT_OAUTH_<ID>_CLIENT_ID"
+  }];
+  map<string, string> oauth_client_secrets = 10 [(forge.v1.config) = {
+    env_prefix: "RELIANT_OAUTH_"
+    env_suffix: "_CLIENT_SECRET"
+    sensitive: true
+    description: "Integration OAuth client secrets, RELIANT_OAUTH_<ID>_CLIENT_SECRET"
   }];
 }

@@ -2,11 +2,14 @@
 package commands
 
 import (
+	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/workflow/builtin"
 	wfscenario "github.com/reliant-labs/reliant/internal/workflow/scenario"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -131,4 +134,33 @@ expect:
 	require.NoError(t, err)
 	res := r.Run(workflows[0].Scenarios[0])
 	assert.Equal(t, wfscenario.StatusPassed, res.Status, "%v", res.Mismatches)
+}
+
+// `--include-builtins` runs the scenarios the binary carries: every file under
+// a builtin workflow's <slug>/scenarios/ directory. It used to read only the
+// retired testdata/<workflow>_scenarios.yaml files, so the scenario
+// directories — embedded, and run by go test — were invisible to the CLI.
+func TestWorkflowScenarioDiscovery_IncludesEmbeddedBuiltinScenarioDirs(t *testing.T) {
+	workflows, err := discoverWorkflowsWithScenarios(nil, t.TempDir(), true)
+	require.NoError(t, err)
+
+	got := map[string]bool{}
+	for _, wf := range workflows {
+		require.Equal(t, "builtin", wf.Source, "an empty project contributes nothing")
+		for _, sc := range wf.Scenarios {
+			got[wf.WorkflowName+"/"+sc.Name] = true
+		}
+	}
+
+	files, err := fs.Glob(builtin.BuiltinScenarioDirsFS, "*/scenarios/*.yaml")
+	require.NoError(t, err)
+	require.NotEmpty(t, files)
+	for _, f := range files {
+		data, err := fs.ReadFile(builtin.BuiltinScenarioDirsFS, f)
+		require.NoError(t, err)
+		sc, err := wfscenario.ParseScenarioFile(data, strings.TrimSuffix(path.Base(f), ".yaml"))
+		require.NoError(t, err, f)
+		key := strings.SplitN(f, "/", 2)[0] + "/" + sc.Name
+		assert.True(t, got[key], "%s is embedded but `scenario list --include-builtins` does not list %s", f, key)
+	}
 }

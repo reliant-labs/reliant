@@ -140,6 +140,7 @@ func validateWorkflowTree(
 				childWorkflow.GetInputs(),
 				opts.PresetLoader,
 				parentWorkflow,
+				opts.valueTypes(),
 				result,
 			)
 
@@ -196,6 +197,7 @@ func validateProtoInputsAgainstSchema(
 	schema map[string]*reliantv1.Input,
 	presetLoader PresetLoader,
 	parentWf *reliantv1.Workflow,
+	vt ValueTypes,
 	result *Result,
 ) {
 	if len(schema) == 0 {
@@ -205,7 +207,7 @@ func validateProtoInputsAgainstSchema(
 	// Build type context from parent workflow for CEL type validation
 	var typeCtx *WorkflowTypeContext
 	if parentWf != nil {
-		typeCtx = BuildWorkflowTypeContext(parentWf, nil)
+		typeCtx = buildWorkflowTypeContext(parentWf, nil, vt)
 	}
 
 	// Build merged inputs: preset params (base) + provided args (override)
@@ -349,7 +351,7 @@ func validateProtoInputsAgainstSchema(
 						continue
 					}
 					// Type-check nested value
-					if err := validateProtoInputType(key+"."+nestedKey, nestedVal, nestedInput); err != nil {
+					if err := validateProtoInputType(key+"."+nestedKey, nestedVal, nestedInput, vt); err != nil {
 						result.AddError(CategoryCrossWorkflow, append(path, "args", key, nestedKey), "", err.Error())
 					}
 				}
@@ -366,7 +368,7 @@ func validateProtoInputsAgainstSchema(
 			}
 			continue
 		}
-		if err := validateProtoInputType(key, value, inputDef); err != nil {
+		if err := validateProtoInputType(key, value, inputDef, vt); err != nil {
 			result.AddError(CategoryCrossWorkflow, append(path, "args", key), "", err.Error())
 		}
 	}
@@ -407,7 +409,10 @@ func validateProtoInputsAgainstSchema(
 // =============================================================================
 
 // protoInputToCELType maps a proto input type to its expected CEL type.
-func protoInputToCELType(input *reliantv1.Input) *cel.Type {
+func protoInputToCELType(input *reliantv1.Input, vt ValueTypes) *cel.Type {
+	if isIntegrationInput(input) {
+		return integrationCELType(input, vt)
+	}
 	switch input.GetType() {
 	case "string", "message", "enum":
 		return cel.StringType
@@ -430,7 +435,7 @@ func protoInputToCELType(input *reliantv1.Input) *cel.Type {
 
 // validateProtoCELExpressionType validates that a CEL expression returns a type compatible with the expected proto input.
 func validateProtoCELExpressionType(expr string, expectedInput *reliantv1.Input, typeCtx *WorkflowTypeContext, argPath []string, result *Result) {
-	expectedType := protoInputToCELType(expectedInput)
+	expectedType := protoInputToCELType(expectedInput, typeCtx.valueTypes())
 	if expectedType == nil {
 		return
 	}

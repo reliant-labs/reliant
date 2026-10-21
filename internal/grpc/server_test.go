@@ -6,15 +6,20 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"strings"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
 	"connectrpc.com/otelconnect"
 	"github.com/reliant-labs/forge/pkg/serverkit"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/reflect/protoregistry"
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/reliant-labs/reliant/internal/grpc/interceptors"
+	"github.com/reliant-labs/reliant/internal/handlers/forge"
 )
 
 type testNamedInterceptor struct{}
@@ -43,25 +48,92 @@ func userChainInterceptors(t *testing.T) []connect.Interceptor {
 }
 
 // The API listener's chain, outermost first: forge's layers (the trace span,
-// profile labels, recovery, request id, logging, tracing, metrics), the auth
-// slot, then reliant's domain whitelist, forge's activity stream and its
-// stream drain innermost. There is no error reporter: a failed RPC reaches
-// Sentry once, as forge's "rpc failed" log line.
+// profile labels, recovery, request id, logging, tracing, metrics), reliant's
+// budgets in forge's Deadline slot, the authenticator, then reliant's domain
+// whitelist, forge's activity stream and its stream drain innermost. There is
+// no error reporter: a failed RPC reaches Sentry once, as forge's "rpc
+// failed" log line.
 func TestUserChainOrder(t *testing.T) {
 	chain, err := NewUserChain(UserChainDeps{Auth: &testNamedInterceptor{}})
 	require.NoError(t, err)
 	require.Equal(t, serverkit.AudienceUser, chain.Audience())
 
 	got := chain.Interceptors()
-	require.Len(t, got, 11)
+	require.Len(t, got, 12)
 	require.IsType(t, &otelconnect.Interceptor{}, got[0], "the trace span opens outermost")
-	require.IsType(t, &interceptors.DomainWhitelistInterceptor{}, got[8], "the domain whitelist reads the user auth stashed")
-	require.Equal(t, reflect.TypeOf(serverkit.StreamDrainInterceptor()), reflect.TypeOf(got[10]),
+	require.IsType(t, serverkit.Deadline{}, got[7], "the deadline wraps authentication")
+	require.IsType(t, &interceptors.DomainWhitelistInterceptor{}, got[9], "the domain whitelist reads the user auth stashed")
+	require.Equal(t, reflect.TypeOf(serverkit.StreamDrainInterceptor()), reflect.TypeOf(got[11]),
 		"the stream drain is innermost, so logging records the status the client received")
-	for _, ic := range got {
-		require.NotEqual(t, reflect.TypeOf(serverkit.Deadline{}), reflect.TypeOf(ic),
-			"forge's Deadline slot (30s for every unary RPC) would undercut the Auth slot's per-procedure budgets")
+}
+
+// userChainDeadline is the Deadline slot NewUserChain configured.
+func userChainDeadline(t *testing.T) serverkit.Deadline {
+	t.Helper()
+	chain, err := NewUserChain(UserChainDeps{Auth: &testNamedInterceptor{}})
+	require.NoError(t, err)
+	for _, ic := range chain.Interceptors() {
+		if d, ok := ic.(serverkit.Deadline); ok {
+			return d
+		}
 	}
+	t.Fatal("the user chain has no Deadline slot")
+	return serverkit.Deadline{}
+}
+
+// The user chain's budgets are reliant's, not forge's defaults: 10s for an
+// unnamed unary RPC (forge's would be 30s), reliant's per-procedure table
+// merged with the forge daemon commands' dispatch budgets, and reliant's
+// slow-RPC reporter.
+func TestUserChainDeadlineIsReliants(t *testing.T) {
+	d := userChainDeadline(t)
+	require.Equal(t, interceptors.UnaryTimeout, d.Unary)
+	require.Equal(t, 10*time.Second, d.Unary)
+	require.NotNil(t, d.OnSlow, "slow RPCs report as [SlowRPC] and reliant_grpc_slow_rpc_total")
+	require.Equal(t, interceptors.ProcedureTimeouts(forge.ForgeRPCDeadlines()), d.Procedures)
+	for procedure, budget := range forge.ForgeRPCDeadlines() {
+		require.Equal(t, budget, d.Procedures[procedure], procedure)
+	}
+}
+
+// A positive Procedures entry bounds a streaming rpc too, so every entry of
+// the user chain's table must name a unary rpc, or be 0 (no deadline). It
+// must also name an rpc that exists: serverkit only checks a key's shape.
+func TestUserChainDeadlineTableNamesUnaryRPCs(t *testing.T) {
+	for procedure, budget := range userChainDeadline(t).Procedures {
+		name := protoreflect.FullName(strings.ReplaceAll(strings.TrimPrefix(procedure, "/"), "/", "."))
+		desc, err := protoregistry.GlobalFiles.FindDescriptorByName(name)
+		require.NoError(t, err, "%s names no rpc", procedure)
+		method, ok := desc.(protoreflect.MethodDescriptor)
+		require.True(t, ok, "%s is not an rpc", procedure)
+		if method.IsStreamingClient() || method.IsStreamingServer() {
+			require.LessOrEqual(t, budget, time.Duration(0), "%s is a streaming rpc: a positive budget would cut every stream", procedure)
+		}
+	}
+}
+
+// A caller's longer deadline does not lift the server's budget: a handler
+// called with an hour's client deadline on an unnamed unary RPC is given the
+// user chain's 10s, not the hour (the timeout reliant had before applied its
+// budget only when the caller sent none).
+func TestUserChainBudgetIsACeilingOverTheCallersDeadline(t *testing.T) {
+	given := make(chan time.Duration, 1)
+	chain, err := NewUserChain(UserChainDeps{Auth: &testNamedInterceptor{}})
+	require.NoError(t, err)
+	handler := connect.NewUnaryHandler(echoProcedure, func(ctx context.Context, _ *connect.Request[emptypb.Empty]) (*connect.Response[emptypb.Empty], error) {
+		deadline, _ := ctx.Deadline()
+		given <- time.Until(deadline)
+		return connect.NewResponse(&emptypb.Empty{}), nil
+	}, chain.HandlerOptions()...)
+	server := httptest.NewServer(handler)
+	t.Cleanup(server.Close)
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Hour)
+	defer cancel()
+	client := connect.NewClient[emptypb.Empty, emptypb.Empty](http.DefaultClient, server.URL+echoProcedure)
+	_, err = client.CallUnary(ctx, connect.NewRequest(&emptypb.Empty{}))
+	require.NoError(t, err)
+	require.LessOrEqual(t, <-given, interceptors.UnaryTimeout)
 }
 
 // The per-RPC deadline wraps authentication, as it always has: an `rlat_`

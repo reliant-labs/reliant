@@ -13,10 +13,10 @@ const (
 	// a LOCAL admin-server on the port control-plane's KCL pins for it
 	// (deploy/kcl/lib/ports.k ADMIN_SERVER_PORT = 8090).
 	//
-	// Loopback, and NOT the hosted admin-server — unlike
-	// internal/builddefaults, whose defaults are now the hosted endpoints so a
-	// `go install` CLI works out of the box. The difference is who reads this:
-	// builddefaults configures the CLI/daemon a USER runs, while this is read
+	// Loopback, and NOT the hosted admin-server — unlike CLIConfig's server
+	// and gateway, whose defaults are the hosted endpoints so a `go install`
+	// CLI works out of the box. The difference is who reads this: CLIConfig
+	// configures the CLI/daemon a USER runs, while this is read
 	// by the api-server and temporal worker, which are SERVER workloads that
 	// KCL always configures explicitly (RELIANT_API_BASE_URL in
 	// deploy/kcl/lib/env.k for the cloud envs, deploy/kcl/dev/main.k for the

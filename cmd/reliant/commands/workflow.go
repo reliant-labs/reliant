@@ -1377,10 +1377,10 @@ func runWorkflowScenarioList(_ *cobra.Command, args []string, dir string, jsonOu
 // Project scenarios are located by workflowref — the locator the daemon uses
 // to index them for the app — so the CLI runs exactly the scenarios the app
 // lists. Scenarios the app would never see (a retired layout, a directory
-// that names no workflow) are an error, not a silent skip.
+// that names no workflow) are an error, not a silent skip. includeBuiltins
+// adds the builtin workflows' scenarios, laid out the same way and embedded in
+// the binary (workflowref.BuiltinLayout).
 func discoverWorkflowsWithScenarios(args []string, dir string, includeBuiltins bool) ([]workflowWithScenarios, error) {
-	var results []workflowWithScenarios
-
 	workflowsDir, onlyFile := dir, ""
 	if len(args) == 1 {
 		path := args[0]
@@ -1405,14 +1405,45 @@ func discoverWorkflowsWithScenarios(args []string, dir string, includeBuiltins b
 	if err != nil {
 		return nil, err
 	}
+	results, err := layoutScenarios(layout, "project", workflowsDir, onlyFile)
+	if err != nil {
+		return nil, err
+	}
+
+	if includeBuiltins {
+		builtins, err := workflowref.BuiltinLayout()
+		if err != nil {
+			return nil, fmt.Errorf("reading builtin workflows: %w", err)
+		}
+		builtinResults, err := layoutScenarios(builtins, "builtin", "", "")
+		if err != nil {
+			return nil, err
+		}
+		results = append(results, builtinResults...)
+	}
+
+	return results, nil
+}
+
+// layoutScenarios pairs each workflow of a layout with its scenarios — a
+// project's workflows directory (dir is where it is on disk), or the builtins
+// the binary embeds (dir is "": their files are read from builtin.BuiltinWorkflowsFS).
+// Both obey one layout, so both are read by this one function. onlyFile, when
+// set, keeps just the workflow in that file.
+func layoutScenarios(layout *workflowref.Layout, source, dir, onlyFile string) ([]workflowWithScenarios, error) {
+	where := dir
+	if source == "builtin" {
+		where = "the builtin workflows"
+	}
 	if problems := layout.ScenarioProblems(); len(problems) > 0 {
 		msgs := make([]string, len(problems))
 		for i, p := range problems {
 			msgs[i] = "  - " + p.Error()
 		}
-		return nil, fmt.Errorf("scenarios in %s are not where the app reads them:\n%s", workflowsDir, strings.Join(msgs, "\n"))
+		return nil, fmt.Errorf("scenarios in %s are not where the app reads them:\n%s", where, strings.Join(msgs, "\n"))
 	}
 
+	var results []workflowWithScenarios
 	for _, entry := range layout.Workflows.Entries() {
 		if onlyFile != "" && entry.Path != onlyFile {
 			continue
@@ -1425,64 +1456,25 @@ func discoverWorkflowsWithScenarios(args []string, dir string, includeBuiltins b
 		for _, f := range files {
 			sc, err := wfscenario.ParseScenarioFile(f.Content, f.Name)
 			if err != nil {
-				return nil, fmt.Errorf("%s: %w", filepath.Join(workflowsDir, filepath.FromSlash(f.Path)), err)
+				return nil, fmt.Errorf("%s: %w", filepath.Join(dir, filepath.FromSlash(f.Path)), err)
 			}
 			scenarios = append(scenarios, sc)
 		}
-		results = append(results, workflowWithScenarios{
-			WorkflowFile: filepath.Join(workflowsDir, filepath.FromSlash(entry.Path)),
+		wf := workflowWithScenarios{
+			// A builtin's file is read back from the embedded FS, which is
+			// slash-separated and rooted at the builtin directory.
+			WorkflowFile: entry.Path,
 			WorkflowName: entry.Name,
-			Source:       "project",
+			Source:       source,
 			Scenarios:    scenarios,
-			Project:      layout.Workflows,
-		})
+		}
+		if source != "builtin" {
+			wf.WorkflowFile = filepath.Join(dir, filepath.FromSlash(entry.Path))
+			wf.Project = layout.Workflows
+		}
+		results = append(results, wf)
 	}
-
-	// Include builtins
-	if includeBuiltins {
-		builtinResults := discoverBuiltinScenarios()
-		results = append(results, builtinResults...)
-	}
-
 	return results, nil
-}
-
-// discoverBuiltinScenarios loads scenarios for all builtin workflows from the embedded FS.
-func discoverBuiltinScenarios() []workflowWithScenarios {
-	var results []workflowWithScenarios
-
-	entries, err := builtin.BuiltinWorkflowsFS.ReadDir(".")
-	if err != nil {
-		return nil
-	}
-
-	for _, entry := range entries {
-		if entry.IsDir() || (!strings.HasSuffix(entry.Name(), ".yaml") && !strings.HasSuffix(entry.Name(), ".yml")) {
-			continue
-		}
-
-		wfName := strings.TrimSuffix(entry.Name(), filepath.Ext(entry.Name()))
-		scenarioFile := "testdata/" + wfName + "_scenarios.yaml"
-
-		data, err := builtin.BuiltinScenariosFS.ReadFile(scenarioFile)
-		if err != nil {
-			continue
-		}
-
-		scenarios, err := wfscenario.ParseScenarioYAML(data)
-		if err != nil || len(scenarios) == 0 {
-			continue
-		}
-
-		results = append(results, workflowWithScenarios{
-			WorkflowFile: entry.Name(),
-			WorkflowName: wfName,
-			Source:       "builtin",
-			Scenarios:    scenarios,
-		})
-	}
-
-	return results
 }
 
 // loadScenarioRunner loads a workflow and returns the scenario runner for it,

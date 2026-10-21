@@ -185,7 +185,16 @@ func TestGitPushFromCredentialsNoneShell_FailsWithNoPrompt(t *testing.T) {
 	}
 	gitconfig := os.Getenv("GIT_CONFIG_GLOBAL")
 	helper := "[credential]\n\thelper = \"!f() { echo username=bot; echo password=hunter2; }; f\"\n"
-	if err := os.WriteFile(gitconfig, []byte(helper), 0o644); err != nil {
+	// Appended: the file is TestMain's shared config, and later tests still
+	// need what it already holds (noAutoMaintenanceConfig).
+	cfg, err := os.OpenFile(gitconfig, os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0o644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cfg.WriteString(helper); err != nil {
+		t.Fatal(err)
+	}
+	if err := cfg.Close(); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("GIT_ASKPASS", askpass)

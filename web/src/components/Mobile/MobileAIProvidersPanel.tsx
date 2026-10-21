@@ -66,6 +66,7 @@ import {
   type RedirectOAuthProvider,
 } from "../../lib/oauth-providers";
 import { useCloudEligibility } from "../../hooks/useOnboardingQueries";
+import { useUnmountSafeTimeout } from "../../hooks/useUnmountSafeTimeout";
 import { onboardingService } from "../../services/controlPlane/onboarding";
 import { OAuthHelperPanel } from "../OAuthHelperPanel";
 import { CopilotDevicePanel } from "../CopilotDevicePanel";
@@ -332,6 +333,9 @@ export function MobileAIProvidersPanel({
   const [enablingReliant, setEnablingReliant] = useState(false);
   const [connectingOAuth, setConnectingOAuth] = useState(false);
   const [oauthBanner, setOauthBanner] = useState<Banner>(null);
+  // The post-connect sheet close is scheduled after an awaited OAuth flow;
+  // the panel may be gone by then.
+  const scheduleTimeout = useUnmountSafeTimeout();
 
   const [streamingEnabled, setStreamingEnabled] = useState(false);
   const [loadingPreferences, setLoadingPreferences] = useState(true);
@@ -489,7 +493,7 @@ export function MobileAIProvidersPanel({
         valid: true,
         message: result.message || `Connected to ${displayName} successfully!`,
       });
-      setTimeout(() => setAddSheetProvider(null), 800);
+      scheduleTimeout(() => setAddSheetProvider(null), 800);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Connection failed";
       setOauthBanner({ valid: false, message: parseErrorMessage(message, kind) });

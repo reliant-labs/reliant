@@ -35,6 +35,21 @@ LDFLAGS=-s -w \
 # CGO settings
 CGO_ENABLED ?= 0
 
+# GOFLAGS gets -trimpath for every go command a target runs, merged into the
+# caller's own (the environment, `go env -w`, or the toolchain's go.env).
+# Without it Go hashes each package's ABSOLUTE directory into its build-cache
+# key, so every worktree (agents run many: ~/.reliant/worktrees/*,
+# ~/src/rl-agent-worktrees/*) compiles the module from scratch and re-runs
+# every test instead of reusing a sibling's results. Measured on a 16-CPU Mac,
+# two worktrees of one commit: the second compiled 267 packages and cached 0 of
+# 73 test packages without it; 0 and 58 with it. The workspace image already
+# makes it the go.env default; a laptop does not. Code here must not locate
+# files from runtime.Caller (internal/architecture/trimpath_guard_test.go).
+# -trimpath=false in GOFLAGS or `go env -w GOFLAGS` opts out. `(pattern)`, not
+# `pattern)`: make counts parentheses inside $(shell ...).
+GOFLAGS := $(shell f="$$(go env GOFLAGS 2>/dev/null)"; case " $$f " in (*" -trimpath"*|*" --trimpath"*) echo "$$f" ;; (*) echo "$${f:+$$f }-trimpath" ;; esac)
+export GOFLAGS
+
 # Test parameters
 TEST_TIMEOUT=300s
 BENCH_TIMEOUT=60s
@@ -64,7 +79,7 @@ NC := \033[0m # No Color
 MINTLIFY_DOCS_DIR := docs
 MINTLIFY_PORT ?= 3000
 
-.PHONY: all build build-all clean test test-short test-affected test-affected-plan test-race test-coverage test-ci test-e2e replay-fixtures freeze-replay-fixtures deps fmt vet lint security help generate generate-cli generate-tools-ref generate-shortcuts generate-nodes generate-types generate-presets generate-workflow-builder-skill generate-changelog generate-mintlify-reference docs docs-build mint changelog changelog-draft postgres-up postgres-down db-driver-audit generate-yaml-bindings build-api-server build-temporal-worker build-tools-daemon build-services docker-build pin-forge pin-drift pin-ancestry forge-generate-check release-rc release-patch release-minor release-major release-tag release-tag-dry-run check-release-tags
+.PHONY: all build build-all clean test test-short test-affected test-affected-plan test-race test-coverage test-ci test-e2e replay-fixtures freeze-replay-fixtures deps fmt vet lint security help generate generate-cli generate-tools-ref generate-shortcuts generate-nodes generate-types generate-presets generate-workflow-builder-skill generate-changelog generate-mintlify-reference docs docs-build mint changelog changelog-draft postgres-up postgres-down db-driver-audit generate-yaml-bindings generate-manifest-schema build-api-server build-temporal-worker build-tools-daemon build-services docker-build pin-forge pin-drift pin-ancestry forge-generate-check release-rc release-patch release-minor release-major release-tag release-tag-dry-run check-release-tags
 
 # Default target
 all: deps fmt vet test build
@@ -206,8 +221,10 @@ test-short:
 # packages it reaches, but only when YOU set DATABASE_URL (the compose default
 # is not exported here: it is a server shared by everyone on this machine).
 # Design and the rule table: dev-docs/testing-affected.md.
+# A FULL lane (a whole-module run) waits for a host heavy slot ($(SLOT));
+# a scoped one does not.
 test-affected:
-	$(GOCMD) run ./tools/test-affected run $(if $(LANES),-lanes $(LANES))
+	TEST_AFFECTED_SLOT='$(SLOT)' $(GOCMD) run ./tools/test-affected run $(if $(LANES),-lanes $(LANES))
 
 ## test-affected-plan: Print what test-affected would run and why, without running it
 test-affected-plan:
@@ -282,7 +299,7 @@ vet:
 lint:
 	@echo "$(YELLOW)Running golangci-lint...$(NC)"
 	@if command -v golangci-lint >/dev/null 2>&1; then \
-		GOFLAGS="-buildvcs=false" golangci-lint run; \
+		GOFLAGS="$(GOFLAGS) -buildvcs=false" golangci-lint run; \
 	else \
 		echo "$(RED)golangci-lint not installed. Install with: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest$(NC)"; \
 		exit 1; \
@@ -470,7 +487,7 @@ forge-generate-check: $(BUF_BIN) $(PROTOC_GEN_ES)
 	@BUF="$(BUF_BIN)" ./scripts/check-forge-generate.sh $(FORGE_CHECK_FLAGS)
 
 ## generate-go: Run Go code generators only (protobuf Go + sqlc + Go reference files)
-generate-go: proto-generate-go generate-yaml-bindings generate-tool-catalog sqlc generate-schema generate-refcheck generate-cel-reference generate-nodes
+generate-go: proto-generate-go generate-yaml-bindings generate-tool-catalog generate-manifest-schema sqlc generate-schema generate-refcheck generate-cel-reference generate-nodes
 	@echo "$(GREEN)✅ Go code generation complete$(NC)"
 
 ## generate-yaml-bindings: Generate YAML bindings from proto descriptors
@@ -484,6 +501,12 @@ generate-tool-catalog:
 	@echo "$(YELLOW)Generating tool parameter catalog...$(NC)"
 	@$(GOCMD) generate ./internal/llm/tools
 	@echo "$(GREEN)✅ Tool catalog generated$(NC)"
+
+## generate-manifest-schema: Generate the published JSON Schema of the integration manifest format from its Go structs
+generate-manifest-schema: proto-generate-go
+	@echo "$(YELLOW)Generating integration manifest schema...$(NC)"
+	@$(GOCMD) generate ./internal/integrations/manifest/schema
+	@echo "$(GREEN)✅ Integration manifest schema generated$(NC)"
 
 ## migration: Create a new migration file (Usage: make migration NAME=my_changes)
 migration:
@@ -543,7 +566,7 @@ WEB_SRC_DIR=web/src
 CHANGELOG_DIR=$(MINTLIFY_DOCS_DIR)/data/releases
 
 ## generate: Generate sqlc, Go protobuf, docs, presets and skills (generate-all minus the reliant TS protobufs)
-generate: generate-yaml-bindings generate-tool-catalog sqlc generate-schema generate-scenario-schema generate-refcheck generate-cel-reference generate-cli generate-tools-ref generate-shortcuts generate-nodes generate-types generate-models generate-presets generate-workflow-builder-skill generate-changelog generate-mintlify-reference
+generate: generate-yaml-bindings generate-tool-catalog generate-manifest-schema sqlc generate-schema generate-scenario-schema generate-refcheck generate-cel-reference generate-cli generate-tools-ref generate-shortcuts generate-nodes generate-types generate-models generate-presets generate-workflow-builder-skill generate-changelog generate-mintlify-reference
 	@echo "$(GREEN)✅ All generated files up to date$(NC)"
 
 ## generate-schema: Generate workflow schema reference from proto types

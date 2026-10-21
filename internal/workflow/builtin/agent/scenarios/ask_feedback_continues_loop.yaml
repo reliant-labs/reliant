@@ -1,0 +1,50 @@
+# ask=true: feedback from ask_question continues the loop, no feedback exits it
+#
+# The while condition is:
+#   (outputs.tool_calls != null && size(outputs.tool_calls) > 0) || outputs.has_feedback == true
+#
+# - Iteration 0: call_llm returns no tools → ask_question → user gives feedback
+#   → has_feedback=true → loop continues
+# - Iteration 1: call_llm returns no tools → ask_question → user continues
+#   → has_feedback=false → loop exits with 2 iterations
+name: ask_feedback_continues_loop
+description: With ask enabled, user feedback loops the agent; plain continue exits
+inputs:
+  mode: auto
+  ask: true
+events:
+  # Iteration 0: no tools, ask fires, user provides feedback
+  - node: agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "Here's my first draft of the answer."
+      response_text: "Here's my first draft of the answer."
+      tool_calls: []
+  - node: agent_loop.ask_question
+    output:
+      has_feedback: true
+  # Iteration 1: no tools, ask fires, user continues without feedback
+  - node: agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "Here's the revised answer incorporating your feedback."
+      response_text: "Here's the revised answer incorporating your feedback."
+      tool_calls: []
+  - node: agent_loop.ask_question
+    output:
+      has_feedback: false
+expect:
+  outcome: completed
+  reached:
+    - agent_loop
+    - agent_loop.call_llm
+    - agent_loop.ask_question
+  not_reached:
+    - agent_loop.approval
+    - agent_loop.execute_tools
+    - agent_loop.compact
+  node_outputs:
+    agent_loop:
+      _iterations: 2

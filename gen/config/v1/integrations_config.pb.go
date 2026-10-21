@@ -24,15 +24,11 @@ const (
 
 // IntegrationsConfig is how a server role reaches the outside world on a
 // user's behalf: the credential vault's key, the deployment's public URL, and
-// the deployment-level secrets of the integrations that push events to it.
-// The API server and the worker compose it, so they agree on which
-// integrations deliver events and on how a webhook's URL reads. The rules
-// every config here follows are in config.proto's header.
-//
-// Not here: each integration's OAuth client, RELIANT_OAUTH_<ID>_CLIENT_ID /
-// _CLIENT_SECRET. That family is keyed by the integration catalog — an open
-// set a config message cannot declare field by field — so the entrypoint
-// reads it through connections.OAuthClientsFromEnv.
+// the deployment-level secrets of the integrations that push events to it,
+// and each integration's OAuth client. The API server and the worker compose
+// it, so they agree on which integrations deliver events and on how a
+// webhook's URL reads. The rules every config here follows are in
+// config.proto's header.
 type IntegrationsConfig struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// This server's externally reachable base URL: where a user points a
@@ -57,8 +53,16 @@ type IntegrationsConfig struct {
 	GithubBotLogin  string `protobuf:"bytes,7,opt,name=github_bot_login,json=githubBotLogin,proto3" json:"github_bot_login,omitempty"`
 	// The secret of the test integration, which only an e2e stack registers.
 	TestIntegrationSecret string `protobuf:"bytes,8,opt,name=test_integration_secret,json=testIntegrationSecret,proto3" json:"test_integration_secret,omitempty"`
-	unknownFields         protoimpl.UnknownFields
-	sizeCache             protoimpl.SizeCache
+	// Each integration's OAuth client: RELIANT_OAUTH_<ID>_CLIENT_ID and
+	// RELIANT_OAUTH_<ID>_CLIENT_SECRET, keyed by the integration's id in upper
+	// case (connections.OAuthClientEnv). The keys are the integration catalog's,
+	// an open set, so they are env families rather than fields. The prefix is
+	// owned: any other RELIANT_OAUTH_* variable (a misspelt suffix) fails the
+	// load. An integration with neither is not offered.
+	OauthClientIds     map[string]string `protobuf:"bytes,9,rep,name=oauth_client_ids,json=oauthClientIds,proto3" json:"oauth_client_ids,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	OauthClientSecrets map[string]string `protobuf:"bytes,10,rep,name=oauth_client_secrets,json=oauthClientSecrets,proto3" json:"oauth_client_secrets,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *IntegrationsConfig) Reset() {
@@ -147,11 +151,25 @@ func (x *IntegrationsConfig) GetTestIntegrationSecret() string {
 	return ""
 }
 
+func (x *IntegrationsConfig) GetOauthClientIds() map[string]string {
+	if x != nil {
+		return x.OauthClientIds
+	}
+	return nil
+}
+
+func (x *IntegrationsConfig) GetOauthClientSecrets() map[string]string {
+	if x != nil {
+		return x.OauthClientSecrets
+	}
+	return nil
+}
+
 var File_config_v1_integrations_config_proto protoreflect.FileDescriptor
 
 const file_config_v1_integrations_config_proto_rawDesc = "" +
 	"\n" +
-	"#config/v1/integrations_config.proto\x12\tconfig.v1\x1a\x14forge/v1/forge.proto\"\x9c\b\n" +
+	"#config/v1/integrations_config.proto\x12\tconfig.v1\x1a\x14forge/v1/forge.proto\"\xb8\f\n" +
 	"\x12IntegrationsConfig\x12a\n" +
 	"\n" +
 	"public_url\x18\x01 \x01(\tBB\x82\xce\x18>\n" +
@@ -170,7 +188,17 @@ const file_config_v1_integrations_config_proto_rawDesc = "" +
 	"\x10github_bot_login\x18\a \x01(\tBS\x82\xce\x18O\n" +
 	"\x18RELIANT_GITHUB_BOT_LOGIN*3GitHub App bot's login, used when no user id is setR\x0egithubBotLogin\x12\x8c\x01\n" +
 	"\x17test_integration_secret\x18\b \x01(\tBT\x82\xce\x18P\n" +
-	"\x1fRELIANT_TEST_INTEGRATION_SECRET*)Test integration secret (e2e stacks only)0\x01P\x01R\x15testIntegrationSecretB8Z6github.com/reliant-labs/reliant/gen/config/v1;configv1b\x06proto3"
+	"\x1fRELIANT_TEST_INTEGRATION_SECRET*)Test integration secret (e2e stacks only)0\x01P\x01R\x15testIntegrationSecret\x12\xb9\x01\n" +
+	"\x10oauth_client_ids\x18\t \x03(\v21.config.v1.IntegrationsConfig.OauthClientIdsEntryB\\\x82\xce\x18X*:Integration OAuth client ids, RELIANT_OAUTH_<ID>_CLIENT_IDb\x0eRELIANT_OAUTH_j\n" +
+	"_CLIENT_IDR\x0eoauthClientIds\x12\xd3\x01\n" +
+	"\x14oauth_client_secrets\x18\n" +
+	" \x03(\v25.config.v1.IntegrationsConfig.OauthClientSecretsEntryBj\x82\xce\x18f*BIntegration OAuth client secrets, RELIANT_OAUTH_<ID>_CLIENT_SECRET0\x01b\x0eRELIANT_OAUTH_j\x0e_CLIENT_SECRETR\x12oauthClientSecrets\x1aA\n" +
+	"\x13OauthClientIdsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1aE\n" +
+	"\x17OauthClientSecretsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B8Z6github.com/reliant-labs/reliant/gen/config/v1;configv1b\x06proto3"
 
 var (
 	file_config_v1_integrations_config_proto_rawDescOnce sync.Once
@@ -184,16 +212,20 @@ func file_config_v1_integrations_config_proto_rawDescGZIP() []byte {
 	return file_config_v1_integrations_config_proto_rawDescData
 }
 
-var file_config_v1_integrations_config_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
+var file_config_v1_integrations_config_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
 var file_config_v1_integrations_config_proto_goTypes = []any{
 	(*IntegrationsConfig)(nil), // 0: config.v1.IntegrationsConfig
+	nil,                        // 1: config.v1.IntegrationsConfig.OauthClientIdsEntry
+	nil,                        // 2: config.v1.IntegrationsConfig.OauthClientSecretsEntry
 }
 var file_config_v1_integrations_config_proto_depIdxs = []int32{
-	0, // [0:0] is the sub-list for method output_type
-	0, // [0:0] is the sub-list for method input_type
-	0, // [0:0] is the sub-list for extension type_name
-	0, // [0:0] is the sub-list for extension extendee
-	0, // [0:0] is the sub-list for field type_name
+	1, // 0: config.v1.IntegrationsConfig.oauth_client_ids:type_name -> config.v1.IntegrationsConfig.OauthClientIdsEntry
+	2, // 1: config.v1.IntegrationsConfig.oauth_client_secrets:type_name -> config.v1.IntegrationsConfig.OauthClientSecretsEntry
+	2, // [2:2] is the sub-list for method output_type
+	2, // [2:2] is the sub-list for method input_type
+	2, // [2:2] is the sub-list for extension type_name
+	2, // [2:2] is the sub-list for extension extendee
+	0, // [0:2] is the sub-list for field type_name
 }
 
 func init() { file_config_v1_integrations_config_proto_init() }
@@ -207,7 +239,7 @@ func file_config_v1_integrations_config_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_config_v1_integrations_config_proto_rawDesc), len(file_config_v1_integrations_config_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   1,
+			NumMessages:   3,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

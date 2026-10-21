@@ -390,9 +390,7 @@ func startDrainingGateway(t *testing.T, g *drainingGateway) *daemonClient {
 	g.responses = make(chan string, 8)
 	g.firstEnded = make(chan struct{})
 	client := newDaemonClientForTest(t, t.TempDir(), startGateway(t, g))
-	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
-	go func() { _ = client.run(ctx) }()
+	startDaemon(t, client)
 	return client
 }
 

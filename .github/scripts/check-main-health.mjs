@@ -21,10 +21,11 @@
 // superseded it has no verdict and is passed over) and reports red when:
 //
 //   - the run's conclusion is anything but success, or
-//   - the required job (default "Backend (Go, full)") is missing from that run
-//     or did not succeed. "Missing" is the tiers silently merging: if main ever
-//     stops running the full tier, this fails rather than reporting a green run
-//     that ran only the short one.
+//   - the required sharded tier (default "Backend (Go, full)", run as
+//     "Backend (Go, full) N/M" shard jobs) is missing from that run, lacks a
+//     shard, or has one that did not succeed. "Missing" is the tiers silently
+//     merging: if main ever stops running the full tier, this fails rather
+//     than reporting a green run that ran only the short one.
 //
 // ## Usage
 //
@@ -39,6 +40,8 @@
 import { execFileSync } from "node:child_process";
 import { appendFileSync, writeFileSync } from "node:fs";
 
+import { shardedTierProblems } from "./gate-health-lib.mjs";
+
 const args = process.argv.slice(2);
 
 function argValue(flag, fallback) {
@@ -48,7 +51,7 @@ function argValue(flag, fallback) {
 
 const workflow = argValue("--workflow", "pr-ci.yml");
 const branch = argValue("--branch", "main");
-const requiredJob = argValue("--require-job", "Backend (Go, full)");
+const requiredTier = argValue("--require-shards", "Backend (Go, full)");
 const runCount = Number(argValue("--runs", "15"));
 const reportPath = argValue("--report", "");
 const repo = argValue("--repo", "");
@@ -103,19 +106,17 @@ if (runs.length === 0) {
 const run = runs[0];
 const jobs = JSON.parse(gh(["run", "view", String(run.databaseId), "--json", "jobs"])).jobs ?? [];
 const failedJobs = jobs.filter((job) => job.conclusion && !["success", "skipped", "neutral"].includes(job.conclusion));
-const tierJob = jobs.find((job) => job.name === requiredJob);
+const tierProblems = shardedTierProblems(jobs, requiredTier);
 
 const reasons = [];
 if (run.conclusion !== "success") {
   reasons.push(`the run concluded \`${run.conclusion}\``);
 }
-if (!tierJob) {
+if (tierProblems.length > 0) {
   reasons.push(
-    `it has no \`${requiredJob}\` job: the full test tier did not run on ${branch}, so every ` +
-      `short-gated test went unrun (did the backend job's tier selection change?)`,
+    `${tierProblems.join("; ")} (the full test tier is the only place every short-gated test ` +
+      `runs; did the backend job's tier selection change?)`,
   );
-} else if (tierJob.conclusion !== "success") {
-  reasons.push(`\`${requiredJob}\` concluded \`${tierJob.conclusion}\``);
 }
 
 const red = reasons.length > 0;
@@ -143,7 +144,7 @@ setOutput("run_url", run.url);
 setOutput("sha", sha);
 
 if (asJson) {
-  console.log(JSON.stringify({ workflow, branch, requiredJob, red, reasons, run, failedJobs }, null, 2));
+  console.log(JSON.stringify({ workflow, branch, requiredTier, red, reasons, run, failedJobs }, null, 2));
 } else {
   console.log(body);
 }

@@ -16,13 +16,17 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
-	"github.com/reliant-labs/reliant/internal/builddefaults"
 )
+
+// hostedServerURL is CLIConfig's proto default for --server: the hosted API.
+const hostedServerURL = "https://api.reliantapi.com"
 
 // resolveWithArgs runs the real root command with the given global flags and
 // returns what a subcommand would resolve. Driving it through cobra (rather
 // than calling the resolver with hand-built flags) is the point: it exercises
 // the actual flag registration and the Changed bookkeeping precedence keys on.
+// The probe sits under `auth`, one of CLIConfig's subtrees, as every
+// server-facing command does.
 func resolveWithArgs(t *testing.T, args ...string) (*connection, error) {
 	t.Helper()
 
@@ -39,10 +43,14 @@ func resolveWithArgs(t *testing.T, args ...string) (*connection, error) {
 	)
 
 	root := NewRootCmd()
-	root.AddCommand(probeIn)
+	authCmd, _, err := root.Find([]string{"auth"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	authCmd.AddCommand(probeIn)
 	root.SetOut(&bytes.Buffer{})
 	root.SetErr(&bytes.Buffer{})
-	root.SetArgs(append([]string{"resolve-probe"}, args...))
+	root.SetArgs(append([]string{"auth", "resolve-probe"}, args...))
 	if err := root.Execute(); err != nil {
 		t.Fatalf("probe command failed: %v", err)
 	}
@@ -52,17 +60,17 @@ func resolveWithArgs(t *testing.T, args ...string) (*connection, error) {
 func TestResolveServerPrecedence(t *testing.T) {
 	const flagServerV = "http://localhost:9999"
 
-	t.Run("no flag, no env: the compiled-in default", func(t *testing.T) {
-		// builddefaults.ServerURL is the HOSTED endpoint: a binary built from
-		// this repo targets the hosted platform so `go install` works with no
-		// flags; loopback is what you opt INTO. See internal/builddefaults.
+	t.Run("no flag, no env: the build's default", func(t *testing.T) {
+		// The default is the HOSTED endpoint: a binary built from this repo
+		// targets the hosted platform so `go install` works with no flags;
+		// loopback is what you opt INTO. See proto/config/v1/cli_config.proto.
 		isolateCLI(t)
 		conn, err := resolveWithArgs(t)
 		if err != nil {
 			t.Fatalf("resolveServer: %v", err)
 		}
-		if conn.ServerURL != builddefaults.ServerURL || conn.ServerSource != sourceDefault {
-			t.Errorf("got %q (%v), want the compiled-in default", conn.ServerURL, conn.ServerSource)
+		if conn.ServerURL != hostedServerURL || conn.ServerSource != sourceDefault {
+			t.Errorf("got %q (%v), want the build's default", conn.ServerURL, conn.ServerSource)
 		}
 	})
 
@@ -110,7 +118,7 @@ func TestResolveServerPrecedence(t *testing.T) {
 		if err != nil {
 			t.Fatalf("resolveServer: %v", err)
 		}
-		if conn.ServerURL != builddefaults.ServerURL {
+		if conn.ServerURL != hostedServerURL {
 			t.Errorf("ServerURL = %q; a stored login must never select the server", conn.ServerURL)
 		}
 	})
@@ -153,6 +161,17 @@ func TestResolveGatewayPrecedence(t *testing.T) {
 		const want = "https://gateway-eu.reliantapi.com"
 		if conn.GatewayURL != want || conn.GatewaySource != sourceDerived {
 			t.Errorf("gateway = %q (%v), want %q derived from the resolved server", conn.GatewayURL, conn.GatewaySource, want)
+		}
+	})
+
+	t.Run("an explicitly empty --gateway derives from the server", func(t *testing.T) {
+		isolateCLI(t)
+		conn, err := resolveWithArgs(t, "--server", "https://eu.reliantapi.com", "--gateway", "")
+		if err != nil {
+			t.Fatalf("resolveServer: %v", err)
+		}
+		if conn.GatewayURL != "https://gateway-eu.reliantapi.com" || conn.GatewaySource != sourceDerived {
+			t.Errorf("gateway = %q (%v), want it derived from --server", conn.GatewayURL, conn.GatewaySource)
 		}
 	})
 
@@ -274,10 +293,14 @@ func TestResolveConnectionCredential(t *testing.T) {
 			return nil
 		}}
 		root := NewRootCmd()
-		root.AddCommand(p)
+		authCmd, _, err := root.Find([]string{"auth"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		authCmd.AddCommand(p)
 		root.SetOut(&bytes.Buffer{})
 		root.SetErr(&bytes.Buffer{})
-		root.SetArgs(append([]string{"probe"}, args...))
+		root.SetArgs(append([]string{"auth", "probe"}, args...))
 		if err := root.Execute(); err != nil {
 			t.Fatal(err)
 		}
@@ -300,6 +323,15 @@ func TestResolveConnectionCredential(t *testing.T) {
 		t.Setenv(envToken, "rlat_env")
 		conn, err := probe(t, "--server", server)
 		if err != nil || conn.Token != "rlat_env" || conn.TokenFrom != envToken {
+			t.Fatalf("got %+v %v", conn, err)
+		}
+	})
+
+	t.Run("RELIANT_TOKEN is trimmed", func(t *testing.T) {
+		isolateCLI(t)
+		t.Setenv(envToken, "  rlat_env \n")
+		conn, err := probe(t, "--server", server)
+		if err != nil || conn.Token != "rlat_env" {
 			t.Fatalf("got %+v %v", conn, err)
 		}
 	})

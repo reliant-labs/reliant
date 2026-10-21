@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=../../manifest/schema/manifest.schema.json
 # Twilio Programmable Messaging: SMS, MMS and WhatsApp. Authored from Twilio's
 # REST API reference (twilio.com/docs/messaging/api/message-resource,
 # /docs/phone-numbers/api/incomingphonenumber-resource) and its error catalog

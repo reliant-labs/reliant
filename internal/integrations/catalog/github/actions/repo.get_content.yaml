@@ -1,0 +1,91 @@
+# yaml-language-server: $schema=../../../manifest/schema/action.schema.json
+id: repo.get_content
+display_name: Read repository file or directory
+summary: Read a file's text, or list a directory, at a branch, tag or commit.
+description: >-
+  Read one path in a repository through GitHub, with no checkout. For a
+  file, content is its text. A binary file has binary true and no
+  content; a file over 1 MB has too_large true and no content. For a
+  directory, entries lists what it holds, one level deep (repo.get_tree
+  lists everything). Omit path for the repository root and ref for the
+  default branch. Results longer than about 30,000 characters are cut
+  short.
+keywords: [file, read, contents, source, code, directory, list, browse, open, cat]
+placement: server
+mutates: false
+tool:
+  expose: true
+params:
+  type: object
+  additionalProperties: false
+  required: [owner, repo]
+  properties:
+    owner: { $ref: ../schemas/owner.yaml }
+    repo: { $ref: ../schemas/repo.yaml }
+    path:
+      type: string
+      pattern: "^[^/]*[^/.][^/]*(/[^/]*[^/.][^/]*)*$"
+      maxLength: 4096
+      title: Path
+      description: >-
+        A file or directory from the repository root, with no leading
+        slash. Omit for the root.
+      examples: ["src/main.go"]
+    ref: { $ref: ../schemas/git_ref.yaml }
+    connection: { $ref: ../schemas/connection.yaml }
+request:
+  method: GET
+  path: /repos/{{ params.owner }}/{{ params.repo }}/contents/{{ params.?path.orValue('') }}
+  query_expr: '{?"ref": params.?ref}'
+  # A 1 MB file arrives base64-encoded inside JSON.
+  max_response_bytes: 5242880
+  errors: { $ref: ../schemas/github_errors.yaml }
+output:
+  # A directory answers with a list; anything else with one object whose
+  # `encoding` is base64 (a file's bytes), none (a file over 1 MB) or
+  # absent (a symlink or submodule).
+  select: >-
+    type(response) == list ?
+      {"type": "dir",
+       "path": params.?path.orValue(""),
+       "entries": response.map(e, {"name": e.name,
+                                   "path": e.path,
+                                   "type": e.type,
+                                   "size": e.?size.orValue(null)})} :
+      {"type": response.type,
+       "path": response.path,
+       "name": response.name,
+       "sha": response.?sha.orValue(null),
+       "size": response.?size.orValue(null),
+       "html_url": response.?html_url.orValue(null),
+       "content": response.?encoding.orValue('') == 'base64' ?
+         base64.decode(response.?content.orValue('')).text().orValue(null) : null,
+       "binary": response.?encoding.orValue('') == 'base64' &&
+         !base64.decode(response.?content.orValue('')).text().hasValue(),
+       "too_large": response.?encoding.orValue('') == 'none',
+       "target": response.?target.orValue(null),
+       "submodule_git_url": response.?submodule_git_url.orValue(null)}
+  schema:
+    type: object
+    properties:
+      type: { type: string, enum: [file, dir, symlink, submodule] }
+      path: { type: string }
+      name: { type: string, description: Absent for a directory. }
+      sha: { type: [string, "null"] }
+      size: { type: [integer, "null"], description: In bytes. }
+      html_url: { type: [string, "null"] }
+      content: { type: [string, "null"], description: "The file's text; null for a directory, a binary file, or a file over 1 MB." }
+      binary: { type: boolean, description: The file is not text, so content is null. }
+      too_large: { type: boolean, description: "The file is over 1 MB, which the contents API does not serve, so content is null." }
+      target: { type: [string, "null"], description: A symlink's target path. }
+      submodule_git_url: { type: [string, "null"] }
+      entries:
+        type: array
+        description: A directory's files and subdirectories.
+        items:
+          type: object
+          properties:
+            name: { type: string }
+            path: { type: string }
+            type: { type: string, enum: [file, dir, symlink, submodule] }
+            size: { type: [integer, "null"] }

@@ -1,0 +1,56 @@
+# Max turns without response - loop stops when max_turns reached without response tool
+#
+# The while condition includes max_turns enforcement:
+#   (outputs.completed != true || outputs.has_feedback == true)
+#     && (inputs.max_turns == 0 || iter.iteration < inputs.max_turns)
+#
+# With max_turns=3, the LLM never calls tools for 3 iterations
+# After iteration 2, iter.iteration=3, 3 < 3 = false → loop exits
+# completed is never set to true since response tool was never called
+name: max_turns_without_response
+description: Loop stops when max_turns reached and agent never called response tool
+inputs:
+  mode: auto
+  max_turns: 3
+  response_tool_name: submit_response
+events:
+  # Iteration 0: LLM responds without tools, gets reminded
+  - node: agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "I'm thinking about how to approach this."
+      response_text: "I'm thinking about how to approach this."
+      tool_calls: []
+  # remind_response triggers because no tool calls
+
+  # Iteration 1: LLM still doesn't use tools
+  - node: agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "Let me analyze the problem more."
+      response_text: "Let me analyze the problem more."
+      tool_calls: []
+  # remind_response triggers again
+
+  # Iteration 2: LLM still doesn't use response tool
+  - node: agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "I need more time to think."
+      response_text: "I need more time to think."
+      tool_calls: []
+  # remind_response triggers again
+  # Ask fires at iteration 3 (3 >= 3), loop asks/exits
+  # Note: completed is never set to true since response tool was never called
+expect:
+  outcome: completed
+  reached:
+    - agent_loop
+    - agent_loop.call_llm
+    - agent_loop.remind_response
+  not_reached:
+    - agent_loop.execute_tools
+    - agent_loop.approval

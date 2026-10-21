@@ -1,0 +1,68 @@
+name: no_custom_integrations
+description: >
+  Scoping determines no custom integrations are needed.
+  Router skips build_integrations and goes directly to build_workflow.
+  Workflow is built and passes review.
+
+events:
+  # scope_conversation EXECUTES: it is a builtin://scope-conversation ref whose
+  # own `conversation` node is a builtin://agent ref, so the qualified id below
+  # makes BOTH transparent and compiles scope-conversation's prompt CEL
+  # (question_areas, plan_filename, max_questions, max_turns).
+  - node: scope_conversation.conversation.agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: |
+            I've written WORKFLOW_PLAN.md. Simple workflow with no custom integrations —
+            just agents and built-in tools for a code review pipeline.
+            All integrations are off-the-shelf (GitHub MCP server, standard tools).
+      response_text: |
+            I've written WORKFLOW_PLAN.md. Simple workflow with no custom integrations —
+            just agents and built-in tools for a code review pipeline.
+            All integrations are off-the-shelf (GitHub MCP server, standard tools).
+      tool_calls: []
+  - node: integration_router
+    output:
+      selected_node: build_workflow
+      reasoning: "No custom integrations identified in the plan. Only off-the-shelf tools needed."
+
+  # build_workflow EXECUTES its get-it-right body rather than standing in for it, so the
+  # loop's own iteration count and verdict are derived, not asserted literals.
+  - node: build_workflow.attempt.implement.agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "Implementation attempt for build_workflow."
+      response_text: "Implementation attempt for build_workflow."
+      tool_calls: []
+  - node: build_workflow.attempt.review.agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: ""
+      response_text: ""
+      tool_calls:
+        - id: call_submit_evaluation
+          name: submit_evaluation
+          input:
+            grade: pass
+            strategy: "pass"
+            feedback: "Workflow is complete. Scenarios cover the main paths. Threading is correct."
+  - node: build_workflow.attempt.review.agent_loop.execute_tools
+    output:
+      response_data:
+        submit_evaluation:
+          grade: pass
+          strategy: "pass"
+          feedback: "Workflow is complete. Scenarios cover the main paths. Threading is correct."
+      tool_results: []
+      thread_token_count: 100
+expect:
+  outcome: completed
+  reached:
+    - scope_conversation
+    - integration_router
+    - build_workflow
+  not_reached:
+    - build_integrations

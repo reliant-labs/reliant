@@ -63,6 +63,7 @@ func sourceToProto(t *core.Trigger, out *reliantv1.Trigger) error {
 			Integration:  cfg.Integration,
 			Events:       cfg.Events,
 			Match:        cfg.Match,
+			MatchInput:   cfg.MatchInput,
 			PollInterval: cfg.PollInterval,
 		}}
 	case core.TriggerKindWorkflowEvent:

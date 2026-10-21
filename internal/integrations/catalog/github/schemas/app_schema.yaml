@@ -1,0 +1,1 @@
+{ type: object, properties: { slug: { type: string }, name: { type: string } } }

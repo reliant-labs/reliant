@@ -34,6 +34,113 @@ message IntegrationManifest {
   // Keywords are extra search terms for the catalog index: product names and
   // synonyms ("email" for gmail). Lower-case words, [a-z0-9][a-z0-9_.-]*.
   repeated string keywords = 10;
+  // Types are the value types this integration defines (`github.repository`):
+  // what a workflow input or a trigger attribute can be typed as. Referenced
+  // as `<id>.<type id>`.
+  repeated TypeSpec types = 11;
+}
+
+// TypeSpec is a value type an integration defines. A workflow input of this
+// type holds plain JSON values matching `value`, and the options source lets
+// a UI offer the values the caller can actually choose from.
+message TypeSpec {
+  // Id is unique within the manifest and a different namespace from action
+  // and trigger ids. Lower-case, [a-z][a-z0-9_]*. The type's ref is
+  // `<integration id>.<id>`.
+  string id = 1;
+  string display_name = 2;
+  string description = 3;
+  // Value is the JSON Schema of ONE value; validation and CEL typing use it.
+  // Normally a string with a pattern.
+  google.protobuf.Struct value = 4;
+  // Options says where a picker gets candidate values. Unset means the type
+  // has no option list (free entry only).
+  TypeOptionsSpec options = 5;
+  // FreeText allows a value that is not among the options (a label that does
+  // not exist yet).
+  bool free_text = 6;
+  // Keywords are extra search terms for the catalog index.
+  repeated string keywords = 7;
+  // Summary is one line for search results and pickers.
+  string summary = 8;
+}
+
+// TypeOptionsSpec is how a type's candidate values are listed: a read-only
+// list action of the same integration, run as the caller, and CEL projections
+// from each item of its output to an option. The CEL expressions see `item`
+// (one output item) and `context` (acting_identity: "owner" or "app").
+message TypeOptionsSpec {
+  // Action is the id of a list action in this manifest. It must not mutate
+  // and must be placeable on the server.
+  string action = 1;
+  // Params are templates for the action's parameters, keyed by param name.
+  // They may read `scope.<key>`, `query` and `page_token`.
+  map<string, string> params = 2;
+  // Items is CEL over the action's output yielding the list of items. Empty
+  // means the output itself is the list.
+  string items = 3;
+  // Value, Label, Description and Group are CEL over `item`. Value is the
+  // stored value and is required; Label defaults to Value.
+  string value = 4;
+  string label = 5;
+  string description = 6;
+  string group = 7;
+  // Annotations are extra facts for the UI and for warnings, name -> CEL over
+  // `item`.
+  map<string, string> annotations = 8;
+  // Warnings are checked per option; each that holds is shown with the option.
+  repeated TypeWarningSpec warnings = 9;
+  // Search says how a query narrows the list: "client" (filter the projected
+  // labels) or "param:<name>" (pass the query as that action param). Empty is
+  // "client".
+  string search = 10;
+  // Paging says how to page an action that pages itself. Unset means the
+  // action returns the whole list and the caller pages it.
+  TypeOptionsPaging paging = 11;
+  // Scope names the other typed values this list depends on, by scope key
+  // (visible to the templates as `scope.<key>`).
+  map<string, TypeScopeSpec> scope = 12;
+  // Resolve maps a stored value back to its current display (an id to a
+  // login), for values that are not in the current options.
+  TypeResolveSpec resolve = 13;
+}
+
+// TypeWarningSpec is a condition on an option, with the message shown when it
+// holds.
+message TypeWarningSpec {
+  // When is CEL over `item`, `option` (the projection so far, with
+  // annotations) and `context`, yielding a bool.
+  string when = 1;
+  string message = 2;
+}
+
+// TypeOptionsPaging is the upstream paging contract of an options action.
+message TypeOptionsPaging {
+  // NextTokenPath is a dotted path into the action's output holding the token
+  // for the next page; absent or empty means the last page.
+  string next_token_path = 1;
+  // TokenParam is the action param that receives the token.
+  string token_param = 2;
+}
+
+// TypeScopeSpec is one dependency of a type's options on another typed value.
+message TypeScopeSpec {
+  // Type is the type ref the scope value has: `<id>` within this manifest or
+  // a qualified `<integration>.<id>`.
+  string type = 1;
+  // Required means the options cannot be listed until the scope is supplied.
+  bool required = 2;
+}
+
+// TypeResolveSpec labels stored values.
+message TypeResolveSpec {
+  // Action is a read-only action of this manifest that looks one value up.
+  string action = 1;
+  // Params are templates; they may read `value`.
+  map<string, string> params = 2;
+  // Label is CEL over `item`, the looked-up object.
+  string label = 3;
+  string description = 4;
 }
 
 // ConnectionSpec says how requests are authenticated and where they may go.
@@ -429,4 +536,8 @@ message TriggerAttribute {
   string description = 2;
   // Example is a representative value for an editor's placeholder.
   string example = 3;
+  // Type is the value type of the attribute: a type id of this manifest, or a
+  // qualified `<integration>.<id>`. Empty means a plain string. It is what an
+  // IntegrationSource's match_input checks an input's type against.
+  string type = 4;
 }

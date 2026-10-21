@@ -21,14 +21,10 @@ import (
 
 // isolateLogging restores the process logger and this package's globals after
 // a test that calls a Setup function, so no test inherits another's handler.
-// It also clears every variable that asks for DEBUG, so a developer's shell
-// cannot make install emit the prod refusal WARN into a test's output.
-// (RELIANT_LOG_LEVEL reaches this package only through Settings.)
+// (RELIANT_LOG_LEVEL, the one variable that asks for DEBUG, reaches this
+// package only through Settings, so no shell can leak a level into a test.)
 func isolateLogging(t *testing.T) {
 	t.Helper()
-	for _, name := range []string{"DEBUG", "RELIANT_DEV_DEBUG"} {
-		t.Setenv(name, "")
-	}
 	previousDefault := slog.Default()
 	previousOutput := DefaultOutput
 	previousActive := activeLogger

@@ -27,7 +27,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { Cpu, Wallet } from "lucide-react";
-import { remainingHeadline } from "@/components/Billing/daemonUsage";
+import { overageSmallDaemonSeconds, remainingHeadline } from "@/components/Billing/daemonUsage";
 import {
   useComputeSubscription,
   useComputeUsage,
@@ -161,8 +161,7 @@ export function MobileBillingScreen({ onBack }: { onBack: () => void }) {
       // null, not "No compute plan": absence is a different state from a plan
       // whose detail failed to load, and the two get different copy.
       planName: plan?.name ?? null,
-      includedHours:
-        d.includedMinutes < 0 ? -1 : Math.round(d.includedMinutes / 60),
+      includedHours: d.includedSmallDaemonHours,
       // The screenshot's `0 h` state. On a phone a bare zero is MORE alarming,
       // not less — there is no surrounding detail to contradict it.
       detailUnavailable: isPlanDetailUnavailable(plan),
@@ -170,9 +169,9 @@ export function MobileBillingScreen({ onBack }: { onBack: () => void }) {
   }, [subscription]);
 
   const usageUi = useMemo(() => {
-    const includedMinutes = usage?.includedMinutes ?? 0;
-    const usedMinutes = usage?.usedMinutes ?? 0;
-    // A stubbed or unmeasurable period answers 200 with used_minutes = 0, so
+    const included = Number(usage?.includedSmallDaemonSeconds ?? 0);
+    const used = Number(usage?.usedSmallDaemonSeconds ?? 0);
+    // A stubbed or unmeasurable period answers 200 with zeros, so
     // "ran nothing" and "we didn't measure" arrive identical. Rendering the
     // second as "0.0 h used" told a user they had consumed nothing while the
     // daemon start gate was refusing them against real metered usage — and a
@@ -181,16 +180,15 @@ export function MobileBillingScreen({ onBack }: { onBack: () => void }) {
     const measured = !!usage && usage.usageMeasured;
     return {
       measured,
-      // Per-daemon billing (design §6.2): the same headline as desktop, from
-      // the same server fields — and only when the server sent them
-      // (measured_through set). Null when unmeasured, never "0.0 … left".
-      headline: usage?.measuredThrough ? remainingHeadline(usage) : null,
-      includedHours: includedMinutes / 60,
-      usedHours: usedMinutes / 60,
+      // The same headline as desktop, from the same server fields. Null when
+      // unmeasured, never "0.0 … left".
+      headline: measured ? remainingHeadline(usage) : null,
+      includedHours: included / 3600,
+      usedHours: used / 3600,
       capacity: deriveComputeCapacity({
-        usedMinutes,
-        includedMinutes,
-        overageMinutes: usage?.overageMinutes ?? 0,
+        used,
+        included,
+        overage: usage ? overageSmallDaemonSeconds(usage) : 0,
       }),
     };
   }, [usage]);
@@ -231,8 +229,6 @@ export function MobileBillingScreen({ onBack }: { onBack: () => void }) {
             planId: plan.id,
             label: plan.name,
             monthlyPriceCents: d.monthlyPriceCents,
-            includedMinutes: d.includedMinutes,
-            overageCentsPerMinute: d.overageCentsPerMinute,
           },
         ];
       }),
@@ -355,9 +351,9 @@ export function MobileBillingScreen({ onBack }: { onBack: () => void }) {
                 // empty track is the same claim in another form.
                 <div className="mt-3 text-xs text-muted-foreground">
                   <p>Usage unavailable for this period.</p>
-                  {planUi.includedHours >= 0 && (
+                  {planUi.includedHours > 0 && (
                     <p className="mt-0.5">
-                      Your plan includes {usageUi.includedHours.toFixed(0)} h.
+                      Your plan includes {planUi.includedHours} h.
                     </p>
                   )}
                 </div>
@@ -376,9 +372,7 @@ export function MobileBillingScreen({ onBack }: { onBack: () => void }) {
                       {usageUi.usedHours.toFixed(1)} h used
                     </span>
                     <span className="text-muted-foreground">
-                      {planUi.includedHours < 0
-                        ? "unlimited"
-                        : `${usageUi.includedHours.toFixed(0)} h included`}
+                      {`${usageUi.includedHours.toFixed(0)} h included`}
                     </span>
                   </div>
                   {/* `bg-primary/10` track, not `bg-muted` — in dark mode

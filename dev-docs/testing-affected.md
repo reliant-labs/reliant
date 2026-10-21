@@ -72,6 +72,32 @@ repo path (`filepath.Join(root, "deploy", "kcl")`) and selects those packages
 when that path changes. It over-approximates on purpose: a test run for no
 reason costs seconds, a test wrongly skipped costs a red main.
 
+What counts as naming a path (`scanSources`, `literalCandidates` in
+`tools/test-affected/graph.go`):
+
+- **A `filepath.Join` / `path.Join` is judged by its anchor**, the first
+  argument, because that is the directory the literals after it are relative to
+  (package string constants count as literals):
+  - joined from the first argument on, the path is relative to the package
+    directory, where `go test` runs: `filepath.Join("..", "..", "web", "src")` in
+    `internal/grpc` names `web/src`;
+  - joined onto the repo root, it names that path under the root:
+    `filepath.Join(repoRoot(t), "scripts", name)` names `scripts/`. The root is
+    whatever the package's sources derive from `os.Getwd()`,
+    `runtime.Caller`, `filepath.Abs("<relative>")`, a `".."`,
+    `git rev-parse --show-toplevel`, or a function, variable or struct field
+    that returns or holds one of those (`rootfacts.go`);
+  - joined onto anything else (`t.TempDir()`, a fixture's checkout, a parameter)
+    it names a directory outside the repo and is **no read at all**:
+    `filepath.Join(ws, "web")` builds a fixture's `web` checkout, not a read of
+    `web/`. Before this rule such fixtures made every web-only diff run their
+    Go packages.
+- **Any other literal is judged alone**: a multi-segment one that is a tracked
+  file or directory (`"deploy/kcl/main.k"` in a table) is a read wherever it is
+  used, and a bare word (`"web"`, `"db"`) only when it is a file at the repo
+  root (`"go.mod"`) or the lone literal argument of another path call
+  (`readTree(root, "deploy")`).
+
 **Web.** vitest's own `related` mode builds the same graph by transforming every
 test file: `vitest list --changed` took 65 seconds of wall time and 26 seconds of
 CPU just to name the files, before running any, on a loaded machine.
@@ -91,6 +117,10 @@ cannot see).
 
 - A Go test that builds a path at run time from non-literal parts reads a file
   the scan cannot name. It still runs when its own package or a dependency changes.
+  So does one that joins literals onto a root it was handed as a parameter
+  (`func readUnder(root string) { filepath.Join(root, "web") }`): a parameter
+  is not traced back to its callers, so name the path in the caller, or join it
+  onto `repoRoot(t)` where it is read.
 - A web test that reads a file through a variable path. The marker scan
   (`readFileSync`, `readdirSync`, `process.cwd()`, `__dirname`) selects any test
   that reads files and names the changed file as a literal.
@@ -145,22 +175,24 @@ waits for. Nothing a PR skips is deleted; it runs on the next push to main.
   `gh workflow run pr-ci.yml --ref <branch>`.
 - **A red main is surfaced.** `gate-health.yml` audits main's newest PR CI run
   after every run on main, and keeps one issue labelled `ci:main-red` open while
-  it is red. It also fails when main has no `Backend (Go, full)` job.
+  it is red. It also fails unless every `Backend (Go, full) N/M` shard, 1 to M,
+  ran and passed on main.
 - **The tiers cannot silently merge.** The job name carries the tier, so the two
   have separate check histories. `TestCITestTierReachedGoTest`
   (`tools/test-affected/ci_tier_test.go`) fails when the job's declared tier
   (`RELIANT_TEST_TIER`) disagrees with whether `-short` reached `go test`.
-- **The Go tests run in up to 4 shards** (`Backend (Go, short) 1/4` ... `4/4`);
-  `Backend (Go, short)` / `Backend (Go, full)` is the one check that passes only
-  when every shard did (and, on a PR that reaches no Go package, when none
-  ran). `go run ./tools/test-affected shard -index K -total N` assigns packages
-  by their measured duration in `tools/test-affected/go-test-weights.tsv` and
-  lists the slowest first. The assignment is made over EVERY package and then
-  narrowed to the PR's selection, so a PR's shard K holds only packages main's
-  shard K holds (main's per-shard build cache is a hit), and a shard left
-  empty is not launched. Every package runs in exactly one shard whatever the
-  weights say; a stale weights file only costs balance. Refresh it when a
-  shard runs much longer than the others: `gh run view <run-id> --log | go run
+- **The Go tests run in up to 4 shards** (`Backend (Go, short) 1/2`, ...).
+  `go list ./... | go run ./tools/test-affected shard` prints the matrix: as
+  few shards as keep each under its weight target (one for a PR that reaches a
+  handful of packages, four for the whole module), balanced by measured
+  duration in `tools/test-affected/go-test-weights.tsv`, slowest first. Every
+  package runs in exactly one shard whatever the weights say; a stale weights
+  file only costs balance. `CI result` fails when a shard did not pass (and on
+  main when none ran). Every Go job restores ONE build cache, which the
+  `Generated code is up to date` job produces on main by compiling every test
+  binary and trimming what it did not use: the repository's cache budget is
+  10 GB, and per-shard caches did not fit it. Refresh the weights when a shard
+  runs much longer than the others: `gh run view <run-id> --log | go run
   ./tools/test-affected weights > tools/test-affected/go-test-weights.tsv`.
 - **Other jobs**: `Lint (forge)` (`forge lint --no-fix` at the pinned forge,
   with forge's pinned golangci-lint and main's golangci-lint analysis cache;

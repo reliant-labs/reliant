@@ -226,7 +226,7 @@ func TestParallelCompete_UseWinnerWritesOnlyInsideTheProject(t *testing.T) {
 	s := newSandbox(t)
 
 	wf := loadBuiltin(t, "parallel-compete")
-	sc := findScenario(t, loadScenarios(t, "../../builtin/testdata/parallel-compete_scenarios.yaml"), "parallel_compete_use_winner")
+	sc := findScenario(t, loadScenarios(t, "parallel-compete"), "parallel_compete_use_winner")
 	// The chat's checkout, as the launcher injects it.
 	sc.Inputs = map[string]interface{}{"project_path": s.project}
 	// create_worktree's outputs point at the sandbox's real candidates.

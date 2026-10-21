@@ -1,0 +1,25 @@
+# The other half of the contract: a turn that ended CLEANLY with no tool calls
+# must still exit after one iteration. Without this, "continue on truncated"
+# could be satisfied by a loop that simply never exits, and the scenario above
+# would pass for the wrong reason.
+name: complete_turn_exits_loop
+description: A cleanly finished turn with no tool calls exits the loop after one iteration
+inputs:
+  mode: auto
+events:
+  - node: agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "All done."
+      response_text: "All done."
+      tool_calls: []
+      stop_reason: done
+expect:
+  outcome: completed
+  reached:
+    - agent_loop
+    - agent_loop.call_llm
+  node_outputs:
+    agent_loop:
+      _iterations: 1

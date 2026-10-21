@@ -204,7 +204,6 @@ func (c *parsedConfigCache) removeLocked(projectID string) {
 // of MB a re-parse costs.
 func (c *Config) shareableCopy() *Config {
 	out := *c
-	out.ContextPaths = slices.Clone(c.ContextPaths)
 	// An MCP server's own slices and map are what a caller edits (append an
 	// arg, set a header), so they are copied too, not just the outer map.
 	if c.MCPServers != nil {

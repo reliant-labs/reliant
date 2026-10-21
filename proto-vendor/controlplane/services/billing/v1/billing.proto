@@ -205,9 +205,6 @@ service BillingService {
   rpc GetUsageSummary(GetUsageSummaryRequest) returns (GetUsageSummaryResponse) {
     option (forge.v1.method) = {auth_required: true};
   }
-  rpc GetComputeUsage(GetComputeUsageRequest) returns (GetComputeUsageResponse) {
-    option (forge.v1.method) = {auth_required: true};
-  }
   rpc GetInvoicePreview(GetInvoicePreviewRequest) returns (GetInvoicePreviewResponse) {
     option (forge.v1.method) = {auth_required: true};
   }
@@ -430,10 +427,15 @@ message RedeemCouponResponse {
   RedeemedCouponKind kind = 4;
   // compute_minutes granted. COMPUTE_MINUTES only.
   int64 compute_minutes = 5;
-  // new_compute_minutes_remaining is the org's total unspent granted compute
-  // minutes AFTER this redemption (grants stack), so the caller can update its
-  // display without a second round-trip. COMPUTE_MINUTES only.
-  int64 new_compute_minutes_remaining = 6;
+  // 6 was new_compute_minutes_remaining: the balance is now reported in the
+  // unit the drain spends it in.
+  reserved 6;
+  reserved "new_compute_minutes_remaining";
+  // new_granted_small_daemon_seconds_remaining is the org's total unspent
+  // coupon grant balance AFTER this redemption (grants stack), in
+  // small-daemon-seconds, so the caller can update its display without a
+  // second round-trip. COMPUTE_MINUTES only.
+  int64 new_granted_small_daemon_seconds_remaining = 7;
 }
 
 message CreateCurrentUserBillingPortalSessionRequest {
@@ -456,27 +458,6 @@ message GetUsageSummaryRequest {
 
 message GetUsageSummaryResponse {
   repeated UsageSummary summaries = 1;
-}
-
-// GetComputeUsage returns daemon compute usage for the current billing period.
-message GetComputeUsageRequest {
-  string org_id = 1;
-}
-
-message ComputeUsageBySizeTier {
-  string size_tier = 1;
-  double total_minutes = 2;
-  double estimated_cost_cents = 3;
-}
-
-message GetComputeUsageResponse {
-  double total_minutes = 1;
-  int32 included_minutes = 2;
-  double overage_minutes = 3;
-  double estimated_overage_cost_cents = 4;
-  repeated ComputeUsageBySizeTier per_size_breakdown = 5;
-  google.protobuf.Timestamp period_start = 6;
-  google.protobuf.Timestamp period_end = 7;
 }
 
 message GetCurrentUserReliantStateRequest {}
@@ -743,78 +724,42 @@ message ConfirmCurrentUserWalletPaymentMethodResponse {
   SavedPaymentMethod payment_method = 1;
 }
 
-message ComputeUsageByWorkspace {
-  string workspace_id = 1;
-  string workspace_name = 2;
-  string size = 3;
-  double minutes = 4;
-  double overage_minutes = 5;
-}
-
-message ComputeUsageByDay {
-  google.protobuf.Timestamp day = 1;
-  double minutes = 2;
-}
-
 message GetCurrentUserComputeUsageRequest {
   optional string period = 1; // "current" (default) | "previous"
 }
 
+// Every metered figure is read from the one Balance every gate reads
+// (daemonmeter.Balance), so the page and the start gate cannot disagree.
+// Only the CURRENT period is measured: Balance answers "now", so a request for
+// the previous period returns the period bounds with usage_measured = false.
+//
+// Public contract: exported verbatim to reliant (see proto/public-api.txt).
+// Never renumber — reserve removed tags.
 message GetCurrentUserComputeUsageResponse {
-  int32 included_minutes = 1;
-  double used_minutes = 2;
-  double overage_minutes = 3;
+  // 1-3, 7-9 were the minute model's included_minutes, used_minutes,
+  // overage_minutes, by_workspace, by_day and granted_minutes_remaining;
+  // the small-daemon-second fields below replace them.
+  reserved 1, 2, 3, 7, 8, 9;
+  reserved "included_minutes", "used_minutes", "overage_minutes", "by_workspace", "by_day", "granted_minutes_remaining";
+
+  // Compute overage so far this period, in cents. Display-only (a double);
+  // by_size carries the exact per-size figures.
   double estimated_overage_cost_cents = 4;
   google.protobuf.Timestamp period_start = 5;
   google.protobuf.Timestamp period_end = 6;
-  repeated ComputeUsageByWorkspace by_workspace = 7;
-  repeated ComputeUsageByDay by_day = 8;
 
-  // granted_minutes_remaining is unspent compute minutes from redeemed
-  // compute coupons.
-  //
-  // Reported ALONGSIDE included_minutes rather than folded into it because the
-  // two behave differently: included minutes refill every billing period,
-  // whereas a grant is a one-time bucket that depletes and does not renew.
-  // Adding them would misrepresent next month's allowance.
-  //
-  // Grants are spent AFTER included minutes and BEFORE overage.
-  //
-  // usage_measured distinguishes "this org genuinely ran nothing" from "the
-  // server did not measure". Both previously arrived as used_minutes = 0 on a
-  // 200 response, so the client could not tell them apart and rendered the
-  // unmeasured case as a confident "0.0 h used" — the same unknown-as-known
-  // defect the plan-detail guard already exists to prevent, one field over,
-  // and in the direction that costs money: a user was told they had consumed
-  // nothing while the daemon start gate refused them against real metered
-  // usage.
-  //
-  // False means used_minutes, overage_minutes, estimated_overage_cost_cents,
-  // by_workspace and by_day carry NO information and must not be rendered as
-  // values. included_minutes and granted_minutes_remaining are unaffected —
-  // they come from the plan and the grant ledger, not from metering.
-  //
-  // Public contract: exported verbatim to reliant (see proto/public-api.txt).
-  // Never renumber — reserve removed tags.
-  int64 granted_minutes_remaining = 9;
-
-  // Whether the metered fields above carry a measurement. See the note on
-  // granted_minutes_remaining for why this is not inferable from a zero.
+  // Whether the metered fields carry a measurement. usage_measured
+  // distinguishes "this org genuinely ran nothing" from "the server did not
+  // measure"; both would otherwise arrive as zeros on a 200 response, and the
+  // client would render the unmeasured case as a confident "0.0 h used".
   //
   // Defaults to FALSE, deliberately: proto3 gives an older or partial server
   // the safe reading. A server that cannot measure says nothing and the
-  // client withholds, rather than a missing field defaulting to "measured"
-  // and reinstating the exact bug this field exists to close.
-  bool usage_measured = 10;
-
-  // ── Per-daemon billing (design §6.1), ALONGSIDE the fields above ────────
+  // client withholds, rather than a missing field defaulting to "measured".
   //
-  // These describe the model IN FORCE for this period: the small-daemon-
-  // second (SDS) model after the cutover, and the old minute model (×60)
-  // before it, read from the one Balance every gate reads — so the page and
-  // the start gate cannot disagree. The fields above keep their meaning until
-  // task M retires them. As with them, usage_measured = false means the
-  // metered values carry no information.
+  // False means every metered field below carries NO information and must
+  // not be rendered as a value.
+  bool usage_measured = 10;
 
   // The plan allowance for this period, in small-daemon-seconds.
   int64 included_small_daemon_seconds = 11;
@@ -822,7 +767,10 @@ message GetCurrentUserComputeUsageResponse {
   int64 used_small_daemon_seconds = 12;
   // max(0, included − used). Never negative.
   int64 remaining_small_daemon_seconds = 13;
-  // One-time coupon grant still unspent, in small-daemon-seconds.
+  // One-time coupon grant still unspent, in small-daemon-seconds. Reported
+  // alongside the allowance rather than folded into it: the allowance
+  // refills every period, a grant depletes once. Spent after the allowance
+  // and before overage.
   int64 granted_small_daemon_seconds_remaining = 14;
   // Sum of the multipliers of the daemons running right now (the burn rate
   // in SDS per second). Zero when nothing runs.
@@ -901,7 +849,7 @@ enum ComputeIneligibleReason {
   COMPUTE_INELIGIBLE_REASON_UNSPECIFIED = 0;
   // The caller is eligible; no reason applies.
   COMPUTE_INELIGIBLE_REASON_NONE = 1;
-  // Never had a compute plan, and holds no granted minutes.
+  // Never had a compute plan, and holds no coupon grant.
   COMPUTE_INELIGIBLE_REASON_NO_SUBSCRIPTION = 3;
   // Signed in, but no organization resolved yet (mid-provisioning).
   COMPUTE_INELIGIBLE_REASON_NO_ORGANIZATION = 4;
@@ -912,7 +860,7 @@ message GetCurrentUserComputeEligibilityRequest {}
 message GetCurrentUserComputeEligibilityResponse {
   // eligible is the single fact a caller needs to enable or disable a
   // "start a machine" control. True when the org has an active compute
-  // subscription OR unspent granted minutes from a redeemed compute coupon.
+  // subscription OR an unspent grant from a redeemed compute coupon.
   bool eligible = 1;
 
   // reason explains an ineligible answer so the UI can offer the right remedy.
@@ -922,10 +870,10 @@ message GetCurrentUserComputeEligibilityResponse {
   // subscription is what makes the caller eligible.
   bool has_active_subscription = 3;
 
-  // granted_minutes_remaining is unspent compute minutes from redeemed
-  // compute coupons. Non-zero alone is enough to make a caller eligible, which
-  // is what lets a coupon unblock someone with no subscription at all.
-  int64 granted_minutes_remaining = 4;
+  // 4 was granted_minutes_remaining; the grant balance is now reported in
+  // small-daemon-seconds (granted_small_daemon_seconds_remaining).
+  reserved 4;
+  reserved "granted_minutes_remaining";
 
   // plan_name of the active compute subscription, for display. Empty when
   // there is none.
@@ -951,6 +899,12 @@ message GetCurrentUserComputeEligibilityResponse {
   // same plan as allowed_daemon_sizes and already capped at the platform
   // ceiling. Zero means growth is off for this caller.
   int32 max_daemon_storage_gib = 7;
+
+  // granted_small_daemon_seconds_remaining is the unspent balance of redeemed
+  // compute coupons, in small-daemon-seconds. Non-zero alone is enough to
+  // make a caller eligible, which is what lets a coupon unblock someone with
+  // no subscription at all.
+  int64 granted_small_daemon_seconds_remaining = 8;
 }
 
 // === Invoice preview ===

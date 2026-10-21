@@ -11,7 +11,7 @@ import { describe, expect, it } from "vitest";
 import type { RunSummary } from "@/api/run-grpc";
 import type { Trigger, TriggerHealthStatusKey } from "@/api/trigger-grpc";
 import type { InvalidWorkflow, WorkflowResponse } from "@/api/workflow-grpc";
-import { automationsSummary, libraryView } from "../library/libraryView";
+import { automationsDeletedWith, automationsSummary, deletedAutomationsSentence, libraryView } from "../library/libraryView";
 
 describe("automationsSummary (the Library's Automations column)", () => {
   it("is null for none — the cell's dash under a labelled column", () => {
@@ -195,5 +195,38 @@ describe("libraryView", () => {
     expect(libraryView({ workflows, invalid, triggers: [], q: "zzz" }).noMatches).toBe(true);
     expect(libraryView({ workflows, invalid: [], triggers: [], source: "failed" }).noMatches).toBe(true);
     expect(libraryView({ workflows: [], invalid: [], triggers: [], q: "zzz" }).noMatches).toBe(false);
+  });
+});
+
+describe("automationsDeletedWith (what Delete takes along)", () => {
+  const trigger = (id: string, workflow: string, projectId = "p1") =>
+    ({ id, name: `Auto ${id}`, workflow, projectId }) as unknown as Trigger;
+
+  it("matches a user workflow by the slug every ref spelling resolves to, across projects", () => {
+    const triggers = [
+      trigger("a", "pr-review"),
+      trigger("b", "project://PR Review"),
+      trigger("c", "pr_review", "p2"),
+      trigger("d", "issue-worker"),
+      trigger("e", "builtin://pr-review"),
+    ];
+    expect(automationsDeletedWith({ name: "pr-review" }, triggers).map((t) => t.id)).toEqual(["a", "b", "c"]);
+  });
+
+  it("is empty for a workflow nothing runs", () => {
+    expect(automationsDeletedWith({ name: "pr-review" }, [trigger("d", "issue-worker")])).toEqual([]);
+  });
+});
+
+describe("deletedAutomationsSentence", () => {
+  const named = (n: number) => Array.from({ length: n }, (_, i) => ({ name: `A${i + 1}` }) as unknown as Trigger);
+
+  it("says nothing without automations", () => expect(deletedAutomationsSentence([])).toBe(""));
+  it("counts and names them", () => {
+    expect(deletedAutomationsSentence(named(1))).toBe("Also deletes its 1 automation: “A1”.");
+    expect(deletedAutomationsSentence(named(2))).toBe("Also deletes its 2 automations: “A1”, “A2”.");
+  });
+  it("abbreviates a long list", () => {
+    expect(deletedAutomationsSentence(named(5))).toBe("Also deletes its 5 automations: “A1”, “A2”, “A3”, and 2 more.");
   });
 });

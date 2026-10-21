@@ -1,0 +1,1 @@
+{ name: action, description: The webhook action., example: opened }

@@ -222,21 +222,22 @@ describe('BillingSection', () => {
     ).toBeInTheDocument()
   })
 
-  // Redeemed compute-coupon minutes. These are reported ALONGSIDE the plan's
-  // included minutes, never summed into them: included minutes refill every
+  // Redeemed compute-coupon time. It is reported ALONGSIDE the plan's
+  // included hours, never summed into them: included hours refill every
   // billing period, a grant depletes once and does not renew.
-  describe('coupon (granted) minutes', () => {
-    const usage = (grantedMinutesRemaining: number) => ({
-      includedMinutes: 600,
-      usedMinutes: 60,
-      overageMinutes: 0,
+  describe('coupon (granted) hours', () => {
+    const usage = (grantedMinutes: number) => ({
+      includedSmallDaemonSeconds: 36000,
+      usedSmallDaemonSeconds: 3600,
+      remainingSmallDaemonSeconds: 32400 + grantedMinutes * 60,
+      runningMultiplier: 0,
       estimatedOverageCostCents: 0,
-      byWorkspace: [],
-      byDay: [],
-      grantedMinutesRemaining,
+      bySize: [],
+      grantedSmallDaemonSecondsRemaining: grantedMinutes * 60,
+      usageMeasured: true,
     })
 
-    it('shows remaining coupon minutes, with hours, on the overview tab', () => {
+    it('shows remaining coupon hours on the overview tab', () => {
       usageState.current = usage(120)
       renderSection()
 
@@ -246,7 +247,7 @@ describe('BillingSection', () => {
       expect(screen.getByText(/does not renew/i)).toBeInTheDocument()
     })
 
-    it('shows remaining coupon minutes as its own stat on the usage tab', () => {
+    it('shows remaining coupon hours as its own stat on the usage tab', () => {
       usageState.current = usage(90)
       renderSection()
 
@@ -262,11 +263,11 @@ describe('BillingSection', () => {
       usageState.current = usage(0)
       renderSection()
 
-      expect(screen.queryByText(/coupon minutes/i)).not.toBeInTheDocument()
+      expect(screen.queryByText(/coupon hours/i)).not.toBeInTheDocument()
 
       fireEvent.click(screen.getByRole('tab', { name: /usage & invoices/i }))
 
-      expect(screen.queryByText(/coupon minutes/i)).not.toBeInTheDocument()
+      expect(screen.queryByText(/coupon hours/i)).not.toBeInTheDocument()
     })
   })
 
@@ -306,7 +307,7 @@ describe('BillingSection', () => {
         newBalanceCents: 2500,
         kind: RedeemedCouponKind.WALLET_CREDIT,
         computeMinutes: 0,
-        newComputeMinutesRemaining: 0,
+        newGrantedSmallDaemonSecondsRemaining: 0,
       })
       renderSection()
 
@@ -328,7 +329,7 @@ describe('BillingSection', () => {
         newBalanceCents: 0,
         kind: RedeemedCouponKind.COMPUTE_MINUTES,
         computeMinutes: 120,
-        newComputeMinutesRemaining: 180,
+        newGrantedSmallDaemonSecondsRemaining: 10800,
       })
       renderSection()
 

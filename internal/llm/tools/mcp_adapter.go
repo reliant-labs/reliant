@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/invopop/jsonschema"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -372,7 +373,10 @@ func (a *MCPToolAdapter) convertResult(result *mcp.ToolResult) ToolResponse {
 type MCPToolRegistry struct {
 	runtime     MCPRuntime
 	projectPath string
+	cache       *MCPToolCache // optional: last-known-good listings across registries
 	tools       map[string]Tool
+	source      MCPToolsSource
+	staleAge    time.Duration
 	mu          sync.RWMutex
 }
 
@@ -382,10 +386,40 @@ func NewMCPToolRegistry(runtime MCPRuntime, projectPath string) *MCPToolRegistry
 		runtime:     runtime,
 		projectPath: projectPath,
 		tools:       make(map[string]Tool),
+		source:      MCPToolsNone,
 	}
 }
 
+// WithCache makes the registry serve the cache's last successful listing when
+// a fresh one cannot be obtained, and record every success in it.
+func (r *MCPToolRegistry) WithCache(cache *MCPToolCache) *MCPToolRegistry {
+	r.cache = cache
+	return r
+}
+
+// cacheKey is what determines the listing: the project scope and whoever the
+// runtime says it is asking as. A runtime that cannot say is not cached.
+func (r *MCPToolRegistry) cacheKey() (mcpToolCacheKey, bool) {
+	if r.cache == nil {
+		return mcpToolCacheKey{}, false
+	}
+	ident, ok := r.runtime.(MCPListIdentity)
+	if !ok {
+		return mcpToolCacheKey{}, false
+	}
+	id := ident.MCPListIdentity()
+	if id == "" {
+		return mcpToolCacheKey{}, false
+	}
+	return mcpToolCacheKey{scope: strings.TrimSpace(r.projectPath), identity: id}, true
+}
+
 // RefreshTools updates the registry with current MCP tools.
+//
+// Only a listing that succeeds changes what the registry holds. When it fails
+// the registry serves the last successful listing for the same scope and
+// identity, if there is one, and the error is still returned so the caller can
+// log it.
 func (r *MCPToolRegistry) RefreshTools() error {
 	logging.Debug("Refreshing MCP tool registry")
 
@@ -399,22 +433,55 @@ func (r *MCPToolRegistry) RefreshTools() error {
 		serverTools, err = r.runtime.ListAllTools()
 	}
 	if err != nil {
-		return fmt.Errorf("failed to list MCP tools: %w", err)
+		err = fmt.Errorf("failed to list MCP tools: %w", err)
+		r.serveLastKnownGood()
+		return err
 	}
 
 	newTools, err := r.buildAdaptersFromServerTools(serverTools)
 	if err != nil {
+		r.serveLastKnownGood()
 		return err
 	}
 
+	if key, ok := r.cacheKey(); ok {
+		r.cache.put(key, serverTools)
+	}
 	r.mu.Lock()
 	r.tools = newTools
+	r.source = MCPToolsLive
+	r.staleAge = 0
 	r.mu.Unlock()
 
 	if len(newTools) > 0 {
 		logging.Debug("MCP tool registry refreshed", "count", len(newTools))
 	}
 	return nil
+}
+
+// serveLastKnownGood loads the cached listing after a failed refresh. With
+// nothing cached the registry keeps whatever it already held.
+func (r *MCPToolRegistry) serveLastKnownGood() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	key, ok := r.cacheKey()
+	if !ok {
+		r.source = MCPToolsNone
+		return
+	}
+	cached, age, ok := r.cache.get(key)
+	if !ok {
+		r.source = MCPToolsNone
+		return
+	}
+	adapters, err := r.buildAdaptersFromServerTools(cached)
+	if err != nil {
+		r.source = MCPToolsNone
+		return
+	}
+	r.tools = adapters
+	r.source = MCPToolsStale
+	r.staleAge = age
 }
 
 func (r *MCPToolRegistry) buildAdaptersFromServerTools(serverTools map[string][]mcp.Tool) (map[string]Tool, error) {
@@ -475,12 +542,22 @@ func (r *MCPToolRegistry) buildAdaptersFromServerTools(serverTools map[string][]
 
 // GetTools returns all MCP tools as Tool interfaces.
 func (r *MCPToolRegistry) GetTools() []Tool {
-	if err := r.RefreshTools(); err != nil {
-		logging.Warn("Failed to refresh MCP tools", "error", err)
-	}
+	return r.GetToolSet().Tools
+}
+
+// GetToolSet refreshes the registry and returns its tools, sorted by name,
+// with where they came from.
+func (r *MCPToolRegistry) GetToolSet() MCPToolSet {
+	err := r.RefreshTools()
 
 	r.mu.RLock()
 	defer r.mu.RUnlock()
+
+	if err != nil {
+		logging.Warn("Failed to refresh MCP tools", "error", err,
+			"mcpToolsSource", string(r.source), "toolCount", len(r.tools),
+			"staleAgeSec", int(r.staleAge.Seconds()))
+	}
 
 	tools := make([]Tool, 0, len(r.tools))
 	for _, tool := range r.tools {
@@ -491,7 +568,7 @@ func (r *MCPToolRegistry) GetTools() []Tool {
 		return tools[i].Name() < tools[j].Name()
 	})
 
-	return tools
+	return MCPToolSet{Tools: tools, Source: r.source, StaleAge: r.staleAge}
 }
 
 // GetTool returns a specific MCP tool by name.

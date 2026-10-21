@@ -1,0 +1,36 @@
+# The other half of the guarantee: interrupted must not become a new wedge.
+#
+# pending_inbox once bricked chats by staying true when nothing was queued, so
+# the loop re-entered forever. stop_reason cannot do that - it is recomputed
+# from each turn's own stream - and this pins it: an interrupted turn followed
+# by a healthy one exits after exactly two iterations rather than looping on.
+# The second turn sets no stop_reason at all, so this also pins that the
+# runtime's fill-from-tool_calls default reads as done.
+name: interrupted_clears_on_next_healthy_turn
+description: stop_reason is per-turn, so a completed turn after an interrupt exits the loop
+inputs:
+  mode: auto
+events:
+  - node: agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "partial output before the cut"
+      response_text: "partial output before the cut"
+      tool_calls: []
+      stop_reason: interrupted
+  - node: agent_loop.call_llm
+    output:
+      message:
+        role: assistant
+        text: "Finished."
+      response_text: "Finished."
+      tool_calls: []
+expect:
+  outcome: completed
+  reached:
+    - agent_loop
+    - agent_loop.call_llm
+  node_outputs:
+    agent_loop:
+      _iterations: 2

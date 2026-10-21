@@ -162,7 +162,7 @@ async function mockGrpcRoutes(page: Page) {
         body: JSON.stringify({
           eligible: true,
           hasActiveSubscription: true,
-          grantedMinutesRemaining: '0',
+          grantedSmallDaemonSecondsRemaining: '0',
           planName: 'free',
         }),
       }),
@@ -299,7 +299,7 @@ test.describe('Onboarding Flow', () => {
       json: {
         plans: sizes.map((size, index) => ({
           id: `compute_${size}`, kind: 'compute', name: `Compute ${size}`, priceCents: String(2000 * (index + 1)), displayOrder: index,
-          structuredLimits: { allowedDaemonSizes: sizes.slice(0, index + 1), daemonComputeIncludedMinutes: 9600, includedSmallDaemonHours: String(160 * 2 ** index) },
+          structuredLimits: { allowedDaemonSizes: sizes.slice(0, index + 1), includedSmallDaemonHours: String(160 * 2 ** index) },
         })),
         daemonPricing: {
           sizes: sizes.map((size, index) => ({ size, multiplier: String(2 ** index), hourlyPriceCents: String(13 * 2 ** index), storageGib: String([120, 140, 180, 260][index]) })),
@@ -317,7 +317,7 @@ test.describe('Onboarding Flow', () => {
     await mockPricing(page);
     // Not covered by a coupon: every row shows its monthly price.
     await page.route('**/controlplane.v1.BillingService/GetCurrentUserComputeEligibility', route =>
-      route.fulfill({ json: { eligible: false, hasActiveSubscription: false, grantedMinutesRemaining: '0', planName: '' } }));
+      route.fulfill({ json: { eligible: false, hasActiveSubscription: false, grantedSmallDaemonSecondsRemaining: '0', planName: '' } }));
     await gotoOnboarding(page);
     const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
     for (const price of ['$20.00/mo', '$40.00/mo', '$60.00/mo', '$80.00/mo']) {
@@ -337,7 +337,7 @@ test.describe('Onboarding Flow', () => {
     await page.route('**/controlplane.v1.UserService/GetCurrentUser', route =>
       route.fulfill({ json: { user: { id: 'user_test', onboardingCompleted: true } } }));
     await page.route('**/controlplane.v1.BillingService/GetCurrentUserComputeEligibility', route =>
-      route.fulfill({ json: { eligible: true, hasActiveSubscription: true, grantedMinutesRemaining: '0', planName: 'Compute xl', allowedDaemonSizes: ['small', 'medium', 'large', 'xl'] } }));
+      route.fulfill({ json: { eligible: true, hasActiveSubscription: true, grantedSmallDaemonSecondsRemaining: '0', planName: 'Compute xl', allowedDaemonSizes: ['small', 'medium', 'large', 'xl'] } }));
     // The XL plan: 160 own-size hours = 1,280 small hours.
     await page.route('**/controlplane.v1.BillingService/GetCurrentUserComputeUsage', route =>
       route.fulfill({ json: { usageMeasured: true, includedSmallDaemonSeconds: String(1280 * 3600), remainingSmallDaemonSeconds: String(3 * 3600) } }));
@@ -687,7 +687,7 @@ test.describe('Onboarding – Compute with no billing (the new-user default)', (
             eligible: false,
             reason: 3, // COMPUTE_INELIGIBLE_REASON_NO_SUBSCRIPTION
             hasActiveSubscription: false,
-            grantedMinutesRemaining: '0',
+            grantedSmallDaemonSecondsRemaining: '0',
             planName: '',
           }),
         }),

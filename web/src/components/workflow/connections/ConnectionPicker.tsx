@@ -17,7 +17,7 @@
  */
 
 import { AlertTriangle, Plus } from "lucide-react";
-import { useId } from "react";
+import { useId, useState } from "react";
 
 import { CardInset } from "../../forge-ui/card";
 import type { CatalogEntry } from "../../../api/catalog-search-grpc";
@@ -33,6 +33,12 @@ export interface ConnectionPickerProps {
   onChange: (connectionId: string) => void;
   onConnect: () => void;
   disabled?: boolean;
+  /**
+   * A settled connection (delegated, or one usable connection chosen)
+   * collapses to one line with "Change", which opens the full picker. For a
+   * setup form, where the connection is usually already right.
+   */
+  compact?: boolean;
 }
 
 export type ConnectionPickerState = "none_required" | "delegated" | "unconnected" | "unavailable" | "connected";
@@ -55,18 +61,52 @@ function connectionLabel(connection: Connection): string {
   return `${connection.name || connection.integrationId}${who}${connection.isDefault ? " (default)" : ""}`;
 }
 
-export function ConnectionPicker({ entry, value, onChange, onConnect, disabled = false }: ConnectionPickerProps) {
+export function ConnectionPicker({ entry, value, onChange, onConnect, disabled = false, compact = false }: ConnectionPickerProps) {
   const id = useId();
   const integration = entry.summary.integration;
   const query = useConnections(integration.id);
   const connections = query.data ?? [];
   const state = connectionPickerState(entry, connections);
+  const [expanded, setExpanded] = useState(false);
 
   if (state === "none_required" && !value) return null;
 
   const selected = connections.find((c) => c.id === value);
   const stale = !!value && !query.isLoading && !selected;
   const needsReauth = selected?.status === "needs_reauth";
+
+  if (compact && !expanded && !query.isLoading && !query.isError && !stale && !needsReauth) {
+    const usable = connections.filter((c) => c.status !== "revoked");
+    const shown = selected ?? usable.find((c) => c.isDefault) ?? usable[0];
+    const line =
+      state === "delegated"
+        ? `Your connected ${integration.displayName} account`
+        : state === "connected" && shown
+          ? connectionLabel(shown)
+          : null;
+    if (line) {
+      return (
+        <CardInset className="flex items-center justify-between gap-3 py-2 text-sm" data-testid="connection-compact">
+          <span className="min-w-0 truncate text-foreground">{line}</span>
+          {state === "connected" ? (
+            <button
+              type="button"
+              onClick={() => setExpanded(true)}
+              disabled={disabled}
+              aria-label={`Change ${integration.displayName} connection`}
+              className="shrink-0 rounded-sm text-xs font-medium text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+            >
+              Change
+            </button>
+          ) : (
+            <a href="/settings/git-connections" className="shrink-0 text-xs font-medium text-primary hover:underline">
+              Manage
+            </a>
+          )}
+        </CardInset>
+      );
+    }
+  }
 
   return (
     <div className="space-y-1.5">

@@ -151,7 +151,9 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge env stop`](#reliant-forge-env-stop) | Suspend a HOSTED environment's workloads on the control plane (not local processes) |
 | [`reliant forge env up`](#reliant-forge-env-up) | Bring the whole dev loop up on this machine: build + deploy + host + frontend |
 | [`reliant forge fix`](#reliant-forge-fix) | Rewrite your code to what a lint asks for (codemods, run on request) |
+| [`reliant forge fix composition-graph`](#reliant-forge-fix-composition-graph) | Move a project off Infra / NewComponents / ServeSpec onto the composition graph |
 | [`reliant forge fix narrow-deps`](#reliant-forge-fix-narrow-deps) | Declare the interfaces a component's Deps actually use, and retype its fields to them |
+| [`reliant forge fix operatorkit`](#reliant-forge-fix-operatorkit) | Rename lifecyclekit.Run / Controller / Options to operatorkit (moved in v0.1.46) |
 | [`reliant forge frontend`](#reliant-forge-frontend) | Operate on built frontends |
 | [`reliant forge frontend sourcemaps`](#reliant-forge-frontend-sourcemaps) | File a frontend's source maps so its browser errors can be symbolicated |
 | [`reliant forge frontend sourcemaps push`](#reliant-forge-frontend-sourcemaps-push) | File the source maps of a built directory forge did not build |
@@ -166,7 +168,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge ledger import`](#reliant-forge-ledger-import) | Import a ledger from a checkout's committed history, or from another ledger directory |
 | [`reliant forge ledger show`](#reliant-forge-ledger-show) | Print this machine's ledger records — promotions, applies and local sessions |
 | [`reliant forge ledger where`](#reliant-forge-ledger-where) | Print which backend holds an environment's ledger, and the declaration that chose it |
-| [`reliant forge lint`](#reliant-forge-lint) | Run linters on the project (auto-fixes formatting in place first; --no-fix to only check) |
+| [`reliant forge lint`](#reliant-forge-lint) | Run linters on the project (auto-fixes formatting in place first; report-only under CI or --check) |
 | [`reliant forge login`](#reliant-forge-login) | Authenticate to the control plane(s) this project declares |
 | [`reliant forge logout`](#reliant-forge-logout) | Forget the stored credential for this project's control plane(s) |
 | [`reliant forge observe`](#reliant-forge-observe) | Read back what the local observability stack collected |
@@ -297,10 +299,8 @@ These flags are available on all commands.
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--config` | `string` | - | path to a config file (.json/.yaml/.yml); also settable via RELIANT_CONFIG. Precedence: defaults < file < env < flags |
-| `--gateway` | `string` | `https://gateway.reliantapi.com` | Daemon gateway URL (defaults to the gateway subdomain of the resolved server) |
 | `--log-format` | `string` | - | Log line format: text or json (default text; json for a hosted daemon) [env: LOG_FORMAT] |
 | `--log-level` | `string` | - | Log level: debug, info, warn or error (default info) [env: RELIANT_LOG_LEVEL] |
-| `--server` | `string` | `https://api.reliantapi.com` | Reliant API server URL (also RELIANT_SERVER_URL) |
 | `--verbose`, `-v` | `bool` | - | Enable verbose output |
 
 ---
@@ -326,6 +326,13 @@ reliant auth
 | [`serve`](#reliant-auth-serve) | Start a local OAuth helper server |
 | [`status`](#reliant-auth-status) | Show the login for the resolved server |
 | [`token`](#reliant-auth-token) | Manage API tokens (rlat_ access tokens acting as you) |
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--gateway` | `string` | `https://gateway.reliantapi.com` | Daemon gateway URL (a non-default server derives its own gateway unless this is set) [env: RELIANT_GATEWAY_URL] |
+| `--server` | `string` | `https://api.reliantapi.com` | Reliant API server URL [env: RELIANT_SERVER_URL] |
 
 ---
 
@@ -525,6 +532,13 @@ reliant daemon
 | [`start`](#reliant-daemon-start) | Start the tools daemon |
 | [`status`](#reliant-daemon-status) | Check daemon status |
 | [`stop`](#reliant-daemon-stop) | Stop the tools daemon |
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--gateway` | `string` | `https://gateway.reliantapi.com` | Daemon gateway URL (a non-default server derives its own gateway unless this is set) [env: RELIANT_GATEWAY_URL] |
+| `--server` | `string` | `https://api.reliantapi.com` | Reliant API server URL [env: RELIANT_SERVER_URL] |
 
 ---
 
@@ -877,7 +891,7 @@ reliant forge
 | [`generate`](#reliant-forge-generate) | Generate code from proto files |
 | [`kcl`](#reliant-forge-kcl) | Evaluate this project's KCL directly |
 | [`ledger`](#reliant-forge-ledger) | Move and inspect deploy ledgers |
-| [`lint`](#reliant-forge-lint) | Run linters on the project (auto-fixes formatting in place first; --no-fix to only check) |
+| [`lint`](#reliant-forge-lint) | Run linters on the project (auto-fixes formatting in place first; report-only under CI or --check) |
 | [`login`](#reliant-forge-login) | Authenticate to the control plane(s) this project declares |
 | [`logout`](#reliant-forge-logout) | Forget the stored credential for this project's control plane(s) |
 | [`observe`](#reliant-forge-observe) | Read back what the local observability stack collected |
@@ -5131,7 +5145,54 @@ reliant forge fix
 
 | Command | Description |
 |---------|-------------|
+| [`composition-graph`](#reliant-forge-fix-composition-graph) | Move a project off Infra / NewComponents / ServeSpec onto the composition graph |
 | [`narrow-deps`](#reliant-forge-fix-narrow-deps) | Declare the interfaces a component's Deps actually use, and retype its fields to them |
+| [`operatorkit`](#reliant-forge-fix-operatorkit) | Rename lifecyclekit.Run / Controller / Options to operatorkit (moved in v0.1.46) |
+
+---
+
+#### reliant forge fix composition-graph
+
+Move a project off Infra / NewComponents / ServeSpec onto the composition graph
+
+Convert the legacy composition to the composition graph.
+
+A project scaffolded before the graph composes with an owned Infra struct and
+OpenInfra (internal/app/providers.go), a Components bag built by NewComponents
+(compose.go), lifecycle.go, ServeSpec (cmd/<bin>/cmd/serve.go) and one
+subcommand per service, worker and operator. forge still generates for it
+exactly as before. This codemod converts the composition forge scaffolded:
+
+  - providers.go, compose.go and serve.go are re-scaffolded for the graph on
+    the next `forge generate` (compose.go keeps every Deps value you set,
+    translated: infra.Log → g.Log, infra.DB → g.DB().DB, c.Tasks → g.Tasks());
+  - lifecycle.go, server.go and the per-component subcommands are retired,
+    and root.go / main.go stop naming them;
+  - the e2e harness runs `server`, the one root a project has until it
+    declares more.
+
+The default root, `server`, reaches every service, worker and operator,
+which is what `<bin> server` ran. Anything the codemod cannot map without
+deciding for you — an Infra field of your own, a ServeSpec knob, a command
+that calls Serve, code that names Infra or Components — is listed with its
+file:line and the edit that clears it, and then NOTHING is written. Clear
+them (the migrations/v0.1.47 skill walks through each) and run it again.
+
+It replaces files you own, so it runs only on a committed tree
+(--allow-dirty overrides); review with git diff, undo with git checkout.
+
+The rest of the v0.1.47 story is the migration skill: `forge skill load migrations/v0.1.47`.
+
+```
+reliant forge fix composition-graph [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-dirty` | `bool` | - | Run over uncommitted changes |
+| `--dry-run` | `bool` | - | List what would be rewritten; change nothing |
 
 ---
 
@@ -5156,6 +5217,38 @@ package already declares (edit that one).
 ```
 reliant forge fix narrow-deps <package-dir>
 ```
+
+---
+
+#### reliant forge fix operatorkit
+
+Rename lifecyclekit.Run / Controller / Options to operatorkit (moved in v0.1.46)
+
+Rename the operator bridge lifecyclekit no longer re-exports.
+
+forge v0.1.46 moved Run, Controller and Options out of
+github.com/reliant-labs/forge/pkg/lifecyclekit and into
+github.com/reliant-labs/forge/pkg/appkit/operatorkit, so that a binary
+importing lifecyclekit for Supervise, WrapWorker or Singleton never links
+controller-runtime. The signatures are identical.
+
+This rewrites every reference in the project's own Go files (generated files,
+vendor/ and testdata/ are left alone), adds the operatorkit import, and drops
+the lifecyclekit import from a file that no longer uses it. It is a rename
+and nothing else, so `forge project upgrade` runs it on its own when the
+project's baseline predates v0.1.46. Re-running it changes nothing.
+
+The rest of the v0.1.46 story is the migration skill: `forge skill load migrations/v0.1.46`.
+
+```
+reliant forge fix operatorkit [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--dry-run` | `bool` | - | List what would be rewritten; change nothing |
 
 ---
 
@@ -5372,21 +5465,35 @@ reliant forge gate record <environment> [flags]
 
 Generate code from proto files
 
-Generate code from proto files based on project configuration or directory conventions.
+Re-project the project from its sources of truth: the .proto files under
+proto/ (the API), the migrations under db/migrations/ (the schema), and
+forge.yaml plus deploy/kcl/ (features, frontends, environments).
 
-When forge.yaml exists, generation is driven by the config:
-  - buf generate for Go stubs (protoc-gen-go + protoc-gen-connect-go)
-  - protoc-gen-forge for entity protos in proto/db/
-  - buf generate for TypeScript stubs for Next.js frontends
-  - Service stubs and mocks for new services
-  - pkg/app/bootstrap.go with explicit service bootstrapping
-  - go mod tidy in gen/
+What it writes, in order:
+  - gen/: Go + Connect stubs (buf generate) and gen/forge_descriptor.json,
+    the services, rpcs and config messages extracted from the protos
+  - each frontend's TypeScript stubs, hooks, CRUD pages, nav and mocks
+  - pkg/config/ from proto/config/, the typed config loader
+  - internal/handlers/<svc>/: a stub for every rpc no handler implements yet,
+    and the CRUD wiring of every entity (an entity is a table in the APPLIED
+    schema that a service's CRUD rpcs name; the schema comes from running
+    db/migrations against a throwaway Postgres)
+  - internal/db/: the ORM stores projected from that schema
+  - mocks for services and for every internal/<pkg>/contract.go
+  - internal/app/: the composition graph (graph_gen.go, routes_gen.go, and
+    the components and Deps keys reconciled into compose.go); cmd/<bin>/
+    commands and roots
+  - pkg/middleware/procedures_gen.go, the per-rpc auth and deadline table
+  - deploy/: KCL config, observability dashboards and alert defaults, CI
+    workflows, seed data
+then go mod tidy, goimports, and a validating go build of the whole tree.
 
-Without forge.yaml, falls back to directory convention scanning:
-  proto/           - Root proto directory (for buf generate)
-  proto/services/  - Service definitions (stubs + mocks)
-  proto/api/       - API messages
-  proto/db/        - Database models (protoc-gen-forge)
+Hand-written code is never overwritten. Files that are yours from birth
+(handlers' rpc_<name>.go, internal/app/providers.go, compose.go) are written
+once and afterwards only reconciled; a generated file you edited is refused
+as drift until you disown it ('forge project disown') or pass --force.
+Without forge.yaml, generate still compiles proto/ and runs the steps that
+need no config, and says so.
 
 Hooks:
   Generate hooks are the commands forge.yaml declares under generate.hooks
@@ -5755,7 +5862,7 @@ reliant forge ledger where <environment> [flags]
 
 ### reliant forge lint
 
-Run linters on the project (auto-fixes formatting in place first; --no-fix to only check)
+Run linters on the project (auto-fixes formatting in place first; report-only under CI or --check)
 
 Run various linters on the Forge project.
 
@@ -5780,12 +5887,22 @@ runs each frontend's own prettier over the src/ files you own (never
 generated or forge-refreshed ones), and runs eslint --fix on frontends — so
 mechanical formatting never surfaces as a gating error. It never rewrites a
 file the project's own formatter gate accepts. Under --scope it touches only
-files inside the scope. Pass --no-fix to gate only and mutate nothing (CI /
-read-only checks); --json is always detect-only.
+files inside the scope, and naming Go package paths (forge lint ./internal/x/...)
+likewise confines the fixers to those packages — the frontend formatter does
+not run then. Only a bare forge lint rewrites the whole project.
+
+REPORT-ONLY. When the CI environment variable is set (GitHub Actions, GitLab
+and the rest set it), or --check (also spelled --no-fix) is passed, forge lint
+writes NOTHING: it prints the diff each fix would have applied and exits
+non-zero if any is pending, so CI fails on unformatted code instead of
+repairing a checkout that is thrown away. --fix forces fixing even under CI;
+--json is always detect-only.
 
 Examples:
   forge lint                     # Auto-fix deterministic-safe issues, then gate
-  forge lint --no-fix            # Gate only; mutate nothing (CI / read-only)
+  forge lint --check             # Report only: print the diffs, mutate nothing
+  CI=1 forge lint                # Same, from the environment (CI sets it)
+  CI=1 forge lint --fix          # Fix even under CI
   forge lint --skip-frontends    # Backend-only gate; no Node toolchain needed
   forge lint --contract          # Run contract interface enforcement linter
   forge lint --db                # Run DB entity lint rules
@@ -5842,6 +5959,11 @@ Examples:
                                  # rewrites, POST handlers, no trailingSlash
                                  # on a bucket). CI's next build is the
                                  # authority; this says it first, file:line
+  forge lint --tracing           # Report where a request's trace is cut (a
+                                 # log call that drops the ctx in scope, a
+                                 # raw *http.Client or sql.Open, a contract
+                                 # built without its decorator) and rewrite
+                                 # each log call to its ...Context form
   forge lint --proto-options     # Flag a (forge.v1.*) annotation naming an
                                  # option field forge's descriptors do not
                                  # define — it compiles, and forge reads it
@@ -5887,6 +6009,7 @@ reliant forge lint [paths...] [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--check` | `bool` | - | Report only: write nothing, print the diff each fix would apply, and exit non-zero if any is pending. The default when CI is set (also spelled --no-fix) |
 | `--column-markers` | `bool` | - | Flag COMMENT ON COLUMN/CONSTRAINT text containing forge: that matches no known column marker (warnings only) |
 | `--computed-fields` | `bool` | - | Flag a forge:computed field that no non-generated Go file assigns — nothing populates it, so the insert takes the column default. FAILS the build, except while the service still holds forge-scaffolded unwired rpc stubs (then a warning naming them) |
 | `--config-deps` | `bool` | - | Flag scalar Deps fields — scalars are configuration; declare a <Component>Config block in proto/config and take it as a typed field (warnings only) |
@@ -5894,7 +6017,7 @@ reliant forge lint [paths...] [flags]
 | `--contract` | `bool` | - | Run contract interface enforcement linter |
 | `--conventions` | `bool` | - | Run forge convention rules on proto files |
 | `--create-nullability` | `bool` | - | Fail when a field's optional label disagrees between an entity message and its Create<Entity>Request — the flattened request drops write presence silently |
-| `--fix` | `bool` | - | Deprecated: auto-fix of deterministic-safe issues is now the default; this flag is a no-op kept for back-compat (use --no-fix to opt out) |
+| `--fix` | `bool` | - | Apply the deterministic-safe fixes (Go formatting, golangci autofixes, frontend prettier, eslint --fix) even when CI is set; they are the default everywhere else |
 | `--fixture-drift` | `bool` | - | Execute every literal fixture statement in a scaffolded handlers_crud_test.go against the current schema — migrations applied to a shadow postgres, each statement run in a rolled-back transaction — and report postgres's own error for each one it rejects: a GENERATED column, a UNIQUE collision, a dangling foreign key, a CHECK a later migration added (warnings only) |
 | `--frontend-stores` | `bool` | - | Flag Zustand stores that import generated Connect clients (warnings only) |
 | `--gate-json` | `string` | - | Also write this run's result to `FILE` as a gate document, for `forge gate record` or `forge env deploy --gate`. A FILE, not a stdout mode: the findings and the exit code are unchanged. |
@@ -5904,13 +6027,13 @@ reliant forge lint [paths...] [flags]
 | `--help-dev` | `bool` | - | List maintainer/debug flags hidden from --help |
 | `--json` | `bool` | - | Output findings as JSON (see lint_json.go header for the schema; exit code matches text mode) |
 | `--migration-safety` | `bool` | - | Run SQL migration safety checks |
-| `--no-fix` | `bool` | - | Skip the deterministic-safe auto-fix pre-pass (Go formatting, golangci autofixes, frontend prettier, eslint --fix); gate only and mutate nothing (CI / read-only) |
+| `--no-fix` | `bool` | - | Same as --check: write nothing, print the diff each fix would apply, and fail if any is pending |
 | `--optional-deps-guard` | `bool` | - | Flag unguarded derefs of // forge:optional-dep Deps fields (warnings only; suppress with // forge:optional-checked on the deref line) |
 | `--proto-markers` | `bool` | - | Flag .proto comments containing forge: that match no known proto marker — a misspelled marker is inert and warns nowhere (warnings only) |
 | `--proto-options` | `bool` | - | Flag (forge.v1.*) annotation fields this forge binary's descriptors do not define — a retired or misspelled option field compiles under buf and is read by nothing (warnings only) |
-| `--quiet`, `-q` | `bool` | - | Print only what failed: a one-line summary per failing linter, its error findings, and the verdict as the LAST line (a clean run is one line). Auto-fix still rewrites files in place, silently (--no-fix to only check); combines with the targeted flags and --scope |
+| `--quiet`, `-q` | `bool` | - | Print only what failed: a one-line summary per failing linter, its error findings, and the verdict as the LAST line (a clean run is one line). Auto-fix still rewrites files in place, silently, unless CI is set or --check (--no-fix) is passed; combines with the targeted flags and --scope |
 | `--read-only-fields` | `bool` | - | Flag a forge:read-only field whose column nothing populates — no non-generated Go file assigns it, no meaningful DEFAULT, not GENERATED — so every row ships as the type's zero with no error anywhere. FAILS the build, except while the service still holds forge-scaffolded unwired rpc stubs (then a warning naming them) |
-| `--scope` | `stringSlice` | `[]` | Report only findings in files under `PATH` (repeatable or comma-separated, project-relative). Go linters run on PATH's packages only; file-anchored linters report only findings under PATH; whole-project linters (frontend lint, graph, component-drift, config-reach) cannot be scoped, are skipped, and are named in the verdict. Auto-fix still rewrites files in place, only those under PATH (--no-fix to only check) |
+| `--scope` | `stringSlice` | `[]` | Report only findings in files under `PATH` (repeatable or comma-separated, project-relative). Go linters run on PATH's packages only; file-anchored linters report only findings under PATH; whole-project linters (frontend lint, graph, component-drift, config-reach) cannot be scoped, are skipped, and are named in the verdict. Auto-fix still rewrites files in place, only those under PATH, unless CI is set or --check (--no-fix) is passed |
 | `--show-suppressed` | `bool` | - | List every suppression the project declares, with file:line, what it covers and the stated reason: forge.yaml lint.rules (off/warn) and contracts.exclude, //forge:exclude-contract markers, forge:lint-disable* and nolint directives, and the migration and optional-dep pragmas. Read-only: runs no linter and exits 0; combines with --json and --scope |
 | `--skip-frontends` | `bool` | - | Skip the whole frontend lane (eslint/stylelint + TypeScript typecheck + static-export) for a backend-only gate that needs no Node toolchain |
 | `--slow-tests` | `bool` | - | Fail on a Go test that does slow work without being marked slow — execs go/forge/kcl/node/npm/git/docker/…, drives containers, or dials an external host, with no testkit.Slow(t, why) or testing.Short() guard on its path — so it runs in the blocking -short tier, and a file its child process reads is invisible to the test cache |
@@ -5918,6 +6041,7 @@ reliant forge lint [paths...] [flags]
 | `--strict` | `bool` | - | Escalate advisory findings to errors so they fail the build / CI: RPCs missing a (forge.v1.method) auth-posture annotation, and any lane that could NOT run (frontend typecheck or eslint with deps not installed; typed-config guardrail when golangci-lint never reported) |
 | `--tests` | `bool` | - | Run test-convention rules (handler-tests-use-tdd + frontend-hook-tests; warnings only) |
 | `--time-bucketing` | `bool` | - | Flag a two-argument date_trunc over a TIMESTAMPTZ column — postgres truncates it in the SESSION timezone, which the driver sets from the client host, so every bucketed total is attributed to the wrong day by an amount that changes with the deploy host. Pin the zone: date_trunc('day', col, 'UTC') (warnings only) |
+| `--tracing` | `bool` | - | Report where a request's trace is cut: a log call made with a context in scope but not passed it (no trace_id), an *http.Client or database pool opened without forge's traced constructors, a contract package constructed without its generated decorator. Rewrites every log call to its ...Context form unless --no-fix; forge.yaml lint.tracing.log_wrappers adds the project's own logging helpers |
 | `--vendored-protos` | `bool` | - | Fail when a vendored proto (proto/forge/v1/forge.proto) differs from the copy embedded in this forge binary — forge's upgrade path does not track these copies, so drift is otherwise invisible |
 
 ---
@@ -6975,6 +7099,7 @@ reliant forge project new [project-name] --mod [module-path] [flags]
 | `--buf-plugins` | `string` | `local` | Default proto plugin source: 'local' (resolved from PATH; no BSR auth needed) or 'remote' (BSR-hosted, requires login under load) |
 | `--disable` | `stringSlice` | `[]` | Features to leave out of the scaffold (comma-separated): orm, codegen, migrations, ci, build, deploy, contracts, frontend, observability, hot_reload. Each is pinned off in forge.yaml's features: block (orm, which has no key, only steers this scaffold). |
 | `--force` | `bool` | - | With --in-place: scaffold over an existing forge.yaml, and REPLACE every pre-existing file the scaffold writes (README.md, go.mod, Taskfile.yml, …) with forge's version. Without it, existing files are kept and listed. .gitignore is always merged, never replaced |
+| `--forge-root` | `string` | - | The forge checkout --link-forge bridges to (also: FORGE_ROOT). Default: the checkout this binary was built from, else the go.mod replace it embeds forge through, else the checkout it sits or was started in |
 | `--frontend` | `stringSlice` | `[]` | Name(s) of Next.js frontends (can be repeated or comma-separated) |
 | `--frontend-workspaces` | `bool` | - | Opt into pnpm-workspaces layout: emit packages/api + packages/hooks + packages/ui-web shared across all frontends. Off by default; recommended once you have 2+ frontends (web + mobile). |
 | `--go-version` | `string` | - | Go version to use in go.mod (e.g., 1.24); defaults to detected version |
@@ -8908,6 +9033,13 @@ reliant project
 | [`create`](#reliant-project-create) | Create a project and print its ID |
 | [`list`](#reliant-project-list) | List your projects |
 
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--gateway` | `string` | `https://gateway.reliantapi.com` | Daemon gateway URL (a non-default server derives its own gateway unless this is set) [env: RELIANT_GATEWAY_URL] |
+| `--server` | `string` | `https://api.reliantapi.com` | Reliant API server URL [env: RELIANT_SERVER_URL] |
+
 ---
 
 ### reliant project create
@@ -9105,6 +9237,13 @@ reliant trigger
 | [`get`](#reliant-trigger-get) | Show one trigger |
 | [`list`](#reliant-trigger-list) | List your triggers |
 | [`update`](#reliant-trigger-update) | Replace a trigger's definition |
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--gateway` | `string` | `https://gateway.reliantapi.com` | Daemon gateway URL (a non-default server derives its own gateway unless this is set) [env: RELIANT_GATEWAY_URL] |
+| `--server` | `string` | `https://api.reliantapi.com` | Reliant API server URL [env: RELIANT_SERVER_URL] |
 
 ---
 
@@ -9324,6 +9463,13 @@ reliant workflow
 | [`validate-tree`](#reliant-workflow-validate-tree) | Validate a workflow tree with preset-aware cross-workflow checks |
 | [`wait-for-gate`](#reliant-workflow-wait-for-gate) | Block until the workflow needs you — the next open question/approval |
 | [`watch`](#reliant-workflow-watch) | Watch a workflow execution and print meaningful boundaries as they happen |
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--gateway` | `string` | `https://gateway.reliantapi.com` | Daemon gateway URL (a non-default server derives its own gateway unless this is set) [env: RELIANT_GATEWAY_URL] |
+| `--server` | `string` | `https://api.reliantapi.com` | Reliant API server URL [env: RELIANT_SERVER_URL] |
 
 ---
 

@@ -74,7 +74,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/reliant-labs/reliant/internal/builddefaults"
 	"github.com/reliant-labs/reliant/internal/instanceid"
 )
 
@@ -87,10 +86,6 @@ const (
 	// path segment: an empty one would collapse the path and silently merge the
 	// signed-out instance into its parent.
 	DefaultSubSegment = "_default"
-
-	// EnvServerURL is the same server-URL override the rest of the binary
-	// honours, consulted when no origin is passed.
-	EnvServerURL = "RELIANT_SERVER_URL"
 
 	// slugHumanMax bounds the readable prefix of a slug segment. Long enough to
 	// recognize a host or a worktree at a glance, short enough that
@@ -121,10 +116,9 @@ type Key struct {
 
 // Resolve canonicalizes the three components and applies defaults.
 //
-// An empty origin falls back to the binary's configured server URL (the
-// RELIANT_SERVER_URL override, then the compiled-in default), so a caller that
-// has no explicit flag lands on the same backend the rest of the process talks
-// to. An origin that is present but unparseable is an error.
+// The origin is the server URL the command resolved (--server,
+// RELIANT_SERVER_URL or the default); one that is empty or unparseable is an
+// error.
 //
 // An empty workspace falls back to the current working directory (a
 // container or CI job names its workspace through the daemon commands'
@@ -133,10 +127,6 @@ type Key struct {
 // anything else is kept verbatim as a label.
 func Resolve(origin, sub, workspace string) (Key, error) {
 	origin = strings.TrimSpace(origin)
-	if origin == "" {
-		origin = builddefaults.Value(EnvServerURL, builddefaults.ServerURL, builddefaults.NeutralServerURL)
-	}
-
 	canonicalOrigin := OriginKey(origin)
 	if canonicalOrigin == "" {
 		return Key{}, fmt.Errorf("%w: %q", ErrInvalidOrigin, origin)

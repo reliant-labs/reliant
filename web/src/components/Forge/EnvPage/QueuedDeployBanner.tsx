@@ -35,6 +35,7 @@ import { useCallback, useState } from "react";
 import { Check, Copy, Hourglass } from "lucide-react";
 
 import { Button } from "@/components/ui/Button";
+import { useUnmountSafeTimeout } from "@/hooks/useUnmountSafeTimeout";
 import { formatRelativeTime } from "@/lib/relativeTime";
 import { queuedOnLabel, type LiveHold } from "@/services/forge/live";
 
@@ -119,6 +120,8 @@ export function QueuedDeployBanner({ release, holds, onSetUpBilling, now }: Queu
 
 function CopyLinkButton({ value }: { value: string }) {
   const [copied, setCopied] = useState(false);
+  // The "Link copied" reset outlives the click; the banner can unmount first.
+  const scheduleTimeout = useUnmountSafeTimeout();
 
   const onCopy = useCallback(() => {
     // Clipboard access can be refused (an insecure origin, a denied
@@ -127,10 +130,10 @@ function CopyLinkButton({ value }: { value: string }) {
       ?.writeText(value)
       .then(() => {
         setCopied(true);
-        setTimeout(() => setCopied(false), 1500);
+        scheduleTimeout(() => setCopied(false), 1500);
       })
       .catch(() => setCopied(false));
-  }, [value]);
+  }, [value, scheduleTimeout]);
 
   return (
     <Button

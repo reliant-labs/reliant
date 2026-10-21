@@ -125,13 +125,10 @@ func newDaemonClientForInstance(t *testing.T, dataDir, gatewayURL, daemonID stri
 // it does not return within the deadline.
 func runUntilDone(t *testing.T, client *daemonClient) error {
 	t.Helper()
-	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
-	done := make(chan error, 1)
-	go func() { done <- client.run(ctx) }()
+	d := startDaemon(t, client)
 	select {
-	case err := <-done:
-		return err
+	case <-d.exited():
+		return d.err
 	case <-time.After(10 * time.Second):
 		t.Fatal("daemon kept running after the gateway refused its identity")
 		return nil
@@ -158,9 +155,7 @@ func TestForeignSavedDaemonIDIsSetAsideAndReRegistered(t *testing.T) {
 			gw := &foreignIDGateway{foreignID: "account-a-daemon", mintedID: "account-b-daemon", refusal: refusal}
 			client := newDaemonClientForInstance(t, dataDir, serveGateway(t, gw), "")
 
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
-			go func() { _ = client.run(ctx) }()
+			startDaemon(t, client)
 
 			waitForStream(t, dataDir, daemonstate.StreamConnected)
 			require.Equal(t, []string{"account-a-daemon", ""}, gw.registrations(),

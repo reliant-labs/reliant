@@ -4,6 +4,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"sync"
 )
 
 // Config directory names for the unified config structure
@@ -22,11 +23,48 @@ const (
 	WorkflowsSubdir = "workflows"
 )
 
+// The directory overrides this process was configured with (CLIConfig's
+// machine block, RELIANT_USER_CONFIG_DIR / RELIANT_APP_DATA_DIR): "" is the
+// default location. The CLI entrypoint sets them once, through
+// ConfigureDirs, before any command touches ~/.reliant; a process that loads
+// no CLIConfig (the server roles) keeps the defaults.
+var (
+	dirsMu           sync.RWMutex
+	userConfigDirSet string
+	appDataDirSet    string
+)
+
+// ConfigureDirs records the process's configured user config and app data
+// directories. An empty value keeps that directory's default.
+func ConfigureDirs(userConfigDir, appDataDir string) {
+	dirsMu.Lock()
+	defer dirsMu.Unlock()
+	userConfigDirSet, appDataDirSet = userConfigDir, appDataDir
+}
+
+// UseUserConfigDirForTest points GetUserConfigDir at dir for one test and
+// restores the previous setting when it ends. Tests that use it must not run
+// in parallel with each other, as for t.Setenv.
+func UseUserConfigDirForTest(t interface{ Cleanup(func()) }, dir string) {
+	dirsMu.Lock()
+	previous := userConfigDirSet
+	userConfigDirSet = dir
+	dirsMu.Unlock()
+	t.Cleanup(func() {
+		dirsMu.Lock()
+		defer dirsMu.Unlock()
+		userConfigDirSet = previous
+	})
+}
+
 // GetUserConfigDir returns the user config directory (~/.reliant/).
 // This is the canonical location for user-editable config files.
-// Environment variable RELIANT_USER_CONFIG_DIR can override this.
+// RELIANT_USER_CONFIG_DIR (ConfigureDirs) overrides it.
 func GetUserConfigDir() string {
-	if configDir := os.Getenv("RELIANT_USER_CONFIG_DIR"); configDir != "" { //nolint:forbidigo // RELIANT_USER_CONFIG_DIR locates the product user config, resolved lazily by every process that touches ~/.reliant; forge gap: a setting every CLI command reads needs a subtree-scoped (persistent) command config, and forge binds a config to one command or to every process
+	dirsMu.RLock()
+	configDir := userConfigDirSet
+	dirsMu.RUnlock()
+	if configDir != "" {
 		return configDir
 	}
 	// Default to ~/.reliant/
@@ -39,9 +77,12 @@ func GetUserConfigDir() string {
 
 // GetAppDataDir returns the platform-specific app data directory.
 // This is for internal data like databases, analytics, auth tokens.
-// Environment variable RELIANT_APP_DATA_DIR can override this.
+// RELIANT_APP_DATA_DIR (ConfigureDirs) overrides it.
 func GetAppDataDir() string {
-	if appDataDir := os.Getenv("RELIANT_APP_DATA_DIR"); appDataDir != "" { //nolint:forbidigo // RELIANT_APP_DATA_DIR locates the product app data dir, resolved lazily by every process that touches it; forge gap: a setting every CLI command reads needs a subtree-scoped (persistent) command config, and forge binds a config to one command or to every process
+	dirsMu.RLock()
+	appDataDir := appDataDirSet
+	dirsMu.RUnlock()
+	if appDataDir != "" {
 		return appDataDir
 	}
 	// Platform-specific defaults

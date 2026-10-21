@@ -108,8 +108,8 @@ export const COMPUTE_PLAN_UNPRICED = null;
 export interface PlanDisplay {
   allowedSizes: string[];
   monthlyPriceCents: number | null;
-  includedMinutes: number;
-  overageCentsPerMinute: number;
+  /** Small-daemon-hours the plan includes each period (0 with none). */
+  includedSmallDaemonHours: number;
 }
 
 /** The wire fields this module reads. Narrow on purpose. */
@@ -121,10 +121,7 @@ export function derivePlanDisplay(
   const limits = plan?.structuredLimits;
   return {
     allowedSizes: limits?.allowedDaemonSizes ?? [],
-    // -1 is the catalog's "unlimited" sentinel and is preserved, not clamped:
-    // callers distinguish it from 0 to render "Unlimited".
-    includedMinutes: limits?.daemonComputeIncludedMinutes ?? 0,
-    overageCentsPerMinute: limits?.daemonOveragePerMinuteCents ?? 0,
+    includedSmallDaemonHours: Number(limits?.includedSmallDaemonHours ?? 0),
     monthlyPriceCents:
       plan && plan.priceCents > 0n
         ? Number(plan.priceCents)
@@ -319,11 +316,12 @@ export function formatAllowedSizes(sizes: string[]): string {
  * it rendered at full confidence next to a purchase button. Zero and unknown
  * had been collapsed, and the collapse resolved toward the alarming reading.
  *
- * The signature is all three facts absent TOGETHER, which is what a row
- * written before the catalog gained these columns looks like. A plan that
- * genuinely includes no hours still carries sizes and a rate, so requiring
- * all three keeps a real zero-hour plan out of the degraded branch — and that
- * matters, because the degraded branch disables the overage control.
+ * The signature is both facts absent TOGETHER — no sizes and no included
+ * hours — which is what a row written before the catalog gained these columns
+ * looks like. A plan that genuinely includes no hours still lists the sizes it
+ * may run, so requiring both keeps a real zero-hour plan out of the degraded
+ * branch — and that matters, because the degraded branch disables the overage
+ * control.
  *
  * Absence of a plan entirely is NOT this state. That is the true empty, and it
  * gets "pick a plan" rather than advice about restarting the control plane.
@@ -333,8 +331,7 @@ export function isPlanDetailUnavailable(plan?: PlanPricing | null): boolean {
   const d = derivePlanDisplay(plan);
   return (
     d.allowedSizes.length === 0 &&
-    d.includedMinutes === 0 &&
-    d.overageCentsPerMinute === 0
+    d.includedSmallDaemonHours === 0
   );
 }
 
@@ -447,7 +444,6 @@ export function suggestRecharge(dailySpendUsd: number | null): {
 // ── Compute capacity ──────────────────────────────────────────────────
 
 export type ComputeCapacityState =
-  | "unlimited"
   | "under"
   | "near"
   | "spent"
@@ -472,36 +468,32 @@ const NEAR_CEILING_FRACTION = 0.8;
  * the boundary the whole band exists to make legible.
  */
 export function deriveComputeCapacity({
-  usedMinutes,
-  includedMinutes,
-  overageMinutes,
+  used,
+  included,
+  overage,
 }: {
-  usedMinutes: number;
-  includedMinutes: number;
-  overageMinutes: number;
+  /** All three in one unit — the server's small-daemon-seconds. */
+  used: number;
+  included: number;
+  overage: number;
 }): ComputeCapacity {
-  // -1 is the catalog's unlimited sentinel. Dividing by it yields a negative
-  // percentage and a bar that renders as though the user had overrun.
-  if (includedMinutes < 0) {
-    return { usedPct: 0, overagePct: 0, state: "unlimited" };
-  }
-  if (includedMinutes === 0) {
+  if (included <= 0) {
     return {
       usedPct: 0,
-      overagePct: overageMinutes > 0 ? 100 : 0,
-      state: overageMinutes > 0 ? "overage" : "spent",
+      overagePct: overage > 0 ? 100 : 0,
+      state: overage > 0 ? "overage" : "spent",
     };
   }
 
-  const usedPct = Math.min((usedMinutes / includedMinutes) * 100, 100);
-  const overagePct = Math.min((overageMinutes / includedMinutes) * 100, 100);
+  const usedPct = Math.min((used / included) * 100, 100);
+  const overagePct = Math.min((overage / included) * 100, 100);
 
   const state: ComputeCapacityState =
-    overageMinutes > 0
+    overage > 0
       ? "overage"
-      : usedMinutes >= includedMinutes
+      : used >= included
         ? "spent"
-        : usedMinutes >= includedMinutes * NEAR_CEILING_FRACTION
+        : used >= included * NEAR_CEILING_FRACTION
           ? "near"
           : "under";
 
@@ -518,14 +510,6 @@ export function formatTimestampDate(ts?: TimestampLike): string {
   if (!ts) return "—";
   return new Date(Number(ts.seconds) * 1000).toLocaleDateString("en-US", {
     year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-}
-
-export function formatDayLabel(ts?: TimestampLike): string {
-  if (!ts) return "—";
-  return new Date(Number(ts.seconds) * 1000).toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
   });

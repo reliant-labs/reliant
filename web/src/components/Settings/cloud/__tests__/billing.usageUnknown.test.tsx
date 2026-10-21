@@ -138,22 +138,21 @@ const HEALTHY_SUB = {
       displayOrder: 1,
       structuredLimits: {
         allowedDaemonSizes: ["small"],
-        daemonComputeIncludedMinutes: 1980, // 33 h
-        daemonOveragePerMinuteCents: 0.47,
+        includedSmallDaemonHours: 33n, // 33 h
       },
     },
   },
 };
 
-/** What the server sends once it has actually read the heartbeat buckets. */
-const measured = (usedMinutes: number) => ({
-  includedMinutes: 1980,
-  usedMinutes,
-  overageMinutes: 0,
+/** What the server sends once it has actually measured the period. */
+const measured = (usedHours: number) => ({
+  includedSmallDaemonSeconds: 33 * 3600,
+  usedSmallDaemonSeconds: usedHours * 3600,
+  remainingSmallDaemonSeconds: Math.max(33 - usedHours, 0) * 3600,
+  runningMultiplier: 0,
   estimatedOverageCostCents: 0,
-  byDay: [],
-  byWorkspace: [],
-  grantedMinutesRemaining: 0,
+  bySize: [],
+  grantedSmallDaemonSecondsRemaining: 0,
   usageMeasured: true,
 });
 
@@ -220,7 +219,7 @@ describe("unmeasured usage is never rendered as a measured zero", () => {
     // Partial failure degrades partially. Included hours come from the plan,
     // so blanking them too would throw away a fact we hold.
     expect(
-      within(computeBand()).getByText(/your plan includes 33 h/i),
+      within(computeBand()).getByText(/your plan includes 33\.0 h/i),
     ).toBeInTheDocument();
   });
 
@@ -237,7 +236,7 @@ describe("unmeasured usage is never rendered as a measured zero", () => {
   });
 
   it("prints real hours for a user who ran machines", () => {
-    state.usage = measured(720); // 12 h
+    state.usage = measured(12);
     renderSection();
 
     expect(within(computeBand()).getByText(/12\.0 h/)).toBeInTheDocument();
@@ -262,7 +261,7 @@ describe("the page's most prominent line does not carry an unmeasured number", (
     state.usage = measured(0);
     const { container } = renderSection();
 
-    expect(container.textContent).toMatch(/0\.0 h of 33 h included/);
+    expect(container.textContent).toMatch(/0\.0 h of 33\.0 h included/);
   });
 });
 

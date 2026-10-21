@@ -3,8 +3,6 @@ package postgres
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
-	"fmt"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 	pgdb "github.com/reliant-labs/reliant/internal/db/postgres/generated"
@@ -165,110 +163,6 @@ func (s *workflowCatalogStore) UpdateWorkflowForkedFrom(ctx context.Context, dra
 		return nil, err
 	}
 	return workflowDraftFromPG(workflowDraftRow(row)), nil
-}
-
-func (s *workflowCatalogStore) CreatePreset(ctx context.Context, preset *core.Preset) (*core.Preset, error) {
-	params, err := presetToCreateParams(preset)
-	if err != nil {
-		return nil, err
-	}
-	row, err := s.q.CreatePreset(ctx, params)
-	if err != nil {
-		return nil, err
-	}
-	return presetFromPG(row), nil
-}
-
-func (s *workflowCatalogStore) UpsertPreset(ctx context.Context, preset *core.Preset) (*core.Preset, error) {
-	params, err := presetToUpsertParams(preset)
-	if err != nil {
-		return nil, err
-	}
-	row, err := s.q.UpsertPreset(ctx, params)
-	if err != nil {
-		return nil, err
-	}
-	return presetFromPG(row), nil
-}
-
-func (s *workflowCatalogStore) GetPreset(ctx context.Context, id string) (*core.Preset, error) {
-	row, err := s.q.GetPreset(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	return presetFromPG(row), nil
-}
-
-func (s *workflowCatalogStore) GetPresetBySlug(ctx context.Context, userID, slug string) (*core.Preset, error) {
-	row, err := s.q.GetPresetBySlug(ctx, pgdb.GetPresetBySlugParams{UserID: userID, Slug: slug})
-	if err != nil {
-		return nil, err
-	}
-	return presetFromPG(row), nil
-}
-
-func (s *workflowCatalogStore) GetPresetBySlugAndProject(ctx context.Context, userID, slug, projectID string) (*core.Preset, error) {
-	row, err := s.q.GetPresetBySlugAndProject(ctx, pgdb.GetPresetBySlugAndProjectParams{UserID: userID, Slug: slug, ProjectID: workflowPtrToNullString(&projectID)})
-	if err != nil {
-		return nil, err
-	}
-	return presetFromPG(row), nil
-}
-
-func (s *workflowCatalogStore) ListUserPresets(ctx context.Context, userID string) ([]*core.Preset, error) {
-	rows, err := s.q.ListUserPresets(ctx, userID)
-	if err != nil {
-		return nil, err
-	}
-	return presetsFromPG(rows), nil
-}
-
-func (s *workflowCatalogStore) ListUserPresetsGlobal(ctx context.Context, userID string) ([]*core.Preset, error) {
-	rows, err := s.q.ListUserPresetsGlobal(ctx, userID)
-	if err != nil {
-		return nil, err
-	}
-	return presetsFromPG(rows), nil
-}
-
-func (s *workflowCatalogStore) ListUserPresetsByProject(ctx context.Context, userID, projectID string) ([]*core.Preset, error) {
-	rows, err := s.q.ListUserPresetsByProject(ctx, pgdb.ListUserPresetsByProjectParams{UserID: userID, ProjectID: workflowPtrToNullString(&projectID)})
-	if err != nil {
-		return nil, err
-	}
-	return presetsFromPG(rows), nil
-}
-
-func (s *workflowCatalogStore) ListPresetsByTag(ctx context.Context, userID, tag, projectID string) ([]*core.Preset, error) {
-	rows, err := s.q.ListPresetsByTag(ctx, pgdb.ListPresetsByTagParams{UserID: userID, Tag: tag, ProjectID: workflowPtrToNullString(&projectID)})
-	if err != nil {
-		return nil, err
-	}
-	return presetsFromPG(rows), nil
-}
-
-func (s *workflowCatalogStore) UpdatePreset(ctx context.Context, preset *core.Preset) (*core.Preset, error) {
-	params, err := presetToUpdateParams(preset)
-	if err != nil {
-		return nil, err
-	}
-	row, err := s.q.UpdatePreset(ctx, params)
-	if err != nil {
-		return nil, err
-	}
-	return presetFromPG(row), nil
-}
-
-func (s *workflowCatalogStore) DeletePreset(ctx context.Context, id string) error {
-	return s.q.DeletePreset(ctx, id)
-}
-
-func (s *workflowCatalogStore) DeletePresetBySlug(ctx context.Context, userID, slug string) error {
-	return s.q.DeletePresetBySlug(ctx, pgdb.DeletePresetBySlugParams{UserID: userID, Slug: slug})
-}
-
-func (s *workflowCatalogStore) DeletePresetBySlugAndProject(ctx context.Context, userID, slug, projectID string) error {
-	return s.q.DeletePresetBySlugAndProject(ctx, pgdb.DeletePresetBySlugAndProjectParams{UserID: userID, Slug: slug, ProjectID: workflowPtrToNullString(&projectID)})
 }
 
 func (s *workflowCatalogStore) CreateWorkflowScenario(ctx context.Context, scenario *core.WorkflowScenario) error {
@@ -443,82 +337,6 @@ func workflowScenariosFromPG(rows []pgdb.WorkflowScenario) []*core.WorkflowScena
 		result[i] = workflowScenarioFromPG(row)
 	}
 	return result
-}
-
-func presetFromPG(sp pgdb.Preset) *core.Preset {
-	params := make(map[string]interface{})
-	if sp.Params != "" {
-		_ = json.Unmarshal([]byte(sp.Params), &params)
-	}
-
-	return &core.Preset{
-		ID:          sp.ID,
-		UserID:      sp.UserID,
-		ProjectID:   workflowNullStringToPtr(sp.ProjectID),
-		Name:        sp.Name,
-		Slug:        sp.Slug,
-		Description: workflowNullStringToPtr(sp.Description),
-		Tag:         sp.Tag,
-		Params:      params,
-		CreatedAt:   sp.CreatedAt,
-		UpdatedAt:   sp.UpdatedAt,
-	}
-}
-
-func presetsFromPG(rows []pgdb.Preset) []*core.Preset {
-	presets := make([]*core.Preset, len(rows))
-	for i, row := range rows {
-		presets[i] = presetFromPG(row)
-	}
-	return presets
-}
-
-func presetToCreateParams(preset *core.Preset) (pgdb.CreatePresetParams, error) {
-	paramsJSON, err := json.Marshal(preset.Params)
-	if err != nil {
-		return pgdb.CreatePresetParams{}, fmt.Errorf("failed to marshal preset params: %w", err)
-	}
-	return pgdb.CreatePresetParams{
-		ID:          preset.ID,
-		UserID:      preset.UserID,
-		ProjectID:   workflowPtrToNullString(preset.ProjectID),
-		Name:        preset.Name,
-		Slug:        preset.Slug,
-		Description: workflowPtrToNullString(preset.Description),
-		Tag:         preset.Tag,
-		Params:      string(paramsJSON),
-	}, nil
-}
-
-func presetToUpsertParams(preset *core.Preset) (pgdb.UpsertPresetParams, error) {
-	paramsJSON, err := json.Marshal(preset.Params)
-	if err != nil {
-		return pgdb.UpsertPresetParams{}, fmt.Errorf("failed to marshal preset params: %w", err)
-	}
-	return pgdb.UpsertPresetParams{
-		ID:          preset.ID,
-		UserID:      preset.UserID,
-		ProjectID:   workflowPtrToNullString(preset.ProjectID),
-		Name:        preset.Name,
-		Slug:        preset.Slug,
-		Description: workflowPtrToNullString(preset.Description),
-		Tag:         preset.Tag,
-		Params:      string(paramsJSON),
-	}, nil
-}
-
-func presetToUpdateParams(preset *core.Preset) (pgdb.UpdatePresetParams, error) {
-	paramsJSON, err := json.Marshal(preset.Params)
-	if err != nil {
-		return pgdb.UpdatePresetParams{}, fmt.Errorf("failed to marshal preset params: %w", err)
-	}
-	return pgdb.UpdatePresetParams{
-		Name:        preset.Name,
-		Description: workflowPtrToNullString(preset.Description),
-		Tag:         preset.Tag,
-		Params:      string(paramsJSON),
-		ID:          preset.ID,
-	}, nil
 }
 
 // workflowStatusToPG maps an unset status to draft — the safe default: an

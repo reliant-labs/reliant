@@ -86,9 +86,7 @@ func TestDaemonRecordsStreamDownWhenGatewayUnreachable(t *testing.T) {
 
 	client := newDaemonClientForTest(t, dataDir, deadURL)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go func() { _ = client.run(ctx) }()
+	startDaemon(t, client)
 
 	state := waitForStream(t, dataDir, daemonstate.StreamDisconnected)
 	require.False(t, state.Stream.Established())
@@ -110,9 +108,7 @@ func TestDaemonRecordsStreamEstablishedOnRegistrationAck(t *testing.T) {
 
 	client := newDaemonClientForTest(t, dataDir, srv.URL)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go func() { _ = client.run(ctx) }()
+	startDaemon(t, client)
 
 	state := waitForStream(t, dataDir, daemonstate.StreamConnected)
 	require.True(t, state.Stream.Established())
@@ -134,9 +130,7 @@ func TestDaemonConnectsToGRPCSchemeGateway(t *testing.T) {
 
 	client := newDaemonClientForTest(t, dataDir, "grpc://"+srv.URL[len("http://"):])
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	go func() { _ = client.run(ctx) }()
+	startDaemon(t, client)
 
 	state := waitForStream(t, dataDir, daemonstate.StreamConnected)
 	require.True(t, state.Stream.Established())

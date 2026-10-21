@@ -42,7 +42,7 @@ import (
 // reached; after it, the sub-workflow starts and reports its own nodes.
 func TestParallelCompete_ImplNodeHonorsItsOwnProjectPath(t *testing.T) {
 	wf := loadBuiltin(t, "parallel-compete")
-	scenarios := loadScenarios(t, "../../builtin/testdata/parallel-compete_scenarios.yaml")
+	scenarios := loadScenarios(t, "parallel-compete")
 
 	var sc *scenario.Scenario
 	for _, s := range scenarios {

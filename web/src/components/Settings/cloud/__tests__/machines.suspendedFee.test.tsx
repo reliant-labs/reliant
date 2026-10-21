@@ -19,7 +19,7 @@ const mocks = vi.hoisted(() => ({
     eligible: true,
     reason: 0,
     hasActiveSubscription: true,
-    grantedMinutesRemaining: 0,
+    grantedSmallDaemonSecondsRemaining: 0,
     planName: 'Compute Small',
     allowedDaemonSizes: ['small'],
   })),
@@ -164,7 +164,7 @@ describe('MachinesSection — suspended machine disk', () => {
       eligible: true,
       reason: 0,
       hasActiveSubscription: true,
-      grantedMinutesRemaining: 0,
+      grantedSmallDaemonSecondsRemaining: 0,
       planName: 'Compute Large',
       allowedDaemonSizes: ['small', 'large'],
     })

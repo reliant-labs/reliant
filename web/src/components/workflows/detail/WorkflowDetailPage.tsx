@@ -48,7 +48,7 @@ import { useWorkflowDefinition } from "../../workflow/useWorkflowDefinition";
 import { DRAFT_NOT_RUNNABLE } from "../../workflow/workflowDraftStatus";
 import { WorkflowBadge, WorkflowSourceBadge } from "../WorkflowSourceBadge";
 import { WorkflowPresetsSection } from "./WorkflowPresetsSection";
-import { EnableWorkflowDialog } from "../../Automations/EnableWorkflowDialog";
+import { WorkflowSetupDialog } from "../../Automations/WorkflowSetupDialog";
 import { workflowEnableState } from "../../Automations/enableWorkflow";
 import { triggerErrorMessage } from "@/api/trigger-grpc";
 import { declaredTriggers, describeDeclaredSource, type DeclaredTrigger } from "@/lib/declaredTriggers";
@@ -241,7 +241,7 @@ export function WorkflowDetail({ projectId, workflowRef }: { projectId: string; 
         </aside>
       </div>
 
-      <EnableWorkflowDialog
+      <WorkflowSetupDialog
         open={enabling}
         onClose={() => setEnabling(false)}
         workflowRef={workflowRef}

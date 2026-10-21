@@ -9,10 +9,11 @@
  * and prompt read (`trigger.payload.…`), so editing it is editing the event.
  */
 
+import type { JsonObject } from "@bufbuild/protobuf";
 import type { ReplayCandidate } from "@/api/trigger-grpc";
 import { formatRelativeTime } from "@/lib/relativeTime";
 
-export type PayloadParse = { ok: true; value: Record<string, unknown> } | { ok: false; error: string };
+export type PayloadParse = { ok: true; value: JsonObject } | { ok: false; error: string };
 
 /** A payload is a JSON object. Anything else cannot be an event's body. */
 export function parsePayload(text: string): PayloadParse {
@@ -27,10 +28,10 @@ export function parsePayload(text: string): PayloadParse {
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
     return { ok: false, error: "The payload must be a JSON object, like {\"issue\": 7}." };
   }
-  return { ok: true, value: parsed as Record<string, unknown> };
+  return { ok: true, value: parsed as JsonObject };
 }
 
-export function formatPayload(payload: Record<string, unknown>): string {
+export function formatPayload(payload: JsonObject): string {
   return Object.keys(payload).length === 0 ? "{}" : JSON.stringify(payload, null, 2);
 }
 

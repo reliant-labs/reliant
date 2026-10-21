@@ -1,0 +1,38 @@
+# yaml-language-server: $schema=../../../manifest/schema/action.schema.json
+id: user.get
+display_name: Get authenticated user
+summary: The GitHub account the connection acts as.
+description: >-
+  Return the GitHub user the connection authenticates as: login, id, name
+  and profile URL.
+keywords: [whoami, account, profile]
+placement: server
+mutates: false
+tool:
+  expose: true
+params:
+  type: object
+  additionalProperties: false
+  properties:
+    connection:
+      type: string
+      description: >-
+        Id of a saved GitHub connection to use. Omit to use your default
+        GitHub connection.
+request:
+  method: GET
+  path: /user
+  errors: { $ref: ../schemas/github_errors.yaml }
+output:
+  select: >-
+    {"login": response.login,
+     "id": response.?id.orValue(null),
+     "name": response.?name.orValue(null),
+     "html_url": response.?html_url.orValue(null)}
+  schema:
+    type: object
+    properties:
+      login: { type: string }
+      id: { type: integer }
+      name: { type: [string, "null"] }
+      html_url: { type: [string, "null"] }

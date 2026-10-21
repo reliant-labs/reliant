@@ -51,7 +51,11 @@ type IntegrationManifest struct {
 	Triggers []*TriggerSpec `protobuf:"bytes,9,rep,name=triggers,proto3" json:"triggers,omitempty"`
 	// Keywords are extra search terms for the catalog index: product names and
 	// synonyms ("email" for gmail). Lower-case words, [a-z0-9][a-z0-9_.-]*.
-	Keywords      []string `protobuf:"bytes,10,rep,name=keywords,proto3" json:"keywords,omitempty"`
+	Keywords []string `protobuf:"bytes,10,rep,name=keywords,proto3" json:"keywords,omitempty"`
+	// Types are the value types this integration defines (`github.repository`):
+	// what a workflow input or a trigger attribute can be typed as. Referenced
+	// as `<id>.<type id>`.
+	Types         []*TypeSpec `protobuf:"bytes,11,rep,name=types,proto3" json:"types,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -156,6 +160,531 @@ func (x *IntegrationManifest) GetKeywords() []string {
 	return nil
 }
 
+func (x *IntegrationManifest) GetTypes() []*TypeSpec {
+	if x != nil {
+		return x.Types
+	}
+	return nil
+}
+
+// TypeSpec is a value type an integration defines. A workflow input of this
+// type holds plain JSON values matching `value`, and the options source lets
+// a UI offer the values the caller can actually choose from.
+type TypeSpec struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Id is unique within the manifest and a different namespace from action
+	// and trigger ids. Lower-case, [a-z][a-z0-9_]*. The type's ref is
+	// `<integration id>.<id>`.
+	Id          string `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	DisplayName string `protobuf:"bytes,2,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
+	Description string `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
+	// Value is the JSON Schema of ONE value; validation and CEL typing use it.
+	// Normally a string with a pattern.
+	Value *structpb.Struct `protobuf:"bytes,4,opt,name=value,proto3" json:"value,omitempty"`
+	// Options says where a picker gets candidate values. Unset means the type
+	// has no option list (free entry only).
+	Options *TypeOptionsSpec `protobuf:"bytes,5,opt,name=options,proto3" json:"options,omitempty"`
+	// FreeText allows a value that is not among the options (a label that does
+	// not exist yet).
+	FreeText bool `protobuf:"varint,6,opt,name=free_text,json=freeText,proto3" json:"free_text,omitempty"`
+	// Keywords are extra search terms for the catalog index.
+	Keywords []string `protobuf:"bytes,7,rep,name=keywords,proto3" json:"keywords,omitempty"`
+	// Summary is one line for search results and pickers.
+	Summary       string `protobuf:"bytes,8,opt,name=summary,proto3" json:"summary,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TypeSpec) Reset() {
+	*x = TypeSpec{}
+	mi := &file_reliant_v1_integration_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TypeSpec) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TypeSpec) ProtoMessage() {}
+
+func (x *TypeSpec) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_integration_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TypeSpec.ProtoReflect.Descriptor instead.
+func (*TypeSpec) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *TypeSpec) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *TypeSpec) GetDisplayName() string {
+	if x != nil {
+		return x.DisplayName
+	}
+	return ""
+}
+
+func (x *TypeSpec) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *TypeSpec) GetValue() *structpb.Struct {
+	if x != nil {
+		return x.Value
+	}
+	return nil
+}
+
+func (x *TypeSpec) GetOptions() *TypeOptionsSpec {
+	if x != nil {
+		return x.Options
+	}
+	return nil
+}
+
+func (x *TypeSpec) GetFreeText() bool {
+	if x != nil {
+		return x.FreeText
+	}
+	return false
+}
+
+func (x *TypeSpec) GetKeywords() []string {
+	if x != nil {
+		return x.Keywords
+	}
+	return nil
+}
+
+func (x *TypeSpec) GetSummary() string {
+	if x != nil {
+		return x.Summary
+	}
+	return ""
+}
+
+// TypeOptionsSpec is how a type's candidate values are listed: a read-only
+// list action of the same integration, run as the caller, and CEL projections
+// from each item of its output to an option. The CEL expressions see `item`
+// (one output item) and `context` (acting_identity: "owner" or "app").
+type TypeOptionsSpec struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Action is the id of a list action in this manifest. It must not mutate
+	// and must be placeable on the server.
+	Action string `protobuf:"bytes,1,opt,name=action,proto3" json:"action,omitempty"`
+	// Params are templates for the action's parameters, keyed by param name.
+	// They may read `scope.<key>`, `query` and `page_token`.
+	Params map[string]string `protobuf:"bytes,2,rep,name=params,proto3" json:"params,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// Items is CEL over the action's output yielding the list of items. Empty
+	// means the output itself is the list.
+	Items string `protobuf:"bytes,3,opt,name=items,proto3" json:"items,omitempty"`
+	// Value, Label, Description and Group are CEL over `item`. Value is the
+	// stored value and is required; Label defaults to Value.
+	Value       string `protobuf:"bytes,4,opt,name=value,proto3" json:"value,omitempty"`
+	Label       string `protobuf:"bytes,5,opt,name=label,proto3" json:"label,omitempty"`
+	Description string `protobuf:"bytes,6,opt,name=description,proto3" json:"description,omitempty"`
+	Group       string `protobuf:"bytes,7,opt,name=group,proto3" json:"group,omitempty"`
+	// Annotations are extra facts for the UI and for warnings, name -> CEL over
+	// `item`.
+	Annotations map[string]string `protobuf:"bytes,8,rep,name=annotations,proto3" json:"annotations,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// Warnings are checked per option; each that holds is shown with the option.
+	Warnings []*TypeWarningSpec `protobuf:"bytes,9,rep,name=warnings,proto3" json:"warnings,omitempty"`
+	// Search says how a query narrows the list: "client" (filter the projected
+	// labels) or "param:<name>" (pass the query as that action param). Empty is
+	// "client".
+	Search string `protobuf:"bytes,10,opt,name=search,proto3" json:"search,omitempty"`
+	// Paging says how to page an action that pages itself. Unset means the
+	// action returns the whole list and the caller pages it.
+	Paging *TypeOptionsPaging `protobuf:"bytes,11,opt,name=paging,proto3" json:"paging,omitempty"`
+	// Scope names the other typed values this list depends on, by scope key
+	// (visible to the templates as `scope.<key>`).
+	Scope map[string]*TypeScopeSpec `protobuf:"bytes,12,rep,name=scope,proto3" json:"scope,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// Resolve maps a stored value back to its current display (an id to a
+	// login), for values that are not in the current options.
+	Resolve       *TypeResolveSpec `protobuf:"bytes,13,opt,name=resolve,proto3" json:"resolve,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TypeOptionsSpec) Reset() {
+	*x = TypeOptionsSpec{}
+	mi := &file_reliant_v1_integration_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TypeOptionsSpec) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TypeOptionsSpec) ProtoMessage() {}
+
+func (x *TypeOptionsSpec) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_integration_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TypeOptionsSpec.ProtoReflect.Descriptor instead.
+func (*TypeOptionsSpec) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *TypeOptionsSpec) GetAction() string {
+	if x != nil {
+		return x.Action
+	}
+	return ""
+}
+
+func (x *TypeOptionsSpec) GetParams() map[string]string {
+	if x != nil {
+		return x.Params
+	}
+	return nil
+}
+
+func (x *TypeOptionsSpec) GetItems() string {
+	if x != nil {
+		return x.Items
+	}
+	return ""
+}
+
+func (x *TypeOptionsSpec) GetValue() string {
+	if x != nil {
+		return x.Value
+	}
+	return ""
+}
+
+func (x *TypeOptionsSpec) GetLabel() string {
+	if x != nil {
+		return x.Label
+	}
+	return ""
+}
+
+func (x *TypeOptionsSpec) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *TypeOptionsSpec) GetGroup() string {
+	if x != nil {
+		return x.Group
+	}
+	return ""
+}
+
+func (x *TypeOptionsSpec) GetAnnotations() map[string]string {
+	if x != nil {
+		return x.Annotations
+	}
+	return nil
+}
+
+func (x *TypeOptionsSpec) GetWarnings() []*TypeWarningSpec {
+	if x != nil {
+		return x.Warnings
+	}
+	return nil
+}
+
+func (x *TypeOptionsSpec) GetSearch() string {
+	if x != nil {
+		return x.Search
+	}
+	return ""
+}
+
+func (x *TypeOptionsSpec) GetPaging() *TypeOptionsPaging {
+	if x != nil {
+		return x.Paging
+	}
+	return nil
+}
+
+func (x *TypeOptionsSpec) GetScope() map[string]*TypeScopeSpec {
+	if x != nil {
+		return x.Scope
+	}
+	return nil
+}
+
+func (x *TypeOptionsSpec) GetResolve() *TypeResolveSpec {
+	if x != nil {
+		return x.Resolve
+	}
+	return nil
+}
+
+// TypeWarningSpec is a condition on an option, with the message shown when it
+// holds.
+type TypeWarningSpec struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// When is CEL over `item`, `option` (the projection so far, with
+	// annotations) and `context`, yielding a bool.
+	When          string `protobuf:"bytes,1,opt,name=when,proto3" json:"when,omitempty"`
+	Message       string `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TypeWarningSpec) Reset() {
+	*x = TypeWarningSpec{}
+	mi := &file_reliant_v1_integration_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TypeWarningSpec) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TypeWarningSpec) ProtoMessage() {}
+
+func (x *TypeWarningSpec) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_integration_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TypeWarningSpec.ProtoReflect.Descriptor instead.
+func (*TypeWarningSpec) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *TypeWarningSpec) GetWhen() string {
+	if x != nil {
+		return x.When
+	}
+	return ""
+}
+
+func (x *TypeWarningSpec) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+// TypeOptionsPaging is the upstream paging contract of an options action.
+type TypeOptionsPaging struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// NextTokenPath is a dotted path into the action's output holding the token
+	// for the next page; absent or empty means the last page.
+	NextTokenPath string `protobuf:"bytes,1,opt,name=next_token_path,json=nextTokenPath,proto3" json:"next_token_path,omitempty"`
+	// TokenParam is the action param that receives the token.
+	TokenParam    string `protobuf:"bytes,2,opt,name=token_param,json=tokenParam,proto3" json:"token_param,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TypeOptionsPaging) Reset() {
+	*x = TypeOptionsPaging{}
+	mi := &file_reliant_v1_integration_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TypeOptionsPaging) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TypeOptionsPaging) ProtoMessage() {}
+
+func (x *TypeOptionsPaging) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_integration_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TypeOptionsPaging.ProtoReflect.Descriptor instead.
+func (*TypeOptionsPaging) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *TypeOptionsPaging) GetNextTokenPath() string {
+	if x != nil {
+		return x.NextTokenPath
+	}
+	return ""
+}
+
+func (x *TypeOptionsPaging) GetTokenParam() string {
+	if x != nil {
+		return x.TokenParam
+	}
+	return ""
+}
+
+// TypeScopeSpec is one dependency of a type's options on another typed value.
+type TypeScopeSpec struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Type is the type ref the scope value has: `<id>` within this manifest or
+	// a qualified `<integration>.<id>`.
+	Type string `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
+	// Required means the options cannot be listed until the scope is supplied.
+	Required      bool `protobuf:"varint,2,opt,name=required,proto3" json:"required,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TypeScopeSpec) Reset() {
+	*x = TypeScopeSpec{}
+	mi := &file_reliant_v1_integration_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TypeScopeSpec) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TypeScopeSpec) ProtoMessage() {}
+
+func (x *TypeScopeSpec) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_integration_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TypeScopeSpec.ProtoReflect.Descriptor instead.
+func (*TypeScopeSpec) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *TypeScopeSpec) GetType() string {
+	if x != nil {
+		return x.Type
+	}
+	return ""
+}
+
+func (x *TypeScopeSpec) GetRequired() bool {
+	if x != nil {
+		return x.Required
+	}
+	return false
+}
+
+// TypeResolveSpec labels stored values.
+type TypeResolveSpec struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Action is a read-only action of this manifest that looks one value up.
+	Action string `protobuf:"bytes,1,opt,name=action,proto3" json:"action,omitempty"`
+	// Params are templates; they may read `value`.
+	Params map[string]string `protobuf:"bytes,2,rep,name=params,proto3" json:"params,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// Label is CEL over `item`, the looked-up object.
+	Label         string `protobuf:"bytes,3,opt,name=label,proto3" json:"label,omitempty"`
+	Description   string `protobuf:"bytes,4,opt,name=description,proto3" json:"description,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *TypeResolveSpec) Reset() {
+	*x = TypeResolveSpec{}
+	mi := &file_reliant_v1_integration_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *TypeResolveSpec) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TypeResolveSpec) ProtoMessage() {}
+
+func (x *TypeResolveSpec) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_integration_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TypeResolveSpec.ProtoReflect.Descriptor instead.
+func (*TypeResolveSpec) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *TypeResolveSpec) GetAction() string {
+	if x != nil {
+		return x.Action
+	}
+	return ""
+}
+
+func (x *TypeResolveSpec) GetParams() map[string]string {
+	if x != nil {
+		return x.Params
+	}
+	return nil
+}
+
+func (x *TypeResolveSpec) GetLabel() string {
+	if x != nil {
+		return x.Label
+	}
+	return ""
+}
+
+func (x *TypeResolveSpec) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
 // ConnectionSpec says how requests are authenticated and where they may go.
 // Adding a provider is data: the auth methods, the identity probe and the
 // per-connection params below are everything the connections layer needs.
@@ -201,7 +730,7 @@ type ConnectionSpec struct {
 
 func (x *ConnectionSpec) Reset() {
 	*x = ConnectionSpec{}
-	mi := &file_reliant_v1_integration_proto_msgTypes[1]
+	mi := &file_reliant_v1_integration_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -213,7 +742,7 @@ func (x *ConnectionSpec) String() string {
 func (*ConnectionSpec) ProtoMessage() {}
 
 func (x *ConnectionSpec) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_integration_proto_msgTypes[1]
+	mi := &file_reliant_v1_integration_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -226,7 +755,7 @@ func (x *ConnectionSpec) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConnectionSpec.ProtoReflect.Descriptor instead.
 func (*ConnectionSpec) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{1}
+	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *ConnectionSpec) GetBaseUrl() string {
@@ -301,7 +830,7 @@ type AuthMethod struct {
 
 func (x *AuthMethod) Reset() {
 	*x = AuthMethod{}
-	mi := &file_reliant_v1_integration_proto_msgTypes[2]
+	mi := &file_reliant_v1_integration_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -313,7 +842,7 @@ func (x *AuthMethod) String() string {
 func (*AuthMethod) ProtoMessage() {}
 
 func (x *AuthMethod) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_integration_proto_msgTypes[2]
+	mi := &file_reliant_v1_integration_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -326,7 +855,7 @@ func (x *AuthMethod) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AuthMethod.ProtoReflect.Descriptor instead.
 func (*AuthMethod) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{2}
+	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *AuthMethod) GetMethod() isAuthMethod_Method {
@@ -436,7 +965,7 @@ type OAuth2Auth struct {
 
 func (x *OAuth2Auth) Reset() {
 	*x = OAuth2Auth{}
-	mi := &file_reliant_v1_integration_proto_msgTypes[3]
+	mi := &file_reliant_v1_integration_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -448,7 +977,7 @@ func (x *OAuth2Auth) String() string {
 func (*OAuth2Auth) ProtoMessage() {}
 
 func (x *OAuth2Auth) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_integration_proto_msgTypes[3]
+	mi := &file_reliant_v1_integration_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -461,7 +990,7 @@ func (x *OAuth2Auth) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OAuth2Auth.ProtoReflect.Descriptor instead.
 func (*OAuth2Auth) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{3}
+	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *OAuth2Auth) GetAuthorizeUrl() string {
@@ -543,7 +1072,7 @@ type RevokeSpec struct {
 
 func (x *RevokeSpec) Reset() {
 	*x = RevokeSpec{}
-	mi := &file_reliant_v1_integration_proto_msgTypes[4]
+	mi := &file_reliant_v1_integration_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -555,7 +1084,7 @@ func (x *RevokeSpec) String() string {
 func (*RevokeSpec) ProtoMessage() {}
 
 func (x *RevokeSpec) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_integration_proto_msgTypes[4]
+	mi := &file_reliant_v1_integration_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -568,7 +1097,7 @@ func (x *RevokeSpec) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevokeSpec.ProtoReflect.Descriptor instead.
 func (*RevokeSpec) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{4}
+	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *RevokeSpec) GetMethod() string {
@@ -625,7 +1154,7 @@ type ApiKeyAuth struct {
 
 func (x *ApiKeyAuth) Reset() {
 	*x = ApiKeyAuth{}
-	mi := &file_reliant_v1_integration_proto_msgTypes[5]
+	mi := &file_reliant_v1_integration_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -637,7 +1166,7 @@ func (x *ApiKeyAuth) String() string {
 func (*ApiKeyAuth) ProtoMessage() {}
 
 func (x *ApiKeyAuth) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_integration_proto_msgTypes[5]
+	mi := &file_reliant_v1_integration_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -650,7 +1179,7 @@ func (x *ApiKeyAuth) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApiKeyAuth.ProtoReflect.Descriptor instead.
 func (*ApiKeyAuth) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{5}
+	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *ApiKeyAuth) GetIn() string {
@@ -696,7 +1225,7 @@ type BasicAuth struct {
 
 func (x *BasicAuth) Reset() {
 	*x = BasicAuth{}
-	mi := &file_reliant_v1_integration_proto_msgTypes[6]
+	mi := &file_reliant_v1_integration_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -708,7 +1237,7 @@ func (x *BasicAuth) String() string {
 func (*BasicAuth) ProtoMessage() {}
 
 func (x *BasicAuth) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_integration_proto_msgTypes[6]
+	mi := &file_reliant_v1_integration_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -721,7 +1250,7 @@ func (x *BasicAuth) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BasicAuth.ProtoReflect.Descriptor instead.
 func (*BasicAuth) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{6}
+	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *BasicAuth) GetUsernameLabel() string {
@@ -758,7 +1287,7 @@ type DelegatedAuth struct {
 
 func (x *DelegatedAuth) Reset() {
 	*x = DelegatedAuth{}
-	mi := &file_reliant_v1_integration_proto_msgTypes[7]
+	mi := &file_reliant_v1_integration_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -770,7 +1299,7 @@ func (x *DelegatedAuth) String() string {
 func (*DelegatedAuth) ProtoMessage() {}
 
 func (x *DelegatedAuth) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_integration_proto_msgTypes[7]
+	mi := &file_reliant_v1_integration_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -783,7 +1312,7 @@ func (x *DelegatedAuth) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DelegatedAuth.ProtoReflect.Descriptor instead.
 func (*DelegatedAuth) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{7}
+	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *DelegatedAuth) GetBroker() string {
@@ -811,7 +1340,7 @@ type ConnectionParam struct {
 
 func (x *ConnectionParam) Reset() {
 	*x = ConnectionParam{}
-	mi := &file_reliant_v1_integration_proto_msgTypes[8]
+	mi := &file_reliant_v1_integration_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -823,7 +1352,7 @@ func (x *ConnectionParam) String() string {
 func (*ConnectionParam) ProtoMessage() {}
 
 func (x *ConnectionParam) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_integration_proto_msgTypes[8]
+	mi := &file_reliant_v1_integration_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -836,7 +1365,7 @@ func (x *ConnectionParam) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConnectionParam.ProtoReflect.Descriptor instead.
 func (*ConnectionParam) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{8}
+	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *ConnectionParam) GetName() string {
@@ -914,7 +1443,7 @@ type IdentityProbe struct {
 
 func (x *IdentityProbe) Reset() {
 	*x = IdentityProbe{}
-	mi := &file_reliant_v1_integration_proto_msgTypes[9]
+	mi := &file_reliant_v1_integration_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -926,7 +1455,7 @@ func (x *IdentityProbe) String() string {
 func (*IdentityProbe) ProtoMessage() {}
 
 func (x *IdentityProbe) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_integration_proto_msgTypes[9]
+	mi := &file_reliant_v1_integration_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -939,7 +1468,7 @@ func (x *IdentityProbe) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use IdentityProbe.ProtoReflect.Descriptor instead.
 func (*IdentityProbe) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{9}
+	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *IdentityProbe) GetMethod() string {
@@ -1050,7 +1579,7 @@ type ActionSpec struct {
 
 func (x *ActionSpec) Reset() {
 	*x = ActionSpec{}
-	mi := &file_reliant_v1_integration_proto_msgTypes[10]
+	mi := &file_reliant_v1_integration_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1062,7 +1591,7 @@ func (x *ActionSpec) String() string {
 func (*ActionSpec) ProtoMessage() {}
 
 func (x *ActionSpec) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_integration_proto_msgTypes[10]
+	mi := &file_reliant_v1_integration_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1075,7 +1604,7 @@ func (x *ActionSpec) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ActionSpec.ProtoReflect.Descriptor instead.
 func (*ActionSpec) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{10}
+	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *ActionSpec) GetId() string {
@@ -1190,7 +1719,7 @@ type ToolSpec struct {
 
 func (x *ToolSpec) Reset() {
 	*x = ToolSpec{}
-	mi := &file_reliant_v1_integration_proto_msgTypes[11]
+	mi := &file_reliant_v1_integration_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1202,7 +1731,7 @@ func (x *ToolSpec) String() string {
 func (*ToolSpec) ProtoMessage() {}
 
 func (x *ToolSpec) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_integration_proto_msgTypes[11]
+	mi := &file_reliant_v1_integration_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1215,7 +1744,7 @@ func (x *ToolSpec) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ToolSpec.ProtoReflect.Descriptor instead.
 func (*ToolSpec) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{11}
+	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *ToolSpec) GetExpose() bool {
@@ -1300,7 +1829,7 @@ type HttpRequestSpec struct {
 
 func (x *HttpRequestSpec) Reset() {
 	*x = HttpRequestSpec{}
-	mi := &file_reliant_v1_integration_proto_msgTypes[12]
+	mi := &file_reliant_v1_integration_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1312,7 +1841,7 @@ func (x *HttpRequestSpec) String() string {
 func (*HttpRequestSpec) ProtoMessage() {}
 
 func (x *HttpRequestSpec) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_integration_proto_msgTypes[12]
+	mi := &file_reliant_v1_integration_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1325,7 +1854,7 @@ func (x *HttpRequestSpec) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HttpRequestSpec.ProtoReflect.Descriptor instead.
 func (*HttpRequestSpec) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{12}
+	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *HttpRequestSpec) GetMethod() string {
@@ -1476,7 +2005,7 @@ type PaginationSpec struct {
 
 func (x *PaginationSpec) Reset() {
 	*x = PaginationSpec{}
-	mi := &file_reliant_v1_integration_proto_msgTypes[13]
+	mi := &file_reliant_v1_integration_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1488,7 +2017,7 @@ func (x *PaginationSpec) String() string {
 func (*PaginationSpec) ProtoMessage() {}
 
 func (x *PaginationSpec) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_integration_proto_msgTypes[13]
+	mi := &file_reliant_v1_integration_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1501,7 +2030,7 @@ func (x *PaginationSpec) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PaginationSpec.ProtoReflect.Descriptor instead.
 func (*PaginationSpec) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{13}
+	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *PaginationSpec) GetStyle() string {
@@ -1586,7 +2115,7 @@ type ErrorRule struct {
 
 func (x *ErrorRule) Reset() {
 	*x = ErrorRule{}
-	mi := &file_reliant_v1_integration_proto_msgTypes[14]
+	mi := &file_reliant_v1_integration_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1598,7 +2127,7 @@ func (x *ErrorRule) String() string {
 func (*ErrorRule) ProtoMessage() {}
 
 func (x *ErrorRule) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_integration_proto_msgTypes[14]
+	mi := &file_reliant_v1_integration_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1611,7 +2140,7 @@ func (x *ErrorRule) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ErrorRule.ProtoReflect.Descriptor instead.
 func (*ErrorRule) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{14}
+	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *ErrorRule) GetStatus() int32 {
@@ -1680,7 +2209,7 @@ type OutputSpec struct {
 
 func (x *OutputSpec) Reset() {
 	*x = OutputSpec{}
-	mi := &file_reliant_v1_integration_proto_msgTypes[15]
+	mi := &file_reliant_v1_integration_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1692,7 +2221,7 @@ func (x *OutputSpec) String() string {
 func (*OutputSpec) ProtoMessage() {}
 
 func (x *OutputSpec) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_integration_proto_msgTypes[15]
+	mi := &file_reliant_v1_integration_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1705,7 +2234,7 @@ func (x *OutputSpec) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OutputSpec.ProtoReflect.Descriptor instead.
 func (*OutputSpec) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{15}
+	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *OutputSpec) GetSelect() string {
@@ -1764,7 +2293,7 @@ type TriggerSpec struct {
 
 func (x *TriggerSpec) Reset() {
 	*x = TriggerSpec{}
-	mi := &file_reliant_v1_integration_proto_msgTypes[16]
+	mi := &file_reliant_v1_integration_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1776,7 +2305,7 @@ func (x *TriggerSpec) String() string {
 func (*TriggerSpec) ProtoMessage() {}
 
 func (x *TriggerSpec) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_integration_proto_msgTypes[16]
+	mi := &file_reliant_v1_integration_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1789,7 +2318,7 @@ func (x *TriggerSpec) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TriggerSpec.ProtoReflect.Descriptor instead.
 func (*TriggerSpec) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{16}
+	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *TriggerSpec) GetId() string {
@@ -1856,14 +2385,18 @@ type TriggerAttribute struct {
 	Name        string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	Description string `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`
 	// Example is a representative value for an editor's placeholder.
-	Example       string `protobuf:"bytes,3,opt,name=example,proto3" json:"example,omitempty"`
+	Example string `protobuf:"bytes,3,opt,name=example,proto3" json:"example,omitempty"`
+	// Type is the value type of the attribute: a type id of this manifest, or a
+	// qualified `<integration>.<id>`. Empty means a plain string. It is what an
+	// IntegrationSource's match_input checks an input's type against.
+	Type          string `protobuf:"bytes,4,opt,name=type,proto3" json:"type,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *TriggerAttribute) Reset() {
 	*x = TriggerAttribute{}
-	mi := &file_reliant_v1_integration_proto_msgTypes[17]
+	mi := &file_reliant_v1_integration_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1875,7 +2408,7 @@ func (x *TriggerAttribute) String() string {
 func (*TriggerAttribute) ProtoMessage() {}
 
 func (x *TriggerAttribute) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_integration_proto_msgTypes[17]
+	mi := &file_reliant_v1_integration_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1888,7 +2421,7 @@ func (x *TriggerAttribute) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TriggerAttribute.ProtoReflect.Descriptor instead.
 func (*TriggerAttribute) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{17}
+	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *TriggerAttribute) GetName() string {
@@ -1912,12 +2445,19 @@ func (x *TriggerAttribute) GetExample() string {
 	return ""
 }
 
+func (x *TriggerAttribute) GetType() string {
+	if x != nil {
+		return x.Type
+	}
+	return ""
+}
+
 var File_reliant_v1_integration_proto protoreflect.FileDescriptor
 
 const file_reliant_v1_integration_proto_rawDesc = "" +
 	"\n" +
 	"\x1creliant/v1/integration.proto\x12\n" +
-	"reliant.v1\x1a\x1cgoogle/protobuf/struct.proto\"\xf3\x02\n" +
+	"reliant.v1\x1a\x1cgoogle/protobuf/struct.proto\"\x9f\x03\n" +
 	"\x13IntegrationManifest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\x05R\aversion\x12!\n" +
@@ -1931,7 +2471,60 @@ const file_reliant_v1_integration_proto_rawDesc = "" +
 	"\aactions\x18\b \x03(\v2\x16.reliant.v1.ActionSpecR\aactions\x123\n" +
 	"\btriggers\x18\t \x03(\v2\x17.reliant.v1.TriggerSpecR\btriggers\x12\x1a\n" +
 	"\bkeywords\x18\n" +
-	" \x03(\tR\bkeywords\"\xeb\x03\n" +
+	" \x03(\tR\bkeywords\x12*\n" +
+	"\x05types\x18\v \x03(\v2\x14.reliant.v1.TypeSpecR\x05types\"\x98\x02\n" +
+	"\bTypeSpec\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12!\n" +
+	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12 \n" +
+	"\vdescription\x18\x03 \x01(\tR\vdescription\x12-\n" +
+	"\x05value\x18\x04 \x01(\v2\x17.google.protobuf.StructR\x05value\x125\n" +
+	"\aoptions\x18\x05 \x01(\v2\x1b.reliant.v1.TypeOptionsSpecR\aoptions\x12\x1b\n" +
+	"\tfree_text\x18\x06 \x01(\bR\bfreeText\x12\x1a\n" +
+	"\bkeywords\x18\a \x03(\tR\bkeywords\x12\x18\n" +
+	"\asummary\x18\b \x01(\tR\asummary\"\x81\x06\n" +
+	"\x0fTypeOptionsSpec\x12\x16\n" +
+	"\x06action\x18\x01 \x01(\tR\x06action\x12?\n" +
+	"\x06params\x18\x02 \x03(\v2'.reliant.v1.TypeOptionsSpec.ParamsEntryR\x06params\x12\x14\n" +
+	"\x05items\x18\x03 \x01(\tR\x05items\x12\x14\n" +
+	"\x05value\x18\x04 \x01(\tR\x05value\x12\x14\n" +
+	"\x05label\x18\x05 \x01(\tR\x05label\x12 \n" +
+	"\vdescription\x18\x06 \x01(\tR\vdescription\x12\x14\n" +
+	"\x05group\x18\a \x01(\tR\x05group\x12N\n" +
+	"\vannotations\x18\b \x03(\v2,.reliant.v1.TypeOptionsSpec.AnnotationsEntryR\vannotations\x127\n" +
+	"\bwarnings\x18\t \x03(\v2\x1b.reliant.v1.TypeWarningSpecR\bwarnings\x12\x16\n" +
+	"\x06search\x18\n" +
+	" \x01(\tR\x06search\x125\n" +
+	"\x06paging\x18\v \x01(\v2\x1d.reliant.v1.TypeOptionsPagingR\x06paging\x12<\n" +
+	"\x05scope\x18\f \x03(\v2&.reliant.v1.TypeOptionsSpec.ScopeEntryR\x05scope\x125\n" +
+	"\aresolve\x18\r \x01(\v2\x1b.reliant.v1.TypeResolveSpecR\aresolve\x1a9\n" +
+	"\vParamsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a>\n" +
+	"\x10AnnotationsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1aS\n" +
+	"\n" +
+	"ScopeEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12/\n" +
+	"\x05value\x18\x02 \x01(\v2\x19.reliant.v1.TypeScopeSpecR\x05value:\x028\x01\"?\n" +
+	"\x0fTypeWarningSpec\x12\x12\n" +
+	"\x04when\x18\x01 \x01(\tR\x04when\x12\x18\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"\\\n" +
+	"\x11TypeOptionsPaging\x12&\n" +
+	"\x0fnext_token_path\x18\x01 \x01(\tR\rnextTokenPath\x12\x1f\n" +
+	"\vtoken_param\x18\x02 \x01(\tR\n" +
+	"tokenParam\"?\n" +
+	"\rTypeScopeSpec\x12\x12\n" +
+	"\x04type\x18\x01 \x01(\tR\x04type\x12\x1a\n" +
+	"\brequired\x18\x02 \x01(\bR\brequired\"\xdd\x01\n" +
+	"\x0fTypeResolveSpec\x12\x16\n" +
+	"\x06action\x18\x01 \x01(\tR\x06action\x12?\n" +
+	"\x06params\x18\x02 \x03(\v2'.reliant.v1.TypeResolveSpec.ParamsEntryR\x06params\x12\x14\n" +
+	"\x05label\x18\x03 \x01(\tR\x05label\x12 \n" +
+	"\vdescription\x18\x04 \x01(\tR\vdescription\x1a9\n" +
+	"\vParamsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xeb\x03\n" +
 	"\x0eConnectionSpec\x12\x19\n" +
 	"\bbase_url\x18\x02 \x01(\tR\abaseUrl\x12#\n" +
 	"\rallowed_hosts\x18\x03 \x03(\tR\fallowedHosts\x12W\n" +
@@ -2093,11 +2686,12 @@ const file_reliant_v1_integration_proto_rawDesc = "" +
 	"\n" +
 	"attributes\x18\a \x03(\v2\x1c.reliant.v1.TriggerAttributeR\n" +
 	"attributes\x12+\n" +
-	"\x04data\x18\b \x01(\v2\x17.google.protobuf.StructR\x04data\"b\n" +
+	"\x04data\x18\b \x01(\v2\x17.google.protobuf.StructR\x04data\"v\n" +
 	"\x10TriggerAttribute\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x18\n" +
-	"\aexample\x18\x03 \x01(\tR\aexampleB:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
+	"\aexample\x18\x03 \x01(\tR\aexample\x12\x12\n" +
+	"\x04type\x18\x04 \x01(\tR\x04typeB:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_integration_proto_rawDescOnce sync.Once
@@ -2111,66 +2705,87 @@ func file_reliant_v1_integration_proto_rawDescGZIP() []byte {
 	return file_reliant_v1_integration_proto_rawDescData
 }
 
-var file_reliant_v1_integration_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
+var file_reliant_v1_integration_proto_msgTypes = make([]protoimpl.MessageInfo, 33)
 var file_reliant_v1_integration_proto_goTypes = []any{
 	(*IntegrationManifest)(nil), // 0: reliant.v1.IntegrationManifest
-	(*ConnectionSpec)(nil),      // 1: reliant.v1.ConnectionSpec
-	(*AuthMethod)(nil),          // 2: reliant.v1.AuthMethod
-	(*OAuth2Auth)(nil),          // 3: reliant.v1.OAuth2Auth
-	(*RevokeSpec)(nil),          // 4: reliant.v1.RevokeSpec
-	(*ApiKeyAuth)(nil),          // 5: reliant.v1.ApiKeyAuth
-	(*BasicAuth)(nil),           // 6: reliant.v1.BasicAuth
-	(*DelegatedAuth)(nil),       // 7: reliant.v1.DelegatedAuth
-	(*ConnectionParam)(nil),     // 8: reliant.v1.ConnectionParam
-	(*IdentityProbe)(nil),       // 9: reliant.v1.IdentityProbe
-	(*ActionSpec)(nil),          // 10: reliant.v1.ActionSpec
-	(*ToolSpec)(nil),            // 11: reliant.v1.ToolSpec
-	(*HttpRequestSpec)(nil),     // 12: reliant.v1.HttpRequestSpec
-	(*PaginationSpec)(nil),      // 13: reliant.v1.PaginationSpec
-	(*ErrorRule)(nil),           // 14: reliant.v1.ErrorRule
-	(*OutputSpec)(nil),          // 15: reliant.v1.OutputSpec
-	(*TriggerSpec)(nil),         // 16: reliant.v1.TriggerSpec
-	(*TriggerAttribute)(nil),    // 17: reliant.v1.TriggerAttribute
-	nil,                         // 18: reliant.v1.ConnectionSpec.DefaultHeadersEntry
-	nil,                         // 19: reliant.v1.OAuth2Auth.AuthorizeParamsEntry
-	nil,                         // 20: reliant.v1.IdentityProbe.HeadersEntry
-	nil,                         // 21: reliant.v1.HttpRequestSpec.QueryEntry
-	nil,                         // 22: reliant.v1.HttpRequestSpec.HeadersEntry
-	(*structpb.Struct)(nil),     // 23: google.protobuf.Struct
-	(*structpb.Value)(nil),      // 24: google.protobuf.Value
+	(*TypeSpec)(nil),            // 1: reliant.v1.TypeSpec
+	(*TypeOptionsSpec)(nil),     // 2: reliant.v1.TypeOptionsSpec
+	(*TypeWarningSpec)(nil),     // 3: reliant.v1.TypeWarningSpec
+	(*TypeOptionsPaging)(nil),   // 4: reliant.v1.TypeOptionsPaging
+	(*TypeScopeSpec)(nil),       // 5: reliant.v1.TypeScopeSpec
+	(*TypeResolveSpec)(nil),     // 6: reliant.v1.TypeResolveSpec
+	(*ConnectionSpec)(nil),      // 7: reliant.v1.ConnectionSpec
+	(*AuthMethod)(nil),          // 8: reliant.v1.AuthMethod
+	(*OAuth2Auth)(nil),          // 9: reliant.v1.OAuth2Auth
+	(*RevokeSpec)(nil),          // 10: reliant.v1.RevokeSpec
+	(*ApiKeyAuth)(nil),          // 11: reliant.v1.ApiKeyAuth
+	(*BasicAuth)(nil),           // 12: reliant.v1.BasicAuth
+	(*DelegatedAuth)(nil),       // 13: reliant.v1.DelegatedAuth
+	(*ConnectionParam)(nil),     // 14: reliant.v1.ConnectionParam
+	(*IdentityProbe)(nil),       // 15: reliant.v1.IdentityProbe
+	(*ActionSpec)(nil),          // 16: reliant.v1.ActionSpec
+	(*ToolSpec)(nil),            // 17: reliant.v1.ToolSpec
+	(*HttpRequestSpec)(nil),     // 18: reliant.v1.HttpRequestSpec
+	(*PaginationSpec)(nil),      // 19: reliant.v1.PaginationSpec
+	(*ErrorRule)(nil),           // 20: reliant.v1.ErrorRule
+	(*OutputSpec)(nil),          // 21: reliant.v1.OutputSpec
+	(*TriggerSpec)(nil),         // 22: reliant.v1.TriggerSpec
+	(*TriggerAttribute)(nil),    // 23: reliant.v1.TriggerAttribute
+	nil,                         // 24: reliant.v1.TypeOptionsSpec.ParamsEntry
+	nil,                         // 25: reliant.v1.TypeOptionsSpec.AnnotationsEntry
+	nil,                         // 26: reliant.v1.TypeOptionsSpec.ScopeEntry
+	nil,                         // 27: reliant.v1.TypeResolveSpec.ParamsEntry
+	nil,                         // 28: reliant.v1.ConnectionSpec.DefaultHeadersEntry
+	nil,                         // 29: reliant.v1.OAuth2Auth.AuthorizeParamsEntry
+	nil,                         // 30: reliant.v1.IdentityProbe.HeadersEntry
+	nil,                         // 31: reliant.v1.HttpRequestSpec.QueryEntry
+	nil,                         // 32: reliant.v1.HttpRequestSpec.HeadersEntry
+	(*structpb.Struct)(nil),     // 33: google.protobuf.Struct
+	(*structpb.Value)(nil),      // 34: google.protobuf.Value
 }
 var file_reliant_v1_integration_proto_depIdxs = []int32{
-	1,  // 0: reliant.v1.IntegrationManifest.connection:type_name -> reliant.v1.ConnectionSpec
-	10, // 1: reliant.v1.IntegrationManifest.actions:type_name -> reliant.v1.ActionSpec
-	16, // 2: reliant.v1.IntegrationManifest.triggers:type_name -> reliant.v1.TriggerSpec
-	18, // 3: reliant.v1.ConnectionSpec.default_headers:type_name -> reliant.v1.ConnectionSpec.DefaultHeadersEntry
-	2,  // 4: reliant.v1.ConnectionSpec.auth:type_name -> reliant.v1.AuthMethod
-	8,  // 5: reliant.v1.ConnectionSpec.connection_params:type_name -> reliant.v1.ConnectionParam
-	9,  // 6: reliant.v1.ConnectionSpec.probe:type_name -> reliant.v1.IdentityProbe
-	3,  // 7: reliant.v1.AuthMethod.oauth2:type_name -> reliant.v1.OAuth2Auth
-	5,  // 8: reliant.v1.AuthMethod.api_key:type_name -> reliant.v1.ApiKeyAuth
-	6,  // 9: reliant.v1.AuthMethod.basic:type_name -> reliant.v1.BasicAuth
-	7,  // 10: reliant.v1.AuthMethod.delegated:type_name -> reliant.v1.DelegatedAuth
-	19, // 11: reliant.v1.OAuth2Auth.authorize_params:type_name -> reliant.v1.OAuth2Auth.AuthorizeParamsEntry
-	4,  // 12: reliant.v1.OAuth2Auth.revoke:type_name -> reliant.v1.RevokeSpec
-	20, // 13: reliant.v1.IdentityProbe.headers:type_name -> reliant.v1.IdentityProbe.HeadersEntry
-	11, // 14: reliant.v1.ActionSpec.tool:type_name -> reliant.v1.ToolSpec
-	23, // 15: reliant.v1.ActionSpec.params:type_name -> google.protobuf.Struct
-	12, // 16: reliant.v1.ActionSpec.request:type_name -> reliant.v1.HttpRequestSpec
-	15, // 17: reliant.v1.ActionSpec.output:type_name -> reliant.v1.OutputSpec
-	21, // 18: reliant.v1.HttpRequestSpec.query:type_name -> reliant.v1.HttpRequestSpec.QueryEntry
-	22, // 19: reliant.v1.HttpRequestSpec.headers:type_name -> reliant.v1.HttpRequestSpec.HeadersEntry
-	24, // 20: reliant.v1.HttpRequestSpec.body:type_name -> google.protobuf.Value
-	13, // 21: reliant.v1.HttpRequestSpec.pagination:type_name -> reliant.v1.PaginationSpec
-	14, // 22: reliant.v1.HttpRequestSpec.errors:type_name -> reliant.v1.ErrorRule
-	23, // 23: reliant.v1.OutputSpec.schema:type_name -> google.protobuf.Struct
-	17, // 24: reliant.v1.TriggerSpec.attributes:type_name -> reliant.v1.TriggerAttribute
-	23, // 25: reliant.v1.TriggerSpec.data:type_name -> google.protobuf.Struct
-	26, // [26:26] is the sub-list for method output_type
-	26, // [26:26] is the sub-list for method input_type
-	26, // [26:26] is the sub-list for extension type_name
-	26, // [26:26] is the sub-list for extension extendee
-	0,  // [0:26] is the sub-list for field type_name
+	7,  // 0: reliant.v1.IntegrationManifest.connection:type_name -> reliant.v1.ConnectionSpec
+	16, // 1: reliant.v1.IntegrationManifest.actions:type_name -> reliant.v1.ActionSpec
+	22, // 2: reliant.v1.IntegrationManifest.triggers:type_name -> reliant.v1.TriggerSpec
+	1,  // 3: reliant.v1.IntegrationManifest.types:type_name -> reliant.v1.TypeSpec
+	33, // 4: reliant.v1.TypeSpec.value:type_name -> google.protobuf.Struct
+	2,  // 5: reliant.v1.TypeSpec.options:type_name -> reliant.v1.TypeOptionsSpec
+	24, // 6: reliant.v1.TypeOptionsSpec.params:type_name -> reliant.v1.TypeOptionsSpec.ParamsEntry
+	25, // 7: reliant.v1.TypeOptionsSpec.annotations:type_name -> reliant.v1.TypeOptionsSpec.AnnotationsEntry
+	3,  // 8: reliant.v1.TypeOptionsSpec.warnings:type_name -> reliant.v1.TypeWarningSpec
+	4,  // 9: reliant.v1.TypeOptionsSpec.paging:type_name -> reliant.v1.TypeOptionsPaging
+	26, // 10: reliant.v1.TypeOptionsSpec.scope:type_name -> reliant.v1.TypeOptionsSpec.ScopeEntry
+	6,  // 11: reliant.v1.TypeOptionsSpec.resolve:type_name -> reliant.v1.TypeResolveSpec
+	27, // 12: reliant.v1.TypeResolveSpec.params:type_name -> reliant.v1.TypeResolveSpec.ParamsEntry
+	28, // 13: reliant.v1.ConnectionSpec.default_headers:type_name -> reliant.v1.ConnectionSpec.DefaultHeadersEntry
+	8,  // 14: reliant.v1.ConnectionSpec.auth:type_name -> reliant.v1.AuthMethod
+	14, // 15: reliant.v1.ConnectionSpec.connection_params:type_name -> reliant.v1.ConnectionParam
+	15, // 16: reliant.v1.ConnectionSpec.probe:type_name -> reliant.v1.IdentityProbe
+	9,  // 17: reliant.v1.AuthMethod.oauth2:type_name -> reliant.v1.OAuth2Auth
+	11, // 18: reliant.v1.AuthMethod.api_key:type_name -> reliant.v1.ApiKeyAuth
+	12, // 19: reliant.v1.AuthMethod.basic:type_name -> reliant.v1.BasicAuth
+	13, // 20: reliant.v1.AuthMethod.delegated:type_name -> reliant.v1.DelegatedAuth
+	29, // 21: reliant.v1.OAuth2Auth.authorize_params:type_name -> reliant.v1.OAuth2Auth.AuthorizeParamsEntry
+	10, // 22: reliant.v1.OAuth2Auth.revoke:type_name -> reliant.v1.RevokeSpec
+	30, // 23: reliant.v1.IdentityProbe.headers:type_name -> reliant.v1.IdentityProbe.HeadersEntry
+	17, // 24: reliant.v1.ActionSpec.tool:type_name -> reliant.v1.ToolSpec
+	33, // 25: reliant.v1.ActionSpec.params:type_name -> google.protobuf.Struct
+	18, // 26: reliant.v1.ActionSpec.request:type_name -> reliant.v1.HttpRequestSpec
+	21, // 27: reliant.v1.ActionSpec.output:type_name -> reliant.v1.OutputSpec
+	31, // 28: reliant.v1.HttpRequestSpec.query:type_name -> reliant.v1.HttpRequestSpec.QueryEntry
+	32, // 29: reliant.v1.HttpRequestSpec.headers:type_name -> reliant.v1.HttpRequestSpec.HeadersEntry
+	34, // 30: reliant.v1.HttpRequestSpec.body:type_name -> google.protobuf.Value
+	19, // 31: reliant.v1.HttpRequestSpec.pagination:type_name -> reliant.v1.PaginationSpec
+	20, // 32: reliant.v1.HttpRequestSpec.errors:type_name -> reliant.v1.ErrorRule
+	33, // 33: reliant.v1.OutputSpec.schema:type_name -> google.protobuf.Struct
+	23, // 34: reliant.v1.TriggerSpec.attributes:type_name -> reliant.v1.TriggerAttribute
+	33, // 35: reliant.v1.TriggerSpec.data:type_name -> google.protobuf.Struct
+	5,  // 36: reliant.v1.TypeOptionsSpec.ScopeEntry.value:type_name -> reliant.v1.TypeScopeSpec
+	37, // [37:37] is the sub-list for method output_type
+	37, // [37:37] is the sub-list for method input_type
+	37, // [37:37] is the sub-list for extension type_name
+	37, // [37:37] is the sub-list for extension extendee
+	0,  // [0:37] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_integration_proto_init() }
@@ -2178,7 +2793,7 @@ func file_reliant_v1_integration_proto_init() {
 	if File_reliant_v1_integration_proto != nil {
 		return
 	}
-	file_reliant_v1_integration_proto_msgTypes[2].OneofWrappers = []any{
+	file_reliant_v1_integration_proto_msgTypes[8].OneofWrappers = []any{
 		(*AuthMethod_Oauth2)(nil),
 		(*AuthMethod_ApiKey)(nil),
 		(*AuthMethod_Basic)(nil),
@@ -2190,7 +2805,7 @@ func file_reliant_v1_integration_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_v1_integration_proto_rawDesc), len(file_reliant_v1_integration_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   23,
+			NumMessages:   33,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

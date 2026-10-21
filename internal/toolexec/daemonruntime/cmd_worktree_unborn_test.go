@@ -18,7 +18,7 @@ func setWorktreeTestGitEnv(t *testing.T) {
 	cfg := filepath.Join(t.TempDir(), "gitconfig")
 	// init.defaultBranch is set to a non-"main" value to prove the worktree
 	// bases off the actual unborn branch, not a hardcoded guess.
-	content := "[init]\n\tdefaultBranch = main\n"
+	content := "[init]\n\tdefaultBranch = main\n" + noAutoMaintenanceConfig
 	if err := os.WriteFile(cfg, []byte(content), 0o644); err != nil {
 		t.Fatalf("write gitconfig: %v", err)
 	}

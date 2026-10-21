@@ -635,6 +635,18 @@ func validateScenarioInputs(result *ValidationResult, inputs map[string]interfac
 
 // validateInputValue performs basic type checking for scenario inputs.
 func validateInputValue(input *reliantv1.Input, value interface{}) error {
+	// An integration input's value is checked against its type's schema when
+	// the run launches; here only its shape (one value, or a list) is.
+	if cfg := input.GetIntegrationInput(); cfg != nil {
+		_, isList := value.([]interface{})
+		if cfg.GetMulti() && !isList {
+			return fmt.Errorf("expected array of %s values, got %T", input.GetType(), value)
+		}
+		if !cfg.GetMulti() && isList {
+			return fmt.Errorf("expected one %s value, got an array", input.GetType())
+		}
+		return nil
+	}
 	switch input.GetType() {
 	case "string", "message":
 		if _, ok := value.(string); !ok {

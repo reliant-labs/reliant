@@ -18,6 +18,7 @@ import (
 	postgresstore "github.com/reliant-labs/reliant/internal/db/postgres"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // Ensure *Repo implements Repository interface at compile time
@@ -953,7 +954,7 @@ func (r *Repo) DeleteMessage(ctx context.Context, messageID string) error {
 
 // CreateApproval creates a new approval record and emits an activity event if the activity changed.
 func (r *Repo) CreateApproval(ctx context.Context, approval *Approval) error {
-	if err := r.approvals.CreateApproval(ctx, approval); err != nil {
+	if err := store.CreateApprovalIfAbsent(ctx, r.ORM(), approval); err != nil {
 		return err
 	}
 	// Activity may have changed from RUNNING → AWAITING_INPUT
@@ -962,22 +963,22 @@ func (r *Repo) CreateApproval(ctx context.Context, approval *Approval) error {
 
 // GetApproval retrieves an approval by ID
 func (r *Repo) GetApproval(ctx context.Context, id string) (*Approval, error) {
-	return r.approvals.GetApproval(ctx, id)
+	return store.GetApproval(ctx, r.ORM(), id)
 }
 
 // GetApprovalByEntityID retrieves an approval by its entity_id
 func (r *Repo) GetApprovalByEntityID(ctx context.Context, entityID string) (*Approval, error) {
-	return r.approvals.GetApprovalByEntityID(ctx, entityID)
+	return store.GetApprovalByEntityID(ctx, r.ORM(), entityID)
 }
 
 // ListPendingApprovalsByChat retrieves all pending approvals for a chat
 func (r *Repo) ListPendingApprovalsByChat(ctx context.Context, chatID string) ([]*Approval, error) {
-	return r.approvals.ListPendingApprovalsByChat(ctx, chatID)
+	return store.ListPendingApprovalsByChat(ctx, r.ORM(), chatID)
 }
 
 // ListApprovalsByChat retrieves all approvals for a chat (including resolved)
 func (r *Repo) ListApprovalsByChat(ctx context.Context, chatID string) ([]*Approval, error) {
-	return r.approvals.ListApprovalsByChat(ctx, chatID)
+	return store.ListApprovalsByChat(ctx, r.ORM(), chatID)
 }
 
 // UpdateApprovalStatus updates the status of an approval and emits an activity event if the activity changed.
@@ -988,7 +989,7 @@ func (r *Repo) UpdateApprovalStatus(ctx context.Context, id string, status int32
 		resolvedAt = &now
 	}
 
-	if err := r.approvals.UpdateApprovalStatus(ctx, id, status, denialReason, actionTaken, metadata, resolvedAt); err != nil {
+	if err := store.UpdateApprovalStatus(ctx, r.ORM(), id, status, denialReason, actionTaken, metadata, resolvedAt); err != nil {
 		return err
 	}
 
@@ -2075,190 +2076,47 @@ func (r *Repo) UpsertProjectConfigRecord(ctx context.Context, record *ProjectCon
 		return fmt.Errorf("daemon ID cannot be empty")
 	}
 
-	now := time.Now().UTC()
-	pushedAt := record.PushedAt
-	if pushedAt.IsZero() {
-		pushedAt = now
-	}
-	createdAt := record.CreatedAt
-	if createdAt.IsZero() {
-		createdAt = now
-	}
-
-	query := `
-		INSERT INTO project_configs (
-			id,
-			project_id,
-			daemon_id,
-			user_config_yaml,
-			project_config_yaml,
-			local_config_yaml,
-			global_memory_md,
-			project_memory_md,
-			mcp_configs,
-			project_workflows_json,
-			project_presets_json,
-			project_scenarios_json,
-			project_skills_json,
-			repo_memories_json,
-			runtime_type,
-			pushed_at,
-			created_at,
-			updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		ON CONFLICT(project_id) DO UPDATE SET
-			daemon_id = excluded.daemon_id,
-			user_config_yaml = excluded.user_config_yaml,
-			project_config_yaml = excluded.project_config_yaml,
-			local_config_yaml = excluded.local_config_yaml,
-			global_memory_md = excluded.global_memory_md,
-			project_memory_md = excluded.project_memory_md,
-			mcp_configs = excluded.mcp_configs,
-			project_workflows_json = excluded.project_workflows_json,
-			project_presets_json = excluded.project_presets_json,
-			project_scenarios_json = excluded.project_scenarios_json,
-			project_skills_json = excluded.project_skills_json,
-			repo_memories_json = excluded.repo_memories_json,
-			runtime_type = excluded.runtime_type,
-			pushed_at = excluded.pushed_at,
-			updated_at = excluded.updated_at
-	`
-	query = r.bindQuery(query)
-
-	_, err := r.DB.ExecContext(ctx, query,
-		record.ID,
-		record.ProjectID,
-		record.DaemonID,
-		record.UserConfigYAML,
-		record.ProjectConfigYAML,
-		record.LocalConfigYAML,
-		record.GlobalMemoryMD,
-		record.ProjectMemoryMD,
-		record.MCPConfigs,
-		record.ProjectWorkflowsJSON,
-		record.ProjectPresetsJSON,
-		record.ProjectScenariosJSON,
-		record.ProjectSkillsJSON,
-		record.RepoMemoriesJSON,
-		record.RuntimeType,
-		pushedAt,
-		createdAt,
-		now,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to upsert project config record for project %s: %w", record.ProjectID, err)
-	}
-
-	return nil
+	return store.UpsertProjectConfigRecord(ctx, r.ORM(), record)
 }
 
+// GetProjectConfigRecord reads the project's whole config record, or
+// sql.ErrNoRows, unwrapped. A caller that needs one part of it reads that
+// column instead (see store.GetProjectConfigRecord).
 func (r *Repo) GetProjectConfigRecord(ctx context.Context, projectID string) (*ProjectConfigRecord, error) {
 	if projectID == "" {
 		return nil, fmt.Errorf("project ID cannot be empty")
 	}
-
-	query := `
-		SELECT
-			id,
-			project_id,
-			daemon_id,
-			user_config_yaml,
-			project_config_yaml,
-			local_config_yaml,
-			global_memory_md,
-			project_memory_md,
-			mcp_configs,
-			project_workflows_json,
-			project_presets_json,
-			project_scenarios_json,
-			project_skills_json,
-			repo_memories_json,
-			runtime_type,
-			pushed_at,
-			created_at,
-			updated_at
-		FROM project_configs
-		WHERE project_id = ?
-		LIMIT 1
-	`
-	query = r.bindQuery(query)
-
-	var record ProjectConfigRecord
-	err := r.DB.QueryRowContext(ctx, query, projectID).Scan(
-		&record.ID,
-		&record.ProjectID,
-		&record.DaemonID,
-		&record.UserConfigYAML,
-		&record.ProjectConfigYAML,
-		&record.LocalConfigYAML,
-		&record.GlobalMemoryMD,
-		&record.ProjectMemoryMD,
-		&record.MCPConfigs,
-		&record.ProjectWorkflowsJSON,
-		&record.ProjectPresetsJSON,
-		&record.ProjectScenariosJSON,
-		&record.ProjectSkillsJSON,
-		&record.RepoMemoriesJSON,
-		&record.RuntimeType,
-		&record.PushedAt,
-		&record.CreatedAt,
-		&record.UpdatedAt,
-	)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, err
-		}
-		return nil, fmt.Errorf("failed to load project config record for project %s: %w", projectID, err)
-	}
-
-	return &record, nil
+	return store.GetProjectConfigRecord(ctx, r.ORM(), projectID)
 }
 
 // GetProjectWorkflowsJSON reads one column of the project config record: the
-// synced .reliant/workflows. See getProjectConfigColumn for why it exists.
-func (r *Repo) GetProjectWorkflowsJSON(ctx context.Context, projectID string) (*string, error) {
-	return r.getProjectConfigColumn(ctx, projectID, "project_workflows_json")
-}
-
-// GetProjectPresetsJSON reads one column of the project config record: the
-// synced .reliant/presets. See getProjectConfigColumn for why it exists.
-func (r *Repo) GetProjectPresetsJSON(ctx context.Context, projectID string) (*string, error) {
-	return r.getProjectConfigColumn(ctx, projectID, "project_presets_json")
-}
-
-// GetProjectMCPConfigsJSON reads one column of the project config record: the
-// stored scoped MCP configs. See getProjectConfigColumn for why it exists.
-func (r *Repo) GetProjectMCPConfigsJSON(ctx context.Context, projectID string) (*string, error) {
-	return r.getProjectConfigColumn(ctx, projectID, "mcp_configs")
-}
-
-// getProjectConfigColumn reads a single column of a project's config record.
-// Like GetProjectConfigRecord it returns sql.ErrNoRows, unwrapped, when the
+// synced .reliant/workflows. It returns sql.ErrNoRows, unwrapped, when the
 // project has no record.
-//
-// The whole row is the wrong read for anything that needs one part of it. It
-// carries every skill body and repo memory the daemon indexed, recursively
-// across nested repos: a workspace of ~30 checkouts of the same repos synced an
-// 18 MB row, nearly all of it project_skills_json. Workflow resolution and
-// preset loading need a column that is empty or a few KB, yet read that row
-// three or more times per send — measured in prod as ~95% of SendMessage,
-// StartChat and UpdateWorkflowParams wall time (p50 1.7s / 2.3s / 1.0s).
-//
-// column is one of the fixed names above, never caller input.
-func (r *Repo) getProjectConfigColumn(ctx context.Context, projectID, column string) (*string, error) {
+func (r *Repo) GetProjectWorkflowsJSON(ctx context.Context, projectID string) (*string, error) {
 	if projectID == "" {
 		return nil, fmt.Errorf("project ID cannot be empty")
 	}
-	query := r.bindQuery(`SELECT ` + column + ` FROM project_configs WHERE project_id = ? LIMIT 1`)
+	return store.GetProjectWorkflowsJSON(ctx, r.ORM(), projectID)
+}
 
-	var value *string
-	if err := r.DB.QueryRowContext(ctx, query, projectID).Scan(&value); err != nil {
-		if err == sql.ErrNoRows {
-			return nil, err
-		}
-		return nil, fmt.Errorf("failed to load %s for project %s: %w", column, projectID, err)
+// GetProjectPresetsJSON reads one column of the project config record: the
+// synced .reliant/presets. It returns sql.ErrNoRows, unwrapped, when the
+// project has no record.
+func (r *Repo) GetProjectPresetsJSON(ctx context.Context, projectID string) (*string, error) {
+	if projectID == "" {
+		return nil, fmt.Errorf("project ID cannot be empty")
 	}
-	return value, nil
+	return store.GetProjectPresetsJSON(ctx, r.ORM(), projectID)
+}
+
+// GetProjectMCPConfigsJSON reads one column of the project config record: the
+// stored scoped MCP configs. It returns sql.ErrNoRows, unwrapped, when the
+// project has no record.
+func (r *Repo) GetProjectMCPConfigsJSON(ctx context.Context, projectID string) (*string, error) {
+	if projectID == "" {
+		return nil, fmt.Errorf("project ID cannot be empty")
+	}
+	return store.GetProjectMCPConfigsJSON(ctx, r.ORM(), projectID)
 }
 
 func (r *Repo) CreateWorktree(ctx context.Context, worktree *Worktree) error {
@@ -2488,7 +2346,7 @@ func (r *Repo) CreateSetting(ctx context.Context, setting *Setting) error {
 		return fmt.Errorf("setting key cannot be empty")
 	}
 
-	return r.settings.CreateSetting(ctx, setting)
+	return store.UpsertSetting(ctx, r.ORM(), setting)
 }
 
 func (r *Repo) GetSetting(ctx context.Context, userID string, projectID *string, key string) (*Setting, error) {
@@ -2499,7 +2357,7 @@ func (r *Repo) GetSetting(ctx context.Context, userID string, projectID *string,
 		return nil, fmt.Errorf("setting key cannot be empty")
 	}
 
-	return r.settings.GetSetting(ctx, userID, projectID, key)
+	return store.GetSetting(ctx, r.ORM(), userID, projectID, key)
 }
 
 func (r *Repo) ListSettings(ctx context.Context, userID string, projectID *string) ([]*Setting, error) {
@@ -2507,7 +2365,7 @@ func (r *Repo) ListSettings(ctx context.Context, userID string, projectID *strin
 		return nil, fmt.Errorf("user_id cannot be empty")
 	}
 
-	return r.settings.ListSettings(ctx, userID, projectID)
+	return store.ListSettings(ctx, r.ORM(), userID, projectID)
 }
 
 func (r *Repo) ListSettingsByKey(ctx context.Context, userID string, keyPattern string) ([]*Setting, error) {
@@ -2518,7 +2376,7 @@ func (r *Repo) ListSettingsByKey(ctx context.Context, userID string, keyPattern 
 		return nil, fmt.Errorf("key pattern cannot be empty")
 	}
 
-	return r.settings.ListSettingsByKey(ctx, userID, keyPattern)
+	return store.ListSettingsByKey(ctx, r.ORM(), userID, keyPattern)
 }
 
 func (r *Repo) UpdateSetting(ctx context.Context, setting *Setting) error {
@@ -2529,14 +2387,14 @@ func (r *Repo) UpdateSetting(ctx context.Context, setting *Setting) error {
 		return fmt.Errorf("setting ID cannot be empty")
 	}
 
-	return r.settings.UpdateSetting(ctx, setting)
+	return store.ReplaceSettingValue(ctx, r.ORM(), setting)
 }
 
 func (r *Repo) DeleteSetting(ctx context.Context, id string) error {
 	if id == "" {
 		return fmt.Errorf("setting ID cannot be empty")
 	}
-	return r.settings.DeleteSetting(ctx, id)
+	return store.RemoveSetting(ctx, r.ORM(), id)
 }
 
 // ==================== Settings Helper Methods ====================
@@ -2732,7 +2590,7 @@ func (r *Repo) GetItemDefault(ctx context.Context, itemType int32, slug string) 
 		return nil, fmt.Errorf("slug cannot be empty")
 	}
 
-	return r.settings.GetItemDefault(ctx, itemType, slug)
+	return store.GetItemDefault(ctx, r.ORM(), itemType, slug)
 }
 
 // ListHiddenItemDefaults returns all items that are hidden by default.
@@ -2741,7 +2599,7 @@ func (r *Repo) ListHiddenItemDefaults(ctx context.Context, itemType int32) ([]st
 		return nil, fmt.Errorf("item_type must be WORKFLOW (1) or PRESET (2)")
 	}
 
-	return r.settings.ListHiddenItemDefaults(ctx, itemType)
+	return store.ListHiddenItemDefaults(ctx, r.ORM(), itemType)
 }
 
 // IsItemVisible determines if an item should be visible to a user.
@@ -2773,7 +2631,7 @@ func (r *Repo) GetDefaultPresetAssignments(ctx context.Context, workflowName str
 		return nil, fmt.Errorf("workflow_name cannot be empty")
 	}
 
-	return r.settings.GetDefaultPresetAssignments(ctx, workflowName)
+	return store.GetDefaultPresetAssignments(ctx, r.ORM(), workflowName)
 }
 
 func (r *Repo) CreatePlan(ctx context.Context, plan *Plan) error {
@@ -2787,7 +2645,7 @@ func (r *Repo) CreatePlan(ctx context.Context, plan *Plan) error {
 		return fmt.Errorf("title is required")
 	}
 
-	return r.planTasks.CreatePlan(ctx, plan)
+	return store.InsertPlan(ctx, r.ORM(), plan)
 }
 
 func (r *Repo) GetPlan(ctx context.Context, id string) (*Plan, error) {
@@ -2795,7 +2653,7 @@ func (r *Repo) GetPlan(ctx context.Context, id string) (*Plan, error) {
 		return nil, fmt.Errorf("plan ID cannot be empty")
 	}
 
-	return r.planTasks.GetPlan(ctx, id)
+	return store.GetPlan(ctx, r.ORM(), id)
 }
 
 func (r *Repo) GetPlanByThreadID(ctx context.Context, threadID string) (*Plan, error) {
@@ -2803,7 +2661,7 @@ func (r *Repo) GetPlanByThreadID(ctx context.Context, threadID string) (*Plan, e
 		return nil, fmt.Errorf("thread ID cannot be empty")
 	}
 
-	return r.planTasks.GetPlanByThreadID(ctx, threadID)
+	return store.GetPlanByThreadID(ctx, r.ORM(), threadID)
 }
 
 func (r *Repo) ListPlansByThread(ctx context.Context, threadID string) ([]*Plan, error) {
@@ -2811,7 +2669,7 @@ func (r *Repo) ListPlansByThread(ctx context.Context, threadID string) ([]*Plan,
 		return nil, fmt.Errorf("thread ID cannot be empty")
 	}
 
-	return r.planTasks.ListPlansByThread(ctx, threadID)
+	return store.ListPlansByThread(ctx, r.ORM(), threadID)
 }
 
 func (r *Repo) ListPlansByChatID(ctx context.Context, chatID string) ([]*Plan, error) {
@@ -2819,7 +2677,7 @@ func (r *Repo) ListPlansByChatID(ctx context.Context, chatID string) ([]*Plan, e
 		return nil, fmt.Errorf("chat ID cannot be empty")
 	}
 
-	return r.planTasks.ListPlansByChatID(ctx, chatID)
+	return store.ListPlansByChatID(ctx, r.ORM(), chatID)
 }
 
 func (r *Repo) ListPlansByProject(ctx context.Context, projectID string) ([]*Plan, error) {
@@ -2827,7 +2685,7 @@ func (r *Repo) ListPlansByProject(ctx context.Context, projectID string) ([]*Pla
 		return nil, fmt.Errorf("project ID cannot be empty")
 	}
 
-	return r.planTasks.ListPlansByProject(ctx, projectID)
+	return store.ListPlansByProject(ctx, r.ORM(), projectID)
 }
 
 func (r *Repo) UpdatePlan(ctx context.Context, plan *Plan) error {
@@ -2838,7 +2696,7 @@ func (r *Repo) UpdatePlan(ctx context.Context, plan *Plan) error {
 		return fmt.Errorf("plan ID cannot be empty")
 	}
 
-	return r.planTasks.UpdatePlan(ctx, plan)
+	return store.ReplacePlan(ctx, r.ORM(), plan)
 }
 
 func (r *Repo) UpdatePlanStatus(ctx context.Context, id string, status int32, completedAt *time.Time) error {
@@ -2846,14 +2704,14 @@ func (r *Repo) UpdatePlanStatus(ctx context.Context, id string, status int32, co
 		return fmt.Errorf("plan ID cannot be empty")
 	}
 
-	return r.planTasks.UpdatePlanStatus(ctx, id, status, completedAt)
+	return store.UpdatePlanStatus(ctx, r.ORM(), id, status, completedAt)
 }
 
 func (r *Repo) DeletePlan(ctx context.Context, id string) error {
 	if id == "" {
 		return fmt.Errorf("plan ID cannot be empty")
 	}
-	return r.planTasks.DeletePlan(ctx, id)
+	return store.RemovePlan(ctx, r.ORM(), id)
 }
 
 // ==================== Tasks ====================
@@ -2869,7 +2727,7 @@ func (r *Repo) CreateTask(ctx context.Context, task *Task) error {
 		return fmt.Errorf("title is required")
 	}
 
-	return r.planTasks.CreateTask(ctx, task)
+	return store.InsertTask(ctx, r.ORM(), task)
 }
 
 func (r *Repo) GetTask(ctx context.Context, id string) (*Task, error) {
@@ -2877,7 +2735,7 @@ func (r *Repo) GetTask(ctx context.Context, id string) (*Task, error) {
 		return nil, fmt.Errorf("task ID cannot be empty")
 	}
 
-	return r.planTasks.GetTask(ctx, id)
+	return store.GetTask(ctx, r.ORM(), id)
 }
 
 func (r *Repo) GetTaskByPosition(ctx context.Context, planID string, position int) (*Task, error) {
@@ -2901,7 +2759,7 @@ func (r *Repo) ListTasksByPlan(ctx context.Context, planID string) ([]*Task, err
 		return nil, fmt.Errorf("plan ID cannot be empty")
 	}
 
-	return r.planTasks.ListTasksByPlan(ctx, planID)
+	return store.ListTasksByPlan(ctx, r.ORM(), planID)
 }
 
 func (r *Repo) ListTasksByParent(ctx context.Context, parentID string) ([]*Task, error) {
@@ -2978,7 +2836,7 @@ func (r *Repo) UpdateTask(ctx context.Context, task *Task) error {
 		return fmt.Errorf("task ID cannot be empty")
 	}
 
-	return r.planTasks.UpdateTask(ctx, task)
+	return store.ReplaceTask(ctx, r.ORM(), task)
 }
 
 func (r *Repo) UpdateTaskStatus(ctx context.Context, id string, status int32, completedAt *time.Time) error {
@@ -2992,14 +2850,14 @@ func (r *Repo) UpdateTaskStatus(ctx context.Context, id string, status int32, co
 		completedAt = &now
 	}
 
-	return r.planTasks.UpdateTaskStatus(ctx, id, status, completedAt)
+	return store.UpdateTaskStatus(ctx, r.ORM(), id, status, completedAt)
 }
 
 func (r *Repo) DeleteTask(ctx context.Context, id string) error {
 	if id == "" {
 		return fmt.Errorf("task ID cannot be empty")
 	}
-	return r.planTasks.DeleteTask(ctx, id)
+	return store.RemoveTask(ctx, r.ORM(), id)
 }
 
 // ==================== Task Dependencies ====================
@@ -3014,49 +2872,49 @@ func (r *Repo) CreateTaskDependency(ctx context.Context, dep *TaskDependency) er
 	if dep.FromTaskID == dep.ToTaskID {
 		return fmt.Errorf("a task cannot depend on itself")
 	}
-	return r.planTasks.CreateTaskDependency(ctx, dep)
+	return store.InsertTaskDependency(ctx, r.ORM(), dep)
 }
 
 func (r *Repo) GetTaskDependency(ctx context.Context, id string) (*TaskDependency, error) {
 	if id == "" {
 		return nil, fmt.Errorf("dependency ID cannot be empty")
 	}
-	return r.planTasks.GetTaskDependency(ctx, id)
+	return store.GetTaskDependency(ctx, r.ORM(), id)
 }
 
 func (r *Repo) ListTaskDependenciesByTask(ctx context.Context, taskID string) ([]*TaskDependency, error) {
 	if taskID == "" {
 		return nil, fmt.Errorf("task ID cannot be empty")
 	}
-	return r.planTasks.ListTaskDependenciesByTask(ctx, taskID)
+	return store.ListTaskDependenciesByTask(ctx, r.ORM(), taskID)
 }
 
 func (r *Repo) ListBlockersForTask(ctx context.Context, taskID string) ([]*TaskDependency, error) {
 	if taskID == "" {
 		return nil, fmt.Errorf("task ID cannot be empty")
 	}
-	return r.planTasks.ListBlockersForTask(ctx, taskID)
+	return store.ListBlockersForTask(ctx, r.ORM(), taskID)
 }
 
 func (r *Repo) ListDependenciesByPlan(ctx context.Context, planID string) ([]*TaskDependency, error) {
 	if planID == "" {
 		return nil, fmt.Errorf("plan ID cannot be empty")
 	}
-	return r.planTasks.ListDependenciesByPlan(ctx, planID)
+	return store.ListDependenciesByPlan(ctx, r.ORM(), planID)
 }
 
 func (r *Repo) DeleteTaskDependency(ctx context.Context, id string) error {
 	if id == "" {
 		return fmt.Errorf("dependency ID cannot be empty")
 	}
-	return r.planTasks.DeleteTaskDependency(ctx, id)
+	return store.RemoveTaskDependency(ctx, r.ORM(), id)
 }
 
 func (r *Repo) DeleteTaskDependencyByPair(ctx context.Context, fromTaskID, toTaskID string, depType int32) error {
 	if fromTaskID == "" || toTaskID == "" || depType == 0 {
 		return fmt.Errorf("from_task_id, to_task_id, and dependency_type are required")
 	}
-	return r.planTasks.DeleteTaskDependencyByPair(ctx, fromTaskID, toTaskID, depType)
+	return store.DeleteTaskDependencyByPair(ctx, r.ORM(), fromTaskID, toTaskID, depType)
 }
 
 // ==================== Background Processes ====================
@@ -3461,19 +3319,19 @@ func scanBackgroundProcessFromRows(rows *sql.Rows) (*BackgroundProcess, error) {
 // ==================== Attachments ====================
 
 func (r *Repo) CreateAttachment(ctx context.Context, attachment *Attachment) error {
-	return r.attachments.CreateAttachment(ctx, attachment)
+	return store.InsertAttachment(ctx, r.ORM(), attachment)
 }
 
 func (r *Repo) GetAttachment(ctx context.Context, id string) (*Attachment, error) {
-	return r.attachments.GetAttachment(ctx, id)
+	return store.GetAttachment(ctx, r.ORM(), id)
 }
 
 func (r *Repo) GetAttachmentsByIDs(ctx context.Context, ids []string) ([]*Attachment, error) {
-	return r.attachments.GetAttachmentsByIDs(ctx, ids)
+	return store.GetAttachmentsByIDs(ctx, r.ORM(), ids)
 }
 
 func (r *Repo) DeleteAttachment(ctx context.Context, id string) error {
-	return r.attachments.DeleteAttachment(ctx, id)
+	return store.RemoveAttachment(ctx, r.ORM(), id)
 }
 
 // ==================== Context Usage ====================
@@ -4781,55 +4639,55 @@ func (r *Repo) UpdateWorkflowForkedFrom(ctx context.Context, draftID string, for
 // ==================== Preset Repository ====================
 
 func (r *Repo) CreatePreset(ctx context.Context, preset *Preset) (*Preset, error) {
-	return r.workflowCatalog.CreatePreset(ctx, preset)
+	return store.InsertPreset(ctx, r.ORM(), preset)
 }
 
 func (r *Repo) UpsertPreset(ctx context.Context, preset *Preset) (*Preset, error) {
-	return r.workflowCatalog.UpsertPreset(ctx, preset)
+	return store.UpsertPreset(ctx, r.ORM(), preset)
 }
 
 func (r *Repo) GetPreset(ctx context.Context, id string) (*Preset, error) {
-	return r.workflowCatalog.GetPreset(ctx, id)
+	return store.GetPreset(ctx, r.ORM(), id)
 }
 
 func (r *Repo) GetPresetBySlug(ctx context.Context, userID, slug string) (*Preset, error) {
-	return r.workflowCatalog.GetPresetBySlug(ctx, userID, slug)
+	return store.GetPresetBySlug(ctx, r.ORM(), userID, slug)
 }
 
 func (r *Repo) GetPresetBySlugAndProject(ctx context.Context, userID, slug, projectID string) (*Preset, error) {
-	return r.workflowCatalog.GetPresetBySlugAndProject(ctx, userID, slug, projectID)
+	return store.GetPresetBySlugAndProject(ctx, r.ORM(), userID, slug, projectID)
 }
 
 func (r *Repo) ListUserPresets(ctx context.Context, userID string) ([]*Preset, error) {
-	return r.workflowCatalog.ListUserPresets(ctx, userID)
+	return store.ListUserPresets(ctx, r.ORM(), userID)
 }
 
 func (r *Repo) ListUserPresetsGlobal(ctx context.Context, userID string) ([]*Preset, error) {
-	return r.workflowCatalog.ListUserPresetsGlobal(ctx, userID)
+	return store.ListUserPresetsGlobal(ctx, r.ORM(), userID)
 }
 
 func (r *Repo) ListUserPresetsByProject(ctx context.Context, userID, projectID string) ([]*Preset, error) {
-	return r.workflowCatalog.ListUserPresetsByProject(ctx, userID, projectID)
+	return store.ListUserPresetsByProject(ctx, r.ORM(), userID, projectID)
 }
 
 func (r *Repo) ListPresetsByTag(ctx context.Context, userID, tag, projectID string) ([]*Preset, error) {
-	return r.workflowCatalog.ListPresetsByTag(ctx, userID, tag, projectID)
+	return store.ListPresetsByTag(ctx, r.ORM(), userID, tag, projectID)
 }
 
 func (r *Repo) UpdatePreset(ctx context.Context, preset *Preset) (*Preset, error) {
-	return r.workflowCatalog.UpdatePreset(ctx, preset)
+	return store.ReplacePreset(ctx, r.ORM(), preset)
 }
 
 func (r *Repo) DeletePreset(ctx context.Context, id string) error {
-	return r.workflowCatalog.DeletePreset(ctx, id)
+	return store.RemovePreset(ctx, r.ORM(), id)
 }
 
 func (r *Repo) DeletePresetBySlug(ctx context.Context, userID, slug string) error {
-	return r.workflowCatalog.DeletePresetBySlug(ctx, userID, slug)
+	return store.DeletePresetBySlug(ctx, r.ORM(), userID, slug)
 }
 
 func (r *Repo) DeletePresetBySlugAndProject(ctx context.Context, userID, slug, projectID string) error {
-	return r.workflowCatalog.DeletePresetBySlugAndProject(ctx, userID, slug, projectID)
+	return store.DeletePresetBySlugAndProject(ctx, r.ORM(), userID, slug, projectID)
 }
 
 // ==================== Workflow Scenario Repository ====================

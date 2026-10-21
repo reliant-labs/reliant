@@ -11,10 +11,16 @@
  * choice. A manual run is attended: it opens as a chat.
  *
  * Replay: a workflow that declares triggers can be run against an event one of
- * them received. The event's payload is shown as JSON and is editable; the
- * trigger's own inputs and prompt map it, exactly as a real fire would, and the
- * result fills the form. The trigger's filter is not applied — the person has
- * decided the event is wanted.
+ * them received ("Start from: A recent event"). The trigger's own inputs and
+ * prompt map it, exactly as a real fire would, and the result fills the form;
+ * the payload stays editable under a disclosure. The trigger's filter is not
+ * applied — the person has decided the event is wanted. For a workflow that
+ * only runs on integration events, a recent event is the default: it is the
+ * only meaningful hand run of it.
+ *
+ * Same frame as the setup dialog (automation-ux-spec.md §3.6): numbered
+ * sections and the actions pinned in the footer. Typed inputs get the picker
+ * through RunWorkflowForm, like every other form.
  */
 
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from "react";
@@ -30,6 +36,8 @@ import { useDebounce } from "@/hooks/useDebounce";
 import { useWorkflowLibrary } from "@/hooks/workflow-library-queries";
 import { Modal } from "../../ui/Modal";
 import { Button } from "../../ui/Button";
+import { SetupSection } from "../../Automations/setup/SetupSection";
+import { cn } from "@/lib/utils";
 import { getWorkflowDisplayName } from "../useWorkflowInputs";
 import { RunFormError } from "./RunFormError";
 import { RunWorkflowForm, type RunWorkflowFormStatus } from "./RunWorkflowForm";
@@ -72,6 +80,8 @@ function RunNowDialogBody({ onClose, projectId, workflowRef }: RunNowDialogProps
   const listing = library.data?.workflows.find((w) => w.name === workflowRef);
   const triggerNames = useMemo(() => (listing?.triggers ?? []).map((t) => t.name).filter(Boolean), [listing]);
   const canReplay = triggerNames.length > 0;
+  const eventOnly =
+    !!listing?.automationOnly && (listing?.triggers ?? []).some((t) => (t.source as { case?: string } | undefined)?.case === "integration");
   const noMachineBlocker = noMachineBlockerFor(library.data?.workflows ?? [], workflowRef);
 
   const [value, setValue] = useState<RunWorkflowValue>(EMPTY_RUN_VALUE);
@@ -86,6 +96,13 @@ function RunNowDialogBody({ onClose, projectId, workflowRef }: RunNowDialogProps
 
   // Replay.
   const [replaying, setReplaying] = useState(false);
+  const replayDefaulted = useRef(false);
+  useEffect(() => {
+    if (replayDefaulted.current || !listing) return;
+    replayDefaulted.current = true;
+    if (eventOnly) setReplaying(true);
+  }, [listing, eventOnly]);
+  const [payloadOpen, setPayloadOpen] = useState(false);
   const [triggerName, setTriggerName] = useState("");
   const [eventKey, setEventKey] = useState(HAND_WRITTEN);
   const [kind, setKind] = useState<string>(REPLAY_KINDS[0]);
@@ -229,40 +246,53 @@ function RunNowDialogBody({ onClose, projectId, workflowRef }: RunNowDialogProps
   const blocked = replaying && (payloadInvalid || !!mappingError);
 
   return (
-    <Modal isOpen onClose={starting ? () => undefined : onClose} title={title} size="lg">
-      <form onSubmit={onSubmit} noValidate className="space-y-5" aria-label={title}>
+    <Modal
+      isOpen
+      onClose={starting ? () => undefined : onClose}
+      title={title}
+      size="lg"
+      footer={
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="ghost" onClick={onClose} disabled={starting} className="max-sm:hidden">
+            Cancel
+          </Button>
+          <Button type="submit" form={id("form")} variant="primary" loading={starting} disabled={blocked} className="max-sm:w-full">
+            Run now
+          </Button>
+        </div>
+      }
+    >
+      <form id={id("form")} onSubmit={onSubmit} noValidate className="space-y-6" aria-label={title}>
         {formError && <RunFormError message={formError} onNavigate={onClose} />}
 
         {canReplay && (
-          <fieldset className="space-y-2">
-            <legend className={labelClass}>Start from</legend>
-            <div className="flex flex-wrap gap-4 text-sm">
-              <label className="flex items-center gap-2">
-                <input
-                  type="radio"
-                  name={id("mode")}
-                  checked={!replaying}
-                  onChange={() => setReplaying(false)}
+          <SetupSection number={1} title="Start from">
+            <div role="radiogroup" aria-label="Start from" className="inline-flex rounded-md border border-border bg-background p-0.5">
+              {[
+                { replay: true, label: "A recent event" },
+                { replay: false, label: "Fill in by hand" },
+              ].map((choice) => (
+                <button
+                  key={choice.label}
+                  type="button"
+                  role="radio"
+                  aria-checked={replaying === choice.replay}
                   disabled={starting}
-                />
-                A fresh run
-              </label>
-              <label className="flex items-center gap-2">
-                <input
-                  type="radio"
-                  name={id("mode")}
-                  checked={replaying}
-                  onChange={() => setReplaying(true)}
-                  disabled={starting}
-                />
-                Replay a past event
-              </label>
+                  onClick={() => setReplaying(choice.replay)}
+                  className={cn(
+                    "rounded px-3 py-1.5 text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
+                    replaying === choice.replay ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                  )}
+                >
+                  {choice.label}
+                </button>
+              ))}
             </div>
-          </fieldset>
+          </SetupSection>
         )}
 
         {replaying && (
-          <section aria-label="Replay a past event" className="space-y-3 rounded-lg border border-border/60 bg-card p-3">
+          <section aria-label="Replay a past event" className="space-y-3 rounded-lg border border-border/60 bg-background p-3">
             {triggerNames.length > 1 && (
               <div>
                 <label htmlFor={id("trigger")} className={labelClass}>
@@ -339,7 +369,16 @@ function RunNowDialogBody({ onClose, projectId, workflowRef }: RunNowDialogProps
               </div>
             )}
 
-            <div>
+            <button
+              type="button"
+              aria-expanded={payloadOpen || payloadInvalid}
+              aria-controls={id("payload-panel")}
+              onClick={() => setPayloadOpen((open) => !open)}
+              className="rounded-sm text-xs font-medium text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+            >
+              {payloadOpen || payloadInvalid ? "Hide the event payload" : "Edit the event payload"}
+            </button>
+            <div id={id("payload-panel")} hidden={!(payloadOpen || payloadInvalid)}>
               <label htmlFor={id("payload")} className={labelClass}>
                 Event payload (JSON)
               </label>
@@ -379,8 +418,9 @@ function RunNowDialogBody({ onClose, projectId, workflowRef }: RunNowDialogProps
           </section>
         )}
 
+        <SetupSection number={canReplay ? 3 : 2} title="Prompt">
         <div>
-          <label htmlFor={id("message")} className={labelClass}>
+          <label htmlFor={id("message")} className="sr-only">
             Message
           </label>
           <textarea
@@ -402,7 +442,9 @@ function RunNowDialogBody({ onClose, projectId, workflowRef }: RunNowDialogProps
               : "Leave it blank to start the run from “Run now.” The run opens as a chat you can answer."}
           </p>
         </div>
+        </SetupSection>
 
+        <SetupSection number={canReplay ? 2 : 1} title="Inputs and where it runs">
         <RunWorkflowForm
           projectId={projectId}
           workflowRef={workflowRef}
@@ -415,16 +457,9 @@ function RunNowDialogBody({ onClose, projectId, workflowRef }: RunNowDialogProps
           offerNoMachine
           noMachineBlocker={noMachineBlocker}
           disabled={starting}
+          hideInputsLabel
         />
-
-        <div className="flex justify-end gap-2 border-t border-border/60 pt-4">
-          <Button type="button" variant="ghost" onClick={onClose} disabled={starting}>
-            Cancel
-          </Button>
-          <Button type="submit" variant="primary" loading={starting} disabled={blocked}>
-            Run now
-          </Button>
-        </div>
+        </SetupSection>
       </form>
     </Modal>
   );
@@ -436,7 +471,7 @@ function MappingSummary({ mapping }: { mapping: Mapping }) {
     return <p className={hintClass}>This trigger maps nothing from the event; the run reads it from the message.</p>;
   }
   return (
-    <div className="rounded-md bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+    <div className="rounded-md border border-border/60 bg-card px-3 py-2 text-xs text-muted-foreground">
       <p className="font-medium text-foreground">The trigger maps this event to</p>
       <ul className="mt-1 space-y-0.5">
         {entries.map(([name, value]) => (

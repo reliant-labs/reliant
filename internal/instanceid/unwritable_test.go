@@ -48,7 +48,6 @@ func TestResolve_UnwritableHomeDoesNotWarn(t *testing.T) {
 		_ = f.Close()
 		t.Skip("running with privileges that ignore directory permissions; cannot make HOME unwritable")
 	}
-	t.Setenv(EnvOverride, "")
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 
@@ -57,7 +56,7 @@ func TestResolve_UnwritableHomeDoesNotWarn(t *testing.T) {
 	slog.SetDefault(slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug})))
 	t.Cleanup(func() { slog.SetDefault(previous) })
 
-	id := resolve()
+	id := resolve("")
 	if _, err := uuid.Parse(id); err != nil {
 		t.Fatalf("resolve() = %q, want a process-lifetime UUID: %v", id, err)
 	}

@@ -74,9 +74,6 @@ refused with nothing applied. ` + "`db migrate status`" + ` previews which.`,
 			if err != nil {
 				return err
 			}
-			if err := config.ValidateDbMigrateUpConfig(cfg); err != nil {
-				return err
-			}
 			migrationURL := migrationURL(cfg.GetDatabase())
 
 			out := cmd.OutOrStdout()
@@ -147,9 +144,6 @@ very deadlock the schema wait produces.`,
 			if err != nil {
 				return err
 			}
-			if err := config.ValidateDbMigrateStatusConfig(cfg); err != nil {
-				return err
-			}
 			migrationURL := migrationURL(cfg.GetDatabase())
 
 			// Deliberately NOT ConnectWithConfig: both of its policies act on
@@ -196,9 +190,6 @@ records it without checking that the schema is the one it builds.`,
 			}
 			cfg, err := config.LoadDbMigrateForceConfig(cmd)
 			if err != nil {
-				return err
-			}
-			if err := config.ValidateDbMigrateForceConfig(cfg); err != nil {
 				return err
 			}
 			migrationURL := migrationURL(cfg.GetDatabase())

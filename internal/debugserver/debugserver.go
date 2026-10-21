@@ -22,8 +22,13 @@ import (
 
 // Start serves the diagnostics endpoints on 127.0.0.1:port in the background.
 // A bind failure is logged, not returned: a process without a profiler still
-// does its job, and failing startup over one would be the wrong trade.
+// does its job, and failing startup over one would be the wrong trade. Port 0
+// (PPROF_PORT=0) serves nothing: the listener is off, not on a random port.
 func Start(port int) {
+	if port == 0 {
+		logging.Info("Debug server (pprof) disabled", "pprof_port", 0)
+		return
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/debug/pprof/", http.DefaultServeMux.ServeHTTP)
 	mux.HandleFunc("/debug/db", func(w http.ResponseWriter, r *http.Request) {

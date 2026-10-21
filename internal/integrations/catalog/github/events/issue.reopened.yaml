@@ -1,0 +1,9 @@
+# yaml-language-server: $schema=../../../manifest/schema/event.schema.json
+id: issue.reopened
+display_name: Issue reopened
+summary: A closed issue was reopened.
+description: Fires when a closed issue is reopened. issue.state_reason is reopened.
+keywords: [reopen, regression, came back]
+events: [issues.reopened]
+attributes: { $ref: ../schemas/issue_attrs.yaml }
+data: { $ref: ../schemas/issue_data.yaml }

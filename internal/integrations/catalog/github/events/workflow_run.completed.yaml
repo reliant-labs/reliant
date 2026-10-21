@@ -1,0 +1,44 @@
+# yaml-language-server: $schema=../../../manifest/schema/event.schema.json
+id: workflow_run.completed
+display_name: Workflow run completed
+summary: A GitHub Actions workflow run finished.
+description: >-
+  Fires when a workflow run completes. Match conclusion (success, failure,
+  cancelled, ...) and branch, e.g. conclusion: failure and branch: main to
+  react to a broken main.
+keywords: [actions, ci, build, failed, workflow]
+events: [workflow_run.completed]
+attributes:
+  - { $ref: ../schemas/attr_repository.yaml }
+  - { $ref: ../schemas/attr_installation.yaml }
+  - { $ref: ../schemas/attr_sender.yaml }
+  - { $ref: ../schemas/attr_action.yaml }
+  - { name: conclusion, description: The run's conclusion., example: failure }
+  - { name: branch, description: The branch the run was for., example: main }
+  - { name: workflow, description: The workflow's name., example: CI }
+data:
+  type: object
+  additionalProperties: false
+  properties:
+    action: { type: string }
+    workflow: { type: object, properties: { id: { type: integer }, name: { type: string }, path: { type: string } } }
+    workflow_run:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        run_number: { type: integer }
+        run_attempt: { type: integer }
+        event: { type: string }
+        status: { type: string }
+        conclusion: { type: string }
+        head_branch: { type: string }
+        head_sha: { type: string }
+        html_url: { type: string }
+        actor: { $ref: ../schemas/user_schema.yaml }
+        run_started_at: { type: string }
+        updated_at: { type: string }
+        head_commit: { type: object, properties: { id: { type: string }, message: { type: string } } }
+        pull_requests: { type: array, items: { type: integer } }
+    repository: { $ref: ../schemas/repository_schema.yaml }
+    sender: { $ref: ../schemas/user_schema.yaml }

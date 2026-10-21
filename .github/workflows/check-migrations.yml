@@ -24,6 +24,11 @@ on:
       - "internal/db/migrationcheck/**"
       - "sqlc.yaml"
 
+# A newer push to a PR obsoletes the run in progress; a run on main finishes.
+concurrency:
+  group: check-migrations-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   check-migrations:
     runs-on: ubuntu-latest

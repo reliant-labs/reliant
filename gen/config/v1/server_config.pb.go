@@ -324,9 +324,8 @@ func (x *ServerTLSConfig) GetDisable() bool {
 // terminationGracePeriodSeconds from them, so a process that ignores them
 // cannot stay inside the grace period it was given. Both follow the rule
 // forge's grace-period arithmetic applies to them (pkg/deploy drainSeconds):
-// zero is the default and negative is none. Forge's arithmetic also reads a
-// bare count of seconds ("30"); this loader takes a Go duration only, so a
-// bare number stops the server at load instead of disagreeing with forge.
+// zero is the default and negative is none. Both are Go durations ("30s"); a
+// bare number stops the server at load.
 type DrainConfig struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// How long the process keeps serving after readiness flips, so load

@@ -9,6 +9,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "../../lib/utils";
+import { useUnmountSafeTimeout } from "../../hooks/useUnmountSafeTimeout";
 import type { SpotlightConfig, SpotlightTarget } from "./types";
 
 interface OnboardingMultiSpotlightProps {
@@ -193,6 +194,9 @@ export function OnboardingMultiSpotlight({
   const [resolved, setResolved] = useState<ResolvedTarget[]>([]);
   const [isVisible, setIsVisible] = useState(false);
   const [highlightVisible, setHighlightVisible] = useState(false);
+  // The highlight fade-in is scheduled from inside the retry/settle timers,
+  // so the effect cleanup cannot see it: tie it to the component instead.
+  const scheduleTimeout = useUnmountSafeTimeout();
   const [labelSizes, setLabelSizes] = useState<Record<number, ElementSize>>({});
   const labelRefs = useRef<Map<number, HTMLDivElement>>(new Map());
 
@@ -259,7 +263,7 @@ export function OnboardingMultiSpotlight({
           if (retryInterval) clearInterval(retryInterval);
           retryInterval = null;
           setIsVisible(true);
-          setTimeout(() => setHighlightVisible(true), 50);
+          scheduleTimeout(() => setHighlightVisible(true), 50);
           if (attempts >= maxAttempts) {
             console.warn(
               `[OnboardingMultiSpotlight] Some targets not found after ${maxAttempts} attempts`
@@ -272,7 +276,7 @@ export function OnboardingMultiSpotlight({
       settleTimeout = setTimeout(() => {
         updatePositions();
         setIsVisible(true);
-        setTimeout(() => setHighlightVisible(true), 50);
+        scheduleTimeout(() => setHighlightVisible(true), 50);
       }, 300);
     }
 
@@ -285,7 +289,7 @@ export function OnboardingMultiSpotlight({
       window.removeEventListener("resize", updatePositions);
       window.removeEventListener("scroll", updatePositions, true);
     };
-  }, [updatePositions, targets]);
+  }, [updatePositions, targets, scheduleTimeout]);
 
   // Recalculate label positions after first render so we have real dimensions.
   useEffect(() => {

@@ -382,3 +382,59 @@ func TestDBMigrateReadsTheServersDatabase(t *testing.T) {
 	require.Error(t, err, "DATABASE_URL is required")
 	assert.Contains(t, err.Error(), "DATABASE_URL")
 }
+
+// Each integration's OAuth client is the RELIANT_OAUTH_<ID>_CLIENT_ID /
+// _CLIENT_SECRET env family, loaded as config by the roles that compose
+// IntegrationsConfig, and looked up by integration id.
+func TestServerOAuthClientsAreAnEnvFamily(t *testing.T) {
+	isolateServerRoleEnv(t)
+	t.Setenv("RELIANT_OAUTH_GITHUB_CLIENT_ID", " gh-id ")
+	t.Setenv("RELIANT_OAUTH_GITHUB_CLIENT_SECRET", "gh-secret")
+	t.Setenv("RELIANT_OAUTH_SLACK_CLIENT_ID", "slack-id")
+
+	got, err := serverRoles[0].load(t)
+	require.NoError(t, err)
+	clients := got.(serverapi.Options).Webhooks.OAuthClients
+	id, secret := clients("github")
+	assert.Equal(t, "gh-id", id)
+	assert.Equal(t, "gh-secret", secret)
+	id, secret = clients("slack")
+	assert.Equal(t, "slack-id", id)
+	assert.Empty(t, secret, "an integration with no secret has none")
+	id, secret = clients("gmail")
+	assert.Empty(t, id+secret, "an integration with neither is not configured")
+}
+
+// The RELIANT_OAUTH_ prefix is owned: a variable in it that names no family
+// is a typo, and the role refuses to start naming it instead of running with
+// the client silently missing.
+func TestServerOAuthClientTypoFailsBoot(t *testing.T) {
+	for _, role := range serverRoles[:2] { // api and worker compose IntegrationsConfig
+		t.Run(role.path[1], func(t *testing.T) {
+			isolateServerRoleEnv(t)
+			t.Setenv("RELIANT_OAUTH_X_CLIENT_SECERT", "oops")
+			_, err := role.load(t)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), "RELIANT_OAUTH_X_CLIENT_SECERT")
+		})
+	}
+}
+
+// The desktop sign-in's provider defaults to the hosted one and follows
+// RELIANT_AUTH_URL / RELIANT_AUTH_KEY.
+func TestServerAPIOAuthProvider(t *testing.T) {
+	isolateServerRoleEnv(t)
+	t.Setenv("RELIANT_AUTH_URL", "")
+	t.Setenv("RELIANT_AUTH_KEY", "")
+	got, err := serverRoles[0].load(t)
+	require.NoError(t, err)
+	assert.Equal(t, "https://dash.reliantlabs.io", got.(serverapi.Options).OAuthProvider.URL)
+	assert.NotEmpty(t, got.(serverapi.Options).OAuthProvider.Key)
+
+	t.Setenv("RELIANT_AUTH_URL", "https://auth.example.com")
+	t.Setenv("RELIANT_AUTH_KEY", "sb_publishable_example")
+	got, err = serverRoles[0].load(t)
+	require.NoError(t, err)
+	assert.Equal(t, "https://auth.example.com", got.(serverapi.Options).OAuthProvider.URL)
+	assert.Equal(t, "sb_publishable_example", got.(serverapi.Options).OAuthProvider.Key)
+}

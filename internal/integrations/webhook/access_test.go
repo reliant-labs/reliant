@@ -82,3 +82,29 @@ func TestAccountKeyedEventsStillRouteByConnection(t *testing.T) {
 	assert.Equal(t, []string{"t1"}, env.intake.triggerIDs())
 	assert.Zero(t, env.store.accessQueries)
 }
+
+// The typed scope narrows the access-gated path too: a user's access to a
+// repository is necessary, and the activation's own scope is also required.
+func TestAccessRoutedEventsAreScopedByInput(t *testing.T) {
+	env := newEventsEnv(t, "https://api.example.com")
+	scoped := func(id, user string, any map[string][]string) *core.Trigger {
+		return integrationTrigger(t, id, user, core.IntegrationConfig{
+			Events: []string{"issues.opened"}, MatchInput: map[string]string{"repository": "repos"}, MatchAny: any,
+		}, "")
+	}
+	for _, tr := range []*core.Trigger{
+		scoped("alice-app", "alice", map[string][]string{"repository": {"acme/app"}}),
+		scoped("bob-other", "bob", map[string][]string{"repository": {"acme/other"}}),
+		scoped("carol-empty", "carol", map[string][]string{"repository": {}}),
+	} {
+		env.route(tr, "100", core.ConnectionStatusActive)
+		env.store.grantAccess(tr.UserID, "100", "repo-1", "1")
+	}
+
+	ev := issueOpened("delivery-1", "100", "acme/app")
+	ev.Resource = "repo-1"
+	rec := env.deliver(t, ev)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	assert.Equal(t, []string{"alice-app"}, env.intake.triggerIDs(),
+		"bob and carol can see the repository but did not scope to it")
+}

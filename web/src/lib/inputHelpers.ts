@@ -264,6 +264,32 @@ export function getInputMaxItems(input: InputDef): number | undefined {
   return asNumber(cv?.maxItems);
 }
 
+/**
+ * An input whose values an integration defines: its type is the qualified
+ * ref (`github.repository`) and its config is integration_input. Its value is
+ * a string, or a list of strings when multi.
+ */
+export function isIntegrationInput(input: InputDef): boolean {
+  return getConfigCase(input) === "integrationInput" || (typeof input?.type === "string" && input.type.includes("."));
+}
+
+/** The integration a typed input belongs to: "github" for `github.repository`. */
+export function integrationOfInputType(type: string): string {
+  const dot = type.indexOf(".");
+  return dot > 0 ? type.slice(0, dot) : "";
+}
+
+/** Scope key → the name of the sibling input that supplies it. */
+export function getIntegrationInputScope(input: InputDef): Record<string, string> {
+  if (getConfigCase(input) !== "integrationInput") return {};
+  return { ...((getConfigValue(input)?.scope as Record<string, string> | undefined) ?? {}) };
+}
+
+/** The author's explicit `required: true` (InputBase.required). */
+export function isInputMarkedRequired(input: InputDef): boolean {
+  return getBase(input)?.required === true;
+}
+
 /** Whether this input should be shown in config UI */
 export function isConfigurableInput(input: InputDef): boolean {
   const ui = getInputUI(input);

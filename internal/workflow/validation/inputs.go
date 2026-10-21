@@ -15,7 +15,7 @@ import (
 )
 
 // validateBoundInputs validates actual input values against the workflow's proto input schema.
-func validateBoundInputs(wf *reliantv1.Workflow, inputs map[string]any, result *Result) {
+func validateBoundInputs(wf *reliantv1.Workflow, inputs map[string]any, vt ValueTypes, result *Result) {
 	wfInputs := wf.GetInputs()
 	if len(wfInputs) == 0 {
 		return
@@ -47,7 +47,7 @@ func validateBoundInputs(wf *reliantv1.Workflow, inputs map[string]any, result *
 
 		// Handle group inputs by validating nested inputs recursively
 		if model.IsGroupInput(inputDef) {
-			validateProtoGroupInput(name, inputDef, inputs, inputPath, result)
+			validateProtoGroupInput(name, inputDef, inputs, inputPath, vt, result)
 			continue
 		}
 
@@ -66,7 +66,7 @@ func validateBoundInputs(wf *reliantv1.Workflow, inputs map[string]any, result *
 		}
 
 		// Type + constraint validation
-		if err := validateProtoInputType(name, providedValue, inputDef); err != nil {
+		if err := validateProtoInputType(name, providedValue, inputDef, vt); err != nil {
 			result.AddError(CategoryInput, inputPath, "", err.Error())
 		}
 	}
@@ -107,9 +107,13 @@ func validateBoundInputs(wf *reliantv1.Workflow, inputs map[string]any, result *
 }
 
 // validateProtoInputType validates that a provided value matches the expected proto input type.
-func validateProtoInputType(name string, value any, inputDef *reliantv1.Input) error {
+func validateProtoInputType(name string, value any, inputDef *reliantv1.Input, vt ValueTypes) error {
 	if value == nil {
 		return nil
+	}
+
+	if isIntegrationInput(inputDef) {
+		return validateIntegrationInputValue(name, value, inputDef, vt)
 	}
 
 	expectedType := inputDef.GetType()
@@ -548,7 +552,7 @@ func coerceInteger(value any) (int64, bool) {
 }
 
 // validateProtoGroupInput validates nested inputs within a group.
-func validateProtoGroupInput(groupName string, groupInput *reliantv1.Input, inputs map[string]any, path []string, result *Result) {
+func validateProtoGroupInput(groupName string, groupInput *reliantv1.Input, inputs map[string]any, path []string, vt ValueTypes, result *Result) {
 	nested := model.GetGroupInputs(groupInput)
 	if len(nested) == 0 {
 		return
@@ -594,7 +598,7 @@ func validateProtoGroupInput(groupName string, groupInput *reliantv1.Input, inpu
 		}
 
 		// Validate type/constraints of provided value
-		if err := validateProtoInputType(nestedName, providedValue, nestedInput); err != nil {
+		if err := validateProtoInputType(nestedName, providedValue, nestedInput, vt); err != nil {
 			result.AddError(CategoryInput, nestedPath, "",
 				fmt.Sprintf("input '%s.%s': %s", groupName, nestedName, err.Error()))
 		}
@@ -623,6 +627,13 @@ func validateProtoGroupInput(groupName string, groupInput *reliantv1.Input, inpu
 // presets when the run starts. Group inputs are left to the launch, which
 // sees them nested. It returns one message per problem, in name order.
 func ValidateParams(declared map[string]*reliantv1.Input, params map[string]any) []string {
+	return ValidateParamsWith(declared, params, nil)
+}
+
+// ValidateParamsWith is ValidateParams with the resolver for integration input
+// types; nil means the embedded catalog's.
+func ValidateParamsWith(declared map[string]*reliantv1.Input, params map[string]any, types ValueTypes) []string {
+	vt := typesOrDefault(types)
 	names := make([]string, 0, len(params))
 	for name := range params {
 		names = append(names, name)
@@ -649,7 +660,7 @@ func ValidateParams(declared map[string]*reliantv1.Input, params map[string]any)
 			problems = append(problems, msg)
 		case model.IsGroupInput(input) || params[name] == nil:
 		default:
-			if err := validateProtoInputType(name, params[name], input); err != nil {
+			if err := validateProtoInputType(name, params[name], input, vt); err != nil {
 				problems = append(problems, err.Error())
 			}
 		}

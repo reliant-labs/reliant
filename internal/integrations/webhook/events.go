@@ -334,7 +334,7 @@ func (e *EventsReceiver) routeByAccess(ctx context.Context, providerID string, e
 	var errs []error
 	for _, t := range matched {
 		cfg, err := triggers.IntegrationConfigFor(t)
-		if err != nil || !t.Enabled || !triggers.IntegrationEventMatches(cfg, ev.Type, ev.Attributes) {
+		if err != nil || !t.Enabled || !eventInScope(t, cfg, ev) {
 			continue
 		}
 		if _, err := e.opts.Intake.Accept(ctx, t, toInbound(providerID, t, ev), triggers.AcceptOptions{}); err != nil {
@@ -377,7 +377,21 @@ func routeMatches(r *core.IntegrationTriggerRoute, ev Event) bool {
 	if err != nil {
 		return false
 	}
-	return triggers.IntegrationEventMatches(cfg, ev.Type, ev.Attributes)
+	return eventInScope(r.Trigger, cfg, ev)
+}
+
+// eventInScope is IntegrationEventMatches, noting at debug level an event the
+// trigger's typed scope dropped. Nothing else records it: a row per
+// out-of-scope event per activation is the noise the scope exists to remove.
+func eventInScope(t *core.Trigger, cfg core.IntegrationConfig, ev Event) bool {
+	if triggers.IntegrationEventMatches(cfg, ev.Type, ev.Attributes) {
+		return true
+	}
+	if attr := triggers.IntegrationScopeMiss(cfg, ev.Type, ev.Attributes); attr != "" {
+		logging.Debug("integration event is outside the trigger's scope; dropped",
+			"trigger_id", t.ID, "event", ev.Type, "attribute", attr)
+	}
+	return false
 }
 
 func toInbound(providerID string, trigger *core.Trigger, ev Event) triggers.InboundEvent {

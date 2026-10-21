@@ -92,12 +92,20 @@ type ApiServerConfig struct {
 	// What the worktree sweep does with active worktrees its daemon reports
 	// finished (clean, merged or pushed, idle over 24h, not in use): dry-run
 	// logs them and archives nothing; on archives them; off never asks.
-	WorktreeAutoArchive string               `protobuf:"bytes,36,opt,name=worktree_auto_archive,json=worktreeAutoArchive,proto3" json:"worktree_auto_archive,omitempty"`
-	Integrations        *IntegrationsConfig  `protobuf:"bytes,40,opt,name=integrations,proto3" json:"integrations,omitempty"`
-	Observability       *ObservabilityConfig `protobuf:"bytes,50,opt,name=observability,proto3" json:"observability,omitempty"`
-	Sentry              *SentryConfig        `protobuf:"bytes,51,opt,name=sentry,proto3" json:"sentry,omitempty"`
-	Analytics           *AnalyticsConfig     `protobuf:"bytes,60,opt,name=analytics,proto3" json:"analytics,omitempty"`
-	Llm                 *LLMConfig           `protobuf:"bytes,70,opt,name=llm,proto3" json:"llm,omitempty"`
+	WorktreeAutoArchive string `protobuf:"bytes,36,opt,name=worktree_auto_archive,json=worktreeAutoArchive,proto3" json:"worktree_auto_archive,omitempty"`
+	// The OAuth provider the desktop sign-in (SystemService.StartOAuthSignIn)
+	// logs in through: its origin and its PUBLIC publishable key
+	// (sb_publishable_*, the browser-facing anon identity, not a service-role
+	// secret). The defaults are the hosted provider, projected from
+	// control-plane's deploy/kcl/lib/env.k like CLIConfig's endpoints and
+	// pinned by the same drift test; a release build stamps its own.
+	AuthProviderUrl string               `protobuf:"bytes,37,opt,name=auth_provider_url,json=authProviderUrl,proto3" json:"auth_provider_url,omitempty"`
+	AuthProviderKey string               `protobuf:"bytes,38,opt,name=auth_provider_key,json=authProviderKey,proto3" json:"auth_provider_key,omitempty"`
+	Integrations    *IntegrationsConfig  `protobuf:"bytes,40,opt,name=integrations,proto3" json:"integrations,omitempty"`
+	Observability   *ObservabilityConfig `protobuf:"bytes,50,opt,name=observability,proto3" json:"observability,omitempty"`
+	Sentry          *SentryConfig        `protobuf:"bytes,51,opt,name=sentry,proto3" json:"sentry,omitempty"`
+	Analytics       *AnalyticsConfig     `protobuf:"bytes,60,opt,name=analytics,proto3" json:"analytics,omitempty"`
+	Llm             *LLMConfig           `protobuf:"bytes,70,opt,name=llm,proto3" json:"llm,omitempty"`
 	// How long an unreferenced Temporal payload blob is kept before the API
 	// server's hourly GC deletes it. It must exceed the longest workflow run
 	// plus the namespace's history retention (internal/temporal/claimcheck).
@@ -312,6 +320,20 @@ func (x *ApiServerConfig) GetWorktreeAutoArchive() string {
 	return ""
 }
 
+func (x *ApiServerConfig) GetAuthProviderUrl() string {
+	if x != nil {
+		return x.AuthProviderUrl
+	}
+	return ""
+}
+
+func (x *ApiServerConfig) GetAuthProviderKey() string {
+	if x != nil {
+		return x.AuthProviderKey
+	}
+	return ""
+}
+
 func (x *ApiServerConfig) GetIntegrations() *IntegrationsConfig {
 	if x != nil {
 		return x.Integrations
@@ -365,7 +387,7 @@ var File_config_v1_api_server_config_proto protoreflect.FileDescriptor
 
 const file_config_v1_api_server_config_proto_rawDesc = "" +
 	"\n" +
-	"!config/v1/api_server_config.proto\x12\tconfig.v1\x1a config/v1/analytics_config.proto\x1a$config/v1/control_plane_config.proto\x1a#config/v1/integrations_config.proto\x1a\x1aconfig/v1/llm_config.proto\x1a$config/v1/observability_config.proto\x1a\x1econfig/v1/preview_config.proto\x1a\x1dconfig/v1/server_config.proto\x1a\x14forge/v1/forge.proto\x1a\x1egoogle/protobuf/duration.proto\"\xe0\x19\n" +
+	"!config/v1/api_server_config.proto\x12\tconfig.v1\x1a config/v1/analytics_config.proto\x1a$config/v1/control_plane_config.proto\x1a#config/v1/integrations_config.proto\x1a\x1aconfig/v1/llm_config.proto\x1a$config/v1/observability_config.proto\x1a\x1econfig/v1/preview_config.proto\x1a\x1dconfig/v1/server_config.proto\x1a\x14forge/v1/forge.proto\x1a\x1egoogle/protobuf/duration.proto\"\xa9\x1c\n" +
 	"\x0fApiServerConfig\x12s\n" +
 	"\x0ejwt_public_key\x18\x01 \x01(\tBM\x82\xce\x18I\n" +
 	"\x0eJWT_PUBLIC_KEY\x12\x0ejwt-public-key*'JWT public key PEM for token validationR\fjwtPublicKey\x12~\n" +
@@ -416,7 +438,11 @@ const file_config_v1_api_server_config_proto_rawDesc = "" +
 	"\x0fmax_upload_size\x18# \x01(\x03BF\x82\xce\x18B\n" +
 	"\x0fMAX_UPLOAD_SIZE\x1a\b10485760*%Largest attachment accepted, in bytesR\rmaxUploadSize\x12\x9d\x01\n" +
 	"\x15worktree_auto_archive\x18$ \x01(\tBi\x82\xce\x18e\n" +
-	"\x1dRELIANT_WORKTREE_AUTO_ARCHIVE\x1a\adry-run*)Worktree auto-archive: dry-run, on or offJ\adry-runJ\x02onJ\x03offR\x13worktreeAutoArchive\x12A\n" +
+	"\x1dRELIANT_WORKTREE_AUTO_ARCHIVE\x1a\adry-run*)Worktree auto-archive: dry-run, on or offJ\adry-runJ\x02onJ\x03offR\x13worktreeAutoArchive\x12\x8e\x01\n" +
+	"\x11auth_provider_url\x18% \x01(\tBb\x82\xce\x18^\n" +
+	"\x10RELIANT_AUTH_URL\x1a\x1bhttps://dash.reliantlabs.io*-OAuth provider origin for the desktop sign-inR\x0fauthProviderUrl\x12\xb5\x01\n" +
+	"\x11auth_provider_key\x18& \x01(\tB\x88\x01\x82\xce\x18\x83\x01\n" +
+	"\x10RELIANT_AUTH_KEY\x1a.sb_publishable_KKiB3B0EdEv7nguwKfEE5A_iY9rVXod*?OAuth provider publishable (public) key for the desktop sign-inR\x0fauthProviderKey\x12A\n" +
 	"\fintegrations\x18( \x01(\v2\x1d.config.v1.IntegrationsConfigR\fintegrations\x12D\n" +
 	"\robservability\x182 \x01(\v2\x1e.config.v1.ObservabilityConfigR\robservability\x12/\n" +
 	"\x06sentry\x183 \x01(\v2\x17.config.v1.SentryConfigR\x06sentry\x128\n" +

@@ -1,0 +1,22 @@
+# yaml-language-server: $schema=../../../manifest/schema/event.schema.json
+id: issue.edited
+display_name: Issue edited
+summary: An issue's title or body was edited.
+description: >-
+  Fires when an issue's title or body changes. data.changes carries the
+  previous title and/or body under `from`.
+events: [issues.edited]
+attributes: { $ref: ../schemas/issue_attrs.yaml }
+data:
+  type: object
+  additionalProperties: false
+  properties:
+    action: { type: string }
+    issue: { $ref: ../schemas/issue_schema.yaml }
+    changes:
+      type: object
+      properties:
+        title: { type: object, properties: { from: { type: string } } }
+        body: { type: object, properties: { from: { type: string } } }
+    repository: { $ref: ../schemas/repository_schema.yaml }
+    sender: { $ref: ../schemas/user_schema.yaml }

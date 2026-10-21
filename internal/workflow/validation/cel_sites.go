@@ -330,7 +330,7 @@ func (s *workflowScope) validateNodeFields(node *reliantv1.Node, basePath []stri
 		if inline := args.GetInline(); inline != nil {
 			// An inline sub-workflow runs in the same loop iteration (if any)
 			// as its parent node, with its own node namespace.
-			child := newWorkflowScope(inline, at("inline"), inlineTypeContext(inline), s.loop)
+			child := newWorkflowScope(inline, at("inline"), inlineTypeContext(inline, s.typeCtx.valueTypes()), s.loop)
 			child.failure = s.failure
 			validateWorkflowScope(child, result)
 		}
@@ -359,7 +359,7 @@ func (s *workflowScope) validateNodeFields(node *reliantv1.Node, basePath []stri
 			}
 		}
 		if inline := args.GetInline(); inline != nil {
-			child := newWorkflowScope(inline, at("inline"), inlineTypeContext(inline), frame)
+			child := newWorkflowScope(inline, at("inline"), inlineTypeContext(inline, s.typeCtx.valueTypes()), frame)
 			child.failure = s.failure
 			validateWorkflowScope(child, result)
 		}
@@ -385,8 +385,8 @@ func (s *workflowScope) validateNodeFields(node *reliantv1.Node, basePath []stri
 
 // inlineTypeContext builds the type context for an inline graph. Inputs are
 // lenient: the parent supplies them dynamically via args.
-func inlineTypeContext(wf *reliantv1.Workflow) *WorkflowTypeContext {
-	typeCtx := BuildWorkflowTypeContext(wf, nil)
+func inlineTypeContext(wf *reliantv1.Workflow, vt ValueTypes) *WorkflowTypeContext {
+	typeCtx := buildWorkflowTypeContext(wf, nil, vt)
 	if typeCtx != nil {
 		typeCtx.LenientInputs = true
 	}

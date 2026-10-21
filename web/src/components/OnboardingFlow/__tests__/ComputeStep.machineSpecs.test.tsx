@@ -53,7 +53,7 @@ const mockUseCloudEligibility = vi.fn(() => ({
   eligible: false,
   reason: null as string | null,
   isLoading: false,
-  grantedMinutesRemaining: 0,
+  grantedSmallDaemonSecondsRemaining: 0,
   refetch: vi.fn(),
 }));
 
@@ -80,9 +80,7 @@ vi.mock("@/hooks/useCloudBillingQueries", () => ({
           priceCents: 2000n,
           structuredLimits: {
             allowedDaemonSizes: ["small"],
-            daemonComputeIncludedMinutes: 1020,
             includedSmallDaemonHours: 17n,
-            daemonOveragePerMinuteCents: 2,
           },
         },
         {
@@ -92,9 +90,7 @@ vi.mock("@/hooks/useCloudBillingQueries", () => ({
           priceCents: 4000n,
           structuredLimits: {
             allowedDaemonSizes: ["small", "medium"],
-            daemonComputeIncludedMinutes: 2520,
             includedSmallDaemonHours: 68n,
-            daemonOveragePerMinuteCents: 2,
           },
         },
         {
@@ -104,9 +100,7 @@ vi.mock("@/hooks/useCloudBillingQueries", () => ({
           priceCents: 8000n,
           structuredLimits: {
             allowedDaemonSizes: ["small", "medium", "large"],
-            daemonComputeIncludedMinutes: 2520,
             includedSmallDaemonHours: 272n,
-            daemonOveragePerMinuteCents: 2,
           },
         },
         {
@@ -116,9 +110,7 @@ vi.mock("@/hooks/useCloudBillingQueries", () => ({
           priceCents: 16000n,
           structuredLimits: {
             allowedDaemonSizes: ["small", "medium", "large", "xl"],
-            daemonComputeIncludedMinutes: 2520,
             includedSmallDaemonHours: 1088n,
-            daemonOveragePerMinuteCents: 2,
           },
         },
       ],
@@ -201,7 +193,7 @@ beforeEach(() => {
     eligible: false,
     reason: null,
     isLoading: false,
-    grantedMinutesRemaining: 0,
+    grantedSmallDaemonSecondsRemaining: 0,
     refetch: vi.fn(),
   });
 });
@@ -280,7 +272,7 @@ describe("ComputeStep — every size says what it gives you", () => {
       eligible: true,
       reason: null,
       isLoading: false,
-      grantedMinutesRemaining: 6000,
+      grantedSmallDaemonSecondsRemaining: 360000,
       refetch: vi.fn(),
     });
     renderStep();

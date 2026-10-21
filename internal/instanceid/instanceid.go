@@ -26,8 +26,9 @@
 // a user. Every Reliant process on the box (daemon, api-server, temporal
 // worker) reads the same file and reports the same id. A container with an
 // ephemeral home directory regenerates on each start, which is the correct
-// reading: a fresh container IS a fresh instance. Deployments that want a
-// pinned value can set RELIANT_INSTANCE_ID.
+// reading: a fresh container IS a fresh instance. A CLI command or daemon
+// that wants a pinned value is given RELIANT_INSTANCE_ID (CLIConfig), which
+// its entrypoint hands to Pin.
 //
 // # What this is NOT
 //
@@ -61,10 +62,11 @@ const (
 	// FileName is the identity record's basename inside the Reliant state dir.
 	FileName = "instance.json"
 
-	// EnvOverride pins the instance id explicitly. Intended for container and
-	// Kubernetes deployments where the home directory is ephemeral but the
-	// workload identity is not: without it, every pod restart would look like
-	// a new machine.
+	// EnvOverride is the variable that pins the instance id (CLIConfig's
+	// machine.instance_id), named in messages. Intended for containers where
+	// the home directory is ephemeral but the workload identity is not:
+	// without it, every restart would look like a new machine. The entrypoint
+	// reads it through typed config and calls Pin.
 	EnvOverride = "RELIANT_INSTANCE_ID"
 
 	// lockFileName serializes first-run generation across processes.
@@ -88,9 +90,21 @@ type record struct {
 }
 
 var (
-	once   sync.Once
+	mu     sync.Mutex
+	pinned string
 	cached string
 )
+
+// Pin makes id this process's instance id instead of the persisted one; a
+// blank id keeps the persisted one. The entrypoint calls it with its loaded
+// config before anything asks for ID, and it discards an id already resolved,
+// so the pin holds however early something asked.
+func Pin(id string) {
+	mu.Lock()
+	defer mu.Unlock()
+	pinned = strings.TrimSpace(id)
+	cached = ""
+}
 
 // ID returns the stable instance UUID, generating and persisting it on first
 // use. It never fails: if the state directory cannot be read or written, it
@@ -99,7 +113,11 @@ var (
 //
 // The result is memoized, so the disk is touched at most once per process.
 func ID() string {
-	once.Do(func() { cached = resolve() })
+	mu.Lock()
+	defer mu.Unlock()
+	if cached == "" {
+		cached = resolve(pinned)
+	}
 	return cached
 }
 
@@ -167,10 +185,10 @@ func Path() (string, error) {
 	return filepath.Join(dir, FileName), nil
 }
 
-// resolve applies the override, then the on-disk record, then a last-resort
+// resolve applies the pinned id, then the on-disk record, then a last-resort
 // ephemeral id.
-func resolve() string {
-	if pinned := strings.TrimSpace(os.Getenv(EnvOverride)); pinned != "" { //nolint:forbidigo // RELIANT_INSTANCE_ID: the machine identity every CLI command and the daemon resolve lazily; forge gap: a setting every CLI command reads needs a subtree-scoped (persistent) command config, and forge binds a config to one command or to every process
+func resolve(pinned string) string {
+	if pinned = strings.TrimSpace(pinned); pinned != "" {
 		return pinned
 	}
 

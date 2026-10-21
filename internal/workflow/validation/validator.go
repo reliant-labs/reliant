@@ -51,6 +51,10 @@ type ValidationOptions struct {
 	// catalog. When provided, enables the skill-reference layer that fails a
 	// workflow naming a skill nothing resolves.
 	SkillResolver *SkillResolver
+
+	// ValueTypes resolves the input types integrations define
+	// (`type: github.repository`). Nil means the embedded catalog's.
+	ValueTypes ValueTypes
 }
 
 // =============================================================================
@@ -85,14 +89,16 @@ func StaticAnalysisWithOptions(wf *reliantv1.Workflow, opts *ValidationOptions) 
 	// independent of the nodes, and one save should show every finding.
 	validateTriggers(wf, opts, catalogIntegrations{}, result)
 
+	valueTypes := opts.valueTypes()
+
 	// Layer 1: Structural validation
-	validateStructure(wf, result)
+	validateStructure(wf, valueTypes, result)
 	if result.HasErrors() {
 		return result
 	}
 
 	// Layer 2: CEL expression validation (compilation-based)
-	ValidateCELWithCompilation(wf, result, opts.WorkflowLoader)
+	validateCELWithTypes(wf, result, opts.WorkflowLoader, valueTypes)
 
 	// Layer 3: Parallel write detection
 	validateParallelWrites(wf, result)
@@ -120,6 +126,12 @@ func StaticAnalysisWithOptions(wf *reliantv1.Workflow, opts *ValidationOptions) 
 // ValidateInputs validates actual input values against the workflow's input schema.
 // Call this right before workflow execution when input values are bound.
 func ValidateInputs(wf *reliantv1.Workflow, inputs map[string]any) *Result {
+	return ValidateInputsWith(wf, inputs, nil)
+}
+
+// ValidateInputsWith is ValidateInputs with the resolver for integration input
+// types; nil means the embedded catalog's.
+func ValidateInputsWith(wf *reliantv1.Workflow, inputs map[string]any, types ValueTypes) *Result {
 	result := NewResult()
 
 	if wf == nil {
@@ -127,7 +139,7 @@ func ValidateInputs(wf *reliantv1.Workflow, inputs map[string]any) *Result {
 		return result
 	}
 
-	validateBoundInputs(wf, inputs, result)
+	validateBoundInputs(wf, inputs, typesOrDefault(types), result)
 	return result
 }
 

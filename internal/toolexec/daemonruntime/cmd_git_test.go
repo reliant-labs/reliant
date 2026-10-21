@@ -20,7 +20,7 @@ import (
 func setGitCloneTestEnv(t *testing.T) {
 	t.Helper()
 	cfg := filepath.Join(t.TempDir(), "gitconfig")
-	content := "[init]\n\tdefaultBranch = main\n[user]\n\tname = Test\n\temail = test@example.com\n"
+	content := "[init]\n\tdefaultBranch = main\n[user]\n\tname = Test\n\temail = test@example.com\n" + noAutoMaintenanceConfig
 	if err := os.WriteFile(cfg, []byte(content), 0o644); err != nil {
 		t.Fatalf("write gitconfig: %v", err)
 	}
@@ -60,7 +60,7 @@ func buildTestOriginRepo(root string) (string, error) {
 		return "", err
 	}
 	run := func(dir string, args ...string) error {
-		cmd := exec.Command("git", args...)
+		cmd := exec.Command("git", noAutoMaintenance(args...)...)
 		cmd.Dir = dir
 		cmd.Env = append(os.Environ(),
 			"GIT_CONFIG_GLOBAL="+os.DevNull, "GIT_CONFIG_NOSYSTEM=1",

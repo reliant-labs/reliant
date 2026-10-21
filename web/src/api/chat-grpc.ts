@@ -3,8 +3,7 @@
 import { grpcClient } from "./grpc-client";
 import { singleflight } from "../lib/singleflight";
 import { repairLegacyWorkflowParams } from "../lib/paramUtils";
-import { create, fromJson, type JsonObject } from "@bufbuild/protobuf";
-import { StructSchema } from "@bufbuild/protobuf/wkt";
+import { create, type JsonObject } from "@bufbuild/protobuf";
 import { jsToProtoValue, protoValueToJs, type ProtoValue } from "./proto-utils";
 import {
   StartChatRequestSchema,
@@ -195,7 +194,8 @@ export interface ReplayEventInput {
   kind?: string;
   /** RFC3339 UTC; omitted means now. */
   occurredAt?: string;
-  payload: Record<string, unknown>;
+  /** protobuf-es carries a google.protobuf.Struct field as its JSON object, not a message. */
+  payload: JsonObject;
 }
 
 export interface RunNowOptions {
@@ -219,7 +219,7 @@ export function replayEventToProto(replay: ReplayEventInput): ReplayEvent {
     eventId: replay.eventId ?? "",
     kind: replay.kind ?? "",
     occurredAt: replay.occurredAt ?? "",
-    payload: fromJson(StructSchema, replay.payload as JsonObject),
+    payload: replay.payload,
   });
 }
 

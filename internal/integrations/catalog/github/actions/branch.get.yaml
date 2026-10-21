@@ -1,0 +1,84 @@
+# yaml-language-server: $schema=../../../manifest/schema/action.schema.json
+#
+# Reading a repository without a checkout: what a run with no machine reads
+# a project's code with. `path` and a tree's `ref` are interpolated into the
+# URL path as ONE percent-escaped segment (GitHub decodes the %2F), so their
+# pattern refuses empty, "." and ".." segments, which would otherwise survive
+# into the decoded path.
+id: branch.get
+display_name: Get branch
+summary: Whether a branch exists, its head commit and whether it is protected.
+description: >-
+  Return one branch: whether it exists, its head commit sha, and whether
+  GitHub treats it as protected (branch protection or a ruleset). A branch
+  that does not exist answers exists false, not an error. Publishing steps
+  read this before pushing, to refuse a protected branch.
+keywords: [branch, protected, protection, exists, head, sha, ref]
+placement: server
+mutates: false
+tool:
+  expose: true
+params:
+  type: object
+  additionalProperties: false
+  required: [owner, repo, branch]
+  properties:
+    owner: { $ref: ../schemas/owner.yaml }
+    repo: { $ref: ../schemas/repo.yaml }
+    branch:
+      type: string
+      pattern: "^[A-Za-z0-9._/-]+$"
+      maxLength: 255
+      title: Branch
+      description: The branch's name, without refs/heads/.
+      examples: ["autopilot/issue-12"]
+    connection: { $ref: ../schemas/connection.yaml }
+request:
+  method: GET
+  # The branch name is one percent-escaped path segment; GitHub decodes %2F.
+  path: /repos/{{ params.owner }}/{{ params.repo }}/branches/{{ params.branch }}
+  errors:
+    # A branch that does not exist is a normal answer for a publishing step.
+    - status: 404
+      accept: true
+      when: >-
+        type(response) == map && response.?message.orValue('') == 'Branch not found'
+    - status: 401
+      retryable: false
+      message: "GitHub rejected the credential ({{ response.?message.orValue('bad credentials') }}): reconnect GitHub in Settings."
+    - status: 403
+      when: >-
+        headers[?'x-ratelimit-remaining'].orValue('') == '0' ||
+        headers[?'retry-after'].hasValue() ||
+        (type(response) == map && type(response.?message.orValue(null)) == string &&
+         response.message.matches('(?i)rate limit'))
+      retryable: true
+      message: { $ref: ../schemas/github_rate_limited.yaml }
+    - status: 429
+      retryable: true
+      message: { $ref: ../schemas/github_rate_limited.yaml }
+    - status: 403
+      retryable: false
+      message: >-
+        GitHub refused the request: {{ response.?message.orValue('forbidden') }}.
+        The connection lacks permission for this action (the GitHub App's
+        permissions, its installation, or your role on the repository).
+    - status: 404
+      retryable: false
+      message: >-
+        GitHub returned not found: the repository does not exist, or this
+        connection cannot see it (is the Reliant GitHub App installed on the
+        repository?).
+output:
+  select: >-
+    {"exists": type(response) == map && response.?name.hasValue(),
+     "name": type(response) == map ? response.?name.orValue(null) : null,
+     "protected": type(response) == map && response.?protected.orValue(false),
+     "sha": type(response) == map ? response.?commit.?sha.orValue(null) : null}
+  schema:
+    type: object
+    properties:
+      exists: { type: boolean }
+      name: { type: [string, "null"] }
+      protected: { type: boolean, description: "True when branch protection or a ruleset applies." }
+      sha: { type: [string, "null"], description: The branch's head commit. }

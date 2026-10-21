@@ -6,8 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"sync"
-
-	pgdb "github.com/reliant-labs/reliant/internal/db/postgres/generated"
 )
 
 // runControlLockTimeout bounds how long a caller waits for another request's
@@ -42,7 +40,7 @@ func (r *Repo) LockChatRunControl(ctx context.Context, chatID string) (func(), e
 	}
 	// Taking it inside a caller's transaction would release the lock at THAT
 	// transaction's commit, which is not the critical section the caller means.
-	if _, ok := ctx.Value(txKey).(pgdb.DBTX); ok {
+	if r.DB.inTx(ctx) {
 		return nil, errors.New("run-control lock must not be taken inside a transaction")
 	}
 

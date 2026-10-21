@@ -715,6 +715,7 @@ condition: "nodes.check.exit_code == 0"
 | `enum` | Dropdown with predefined values |
 | `group` | Input group for organizing related inputs with preset matching |
 | `integer` | Whole number input with optional min/max |
+| `integration` | Value an integration defines, written type: <integration>.<type> (for example github.repository); multi makes it a list |
 | `message` | Primary user message/prompt input |
 | `model` | Model selector dropdown |
 | `number` | Decimal number input with optional min/max |
@@ -863,7 +864,7 @@ Events are always keyed by node path, never by ref URL: `node: "builtin://agent"
 
 Every event needs either `output:` (a raw activity output map) or `type:` (a convenience wrapper
 like `llm_response`/`tool_result` that gets converted into one). **Write `output:` directly.** It is
-the form every scenario in `internal/workflow/builtin/testdata/` uses (the CI-gating corpus), and it is
+the form nearly every builtin scenario (`internal/workflow/builtin/<workflow>/scenarios/`, which CI runs) uses, and it is
 the only form that exposes real activity field names — `response_data`, `thread_token_count`,
 `has_feedback`, `tool_results` — which you need for routing and compaction scenarios and which the
 `type:` wrapper hides.
@@ -893,13 +894,13 @@ Node state is a set of facts about the whole run, not a single verdict per node.
 
 ### Example scenario
 
-Verbatim from `internal/workflow/builtin/testdata/agent_scenarios.yaml`, run against `builtin://agent`.
+Verbatim from `internal/workflow/builtin/agent/scenarios/compaction_at_default_threshold.yaml`, run against `builtin://agent`.
 It exercises a tool call whose output crosses the compaction token threshold, so the `compact`
 node runs before the loop's next iteration:
 
 ```yaml
-name: compaction_triggered
-description: Token count exceeds the model's compaction threshold after tool execution, compact node runs
+name: compaction_at_default_threshold
+description: Token count exceeds the default compaction threshold after tool execution, compact node runs
 inputs:
   mode: auto
 events:
@@ -913,8 +914,7 @@ events:
       tool_calls:
         - id: call_0
           name: view
-          input:
-            file_path: "/path/to/large/file.go"
+          input: '{"file_path":"/path/to/large/file.go"}'
   # Tool returns with token count above the 185000 default threshold
   - node: agent_loop.execute_tools
     output:
@@ -1008,9 +1008,9 @@ The same rule addresses sub-workflows: `ref: project://blog-content-pipeline` na
 `validate` follows every `project://` ref transitively and reports a broken one with the whole chain
 (`a.yaml → project://b → project://c: no project workflow is named "c"`) — and a ref cycle as an error.
 
-(The builtin workflows' own CI corpus additionally keeps multi-document files in
-`internal/workflow/builtin/testdata/<workflow>_scenarios.yaml`. That is reliant's test fixture format,
-not a project layout.)
+The builtin workflows keep their scenarios in this same layout
+(`internal/workflow/builtin/<workflow>/scenarios/`), embedded in the binary;
+`reliant workflow scenario run --include-builtins` runs them alongside the project's.
 
 ### Reading `run_scenario` output
 

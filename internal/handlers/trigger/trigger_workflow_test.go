@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"connectrpc.com/connect"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -184,7 +185,7 @@ func TestEnableWorkflowResumesAPausedActivationAndKeepsItsSettings(t *testing.T)
 
 	again := env.enable(t, env.enableRequest(func(r *reliantv1.EnableWorkflowRequest) {
 		connect1(r)
-		r.Message = "ignored: the paused activations keep what they had"
+		r.Message = "ignored: every declaration here has its own prompt"
 	}))
 	require.True(t, again.Enabled)
 	for _, r := range again.Results {
@@ -197,6 +198,163 @@ func TestEnableWorkflowResumesAPausedActivationAndKeepsItsSettings(t *testing.T)
 	for _, r := range third.Results {
 		assert.Equal(t, reliantv1.WorkflowTriggerOutcome_WORKFLOW_TRIGGER_OUTCOME_ALREADY_ENABLED, r.Outcome, r.Trigger)
 	}
+}
+
+// Enabling a workflow that is already on is how its settings change: every
+// activation is brought to the request, keeps its name and id, and stays one
+// row per trigger.
+func TestEnableWorkflowUpdatesTheSettingsOfAnEnabledAutomation(t *testing.T) {
+	env, _ := setupInboundTriggerTest(t)
+	env.saveWorkflow(t, "triage", enableWorkflowYAML)
+	conn := env.createConnection(t, env.userID, "test", "acct-1", core.ConnectionStatusActive)
+	first := env.enable(t, env.enableRequest(func(r *reliantv1.EnableWorkflowRequest) {
+		r.ConnectionIds = map[string]string{"test": conn.ID}
+		r.Params = map[string]*structpb.Value{"mode": structpb.NewStringValue("lenient")}
+	}))
+	require.True(t, first.Enabled, "%v", first.Results)
+	ids := map[string]string{}
+	for _, r := range first.Results {
+		ids[r.Trigger] = r.Activation.GetId()
+	}
+
+	resp := env.enable(t, env.enableRequest(func(r *reliantv1.EnableWorkflowRequest) {
+		r.ConnectionIds = map[string]string{"test": conn.ID}
+		r.Params = map[string]*structpb.Value{"mode": structpb.NewStringValue("strict")}
+		r.NotifyOnComplete = true
+		r.NamePrefix = "ignored for an existing activation"
+	}))
+
+	require.True(t, resp.Enabled, "%v", resp.Results)
+	for _, r := range resp.Results {
+		assert.Equal(t, reliantv1.WorkflowTriggerOutcome_WORKFLOW_TRIGGER_OUTCOME_UPDATED, r.Outcome, r.Trigger)
+		assert.Equal(t, ids[r.Trigger], r.Activation.GetId(), "%s is the same activation", r.Trigger)
+		assert.Equal(t, "strict", r.Activation.GetParams()["mode"].GetStringValue(), r.Trigger)
+		assert.True(t, r.Activation.GetNotifyOnComplete(), r.Trigger)
+		assert.True(t, r.Activation.GetEnabled(), r.Trigger)
+		assert.Equal(t, "triage · "+r.Trigger, r.Activation.GetName(), "an existing activation keeps its name")
+	}
+	assert.Len(t, env.storedTriggers(t), 3, "no duplicates")
+
+	again := env.enable(t, env.enableRequest(func(r *reliantv1.EnableWorkflowRequest) {
+		r.ConnectionIds = map[string]string{"test": conn.ID}
+		r.Params = map[string]*structpb.Value{"mode": structpb.NewStringValue("strict")}
+		r.NotifyOnComplete = true
+	}))
+	for _, r := range again.Results {
+		assert.Equal(t, reliantv1.WorkflowTriggerOutcome_WORKFLOW_TRIGGER_OUTCOME_ALREADY_ENABLED, r.Outcome,
+			"%s: the same settings again change nothing", r.Trigger)
+	}
+}
+
+// Finish setup is the same call on a paused automation: it takes the new
+// settings and resumes.
+func TestEnableWorkflowResumesAPausedAutomationWithNewSettings(t *testing.T) {
+	env, _ := setupInboundTriggerTest(t)
+	env.saveWorkflow(t, "triage", enableWorkflowYAML)
+	conn := env.createConnection(t, env.userID, "test", "acct-1", core.ConnectionStatusActive)
+	connect1 := func(r *reliantv1.EnableWorkflowRequest) { r.ConnectionIds = map[string]string{"test": conn.ID} }
+	require.True(t, env.enable(t, env.enableRequest(connect1)).Enabled)
+	_, err := env.svc.DisableWorkflow(env.ctx, connect.NewRequest(&reliantv1.DisableWorkflowRequest{Workflow: "triage"}))
+	require.NoError(t, err)
+
+	resp := env.enable(t, env.enableRequest(func(r *reliantv1.EnableWorkflowRequest) {
+		connect1(r)
+		r.Params = map[string]*structpb.Value{"mode": structpb.NewStringValue("strict")}
+	}))
+
+	require.True(t, resp.Enabled, "%v", resp.Results)
+	for _, r := range resp.Results {
+		assert.Equal(t, reliantv1.WorkflowTriggerOutcome_WORKFLOW_TRIGGER_OUTCOME_RESUMED, r.Outcome, r.Trigger)
+		assert.Equal(t, "strict", r.Activation.GetParams()["mode"].GetStringValue(), r.Trigger)
+	}
+	for _, tr := range env.storedTriggers(t) {
+		assert.True(t, tr.Enabled, tr.Name)
+		assert.Equal(t, "strict", tr.Params["mode"], tr.Name)
+	}
+}
+
+// An existing activation's new settings are validated like a new one's, and a
+// refusal changes nothing anywhere.
+func TestEnableWorkflowRevalidatesAnExistingAutomationAndRefusesWithoutWriting(t *testing.T) {
+	env, _ := setupInboundTriggerTest(t)
+	env.saveWorkflow(t, "triage", enableWorkflowYAML)
+	conn := env.createConnection(t, env.userID, "test", "acct-1", core.ConnectionStatusActive)
+	require.True(t, env.enable(t, env.enableRequest(func(r *reliantv1.EnableWorkflowRequest) {
+		r.ConnectionIds = map[string]string{"test": conn.ID}
+		r.Params = map[string]*structpb.Value{"mode": structpb.NewStringValue("lenient")}
+	})).Enabled)
+
+	resp := env.enable(t, env.enableRequest(func(r *reliantv1.EnableWorkflowRequest) {
+		r.ConnectionIds = map[string]string{"test": conn.ID}
+		r.Params = map[string]*structpb.Value{"mode": structpb.NewNumberValue(3)}
+	}))
+
+	assert.False(t, resp.Enabled)
+	assert.Equal(t, reliantv1.WorkflowTriggerOutcome_WORKFLOW_TRIGGER_OUTCOME_FAILED, outcomes(resp)["nightly"])
+	assert.Contains(t, resultFor(resp, "nightly").Message, "params")
+	for _, tr := range env.storedTriggers(t) {
+		assert.Equal(t, "lenient", tr.Params["mode"], "%s keeps its settings", tr.Name)
+		assert.True(t, tr.Enabled, tr.Name)
+	}
+}
+
+// A write that fails after another activation was already changed puts that
+// one's previous settings back.
+func TestEnableWorkflowPutsBackAnUpdatedAutomationWhenALaterWriteFails(t *testing.T) {
+	env, _ := setupInboundTriggerTest(t)
+	env.saveWorkflow(t, "triage", `name: triage
+inputs:
+  mode: {type: string, default: ""}
+triggers:
+  - name: hook
+    webhook: {}
+    prompt: "x"
+  - name: nightly
+    schedule: {cron: "0 9 * * *"}
+    prompt: "y"
+entry: [a]
+nodes:
+  - id: a
+    type: approval
+    args: {title: ok}
+`)
+	withMode := func(mode string) func(*reliantv1.EnableWorkflowRequest) {
+		return func(r *reliantv1.EnableWorkflowRequest) {
+			r.Params = map[string]*structpb.Value{"mode": structpb.NewStringValue(mode)}
+		}
+	}
+	require.True(t, env.enable(t, env.enableRequest(withMode("lenient"))).Enabled)
+	env.backend.syncErr = errors.New("temporal is down")
+
+	resp := env.enable(t, env.enableRequest(withMode("strict")))
+
+	assert.False(t, resp.Enabled)
+	assert.Equal(t, reliantv1.WorkflowTriggerOutcome_WORKFLOW_TRIGGER_OUTCOME_FAILED, outcomes(resp)["nightly"])
+	assert.Equal(t, reliantv1.WorkflowTriggerOutcome_WORKFLOW_TRIGGER_OUTCOME_NOT_ENABLED, outcomes(resp)["hook"])
+	assert.Contains(t, resultFor(resp, "hook").Message, "keeps its previous settings")
+	for _, tr := range env.storedTriggers(t) {
+		assert.Equal(t, "lenient", tr.Params["mode"], "%s has its previous settings back", tr.Name)
+		assert.True(t, tr.Enabled, tr.Name)
+	}
+}
+
+// A request that names no connection keeps the one an activation listens
+// through instead of moving it to the default.
+func TestEnableWorkflowKeepsAnUnnamedConnection(t *testing.T) {
+	env, _ := setupInboundTriggerTest(t)
+	env.saveWorkflow(t, "triage", enableWorkflowYAML)
+	env.createConnection(t, env.userID, "test", "acct-1", core.ConnectionStatusActive)
+	other := env.createConnection(t, env.userID, "test", "acct-2", core.ConnectionStatusActive)
+	require.True(t, env.enable(t, env.enableRequest(func(r *reliantv1.EnableWorkflowRequest) {
+		r.ConnectionIds = map[string]string{"test": other.ID}
+	})).Enabled)
+
+	resp := env.enable(t, env.enableRequest(func(r *reliantv1.EnableWorkflowRequest) {
+		r.Params = map[string]*structpb.Value{"mode": structpb.NewStringValue("strict")}
+	}))
+
+	require.True(t, resp.Enabled, "%v", resp.Results)
+	assert.Equal(t, other.ID, resultFor(resp, "new-issue").Activation.GetConnectionId())
 }
 
 // The shared prompt fills in for a declaration that has none and never
@@ -366,4 +524,123 @@ func TestWorkflowEnableAndDisableAreScopedToTheCaller(t *testing.T) {
 	for _, tr := range env.storedTriggers(t) {
 		assert.True(t, tr.Enabled)
 	}
+}
+
+const hookOnlyYAML = `name: triage
+triggers:
+  - name: hook
+    webhook: {}
+    prompt: "Handle the delivery."
+entry: [a]
+nodes:
+  - id: a
+    type: approval
+    args: {title: ok}
+`
+
+// leftover is an automation of some other workflow that already holds name.
+func (e *triggerTestEnv) leftover(t *testing.T, name, workflow string) {
+	t.Helper()
+	trigger := "hook"
+	require.NoError(t, e.repo.CreateTrigger(context.Background(), &core.Trigger{
+		ID: uuid.NewString(), UserID: e.userID, ProjectID: e.projectID, Name: name,
+		Kind: core.TriggerKindWebhook, Enabled: false, Workflow: workflow, WorkflowTrigger: &trigger,
+		ActingIdentity: core.ActingIdentityOwner,
+	}))
+}
+
+func (e *triggerTestEnv) storedNames(t *testing.T) []string {
+	t.Helper()
+	var names []string
+	for _, tr := range e.storedTriggers(t) {
+		names = append(names, tr.Name)
+	}
+	return names
+}
+
+// A paused automation whose workflow was deleted is debris: it must not block
+// enabling a workflow that would take the same default name.
+func TestEnableWorkflowIsNotBlockedByABrokenLeftoverOfADeletedWorkflow(t *testing.T) {
+	env, _ := setupInboundTriggerTest(t)
+	env.saveWorkflow(t, "triage", hookOnlyYAML)
+	env.leftover(t, "triage · hook", "no-such-workflow")
+
+	resp := env.enable(t, env.enableRequest(nil))
+
+	require.True(t, resp.Enabled, "%v", resp.Results)
+	assert.Equal(t, reliantv1.WorkflowTriggerOutcome_WORKFLOW_TRIGGER_OUTCOME_ENABLED, outcomes(resp)["hook"])
+	assert.ElementsMatch(t, []string{"triage · hook", "triage (yours) · hook"}, env.storedNames(t),
+		"the leftover is untouched and the new automation is named apart from it")
+}
+
+// A live automation of another workflow holding the default name no longer
+// asks the user to invent a prefix: the new names are qualified by source.
+func TestEnableWorkflowNamesApartFromALiveAutomationOfAnotherWorkflow(t *testing.T) {
+	env, _ := setupInboundTriggerTest(t)
+	env.saveWorkflow(t, "triage", hookOnlyYAML)
+	env.saveWorkflow(t, "other", hookOnlyYAML)
+	env.leftover(t, "triage · hook", "other")
+
+	resp := env.enable(t, env.enableRequest(nil))
+
+	require.True(t, resp.Enabled, "%v", resp.Results)
+	assert.Equal(t, "triage (yours) · hook", resp.Results[0].Activation.GetName())
+}
+
+func TestActivationPrefixIsQualifiedBySourceThenNumbered(t *testing.T) {
+	svc := &Service{}
+	declared := []*reliantv1.WorkflowTrigger{{Name: "a"}, {Name: "b"}}
+	pick := func(workflow, prefix string, taken ...string) string {
+		set := map[string]bool{}
+		for _, n := range taken {
+			set[n] = true
+		}
+		return svc.activationPrefix(&reliantv1.EnableWorkflowRequest{Workflow: workflow, NamePrefix: prefix},
+			declared, map[string]*core.Trigger{}, map[string]*reliantv1.WorkflowTriggerOverride{}, set)
+	}
+
+	assert.Equal(t, "PR review", pick("builtin://pr-review", "PR review"), "a free prefix is used as given")
+	assert.Equal(t, "PR review (built-in)", pick("builtin://pr-review", "PR review", "PR review · b"))
+	assert.Equal(t, "PR review (yours)", pick("pr-review", "PR review", "PR review · a"))
+	assert.Equal(t, "PR review (2)", pick("x", "PR review", "PR review · a", "PR review (yours) · a"),
+		"once the source-qualified name is taken too, a number settles it")
+}
+
+func TestActivationPrefixLeavesAResumedActivationAndAChosenNameAlone(t *testing.T) {
+	svc := &Service{}
+	declared := []*reliantv1.WorkflowTrigger{{Name: "a"}, {Name: "b"}}
+	chosen := "My own name"
+	got := svc.activationPrefix(
+		&reliantv1.EnableWorkflowRequest{Workflow: "w", NamePrefix: "P"},
+		declared,
+		map[string]*core.Trigger{"a": {Name: "P · a"}},
+		map[string]*reliantv1.WorkflowTriggerOverride{"b": {Trigger: "b", Name: &chosen}},
+		map[string]bool{"P · a": true, "My own name": true},
+	)
+	assert.Equal(t, "P", got, "a resumed activation keeps its name and a chosen name is not rewritten")
+}
+
+// A name the caller chose for one trigger is theirs: if it is taken, say so.
+func TestEnableWorkflowStillRefusesAChosenNameThatIsTaken(t *testing.T) {
+	env, _ := setupInboundTriggerTest(t)
+	env.saveWorkflow(t, "triage", hookOnlyYAML)
+	env.leftover(t, "mine", "no-such-workflow")
+	name := "mine"
+
+	resp := env.enable(t, env.enableRequest(func(r *reliantv1.EnableWorkflowRequest) {
+		r.Overrides = []*reliantv1.WorkflowTriggerOverride{{Trigger: "hook", Name: &name}}
+	}))
+
+	assert.False(t, resp.Enabled)
+	assert.Contains(t, resp.Results[0].Message, `"mine"`)
+	assert.Equal(t, []string{"mine"}, env.storedNames(t))
+}
+
+func TestRetireDeletedTriggersDeletesTheirSchedules(t *testing.T) {
+	env := setupTriggerTest(t)
+	env.svc.RetireDeletedTriggers(env.ctx, []*core.Trigger{
+		{ID: "s1", UserID: env.userID, Kind: core.TriggerKindSchedule},
+		{ID: "w1", UserID: env.userID, Kind: core.TriggerKindWebhook},
+	})
+	assert.Equal(t, []string{"s1"}, env.backend.deleted, "only a schedule-backed trigger has a schedule to delete")
 }

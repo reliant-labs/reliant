@@ -12,20 +12,16 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file config/v1/integrations_config.proto.
  */
 export const file_config_v1_integrations_config: GenFile = /*@__PURE__*/
-  fileDesc("CiNjb25maWcvdjEvaW50ZWdyYXRpb25zX2NvbmZpZy5wcm90bxIJY29uZmlnLnYxIpUHChJJbnRlZ3JhdGlvbnNDb25maWcSVgoKcHVibGljX3VybBgBIAEoCUJCgs4YPgoKUFVCTElDX1VSTCowRXh0ZXJuYWxseSByZWFjaGFibGUgYmFzZSBVUkwgb2YgdGhpcyBkZXBsb3ltZW50EmgKCXZhdWx0X2tleRgCIAEoCUJVgs4YUQoRUkVMSUFOVF9WQVVMVF9LRVkqOENyZWRlbnRpYWwgdmF1bHQga2V5ICh2MTo8YmFzZTY0Pik7IHJlcXVpcmVkIHdoZW4gaG9zdGVkMAFQARKBAQoUc2xhY2tfc2lnbmluZ19zZWNyZXQYAyABKAlCY4LOGF8KHFJFTElBTlRfU0xBQ0tfU0lHTklOR19TRUNSRVQqO1NsYWNrIHNpZ25pbmcgc2VjcmV0ICh1bnNldDogU2xhY2sgZXZlbnRzIGFyZSBub3QgcmVjZWl2ZWQpMAFQARKJAQoVZ2l0aHViX3dlYmhvb2tfc2VjcmV0GAQgASgJQmqCzhhmCh1SRUxJQU5UX0dJVEhVQl9XRUJIT09LX1NFQ1JFVCpBR2l0SHViIEFwcCB3ZWJob29rIHNlY3JldCAodW5zZXQ6IEdpdEh1YiBldmVudHMgYXJlIG5vdCByZWNlaXZlZCkwAVABEkcKD2dpdGh1Yl9hcHBfc2x1ZxgFIAEoCUIugs4YKgoXUkVMSUFOVF9HSVRIVUJfQVBQX1NMVUcqD0dpdEh1YiBBcHAgc2x1ZxJ+ChJnaXRodWJfYm90X3VzZXJfaWQYBiABKANCYoLOGF4KGlJFTElBTlRfR0lUSFVCX0JPVF9VU0VSX0lEKkBHaXRIdWIgQXBwIGJvdCdzIG51bWVyaWMgdXNlciBpZCAoZGVmYXVsdDogdGhlIHByb2R1Y3Rpb24gQXBwJ3MpEm0KEGdpdGh1Yl9ib3RfbG9naW4YByABKAlCU4LOGE8KGFJFTElBTlRfR0lUSFVCX0JPVF9MT0dJTiozR2l0SHViIEFwcCBib3QncyBsb2dpbiwgdXNlZCB3aGVuIG5vIHVzZXIgaWQgaXMgc2V0EnUKF3Rlc3RfaW50ZWdyYXRpb25fc2VjcmV0GAggASgJQlSCzhhQCh9SRUxJQU5UX1RFU1RfSU5URUdSQVRJT05fU0VDUkVUKilUZXN0IGludGVncmF0aW9uIHNlY3JldCAoZTJlIHN0YWNrcyBvbmx5KTABUAFCOFo2Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vY29uZmlnL3YxO2NvbmZpZ3YxYgZwcm90bzM", [file_forge_v1_forge]);
+  fileDesc("CiNjb25maWcvdjEvaW50ZWdyYXRpb25zX2NvbmZpZy5wcm90bxIJY29uZmlnLnYxIvUKChJJbnRlZ3JhdGlvbnNDb25maWcSVgoKcHVibGljX3VybBgBIAEoCUJCgs4YPgoKUFVCTElDX1VSTCowRXh0ZXJuYWxseSByZWFjaGFibGUgYmFzZSBVUkwgb2YgdGhpcyBkZXBsb3ltZW50EmgKCXZhdWx0X2tleRgCIAEoCUJVgs4YUQoRUkVMSUFOVF9WQVVMVF9LRVkqOENyZWRlbnRpYWwgdmF1bHQga2V5ICh2MTo8YmFzZTY0Pik7IHJlcXVpcmVkIHdoZW4gaG9zdGVkMAFQARKBAQoUc2xhY2tfc2lnbmluZ19zZWNyZXQYAyABKAlCY4LOGF8KHFJFTElBTlRfU0xBQ0tfU0lHTklOR19TRUNSRVQqO1NsYWNrIHNpZ25pbmcgc2VjcmV0ICh1bnNldDogU2xhY2sgZXZlbnRzIGFyZSBub3QgcmVjZWl2ZWQpMAFQARKJAQoVZ2l0aHViX3dlYmhvb2tfc2VjcmV0GAQgASgJQmqCzhhmCh1SRUxJQU5UX0dJVEhVQl9XRUJIT09LX1NFQ1JFVCpBR2l0SHViIEFwcCB3ZWJob29rIHNlY3JldCAodW5zZXQ6IEdpdEh1YiBldmVudHMgYXJlIG5vdCByZWNlaXZlZCkwAVABEkcKD2dpdGh1Yl9hcHBfc2x1ZxgFIAEoCUIugs4YKgoXUkVMSUFOVF9HSVRIVUJfQVBQX1NMVUcqD0dpdEh1YiBBcHAgc2x1ZxJ+ChJnaXRodWJfYm90X3VzZXJfaWQYBiABKANCYoLOGF4KGlJFTElBTlRfR0lUSFVCX0JPVF9VU0VSX0lEKkBHaXRIdWIgQXBwIGJvdCdzIG51bWVyaWMgdXNlciBpZCAoZGVmYXVsdDogdGhlIHByb2R1Y3Rpb24gQXBwJ3MpEm0KEGdpdGh1Yl9ib3RfbG9naW4YByABKAlCU4LOGE8KGFJFTElBTlRfR0lUSFVCX0JPVF9MT0dJTiozR2l0SHViIEFwcCBib3QncyBsb2dpbiwgdXNlZCB3aGVuIG5vIHVzZXIgaWQgaXMgc2V0EnUKF3Rlc3RfaW50ZWdyYXRpb25fc2VjcmV0GAggASgJQlSCzhhQCh9SRUxJQU5UX1RFU1RfSU5URUdSQVRJT05fU0VDUkVUKilUZXN0IGludGVncmF0aW9uIHNlY3JldCAoZTJlIHN0YWNrcyBvbmx5KTABUAESqQEKEG9hdXRoX2NsaWVudF9pZHMYCSADKAsyMS5jb25maWcudjEuSW50ZWdyYXRpb25zQ29uZmlnLk9hdXRoQ2xpZW50SWRzRW50cnlCXILOGFgqOkludGVncmF0aW9uIE9BdXRoIGNsaWVudCBpZHMsIFJFTElBTlRfT0FVVEhfPElEPl9DTElFTlRfSURiDlJFTElBTlRfT0FVVEhfagpfQ0xJRU5UX0lEEr8BChRvYXV0aF9jbGllbnRfc2VjcmV0cxgKIAMoCzI1LmNvbmZpZy52MS5JbnRlZ3JhdGlvbnNDb25maWcuT2F1dGhDbGllbnRTZWNyZXRzRW50cnlCaoLOGGYqQkludGVncmF0aW9uIE9BdXRoIGNsaWVudCBzZWNyZXRzLCBSRUxJQU5UX09BVVRIXzxJRD5fQ0xJRU5UX1NFQ1JFVDABYg5SRUxJQU5UX09BVVRIX2oOX0NMSUVOVF9TRUNSRVQaNQoTT2F1dGhDbGllbnRJZHNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBGjkKF09hdXRoQ2xpZW50U2VjcmV0c0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAFCOFo2Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vY29uZmlnL3YxO2NvbmZpZ3YxYgZwcm90bzM", [file_forge_v1_forge]);
 
 /**
  * IntegrationsConfig is how a server role reaches the outside world on a
  * user's behalf: the credential vault's key, the deployment's public URL, and
- * the deployment-level secrets of the integrations that push events to it.
- * The API server and the worker compose it, so they agree on which
- * integrations deliver events and on how a webhook's URL reads. The rules
- * every config here follows are in config.proto's header.
- *
- * Not here: each integration's OAuth client, RELIANT_OAUTH_<ID>_CLIENT_ID /
- * _CLIENT_SECRET. That family is keyed by the integration catalog — an open
- * set a config message cannot declare field by field — so the entrypoint
- * reads it through connections.OAuthClientsFromEnv.
+ * the deployment-level secrets of the integrations that push events to it,
+ * and each integration's OAuth client. The API server and the worker compose
+ * it, so they agree on which integrations deliver events and on how a
+ * webhook's URL reads. The rules every config here follows are in
+ * config.proto's header.
  *
  * @generated from message config.v1.IntegrationsConfig
  */
@@ -90,6 +86,23 @@ export type IntegrationsConfig = Message<"config.v1.IntegrationsConfig"> & {
    * @generated from field: string test_integration_secret = 8;
    */
   testIntegrationSecret: string;
+
+  /**
+   * Each integration's OAuth client: RELIANT_OAUTH_<ID>_CLIENT_ID and
+   * RELIANT_OAUTH_<ID>_CLIENT_SECRET, keyed by the integration's id in upper
+   * case (connections.OAuthClientEnv). The keys are the integration catalog's,
+   * an open set, so they are env families rather than fields. The prefix is
+   * owned: any other RELIANT_OAUTH_* variable (a misspelt suffix) fails the
+   * load. An integration with neither is not offered.
+   *
+   * @generated from field: map<string, string> oauth_client_ids = 9;
+   */
+  oauthClientIds: { [key: string]: string };
+
+  /**
+   * @generated from field: map<string, string> oauth_client_secrets = 10;
+   */
+  oauthClientSecrets: { [key: string]: string };
 };
 
 /**

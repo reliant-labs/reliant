@@ -36,24 +36,24 @@ type UserChainDeps struct {
 
 // NewUserChain builds the API listener's chain. Outermost first:
 //
-//	trace → recovery → request-id → logging → metrics →
-//	[slow-RPC watchdog → timeout → auth] → domain whitelist → activity →
-//	stream drain
+//	trace → recovery → request-id → logging → metrics → deadline → auth →
+//	domain whitelist → activity → stream drain
 //
 // and, inside it, a mount's own options (machinewake on the worktree and
 // filesystem services, forgeAPIDisabled when the forge API is off).
 //
 // Where it departs from forge's defaults, it says why:
 //
-//   - The Auth slot is the watchdog, the timeout and the authenticator, in
-//     that order (authSlot). The per-RPC deadline and the slow-RPC watchdog
-//     have always wrapped authentication: an `rlat_` introspection, the
-//     self-hosted token store's query and the analytics privacy lookup run
-//     inside the RPC's deadline, and a slow one is reported as a slow RPC.
-//     forge's chain runs Extras after Auth, so as Extras they would no
-//     longer bound it. forge's own Deadline slot, which sits in the same
-//     place, is dropped (NoDeadline): its 30s default for every unary RPC
-//     would undercut reliant's per-procedure budgets.
+//   - The Deadline slot carries reliant's budgets, not forge's 30s default:
+//     UnaryTimeout (10s, see interceptors.UnaryTimeout) for a unary RPC the
+//     table does not name, and the per-procedure table — reliant's own
+//     longer budgets plus the forge daemon commands' (ForgeRPCDeadlines),
+//     with 0 for the OAuth flows that wait on a person. The slot wraps
+//     authentication, as reliant's timeout always has: an `rlat_`
+//     introspection, the self-hosted token store's query and the analytics
+//     privacy lookup run inside the RPC's budget. Its watchdog reports
+//     through interceptors.ReportSlowRPC, the [SlowRPC] warning and
+//     reliant_grpc_slow_rpc_total.
 //   - No audit layer. forge's default audits the forge claims an
 //     authenticator stashes (authn), and reliant's stashes its own
 //     (auth.WithUser), so every call would be audited as anonymous. The API
@@ -77,13 +77,8 @@ func NewUserChain(deps UserChainDeps) (*UserChain, error) {
 	if deps.Auth == nil {
 		return nil, errors.New("user chain: UserChainDeps.Auth is required")
 	}
-	timeouts := interceptors.NewTimeoutInterceptor().WithMethodTimeouts(forge.ForgeRPCDeadlines())
 	chain, err := serverkit.NewChain(serverkit.ChainDeps{
-		Auth: serverkit.AuthFor(serverkit.AudienceUser, authSlot{
-			interceptors.NewSlowRPCWatchdogInterceptor(),
-			timeouts.Interceptor(),
-			deps.Auth,
-		}),
+		Auth:   serverkit.AuthFor(serverkit.AudienceUser, deps.Auth),
 		Logger: deps.Logger,
 		Audit:  serverkit.NoAudit,
 		// A failed RPC reaches Sentry once, as forge's "rpc failed" line
@@ -93,11 +88,11 @@ func NewUserChain(deps UserChainDeps) (*UserChain, error) {
 		// failure Temporal carries as Benign — nobody has to act — logged at
 		// ERROR, error_class=server, and counted as a dead-end error.
 		LogOptions: []observe.LogOption{observe.WithErrorClassifier(errclass.Library)},
-		// The Auth slot above already bounds and watches every RPC; forge's
-		// default Deadline (30s for every unary RPC) would cut the longer
-		// budgets reliant grants — worktree operations, forge daemon
-		// commands, the unbounded OAuth flows — and log each slow call twice.
-		Deadline: serverkit.NoDeadline,
+		Deadline: serverkit.Deadline{
+			Unary:      interceptors.UnaryTimeout,
+			Procedures: interceptors.ProcedureTimeouts(forge.ForgeRPCDeadlines()),
+			OnSlow:     interceptors.ReportSlowRPC,
+		},
 		Extras: []connect.Interceptor{
 			interceptors.NewDomainWhitelistInterceptor(deps.AllowedEmailDomains),
 		},
@@ -109,30 +104,4 @@ func NewUserChain(deps UserChainDeps) (*UserChain, error) {
 		return nil, fmt.Errorf("user chain: %w", err)
 	}
 	return &UserChain{chain}, nil
-}
-
-// authSlot runs interceptors as one, the first outermost — the order
-// connect.WithInterceptors gives a list. It is how NewUserChain fills the
-// chain's single Auth slot with the layers that must wrap authentication.
-type authSlot []connect.Interceptor
-
-func (s authSlot) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
-	for i := len(s) - 1; i >= 0; i-- {
-		next = s[i].WrapUnary(next)
-	}
-	return next
-}
-
-func (s authSlot) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
-	for i := len(s) - 1; i >= 0; i-- {
-		next = s[i].WrapStreamingClient(next)
-	}
-	return next
-}
-
-func (s authSlot) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
-	for i := len(s) - 1; i >= 0; i-- {
-		next = s[i].WrapStreamingHandler(next)
-	}
-	return next
 }

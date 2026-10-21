@@ -5,14 +5,14 @@
  * A workflow's `triggers:` say when its author meant it to run, and declaring
  * them fires nothing, so a list of what runs on its own must also show what
  * does not run YET. Enabling is per workflow, not per trigger: one dialog
- * turns on all of a workflow's triggers (EnableWorkflowDialog).
+ * turns on all of a workflow's triggers (WorkflowSetupDialog).
  */
 
 import { useState } from "react";
 import { CalendarClock, Webhook, Workflow, Zap } from "lucide-react";
 
 import { Button } from "../ui/Button";
-import { EnableWorkflowDialog } from "./EnableWorkflowDialog";
+import { WorkflowSetupDialog } from "./WorkflowSetupDialog";
 import { describeSchedule } from "@/lib/cronText";
 import { describeDeclaredSource, integrationOf, sourceCase, type DeclaredTrigger } from "@/lib/declaredTriggers";
 import { useIntegrationEventNaming } from "@/hooks/connection-queries";
@@ -64,7 +64,7 @@ export function InactiveDeclaredTriggers({
         })}
       </ul>
       {enabling && (
-        <EnableWorkflowDialog
+        <WorkflowSetupDialog
           open
           onClose={() => setEnabling(null)}
           workflowRef={enabling.workflowRef}

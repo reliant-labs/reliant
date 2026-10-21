@@ -250,20 +250,42 @@ func TestWriteRecord_KeepsHostnameForDebugging(t *testing.T) {
 func TestResolve_EnvOverrideWins(t *testing.T) {
 	// A pinned id must be honored verbatim — this is how a container with an
 	// ephemeral home keeps a stable identity across restarts.
-	t.Setenv(EnvOverride, "pinned-workload-identity")
-	if got := resolve(); got != "pinned-workload-identity" {
+	if got := resolve("pinned-workload-identity"); got != "pinned-workload-identity" {
 		t.Fatalf("resolve() = %q, want the pinned override", got)
 	}
 }
 
+// pinForTest pins the process's instance id for one test, as the entrypoint
+// does with RELIANT_INSTANCE_ID, and unpins it afterwards.
+func pinForTest(t *testing.T, id string) {
+	t.Helper()
+	Pin(id)
+	t.Cleanup(func() { Pin("") })
+}
+
+// The entrypoint pins the id from its loaded config; a pin must win even over
+// an id something resolved before it.
+func TestPin_ReplacesAnAlreadyResolvedID(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	pinForTest(t, "")
+	if got := ID(); got == "pinned-after-first-use" {
+		t.Fatalf("ID() = %q before any pin", got)
+	}
+	pinForTest(t, "  pinned-after-first-use ")
+	if got := ID(); got != "pinned-after-first-use" {
+		t.Fatalf("ID() = %q, want the pinned id, trimmed", got)
+	}
+}
+
 func TestResolve_OverrideIsTrimmedAndBlankIgnored(t *testing.T) {
-	t.Setenv(EnvOverride, "   ")
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 
 	// A blank override must fall through to the file, not pin an empty id.
-	got := resolve()
+	got := resolve("   ")
 	if strings.TrimSpace(got) == "" {
 		t.Fatal("resolve() returned an empty id for a whitespace override")
 	}
@@ -274,11 +296,10 @@ func TestResolve_OverrideIsTrimmedAndBlankIgnored(t *testing.T) {
 
 func TestResolve_PersistsUnderHomeReliantDir(t *testing.T) {
 	home := t.TempDir()
-	t.Setenv(EnvOverride, "")
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 
-	got := resolve()
+	got := resolve("")
 	if _, err := uuid.Parse(got); err != nil {
 		t.Fatalf("resolve() = %q, want a UUID: %v", got, err)
 	}
@@ -292,11 +313,10 @@ func TestResolve_PersistsUnderHomeReliantDir(t *testing.T) {
 }
 
 func TestShortAndLabelShape(t *testing.T) {
-	t.Setenv(EnvOverride, "3f2a1b0c-4d5e-6f70-8192-a3b4c5d6e7f8")
+	pinForTest(t, "3f2a1b0c-4d5e-6f70-8192-a3b4c5d6e7f8")
 
-	// Short/Label read through ID()'s sync.Once, so resolve them via a fresh
-	// process-independent path: check the formatting helpers against the same
-	// override the cache will have picked up.
+	// Short/Label read through ID()'s cache: check the formatting helpers
+	// against the pinned id the cache now holds.
 	id := ID()
 	if id == "" {
 		t.Fatal("ID() returned empty")
@@ -323,7 +343,7 @@ func TestShortAndLabelShape(t *testing.T) {
 // PROCESS restart?), the stable id (is it the same MACHINE?), and a readable
 // hostname — the three questions the incident needed answered at once.
 func TestWorkerIdentity_CarriesPidStableIDAndHostname(t *testing.T) {
-	t.Setenv(EnvOverride, "3f2a1b0c-4d5e-6f70-8192-a3b4c5d6e7f8")
+	pinForTest(t, "3f2a1b0c-4d5e-6f70-8192-a3b4c5d6e7f8")
 
 	got := WorkerIdentity()
 
@@ -342,7 +362,7 @@ func TestWorkerIdentity_CarriesPidStableIDAndHostname(t *testing.T) {
 // A hostname flip must not change the machine segment of the worker identity —
 // that is precisely the false "the worker moved hosts" signal being fixed.
 func TestWorkerIdentity_MachineSegmentIsStableAcrossHostnames(t *testing.T) {
-	t.Setenv(EnvOverride, "3f2a1b0c-4d5e-6f70-8192-a3b4c5d6e7f8")
+	pinForTest(t, "3f2a1b0c-4d5e-6f70-8192-a3b4c5d6e7f8")
 
 	machineSegment := func(identity string) string {
 		_, rest, found := strings.Cut(identity, ".")

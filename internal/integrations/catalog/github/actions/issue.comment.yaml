@@ -1,0 +1,46 @@
+# yaml-language-server: $schema=../../../manifest/schema/action.schema.json
+id: issue.comment
+display_name: Comment on issue or pull request
+summary: Add a comment to an issue or a pull request's conversation.
+description: >-
+  Post a markdown comment on an issue, or on a pull request's conversation
+  tab (pull requests share the issue comments API; pass the PR number as
+  issue_number). For a review with a verdict, use pr.review.create.
+keywords: [comment, reply, issue, pull request, pr, discussion]
+placement: server
+mutates: true
+tool:
+  expose: true
+params:
+  type: object
+  additionalProperties: false
+  required: [owner, repo, issue_number, body]
+  properties:
+    owner: { $ref: ../schemas/owner.yaml }
+    repo: { $ref: ../schemas/repo.yaml }
+    issue_number: { $ref: ../schemas/issue_number.yaml }
+    body:
+      type: string
+      minLength: 1
+      title: Comment
+      description: The comment to post, in GitHub-flavored markdown.
+      examples: ["Thanks! Reproduced on main; a fix is in #57."]
+    connection: { $ref: ../schemas/connection.yaml }
+request:
+  method: POST
+  path: /repos/{{ params.owner }}/{{ params.repo }}/issues/{{ params.issue_number }}/comments
+  body_expr: '{"body": params.body}'
+  errors: { $ref: ../schemas/github_errors.yaml }
+output:
+  select: >-
+    {"id": response.id,
+     "node_id": response.?node_id.orValue(null),
+     "html_url": response.html_url,
+     "created_at": response.?created_at.orValue(null)}
+  schema:
+    type: object
+    properties:
+      id: { type: integer }
+      node_id: { type: [string, "null"] }
+      html_url: { type: string }
+      created_at: { type: [string, "null"] }

@@ -29,6 +29,8 @@ import (
 	"testing"
 	"time"
 
+	userconfig "github.com/reliant-labs/reliant/internal/config"
+
 	"connectrpc.com/connect"
 	natstest "github.com/nats-io/nats-server/v2/test"
 	"github.com/nats-io/nats.go"
@@ -158,7 +160,7 @@ func TestLocalModelE2E(t *testing.T) {
 
 	// Never touch ~/.reliant.
 	cfgDir := t.TempDir()
-	t.Setenv("RELIANT_USER_CONFIG_DIR", cfgDir)
+	userconfig.UseUserConfigDirForTest(t, cfgDir)
 	t.Setenv("HOME", t.TempDir())
 
 	repo, cleanupDB := db.SetupTestDB(t)

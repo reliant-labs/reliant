@@ -114,7 +114,6 @@ type Config struct {
 	WorktreeDir     string                   `yaml:"worktreeDir,omitempty" json:"worktreeDir,omitempty"`
 	MCPServers      map[string]MCPServer     `yaml:"mcpServers,omitempty" json:"mcpServers,omitempty"`
 	Debug           bool                     `yaml:"debug,omitempty" json:"debug,omitempty"`
-	ContextPaths    []string                 `yaml:"contextPaths,omitempty" json:"contextPaths,omitempty"`
 	Models          *models.UserModelsConfig `yaml:"models,omitempty" json:"models,omitempty"`
 	GlobalMemoryMD  string                   `yaml:"-" json:"-"`
 	ProjectMemoryMD string                   `yaml:"-" json:"-"`
@@ -156,13 +155,6 @@ const DaemonRuntimeTypeLabelKey = "reliant.runtime-type"
 const (
 	MaxTokensFallbackDefault = 32000
 )
-
-// DefaultContextPaths defines the context/instruction files that are auto-loaded.
-// Simplified to only support reliant.md (project instructions) and reliant.local.md (local/gitignored).
-var DefaultContextPaths = []string{
-	"reliant.md",       // Project instructions (committed to git)
-	"reliant.local.md", // Local instructions (gitignored)
-}
 
 // Validate checks if the configuration is valid and applies defaults where needed.
 func Validate(cfg *Config) error {

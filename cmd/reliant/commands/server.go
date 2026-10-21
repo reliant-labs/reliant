@@ -71,15 +71,14 @@ func loadServerAPIConfig(cmd *cobra.Command, opts *serverapi.Options) error {
 	if err != nil {
 		return err
 	}
-	if err := config.ValidateApiServerConfig(api); err != nil {
-		return err
-	}
 	if err := checkServerPorts(
 		serverPort{"GRPC_PORT (--grpc-port)", api.GetGrpcPort()},
 		serverPort{"HEALTH_PORT (--health-port)", api.GetHealthPort()},
-		serverPort{"PPROF_PORT (--pprof-port)", api.GetPprofPort()},
 		serverPort{"TEMPORAL_PORT (--temporal-port)", api.GetTemporal().GetPort()},
 	); err != nil {
+		return err
+	}
+	if err := checkPprofPort(api.GetPprofPort()); err != nil {
 		return err
 	}
 	drain := drainBudget(api.GetDrain())
@@ -109,6 +108,7 @@ func loadServerAPIConfig(cmd *cobra.Command, opts *serverapi.Options) error {
 	opts.AuthAPIKey = api.GetAuthApiKey()
 	opts.RequireEmailVerifiedClaim = api.GetRequireEmailVerifiedClaim()
 	opts.AuthorizationServer = strings.TrimSpace(api.GetAuthorizationServer())
+	opts.OAuthProvider = auth.Provider{URL: api.GetAuthProviderUrl(), Key: api.GetAuthProviderKey()}
 	opts.OAuthIssuers = api.GetMcpOauthIssuers()
 	opts.MaxUploadSize = api.GetMaxUploadSize()
 	opts.WorktreeAutoArchive = worktreesweep.ParseAutoArchiveMode(api.GetWorktreeAutoArchive())
@@ -158,14 +158,13 @@ func loadServerWorkerConfig(cmd *cobra.Command, opts *serverworker.Options) erro
 	if err != nil {
 		return err
 	}
-	if err := config.ValidateWorkerConfig(worker); err != nil {
-		return err
-	}
 	if err := checkServerPorts(
 		serverPort{"HEALTH_PORT (--health-port)", worker.GetHealthPort()},
-		serverPort{"PPROF_PORT (--pprof-port)", worker.GetPprofPort()},
 		serverPort{"TEMPORAL_PORT (--temporal-port)", worker.GetTemporal().GetPort()},
 	); err != nil {
+		return err
+	}
+	if err := checkPprofPort(worker.GetPprofPort()); err != nil {
 		return err
 	}
 	drain := drainBudget(worker.GetDrain())
@@ -209,9 +208,6 @@ func loadServerGatewayConfig(cmd *cobra.Command, opts *servergateway.Options) er
 	}
 	gateway, err := config.LoadGatewayConfig(cmd)
 	if err != nil {
-		return err
-	}
-	if err := config.ValidateGatewayConfig(gateway); err != nil {
 		return err
 	}
 	if err := checkServerPorts(
@@ -335,6 +331,16 @@ func checkServerPorts(ports ...serverPort) error {
 		}
 	}
 	return nil
+}
+
+// checkPprofPort is checkServerPorts for PPROF_PORT, where 0 is a setting
+// rather than a mistake: no diagnostics listener (debugserver.Start serves
+// none on port 0), as an empty PPROF_ADDR is for the gateway.
+func checkPprofPort(port int32) error {
+	if port == 0 {
+		return nil
+	}
+	return checkServerPorts(serverPort{"PPROF_PORT (--pprof-port)", port})
 }
 
 func newServerWorkerCmd() *cobra.Command {

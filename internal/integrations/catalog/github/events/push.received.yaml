@@ -1,0 +1,36 @@
+# yaml-language-server: $schema=../../../manifest/schema/event.schema.json
+id: push.received
+display_name: Push
+summary: Commits or a tag were pushed to a repository.
+description: >-
+  Fires on every push. A branch push sets `branch` (match branch: main to
+  watch one branch); a tag push sets `tag` instead and has no `branch`.
+  data.commits lists up to 20 commits.
+keywords: [push, commit, deploy, branch, tag]
+events: [push]
+attributes:
+  - { $ref: ../schemas/attr_repository.yaml }
+  - { $ref: ../schemas/attr_installation.yaml }
+  - { $ref: ../schemas/attr_sender.yaml }
+  - { name: ref, description: The full ref pushed., example: refs/heads/main }
+  - { name: branch, description: "The branch pushed, for a branch push only.", example: main }
+  - { name: tag, description: "The tag pushed, for a tag push only.", example: v1.2.0 }
+data:
+  type: object
+  additionalProperties: false
+  properties:
+    ref: { type: string }
+    before: { type: string }
+    after: { type: string }
+    created: { type: boolean }
+    deleted: { type: boolean }
+    forced: { type: boolean }
+    compare: { type: string }
+    truncated: { type: boolean, description: Set when commits were cut to fit the size cap. }
+    commits:
+      type: array
+      items: { $ref: ../schemas/commit_schema.yaml }
+    head_commit: { $ref: ../schemas/commit_schema.yaml }
+    pusher: { type: object, properties: { name: { type: string } } }
+    repository: { $ref: ../schemas/repository_schema.yaml }
+    sender: { $ref: ../schemas/user_schema.yaml }

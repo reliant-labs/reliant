@@ -1398,6 +1398,8 @@ message Input {
   string type = 1;
 
   // Type-specific configuration. Exactly one must be set, matching the type field.
+  // An integration-provided type is named `<integration>.<type>`
+  // (`github.repository`) and uses integration_input.
   oneof config {
     StringInputConfig string_input = 10;
     NumberInputConfig number_input = 11;
@@ -1413,6 +1415,7 @@ message Input {
     AnyInputConfig any_input = 21;
     GroupInputConfig group_input = 22;
     PresetInputConfig preset_input = 23;
+    IntegrationInputConfig integration_input = 24;
   }
 }
 
@@ -1429,6 +1432,11 @@ message InputBase {
   // ("fix the flaky login test", "[forge/db, code-review]"). Run and
   // activation forms show it in an empty input; it is never a default.
   string example = 3 [(reliant) = {description: "What a value looks like, shown in the empty input on the Run and activation forms. Never used as a value; set default for that"}];
+  // Required says a value must be supplied. It is explicit so a default cannot
+  // silently make an input optional: required together with a default is a
+  // validation error. An input with no default is required whether or not this
+  // is set.
+  bool required = 4 [(reliant) = {description: "Set true to demand a value on every run and activation. Cannot be combined with default; an input with no default is required already"}];
 }
 
 // StringInputConfig configures a string input with optional validation constraints.
@@ -1579,6 +1587,25 @@ message PresetInputConfig {
   repeated string tags = 3;
   // Allow multiple selections.
   bool multi = 4;
+}
+
+// IntegrationInputConfig configures an input whose values an integration
+// defines, such as `github.repository`. Input.type carries the qualified type
+// ref. A value is a plain JSON scalar (normally a string) matching the type's
+// value schema, so filters and nodes compare it like any other string.
+message IntegrationInputConfig {
+  InputBase base = 1;
+  // Default value (a scalar, or a list when multi).
+  google.protobuf.Value default = 2;
+  // Multi makes the input a list of values of the type.
+  bool multi = 3;
+  // Minimum number of values; meaningful when multi.
+  optional int32 min_items = 4;
+  // Maximum number of values; meaningful when multi.
+  optional int32 max_items = 5;
+  // Scope binds each scope key the type declares (TypeOptionsSpec.scope) to
+  // the name of another input of this workflow that supplies it.
+  map<string, string> scope = 6;
 }
 
 // =============================================================================

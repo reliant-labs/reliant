@@ -1,0 +1,9 @@
+# yaml-language-server: $schema=../../../manifest/schema/event.schema.json
+id: pull_request.reopened
+display_name: Pull request reopened
+summary: A closed pull request was reopened.
+description: Fires when a closed pull request is reopened. Match base_branch or branch like pull_request.opened.
+keywords: [pr, reopen]
+events: [pull_request.reopened]
+attributes: { $ref: ../schemas/pr_attrs.yaml }
+data: { $ref: ../schemas/pr_data.yaml }

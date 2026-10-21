@@ -46,9 +46,14 @@ events:
 
 expect:
   outcome: completed
+  completed:
+    - attempt.implement.agent_loop.call_llm
+    - attempt.review.agent_loop.call_llm
+    - attempt.review.agent_loop.execute_tools
   reached:
     - attempt
     - attempt.implement
+    - attempt.join_checks
     - attempt.review
   not_reached:
     - attempt.refactor
