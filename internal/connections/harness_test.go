@@ -242,7 +242,7 @@ func newEnv(t *testing.T) *env {
 	require.NoError(t, err)
 	ring, err := crypto.ParseKeyring("v1:" + base64.StdEncoding.EncodeToString(k))
 	require.NoError(t, err)
-	v := vault.New(vault.Deps{DB: raw, Keys: vault.NewEnvKeyWrapper(ring)})
+	v := vault.New(vault.Deps{DB: repo.ORM(), Keys: vault.NewEnvKeyWrapper(ring)})
 
 	gh := newFakeGitHub(t)
 	providers, err := connections.ProvidersFromCatalog(testManifests(t), connections.OAuthClientsFromEnv(oauthEnv(map[string]string{

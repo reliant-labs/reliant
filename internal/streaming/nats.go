@@ -15,6 +15,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/observe/natsotel"
+
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -146,7 +148,7 @@ func (h *NATSHub) Publish(ctx context.Context, chatID string, delta StreamingDel
 	}
 
 	subject := natsSubjectPfx + chatID
-	msg := observability.NATSPublishMsg(ctx, subject, data)
+	msg := natsotel.NewMsg(ctx, subject, data)
 	// PublishMsgAsync is non-blocking; we intentionally ignore the ack future.
 	if _, err := h.js.PublishMsgAsync(msg); err != nil {
 		h.dropCount.Add(1)
@@ -454,7 +456,7 @@ type deliverySpan struct {
 }
 
 func (d *deliverySpan) observe(ctx context.Context, headers nats.Header, delta StreamingDelta) {
-	parent := observability.ExtractTraceContext(ctx, &nats.Msg{Header: headers})
+	parent := natsotel.Extract(ctx, headers)
 	sc := trace.SpanContextFromContext(parent)
 	if !sc.IsValid() {
 		// A delta with no producer trace has nothing to be a child of; a

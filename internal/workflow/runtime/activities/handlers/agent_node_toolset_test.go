@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/crypto"
+	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -90,7 +91,9 @@ func newNestedAgentFixture(t *testing.T, noMachine bool) *nestedAgentFixture {
 	require.NoError(t, err)
 	ring, err := crypto.ParseKeyring("v1:" + base64.StdEncoding.EncodeToString(key))
 	require.NoError(t, err)
-	v := vault.New(vault.Deps{DB: h.DB(), Keys: vault.NewEnvKeyWrapper(ring)})
+	vaultDB, err := orm.NewClientWithDB(h.DB(), "postgres")
+	require.NoError(t, err)
+	v := vault.New(vault.Deps{DB: vaultDB, Keys: vault.NewEnvKeyWrapper(ring)})
 	providers, err := connections.ProvidersFromCatalog(catalog.MustBuiltin().Manifests(),
 		connections.OAuthClientsFromEnv(func(string) string { return "" }))
 	require.NoError(t, err)

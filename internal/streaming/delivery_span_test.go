@@ -4,8 +4,9 @@ import (
 	"context"
 	"testing"
 
+	"github.com/reliant-labs/forge/pkg/observe/natsotel"
+
 	"github.com/nats-io/nats.go"
-	"github.com/reliant-labs/reliant/internal/observability"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -29,7 +30,7 @@ func TestDeliverySpanIsOnePerProducerStream(t *testing.T) {
 	producer := tp.Tracer("producer")
 	headersOf := func(span trace.Span) nats.Header {
 		msg := &nats.Msg{}
-		observability.InjectTraceContext(trace.ContextWithSpan(context.Background(), span), msg)
+		natsotel.Inject(trace.ContextWithSpan(context.Background(), span), msg)
 		return msg.Header
 	}
 	text := StreamingDelta{DeltaType: DeltaTypeContentBlockDelta, Delta: "x"}

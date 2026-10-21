@@ -7,21 +7,24 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/orm"
+
 	"github.com/reliant-labs/reliant/internal/db/core"
 	pgdb "github.com/reliant-labs/reliant/internal/db/postgres/generated"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/vault"
 )
 
 type settingStore struct {
 	q      pgdb.Querier
-	db     pgdb.DBTX
-	bind   func(string) string
+	db     orm.Context
 	sealer CredentialSealer
 }
 
-// NewSettingStore creates the Postgres settings store implementation.
-func NewSettingStore(q pgdb.Querier, db pgdb.DBTX, bind func(string) string) core.SettingStore {
-	return &settingStore{q: q, db: db, bind: bind}
+// NewSettingStore creates the Postgres settings store implementation. Its
+// api_keys statements are internal/store's (api_key_repo_ext.go).
+func NewSettingStore(q pgdb.Querier, db orm.Context) core.SettingStore {
+	return &settingStore{q: q, db: db}
 }
 
 // CredentialSealer is the slice of the credential vault this store needs for
@@ -67,15 +70,14 @@ func automationProvider(daemonID string) string { return core.AutomationProvider
 
 func (s *settingStore) GetAutomationToken(ctx context.Context, userID, daemonID string) (string, error) {
 	provider := automationProvider(daemonID)
-	var sealed []byte
-	query := s.bind("SELECT api_key_sealed FROM api_keys WHERE user_id = ? AND provider = ?")
-	if err := s.db.QueryRowContext(ctx, query, userID, provider).Scan(&sealed); err != nil {
+	sealed, err := store.GetAPIKeySealed(ctx, s.db, userID, provider)
+	if err != nil {
 		return "", err
 	}
 	return s.openAPIKey(ctx, userID, provider, sealed)
 }
 
-// SetAutomationToken writes only the sealed column. The plaintext column is kept (always ”)
+// SetAutomationToken writes only the sealed column. The plaintext column is kept (always empty)
 // until a later migration drops it.
 func (s *settingStore) SetAutomationToken(ctx context.Context, userID, daemonID, token string) error {
 	if s.sealer == nil {
@@ -86,38 +88,24 @@ func (s *settingStore) SetAutomationToken(ctx context.Context, userID, daemonID,
 	if err != nil {
 		return fmt.Errorf("sealing automation token for daemon %q: %w", daemonID, err)
 	}
-	now := time.Now().UTC()
-	id := uuid.New().String()
-	query := s.bind(`INSERT INTO api_keys (id, user_id, provider, api_key, api_key_sealed, created_at, updated_at)
-		 VALUES (?, ?, ?, '', ?, ?, ?)
-		 ON CONFLICT(user_id, provider) DO UPDATE SET
-		   api_key = '',
-		   api_key_sealed = excluded.api_key_sealed,
-		   updated_at = excluded.updated_at`)
-	_, err = s.db.ExecContext(ctx, query, id, userID, provider, sealed, now, now)
-	return err
+	return store.UpsertSealedAPIKey(ctx, s.db, uuid.New().String(), userID, provider, sealed, time.Now().UTC())
 }
 
 func (s *settingStore) DeleteAutomationToken(ctx context.Context, userID, daemonID string) error {
-	query := s.bind("DELETE FROM api_keys WHERE user_id = ? AND provider = ?")
-	_, err := s.db.ExecContext(ctx, query, userID, automationProvider(daemonID))
-	return err
+	return store.DeleteAPIKey(ctx, s.db, userID, automationProvider(daemonID))
 }
 
 // CountUnsealedAPIKeys is count(api_key_sealed IS NULL): the number operators
 // watch reach zero before the contract step.
 func (s *settingStore) CountUnsealedAPIKeys(ctx context.Context) (int64, error) {
-	var n int64
-	err := s.db.QueryRowContext(ctx, "SELECT count(*) FROM api_keys WHERE api_key_sealed IS NULL").Scan(&n)
-	return n, err
+	return store.CountUnsealedAPIKeys(ctx, s.db)
 }
 
 // ValidateAPIKeysSealedConstraint validates the NOT VALID CHECK the contract
 // migration added. Call only after the backfill has sealed every row; it fails
 // if any NULL remains. Safe to run repeatedly and from several processes.
 func (s *settingStore) ValidateAPIKeysSealedConstraint(ctx context.Context) error {
-	_, err := s.db.ExecContext(ctx, "ALTER TABLE api_keys VALIDATE CONSTRAINT api_keys_sealed_not_null")
-	return err
+	return store.ValidateAPIKeysSealedConstraint(ctx, s.db)
 }
 
 // BackfillAPIKeys seals rows whose api_key_sealed IS NULL, batch rows at a
@@ -133,42 +121,24 @@ func (s *settingStore) BackfillAPIKeys(ctx context.Context, batch int) (int, err
 	}
 	total := 0
 	for {
-		rows, err := s.db.QueryContext(ctx, s.bind(
-			"SELECT id, user_id, provider, api_key FROM api_keys WHERE api_key_sealed IS NULL ORDER BY id LIMIT ?"), batch)
+		work, err := store.ListUnsealedAPIKeys(ctx, s.db, batch)
 		if err != nil {
 			return total, err
 		}
-		type pending struct{ id, userID, provider, apiKey string }
-		var work []pending
-		for rows.Next() {
-			var p pending
-			if err := rows.Scan(&p.id, &p.userID, &p.provider, &p.apiKey); err != nil {
-				_ = rows.Close()
-				return total, err
-			}
-			work = append(work, p)
-		}
-		if err := rows.Err(); err != nil {
-			_ = rows.Close()
-			return total, err
-		}
-		_ = rows.Close()
 		if len(work) == 0 {
 			return total, nil
 		}
 		progressed := 0
 		for _, p := range work {
-			sealed, err := s.sealer.Seal(ctx, vault.UserTenant(p.userID), []byte(p.apiKey), apiKeyAAD(p.userID, p.provider))
+			sealed, err := s.sealer.Seal(ctx, vault.UserTenant(p.UserID), []byte(p.APIKey), apiKeyAAD(p.UserID, p.Provider))
 			if err != nil {
-				return total, fmt.Errorf("sealing api key %s: %w", p.id, err)
+				return total, fmt.Errorf("sealing api key %s: %w", p.ID, err)
 			}
-			res, err := s.db.ExecContext(ctx, s.bind(
-				"UPDATE api_keys SET api_key_sealed = ? WHERE id = ? AND api_key_sealed IS NULL AND api_key = ?"),
-				sealed, p.id, p.apiKey)
+			ok, err := store.SealUnsealedAPIKey(ctx, s.db, p.ID, p.APIKey, sealed)
 			if err != nil {
 				return total, err
 			}
-			if n, _ := res.RowsAffected(); n > 0 {
+			if ok {
 				progressed++
 			}
 		}

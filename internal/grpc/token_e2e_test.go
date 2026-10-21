@@ -431,9 +431,9 @@ func TestDaemonCredential_HostedRefusesWhenControlPlaneIsDown(t *testing.T) {
 func TestDaemonCredential_SelfHostedEndToEnd(t *testing.T) {
 	const userID = "user-e2e-selfhosted"
 
-	_, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
+	repo, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
 	t.Cleanup(cleanup)
-	authority, mode, err := tokenauthority.New(tokenauthority.DepsFor(controlplane.Endpoint{}, rawDB))
+	authority, mode, err := tokenauthority.New(tokenauthority.DepsFor(controlplane.Endpoint{}, repo.ORM()))
 	require.NoError(t, err)
 	require.Equal(t, tokenauthority.ModeLocal, mode)
 

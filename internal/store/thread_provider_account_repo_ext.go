@@ -36,6 +36,104 @@
 //	}
 package store
 
+import (
+	"context"
+	"errors"
+	"time"
+
+	"github.com/reliant-labs/forge/pkg/orm"
+	"github.com/uptrace/bun/dialect/pgdialect"
+
+	"github.com/reliant-labs/reliant/internal/db/core"
+)
+
+// Thread assignments (P5b lane L6): a thread's sticky provider account, one per provider.
+
+func assignmentToCore(r *ThreadProviderAccount) core.Assignment {
+	return core.Assignment{ThreadID: r.ThreadID, Provider: r.Provider, AccountID: r.AccountID, AssignedAt: r.AssignedAt, Reason: r.Reason}
+}
+
+// GetThreadAssignment returns the thread's account for provider, or (nil, nil) when it has none.
+func GetThreadAssignment(ctx context.Context, db orm.Context, threadID, provider string) (*core.Assignment, error) {
+	row, err := GetThreadProviderAccountByPK(ctx, db, threadID, provider)
+	if errors.Is(err, orm.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	a := assignmentToCore(row)
+	return &a, nil
+}
+
+// ListThreadAssignments returns the thread's account for every provider it has used, most
+// recently assigned first.
+func ListThreadAssignments(ctx context.Context, db orm.Context, threadID string) ([]core.Assignment, error) {
+	rows, err := ListThreadProviderAccount(ctx, db,
+		orm.WhereEq(ThreadProviderAccountFieldThreadID, threadID),
+		orm.WithOrderBy(ThreadProviderAccountFieldAssignedAt, orm.Desc),
+		orm.WithOrderBy(ThreadProviderAccountFieldProvider, orm.Asc))
+	if err != nil {
+		return nil, err
+	}
+	out := make([]core.Assignment, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, assignmentToCore(r))
+	}
+	return out, nil
+}
+
+// InsertThreadAssignment assigns a's account to the thread for a's provider only if the thread
+// has none for it yet, and reports whether it did.
+func InsertThreadAssignment(ctx context.Context, db orm.Context, a core.Assignment) (bool, error) {
+	res, err := db.Bun().NewInsert().Model(&ThreadProviderAccount{
+		ThreadID: a.ThreadID, Provider: a.Provider, AccountID: a.AccountID, AssignedAt: a.AssignedAt.UTC(), Reason: a.Reason,
+	}).On("CONFLICT (thread_id, provider) DO NOTHING").Exec(ctx)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n > 0, err
+}
+
+// ReassignThread moves the thread's assignment for a's provider to a's account only while it is
+// still expectedAccountID, and reports whether it did.
+func ReassignThread(ctx context.Context, db orm.Context, a core.Assignment, expectedAccountID string) (bool, error) {
+	res, err := db.Bun().NewUpdate().Model((*ThreadProviderAccount)(nil)).
+		Set("account_id = ?", a.AccountID).Set("assigned_at = ?", a.AssignedAt.UTC()).Set("reason = ?", a.Reason).
+		Where("thread_id = ?", a.ThreadID).Where("provider = ?", a.Provider).Where("account_id = ?", expectedAccountID).
+		Exec(ctx)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n > 0, err
+}
+
+// RecentAssignmentCounts counts the threads assigned to each of accountIDs since since. An
+// account with none is absent from the map.
+func RecentAssignmentCounts(ctx context.Context, db orm.Context, accountIDs []string, since time.Time) (map[string]int, error) {
+	out := map[string]int{}
+	if len(accountIDs) == 0 {
+		return out, nil
+	}
+	var rows []struct {
+		AccountID string `bun:"account_id"`
+		N         int    `bun:"n"`
+	}
+	err := db.Bun().NewSelect().Model((*ThreadProviderAccount)(nil)).
+		Column(ThreadProviderAccountFieldAccountID).ColumnExpr("count(*) AS n").
+		Where("account_id = ANY(?::text[])", pgdialect.Array(accountIDs)).Where("assigned_at >= ?", since.UTC()).
+		Group(ThreadProviderAccountFieldAccountID).Scan(ctx, &rows)
+	if err != nil {
+		return nil, err
+	}
+	for _, r := range rows {
+		out[r.AccountID] = r.N
+	}
+	return out, nil
+}
+
 // ThreadProviderAccountExtra carries fields on ThreadProviderAccount that are NOT columns — computed
 // values, transient state, anything derived rather than stored. ThreadProviderAccount is
 // embedded on ThreadProviderAccountExtra (see thread_provider_account_orm.go), so a field added here is a field on

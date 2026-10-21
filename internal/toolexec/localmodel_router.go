@@ -11,6 +11,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/observe/natsotel"
+
 	"github.com/google/uuid"
 	"github.com/nats-io/nats.go"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -199,7 +201,7 @@ func (r *NATSDaemonRouter) OpenLocalModelHTTP(ctx context.Context, userID, daemo
 	}
 	defer func() { _ = ackSub.Unsubscribe() }()
 
-	reqMsg := observability.NATSPublishMsg(ctx, localModelRequestSubjectFor(userID, daemonID), data)
+	reqMsg := natsotel.NewMsg(ctx, localModelRequestSubjectFor(userID, daemonID), data)
 	reqMsg.Reply = ackSub.Subject
 	if _, err := publishChunkedRequest(r.nc, reqMsg); err != nil {
 		observability.NATSErrorsTotal.WithLabelValues("daemon.localmodel.request", "publish").Inc()
@@ -241,7 +243,7 @@ func (r *NATSDaemonRouter) RefreshLocalModels(ctx context.Context, userID, daemo
 	if r.nc == nil {
 		return nil, fmt.Errorf("local model refresh: nats connection is nil")
 	}
-	msg := observability.NATSPublishMsg(ctx, localModelRefreshSubjectFor(userID, daemonID), nil)
+	msg := natsotel.NewMsg(ctx, localModelRefreshSubjectFor(userID, daemonID), nil)
 	// The bridge bounds its own wait at LocalModelRefreshTimeout; the extra
 	// margin lets its (more informative) reply win over our timeout.
 	reply, err := r.nc.RequestMsgWithContext(withTimeoutCap(ctx, LocalModelRefreshTimeout+3*time.Second), msg)

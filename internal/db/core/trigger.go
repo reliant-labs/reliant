@@ -2,7 +2,6 @@
 package core
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"sort"
@@ -494,109 +493,6 @@ type TriggerProjection struct {
 type TriggerFilters struct {
 	UserID    string
 	ProjectID *string
-}
-
-// TriggerStore is the shared contract for trigger and trigger-event
-// persistence.
-type TriggerStore interface {
-	CreateTrigger(ctx context.Context, t *Trigger) error
-	// GetTrigger returns ErrTriggerNotFound when the id does not resolve.
-	GetTrigger(ctx context.Context, id string) (*Trigger, error)
-	// ListTriggers lists one user's triggers; f.UserID must be set.
-	ListTriggers(ctx context.Context, f TriggerFilters) ([]*Trigger, error)
-	// ListAllTriggers lists every user's triggers, for schedule reconciliation.
-	ListAllTriggers(ctx context.Context) ([]*Trigger, error)
-	// LockTrigger takes a row lock on the trigger until the surrounding
-	// transaction ends, returning ErrTriggerNotFound when it does not exist.
-	LockTrigger(ctx context.Context, id string) error
-	// UpdateTrigger returns ErrTriggerNotFound when the id does not resolve.
-	UpdateTrigger(ctx context.Context, t *Trigger) error
-	DeleteTrigger(ctx context.Context, id string) error
-	// SetTriggerEnabled returns ErrTriggerNotFound when the id does not resolve.
-	SetTriggerEnabled(ctx context.Context, id string, enabled bool) error
-	// SetTriggerProjection refreshes an activation's projection of its
-	// declaration. It returns ErrTriggerNotFound when the id does not
-	// resolve to an activation.
-	SetTriggerProjection(ctx context.Context, id string, p TriggerProjection) error
-	// ListWorkflowTriggerActivations lists one user's activations of the
-	// triggers a workflow declares.
-	ListWorkflowTriggerActivations(ctx context.Context, userID, workflow string) ([]*Trigger, error)
-	// ListAllWorkflowTriggerActivations lists every activation, for the
-	// periodic reconcile.
-	ListAllWorkflowTriggerActivations(ctx context.Context) ([]*Trigger, error)
-
-	// CreateTriggerEvent inserts the event, doing nothing on a (Kind,
-	// DedupeKey) that already exists. created=false means a row for that key
-	// was already there and nothing was written — the caller lost the race,
-	// or is a retry of its own earlier attempt.
-	CreateTriggerEvent(ctx context.Context, ev *TriggerEvent) (created bool, err error)
-	// GetTriggerEventByDedupe returns ErrTriggerEventNotFound on a miss.
-	GetTriggerEventByDedupe(ctx context.Context, kind TriggerEventKind, dedupeKey string) (*TriggerEvent, error)
-	// GetTriggerEventByChatID returns the event that launched the chat, or
-	// ErrTriggerEventNotFound for a chat with none (it predates trigger events).
-	GetTriggerEventByChatID(ctx context.Context, chatID string) (*TriggerEvent, error)
-	// GetTriggerEventByChat returns the event of the given kind that launched
-	// chatID, or ErrTriggerEventNotFound when that chat was not launched by
-	// that kind of event.
-	GetTriggerEventByChat(ctx context.Context, kind TriggerEventKind, chatID string) (*TriggerEvent, error)
-	// CountLiveLaunchedRuns counts the user's chats launched by an event of
-	// the given kind whose root run is still live (pending, active or
-	// paused). A chat deleted since its launch is not counted.
-	CountLiveLaunchedRuns(ctx context.Context, userID string, kind TriggerEventKind) (int, error)
-	// UpdateTriggerEventOutcome returns ErrTriggerEventNotFound when the id
-	// does not resolve.
-	UpdateTriggerEventOutcome(ctx context.Context, id string, outcome TriggerEventOutcome, detail string, chatID *string) error
-	// SetLaunchEventRunStatus records status (a TriggerRun* value) as how the
-	// run its trigger fired ended, on chatID's launch event. A chat with no
-	// launch event is not an error: there is nothing to record against.
-	SetLaunchEventRunStatus(ctx context.Context, chatID, status string) error
-	// UpdateTriggerEventPayload replaces the event's payload. It returns
-	// ErrTriggerEventNotFound when the id does not resolve.
-	UpdateTriggerEventPayload(ctx context.Context, id string, payload map[string]any) error
-	// ListTriggerEvents returns up to f.Limit of the trigger's firings newest
-	// first, each with the run it launched, and whether more follow.
-	ListTriggerEvents(ctx context.Context, f TriggerEventFilters) ([]*TriggerEventWithRun, bool, error)
-	// RecentTriggerFirings returns each named trigger's newest perTrigger
-	// firings (newest first, with their runs) in one query. A trigger with no
-	// firings has no map entry. Triggers belonging to other users never appear.
-	RecentTriggerFirings(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*TriggerEventWithRun, error)
-	// FiringsSinceLastSuccess returns each trigger's firings newer than its
-	// newest success (a launched firing whose run completed), newest first,
-	// capped at perTrigger. It is the failure episode, not a fixed window.
-	FiringsSinceLastSuccess(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*TriggerEventWithRun, error)
-	// GetLatestTriggerEvent returns the trigger's latest event, optionally
-	// filtered by outcome, and (nil, nil) when it has none.
-	GetLatestTriggerEvent(ctx context.Context, triggerID string, outcome *TriggerEventOutcome) (*TriggerEvent, error)
-
-	// SetTriggerWebhookTokenHash replaces the webhook token hash. Returns
-	// ErrTriggerNotFound when the id does not resolve.
-	SetTriggerWebhookTokenHash(ctx context.Context, id string, hash []byte) error
-	// SetTriggerWebhookSecret replaces (nil clears) the sealed HMAC secret.
-	SetTriggerWebhookSecret(ctx context.Context, id string, sealed []byte) error
-	// GetTriggerWebhookCredentials returns ErrTriggerNotFound on a miss.
-	GetTriggerWebhookCredentials(ctx context.Context, id string) (*TriggerWebhookCredentials, error)
-	// ListIntegrationTriggers lists every enabled integration trigger for
-	// one integration whose connection is its owner's and not deleted.
-	ListIntegrationTriggers(ctx context.Context, integration string) ([]*IntegrationTriggerRoute, error)
-	// ListStalePendingTriggerEvents lists pending events created before
-	// olderThan, oldest first.
-	ListStalePendingTriggerEvents(ctx context.Context, olderThan time.Time, limit int) ([]*TriggerEvent, error)
-	// ClaimPendingTriggerEvent moves a pending event to launched with the
-	// given payload. claimed=false means it was not pending (another fire
-	// claimed or settled it first).
-	ClaimPendingTriggerEvent(ctx context.Context, id string, payload map[string]any) (claimed bool, err error)
-	// SettlePendingTriggerEvent records a non-launch verdict on a pending
-	// event. settled=false means it was no longer pending.
-	SettlePendingTriggerEvent(ctx context.Context, id string, outcome TriggerEventOutcome, detail string) (settled bool, err error)
-
-	// GetTriggerRegistration returns ErrTriggerRegistrationNotFound on a miss.
-	GetTriggerRegistration(ctx context.Context, triggerID string) (*TriggerRegistration, error)
-	// ListTriggerRegistrations returns the named triggers' registrations,
-	// keyed by trigger id, in one query. Triggers belonging to other users,
-	// and triggers with no registration, have no entry.
-	ListTriggerRegistrations(ctx context.Context, userID string, triggerIDs []string) (map[string]*TriggerRegistration, error)
-	UpsertTriggerRegistration(ctx context.Context, reg *TriggerRegistration) error
-	DeleteTriggerRegistration(ctx context.Context, triggerID string) error
 }
 
 // OriginConfidence is how sure Reliant is that it caused an event.

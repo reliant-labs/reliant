@@ -115,7 +115,6 @@ type Repo struct {
 	threads         core.ThreadStore
 	contextWindows  core.ContextWindowStore
 	workflowCatalog core.WorkflowCatalogStore
-	triggers        core.TriggerStore
 	inbox           core.InboxStore
 	runEvents       core.RunEventStore
 
@@ -163,20 +162,17 @@ func NewRepoWithDriver(db *sql.DB, driver DatabaseDriver) (*Repo, error) {
 	pgQueries := pgdb.New(q)
 
 	return &Repo{
-		DB:            q,
-		driver:        driver,
-		accounts:      postgresstore.NewProviderAccountStore(db),
-		chats:         postgresstore.NewChatStore(pgQueries, q),
-		runs:          postgresstore.NewRunStore(client),
-		agentMessages: postgresstore.NewAgentMessageStore(pgQueries, q),
-		settings: postgresstore.NewSettingStore(pgQueries, q, func(query string) string {
-			return (&Repo{driver: DriverPostgres}).bindQuery(query)
-		}),
+		DB:              q,
+		driver:          driver,
+		accounts:        postgresstore.NewProviderAccountStore(client),
+		chats:           postgresstore.NewChatStore(pgQueries, q),
+		runs:            postgresstore.NewRunStore(client),
+		agentMessages:   postgresstore.NewAgentMessageStore(pgQueries, q),
+		settings:        postgresstore.NewSettingStore(pgQueries, client),
 		workflows:       postgresstore.NewWorkflowStore(client),
 		threads:         postgresstore.NewThreadStore(pgQueries),
 		contextWindows:  postgresstore.NewContextWindowStore(pgQueries),
 		workflowCatalog: postgresstore.NewWorkflowCatalogStore(client),
-		triggers:        postgresstore.NewTriggerStore(pgQueries),
 		inbox:           postgresstore.NewInboxStore(pgQueries),
 		runEvents:       postgresstore.NewRunEventStore(client),
 	}, nil
@@ -1160,14 +1156,6 @@ func (r *Repo) EnrichMessageUpdate(ctx context.Context, update ChatUpdate) (json
 // Temporal is the source of truth for workflow execution status
 
 // IsChatBusy removed - use Temporal client to query running workflows for a chat
-
-// Null type conversion helpers
-func nullStringToPtr(ns sql.NullString) *string {
-	if ns.Valid {
-		return &ns.String
-	}
-	return nil
-}
 
 // =============================================================================
 // Activity Idempotency Helpers

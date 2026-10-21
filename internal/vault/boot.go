@@ -5,7 +5,6 @@ package vault
 import (
 	"context"
 	"crypto/rand"
-	"database/sql"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -15,6 +14,9 @@ import (
 	"strings"
 
 	"github.com/reliant-labs/forge/pkg/crypto"
+	"github.com/reliant-labs/forge/pkg/orm"
+
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // KeyFileName is the self-hosted key file, inside the data dir.
@@ -29,9 +31,7 @@ type BootOptions struct {
 	// role's config); empty when none is configured.
 	Key     string
 	DataDir string
-	DB      interface {
-		DBTX
-	}
+	DB      orm.Context
 	// Warn receives the one-time "generated a key" warning. Defaults to slog.
 	Warn func(msg string, args ...any)
 }
@@ -109,7 +109,7 @@ func Boot(ctx context.Context, opts BootOptions) (Service, error) {
 	return fromRaw(opts.DB, generated, path)
 }
 
-func fromRaw(db DBTX, raw, source string) (Service, error) {
+func fromRaw(db orm.Context, raw, source string) (Service, error) {
 	ring, err := crypto.ParseKeyring(raw)
 	if err != nil {
 		return nil, fmt.Errorf("vault key from %s is malformed: %w", source, err)
@@ -117,14 +117,8 @@ func fromRaw(db DBTX, raw, source string) (Service, error) {
 	return New(Deps{DB: db, Keys: NewEnvKeyWrapper(ring)}), nil
 }
 
-func sealedDataExists(ctx context.Context, db DBTX) (bool, error) {
-	var exists bool
-	err := db.QueryRowContext(ctx,
-		`SELECT EXISTS (SELECT 1 FROM vault_keys) OR EXISTS (SELECT 1 FROM api_keys WHERE api_key_sealed IS NOT NULL)`).
-		Scan(&exists)
-	if errors.Is(err, sql.ErrNoRows) {
-		return false, nil
-	}
+func sealedDataExists(ctx context.Context, db orm.Context) (bool, error) {
+	exists, err := store.SealedCredentialsExist(ctx, db)
 	if err != nil {
 		return false, fmt.Errorf("checking for sealed data: %w", err)
 	}

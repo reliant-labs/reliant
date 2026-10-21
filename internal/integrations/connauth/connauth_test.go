@@ -45,14 +45,14 @@ type env struct {
 
 func newEnv(t *testing.T) *env {
 	t.Helper()
-	repo, raw, cleanup := db.SetupTestDBWithRawDB(t)
+	repo, _, cleanup := db.SetupTestDBWithRawDB(t)
 	t.Cleanup(cleanup)
 	k := make([]byte, 32)
 	_, err := rand.Read(k)
 	require.NoError(t, err)
 	ring, err := crypto.ParseKeyring("v1:" + base64.StdEncoding.EncodeToString(k))
 	require.NoError(t, err)
-	v := vault.New(vault.Deps{DB: raw, Keys: vault.NewEnvKeyWrapper(ring)})
+	v := vault.New(vault.Deps{DB: repo.ORM(), Keys: vault.NewEnvKeyWrapper(ring)})
 	providers, err := connections.ProvidersFromCatalog(catalog.MustBuiltin().Manifests(), connections.OAuthClientsFromEnv(func(string) string { return "" }))
 	require.NoError(t, err)
 	store := repo.Connections()

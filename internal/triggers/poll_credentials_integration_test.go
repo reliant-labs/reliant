@@ -98,14 +98,14 @@ func newPollCredEnv(t *testing.T) *pollCredEnv {
 	if testing.Short() {
 		t.Skip("needs a database; skipped under -short")
 	}
-	repo, raw, cleanup := db.SetupTestDBWithRawDB(t)
+	repo, _, cleanup := db.SetupTestDBWithRawDB(t)
 	t.Cleanup(cleanup)
 	k := make([]byte, 32)
 	_, err := rand.Read(k)
 	require.NoError(t, err)
 	ring, err := crypto.ParseKeyring("v1:" + base64.StdEncoding.EncodeToString(k))
 	require.NoError(t, err)
-	v := vault.New(vault.Deps{DB: raw, Keys: vault.NewEnvKeyWrapper(ring)})
+	v := vault.New(vault.Deps{DB: repo.ORM(), Keys: vault.NewEnvKeyWrapper(ring)})
 	providers, err := connections.ProvidersFromCatalog(catalog.MustBuiltin().Manifests(), connections.OAuthClientsFromEnv(func(key string) string {
 		return map[string]string{"RELIANT_OAUTH_GITHUB_CLIENT_ID": "cid", "RELIANT_OAUTH_GITHUB_CLIENT_SECRET": "csecret"}[key]
 	}))

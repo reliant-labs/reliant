@@ -32,9 +32,9 @@ package tokenauthority
 
 import (
 	"context"
-	"database/sql"
 
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
+	"github.com/reliant-labs/forge/pkg/orm"
 
 	"github.com/reliant-labs/reliant/internal/accesstokenclient"
 )
@@ -73,8 +73,9 @@ type Deps struct {
 	// ControlPlaneURL: a URL without it is a misconfiguration, never a reason
 	// to fall back to the local store.
 	InternalServiceSecret string
-	// DB is reliant's database, for the self-hosted store.
-	DB *sql.DB
+	// DB is the ORM client over reliant's database, for the self-hosted
+	// store (its statements are internal/store's).
+	DB orm.Context
 }
 
 // Mode names which store an Authority is.

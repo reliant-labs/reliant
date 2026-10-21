@@ -26,7 +26,7 @@ func sealedRepo(t *testing.T) (*Repo, *sql.DB) {
 	require.NoError(t, err)
 	ring, err := crypto.ParseKeyring("v1:" + base64.StdEncoding.EncodeToString(k))
 	require.NoError(t, err)
-	require.NoError(t, repo.EnableCredentialSealing(vault.New(vault.Deps{DB: raw, Keys: vault.NewEnvKeyWrapper(ring)})))
+	require.NoError(t, repo.EnableCredentialSealing(vault.New(vault.Deps{DB: repo.ORM(), Keys: vault.NewEnvKeyWrapper(ring)})))
 	return repo, raw
 }
 
@@ -183,7 +183,7 @@ func TestBootRefusesWhenUnsealedRowRemainsAfterBackfill(t *testing.T) {
 	require.NoError(t, err)
 	ring, err := crypto.ParseKeyring("v1:" + base64.StdEncoding.EncodeToString(k))
 	require.NoError(t, err)
-	real := vault.New(vault.Deps{DB: raw, Keys: vault.NewEnvKeyWrapper(ring)})
+	real := vault.New(vault.Deps{DB: repo.ORM(), Keys: vault.NewEnvKeyWrapper(ring)})
 	_, err = raw.ExecContext(ctx, `INSERT INTO api_keys (id, user_id, provider, api_key) VALUES ('l1','u1','reliant-automation:openai','legacy')`)
 	require.NoError(t, err)
 

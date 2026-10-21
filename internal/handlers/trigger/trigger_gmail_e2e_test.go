@@ -90,7 +90,7 @@ func TestGmailPollsIntoLaunchedRunsEndToEnd(t *testing.T) {
 	require.NoError(t, err)
 	ring, err := crypto.ParseKeyring("v1:" + base64.StdEncoding.EncodeToString(key))
 	require.NoError(t, err)
-	sealer := vault.New(vault.Deps{DB: repo.DB, Keys: vault.NewEnvKeyWrapper(ring)})
+	sealer := vault.New(vault.Deps{DB: repo.ORM(), Keys: vault.NewEnvKeyWrapper(ring)})
 	env := func(k string) string {
 		return map[string]string{
 			"RELIANT_OAUTH_GMAIL_CLIENT_ID":     "1234-gmail.apps.googleusercontent.com",
