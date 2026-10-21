@@ -35,6 +35,66 @@
 //	}
 package store
 
+import (
+	"context"
+	"fmt"
+	"time"
+
+	"github.com/reliant-labs/forge/pkg/orm"
+)
+
+// The legacy credential copy's completion marker (P5b lane L6): one row, id 1, written in the
+// transaction that copied the legacy credential tables into provider_accounts.
+
+// legacyCopyLockName keys the global advisory lock the copy runs under. Every release that
+// copies takes it, so its text must never change.
+const legacyCopyLockName = "provider_accounts_legacy_copy"
+
+// LegacyCredentialCopyDone reports whether the one-time copy has completed.
+func LegacyCredentialCopyDone(ctx context.Context, db orm.Context) (bool, error) {
+	n, err := CountLegacyCredentialCopy(ctx, db)
+	return n > 0, err
+}
+
+// LockLegacyCredentialCopy serializes the copy across processes until the transaction ctx
+// carries ends.
+func LockLegacyCredentialCopy(ctx context.Context, db orm.Context) error {
+	if _, err := db.Bun().NewRaw(`SELECT pg_advisory_xact_lock(hashtext(?0))`, legacyCopyLockName).Exec(ctx); err != nil {
+		return fmt.Errorf("lock legacy credential copy: %w", err)
+	}
+	return nil
+}
+
+// RecordLegacyCredentialCopy writes the completion marker.
+//
+// The builder, not CreateLegacyCredentialCopy: forge projects the plain `integer PRIMARY KEY`
+// id as autoincrement, so Create leaves the id out and the insert fails NOT NULL.
+func RecordLegacyCredentialCopy(ctx context.Context, db orm.Context, completedAt time.Time, created, skipped, failed int) error {
+	_, err := db.Bun().NewInsert().Model(&LegacyCredentialCopy{
+		ID: 1, CompletedAt: completedAt.UTC(), Created: int32(created), Skipped: int32(skipped), Failed: int32(failed),
+	}).Exec(ctx)
+	return err
+}
+
+// InLegacyImportSavepoint runs fn under a savepoint of the transaction ctx carries. An error
+// from fn rolls back to the savepoint, leaving the transaction usable, and is returned as
+// rowErr; err is a savepoint statement failing, which leaves the transaction unusable.
+func InLegacyImportSavepoint(ctx context.Context, db orm.Context, fn func() error) (rowErr, err error) {
+	if _, err := db.Exec(ctx, `SAVEPOINT legacy_import`); err != nil {
+		return nil, err
+	}
+	if rowErr := fn(); rowErr != nil {
+		if _, err := db.Exec(ctx, `ROLLBACK TO SAVEPOINT legacy_import`); err != nil {
+			return rowErr, err
+		}
+		return rowErr, nil
+	}
+	if _, err := db.Exec(ctx, `RELEASE SAVEPOINT legacy_import`); err != nil {
+		return nil, err
+	}
+	return nil, nil
+}
+
 // LegacyCredentialCopyExtra carries fields on LegacyCredentialCopy that are NOT columns — computed
 // values, transient state, anything derived rather than stored. LegacyCredentialCopy is
 // embedded on LegacyCredentialCopyExtra (see legacy_credential_copy_orm.go), so a field added here is a field on

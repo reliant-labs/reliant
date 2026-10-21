@@ -6,6 +6,8 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/reliant-labs/forge/pkg/observe/natsotel"
+
 	"github.com/nats-io/nats.go"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/observability"
@@ -81,7 +83,7 @@ func (h *NATSUpdateHub[T]) Publish(ctx context.Context, event UpdateEvent[T]) {
 	}
 
 	subject := h.subjectPrefix + "." + event.Key
-	msg := observability.NATSPublishMsg(ctx, subject, data)
+	msg := natsotel.NewMsg(ctx, subject, data)
 	if err := h.nc.PublishMsg(msg); err != nil {
 		observability.NATSErrorsTotal.WithLabelValues("updates", "publish").Inc()
 		logging.WarnContext(ctx, "[NATSUpdateHub:"+h.name+"] Failed to publish",
@@ -168,7 +170,7 @@ func (h *NATSUpdateHub[T]) consumeLoop(ctx context.Context, sub *natsUpdateSubsc
 		}
 
 		func() {
-			_, span := observability.StartNATSSpan(context.Background(), msg, "nats.consume.update")
+			_, span := natsotel.StartConsumerSpan(context.Background(), msg.Subject, msg.Header, "nats.consume.update")
 			defer span.End()
 
 			observability.NATSReceiveTotal.WithLabelValues("updates").Inc()

@@ -4017,18 +4017,5 @@ func (r *Repo) ValidateAPIKeysSealedConstraint(ctx context.Context) error {
 // ListUserIDsWithProviderAccount returns every user holding an account for provider, without
 // opening (decrypting) any of them.
 func (r *Repo) ListUserIDsWithProviderAccount(ctx context.Context, provider string) ([]string, error) {
-	rows, err := r.DB.QueryContext(ctx, "SELECT DISTINCT user_id FROM provider_accounts WHERE provider = $1 ORDER BY user_id", provider)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var ids []string
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		ids = append(ids, id)
-	}
-	return ids, rows.Err()
+	return r.accounts.ListUserIDsWithProviderAccount(ctx, provider)
 }

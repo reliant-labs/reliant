@@ -10,6 +10,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/observe/natsotel"
+
 	"github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -220,7 +222,7 @@ func (b *NATSToolBridge) OnDaemonConnected(userID, daemonID string) {
 
 	// 1. tools.request.{userID}.{daemonID}
 	addSub(b.nc.Subscribe(daemonSubject(toolRequestSubject, userID, daemonID), func(msg *nats.Msg) {
-		ctx, span := observability.StartNATSSpan(context.Background(), msg, "nats.handle.tools.request")
+		ctx, span := natsotel.StartConsumerSpan(context.Background(), msg.Subject, msg.Header, "nats.handle.tools.request")
 		defer span.End()
 		observability.NATSReceiveTotal.WithLabelValues("tools.request").Inc()
 
@@ -238,7 +240,7 @@ func (b *NATSToolBridge) OnDaemonConnected(userID, daemonID string) {
 
 	// 2. tools.cancel.{userID}.{daemonID}
 	addSub(b.nc.Subscribe(daemonSubject(toolCancelSubject, userID, daemonID), func(msg *nats.Msg) {
-		ctx, span := observability.StartNATSSpan(context.Background(), msg, "nats.handle.tools.cancel")
+		ctx, span := natsotel.StartConsumerSpan(context.Background(), msg.Subject, msg.Header, "nats.handle.tools.cancel")
 		defer span.End()
 		observability.NATSReceiveTotal.WithLabelValues("tools.cancel").Inc()
 
@@ -259,7 +261,7 @@ func (b *NATSToolBridge) OnDaemonConnected(userID, daemonID string) {
 
 	// 2b. tools.background.{userID}.{daemonID}
 	addSub(b.nc.Subscribe(daemonSubject(toolBackgroundSubj, userID, daemonID), func(msg *nats.Msg) {
-		ctx, span := observability.StartNATSSpan(context.Background(), msg, "nats.handle.tools.background")
+		ctx, span := natsotel.StartConsumerSpan(context.Background(), msg.Subject, msg.Header, "nats.handle.tools.background")
 		defer span.End()
 		observability.NATSReceiveTotal.WithLabelValues("tools.background").Inc()
 
@@ -280,7 +282,7 @@ func (b *NATSToolBridge) OnDaemonConnected(userID, daemonID string) {
 
 	// 3. daemon.config.load.{userID}.{daemonID}
 	addSub(b.nc.Subscribe(daemonSubject(configLoadSubject, userID, daemonID), func(msg *nats.Msg) {
-		ctx, span := observability.StartNATSSpan(context.Background(), msg, "nats.handle.daemon.config.load")
+		ctx, span := natsotel.StartConsumerSpan(context.Background(), msg.Subject, msg.Header, "nats.handle.daemon.config.load")
 		defer span.End()
 		observability.NATSReceiveTotal.WithLabelValues("daemon.config.load").Inc()
 
@@ -301,7 +303,7 @@ func (b *NATSToolBridge) OnDaemonConnected(userID, daemonID string) {
 
 	// 4. daemon.config.watch.{userID}.{daemonID}
 	addSub(b.nc.Subscribe(daemonSubject(configWatchSubject, userID, daemonID), func(msg *nats.Msg) {
-		ctx, span := observability.StartNATSSpan(context.Background(), msg, "nats.handle.daemon.config.watch")
+		ctx, span := natsotel.StartConsumerSpan(context.Background(), msg.Subject, msg.Header, "nats.handle.daemon.config.watch")
 		defer span.End()
 		observability.NATSReceiveTotal.WithLabelValues("daemon.config.watch").Inc()
 
@@ -322,7 +324,7 @@ func (b *NATSToolBridge) OnDaemonConnected(userID, daemonID string) {
 
 	// 5. daemon.terminal.input.{userID}.{daemonID}.> (wildcard on sessionID)
 	addSub(b.nc.Subscribe(daemonSubject(terminalInputSubject, userID, daemonID)+".>", func(msg *nats.Msg) {
-		_, span := observability.StartNATSSpan(context.Background(), msg, "nats.handle.daemon.terminal.input")
+		_, span := natsotel.StartConsumerSpan(context.Background(), msg.Subject, msg.Header, "nats.handle.daemon.terminal.input")
 		defer span.End()
 		observability.NATSReceiveTotal.WithLabelValues("daemon.terminal.input").Inc()
 
@@ -349,7 +351,7 @@ func (b *NATSToolBridge) OnDaemonConnected(userID, daemonID string) {
 
 	// 6. daemon.terminal.resize.{userID}.{daemonID}.> (wildcard on sessionID)
 	addSub(b.nc.Subscribe(daemonSubject(terminalResizeSubject, userID, daemonID)+".>", func(msg *nats.Msg) {
-		_, span := observability.StartNATSSpan(context.Background(), msg, "nats.handle.daemon.terminal.resize")
+		_, span := natsotel.StartConsumerSpan(context.Background(), msg.Subject, msg.Header, "nats.handle.daemon.terminal.resize")
 		defer span.End()
 		observability.NATSReceiveTotal.WithLabelValues("daemon.terminal.resize").Inc()
 
@@ -377,7 +379,7 @@ func (b *NATSToolBridge) OnDaemonConnected(userID, daemonID string) {
 
 	// 7. daemon.process.subscribe.{userID}.{daemonID}
 	addSub(b.nc.Subscribe(daemonSubject(processOutputSubscribeSubject, userID, daemonID), func(msg *nats.Msg) {
-		_, span := observability.StartNATSSpan(context.Background(), msg, "nats.handle.daemon.process.subscribe")
+		_, span := natsotel.StartConsumerSpan(context.Background(), msg.Subject, msg.Header, "nats.handle.daemon.process.subscribe")
 		defer span.End()
 		observability.NATSReceiveTotal.WithLabelValues("daemon.process.subscribe").Inc()
 
@@ -399,7 +401,7 @@ func (b *NATSToolBridge) OnDaemonConnected(userID, daemonID string) {
 	// turn sends the terminal-output-subscribe message down to the daemon and
 	// starts its PTY pump. Mirrors the process-output subscribe handler above.
 	addSub(b.nc.Subscribe(daemonSubject(terminalSubscribeSubject, userID, daemonID)+".*", func(msg *nats.Msg) {
-		_, span := observability.StartNATSSpan(context.Background(), msg, "nats.handle.daemon.terminal.subscribe")
+		_, span := natsotel.StartConsumerSpan(context.Background(), msg.Subject, msg.Header, "nats.handle.daemon.terminal.subscribe")
 		defer span.End()
 		observability.NATSReceiveTotal.WithLabelValues("daemon.terminal.subscribe").Inc()
 
@@ -420,7 +422,7 @@ func (b *NATSToolBridge) OnDaemonConnected(userID, daemonID string) {
 
 	// 8. tools.online.{userID}.{daemonID}
 	addSub(b.nc.Subscribe(daemonSubject(toolOnlineSubject, userID, daemonID), func(msg *nats.Msg) {
-		_, span := observability.StartNATSSpan(context.Background(), msg, "nats.handle.tools.online")
+		_, span := natsotel.StartConsumerSpan(context.Background(), msg.Subject, msg.Header, "nats.handle.tools.online")
 		defer span.End()
 		observability.NATSReceiveTotal.WithLabelValues("tools.online").Inc()
 
@@ -429,7 +431,7 @@ func (b *NATSToolBridge) OnDaemonConnected(userID, daemonID string) {
 
 	// 9. daemon.process.kill.{userID}.{daemonID}
 	addSub(b.nc.Subscribe(daemonSubject(daemonKillSubject, userID, daemonID), func(msg *nats.Msg) {
-		_, span := observability.StartNATSSpan(context.Background(), msg, "nats.handle.daemon.process.kill")
+		_, span := natsotel.StartConsumerSpan(context.Background(), msg.Subject, msg.Header, "nats.handle.daemon.process.kill")
 		defer span.End()
 		observability.NATSReceiveTotal.WithLabelValues("daemon.process.kill").Inc()
 
@@ -464,7 +466,7 @@ func (b *NATSToolBridge) OnDaemonConnected(userID, daemonID string) {
 			return
 		}
 
-		ctx, span := observability.StartNATSSpan(context.Background(), msg, "nats.handle.daemon.command")
+		ctx, span := natsotel.StartConsumerSpan(context.Background(), msg.Subject, msg.Header, "nats.handle.daemon.command")
 		observability.NATSReceiveTotal.WithLabelValues("daemon.command").Inc()
 
 		var req daemonCommandWire
@@ -515,7 +517,7 @@ func (b *NATSToolBridge) OnDaemonConnected(userID, daemonID string) {
 			return
 		}
 
-		ctx, span := observability.StartNATSSpan(context.Background(), msg, "nats.handle.tools.request.sync")
+		ctx, span := natsotel.StartConsumerSpan(context.Background(), msg.Subject, msg.Header, "nats.handle.tools.request.sync")
 		observability.NATSReceiveTotal.WithLabelValues("tools.request.sync").Inc()
 
 		var request ToolExecutionRequest
