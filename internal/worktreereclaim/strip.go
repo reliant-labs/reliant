@@ -131,7 +131,7 @@ func regenerableTargets(ctx context.Context, checkout string, repos []string) []
 	return safe
 }
 
-// collectRegenerable walks one ignored path the way unrecognizedIgnored does,
+// collectRegenerable walks one ignored path the way dataWalk.visit does,
 // but collects the regenerable ones: a regenerable path is taken whole, and
 // any other directory is judged by its contents.
 func collectRegenerable(checkout, rel string, out *[]string, budget *int) {
