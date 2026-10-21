@@ -260,7 +260,7 @@ func (b bearer) Apply(r *http.Request) error {
 
 // Service is the real option service over the fake.
 func (f *Fake) Service(without ...string) inputoptions.Service {
-	svc, err := inputoptions.New(inputoptions.Deps{Types: f.Types(), Runner: f.Runner(), Credentials: Credentials(without...)})
+	svc, err := inputoptions.NewInstrumented(inputoptions.Deps{Types: f.Types(), Runner: f.Runner(), Credentials: Credentials(without...)})
 	if err != nil {
 		f.t.Fatal(err)
 	}
