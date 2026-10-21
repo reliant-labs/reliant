@@ -235,16 +235,6 @@ func fromNode(n *yaml.Node) (any, error) {
 	return nil, fmt.Errorf("line %d: unsupported YAML node", n.Line)
 }
 
-// renderValue writes a top-level value: one flow line when it fits, a block
-// otherwise.
-func renderValue(b *strings.Builder, m ymap) {
-	if s, ok := flow(m); ok && len(s) <= flowLimit {
-		b.WriteString(s + "\n")
-		return
-	}
-	render(b, m, 0)
-}
-
 // plain converts the writer's tree to what a YAML decoder returns for the text
 // it wrote, for the round-trip check.
 func plain(v any) any {

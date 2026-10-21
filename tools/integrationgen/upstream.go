@@ -175,20 +175,6 @@ func (n node) types() map[string]bool {
 	return out
 }
 
-func (n node) enums() map[string]bool {
-	out := map[string]bool{}
-	for _, s := range n {
-		if list, ok := s["enum"].([]any); ok {
-			for _, e := range list {
-				if str, ok := e.(string); ok {
-					out[str] = true
-				}
-			}
-		}
-	}
-	return out
-}
-
 // accepts reports whether a field of the given spec kind can read a value of
 // the upstream types. An upstream that says nothing accepts anything.
 func accepts(kind string, types map[string]bool) bool {

@@ -104,7 +104,7 @@ func (g *emitter) run() error {
 	if err != nil {
 		return err
 	}
-	g.put(filepath.Join("internal/integrations/webhook", p.Provider, "zz_projection_gen.go"), src)
+	g.put(filepath.Join("internal/integrations/webhook", p.Provider, "zz_projection_generated.go"), src)
 
 	man, err := g.syncManifest()
 	if err != nil {

@@ -6,7 +6,7 @@ import (
 	"strconv"
 )
 
-// Helpers the generated projections (zz_projection_gen.go, from projection/*.yaml)
+// Helpers the generated projections (zz_projection_generated.go, from projection/*.yaml)
 // are written in. What an event keeps is decided by its spec, not here.
 //
 // The recorded payload is a TRIMMED copy of the webhook body (provider.yaml,

@@ -15,7 +15,7 @@ import (
 
 // testdata/demo is a miniature repository root with one provider, "demo": its
 // specs, its pinned upstream schema, its hand-written hooks and its catalog
-// directory. The files the generator owns in it (zz_projection_gen.go, the
+// directory. The files the generator owns in it (zz_projection_generated.go, the
 // events/ and *_schema.yaml fragments, the manifest's trigger list) are the
 // golden output: the test regenerates into a copy and compares every one.
 //
@@ -84,11 +84,11 @@ func TestGenerationIsIdempotentAndCheckModeSeesDrift(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, stale, "the golden tree is current, so -check finds nothing")
 
-	gen := filepath.Join(root, "internal/integrations/webhook/demo/zz_projection_gen.go")
+	gen := filepath.Join(root, "internal/integrations/webhook/demo/zz_projection_generated.go")
 	require.NoError(t, os.WriteFile(gen, []byte("package demo\n"), 0o644))
 	stale, err = apply(root, out, true)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"internal/integrations/webhook/demo/zz_projection_gen.go"}, stale)
+	assert.Equal(t, []string{"internal/integrations/webhook/demo/zz_projection_generated.go"}, stale)
 
 	stale, err = apply(root, out, false)
 	require.NoError(t, err)
