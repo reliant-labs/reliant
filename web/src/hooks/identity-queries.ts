@@ -66,15 +66,21 @@ export function useIdentityUsers(orgId: string | null, envId: string, filter: Id
  * Every identity write: it runs, then re-reads everything the tab shows for
  * this environment (the users list and the status), whatever the outcome — a
  * verb that failed half way may still have changed the instance.
+ *
+ * `secret`: the result is a credential (a password-set code). The mutation
+ * cache drops it as soon as nothing observes it, rather than keeping it for
+ * the default five minutes; the caller holds the only copy and clears it.
  */
 export function useIdentityMutation<TArgs, TResult>(
   orgId: string | null,
   envId: string,
-  run: (api: IdentityApi, orgId: string, envId: string, args: TArgs) => Promise<TResult>
+  run: (api: IdentityApi, orgId: string, envId: string, args: TArgs) => Promise<TResult>,
+  opts: { secret?: boolean } = {}
 ) {
   const api = useIdentityApi();
   const queryClient = useQueryClient();
   return useMutation({
+    ...(opts.secret ? { gcTime: 0 } : {}),
     mutationFn: (args: TArgs) => {
       if (!orgId) return Promise.reject(new Error("no organization"));
       return run(api, orgId, envId, args);
