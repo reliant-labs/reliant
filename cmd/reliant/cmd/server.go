@@ -18,6 +18,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/serverworker"
 	"github.com/reliant-labs/reliant/pkg/config"
 	"github.com/spf13/cobra"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 func newServerCmd() *cobra.Command {
@@ -31,6 +32,12 @@ server role for split-deployment mode.`,
 	cmd.AddCommand(newServerAPICmd())
 	cmd.AddCommand(newServerWorkerCmd())
 	cmd.AddCommand(newServerGatewayCmd())
+
+	// What every role reads the same way — proto/config/v1
+	// ServerProcessConfig and DatabaseConfig — persistent here, so each
+	// role's command inherits the flags.
+	config.RegisterServerProcessConfigFlags(cmd)
+	config.RegisterDatabaseConfigFlags(cmd)
 
 	return cmd
 }
@@ -60,13 +67,39 @@ Designed to run as N replicas behind a load balancer.`,
 	return cmd
 }
 
-// loadServerAPIConfig fills opts with what `server api` reads through typed
-// config: the root config, and its own ApiServerConfig.
-func loadServerAPIConfig(cmd *cobra.Command, opts *serverapi.Options) error {
+// serverConfigs is what every server role loads before its own command
+// config: the root config, and the `server` subtree configs.
+type serverConfigs struct {
+	base     *config.ReliantConfig
+	process  *config.ServerProcessConfig
+	database *config.DatabaseConfig
+}
+
+// loadServerConfigs loads the configs every server role shares.
+func loadServerConfigs(cmd *cobra.Command) (serverConfigs, error) {
 	base, err := loadRootConfig(cmd)
+	if err != nil {
+		return serverConfigs{}, err
+	}
+	process, err := config.LoadServerProcessConfig(cmd)
+	if err != nil {
+		return serverConfigs{}, err
+	}
+	database, err := config.LoadDatabaseConfig(cmd)
+	if err != nil {
+		return serverConfigs{}, err
+	}
+	return serverConfigs{base: base, process: process, database: database}, nil
+}
+
+// loadServerAPIConfig fills opts with what `server api` reads through typed
+// config: the configs every role shares, and its own ApiServerConfig.
+func loadServerAPIConfig(cmd *cobra.Command, opts *serverapi.Options) error {
+	shared, err := loadServerConfigs(cmd)
 	if err != nil {
 		return err
 	}
+	base, process := shared.base, shared.process
 	api, err := config.LoadApiServerConfig(cmd)
 	if err != nil {
 		return err
@@ -74,36 +107,35 @@ func loadServerAPIConfig(cmd *cobra.Command, opts *serverapi.Options) error {
 	if err := checkServerPorts(
 		serverPort{"GRPC_PORT (--grpc-port)", api.GetGrpcPort()},
 		serverPort{"HEALTH_PORT (--health-port)", api.GetHealthPort()},
-		serverPort{"TEMPORAL_PORT (--temporal-port)", api.GetTemporal().GetPort()},
+		serverPort{"TEMPORAL_PORT (--temporal-port)", process.GetTemporal().GetPort()},
 	); err != nil {
 		return err
 	}
 	if err := checkPprofPort(api.GetPprofPort()); err != nil {
 		return err
 	}
-	drain := drainBudget(api.GetDrain())
 	opts.Log = logSettings(base)
 	opts.GRPCPort = int(api.GetGrpcPort())
 	opts.HealthPort = int(api.GetHealthPort())
 	opts.PprofPort = int(api.GetPprofPort())
 	opts.BindAddress = api.GetBindAddress()
-	opts.DataDir = api.GetDataDir()
-	opts.DatabaseDriver, opts.DatabaseURL, opts.DatabaseDirectURL = databaseSettings(api.GetDatabase())
-	if opts.DatabasePool, err = databasePool(api.GetDatabase()); err != nil {
+	opts.DataDir = process.GetDataDir()
+	opts.DatabaseDriver, opts.DatabaseURL, opts.DatabaseDirectURL = databaseSettings(shared.database)
+	if opts.DatabasePool, err = databasePool(shared.database); err != nil {
 		return err
 	}
-	opts.TemporalHost, opts.TemporalPort, opts.TemporalNamespace = temporalSettings(api.GetTemporal())
-	opts.NATS = natsEndpoint(api.GetNats())
-	opts.StreamingDriver = api.GetStreamingDriver()
+	opts.TemporalHost, opts.TemporalPort, opts.TemporalNamespace = temporalSettings(process.GetTemporal())
+	opts.NATS = natsEndpoint(process.GetNats())
+	opts.StreamingDriver = process.GetStreamingDriver()
 	opts.CORSAllowedOrigins = api.GetCorsAllowedOrigins()
-	opts.TLSCertFile, opts.TLSKeyFile, opts.DisableTLS = tlsSettings(api.GetTls())
-	opts.PreStopDelay, opts.ShutdownTimeout = drain.preStopDelay, drain.shutdownTimeout
+	opts.TLSCertFile, opts.TLSKeyFile, opts.DisableTLS = tlsSettings(process.GetTls())
+	opts.PreStopDelay, opts.ShutdownTimeout = drainBudget(api)
 	opts.JWTPublicKey = api.GetJwtPublicKey()
 	opts.JWTPublicKeyFile = api.GetJwtPublicKeyFile()
 	opts.JWKSURL = api.GetJwksUrl()
 	opts.AllowedEmailDomains = api.GetAllowedEmailDomains()
 	opts.DisableForgeAPI = api.GetDisableForgeApi()
-	opts.ControlPlane = controlPlaneEndpoint(api.GetControlPlane())
+	opts.ControlPlane = controlPlaneEndpoint(process.GetControlPlane())
 	opts.AuthMode = api.GetAuthMode()
 	opts.AuthAPIKey = api.GetAuthApiKey()
 	opts.RequireEmailVerifiedClaim = api.GetRequireEmailVerifiedClaim()
@@ -112,24 +144,24 @@ func loadServerAPIConfig(cmd *cobra.Command, opts *serverapi.Options) error {
 	opts.OAuthIssuers = api.GetMcpOauthIssuers()
 	opts.MaxUploadSize = api.GetMaxUploadSize()
 	opts.WorktreeAutoArchive = worktreesweep.ParseAutoArchiveMode(api.GetWorktreeAutoArchive())
-	in, err := integrations(api.GetIntegrations())
+	in, err := integrations(process.GetIntegrations())
 	if err != nil {
 		return err
 	}
 	opts.PublicURL, opts.VaultKey, opts.Webhooks = in.publicURL, in.vaultKey, in.webhooks
 	opts.GitHubAppSlug, opts.GitHubBot = in.gitHubAppSlug, in.gitHubBot
-	opts.Analytics = analyticsSettings(api.GetAnalytics())
+	opts.Analytics = analyticsSettings(process.GetAnalytics())
 	if opts.PayloadGCHorizon = api.GetPayloadBlobGcHorizon().AsDuration(); opts.PayloadGCHorizon <= 0 {
 		return fmt.Errorf("config: RELIANT_PAYLOAD_BLOB_GC_HORIZON = %s is not a positive duration", opts.PayloadGCHorizon)
 	}
-	opts.Observability = observabilitySettings(api.GetObservability(), base)
-	if opts.Sentry, err = sentrySettings(api.GetSentry(), api.GetObservability()); err != nil {
+	opts.Observability = observabilitySettings(process.GetObservability(), base)
+	if opts.Sentry, err = sentrySettings(process.GetSentry(), process.GetObservability()); err != nil {
 		return err
 	}
-	if opts.LLM, err = llmSettings(api.GetLlm()); err != nil {
+	if opts.LLM, err = llmSettings(process.GetLlm()); err != nil {
 		return err
 	}
-	if opts.Preview, err = previewSettings(api.GetPreview()); err != nil {
+	if opts.Preview, err = previewSettings(process.GetPreview()); err != nil {
 		return err
 	}
 	return validateServerAPIAuth(opts)
@@ -148,64 +180,65 @@ func validateServerAPIAuth(opts *serverapi.Options) error {
 }
 
 // loadServerWorkerConfig fills opts with what `server worker` reads through
-// typed config: the root config, and its own WorkerConfig.
+// typed config: the configs every role shares, and its own WorkerConfig.
 func loadServerWorkerConfig(cmd *cobra.Command, opts *serverworker.Options) error {
-	base, err := loadRootConfig(cmd)
+	shared, err := loadServerConfigs(cmd)
 	if err != nil {
 		return err
 	}
+	base, process := shared.base, shared.process
 	worker, err := config.LoadWorkerConfig(cmd)
 	if err != nil {
 		return err
 	}
 	if err := checkServerPorts(
 		serverPort{"HEALTH_PORT (--health-port)", worker.GetHealthPort()},
-		serverPort{"TEMPORAL_PORT (--temporal-port)", worker.GetTemporal().GetPort()},
+		serverPort{"TEMPORAL_PORT (--temporal-port)", process.GetTemporal().GetPort()},
 	); err != nil {
 		return err
 	}
 	if err := checkPprofPort(worker.GetPprofPort()); err != nil {
 		return err
 	}
-	drain := drainBudget(worker.GetDrain())
 	opts.Log = logSettings(base)
 	opts.HealthPort = int(worker.GetHealthPort())
 	opts.PprofPort = int(worker.GetPprofPort())
-	opts.DataDir = worker.GetDataDir()
-	opts.DatabaseDriver, opts.DatabaseURL, opts.DatabaseDirectURL = databaseSettings(worker.GetDatabase())
-	if opts.DatabasePool, err = databasePool(worker.GetDatabase()); err != nil {
+	opts.DataDir = process.GetDataDir()
+	opts.DatabaseDriver, opts.DatabaseURL, opts.DatabaseDirectURL = databaseSettings(shared.database)
+	if opts.DatabasePool, err = databasePool(shared.database); err != nil {
 		return err
 	}
-	opts.TemporalHost, opts.TemporalPort, opts.TemporalNamespace = temporalSettings(worker.GetTemporal())
-	opts.NATS = natsEndpoint(worker.GetNats())
-	opts.StreamingDriver = worker.GetStreamingDriver()
-	opts.PreStopDelay, opts.ShutdownTimeout = drain.preStopDelay, drain.shutdownTimeout
-	opts.ControlPlane = controlPlaneEndpoint(worker.GetControlPlane())
-	in, err := integrations(worker.GetIntegrations())
+	opts.TemporalHost, opts.TemporalPort, opts.TemporalNamespace = temporalSettings(process.GetTemporal())
+	opts.NATS = natsEndpoint(process.GetNats())
+	opts.StreamingDriver = process.GetStreamingDriver()
+	opts.PreStopDelay, opts.ShutdownTimeout = drainBudget(worker)
+	opts.ControlPlane = controlPlaneEndpoint(process.GetControlPlane())
+	in, err := integrations(process.GetIntegrations())
 	if err != nil {
 		return err
 	}
 	opts.PublicURL, opts.VaultKey, opts.Webhooks = in.publicURL, in.vaultKey, in.webhooks
 	opts.GitHubAppSlug, opts.GitHubBot = in.gitHubAppSlug, in.gitHubBot
-	opts.Analytics = analyticsSettings(worker.GetAnalytics())
-	opts.Observability = observabilitySettings(worker.GetObservability(), base)
-	if opts.Sentry, err = sentrySettings(worker.GetSentry(), worker.GetObservability()); err != nil {
+	opts.Analytics = analyticsSettings(process.GetAnalytics())
+	opts.Observability = observabilitySettings(process.GetObservability(), base)
+	if opts.Sentry, err = sentrySettings(process.GetSentry(), process.GetObservability()); err != nil {
 		return err
 	}
-	if opts.LLM, err = llmSettings(worker.GetLlm()); err != nil {
+	if opts.LLM, err = llmSettings(process.GetLlm()); err != nil {
 		return err
 	}
-	opts.Preview, err = previewSettings(worker.GetPreview())
+	opts.Preview, err = previewSettings(process.GetPreview())
 	return err
 }
 
 // loadServerGatewayConfig fills opts with what `server gateway` reads through
-// typed config: the root config, and its own GatewayConfig.
+// typed config: the configs every role shares, and its own GatewayConfig.
 func loadServerGatewayConfig(cmd *cobra.Command, opts *servergateway.Options) error {
-	base, err := loadRootConfig(cmd)
+	shared, err := loadServerConfigs(cmd)
 	if err != nil {
 		return err
 	}
+	base, process := shared.base, shared.process
 	gateway, err := config.LoadGatewayConfig(cmd)
 	if err != nil {
 		return err
@@ -216,26 +249,25 @@ func loadServerGatewayConfig(cmd *cobra.Command, opts *servergateway.Options) er
 	); err != nil {
 		return err
 	}
-	drain := drainBudget(gateway.GetDrain())
 	opts.Log = logSettings(base)
 	opts.ToolsDaemonPort = int(gateway.GetDaemonPort())
 	opts.HealthPort = int(gateway.GetHealthPort())
 	opts.BindAddress = gateway.GetBindAddress()
-	opts.DataDir = gateway.GetDataDir()
+	opts.DataDir = process.GetDataDir()
 	opts.PprofAddr = gateway.GetPprofAddr()
-	opts.DatabaseDriver, opts.DatabaseURL, opts.DatabaseDirectURL = databaseSettings(gateway.GetDatabase())
-	if opts.DatabasePool, err = databasePool(gateway.GetDatabase()); err != nil {
+	opts.DatabaseDriver, opts.DatabaseURL, opts.DatabaseDirectURL = databaseSettings(shared.database)
+	if opts.DatabasePool, err = databasePool(shared.database); err != nil {
 		return err
 	}
-	opts.NATS = natsEndpoint(gateway.GetNats())
-	opts.TLSCertFile, opts.TLSKeyFile, opts.DisableTLS = tlsSettings(gateway.GetTls())
-	opts.PreStopDelay, opts.ShutdownTimeout = drain.preStopDelay, drain.shutdownTimeout
-	opts.ControlPlane = controlPlaneEndpoint(gateway.GetControlPlane())
-	opts.Observability = observabilitySettings(gateway.GetObservability(), base)
+	opts.NATS = natsEndpoint(process.GetNats())
+	opts.TLSCertFile, opts.TLSKeyFile, opts.DisableTLS = tlsSettings(process.GetTls())
+	opts.PreStopDelay, opts.ShutdownTimeout = drainBudget(gateway)
+	opts.ControlPlane = controlPlaneEndpoint(process.GetControlPlane())
+	opts.Observability = observabilitySettings(process.GetObservability(), base)
 	return nil
 }
 
-// controlPlaneEndpoint is a role config's ControlPlaneConfig in the shape the
+// controlPlaneEndpoint is the shared ControlPlaneConfig in the shape the
 // server packages take, trimmed as every reader of these variables trimmed
 // them.
 func controlPlaneEndpoint(cfg *configv1.ControlPlaneConfig) controlplane.Endpoint {
@@ -245,32 +277,32 @@ func controlPlaneEndpoint(cfg *configv1.ControlPlaneConfig) controlplane.Endpoin
 	}
 }
 
-// databaseSettings is a role's DatabaseConfig in the shape the server
-// packages' Options take: driver, URL, direct (session) URL. The URLs are
-// trimmed, as the database layer trimmed them.
+// databaseSettings is the DatabaseConfig in the shape the server packages'
+// Options take: driver, URL, direct (session) URL. The URLs are trimmed, as
+// the database layer trimmed them.
 func databaseSettings(cfg *configv1.DatabaseConfig) (driver, url, directURL string) {
-	return cfg.GetDriver(), strings.TrimSpace(cfg.GetUrl()), strings.TrimSpace(cfg.GetDirectUrl())
+	return cfg.GetDatabaseDriver(), strings.TrimSpace(cfg.GetDatabaseUrl()), strings.TrimSpace(cfg.GetDatabaseDirectUrl())
 }
 
-// databasePool is a role's DatabaseConfig pool and wait settings in the shape
+// databasePool is the DatabaseConfig pool and wait settings in the shape
 // the database layer takes. A size or a wait that cannot be honoured is
 // refused rather than quietly replaced by its default.
 func databasePool(cfg *configv1.DatabaseConfig) (db.Pool, error) {
-	if n := cfg.GetMaxOpenConns(); n < 1 {
+	if n := cfg.GetDbMaxOpenConns(); n < 1 {
 		return db.Pool{}, fmt.Errorf("config: RELIANT_DB_MAX_OPEN_CONNS = %d must be at least 1", n)
 	}
-	if n := cfg.GetMaxIdleConns(); n < 1 {
+	if n := cfg.GetDbMaxIdleConns(); n < 1 {
 		return db.Pool{}, fmt.Errorf("config: RELIANT_DB_MAX_IDLE_CONNS = %d must be at least 1", n)
 	}
-	if s := cfg.GetSchemaWaitSeconds(); s < 1 {
+	if s := cfg.GetDbSchemaWaitSeconds(); s < 1 {
 		return db.Pool{}, fmt.Errorf("config: RELIANT_DB_SCHEMA_WAIT_SECONDS = %d must be at least 1", s)
 	}
 	pool := db.Pool{
-		MaxOpenConns: int(cfg.GetMaxOpenConns()),
-		MaxIdleConns: int(cfg.GetMaxIdleConns()),
-		SchemaWait:   time.Duration(cfg.GetSchemaWaitSeconds()) * time.Second,
+		MaxOpenConns: int(cfg.GetDbMaxOpenConns()),
+		MaxIdleConns: int(cfg.GetDbMaxIdleConns()),
+		SchemaWait:   time.Duration(cfg.GetDbSchemaWaitSeconds()) * time.Second,
 	}
-	if d := cfg.GetConnectTimeout(); d != nil {
+	if d := cfg.GetDbConnectTimeout(); d != nil {
 		if pool.ConnectTimeout = d.AsDuration(); pool.ConnectTimeout <= 0 {
 			return db.Pool{}, fmt.Errorf("config: DB_CONNECT_TIMEOUT = %s is not a positive duration", pool.ConnectTimeout)
 		}
@@ -278,41 +310,38 @@ func databasePool(cfg *configv1.DatabaseConfig) (db.Pool, error) {
 	return pool, nil
 }
 
-// temporalSettings is a role's TemporalConfig in the shape the server
+// temporalSettings is the shared TemporalConfig in the shape the server
 // packages' Options take.
 func temporalSettings(cfg *configv1.TemporalConfig) (host string, port int, namespace string) {
 	return cfg.GetHost(), int(cfg.GetPort()), cfg.GetNamespace()
 }
 
-// tlsSettings is a role's ServerTLSConfig in the shape the server packages'
+// tlsSettings is the shared ServerTLSConfig in the shape the server packages'
 // Options take.
 func tlsSettings(cfg *configv1.ServerTLSConfig) (certFile, keyFile string, disable bool) {
 	return cfg.GetCertFile(), cfg.GetKeyFile(), cfg.GetDisable()
 }
 
-// natsEndpoint is a role's NatsConfig as natsutil connects to it.
+// natsEndpoint is the shared NatsConfig as natsutil connects to it.
 func natsEndpoint(cfg *configv1.NatsConfig) natsutil.Endpoint {
 	return natsutil.Endpoint{URL: cfg.GetUrl(), User: cfg.GetUser(), Password: cfg.GetPassword()}
 }
 
-// serverDrain is a role's rollout drain budget in the terms serverkit.Drainer
-// takes it.
-type serverDrain struct {
-	preStopDelay    time.Duration
-	shutdownTimeout time.Duration
+// roleDrain is a role config's rollout drain budget: each role declares its
+// own PRE_STOP_DELAY and SHUTDOWN_TIMEOUT.
+type roleDrain interface {
+	GetPreStopDelay() *durationpb.Duration
+	GetShutdownTimeout() *durationpb.Duration
 }
 
-// drainBudget is a role's DrainConfig (PRE_STOP_DELAY, SHUTDOWN_TIMEOUT) in
+// drainBudget is a role's drain budget (pre-stop delay, shutdown timeout) in
 // the terms serverkit.Drainer takes it, under the rule forge's grace-period
 // arithmetic applies to the same variables (pkg/deploy drainSeconds), so the
 // two can never disagree about the budget: zero is serverkit's default
 // (5s / 30s) and negative is none. A value that is not a duration has already
 // stopped the server at load.
-func drainBudget(cfg *configv1.DrainConfig) serverDrain {
-	return serverDrain{
-		preStopDelay:    cfg.GetPreStopDelay().AsDuration(),
-		shutdownTimeout: cfg.GetShutdownTimeout().AsDuration(),
-	}
+func drainBudget(cfg roleDrain) (preStopDelay, shutdownTimeout time.Duration) {
+	return cfg.GetPreStopDelay().AsDuration(), cfg.GetShutdownTimeout().AsDuration()
 }
 
 // serverPort is a port setting, named as an operator sets it.

@@ -2,78 +2,65 @@ syntax = "proto3";
 
 package config.v1;
 
+import "config/v1/analytics_config.proto";
+import "config/v1/control_plane_config.proto";
+import "config/v1/integrations_config.proto";
+import "config/v1/llm_config.proto";
+import "config/v1/observability_config.proto";
+import "config/v1/preview_config.proto";
 import "forge/v1/forge.proto";
-import "google/protobuf/duration.proto";
 
 option go_package = "github.com/reliant-labs/reliant/gen/config/v1;configv1";
 
-// Blocks the server roles (`reliant server api|worker|gateway`) compose: each
-// is one concern every role that composes it reads the same way. A role's own
-// knobs — and the ones whose default differs per role, like HEALTH_PORT — are
-// leaves on its own message (api_server_config.proto, worker_config.proto,
-// gateway_config.proto). The rules every config here follows are in
-// config.proto's header.
+// ServerProcessConfig is what every server role (`reliant server
+// api|worker|gateway`) reads the same way: the infrastructure it connects to
+// and the outside world it reports to. It is a SUBTREE config over `server`,
+// so all three roles load ONE declaration of it, and a component they share
+// (the repo, the NATS connection, the control-plane endpoint) has one
+// constructor reading one config in every role, rather than each role's copy
+// of the same block. Its flags are persistent on `server`.
+//
+// A role's own knobs stay on its command config (api_server_config.proto,
+// worker_config.proto, gateway_config.proto): its ports, including
+// HEALTH_PORT, whose default differs per role; its bind address and pprof
+// listener; and its drain budget, which may differ per role. The database a
+// role connects to is DatabaseConfig (db_config.proto), a subtree config of
+// its own because `reliant db migrate` loads it too. The rules every config
+// here follows are in config.proto's header.
+message ServerProcessConfig {
+  option (forge.v1.binary_config) = {
+    binary: "reliant"
+    subtrees: [{path: ["server"]}]
+  };
 
-// DatabaseConfig is the Postgres a process connects to (each server role, and
-// the `reliant db migrate` commands), and how it sizes its pool and waits on
-// it.
-message DatabaseConfig {
-  // The connection URL. A secret: it carries the password, so it has no flag
-  // (a flag's value is in the shell history and in `ps`).
-  string url = 1 [(forge.v1.config) = {
-    env_var: "DATABASE_URL"
-    sensitive: true
-    required: true
-    description: "Postgres connection URL"
-  }];
+  ControlPlaneConfig control_plane = 1;
+  NatsConfig nats = 2;
+  TemporalConfig temporal = 3;
+  ServerTLSConfig tls = 4;
 
-  // A session-capable URL for the same database, for session-scoped work
-  // (advisory locks, migrations): set it when url is a transaction-pooling
-  // PgBouncer. Unset: url already has session semantics.
-  string direct_url = 2 [(forge.v1.config) = {
-    env_var: "DATABASE_DIRECT_URL"
-    sensitive: true
-    optional: true
-    description: "Session-capable Postgres URL for session-scoped work, when DATABASE_URL is a transaction pooler"
-  }];
-
-  // The only driver is postgres; the knob remains because deployments set it.
-  string driver = 3 [(forge.v1.config) = {
-    env_var: "DATABASE_DRIVER"
-    flag: "db-driver"
-    default_value: "postgres"
-    allowed_values: ["postgres"]
-    description: "Database driver (postgres)"
+  string data_dir = 5 [(forge.v1.config) = {
+    env_var: "DATA_DIR"
+    flag: "data-dir"
+    default_value: "./data"
+    description: "Data directory for logs and certs"
   }];
 
-  // The connection pool's size. Dev caps both low: its Postgres is shared by
-  // every parallel stack on the machine.
-  int32 max_open_conns = 4 [(forge.v1.config) = {
-    env_var: "RELIANT_DB_MAX_OPEN_CONNS"
-    default_value: "25"
-    description: "Most open database connections"
-  }];
-  int32 max_idle_conns = 5 [(forge.v1.config) = {
-    env_var: "RELIANT_DB_MAX_IDLE_CONNS"
-    default_value: "10"
-    description: "Most idle database connections kept open"
+  // How live deltas fan out across replicas. nats is the only driver; the
+  // knob remains because deployments set it.
+  string streaming_driver = 6 [(forge.v1.config) = {
+    env_var: "STREAMING_DRIVER"
+    flag: "streaming-driver"
+    default_value: "nats"
+    allowed_values: ["nats"]
+    description: "Streaming driver (nats)"
   }];
 
-  // How long the startup ping keeps retrying a database that is not up yet.
-  // It must stay inside the deployment's startup probe window. Unset:
-  // forge serverkit's default.
-  google.protobuf.Duration connect_timeout = 6 [(forge.v1.config) = {
-    env_var: "DB_CONNECT_TIMEOUT"
-    description: "How long the startup ping retries a database that is not up yet"
-  }];
-
-  // How long a process that waits for the schema (the worker, the gateway)
-  // waits for the API server or `reliant db migrate up` to apply it.
-  int32 schema_wait_seconds = 7 [(forge.v1.config) = {
-    env_var: "RELIANT_DB_SCHEMA_WAIT_SECONDS"
-    default_value: "300"
-    description: "Seconds to wait for the schema to be migrated"
-  }];
+  IntegrationsConfig integrations = 7;
+  ObservabilityConfig observability = 8;
+  SentryConfig sentry = 9;
+  AnalyticsConfig analytics = 10;
+  LLMConfig llm = 11;
+  PreviewConfig preview = 12;
 }
 
 // NatsConfig is the NATS server a server role connects to: daemon routing,
@@ -124,7 +111,11 @@ message TemporalConfig {
 }
 
 // ServerTLSConfig is how a server role that terminates TLS itself (the API
-// server, the daemon gateway) serves it.
+// server, the daemon gateway) serves it: on its own listeners, never on the
+// plaintext health port. It keeps its own names rather than forge's
+// tls_cert_path / tls_key_path, which forge's serve policy applies to the
+// probe address — reliant's HEALTH_PORT, which must stay plaintext for the
+// kubelet and the load balancer's HTTP health checks.
 message ServerTLSConfig {
   string cert_file = 1 [(forge.v1.config) = {
     env_var: "TLS_CERT_FILE"
@@ -140,29 +131,5 @@ message ServerTLSConfig {
     env_var: "DISABLE_TLS"
     flag: "disable-tls"
     description: "Disable TLS (use plaintext HTTP)"
-  }];
-}
-
-// DrainConfig is a server's rollout drain budget. control-plane sets both on
-// every server workload, and forge derives the pod's
-// terminationGracePeriodSeconds from them, so a process that ignores them
-// cannot stay inside the grace period it was given. Both follow the rule
-// forge's grace-period arithmetic applies to them (pkg/deploy drainSeconds):
-// zero is the default and negative is none. Both are Go durations ("30s"); a
-// bare number stops the server at load.
-message DrainConfig {
-  // How long the process keeps serving after readiness flips, so load
-  // balancers see the failing probe first. Negative is no pause.
-  google.protobuf.Duration pre_stop_delay = 1 [(forge.v1.config) = {
-    env_var: "PRE_STOP_DELAY"
-    default_value: "5s"
-    description: "How long to keep serving after readiness flips at shutdown (negative: no pause)"
-  }];
-
-  // Bounds everything after the pre-stop pause.
-  google.protobuf.Duration shutdown_timeout = 2 [(forge.v1.config) = {
-    env_var: "SHUTDOWN_TIMEOUT"
-    default_value: "30s"
-    description: "Budget for graceful shutdown after the pre-stop pause"
   }];
 }

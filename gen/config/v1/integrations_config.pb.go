@@ -25,10 +25,10 @@ const (
 // IntegrationsConfig is how a server role reaches the outside world on a
 // user's behalf: the credential vault's key, the deployment's public URL, and
 // the deployment-level secrets of the integrations that push events to it,
-// and each integration's OAuth client. The API server and the worker compose
-// it, so they agree on which integrations deliver events and on how a
-// webhook's URL reads. The rules every config here follows are in
-// config.proto's header.
+// and each integration's OAuth client. The API server and the worker read it
+// from ServerProcessConfig, so they agree on which integrations deliver
+// events and on how a webhook's URL reads. The rules every config here
+// follows are in config.proto's header.
 type IntegrationsConfig struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// This server's externally reachable base URL: where a user points a

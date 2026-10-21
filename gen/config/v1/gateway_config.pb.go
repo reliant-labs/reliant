@@ -10,6 +10,7 @@ import (
 	_ "github.com/reliant-labs/forge/pkg/forgepb"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	durationpb "google.golang.org/protobuf/types/known/durationpb"
 	reflect "reflect"
 	sync "sync"
 	unsafe "unsafe"
@@ -23,27 +24,25 @@ const (
 )
 
 // GatewayConfig is the `reliant server gateway` process's own config. It loads
-// alongside the root ReliantConfig (config.proto, whose header has the rules
-// every config here follows).
+// alongside the root ReliantConfig and the `server` subtree configs,
+// ServerProcessConfig and DatabaseConfig (config.proto, whose header has the
+// rules every config here follows).
 type GatewayConfig struct {
-	state        protoimpl.MessageState `protogen:"open.v1"`
-	ControlPlane *ControlPlaneConfig    `protobuf:"bytes,1,opt,name=control_plane,json=controlPlane,proto3" json:"control_plane,omitempty"`
-	Database     *DatabaseConfig        `protobuf:"bytes,10,opt,name=database,proto3" json:"database,omitempty"`
-	Nats         *NatsConfig            `protobuf:"bytes,11,opt,name=nats,proto3" json:"nats,omitempty"`
-	Tls          *ServerTLSConfig       `protobuf:"bytes,12,opt,name=tls,proto3" json:"tls,omitempty"`
-	Drain        *DrainConfig           `protobuf:"bytes,13,opt,name=drain,proto3" json:"drain,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
 	// The port daemons dial: the gateway's bidi-streaming gRPC listener. A
 	// local daemon reads the same variable to find it (DaemonConfig).
 	DaemonPort  int32  `protobuf:"varint,14,opt,name=daemon_port,json=daemonPort,proto3" json:"daemon_port,omitempty"`
 	HealthPort  int32  `protobuf:"varint,15,opt,name=health_port,json=healthPort,proto3" json:"health_port,omitempty"`
 	BindAddress string `protobuf:"bytes,16,opt,name=bind_address,json=bindAddress,proto3" json:"bind_address,omitempty"`
-	DataDir     string `protobuf:"bytes,17,opt,name=data_dir,json=dataDir,proto3" json:"data_dir,omitempty"`
 	// The pprof debug listener, host:port. Unset: no pprof server. (The API
 	// server and worker take a PPROF_PORT on loopback instead.)
-	PprofAddr     string               `protobuf:"bytes,18,opt,name=pprof_addr,json=pprofAddr,proto3" json:"pprof_addr,omitempty"`
-	Observability *ObservabilityConfig `protobuf:"bytes,50,opt,name=observability,proto3" json:"observability,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	PprofAddr string `protobuf:"bytes,18,opt,name=pprof_addr,json=pprofAddr,proto3" json:"pprof_addr,omitempty"`
+	// The rollout drain budget, read as ApiServerConfig's is (its comment has
+	// the rules). Each role declares its own, so one role's may differ.
+	PreStopDelay    *durationpb.Duration `protobuf:"bytes,19,opt,name=pre_stop_delay,json=preStopDelay,proto3" json:"pre_stop_delay,omitempty"`
+	ShutdownTimeout *durationpb.Duration `protobuf:"bytes,20,opt,name=shutdown_timeout,json=shutdownTimeout,proto3" json:"shutdown_timeout,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *GatewayConfig) Reset() {
@@ -76,41 +75,6 @@ func (*GatewayConfig) Descriptor() ([]byte, []int) {
 	return file_config_v1_gateway_config_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *GatewayConfig) GetControlPlane() *ControlPlaneConfig {
-	if x != nil {
-		return x.ControlPlane
-	}
-	return nil
-}
-
-func (x *GatewayConfig) GetDatabase() *DatabaseConfig {
-	if x != nil {
-		return x.Database
-	}
-	return nil
-}
-
-func (x *GatewayConfig) GetNats() *NatsConfig {
-	if x != nil {
-		return x.Nats
-	}
-	return nil
-}
-
-func (x *GatewayConfig) GetTls() *ServerTLSConfig {
-	if x != nil {
-		return x.Tls
-	}
-	return nil
-}
-
-func (x *GatewayConfig) GetDrain() *DrainConfig {
-	if x != nil {
-		return x.Drain
-	}
-	return nil
-}
-
 func (x *GatewayConfig) GetDaemonPort() int32 {
 	if x != nil {
 		return x.DaemonPort
@@ -132,13 +96,6 @@ func (x *GatewayConfig) GetBindAddress() string {
 	return ""
 }
 
-func (x *GatewayConfig) GetDataDir() string {
-	if x != nil {
-		return x.DataDir
-	}
-	return ""
-}
-
 func (x *GatewayConfig) GetPprofAddr() string {
 	if x != nil {
 		return x.PprofAddr
@@ -146,9 +103,16 @@ func (x *GatewayConfig) GetPprofAddr() string {
 	return ""
 }
 
-func (x *GatewayConfig) GetObservability() *ObservabilityConfig {
+func (x *GatewayConfig) GetPreStopDelay() *durationpb.Duration {
 	if x != nil {
-		return x.Observability
+		return x.PreStopDelay
+	}
+	return nil
+}
+
+func (x *GatewayConfig) GetShutdownTimeout() *durationpb.Duration {
+	if x != nil {
+		return x.ShutdownTimeout
 	}
 	return nil
 }
@@ -157,14 +121,8 @@ var File_config_v1_gateway_config_proto protoreflect.FileDescriptor
 
 const file_config_v1_gateway_config_proto_rawDesc = "" +
 	"\n" +
-	"\x1econfig/v1/gateway_config.proto\x12\tconfig.v1\x1a$config/v1/control_plane_config.proto\x1a$config/v1/observability_config.proto\x1a\x1dconfig/v1/server_config.proto\x1a\x14forge/v1/forge.proto\"\x9e\a\n" +
-	"\rGatewayConfig\x12B\n" +
-	"\rcontrol_plane\x18\x01 \x01(\v2\x1d.config.v1.ControlPlaneConfigR\fcontrolPlane\x125\n" +
-	"\bdatabase\x18\n" +
-	" \x01(\v2\x19.config.v1.DatabaseConfigR\bdatabase\x12)\n" +
-	"\x04nats\x18\v \x01(\v2\x15.config.v1.NatsConfigR\x04nats\x12,\n" +
-	"\x03tls\x18\f \x01(\v2\x1a.config.v1.ServerTLSConfigR\x03tls\x12,\n" +
-	"\x05drain\x18\r \x01(\v2\x16.config.v1.DrainConfigR\x05drain\x12s\n" +
+	"\x1econfig/v1/gateway_config.proto\x12\tconfig.v1\x1a\x14forge/v1/forge.proto\x1a\x1egoogle/protobuf/duration.proto\"\xac\a\n" +
+	"\rGatewayConfig\x12s\n" +
 	"\vdaemon_port\x18\x0e \x01(\x05BR\x82\xce\x18N\n" +
 	"\x11TOOLS_DAEMON_PORT\x12\vdaemon-port\x1a\x049190*&Daemon bidi-streaming gRPC listen portR\n" +
 	"daemonPort\x12j\n" +
@@ -172,16 +130,18 @@ const file_config_v1_gateway_config_proto_rawDesc = "" +
 	"\vHEALTH_PORT\x12\vhealth-port\x1a\x048080*#Health/readiness HTTP endpoint portR\n" +
 	"healthPort\x12h\n" +
 	"\fbind_address\x18\x10 \x01(\tBE\x82\xce\x18A\n" +
-	"\fBIND_ADDRESS\x12\fbind-address\x1a\a0.0.0.0*\x1aNetwork address to bind toR\vbindAddress\x12^\n" +
-	"\bdata_dir\x18\x11 \x01(\tBC\x82\xce\x18?\n" +
-	"\bDATA_DIR\x12\bdata-dir\x1a\x06./data*!Data directory for logs and certsR\adataDir\x12z\n" +
+	"\fBIND_ADDRESS\x12\fbind-address\x1a\a0.0.0.0*\x1aNetwork address to bind toR\vbindAddress\x12z\n" +
 	"\n" +
 	"pprof_addr\x18\x12 \x01(\tB[\x82\xce\x18W\n" +
 	"\n" +
 	"PPROF_ADDR\x12\n" +
-	"pprof-addr*=pprof debug server address host:port (unset: no pprof server)R\tpprofAddr\x12D\n" +
-	"\robservability\x182 \x01(\v2\x1e.config.v1.ObservabilityConfigR\robservability:\x1e\xca\xc1\x18\x1a\n" +
-	"\areliant\x12\x06server\x12\agatewayB8Z6github.com/reliant-labs/reliant/gen/config/v1;configv1b\x06proto3"
+	"pprof-addr*=pprof debug server address host:port (unset: no pprof server)R\tpprofAddr\x12\xaa\x01\n" +
+	"\x0epre_stop_delay\x18\x13 \x01(\v2\x19.google.protobuf.DurationBi\x82\xce\x18e\n" +
+	"\x0ePRE_STOP_DELAY\x1a\x025s*OHow long to keep serving after readiness flips at shutdown (negative: no pause)R\fpreStopDelay\x12\x98\x01\n" +
+	"\x10shutdown_timeout\x18\x14 \x01(\v2\x19.google.protobuf.DurationBR\x82\xce\x18N\n" +
+	"\x10SHUTDOWN_TIMEOUT\x1a\x0330s*5Budget for graceful shutdown after the pre-stop pauseR\x0fshutdownTimeout:\x1e\xca\xc1\x18\x1a\n" +
+	"\areliant\x12\x06server\x12\agatewayJ\x04\b\x01\x10\x02J\x04\b\n" +
+	"\x10\vJ\x04\b\v\x10\fJ\x04\b\f\x10\rJ\x04\b\r\x10\x0eJ\x04\b\x11\x10\x12J\x04\b2\x103R\rcontrol_planeR\bdatabaseR\x04natsR\x03tlsR\x05drainR\bdata_dirR\robservabilityB8Z6github.com/reliant-labs/reliant/gen/config/v1;configv1b\x06proto3"
 
 var (
 	file_config_v1_gateway_config_proto_rawDescOnce sync.Once
@@ -198,25 +158,16 @@ func file_config_v1_gateway_config_proto_rawDescGZIP() []byte {
 var file_config_v1_gateway_config_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
 var file_config_v1_gateway_config_proto_goTypes = []any{
 	(*GatewayConfig)(nil),       // 0: config.v1.GatewayConfig
-	(*ControlPlaneConfig)(nil),  // 1: config.v1.ControlPlaneConfig
-	(*DatabaseConfig)(nil),      // 2: config.v1.DatabaseConfig
-	(*NatsConfig)(nil),          // 3: config.v1.NatsConfig
-	(*ServerTLSConfig)(nil),     // 4: config.v1.ServerTLSConfig
-	(*DrainConfig)(nil),         // 5: config.v1.DrainConfig
-	(*ObservabilityConfig)(nil), // 6: config.v1.ObservabilityConfig
+	(*durationpb.Duration)(nil), // 1: google.protobuf.Duration
 }
 var file_config_v1_gateway_config_proto_depIdxs = []int32{
-	1, // 0: config.v1.GatewayConfig.control_plane:type_name -> config.v1.ControlPlaneConfig
-	2, // 1: config.v1.GatewayConfig.database:type_name -> config.v1.DatabaseConfig
-	3, // 2: config.v1.GatewayConfig.nats:type_name -> config.v1.NatsConfig
-	4, // 3: config.v1.GatewayConfig.tls:type_name -> config.v1.ServerTLSConfig
-	5, // 4: config.v1.GatewayConfig.drain:type_name -> config.v1.DrainConfig
-	6, // 5: config.v1.GatewayConfig.observability:type_name -> config.v1.ObservabilityConfig
-	6, // [6:6] is the sub-list for method output_type
-	6, // [6:6] is the sub-list for method input_type
-	6, // [6:6] is the sub-list for extension type_name
-	6, // [6:6] is the sub-list for extension extendee
-	0, // [0:6] is the sub-list for field type_name
+	1, // 0: config.v1.GatewayConfig.pre_stop_delay:type_name -> google.protobuf.Duration
+	1, // 1: config.v1.GatewayConfig.shutdown_timeout:type_name -> google.protobuf.Duration
+	2, // [2:2] is the sub-list for method output_type
+	2, // [2:2] is the sub-list for method input_type
+	2, // [2:2] is the sub-list for extension type_name
+	2, // [2:2] is the sub-list for extension extendee
+	0, // [0:2] is the sub-list for field type_name
 }
 
 func init() { file_config_v1_gateway_config_proto_init() }
@@ -224,9 +175,6 @@ func file_config_v1_gateway_config_proto_init() {
 	if File_config_v1_gateway_config_proto != nil {
 		return
 	}
-	file_config_v1_control_plane_config_proto_init()
-	file_config_v1_observability_config_proto_init()
-	file_config_v1_server_config_proto_init()
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

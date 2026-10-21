@@ -67,7 +67,7 @@ type Options struct {
 	// (db.DatabaseConfig.DirectURL); empty when DatabaseURL already is one.
 	DatabaseDirectURL string
 	// DatabasePool sizes the pool and bounds the waits on the database
-	// (the role config's DatabaseConfig).
+	// (the server roles' DatabaseConfig).
 	DatabasePool db.Pool
 	// DataDir is the directory for local data (logs, certs).
 	DataDir string
@@ -90,7 +90,7 @@ type Options struct {
 	Log logging.Settings
 
 	// ControlPlane is the control plane hosting this deployment; the zero
-	// value is self-hosted (the role config's ControlPlaneConfig).
+	// value is self-hosted (ServerProcessConfig's ControlPlaneConfig).
 	ControlPlane controlplane.Endpoint
 
 	// Observability is where this role exports telemetry and the

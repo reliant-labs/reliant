@@ -19,8 +19,8 @@ import (
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
-// serverRoleEnv is every variable the server roles read through the blocks
-// and leaves of ApiServerConfig, WorkerConfig and GatewayConfig besides the
+// serverRoleEnv is every variable the server roles read through
+// ServerProcessConfig, DatabaseConfig and their own role configs besides the
 // control plane, JWT and forge-API settings other tests own.
 var serverRoleEnv = []string{
 	"DATABASE_URL", "DATABASE_DIRECT_URL", "DATABASE_DRIVER",
@@ -353,8 +353,8 @@ func TestServerRoleDatabasePool(t *testing.T) {
 	}
 }
 
-// The migrate commands read the same database variables as the servers,
-// and run on the direct (session) URL when one is set.
+// The migrate commands load the servers' own DatabaseConfig, and run on the
+// direct (session) URL when one is set.
 func TestDBMigrateReadsTheServersDatabase(t *testing.T) {
 	isolateServerRoleEnv(t)
 	for _, sub := range []string{"up", "status", "force"} {
@@ -364,17 +364,17 @@ func TestDBMigrateReadsTheServersDatabase(t *testing.T) {
 	}
 	cmd, _, err := NewRootCmd().Find([]string{"db", "migrate", "up"})
 	require.NoError(t, err)
-	cfg, err := config.LoadDbMigrateUpConfig(cmd)
+	cfg, err := config.LoadDatabaseConfig(cmd)
 	require.NoError(t, err)
-	assert.Equal(t, testDatabaseURL, migrationURL(cfg.GetDatabase()))
+	assert.Equal(t, testDatabaseURL, migrationURL(cfg))
 
 	t.Setenv("DATABASE_DIRECT_URL", " postgres://reliant@db-direct.test/reliant ")
-	cfg, err = config.LoadDbMigrateUpConfig(cmd)
+	cfg, err = config.LoadDatabaseConfig(cmd)
 	require.NoError(t, err)
-	assert.Equal(t, "postgres://reliant@db-direct.test/reliant", migrationURL(cfg.GetDatabase()))
+	assert.Equal(t, "postgres://reliant@db-direct.test/reliant", migrationURL(cfg))
 
 	require.NoError(t, os.Unsetenv("DATABASE_URL"))
-	_, err = config.LoadDbMigrateStatusConfig(func() *cobra.Command {
+	_, err = config.LoadDatabaseConfig(func() *cobra.Command {
 		c, _, err := NewRootCmd().Find([]string{"db", "migrate", "status"})
 		require.NoError(t, err)
 		return c
@@ -409,7 +409,7 @@ func TestServerOAuthClientsAreAnEnvFamily(t *testing.T) {
 // is a typo, and the role refuses to start naming it instead of running with
 // the client silently missing.
 func TestServerOAuthClientTypoFailsBoot(t *testing.T) {
-	for _, role := range serverRoles[:2] { // api and worker compose IntegrationsConfig
+	for _, role := range serverRoles { // every role loads IntegrationsConfig (ServerProcessConfig)
 		t.Run(role.path[1], func(t *testing.T) {
 			isolateServerRoleEnv(t)
 			t.Setenv("RELIANT_OAUTH_X_CLIENT_SECERT", "oops")

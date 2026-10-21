@@ -90,7 +90,7 @@ type Config struct {
 	IntegrationCredentials httpaction.CredentialSource
 
 	// ControlPlaneURL is the control plane hosting this deployment, "" when it
-	// is self-hosted (the role config's ControlPlaneConfig). It decides which
+	// is self-hosted (ServerProcessConfig's ControlPlaneConfig). It decides which
 	// addresses a user-supplied model endpoint may resolve to.
 	ControlPlaneURL string
 	// WriteLedger records the action node's mutating integration calls, so an

@@ -147,7 +147,7 @@ func New(deps Deps) Service {
 }
 
 // Endpoint is how a server process reaches the control plane hosting its
-// deployment: the role config's ControlPlaneConfig
+// deployment: ServerProcessConfig's ControlPlaneConfig
 // (proto/config/v1/control_plane_config.proto), loaded once by the entrypoint
 // and handed down. The zero Endpoint is a self-hosted deployment, with no
 // control plane — never a localhost default, which would turn "not hosted"

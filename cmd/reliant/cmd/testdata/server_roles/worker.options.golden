@@ -1,0 +1,99 @@
+[
+  serverworker.Options {
+    DatabaseDriver: "postgres"
+    DatabaseURL: "postgres://reliant:pw@db.surface.test:5432/reliant"
+    DatabaseDirectURL: "postgres://reliant:pw@db-direct.surface.test:5432/reliant"
+    DatabasePool: db.Pool {
+      MaxOpenConns: 41
+      MaxIdleConns: 17
+      ConnectTimeout: 47s
+      SchemaWait: 2m3s
+    }
+    DataDir: "/surface/data"
+    TemporalHost: "temporal.surface.test"
+    TemporalPort: 7299
+    TemporalNamespace: "surface"
+    NATS: natsutil.Endpoint {
+      URL: "nats://nats.surface.test:4223"
+      User: "nats-user"
+      Password: "nats-pass"
+    }
+    StreamingDriver: "nats"
+    HealthPort: 18082
+    PreStopDelay: 11s
+    ShutdownTimeout: 43s
+    PprofPort: 16061
+    ControlPlane: controlplane.Endpoint {
+      URL: "http://cp.surface.test:8080"
+      InternalServiceSecret: "cp-secret"
+    }
+    Log: logging.Settings {
+      Level: "warn"
+      Format: "json"
+    }
+    PublicURL: "https://public.surface.test"
+    VaultKey: "v1:c3VyZmFjZS12YXVsdC1rZXktMzItYnl0ZXMtbG9uZyE="
+    Webhooks: webhook.RegistryConfig {
+      SlackSigningSecret: "slack-signing"
+      GitHubWebhookSecret: "gh-webhook"
+      OAuthClients: func(set=false)
+      PublicURL: "https://public.surface.test"
+      TestIntegrationSecret: "test-integration"
+    }
+    GitHubAppSlug: "surface-app"
+    GitHubBot: github.OurBot {
+      ID: 4242
+      Login: ""
+    }
+    Observability: observability.Settings {
+      Environment: "surface"
+      OTLPEndpoint: "http://otel.surface.test:4318"
+      OTLPEnabled: true
+      PrometheusEnabled: false
+    }
+    Sentry: telemetry.SentryConfig {
+      DSN: "https://key@o0.ingest.sentry.io/42"
+      Environment: "surface"
+      Release: ""
+      Debug: false
+      Enabled: true
+      TracesSampleRate: 0.25
+    }
+    Analytics: analytics.Settings {
+      Disabled: true
+    }
+    LLM: drivers.Settings {
+      StreamTimeouts: llm.StreamTimeouts {
+        Idle: 1m31s
+        ContentStall: 6m0s
+        Progress: 11m0s
+        MidBlock: 3m0s
+      }
+      ReliantBaseURL: "https://llm.surface.test"
+      VertexProject: "surface-project"
+      VertexLocation: "europe-west4"
+      DebugOpenAIResponsesInput: true
+      DebugOpenAIToolSchemas: true
+    }
+    Preview: tools.PreviewSettings {
+      ProxyHost: "proxy.surface.test"
+      WorkspaceBaseDomain: "ws.surface.test"
+      WorkspaceURLScheme: "http"
+      WorkspaceURLPort: 8443
+    }
+  }
+  {
+    github: [
+      "gh-client"
+      "gh-secret"
+    ]
+    gmail: [
+      ""
+      ""
+    ]
+    slack: [
+      "slack-client"
+      ""
+    ]
+  }
+]

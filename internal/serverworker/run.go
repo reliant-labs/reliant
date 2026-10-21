@@ -67,7 +67,7 @@ type Options struct {
 	// (db.DatabaseConfig.DirectURL); empty when DatabaseURL already is one.
 	DatabaseDirectURL string
 	// DatabasePool sizes the pool and bounds the waits on the database
-	// (the role config's DatabaseConfig).
+	// (the server roles' DatabaseConfig).
 	DatabasePool db.Pool
 	DataDir      string
 
@@ -93,7 +93,7 @@ type Options struct {
 	PprofPort int
 
 	// ControlPlane is the control plane hosting this deployment; the zero
-	// value is self-hosted (the role config's ControlPlaneConfig).
+	// value is self-hosted (ServerProcessConfig's ControlPlaneConfig).
 	ControlPlane controlplane.Endpoint
 
 	// Log is the configured log level and format (the root config's
@@ -144,7 +144,7 @@ func Run(ctx context.Context, opts Options) error {
 		return fmt.Errorf("NATS_URL is required (tool routing and streaming go through NATS)")
 	}
 
-	// The readiness gate and rollout drain budget, from the role's DrainConfig.
+	// The readiness gate and rollout drain budget, from the role config's PRE_STOP_DELAY and SHUTDOWN_TIMEOUT.
 	// The budget is what bounds the Temporal worker's Stop, and that is the
 	// part that has to fit inside the pod's grace period (control-plane states
 	// 60s for the worker; the default 5s + 30s fits). Nothing routes to the

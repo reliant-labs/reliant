@@ -42,7 +42,7 @@ var controlPlaneRoles = map[string]func(*cobra.Command) (controlplane.Endpoint, 
 }
 
 // TestControlPlaneEnvContract pins that every server role reads the control
-// plane through its role config exactly as the six hand-written readers did:
+// plane through ServerProcessConfig exactly as the six hand-written readers did:
 // RELIANT_CONTROL_PLANE_URL, else CONTROL_PLANE_API_URL, else
 // CONTROL_PLANE_BASE_URL (an empty one is unset), and INTERNAL_SERVICE_SECRET,
 // each trimmed. control-plane sets RELIANT_CONTROL_PLANE_URL on the api, the

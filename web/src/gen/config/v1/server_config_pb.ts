@@ -5,85 +5,116 @@
 
 import type { GenFile, GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
+import type { AnalyticsConfig } from "./analytics_config_pb";
+import { file_config_v1_analytics_config } from "./analytics_config_pb";
+import type { ControlPlaneConfig } from "./control_plane_config_pb";
+import { file_config_v1_control_plane_config } from "./control_plane_config_pb";
+import type { IntegrationsConfig } from "./integrations_config_pb";
+import { file_config_v1_integrations_config } from "./integrations_config_pb";
+import type { LLMConfig } from "./llm_config_pb";
+import { file_config_v1_llm_config } from "./llm_config_pb";
+import type { ObservabilityConfig, SentryConfig } from "./observability_config_pb";
+import { file_config_v1_observability_config } from "./observability_config_pb";
+import type { PreviewConfig } from "./preview_config_pb";
+import { file_config_v1_preview_config } from "./preview_config_pb";
 import { file_forge_v1_forge } from "../../forge/v1/forge_pb";
-import type { Duration } from "@bufbuild/protobuf/wkt";
-import { file_google_protobuf_duration } from "@bufbuild/protobuf/wkt";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
  * Describes the file config/v1/server_config.proto.
  */
 export const file_config_v1_server_config: GenFile = /*@__PURE__*/
-  fileDesc("Ch1jb25maWcvdjEvc2VydmVyX2NvbmZpZy5wcm90bxIJY29uZmlnLnYxIpAGCg5EYXRhYmFzZUNvbmZpZxI8CgN1cmwYASABKAlCL4LOGCsKDERBVEFCQVNFX1VSTCABKhdQb3N0Z3JlcyBjb25uZWN0aW9uIFVSTDABEpIBCgpkaXJlY3RfdXJsGAIgASgJQn6Czhh6ChNEQVRBQkFTRV9ESVJFQ1RfVVJMKl9TZXNzaW9uLWNhcGFibGUgUG9zdGdyZXMgVVJMIGZvciBzZXNzaW9uLXNjb3BlZCB3b3JrLCB3aGVuIERBVEFCQVNFX1VSTCBpcyBhIHRyYW5zYWN0aW9uIHBvb2xlcjABUAESYAoGZHJpdmVyGAMgASgJQlCCzhhMCg9EQVRBQkFTRV9EUklWRVISCWRiLWRyaXZlchoIcG9zdGdyZXMqGkRhdGFiYXNlIGRyaXZlciAocG9zdGdyZXMpSghwb3N0Z3JlcxJbCg5tYXhfb3Blbl9jb25ucxgEIAEoBUJDgs4YPwoZUkVMSUFOVF9EQl9NQVhfT1BFTl9DT05OUxoCMjUqHk1vc3Qgb3BlbiBkYXRhYmFzZSBjb25uZWN0aW9ucxJlCg5tYXhfaWRsZV9jb25ucxgFIAEoBUJNgs4YSQoZUkVMSUFOVF9EQl9NQVhfSURMRV9DT05OUxoCMTAqKE1vc3QgaWRsZSBkYXRhYmFzZSBjb25uZWN0aW9ucyBrZXB0IG9wZW4SjQEKD2Nvbm5lY3RfdGltZW91dBgGIAEoCzIZLmdvb2dsZS5wcm90b2J1Zi5EdXJhdGlvbkJZgs4YVQoSREJfQ09OTkVDVF9USU1FT1VUKj9Ib3cgbG9uZyB0aGUgc3RhcnR1cCBwaW5nIHJldHJpZXMgYSBkYXRhYmFzZSB0aGF0IGlzIG5vdCB1cCB5ZXQSdQoTc2NoZW1hX3dhaXRfc2Vjb25kcxgHIAEoBUJYgs4YVAoeUkVMSUFOVF9EQl9TQ0hFTUFfV0FJVF9TRUNPTkRTGgMzMDAqLVNlY29uZHMgdG8gd2FpdCBmb3IgdGhlIHNjaGVtYSB0byBiZSBtaWdyYXRlZCLXAQoKTmF0c0NvbmZpZxIwCgN1cmwYASABKAlCI4LOGB8KCE5BVFNfVVJMIAEqD05BVFMgc2VydmVyIFVSTDABEkcKBHVzZXIYAiABKAlCOYLOGDUKCU5BVFNfVVNFUiooTkFUUyB1c2VyIG5hbWUgKHVzZWQgd2l0aCBOQVRTX1BBU1NXT1JEKRJOCghwYXNzd29yZBgDIAEoCUI8gs4YOAoNTkFUU19QQVNTV09SRCojTkFUUyBwYXNzd29yZCAodXNlZCB3aXRoIE5BVFNfVVNFUikwAVABIo8CCg5UZW1wb3JhbENvbmZpZxJRCgRob3N0GAEgASgJQkOCzhg/Cg1URU1QT1JBTF9IT1NUEg10ZW1wb3JhbC1ob3N0Gglsb2NhbGhvc3QqFFRlbXBvcmFsIHNlcnZlciBob3N0EkwKBHBvcnQYAiABKAVCPoLOGDoKDVRFTVBPUkFMX1BPUlQSDXRlbXBvcmFsLXBvcnQaBDcyMzMqFFRlbXBvcmFsIHNlcnZlciBwb3J0ElwKCW5hbWVzcGFjZRgDIAEoCUJJgs4YRQoSVEVNUE9SQUxfTkFNRVNQQUNFEhJ0ZW1wb3JhbC1uYW1lc3BhY2UaB3JlbGlhbnQqElRlbXBvcmFsIG5hbWVzcGFjZSLzAQoPU2VydmVyVExTQ29uZmlnEksKCWNlcnRfZmlsZRgBIAEoCUI4gs4YNAoNVExTX0NFUlRfRklMRRIIdGxzLWNlcnQqGVRMUyBjZXJ0aWZpY2F0ZSBmaWxlIHBhdGgSQAoIa2V5X2ZpbGUYAiABKAlCLoLOGCoKDFRMU19LRVlfRklMRRIHdGxzLWtleSoRVExTIGtleSBmaWxlIHBhdGgSUQoHZGlzYWJsZRgDIAEoCEJAgs4YPAoLRElTQUJMRV9UTFMSC2Rpc2FibGUtdGxzKiBEaXNhYmxlIFRMUyAodXNlIHBsYWludGV4dCBIVFRQKSK2AgoLRHJhaW5Db25maWcSnAEKDnByZV9zdG9wX2RlbGF5GAEgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uQmmCzhhlCg5QUkVfU1RPUF9ERUxBWRoCNXMqT0hvdyBsb25nIHRvIGtlZXAgc2VydmluZyBhZnRlciByZWFkaW5lc3MgZmxpcHMgYXQgc2h1dGRvd24gKG5lZ2F0aXZlOiBubyBwYXVzZSkShwEKEHNodXRkb3duX3RpbWVvdXQYAiABKAsyGS5nb29nbGUucHJvdG9idWYuRHVyYXRpb25CUoLOGE4KEFNIVVRET1dOX1RJTUVPVVQaAzMwcyo1QnVkZ2V0IGZvciBncmFjZWZ1bCBzaHV0ZG93biBhZnRlciB0aGUgcHJlLXN0b3AgcGF1c2VCOFo2Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vY29uZmlnL3YxO2NvbmZpZ3YxYgZwcm90bzM", [file_forge_v1_forge, file_google_protobuf_duration]);
+  fileDesc("Ch1jb25maWcvdjEvc2VydmVyX2NvbmZpZy5wcm90bxIJY29uZmlnLnYxIrEFChNTZXJ2ZXJQcm9jZXNzQ29uZmlnEjQKDWNvbnRyb2xfcGxhbmUYASABKAsyHS5jb25maWcudjEuQ29udHJvbFBsYW5lQ29uZmlnEiMKBG5hdHMYAiABKAsyFS5jb25maWcudjEuTmF0c0NvbmZpZxIrCgh0ZW1wb3JhbBgDIAEoCzIZLmNvbmZpZy52MS5UZW1wb3JhbENvbmZpZxInCgN0bHMYBCABKAsyGi5jb25maWcudjEuU2VydmVyVExTQ29uZmlnElUKCGRhdGFfZGlyGAUgASgJQkOCzhg/CghEQVRBX0RJUhIIZGF0YS1kaXIaBi4vZGF0YSohRGF0YSBkaXJlY3RvcnkgZm9yIGxvZ3MgYW5kIGNlcnRzEmcKEHN0cmVhbWluZ19kcml2ZXIYBiABKAlCTYLOGEkKEFNUUkVBTUlOR19EUklWRVISEHN0cmVhbWluZy1kcml2ZXIaBG5hdHMqF1N0cmVhbWluZyBkcml2ZXIgKG5hdHMpSgRuYXRzEjMKDGludGVncmF0aW9ucxgHIAEoCzIdLmNvbmZpZy52MS5JbnRlZ3JhdGlvbnNDb25maWcSNQoNb2JzZXJ2YWJpbGl0eRgIIAEoCzIeLmNvbmZpZy52MS5PYnNlcnZhYmlsaXR5Q29uZmlnEicKBnNlbnRyeRgJIAEoCzIXLmNvbmZpZy52MS5TZW50cnlDb25maWcSLQoJYW5hbHl0aWNzGAogASgLMhouY29uZmlnLnYxLkFuYWx5dGljc0NvbmZpZxIhCgNsbG0YCyABKAsyFC5jb25maWcudjEuTExNQ29uZmlnEikKB3ByZXZpZXcYDCABKAsyGC5jb25maWcudjEuUHJldmlld0NvbmZpZzoXysEYEwoHcmVsaWFudBoICgZzZXJ2ZXIi1wEKCk5hdHNDb25maWcSMAoDdXJsGAEgASgJQiOCzhgfCghOQVRTX1VSTCABKg9OQVRTIHNlcnZlciBVUkwwARJHCgR1c2VyGAIgASgJQjmCzhg1CglOQVRTX1VTRVIqKE5BVFMgdXNlciBuYW1lICh1c2VkIHdpdGggTkFUU19QQVNTV09SRCkSTgoIcGFzc3dvcmQYAyABKAlCPILOGDgKDU5BVFNfUEFTU1dPUkQqI05BVFMgcGFzc3dvcmQgKHVzZWQgd2l0aCBOQVRTX1VTRVIpMAFQASKPAgoOVGVtcG9yYWxDb25maWcSUQoEaG9zdBgBIAEoCUJDgs4YPwoNVEVNUE9SQUxfSE9TVBINdGVtcG9yYWwtaG9zdBoJbG9jYWxob3N0KhRUZW1wb3JhbCBzZXJ2ZXIgaG9zdBJMCgRwb3J0GAIgASgFQj6Czhg6Cg1URU1QT1JBTF9QT1JUEg10ZW1wb3JhbC1wb3J0GgQ3MjMzKhRUZW1wb3JhbCBzZXJ2ZXIgcG9ydBJcCgluYW1lc3BhY2UYAyABKAlCSYLOGEUKElRFTVBPUkFMX05BTUVTUEFDRRISdGVtcG9yYWwtbmFtZXNwYWNlGgdyZWxpYW50KhJUZW1wb3JhbCBuYW1lc3BhY2Ui8wEKD1NlcnZlclRMU0NvbmZpZxJLCgljZXJ0X2ZpbGUYASABKAlCOILOGDQKDVRMU19DRVJUX0ZJTEUSCHRscy1jZXJ0KhlUTFMgY2VydGlmaWNhdGUgZmlsZSBwYXRoEkAKCGtleV9maWxlGAIgASgJQi6CzhgqCgxUTFNfS0VZX0ZJTEUSB3Rscy1rZXkqEVRMUyBrZXkgZmlsZSBwYXRoElEKB2Rpc2FibGUYAyABKAhCQILOGDwKC0RJU0FCTEVfVExTEgtkaXNhYmxlLXRscyogRGlzYWJsZSBUTFMgKHVzZSBwbGFpbnRleHQgSFRUUClCOFo2Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vY29uZmlnL3YxO2NvbmZpZ3YxYgZwcm90bzM", [file_config_v1_analytics_config, file_config_v1_control_plane_config, file_config_v1_integrations_config, file_config_v1_llm_config, file_config_v1_observability_config, file_config_v1_preview_config, file_forge_v1_forge]);
 
 /**
- * DatabaseConfig is the Postgres a process connects to (each server role, and
- * the `reliant db migrate` commands), and how it sizes its pool and waits on
- * it.
+ * ServerProcessConfig is what every server role (`reliant server
+ * api|worker|gateway`) reads the same way: the infrastructure it connects to
+ * and the outside world it reports to. It is a SUBTREE config over `server`,
+ * so all three roles load ONE declaration of it, and a component they share
+ * (the repo, the NATS connection, the control-plane endpoint) has one
+ * constructor reading one config in every role, rather than each role's copy
+ * of the same block. Its flags are persistent on `server`.
  *
- * @generated from message config.v1.DatabaseConfig
+ * A role's own knobs stay on its command config (api_server_config.proto,
+ * worker_config.proto, gateway_config.proto): its ports, including
+ * HEALTH_PORT, whose default differs per role; its bind address and pprof
+ * listener; and its drain budget, which may differ per role. The database a
+ * role connects to is DatabaseConfig (db_config.proto), a subtree config of
+ * its own because `reliant db migrate` loads it too. The rules every config
+ * here follows are in config.proto's header.
+ *
+ * @generated from message config.v1.ServerProcessConfig
  */
-export type DatabaseConfig = Message<"config.v1.DatabaseConfig"> & {
+export type ServerProcessConfig = Message<"config.v1.ServerProcessConfig"> & {
   /**
-   * The connection URL. A secret: it carries the password, so it has no flag
-   * (a flag's value is in the shell history and in `ps`).
-   *
-   * @generated from field: string url = 1;
+   * @generated from field: config.v1.ControlPlaneConfig control_plane = 1;
    */
-  url: string;
+  controlPlane?: ControlPlaneConfig | undefined;
 
   /**
-   * A session-capable URL for the same database, for session-scoped work
-   * (advisory locks, migrations): set it when url is a transaction-pooling
-   * PgBouncer. Unset: url already has session semantics.
-   *
-   * @generated from field: string direct_url = 2;
+   * @generated from field: config.v1.NatsConfig nats = 2;
    */
-  directUrl: string;
+  nats?: NatsConfig | undefined;
 
   /**
-   * The only driver is postgres; the knob remains because deployments set it.
-   *
-   * @generated from field: string driver = 3;
+   * @generated from field: config.v1.TemporalConfig temporal = 3;
    */
-  driver: string;
+  temporal?: TemporalConfig | undefined;
 
   /**
-   * The connection pool's size. Dev caps both low: its Postgres is shared by
-   * every parallel stack on the machine.
-   *
-   * @generated from field: int32 max_open_conns = 4;
+   * @generated from field: config.v1.ServerTLSConfig tls = 4;
    */
-  maxOpenConns: number;
+  tls?: ServerTLSConfig | undefined;
 
   /**
-   * @generated from field: int32 max_idle_conns = 5;
+   * @generated from field: string data_dir = 5;
    */
-  maxIdleConns: number;
+  dataDir: string;
 
   /**
-   * How long the startup ping keeps retrying a database that is not up yet.
-   * It must stay inside the deployment's startup probe window. Unset:
-   * forge serverkit's default.
+   * How live deltas fan out across replicas. nats is the only driver; the
+   * knob remains because deployments set it.
    *
-   * @generated from field: google.protobuf.Duration connect_timeout = 6;
+   * @generated from field: string streaming_driver = 6;
    */
-  connectTimeout?: Duration | undefined;
+  streamingDriver: string;
 
   /**
-   * How long a process that waits for the schema (the worker, the gateway)
-   * waits for the API server or `reliant db migrate up` to apply it.
-   *
-   * @generated from field: int32 schema_wait_seconds = 7;
+   * @generated from field: config.v1.IntegrationsConfig integrations = 7;
    */
-  schemaWaitSeconds: number;
+  integrations?: IntegrationsConfig | undefined;
+
+  /**
+   * @generated from field: config.v1.ObservabilityConfig observability = 8;
+   */
+  observability?: ObservabilityConfig | undefined;
+
+  /**
+   * @generated from field: config.v1.SentryConfig sentry = 9;
+   */
+  sentry?: SentryConfig | undefined;
+
+  /**
+   * @generated from field: config.v1.AnalyticsConfig analytics = 10;
+   */
+  analytics?: AnalyticsConfig | undefined;
+
+  /**
+   * @generated from field: config.v1.LLMConfig llm = 11;
+   */
+  llm?: LLMConfig | undefined;
+
+  /**
+   * @generated from field: config.v1.PreviewConfig preview = 12;
+   */
+  preview?: PreviewConfig | undefined;
 };
 
 /**
- * Describes the message config.v1.DatabaseConfig.
- * Use `create(DatabaseConfigSchema)` to create a new message.
+ * Describes the message config.v1.ServerProcessConfig.
+ * Use `create(ServerProcessConfigSchema)` to create a new message.
  */
-export const DatabaseConfigSchema: GenMessage<DatabaseConfig> = /*@__PURE__*/
+export const ServerProcessConfigSchema: GenMessage<ServerProcessConfig> = /*@__PURE__*/
   messageDesc(file_config_v1_server_config, 0);
 
 /**
@@ -152,7 +183,11 @@ export const TemporalConfigSchema: GenMessage<TemporalConfig> = /*@__PURE__*/
 
 /**
  * ServerTLSConfig is how a server role that terminates TLS itself (the API
- * server, the daemon gateway) serves it.
+ * server, the daemon gateway) serves it: on its own listeners, never on the
+ * plaintext health port. It keeps its own names rather than forge's
+ * tls_cert_path / tls_key_path, which forge's serve policy applies to the
+ * probe address — reliant's HEALTH_PORT, which must stay plaintext for the
+ * kubelet and the load balancer's HTTP health checks.
  *
  * @generated from message config.v1.ServerTLSConfig
  */
@@ -179,39 +214,4 @@ export type ServerTLSConfig = Message<"config.v1.ServerTLSConfig"> & {
  */
 export const ServerTLSConfigSchema: GenMessage<ServerTLSConfig> = /*@__PURE__*/
   messageDesc(file_config_v1_server_config, 3);
-
-/**
- * DrainConfig is a server's rollout drain budget. control-plane sets both on
- * every server workload, and forge derives the pod's
- * terminationGracePeriodSeconds from them, so a process that ignores them
- * cannot stay inside the grace period it was given. Both follow the rule
- * forge's grace-period arithmetic applies to them (pkg/deploy drainSeconds):
- * zero is the default and negative is none. Both are Go durations ("30s"); a
- * bare number stops the server at load.
- *
- * @generated from message config.v1.DrainConfig
- */
-export type DrainConfig = Message<"config.v1.DrainConfig"> & {
-  /**
-   * How long the process keeps serving after readiness flips, so load
-   * balancers see the failing probe first. Negative is no pause.
-   *
-   * @generated from field: google.protobuf.Duration pre_stop_delay = 1;
-   */
-  preStopDelay?: Duration | undefined;
-
-  /**
-   * Bounds everything after the pre-stop pause.
-   *
-   * @generated from field: google.protobuf.Duration shutdown_timeout = 2;
-   */
-  shutdownTimeout?: Duration | undefined;
-};
-
-/**
- * Describes the message config.v1.DrainConfig.
- * Use `create(DrainConfigSchema)` to create a new message.
- */
-export const DrainConfigSchema: GenMessage<DrainConfig> = /*@__PURE__*/
-  messageDesc(file_config_v1_server_config, 4);
 

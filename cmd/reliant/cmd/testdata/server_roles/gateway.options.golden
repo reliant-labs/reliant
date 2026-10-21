@@ -1,0 +1,40 @@
+servergateway.Options {
+  ToolsDaemonPort: 19191
+  HealthPort: 18082
+  PreStopDelay: 11s
+  ShutdownTimeout: 43s
+  BindAddress: "127.0.0.2"
+  DatabaseDriver: "postgres"
+  DatabaseURL: "postgres://reliant:pw@db.surface.test:5432/reliant"
+  DatabaseDirectURL: "postgres://reliant:pw@db-direct.surface.test:5432/reliant"
+  DatabasePool: db.Pool {
+    MaxOpenConns: 41
+    MaxIdleConns: 17
+    ConnectTimeout: 47s
+    SchemaWait: 2m3s
+  }
+  DataDir: "/surface/data"
+  NATS: natsutil.Endpoint {
+    URL: "nats://nats.surface.test:4223"
+    User: "nats-user"
+    Password: "nats-pass"
+  }
+  PprofAddr: "127.0.0.1:16062"
+  TLSCertFile: "/tls/surface.crt"
+  TLSKeyFile: "/tls/surface.key"
+  DisableTLS: true
+  Log: logging.Settings {
+    Level: "warn"
+    Format: "json"
+  }
+  ControlPlane: controlplane.Endpoint {
+    URL: "http://cp.surface.test:8080"
+    InternalServiceSecret: "cp-secret"
+  }
+  Observability: observability.Settings {
+    Environment: "surface"
+    OTLPEndpoint: "http://otel.surface.test:4318"
+    OTLPEnabled: true
+    PrometheusEnabled: false
+  }
+}

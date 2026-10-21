@@ -767,6 +767,12 @@ reliant db migrate
 | [`status`](#reliant-db-migrate-status) | Preview what `db migrate up` would do, changing nothing |
 | [`up`](#reliant-db-migrate-up) | Apply every pending migration |
 
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--db-driver` | `string` | `postgres` | Database driver (postgres) [env: DATABASE_DRIVER] |
+
 ---
 
 #### reliant db migrate force
@@ -785,14 +791,8 @@ means no version applied. Never force the baseline onto a database: that
 records it without checking that the schema is the one it builds.
 
 ```
-reliant db migrate force <version> [flags]
+reliant db migrate force <version>
 ```
-
-**Flags:**
-
-| Flag | Type | Default | Description |
-|------|------|---------|-------------|
-| `--db-driver` | `string` | `postgres` | Database driver (postgres) [env: DATABASE_DRIVER] |
 
 ---
 
@@ -813,14 +813,8 @@ It is the pre-flight for a database we keep, and stays usable to diagnose the
 very deadlock the schema wait produces.
 
 ```
-reliant db migrate status [flags]
+reliant db migrate status
 ```
-
-**Flags:**
-
-| Flag | Type | Default | Description |
-|------|------|---------|-------------|
-| `--db-driver` | `string` | `postgres` | Database driver (postgres) [env: DATABASE_DRIVER] |
 
 ---
 
@@ -841,14 +835,8 @@ itself, then adopted. A goose history the baseline does not describe is
 refused with nothing applied. `db migrate status` previews which.
 
 ```
-reliant db migrate up [flags]
+reliant db migrate up
 ```
-
-**Flags:**
-
-| Flag | Type | Default | Description |
-|------|------|---------|-------------|
-| `--db-driver` | `string` | `postgres` | Database driver (postgres) [env: DATABASE_DRIVER] |
 
 ---
 
@@ -9110,6 +9098,20 @@ reliant server
 | [`gateway`](#reliant-server-gateway) | Run the daemon connection gateway |
 | [`worker`](#reliant-server-worker) | Run the Temporal workflow worker |
 
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--data-dir` | `string` | `./data` | Data directory for logs and certs [env: DATA_DIR] |
+| `--db-driver` | `string` | `postgres` | Database driver (postgres) [env: DATABASE_DRIVER] |
+| `--disable-tls` | `bool` | - | Disable TLS (use plaintext HTTP) [env: DISABLE_TLS] |
+| `--streaming-driver` | `string` | `nats` | Streaming driver (nats) [env: STREAMING_DRIVER] |
+| `--temporal-host` | `string` | `localhost` | Temporal server host [env: TEMPORAL_HOST] |
+| `--temporal-namespace` | `string` | `reliant` | Temporal namespace [env: TEMPORAL_NAMESPACE] |
+| `--temporal-port` | `int32` | `7233` | Temporal server port [env: TEMPORAL_PORT] |
+| `--tls-cert` | `string` | - | TLS certificate file path [env: TLS_CERT_FILE] |
+| `--tls-key` | `string` | - | TLS key file path [env: TLS_KEY_FILE] |
+
 ---
 
 ### reliant server api
@@ -9132,21 +9134,12 @@ reliant server api [flags]
 |------|------|---------|-------------|
 | `--bind-address` | `string` | `0.0.0.0` | Network address to bind to [env: BIND_ADDRESS] |
 | `--cors-origins` | `string` | `*` | Comma-separated CORS allowed origins, or * for all [env: CORS_ALLOWED_ORIGINS] |
-| `--data-dir` | `string` | `./data` | Data directory for logs and certs [env: DATA_DIR] |
-| `--db-driver` | `string` | `postgres` | Database driver (postgres) [env: DATABASE_DRIVER] |
-| `--disable-tls` | `bool` | - | Disable TLS (use plaintext HTTP) [env: DISABLE_TLS] |
 | `--grpc-port` | `int32` | `9090` | gRPC/ConnectRPC listen port [env: GRPC_PORT] |
 | `--health-port` | `int32` | `8081` | Health/readiness HTTP endpoint port [env: HEALTH_PORT] |
 | `--jwks-url` | `string` | - | JWKS endpoint URL for JWT validation (alternative to PEM key) [env: RELIANT_JWKS_URL] |
 | `--jwt-public-key` | `string` | - | JWT public key PEM for token validation [env: JWT_PUBLIC_KEY] |
 | `--jwt-public-key-file` | `string` | - | Path to JWT public key PEM file [env: JWT_PUBLIC_KEY_FILE] |
 | `--pprof-port` | `int32` | `6060` | pprof debug server port [env: PPROF_PORT] |
-| `--streaming-driver` | `string` | `nats` | Streaming driver (nats) [env: STREAMING_DRIVER] |
-| `--temporal-host` | `string` | `localhost` | Temporal server host [env: TEMPORAL_HOST] |
-| `--temporal-namespace` | `string` | `reliant` | Temporal namespace [env: TEMPORAL_NAMESPACE] |
-| `--temporal-port` | `int32` | `7233` | Temporal server port [env: TEMPORAL_PORT] |
-| `--tls-cert` | `string` | - | TLS certificate file path [env: TLS_CERT_FILE] |
-| `--tls-key` | `string` | - | TLS key file path [env: TLS_KEY_FILE] |
 
 ---
 
@@ -9170,13 +9163,8 @@ reliant server gateway [flags]
 |------|------|---------|-------------|
 | `--bind-address` | `string` | `0.0.0.0` | Network address to bind to [env: BIND_ADDRESS] |
 | `--daemon-port` | `int32` | `9190` | Daemon bidi-streaming gRPC listen port [env: TOOLS_DAEMON_PORT] |
-| `--data-dir` | `string` | `./data` | Data directory for logs and certs [env: DATA_DIR] |
-| `--db-driver` | `string` | `postgres` | Database driver (postgres) [env: DATABASE_DRIVER] |
-| `--disable-tls` | `bool` | - | Disable TLS (use plaintext HTTP) [env: DISABLE_TLS] |
 | `--health-port` | `int32` | `8080` | Health/readiness HTTP endpoint port [env: HEALTH_PORT] |
 | `--pprof-addr` | `string` | - | pprof debug server address host:port (unset: no pprof server) [env: PPROF_ADDR] |
-| `--tls-cert` | `string` | - | TLS certificate file path [env: TLS_CERT_FILE] |
-| `--tls-key` | `string` | - | TLS key file path [env: TLS_KEY_FILE] |
 
 ---
 
@@ -9198,14 +9186,8 @@ reliant server worker [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `--data-dir` | `string` | `./data` | Data directory for logs [env: DATA_DIR] |
-| `--db-driver` | `string` | `postgres` | Database driver (postgres) [env: DATABASE_DRIVER] |
 | `--health-port` | `int32` | `8081` | Health check endpoint port [env: HEALTH_PORT] |
 | `--pprof-port` | `int32` | `6060` | pprof debug server port (binds 127.0.0.1 only) [env: PPROF_PORT] |
-| `--streaming-driver` | `string` | `nats` | Streaming driver (nats) [env: STREAMING_DRIVER] |
-| `--temporal-host` | `string` | `localhost` | Temporal server host [env: TEMPORAL_HOST] |
-| `--temporal-namespace` | `string` | `reliant` | Temporal namespace [env: TEMPORAL_NAMESPACE] |
-| `--temporal-port` | `int32` | `7233` | Temporal server port [env: TEMPORAL_PORT] |
 
 ---
 

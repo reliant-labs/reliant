@@ -2,32 +2,26 @@ syntax = "proto3";
 
 package config.v1;
 
-import "config/v1/analytics_config.proto";
-import "config/v1/control_plane_config.proto";
-import "config/v1/integrations_config.proto";
-import "config/v1/llm_config.proto";
-import "config/v1/observability_config.proto";
-import "config/v1/preview_config.proto";
-import "config/v1/server_config.proto";
 import "forge/v1/forge.proto";
+import "google/protobuf/duration.proto";
 
 option go_package = "github.com/reliant-labs/reliant/gen/config/v1;configv1";
 
 // WorkerConfig is the `reliant server worker` process's own config. It loads
-// alongside the root ReliantConfig (config.proto, whose header has the rules
-// every config here follows).
+// alongside the root ReliantConfig and the `server` subtree configs,
+// ServerProcessConfig and DatabaseConfig (config.proto, whose header has the
+// rules every config here follows).
 message WorkerConfig {
   option (forge.v1.binary_config) = {
     binary: "reliant"
     command: ["server", "worker"]
   };
 
-  ControlPlaneConfig control_plane = 1;
-
-  DatabaseConfig database = 10;
-  NatsConfig nats = 11;
-  TemporalConfig temporal = 12;
-  DrainConfig drain = 13;
+  // The blocks every server role shares moved to ServerProcessConfig and
+  // DatabaseConfig.
+  reserved 1, 10, 11, 12, 13, 16, 17, 40, 50, 51, 60, 70, 90;
+  reserved "control_plane", "database", "nats", "temporal", "drain", "data_dir", "streaming_driver",
+    "integrations", "observability", "sentry", "analytics", "llm", "preview";
 
   int32 health_port = 14 [(forge.v1.config) = {
     env_var: "HEALTH_PORT"
@@ -41,23 +35,17 @@ message WorkerConfig {
     default_value: "6060"
     description: "pprof debug server port (binds 127.0.0.1 only)"
   }];
-  string data_dir = 16 [(forge.v1.config) = {
-    env_var: "DATA_DIR"
-    flag: "data-dir"
-    default_value: "./data"
-    description: "Data directory for logs"
+
+  // The rollout drain budget, read as ApiServerConfig's is (its comment has
+  // the rules). Each role declares its own, so one role's may differ.
+  google.protobuf.Duration pre_stop_delay = 18 [(forge.v1.config) = {
+    env_var: "PRE_STOP_DELAY"
+    default_value: "5s"
+    description: "How long to keep serving after readiness flips at shutdown (negative: no pause)"
   }];
-  string streaming_driver = 17 [(forge.v1.config) = {
-    env_var: "STREAMING_DRIVER"
-    flag: "streaming-driver"
-    default_value: "nats"
-    allowed_values: ["nats"]
-    description: "Streaming driver (nats)"
+  google.protobuf.Duration shutdown_timeout = 19 [(forge.v1.config) = {
+    env_var: "SHUTDOWN_TIMEOUT"
+    default_value: "30s"
+    description: "Budget for graceful shutdown after the pre-stop pause"
   }];
-  IntegrationsConfig integrations = 40;
-  ObservabilityConfig observability = 50;
-  SentryConfig sentry = 51;
-  AnalyticsConfig analytics = 60;
-  LLMConfig llm = 70;
-  PreviewConfig preview = 90;
 }

@@ -37114,819 +37114,6 @@
       "Line": 14
     },
     {
-      "Name": "ControlPlaneConfig",
-      "Fields": [
-        {
-          "Name": "url",
-          "GoName": "Url",
-          "GoType": "string",
-          "ProtoType": "string",
-          "EnvVar": "RELIANT_CONTROL_PLANE_URL",
-          "Flag": "",
-          "DefaultValue": "",
-          "Required": false,
-          "Description": "Control-plane base URL; unset means self-hosted",
-          "Sensitive": false,
-          "Category": "",
-          "ProtoFile": "config/v1/control_plane_config.proto",
-          "EnvVarAliases": [
-            {
-              "Name": "CONTROL_PLANE_API_URL",
-              "Deprecated": true
-            },
-            {
-              "Name": "CONTROL_PLANE_BASE_URL",
-              "Deprecated": true
-            }
-          ]
-        },
-        {
-          "Name": "internal_service_secret",
-          "GoName": "InternalServiceSecret",
-          "GoType": "string",
-          "ProtoType": "string",
-          "EnvVar": "INTERNAL_SERVICE_SECRET",
-          "Flag": "",
-          "DefaultValue": "",
-          "Required": false,
-          "Description": "Secret for internal-service calls to the control plane (required when url is set)",
-          "Sensitive": true,
-          "Category": "",
-          "Optional": true,
-          "ProtoFile": "config/v1/control_plane_config.proto"
-        }
-      ],
-      "ProtoFile": "config/v1/control_plane_config.proto",
-      "Line": 18
-    },
-    {
-      "Name": "IntegrationsConfig",
-      "Fields": [
-        {
-          "Name": "public_url",
-          "GoName": "PublicUrl",
-          "GoType": "string",
-          "ProtoType": "string",
-          "EnvVar": "PUBLIC_URL",
-          "Flag": "",
-          "DefaultValue": "",
-          "Required": false,
-          "Description": "Externally reachable base URL of this deployment",
-          "Sensitive": false,
-          "Category": "",
-          "ProtoFile": "config/v1/integrations_config.proto"
-        },
-        {
-          "Name": "vault_key",
-          "GoName": "VaultKey",
-          "GoType": "string",
-          "ProtoType": "string",
-          "EnvVar": "RELIANT_VAULT_KEY",
-          "Flag": "",
-          "DefaultValue": "",
-          "Required": false,
-          "Description": "Credential vault key (v1:\u003cbase64\u003e); required when hosted",
-          "Sensitive": true,
-          "Category": "",
-          "Optional": true,
-          "ProtoFile": "config/v1/integrations_config.proto"
-        },
-        {
-          "Name": "slack_signing_secret",
-          "GoName": "SlackSigningSecret",
-          "GoType": "string",
-          "ProtoType": "string",
-          "EnvVar": "RELIANT_SLACK_SIGNING_SECRET",
-          "Flag": "",
-          "DefaultValue": "",
-          "Required": false,
-          "Description": "Slack signing secret (unset: Slack events are not received)",
-          "Sensitive": true,
-          "Category": "",
-          "Optional": true,
-          "ProtoFile": "config/v1/integrations_config.proto"
-        },
-        {
-          "Name": "github_webhook_secret",
-          "GoName": "GithubWebhookSecret",
-          "GoType": "string",
-          "ProtoType": "string",
-          "EnvVar": "RELIANT_GITHUB_WEBHOOK_SECRET",
-          "Flag": "",
-          "DefaultValue": "",
-          "Required": false,
-          "Description": "GitHub App webhook secret (unset: GitHub events are not received)",
-          "Sensitive": true,
-          "Category": "",
-          "Optional": true,
-          "ProtoFile": "config/v1/integrations_config.proto"
-        },
-        {
-          "Name": "github_app_slug",
-          "GoName": "GithubAppSlug",
-          "GoType": "string",
-          "ProtoType": "string",
-          "EnvVar": "RELIANT_GITHUB_APP_SLUG",
-          "Flag": "",
-          "DefaultValue": "",
-          "Required": false,
-          "Description": "GitHub App slug",
-          "Sensitive": false,
-          "Category": "",
-          "ProtoFile": "config/v1/integrations_config.proto"
-        },
-        {
-          "Name": "github_bot_user_id",
-          "GoName": "GithubBotUserId",
-          "GoType": "int64",
-          "ProtoType": "int64",
-          "EnvVar": "RELIANT_GITHUB_BOT_USER_ID",
-          "Flag": "",
-          "DefaultValue": "",
-          "Required": false,
-          "Description": "GitHub App bot's numeric user id (default: the production App's)",
-          "Sensitive": false,
-          "Category": "",
-          "ProtoFile": "config/v1/integrations_config.proto"
-        },
-        {
-          "Name": "github_bot_login",
-          "GoName": "GithubBotLogin",
-          "GoType": "string",
-          "ProtoType": "string",
-          "EnvVar": "RELIANT_GITHUB_BOT_LOGIN",
-          "Flag": "",
-          "DefaultValue": "",
-          "Required": false,
-          "Description": "GitHub App bot's login, used when no user id is set",
-          "Sensitive": false,
-          "Category": "",
-          "ProtoFile": "config/v1/integrations_config.proto"
-        },
-        {
-          "Name": "test_integration_secret",
-          "GoName": "TestIntegrationSecret",
-          "GoType": "string",
-          "ProtoType": "string",
-          "EnvVar": "RELIANT_TEST_INTEGRATION_SECRET",
-          "Flag": "",
-          "DefaultValue": "",
-          "Required": false,
-          "Description": "Test integration secret (e2e stacks only)",
-          "Sensitive": true,
-          "Category": "",
-          "Optional": true,
-          "ProtoFile": "config/v1/integrations_config.proto"
-        },
-        {
-          "Name": "oauth_client_ids",
-          "GoName": "OauthClientIds",
-          "GoType": "string",
-          "ProtoType": "message",
-          "EnvVar": "",
-          "Flag": "",
-          "DefaultValue": "",
-          "Required": false,
-          "Description": "Integration OAuth client ids, RELIANT_OAUTH_\u003cID\u003e_CLIENT_ID",
-          "Sensitive": false,
-          "Category": "",
-          "ProtoFile": "config/v1/integrations_config.proto",
-          "EnvPrefix": "RELIANT_OAUTH_",
-          "EnvSuffix": "_CLIENT_ID",
-          "MapValueType": "string"
-        },
-        {
-          "Name": "oauth_client_secrets",
-          "GoName": "OauthClientSecrets",
-          "GoType": "string",
-          "ProtoType": "message",
-          "EnvVar": "",
-          "Flag": "",
-          "DefaultValue": "",
-          "Required": false,
-          "Description": "Integration OAuth client secrets, RELIANT_OAUTH_\u003cID\u003e_CLIENT_SECRET",
-          "Sensitive": true,
-          "Category": "",
-          "ProtoFile": "config/v1/integrations_config.proto",
-          "EnvPrefix": "RELIANT_OAUTH_",
-          "EnvSuffix": "_CLIENT_SECRET",
-          "MapValueType": "string"
-        }
-      ],
-      "ProtoFile": "config/v1/integrations_config.proto",
-      "Line": 16
-    },
-    {
-      "Name": "LLMConfig",
-      "Fields": [
-        {
-          "Name": "reliant_api_base_url",
-          "GoName": "ReliantApiBaseUrl",
-          "GoType": "string",
-          "ProtoType": "string",
-          "EnvVar": "RELIANT_API_BASE_URL",
-          "Flag": "",
-          "DefaultValue": "",
-          "Required": false,
-          "Description": "Reliant LLM gateway base URL",
-          "Sensitive": false,
-          "Category": "",
-          "ProtoFile": "config/v1/llm_config.proto"
-        },
-        {
-          "Name": "vertexai_project",
-          "GoName": "VertexaiProject",
-          "GoType": "string",
-          "ProtoType": "string",
-          "EnvVar": "VERTEXAI_PROJECT",
-          "Flag": "",
-          "DefaultValue": "",
-          "Required": false,
-          "Description": "Vertex AI project (required to call Vertex AI models)",
-          "Sensitive": false,
-          "Category": "",
-          "ProtoFile": "config/v1/llm_config.proto"
-        },
-        {
-          "Name": "vertexai_location",
-          "GoName": "VertexaiLocation",
-          "GoType": "string",
-          "ProtoType": "string",
-          "EnvVar": "VERTEXAI_LOCATION",
-          "Flag": "",
-          "DefaultValue": "us-central1",
-          "Required": false,
-          "Description": "Vertex AI region",
-          "Sensitive": false,
-          "Category": "",
-          "ProtoFile": "config/v1/llm_config.proto"
-        },
-        {
-          "Name": "stream_idle_timeout",
-          "GoName": "StreamIdleTimeout",
-          "GoType": "string",
-          "ProtoType": "message",
-          "EnvVar": "RELIANT_LLM_STREAM_IDLE_TIMEOUT",
-          "Flag": "",
-          "DefaultValue": "90s",
-          "Required": false,
-          "Description": "Cut a stream that sends no bytes for this long",
-          "Sensitive": false,
-          "Category": "",
-          "ProtoFile": "config/v1/llm_config.proto"
-        },
-        {
-          "Name": "stream_content_stall_timeout",
-          "GoName": "StreamContentStallTimeout",
-          "GoType": "string",
-          "ProtoType": "message",
-          "EnvVar": "RELIANT_LLM_STREAM_CONTENT_STALL_TIMEOUT",
-          "Flag": "",
-          "DefaultValue": "5m",
-          "Required": false,
-          "Description": "Cut a stream that sends only keepalives before any content for this long",
-          "Sensitive": false,
-          "Category": "",
-          "ProtoFile": "config/v1/llm_config.proto"
-        },
-        {
-          "Name": "stream_progress_timeout",
-          "GoName": "StreamProgressTimeout",
-          "GoType": "string",
-          "ProtoType": "message",
-          "EnvVar": "RELIANT_LLM_STREAM_PROGRESS_TIMEOUT",
-          "Flag": "",
-          "DefaultValue": "10m",
-          "Required": false,
-          "Description": "Cut a stream that produces no driver event for this long",
-          "Sensitive": false,
-          "Category": "",
-          "ProtoFile": "config/v1/llm_config.proto"
-        },
-        {
-          "Name": "stream_mid_block_stall_timeout",
-          "GoName": "StreamMidBlockStallTimeout",
-          "GoType": "string",
-          "ProtoType": "message",
-          "EnvVar": "RELIANT_LLM_STREAM_MID_BLOCK_STALL_TIMEOUT",
-          "Flag": "",
-          "DefaultValue": "",
-          "Required": false,
-          "Description": "Pin how long a content block may stay open on keepalives (default: derived from the output budget)",
-          "Sensitive": false,
-          "Category": "",
-          "ProtoFile": "config/v1/llm_config.proto"
-        },
-        {
-          "Name": "debug_openai_responses_input",
-          "GoName": "DebugOpenaiResponsesInput",
-          "GoType": "bool",
-          "ProtoType": "bool",
-          "EnvVar": "RELIANT_DEBUG_OPENAI_RESPONSES_INPUT",
-          "Flag": "",
-          "DefaultValue": "",
-          "Required": false,
-          "Description": "Log each OpenAI Responses input item",
-          "Sensitive": false,
-          "Category": "",
-          "ProtoFile": "config/v1/llm_config.proto"
-        },
-        {
-          "Name": "debug_openai_tool_schemas",
-          "GoName": "DebugOpenaiToolSchemas",
-          "GoType": "bool",
-          "ProtoType": "bool",
-          "EnvVar": "RELIANT_DEBUG_OPENAI_TOOL_SCHEMAS",
-          "Flag": "",
-          "DefaultValue": "",
-          "Required": false,
-          "Description": "Log each OpenAI function tool schema as sent",
-          "Sensitive": false,
-          "Category": "",
-          "ProtoFile": "config/v1/llm_config.proto"
-        }
-      ],
-      "ProtoFile": "config/v1/llm_config.proto",
-      "Line": 14
-    },
-    {
-      "Name": "ObservabilityConfig",
-      "Fields": [
-        {
-          "Name": "otlp_endpoint",
-          "GoName": "OtlpEndpoint",
-          "GoType": "string",
-          "ProtoType": "string",
-          "EnvVar": "OTEL_EXPORTER_OTLP_ENDPOINT",
-          "Flag": "",
-          "DefaultValue": "",
-          "Required": false,
-          "Description": "OTLP collector base URL (export is on whenever it is set)",
-          "Sensitive": false,
-          "Category": "",
-          "ProtoFile": "config/v1/observability_config.proto"
-        },
-        {
-          "Name": "otel_enabled",
-          "GoName": "OtelEnabled",
-          "GoType": "bool",
-          "ProtoType": "bool",
-          "EnvVar": "OTEL_ENABLED",
-          "Flag": "",
-          "DefaultValue": "",
-          "Required": false,
-          "Description": "Require an OTLP collector endpoint (OTEL_EXPORTER_OTLP_ENDPOINT)",
-          "Sensitive": false,
-          "Category": "",
-          "ProtoFile": "config/v1/observability_config.proto"
-        },
-        {
-          "Name": "prometheus_enabled",
-          "GoName": "PrometheusEnabled",
-          "GoType": "bool",
-          "ProtoType": "bool",
-          "EnvVar": "PROMETHEUS_ENABLED",
-          "Flag": "",
-          "DefaultValue": "true",
-          "Required": false,
-          "Description": "Serve Reliant's Prometheus metrics",
-          "Sensitive": false,
-          "Category": "",
-          "ProtoFile": "config/v1/observability_config.proto"
-        },
-        {
-          "Name": "environment",
-          "GoName": "Environment",
-          "GoType": "string",
-          "ProtoType": "string",
-          "EnvVar": "SENTRY_ENVIRONMENT",
-          "Flag": "",
-          "DefaultValue": "",
-          "Required": false,
-          "Description": "Deployment environment telemetry is filed under",
-          "Sensitive": false,
-          "Category": "",
-          "ProtoFile": "config/v1/observability_config.proto",
-          "EnvVarAliases": [
-            {
-              "Name": "ENVIRONMENT"
-            }
-          ]
-        }
-      ],
-      "ProtoFile": "config/v1/observability_config.proto",
-      "Line": 13
-    },
-    {
-      "Name": "SentryConfig",
-      "Fields": [
-        {
-          "Name": "enabled",
-          "GoName": "Enabled",
-          "GoType": "bool",
-          "ProtoType": "bool",
-          "EnvVar": "SENTRY_ENABLED",
-          "Flag": "",
-          "DefaultValue": "true",
-          "Required": false,
-          "Description": "Report errors to Sentry (when SENTRY_DSN is set and the tier is prod)",
-          "Sensitive": false,
-          "Category": "",
-          "ProtoFile": "config/v1/observability_config.proto"
-        },
-        {
-          "Name": "dsn",
-          "GoName": "Dsn",
-          "GoType": "string",
-          "ProtoType": "string",
-          "EnvVar": "SENTRY_DSN",
-          "Flag": "",
-          "DefaultValue": "",
-          "Required": false,
-          "Description": "Sentry DSN",
-          "Sensitive": true,
-          "Category": "",
-          "Optional": true,
-          "ProtoFile": "config/v1/observability_config.proto"
-        },
-        {
-          "Name": "traces_sample_rate",
-          "GoName": "TracesSampleRate",
-          "GoType": "float64",
-          "ProtoType": "double",
-          "EnvVar": "SENTRY_TRACES_SAMPLE_RATE",
-          "Flag": "",
-          "DefaultValue": "0",
-          "Required": false,
-          "Description": "Share of transactions Sentry traces, 0 to 1",
-          "Sensitive": false,
-          "Category": "",
-          "ProtoFile": "config/v1/observability_config.proto"
-        }
-      ],
-      "ProtoFile": "config/v1/observability_config.proto",
-      "Line": 47
-    },
-    {
-      "Name": "PreviewConfig",
-      "Fields": [
-        {
-          "Name": "proxy_host",
-          "GoName": "ProxyHost",
-          "GoType": "string",
-          "ProtoType": "string",
-          "EnvVar": "PROXY_HOST",
-          "Flag": "",
-          "DefaultValue": "",
-          "Required": false,
-          "Description": "Workspace proxy host for path-based preview URLs",
-          "Sensitive": false,
-          "Category": "",
-          "ProtoFile": "config/v1/preview_config.proto"
-        },
-        {
-          "Name": "workspace_base_domain",
-          "GoName": "WorkspaceBaseDomain",
-          "GoType": "string",
-          "ProtoType": "string",
-          "EnvVar": "WORKSPACE_BASE_DOMAIN",
-          "Flag": "",
-          "DefaultValue": "",
-          "Required": false,
-          "Description": "Base domain of subdomain-routed preview URLs",
-          "Sensitive": false,
-          "Category": "",
-          "ProtoFile": "config/v1/preview_config.proto"
-        },
-        {
-          "Name": "workspace_url_scheme",
-          "GoName": "WorkspaceUrlScheme",
-          "GoType": "string",
-          "ProtoType": "string",
-          "EnvVar": "WORKSPACE_URL_SCHEME",
-          "Flag": "",
-          "DefaultValue": "https",
-          "Required": false,
-          "Description": "Scheme of subdomain-routed preview URLs",
-          "Sensitive": false,
-          "Category": "",
-          "ProtoFile": "config/v1/preview_config.proto",
-          "AllowedValues": [
-            "http",
-            "https"
-          ]
-        },
-        {
-          "Name": "workspace_url_port",
-          "GoName": "WorkspaceUrlPort",
-          "GoType": "int32",
-          "ProtoType": "int32",
-          "EnvVar": "WORKSPACE_URL_PORT",
-          "Flag": "",
-          "DefaultValue": "",
-          "Required": false,
-          "Description": "Port of subdomain-routed preview URLs, when not the scheme's default",
-          "Sensitive": false,
-          "Category": "",
-          "ProtoFile": "config/v1/preview_config.proto"
-        }
-      ],
-      "ProtoFile": "config/v1/preview_config.proto",
-      "Line": 15
-    },
-    {
-      "Name": "DatabaseConfig",
-      "Fields": [
-        {
-          "Name": "url",
-          "GoName": "Url",
-          "GoType": "string",
-          "ProtoType": "string",
-          "EnvVar": "DATABASE_URL",
-          "Flag": "",
-          "DefaultValue": "",
-          "Required": true,
-          "Description": "Postgres connection URL",
-          "Sensitive": true,
-          "Category": "",
-          "ProtoFile": "config/v1/server_config.proto"
-        },
-        {
-          "Name": "direct_url",
-          "GoName": "DirectUrl",
-          "GoType": "string",
-          "ProtoType": "string",
-          "EnvVar": "DATABASE_DIRECT_URL",
-          "Flag": "",
-          "DefaultValue": "",
-          "Required": false,
-          "Description": "Session-capable Postgres URL for session-scoped work, when DATABASE_URL is a transaction pooler",
-          "Sensitive": true,
-          "Category": "",
-          "Optional": true,
-          "ProtoFile": "config/v1/server_config.proto"
-        },
-        {
-          "Name": "driver",
-          "GoName": "Driver",
-          "GoType": "string",
-          "ProtoType": "string",
-          "EnvVar": "DATABASE_DRIVER",
-          "Flag": "db-driver",
-          "DefaultValue": "postgres",
-          "Required": false,
-          "Description": "Database driver (postgres)",
-          "Sensitive": false,
-          "Category": "",
-          "ProtoFile": "config/v1/server_config.proto",
-          "AllowedValues": [
-            "postgres"
-          ]
-        },
-        {
-          "Name": "max_open_conns",
-          "GoName": "MaxOpenConns",
-          "GoType": "int32",
-          "ProtoType": "int32",
-          "EnvVar": "RELIANT_DB_MAX_OPEN_CONNS",
-          "Flag": "",
-          "DefaultValue": "25",
-          "Required": false,
-          "Description": "Most open database connections",
-          "Sensitive": false,
-          "Category": "",
-          "ProtoFile": "config/v1/server_config.proto"
-        },
-        {
-          "Name": "max_idle_conns",
-          "GoName": "MaxIdleConns",
-          "GoType": "int32",
-          "ProtoType": "int32",
-          "EnvVar": "RELIANT_DB_MAX_IDLE_CONNS",
-          "Flag": "",
-          "DefaultValue": "10",
-          "Required": false,
-          "Description": "Most idle database connections kept open",
-          "Sensitive": false,
-          "Category": "",
-          "ProtoFile": "config/v1/server_config.proto"
-        },
-        {
-          "Name": "connect_timeout",
-          "GoName": "ConnectTimeout",
-          "GoType": "string",
-          "ProtoType": "message",
-          "EnvVar": "DB_CONNECT_TIMEOUT",
-          "Flag": "",
-          "DefaultValue": "",
-          "Required": false,
-          "Description": "How long the startup ping retries a database that is not up yet",
-          "Sensitive": false,
-          "Category": "",
-          "ProtoFile": "config/v1/server_config.proto"
-        },
-        {
-          "Name": "schema_wait_seconds",
-          "GoName": "SchemaWaitSeconds",
-          "GoType": "int32",
-          "ProtoType": "int32",
-          "EnvVar": "RELIANT_DB_SCHEMA_WAIT_SECONDS",
-          "Flag": "",
-          "DefaultValue": "300",
-          "Required": false,
-          "Description": "Seconds to wait for the schema to be migrated",
-          "Sensitive": false,
-          "Category": "",
-          "ProtoFile": "config/v1/server_config.proto"
-        }
-      ],
-      "ProtoFile": "config/v1/server_config.proto",
-      "Line": 20
-    },
-    {
-      "Name": "NatsConfig",
-      "Fields": [
-        {
-          "Name": "url",
-          "GoName": "Url",
-          "GoType": "string",
-          "ProtoType": "string",
-          "EnvVar": "NATS_URL",
-          "Flag": "",
-          "DefaultValue": "",
-          "Required": true,
-          "Description": "NATS server URL",
-          "Sensitive": true,
-          "Category": "",
-          "ProtoFile": "config/v1/server_config.proto"
-        },
-        {
-          "Name": "user",
-          "GoName": "User",
-          "GoType": "string",
-          "ProtoType": "string",
-          "EnvVar": "NATS_USER",
-          "Flag": "",
-          "DefaultValue": "",
-          "Required": false,
-          "Description": "NATS user name (used with NATS_PASSWORD)",
-          "Sensitive": false,
-          "Category": "",
-          "ProtoFile": "config/v1/server_config.proto"
-        },
-        {
-          "Name": "password",
-          "GoName": "Password",
-          "GoType": "string",
-          "ProtoType": "string",
-          "EnvVar": "NATS_PASSWORD",
-          "Flag": "",
-          "DefaultValue": "",
-          "Required": false,
-          "Description": "NATS password (used with NATS_USER)",
-          "Sensitive": true,
-          "Category": "",
-          "Optional": true,
-          "ProtoFile": "config/v1/server_config.proto"
-        }
-      ],
-      "ProtoFile": "config/v1/server_config.proto",
-      "Line": 81
-    },
-    {
-      "Name": "TemporalConfig",
-      "Fields": [
-        {
-          "Name": "host",
-          "GoName": "Host",
-          "GoType": "string",
-          "ProtoType": "string",
-          "EnvVar": "TEMPORAL_HOST",
-          "Flag": "temporal-host",
-          "DefaultValue": "localhost",
-          "Required": false,
-          "Description": "Temporal server host",
-          "Sensitive": false,
-          "Category": "",
-          "ProtoFile": "config/v1/server_config.proto"
-        },
-        {
-          "Name": "port",
-          "GoName": "Port",
-          "GoType": "int32",
-          "ProtoType": "int32",
-          "EnvVar": "TEMPORAL_PORT",
-          "Flag": "temporal-port",
-          "DefaultValue": "7233",
-          "Required": false,
-          "Description": "Temporal server port",
-          "Sensitive": false,
-          "Category": "",
-          "ProtoFile": "config/v1/server_config.proto"
-        },
-        {
-          "Name": "namespace",
-          "GoName": "Namespace",
-          "GoType": "string",
-          "ProtoType": "string",
-          "EnvVar": "TEMPORAL_NAMESPACE",
-          "Flag": "temporal-namespace",
-          "DefaultValue": "reliant",
-          "Required": false,
-          "Description": "Temporal namespace",
-          "Sensitive": false,
-          "Category": "",
-          "ProtoFile": "config/v1/server_config.proto"
-        }
-      ],
-      "ProtoFile": "config/v1/server_config.proto",
-      "Line": 105
-    },
-    {
-      "Name": "ServerTLSConfig",
-      "Fields": [
-        {
-          "Name": "cert_file",
-          "GoName": "CertFile",
-          "GoType": "string",
-          "ProtoType": "string",
-          "EnvVar": "TLS_CERT_FILE",
-          "Flag": "tls-cert",
-          "DefaultValue": "",
-          "Required": false,
-          "Description": "TLS certificate file path",
-          "Sensitive": false,
-          "Category": "",
-          "ProtoFile": "config/v1/server_config.proto"
-        },
-        {
-          "Name": "key_file",
-          "GoName": "KeyFile",
-          "GoType": "string",
-          "ProtoType": "string",
-          "EnvVar": "TLS_KEY_FILE",
-          "Flag": "tls-key",
-          "DefaultValue": "",
-          "Required": false,
-          "Description": "TLS key file path",
-          "Sensitive": false,
-          "Category": "",
-          "ProtoFile": "config/v1/server_config.proto"
-        },
-        {
-          "Name": "disable",
-          "GoName": "Disable",
-          "GoType": "bool",
-          "ProtoType": "bool",
-          "EnvVar": "DISABLE_TLS",
-          "Flag": "disable-tls",
-          "DefaultValue": "",
-          "Required": false,
-          "Description": "Disable TLS (use plaintext HTTP)",
-          "Sensitive": false,
-          "Category": "",
-          "ProtoFile": "config/v1/server_config.proto"
-        }
-      ],
-      "ProtoFile": "config/v1/server_config.proto",
-      "Line": 128
-    },
-    {
-      "Name": "DrainConfig",
-      "Fields": [
-        {
-          "Name": "pre_stop_delay",
-          "GoName": "PreStopDelay",
-          "GoType": "string",
-          "ProtoType": "message",
-          "EnvVar": "PRE_STOP_DELAY",
-          "Flag": "",
-          "DefaultValue": "5s",
-          "Required": false,
-          "Description": "How long to keep serving after readiness flips at shutdown (negative: no pause)",
-          "Sensitive": false,
-          "Category": "",
-          "ProtoFile": "config/v1/server_config.proto"
-        },
-        {
-          "Name": "shutdown_timeout",
-          "GoName": "ShutdownTimeout",
-          "GoType": "string",
-          "ProtoType": "message",
-          "EnvVar": "SHUTDOWN_TIMEOUT",
-          "Flag": "",
-          "DefaultValue": "30s",
-          "Required": false,
-          "Description": "Budget for graceful shutdown after the pre-stop pause",
-          "Sensitive": false,
-          "Category": "",
-          "ProtoFile": "config/v1/server_config.proto"
-        }
-      ],
-      "ProtoFile": "config/v1/server_config.proto",
-      "Line": 153
-    },
-    {
       "Name": "ApiServerConfig",
       "Fields": [
         {
@@ -37986,21 +37173,6 @@
           "ProtoFile": "config/v1/api_server_config.proto"
         },
         {
-          "Name": "control_plane",
-          "GoName": "ControlPlane",
-          "GoType": "",
-          "ProtoType": "message",
-          "EnvVar": "",
-          "Flag": "",
-          "DefaultValue": "",
-          "Required": false,
-          "Description": "",
-          "Sensitive": false,
-          "Category": "",
-          "MessageType": "ControlPlaneConfig",
-          "ProtoFile": "config/v1/api_server_config.proto"
-        },
-        {
           "Name": "disable_forge_api",
           "GoName": "DisableForgeApi",
           "GoType": "bool",
@@ -38012,81 +37184,6 @@
           "Description": "Turn the forge RPC surface off at this server (its rpcs answer FailedPrecondition)",
           "Sensitive": false,
           "Category": "",
-          "ProtoFile": "config/v1/api_server_config.proto"
-        },
-        {
-          "Name": "database",
-          "GoName": "Database",
-          "GoType": "",
-          "ProtoType": "message",
-          "EnvVar": "",
-          "Flag": "",
-          "DefaultValue": "",
-          "Required": false,
-          "Description": "",
-          "Sensitive": false,
-          "Category": "",
-          "MessageType": "DatabaseConfig",
-          "ProtoFile": "config/v1/api_server_config.proto"
-        },
-        {
-          "Name": "nats",
-          "GoName": "Nats",
-          "GoType": "",
-          "ProtoType": "message",
-          "EnvVar": "",
-          "Flag": "",
-          "DefaultValue": "",
-          "Required": false,
-          "Description": "",
-          "Sensitive": false,
-          "Category": "",
-          "MessageType": "NatsConfig",
-          "ProtoFile": "config/v1/api_server_config.proto"
-        },
-        {
-          "Name": "temporal",
-          "GoName": "Temporal",
-          "GoType": "",
-          "ProtoType": "message",
-          "EnvVar": "",
-          "Flag": "",
-          "DefaultValue": "",
-          "Required": false,
-          "Description": "",
-          "Sensitive": false,
-          "Category": "",
-          "MessageType": "TemporalConfig",
-          "ProtoFile": "config/v1/api_server_config.proto"
-        },
-        {
-          "Name": "tls",
-          "GoName": "Tls",
-          "GoType": "",
-          "ProtoType": "message",
-          "EnvVar": "",
-          "Flag": "",
-          "DefaultValue": "",
-          "Required": false,
-          "Description": "",
-          "Sensitive": false,
-          "Category": "",
-          "MessageType": "ServerTLSConfig",
-          "ProtoFile": "config/v1/api_server_config.proto"
-        },
-        {
-          "Name": "drain",
-          "GoName": "Drain",
-          "GoType": "",
-          "ProtoType": "message",
-          "EnvVar": "",
-          "Flag": "",
-          "DefaultValue": "",
-          "Required": false,
-          "Description": "",
-          "Sensitive": false,
-          "Category": "",
-          "MessageType": "DrainConfig",
           "ProtoFile": "config/v1/api_server_config.proto"
         },
         {
@@ -38144,37 +37241,6 @@
           "Sensitive": false,
           "Category": "",
           "ProtoFile": "config/v1/api_server_config.proto"
-        },
-        {
-          "Name": "data_dir",
-          "GoName": "DataDir",
-          "GoType": "string",
-          "ProtoType": "string",
-          "EnvVar": "DATA_DIR",
-          "Flag": "data-dir",
-          "DefaultValue": "./data",
-          "Required": false,
-          "Description": "Data directory for logs and certs",
-          "Sensitive": false,
-          "Category": "",
-          "ProtoFile": "config/v1/api_server_config.proto"
-        },
-        {
-          "Name": "streaming_driver",
-          "GoName": "StreamingDriver",
-          "GoType": "string",
-          "ProtoType": "string",
-          "EnvVar": "STREAMING_DRIVER",
-          "Flag": "streaming-driver",
-          "DefaultValue": "nats",
-          "Required": false,
-          "Description": "Streaming driver (nats)",
-          "Sensitive": false,
-          "Category": "",
-          "ProtoFile": "config/v1/api_server_config.proto",
-          "AllowedValues": [
-            "nats"
-          ]
         },
         {
           "Name": "cors_allowed_origins",
@@ -38327,81 +37393,6 @@
           "ProtoFile": "config/v1/api_server_config.proto"
         },
         {
-          "Name": "integrations",
-          "GoName": "Integrations",
-          "GoType": "",
-          "ProtoType": "message",
-          "EnvVar": "",
-          "Flag": "",
-          "DefaultValue": "",
-          "Required": false,
-          "Description": "",
-          "Sensitive": false,
-          "Category": "",
-          "MessageType": "IntegrationsConfig",
-          "ProtoFile": "config/v1/api_server_config.proto"
-        },
-        {
-          "Name": "observability",
-          "GoName": "Observability",
-          "GoType": "",
-          "ProtoType": "message",
-          "EnvVar": "",
-          "Flag": "",
-          "DefaultValue": "",
-          "Required": false,
-          "Description": "",
-          "Sensitive": false,
-          "Category": "",
-          "MessageType": "ObservabilityConfig",
-          "ProtoFile": "config/v1/api_server_config.proto"
-        },
-        {
-          "Name": "sentry",
-          "GoName": "Sentry",
-          "GoType": "",
-          "ProtoType": "message",
-          "EnvVar": "",
-          "Flag": "",
-          "DefaultValue": "",
-          "Required": false,
-          "Description": "",
-          "Sensitive": false,
-          "Category": "",
-          "MessageType": "SentryConfig",
-          "ProtoFile": "config/v1/api_server_config.proto"
-        },
-        {
-          "Name": "analytics",
-          "GoName": "Analytics",
-          "GoType": "",
-          "ProtoType": "message",
-          "EnvVar": "",
-          "Flag": "",
-          "DefaultValue": "",
-          "Required": false,
-          "Description": "",
-          "Sensitive": false,
-          "Category": "",
-          "MessageType": "AnalyticsConfig",
-          "ProtoFile": "config/v1/api_server_config.proto"
-        },
-        {
-          "Name": "llm",
-          "GoName": "Llm",
-          "GoType": "",
-          "ProtoType": "message",
-          "EnvVar": "",
-          "Flag": "",
-          "DefaultValue": "",
-          "Required": false,
-          "Description": "",
-          "Sensitive": false,
-          "Category": "",
-          "MessageType": "LLMConfig",
-          "ProtoFile": "config/v1/api_server_config.proto"
-        },
-        {
           "Name": "payload_blob_gc_horizon",
           "GoName": "PayloadBlobGcHorizon",
           "GoType": "string",
@@ -38416,18 +37407,31 @@
           "ProtoFile": "config/v1/api_server_config.proto"
         },
         {
-          "Name": "preview",
-          "GoName": "Preview",
-          "GoType": "",
+          "Name": "pre_stop_delay",
+          "GoName": "PreStopDelay",
+          "GoType": "string",
           "ProtoType": "message",
-          "EnvVar": "",
+          "EnvVar": "PRE_STOP_DELAY",
           "Flag": "",
-          "DefaultValue": "",
+          "DefaultValue": "5s",
           "Required": false,
-          "Description": "",
+          "Description": "How long to keep serving after readiness flips at shutdown (negative: no pause)",
           "Sensitive": false,
           "Category": "",
-          "MessageType": "PreviewConfig",
+          "ProtoFile": "config/v1/api_server_config.proto"
+        },
+        {
+          "Name": "shutdown_timeout",
+          "GoName": "ShutdownTimeout",
+          "GoType": "string",
+          "ProtoType": "message",
+          "EnvVar": "SHUTDOWN_TIMEOUT",
+          "Flag": "",
+          "DefaultValue": "30s",
+          "Required": false,
+          "Description": "Budget for graceful shutdown after the pre-stop pause",
+          "Sensitive": false,
+          "Category": "",
           "ProtoFile": "config/v1/api_server_config.proto"
         }
       ],
@@ -38437,7 +37441,7 @@
         "api"
       ],
       "ProtoFile": "config/v1/api_server_config.proto",
-      "Line": 22
+      "Line": 15
     },
     {
       "Name": "CLIConfig",
@@ -38708,7 +37712,7 @@
       ],
       "Binary": "reliant",
       "ProtoFile": "config/v1/config.proto",
-      "Line": 54
+      "Line": 60
     },
     {
       "Name": "RuntimeConfig",
@@ -38734,7 +37738,7 @@
         }
       ],
       "ProtoFile": "config/v1/config.proto",
-      "Line": 63
+      "Line": 69
     },
     {
       "Name": "LogConfig",
@@ -38769,7 +37773,7 @@
         }
       ],
       "ProtoFile": "config/v1/config.proto",
-      "Line": 81
+      "Line": 87
     },
     {
       "Name": "StorageReaperConfig",
@@ -38837,7 +37841,53 @@
         }
       ],
       "ProtoFile": "config/v1/config.proto",
-      "Line": 106
+      "Line": 112
+    },
+    {
+      "Name": "ControlPlaneConfig",
+      "Fields": [
+        {
+          "Name": "url",
+          "GoName": "Url",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "RELIANT_CONTROL_PLANE_URL",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "Control-plane base URL; unset means self-hosted",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "config/v1/control_plane_config.proto",
+          "EnvVarAliases": [
+            {
+              "Name": "CONTROL_PLANE_API_URL",
+              "Deprecated": true
+            },
+            {
+              "Name": "CONTROL_PLANE_BASE_URL",
+              "Deprecated": true
+            }
+          ]
+        },
+        {
+          "Name": "internal_service_secret",
+          "GoName": "InternalServiceSecret",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "INTERNAL_SERVICE_SECRET",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "Secret for internal-service calls to the control plane (required when url is set)",
+          "Sensitive": true,
+          "Category": "",
+          "Optional": true,
+          "ProtoFile": "config/v1/control_plane_config.proto"
+        }
+      ],
+      "ProtoFile": "config/v1/control_plane_config.proto",
+      "Line": 18
     },
     {
       "Name": "DaemonInstanceConfig",
@@ -39303,167 +38353,127 @@
       "Line": 255
     },
     {
-      "Name": "DbMigrateUpConfig",
+      "Name": "DatabaseConfig",
       "Fields": [
         {
-          "Name": "database",
-          "GoName": "Database",
-          "GoType": "",
-          "ProtoType": "message",
-          "EnvVar": "",
+          "Name": "database_url",
+          "GoName": "DatabaseUrl",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "DATABASE_URL",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": true,
+          "Description": "Postgres connection URL",
+          "Sensitive": true,
+          "Category": "",
+          "ProtoFile": "config/v1/db_config.proto"
+        },
+        {
+          "Name": "database_direct_url",
+          "GoName": "DatabaseDirectUrl",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "DATABASE_DIRECT_URL",
           "Flag": "",
           "DefaultValue": "",
           "Required": false,
-          "Description": "",
+          "Description": "Session-capable Postgres URL for session-scoped work, when DATABASE_URL is a transaction pooler",
+          "Sensitive": true,
+          "Category": "",
+          "Optional": true,
+          "ProtoFile": "config/v1/db_config.proto"
+        },
+        {
+          "Name": "database_driver",
+          "GoName": "DatabaseDriver",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "DATABASE_DRIVER",
+          "Flag": "db-driver",
+          "DefaultValue": "postgres",
+          "Required": false,
+          "Description": "Database driver (postgres)",
           "Sensitive": false,
           "Category": "",
-          "MessageType": "DatabaseConfig",
+          "ProtoFile": "config/v1/db_config.proto",
+          "AllowedValues": [
+            "postgres"
+          ]
+        },
+        {
+          "Name": "db_max_open_conns",
+          "GoName": "DbMaxOpenConns",
+          "GoType": "int32",
+          "ProtoType": "int32",
+          "EnvVar": "RELIANT_DB_MAX_OPEN_CONNS",
+          "Flag": "",
+          "DefaultValue": "25",
+          "Required": false,
+          "Description": "Most open database connections",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "config/v1/db_config.proto"
+        },
+        {
+          "Name": "db_max_idle_conns",
+          "GoName": "DbMaxIdleConns",
+          "GoType": "int32",
+          "ProtoType": "int32",
+          "EnvVar": "RELIANT_DB_MAX_IDLE_CONNS",
+          "Flag": "",
+          "DefaultValue": "10",
+          "Required": false,
+          "Description": "Most idle database connections kept open",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "config/v1/db_config.proto"
+        },
+        {
+          "Name": "db_connect_timeout",
+          "GoName": "DbConnectTimeout",
+          "GoType": "string",
+          "ProtoType": "message",
+          "EnvVar": "DB_CONNECT_TIMEOUT",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "How long the startup ping retries a database that is not up yet",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "config/v1/db_config.proto"
+        },
+        {
+          "Name": "db_schema_wait_seconds",
+          "GoName": "DbSchemaWaitSeconds",
+          "GoType": "int32",
+          "ProtoType": "int32",
+          "EnvVar": "RELIANT_DB_SCHEMA_WAIT_SECONDS",
+          "Flag": "",
+          "DefaultValue": "300",
+          "Required": false,
+          "Description": "Seconds to wait for the schema to be migrated",
+          "Sensitive": false,
+          "Category": "",
           "ProtoFile": "config/v1/db_config.proto"
         }
       ],
       "Binary": "reliant",
-      "Command": [
-        "db",
-        "migrate",
-        "up"
+      "Subtrees": [
+        [
+          "server"
+        ],
+        [
+          "db",
+          "migrate"
+        ]
       ],
       "ProtoFile": "config/v1/db_config.proto",
-      "Line": 17
-    },
-    {
-      "Name": "DbMigrateStatusConfig",
-      "Fields": [
-        {
-          "Name": "database",
-          "GoName": "Database",
-          "GoType": "",
-          "ProtoType": "message",
-          "EnvVar": "",
-          "Flag": "",
-          "DefaultValue": "",
-          "Required": false,
-          "Description": "",
-          "Sensitive": false,
-          "Category": "",
-          "MessageType": "DatabaseConfig",
-          "ProtoFile": "config/v1/db_config.proto"
-        }
-      ],
-      "Binary": "reliant",
-      "Command": [
-        "db",
-        "migrate",
-        "status"
-      ],
-      "ProtoFile": "config/v1/db_config.proto",
-      "Line": 27
-    },
-    {
-      "Name": "DbMigrateForceConfig",
-      "Fields": [
-        {
-          "Name": "database",
-          "GoName": "Database",
-          "GoType": "",
-          "ProtoType": "message",
-          "EnvVar": "",
-          "Flag": "",
-          "DefaultValue": "",
-          "Required": false,
-          "Description": "",
-          "Sensitive": false,
-          "Category": "",
-          "MessageType": "DatabaseConfig",
-          "ProtoFile": "config/v1/db_config.proto"
-        }
-      ],
-      "Binary": "reliant",
-      "Command": [
-        "db",
-        "migrate",
-        "force"
-      ],
-      "ProtoFile": "config/v1/db_config.proto",
-      "Line": 37
+      "Line": 23
     },
     {
       "Name": "GatewayConfig",
       "Fields": [
-        {
-          "Name": "control_plane",
-          "GoName": "ControlPlane",
-          "GoType": "",
-          "ProtoType": "message",
-          "EnvVar": "",
-          "Flag": "",
-          "DefaultValue": "",
-          "Required": false,
-          "Description": "",
-          "Sensitive": false,
-          "Category": "",
-          "MessageType": "ControlPlaneConfig",
-          "ProtoFile": "config/v1/gateway_config.proto"
-        },
-        {
-          "Name": "database",
-          "GoName": "Database",
-          "GoType": "",
-          "ProtoType": "message",
-          "EnvVar": "",
-          "Flag": "",
-          "DefaultValue": "",
-          "Required": false,
-          "Description": "",
-          "Sensitive": false,
-          "Category": "",
-          "MessageType": "DatabaseConfig",
-          "ProtoFile": "config/v1/gateway_config.proto"
-        },
-        {
-          "Name": "nats",
-          "GoName": "Nats",
-          "GoType": "",
-          "ProtoType": "message",
-          "EnvVar": "",
-          "Flag": "",
-          "DefaultValue": "",
-          "Required": false,
-          "Description": "",
-          "Sensitive": false,
-          "Category": "",
-          "MessageType": "NatsConfig",
-          "ProtoFile": "config/v1/gateway_config.proto"
-        },
-        {
-          "Name": "tls",
-          "GoName": "Tls",
-          "GoType": "",
-          "ProtoType": "message",
-          "EnvVar": "",
-          "Flag": "",
-          "DefaultValue": "",
-          "Required": false,
-          "Description": "",
-          "Sensitive": false,
-          "Category": "",
-          "MessageType": "ServerTLSConfig",
-          "ProtoFile": "config/v1/gateway_config.proto"
-        },
-        {
-          "Name": "drain",
-          "GoName": "Drain",
-          "GoType": "",
-          "ProtoType": "message",
-          "EnvVar": "",
-          "Flag": "",
-          "DefaultValue": "",
-          "Required": false,
-          "Description": "",
-          "Sensitive": false,
-          "Category": "",
-          "MessageType": "DrainConfig",
-          "ProtoFile": "config/v1/gateway_config.proto"
-        },
         {
           "Name": "daemon_port",
           "GoName": "DaemonPort",
@@ -39507,20 +38517,6 @@
           "ProtoFile": "config/v1/gateway_config.proto"
         },
         {
-          "Name": "data_dir",
-          "GoName": "DataDir",
-          "GoType": "string",
-          "ProtoType": "string",
-          "EnvVar": "DATA_DIR",
-          "Flag": "data-dir",
-          "DefaultValue": "./data",
-          "Required": false,
-          "Description": "Data directory for logs and certs",
-          "Sensitive": false,
-          "Category": "",
-          "ProtoFile": "config/v1/gateway_config.proto"
-        },
-        {
           "Name": "pprof_addr",
           "GoName": "PprofAddr",
           "GoType": "string",
@@ -39535,18 +38531,31 @@
           "ProtoFile": "config/v1/gateway_config.proto"
         },
         {
-          "Name": "observability",
-          "GoName": "Observability",
-          "GoType": "",
+          "Name": "pre_stop_delay",
+          "GoName": "PreStopDelay",
+          "GoType": "string",
           "ProtoType": "message",
-          "EnvVar": "",
+          "EnvVar": "PRE_STOP_DELAY",
           "Flag": "",
-          "DefaultValue": "",
+          "DefaultValue": "5s",
           "Required": false,
-          "Description": "",
+          "Description": "How long to keep serving after readiness flips at shutdown (negative: no pause)",
           "Sensitive": false,
           "Category": "",
-          "MessageType": "ObservabilityConfig",
+          "ProtoFile": "config/v1/gateway_config.proto"
+        },
+        {
+          "Name": "shutdown_timeout",
+          "GoName": "ShutdownTimeout",
+          "GoType": "string",
+          "ProtoType": "message",
+          "EnvVar": "SHUTDOWN_TIMEOUT",
+          "Flag": "",
+          "DefaultValue": "30s",
+          "Required": false,
+          "Description": "Budget for graceful shutdown after the pre-stop pause",
+          "Sensitive": false,
+          "Category": "",
           "ProtoFile": "config/v1/gateway_config.proto"
         }
       ],
@@ -39556,7 +38565,482 @@
         "gateway"
       ],
       "ProtoFile": "config/v1/gateway_config.proto",
+      "Line": 15
+    },
+    {
+      "Name": "IntegrationsConfig",
+      "Fields": [
+        {
+          "Name": "public_url",
+          "GoName": "PublicUrl",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "PUBLIC_URL",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "Externally reachable base URL of this deployment",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "config/v1/integrations_config.proto"
+        },
+        {
+          "Name": "vault_key",
+          "GoName": "VaultKey",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "RELIANT_VAULT_KEY",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "Credential vault key (v1:\u003cbase64\u003e); required when hosted",
+          "Sensitive": true,
+          "Category": "",
+          "Optional": true,
+          "ProtoFile": "config/v1/integrations_config.proto"
+        },
+        {
+          "Name": "slack_signing_secret",
+          "GoName": "SlackSigningSecret",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "RELIANT_SLACK_SIGNING_SECRET",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "Slack signing secret (unset: Slack events are not received)",
+          "Sensitive": true,
+          "Category": "",
+          "Optional": true,
+          "ProtoFile": "config/v1/integrations_config.proto"
+        },
+        {
+          "Name": "github_webhook_secret",
+          "GoName": "GithubWebhookSecret",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "RELIANT_GITHUB_WEBHOOK_SECRET",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "GitHub App webhook secret (unset: GitHub events are not received)",
+          "Sensitive": true,
+          "Category": "",
+          "Optional": true,
+          "ProtoFile": "config/v1/integrations_config.proto"
+        },
+        {
+          "Name": "github_app_slug",
+          "GoName": "GithubAppSlug",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "RELIANT_GITHUB_APP_SLUG",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "GitHub App slug",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "config/v1/integrations_config.proto"
+        },
+        {
+          "Name": "github_bot_user_id",
+          "GoName": "GithubBotUserId",
+          "GoType": "int64",
+          "ProtoType": "int64",
+          "EnvVar": "RELIANT_GITHUB_BOT_USER_ID",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "GitHub App bot's numeric user id (default: the production App's)",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "config/v1/integrations_config.proto"
+        },
+        {
+          "Name": "github_bot_login",
+          "GoName": "GithubBotLogin",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "RELIANT_GITHUB_BOT_LOGIN",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "GitHub App bot's login, used when no user id is set",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "config/v1/integrations_config.proto"
+        },
+        {
+          "Name": "test_integration_secret",
+          "GoName": "TestIntegrationSecret",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "RELIANT_TEST_INTEGRATION_SECRET",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "Test integration secret (e2e stacks only)",
+          "Sensitive": true,
+          "Category": "",
+          "Optional": true,
+          "ProtoFile": "config/v1/integrations_config.proto"
+        },
+        {
+          "Name": "oauth_client_ids",
+          "GoName": "OauthClientIds",
+          "GoType": "string",
+          "ProtoType": "message",
+          "EnvVar": "",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "Integration OAuth client ids, RELIANT_OAUTH_\u003cID\u003e_CLIENT_ID",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "config/v1/integrations_config.proto",
+          "EnvPrefix": "RELIANT_OAUTH_",
+          "EnvSuffix": "_CLIENT_ID",
+          "MapValueType": "string"
+        },
+        {
+          "Name": "oauth_client_secrets",
+          "GoName": "OauthClientSecrets",
+          "GoType": "string",
+          "ProtoType": "message",
+          "EnvVar": "",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "Integration OAuth client secrets, RELIANT_OAUTH_\u003cID\u003e_CLIENT_SECRET",
+          "Sensitive": true,
+          "Category": "",
+          "ProtoFile": "config/v1/integrations_config.proto",
+          "EnvPrefix": "RELIANT_OAUTH_",
+          "EnvSuffix": "_CLIENT_SECRET",
+          "MapValueType": "string"
+        }
+      ],
+      "ProtoFile": "config/v1/integrations_config.proto",
       "Line": 16
+    },
+    {
+      "Name": "LLMConfig",
+      "Fields": [
+        {
+          "Name": "reliant_api_base_url",
+          "GoName": "ReliantApiBaseUrl",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "RELIANT_API_BASE_URL",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "Reliant LLM gateway base URL",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "config/v1/llm_config.proto"
+        },
+        {
+          "Name": "vertexai_project",
+          "GoName": "VertexaiProject",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "VERTEXAI_PROJECT",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "Vertex AI project (required to call Vertex AI models)",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "config/v1/llm_config.proto"
+        },
+        {
+          "Name": "vertexai_location",
+          "GoName": "VertexaiLocation",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "VERTEXAI_LOCATION",
+          "Flag": "",
+          "DefaultValue": "us-central1",
+          "Required": false,
+          "Description": "Vertex AI region",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "config/v1/llm_config.proto"
+        },
+        {
+          "Name": "stream_idle_timeout",
+          "GoName": "StreamIdleTimeout",
+          "GoType": "string",
+          "ProtoType": "message",
+          "EnvVar": "RELIANT_LLM_STREAM_IDLE_TIMEOUT",
+          "Flag": "",
+          "DefaultValue": "90s",
+          "Required": false,
+          "Description": "Cut a stream that sends no bytes for this long",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "config/v1/llm_config.proto"
+        },
+        {
+          "Name": "stream_content_stall_timeout",
+          "GoName": "StreamContentStallTimeout",
+          "GoType": "string",
+          "ProtoType": "message",
+          "EnvVar": "RELIANT_LLM_STREAM_CONTENT_STALL_TIMEOUT",
+          "Flag": "",
+          "DefaultValue": "5m",
+          "Required": false,
+          "Description": "Cut a stream that sends only keepalives before any content for this long",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "config/v1/llm_config.proto"
+        },
+        {
+          "Name": "stream_progress_timeout",
+          "GoName": "StreamProgressTimeout",
+          "GoType": "string",
+          "ProtoType": "message",
+          "EnvVar": "RELIANT_LLM_STREAM_PROGRESS_TIMEOUT",
+          "Flag": "",
+          "DefaultValue": "10m",
+          "Required": false,
+          "Description": "Cut a stream that produces no driver event for this long",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "config/v1/llm_config.proto"
+        },
+        {
+          "Name": "stream_mid_block_stall_timeout",
+          "GoName": "StreamMidBlockStallTimeout",
+          "GoType": "string",
+          "ProtoType": "message",
+          "EnvVar": "RELIANT_LLM_STREAM_MID_BLOCK_STALL_TIMEOUT",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "Pin how long a content block may stay open on keepalives (default: derived from the output budget)",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "config/v1/llm_config.proto"
+        },
+        {
+          "Name": "debug_openai_responses_input",
+          "GoName": "DebugOpenaiResponsesInput",
+          "GoType": "bool",
+          "ProtoType": "bool",
+          "EnvVar": "RELIANT_DEBUG_OPENAI_RESPONSES_INPUT",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "Log each OpenAI Responses input item",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "config/v1/llm_config.proto"
+        },
+        {
+          "Name": "debug_openai_tool_schemas",
+          "GoName": "DebugOpenaiToolSchemas",
+          "GoType": "bool",
+          "ProtoType": "bool",
+          "EnvVar": "RELIANT_DEBUG_OPENAI_TOOL_SCHEMAS",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "Log each OpenAI function tool schema as sent",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "config/v1/llm_config.proto"
+        }
+      ],
+      "ProtoFile": "config/v1/llm_config.proto",
+      "Line": 14
+    },
+    {
+      "Name": "ObservabilityConfig",
+      "Fields": [
+        {
+          "Name": "otlp_endpoint",
+          "GoName": "OtlpEndpoint",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "OTEL_EXPORTER_OTLP_ENDPOINT",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "OTLP collector base URL (export is on whenever it is set)",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "config/v1/observability_config.proto"
+        },
+        {
+          "Name": "otel_enabled",
+          "GoName": "OtelEnabled",
+          "GoType": "bool",
+          "ProtoType": "bool",
+          "EnvVar": "OTEL_ENABLED",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "Require an OTLP collector endpoint (OTEL_EXPORTER_OTLP_ENDPOINT)",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "config/v1/observability_config.proto"
+        },
+        {
+          "Name": "prometheus_enabled",
+          "GoName": "PrometheusEnabled",
+          "GoType": "bool",
+          "ProtoType": "bool",
+          "EnvVar": "PROMETHEUS_ENABLED",
+          "Flag": "",
+          "DefaultValue": "true",
+          "Required": false,
+          "Description": "Serve Reliant's Prometheus metrics",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "config/v1/observability_config.proto"
+        },
+        {
+          "Name": "environment",
+          "GoName": "Environment",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "SENTRY_ENVIRONMENT",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "Deployment environment telemetry is filed under",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "config/v1/observability_config.proto",
+          "EnvVarAliases": [
+            {
+              "Name": "ENVIRONMENT"
+            }
+          ]
+        }
+      ],
+      "ProtoFile": "config/v1/observability_config.proto",
+      "Line": 14
+    },
+    {
+      "Name": "SentryConfig",
+      "Fields": [
+        {
+          "Name": "enabled",
+          "GoName": "Enabled",
+          "GoType": "bool",
+          "ProtoType": "bool",
+          "EnvVar": "SENTRY_ENABLED",
+          "Flag": "",
+          "DefaultValue": "true",
+          "Required": false,
+          "Description": "Report errors to Sentry (when SENTRY_DSN is set and the tier is prod)",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "config/v1/observability_config.proto"
+        },
+        {
+          "Name": "dsn",
+          "GoName": "Dsn",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "SENTRY_DSN",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "Sentry DSN",
+          "Sensitive": true,
+          "Category": "",
+          "Optional": true,
+          "ProtoFile": "config/v1/observability_config.proto"
+        },
+        {
+          "Name": "traces_sample_rate",
+          "GoName": "TracesSampleRate",
+          "GoType": "float64",
+          "ProtoType": "double",
+          "EnvVar": "SENTRY_TRACES_SAMPLE_RATE",
+          "Flag": "",
+          "DefaultValue": "0",
+          "Required": false,
+          "Description": "Share of transactions Sentry traces, 0 to 1",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "config/v1/observability_config.proto"
+        }
+      ],
+      "ProtoFile": "config/v1/observability_config.proto",
+      "Line": 48
+    },
+    {
+      "Name": "PreviewConfig",
+      "Fields": [
+        {
+          "Name": "proxy_host",
+          "GoName": "ProxyHost",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "PROXY_HOST",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "Workspace proxy host for path-based preview URLs",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "config/v1/preview_config.proto"
+        },
+        {
+          "Name": "workspace_base_domain",
+          "GoName": "WorkspaceBaseDomain",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "WORKSPACE_BASE_DOMAIN",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "Base domain of subdomain-routed preview URLs",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "config/v1/preview_config.proto"
+        },
+        {
+          "Name": "workspace_url_scheme",
+          "GoName": "WorkspaceUrlScheme",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "WORKSPACE_URL_SCHEME",
+          "Flag": "",
+          "DefaultValue": "https",
+          "Required": false,
+          "Description": "Scheme of subdomain-routed preview URLs",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "config/v1/preview_config.proto",
+          "AllowedValues": [
+            "http",
+            "https"
+          ]
+        },
+        {
+          "Name": "workspace_url_port",
+          "GoName": "WorkspaceUrlPort",
+          "GoType": "int32",
+          "ProtoType": "int32",
+          "EnvVar": "WORKSPACE_URL_PORT",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "Port of subdomain-routed preview URLs, when not the scheme's default",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "config/v1/preview_config.proto"
+        }
+      ],
+      "ProtoFile": "config/v1/preview_config.proto",
+      "Line": 15
     },
     {
       "Name": "PreviewURLConfig",
@@ -39584,7 +39068,7 @@
       "Line": 13
     },
     {
-      "Name": "WorkerConfig",
+      "Name": "ServerProcessConfig",
       "Fields": [
         {
           "Name": "control_plane",
@@ -39599,22 +39083,7 @@
           "Sensitive": false,
           "Category": "",
           "MessageType": "ControlPlaneConfig",
-          "ProtoFile": "config/v1/worker_config.proto"
-        },
-        {
-          "Name": "database",
-          "GoName": "Database",
-          "GoType": "",
-          "ProtoType": "message",
-          "EnvVar": "",
-          "Flag": "",
-          "DefaultValue": "",
-          "Required": false,
-          "Description": "",
-          "Sensitive": false,
-          "Category": "",
-          "MessageType": "DatabaseConfig",
-          "ProtoFile": "config/v1/worker_config.proto"
+          "ProtoFile": "config/v1/server_config.proto"
         },
         {
           "Name": "nats",
@@ -39629,7 +39098,7 @@
           "Sensitive": false,
           "Category": "",
           "MessageType": "NatsConfig",
-          "ProtoFile": "config/v1/worker_config.proto"
+          "ProtoFile": "config/v1/server_config.proto"
         },
         {
           "Name": "temporal",
@@ -39644,11 +39113,11 @@
           "Sensitive": false,
           "Category": "",
           "MessageType": "TemporalConfig",
-          "ProtoFile": "config/v1/worker_config.proto"
+          "ProtoFile": "config/v1/server_config.proto"
         },
         {
-          "Name": "drain",
-          "GoName": "Drain",
+          "Name": "tls",
+          "GoName": "Tls",
           "GoType": "",
           "ProtoType": "message",
           "EnvVar": "",
@@ -39658,9 +39127,291 @@
           "Description": "",
           "Sensitive": false,
           "Category": "",
-          "MessageType": "DrainConfig",
-          "ProtoFile": "config/v1/worker_config.proto"
+          "MessageType": "ServerTLSConfig",
+          "ProtoFile": "config/v1/server_config.proto"
         },
+        {
+          "Name": "data_dir",
+          "GoName": "DataDir",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "DATA_DIR",
+          "Flag": "data-dir",
+          "DefaultValue": "./data",
+          "Required": false,
+          "Description": "Data directory for logs and certs",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "config/v1/server_config.proto"
+        },
+        {
+          "Name": "streaming_driver",
+          "GoName": "StreamingDriver",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "STREAMING_DRIVER",
+          "Flag": "streaming-driver",
+          "DefaultValue": "nats",
+          "Required": false,
+          "Description": "Streaming driver (nats)",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "config/v1/server_config.proto",
+          "AllowedValues": [
+            "nats"
+          ]
+        },
+        {
+          "Name": "integrations",
+          "GoName": "Integrations",
+          "GoType": "",
+          "ProtoType": "message",
+          "EnvVar": "",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "",
+          "Sensitive": false,
+          "Category": "",
+          "MessageType": "IntegrationsConfig",
+          "ProtoFile": "config/v1/server_config.proto"
+        },
+        {
+          "Name": "observability",
+          "GoName": "Observability",
+          "GoType": "",
+          "ProtoType": "message",
+          "EnvVar": "",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "",
+          "Sensitive": false,
+          "Category": "",
+          "MessageType": "ObservabilityConfig",
+          "ProtoFile": "config/v1/server_config.proto"
+        },
+        {
+          "Name": "sentry",
+          "GoName": "Sentry",
+          "GoType": "",
+          "ProtoType": "message",
+          "EnvVar": "",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "",
+          "Sensitive": false,
+          "Category": "",
+          "MessageType": "SentryConfig",
+          "ProtoFile": "config/v1/server_config.proto"
+        },
+        {
+          "Name": "analytics",
+          "GoName": "Analytics",
+          "GoType": "",
+          "ProtoType": "message",
+          "EnvVar": "",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "",
+          "Sensitive": false,
+          "Category": "",
+          "MessageType": "AnalyticsConfig",
+          "ProtoFile": "config/v1/server_config.proto"
+        },
+        {
+          "Name": "llm",
+          "GoName": "Llm",
+          "GoType": "",
+          "ProtoType": "message",
+          "EnvVar": "",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "",
+          "Sensitive": false,
+          "Category": "",
+          "MessageType": "LLMConfig",
+          "ProtoFile": "config/v1/server_config.proto"
+        },
+        {
+          "Name": "preview",
+          "GoName": "Preview",
+          "GoType": "",
+          "ProtoType": "message",
+          "EnvVar": "",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "",
+          "Sensitive": false,
+          "Category": "",
+          "MessageType": "PreviewConfig",
+          "ProtoFile": "config/v1/server_config.proto"
+        }
+      ],
+      "Binary": "reliant",
+      "Subtrees": [
+        [
+          "server"
+        ]
+      ],
+      "ProtoFile": "config/v1/server_config.proto",
+      "Line": 31
+    },
+    {
+      "Name": "NatsConfig",
+      "Fields": [
+        {
+          "Name": "url",
+          "GoName": "Url",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "NATS_URL",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": true,
+          "Description": "NATS server URL",
+          "Sensitive": true,
+          "Category": "",
+          "ProtoFile": "config/v1/server_config.proto"
+        },
+        {
+          "Name": "user",
+          "GoName": "User",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "NATS_USER",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "NATS user name (used with NATS_PASSWORD)",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "config/v1/server_config.proto"
+        },
+        {
+          "Name": "password",
+          "GoName": "Password",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "NATS_PASSWORD",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "NATS password (used with NATS_USER)",
+          "Sensitive": true,
+          "Category": "",
+          "Optional": true,
+          "ProtoFile": "config/v1/server_config.proto"
+        }
+      ],
+      "ProtoFile": "config/v1/server_config.proto",
+      "Line": 68
+    },
+    {
+      "Name": "TemporalConfig",
+      "Fields": [
+        {
+          "Name": "host",
+          "GoName": "Host",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "TEMPORAL_HOST",
+          "Flag": "temporal-host",
+          "DefaultValue": "localhost",
+          "Required": false,
+          "Description": "Temporal server host",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "config/v1/server_config.proto"
+        },
+        {
+          "Name": "port",
+          "GoName": "Port",
+          "GoType": "int32",
+          "ProtoType": "int32",
+          "EnvVar": "TEMPORAL_PORT",
+          "Flag": "temporal-port",
+          "DefaultValue": "7233",
+          "Required": false,
+          "Description": "Temporal server port",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "config/v1/server_config.proto"
+        },
+        {
+          "Name": "namespace",
+          "GoName": "Namespace",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "TEMPORAL_NAMESPACE",
+          "Flag": "temporal-namespace",
+          "DefaultValue": "reliant",
+          "Required": false,
+          "Description": "Temporal namespace",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "config/v1/server_config.proto"
+        }
+      ],
+      "ProtoFile": "config/v1/server_config.proto",
+      "Line": 92
+    },
+    {
+      "Name": "ServerTLSConfig",
+      "Fields": [
+        {
+          "Name": "cert_file",
+          "GoName": "CertFile",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "TLS_CERT_FILE",
+          "Flag": "tls-cert",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "TLS certificate file path",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "config/v1/server_config.proto"
+        },
+        {
+          "Name": "key_file",
+          "GoName": "KeyFile",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "TLS_KEY_FILE",
+          "Flag": "tls-key",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "TLS key file path",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "config/v1/server_config.proto"
+        },
+        {
+          "Name": "disable",
+          "GoName": "Disable",
+          "GoType": "bool",
+          "ProtoType": "bool",
+          "EnvVar": "DISABLE_TLS",
+          "Flag": "disable-tls",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "Disable TLS (use plaintext HTTP)",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "config/v1/server_config.proto"
+        }
+      ],
+      "ProtoFile": "config/v1/server_config.proto",
+      "Line": 119
+    },
+    {
+      "Name": "WorkerConfig",
+      "Fields": [
         {
           "Name": "health_port",
           "GoName": "HealthPort",
@@ -39690,124 +39441,31 @@
           "ProtoFile": "config/v1/worker_config.proto"
         },
         {
-          "Name": "data_dir",
-          "GoName": "DataDir",
+          "Name": "pre_stop_delay",
+          "GoName": "PreStopDelay",
           "GoType": "string",
-          "ProtoType": "string",
-          "EnvVar": "DATA_DIR",
-          "Flag": "data-dir",
-          "DefaultValue": "./data",
+          "ProtoType": "message",
+          "EnvVar": "PRE_STOP_DELAY",
+          "Flag": "",
+          "DefaultValue": "5s",
           "Required": false,
-          "Description": "Data directory for logs",
+          "Description": "How long to keep serving after readiness flips at shutdown (negative: no pause)",
           "Sensitive": false,
           "Category": "",
           "ProtoFile": "config/v1/worker_config.proto"
         },
         {
-          "Name": "streaming_driver",
-          "GoName": "StreamingDriver",
+          "Name": "shutdown_timeout",
+          "GoName": "ShutdownTimeout",
           "GoType": "string",
-          "ProtoType": "string",
-          "EnvVar": "STREAMING_DRIVER",
-          "Flag": "streaming-driver",
-          "DefaultValue": "nats",
-          "Required": false,
-          "Description": "Streaming driver (nats)",
-          "Sensitive": false,
-          "Category": "",
-          "ProtoFile": "config/v1/worker_config.proto",
-          "AllowedValues": [
-            "nats"
-          ]
-        },
-        {
-          "Name": "integrations",
-          "GoName": "Integrations",
-          "GoType": "",
           "ProtoType": "message",
-          "EnvVar": "",
+          "EnvVar": "SHUTDOWN_TIMEOUT",
           "Flag": "",
-          "DefaultValue": "",
+          "DefaultValue": "30s",
           "Required": false,
-          "Description": "",
+          "Description": "Budget for graceful shutdown after the pre-stop pause",
           "Sensitive": false,
           "Category": "",
-          "MessageType": "IntegrationsConfig",
-          "ProtoFile": "config/v1/worker_config.proto"
-        },
-        {
-          "Name": "observability",
-          "GoName": "Observability",
-          "GoType": "",
-          "ProtoType": "message",
-          "EnvVar": "",
-          "Flag": "",
-          "DefaultValue": "",
-          "Required": false,
-          "Description": "",
-          "Sensitive": false,
-          "Category": "",
-          "MessageType": "ObservabilityConfig",
-          "ProtoFile": "config/v1/worker_config.proto"
-        },
-        {
-          "Name": "sentry",
-          "GoName": "Sentry",
-          "GoType": "",
-          "ProtoType": "message",
-          "EnvVar": "",
-          "Flag": "",
-          "DefaultValue": "",
-          "Required": false,
-          "Description": "",
-          "Sensitive": false,
-          "Category": "",
-          "MessageType": "SentryConfig",
-          "ProtoFile": "config/v1/worker_config.proto"
-        },
-        {
-          "Name": "analytics",
-          "GoName": "Analytics",
-          "GoType": "",
-          "ProtoType": "message",
-          "EnvVar": "",
-          "Flag": "",
-          "DefaultValue": "",
-          "Required": false,
-          "Description": "",
-          "Sensitive": false,
-          "Category": "",
-          "MessageType": "AnalyticsConfig",
-          "ProtoFile": "config/v1/worker_config.proto"
-        },
-        {
-          "Name": "llm",
-          "GoName": "Llm",
-          "GoType": "",
-          "ProtoType": "message",
-          "EnvVar": "",
-          "Flag": "",
-          "DefaultValue": "",
-          "Required": false,
-          "Description": "",
-          "Sensitive": false,
-          "Category": "",
-          "MessageType": "LLMConfig",
-          "ProtoFile": "config/v1/worker_config.proto"
-        },
-        {
-          "Name": "preview",
-          "GoName": "Preview",
-          "GoType": "",
-          "ProtoType": "message",
-          "EnvVar": "",
-          "Flag": "",
-          "DefaultValue": "",
-          "Required": false,
-          "Description": "",
-          "Sensitive": false,
-          "Category": "",
-          "MessageType": "PreviewConfig",
           "ProtoFile": "config/v1/worker_config.proto"
         }
       ],
@@ -39817,25 +39475,25 @@
         "worker"
       ],
       "ProtoFile": "config/v1/worker_config.proto",
-      "Line": 20
+      "Line": 15
     }
   ],
   "sources": {
     "config/v1/analytics_config.proto": "2093382e19e6c0a59f28913b76fae435017337a229b93f167599e3198207fc94",
-    "config/v1/api_server_config.proto": "1ae01f909bdfee18e653cfb0c695784d9c602fba24a25100fd22fde3a0711711",
+    "config/v1/api_server_config.proto": "981fe2bbc1c0b57d34f7c9ed4fd325c7678f0ad8956c0239edbe9a4465be9a57",
     "config/v1/cli_config.proto": "5acd17311a1d616f1f6e54ee6d9c30a9ddf6c78474fd0308e80f2db99d71a55e",
-    "config/v1/config.proto": "c873c25d565a973afe746cc17710f51652517db44137e24eba21daf4b8a13c23",
-    "config/v1/control_plane_config.proto": "d461d08a8932926bc6dbd8f40c84e9d259c1007b424c6b945de40196830ac1ea",
+    "config/v1/config.proto": "470b5ebfc2dba63d9364338197ba52766a00f2bd2e43f63529c5f977351decdd",
+    "config/v1/control_plane_config.proto": "baedb9e18f40a3711bad8e7c0572ff37257dddff3f3ff46d7e4e4f57b0c1454a",
     "config/v1/daemon_config.proto": "f50c66d5ee9c77735c670ce26b18216923002fee9f455a5db8ee013a4e0cb545",
-    "config/v1/db_config.proto": "9e899127482ecf4547e5e08571eb1adc6f4a6aeb903cd1790495f3bb631fd7b3",
-    "config/v1/gateway_config.proto": "512d79d4f70c221bc73bf62a727422cad427e7ede9d669fb4d66f3e43298a36b",
-    "config/v1/integrations_config.proto": "d28693090d9c3dc61085691227853d63a783d0b9fc9d91caae31d14256d59132",
+    "config/v1/db_config.proto": "566e7ebb67f0eaac98cccfac4a9baf948f319c1a928ea8cf0b7f837d214d1bd0",
+    "config/v1/gateway_config.proto": "19cf0f91d4050f55f58da8c95001ec65e2b3579b37615d638d68024016217464",
+    "config/v1/integrations_config.proto": "3f051e70d4f454b353726dfc7a381921afe61fa021acb318ccf0ce592670faac",
     "config/v1/llm_config.proto": "4c697b1803e3b0f06470ac2538193be961dbf71d5be61c8712ab97d7488e257d",
-    "config/v1/observability_config.proto": "6f11ef06577f5a13763572380c121a9b4063b9ba8358a8a34f2fdb93121bf89a",
+    "config/v1/observability_config.proto": "d5e01af322359c3358ebcd3bc16bf03fbf4be4bad2b03b52e75a9d320193001b",
     "config/v1/preview_config.proto": "a8620fb35910b249c3b1bc0767fb615bdf699624526d7a237c62cb490fb9c425",
     "config/v1/preview_url_config.proto": "fa0cc5f673ae266457eaa39150abaf020bfdda8d7395f54c47fef893a8653d4d",
-    "config/v1/server_config.proto": "b95a13b0a379a2eda412b14e3f25fa31a06b7790e614a5d251c22a588f077451",
-    "config/v1/worker_config.proto": "a03479e9f3f388fc5afcdf8db3c59c3b07537433203eac267ff0e899f4d136e0",
+    "config/v1/server_config.proto": "ccf8db8ce398db64bf8f74386ad35612bf7fb9419ee55ade9e8acf86dbd46235",
+    "config/v1/worker_config.proto": "b1b71b542b5f671aea986824f2c2d8643ff2f7f6e05029b3b79b889988586d04",
     "reliant/v1/account.proto": "d7e5ce0de4321d271532eb749a53e2001e692bdf208a4b7b71d4816673eebf35",
     "reliant/v1/annotations.proto": "378abb26b00cc86e8b14aef65e3e78467130da6a7787cd66b9a7d59ade949b57",
     "reliant/v1/approval.proto": "4ebbca862a2a5f88bb7f603d52d09933c296cbdc89e55d2abd1f58b76ecad6ce",

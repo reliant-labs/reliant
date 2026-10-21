@@ -5,20 +5,6 @@
 
 import type { GenFile, GenMessage } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
-import type { AnalyticsConfig } from "./analytics_config_pb";
-import { file_config_v1_analytics_config } from "./analytics_config_pb";
-import type { ControlPlaneConfig } from "./control_plane_config_pb";
-import { file_config_v1_control_plane_config } from "./control_plane_config_pb";
-import type { IntegrationsConfig } from "./integrations_config_pb";
-import { file_config_v1_integrations_config } from "./integrations_config_pb";
-import type { LLMConfig } from "./llm_config_pb";
-import { file_config_v1_llm_config } from "./llm_config_pb";
-import type { ObservabilityConfig, SentryConfig } from "./observability_config_pb";
-import { file_config_v1_observability_config } from "./observability_config_pb";
-import type { PreviewConfig } from "./preview_config_pb";
-import { file_config_v1_preview_config } from "./preview_config_pb";
-import type { DatabaseConfig, DrainConfig, NatsConfig, ServerTLSConfig, TemporalConfig } from "./server_config_pb";
-import { file_config_v1_server_config } from "./server_config_pb";
 import { file_forge_v1_forge } from "../../forge/v1/forge_pb";
 import type { Duration } from "@bufbuild/protobuf/wkt";
 import { file_google_protobuf_duration } from "@bufbuild/protobuf/wkt";
@@ -28,13 +14,13 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file config/v1/api_server_config.proto.
  */
 export const file_config_v1_api_server_config: GenFile = /*@__PURE__*/
-  fileDesc("CiFjb25maWcvdjEvYXBpX3NlcnZlcl9jb25maWcucHJvdG8SCWNvbmZpZy52MSLUGAoPQXBpU2VydmVyQ29uZmlnEmUKDmp3dF9wdWJsaWNfa2V5GAEgASgJQk2CzhhJCg5KV1RfUFVCTElDX0tFWRIOand0LXB1YmxpYy1rZXkqJ0pXVCBwdWJsaWMga2V5IFBFTSBmb3IgdG9rZW4gdmFsaWRhdGlvbhJsChNqd3RfcHVibGljX2tleV9maWxlGAIgASgJQk+CzhhLChNKV1RfUFVCTElDX0tFWV9GSUxFEhNqd3QtcHVibGljLWtleS1maWxlKh9QYXRoIHRvIEpXVCBwdWJsaWMga2V5IFBFTSBmaWxlEnEKCGp3a3NfdXJsGAMgASgJQl+CzhhbChBSRUxJQU5UX0pXS1NfVVJMEghqd2tzLXVybCo9SldLUyBlbmRwb2ludCBVUkwgZm9yIEpXVCB2YWxpZGF0aW9uIChhbHRlcm5hdGl2ZSB0byBQRU0ga2V5KRJ+ChVhbGxvd2VkX2VtYWlsX2RvbWFpbnMYBCADKAlCX4LOGFsKFUFMTE9XRURfRU1BSUxfRE9NQUlOUypCQ29tbWEtc2VwYXJhdGVkIGVtYWlsIGRvbWFpbnMgYWxsb3dlZCB0byBzaWduIGluIChub25lIGFsbG93cyBhbGwpEjQKDWNvbnRyb2xfcGxhbmUYBSABKAsyHS5jb25maWcudjEuQ29udHJvbFBsYW5lQ29uZmlnEo4BChFkaXNhYmxlX2ZvcmdlX2FwaRgGIAEoCEJzgs4YbwoZUkVMSUFOVF9ESVNBQkxFX0ZPUkdFX0FQSSpSVHVybiB0aGUgZm9yZ2UgUlBDIHN1cmZhY2Ugb2ZmIGF0IHRoaXMgc2VydmVyIChpdHMgcnBjcyBhbnN3ZXIgRmFpbGVkUHJlY29uZGl0aW9uKRIrCghkYXRhYmFzZRgKIAEoCzIZLmNvbmZpZy52MS5EYXRhYmFzZUNvbmZpZxIjCgRuYXRzGAsgASgLMhUuY29uZmlnLnYxLk5hdHNDb25maWcSKwoIdGVtcG9yYWwYDCABKAsyGS5jb25maWcudjEuVGVtcG9yYWxDb25maWcSJwoDdGxzGA0gASgLMhouY29uZmlnLnYxLlNlcnZlclRMU0NvbmZpZxIlCgVkcmFpbhgOIAEoCzIWLmNvbmZpZy52MS5EcmFpbkNvbmZpZxJQCglncnBjX3BvcnQYDyABKAVCPYLOGDkKCUdSUENfUE9SVBIJZ3JwYy1wb3J0GgQ5MDkwKhtnUlBDL0Nvbm5lY3RSUEMgbGlzdGVuIHBvcnQSXgoLaGVhbHRoX3BvcnQYECABKAVCSYLOGEUKC0hFQUxUSF9QT1JUEgtoZWFsdGgtcG9ydBoEODA4MSojSGVhbHRoL3JlYWRpbmVzcyBIVFRQIGVuZHBvaW50IHBvcnQSTwoKcHByb2ZfcG9ydBgRIAEoBUI7gs4YNwoKUFBST0ZfUE9SVBIKcHByb2YtcG9ydBoENjA2MCoXcHByb2YgZGVidWcgc2VydmVyIHBvcnQSWwoMYmluZF9hZGRyZXNzGBIgASgJQkWCzhhBCgxCSU5EX0FERFJFU1MSDGJpbmQtYWRkcmVzcxoHMC4wLjAuMCoaTmV0d29yayBhZGRyZXNzIHRvIGJpbmQgdG8SVQoIZGF0YV9kaXIYEyABKAlCQ4LOGD8KCERBVEFfRElSEghkYXRhLWRpchoGLi9kYXRhKiFEYXRhIGRpcmVjdG9yeSBmb3IgbG9ncyBhbmQgY2VydHMSZwoQc3RyZWFtaW5nX2RyaXZlchgUIAEoCUJNgs4YSQoQU1RSRUFNSU5HX0RSSVZFUhIQc3RyZWFtaW5nLWRyaXZlchoEbmF0cyoXU3RyZWFtaW5nIGRyaXZlciAobmF0cylKBG5hdHMSfQoUY29yc19hbGxvd2VkX29yaWdpbnMYFSADKAlCX4LOGFsKFENPUlNfQUxMT1dFRF9PUklHSU5TEgxjb3JzLW9yaWdpbnMaASoqMkNvbW1hLXNlcGFyYXRlZCBDT1JTIGFsbG93ZWQgb3JpZ2lucywgb3IgKiBmb3IgYWxsEnwKCWF1dGhfbW9kZRgeIAEoCUJpgs4YZQoJQVVUSF9NT0RFGghzdXBhYmFzZSo8QXV0aCBtb2RlOiBzdXBhYmFzZSAoSldUcykgb3IgYXBpa2V5IChvbmUgc2hhcmVkIGJlYXJlciBrZXkpSghzdXBhYmFzZUoGYXBpa2V5ElQKDGF1dGhfYXBpX2tleRgfIAEoCUI+gs4YOgoMQVVUSF9BUElfS0VZKiZTaGFyZWQgYmVhcmVyIGtleSBmb3IgQVVUSF9NT0RFPWFwaWtleTABUAEShQEKHHJlcXVpcmVfZW1haWxfdmVyaWZpZWRfY2xhaW0YICABKAhCX4LOGFsKIUFVVEhfUkVRVUlSRV9FTUFJTF9WRVJJRklFRF9DTEFJTSo2QSBKV1Qgd2l0aG91dCBhbiBlbWFpbF92ZXJpZmllZCBjbGFpbSBjYXJyaWVzIG5vIGVtYWlsEoYBChRhdXRob3JpemF0aW9uX3NlcnZlchghIAEoCUJogs4YZAocUkVMSUFOVF9BVVRIT1JJWkFUSU9OX1NFUlZFUipEUHVibGljIFVSTCBvZiB0aGUgY29udHJvbCBwbGFuZSB0aGF0IGlzc3VlcyB0aGlzIGRlcGxveW1lbnQncyB0b2tlbnMSfQoRbWNwX29hdXRoX2lzc3VlcnMYIiADKAlCYoLOGF4KEU1DUF9PQVVUSF9JU1NVRVJTKklDb21tYS1zZXBhcmF0ZWQgT0F1dGggaXNzdWVycyB3aG9zZSB0b2tlbnMgdGhlIGNvbm5lY3RvciBlbmRwb2ludCBhY2NlcHRzEl8KD21heF91cGxvYWRfc2l6ZRgjIAEoA0JGgs4YQgoPTUFYX1VQTE9BRF9TSVpFGggxMDQ4NTc2MColTGFyZ2VzdCBhdHRhY2htZW50IGFjY2VwdGVkLCBpbiBieXRlcxKIAQoVd29ya3RyZWVfYXV0b19hcmNoaXZlGCQgASgJQmmCzhhlCh1SRUxJQU5UX1dPUktUUkVFX0FVVE9fQVJDSElWRRoHZHJ5LXJ1biopV29ya3RyZWUgYXV0by1hcmNoaXZlOiBkcnktcnVuLCBvbiBvciBvZmZKB2RyeS1ydW5KAm9uSgNvZmYSfQoRYXV0aF9wcm92aWRlcl91cmwYJSABKAlCYoLOGF4KEFJFTElBTlRfQVVUSF9VUkwaG2h0dHBzOi8vZGFzaC5yZWxpYW50bGFicy5pbyotT0F1dGggcHJvdmlkZXIgb3JpZ2luIGZvciB0aGUgZGVza3RvcCBzaWduLWluEqQBChFhdXRoX3Byb3ZpZGVyX2tleRgmIAEoCUKIAYLOGIMBChBSRUxJQU5UX0FVVEhfS0VZGi5zYl9wdWJsaXNoYWJsZV9LS2lCM0IwRWRFdjduZ3V3S2ZFRTVBX2lZOXJWWG9kKj9PQXV0aCBwcm92aWRlciBwdWJsaXNoYWJsZSAocHVibGljKSBrZXkgZm9yIHRoZSBkZXNrdG9wIHNpZ24taW4SMwoMaW50ZWdyYXRpb25zGCggASgLMh0uY29uZmlnLnYxLkludGVncmF0aW9uc0NvbmZpZxI1Cg1vYnNlcnZhYmlsaXR5GDIgASgLMh4uY29uZmlnLnYxLk9ic2VydmFiaWxpdHlDb25maWcSJwoGc2VudHJ5GDMgASgLMhcuY29uZmlnLnYxLlNlbnRyeUNvbmZpZxItCglhbmFseXRpY3MYPCABKAsyGi5jb25maWcudjEuQW5hbHl0aWNzQ29uZmlnEiEKA2xsbRhGIAEoCzIULmNvbmZpZy52MS5MTE1Db25maWcSnwEKF3BheWxvYWRfYmxvYl9nY19ob3Jpem9uGFAgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uQmOCzhhfCh9SRUxJQU5UX1BBWUxPQURfQkxPQl9HQ19IT1JJWk9OGgQ3MjBoKjZIb3cgbG9uZyBhbiB1bnJlZmVyZW5jZWQgVGVtcG9yYWwgcGF5bG9hZCBibG9iIGlzIGtlcHQSKQoHcHJldmlldxhaIAEoCzIYLmNvbmZpZy52MS5QcmV2aWV3Q29uZmlnOhrKwRgWCgdyZWxpYW50EgZzZXJ2ZXISA2FwaUI4WjZnaXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9jb25maWcvdjE7Y29uZmlndjFiBnByb3RvMw", [file_config_v1_analytics_config, file_config_v1_control_plane_config, file_config_v1_integrations_config, file_config_v1_llm_config, file_config_v1_observability_config, file_config_v1_preview_config, file_config_v1_server_config, file_forge_v1_forge, file_google_protobuf_duration]);
+  fileDesc("CiFjb25maWcvdjEvYXBpX3NlcnZlcl9jb25maWcucHJvdG8SCWNvbmZpZy52MSKJFwoPQXBpU2VydmVyQ29uZmlnEmUKDmp3dF9wdWJsaWNfa2V5GAEgASgJQk2CzhhJCg5KV1RfUFVCTElDX0tFWRIOand0LXB1YmxpYy1rZXkqJ0pXVCBwdWJsaWMga2V5IFBFTSBmb3IgdG9rZW4gdmFsaWRhdGlvbhJsChNqd3RfcHVibGljX2tleV9maWxlGAIgASgJQk+CzhhLChNKV1RfUFVCTElDX0tFWV9GSUxFEhNqd3QtcHVibGljLWtleS1maWxlKh9QYXRoIHRvIEpXVCBwdWJsaWMga2V5IFBFTSBmaWxlEnEKCGp3a3NfdXJsGAMgASgJQl+CzhhbChBSRUxJQU5UX0pXS1NfVVJMEghqd2tzLXVybCo9SldLUyBlbmRwb2ludCBVUkwgZm9yIEpXVCB2YWxpZGF0aW9uIChhbHRlcm5hdGl2ZSB0byBQRU0ga2V5KRJ+ChVhbGxvd2VkX2VtYWlsX2RvbWFpbnMYBCADKAlCX4LOGFsKFUFMTE9XRURfRU1BSUxfRE9NQUlOUypCQ29tbWEtc2VwYXJhdGVkIGVtYWlsIGRvbWFpbnMgYWxsb3dlZCB0byBzaWduIGluIChub25lIGFsbG93cyBhbGwpEo4BChFkaXNhYmxlX2ZvcmdlX2FwaRgGIAEoCEJzgs4YbwoZUkVMSUFOVF9ESVNBQkxFX0ZPUkdFX0FQSSpSVHVybiB0aGUgZm9yZ2UgUlBDIHN1cmZhY2Ugb2ZmIGF0IHRoaXMgc2VydmVyIChpdHMgcnBjcyBhbnN3ZXIgRmFpbGVkUHJlY29uZGl0aW9uKRJQCglncnBjX3BvcnQYDyABKAVCPYLOGDkKCUdSUENfUE9SVBIJZ3JwYy1wb3J0GgQ5MDkwKhtnUlBDL0Nvbm5lY3RSUEMgbGlzdGVuIHBvcnQSXgoLaGVhbHRoX3BvcnQYECABKAVCSYLOGEUKC0hFQUxUSF9QT1JUEgtoZWFsdGgtcG9ydBoEODA4MSojSGVhbHRoL3JlYWRpbmVzcyBIVFRQIGVuZHBvaW50IHBvcnQSTwoKcHByb2ZfcG9ydBgRIAEoBUI7gs4YNwoKUFBST0ZfUE9SVBIKcHByb2YtcG9ydBoENjA2MCoXcHByb2YgZGVidWcgc2VydmVyIHBvcnQSWwoMYmluZF9hZGRyZXNzGBIgASgJQkWCzhhBCgxCSU5EX0FERFJFU1MSDGJpbmQtYWRkcmVzcxoHMC4wLjAuMCoaTmV0d29yayBhZGRyZXNzIHRvIGJpbmQgdG8SfQoUY29yc19hbGxvd2VkX29yaWdpbnMYFSADKAlCX4LOGFsKFENPUlNfQUxMT1dFRF9PUklHSU5TEgxjb3JzLW9yaWdpbnMaASoqMkNvbW1hLXNlcGFyYXRlZCBDT1JTIGFsbG93ZWQgb3JpZ2lucywgb3IgKiBmb3IgYWxsEnwKCWF1dGhfbW9kZRgeIAEoCUJpgs4YZQoJQVVUSF9NT0RFGghzdXBhYmFzZSo8QXV0aCBtb2RlOiBzdXBhYmFzZSAoSldUcykgb3IgYXBpa2V5IChvbmUgc2hhcmVkIGJlYXJlciBrZXkpSghzdXBhYmFzZUoGYXBpa2V5ElQKDGF1dGhfYXBpX2tleRgfIAEoCUI+gs4YOgoMQVVUSF9BUElfS0VZKiZTaGFyZWQgYmVhcmVyIGtleSBmb3IgQVVUSF9NT0RFPWFwaWtleTABUAEShQEKHHJlcXVpcmVfZW1haWxfdmVyaWZpZWRfY2xhaW0YICABKAhCX4LOGFsKIUFVVEhfUkVRVUlSRV9FTUFJTF9WRVJJRklFRF9DTEFJTSo2QSBKV1Qgd2l0aG91dCBhbiBlbWFpbF92ZXJpZmllZCBjbGFpbSBjYXJyaWVzIG5vIGVtYWlsEoYBChRhdXRob3JpemF0aW9uX3NlcnZlchghIAEoCUJogs4YZAocUkVMSUFOVF9BVVRIT1JJWkFUSU9OX1NFUlZFUipEUHVibGljIFVSTCBvZiB0aGUgY29udHJvbCBwbGFuZSB0aGF0IGlzc3VlcyB0aGlzIGRlcGxveW1lbnQncyB0b2tlbnMSfQoRbWNwX29hdXRoX2lzc3VlcnMYIiADKAlCYoLOGF4KEU1DUF9PQVVUSF9JU1NVRVJTKklDb21tYS1zZXBhcmF0ZWQgT0F1dGggaXNzdWVycyB3aG9zZSB0b2tlbnMgdGhlIGNvbm5lY3RvciBlbmRwb2ludCBhY2NlcHRzEl8KD21heF91cGxvYWRfc2l6ZRgjIAEoA0JGgs4YQgoPTUFYX1VQTE9BRF9TSVpFGggxMDQ4NTc2MColTGFyZ2VzdCBhdHRhY2htZW50IGFjY2VwdGVkLCBpbiBieXRlcxKIAQoVd29ya3RyZWVfYXV0b19hcmNoaXZlGCQgASgJQmmCzhhlCh1SRUxJQU5UX1dPUktUUkVFX0FVVE9fQVJDSElWRRoHZHJ5LXJ1biopV29ya3RyZWUgYXV0by1hcmNoaXZlOiBkcnktcnVuLCBvbiBvciBvZmZKB2RyeS1ydW5KAm9uSgNvZmYSfQoRYXV0aF9wcm92aWRlcl91cmwYJSABKAlCYoLOGF4KEFJFTElBTlRfQVVUSF9VUkwaG2h0dHBzOi8vZGFzaC5yZWxpYW50bGFicy5pbyotT0F1dGggcHJvdmlkZXIgb3JpZ2luIGZvciB0aGUgZGVza3RvcCBzaWduLWluEqQBChFhdXRoX3Byb3ZpZGVyX2tleRgmIAEoCUKIAYLOGIMBChBSRUxJQU5UX0FVVEhfS0VZGi5zYl9wdWJsaXNoYWJsZV9LS2lCM0IwRWRFdjduZ3V3S2ZFRTVBX2lZOXJWWG9kKj9PQXV0aCBwcm92aWRlciBwdWJsaXNoYWJsZSAocHVibGljKSBrZXkgZm9yIHRoZSBkZXNrdG9wIHNpZ24taW4SnwEKF3BheWxvYWRfYmxvYl9nY19ob3Jpem9uGFAgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uQmOCzhhfCh9SRUxJQU5UX1BBWUxPQURfQkxPQl9HQ19IT1JJWk9OGgQ3MjBoKjZIb3cgbG9uZyBhbiB1bnJlZmVyZW5jZWQgVGVtcG9yYWwgcGF5bG9hZCBibG9iIGlzIGtlcHQSnAEKDnByZV9zdG9wX2RlbGF5GBYgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uQmmCzhhlCg5QUkVfU1RPUF9ERUxBWRoCNXMqT0hvdyBsb25nIHRvIGtlZXAgc2VydmluZyBhZnRlciByZWFkaW5lc3MgZmxpcHMgYXQgc2h1dGRvd24gKG5lZ2F0aXZlOiBubyBwYXVzZSkShwEKEHNodXRkb3duX3RpbWVvdXQYFyABKAsyGS5nb29nbGUucHJvdG9idWYuRHVyYXRpb25CUoLOGE4KEFNIVVRET1dOX1RJTUVPVVQaAzMwcyo1QnVkZ2V0IGZvciBncmFjZWZ1bCBzaHV0ZG93biBhZnRlciB0aGUgcHJlLXN0b3AgcGF1c2U6GsrBGBYKB3JlbGlhbnQSBnNlcnZlchIDYXBpSgQIBRAGSgQIChALSgQICxAMSgQIDBANSgQIDRAOSgQIDhAPSgQIExAUSgQIFBAVSgQIKBApSgQIMhAzSgQIMxA0SgQIPBA9SgQIRhBHSgQIWhBbUg1jb250cm9sX3BsYW5lUghkYXRhYmFzZVIEbmF0c1IIdGVtcG9yYWxSA3Rsc1IFZHJhaW5SCGRhdGFfZGlyUhBzdHJlYW1pbmdfZHJpdmVyUgxpbnRlZ3JhdGlvbnNSDW9ic2VydmFiaWxpdHlSBnNlbnRyeVIJYW5hbHl0aWNzUgNsbG1SB3ByZXZpZXdCOFo2Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vY29uZmlnL3YxO2NvbmZpZ3YxYgZwcm90bzM", [file_forge_v1_forge, file_google_protobuf_duration]);
 
 /**
  * ApiServerConfig is the `reliant server api` process's own config: the knobs
- * only the API server reads. It loads alongside the root ReliantConfig
+ * only the API server reads. It loads alongside the root ReliantConfig and the
+ * `server` subtree configs, ServerProcessConfig and DatabaseConfig
  * (config.proto, whose header has the rules every config here follows).
- *
  *
  * @generated from message config.v1.ApiServerConfig
  */
@@ -68,11 +54,6 @@ export type ApiServerConfig = Message<"config.v1.ApiServerConfig"> & {
   allowedEmailDomains: string[];
 
   /**
-   * @generated from field: config.v1.ControlPlaneConfig control_plane = 5;
-   */
-  controlPlane?: ControlPlaneConfig | undefined;
-
-  /**
    * Turns the forge RPC surface (ForgeService) off at this server: every forge
    * rpc then answers FailedPrecondition, saying the forge API is disabled in
    * this deployment. A kill switch, so unset means ON. StartDeploy applies to
@@ -89,36 +70,15 @@ export type ApiServerConfig = Message<"config.v1.ApiServerConfig"> & {
   disableForgeApi: boolean;
 
   /**
-   * @generated from field: config.v1.DatabaseConfig database = 10;
-   */
-  database?: DatabaseConfig | undefined;
-
-  /**
-   * @generated from field: config.v1.NatsConfig nats = 11;
-   */
-  nats?: NatsConfig | undefined;
-
-  /**
-   * @generated from field: config.v1.TemporalConfig temporal = 12;
-   */
-  temporal?: TemporalConfig | undefined;
-
-  /**
-   * @generated from field: config.v1.ServerTLSConfig tls = 13;
-   */
-  tls?: ServerTLSConfig | undefined;
-
-  /**
-   * @generated from field: config.v1.DrainConfig drain = 14;
-   */
-  drain?: DrainConfig | undefined;
-
-  /**
    * @generated from field: int32 grpc_port = 15;
    */
   grpcPort: number;
 
   /**
+   * The probe listener (/health, /ready). Not forge's `port`, which names
+   * the port a process serves its API on: reliant's API is GRPC_PORT, and
+   * HEALTH_PORT's default differs per role. The serve policy maps it.
+   *
    * @generated from field: int32 health_port = 16;
    */
   healthPort: number;
@@ -132,19 +92,6 @@ export type ApiServerConfig = Message<"config.v1.ApiServerConfig"> & {
    * @generated from field: string bind_address = 18;
    */
   bindAddress: string;
-
-  /**
-   * @generated from field: string data_dir = 19;
-   */
-  dataDir: string;
-
-  /**
-   * How live deltas fan out across replicas. nats is the only driver; the
-   * knob remains because deployments set it.
-   *
-   * @generated from field: string streaming_driver = 20;
-   */
-  streamingDriver: string;
 
   /**
    * The browser origins allowed to call the API, comma-separated; "*"
@@ -234,31 +181,6 @@ export type ApiServerConfig = Message<"config.v1.ApiServerConfig"> & {
   authProviderKey: string;
 
   /**
-   * @generated from field: config.v1.IntegrationsConfig integrations = 40;
-   */
-  integrations?: IntegrationsConfig | undefined;
-
-  /**
-   * @generated from field: config.v1.ObservabilityConfig observability = 50;
-   */
-  observability?: ObservabilityConfig | undefined;
-
-  /**
-   * @generated from field: config.v1.SentryConfig sentry = 51;
-   */
-  sentry?: SentryConfig | undefined;
-
-  /**
-   * @generated from field: config.v1.AnalyticsConfig analytics = 60;
-   */
-  analytics?: AnalyticsConfig | undefined;
-
-  /**
-   * @generated from field: config.v1.LLMConfig llm = 70;
-   */
-  llm?: LLMConfig | undefined;
-
-  /**
    * How long an unreferenced Temporal payload blob is kept before the API
    * server's hourly GC deletes it. It must exceed the longest workflow run
    * plus the namespace's history retention (internal/temporal/claimcheck).
@@ -268,9 +190,22 @@ export type ApiServerConfig = Message<"config.v1.ApiServerConfig"> & {
   payloadBlobGcHorizon?: Duration | undefined;
 
   /**
-   * @generated from field: config.v1.PreviewConfig preview = 90;
+   * The rollout drain budget. control-plane sets both on every server
+   * workload, and forge derives the pod's terminationGracePeriodSeconds from
+   * them, so a process that ignores them cannot stay inside the grace period
+   * it was given. Both follow the rule forge's grace-period arithmetic applies
+   * to them (pkg/deploy drainSeconds): zero is the default and negative is
+   * none. Both are Go durations ("30s"); a bare number stops the server at
+   * load. They carry forge's names, which its serve policy reads.
+   *
+   * @generated from field: google.protobuf.Duration pre_stop_delay = 22;
    */
-  preview?: PreviewConfig | undefined;
+  preStopDelay?: Duration | undefined;
+
+  /**
+   * @generated from field: google.protobuf.Duration shutdown_timeout = 23;
+   */
+  shutdownTimeout?: Duration | undefined;
 };
 
 /**
