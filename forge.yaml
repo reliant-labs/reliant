@@ -47,7 +47,6 @@ lint:
         forge-tracing-log-without-ctx: warn
         forge-tracing-raw-http-client: warn
         forge-tracing-contract-uninstrumented: warn
-        forge-tracing-raw-sql-open: warn
 generate:
     hooks:
         # sqlc until the forge ORM replaces it (P5b). `make sqlc` runs the
