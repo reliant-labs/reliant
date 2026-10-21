@@ -278,6 +278,16 @@ stays as it is and shrinks one aggregate lane at a time; the lanes are in
    also sets `MaxAttempts: 1`. `internal/store/connection_repo_ext.go`'s
    `connectionTx` is both.
 
+   Every opener's level is pinned on the wire by
+   `storetest.TestTransactionOpenersBeginAtTheirLevel`: a port that moves a
+   transaction adds or keeps its row there. Prove a lock-based one with a race
+   test through `storetest.Env.Probe` (records each BEGIN's level and every
+   SQLSTATE, so a 40001 that `RunTx` retried past still fails the test) and
+   `Env.HoldLocks` (the winner, committed once the transaction under test is
+   queued behind it) — `TestMergeWorktreeCleanupMetadataLoserReadsTheWinnersWrite`
+   is the pattern. A nested opener joins the outer transaction at the
+   OUTER's level, whatever options it passes.
+
 8. **Consumers depend on the least they use (P6).** A port never widens a
    dependency. A handler, service or workflow that needs persistence
    declares, in its own package, an interface listing only the methods it

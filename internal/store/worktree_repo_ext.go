@@ -251,10 +251,18 @@ func SetWorktreeCleanupMetadata(ctx context.Context, db orm.Context, id string, 
 // cleanup_metadata under SELECT ... FOR UPDATE, so settle, sweep and clean-up
 // running on different replicas never lose each other's updates. fn gets the
 // stored metadata and whether the row is archived; it returns false to write
-// nothing. fn may run more than once (the transaction retries a
-// serialization failure), each time on a fresh copy of the stored value.
+// nothing.
+//
+// The row lock is the whole guarantee, so the transaction is READ COMMITTED,
+// as the hand SQL's BeginTx(nil) was (internal/db/SCHEMA.md rule 7): a merge
+// queued behind another writer's lock then reads that writer's committed
+// value. Under the ORM's SERIALIZABLE default the same read fails with 40001,
+// and under contention the retries run out and an update is lost
+// (TestMergeWorktreeCleanupMetadataLoserReadsTheWinnersWrite). fn may still
+// run more than once — a deadlock (40P01) is retried — each time on a fresh
+// copy of the stored value.
 func MergeWorktreeCleanupMetadata(ctx context.Context, db orm.Context, id string, fn func(m *core.CleanupMetadata, archived bool) bool) error {
-	return db.RunTx(ctx, func(ctx context.Context) error {
+	return db.RunTxWithOptions(ctx, orm.TxOptions{Isolation: orm.IsolationReadCommitted}, func(ctx context.Context) error {
 		var row Worktree
 		err := db.Bun().NewSelect().Model(&row).WhereAllWithDeleted().
 			Column(WorktreeFieldCleanupMetadata, WorktreeFieldDeletedAt).
