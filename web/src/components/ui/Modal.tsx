@@ -14,6 +14,17 @@ interface ModalProps {
   size?: "sm" | "md" | "lg" | "xl" | "full";
   hideCloseButton?: boolean;
   headerActions?: React.ReactNode;
+  /**
+   * Actions pinned below the scrolling body, so the primary button never
+   * scrolls out of reach on a long form.
+   */
+  footer?: React.ReactNode;
+  /**
+   * Below `sm` the dialog becomes a full-screen sheet: no margin, no corner
+   * radius, the close button on the left. Defaults to on for lg and wider,
+   * whose forms are too tall to read in a floating card on a phone.
+   */
+  sheetOnMobile?: boolean;
 }
 
 const sizeClasses = {
@@ -34,7 +45,10 @@ export function Modal({
   size = "xl",
   hideCloseButton = false,
   headerActions,
+  footer,
+  sheetOnMobile,
 }: ModalProps) {
+  const sheet = sheetOnMobile ?? (size === "lg" || size === "xl" || size === "full");
   const modalRef = useRef<HTMLDivElement>(null);
   const hasOpenedRef = useRef(false);
   // Track the element that was focused before modal opened
@@ -123,7 +137,10 @@ export function Modal({
       // max-height: a `fixed inset-0` overlay resolves against the largest
       // viewport on mobile, so centring inside it puts the panel's midpoint
       // below the visible centre and it drifts as browser chrome animates.
-      className="fixed inset-0 h-[100dvh] z-50 isolate flex items-center justify-center p-4 sm:p-6"
+      className={cn(
+        "fixed inset-0 h-[100dvh] z-50 isolate flex items-center justify-center p-4 sm:p-6",
+        sheet && "max-sm:p-0",
+      )}
       role="dialog"
       aria-modal="true"
       aria-labelledby={title ? "modal-title" : undefined}
@@ -147,12 +164,25 @@ export function Modal({
           "elevation-5",
           "animate-in fade-in-0 zoom-in-95 duration-200",
           sizeClasses[size],
+          sheet && "max-sm:h-[100dvh] max-sm:max-h-[100dvh] max-sm:max-w-none max-sm:rounded-none max-sm:border-0",
           className
         )}
+        data-sheet-on-mobile={sheet ? "true" : undefined}
       >
         {title && (
           <div className="flex items-center justify-between gap-4 px-6 py-5 border-b border-border/60 elevation-1">
             <div className="flex items-center gap-3 min-w-0">
+              {sheet && !hideCloseButton && (
+                // On a phone the sheet closes from the left, where a back
+                // gesture's thumb already is; the right-hand button hides.
+                <button
+                  onClick={stableOnClose}
+                  className="-ml-2 rounded-lg p-2 transition-colors hover:bg-muted/80 focus:outline-none focus:ring-2 focus:ring-primary sm:hidden"
+                  aria-label="Close modal"
+                >
+                  <X className="h-5 w-5 text-muted-foreground" />
+                </button>
+              )}
               {titlePrefix}
               <h2 
                 id="modal-title"
@@ -166,7 +196,10 @@ export function Modal({
               {!hideCloseButton && (
                 <button
                   onClick={stableOnClose}
-                  className="p-2 -mr-2 hover:bg-muted/80 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background"
+                  className={cn(
+                    "p-2 -mr-2 hover:bg-muted/80 rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background",
+                    sheet && "max-sm:hidden",
+                  )}
                   aria-label="Close modal"
                 >
                   <X className="w-5 h-5 text-muted-foreground" />
@@ -177,8 +210,13 @@ export function Modal({
         )}
 
         <div className="flex-1 overflow-y-auto bg-[hsl(var(--surface-modal))]">
-          <div className="px-6 py-6">{children}</div>
+          <div className="px-6 py-6 max-sm:px-4">{children}</div>
         </div>
+        {footer && (
+          <div className="shrink-0 border-t border-border/60 px-6 py-3 elevation-1 max-sm:px-4" data-testid="modal-footer">
+            {footer}
+          </div>
+        )}
       </div>
     </div>
   );

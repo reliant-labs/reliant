@@ -178,7 +178,7 @@ export interface ResolvedSender {
 }
 
 /** TriggerHealthStatus; UNSPECIFIED (an older server) reads as unknown. */
-export type TriggerHealthStatusKey = "healthy" | "degraded" | "failing" | "broken" | "unknown";
+export type TriggerHealthStatusKey = "healthy" | "degraded" | "failing" | "broken" | "needs_setup" | "unknown";
 
 /** The server's read-only health summary. Rules: TriggerHealthStatus in trigger.proto. */
 /** Who an automation's integration writes speak as. */
@@ -389,6 +389,8 @@ function healthStatusFromProto(status: TriggerHealthStatus): TriggerHealthStatus
       return "failing";
     case TriggerHealthStatus.BROKEN:
       return "broken";
+    case TriggerHealthStatus.NEEDS_SETUP:
+      return "needs_setup";
     default:
       return "unknown";
   }

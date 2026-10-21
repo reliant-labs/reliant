@@ -294,8 +294,8 @@ describe("WorkflowDetailPage", () => {
       expect(header).toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "Disable" })).toBeNull();
       await user.click((await screen.findAllByRole("button", { name: "Enable" }))[0]!);
-      const dialog = await screen.findByRole("form", { name: "Enable Triage" });
-      expect(within(dialog).getByText(/all 2 triggers/)).toBeInTheDocument();
+      const dialog = await screen.findByRole("form", { name: "Set up Triage" });
+      expect(within(dialog).getByRole("button", { name: "2 triggers" })).toBeInTheDocument();
     });
 
     it("shows Disable, not Enable, once every declared trigger is running, with each one's state", async () => {
