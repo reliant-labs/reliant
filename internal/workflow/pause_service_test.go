@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/sdk/client"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -166,7 +167,7 @@ func (m *mockPauseRepo) PauseRunningWorkflowsByChat(_ context.Context, _ string)
 }
 
 // RunTx runs f inline; the mock has no transactions.
-func (m *mockPauseRepo) RunTx(ctx context.Context, f func(context.Context) error) error {
+func (m *mockPauseRepo) RunTx(ctx context.Context, _ orm.TxPolicy, f func(context.Context) error) error {
 	return f(ctx)
 }
 

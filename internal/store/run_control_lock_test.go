@@ -118,7 +118,7 @@ func TestRunControlLockRefusedInsideTx(t *testing.T) {
 	if !errors.Is(err, store.ErrRunControlInTx) {
 		t.Fatalf("inside orm RunTx: got %v, want ErrRunControlInTx", err)
 	}
-	err = env.Repo.RunTx(ctx, func(txCtx context.Context) error {
+	err = env.Repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
 		_, err := env.Repo.LockChatRunControl(txCtx, "chat-rc-tx")
 		return err
 	})

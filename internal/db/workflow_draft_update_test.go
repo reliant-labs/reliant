@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/stretchr/testify/require"
 )
 
@@ -118,7 +119,7 @@ func TestWorkflowDraftWrite_RolledBackEmitsNothing(t *testing.T) {
 
 	draft := newDraftForTest(userID)
 	boom := errors.New("boom")
-	err := repo.RunTx(ctx, func(txCtx context.Context) error {
+	err := repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
 		if err := repo.CreateWorkflowDraft(txCtx, draft); err != nil {
 			return err
 		}

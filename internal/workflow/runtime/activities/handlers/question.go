@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/triggers/runevents"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
@@ -179,7 +180,7 @@ func (a *QuestionCreateActivity) Execute(ctx context.Context, input QuestionCrea
 	}
 
 	// Dual-write: create question record + mark chat unread + emit update atomically
-	err = a.repo.RunTx(ctx, func(txCtx context.Context) error {
+	err = a.repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
 		if err := a.repo.CreateQuestion(txCtx, question); err != nil {
 			return fmt.Errorf("failed to create question: %w", err)
 		}

@@ -19,6 +19,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	promtestutil "github.com/prometheus/client_golang/prometheus/testutil"
+	"github.com/reliant-labs/forge/pkg/orm"
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -377,7 +378,7 @@ func (m *mockRepo) UpdateWorkflowStatus(_ context.Context, id string, status db.
 // status repair wraps its CAS in one so the run-event outbox row and the
 // terminal cascade commit with it. inTx records that f is running, so a test
 // can tell a write made inside the commit from one made after it.
-func (m *mockRepo) RunTx(ctx context.Context, f func(ctx context.Context) error) error {
+func (m *mockRepo) RunTx(ctx context.Context, _ orm.TxPolicy, f func(ctx context.Context) error) error {
 	m.mu.Lock()
 	m.inTx = true
 	m.mu.Unlock()

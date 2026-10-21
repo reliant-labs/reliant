@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/orm"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/ptr"
@@ -58,12 +59,12 @@ func TestLegacyAllocatorBaseline_StillConflicts(t *testing.T) {
 				// The OLD transaction body, verbatim in shape: scan for
 				// ordinal, walk for seq, then insert into the range just read.
 				//
-				// RunTxNoRetry deliberately: RunTx's ladder absorbs these
+				// One attempt deliberately: RunTx's ladder absorbs these
 				// conflicts and reports success, which hides the very thing
 				// this control exists to measure. The production path DID
 				// retry, and still exhausted the ladder 35 times in one
 				// session — so the raw rate is the honest number.
-				err := h.repo.RunTxNoRetry(ctx, func(txCtx context.Context) error {
+				err := h.repo.RunTx(ctx, orm.Serializable.WithMaxAttempts(1), func(txCtx context.Context) error {
 					ordinal, err := h.repo.GetNextOrdinal(txCtx, threadID)
 					if err != nil {
 						return err

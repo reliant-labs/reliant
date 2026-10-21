@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/orm"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
@@ -1498,7 +1499,7 @@ func (r *Reconciler) recoverWedgedWorkflow(ctx context.Context, wf *db.Workflow,
 //     repair, or neither does, and only the pass whose CAS wins emits it.
 func (r *Reconciler) swapStatus(ctx context.Context, wf *db.Workflow, to db.WorkflowStatus, temporalRunID string) (bool, error) {
 	var swapped bool
-	err := r.repo.RunTx(ctx, func(txCtx context.Context) error {
+	err := r.repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
 		var err error
 		swapped, err = r.repo.CompareAndSwapWorkflowStatus(txCtx, wf.ID, to, wf.Status)
 		if err != nil || !swapped {

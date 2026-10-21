@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/orm"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/triggers/runevents"
@@ -198,7 +199,7 @@ func (a *ApprovalCreateActivity) Execute(ctx context.Context, input ApprovalCrea
 	}
 
 	// Dual-write: create approval record + chat_update + mark chat unread atomically
-	err = a.repo.RunTx(ctx, func(txCtx context.Context) error {
+	err = a.repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
 		if err := a.repo.CreateApproval(txCtx, approval); err != nil {
 			return fmt.Errorf("failed to create approval: %w", err)
 		}

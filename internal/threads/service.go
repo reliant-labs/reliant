@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/orm"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -104,12 +105,7 @@ type Repository interface {
 	SeedSeqCounterForFork(ctx context.Context, chatID, forkAtContextWindowID string) error
 
 	// Transaction support
-	RunTx(ctx context.Context, f func(ctx context.Context) error) error
-
-	// RunTxNoRetry runs one attempt with no retry ladder. Used by the
-	// concurrency control test to measure the raw conflict rate of the
-	// superseded allocator shape; production paths want RunTx.
-	RunTxNoRetry(ctx context.Context, f func(ctx context.Context) error) error
+	RunTx(ctx context.Context, policy orm.TxPolicy, f func(ctx context.Context) error) error
 }
 
 // Service provides centralized thread and context window management.
@@ -261,7 +257,7 @@ func (s *Service) CreateWorkflowWithThread(ctx context.Context, opts CreateWorkf
 	var resultThread *db.Thread
 	var resultCW *db.ContextWindow
 
-	err = s.repo.RunTx(ctx, func(txCtx context.Context) error {
+	err = s.repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
 		// Step 1: Create workflow first (if it doesn't exist).
 		// For inline workflows (workflow nodes that execute within parent), the
 		// workflow ID is the same as the parent, so it already exists. CreateWorkflow

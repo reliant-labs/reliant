@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+
+	"github.com/reliant-labs/forge/pkg/orm"
 )
 
 const providerKeyLockTimeout = "15s"
@@ -21,7 +23,7 @@ func (r *Repo) LockProviderKey(ctx context.Context, userID, provider string) (fu
 	if r.DB == nil {
 		return nil, errors.New("database connection not initialized")
 	}
-	tx, err := r.DB.BeginTxWithOptions(ctx, TxOptions{Isolation: IsolationReadCommitted})
+	tx, err := r.DB.BeginTxWithOptions(ctx, orm.ReadCommitted)
 	if err != nil {
 		return nil, fmt.Errorf("begin provider-key lock transaction: %w", err)
 	}

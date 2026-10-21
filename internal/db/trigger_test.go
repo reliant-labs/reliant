@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
@@ -657,7 +658,7 @@ func TestCreateTriggerEventRollsBackWithTransaction(t *testing.T) {
 	}
 
 	sentinel := errors.New("launch failed after the event row was written")
-	err := repo.RunTx(ctx, func(txCtx context.Context) error {
+	err := repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
 		created, err := repo.CreateTriggerEvent(txCtx, newTestTriggerEvent(
 			"ev-runtx", trigger.ID, "test-user", "fire-key-runtx", time.Now()))
 		if err != nil {
@@ -744,7 +745,7 @@ func TestLockTriggerRequiresAnExistingRow(t *testing.T) {
 	defer cleanup()
 	ctx := context.Background()
 
-	if err := repo.RunTx(ctx, func(txCtx context.Context) error {
+	if err := repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
 		return repo.LockTrigger(txCtx, "no-such-trigger")
 	}); !errors.Is(err, core.ErrTriggerNotFound) {
 		t.Errorf("LockTrigger(missing) = %v, want ErrTriggerNotFound", err)

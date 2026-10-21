@@ -11,6 +11,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/orm"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/daemonchoice"
@@ -1335,7 +1336,7 @@ func (s *Service) SetChatDaemon(
 	// cannot become one without. Other clients learn of it through the same
 	// chat_config_changed update UpdateChat emits.
 	connecting := chat.NoMachine && daemonID != nil
-	if err := s.deps.Repo.RunTx(ctx, func(txCtx context.Context) error {
+	if err := s.deps.Repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
 		if err := s.deps.Repo.UpdateChatActiveDaemon(txCtx, chat.ID, daemonID); err != nil {
 			return err
 		}

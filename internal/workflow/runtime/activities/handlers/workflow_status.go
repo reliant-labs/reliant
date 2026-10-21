@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -429,7 +430,7 @@ func (a *WorkflowStatusActivity) trackWorkflow(ctx context.Context, input Workfl
 		// The status, the subtree cascade and the run event commit together:
 		// written separately, a reconciler pass between them saw a terminal
 		// workflow over running threads and reaped them as a missed cascade.
-		return a.repo.RunTx(ctx, func(txCtx context.Context) error {
+		return a.repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
 			if err := a.repo.UpdateWorkflowStatus(txCtx, input.WorkflowID, db.Failed()); err != nil {
 				return err
 			}
@@ -443,7 +444,7 @@ func (a *WorkflowStatusActivity) trackWorkflow(ctx context.Context, input Workfl
 		})
 
 	case "cancelled":
-		if err := a.repo.RunTx(ctx, func(txCtx context.Context) error {
+		if err := a.repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
 			if err := a.repo.UpdateWorkflowStatus(txCtx, input.WorkflowID, db.Cancelled()); err != nil {
 				return err
 			}
@@ -635,7 +636,7 @@ func (a *WorkflowStatusActivity) markWorkflowStarted(ctx context.Context, input 
 // retry is safe.
 func (a *WorkflowStatusActivity) markWorkflowCompleted(ctx context.Context, input WorkflowStatusInput) error {
 	var transitionedTo string
-	if err := a.repo.RunTx(ctx, func(txCtx context.Context) error {
+	if err := a.repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
 		if err := a.repo.UpdateWorkflowStatus(txCtx, input.WorkflowID, db.Completed()); err != nil {
 			return err
 		}

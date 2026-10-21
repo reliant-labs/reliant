@@ -3,29 +3,11 @@ package db
 
 import (
 	"context"
-	"database/sql"
 	"strings"
 	"testing"
+
+	"github.com/reliant-labs/forge/pkg/orm"
 )
-
-// The zero value must remain the SAFE choice: read-write SERIALIZABLE, exactly
-// what every transaction did before TxOptions existed. If the zero value ever
-// became READ COMMITTED, every caller that never thought about isolation would
-// silently lose serializability — which is why the enum is ordered so that
-// "default" and "serializable" are the same thing.
-func TestTxOptions_ZeroValueIsSerializableReadWrite(t *testing.T) {
-	var opts TxOptions
-
-	if opts.ReadOnly {
-		t.Fatal("zero value must be read-write")
-	}
-	if got := opts.Isolation.sqlLevel(); got != sql.LevelSerializable {
-		t.Fatalf("zero value must be SERIALIZABLE, got %v", got)
-	}
-	if IsolationDefault.sqlLevel() != IsolationSerializable.sqlLevel() {
-		t.Fatal("IsolationDefault and IsolationSerializable must be the same level")
-	}
-}
 
 // What the database actually applied, not what we asked for.
 func txSettings(t *testing.T, ctx context.Context) (isolation string, readOnly string) {
@@ -57,21 +39,23 @@ func TestRunTx_AppliesRequestedIsolationAndMode(t *testing.T) {
 
 	tests := []struct {
 		name          string
-		opts          TxOptions
+		policy        orm.TxPolicy
 		wantIsolation string
 		wantReadOnly  string
 	}{
-		{"default", TxOptions{}, "serializable", "off"},
-		{"explicit serializable", TxOptions{Isolation: IsolationSerializable}, "serializable", "off"},
-		{"read committed", TxOptions{Isolation: IsolationReadCommitted}, "read committed", "off"},
-		{"read only", TxOptions{ReadOnly: true}, "serializable", "on"},
-		{"read only + read committed", TxOptions{ReadOnly: true, Isolation: IsolationReadCommitted}, "read committed", "on"},
+		{"serializable", orm.Serializable, "serializable", "off"},
+		{"serializable, one attempt", orm.Serializable.WithMaxAttempts(1), "serializable", "off"},
+		{"read committed", orm.ReadCommitted, "read committed", "off"},
+		{"read committed, retried", orm.ReadCommitted.WithMaxAttempts(orm.DefaultTxMaxAttempts), "read committed", "off"},
+		{"repeatable read", orm.RepeatableRead, "repeatable read", "off"},
+		{"read only", orm.Serializable.WithReadOnly(), "serializable", "on"},
+		{"read only + read committed", orm.ReadCommitted.WithReadOnly(), "read committed", "on"},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			base := context.WithValue(context.Background(), ctxRepoKey{}, repo)
-			err := repo.RunTxWithOptions(base, tc.opts, func(ctx context.Context) error {
+			err := repo.RunTx(base, tc.policy, func(ctx context.Context) error {
 				iso, ro := txSettings(t, context.WithValue(ctx, ctxRepoKey{}, repo))
 				if iso != tc.wantIsolation {
 					t.Errorf("isolation = %q, want %q", iso, tc.wantIsolation)
@@ -82,7 +66,7 @@ func TestRunTx_AppliesRequestedIsolationAndMode(t *testing.T) {
 				return nil
 			})
 			if err != nil {
-				t.Fatalf("RunTxWithOptions: %v", err)
+				t.Fatalf("RunTx(%v): %v", tc.policy, err)
 			}
 		})
 	}
@@ -150,10 +134,10 @@ func TestReadOnlyTransactionTakesNoPredicateLocks(t *testing.T) {
 		}
 	}
 
-	countLocks := func(opts TxOptions) int {
+	countLocks := func(policy orm.TxPolicy) int {
 		var locks int
 		base := context.WithValue(context.Background(), ctxRepoKey{}, repo)
-		err := repo.RunTxWithOptions(base, opts, func(ctx context.Context) error {
+		err := repo.RunTx(base, policy, func(ctx context.Context) error {
 			// Force a scan that would take predicate locks under SERIALIZABLE.
 			var n int
 			if err := repo.DB.DB(ctx).QueryRowContext(ctx,
@@ -165,13 +149,13 @@ func TestReadOnlyTransactionTakesNoPredicateLocks(t *testing.T) {
 			).Scan(&locks)
 		})
 		if err != nil {
-			t.Fatalf("RunTxWithOptions(%+v): %v", opts, err)
+			t.Fatalf("RunTx(%v): %v", policy, err)
 		}
 		return locks
 	}
 
-	readWrite := countLocks(TxOptions{})
-	readOnly := countLocks(TxOptions{ReadOnly: true})
+	readWrite := countLocks(orm.Serializable)
+	readOnly := countLocks(orm.Serializable.WithReadOnly())
 
 	t.Logf("SIReadLocks held — read-write: %d, read-only deferrable: %d", readWrite, readOnly)
 

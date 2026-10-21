@@ -21,10 +21,11 @@ import (
 // transaction. Without this a call through the other layer ran on the pool:
 // outside the transaction, and blocked forever on a row it had locked.
 //
-// Repo.RunTx keeps its own attempt loop (isRetryableError, maxRetries) and
-// opens each attempt with the ORM's non-retrying BeginTx; orm.Client.RunTx
-// retries 40001/40P01 only. Whichever layer opens the transaction owns its
-// retry policy, and a nested RunTx of either kind joins it.
+// Repo.RunTx keeps its own attempt loop (isRetryableError, bounded by the
+// policy's attempt budget) and opens each attempt with the ORM's
+// non-retrying BeginDetached; orm.Client.RunTx retries 40001/40P01 only.
+// Whichever layer opens the transaction owns its retry policy, and a nested
+// RunTx of either kind joins it.
 
 // WrappedDBTX is the executor every hand-written Repository statement runs
 // on: the transaction ctx carries, or the pool, with statement-level retries
@@ -51,9 +52,8 @@ func (w *WrappedDBTX) inTx(ctx context.Context) bool {
 
 // beginSharedTx begins one Repo.RunTx attempt: a forge transaction on this
 // pool, at opts' isolation, READ ONLY DEFERRABLE when opts.ReadOnly under
-// SERIALIZABLE (see TxOptions.ReadOnly). BeginDetached never retries and
-// never joins; runTxWithRetries does the former, RunTxWithOptions the
-// latter.
-func (w *WrappedDBTX) beginSharedTx(ctx context.Context, opts TxOptions) (*orm.Tx, error) {
-	return w.orm.BeginDetached(ctx, opts.ormPolicy())
+// SERIALIZABLE. opts is one attempt: BeginDetached never retries and never
+// joins; runTxWithRetries does the former, RunTx the latter.
+func (w *WrappedDBTX) beginSharedTx(ctx context.Context, opts orm.TxOptions) (*orm.Tx, error) {
+	return w.orm.BeginDetached(ctx, opts)
 }

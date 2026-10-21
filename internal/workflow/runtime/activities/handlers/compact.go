@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/orm"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -307,7 +308,7 @@ func (a *GenerateTitleActivity) Execute(ctx context.Context, input GenerateTitle
 	}
 
 	// 3. Update chat with generated title using RunTx for parallelism
-	err = a.repo.RunTx(ctx, func(ctx context.Context) error {
+	err = a.repo.RunTx(ctx, orm.Serializable, func(ctx context.Context) error {
 		// Get the chat again inside the transaction
 		chat, err := a.repo.GetChat(ctx, input.ChatID)
 		if err != nil {

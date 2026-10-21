@@ -4,6 +4,7 @@ package launch
 import (
 	"context"
 
+	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/reliant/internal/chatselection"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -68,7 +69,7 @@ type ProjectLookup interface {
 // Transactor runs f in one transaction; repository calls made with the ctx f
 // receives join it.
 type Transactor interface {
-	RunTx(ctx context.Context, f func(ctx context.Context) error) error
+	RunTx(ctx context.Context, policy orm.TxPolicy, f func(ctx context.Context) error) error
 }
 
 // ChatSelections is the chat selection store: the layer between a chat's

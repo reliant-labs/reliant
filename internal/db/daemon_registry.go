@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
 )
@@ -123,7 +124,7 @@ func (r *Repo) RemoveDaemon(ctx context.Context, daemonID string) (string, bool,
 	}
 	var userID string
 	var removed bool
-	err := r.RunTxWithOptions(ctx, TxOptions{Isolation: IsolationReadCommitted}, func(txCtx context.Context) error {
+	err := r.RunTx(ctx, orm.ReadCommitted.WithMaxAttempts(orm.DefaultTxMaxAttempts), func(txCtx context.Context) error {
 		var err error
 		userID, removed, err = r.removeDaemon(txCtx, daemonID)
 		return err
@@ -220,7 +221,7 @@ func (r *Repo) ApplyDaemonRegistrySnapshot(ctx context.Context, snap RegistrySna
 		return RegistrySnapshotResult{}, fmt.Errorf("snapshot user ID cannot be empty")
 	}
 	var result RegistrySnapshotResult
-	err := r.RunTxWithOptions(ctx, TxOptions{Isolation: IsolationReadCommitted}, func(txCtx context.Context) error {
+	err := r.RunTx(ctx, orm.ReadCommitted.WithMaxAttempts(orm.DefaultTxMaxAttempts), func(txCtx context.Context) error {
 		var err error
 		result, err = r.applyDaemonRegistrySnapshot(txCtx, snap)
 		return err

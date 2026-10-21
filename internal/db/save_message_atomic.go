@@ -4,6 +4,7 @@ package db
 import (
 	"context"
 
+	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/reliant/internal/store"
 )
 
@@ -21,17 +22,18 @@ type AtomicMessageResult = store.AtomicMessageResult
 //
 // It runs at READ COMMITTED deliberately: this write path was the hottest
 // SERIALIZABLE transaction in the system and was responsible for the
-// overwhelming majority of observed 40001 conflicts. RunTxWithOptions opens it
-// so the Repository's retry ladder applies — including 23505, which a seq
-// collision with one of the writers that still allocate for themselves raises
-// and the self-healing allocator resolves on the retry.
+// overwhelming majority of observed 40001 conflicts. It asks Repo.RunTx for
+// the full attempt budget, so the Repository's retry ladder applies —
+// including 23505, which a seq collision with one of the writers that still
+// allocate for themselves raises and the self-healing allocator resolves on
+// the retry.
 //
 // The chat_update is published only after the transaction commits. Notifying
 // from inside would announce a sequence number a reader could not yet SELECT,
 // and on rollback would announce one that never existed at all.
 func (r *Repo) SaveMessageAtomic(ctx context.Context, w AtomicMessageWrite) (*AtomicMessageResult, error) {
 	var result *AtomicMessageResult
-	err := r.RunTxWithOptions(ctx, TxOptions{Isolation: IsolationReadCommitted}, func(txCtx context.Context) error {
+	err := r.RunTx(ctx, orm.ReadCommitted.WithMaxAttempts(orm.DefaultTxMaxAttempts), func(txCtx context.Context) error {
 		var err error
 		result, err = store.SaveMessageAtomic(txCtx, r.ORM(), w)
 		if err != nil {

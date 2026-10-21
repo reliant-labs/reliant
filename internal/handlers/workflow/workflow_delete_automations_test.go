@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"connectrpc.com/connect"
+	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -39,7 +40,7 @@ func newAutomationsStore(slug string, triggers ...*core.Trigger) *automationsSto
 		s.deleted = append(s.deleted, id)
 		return nil
 	}
-	s.RunTxFunc = func(ctx context.Context, f func(context.Context) error) error {
+	s.RunTxFunc = func(ctx context.Context, _ orm.TxPolicy, f func(context.Context) error) error {
 		before := len(s.deleted)
 		if err := f(ctx); err != nil {
 			s.deleted = s.deleted[:before]

@@ -11,6 +11,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/orm"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/client"
 
@@ -93,7 +94,7 @@ func (s *Service) saveIncomingMessages(
 	clientID := canonicalClientMessageID(req.Msg.GetClientMessageId())
 	hasMessage := hasUserContent || len(req.Msg.Attachments) > 0
 	var savedMessageID string
-	err := s.deps.Repo.RunTx(ctx, func(txCtx context.Context) error {
+	err := s.deps.Repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
 		savedMessageID = ""
 		if clientID != "" && hasMessage {
 			existingID, err := s.savedSendID(txCtx, req.Msg.ChatId, clientID)
@@ -623,7 +624,7 @@ func (s *Service) SendMessage(
 	if workflowID := chat.MainThreadID(); workflowID != "" {
 		var existingWorkflow *db.Workflow
 
-		err := s.deps.Repo.RunTx(ctx, func(txCtx context.Context) error {
+		err := s.deps.Repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
 			wf, err := s.deps.Repo.GetWorkflow(txCtx, workflowID)
 			if err != nil {
 				return err
@@ -730,7 +731,7 @@ func (s *Service) SendMessage(
 				// "paused" row on a running workflow is self-healing; a
 				// never-signalled workflow is not.
 				var savedMessageID string
-				err = s.deps.Repo.RunTx(ctx, func(txCtx context.Context) error {
+				err = s.deps.Repo.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
 					var saveErr error
 					savedMessageID, saveErr = s.saveIncomingMessages(txCtx, req, targetThread, workflowID, systemMessages, userContent, hasUserContent)
 					return saveErr
