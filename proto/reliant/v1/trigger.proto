@@ -249,6 +249,11 @@ enum TriggerHealthStatus {
   TRIGGER_HEALTH_STATUS_FAILING = 3;
   TRIGGER_HEALTH_STATUS_UNKNOWN = 4;
   TRIGGER_HEALTH_STATUS_BROKEN = 5;
+  // NEEDS_SETUP: the activation's stored params do not satisfy the workflow's
+  // current inputs (a required input has no value). Computed on read; the
+  // fix is to finish setup, not to repair the workflow. BROKEN takes
+  // precedence.
+  TRIGGER_HEALTH_STATUS_NEEDS_SETUP = 6;
 }
 
 // TriggerHealth is the read-only health summary of a trigger. See
@@ -371,6 +376,12 @@ message IntegrationSource {
   // Polled integrations only: how often to poll, as a Go duration. Empty
   // means the integration's default.
   string poll_interval = 4;
+
+  // Event attributes that must equal one of the values of a workflow input,
+  // written `match: {repository: {input: repos}}`: attribute name -> input
+  // name. The input's type must be the attribute's declared type (single or
+  // multi). An unset input matches nothing. Applied together with `match`.
+  map<string, string> match_input = 5;
 }
 
 // WorkflowEventSource is the trigger.source arm for a trigger that fires when

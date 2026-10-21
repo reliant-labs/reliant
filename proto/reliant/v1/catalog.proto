@@ -6,6 +6,7 @@ package reliant.v1;
 import "buf/validate/validate.proto";
 import "google/protobuf/struct.proto";
 import "reliant/v1/connection.proto";
+import "reliant/v1/trigger.proto";
 
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 
@@ -50,6 +51,13 @@ service CatalogService {
   // hundreds of integrations holds only what it has scrolled to;
   // SearchCatalog with `integration` set lists one integration's entries.
   rpc ListCatalogIntegrations(ListCatalogIntegrationsRequest) returns (ListCatalogIntegrationsResponse) {}
+
+  // ListInputOptions lists the values a picker can offer for an
+  // integration-defined input type (`github.repository`): it runs the type's
+  // options list action as the caller, through the connection they chose, and
+  // projects each item to an option. It reads only; an unknown type is
+  // NOT_FOUND.
+  rpc ListInputOptions(ListInputOptionsRequest) returns (ListInputOptionsResponse) {}
 }
 
 // ModelInfo represents information about an LLM model
@@ -374,6 +382,9 @@ enum CatalogEntryKind {
   CATALOG_ENTRY_KIND_ACTION = 1;
   // TRIGGER is an event type that can start a run.
   CATALOG_ENTRY_KIND_TRIGGER = 2;
+  // TYPE is a value type an integration defines (`github.repository`), which
+  // a workflow input or trigger attribute can be typed as.
+  CATALOG_ENTRY_KIND_TYPE = 3;
 }
 
 // CatalogIntegration is the integration an entry belongs to.
@@ -545,4 +556,62 @@ message CatalogConnectionRequirement {
   repeated IntegrationAuthMethod methods = 2;
   // ConnectionParams are the non-secret settings a new connection asks for.
   repeated IntegrationConnectionParam connection_params = 3;
+}
+
+message ListInputOptionsRequest {
+  // Type is the qualified type ref, e.g. "github.repository".
+  string type = 1;
+  // ConnectionId names the connection to list through. Empty means the
+  // caller's default connection to the type's integration, else a delegated
+  // authority.
+  string connection_id = 2;
+  // Scope supplies the values of the type's declared scope keys.
+  map<string, google.protobuf.Value> scope = 3;
+  // Query narrows the options (client or server side, as the type declares).
+  string query = 4;
+  // PageToken is a previous response's next_page_token. It is only valid for
+  // the same type, connection, scope and query.
+  string page_token = 5;
+  // PageSize defaults to 50; larger values are capped at 200.
+  int32 page_size = 6;
+  // ActingIdentity only feeds the type's warnings, which may differ for the
+  // owner and for the bot.
+  ActingIdentity acting_identity = 7;
+  // Resolve, when set, labels these stored values instead of listing: the
+  // response holds one option per value the type could resolve, and query,
+  // page_token and page_size are ignored.
+  repeated string resolve = 8;
+}
+
+// InputOption is one value a picker can offer.
+message InputOption {
+  // Value is what is stored in the input.
+  string value = 1;
+  string label = 2;
+  string description = 3;
+  // Group is the heading the option is listed under; empty for none.
+  string group = 4;
+  // Annotations are the facts the type's projection extracted (e.g.
+  // can_push) for the UI.
+  map<string, google.protobuf.Value> annotations = 5;
+  // Warnings are the messages of every type warning that holds for this
+  // option.
+  repeated string warnings = 6;
+}
+
+// InputOptionsConnectionState says whether the caller can list at all.
+enum InputOptionsConnectionState {
+  INPUT_OPTIONS_CONNECTION_STATE_UNSPECIFIED = 0;
+  // CONNECTED: the options were listed through a usable connection.
+  INPUT_OPTIONS_CONNECTION_STATE_CONNECTED = 1;
+  // NEEDS_CONNECTION: the caller has no usable connection to the type's
+  // integration; the UI offers Connect. options is empty.
+  INPUT_OPTIONS_CONNECTION_STATE_NEEDS_CONNECTION = 2;
+}
+
+message ListInputOptionsResponse {
+  repeated InputOption options = 1;
+  // NextPageToken fetches the next page; empty on the last.
+  string next_page_token = 2;
+  InputOptionsConnectionState connection_state = 3;
 }

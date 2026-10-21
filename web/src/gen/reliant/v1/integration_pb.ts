@@ -15,7 +15,7 @@ import type { JsonObject, Message } from "@bufbuild/protobuf";
  * Describes the file reliant/v1/integration.proto.
  */
 export const file_reliant_v1_integration: GenFile = /*@__PURE__*/
-  fileDesc("ChxyZWxpYW50L3YxL2ludGVncmF0aW9uLnByb3RvEgpyZWxpYW50LnYxIpMCChNJbnRlZ3JhdGlvbk1hbmlmZXN0EgoKAmlkGAEgASgJEg8KB3ZlcnNpb24YAiABKAUSFAoMZGlzcGxheV9uYW1lGAMgASgJEhMKC2Rlc2NyaXB0aW9uGAQgASgJEgwKBGljb24YBSABKAkSEAoIY2F0ZWdvcnkYBiABKAkSLgoKY29ubmVjdGlvbhgHIAEoCzIaLnJlbGlhbnQudjEuQ29ubmVjdGlvblNwZWMSJwoHYWN0aW9ucxgIIAMoCzIWLnJlbGlhbnQudjEuQWN0aW9uU3BlYxIpCgh0cmlnZ2VycxgJIAMoCzIXLnJlbGlhbnQudjEuVHJpZ2dlclNwZWMSEAoIa2V5d29yZHMYCiADKAki9wIKDkNvbm5lY3Rpb25TcGVjEhAKCGJhc2VfdXJsGAIgASgJEhUKDWFsbG93ZWRfaG9zdHMYAyADKAkSRwoPZGVmYXVsdF9oZWFkZXJzGAQgAygLMi4ucmVsaWFudC52MS5Db25uZWN0aW9uU3BlYy5EZWZhdWx0SGVhZGVyc0VudHJ5Eh0KFWFsbG93X2FueV9wdWJsaWNfaG9zdBgFIAEoCBIkCgRhdXRoGAcgAygLMhYucmVsaWFudC52MS5BdXRoTWV0aG9kEhUKDWF1dGhfb3B0aW9uYWwYCCABKAgSNgoRY29ubmVjdGlvbl9wYXJhbXMYCSADKAsyGy5yZWxpYW50LnYxLkNvbm5lY3Rpb25QYXJhbRIoCgVwcm9iZRgKIAEoCzIZLnJlbGlhbnQudjEuSWRlbnRpdHlQcm9iZRo1ChNEZWZhdWx0SGVhZGVyc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiwwEKCkF1dGhNZXRob2QSKAoGb2F1dGgyGAEgASgLMhYucmVsaWFudC52MS5PQXV0aDJBdXRoSAASKQoHYXBpX2tleRgCIAEoCzIWLnJlbGlhbnQudjEuQXBpS2V5QXV0aEgAEiYKBWJhc2ljGAMgASgLMhUucmVsaWFudC52MS5CYXNpY0F1dGhIABIuCglkZWxlZ2F0ZWQYBCABKAsyGS5yZWxpYW50LnYxLkRlbGVnYXRlZEF1dGhIAEIICgZtZXRob2QipwIKCk9BdXRoMkF1dGgSFQoNYXV0aG9yaXplX3VybBgBIAEoCRIRCgl0b2tlbl91cmwYAiABKAkSDgoGc2NvcGVzGAMgAygJEhcKD3Njb3BlX3NlcGFyYXRvchgEIAEoCRIMCgRwa2NlGAUgASgJEkUKEGF1dGhvcml6ZV9wYXJhbXMYBiADKAsyKy5yZWxpYW50LnYxLk9BdXRoMkF1dGguQXV0aG9yaXplUGFyYW1zRW50cnkSJgoGcmV2b2tlGAcgASgLMhYucmVsaWFudC52MS5SZXZva2VTcGVjEhEKCXNlbmRlcl9pZBgIIAEoCRo2ChRBdXRob3JpemVQYXJhbXNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBImUKClJldm9rZVNwZWMSDgoGbWV0aG9kGAEgASgJEgsKA3VybBgCIAEoCRITCgtjbGllbnRfYXV0aBgDIAEoCRIQCgh0b2tlbl9pbhgEIAEoCRITCgt0b2tlbl9wYXJhbRgFIAEoCSJFCgpBcGlLZXlBdXRoEgoKAmluGAEgASgJEgwKBG5hbWUYAiABKAkSDgoGcHJlZml4GAMgASgJEg0KBWxhYmVsGAQgASgJIlMKCUJhc2ljQXV0aBIWCg51c2VybmFtZV9sYWJlbBgBIAEoCRIWCg5wYXNzd29yZF9sYWJlbBgCIAEoCRIWCg51c2VybmFtZV9wYXJhbRgDIAEoCSIfCg1EZWxlZ2F0ZWRBdXRoEg4KBmJyb2tlchgBIAEoCSJyCg9Db25uZWN0aW9uUGFyYW0SDAoEbmFtZRgBIAEoCRIUCgxkaXNwbGF5X25hbWUYAiABKAkSEwoLZGVzY3JpcHRpb24YAyABKAkSDwoHcGF0dGVybhgEIAEoCRIVCg1kZWZhdWx0X3ZhbHVlGAUgASgJIv0BCg1JZGVudGl0eVByb2JlEg4KBm1ldGhvZBgBIAEoCRILCgN1cmwYAiABKAkSDAoEcGF0aBgDIAEoCRI3CgdoZWFkZXJzGAQgAygLMiYucmVsaWFudC52MS5JZGVudGl0eVByb2JlLkhlYWRlcnNFbnRyeRIKCgJvaxgFIAEoCRITCgtleHRlcm5hbF9pZBgGIAEoCRINCgVsYWJlbBgHIAEoCRIVCg1yb3V0ZXNfZXZlbnRzGAggASgIEhEKCXNlbmRlcl9pZBgJIAEoCRouCgxIZWFkZXJzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASLiAgoKQWN0aW9uU3BlYxIKCgJpZBgBIAEoCRIUCgxkaXNwbGF5X25hbWUYAiABKAkSEwoLZGVzY3JpcHRpb24YAyABKAkSDAoEa2luZBgEIAEoCRIRCglwbGFjZW1lbnQYBSABKAkSDwoHbXV0YXRlcxgGIAEoCBIiCgR0b29sGAcgASgLMhQucmVsaWFudC52MS5Ub29sU3BlYxInCgZwYXJhbXMYCCABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0EiwKB3JlcXVlc3QYCSABKAsyGy5yZWxpYW50LnYxLkh0dHBSZXF1ZXN0U3BlYxImCgZvdXRwdXQYCiABKAsyFi5yZWxpYW50LnYxLk91dHB1dFNwZWMSEAoIZXhlY3V0b3IYCyABKAkSDwoHc3VtbWFyeRgMIAEoCRIQCghrZXl3b3JkcxgNIAMoCRITCgtwYXJhbV9vcmRlchgOIAMoCSI2CghUb29sU3BlYxIOCgZleHBvc2UYASABKAgSDAoEbmFtZRgCIAEoCRIMCgR0YWdzGAMgAygJItIECg9IdHRwUmVxdWVzdFNwZWMSDgoGbWV0aG9kGAEgASgJEgsKA3VybBgCIAEoCRIMCgRwYXRoGAMgASgJEjUKBXF1ZXJ5GAQgAygLMiYucmVsaWFudC52MS5IdHRwUmVxdWVzdFNwZWMuUXVlcnlFbnRyeRI5CgdoZWFkZXJzGAUgAygLMigucmVsaWFudC52MS5IdHRwUmVxdWVzdFNwZWMuSGVhZGVyc0VudHJ5EiQKBGJvZHkYBiABKAsyFi5nb29nbGUucHJvdG9idWYuVmFsdWUSLgoKcGFnaW5hdGlvbhgHIAEoCzIaLnJlbGlhbnQudjEuUGFnaW5hdGlvblNwZWMSJQoGZXJyb3JzGAggAygLMhUucmVsaWFudC52MS5FcnJvclJ1bGUSFwoPdGltZW91dF9zZWNvbmRzGAkgASgFEhoKEm1heF9yZXNwb25zZV9ieXRlcxgKIAEoAxIUCgxoZWFkZXJzX2V4cHIYCyABKAkSEgoKcXVlcnlfZXhwchgMIAEoCRIRCglib2R5X2V4cHIYDSABKAkSEwoLYm9keV9mb3JtYXQYDiABKAkSFAoMdGltZW91dF9leHByGA8gASgJEhcKD3Jlc3BvbnNlX2Zvcm1hdBgQIAEoCRIRCglyZWRpcmVjdHMYESABKAkaLAoKUXVlcnlFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBGi4KDEhlYWRlcnNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIpcBCg5QYWdpbmF0aW9uU3BlYxINCgVzdHlsZRgBIAEoCRIRCgltYXhfcGFnZXMYAiABKAUSFAoMY3Vyc29yX3BhcmFtGAMgASgJEhMKC25leHRfY3Vyc29yGAQgASgJEhIKCnBhZ2VfcGFyYW0YBSABKAkSEgoKc3RhcnRfcGFnZRgGIAEoBRIQCghuZXh0X3VybBgHIAEoCSKFAQoJRXJyb3JSdWxlEg4KBnN0YXR1cxgBIAEoBRISCgpzdGF0dXNfbWluGAIgASgFEhIKCnN0YXR1c19tYXgYAyABKAUSEQoJcmV0cnlhYmxlGAQgASgIEg8KB21lc3NhZ2UYBSABKAkSDAoEd2hlbhgGIAEoCRIOCgZhY2NlcHQYByABKAgiRQoKT3V0cHV0U3BlYxIOCgZzZWxlY3QYASABKAkSJwoGc2NoZW1hGAIgASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdCLQAQoLVHJpZ2dlclNwZWMSCgoCaWQYASABKAkSFAoMZGlzcGxheV9uYW1lGAIgASgJEg8KB3N1bW1hcnkYAyABKAkSEwoLZGVzY3JpcHRpb24YBCABKAkSEAoIa2V5d29yZHMYBSADKAkSDgoGZXZlbnRzGAYgAygJEjAKCmF0dHJpYnV0ZXMYByADKAsyHC5yZWxpYW50LnYxLlRyaWdnZXJBdHRyaWJ1dGUSJQoEZGF0YRgIIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QiRgoQVHJpZ2dlckF0dHJpYnV0ZRIMCgRuYW1lGAEgASgJEhMKC2Rlc2NyaXB0aW9uGAIgASgJEg8KB2V4YW1wbGUYAyABKAlCOlo4Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vcmVsaWFudC92MTtyZWxpYW50djFiBnByb3RvMw", [file_google_protobuf_struct]);
+  fileDesc("ChxyZWxpYW50L3YxL2ludGVncmF0aW9uLnByb3RvEgpyZWxpYW50LnYxIrgCChNJbnRlZ3JhdGlvbk1hbmlmZXN0EgoKAmlkGAEgASgJEg8KB3ZlcnNpb24YAiABKAUSFAoMZGlzcGxheV9uYW1lGAMgASgJEhMKC2Rlc2NyaXB0aW9uGAQgASgJEgwKBGljb24YBSABKAkSEAoIY2F0ZWdvcnkYBiABKAkSLgoKY29ubmVjdGlvbhgHIAEoCzIaLnJlbGlhbnQudjEuQ29ubmVjdGlvblNwZWMSJwoHYWN0aW9ucxgIIAMoCzIWLnJlbGlhbnQudjEuQWN0aW9uU3BlYxIpCgh0cmlnZ2VycxgJIAMoCzIXLnJlbGlhbnQudjEuVHJpZ2dlclNwZWMSEAoIa2V5d29yZHMYCiADKAkSIwoFdHlwZXMYCyADKAsyFC5yZWxpYW50LnYxLlR5cGVTcGVjIs0BCghUeXBlU3BlYxIKCgJpZBgBIAEoCRIUCgxkaXNwbGF5X25hbWUYAiABKAkSEwoLZGVzY3JpcHRpb24YAyABKAkSJgoFdmFsdWUYBCABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0EiwKB29wdGlvbnMYBSABKAsyGy5yZWxpYW50LnYxLlR5cGVPcHRpb25zU3BlYxIRCglmcmVlX3RleHQYBiABKAgSEAoIa2V5d29yZHMYByADKAkSDwoHc3VtbWFyeRgIIAEoCSLtBAoPVHlwZU9wdGlvbnNTcGVjEg4KBmFjdGlvbhgBIAEoCRI3CgZwYXJhbXMYAiADKAsyJy5yZWxpYW50LnYxLlR5cGVPcHRpb25zU3BlYy5QYXJhbXNFbnRyeRINCgVpdGVtcxgDIAEoCRINCgV2YWx1ZRgEIAEoCRINCgVsYWJlbBgFIAEoCRITCgtkZXNjcmlwdGlvbhgGIAEoCRINCgVncm91cBgHIAEoCRJBCgthbm5vdGF0aW9ucxgIIAMoCzIsLnJlbGlhbnQudjEuVHlwZU9wdGlvbnNTcGVjLkFubm90YXRpb25zRW50cnkSLQoId2FybmluZ3MYCSADKAsyGy5yZWxpYW50LnYxLlR5cGVXYXJuaW5nU3BlYxIOCgZzZWFyY2gYCiABKAkSLQoGcGFnaW5nGAsgASgLMh0ucmVsaWFudC52MS5UeXBlT3B0aW9uc1BhZ2luZxI1CgVzY29wZRgMIAMoCzImLnJlbGlhbnQudjEuVHlwZU9wdGlvbnNTcGVjLlNjb3BlRW50cnkSLAoHcmVzb2x2ZRgNIAEoCzIbLnJlbGlhbnQudjEuVHlwZVJlc29sdmVTcGVjGi0KC1BhcmFtc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEaMgoQQW5ub3RhdGlvbnNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBGkcKClNjb3BlRW50cnkSCwoDa2V5GAEgASgJEigKBXZhbHVlGAIgASgLMhkucmVsaWFudC52MS5UeXBlU2NvcGVTcGVjOgI4ASIwCg9UeXBlV2FybmluZ1NwZWMSDAoEd2hlbhgBIAEoCRIPCgdtZXNzYWdlGAIgASgJIkEKEVR5cGVPcHRpb25zUGFnaW5nEhcKD25leHRfdG9rZW5fcGF0aBgBIAEoCRITCgt0b2tlbl9wYXJhbRgCIAEoCSIvCg1UeXBlU2NvcGVTcGVjEgwKBHR5cGUYASABKAkSEAoIcmVxdWlyZWQYAiABKAgirQEKD1R5cGVSZXNvbHZlU3BlYxIOCgZhY3Rpb24YASABKAkSNwoGcGFyYW1zGAIgAygLMicucmVsaWFudC52MS5UeXBlUmVzb2x2ZVNwZWMuUGFyYW1zRW50cnkSDQoFbGFiZWwYAyABKAkSEwoLZGVzY3JpcHRpb24YBCABKAkaLQoLUGFyYW1zRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASL3AgoOQ29ubmVjdGlvblNwZWMSEAoIYmFzZV91cmwYAiABKAkSFQoNYWxsb3dlZF9ob3N0cxgDIAMoCRJHCg9kZWZhdWx0X2hlYWRlcnMYBCADKAsyLi5yZWxpYW50LnYxLkNvbm5lY3Rpb25TcGVjLkRlZmF1bHRIZWFkZXJzRW50cnkSHQoVYWxsb3dfYW55X3B1YmxpY19ob3N0GAUgASgIEiQKBGF1dGgYByADKAsyFi5yZWxpYW50LnYxLkF1dGhNZXRob2QSFQoNYXV0aF9vcHRpb25hbBgIIAEoCBI2ChFjb25uZWN0aW9uX3BhcmFtcxgJIAMoCzIbLnJlbGlhbnQudjEuQ29ubmVjdGlvblBhcmFtEigKBXByb2JlGAogASgLMhkucmVsaWFudC52MS5JZGVudGl0eVByb2JlGjUKE0RlZmF1bHRIZWFkZXJzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASLDAQoKQXV0aE1ldGhvZBIoCgZvYXV0aDIYASABKAsyFi5yZWxpYW50LnYxLk9BdXRoMkF1dGhIABIpCgdhcGlfa2V5GAIgASgLMhYucmVsaWFudC52MS5BcGlLZXlBdXRoSAASJgoFYmFzaWMYAyABKAsyFS5yZWxpYW50LnYxLkJhc2ljQXV0aEgAEi4KCWRlbGVnYXRlZBgEIAEoCzIZLnJlbGlhbnQudjEuRGVsZWdhdGVkQXV0aEgAQggKBm1ldGhvZCKnAgoKT0F1dGgyQXV0aBIVCg1hdXRob3JpemVfdXJsGAEgASgJEhEKCXRva2VuX3VybBgCIAEoCRIOCgZzY29wZXMYAyADKAkSFwoPc2NvcGVfc2VwYXJhdG9yGAQgASgJEgwKBHBrY2UYBSABKAkSRQoQYXV0aG9yaXplX3BhcmFtcxgGIAMoCzIrLnJlbGlhbnQudjEuT0F1dGgyQXV0aC5BdXRob3JpemVQYXJhbXNFbnRyeRImCgZyZXZva2UYByABKAsyFi5yZWxpYW50LnYxLlJldm9rZVNwZWMSEQoJc2VuZGVyX2lkGAggASgJGjYKFEF1dGhvcml6ZVBhcmFtc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiZQoKUmV2b2tlU3BlYxIOCgZtZXRob2QYASABKAkSCwoDdXJsGAIgASgJEhMKC2NsaWVudF9hdXRoGAMgASgJEhAKCHRva2VuX2luGAQgASgJEhMKC3Rva2VuX3BhcmFtGAUgASgJIkUKCkFwaUtleUF1dGgSCgoCaW4YASABKAkSDAoEbmFtZRgCIAEoCRIOCgZwcmVmaXgYAyABKAkSDQoFbGFiZWwYBCABKAkiUwoJQmFzaWNBdXRoEhYKDnVzZXJuYW1lX2xhYmVsGAEgASgJEhYKDnBhc3N3b3JkX2xhYmVsGAIgASgJEhYKDnVzZXJuYW1lX3BhcmFtGAMgASgJIh8KDURlbGVnYXRlZEF1dGgSDgoGYnJva2VyGAEgASgJInIKD0Nvbm5lY3Rpb25QYXJhbRIMCgRuYW1lGAEgASgJEhQKDGRpc3BsYXlfbmFtZRgCIAEoCRITCgtkZXNjcmlwdGlvbhgDIAEoCRIPCgdwYXR0ZXJuGAQgASgJEhUKDWRlZmF1bHRfdmFsdWUYBSABKAki/QEKDUlkZW50aXR5UHJvYmUSDgoGbWV0aG9kGAEgASgJEgsKA3VybBgCIAEoCRIMCgRwYXRoGAMgASgJEjcKB2hlYWRlcnMYBCADKAsyJi5yZWxpYW50LnYxLklkZW50aXR5UHJvYmUuSGVhZGVyc0VudHJ5EgoKAm9rGAUgASgJEhMKC2V4dGVybmFsX2lkGAYgASgJEg0KBWxhYmVsGAcgASgJEhUKDXJvdXRlc19ldmVudHMYCCABKAgSEQoJc2VuZGVyX2lkGAkgASgJGi4KDEhlYWRlcnNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIuICCgpBY3Rpb25TcGVjEgoKAmlkGAEgASgJEhQKDGRpc3BsYXlfbmFtZRgCIAEoCRITCgtkZXNjcmlwdGlvbhgDIAEoCRIMCgRraW5kGAQgASgJEhEKCXBsYWNlbWVudBgFIAEoCRIPCgdtdXRhdGVzGAYgASgIEiIKBHRvb2wYByABKAsyFC5yZWxpYW50LnYxLlRvb2xTcGVjEicKBnBhcmFtcxgIIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3QSLAoHcmVxdWVzdBgJIAEoCzIbLnJlbGlhbnQudjEuSHR0cFJlcXVlc3RTcGVjEiYKBm91dHB1dBgKIAEoCzIWLnJlbGlhbnQudjEuT3V0cHV0U3BlYxIQCghleGVjdXRvchgLIAEoCRIPCgdzdW1tYXJ5GAwgASgJEhAKCGtleXdvcmRzGA0gAygJEhMKC3BhcmFtX29yZGVyGA4gAygJIjYKCFRvb2xTcGVjEg4KBmV4cG9zZRgBIAEoCBIMCgRuYW1lGAIgASgJEgwKBHRhZ3MYAyADKAki0gQKD0h0dHBSZXF1ZXN0U3BlYxIOCgZtZXRob2QYASABKAkSCwoDdXJsGAIgASgJEgwKBHBhdGgYAyABKAkSNQoFcXVlcnkYBCADKAsyJi5yZWxpYW50LnYxLkh0dHBSZXF1ZXN0U3BlYy5RdWVyeUVudHJ5EjkKB2hlYWRlcnMYBSADKAsyKC5yZWxpYW50LnYxLkh0dHBSZXF1ZXN0U3BlYy5IZWFkZXJzRW50cnkSJAoEYm9keRgGIAEoCzIWLmdvb2dsZS5wcm90b2J1Zi5WYWx1ZRIuCgpwYWdpbmF0aW9uGAcgASgLMhoucmVsaWFudC52MS5QYWdpbmF0aW9uU3BlYxIlCgZlcnJvcnMYCCADKAsyFS5yZWxpYW50LnYxLkVycm9yUnVsZRIXCg90aW1lb3V0X3NlY29uZHMYCSABKAUSGgoSbWF4X3Jlc3BvbnNlX2J5dGVzGAogASgDEhQKDGhlYWRlcnNfZXhwchgLIAEoCRISCgpxdWVyeV9leHByGAwgASgJEhEKCWJvZHlfZXhwchgNIAEoCRITCgtib2R5X2Zvcm1hdBgOIAEoCRIUCgx0aW1lb3V0X2V4cHIYDyABKAkSFwoPcmVzcG9uc2VfZm9ybWF0GBAgASgJEhEKCXJlZGlyZWN0cxgRIAEoCRosCgpRdWVyeUVudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEaLgoMSGVhZGVyc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEilwEKDlBhZ2luYXRpb25TcGVjEg0KBXN0eWxlGAEgASgJEhEKCW1heF9wYWdlcxgCIAEoBRIUCgxjdXJzb3JfcGFyYW0YAyABKAkSEwoLbmV4dF9jdXJzb3IYBCABKAkSEgoKcGFnZV9wYXJhbRgFIAEoCRISCgpzdGFydF9wYWdlGAYgASgFEhAKCG5leHRfdXJsGAcgASgJIoUBCglFcnJvclJ1bGUSDgoGc3RhdHVzGAEgASgFEhIKCnN0YXR1c19taW4YAiABKAUSEgoKc3RhdHVzX21heBgDIAEoBRIRCglyZXRyeWFibGUYBCABKAgSDwoHbWVzc2FnZRgFIAEoCRIMCgR3aGVuGAYgASgJEg4KBmFjY2VwdBgHIAEoCCJFCgpPdXRwdXRTcGVjEg4KBnNlbGVjdBgBIAEoCRInCgZzY2hlbWEYAiABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0ItABCgtUcmlnZ2VyU3BlYxIKCgJpZBgBIAEoCRIUCgxkaXNwbGF5X25hbWUYAiABKAkSDwoHc3VtbWFyeRgDIAEoCRITCgtkZXNjcmlwdGlvbhgEIAEoCRIQCghrZXl3b3JkcxgFIAMoCRIOCgZldmVudHMYBiADKAkSMAoKYXR0cmlidXRlcxgHIAMoCzIcLnJlbGlhbnQudjEuVHJpZ2dlckF0dHJpYnV0ZRIlCgRkYXRhGAggASgLMhcuZ29vZ2xlLnByb3RvYnVmLlN0cnVjdCJUChBUcmlnZ2VyQXR0cmlidXRlEgwKBG5hbWUYASABKAkSEwoLZGVzY3JpcHRpb24YAiABKAkSDwoHZXhhbXBsZRgDIAEoCRIMCgR0eXBlGAQgASgJQjpaOGdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL3JlbGlhbnQvdjE7cmVsaWFudHYxYgZwcm90bzM", [file_google_protobuf_struct]);
 
 /**
  * IntegrationManifest is the declarative description of one integration: how a
@@ -91,6 +91,15 @@ export type IntegrationManifest = Message<"reliant.v1.IntegrationManifest"> & {
    * @generated from field: repeated string keywords = 10;
    */
   keywords: string[];
+
+  /**
+   * Types are the value types this integration defines (`github.repository`):
+   * what a workflow input or a trigger attribute can be typed as. Referenced
+   * as `<id>.<type id>`.
+   *
+   * @generated from field: repeated reliant.v1.TypeSpec types = 11;
+   */
+  types: TypeSpec[];
 };
 
 /**
@@ -99,6 +108,317 @@ export type IntegrationManifest = Message<"reliant.v1.IntegrationManifest"> & {
  */
 export const IntegrationManifestSchema: GenMessage<IntegrationManifest> = /*@__PURE__*/
   messageDesc(file_reliant_v1_integration, 0);
+
+/**
+ * TypeSpec is a value type an integration defines. A workflow input of this
+ * type holds plain JSON values matching `value`, and the options source lets
+ * a UI offer the values the caller can actually choose from.
+ *
+ * @generated from message reliant.v1.TypeSpec
+ */
+export type TypeSpec = Message<"reliant.v1.TypeSpec"> & {
+  /**
+   * Id is unique within the manifest and a different namespace from action
+   * and trigger ids. Lower-case, [a-z][a-z0-9_]*. The type's ref is
+   * `<integration id>.<id>`.
+   *
+   * @generated from field: string id = 1;
+   */
+  id: string;
+
+  /**
+   * @generated from field: string display_name = 2;
+   */
+  displayName: string;
+
+  /**
+   * @generated from field: string description = 3;
+   */
+  description: string;
+
+  /**
+   * Value is the JSON Schema of ONE value; validation and CEL typing use it.
+   * Normally a string with a pattern.
+   *
+   * @generated from field: google.protobuf.Struct value = 4;
+   */
+  value?: JsonObject | undefined;
+
+  /**
+   * Options says where a picker gets candidate values. Unset means the type
+   * has no option list (free entry only).
+   *
+   * @generated from field: reliant.v1.TypeOptionsSpec options = 5;
+   */
+  options?: TypeOptionsSpec | undefined;
+
+  /**
+   * FreeText allows a value that is not among the options (a label that does
+   * not exist yet).
+   *
+   * @generated from field: bool free_text = 6;
+   */
+  freeText: boolean;
+
+  /**
+   * Keywords are extra search terms for the catalog index.
+   *
+   * @generated from field: repeated string keywords = 7;
+   */
+  keywords: string[];
+
+  /**
+   * Summary is one line for search results and pickers.
+   *
+   * @generated from field: string summary = 8;
+   */
+  summary: string;
+};
+
+/**
+ * Describes the message reliant.v1.TypeSpec.
+ * Use `create(TypeSpecSchema)` to create a new message.
+ */
+export const TypeSpecSchema: GenMessage<TypeSpec> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_integration, 1);
+
+/**
+ * TypeOptionsSpec is how a type's candidate values are listed: a read-only
+ * list action of the same integration, run as the caller, and CEL projections
+ * from each item of its output to an option. The CEL expressions see `item`
+ * (one output item) and `context` (acting_identity: "owner" or "app").
+ *
+ * @generated from message reliant.v1.TypeOptionsSpec
+ */
+export type TypeOptionsSpec = Message<"reliant.v1.TypeOptionsSpec"> & {
+  /**
+   * Action is the id of a list action in this manifest. It must not mutate
+   * and must be placeable on the server.
+   *
+   * @generated from field: string action = 1;
+   */
+  action: string;
+
+  /**
+   * Params are templates for the action's parameters, keyed by param name.
+   * They may read `scope.<key>`, `query` and `page_token`.
+   *
+   * @generated from field: map<string, string> params = 2;
+   */
+  params: { [key: string]: string };
+
+  /**
+   * Items is CEL over the action's output yielding the list of items. Empty
+   * means the output itself is the list.
+   *
+   * @generated from field: string items = 3;
+   */
+  items: string;
+
+  /**
+   * Value, Label, Description and Group are CEL over `item`. Value is the
+   * stored value and is required; Label defaults to Value.
+   *
+   * @generated from field: string value = 4;
+   */
+  value: string;
+
+  /**
+   * @generated from field: string label = 5;
+   */
+  label: string;
+
+  /**
+   * @generated from field: string description = 6;
+   */
+  description: string;
+
+  /**
+   * @generated from field: string group = 7;
+   */
+  group: string;
+
+  /**
+   * Annotations are extra facts for the UI and for warnings, name -> CEL over
+   * `item`.
+   *
+   * @generated from field: map<string, string> annotations = 8;
+   */
+  annotations: { [key: string]: string };
+
+  /**
+   * Warnings are checked per option; each that holds is shown with the option.
+   *
+   * @generated from field: repeated reliant.v1.TypeWarningSpec warnings = 9;
+   */
+  warnings: TypeWarningSpec[];
+
+  /**
+   * Search says how a query narrows the list: "client" (filter the projected
+   * labels) or "param:<name>" (pass the query as that action param). Empty is
+   * "client".
+   *
+   * @generated from field: string search = 10;
+   */
+  search: string;
+
+  /**
+   * Paging says how to page an action that pages itself. Unset means the
+   * action returns the whole list and the caller pages it.
+   *
+   * @generated from field: reliant.v1.TypeOptionsPaging paging = 11;
+   */
+  paging?: TypeOptionsPaging | undefined;
+
+  /**
+   * Scope names the other typed values this list depends on, by scope key
+   * (visible to the templates as `scope.<key>`).
+   *
+   * @generated from field: map<string, reliant.v1.TypeScopeSpec> scope = 12;
+   */
+  scope: { [key: string]: TypeScopeSpec };
+
+  /**
+   * Resolve maps a stored value back to its current display (an id to a
+   * login), for values that are not in the current options.
+   *
+   * @generated from field: reliant.v1.TypeResolveSpec resolve = 13;
+   */
+  resolve?: TypeResolveSpec | undefined;
+};
+
+/**
+ * Describes the message reliant.v1.TypeOptionsSpec.
+ * Use `create(TypeOptionsSpecSchema)` to create a new message.
+ */
+export const TypeOptionsSpecSchema: GenMessage<TypeOptionsSpec> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_integration, 2);
+
+/**
+ * TypeWarningSpec is a condition on an option, with the message shown when it
+ * holds.
+ *
+ * @generated from message reliant.v1.TypeWarningSpec
+ */
+export type TypeWarningSpec = Message<"reliant.v1.TypeWarningSpec"> & {
+  /**
+   * When is CEL over `item`, `option` (the projection so far, with
+   * annotations) and `context`, yielding a bool.
+   *
+   * @generated from field: string when = 1;
+   */
+  when: string;
+
+  /**
+   * @generated from field: string message = 2;
+   */
+  message: string;
+};
+
+/**
+ * Describes the message reliant.v1.TypeWarningSpec.
+ * Use `create(TypeWarningSpecSchema)` to create a new message.
+ */
+export const TypeWarningSpecSchema: GenMessage<TypeWarningSpec> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_integration, 3);
+
+/**
+ * TypeOptionsPaging is the upstream paging contract of an options action.
+ *
+ * @generated from message reliant.v1.TypeOptionsPaging
+ */
+export type TypeOptionsPaging = Message<"reliant.v1.TypeOptionsPaging"> & {
+  /**
+   * NextTokenPath is a dotted path into the action's output holding the token
+   * for the next page; absent or empty means the last page.
+   *
+   * @generated from field: string next_token_path = 1;
+   */
+  nextTokenPath: string;
+
+  /**
+   * TokenParam is the action param that receives the token.
+   *
+   * @generated from field: string token_param = 2;
+   */
+  tokenParam: string;
+};
+
+/**
+ * Describes the message reliant.v1.TypeOptionsPaging.
+ * Use `create(TypeOptionsPagingSchema)` to create a new message.
+ */
+export const TypeOptionsPagingSchema: GenMessage<TypeOptionsPaging> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_integration, 4);
+
+/**
+ * TypeScopeSpec is one dependency of a type's options on another typed value.
+ *
+ * @generated from message reliant.v1.TypeScopeSpec
+ */
+export type TypeScopeSpec = Message<"reliant.v1.TypeScopeSpec"> & {
+  /**
+   * Type is the type ref the scope value has: `<id>` within this manifest or
+   * a qualified `<integration>.<id>`.
+   *
+   * @generated from field: string type = 1;
+   */
+  type: string;
+
+  /**
+   * Required means the options cannot be listed until the scope is supplied.
+   *
+   * @generated from field: bool required = 2;
+   */
+  required: boolean;
+};
+
+/**
+ * Describes the message reliant.v1.TypeScopeSpec.
+ * Use `create(TypeScopeSpecSchema)` to create a new message.
+ */
+export const TypeScopeSpecSchema: GenMessage<TypeScopeSpec> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_integration, 5);
+
+/**
+ * TypeResolveSpec labels stored values.
+ *
+ * @generated from message reliant.v1.TypeResolveSpec
+ */
+export type TypeResolveSpec = Message<"reliant.v1.TypeResolveSpec"> & {
+  /**
+   * Action is a read-only action of this manifest that looks one value up.
+   *
+   * @generated from field: string action = 1;
+   */
+  action: string;
+
+  /**
+   * Params are templates; they may read `value`.
+   *
+   * @generated from field: map<string, string> params = 2;
+   */
+  params: { [key: string]: string };
+
+  /**
+   * Label is CEL over `item`, the looked-up object.
+   *
+   * @generated from field: string label = 3;
+   */
+  label: string;
+
+  /**
+   * @generated from field: string description = 4;
+   */
+  description: string;
+};
+
+/**
+ * Describes the message reliant.v1.TypeResolveSpec.
+ * Use `create(TypeResolveSpecSchema)` to create a new message.
+ */
+export const TypeResolveSpecSchema: GenMessage<TypeResolveSpec> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_integration, 6);
 
 /**
  * ConnectionSpec says how requests are authenticated and where they may go.
@@ -186,7 +506,7 @@ export type ConnectionSpec = Message<"reliant.v1.ConnectionSpec"> & {
  * Use `create(ConnectionSpecSchema)` to create a new message.
  */
 export const ConnectionSpecSchema: GenMessage<ConnectionSpec> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_integration, 1);
+  messageDesc(file_reliant_v1_integration, 7);
 
 /**
  * AuthMethod is one way to connect. Exactly one arm is set.
@@ -229,7 +549,7 @@ export type AuthMethod = Message<"reliant.v1.AuthMethod"> & {
  * Use `create(AuthMethodSchema)` to create a new message.
  */
 export const AuthMethodSchema: GenMessage<AuthMethod> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_integration, 2);
+  messageDesc(file_reliant_v1_integration, 8);
 
 /**
  * OAuth2Auth is the authorization-code grant with PKCE.
@@ -308,7 +628,7 @@ export type OAuth2Auth = Message<"reliant.v1.OAuth2Auth"> & {
  * Use `create(OAuth2AuthSchema)` to create a new message.
  */
 export const OAuth2AuthSchema: GenMessage<OAuth2Auth> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_integration, 3);
+  messageDesc(file_reliant_v1_integration, 9);
 
 /**
  * RevokeSpec describes the provider's token revocation call.
@@ -361,7 +681,7 @@ export type RevokeSpec = Message<"reliant.v1.RevokeSpec"> & {
  * Use `create(RevokeSpecSchema)` to create a new message.
  */
 export const RevokeSpecSchema: GenMessage<RevokeSpec> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_integration, 4);
+  messageDesc(file_reliant_v1_integration, 10);
 
 /**
  * ApiKeyAuth is a pasted key, placed in a header or a query parameter.
@@ -405,7 +725,7 @@ export type ApiKeyAuth = Message<"reliant.v1.ApiKeyAuth"> & {
  * Use `create(ApiKeyAuthSchema)` to create a new message.
  */
 export const ApiKeyAuthSchema: GenMessage<ApiKeyAuth> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_integration, 5);
+  messageDesc(file_reliant_v1_integration, 11);
 
 /**
  * BasicAuth is HTTP Basic: a username (often an account id) and a secret.
@@ -438,7 +758,7 @@ export type BasicAuth = Message<"reliant.v1.BasicAuth"> & {
  * Use `create(BasicAuthSchema)` to create a new message.
  */
 export const BasicAuthSchema: GenMessage<BasicAuth> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_integration, 6);
+  messageDesc(file_reliant_v1_integration, 12);
 
 /**
  * DelegatedAuth takes the token from an external authority at call time, such
@@ -460,7 +780,7 @@ export type DelegatedAuth = Message<"reliant.v1.DelegatedAuth"> & {
  * Use `create(DelegatedAuthSchema)` to create a new message.
  */
 export const DelegatedAuthSchema: GenMessage<DelegatedAuth> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_integration, 7);
+  messageDesc(file_reliant_v1_integration, 13);
 
 /**
  * ConnectionParam is one non-secret per-connection setting.
@@ -506,7 +826,7 @@ export type ConnectionParam = Message<"reliant.v1.ConnectionParam"> & {
  * Use `create(ConnectionParamSchema)` to create a new message.
  */
 export const ConnectionParamSchema: GenMessage<ConnectionParam> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_integration, 8);
+  messageDesc(file_reliant_v1_integration, 14);
 
 /**
  * IdentityProbe is one request that names the account a credential acts as.
@@ -594,7 +914,7 @@ export type IdentityProbe = Message<"reliant.v1.IdentityProbe"> & {
  * Use `create(IdentityProbeSchema)` to create a new message.
  */
 export const IdentityProbeSchema: GenMessage<IdentityProbe> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_integration, 9);
+  messageDesc(file_reliant_v1_integration, 15);
 
 /**
  * ActionSpec is one operation: usable as a workflow node and, optionally, as
@@ -710,7 +1030,7 @@ export type ActionSpec = Message<"reliant.v1.ActionSpec"> & {
  * Use `create(ActionSpecSchema)` to create a new message.
  */
 export const ActionSpecSchema: GenMessage<ActionSpec> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_integration, 10);
+  messageDesc(file_reliant_v1_integration, 16);
 
 /**
  * ToolSpec controls exposing an action to agents as a tool.
@@ -742,7 +1062,7 @@ export type ToolSpec = Message<"reliant.v1.ToolSpec"> & {
  * Use `create(ToolSpecSchema)` to create a new message.
  */
 export const ToolSpecSchema: GenMessage<ToolSpec> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_integration, 11);
+  messageDesc(file_reliant_v1_integration, 17);
 
 /**
  * HttpRequestSpec is the declarative request template. String values may embed
@@ -888,7 +1208,7 @@ export type HttpRequestSpec = Message<"reliant.v1.HttpRequestSpec"> & {
  * Use `create(HttpRequestSpecSchema)` to create a new message.
  */
 export const HttpRequestSpecSchema: GenMessage<HttpRequestSpec> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_integration, 12);
+  messageDesc(file_reliant_v1_integration, 18);
 
 /**
  * PaginationSpec follows pages and concatenates each page's selected list.
@@ -957,7 +1277,7 @@ export type PaginationSpec = Message<"reliant.v1.PaginationSpec"> & {
  * Use `create(PaginationSpecSchema)` to create a new message.
  */
 export const PaginationSpecSchema: GenMessage<PaginationSpec> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_integration, 13);
+  messageDesc(file_reliant_v1_integration, 19);
 
 /**
  * ErrorRule maps one status (or an inclusive range) to an error outcome.
@@ -1026,7 +1346,7 @@ export type ErrorRule = Message<"reliant.v1.ErrorRule"> & {
  * Use `create(ErrorRuleSchema)` to create a new message.
  */
 export const ErrorRuleSchema: GenMessage<ErrorRule> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_integration, 14);
+  messageDesc(file_reliant_v1_integration, 20);
 
 /**
  * OutputSpec selects what part of the response becomes the node's data.
@@ -1058,7 +1378,7 @@ export type OutputSpec = Message<"reliant.v1.OutputSpec"> & {
  * Use `create(OutputSpecSchema)` to create a new message.
  */
 export const OutputSpecSchema: GenMessage<OutputSpec> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_integration, 15);
+  messageDesc(file_reliant_v1_integration, 21);
 
 /**
  * TriggerSpec declares one trigger type the integration delivers: what can
@@ -1143,7 +1463,7 @@ export type TriggerSpec = Message<"reliant.v1.TriggerSpec"> & {
  * Use `create(TriggerSpecSchema)` to create a new message.
  */
 export const TriggerSpecSchema: GenMessage<TriggerSpec> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_integration, 16);
+  messageDesc(file_reliant_v1_integration, 22);
 
 /**
  * TriggerAttribute is one routing fact a trigger's events carry.
@@ -1170,6 +1490,15 @@ export type TriggerAttribute = Message<"reliant.v1.TriggerAttribute"> & {
    * @generated from field: string example = 3;
    */
   example: string;
+
+  /**
+   * Type is the value type of the attribute: a type id of this manifest, or a
+   * qualified `<integration>.<id>`. Empty means a plain string. It is what an
+   * IntegrationSource's match_input checks an input's type against.
+   *
+   * @generated from field: string type = 4;
+   */
+  type: string;
 };
 
 /**
@@ -1177,5 +1506,5 @@ export type TriggerAttribute = Message<"reliant.v1.TriggerAttribute"> & {
  * Use `create(TriggerAttributeSchema)` to create a new message.
  */
 export const TriggerAttributeSchema: GenMessage<TriggerAttribute> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_integration, 17);
+  messageDesc(file_reliant_v1_integration, 23);
 
