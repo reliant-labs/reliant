@@ -140,7 +140,7 @@ tools/integrationgen/upstream/octokit-webhooks-schemas/schema.json   the vendore
 
 | Output | Replaces |
 |---|---|
-| `webhook/github/zz_projection_gen.go`: the `mappings` table and one attrs and one data func per event | the hand-written projections in `data.go` |
+| `webhook/github/zz_projection_generated.go`: the `mappings` table and one attrs and one data func per event | the hand-written projections in `data.go` |
 | `catalog/github/events/<id>.yaml`: attributes and the closed `data` schema | the hand-written event fragments |
 | `catalog/github/schemas/<object>_schema.yaml` | the hand-written object schemas |
 | the `triggers:` list of `catalog/github/manifest.yaml` (a new event is appended) | |

@@ -8,7 +8,7 @@
 //
 // From them it writes
 //
-//	internal/integrations/webhook/<provider>/zz_projection_gen.go   the parser's projections
+//	internal/integrations/webhook/<provider>/zz_projection_generated.go   the parser's projections
 //	internal/integrations/catalog/<provider>/events/<id>.yaml       each event's data schema and attributes
 //	internal/integrations/catalog/<provider>/schemas/*_schema.yaml  the shared objects
 //

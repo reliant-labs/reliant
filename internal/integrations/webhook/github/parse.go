@@ -148,7 +148,7 @@ type userRef struct {
 }
 
 // mapping says how one (X-GitHub-Event, action) becomes an event. The table is
-// generated from projection/*.yaml (zz_projection_gen.go), which is also where
+// generated from projection/*.yaml (zz_projection_generated.go), which is also where
 // the event's data schema in the catalog comes from.
 type mapping struct {
 	// attrs adds the per-event routing attributes. Every attribute a
