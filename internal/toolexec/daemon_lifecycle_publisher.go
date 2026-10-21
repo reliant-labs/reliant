@@ -14,6 +14,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/observe/natsotel"
+
 	"github.com/nats-io/nats.go"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/observability"
@@ -81,7 +83,7 @@ func (p *DaemonLifecyclePublisher) publish(ctx context.Context, eventType, userI
 	}
 
 	subject := fmt.Sprintf("%s.%s", daemonEventsSubjectPrefix, eventType)
-	msg := observability.NATSPublishMsg(ctx, subject, data)
+	msg := natsotel.NewMsg(ctx, subject, data)
 	if err := p.nc.PublishMsg(msg); err != nil {
 		logging.ErrorContext(ctx, "[DaemonLifecyclePublisher] Failed to publish daemon lifecycle event", "error", err, "subject", subject, "daemonID", daemonID)
 		return
