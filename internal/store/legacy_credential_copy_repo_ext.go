@@ -41,6 +41,8 @@ import (
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/orm"
+
+	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
 // The legacy credential copy's completion marker (P5b lane L6): one row, id 1, written in the
@@ -105,4 +107,129 @@ func InLegacyImportSavepoint(ctx context.Context, db orm.Context, fn func() erro
 // persist them — `bun:"-"` is Bun's own idiom for a field it must never
 // bind or scan.
 type LegacyCredentialCopyExtra struct {
+}
+
+// LegacyCredential is one row of a legacy credential table — claude_auth_tokens,
+// codex_auth_tokens, copilot_auth_tokens, antigravity_auth_tokens, or an LLM row of api_keys —
+// read for the one-time copy, its secrets still sealed under the legacy table's AAD. Meta holds
+// the table's identity columns in the order its reader documents ("" for NULL), and Sealed its
+// sealed columns in order.
+type LegacyCredential struct {
+	ID, UserID, Provider string
+	ExpiresAt            time.Time // zero for NULL, or a table without the column
+	CreatedAt, UpdatedAt time.Time
+	Meta                 [5]string
+	Sealed               [][]byte
+}
+
+func legacyText(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
+
+func legacyTime(t *time.Time) time.Time {
+	if t == nil {
+		return time.Time{}
+	}
+	return *t
+}
+
+// ListLegacyClaudeCredentials reads claude_auth_tokens. Meta: account_uuid, account_email,
+// organization_uuid, organization_name, scope. Sealed: access, refresh.
+func ListLegacyClaudeCredentials(ctx context.Context, db orm.Context) ([]LegacyCredential, error) {
+	rows, err := ListClaudeAuthToken(ctx, db)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]LegacyCredential, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, LegacyCredential{
+			ID: r.ID, UserID: r.UserID, Provider: "claude", ExpiresAt: legacyTime(r.ExpiresAt),
+			CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
+			Meta: [5]string{legacyText(r.AccountUUID), legacyText(r.AccountEmail), legacyText(r.OrganizationUUID),
+				legacyText(r.OrganizationName), legacyText(r.Scope)},
+			Sealed: [][]byte{r.AccessTokenSealed, r.RefreshTokenSealed},
+		})
+	}
+	return out, nil
+}
+
+// ListLegacyCodexCredentials reads codex_auth_tokens. Meta: account_id. Sealed: access,
+// refresh, id token.
+func ListLegacyCodexCredentials(ctx context.Context, db orm.Context) ([]LegacyCredential, error) {
+	rows, err := ListCodexAuthToken(ctx, db)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]LegacyCredential, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, LegacyCredential{
+			ID: r.ID, UserID: r.UserID, Provider: "codex", CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
+			Meta:   [5]string{legacyText(r.AccountID)},
+			Sealed: [][]byte{r.AccessTokenSealed, r.RefreshTokenSealed, r.IDTokenSealed},
+		})
+	}
+	return out, nil
+}
+
+// ListLegacyCopilotCredentials reads copilot_auth_tokens. Meta: tier. Sealed: GitHub access,
+// GitHub refresh.
+func ListLegacyCopilotCredentials(ctx context.Context, db orm.Context) ([]LegacyCredential, error) {
+	rows, err := ListCopilotAuthToken(ctx, db)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]LegacyCredential, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, LegacyCredential{
+			ID: r.ID, UserID: r.UserID, Provider: "copilot", CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
+			Meta:   [5]string{legacyText(r.Tier)},
+			Sealed: [][]byte{r.GithubAccessTokenSealed, r.GithubRefreshTokenSealed},
+		})
+	}
+	return out, nil
+}
+
+// ListLegacyAntigravityCredentials reads antigravity_auth_tokens. Meta: scope. Sealed: access,
+// refresh, id token.
+func ListLegacyAntigravityCredentials(ctx context.Context, db orm.Context) ([]LegacyCredential, error) {
+	rows, err := ListAntigravityAuthToken(ctx, db)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]LegacyCredential, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, LegacyCredential{
+			ID: r.ID, UserID: r.UserID, Provider: "antigravity", ExpiresAt: legacyTime(r.ExpiresAt),
+			CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
+			Meta:   [5]string{legacyText(r.Scope)},
+			Sealed: [][]byte{r.AccessTokenSealed, r.RefreshTokenSealed, r.IDTokenSealed},
+		})
+	}
+	return out, nil
+}
+
+// ListLegacyAPIKeyCredentials reads the LLM rows of api_keys that hold a sealed key: not an
+// automation credential, and not one of the OAuth providers' markers (their tokens are in the
+// tables above). Sealed: the key.
+func ListLegacyAPIKeyCredentials(ctx context.Context, db orm.Context) ([]LegacyCredential, error) {
+	var rows []*ApiKey
+	err := db.Bun().NewSelect().Model(&rows).
+		Where("provider NOT LIKE ?", core.AutomationProviderPrefix+"%").
+		Where("api_key_sealed IS NOT NULL").
+		Where("provider NOT IN ('claude', 'codex', 'copilot', 'antigravity')").
+		Scan(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]LegacyCredential, 0, len(rows))
+	for _, r := range rows {
+		out = append(out, LegacyCredential{
+			ID: r.ID, UserID: r.UserID, Provider: r.Provider, CreatedAt: r.CreatedAt, UpdatedAt: r.UpdatedAt,
+			Sealed: [][]byte{r.APIKeySealed},
+		})
+	}
+	return out, nil
 }

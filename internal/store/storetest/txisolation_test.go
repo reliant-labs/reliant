@@ -3,10 +3,14 @@ package storetest_test
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"slices"
 	"testing"
 	"time"
+
+	fat "github.com/reliant-labs/forge/pkg/accesstoken"
+	"github.com/reliant-labs/forge/pkg/crypto"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/chatselection"
@@ -14,6 +18,8 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/store/storetest"
+	"github.com/reliant-labs/reliant/internal/tokenauthority"
+	"github.com/reliant-labs/reliant/internal/vault"
 )
 
 // TestTransactionOpenersBeginAtTheirLevel pins the isolation level each
@@ -36,6 +42,15 @@ func TestTransactionOpenersBeginAtTheirLevel(t *testing.T) {
 	}
 	p := env.Probe(t)
 	noop := func(context.Context) error { return nil }
+	// Warm the probe vault's DEK for the seed user, so the account rows below
+	// begin only their own transaction: a tenant's first seal adds the
+	// vault's detached ones (pinned by their own subtest at the end).
+	if _, _, err := p.Repo.UpsertProviderAccount(context.Background(), core.AccountUpsert{
+		UserID: storetest.SeedUserID, Provider: "openai", AuthKind: core.AuthKindAPIKey,
+		IdentityKey: "iso-warm", Secrets: core.AccountSecrets{Secret: "sk-warm"},
+	}); err != nil {
+		t.Fatalf("warm the vault: %v", err)
+	}
 
 	const (
 		serializable  = "serializable"
@@ -105,6 +120,29 @@ func TestTransactionOpenersBeginAtTheirLevel(t *testing.T) {
 			}
 			return err
 		}},
+		// The accounts store (AccountStore.inTx): an advisory lock per (user,
+		// provider), then read-then-write; never retried, since it seals
+		// with fresh randomness under the locks it took.
+		{"Repo.UpsertProviderAccount (AccountStore.inTx)", readCommitted, func(ctx context.Context) error {
+			_, _, err := p.Repo.UpsertProviderAccount(ctx, core.AccountUpsert{
+				UserID: storetest.SeedUserID, Provider: "openai", AuthKind: core.AuthKindAPIKey,
+				IdentityKey: "iso-key", Secrets: core.AccountSecrets{Secret: "sk-iso"},
+			})
+			return err
+		}},
+		{"Repo.ReorderProviderAccounts (AccountStore.inTx)", readCommitted, func(ctx context.Context) error {
+			return p.Repo.ReorderProviderAccounts(ctx, storetest.SeedUserID, "gemini", nil)
+		}},
+		// The self-hosted token store's rotation (LocalStore.MintForUser with
+		// Rotate): READ COMMITTED as database/sql's BeginTx(nil) was, never
+		// retried (MaxAttempts 1) — the advisory lock serializes rotations,
+		// and a retry would mint a second token.
+		{"tokenauthority.LocalStore.MintForUser (rotate)", readCommitted, func(ctx context.Context) error {
+			_, err := tokenauthority.NewLocalStore(p.ORM).MintForUser(ctx, tokenauthority.MintRequest{
+				UserID: storetest.SeedUserID, Name: "iso", Scopes: []fat.Scope{fat.ScopeReliantAPI}, Rotate: true,
+			})
+			return err
+		}},
 		// The connection store (connectionTx), which also never retries: the
 		// secrets lock refreshes a token over the network.
 		{"store.SoftDeleteConnection (connectionTx)", readCommitted, func(ctx context.Context) error {
@@ -139,6 +177,40 @@ func TestTransactionOpenersBeginAtTheirLevel(t *testing.T) {
 		}
 		if got := p.Isolations(); !slices.Equal(got, []string{serializable}) {
 			t.Fatalf("began %v, want only the outer [serializable]", got)
+		}
+	})
+
+	// The vault never joins either: a tenant's first DEK, sealed inside a
+	// caller's transaction, is read, written and re-read on detached READ
+	// COMMITTED transactions of its own, so the caller's rollback cannot take
+	// back a key the vault already sealed under. Outside a transaction its
+	// statements run on the pool and begin nothing.
+	t.Run("the vault's DEK statements inside Repo.RunTx detach at read committed", func(t *testing.T) {
+		ring, err := crypto.ParseKeyring("v1:" + base64.StdEncoding.EncodeToString(make([]byte, 32)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		v := vault.New(vault.Deps{DB: p.ORM, Keys: vault.NewEnvKeyWrapper(ring)})
+		p.Reset()
+		var sealed []byte
+		err = p.Repo.RunTx(context.Background(), func(ctx context.Context) error {
+			var err error
+			sealed, err = v.Seal(ctx, vault.UserTenant("iso-tenant"), []byte("x"), []byte("a"))
+			return err
+		})
+		if err != nil {
+			t.Fatalf("Seal inside Repo.RunTx: %v", err)
+		}
+		if got := p.Isolations(); !slices.Equal(got, []string{serializable, readCommitted, readCommitted, readCommitted}) {
+			t.Fatalf("began %v, want the outer [serializable] then three detached [read committed] (read, create, re-read)", got)
+		}
+		p.Reset()
+		fresh := vault.New(vault.Deps{DB: p.ORM, Keys: vault.NewEnvKeyWrapper(ring)})
+		if _, err := fresh.Open(context.Background(), vault.UserTenant("iso-tenant"), sealed, []byte("a")); err != nil {
+			t.Fatalf("Open outside a transaction: %v", err)
+		}
+		if got := p.Isolations(); len(got) != 0 {
+			t.Fatalf("outside a transaction the vault began %v, want none", got)
 		}
 	})
 

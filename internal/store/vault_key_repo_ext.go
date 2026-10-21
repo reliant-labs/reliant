@@ -35,6 +35,71 @@
 //	}
 package store
 
+import (
+	"context"
+	"errors"
+
+	"github.com/reliant-labs/forge/pkg/orm"
+)
+
+// The credential vault's wrapped data keys (P5b lane L6). internal/vault owns every rule
+// (wrapping, caching, tenant binding); these are its statements. The vault runs each one
+// outside any transaction its caller carries, so a key row commits on its own.
+
+// WrappedVaultKey is one vault_keys row as the vault reads it: whose key it is, its state, and
+// the data key still wrapped under the KEK.
+type WrappedVaultKey struct {
+	ID, TenantKind, TenantID, State string
+	WrappedDEK                      []byte
+}
+
+// GetTenantVaultKey returns the tenant's key in state (the vault's primary), or found=false.
+func GetTenantVaultKey(ctx context.Context, db orm.Context, tenantKind, tenantID, state string) (key WrappedVaultKey, found bool, err error) {
+	rows, err := ListVaultKey(ctx, db,
+		orm.WhereEq(VaultKeyFieldTenantKind, tenantKind), orm.WhereEq(VaultKeyFieldTenantID, tenantID),
+		orm.WhereEq(VaultKeyFieldState, state), orm.WithLimit(1))
+	if err != nil || len(rows) == 0 {
+		return WrappedVaultKey{}, false, err
+	}
+	return wrappedVaultKey(rows[0]), true, nil
+}
+
+// GetWrappedVaultKey returns the key with that id, or found=false.
+func GetWrappedVaultKey(ctx context.Context, db orm.Context, id string) (key WrappedVaultKey, found bool, err error) {
+	row, err := GetVaultKeyByID(ctx, db, id)
+	if errors.Is(err, orm.ErrNoRows) {
+		return WrappedVaultKey{}, false, nil
+	}
+	if err != nil {
+		return WrappedVaultKey{}, false, err
+	}
+	return wrappedVaultKey(row), true, nil
+}
+
+func wrappedVaultKey(r *VaultKey) WrappedVaultKey {
+	return WrappedVaultKey{ID: r.ID, TenantKind: r.TenantKind, TenantID: r.TenantID, State: r.State, WrappedDEK: r.WrappedDek}
+}
+
+// InsertVaultKeyIfAbsent stores a tenant's first data key, version 1, unless a conflicting key
+// (another first use of the same tenant) is already stored: concurrent first uses converge on
+// one row, and the loser re-reads the winner's.
+func InsertVaultKeyIfAbsent(ctx context.Context, db orm.Context, key WrappedVaultKey, kekID string) error {
+	_, err := db.Bun().NewInsert().Model(&VaultKey{
+		ID: key.ID, TenantKind: key.TenantKind, TenantID: key.TenantID, Version: 1,
+		KekID: kekID, WrappedDek: key.WrappedDEK, State: key.State,
+	}).On("CONFLICT DO NOTHING").Exec(ctx)
+	return err
+}
+
+// SealedCredentialsExist reports whether anything was ever sealed: a vault key, or an api_keys
+// row with a sealed value. A key-encryption key generated now could open none of it.
+func SealedCredentialsExist(ctx context.Context, db orm.Context) (bool, error) {
+	var exists bool
+	err := db.Bun().NewRaw(`SELECT EXISTS (SELECT 1 FROM vault_keys) OR EXISTS (SELECT 1 FROM api_keys WHERE api_key_sealed IS NOT NULL)`).
+		Scan(ctx, &exists)
+	return exists, err
+}
+
 // VaultKeyExtra carries fields on VaultKey that are NOT columns — computed
 // values, transient state, anything derived rather than stored. VaultKey is
 // embedded on VaultKeyExtra (see vault_key_orm.go), so a field added here is a field on

@@ -21,7 +21,7 @@ func BootVault(ctx context.Context, repo *Repo, hosted bool, dataDir, key string
 		Hosted:  hosted,
 		Key:     key,
 		DataDir: dataDir,
-		DB:      repo.DB.SQLDB(),
+		DB:      repo.ORM(),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("vault: %w", err)

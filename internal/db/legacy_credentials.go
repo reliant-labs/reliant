@@ -3,13 +3,14 @@ package db
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"log/slog"
-	"time"
+
+	"github.com/reliant-labs/forge/pkg/orm"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 	postgresstore "github.com/reliant-labs/reliant/internal/db/postgres"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // The legacy credential tables (claude_auth_tokens, codex_auth_tokens, copilot_auth_tokens,
@@ -24,52 +25,36 @@ type legacyTable struct {
 	source   string
 	provider string // "" = the row carries its own (api_keys)
 	authKind core.AuthKind
-	// query selects: id, user_id, provider, expires_at, created_at, updated_at, meta1..meta4, then
-	// the sealed columns (named by sealed, in order).
-	query  string
+	// read returns the table's rows (internal/store's readers document each one's Meta); sealed
+	// names their sealed columns, in order, for the legacy AAD.
+	read   func(ctx context.Context, db orm.Context) ([]store.LegacyCredential, error)
 	sealed []string
 }
 
 var legacyTables = []legacyTable{
 	{
 		source: postgresstore.LegacySourceClaude, provider: "claude", authKind: core.AuthKindOAuth,
-		query: `SELECT id, user_id, 'claude', expires_at, created_at, updated_at,
-				account_uuid, account_email, organization_uuid, organization_name, scope,
-				access_token_sealed, refresh_token_sealed
-			FROM claude_auth_tokens`,
+		read:   store.ListLegacyClaudeCredentials,
 		sealed: []string{"access_token", "refresh_token"},
 	},
 	{
 		source: postgresstore.LegacySourceCodex, provider: "codex", authKind: core.AuthKindOAuth,
-		query: `SELECT id, user_id, 'codex', NULL::timestamptz, created_at, updated_at,
-				account_id, NULL::text, NULL::text, NULL::text, NULL::text,
-				access_token_sealed, refresh_token_sealed, id_token_sealed
-			FROM codex_auth_tokens`,
+		read:   store.ListLegacyCodexCredentials,
 		sealed: []string{"access_token", "refresh_token", "id_token"},
 	},
 	{
 		source: postgresstore.LegacySourceCopilot, provider: "copilot", authKind: core.AuthKindDevice,
-		query: `SELECT id, user_id, 'copilot', NULL::timestamptz, created_at, updated_at,
-				tier, NULL::text, NULL::text, NULL::text, NULL::text,
-				github_access_token_sealed, github_refresh_token_sealed
-			FROM copilot_auth_tokens`,
+		read:   store.ListLegacyCopilotCredentials,
 		sealed: []string{"github_access_token", "github_refresh_token"},
 	},
 	{
 		source: postgresstore.LegacySourceAntigravity, provider: "antigravity", authKind: core.AuthKindOAuth,
-		query: `SELECT id, user_id, 'antigravity', expires_at, created_at, updated_at,
-				scope, NULL::text, NULL::text, NULL::text, NULL::text,
-				access_token_sealed, refresh_token_sealed, id_token_sealed
-			FROM antigravity_auth_tokens`,
+		read:   store.ListLegacyAntigravityCredentials,
 		sealed: []string{"access_token", "refresh_token", "id_token"},
 	},
 	{
 		source: postgresstore.LegacySourceAPIKeys, provider: "", authKind: core.AuthKindAPIKey,
-		query: `SELECT id, user_id, provider, NULL::timestamptz, created_at, updated_at,
-				NULL::text, NULL::text, NULL::text, NULL::text, NULL::text,
-				api_key_sealed
-			FROM api_keys WHERE provider NOT LIKE '` + core.AutomationProviderPrefix + `%' AND api_key_sealed IS NOT NULL
-				AND provider NOT IN ('claude', 'codex', 'copilot', 'antigravity')`,
+		read:   store.ListLegacyAPIKeyCredentials,
 		sealed: []string{"api_key"},
 	},
 }
@@ -83,34 +68,8 @@ func (t legacyTable) aad(userID, provider, column string) []byte {
 
 // legacyRow is one raw row of a legacy table, secrets still sealed.
 type legacyRow struct {
-	table                             legacyTable
-	id, userID, provider              string
-	expiresAt                         sql.NullTime
-	createdAt, updatedAt              time.Time
-	meta1, meta2, meta3, meta4, meta5 sql.NullString
-	sealed                            [][]byte
-}
-
-func (t legacyTable) read(ctx context.Context, db *sql.DB) ([]legacyRow, error) {
-	rows, err := db.QueryContext(ctx, t.query)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var out []legacyRow
-	for rows.Next() {
-		r := legacyRow{table: t, sealed: make([][]byte, len(t.sealed))}
-		dest := []any{&r.id, &r.userID, &r.provider, &r.expiresAt, &r.createdAt, &r.updatedAt,
-			&r.meta1, &r.meta2, &r.meta3, &r.meta4, &r.meta5}
-		for i := range r.sealed {
-			dest = append(dest, &r.sealed[i])
-		}
-		if err := rows.Scan(dest...); err != nil {
-			return nil, err
-		}
-		out = append(out, r)
-	}
-	return out, rows.Err()
+	table legacyTable
+	store.LegacyCredential
 }
 
 // toImport opens the row's secrets under the legacy AAD and derives the account's identity.
@@ -119,7 +78,7 @@ func (r *Repo) legacyToImport(ctx context.Context, lr legacyRow) (*postgresstore
 	t := lr.table
 	cols := make([]string, len(t.sealed))
 	for i, column := range t.sealed {
-		v, err := r.accounts.OpenLegacy(ctx, lr.userID, t.aad(lr.userID, lr.provider, column), lr.sealed[i])
+		v, err := r.accounts.OpenLegacy(ctx, lr.UserID, t.aad(lr.UserID, lr.Provider, column), lr.Sealed[i])
 		if err != nil {
 			return nil, fmt.Errorf("opening %s.%s: %w", t.source, column, err)
 		}
@@ -130,10 +89,10 @@ func (r *Repo) legacyToImport(ctx context.Context, lr legacyRow) (*postgresstore
 		return nil, nil
 	}
 	if cols[0] == "" {
-		return nil, fmt.Errorf("%s row %s has an empty credential", t.source, lr.id)
+		return nil, fmt.Errorf("%s row %s has an empty credential", t.source, lr.ID)
 	}
 
-	u := core.AccountUpsert{UserID: lr.userID, Provider: lr.provider, AuthKind: t.authKind}
+	u := core.AccountUpsert{UserID: lr.UserID, Provider: lr.Provider, AuthKind: t.authKind}
 	u.Secrets.Secret = cols[0]
 	if len(cols) > 1 {
 		u.Secrets.Refresh = cols[1]
@@ -141,41 +100,39 @@ func (r *Repo) legacyToImport(ctx context.Context, lr legacyRow) (*postgresstore
 	if len(cols) > 2 {
 		u.Secrets.IDToken = cols[2]
 	}
-	if lr.expiresAt.Valid {
-		u.ExpiresAt = lr.expiresAt.Time
-	}
-	placeholder := core.PlaceholderIdentityKey(lr.id)
+	u.ExpiresAt = lr.ExpiresAt
+	placeholder := core.PlaceholderIdentityKey(lr.ID)
 	u.IdentityKey = placeholder
 
 	switch t.source {
 	case postgresstore.LegacySourceClaude:
-		u.ExternalAccountID, u.Email = lr.meta1.String, lr.meta2.String
-		u.OrganizationID, u.OrganizationName, u.Scope = lr.meta3.String, lr.meta4.String, lr.meta5.String
+		u.ExternalAccountID, u.Email = lr.Meta[0], lr.Meta[1]
+		u.OrganizationID, u.OrganizationName, u.Scope = lr.Meta[2], lr.Meta[3], lr.Meta[4]
 		if u.ExternalAccountID != "" {
 			u.IdentityKey = core.ClaudeIdentityKey(u.ExternalAccountID, u.OrganizationID)
 		}
 	case postgresstore.LegacySourceCodex:
-		u.ExternalAccountID = lr.meta1.String
+		u.ExternalAccountID = lr.Meta[0]
 		if id, ok := core.CodexIdentityFromJWT(u.Secrets.IDToken, u.Secrets.Secret); ok {
 			u.IdentityKey, u.Email, u.PlanRaw, u.Plan = id.IdentityKey, id.Email, id.PlanRaw, id.Plan
 			u.ExternalAccountID = id.ExternalAccountID
 		}
 	case postgresstore.LegacySourceCopilot:
-		u.PlanRaw = lr.meta1.String
+		u.PlanRaw = lr.Meta[0]
 	case postgresstore.LegacySourceAntigravity:
-		u.Scope = lr.meta1.String
+		u.Scope = lr.Meta[0]
 		if id, ok := core.GoogleIdentityFromIDToken(u.Secrets.IDToken); ok {
 			u.IdentityKey, u.Email, u.ExternalAccountID = id.IdentityKey, id.Email, id.ExternalAccountID
 		}
 	case postgresstore.LegacySourceAPIKeys:
-		if lr.provider == providerReliant {
+		if lr.Provider == providerReliant {
 			u.AuthKind, u.IdentityKey = core.AuthKindManaged, core.ManagedIdentityKey
 		} else {
-			u.IdentityKey = core.APIKeyIdentityKey(lr.userID, lr.provider, u.Secrets.Secret)
+			u.IdentityKey = core.APIKeyIdentityKey(lr.UserID, lr.Provider, u.Secrets.Secret)
 			u.KeyHint = core.KeyHint(u.Secrets.Secret)
 		}
 	}
-	return &postgresstore.LegacyImport{Upsert: u, Source: t.source, CreatedAt: lr.createdAt, UpdatedAt: lr.updatedAt}, nil
+	return &postgresstore.LegacyImport{Upsert: u, Source: t.source, CreatedAt: lr.CreatedAt, UpdatedAt: lr.UpdatedAt}, nil
 }
 
 // MigrateLegacyCredentials copies every legacy credential into provider_accounts, once.
@@ -195,20 +152,20 @@ func (r *Repo) MigrateLegacyCredentials(ctx context.Context) (postgresstore.Impo
 	if err != nil || done {
 		return postgresstore.ImportResult{}, false, err
 	}
-	sqlDB := r.DB.SQLDB()
 	var (
 		imports []postgresstore.LegacyImport
 		skipped int
 	)
 	for _, t := range legacyTables {
-		rows, err := t.read(ctx, sqlDB)
+		rows, err := t.read(ctx, r.ORM())
 		if err != nil {
 			return postgresstore.ImportResult{}, false, fmt.Errorf("reading %s: %w", t.source, err)
 		}
-		for _, lr := range rows {
+		for _, row := range rows {
+			lr := legacyRow{table: t, LegacyCredential: row}
 			in, err := r.legacyToImport(ctx, lr)
 			if err != nil {
-				slog.WarnContext(ctx, "legacy credential skipped: could not be read", "source", t.source, "user_id", lr.userID, "provider", lr.provider, "error", err)
+				slog.WarnContext(ctx, "legacy credential skipped: could not be read", "source", t.source, "user_id", lr.UserID, "provider", lr.Provider, "error", err)
 				skipped++
 				continue
 			}

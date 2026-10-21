@@ -97,7 +97,7 @@ func New(tb testing.TB) *Env {
 	if err != nil {
 		tb.Fatalf("storetest: repo: %v", err)
 	}
-	enableSealing(tb, repo, clone)
+	enableSealing(tb, repo)
 	var name string
 	if err := clone.QueryRow(`SELECT current_database()`).Scan(&name); err != nil {
 		tb.Fatalf("storetest: database name: %v", err)
@@ -134,7 +134,7 @@ func buildTemplate(build *sql.DB, base string) error {
 
 // enableSealing gives the Repo a throwaway vault: provider keys and sign-in
 // tokens exist only sealed, so the twin cannot write them without one.
-func enableSealing(tb testing.TB, repo *db.Repo, conn *sql.DB) {
+func enableSealing(tb testing.TB, repo *db.Repo) {
 	tb.Helper()
 	key := make([]byte, 32)
 	if _, err := rand.Read(key); err != nil {
@@ -144,7 +144,7 @@ func enableSealing(tb testing.TB, repo *db.Repo, conn *sql.DB) {
 	if err != nil {
 		tb.Fatalf("storetest: parse vault key: %v", err)
 	}
-	if err := repo.EnableCredentialSealing(vault.NewInstrumented(vault.Deps{DB: conn, Keys: vault.NewEnvKeyWrapper(ring)})); err != nil {
+	if err := repo.EnableCredentialSealing(vault.NewInstrumented(vault.Deps{DB: repo.ORM(), Keys: vault.NewEnvKeyWrapper(ring)})); err != nil {
 		tb.Fatalf("storetest: enable credential sealing: %v", err)
 	}
 }

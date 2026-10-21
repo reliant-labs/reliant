@@ -89,7 +89,7 @@ func TestTwilioMessagesLaunchRunsEndToEnd(t *testing.T) {
 	require.NoError(t, err)
 	ring, err := crypto.ParseKeyring("v1:" + base64.StdEncoding.EncodeToString(key))
 	require.NoError(t, err)
-	sealer := vault.New(vault.Deps{DB: repo.DB, Keys: vault.NewEnvKeyWrapper(ring)})
+	sealer := vault.New(vault.Deps{DB: repo.ORM(), Keys: vault.NewEnvKeyWrapper(ring)})
 	providers, err := connections.ProvidersFromCatalog(catalog.MustBuiltin().Manifests(), connections.OAuthClientsFromEnv(func(string) string { return "" }))
 	require.NoError(t, err)
 	doer := twilioDoer{target: twilio}

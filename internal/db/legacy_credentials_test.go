@@ -69,7 +69,7 @@ func newLegacyFixture(t *testing.T) *legacyFixture {
 	require.NoError(t, err)
 	ring, err := crypto.ParseKeyring("v1:" + base64.StdEncoding.EncodeToString(k))
 	require.NoError(t, err)
-	sealer := vault.New(vault.Deps{DB: raw, Keys: vault.NewEnvKeyWrapper(ring)})
+	sealer := vault.New(vault.Deps{DB: repo.ORM(), Keys: vault.NewEnvKeyWrapper(ring)})
 	require.NoError(t, repo.EnableCredentialSealing(sealer))
 	return &legacyFixture{t: t, repo: repo, raw: raw, sealer: sealer}
 }
@@ -332,7 +332,7 @@ func TestUpgradeBootCopiesLegacyCredentialsAndTheyOpen(t *testing.T) {
 	ring, err := crypto.ParseKeyring(envKey)
 	require.NoError(t, err)
 	// The previous release's vault: same key, same tenant DEKs (they live in vault_keys).
-	prev := &legacyFixture{t: t, repo: repo, raw: raw, sealer: vault.New(vault.Deps{DB: raw, Keys: vault.NewEnvKeyWrapper(ring)})}
+	prev := &legacyFixture{t: t, repo: repo, raw: raw, sealer: vault.New(vault.Deps{DB: repo.ORM(), Keys: vault.NewEnvKeyWrapper(ring)})}
 
 	const user = "upgrade-user"
 	prev.seedEverything(user)

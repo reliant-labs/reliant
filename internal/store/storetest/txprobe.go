@@ -55,7 +55,7 @@ func (e *Env) Probe(tb testing.TB) *TxProbe {
 	if err != nil {
 		tb.Fatalf("storetest: probe repo: %v", err)
 	}
-	enableSealing(tb, repo, pool)
+	enableSealing(tb, repo)
 	p.ORM, p.Repo = repo.ORM(), repo
 	p.Reset()
 	return p
