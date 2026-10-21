@@ -30,7 +30,7 @@ import (
 // failed, and the process then exited with the streams still open, cutting
 // them with no status at all.
 //
-// They drive the real server: NewAPI's routes behind the UserChain on an
+// They drive the real server: the API's routes behind the UserChain on an
 // APIListener, the real StreamingService handler, over prior-knowledge HTTP/2
 // as in production, and drain the listener as Supervise does (Drain).
 
@@ -50,11 +50,12 @@ func (drainTestRepo) GetLatestUserUpdateSequence(context.Context, string) (int64
 // interceptor's own validator.
 type drainTestAuthority struct{ tokenauthority.Authority }
 
-// startDrainTestServer serves the API on a loopback port (startTestServer),
-// with extra's routes beside it, returning the listener and its base URL.
+// startDrainTestServer serves StreamingService and the API's plain-HTTP
+// routes on a loopback port (startTestServer), with extra's routes beside
+// them, returning the listener and its base URL.
 func startDrainTestServer(t *testing.T, extra ...func(mux *http.ServeMux)) (*APIListener, string) {
 	t.Helper()
-	return startTestServer(t, testServerConfig(t, drainTestRepo{}), extra...)
+	return startTestServer(t, testStreaming(t, drainTestRepo{}), testHTTPRoutes(t, testUserAuth(t)), plainRoutes(extra...))
 }
 
 // h2cClient speaks prior-knowledge HTTP/2, as the load balancer does to the pod.

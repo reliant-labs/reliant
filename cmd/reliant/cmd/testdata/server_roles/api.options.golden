@@ -1,5 +1,5 @@
 [
-  serverapi.Options {
+  cmd.apiOptions {
     GRPCPort: 19091
     PprofPort: 16061
     BindAddress: "127.0.0.2"
@@ -22,7 +22,15 @@
       Password: "nats-pass"
     }
     StreamingDriver: "nats"
-    HealthPort: 18082
+    HealthAddr: "127.0.0.2:18082"
+    LivenessPaths: [
+      "/live"
+      "/health"
+    ]
+    ReadinessPaths: [
+      "/ready"
+      "/ready2"
+    ]
     PreStopDelay: 11s
     ShutdownTimeout: 43s
     CORSAllowedOrigins: [

@@ -10,10 +10,42 @@ import (
 	"github.com/reliant-labs/forge/pkg/observe"
 	"github.com/reliant-labs/forge/pkg/serverkit"
 
+	"github.com/reliant-labs/reliant/internal/accesstokenclient"
+	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/errclass"
 	"github.com/reliant-labs/reliant/internal/grpc/interceptors"
 	"github.com/reliant-labs/reliant/internal/handlers/forge"
+	"github.com/reliant-labs/reliant/pkg/middleware"
 )
+
+// UserAuth authenticates the user audience: a JWT (or, in apikey mode, the
+// shared key) and `rlat_` access tokens, through the deployment's token
+// authority behind a CacheTTL-bounded cache. The chain's Auth slot runs it for
+// every Connect call (UserChainDeps.Auth), and the attachment-bytes route
+// calls its AuthenticateHTTP directly. The procedures it lets through
+// unauthenticated are the ones whose proto declares (forge.v1.method)
+// auth_required: false; forge generate projects them into
+// middleware.UnauthenticatedProcedures.
+type UserAuth struct {
+	*interceptors.AuthInterceptor
+	settings auth.Settings
+}
+
+// NewUserAuth builds the user authenticator from settings, introspecting
+// access tokens through tokens.
+func NewUserAuth(settings auth.Settings, tokens accesstokenclient.Introspector) (*UserAuth, error) {
+	interceptor, err := interceptors.NewAuthInterceptor(settings, middleware.UnauthenticatedProcedures)
+	if err != nil {
+		return nil, fmt.Errorf("auth interceptor setup failed: %w", err)
+	}
+	interceptor.SetAccessTokenIntrospector(accesstokenclient.NewCachedIntrospector(tokens))
+	return &UserAuth{AuthInterceptor: interceptor, settings: settings}, nil
+}
+
+// Settings is how callers authenticate: what the routes outside the chain
+// (the terminal websocket, the connector endpoint) validate with, and the
+// auth mode /health reports.
+func (a *UserAuth) Settings() auth.Settings { return a.settings }
 
 // UserChain is the interceptor chain of the API listener: forge's chain
 // (serverkit.NewChain) with reliant's user credential as its authenticator.
@@ -24,7 +56,7 @@ type UserChain struct{ *serverkit.Chain }
 // UserChainDeps configures a UserChain.
 type UserChainDeps struct {
 	// Auth authenticates users: a JWT or the API key, and `rlat_` access
-	// tokens through its introspector (API.Auth). Required.
+	// tokens through its introspector (UserAuth). Required.
 	Auth connect.Interceptor
 	// AllowedEmailDomains, when non-empty, admits only users whose email is
 	// in one of these domains.

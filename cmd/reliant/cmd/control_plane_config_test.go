@@ -13,7 +13,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/controlplane"
-	"github.com/reliant-labs/reliant/internal/serverapi"
 )
 
 // controlPlaneEnv is every variable ControlPlaneConfig reads.
@@ -23,7 +22,7 @@ var controlPlaneEnv = []string{"RELIANT_CONTROL_PLANE_URL", "CONTROL_PLANE_API_U
 // does and returns the control plane it hands its server package.
 var controlPlaneRoles = map[string]func(*cobra.Command) (controlplane.Endpoint, error){
 	"server api": func(cmd *cobra.Command) (controlplane.Endpoint, error) {
-		var opts serverapi.Options
+		var opts apiOptions
 		err := loadServerAPIConfig(cmd, &opts)
 		return opts.ControlPlane, err
 	},

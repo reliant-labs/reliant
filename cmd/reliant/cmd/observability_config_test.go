@@ -11,7 +11,6 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/observability"
 	"github.com/reliant-labs/reliant/internal/runenv"
-	"github.com/reliant-labs/reliant/internal/serverapi"
 	"github.com/reliant-labs/reliant/internal/telemetry"
 )
 
@@ -36,7 +35,7 @@ func isolateObservabilityEnv(t *testing.T) {
 // internal/observability.
 func observabilityOf(t *testing.T) map[string]observability.Settings {
 	t.Helper()
-	var api serverapi.Options
+	var api apiOptions
 	require.NoError(t, loadServerAPIConfig(roleCommand(t, "api"), &api))
 	var worker workerOptions
 	require.NoError(t, loadServerWorkerConfig(roleCommand(t, "worker"), &worker))
@@ -80,7 +79,7 @@ func TestObservabilityEnvironmentPrecedence(t *testing.T) {
 // The API server and worker report to Sentry as prod/main.k configures them.
 func TestSentryEnvContract(t *testing.T) {
 	isolateObservabilityEnv(t)
-	var api serverapi.Options
+	var api apiOptions
 	require.NoError(t, loadServerAPIConfig(roleCommand(t, "api"), &api))
 	assert.Equal(t, telemetry.SentryConfig{Enabled: true}, api.Sentry, "defaults: on, nothing to report to")
 
@@ -105,7 +104,7 @@ func TestObservabilityMisconfigurationFailsBoot(t *testing.T) {
 		t.Run(name+"="+value, func(t *testing.T) {
 			isolateObservabilityEnv(t)
 			t.Setenv(name, value)
-			var api serverapi.Options
+			var api apiOptions
 			err := loadServerAPIConfig(roleCommand(t, "api"), &api)
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), name)

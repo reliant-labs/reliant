@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/llm/tools"
-	"github.com/reliant-labs/reliant/internal/serverapi"
 )
 
 // The preview settings control-plane sets on the API server and the worker
@@ -25,7 +24,7 @@ func TestPreviewEnvContract(t *testing.T) {
 		t.Helper()
 		apiCmd, _, err := NewRootCmd().Find([]string{"server", "api"})
 		require.NoError(t, err)
-		var api serverapi.Options
+		var api apiOptions
 		if err := loadServerAPIConfig(apiCmd, &api); err != nil {
 			return tools.PreviewSettings{}, tools.PreviewSettings{}, err
 		}

@@ -99,6 +99,26 @@ func Migrate(ctx context.Context, dsn string, logger *slog.Logger) (MigrateResul
 	if err != nil {
 		return MigrateResult{}, fmt.Errorf("open migration connection: %w", err)
 	}
+	defer func() { _ = pool.Close() }()
+	return MigrateDB(ctx, pool, logger)
+}
+
+// ApplyOnBoot is the migrating server's boot step — the api-server's process
+// policy runs it before its root is built (migrate=apply) — on pool, a
+// connection of its own opened for it on DatabaseConfig.MigrationURL: Migrate,
+// then the boot log of what it did.
+func ApplyOnBoot(ctx context.Context, pool *sql.DB, logger *slog.Logger) error {
+	res, err := MigrateDB(ctx, pool, logger)
+	if err != nil {
+		return fmt.Errorf("failed to apply migrations: %w", err)
+	}
+	logMigrateResult(logger, res)
+	return nil
+}
+
+// MigrateDB is Migrate on pool, which it narrows to the one session the run
+// needs and the caller closes.
+func MigrateDB(ctx context.Context, pool *sql.DB, logger *slog.Logger) (MigrateResult, error) {
 	// One session for the whole run: the goose bridge holds its lock on it
 	// while goose (which takes a *sql.DB) runs on it, and migratekit.Apply
 	// borrows that same connection. Idle connections are never retired, so
@@ -107,9 +127,9 @@ func Migrate(ctx context.Context, dsn string, logger *slog.Logger) (MigrateResul
 	pool.SetMaxIdleConns(1)
 	pool.SetConnMaxLifetime(0)
 	pool.SetConnMaxIdleTime(0)
-	defer func() { _ = pool.Close() }()
 
 	var res MigrateResult
+	var err error
 	if res.GooseApplied, err = catchUpGoose(ctx, pool, logger); err != nil {
 		return res, err
 	}

@@ -16,7 +16,7 @@
 //   - compose.go: one constructor method per node, holding every edge.
 //   - graph_gen.go, routes_gen.go: generated.
 //
-// The gateway and the worker are roots today; `reliant server api` still
-// constructs itself (internal/serverapi) and becomes a root next
-// (research/forge-migration/09-roots-plan.md, R5).
+// Every server role is a root: `reliant server api` (roots_api.go),
+// `reliant server worker` (roots_worker.go) and `reliant server gateway`
+// (roots_gateway.go).
 package app

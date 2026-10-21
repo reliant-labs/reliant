@@ -3,30 +3,27 @@ package grpc
 
 import (
 	"context"
-	"database/sql"
+	"encoding/json"
+	"log/slog"
 	"net/http"
-	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/sdk/client"
-	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/reliant-labs/forge/pkg/mountkit"
 	"github.com/reliant-labs/forge/pkg/serverkit"
-	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/connectorgrant"
 	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/reliant-labs/reliant/internal/integrations/catalogindex"
+	"github.com/reliant-labs/reliant/internal/handlers/catalog"
+	"github.com/reliant-labs/reliant/internal/handlers/forge"
+	streaminghandler "github.com/reliant-labs/reliant/internal/handlers/streaming"
 	"github.com/reliant-labs/reliant/internal/integrations/webhook"
-	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/mcpserver"
 	"github.com/reliant-labs/reliant/internal/toolexec"
-	"github.com/reliant-labs/reliant/internal/workflow"
+	"github.com/reliant-labs/reliant/pkg/config"
 )
 
 // testRouter stands in for the daemon router. Any call panics on the nil
@@ -36,55 +33,99 @@ type testRouter struct{ toolexec.DaemonRouter }
 // testGrants stands in for the connector grant store, on the same terms.
 type testGrants struct{ connectorgrant.Store }
 
-// testServerConfig returns a Config with every required collaborator set to
-// a stand-in that construction accepts and these tests never call through:
-// the requests they send end in the auth interceptor or in the one handler
-// under test, which repo answers.
-func testServerConfig(t *testing.T, repo db.Repository) *Config {
-	t.Helper()
-	// Neither client dials until it is used, and nothing here uses them.
-	temporal, err := client.NewLazyClient(client.Options{HostPort: "127.0.0.1:1"})
-	require.NoError(t, err)
-	t.Cleanup(temporal.Close)
-	sqlDB, err := sql.Open("pgx", "postgres://127.0.0.1:1/unreached")
-	require.NoError(t, err)
-	t.Cleanup(func() { _ = sqlDB.Close() })
+// testRoute mounts what one test serves: a service (mountService), or the
+// API's plain-HTTP routes (testHTTPRoutes). The API root's own route set is
+// internal/app's; these tests pin the listener, the chain and the handlers
+// behind it, so each mounts only what it calls.
+type testRoute func(mux *http.ServeMux, opts ...connect.HandlerOption) []string
 
-	return &Config{
-		Database:        repo,
-		SQL:             sqlDB,
-		ConnectorGrants: testGrants{},
-		DaemonRouter:    testRouter{},
-		TokenAuthority:  drainTestAuthority{},
-		TemporalClient:  temporal,
-		PauseService:    workflow.NewPauseService(temporal, repo),
-		ToolsFactory:    tools.NewToolsFactory(nil),
-		CatalogSearch:   catalogindex.NewService(nil, nil, nil),
-		Connections:     connections.NewService(nil, nil, nil, nil, nil, nil),
-		OAuthRoutes:     connections.NewOAuthHTTP(nil),
-		TriggerInbound:  webhook.NewInbound(nil, nil, nil, nil, ""),
+// mountService mounts svc with the listener's chain and the mount's own
+// options over it, as the generated route set does.
+func mountService(name string, svc mountkit.Registrar, mount ...mountkit.Option) testRoute {
+	return func(mux *http.ServeMux, opts ...connect.HandlerOption) []string {
+		mountkit.RegisterService(mux, svc, opts, mount...)
+		return []string{name}
 	}
 }
 
-// startTestServer builds the API from cfg with NewAPI, under API-key auth, and
-// serves it as serverapi.Run does — through a UserChain, on an APIListener —
-// on a loopback port, returning the listener and its base URL. extra mounts
-// routes of the test's own beside the API's.
-func startTestServer(t *testing.T, cfg *Config, extra ...func(mux *http.ServeMux)) (*APIListener, string) {
-	t.Helper()
-	cfg.Auth = auth.Settings{Mode: auth.ModeAPIKey, APIKey: drainTestAPIKey}
+// plainRoutes mounts plain-HTTP routes of a test's own, outside the chain.
+func plainRoutes(mounts ...func(mux *http.ServeMux)) testRoute {
+	return func(mux *http.ServeMux, _ ...connect.HandlerOption) []string {
+		for _, mount := range mounts {
+			mount(mux)
+		}
+		return nil
+	}
+}
 
-	api, err := NewAPI(cfg)
+// testUserAuth is the user authenticator under API-key auth; nothing these
+// tests send reaches its token authority.
+func testUserAuth(t *testing.T) *UserAuth {
+	t.Helper()
+	a, err := NewUserAuth(auth.Settings{Mode: auth.ModeAPIKey, APIKey: drainTestAPIKey}, drainTestAuthority{})
 	require.NoError(t, err)
-	chain, err := NewUserChain(UserChainDeps{Auth: api.Auth()})
+	return a
+}
+
+// testStreaming is the real StreamingService over repo, with no hubs.
+func testStreaming(t *testing.T, repo db.Repository) testRoute {
+	t.Helper()
+	svc, err := streaminghandler.New(streaminghandler.Deps{Logger: slog.Default(), Config: &config.Config{}, Repo: repo})
+	require.NoError(t, err)
+	return mountService("reliant.v1.StreamingService", svc)
+}
+
+// testForge is the real ForgeService, with mount's options over the chain.
+func testForge(t *testing.T, mount ...mountkit.Option) testRoute {
+	t.Helper()
+	svc, err := forge.New(forge.Deps{Logger: slog.Default(), Config: &config.Config{}, Router: testRouter{}, Repo: drainTestRepo{}})
+	require.NoError(t, err)
+	return mountService("reliant.v1.ForgeService", svc, mount...)
+}
+
+// testCatalog is the real CatalogService answering ListInputOptions from
+// options (none: the rpc is unimplemented).
+func testCatalog(t *testing.T, options catalog.InputOptions) testRoute {
+	t.Helper()
+	svc, err := catalog.New(catalog.Deps{Logger: slog.Default(), Config: &config.Config{}, InputOptions: options})
+	require.NoError(t, err)
+	return mountService("reliant.v1.CatalogService", svc)
+}
+
+// testHTTPRoutes are the API's plain-HTTP routes over stand-ins these tests
+// never call through.
+func testHTTPRoutes(t *testing.T, authn *UserAuth) testRoute {
+	t.Helper()
+	routes, err := NewAPIHTTPRoutes(APIHTTPRoutesDeps{
+		Auth:    authn,
+		Repo:    drainTestRepo{},
+		Router:  testRouter{},
+		OAuth:   connections.NewOAuthHTTP(nil),
+		Inbound: webhook.NewInbound(nil, nil, nil, nil, ""),
+		Grants:  testGrants{},
+		Tokens:  drainTestAuthority{},
+	})
+	require.NoError(t, err)
+	return func(mux *http.ServeMux, _ ...connect.HandlerOption) []string {
+		routes.Register(mux)
+		return nil
+	}
+}
+
+// startTestServer serves routes under API-key auth as the api root does —
+// through a UserChain, on an APIListener — on a loopback port, returning the
+// listener and its base URL.
+func startTestServer(t *testing.T, routes ...testRoute) (*APIListener, string) {
+	t.Helper()
+	chain, err := NewUserChain(UserChainDeps{Auth: testUserAuth(t)})
 	require.NoError(t, err)
 	listener, err := NewAPIListener(APIListenerDeps{
 		BindAddress: "127.0.0.1",
 		Chain:       chain,
 		Routes: serverkit.RoutesFunc(func(mux *http.ServeMux, opts ...connect.HandlerOption) []string {
-			services := api.Register(mux, opts...)
-			for _, mount := range extra {
-				mount(mux)
+			var services []string
+			for _, route := range routes {
+				services = append(services, route(mux, opts...)...)
 			}
 			return services
 		}),
@@ -102,77 +143,12 @@ func startTestServer(t *testing.T, cfg *Config, extra ...func(mux *http.ServeMux
 	return listener, "http://" + listener.Addr().String()
 }
 
-// A missing collaborator is a composition bug: serverapi.Run builds every one
-// or fails boot. NewAPI refuses it at construction, naming it, rather than
-// leaving its routes unmounted — an unmounted route answers 404, which the web
-// client files as version skew.
-func TestNewAPINamesEveryMissingCollaborator(t *testing.T) {
-	required := []string{
-		"Database", "SQL", "ConnectorGrants", "DaemonRouter", "TemporalClient", "PauseService",
-		"ToolsFactory", "CatalogSearch", "Connections", "OAuthRoutes", "TriggerInbound",
-	}
+// The plain-HTTP routes beside the Connect services authenticate themselves:
+// the terminal websocket and the connector MCP endpoint answer an anonymous
+// caller 401, not 404.
+func TestAPIHTTPRoutesAreMounted(t *testing.T) {
+	_, baseURL := startTestServer(t, testHTTPRoutes(t, testUserAuth(t)))
 
-	t.Run("an empty config names them all", func(t *testing.T) {
-		_, err := NewAPI(&Config{})
-		require.Error(t, err)
-		for _, name := range required {
-			require.Contains(t, err.Error(), name)
-		}
-	})
-
-	unset := map[string]func(*Config){
-		"Database":        func(c *Config) { c.Database = nil },
-		"SQL":             func(c *Config) { c.SQL = nil },
-		"ConnectorGrants": func(c *Config) { c.ConnectorGrants = nil },
-		"DaemonRouter":    func(c *Config) { c.DaemonRouter = nil },
-		"TemporalClient":  func(c *Config) { c.TemporalClient = nil },
-		"PauseService":    func(c *Config) { c.PauseService = nil },
-		"ToolsFactory":    func(c *Config) { c.ToolsFactory = nil },
-		"CatalogSearch":   func(c *Config) { c.CatalogSearch = nil },
-		"Connections":     func(c *Config) { c.Connections = nil },
-		"OAuthRoutes":     func(c *Config) { c.OAuthRoutes = nil },
-		"TriggerInbound":  func(c *Config) { c.TriggerInbound = nil },
-	}
-	require.Len(t, unset, len(required), "every required collaborator has a case")
-	for _, name := range required {
-		t.Run("missing "+name, func(t *testing.T) {
-			cfg := testServerConfig(t, drainTestRepo{})
-			unset[name](cfg)
-			_, err := NewAPI(cfg)
-			require.Error(t, err)
-			require.Equal(t, "api config: required collaborators not set: "+name, err.Error())
-		})
-	}
-}
-
-// Every service is mounted, whatever the deployment: an unauthenticated call
-// reaches the auth interceptor and is refused there, rather than finding no
-// route (a 404, which Connect reports as Unimplemented). These are the
-// services that used to be mounted only when a collaborator was present.
-func TestNewAPIMountsEveryService(t *testing.T) {
-	_, baseURL := startTestServer(t, testServerConfig(t, drainTestRepo{}))
-
-	for _, procedure := range []string{
-		reliantv1connect.FileSystemServiceGetFileTreeProcedure,
-		reliantv1connect.PackageCommandsServiceListCommandsProcedure,
-		reliantv1connect.BackgroundServiceListProcessesProcedure,
-		reliantv1connect.TerminalServiceListSessionsProcedure,
-		reliantv1connect.AccountServicePreviewAccountDeletionProcedure,
-		reliantv1connect.ConnectorServiceListConnectorsProcedure,
-		reliantv1connect.ConnectionServiceListIntegrationsProcedure,
-		reliantv1connect.ForgeServiceGetTopologyProcedure,
-	} {
-		t.Run(strings.TrimPrefix(procedure, "/reliant.v1."), func(t *testing.T) {
-			// An empty message is a valid encoding of every request type.
-			call := connect.NewClient[emptypb.Empty, emptypb.Empty](h2cClient(), baseURL+procedure)
-			_, err := call.CallUnary(context.Background(), connect.NewRequest(&emptypb.Empty{}))
-			require.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err), "got %v", err)
-			require.Contains(t, err.Error(), "missing authorization token")
-		})
-	}
-
-	// The plain-HTTP routes beside them: the terminal websocket and the
-	// connector MCP endpoint answer 401, not 404.
 	for _, path := range []string{"/api/v2/terminal/ws", mcpserver.MountPath} {
 		t.Run(path, func(t *testing.T) {
 			resp, err := h2cClient().Get(baseURL + path)
@@ -183,25 +159,22 @@ func TestNewAPIMountsEveryService(t *testing.T) {
 	}
 }
 
-// The name each mount reports is what the listener checks against its
-// chain's audience, so it must be the service that mount really serves: a
-// name copied onto the wrong row would check one service's audience and
-// serve another's.
-func TestAPIServiceNamesAreTheServicesMounted(t *testing.T) {
-	cfg := testServerConfig(t, drainTestRepo{})
-	cfg.Auth = auth.Settings{Mode: auth.ModeAPIKey, APIKey: drainTestAPIKey}
-	api, err := NewAPI(cfg)
+// /health on the API port is what the web client reads the auth mode from
+// (web/src/hooks/useAuthMode.ts): its JSON is unchanged.
+func TestAPIHealthReportsTheAuthMode(t *testing.T) {
+	_, baseURL := startTestServer(t, testHTTPRoutes(t, testUserAuth(t)))
+
+	resp, err := h2cClient().Get(baseURL + "/health")
 	require.NoError(t, err)
-	require.NotEmpty(t, api.services)
+	defer func() { _ = resp.Body.Close() }()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	require.Equal(t, "application/json", resp.Header.Get("Content-Type"))
+	var body map[string]string
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+	require.Equal(t, map[string]string{"status": "ok", "service": "grpc-server", "auth_mode": auth.ModeAPIKey}, body)
+}
 
-	seen := map[string]bool{}
-	for _, s := range api.services {
-		require.False(t, seen[s.name], "%s is mounted twice", s.name)
-		seen[s.name] = true
-
-		mux := http.NewServeMux()
-		mountkit.RegisterService(mux, s.svc, nil, s.mount...)
-		_, pattern := mux.Handler(httptest.NewRequest(http.MethodPost, "/"+s.name+"/Any", nil))
-		require.Equal(t, "/"+s.name+"/", pattern, "the %s row mounts another service", s.name)
-	}
+func TestAPIHTTPRoutesRequireTheirCollaborators(t *testing.T) {
+	_, err := NewAPIHTTPRoutes(APIHTTPRoutesDeps{})
+	require.Error(t, err)
 }

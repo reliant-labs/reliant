@@ -16,7 +16,6 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/grpc/interceptors"
-	"github.com/reliant-labs/reliant/internal/serverapi"
 )
 
 // serverAPIConfigEnv is every variable `server api` reads through
@@ -25,7 +24,7 @@ var serverAPIConfigEnv = []string{"JWT_PUBLIC_KEY", "JWT_PUBLIC_KEY_FILE", "RELI
 	"AUTH_MODE", "AUTH_API_KEY", "AUTH_REQUIRE_EMAIL_VERIFIED_CLAIM", "RELIANT_AUTHORIZATION_SERVER", "MCP_OAUTH_ISSUERS", "MAX_UPLOAD_SIZE", "RELIANT_WORKTREE_AUTO_ARCHIVE"}
 
 // TestServerAPIConfigEnvContract pins that the variables `server api` now
-// reads through ApiServerConfig reach serverapi.Options exactly as the flag
+// reads through ApiServerConfig reach apiOptions exactly as the flag
 // defaults and raw reads they replaced did: the same names, the value
 // verbatim, "" when unset or empty, and the flag winning over the variable.
 // control-plane sets RELIANT_JWKS_URL on every reliant API server (dev, e2e
@@ -35,22 +34,22 @@ func TestServerAPIConfigEnvContract(t *testing.T) {
 		name string
 		env  map[string]string
 		args []string
-		want serverapi.Options
+		want apiOptions
 	}{
 		{name: "nothing set"},
 		{name: "JWT_PUBLIC_KEY", env: map[string]string{"JWT_PUBLIC_KEY": "-----BEGIN PUBLIC KEY-----\nabc\n-----END PUBLIC KEY-----\n"},
-			want: serverapi.Options{JWTPublicKey: "-----BEGIN PUBLIC KEY-----\nabc\n-----END PUBLIC KEY-----\n"}},
+			want: apiOptions{JWTPublicKey: "-----BEGIN PUBLIC KEY-----\nabc\n-----END PUBLIC KEY-----\n"}},
 		{name: "JWT_PUBLIC_KEY_FILE", env: map[string]string{"JWT_PUBLIC_KEY_FILE": "/etc/reliant/jwt.pem"},
-			want: serverapi.Options{JWTPublicKeyFile: "/etc/reliant/jwt.pem"}},
+			want: apiOptions{JWTPublicKeyFile: "/etc/reliant/jwt.pem"}},
 		{name: "RELIANT_JWKS_URL", env: map[string]string{"RELIANT_JWKS_URL": "https://example.supabase.co/auth/v1/.well-known/jwks.json"},
-			want: serverapi.Options{JWKSURL: "https://example.supabase.co/auth/v1/.well-known/jwks.json"}},
+			want: apiOptions{JWKSURL: "https://example.supabase.co/auth/v1/.well-known/jwks.json"}},
 		{name: "RELIANT_JWKS_URL empty is unset", env: map[string]string{"RELIANT_JWKS_URL": ""}},
 		{name: "--jwks-url outranks RELIANT_JWKS_URL", env: map[string]string{"RELIANT_JWKS_URL": "https://env.example/jwks"},
-			args: []string{"--jwks-url=https://flag.example/jwks"}, want: serverapi.Options{JWKSURL: "https://flag.example/jwks"}},
+			args: []string{"--jwks-url=https://flag.example/jwks"}, want: apiOptions{JWKSURL: "https://flag.example/jwks"}},
 		{name: "--jwt-public-key outranks JWT_PUBLIC_KEY", env: map[string]string{"JWT_PUBLIC_KEY": "env-pem"},
-			args: []string{"--jwt-public-key", "flag-pem"}, want: serverapi.Options{JWTPublicKey: "flag-pem"}},
+			args: []string{"--jwt-public-key", "flag-pem"}, want: apiOptions{JWTPublicKey: "flag-pem"}},
 		{name: "--jwt-public-key-file outranks JWT_PUBLIC_KEY_FILE", env: map[string]string{"JWT_PUBLIC_KEY_FILE": "/env.pem"},
-			args: []string{"--jwt-public-key-file=/flag.pem"}, want: serverapi.Options{JWTPublicKeyFile: "/flag.pem"}},
+			args: []string{"--jwt-public-key-file=/flag.pem"}, want: apiOptions{JWTPublicKeyFile: "/flag.pem"}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -109,7 +108,7 @@ func TestServerAPIDisableForgeAPI(t *testing.T) {
 			t.Setenv("RELIANT_DISABLE_FORGE_API", raw)
 			cmd, _, err := NewRootCmd().Find([]string{"server", "api"})
 			require.NoError(t, err)
-			var opts serverapi.Options
+			var opts apiOptions
 			err = loadServerAPIConfig(cmd, &opts)
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), "RELIANT_DISABLE_FORGE_API")
@@ -128,12 +127,12 @@ func isolateServerAPIConfigEnv(t *testing.T) {
 
 // loadServerAPIOptions runs what `server api`'s RunE does with its typed
 // config, after parsing args.
-func loadServerAPIOptions(t *testing.T, args ...string) serverapi.Options {
+func loadServerAPIOptions(t *testing.T, args ...string) apiOptions {
 	t.Helper()
 	cmd, _, err := NewRootCmd().Find([]string{"server", "api"})
 	require.NoError(t, err)
 	require.NoError(t, cmd.ParseFlags(args))
-	var opts serverapi.Options
+	var opts apiOptions
 	require.NoError(t, loadServerAPIConfig(cmd, &opts))
 	return opts
 }
@@ -184,7 +183,7 @@ func TestServerAPISharedConfigFile(t *testing.T) {
 		cmd, _, err := NewRootCmd().Find([]string{"server", "api"})
 		require.NoError(t, err)
 		require.NoError(t, cmd.ParseFlags([]string{"--config", typo}))
-		var opts serverapi.Options
+		var opts apiOptions
 		err = loadServerAPIConfig(cmd, &opts)
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "jwksURL")
@@ -242,7 +241,7 @@ func TestServerAPIAuthMisconfigurationFailsBoot(t *testing.T) {
 			}
 			cmd, _, err := NewRootCmd().Find([]string{"server", "api"})
 			require.NoError(t, err)
-			var opts serverapi.Options
+			var opts apiOptions
 			err = loadServerAPIConfig(cmd, &opts)
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), tc.wantInErr)

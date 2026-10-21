@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/reliant-labs/reliant/internal/serverapi"
 	"github.com/reliant-labs/reliant/internal/temporal/claimcheck"
 )
 
@@ -20,10 +19,10 @@ func TestServerAPIPayloadGCHorizon(t *testing.T) {
 	isolateServerRoleEnv(t)
 	t.Setenv("RELIANT_PAYLOAD_BLOB_GC_HORIZON", "")
 	require.NoError(t, os.Unsetenv("RELIANT_PAYLOAD_BLOB_GC_HORIZON"))
-	load := func() (serverapi.Options, error) {
+	load := func() (apiOptions, error) {
 		cmd, _, err := NewRootCmd().Find([]string{"server", "api"})
 		require.NoError(t, err)
-		var opts serverapi.Options
+		var opts apiOptions
 		return opts, loadServerAPIConfig(cmd, &opts)
 	}
 	opts, err := load()

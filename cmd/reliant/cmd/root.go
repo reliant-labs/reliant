@@ -12,11 +12,9 @@
 //
 // The server roles are roots of the composition graph (internal/app): each
 // root's command comes from rootCommands (roots_gen.go, generated) and runs
-// under the process policy in serve.go. Today `reliant server gateway` and
-// `reliant server worker` are roots; `reliant server api` still constructs
-// itself (server.go) and is merged under the generated `server` command
-// (mergeServerRoles) until it becomes a root too
-// (research/forge-migration/09-roots-plan.md, R5).
+// under the process policy in serve.go: `reliant server api`, `reliant server
+// worker` and `reliant server gateway`, under the generated `server` group
+// (its help is internal/app/roots.go's //forge:group).
 // metrics.go and internal/metrics stay declined (.forge/scaffolded.json):
 // they would add a `reliant metrics` command to a surface pinned by
 // help_text_test and command_surface_test.
@@ -103,9 +101,6 @@ Reliant server components.`,
 	daemonCmd, authCmd, projectCmd, workflowCmd, triggerCmd := newDaemonCmd(), newAuthCmd(), newProjectCmd(), newWorkflowCmd(), newTriggerCmd()
 	bindCLIConfig(authCmd, daemonCmd, projectCmd, triggerCmd, workflowCmd)
 	for _, c := range rootCommands(deps) {
-		if c.Name() == "server" {
-			mergeServerRoles(c)
-		}
 		root.AddCommand(c)
 	}
 	root.AddCommand(daemonCmd)

@@ -13,7 +13,8 @@ import (
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 )
 
-// The forge RPC surface's server-side kill switch (Config.DisableForgeAPI).
+// The forge RPC surface's server-side kill switch (ForgeAPIDisabled, which the
+// api root mounts ForgeService with under RELIANT_DISABLE_FORGE_API).
 //
 // WHY IT EXISTS ALONGSIDE THE FRONTEND FLAG. The web app gates the forge UI on a
 // per-browser localStorage flag, which is not a security boundary: anyone who
@@ -47,9 +48,7 @@ func requireForgeAPIDisabled(t *testing.T, err error) {
 }
 
 func TestDisabledForgeAPIAnswersFailedPrecondition(t *testing.T) {
-	cfg := testServerConfig(t, drainTestRepo{})
-	cfg.DisableForgeAPI = true
-	_, baseURL := startTestServer(t, cfg)
+	_, baseURL := startTestServer(t, testForge(t, ForgeAPIDisabled()))
 	forge := forgeClient(baseURL)
 
 	t.Run("a unary rpc, before its handler runs", func(t *testing.T) {
@@ -83,7 +82,7 @@ func TestDisabledForgeAPIRefusesStreamingHandlers(t *testing.T) {
 }
 
 func TestEnabledForgeAPIReachesItsHandlers(t *testing.T) {
-	_, baseURL := startTestServer(t, testServerConfig(t, drainTestRepo{}))
+	_, baseURL := startTestServer(t, testForge(t))
 
 	_, err := forgeClient(baseURL).GetTopology(context.Background(), authed(&reliantv1.GetForgeTopologyRequest{}))
 	require.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err),

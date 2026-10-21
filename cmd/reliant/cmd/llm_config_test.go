@@ -11,7 +11,6 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
-	"github.com/reliant-labs/reliant/internal/serverapi"
 )
 
 var llmEnv = []string{
@@ -36,7 +35,7 @@ func llmOf(t *testing.T) (api, worker drivers.Settings, err error) {
 	t.Helper()
 	apiCmd, _, ferr := NewRootCmd().Find([]string{"server", "api"})
 	require.NoError(t, ferr)
-	var a serverapi.Options
+	var a apiOptions
 	if err := loadServerAPIConfig(apiCmd, &a); err != nil {
 		return drivers.Settings{}, drivers.Settings{}, err
 	}

@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/analytics"
-	"github.com/reliant-labs/reliant/internal/serverapi"
 )
 
 var analyticsEnv = []string{"RELIANT_ANALYTICS_DISABLED"}
@@ -26,7 +25,7 @@ func TestAnalyticsEnvContract(t *testing.T) {
 		t.Helper()
 		apiCmd, _, err := NewRootCmd().Find([]string{"server", "api"})
 		require.NoError(t, err)
-		var api serverapi.Options
+		var api apiOptions
 		require.NoError(t, loadServerAPIConfig(apiCmd, &api))
 		workerCmd, _, err := NewRootCmd().Find([]string{"server", "worker"})
 		require.NoError(t, err)
@@ -47,7 +46,7 @@ func TestAnalyticsEnvContract(t *testing.T) {
 	t.Setenv("RELIANT_ANALYTICS_DISABLED", "yes")
 	apiCmd, _, err := NewRootCmd().Find([]string{"server", "api"})
 	require.NoError(t, err)
-	var opts serverapi.Options
+	var opts apiOptions
 	err = loadServerAPIConfig(apiCmd, &opts)
 	require.Error(t, err, "a malformed kill switch stops the process")
 	assert.Contains(t, err.Error(), "RELIANT_ANALYTICS_DISABLED")

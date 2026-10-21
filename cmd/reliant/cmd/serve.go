@@ -3,7 +3,8 @@
 // THE PROCESS POLICY — the one every server root runs under, and nothing else.
 //
 // What a process RUNS is one root of the composition graph
-// (internal/app/graph_gen.go): `reliant server gateway` runs the gateway root
+// (internal/app/graph_gen.go): `reliant server api` runs the api root
+// (internal/app/roots_api.go), `reliant server gateway` the gateway root
 // (internal/app/roots_gateway.go), `reliant server worker` the worker root
 // (internal/app/roots_worker.go), and every //forge:root in internal/app
 // gets a command of its own (roots_gen.go, generated). Each node is
@@ -18,12 +19,15 @@
 // reverse dependency order inside the shutdown budget, pending error reports
 // and telemetry flushed last.
 //
-// No root migrates here: the api-server owns the schema, and the database
-// provider of every other role waits for it (db.MigrateWait).
+// The api-server owns the schema: its root declares migrate=apply, so its
+// process applies the migrations here, after the boot probes bind and before
+// the root is built (migrateSchema). Every other root declares migrate=wait,
+// and its database provider waits for them (db.MigrateWait).
 package cmd
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"log/slog"
 	"os/signal"
@@ -34,6 +38,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/serverkit"
 
 	"github.com/reliant-labs/reliant/internal/app"
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/observability"
 	"github.com/reliant-labs/reliant/internal/runenv"
@@ -52,6 +57,7 @@ type rootPolicy struct {
 
 // rootPolicies is each root's policy, by root name.
 var rootPolicies = map[string]rootPolicy{
+	"api":     {serviceName: "reliant-api-server", logFile: "reliant.log"},
 	"gateway": {serviceName: "daemon-gateway", logFile: "daemon-gateway.log"},
 	"worker":  {serviceName: "reliant-temporal-worker", logFile: "temporal-worker.log"},
 }
@@ -112,6 +118,15 @@ func runRoot(ctx context.Context, deps Deps, root rootSpec) error {
 		return fmt.Errorf("initialize observability: %w", err)
 	}
 
+	// MIGRATIONS, before anything reads the schema: only a root that
+	// declares migrate=apply (the api-server, the schema's one owner) runs
+	// them; the boot probes answer meanwhile.
+	if root.Migrate {
+		if err := migrateSchema(ctx, skCfg, root.Configs.DatabaseConfig, logger); err != nil {
+			return err
+		}
+	}
+
 	// THE ROOT POLICY: the readiness gate and stop budget (PRE_STOP_DELAY,
 	// SHUTDOWN_TIMEOUT), and the probes on the health port. Every node that
 	// reports Ready joins the readiness paths.
@@ -154,6 +169,26 @@ func flushTelemetry(obs *observability.Provider) func(context.Context) error {
 	}
 }
 
+// migrateSchema applies every migration this binary embeds (db.ApplyOnBoot,
+// through the goose bridge), on a connection of its own to the session-capable
+// DATABASE_DIRECT_URL when one is set (db.DatabaseConfig.MigrationURL), never
+// the serving pool. The connect retries within DB_CONNECT_TIMEOUT — a database
+// that comes up seconds after the api-server is a wait, with the database
+// pending in the boot readiness body — and the migration itself does not: a
+// failed or dirty one is a human's problem, not a transient.
+func migrateSchema(ctx context.Context, skCfg serverkit.Config, database *config.DatabaseConfig, logger *slog.Logger) error {
+	_, url, directURL := app.DatabaseURLs(database)
+	if url == "" {
+		return fmt.Errorf("config: DATABASE_URL is required")
+	}
+	migrateCfg := skCfg
+	migrateCfg.AutoMigrate = true
+	migrateCfg.DatabaseURL = db.DatabaseConfig{URL: url, DirectURL: directURL}.MigrationURL()
+	return serverkit.AutoMigrateContext(ctx, migrateCfg, logger, func(pool *sql.DB, logger *slog.Logger) error {
+		return db.ApplyOnBoot(ctx, pool, logger)
+	})
+}
+
 // serverkitConfig projects reliant's configs onto the vendor-neutral
 // serverkit.Config: the probe address, the drain budget, pprof and the probe
 // paths, from the command config of the role the root runs as.
@@ -188,6 +223,20 @@ func serverkitConfig(cfg *config.Config, configs rootConfigs) (serverkit.Config,
 		skCfg.Probes.Ready = serverkit.ProbePathList(c.GetReadinessPaths())
 		// Zero is serverkit's default (5s / 30s), negative none: the rule
 		// forge's grace-period arithmetic applies to the same variables.
+		skCfg.PreStopDelay = c.GetPreStopDelay().AsDuration()
+		skCfg.ShutdownTimeout = c.GetShutdownTimeout().AsDuration()
+	}
+	if c := configs.ApiServerConfig; c != nil {
+		if err := app.CheckPorts(app.Port{Name: "HEALTH_PORT (--health-port)", Port: c.GetHealthPort()}); err != nil {
+			return serverkit.Config{}, err
+		}
+		skCfg.Addr = fmt.Sprintf("%s:%d", c.GetBindAddress(), c.GetHealthPort())
+		skCfg.Probes.Live = serverkit.ProbePathList(c.GetLivenessPaths())
+		skCfg.Probes.Ready = serverkit.ProbePathList(c.GetReadinessPaths())
+		// The pause keeps the API serving while EndpointSlices and the GKE
+		// NEG drop the pod: without it the listener closes while the pod is
+		// still a routing target, which is connection-refused on every
+		// rollout.
 		skCfg.PreStopDelay = c.GetPreStopDelay().AsDuration()
 		skCfg.ShutdownTimeout = c.GetShutdownTimeout().AsDuration()
 	}

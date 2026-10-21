@@ -404,6 +404,41 @@ Your order (a)→(b)→(c)→(d)→(e) holds with **three changes**:
 - R4 and R5 both edit `compose.go` (owned, reconciled) and `roots.go`. To keep their merge
   conflicts trivial, put one root per file: `roots_api.go`, `roots_worker.go`. compose.go
   conflicts are append-only. Rebase, then rerun `forge generate`.
+- **As landed:** `internal/app/roots_api.go` declares `API` (`migrate=apply`; field order
+  = stop order: the API listener, the ten loops in today's order, then the infrastructure
+  as fields — the api's daemon router, the update feed, streaming hub, Temporal client,
+  the debug server — and last `Runtime`, `Settings` and `APISettings`, built first).
+  `PlanAPI().Stop()` is pinned by `TestAPIStopsTakingCallsFirst`: today's eleven nodes
+  verbatim (forge's names: `api_listener` … `payload_gc`, `git_hub_access_loop` for
+  `github-access`), then api_daemon_router, chat_update_hub, user_update_hub,
+  streaming_hub, nats_conn, temporal_client, api_debug_server, db_repo, probe_listener —
+  today's deferred closes but for the streaming hub now closing before NATS (its first
+  connect waits for NATS, R4's edge) and the debug server, which nothing used to stop.
+  Readiness is db_repo, temporal_client (**new on the api**: a Temporal that does not
+  answer now takes an api replica out of rotation), nats_conn, streaming_hub,
+  api_listener. Each of the 35 handlers is a compose method whose Deps are today's
+  literals; every Router is `g.APIDaemonRouter().NATSDaemonRouter` (the wrapper's
+  `Close(ctx)` shadows the router's `Close()`, so it no longer satisfies
+  `toolexec.DaemonRouter` itself). The route set is the generated `UserRoutes` with
+  `apiMountOptions` (machinewake on worktree/file_system, `grpcserver.ForgeAPIDisabled()`
+  on forge); the plain-HTTP routes are `grpcserver.APIHTTPRoutes` (node `http_routes`),
+  composed with `UserRoutes` in `NewAPIListener`. `grpcserver.UserAuth` is the user
+  audience's authenticator (`//forge:audience user` on `NewUserAuth`). Absent loops are
+  constructors returning `(nil, nil)` (KeySweep, GitHubAccess, its loop, TriggerSenders,
+  TriggerAlerting), pinned on a real graph by `TestAPIOmitsAbsentLoops`. Config
+  validation moved into `APISettings` (`CheckAPIServerConfig`), the api root's last
+  field, so a bad value still stops the process before anything is dialled — but after
+  the boot probes bind and after migrations. The ResetGuard is its own node that installs
+  itself on the shared PauseService: the worker's pause service still has none.
+  Migration is `runRoot` policy: `migrateSchema` runs `db.ApplyOnBoot` through
+  `serverkit.AutoMigrateContext` (connect retried within DB_CONNECT_TIMEOUT) on
+  `MigrationURL`, and `TestOnlyTheAPIMigrates` pins the roots' generated `Migrate` /
+  `AwaitMigrations`. `ApiServerConfig` gained env-only `LIVENESS_PATHS`/`READINESS_PATHS`;
+  the probe address is `BIND_ADDRESS:HEALTH_PORT`, as before. `serverapi` is gone
+  (`input_options.go` moved too); its tests are `internal/app/providers_api_*_test.go`,
+  and `TestServerAPIDoesNotBuildMCPManager` checks internal/app. The grpc tests that
+  drove `NewAPI` mount only what each calls (`startTestServer(t, routes...)`); the mount
+  set and mount options are pinned in `internal/app/roots_api_routes_test.go`.
 
 ### R6: (e) delete the leftovers, gate the graph *(needs R4 + R5)*
 - Delete the `lint.rules` graph overrides, so `forge lint --graph` gates through `forge lint`'s

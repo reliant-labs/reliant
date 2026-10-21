@@ -37451,6 +37451,34 @@
           "Sensitive": false,
           "Category": "",
           "ProtoFile": "config/v1/api_server_config.proto"
+        },
+        {
+          "Name": "liveness_paths",
+          "GoName": "LivenessPaths",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "LIVENESS_PATHS",
+          "Flag": "",
+          "DefaultValue": "/health,/healthz",
+          "Required": false,
+          "Description": "Liveness probe paths on the health port (comma-separated)",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "config/v1/api_server_config.proto"
+        },
+        {
+          "Name": "readiness_paths",
+          "GoName": "ReadinessPaths",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "READINESS_PATHS",
+          "Flag": "",
+          "DefaultValue": "/ready,/readyz",
+          "Required": false,
+          "Description": "Readiness probe paths on the health port (comma-separated)",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "config/v1/api_server_config.proto"
         }
       ],
       "Binary": "reliant",
@@ -39554,7 +39582,7 @@
   ],
   "sources": {
     "config/v1/analytics_config.proto": "2093382e19e6c0a59f28913b76fae435017337a229b93f167599e3198207fc94",
-    "config/v1/api_server_config.proto": "981fe2bbc1c0b57d34f7c9ed4fd325c7678f0ad8956c0239edbe9a4465be9a57",
+    "config/v1/api_server_config.proto": "b42c317661471efc240cf0ecb2c02bafc9ef93130f20e9290d150215e077b322",
     "config/v1/cli_config.proto": "5acd17311a1d616f1f6e54ee6d9c30a9ddf6c78474fd0308e80f2db99d71a55e",
     "config/v1/config.proto": "470b5ebfc2dba63d9364338197ba52766a00f2bd2e43f63529c5f977351decdd",
     "config/v1/control_plane_config.proto": "baedb9e18f40a3711bad8e7c0572ff37257dddff3f3ff46d7e4e4f57b0c1454a",

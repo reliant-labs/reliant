@@ -204,4 +204,20 @@ message ApiServerConfig {
     default_value: "30s"
     description: "Budget for graceful shutdown after the pre-stop pause"
   }];
+
+  // The probe paths on HEALTH_PORT, read as GatewayConfig's are (its comment
+  // has the rules): /health and /ready are what control-plane probes
+  // (RELIANT_PROBES, the GKE health check, docker-compose), /healthz and
+  // /readyz forge's. The JSON /health the web client reads the auth mode from
+  // is the API port's, not these.
+  string liveness_paths = 24 [(forge.v1.config) = {
+    env_var: "LIVENESS_PATHS"
+    default_value: "/health,/healthz"
+    description: "Liveness probe paths on the health port (comma-separated)"
+  }];
+  string readiness_paths = 25 [(forge.v1.config) = {
+    env_var: "READINESS_PATHS"
+    default_value: "/ready,/readyz"
+    description: "Readiness probe paths on the health port (comma-separated)"
+  }];
 }

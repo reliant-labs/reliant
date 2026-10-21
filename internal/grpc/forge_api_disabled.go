@@ -6,6 +6,7 @@ import (
 	"errors"
 
 	"connectrpc.com/connect"
+	"github.com/reliant-labs/forge/pkg/mountkit"
 )
 
 // forgeAPIDisabledReason is the X-Reliant-Reason a forgeAPIDisabled refusal
@@ -15,8 +16,17 @@ import (
 // failed, so the code cannot tell the two apart.
 const forgeAPIDisabledReason = "forge_api_disabled"
 
+// ForgeAPIDisabled is ForgeService's mount option when the operator turned
+// the forge API off (ApiServerConfig.disable_forge_api,
+// RELIANT_DISABLE_FORGE_API): forgeAPIDisabled innermost in its chain — a
+// mount's own handler options run inside the listener's — so every rpc
+// answers FailedPrecondition, after auth, before the handler runs.
+func ForgeAPIDisabled() mountkit.Option {
+	return mountkit.WithHandlerOptions(connect.WithInterceptors(forgeAPIDisabled{}))
+}
+
 // forgeAPIDisabled answers every ForgeService rpc with FailedPrecondition: the
-// operator's kill switch (Config.DisableForgeAPI, RELIANT_DISABLE_FORGE_API).
+// operator's kill switch (RELIANT_DISABLE_FORGE_API).
 //
 // The service stays mounted, so a disabled surface is an honest answer the web
 // shows as such. An unmounted one answered 404, which the web files as version

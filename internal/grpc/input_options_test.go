@@ -11,7 +11,6 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
-	"github.com/reliant-labs/reliant/internal/handlers/trigger"
 	"github.com/reliant-labs/reliant/internal/integrations/inputoptions"
 )
 
@@ -26,21 +25,12 @@ func (f *fakeInputOptions) Resolve(context.Context, inputoptions.ResolveRequest)
 	return &inputoptions.Resolution{}, nil
 }
 
-type fakeChecker struct{}
-
-func (fakeChecker) CheckValues(context.Context, trigger.ValueCheck) (trigger.ValueCheckResult, error) {
-	return trigger.ValueCheckResult{}, nil
-}
-
 // ListInputOptions is mounted behind the same authentication as the rest of
 // the API: an anonymous caller is refused before the option service is asked,
 // and an authenticated one reaches it as themselves.
 func TestListInputOptionsIsMountedBehindAuth(t *testing.T) {
 	opts := &fakeInputOptions{}
-	cfg := testServerConfig(t, drainTestRepo{})
-	cfg.InputOptions = opts
-	cfg.TriggerOptions = fakeChecker{}
-	_, baseURL := startTestServer(t, cfg)
+	_, baseURL := startTestServer(t, testCatalog(t, opts))
 	client := reliantv1connect.NewCatalogServiceClient(h2cClient(), baseURL)
 	typ := "github.repository"
 
@@ -60,7 +50,7 @@ func TestListInputOptionsIsMountedBehindAuth(t *testing.T) {
 // A deployment composed without an option source answers Unimplemented, not a
 // missing route.
 func TestListInputOptionsWithoutAnOptionSourceIsUnimplemented(t *testing.T) {
-	_, baseURL := startTestServer(t, testServerConfig(t, drainTestRepo{}))
+	_, baseURL := startTestServer(t, testCatalog(t, nil))
 	client := reliantv1connect.NewCatalogServiceClient(h2cClient(), baseURL)
 	typ := "github.repository"
 	_, err := client.ListInputOptions(context.Background(), authed(&reliantv1.ListInputOptionsRequest{Type: &typ}))

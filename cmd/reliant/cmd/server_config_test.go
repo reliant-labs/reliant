@@ -13,7 +13,6 @@ import (
 	"github.com/reliant-labs/forge/pkg/serverkit"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/natsutil"
-	"github.com/reliant-labs/reliant/internal/serverapi"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
@@ -51,7 +50,7 @@ func isolateServerRoleEnv(t *testing.T) {
 
 // serverRole runs what one server role's RunE does with its typed config,
 // after parsing args, and returns the Options it would hand its package
-// (serverapi.Options), or for the roots, what each root gets (workerOptions,
+// (apiOptions), or for the roots, what each root gets (workerOptions,
 // gatewayRole).
 type serverRole struct {
 	path []string
@@ -60,7 +59,7 @@ type serverRole struct {
 
 var serverRoles = []serverRole{
 	{path: []string{"server", "api"}, load: func(t *testing.T, args ...string) (any, error) {
-		var opts serverapi.Options
+		var opts apiOptions
 		err := loadServerAPIConfig(findServerCmd(t, "api", args...), &opts)
 		return opts, err
 	}},
@@ -89,7 +88,9 @@ func TestServerRoleDefaults(t *testing.T) {
 
 	api := loadServerAPIOptions(t)
 	assert.Equal(t, 9090, api.GRPCPort)
-	assert.Equal(t, 8081, api.HealthPort)
+	assert.Equal(t, "0.0.0.0:8081", api.HealthAddr, "the api probes on BIND_ADDRESS, as it always has")
+	assert.Equal(t, []string{"/health", "/healthz"}, api.LivenessPaths, "control-plane probes /health")
+	assert.Equal(t, []string{"/ready", "/readyz"}, api.ReadinessPaths, "control-plane probes /ready")
 	assert.Equal(t, 6060, api.PprofPort)
 	assert.Equal(t, "0.0.0.0", api.BindAddress)
 	assert.Equal(t, "./data", api.DataDir)
@@ -157,7 +158,7 @@ func TestServerRoleEnvContract(t *testing.T) {
 	assert.Equal(t, "default", api.TemporalNamespace)
 	assert.True(t, api.DisableTLS)
 	assert.Equal(t, 19090, api.GRPCPort)
-	assert.Equal(t, 18081, api.HealthPort)
+	assert.Equal(t, "127.0.0.1:18081", api.HealthAddr)
 	assert.Equal(t, 16060, api.PprofPort)
 	assert.Equal(t, "127.0.0.1", api.BindAddress)
 	assert.Equal(t, "/data", api.DataDir)
@@ -299,7 +300,7 @@ func drainOf(t *testing.T, role serverRole) (preStop, shutdown time.Duration) {
 	opts, err := role.load(t)
 	require.NoError(t, err)
 	switch o := opts.(type) {
-	case serverapi.Options:
+	case apiOptions:
 		return o.PreStopDelay, o.ShutdownTimeout
 	case workerOptions:
 		return o.PreStopDelay, o.ShutdownTimeout
@@ -331,7 +332,7 @@ func TestServerRoleDatabasePool(t *testing.T) {
 		opts, err := role.load(t)
 		require.NoError(t, err)
 		switch o := opts.(type) {
-		case serverapi.Options:
+		case apiOptions:
 			assert.Equal(t, want, o.DatabasePool, "api")
 		case workerOptions:
 			assert.Equal(t, want, o.DatabasePool, "worker")
@@ -396,7 +397,7 @@ func TestServerOAuthClientsAreAnEnvFamily(t *testing.T) {
 
 	got, err := serverRoles[0].load(t)
 	require.NoError(t, err)
-	clients := got.(serverapi.Options).Webhooks.OAuthClients
+	clients := got.(apiOptions).Webhooks.OAuthClients
 	id, secret := clients("github")
 	assert.Equal(t, "gh-id", id)
 	assert.Equal(t, "gh-secret", secret)
@@ -430,13 +431,13 @@ func TestServerAPIOAuthProvider(t *testing.T) {
 	t.Setenv("RELIANT_AUTH_KEY", "")
 	got, err := serverRoles[0].load(t)
 	require.NoError(t, err)
-	assert.Equal(t, "https://dash.reliantlabs.io", got.(serverapi.Options).OAuthProvider.URL)
-	assert.NotEmpty(t, got.(serverapi.Options).OAuthProvider.Key)
+	assert.Equal(t, "https://dash.reliantlabs.io", got.(apiOptions).OAuthProvider.URL)
+	assert.NotEmpty(t, got.(apiOptions).OAuthProvider.Key)
 
 	t.Setenv("RELIANT_AUTH_URL", "https://auth.example.com")
 	t.Setenv("RELIANT_AUTH_KEY", "sb_publishable_example")
 	got, err = serverRoles[0].load(t)
 	require.NoError(t, err)
-	assert.Equal(t, "https://auth.example.com", got.(serverapi.Options).OAuthProvider.URL)
-	assert.Equal(t, "sb_publishable_example", got.(serverapi.Options).OAuthProvider.Key)
+	assert.Equal(t, "https://auth.example.com", got.(apiOptions).OAuthProvider.URL)
+	assert.Equal(t, "sb_publishable_example", got.(apiOptions).OAuthProvider.Key)
 }

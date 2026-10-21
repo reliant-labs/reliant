@@ -11,9 +11,9 @@ import (
 )
 
 // APIListener is the API server's listener: the address browsers, the CLI
-// and `rlat_` tokens call, serving the API's routes through a UserChain. The
-// api role runs it under lifecyclekit.Supervise, which drains it: see
-// serverapi.Run.
+// and `rlat_` tokens call, serving the API's routes through a UserChain. It
+// is a node of the api root (internal/app/roots_api.go), whose supervision
+// drains it first.
 type APIListener struct{ *serverkit.Listener }
 
 // APIListenerDeps configures an APIListener.
@@ -32,7 +32,8 @@ type APIListenerDeps struct {
 
 	// Chain authenticates every Connect call. Required.
 	Chain *UserChain
-	// Routes are what it serves — the API (NewAPI). Required.
+	// Routes are what it serves — the user-audience route set and the
+	// API's plain-HTTP routes (internal/app's NewAPIListener). Required.
 	Routes serverkit.Routes
 	// Logger receives the listener's lines and its drain phase; nil is
 	// slog.Default().

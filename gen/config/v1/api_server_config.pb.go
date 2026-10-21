@@ -108,8 +108,15 @@ type ApiServerConfig struct {
 	// load. They carry forge's names, which its serve policy reads.
 	PreStopDelay    *durationpb.Duration `protobuf:"bytes,22,opt,name=pre_stop_delay,json=preStopDelay,proto3" json:"pre_stop_delay,omitempty"`
 	ShutdownTimeout *durationpb.Duration `protobuf:"bytes,23,opt,name=shutdown_timeout,json=shutdownTimeout,proto3" json:"shutdown_timeout,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// The probe paths on HEALTH_PORT, read as GatewayConfig's are (its comment
+	// has the rules): /health and /ready are what control-plane probes
+	// (RELIANT_PROBES, the GKE health check, docker-compose), /healthz and
+	// /readyz forge's. The JSON /health the web client reads the auth mode from
+	// is the API port's, not these.
+	LivenessPaths  string `protobuf:"bytes,24,opt,name=liveness_paths,json=livenessPaths,proto3" json:"liveness_paths,omitempty"`
+	ReadinessPaths string `protobuf:"bytes,25,opt,name=readiness_paths,json=readinessPaths,proto3" json:"readiness_paths,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *ApiServerConfig) Reset() {
@@ -296,11 +303,25 @@ func (x *ApiServerConfig) GetShutdownTimeout() *durationpb.Duration {
 	return nil
 }
 
+func (x *ApiServerConfig) GetLivenessPaths() string {
+	if x != nil {
+		return x.LivenessPaths
+	}
+	return ""
+}
+
+func (x *ApiServerConfig) GetReadinessPaths() string {
+	if x != nil {
+		return x.ReadinessPaths
+	}
+	return ""
+}
+
 var File_config_v1_api_server_config_proto protoreflect.FileDescriptor
 
 const file_config_v1_api_server_config_proto_rawDesc = "" +
 	"\n" +
-	"!config/v1/api_server_config.proto\x12\tconfig.v1\x1a\x14forge/v1/forge.proto\x1a\x1egoogle/protobuf/duration.proto\"\xf1\x19\n" +
+	"!config/v1/api_server_config.proto\x12\tconfig.v1\x1a\x14forge/v1/forge.proto\x1a\x1egoogle/protobuf/duration.proto\"\x89\x1c\n" +
 	"\x0fApiServerConfig\x12s\n" +
 	"\x0ejwt_public_key\x18\x01 \x01(\tBM\x82\xce\x18I\n" +
 	"\x0eJWT_PUBLIC_KEY\x12\x0ejwt-public-key*'JWT public key PEM for token validationR\fjwtPublicKey\x12~\n" +
@@ -350,7 +371,11 @@ const file_config_v1_api_server_config_proto_rawDesc = "" +
 	"\x0epre_stop_delay\x18\x16 \x01(\v2\x19.google.protobuf.DurationBi\x82\xce\x18e\n" +
 	"\x0ePRE_STOP_DELAY\x1a\x025s*OHow long to keep serving after readiness flips at shutdown (negative: no pause)R\fpreStopDelay\x12\x98\x01\n" +
 	"\x10shutdown_timeout\x18\x17 \x01(\v2\x19.google.protobuf.DurationBR\x82\xce\x18N\n" +
-	"\x10SHUTDOWN_TIMEOUT\x1a\x0330s*5Budget for graceful shutdown after the pre-stop pauseR\x0fshutdownTimeout:\x1a\xca\xc1\x18\x16\n" +
+	"\x10SHUTDOWN_TIMEOUT\x1a\x0330s*5Budget for graceful shutdown after the pre-stop pauseR\x0fshutdownTimeout\x12\x88\x01\n" +
+	"\x0eliveness_paths\x18\x18 \x01(\tBa\x82\xce\x18]\n" +
+	"\x0eLIVENESS_PATHS\x1a\x10/health,/healthz*9Liveness probe paths on the health port (comma-separated)R\rlivenessPaths\x12\x8a\x01\n" +
+	"\x0freadiness_paths\x18\x19 \x01(\tBa\x82\xce\x18]\n" +
+	"\x0fREADINESS_PATHS\x1a\x0e/ready,/readyz*:Readiness probe paths on the health port (comma-separated)R\x0ereadinessPaths:\x1a\xca\xc1\x18\x16\n" +
 	"\areliant\x12\x06server\x12\x03apiJ\x04\b\x05\x10\x06J\x04\b\n" +
 	"\x10\vJ\x04\b\v\x10\fJ\x04\b\f\x10\rJ\x04\b\r\x10\x0eJ\x04\b\x0e\x10\x0fJ\x04\b\x13\x10\x14J\x04\b\x14\x10\x15J\x04\b(\x10)J\x04\b2\x103J\x04\b3\x104J\x04\b<\x10=J\x04\bF\x10GJ\x04\bZ\x10[R\rcontrol_planeR\bdatabaseR\x04natsR\btemporalR\x03tlsR\x05drainR\bdata_dirR\x10streaming_driverR\fintegrationsR\robservabilityR\x06sentryR\tanalyticsR\x03llmR\apreviewB8Z6github.com/reliant-labs/reliant/gen/config/v1;configv1b\x06proto3"
 

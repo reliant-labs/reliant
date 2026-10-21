@@ -11,7 +11,6 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/app"
 	"github.com/reliant-labs/reliant/internal/integrations/webhook/github"
-	"github.com/reliant-labs/reliant/internal/serverapi"
 )
 
 // integrationsEnv is every variable IntegrationsConfig reads, plus the OAuth
@@ -59,7 +58,7 @@ func TestIntegrationsEnvContract(t *testing.T) {
 		t.Setenv(name, value)
 	}
 
-	var api serverapi.Options
+	var api apiOptions
 	require.NoError(t, loadServerAPIConfig(serverCmd(t, "api"), &api))
 	var worker workerOptions
 	require.NoError(t, loadServerWorkerConfig(serverCmd(t, "worker"), &worker))
@@ -87,7 +86,7 @@ func TestIntegrationsEnvContract(t *testing.T) {
 // (it used to fall back to the default silently).
 func TestIntegrationsGitHubBot(t *testing.T) {
 	isolateIntegrationsEnv(t)
-	var api serverapi.Options
+	var api apiOptions
 	require.NoError(t, loadServerAPIConfig(serverCmd(t, "api"), &api))
 	assert.Equal(t, github.BotFrom(0, ""), api.GitHubBot)
 

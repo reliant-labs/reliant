@@ -21,7 +21,6 @@ import (
 	"google.golang.org/protobuf/reflect/protoregistry"
 
 	"github.com/reliant-labs/forge/pkg/forgepb"
-	"github.com/reliant-labs/reliant/internal/serverapi"
 )
 
 var updateServerRoleSurface = flag.Bool("update-server-role-surface", false,
@@ -75,7 +74,7 @@ func comparableOptions(opts any) any {
 		return out
 	}
 	switch o := opts.(type) {
-	case serverapi.Options:
+	case apiOptions:
 		got := clients(o.Webhooks.OAuthClients)
 		o.Webhooks.OAuthClients = nil
 		return []any{o, got}
