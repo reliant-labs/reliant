@@ -85,6 +85,8 @@ func (s *Service) EnableWorkflow(
 		}
 	}
 
+	prefix := s.activationPrefix(msg, declared, activations, overrides, taken)
+
 	// Phase 1: validate everything and write nothing.
 	results := make([]*reliantv1.WorkflowTriggerResult, len(declared))
 	steps := make([]*enableStep, len(declared))
@@ -110,11 +112,13 @@ func (s *Service) EnableWorkflow(
 			continue
 		}
 
-		def, err := s.workflowActivationDefinition(wt, msg, overrides[name])
+		def, err := s.workflowActivationDefinition(wt, msg, prefix, overrides[name])
 		if err == nil {
 			if taken[def.Name] {
+				// Only a name the caller chose for this trigger can still
+				// collide: the default prefix was picked to be free.
 				err = connect.NewError(connect.CodeAlreadyExists,
-					fmt.Errorf("you already have an automation named %q in this project; rename it or pick another prefix", def.Name))
+					fmt.Errorf("you already have an automation named %q in this project; pick another name", def.Name))
 			} else {
 				var row *core.Trigger
 				if row, err = s.triggerFromDefinition(ctx, userID, def, nil); err == nil {
@@ -225,17 +229,68 @@ func (s *Service) undoEnable(ctx context.Context, steps []*enableStep, results [
 	}
 }
 
+// activationPrefix is the "<prefix> · <trigger>" prefix the new activations are
+// named by: the request's (or the workflow ref), made free in this project.
+// A name taken by an automation of ANOTHER workflow — a user workflow of the
+// same title as a built-in, or a leftover of a workflow that was deleted —
+// never fails the enable. The prefix is qualified by this workflow's source
+// ("(built-in)" / "(yours)") first, then numbered, so one enable names all of
+// its activations consistently. A name the caller chose for one trigger
+// (override.Name) is theirs and is not rewritten.
+func (s *Service) activationPrefix(
+	msg *reliantv1.EnableWorkflowRequest,
+	declared []*reliantv1.WorkflowTrigger,
+	activations map[string]*core.Trigger,
+	overrides map[string]*reliantv1.WorkflowTriggerOverride,
+	taken map[string]bool,
+) string {
+	base := strings.TrimSpace(msg.NamePrefix)
+	if base == "" {
+		base = msg.Workflow
+	}
+	var created []string
+	for _, wt := range declared {
+		if activations[wt.GetName()] != nil {
+			continue
+		}
+		if o := overrides[wt.GetName()]; o != nil && o.Name != nil {
+			continue
+		}
+		created = append(created, wt.GetName())
+	}
+	free := func(prefix string) bool {
+		for _, name := range created {
+			if taken[prefix+" · "+name] {
+				return false
+			}
+		}
+		return true
+	}
+	if free(base) {
+		return base
+	}
+	qualifier := "yours"
+	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(msg.Workflow)), "builtin://") {
+		qualifier = "built-in"
+	}
+	if candidate := base + " (" + qualifier + ")"; free(candidate) {
+		return candidate
+	}
+	for n := 2; ; n++ {
+		if candidate := fmt.Sprintf("%s (%d)", base, n); free(candidate) {
+			return candidate
+		}
+	}
+}
+
 // workflowActivationDefinition is the definition of one declared trigger's
 // activation: the request's shared choices, then the trigger's override.
 func (s *Service) workflowActivationDefinition(
 	wt *reliantv1.WorkflowTrigger,
 	msg *reliantv1.EnableWorkflowRequest,
+	prefix string,
 	override *reliantv1.WorkflowTriggerOverride,
 ) (*reliantv1.TriggerDefinition, error) {
-	prefix := strings.TrimSpace(msg.NamePrefix)
-	if prefix == "" {
-		prefix = msg.Workflow
-	}
 	enabled := true
 	def := &reliantv1.TriggerDefinition{
 		Name:             prefix + " · " + wt.GetName(),
@@ -350,4 +405,26 @@ func connectMessage(err error) string {
 		return ce.Message()
 	}
 	return err.Error()
+}
+
+// RetireDeletedTriggers stops what outlives the rows of triggers already
+// deleted: their Temporal Schedules and the automation access nothing else
+// holds any more. It is best effort, because the rows are the truth: a
+// schedule left behind finds no row to fire and SyncAll collects it.
+func (s *Service) RetireDeletedTriggers(ctx context.Context, deleted []*core.Trigger) {
+	type holder struct{ user, daemon string }
+	released := map[holder]bool{}
+	for _, t := range deleted {
+		if s.deps.Syncer != nil && syncs(t.Kind) {
+			if err := s.deps.Syncer.Delete(ctx, t.ID); err != nil {
+				logging.WarnContext(ctx, "could not delete the schedule of a deleted trigger; the next sync collects it",
+					"trigger_id", t.ID, "error", err)
+			}
+		}
+		h := holder{t.UserID, t.DaemonID}
+		if t.DaemonID != "" && !released[h] {
+			released[h] = true
+			s.grants.releaseIfUnused(ctx, t.UserID, t.DaemonID)
+		}
+	}
 }

@@ -19,6 +19,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -1228,17 +1229,78 @@ func (s *Service) DeleteWorkflow(
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("workflow not found: %s", name))
 	}
 
-	// Delete from database
-	if err := s.deps.Repo.DeleteWorkflowDraftBySlug(ctx, userID, slug); err != nil {
+	// The workflow and every automation that runs it go in one transaction:
+	// an automation of a deleted workflow can never run, it is only a broken
+	// row that later blocks enabling the workflow's replacement.
+	var removed []*core.Trigger
+	err = s.deps.Repo.RunTx(ctx, func(ctx context.Context) error {
+		var err error
+		if removed, err = s.automationsOfDeletedWorkflow(ctx, userID, slug); err != nil {
+			return err
+		}
+		for _, t := range removed {
+			if err := s.deps.Repo.DeleteTrigger(ctx, t.ID); err != nil {
+				return fmt.Errorf("delete automation %q: %w", t.Name, err)
+			}
+		}
+		return s.deps.Repo.DeleteWorkflowDraftBySlug(ctx, userID, slug)
+	})
+	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to delete workflow: %w", err))
 	}
+	if s.deps.Automations != nil && len(removed) > 0 {
+		s.deps.Automations.RetireDeletedTriggers(ctx, removed)
+	}
 
-	logging.InfoContext(ctx, "Workflow deleted", "name", name, "slug", slug, "user_id", userID)
+	logging.InfoContext(ctx, "Workflow deleted", "name", name, "slug", slug, "user_id", userID, "automations", len(removed))
 
+	message := "Workflow deleted successfully"
+	if len(removed) > 0 {
+		message = fmt.Sprintf("Workflow deleted successfully, along with %d automation%s that ran it", len(removed), plural(len(removed)))
+	}
 	return connect.NewResponse(&reliantv1.DeleteWorkflowResponse{
 		Success: true,
-		Message: "Workflow deleted successfully",
+		Message: message,
 	}), nil
+}
+
+func plural(n int) string {
+	if n == 1 {
+		return ""
+	}
+	return "s"
+}
+
+// automationsOfDeletedWorkflow lists the caller's automations, in any project,
+// that run the user workflow slug and would find nothing to run once it is
+// gone. One whose project still syncs a workflow of that name keeps working
+// (it resolves to the project's), so it stays.
+func (s *Service) automationsOfDeletedWorkflow(ctx context.Context, userID, slug string) ([]*core.Trigger, error) {
+	all, err := s.deps.Repo.ListTriggers(ctx, core.TriggerFilters{UserID: userID})
+	if err != nil {
+		return nil, fmt.Errorf("list automations: %w", err)
+	}
+	shadowed := map[string]bool{}
+	var out []*core.Trigger
+	for _, t := range all {
+		if workflowref.ProjectSlug(t.Workflow) != slug {
+			continue
+		}
+		covered, ok := shadowed[t.ProjectID]
+		if !ok {
+			index, err := workflowsource.ProjectIndex(ctx, s.deps.Repo, t.ProjectID)
+			if err != nil {
+				return nil, fmt.Errorf("read project workflows: %w", err)
+			}
+			entry, lookupErr := index.Lookup(slug)
+			covered = lookupErr == nil && entry != nil
+			shadowed[t.ProjectID] = covered
+		}
+		if !covered {
+			out = append(out, t)
+		}
+	}
+	return out, nil
 }
 
 // ImportWorkflow imports a workflow from YAML into the database

@@ -11,6 +11,7 @@ import (
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
@@ -30,6 +31,18 @@ type Deps struct {
 	// always has one; without it that save answers Unavailable.
 	// forge:optional-dep
 	Router Sender
+	// Automations stops what outlives the rows of automations deleted with
+	// their workflow (their schedules, the access only they held). Without
+	// it the rows are still deleted; their schedules are left to the
+	// periodic sync.
+	// forge:optional-dep
+	Automations AutomationRetirer
+}
+
+// AutomationRetirer is the trigger service's cleanup after automations are
+// deleted from the database. Declared here, at the consumer.
+type AutomationRetirer interface {
+	RetireDeletedTriggers(ctx context.Context, deleted []*core.Trigger)
 }
 
 // Repository is the slice of db.Repository the workflow handlers use. The
@@ -49,6 +62,11 @@ type Repository interface {
 	SetWorkflowDraftHidden(ctx context.Context, id string, isHidden bool) (*db.WorkflowDraft, error)
 	SetWorkflowDraftStatus(ctx context.Context, id string, status db.WorkflowDraftStatus) (*db.WorkflowDraft, error)
 	DeleteWorkflowDraftBySlug(ctx context.Context, userID, slug string) error
+
+	// What deleting a workflow does to the automations that run it.
+	ListTriggers(ctx context.Context, f core.TriggerFilters) ([]*core.Trigger, error)
+	DeleteTrigger(ctx context.Context, id string) error
+	RunTx(ctx context.Context, f func(ctx context.Context) error) error
 
 	ListVisibilityOverrides(ctx context.Context, userID string, itemType int32) (map[string]bool, error)
 	ListHiddenItemDefaults(ctx context.Context, itemType int32) ([]string, error)

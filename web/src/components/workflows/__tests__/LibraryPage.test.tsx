@@ -271,6 +271,39 @@ describe("LibraryPage", () => {
     expect(within(builtinMenu).getByRole("menuitem", { name: "Duplicate" })).toBeInTheDocument();
   });
 
+  it("Delete lists the automations it takes with the workflow, in any project", async () => {
+    mocks.deleteWorkflow.mockResolvedValue({});
+    mocks.listTriggers.mockResolvedValue({
+      triggers: [
+        protoTrigger("t1", "my-draft", "Autopilot · PR review · pr-opened"),
+        protoTrigger("t2", "project://My Draft", "Autopilot · PR review · push"),
+        protoTrigger("t3", "triage"),
+        protoTrigger("t4", "builtin://my-draft", "Built-in one"),
+      ],
+    });
+    renderLibrary();
+    const draft = await screen.findByTestId("workflow-row-my-draft");
+    await userEvent.click(within(draft).getByRole("button", { name: "More actions for My Draft (draft, my-draft)" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: "Delete" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "Delete “My Draft”?" });
+    await waitFor(() => expect(dialog).toHaveTextContent("Also deletes its 2 automations"));
+    expect(dialog).toHaveTextContent("Autopilot · PR review · pr-opened");
+    expect(dialog).toHaveTextContent("Autopilot · PR review · push");
+    expect(dialog).not.toHaveTextContent("Automation t3");
+    expect(dialog).not.toHaveTextContent("Built-in one");
+  });
+
+  it("Delete says nothing about automations when none run the workflow", async () => {
+    renderLibrary();
+    const draft = await screen.findByTestId("workflow-row-my-draft");
+    await userEvent.click(within(draft).getByRole("button", { name: "More actions for My Draft (draft, my-draft)" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: "Delete" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "Delete “My Draft”?" });
+    expect(dialog).not.toHaveTextContent("automation");
+  });
+
   it("Delete asks in the app, naming the title, slug and source — never a native confirm", async () => {
     const nativeConfirm = vi.spyOn(window, "confirm");
     mocks.deleteWorkflow.mockResolvedValue({});

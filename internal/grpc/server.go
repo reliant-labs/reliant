@@ -470,15 +470,6 @@ func NewAPI(cfg *Config) (*API, error) {
 	if err != nil {
 		return nil, fmt.Errorf("mcp service: %w", err)
 	}
-	workflowService, err := workflowhandler.New(workflowhandler.Deps{
-		Logger: handlerLogger,
-		Config: handlerConfig,
-		Repo:   database,
-		Router: router,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("workflow service: %w", err)
-	}
 	scenarioService, err := scenario.New(scenario.Deps{
 		Logger: handlerLogger,
 		Config: handlerConfig,
@@ -677,6 +668,17 @@ func NewAPI(cfg *Config) (*API, error) {
 	triggerService, err := trigger.New(triggerDeps)
 	if err != nil {
 		return nil, fmt.Errorf("trigger service: %w", err)
+	}
+	workflowService, err := workflowhandler.New(workflowhandler.Deps{
+		Logger: handlerLogger,
+		Config: handlerConfig,
+		Repo:   database,
+		Router: router,
+		// The trigger service stops the schedules of automations deleted with a workflow.
+		Automations: triggerService,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("workflow service: %w", err)
 	}
 	inboxService, err := inbox.New(inbox.Deps{
 		Logger:  handlerLogger,

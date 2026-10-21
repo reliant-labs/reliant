@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"connectrpc.com/connect"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -366,4 +367,123 @@ func TestWorkflowEnableAndDisableAreScopedToTheCaller(t *testing.T) {
 	for _, tr := range env.storedTriggers(t) {
 		assert.True(t, tr.Enabled)
 	}
+}
+
+const hookOnlyYAML = `name: triage
+triggers:
+  - name: hook
+    webhook: {}
+    prompt: "Handle the delivery."
+entry: [a]
+nodes:
+  - id: a
+    type: approval
+    args: {title: ok}
+`
+
+// leftover is an automation of some other workflow that already holds name.
+func (e *triggerTestEnv) leftover(t *testing.T, name, workflow string) {
+	t.Helper()
+	trigger := "hook"
+	require.NoError(t, e.repo.CreateTrigger(context.Background(), &core.Trigger{
+		ID: uuid.NewString(), UserID: e.userID, ProjectID: e.projectID, Name: name,
+		Kind: core.TriggerKindWebhook, Enabled: false, Workflow: workflow, WorkflowTrigger: &trigger,
+		ActingIdentity: core.ActingIdentityOwner,
+	}))
+}
+
+func (e *triggerTestEnv) storedNames(t *testing.T) []string {
+	t.Helper()
+	var names []string
+	for _, tr := range e.storedTriggers(t) {
+		names = append(names, tr.Name)
+	}
+	return names
+}
+
+// A paused automation whose workflow was deleted is debris: it must not block
+// enabling a workflow that would take the same default name.
+func TestEnableWorkflowIsNotBlockedByABrokenLeftoverOfADeletedWorkflow(t *testing.T) {
+	env, _ := setupInboundTriggerTest(t)
+	env.saveWorkflow(t, "triage", hookOnlyYAML)
+	env.leftover(t, "triage · hook", "no-such-workflow")
+
+	resp := env.enable(t, env.enableRequest(nil))
+
+	require.True(t, resp.Enabled, "%v", resp.Results)
+	assert.Equal(t, reliantv1.WorkflowTriggerOutcome_WORKFLOW_TRIGGER_OUTCOME_ENABLED, outcomes(resp)["hook"])
+	assert.ElementsMatch(t, []string{"triage · hook", "triage (yours) · hook"}, env.storedNames(t),
+		"the leftover is untouched and the new automation is named apart from it")
+}
+
+// A live automation of another workflow holding the default name no longer
+// asks the user to invent a prefix: the new names are qualified by source.
+func TestEnableWorkflowNamesApartFromALiveAutomationOfAnotherWorkflow(t *testing.T) {
+	env, _ := setupInboundTriggerTest(t)
+	env.saveWorkflow(t, "triage", hookOnlyYAML)
+	env.saveWorkflow(t, "other", hookOnlyYAML)
+	env.leftover(t, "triage · hook", "other")
+
+	resp := env.enable(t, env.enableRequest(nil))
+
+	require.True(t, resp.Enabled, "%v", resp.Results)
+	assert.Equal(t, "triage (yours) · hook", resp.Results[0].Activation.GetName())
+}
+
+func TestActivationPrefixIsQualifiedBySourceThenNumbered(t *testing.T) {
+	svc := &Service{}
+	declared := []*reliantv1.WorkflowTrigger{{Name: "a"}, {Name: "b"}}
+	pick := func(workflow, prefix string, taken ...string) string {
+		set := map[string]bool{}
+		for _, n := range taken {
+			set[n] = true
+		}
+		return svc.activationPrefix(&reliantv1.EnableWorkflowRequest{Workflow: workflow, NamePrefix: prefix},
+			declared, map[string]*core.Trigger{}, map[string]*reliantv1.WorkflowTriggerOverride{}, set)
+	}
+
+	assert.Equal(t, "PR review", pick("builtin://pr-review", "PR review"), "a free prefix is used as given")
+	assert.Equal(t, "PR review (built-in)", pick("builtin://pr-review", "PR review", "PR review · b"))
+	assert.Equal(t, "PR review (yours)", pick("pr-review", "PR review", "PR review · a"))
+	assert.Equal(t, "PR review (2)", pick("x", "PR review", "PR review · a", "PR review (yours) · a"),
+		"once the source-qualified name is taken too, a number settles it")
+}
+
+func TestActivationPrefixLeavesAResumedActivationAndAChosenNameAlone(t *testing.T) {
+	svc := &Service{}
+	declared := []*reliantv1.WorkflowTrigger{{Name: "a"}, {Name: "b"}}
+	chosen := "My own name"
+	got := svc.activationPrefix(
+		&reliantv1.EnableWorkflowRequest{Workflow: "w", NamePrefix: "P"},
+		declared,
+		map[string]*core.Trigger{"a": {Name: "P · a"}},
+		map[string]*reliantv1.WorkflowTriggerOverride{"b": {Trigger: "b", Name: &chosen}},
+		map[string]bool{"P · a": true, "My own name": true},
+	)
+	assert.Equal(t, "P", got, "a resumed activation keeps its name and a chosen name is not rewritten")
+}
+
+// A name the caller chose for one trigger is theirs: if it is taken, say so.
+func TestEnableWorkflowStillRefusesAChosenNameThatIsTaken(t *testing.T) {
+	env, _ := setupInboundTriggerTest(t)
+	env.saveWorkflow(t, "triage", hookOnlyYAML)
+	env.leftover(t, "mine", "no-such-workflow")
+	name := "mine"
+
+	resp := env.enable(t, env.enableRequest(func(r *reliantv1.EnableWorkflowRequest) {
+		r.Overrides = []*reliantv1.WorkflowTriggerOverride{{Trigger: "hook", Name: &name}}
+	}))
+
+	assert.False(t, resp.Enabled)
+	assert.Contains(t, resp.Results[0].Message, `"mine"`)
+	assert.Equal(t, []string{"mine"}, env.storedNames(t))
+}
+
+func TestRetireDeletedTriggersDeletesTheirSchedules(t *testing.T) {
+	env := setupTriggerTest(t)
+	env.svc.RetireDeletedTriggers(env.ctx, []*core.Trigger{
+		{ID: "s1", UserID: env.userID, Kind: core.TriggerKindSchedule},
+		{ID: "w1", UserID: env.userID, Kind: core.TriggerKindWebhook},
+	})
+	assert.Equal(t, []string{"s1"}, env.backend.deleted, "only a schedule-backed trigger has a schedule to delete")
 }
