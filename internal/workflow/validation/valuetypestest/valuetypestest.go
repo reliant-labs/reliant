@@ -2,6 +2,7 @@
 // Package valuetypestest is a map-backed fake of the resolver for integration
 // input types (validation.ValueTypes, triggerspec.ValueTypes), for tests that
 // need `type: github.repository` to resolve without a catalog.
+//forge:exclude-contract: a test fake, the substitute a contract would generate; it is no boundary
 package valuetypestest
 
 import "sort"

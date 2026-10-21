@@ -120,3 +120,31 @@ func TestReconcileReportsLookupFailures(t *testing.T) {
 	require.Error(t, err)
 	assert.Empty(t, repo.written)
 }
+
+// The reconciler re-projects the scope from each activation's own params, and
+// a pass that finds the projection current writes nothing.
+func TestReconcileProjectsTheScopeFromParams(t *testing.T) {
+	name := "pr"
+	mk := func(id string, params map[string]any) *core.Trigger {
+		return &core.Trigger{ID: id, UserID: "u1", ProjectID: "p1", Workflow: "triage", WorkflowTrigger: &name,
+			Kind: core.TriggerKindIntegration, Params: params,
+			Config: json.RawMessage(`{"integration":"github","events":["pull_request.opened"]}`)}
+	}
+	repo := &projectionRepo{triggers: map[string]*core.Trigger{
+		"a": mk("a", map[string]any{"repos": []any{"acme/app"}}),
+		"b": mk("b", map[string]any{"repos": []any{"acme/web", "acme/api"}}),
+		"c": mk("c", nil),
+	}}
+	r := NewReconciler(repo, fakeWorkflows{yaml: map[string]string{"triage": scopedWorkflow}}, nil)
+
+	report, err := r.ReconcileAll(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, 3, report.Updated)
+	assert.Equal(t, []string{"acme/app"}, scopeOf(t, repo.written["a"].Config).MatchAny["repository"])
+	assert.Equal(t, []string{"acme/web", "acme/api"}, scopeOf(t, repo.written["b"].Config).MatchAny["repository"])
+	assert.Equal(t, []string{}, scopeOf(t, repo.written["c"].Config).MatchAny["repository"], "no params: a scope that matches nothing")
+
+	report, err = r.ReconcileAll(context.Background())
+	require.NoError(t, err)
+	assert.Zero(t, report.Updated, "a current projection is not rewritten")
+}

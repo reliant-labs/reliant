@@ -5,6 +5,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
+	"sort"
 	"strings"
 	"time"
 
@@ -240,7 +242,28 @@ func (in *Intake) applyFilter(ctx context.Context, expr string, trigger *core.Tr
 // everything. match: every entry must equal the event's attribute; an absent
 // attribute is a miss, so a trigger scoped to one repository can never fire
 // on an event that does not say which repository it is about.
+//
+// scope (MatchInput/MatchAny): for each scoped attribute the event's value
+// must be one of the values the activation's input holds. A scope with no
+// values matches nothing, and so does a scope whose projection is missing: an
+// activation is never wider than what it declares.
 func IntegrationEventMatches(cfg core.IntegrationConfig, eventType string, attrs map[string]string) bool {
+	ok, _ := routeIntegrationEvent(cfg, eventType, attrs)
+	return ok
+}
+
+// IntegrationScopeMiss names the scoped attribute that kept an event of a
+// type cfg listens to away from it, or "" when the event matched or never
+// reached the scope (wrong type, or a literal match failed). It exists so the
+// router can say why a silent drop happened.
+func IntegrationScopeMiss(cfg core.IntegrationConfig, eventType string, attrs map[string]string) string {
+	if ok, miss := routeIntegrationEvent(cfg, eventType, attrs); !ok {
+		return miss
+	}
+	return ""
+}
+
+func routeIntegrationEvent(cfg core.IntegrationConfig, eventType string, attrs map[string]string) (ok bool, scopeMiss string) {
 	matched := false
 	for _, want := range cfg.Events {
 		switch {
@@ -254,15 +277,26 @@ func IntegrationEventMatches(cfg core.IntegrationConfig, eventType string, attrs
 		}
 	}
 	if !matched {
-		return false
+		return false, ""
 	}
 	for key, want := range cfg.Match {
 		got, ok := attrs[key]
 		if !ok || got != want {
-			return false
+			return false, ""
 		}
 	}
-	return true
+	scoped := make([]string, 0, len(cfg.MatchInput))
+	for attr := range cfg.MatchInput {
+		scoped = append(scoped, attr)
+	}
+	sort.Strings(scoped)
+	for _, attr := range scoped {
+		got, ok := attrs[attr]
+		if !ok || !slices.Contains(cfg.MatchAny[attr], got) {
+			return false, attr
+		}
+	}
+	return true, ""
 }
 
 // EventFireWorkflowID is the fire workflow id for one recorded event. It is

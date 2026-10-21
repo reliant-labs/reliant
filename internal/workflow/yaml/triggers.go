@@ -34,7 +34,11 @@ import (
 //   - an enum may be its short name (`overlap: allow`) or its proto name
 //     (`TRIGGER_OVERLAP_POLICY_ALLOW`); it is written short;
 //   - a source with no options may be a bare key (`webhook:`); it is written
-//     `webhook: {}`.
+//     `webhook: {}`;
+//   - an integration's `match` entry may name a workflow input instead of a
+//     value: `match: {repository: {input: repos}}` is
+//     IntegrationSource.match_input (attribute -> input). The proto field is
+//     not spelled in YAML; it is written back into `match`.
 //
 // Unlike node args, unknown keys are ERRORS at every level. A typo here is
 // never harmless: a dropped `filtr:` is a trigger that fires on everything,
@@ -161,14 +165,66 @@ func unmarshalStrictMessage(node *yaml.Node, msg protoreflect.Message) error {
 		return fmt.Errorf("expected a mapping")
 	}
 	fields := msg.Descriptor().Fields()
+	isIntegration := msg.Descriptor().FullName() == integrationSourceName
 	for i := 0; i < len(node.Content); i += 2 {
 		key, val := node.Content[i].Value, node.Content[i+1]
 		fd := fields.ByName(protoreflect.Name(key))
 		if fd == nil {
 			return unknownFieldError(key, msg.Descriptor())
 		}
+		if isIntegration {
+			switch key {
+			case integrationMatchInputField:
+				return fmt.Errorf("%s: write the scope inside match: `match: {repository: {input: repos}}`", key)
+			case integrationMatchField:
+				if err := setIntegrationMatch(msg, val); err != nil {
+					return fmt.Errorf("%s: %w", key, err)
+				}
+				continue
+			}
+		}
 		if err := setStrictField(msg, fd, val); err != nil {
 			return fmt.Errorf("%s: %w", key, err)
+		}
+	}
+	return nil
+}
+
+const (
+	integrationSourceName      protoreflect.FullName = "reliant.v1.IntegrationSource"
+	integrationMatchField                            = "match"
+	integrationMatchInputField                       = "match_input"
+)
+
+// setIntegrationMatch reads an integration source's `match:` mapping. An entry
+// is an attribute and either the value it must equal or `{input: <name>}`, the
+// workflow input whose values it must be one of.
+func setIntegrationMatch(msg protoreflect.Message, node *yaml.Node) error {
+	if node.Kind == yaml.ScalarNode && node.Tag == "!!null" {
+		return nil
+	}
+	if node.Kind != yaml.MappingNode {
+		return fmt.Errorf("expected a mapping of attributes to values")
+	}
+	fields := msg.Descriptor().Fields()
+	literals := msg.Mutable(fields.ByName(integrationMatchField)).Map()
+	inputs := msg.Mutable(fields.ByName(integrationMatchInputField)).Map()
+	for i := 0; i < len(node.Content); i += 2 {
+		attr, val := node.Content[i].Value, node.Content[i+1]
+		switch val.Kind {
+		case yaml.ScalarNode:
+			literals.Set(protoreflect.ValueOfString(attr).MapKey(), protoreflect.ValueOfString(val.Value))
+		case yaml.MappingNode:
+			input := ""
+			if len(val.Content) == 2 && val.Content[0].Value == "input" && val.Content[1].Kind == yaml.ScalarNode {
+				input = val.Content[1].Value
+			}
+			if input == "" {
+				return fmt.Errorf("%q: expected a value, or {input: <workflow input name>}", attr)
+			}
+			inputs.Set(protoreflect.ValueOfString(attr).MapKey(), protoreflect.ValueOfString(input))
+		default:
+			return fmt.Errorf("%q: expected a value, or {input: <workflow input name>}, got a %s", attr, yamlKindName(val.Kind))
 		}
 	}
 	return nil
@@ -381,8 +437,20 @@ func marshalStrictField(fd protoreflect.FieldDescriptor, val protoreflect.Value)
 func marshalStrictMessage(msg protoreflect.Message) (*yaml.Node, error) {
 	m := &yaml.Node{Kind: yaml.MappingNode}
 	fields := msg.Descriptor().Fields()
+	isIntegration := msg.Descriptor().FullName() == integrationSourceName
 	for i := 0; i < fields.Len(); i++ {
 		fd := fields.Get(i)
+		if isIntegration {
+			switch fd.Name() {
+			case integrationMatchInputField:
+				continue
+			case integrationMatchField:
+				if n := marshalIntegrationMatch(msg); n != nil {
+					m.Content = append(m.Content, scalarNode(integrationMatchField, ""), n)
+				}
+				continue
+			}
+		}
 		if !msg.Has(fd) {
 			continue
 		}
@@ -398,6 +466,37 @@ func marshalStrictMessage(msg protoreflect.Message) (*yaml.Node, error) {
 		m.Style = yaml.FlowStyle
 	}
 	return m, nil
+}
+
+// marshalIntegrationMatch writes match and match_input as the one `match:`
+// mapping they are authored in; nil when both are empty.
+func marshalIntegrationMatch(msg protoreflect.Message) *yaml.Node {
+	fields := msg.Descriptor().Fields()
+	entries := map[string]string{}
+	inputs := map[string]bool{}
+	msg.Get(fields.ByName(integrationMatchField)).Map().Range(func(k protoreflect.MapKey, v protoreflect.Value) bool {
+		entries[k.String()] = v.String()
+		return true
+	})
+	msg.Get(fields.ByName(integrationMatchInputField)).Map().Range(func(k protoreflect.MapKey, v protoreflect.Value) bool {
+		entries[k.String()] = v.String()
+		inputs[k.String()] = true
+		return true
+	})
+	if len(entries) == 0 {
+		return nil
+	}
+	m := &yaml.Node{Kind: yaml.MappingNode}
+	for _, k := range sortedKeys(entries) {
+		if inputs[k] {
+			ref := &yaml.Node{Kind: yaml.MappingNode, Style: yaml.FlowStyle,
+				Content: []*yaml.Node{scalarNode("input", ""), stringNode(entries[k])}}
+			m.Content = append(m.Content, scalarNode(k, ""), ref)
+			continue
+		}
+		m.Content = append(m.Content, scalarNode(k, ""), stringNode(entries[k]))
+	}
+	return m
 }
 
 // stringNode is a scalar that always reads back as a string: a value such
