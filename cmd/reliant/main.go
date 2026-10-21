@@ -4,7 +4,7 @@ package main
 import (
 	"os"
 
-	"github.com/reliant-labs/reliant/cmd/reliant/commands"
+	"github.com/reliant-labs/reliant/cmd/reliant/cmd"
 	"github.com/reliant-labs/reliant/internal/heavyjob"
 	"github.com/reliant-labs/reliant/internal/pid1"
 )
@@ -18,7 +18,7 @@ func main() {
 	// (`reliant __heavy-slot …`); that process is the wrapper, not the CLI.
 	heavyjob.Dispatch()
 
-	if err := commands.Execute(); err != nil {
+	if err := cmd.Execute(); err != nil {
 		os.Exit(1)
 	}
 }

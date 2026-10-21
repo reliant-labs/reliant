@@ -20,7 +20,7 @@ authenticated backend gRPC (`completeClaudeOAuth` / `completeCodexOAuth`).
 Key files:
 
 - `internal/auth/oauthcallback/` — shared Go package for OAuth callback handling (used by both the daemon and `auth serve`)
-- `cmd/reliant/commands/auth_serve.go` — the `reliant auth serve` CLI command
+- `cmd/reliant/cmd/auth_serve.go` — the `reliant auth serve` CLI command
 - `web/src/lib/oauth-local.ts` — frontend helper to call the local server
 - `web/src/hooks/useOAuthAvailability.ts` — whether OAuth is available (Electron → always, web → pings health)
 - `web/src/lib/claude-oauth.ts` / `codex-oauth.ts` — flow libs that branch between daemon (Electron) and local server (web)

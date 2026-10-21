@@ -47,7 +47,7 @@ function getGatewayURL(): string {
  * The daemon derives its gateway from the server URL when none is given. For a
  * cloud host that derivation is correct (api.example.com -> gateway.example.com),
  * but for loopback it deliberately declines to guess a port and returns the
- * server URL unchanged (deriveGatewayURL, cmd/reliant/commands/connection.go).
+ * server URL unchanged (deriveGatewayURL, cmd/reliant/cmd/connection.go).
  * So on localhost an omitted gateway is not "the daemon will figure it out",
  * it is a command that always fails.
  */
@@ -108,7 +108,7 @@ function isNonProd(): boolean {
  *   RELIANT_SERVER_URL   ← VITE_API_URL || VITE_GRPC_URL
  *   RELIANT_GATEWAY_URL  ← RELIANT_CONFIG.gatewayUrl || VITE_GATEWAY_URL
  *
- * both via cmd/reliant/commands/connection.go, and they are the same two
+ * both via cmd/reliant/cmd/connection.go, and they are the same two
  * electron/src/backend-manager.js puts in the daemon's environment when it
  * spawns one itself.
  *
@@ -173,7 +173,7 @@ export function daemonStartCommandNeedsEditing(): boolean {
  *
  * The server itself contacts no backend: it binds a loopback port, opens the
  * browser, catches the redirect, and hands the code back to the tab that asked
- * (cmd/reliant/commands/auth_serve.go). The token exchange happens over the
+ * (cmd/reliant/cmd/auth_serve.go). The token exchange happens over the
  * BROWSER's authenticated connection, not here.
  *
  * ── Why it still carries an env prefix in dev ─────────────────────────

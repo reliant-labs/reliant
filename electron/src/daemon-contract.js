@@ -3,7 +3,7 @@
  * don't open a browser" startup path.
  *
  * CONFIRMED against the Go source (not a placeholder):
- *   - CLI flag:     cmd/reliant/commands/daemon.go:741
+ *   - CLI flag:     cmd/reliant/cmd/daemon.go:741
  *   - Stream value: internal/toolexec/daemonstate/state.go:58
  *
  * With --non-interactive, a daemon that has no credentials for its --server

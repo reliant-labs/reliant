@@ -473,7 +473,7 @@ jobs:
           # `exp.winarm64` is a DELVE build tag, and it is what makes the
           # windows/arm64 leg compile at all.
           #
-          # cmd/reliant registers `reliant forge` (cmd/reliant/commands/forge.go),
+          # cmd/reliant registers `reliant forge` (cmd/reliant/cmd/forge.go),
           # which pulls github.com/reliant-labs/forge/cli -> internal/cli/debug ->
           # delve/service/debugger, so the shipped backend links Delve on every
           # target. Delve only supports windows/amd64 natively; for windows/arm64

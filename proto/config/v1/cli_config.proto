@@ -35,7 +35,7 @@ message CLIConfig {
 }
 
 // CLIConnectionConfig selects the server a command talks to and the bearer it
-// presents (cmd/reliant/commands/connection.go has the precedence).
+// presents (cmd/reliant/cmd/connection.go has the precedence).
 message CLIConnectionConfig {
   // The defaults are Reliant's hosted endpoints, so a `go install` build works
   // with no flags and no environment; pointing at another server is one value.

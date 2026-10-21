@@ -87,7 +87,7 @@ func TestRecognisedEnvironments(t *testing.T) {
 }
 
 // Which variable supplies the tier (RELIANT_ENV, else NODE_ENV) is the root
-// config's business, pinned by cmd/reliant/commands TestRuntimeEnvContract.
+// config's business, pinned by cmd/reliant/cmd TestRuntimeEnvContract.
 // What runenv owns is what happens before and without that: a process that
 // never configured a tier is prod, and a test's tier does not outlive it.
 func TestUnconfiguredIsProd(t *testing.T) {

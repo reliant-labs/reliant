@@ -39762,7 +39762,7 @@
   "sources": {
     "config/v1/analytics_config.proto": "2093382e19e6c0a59f28913b76fae435017337a229b93f167599e3198207fc94",
     "config/v1/api_server_config.proto": "1ae01f909bdfee18e653cfb0c695784d9c602fba24a25100fd22fde3a0711711",
-    "config/v1/cli_config.proto": "969eac8061aac3370d808aeec0907a948f6f1c7d6c2b3bbdbf1d67830e8adf46",
+    "config/v1/cli_config.proto": "5acd17311a1d616f1f6e54ee6d9c30a9ddf6c78474fd0308e80f2db99d71a55e",
     "config/v1/config.proto": "c873c25d565a973afe746cc17710f51652517db44137e24eba21daf4b8a13c23",
     "config/v1/control_plane_config.proto": "d461d08a8932926bc6dbd8f40c84e9d259c1007b424c6b945de40196830ac1ea",
     "config/v1/daemon_config.proto": "f50c66d5ee9c77735c670ce26b18216923002fee9f455a5db8ee013a4e0cb545",
