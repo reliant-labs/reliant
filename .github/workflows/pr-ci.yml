@@ -320,11 +320,15 @@ jobs:
           echo "new/changed Go tests to repeat:"; echo "${flake_targets:-<none>}"
 
           # forge lint's scope: the files this PR changed that still exist.
-          # The whole project instead when the change moves what a lint lane
-          # judges every file by (linter config, the forge pin, dependencies),
-          # or when nothing is left to scope to (a PR that only deletes).
+          # The whole project instead when the change is linter config itself
+          # (.golangci.yml, buf.yaml), or when nothing is left to scope to (a
+          # PR that only deletes). A forge or dependency bump stays scoped: a
+          # finding it causes in an untouched file surfaces on main's
+          # whole-project lint one merge later, and lint is not allowed to
+          # cost every pin bump ~8 minutes (`go build ./...` still compiles
+          # the module against the new dependencies).
           lint_scope=""
-          if [ "${full}" = false ] && ! grep -qE '^(\.golangci\.ya?ml|forge\.yaml|go\.(mod|sum)|buf(\.gen|\.work)?\.yaml)$' <<< "${changed}"; then
+          if [ "${full}" = false ] && ! grep -qE '^(\.golangci\.ya?ml|buf(\.gen|\.work)?\.yaml)$' <<< "${changed}"; then
             while IFS= read -r f; do
               if [ -n "${f}" ] && [ -e "${f}" ]; then lint_scope="${lint_scope}${f}"$'\n'; fi
             done <<< "${changed}"
@@ -1249,8 +1253,8 @@ jobs:
       # warm one took 268s). `forge lint --scope <file>...` runs the Go
       # linters on the changed files' packages and reports the file-anchored
       # lanes' findings in the changed files only (`changes` computes the
-      # list; it is empty, meaning the whole project, when the PR moves lint
-      # config, the forge pin or dependencies). Main lints the whole project
+      # list; it is empty, meaning the whole project, when the PR changes
+      # linter config). Main lints the whole project
       # on every push, so a finding a change causes in a file it did not touch
       # is caught one merge later.
       #

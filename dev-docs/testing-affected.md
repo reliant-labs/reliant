@@ -207,8 +207,8 @@ waits for. Nothing a PR skips is deleted; it runs on the next push to main.
 - **Other jobs**: `Lint (forge)` (`forge lint --no-fix` at the pinned forge;
   blocks). On a PR it is scoped to the changed files (`forge lint --scope
   <file>...`, after `go build ./...` so every package still compiles); the
-  whole project when the PR moves lint config, the forge pin or dependencies,
-  and always on main. Web lint/typecheck/build, vitest (`Web (vitest K/N)`,
+  whole project when the PR changes linter config (`.golangci.yml`,
+  `buf.yaml`), and always on main. Web lint/typecheck/build, vitest (`Web (vitest K/N)`,
   one runner per 150 selected files, up to four), Playwright in two shards,
   the e2e stories, and `Generated code is up to date` (`make generate-all`
   drift; on main also `forge generate is a no-op`, the forge-generate lane
