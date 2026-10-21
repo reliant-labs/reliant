@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 )
 
 // This is forge's worktree policy (forge/internal/storage/worktrees.go,
@@ -75,8 +76,17 @@ const maxCompareBytes int64 = 64 << 20
 type dataWalk struct {
 	checkout string
 	nested   []string
-	source   string // "" when the repository has no main working tree
-	out      []string
+	// source finds the source checkout ("" when there is none). It is asked
+	// only when a file needs comparing, and once: most walks never need it,
+	// and every git process a pass starts is budgeted.
+	source func() string
+	out    []string
+}
+
+// newDataWalk returns a walk of checkout whose source checkout is looked up
+// on first use.
+func newDataWalk(ctx context.Context, checkout string, nested []string) *dataWalk {
+	return &dataWalk{checkout: checkout, nested: nested, source: sync.OnceValue(func() string { return sourceCheckout(ctx, checkout) })}
 }
 
 // visit judges one ignored path. git collapses a directory holding only
@@ -129,15 +139,19 @@ func (d *dataWalk) visit(rel string) {
 // back into this worktree, or into another one being removed) and must not be
 // this very file reached another way.
 func (d *dataWalk) copyInSource(rel, full string, info os.FileInfo) bool {
-	if d.source == "" || info.Size() > maxCompareBytes {
+	if info.Size() > maxCompareBytes || d.source == nil {
 		return false
 	}
-	src := filepath.Join(d.source, filepath.FromSlash(rel))
+	source := d.source()
+	if source == "" {
+		return false
+	}
+	src := filepath.Join(source, filepath.FromSlash(rel))
 	si, err := os.Lstat(src)
 	if err != nil || !si.Mode().IsRegular() || si.Size() != info.Size() || os.SameFile(si, info) {
 		return false
 	}
-	if !within(d.source, src) || within(d.checkout, src) {
+	if !within(source, src) || within(d.checkout, src) {
 		return false
 	}
 	return sameBytes(full, src)

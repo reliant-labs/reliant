@@ -688,7 +688,7 @@ func dataHold(ctx context.Context, checkout string, nested []string) verdict {
 	if err != nil {
 		return verdict{ReasonUnverified, "could not list ignored files: " + err.Error()}
 	}
-	walk := dataWalk{checkout: checkout, nested: nested, source: sourceCheckout(ctx, checkout)}
+	walk := newDataWalk(ctx, checkout, nested)
 	for _, e := range strings.Split(out, "\x00") {
 		if e != "" {
 			walk.visit(e)
@@ -702,10 +702,10 @@ func dataHold(ctx context.Context, checkout string, nested []string) verdict {
 		shown = shown[:3]
 	}
 	detail := "ignored files that are not rebuildable: " + strings.Join(shown, ", ")
-	if walk.source != "" {
+	if source := walk.source(); source != "" {
 		// Say how to free it: these exist only here, and a copy identical to
 		// the source checkout's would not hold it.
-		detail += " (not in " + walk.source + ", or different there)"
+		detail += " (not in " + source + ", or different there)"
 	}
 	return verdict{ReasonData, detail}
 }

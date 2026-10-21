@@ -98,7 +98,7 @@ func TestCopyInSource_RefusesPathsThatLeaveTheSource(t *testing.T) {
 		t.Fatal(err)
 	}
 	write(t, filepath.Join(checkout, "away", "dev.yaml"), "token\n")
-	d := dataWalk{checkout: checkout, source: source}
+	d := dataWalk{checkout: checkout, source: func() string { return source }}
 	for rel, want := range map[string]bool{
 		"plain/dev.yaml":   true,  // a separate file in the source
 		"secrets/dev.yaml": false, // the source path is this very file
