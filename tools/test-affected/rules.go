@@ -16,9 +16,12 @@ const (
 	// laneForgeGen is not a test runner: it runs the pinned `forge generate`
 	// and fails if that changes anything (make forge-generate-check).
 	laneForgeGen lane = "forge-generate"
+	// laneDocGen is not a test runner either: it runs every docs generator
+	// and fails if that changes anything (make docs-generate-check).
+	laneDocGen lane = "docs-generate"
 )
 
-var allLanes = []lane{laneGo, laneWeb, laneElectron, laneForgeGen}
+var allLanes = []lane{laneGo, laneWeb, laneElectron, laneForgeGen, laneDocGen}
 
 // forgeInputs are the paths `forge generate` reads (protos, migrations,
 // contract.go interfaces, package directives in doc.go, handler packages, the
@@ -40,6 +43,47 @@ var forgeInputs = []string{
 
 func isForgeInput(p string) bool {
 	for _, pat := range forgeInputs {
+		if matchGlob(pat, p) {
+			return true
+		}
+	}
+	return false
+}
+
+// docGenPaths are what the docs generators (the Makefile's DOCGEN_TARGETS:
+// tools/docgen and scripts/generate-mintlify-reference.py) read or write
+// other than compiled Go: their recipes' arguments and the paths their sources
+// name. A change to one runs the docs-generate lane: a hand edit of an output
+// is drift too (reliant #1228 edited SKILL.md; regenerating reverted it).
+//
+// The Go they compile is not listed: Classify derives it from the graph (the
+// build deps of every tools/docgen package, embedded files included), and a
+// .proto through the gen/ package it regenerates.
+// TestDocGenTargetsCoverEveryDocsGenerator checks this list against the
+// Makefile recipes and the generators' sources.
+//
+// Like forgeInputs, these are not rules: they claim nothing for the test lanes.
+var docGenPaths = []string{
+	// The generators, and the module they build against: cli.md documents
+	// forge's whole command tree, so a forge bump changes it.
+	"tools/docgen/**", "scripts/generate-mintlify-reference.py", "go.mod", "go.sum",
+	// Inputs read at run time.
+	"config/shortcuts.yaml",                    // generate-shortcuts
+	"internal/workflow/scenario/types.go",      // generate-scenario-schema parses it
+	"internal/workflow/builtin/presets/*.yaml", // generate-presets
+	"docs/data/releases/**",                    // generate-changelog
+	// Outputs (generated/docs-source/** is also read: by the assembler and the
+	// Mintlify conversion).
+	"generated/docs-source/**",
+	"docs/reference/*.mdx",
+	"docs/changelog.mdx",
+	"web/src/store/shortcutsData.generated.ts",
+	"internal/workflow/runtime/schema/field_descriptions.go",
+	"internal/skills/catalog/builtin/workflow-builder/SKILL.md",
+}
+
+func isDocGenPath(p string) bool {
+	for _, pat := range docGenPaths {
 		if matchGlob(pat, p) {
 			return true
 		}

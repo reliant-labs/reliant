@@ -21,6 +21,7 @@ It is the first thing to run before pushing. It does not replace the full lane
 | web | `npx vitest run <files>` in `web/` | every vitest file that imports a changed module, transitively |
 | electron | `npm test` in `electron/` | any change under `electron/`, or a changed file an electron test names |
 | forge-generate | `make forge-generate-check`, first: forge.yaml's pinned `forge generate`, failing (and naming each file) if it changed anything | a change to something forge reads or writes: `proto/**`, `db/**`, a `contract.go` or `doc.go`, `internal/handlers/**`, `*_gen.go`, `gen/**`, `deploy/**`, `forge.yaml`, `go.mod`/`go.sum`, `buf.yaml`/`buf.gen.yaml` (`forgeInputs` in `rules.go`) |
+| docs-generate | `make docs-generate-check`, second (in a heavy slot): every docs generator (the Makefile's `DOCGEN_TARGETS`), failing (and naming each file) if it changed anything | a change to something a docs generator reads or writes (below) |
 
 The forge-generate lane is CI's **forge generate is a no-op** check, run
 locally. CI runs that check on main only (it alone cost a PR 110-160s), so
@@ -30,6 +31,35 @@ It leaves what it regenerated in your tree, so the fix is to commit those
 files. It judges only what generate changes, not whether the tree is clean, so
 your uncommitted edits are fine; do not edit files while it runs. Its blind
 spot is a `//forge:` directive in a Go file other than `doc.go`.
+
+The docs-generate lane is the docs half of CI's **Generated code is up to
+date** job, run locally: that job runs the same `make docs-generate-check`, and
+`DOCGEN_TARGETS` in the Makefile is the one list of docs generators (every
+target that runs a `tools/docgen` program or
+`scripts/generate-mintlify-reference.py`). It exists because a hand edit to a
+generated doc passed every local check: #1228 edited the generated
+workflow-builder `SKILL.md`, the next regeneration reverted it, and #1230 had to
+move the text into `tools/docgen/assembler`. Like forge-generate, it judges only
+what regenerating changes and leaves the result in your tree: commit it, or, if
+it reverted an edit of yours, put the text in the generator's source. What
+selects it (`docGenInput` in `plan.go`):
+
+- **Go a generator compiles**: code (or a `go:embed`ded file) of any package
+  in the build deps of a `tools/docgen/*` package, taken from the same
+  `go list` graph as the Go lane. `tools/docgen/cli` documents the whole
+  command tree, so this is most of the module's non-test code. A `.proto`
+  counts through the `gen/` package it regenerates. Test files and
+  build-tagged files do not.
+- **`docGenPaths` in `rules.go`**: the generators themselves
+  (`tools/docgen/**`, the Mintlify script), `go.mod`/`go.sum`, the files they
+  read at run time (`config/shortcuts.yaml`, the scenario `types.go`, the
+  preset YAMLs, `docs/data/releases/**`) and every output
+  (`generated/docs-source/**`, `docs/reference/*.mdx`, `docs/changelog.mdx`,
+  `shortcutsData.generated.ts`, `field_descriptions.go`, the workflow-builder
+  `SKILL.md`). `TestDocGenTargetsCoverEveryDocsGenerator` checks the list
+  against the Makefile recipes and the generators' own sources, and checks
+  that `DOCGEN_TARGETS` names every docs generator and that CI runs
+  `make docs-generate-check` instead of naming targets itself.
 
 Knobs (environment): `TEST_BASE=<rev>` moves the diff base (a stacked branch),
 `TEST_FULL=1` runs every lane in full, `LANES=go,web` picks lanes. For other
@@ -57,7 +87,7 @@ rule claims and no Go package owns runs **everything** (fail-safe).
 | `web/e2e/**` | nothing (Playwright is separate) |
 | `electron/**` | the electron lane |
 | `docs/**`, `**/*.md`, `.github/**`, `research/**`, lint config | nothing, unless a test names the file |
-| `go.mod`, `go.sum`, `tools/tools.go` | **Go: full** |
+| `go.mod`, `go.sum`, `tools/tools.go` | **Go: full** (`go.mod`/`go.sum` also run forge-generate and docs-generate) |
 | `package.json`, lockfiles at the root | **web and electron: full** |
 | `web/package.json`, `vite.config.ts`, `tsconfig*.json`, `tailwind`/`postcss` config, `web/src/test/setup.ts` | **web: full** |
 | `Makefile`, `buf*.yaml` | **everything: full** |
@@ -216,7 +246,8 @@ waits for. Nothing a PR skips is deleted; it runs on the next push to main.
   `forge lint` locally before pushing Go or proto changes. Web
   lint/typecheck/build, vitest (`Web (vitest K/N)`, one runner per 150
   selected files, up to four), Playwright (one runner), the e2e stories, and
-  `Generated code is up to date` (`make generate-all` drift; on main also
+  `Generated code is up to date` (`make docs-generate-check`, the
+  docs-generate lane above, then `make generate-all` drift; on main also
   `forge generate is a no-op`, the forge-generate lane above).
 - **license-gate and Pin Drift** run on a PR only when it touches a dependency
   manifest, a lockfile, the pin or their own scripts; on main, always.

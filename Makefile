@@ -79,7 +79,7 @@ NC := \033[0m # No Color
 MINTLIFY_DOCS_DIR := docs
 MINTLIFY_PORT ?= 3000
 
-.PHONY: all build build-all clean test test-short test-affected test-affected-plan test-race test-coverage test-ci test-e2e replay-fixtures freeze-replay-fixtures deps fmt vet lint security help generate generate-cli generate-tools-ref generate-shortcuts generate-nodes generate-types generate-presets generate-workflow-builder-skill generate-changelog generate-mintlify-reference docs docs-build mint changelog changelog-draft postgres-up postgres-down generate-yaml-bindings generate-manifest-schema generate-integrations build-api-server build-temporal-worker build-tools-daemon build-services docker-build pin-forge pin-drift pin-ancestry forge-generate-check release-rc release-patch release-minor release-major release-tag release-tag-dry-run check-release-tags
+.PHONY: all build build-all clean test test-short test-affected test-affected-plan test-race test-coverage test-ci test-e2e replay-fixtures freeze-replay-fixtures deps fmt vet lint security help generate generate-cli generate-tools-ref generate-shortcuts generate-nodes generate-types generate-presets generate-workflow-builder-skill generate-changelog generate-mintlify-reference docs docs-build mint changelog changelog-draft postgres-up postgres-down generate-yaml-bindings generate-manifest-schema generate-integrations build-api-server build-temporal-worker build-tools-daemon build-services docker-build pin-forge pin-drift pin-ancestry forge-generate-check docs-generate-check release-rc release-patch release-minor release-major release-tag release-tag-dry-run check-release-tags
 
 # Default target
 all: deps fmt vet test build
@@ -210,7 +210,7 @@ test:
 test-short:
 	$(GOTEST) -short -timeout 60s $(or $(PKGS),./...)
 
-## test-affected: Run ONLY the tests your diff can reach (Go -short, vitest, electron), diffed against the merge-base with origin/main
+## test-affected: Run ONLY the tests your diff can reach (Go -short, vitest, electron) and the codegen checks it can affect (forge generate, the docs generators), diffed against the merge-base with origin/main
 # The first thing to run before pushing. Reads the diff (committed, staged,
 # unstaged, untracked), maps each path to the Go packages and their reverse
 # dependencies, the vitest files that import it, and the electron tests, runs
@@ -546,9 +546,29 @@ CONFIG_DIR=config
 WEB_SRC_DIR=web/src
 CHANGELOG_DIR=$(MINTLIFY_DOCS_DIR)/data/releases
 
+# DOCGEN_TARGETS are the docs generators: every target that runs a
+# tools/docgen program or the Mintlify conversion, in dependency order (the
+# assembler and the Mintlify conversion read what the reference generators
+# write). It is the ONE list: `generate` runs it, `docs-generate-check` checks
+# it, and so do CI's "Generated code is up to date" job and `make
+# test-affected`'s docs-generate lane. tools/test-affected's
+# TestDocGenTargetsCoverEveryDocsGenerator fails when a docs generator is
+# missing from it, or when a path one reads or writes is not a docs-generate
+# input.
+DOCGEN_TARGETS := generate-schema generate-scenario-schema generate-refcheck generate-cel-reference generate-cli generate-tools-ref generate-shortcuts generate-nodes generate-types generate-models generate-presets generate-workflow-builder-skill generate-changelog generate-mintlify-reference
+
 ## generate: Generate Go protobuf, docs, presets and skills (generate-all minus the reliant TS protobufs)
-generate: generate-yaml-bindings generate-tool-catalog generate-manifest-schema generate-integrations generate-schema generate-scenario-schema generate-refcheck generate-cel-reference generate-cli generate-tools-ref generate-shortcuts generate-nodes generate-types generate-models generate-presets generate-workflow-builder-skill generate-changelog generate-mintlify-reference
+generate: generate-yaml-bindings generate-tool-catalog generate-manifest-schema generate-integrations $(DOCGEN_TARGETS)
 	@echo "$(GREEN)✅ All generated files up to date$(NC)"
+
+## docs-generate-check: Run every docs generator (DOCGEN_TARGETS) and fail, naming each file, if it changes anything (CI's "Generated code is up to date" job runs it)
+# It judges only what the generators change, so it runs on a tree with
+# uncommitted edits too, and it leaves what it regenerated in the tree: commit
+# that, or, if it reverted a hand edit, move the edit into the generator.
+# `make test-affected` runs it when the diff touches a docs generator's input
+# or output.
+docs-generate-check:
+	@MAKE='$(MAKE)' ./scripts/check-docs-generate.sh $(DOCS_CHECK_FLAGS) $(DOCGEN_TARGETS)
 
 ## generate-schema: Generate workflow schema reference from proto types
 generate-schema:

@@ -72,7 +72,7 @@ func main() {
 	baseFlag := fs.String("base", "", "base commit-ish (default: the merge-base with origin/main, or $TEST_BASE)")
 	asJSON := fs.Bool("json", false, "print the plan as JSON instead of the table")
 	full := fs.Bool("full", false, "run everything (also TEST_FULL=1)")
-	lanes := fs.String("lanes", "go,web,electron,forge-generate", "comma-separated lanes to consider")
+	lanes := fs.String("lanes", "go,web,electron,forge-generate,docs-generate", "comma-separated lanes to consider")
 	files := fs.String("files", "", "comma-separated paths (or @file, one per line) to treat as the change set instead of the git diff (what-if)")
 	dry := fs.Bool("dry-run", false, "with run: print the commands instead of executing them")
 	gotestP := fs.Int("p", 0, "go test -p (default: the machine's parallelism)")
@@ -185,7 +185,7 @@ func plan(ctx context.Context, root, baseFlag string, forceFull bool, whatIf []s
 
 func failSafe(base, head, why string) *Plan {
 	lf := LaneFull{Full: true, Reasons: []string{why}}
-	return &Plan{Base: base, Head: head, Go: GoPlan{LaneFull: lf}, Web: WebPlan{LaneFull: lf}, Electron: ElectronPlan{LaneFull: lf}, ForgeGen: ForgeGenPlan{LaneFull: lf}}
+	return &Plan{Base: base, Head: head, Go: GoPlan{LaneFull: lf}, Web: WebPlan{LaneFull: lf}, Electron: ElectronPlan{LaneFull: lf}, ForgeGen: ForgeGenPlan{LaneFull: lf}, DocGen: DocGenPlan{LaneFull: lf}}
 }
 
 func firstLine(s string) string {
@@ -380,6 +380,7 @@ func printTable(w io.Writer, pl *Plan, enabled map[lane]bool) error {
 		{laneWeb, pl.Web.LaneFull, fmt.Sprintf("%d vitest file(s)", len(pl.Web.Tests)), pl.Web.Tests, pl.Web.Why},
 		{laneElectron, pl.Electron.LaneFull, "electron tests", nil, nil},
 		{laneForgeGen, pl.ForgeGen.LaneFull, "forge generate", nil, nil},
+		{laneDocGen, pl.DocGen.LaneFull, "docs generators", nil, nil},
 	}
 	for _, lp := range lanePlans {
 		if !enabled[lp.l] {
@@ -395,7 +396,7 @@ func printTable(w io.Writer, pl *Plan, enabled map[lane]bool) error {
 				}
 				p.f("  - %s\n", r)
 			}
-		case len(lp.list) == 0 && (lp.l == laneElectron || lp.l == laneForgeGen):
+		case len(lp.list) == 0 && (lp.l == laneElectron || lp.l == laneForgeGen || lp.l == laneDocGen):
 			p.f("\n[%s] skip: nothing it reads changed\n", lp.l)
 		case len(lp.list) == 0:
 			p.f("\n[%s] skip: no test reaches a changed file\n", lp.l)
@@ -451,6 +452,11 @@ func (r *runner) steps(pl *Plan, enabled map[lane]bool) []step {
 	// writes what it regenerates into the tree, naming every file it changed.
 	if enabled[laneForgeGen] && pl.ForgeGen.Full {
 		out = append(out, step{name: "forge generate is a no-op", dir: r.root, argv: []string{"make", "--no-print-directory", "forge-generate-check"}})
+	}
+	// Likewise: the docs generators write into the tree (one of them a Go
+	// file). They compile most of the module, so the step takes a heavy slot.
+	if enabled[laneDocGen] && pl.DocGen.Full {
+		out = append(out, step{name: "docs generators are a no-op", dir: r.root, argv: r.heavy([]string{"make", "--no-print-directory", "docs-generate-check"})})
 	}
 	if enabled[laneGo] {
 		out = append(out, r.goSteps(pl)...)

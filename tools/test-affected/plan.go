@@ -60,6 +60,12 @@ type ForgeGenPlan struct {
 	LaneFull
 }
 
+// DocGenPlan is the docs-generate lane (all or nothing): every docs
+// generator (the Makefile's DOCGEN_TARGETS) must leave the tree as it found it.
+type DocGenPlan struct {
+	LaneFull
+}
+
 // Plan is the whole decision.
 type Plan struct {
 	Base     string       `json:"base"`
@@ -69,6 +75,7 @@ type Plan struct {
 	Web      WebPlan      `json:"web"`
 	Electron ElectronPlan `json:"electron"`
 	ForgeGen ForgeGenPlan `json:"forge_generate"`
+	DocGen   DocGenPlan   `json:"docs_generate"`
 }
 
 type reasons struct {
@@ -113,6 +120,10 @@ type classifier struct {
 	dbFan    bool
 	dbSel    *reasons // package selected only because a migration changed
 
+	// docGenDeps maps every module package a docs generator compiles to the
+	// first generator (tools/docgen/<name>) that does.
+	docGenDeps map[string]string
+
 	web       *reasons // web test file (relative to web/) -> why
 	webTouch  bool     // a non-test web module changed
 	elecReads []string // why the electron lane runs, from tests naming a changed file
@@ -125,7 +136,8 @@ func Classify(changes []Change, g *Graph) *Plan {
 		pl:   &Plan{},
 		full: map[lane][]string{},
 		code: newReasons(), embed: newReasons(), testOnly: newReasons(), dbSel: newReasons(),
-		web: newReasons(),
+		web:        newReasons(),
+		docGenDeps: docGenDeps(g),
 	}
 	for _, ch := range changes {
 		c.attribute(ch)
@@ -134,6 +146,7 @@ func Classify(changes []Change, g *Graph) *Plan {
 	c.selectWeb()
 	c.selectElectron()
 	c.pl.ForgeGen.LaneFull = laneFull(c.full[laneForgeGen])
+	c.pl.DocGen.LaneFull = laneFull(c.full[laneDocGen])
 	return c.pl
 }
 
@@ -169,6 +182,10 @@ func (c *classifier) attribute(ch Change) {
 		rep.Rules = append(rep.Rules, "forge-input")
 		c.full[laneForgeGen] = append(c.full[laneForgeGen], ch.Path+": forge generate reads or writes it")
 	}
+	if why, ok := c.docGenInput(ch); ok {
+		rep.Rules = append(rep.Rules, "docgen-input")
+		c.full[laneDocGen] = append(c.full[laneDocGen], ch.Path+": "+why)
+	}
 	if len(matched) == 0 && !owned {
 		why := fmt.Sprintf("%s: claimed by no rule and no Go package (fail-safe)", ch.Path)
 		for _, l := range allLanes {
@@ -190,6 +207,59 @@ func (c *classifier) attribute(ch Change) {
 		}
 	}
 	c.pl.Files = append(c.pl.Files, rep)
+}
+
+// docGenDir is where the docs generators live: every package under it is one.
+const docGenDir = "tools/docgen/"
+
+// docGenDeps is the union of the build deps of every docs generator package.
+func docGenDeps(g *Graph) map[string]string {
+	deps := map[string]string{}
+	for _, dir := range sortedKeys(g.DirPkg) {
+		if !strings.HasPrefix(dir+"/", docGenDir) {
+			continue
+		}
+		gen := g.DirPkg[dir]
+		for _, p := range sortedKeys(g.BuildDeps[gen]) {
+			if _, ok := deps[p]; !ok {
+				deps[p] = dir
+			}
+		}
+	}
+	return deps
+}
+
+// docGenInput reports whether a docs generator reads or writes the file, and
+// why: a path in docGenPaths, built code (or an embedded file) of a package a
+// generator compiles, or a .proto whose generated package one compiles.
+func (c *classifier) docGenInput(ch Change) (string, bool) {
+	if isDocGenPath(ch.Path) {
+		return "a docs generator reads or writes it", true
+	}
+	compiled := func(pkg string) (string, bool) {
+		gen, ok := c.docGenDeps[pkg]
+		if !ok {
+			return "", false
+		}
+		return fmt.Sprintf("%s compiles %s", gen, rel(c.g.Module, pkg)), true
+	}
+	if fi, ok := c.g.Files[ch.Path]; ok {
+		if fi.Kind != KindCode {
+			return "", false // a test or a build-tagged file is not in a generator's build
+		}
+		return compiled(fi.Pkg)
+	}
+	if pkg, ok := protoToGen(c.g, ch.Path); ok {
+		return compiled(pkg)
+	}
+	// A Go file the graph no longer lists (deleted or renamed) was code of the
+	// package owning its directory.
+	if strings.HasSuffix(ch.Path, ".go") && !strings.HasSuffix(ch.Path, "_test.go") {
+		if pkg, ok := ownerByDir(c.g, ch.Path); ok {
+			return compiled(pkg)
+		}
+	}
+	return "", false
 }
 
 // attributeToPackage maps a file to the Go package that owns it and records

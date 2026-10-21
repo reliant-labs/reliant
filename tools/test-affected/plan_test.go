@@ -16,17 +16,20 @@ const mod = "github.com/reliant-labs/reliant"
 //	internal/db     embeds db/migrations (not in the dir): DB-backed tests
 //	internal/guard  walks every Go file
 //	internal/deploy reads deploy/kcl/main.k
+//	tools/docgen/cli a docs generator: compiles cmd/app (so mid and leaf),
+//	                 internal/fixture (and its embedded data) and gen/reliant/v1
 func testGraph() *Graph {
 	pkg := func(n string) string { return mod + "/" + n }
 	g := &Graph{
-		Module:   mod,
-		DirPkg:   map[string]string{},
-		Files:    map[string]FileInfo{},
-		HasEmbed: map[string]bool{},
-		TestDeps: map[string]map[string]bool{},
-		Readers:  map[string][]string{},
-		Walkers:  map[string]bool{},
-		DBTests:  map[string]bool{},
+		Module:    mod,
+		DirPkg:    map[string]string{},
+		Files:     map[string]FileInfo{},
+		HasEmbed:  map[string]bool{},
+		TestDeps:  map[string]map[string]bool{},
+		Readers:   map[string][]string{},
+		Walkers:   map[string]bool{},
+		DBTests:   map[string]bool{},
+		BuildDeps: map[string]map[string]bool{},
 	}
 	for _, n := range []string{"internal/leaf", "internal/mid", "cmd/app", "internal/other", "internal/db", "internal/guard", "internal/deploy", "gen/reliant/v1", "internal/fixture"} {
 		g.DirPkg[n] = pkg(n)
@@ -52,6 +55,13 @@ func testGraph() *Graph {
 	dep("internal/deploy")
 	dep("internal/fixture")
 	dep("gen/reliant/v1")
+	// A generator has no tests: BuildDeps only, so it selects no Go package.
+	g.DirPkg["tools/docgen/cli"] = pkg("tools/docgen/cli")
+	g.Files["tools/docgen/cli/main.go"] = FileInfo{Pkg: pkg("tools/docgen/cli"), Kind: KindCode}
+	g.BuildDeps[pkg("tools/docgen/cli")] = map[string]bool{}
+	for _, d := range []string{"tools/docgen/cli", "cmd/app", "internal/mid", "internal/leaf", "internal/fixture", "gen/reliant/v1"} {
+		g.BuildDeps[pkg("tools/docgen/cli")][pkg(d)] = true
+	}
 	g.DBTests[pkg("internal/db")] = true
 	g.Walkers[pkg("internal/guard")] = true
 	g.Readers[pkg("internal/deploy")] = []string{"deploy/kcl/main.k"}
@@ -191,8 +201,10 @@ func TestPinsAndConfigForceFull(t *testing.T) {
 		path  string
 		lanes []lane
 	}{
-		{"go.mod", []lane{laneGo, laneForgeGen}},
-		{"go.sum", []lane{laneGo, laneForgeGen}},
+		// The docs generators build against go.mod's pins too (cli.md
+		// documents forge's command tree).
+		{"go.mod", []lane{laneGo, laneForgeGen, laneDocGen}},
+		{"go.sum", []lane{laneGo, laneForgeGen, laneDocGen}},
 		{"Makefile", allLanes},
 		// The forge pin and forge's own config reach Go and codegen, never a
 		// vitest file or electron: a forge bump must not run the whole web lane.
@@ -217,6 +229,8 @@ func TestPinsAndConfigForceFull(t *testing.T) {
 				got = pl.Electron.Full
 			case laneForgeGen:
 				got = pl.ForgeGen.Full
+			case laneDocGen:
+				got = pl.DocGen.Full
 			}
 			if got != want {
 				t.Errorf("%s: lane %s full = %v, want %v", tc.path, l, got, want)
@@ -227,8 +241,8 @@ func TestPinsAndConfigForceFull(t *testing.T) {
 
 func TestUnclaimedPathFailsSafe(t *testing.T) {
 	pl := classify("some-new-top-level-thing/x.dat")
-	if !pl.Go.Full || !pl.Web.Full || !pl.Electron.Full || !pl.ForgeGen.Full {
-		t.Fatalf("a path nothing claims must run everything: go=%v web=%v electron=%v forge-generate=%v", pl.Go.Full, pl.Web.Full, pl.Electron.Full, pl.ForgeGen.Full)
+	if !pl.Go.Full || !pl.Web.Full || !pl.Electron.Full || !pl.ForgeGen.Full || !pl.DocGen.Full {
+		t.Fatalf("a path nothing claims must run everything: go=%v web=%v electron=%v forge-generate=%v docs-generate=%v", pl.Go.Full, pl.Web.Full, pl.Electron.Full, pl.ForgeGen.Full, pl.DocGen.Full)
 	}
 	if !strings.Contains(strings.Join(pl.Go.Reasons, " "), "some-new-top-level-thing/x.dat") {
 		t.Fatalf("the reason must name the path: %v", pl.Go.Reasons)
@@ -272,6 +286,67 @@ func TestForgeInputClaimsNothingForTheTestLanes(t *testing.T) {
 	pl := classify("deploy/observability/x.json")
 	if pl.Go.Full || pl.Web.Full || pl.Electron.Full {
 		t.Fatalf("a forge input must not widen the test lanes: go=%v web=%v electron=%v", pl.Go.Full, pl.Web.Full, pl.Electron.Full)
+	}
+}
+
+// The hand edit #1228 made: SKILL.md is generated (tools/docgen/assembler), so
+// editing it must run the docs check, which regenerates it and fails.
+func TestHandEditedSkillMDRunsTheDocsCheck(t *testing.T) {
+	const skill = "internal/skills/catalog/builtin/workflow-builder/SKILL.md"
+	pl := classify(skill)
+	if !pl.DocGen.Full {
+		t.Fatalf("%s is a docs generator's output: the docs-generate lane must run", skill)
+	}
+	if !strings.Contains(strings.Join(pl.DocGen.Reasons, " "), skill) {
+		t.Fatalf("the reason must name the path: %v", pl.DocGen.Reasons)
+	}
+	if pl.Go.Full || pl.Web.Full || pl.Electron.Full || pl.ForgeGen.Full {
+		t.Fatalf("a docs output must not widen the other lanes: go=%v web=%v electron=%v forge-generate=%v", pl.Go.Full, pl.Web.Full, pl.Electron.Full, pl.ForgeGen.Full)
+	}
+}
+
+func TestUnrelatedWebChangeSkipsTheDocsCheck(t *testing.T) {
+	for _, p := range []string{"web/src/lib/leaf.ts", "web/src/lib/__tests__/leaf.test.ts", "web/e2e/observability.spec.ts"} {
+		if pl := classify(p); pl.DocGen.Full {
+			t.Errorf("%s reaches no docs generator: docs-generate must not run (%v)", p, pl.DocGen.Reasons)
+		}
+	}
+}
+
+func TestDocGenInputsRunTheDocsCheck(t *testing.T) {
+	for _, tc := range []struct{ path, why string }{
+		{"tools/docgen/cli/main.go", "a docs generator reads or writes it"},
+		{"generated/docs-source/reference/cli.md", "a docs generator reads or writes it"},
+		{"docs/reference/cli.mdx", "a docs generator reads or writes it"},
+		{"docs/changelog.mdx", "a docs generator reads or writes it"},
+		{"docs/data/releases/v1.yaml", "a docs generator reads or writes it"},
+		{"config/shortcuts.yaml", "a docs generator reads or writes it"},
+		{"web/src/store/shortcutsData.generated.ts", "a docs generator reads or writes it"},
+		{"scripts/generate-mintlify-reference.py", "a docs generator reads or writes it"},
+		// Compiled into a generator, directly or transitively, or embedded by
+		// a package that is.
+		{"internal/leaf/leaf.go", "tools/docgen/cli compiles internal/leaf"},
+		{"internal/fixture/data/x.json", "tools/docgen/cli compiles internal/fixture"},
+		// A proto, through the gen/ package it regenerates.
+		{"proto/reliant/v1/chat.proto", "tools/docgen/cli compiles gen/reliant/v1"},
+		// A Go file the graph no longer lists, in a compiled package.
+		{"internal/mid/gone.go", "tools/docgen/cli compiles internal/mid"},
+	} {
+		pl := classify(tc.path)
+		if !pl.DocGen.Full {
+			t.Errorf("%s: the docs-generate lane must run", tc.path)
+			continue
+		}
+		if want := tc.path + ": " + tc.why; !slices.Contains(pl.DocGen.Reasons, want) {
+			t.Errorf("%s: reasons %v, want %q", tc.path, pl.DocGen.Reasons, want)
+		}
+	}
+	// Not in any generator's build: another package, a test file, a
+	// build-tagged file, docs prose.
+	for _, p := range []string{"internal/other/other.go", "internal/leaf/leaf_test.go", "internal/leaf/live_test.go", "docs/automations/overview.mdx", ".github/workflows/pr-ci.yml"} {
+		if pl := classify(p); pl.DocGen.Full {
+			t.Errorf("%s reaches no docs generator: docs-generate must not run (%v)", p, pl.DocGen.Reasons)
+		}
 	}
 }
 
@@ -528,9 +603,27 @@ func TestRunnerRunsTheForgeGenerateCheckFirst(t *testing.T) {
 	}
 }
 
+func TestRunnerRunsTheDocsCheckAfterForgeAndBeforeTests(t *testing.T) {
+	pl := classify("internal/vault/contract.go", "internal/leaf/leaf.go")
+	r := &runner{root: "/repo", slot: []string{"forge", "slot", "run", "--class", "heavy", "--"}}
+	var got []string
+	for _, s := range r.steps(pl, laneSet("go,web,electron,forge-generate,docs-generate")) {
+		got = append(got, strings.Join(s.argv, " "))
+	}
+	if len(got) < 3 || got[0] != "make --no-print-directory forge-generate-check" ||
+		got[1] != "forge slot run --class heavy -- make --no-print-directory docs-generate-check" {
+		t.Fatalf("the docs check runs second (after forge, before the tests), in a heavy slot: %v", got)
+	}
+	for _, s := range r.steps(pl, laneSet("go,forge-generate")) {
+		if strings.Contains(strings.Join(s.argv, " "), "docs-generate-check") {
+			t.Fatal("-lanes without docs-generate must not run the docs check")
+		}
+	}
+}
+
 func TestNothingToRunRunsNothing(t *testing.T) {
 	pl := classify("docs/x.md")
-	if steps := (&runner{root: "/repo"}).steps(pl, laneSet("go,web,electron,forge-generate")); len(steps) != 0 {
+	if steps := (&runner{root: "/repo"}).steps(pl, laneSet("go,web,electron,forge-generate,docs-generate")); len(steps) != 0 {
 		t.Fatalf("an inert diff runs nothing, got %v", steps)
 	}
 }

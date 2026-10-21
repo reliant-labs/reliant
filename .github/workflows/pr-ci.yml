@@ -492,15 +492,20 @@ jobs:
   # it, so this job proves the two agree. It is a hard gate: if regenerating
   # produces a diff, commit that diff in the change that caused it.
   #
-  # Two generators, two checks, ONE job:
+  # Three checks, ONE job:
   #
-  #   1. `make generate-all` — every generator a contributor runs (protobuf with
-  #      the pinned local plugins, the CLI/tools/models/... docs
-  #      references, the Mintlify pages) — then `git status` must be clean.
-  #   2. `make forge-generate-check` — forge.yaml's pinned `forge generate`
+  #   1. `make docs-generate-check` — every docs generator (the Makefile's
+  #      DOCGEN_TARGETS: the CLI/tools/models/... references, the
+  #      workflow-builder SKILL.md, the changelog and Mintlify pages), failing
+  #      and naming every file it changes. `make test-affected` runs the same
+  #      target locally, so the list exists once.
+  #   2. `make generate-all` — every generator a contributor runs (protobuf with
+  #      the pinned local plugins, then the docs again) — then `git status`
+  #      must be clean.
+  #   3. `make forge-generate-check` — forge.yaml's pinned `forge generate`
   #      (mocks, gen/forge_descriptor.json, harnesses, observability files),
   #      failing and naming every file it changes. It judges only what forge
-  #      changes, so it still reports on a tree check 1 left dirty.
+  #      changes, so it still reports on a tree check 2 left dirty.
   #
   # They were two jobs. Merged, the second reuses the first's compile: both
   # build essentially the whole module (the CLI reference compiles every
@@ -639,23 +644,23 @@ jobs:
           key: embedded-postgres-${{ runner.os }}-${{ runner.arch }}-${{ steps.pins.outputs.embedded_pg }}
           restore-keys: embedded-postgres-${{ runner.os }}-${{ runner.arch }}-
 
+      # Check 1, first, so it judges the docs exactly as committed: every docs
+      # generator (the Makefile's DOCGEN_TARGETS, the one list; make
+      # test-affected runs the same check), failing and naming every file it
+      # changes. A hand edit to a generated doc fails here.
+      - name: Docs generators are a no-op (make docs-generate-check)
+        run: make docs-generate-check DOCS_CHECK_FLAGS=--github
+
       - name: Regenerate everything (make generate-all)
         id: generate-all
+        if: ${{ !cancelled() }}
         run: make generate-all
-
-      # The published docs are generated too: the CLI/tools/models/types
-      # references, the changelog page and the Mintlify .mdx conversions.
-      - name: Generate docs
-        run: >
-          make generate-scenario-schema generate-cli generate-tools-ref
-          generate-types generate-models generate-presets
-          generate-workflow-builder-skill generate-changelog
-          generate-mintlify-reference
 
       # `git status`, not `git diff`: a generator that emits a NEW file (a new
       # proto, a new control-plane service) leaves it untracked, and `git diff`
       # cannot see untracked files.
       - name: Fail if generated code differs from what is committed
+        if: ${{ !cancelled() && steps.generate-all.outcome == 'success' }}
         run: |
           set -euo pipefail
           drift="$(git status --porcelain --untracked-files=all)"
@@ -668,7 +673,7 @@ jobs:
           fi
           echo "Generated code matches the committed output."
 
-      # Runs whatever check 1 concluded, so both verdicts report on one run.
+      # Runs whatever checks 1 and 2 concluded, so every verdict reports on one run.
       # FORGE: the cached binary; the check refuses it unless it reports the
       # pinned version.
       # Main only: the job header says why.
