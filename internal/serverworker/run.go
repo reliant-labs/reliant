@@ -262,7 +262,7 @@ func Run(ctx context.Context, opts Options) error {
 		Host:         opts.TemporalHost,
 		Port:         opts.TemporalPort,
 		Namespace:    opts.TemporalNamespace,
-		PayloadStore: claimcheck.NewPostgresStore(repo.DB.SQLDB()),
+		PayloadStore: claimcheck.NewPostgresStore(repo.ORM()),
 	})
 	if err != nil {
 		return fmt.Errorf("failed to connect to Temporal: %w", err)

@@ -675,7 +675,7 @@ type Repository interface {
 	// `at` is the reset point's event time; it is what separates work the
 	// new run will redo from work it will only replay. Paused rows are out
 	// of scope (ResumeWorkflowsByChat owns those). See
-	// queries/workflows.sql for the full predicate.
+	// internal/store/workflow_repo_ext.go for the full predicate.
 	ReviveSubtreeLiveAt(ctx context.Context, rootWorkflowID string, at time.Time) (workflowsRevived, threadsRevived int64, err error)
 	PauseRunningWorkflowsByChat(ctx context.Context, chatID string) error // Pause all running workflows for a chat
 	ResumeWorkflowsByChat(ctx context.Context, chatID string) error       // Resume all paused workflows for a chat
