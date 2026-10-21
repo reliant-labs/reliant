@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/reliant/internal/chatselection"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/store/storetest"
@@ -36,7 +37,7 @@ func TestChatSelectionQueries(t *testing.T) {
 		Params: map[string]any{"model": "fast", "nested": map[string]any{"n": float64(2)}},
 	}
 	var stored *chatselection.Selection
-	err := env.ORM.RunTx(ctx, func(ctx context.Context) error {
+	err := env.ORM.RunTx(ctx, orm.Serializable, func(ctx context.Context) error {
 		if err := store.LockChatSelection(ctx, env.ORM, "sel-a"); err != nil {
 			return err
 		}

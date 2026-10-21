@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { devHarnessPresent } from './devHarness';
 
 // Smoke for the console's Overview and a workload's page, against the
 // dev-only fixture harness (/forge-workloads-preview): the real OverviewHome
@@ -12,7 +13,7 @@ import { test, expect, type Page } from '@playwright/test';
 async function openHarness(page: Page, query = '') {
   await page.goto(`/forge-workloads-preview${query}`);
   const overview = page.getByTestId('overview').or(page.getByTestId('workload-detail'));
-  const present = await overview.first().waitFor({ timeout: 20_000 }).then(() => true, () => false);
+  const present = await devHarnessPresent(page, '/forge-workloads-preview', overview);
   test.skip(!present, 'the fixture harness is a dev-build-only route');
 }
 

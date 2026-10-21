@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { devHarnessPresent } from './devHarness';
 
 // Smoke for the Observability tab of an environment page, against the
 // dev-only fixture harness (/forge-observability-preview): the real
@@ -17,7 +18,7 @@ const shotDir = process.env.OBS_SCREENSHOTS;
 async function openHarness(page: Page, query = '') {
   await page.goto(`/forge-observability-preview${query}`);
   const panel = page.getByTestId('obs-panel');
-  const present = await panel.waitFor({ timeout: 20_000 }).then(() => true, () => false);
+  const present = await devHarnessPresent(page, '/forge-observability-preview', panel);
   test.skip(!present, 'the fixture harness is a dev-build-only route');
 }
 
@@ -86,7 +87,7 @@ test.describe('observability console', () => {
 
     await page.goto('/forge-dashboards-preview');
     const home = page.getByTestId('observability-home');
-    const present = await home.waitFor({ timeout: 20_000 }).then(() => true, () => false);
+    const present = await devHarnessPresent(page, '/forge-dashboards-preview', home);
     test.skip(!present, 'the fixture harness is a dev-build-only route');
     await expect(page.getByTestId('observability-strip')).toContainText('Requests');
     await expect(page.getByTestId('observability-services')).toContainText('Crash-looping');

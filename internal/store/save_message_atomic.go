@@ -229,7 +229,7 @@ func SaveMessageAtomic(ctx context.Context, db orm.Context, w AtomicMessageWrite
 	cols := newBlockColumns(w.Blocks)
 
 	var result AtomicMessageResult
-	err := db.RunTxWithOptions(ctx, orm.TxOptions{Isolation: orm.IsolationReadCommitted}, func(txCtx context.Context) error {
+	err := db.RunTx(ctx, orm.ReadCommitted.WithMaxAttempts(orm.DefaultTxMaxAttempts), func(txCtx context.Context) error {
 		result = AtomicMessageResult{}
 		err := db.QueryRow(txCtx, saveMessageAtomicSQL,
 			w.ThreadID,

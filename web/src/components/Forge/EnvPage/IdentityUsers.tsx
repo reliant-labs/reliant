@@ -484,7 +484,7 @@ function InvitePanel({ orgId, envId, envName, roles }: { orgId: string; envId: s
   return (
     <Panel
       title="Invite"
-      description={`Emails them a link to set a password for ${envName}. An address that already has an account is given the roles instead.`}
+      description={`Emails them a link to set a password for ${envName}, if its identity declares smtp (otherwise the invite is refused and says why). An address that already has an account is given the roles instead.`}
       testId="identity-invite"
     >
       <form

@@ -196,7 +196,7 @@ func TestRunEventEmitterQueriesAgreeWithSQLC(t *testing.T) {
 	count("ap-1", 1)
 	count("q-1", 1)
 
-	err := env.ORM.RunTx(ctx, func(ctx context.Context) error {
+	err := env.ORM.RunTx(ctx, orm.Serializable, func(ctx context.Context) error {
 		if err := store.LockChatForRunEvent(ctx, env.ORM, "chat-blk"); err != nil {
 			return err
 		}
@@ -205,7 +205,7 @@ func TestRunEventEmitterQueriesAgreeWithSQLC(t *testing.T) {
 	if err != nil {
 		t.Fatalf("lock chat: %v", err)
 	}
-	err = env.ORM.RunTx(ctx, func(ctx context.Context) error {
+	err = env.ORM.RunTx(ctx, orm.Serializable, func(ctx context.Context) error {
 		return store.LockChatForRunEvent(ctx, env.ORM, "missing")
 	})
 	if !errors.Is(err, core.ErrChatNotFound) {
@@ -224,7 +224,7 @@ func TestLockChatForRunEventSerializesAcrossLayers(t *testing.T) {
 	var releasedAt time.Time
 	done := make(chan error, 1)
 	go func() {
-		done <- env.ORM.RunTx(ctx, func(ctx context.Context) error {
+		done <- env.ORM.RunTx(ctx, orm.Serializable, func(ctx context.Context) error {
 			if err := store.LockChatForRunEvent(ctx, env.ORM, "chat-rowlock"); err != nil {
 				return err
 			}

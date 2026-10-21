@@ -93,7 +93,7 @@ func ReplaceIntegrationAccess(ctx context.Context, db orm.Context, userID, integ
 		labels = append(labels, g.ResourceLabel)
 	}
 	at = at.UTC()
-	return db.RunTx(ctx, func(ctx context.Context) error {
+	return db.RunTx(ctx, orm.Serializable, func(ctx context.Context) error {
 		if len(grants) > 0 {
 			if _, err := db.Bun().NewRaw(upsertIntegrationAccessSQL,
 				userID, integrationID, subjectID, at, orm.Arg(accounts), orm.Arg(resources), orm.Arg(labels)).Exec(ctx); err != nil {

@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/store/storetest"
@@ -68,7 +69,7 @@ func l6TryInOtherSession(t *testing.T, env *storetest.Env, probe string, args ..
 // l6InTx runs f in one ORM transaction, as AccountStore does.
 func l6InTx(t *testing.T, env *storetest.Env, f func(ctx context.Context) error) {
 	t.Helper()
-	if err := env.ORM.RunTx(context.Background(), f); err != nil {
+	if err := env.ORM.RunTx(context.Background(), orm.Serializable, f); err != nil {
 		t.Fatalf("transaction: %v", err)
 	}
 }

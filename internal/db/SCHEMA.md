@@ -258,16 +258,21 @@ splits it. The rules every query follows:
    (A one-column stamp through `Update<E>` reads every other column back;
    pass `crud.NoReadBack()` when the caller does not need the row.)
 
-   **Porting a hand-SQL transaction keeps its isolation.** `RunTx` of either
-   layer is SERIALIZABLE by default; a hand store's `db.BeginTx(ctx, nil)`
-   was READ COMMITTED. A transaction whose correctness comes from row locks
-   (`SELECT … FOR UPDATE`, advisory locks) rather than snapshot isolation
-   says so with `RunTxWithOptions(ctx, orm.TxOptions{Isolation:
-   orm.IsolationReadCommitted}, …)` — under SERIALIZABLE the loser of a lock
-   race fails with 40001 instead of reading the winner's write. One that
-   runs a side effect it must not repeat (a token refresh over the network)
-   also sets `MaxAttempts: 1`. `internal/store/connection_repo_ext.go`'s
-   `connectionTx` is both.
+   **Porting a hand-SQL transaction keeps its isolation.** The forge ORM has
+   no default level: every `orm` opener names one (`RunTx(ctx,
+   orm.Serializable, fn)`, `BeginDetached(ctx, orm.ReadCommitted)`). The
+   Repository's own `Repo.RunTx` is SERIALIZABLE by default; a hand store's
+   `db.BeginTx(ctx, nil)` was READ COMMITTED. A transaction whose correctness
+   comes from row locks (`SELECT … FOR UPDATE`, advisory locks) rather than
+   snapshot isolation names `orm.ReadCommitted` (one attempt) — under
+   SERIALIZABLE the loser of a lock race fails with 40001 instead of reading
+   the winner's write; `forge lint --conventions` reports an orm
+   SERIALIZABLE transaction that takes a lock
+   (`forgeconv-tx-lock-under-serializable`). One that may survive a deadlock
+   says so with `orm.ReadCommitted.WithMaxAttempts(n)`; one that runs a side
+   effect it must not repeat (a token refresh over the network) keeps one
+   attempt. `internal/store/connection_repo_ext.go`'s `connectionTx` is
+   both READ COMMITTED and one attempt.
 
    Every opener's level is pinned on the wire by
    `storetest.TestTransactionOpenersBeginAtTheirLevel`: a port that moves a

@@ -87,6 +87,7 @@ import {
   type DashboardSearch,
   type RefreshInterval,
 } from "./dashboardModel";
+import { AlertFromPanelDialog, CREATE_ALERT_LABEL } from "./AlertFromPanelDialog";
 import { PromoteDialog, SaveCopyDialog, envScopeOf, writeErrorMessage } from "./dialogs";
 import { drillSearches, type ExploreHrefs } from "./drill";
 import { duplicatePanel, starterPanel, upsertPanel } from "./panelBuilder";
@@ -194,6 +195,7 @@ export function DashboardView({ project, dashRef, env, environments, search, onS
   // ── Editing ──
   const [layout, setLayout] = useState<Dashboard | null>(null);
   const [drawer, setDrawer] = useState<{ mode: DrawerMode; panel: Panel } | null>(null);
+  const [alertPanel, setAlertPanel] = useState<Panel | null>(null);
   const [removing, setRemoving] = useState<Panel | null>(null);
   const [dragging, setDragging] = useState<string | null>(null);
 
@@ -279,6 +281,7 @@ export function DashboardView({ project, dashRef, env, environments, search, onS
                 : []),
               ...(!editable ? [{ label: "View spec", onSelect: () => setDrawer({ mode: "view" as const, panel }), testId: `dashboard-panel-view-${panel.id}` }] : []),
               { label: panel.signal === "logs" ? "Explore in Logs" : "Explore in Traces", detail: "with this panel's service", href: links.searchHref(panel) },
+              { label: CREATE_ALERT_LABEL, detail: "as KCL", onSelect: () => setAlertPanel(panel), separated: true, testId: `dashboard-panel-alert-${panel.id}` },
               ...(editable && !layout
                 ? [{ label: "Remove panel", onSelect: () => setRemoving(panel), separated: true, testId: `dashboard-panel-remove-${panel.id}` }]
                 : []),
@@ -546,6 +549,8 @@ export function DashboardView({ project, dashRef, env, environments, search, onS
           scope={scope}
           range={range}
           services={services}
+          environments={environments}
+          env={env}
           scopeLabel={`${env === ENV_ALL ? "all environments" : env}${search.service ? ` · ${search.service}` : ""}`}
           version={currentVersion}
           envScope={workspaceScope}
@@ -565,6 +570,9 @@ export function DashboardView({ project, dashRef, env, environments, search, onS
             writeVersion(upsertPanel(spec, panel), `${drawer.mode === "add" ? "Added" : "Edited"} ${panel.title}`, () => setDrawer(null))
           }
         />
+      )}
+      {alertPanel && (
+        <AlertFromPanelDialog panel={alertPanel} dashboardTitle={summary.title} environments={environments} env={env} services={services} onClose={() => setAlertPanel(null)} />
       )}
       <ConfirmationDialog
         open={!!removing}

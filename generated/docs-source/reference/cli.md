@@ -154,6 +154,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge fix composition-graph`](#reliant-forge-fix-composition-graph) | Move a project off Infra / NewComponents / ServeSpec onto the composition graph |
 | [`reliant forge fix narrow-deps`](#reliant-forge-fix-narrow-deps) | Declare the interfaces a component's Deps actually use, and retype its fields to them |
 | [`reliant forge fix operatorkit`](#reliant-forge-fix-operatorkit) | Rename lifecyclekit.Run / Controller / Options to operatorkit (moved in v0.1.46) |
+| [`reliant forge fix tx-isolation`](#reliant-forge-fix-tx-isolation) | Spell out every pkg/orm transaction's isolation level and attempt budget (no default since v0.1.47) |
 | [`reliant forge frontend`](#reliant-forge-frontend) | Operate on built frontends |
 | [`reliant forge frontend sourcemaps`](#reliant-forge-frontend-sourcemaps) | File a frontend's source maps so its browser errors can be symbolicated |
 | [`reliant forge frontend sourcemaps push`](#reliant-forge-frontend-sourcemaps-push) | File the source maps of a built directory forge did not build |
@@ -5136,6 +5137,7 @@ reliant forge fix
 | [`composition-graph`](#reliant-forge-fix-composition-graph) | Move a project off Infra / NewComponents / ServeSpec onto the composition graph |
 | [`narrow-deps`](#reliant-forge-fix-narrow-deps) | Declare the interfaces a component's Deps actually use, and retype its fields to them |
 | [`operatorkit`](#reliant-forge-fix-operatorkit) | Rename lifecyclekit.Run / Controller / Options to operatorkit (moved in v0.1.46) |
+| [`tx-isolation`](#reliant-forge-fix-tx-isolation) | Spell out every pkg/orm transaction's isolation level and attempt budget (no default since v0.1.47) |
 
 ---
 
@@ -5230,6 +5232,53 @@ The rest of the v0.1.46 story is the migration skill: `forge skill load migratio
 
 ```
 reliant forge fix operatorkit [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--dry-run` | `bool` | - | List what would be rewritten; change nothing |
+
+---
+
+#### reliant forge fix tx-isolation
+
+Spell out every pkg/orm transaction's isolation level and attempt budget (no default since v0.1.47)
+
+Make every pkg/orm transaction name its isolation, exactly as it ran before.
+
+forge v0.1.47 removed the default isolation level. RunTx, RunTransaction and
+BeginDetached now take a policy that names the level and carries the attempt
+budget (orm.Serializable, orm.ReadCommitted, orm.RepeatableRead, refined with
+WithMaxAttempts / WithReadOnly into an orm.TxOptions); an unset level is
+rejected with orm.ErrInvalidTxOptions. RunTxWithOptions,
+RunTransactionWithOptions, Client.BeginTx and orm.IsolationDefault are gone,
+and orm.IsolationSerializable / IsolationReadCommitted / IsolationRepeatableRead
+are orm.Serializable / ReadCommitted / RepeatableRead.
+
+This rewrites every call on a pkg/orm handle to the explicit form that keeps
+what it did:
+
+  RunTx(ctx, fn)                      → RunTx(ctx, orm.Serializable, fn)          serializable, 7 attempts
+  tx.RunTx(ctx, fn) on an *orm.Tx     → tx.Join(ctx, fn)                          a join: its own level
+  RunTxWithOptions(ctx, opts, fn)     → RunTx(ctx, <opts spelled out>, fn)
+  BeginDetached(ctx, orm.TxOptions{}) → BeginDetached(ctx, orm.Serializable.WithMaxAttempts(1))
+  RunTransaction(ctx, fn)             → RunTransaction(ctx, orm.ReadCommitted, fn) read committed, 1 attempt
+  RunTransactionWithOptions(ctx, nil, fn), BeginTx(ctx, nil)
+                                      → … orm.ReadCommitted (BeginTx → BeginDetached)
+
+and every orm.TxOptions literal that left the level or the attempt budget to a
+default. It never picks a different level: it prints each site, and choosing
+READ COMMITTED for a SERIALIZABLE transaction that takes a lock is yours
+(forgeconv-tx-lock-under-serializable lists them). A shape it cannot decide —
+options computed at run time — is listed with the edit to make. Generated
+files, vendor/ and testdata/ are left alone. Re-running it changes nothing.
+
+The rest of the v0.1.47 story is the migration skill: `forge skill load migrations/v0.1.47`.
+
+```
+reliant forge fix tx-isolation [flags]
 ```
 
 **Flags:**

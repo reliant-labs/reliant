@@ -31,6 +31,8 @@ const ADMIN_SET = [
   "cluster:manage",
   "token:read",
   "token:write",
+  "identity:read",
+  "identity:manage",
 ];
 
 function roster(grantable: string[] = ADMIN_SET) {
@@ -72,6 +74,20 @@ describe("MemberPermissions", () => {
     expect(userId).toBe("u-dev");
     expect(scopes).toContain("deploy:write");
     expect(scopes).toContain("deploy:read");
+  });
+
+  it("offers the identity grants, which an admin hands out explicitly", async () => {
+    // identity:manage is a per-org grant (control-plane orggrants.OrgScopes)
+    // that deploy:write does not imply; without a box here no admin could
+    // give it to a member.
+    render(<MemberPermissions />);
+    await screen.findByText("dev@example.test");
+
+    fireEvent.click(screen.getByRole("checkbox", { name: /dev@example.test identity:manage/i }));
+
+    await waitFor(() => expect(updateMemberPermissions).toHaveBeenCalledTimes(1));
+    const [, scopes] = updateMemberPermissions.mock.calls[0];
+    expect(scopes).toEqual(expect.arrayContaining(["deploy:read", "identity:manage"]));
   });
 
   it("revokes by omitting the permission from the set", async () => {

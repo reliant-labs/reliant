@@ -189,7 +189,7 @@ func TestDEKCommitsOutsideTheCallersTransaction(t *testing.T) {
 
 	var ct []byte
 	rollback := errors.New("roll back")
-	err = repo.ORM().RunTx(ctx, func(ctx context.Context) error {
+	err = repo.ORM().RunTx(ctx, orm.Serializable, func(ctx context.Context) error {
 		var err error
 		if ct, err = v.Seal(ctx, vault.UserTenant("erin"), []byte("kept"), []byte("a")); err != nil {
 			return err

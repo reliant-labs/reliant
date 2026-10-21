@@ -11,6 +11,7 @@ import (
 
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/reliant-labs/forge/pkg/crypto"
+	"github.com/reliant-labs/forge/pkg/orm"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/chatselection"
@@ -68,8 +69,10 @@ func TestTransactionOpenersBeginAtTheirLevel(t *testing.T) {
 		{"Repo.RunTxWithOptions(read committed)", readCommitted, func(ctx context.Context) error {
 			return p.Repo.RunTxWithOptions(ctx, db.TxOptions{Isolation: db.IsolationReadCommitted}, noop)
 		}},
-		// The ORM's default, which every lock-based port must override.
-		{"orm.Client.RunTx (forge default)", serializable, func(ctx context.Context) error { return p.ORM.RunTx(ctx, noop) }},
+		// The ORM has no default level; orm.Serializable is what the
+		// codemod spelled for every RunTx that used to inherit one, and a
+		// lock-based port must name orm.ReadCommitted instead.
+		{"orm.Client.RunTx(orm.Serializable)", serializable, func(ctx context.Context) error { return p.ORM.RunTx(ctx, orm.Serializable, noop) }},
 
 		// Serializable Repository writers.
 		{"Repo.CreateChatUpdate", serializable, func(ctx context.Context) error {

@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/store/storetest"
@@ -160,7 +161,7 @@ func TestInsertWorkflowIfAbsentKeepsTheFirstRowAndTheTransaction(t *testing.T) {
 	if err := store.InsertWorkflowIfAbsent(ctx, env.ORM, first); err != nil {
 		t.Fatal(err)
 	}
-	err := env.ORM.RunTx(ctx, func(ctx context.Context) error {
+	err := env.ORM.RunTx(ctx, orm.Serializable, func(ctx context.Context) error {
 		again := newWorkflow("wf-dup", "chat-dup", nil, core.Completed(), l2Base.Add(time.Hour))
 		again.WorkflowName = "renamed"
 		again.Outcome = ptr("success")

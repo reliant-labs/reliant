@@ -329,7 +329,7 @@ func (r *Repo) executeTransaction(ctx context.Context, tx *orm.Tx, f func(ctx co
 	// SERIALIZABLE retry cannot publish events created by the rolled-back
 	// attempt.
 	execTime := time.Now()
-	err := tx.RunTx(ctx, f)
+	err := tx.Join(ctx, f)
 	result.execDuration = time.Since(execTime)
 
 	if err != nil {
@@ -412,6 +412,16 @@ func (i Isolation) sqlLevel() sql.IsolationLevel {
 		return sql.LevelReadCommitted
 	}
 	return sql.LevelSerializable
+}
+
+// ormPolicy is opts as one forge transaction attempt: the same level and
+// access mode, one attempt (runTxWithRetries owns the retry loop).
+func (o TxOptions) ormPolicy() orm.TxOptions {
+	level := orm.Serializable
+	if o.Isolation == IsolationReadCommitted {
+		level = orm.ReadCommitted
+	}
+	return orm.TxOptions{Isolation: level, ReadOnly: o.ReadOnly, MaxAttempts: 1}
 }
 
 func (i Isolation) String() string {

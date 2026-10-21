@@ -122,9 +122,15 @@ func toolClone(ctx context.Context, repo string, repos []string) bool {
 	return err == nil
 }
 
+// underAny reports whether p lies inside one of repos. Both come from the same
+// walk, which never follows a symlink, so the comparison is lexical: a symlink
+// inside a checkout is that checkout's file wherever it points. Resolving it
+// (within does) turned a venv's bin/python3 -> /usr/bin/python3.12 into "a file
+// outside every checkout", which holds a workspace for good.
 func underAny(repos []string, p string) bool {
 	for _, r := range repos {
-		if within(r, p) {
+		rel, err := filepath.Rel(r, p)
+		if err == nil && rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 			return true
 		}
 	}
