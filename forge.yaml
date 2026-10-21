@@ -55,3 +55,11 @@ database:
         # fails one that says neither, or gives no reason
         # (internal/db/SCHEMA.md).
         require_compat_declaration: true
+    orm:
+        # The generated data layer (entities, <Entity>Store, the _repo_ext.go
+        # seams) lands in internal/store, beside the hand-owned internal/db
+        # Repository, whose names (Chat, Message, Repo, …) it would otherwise
+        # collide with. Aggregates port onto it lane by lane (P5b,
+        # research/forge-migration/08-p5b-spike.md; rules in
+        # internal/db/SCHEMA.md).
+        package: internal/store

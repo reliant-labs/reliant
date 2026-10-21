@@ -923,6 +923,216 @@
     },
     "internal/handlers/worktree/handlers_scaffold_update_worktree_test.go": {
       "scaffolded_at": "2026-10-14T18:43:31Z"
+    },
+    "internal/store/access_token_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:26:59Z"
+    },
+    "internal/store/agent_message_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:27:00Z"
+    },
+    "internal/store/antigravity_auth_token_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:27:00Z"
+    },
+    "internal/store/api_key_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:27:00Z"
+    },
+    "internal/store/approval_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:27:00Z"
+    },
+    "internal/store/attachment_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:27:00Z"
+    },
+    "internal/store/background_process_output_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:27:00Z"
+    },
+    "internal/store/background_process_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:27:00Z"
+    },
+    "internal/store/chat_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:27:00Z"
+    },
+    "internal/store/chat_selection_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:27:00Z"
+    },
+    "internal/store/chat_update_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:27:00Z"
+    },
+    "internal/store/chats_with_activity_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:27:00Z"
+    },
+    "internal/store/claude_auth_token_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:27:00Z"
+    },
+    "internal/store/codex_auth_token_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:27:00Z"
+    },
+    "internal/store/command_favorite_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:27:00Z"
+    },
+    "internal/store/connection_event_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:27:00Z"
+    },
+    "internal/store/connection_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:27:00Z"
+    },
+    "internal/store/connection_secret_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:27:00Z"
+    },
+    "internal/store/connector_audit_log_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:27:00Z"
+    },
+    "internal/store/connector_client_binding_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:27:00Z"
+    },
+    "internal/store/connector_grant_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:27:00Z"
+    },
+    "internal/store/context_window_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:27:00Z"
+    },
+    "internal/store/copilot_auth_token_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:27:00Z"
+    },
+    "internal/store/daemon_attachment_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:27:00Z"
+    },
+    "internal/store/daemon_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:27:00Z"
+    },
+    "internal/store/default_preset_assignment_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:27:00Z"
+    },
+    "internal/store/inbox_dismissal_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:27:00Z"
+    },
+    "internal/store/integration_access_refresh_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:27:00Z"
+    },
+    "internal/store/integration_event_access_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:27:00Z"
+    },
+    "internal/store/integration_write_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:27:00Z"
+    },
+    "internal/store/item_default_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:27:01Z"
+    },
+    "internal/store/legacy_credential_copy_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:27:01Z"
+    },
+    "internal/store/message_content_block_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:27:01Z"
+    },
+    "internal/store/message_order_counter_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:27:01Z"
+    },
+    "internal/store/message_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:27:01Z"
+    },
+    "internal/store/model_endpoint_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:27:01Z"
+    },
+    "internal/store/oauth_flow_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:27:01Z"
+    },
+    "internal/store/plan_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:27:01Z"
+    },
+    "internal/store/preset_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:27:01Z"
+    },
+    "internal/store/project_config_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:27:01Z"
+    },
+    "internal/store/project_daemon_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:27:01Z"
+    },
+    "internal/store/project_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:27:01Z"
+    },
+    "internal/store/provider_account_limit_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:27:01Z"
+    },
+    "internal/store/provider_account_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:27:01Z"
+    },
+    "internal/store/provider_backoff_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:27:01Z"
+    },
+    "internal/store/question_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:27:01Z"
+    },
+    "internal/store/repo_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:27:01Z"
+    },
+    "internal/store/run_event_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:27:01Z"
+    },
+    "internal/store/setting_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:27:01Z"
+    },
+    "internal/store/step_execution_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:27:01Z"
+    },
+    "internal/store/task_dependency_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:27:01Z"
+    },
+    "internal/store/task_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:27:01Z"
+    },
+    "internal/store/temporal_payload_blob_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:27:01Z"
+    },
+    "internal/store/thread_provider_account_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:27:01Z"
+    },
+    "internal/store/thread_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:27:01Z"
+    },
+    "internal/store/tool_call_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:27:01Z"
+    },
+    "internal/store/tool_call_result_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:27:01Z"
+    },
+    "internal/store/trigger_event_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:27:02Z"
+    },
+    "internal/store/trigger_registration_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:27:02Z"
+    },
+    "internal/store/trigger_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:27:02Z"
+    },
+    "internal/store/update_stream_counter_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:27:02Z"
+    },
+    "internal/store/user_update_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:27:02Z"
+    },
+    "internal/store/vault_key_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:27:02Z"
+    },
+    "internal/store/video_generation_job_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:27:02Z"
+    },
+    "internal/store/visibility_override_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:27:02Z"
+    },
+    "internal/store/workflow_checkpoint_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:27:02Z"
+    },
+    "internal/store/workflow_draft_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:27:02Z"
+    },
+    "internal/store/workflow_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:27:02Z"
+    },
+    "internal/store/workflow_scenario_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:27:02Z"
+    },
+    "internal/store/worktree_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:27:02Z"
     }
   },
   "absent_reported": [
