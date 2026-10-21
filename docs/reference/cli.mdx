@@ -151,7 +151,9 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge env stop`](#reliant-forge-env-stop) | Suspend a HOSTED environment's workloads on the control plane (not local processes) |
 | [`reliant forge env up`](#reliant-forge-env-up) | Bring the whole dev loop up on this machine: build + deploy + host + frontend |
 | [`reliant forge fix`](#reliant-forge-fix) | Rewrite your code to what a lint asks for (codemods, run on request) |
+| [`reliant forge fix composition-graph`](#reliant-forge-fix-composition-graph) | Move a project off Infra / NewComponents / ServeSpec onto the composition graph |
 | [`reliant forge fix narrow-deps`](#reliant-forge-fix-narrow-deps) | Declare the interfaces a component's Deps actually use, and retype its fields to them |
+| [`reliant forge fix operatorkit`](#reliant-forge-fix-operatorkit) | Rename lifecyclekit.Run / Controller / Options to operatorkit (moved in v0.1.46) |
 | [`reliant forge frontend`](#reliant-forge-frontend) | Operate on built frontends |
 | [`reliant forge frontend sourcemaps`](#reliant-forge-frontend-sourcemaps) | File a frontend's source maps so its browser errors can be symbolicated |
 | [`reliant forge frontend sourcemaps push`](#reliant-forge-frontend-sourcemaps-push) | File the source maps of a built directory forge did not build |
@@ -5143,7 +5145,54 @@ reliant forge fix
 
 | Command | Description |
 |---------|-------------|
+| [`composition-graph`](#reliant-forge-fix-composition-graph) | Move a project off Infra / NewComponents / ServeSpec onto the composition graph |
 | [`narrow-deps`](#reliant-forge-fix-narrow-deps) | Declare the interfaces a component's Deps actually use, and retype its fields to them |
+| [`operatorkit`](#reliant-forge-fix-operatorkit) | Rename lifecyclekit.Run / Controller / Options to operatorkit (moved in v0.1.46) |
+
+---
+
+#### reliant forge fix composition-graph
+
+Move a project off Infra / NewComponents / ServeSpec onto the composition graph
+
+Convert the legacy composition to the composition graph.
+
+A project scaffolded before the graph composes with an owned Infra struct and
+OpenInfra (internal/app/providers.go), a Components bag built by NewComponents
+(compose.go), lifecycle.go, ServeSpec (cmd/`<bin>`/cmd/serve.go) and one
+subcommand per service, worker and operator. forge still generates for it
+exactly as before. This codemod converts the composition forge scaffolded:
+
+  - providers.go, compose.go and serve.go are re-scaffolded for the graph on
+    the next `forge generate` (compose.go keeps every Deps value you set,
+    translated: infra.Log → g.Log, infra.DB → g.DB().DB, c.Tasks → g.Tasks());
+  - lifecycle.go, server.go and the per-component subcommands are retired,
+    and root.go / main.go stop naming them;
+  - the e2e harness runs `server`, the one root a project has until it
+    declares more.
+
+The default root, `server`, reaches every service, worker and operator,
+which is what `<bin> server` ran. Anything the codemod cannot map without
+deciding for you — an Infra field of your own, a ServeSpec knob, a command
+that calls Serve, code that names Infra or Components — is listed with its
+file:line and the edit that clears it, and then NOTHING is written. Clear
+them (the migrations/v0.1.47 skill walks through each) and run it again.
+
+It replaces files you own, so it runs only on a committed tree
+(--allow-dirty overrides); review with git diff, undo with git checkout.
+
+The rest of the v0.1.47 story is the migration skill: `forge skill load migrations/v0.1.47`.
+
+```
+reliant forge fix composition-graph [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-dirty` | `bool` | - | Run over uncommitted changes |
+| `--dry-run` | `bool` | - | List what would be rewritten; change nothing |
 
 ---
 
@@ -5168,6 +5217,38 @@ package already declares (edit that one).
 ```
 reliant forge fix narrow-deps <package-dir>
 ```
+
+---
+
+#### reliant forge fix operatorkit
+
+Rename lifecyclekit.Run / Controller / Options to operatorkit (moved in v0.1.46)
+
+Rename the operator bridge lifecyclekit no longer re-exports.
+
+forge v0.1.46 moved Run, Controller and Options out of
+github.com/reliant-labs/forge/pkg/lifecyclekit and into
+github.com/reliant-labs/forge/pkg/appkit/operatorkit, so that a binary
+importing lifecyclekit for Supervise, WrapWorker or Singleton never links
+controller-runtime. The signatures are identical.
+
+This rewrites every reference in the project's own Go files (generated files,
+vendor/ and testdata/ are left alone), adds the operatorkit import, and drops
+the lifecyclekit import from a file that no longer uses it. It is a rename
+and nothing else, so `forge project upgrade` runs it on its own when the
+project's baseline predates v0.1.46. Re-running it changes nothing.
+
+The rest of the v0.1.46 story is the migration skill: `forge skill load migrations/v0.1.46`.
+
+```
+reliant forge fix operatorkit [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--dry-run` | `bool` | - | List what would be rewritten; change nothing |
 
 ---
 
@@ -5868,6 +5949,11 @@ Examples:
                                  # rewrites, POST handlers, no trailingSlash
                                  # on a bucket). CI's next build is the
                                  # authority; this says it first, file:line
+  forge lint --tracing           # Report where a request's trace is cut (a
+                                 # log call that drops the ctx in scope, a
+                                 # raw *http.Client or sql.Open, a contract
+                                 # built without its decorator) and rewrite
+                                 # each log call to its ...Context form
   forge lint --proto-options     # Flag a (forge.v1.*) annotation naming an
                                  # option field forge's descriptors do not
                                  # define — it compiles, and forge reads it
@@ -5944,6 +6030,7 @@ reliant forge lint [paths...] [flags]
 | `--strict` | `bool` | - | Escalate advisory findings to errors so they fail the build / CI: RPCs missing a (forge.v1.method) auth-posture annotation, and any lane that could NOT run (frontend typecheck or eslint with deps not installed; typed-config guardrail when golangci-lint never reported) |
 | `--tests` | `bool` | - | Run test-convention rules (handler-tests-use-tdd + frontend-hook-tests; warnings only) |
 | `--time-bucketing` | `bool` | - | Flag a two-argument date_trunc over a TIMESTAMPTZ column — postgres truncates it in the SESSION timezone, which the driver sets from the client host, so every bucketed total is attributed to the wrong day by an amount that changes with the deploy host. Pin the zone: date_trunc('day', col, 'UTC') (warnings only) |
+| `--tracing` | `bool` | - | Report where a request's trace is cut: a log call made with a context in scope but not passed it (no trace_id), an *http.Client or database pool opened without forge's traced constructors, a contract package constructed without its generated decorator. Rewrites every log call to its ...Context form unless --no-fix; forge.yaml lint.tracing.log_wrappers adds the project's own logging helpers |
 | `--vendored-protos` | `bool` | - | Fail when a vendored proto (proto/forge/v1/forge.proto) differs from the copy embedded in this forge binary — forge's upgrade path does not track these copies, so drift is otherwise invisible |
 
 ---

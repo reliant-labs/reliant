@@ -25,7 +25,7 @@
 
 name: reliant
 module_path: github.com/reliant-labs/reliant
-forge_version: v0.1.47-0.20261020223748-e2796327179f
+forge_version: v0.1.47-0.20261020233613-8e36973aaca9
 harness: reliant
 config:
     # Every process setting is typed config (proto/config/v1, read through
@@ -39,6 +39,15 @@ lint:
         # declaration. Warn while the declarations are written; this goes back
         # to error (delete the entry) once the D3 declarations land.
         forgeconv-activity-declared: warn
+        # forge #993's tracing rules ship hard-ERROR, and reliant has 106
+        # findings at the pin that introduced them (61 log-without-ctx, 18
+        # raw-http-client, 18 contract-uninstrumented, 9 raw-sql-open). Warn
+        # while that adoption is tracked separately; each goes back to error
+        # (delete the entry) once its findings are fixed.
+        forge-tracing-log-without-ctx: warn
+        forge-tracing-raw-http-client: warn
+        forge-tracing-contract-uninstrumented: warn
+        forge-tracing-raw-sql-open: warn
 generate:
     hooks:
         # sqlc until the forge ORM replaces it (P5b). `make sqlc` runs the
