@@ -145,22 +145,24 @@ waits for. Nothing a PR skips is deleted; it runs on the next push to main.
   `gh workflow run pr-ci.yml --ref <branch>`.
 - **A red main is surfaced.** `gate-health.yml` audits main's newest PR CI run
   after every run on main, and keeps one issue labelled `ci:main-red` open while
-  it is red. It also fails when main has no `Backend (Go, full)` job.
+  it is red. It also fails unless every `Backend (Go, full) N/M` shard, 1 to M,
+  ran and passed on main.
 - **The tiers cannot silently merge.** The job name carries the tier, so the two
   have separate check histories. `TestCITestTierReachedGoTest`
   (`tools/test-affected/ci_tier_test.go`) fails when the job's declared tier
   (`RELIANT_TEST_TIER`) disagrees with whether `-short` reached `go test`.
-- **The Go tests run in up to 4 shards** (`Backend (Go, short) 1/4` ... `4/4`);
-  `Backend (Go, short)` / `Backend (Go, full)` is the one check that passes only
-  when every shard did (and, on a PR that reaches no Go package, when none
-  ran). `go run ./tools/test-affected shard -index K -total N` assigns packages
-  by their measured duration in `tools/test-affected/go-test-weights.tsv` and
-  lists the slowest first. The assignment is made over EVERY package and then
-  narrowed to the PR's selection, so a PR's shard K holds only packages main's
-  shard K holds (main's per-shard build cache is a hit), and a shard left
-  empty is not launched. Every package runs in exactly one shard whatever the
-  weights say; a stale weights file only costs balance. Refresh it when a
-  shard runs much longer than the others: `gh run view <run-id> --log | go run
+- **The Go tests run in up to 4 shards** (`Backend (Go, short) 1/2`, ...).
+  `go list ./... | go run ./tools/test-affected shard` prints the matrix: as
+  few shards as keep each under its weight target (one for a PR that reaches a
+  handful of packages, four for the whole module), balanced by measured
+  duration in `tools/test-affected/go-test-weights.tsv`, slowest first. Every
+  package runs in exactly one shard whatever the weights say; a stale weights
+  file only costs balance. `CI result` fails when a shard did not pass (and on
+  main when none ran). Every Go job restores ONE build cache, which the
+  `Generated code is up to date` job produces on main by compiling every test
+  binary and trimming what it did not use: the repository's cache budget is
+  10 GB, and per-shard caches did not fit it. Refresh the weights when a shard
+  runs much longer than the others: `gh run view <run-id> --log | go run
   ./tools/test-affected weights > tools/test-affected/go-test-weights.tsv`.
 - **Other jobs**: `Lint (forge)` (`forge lint --no-fix` at the pinned forge,
   with forge's pinned golangci-lint and main's golangci-lint analysis cache;

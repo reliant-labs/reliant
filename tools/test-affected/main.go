@@ -11,7 +11,7 @@
 //
 // CI's sharded Go lane uses two more commands (shard.go):
 //
-//	go list ./... | go run ./tools/test-affected shard -index 1 -total 3
+//	go list ./... | go run ./tools/test-affected shard   # the backend matrix, as JSON
 //	gh run view <id> --log | go run ./tools/test-affected weights > tools/test-affected/go-test-weights.tsv
 //
 // and its new-flake gate one (changedtests.go):

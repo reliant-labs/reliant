@@ -1212,6 +1212,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	// was shown (research/TOOL_CAPABILITIES.md).
 	var availableTools []tools.Tool
 	var caps *tools.Capabilities
+	mcpSource := tools.MCPToolsUnrequested
 	var bindingScopes toolbindings.Scopes
 	if tc == nil {
 		// No tools_config is the same statement as an empty one: this node's
@@ -1283,6 +1284,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		})
 		availableTools = toolsResult.Tools
 		caps = toolsResult.Capabilities
+		mcpSource = toolsResult.MCPSource
 
 		// Emit warning to chat if MCP servers failed to load
 		if len(toolsResult.FailedMCPServers) > 0 {
@@ -1646,6 +1648,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	// thread's previous request. Logged on the Usage line below, so a turn that
 	// rewrote most of its prompt into the cache names the section that moved.
 	shape := computePromptShape(resolvedModelID, systemPrompts, history, availableTools)
+	shape.mcpToolsSource = mcpSource
 	shapeDiff := callLLMShapes.observe(chat.ID+"|"+thread, shape)
 
 	// Stream response with cancellation support. The transport reports on
@@ -2134,6 +2137,9 @@ type availableToolsResult struct {
 	Tools            []tools.Tool
 	Capabilities     *tools.Capabilities
 	FailedMCPServers []string // Names of MCP servers that failed to load
+	// MCPSource says where this turn's MCP tools came from: a live listing,
+	// the last known good one (the machine could not answer), or nothing.
+	MCPSource tools.MCPToolsSource
 }
 
 // toolNames is the name of every tool in a request's tool array.
@@ -2259,10 +2265,16 @@ func (a *CallLLMActivity) getAvailableTools(ctx context.Context, chat *db.Chat, 
 		}
 	}
 
-	var mcpTools []tools.Tool
+	// A listing the machine cannot answer (suspended, still starting) yields
+	// the last good one rather than nothing: the tools array leads the
+	// provider's prompt-cache prefix, so an MCP tool that vanishes for one
+	// request and returns on the next re-writes the whole conversation twice.
+	// Only a successful listing changes the list.
+	var mcpToolSet tools.MCPToolSet
 	if projectScopedToolsFactory != nil {
-		mcpTools = projectScopedToolsFactory.GetMCPTools(toolRuntime)
+		mcpToolSet = projectScopedToolsFactory.GetMCPToolSet(toolRuntime)
 	}
+	mcpTools := mcpToolSet.Tools
 	mcpToolNames := toolNames(mcpTools)
 
 	// The node's declaration: what it is handed, and what load_tool may
@@ -2319,7 +2331,7 @@ func (a *CallLLMActivity) getAvailableTools(ctx context.Context, chat *db.Chat, 
 		"available_mcp_tools", len(mcpToolNames))
 
 	if projectScopedToolsFactory == nil {
-		return availableToolsResult{Capabilities: caps, FailedMCPServers: failedMCPServers}
+		return availableToolsResult{Capabilities: caps, FailedMCPServers: failedMCPServers, MCPSource: mcpToolSet.Source}
 	}
 
 	// Instantiate exactly what the set offers.
@@ -2364,6 +2376,7 @@ func (a *CallLLMActivity) getAvailableTools(ctx context.Context, chat *db.Chat, 
 		Tools:            toolsList,
 		Capabilities:     caps,
 		FailedMCPServers: failedMCPServers,
+		MCPSource:        mcpToolSet.Source,
 	}
 }
 
