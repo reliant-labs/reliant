@@ -26,7 +26,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { Code, ConnectError } from "@connectrpc/connect";
-import { AlertTriangle, CalendarX, CheckCircle2, ChevronDown, HardDrive, HelpCircle, MonitorPause, Shield, X } from "lucide-react";
+import { AlertTriangle, CalendarX, CheckCircle2, ChevronDown, HardDrive, HelpCircle, MonitorPause, Settings2, Shield, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { api } from "@/api/client";
@@ -35,7 +35,7 @@ import { answerQuestion } from "@/hooks/approval-queries";
 import { inboxKeys, removeInboxItems } from "@/hooks/inbox-queries";
 import { useResumeDaemon } from "@/hooks/useOnboardingQueries";
 import { useSetTriggerEnabled, useTriggerById } from "@/hooks/trigger-queries";
-import { automationHref } from "@/lib/workflowsArea";
+import { automationHref, workflowPageHref } from "@/lib/workflowsArea";
 import { SetupDialogFor } from "../Automations/SetupDialogFor";
 import { useGoToBilling } from "@/hooks/useGoToBilling";
 import { isQuotaResumeError, resumeErrorMessage } from "@/lib/daemon-resume";
@@ -212,6 +212,8 @@ function KindIcon({ kind }: { kind: InboxItemKind }) {
       return <AlertTriangle className={cn(className, "text-destructive-ink")} aria-label="Automation failing" />;
     case InboxItemKind.AUTOMATION_LAUNCH_FAILED:
       return <CalendarX className={cn(className, "text-destructive")} aria-label="Automation could not start" />;
+    case InboxItemKind.AUTOMATION_NEEDS_SETUP:
+      return <Settings2 className={cn(className, "text-warning-ink")} aria-label="Automation needs setup" />;
     case InboxItemKind.RUN_FINISHED:
       return <CheckCircle2 className={cn(className, "text-success-ink")} aria-label="Run finished" />;
     case InboxItemKind.STORAGE:
@@ -317,6 +319,10 @@ function rowDetail(item: InboxItemData): { node: ReactNode; title: string } | nu
       const text = storageDetail(payload.value);
       return text ? { node: text, title: text } : null;
     }
+    case "automationNeedsSetup": {
+      const text = payload.value.issues.map((issue) => sentenceCase(issue.message)).join(" · ");
+      return text ? { node: text, title: text } : null;
+    }
     case "automationLaunchFailed": {
       const { reason, consecutiveFailures } = payload.value;
       const text = [consecutiveFailures > 1 ? `${consecutiveFailures} in a row` : "", reason ? sentenceCase(reason) : ""]
@@ -397,6 +403,14 @@ function InlineAction({ item, expanded, onToggle, onRaceOrError }: InlineActionP
       return <FailingAutomationAction triggerId={item.triggerId} lastRunChatId={payload.value.lastRunChatId} />;
     case "automationLaunchFailed":
       return <LaunchFailedAction triggerId={item.triggerId} />;
+    case "automationNeedsSetup":
+      // The workflow page's automation is where "Finish setup" renders; the
+      // item carries everything the link needs, so it needs no list lookup.
+      return (
+        <a href={workflowPageHref(item.workflowName, item.projectId, { automation: true })} className={actionButtonClass}>
+          Finish setup
+        </a>
+      );
     case "storage":
       return (
         <StorageAction storage={payload.value} label={machineName(payload.value.daemonName, payload.value.daemonId)} />
