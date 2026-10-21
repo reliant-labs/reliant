@@ -22,7 +22,10 @@ It is the first thing to run before pushing. It does not replace the full lane
 | electron | `npm test` in `electron/` | any change under `electron/`, or a changed file an electron test names |
 | forge-generate | `make forge-generate-check`, first: forge.yaml's pinned `forge generate`, failing (and naming each file) if it changed anything | a change to something forge reads or writes: `proto/**`, `db/**`, a `contract.go` or `doc.go`, `internal/handlers/**`, `*_gen.go`, `gen/**`, `deploy/**`, `forge.yaml`, `go.mod`/`go.sum`, `buf.yaml`/`buf.gen.yaml` (`forgeInputs` in `rules.go`) |
 
-The forge-generate lane is CI's **forge generate is a no-op** job, run locally.
+The forge-generate lane is CI's **forge generate is a no-op** check, run
+locally. CI runs that check on main only (it alone cost a PR 110-160s), so
+running this lane before pushing a proto, migration or handler change is how a
+PR finds out.
 It leaves what it regenerated in your tree, so the fix is to commit those
 files. It judges only what generate changes, not whether the tree is clean, so
 your uncommitted edits are fine; do not edit files while it runs. Its blind
@@ -188,19 +191,28 @@ waits for. Nothing a PR skips is deleted; it runs on the next push to main.
   duration in `tools/test-affected/go-test-weights.tsv`, slowest first. Every
   package runs in exactly one shard whatever the weights say; a stale weights
   file only costs balance. `CI result` fails when a shard did not pass (and on
-  main when none ran). Every Go job restores ONE build cache, which the
-  `Generated code is up to date` job produces on main by compiling every test
-  binary and trimming what it did not use: the repository's cache budget is
-  10 GB, and per-shard caches did not fit it. Refresh the weights when a shard
+  main when none ran). Every test job restores ONE package cache, which the
+  main-only `Go package cache` job produces: the compiled non-test packages
+  every test binary imports, and nothing else (no test variants, which a PR
+  invalidates by construction). ~540 MB compressed, restored in ~10-15s; the
+  old everything-cache was 3.2 GB and cost 1-4 minutes per job. The codegen
+  job keeps its own cache, because the Makefile builds generators with
+  `-trimpath`, a different compile key. Refresh the weights when a shard
   runs much longer than the others: `gh run view <run-id> --log | go run
   ./tools/test-affected weights > tools/test-affected/go-test-weights.tsv`.
-- **Other jobs**: `Lint (forge)` (`forge lint`, report-only, at the pinned forge,
-  with forge's pinned golangci-lint and main's golangci-lint analysis cache;
-  blocks; run it locally before pushing a Go or proto change), web
-  lint/typecheck/build, vitest (`Web (vitest K/N)`, one shard for up to 150
-  selected files, two otherwise), Playwright in two shards, the e2e stories,
-  and `Generated code is up to date` (`make generate-all` drift, then `forge
-  generate is a no-op`, the forge-generate lane above, in one job).
+- **The short tier's test Postgres runs without durability** (fsync,
+  synchronous_commit and full_page_writes off): per-test template databases
+  made the DB-backed packages fsync-bound (internal/db 166s -> 54s). It also
+  passes `-vet=off` (lint vets what the PR changed; main vets everything).
+- **Other jobs**: `Lint (forge)` (`forge lint --no-fix` at the pinned forge;
+  blocks). On a PR it is scoped to the changed files (`forge lint --scope
+  <file>...`, after `go build ./...` so every package still compiles); the
+  whole project when the PR moves lint config, the forge pin or dependencies,
+  and always on main. Web lint/typecheck/build, vitest (`Web (vitest K/N)`,
+  one runner per 150 selected files, up to four), Playwright in two shards,
+  the e2e stories, and `Generated code is up to date` (`make generate-all`
+  drift; on main also `forge generate is a no-op`, the forge-generate lane
+  above).
 - **license-gate and Pin Drift** run on a PR only when it touches a dependency
   manifest, a lockfile, the pin or their own scripts; on main, always.
 - **Caches are saved only on main.** A PR restores main's caches and never

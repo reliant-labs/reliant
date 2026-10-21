@@ -578,7 +578,7 @@ jobs:
       # checks keeps exactly what they used (the go-cache job explains).
       - name: Back-date the restored Go build cache (main only)
         id: gen-cache-mark
-        if: (github.event_name != 'pull_request' || github.head_ref == 'ci/five-minutes') && steps.build-cache.outputs.cache-hit != 'true'
+        if: github.event_name != 'pull_request' && steps.build-cache.outputs.cache-hit != 'true'
         run: |
           set -euo pipefail
           cache="$(go env GOCACHE)"; mkdir -p "${cache}"
@@ -750,7 +750,7 @@ jobs:
   go-cache:
     name: Go package cache (main only)
     needs: changes
-    if: github.event_name != 'pull_request' || github.head_ref == 'ci/five-minutes'
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
