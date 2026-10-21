@@ -4,7 +4,8 @@
  * What the setup dialog says once an automation is on: that it is on, where,
  * what will make it run next — one sentence per trigger kind, from data — the
  * warnings that did not block it, and what to do now (try it, open the
- * workflow, done). A webhook's URL and token come back once, here.
+ * workflow, done). A webhook's URL and token come back once, here, except for
+ * one Reliant connected itself (Trigger.webhookManaged), which has neither.
  */
 
 import { CircleCheck, AlertTriangle } from "lucide-react";
@@ -61,6 +62,12 @@ export function SetupSuccess({
     if (integrationOf(trigger)) {
       const what = describeDeclaredSource(trigger, describeSchedule, naming);
       return { key: trigger.name ?? "", text: `Runs on the next event (${what})${scopeSummary ? ` in ${scopeSummary}` : ""}.` };
+    }
+    if (activation?.webhookManaged) {
+      return {
+        key: trigger.name ?? "",
+        text: `Connected to your organization's alerts: the next critical or error alert in ${projectName}'s environments starts a run. Turning it off disconnects it.`,
+      };
     }
     return { key: trigger.name ?? "", text: `${describeDeclaredSource(trigger, describeSchedule, naming)}.` };
   });

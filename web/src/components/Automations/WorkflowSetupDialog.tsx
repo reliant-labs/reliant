@@ -34,7 +34,7 @@
 
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, ChevronDown, ChevronRight, CircleCheck, CircleX, MinusCircle } from "lucide-react";
 import { toast } from "sonner";
 
@@ -53,7 +53,9 @@ import { triggerKeys, useProjectDaemonInstalls, useTriggers } from "@/hooks/trig
 import { useCatalogEntry, useDeclaredTriggerRef, useDeclaredTriggerRefState, useIntegrationEventNaming } from "@/hooks/connection-queries";
 import { useWorkflowLibrary } from "@/hooks/workflow-library-queries";
 import { describeSchedule } from "@/lib/cronText";
-import { describeDeclaredSource, integrationOf, promptOf, type DeclaredTrigger } from "@/lib/declaredTriggers";
+import { describeDeclaredSource, integrationOf, isAlertingWebhook, promptOf, type DeclaredTrigger } from "@/lib/declaredTriggers";
+import { repoGrpc } from "@/api/repo-grpc";
+import { DEFAULT_REPO_INPUT, singleGitHubRepo, withDefaultRepo } from "./alertTriage";
 import { inputDefToSchema } from "@/lib/nodeFieldAdapter";
 import { getInputDescription, getInputMaxItems, getInputMinItems, getInputMulti, isIntegrationInput, type InputDef } from "@/lib/inputHelpers";
 import { classifyInputs, type SetupInput } from "@/lib/setupInputs";
@@ -298,6 +300,21 @@ function SetupBody({
     for (const g of definition.inputGroups) for (const i of g.inputs) map.set(i.name, i.schema);
     return map;
   }, [definition.inputGroups]);
+
+  // An alert-triage workflow (a `source: alerting` webhook) files alerts no
+  // service maps to in default_repo: with one GitHub repository in the
+  // project, that is the repository, so the one click needs no other input.
+  const alerting = useMemo(() => declared.some(isAlertingWebhook), [declared]);
+  const wantsDefaultRepo = alerting && !!projectId && schemaByName.has(DEFAULT_REPO_INPUT);
+  const projectRepos = useQuery({
+    queryKey: ["alert-triage", "repos", projectId],
+    queryFn: () => repoGrpc.list(projectId),
+    enabled: wantsDefaultRepo,
+    staleTime: 60_000,
+  });
+  const defaultRepo = wantsDefaultRepo ? singleGitHubRepo(projectRepos.data?.repos.map((r) => r.remote_url) ?? []) : undefined;
+  const fillsDefaultRepo = withDefaultRepo(value.params, defaultRepo) !== value.params;
+
   const display = useMemo(() => {
     const out: Record<string, unknown> = {};
     for (const [name, raw] of Object.entries(flat)) {
@@ -403,7 +420,7 @@ function SetupBody({
       daemonId: machine === NO_MACHINE ? "" : machine,
       noMachine: machine === NO_MACHINE,
       connectionIds: Object.fromEntries(Object.entries(connections).filter(([, id]) => id)),
-      params: value.params,
+      params: withDefaultRepo(value.params, defaultRepo),
       presets: value.presets,
       notifyOnComplete: notify,
       message: message.trim(),
@@ -569,6 +586,21 @@ function SetupBody({
               </ul>
             )}
           </div>
+
+          {alerting && (
+            <div role="note" className="space-y-1 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm" data-testid="alert-triage-note">
+              <p className="text-foreground">
+                On Reliant&apos;s hosted platform, turning this on connects it to your organization&apos;s alerts: the critical and error
+                alerts of {projectName}&apos;s environments, and new or regressed errors. There is no token to copy and no alert route to write.
+              </p>
+              {fillsDefaultRepo && defaultRepo && (
+                <p className="text-xs text-muted-foreground">
+                  Alerts no service is mapped to are filed in <span className="font-mono">{defaultRepo}</span>, this project&apos;s repository.
+                  Set default_repo under More settings to choose another.
+                </p>
+              )}
+            </div>
+          )}
 
           {mode === "finish" && prefill && (
             <div role="note" className="rounded-md border border-warning-border bg-warning-surface px-3 py-2 text-sm text-warning-ink" data-testid="finish-banner">

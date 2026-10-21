@@ -53,6 +53,7 @@ const listConnections = vi.fn();
 const searchCatalog = vi.fn();
 const getCatalogEntry = vi.fn();
 const listInputOptions = vi.fn();
+const listRepos = vi.fn();
 
 vi.mock("@/api/grpc-client", () => ({
   grpcClient: {
@@ -64,6 +65,7 @@ vi.mock("@/api/grpc-client", () => ({
     worktree: () => ({ listWorktrees }),
     daemonRegistry: () => ({ listDaemons }),
     project: () => ({ listProjectDaemons }),
+    repo: () => ({ listRepos }),
   },
   getGRPCBaseURLPublic: () => "https://api.example.com",
 }));
@@ -450,5 +452,51 @@ describe("WorkflowSetupDialog: finish setup and settings (O2)", () => {
     listTriggers.mockResolvedValue(create(ListTriggersResponseSchema, { triggers: [activation("nightly", { enabled: false, params: { label: "bug" } })] }));
     render([nightly]);
     expect(await screen.findByRole("button", { name: "Save and resume" })).toBeInTheDocument();
+  });
+});
+
+describe("WorkflowSetupDialog: alert triage", () => {
+  const alerts = {
+    name: "alertmanager",
+    filter: "",
+    inputs: {},
+    prompt: "Triage it.",
+    source: { case: "webhook", value: { source: "alerting" } },
+  } as unknown as DeclaredTrigger;
+
+  function oncallWorkflowResponse() {
+    const str = (description: string) =>
+      create(InputSchema, {
+        type: "string",
+        config: { case: "stringInput", value: create(StringInputConfigSchema, { base: create(InputBaseSchema, { description }), default: "" }) },
+      });
+    return create(GetWorkflowResponseSchema, {
+      source: "builtin",
+      workflow: create(WorkflowSchema, { name: "oncall", inputs: { default_repo: str("Fallback repository") } }),
+    });
+  }
+
+  it("connects without a token and fills default_repo with the project's one repository", async () => {
+    const user = userEvent.setup();
+    getWorkflow.mockResolvedValue(oncallWorkflowResponse());
+    listRepos.mockResolvedValue({ repos: [{ id: "r", projectId: "proj-1", name: "shop", relativePath: "", remoteUrl: "git@github.com:acme/shop.git" }] });
+    const managed = create(WorkflowTriggerResultSchema, {
+      trigger: "alertmanager",
+      outcome: WorkflowTriggerOutcome.ENABLED,
+      activation: create(TriggerSchema, { id: "t-a", name: "Oncall · alertmanager", workflowTrigger: "alertmanager", webhookUrl: "/hooks/t-a", webhookManaged: true }),
+    });
+    enableWorkflow.mockResolvedValue(create(EnableWorkflowResponseSchema, { enabled: true, results: [managed] }));
+    render([alerts], { workflowRef: "oncall", title: "Oncall" });
+
+    const note = await screen.findByTestId("alert-triage-note");
+    expect(note).toHaveTextContent("connects it to your organization's alerts");
+    await waitFor(() => expect(note).toHaveTextContent("acme/shop"));
+    await machineReady();
+    await user.click(screen.getByRole("button", { name: "Turn on" }));
+
+    await waitFor(() => expect(enableWorkflow).toHaveBeenCalledTimes(1));
+    expect(sentRequest().params.default_repo?.kind).toEqual({ case: "stringValue", value: "acme/shop" });
+    expect(await screen.findByText(/Connected to your organization's alerts/)).toBeInTheDocument();
+    expect(screen.queryByLabelText("Token")).not.toBeInTheDocument();
   });
 });
