@@ -24,6 +24,11 @@
  * and a member sees no controls they would be refused — the server checks
  * every call again, so this is a courtesy, not the control.
  *
+ * EMAIL IS NOT ASSUMED. An instance sends mail only when its environment
+ * declares smtp (`mailDelivery`). Without it the tab says so, and every verb
+ * that would have emailed someone offers a one-time link to hand over instead
+ * (IdentityPasswordCodeDialog) rather than pretending a message went out.
+ *
  * A LOCAL environment runs forge's dev IdP on the developer's machine. It
  * reports nothing to the control plane, so the tab says so plainly instead of
  * inventing a status.
@@ -49,7 +54,7 @@ import type { LiveEnv } from "@/services/forge/live";
 import type { EnvLifecycle } from "@/services/forge/roster";
 import { cn } from "@/lib/utils";
 
-import { formatAgo } from "../Observability/format";
+import { formatAgo, formatIn } from "../Observability/format";
 import { Panel } from "./EnvTabPanels";
 import { IdentityUsers } from "./IdentityUsers";
 
@@ -214,15 +219,6 @@ const DELIVERY_VARIANT: Record<IdentityDeliveryState, "success" | "warning" | "e
   unknown: "neutral",
 };
 
-/** "in 21d", "in 3h" — or "expired" once it has passed. */
-export function formatIn(ms: number, now: number = Date.now()): string {
-  const seconds = Math.round((ms - now) / 1000);
-  if (seconds <= 0) return "expired";
-  if (seconds < 3600) return `in ${Math.max(1, Math.round(seconds / 60))}m`;
-  if (seconds < 86_400) return `in ${Math.round(seconds / 3600)}h`;
-  return `in ${Math.round(seconds / 86_400)}d`;
-}
-
 function StatusPanel({
   envId,
   status: s,
@@ -251,6 +247,26 @@ function StatusPanel({
           <dd className="text-foreground" data-testid="identity-visibility">
             {s.public ? "Public — anyone can reach the sign-in pages" : "Private — only from your clusters"}
           </dd>
+          {s.mailDelivery !== "unknown" && (
+            <>
+              <dt className="text-xs text-muted-foreground">Email</dt>
+              <dd className="text-foreground" data-testid="identity-mail">
+                {s.mailDelivery === "smtp" ? (
+                  "Sent through this environment's own SMTP server"
+                ) : (
+                  <div className="space-y-1">
+                    <p>None — Reliant sends no email for this environment: no invitations, no password-reset links.</p>
+                    <p className="text-xs text-muted-foreground" data-testid="identity-mail-none-hint">
+                      To send them, add <code className="font-mono text-foreground">smtp = forge.IdentitySMTP {"{…}"}</code> to its{" "}
+                      <code className="font-mono text-foreground">forge.ManagedIdentity</code> in{" "}
+                      <code className="font-mono text-foreground">deploy/kcl/identity.k</code> and deploy. Until then, an admin
+                      invites people and resets passwords by getting a one-time link under Users and handing it over.
+                    </p>
+                  </div>
+                )}
+              </dd>
+            </>
+          )}
           <dt className="text-xs text-muted-foreground">Last reconciled</dt>
           <dd className="text-foreground">{s.lastReconciledAtMs ? formatAgo(s.lastReconciledAtMs) : "not yet"}</dd>
           {(sharesAnother || s.sharerEnvironmentIds.length > 0) && (

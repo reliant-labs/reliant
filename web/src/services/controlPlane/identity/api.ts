@@ -18,14 +18,22 @@
  *
  * DECLARED ROLES are converged from the environment's KCL and are read-only
  * here: the invite, role and delete verbs refuse to touch them.
+ *
+ * MAIL. An instance sends mail only when its environment declares smtp
+ * (`mailDelivery`). Without it, invite and reset are refused unless the caller
+ * asks for the password-set code back (`returnCode`), which also needs the
+ * identity:manage permission. A returned code is a credential: this file maps
+ * it and hands it to the screen, and nothing logs it.
  */
 
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 
 import {
   IdentityDeliveryState as WireDeliveryState,
+  IdentityMailDelivery as WireMailDelivery,
   IdentityState as WireState,
   IdentityUserState as WireUserState,
+  type IdentityPasswordCode as WirePasswordCode,
   type IdentityUser as WireUser,
 } from "@/gen/controlplane/controlplane/v1/identity_pb";
 import { IdentityService } from "@/gen/controlplane/services/identity/v1/identity_pb";
@@ -103,6 +111,26 @@ export interface IdentityStatus {
   callerCanManage: boolean;
   /** Whether this deployment can export identities at all. */
   exportEnabled: boolean;
+  /**
+   * Whether the instance can send mail. `none`: invitations and resets are
+   * refused unless the code is handed back (return_code). `unknown`: a server
+   * that predates the field, so the console claims neither.
+   */
+  mailDelivery: IdentityMailDelivery;
+}
+
+export type IdentityMailDelivery = "none" | "smtp" | "unknown";
+
+/**
+ * A one-time password-set code handed back to an admin to deliver themselves.
+ * It is a CREDENTIAL: shown once, never logged, never toasted, never cached.
+ */
+export interface IdentityPasswordCode {
+  code: string;
+  /** An estimate (issue time plus the instance's 1h default). */
+  expiresAtMs: number | null;
+  /** The environment's reset page with the code filled in; "" when it declares nothing to build it from. */
+  resetUrl: string;
 }
 
 export interface IdentityRole {
@@ -162,6 +190,11 @@ const DELIVERY_STATE: Record<number, IdentityDeliveryState> = {
   [WireDeliveryState.UNBOUND]: "unbound",
   [WireDeliveryState.WITHDRAWN]: "withdrawn",
   [WireDeliveryState.DISABLED]: "disabled",
+};
+
+const MAIL_DELIVERY: Record<number, IdentityMailDelivery> = {
+  [WireMailDelivery.NONE]: "none",
+  [WireMailDelivery.SMTP]: "smtp",
 };
 
 const USER_STATE: Record<number, IdentityUserState> = {
@@ -226,6 +259,7 @@ export async function getIdentityStatus(orgId: string, environmentId: string): P
     refused: r.refused,
     callerCanManage: r.callerCanManage,
     exportEnabled: r.exportEnabled,
+    mailDelivery: MAIL_DELIVERY[r.mailDelivery] ?? "unknown",
   };
 }
 
@@ -253,14 +287,30 @@ export async function listIdentityUsers(
   };
 }
 
-/** Creates the account if needed, grants the console-managed roles, and has the instance email an invitation. */
+function mapCode(c: WirePasswordCode | undefined): IdentityPasswordCode | null {
+  if (!c?.code) return null;
+  return { code: c.code, expiresAtMs: msOf(c.expiresAt), resetUrl: c.resetUrl };
+}
+
+/**
+ * Creates the account if needed and grants the console-managed roles. Without
+ * `returnCode` the instance emails the invitation (refused when mail delivery
+ * is none); with it the password-set code comes back instead, for an account
+ * that has no credential yet.
+ */
 export async function inviteIdentityUser(
   orgId: string,
   environmentId: string,
-  args: { email: string; roles: string[] }
-): Promise<{ userId: string; created: boolean }> {
-  const r = await client().inviteUser({ orgId, environmentId, email: args.email.trim(), roles: args.roles });
-  return { userId: r.userId, created: r.created };
+  args: { email: string; roles: string[]; returnCode?: boolean }
+): Promise<{ userId: string; created: boolean; code: IdentityPasswordCode | null }> {
+  const r = await client().inviteUser({
+    orgId,
+    environmentId,
+    email: args.email.trim(),
+    roles: args.roles,
+    returnCode: args.returnCode ?? false,
+  });
+  return { userId: r.userId, created: r.created, code: mapCode(r.code) };
 }
 
 /** Replaces the user's COMPLETE set of console-managed roles. Declared roles are left as they are. */
@@ -273,8 +323,19 @@ export async function setIdentityUserRoles(
   return r.user ? mapUser(r.user) : null;
 }
 
-export async function sendIdentityPasswordReset(orgId: string, environmentId: string, userId: string): Promise<void> {
-  await client().sendPasswordReset({ orgId, environmentId, userId });
+/**
+ * Without `returnCode` the instance emails a reset link and this returns null;
+ * with it, the password-set code is handed back instead (it needs the
+ * identity:manage permission, not only the admin role).
+ */
+export async function sendIdentityPasswordReset(
+  orgId: string,
+  environmentId: string,
+  userId: string,
+  opts: { returnCode?: boolean } = {}
+): Promise<IdentityPasswordCode | null> {
+  const r = await client().sendPasswordReset({ orgId, environmentId, userId, returnCode: opts.returnCode ?? false });
+  return mapCode(r.code);
 }
 
 export async function lockIdentityUser(orgId: string, environmentId: string, userId: string): Promise<void> {
