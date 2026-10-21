@@ -76,13 +76,16 @@ type IdentityServiceClient interface {
 	GetIdentityStatus(context.Context, *connect.Request[v1.GetIdentityStatusRequest]) (*connect.Response[v1.GetIdentityStatusResponse], error)
 	// ListUsers lists the instance's human users with their state and roles.
 	ListUsers(context.Context, *connect.Request[v1.ListIdentityUsersRequest]) (*connect.Response[v1.ListIdentityUsersResponse], error)
-	// InviteUser creates the account if needed, grants the console-managed roles
-	// and has the instance email the invitee a link to set a credential.
+	// InviteUser creates the account if needed and grants the console-managed
+	// roles. An account with no credential yet (a new one, or one never set up)
+	// gets a password-set code: emailed as a link when the environment has mail
+	// delivery, or handed back with return_code.
 	InviteUser(context.Context, *connect.Request[v1.InviteIdentityUserRequest]) (*connect.Response[v1.InviteIdentityUserResponse], error)
 	// SetUserRoles replaces the user's console-managed roles. Declared roles are
 	// left as they are.
 	SetUserRoles(context.Context, *connect.Request[v1.SetIdentityUserRolesRequest]) (*connect.Response[v1.SetIdentityUserRolesResponse], error)
-	// SendPasswordReset emails the user a link to set a new password.
+	// SendPasswordReset issues the user a password-set code: emailed as a link
+	// when the environment has mail delivery, or handed back with return_code.
 	SendPasswordReset(context.Context, *connect.Request[v1.SendIdentityPasswordResetRequest]) (*connect.Response[v1.SendIdentityPasswordResetResponse], error)
 	// LockUser blocks sign-in for the user. Reversible with UnlockUser.
 	LockUser(context.Context, *connect.Request[v1.LockIdentityUserRequest]) (*connect.Response[v1.LockIdentityUserResponse], error)
@@ -263,13 +266,16 @@ type IdentityServiceHandler interface {
 	GetIdentityStatus(context.Context, *connect.Request[v1.GetIdentityStatusRequest]) (*connect.Response[v1.GetIdentityStatusResponse], error)
 	// ListUsers lists the instance's human users with their state and roles.
 	ListUsers(context.Context, *connect.Request[v1.ListIdentityUsersRequest]) (*connect.Response[v1.ListIdentityUsersResponse], error)
-	// InviteUser creates the account if needed, grants the console-managed roles
-	// and has the instance email the invitee a link to set a credential.
+	// InviteUser creates the account if needed and grants the console-managed
+	// roles. An account with no credential yet (a new one, or one never set up)
+	// gets a password-set code: emailed as a link when the environment has mail
+	// delivery, or handed back with return_code.
 	InviteUser(context.Context, *connect.Request[v1.InviteIdentityUserRequest]) (*connect.Response[v1.InviteIdentityUserResponse], error)
 	// SetUserRoles replaces the user's console-managed roles. Declared roles are
 	// left as they are.
 	SetUserRoles(context.Context, *connect.Request[v1.SetIdentityUserRolesRequest]) (*connect.Response[v1.SetIdentityUserRolesResponse], error)
-	// SendPasswordReset emails the user a link to set a new password.
+	// SendPasswordReset issues the user a password-set code: emailed as a link
+	// when the environment has mail delivery, or handed back with return_code.
 	SendPasswordReset(context.Context, *connect.Request[v1.SendIdentityPasswordResetRequest]) (*connect.Response[v1.SendIdentityPasswordResetResponse], error)
 	// LockUser blocks sign-in for the user. Reversible with UnlockUser.
 	LockUser(context.Context, *connect.Request[v1.LockIdentityUserRequest]) (*connect.Response[v1.LockIdentityUserResponse], error)

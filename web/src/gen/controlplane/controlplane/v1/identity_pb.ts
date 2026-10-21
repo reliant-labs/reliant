@@ -15,7 +15,45 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file controlplane/v1/identity.proto.
  */
 export const file_controlplane_v1_identity: GenFile = /*@__PURE__*/
-  fileDesc("Ch5jb250cm9scGxhbmUvdjEvaWRlbnRpdHkucHJvdG8SD2NvbnRyb2xwbGFuZS52MSJlCgtJZGVudGl0eUFwcBIMCgRuYW1lGAEgASgJEhEKCWNsaWVudF9pZBgCIAEoCRI1ChFicm9rZXJfZXhwaXJlc19hdBgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAi0wEKEElkZW50aXR5RGVsaXZlcnkSDAoEa2luZBgBIAEoCRIPCgdjbHVzdGVyGAIgASgJEhEKCW5hbWVzcGFjZRgDIAEoCRIMCgRuYW1lGAQgASgJEjUKBXN0YXRlGAUgASgOMiYuY29udHJvbHBsYW5lLnYxLklkZW50aXR5RGVsaXZlcnlTdGF0ZRISCgpsYXN0X2Vycm9yGAYgASgJEjQKEGxhc3RfdmVyaWZpZWRfYXQYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIlIKDElkZW50aXR5Um9sZRILCgNrZXkYASABKAkSFAoMZGlzcGxheV9uYW1lGAIgASgJEg0KBWdyb3VwGAMgASgJEhAKCGRlY2xhcmVkGAQgASgIIrYBCgxJZGVudGl0eVVzZXISDwoHdXNlcl9pZBgBIAEoCRINCgVlbWFpbBgCIAEoCRIUCgxkaXNwbGF5X25hbWUYAyABKAkSMQoFc3RhdGUYBCABKA4yIi5jb250cm9scGxhbmUudjEuSWRlbnRpdHlVc2VyU3RhdGUSDQoFcm9sZXMYBSADKAkSLgoKY3JlYXRlZF9hdBgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAqzQIKDUlkZW50aXR5U3RhdGUSHgoaSURFTlRJVFlfU1RBVEVfVU5TUEVDSUZJRUQQABIaChZJREVOVElUWV9TVEFURV9QRU5ESU5HEAESGwoXSURFTlRJVFlfU1RBVEVfQ1JFQVRJTkcQAhIfChtJREVOVElUWV9TVEFURV9QUk9WSVNJT05JTkcQAxIYChRJREVOVElUWV9TVEFURV9SRUFEWRAEEhsKF0lERU5USVRZX1NUQVRFX0RFR1JBREVEEAUSGgoWSURFTlRJVFlfU1RBVEVfRkFJTElORxAGEhwKGElERU5USVRZX1NUQVRFX1dJVEhEUkFXThAHEhgKFElERU5USVRZX1NUQVRFX0dSQUNFEAgSGwoXSURFTlRJVFlfU1RBVEVfREVMRVRJTkcQCRIaChZJREVOVElUWV9TVEFURV9ERUxFVEVEEAoqowIKFUlkZW50aXR5RGVsaXZlcnlTdGF0ZRInCiNJREVOVElUWV9ERUxJVkVSWV9TVEFURV9VTlNQRUNJRklFRBAAEiUKIUlERU5USVRZX0RFTElWRVJZX1NUQVRFX0RFTElWRVJFRBABEiMKH0lERU5USVRZX0RFTElWRVJZX1NUQVRFX1BFTkRJTkcQAhIjCh9JREVOVElUWV9ERUxJVkVSWV9TVEFURV9GQUlMSU5HEAMSIwofSURFTlRJVFlfREVMSVZFUllfU1RBVEVfVU5CT1VORBAEEiUKIUlERU5USVRZX0RFTElWRVJZX1NUQVRFX1dJVEhEUkFXThAFEiQKIElERU5USVRZX0RFTElWRVJZX1NUQVRFX0RJU0FCTEVEEAYquwEKEUlkZW50aXR5VXNlclN0YXRlEiMKH0lERU5USVRZX1VTRVJfU1RBVEVfVU5TUEVDSUZJRUQQABIfChtJREVOVElUWV9VU0VSX1NUQVRFX0lOVklURUQQARIeChpJREVOVElUWV9VU0VSX1NUQVRFX0FDVElWRRACEh4KGklERU5USVRZX1VTRVJfU1RBVEVfTE9DS0VEEAMSIAocSURFTlRJVFlfVVNFUl9TVEFURV9ESVNBQkxFRBAEQtIBChNjb20uY29udHJvbHBsYW5lLnYxQg1JZGVudGl0eVByb3RvUAFaT2dpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL2NvbnRyb2xwbGFuZS9jb250cm9scGxhbmUvdjE7Y29udHJvbHBsYW5ldjGiAgNDWFiqAg9Db250cm9scGxhbmUuVjHKAg9Db250cm9scGxhbmVcVjHiAhtDb250cm9scGxhbmVcVjFcR1BCTWV0YWRhdGHqAhBDb250cm9scGxhbmU6OlYxYgZwcm90bzM", [file_google_protobuf_timestamp]);
+  fileDesc("Ch5jb250cm9scGxhbmUvdjEvaWRlbnRpdHkucHJvdG8SD2NvbnRyb2xwbGFuZS52MSJnChRJZGVudGl0eVBhc3N3b3JkQ29kZRIMCgRjb2RlGAEgASgJEi4KCmV4cGlyZXNfYXQYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhEKCXJlc2V0X3VybBgDIAEoCSJlCgtJZGVudGl0eUFwcBIMCgRuYW1lGAEgASgJEhEKCWNsaWVudF9pZBgCIAEoCRI1ChFicm9rZXJfZXhwaXJlc19hdBgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAi0wEKEElkZW50aXR5RGVsaXZlcnkSDAoEa2luZBgBIAEoCRIPCgdjbHVzdGVyGAIgASgJEhEKCW5hbWVzcGFjZRgDIAEoCRIMCgRuYW1lGAQgASgJEjUKBXN0YXRlGAUgASgOMiYuY29udHJvbHBsYW5lLnYxLklkZW50aXR5RGVsaXZlcnlTdGF0ZRISCgpsYXN0X2Vycm9yGAYgASgJEjQKEGxhc3RfdmVyaWZpZWRfYXQYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIlIKDElkZW50aXR5Um9sZRILCgNrZXkYASABKAkSFAoMZGlzcGxheV9uYW1lGAIgASgJEg0KBWdyb3VwGAMgASgJEhAKCGRlY2xhcmVkGAQgASgIIrYBCgxJZGVudGl0eVVzZXISDwoHdXNlcl9pZBgBIAEoCRINCgVlbWFpbBgCIAEoCRIUCgxkaXNwbGF5X25hbWUYAyABKAkSMQoFc3RhdGUYBCABKA4yIi5jb250cm9scGxhbmUudjEuSWRlbnRpdHlVc2VyU3RhdGUSDQoFcm9sZXMYBSADKAkSLgoKY3JlYXRlZF9hdBgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAqzQIKDUlkZW50aXR5U3RhdGUSHgoaSURFTlRJVFlfU1RBVEVfVU5TUEVDSUZJRUQQABIaChZJREVOVElUWV9TVEFURV9QRU5ESU5HEAESGwoXSURFTlRJVFlfU1RBVEVfQ1JFQVRJTkcQAhIfChtJREVOVElUWV9TVEFURV9QUk9WSVNJT05JTkcQAxIYChRJREVOVElUWV9TVEFURV9SRUFEWRAEEhsKF0lERU5USVRZX1NUQVRFX0RFR1JBREVEEAUSGgoWSURFTlRJVFlfU1RBVEVfRkFJTElORxAGEhwKGElERU5USVRZX1NUQVRFX1dJVEhEUkFXThAHEhgKFElERU5USVRZX1NUQVRFX0dSQUNFEAgSGwoXSURFTlRJVFlfU1RBVEVfREVMRVRJTkcQCRIaChZJREVOVElUWV9TVEFURV9ERUxFVEVEEAoqowIKFUlkZW50aXR5RGVsaXZlcnlTdGF0ZRInCiNJREVOVElUWV9ERUxJVkVSWV9TVEFURV9VTlNQRUNJRklFRBAAEiUKIUlERU5USVRZX0RFTElWRVJZX1NUQVRFX0RFTElWRVJFRBABEiMKH0lERU5USVRZX0RFTElWRVJZX1NUQVRFX1BFTkRJTkcQAhIjCh9JREVOVElUWV9ERUxJVkVSWV9TVEFURV9GQUlMSU5HEAMSIwofSURFTlRJVFlfREVMSVZFUllfU1RBVEVfVU5CT1VORBAEEiUKIUlERU5USVRZX0RFTElWRVJZX1NUQVRFX1dJVEhEUkFXThAFEiQKIElERU5USVRZX0RFTElWRVJZX1NUQVRFX0RJU0FCTEVEEAYqgAEKFElkZW50aXR5TWFpbERlbGl2ZXJ5EiYKIklERU5USVRZX01BSUxfREVMSVZFUllfVU5TUEVDSUZJRUQQABIfChtJREVOVElUWV9NQUlMX0RFTElWRVJZX05PTkUQARIfChtJREVOVElUWV9NQUlMX0RFTElWRVJZX1NNVFAQAiq7AQoRSWRlbnRpdHlVc2VyU3RhdGUSIwofSURFTlRJVFlfVVNFUl9TVEFURV9VTlNQRUNJRklFRBAAEh8KG0lERU5USVRZX1VTRVJfU1RBVEVfSU5WSVRFRBABEh4KGklERU5USVRZX1VTRVJfU1RBVEVfQUNUSVZFEAISHgoaSURFTlRJVFlfVVNFUl9TVEFURV9MT0NLRUQQAxIgChxJREVOVElUWV9VU0VSX1NUQVRFX0RJU0FCTEVEEARC0gEKE2NvbS5jb250cm9scGxhbmUudjFCDUlkZW50aXR5UHJvdG9QAVpPZ2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vY29udHJvbHBsYW5lL2NvbnRyb2xwbGFuZS92MTtjb250cm9scGxhbmV2MaICA0NYWKoCD0NvbnRyb2xwbGFuZS5WMcoCD0NvbnRyb2xwbGFuZVxWMeICG0NvbnRyb2xwbGFuZVxWMVxHUEJNZXRhZGF0YeoCEENvbnRyb2xwbGFuZTo6VjFiBnByb3RvMw", [file_google_protobuf_timestamp]);
+
+/**
+ * IdentityPasswordCode is a one-time code that sets a user's password, handed
+ * back to an admin who asked for it (return_code) so they can deliver it
+ * themselves. It is a credential: it is never logged or audited.
+ *
+ * @generated from message controlplane.v1.IdentityPasswordCode
+ */
+export type IdentityPasswordCode = Message<"controlplane.v1.IdentityPasswordCode"> & {
+  /**
+   * @generated from field: string code = 1;
+   */
+  code: string;
+
+  /**
+   * An estimate: the instance's default password-code lifetime (1h) from the
+   * moment it was issued. Redeeming it later is refused.
+   *
+   * @generated from field: google.protobuf.Timestamp expires_at = 2;
+   */
+  expiresAt?: Timestamp | undefined;
+
+  /**
+   * The environment's own reset page with the code filled in, the link an
+   * email would have carried. Empty when the environment's identity declares
+   * no application login URI or domain to build it from.
+   *
+   * @generated from field: string reset_url = 3;
+   */
+  resetUrl: string;
+};
+
+/**
+ * Describes the message controlplane.v1.IdentityPasswordCode.
+ * Use `create(IdentityPasswordCodeSchema)` to create a new message.
+ */
+export const IdentityPasswordCodeSchema: GenMessage<IdentityPasswordCode> = /*@__PURE__*/
+  messageDesc(file_controlplane_v1_identity, 0);
 
 /**
  * IdentityApp is one registered application. A client id is not a secret.
@@ -47,7 +85,7 @@ export type IdentityApp = Message<"controlplane.v1.IdentityApp"> & {
  * Use `create(IdentityAppSchema)` to create a new message.
  */
 export const IdentityAppSchema: GenMessage<IdentityApp> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_identity, 0);
+  messageDesc(file_controlplane_v1_identity, 1);
 
 /**
  * IdentityDelivery is one destination the instance's outputs are delivered to.
@@ -96,7 +134,7 @@ export type IdentityDelivery = Message<"controlplane.v1.IdentityDelivery"> & {
  * Use `create(IdentityDeliverySchema)` to create a new message.
  */
 export const IdentityDeliverySchema: GenMessage<IdentityDelivery> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_identity, 1);
+  messageDesc(file_controlplane_v1_identity, 2);
 
 /**
  * IdentityRole is a role the environment's identity declares. A declared role
@@ -132,7 +170,7 @@ export type IdentityRole = Message<"controlplane.v1.IdentityRole"> & {
  * Use `create(IdentityRoleSchema)` to create a new message.
  */
 export const IdentityRoleSchema: GenMessage<IdentityRole> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_identity, 2);
+  messageDesc(file_controlplane_v1_identity, 3);
 
 /**
  * @generated from message controlplane.v1.IdentityUser
@@ -176,7 +214,7 @@ export type IdentityUser = Message<"controlplane.v1.IdentityUser"> & {
  * Use `create(IdentityUserSchema)` to create a new message.
  */
 export const IdentityUserSchema: GenMessage<IdentityUser> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_identity, 3);
+  messageDesc(file_controlplane_v1_identity, 4);
 
 /**
  * IdentityState is where an environment's identity instance stands in the
@@ -299,6 +337,42 @@ export const IdentityDeliveryStateSchema: GenEnum<IdentityDeliveryState> = /*@__
   enumDesc(file_controlplane_v1_identity, 1);
 
 /**
+ * IdentityMailDelivery is whether an environment's identity instance can send
+ * mail: invitations and password-reset links.
+ *
+ * @generated from enum controlplane.v1.IdentityMailDelivery
+ */
+export enum IdentityMailDelivery {
+  /**
+   * @generated from enum value: IDENTITY_MAIL_DELIVERY_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * No mail is sent: the environment declares no smtp in its
+   * forge.ManagedIdentity, and the platform provides no relay. InviteUser and
+   * SendPasswordReset then refuse unless the caller asks for the code back
+   * (return_code) and delivers it another way.
+   *
+   * @generated from enum value: IDENTITY_MAIL_DELIVERY_NONE = 1;
+   */
+  NONE = 1,
+
+  /**
+   * The environment's own SMTP server (forge.ManagedIdentity smtp).
+   *
+   * @generated from enum value: IDENTITY_MAIL_DELIVERY_SMTP = 2;
+   */
+  SMTP = 2,
+}
+
+/**
+ * Describes the enum controlplane.v1.IdentityMailDelivery.
+ */
+export const IdentityMailDeliverySchema: GenEnum<IdentityMailDelivery> = /*@__PURE__*/
+  enumDesc(file_controlplane_v1_identity, 2);
+
+/**
  * @generated from enum controlplane.v1.IdentityUserState
  */
 export enum IdentityUserState {
@@ -334,5 +408,5 @@ export enum IdentityUserState {
  * Describes the enum controlplane.v1.IdentityUserState.
  */
 export const IdentityUserStateSchema: GenEnum<IdentityUserState> = /*@__PURE__*/
-  enumDesc(file_controlplane_v1_identity, 2);
+  enumDesc(file_controlplane_v1_identity, 3);
 

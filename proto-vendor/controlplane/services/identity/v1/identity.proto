@@ -23,18 +23,30 @@ option go_package = "github.com/reliant-labs/control-plane/gen/services/identity
 // it relays the request, unchanged, to the identity reconciler's internal API
 // (IdentityInternalService), which alone maps (org, env) to an instance.
 //
-// AUTHORIZATION. Members may read (GetIdentityStatus, ListUsers). Every verb
-// that changes anything, and RequestExport, needs the org role admin or above.
-// Machine credentials are refused on every RPC. Every mutation is audited.
+// AUTHORIZATION. A person: members may read (GetIdentityStatus, ListUsers);
+// every verb that changes anything, and the export verbs, need the org role
+// admin or above. A machine credential: it must act for THAT org and carry the
+// scope explicitly, identity:read for the reads and identity:manage for the
+// rest (deploy's callerOrgID model); a Reliant agent's forge elevates to them
+// on demand, clipped to its person's grants. Asking for a password-set code
+// back (return_code) needs identity:manage either way: a person must also be
+// an org admin and hold the identity:manage grant. Every mutation is audited,
+// a machine caller by its token id and acting user.
+//
+// MAIL. GetIdentityStatus reports mail_delivery. With none, InviteUser and
+// SendPasswordReset answer FailedPrecondition rather than succeed and send
+// nothing, unless the caller asks for the code back (return_code) to deliver
+// itself.
 //
 // DECLARED ROLES ARE READ-ONLY. A role the environment's identity declares with
 // members_from = declared is converged from KCL; invite, role and delete verbs
 // refuse to touch it ("managed in deploy/kcl/identity.k").
 //
 // ERRORS: InvalidArgument (missing id, unknown role), PermissionDenied (not a
-// member / not an admin / machine credential), NotFound (no such environment,
+// member / not an admin / machine credential without the scope or for another
+// org), NotFound (no such environment,
 // instance or user in it), FailedPrecondition (declared role, instance not
-// ready, export not enabled for this deployment), Unavailable (identity
+// ready, export not enabled for this deployment, no mail delivery), Unavailable (identity
 // management is not configured on this server).
 service IdentityService {
   option (forge.v1.service) = {
@@ -61,8 +73,10 @@ service IdentityService {
     };
   }
 
-  // InviteUser creates the account if needed, grants the console-managed roles
-  // and has the instance email the invitee a link to set a credential.
+  // InviteUser creates the account if needed and grants the console-managed
+  // roles. An account with no credential yet (a new one, or one never set up)
+  // gets a password-set code: emailed as a link when the environment has mail
+  // delivery, or handed back with return_code.
   rpc InviteUser(InviteIdentityUserRequest) returns (InviteIdentityUserResponse) {
     option (forge.v1.method) = {
       auth_required: true
@@ -96,7 +110,8 @@ service IdentityService {
     };
   }
 
-  // SendPasswordReset emails the user a link to set a new password.
+  // SendPasswordReset issues the user a password-set code: emailed as a link
+  // when the environment has mail delivery, or handed back with return_code.
   rpc SendPasswordReset(SendIdentityPasswordResetRequest) returns (SendIdentityPasswordResetResponse) {
     option (forge.v1.method) = {
       auth_required: true
@@ -251,6 +266,9 @@ message GetIdentityStatusResponse {
   // RequestExport and GetExportURL answer FailedPrecondition for every
   // environment, so a console can say so without calling them.
   bool export_enabled = 19;
+  // Whether the instance can send mail. NONE means InviteUser and
+  // SendPasswordReset need return_code.
+  IdentityMailDelivery mail_delivery = 20;
 }
 
 message ListIdentityUsersRequest {
@@ -291,12 +309,20 @@ message InviteIdentityUserRequest {
       }
     }
   }];
+  // Hand the password-set code back instead of emailing it (needs
+  // identity:manage; see the service comment). The only way to invite where
+  // mail_delivery is NONE.
+  bool return_code = 5;
 }
 
 message InviteIdentityUserResponse {
   string user_id = 1;
   // False when the email already had an account (its roles were added to).
   bool created = 2;
+  // The password-set code, when return_code was set and the account had no
+  // credential. Unset for an account that already has one: use
+  // SendPasswordReset for that.
+  IdentityPasswordCode code = 3;
 }
 
 message SetIdentityUserRolesRequest {
@@ -330,9 +356,16 @@ message SendIdentityPasswordResetRequest {
     min_len: 1
     max_len: 128
   }];
+  // Hand the password-set code back instead of emailing it (needs
+  // identity:manage; see the service comment). The only way to reset where
+  // mail_delivery is NONE.
+  bool return_code = 4;
 }
 
-message SendIdentityPasswordResetResponse {}
+message SendIdentityPasswordResetResponse {
+  // The password-set code, when return_code was set.
+  IdentityPasswordCode code = 1;
+}
 
 message LockIdentityUserRequest {
   string org_id = 1 [(buf.validate.field).required = true];
