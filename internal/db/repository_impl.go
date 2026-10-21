@@ -18,6 +18,7 @@ import (
 	postgresstore "github.com/reliant-labs/reliant/internal/db/postgres"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // Ensure *Repo implements Repository interface at compile time
@@ -953,7 +954,7 @@ func (r *Repo) DeleteMessage(ctx context.Context, messageID string) error {
 
 // CreateApproval creates a new approval record and emits an activity event if the activity changed.
 func (r *Repo) CreateApproval(ctx context.Context, approval *Approval) error {
-	if err := r.approvals.CreateApproval(ctx, approval); err != nil {
+	if err := store.CreateApprovalIfAbsent(ctx, r.ORM(), approval); err != nil {
 		return err
 	}
 	// Activity may have changed from RUNNING → AWAITING_INPUT
@@ -962,22 +963,22 @@ func (r *Repo) CreateApproval(ctx context.Context, approval *Approval) error {
 
 // GetApproval retrieves an approval by ID
 func (r *Repo) GetApproval(ctx context.Context, id string) (*Approval, error) {
-	return r.approvals.GetApproval(ctx, id)
+	return store.GetApproval(ctx, r.ORM(), id)
 }
 
 // GetApprovalByEntityID retrieves an approval by its entity_id
 func (r *Repo) GetApprovalByEntityID(ctx context.Context, entityID string) (*Approval, error) {
-	return r.approvals.GetApprovalByEntityID(ctx, entityID)
+	return store.GetApprovalByEntityID(ctx, r.ORM(), entityID)
 }
 
 // ListPendingApprovalsByChat retrieves all pending approvals for a chat
 func (r *Repo) ListPendingApprovalsByChat(ctx context.Context, chatID string) ([]*Approval, error) {
-	return r.approvals.ListPendingApprovalsByChat(ctx, chatID)
+	return store.ListPendingApprovalsByChat(ctx, r.ORM(), chatID)
 }
 
 // ListApprovalsByChat retrieves all approvals for a chat (including resolved)
 func (r *Repo) ListApprovalsByChat(ctx context.Context, chatID string) ([]*Approval, error) {
-	return r.approvals.ListApprovalsByChat(ctx, chatID)
+	return store.ListApprovalsByChat(ctx, r.ORM(), chatID)
 }
 
 // UpdateApprovalStatus updates the status of an approval and emits an activity event if the activity changed.
@@ -988,7 +989,7 @@ func (r *Repo) UpdateApprovalStatus(ctx context.Context, id string, status int32
 		resolvedAt = &now
 	}
 
-	if err := r.approvals.UpdateApprovalStatus(ctx, id, status, denialReason, actionTaken, metadata, resolvedAt); err != nil {
+	if err := store.UpdateApprovalStatus(ctx, r.ORM(), id, status, denialReason, actionTaken, metadata, resolvedAt); err != nil {
 		return err
 	}
 
@@ -2787,7 +2788,7 @@ func (r *Repo) CreatePlan(ctx context.Context, plan *Plan) error {
 		return fmt.Errorf("title is required")
 	}
 
-	return r.planTasks.CreatePlan(ctx, plan)
+	return store.InsertPlan(ctx, r.ORM(), plan)
 }
 
 func (r *Repo) GetPlan(ctx context.Context, id string) (*Plan, error) {
@@ -2795,7 +2796,7 @@ func (r *Repo) GetPlan(ctx context.Context, id string) (*Plan, error) {
 		return nil, fmt.Errorf("plan ID cannot be empty")
 	}
 
-	return r.planTasks.GetPlan(ctx, id)
+	return store.GetPlan(ctx, r.ORM(), id)
 }
 
 func (r *Repo) GetPlanByThreadID(ctx context.Context, threadID string) (*Plan, error) {
@@ -2803,7 +2804,7 @@ func (r *Repo) GetPlanByThreadID(ctx context.Context, threadID string) (*Plan, e
 		return nil, fmt.Errorf("thread ID cannot be empty")
 	}
 
-	return r.planTasks.GetPlanByThreadID(ctx, threadID)
+	return store.GetPlanByThreadID(ctx, r.ORM(), threadID)
 }
 
 func (r *Repo) ListPlansByThread(ctx context.Context, threadID string) ([]*Plan, error) {
@@ -2811,7 +2812,7 @@ func (r *Repo) ListPlansByThread(ctx context.Context, threadID string) ([]*Plan,
 		return nil, fmt.Errorf("thread ID cannot be empty")
 	}
 
-	return r.planTasks.ListPlansByThread(ctx, threadID)
+	return store.ListPlansByThread(ctx, r.ORM(), threadID)
 }
 
 func (r *Repo) ListPlansByChatID(ctx context.Context, chatID string) ([]*Plan, error) {
@@ -2819,7 +2820,7 @@ func (r *Repo) ListPlansByChatID(ctx context.Context, chatID string) ([]*Plan, e
 		return nil, fmt.Errorf("chat ID cannot be empty")
 	}
 
-	return r.planTasks.ListPlansByChatID(ctx, chatID)
+	return store.ListPlansByChatID(ctx, r.ORM(), chatID)
 }
 
 func (r *Repo) ListPlansByProject(ctx context.Context, projectID string) ([]*Plan, error) {
@@ -2827,7 +2828,7 @@ func (r *Repo) ListPlansByProject(ctx context.Context, projectID string) ([]*Pla
 		return nil, fmt.Errorf("project ID cannot be empty")
 	}
 
-	return r.planTasks.ListPlansByProject(ctx, projectID)
+	return store.ListPlansByProject(ctx, r.ORM(), projectID)
 }
 
 func (r *Repo) UpdatePlan(ctx context.Context, plan *Plan) error {
@@ -2838,7 +2839,7 @@ func (r *Repo) UpdatePlan(ctx context.Context, plan *Plan) error {
 		return fmt.Errorf("plan ID cannot be empty")
 	}
 
-	return r.planTasks.UpdatePlan(ctx, plan)
+	return store.ReplacePlan(ctx, r.ORM(), plan)
 }
 
 func (r *Repo) UpdatePlanStatus(ctx context.Context, id string, status int32, completedAt *time.Time) error {
@@ -2846,14 +2847,14 @@ func (r *Repo) UpdatePlanStatus(ctx context.Context, id string, status int32, co
 		return fmt.Errorf("plan ID cannot be empty")
 	}
 
-	return r.planTasks.UpdatePlanStatus(ctx, id, status, completedAt)
+	return store.UpdatePlanStatus(ctx, r.ORM(), id, status, completedAt)
 }
 
 func (r *Repo) DeletePlan(ctx context.Context, id string) error {
 	if id == "" {
 		return fmt.Errorf("plan ID cannot be empty")
 	}
-	return r.planTasks.DeletePlan(ctx, id)
+	return store.RemovePlan(ctx, r.ORM(), id)
 }
 
 // ==================== Tasks ====================
@@ -2869,7 +2870,7 @@ func (r *Repo) CreateTask(ctx context.Context, task *Task) error {
 		return fmt.Errorf("title is required")
 	}
 
-	return r.planTasks.CreateTask(ctx, task)
+	return store.InsertTask(ctx, r.ORM(), task)
 }
 
 func (r *Repo) GetTask(ctx context.Context, id string) (*Task, error) {
@@ -2877,7 +2878,7 @@ func (r *Repo) GetTask(ctx context.Context, id string) (*Task, error) {
 		return nil, fmt.Errorf("task ID cannot be empty")
 	}
 
-	return r.planTasks.GetTask(ctx, id)
+	return store.GetTask(ctx, r.ORM(), id)
 }
 
 func (r *Repo) GetTaskByPosition(ctx context.Context, planID string, position int) (*Task, error) {
@@ -2901,7 +2902,7 @@ func (r *Repo) ListTasksByPlan(ctx context.Context, planID string) ([]*Task, err
 		return nil, fmt.Errorf("plan ID cannot be empty")
 	}
 
-	return r.planTasks.ListTasksByPlan(ctx, planID)
+	return store.ListTasksByPlan(ctx, r.ORM(), planID)
 }
 
 func (r *Repo) ListTasksByParent(ctx context.Context, parentID string) ([]*Task, error) {
@@ -2978,7 +2979,7 @@ func (r *Repo) UpdateTask(ctx context.Context, task *Task) error {
 		return fmt.Errorf("task ID cannot be empty")
 	}
 
-	return r.planTasks.UpdateTask(ctx, task)
+	return store.ReplaceTask(ctx, r.ORM(), task)
 }
 
 func (r *Repo) UpdateTaskStatus(ctx context.Context, id string, status int32, completedAt *time.Time) error {
@@ -2992,14 +2993,14 @@ func (r *Repo) UpdateTaskStatus(ctx context.Context, id string, status int32, co
 		completedAt = &now
 	}
 
-	return r.planTasks.UpdateTaskStatus(ctx, id, status, completedAt)
+	return store.UpdateTaskStatus(ctx, r.ORM(), id, status, completedAt)
 }
 
 func (r *Repo) DeleteTask(ctx context.Context, id string) error {
 	if id == "" {
 		return fmt.Errorf("task ID cannot be empty")
 	}
-	return r.planTasks.DeleteTask(ctx, id)
+	return store.RemoveTask(ctx, r.ORM(), id)
 }
 
 // ==================== Task Dependencies ====================
@@ -3014,49 +3015,49 @@ func (r *Repo) CreateTaskDependency(ctx context.Context, dep *TaskDependency) er
 	if dep.FromTaskID == dep.ToTaskID {
 		return fmt.Errorf("a task cannot depend on itself")
 	}
-	return r.planTasks.CreateTaskDependency(ctx, dep)
+	return store.InsertTaskDependency(ctx, r.ORM(), dep)
 }
 
 func (r *Repo) GetTaskDependency(ctx context.Context, id string) (*TaskDependency, error) {
 	if id == "" {
 		return nil, fmt.Errorf("dependency ID cannot be empty")
 	}
-	return r.planTasks.GetTaskDependency(ctx, id)
+	return store.GetTaskDependency(ctx, r.ORM(), id)
 }
 
 func (r *Repo) ListTaskDependenciesByTask(ctx context.Context, taskID string) ([]*TaskDependency, error) {
 	if taskID == "" {
 		return nil, fmt.Errorf("task ID cannot be empty")
 	}
-	return r.planTasks.ListTaskDependenciesByTask(ctx, taskID)
+	return store.ListTaskDependenciesByTask(ctx, r.ORM(), taskID)
 }
 
 func (r *Repo) ListBlockersForTask(ctx context.Context, taskID string) ([]*TaskDependency, error) {
 	if taskID == "" {
 		return nil, fmt.Errorf("task ID cannot be empty")
 	}
-	return r.planTasks.ListBlockersForTask(ctx, taskID)
+	return store.ListBlockersForTask(ctx, r.ORM(), taskID)
 }
 
 func (r *Repo) ListDependenciesByPlan(ctx context.Context, planID string) ([]*TaskDependency, error) {
 	if planID == "" {
 		return nil, fmt.Errorf("plan ID cannot be empty")
 	}
-	return r.planTasks.ListDependenciesByPlan(ctx, planID)
+	return store.ListDependenciesByPlan(ctx, r.ORM(), planID)
 }
 
 func (r *Repo) DeleteTaskDependency(ctx context.Context, id string) error {
 	if id == "" {
 		return fmt.Errorf("dependency ID cannot be empty")
 	}
-	return r.planTasks.DeleteTaskDependency(ctx, id)
+	return store.RemoveTaskDependency(ctx, r.ORM(), id)
 }
 
 func (r *Repo) DeleteTaskDependencyByPair(ctx context.Context, fromTaskID, toTaskID string, depType int32) error {
 	if fromTaskID == "" || toTaskID == "" || depType == 0 {
 		return fmt.Errorf("from_task_id, to_task_id, and dependency_type are required")
 	}
-	return r.planTasks.DeleteTaskDependencyByPair(ctx, fromTaskID, toTaskID, depType)
+	return store.DeleteTaskDependencyByPair(ctx, r.ORM(), fromTaskID, toTaskID, depType)
 }
 
 // ==================== Background Processes ====================
@@ -3461,19 +3462,19 @@ func scanBackgroundProcessFromRows(rows *sql.Rows) (*BackgroundProcess, error) {
 // ==================== Attachments ====================
 
 func (r *Repo) CreateAttachment(ctx context.Context, attachment *Attachment) error {
-	return r.attachments.CreateAttachment(ctx, attachment)
+	return store.InsertAttachment(ctx, r.ORM(), attachment)
 }
 
 func (r *Repo) GetAttachment(ctx context.Context, id string) (*Attachment, error) {
-	return r.attachments.GetAttachment(ctx, id)
+	return store.GetAttachment(ctx, r.ORM(), id)
 }
 
 func (r *Repo) GetAttachmentsByIDs(ctx context.Context, ids []string) ([]*Attachment, error) {
-	return r.attachments.GetAttachmentsByIDs(ctx, ids)
+	return store.GetAttachmentsByIDs(ctx, r.ORM(), ids)
 }
 
 func (r *Repo) DeleteAttachment(ctx context.Context, id string) error {
-	return r.attachments.DeleteAttachment(ctx, id)
+	return store.RemoveAttachment(ctx, r.ORM(), id)
 }
 
 // ==================== Context Usage ====================

@@ -134,9 +134,6 @@ type Querier interface {
 	CountWorkflowDraftsByUser(ctx context.Context, userID string) (int64, error)
 	CountWorkflowScenariosByDraft(ctx context.Context, workflowDraftID sql.NullString) (int64, error)
 	CountWorkflowScenariosByUser(ctx context.Context, userID string) (int64, error)
-	// Create a new approval record (idempotent via UNIQUE constraint on entity_id)
-	CreateApproval(ctx context.Context, arg CreateApprovalParams) error
-	CreateAttachment(ctx context.Context, arg CreateAttachmentParams) error
 	CreateChat(ctx context.Context, arg CreateChatParams) error
 	CreateChatUpdate(ctx context.Context, arg CreateChatUpdateParams) error
 	CreateContentBlock(ctx context.Context, arg CreateContentBlockParams) error
@@ -160,7 +157,6 @@ type Querier interface {
 	// two different sends racing for one seq) still raises and the transaction
 	// retries as before.
 	CreateMessageOnce(ctx context.Context, arg CreateMessageOnceParams) (int64, error)
-	CreatePlan(ctx context.Context, arg CreatePlanParams) (Plan, error)
 	CreatePreset(ctx context.Context, arg CreatePresetParams) (Preset, error)
 	CreateProject(ctx context.Context, arg CreateProjectParams) error
 	// The project-scoped counterpart. project_id is NOT NULL here, so the table's
@@ -186,8 +182,6 @@ type Querier interface {
 	// ON CONFLICT target resolves against.
 	CreateSetting(ctx context.Context, arg CreateSettingParams) error
 	CreateStepExecution(ctx context.Context, arg CreateStepExecutionParams) (StepExecution, error)
-	CreateTask(ctx context.Context, arg CreateTaskParams) (Task, error)
-	CreateTaskDependency(ctx context.Context, arg CreateTaskDependencyParams) (TaskDependency, error)
 	CreateThread(ctx context.Context, arg CreateThreadParams) (Thread, error)
 	CreateTrigger(ctx context.Context, arg CreateTriggerParams) error
 	// DO NOTHING rather than DO UPDATE: the first row for a (kind, dedupe_key) is
@@ -208,14 +202,12 @@ type Querier interface {
 	CreateWorkflowScenario(ctx context.Context, arg CreateWorkflowScenarioParams) (WorkflowScenario, error)
 	CreateWorktree(ctx context.Context, arg CreateWorktreeParams) error
 	DeleteAllVisibilityOverrides(ctx context.Context, arg DeleteAllVisibilityOverridesParams) error
-	DeleteAttachment(ctx context.Context, id string) error
 	DeleteChat(ctx context.Context, id string) error
 	DeleteContextWindow(ctx context.Context, id string) error
 	DeleteContextWindowsByThread(ctx context.Context, threadID string) error
 	DeleteDefaultPresetAssignment(ctx context.Context, arg DeleteDefaultPresetAssignmentParams) error
 	DeleteDispatchedRunEventsBefore(ctx context.Context, dispatchedAt sql.NullTime) (int64, error)
 	DeleteMessage(ctx context.Context, id string) error
-	DeletePlan(ctx context.Context, id string) error
 	DeletePreset(ctx context.Context, id string) error
 	// Delete by user and slug (global scope)
 	DeletePresetBySlug(ctx context.Context, arg DeletePresetBySlugParams) error
@@ -232,9 +224,6 @@ type Querier interface {
 	// they left. Also the whole set when a refresh finds the credential gone.
 	DeleteStaleIntegrationAccess(ctx context.Context, arg DeleteStaleIntegrationAccessParams) (int64, error)
 	DeleteStepExecutionsForWorkflow(ctx context.Context, workflowID string) error
-	DeleteTask(ctx context.Context, id string) error
-	DeleteTaskDependency(ctx context.Context, id string) error
-	DeleteTaskDependencyByPair(ctx context.Context, arg DeleteTaskDependencyByPairParams) error
 	DeleteThread(ctx context.Context, id string) error
 	DeleteThreadsByConversation(ctx context.Context, chatID string) error
 	DeleteTrigger(ctx context.Context, id string) error
@@ -313,12 +302,6 @@ type Querier interface {
 	GetAgentMessage(ctx context.Context, id string) (AgentMessage, error)
 	// Get all step executions in a workflow (for full history reconstruction)
 	GetAllStepExecutionsForWorkflow(ctx context.Context, workflowID string) ([]StepExecution, error)
-	// Get a specific approval by ID
-	GetApproval(ctx context.Context, id string) (Approval, error)
-	// Get an approval by its entity_id (content_block_id or event_id)
-	GetApprovalByEntityID(ctx context.Context, entityID string) (Approval, error)
-	GetAttachment(ctx context.Context, id string) (Attachment, error)
-	GetAttachmentsByIDs(ctx context.Context, ids []string) ([]Attachment, error)
 	// The steps the chat timeline renders, for ChatService/GetWorkflowExecutions
 	// in its BASIC view. GetStepExecutionsForChat is the FULL view.
 	//
@@ -462,7 +445,6 @@ type Querier interface {
 	// Get all messages in a specific context window
 	// Ordered by seq for deterministic ordering
 	GetNodeMessages(ctx context.Context, contextWindowID string) ([]Message, error)
-	GetPlan(ctx context.Context, id string) (Plan, error)
 	GetPreset(ctx context.Context, id string) (Preset, error)
 	// Lookup by user and slug (global scope when project_id IS NULL)
 	GetPresetBySlug(ctx context.Context, arg GetPresetBySlugParams) (Preset, error)
@@ -528,8 +510,6 @@ type Querier interface {
 	// the sort proceeds incrementally over already-ordered groups instead of
 	// spilling to disk, and every scalar column below is covered by that index.
 	GetStepExecutionsForChat(ctx context.Context, arg GetStepExecutionsForChatParams) ([]GetStepExecutionsForChatRow, error)
-	GetTask(ctx context.Context, id string) (Task, error)
-	GetTaskDependency(ctx context.Context, id string) (TaskDependency, error)
 	// The report holding one spawn's slot, read when a write to the slot was
 	// refused: the same sender is a retry (idempotent), a different one is a
 	// second spawn under the same id, whose report cannot be stored.
@@ -622,8 +602,6 @@ type Querier interface {
 	ListAllTriggers(ctx context.Context) ([]Trigger, error)
 	// Every activation of a declared trigger, for the periodic reconcile.
 	ListAllWorkflowTriggerActivations(ctx context.Context) ([]Trigger, error)
-	// List all approvals for a chat (including resolved)
-	ListApprovalsByChat(ctx context.Context, chatID string) ([]Approval, error)
 	// List archived chats with worktree info. Reads chats_with_activity (not chats)
 	// so the root workflow state and last_message_at come back like every other
 	// chat read; falls back to project name if worktree name is unavailable.
@@ -633,7 +611,6 @@ type Querier interface {
 	// automation archives its own runs once they succeed; those are history in
 	// Runs (ListRuns with include_archived), not chats the user put away.
 	ListArchivedChats(ctx context.Context, userID string) ([]ListArchivedChatsRow, error)
-	ListAttachmentsByUser(ctx context.Context, arg ListAttachmentsByUserParams) ([]Attachment, error)
 	// Every backgrounded call whose outcome lives in a daemon's process table:
 	// status 6 with no child workflow. Spawns are excluded — their outcome is the
 	// child workflow, which ListStrandedBackgroundSpawnToolCalls reconciles.
@@ -647,7 +624,6 @@ type Querier interface {
 	// Served by idx_tool_calls_chat_live (status IN (1,2,6)), which stays small
 	// once the sweep keeps status 6 honest.
 	ListBackgroundedProcessToolCalls(ctx context.Context) ([]ListBackgroundedProcessToolCallsRow, error)
-	ListBlockersForTask(ctx context.Context, toTaskID string) ([]TaskDependency, error)
 	ListChats(ctx context.Context, arg ListChatsParams) ([]ChatsWithActivity, error)
 	// Chats whose root run the daemon-offline breaker paused and nothing has
 	// resumed, oldest first. The root run must still read paused: a marker left
@@ -670,7 +646,6 @@ type Querier interface {
 	ListContentBlocks(ctx context.Context, messageID string) ([]MessageContentBlock, error)
 	ListContentBlocksForMessages(ctx context.Context, messageIds []string) ([]MessageContentBlock, error)
 	ListContextWindowsByThread(ctx context.Context, threadID string) ([]ContextWindow, error)
-	ListDependenciesByPlan(ctx context.Context, planID string) ([]TaskDependency, error)
 	// Which of the candidate item ids this user has dismissed.
 	ListDismissedInboxItemIDs(ctx context.Context, arg ListDismissedInboxItemIDsParams) ([]string, error)
 	// Every firing of each named trigger after its newest SUCCESS (a launched
@@ -767,11 +742,6 @@ type Querier interface {
 	// (uncursored) snapshot's own window, which is unbounded above because spawn
 	// threads out-write and out-live the main thread -- see ListRecentChatWindow.
 	ListMessagesInContextWindowRange(ctx context.Context, arg ListMessagesInContextWindowRangeParams) ([]Message, error)
-	// List all pending approvals for a chat
-	ListPendingApprovalsByChat(ctx context.Context, chatID string) ([]Approval, error)
-	ListPlans(ctx context.Context, threadID string) ([]Plan, error)
-	ListPlansByChatID(ctx context.Context, chatID string) ([]Plan, error)
-	ListPlansByProject(ctx context.Context, projectID sql.NullString) ([]Plan, error)
 	// List presets by tag for a user
 	ListPresetsByTag(ctx context.Context, arg ListPresetsByTagParams) ([]Preset, error)
 	ListProjectDaemonsForDaemon(ctx context.Context, daemonID string) ([]ProjectDaemon, error)
@@ -977,8 +947,6 @@ type Querier interface {
 	// later pass can distinguish from a real one. A missing result is recoverable;
 	// an invented one is not.
 	ListStrandedSpawnToolCalls(ctx context.Context) ([]ToolCall, error)
-	ListTaskDependenciesByTask(ctx context.Context, fromTaskID string) ([]TaskDependency, error)
-	ListTasks(ctx context.Context, planID string) ([]Task, error)
 	ListThreadsByConversation(ctx context.Context, chatID string) ([]Thread, error)
 	// Threads in a chat with a given origin (e.g. every spawn thread).
 	ListThreadsByOrigin(ctx context.Context, arg ListThreadsByOriginParams) ([]Thread, error)
@@ -1354,8 +1322,6 @@ type Querier interface {
 	SettlePendingTriggerEvent(ctx context.Context, arg SettlePendingTriggerEventParams) (int64, error)
 	TouchProject(ctx context.Context, arg TouchProjectParams) error
 	UnarchiveWorktree(ctx context.Context, id string) error
-	// Update the status of an approval
-	UpdateApprovalStatus(ctx context.Context, arg UpdateApprovalStatusParams) error
 	UpdateChat(ctx context.Context, arg UpdateChatParams) error
 	// Pinning a daemon puts the chat on a machine, so it ends no-machine in the same
 	// write (chats_no_machine_has_no_daemon_check). Clearing the daemon never sets
@@ -1365,12 +1331,10 @@ type Querier interface {
 	UpdateChatTitle(ctx context.Context, arg UpdateChatTitleParams) error
 	UpdateContentBlock(ctx context.Context, arg UpdateContentBlockParams) error
 	UpdateMessage(ctx context.Context, arg UpdateMessageParams) error
-	UpdatePlan(ctx context.Context, arg UpdatePlanParams) (Plan, error)
 	UpdatePreset(ctx context.Context, arg UpdatePresetParams) (Preset, error)
 	UpdateProject(ctx context.Context, arg UpdateProjectParams) error
 	UpdateRepo(ctx context.Context, arg UpdateRepoParams) error
 	UpdateSetting(ctx context.Context, arg UpdateSettingParams) error
-	UpdateTask(ctx context.Context, arg UpdateTaskParams) (Task, error)
 	// Update fork point when the fork's target message changes (e.g., parent compacts)
 	UpdateThreadForkPoint(ctx context.Context, arg UpdateThreadForkPointParams) (Thread, error)
 	// Record thread lifecycle. Replaces the "thread:<node>" workflow records that

@@ -1,7 +1,6 @@
 package core
 
 import (
-	"context"
 	"database/sql"
 	"fmt"
 	"time"
@@ -63,31 +62,3 @@ const (
 	DependencyTypeRelated      int32 = 2 // informational link
 	DependencyTypeParallelWith int32 = 3 // explicitly parallelizable
 )
-
-// PlanTaskStore is the shared contract for plan/task persistence across drivers.
-type PlanTaskStore interface {
-	CreatePlan(ctx context.Context, plan *Plan) error
-	GetPlan(ctx context.Context, id string) (*Plan, error)
-	GetPlanByThreadID(ctx context.Context, threadID string) (*Plan, error)
-	ListPlansByThread(ctx context.Context, threadID string) ([]*Plan, error)
-	ListPlansByChatID(ctx context.Context, chatID string) ([]*Plan, error)
-	ListPlansByProject(ctx context.Context, projectID string) ([]*Plan, error)
-	UpdatePlan(ctx context.Context, plan *Plan) error
-	UpdatePlanStatus(ctx context.Context, id string, status int32, completedAt *time.Time) error
-	DeletePlan(ctx context.Context, id string) error
-
-	CreateTask(ctx context.Context, task *Task) error
-	GetTask(ctx context.Context, id string) (*Task, error)
-	ListTasksByPlan(ctx context.Context, planID string) ([]*Task, error)
-	UpdateTask(ctx context.Context, task *Task) error
-	UpdateTaskStatus(ctx context.Context, id string, status int32, completedAt *time.Time) error
-	DeleteTask(ctx context.Context, id string) error
-
-	CreateTaskDependency(ctx context.Context, dep *TaskDependency) error
-	GetTaskDependency(ctx context.Context, id string) (*TaskDependency, error)
-	ListTaskDependenciesByTask(ctx context.Context, taskID string) ([]*TaskDependency, error)
-	ListBlockersForTask(ctx context.Context, taskID string) ([]*TaskDependency, error)
-	ListDependenciesByPlan(ctx context.Context, planID string) ([]*TaskDependency, error)
-	DeleteTaskDependency(ctx context.Context, id string) error
-	DeleteTaskDependencyByPair(ctx context.Context, fromTaskID, toTaskID string, depType int32) error
-}
