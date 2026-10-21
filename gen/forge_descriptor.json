@@ -39259,7 +39259,7 @@
     "reliant/v1/terminal.proto": "877157ed3b8127ca00b1e49597143a8fdf73d100ebf7867118541c95c809a43f",
     "reliant/v1/token.proto": "df7f634505ef8d0da2882feb4fe31865d541b2593df0c069159f2b6440e5f63e",
     "reliant/v1/tool_call.proto": "b5861a934a2b119031b609eb10cf77e6ba8ccce474d1bb0edbf5cd9fed56cc95",
-    "reliant/v1/tools_daemon.proto": "e62f37533e170c9ad8aafbf3df0571396db8e050a8d7cd317f08b9c1fbdd5832",
+    "reliant/v1/tools_daemon.proto": "ed355efab8f065a289e7de67224236af37e8b4fcd2770e1de66120cf45b1aaf4",
     "reliant/v1/trigger.proto": "a3fc79123e74a64fb946301fbcdee1b6bc55d3eb2499b41d376ebb00d29bfbc9",
     "reliant/v1/workflow.proto": "bd8fa927bf1b9842617fda4c7d56e346ff6ee6d89247178752fb10b9c4f18c86",
     "reliant/v1/workflow_v2.proto": "09bd60535203942e2becc08310aca0db9a8980d73e66242402a6fadf6426b93e",
