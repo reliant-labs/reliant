@@ -3000,15 +3000,15 @@ func (x *CatalogConnectionRequirement) GetConnectionParams() []*IntegrationConne
 type ListInputOptionsRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Type is the qualified type ref, e.g. "github.repository".
-	Type string `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
+	Type *string `protobuf:"bytes,1,opt,name=type,proto3,oneof" json:"type,omitempty"`
 	// ConnectionId names the connection to list through. Empty means the
 	// caller's default connection to the type's integration, else a delegated
 	// authority.
-	ConnectionId string `protobuf:"bytes,2,opt,name=connection_id,json=connectionId,proto3" json:"connection_id,omitempty"`
+	ConnectionId *string `protobuf:"bytes,2,opt,name=connection_id,json=connectionId,proto3,oneof" json:"connection_id,omitempty"`
 	// Scope supplies the values of the type's declared scope keys.
 	Scope map[string]*structpb.Value `protobuf:"bytes,3,rep,name=scope,proto3" json:"scope,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	// Query narrows the options (client or server side, as the type declares).
-	Query string `protobuf:"bytes,4,opt,name=query,proto3" json:"query,omitempty"`
+	Query *string `protobuf:"bytes,4,opt,name=query,proto3,oneof" json:"query,omitempty"`
 	// PageToken is a previous response's next_page_token. It is only valid for
 	// the same type, connection, scope and query.
 	PageToken string `protobuf:"bytes,5,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
@@ -3016,7 +3016,7 @@ type ListInputOptionsRequest struct {
 	PageSize int32 `protobuf:"varint,6,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
 	// ActingIdentity only feeds the type's warnings, which may differ for the
 	// owner and for the bot.
-	ActingIdentity ActingIdentity `protobuf:"varint,7,opt,name=acting_identity,json=actingIdentity,proto3,enum=reliant.v1.ActingIdentity" json:"acting_identity,omitempty"`
+	ActingIdentity *ActingIdentity `protobuf:"varint,7,opt,name=acting_identity,json=actingIdentity,proto3,enum=reliant.v1.ActingIdentity,oneof" json:"acting_identity,omitempty"`
 	// Resolve, when set, labels these stored values instead of listing: the
 	// response holds one option per value the type could resolve, and query,
 	// page_token and page_size are ignored.
@@ -3056,15 +3056,15 @@ func (*ListInputOptionsRequest) Descriptor() ([]byte, []int) {
 }
 
 func (x *ListInputOptionsRequest) GetType() string {
-	if x != nil {
-		return x.Type
+	if x != nil && x.Type != nil {
+		return *x.Type
 	}
 	return ""
 }
 
 func (x *ListInputOptionsRequest) GetConnectionId() string {
-	if x != nil {
-		return x.ConnectionId
+	if x != nil && x.ConnectionId != nil {
+		return *x.ConnectionId
 	}
 	return ""
 }
@@ -3077,8 +3077,8 @@ func (x *ListInputOptionsRequest) GetScope() map[string]*structpb.Value {
 }
 
 func (x *ListInputOptionsRequest) GetQuery() string {
-	if x != nil {
-		return x.Query
+	if x != nil && x.Query != nil {
+		return *x.Query
 	}
 	return ""
 }
@@ -3098,8 +3098,8 @@ func (x *ListInputOptionsRequest) GetPageSize() int32 {
 }
 
 func (x *ListInputOptionsRequest) GetActingIdentity() ActingIdentity {
-	if x != nil {
-		return x.ActingIdentity
+	if x != nil && x.ActingIdentity != nil {
+		return *x.ActingIdentity
 	}
 	return ActingIdentity_ACTING_IDENTITY_UNSPECIFIED
 }
@@ -3497,21 +3497,25 @@ const file_reliant_v1_catalog_proto_rawDesc = "" +
 	"\x1cCatalogConnectionRequirement\x12\x1a\n" +
 	"\brequired\x18\x01 \x01(\bR\brequired\x12;\n" +
 	"\amethods\x18\x02 \x03(\v2!.reliant.v1.IntegrationAuthMethodR\amethods\x12S\n" +
-	"\x11connection_params\x18\x03 \x03(\v2&.reliant.v1.IntegrationConnectionParamR\x10connectionParams\"\x9b\x03\n" +
-	"\x17ListInputOptionsRequest\x12\x12\n" +
-	"\x04type\x18\x01 \x01(\tR\x04type\x12#\n" +
-	"\rconnection_id\x18\x02 \x01(\tR\fconnectionId\x12D\n" +
-	"\x05scope\x18\x03 \x03(\v2..reliant.v1.ListInputOptionsRequest.ScopeEntryR\x05scope\x12\x14\n" +
-	"\x05query\x18\x04 \x01(\tR\x05query\x12\x1d\n" +
+	"\x11connection_params\x18\x03 \x03(\v2&.reliant.v1.IntegrationConnectionParamR\x10connectionParams\"\xe8\x03\n" +
+	"\x17ListInputOptionsRequest\x12\x17\n" +
+	"\x04type\x18\x01 \x01(\tH\x00R\x04type\x88\x01\x01\x12(\n" +
+	"\rconnection_id\x18\x02 \x01(\tH\x01R\fconnectionId\x88\x01\x01\x12D\n" +
+	"\x05scope\x18\x03 \x03(\v2..reliant.v1.ListInputOptionsRequest.ScopeEntryR\x05scope\x12\x19\n" +
+	"\x05query\x18\x04 \x01(\tH\x02R\x05query\x88\x01\x01\x12\x1d\n" +
 	"\n" +
 	"page_token\x18\x05 \x01(\tR\tpageToken\x12\x1b\n" +
-	"\tpage_size\x18\x06 \x01(\x05R\bpageSize\x12C\n" +
-	"\x0facting_identity\x18\a \x01(\x0e2\x1a.reliant.v1.ActingIdentityR\x0eactingIdentity\x12\x18\n" +
+	"\tpage_size\x18\x06 \x01(\x05R\bpageSize\x12H\n" +
+	"\x0facting_identity\x18\a \x01(\x0e2\x1a.reliant.v1.ActingIdentityH\x03R\x0eactingIdentity\x88\x01\x01\x12\x18\n" +
 	"\aresolve\x18\b \x03(\tR\aresolve\x1aP\n" +
 	"\n" +
 	"ScopeEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12,\n" +
-	"\x05value\x18\x02 \x01(\v2\x16.google.protobuf.ValueR\x05value:\x028\x01\"\xb1\x02\n" +
+	"\x05value\x18\x02 \x01(\v2\x16.google.protobuf.ValueR\x05value:\x028\x01B\a\n" +
+	"\x05_typeB\x10\n" +
+	"\x0e_connection_idB\b\n" +
+	"\x06_queryB\x12\n" +
+	"\x10_acting_identity\"\xb1\x02\n" +
 	"\vInputOption\x12\x14\n" +
 	"\x05value\x18\x01 \x01(\tR\x05value\x12\x14\n" +
 	"\x05label\x18\x02 \x01(\tR\x05label\x12 \n" +
@@ -3697,6 +3701,7 @@ func file_reliant_v1_catalog_proto_init() {
 	file_reliant_v1_catalog_proto_msgTypes[13].OneofWrappers = []any{}
 	file_reliant_v1_catalog_proto_msgTypes[17].OneofWrappers = []any{}
 	file_reliant_v1_catalog_proto_msgTypes[31].OneofWrappers = []any{}
+	file_reliant_v1_catalog_proto_msgTypes[38].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
