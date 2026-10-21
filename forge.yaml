@@ -46,7 +46,8 @@ lint:
         # (delete the entry) once its findings are fixed. log-without-ctx is
         # done: `forge lint --tracing` rewrote every call, including the
         # internal/logging helpers listed under tracing.log_wrappers below.
-        forge-tracing-raw-http-client: warn
+        # raw-http-client is done: plain outbound HTTP goes through
+        # observe.NewHTTPClient, Connect clients through observe.NewClientStack.
         forge-tracing-contract-uninstrumented: warn
         forge-tracing-raw-sql-open: warn
     tracing:
