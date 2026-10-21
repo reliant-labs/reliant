@@ -3,19 +3,15 @@
 package serverworker
 
 import (
-	"errors"
 	"fmt"
-	"log/slog"
 
-	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/reliant-labs/reliant/internal/gitcredentialclient"
 	"github.com/reliant-labs/reliant/internal/integrations/catalog"
 	"github.com/reliant-labs/reliant/internal/integrations/catalogindex"
 	"github.com/reliant-labs/reliant/internal/integrations/connauth"
-	"github.com/reliant-labs/reliant/internal/integrations/ghdelegated"
+	"github.com/reliant-labs/reliant/internal/integrations/credwire"
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
 	"github.com/reliant-labs/reliant/internal/triggers"
 	"github.com/reliant-labs/reliant/internal/vault"
@@ -46,42 +42,10 @@ func newConnectionResolver(repo *db.Repo, keys vault.Service, clients connection
 }
 
 // newIntegrationCredentials is the credential source integration actions
-// authenticate with: saved connections, plus the delegated brokers this
-// deployment registers. When a control plane is configured, the GitHub broker
-// is registered under ghdelegated.BrokerID, which the `github` manifest's
-// delegated method names; self-hosted registers none, and `github` is a saved
-// connection (reliant's own OAuth app or a pasted token).
-//
-// A control-plane URL without INTERNAL_SERVICE_SECRET is a boot error, never a
-// silent fall-back to the self-hosted provider: hosted users' GitHub tokens
-// live at control-plane, so falling back would answer "not connected" for
-// every one of them.
+// authenticate with: saved connections plus the delegated brokers this
+// deployment registers (see credwire).
 func newIntegrationCredentials(resolver *connections.Resolver, cp controlplane.Endpoint) (httpaction.CredentialSource, error) {
-	var deps connauth.Deps
-	if resolver != nil {
-		deps.Resolver = resolver
-	}
-	// The same Endpoint BootVault and the token authority are given, so the
-	// worker's notion of "hosted" cannot disagree with theirs.
-	if !cp.Hosted() {
-		return connauth.NewInstrumented(deps), nil
-	}
-	brokers := connauth.NewBrokers()
-	secret := cp.InternalServiceSecret
-	if secret == "" {
-		return nil, errors.New("integrations: RELIANT_CONTROL_PLANE_URL is set but INTERNAL_SERVICE_SECRET is not; " +
-			"hosted GitHub tokens come from control-plane and cannot be fetched unauthenticated")
-	}
-	client := gitcredentialclient.NewInstrumented(gitcredentialclient.Deps{
-		BaseURL: cp.URL,
-		Sign:    func() (string, error) { return auth.SignInternalServiceToken(secret) },
-	})
-	broker := ghdelegated.NewInstrumented(ghdelegated.Deps{Tokens: client, Installations: client, Logger: slog.Default().With("component", "ghdelegated")})
-	if err := brokers.Register(ghdelegated.BrokerID, broker); err != nil {
-		return nil, fmt.Errorf("integrations: %w", err)
-	}
-	deps.Broker = brokers.Get
-	return connauth.NewInstrumented(deps), nil
+	return credwire.New(resolver, cp)
 }
 
 // triggerCredentials is what the poll activity resolves a polled trigger's

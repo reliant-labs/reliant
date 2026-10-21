@@ -73,12 +73,25 @@ type Service interface {
 	// so a caller can judge an integration usable by the brokers this process
 	// actually registered.
 	Broker(id string) (DelegatedBroker, bool)
+
+	// ForUser is the credential source for userID's own calls outside any
+	// run: a picker listing the values of a typed input. The owner is the
+	// authenticated caller, passed by the server and never by a request
+	// body; everything else is Credential's order (the connection named, else
+	// the user's default, else the delegated authority) with the same
+	// strictness: the connection must be the user's own and the integration's,
+	// and a daemon-placed action is refused.
+	//
+	// It is for reads. A call that mutates is refused, and an acting identity
+	// is not honoured: a read keeps the user's own access.
+	ForUser(userID string) httpaction.CredentialSource
 }
 
 // Resolver resolves saved connections. *connections.Resolver satisfies it.
 type Resolver interface {
 	ForCall(ctx context.Context, call connections.CallSite, ref connections.Ref) (*connections.Resolved, error)
 	ForTrigger(ctx context.Context, site connections.TriggerSite) (*connections.Resolved, error)
+	ForUser(ctx context.Context, userID string, ref connections.Ref) (*connections.Resolved, error)
 	OwnerOf(ctx context.Context, runID string) (string, error)
 	Usable(ctx context.Context, call connections.CallSite, refs []connections.Ref) (map[connections.Ref]error, error)
 }

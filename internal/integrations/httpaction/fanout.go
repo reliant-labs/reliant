@@ -40,6 +40,7 @@ func (r *Runner) fanOut(ctx context.Context, env callEnv, req *reliantv1.HttpReq
 	}
 
 	items := []any{}
+	truncated := parents.truncated
 	last := parents.last
 	for _, parent := range parents.items {
 		vars := map[string]any{"params": params, "connection": connVars, "parent": parent}
@@ -56,6 +57,9 @@ func (r *Runner) fanOut(ctx context.Context, env callEnv, req *reliantv1.HttpReq
 			return res, nil
 		}
 		items = append(items, run.items...)
+		truncated = truncated || run.truncated
 	}
-	return success(last, map[string]any{manifest.ItemsOutputField: items}), nil
+	res := success(last, map[string]any{manifest.ItemsOutputField: items})
+	res.Truncated = truncated
+	return res, nil
 }
