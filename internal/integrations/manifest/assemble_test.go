@@ -93,9 +93,8 @@ func TestLoadFSManifestListsItsOwnOrder(t *testing.T) {
 }
 
 func TestLoadFSTypesFragment(t *testing.T) {
-	// types: is a plain key today; the fragment only has to land under it.
 	fsys := fragFS(nil)
-	fsys["demo/types.yaml"] = &fstest.MapFile{Data: []byte("repository: { type: string }\n")}
+	fsys["demo/types.yaml"] = &fstest.MapFile{Data: []byte("- id: repository\n  value: { type: string }\n")}
 	root, err := assemble(fsys, "demo/manifest.yaml")
 	if err != nil {
 		t.Fatal(err)

@@ -199,11 +199,11 @@ func (g *gen) field(msg string, fd protoreflect.FieldDescriptor) (any, error) {
 	var s map[string]any
 	switch {
 	case fd.IsMap():
-		v := fd.MapValue()
-		if v.Kind() != protoreflect.StringKind {
-			return nil, fmt.Errorf("%s: only string-valued maps are supported", path)
+		v, err := g.scalarOrMessage(path, fd.MapValue())
+		if err != nil {
+			return nil, err
 		}
-		s = map[string]any{"type": "object", "additionalProperties": map[string]any{"type": "string"}}
+		s = map[string]any{"type": "object", "additionalProperties": withFragmentRef(v)}
 	case fd.IsList():
 		item, err := g.scalarOrMessage(path, fd)
 		if err != nil {

@@ -530,7 +530,14 @@
           "anyOf": [
             {
               "additionalProperties": {
-                "type": "string"
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "$ref": "#/$defs/FragmentRef"
+                  }
+                ]
               },
               "type": "object"
             },
@@ -737,7 +744,14 @@
           "anyOf": [
             {
               "additionalProperties": {
-                "type": "string"
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "$ref": "#/$defs/FragmentRef"
+                  }
+                ]
               },
               "type": "object"
             },
@@ -821,7 +835,14 @@
           "anyOf": [
             {
               "additionalProperties": {
-                "type": "string"
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "$ref": "#/$defs/FragmentRef"
+                  }
+                ]
               },
               "type": "object"
             },
@@ -944,7 +965,14 @@
           "anyOf": [
             {
               "additionalProperties": {
-                "type": "string"
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "$ref": "#/$defs/FragmentRef"
+                  }
+                ]
               },
               "type": "object"
             },
@@ -1166,6 +1194,27 @@
           ],
           "description": "Triggers are the trigger types the integration delivers. Declaring one is a catalog statement; delivery is the provider's (a webhook Provider or a Poller registered for this id)."
         },
+        "types": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/TypeSpec"
+                  },
+                  {
+                    "$ref": "#/$defs/FragmentRef"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Types are the value types this integration defines (`github.repository`): what a workflow input or a trigger attribute can be typed as. Referenced as `<id>.<type id>`."
+        },
         "version": {
           "anyOf": [
             {
@@ -1194,7 +1243,14 @@
           "anyOf": [
             {
               "additionalProperties": {
-                "type": "string"
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "$ref": "#/$defs/FragmentRef"
+                  }
+                ]
               },
               "type": "object"
             },
@@ -1583,6 +1639,17 @@
             }
           ],
           "description": "Name is the key in Event.Attributes and IntegrationSource.match: lower-case, [a-z][a-z0-9_]*."
+        },
+        "type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Type is the value type of the attribute: a type id of this manifest, or a qualified `<integration>.<id>`. Empty means a plain string. It is what an IntegrationSource's match_input checks an input's type against."
         }
       },
       "required": [
@@ -1732,6 +1799,442 @@
         "events",
         "data"
       ],
+      "type": "object"
+    },
+    "TypeOptionsPaging": {
+      "additionalProperties": false,
+      "description": "TypeOptionsPaging is the upstream paging contract of an options action.",
+      "properties": {
+        "next_token_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "NextTokenPath is a dotted path into the action's output holding the token for the next page; absent or empty means the last page."
+        },
+        "token_param": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "TokenParam is the action param that receives the token."
+        }
+      },
+      "type": "object"
+    },
+    "TypeOptionsSpec": {
+      "additionalProperties": false,
+      "description": "TypeOptionsSpec is how a type's candidate values are listed: a read-only list action of the same integration, run as the caller, and CEL projections from each item of its output to an option. The CEL expressions see `item` (one output item) and `context` (acting_identity: \"owner\" or \"app\").",
+      "properties": {
+        "action": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Action is the id of a list action in this manifest. It must not mutate and must be placeable on the server."
+        },
+        "annotations": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "$ref": "#/$defs/FragmentRef"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Annotations are extra facts for the UI and for warnings, name -> CEL over `item`."
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ]
+        },
+        "group": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ]
+        },
+        "items": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Items is CEL over the action's output yielding the list of items. Empty means the output itself is the list."
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ]
+        },
+        "paging": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TypeOptionsPaging"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Paging says how to page an action that pages itself. Unset means the action returns the whole list and the caller pages it."
+        },
+        "params": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "$ref": "#/$defs/FragmentRef"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Params are templates for the action's parameters, keyed by param name. They may read `scope.<key>`, `query` and `page_token`."
+        },
+        "resolve": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TypeResolveSpec"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Resolve maps a stored value back to its current display (an id to a login), for values that are not in the current options."
+        },
+        "scope": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/TypeScopeSpec"
+                  },
+                  {
+                    "$ref": "#/$defs/FragmentRef"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Scope names the other typed values this list depends on, by scope key (visible to the templates as `scope.<key>`)."
+        },
+        "search": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Search says how a query narrows the list: \"client\" (filter the projected labels) or \"param:<name>\" (pass the query as that action param). Empty is \"client\"."
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Value, Label, Description and Group are CEL over `item`. Value is the stored value and is required; Label defaults to Value."
+        },
+        "warnings": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/TypeWarningSpec"
+                  },
+                  {
+                    "$ref": "#/$defs/FragmentRef"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Warnings are checked per option; each that holds is shown with the option."
+        }
+      },
+      "type": "object"
+    },
+    "TypeResolveSpec": {
+      "additionalProperties": false,
+      "description": "TypeResolveSpec labels stored values.",
+      "properties": {
+        "action": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Action is a read-only action of this manifest that looks one value up."
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ]
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Label is CEL over `item`, the looked-up object."
+        },
+        "params": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "$ref": "#/$defs/FragmentRef"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Params are templates; they may read `value`."
+        }
+      },
+      "type": "object"
+    },
+    "TypeScopeSpec": {
+      "additionalProperties": false,
+      "description": "TypeScopeSpec is one dependency of a type's options on another typed value.",
+      "properties": {
+        "required": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Required means the options cannot be listed until the scope is supplied."
+        },
+        "type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Type is the type ref the scope value has: `<id>` within this manifest or a qualified `<integration>.<id>`."
+        }
+      },
+      "type": "object"
+    },
+    "TypeSpec": {
+      "additionalProperties": false,
+      "description": "TypeSpec is a value type an integration defines. A workflow input of this type holds plain JSON values matching `value`, and the options source lets a UI offer the values the caller can actually choose from.",
+      "properties": {
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ]
+        },
+        "display_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ]
+        },
+        "free_text": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "FreeText allows a value that is not among the options (a label that does not exist yet)."
+        },
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Id is unique within the manifest and a different namespace from action and trigger ids. Lower-case, [a-z][a-z0-9_]*. The type's ref is `<integration id>.<id>`."
+        },
+        "keywords": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "$ref": "#/$defs/FragmentRef"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Keywords are extra search terms for the catalog index."
+        },
+        "options": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TypeOptionsSpec"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Options says where a picker gets candidate values. Unset means the type has no option list (free entry only)."
+        },
+        "summary": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Summary is one line for search results and pickers."
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "object"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Value is the JSON Schema of ONE value; validation and CEL typing use it. Normally a string with a pattern."
+        }
+      },
+      "type": "object"
+    },
+    "TypeWarningSpec": {
+      "additionalProperties": false,
+      "description": "TypeWarningSpec is a condition on an option, with the message shown when it holds.",
+      "properties": {
+        "message": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ]
+        },
+        "when": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "When is CEL over `item`, `option` (the projection so far, with annotations) and `context`, yielding a bool."
+        }
+      },
       "type": "object"
     }
   },
