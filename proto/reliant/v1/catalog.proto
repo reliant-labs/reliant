@@ -544,6 +544,9 @@ message CatalogEntry {
   // them. ParamsSchema is a Struct, so its keys arrive in no meaningful order;
   // a form lists required params first, then the rest, each in this order.
   repeated string param_order = 8;
+  // ValueSchema is the JSON Schema of ONE value of a type: what a workflow
+  // input of that type holds. Unset for an action or a trigger.
+  google.protobuf.Struct value_schema = 9;
 }
 
 // CatalogConnectionRequirement is what using an entry asks of a connection.

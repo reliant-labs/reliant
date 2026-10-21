@@ -14,6 +14,7 @@ attributes:
   - { $ref: ../schemas/attr_repository.yaml }
   - { $ref: ../schemas/attr_installation.yaml }
   - { $ref: ../schemas/attr_sender.yaml }
+  - { $ref: ../schemas/attr_sender_id.yaml }
   - { name: ref, description: The full ref pushed., example: refs/heads/main }
   - { name: branch, description: "The branch pushed, for a branch push only.", example: main }
   - { name: tag, description: "The tag pushed, for a tag push only.", example: v1.2.0 }

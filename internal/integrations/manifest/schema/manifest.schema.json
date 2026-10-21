@@ -658,6 +658,73 @@
       },
       "type": "object"
     },
+    "FanOutSpec": {
+      "additionalProperties": false,
+      "description": "FanOutSpec turns one request into a walk over a list and what hangs off each of its items (GitHub: the user's installations, then the repositories of each). The enclosing request lists the parents, one page at a time, exactly as a paginated request does. `request` then runs once per parent, in order, and the action's output.select shapes each of ITS pages. The parent is `params.parent` in the per-parent request's templates and in output.select. The action's output is the concatenation of every parent's items.",
+      "properties": {
+        "items": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Items is CEL over each page of the parent request (`response`, `params`) yielding the list of parents. A parent is usually an object whose fields the per-parent request reads."
+        },
+        "max_items": {
+          "anyOf": [
+            {
+              "maximum": 200,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "MaxItems bounds the parents (default 50, max 200). More is an error, not a silent cut: a walk that quietly drops half of its parents reads as complete."
+        },
+        "request": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HttpRequestSpec"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Request runs once per parent. It must paginate, and it may not itself fan out."
+        },
+        "skip_status": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "$ref": "#/$defs/FragmentRef"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "SkipStatus lists statuses of a non-retryable failure of the per-parent request that drop that parent instead of failing the action: the parent went away (or stopped being visible) between the two listings. A retryable failure (a rate limit) always fails the action."
+        }
+      },
+      "required": [
+        "items",
+        "request"
+      ],
+      "type": "object"
+    },
     "FragmentRef": {
       "additionalProperties": false,
       "description": "A reference to a fragment file, resolved relative to the file that contains it. It stands for that file's content.",
@@ -739,6 +806,17 @@
             }
           ],
           "description": "Errors maps response statuses to retryable/permanent plus a message. The first matching rule wins; unmatched non-2xx use the defaults (429 and 5xx retryable, other statuses permanent)."
+        },
+        "fan_out": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FanOutSpec"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "FanOut makes the action a walk: this request lists parents (it must paginate), and fan_out.request then runs once per parent. See FanOutSpec."
         },
         "headers": {
           "anyOf": [
@@ -1207,6 +1285,7 @@
                   }
                 ]
               },
+              "maxItems": 100,
               "type": "array"
             },
             {
@@ -1643,6 +1722,7 @@
         "type": {
           "anyOf": [
             {
+              "pattern": "^([a-z][a-z0-9_]*\\.)?[a-z][a-z0-9_]*$",
               "type": "string"
             },
             {
@@ -1828,6 +1908,10 @@
           "description": "TokenParam is the action param that receives the token."
         }
       },
+      "required": [
+        "next_token_path",
+        "token_param"
+      ],
       "type": "object"
     },
     "TypeOptionsSpec": {
@@ -1895,7 +1979,7 @@
               "$ref": "#/$defs/FragmentRef"
             }
           ],
-          "description": "Items is CEL over the action's output yielding the list of items. Empty means the output itself is the list."
+          "description": "Items is CEL over `output` (the action's output data) yielding the list of items. Empty means `output.items`, which is what every list action that paginates returns."
         },
         "label": {
           "anyOf": [
@@ -1937,7 +2021,7 @@
               "$ref": "#/$defs/FragmentRef"
             }
           ],
-          "description": "Params are templates for the action's parameters, keyed by param name. They may read `scope.<key>`, `query` and `page_token`."
+          "description": "Params are templates for the action's parameters, keyed by param name. They may read `scope.<key>`, `query` and `page_token`. A template that renders to null leaves its param out, so an optional param follows an optional scope."
         },
         "resolve": {
           "anyOf": [
@@ -1974,6 +2058,7 @@
         "search": {
           "anyOf": [
             {
+              "pattern": "^(client|param:[a-z][a-z0-9_]*)$",
               "type": "string"
             },
             {
@@ -2006,6 +2091,7 @@
                   }
                 ]
               },
+              "maxItems": 10,
               "type": "array"
             },
             {
@@ -2015,6 +2101,10 @@
           "description": "Warnings are checked per option; each that holds is shown with the option."
         }
       },
+      "required": [
+        "action",
+        "value"
+      ],
       "type": "object"
     },
     "TypeResolveSpec": {
@@ -2075,6 +2165,10 @@
           "description": "Params are templates; they may read `value`."
         }
       },
+      "required": [
+        "action",
+        "label"
+      ],
       "type": "object"
     },
     "TypeScopeSpec": {
@@ -2095,6 +2189,7 @@
         "type": {
           "anyOf": [
             {
+              "pattern": "^([a-z][a-z0-9_]*\\.)?[a-z][a-z0-9_]*$",
               "type": "string"
             },
             {
@@ -2104,6 +2199,9 @@
           "description": "Type is the type ref the scope value has: `<id>` within this manifest or a qualified `<integration>.<id>`."
         }
       },
+      "required": [
+        "type"
+      ],
       "type": "object"
     },
     "TypeSpec": {
@@ -2144,6 +2242,7 @@
         "id": {
           "anyOf": [
             {
+              "pattern": "^[a-z][a-z0-9_]*$",
               "type": "string"
             },
             {
@@ -2158,6 +2257,8 @@
               "items": {
                 "anyOf": [
                   {
+                    "maxLength": 40,
+                    "pattern": "^[a-z0-9][a-z0-9 _.+-]*$",
                     "type": "string"
                   },
                   {
@@ -2187,6 +2288,7 @@
         "summary": {
           "anyOf": [
             {
+              "maxLength": 200,
               "type": "string"
             },
             {
@@ -2198,6 +2300,9 @@
         "value": {
           "anyOf": [
             {
+              "required": [
+                "type"
+              ],
               "type": "object"
             },
             {
@@ -2207,6 +2312,10 @@
           "description": "Value is the JSON Schema of ONE value; validation and CEL typing use it. Normally a string with a pattern."
         }
       },
+      "required": [
+        "id",
+        "value"
+      ],
       "type": "object"
     },
     "TypeWarningSpec": {
@@ -2235,6 +2344,10 @@
           "description": "When is CEL over `item`, `option` (the projection so far, with annotations) and `context`, yielding a bool."
         }
       },
+      "required": [
+        "when",
+        "message"
+      ],
       "type": "object"
     }
   },

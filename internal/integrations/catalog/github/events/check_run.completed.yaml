@@ -17,6 +17,7 @@ attributes:
   - { $ref: ../schemas/attr_repository.yaml }
   - { $ref: ../schemas/attr_installation.yaml }
   - { $ref: ../schemas/attr_sender.yaml }
+  - { $ref: ../schemas/attr_sender_id.yaml }
   - { $ref: ../schemas/attr_action.yaml }
   - { name: conclusion, description: "The check's conclusion.", example: failure }
   - { name: branch, description: The branch the check ran on., example: main }

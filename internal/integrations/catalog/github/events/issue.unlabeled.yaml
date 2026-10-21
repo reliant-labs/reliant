@@ -14,8 +14,9 @@ attributes:
   - { $ref: ../schemas/attr_repository.yaml }
   - { $ref: ../schemas/attr_installation.yaml }
   - { $ref: ../schemas/attr_sender.yaml }
+  - { $ref: ../schemas/attr_sender_id.yaml }
   - { $ref: ../schemas/attr_action.yaml }
-  - { name: label, description: The label that was removed., example: needs-triage }
+  - { name: label, description: The label that was removed., example: needs-triage, type: label }
 data:
   type: object
   additionalProperties: false

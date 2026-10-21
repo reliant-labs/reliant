@@ -232,6 +232,9 @@ func LoadFS(fsys fs.FS, trust Trust) ([]*reliantv1.IntegrationManifest, error) {
 		}
 		return out[i].GetVersion() < out[j].GetVersion()
 	})
+	if err := CheckTypeRefs(out); err != nil {
+		return nil, err
+	}
 	return out, nil
 }
 
@@ -263,6 +266,9 @@ func Validate(m *reliantv1.IntegrationManifest, trust Trust) error {
 		return fmt.Errorf("at least one action or trigger is required")
 	}
 	if err := validateTriggers(m); err != nil {
+		return err
+	}
+	if err := validateTypes(m); err != nil {
 		return err
 	}
 	ids := map[string]bool{}
@@ -374,7 +380,61 @@ func validateAction(m *reliantv1.IntegrationManifest, a *reliantv1.ActionSpec, c
 			return err
 		}
 	}
+	if fo := req.GetFanOut(); fo != nil {
+		if err := validateFanOut(fo, a, conn, allowed); err != nil {
+			return fmt.Errorf("request.fan_out: %w", err)
+		}
+	}
 	return validateOutput(a.GetOutput(), req.GetPagination())
+}
+
+// DefaultFanOutItems and MaxFanOutItems bound the parents a fan-out walks.
+const (
+	DefaultFanOutItems = 50
+	MaxFanOutItems     = 200
+)
+
+// validateFanOut applies the rules of a walk: both requests page (the output is
+// a list), the walk is one level deep, and the per-parent request is held to
+// the same host rules as the first.
+func validateFanOut(fo *reliantv1.FanOutSpec, a *reliantv1.ActionSpec, conn *reliantv1.ConnectionSpec, allowed map[string]bool) error {
+	req := a.GetRequest()
+	if req.GetPagination() == nil {
+		return fmt.Errorf("the request lists the parents and must paginate (pagination: ...), even for a single page")
+	}
+	if fo.GetItems() == "" {
+		return fmt.Errorf("items is required: the CEL over each page that yields the list of parents")
+	}
+	if err := tmpl.ValidateExpr(fo.GetItems()); err != nil {
+		return fmt.Errorf("items: %w", err)
+	}
+	if fo.GetMaxItems() < 0 || fo.GetMaxItems() > MaxFanOutItems {
+		return fmt.Errorf("max_items must be 0..%d", MaxFanOutItems)
+	}
+	child := fo.GetRequest()
+	if child == nil {
+		return fmt.Errorf("request is required: what runs once for each parent")
+	}
+	if child.GetFanOut() != nil {
+		return fmt.Errorf("request may not fan out again; a walk is one level deep")
+	}
+	if child.GetPagination() == nil {
+		return fmt.Errorf("request must paginate (pagination: ...), even for a single page: its pages are concatenated")
+	}
+	if err := validateRequest(child); err != nil {
+		return fmt.Errorf("request: %w", err)
+	}
+	if a.GetPlacement() != PlacementDaemon {
+		if err := checkHost(child, conn, allowed); err != nil {
+			return fmt.Errorf("request: %w", err)
+		}
+	}
+	for _, s := range fo.GetSkipStatus() {
+		if s < 400 || s > 599 {
+			return fmt.Errorf("skip_status %d must be an error status (400..599)", s)
+		}
+	}
+	return nil
 }
 
 // validateEnumTemplate checks an enum-like request field at load time: a

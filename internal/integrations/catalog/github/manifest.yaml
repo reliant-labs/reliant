@@ -114,6 +114,10 @@ actions:
   - $ref: actions/pr.review_comments.list.yaml
   - $ref: actions/pr.review_comment.reply.yaml
   - $ref: actions/repo.list_for_user.yaml
+  - $ref: actions/app.installations.list.yaml
+  - $ref: actions/app.installation_repositories.list.yaml
+  - $ref: actions/users.search.yaml
+  - $ref: actions/user.get_by_id.yaml
   - $ref: actions/repo.get.yaml
   - $ref: actions/branch.get.yaml
   - $ref: actions/repo.get_content.yaml

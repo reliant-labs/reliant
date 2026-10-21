@@ -1,0 +1,46 @@
+# yaml-language-server: $schema=../../../manifest/schema/action.schema.json
+id: app.installations.list
+display_name: List GitHub App installations
+summary: The accounts the Reliant GitHub App is installed on that you can access.
+description: >-
+  List the installations of the Reliant GitHub App that the connected user can
+  access: one per account (a user or an organization) the App was installed
+  on. Needs a GitHub App user token, so it works with the hosted connection and
+  an oauth2 connection to a GitHub App, but not with a personal access token.
+keywords: [installation, app, organization, account, picker]
+placement: server
+mutates: false
+params:
+  type: object
+  additionalProperties: false
+  properties:
+    connection: { $ref: ../schemas/connection.yaml }
+request:
+  method: GET
+  path: /user/installations
+  query: { per_page: "100" }
+  pagination: { style: link_header, max_pages: 10 }
+  max_response_bytes: 5242880
+  errors: { $ref: ../schemas/github_errors.yaml }
+output:
+  select: >-
+    response.installations.map(i, {"id": i.id,
+                                   "account": i.account.login,
+                                   "account_type": i.?account.?type.orValue(null),
+                                   "target_type": i.?target_type.orValue(null),
+                                   "repository_selection": i.?repository_selection.orValue(null),
+                                   "html_url": i.?html_url.orValue(null)})
+  schema:
+    type: object
+    properties:
+      items:
+        type: array
+        items:
+          type: object
+          properties:
+            id: { type: integer, description: The installation id. }
+            account: { type: string, description: The login of the account the App is installed on. }
+            account_type: { type: [string, "null"], description: User or Organization. }
+            target_type: { type: [string, "null"] }
+            repository_selection: { type: [string, "null"], description: all or selected. }
+            html_url: { type: [string, "null"] }

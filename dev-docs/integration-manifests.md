@@ -74,6 +74,55 @@ whole mapping it appears in. It replaces YAML anchors, which cannot cross files.
   `$ref: "#/$defs/x"` inside `params` or `data` is left alone.
 - A file in `schemas/` that nothing references is an error.
 
+## Value types
+
+`types.yaml` (or `types:` in `manifest.yaml`) lists the value types an integration
+defines; a workflow input or a trigger attribute names one as `<integration>.<id>`
+(`github.repository`; inside the manifest a bare `repository` works too). A type is
+data: nothing in Go knows what it is.
+
+```yaml
+- id: repository
+  value: { type: string, pattern: "^[^/]+/[^/]+$", examples: [acme/app] }   # JSON Schema of ONE value
+  options:                      # where a picker gets candidate values
+    action: app.installation_repositories.list   # a read-only list action of this manifest
+    params: { installation_id: "{{ has(scope.installation) ? dyn(int(scope.installation)) : dyn(null) }}" }
+    search: client              # client, or param:<name> to pass the query to the action
+    value: item.full_name       # CEL over one item of the action's output
+    label: item.full_name
+    annotations: { can_push: item.can_push }
+    warnings:
+      - when: "context.acting_identity == 'app' && !option.annotations.can_push"
+        message: The bot cannot write here.
+    scope: { installation: { type: installation } }   # other typed values the list depends on
+```
+
+Load checks everything that can be checked: the value schema compiles and its
+examples are valid values; the action exists, does not mutate and runs on the
+server; every projection compiles **and reads only fields the action's
+`output.schema` declares**; `params` name params the action has and supply every
+param it requires; `search`, `paging` and `scope` refer to real params, fields and
+types; scopes do not form a cycle; and every attribute `type:` (and every scope type
+naming another integration) resolves to a declared type. Projections see `item`
+(one output item), and warnings also `option` and `context`; param templates see
+`scope`, `query` and `page_token`, and may use the strings extension (`split`, ...).
+A param template that renders to null leaves its param out.
+
+`options.items` defaults to `output.items`, which is where a list action that
+paginates returns its list.
+
+### Actions that walk
+
+Some listings are two calls deep (GitHub: your installations, then each one's
+repositories). `request.fan_out` expresses that without code: the enclosing request
+lists parents, and `fan_out.request` runs once per parent, its pages concatenated into
+one list. The parent is `parent` in the per-parent templates and in `output.select`.
+Both requests must paginate (even for one page), a walk is one level deep, more than
+`max_items` parents (default 50) is an error rather than a silent cut, and a
+non-retryable failure listed in `skip_status` drops that parent (it went away between
+the two calls) while any other failure fails the action, so a partial list is never
+returned as a complete one.
+
 ## Webhook events and their data schema
 
 An event's `data:` is the JSON Schema of `trigger.payload.data`. For GitHub it is

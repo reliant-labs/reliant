@@ -107,7 +107,52 @@ func (r *Runner) run(ctx context.Context, m *reliantv1.IntegrationManifest, a *r
 	}
 	connVars, connValues := connectionVars(m, cred)
 	req := a.GetRequest()
+	env := callEnv{m: m, a: a, cred: cred, connValues: connValues}
+	if fo := req.GetFanOut(); fo != nil {
+		return r.fanOut(ctx, env, req, fo, params, connVars)
+	}
 	vars := map[string]any{"params": params, "connection": connVars}
+	selectPage := func(p *page) (any, error) { return selectOutput(a.GetOutput(), p, params) }
+	run, err := r.request(ctx, env, req, vars, selectPage)
+	if err != nil {
+		return nil, err
+	}
+	if run.result != nil {
+		return run.result, nil
+	}
+	if req.GetPagination() != nil {
+		return success(run.last, map[string]any{"items": run.items}), nil
+	}
+	selected, err := selectPage(run.last)
+	if err != nil {
+		return nil, err
+	}
+	return success(run.last, asObject(selected)), nil
+}
+
+// callEnv is what every request of one action call shares.
+type callEnv struct {
+	m          *reliantv1.IntegrationManifest
+	a          *reliantv1.ActionSpec
+	cred       Credential
+	connValues map[string]string
+}
+
+// requestRun is the outcome of one request and all of its pages.
+type requestRun struct {
+	// items are the pages' selected lists, concatenated; only for a request
+	// that paginates.
+	items []any
+	// last is the last page read.
+	last *page
+	// result is set when the request failed: it is the action's answer.
+	result *Result
+}
+
+// request performs req, following its pages. selectPage shapes each page of a
+// paginated request into a list; it is not called for a single response.
+func (r *Runner) request(ctx context.Context, env callEnv, req *reliantv1.HttpRequestSpec, vars map[string]any, selectPage func(*page) (any, error)) (*requestRun, error) {
+	m, a, cred, connValues := env.m, env.a, env.cred, env.connValues
 	opts, err := renderOptions(req, vars)
 	if err != nil {
 		return nil, err
@@ -305,20 +350,21 @@ func (r *Runner) run(ctx context.Context, m *reliantv1.IntegrationManifest, a *r
 		// not a failure: its status and Location are what they wanted.
 		returnedRedirect := opts.redirects == manifest.RedirectsReturn && pgResp.status >= 300 && pgResp.status < 400
 		if (pgResp.status < 200 || pgResp.status >= 300) && !returnedRedirect && !acceptedError(req, pgResp) {
-			return errorResult(req, pgResp)
+			res, _ := errorResult(req, pgResp)
+			return &requestRun{result: res, last: pgResp}, nil
 		}
 		// A provider that reports failure in a 2xx body (Slack's ok:false)
 		// declares a guarded rule for it; any other 2xx is a success.
 		if rule := matchErrorRule(req, pgResp); rule != nil && !rule.GetAccept() {
-			return ruleResult(rule, pgResp), nil
+			return &requestRun{result: ruleResult(rule, pgResp), last: pgResp}, nil
 		}
 		if opts.responseFormat == manifest.ResponseFormatJSON && pgResp.jsonErr != nil && !returnedRedirect {
-			return notJSONResult(pgResp), nil
+			return &requestRun{result: notJSONResult(pgResp), last: pgResp}, nil
 		}
 		if pg == nil {
 			break
 		}
-		selected, err := selectOutput(a.GetOutput(), pgResp, params)
+		selected, err := selectPage(pgResp)
 		if err != nil {
 			return nil, err
 		}
@@ -344,15 +390,7 @@ func (r *Runner) run(ctx context.Context, m *reliantv1.IntegrationManifest, a *r
 			followed = next
 		}
 	}
-	if pg != nil {
-		data := map[string]any{"items": items}
-		return success(last, data), nil
-	}
-	selected, err := selectOutput(a.GetOutput(), last, params)
-	if err != nil {
-		return nil, err
-	}
-	return success(last, asObject(selected)), nil
+	return &requestRun{items: items, last: last}, nil
 }
 
 type page struct {
@@ -752,6 +790,12 @@ func responseVars(p *page) map[string]any {
 // shaped by what was asked (keep only the entries under the directory the
 // caller named).
 func selectOutput(o *reliantv1.OutputSpec, p *page, params map[string]any) (any, error) {
+	return selectOutputFor(o, p, params, nil)
+}
+
+// selectOutputFor is selectOutput for a page fetched on behalf of parent (see
+// FanOutSpec); parent is null otherwise.
+func selectOutputFor(o *reliantv1.OutputSpec, p *page, params map[string]any, parent any) (any, error) {
 	switch sel := o.GetSelect(); sel {
 	case "", "$":
 		if p.parsed == nil {
@@ -763,6 +807,7 @@ func selectOutput(o *reliantv1.OutputSpec, p *page, params map[string]any) (any,
 	default:
 		vars := responseVars(p)
 		vars["params"] = params
+		vars["parent"] = parent
 		v, err := tmpl.EvalExpr(sel, vars)
 		if err != nil {
 			return nil, fmt.Errorf("output.select: %w", err)

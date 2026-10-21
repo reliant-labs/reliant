@@ -11,7 +11,7 @@ description: >-
 keywords: [pr, label, tag, triage, re-review]
 attributes:
   - { group: pr }
-  - { name: label, description: The label that was added., example: "agent:re-review", from: label.name }
+  - { name: label, type: label, description: The label that was added., example: "agent:re-review", from: label.name }
 data:
   number: integer
   label: { kind: string, from: label.name, description: The label that was added or removed. }

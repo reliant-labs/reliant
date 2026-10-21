@@ -261,6 +261,10 @@ func (g *gen) scalarOrMessage(path string, fd protoreflect.FieldDescriptor) (map
 		switch full := fd.Message().FullName(); full {
 		case "google.protobuf.Struct":
 			s = map[string]any{"type": "object"}
+			if valueSchemaFields[path] {
+				s["description"] = "A JSON Schema."
+				s["required"] = []string{"type"}
+			}
 			if jsonSchemaFields[path] {
 				s["description"] = "A JSON Schema object."
 				s["properties"] = map[string]any{"type": map[string]any{"const": "object"}}

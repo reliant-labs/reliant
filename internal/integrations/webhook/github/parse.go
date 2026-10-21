@@ -197,6 +197,7 @@ func events(event string, body *payload, receivedAt time.Time) []Event {
 		"repository":      body.Repository.FullName,
 		"installation_id": installation,
 		"sender":          senderLogin(body),
+		"sender_id":       senderID(body),
 	}
 	if event != "push" {
 		attrs["action"] = body.Action
@@ -230,13 +231,9 @@ func events(event string, body *payload, receivedAt time.Time) []Event {
 // id (web/src/lib/onlyFromFilter.ts).
 func sender(body *payload) *core.TriggerSender {
 	login := senderLogin(body)
-	id := ""
-	if body.Sender != nil && body.Sender.ID > 0 {
-		id = strconv.FormatInt(body.Sender.ID, 10)
-	}
 	return &core.TriggerSender{
 		Kind:        core.TriggerSenderKindGitHub,
-		ID:          id,
+		ID:          senderID(body),
 		DisplayName: login,
 		Verified:    login != "",
 	}
@@ -258,6 +255,15 @@ func isOurComment(event string, body *payload) bool {
 		return false
 	}
 	return body.Sender != nil && IsOurBot(body.Sender.Type, body.Sender.ID, body.Sender.Login)
+}
+
+// senderID is the sender's numeric GitHub id as a string; empty when the
+// delivery names none (never "0": an id an allowlist could be written to match).
+func senderID(body *payload) string {
+	if body.Sender == nil || body.Sender.ID <= 0 {
+		return ""
+	}
+	return strconv.FormatInt(body.Sender.ID, 10)
 }
 
 func senderLogin(body *payload) string {

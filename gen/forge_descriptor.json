@@ -11867,6 +11867,11 @@
             "name": "param_order",
             "kind": "string",
             "repeated": true
+          },
+          {
+            "name": "value_schema",
+            "kind": "message",
+            "type_name": "google.protobuf.Struct"
           }
         ],
         "reliant.v1.CatalogEntrySummary": [
@@ -39836,7 +39841,7 @@
     "reliant/v1/approval.proto": "4ebbca862a2a5f88bb7f603d52d09933c296cbdc89e55d2abd1f58b76ecad6ce",
     "reliant/v1/attachment.proto": "61fa803dd43b3e1f790ab13de3eeeced908b97c6076ea3154180dbd9b5018085",
     "reliant/v1/background.proto": "84c4c5ccc39bbf99e46126262da13cb89b19337af1fe573b63f56d6d0e8e7eba",
-    "reliant/v1/catalog.proto": "b17516863b217f7700bbfc43e819b98795210b4c402a093c95d2491cdbea01c8",
+    "reliant/v1/catalog.proto": "1ab34bbac8b863cb035b9fca4c0d622d8d293b4f78f905ee27eb47ae36fc38e6",
     "reliant/v1/chat.proto": "cd28fab6e9bf23b6ccb54308c160bdb91acff4dd403aea76b47646efe317f7a1",
     "reliant/v1/common.proto": "3f55240c147956015c9adabf3237b53a6925c6ec20ec90344237a8d7c8357ba1",
     "reliant/v1/connection.proto": "31ef55ce12e0a3862f02156e159049a5f84142b7f9978f2c5c939afa52a50b64",
@@ -39846,7 +39851,7 @@
     "reliant/v1/filesystem.proto": "140d121cbc7cebc799860129abf98389a867d0b128fbe36b0d6c000bf9b92a6d",
     "reliant/v1/forge.proto": "a065ade3885e8671952b6908f2986727eb1b4b478304dfe7772bc62be4078a00",
     "reliant/v1/inbox.proto": "27964969ffaeafe7621bb6739018d03d83b67dc6e60e19be1b264c06227b34ea",
-    "reliant/v1/integration.proto": "4d2d14d32cabb184847d04eb32d49a8e3e4dd9bcf4bb2c227a665801e4c5995f",
+    "reliant/v1/integration.proto": "767cea1a652eb5c4ff2101c1f220e5e915566dd8ebda98567b4edfb26e420e0a",
     "reliant/v1/mcp.proto": "d27eec630292113ac64b4b2e3468e72516d1f5c211dbfe536c2730e43ed2efd1",
     "reliant/v1/message.proto": "bd01e3101e743d989c4facc477eedf924055f89a83a2c1d84aaa027ca1e7bfb8",
     "reliant/v1/model_endpoint.proto": "2fb5bd0a5d3a2bda68df02bfb6658b210ea7eb021999816d2ec8e3cf3705b890",

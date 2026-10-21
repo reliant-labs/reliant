@@ -128,14 +128,33 @@ func TestAValidIntegrationInputDeclarationHasNoFindings(t *testing.T) {
 	assert.Empty(t, staticErrors(wf))
 }
 
-// With no resolver set, the catalog is the source, and it declares no input
-// types yet: every integration type is unknown, with a message that says so.
-func TestWithoutACatalogTypeEveryIntegrationTypeIsUnknown(t *testing.T) {
-	wf := typedWorkflow(t, "  repos: {type: github.repository, multi: true}\n", "")
-	res := StaticAnalysisWithOptions(wf, nil)
+// With no resolver set, the embedded catalog is the source: the types GitHub's
+// manifest declares resolve, with the shipped schemas and scopes, and one it
+// does not declare is unknown, with the declared ones to choose from.
+func TestWithoutAResolverTheCatalogDeclaresTheTypes(t *testing.T) {
+	wf := typedWorkflow(t, `  repos: {type: github.repository, multi: true, required: true, min_items: 1}
+  who: {type: github.user, multi: true, default: ["583231"]}
+  skip: {type: github.label, scope: {repository: repos}, default: skip-review}
+`, "")
+	assert.Empty(t, staticErrors(wf), "the shipped catalog declares these")
+
+	bad := typedWorkflow(t, "  repos: {type: github.repo, multi: true}\n", "")
+	res := StaticAnalysisWithOptions(bad, nil)
 	require.True(t, res.HasErrors())
-	assert.Contains(t, res.Errors()[0].Error(), `unknown input type "github.repository"`)
-	assert.Contains(t, res.Errors()[0].Error(), "string, number, integer")
+	assert.Contains(t, res.Errors()[0].Error(), `github has no input type "repo"`)
+	assert.Contains(t, res.Errors()[0].Error(), "github.repository", "the nearest declared type is suggested")
+
+	// The shipped value schema is what is enforced: a login is not a user id.
+	wf = typedWorkflow(t, "  who: {type: github.user, default: octocat}\n", "")
+	res = StaticAnalysisWithOptions(wf, nil)
+	require.True(t, res.HasErrors())
+	assert.Contains(t, res.Errors()[0].Error(), "github.user")
+
+	// A scope the type does not declare is refused against the shipped scopes.
+	wf = typedWorkflow(t, "  repos: {type: github.repository, multi: true}\n  r: {type: github.repository, scope: {team: repos}}\n", "")
+	res = StaticAnalysisWithOptions(wf, nil)
+	require.True(t, res.HasErrors())
+	assert.Contains(t, res.Errors()[0].Error(), `github.repository has no scope "team"`)
 }
 
 // Bound values: a run's inputs and an activation's params.

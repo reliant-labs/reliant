@@ -2840,7 +2840,10 @@ type CatalogEntry struct {
 	// ParamOrder is the action's params in the order its manifest declares
 	// them. ParamsSchema is a Struct, so its keys arrive in no meaningful order;
 	// a form lists required params first, then the rest, each in this order.
-	ParamOrder    []string `protobuf:"bytes,8,rep,name=param_order,json=paramOrder,proto3" json:"param_order,omitempty"`
+	ParamOrder []string `protobuf:"bytes,8,rep,name=param_order,json=paramOrder,proto3" json:"param_order,omitempty"`
+	// ValueSchema is the JSON Schema of ONE value of a type: what a workflow
+	// input of that type holds. Unset for an action or a trigger.
+	ValueSchema   *structpb.Struct `protobuf:"bytes,9,opt,name=value_schema,json=valueSchema,proto3" json:"value_schema,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2927,6 +2930,13 @@ func (x *CatalogEntry) GetToolName() string {
 func (x *CatalogEntry) GetParamOrder() []string {
 	if x != nil {
 		return x.ParamOrder
+	}
+	return nil
+}
+
+func (x *CatalogEntry) GetValueSchema() *structpb.Struct {
+	if x != nil {
+		return x.ValueSchema
 	}
 	return nil
 }
@@ -3481,7 +3491,7 @@ const file_reliant_v1_catalog_proto_rawDesc = "" +
 	"\x16GetCatalogEntryRequest\x12\x10\n" +
 	"\x03ref\x18\x01 \x01(\tR\x03ref\"I\n" +
 	"\x17GetCatalogEntryResponse\x12.\n" +
-	"\x05entry\x18\x01 \x01(\v2\x18.reliant.v1.CatalogEntryR\x05entry\"\xaf\x03\n" +
+	"\x05entry\x18\x01 \x01(\v2\x18.reliant.v1.CatalogEntryR\x05entry\"\xeb\x03\n" +
 	"\fCatalogEntry\x129\n" +
 	"\asummary\x18\x01 \x01(\v2\x1f.reliant.v1.CatalogEntrySummaryR\asummary\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12<\n" +
@@ -3493,7 +3503,8 @@ const file_reliant_v1_catalog_proto_rawDesc = "" +
 	"connection\x12\x1b\n" +
 	"\ttool_name\x18\a \x01(\tR\btoolName\x12\x1f\n" +
 	"\vparam_order\x18\b \x03(\tR\n" +
-	"paramOrder\"\xcc\x01\n" +
+	"paramOrder\x12:\n" +
+	"\fvalue_schema\x18\t \x01(\v2\x17.google.protobuf.StructR\vvalueSchema\"\xcc\x01\n" +
 	"\x1cCatalogConnectionRequirement\x12\x1a\n" +
 	"\brequired\x18\x01 \x01(\bR\brequired\x12;\n" +
 	"\amethods\x18\x02 \x03(\v2!.reliant.v1.IntegrationAuthMethodR\amethods\x12S\n" +
@@ -3655,40 +3666,41 @@ var file_reliant_v1_catalog_proto_depIdxs = []int32{
 	46, // 32: reliant.v1.CatalogEntry.output_schema:type_name -> google.protobuf.Struct
 	46, // 33: reliant.v1.CatalogEntry.payload_schema:type_name -> google.protobuf.Struct
 	39, // 34: reliant.v1.CatalogEntry.connection:type_name -> reliant.v1.CatalogConnectionRequirement
-	47, // 35: reliant.v1.CatalogConnectionRequirement.methods:type_name -> reliant.v1.IntegrationAuthMethod
-	48, // 36: reliant.v1.CatalogConnectionRequirement.connection_params:type_name -> reliant.v1.IntegrationConnectionParam
-	43, // 37: reliant.v1.ListInputOptionsRequest.scope:type_name -> reliant.v1.ListInputOptionsRequest.ScopeEntry
-	49, // 38: reliant.v1.ListInputOptionsRequest.acting_identity:type_name -> reliant.v1.ActingIdentity
-	44, // 39: reliant.v1.InputOption.annotations:type_name -> reliant.v1.InputOption.AnnotationsEntry
-	41, // 40: reliant.v1.ListInputOptionsResponse.options:type_name -> reliant.v1.InputOption
-	1,  // 41: reliant.v1.ListInputOptionsResponse.connection_state:type_name -> reliant.v1.InputOptionsConnectionState
-	50, // 42: reliant.v1.ListInputOptionsRequest.ScopeEntry.value:type_name -> google.protobuf.Value
-	50, // 43: reliant.v1.InputOption.AnnotationsEntry.value:type_name -> google.protobuf.Value
-	4,  // 44: reliant.v1.CatalogService.ListModels:input_type -> reliant.v1.ListModelsRequest
-	7,  // 45: reliant.v1.CatalogService.ListModelsByProvider:input_type -> reliant.v1.ListModelsByProviderRequest
-	10, // 46: reliant.v1.CatalogService.ListAvailableModels:input_type -> reliant.v1.ListAvailableModelsRequest
-	13, // 47: reliant.v1.CatalogService.ListTools:input_type -> reliant.v1.ListToolsRequest
-	19, // 48: reliant.v1.CatalogService.ListNodes:input_type -> reliant.v1.ListNodesRequest
-	21, // 49: reliant.v1.CatalogService.GetCELCompletions:input_type -> reliant.v1.GetCELCompletionsRequest
-	31, // 50: reliant.v1.CatalogService.SearchCatalog:input_type -> reliant.v1.SearchCatalogRequest
-	36, // 51: reliant.v1.CatalogService.GetCatalogEntry:input_type -> reliant.v1.GetCatalogEntryRequest
-	33, // 52: reliant.v1.CatalogService.ListCatalogIntegrations:input_type -> reliant.v1.ListCatalogIntegrationsRequest
-	40, // 53: reliant.v1.CatalogService.ListInputOptions:input_type -> reliant.v1.ListInputOptionsRequest
-	5,  // 54: reliant.v1.CatalogService.ListModels:output_type -> reliant.v1.ListModelsResponse
-	8,  // 55: reliant.v1.CatalogService.ListModelsByProvider:output_type -> reliant.v1.ListModelsByProviderResponse
-	11, // 56: reliant.v1.CatalogService.ListAvailableModels:output_type -> reliant.v1.ListAvailableModelsResponse
-	14, // 57: reliant.v1.CatalogService.ListTools:output_type -> reliant.v1.ListToolsResponse
-	20, // 58: reliant.v1.CatalogService.ListNodes:output_type -> reliant.v1.ListNodesResponse
-	27, // 59: reliant.v1.CatalogService.GetCELCompletions:output_type -> reliant.v1.GetCELCompletionsResponse
-	32, // 60: reliant.v1.CatalogService.SearchCatalog:output_type -> reliant.v1.SearchCatalogResponse
-	37, // 61: reliant.v1.CatalogService.GetCatalogEntry:output_type -> reliant.v1.GetCatalogEntryResponse
-	35, // 62: reliant.v1.CatalogService.ListCatalogIntegrations:output_type -> reliant.v1.ListCatalogIntegrationsResponse
-	42, // 63: reliant.v1.CatalogService.ListInputOptions:output_type -> reliant.v1.ListInputOptionsResponse
-	54, // [54:64] is the sub-list for method output_type
-	44, // [44:54] is the sub-list for method input_type
-	44, // [44:44] is the sub-list for extension type_name
-	44, // [44:44] is the sub-list for extension extendee
-	0,  // [0:44] is the sub-list for field type_name
+	46, // 35: reliant.v1.CatalogEntry.value_schema:type_name -> google.protobuf.Struct
+	47, // 36: reliant.v1.CatalogConnectionRequirement.methods:type_name -> reliant.v1.IntegrationAuthMethod
+	48, // 37: reliant.v1.CatalogConnectionRequirement.connection_params:type_name -> reliant.v1.IntegrationConnectionParam
+	43, // 38: reliant.v1.ListInputOptionsRequest.scope:type_name -> reliant.v1.ListInputOptionsRequest.ScopeEntry
+	49, // 39: reliant.v1.ListInputOptionsRequest.acting_identity:type_name -> reliant.v1.ActingIdentity
+	44, // 40: reliant.v1.InputOption.annotations:type_name -> reliant.v1.InputOption.AnnotationsEntry
+	41, // 41: reliant.v1.ListInputOptionsResponse.options:type_name -> reliant.v1.InputOption
+	1,  // 42: reliant.v1.ListInputOptionsResponse.connection_state:type_name -> reliant.v1.InputOptionsConnectionState
+	50, // 43: reliant.v1.ListInputOptionsRequest.ScopeEntry.value:type_name -> google.protobuf.Value
+	50, // 44: reliant.v1.InputOption.AnnotationsEntry.value:type_name -> google.protobuf.Value
+	4,  // 45: reliant.v1.CatalogService.ListModels:input_type -> reliant.v1.ListModelsRequest
+	7,  // 46: reliant.v1.CatalogService.ListModelsByProvider:input_type -> reliant.v1.ListModelsByProviderRequest
+	10, // 47: reliant.v1.CatalogService.ListAvailableModels:input_type -> reliant.v1.ListAvailableModelsRequest
+	13, // 48: reliant.v1.CatalogService.ListTools:input_type -> reliant.v1.ListToolsRequest
+	19, // 49: reliant.v1.CatalogService.ListNodes:input_type -> reliant.v1.ListNodesRequest
+	21, // 50: reliant.v1.CatalogService.GetCELCompletions:input_type -> reliant.v1.GetCELCompletionsRequest
+	31, // 51: reliant.v1.CatalogService.SearchCatalog:input_type -> reliant.v1.SearchCatalogRequest
+	36, // 52: reliant.v1.CatalogService.GetCatalogEntry:input_type -> reliant.v1.GetCatalogEntryRequest
+	33, // 53: reliant.v1.CatalogService.ListCatalogIntegrations:input_type -> reliant.v1.ListCatalogIntegrationsRequest
+	40, // 54: reliant.v1.CatalogService.ListInputOptions:input_type -> reliant.v1.ListInputOptionsRequest
+	5,  // 55: reliant.v1.CatalogService.ListModels:output_type -> reliant.v1.ListModelsResponse
+	8,  // 56: reliant.v1.CatalogService.ListModelsByProvider:output_type -> reliant.v1.ListModelsByProviderResponse
+	11, // 57: reliant.v1.CatalogService.ListAvailableModels:output_type -> reliant.v1.ListAvailableModelsResponse
+	14, // 58: reliant.v1.CatalogService.ListTools:output_type -> reliant.v1.ListToolsResponse
+	20, // 59: reliant.v1.CatalogService.ListNodes:output_type -> reliant.v1.ListNodesResponse
+	27, // 60: reliant.v1.CatalogService.GetCELCompletions:output_type -> reliant.v1.GetCELCompletionsResponse
+	32, // 61: reliant.v1.CatalogService.SearchCatalog:output_type -> reliant.v1.SearchCatalogResponse
+	37, // 62: reliant.v1.CatalogService.GetCatalogEntry:output_type -> reliant.v1.GetCatalogEntryResponse
+	35, // 63: reliant.v1.CatalogService.ListCatalogIntegrations:output_type -> reliant.v1.ListCatalogIntegrationsResponse
+	42, // 64: reliant.v1.CatalogService.ListInputOptions:output_type -> reliant.v1.ListInputOptionsResponse
+	55, // [55:65] is the sub-list for method output_type
+	45, // [45:55] is the sub-list for method input_type
+	45, // [45:45] is the sub-list for extension type_name
+	45, // [45:45] is the sub-list for extension extendee
+	0,  // [0:45] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_catalog_proto_init() }

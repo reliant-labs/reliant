@@ -1,1 +1,1 @@
-{ name: installation_id, description: The GitHub App installation the event came through., example: "98765" }
+{ name: installation_id, type: installation, description: The GitHub App installation the event came through., example: "98765" }

@@ -14,6 +14,13 @@ var required = map[string][]string{
 	"ActionSpec":          {"id", "placement"},
 	"TriggerSpec":         {"id", "events", "data"},
 	"TriggerAttribute":    {"name"},
+	"FanOutSpec":          {"items", "request"},
+	"TypeSpec":            {"id", "value"},
+	"TypeOptionsSpec":     {"action", "value"},
+	"TypeWarningSpec":     {"when", "message"},
+	"TypeScopeSpec":       {"type"},
+	"TypeOptionsPaging":   {"next_token_path", "token_param"},
+	"TypeResolveSpec":     {"action", "label"},
 	"ConnectionParam":     {"name"},
 }
 
@@ -49,6 +56,10 @@ var patterns = map[string]string{
 	"ActionSpec.executor":    manifest.ExecutorPattern.String(),
 	"ToolSpec.name":          manifest.ToolNamePattern.String(),
 	"TriggerAttribute.name":  manifest.AttributeNamePattern.String(),
+	"TriggerAttribute.type":  manifest.TypeRefPattern.String(),
+	"TypeSpec.id":            manifest.IDPattern.String(),
+	"TypeScopeSpec.type":     manifest.TypeRefPattern.String(),
+	"TypeOptionsSpec.search": manifest.TypeSearchPattern.String(),
 	"ConnectionParam.name":   manifest.ParamNamePattern.String(),
 	"DelegatedAuth.broker":   manifest.BrokerPattern.String(),
 	"TriggerSpec.events":     manifest.EventTypePattern.String(),
@@ -57,11 +68,14 @@ var patterns = map[string]string{
 var maxLength = map[string]int{
 	"ActionSpec.summary":  200,
 	"TriggerSpec.summary": 200,
+	"TypeSpec.summary":    200,
 }
 
 var maxItems = map[string]int{
-	"TriggerSpec.events":     manifest.MaxTriggerEvents,
-	"TriggerSpec.attributes": manifest.MaxTriggerAttributes,
+	"TriggerSpec.events":        manifest.MaxTriggerEvents,
+	"TriggerSpec.attributes":    manifest.MaxTriggerAttributes,
+	"IntegrationManifest.types": manifest.MaxTypes,
+	"TypeOptionsSpec.warnings":  manifest.MaxTypeWarnings,
 }
 
 var minItems = map[string]int{"TriggerSpec.events": 1}
@@ -71,16 +85,23 @@ var bounds = map[string][2]int64{
 	"HttpRequestSpec.timeout_seconds":    {0, manifest.MaxTimeoutSeconds},
 	"HttpRequestSpec.max_response_bytes": {0, manifest.MaxResponseBytesLimit},
 	"PaginationSpec.max_pages":           {0, manifest.MaxPaginationPages},
+	"FanOutSpec.max_items":               {0, manifest.MaxFanOutItems},
 }
 
 var keywordItems = map[string]bool{
 	"IntegrationManifest.keywords": true,
 	"ActionSpec.keywords":          true,
 	"TriggerSpec.keywords":         true,
+	"TypeSpec.keywords":            true,
 }
 
 // jsonSchemaFields hold a JSON Schema whose root is an object.
 var jsonSchemaFields = map[string]bool{
 	"ActionSpec.params": true,
 	"TriggerSpec.data":  true,
+}
+
+// valueSchemaFields hold a JSON Schema whose root is any typed value.
+var valueSchemaFields = map[string]bool{
+	"TypeSpec.value": true,
 }

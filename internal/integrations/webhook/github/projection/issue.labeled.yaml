@@ -8,7 +8,7 @@ description: >-
   label, e.g. label: needs-triage.
 keywords: [label, tag, triage]
 attributes:
-  - { name: label, description: The label that was added., example: needs-triage, from: label.name }
+  - { name: label, type: label, description: The label that was added., example: needs-triage, from: label.name }
 data:
   label: { kind: string, from: label.name, description: The label that was added. }
   issue: { kind: object, object: issue }

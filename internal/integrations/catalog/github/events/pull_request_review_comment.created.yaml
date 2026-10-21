@@ -20,6 +20,7 @@ attributes:
   - { $ref: ../schemas/attr_repository.yaml }
   - { $ref: ../schemas/attr_installation.yaml }
   - { $ref: ../schemas/attr_sender.yaml }
+  - { $ref: ../schemas/attr_sender_id.yaml }
   - { $ref: ../schemas/attr_action.yaml }
   - { $ref: ../schemas/attr_branch.yaml }
   - { $ref: ../schemas/attr_base_branch.yaml }

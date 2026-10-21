@@ -13,6 +13,7 @@ import (
 	gojsonschema "github.com/google/jsonschema-go/jsonschema"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/integrations/catalogindex"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 )
 
@@ -40,19 +41,33 @@ type ValueTypes interface {
 	ScopeTypes(ref string) map[string]string
 }
 
-// catalogValueTypes is the ValueTypes over the embedded integration catalog.
-//
-// SEAM: the catalog does not declare input types yet (manifest `types:`), so
-// until it does every integration type is reported as unknown. When manifests
-// carry TypeSpec, implement these three methods over catalog.Builtin() the way
-// catalogIntegrations does for triggers; nothing else changes, because every
-// production caller reaches ValueTypes through ValidationOptions.valueTypes
-// (or the default of the entry points that take no options).
+// catalogValueTypes is the ValueTypes over the embedded integration catalog:
+// the types the shipped manifests declare (`types:`), answered by the catalog
+// index. A catalog that cannot load declares none, and every integration type
+// is then reported unknown, which is the least surprising way to fail.
 type catalogValueTypes struct{}
 
-func (catalogValueTypes) ValueSchema(string) (map[string]any, bool) { return nil, false }
-func (catalogValueTypes) TypeRefs() []string                        { return nil }
-func (catalogValueTypes) ScopeTypes(string) map[string]string       { return nil }
+func (catalogValueTypes) index() ValueTypes {
+	idx, err := catalogindex.Builtin()
+	if err != nil {
+		return noValueTypes{}
+	}
+	return idx
+}
+
+func (c catalogValueTypes) ValueSchema(ref string) (map[string]any, bool) {
+	return c.index().ValueSchema(ref)
+}
+func (c catalogValueTypes) TypeRefs() []string { return c.index().TypeRefs() }
+func (c catalogValueTypes) ScopeTypes(ref string) map[string]string {
+	return c.index().ScopeTypes(ref)
+}
+
+type noValueTypes struct{}
+
+func (noValueTypes) ValueSchema(string) (map[string]any, bool) { return nil, false }
+func (noValueTypes) TypeRefs() []string                        { return nil }
+func (noValueTypes) ScopeTypes(string) map[string]string       { return nil }
 
 // valueTypes is the resolver to use: the one the caller set, else the catalog.
 // Safe on a nil receiver.
