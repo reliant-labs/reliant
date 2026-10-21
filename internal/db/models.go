@@ -465,13 +465,10 @@ const (
 // status its owned threads take. See core for why PAUSED is not terminal.
 var ThreadStatusForStopReason = core.ThreadStatusForStopReason
 
+// ThreadStatus is an alias to the shared core thread lifecycle status.
+type ThreadStatus = core.ThreadStatus
+
 // Thread lifecycle statuses, mirroring the workflow lifecycle.
-//
-// Deliberately NOT re-exported as db.ThreadStatus (a named type): these are
-// plain int32 constants for the same reason the durable tool-call status enum
-// is not re-exported as db.ToolCallStatus — that name is already taken in this
-// package by a string-valued streaming status type, and two same-named types
-// with different underlying kinds cannot coexist here.
 const (
 	ThreadStatusRunning   = core.ThreadStatusRunning
 	ThreadStatusCompleted = core.ThreadStatusCompleted
@@ -575,24 +572,9 @@ type TriggerFilters = core.TriggerFilters
 
 // QuestionStatus represents the status of a question (stored as INTEGER in DB)
 const (
-	QuestionStatusPending  = 1 // QUESTION_STATUS_PENDING
-	QuestionStatusResolved = 2 // QUESTION_STATUS_RESOLVED
+	QuestionStatusPending  = core.QuestionStatusPending
+	QuestionStatusResolved = core.QuestionStatusResolved
 )
 
-// Question represents a pending question for user interaction
-type Question struct {
-	ID                 string
-	ChatID             string
-	WorkflowID         string
-	TemporalWorkflowID string
-	ThreadID           string
-	StepID             string
-	LoopNodeID         *string
-	LoopIteration      *int
-	Status             int
-	Metadata           *string
-	ResponseData       *string
-	CreatedAt          time.Time
-	ResolvedAt         *time.Time
-	ToolCallID         *string
-}
+// Question is an alias to the shared core question model.
+type Question = core.Question

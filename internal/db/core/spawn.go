@@ -69,7 +69,7 @@ type SpawnRun struct {
 	ChildWorkflowID   string
 	IssuingWorkflowID string
 	WorkflowStatus    WorkflowStatus
-	ThreadStatus      int32
+	ThreadStatus      ThreadStatus
 	ThreadOrigin      ThreadOrigin
 	WorktreePath      string
 	// SpawnDepth counts the run's ancestors up its workflow tree: 1 for a

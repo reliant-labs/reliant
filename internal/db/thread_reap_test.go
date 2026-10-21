@@ -44,7 +44,7 @@ func TestReapOrphanedThreads(t *testing.T) {
 	failedWf := "wf-tr-failed"
 	failedThread := "th-tr-failed"
 	insertTestWorkflowWithParent(t, repo, failedWf, chatID, nil, Failed())
-	insertTestThreadForWorkflow(t, repo, failedThread, chatID, failedWf, int32(6))
+	insertTestThreadForWorkflow(t, repo, failedThread, chatID, failedWf, ThreadStatus(6))
 
 	// A LIVE workflow with a live thread. Reaping this would falsely close
 	// an in-flight agent's conversation -- a far worse failure than the one
@@ -93,7 +93,7 @@ func TestReapOrphanedThreads(t *testing.T) {
 		}
 	}
 
-	assertThreadStatus := func(id string, want int32, why string) {
+	assertThreadStatus := func(id string, want ThreadStatus, why string) {
 		t.Helper()
 		th, err := repo.GetThread(ctx, id)
 		if err != nil {

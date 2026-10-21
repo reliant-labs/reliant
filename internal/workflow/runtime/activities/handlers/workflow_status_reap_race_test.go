@@ -133,7 +133,7 @@ func TestWorkflowStatus_StartedNeverExposesARevivedThreadUnderATerminalWorkflow(
 func TestWorkflowStatus_TerminalArmsCascadeInTheStatusCommit(t *testing.T) {
 	for _, tc := range []struct {
 		status     string
-		wantThread int32
+		wantThread db.ThreadStatus
 		wantRun    db.WorkflowStatus
 	}{
 		{status: "completed", wantThread: db.ThreadStatusCompleted, wantRun: db.Completed()},

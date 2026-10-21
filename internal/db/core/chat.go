@@ -1,7 +1,6 @@
 package core
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"time"
@@ -311,43 +310,4 @@ type PausedForMachineChat struct {
 type WaitingForMachineRun struct {
 	ChatID     string
 	WorkflowID string
-}
-
-// ChatStore is the shared contract for chat persistence across drivers.
-type ChatStore interface {
-	CreateChat(ctx context.Context, chat *Chat) error
-	GetChat(ctx context.Context, id string) (*Chat, error)
-	GetChatWithUserCheck(ctx context.Context, id string, userID string) (*Chat, error)
-	ListChats(ctx context.Context, filters ChatFilters) ([]*Chat, error)
-	SearchChats(ctx context.Context, filters ChatSearchFilters) ([]*Chat, error)
-	UpdateChat(ctx context.Context, chat *Chat) error
-	DeleteChat(ctx context.Context, id string) error
-	UpdateChatActiveDaemon(ctx context.Context, chatID string, daemonID *string) error
-	// SetChatAdopted adopts or un-adopts a chat owned by userID. It reports
-	// whether the chat exists and is the user's; repeating it is a no-op.
-	SetChatAdopted(ctx context.Context, chatID, userID string, adopted bool) (bool, error)
-	// SetChatDaemonBlocked sets or clears the daemon-pending marker and reports
-	// whether the stored value changed.
-	SetChatDaemonBlocked(ctx context.Context, chatID string, blocked bool) (bool, error)
-	// SetChatQueuedForMachine sets or clears the queued-for-machine marker and
-	// reports whether the stored value changed. Clearing is a claim: of two
-	// callers that race, exactly one sees true.
-	SetChatQueuedForMachine(ctx context.Context, chatID string, queued bool) (bool, error)
-	// ListChatsQueuedForMachine lists non-archived chats holding a message
-	// queued for their machine, oldest first, at most limit. An empty userID
-	// lists every user's.
-	ListChatsQueuedForMachine(ctx context.Context, userID string, limit int) ([]QueuedForMachineChat, error)
-	// SetChatPausedForMachine sets or clears the marker saying the daemon-offline
-	// breaker paused the chat's run, and reports whether the stored value
-	// changed. Clearing is a claim: of two callers that race, exactly one sees
-	// true.
-	SetChatPausedForMachine(ctx context.Context, chatID string, paused bool) (bool, error)
-	// ListChatsPausedForMachine lists non-archived chats whose root run the
-	// breaker paused and that still read paused, oldest first, at most limit.
-	// An empty userID lists every user's.
-	ListChatsPausedForMachine(ctx context.Context, userID string, limit int) ([]PausedForMachineChat, error)
-	// ListChatsWaitingForMachine lists a user's chats whose live root run is
-	// parked waiting for a machine.
-	ListChatsWaitingForMachine(ctx context.Context, userID string) ([]WaitingForMachineRun, error)
-	ListArchivedChats(ctx context.Context, userID string) ([]*ArchivedChatInfo, error)
 }

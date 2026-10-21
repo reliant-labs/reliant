@@ -716,7 +716,7 @@ type Repository interface {
 	ListChildThreads(ctx context.Context, parentThreadID string) ([]*Thread, error)
 	UpdateThreadWorkflow(ctx context.Context, threadID, workflowID string) (*Thread, error)
 	UpdateThreadForkPoint(ctx context.Context, threadID string, forkAtMessageID *string) (*Thread, error)
-	UpdateThreadStatus(ctx context.Context, threadID string, status int32, completedAt *time.Time) (*Thread, error)
+	UpdateThreadStatus(ctx context.Context, threadID string, status ThreadStatus, completedAt *time.Time) (*Thread, error)
 	// ReviveThread moves a terminal thread back to running because a new run
 	// has started on it, and clears the completed_at of the turn that ended.
 	// The inverse of CascadeTerminalStatusToThreadSubtree below, and the

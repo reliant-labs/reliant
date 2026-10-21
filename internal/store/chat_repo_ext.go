@@ -35,6 +35,344 @@
 //	}
 package store
 
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"time"
+
+	"github.com/reliant-labs/forge/pkg/crud"
+	"github.com/reliant-labs/forge/pkg/orm"
+
+	"github.com/reliant-labs/reliant/internal/db/core"
+)
+
+// The chats writes (P5b L1b). Reads go through the view — see
+// chats_with_activity_repo_ext.go.
+
+// InsertChat stores a new chat with the caller's created_at, updated_at and
+// last_active. An unset State is IDLE (the column DEFAULT).
+//
+// forge friction: the generated CreateChat re-stamps updated_at to the time
+// of the write, overwriting the caller's value, so this inserts through bun
+// directly until forge's Create honours a caller-set updated_at.
+func InsertChat(ctx context.Context, db orm.Context, chat *core.Chat) error {
+	row := chatToRow(chat)
+	if _, err := db.Bun().NewInsert().Model(row).Exec(ctx); err != nil {
+		return fmt.Errorf("failed to create chat: %w", err)
+	}
+	return nil
+}
+
+// chatUpdateColumns are the columns SaveChat writes; updated_at is stamped
+// by the masked update itself.
+var chatUpdateColumns = []string{
+	ChatFieldTitle, ChatFieldProjectID, ChatFieldWorktreeID, ChatFieldWorkflowName,
+	ChatFieldState, ChatFieldWorkflowID, ChatFieldRunID, ChatFieldSelectedPresets,
+	ChatFieldLastActive,
+}
+
+// SaveChat writes a chat's editable columns and stamps updated_at. A chat
+// that does not exist is left alone, as the statement it replaced did. The
+// caller holds the row it wrote, so nothing is read back.
+func SaveChat(ctx context.Context, db orm.Context, chat *core.Chat) error {
+	err := chatRepo.UpdateMasked(ctx, db, chatToRow(chat), chatUpdateColumns, crud.NoReadBack())
+	if err != nil && !chatIsMissing(err) {
+		return fmt.Errorf("failed to update chat: %w", err)
+	}
+	return nil
+}
+
+// UpdateChatState moves a chat to state, capturing archivedWorktreeName onto
+// it unless one is already recorded (so an archived chat keeps naming its
+// worktree after the worktree row is gone), and stamps updated_at and
+// last_active with now.
+func UpdateChatState(ctx context.Context, db orm.Context, chatID string, state core.ChatState, archivedWorktreeName *string, now time.Time) error {
+	_, err := db.Bun().NewRaw(`
+UPDATE chats
+SET state = ?0,
+    archived_worktree_name = COALESCE(archived_worktree_name, ?1),
+    updated_at = ?2,
+    last_active = ?2
+WHERE id = ?3`, state, archivedWorktreeName, now, chatID).Exec(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to update chat state: %w", err)
+	}
+	return nil
+}
+
+// UpdateChatUnread sets the chat's unread flag and stamps updated_at. A chat
+// that does not exist is left alone.
+func UpdateChatUnread(ctx context.Context, db orm.Context, chatID string, unread bool) error {
+	row := &Chat{ID: chatID}
+	if unread {
+		row.Unread = 1
+	}
+	err := chatRepo.UpdateMasked(ctx, db, row, []string{ChatFieldUnread}, crud.NoReadBack())
+	if err != nil && !chatIsMissing(err) {
+		return fmt.Errorf("failed to update chat unread: %w", err)
+	}
+	return nil
+}
+
+// updateChatActiveDaemonSQL pins (or clears) the chat's daemon. Pinning a
+// daemon puts the chat on a machine, so it ends no-machine in the same write
+// (chats_no_machine_has_no_daemon_check). Clearing the daemon never sets
+// no_machine: a chat that has had a machine does not become one without.
+const updateChatActiveDaemonSQL = `
+UPDATE chats SET
+    active_daemon_id = ?0,
+    no_machine = no_machine AND ?0::text IS NULL,
+    updated_at = NOW()
+WHERE id = ?1`
+
+// UpdateChatActiveDaemon pins the chat to daemonID, or clears the pin when it
+// is nil.
+func UpdateChatActiveDaemon(ctx context.Context, db orm.Context, chatID string, daemonID *string) error {
+	_, err := db.Bun().NewRaw(updateChatActiveDaemonSQL, daemonID, chatID).Exec(ctx)
+	return err
+}
+
+// RemoveChat deletes the chat (the generated DeleteChat), treating one that
+// does not exist as already deleted, as the statement it replaced did.
+func RemoveChat(ctx context.Context, db orm.Context, id string) error {
+	if err := DeleteChat(ctx, db, id); err != nil && !chatIsMissing(err) {
+		return err
+	}
+	return nil
+}
+
+// setChatAdoptedSQL is idempotent: adopting an adopted chat keeps its original
+// adopted_at, and clearing an un-adopted one is a no-op. Scoped to the owner;
+// zero rows means the chat is not the caller's (or does not exist).
+const setChatAdoptedSQL = `
+UPDATE chats SET
+    adopted_at = CASE WHEN ?0::boolean THEN COALESCE(adopted_at, NOW()) ELSE NULL END,
+    updated_at = NOW()
+WHERE id = ?1 AND user_id = ?2`
+
+// SetChatAdopted adopts or un-adopts a chat owned by userID, reporting whether
+// the chat exists and is the user's.
+func SetChatAdopted(ctx context.Context, db orm.Context, chatID, userID string, adopted bool) (bool, error) {
+	res, err := db.Bun().NewRaw(setChatAdoptedSQL, adopted, chatID, userID).Exec(ctx)
+	if err != nil {
+		return false, fmt.Errorf("failed to set chat adoption: %w", err)
+	}
+	n, err := res.RowsAffected()
+	return n > 0, err
+}
+
+// SetChatDaemonBlocked sets or clears the daemon-pending marker and reports
+// whether the stored value changed, so callers emit chat_activity_changed on
+// transitions and not on every tool call.
+//
+// It runs on every tool call, so it is the raw passthrough with bound $N
+// parameters: bun would format the arguments into the text, a new prepared
+// statement per chat under pgx's statement cache (internal/db/SCHEMA.md).
+func SetChatDaemonBlocked(ctx context.Context, db orm.Context, chatID string, blocked bool) (bool, error) {
+	res, err := db.Exec(ctx, `
+UPDATE chats SET
+    daemon_blocked_at = CASE WHEN $1::boolean THEN NOW() ELSE NULL END
+WHERE id = $2
+  AND (daemon_blocked_at IS NOT NULL) IS DISTINCT FROM $1::boolean`, blocked, chatID)
+	if err != nil {
+		return false, fmt.Errorf("failed to set chat daemon-blocked marker: %w", err)
+	}
+	n, err := res.RowsAffected()
+	return n > 0, err
+}
+
+// setChatQueuedForMachineSQL sets or clears the queued-for-machine marker,
+// matching a row only when the value actually changes: clearing is how a
+// deliverer CLAIMS the queued message, so of two that race exactly one sees
+// the row change.
+const setChatQueuedForMachineSQL = `
+UPDATE chats SET
+    queued_for_machine_at = CASE WHEN ?0::boolean THEN NOW() ELSE NULL END
+WHERE id = ?1
+  AND (queued_for_machine_at IS NOT NULL) IS DISTINCT FROM ?0::boolean`
+
+// SetChatQueuedForMachine sets or clears the queued-for-machine marker and
+// reports whether the stored value changed.
+func SetChatQueuedForMachine(ctx context.Context, db orm.Context, chatID string, queued bool) (bool, error) {
+	res, err := db.Bun().NewRaw(setChatQueuedForMachineSQL, queued, chatID).Exec(ctx)
+	if err != nil {
+		return false, fmt.Errorf("failed to set chat queued-for-machine marker: %w", err)
+	}
+	n, err := res.RowsAffected()
+	return n > 0, err
+}
+
+// setChatPausedForMachineSQL sets or clears the paused-for-machine marker: the
+// chat's run was paused by the daemon-offline breaker (not by the user). Like
+// the queued marker, clearing is a claim: of two resumers that race exactly
+// one sees the row change.
+const setChatPausedForMachineSQL = `
+UPDATE chats SET
+    paused_for_machine_at = CASE WHEN ?0::boolean THEN NOW() ELSE NULL END
+WHERE id = ?1
+  AND (paused_for_machine_at IS NOT NULL) IS DISTINCT FROM ?0::boolean`
+
+// SetChatPausedForMachine sets or clears the paused-for-machine marker and
+// reports whether the stored value changed.
+func SetChatPausedForMachine(ctx context.Context, db orm.Context, chatID string, paused bool) (bool, error) {
+	res, err := db.Bun().NewRaw(setChatPausedForMachineSQL, paused, chatID).Exec(ctx)
+	if err != nil {
+		return false, fmt.Errorf("failed to set chat paused-for-machine marker: %w", err)
+	}
+	n, err := res.RowsAffected()
+	return n > 0, err
+}
+
+// listChatsQueuedForMachineSQL lists chats holding a message queued for their
+// machine, oldest first. An empty user id lists every user's (the delivery
+// sweep); otherwise one user's (a machine of theirs just connected).
+// Archived chats are left alone.
+const listChatsQueuedForMachineSQL = `
+SELECT id, user_id, active_daemon_id, queued_for_machine_at
+FROM chats
+WHERE queued_for_machine_at IS NOT NULL
+  AND state IS DISTINCT FROM 3
+  AND (?0::text = '' OR user_id = ?0::text)
+ORDER BY queued_for_machine_at ASC, id ASC
+LIMIT ?1`
+
+// ListChatsQueuedForMachine lists up to limit chats holding a message queued
+// for their machine.
+func ListChatsQueuedForMachine(ctx context.Context, db orm.Context, userID string, limit int) ([]core.QueuedForMachineChat, error) {
+	var rows []struct {
+		ID                 string    `bun:"id"`
+		UserID             string    `bun:"user_id"`
+		ActiveDaemonID     *string   `bun:"active_daemon_id"`
+		QueuedForMachineAt time.Time `bun:"queued_for_machine_at"`
+	}
+	if err := db.Bun().NewRaw(listChatsQueuedForMachineSQL, userID, limit).Scan(ctx, &rows); err != nil {
+		return nil, fmt.Errorf("failed to list chats queued for their machine: %w", err)
+	}
+	chats := make([]core.QueuedForMachineChat, len(rows))
+	for i, row := range rows {
+		chats[i] = core.QueuedForMachineChat{
+			ChatID:         row.ID,
+			UserID:         row.UserID,
+			ActiveDaemonID: row.ActiveDaemonID,
+			QueuedAt:       row.QueuedForMachineAt,
+		}
+	}
+	return chats, nil
+}
+
+// listChatsPausedForMachineSQL lists chats whose root run the daemon-offline
+// breaker paused and nothing has resumed, oldest first. The root run must
+// still read paused (STOPPED/PAUSED): a marker left behind by a run that
+// ended since is not a chat to resume. An empty user id lists every user's
+// (the sweep); otherwise one user's (a machine of theirs just connected).
+// Archived chats are left alone.
+const listChatsPausedForMachineSQL = `
+SELECT c.id, c.user_id, c.workflow_id, c.active_daemon_id, c.paused_for_machine_at
+FROM chats c
+JOIN workflows w ON w.id = c.workflow_id
+WHERE c.paused_for_machine_at IS NOT NULL
+  AND c.state IS DISTINCT FROM 3
+  AND w.state = 3 AND w.stop_reason = 3
+  AND (?0::text = '' OR c.user_id = ?0::text)
+ORDER BY c.paused_for_machine_at ASC, c.id ASC
+LIMIT ?1`
+
+// ListChatsPausedForMachine lists up to limit chats the breaker paused.
+func ListChatsPausedForMachine(ctx context.Context, db orm.Context, userID string, limit int) ([]core.PausedForMachineChat, error) {
+	var rows []struct {
+		ID                 string    `bun:"id"`
+		UserID             string    `bun:"user_id"`
+		WorkflowID         string    `bun:"workflow_id"`
+		ActiveDaemonID     *string   `bun:"active_daemon_id"`
+		PausedForMachineAt time.Time `bun:"paused_for_machine_at"`
+	}
+	if err := db.Bun().NewRaw(listChatsPausedForMachineSQL, userID, limit).Scan(ctx, &rows); err != nil {
+		return nil, fmt.Errorf("failed to list chats paused for their machine: %w", err)
+	}
+	chats := make([]core.PausedForMachineChat, len(rows))
+	for i, row := range rows {
+		chats[i] = core.PausedForMachineChat{
+			ChatID:         row.ID,
+			UserID:         row.UserID,
+			WorkflowID:     row.WorkflowID,
+			ActiveDaemonID: row.ActiveDaemonID,
+			PausedAt:       row.PausedForMachineAt,
+		}
+	}
+	return chats, nil
+}
+
+// listChatsWaitingForMachineSQL lists one user's chats whose root run is live
+// (ACTIVE) and parked waiting for a machine (the daemon-pending marker): the
+// runs to tell when one of the user's machines connects.
+const listChatsWaitingForMachineSQL = `
+SELECT c.id, c.workflow_id
+FROM chats c
+JOIN workflows w ON w.id = c.workflow_id
+WHERE c.user_id = ?0::text
+  AND c.daemon_blocked_at IS NOT NULL
+  AND w.state = 2`
+
+// ListChatsWaitingForMachine lists a user's chats whose live root run is
+// parked waiting for a machine.
+func ListChatsWaitingForMachine(ctx context.Context, db orm.Context, userID string) ([]core.WaitingForMachineRun, error) {
+	var rows []struct {
+		ID         string `bun:"id"`
+		WorkflowID string `bun:"workflow_id"`
+	}
+	if err := db.Bun().NewRaw(listChatsWaitingForMachineSQL, userID).Scan(ctx, &rows); err != nil {
+		return nil, fmt.Errorf("failed to list chats waiting for their machine: %w", err)
+	}
+	runs := make([]core.WaitingForMachineRun, len(rows))
+	for i, row := range rows {
+		runs[i] = core.WaitingForMachineRun{ChatID: row.ID, WorkflowID: row.WorkflowID}
+	}
+	return runs, nil
+}
+
+// chatToRow maps a core.Chat onto the chats row its writes take. An unset
+// state is IDLE: nil leaves the column to its DEFAULT on insert, and an update
+// writes IDLE explicitly, as the statements these replaced did.
+func chatToRow(chat *core.Chat) *Chat {
+	state := chat.State
+	if state == core.ChatStateUnspecified {
+		state = core.ChatStateIdle
+	}
+	row := &Chat{
+		ID:              chat.ID,
+		Title:           chat.Title,
+		ProjectID:       chat.ProjectID,
+		UserID:          chat.UserID,
+		State:           &state,
+		WorkflowID:      chat.WorkflowID,
+		RunID:           chat.RunID,
+		CreatedAt:       chat.CreatedAt,
+		UpdatedAt:       chat.UpdatedAt,
+		LastActive:      chat.LastActive,
+		WorktreeID:      chat.WorktreeID,
+		WorkflowName:    chat.WorkflowName,
+		SelectedPresets: chatPresetsToColumn(chat.SelectedPresets),
+		ActiveDaemonID:  chat.ActiveDaemonID,
+		NoMachine:       chat.NoMachine,
+	}
+	return row
+}
+
+// chatPresetsToColumn encodes selected presets for chats.selected_presets; no
+// presets is NULL.
+func chatPresetsToColumn(m map[string]string) *string {
+	if len(m) == 0 {
+		return nil
+	}
+	data, err := json.Marshal(m)
+	if err != nil {
+		return nil
+	}
+	s := string(data)
+	return &s
+}
+
 // ChatExtra carries fields on Chat that are NOT columns — computed
 // values, transient state, anything derived rather than stored. Chat is
 // embedded on ChatExtra (see chat_orm.go), so a field added here is a field on

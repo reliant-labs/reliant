@@ -603,7 +603,7 @@ func (s *Service) attachThreadsWithoutWorkflowRow(
 // This is the inverse of core.ThreadStatusForStopReason, which projects a
 // workflow's stop reason onto its threads. Threads have no PENDING/ACTIVE
 // distinction to make, so running maps to ACTIVE.
-func threadStatusToWorkflowStatus(status int32) (reliantv1.WorkflowState, reliantv1.WorkflowStopReason) {
+func threadStatusToWorkflowStatus(status db.ThreadStatus) (reliantv1.WorkflowState, reliantv1.WorkflowStopReason) {
 	switch status {
 	case db.ThreadStatusRunning:
 		return reliantv1.WorkflowState_WORKFLOW_STATE_ACTIVE, reliantv1.WorkflowStopReason_WORKFLOW_STOP_REASON_UNSPECIFIED

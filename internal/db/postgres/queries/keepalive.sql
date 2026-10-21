@@ -1,0 +1,8 @@
+-- name: SqlcKeepalive :one
+-- No sqlc query is left: every aggregate is on the forge ORM (internal/store,
+-- P5b). sqlc refuses to run over an empty query set, and `make sqlc` is still a
+-- forge generate hook, so this one statement keeps the hook runnable until the
+-- P5b finish lane deletes sqlc, this directory, internal/db/postgres/generated
+-- and the hook together (research/forge-migration/08-p5b-spike.md, "Finish").
+-- Nothing calls it.
+SELECT 1::integer AS ok;

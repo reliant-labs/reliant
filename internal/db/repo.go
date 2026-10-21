@@ -106,16 +106,11 @@ type ChatUpdateNotifier func(chatID string, seqNum int64, update ChatUpdate)
 type Repo struct {
 	DB              *WrappedDBTX
 	driver          DatabaseDriver
-	chats           core.ChatStore
 	runs            core.RunStore
-	agentMessages   core.AgentMessageStore
 	settings        core.SettingStore
 	accounts        *postgresstore.AccountStore
 	workflows       core.WorkflowStore
-	threads         core.ThreadStore
-	contextWindows  core.ContextWindowStore
 	workflowCatalog core.WorkflowCatalogStore
-	inbox           core.InboxStore
 	runEvents       core.RunEventStore
 
 	// session is the DatabaseConfig.DirectURL pool, for work that needs a
@@ -165,15 +160,10 @@ func NewRepoWithDriver(db *sql.DB, driver DatabaseDriver) (*Repo, error) {
 		DB:              q,
 		driver:          driver,
 		accounts:        postgresstore.NewProviderAccountStore(client),
-		chats:           postgresstore.NewChatStore(pgQueries, q),
 		runs:            postgresstore.NewRunStore(client),
-		agentMessages:   postgresstore.NewAgentMessageStore(pgQueries, q),
 		settings:        postgresstore.NewSettingStore(pgQueries, client),
 		workflows:       postgresstore.NewWorkflowStore(client),
-		threads:         postgresstore.NewThreadStore(pgQueries),
-		contextWindows:  postgresstore.NewContextWindowStore(pgQueries),
 		workflowCatalog: postgresstore.NewWorkflowCatalogStore(client),
-		inbox:           postgresstore.NewInboxStore(pgQueries),
 		runEvents:       postgresstore.NewRunEventStore(client),
 	}, nil
 }
@@ -1273,19 +1263,8 @@ func (r *Repo) UpdateChatState(ctx context.Context, chatID string, state ChatSta
 
 	// Update the chat state
 	now := time.Now().UTC()
-	query := `
-		UPDATE chats
-		SET state = ?, 
-		    archived_worktree_name = COALESCE(archived_worktree_name, ?),
-		    updated_at = ?,
-		    last_active = ?
-		WHERE id = ?
-	`
-	query = r.bindQuery(query)
-
-	_, err = r.DB.ExecContext(ctx, query, int32(state), archivedWorktreeName, now, now, chatID)
-	if err != nil {
-		return fmt.Errorf("failed to update chat state: %w", err)
+	if err := store.UpdateChatState(ctx, r.ORM(), chatID, state, archivedWorktreeName, now); err != nil {
+		return err
 	}
 
 	// Create user update for the state change
@@ -1340,7 +1319,7 @@ func (r *Repo) UpdateChatState(ctx context.Context, chatID string, state ChatSta
 // UpdateChatActiveDaemon sets the active daemon for a chat session.
 // When daemonID is nil, the active daemon is cleared (revert to default resolution).
 func (r *Repo) UpdateChatActiveDaemon(ctx context.Context, chatID string, daemonID *string) error {
-	return r.chats.UpdateChatActiveDaemon(ctx, chatID, daemonID)
+	return store.UpdateChatActiveDaemon(ctx, r.ORM(), chatID, daemonID)
 }
 
 // SetChatAdopted adopts or un-adopts a chat for its owner. It reports whether
@@ -1350,7 +1329,7 @@ func (r *Repo) UpdateChatActiveDaemon(ctx context.Context, chatID string, daemon
 func (r *Repo) SetChatAdopted(ctx context.Context, chatID, userID string, adopted bool) (bool, error) {
 	var owned bool
 	err := r.RunTx(ctx, func(txCtx context.Context) error {
-		ok, err := r.chats.SetChatAdopted(txCtx, chatID, userID, adopted)
+		ok, err := store.SetChatAdopted(txCtx, r.ORM(), chatID, userID, adopted)
 		if err != nil || !ok {
 			return err
 		}
@@ -1366,7 +1345,7 @@ func (r *Repo) SetChatAdopted(ctx context.Context, chatID, userID string, adopte
 // UPDATE that matches no row.
 func (r *Repo) SetChatDaemonBlocked(ctx context.Context, chatID string, blocked bool) error {
 	return r.RunTx(ctx, func(txCtx context.Context) error {
-		changed, err := r.chats.SetChatDaemonBlocked(txCtx, chatID, blocked)
+		changed, err := store.SetChatDaemonBlocked(txCtx, r.ORM(), chatID, blocked)
 		if err != nil || !changed {
 			return err
 		}
@@ -1382,7 +1361,7 @@ func (r *Repo) SetChatQueuedForMachine(ctx context.Context, chatID string, queue
 	var changed bool
 	err := r.RunTx(ctx, func(txCtx context.Context) error {
 		var err error
-		changed, err = r.chats.SetChatQueuedForMachine(txCtx, chatID, queued)
+		changed, err = store.SetChatQueuedForMachine(txCtx, r.ORM(), chatID, queued)
 		if err != nil || !changed {
 			return err
 		}
@@ -1394,25 +1373,25 @@ func (r *Repo) SetChatQueuedForMachine(ctx context.Context, chatID string, queue
 // ListChatsQueuedForMachine lists chats holding a message queued for their
 // machine; see the Repository interface.
 func (r *Repo) ListChatsQueuedForMachine(ctx context.Context, userID string, limit int) ([]QueuedForMachineChat, error) {
-	return r.chats.ListChatsQueuedForMachine(ctx, userID, limit)
+	return store.ListChatsQueuedForMachine(ctx, r.ORM(), userID, limit)
 }
 
 // SetChatPausedForMachine records (or clears) that the daemon-offline breaker
 // paused the chat's run, and reports whether the stored value changed.
 func (r *Repo) SetChatPausedForMachine(ctx context.Context, chatID string, paused bool) (bool, error) {
-	return r.chats.SetChatPausedForMachine(ctx, chatID, paused)
+	return store.SetChatPausedForMachine(ctx, r.ORM(), chatID, paused)
 }
 
 // ListChatsPausedForMachine lists chats the breaker paused; see the Repository
 // interface.
 func (r *Repo) ListChatsPausedForMachine(ctx context.Context, userID string, limit int) ([]PausedForMachineChat, error) {
-	return r.chats.ListChatsPausedForMachine(ctx, userID, limit)
+	return store.ListChatsPausedForMachine(ctx, r.ORM(), userID, limit)
 }
 
 // ListChatsWaitingForMachine lists a user's chats whose live root run is
 // parked waiting for a machine.
 func (r *Repo) ListChatsWaitingForMachine(ctx context.Context, userID string) ([]WaitingForMachineRun, error) {
-	return r.chats.ListChatsWaitingForMachine(ctx, userID)
+	return store.ListChatsWaitingForMachine(ctx, r.ORM(), userID)
 }
 
 // UpdateChatUnread sets the unread flag on a chat and emits a user update.
@@ -1422,18 +1401,8 @@ func (r *Repo) UpdateChatUnread(ctx context.Context, chatID string, unread bool,
 		return fmt.Errorf("failed to get chat: %w", err)
 	}
 
-	unreadInt := 0
-	if unread {
-		unreadInt = 1
-	}
-
-	now := time.Now().UTC()
-	query := `UPDATE chats SET unread = ?, updated_at = ? WHERE id = ?`
-	query = r.bindQuery(query)
-
-	_, err = r.DB.ExecContext(ctx, query, unreadInt, now, chatID)
-	if err != nil {
-		return fmt.Errorf("failed to update chat unread: %w", err)
+	if err := store.UpdateChatUnread(ctx, r.ORM(), chatID, unread); err != nil {
+		return err
 	}
 
 	updateData := map[string]interface{}{

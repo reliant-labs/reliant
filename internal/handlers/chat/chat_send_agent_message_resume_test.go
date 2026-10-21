@@ -28,7 +28,7 @@ import (
 
 // stopSubAgent puts the fixture's child in the state a spawn ends in: its
 // thread and its own workflow row both terminal with the given outcome.
-func stopSubAgent(t *testing.T, repo *db.Repo, ctx context.Context, fx sendAgentMessageFixture, threadStatus int32, workflowStatus core.WorkflowStatus) {
+func stopSubAgent(t *testing.T, repo *db.Repo, ctx context.Context, fx sendAgentMessageFixture, threadStatus db.ThreadStatus, workflowStatus core.WorkflowStatus) {
 	t.Helper()
 	stoppedAt := time.Now().UTC()
 	_, err := repo.UpdateThreadStatus(ctx, fx.childThreadID, threadStatus, &stoppedAt)

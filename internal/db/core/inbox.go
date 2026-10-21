@@ -1,9 +1,6 @@
 package core
 
-import (
-	"context"
-	"time"
-)
+import "time"
 
 // InboxPendingKind identifies which source an InboxPending row came from. The
 // values are the reliantv1.InboxItemKind wire values for the kinds SQL
@@ -42,20 +39,4 @@ type InboxPending struct {
 	Text1        string
 	Text2        string
 	Int1         int32
-}
-
-// InboxStore is the persistence contract for the Inbox. Every method is scoped
-// by an explicit user id, never by a request value.
-type InboxStore interface {
-	// ListInboxPending returns the user's pending approvals, questions,
-	// waiting-for-machine runs and launch-failed automations, unsorted. Only
-	// items that can be opened are returned: the project must exist and be the
-	// user's, and a blocking item's run must not be completed or cancelled.
-	ListInboxPending(ctx context.Context, userID string) ([]*InboxPending, error)
-	// ListDismissedInboxItemIDs returns the subset of itemIDs the user dismissed.
-	ListDismissedInboxItemIDs(ctx context.Context, userID string, itemIDs []string) (map[string]bool, error)
-	// DismissInboxItems is idempotent.
-	DismissInboxItems(ctx context.Context, userID string, itemIDs []string, at time.Time) error
-	// RestoreInboxItems undoes DismissInboxItems; ids not dismissed are ignored.
-	RestoreInboxItems(ctx context.Context, userID string, itemIDs []string) error
 }

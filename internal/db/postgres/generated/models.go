@@ -31,13 +31,15 @@ type AccessToken struct {
 }
 
 type AgentMessage struct {
-	ID                 string                `json:"id"`
-	ChatID             string                `json:"chat_id"`
-	FromThreadID       string                `json:"from_thread_id"`
-	ToThreadID         string                `json:"to_thread_id"`
-	Kind               int32                 `json:"kind"`
-	Body               string                `json:"body"`
-	ToolCallID         sql.NullString        `json:"tool_call_id"`
+	ID           string `json:"id"`
+	ChatID       string `json:"chat_id"`
+	FromThreadID string `json:"from_thread_id"`
+	ToThreadID   string `json:"to_thread_id"`
+	// forge:go-type=github.com/reliant-labs/reliant/internal/db/core;core.AgentMessageKind
+	Kind       int32          `json:"kind"`
+	Body       string         `json:"body"`
+	ToolCallID sql.NullString `json:"tool_call_id"`
+	// forge:go-type=github.com/reliant-labs/reliant/internal/db/core;core.AgentMessageStatus
 	Status             int32                 `json:"status"`
 	CreatedAt          time.Time             `json:"created_at"`
 	DeliveredAt        sql.NullTime          `json:"delivered_at"`
@@ -203,7 +205,8 @@ type ChatsWithActivity struct {
 	NoMachine            bool           `json:"no_machine"`
 	QueuedForMachineAt   sql.NullTime   `json:"queued_for_machine_at"`
 	LastMessageAt        interface{}    `json:"last_message_at"`
-	Activity             int32          `json:"activity"`
+	// forge:go-type=github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1.ChatActivity
+	Activity int32 `json:"activity"`
 	// forge:go-type=github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1.WorkflowState
 	RootWorkflowState sql.NullInt32 `json:"root_workflow_state"`
 	// forge:go-type=github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1.WorkflowStopReason
@@ -211,10 +214,11 @@ type ChatsWithActivity struct {
 	LaunchKind             sql.NullString `json:"launch_kind"`
 	TriggerID              sql.NullString `json:"trigger_id"`
 	ListInSidebar          sql.NullBool   `json:"list_in_sidebar"`
-	DisplayState           int32          `json:"display_state"`
-	UsageLimitResumesAt    sql.NullTime   `json:"usage_limit_resumes_at"`
-	UsageLimitProvider     sql.NullString `json:"usage_limit_provider"`
-	UsageLimitProbing      bool           `json:"usage_limit_probing"`
+	// forge:go-type=github.com/reliant-labs/reliant/internal/db/core;core.RunDisplayState
+	DisplayState        int32          `json:"display_state"`
+	UsageLimitResumesAt sql.NullTime   `json:"usage_limit_resumes_at"`
+	UsageLimitProvider  sql.NullString `json:"usage_limit_provider"`
+	UsageLimitProbing   bool           `json:"usage_limit_probing"`
 }
 
 type ClaudeAuthToken struct {
@@ -807,14 +811,15 @@ type TemporalPayloadBlob struct {
 }
 
 type Thread struct {
-	ID              string         `json:"id"`
-	ChatID          string         `json:"chat_id"`
-	ParentThreadID  sql.NullString `json:"parent_thread_id"`
-	WorkflowID      sql.NullString `json:"workflow_id"`
-	CreatedAt       time.Time      `json:"created_at"`
-	Title           sql.NullString `json:"title"`
-	Origin          string         `json:"origin"`
-	OriginNodeID    sql.NullString `json:"origin_node_id"`
+	ID             string         `json:"id"`
+	ChatID         string         `json:"chat_id"`
+	ParentThreadID sql.NullString `json:"parent_thread_id"`
+	WorkflowID     sql.NullString `json:"workflow_id"`
+	CreatedAt      time.Time      `json:"created_at"`
+	Title          sql.NullString `json:"title"`
+	Origin         string         `json:"origin"`
+	OriginNodeID   sql.NullString `json:"origin_node_id"`
+	// forge:go-type=github.com/reliant-labs/reliant/internal/db/core;core.ThreadStatus
 	Status          int32          `json:"status"`
 	CompletedAt     sql.NullTime   `json:"completed_at"`
 	ForkAtMessageID sql.NullString `json:"fork_at_message_id"`

@@ -268,7 +268,7 @@ func spawnTree(t *testing.T, f *msgFixture) {
 			t.Fatalf("workflow %s: %v", id, err)
 		}
 	}
-	thread := func(id string, origin core.ThreadOrigin, status int32) {
+	thread := func(id string, origin core.ThreadOrigin, status core.ThreadStatus) {
 		t.Helper()
 		if _, err := f.env.Repo.CreateThread(ctx, &db.Thread{ID: id, ChatID: f.chat, Origin: origin, Status: status, CreatedAt: t0, Title: sp("title " + id)}); err != nil {
 			t.Fatalf("thread %s: %v", id, err)
@@ -280,7 +280,7 @@ func spawnTree(t *testing.T, f *msgFixture) {
 		id, parent string
 		state      db.WorkflowState
 		stop       db.WorkflowStopReason
-		threadStat int32
+		threadStat core.ThreadStatus
 	}{
 		{"child-1", root, db.WorkflowStateStopped, db.StopReasonFailed, core.ThreadStatusFailed},
 		{"child-2", root, db.WorkflowStateStopped, db.StopReasonCompleted, core.ThreadStatusCompleted},

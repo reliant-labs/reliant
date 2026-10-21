@@ -8,6 +8,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // announceAgentMailboxChanged tells the chat's open clients that one of its
@@ -52,7 +53,7 @@ func (r *Repo) EnqueueAgentMessage(ctx context.Context, msg *AgentMessage) error
 	if msg.ToThreadID == "" {
 		return fmt.Errorf("to thread ID is required")
 	}
-	if err := r.agentMessages.EnqueueAgentMessage(ctx, msg); err != nil {
+	if err := store.EnqueueAgentMessage(ctx, r.ORM(), msg); err != nil {
 		return err
 	}
 	r.announceAgentMailboxChanged(ctx, msg.ChatID)
@@ -80,7 +81,7 @@ func (r *Repo) EnqueueAgentMessageOnce(ctx context.Context, msg *AgentMessage) (
 	if msg.ToThreadID == "" {
 		return false, fmt.Errorf("to thread ID is required")
 	}
-	inserted, err := r.agentMessages.EnqueueAgentMessageOnce(ctx, msg)
+	inserted, err := store.EnqueueAgentMessageOnce(ctx, r.ORM(), msg)
 	if err != nil {
 		return false, err
 	}
@@ -96,7 +97,7 @@ func (r *Repo) GetAgentMessage(ctx context.Context, id string) (*AgentMessage, e
 	if id == "" {
 		return nil, fmt.Errorf("message ID cannot be empty")
 	}
-	return r.agentMessages.GetAgentMessage(ctx, id)
+	return store.GetAgentMessage(ctx, r.ORM(), id)
 }
 
 // DeleteUndeliveredAgentMessage removes a row nobody ever read, so a repeat of
@@ -108,7 +109,7 @@ func (r *Repo) DeleteUndeliveredAgentMessage(ctx context.Context, id, chatID str
 	if chatID == "" {
 		return false, fmt.Errorf("chat ID cannot be empty")
 	}
-	return r.agentMessages.DeleteUndeliveredAgentMessage(ctx, id, chatID)
+	return store.DeleteUndeliveredAgentMessage(ctx, r.ORM(), id, chatID)
 }
 
 // EnqueueAgentMessageIfAbsent is EnqueueAgentMessage's conditional sibling,
@@ -142,7 +143,7 @@ func (r *Repo) EnqueueAgentMessageIfAbsent(ctx context.Context, msg *AgentMessag
 	default:
 		return false, fmt.Errorf("kind must be a terminal kind (completion, cancelled, or failed), got %d", msg.Kind)
 	}
-	inserted, err := r.agentMessages.EnqueueAgentMessageIfAbsent(ctx, msg)
+	inserted, err := store.EnqueueAgentMessageIfAbsent(ctx, r.ORM(), msg)
 	if err != nil {
 		return false, err
 	}
@@ -182,7 +183,7 @@ func (r *Repo) EnqueueSpawnReport(ctx context.Context, msg *AgentMessage) (Spawn
 	if msg.Synthesized {
 		return 0, fmt.Errorf("a synthesized report cannot supersede; use EnqueueAgentMessageIfAbsent")
 	}
-	outcome, err := r.agentMessages.EnqueueSpawnReport(ctx, msg)
+	outcome, err := store.EnqueueSpawnReport(ctx, r.ORM(), msg)
 	if err != nil {
 		return 0, err
 	}
@@ -198,7 +199,7 @@ func (r *Repo) ListQueuedAgentMessagesForThread(ctx context.Context, toThreadID 
 	if toThreadID == "" {
 		return nil, fmt.Errorf("to thread ID cannot be empty")
 	}
-	return r.agentMessages.ListQueuedAgentMessagesForThread(ctx, toThreadID)
+	return store.ListQueuedAgentMessagesForThread(ctx, r.ORM(), toThreadID)
 }
 
 func (r *Repo) MarkAgentMessagesDelivered(ctx context.Context, ids []string, deliveredAt time.Time, deliveredMessageID string) ([]string, error) {
@@ -207,7 +208,7 @@ func (r *Repo) MarkAgentMessagesDelivered(ctx context.Context, ids []string, del
 	}
 	// deliveredMessageID may be empty: a drain claims its rows before the
 	// envelope exists and backfills the pointer afterwards.
-	return r.agentMessages.MarkAgentMessagesDelivered(ctx, ids, deliveredAt, deliveredMessageID)
+	return store.MarkAgentMessagesDelivered(ctx, r.ORM(), ids, deliveredAt, deliveredMessageID)
 }
 
 func (r *Repo) SetAgentMessagesDeliveredMessageID(ctx context.Context, ids []string, deliveredMessageID string) error {
@@ -217,14 +218,14 @@ func (r *Repo) SetAgentMessagesDeliveredMessageID(ctx context.Context, ids []str
 	if deliveredMessageID == "" {
 		return fmt.Errorf("delivered message ID is required")
 	}
-	return r.agentMessages.SetAgentMessagesDeliveredMessageID(ctx, ids, deliveredMessageID)
+	return store.SetAgentMessagesDeliveredMessageID(ctx, r.ORM(), ids, deliveredMessageID)
 }
 
 func (r *Repo) CountQueuedAgentMessagesForThread(ctx context.Context, toThreadID string) (int64, error) {
 	if toThreadID == "" {
 		return 0, fmt.Errorf("to thread ID cannot be empty")
 	}
-	return r.agentMessages.CountQueuedAgentMessagesForThread(ctx, toThreadID)
+	return store.CountQueuedAgentMessagesForThread(ctx, r.ORM(), toThreadID)
 }
 
 // MarkQueuedAgentMessagesPreempting marks the thread's queued messages that
@@ -233,7 +234,7 @@ func (r *Repo) MarkQueuedAgentMessagesPreempting(ctx context.Context, toThreadID
 	if toThreadID == "" {
 		return 0, fmt.Errorf("to thread ID cannot be empty")
 	}
-	return r.agentMessages.MarkQueuedAgentMessagesPreempting(ctx, toThreadID, preemptedAt)
+	return store.MarkQueuedAgentMessagesPreempting(ctx, r.ORM(), toThreadID, preemptedAt)
 }
 
 // CancelQueuedAgentMessage deletes a mailbox row only if it is still
@@ -245,7 +246,7 @@ func (r *Repo) CancelQueuedAgentMessage(ctx context.Context, id, chatID string) 
 	if chatID == "" {
 		return false, fmt.Errorf("chat ID cannot be empty")
 	}
-	return r.agentMessages.CancelQueuedAgentMessage(ctx, id, chatID)
+	return store.CancelQueuedAgentMessage(ctx, r.ORM(), id, chatID)
 }
 
 // ClaimQueuedAgentMessagesForThread takes queued human messages off a thread's
@@ -260,7 +261,7 @@ func (r *Repo) ClaimQueuedAgentMessagesForThread(ctx context.Context, toThreadID
 	if chatID == "" {
 		return nil, fmt.Errorf("chat ID cannot be empty")
 	}
-	return r.agentMessages.ClaimQueuedAgentMessagesForThread(ctx, toThreadID, chatID, messageID)
+	return store.ClaimQueuedAgentMessagesForThread(ctx, r.ORM(), toThreadID, chatID, messageID)
 }
 
 // MarkQueuedAgentMessagesUndeliveredForThread resolves the mailbox of a thread
@@ -270,11 +271,11 @@ func (r *Repo) MarkQueuedAgentMessagesUndeliveredForThread(ctx context.Context, 
 	if toThreadID == "" {
 		return 0, fmt.Errorf("to thread ID cannot be empty")
 	}
-	return r.agentMessages.MarkQueuedAgentMessagesUndeliveredForThread(ctx, toThreadID)
+	return store.MarkQueuedAgentMessagesUndeliveredForThread(ctx, r.ORM(), toThreadID)
 }
 
 // ListThreadsWithOrphanedAgentMessages returns threads that are already
 // terminal but still have queued mailbox rows.
 func (r *Repo) ListThreadsWithOrphanedAgentMessages(ctx context.Context) ([]string, error) {
-	return r.agentMessages.ListThreadsWithOrphanedAgentMessages(ctx)
+	return store.ListThreadsWithOrphanedAgentMessages(ctx, r.ORM())
 }

@@ -610,17 +610,17 @@ LIMIT 1
 // none.
 func LatestSpawnRunForThread(ctx context.Context, db orm.Context, chatID, threadID string) (*core.SpawnRun, error) {
 	var rows []struct {
-		ToolCallID         string          `bun:"tool_call_id"`
-		ParentThreadID     string          `bun:"parent_thread_id"`
-		ToolInput          json.RawMessage `bun:"tool_input"`
-		ChildWorkflowID    string          `bun:"child_workflow_id"`
-		IssuingWorkflowID  string          `bun:"issuing_workflow_id"`
-		WorkflowState      int32           `bun:"workflow_state"`
-		WorkflowStopReason int32           `bun:"workflow_stop_reason"`
-		ThreadStatus       int32           `bun:"thread_status"`
-		ThreadOrigin       string          `bun:"thread_origin"`
-		WorktreePath       string          `bun:"worktree_path"`
-		SpawnDepth         int             `bun:"spawn_depth"`
+		ToolCallID         string            `bun:"tool_call_id"`
+		ParentThreadID     string            `bun:"parent_thread_id"`
+		ToolInput          json.RawMessage   `bun:"tool_input"`
+		ChildWorkflowID    string            `bun:"child_workflow_id"`
+		IssuingWorkflowID  string            `bun:"issuing_workflow_id"`
+		WorkflowState      int32             `bun:"workflow_state"`
+		WorkflowStopReason int32             `bun:"workflow_stop_reason"`
+		ThreadStatus       core.ThreadStatus `bun:"thread_status"`
+		ThreadOrigin       string            `bun:"thread_origin"`
+		WorktreePath       string            `bun:"worktree_path"`
+		SpawnDepth         int               `bun:"spawn_depth"`
 	}
 	if err := db.Bun().NewRaw(latestSpawnRunForThreadSQL, chatID, threadID).Scan(ctx, &rows); err != nil {
 		return nil, fmt.Errorf("failed to read the latest spawn run of thread %s: %w", threadID, err)

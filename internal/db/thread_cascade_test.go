@@ -10,7 +10,7 @@ import (
 // insertTestThreadForWorkflow creates a threads row owned by workflowID, at
 // the given status, matching the real shape (a thread's workflow_id names
 // the workflow whose ThreadStatusActivity calls own it).
-func insertTestThreadForWorkflow(t *testing.T, repo *Repo, id, chatID, workflowID string, status int32) {
+func insertTestThreadForWorkflow(t *testing.T, repo *Repo, id, chatID, workflowID string, status ThreadStatus) {
 	t.Helper()
 	wfID := workflowID
 	if _, err := repo.CreateThread(context.Background(), &Thread{

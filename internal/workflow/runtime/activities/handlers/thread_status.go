@@ -88,7 +88,7 @@ func wireStatusFromVerb(verb string) string {
 // threadStatusFromVerb maps a lifecycle verb to a stored status. Terminal
 // statuses mirror CHAT_WORKFLOW_STATUS so a thread's state is directly
 // comparable to its workflow's.
-func threadStatusFromVerb(verb string) (int32, bool) {
+func threadStatusFromVerb(verb string) (db.ThreadStatus, bool) {
 	switch verb {
 	case "started":
 		return db.ThreadStatusRunning, false

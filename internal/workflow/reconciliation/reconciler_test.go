@@ -321,7 +321,7 @@ func newMockRepo() *mockRepo {
 }
 
 // withThread registers a thread the recipient-liveness check can read.
-func (m *mockRepo) withThread(id string, status int32) *mockRepo {
+func (m *mockRepo) withThread(id string, status core.ThreadStatus) *mockRepo {
 	m.threads[id] = &db.Thread{ID: id, Status: status}
 	return m
 }

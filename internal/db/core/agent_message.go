@@ -8,7 +8,6 @@
 package core
 
 import (
-	"context"
 	"errors"
 	"time"
 )
@@ -154,101 +153,3 @@ const (
 // a retry is exactly how a sub-agent's result used to disappear without a
 // trace.
 var ErrSpawnReportSlotTaken = errors.New("another spawn already reported under this tool call id")
-
-// AgentMessageStore is the shared contract for mailbox persistence across
-// drivers.
-type AgentMessageStore interface {
-	EnqueueAgentMessage(ctx context.Context, msg *AgentMessage) error
-	// EnqueueAgentMessageOnce inserts msg unless a row already holds its id,
-	// and reports which happened. A human send names its row (the client's
-	// message id), so a repeat of that send arrives with an id that is taken;
-	// the id is the arbiter between racing repeats, and the losers get
-	// inserted=false instead of an error.
-	EnqueueAgentMessageOnce(ctx context.Context, msg *AgentMessage) (inserted bool, err error)
-	// GetAgentMessage returns the row with this id, or (nil, nil) when none
-	// exists, whatever its status.
-	GetAgentMessage(ctx context.Context, id string) (*AgentMessage, error)
-	// DeleteUndeliveredAgentMessage removes the row with this id in this chat
-	// only if it is Undelivered -- nobody ever read it -- and reports whether it
-	// did. A queued or delivered row is left alone.
-	DeleteUndeliveredAgentMessage(ctx context.Context, id, chatID string) (deleted bool, err error)
-	// EnqueueSpawnReport writes a REAL terminal spawn report (Synthesized must
-	// be false; ToolCallID required). A spawn's slot is (ChatID, ToolCallID):
-	// the call inserts, supersedes a synthesized placeholder for the same
-	// spawn, or reports SpawnReportAlreadyReported without error when this
-	// spawn already reported. A slot held by a different spawn fails with
-	// ErrSpawnReportSlotTaken. See
-	// dev-docs/incidents/2026-10-04-spawn-report-collision.md.
-	EnqueueSpawnReport(ctx context.Context, msg *AgentMessage) (SpawnReportOutcome, error)
-	// EnqueueAgentMessageIfAbsent is the reconciler's placeholder write: it
-	// inserts msg (which must carry a terminal
-	// Kind: Completion, Cancelled, or Failed) unless a terminal report for
-	// the same spawn -- (ChatID, ToolCallID) -- already exists, enforced by a
-	// DB constraint so the check-and-insert is atomic under concurrent
-	// callers (see idx_agent_messages_one_terminal_report_per_chat_spawn). Returns
-	// inserted = true when this call's row landed, false when this spawn's
-	// report already existed (the ordinary outcome the second of two racing
-	// callers sees, not an error), and ErrSpawnReportSlotTaken when the slot
-	// holds a different spawn's report.
-	EnqueueAgentMessageIfAbsent(ctx context.Context, msg *AgentMessage) (inserted bool, err error)
-	// ListQueuedAgentMessagesForThread returns queued messages for a
-	// recipient thread, ordered by created_at ascending -- delivery order
-	// must match send order.
-	ListQueuedAgentMessagesForThread(ctx context.Context, toThreadID string) ([]*AgentMessage, error)
-	// MarkAgentMessagesDelivered marks a batch of messages delivered,
-	// recording when and into which message they landed, and returns the ids it
-	// actually moved.
-	//
-	// Conditional on the rows still being queued, which is what makes a drain
-	// idempotent: the drain reads its rows before it writes them, so two drains
-	// racing on one thread can select the same batch. The loser moves nothing
-	// and gets back fewer ids than it asked for -- its signal to abandon its own
-	// inserts rather than write the same messages into the transcript twice.
-	MarkAgentMessagesDelivered(ctx context.Context, ids []string, deliveredAt time.Time, deliveredMessageID string) ([]string, error)
-	// SetAgentMessagesDeliveredMessageID backfills the envelope pointer on rows
-	// the caller already claimed via MarkAgentMessagesDelivered.
-	SetAgentMessagesDeliveredMessageID(ctx context.Context, ids []string, deliveredMessageID string) error
-	CountQueuedAgentMessagesForThread(ctx context.Context, toThreadID string) (int64, error)
-	// MarkQueuedAgentMessagesPreempting marks every queued message for the
-	// thread that has not yet cut a waiting tool call short, and returns how
-	// many it marked. Non-zero means "preempt the thread's waits now". Each
-	// message preempts at most once, so one the drain cannot deliver does not
-	// cut every later wait short too.
-	MarkQueuedAgentMessagesPreempting(ctx context.Context, toThreadID string, preemptedAt time.Time) (int64, error)
-	// CancelQueuedAgentMessage deletes a mailbox row identified by (id,
-	// chatID) ONLY IF it is still queued -- this races against the target
-	// agent's own drain loop, so the deletion is conditioned on status = 1
-	// at the database level rather than checked-then-deleted in application
-	// code. Returns cancelled = false, with the row left untouched, when
-	// the message had already been delivered (or never existed / belonged
-	// to a different chat).
-	CancelQueuedAgentMessage(ctx context.Context, id, chatID string) (cancelled bool, err error)
-	// ClaimQueuedAgentMessagesForThread atomically removes still-queued
-	// HUMAN messages for a thread and returns exactly the rows it removed,
-	// oldest first. Pass a non-empty messageID to claim a single message, or
-	// "" to claim the whole queue.
-	//
-	// This is take-and-return in ONE statement, which is what makes "pull my
-	// queued messages back and send them properly" raceless: a row the
-	// agent's drain won first is simply absent from the result, so a caller
-	// can never resend something the agent already received. Callers must
-	// treat the returned slice — not their own prior view of the queue — as
-	// the definitive list of what they now own.
-	ClaimQueuedAgentMessagesForThread(ctx context.Context, toThreadID, chatID, messageID string) ([]*AgentMessage, error)
-	// MarkQueuedAgentMessagesUndeliveredForThread resolves every still-queued
-	// row addressed to a thread whose loop has exited, moving them to
-	// AgentMessageStatusUndelivered, and returns how many it moved.
-	//
-	// Called when a thread reaches a terminal status: from that moment there
-	// is no future loop boundary to drain into, so a row left at queued is
-	// not "pending", it is stranded, and only a distinct status can say so.
-	// Idempotent -- it matches queued rows only, so re-running it (a retried
-	// activity, a reconciler pass racing the live path) moves nothing the
-	// first call already moved.
-	MarkQueuedAgentMessagesUndeliveredForThread(ctx context.Context, toThreadID string) (int64, error)
-	// ListThreadsWithOrphanedAgentMessages returns the id of every thread
-	// that is already terminal but still has queued rows addressed to it --
-	// the backlog the live path above did not catch, either because it
-	// predates that path or because the process died between the two writes.
-	ListThreadsWithOrphanedAgentMessages(ctx context.Context) ([]string, error)
-}

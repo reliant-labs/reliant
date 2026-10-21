@@ -6,6 +6,8 @@ import (
 	"fmt"
 
 	"github.com/reliant-labs/forge/pkg/observe/dbtrace"
+
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // OpenReadOnlyRepo opens a Postgres connection and wraps it in a *Repo WITHOUT
@@ -40,37 +42,12 @@ func OpenReadOnlyRepo(url string) (*Repo, error) {
 // creation order. It is a read-only query used by run-analysis tooling
 // (`reliant-dev workflow analyze`) to reconstruct the gate/question history —
 // what was asked at each checkpoint and what was answered.
-//
-// It mirrors the scan shape of the other question queries in
-// repository_impl.go and adds no new mutation surface.
 func (r *Repo) ListQuestionsByChat(ctx context.Context, chatID string) ([]*Question, error) {
 	if chatID == "" {
 		return nil, fmt.Errorf("chat ID cannot be empty")
 	}
 
-	query := `SELECT id, chat_id, workflow_id, temporal_workflow_id, thread_id, step_id, loop_node_id, loop_iteration, status, metadata, response_data, created_at, resolved_at, tool_call_id
-		FROM questions WHERE chat_id = ? ORDER BY created_at ASC`
-	query = r.bindQuery(query)
-
-	rows, err := r.DB.DB(ctx).QueryContext(ctx, query, chatID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to list questions by chat: %w", err)
-	}
-	defer rows.Close()
-
-	var questions []*Question
-	for rows.Next() {
-		var q Question
-		if err := rows.Scan(
-			&q.ID, &q.ChatID, &q.WorkflowID, &q.TemporalWorkflowID, &q.ThreadID, &q.StepID,
-			&q.LoopNodeID, &q.LoopIteration, &q.Status, &q.Metadata, &q.ResponseData,
-			&q.CreatedAt, &q.ResolvedAt, &q.ToolCallID,
-		); err != nil {
-			return nil, fmt.Errorf("failed to scan question: %w", err)
-		}
-		questions = append(questions, &q)
-	}
-	return questions, rows.Err()
+	return store.ListQuestionsByChat(ctx, r.ORM(), chatID)
 }
 
 // PendingQuestionsByThread returns each thread's newest PENDING question for a
@@ -95,27 +72,14 @@ func (r *Repo) PendingQuestionsByThread(ctx context.Context, chatID string) (map
 		return nil, fmt.Errorf("chat ID cannot be empty")
 	}
 
-	query := r.bindQuery(`SELECT id, chat_id, workflow_id, temporal_workflow_id, thread_id, step_id, loop_node_id, loop_iteration, status, metadata, response_data, created_at, resolved_at, tool_call_id
-		FROM questions WHERE chat_id = ? AND status = 1 ORDER BY created_at ASC`)
-
-	rows, err := r.DB.DB(ctx).QueryContext(ctx, query, chatID)
+	pending, err := store.ListPendingQuestionsByChat(ctx, r.ORM(), chatID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to list pending questions by chat: %w", err)
+		return nil, err
 	}
-	defer rows.Close()
-
-	byThread := map[string]*Question{}
-	for rows.Next() {
-		var q Question
-		if err := rows.Scan(
-			&q.ID, &q.ChatID, &q.WorkflowID, &q.TemporalWorkflowID, &q.ThreadID, &q.StepID,
-			&q.LoopNodeID, &q.LoopIteration, &q.Status, &q.Metadata, &q.ResponseData,
-			&q.CreatedAt, &q.ResolvedAt, &q.ToolCallID,
-		); err != nil {
-			return nil, fmt.Errorf("failed to scan pending question: %w", err)
-		}
-		// Ascending order means a later row is the newer question for its thread.
-		byThread[q.ThreadID] = &q
+	byThread := make(map[string]*Question, len(pending))
+	for _, q := range pending {
+		// Oldest first, so a later row is the newer question for its thread.
+		byThread[q.ThreadID] = q
 	}
-	return byThread, rows.Err()
+	return byThread, nil
 }
