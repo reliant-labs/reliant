@@ -36,7 +36,7 @@ nodes:
     args: {title: ok}
 `
 
-func reposParam(repos ...any) map[string]*structpb.Value {
+func setupReposParam(repos ...any) map[string]*structpb.Value {
 	list, _ := structpb.NewList(repos)
 	return map[string]*structpb.Value{"repos": structpb.NewListValue(list)}
 }
@@ -85,7 +85,7 @@ func (e *needsSetupEnv) seedUnfinished(t *testing.T, enabled bool) *core.Trigger
 	e.seeded++
 	created := e.create(t, e.activationDef(func(d *reliantv1.TriggerDefinition) {
 		d.Name = fmt.Sprintf("seeded %d", e.seeded)
-		d.Params = reposParam("acme/web")
+		d.Params = setupReposParam("acme/web")
 	}))
 	row, err := e.repo.GetTrigger(context.Background(), created.GetId())
 	require.NoError(t, err)
@@ -119,7 +119,7 @@ func TestCreateActivationEnforcesItemBounds(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			_, err := env.svc.CreateTrigger(env.ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{
-				Trigger: env.activationDef(func(d *reliantv1.TriggerDefinition) { d.Params = reposParam(tc.repos...) }),
+				Trigger: env.activationDef(func(d *reliantv1.TriggerDefinition) { d.Params = setupReposParam(tc.repos...) }),
 			}))
 			require.Error(t, err)
 			assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
@@ -131,7 +131,7 @@ func TestCreateActivationEnforcesItemBounds(t *testing.T) {
 
 func TestCreateActivationAcceptsACompleteSetup(t *testing.T) {
 	env := setupNeedsSetup(t)
-	created := env.create(t, env.activationDef(func(d *reliantv1.TriggerDefinition) { d.Params = reposParam("acme/web") }))
+	created := env.create(t, env.activationDef(func(d *reliantv1.TriggerDefinition) { d.Params = setupReposParam("acme/web") }))
 	assert.NotEqual(t, reliantv1.TriggerHealthStatus_TRIGGER_HEALTH_STATUS_NEEDS_SETUP, created.GetHealth().GetStatus())
 }
 
@@ -139,7 +139,7 @@ func TestCreateActivationAcceptsACompleteSetup(t *testing.T) {
 
 func TestUpdateActivationCannotClearARequiredParam(t *testing.T) {
 	env := setupNeedsSetup(t)
-	created := env.create(t, env.activationDef(func(d *reliantv1.TriggerDefinition) { d.Params = reposParam("acme/web") }))
+	created := env.create(t, env.activationDef(func(d *reliantv1.TriggerDefinition) { d.Params = setupReposParam("acme/web") }))
 
 	_, err := env.svc.UpdateTrigger(env.ctx, connect.NewRequest(&reliantv1.UpdateTriggerRequest{
 		Id: created.GetId(), Trigger: env.activationDef(func(d *reliantv1.TriggerDefinition) { d.Params = nil }),
@@ -163,7 +163,7 @@ func TestEnableWorkflowRefusesANewActivationWithoutTheRequiredParam(t *testing.T
 	assert.Contains(t, resultFor(resp, "new-issue").Message, "repos is required")
 	assert.Empty(t, env.storedTriggers(t))
 
-	ok := env.enable(t, env.enableReq(reposParam("acme/web")))
+	ok := env.enable(t, env.enableReq(setupReposParam("acme/web")))
 	assert.True(t, ok.Enabled, "%v", ok.Results)
 }
 
@@ -182,7 +182,7 @@ func TestEnableWorkflowRevalidatesAnExistingActivationAgainstRequiredParams(t *t
 	assert.Equal(t, seeded.ID, env.storedTriggers(t)[0].ID)
 
 	// Supplying it finishes the setup: the same call is "Finish setup".
-	done := env.enable(t, env.enableReq(reposParam("acme/web")))
+	done := env.enable(t, env.enableReq(setupReposParam("acme/web")))
 	require.True(t, done.Enabled, "%v", done.Results)
 	assert.Equal(t, reliantv1.WorkflowTriggerOutcome_WORKFLOW_TRIGGER_OUTCOME_UPDATED, outcomes(done)["new-issue"])
 	assert.Equal(t, []any{"acme/web"}, env.storedTriggers(t)[0].Params["repos"])
@@ -200,7 +200,7 @@ func TestEnableWorkflowResumeValidatesParams(t *testing.T) {
 	assert.Contains(t, resultFor(resp, "new-issue").Message, "repos is required")
 	assert.False(t, env.storedTriggers(t)[0].Enabled, "it stays paused")
 
-	done := env.enable(t, env.enableReq(reposParam("acme/web")))
+	done := env.enable(t, env.enableReq(setupReposParam("acme/web")))
 	require.True(t, done.Enabled, "%v", done.Results)
 	assert.Equal(t, reliantv1.WorkflowTriggerOutcome_WORKFLOW_TRIGGER_OUTCOME_RESUMED, outcomes(done)["new-issue"])
 	assert.True(t, env.storedTriggers(t)[0].Enabled)
@@ -237,7 +237,7 @@ func TestRunNowOfAnUnfinishedActivationSaysWhatToFinish(t *testing.T) {
 
 func TestRunNowOfACompleteActivationStillFires(t *testing.T) {
 	env := setupNeedsSetup(t)
-	created := env.create(t, env.activationDef(func(d *reliantv1.TriggerDefinition) { d.Params = reposParam("acme/web") }))
+	created := env.create(t, env.activationDef(func(d *reliantv1.TriggerDefinition) { d.Params = setupReposParam("acme/web") }))
 	_, err := env.svc.FireTrigger(env.ctx, connect.NewRequest(&reliantv1.FireTriggerRequest{Id: created.GetId()}))
 	require.NoError(t, err)
 }
@@ -341,7 +341,7 @@ func TestEnableFailsOnADefinitelyUnreachableValue(t *testing.T) {
 	resp := env.enable(t, env.enableRequest(func(r *reliantv1.EnableWorkflowRequest) {
 		// The typed values are github's; the trigger listens through "test".
 		r.ConnectionIds = map[string]string{"test": env.connID, "github": "gh-conn"}
-		r.Params = reposParam("acme/web", "acme/gone")
+		r.Params = setupReposParam("acme/web", "acme/gone")
 	}))
 
 	assert.False(t, resp.Enabled)
@@ -362,7 +362,7 @@ func TestEnableWarnsButProceedsOnAnUpstreamError(t *testing.T) {
 	env := setupNeedsSetup(t)
 	env.withOptions(t, &fakeOptions{err: errors.New("github is down")})
 
-	resp := env.enable(t, env.enableReq(reposParam("acme/web")))
+	resp := env.enable(t, env.enableReq(setupReposParam("acme/web")))
 
 	require.True(t, resp.Enabled, "%v", resp.Results)
 	require.Len(t, resultFor(resp, "new-issue").Warnings, 1)
@@ -376,7 +376,7 @@ func TestEnableWarnsWhenTheBotCannotWrite(t *testing.T) {
 	env := setupNeedsSetup(t)
 	env.withOptions(t, &fakeOptions{warnings: []string{"The Reliant bot cannot write to acme/web; reviews will be skipped."}})
 
-	resp := env.enable(t, env.enableReq(reposParam("acme/web")))
+	resp := env.enable(t, env.enableReq(setupReposParam("acme/web")))
 
 	require.True(t, resp.Enabled, "%v", resp.Results)
 	assert.Equal(t, []string{"The Reliant bot cannot write to acme/web; reviews will be skipped."}, resultFor(resp, "new-issue").Warnings)
@@ -386,24 +386,24 @@ func TestEnableChecksReachabilityOfAResumedAndAnUpdatedActivationToo(t *testing.
 	env := setupNeedsSetup(t)
 	opts := &fakeOptions{}
 	env.withOptions(t, opts)
-	require.True(t, env.enable(t, env.enableReq(reposParam("acme/web"))).Enabled)
+	require.True(t, env.enable(t, env.enableReq(setupReposParam("acme/web"))).Enabled)
 	opts.checks = nil
 
 	opts.unreachable = []string{"acme/other"}
-	resp := env.enable(t, env.enableReq(reposParam("acme/other")))
+	resp := env.enable(t, env.enableReq(setupReposParam("acme/other")))
 	assert.False(t, resp.Enabled, "an update to an unreachable value is refused")
 	assert.Equal(t, []any{"acme/web"}, env.storedTriggers(t)[0].Params["repos"], "the previous setting stays")
 
 	// Nothing changed and it is on: nothing to check, nothing to ask GitHub.
 	opts.checks, opts.unreachable = nil, nil
-	same := env.enable(t, env.enableReq(reposParam("acme/web")))
+	same := env.enable(t, env.enableReq(setupReposParam("acme/web")))
 	assert.Equal(t, reliantv1.WorkflowTriggerOutcome_WORKFLOW_TRIGGER_OUTCOME_ALREADY_ENABLED, outcomes(same)["new-issue"])
 	assert.Empty(t, opts.checks)
 }
 
 func TestEnableWithoutAnOptionsCheckerChecksShapesOnly(t *testing.T) {
 	env := setupNeedsSetup(t)
-	resp := env.enable(t, env.enableReq(reposParam("acme/web")))
+	resp := env.enable(t, env.enableReq(setupReposParam("acme/web")))
 	require.True(t, resp.Enabled)
 	assert.Empty(t, resultFor(resp, "new-issue").Warnings)
 }
