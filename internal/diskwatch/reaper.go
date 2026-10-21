@@ -325,6 +325,7 @@ type autoGCRecord struct {
 	Error           string    `json:"error"`
 	CutOffLayers    []string  `json:"cut_off_layers"`
 	BackedOffLayers []string  `json:"backed_off_layers"`
+	OverBudget      []string  `json:"over_budget"`
 }
 
 func readAutoGCRecord(policyPath string) (autoGCRecord, error) {
@@ -356,6 +357,9 @@ type ReaperResult struct {
 	CutOff, BackedOff []string
 	// Failed is the layers that errored.
 	Failed []string
+	// OverBudget describes each cache forge could not bring under its size
+	// budget because more than the budget is younger than its safety floor.
+	OverBudget []string
 }
 
 // reaperPass runs the reaper once and logs the outcome. The caller holds the
@@ -407,6 +411,14 @@ func (w *Watcher) reaperPass(ctx context.Context, policyPath, trigger string) (r
 	fresh := recErr == nil && !rec.At.Before(start.Add(-time.Second))
 	if fresh {
 		res.CutOff, res.BackedOff, res.Failed = rec.CutOffLayers, rec.BackedOffLayers, rec.FailedLayers
+		res.OverBudget = rec.OverBudget
+	}
+	// A budget no trim can reach is a finding, not a failed pass: the cache
+	// fills faster than its entries age past forge's safety floor, so the
+	// fix is the fill (usually builds without -trimpath). WARN on every pass
+	// until it is fixed; it is otherwise only in the DEBUG output tail.
+	for _, finding := range res.OverBudget {
+		logging.WarnContext(ctx, "[diskwatch] Storage reaper: a cache is over a budget no trim can reach", "trigger", trigger, "finding", finding)
 	}
 	fields := []any{
 		"trigger", trigger, "after", elapsed, "freed", FormatBytes(res.Freed),

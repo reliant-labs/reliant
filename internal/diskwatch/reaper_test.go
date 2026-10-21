@@ -354,6 +354,28 @@ func TestReaper_LogsWhatForgeSkippedAndWhatItFreed(t *testing.T) {
 	}
 }
 
+// forge records a Go cache it cannot trim to budget — more than the budget is
+// younger than its 2h safety floor — under over_budget, and the pass is still
+// OK. The daemon must say so at WARN: that finding is why a 20 GiB budget held
+// a 152 GiB cache with every pass logged as a clean INFO.
+func TestReaper_WarnsOnABudgetNoTrimCanReach(t *testing.T) {
+	h := newReaperHarness(t, plentyOfSpace)
+	finding := "shared go build cache is over its budget and no trim can reach it: ~152.0 GiB against 20.0 GiB"
+	h.run = func(context.Context, string) (reaperRun, error) {
+		h.writeForgeRecord(autoGCRecord{At: h.now, OK: true, OverBudget: []string{finding}})
+		return reaperRun{}, nil
+	}
+	res := h.w.reaperPass(context.Background(), h.policy, "scheduled")
+	if !reflect.DeepEqual(res.OverBudget, []string{finding}) {
+		t.Errorf("OverBudget = %v", res.OverBudget)
+	}
+	for _, want := range []string{"level=WARN", "over a budget no trim can reach", "152.0 GiB", "Storage reaper pass finished"} {
+		if !h.logged(want) {
+			t.Errorf("log missing %q:\n%s", want, h.logs)
+		}
+	}
+}
+
 func TestReaper_FailureIsAWarnNotACrash(t *testing.T) {
 	t.Run("non-zero exit with a record", func(t *testing.T) {
 		h := newReaperHarness(t, plentyOfSpace)
