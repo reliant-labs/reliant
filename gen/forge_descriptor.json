@@ -10792,6 +10792,12 @@
           {
             "name": "last_failure_detail",
             "kind": "string"
+          },
+          {
+            "name": "setup_issues",
+            "kind": "message",
+            "type_name": "reliant.v1.TriggerSetupIssue",
+            "repeated": true
           }
         ],
         "reliant.v1.TriggerSender": [
@@ -10810,6 +10816,16 @@
           {
             "name": "verified",
             "kind": "bool"
+          }
+        ],
+        "reliant.v1.TriggerSetupIssue": [
+          {
+            "name": "input",
+            "kind": "string"
+          },
+          {
+            "name": "message",
+            "kind": "string"
           }
         ],
         "reliant.v1.UpdateTriggerRequest": [
@@ -10938,6 +10954,11 @@
             "name": "webhook",
             "kind": "message",
             "type_name": "reliant.v1.WebhookCredential"
+          },
+          {
+            "name": "warnings",
+            "kind": "string",
+            "repeated": true
           }
         ]
       },
@@ -10982,6 +11003,7 @@
         "reliant.v1.TriggerFailure": "reliant/v1/trigger.proto",
         "reliant.v1.TriggerHealth": "reliant/v1/trigger.proto",
         "reliant.v1.TriggerSender": "reliant/v1/trigger.proto",
+        "reliant.v1.TriggerSetupIssue": "reliant/v1/trigger.proto",
         "reliant.v1.UpdateTriggerRequest": "reliant/v1/trigger.proto",
         "reliant.v1.UpdateTriggerResponse": "reliant/v1/trigger.proto",
         "reliant.v1.WebhookCredential": "reliant/v1/trigger.proto",
@@ -19189,6 +19211,22 @@
           {
             "name": "last_failure_detail",
             "kind": "string"
+          },
+          {
+            "name": "setup_issues",
+            "kind": "message",
+            "type_name": "reliant.v1.TriggerSetupIssue",
+            "repeated": true
+          }
+        ],
+        "reliant.v1.TriggerSetupIssue": [
+          {
+            "name": "input",
+            "kind": "string"
+          },
+          {
+            "name": "message",
+            "kind": "string"
           }
         ]
       },
@@ -19213,7 +19251,8 @@
         "reliant.v1.ListInboxResponse": "reliant/v1/inbox.proto",
         "reliant.v1.RestoreInboxItemRequest": "reliant/v1/inbox.proto",
         "reliant.v1.RestoreInboxItemResponse": "reliant/v1/inbox.proto",
-        "reliant.v1.TriggerHealth": "reliant/v1/trigger.proto"
+        "reliant.v1.TriggerHealth": "reliant/v1/trigger.proto",
+        "reliant.v1.TriggerSetupIssue": "reliant/v1/trigger.proto"
       },
       "Enums": {
         "reliant.v1.ApprovalType": [
@@ -39811,7 +39850,7 @@
     "reliant/v1/token.proto": "df7f634505ef8d0da2882feb4fe31865d541b2593df0c069159f2b6440e5f63e",
     "reliant/v1/tool_call.proto": "b5861a934a2b119031b609eb10cf77e6ba8ccce474d1bb0edbf5cd9fed56cc95",
     "reliant/v1/tools_daemon.proto": "ed355efab8f065a289e7de67224236af37e8b4fcd2770e1de66120cf45b1aaf4",
-    "reliant/v1/trigger.proto": "6f1ce6c9f918fe5f5a44e9c39f939c7d804d7d4b07f4cc427b11fa91e361f1ea",
+    "reliant/v1/trigger.proto": "cdf7e534edff89945c8ace69553eb1d2d69b47e4244a9f71f160912be9c8fbd7",
     "reliant/v1/workflow.proto": "bd8fa927bf1b9842617fda4c7d56e346ff6ee6d89247178752fb10b9c4f18c86",
     "reliant/v1/workflow_v2.proto": "ab25a4ea3cdfdc1ab731f8eefde4fe45325da51d03e2f93ec1c1023b5e36eaf7",
     "reliant/v1/worktree.proto": "ce353c761192377e35feb5ab9aa68f2b52981f0982b746f7597e51b7648fa24b"
