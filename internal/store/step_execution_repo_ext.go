@@ -357,6 +357,13 @@ func toNullInt64(v *int64) sql.NullInt64 {
 	return sql.NullInt64{Int64: *v, Valid: true}
 }
 
+func toNullTime(v *time.Time) sql.NullTime {
+	if v == nil {
+		return sql.NullTime{}
+	}
+	return sql.NullTime{Time: *v, Valid: true}
+}
+
 func toNullInt32(v *int32) sql.NullInt32 {
 	if v == nil {
 		return sql.NullInt32{}
