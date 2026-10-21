@@ -18,6 +18,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -899,6 +900,12 @@ func wireTriggerAlerting(repo *db.Repo, cp controlplane.Endpoint, publicURL stri
 	secret := cp.InternalServiceSecret
 	if secret == "" {
 		logging.Warn("alert-triage automations are plain webhooks here: RELIANT_CONTROL_PLANE_URL is set but INTERNAL_SERVICE_SECRET is not")
+		return nil
+	}
+	if strings.TrimSpace(publicURL) == "" {
+		// The control plane's Alertmanager needs an absolute URL to post to;
+		// a bare /hooks path would be refused at every enable.
+		logging.Warn("alert-triage automations are plain webhooks here: PUBLIC_URL is not set, so Alertmanager has no URL to deliver to")
 		return nil
 	}
 	receivers := controlplane.New(controlplane.Deps{
