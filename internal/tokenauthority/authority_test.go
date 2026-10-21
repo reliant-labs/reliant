@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -23,8 +24,11 @@ func TestNewPicksExactlyOneStore(t *testing.T) {
 		a, mode, err := New(Deps{ControlPlaneURL: "http://cp.invalid", InternalServiceSecret: "s3cret", DB: &sql.DB{}})
 		require.NoError(t, err)
 		require.Equal(t, ModeControlPlane, mode)
-		_, ok := a.(*accesstokenclient.Client)
-		require.True(t, ok, "a configured control-plane must win even when a DB is present: got %T", a)
+		// The hosted store is accesstokenclient's, constructed through its
+		// traced decorator (NewInstrumented), so its concrete type is the
+		// decorator's: identify it by package, not by type.
+		require.Equal(t, reflect.TypeOf(accesstokenclient.Client{}).PkgPath(), reflect.TypeOf(a).Elem().PkgPath(),
+			"a configured control-plane must win even when a DB is present: got %T", a)
 	})
 
 	t.Run("control-plane URL without a secret is an error, never a local fallback", func(t *testing.T) {
