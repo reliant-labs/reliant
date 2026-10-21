@@ -3,6 +3,13 @@ package core
 
 import "time"
 
+// IntegrationAccessFreshness is how recently a user's access snapshot must
+// have been confirmed to be trusted: for routing an access-gated event to
+// their triggers, and for reading who they are at the provider from it. Grants
+// are refreshed far more often, so a healthy snapshot is never near it; an
+// older one means refreshing has been failing.
+const IntegrationAccessFreshness = time.Hour
+
 // IntegrationAccessGrant is one (account, resource) a user's own provider
 // credential can see: for GitHub, a repository in an App installation.
 // Access-gated routing sends an event about that resource only to triggers

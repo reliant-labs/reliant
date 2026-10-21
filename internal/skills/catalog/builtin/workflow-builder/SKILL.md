@@ -307,7 +307,7 @@ over the user's params (enabling drops a param it would override).
 neither, enabling is refused. The event is still attached after it as untrusted data.
 
 **`trigger.activation`** is the activation the event fires for, readable in a `filter`, `inputs`, `prompt` and `dedupe_key` (not in nodes, which read `inputs`):
-`trigger.activation.params.<input>`, `.id`, `.owner.user_id`, and `.owner.github_id` (the GitHub user id of the connection it listens through, a string; empty without one). One declaration serves many activations, each with its own inputs. `params` holds the workflow's inputs except those this trigger's `inputs` map from the event, with defaults applied and declared types.
+`trigger.activation.params.<input>`, `.id`, `.owner.user_id`, and `.owner.github_id` (the owner's GitHub user id, a string: the connection it listens through if it names one, else the owner's linked GitHub identity; empty when the owner has neither, in which case a filter on it never matches the owner and the skip reason says so). One declaration serves many activations, each with its own inputs. `params` holds the workflow's inputs except those this trigger's `inputs` map from the event, with defaults applied and declared types.
 Validation types it from the workflow's inputs: `trigger.activation.params.repo` for a `repos` input is an error when you save.
 
 **Typed inputs: let the integration say what a value is.** An integration defines value types, and an input of that type is a picker in the Enable and Run dialogs, not a text box.

@@ -92,3 +92,16 @@ func (f *Filter) MatchScope(scope triggerspec.Scope) (bool, error) {
 	}
 	return f.Filter.MatchScope(scope)
 }
+
+// OwnerIdentityGap explains a filter that reads the owner's GitHub id when the
+// owner has none, for the recorded reason of an event the filter did not
+// match. Such a sender-gated filter ("only me, or these people") can admit
+// only what it names explicitly (trusted_ids), and a bare "filter did not
+// match" would send the owner hunting through a filter that is fine. Empty
+// when the filter does not read the id or the id is known.
+func OwnerIdentityGap(expr string, scope triggerspec.Scope) string {
+	if !triggerspec.ReadsOwnerGitHubID(expr) || scope.OwnerGitHubID() != "" {
+		return ""
+	}
+	return "owner has no linked GitHub identity (trigger.activation.owner.github_id is empty), so the owner cannot match; connect GitHub in Settings"
+}

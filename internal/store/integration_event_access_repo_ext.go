@@ -38,6 +38,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"time"
@@ -152,6 +153,32 @@ func PruneIntegrationAccess(ctx context.Context, db orm.Context, before time.Tim
 		return 0, err
 	}
 	return res.RowsAffected()
+}
+
+// GetIntegrationAccessSubject is the user's own id AT THE PROVIDER (for GitHub,
+// the numeric user id) as the access refresher last read it from the user's
+// credential, or "" when no grant refreshed at or after freshAfter records
+// one. It is the one place the platform keeps who a user is on GitHub: the
+// refresher stamps subject_id from GET /user with the same token the user's
+// runs act with, and it is cleared with the grants when that token is gone.
+func GetIntegrationAccessSubject(ctx context.Context, db orm.Context, userID, integrationID string, freshAfter time.Time) (string, error) {
+	var subject string
+	err := db.Bun().NewSelect().Model((*IntegrationEventAccess)(nil)).
+		Column(IntegrationEventAccessFieldSubjectID).
+		Where("? = ?", bun.Ident(IntegrationEventAccessFieldUserID), userID).
+		Where("? = ?", bun.Ident(IntegrationEventAccessFieldIntegrationID), integrationID).
+		Where("? <> ''", bun.Ident(IntegrationEventAccessFieldSubjectID)).
+		Where("? >= ?", bun.Ident(IntegrationEventAccessFieldRefreshedAt), freshAfter.UTC()).
+		OrderExpr("? DESC", bun.Ident(IntegrationEventAccessFieldRefreshedAt)).
+		Limit(1).
+		Scan(ctx, &subject)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("read integration access subject: %w", err)
+	}
+	return subject, nil
 }
 
 // IntegrationEventAccessExtra carries fields on IntegrationEventAccess that are NOT columns — computed

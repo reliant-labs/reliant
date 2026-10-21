@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
@@ -14,6 +15,8 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/triggers"
+	wfyaml "github.com/reliant-labs/reliant/internal/workflow/yaml"
 )
 
 // A workflow with one required, multi-valued input the trigger does not map:
@@ -406,4 +409,70 @@ func TestEnableWithoutAnOptionsCheckerChecksShapesOnly(t *testing.T) {
 	resp := env.enable(t, env.enableReq(setupReposParam("acme/web")))
 	require.True(t, resp.Enabled)
 	assert.Empty(t, resultFor(resp, "new-issue").Warnings)
+}
+
+// ---- owner identity --------------------------------------------------------
+
+const ownerGatedYAML = `name: responder
+triggers:
+  - name: on-comment
+    integration: {integration: test, events: [issues.opened]}
+    filter: "trigger.sender.verified && trigger.sender.id == trigger.activation.owner.github_id"
+    prompt: "Respond."
+  - name: on-open
+    integration: {integration: test, events: [issues.closed]}
+    prompt: "Triage."
+entry: [a]
+nodes:
+  - id: a
+    type: approval
+    args: {title: ok}
+`
+
+func gatedDeclaration(t *testing.T, name string) *reliantv1.WorkflowTrigger {
+	t.Helper()
+	wf, err := wfyaml.ParseWorkflow([]byte(ownerGatedYAML))
+	require.NoError(t, err)
+	wt := triggers.FindDeclaredTrigger(wf, name)
+	require.NotNil(t, wt)
+	return wt
+}
+
+// A trigger whose filter compares the sender with the owner's GitHub id would
+// enable and then skip every event if the owner has no GitHub identity. The
+// enable says so, for the trigger that needs it and only that one.
+func TestEnableWarnsWhenAnOwnerGatedFilterHasNoOwnerIdentity(t *testing.T) {
+	env, _ := setupInboundTriggerTest(t)
+	env.saveWorkflow(t, "responder", ownerGatedYAML)
+	conn := env.createConnection(t, env.userID, "test", "acct-1", core.ConnectionStatusActive)
+
+	resp := env.enable(t, env.enableRequest(func(r *reliantv1.EnableWorkflowRequest) {
+		r.Workflow = "responder"
+		r.ConnectionIds = map[string]string{"test": conn.ID}
+	}))
+	require.True(t, resp.Enabled, "%v", resp.Results)
+	gated := resultFor(resp, "on-comment").Warnings
+	require.Len(t, gated, 1, "the gated trigger warns")
+	assert.Contains(t, gated[0], "your GitHub identity")
+	assert.Contains(t, gated[0], "on-comment")
+	assert.Empty(t, resultFor(resp, "on-open").Warnings, "a trigger that never asks who the owner is does not")
+}
+
+// With the owner's GitHub identity linked, an activation that names no
+// connection (every hosted GitHub one) has nothing to warn about; unlinked, it
+// does. The identity is read when asked, not stored on the activation.
+func TestOwnerIdentityWarningFollowsTheLinkedIdentity(t *testing.T) {
+	env, _ := setupInboundTriggerTest(t)
+	row := &core.Trigger{ID: "t1", UserID: env.userID}
+	gated, plain := gatedDeclaration(t, "on-comment"), gatedDeclaration(t, "on-open")
+
+	assert.Len(t, env.svc.ownerIdentityWarnings(env.ctx, gated, row), 1, "no identity linked yet")
+	assert.Empty(t, env.svc.ownerIdentityWarnings(env.ctx, plain, row))
+
+	require.NoError(t, env.repo.ReplaceIntegrationAccess(env.ctx, env.userID, "github", "225976313", time.Now(),
+		[]core.IntegrationAccessGrant{{AccountKey: "1", ResourceKey: "1"}}))
+	assert.Empty(t, env.svc.ownerIdentityWarnings(env.ctx, gated, row), "linked: the same activation now matches")
+
+	require.NoError(t, env.repo.ReplaceIntegrationAccess(env.ctx, env.userID, "github", "", time.Now().Add(time.Minute), nil))
+	assert.Len(t, env.svc.ownerIdentityWarnings(env.ctx, gated, row), 1, "unlinked again (the token went away): warns again")
 }

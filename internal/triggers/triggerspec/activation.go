@@ -2,6 +2,8 @@
 package triggerspec
 
 import (
+	"strings"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	wfcel "github.com/reliant-labs/reliant/internal/workflow/cel"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
@@ -45,9 +47,24 @@ type Scope struct {
 // Owner is who an activation's runs are for.
 type Owner struct {
 	UserID string
-	// GitHubID is the GitHub user id of the connection the activation listens
-	// through (core.Connection.SenderID); empty without one.
+	// GitHubID is the owner's GitHub user id, as a GitHub event names its
+	// sender: the id of the connection the activation listens through, or
+	// else the owner's linked GitHub identity (triggers.OwnerOf resolves
+	// it). Empty when the owner has none.
 	GitHubID string
+}
+
+const ownerGitHubIDPath = "activation.owner.github_id"
+
+// ReadsOwnerGitHubID reports whether expr reads trigger.activation.owner.github_id:
+// a filter that gates on who the owner is on GitHub.
+func ReadsOwnerGitHubID(expr string) bool { return strings.Contains(expr, ownerGitHubIDPath) }
+
+// OwnerGitHubID is the owner's GitHub id this scope carries; "" when unknown.
+func (s Scope) OwnerGitHubID() string {
+	owner, _ := s.Activation["owner"].(map[string]any)
+	id, _ := owner["github_id"].(string)
+	return id
 }
 
 // ActivationRoot is `trigger.activation`. Every key is always present, so an

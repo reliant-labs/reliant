@@ -142,6 +142,7 @@ func (s *Service) EnableWorkflow(
 					row.Enabled = true
 					if err = s.refreshTriggerAccess(ctx, row); err == nil {
 						warnings, err = s.checkReachability(ctx, userID, wf, wt, msg, row)
+						warnings = append(warnings, s.ownerIdentityWarnings(ctx, wt, row)...)
 					}
 				}
 			}
@@ -231,6 +232,7 @@ func (s *Service) existingActivationStep(
 	if err != nil {
 		return nil, err
 	}
+	warnings = append(warnings, s.ownerIdentityWarnings(ctx, wt, row)...)
 	if sameActivationSettings(row, existing) {
 		return &enableStep{name: name, existing: existing, warnings: warnings}, nil
 	}

@@ -118,7 +118,7 @@ trigger.sender.verified && trigger.sender.id != ''
     || trigger.sender.id in trigger.activation.params.trusted_ids)
 ```
 
-`trigger.sender.id` is the numeric id of whoever GitHub says acted, verified by the webhook's signature. `trigger.activation.owner.github_id` is you, by the connection you enabled the workflow with. A sender with no id, or an unverified one, never passes. The review responder and issue worker also drop any comment from the agent's own thread, so an agent cannot talk itself into more work.
+`trigger.sender.id` is the numeric id of whoever GitHub says acted, verified by the webhook's signature. `trigger.activation.owner.github_id` is you, by your linked GitHub account (or the connection you enabled the workflow with, if it names one). If you have no GitHub identity, skipped events say "owner has no linked GitHub identity". A sender with no id, or an unverified one, never passes. The review responder and issue worker also drop any comment from the agent's own thread, so an agent cannot talk itself into more work.
 
 You can check what a filter does before enabling anything:
 

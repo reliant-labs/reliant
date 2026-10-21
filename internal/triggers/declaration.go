@@ -7,10 +7,13 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
+	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/triggers/triggerspec"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 )
@@ -204,34 +207,102 @@ func ActivationScope(ctx context.Context, repo any, t *core.Trigger, decl *Decla
 	if decl != nil {
 		params = decl.activationParams(t.Params)
 	}
-	return triggerspec.Scope{Trigger: root, Activation: triggerspec.ActivationRoot(t.ID, ownerOf(ctx, repo, t), params)}
+	return triggerspec.Scope{Trigger: root, Activation: triggerspec.ActivationRoot(t.ID, OwnerOf(ctx, repo, t), params)}
 }
 
-// connectionReader is what reading an activation's owner needs of the store.
-// Every repository the fire and intake paths run on (*db.Repo) has it; a
-// narrower fake that does not simply yields an owner with no GitHub id.
+// connectionReader and accessSubjectReader are what resolving an activation's
+// owner needs of the store. Every repository the fire and intake paths run on
+// (*db.Repo) has them (see ownerSource); a narrower fake that has neither
+// simply yields an owner with no GitHub id.
 type connectionReader interface {
 	GetConnection(ctx context.Context, userID, id string) (*core.Connection, error)
 }
 
-// ownerOf is who t's runs are for, as trigger.activation.owner. github_id is
-// the sender id of the GitHub connection t listens through, the same id a
-// GitHub event names its sender by (trigger.sender.id), so a filter can say
-// "only me" by comparing the two. It is empty when the activation has no
-// connection, the connection is not GitHub's, or it cannot be read: a failure
-// to find the owner's id must never widen who a filter admits.
-func ownerOf(ctx context.Context, repo any, t *core.Trigger) triggerspec.Owner {
+type connectionStoreProvider interface {
+	Connections() core.ConnectionStore
+}
+
+type accessSubjectReader interface {
+	GetIntegrationAccessSubject(ctx context.Context, userID, integrationID string, freshAfter time.Time) (string, error)
+}
+
+// ownerSource is the production repository's side of owner resolution; the
+// assertion keeps a refactor of *db.Repo from silently emptying every owner.
+type ownerSource interface {
+	connectionStoreProvider
+	accessSubjectReader
+}
+
+var _ ownerSource = (*db.Repo)(nil)
+
+// OwnerOf is who t's runs are for, as trigger.activation.owner. It is the one
+// place every trigger path (intake filter, origin filter, dedupe, fire,
+// replay, workflow events) resolves the owner, so a filter and an inputs
+// mapping that name github_id read the same value.
+//
+// github_id is the owner's GitHub user id, in the form a GitHub event names
+// its sender (trigger.sender.id), so a filter can say "only me" by comparing
+// the two. It comes from, in order:
+//
+//  1. the GitHub connection t listens through, when it names one: the
+//     account that connection acts as (Connection.SenderID). A named
+//     connection DECIDES: runs act through it, so a connection that is not
+//     the owner's GitHub one, or has no sender id, leaves github_id empty
+//     rather than falling back to some other account of the owner's;
+//  2. otherwise the owner's linked GitHub identity: the GitHub user id the
+//     platform reads off the owner's own GitHub token (the one their runs
+//     act with when no connection is named) every time it refreshes their
+//     access, kept as the subject of their access snapshot.
+//
+// It is resolved at every evaluation and never stored on the trigger: the
+// identity can change (the owner reconnects another GitHub account), and a
+// copy taken when the trigger was declared would go on admitting the old
+// account as "me". The snapshot is only trusted while fresh
+// (core.IntegrationAccessFreshness), like routing trusts it.
+//
+// It is empty when neither source yields an id, and a failure to find the id
+// must never widen who a filter admits: "" equals no verified sender's id.
+func OwnerOf(ctx context.Context, repo any, t *core.Trigger) triggerspec.Owner {
 	owner := triggerspec.Owner{UserID: t.UserID}
-	reader, ok := repo.(connectionReader)
-	if !ok || t.ConnectionID == nil || *t.ConnectionID == "" {
+	if t.UserID == "" {
 		return owner
+	}
+	if t.ConnectionID != nil && *t.ConnectionID != "" {
+		owner.GitHubID = connectionSenderID(ctx, repo, t)
+		return owner
+	}
+	reader, ok := repo.(accessSubjectReader)
+	if !ok {
+		return owner
+	}
+	id, err := reader.GetIntegrationAccessSubject(ctx, t.UserID, "github", time.Now().Add(-core.IntegrationAccessFreshness))
+	if err != nil {
+		logging.WarnContext(ctx, "could not read the owner's linked GitHub identity; treating it as unknown",
+			"trigger_id", t.ID, "user_id", t.UserID, "error", err)
+		return owner
+	}
+	owner.GitHubID = id
+	return owner
+}
+
+// connectionSenderID is the GitHub user id of the connection t listens
+// through, or "" when it is not the owner's GitHub connection or cannot be
+// read.
+func connectionSenderID(ctx context.Context, repo any, t *core.Trigger) string {
+	var reader connectionReader
+	switch r := repo.(type) {
+	case connectionReader:
+		reader = r
+	case connectionStoreProvider:
+		reader = r.Connections()
+	default:
+		return ""
 	}
 	conn, err := reader.GetConnection(ctx, t.UserID, *t.ConnectionID)
 	if err != nil || conn == nil || conn.UserID != t.UserID || conn.IntegrationID != "github" || conn.SenderID == nil {
-		return owner
+		return ""
 	}
-	owner.GitHubID = *conn.SenderID
-	return owner
+	return *conn.SenderID
 }
 
 func (d *Declaration) activationParams(stored map[string]any) map[string]any {

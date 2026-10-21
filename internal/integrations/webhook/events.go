@@ -33,7 +33,7 @@ type EventsStore interface {
 // accessRefreshInterval while their owner has a trigger, so a healthy grant
 // is never near this; one older than it means refreshing has been failing,
 // and access nobody has re-confirmed in that long is not trusted.
-const AccessFreshness = time.Hour
+const AccessFreshness = core.IntegrationAccessFreshness
 
 // EventsOptions configures the app-level receiver.
 type EventsOptions struct {

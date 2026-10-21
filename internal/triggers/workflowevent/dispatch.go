@@ -228,7 +228,11 @@ func (d *Dispatcher) fire(ctx context.Context, trigger *core.Trigger, spec Spec,
 		return d.record(ctx, trigger, ev, chain, core.TriggerEventFailed, "filter error: "+err.Error())
 	}
 	if !pass {
-		return d.record(ctx, trigger, ev, chain, core.TriggerEventSkipped, "filter did not match")
+		reason := "filter did not match"
+		if gap := triggers.OwnerIdentityGap(spec.Filter, scope); gap != "" {
+			reason += ": " + gap + ". Filter: " + spec.Filter
+		}
+		return d.record(ctx, trigger, ev, chain, core.TriggerEventSkipped, reason)
 	}
 
 	launchSpec, err := d.buildSpec(trigger, ev, launchEv, spec, scope)

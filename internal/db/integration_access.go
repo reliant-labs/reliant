@@ -21,6 +21,13 @@ func (r *Repo) ReplaceIntegrationAccess(ctx context.Context, userID, integration
 	return store.ReplaceIntegrationAccess(ctx, r.ORM(), userID, integrationID, subjectID, at, grants)
 }
 
+// GetIntegrationAccessSubject is the user's id at the provider as the access
+// refresher last recorded it, or "" when nothing refreshed at or after
+// freshAfter records one.
+func (r *Repo) GetIntegrationAccessSubject(ctx context.Context, userID, integrationID string, freshAfter time.Time) (string, error) {
+	return store.GetIntegrationAccessSubject(ctx, r.ORM(), userID, integrationID, freshAfter)
+}
+
 // RevokeIntegrationAccess deletes the grants a provider revocation names, for
 // every user. It returns how many it removed.
 func (r *Repo) RevokeIntegrationAccess(ctx context.Context, integrationID string, rev core.IntegrationAccessRevocation) (int64, error) {

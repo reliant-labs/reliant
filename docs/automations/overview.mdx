@@ -103,7 +103,7 @@ A filter, an `inputs` mapping and a `prompt` can also read the activation they f
 | `trigger.activation.params.<input>` | A value the activation sets for one of the workflow's declared inputs |
 | `trigger.activation.id` | The activation's id |
 | `trigger.activation.owner.user_id` | The user the activation's runs execute as |
-| `trigger.activation.owner.github_id` | The GitHub user id of the connection the activation listens through, as a string; empty when it has none |
+| `trigger.activation.owner.github_id` | The owner's GitHub user id, as a string: the connection the activation listens through when it names one, otherwise the GitHub identity linked to the owner's account; empty when the owner has neither |
 
 A pack that watches a list of repositories declares a typed input for it and scopes the trigger by that input with `match`. Each activation then names its own repositories:
 
@@ -145,7 +145,7 @@ An input marked `required: true` (or declared with no default) must have a value
 
 #### Who may start a run
 
-Trust is a CEL filter over data the trigger already has; there is no table of trusted people to maintain. `trigger.sender` is who the source says sent the event, and `trigger.activation.owner.github_id` is you, by the GitHub connection the activation listens through. Both are strings, so a list of trusted people is a `github.user` input, which stores numeric ids as strings (`"583231"`, quoted: CEL does not match the number `583231` against the string) and is picked by login in the dialog.
+Trust is a CEL filter over data the trigger already has; there is no table of trusted people to maintain. `trigger.sender` is who the source says sent the event, and `trigger.activation.owner.github_id` is you, by the GitHub connection the activation listens through, or, when it names none, by the GitHub account linked to yours (read at every event, so reconnecting a different account takes effect at once). Both are strings, so a list of trusted people is a `github.user` input, which stores numeric ids as strings (`"583231"`, quoted: CEL does not match the number `583231` against the string) and is picked by login in the dialog.
 
 ```yaml
 inputs:
@@ -159,7 +159,7 @@ triggers:
        trigger.sender.id in trigger.activation.params.trusted_ids)
 ```
 
-With no `trusted_ids` set, only you can start it. An activation with no GitHub connection has an empty `github_id`, which never equals a verified sender's id, so only its `trusted_ids` admit anyone. Comparing a sender id with a number is an error when the workflow is saved.
+With no `trusted_ids` set, only you can start it. If you have no GitHub identity at all, `github_id` is empty, which never equals a verified sender's id, so only `trusted_ids` admit anyone; the skipped event says "owner has no linked GitHub identity", and enabling the workflow warns about it. Comparing a sender id with a number is an error when the workflow is saved.
 
 ## Telling your own writes apart
 

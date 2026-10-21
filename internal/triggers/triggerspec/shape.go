@@ -116,7 +116,7 @@ func activationSchema(params map[string]any) map[string]any {
 				"additionalProperties": false,
 				"properties": map[string]any{
 					"user_id":   map[string]any{"type": "string", "description": "The user the activation's runs execute as."},
-					"github_id": map[string]any{"type": "string", "description": "The GitHub user id of the connection the activation listens through, as trigger.sender.id names a GitHub sender; empty when it has none."},
+					"github_id": map[string]any{"type": "string", "description": "The owner's GitHub user id, as trigger.sender.id names a GitHub sender: the connection the activation listens through, else the owner's linked GitHub identity; empty when the owner has neither."},
 				},
 			},
 			"params": params,

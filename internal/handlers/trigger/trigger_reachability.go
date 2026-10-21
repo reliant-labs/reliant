@@ -11,6 +11,8 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/triggers"
+	"github.com/reliant-labs/reliant/internal/triggers/triggerspec"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 )
 
@@ -170,4 +172,23 @@ func scopeValues(input interface {
 		}
 	}
 	return out
+}
+
+// ownerIdentityWarnings tells the person enabling when a declared trigger's
+// filter gates on who the owner is on GitHub
+// (trigger.activation.owner.github_id) and the owner has no GitHub identity
+// to compare against: the activation would enable fine and then skip every
+// event, including the owner's own. It is a warning, not a refusal, because
+// the same filter may admit others by trusted_ids, and the identity can be
+// linked later (it is read at every event, never stored on the activation).
+func (s *Service) ownerIdentityWarnings(ctx context.Context, wt *reliantv1.WorkflowTrigger, row *core.Trigger) []string {
+	if !triggerspec.ReadsOwnerGitHubID(wt.GetFilter()) {
+		return nil
+	}
+	if triggers.OwnerOf(ctx, s.deps.Repo, row).GitHubID != "" {
+		return nil
+	}
+	return []string{fmt.Sprintf(
+		"Trigger %q only admits senders by your GitHub identity, and none is linked to your account yet, so "+
+			"you will not match until you connect GitHub in Settings. Others can still match if you list them in trusted_ids.", wt.GetName())}
 }

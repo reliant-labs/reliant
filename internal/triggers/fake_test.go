@@ -28,6 +28,14 @@ type fakeRepo struct {
 	// daemons are the daemon ids that exist; GetDaemon misses on the rest.
 	daemons     map[string]bool
 	connections map[string]*core.Connection
+	// subjects are the users' GitHub ids as the access refresher recorded
+	// them, by user id.
+	subjects map[string]fakeSubject
+}
+
+type fakeSubject struct {
+	id          string
+	refreshedAt time.Time
 }
 
 func newFakeRepo() *fakeRepo {
@@ -37,6 +45,7 @@ func newFakeRepo() *fakeRepo {
 		daemons:  map[string]bool{testDaemonID: true},
 
 		connections: map[string]*core.Connection{},
+		subjects:    map[string]fakeSubject{},
 	}
 }
 
@@ -272,4 +281,15 @@ func (r *fakeRepo) GetConnection(_ context.Context, userID, id string) (*core.Co
 		return c, nil
 	}
 	return nil, core.ErrConnectionNotFound
+}
+
+// GetIntegrationAccessSubject is the user's recorded GitHub id, or "" when
+// none was refreshed at or after freshAfter.
+func (r *fakeRepo) GetIntegrationAccessSubject(_ context.Context, userID, integrationID string, freshAfter time.Time) (string, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if s, ok := r.subjects[userID]; ok && integrationID == "github" && !s.refreshedAt.Before(freshAfter) {
+		return s.id, nil
+	}
+	return "", nil
 }

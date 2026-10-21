@@ -231,13 +231,18 @@ func (in *Intake) applyFilter(ctx context.Context, expr string, trigger *core.Tr
 	event := FilterInput{
 		Kind: string(ev.Kind), TriggerID: trigger.ID, OccurredAt: occurredAt, Payload: ev.Payload, Sender: ev.Sender, Origin: origin,
 	}
-	hit, err := filter.MatchScope(ActivationScope(ctx, in.repo, trigger, decl, event.Root()))
+	scope := ActivationScope(ctx, in.repo, trigger, decl, event.Root())
+	hit, err := filter.MatchScope(scope)
 	if err != nil {
 		return core.TriggerEventFailed, fmt.Sprintf(
 			"the trigger's filter could not evaluate this event (%v); guard optional fields with has()", err)
 	}
 	if !hit {
-		return core.TriggerEventSkipped, "filter did not match: " + filter.Expr()
+		reason := "filter did not match: " + filter.Expr()
+		if gap := OwnerIdentityGap(filter.Expr(), scope); gap != "" {
+			reason = "filter did not match: " + gap + ". Filter: " + filter.Expr()
+		}
+		return core.TriggerEventSkipped, reason
 	}
 	return core.TriggerEventPending, ""
 }
