@@ -223,15 +223,35 @@ stays as it is and shrinks one aggregate lane at a time; the lanes are in
    (or a `DATABASE_URL`, whose server is used); like this package's tests
    they skip under `-short`.
 
-7. **One transaction, one layer.** The Repository's transaction
-   (`Repo.RunTx`) and the ORM's (`orm.Client.RunTx`) live under different
-   context keys and do not see each other: a store call inside `Repo.RunTx`
-   runs on the pool, outside the transaction — no atomicity, and a self-
-   deadlock if it touches a row the transaction has locked. Port a
-   transaction's statements together, opening it with `RunTx`/
-   `RunTxWithOptions` (which also retries 40001/40P01) and moving
-   post-commit effects to `orm.AfterCommit`. A lock that needs its own
-   transaction uses `BeginDetached`, refusing when `orm.InTx(ctx)`.
+7. **One transaction, either layer.** The Repository and `internal/store`
+   share one pool (`repo.ORM()` is the ORM client over it) and one
+   transaction: forge's, carried in `ctx`. `Repo.RunTx` opens it through the
+   ORM client, and every Repository/sqlc statement resolves to the
+   transaction `ctx` carries (`tx_bridge.go`). So a transaction opened by
+   either side is joined by both, and a transaction can port one statement
+   at a time — `SaveMessageAtomic` or chat+thread creation may hold sqlc
+   and store calls side by side across lanes:
+
+   ```go
+   err := repo.RunTx(ctx, func(ctx context.Context) error { // or repo.ORM().RunTx
+       if err := repo.UpsertProjectDaemon(ctx, projectID, daemonID, path, nil); err != nil { // sqlc
+           return err
+       }
+       return store.UpdateChatMasked(ctx, repo.ORM(), chat, []string{store.ChatFieldActiveDaemonID}) // store
+   })
+   ```
+
+   Pass the ctx the closure receives to every call; the handle stays the
+   plain client (`repo.ORM()`, never a `*orm.Tx`). A nested `RunTx` of
+   either kind joins. The layer that OPENS the transaction owns its retry:
+   `Repo.RunTx` keeps its ladder (40001/40P01, plus 23505 and 25P02);
+   `orm.Client.RunTx` retries 40001/40P01 only, so keep `Repo.RunTx` around
+   a transaction that relied on the other two until its port decides.
+   `runAfterCommit` is `orm.AfterCommit`, so post-commit effects registered
+   by either layer run once, after the commit that keeps them. A lock that
+   needs its own transaction uses `BeginDetached` (or the Repository's
+   `BeginTxWithOptions`), refusing when `orm.InTx(ctx)`. Tests that hold
+   this: `internal/store/storetest/txbridge_test.go`.
    (A one-column stamp through `Update<E>` reads every other column back;
    pass `crud.NoReadBack()` when the caller does not need the row.)
 

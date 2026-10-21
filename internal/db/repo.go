@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/reliant-labs/forge/pkg/orm"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	core "github.com/reliant-labs/reliant/internal/db/core"
 	postgresstore "github.com/reliant-labs/reliant/internal/db/postgres"
@@ -23,12 +24,7 @@ import (
 	"go.temporal.io/sdk/activity"
 )
 
-type transactionKey string
-
 const (
-	txKey          transactionKey = `tx`
-	afterCommitKey transactionKey = `after-commit`
-
 	// Retry configuration.
 	//
 	// maxRetries is sized for the contention the product actually generates,
@@ -69,19 +65,14 @@ const (
 	defaultDBTimeout = 10 * time.Second
 )
 
-// afterCommitCallbacks belongs to one transaction ATTEMPT. A failed attempt's
-// callbacks are discarded with its transaction; only the callbacks collected
-// by the attempt that actually commits are run.
-type afterCommitCallbacks struct {
-	callbacks []func()
-}
-
+// runAfterCommit defers callback until the transaction ctx carries commits.
+// It is orm.AfterCommit: the callbacks belong to one transaction ATTEMPT, so
+// a failed attempt's are discarded with it and only the attempt that commits
+// runs its own — whichever layer opened the transaction.
 func runAfterCommit(ctx context.Context, callback func()) error {
-	callbacks, ok := ctx.Value(afterCommitKey).(*afterCommitCallbacks)
-	if !ok || callbacks == nil {
+	if err := orm.AfterCommit(ctx, func(context.Context) { callback() }); err != nil {
 		return errors.New("after-commit callback requires repository transaction")
 	}
-	callbacks.callbacks = append(callbacks.callbacks, callback)
 	return nil
 }
 
@@ -164,12 +155,19 @@ func (r *Repo) backoffBeforeRetry(attempt int) {
 }
 
 // NewRepo creates a new Repo with the given database
-func NewRepo(db *sql.DB) *Repo {
+func NewRepo(db *sql.DB) (*Repo, error) {
 	return NewRepoWithDriver(db, DriverPostgres)
 }
 
-func NewRepoWithDriver(db *sql.DB, driver DatabaseDriver) *Repo {
-	q := &WrappedDBTX{db: db}
+// NewRepoWithDriver builds the Repository and the forge ORM client over the
+// one pool db, sharing one transaction: see WrappedDBTX. It pings db (the ORM
+// client's constructor does).
+func NewRepoWithDriver(db *sql.DB, driver DatabaseDriver) (*Repo, error) {
+	client, err := orm.NewClientWithDB(db, "postgres")
+	if err != nil {
+		return nil, fmt.Errorf("orm client: %w", err)
+	}
+	q := &WrappedDBTX{db: db, orm: client}
 	pgQueries := pgdb.New(q)
 
 	tokenCounts := newSQLTokenCountStore(q, func(query string) string {
@@ -201,7 +199,16 @@ func NewRepoWithDriver(db *sql.DB, driver DatabaseDriver) *Repo {
 		inbox:           postgresstore.NewInboxStore(pgQueries),
 		runEvents:       postgresstore.NewRunEventStore(pgQueries),
 		tokenCounts:     tokenCounts,
-	}
+	}, nil
+}
+
+// ORM is the forge ORM client over the Repository's pool — the orm.Context
+// internal/store's generated delegates and _repo_ext.go queries take. It
+// shares the Repository's transaction in both directions (WrappedDBTX), so a
+// store call inside RunTx and a Repository call inside ORM().RunTx each join
+// the transaction the other opened.
+func (r *Repo) ORM() *orm.Client {
+	return r.DB.orm
 }
 
 // SetUpdateNotifiers configures callbacks that are invoked after successful
@@ -242,7 +249,11 @@ func NewRepoFromConfig(cfg DatabaseConfig) (*Repo, error) {
 		return nil, err
 	}
 
-	repo := NewRepoWithDriver(db, cfg.Driver)
+	repo, err := NewRepoWithDriver(db, cfg.Driver)
+	if err != nil {
+		_ = db.Close()
+		return nil, err
+	}
 	if cfg.DirectURL != "" {
 		session, err := openSessionPool(cfg.DirectURL)
 		if err != nil {
@@ -374,24 +385,24 @@ func ResetPeakPendingWrites() {}
 // executeTransaction executes a function within a transaction and handles commit/rollback.
 // The returned txResult always has execDuration and commitDuration set; beginDuration
 // should be set by the caller (attemptTransaction) since it tracks the BeginImmediate call.
-func (r *Repo) executeTransaction(ctx context.Context, tx *sql.Tx, f func(ctx context.Context) error) txResult {
+func (r *Repo) executeTransaction(ctx context.Context, tx *orm.Tx, f func(ctx context.Context) error) txResult {
 	var result txResult
 
 	// Setup deferred rollback for panics and errors
 	defer func() {
 		if !result.committed {
-			tx.Rollback()
+			_ = tx.Rollback()
 		}
 	}()
 
-	// Execute the transaction function. After-commit callbacks live on this
-	// attempt's context so a SERIALIZABLE retry cannot publish events created by
-	// the rolled-back attempt.
+	// Execute the transaction function under the ctx tx.RunTx hands it: a
+	// forge transaction context, which this package's queries (WrappedDBTX)
+	// and internal/store's both resolve to. After-commit callbacks
+	// (runAfterCommit, orm.AfterCommit) belong to this attempt, so a
+	// SERIALIZABLE retry cannot publish events created by the rolled-back
+	// attempt.
 	execTime := time.Now()
-	afterCommit := &afterCommitCallbacks{}
-	txCtx := context.WithValue(ctx, txKey, tx)
-	txCtx = context.WithValue(txCtx, afterCommitKey, afterCommit)
-	err := f(txCtx)
+	err := tx.RunTx(ctx, f)
 	result.execDuration = time.Since(execTime)
 
 	if err != nil {
@@ -399,7 +410,7 @@ func (r *Repo) executeTransaction(ctx context.Context, tx *sql.Tx, f func(ctx co
 		return result
 	}
 
-	// Try to commit
+	// Commit, which runs the attempt's after-commit callbacks once it has.
 	commitTime := time.Now()
 	err = tx.Commit()
 	result.commitDuration = time.Since(commitTime)
@@ -411,9 +422,6 @@ func (r *Repo) executeTransaction(ctx context.Context, tx *sql.Tx, f func(ctx co
 	}
 
 	result.committed = true
-	for _, callback := range afterCommit.callbacks {
-		callback()
-	}
 	return result
 }
 
@@ -550,7 +558,7 @@ func (r *Repo) RunTxWithOptions(ctx context.Context, opts TxOptions, f func(ctx 
 	// (a writing inner call joining a read-only outer transaction) is rejected
 	// by Postgres at the point of the write, which is exactly where the
 	// mistake is.
-	if _, ok := ctx.Value(txKey).(pgdb.DBTX); ok {
+	if r.DB.inTx(ctx) {
 		return f(ctx)
 	}
 
@@ -646,7 +654,7 @@ func (r *Repo) RunTxNoRetry(ctx context.Context, f func(ctx context.Context) err
 	if r.DB == nil {
 		return errors.New("database connection not initialized")
 	}
-	if _, ok := ctx.Value(txKey).(pgdb.DBTX); ok {
+	if r.DB.inTx(ctx) {
 		return f(ctx)
 	}
 
@@ -665,7 +673,7 @@ func (r *Repo) RunTxNoRetry(ctx context.Context, f func(ctx context.Context) err
 // Returns (result, nil) if transaction was started, (nil, err) if begin failed
 func (r *Repo) attemptTransaction(ctx context.Context, opts TxOptions, f func(ctx context.Context) error, metrics *txMetrics) (*txResult, error) {
 	beginTime := time.Now()
-	tx, err := r.DB.BeginTxWithOptions(ctx, opts)
+	tx, err := r.DB.beginSharedTx(ctx, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -675,25 +683,12 @@ func (r *Repo) attemptTransaction(ctx context.Context, opts TxOptions, f func(ct
 	return &result, nil
 }
 
-type WrappedDBTX struct {
-	db *sql.DB
-}
-
-func (w *WrappedDBTX) DB(ctx context.Context) pgdb.DBTX {
-	tx, ok := ctx.Value(txKey).(pgdb.DBTX)
-	if ok && tx != nil {
-		return tx
-	}
-
-	return w.db
-}
-
-// BeginImmediate starts a read-write transaction with Serializable isolation.
-func (w *WrappedDBTX) BeginImmediate(ctx context.Context) (*sql.Tx, error) {
-	return w.BeginTxWithOptions(ctx, TxOptions{})
-}
-
-// BeginTxWithOptions starts a SERIALIZABLE transaction, read-only when asked.
+// BeginTxWithOptions starts a DETACHED transaction on the pool: one the
+// caller holds and ends itself, never carried in a ctx, so nothing else joins
+// it (the run-control and provider-key locks). RunTx's transactions are
+// beginSharedTx's.
+//
+// It is SERIALIZABLE unless opts says otherwise, read-only when asked.
 //
 // database/sql's ReadOnly maps to Postgres READ ONLY. Combined with
 // SERIALIZABLE it also implies DEFERRABLE behavior for the purpose that
@@ -763,7 +758,7 @@ func (w *WrappedDBTX) QueryRowContext(ctx context.Context, query string, args ..
 // Transaction-level retries in RunTx handle recovery instead.
 func (w *WrappedDBTX) execContextWithRetry(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
 	// Skip statement-level retries when inside a transaction
-	if _, inTx := ctx.Value(txKey).(pgdb.DBTX); inTx {
+	if w.inTx(ctx) {
 		return w.DB(ctx).ExecContext(ctx, query, args...)
 	}
 
@@ -801,7 +796,7 @@ func (w *WrappedDBTX) execContextWithRetry(ctx context.Context, query string, ar
 // Transaction-level retries in RunTx handle recovery instead.
 func (w *WrappedDBTX) queryContextWithRetry(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
 	// Skip statement-level retries when inside a transaction
-	if _, inTx := ctx.Value(txKey).(pgdb.DBTX); inTx {
+	if w.inTx(ctx) {
 		return w.DB(ctx).QueryContext(ctx, query, args...)
 	}
 
@@ -872,7 +867,7 @@ const (
 // Keeping this primitive transaction-only makes it impossible for a future
 // caller to accidentally consume a cursor outside the durable write.
 func (r *Repo) allocateUpdateSequence(ctx context.Context, streamKind, streamID string) (int64, error) {
-	if _, ok := ctx.Value(txKey).(pgdb.DBTX); !ok {
+	if !r.DB.inTx(ctx) {
 		return 0, fmt.Errorf("allocate %s update sequence: transaction required", streamKind)
 	}
 

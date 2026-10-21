@@ -153,7 +153,12 @@ func setupTestRepoFrom(t *testing.T, baseDSN, template string) (*Repo, *sql.DB, 
 		t.Fatalf("failed to open database: %v", err)
 	}
 
-	repo := NewRepoWithDriver(db, DriverPostgres)
+	repo, err := NewRepoWithDriver(db, DriverPostgres)
+	if err != nil {
+		_ = db.Close()
+		dropTestDB(name)
+		t.Fatalf("failed to build repo: %v", err)
+	}
 	// Provider keys and sign-in tokens exist only sealed, so every test repo
 	// gets a throwaway vault.
 	keyBytes := make([]byte, 32)

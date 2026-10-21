@@ -84,6 +84,15 @@ func openRecording(t *testing.T, dsn string) *sql.DB {
 	return pool
 }
 
+func newRecordingRepo(t *testing.T, pool *sql.DB) *db.Repo {
+	t.Helper()
+	repo, err := db.NewRepo(pool)
+	if err != nil {
+		t.Fatalf("NewRepo: %v", err)
+	}
+	return repo
+}
+
 func countContaining(statements []string, needle string) int {
 	n := 0
 	for _, s := range statements {
@@ -104,7 +113,7 @@ func TestTryAdvisoryLockTakesItsSessionFromTheSessionPool(t *testing.T) {
 	pooled := openRecording(t, t.Name()+"/pooled")
 	session := openRecording(t, t.Name()+"/session")
 
-	repo := db.NewRepo(pooled).WithSessionPool(session)
+	repo := newRecordingRepo(t, pooled).WithSessionPool(session)
 	t.Cleanup(func() { _ = repo.Close() })
 
 	release, ok, err := repo.TryAdvisoryLock(context.Background(), 42)
@@ -136,7 +145,7 @@ func TestTryAdvisoryLockTakesItsSessionFromTheSessionPool(t *testing.T) {
 func TestTryAdvisoryLockUsesTheMainPoolWhenNoSessionPoolIsConfigured(t *testing.T) {
 	pooled := openRecording(t, t.Name()+"/pooled")
 
-	repo := db.NewRepo(pooled)
+	repo := newRecordingRepo(t, pooled)
 	t.Cleanup(func() { _ = repo.Close() })
 
 	release, ok, err := repo.TryAdvisoryLock(context.Background(), 42)

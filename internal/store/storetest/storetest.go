@@ -53,7 +53,9 @@ const (
 // Env is one test's private database.
 type Env struct {
 	// ORM is the forge ORM client: the orm.Context every generated delegate
-	// and _repo_ext.go query takes, and the source of store.NewStore.
+	// and _repo_ext.go query takes, and the source of store.NewStore. It is
+	// Repo.ORM(): the two share one transaction, opened from either side
+	// (internal/db/SCHEMA.md, "One transaction, either layer").
 	ORM *orm.Client
 	// Repo is the hand/sqlc Repository over the same pool — the twin a
 	// ported query is checked against. Credential sealing is on, with a
@@ -87,13 +89,12 @@ func New(tb testing.TB) *Env {
 	}
 	tb.Cleanup(cleanup)
 
-	client, err := orm.NewClientWithDB(clone, "postgres")
+	repo, err := db.NewRepoWithDriver(clone, db.DriverPostgres)
 	if err != nil {
-		tb.Fatalf("storetest: orm client: %v", err)
+		tb.Fatalf("storetest: repo: %v", err)
 	}
-	repo := db.NewRepoWithDriver(clone, db.DriverPostgres)
 	enableSealing(tb, repo, clone)
-	return &Env{ORM: client, Repo: repo, SQL: clone}
+	return &Env{ORM: repo.ORM(), Repo: repo, SQL: clone}
 }
 
 // buildTemplate migrates the empty template database through db.Migrate —

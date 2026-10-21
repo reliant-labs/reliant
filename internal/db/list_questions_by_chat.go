@@ -27,7 +27,12 @@ func OpenReadOnlyRepo(url string) (*Repo, error) {
 		_ = sqlDB.Close()
 		return nil, fmt.Errorf("failed to connect to postgres database: %w", err)
 	}
-	return NewRepoWithDriver(sqlDB, DriverPostgres), nil
+	repo, err := NewRepoWithDriver(sqlDB, DriverPostgres)
+	if err != nil {
+		_ = sqlDB.Close()
+		return nil, err
+	}
+	return repo, nil
 }
 
 // ListQuestionsByChat returns every question (gate) raised for a chat, in

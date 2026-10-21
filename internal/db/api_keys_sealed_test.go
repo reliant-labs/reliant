@@ -147,9 +147,10 @@ func TestClearedSealedColumnErrorsInsteadOfFallingBack(t *testing.T) {
 func TestSetAutomationTokenRequiresVault(t *testing.T) {
 	_, raw, cleanup := SetupTestDBWithRawDB(t)
 	defer cleanup()
-	bare := NewRepoWithDriver(raw, DriverPostgres)
+	bare, err := NewRepoWithDriver(raw, DriverPostgres)
+	require.NoError(t, err)
 	require.Error(t, bare.SetAutomationToken(context.Background(), "u1", "openai", "sk"))
-	_, err := bare.GetAutomationToken(context.Background(), "u1", "openai")
+	_, err = bare.GetAutomationToken(context.Background(), "u1", "openai")
 	require.Error(t, err)
 }
 
