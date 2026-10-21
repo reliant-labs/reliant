@@ -117,17 +117,17 @@ func (e *EventsReceiver) serve(w http.ResponseWriter, r *http.Request) {
 
 	if err := provider.Verify(ctx, req); err != nil {
 		if errors.Is(err, ErrUnauthorized) {
-			logging.Warn("integration delivery failed verification", "provider", providerID, "error", err)
+			logging.WarnContext(r.Context(), "integration delivery failed verification", "provider", providerID, "error", err)
 			writeStatus(w, http.StatusUnauthorized, "unauthorized")
 			return
 		}
-		logging.Error("integration delivery could not be verified", "provider", providerID, "error", err)
+		logging.ErrorContext(r.Context(), "integration delivery could not be verified", "provider", providerID, "error", err)
 		writeStatus(w, http.StatusInternalServerError, "verification error")
 		return
 	}
 	delivery, err := provider.Parse(ctx, req)
 	if err != nil {
-		logging.Warn("integration delivery could not be parsed", "provider", providerID, "error", err)
+		logging.WarnContext(r.Context(), "integration delivery could not be parsed", "provider", providerID, "error", err)
 		writeStatus(w, http.StatusBadRequest, "could not parse delivery")
 		return
 	}
@@ -152,14 +152,14 @@ func (e *EventsReceiver) recordAndAck(ctx context.Context, w http.ResponseWriter
 	// reduced access. A failure here is a 503 like a routing failure — the
 	// receiver must not ack a revocation it did not apply.
 	if err := e.revoke(ctx, providerID, delivery.Revocations); err != nil {
-		logging.Error("integration access revocation could not be applied", "provider", providerID, "error", err)
+		logging.ErrorContext(ctx, "integration access revocation could not be applied", "provider", providerID, "error", err)
 		writeStatus(w, http.StatusServiceUnavailable, "could not record the delivery; retry")
 		return
 	}
 	if err := e.route(ctx, providerID, delivery.Events, verified); err != nil {
 		// A partial failure still recorded what it could. Asking the sender
 		// to retry is right: the recorded half dedupes.
-		logging.Error("integration delivery could not be fully recorded", "provider", providerID, "error", err)
+		logging.ErrorContext(ctx, "integration delivery could not be fully recorded", "provider", providerID, "error", err)
 		writeStatus(w, http.StatusServiceUnavailable, "could not record the delivery; retry")
 		return
 	}
@@ -191,13 +191,13 @@ func (e *EventsReceiver) serveConnectionSigned(w http.ResponseWriter, r *http.Re
 	}
 	account, err := provider.SignedAccount(req)
 	if err != nil {
-		logging.Warn("integration delivery names no account", "provider", providerID, "error", err)
+		logging.WarnContext(r.Context(), "integration delivery names no account", "provider", providerID, "error", err)
 		writeStatus(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 	routes, err := e.opts.Store.ListIntegrationTriggers(ctx, providerID)
 	if err != nil {
-		logging.Error("integration delivery could not be verified", "provider", providerID, "error", err)
+		logging.ErrorContext(r.Context(), "integration delivery could not be verified", "provider", providerID, "error", err)
 		writeStatus(w, http.StatusServiceUnavailable, "could not verify the delivery; retry")
 		return
 	}
@@ -222,7 +222,7 @@ func (e *EventsReceiver) serveConnectionSigned(w http.ResponseWriter, r *http.Re
 		}
 	}
 	if len(verified) == 0 {
-		logging.Warn("integration delivery verified against no connection", "provider", providerID,
+		logging.WarnContext(r.Context(), "integration delivery verified against no connection", "provider", providerID,
 			"account", account, "candidates", len(verdict))
 		writeStatus(w, http.StatusUnauthorized, "unauthorized")
 		return
@@ -230,7 +230,7 @@ func (e *EventsReceiver) serveConnectionSigned(w http.ResponseWriter, r *http.Re
 
 	delivery, err := provider.Parse(ctx, req)
 	if err != nil {
-		logging.Warn("integration delivery could not be parsed", "provider", providerID, "error", err)
+		logging.WarnContext(r.Context(), "integration delivery could not be parsed", "provider", providerID, "error", err)
 		writeStatus(w, http.StatusBadRequest, "could not parse delivery")
 		return
 	}
@@ -249,13 +249,13 @@ func (e *EventsReceiver) serveConnectionSigned(w http.ResponseWriter, r *http.Re
 func (e *EventsReceiver) verifyWithConnection(ctx context.Context, provider ConnectionSigned, req *Request, userID, connectionID string) bool {
 	secret, err := e.opts.ConnectionSecrets.Token(ctx, userID, connectionID)
 	if err != nil {
-		logging.Warn("connection secret could not be opened to verify a delivery", "provider", provider.ID(),
+		logging.WarnContext(ctx, "connection secret could not be opened to verify a delivery", "provider", provider.ID(),
 			"connection_id", connectionID, "error", err)
 		return false
 	}
 	if err := provider.VerifyWith(req, secret); err != nil {
 		if !errors.Is(err, ErrUnauthorized) {
-			logging.Warn("delivery verification failed", "provider", provider.ID(), "connection_id", connectionID, "error", err)
+			logging.WarnContext(ctx, "delivery verification failed", "provider", provider.ID(), "connection_id", connectionID, "error", err)
 		}
 		return false
 	}
@@ -289,7 +289,7 @@ func (e *EventsReceiver) route(ctx context.Context, providerID string, events []
 	)
 	for _, ev := range events {
 		if ev.AccountKey == "" || ev.DeliveryID == "" || ev.Type == "" || ev.Sender == nil {
-			logging.Warn("integration event is missing its account, delivery id, type or sender; dropped",
+			logging.WarnContext(ctx, "integration event is missing its account, delivery id, type or sender; dropped",
 				"provider", providerID, "type", ev.Type)
 			continue
 		}
@@ -297,7 +297,7 @@ func (e *EventsReceiver) route(ctx context.Context, providerID string, events []
 			if verified != nil {
 				// Access grants are not the connections that verified this
 				// delivery; routing through them would skip that check.
-				logging.Warn("a per-connection-verified event carries a resource key; dropped",
+				logging.WarnContext(ctx, "a per-connection-verified event carries a resource key; dropped",
 					"provider", providerID, "type", ev.Type)
 				continue
 			}
@@ -350,7 +350,7 @@ func (e *EventsReceiver) revoke(ctx context.Context, providerID string, revs []c
 	var errs []error
 	for _, rev := range revs {
 		if rev.AccountKey == "" && rev.SubjectID == "" {
-			logging.Warn("integration access revocation names no account or subject; ignored", "provider", providerID)
+			logging.WarnContext(ctx, "integration access revocation names no account or subject; ignored", "provider", providerID)
 			continue
 		}
 		n, err := e.opts.Store.RevokeIntegrationAccess(ctx, providerID, rev)
@@ -358,7 +358,7 @@ func (e *EventsReceiver) revoke(ctx context.Context, providerID string, revs []c
 			errs = append(errs, err)
 			continue
 		}
-		logging.Info("integration access revoked", "provider", providerID,
+		logging.InfoContext(ctx, "integration access revoked", "provider", providerID,
 			"account", rev.AccountKey, "resource", rev.ResourceKey, "subject", rev.SubjectID, "grants", n)
 	}
 	return errors.Join(errs...)

@@ -45,7 +45,7 @@ func AdoptFromDaemon(ctx context.Context, database db.Repository, router DaemonC
 	}
 	respBytes, err := router.SendDaemonCommand(ctx, project.UserID, "repo.discover", payload, 30_000)
 	if err != nil {
-		logging.Warn("repo adoption: discover failed", "error", err, "project_id", project.ID)
+		logging.WarnContext(ctx, "repo adoption: discover failed", "error", err, "project_id", project.ID)
 		return nil
 	}
 	var resp struct {
@@ -86,17 +86,17 @@ func AdoptFromDaemon(ctx context.Context, database db.Repository, router DaemonC
 			CreatedAt:    now,
 			UpdatedAt:    now,
 		}); err != nil {
-			logging.Warn("repo adoption: failed to register repo", "error", err, "project_id", project.ID, "relative_path", found.RelativePath)
+			logging.WarnContext(ctx, "repo adoption: failed to register repo", "error", err, "project_id", project.ID, "relative_path", found.RelativePath)
 			continue
 		}
 		adopted++
 	}
 	if adopted > 0 {
-		logging.Info("repo adoption: registered repos found on disk", "project_id", project.ID, "count", adopted)
+		logging.InfoContext(ctx, "repo adoption: registered repos found on disk", "project_id", project.ID, "count", adopted)
 		if !project.IsGitRepo {
 			project.IsGitRepo = true
 			if err := database.UpdateProject(ctx, project, project.UserID); err != nil {
-				logging.Warn("repo adoption: failed to update project is_git_repo", "error", err, "project_id", project.ID)
+				logging.WarnContext(ctx, "repo adoption: failed to update project is_git_repo", "error", err, "project_id", project.ID)
 			}
 		}
 	}

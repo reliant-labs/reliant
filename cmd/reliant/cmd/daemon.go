@@ -139,7 +139,7 @@ func registerDaemon(ctx context.Context, cmd *cobra.Command, conn *connection, a
 	if !nonInteractive {
 		fmt.Fprintln(cmd.OutOrStdout(), "Registering this machine as a daemon — approve the login in your browser.")
 	}
-	logging.Info("Registering daemon via control-plane login", "api_url", apiURL, "instance_id", instanceid.ID())
+	logging.InfoContext(ctx, "Registering daemon via control-plane login", "api_url", apiURL, "instance_id", instanceid.ID())
 
 	cred, err := cliauth.Login{
 		Server: apiURL,
@@ -231,7 +231,7 @@ func ensureDaemonCredentials(ctx context.Context, cmd *cobra.Command, conn *conn
 		// (ExpiresAt == nil), which is every daemon registration / managed-daemon
 		// mint, skip this and are returned as-is.
 		if daemonCredsExpiringSoon(creds, time.Now()) {
-			logging.Warn("stored daemon PAT is expired or near expiry — re-minting",
+			logging.WarnContext(ctx, "stored daemon PAT is expired or near expiry — re-minting",
 				"expiresAt", creds.ExpiresAt.Format(time.RFC3339))
 			if !nonInteractive {
 				fmt.Fprintln(cmd.OutOrStdout(), "Daemon credentials expired. Re-registering...")
@@ -287,7 +287,7 @@ var daemonCredentialPollInterval = 3 * time.Second
 func waitForCredentialsNonInteractive(ctx context.Context, cmd *cobra.Command, conn *connection, account, dataDir string) (*auth.DaemonCredentials, error) {
 	fmt.Fprintln(cmd.OutOrStdout(), "No daemon credentials found and running non-interactively — waiting for sign-in...")
 	if err := daemonstate.SetStream(dataDir, daemonstate.StreamAwaitingCredentials, "waiting for credentials to appear on disk"); err != nil {
-		logging.Warn("failed to publish awaiting-credentials daemon state", "error", err)
+		logging.WarnContext(ctx, "failed to publish awaiting-credentials daemon state", "error", err)
 	}
 
 	// Check immediately before the first tick: a credential can already be on

@@ -46,7 +46,7 @@ func (in *Intake) enrich(ctx context.Context, trigger *core.Trigger, ev *Inbound
 	for _, e := range in.enrichers {
 		out, err := e.Enrich(ctx, trigger, *ev)
 		if err != nil {
-			slog.Warn("trigger event enrichment failed; recording the event unenriched",
+			slog.WarnContext(ctx, "trigger event enrichment failed; recording the event unenriched",
 				"trigger_id", trigger.ID, "kind", ev.Kind, "error", err)
 			continue
 		}

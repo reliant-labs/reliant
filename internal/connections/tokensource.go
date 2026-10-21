@@ -333,7 +333,7 @@ func (s *TokenSource) refreshLocked(ctx context.Context, conn *core.Connection, 
 			// Transient (5xx, timeout, network): leave the status alone and let
 			// the caller retry. Only a class is logged: the provider's body
 			// could echo a credential.
-			slog.Warn("connection token refresh failed", "connection_id", conn.ID, "class", refreshFailureClass(err))
+			slog.WarnContext(ctx, "connection token refresh failed", "connection_id", conn.ID, "class", refreshFailureClass(err))
 			_ = tx.AppendEvent(ctx, workerEvent(core.ConnectionEventRefreshFailed, conn.UserID))
 			return newError(CodeUnavailable, "token refresh for connection %q is temporarily unavailable", conn.Name)
 		}

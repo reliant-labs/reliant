@@ -194,11 +194,11 @@ func (r *NATSDaemonRouter) awaitRedelivery(
 	request *ToolExecutionRequest, interrupted *ToolExecutionResponse, deadline time.Time,
 ) (*ToolExecutionResponse, dispatchOutcome, error) {
 	start := time.Now()
-	logging.Info("[DaemonRouter] daemon stream dropped under a tool request; waiting for its result to be redelivered",
+	logging.InfoContext(ctx, "[DaemonRouter] daemon stream dropped under a tool request; waiting for its result to be redelivered",
 		"user_id", userID, "daemon_id", daemonID, "request_id", request.RequestID, "tool", request.ToolName,
 		"deadline", deadline)
 	delivered := func(resp *ToolExecutionResponse) (*ToolExecutionResponse, dispatchOutcome, error) {
-		logging.Info("[DaemonRouter] tool result redelivered after its daemon stream dropped",
+		logging.InfoContext(ctx, "[DaemonRouter] tool result redelivered after its daemon stream dropped",
 			"user_id", userID, "daemon_id", daemonID, "request_id", request.RequestID,
 			"waited", time.Since(start).Round(time.Millisecond))
 		return resp, dispatchFinal, nil
@@ -225,7 +225,7 @@ func (r *NATSDaemonRouter) awaitRedelivery(
 			if !time.Now().Before(deadline) {
 				return nil, dispatchFinal, daemonRequestError("tool request", nats.ErrTimeout)
 			}
-			logging.Info("[DaemonRouter] gave up waiting for a redelivered tool result: the machine did not reconnect",
+			logging.InfoContext(ctx, "[DaemonRouter] gave up waiting for a redelivered tool result: the machine did not reconnect",
 				"user_id", userID, "daemon_id", daemonID, "request_id", request.RequestID,
 				"waited", time.Since(start).Round(time.Millisecond))
 			return withMessage(interrupted, fmt.Sprintf("%s (the machine did not reconnect within %s)",
@@ -240,7 +240,7 @@ func (r *NATSDaemonRouter) awaitRedelivery(
 			// The daemon or its gateway went away again between the probe and
 			// the question. Pause before probing again, so a daemon that
 			// answers the probe but not the question is not asked in a loop.
-			logging.Debug("[DaemonRouter] could not ask the daemon about an interrupted tool request; retrying",
+			logging.DebugContext(ctx, "[DaemonRouter] could not ask the daemon about an interrupted tool request; retrying",
 				"daemon_id", daemonID, "request_id", request.RequestID, "error", err)
 			if resp, done, err := r.nextToolReply(ctx, inbox, earliest(deadline, time.Now().Add(reconnectProbeInterval))); done {
 				if err == nil && resp.ErrorCode != ErrorCodeDaemonInterrupted {
@@ -263,7 +263,7 @@ func (r *NATSDaemonRouter) awaitRedelivery(
 			// as delivered — so the loss is reported now, not after a wait.
 			// A daemon too old to answer is the same case: it keeps no
 			// results to redeliver.
-			logging.Info("[DaemonRouter] interrupted tool request is lost: the daemon no longer knows it",
+			logging.InfoContext(ctx, "[DaemonRouter] interrupted tool request is lost: the daemon no longer knows it",
 				"user_id", userID, "daemon_id", daemonID, "request_id", request.RequestID, "status_error", err)
 			return lostToolRequest(interrupted, request.RequestID), dispatchInterrupted, nil
 		}
@@ -281,7 +281,7 @@ func (r *NATSDaemonRouter) awaitRedelivery(
 		case !time.Now().Before(deadline):
 			return nil, dispatchFinal, daemonRequestError("tool request", nats.ErrTimeout)
 		case !done && state == ToolRequestDelivered:
-			logging.Warn("[DaemonRouter] a gateway acknowledged a tool result that never arrived; reporting it lost",
+			logging.WarnContext(ctx, "[DaemonRouter] a gateway acknowledged a tool result that never arrived; reporting it lost",
 				"user_id", userID, "daemon_id", daemonID, "request_id", request.RequestID)
 			return lostToolRequest(interrupted, request.RequestID), dispatchInterrupted, nil
 		}

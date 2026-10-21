@@ -68,7 +68,7 @@ func (t *tokenRefreshTransport) RoundTrip(req *http.Request) (*http.Response, er
 	if resp.StatusCode == http.StatusUnauthorized && t.opts.TokenReloader != nil {
 		stored, rerr := t.opts.TokenReloader()
 		if rerr != nil {
-			logging.Warn("Antigravity API returned 401 and reloading persisted tokens failed",
+			logging.WarnContext(req.Context(), "Antigravity API returned 401 and reloading persisted tokens failed",
 				"error", rerr, "user_id", t.opts.UserID)
 			return resp, nil
 		}
@@ -97,7 +97,7 @@ func (t *tokenRefreshTransport) RoundTrip(req *http.Request) (*http.Response, er
 			// Body not replayable; the adopted token still fixes future requests.
 			return resp, nil
 		}
-		logging.Warn("Antigravity API returned 401 but newer OAuth tokens are available; retrying once",
+		logging.WarnContext(req.Context(), "Antigravity API returned 401 but newer OAuth tokens are available; retrying once",
 			"user_id", t.opts.UserID)
 		_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 4096))
 		_ = resp.Body.Close()

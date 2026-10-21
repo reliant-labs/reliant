@@ -170,9 +170,9 @@ func (d *Derivation) Start(ctx context.Context) error {
 	// by construction can never touch a row whose process is gone.
 	go d.reapLoop(ctx)
 
-	logging.Info(logPrefix+" derivation consumer started", "subject", daemonwire.SubjectWildcard)
+	logging.InfoContext(ctx, logPrefix+" derivation consumer started", "subject", daemonwire.SubjectWildcard)
 	<-ctx.Done()
-	logging.Info(logPrefix + " derivation consumer shutting down")
+	logging.InfoContext(ctx, logPrefix+" derivation consumer shutting down")
 	return nil
 }
 
@@ -206,11 +206,11 @@ func (d *Derivation) reapOnce(ctx context.Context) {
 		if ctx.Err() != nil {
 			return // shutting down
 		}
-		logging.Warn(logPrefix+" attachment reap failed", "ttl", AttachmentTTL, "error", err)
+		logging.WarnContext(ctx, logPrefix+" attachment reap failed", "ttl", AttachmentTTL, "error", err)
 		return
 	}
 	if n > 0 {
-		logging.Info(logPrefix+" reaped expired daemon attachments",
+		logging.InfoContext(ctx, logPrefix+" reaped expired daemon attachments",
 			"count", n, "ttl", AttachmentTTL)
 	}
 }
@@ -220,13 +220,13 @@ func (d *Derivation) handle(ctx context.Context, msg *nats.Msg) {
 	// contract does not define, so dispatch only ever sees a known type.
 	evt, err := daemonwire.UnmarshalEvent(msg.Data)
 	if err != nil {
-		logging.Warn(logPrefix+" malformed event, dropping", "subject", msg.Subject, "error", err)
+		logging.WarnContext(ctx, logPrefix+" malformed event, dropping", "subject", msg.Subject, "error", err)
 		return
 	}
 	if err := d.dispatch(ctx, evt); err != nil {
 		// Plain NATS gives us no redelivery — log and move on. The next
 		// gateway tick re-supplies truth.
-		logging.Warn(logPrefix+" event processing failed",
+		logging.WarnContext(ctx, logPrefix+" event processing failed",
 			"daemonID", evt.DaemonID, "type", evt.Type, "error", err)
 	}
 }
@@ -284,7 +284,7 @@ func (d *Derivation) dispatch(ctx context.Context, evt daemonwire.Event) error {
 // rather than minutes later, when its pod first reaches the gateway.
 func (d *Derivation) onLifecycle(ctx context.Context, evt daemonwire.Event) error {
 	if !daemonwire.ValidLifecyclePhase(evt.Phase) {
-		logging.Warn(logPrefix+" lifecycle event with unknown phase, dropping",
+		logging.WarnContext(ctx, logPrefix+" lifecycle event with unknown phase, dropping",
 			"daemonID", evt.DaemonID, "phase", string(evt.Phase))
 		return nil
 	}
@@ -320,7 +320,7 @@ func (d *Derivation) onLifecycle(ctx context.Context, evt daemonwire.Event) erro
 		return fmt.Errorf("apply lifecycle %s: %w", evt.DaemonID, err)
 	}
 	if !updated && !created {
-		logging.Debug(logPrefix+" lifecycle event did not apply (stale or daemon not registered)",
+		logging.DebugContext(ctx, logPrefix+" lifecycle event did not apply (stale or daemon not registered)",
 			"daemonID", evt.DaemonID, "phase", string(evt.Phase), "at", evt.At)
 		return nil
 	}
@@ -345,7 +345,7 @@ func (d *Derivation) onRemoved(ctx context.Context, evt daemonwire.Event) error 
 	if !removed {
 		return nil
 	}
-	logging.Info(logPrefix+" removed daemon deleted by the control plane",
+	logging.InfoContext(ctx, logPrefix+" removed daemon deleted by the control plane",
 		"daemonID", evt.DaemonID, "userID", userID)
 	if d.notify != nil {
 		d.notify(ctx, userID, evt.DaemonID)
@@ -358,23 +358,23 @@ func (d *Derivation) onRemoved(ctx context.Context, evt daemonwire.Event) error 
 func (d *Derivation) handleSnapshot(ctx context.Context, msg *nats.Msg) {
 	var snap daemonwire.RegistrySnapshot
 	if err := json.Unmarshal(msg.Data, &snap); err != nil {
-		logging.Warn(logPrefix+" malformed registry snapshot, dropping", "error", err)
+		logging.WarnContext(ctx, logPrefix+" malformed registry snapshot, dropping", "error", err)
 		return
 	}
 	if snap.UserID == "" || snap.At.IsZero() {
-		logging.Warn(logPrefix + " registry snapshot missing user_id or at, dropping")
+		logging.WarnContext(ctx, logPrefix+" registry snapshot missing user_id or at, dropping")
 		return
 	}
 	result, err := d.repo.ApplyDaemonRegistrySnapshot(ctx, snapshotApply(snap, time.Now().UTC()))
 	if err != nil {
-		logging.Warn(logPrefix+" registry snapshot failed; the next one retries",
+		logging.WarnContext(ctx, logPrefix+" registry snapshot failed; the next one retries",
 			"userID", snap.UserID, "error", err)
 		return
 	}
 	if !result.Changed() {
 		return
 	}
-	logging.Info(logPrefix+" registry snapshot reconciled daemons",
+	logging.InfoContext(ctx, logPrefix+" registry snapshot reconciled daemons",
 		"userID", snap.UserID, "upserted", result.Upserted, "removed", result.Removed)
 	if d.notify != nil {
 		// One notification per owner: the client refetches the whole list,

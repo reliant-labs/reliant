@@ -631,7 +631,7 @@ func (r *NATSDaemonRouter) Wake(ctx context.Context, userID string, selector *Da
 		// Not known to be suspended: the resume only hedged against a lagging
 		// mirror, and its failure says nothing the NATS request will not. Route
 		// exactly as resolution would have.
-		logging.Info("[DaemonRouter] speculative resume of an unattached managed daemon failed; routing to it as-is",
+		logging.InfoContext(ctx, "[DaemonRouter] speculative resume of an unattached managed daemon failed; routing to it as-is",
 			"user_id", userID, "daemon_id", rec.id, "error", err)
 		daemonID, err := routableDaemonID(userID, selector, rec, found, sawDaemonRecord)
 		return WakeResult{DaemonID: daemonID}, err
@@ -658,7 +658,7 @@ func (r *NATSDaemonRouter) resume(ctx context.Context, userID string, selector *
 	}
 	if err := r.resumer.ResumeDaemon(ctx, token, daemonID); err != nil {
 		if connect.CodeOf(err) == connect.CodeFailedPrecondition {
-			logging.Info("[DaemonRouter] control plane does not hold the daemon as suspended; treating it as awake",
+			logging.InfoContext(ctx, "[DaemonRouter] control plane does not hold the daemon as suspended; treating it as awake",
 				"user_id", userID, "daemon_id", daemonID, "error", err)
 			return false, nil
 		}
@@ -1146,7 +1146,7 @@ func (r *NATSDaemonRouter) sendDaemonCommandData(ctx context.Context, userID, da
 			// file-tree poll of a closed laptop a WARN: 830 in six hours.
 			reqErr := daemonRequestError(
 				fmt.Sprintf("daemon command %s (subject %s, timeout %s)", commandType, subject, timeout), res.err)
-			logging.Warn("[DaemonRouter] daemon command failed",
+			logging.WarnContext(ctx, "[DaemonRouter] daemon command failed",
 				"subject", subject, "commandType", commandType,
 				"payloadBytes", len(data), "timeout", timeout.String(),
 				"elapsed", time.Since(start).Round(time.Millisecond).String(),
@@ -1608,7 +1608,7 @@ func (r *NATSDaemonRouter) EnqueueDaemonCommand(ctx context.Context, userID, com
 		// '>', '*' or ' ' would publish to a subject the consumer never matches.
 		subject := pendingSubjectPrefix + sanitizePendingSubjectToken(d.ID)
 		if _, pubErr := js.Publish(ctx, subject, envelope); pubErr != nil {
-			logging.Warn("EnqueueDaemonCommand: JetStream publish failed",
+			logging.WarnContext(ctx, "EnqueueDaemonCommand: JetStream publish failed",
 				"userID", userID, "daemonID", d.ID, "subject", subject,
 				"commandType", commandType, "error", pubErr)
 			continue

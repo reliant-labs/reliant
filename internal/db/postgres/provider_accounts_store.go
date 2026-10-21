@@ -228,7 +228,7 @@ func (s *AccountStore) ListProviderAccountsWithSecrets(ctx context.Context, user
 		sec, err := s.openAll(ctx, p.acct, p.secret, p.refresh, p.idTokenB)
 		if err != nil {
 			// A credential that will not open must not hide the user's other accounts.
-			slog.Warn("provider account secret did not open; skipping it", "account_id", p.acct.ID, "provider", p.acct.Provider, "error", err)
+			slog.WarnContext(ctx, "provider account secret did not open; skipping it", "account_id", p.acct.ID, "provider", p.acct.Provider, "error", err)
 			continue
 		}
 		out = append(out, core.AccountWithSecrets{ProviderAccount: p.acct, Secrets: sec})
@@ -1137,7 +1137,7 @@ func (s *AccountStore) ImportLegacy(ctx context.Context, imports []LegacyImport,
 		res = ImportResult{Failed: skipped}
 		for _, in := range imports {
 			if err := validateUpsert(in.Upsert); err != nil {
-				slog.Warn("legacy credential skipped: invalid", "source", in.Source, "user_id", in.Upsert.UserID, "provider", in.Upsert.Provider, "error", err)
+				slog.WarnContext(ctx, "legacy credential skipped: invalid", "source", in.Source, "user_id", in.Upsert.UserID, "provider", in.Upsert.Provider, "error", err)
 				res.Failed++
 				continue
 			}
@@ -1149,7 +1149,7 @@ func (s *AccountStore) ImportLegacy(ctx context.Context, imports []LegacyImport,
 				if _, rbErr := tx.ExecContext(ctx, `ROLLBACK TO SAVEPOINT legacy_import`); rbErr != nil {
 					return rbErr
 				}
-				slog.Warn("legacy credential skipped: write failed", "source", in.Source, "user_id", in.Upsert.UserID, "provider", in.Upsert.Provider, "error", err)
+				slog.WarnContext(ctx, "legacy credential skipped: write failed", "source", in.Source, "user_id", in.Upsert.UserID, "provider", in.Upsert.Provider, "error", err)
 				res.Failed++
 				continue
 			}
