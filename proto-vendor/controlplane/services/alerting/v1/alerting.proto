@@ -155,6 +155,11 @@ enum ReceiverType {
   RECEIVER_TYPE_PAGERDUTY = 4;
   // The Reliant console and desktop app. Every org has one implicitly.
   RECEIVER_TYPE_RELIANT_INAPP = 5;
+  // A Reliant Autopilot automation (alert triage). Provisioned by reliant
+  // when its owner enables the automation, never created here; it reaches
+  // every alert of the org that passes its filter without an env route.
+  // Read-only in this service: disable the automation in Reliant to remove it.
+  RECEIVER_TYPE_AUTOPILOT = 6;
 }
 
 message Receiver {
@@ -190,7 +195,8 @@ message CreateReceiverRequest {
     defined_only: true
     not_in: [
       0,
-      5
+      5,
+      6
     ]
   }];
   // slack:     secret = incoming-webhook URL; settings.channel optional.
