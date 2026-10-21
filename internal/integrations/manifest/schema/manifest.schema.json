@@ -1,0 +1,2245 @@
+{
+  "$defs": {
+    "ActionSpec": {
+      "additionalProperties": false,
+      "description": "ActionSpec is one operation: usable as a workflow node and, optionally, as an agent tool, with one parameter schema and one output schema.",
+      "properties": {
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ]
+        },
+        "display_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ]
+        },
+        "executor": {
+          "anyOf": [
+            {
+              "pattern": "^go:([a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*)$",
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Executor is empty for the declarative `request`, or \"go:<name>\": a Go function registered under <name> with the same params and output contract. It is the escape hatch for what a declaration cannot express (MIME assembly, request signing). The params and output schemas stay in the manifest, so forms and tool definitions never depend on code. It is manifest-only and never appears in workflow YAML."
+        },
+        "id": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*$",
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Id is unique within the manifest, e.g. \"request\" or \"issue.create\"."
+        },
+        "keywords": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "maxLength": 40,
+                    "pattern": "^[a-z0-9][a-z0-9 _.+-]*$",
+                    "type": "string"
+                  },
+                  {
+                    "$ref": "#/$defs/FragmentRef"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Keywords are extra search terms for the catalog index."
+        },
+        "kind": {
+          "anyOf": [
+            {
+              "enum": [
+                "call"
+              ],
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Kind is \"call\" (default). \"await_external\" is reserved."
+        },
+        "mutates": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Mutates is the capability-class flag: the action changes external state. Recorded now; enforcement for triggered runs is a later phase."
+        },
+        "output": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OutputSpec"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ]
+        },
+        "params": {
+          "anyOf": [
+            {
+              "properties": {
+                "type": {
+                  "const": "object"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "type": "object"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Params is a JSON Schema for the action's parameters."
+        },
+        "placement": {
+          "anyOf": [
+            {
+              "enum": [
+                "server",
+                "any",
+                "daemon"
+              ],
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Placement is \"server\", \"any\" or \"daemon\". Only curated (embedded) manifests may claim server or any."
+        },
+        "request": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/HttpRequestSpec"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Request is the declarative HTTP call. Required unless executor is set."
+        },
+        "summary": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Summary is one line for search results and pickers; description is the long form an agent reads."
+        },
+        "tool": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ToolSpec"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "placement"
+      ],
+      "type": "object"
+    },
+    "ApiKeyAuth": {
+      "additionalProperties": false,
+      "description": "ApiKeyAuth is a pasted key, placed in a header or a query parameter.",
+      "properties": {
+        "in": {
+          "anyOf": [
+            {
+              "enum": [
+                "header",
+                "query"
+              ],
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "In is \"header\" or \"query\". Leaving in and name both empty lets the user choose the header per connection from a fixed list; only an allow_any_public_host integration may do that, since it knows no API."
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Label names the key field in the connect form (\"API token\")."
+        },
+        "name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Name is the header or query parameter that carries the key."
+        },
+        "prefix": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Prefix is written before the key (\"Bearer \", \"Token \")."
+        }
+      },
+      "type": "object"
+    },
+    "AuthMethod": {
+      "additionalProperties": false,
+      "description": "AuthMethod is one way to connect. Exactly one arm is set.",
+      "oneOf": [
+        {
+          "additionalProperties": false,
+          "properties": {
+            "oauth2": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/OAuth2Auth"
+                },
+                {
+                  "$ref": "#/$defs/FragmentRef"
+                }
+              ]
+            }
+          },
+          "required": [
+            "oauth2"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "api_key": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ApiKeyAuth"
+                },
+                {
+                  "$ref": "#/$defs/FragmentRef"
+                }
+              ]
+            }
+          },
+          "required": [
+            "api_key"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "basic": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/BasicAuth"
+                },
+                {
+                  "$ref": "#/$defs/FragmentRef"
+                }
+              ]
+            }
+          },
+          "required": [
+            "basic"
+          ],
+          "type": "object"
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "delegated": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/DelegatedAuth"
+                },
+                {
+                  "$ref": "#/$defs/FragmentRef"
+                }
+              ]
+            }
+          },
+          "required": [
+            "delegated"
+          ],
+          "type": "object"
+        }
+      ],
+      "properties": {
+        "api_key": true,
+        "basic": true,
+        "delegated": true,
+        "oauth2": true
+      },
+      "type": "object"
+    },
+    "BasicAuth": {
+      "additionalProperties": false,
+      "description": "BasicAuth is HTTP Basic: a username (often an account id) and a secret.",
+      "properties": {
+        "password_label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ]
+        },
+        "username_label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ]
+        },
+        "username_param": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "UsernameParam, when set, names a connection param whose value is the username (an account id the base_url also uses), so the user pastes only the secret."
+        }
+      },
+      "type": "object"
+    },
+    "ConnectionParam": {
+      "additionalProperties": false,
+      "description": "ConnectionParam is one non-secret per-connection setting.",
+      "properties": {
+        "default_value": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "DefaultValue is used when the user supplies none. A param without one is required."
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ]
+        },
+        "display_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ]
+        },
+        "name": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9_]*$",
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Name is [a-z][a-z0-9_]*; templates reach it as connection.params.<name>."
+        },
+        "pattern": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Pattern is an RE2 expression every value must match in full."
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "ConnectionSpec": {
+      "additionalProperties": false,
+      "description": "ConnectionSpec says how requests are authenticated and where they may go. Adding a provider is data: the auth methods, the identity probe and the per-connection params below are everything the connections layer needs.",
+      "properties": {
+        "allow_any_public_host": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "AllowAnyPublicHost lets request.url name any host. It exists for the generic HTTP integration only: it requires auth_optional, and the runtime still refuses private addresses after DNS and pins a credential to the host a call started at."
+        },
+        "allowed_hosts": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "$ref": "#/$defs/FragmentRef"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ]
+        },
+        "auth": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/AuthMethod"
+                  },
+                  {
+                    "$ref": "#/$defs/FragmentRef"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Auth lists the ways a user can connect, most preferred first. Empty means the integration takes no credential. Each kind appears at most once; a connection records which kind it was made with."
+        },
+        "auth_optional": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "AuthOptional lets an action run with no connection and attach one only when the caller names it (the generic HTTP integration). Without it every action needs a connection: the one named, else the owner's default, else a delegated authority."
+        },
+        "base_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "BaseUrl is the https origin (and optional path prefix) request `path`s resolve against. Every request host must be this host or in allowed_hosts.\n\nIt may interpolate connection params, and nothing else. The leftmost host label may be exactly {{ connection.params.<name> }} followed by a literal domain of at least two labels (https://{{ connection.params.shop }}.myshopify.com), so a user-supplied value can pick a tenant but never the domain. Path segments may also interpolate params; they are percent-escaped."
+        },
+        "connection_params": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ConnectionParam"
+                  },
+                  {
+                    "$ref": "#/$defs/FragmentRef"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "ConnectionParams are per-connection, non-secret settings the user supplies when connecting (a Shopify shop, a Zendesk subdomain). Templates reach them as connection.params.<name>."
+        },
+        "default_headers": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "$ref": "#/$defs/FragmentRef"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ]
+        },
+        "probe": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/IdentityProbe"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Probe asks the provider who a credential acts as. It labels a new OAuth connection (and is required for oauth2, whose dedupe key is the external id) and backs TestConnection for every kind."
+        }
+      },
+      "type": "object"
+    },
+    "DelegatedAuth": {
+      "additionalProperties": false,
+      "description": "DelegatedAuth takes the token from an external authority at call time, such as GitHub through the control plane. Broker names a broker that Go code registers with the connections layer; no connection row is stored. A deployment that registered none lists the method as unavailable.",
+      "properties": {
+        "broker": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9-]*$",
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "ErrorRule": {
+      "additionalProperties": false,
+      "description": "ErrorRule maps one status (or an inclusive range) to an error outcome.\n\nA rule may cover a 2xx status, for providers that report failure in a successful response's body (Slack answers HTTP 200 with {\"ok\": false, \"error\": \"...\"}). Such a rule must carry a `when`, and a 2xx response that no rule matches is a success.",
+      "properties": {
+        "accept": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Accept turns a matching non-2xx response into a success: the request is done, and output.select runs over the response as usual (`status` tells the cases apart). It makes a create idempotent when the provider answers \"already exists\" with an error (GitHub's 422 for a label). The rule must carry a `when` that says which bodies mean that, and cannot cover a 2xx status. Retryable and message are unused."
+        },
+        "message": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Message is a template over `status`, `headers` and `response`."
+        },
+        "retryable": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ]
+        },
+        "status": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ]
+        },
+        "status_max": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ]
+        },
+        "status_min": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ]
+        },
+        "when": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "When is an optional CEL bool over `status`, `headers` (lower-cased names) and `response` that must also hold for the rule to match. It splits one status that means two things: GitHub answers both an exhausted rate limit (retryable) and a missing permission (permanent) with 403. A `when` that fails to evaluate does not match."
+        }
+      },
+      "type": "object"
+    },
+    "FragmentRef": {
+      "additionalProperties": false,
+      "description": "A reference to a fragment file, resolved relative to the file that contains it. It stands for that file's content.",
+      "properties": {
+        "$ref": {
+          "pattern": "^[^#].*\\.ya?ml$",
+          "type": "string"
+        }
+      },
+      "required": [
+        "$ref"
+      ],
+      "type": "object"
+    },
+    "HttpRequestSpec": {
+      "additionalProperties": false,
+      "description": "HttpRequestSpec is the declarative request template. String values may embed {{ expr }} (CEL over `params`). A string that is exactly one {{ expr }} keeps the expression's native type; otherwise the result is stringified. Values interpolated into `path` are percent-escaped.",
+      "properties": {
+        "body": {
+          "anyOf": [
+            {},
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Body is a JSON template (any JSON shape); strings inside are templated."
+        },
+        "body_expr": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ]
+        },
+        "body_format": {
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "enum": [
+                    "json",
+                    "form",
+                    "text"
+                  ]
+                },
+                {
+                  "description": "A template: its value is checked per call.",
+                  "pattern": "\\{\\{"
+                }
+              ],
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "BodyFormat is how the rendered body is encoded: \"json\" (the default), \"form\" (application/x-www-form-urlencoded, as Twilio and Stripe take) or \"text\" (sent verbatim). A form body must render to an object whose values are scalars or lists of scalars; a list repeats its key (MediaUrl=a&MediaUrl=b) and a null value leaves the key out. A text body must render to a string or scalar. The Content-Type follows the format unless a header sets one. A template may be used, for a caller-chosen encoding (the generic HTTP action)."
+        },
+        "errors": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ErrorRule"
+                  },
+                  {
+                    "$ref": "#/$defs/FragmentRef"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Errors maps response statuses to retryable/permanent plus a message. The first matching rule wins; unmatched non-2xx use the defaults (429 and 5xx retryable, other statuses permanent)."
+        },
+        "headers": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "$ref": "#/$defs/FragmentRef"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ]
+        },
+        "headers_expr": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "HeadersExpr, QueryExpr and BodyExpr are CEL over `params`, for requests whose shape the caller supplies (the generic HTTP action). HeadersExpr and QueryExpr must yield a map of scalars; BodyExpr any JSON value, or null for no body. They are merged over the static maps / replace `body`."
+        },
+        "max_response_bytes": {
+          "anyOf": [
+            {
+              "maximum": 10485760,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "MaxResponseBytes defaults to 1 MiB, max 10 MiB. Larger bodies are an error."
+        },
+        "method": {
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "enum": [
+                    "GET",
+                    "POST",
+                    "PUT",
+                    "PATCH",
+                    "DELETE"
+                  ]
+                },
+                {
+                  "description": "A template: its value is checked per call.",
+                  "pattern": "\\{\\{"
+                }
+              ],
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Method is GET, POST, PUT, PATCH or DELETE. A template may be used."
+        },
+        "pagination": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PaginationSpec"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ]
+        },
+        "path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Path is appended to the connection base_url. Mutually exclusive with url."
+        },
+        "query": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "$ref": "#/$defs/FragmentRef"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ]
+        },
+        "query_expr": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ]
+        },
+        "redirects": {
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "enum": [
+                    "follow",
+                    "return"
+                  ]
+                },
+                {
+                  "description": "A template: its value is checked per call.",
+                  "pattern": "\\{\\{"
+                }
+              ],
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Redirects is \"follow\" (the default: up to 5 hops, each held to the same host rules and credential pinning as the first request) or \"return\": a 3xx is the action's result, status and Location header included, rather than followed or treated as a failure. A template may be used."
+        },
+        "response_format": {
+          "anyOf": [
+            {
+              "anyOf": [
+                {
+                  "enum": [
+                    "auto",
+                    "json",
+                    "text"
+                  ]
+                },
+                {
+                  "description": "A template: its value is checked per call.",
+                  "pattern": "\\{\\{"
+                }
+              ],
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "ResponseFormat is how a response body is read: \"auto\" (the default: parsed when it is JSON, otherwise only the raw text is kept), \"json\" (a 2xx body that is not JSON fails the action instead of yielding a null) or \"text\" (never parsed; `response` is null and `raw` is the body). A template may be used."
+        },
+        "timeout_expr": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "TimeoutExpr is CEL over `params` yielding the request timeout in seconds, 1..120. It overrides timeout_seconds, for a caller-chosen timeout."
+        },
+        "timeout_seconds": {
+          "anyOf": [
+            {
+              "maximum": 120,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "TimeoutSeconds defaults to 30, max 120."
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Url is a full URL template, for integrations that allow it."
+        }
+      },
+      "type": "object"
+    },
+    "IdentityProbe": {
+      "additionalProperties": false,
+      "description": "IdentityProbe is one request that names the account a credential acts as. The connection's default_headers and its credential are applied.",
+      "properties": {
+        "external_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "ExternalId is CEL over `response` yielding the account's stable id."
+        },
+        "headers": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "$ref": "#/$defs/FragmentRef"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ]
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Label is CEL over `response` yielding a human label (a login, an email)."
+        },
+        "method": {
+          "anyOf": [
+            {
+              "enum": [
+                "GET",
+                "POST"
+              ],
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Method is GET (the default) or POST."
+        },
+        "ok": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Ok is CEL over `response` (the parsed body). False means the credential was refused even though the status was 2xx, as Slack reports it."
+        },
+        "path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ]
+        },
+        "routes_events": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "RoutesEvents says the external id is what the integration's inbound events route on (Event.AccountKey == the connection's external account, as Twilio's AccountSid). Such an id must be the provider's answer for the credential, never one the user typed, so a pasted credential is probed before it is saved and one the provider refuses is not saved. Leave it unset when events route some other way (GitHub's access grants) or not at all."
+        },
+        "sender_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "SenderId is CEL over `response` yielding the provider's id for the PERSON the credential belongs to, as that provider's own events name them in trigger.sender.id: a GitHub user id (string(response.id), never the login, which can be renamed and reclaimed), a Gmail address. It is what \"Only from: Me\" writes. Leave it unset when the probe answers for something other than a person (Slack's auth.test names the bot); OAuth2Auth's sender_id can read it from the token response instead."
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Url is absolute (same template rule as base_url); path is relative to base_url. Exactly one is set."
+        }
+      },
+      "type": "object"
+    },
+    "IntegrationManifest": {
+      "additionalProperties": false,
+      "description": "IntegrationManifest is the declarative description of one integration: how a user authenticates (connection), what it can do (actions), and what can start a run from it (triggers). It is authored as YAML, embedded in the binary, and decoded through protojson, so an unknown field is a load error.\n\nEnum-like fields (connection type, placement, pagination style) are strings validated by the loader rather than proto enums, so manifests stay readable (`placement: server`) and new values do not need a wire change.",
+      "properties": {
+        "actions": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ActionSpec"
+                  },
+                  {
+                    "$ref": "#/$defs/FragmentRef"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ]
+        },
+        "category": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ]
+        },
+        "connection": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ConnectionSpec"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ]
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ]
+        },
+        "display_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ]
+        },
+        "icon": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ]
+        },
+        "id": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9_]*$",
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Id is the stable integration id, e.g. \"http\". Lower-case, [a-z][a-z0-9_]*."
+        },
+        "keywords": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "maxLength": 40,
+                    "pattern": "^[a-z0-9][a-z0-9 _.+-]*$",
+                    "type": "string"
+                  },
+                  {
+                    "$ref": "#/$defs/FragmentRef"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Keywords are extra search terms for the catalog index: product names and synonyms (\"email\" for gmail). Lower-case words, [a-z0-9][a-z0-9_.-]*."
+        },
+        "triggers": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/TriggerSpec"
+                  },
+                  {
+                    "$ref": "#/$defs/FragmentRef"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Triggers are the trigger types the integration delivers. Declaring one is a catalog statement; delivery is the provider's (a webhook Provider or a Poller registered for this id)."
+        },
+        "types": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/TypeSpec"
+                  },
+                  {
+                    "$ref": "#/$defs/FragmentRef"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Types are the value types this integration defines (`github.repository`): what a workflow input or a trigger attribute can be typed as. Referenced as `<id>.<type id>`."
+        },
+        "version": {
+          "anyOf": [
+            {
+              "maximum": 2147483647,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Version is the manifest MAJOR version. `uses: http/request@1` pins it; breaking param changes ship as version 2 alongside version 1."
+        }
+      },
+      "required": [
+        "id",
+        "version"
+      ],
+      "type": "object"
+    },
+    "OAuth2Auth": {
+      "additionalProperties": false,
+      "description": "OAuth2Auth is the authorization-code grant with PKCE.\n\nThe client id and secret are deployment config, read from RELIANT_OAUTH_<ID>_CLIENT_ID and RELIANT_OAUTH_<ID>_CLIENT_SECRET, where <ID> is the integration id upper-cased. They are never in a manifest or the database. A deployment without them lists the method as unavailable.",
+      "properties": {
+        "authorize_params": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "$ref": "#/$defs/FragmentRef"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "AuthorizeParams are extra authorization request parameters (access_type: offline). The parameters the flow itself sets are refused."
+        },
+        "authorize_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "AuthorizeUrl and TokenUrl are https, fixed by the catalog. They may interpolate connection params under the same rule as base_url."
+        },
+        "pkce": {
+          "anyOf": [
+            {
+              "enum": [
+                "S256",
+                "plain"
+              ],
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Pkce is the code challenge method: \"S256\" (the default) or \"plain\". PKCE is always sent: RFC 6749 §3.1 has a server ignore parameters it does not recognise, so sending it never breaks a provider that lacks it."
+        },
+        "revoke": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/RevokeSpec"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Revoke, when set, is called best-effort when a connection is deleted."
+        },
+        "scope_separator": {
+          "anyOf": [
+            {
+              "enum": [
+                " ",
+                ","
+              ],
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "ScopeSeparator joins scopes: \" \" (the default, RFC 6749) or \",\"."
+        },
+        "scopes": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "$ref": "#/$defs/FragmentRef"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ]
+        },
+        "sender_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "SenderId is CEL over `response`, the token endpoint's answer with every token field removed, yielding the id of the person who authorized, as trigger.sender.id names them (Slack: response.authed_user.id). Set when only the exchange says who that person is; it takes precedence over the probe's sender_id."
+        },
+        "token_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "OutputSpec": {
+      "additionalProperties": false,
+      "description": "OutputSpec selects what part of the response becomes the node's data.",
+      "properties": {
+        "schema": {
+          "anyOf": [
+            {
+              "type": "object"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Schema is a JSON Schema for `data`."
+        },
+        "select": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Select is \"$\" (whole parsed body; the default), \"$raw\" (raw body text as {\"body\": \"...\"}) or CEL over `response`, `status`, `headers` and the action's validated `params`. With pagination, select is evaluated per page, must yield a list, and the lists are concatenated into {\"items\": [...]}."
+        }
+      },
+      "type": "object"
+    },
+    "PaginationSpec": {
+      "additionalProperties": false,
+      "description": "PaginationSpec follows pages and concatenates each page's selected list.",
+      "properties": {
+        "cursor_param": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "CursorParam is the query parameter that carries the cursor (cursor style)."
+        },
+        "max_pages": {
+          "anyOf": [
+            {
+              "maximum": 100,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "MaxPages bounds the walk (default 10, max 100)."
+        },
+        "next_cursor": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "NextCursor is CEL over `response` yielding the next cursor, or empty/null to stop (cursor style)."
+        },
+        "next_url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "NextUrl is CEL over `response` yielding the next page's URL, or empty/null to stop (next_url style): Twilio's next_page_uri, Microsoft Graph's @odata.nextLink. A relative reference resolves against the URL of the page it came from. The next page must stay on the call's host, like a Link header's, and is fetched with the first page's method and headers."
+        },
+        "page_param": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "PageParam is the query parameter carrying the page number (page style)."
+        },
+        "start_page": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "StartPage is the first page number (default 1)."
+        },
+        "style": {
+          "anyOf": [
+            {
+              "enum": [
+                "link_header",
+                "cursor",
+                "page",
+                "next_url"
+              ],
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Style is \"link_header\", \"cursor\", \"page\" or \"next_url\"."
+        }
+      },
+      "type": "object"
+    },
+    "RevokeSpec": {
+      "additionalProperties": false,
+      "description": "RevokeSpec describes the provider's token revocation call.",
+      "properties": {
+        "client_auth": {
+          "anyOf": [
+            {
+              "enum": [
+                "none",
+                "basic"
+              ],
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "ClientAuth is \"none\" (the default) or \"basic\" (client id and secret as HTTP Basic credentials)."
+        },
+        "method": {
+          "anyOf": [
+            {
+              "enum": [
+                "POST",
+                "DELETE",
+                "GET"
+              ],
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Method is POST (the default), DELETE or GET."
+        },
+        "token_in": {
+          "anyOf": [
+            {
+              "enum": [
+                "form",
+                "json",
+                "query",
+                "bearer"
+              ],
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "TokenIn is where the access token goes: \"form\" (the default, RFC 7009), \"json\", \"query\" or \"bearer\"."
+        },
+        "token_param": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "TokenParam names the token field for form, json and query (default \"token\")."
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Url is https and catalog-fixed. Besides connection params it may interpolate {{ client_id }}."
+        }
+      },
+      "type": "object"
+    },
+    "ToolSpec": {
+      "additionalProperties": false,
+      "description": "ToolSpec controls exposing an action to agents as a tool.",
+      "properties": {
+        "expose": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ]
+        },
+        "name": {
+          "anyOf": [
+            {
+              "pattern": "^[a-zA-Z0-9_-]{1,64}$",
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Name overrides the derived tool name (`<integration>__<action>` with dots in the action id turned into underscores)."
+        },
+        "tags": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "$ref": "#/$defs/FragmentRef"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "TriggerAttribute": {
+      "additionalProperties": false,
+      "description": "TriggerAttribute is one routing fact a trigger's events carry.",
+      "properties": {
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ]
+        },
+        "example": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Example is a representative value for an editor's placeholder."
+        },
+        "name": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9_]*$",
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Name is the key in Event.Attributes and IntegrationSource.match: lower-case, [a-z][a-z0-9_]*."
+        },
+        "type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Type is the value type of the attribute: a type id of this manifest, or a qualified `<integration>.<id>`. Empty means a plain string. It is what an IntegrationSource's match_input checks an input's type against."
+        }
+      },
+      "required": [
+        "name"
+      ],
+      "type": "object"
+    },
+    "TriggerSpec": {
+      "additionalProperties": false,
+      "description": "TriggerSpec declares one trigger type the integration delivers: what can start a run from it (`github/issue.opened@1`). It is a CATALOG entry — what search lists, what the editor's trigger picker offers, and the schema a trigger filter is checked against. Delivering the events is the provider's (internal/integrations/webhook): its Event.Type values are what `events` names, and its Event.Attributes keys are what `attributes` names.\n\nA trigger row listens through an IntegrationSource, whose `events` and `match` are exactly this spec's events and attribute names, so the editor can build one from a picked spec without knowing the provider.",
+      "properties": {
+        "attributes": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/TriggerAttribute"
+                  },
+                  {
+                    "$ref": "#/$defs/FragmentRef"
+                  }
+                ]
+              },
+              "maxItems": 20,
+              "type": "array"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Attributes are the routing facts every event of this trigger carries, which an IntegrationSource's `match` can require by equality (repository, branch). An event of this trigger always sets them."
+        },
+        "data": {
+          "anyOf": [
+            {
+              "properties": {
+                "type": {
+                  "const": "object"
+                }
+              },
+              "required": [
+                "type"
+              ],
+              "type": "object"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Data is the JSON Schema of the provider's event payload, as recorded on the event (trigger.payload.data). The full trigger.payload schema wraps it in the envelope every integration event shares; see manifest.TriggerPayloadSchema."
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ]
+        },
+        "display_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ]
+        },
+        "events": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*$",
+                    "type": "string"
+                  },
+                  {
+                    "$ref": "#/$defs/FragmentRef"
+                  }
+                ]
+              },
+              "maxItems": 20,
+              "minItems": 1,
+              "type": "array"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Events are the provider event types this trigger fires on, as the provider emits them (Event.Type): \"issues.opened\". An IntegrationSource built from this spec lists them in `events`. At least one."
+        },
+        "id": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*$",
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Id is unique within the manifest, e.g. \"issue.opened\". Same grammar as an action id, and the same namespace: `<integration>/<id>@<major>` names exactly one action or trigger, so an id may not be both."
+        },
+        "keywords": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "maxLength": 40,
+                    "pattern": "^[a-z0-9][a-z0-9 _.+-]*$",
+                    "type": "string"
+                  },
+                  {
+                    "$ref": "#/$defs/FragmentRef"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Keywords are extra search terms for the catalog index."
+        },
+        "summary": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Summary is one line for search results and pickers; description is the long form an agent reads."
+        }
+      },
+      "required": [
+        "id",
+        "events",
+        "data"
+      ],
+      "type": "object"
+    },
+    "TypeOptionsPaging": {
+      "additionalProperties": false,
+      "description": "TypeOptionsPaging is the upstream paging contract of an options action.",
+      "properties": {
+        "next_token_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "NextTokenPath is a dotted path into the action's output holding the token for the next page; absent or empty means the last page."
+        },
+        "token_param": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "TokenParam is the action param that receives the token."
+        }
+      },
+      "type": "object"
+    },
+    "TypeOptionsSpec": {
+      "additionalProperties": false,
+      "description": "TypeOptionsSpec is how a type's candidate values are listed: a read-only list action of the same integration, run as the caller, and CEL projections from each item of its output to an option. The CEL expressions see `item` (one output item) and `context` (acting_identity: \"owner\" or \"app\").",
+      "properties": {
+        "action": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Action is the id of a list action in this manifest. It must not mutate and must be placeable on the server."
+        },
+        "annotations": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "$ref": "#/$defs/FragmentRef"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Annotations are extra facts for the UI and for warnings, name -> CEL over `item`."
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ]
+        },
+        "group": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ]
+        },
+        "items": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Items is CEL over the action's output yielding the list of items. Empty means the output itself is the list."
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ]
+        },
+        "paging": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TypeOptionsPaging"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Paging says how to page an action that pages itself. Unset means the action returns the whole list and the caller pages it."
+        },
+        "params": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "$ref": "#/$defs/FragmentRef"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Params are templates for the action's parameters, keyed by param name. They may read `scope.<key>`, `query` and `page_token`."
+        },
+        "resolve": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TypeResolveSpec"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Resolve maps a stored value back to its current display (an id to a login), for values that are not in the current options."
+        },
+        "scope": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/TypeScopeSpec"
+                  },
+                  {
+                    "$ref": "#/$defs/FragmentRef"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Scope names the other typed values this list depends on, by scope key (visible to the templates as `scope.<key>`)."
+        },
+        "search": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Search says how a query narrows the list: \"client\" (filter the projected labels) or \"param:<name>\" (pass the query as that action param). Empty is \"client\"."
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Value, Label, Description and Group are CEL over `item`. Value is the stored value and is required; Label defaults to Value."
+        },
+        "warnings": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/TypeWarningSpec"
+                  },
+                  {
+                    "$ref": "#/$defs/FragmentRef"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Warnings are checked per option; each that holds is shown with the option."
+        }
+      },
+      "type": "object"
+    },
+    "TypeResolveSpec": {
+      "additionalProperties": false,
+      "description": "TypeResolveSpec labels stored values.",
+      "properties": {
+        "action": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Action is a read-only action of this manifest that looks one value up."
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ]
+        },
+        "label": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Label is CEL over `item`, the looked-up object."
+        },
+        "params": {
+          "anyOf": [
+            {
+              "additionalProperties": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "$ref": "#/$defs/FragmentRef"
+                  }
+                ]
+              },
+              "type": "object"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Params are templates; they may read `value`."
+        }
+      },
+      "type": "object"
+    },
+    "TypeScopeSpec": {
+      "additionalProperties": false,
+      "description": "TypeScopeSpec is one dependency of a type's options on another typed value.",
+      "properties": {
+        "required": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Required means the options cannot be listed until the scope is supplied."
+        },
+        "type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Type is the type ref the scope value has: `<id>` within this manifest or a qualified `<integration>.<id>`."
+        }
+      },
+      "type": "object"
+    },
+    "TypeSpec": {
+      "additionalProperties": false,
+      "description": "TypeSpec is a value type an integration defines. A workflow input of this type holds plain JSON values matching `value`, and the options source lets a UI offer the values the caller can actually choose from.",
+      "properties": {
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ]
+        },
+        "display_name": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ]
+        },
+        "free_text": {
+          "anyOf": [
+            {
+              "type": "boolean"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "FreeText allows a value that is not among the options (a label that does not exist yet)."
+        },
+        "id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Id is unique within the manifest and a different namespace from action and trigger ids. Lower-case, [a-z][a-z0-9_]*. The type's ref is `<integration id>.<id>`."
+        },
+        "keywords": {
+          "anyOf": [
+            {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "$ref": "#/$defs/FragmentRef"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Keywords are extra search terms for the catalog index."
+        },
+        "options": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TypeOptionsSpec"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Options says where a picker gets candidate values. Unset means the type has no option list (free entry only)."
+        },
+        "summary": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Summary is one line for search results and pickers."
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "object"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "Value is the JSON Schema of ONE value; validation and CEL typing use it. Normally a string with a pattern."
+        }
+      },
+      "type": "object"
+    },
+    "TypeWarningSpec": {
+      "additionalProperties": false,
+      "description": "TypeWarningSpec is a condition on an option, with the message shown when it holds.",
+      "properties": {
+        "message": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ]
+        },
+        "when": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "$ref": "#/$defs/FragmentRef"
+            }
+          ],
+          "description": "When is CEL over `item`, `option` (the projection so far, with annotations) and `context`, yielding a bool."
+        }
+      },
+      "type": "object"
+    }
+  },
+  "$ref": "#/$defs/IntegrationManifest",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The manifest of one integration: how a user connects, what it can do (actions) and what can start a run from it (triggers). Authored as YAML, either one manifest.yaml or a manifest.yaml with actions/, events/, types.yaml and schemas/ fragments beside it.",
+  "title": "Reliant integration manifest"
+}

@@ -268,7 +268,7 @@ describe("AutomationsListPage", () => {
       .getAllByRole("listitem")
       .map((li) => li.getAttribute("data-testid"));
     expect(ids).toEqual(["automation-row-fail", "automation-row-wait", "automation-row-skip"]);
-    expect(within(attention).getByText("2 failed")).toBeInTheDocument();
+    expect(within(attention).getByText("2 failed in a row")).toBeInTheDocument();
     // Health and the last run both say it: the run is blocked, so the
     // automation is too.
     const waitingRow = within(attention).getByTestId("automation-row-wait");

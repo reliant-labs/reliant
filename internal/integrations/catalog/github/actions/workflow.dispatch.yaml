@@ -1,0 +1,64 @@
+# yaml-language-server: $schema=../../../manifest/schema/action.schema.json
+id: workflow.dispatch
+display_name: Run Actions workflow
+summary: Trigger a GitHub Actions workflow that has a workflow_dispatch trigger.
+description: >-
+  Start a GitHub Actions workflow run on a branch or tag. The workflow
+  file must declare `on: workflow_dispatch`, and inputs must match its
+  declared inputs (at most 25, all passed as strings). workflow is the
+  workflow file name (deploy.yml) or its numeric id. Returns the run id and
+  URL when GitHub reports them.
+keywords: [actions, ci, workflow, dispatch, run, deploy, trigger]
+placement: server
+mutates: true
+tool:
+  expose: true
+params:
+  type: object
+  additionalProperties: false
+  required: [owner, repo, workflow, ref]
+  properties:
+    owner: { $ref: ../schemas/owner.yaml }
+    repo: { $ref: ../schemas/repo.yaml }
+    workflow:
+      type: string
+      pattern: "^[A-Za-z0-9._-]*[A-Za-z0-9_-][A-Za-z0-9._-]*$"
+      maxLength: 255
+      title: Workflow file
+      description: The workflow's file name under .github/workflows, or its numeric id.
+      examples: ["deploy.yml"]
+    ref:
+      type: string
+      minLength: 1
+      title: Branch or tag
+      description: The branch or tag to run the workflow on.
+      examples: ["main"]
+    inputs:
+      type: object
+      maxProperties: 25
+      additionalProperties: { type: string }
+      title: Workflow inputs
+      description: Values for the workflow's declared workflow_dispatch inputs, all as strings.
+      examples: [{ "environment": "staging", "dry_run": "true" }]
+    connection: { $ref: ../schemas/connection.yaml }
+request:
+  method: POST
+  path: /repos/{{ params.owner }}/{{ params.repo }}/actions/workflows/{{ params.workflow }}/dispatches
+  body_expr: >-
+    {"ref": params.ref,
+     ?"inputs": params.?inputs,
+     "return_run_details": true}
+  errors: { $ref: ../schemas/github_errors.yaml }
+output:
+  select: >-
+    {"dispatched": true,
+     "workflow_run_id": type(response) == map ? response.?workflow_run_id.orValue(null) : null,
+     "run_url": type(response) == map ? response.?run_url.orValue(null) : null,
+     "html_url": type(response) == map ? response.?html_url.orValue(null) : null}
+  schema:
+    type: object
+    properties:
+      dispatched: { type: boolean }
+      workflow_run_id: { type: [integer, "null"] }
+      run_url: { type: [string, "null"] }
+      html_url: { type: [string, "null"] }

@@ -49,6 +49,11 @@ type FieldInfo struct {
 	IsDynamic   bool         // Whether this is a dynamic type (can't validate sub-fields)
 	ElemType    reflect.Type // Element type for slices/maps
 
+	// CELType, when set, is the exact CEL type of the field and overrides what
+	// Kind alone would give (a bare slice is list<dyn>). An integration input
+	// sets it so `inputs.repos` is list<string>, not list<dyn>.
+	CELType *cel.Type
+
 	// Properties holds nested property information for object types with JSON Schema.
 	Properties map[string]*FieldInfo
 
@@ -59,6 +64,14 @@ type FieldInfo struct {
 // =============================================================================
 // WORKFLOW TYPE CONTEXT — local replacement for v3.WorkflowTypeContext
 // =============================================================================
+
+// valueTypes is the resolver for integration input types; nil-safe.
+func (c *WorkflowTypeContext) valueTypes() ValueTypes {
+	if c == nil {
+		return typesOrDefault(nil)
+	}
+	return typesOrDefault(c.ValueTypes)
+}
 
 // WorkflowTypeContext contains type information for a specific workflow.
 // This enables deep validation of field access within dynamic namespaces.
@@ -106,6 +119,10 @@ type WorkflowTypeContext struct {
 	// beyond the proto schema (e.g., call_llm with response tools/structured output).
 	// For these nodes, unknown field access in CEL returns dyn instead of an error.
 	NodesWithExtendedOutputs map[string]bool
+
+	// ValueTypes resolves the input types integrations define; nil means the
+	// catalog's. Inline workflows inherit it.
+	ValueTypes ValueTypes
 
 	// LenientInputs skips strict input field validation. Set for inline workflows
 	// that receive inputs dynamically via args from the parent, so input names

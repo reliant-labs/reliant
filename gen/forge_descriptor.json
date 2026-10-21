@@ -9749,6 +9749,11 @@
             "ProtoType": "[]message",
             "IsOptional": false,
             "MessageType": "reliant.v1.WorkflowTriggerOverride"
+          },
+          {
+            "Name": "acting_identity",
+            "ProtoType": "enum",
+            "IsOptional": false
           }
         ],
         "EnableWorkflowResponse": [
@@ -10118,6 +10123,11 @@
             "kind": "message",
             "type_name": "reliant.v1.WorkflowTriggerOverride",
             "repeated": true
+          },
+          {
+            "name": "acting_identity",
+            "kind": "enum",
+            "type_name": "reliant.v1.ActingIdentity"
           }
         ],
         "reliant.v1.EnableWorkflowResponse": [
@@ -11050,7 +11060,8 @@
           "WORKFLOW_TRIGGER_OUTCOME_ALREADY_ENABLED",
           "WORKFLOW_TRIGGER_OUTCOME_FAILED",
           "WORKFLOW_TRIGGER_OUTCOME_NOT_ENABLED",
-          "WORKFLOW_TRIGGER_OUTCOME_LEFT_ENABLED"
+          "WORKFLOW_TRIGGER_OUTCOME_LEFT_ENABLED",
+          "WORKFLOW_TRIGGER_OUTCOME_UPDATED"
         ]
       },
       "EnumNumbers": {
@@ -11122,7 +11133,8 @@
           3,
           4,
           5,
-          6
+          6,
+          7
         ]
       },
       "EnumGoRefs": {
@@ -11435,12 +11447,12 @@
           {
             "Name": "type",
             "ProtoType": "string",
-            "IsOptional": false
+            "IsOptional": true
           },
           {
             "Name": "connection_id",
             "ProtoType": "string",
-            "IsOptional": false
+            "IsOptional": true
           },
           {
             "Name": "scope",
@@ -11450,7 +11462,7 @@
           {
             "Name": "query",
             "ProtoType": "string",
-            "IsOptional": false
+            "IsOptional": true
           },
           {
             "Name": "page_token",
@@ -11465,7 +11477,7 @@
           {
             "Name": "acting_identity",
             "ProtoType": "enum",
-            "IsOptional": false
+            "IsOptional": true
           },
           {
             "Name": "resolve",
@@ -12105,11 +12117,13 @@
         "reliant.v1.ListInputOptionsRequest": [
           {
             "name": "type",
-            "kind": "string"
+            "kind": "string",
+            "optional": true
           },
           {
             "name": "connection_id",
-            "kind": "string"
+            "kind": "string",
+            "optional": true
           },
           {
             "name": "scope",
@@ -12120,7 +12134,8 @@
           },
           {
             "name": "query",
-            "kind": "string"
+            "kind": "string",
+            "optional": true
           },
           {
             "name": "page_token",
@@ -12133,7 +12148,8 @@
           {
             "name": "acting_identity",
             "kind": "enum",
-            "type_name": "reliant.v1.ActingIdentity"
+            "type_name": "reliant.v1.ActingIdentity",
+            "optional": true
           },
           {
             "name": "resolve",
@@ -39764,7 +39780,7 @@
     "reliant/v1/approval.proto": "4ebbca862a2a5f88bb7f603d52d09933c296cbdc89e55d2abd1f58b76ecad6ce",
     "reliant/v1/attachment.proto": "61fa803dd43b3e1f790ab13de3eeeced908b97c6076ea3154180dbd9b5018085",
     "reliant/v1/background.proto": "84c4c5ccc39bbf99e46126262da13cb89b19337af1fe573b63f56d6d0e8e7eba",
-    "reliant/v1/catalog.proto": "ed2ab72cec1ced0bb5c5e7ebd7f5d2346c5f882255ef25e88ac66e2b10d7d1c7",
+    "reliant/v1/catalog.proto": "b17516863b217f7700bbfc43e819b98795210b4c402a093c95d2491cdbea01c8",
     "reliant/v1/chat.proto": "cd28fab6e9bf23b6ccb54308c160bdb91acff4dd403aea76b47646efe317f7a1",
     "reliant/v1/common.proto": "3f55240c147956015c9adabf3237b53a6925c6ec20ec90344237a8d7c8357ba1",
     "reliant/v1/connection.proto": "31ef55ce12e0a3862f02156e159049a5f84142b7f9978f2c5c939afa52a50b64",
@@ -39795,7 +39811,7 @@
     "reliant/v1/token.proto": "df7f634505ef8d0da2882feb4fe31865d541b2593df0c069159f2b6440e5f63e",
     "reliant/v1/tool_call.proto": "b5861a934a2b119031b609eb10cf77e6ba8ccce474d1bb0edbf5cd9fed56cc95",
     "reliant/v1/tools_daemon.proto": "ed355efab8f065a289e7de67224236af37e8b4fcd2770e1de66120cf45b1aaf4",
-    "reliant/v1/trigger.proto": "cb0794d699420370f0078273e3878543c9f46b9db9d75f6a04e20c2214ea418a",
+    "reliant/v1/trigger.proto": "6f1ce6c9f918fe5f5a44e9c39f939c7d804d7d4b07f4cc427b11fa91e361f1ea",
     "reliant/v1/workflow.proto": "bd8fa927bf1b9842617fda4c7d56e346ff6ee6d89247178752fb10b9c4f18c86",
     "reliant/v1/workflow_v2.proto": "ab25a4ea3cdfdc1ab731f8eefde4fe45325da51d03e2f93ec1c1023b5e36eaf7",
     "reliant/v1/worktree.proto": "ce353c761192377e35feb5ab9aa68f2b52981f0982b746f7597e51b7648fa24b"

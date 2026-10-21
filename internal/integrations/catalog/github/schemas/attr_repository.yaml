@@ -1,0 +1,1 @@
+{ name: repository, description: "The repository, owner/name.", example: acme/app }

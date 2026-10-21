@@ -560,15 +560,15 @@ message CatalogConnectionRequirement {
 
 message ListInputOptionsRequest {
   // Type is the qualified type ref, e.g. "github.repository".
-  string type = 1;
+  optional string type = 1;
   // ConnectionId names the connection to list through. Empty means the
   // caller's default connection to the type's integration, else a delegated
   // authority.
-  string connection_id = 2;
+  optional string connection_id = 2;
   // Scope supplies the values of the type's declared scope keys.
   map<string, google.protobuf.Value> scope = 3;
   // Query narrows the options (client or server side, as the type declares).
-  string query = 4;
+  optional string query = 4;
   // PageToken is a previous response's next_page_token. It is only valid for
   // the same type, connection, scope and query.
   string page_token = 5;
@@ -576,7 +576,7 @@ message ListInputOptionsRequest {
   int32 page_size = 6;
   // ActingIdentity only feeds the type's warnings, which may differ for the
   // owner and for the bot.
-  ActingIdentity acting_identity = 7;
+  optional ActingIdentity acting_identity = 7;
   // Resolve, when set, labels these stored values instead of listing: the
   // response holds one option per value the type could resolve, and query,
   // page_token and page_size are ignored.

@@ -1,14 +1,11 @@
 package core
 
-import (
-	"context"
-	"time"
-)
+import "time"
 
 // Attachment represents a file attachment.
 //
-// This lives in core so driver store packages can share a common contract
-// without importing the db facade package.
+// This lives in core so internal/store can return it without importing the
+// db facade package.
 type Attachment struct {
 	ID             string
 	UserID         string
@@ -21,12 +18,4 @@ type Attachment struct {
 	Content        []byte // File content bytes (nil for file_references)
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
-}
-
-// AttachmentStore is the shared contract for attachment persistence across drivers.
-type AttachmentStore interface {
-	CreateAttachment(ctx context.Context, attachment *Attachment) error
-	GetAttachment(ctx context.Context, id string) (*Attachment, error)
-	GetAttachmentsByIDs(ctx context.Context, ids []string) ([]*Attachment, error)
-	DeleteAttachment(ctx context.Context, id string) error
 }

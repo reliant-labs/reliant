@@ -64,7 +64,7 @@ NC := \033[0m # No Color
 MINTLIFY_DOCS_DIR := docs
 MINTLIFY_PORT ?= 3000
 
-.PHONY: all build build-all clean test test-short test-affected test-affected-plan test-race test-coverage test-ci test-e2e replay-fixtures freeze-replay-fixtures deps fmt vet lint security help generate generate-cli generate-tools-ref generate-shortcuts generate-nodes generate-types generate-presets generate-workflow-builder-skill generate-changelog generate-mintlify-reference docs docs-build mint changelog changelog-draft postgres-up postgres-down db-driver-audit generate-yaml-bindings build-api-server build-temporal-worker build-tools-daemon build-services docker-build pin-forge pin-drift pin-ancestry forge-generate-check release-rc release-patch release-minor release-major release-tag release-tag-dry-run check-release-tags
+.PHONY: all build build-all clean test test-short test-affected test-affected-plan test-race test-coverage test-ci test-e2e replay-fixtures freeze-replay-fixtures deps fmt vet lint security help generate generate-cli generate-tools-ref generate-shortcuts generate-nodes generate-types generate-presets generate-workflow-builder-skill generate-changelog generate-mintlify-reference docs docs-build mint changelog changelog-draft postgres-up postgres-down db-driver-audit generate-yaml-bindings generate-manifest-schema build-api-server build-temporal-worker build-tools-daemon build-services docker-build pin-forge pin-drift pin-ancestry forge-generate-check release-rc release-patch release-minor release-major release-tag release-tag-dry-run check-release-tags
 
 # Default target
 all: deps fmt vet test build
@@ -470,7 +470,7 @@ forge-generate-check: $(BUF_BIN) $(PROTOC_GEN_ES)
 	@BUF="$(BUF_BIN)" ./scripts/check-forge-generate.sh $(FORGE_CHECK_FLAGS)
 
 ## generate-go: Run Go code generators only (protobuf Go + sqlc + Go reference files)
-generate-go: proto-generate-go generate-yaml-bindings generate-tool-catalog sqlc generate-schema generate-refcheck generate-cel-reference generate-nodes
+generate-go: proto-generate-go generate-yaml-bindings generate-tool-catalog generate-manifest-schema sqlc generate-schema generate-refcheck generate-cel-reference generate-nodes
 	@echo "$(GREEN)✅ Go code generation complete$(NC)"
 
 ## generate-yaml-bindings: Generate YAML bindings from proto descriptors
@@ -484,6 +484,12 @@ generate-tool-catalog:
 	@echo "$(YELLOW)Generating tool parameter catalog...$(NC)"
 	@$(GOCMD) generate ./internal/llm/tools
 	@echo "$(GREEN)✅ Tool catalog generated$(NC)"
+
+## generate-manifest-schema: Generate the published JSON Schema of the integration manifest format from its Go structs
+generate-manifest-schema: proto-generate-go
+	@echo "$(YELLOW)Generating integration manifest schema...$(NC)"
+	@$(GOCMD) generate ./internal/integrations/manifest/schema
+	@echo "$(GREEN)✅ Integration manifest schema generated$(NC)"
 
 ## migration: Create a new migration file (Usage: make migration NAME=my_changes)
 migration:
@@ -543,7 +549,7 @@ WEB_SRC_DIR=web/src
 CHANGELOG_DIR=$(MINTLIFY_DOCS_DIR)/data/releases
 
 ## generate: Generate sqlc, Go protobuf, docs, presets and skills (generate-all minus the reliant TS protobufs)
-generate: generate-yaml-bindings generate-tool-catalog sqlc generate-schema generate-scenario-schema generate-refcheck generate-cel-reference generate-cli generate-tools-ref generate-shortcuts generate-nodes generate-types generate-models generate-presets generate-workflow-builder-skill generate-changelog generate-mintlify-reference
+generate: generate-yaml-bindings generate-tool-catalog generate-manifest-schema sqlc generate-schema generate-scenario-schema generate-refcheck generate-cel-reference generate-cli generate-tools-ref generate-shortcuts generate-nodes generate-types generate-models generate-presets generate-workflow-builder-skill generate-changelog generate-mintlify-reference
 	@echo "$(GREEN)✅ All generated files up to date$(NC)"
 
 ## generate-schema: Generate workflow schema reference from proto types

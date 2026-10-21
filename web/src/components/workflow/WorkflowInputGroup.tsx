@@ -6,9 +6,10 @@ import { cn } from "../../lib/utils";
 import { useGlobalDataStore, type Preset } from "../../store/globalDataStore";
 import { presetGrpc } from "../../api/preset-grpc";
 import type { InputDef } from "../../lib/inputHelpers";
-import { getInputDefault } from "../../lib/inputHelpers";
+import { getInputDefault, isIntegrationInput } from "../../lib/inputHelpers";
 import { inputDefToSchema } from "../../lib/nodeFieldAdapter";
 import { ProtoFieldRenderer } from "./ProtoFieldRenderer";
+import { TypedInputField } from "./inputs/TypedInputField";
 import { InlinePresetPicker } from "./InlinePresetPicker";
 import { toJson } from "@bufbuild/protobuf";
 import { ValueSchema } from "@bufbuild/protobuf/wkt";
@@ -290,16 +291,28 @@ export function WorkflowInputGroup({
         {hasInputs && (
           <>
             <SectionFields>
-              {group.inputs.map(({ name, schema }) => (
-                <ProtoFieldRenderer
-                  key={name}
-                  schema={inputDefToSchema(name, schema)}
-                  value={getInputValue(name, schema, values)}
-                  onChange={(value) => onChange(name, value)}
-                  disabled={disabled}
-                  hideCELToggle
-                />
-              ))}
+              {group.inputs.map(({ name, schema }) =>
+                isIntegrationInput(schema) ? (
+                  <TypedInputField
+                    key={name}
+                    name={name}
+                    schema={schema}
+                    value={values[name]}
+                    values={values}
+                    onChange={(value) => onChange(name, value)}
+                    disabled={disabled}
+                  />
+                ) : (
+                  <ProtoFieldRenderer
+                    key={name}
+                    schema={inputDefToSchema(name, schema)}
+                    value={getInputValue(name, schema, values)}
+                    onChange={(value) => onChange(name, value)}
+                    disabled={disabled}
+                    hideCELToggle
+                  />
+                ),
+              )}
             </SectionFields>
 
             {/* Save preset UI */}
@@ -449,16 +462,28 @@ export function WorkflowInputGroup({
 
         {isExpanded && hasInputs && (
           <div className="cpv2-param-group-body">
-            {group.inputs.map(({ name, schema }) => (
-              <ProtoFieldRenderer
-                key={name}
-                schema={inputDefToSchema(name, schema)}
-                value={getInputValue(name, schema, values)}
-                onChange={(value) => onChange(name, value)}
-                disabled={disabled}
-                hideCELToggle
-              />
-            ))}
+            {group.inputs.map(({ name, schema }) =>
+              isIntegrationInput(schema) ? (
+                <TypedInputField
+                  key={name}
+                  name={name}
+                  schema={schema}
+                  value={values[name]}
+                  values={values}
+                  onChange={(value) => onChange(name, value)}
+                  disabled={disabled}
+                />
+              ) : (
+                <ProtoFieldRenderer
+                  key={name}
+                  schema={inputDefToSchema(name, schema)}
+                  value={getInputValue(name, schema, values)}
+                  onChange={(value) => onChange(name, value)}
+                  disabled={disabled}
+                  hideCELToggle
+                />
+              ),
+            )}
 
           {/* Save preset UI */}
           {groupIsDirty && group.presets?.tag && projectId && (

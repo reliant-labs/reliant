@@ -1,0 +1,6 @@
+{
+  "$ref": "manifest.schema.json#/$defs/TriggerSpec",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "One file of an integration's events/ directory, named <id>.yaml: a trigger type.",
+  "title": "Reliant integration event"
+}

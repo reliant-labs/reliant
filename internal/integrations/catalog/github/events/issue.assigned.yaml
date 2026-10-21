@@ -1,0 +1,22 @@
+# yaml-language-server: $schema=../../../manifest/schema/event.schema.json
+id: issue.assigned
+display_name: Issue assigned
+summary: Someone was assigned to an issue.
+description: Fires when a user is assigned to an issue. Match `assignee` to react to one person.
+keywords: [assign, owner]
+events: [issues.assigned]
+attributes:
+  - { $ref: ../schemas/attr_repository.yaml }
+  - { $ref: ../schemas/attr_installation.yaml }
+  - { $ref: ../schemas/attr_sender.yaml }
+  - { $ref: ../schemas/attr_action.yaml }
+  - { name: assignee, description: Login of the user who was assigned., example: octocat }
+data:
+  type: object
+  additionalProperties: false
+  properties:
+    action: { type: string }
+    assignee: { $ref: ../schemas/user_schema.yaml }
+    issue: { $ref: ../schemas/issue_schema.yaml }
+    repository: { $ref: ../schemas/repository_schema.yaml }
+    sender: { $ref: ../schemas/user_schema.yaml }

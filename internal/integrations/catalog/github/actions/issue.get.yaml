@@ -1,0 +1,64 @@
+# yaml-language-server: $schema=../../../manifest/schema/action.schema.json
+id: issue.get
+display_name: Get issue
+summary: Read an issue (or a pull request's conversation) by number.
+description: >-
+  Return one issue: title, body, state, author, labels, assignees and
+  timestamps. Pull requests are issues too; is_pull_request says which.
+keywords: [issue, read, fetch, details, ticket]
+placement: server
+mutates: false
+tool:
+  expose: true
+params:
+  type: object
+  additionalProperties: false
+  required: [owner, repo, issue_number]
+  properties:
+    owner: { $ref: ../schemas/owner.yaml }
+    repo: { $ref: ../schemas/repo.yaml }
+    issue_number: { $ref: ../schemas/issue_number.yaml }
+    connection: { $ref: ../schemas/connection.yaml }
+request:
+  method: GET
+  path: /repos/{{ params.owner }}/{{ params.repo }}/issues/{{ params.issue_number }}
+  errors: { $ref: ../schemas/github_errors.yaml }
+output:
+  select: >-
+    {"number": response.number,
+     "id": response.id,
+     "title": response.title,
+     "body": response.?body.orValue(null),
+     "state": response.state,
+     "state_reason": response.?state_reason.orValue(null),
+     "locked": response.?locked.orValue(false),
+     "comments": response.?comments.orValue(0),
+     "html_url": response.html_url,
+     "user": response.?user.?login.orValue(null),
+     "labels": type(response.?labels.orValue(null)) == list ?
+       response.labels.map(l, type(l) == string ? l : l.name) : [],
+     "assignees": type(response.?assignees.orValue(null)) == list ?
+       response.assignees.map(a, a.login) : [],
+     "is_pull_request": response.?pull_request.orValue(null) != null,
+     "created_at": response.?created_at.orValue(null),
+     "updated_at": response.?updated_at.orValue(null),
+     "closed_at": response.?closed_at.orValue(null)}
+  schema:
+    type: object
+    properties:
+      number: { type: integer }
+      id: { type: integer }
+      title: { type: string }
+      body: { type: [string, "null"] }
+      state: { type: string, enum: [open, closed] }
+      state_reason: { type: [string, "null"] }
+      locked: { type: boolean }
+      comments: { type: integer }
+      html_url: { type: string }
+      user: { type: [string, "null"], description: The author's login (null for a deleted account). }
+      labels: { type: array, items: { type: string } }
+      assignees: { type: array, items: { type: string } }
+      is_pull_request: { type: boolean }
+      created_at: { type: [string, "null"] }
+      updated_at: { type: [string, "null"] }
+      closed_at: { type: [string, "null"] }

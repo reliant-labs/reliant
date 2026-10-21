@@ -3,8 +3,9 @@
 /**
  * The Workflows area's paths, in one place (WORKFLOW_UI.md §1.2–1.3).
  *
- * One area, three tabs: Library (definitions), Runs (every execution) and
- * Automations (standing triggers). They replaced three separate places — the
+ * One area, three tabs in the order of the jobs — find it, turn it on, watch
+ * it: Library (definitions), Automations (what runs by itself) and Runs (every
+ * execution). They replaced three separate places — the
  * `/workflow` hub, `/runs` and `/automations` — which survive only as
  * redirects (workflowsAreaRoutes.tsx). This module and that one are the only
  * files that may spell those retired paths; workflowsAreaLinks.test.ts
@@ -34,8 +35,8 @@ export interface WorkflowsTabInfo {
 /** The tabs, in the order the tab bar renders them. */
 export const WORKFLOWS_TABS: readonly WorkflowsTabInfo[] = [
   { key: "library", label: "Library", path: WORKFLOWS_LIBRARY_PATH, listLabel: "Library" },
-  { key: "runs", label: "Runs", path: WORKFLOWS_RUNS_PATH, listLabel: "All runs" },
   { key: "automations", label: "Automations", path: WORKFLOWS_AUTOMATIONS_PATH, listLabel: "All automations" },
+  { key: "runs", label: "Runs", path: WORKFLOWS_RUNS_PATH, listLabel: "All runs" },
 ];
 
 function isAtOrBelow(pathname: string, path: string): boolean {
@@ -83,4 +84,32 @@ export function legacyWorkflowsPath(pathname: string): string | null {
   if (isAtOrBelow(pathname, "/runs")) return `/workflows${pathname}`;
   if (isAtOrBelow(pathname, "/automations")) return `/workflows${pathname}`;
   return null;
+}
+
+/** The DOM id of one project's automation on a workflow page ("Turned on" card). */
+export function automationAnchorId(projectId: string): string {
+  return `automation-${projectId}`;
+}
+
+/**
+ * A workflow's page, optionally scrolled to its automation in one project.
+ * `?project=` makes that project current, so the page reads it.
+ */
+export function workflowPageHref(workflowRef: string, projectId?: string, options: { automation?: boolean } = {}): string {
+  const path = `${WORKFLOWS_LIBRARY_PATH}/${encodeURIComponent(workflowRef)}`;
+  const query = projectId ? `?${new URLSearchParams({ project: projectId }).toString()}` : "";
+  const hash = projectId && options.automation ? `#${automationAnchorId(projectId)}` : "";
+  return `${path}${query}${hash}`;
+}
+
+/**
+ * Where an automation is opened, decided in this one place: a workflow
+ * automation (an activation of a declared trigger) is configured on its
+ * workflow's page, a custom automation on its own page.
+ */
+export function automationHref(trigger: { id: string; workflow: string; workflowTrigger?: string; projectId: string }): string {
+  if (trigger.workflowTrigger && trigger.workflow) {
+    return workflowPageHref(trigger.workflow, trigger.projectId, { automation: true });
+  }
+  return `${WORKFLOWS_AUTOMATIONS_PATH}/${encodeURIComponent(trigger.id)}`;
 }

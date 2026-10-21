@@ -460,9 +460,10 @@ const (
 	// ENABLED: a new activation was created and is running.
 	WorkflowTriggerOutcome_WORKFLOW_TRIGGER_OUTCOME_ENABLED WorkflowTriggerOutcome = 1
 	// RESUMED: the user's paused activation of it was turned back on, with the
-	// settings it already had.
+	// request's settings.
 	WorkflowTriggerOutcome_WORKFLOW_TRIGGER_OUTCOME_RESUMED WorkflowTriggerOutcome = 2
-	// ALREADY_ENABLED: an enabled activation already existed; nothing changed.
+	// ALREADY_ENABLED: an enabled activation already had exactly the request's
+	// settings; nothing changed.
 	WorkflowTriggerOutcome_WORKFLOW_TRIGGER_OUTCOME_ALREADY_ENABLED WorkflowTriggerOutcome = 3
 	// FAILED: this trigger could not be enabled; message says why. Because
 	// enabling is all-or-nothing, it is also why no other trigger was.
@@ -473,6 +474,9 @@ const (
 	// LEFT_ENABLED: the call failed but this trigger's activation could not be
 	// undone and is still running; disable it. message says why.
 	WorkflowTriggerOutcome_WORKFLOW_TRIGGER_OUTCOME_LEFT_ENABLED WorkflowTriggerOutcome = 6
+	// UPDATED: an enabled activation already existed and now has the request's
+	// settings; it kept running throughout.
+	WorkflowTriggerOutcome_WORKFLOW_TRIGGER_OUTCOME_UPDATED WorkflowTriggerOutcome = 7
 )
 
 // Enum value maps for WorkflowTriggerOutcome.
@@ -485,6 +489,7 @@ var (
 		4: "WORKFLOW_TRIGGER_OUTCOME_FAILED",
 		5: "WORKFLOW_TRIGGER_OUTCOME_NOT_ENABLED",
 		6: "WORKFLOW_TRIGGER_OUTCOME_LEFT_ENABLED",
+		7: "WORKFLOW_TRIGGER_OUTCOME_UPDATED",
 	}
 	WorkflowTriggerOutcome_value = map[string]int32{
 		"WORKFLOW_TRIGGER_OUTCOME_UNSPECIFIED":     0,
@@ -494,6 +499,7 @@ var (
 		"WORKFLOW_TRIGGER_OUTCOME_FAILED":          4,
 		"WORKFLOW_TRIGGER_OUTCOME_NOT_ENABLED":     5,
 		"WORKFLOW_TRIGGER_OUTCOME_LEFT_ENABLED":    6,
+		"WORKFLOW_TRIGGER_OUTCOME_UPDATED":         7,
 	}
 )
 
@@ -2915,8 +2921,9 @@ type EnableWorkflowRequest struct {
 	NoMachine bool   `protobuf:"varint,5,opt,name=no_machine,json=noMachine,proto3" json:"no_machine,omitempty"`
 	// The connection each integration trigger listens through, keyed by
 	// integration id (e.g. "github"). One entry serves every trigger of that
-	// integration. An integration with no entry uses the user's default
-	// connection for it; with none, that trigger is refused.
+	// integration. An integration with no entry keeps the connection an
+	// existing activation listens through, and otherwise uses the user's
+	// default connection for it; with none, that trigger is refused.
 	ConnectionIds map[string]string `protobuf:"bytes,6,rep,name=connection_ids,json=connectionIds,proto3" json:"connection_ids,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	// Workflow inputs the activations set on every run, as
 	// TriggerDefinition.params. A trigger's own `inputs` mapping wins over
@@ -2930,13 +2937,17 @@ type EnableWorkflowRequest struct {
 	// The prompt for a trigger whose declaration has none (TriggerDefinition.message).
 	// A declaration's own prompt is used when this is empty.
 	Message string `protobuf:"bytes,10,opt,name=message,proto3" json:"message,omitempty"`
-	// Names the activations "<name_prefix> · <trigger>". Empty uses the
-	// workflow ref.
+	// Names new activations "<name_prefix> · <trigger>". Empty uses the
+	// workflow ref. An existing activation keeps its name.
 	NamePrefix string `protobuf:"bytes,11,opt,name=name_prefix,json=namePrefix,proto3" json:"name_prefix,omitempty"`
 	// Per-trigger exceptions to the shared choices above.
-	Overrides     []*WorkflowTriggerOverride `protobuf:"bytes,12,rep,name=overrides,proto3" json:"overrides,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Overrides []*WorkflowTriggerOverride `protobuf:"bytes,12,rep,name=overrides,proto3" json:"overrides,omitempty"`
+	// Who the integration writes of every run speak as, as
+	// TriggerDefinition.acting_identity. Unspecified means the owner for a new
+	// activation and "unchanged" for an existing one.
+	ActingIdentity ActingIdentity `protobuf:"varint,13,opt,name=acting_identity,json=actingIdentity,proto3,enum=reliant.v1.ActingIdentity" json:"acting_identity,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *EnableWorkflowRequest) Reset() {
@@ -3053,6 +3064,13 @@ func (x *EnableWorkflowRequest) GetOverrides() []*WorkflowTriggerOverride {
 	return nil
 }
 
+func (x *EnableWorkflowRequest) GetActingIdentity() ActingIdentity {
+	if x != nil {
+		return x.ActingIdentity
+	}
+	return ActingIdentity_ACTING_IDENTITY_UNSPECIFIED
+}
+
 // WorkflowTriggerOverride changes one declared trigger's activation away from
 // the shared choices of an EnableWorkflowRequest.
 type WorkflowTriggerOverride struct {
@@ -3162,7 +3180,7 @@ type WorkflowTriggerResult struct {
 	// For FAILED, NOT_ENABLED and LEFT_ENABLED: why, in words a person can act
 	// on ("connect GitHub first: ...").
 	Message string `protobuf:"bytes,3,opt,name=message,proto3" json:"message,omitempty"`
-	// The activation, for ENABLED, RESUMED and ALREADY_ENABLED.
+	// The activation, for ENABLED, RESUMED, UPDATED and ALREADY_ENABLED.
 	Activation *Trigger `protobuf:"bytes,4,opt,name=activation,proto3" json:"activation,omitempty"`
 	// A webhook trigger's token, for ENABLED only. Shown once, never again.
 	Webhook       *WebhookCredential `protobuf:"bytes,5,opt,name=webhook,proto3" json:"webhook,omitempty"`
@@ -4453,7 +4471,7 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
 	"\aenabled\x18\x02 \x01(\bR\aenabled\"J\n" +
 	"\x19SetTriggerEnabledResponse\x12-\n" +
-	"\atrigger\x18\x01 \x01(\v2\x13.reliant.v1.TriggerR\atrigger\"\xaf\x06\n" +
+	"\atrigger\x18\x01 \x01(\v2\x13.reliant.v1.TriggerR\atrigger\"\xf4\x06\n" +
 	"\x15EnableWorkflowRequest\x12\x1a\n" +
 	"\bworkflow\x18\x01 \x01(\tR\bworkflow\x12\x1d\n" +
 	"\n" +
@@ -4471,7 +4489,8 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	" \x01(\tR\amessage\x12\x1f\n" +
 	"\vname_prefix\x18\v \x01(\tR\n" +
 	"namePrefix\x12A\n" +
-	"\toverrides\x18\f \x03(\v2#.reliant.v1.WorkflowTriggerOverrideR\toverrides\x1a@\n" +
+	"\toverrides\x18\f \x03(\v2#.reliant.v1.WorkflowTriggerOverrideR\toverrides\x12C\n" +
+	"\x0facting_identity\x18\r \x01(\x0e2\x1a.reliant.v1.ActingIdentityR\x0eactingIdentity\x1a@\n" +
 	"\x12ConnectionIdsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1aQ\n" +
@@ -4617,7 +4636,7 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\x1dTRIGGER_HEALTH_STATUS_FAILING\x10\x03\x12!\n" +
 	"\x1dTRIGGER_HEALTH_STATUS_UNKNOWN\x10\x04\x12 \n" +
 	"\x1cTRIGGER_HEALTH_STATUS_BROKEN\x10\x05\x12%\n" +
-	"!TRIGGER_HEALTH_STATUS_NEEDS_SETUP\x10\x06*\xb6\x02\n" +
+	"!TRIGGER_HEALTH_STATUS_NEEDS_SETUP\x10\x06*\xdc\x02\n" +
 	"\x16WorkflowTriggerOutcome\x12(\n" +
 	"$WORKFLOW_TRIGGER_OUTCOME_UNSPECIFIED\x10\x00\x12$\n" +
 	" WORKFLOW_TRIGGER_OUTCOME_ENABLED\x10\x01\x12$\n" +
@@ -4625,7 +4644,8 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"(WORKFLOW_TRIGGER_OUTCOME_ALREADY_ENABLED\x10\x03\x12#\n" +
 	"\x1fWORKFLOW_TRIGGER_OUTCOME_FAILED\x10\x04\x12(\n" +
 	"$WORKFLOW_TRIGGER_OUTCOME_NOT_ENABLED\x10\x05\x12)\n" +
-	"%WORKFLOW_TRIGGER_OUTCOME_LEFT_ENABLED\x10\x062\xfa\n" +
+	"%WORKFLOW_TRIGGER_OUTCOME_LEFT_ENABLED\x10\x06\x12$\n" +
+	" WORKFLOW_TRIGGER_OUTCOME_UPDATED\x10\a2\xfa\n" +
 	"\n" +
 	"\x0eTriggerService\x12V\n" +
 	"\rCreateTrigger\x12 .reliant.v1.CreateTriggerRequest\x1a!.reliant.v1.CreateTriggerResponse\"\x00\x12M\n" +
@@ -4783,62 +4803,63 @@ var file_reliant_v1_trigger_proto_depIdxs = []int32{
 	63, // 45: reliant.v1.EnableWorkflowRequest.params:type_name -> reliant.v1.EnableWorkflowRequest.ParamsEntry
 	64, // 46: reliant.v1.EnableWorkflowRequest.presets:type_name -> reliant.v1.EnableWorkflowRequest.PresetsEntry
 	35, // 47: reliant.v1.EnableWorkflowRequest.overrides:type_name -> reliant.v1.WorkflowTriggerOverride
-	65, // 48: reliant.v1.WorkflowTriggerOverride.params:type_name -> reliant.v1.WorkflowTriggerOverride.ParamsEntry
-	6,  // 49: reliant.v1.WorkflowTriggerResult.outcome:type_name -> reliant.v1.WorkflowTriggerOutcome
-	15, // 50: reliant.v1.WorkflowTriggerResult.activation:type_name -> reliant.v1.Trigger
-	19, // 51: reliant.v1.WorkflowTriggerResult.webhook:type_name -> reliant.v1.WebhookCredential
-	36, // 52: reliant.v1.EnableWorkflowResponse.results:type_name -> reliant.v1.WorkflowTriggerResult
-	15, // 53: reliant.v1.DisableWorkflowResponse.paused:type_name -> reliant.v1.Trigger
-	40, // 54: reliant.v1.DisableWorkflowResponse.failed:type_name -> reliant.v1.TriggerFailure
-	2,  // 55: reliant.v1.ListTriggerEventsRequest.outcomes:type_name -> reliant.v1.TriggerEventOutcome
-	16, // 56: reliant.v1.ListTriggerEventsResponse.events:type_name -> reliant.v1.TriggerEvent
-	16, // 57: reliant.v1.GetLaunchEventResponse.event:type_name -> reliant.v1.TriggerEvent
-	48, // 58: reliant.v1.ResolveTriggerSendersResponse.senders:type_name -> reliant.v1.ResolvedTriggerSender
-	16, // 59: reliant.v1.ReplayCandidate.event:type_name -> reliant.v1.TriggerEvent
-	51, // 60: reliant.v1.ListReplayEventsResponse.events:type_name -> reliant.v1.ReplayCandidate
-	71, // 61: reliant.v1.PreviewReplayRequest.replay:type_name -> reliant.v1.ReplayEvent
-	17, // 62: reliant.v1.PreviewReplayRequest.sender:type_name -> reliant.v1.TriggerSender
-	66, // 63: reliant.v1.PreviewReplayResponse.inputs:type_name -> reliant.v1.PreviewReplayResponse.InputsEntry
-	72, // 64: reliant.v1.Trigger.ParamsEntry.value:type_name -> google.protobuf.Value
-	72, // 65: reliant.v1.TriggerDefinition.ParamsEntry.value:type_name -> google.protobuf.Value
-	72, // 66: reliant.v1.EnableWorkflowRequest.ParamsEntry.value:type_name -> google.protobuf.Value
-	72, // 67: reliant.v1.WorkflowTriggerOverride.ParamsEntry.value:type_name -> google.protobuf.Value
-	72, // 68: reliant.v1.PreviewReplayResponse.InputsEntry.value:type_name -> google.protobuf.Value
-	20, // 69: reliant.v1.TriggerService.CreateTrigger:input_type -> reliant.v1.CreateTriggerRequest
-	24, // 70: reliant.v1.TriggerService.GetTrigger:input_type -> reliant.v1.GetTriggerRequest
-	26, // 71: reliant.v1.TriggerService.ListTriggers:input_type -> reliant.v1.ListTriggersRequest
-	28, // 72: reliant.v1.TriggerService.UpdateTrigger:input_type -> reliant.v1.UpdateTriggerRequest
-	30, // 73: reliant.v1.TriggerService.DeleteTrigger:input_type -> reliant.v1.DeleteTriggerRequest
-	32, // 74: reliant.v1.TriggerService.SetTriggerEnabled:input_type -> reliant.v1.SetTriggerEnabledRequest
-	41, // 75: reliant.v1.TriggerService.FireTrigger:input_type -> reliant.v1.FireTriggerRequest
-	43, // 76: reliant.v1.TriggerService.ListTriggerEvents:input_type -> reliant.v1.ListTriggerEventsRequest
-	45, // 77: reliant.v1.TriggerService.GetLaunchEvent:input_type -> reliant.v1.GetLaunchEventRequest
-	22, // 78: reliant.v1.TriggerService.RotateWebhookToken:input_type -> reliant.v1.RotateWebhookTokenRequest
-	34, // 79: reliant.v1.TriggerService.EnableWorkflow:input_type -> reliant.v1.EnableWorkflowRequest
-	38, // 80: reliant.v1.TriggerService.DisableWorkflow:input_type -> reliant.v1.DisableWorkflowRequest
-	47, // 81: reliant.v1.TriggerService.ResolveTriggerSenders:input_type -> reliant.v1.ResolveTriggerSendersRequest
-	50, // 82: reliant.v1.TriggerService.ListReplayEvents:input_type -> reliant.v1.ListReplayEventsRequest
-	53, // 83: reliant.v1.TriggerService.PreviewReplay:input_type -> reliant.v1.PreviewReplayRequest
-	21, // 84: reliant.v1.TriggerService.CreateTrigger:output_type -> reliant.v1.CreateTriggerResponse
-	25, // 85: reliant.v1.TriggerService.GetTrigger:output_type -> reliant.v1.GetTriggerResponse
-	27, // 86: reliant.v1.TriggerService.ListTriggers:output_type -> reliant.v1.ListTriggersResponse
-	29, // 87: reliant.v1.TriggerService.UpdateTrigger:output_type -> reliant.v1.UpdateTriggerResponse
-	31, // 88: reliant.v1.TriggerService.DeleteTrigger:output_type -> reliant.v1.DeleteTriggerResponse
-	33, // 89: reliant.v1.TriggerService.SetTriggerEnabled:output_type -> reliant.v1.SetTriggerEnabledResponse
-	42, // 90: reliant.v1.TriggerService.FireTrigger:output_type -> reliant.v1.FireTriggerResponse
-	44, // 91: reliant.v1.TriggerService.ListTriggerEvents:output_type -> reliant.v1.ListTriggerEventsResponse
-	46, // 92: reliant.v1.TriggerService.GetLaunchEvent:output_type -> reliant.v1.GetLaunchEventResponse
-	23, // 93: reliant.v1.TriggerService.RotateWebhookToken:output_type -> reliant.v1.RotateWebhookTokenResponse
-	37, // 94: reliant.v1.TriggerService.EnableWorkflow:output_type -> reliant.v1.EnableWorkflowResponse
-	39, // 95: reliant.v1.TriggerService.DisableWorkflow:output_type -> reliant.v1.DisableWorkflowResponse
-	49, // 96: reliant.v1.TriggerService.ResolveTriggerSenders:output_type -> reliant.v1.ResolveTriggerSendersResponse
-	52, // 97: reliant.v1.TriggerService.ListReplayEvents:output_type -> reliant.v1.ListReplayEventsResponse
-	54, // 98: reliant.v1.TriggerService.PreviewReplay:output_type -> reliant.v1.PreviewReplayResponse
-	84, // [84:99] is the sub-list for method output_type
-	69, // [69:84] is the sub-list for method input_type
-	69, // [69:69] is the sub-list for extension type_name
-	69, // [69:69] is the sub-list for extension extendee
-	0,  // [0:69] is the sub-list for field type_name
+	3,  // 48: reliant.v1.EnableWorkflowRequest.acting_identity:type_name -> reliant.v1.ActingIdentity
+	65, // 49: reliant.v1.WorkflowTriggerOverride.params:type_name -> reliant.v1.WorkflowTriggerOverride.ParamsEntry
+	6,  // 50: reliant.v1.WorkflowTriggerResult.outcome:type_name -> reliant.v1.WorkflowTriggerOutcome
+	15, // 51: reliant.v1.WorkflowTriggerResult.activation:type_name -> reliant.v1.Trigger
+	19, // 52: reliant.v1.WorkflowTriggerResult.webhook:type_name -> reliant.v1.WebhookCredential
+	36, // 53: reliant.v1.EnableWorkflowResponse.results:type_name -> reliant.v1.WorkflowTriggerResult
+	15, // 54: reliant.v1.DisableWorkflowResponse.paused:type_name -> reliant.v1.Trigger
+	40, // 55: reliant.v1.DisableWorkflowResponse.failed:type_name -> reliant.v1.TriggerFailure
+	2,  // 56: reliant.v1.ListTriggerEventsRequest.outcomes:type_name -> reliant.v1.TriggerEventOutcome
+	16, // 57: reliant.v1.ListTriggerEventsResponse.events:type_name -> reliant.v1.TriggerEvent
+	16, // 58: reliant.v1.GetLaunchEventResponse.event:type_name -> reliant.v1.TriggerEvent
+	48, // 59: reliant.v1.ResolveTriggerSendersResponse.senders:type_name -> reliant.v1.ResolvedTriggerSender
+	16, // 60: reliant.v1.ReplayCandidate.event:type_name -> reliant.v1.TriggerEvent
+	51, // 61: reliant.v1.ListReplayEventsResponse.events:type_name -> reliant.v1.ReplayCandidate
+	71, // 62: reliant.v1.PreviewReplayRequest.replay:type_name -> reliant.v1.ReplayEvent
+	17, // 63: reliant.v1.PreviewReplayRequest.sender:type_name -> reliant.v1.TriggerSender
+	66, // 64: reliant.v1.PreviewReplayResponse.inputs:type_name -> reliant.v1.PreviewReplayResponse.InputsEntry
+	72, // 65: reliant.v1.Trigger.ParamsEntry.value:type_name -> google.protobuf.Value
+	72, // 66: reliant.v1.TriggerDefinition.ParamsEntry.value:type_name -> google.protobuf.Value
+	72, // 67: reliant.v1.EnableWorkflowRequest.ParamsEntry.value:type_name -> google.protobuf.Value
+	72, // 68: reliant.v1.WorkflowTriggerOverride.ParamsEntry.value:type_name -> google.protobuf.Value
+	72, // 69: reliant.v1.PreviewReplayResponse.InputsEntry.value:type_name -> google.protobuf.Value
+	20, // 70: reliant.v1.TriggerService.CreateTrigger:input_type -> reliant.v1.CreateTriggerRequest
+	24, // 71: reliant.v1.TriggerService.GetTrigger:input_type -> reliant.v1.GetTriggerRequest
+	26, // 72: reliant.v1.TriggerService.ListTriggers:input_type -> reliant.v1.ListTriggersRequest
+	28, // 73: reliant.v1.TriggerService.UpdateTrigger:input_type -> reliant.v1.UpdateTriggerRequest
+	30, // 74: reliant.v1.TriggerService.DeleteTrigger:input_type -> reliant.v1.DeleteTriggerRequest
+	32, // 75: reliant.v1.TriggerService.SetTriggerEnabled:input_type -> reliant.v1.SetTriggerEnabledRequest
+	41, // 76: reliant.v1.TriggerService.FireTrigger:input_type -> reliant.v1.FireTriggerRequest
+	43, // 77: reliant.v1.TriggerService.ListTriggerEvents:input_type -> reliant.v1.ListTriggerEventsRequest
+	45, // 78: reliant.v1.TriggerService.GetLaunchEvent:input_type -> reliant.v1.GetLaunchEventRequest
+	22, // 79: reliant.v1.TriggerService.RotateWebhookToken:input_type -> reliant.v1.RotateWebhookTokenRequest
+	34, // 80: reliant.v1.TriggerService.EnableWorkflow:input_type -> reliant.v1.EnableWorkflowRequest
+	38, // 81: reliant.v1.TriggerService.DisableWorkflow:input_type -> reliant.v1.DisableWorkflowRequest
+	47, // 82: reliant.v1.TriggerService.ResolveTriggerSenders:input_type -> reliant.v1.ResolveTriggerSendersRequest
+	50, // 83: reliant.v1.TriggerService.ListReplayEvents:input_type -> reliant.v1.ListReplayEventsRequest
+	53, // 84: reliant.v1.TriggerService.PreviewReplay:input_type -> reliant.v1.PreviewReplayRequest
+	21, // 85: reliant.v1.TriggerService.CreateTrigger:output_type -> reliant.v1.CreateTriggerResponse
+	25, // 86: reliant.v1.TriggerService.GetTrigger:output_type -> reliant.v1.GetTriggerResponse
+	27, // 87: reliant.v1.TriggerService.ListTriggers:output_type -> reliant.v1.ListTriggersResponse
+	29, // 88: reliant.v1.TriggerService.UpdateTrigger:output_type -> reliant.v1.UpdateTriggerResponse
+	31, // 89: reliant.v1.TriggerService.DeleteTrigger:output_type -> reliant.v1.DeleteTriggerResponse
+	33, // 90: reliant.v1.TriggerService.SetTriggerEnabled:output_type -> reliant.v1.SetTriggerEnabledResponse
+	42, // 91: reliant.v1.TriggerService.FireTrigger:output_type -> reliant.v1.FireTriggerResponse
+	44, // 92: reliant.v1.TriggerService.ListTriggerEvents:output_type -> reliant.v1.ListTriggerEventsResponse
+	46, // 93: reliant.v1.TriggerService.GetLaunchEvent:output_type -> reliant.v1.GetLaunchEventResponse
+	23, // 94: reliant.v1.TriggerService.RotateWebhookToken:output_type -> reliant.v1.RotateWebhookTokenResponse
+	37, // 95: reliant.v1.TriggerService.EnableWorkflow:output_type -> reliant.v1.EnableWorkflowResponse
+	39, // 96: reliant.v1.TriggerService.DisableWorkflow:output_type -> reliant.v1.DisableWorkflowResponse
+	49, // 97: reliant.v1.TriggerService.ResolveTriggerSenders:output_type -> reliant.v1.ResolveTriggerSendersResponse
+	52, // 98: reliant.v1.TriggerService.ListReplayEvents:output_type -> reliant.v1.ListReplayEventsResponse
+	54, // 99: reliant.v1.TriggerService.PreviewReplay:output_type -> reliant.v1.PreviewReplayResponse
+	85, // [85:100] is the sub-list for method output_type
+	70, // [70:85] is the sub-list for method input_type
+	70, // [70:70] is the sub-list for extension type_name
+	70, // [70:70] is the sub-list for extension extendee
+	0,  // [0:70] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_trigger_proto_init() }

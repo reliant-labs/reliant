@@ -1,0 +1,5 @@
+type: object
+properties:
+  ref: { type: string }
+  sha: { type: string }
+  label: { type: string }

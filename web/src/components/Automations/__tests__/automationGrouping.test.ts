@@ -93,7 +93,7 @@ describe("groupAutomations", () => {
     ]);
   });
 
-  it("pins Failing / Waiting / Skipping / Degraded under Needs attention, worst first, and only there", () => {
+  it("pins Failing / Waiting / Skipping under Needs attention, worst first, and only there; a single recent failure stays put", () => {
     const { attention, groups } = groupAutomations(
       [
         trigger({ id: "fine" }),
@@ -115,9 +115,9 @@ describe("groupAutomations", () => {
       "workflow",
     );
     expect(attention?.label).toBe("Needs attention");
-    expect(ids(attention!.entries)).toEqual(["failing", "waiting", "skipping", "degraded"]);
+    expect(ids(attention!.entries)).toEqual(["failing", "waiting", "skipping"]);
     // The "other" workflow's only automation moved up, so its group is gone.
-    expect(groups.map((g) => [g.label, ids(g.entries)])).toEqual([["Agent", ["fine"]]]);
+    expect(groups.map((g) => [g.label, ids(g.entries)])).toEqual([["Agent", ["degraded", "fine"]]]);
   });
 
   it("has no Needs attention group when nothing needs it", () => {

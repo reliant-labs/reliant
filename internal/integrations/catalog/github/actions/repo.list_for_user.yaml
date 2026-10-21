@@ -1,0 +1,89 @@
+# yaml-language-server: $schema=../../../manifest/schema/action.schema.json
+id: repo.list_for_user
+display_name: List repositories
+summary: Repositories the connection can see, for pickers and lookups.
+description: >-
+  List the repositories the connected user can access (owned,
+  collaborator, and through organization membership), following
+  pagination up to 1000. With the hosted GitHub App, actions still only
+  reach repositories the App is installed on. can_push says whether the
+  user can write.
+keywords: [repository, repos, list, picker, projects]
+placement: server
+mutates: false
+tool:
+  expose: true
+params:
+  type: object
+  additionalProperties: false
+  properties:
+    visibility:
+      type: string
+      enum: [all, public, private]
+      title: Visibility
+      description: Only repositories with this visibility.
+    affiliation:
+      type: string
+      pattern: "^(owner|collaborator|organization_member)(,(owner|collaborator|organization_member))*$"
+      title: Your relationship
+      description: >-
+        Which of your repositories to list, comma-separated: owner,
+        collaborator, organization_member. Defaults to all three.
+      examples: ["owner,collaborator"]
+    sort:
+      type: string
+      enum: [created, updated, pushed, full_name]
+      title: Sort by
+      description: What to sort by. Defaults to full_name.
+    direction:
+      type: string
+      enum: [asc, desc]
+      title: Direction
+      description: Sort direction. Defaults to asc for full_name, otherwise desc.
+    connection: { $ref: ../schemas/connection.yaml }
+request:
+  method: GET
+  path: /user/repos
+  query: { per_page: "100" }
+  query_expr: >-
+    {?"visibility": params.?visibility,
+     ?"affiliation": params.?affiliation,
+     ?"sort": params.?sort,
+     ?"direction": params.?direction}
+  pagination: { style: link_header, max_pages: 10 }
+  max_response_bytes: 5242880
+  errors: { $ref: ../schemas/github_errors.yaml }
+output:
+  select: >-
+    response.map(r, {"id": r.id,
+                     "full_name": r.full_name,
+                     "name": r.name,
+                     "owner": r.owner.login,
+                     "private": r.private,
+                     "html_url": r.html_url,
+                     "description": r.?description.orValue(null),
+                     "default_branch": r.?default_branch.orValue(null),
+                     "archived": r.?archived.orValue(false),
+                     "fork": r.?fork.orValue(false),
+                     "pushed_at": r.?pushed_at.orValue(null),
+                     "can_push": r.?permissions.?push.orValue(false)})
+  schema:
+    type: object
+    properties:
+      items:
+        type: array
+        items:
+          type: object
+          properties:
+            id: { type: integer }
+            full_name: { type: string, description: "owner/name" }
+            name: { type: string }
+            owner: { type: string }
+            private: { type: boolean }
+            html_url: { type: string }
+            description: { type: [string, "null"] }
+            default_branch: { type: [string, "null"] }
+            archived: { type: boolean }
+            fork: { type: boolean }
+            pushed_at: { type: [string, "null"] }
+            can_push: { type: boolean }

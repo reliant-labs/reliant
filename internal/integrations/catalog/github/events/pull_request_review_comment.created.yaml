@@ -1,0 +1,51 @@
+# yaml-language-server: $schema=../../../manifest/schema/event.schema.json
+id: pull_request_review_comment.created
+display_name: Pull request inline comment
+summary: A comment was left on a line of a pull request's diff.
+description: >-
+  Fires when someone comments on a line of a pull request's diff, or
+  replies in such a thread, including the comments of a review as it is
+  submitted (each comment fires on its own). Conversation-tab comments are
+  issue_comment.created instead. Match mentions_reliant: "true" for
+  comments that mention @reliant and is_reply: "false" for the first
+  comment of a thread. data.comment has the file path, line, side, the diff
+  hunk and review id; reply with github/pr.review_comment.reply using
+  data.comment.id. Comments written by GitHub Apps (including this one)
+  never fire, so a run that replies cannot trigger itself.
+keywords: [pr, review comment, inline, diff, line, thread, responder, address feedback]
+events: [pull_request_review_comment.created]
+attributes:
+  - { $ref: ../schemas/attr_repository.yaml }
+  - { $ref: ../schemas/attr_installation.yaml }
+  - { $ref: ../schemas/attr_sender.yaml }
+  - { $ref: ../schemas/attr_action.yaml }
+  - { $ref: ../schemas/attr_branch.yaml }
+  - { $ref: ../schemas/attr_base_branch.yaml }
+  - { name: mentions_reliant, description: '"true" when the comment mentions @reliant.', example: "true" }
+  - { name: is_reply, description: '"true" when the comment replies to another in its thread.', example: "false" }
+data:
+  type: object
+  additionalProperties: false
+  properties:
+    action: { type: string }
+    pull_request: { $ref: ../schemas/pr_schema.yaml }
+    comment:
+      type: object
+      properties:
+        id: { type: integer }
+        body: { type: string }
+        html_url: { type: string }
+        user: { $ref: ../schemas/user_schema.yaml }
+        author_association: { type: string }
+        path: { type: string }
+        line: { type: integer, description: The line in the diff; absent when the comment is outdated. }
+        original_line: { type: integer }
+        side: { type: string, description: "LEFT or RIGHT." }
+        subject_type: { type: string, description: "line or file." }
+        commit_id: { type: string }
+        diff_hunk: { type: string }
+        in_reply_to_id: { type: integer, description: The comment this replies to; absent for the first comment of a thread. }
+        pull_request_review_id: { type: integer }
+        created_at: { type: string }
+    repository: { $ref: ../schemas/repository_schema.yaml }
+    sender: { $ref: ../schemas/user_schema.yaml }

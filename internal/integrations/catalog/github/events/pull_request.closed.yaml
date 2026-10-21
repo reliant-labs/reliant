@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=../../../manifest/schema/event.schema.json
+id: pull_request.closed
+display_name: Pull request closed
+summary: A pull request was closed or merged.
+description: >-
+  Fires when a pull request is closed. Match merged: "true" for merges
+  only; pull_request.merged says the same in the payload.
+keywords: [pr, merged, merge]
+events: [pull_request.closed]
+attributes:
+  - { $ref: ../schemas/attr_repository.yaml }
+  - { $ref: ../schemas/attr_installation.yaml }
+  - { $ref: ../schemas/attr_sender.yaml }
+  - { $ref: ../schemas/attr_action.yaml }
+  - { $ref: ../schemas/attr_branch.yaml }
+  - { $ref: ../schemas/attr_base_branch.yaml }
+  - { name: merged, description: '"true" when the pull request was merged.', example: "true" }
+data: { $ref: ../schemas/pr_data.yaml }

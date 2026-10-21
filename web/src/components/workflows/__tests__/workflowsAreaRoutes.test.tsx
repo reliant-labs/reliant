@@ -112,12 +112,12 @@ describe("Workflows area routes render inside the shell with the right tab", () 
     renderAt(path);
     expect(await screen.findByTestId(`page-${page}`)).toBeInTheDocument();
     expect(activeTab()).toBe(tab);
-    // The three tabs, in order.
+    // The three tabs, in the order of the jobs: find it, turn it on, watch it (O9).
     const nav = screen.getByRole("navigation", { name: "Workflows" });
     expect(within(nav).getAllByRole("link").map((link) => link.textContent)).toEqual([
       "Library",
-      "Runs",
       "Automations",
+      "Runs",
     ]);
   });
 

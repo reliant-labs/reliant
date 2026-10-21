@@ -1,0 +1,44 @@
+# yaml-language-server: $schema=../../../manifest/schema/action.schema.json
+id: issue.labels.add
+display_name: Add a label to an issue or pull request
+summary: Add one label without touching the others (atomic, unlike issue.update).
+description: >-
+  Add a single label to an issue or pull request. This is one request that
+  GitHub applies on its own, so it cannot overwrite a label someone else
+  added at the same moment; issue.update with labels replaces the whole
+  list and can. A label that does not exist in the repository is created;
+  adding one the issue already has changes nothing. Returns the issue's
+  labels after the change.
+keywords: [label, add, tag, mark, triage, issue, pull request, atomic]
+placement: server
+mutates: true
+tool:
+  expose: true
+params:
+  type: object
+  additionalProperties: false
+  required: [owner, repo, issue_number, label]
+  properties:
+    owner: { $ref: ../schemas/owner.yaml }
+    repo: { $ref: ../schemas/repo.yaml }
+    issue_number: { $ref: ../schemas/issue_number.yaml }
+    label: { $ref: ../schemas/label_name.yaml }
+    connection: { $ref: ../schemas/connection.yaml }
+request:
+  method: POST
+  path: /repos/{{ params.owner }}/{{ params.repo }}/issues/{{ params.issue_number }}/labels
+  body_expr: '{"labels": [params.label]}'
+  errors: { $ref: ../schemas/github_errors.yaml }
+output:
+  select: >-
+    {"added": params.label,
+     "labels": response.map(l, type(l) == string ? l : l.name),
+     "number": params.issue_number,
+     "html_url": "https://github.com/" + params.owner + "/" + params.repo + "/issues/" + string(int(params.issue_number))}
+  schema:
+    type: object
+    properties:
+      added: { type: string }
+      labels: { type: array, items: { type: string }, description: The issue's labels after the change. }
+      number: { type: integer }
+      html_url: { type: string, description: The issue's page (GitHub redirects it to the pull request for one). }

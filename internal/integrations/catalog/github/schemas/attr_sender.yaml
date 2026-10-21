@@ -1,0 +1,1 @@
+{ name: sender, description: "Login of the user who acted. A login can be renamed and reclaimed by someone else, so never use it to decide who may start a run; trigger.sender.id (the user id) is for that.", example: octocat }

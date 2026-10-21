@@ -1,0 +1,24 @@
+# yaml-language-server: $schema=../../../manifest/schema/event.schema.json
+id: issue.labeled
+display_name: Issue labeled
+summary: A label was added to an issue.
+description: >-
+  Fires when a label is added to an issue. Match `label` to react to one
+  label, e.g. label: needs-triage.
+keywords: [label, tag, triage]
+events: [issues.labeled]
+attributes:
+  - { $ref: ../schemas/attr_repository.yaml }
+  - { $ref: ../schemas/attr_installation.yaml }
+  - { $ref: ../schemas/attr_sender.yaml }
+  - { $ref: ../schemas/attr_action.yaml }
+  - { name: label, description: The label that was added., example: needs-triage }
+data:
+  type: object
+  additionalProperties: false
+  properties:
+    action: { type: string }
+    label: { type: string, description: The label that was added. }
+    issue: { $ref: ../schemas/issue_schema.yaml }
+    repository: { $ref: ../schemas/repository_schema.yaml }
+    sender: { $ref: ../schemas/user_schema.yaml }

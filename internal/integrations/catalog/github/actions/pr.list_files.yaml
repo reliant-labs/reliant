@@ -1,0 +1,57 @@
+# yaml-language-server: $schema=../../../manifest/schema/action.schema.json
+id: pr.list_files
+display_name: List pull request files
+summary: The files a pull request changes, with per-file diffs, for review.
+description: >-
+  List the files a pull request changes: filename, status (added,
+  modified, removed, renamed, ...), line counts and the unified diff hunk
+  (patch). patch is null for binary files and very large diffs. Follows
+  GitHub's pagination up to 1000 files; GitHub itself caps the list at
+  3000.
+keywords: [pull request, pr, diff, files, changes, patch, review]
+placement: server
+mutates: false
+tool:
+  expose: true
+params:
+  type: object
+  additionalProperties: false
+  required: [owner, repo, pull_number]
+  properties:
+    owner: { $ref: ../schemas/owner.yaml }
+    repo: { $ref: ../schemas/repo.yaml }
+    pull_number: { $ref: ../schemas/pull_number.yaml }
+    connection: { $ref: ../schemas/connection.yaml }
+request:
+  method: GET
+  path: /repos/{{ params.owner }}/{{ params.repo }}/pulls/{{ params.pull_number }}/files
+  query: { per_page: "100" }
+  pagination: { style: link_header, max_pages: 10 }
+  max_response_bytes: 5242880
+  errors: { $ref: ../schemas/github_errors.yaml }
+output:
+  select: >-
+    response.map(f, {"filename": f.filename,
+                     "status": f.status,
+                     "additions": f.additions,
+                     "deletions": f.deletions,
+                     "changes": f.changes,
+                     "patch": f.?patch.orValue(null),
+                     "previous_filename": f.?previous_filename.orValue(null),
+                     "sha": f.?sha.orValue(null)})
+  schema:
+    type: object
+    properties:
+      items:
+        type: array
+        items:
+          type: object
+          properties:
+            filename: { type: string }
+            status: { type: string, enum: [added, removed, modified, renamed, copied, changed, unchanged] }
+            additions: { type: integer }
+            deletions: { type: integer }
+            changes: { type: integer }
+            patch: { type: [string, "null"], description: The unified diff hunk; null for binary or oversized files. }
+            previous_filename: { type: [string, "null"], description: Set when status is renamed. }
+            sha: { type: [string, "null"] }

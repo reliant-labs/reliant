@@ -456,6 +456,9 @@ func fieldInfoToCELType(info *FieldInfo) *types.Type {
 	if info.IsDynamic {
 		return types.DynType
 	}
+	if info.CELType != nil {
+		return info.CELType
+	}
 	return kindToCELType(info.Kind)
 }
 

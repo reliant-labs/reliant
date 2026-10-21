@@ -1,0 +1,22 @@
+type: object
+properties:
+  number: { type: integer }
+  title: { type: string }
+  body: { type: string }
+  state: { type: string, enum: [open, closed] }
+  draft: { type: boolean }
+  merged: { type: boolean }
+  merged_at: { type: string }
+  merge_commit_sha: { type: string }
+  html_url: { type: string }
+  user: { $ref: user_schema.yaml }
+  head: { $ref: ref_schema.yaml }
+  base: { $ref: ref_schema.yaml }
+  labels: { type: array, items: { type: string } }
+  requested_reviewers: { type: array, items: { type: string } }
+  additions: { type: integer }
+  deletions: { type: integer }
+  changed_files: { type: integer }
+  commits: { type: integer }
+  created_at: { type: string }
+  updated_at: { type: string }
