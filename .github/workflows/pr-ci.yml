@@ -554,6 +554,12 @@ jobs:
           restore-keys: |
             go-mod-${{ runner.os }}-
 
+      # The trim step below keeps every entry used since this moment, so it
+      # is taken BEFORE anything can read the cache. (Not the event payload's
+      # mtime: the runner rewrites that file for every step.)
+      - name: Note when the Go build cache was restored
+        run: echo "GOCACHE_RESTORED_AT=$(date +%s)" >> "$GITHUB_ENV"
+
       # The shared cache ("ONE GO BUILD CACHE" above); this job saves it.
       - name: Restore Go build cache
         id: build-cache
@@ -708,18 +714,16 @@ jobs:
           go test -count=1 -run '^$' -exec /bin/true -tags=e2e ./e2e/...
 
       # Go refreshes an entry's mtime whenever it uses one more than an hour
-      # old, so every entry this job touched is newer than (job start - 1h).
+      # old, so every entry this job touched is newer than (restore - 1h).
       # Anything older is something no job needs any more; without this, each
       # save carried forward everything it had restored and the cache only
-      # grew. The runner writes the event payload when the job starts and
-      # never again, so its mtime is the job start.
+      # grew.
       - name: Trim the Go build cache to what this job used (main only)
         if: ${{ !cancelled() && github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && steps.build-cache.outputs.cache-hit != 'true' }}
         run: |
           set -euo pipefail
           du -sh ~/.cache/go-build
-          job_start="$(stat -c %Y "${GITHUB_EVENT_PATH}")"
-          stale_minutes=$(( ($(date +%s) - job_start) / 60 + 65 ))
+          stale_minutes=$(( ($(date +%s) - GOCACHE_RESTORED_AT) / 60 + 65 ))
           find ~/.cache/go-build -type f -mmin +"${stale_minutes}" -delete
           du -sh ~/.cache/go-build
 

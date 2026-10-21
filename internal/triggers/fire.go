@@ -108,6 +108,11 @@ func (f *Firer) Fire(ctx context.Context, req FireRequest) (*FireOutput, error) 
 		projected.Config = decl.Source.Config
 		trigger = &projected
 	}
+	// An activation missing a setting its workflow requires would launch a
+	// run that fails input validation at its first step. Record why instead.
+	if issues := SetupIssues(decl, trigger); len(issues) > 0 && !resuming {
+		return f.recordSkip(ctx, trigger, req, SetupDetail(issues))
+	}
 
 	// A stored config that no longer parses cannot tell us its overlap policy
 	// or timezone. Record that as the verdict rather than guessing, so the

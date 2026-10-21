@@ -66,6 +66,12 @@ enum InboxItemKind {
   // A machine is low on disk, or holds archived worktrees it will not remove
   // on its own. One item per machine. Informational.
   INBOX_ITEM_KIND_STORAGE = 7;
+  // An enabled automation cannot run until the person finishes setting it up
+  // (TRIGGER_HEALTH_STATUS_NEEDS_SETUP): a required input has no value. One
+  // item per automation; it links to the workflow page's automation, where
+  // "Finish setup" renders, and leaves the list when setup is finished.
+  // Informational.
+  INBOX_ITEM_KIND_AUTOMATION_NEEDS_SETUP = 8;
 }
 
 message ListInboxRequest {
@@ -102,12 +108,15 @@ message InboxItem {
 
   // Stable key for dismissal and de-duplication, prefixed by kind
   // ("approval:", "question:", "waiting_for_machine:", "automation_failing:",
-  // "automation_launch_failed:", "run_finished:", "storage:"). Approvals and questions
+  // "automation_launch_failed:", "run_finished:", "storage:",
+  // "automation_needs_setup:"). Approvals and questions
   // embed their row id; waiting-for-machine embeds the chat id and when the
   // block began, so a later block is a new item; run-finished embeds the chat
   // id. Automation failure items embed the id of the FIRST failing event of the
   // current failure episode, so repeated failures stay one item and a new
-  // episode is a new item.
+  // episode is a new item. A needs-setup item embeds the automation and the
+  // set of inputs it is missing, so dismissing it holds until a workflow edit
+  // makes it miss something new.
   string item_id = 2;
 
   // The chat the item belongs to. Empty for automation failure kinds that have
@@ -137,6 +146,7 @@ message InboxItem {
     InboxAutomationLaunchFailed automation_launch_failed = 24;
     InboxRunFinished run_finished = 25;
     InboxStorage storage = 26;
+    InboxAutomationNeedsSetup automation_needs_setup = 27;
   }
 }
 
@@ -170,6 +180,14 @@ message InboxAutomationFailing {
   TriggerHealth health = 1;
   // The run to open: the newest launched firing's chat, when it still exists.
   optional string last_run_chat_id = 2;
+}
+
+// InboxAutomationNeedsSetup is an automation waiting for its owner to finish
+// setting it up. The item's workflow_name and project_id locate the workflow
+// page's automation.
+message InboxAutomationNeedsSetup {
+  // What is missing, one entry per workflow input, in input-name order.
+  repeated TriggerSetupIssue issues = 1;
 }
 
 message InboxAutomationLaunchFailed {

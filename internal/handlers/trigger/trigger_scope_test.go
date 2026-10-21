@@ -4,6 +4,7 @@ package trigger
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -92,11 +93,14 @@ func TestActivationProjectsTheScopeFromItsParams(t *testing.T) {
 	assert.False(t, matches(cfg, "acme/app"), "a repository removed from the params stops routing")
 }
 
-// An activation with no params projects a scope that matches nothing: it is
-// never wider than what the owner chose.
+// An activation holding no repositories projects a scope that matches nothing:
+// it is never wider than what the owner chose. A required scope input cannot
+// be left out any more (T5 refuses it), so this is the optional form
+// (`default: []`), which is how a workflow says "off until you pick some".
 func TestActivationWithoutParamsProjectsAnEmptyScope(t *testing.T) {
 	env, _ := setupInboundTriggerTest(t)
-	env.saveWorkflow(t, "triage", scopedActivationYAML)
+	env.saveWorkflow(t, "triage", strings.Replace(scopedActivationYAML,
+		"    required: true\n    min_items: 1\n", "    default: []\n", 1))
 	conn := env.createConnection(t, env.userID, "test", "acct-1", core.ConnectionStatusActive)
 
 	created, err := env.svc.CreateTrigger(env.ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{
@@ -106,6 +110,20 @@ func TestActivationWithoutParamsProjectsAnEmptyScope(t *testing.T) {
 	cfg := env.storedScope(t, created.Msg.GetTrigger().GetId())
 	assert.Equal(t, map[string][]string{"repository": {}}, cfg.MatchAny)
 	assert.False(t, matches(cfg, "acme/app"), "an empty scope never fires")
+}
+
+// The required form refuses an activation with no repositories outright.
+func TestRequiredScopeInputCannotBeLeftOutOfAnActivation(t *testing.T) {
+	env, _ := setupInboundTriggerTest(t)
+	env.saveWorkflow(t, "triage", scopedActivationYAML)
+	conn := env.createConnection(t, env.userID, "test", "acct-1", core.ConnectionStatusActive)
+
+	_, err := env.svc.CreateTrigger(env.ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{
+		Trigger: env.activation("pr", func(d *reliantv1.TriggerDefinition) { d.ConnectionId = &conn.ID }),
+	}))
+	require.Error(t, err)
+	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	assert.Contains(t, err.Error(), "repos is required")
 }
 
 func matches(cfg core.IntegrationConfig, repo string) bool {

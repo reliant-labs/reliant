@@ -27,6 +27,7 @@ import {
   approvalItem,
   failingItem,
   launchFailedItem,
+  needsSetupItem,
   questionItem,
   renderInboxAt,
   runFinishedItem,
@@ -189,6 +190,17 @@ describe("InboxPage item kinds", () => {
     expect(within(row).queryByText(/in a row/)).toBeNull();
     await userEvent.click(within(row).getByRole("link", { name: "Edit automation" }));
     await waitFor(() => expect(router.state.location.pathname).toBe("/workflows/automations/trg-2"));
+  });
+
+  it("an automation that needs setup names what is missing and links to Finish setup on its workflow page", async () => {
+    respond([needsSetupItem()]);
+    renderInboxAt(<InboxPage />);
+    const row = await screen.findByTestId("inbox-item-automation_needs_setup:trg-4:repos");
+    expect(within(row).getByLabelText("Automation needs setup")).toBeInTheDocument();
+    expect(within(row).getByText("Repos is required")).toBeInTheDocument();
+    expect(screen.getByText("Automations that need setup")).toBeInTheDocument();
+    const link = within(row).getByRole("link", { name: "Finish setup" });
+    expect(link).toHaveAttribute("href", "/workflows/library/builtin%3A%2F%2Fautopilot-pr-review?project=proj-1#automation-proj-1");
   });
 
   it("a finished run opens its run", async () => {

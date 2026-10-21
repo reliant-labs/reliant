@@ -313,10 +313,7 @@ func warnUnmappedRequiredInputs(mapped map[string]string, scoping map[string]boo
 		if _, ok := mapped[name]; ok || scoping[name] || !model.IsInputRequired(input) {
 			continue
 		}
-		switch input.GetConfig().(type) {
-		case *reliantv1.Input_StringInput, *reliantv1.Input_IntegerInput, *reliantv1.Input_NumberInput,
-			*reliantv1.Input_BooleanInput, *reliantv1.Input_EnumInput, *reliantv1.Input_ArrayInput,
-			*reliantv1.Input_ObjectInput, *reliantv1.Input_IntegrationInput:
+		if isSuppliedByParams(input) {
 			missing = append(missing, name)
 		}
 	}

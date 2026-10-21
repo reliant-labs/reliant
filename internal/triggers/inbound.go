@@ -154,6 +154,14 @@ func (in *Intake) Accept(ctx context.Context, trigger *core.Trigger, ev InboundE
 		outcome, detail = core.TriggerEventFailed, err.Error()
 	case err != nil:
 		return nil, fmt.Errorf("resolve trigger %s's declaration: %w", trigger.ID, err)
+	case len(SetupIssues(decl, trigger)) > 0:
+		// An activation that was never finished (or whose workflow has since
+		// grown a required input) cannot launch anything, and its filter reads
+		// the very params that are missing, so evaluating it would only
+		// report a misleading "did not match". Say what is wrong instead.
+		// Recorded as skipped, not failed: the automation did not break, it is
+		// waiting for its owner, and health reads that from the workflow.
+		outcome, detail = core.TriggerEventSkipped, SetupDetail(SetupIssues(decl, trigger))
 	case !opts.Manual:
 		outcome, detail = in.applyOriginGuards(ctx, trigger, decl, ev, origin, occurredAt)
 		if outcome == core.TriggerEventPending {
