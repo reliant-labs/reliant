@@ -183,6 +183,23 @@ message ApiServerConfig {
     allowed_values: ["dry-run", "on", "off"]
     description: "Worktree auto-archive: dry-run, on or off"
   }];
+
+  // The OAuth provider the desktop sign-in (SystemService.StartOAuthSignIn)
+  // logs in through: its origin and its PUBLIC publishable key
+  // (sb_publishable_*, the browser-facing anon identity, not a service-role
+  // secret). The defaults are the hosted provider, projected from
+  // control-plane's deploy/kcl/lib/env.k like CLIConfig's endpoints and
+  // pinned by the same drift test; a release build stamps its own.
+  string auth_provider_url = 37 [(forge.v1.config) = {
+    env_var: "RELIANT_AUTH_URL"
+    default_value: "https://dash.reliantlabs.io"
+    description: "OAuth provider origin for the desktop sign-in"
+  }];
+  string auth_provider_key = 38 [(forge.v1.config) = {
+    env_var: "RELIANT_AUTH_KEY"
+    default_value: "sb_publishable_KKiB3B0EdEv7nguwKfEE5A_iY9rVXod"
+    description: "OAuth provider publishable (public) key for the desktop sign-in"
+  }];
   IntegrationsConfig integrations = 40;
   ObservabilityConfig observability = 50;
   SentryConfig sentry = 51;

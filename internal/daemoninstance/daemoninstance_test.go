@@ -105,26 +105,18 @@ func TestOriginKeyCollapsesToOrigin(t *testing.T) {
 }
 
 func TestResolveRejectsUnparseableOrigin(t *testing.T) {
-	if _, err := Resolve("not-a-url", "sub", "/tmp/ws"); !errors.Is(err, ErrInvalidOrigin) {
-		t.Fatalf("Resolve with a bad origin: err = %v, want ErrInvalidOrigin", err)
+	for _, bad := range []string{"not-a-url", "", "  "} {
+		if _, err := Resolve(bad, "sub", "/tmp/ws"); !errors.Is(err, ErrInvalidOrigin) {
+			t.Fatalf("Resolve with origin %q: err = %v, want ErrInvalidOrigin", bad, err)
+		}
 	}
 }
 
-func TestResolveDefaultsOriginAndWorkspace(t *testing.T) {
-	t.Setenv(EnvServerURL, "http://localhost:3123")
-
-	dir := t.TempDir()
-	key, err := Resolve("", "", dir)
-	if err != nil {
-		t.Fatalf("Resolve: %v", err)
-	}
-	if key.Origin != "http://localhost:3123" {
-		t.Errorf("origin = %q, want the RELIANT_SERVER_URL value", key.Origin)
-	}
-
+func TestResolveDefaultsWorkspace(t *testing.T) {
 	// With no workspace, the working directory names it.
+	dir := t.TempDir()
 	t.Chdir(dir)
-	key, err = Resolve("http://localhost:8090", "", "")
+	key, err := Resolve("http://localhost:8090", "", "")
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}

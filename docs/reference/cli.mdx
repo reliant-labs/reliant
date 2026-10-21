@@ -297,10 +297,8 @@ These flags are available on all commands.
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--config` | `string` | - | path to a config file (.json/.yaml/.yml); also settable via RELIANT_CONFIG. Precedence: defaults \< file \< env \< flags |
-| `--gateway` | `string` | `https://gateway.reliantapi.com` | Daemon gateway URL (defaults to the gateway subdomain of the resolved server) |
 | `--log-format` | `string` | - | Log line format: text or json (default text; json for a hosted daemon) [env: LOG_FORMAT] |
 | `--log-level` | `string` | - | Log level: debug, info, warn or error (default info) [env: RELIANT_LOG_LEVEL] |
-| `--server` | `string` | `https://api.reliantapi.com` | Reliant API server URL (also RELIANT_SERVER_URL) |
 | `--verbose`, `-v` | `bool` | - | Enable verbose output |
 
 ---
@@ -326,6 +324,13 @@ reliant auth
 | [`serve`](#reliant-auth-serve) | Start a local OAuth helper server |
 | [`status`](#reliant-auth-status) | Show the login for the resolved server |
 | [`token`](#reliant-auth-token) | Manage API tokens (rlat_ access tokens acting as you) |
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--gateway` | `string` | `https://gateway.reliantapi.com` | Daemon gateway URL (a non-default server derives its own gateway unless this is set) [env: RELIANT_GATEWAY_URL] |
+| `--server` | `string` | `https://api.reliantapi.com` | Reliant API server URL [env: RELIANT_SERVER_URL] |
 
 ---
 
@@ -525,6 +530,13 @@ reliant daemon
 | [`start`](#reliant-daemon-start) | Start the tools daemon |
 | [`status`](#reliant-daemon-status) | Check daemon status |
 | [`stop`](#reliant-daemon-stop) | Stop the tools daemon |
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--gateway` | `string` | `https://gateway.reliantapi.com` | Daemon gateway URL (a non-default server derives its own gateway unless this is set) [env: RELIANT_GATEWAY_URL] |
+| `--server` | `string` | `https://api.reliantapi.com` | Reliant API server URL [env: RELIANT_SERVER_URL] |
 
 ---
 
@@ -8923,6 +8935,13 @@ reliant project
 | [`create`](#reliant-project-create) | Create a project and print its ID |
 | [`list`](#reliant-project-list) | List your projects |
 
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--gateway` | `string` | `https://gateway.reliantapi.com` | Daemon gateway URL (a non-default server derives its own gateway unless this is set) [env: RELIANT_GATEWAY_URL] |
+| `--server` | `string` | `https://api.reliantapi.com` | Reliant API server URL [env: RELIANT_SERVER_URL] |
+
 ---
 
 ### reliant project create
@@ -9120,6 +9139,13 @@ reliant trigger
 | [`get`](#reliant-trigger-get) | Show one trigger |
 | [`list`](#reliant-trigger-list) | List your triggers |
 | [`update`](#reliant-trigger-update) | Replace a trigger's definition |
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--gateway` | `string` | `https://gateway.reliantapi.com` | Daemon gateway URL (a non-default server derives its own gateway unless this is set) [env: RELIANT_GATEWAY_URL] |
+| `--server` | `string` | `https://api.reliantapi.com` | Reliant API server URL [env: RELIANT_SERVER_URL] |
 
 ---
 
@@ -9339,6 +9365,13 @@ reliant workflow
 | [`validate-tree`](#reliant-workflow-validate-tree) | Validate a workflow tree with preset-aware cross-workflow checks |
 | [`wait-for-gate`](#reliant-workflow-wait-for-gate) | Block until the workflow needs you — the next open question/approval |
 | [`watch`](#reliant-workflow-watch) | Watch a workflow execution and print meaningful boundaries as they happen |
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--gateway` | `string` | `https://gateway.reliantapi.com` | Daemon gateway URL (a non-default server derives its own gateway unless this is set) [env: RELIANT_GATEWAY_URL] |
+| `--server` | `string` | `https://api.reliantapi.com` | Reliant API server URL [env: RELIANT_SERVER_URL] |
 
 ---
 

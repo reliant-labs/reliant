@@ -106,7 +106,7 @@ describe('daemonStartCommand gateway handling', () => {
 
 describe('production renders a bare command', () => {
   // The released binary carries the hosted server/gateway/admin/auth defaults
-  // compiled in (release.yml injects them into internal/builddefaults via -X),
+  // compiled in (release.yml stamps them into pkg/config.BuildDefaults via -X),
   // so prod must print `reliant auth serve` with NO env prefix.
   //
   // This shipped broken: isNonProd() keys off VITE_CLI_DEFAULTS_BAKED and

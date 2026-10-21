@@ -239,7 +239,7 @@ func TestPrecondition_RefusalDoesNotFallBackToTheSharedClient(t *testing.T) {
 // disabled one, because declining to start something with nothing to do is not
 // a failure.
 func TestPrecondition_EnsureProjectServersLoadedSkipsUnsatisfiedServer(t *testing.T) {
-	t.Setenv("RELIANT_USER_CONFIG_DIR", t.TempDir())
+	config.UseUserConfigDirForTest(t, t.TempDir())
 
 	m := NewManager(RoleDaemon)
 	t.Cleanup(func() { _ = m.Close() })

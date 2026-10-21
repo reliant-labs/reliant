@@ -46,9 +46,14 @@ Example:
 }
 
 func runAuthServe(cmd *cobra.Command, port int) error {
+	origins, err := cliWebOrigins(cmd)
+	if err != nil {
+		return err
+	}
 	srv, err := oauthhelper.Start(oauthhelper.Options{
-		Port:   port,
-		Source: "auth-serve",
+		Port:         port,
+		Source:       "auth-serve",
+		ExtraOrigins: origins,
 	})
 	if err != nil {
 		return err

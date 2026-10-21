@@ -86,8 +86,8 @@ func TestDaemonLogLevel(t *testing.T) {
 		{"info", map[string]string{"RELIANT_LOG_LEVEL": "info"}, slog.LevelInfo, true},
 		{"typo falls back to INFO, not explicit", map[string]string{"RELIANT_LOG_LEVEL": "verbose"}, slog.LevelInfo, false},
 		{"ambient DEBUG flag in prod stays INFO", map[string]string{"DEBUG": "true"}, slog.LevelInfo, false},
-		{"explicit info outranks DEBUG flag in dev", map[string]string{"RELIANT_ENV": "dev", "RELIANT_LOG_LEVEL": "info", "DEBUG": "true"}, slog.LevelInfo, true},
-		{"DEBUG flag in dev", map[string]string{"RELIANT_ENV": "dev", "DEBUG": "true"}, slog.LevelDebug, false},
+		{"explicit info in dev", map[string]string{"RELIANT_ENV": "dev", "RELIANT_LOG_LEVEL": "info", "DEBUG": "true"}, slog.LevelInfo, true},
+		{"DEBUG flag in dev is not read", map[string]string{"RELIANT_ENV": "dev", "DEBUG": "true"}, slog.LevelInfo, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

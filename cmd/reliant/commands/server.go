@@ -71,9 +71,6 @@ func loadServerAPIConfig(cmd *cobra.Command, opts *serverapi.Options) error {
 	if err != nil {
 		return err
 	}
-	if err := config.ValidateApiServerConfig(api); err != nil {
-		return err
-	}
 	if err := checkServerPorts(
 		serverPort{"GRPC_PORT (--grpc-port)", api.GetGrpcPort()},
 		serverPort{"HEALTH_PORT (--health-port)", api.GetHealthPort()},
@@ -111,6 +108,7 @@ func loadServerAPIConfig(cmd *cobra.Command, opts *serverapi.Options) error {
 	opts.AuthAPIKey = api.GetAuthApiKey()
 	opts.RequireEmailVerifiedClaim = api.GetRequireEmailVerifiedClaim()
 	opts.AuthorizationServer = strings.TrimSpace(api.GetAuthorizationServer())
+	opts.OAuthProvider = auth.Provider{URL: api.GetAuthProviderUrl(), Key: api.GetAuthProviderKey()}
 	opts.OAuthIssuers = api.GetMcpOauthIssuers()
 	opts.MaxUploadSize = api.GetMaxUploadSize()
 	opts.WorktreeAutoArchive = worktreesweep.ParseAutoArchiveMode(api.GetWorktreeAutoArchive())
@@ -158,9 +156,6 @@ func loadServerWorkerConfig(cmd *cobra.Command, opts *serverworker.Options) erro
 	}
 	worker, err := config.LoadWorkerConfig(cmd)
 	if err != nil {
-		return err
-	}
-	if err := config.ValidateWorkerConfig(worker); err != nil {
 		return err
 	}
 	if err := checkServerPorts(
@@ -213,9 +208,6 @@ func loadServerGatewayConfig(cmd *cobra.Command, opts *servergateway.Options) er
 	}
 	gateway, err := config.LoadGatewayConfig(cmd)
 	if err != nil {
-		return err
-	}
-	if err := config.ValidateGatewayConfig(gateway); err != nil {
 		return err
 	}
 	if err := checkServerPorts(

@@ -46,8 +46,7 @@ option go_package = "github.com/reliant-labs/reliant/gen/config/v1;configv1";
 //     stays with the reader.
 // Readers whose legacy semantics forge's loader cannot reproduce keep their
 // raw reads: a bool that only the exact string "true" (or "false") switched,
-// a number whose malformed value fell back to the default, and a variable that
-// maps onto another field's value (DEBUG=true meaning a DEBUG log level).
+// and a number whose malformed value fell back to the default.
 
 // ReliantConfig is the reliant binary's root config: the surface every
 // reliant process reads.
@@ -80,9 +79,8 @@ message RuntimeConfig {
 // surrounding space ignored) and warns, once its logger exists, about a value
 // that names nothing.
 message LogConfig {
-  // Unset: INFO, or DEBUG when the DEBUG / RELIANT_DEV_DEBUG flags ask for it.
-  // Servers never log DEBUG in prod; the daemon honours an explicit level
-  // everywhere (logging.GetLogLevel, logging.DaemonLogLevel).
+  // Unset: INFO. Servers never log DEBUG in prod; the daemon honours an
+  // explicit level everywhere (logging.GetLogLevel, logging.DaemonLogLevel).
   string level = 1 [(forge.v1.config) = {
     env_var: "RELIANT_LOG_LEVEL"
     flag: "log-level"

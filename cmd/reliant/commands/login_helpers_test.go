@@ -22,9 +22,13 @@ func isolateCLI(t *testing.T) string {
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 	t.Setenv("FORGE_HOME", home)
-	t.Setenv(envServerURL, "")
-	t.Setenv(envGatewayURL, "")
-	t.Setenv(envToken, "")
+	// Every CLIConfig variable, and the config file that could set them.
+	for _, name := range []string{
+		envServerURL, envGatewayURL, envToken, "RELIANT_SKIP_TLS_VERIFY", "RELIANT_WEB_ORIGIN", "FRONTEND_PORT",
+		"RELIANT_INSTANCE_ID", "RELIANT_USER_CONFIG_DIR", "RELIANT_APP_DATA_DIR", "RELIANT_CONFIG",
+	} {
+		t.Setenv(name, "")
+	}
 	path, err := cliauth.CredentialsPath()
 	if err != nil || !strings.HasPrefix(path, home) {
 		t.Fatalf("credentials path %q escaped temp HOME %q — aborting to protect the real file", path, home)

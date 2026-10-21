@@ -3,7 +3,6 @@ package commands
 
 import (
 	"fmt"
-	"os"
 	"strings"
 
 	configv1 "github.com/reliant-labs/reliant/gen/config/v1"
@@ -23,8 +22,7 @@ type integrationSettings struct {
 }
 
 // integrations builds a role's integration settings from its
-// IntegrationsConfig plus this process's integration OAuth clients, trimmed as
-// every reader of these variables trimmed them.
+// IntegrationsConfig, trimmed as every reader of these variables trimmed them.
 func integrations(cfg *configv1.IntegrationsConfig) (integrationSettings, error) {
 	if id := cfg.GetGithubBotUserId(); id < 0 {
 		return integrationSettings{}, fmt.Errorf("config: RELIANT_GITHUB_BOT_USER_ID = %d is not a GitHub user id", id)
@@ -36,21 +34,11 @@ func integrations(cfg *configv1.IntegrationsConfig) (integrationSettings, error)
 		webhooks: webhook.RegistryConfig{
 			SlackSigningSecret:    cfg.GetSlackSigningSecret(),
 			GitHubWebhookSecret:   cfg.GetGithubWebhookSecret(),
-			OAuthClients:          processOAuthClients(),
+			OAuthClients:          connections.OAuthClientsFromConfig(cfg.GetOauthClientIds(), cfg.GetOauthClientSecrets()),
 			PublicURL:             publicURL,
 			TestIntegrationSecret: cfg.GetTestIntegrationSecret(),
 		},
 		gitHubAppSlug: strings.TrimSpace(cfg.GetGithubAppSlug()),
 		gitHubBot:     github.BotFrom(cfg.GetGithubBotUserId(), cfg.GetGithubBotLogin()),
 	}, nil
-}
-
-// processOAuthClients is the deployment's integration OAuth clients,
-// RELIANT_OAUTH_<ID>_CLIENT_ID / _CLIENT_SECRET. The family is keyed by the
-// integration catalog — an open set of names no config message can declare
-// field by field, and forge config has no prefix-keyed map — so this one
-// lookup over the process environment is the entrypoint's to build and hand
-// down.
-func processOAuthClients() connections.OAuthClients {
-	return connections.OAuthClientsFromEnv(os.Getenv) //nolint:forbidigo // open RELIANT_OAUTH_<ID>_* family keyed by the integration catalog; forge config has no prefix-keyed map
 }

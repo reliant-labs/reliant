@@ -12,7 +12,7 @@ func TestLoadMCPServersFromProjectScopes_Precedence(t *testing.T) {
 	userConfigDir := t.TempDir()
 	projectDir := t.TempDir()
 
-	t.Setenv("RELIANT_USER_CONFIG_DIR", userConfigDir)
+	config.UseUserConfigDirForTest(t, userConfigDir)
 
 	globalPath := filepath.Join(userConfigDir, config.MCPConfigFileName)
 	projectPath := filepath.Join(projectDir, config.ReliantDir, config.MCPConfigFileName)

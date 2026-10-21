@@ -36,13 +36,24 @@ func OAuthClientEnv(integrationID string) (idVar, secretVar string) {
 
 // OAuthClients looks up the deployment's OAuth client for an integration:
 // ("", "") when it configured none. The family it reads (OAuthClientEnv) is
-// keyed by the integration catalog, an open set a typed config message cannot
-// declare field by field, so a process entrypoint builds the lookup over its
-// environment once (OAuthClientsFromEnv) and hands it down.
+// keyed by the integration catalog, an open set, so the process config loads
+// it as two env-family maps (IntegrationsConfig) and the entrypoint hands the
+// lookup over them down (OAuthClientsFromConfig).
 type OAuthClients func(integrationID string) (clientID, clientSecret string)
 
-// OAuthClientsFromEnv is the OAuthClients lookup over an environment, each
-// value trimmed.
+// OAuthClientsFromConfig is the OAuthClients lookup over the loaded
+// RELIANT_OAUTH_<ID>_CLIENT_ID / _CLIENT_SECRET maps, keyed by <ID> (the
+// integration id upper-cased, as OAuthClientEnv spells it), each value
+// trimmed.
+func OAuthClientsFromConfig(clientIDs, clientSecrets map[string]string) OAuthClients {
+	return func(integrationID string) (string, string) {
+		key := strings.ToUpper(integrationID)
+		return strings.TrimSpace(clientIDs[key]), strings.TrimSpace(clientSecrets[key])
+	}
+}
+
+// OAuthClientsFromEnv is the OAuthClients lookup over an environment given
+// as a lookup function (a test's fixture), each value trimmed.
 func OAuthClientsFromEnv(getenv func(string) string) OAuthClients {
 	return func(integrationID string) (string, string) {
 		idVar, secretVar := OAuthClientEnv(integrationID)

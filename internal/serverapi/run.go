@@ -126,6 +126,9 @@ type Options struct {
 	// AuthorizationServer is the public URL of the control plane that issues
 	// this deployment's rlat_ tokens (RELIANT_AUTHORIZATION_SERVER).
 	AuthorizationServer string
+	// OAuthProvider is the provider the desktop sign-in logs in through
+	// (RELIANT_AUTH_URL / RELIANT_AUTH_KEY).
+	OAuthProvider auth.Provider
 	// OAuthIssuers are the authorization servers whose access tokens the
 	// connector (MCP) endpoint accepts (MCP_OAUTH_ISSUERS).
 	OAuthIssuers []string
@@ -519,6 +522,7 @@ func Run(ctx context.Context, opts Options) error {
 		PublicURL:           opts.PublicURL,
 		OAuthIssuers:        opts.OAuthIssuers,
 		AuthorizationServer: opts.AuthorizationServer,
+		OAuthProvider:       opts.OAuthProvider,
 		MaxUploadSize:       opts.MaxUploadSize,
 		WorktreeAutoArchive: opts.WorktreeAutoArchive,
 		DisableForgeAPI:     opts.DisableForgeAPI,

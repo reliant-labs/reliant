@@ -16,24 +16,22 @@ import (
 	"runtime"
 	"strings"
 	"time"
-
-	"github.com/reliant-labs/reliant/internal/builddefaults"
 )
 
-// ErrAuthNotConfigured is returned when OAuth is attempted without required env vars.
+// ErrAuthNotConfigured is returned when OAuth is attempted with no provider
+// configured.
 var ErrAuthNotConfigured = fmt.Errorf("auth provider not configured")
 
-func getAuthURL() string {
-	return builddefaults.Value("RELIANT_AUTH_URL", builddefaults.AuthURL, "")
+// Provider is the OAuth provider the desktop sign-in logs in through: its
+// origin (RELIANT_AUTH_URL) and its PUBLIC publishable key (RELIANT_AUTH_KEY),
+// as the API server's config carries them.
+type Provider struct {
+	URL string
+	Key string
 }
 
-func getAuthKey() string {
-	return builddefaults.Value("RELIANT_AUTH_KEY", builddefaults.AuthKey, "")
-}
-
-func requireAuthConfig() (serverURL string, anonKey string, err error) {
-	serverURL = getAuthURL()
-	anonKey = getAuthKey()
+func requireAuthConfig(p Provider) (serverURL string, anonKey string, err error) {
+	serverURL, anonKey = strings.TrimSpace(p.URL), strings.TrimSpace(p.Key)
 	if serverURL == "" {
 		return "", "", fmt.Errorf("%w: RELIANT_AUTH_URL must be set for OAuth login. See docs for auth provider setup", ErrAuthNotConfigured)
 	}
@@ -61,8 +59,8 @@ type LoginResult struct {
 // Electron stores encrypted. It is not a CLI credential. The CLI logs in to the
 // control plane for an rlat_ access token (internal/cliauth), and nothing in
 // this package writes a session file any more.
-func LoginWithOAuthProvider(ctx context.Context, provider string) (*LoginResult, error) {
-	serverURL, anonKey, err := requireAuthConfig()
+func LoginWithOAuthProvider(ctx context.Context, p Provider, provider string) (*LoginResult, error) {
+	serverURL, anonKey, err := requireAuthConfig(p)
 	if err != nil {
 		return nil, err
 	}

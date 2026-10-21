@@ -27,7 +27,7 @@ var rootConfigProcesses = [][]string{
 }
 
 // rootConfigEnv is every variable the root config, or the logger built from
-// it, reads.
+// it, reads, plus the retired DEBUG switches the cases prove are not read.
 var rootConfigEnv = []string{"RELIANT_LOG_LEVEL", "LOG_FORMAT", "DEBUG", "RELIANT_DEV_DEBUG", "RELIANT_CONFIG"}
 
 // TestRootConfigEnvContract pins that RELIANT_LOG_LEVEL and LOG_FORMAT, now
@@ -61,8 +61,9 @@ func TestRootConfigEnvContract(t *testing.T) {
 		{name: "RELIANT_LOG_LEVEL=info", env: map[string]string{"RELIANT_LOG_LEVEL": "info"}, want: effect{level: slog.LevelInfo}},
 		{name: "RELIANT_LOG_LEVEL unrecognised", env: map[string]string{"RELIANT_LOG_LEVEL": "verbose"}, want: effect{level: slog.LevelInfo, warns: "Unrecognised RELIANT_LOG_LEVEL"}},
 		{name: "RELIANT_LOG_LEVEL empty is unset", env: map[string]string{"RELIANT_LOG_LEVEL": ""}, want: effect{level: slog.LevelInfo}},
-		{name: "RELIANT_LOG_LEVEL outranks DEBUG=true", env: map[string]string{"RELIANT_LOG_LEVEL": "warn", "DEBUG": "true"}, want: effect{level: slog.LevelWarn}},
-		{name: "DEBUG=true without RELIANT_LOG_LEVEL", env: map[string]string{"DEBUG": "true"}, want: effect{level: slog.LevelDebug}},
+		{name: "DEBUG=true is not read", env: map[string]string{"RELIANT_LOG_LEVEL": "warn", "DEBUG": "true"}, want: effect{level: slog.LevelWarn}},
+		{name: "DEBUG=true without RELIANT_LOG_LEVEL is not read", env: map[string]string{"DEBUG": "true"}, want: effect{level: slog.LevelInfo}},
+		{name: "RELIANT_DEV_DEBUG=true is retired", env: map[string]string{"RELIANT_DEV_DEBUG": "true"}, want: effect{level: slog.LevelInfo}},
 
 		{name: "LOG_FORMAT=json", env: map[string]string{"LOG_FORMAT": "json"}, want: effect{level: slog.LevelInfo, json: true}},
 		{name: "LOG_FORMAT=JSON", env: map[string]string{"LOG_FORMAT": "JSON"}, want: effect{level: slog.LevelInfo, json: true}},

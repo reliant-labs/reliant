@@ -81,9 +81,8 @@ export const RuntimeConfigSchema: GenMessage<RuntimeConfig> = /*@__PURE__*/
  */
 export type LogConfig = Message<"config.v1.LogConfig"> & {
   /**
-   * Unset: INFO, or DEBUG when the DEBUG / RELIANT_DEV_DEBUG flags ask for it.
-   * Servers never log DEBUG in prod; the daemon honours an explicit level
-   * everywhere (logging.GetLogLevel, logging.DaemonLogLevel).
+   * Unset: INFO. Servers never log DEBUG in prod; the daemon honours an
+   * explicit level everywhere (logging.GetLogLevel, logging.DaemonLogLevel).
    *
    * @generated from field: string level = 1;
    */

@@ -186,9 +186,8 @@ export const ServerTLSConfigSchema: GenMessage<ServerTLSConfig> = /*@__PURE__*/
  * terminationGracePeriodSeconds from them, so a process that ignores them
  * cannot stay inside the grace period it was given. Both follow the rule
  * forge's grace-period arithmetic applies to them (pkg/deploy drainSeconds):
- * zero is the default and negative is none. Forge's arithmetic also reads a
- * bare count of seconds ("30"); this loader takes a Go duration only, so a
- * bare number stops the server at load instead of disagreeing with forge.
+ * zero is the default and negative is none. Both are Go durations ("30s"); a
+ * bare number stops the server at load.
  *
  * @generated from message config.v1.DrainConfig
  */

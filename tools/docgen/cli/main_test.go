@@ -9,7 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/reliant-labs/reliant/internal/builddefaults"
+	forgeconfig "github.com/reliant-labs/forge/pkg/config"
+
+	"github.com/reliant-labs/reliant/pkg/config"
 )
 
 // helperOutputEnv makes the test binary act as the generator: generate()
@@ -58,6 +60,10 @@ func TestReferenceIgnoresTheGeneratingEnvironment(t *testing.T) {
 		t.Fatalf("read generated reference: %v", err)
 	}
 	reference := string(data)
+	defaults, err := forgeconfig.DefaultsTyped[*config.CLIConfig]()
+	if err != nil {
+		t.Fatalf("CLIConfig defaults: %v", err)
+	}
 
 	for _, line := range strings.Split(reference, "\n") {
 		if strings.Contains(line, "envleak") || strings.Contains(line, "7777") || strings.Contains(line, "7778") {
@@ -65,8 +71,8 @@ func TestReferenceIgnoresTheGeneratingEnvironment(t *testing.T) {
 		}
 	}
 	for _, want := range []string{
-		"| `--server` | `string` | `" + builddefaults.ServerURL + "` |",
-		"| `--gateway` | `string` | `" + builddefaults.GatewayURL + "` |",
+		"| `--server` | `string` | `" + defaults.GetConnection().GetServerUrl() + "` |",
+		"| `--gateway` | `string` | `" + defaults.GetConnection().GetGatewayUrl() + "` |",
 		"| `--listen-port` | `int32` | `9190` |",
 	} {
 		if !strings.Contains(reference, want) {

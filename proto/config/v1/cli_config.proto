@@ -1,0 +1,121 @@
+syntax = "proto3";
+
+package config.v1;
+
+import "forge/v1/forge.proto";
+
+option go_package = "github.com/reliant-labs/reliant/gen/config/v1;configv1";
+
+// CLIConfig is what every end-user command reads: where the CLI talks to and
+// with what credential, which web origins its localhost helpers answer, and
+// where this machine keeps its Reliant state. It is a SUBTREE config: every
+// command at or below each path loads it (its flags are persistent there),
+// and no server role does, so a `server api` Deployment carries none of it.
+// It loads alongside the root ReliantConfig (config.proto, whose header has
+// the rules every config here follows).
+//
+// The paths are the command groups that talk to a Reliant server or touch
+// ~/.reliant. `server` and `db` are the hosted roles; `forge` is forge's own
+// CLI, whose flags are its own; `version` and `preview-url` read none of this.
+message CLIConfig {
+  option (forge.v1.binary_config) = {
+    binary: "reliant"
+    subtrees: [
+      {path: ["auth"]},
+      {path: ["daemon"]},
+      {path: ["project"]},
+      {path: ["trigger"]},
+      {path: ["workflow"]}
+    ]
+  };
+
+  CLIConnectionConfig connection = 1;
+  CLIWebConfig web = 2;
+  CLIMachineConfig machine = 3;
+}
+
+// CLIConnectionConfig selects the server a command talks to and the bearer it
+// presents (cmd/reliant/commands/connection.go has the precedence).
+message CLIConnectionConfig {
+  // The defaults are Reliant's hosted endpoints, so a `go install` build works
+  // with no flags and no environment; pointing at another server is one value.
+  // They are a projection of control-plane's deploy/kcl/lib/env.k
+  // (reliant_endpoints), pinned against the generated
+  // electron/release.config.json by pkg/config's drift test. A release build
+  // stamps its own (pkg/config.BuildDefaults, .github/workflows/release.yml).
+  string server_url = 1 [(forge.v1.config) = {
+    env_var: "RELIANT_SERVER_URL"
+    flag: "server"
+    default_value: "https://api.reliantapi.com"
+    description: "Reliant API server URL"
+  }];
+
+  // The daemon gateway, a different process from the API server. Declared,
+  // never derived, for the hosted server: deriving from prod's `api.` host
+  // invents gateway-api.reliantapi.com, which does not exist. A server chosen
+  // by --server or RELIANT_SERVER_URL derives its own gateway unless this is
+  // set too, so switching servers never leaves the gateway behind.
+  string gateway_url = 2 [(forge.v1.config) = {
+    env_var: "RELIANT_GATEWAY_URL"
+    flag: "gateway"
+    default_value: "https://gateway.reliantapi.com"
+    description: "Daemon gateway URL (a non-default server derives its own gateway unless this is set)"
+  }];
+
+  // A bearer for one invocation (CI, scripts), ahead of the stored login. No
+  // flag: `daemon start --token` already means "read a daemon token from
+  // stdin", and a secret on a command line ends up in shell history.
+  string token = 3 [(forge.v1.config) = {
+    env_var: "RELIANT_TOKEN"
+    sensitive: true
+    optional: true
+    description: "API token used instead of the stored login"
+  }];
+
+  // Skips TLS certificate verification for every server. Localhost servers
+  // are never verified, set or not.
+  bool skip_tls_verify = 4 [(forge.v1.config) = {
+    env_var: "RELIANT_SKIP_TLS_VERIFY"
+    description: "Skip TLS certificate verification (development only)"
+  }];
+}
+
+// CLIWebConfig is which browser origins the localhost OAuth helper (`auth
+// serve`, and the one the daemon opens on demand) accepts beyond its
+// defaults. A worktree's web dev server gets a per-worktree port, so its
+// origin is never one of the static defaults.
+message CLIWebConfig {
+  repeated string origins = 1 [(forge.v1.config) = {
+    env_var: "RELIANT_WEB_ORIGIN"
+    description: "Comma-separated web origins the localhost OAuth helper accepts"
+  }];
+
+  // The dev web server's port, as forge publishes it and the Electron main
+  // process reads it: its loopback origins are accepted too, so a worktree
+  // stack works without also setting RELIANT_WEB_ORIGIN.
+  string frontend_port = 2 [(forge.v1.config) = {
+    env_var: "FRONTEND_PORT"
+    description: "Dev web server port whose loopback origins the localhost OAuth helper accepts"
+  }];
+}
+
+// CLIMachineConfig is where this machine keeps its Reliant state.
+message CLIMachineConfig {
+  // Unset: the id persisted in ~/.reliant, created on first use.
+  string instance_id = 1 [(forge.v1.config) = {
+    env_var: "RELIANT_INSTANCE_ID"
+    description: "Pinned machine instance id (default: the one persisted in ~/.reliant)"
+  }];
+
+  // Unset: ~/.reliant. The desktop app sets both directories.
+  string user_config_dir = 2 [(forge.v1.config) = {
+    env_var: "RELIANT_USER_CONFIG_DIR"
+    description: "User configuration directory (default: ~/.reliant)"
+  }];
+
+  // Unset: the platform's user config directory, then ~/.local/share/reliant.
+  string app_data_dir = 3 [(forge.v1.config) = {
+    env_var: "RELIANT_APP_DATA_DIR"
+    description: "Internal app data directory (default: platform-specific)"
+  }];
+}

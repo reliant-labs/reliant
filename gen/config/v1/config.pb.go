@@ -142,9 +142,8 @@ func (x *RuntimeConfig) GetEnvironment() string {
 // that names nothing.
 type LogConfig struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Unset: INFO, or DEBUG when the DEBUG / RELIANT_DEV_DEBUG flags ask for it.
-	// Servers never log DEBUG in prod; the daemon honours an explicit level
-	// everywhere (logging.GetLogLevel, logging.DaemonLogLevel).
+	// Unset: INFO. Servers never log DEBUG in prod; the daemon honours an
+	// explicit level everywhere (logging.GetLogLevel, logging.DaemonLogLevel).
 	Level string `protobuf:"bytes,1,opt,name=level,proto3" json:"level,omitempty"`
 	// Unset: text, or JSON for a hosted daemon.
 	Format        string `protobuf:"bytes,2,opt,name=format,proto3" json:"format,omitempty"`

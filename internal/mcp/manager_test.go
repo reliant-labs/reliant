@@ -62,7 +62,7 @@ func (f *fakeManagerClient) ServerInfo() *ServerInfo {
 }
 
 func TestEnsureProjectServersLoaded_DisabledServerNotLoadedOrFailed(t *testing.T) {
-	t.Setenv("RELIANT_USER_CONFIG_DIR", t.TempDir())
+	config.UseUserConfigDirForTest(t, t.TempDir())
 
 	manager := NewManager(RoleDaemon)
 	t.Cleanup(func() {
@@ -104,7 +104,7 @@ func TestEnsureProjectServersLoaded_DisabledServerNotLoadedOrFailed(t *testing.T
 }
 
 func TestEnsureProjectServersLoaded_DisabledServerStopsRunningClient(t *testing.T) {
-	t.Setenv("RELIANT_USER_CONFIG_DIR", t.TempDir())
+	config.UseUserConfigDirForTest(t, t.TempDir())
 
 	manager := NewManager(RoleDaemon)
 	t.Cleanup(func() {
@@ -167,7 +167,7 @@ func TestGetProjectLastError_ReturnsStartupError(t *testing.T) {
 }
 
 func TestEnsureProjectServersLoaded_AssociatesAlreadyRunningServerWithNewScope(t *testing.T) {
-	t.Setenv("RELIANT_USER_CONFIG_DIR", t.TempDir())
+	config.UseUserConfigDirForTest(t, t.TempDir())
 
 	manager := NewManager(RoleDaemon)
 	t.Cleanup(func() {
@@ -231,7 +231,7 @@ func TestLoadProjectServersFromConfig_MergesFilesystemScopeOverridesOverResolved
 	})
 
 	userConfigDir := t.TempDir()
-	t.Setenv("RELIANT_USER_CONFIG_DIR", userConfigDir)
+	config.UseUserConfigDirForTest(t, userConfigDir)
 
 	projectPath := t.TempDir()
 	projectLocalDir := filepath.Join(projectPath, config.ReliantLocalDir)
@@ -289,7 +289,7 @@ func TestLoadProjectServersFromConfig_FallsBackToFilesystemWhenResolverFails(t *
 	})
 
 	userConfigDir := t.TempDir()
-	t.Setenv("RELIANT_USER_CONFIG_DIR", userConfigDir)
+	config.UseUserConfigDirForTest(t, userConfigDir)
 
 	projectPath := t.TempDir()
 	projectDir := filepath.Join(projectPath, config.ReliantDir)
@@ -327,7 +327,7 @@ func TestLoadProjectServersFromConfig_IncludesBuiltinServers(t *testing.T) {
 	})
 
 	userConfigDir := t.TempDir()
-	t.Setenv("RELIANT_USER_CONFIG_DIR", userConfigDir)
+	config.UseUserConfigDirForTest(t, userConfigDir)
 
 	projectPath := t.TempDir()
 
@@ -355,7 +355,7 @@ func TestLoadProjectServersFromConfig_UserConfigOverridesBuiltin(t *testing.T) {
 	})
 
 	userConfigDir := t.TempDir()
-	t.Setenv("RELIANT_USER_CONFIG_DIR", userConfigDir)
+	config.UseUserConfigDirForTest(t, userConfigDir)
 
 	projectPath := t.TempDir()
 	projectDir := filepath.Join(projectPath, config.ReliantDir)

@@ -8,15 +8,15 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
-	"os"
 	"strings"
 
 	"connectrpc.com/connect"
+	forgeconfig "github.com/reliant-labs/forge/pkg/config"
 	"github.com/spf13/cobra"
 
-	"github.com/reliant-labs/reliant/internal/builddefaults"
 	"github.com/reliant-labs/reliant/internal/cliauth"
 	"github.com/reliant-labs/reliant/internal/toolexec/transport"
+	"github.com/reliant-labs/reliant/pkg/config"
 )
 
 // ============================================================================
@@ -28,8 +28,12 @@ import (
 // deleted. It silently repointed a prod-baked binary at a dev stack because
 // a context once auto-created against localhost stayed "current".
 //
-//	server:  --server > RELIANT_SERVER_URL > compiled-in default > neutral fallback
+//	server:  --server > RELIANT_SERVER_URL > the build's default
 //	token:   RELIANT_TOKEN > the shared credentials file entry for that server
+//
+// All three are CLIConfig (proto/config/v1/cli_config.proto), a subtree config
+// every end-user command loads; the build's default is the proto default, or
+// what a release stamped into pkg/config.BuildDefaults.
 //
 // The credentials file is forge's (forge/pkg/credentials), shared with
 // `forge login` and keyed by (server, client). A login to one server is never
@@ -45,6 +49,7 @@ const (
 	flagServer  = "server"
 	flagGateway = "gateway"
 
+	// The variables behind the flags and the token, named in messages.
 	envServerURL  = "RELIANT_SERVER_URL"
 	envGatewayURL = "RELIANT_GATEWAY_URL"
 	// envToken supplies a bearer for one invocation (CI, scripts), ahead of the
@@ -59,12 +64,13 @@ const (
 type valueSource int
 
 const (
-	// sourceDefault is the flag's default: the compiled-in default, else the
-	// neutral localhost fallback.
+	// sourceDefault is the build's default (the proto default, or the
+	// release's stamped one).
 	sourceDefault valueSource = iota
 	// sourceFlag means the user passed the flag explicitly on this invocation.
 	sourceFlag
-	// sourceEnv means an environment variable supplied the value directly.
+	// sourceEnv means an environment variable (or the config file) supplied
+	// the value directly.
 	sourceEnv
 	// sourceDerived means the value was computed from the resolved server URL.
 	sourceDerived
@@ -85,45 +91,49 @@ type connection struct {
 	// TokenFrom names where Token came from (RELIANT_TOKEN or the file path),
 	// for diagnostics. Never the token.
 	TokenFrom string
+	// envToken is RELIANT_TOKEN as loaded, trimmed; "" when unset.
+	envToken string
+	// skipTLSVerify is RELIANT_SKIP_TLS_VERIFY.
+	skipTLSVerify bool
 }
 
-// registerConnectionFlags binds the persistent flags that select the target
-// server on the root command. The values are read back through the command
-// (see persistentFlag) rather than through package variables.
-func registerConnectionFlags(root *cobra.Command) {
-	root.PersistentFlags().String(flagServer, defaultServerURL(), "Reliant API server URL (also RELIANT_SERVER_URL)")
-	root.PersistentFlags().String(flagGateway, defaultGatewayURL(), "Daemon gateway URL (defaults to the gateway subdomain of the resolved server)")
+// flagChanged reports whether the user passed the named flag on this
+// invocation. Precedence keys on "did the user pass it", never on emptiness:
+// `--server ""` is an explicit (if odd) choice and must stay distinguishable
+// from an unset flag.
+func flagChanged(cmd *cobra.Command, name string) bool {
+	f := cmd.Flags().Lookup(name)
+	return f != nil && f.Changed
 }
 
-func defaultServerURL() string {
-	return builddefaults.Value(envServerURL, builddefaults.ServerURL, builddefaults.NeutralServerURL)
-}
-
-func defaultGatewayURL() string {
-	return builddefaults.Value(envGatewayURL, builddefaults.GatewayURL, "")
-}
-
-// persistentFlag returns a root persistent flag's value and whether the user
-// passed it on this invocation. Precedence keys on "did the user pass it",
-// never on emptiness: `--server ""` is an explicit (if odd) choice and must
-// stay distinguishable from an unset flag.
-func persistentFlag(cmd *cobra.Command, name string) (value string, changed bool) {
-	root := cmd
-	if r := cmd.Root(); r != nil {
-		root = r
+// buildConnectionDefaults is the server and gateway this build targets when
+// nothing selects one: CLIConfig's proto defaults, overlaid by what a release
+// stamped into pkg/config.BuildDefaults. A value equal to it is the default
+// for provenance; a loaded value that differs came from the environment or
+// the config file.
+func buildConnectionDefaults() (server, gateway string) {
+	defaults, err := forgeconfig.DefaultsTyped[*config.CLIConfig]()
+	if err == nil {
+		server, gateway = defaults.GetConnection().GetServerUrl(), defaults.GetConnection().GetGatewayUrl()
 	}
-	f := root.PersistentFlags().Lookup(name)
-	if f == nil {
-		return "", false
+	// A stamp the loader refused fails every Load, so only a valid one
+	// reaches a command; its keys are env_var names.
+	if stamp, err := url.ParseQuery(strings.TrimSpace(config.BuildDefaults)); err == nil {
+		if v, ok := stamp[envServerURL]; ok && len(v) > 0 {
+			server = v[0]
+		}
+		if v, ok := stamp[envGatewayURL]; ok && len(v) > 0 {
+			gateway = v[0]
+		}
 	}
-	return f.Value.String(), f.Changed
+	return server, gateway
 }
 
 // resolveServer resolves WHERE a command talks, without requiring credentials:
 //
-//	server:   --server > RELIANT_SERVER_URL > compiled-in default > neutral fallback
-//	gateway:  --gateway > RELIANT_GATEWAY_URL > derived from the resolved server
-//	          > build-time default
+//	server:   --server > RELIANT_SERVER_URL > the build's default
+//	gateway:  --gateway > RELIANT_GATEWAY_URL > the build's default when the
+//	          server is the default one, else derived from the resolved server
 //
 // Commands that need a bearer call resolveConnection instead. Login is the
 // reason this half stands alone: "where do I log in" must not depend on
@@ -131,14 +141,25 @@ func persistentFlag(cmd *cobra.Command, name string) (value string, changed bool
 // lives in the daemon store keyed by this same server, so one machine can run
 // daemons against prod and a dev stack, chosen by --server.
 func resolveServer(cmd *cobra.Command) (*connection, error) {
-	server, serverFlagSet := persistentFlag(cmd, flagServer)
-	conn := &connection{ServerURL: server, ServerSource: sourceDefault}
-	if serverFlagSet {
+	cfg, err := config.LoadCLIConfig(cmd)
+	if err != nil {
+		return nil, err
+	}
+	c := cfg.GetConnection()
+	defaultServer, defaultGateway := buildConnectionDefaults()
+	conn := &connection{
+		ServerURL:     c.GetServerUrl(),
+		ServerSource:  sourceDefault,
+		envToken:      strings.TrimSpace(c.GetToken()),
+		skipTLSVerify: c.GetSkipTlsVerify(),
+	}
+	switch {
+	case flagChanged(cmd, flagServer):
 		conn.ServerSource = sourceFlag
-	} else if os.Getenv(envServerURL) != "" { //nolint:forbidigo // RELIANT_SERVER_URL: forge gap: its default is set at build time (-ldflags), a layer forge config does not have; forge gap: a setting every CLI command reads needs a subtree-scoped (persistent) command config, and forge binds a config to one command or to every process
+	case conn.ServerURL != defaultServer:
 		conn.ServerSource = sourceEnv
 	}
-	conn.GatewayURL, conn.GatewaySource = resolveGateway(cmd, conn)
+	conn.GatewayURL, conn.GatewaySource = resolveGateway(cmd, conn, c.GetGatewayUrl(), defaultGateway)
 	return conn, nil
 }
 
@@ -149,8 +170,8 @@ func resolveConnection(cmd *cobra.Command) (*connection, error) {
 	if err != nil {
 		return nil, err
 	}
-	if t := strings.TrimSpace(os.Getenv(envToken)); t != "" { //nolint:forbidigo // RELIANT_TOKEN: forge gap: a setting every CLI command reads needs a subtree-scoped (persistent) command config, and forge binds a config to one command or to every process
-		conn.Token, conn.TokenFrom = t, envToken
+	if conn.envToken != "" {
+		conn.Token, conn.TokenFrom = conn.envToken, envToken
 		return conn, nil
 	}
 	cred, path, err := cliauth.Lookup(conn.ServerURL)
@@ -174,21 +195,25 @@ func (c *connection) serverFlagHint() string {
 	return ""
 }
 
-// resolveGateway applies the gateway precedence. The key rule: a server chosen
-// by --server or by a context derives its own gateway, so switching servers can
-// never leave the gateway pointed at the previous one.
-func resolveGateway(cmd *cobra.Command, conn *connection) (string, valueSource) {
-	// An explicitly empty --gateway is not a target (unlike --server, where the
-	// empty string is the value asked for): empty is this flag's documented
-	// "work it out from the server" setting, so it falls through to derivation.
-	if gw, changed := persistentFlag(cmd, flagGateway); changed && gw != "" {
-		return gw, sourceFlag
+// resolveGateway applies the gateway precedence to the loaded gateway URL.
+// The key rule: a server chosen by --server or RELIANT_SERVER_URL derives its
+// own gateway, so switching servers can never leave the gateway pointed at the
+// default one.
+func resolveGateway(cmd *cobra.Command, conn *connection, gateway, defaultGateway string) (string, valueSource) {
+	if flagChanged(cmd, flagGateway) {
+		// An explicitly empty --gateway is not a target (unlike --server,
+		// where the empty string is the value asked for): empty is this
+		// flag's documented "work it out from the server" setting.
+		if gateway != "" {
+			return gateway, sourceFlag
+		}
+		return deriveGatewayURL(conn.ServerURL), sourceDerived
 	}
-	if env := os.Getenv(envGatewayURL); env != "" { //nolint:forbidigo // RELIANT_GATEWAY_URL: forge gap: its default is set at build time (-ldflags), a layer forge config does not have; forge gap: a setting every CLI command reads needs a subtree-scoped (persistent) command config, and forge binds a config to one command or to every process
-		return env, sourceEnv
+	if gateway != "" && gateway != defaultGateway {
+		return gateway, sourceEnv
 	}
-	if conn.ServerSource == sourceDefault && builddefaults.GatewayURL != "" {
-		return builddefaults.GatewayURL, sourceDefault
+	if conn.ServerSource == sourceDefault && defaultGateway != "" {
+		return defaultGateway, sourceDefault
 	}
 	return deriveGatewayURL(conn.ServerURL), sourceDerived
 }
@@ -318,7 +343,7 @@ func (c *connection) httpClientWithBearer(bearer string) *http.Client {
 		// macOS can't resolve subdomain.localhost via DNS.
 		DialContext: transport.LocalhostDialContext,
 	}
-	if shouldSkipTLSVerify(c.ServerURL) {
+	if c.skipTLSVerify || shouldSkipTLSVerify(c.ServerURL) {
 		tr.TLSClientConfig = &crypto_tls.Config{InsecureSkipVerify: true} //nolint:gosec // dev only
 	}
 	return &http.Client{
@@ -326,13 +351,10 @@ func (c *connection) httpClientWithBearer(bearer string) *http.Client {
 	}
 }
 
-// shouldSkipTLSVerify returns true when TLS cert verification should be skipped
-// for the given server URL (localhost targets or explicit env override).
+// shouldSkipTLSVerify returns true when TLS cert verification is skipped for
+// the given server URL whatever RELIANT_SKIP_TLS_VERIFY says: a localhost
+// target, where self-signed certs are common in dev.
 func shouldSkipTLSVerify(server string) bool {
-	if os.Getenv("RELIANT_SKIP_TLS_VERIFY") == "1" { //nolint:forbidigo // RELIANT_SKIP_TLS_VERIFY: forge gap: a setting every CLI command reads needs a subtree-scoped (persistent) command config, and forge binds a config to one command or to every process
-		return true
-	}
-	// For localhost URLs, self-signed certs are common in dev.
 	for _, prefix := range []string{"https://localhost", "https://127.0.0.1", "https://[::1]"} {
 		if strings.HasPrefix(server, prefix) {
 			return true

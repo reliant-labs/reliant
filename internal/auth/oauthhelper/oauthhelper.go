@@ -46,7 +46,6 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"os"
 	"strings"
 	"sync"
 	"syscall"
@@ -99,8 +98,9 @@ type Options struct {
 	Port int
 	// Source is the HealthResponse.Source value ("daemon" / "auth-serve").
 	Source string
-	// ExtraOrigins are additional allowed CORS origins beyond the defaults.
-	// RELIANT_WEB_ORIGIN is folded in automatically.
+	// ExtraOrigins are additional allowed CORS origins beyond the defaults:
+	// the process's configured web origins (WebOrigins) and any the caller
+	// adds.
 	ExtraOrigins []string
 	// IdleTimeout closes the listener after this long with no request. Zero
 	// means "stay up until Shutdown" — the `auth serve` foreground case, where
@@ -475,16 +475,32 @@ func (s *Server) setCORS(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
 }
 
-// buildAllowedOrigins is the CORS/CSRF allowlist, whose only legitimate caller
-// is the reliant web app.
+// WebOrigins is the process's configured web origins in the form
+// Options.ExtraOrigins takes: the RELIANT_WEB_ORIGIN entries, and the loopback
+// origins of the dev web server's FRONTEND_PORT (CLIConfig's web block).
 //
-// RELIANT_WEB_ORIGIN (comma-separated) extends it, and is load-bearing rather
-// than a convenience: the web dev server's port is allocated per worktree (see
-// .dev-ports.sh FRONTEND_PORT), so a worktree's Vite origin is never one of the
-// static defaults. Resolved here — in the shared package — so both `auth serve`
-// and the daemon-hosted helper honour the same variable. Reading it in only one
-// of the two is how the daemon path would 403 a request `auth serve` allows,
-// with an error that names the origin and not the reason.
+// They are load-bearing rather than a convenience: the web dev server's port
+// is allocated per worktree (see .dev-ports.sh FRONTEND_PORT), so a worktree's
+// Vite origin is never one of the static defaults. Both hosts — `auth serve`
+// and the daemon-hosted helper — pass them, so neither 403s a request the
+// other allows with an error that names the origin and not the reason.
+// FRONTEND_PORT is what forge publishes for the dev web server and what the
+// Electron main process already reads, so a worktree stack works without
+// anyone also setting RELIANT_WEB_ORIGIN to the same number.
+func WebOrigins(origins []string, frontendPort string) []string {
+	out := append([]string(nil), origins...)
+	if p := strings.TrimSpace(frontendPort); p != "" {
+		out = append(out,
+			"http://localhost:"+p,
+			"http://127.0.0.1:"+p,
+		)
+	}
+	return out
+}
+
+// buildAllowedOrigins is the CORS/CSRF allowlist, whose only legitimate caller
+// is the reliant web app: the static defaults plus extra (WebOrigins and the
+// caller's own).
 func buildAllowedOrigins(extra []string) map[string]bool {
 	origins := []string{
 		hostedWebOrigin,
@@ -492,19 +508,6 @@ func buildAllowedOrigins(extra []string) map[string]bool {
 		"http://localhost:3000", // common dev port (web/src/routes.tsx, scripts/dev.sh)
 	}
 	origins = append(origins, extra...)
-	if env := os.Getenv("RELIANT_WEB_ORIGIN"); env != "" { //nolint:forbidigo // RELIANT_WEB_ORIGIN: read by `auth serve` and the daemon-hosted helper alike; forge gap: a setting every CLI command reads needs a subtree-scoped (persistent) command config, and forge binds a config to one command or to every process
-		origins = append(origins, strings.Split(env, ",")...)
-	}
-	// FRONTEND_PORT is what forge publishes for the dev web server and what the
-	// Electron main process already reads. Accepting the loopback origins it
-	// implies means a worktree stack works without anyone also having to set
-	// RELIANT_WEB_ORIGIN to the same number.
-	if p := strings.TrimSpace(os.Getenv("FRONTEND_PORT")); p != "" { //nolint:forbidigo // FRONTEND_PORT: read by `auth serve` and the daemon-hosted helper alike; forge gap: a setting every CLI command reads needs a subtree-scoped (persistent) command config, and forge binds a config to one command or to every process
-		origins = append(origins,
-			"http://localhost:"+p,
-			"http://127.0.0.1:"+p,
-		)
-	}
 
 	set := make(map[string]bool, len(origins))
 	for _, o := range origins {

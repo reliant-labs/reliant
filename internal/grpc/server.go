@@ -148,6 +148,9 @@ type Config struct {
 	// names, and what CLI login discovery (RFC 8414) advertises. Empty on a
 	// self-hosted server with no control plane.
 	AuthorizationServer string
+	// OAuthProvider is the provider the desktop sign-in
+	// (SystemService.StartOAuthSignIn) logs in through.
+	OAuthProvider auth.Provider
 	// MaxUploadSize is the largest attachment accepted, in bytes; zero takes
 	// AttachmentService's default.
 	MaxUploadSize int64
@@ -313,6 +316,7 @@ func NewAPI(cfg *Config) (*API, error) {
 		Temporal:      cfg.TemporalClient,
 		NATSConnected: cfg.NATSChecker,
 		StreamingHub:  cfg.StreamingHub,
+		OAuthProvider: cfg.OAuthProvider,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("system service: %w", err)

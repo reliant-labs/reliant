@@ -53,9 +53,8 @@ type Settings struct {
 // GetLogLevel returns the level s asks for, or the default.
 //
 // The servers never log DEBUG in prod, and nothing overrides that:
-// RELIANT_LOG_LEVEL=debug, DEBUG=true and RELIANT_DEV_DEBUG=true are all held at
-// INFO there, because DEBUG lines are where request bodies and tool payloads
-// end up. The tools daemon is the one exception (see DaemonLogLevel).
+// RELIANT_LOG_LEVEL=debug is held at INFO there, because DEBUG lines are where
+// request bodies and tool payloads end up. The tools daemon is the one exception (see DaemonLogLevel).
 // RELIANT_LOG_LEVEL=INFO/WARN/ERROR is honoured in every environment, since it
 // can only make prod quieter. The refusal is reported once, as a WARN, when
 // the logger is installed (see install) — this function runs before that
@@ -70,21 +69,12 @@ func GetLogLevel(s Settings) slog.Level {
 }
 
 // requestedLevel is the level the settings ask for, before any environment
-// cap. RELIANT_LOG_LEVEL (debug|info|warn|error, any case) wins; otherwise
-// DEBUG=true or RELIANT_DEV_DEBUG=true selects DEBUG; otherwise INFO.
-//
-// The DEBUG / RELIANT_DEV_DEBUG reads are a deliberate shim, not config still
-// waiting to move: they are not alternative names for RELIANT_LOG_LEVEL (an
-// alias would hand the level "true"), they are bools that MAP onto one of its
-// values, only for the exact string "true". DEBUG is also a name other tools
-// own (DEBUG=express:* is common in a shell), so it must not be parsed as a
-// config bool that refuses to start on anything else.
+// cap: RELIANT_LOG_LEVEL (debug|info|warn|error, any case), else INFO. It is
+// the one way to ask for DEBUG; DEBUG=true and RELIANT_DEV_DEBUG=true are not
+// read.
 func requestedLevel(s Settings) slog.Level {
 	if level, ok := explicitLevel(s); ok {
 		return level
-	}
-	if os.Getenv("DEBUG") == "true" || os.Getenv("RELIANT_DEV_DEBUG") == "true" { //nolint:forbidigo // forge gap: DEBUG/RELIANT_DEV_DEBUG=true are bools that map onto the log level field (only the exact string "true"; DEBUG is also other tools' variable), which forge config cannot express
-		return slog.LevelDebug
 	}
 	return slog.LevelInfo
 }
@@ -138,22 +128,11 @@ func capLevel(level slog.Level) slog.Level {
 	return level
 }
 
-// debugRequest names the setting asking for DEBUG ("DEBUG=true"), or "" when
-// none is. It follows requestedLevel's precedence: an explicit
-// RELIANT_LOG_LEVEL outranks the DEBUG flags, so with a quieter explicit level
-// they are not a request at all. A request prod refuses must be reported
-// however it was spelled.
+// debugRequest names the setting asking for DEBUG ("RELIANT_LOG_LEVEL=debug"),
+// or "" when none is, so a request prod refuses is reported as it was spelled.
 func debugRequest(s Settings) string {
-	if level, ok := explicitLevel(s); ok {
-		if level < slog.LevelInfo {
-			return logLevelEnv + "=" + s.Level
-		}
-		return ""
-	}
-	for _, flag := range []string{"DEBUG", "RELIANT_DEV_DEBUG"} {
-		if os.Getenv(flag) == "true" { //nolint:forbidigo // forge gap: DEBUG/RELIANT_DEV_DEBUG=true map onto the log level field; see requestedLevel
-			return flag + "=true"
-		}
+	if level, ok := explicitLevel(s); ok && level < slog.LevelInfo {
+		return logLevelEnv + "=" + s.Level
 	}
 	return ""
 }

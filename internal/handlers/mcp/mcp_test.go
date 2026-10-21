@@ -110,7 +110,7 @@ func setupMCPServiceToggleTest(t *testing.T) (context.Context, *Service, *fakeMC
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
-	t.Setenv("RELIANT_USER_CONFIG_DIR", filepath.Join(t.TempDir(), "user-config"))
+	config.UseUserConfigDirForTest(t, filepath.Join(t.TempDir(), "user-config"))
 
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
 	manager := newFakeMCPManagerRuntime()
@@ -257,7 +257,7 @@ func TestMCPService_ListServers_PrefersStoredConfigSnapshotOverFilesystem(t *tes
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
-	t.Setenv("RELIANT_USER_CONFIG_DIR", filepath.Join(t.TempDir(), "user-config"))
+	config.UseUserConfigDirForTest(t, filepath.Join(t.TempDir(), "user-config"))
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
 
 	projectPath := filepath.Join(t.TempDir(), "project")
@@ -469,7 +469,7 @@ func TestMCPService_SetServerEnabled_GlobalScopePropagatesStoredSnapshotAcrossPr
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
-	t.Setenv("RELIANT_USER_CONFIG_DIR", filepath.Join(t.TempDir(), "user-config"))
+	config.UseUserConfigDirForTest(t, filepath.Join(t.TempDir(), "user-config"))
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
 
 	projectPathA := filepath.Join(t.TempDir(), "project-a")

@@ -438,28 +438,27 @@ jobs:
           echo "Stamping version=${IDENTITY} commit=${COMMIT}"
           LDFLAGS="-s -w -X github.com/reliant-labs/reliant/internal/build.BuildType=production -X github.com/reliant-labs/reliant/internal/version.Version=${IDENTITY} -X github.com/reliant-labs/reliant/internal/version.Commit=${COMMIT}"
 
-          # Compiled-in hosted endpoints. Same defect as build-config.js on the
-          # Electron side: internal/builddefaults documents these as injected
-          # via -X for commercial builds, but nothing injected them, so the
-          # shipped binary fell through to NeutralServerURL
-          # (http://localhost:8080) — correct for a self-hoster building from
-          # source, useless in a released artifact.
-          BD=github.com/reliant-labs/reliant/internal/builddefaults
-          if [[ -n "${RELIANT_SERVER_URL:-}" ]]; then
-            LDFLAGS="$LDFLAGS -X $BD.ServerURL=$RELIANT_SERVER_URL"
-          fi
-          if [[ -n "${RELIANT_GATEWAY_URL:-}" ]]; then
-            LDFLAGS="$LDFLAGS -X $BD.GatewayURL=$RELIANT_GATEWAY_URL"
-          fi
-          if [[ -n "${RELIANT_AUTH_URL:-}" ]]; then
-            LDFLAGS="$LDFLAGS -X $BD.AuthURL=$RELIANT_AUTH_URL"
-          fi
-          if [[ -n "${RELIANT_AUTH_KEY:-}" ]]; then
-            LDFLAGS="$LDFLAGS -X $BD.AuthKey=$RELIANT_AUTH_KEY"
+          # Build-time defaults: the release's hosted endpoints, stamped into
+          # pkg/config.BuildDefaults (forge's build-defaults layer, between the
+          # proto default_value and the config file / env / flags). One -X in
+          # URL query form keyed by each field's env_var, every value
+          # query-escaped. The proto defaults already ARE prod's endpoints, so
+          # an unstamped build still works; the stamp is what lets another
+          # environment's release config retarget a build. A key or value the
+          # loader refuses fails every config load of the shipped binary.
+          STAMP=""
+          for key in RELIANT_SERVER_URL RELIANT_GATEWAY_URL RELIANT_AUTH_URL RELIANT_AUTH_KEY; do
+            value="${!key:-}"
+            if [[ -n "$value" ]]; then
+              STAMP="${STAMP:+$STAMP&}${key}=$(jq -rn --arg v "$value" '$v|@uri')"
+            fi
+          done
+          if [[ -n "$STAMP" ]]; then
+            LDFLAGS="$LDFLAGS -X 'github.com/reliant-labs/reliant/pkg/config.BuildDefaults=${STAMP}'"
           fi
 
-          echo "Compiled-in ServerURL = $RELIANT_SERVER_URL"
-          echo "Compiled-in GatewayURL = $RELIANT_GATEWAY_URL"
+          echo "Build-default RELIANT_SERVER_URL = $RELIANT_SERVER_URL"
+          echo "Build-default RELIANT_GATEWAY_URL = $RELIANT_GATEWAY_URL"
 
           if [[ "$TARGET_OS" == "windows" ]]; then
             BACKEND_BIN_NAME="reliant-backend.exe"

@@ -36946,10 +36946,44 @@
           "Category": "",
           "Optional": true,
           "ProtoFile": "config/v1/integrations_config.proto"
+        },
+        {
+          "Name": "oauth_client_ids",
+          "GoName": "OauthClientIds",
+          "GoType": "string",
+          "ProtoType": "message",
+          "EnvVar": "",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "Integration OAuth client ids, RELIANT_OAUTH_\u003cID\u003e_CLIENT_ID",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "config/v1/integrations_config.proto",
+          "EnvPrefix": "RELIANT_OAUTH_",
+          "EnvSuffix": "_CLIENT_ID",
+          "MapValueType": "string"
+        },
+        {
+          "Name": "oauth_client_secrets",
+          "GoName": "OauthClientSecrets",
+          "GoType": "string",
+          "ProtoType": "message",
+          "EnvVar": "",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "Integration OAuth client secrets, RELIANT_OAUTH_\u003cID\u003e_CLIENT_SECRET",
+          "Sensitive": true,
+          "Category": "",
+          "ProtoFile": "config/v1/integrations_config.proto",
+          "EnvPrefix": "RELIANT_OAUTH_",
+          "EnvSuffix": "_CLIENT_SECRET",
+          "MapValueType": "string"
         }
       ],
       "ProtoFile": "config/v1/integrations_config.proto",
-      "Line": 20
+      "Line": 16
     },
     {
       "Name": "LLMConfig",
@@ -37559,7 +37593,7 @@
         }
       ],
       "ProtoFile": "config/v1/server_config.proto",
-      "Line": 154
+      "Line": 153
     },
     {
       "Name": "ApiServerConfig",
@@ -37934,6 +37968,34 @@
           ]
         },
         {
+          "Name": "auth_provider_url",
+          "GoName": "AuthProviderUrl",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "RELIANT_AUTH_URL",
+          "Flag": "",
+          "DefaultValue": "https://dash.reliantlabs.io",
+          "Required": false,
+          "Description": "OAuth provider origin for the desktop sign-in",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "config/v1/api_server_config.proto"
+        },
+        {
+          "Name": "auth_provider_key",
+          "GoName": "AuthProviderKey",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "RELIANT_AUTH_KEY",
+          "Flag": "",
+          "DefaultValue": "sb_publishable_KKiB3B0EdEv7nguwKfEE5A_iY9rVXod",
+          "Required": false,
+          "Description": "OAuth provider publishable (public) key for the desktop sign-in",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "config/v1/api_server_config.proto"
+        },
+        {
           "Name": "integrations",
           "GoName": "Integrations",
           "GoType": "",
@@ -38047,6 +38109,224 @@
       "Line": 22
     },
     {
+      "Name": "CLIConfig",
+      "Fields": [
+        {
+          "Name": "connection",
+          "GoName": "Connection",
+          "GoType": "",
+          "ProtoType": "message",
+          "EnvVar": "",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "",
+          "Sensitive": false,
+          "Category": "",
+          "MessageType": "CLIConnectionConfig",
+          "ProtoFile": "config/v1/cli_config.proto"
+        },
+        {
+          "Name": "web",
+          "GoName": "Web",
+          "GoType": "",
+          "ProtoType": "message",
+          "EnvVar": "",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "",
+          "Sensitive": false,
+          "Category": "",
+          "MessageType": "CLIWebConfig",
+          "ProtoFile": "config/v1/cli_config.proto"
+        },
+        {
+          "Name": "machine",
+          "GoName": "Machine",
+          "GoType": "",
+          "ProtoType": "message",
+          "EnvVar": "",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "",
+          "Sensitive": false,
+          "Category": "",
+          "MessageType": "CLIMachineConfig",
+          "ProtoFile": "config/v1/cli_config.proto"
+        }
+      ],
+      "Binary": "reliant",
+      "Subtrees": [
+        [
+          "auth"
+        ],
+        [
+          "daemon"
+        ],
+        [
+          "project"
+        ],
+        [
+          "trigger"
+        ],
+        [
+          "workflow"
+        ]
+      ],
+      "ProtoFile": "config/v1/cli_config.proto",
+      "Line": 21
+    },
+    {
+      "Name": "CLIConnectionConfig",
+      "Fields": [
+        {
+          "Name": "server_url",
+          "GoName": "ServerUrl",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "RELIANT_SERVER_URL",
+          "Flag": "server",
+          "DefaultValue": "https://api.reliantapi.com",
+          "Required": false,
+          "Description": "Reliant API server URL",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "config/v1/cli_config.proto"
+        },
+        {
+          "Name": "gateway_url",
+          "GoName": "GatewayUrl",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "RELIANT_GATEWAY_URL",
+          "Flag": "gateway",
+          "DefaultValue": "https://gateway.reliantapi.com",
+          "Required": false,
+          "Description": "Daemon gateway URL (a non-default server derives its own gateway unless this is set)",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "config/v1/cli_config.proto"
+        },
+        {
+          "Name": "token",
+          "GoName": "Token",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "RELIANT_TOKEN",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "API token used instead of the stored login",
+          "Sensitive": true,
+          "Category": "",
+          "Optional": true,
+          "ProtoFile": "config/v1/cli_config.proto"
+        },
+        {
+          "Name": "skip_tls_verify",
+          "GoName": "SkipTlsVerify",
+          "GoType": "bool",
+          "ProtoType": "bool",
+          "EnvVar": "RELIANT_SKIP_TLS_VERIFY",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "Skip TLS certificate verification (development only)",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "config/v1/cli_config.proto"
+        }
+      ],
+      "ProtoFile": "config/v1/cli_config.proto",
+      "Line": 39
+    },
+    {
+      "Name": "CLIWebConfig",
+      "Fields": [
+        {
+          "Name": "origins",
+          "GoName": "Origins",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "RELIANT_WEB_ORIGIN",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "Comma-separated web origins the localhost OAuth helper accepts",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "config/v1/cli_config.proto"
+        },
+        {
+          "Name": "frontend_port",
+          "GoName": "FrontendPort",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "FRONTEND_PORT",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "Dev web server port whose loopback origins the localhost OAuth helper accepts",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "config/v1/cli_config.proto"
+        }
+      ],
+      "ProtoFile": "config/v1/cli_config.proto",
+      "Line": 87
+    },
+    {
+      "Name": "CLIMachineConfig",
+      "Fields": [
+        {
+          "Name": "instance_id",
+          "GoName": "InstanceId",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "RELIANT_INSTANCE_ID",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "Pinned machine instance id (default: the one persisted in ~/.reliant)",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "config/v1/cli_config.proto"
+        },
+        {
+          "Name": "user_config_dir",
+          "GoName": "UserConfigDir",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "RELIANT_USER_CONFIG_DIR",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "User configuration directory (default: ~/.reliant)",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "config/v1/cli_config.proto"
+        },
+        {
+          "Name": "app_data_dir",
+          "GoName": "AppDataDir",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "RELIANT_APP_DATA_DIR",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "Internal app data directory (default: platform-specific)",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "config/v1/cli_config.proto"
+        }
+      ],
+      "ProtoFile": "config/v1/cli_config.proto",
+      "Line": 103
+    },
+    {
       "Name": "ReliantConfig",
       "Fields": [
         {
@@ -38097,7 +38377,7 @@
       ],
       "Binary": "reliant",
       "ProtoFile": "config/v1/config.proto",
-      "Line": 55
+      "Line": 54
     },
     {
       "Name": "RuntimeConfig",
@@ -38123,7 +38403,7 @@
         }
       ],
       "ProtoFile": "config/v1/config.proto",
-      "Line": 64
+      "Line": 63
     },
     {
       "Name": "LogConfig",
@@ -38158,7 +38438,7 @@
         }
       ],
       "ProtoFile": "config/v1/config.proto",
-      "Line": 82
+      "Line": 81
     },
     {
       "Name": "StorageReaperConfig",
@@ -38226,7 +38506,7 @@
         }
       ],
       "ProtoFile": "config/v1/config.proto",
-      "Line": 108
+      "Line": 106
     },
     {
       "Name": "DaemonInstanceConfig",
@@ -39211,18 +39491,19 @@
   ],
   "sources": {
     "config/v1/analytics_config.proto": "2093382e19e6c0a59f28913b76fae435017337a229b93f167599e3198207fc94",
-    "config/v1/api_server_config.proto": "52b890a182f21c985c774371d65fde6a1063824302ac09d422ff3a82707b9e51",
-    "config/v1/config.proto": "e971a79c722ce7af5f719f5529b1fb12db519a78d9cfbb673376a47b448782bb",
+    "config/v1/api_server_config.proto": "1ae01f909bdfee18e653cfb0c695784d9c602fba24a25100fd22fde3a0711711",
+    "config/v1/cli_config.proto": "969eac8061aac3370d808aeec0907a948f6f1c7d6c2b3bbdbf1d67830e8adf46",
+    "config/v1/config.proto": "c873c25d565a973afe746cc17710f51652517db44137e24eba21daf4b8a13c23",
     "config/v1/control_plane_config.proto": "d461d08a8932926bc6dbd8f40c84e9d259c1007b424c6b945de40196830ac1ea",
     "config/v1/daemon_config.proto": "f50c66d5ee9c77735c670ce26b18216923002fee9f455a5db8ee013a4e0cb545",
     "config/v1/db_config.proto": "9e899127482ecf4547e5e08571eb1adc6f4a6aeb903cd1790495f3bb631fd7b3",
     "config/v1/gateway_config.proto": "512d79d4f70c221bc73bf62a727422cad427e7ede9d669fb4d66f3e43298a36b",
-    "config/v1/integrations_config.proto": "7e0e4fb58edda50e42ccc036ca4896da59e239f5e153d68b90803ef137183b3c",
+    "config/v1/integrations_config.proto": "d28693090d9c3dc61085691227853d63a783d0b9fc9d91caae31d14256d59132",
     "config/v1/llm_config.proto": "4c697b1803e3b0f06470ac2538193be961dbf71d5be61c8712ab97d7488e257d",
     "config/v1/observability_config.proto": "6f11ef06577f5a13763572380c121a9b4063b9ba8358a8a34f2fdb93121bf89a",
     "config/v1/preview_config.proto": "a8620fb35910b249c3b1bc0767fb615bdf699624526d7a237c62cb490fb9c425",
     "config/v1/preview_url_config.proto": "fa0cc5f673ae266457eaa39150abaf020bfdda8d7395f54c47fef893a8653d4d",
-    "config/v1/server_config.proto": "cac237dd05e014ab2ad5fe0a3a0fa6a7320abe72fca0730f58c7dc50674caf2a",
+    "config/v1/server_config.proto": "b95a13b0a379a2eda412b14e3f25fa31a06b7790e614a5d251c22a588f077451",
     "config/v1/worker_config.proto": "a03479e9f3f388fc5afcdf8db3c59c3b07537433203eac267ff0e899f4d136e0",
     "reliant/v1/account.proto": "d7e5ce0de4321d271532eb749a53e2001e692bdf208a4b7b71d4816673eebf35",
     "reliant/v1/annotations.proto": "378abb26b00cc86e8b14aef65e3e78467130da6a7787cd66b9a7d59ade949b57",

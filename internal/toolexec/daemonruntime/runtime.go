@@ -205,6 +205,9 @@ type StartOptions struct {
 	// Guards is the policy for this machine's heavy commands and a filling
 	// disk; the zero value is the default policy.
 	Guards Guards
+	// OAuthHelperOrigins are the configured web origins the on-demand OAuth
+	// helper accepts beyond its defaults (oauthhelper.WebOrigins).
+	OAuthHelperOrigins []string
 }
 
 // Guards is the daemon's policy for heavy commands (internal/heavyjob) and a
@@ -221,6 +224,7 @@ func Start(ctx context.Context, opts StartOptions) error {
 	if err := opts.BootstrapConfig.Validate(); err != nil {
 		return fmt.Errorf("daemon runtime bootstrap config invalid: %w", err)
 	}
+	setOAuthHelperOrigins(opts.OAuthHelperOrigins)
 
 	// Claim the data directory before anything else, so a second daemon fails
 	// here rather than at the gateway. Two daemons on one host resolve to one

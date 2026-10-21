@@ -746,6 +746,10 @@ To switch back to an account whose token is already stored:
 			if err != nil {
 				return err
 			}
+			webOrigins, err := cliWebOrigins(cmd)
+			if err != nil {
+				return err
+			}
 			var (
 				instance   = daemonInstance(dcfg.GetInstance())
 				grpcURL    = dcfg.GetGatewayUrl()
@@ -860,9 +864,10 @@ To switch back to an account whose token is already stored:
 						Name:       daemonName,
 						Verbose:    verbose,
 					},
-					Host:             host,
-					ChromeBrowserURL: dcfg.GetChromeBrowserUrl(),
-					Guards:           daemonGuards(dcfg),
+					Host:               host,
+					ChromeBrowserURL:   dcfg.GetChromeBrowserUrl(),
+					Guards:             daemonGuards(dcfg),
+					OAuthHelperOrigins: webOrigins,
 				})
 				if err != nil && !errors.Is(err, context.Canceled) {
 					return fmt.Errorf("tools-daemon exited with error: %w", err)
@@ -917,9 +922,10 @@ To switch back to an account whose token is already stored:
 						ListenPort: listenPort,
 						Verbose:    verbose,
 					},
-					Host:             host,
-					ChromeBrowserURL: dcfg.GetChromeBrowserUrl(),
-					Guards:           daemonGuards(dcfg),
+					Host:               host,
+					ChromeBrowserURL:   dcfg.GetChromeBrowserUrl(),
+					Guards:             daemonGuards(dcfg),
+					OAuthHelperOrigins: webOrigins,
 				})
 			}
 

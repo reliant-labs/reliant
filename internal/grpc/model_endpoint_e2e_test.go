@@ -23,6 +23,8 @@ import (
 	"testing"
 	"time"
 
+	userconfig "github.com/reliant-labs/reliant/internal/config"
+
 	"connectrpc.com/connect"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/stretchr/testify/assert"
@@ -59,7 +61,7 @@ func TestModelEndpointE2E(t *testing.T) {
 	e2eHTTPJSON(t, http.MethodGet, e2eOllamaRoot+"/api/tags", &tags)
 	require.NotEmpty(t, tags.Models, "ollama must be running with %s", e2eChatModel)
 
-	t.Setenv("RELIANT_USER_CONFIG_DIR", t.TempDir())
+	userconfig.UseUserConfigDirForTest(t, t.TempDir())
 	t.Setenv("HOME", t.TempDir())
 
 	repo, cleanupDB := db.SetupTestDB(t)

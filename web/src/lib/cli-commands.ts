@@ -3,8 +3,9 @@
  * for the current deployment.
  *
  * In production the `reliant` CLI binary is built with the right server,
- * gateway, admin, and auth defaults compiled in (see internal/builddefaults
- * in the Go repo), so we return a bare command. In non-prod — local dev,
+ * gateway, admin, and auth defaults compiled in (the proto defaults in
+ * proto/config/v1, and the release's pkg/config.BuildDefaults stamp), so we
+ * return a bare command. In non-prod — local dev,
  * OSS self-hosted — the user needs explicit env-var overrides so the daemon
  * dials the same hosts the web frontend is using.
  */
@@ -71,8 +72,8 @@ export const GATEWAY_URL_PLACEHOLDER = "<your-daemon-gateway-url>";
  * place: control-plane's deploy/kcl/lib/env.k (reliant_web_vite_env), which
  * sets it for prod and withholds it from every other environment. It means the
  * `reliant` binary shipped alongside this build was compiled with matching
- * server / gateway / auth defaults baked into internal/builddefaults via
- * -X ldflags, so the command needs no overrides.
+ * server / gateway / auth defaults baked in (pkg/config.BuildDefaults, via
+ * -X ldflags), so the command needs no overrides.
  *
  * Everything without the flag — OSS self-hosted builds, a local dev stack —
  * is non-managed and gets explicit overrides so the daemon dials the right
@@ -177,7 +178,7 @@ export function daemonStartCommandNeedsEditing(): boolean {
  *
  * ── Why it still carries an env prefix in dev ─────────────────────────
  *
- * The binary defaults to PRODUCTION (builddefaults.ServerURL =
+ * The binary defaults to PRODUCTION (RELIANT_SERVER_URL's default is
  * https://api.reliantapi.com). A dev web app talking to a dev backend must say
  * so explicitly, and the only correct way to do that is on the command line —
  * which means the UI has to SHOW those variables rather than print a bare

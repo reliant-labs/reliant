@@ -215,12 +215,13 @@ For advanced use cases, you can override default paths:
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `RELIANT_USER_CONFIG_DIR` | `~/.reliant/` | User configuration directory |
-| `RELIANT_APP_DATA_DIR` | Platform-specific | Internal app data directory |
+| `RELIANT_USER_CONFIG_DIR` | `~/.reliant/` | User configuration directory (CLI commands and the daemon) |
+| `RELIANT_APP_DATA_DIR` | Platform-specific | Internal app data directory (CLI commands and the daemon) |
 | `RELIANT_LOGS_PATH` | Platform-specific | Log file directory |
 | `RELIANT_WORKTREE_DIR` | `~/.reliant/worktrees/` | Git worktree storage |
 | `DATABASE_DRIVER` | `sqlite` | Backend DB driver (`sqlite` or `postgres`) |
 | `DATABASE_URL` | _(unset)_ | Required when `DATABASE_DRIVER=postgres` |
+| `RELIANT_LOG_LEVEL` | `info` | `debug`, `info`, `warn` or `error`; the one way to ask for DEBUG logs (`DEBUG=true` and `RELIANT_DEV_DEBUG` are not read) |
 
 When using `DATABASE_DRIVER=postgres` in local development, `scripts/dev.sh` and `scripts/dev.ps1` now auto-provision a **per-worktree database** on the shared local Postgres server and export a worktree-specific `DATABASE_URL` (also written to `.dev-ports.sh`). This keeps Postgres behavior aligned with SQLite worktree isolation.
 

@@ -47,7 +47,18 @@ const helperIdleTimeout = 10 * time.Minute
 var (
 	helperMu     sync.Mutex
 	helperServer *oauthhelper.Server
+	// helperOrigins are the daemon's configured web origins
+	// (StartOptions.OAuthHelperOrigins), allowed in every session.
+	helperOrigins []string
 )
+
+// setOAuthHelperOrigins records the daemon's configured web origins for the
+// helpers it opens from now on.
+func setOAuthHelperOrigins(origins []string) {
+	helperMu.Lock()
+	defer helperMu.Unlock()
+	helperOrigins = append([]string(nil), origins...)
+}
 
 type openOAuthHelperRequest struct {
 	// WebOrigin is the browser origin that will call the helper. Passed from
@@ -83,7 +94,7 @@ func handleOpenOAuthHelper(_ context.Context, payload []byte) ([]byte, error) {
 	helperMu.Lock()
 	defer helperMu.Unlock()
 
-	var extra []string
+	extra := append([]string(nil), helperOrigins...)
 	if req.WebOrigin != "" {
 		extra = append(extra, req.WebOrigin)
 	}

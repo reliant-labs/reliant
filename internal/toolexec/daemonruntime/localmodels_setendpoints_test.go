@@ -7,12 +7,14 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/reliant-labs/reliant/internal/config"
 )
 
 func setupConfigDir(t *testing.T, content string) string {
 	t.Helper()
 	dir := t.TempDir()
-	t.Setenv("RELIANT_USER_CONFIG_DIR", dir)
+	config.UseUserConfigDirForTest(t, dir)
 	if content != "" {
 		if err := os.WriteFile(filepath.Join(dir, "config.yaml"), []byte(content), 0o640); err != nil {
 			t.Fatal(err)
