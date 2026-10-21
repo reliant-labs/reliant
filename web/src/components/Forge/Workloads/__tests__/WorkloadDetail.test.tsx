@@ -13,7 +13,7 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Code, ConnectError } from "@connectrpc/connect";
 
-import { createWorkloadsFixtureApi } from "../__fixtures__/workloadFixtures";
+import { createRepoMetaFixture, createWorkloadsFixtureApi } from "../__fixtures__/workloadFixtures";
 import { eventsInOrder } from "../WorkloadDetail";
 import { renderWorkload } from "./workloadsTestUtils";
 
@@ -38,36 +38,98 @@ describe("a workload", () => {
     expect(within(page).getByRole("link", { name: "Overview" })).toHaveAttribute("href", "/overview");
   });
 
-  it("names the environment on Restart, confirms, and shows the environment the server echoed", async () => {
+  it("names the environment on Restart, confirms with a neutral primary button, and shows the environment the server echoed", async () => {
     const onRestart = vi.fn().mockResolvedValue({ environmentId: "env-prod", environmentName: "prod", workload: "reliant-temporal-worker", requestedAt: new Date().toISOString() });
-    renderWorkload("reliant-temporal-worker", { restart: { onRestart, unavailableReason: null } });
+    renderWorkload("reliant-temporal-worker", { actions: { onRestart } });
     await ready();
     const button = screen.getByTestId("workload-restart");
     expect(button).toHaveTextContent("Restart in prod");
     await userEvent.click(button);
     const dialog = screen.getByRole("dialog", { name: "Restart reliant-temporal-worker in prod?" });
-    await userEvent.click(within(dialog).getByRole("button", { name: "Restart in prod" }));
+    const confirm = within(dialog).getByRole("button", { name: "Restart in prod" });
+    // D8: the action is the primary (accent) button, never a status colour.
+    expect(confirm.className).toContain("bg-accent");
+    expect(confirm.className).not.toMatch(/warning|danger/);
+    await userEvent.click(confirm);
     expect(onRestart).toHaveBeenCalledTimes(1);
     await waitFor(() => expect(screen.getByTestId("workload-restart-requested")).toHaveTextContent("Restart requested in prod"));
   });
 
-  it("says why a restart did not happen", async () => {
-    const onRestart = vi.fn().mockRejectedValue(new ConnectError("permission denied", Code.PermissionDenied));
-    renderWorkload("admin-server", { restart: { onRestart, unavailableReason: null } });
+  it("says why a restart did not happen, in the server's words without the protocol prefix", async () => {
+    const onRestart = vi.fn().mockRejectedValue(new ConnectError("the caller may not write deployments", Code.PermissionDenied));
+    renderWorkload("admin-server", { actions: { onRestart } });
     await ready();
     await userEvent.click(screen.getByTestId("workload-restart"));
     await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Restart in prod" }));
-    await waitFor(() => expect(screen.getByTestId("workload-restart-failed")).toHaveTextContent("The restart in prod was not requested"));
+    const failed = await screen.findByTestId("workload-action-failed");
+    expect(failed).toHaveTextContent("The restart in prod was not requested: the caller may not write deployments");
+    expect(failed.textContent).not.toContain("[permission_denied]");
   });
 
   it("offers no restart where Reliant does not host the environment, and says why", async () => {
-    renderWorkload("admin-server", { restart: { onRestart: vi.fn(), unavailableReason: "Restart is offered for environments Reliant hosts." } });
+    renderWorkload("admin-server", { actions: { unavailableReason: "Restart and Stop are offered for environments Reliant hosts." }, hosted: null });
     await ready();
     expect(screen.getByTestId("workload-restart")).toBeDisabled();
+    expect(screen.queryByTestId("workload-stop")).toBeNull();
     expect(screen.getByTestId("workload-restart-unavailable")).toHaveTextContent("environments Reliant hosts");
   });
 
-  it("never scales from the console: it shows the declared line and opens a pull request against it", async () => {
+  it("stops a hosted workload in its environment, after a confirm that names it", async () => {
+    const harness = renderWorkload("admin-server");
+    await ready();
+    await userEvent.click(screen.getByTestId("workload-stop"));
+    expect(screen.getByTestId("workload-stop")).toHaveTextContent("Stop in prod");
+    const dialog = screen.getByRole("dialog", { name: "Stop admin-server in prod?" });
+    await userEvent.click(within(dialog).getByRole("button", { name: "Stop in prod" }));
+    expect(harness.actions.onSetRunState).toHaveBeenCalledWith("dep-admin-server", "suspended");
+    expect(await screen.findByTestId("workload-run-state-requested")).toHaveTextContent("Stop requested in prod");
+  });
+
+  it("disables Restart on a stopped workload and offers Start in its place", async () => {
+    const harness = renderWorkload("docs");
+    await ready();
+    expect(screen.getByTestId("workload-restart")).toBeDisabled();
+    expect(screen.getByTestId("workload-restart")).toHaveAttribute("title", expect.stringMatching(/Start it first/));
+    expect(screen.getByTestId("workload-start-first")).toHaveTextContent("Start it first");
+    expect(screen.getByTestId("workload-run-state")).toHaveTextContent("Stopped by you");
+    await userEvent.click(screen.getByTestId("workload-start"));
+    await userEvent.click(within(screen.getByRole("dialog", { name: "Start docs in prod?" })).getByRole("button", { name: "Start in prod" }));
+    expect(harness.actions.onSetRunState).toHaveBeenCalledWith("dep-docs", "running");
+  });
+
+  it("shows where a hosted workload serves, and the platform's last error while it is not serving", async () => {
+    renderWorkload("reliant-temporal-worker");
+    await ready();
+    expect(screen.queryByTestId("workload-url")).toBeNull();
+    expect(screen.getByTestId("workload-last-error")).toHaveTextContent("OOMKilled: exceeded its 1Gi memory limit");
+  });
+
+  it("says the workload runs the wrong version when the observed digest is not the published one — never 'declared'", async () => {
+    renderWorkload("litellm");
+    await ready();
+    const header = screen.getByTestId("workload-hosted-facts");
+    expect(within(header).getByText("wrong version")).toBeInTheDocument();
+    expect(screen.getAllByText("wrong version").length).toBeGreaterThan(0);
+    expect(screen.queryByText("declared")).toBeNull();
+  });
+
+  it("puts the digest and who updated it in the meta line", async () => {
+    renderWorkload("admin-server");
+    await ready();
+    expect(screen.getByTestId("workload-url")).toHaveAttribute("href", "https://admin.reliantlabs.io");
+    expect(screen.getByText("sha256:e9a0c1d2b3f4…")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId("workload-updated")).toHaveTextContent(/updated .* by /));
+  });
+
+  it("marks a rollback in the deploy history", async () => {
+    renderWorkload("admin-server", { env: "e2e" });
+    await ready();
+    const history = await screen.findByTestId("workload-deploy-history");
+    await waitFor(() => expect(within(history).getAllByRole("listitem").length).toBeGreaterThan(1));
+    expect(history.querySelector("[data-rollback=true]")).not.toBeNull();
+  });
+
+  it("never scales from the console: it opens a pull request against the repository's default branch", async () => {
     renderWorkload("reliant-temporal-worker");
     await ready();
     await userEvent.click(screen.getByTestId("workload-scale"));
@@ -75,10 +137,23 @@ describe("a workload", () => {
     expect(popover).toHaveTextContent("Replicas are declared in code");
     expect(popover).toHaveTextContent("deploy/kcl/prod/main.k");
     expect(popover).toHaveTextContent("replicas = 2");
-    // The release was cut from main: GitHub's editor on that branch proposes the change as a PR.
     await waitFor(() =>
       expect(within(popover).getByTestId("workload-scale-open-pr")).toHaveAttribute("href", "https://github.com/reliant-labs/control-plane/edit/main/deploy/kcl/prod/main.k")
     );
+    expect(within(popover).getByTestId("workload-scale-pr-note")).toHaveTextContent("main, reliant-labs/control-plane's default branch");
+    // The view link is the declaration's own commit.
+    expect(within(popover).getByTestId("workload-scale-view").getAttribute("href")).toMatch(/\/blob\/[0-9a-f]{40}\/deploy\/kcl\/prod\/main\.k$/);
+  });
+
+  it("does not guess a branch: with the default branch unknown it offers View at commit and Copy path only", async () => {
+    renderWorkload("reliant-temporal-worker", { repoMeta: createRepoMetaFixture(null) });
+    await ready();
+    await userEvent.click(screen.getByTestId("workload-scale"));
+    const popover = screen.getByTestId("workload-scale-popover");
+    await waitFor(() => expect(within(popover).getByTestId("workload-scale-no-pr")).toHaveTextContent("could not learn reliant-labs/control-plane's default branch"));
+    expect(within(popover).queryByTestId("workload-scale-open-pr")).toBeNull();
+    expect(within(popover).getByTestId("workload-scale-view")).toBeInTheDocument();
+    expect(within(popover).getByRole("button", { name: "Copy path" })).toBeInTheDocument();
   });
 
   it("lists its pods, saying when a node is not reported and when an age is a lower bound", async () => {
@@ -138,6 +213,12 @@ describe("a Job", () => {
 });
 
 describe("its states", () => {
+  it("says a self-managed environment's declared workload is unobserved, not missing", async () => {
+    renderWorkload("admin-server", { env: "staging" });
+    await waitFor(() => expect(screen.getByTestId("workload-detail")).toHaveAttribute("data-state", "unobserved"));
+    expect(screen.getByText("admin-server is declared in staging, and nothing has observed it")).toBeInTheDocument();
+  });
+
   it("says a workload does not run in this environment, with the way back", async () => {
     renderWorkload("nonexistent");
     await waitFor(() => expect(screen.getByTestId("workload-detail")).toHaveAttribute("data-state", "not-found"));

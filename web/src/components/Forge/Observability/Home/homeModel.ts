@@ -26,11 +26,17 @@ export interface ServiceRow {
   health: ServiceHealth;
   workload: Workload | null;
   tone: HealthTone;
-  /** The word beside the dot: Crash-looping, Degraded, Healthy, No workload data. */
+  /**
+   * The word beside the dot: the workload's server verdict (Crash-looping,
+   * Degraded, Healthy…), or — with no workload telemetry — the signal alone
+   * (Alert firing, Errors elevated) or No workload data, never a verdict.
+   */
   status: string;
   /** Why, in a few words, when it is not healthy. */
   reason: string | null;
   alertsFiring: number;
+  /** No verdict, but an alert firing or a high error rate: ranked with the rows that need attention. */
+  signal?: boolean;
 }
 
 /** The labels an alert names its service by, in the order the rule packs use them. */
@@ -80,19 +86,23 @@ export function serviceRows(
         };
       }
       // No workload telemetry (a service outside Kubernetes, or before the
-      // node agent reports): the request side is all there is.
-      const tone: HealthTone = signal ? "warning" : health.requestCount > 0 ? "success" : "neutral";
-      const status = signal ? "Degraded" : health.requestCount > 0 ? "Healthy" : "No workload data";
-      return { name: health.name, env, health, workload, tone, status, reason: signal, alertsFiring: firing };
+      // node agent reports): there is no verdict, and none is invented. The
+      // row says the SIGNAL it has, in words the server's verdict never uses
+      // and in the neutral tone, so it cannot be read as "Degraded". It still
+      // ranks among the rows that need looking at (byAttention).
+      const status = firing > 0 ? `${firing === 1 ? "Alert" : "Alerts"} firing` : health.errorRate >= ERROR_RATE_ATTENTION ? "Errors elevated" : "No workload data";
+      return { name: health.name, env, health, workload, tone: "neutral", status, reason: signal, alertsFiring: firing, signal: !!signal };
     });
 }
 
 const RANK: Record<HealthTone, number> = { danger: 0, warning: 1, success: 2, neutral: 3 };
+/** A row with no verdict but a firing alert or a high error rate ranks with the degraded ones, after them. */
+const rankOf = (row: ServiceRow) => (row.signal ? 1.5 : RANK[row.tone]);
 
 /** What needs attention first: the worst status, then the most firing alerts, then the highest error rate, then the busiest. */
 export function byAttention(a: ServiceRow, b: ServiceRow): number {
   return (
-    RANK[a.tone] - RANK[b.tone] ||
+    rankOf(a) - rankOf(b) ||
     b.alertsFiring - a.alertsFiring ||
     b.health.errorRate - a.health.errorRate ||
     b.health.requestCount - a.health.requestCount ||

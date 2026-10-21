@@ -249,9 +249,10 @@ export function toCloudPromotion(msg: DeployPromotion): CloudPromotion {
 }
 
 /**
- * One deployment, in forge's hosted-workload shape. Same object
- * HostedWorkloadList already renders from forge's reports, so a workload's
- * verdict, drift and URL read identically whichever source produced them.
+ * One deployment, in forge's hosted-workload shape — the same shape forge's
+ * own reports use, so a workload's verdict, drift and URL read identically
+ * whichever source produced them. The workload page reads its run state, URL,
+ * last error and drift from here.
  */
 function toWorkload(msg: DeploymentStatus): ForgeHostedWorkload {
   const deployment = msg.deployment;
@@ -347,6 +348,15 @@ function runStateEnum(state: RunStateRequest): DeployRunState {
  */
 export async function setEnvironmentRunState(environmentId: string, state: RunStateRequest): Promise<void> {
   await client().setEnvironmentRunState({ environmentId, runState: runStateEnum(state) });
+}
+
+/**
+ * Stop or start ONE hosted workload's deployment: its RUN STATE (running or
+ * suspended), which DeployService.Scale carries. Not a replica count — forge's
+ * tiers carry none, and replicas are declared in KCL (decision D6).
+ */
+export async function setWorkloadRunState(deploymentId: string, state: RunStateRequest): Promise<void> {
+  await client().scale({ deploymentId, runState: runStateEnum(state) });
 }
 
 /** What the control plane echoes for a restart: the environment it happened IN, so no caller can misread where. */

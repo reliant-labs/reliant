@@ -122,19 +122,21 @@ describe("what needs attention", () => {
     ({ envId: "env-prod", envName: "prod", workload: name, namespace: "", serviceVersion: "", replicasObserved: 1, restartsInWindow: 5, containers: [], latestWarning: null, health, healthReason }) as unknown as Workload;
   const alert = (service: string): AlertInstance => ({ envId: "env-prod", rule: "X", fingerprint: service, labels: { service }, annotations: {}, state: "firing", activeAtMs: null, firingAtMs: null, lastEvalAtMs: null, lastValue: 1 });
 
-  it("puts crash-looping first, then degraded (alerts firing before a high error rate), then healthy, then no data", () => {
+  it("puts crash-looping first, then the signals (alerts firing before a high error rate), then the rest", () => {
     const rows = serviceRows(
       [health("quiet", { requestCount: 0 }), health("ok"), health("noisy", { errorRate: 0.2 }), health("paged"), health("looping"), health("operator", { operatorData: true })],
       [workload("looping", "crash_looping", "restarted 5x, last exit OOMKilled")],
       [alert("paged")],
       () => "prod"
     ).sort(byAttention);
-    expect(rows.map((r) => [r.name, r.status])).toEqual([
-      ["looping", "Crash-looping"],
-      ["paged", "Degraded"],
-      ["noisy", "Degraded"],
-      ["ok", "Healthy"],
-      ["quiet", "No workload data"],
+    // Only "looping" has a workload, so only it has a verdict. The others say
+    // their signal, in words and a tone the verdict never uses.
+    expect(rows.map((r) => [r.name, r.status, r.tone])).toEqual([
+      ["looping", "Crash-looping", "danger"],
+      ["paged", "Alert firing", "neutral"],
+      ["noisy", "Errors elevated", "neutral"],
+      ["ok", "No workload data", "neutral"],
+      ["quiet", "No workload data", "neutral"],
     ]);
     expect(rows[1].reason).toBe("1 alert firing");
     // The workload's verdict and its reason are the server's, never re-derived from restarts.

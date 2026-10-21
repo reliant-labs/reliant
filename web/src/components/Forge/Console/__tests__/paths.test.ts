@@ -144,4 +144,12 @@ describe("redirects from the retired URLs", () => {
     );
     expect(legacyObservabilityTarget("shop", { view: "usage" })).toBe("/forge/p/shop/settings?env=all");
   });
+
+  it("sends the retired Workloads view to the Overview, or to the workload's page when it names one environment", () => {
+    expect(legacyObservabilityTarget("shop", { view: "workloads", envs: ["prod"] })).toBe("/forge/p/shop?env=prod");
+    expect(legacyObservabilityTarget("shop", { view: "workloads", envs: ["prod"], workload: "api" })).toBe("/forge/p/shop/workloads/prod/api?env=prod");
+    // Every environment: the Overview, filtered to the workload, lets the reader pick one.
+    expect(legacyObservabilityTarget("shop", { view: "workloads", workload: "api" })).toBe("/forge/p/shop?env=all&q=api");
+    expect(legacyEnvTarget("shop", "e2e", { tab: "observability", view: "workloads", workload: "api" })).toBe("/forge/p/shop/workloads/e2e/api?env=e2e");
+  });
 });

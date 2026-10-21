@@ -10,13 +10,16 @@ import { useState, type ReactNode } from "react";
 import { ChevronDown } from "lucide-react";
 
 import Link from "@/components/forge-ui/link";
+import Modal from "@/components/forge-ui/modal";
 import Status from "@/components/forge-ui/status";
+import Tag from "@/components/forge-ui/tag";
 import { useEscapeLayer } from "@/hooks/useEscapeLayer";
 import type { ResourceUsage, Workload } from "@/services/controlPlane/observability/types";
 import { cn } from "@/lib/utils";
+import { shortDigest, type ForgeHostedWorkload } from "@/services/forge/topology";
 
 import { formatPercent } from "../Observability/format";
-import { INK_LINK } from "../Releases/releaseParts";
+import { BUTTON_PRIMARY, BUTTON_SECONDARY, INK_LINK } from "../Releases/releaseParts";
 import { shortVersion } from "../Releases/releaseModel";
 import { HEALTH_STATUS } from "./health";
 
@@ -38,14 +41,24 @@ export function HealthStatus({ workload, withReason = false }: { workload: Pick<
  * The release a workload runs, linked to it. A release established from the
  * newest promotion rather than an observed digest is DECLARED, not verified,
  * and says so on hover — the two must never read alike.
+ *
+ * DRIFT WINS. When the platform observed a digest that is not the one the
+ * published release asks for (GetStatus `drifted`), the workload runs the
+ * WRONG VERSION: the server's release join cannot see that (an unmatched
+ * digest falls back to the promotion basis), so this says it from the hosted
+ * observation, and never "declared".
  */
 export function WorkloadRelease({
   workload,
   releaseHref,
+  hosted,
 }: {
   workload: Pick<Workload, "releaseVersion" | "releaseBasis" | "serviceVersion">;
   releaseHref: (version: string) => string;
+  /** The platform's observation of this workload, for a hosted environment. */
+  hosted?: ForgeHostedWorkload | null;
 }) {
+  const drifted = hosted?.drifted === true;
   if (!workload.releaseVersion) {
     return (
       <span className="text-ink-muted" title="Reliant could not tell which release this runs">
@@ -53,7 +66,7 @@ export function WorkloadRelease({
       </span>
     );
   }
-  const declared = workload.releaseBasis === "promotion";
+  const declared = workload.releaseBasis === "promotion" && !drifted;
   return (
     <span className="inline-flex items-center gap-1.5">
       <Link
@@ -68,7 +81,74 @@ export function WorkloadRelease({
         {shortVersion(workload.releaseVersion)}
       </Link>
       {declared && <span className="text-xs text-ink-muted">declared</span>}
+      {drifted && <DriftTag workload={hosted!} />}
     </span>
+  );
+}
+
+/** The platform observed a digest other than the one the published release asks for. */
+export function DriftTag({ workload }: { workload: Pick<ForgeHostedWorkload, "observed_digest" | "desired_digest"> }) {
+  return (
+    <Tag
+      tone="danger"
+      title={`Running ${shortDigest(workload.observed_digest) || "an unknown digest"}, but the published release asks for ${shortDigest(workload.desired_digest) || "an unknown digest"}.`}
+    >
+      <span data-drifted="true">wrong version</span>
+    </Tag>
+  );
+}
+
+/**
+ * A confirm dialog for a workload action that names its environment (D1).
+ * The confirm button is the primary action, never a status colour (D8): the
+ * consequence is in the words, not in amber.
+ */
+export function ActionDialog({
+  open,
+  title,
+  description,
+  detail,
+  confirmLabel,
+  pending,
+  onConfirm,
+  onCancel,
+  testId,
+}: {
+  open: boolean;
+  title: string;
+  description: string;
+  /** A second, smaller line in the body: where the action is recorded. */
+  detail: string;
+  confirmLabel: string;
+  pending: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+  testId?: string;
+}) {
+  return (
+    <Modal
+      open={open}
+      // Nothing closes the dialog while the request is in flight: its answer lands here.
+      onClose={() => {
+        if (!pending) onCancel();
+      }}
+      closeOnOverlay={!pending}
+      title={title}
+      description={description}
+      size="sm"
+      footer={
+        <div className="flex justify-end gap-2" data-testid={testId}>
+          <button type="button" className={BUTTON_SECONDARY} onClick={onCancel} disabled={pending}>
+            Cancel
+          </button>
+          <button type="button" className={BUTTON_PRIMARY} onClick={onConfirm} disabled={pending} data-testid={testId ? `${testId}-confirm` : undefined}>
+            {pending ? "Working…" : confirmLabel}
+          </button>
+        </div>
+      }
+    >
+      <p className="text-xs text-ink-muted">{detail}</p>
+    </Modal>
   );
 }
 

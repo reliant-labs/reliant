@@ -24,10 +24,9 @@
  */
 
 import { lazy, Suspense, useMemo, useState, type ReactNode } from "react";
-import { ArrowRight, Copy, ExternalLink, GitPullRequest, RotateCcw, ScrollText, SlidersHorizontal } from "lucide-react";
+import { AlertTriangle, ArrowRight, Copy, ExternalLink, GitPullRequest, Play, RotateCcw, ScrollText, SlidersHorizontal, Square } from "lucide-react";
 
 import Card from "@/components/forge-ui/card";
-import ConfirmationDialog from "@/components/forge-ui/confirmation_dialog";
 import EmptyState from "@/components/forge-ui/empty_state";
 import Link from "@/components/forge-ui/link";
 import Mono from "@/components/forge-ui/mono";
@@ -38,13 +37,15 @@ import Tabs from "@/components/forge-ui/tabs";
 import Tag from "@/components/forge-ui/tag";
 import { useEscapeLayer } from "@/hooks/useEscapeLayer";
 import { useObservabilityOrg, usePanelQuery, useWorkload, useWorkloads } from "@/hooks/observability-queries";
-import { useProjectRelease } from "@/hooks/release-queries";
+import { useEnvPromotions, useProjectRelease, useProjectReleases } from "@/hooks/release-queries";
 import { isChunkLoadError, staleChunkModule } from "@/lib/lazyRoute";
 import { cn } from "@/lib/utils";
 import { obsErrorKind } from "@/services/controlPlane/observability/errors";
 import type { ObsScope, Workload, WorkloadDetail as WorkloadDetailData, WorkloadEvent, WorkloadJob, WorkloadSeries } from "@/services/controlPlane/observability/types";
 import { RANGE_LABELS, RANGE_PRESETS, type RangePreset } from "@/services/controlPlane/observability/window";
-import type { RestartedWorkload } from "@/services/forge/cloudEnvs";
+import { cloudErrorDetail, type RestartedWorkload, type RunStateRequest } from "@/services/forge/cloudEnvs";
+import { useDefaultBranch } from "@/services/forge/RepoMetaContext";
+import { workloadLastError, workloadLink, type ForgeHostedWorkload } from "@/services/forge/topology";
 
 import { UPlotChart, type ChartMarker } from "../Observability/charts/UPlotChart";
 import { unionTimestamps } from "../Observability/Dashboards/PanelBody";
@@ -56,22 +57,28 @@ import type { ObsNavigate, ObsSearch, ObsView } from "../Observability/obsSearch
 import { useReleaseMarkers } from "../Observability/releaseMarkers";
 import { Ago, BUTTON_PRIMARY, BUTTON_SECONDARY, Facts, INK_LINK, Note, Panel, RowMenu, type MenuItem } from "../Releases/releaseParts";
 import { shortVersion } from "../Releases/releaseModel";
+import { usePromoterNames } from "../Releases/useReleaseData";
+import { runStateOf } from "../runStateVocabulary";
 import {
   JOB_STATUS,
   KIND_LABEL,
   declarationLinks,
+  deployHistory,
+  digestOf,
   formatAge,
   formatMillicores,
   formatQuantityBytes,
   formatSeconds,
+  githubRepoOf,
   isJobKind,
   lastExitOf,
   podAgeMs,
   replicasText,
   WORKLOAD_TABS,
+  type DeployHistoryEntry,
   type WorkloadTab,
 } from "./workloadModel";
-import { HealthStatus, WorkloadRelease } from "./workloadParts";
+import { ActionDialog, DriftTag, HealthStatus, WorkloadRelease } from "./workloadParts";
 import { OVERVIEW_RANGE } from "./OverviewHome";
 
 // Its own chunk, as on the Observability pages: the explorers load only when a tab shows them.
@@ -97,11 +104,25 @@ const EXPLORER_TABS: Partial<Record<WorkloadTab, ObsView>> = { logs: "logs", tra
 /** The URL's state: the tab, the window, and the explorer tabs' own keys (obsSearch.ts). */
 export type WorkloadDetailSearch = Omit<ObsSearch, "view" | "envs" | "service" | "workload"> & { tab?: WorkloadTab };
 
-/** What the page lets a reader do to the running workload: restart it, or why not. */
-export interface RestartControl {
-  onRestart: () => Promise<RestartedWorkload>;
-  /** Set when restarting is impossible here, with the reason; the button is then disabled and says so. */
+/**
+ * What the page lets a reader do to the running workload, and why not.
+ *
+ * Restart and Stop/Start are HOSTED-ONLY (decision D6, hosted first): the
+ * platform runs those pods. Stop/Start is the deployment's RUN STATE
+ * (DeployService.Scale: running or suspended), not a replica count — replicas
+ * are declared in KCL and the Scale button only points at the declaration.
+ */
+export interface WorkloadActions {
+  /** Set when no action can run in this environment, with the reason; the buttons are then disabled and say so. */
   unavailableReason: string | null;
+  onRestart: () => Promise<RestartedWorkload>;
+  onSetRunState: (deploymentId: string, state: RunStateRequest) => Promise<void>;
+}
+
+/** What the platform observes of the workload in a hosted environment (GetStatus); null for an environment it does not place. */
+export interface HostedObservation {
+  workload: ForgeHostedWorkload | null;
+  loading: boolean;
 }
 
 export interface WorkloadDetailHrefs {
@@ -119,10 +140,13 @@ export interface WorkloadDetailProps {
   search: WorkloadDetailSearch;
   onSearch: (next: WorkloadDetailSearch, options?: { replace?: boolean }) => void;
   hrefs: WorkloadDetailHrefs;
-  restart: RestartControl;
+  actions: WorkloadActions;
+  hosted: HostedObservation | null;
+  /** The environment's last recorded render declares this workload (a self-managed environment, where nothing may report). */
+  declaredInRender?: boolean;
 }
 
-export function WorkloadDetail({ project, env, name, search, onSearch, hrefs, restart }: WorkloadDetailProps) {
+export function WorkloadDetail({ project, env, name, search, onSearch, hrefs, actions, hosted, declaredInRender = false }: WorkloadDetailProps) {
   const range = (search.range as RangePreset | undefined) ?? OVERVIEW_RANGE;
   const tab: WorkloadTab = search.tab ?? "overview";
   const org = useObservabilityOrg();
@@ -142,6 +166,7 @@ export function WorkloadDetail({ project, env, name, search, onSearch, hrefs, re
   const isJob = summary ? isJobKind(summary.kind) : runs.length > 0;
   const releaseQuery = useProjectRelease(project, summary?.releaseVersion || null);
   const release = releaseQuery.data?.release ?? null;
+  const history = useDeployHistory(project, env.id, name);
 
   const crumbs = [{ label: "Overview", href: hrefs.overview }, { label: name }];
   const rangeControl = (
@@ -188,12 +213,19 @@ export function WorkloadDetail({ project, env, name, search, onSearch, hrefs, re
 
   if (!summary && runs.length === 0) {
     return (
-      <div className="space-y-6" data-testid="workload-detail" data-state="not-found">
+      <div className="space-y-6" data-testid="workload-detail" data-state={declaredInRender ? "unobserved" : "not-found"}>
         <PageHeader breadcrumbs={crumbs} title={name} titleAccessory={<Tag>{env.name}</Tag>} className="mb-0" />
-        <EmptyState
-          title={`No workload named ${name} in ${env.name}`}
-          description={`Nothing named ${name} reported from ${env.name} in the ${RANGE_LABELS[range].toLowerCase()}, and its recorded bundle does not declare it. It may run in another environment, or it was removed.`}
-        />
+        {declaredInRender ? (
+          <EmptyState
+            title={`${name} is declared in ${env.name}, and nothing has observed it`}
+            description={`${env.name}'s last recorded render declares ${name}, but no telemetry from it reached Reliant in the ${RANGE_LABELS[range].toLowerCase()}. Reliant does not run ${env.name}'s cluster; its workloads report once the cluster sends telemetry.`}
+          />
+        ) : (
+          <EmptyState
+            title={`No workload named ${name} in ${env.name}`}
+            description={`Nothing named ${name} reported from ${env.name} in the ${RANGE_LABELS[range].toLowerCase()}, and its recorded bundle does not declare it. It may run in another environment, or it was removed.`}
+          />
+        )}
         <div className="flex items-center justify-center gap-3">
           <Link href={hrefs.overview} className={cn(BUTTON_SECONDARY, "no-color")}>
             Back to Overview
@@ -216,9 +248,10 @@ export function WorkloadDetail({ project, env, name, search, onSearch, hrefs, re
         summary={summary}
         runs={runs}
         isJob={isJob}
-        branch={release?.branch || null}
+        hosted={hosted}
+        lastDeploy={history.entries[0] ?? null}
         hrefs={hrefs}
-        restart={restart}
+        actions={actions}
         // An explorer tab carries its own window control (the same `range` key): one on screen, not two.
         rangeControl={explorer ? null : rangeControl}
         onTab={(next) => onSearch({ tab: next === "overview" ? undefined : next, range: search.range })}
@@ -246,8 +279,8 @@ export function WorkloadDetail({ project, env, name, search, onSearch, hrefs, re
                 <OverviewTab scope={scope} range={range} env={env} name={name} detail={detail.data ?? null} summary={summary} onLogs={() => onSearch({ tab: "logs", range: search.range })} />
               ))}
             {tab === "events" && <EventsPanel events={detail.data?.events ?? []} range={range} />}
-            {tab === "history" && <HistoryTab detail={detail.data ?? null} envId={env.id} runs={runs} hrefs={hrefs} />}
-            {tab === "config" && <ConfigTab summary={summary} env={env.name} branch={release?.branch || null} />}
+            {tab === "history" && <HistoryTab detail={detail.data ?? null} envId={env.id} runs={runs} history={history} hrefs={hrefs} />}
+            {tab === "config" && <ConfigTab summary={summary} env={env.name} />}
           </div>
           <Rail
             name={name}
@@ -255,7 +288,9 @@ export function WorkloadDetail({ project, env, name, search, onSearch, hrefs, re
             summary={summary}
             latestRun={isJob ? (runs[0] ?? null) : null}
             detail={detail.data ?? null}
+            history={history}
             commit={release ? { sha: release.gitCommit, subject: release.subject, author: release.author } : null}
+            hosted={hosted?.workload ?? null}
             hrefs={hrefs}
             onTab={(next) => onSearch({ tab: next, range: search.range })}
           />
@@ -265,7 +300,28 @@ export function WorkloadDetail({ project, env, name, search, onSearch, hrefs, re
   );
 }
 
+/** This workload's deploy history in the environment: the ledger, the promoters' names and cut order, joined. */
+interface DeployHistory {
+  entries: DeployHistoryEntry[];
+  loading: boolean;
+  failed: boolean;
+}
+
+function useDeployHistory(project: string, envId: string, name: string): DeployHistory {
+  const ledgers = useEnvPromotions(useMemo(() => [envId], [envId]));
+  const ledger = ledgers.get(envId);
+  const releases = useProjectReleases(project);
+  const names = usePromoterNames(project);
+  const entries = useMemo(() => {
+    const rank = new Map((releases.data ?? []).map((r, index) => [r.version, index]));
+    return deployHistory(ledger?.data ?? [], name, rank, names);
+  }, [ledger?.data, releases.data, name, names]);
+  return { entries, loading: !!ledger?.isLoading, failed: !!ledger?.error };
+}
+
 // ── Header ──────────────────────────────────────────────────────────────────
+
+type Outcome = { kind: "restart"; result: RestartedWorkload } | { kind: "run-state"; state: RunStateRequest } | { kind: "failed"; action: string; message: string };
 
 function WorkloadHeader({
   crumbs,
@@ -274,9 +330,10 @@ function WorkloadHeader({
   summary,
   runs,
   isJob,
-  branch,
+  hosted,
+  lastDeploy,
   hrefs,
-  restart,
+  actions,
   rangeControl,
   onTab,
 }: {
@@ -286,29 +343,40 @@ function WorkloadHeader({
   summary: Workload | null;
   runs: WorkloadJob[];
   isJob: boolean;
-  branch: string | null;
+  hosted: HostedObservation | null;
+  lastDeploy: DeployHistoryEntry | null;
   hrefs: WorkloadDetailHrefs;
-  restart: RestartControl;
+  actions: WorkloadActions;
   rangeControl: ReactNode;
   onTab: (tab: WorkloadTab) => void;
 }) {
-  const [confirming, setConfirming] = useState(false);
-  const [pending, setPending] = useState(false);
-  const [outcome, setOutcome] = useState<{ ok: true; result: RestartedWorkload } | { ok: false; message: string } | null>(null);
-  const container = summary?.containers[0];
-  const image = summary?.declared?.image || (container ? `${container.imageName}${container.imageTag ? `:${container.imageTag}` : ""}` : "");
+  const [confirming, setConfirming] = useState<null | "restart" | RunStateRequest>(null);
+  const [pending, setPending] = useState<null | "restart" | RunStateRequest>(null);
+  const [outcome, setOutcome] = useState<Outcome | null>(null);
+  const observed = hosted?.workload ?? null;
   const latestRun = runs[0];
+  const digest = digestOf(summary?.declared?.image ?? "") || observed?.observed_digest || "";
 
-  const runRestart = async () => {
-    setPending(true);
+  // Run state: what the platform says, else the server's verdict.
+  const runState = observed ? runStateOf(observed) : null;
+  const suspended = summary?.health === "suspended" || runState?.kind === "stopped" || runState?.kind === "billing";
+  const deploymentId = observed?.deployment_id || "";
+  const canRunState = !actions.unavailableReason && !!deploymentId && !isJob;
+  const restartBlocked = actions.unavailableReason ?? (suspended ? "Start it first: a stopped workload has no pods to restart." : null);
+
+  const run = async (what: "restart" | RunStateRequest) => {
+    setPending(what);
     try {
-      const result = await restart.onRestart();
-      setOutcome({ ok: true, result });
+      if (what === "restart") setOutcome({ kind: "restart", result: await actions.onRestart() });
+      else {
+        await actions.onSetRunState(deploymentId, what);
+        setOutcome({ kind: "run-state", state: what });
+      }
     } catch (err) {
-      setOutcome({ ok: false, message: err instanceof Error ? err.message : String(err) });
+      setOutcome({ kind: "failed", action: what === "restart" ? "restart" : what === "running" ? "start" : "stop", message: cloudErrorDetail(err) || "the control plane did not say why" });
     } finally {
-      setPending(false);
-      setConfirming(false);
+      setPending(null);
+      setConfirming(null);
     }
   };
 
@@ -316,6 +384,8 @@ function WorkloadHeader({
     { label: "Open in Activity", href: hrefs.activity, testId: "workload-menu-activity" },
     { label: "View declared spec", onSelect: () => onTab("config"), testId: "workload-menu-config" },
   ];
+  const link = observed ? workloadLink(observed) : "";
+  const lastError = observed ? workloadLastError(observed) : "";
 
   return (
     <div className="space-y-3">
@@ -325,7 +395,7 @@ function WorkloadHeader({
           title={name}
           titleAccessory={
             <>
-              {summary ? <HealthStatus workload={summary} /> : latestRun ? <Status tone={JOB_STATUS[latestRun.result].tone} label={JOB_STATUS[latestRun.result].label} /> : null}
+              {summary ? <HealthStatus workload={summary} withReason /> : latestRun ? <Status tone={JOB_STATUS[latestRun.result].tone} label={JOB_STATUS[latestRun.result].label} /> : null}
               <Tag>{env.name}</Tag>
             </>
           }
@@ -338,7 +408,7 @@ function WorkloadHeader({
               </span>
               {summary?.releaseVersion ? (
                 <span className="inline-flex items-center gap-1">
-                  Release <WorkloadRelease workload={summary} releaseHref={hrefs.release} />
+                  Release <WorkloadRelease workload={summary} releaseHref={hrefs.release} hosted={observed} />
                 </span>
               ) : latestRun?.releaseVersion ? (
                 <span>
@@ -348,8 +418,13 @@ function WorkloadHeader({
                   </Link>
                 </span>
               ) : null}
-              {image && <Mono value={image} length={40} />}
-              {summary?.healthReason && <span>{summary.healthReason}</span>}
+              {digest && <Mono value={digest} length={19} />}
+              {lastDeploy?.at && (
+                <span data-testid="workload-updated">
+                  updated <Ago at={lastDeploy.at} />
+                  {lastDeploy.by ? ` by ${lastDeploy.by}` : ""}
+                </span>
+              )}
             </>
           }
           className="mb-0 min-w-0 flex-1"
@@ -365,26 +440,74 @@ function WorkloadHeader({
               <button
                 type="button"
                 className={BUTTON_SECONDARY}
-                onClick={() => setConfirming(true)}
-                disabled={!!restart.unavailableReason || pending}
-                title={restart.unavailableReason ?? `A rolling restart of ${name} in ${env.name}`}
+                onClick={() => setConfirming("restart")}
+                disabled={!!restartBlocked || !!pending}
+                title={restartBlocked ?? `A rolling restart of ${name} in ${env.name}`}
                 data-testid="workload-restart"
               >
                 <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
-                {pending ? `Restarting in ${env.name}…` : `Restart in ${env.name}`}
+                {pending === "restart" ? `Restarting in ${env.name}…` : `Restart in ${env.name}`}
               </button>
-              <ScaleButton name={name} env={env.name} summary={summary} branch={branch} />
+              {canRunState &&
+                (suspended ? (
+                  <button type="button" className={BUTTON_SECONDARY} onClick={() => setConfirming("running")} disabled={!!pending} data-testid="workload-start">
+                    <Play className="h-3.5 w-3.5" aria-hidden="true" />
+                    {pending === "running" ? `Starting in ${env.name}…` : `Start in ${env.name}`}
+                  </button>
+                ) : (
+                  <button type="button" className={BUTTON_SECONDARY} onClick={() => setConfirming("suspended")} disabled={!!pending} data-testid="workload-stop">
+                    <Square className="h-3.5 w-3.5" aria-hidden="true" />
+                    {pending === "suspended" ? `Stopping in ${env.name}…` : `Stop in ${env.name}`}
+                  </button>
+                ))}
+              <ScaleButton name={name} env={env.name} summary={summary} />
             </>
           )}
           <RowMenu label={`More actions for ${name}`} items={menu} testId="workload-menu" />
         </div>
       </div>
-      {restart.unavailableReason && !isJob && (
-        <p className="text-xs text-ink-muted" data-testid="workload-restart-unavailable">
-          {restart.unavailableReason}
-        </p>
+
+      {/* What the platform observes of a hosted workload: where it serves, its run state, the wrong-version call, its last error. */}
+      {observed && (link || (runState && runState.kind !== "running" && runState.kind !== "unknown") || observed.drifted || lastError) && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-muted" data-testid="workload-hosted-facts">
+          {link && (
+            <a href={link} target="_blank" rel="noreferrer" className={cn(INK_LINK, "inline-flex items-center gap-1")} data-testid="workload-url">
+              {link.replace(/^https?:\/\//, "")}
+              <ExternalLink className="h-3 w-3" aria-hidden="true" />
+              <span className="sr-only">(opens in a new tab)</span>
+            </a>
+          )}
+          {runState && runState.kind !== "running" && runState.kind !== "unknown" && (
+            <span title={runState.detail} data-testid="workload-run-state" data-run-state={runState.kind}>
+              <Tag tone={runState.kind === "billing" ? "danger" : "neutral"}>{runState.label}</Tag>
+            </span>
+          )}
+          {observed.drifted && <DriftTag workload={observed} />}
+          {lastError && (
+            <span className="inline-flex min-w-0 items-start gap-1 text-ink" data-testid="workload-last-error">
+              <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0 text-danger-ink" aria-hidden="true" />
+              <span className="sr-only">Last error: </span>
+              <span className="line-clamp-2 break-words" title={lastError}>
+                {lastError}
+              </span>
+            </span>
+          )}
+        </div>
       )}
-      {outcome?.ok && (
+
+      {actions.unavailableReason && !isJob ? (
+        <p className="text-xs text-ink-muted" data-testid="workload-restart-unavailable">
+          {actions.unavailableReason}
+        </p>
+      ) : (
+        suspended &&
+        canRunState && (
+          <p className="text-xs text-ink-muted" data-testid="workload-start-first">
+            {name} is stopped in {env.name}. Start it first to restart it. {runState?.kind === "billing" ? runState.detail : ""}
+          </p>
+        )
+      )}
+      {outcome?.kind === "restart" && (
         <Note tone="neutral" testId="workload-restart-requested">
           Restart requested in <span className="font-medium text-ink">{outcome.result.environmentName || env.name}</span>
           {outcome.result.requestedAt ? (
@@ -396,20 +519,49 @@ function WorkloadHeader({
           . Pods are replaced one at a time, each gated on readiness; the release and the declared spec do not change. Watch the Pods table below.
         </Note>
       )}
-      {outcome && !outcome.ok && (
-        <Note tone="danger" testId="workload-restart-failed">
-          The restart in {env.name} was not requested: {outcome.message}
+      {outcome?.kind === "run-state" && (
+        <Note tone="neutral" testId="workload-run-state-requested">
+          {outcome.state === "running" ? "Start" : "Stop"} requested in <span className="font-medium text-ink">{env.name}</span>.{" "}
+          {outcome.state === "running" ? "Pods come back as the platform converges." : "Compute goes off as the platform converges; data and URLs are kept."}
         </Note>
       )}
-      <ConfirmationDialog
-        open={confirming}
-        onCancel={() => setConfirming(false)}
-        onConfirm={() => void runRestart()}
+      {outcome?.kind === "failed" && (
+        <Note tone="danger" testId="workload-action-failed">
+          The {outcome.action} in {env.name} was not requested: {outcome.message}
+        </Note>
+      )}
+      <ActionDialog
+        open={confirming === "restart"}
+        onCancel={() => setConfirming(null)}
+        onConfirm={() => void run("restart")}
         title={`Restart ${name} in ${env.name}?`}
-        description={`A rolling restart: pods are replaced one at a time and readiness gates each step. The release and the declared spec do not change. Recorded in the audit trail as a restart of ${name} in ${env.name}.`}
+        description="A rolling restart: pods are replaced one at a time and readiness gates each step. The release and the declared spec do not change."
+        detail={`Recorded in the audit trail as a restart of ${name} in ${env.name}.`}
         confirmLabel={`Restart in ${env.name}`}
-        variant="warning"
-        loading={pending}
+        pending={pending === "restart"}
+        testId="workload-restart-dialog"
+      />
+      <ActionDialog
+        open={confirming === "suspended"}
+        onCancel={() => setConfirming(null)}
+        onConfirm={() => void run("suspended")}
+        title={`Stop ${name} in ${env.name}?`}
+        description={`Its compute turns off until you start it again: it stops serving. Data and URLs are kept. The rest of ${env.name} keeps running.`}
+        detail={`Recorded in the audit trail as a stop of ${name} in ${env.name}.`}
+        confirmLabel={`Stop in ${env.name}`}
+        pending={pending === "suspended"}
+        testId="workload-stop-dialog"
+      />
+      <ActionDialog
+        open={confirming === "running"}
+        onCancel={() => setConfirming(null)}
+        onConfirm={() => void run("running")}
+        title={`Start ${name} in ${env.name}?`}
+        description="Its compute turns back on, on the release it was running."
+        detail={`Recorded in the audit trail as a start of ${name} in ${env.name}.`}
+        confirmLabel={`Start in ${env.name}`}
+        pending={pending === "running"}
+        testId="workload-start-dialog"
       />
     </div>
   );
@@ -417,16 +569,33 @@ function WorkloadHeader({
 
 /**
  * Scale (D6): replicas are declared in KCL, so the console never changes them.
- * It shows where the declaration lives and opens a pull request against it.
+ * It shows where the declaration lives. "Open PR" edits the declaration on the
+ * repository's DEFAULT branch only — where a change is proposed as a pull
+ * request — and only when that branch is known; otherwise the file can be
+ * viewed at the exact commit the declaration was rendered from, and its path
+ * copied. Repository, path and commit are the one recorded bundle's.
  */
-function ScaleButton({ name, env, summary, branch }: { name: string; env: string; summary: Workload | null; branch: string | null }) {
+function ScaleButton({ name, env, summary }: { name: string; env: string; summary: Workload | null }) {
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const escapeLayer = useEscapeLayer(open, () => setOpen(false));
   const declared = summary?.declared ?? null;
-  const links = declared ? declarationLinks(declared, branch) : { edit: null, view: null };
+  const repo = declared ? githubRepoOf(declared.sourceRepo) : null;
+  const defaultBranch = useDefaultBranch(open ? repo : null);
+  const links = declared ? declarationLinks(declared, defaultBranch.branch) : { edit: null, view: null };
   const replicas = declared?.replicas ?? summary?.desiredReplicas ?? null;
   const path = declared?.sourcePath || `deploy/kcl/${env}/main.k`;
+  const noEditReason = !declared
+    ? null
+    : !declared.sourceRepo
+      ? "The bundle recorded no repository."
+      : !repo
+        ? "The declaration's repository is not on GitHub."
+        : defaultBranch.loading
+          ? null
+          : !defaultBranch.branch
+            ? `Reliant could not learn ${repo}'s default branch, so it will not guess where to propose the change.`
+            : null;
   return (
     <div
       className="relative"
@@ -459,7 +628,16 @@ function ScaleButton({ name, env, summary, branch }: { name: string; env: string
           ) : (
             <p className="mt-3 text-xs text-ink-muted">This environment&apos;s recorded bundle does not declare {name}, so there is no declaration to point at.</p>
           )}
-          {declared && !declared.sourceRepo && <p className="mt-2 text-xs text-ink-muted">The bundle recorded no repository, so the pull request is yours to open against {path}.</p>}
+          {links.edit && defaultBranch.branch && (
+            <p className="mt-2 text-xs text-ink-muted" data-testid="workload-scale-pr-note">
+              Opens GitHub&apos;s editor on {defaultBranch.branch}, {repo}&apos;s default branch; saving there proposes a pull request.
+            </p>
+          )}
+          {noEditReason && (
+            <p className="mt-2 text-xs text-ink-muted" data-testid="workload-scale-no-pr">
+              {noEditReason}
+            </p>
+          )}
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <button
               type="button"
@@ -471,27 +649,16 @@ function ScaleButton({ name, env, summary, branch }: { name: string; env: string
               <Copy className="h-3.5 w-3.5" aria-hidden="true" />
               {copied ? "Copied" : "Copy path"}
             </button>
-            {links.edit ? (
+            {links.view && (
+              <a href={links.view} target="_blank" rel="noreferrer" className={cn(BUTTON_SECONDARY, "no-color")} data-testid="workload-scale-view">
+                <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                View at {declared!.sourceCommit.slice(0, 8)}
+              </a>
+            )}
+            {links.edit && (
               <a href={links.edit} target="_blank" rel="noreferrer" className={cn(BUTTON_PRIMARY, "no-color")} data-testid="workload-scale-open-pr">
                 <GitPullRequest className="h-3.5 w-3.5" aria-hidden="true" />
                 Open PR
-              </a>
-            ) : (
-              <button
-                type="button"
-                className={BUTTON_PRIMARY}
-                disabled
-                title={declared?.sourceRepo ? "The release recorded no branch to open a pull request against" : "The bundle recorded no GitHub repository"}
-                data-testid="workload-scale-open-pr"
-              >
-                <GitPullRequest className="h-3.5 w-3.5" aria-hidden="true" />
-                Open PR
-              </button>
-            )}
-            {links.view && (
-              <a href={links.view} target="_blank" rel="noreferrer" className={cn(INK_LINK, "inline-flex items-center gap-1 text-xs")}>
-                View at {declared!.sourceCommit.slice(0, 8)}
-                <ExternalLink className="h-3 w-3" aria-hidden="true" />
               </a>
             )}
           </div>
@@ -885,11 +1052,26 @@ function EventsPanel({ events, range }: { events: WorkloadEvent[]; range: RangeP
   );
 }
 
-function HistoryTab({ detail, envId, runs, hrefs }: { detail: WorkloadDetailData | null; envId: string; runs: WorkloadJob[]; hrefs: WorkloadDetailHrefs }) {
+function HistoryTab({
+  detail,
+  envId,
+  runs,
+  history,
+  hrefs,
+}: {
+  detail: WorkloadDetailData | null;
+  envId: string;
+  runs: WorkloadJob[];
+  history: DeployHistory;
+  hrefs: WorkloadDetailHrefs;
+}) {
   const versions = [...(detail?.versionChanges ?? [])].filter((v) => v.envId === envId).reverse();
   const images = [...(detail?.imageChanges ?? [])].filter((c) => c.envId === envId).reverse();
   return (
     <>
+      <Panel title="Deploy history" meta="Every promotion that moved it, newest first" testId="workload-history-deploys">
+        <DeployHistoryList history={history} env="" hrefs={hrefs} />
+      </Panel>
       <Panel title="Versions" meta="The service.version it reported, newest first" testId="workload-history-versions">
         {versions.length === 0 ? (
           <p className="text-sm text-ink-muted">It reported no version in the window.</p>
@@ -949,7 +1131,7 @@ function HistoryTab({ detail, envId, runs, hrefs }: { detail: WorkloadDetailData
   );
 }
 
-function ConfigTab({ summary, env, branch }: { summary: Workload | null; env: string; branch: string | null }) {
+function ConfigTab({ summary, env }: { summary: Workload | null; env: string }) {
   const declared = summary?.declared ?? null;
   if (!declared) {
     return (
@@ -960,7 +1142,7 @@ function ConfigTab({ summary, env, branch }: { summary: Workload | null; env: st
       </Panel>
     );
   }
-  const links = declarationLinks(declared, branch);
+  const links = declarationLinks(declared, null);
   const notRecorded = <span className="text-ink-muted">not recorded</span>;
   const notDeclared = <span className="text-ink-muted">not declared</span>;
   const resource = (value: string) => (declared.specRecorded ? value || notDeclared : notRecorded);
@@ -1052,7 +1234,9 @@ function Rail({
   summary,
   latestRun,
   detail,
+  history,
   commit,
+  hosted,
   hrefs,
   onTab,
 }: {
@@ -1062,13 +1246,14 @@ function Rail({
   /** A Job's newest run: its release stands in for the workload's, and it has no rollouts or profiles. */
   latestRun: WorkloadJob | null;
   detail: WorkloadDetailData | null;
+  history: DeployHistory;
   commit: { sha: string; subject: string; author: string } | null;
+  hosted: ForgeHostedWorkload | null;
   hrefs: WorkloadDetailHrefs;
   onTab: (tab: WorkloadTab) => void;
 }) {
   const declared = summary?.declared ?? null;
   const exit = summary ? lastExitOf(summary) : null;
-  const versions = [...(detail?.versionChanges ?? [])].filter((v) => v.envId === env.id).reverse().slice(0, 5);
   const events = eventsInOrder(detail?.events ?? []).slice(0, 4);
   const container = summary?.containers[0];
   return (
@@ -1080,8 +1265,8 @@ function Rail({
               "Release",
               summary?.releaseVersion ? (
                 <span key="r" className="inline-flex flex-wrap items-center gap-1.5">
-                  <WorkloadRelease workload={summary} releaseHref={hrefs.release} />
-                  <span className="text-ink-muted">{summary.releaseBasis === "digest" ? "verified by digest" : ""}</span>
+                  <WorkloadRelease workload={summary} releaseHref={hrefs.release} hosted={hosted} />
+                  <span className="text-ink-muted">{summary.releaseBasis === "digest" && !hosted?.drifted ? "verified by digest" : ""}</span>
                 </span>
               ) : latestRun?.releaseVersion ? (
                 <span key="r">
@@ -1119,37 +1304,39 @@ function Rail({
                 <span className="text-ink-muted">not observed</span>
               ),
             ],
+            ...(history.entries[0]
+              ? ([
+                  [
+                    "Deployed by",
+                    <span key="by">
+                      {history.entries[0].by || <span className="text-ink-muted">not recorded</span>}
+                      {history.entries[0].scoped && <span className="text-ink-muted"> · scoped deploy</span>}
+                      <span className="text-ink-muted">
+                        {" · "}
+                        <Ago at={history.entries[0].at} />
+                      </span>
+                    </span>,
+                  ],
+                ] as [string, ReactNode][])
+              : []),
             ["Declared in", declared ? <Mono key="d" value={declared.sourcePath || `deploy/kcl/${env.name}/main.k`} length={26} copy={false} /> : <span className="text-ink-muted">not declared</span>],
             ...(exit ? ([["Last exit", <span key="e" className="text-warning-ink">{exit.reason}{exit.atMs ? ` · ${formatAgo(exit.atMs)}` : ""}</span>]] as [string, ReactNode][]) : []),
           ]}
         />
       </Panel>
       {!latestRun && (
-      <Panel
-        title="Rollouts"
-        actions={
-          <button type="button" onClick={() => onTab("history")} className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-xs text-ink-muted hover:bg-ink/5 hover:text-ink">
-            History
-            <ArrowRight className="h-3 w-3" aria-hidden="true" />
-          </button>
-        }
-        testId="workload-rollouts"
-      >
-        {versions.length === 0 ? (
-          <p className="text-xs text-ink-muted">No version change in the window.</p>
-        ) : (
-          <ol className="space-y-3">
-            {versions.map((v, index) => (
-              <li key={`${v.serviceVersion}-${v.firstSeenMs}`} className="relative pl-6 text-xs">
-                <span aria-hidden="true" className={cn("absolute left-1 top-1.5 h-2 w-2 rounded-full border", index === 0 ? "border-success bg-success" : "border-ink-muted bg-surface")} />
-                {index < versions.length - 1 && <span aria-hidden="true" className="absolute -bottom-3 left-2 top-4 w-px bg-border" />}
-                <span className="block text-ink">{v.serviceVersion}</span>
-                <span className="block text-ink-muted">first seen {formatAgo(v.firstSeenMs)}</span>
-              </li>
-            ))}
-          </ol>
-        )}
-      </Panel>
+        <Panel
+          title="Deploy history"
+          actions={
+            <button type="button" onClick={() => onTab("history")} className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-xs text-ink-muted hover:bg-ink/5 hover:text-ink">
+              History
+              <ArrowRight className="h-3 w-3" aria-hidden="true" />
+            </button>
+          }
+          testId="workload-deploy-history"
+        >
+          <DeployHistoryList history={history} env={env.name} hrefs={hrefs} limit={5} />
+        </Panel>
       )}
       <Panel
         title="Recent events"
@@ -1199,6 +1386,46 @@ function Rail({
         </nav>
       </Panel>
     </aside>
+  );
+}
+
+/**
+ * Promotions that moved the workload, newest first: the release, who, and
+ * when; a rollback in red, a scoped deploy said so. The ledger records no
+ * "via" (CLI, console or CI), so none is shown.
+ */
+function DeployHistoryList({ history, env, hrefs, limit }: { history: DeployHistory; env: string; hrefs: WorkloadDetailHrefs; limit?: number }) {
+  if (history.loading) return <div className="h-16 animate-pulse rounded bg-ink/5 motion-reduce:animate-none" aria-label="Loading deploy history" />;
+  if (history.failed) return <p className="text-xs text-ink-muted">The deploy history could not be read right now.</p>;
+  if (history.entries.length === 0) return <p className="text-xs text-ink-muted">No promotion{env ? ` to ${env}` : ""} has moved it yet.</p>;
+  const entries = limit ? history.entries.slice(0, limit) : history.entries;
+  return (
+    <ol className="space-y-3.5" data-testid="deploy-history">
+      {entries.map((entry, index) => (
+        <li key={entry.id} className="relative pl-6 text-xs" data-rollback={entry.rollback ? "true" : undefined}>
+          <span
+            aria-hidden="true"
+            className={cn(
+              "absolute left-1 top-1.5 h-2 w-2 rounded-full border",
+              entry.rollback ? "border-danger bg-danger" : index === 0 ? "border-success bg-success" : "border-ink-muted bg-surface"
+            )}
+          />
+          {index < entries.length - 1 && <span aria-hidden="true" className="absolute -bottom-3.5 left-2 top-4 w-px bg-border" />}
+          <span className={cn("block", entry.rollback ? "text-danger-ink" : "text-ink")}>
+            {entry.rollback ? "Rolled back to " : ""}
+            <Link href={hrefs.release(entry.version)} className={INK_LINK} title={entry.version}>
+              {shortVersion(entry.version)}
+            </Link>
+            {entry.scoped && <span className="text-ink-muted"> · scoped</span>}
+          </span>
+          <span className="block text-ink-muted">
+            {entry.by || "unknown"}
+            {entry.at ? " · " : ""}
+            <Ago at={entry.at} />
+          </span>
+        </li>
+      ))}
+    </ol>
   );
 }
 

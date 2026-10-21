@@ -14,23 +14,34 @@
  *   /forge-workloads-preview?env=all                           every environment
  *   /forge-workloads-preview?workload=reliant-temporal-worker  a workload (in the scoped env)
  *   …&tab=logs|traces|profiles|events|history|config
- *   …&case=empty|loading|error|not-set-up|self-managed
+ *   …&case=empty|loading|error|not-set-up|self-managed|local|no-default-branch|action-fails
  *   …&dark=1&scheme=pure-black
  */
 
 import { useEffect, useMemo } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { Code, ConnectError } from "@connectrpc/connect";
 
 import { ObservabilityApiProvider } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import { ReleasesApiProvider } from "@/services/forge/ReleasesApiContext";
+import { RepoMetaProvider } from "@/services/forge/RepoMetaContext";
 
 import { ConsolePreviewShell } from "../../Console/ConsolePreviewShell";
 import { withSearch } from "../../Console/paths";
 import { createReleasesFixtureApi } from "../../Releases/__fixtures__/releaseFixtures";
 import { OverviewHome, type OverviewSearch } from "../OverviewHome";
-import { WorkloadDetail, type RestartControl, type WorkloadDetailSearch } from "../WorkloadDetail";
-import { STRIP_ENVS, WORKLOADS_PROJECT, createWorkloadsFixtureApi, type WorkloadsFixtureState } from "../__fixtures__/workloadFixtures";
+import { WorkloadDetail, type WorkloadActions, type WorkloadDetailSearch } from "../WorkloadDetail";
+import { actionsUnavailableReason } from "../WorkloadPages";
+import {
+  FIXTURE_HOSTED,
+  STRIP_ENVS,
+  WORKLOADS_PROJECT,
+  createRepoMetaFixture,
+  createWorkloadsFixtureApi,
+  fixtureHostedObservation,
+  type WorkloadsFixtureState,
+} from "../__fixtures__/workloadFixtures";
 
 const BASE = "/forge-workloads-preview";
 
@@ -54,6 +65,9 @@ const CASES: { id: string; label: string; state: WorkloadsFixtureState }[] = [
   { id: "error", label: "telemetry unavailable", state: "error" },
   { id: "not-set-up", label: "observability not set up", state: "not-set-up" },
   { id: "self-managed", label: "self-managed env (no restart)", state: "data" },
+  { id: "local", label: "local env (no restart)", state: "data" },
+  { id: "no-default-branch", label: "repo default branch unknown", state: "data" },
+  { id: "action-fails", label: "restart / stop refused", state: "data" },
   { id: "no-envs", label: "nothing deployed", state: "data" },
 ];
 
@@ -90,19 +104,18 @@ export default function WorkloadsPreview() {
   const href = (extra: Record<string, unknown>) => withSearch(BASE, { env, ...keep, ...extra });
 
   const workloadEnv = STRIP_ENVS.find((candidate) => candidate.name === env) ?? STRIP_ENVS[0]!;
-  const restart: RestartControl = {
+  const refuse = () => Promise.reject(new ConnectError("the caller may not write deployments in this organization", Code.PermissionDenied));
+  const later = <T,>(value: T) => new Promise<T>((resolve) => setTimeout(() => resolve(value), 600));
+  const kind = active.id === "self-managed" ? "self_managed" : active.id === "local" ? "local" : workloadEnv.placed ? "persistent" : "self_managed";
+  const actions: WorkloadActions = {
     onRestart: () =>
-      new Promise((resolve) =>
-        setTimeout(
-          () => resolve({ environmentId: workloadEnv.id, environmentName: workloadEnv.name, workload: search.workload ?? "", requestedAt: new Date().toISOString() }),
-          600
-        )
-      ),
-    unavailableReason:
-      active.id === "self-managed"
-        ? `Restart is offered for environments Reliant hosts. ${workloadEnv.name} runs on your own cluster, so restart it there (kubectl rollout restart).`
-        : null,
+      active.id === "action-fails"
+        ? refuse()
+        : later({ environmentId: workloadEnv.id, environmentName: workloadEnv.name, workload: search.workload ?? "", requestedAt: new Date().toISOString() }),
+    onSetRunState: () => (active.id === "action-fails" ? refuse() : later(undefined)),
+    unavailableReason: actionsUnavailableReason(kind, workloadEnv.name),
   };
+  const repoMeta = useMemo(() => createRepoMetaFixture(active.id === "no-default-branch" ? null : "main"), [active]);
 
   return (
     <ConsolePreviewShell
@@ -136,6 +149,7 @@ export default function WorkloadsPreview() {
       <QueryClientProvider client={queryClient}>
         <ObservabilityApiProvider api={obsApi}>
           <ReleasesApiProvider api={releasesApi}>
+            <RepoMetaProvider api={repoMeta}>
             {search.workload ? (
               <WorkloadDetail
                 key={`${caseId}-${workloadEnv.name}-${search.workload}`}
@@ -150,7 +164,9 @@ export default function WorkloadsPreview() {
                   activity: href({}),
                   dashboards: withSearch("/forge-dashboards-preview", { dark: search.dark, scheme: search.scheme }),
                 }}
-                restart={restart}
+                actions={actions}
+                hosted={kind === "persistent" ? fixtureHostedObservation(workloadEnv.name, search.workload) : null}
+                declaredInRender={!workloadEnv.placed && workloadEnv.declared.includes(search.workload)}
               />
             ) : (
               <OverviewHome
@@ -170,8 +186,10 @@ export default function WorkloadsPreview() {
                 }}
                 onSelectEnv={(next) => go({ env: next })}
                 navigateTo={(target) => void navigate({ href: target })}
+                hosted={FIXTURE_HOSTED}
               />
             )}
+            </RepoMetaProvider>
           </ReleasesApiProvider>
         </ObservabilityApiProvider>
       </QueryClientProvider>

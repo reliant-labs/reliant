@@ -15,16 +15,18 @@ import { useCallback, useMemo } from "react";
 import { useNavigate, useParams, useSearch } from "@tanstack/react-router";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
-import { isPlacedKind } from "@/services/forge/live";
+import { useCloudEnvStatus, useCloudEnvStatuses, useSetWorkloadRunState } from "@/hooks/forge-queries";
+import { isPlacedKind, type LiveEnvKind } from "@/services/forge/live";
 import { restartWorkload, type RestartedWorkload } from "@/services/forge/cloudEnvs";
+import type { ForgeHostedWorkload } from "@/services/forge/topology";
 
 import { useForgeConsole } from "../Console/consoleContext";
 import { consolePath, withSearch } from "../Console/paths";
 import { CloudNotice } from "../SourceNotices";
 import { usePromoterNames } from "../Releases/useReleaseData";
 import { promoterOf } from "../Releases/releaseModel";
-import { OverviewHome, type OverviewHrefs, type OverviewSearch } from "./OverviewHome";
-import { WorkloadDetail, type RestartControl, type WorkloadDetailSearch } from "./WorkloadDetail";
+import { OverviewHome, type HostedByEnv, type OverviewHrefs, type OverviewSearch } from "./OverviewHome";
+import { WorkloadDetail, type HostedObservation, type WorkloadActions, type WorkloadDetailSearch } from "./WorkloadDetail";
 import type { StripEnv } from "./workloadModel";
 
 /** The roster's recorded, deployed environments as the Overview's strip needs them: prod first, previews last. */
@@ -46,6 +48,8 @@ function useStripEnvs(): { envs: StripEnv[]; loading: boolean } {
               promotedAt: live.promotedAt,
               promotedBy: promoterOf(live, names),
               preview: live.kind === "preview",
+              placed: isPlacedKind(live.kind),
+              declared: (live.declaredShape?.workloads ?? []).map((workload) => workload.name).filter(Boolean),
             },
           ];
         })
@@ -69,12 +73,51 @@ function useSearchUpdater<T extends object>() {
   );
 }
 
+/**
+ * Why Restart and Stop/Start cannot run in an environment of this kind, or
+ * null when they can (hosted: persistent or preview). Said per kind, because
+ * the true sentence differs: a local environment runs on a developer's
+ * machine, a self-managed one on the team's own cluster, an unknown one is a
+ * kind this build does not recognise.
+ */
+export function actionsUnavailableReason(kind: LiveEnvKind, envName: string): string | null {
+  switch (kind) {
+    case "persistent":
+    case "preview":
+      return null;
+    case "self_managed":
+      return `Restart and Stop are offered for environments Reliant hosts. ${envName} runs on your own cluster, so restart it there (kubectl rollout restart).`;
+    case "local":
+      return `${envName} is a local environment: it runs on a developer's machine with forge env up, so there is nothing deployed to restart. Restart it from that machine.`;
+    default:
+      return `Reliant does not recognise how ${envName} is run, so it offers no actions on its workloads.`;
+  }
+}
+
+/** Each hosted environment's GetStatus observation, by environment name then workload name. */
+function useHostedByEnv(envs: StripEnv[]): HostedByEnv {
+  const hostedEnvs = useMemo(() => envs.filter((candidate) => candidate.placed), [envs]);
+  const statuses = useCloudEnvStatuses(hostedEnvs.map((candidate) => candidate.id));
+  const key = hostedEnvs.map((candidate) => `${candidate.id}:${statuses.get(candidate.id)?.data ? "1" : "0"}`).join(",");
+  return useMemo(() => {
+    const out = new Map<string, Map<string, ForgeHostedWorkload>>();
+    for (const candidate of hostedEnvs) {
+      const workloads = statuses.get(candidate.id)?.data?.workloads ?? [];
+      out.set(candidate.name, new Map(workloads.filter((w) => w.name).map((w) => [w.name!, w])));
+    }
+    return out;
+    // `statuses` is a fresh Map per render; `key` changes when any status lands.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hostedEnvs, key]);
+}
+
 export function OverviewPage() {
   const { forgeProject, env, setEnv, roster, href } = useForgeConsole();
   const navigate = useNavigate();
   const search = useSearch({ strict: false }) as OverviewSearch;
   const onSearch = useSearchUpdater<OverviewSearch>();
   const { envs, loading } = useStripEnvs();
+  const hosted = useHostedByEnv(envs);
   const hrefs = useMemo<OverviewHrefs>(
     () => ({
       // The workload page carries the window, so its charts open on the one the reader was looking at.
@@ -99,6 +142,7 @@ export function OverviewPage() {
         hrefs={hrefs}
         onSelectEnv={setEnv}
         navigateTo={(target) => void navigate({ href: target })}
+        hosted={hosted}
       />
     </div>
   );
@@ -124,21 +168,26 @@ export function WorkloadPage() {
     [navigate]
   );
 
-  const restart = useMutation<RestartedWorkload, Error, void>({
-    mutationFn: () => restartWorkload(live!.id, name),
+  const restart = useMutation<RestartedWorkload, Error, string>({
+    // The environment the PATH names, by its control-plane id: a restart is always "in <env>".
+    mutationFn: (environmentId) => restartWorkload(environmentId, name),
     // The pods roll over the next minute: re-read the workload so the Pods table follows.
     onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["observability"] }),
   });
-  const restartControl = useMemo<RestartControl>(
+  const runState = useSetWorkloadRunState();
+  const placed = !!live && isPlacedKind(live.kind);
+  const status = useCloudEnvStatus(placed ? live!.id : null);
+  const actions = useMemo<WorkloadActions>(
     () => ({
-      onRestart: () => restart.mutateAsync(),
-      unavailableReason: !live
-        ? null
-        : isPlacedKind(live.kind)
-          ? null
-          : `Restart is offered for environments Reliant hosts. ${envName} runs on your own cluster, so restart it there (kubectl rollout restart).`,
+      onRestart: () => restart.mutateAsync(live!.id),
+      onSetRunState: (deploymentId, state) => runState.mutateAsync({ deploymentId, state }),
+      unavailableReason: live ? actionsUnavailableReason(live.kind, envName) : null,
     }),
-    [restart, live, envName]
+    [restart, runState, live, envName]
+  );
+  const hosted = useMemo<HostedObservation | null>(
+    () => (placed ? { workload: status.data?.workloads.find((w) => w.name === name) ?? null, loading: status.isLoading } : null),
+    [placed, status.data, status.isLoading, name]
   );
 
   const hrefs = useMemo(
@@ -179,7 +228,9 @@ export function WorkloadPage() {
         search={detailSearch}
         onSearch={onSearch}
         hrefs={hrefs}
-        restart={restartControl}
+        actions={actions}
+        hosted={hosted}
+        declaredInRender={!placed && (live.declaredShape?.workloads ?? []).some((workload) => workload.name === name)}
       />
     </div>
   );

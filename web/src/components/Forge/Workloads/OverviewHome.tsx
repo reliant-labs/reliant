@@ -39,6 +39,7 @@ import { useAlerts, useObservabilityOrg, useReleases, useWorkloads } from "@/hoo
 import { useProjectReleases } from "@/hooks/release-queries";
 import { obsErrorKind } from "@/services/controlPlane/observability/errors";
 import type { ObsScope, Workload } from "@/services/controlPlane/observability/types";
+import type { ForgeHostedWorkload } from "@/services/forge/topology";
 import { RANGE_LABELS, RANGE_PRESETS, type RangePreset } from "@/services/controlPlane/observability/window";
 import { cn } from "@/lib/utils";
 
@@ -69,6 +70,7 @@ import {
   type AttentionItem,
   type JobRow,
   type KindFilter,
+  type ServiceRow,
   type StatusFilter,
   type StripCell,
   type StripEnv,
@@ -102,20 +104,29 @@ export interface OverviewHomeProps {
   hrefs: OverviewHrefs;
   onSelectEnv: (env: string) => void;
   navigateTo: (href: string) => void;
+  /**
+   * What the platform observes of each HOSTED environment's workloads
+   * (DeployService.GetStatus), by environment name then workload name: the
+   * drift call ("wrong version") the telemetry cannot make. Empty for an
+   * environment Reliant does not place.
+   */
+  hosted?: HostedByEnv;
 }
+
+export type HostedByEnv = ReadonlyMap<string, ReadonlyMap<string, ForgeHostedWorkload>>;
+const NO_HOSTED: HostedByEnv = new Map();
 
 /** The Overview's window when the URL names none: a day, so "Restarts" reads as restarts today. */
 export const OVERVIEW_RANGE: RangePreset = "24h";
 const ACTIVITY_DAYS = 30;
 
-export function OverviewHome({ project, env, envs, envsLoading, search, onSearch, hrefs, onSelectEnv, navigateTo }: OverviewHomeProps) {
+export function OverviewHome({ project, env, envs, envsLoading, search, onSearch, hrefs, onSelectEnv, navigateTo, hosted = NO_HOSTED }: OverviewHomeProps) {
   const range = search.range ?? OVERVIEW_RANGE;
   const org = useObservabilityOrg();
   const orgId = org.orgId;
   const all = env === ENV_ALL;
   const scopedEnv = all ? null : (envs.find((candidate) => candidate.name === env) ?? null);
   const unrecorded = !all && !envsLoading && !scopedEnv;
-  const envOrder = useMemo(() => envs.map((candidate) => candidate.name), [envs]);
   const environments = useMemo(() => envs.map((candidate) => ({ id: candidate.id, name: candidate.name, declared: null })), [envs]);
 
   // The whole project, once: every environment's cell and every table row come from this.
@@ -129,7 +140,7 @@ export function OverviewHome({ project, env, envs, envsLoading, search, onSearch
 
   const workloads = useMemo(() => listed.data?.workloads ?? [], [listed.data]);
   const allJobs = useMemo(() => jobRows(listed.data?.jobs ?? [], ENV_ALL), [listed.data]);
-  const services = useMemo(() => serviceRows(workloads, env, envOrder), [workloads, env, envOrder]);
+  const services = useMemo(() => serviceRows(workloads, env, envs), [workloads, env, envs]);
   const jobs = useMemo(() => (all ? allJobs : allJobs.filter((row) => row.envName === env)), [allJobs, all, env]);
   const visible = useMemo(() => filterServices(services, search), [services, search]);
 
@@ -285,6 +296,8 @@ export function OverviewHome({ project, env, envs, envsLoading, search, onSearch
               loading={loading}
               showEnv={all}
               windowWords={windowWords}
+              windowShort={range}
+              hosted={hosted}
               hrefs={hrefs}
               empty={
                 filtered ? (
@@ -305,7 +318,9 @@ export function OverviewHome({ project, env, envs, envsLoading, search, onSearch
               }
             />
             {listed.data?.truncated && (
-              <p className="border-t border-border px-4 py-2.5 text-xs text-ink-muted">Showing the first 500 workloads.</p>
+              <p className="border-t border-border px-4 py-2.5 text-xs text-ink-muted" data-testid="overview-services-truncated">
+                Showing the first 500 workloads.
+              </p>
             )}
           </Panel>
 
@@ -317,6 +332,11 @@ export function OverviewHome({ project, env, envs, envsLoading, search, onSearch
               hrefs={hrefs}
               empty={<>No job has run in {where} in the {windowWords}. Migrations and provisioning jobs appear here after the next deploy that runs them.</>}
             />
+            {listed.data?.jobsTruncated && (
+              <p className="border-t border-border px-4 py-2.5 text-xs text-ink-muted" data-testid="overview-jobs-truncated">
+                Built from the newest 200 runs in the {windowWords}; older runs are not counted.
+              </p>
+            )}
           </Panel>
         </div>
       )}
@@ -623,8 +643,8 @@ function RecentActivity({
             const version = p.version || p.releaseId.slice(0, 12);
             return (
               <li key={p.promotionId} className="flex items-start gap-2 py-2 first:pt-0 last:pb-0">
-                <span aria-hidden="true" className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full border border-border text-[0.625rem] font-medium uppercase text-ink-muted">
-                  {who.slice(0, 1)}
+                <span aria-hidden="true" className="mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full border border-border text-2xs font-medium text-ink-muted">
+                  {who.slice(0, 1).toUpperCase()}
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-ink">
@@ -671,13 +691,17 @@ function ServicesTable({
   loading,
   showEnv,
   windowWords,
+  windowShort,
+  hosted,
   hrefs,
   empty,
 }: {
-  rows: Workload[];
+  rows: ServiceRow[];
   loading: boolean;
   showEnv: boolean;
   windowWords: string;
+  windowShort: string;
+  hosted: HostedByEnv;
   hrefs: OverviewHrefs;
   empty: ReactNode;
 }) {
@@ -705,7 +729,7 @@ function ServicesTable({
               Version
             </th>
             <th scope="col" className={cn(TH, "text-right")} title={`Container restarts in the ${windowWords}, and the last exit reason`}>
-              Restarts
+              Restarts {windowShort}
             </th>
             <th scope="col" className={TH}>
               CPU
@@ -726,6 +750,7 @@ function ServicesTable({
             </tr>
           ) : (
             rows.map((w) => {
+              if (w.unobserved) return <UnobservedRow key={`${w.envName}/${w.workload}`} row={w} showEnv={showEnv} />;
               const exit = lastExitOf(w);
               const status = HEALTH_STATUS[w.health];
               return (
@@ -746,7 +771,7 @@ function ServicesTable({
                   </td>
                   <td className={cn(TD, "text-right tabular-nums", replicasShort(w) && "text-warning-ink")}>{replicasText(w)}</td>
                   <td className={TD}>
-                    <WorkloadRelease workload={w} releaseHref={hrefs.release} />
+                    <WorkloadRelease workload={w} releaseHref={hrefs.release} hosted={hosted.get(w.envName)?.get(w.workload) ?? null} />
                   </td>
                   <td className={cn(TD, "text-right tabular-nums")}>
                     {w.restartsInWindow ? (
@@ -778,6 +803,32 @@ function ServicesTable({
         </tbody>
       </table>
     </div>
+  );
+}
+
+/**
+ * A workload a self-managed environment's render declares and nothing has
+ * observed: named, with no verdict and no figures, and no page to open (there
+ * is nothing observed to show on one).
+ */
+function UnobservedRow({ row, showEnv }: { row: ServiceRow; showEnv: boolean }) {
+  return (
+    <tr className="border-t border-border/70 first:border-t-0" data-testid={`overview-service-${row.workload}${showEnv ? `-${row.envName}` : ""}`} data-health="unobserved">
+      <td className={TD}>
+        <span className="font-medium text-ink">{row.workload}</span>
+      </td>
+      {showEnv && (
+        <td className={TD}>
+          <Tag>{row.envName}</Tag>
+        </td>
+      )}
+      <td className={TD} title={row.healthReason}>
+        <Status tone="neutral" label="Unobserved" />
+      </td>
+      <td colSpan={5} className={cn(TD, "text-xs text-ink-muted")}>
+        Declared by {row.envName}&apos;s last recorded render; nothing reports from it.
+      </td>
+    </tr>
   );
 }
 

@@ -604,10 +604,21 @@ export const forgeConsoleDashboardSearchSchema = z.object({
  * The retired /forge/observability: read only to redirect to the page
  * hosting `view`, with `envs` turned into the scope (Console/paths.ts).
  */
+/**
+ * The retired URLs' view: a current view, or the retired `workloads` (the
+ * workloads are the Overview's now, with a page per workload) and the
+ * workload it had open — read only so the redirect lands on the right page.
+ */
+const legacyObsShape = {
+  ...obsSearchShape,
+  view: z.enum([...OBS_VIEWS, "workloads"]).optional().catch(undefined),
+  workload: z.string().optional().catch(undefined),
+};
+
 export const forgeObservabilitySearchSchema = z.object({
   project: z.string().optional(),
   forgeProject: forgeProjectParam,
-  ...obsSearchShape,
+  ...legacyObsShape,
 });
 
 /**
@@ -659,7 +670,7 @@ export const forgeLegacyEnvSearchSchema = z.object({
   forgeProject: forgeProjectParam,
   secret: z.string().optional(),
   tab: z.string().optional(),
-  ...obsSearchShape,
+  ...legacyObsShape,
 });
 
 /**

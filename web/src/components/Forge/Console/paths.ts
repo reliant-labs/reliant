@@ -242,10 +242,25 @@ export function carriedObsSearch(search: Record<string, unknown>): Record<string
 
 // ── The retired URLs ────────────────────────────────────────────────────────
 
+/**
+ * What a retired Observability URL carried: the current keys, plus the
+ * retired `view=workloads` and the `workload` it had open.
+ */
+export type LegacyObsSearch = Omit<ObsSearch, "view"> & { view?: ObsView | "workloads"; workload?: string };
+
 /** What a legacy `/forge/env/:env` URL carried. */
-export interface LegacyEnvSearch extends ObsSearch {
+export interface LegacyEnvSearch extends LegacyObsSearch {
   tab?: string;
   secret?: string;
+}
+
+/**
+ * The retired Workloads view → the Overview (where the workloads are now), or
+ * the workload's own page when the URL names it and one environment.
+ */
+function legacyWorkloadsTarget(project: string, env: string, workload: string | undefined): string {
+  if (workload && env !== "all") return withSearch(consolePath(project, { kind: "workload", env, name: workload }), { env });
+  return withSearch(consolePath(project, { kind: "overview" }), { env, q: workload });
 }
 
 /**
@@ -266,6 +281,7 @@ export function legacyEnvTarget(project: string, env: string, search: LegacyEnvS
     case "secrets":
       return withSearch(consolePath(project, { kind: "secrets" }), { env, secret: search.secret });
     case "observability":
+      if (search.view === "workloads") return legacyWorkloadsTarget(project, env, search.workload);
       return withSearch(consolePath(project, pageOfObsView(search.view)), {
         env,
         ...carriedObsSearch(search as Record<string, unknown>),
@@ -280,7 +296,8 @@ export function legacyEnvTarget(project: string, env: string, search: LegacyEnvS
 }
 
 /** `/forge/observability?view=…&envs=…` → the page hosting that view, scoped. */
-export function legacyObservabilityTarget(project: string, search: ObsSearch): string {
+export function legacyObservabilityTarget(project: string, search: LegacyObsSearch): string {
+  if (search.view === "workloads") return legacyWorkloadsTarget(project, envScopeOfEnvs(search.envs), search.workload);
   return withSearch(consolePath(project, pageOfObsView(search.view)), {
     env: envScopeOfEnvs(search.envs),
     ...carriedObsSearch(search as Record<string, unknown>),

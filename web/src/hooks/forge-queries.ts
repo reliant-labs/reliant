@@ -36,6 +36,7 @@ import {
   listEnvironmentPromotions,
   listProjectEnvironments,
   setEnvironmentRunState,
+  setWorkloadRunState,
   type RunStateRequest,
   type CloudAvailability,
   type CloudEnv,
@@ -1217,6 +1218,15 @@ export function useSetEnvironmentRunState(environmentId: string | null | undefin
   const invalidate = useInvalidateAfterRunStateWrite();
   return useMutation<void, Error, RunStateRequest>({
     mutationFn: (state) => setEnvironmentRunState(environmentId ?? "", state),
+    onSuccess: invalidate,
+  });
+}
+
+/** Stop or start one hosted workload (its deployment's run state). */
+export function useSetWorkloadRunState() {
+  const invalidate = useInvalidateAfterRunStateWrite();
+  return useMutation<void, Error, { deploymentId: string; state: RunStateRequest }>({
+    mutationFn: ({ deploymentId, state }) => setWorkloadRunState(deploymentId, state),
     onSuccess: invalidate,
   });
 }

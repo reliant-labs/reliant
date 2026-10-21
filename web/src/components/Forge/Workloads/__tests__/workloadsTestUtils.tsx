@@ -16,20 +16,31 @@ import { vi } from "vitest";
 import { createTestQueryClient } from "@/test/renderWithQuery";
 import { ObservabilityApiProvider, type ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import { ReleasesApiProvider } from "@/services/forge/ReleasesApiContext";
+import { RepoMetaProvider, type RepoMetaApi } from "@/services/forge/RepoMetaContext";
 
 import { createReleasesFixtureApi } from "../../Releases/__fixtures__/releaseFixtures";
-import { OverviewHome, type OverviewSearch } from "../OverviewHome";
-import { WorkloadDetail, type RestartControl, type WorkloadDetailSearch } from "../WorkloadDetail";
+import { OverviewHome, type HostedByEnv, type OverviewSearch } from "../OverviewHome";
+import { WorkloadDetail, type HostedObservation, type WorkloadActions, type WorkloadDetailSearch } from "../WorkloadDetail";
 import type { StripEnv } from "../workloadModel";
-import { STRIP_ENVS, WORKLOADS_PROJECT, createWorkloadsFixtureApi } from "../__fixtures__/workloadFixtures";
+import { FIXTURE_HOSTED, STRIP_ENVS, WORKLOADS_PROJECT, createRepoMetaFixture, createWorkloadsFixtureApi, fixtureHostedObservation } from "../__fixtures__/workloadFixtures";
 
-function wrap(obs: ObservabilityApi, ui: ReactElement): RenderResult {
-  return render(
+export function WorkloadsProviders({ obs, repoMeta = createRepoMetaFixture(), children }: { obs: ObservabilityApi; repoMeta?: RepoMetaApi; children: ReactElement }) {
+  return (
     <QueryClientProvider client={createTestQueryClient()}>
       <ObservabilityApiProvider api={obs}>
-        <ReleasesApiProvider api={createReleasesFixtureApi()}>{ui}</ReleasesApiProvider>
+        <ReleasesApiProvider api={createReleasesFixtureApi()}>
+          <RepoMetaProvider api={repoMeta}>{children}</RepoMetaProvider>
+        </ReleasesApiProvider>
       </ObservabilityApiProvider>
     </QueryClientProvider>
+  );
+}
+
+function wrap(obs: ObservabilityApi, ui: ReactElement, repoMeta?: RepoMetaApi): RenderResult {
+  return render(
+    <WorkloadsProviders obs={obs} repoMeta={repoMeta}>
+      {ui}
+    </WorkloadsProviders>
   );
 }
 
@@ -42,7 +53,8 @@ export function renderOverview({
   envs = STRIP_ENVS,
   search = {},
   obs = createWorkloadsFixtureApi(),
-}: { env?: string; envs?: StripEnv[]; search?: OverviewSearch; obs?: ObservabilityApi } = {}): Harness<OverviewSearch> & { selectEnv: ReturnType<typeof vi.fn>; navigateTo: ReturnType<typeof vi.fn> } {
+  hosted = FIXTURE_HOSTED,
+}: { env?: string; envs?: StripEnv[]; search?: OverviewSearch; obs?: ObservabilityApi; hosted?: HostedByEnv } = {}): Harness<OverviewSearch> & { selectEnv: ReturnType<typeof vi.fn>; navigateTo: ReturnType<typeof vi.fn> } {
   let latest = search;
   const selectEnv = vi.fn();
   const navigateTo = vi.fn();
@@ -70,6 +82,7 @@ export function renderOverview({
         }}
         onSelectEnv={selectEnv}
         navigateTo={navigateTo}
+        hosted={hosted}
       />
     );
   }
@@ -81,12 +94,24 @@ export function renderWorkload(
   {
     env = "prod",
     search = {},
-    restart = { onRestart: vi.fn(), unavailableReason: null },
+    actions = {},
+    hosted,
     obs = createWorkloadsFixtureApi(),
-  }: { env?: string; search?: WorkloadDetailSearch; restart?: RestartControl; obs?: ObservabilityApi } = {}
-): Harness<WorkloadDetailSearch> {
+    repoMeta,
+  }: {
+    env?: string;
+    search?: WorkloadDetailSearch;
+    actions?: Partial<WorkloadActions>;
+    /** Defaults to the fixture's GetStatus answer for the env (null for a self-managed one). */
+    hosted?: HostedObservation | null;
+    obs?: ObservabilityApi;
+    repoMeta?: RepoMetaApi;
+  } = {}
+): Harness<WorkloadDetailSearch> & { actions: WorkloadActions } {
   let latest = search;
   const scoped = STRIP_ENVS.find((candidate) => candidate.name === env)!;
+  const allActions: WorkloadActions = { onRestart: vi.fn(), onSetRunState: vi.fn().mockResolvedValue(undefined), unavailableReason: null, ...actions };
+  const observation = hosted === undefined ? fixtureHostedObservation(env, name) : hosted;
   function Stateful() {
     const [state, setState] = useState<WorkloadDetailSearch>(search);
     return (
@@ -100,9 +125,11 @@ export function renderWorkload(
           setState(next);
         }}
         hrefs={{ overview: "/overview", release: (version) => `/r/${version}`, activity: "/activity", dashboards: "/dashboards" }}
-        restart={restart}
+        actions={allActions}
+        hosted={observation}
+        declaredInRender={!scoped.placed && scoped.declared.includes(name)}
       />
     );
   }
-  return { ...wrap(obs, <Stateful />), current: () => latest };
+  return { ...wrap(obs, <Stateful />, repoMeta), current: () => latest, actions: allActions };
 }

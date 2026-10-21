@@ -14,6 +14,13 @@
  *          flight), a migrate Job that FAILED (BackoffLimitExceeded).
  *   dev    two healthy services, a provisioning Job still running.
  *   pr-981 one healthy service.
+ *   staging  SELF-MANAGED: nothing reports from it; its render declares three
+ *          workloads, which the Overview lists as unobserved.
+ *
+ * The hosted observation (GetStatus) of prod: admin-server serves a URL,
+ * litellm runs the WRONG VERSION (an observed digest no promotion pinned),
+ * reliant-temporal-worker carries the platform's last error, docs is stopped
+ * by its owner.
  *
  * GetWorkload answers with series (CPU and memory against limits), events,
  * versions, images, pods (one with no node reported) and the declared spec.
@@ -40,6 +47,8 @@ import type {
 
 import { createFixtureApi } from "../../Observability/__fixtures__/fixtureApi";
 import { FIXTURE_DELIVERY, FIXTURE_NOW, RELEASE_ENVS, RELEASE_PROJECT, RELEASES } from "../../Releases/__fixtures__/releaseFixtures";
+import type { ForgeHostedWorkload } from "@/services/forge/topology";
+
 import type { StripEnv } from "../workloadModel";
 
 export const WORKLOADS_PROJECT = RELEASE_PROJECT;
@@ -49,14 +58,79 @@ const HOUR = 60 * MIN;
 const MiB = 1024 * 1024;
 
 /** The roster as the Overview's strip reads it: prod first, previews last. */
-export const STRIP_ENVS: StripEnv[] = RELEASE_ENVS.map((env) => ({
-  id: env.id,
-  name: env.name,
-  release: env.current,
-  promotedAt: new Date(FIXTURE_NOW - (env.name === "prod" ? 5 : env.name === "e2e" ? 16 : 3) * HOUR).toISOString(),
-  promotedBy: env.name === "e2e" ? "ci" : "sean",
-  preview: env.kind === "preview",
-}));
+export const STRIP_ENVS: StripEnv[] = [
+  ...RELEASE_ENVS.filter((env) => env.kind === "long").map((env) => stripEnv(env)),
+  {
+    id: "env-staging",
+    name: "staging",
+    release: "",
+    promotedBy: "",
+    preview: false,
+    placed: false,
+    declared: ["admin-server", "reliant-api-server", "reliant-temporal-worker"],
+  },
+  ...RELEASE_ENVS.filter((env) => env.kind === "preview").map((env) => stripEnv(env)),
+];
+
+function stripEnv(env: (typeof RELEASE_ENVS)[number]): StripEnv {
+  return {
+    id: env.id,
+    name: env.name,
+    release: env.current,
+    promotedAt: new Date(FIXTURE_NOW - (env.name === "prod" ? 5 : env.name === "e2e" ? 16 : 3) * HOUR).toISOString(),
+    promotedBy: env.name === "e2e" ? "ci" : "sean",
+    preview: env.kind === "preview",
+    placed: true,
+    declared: [],
+  };
+}
+
+const DIGEST = (seed: string) => `sha256:${seed.repeat(64 / seed.length).slice(0, 64)}`;
+const hosted = (name: string, over: Partial<ForgeHostedWorkload> = {}): ForgeHostedWorkload => ({
+  name,
+  tier: "backend",
+  verdict: "converged",
+  observed_state: "ready",
+  observed_digest: DIGEST("e9a0c1d2"),
+  desired_digest: DIGEST("e9a0c1d2"),
+  deployment_id: `dep-${name}`,
+  declared_run_state: "running",
+  drifted: false,
+  last_error: "",
+  ...over,
+});
+
+/** GetStatus of each hosted environment, by environment then workload name. */
+export const FIXTURE_HOSTED: ReadonlyMap<string, ReadonlyMap<string, ForgeHostedWorkload>> = new Map([
+  [
+    "prod",
+    new Map([
+      ["admin-server", hosted("admin-server", { url: "https://admin.reliantlabs.io" })],
+      ["reliant-api-server", hosted("reliant-api-server", { url: "https://api.reliantlabs.io" })],
+      [
+        "reliant-temporal-worker",
+        hosted("reliant-temporal-worker", { verdict: "degraded", observed_state: "degraded", last_error: "container worker OOMKilled: exceeded its 1Gi memory limit (14 restarts)" }),
+      ],
+      ["litellm", hosted("litellm", { verdict: "diverged", observed_digest: DIGEST("7f3b9a"), desired_digest: DIGEST("e9a0c1d2"), drifted: true })],
+      ["web", hosted("web", { url: "https://reliantlabs.io" })],
+      ["docs", hosted("docs", { declared_run_state: "suspended", observed_state: "suspended", suspend_reason: "owner", url: "https://docs.reliantlabs.io" })],
+    ]),
+  ],
+  ["e2e", new Map([["admin-server", hosted("admin-server")], ["reliant-api-server", hosted("reliant-api-server", { verdict: "converging", observed_state: "progressing" })]])],
+  ["dev", new Map([["admin-server", hosted("admin-server")], ["reliant-api-server", hosted("reliant-api-server")]])],
+]);
+
+/** What GetStatus says of one workload: the detail page's `hosted` prop. Null for an environment Reliant does not place. */
+export function fixtureHostedObservation(envName: string, workload: string): { workload: ForgeHostedWorkload | null; loading: boolean } | null {
+  const env = STRIP_ENVS.find((candidate) => candidate.name === envName);
+  if (!env?.placed) return null;
+  return { workload: FIXTURE_HOSTED.get(envName)?.get(workload) ?? null, loading: false };
+}
+
+/** The repository metadata seam: control-plane's default branch is main; `unknown` answers nothing. */
+export function createRepoMetaFixture(defaultBranch: string | null = "main") {
+  return { defaultBranch: async () => defaultBranch };
+}
 
 function usage(latest: number, p95: number, limit: number | null, request: number | null): ResourceUsage {
   return {
@@ -104,8 +178,9 @@ const SEEDS: Seed[] = [
     memory: [1004 * MiB, 1024 * MiB],
     kind: "statefulset",
   },
-  { env: "prod", name: "litellm", health: "degraded", reason: "1 of 2 replicas ready", ready: 1, desired: 2, release: V[1]!, restarts: 2, exit: "Error", cpu: [0.3, 0.5], memory: [700 * MiB, 768 * MiB] },
+  { env: "prod", name: "litellm", health: "degraded", reason: "1 of 2 replicas ready", ready: 1, desired: 2, release: V[1]!, basis: "promotion", restarts: 2, exit: "Error", cpu: [0.3, 0.5], memory: [700 * MiB, 768 * MiB] },
   { env: "prod", name: "web", health: "healthy", ready: 2, desired: 2, release: V[0]!, basis: "promotion", cpu: [0.02, null], memory: [64 * MiB, null] },
+  { env: "prod", name: "docs", health: "suspended", reason: "stopped by its owner", ready: 0, desired: 1, release: V[0]!, cpu: [0, 0.25], memory: [0, 256 * MiB] },
   { env: "e2e", name: "admin-server", health: "healthy", ready: 1, desired: 1, release: V[3]!, cpu: [0.06, 0.5], memory: [160 * MiB, 512 * MiB] },
   { env: "e2e", name: "reliant-api-server", health: "pending", reason: "rolling out: 1 of 2 updated", ready: 1, desired: 2, release: V[3]!, cpu: [0.1, 1], memory: [240 * MiB, 1024 * MiB] },
   { env: "dev", name: "admin-server", health: "healthy", ready: 1, desired: 1, release: V[0]!, cpu: [0.03, 0.5], memory: [140 * MiB, 512 * MiB] },
@@ -113,7 +188,7 @@ const SEEDS: Seed[] = [
   { env: "pr-981", name: "admin-server", health: "healthy", ready: 1, desired: 1, release: V[4]!, cpu: [0.02, 0.5], memory: [120 * MiB, 512 * MiB] },
 ];
 
-const envIdOf = (name: string) => RELEASE_ENVS.find((env) => env.name === name)!.id;
+const envIdOf = (name: string) => STRIP_ENVS.find((env) => env.name === name)!.id;
 
 function declaredOf(seed: Seed): DeclaredWorkload {
   return {
@@ -136,6 +211,7 @@ function declaredOf(seed: Seed): DeclaredWorkload {
 }
 
 function podsOf(seed: Seed, now: number): WorkloadPod[] {
+  if (seed.health === "suspended") return [];
   const count = Math.max(seed.desired ?? 1, 1);
   return Array.from({ length: count }, (_, i) => {
     const bad = i === 0 && seed.health !== "healthy" && seed.health !== "pending";

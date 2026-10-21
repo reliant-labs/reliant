@@ -58,8 +58,9 @@ describe("the Overview", () => {
     expect(within(worker).getByRole("link", { name: "reliant-temporal-worker" })).toHaveAttribute("href", "/w/prod/reliant-temporal-worker");
     // Only prod's: no environment column, no other env's rows.
     expect(within(table).queryByText("Environment")).toBeNull();
-    expect(within(table).getAllByRole("row")).toHaveLength(1 + 5);
-    expect(screen.getByTestId("overview-counts")).toHaveTextContent("5 services and 1 job in prod");
+    expect(within(table).getAllByRole("row")).toHaveLength(1 + 6);
+    expect(screen.getByTestId("overview-counts")).toHaveTextContent("6 services and 1 job in prod");
+    expect(within(table).getByRole("columnheader", { name: "Restarts 24h" })).toBeInTheDocument();
   });
 
   it("says when a release is declared by the promotion rather than verified by digest", async () => {
@@ -70,6 +71,24 @@ describe("the Overview", () => {
     expect(screen.getByTestId("overview-service-admin-server")).not.toHaveTextContent("declared");
     // No limit set: there is nothing to draw a meter against, and it says so.
     expect(within(web).getAllByTestId("usage-meter")[0]).toHaveTextContent("no limit");
+  });
+
+  it("says a hosted workload runs the wrong version when its digest is not the published one, instead of 'declared'", async () => {
+    renderOverview();
+    await ready();
+    const litellm = screen.getByTestId("overview-service-litellm");
+    expect(litellm).toHaveTextContent("wrong version");
+    expect(litellm).not.toHaveTextContent("declared");
+  });
+
+  it("lists a self-managed environment's declared workloads as unobserved", async () => {
+    renderOverview({ env: "staging" });
+    await ready();
+    const row = screen.getByTestId("overview-service-admin-server");
+    expect(row).toHaveAttribute("data-health", "unobserved");
+    expect(row).toHaveTextContent("Unobserved");
+    expect(within(row).queryByRole("link")).toBeNull();
+    expect(screen.getByTestId("overview-env-staging")).toHaveTextContent("Unobserved");
   });
 
   it("puts what needs attention first, each opening its page", async () => {
@@ -113,8 +132,8 @@ describe("the Overview", () => {
   });
 
   it("names what is missing for an environment Reliant has no record of", async () => {
-    renderOverview({ env: "staging" });
-    await waitFor(() => expect(screen.getByTestId("overview-unrecorded-env")).toHaveTextContent("Reliant has no record of staging"));
+    renderOverview({ env: "qa" });
+    await waitFor(() => expect(screen.getByTestId("overview-unrecorded-env")).toHaveTextContent("Reliant has no record of qa"));
   });
 });
 
@@ -150,6 +169,13 @@ describe("its states", () => {
     expect(screen.getByTestId("overview-env-prod")).toHaveTextContent("health unavailable");
     expect(screen.getByTestId("overview-attention")).toHaveTextContent("Workload health could not be read");
     expect(screen.getByRole("button", { name: /try again|retry/i })).toBeInTheDocument();
+  });
+
+  it("says when the jobs list was cut short", async () => {
+    const base = createWorkloadsFixtureApi();
+    renderOverview({ obs: { ...base, listWorkloads: async (req) => ({ ...(await base.listWorkloads(req)), jobsTruncated: true }) } });
+    await ready();
+    expect(screen.getByTestId("overview-jobs-truncated")).toHaveTextContent("newest 200 runs");
   });
 
   it("explains an organization whose telemetry store does not exist yet", async () => {

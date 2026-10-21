@@ -25,8 +25,11 @@ import type {
   WorkloadPod,
 } from "@/services/controlPlane/observability/types";
 
+import type { ReleasePromotion } from "@/services/forge/releases";
+
 import { ENV_ALL } from "../Console/envScope";
 import { alertService } from "../Observability/Home/homeModel";
+import { promoterOf } from "../Releases/releaseModel";
 import { HEALTH_STATUS } from "./health";
 
 export { HEALTH_STATUS };
@@ -167,15 +170,59 @@ export function formatAge(ms: number): string {
 
 // ── Rows ────────────────────────────────────────────────────────────────────
 
-/** The long-running workloads in scope, by name and then environment. */
-export function serviceRows(workloads: readonly Workload[], env: string, envOrder: readonly string[]): Workload[] {
+/**
+ * A row of the Services table: an observed workload, or — for an environment
+ * Reliant does not place, where nothing may report — a workload its last
+ * recorded render DECLARES and nothing has observed (`unobserved`).
+ */
+export type ServiceRow = Workload & { unobserved?: boolean };
+
+/** A declared-only row: no verdict, no figures, said as what it is. */
+function unobservedRow(env: StripEnv, name: string): ServiceRow {
+  return {
+    envId: env.id,
+    envName: env.name,
+    workload: name,
+    namespace: "",
+    serviceVersion: "",
+    replicasObserved: 0,
+    restartsInWindow: 0,
+    containers: [],
+    latestWarning: null,
+    kind: "unknown",
+    health: "unknown",
+    healthReason: "Declared by the last recorded render; nothing has observed it",
+    readyReplicas: null,
+    desiredReplicas: null,
+    releaseVersion: "",
+    releaseBasis: "none",
+    pods: [],
+    declared: null,
+    unobserved: true,
+  };
+}
+
+/**
+ * The long-running workloads in scope, by name and then environment. For an
+ * environment Reliant does not place (self-managed), every workload its render
+ * declares that sent no telemetry is listed too, as unobserved: an empty list
+ * would read as "this environment runs nothing".
+ */
+export function serviceRows(workloads: readonly Workload[], env: string, envs: readonly StripEnv[]): ServiceRow[] {
+  const envOrder = envs.map((candidate) => candidate.name);
   const order = (name: string) => {
     const index = envOrder.indexOf(name);
     return index < 0 ? envOrder.length : index;
   };
-  return workloads
-    .filter((w) => !isJobKind(w.kind) && (env === ENV_ALL || w.envName === env))
-    .sort((a, b) => a.workload.localeCompare(b.workload) || order(a.envName) - order(b.envName));
+  const observed: ServiceRow[] = workloads.filter((w) => !isJobKind(w.kind) && (env === ENV_ALL || w.envName === env));
+  const unobserved = envs
+    .filter((candidate) => !candidate.placed && (env === ENV_ALL || candidate.name === env))
+    .flatMap((candidate) =>
+      candidate.declared
+        .filter((name) => !workloads.some((w) => w.envName === candidate.name && w.workload === name))
+        .map((name) => unobservedRow(candidate, name))
+    );
+  return [...observed, ...unobserved].sort((a, b) => a.workload.localeCompare(b.workload) || order(a.envName) - order(b.envName));
 }
 
 /** One declared Job in one environment: its latest run, and how its recent runs went. */
@@ -221,7 +268,7 @@ export interface ServiceFilters {
   kind?: KindFilter;
 }
 
-export function filterServices(rows: readonly Workload[], filters: ServiceFilters): Workload[] {
+export function filterServices(rows: readonly ServiceRow[], filters: ServiceFilters): ServiceRow[] {
   const q = filters.q?.trim().toLowerCase() ?? "";
   return rows.filter(
     (w) =>
@@ -322,6 +369,10 @@ export interface StripEnv {
   promotedAt?: string;
   promotedBy: string;
   preview: boolean;
+  /** Reliant places (hosts) it: persistent or preview. A self-managed environment is not placed. */
+  placed: boolean;
+  /** The workloads its last recorded render declares, by name. */
+  declared: string[];
 }
 
 export interface StripCell {
@@ -341,6 +392,11 @@ export function stripCell(env: StripEnv, workloads: readonly Workload[], jobs: r
   const degraded = mine.filter((w) => w.health === "degraded").length;
   const failedJobs = jobs.filter((j) => j.envName === env.name && j.latest.result === "failed").length;
   const silent = mine.length === 0 && !jobs.some((j) => j.envName === env.name);
+  // Nothing reports from a self-managed environment without the node agent;
+  // what it declares is still known, and is not "No data".
+  if (silent && !env.placed && env.declared.length > 0) {
+    return { env, tone: "neutral", label: "Unobserved", services: env.declared.length, failedJobs, silent };
+  }
   if (failing) return { env, tone: "danger", label: `${failing} failing`, services: mine.length, failedJobs, silent };
   if (degraded) return { env, tone: "warning", label: `${degraded} degraded`, services: mine.length, failedJobs, silent };
   if (failedJobs) return { env, tone: "danger", label: `${failedJobs} job${failedJobs === 1 ? "" : "s"} failed`, services: mine.length, failedJobs, silent };
@@ -356,7 +412,7 @@ export function previewsCell(previews: readonly StripEnv[], workloads: readonly 
   const worst = [...cells].sort((a, b) => rank[a.tone] - rank[b.tone])[0]!;
   const unhealthy = cells.filter((c) => c.tone === "danger" || c.tone === "warning").length;
   return {
-    env: { id: "", name: "previews", release: "", promotedBy: "", preview: true },
+    env: { id: "", name: "previews", release: "", promotedBy: "", preview: true, placed: true, declared: [] },
     tone: worst.tone,
     label: unhealthy ? `${unhealthy} need${unhealthy === 1 ? "s" : ""} attention` : worst.tone === "success" ? "Healthy" : worst.label,
     services: cells.reduce((sum, c) => sum + c.services, 0),
@@ -381,17 +437,76 @@ export function githubRepoOf(sourceRepo: string): string | null {
  * Where to change the declaration (decision D6: replicas are declared in code,
  * so the console's Scale is "Open PR", never a mutation).
  *
- *   edit   GitHub's web editor on the branch the release was cut from: saving
- *          proposes the change as a pull request. Null when the branch or the
- *          repository is unknown — an editor on a commit cannot open one.
+ * Repository, path and commit all come from ONE recorded bundle — the
+ * declaration's — never mixed with the release a workload happens to run
+ * (after a scoped deploy those are different releases).
+ *
+ *   edit   GitHub's web editor on the repository's DEFAULT branch, where a
+ *          change is proposed as a pull request. Only the default branch:
+ *          the branch a release was cut from may be unpushed or deleted, and
+ *          the editor commits directly to an unprotected branch. Null when
+ *          the default branch is unknown — nothing is guessed.
  *   view   the file at the exact commit the bundle was rendered from.
  */
-export function declarationLinks(declared: Pick<DeclaredWorkload, "sourceRepo" | "sourceCommit" | "sourcePath">, branch: string | null): { edit: string | null; view: string | null } {
+export function declarationLinks(
+  declared: Pick<DeclaredWorkload, "sourceRepo" | "sourceCommit" | "sourcePath">,
+  defaultBranch: string | null | undefined
+): { edit: string | null; view: string | null } {
   const repo = githubRepoOf(declared.sourceRepo);
   if (!repo || !declared.sourcePath) return { edit: null, view: null };
   const path = declared.sourcePath.replace(/^\/+/, "");
   return {
-    edit: branch ? `https://github.com/${repo}/edit/${encodeURIComponent(branch)}/${path}` : null,
+    edit: defaultBranch ? `https://github.com/${repo}/edit/${encodeURIComponent(defaultBranch)}/${path}` : null,
     view: declared.sourceCommit ? `https://github.com/${repo}/blob/${declared.sourceCommit}/${path}` : null,
   };
+}
+
+/** The digest of an image reference (`repo@sha256:…`), or "" when it is not pinned. */
+export function digestOf(image: string): string {
+  const at = image.lastIndexOf("@");
+  return at >= 0 ? image.slice(at + 1) : "";
+}
+
+// ── Deploy history ──────────────────────────────────────────────────────────
+
+export interface DeployHistoryEntry {
+  id: string;
+  version: string;
+  /** Who: the automation actor, else the person's name; "" when neither is known. */
+  by: string;
+  at?: string;
+  /** Moved only some components (a scoped deploy), this one among them. */
+  scoped: boolean;
+  /** Put an OLDER release here than the one it replaced: a rollback (cut order, as the Releases pages judge it). */
+  rollback: boolean;
+}
+
+/**
+ * Every promotion in an environment's ledger (newest first) that moved this
+ * workload — whole-release promotions, and scoped ones that named it — with
+ * the rollbacks marked. The ledger records no rollback kind: promoting an
+ * older release is how one is spelled, so "older" is cut order (`rank`, the
+ * release list's index, newest first); a release outside the list is not
+ * judged. The ledger records no "via" (CLI, console, CI) either.
+ */
+export function deployHistory(
+  promotions: readonly ReleasePromotion[],
+  workload: string,
+  rank: ReadonlyMap<string, number>,
+  names: ReadonlyMap<string, string>
+): DeployHistoryEntry[] {
+  const moving = promotions.filter((p) => p.targets.length === 0 || p.targets.includes(workload));
+  return moving.map((p, index) => {
+    const replaced = moving[index + 1];
+    const now = rank.get(p.releaseVersion);
+    const before = replaced ? rank.get(replaced.releaseVersion) : undefined;
+    return {
+      id: p.id,
+      version: p.releaseVersion,
+      by: promoterOf(p, names),
+      at: p.createdAt,
+      scoped: p.targets.length > 0,
+      rollback: now !== undefined && before !== undefined && replaced!.releaseVersion !== p.releaseVersion && now > before,
+    };
+  });
 }
