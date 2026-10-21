@@ -160,29 +160,70 @@ func TestBuiltinWorkflowLoading(t *testing.T) {
 	}
 }
 
-// TestBuiltinWorkflowTemplateResolution tests that complex builtin workflows
-// can be loaded via ResolveAndParseWorkflow without errors.
-// This originally caught a bug where trigger templates inside nodes were being resolved too early.
+// TestBuiltinWorkflowTemplateResolution runs the pre-run template resolution
+// the runtime performs (ResolveAndParseWorkflow) over EVERY embedded builtin,
+// with the inputs a real run would hold: the schema's defaults and zero values
+// (ApplyDefaultsForRuntime) under a realistic value for every required input.
+//
+// It is a table over the embedded registry, so a new builtin is covered the
+// moment it lands. A builtin whose pre-run resolution fails never starts: the
+// four Autopilot workflows that read `nodes.*` in an action node's `with:`
+// failed this way in prod, two seconds in, and no test noticed because only
+// parallel-compete was checked.
 func TestBuiltinWorkflowTemplateResolution(t *testing.T) {
 	t.Parallel()
-	// Complex workflows with nested structures and CEL expressions
-	workflowsToTest := []string{
-		"parallel-compete", // Complex parallel workflow with worktrees
+	entries, err := builtin.BuiltinWorkflowsFS.ReadDir(".")
+	require.NoError(t, err, "Should be able to read builtin workflows directory")
+
+	// Realistic values by input name. An input absent here holds its schema
+	// default, or the zero value, as it does for a caller that omitted it.
+	required := map[string]interface{}{
+		"repo":          "acme/widgets",
+		"number":        int64(42),
+		"pr_number":     int64(42),
+		"run_id":        "run-123",
+		"workflow_name": "autopilot-pr-review",
+		"what":          "reviewing the PR",
+		"repos":         []interface{}{"acme/widgets"},
 	}
 
-	for _, name := range workflowsToTest {
-		t.Run("builtin://"+name, func(t *testing.T) {
-			filename := name + ".yaml"
-			data, err := builtin.BuiltinWorkflowsFS.ReadFile(filename)
-			require.NoError(t, err, "Should read builtin workflow: %s", name)
+	checked := 0
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".yaml") {
+			continue
+		}
+		name := strings.TrimSuffix(entry.Name(), ".yaml")
+		checked++
+		data, err := builtin.BuiltinWorkflowsFS.ReadFile(entry.Name())
+		require.NoError(t, err, "Should read builtin workflow: %s", name)
+		parsed, err := parseBuiltin(entry.Name())
+		require.NoError(t, err)
 
-			// ResolveAndParseWorkflow is what the runtime uses
-			wf, err := runtime.ResolveAndParseWorkflow(data, map[string]interface{}{}, nil)
-			require.NoError(t, err, "ResolveAndParseWorkflow should succeed for builtin://%s", name)
-			require.NotNil(t, wf, "Workflow should not be nil")
-			assert.Equal(t, name, wf.GetName(), "Workflow name should match")
-		})
+		// "defaults": nothing supplied but what the schema defaults to, the
+		// inputs of a run started with no event (an empty `repo` that a
+		// refusal node exists to catch). "supplied": a realistic value for
+		// every input listed in `required`, defaults overridden.
+		for _, mode := range []string{"defaults", "supplied"} {
+			t.Run("builtin://"+name+"/"+mode, func(t *testing.T) {
+				t.Parallel()
+				supplied := map[string]interface{}{}
+				for key, schema := range parsed.GetInputs() {
+					v, ok := required[key]
+					if ok && (mode == "supplied" || model.GetInputDefault(schema) == nil) {
+						supplied[key] = v
+					}
+				}
+				inputs := runtime.ApplyDefaultsForRuntime(supplied, parsed.GetInputs())
+
+				// ResolveAndParseWorkflow is what the runtime uses
+				wf, err := runtime.ResolveAndParseWorkflow(data, inputs, nil)
+				require.NoError(t, err, "ResolveAndParseWorkflow should succeed for builtin://%s", name)
+				require.NotNil(t, wf, "Workflow should not be nil")
+				assert.Equal(t, name, wf.GetName(), "Workflow name should match")
+			})
+		}
 	}
+	require.NotZero(t, checked, "no builtin workflows found")
 }
 
 // TestBuiltinWorkflowModelIDsAreValid validates that all model defaults in builtin workflows

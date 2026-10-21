@@ -21,6 +21,21 @@ import (
 // Templates referencing runtime context (nodes.*, output.*, iter.*) are left as-is
 // because they must be evaluated at step execution time.
 //
+// Two rules decide what is left for runtime, and they are independent:
+//
+//  1. By scope, structural: inside a node, a template that mentions a
+//     namespace this pass cannot provide (nodes, iter, output, outputs,
+//     failure) is left as-is, whatever key it sits under. Nothing a node field
+//     reads from the run can fail here, so a new node field needs no entry
+//     in a list to be safe. This is what keeps `with: {commit_id:
+//     "{{nodes.pr.data.head.sha}}"}` and `iter.item` in a loop body loadable.
+//  2. By key, laziness: the runtimeEvaluatedKeys below are left to node
+//     execution even when they read only inputs, because a node that never
+//     runs must not be able to fail the run (an action node's `with:` splits
+//     `inputs.repo` — a refusal node must be able to reject a malformed repo
+//     before anything evaluates it) and because some are evaluated against
+//     inputs that can change mid-run.
+//
 // Deferred sections (preserved as templates for runtime evaluation):
 //
 //   - "outputs": Workflow-level outputs - resolved at completion via EvaluateWorkflowOutputs()
@@ -64,6 +79,7 @@ func ResolveWorkflowTemplates(raw map[string]interface{}, inputs map[string]inte
 	// This applies to the entire subtree under each node element (including nested structures)
 	runtimeEvaluatedKeys := map[string]bool{
 		"args":         true, // Node args reference nodes.*/inputs.*, evaluated at step execution
+		"with":         true, // Action node params reference nodes.*/inputs.*, evaluated when the node runs
 		"save_message": true, // Save message templates reference output.*, evaluated after step
 		"outputs":      true, // Outputs inside nodes (e.g., loop.inline.outputs) reference nodes.*, evaluated at runtime
 		"thread":       true, // Node thread config (inject.content, etc.) references iter.*, evaluated at runtime
@@ -160,12 +176,41 @@ func resolveWorkflowTemplatesRecursive(
 		return result, nil
 
 	case string:
+		if insideNodeSubtree {
+			deferred, err := referencesRuntimeScope(v, context)
+			if err != nil {
+				return nil, err
+			}
+			if deferred {
+				return v, nil
+			}
+		}
 		return resolveTemplateString(v, context)
 
 	default:
 		// Non-string primitives (int, float, bool, nil) pass through unchanged
 		return value, nil
 	}
+}
+
+// referencesRuntimeScope reports whether the template s mentions a CEL
+// namespace that exists only while a node runs, i.e. one the pre-run context
+// does not provide. Such a template cannot be evaluated yet.
+func referencesRuntimeScope(s string, context wfcel.CELEvalContext) (bool, error) {
+	if !wfcel.ContainsTemplate(s) {
+		return false, nil
+	}
+	available := make(map[wfcel.CELNamespace]bool)
+	for _, ns := range context.Namespaces() {
+		available[ns] = true
+	}
+	var runtimeOnly []wfcel.CELNamespace
+	for _, ns := range wfcel.AllNamespaces() {
+		if !available[ns] {
+			runtimeOnly = append(runtimeOnly, ns)
+		}
+	}
+	return wfcel.TemplateReferencesAny(s, runtimeOnly)
 }
 
 // isMapValue returns true if the value is a map

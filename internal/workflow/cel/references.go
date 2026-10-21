@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/google/cel-go/cel"
 	"github.com/google/cel-go/common/ast"
@@ -54,15 +55,60 @@ func TemplateExpressions(s string, rawCEL bool) ([]string, error) {
 	return exprs, nil
 }
 
+// parseEnv is the environment expressions are parsed (never checked) in. A
+// cel.Env is safe for concurrent use and building one is not free, so it is
+// built once.
+var parseEnv = sync.OnceValues(func() (*cel.Env, error) {
+	env, err := cel.NewEnv(cel.OptionalTypes())
+	if err != nil {
+		return nil, fmt.Errorf("creating CEL parse env: %w", err)
+	}
+	return env, nil
+})
+
+// TemplateReferencesAny reports whether any {{ }} expression in the template
+// string s mentions one of namespaces as an identifier. Parsing only, so it
+// answers for namespaces the caller has no environment for. A string with no
+// template delimiters mentions nothing. A string that does not parse is an
+// error, never a "no": the caller is deciding whether an expression can be
+// evaluated now, and must not guess about one it could not read.
+func TemplateReferencesAny(s string, namespaces []CELNamespace) (bool, error) {
+	exprs, err := TemplateExpressions(s, false)
+	if err != nil || len(exprs) == 0 {
+		return false, err
+	}
+	env, err := parseEnv()
+	if err != nil {
+		return false, err
+	}
+	wanted := make(map[string]bool, len(namespaces))
+	for _, ns := range namespaces {
+		wanted[string(ns)] = true
+	}
+	for _, expr := range exprs {
+		parsed, issues := env.Parse(expr)
+		if issues != nil && issues.Err() != nil {
+			return false, fmt.Errorf("parsing %q: %w", expr, issues.Err())
+		}
+		found := ast.MatchDescendants(ast.NavigateAST(parsed.NativeRep()), func(e ast.NavigableExpr) bool {
+			return e.Kind() == ast.IdentKind && wanted[e.AsIdent()]
+		})
+		if len(found) > 0 {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 // ReferencesOf parses each expression and reports how it reads namespace.
 // Parsing only — no type checking — so it works for any namespace without a
 // declared environment. A parse error is returned rather than guessed around:
 // a caller deciding what data to ship must not under-ship on an expression it
 // could not read.
 func ReferencesOf(exprs []string, namespace CELNamespace) (NamespaceRefs, error) {
-	env, err := cel.NewEnv(cel.OptionalTypes())
+	env, err := parseEnv()
 	if err != nil {
-		return NamespaceRefs{}, fmt.Errorf("creating CEL parse env: %w", err)
+		return NamespaceRefs{}, err
 	}
 	var refs NamespaceRefs
 	fields := map[string]bool{}

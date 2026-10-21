@@ -185,3 +185,33 @@ func TestTemplateExpressions_MalformedIsAnError(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []string{"x.startsWith('{') && y"}, exprs, "raw CEL with a brace in a string has no {{")
 }
+
+func TestTemplateReferencesAny(t *testing.T) {
+	runtimeOnly := []CELNamespace{CELNodes, CELIter}
+	cases := []struct {
+		in      string
+		want    bool
+		wantErr bool
+	}{
+		{"plain text", false, false},
+		{"{{ inputs.a }}", false, false},
+		{"{{ nodes.pr.data.head.sha }}", true, false},
+		{"x {{ inputs.a }} {{ iter.item }}", true, false},
+		{"{{ has(nodes.pr) ? 1 : 2 }}", true, false},
+		{"{{ inputs.nodes }}", false, false}, // a field named nodes is not the namespace
+		{"{{ 'nodes' }}", false, false},      // nor is a string literal
+		{"{{ nodes.x. }}", false, true},
+	}
+	for _, tc := range cases {
+		got, err := TemplateReferencesAny(tc.in, runtimeOnly)
+		if tc.wantErr {
+			if err == nil {
+				t.Errorf("%q: want an error", tc.in)
+			}
+			continue
+		}
+		if err != nil || got != tc.want {
+			t.Errorf("%q: got (%v, %v), want %v", tc.in, got, err, tc.want)
+		}
+	}
+}
