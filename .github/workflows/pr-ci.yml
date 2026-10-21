@@ -585,6 +585,7 @@ jobs:
           echo "buf=$(sed -n 's/^BUF_VERSION := //p' Makefile)" >> "$GITHUB_OUTPUT"
           echo "sqlc=$(sed -n 's/^SQLC_VERSION := //p' Makefile)" >> "$GITHUB_OUTPUT"
           echo "forge=$(sed -n 's/^forge_version:[[:space:]]*//p' forge.yaml)" >> "$GITHUB_OUTPUT"
+          echo "embedded_pg=$(sed -n 's|^[[:space:]]*github.com/fergusstrange/embedded-postgres \(v[^[:space:]]*\).*|\1|p' go.mod)" >> "$GITHUB_OUTPUT"
 
       - name: Restore pinned buf and sqlc
         id: gen-bins
@@ -613,15 +614,20 @@ jobs:
         run: go install "github.com/reliant-labs/forge/cmd/forge@${{ steps.pins.outputs.forge }}"
 
       # forge generate starts an ephemeral Postgres to read the applied schema;
-      # its binaries come from Maven Central unless this cache holds them.
-      # forge's embedded-postgres pin fixes the archive, so the forge version
-      # keys it.
+      # its binaries come from Maven Central unless this cache holds them, and
+      # Maven answers a burst of runs with HTTP 429 (#1133 failed on it).
+      # The archive is fixed by the embedded-postgres module version in
+      # go.mod, NOT by the forge pin: keying on forge made every forge bump a
+      # cold key, and a PR never saves, so the bump's own PR always fetched.
+      # The archive's file name carries the postgres version, so the prefix
+      # fallback is safe: a stale archive is simply not the one asked for.
       - name: Restore embedded Postgres binaries
         id: pg-cache
         uses: actions/cache/restore@v4
         with:
           path: ~/.cache/forge/embedded-postgres
-          key: embedded-postgres-${{ runner.os }}-${{ runner.arch }}-${{ steps.pins.outputs.forge }}
+          key: embedded-postgres-${{ runner.os }}-${{ runner.arch }}-${{ steps.pins.outputs.embedded_pg }}
+          restore-keys: embedded-postgres-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Regenerate everything (make generate-all)
         id: generate-all
