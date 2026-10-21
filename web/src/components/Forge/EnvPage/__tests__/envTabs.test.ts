@@ -16,7 +16,6 @@ describe("an environment page's tabs", () => {
     expect(defaultTab("deployed")).toBe("overview");
     expect(tabsFor("deployed").map((tab) => tab.id)).toEqual([
       "overview",
-      "observability",
       "identity",
       "releases",
       "activity",
@@ -29,7 +28,6 @@ describe("an environment page's tabs", () => {
     const needs = Object.fromEntries(tabsFor("deployed").map((tab) => [tab.id, tab.needsDaemon]));
     expect(needs).toEqual({
       overview: false,
-      observability: false,
       identity: false,
       releases: false,
       activity: false,
@@ -42,7 +40,8 @@ describe("an environment page's tabs", () => {
     expect(resolveTab("live", "deployed")).toBe("overview");
     expect(resolveTab("live", "local")).toBe("running");
     // The per-branch Changes and Checks tabs were removed; their links still land.
-    for (const retired of ["preview", "changes", "checks"]) {
+    // So was Observability: the project's Overview and Observability pages, scoped (D1).
+    for (const retired of ["preview", "changes", "checks", "observability"]) {
       expect(resolveTab(retired, "deployed")).toBe("overview");
       expect(resolveTab(retired, "local")).toBe("running");
     }
@@ -50,8 +49,6 @@ describe("an environment page's tabs", () => {
 
   it("falls back to the default for a tab this env does not have", () => {
     expect(resolveTab("running", "deployed")).toBe("overview");
-    // The hosted telemetry store only hears from deployed environments.
-    expect(resolveTab("observability", "local")).toBe("running");
     expect(resolveTab("releases", "local")).toBe("running");
     expect(resolveTab("nonsense", "deployed")).toBe("overview");
   });

@@ -13,7 +13,7 @@
  * environment, filterable and groupable) and one environment's tab (pinned to
  * prod). The URL state the pages keep in search params is held in component
  * state, seeded from this page's own query string, so a screenshot of any
- * state is a link: `?place=project&view=workloads&groupBy=deployment.environment.name`.
+ * state is a link: `?place=project&view=traces&groupBy=deployment.environment.name`.
  */
 
 import { useMemo, useState } from "react";

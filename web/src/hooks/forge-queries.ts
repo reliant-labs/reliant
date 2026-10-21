@@ -35,7 +35,6 @@ import {
   hasCloudControlPlane,
   listEnvironmentPromotions,
   listProjectEnvironments,
-  scaleDeployment,
   setEnvironmentRunState,
   type RunStateRequest,
   type CloudAvailability,
@@ -1218,14 +1217,6 @@ export function useSetEnvironmentRunState(environmentId: string | null | undefin
   const invalidate = useInvalidateAfterRunStateWrite();
   return useMutation<void, Error, RunStateRequest>({
     mutationFn: (state) => setEnvironmentRunState(environmentId ?? "", state),
-    onSuccess: invalidate,
-  });
-}
-
-export function useScaleDeployment() {
-  const invalidate = useInvalidateAfterRunStateWrite();
-  return useMutation<void, Error, { deploymentId: string; state: RunStateRequest }>({
-    mutationFn: ({ deploymentId, state }) => scaleDeployment(deploymentId, state),
     onSuccess: invalidate,
   });
 }

@@ -375,9 +375,8 @@ describe("the Live tab makes zero daemon calls", () => {
     );
     expect(screen.getByText("v12")).toBeInTheDocument();
 
-    // Workloads, from the platform's observation.
-    const workloads = await screen.findByTestId("live-workloads-observed");
-    expect(within(workloads).getByText("api")).toBeInTheDocument();
+    // Workloads are the Overview's: the section points there, scoped to this env.
+    expect(screen.getByTestId("env-workloads-link")).toHaveTextContent(/overview, scoped to prod/i);
 
     // Intent and the observed reading, both from the control plane.
     const state = screen.getByTestId("live-state");
@@ -454,12 +453,6 @@ describe("the Live tab makes zero daemon calls", () => {
       /declared, not built yet/i
     );
     expect(screen.getAllByText(/declared, not built yet/i).length).toBeGreaterThan(0);
-
-    // The platform places nothing there, so Live shows the DECLARATION and
-    // says so rather than implying an observation.
-    const declared = await screen.findByTestId("live-workloads-declared");
-    expect(within(declared).getByText("api")).toBeInTheDocument();
-    expect(within(declared).getByText(/not an observation of your cluster/i)).toBeInTheDocument();
 
     // GetStatus is NOT called for a non-placed env: the platform has no
     // observer on the user's own cluster.
@@ -569,7 +562,7 @@ describe("tab routing", () => {
     expect(screen.getByTestId("env-tab-overview")).toHaveAttribute("aria-selected", "true");
   });
 
-  it.each(["observability", "releases", "activity", "secrets", "domains"])("selects the %s tab from the URL", async (tab) => {
+  it.each(["releases", "activity", "secrets", "domains"])("selects the %s tab from the URL", async (tab) => {
     routeState.env = "prod";
     routeState.tab = tab;
     renderWithQuery(<ForgeEnvPage />);
@@ -599,20 +592,12 @@ describe("tab routing", () => {
     expect(back.search({ project: "proj-1", tab: "activity" })).toEqual({ project: "proj-1", tab: undefined });
   });
 
-  it("drops the Observability tab's filters from the URL on leaving it", async () => {
+  it("lands a retired Observability link on Overview", async () => {
     routeState.env = "prod";
     routeState.tab = "observability";
-    const user = userEvent.setup();
     renderWithQuery(<ForgeEnvPage />);
-    await waitFor(() => expect(screen.getByTestId("forge-env-page")).toHaveAttribute("data-tab", "observability"));
-
-    await user.click(screen.getByTestId("env-tab-secrets"));
-    const call = navigate.mock.calls.at(-1)?.[0] as {
-      search: (prev: Record<string, unknown>) => Record<string, unknown>;
-    };
-    expect(
-      call.search({ project: "proj-1", tab: "observability", view: "logs", q: "timeout", range: "6h", trace: "abc" })
-    ).toEqual({ project: "proj-1", tab: "secrets" });
+    await waitFor(() => expect(screen.getByTestId("forge-env-page")).toHaveAttribute("data-tab", "overview"));
+    expect(screen.queryByTestId("env-tab-observability")).toBeNull();
   });
 
   it("follows the URL when it moves after a click (Back/Forward)", async () => {

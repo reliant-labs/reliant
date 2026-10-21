@@ -563,6 +563,71 @@ export interface WorkloadEvent {
   container: string;
 }
 
+/** How a workload runs, from the environment's recorded bundle; "unknown" when no bundle declares it. */
+export type WorkloadKind = "deployment" | "statefulset" | "daemonset" | "cronjob" | "job" | "unknown";
+
+/**
+ * The ONE server-side verdict (WorkloadHealth in the proto): the list, the
+ * detail page and every badge read this, never a client-side re-derivation.
+ */
+export type WorkloadHealth = "healthy" | "degraded" | "crash_looping" | "pending" | "suspended" | "unknown";
+
+/**
+ * How `releaseVersion` was established: "digest" — the observed image digest
+ * is the one a promotion pinned (verified); "promotion" — the newest promotion
+ * that moved the workload (declared, not verified); "none" — not established.
+ */
+export type WorkloadReleaseBasis = "digest" | "promotion" | "none";
+
+/** One pod's aggregate over the window. GetWorkload only. */
+export interface WorkloadPod {
+  name: string;
+  uid: string;
+  /** "running": reported in the last 5 minutes; "gone": replaced, evicted or finished. */
+  state: "running" | "gone" | "unknown";
+  restarts: number;
+  lastExitReason: string;
+  lastExitAtMs: number | null;
+  /** k8s.node.name; empty until the node agent reports it. */
+  node: string;
+  firstSeenMs: number | null;
+  lastSeenMs: number | null;
+  /** The pod is older than the window, so its age is at least this. */
+  ageIsLowerBound: boolean;
+  latestWarning: WorkloadEvent | null;
+}
+
+export interface DeclaredPort {
+  name: string;
+  port: number;
+  protocol: string;
+}
+
+/**
+ * What the environment's recorded bundle declares for the workload — names and
+ * numbers only (environment variables by NAME, never values). GetWorkload only.
+ */
+export interface DeclaredWorkload {
+  name: string;
+  kind: WorkloadKind;
+  /** False for a bundle recorded before snapshots: only name, kind and replicas are known. */
+  specRecorded: boolean;
+  replicas: number | null;
+  /** 0 = not declared. */
+  cpuRequestMillicores: number;
+  cpuLimitMillicores: number;
+  memoryRequestBytes: number;
+  memoryLimitBytes: number;
+  ports: DeclaredPort[];
+  envNames: string[];
+  image: string;
+  /** The environment's entry point (deploy/kcl/<env>/main.k); no line number is recorded. */
+  sourcePath: string;
+  sourceRepo: string;
+  sourceCommit: string;
+  bundleId: string;
+}
+
 export interface Workload {
   envId: string;
   envName: string;
@@ -573,12 +638,51 @@ export interface Workload {
   restartsInWindow: number;
   containers: WorkloadContainer[];
   latestWarning: WorkloadEvent | null;
+  kind: WorkloadKind;
+  health: WorkloadHealth;
+  /** Why, in one line ("2 of 3 replicas ready"). Empty when healthy. */
+  healthReason: string;
+  /** The deploy ledger's observed ready count, else the pods reporting. */
+  readyReplicas: number | null;
+  /** Null when neither the ledger nor the bundle knows it: render ready alone. */
+  desiredReplicas: number | null;
+  /** The release it runs ("v1.7.44"), or "" when it cannot be established. */
+  releaseVersion: string;
+  releaseBasis: WorkloadReleaseBasis;
+  /** GetWorkload only; the list leaves it empty. */
+  pods: WorkloadPod[];
+  /** GetWorkload only; null in the list, and when no recorded bundle declares it. */
+  declared: DeclaredWorkload | null;
+}
+
+export type WorkloadJobResult = "running" | "succeeded" | "failed" | "unknown";
+
+/** One Kubernetes Job run (a migration, a provisioning step), from the Job's own events. */
+export interface WorkloadJob {
+  envId: string;
+  envName: string;
+  /** The run, e.g. control-plane-migrate-b9e1b9d6de. */
+  name: string;
+  /** The declared workload it belongs to (control-plane-migrate). */
+  workload: string;
+  result: WorkloadJobResult;
+  /** BackoffLimitExceeded, DeadlineExceeded… for a failed run. */
+  reason: string;
+  /** The release in effect when the run started; "" when unknown. */
+  releaseVersion: string;
+  startedAtMs: number | null;
+  finishedAtMs: number | null;
+  /** 0 while running, or when either end is unknown. */
+  durationSeconds: number;
 }
 
 export interface ListWorkloadsResult {
   /** By env, then name. */
   workloads: Workload[];
   truncated: boolean;
+  /** Newest first, at most 200. */
+  jobs: WorkloadJob[];
+  jobsTruncated: boolean;
 }
 
 export type WorkloadMetric =
@@ -632,4 +736,6 @@ export interface WorkloadDetail {
   versionChanges: VersionChange[];
   stepSeconds: number;
   truncated: boolean;
+  /** One summary per environment in scope that reports the workload, with its pods and declared config. */
+  workloads: Workload[];
 }

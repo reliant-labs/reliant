@@ -23,33 +23,25 @@ import Card from "@/components/forge-ui/card";
 import Link from "@/components/forge-ui/link";
 import Status from "@/components/forge-ui/status";
 import Tag from "@/components/forge-ui/tag";
-import {
-  useAlertHistory,
-  useAlerts,
-  useObservabilityOrg,
-  usePanelQuery,
-  useServiceOverview,
-  useWorkloads,
-} from "@/hooks/observability-queries";
+import { useAlerts, useObservabilityOrg, useServiceOverview, useWorkloads } from "@/hooks/observability-queries";
 import { obsErrorKind } from "@/services/controlPlane/observability/errors";
-import type { ObsScope, PanelResult } from "@/services/controlPlane/observability/types";
+import type { ObsScope } from "@/services/controlPlane/observability/types";
 import { RANGE_LABELS, RANGE_PRESETS, type RangePreset } from "@/services/controlPlane/observability/window";
 import { cn } from "@/lib/utils";
 
 import { ENV_ALL } from "../../Console/envScope";
+import { UsageMeter } from "../../Workloads/workloadParts";
+import { worstUsage } from "../../Workloads/workloadModel";
 import { ENV_KEY } from "../attributes";
-import { UPlotChart, type ChartMarker } from "../charts/UPlotChart";
 import { DashboardHeader } from "../Dashboards/DashboardHeader";
-import { alertBands, rangeMs } from "../Dashboards/dashboardModel";
-import { unionTimestamps } from "../Dashboards/PanelBody";
 import { INK_LINK, VariableSelect } from "../Dashboards/parts";
 import { describePromotion, useReleaseMarkers } from "../releaseMarkers";
-import { formatAgo, formatCores, formatCount, formatDuration, formatPercent, formatRate } from "../format";
+import { formatAgo, formatCores, formatDuration, formatPercent, formatRate } from "../format";
 import type { ObsEnvironment } from "../obsPlace";
 import type { ObsSearch } from "../obsSearch";
 import { ObsError, ObsNotSetUp } from "../ObsStates";
-import { UsageBar } from "../WorkloadsView";
-import { byAttention, firingCounts, ratioSeries, redPanel, seriesValues, serviceRows, type ServiceRow } from "./homeModel";
+import { HealthStrip } from "./HealthStrip";
+import { byAttention, serviceRows, type ServiceRow } from "./homeModel";
 
 export interface ObservabilityHomeHrefs {
   logs: (search?: ObsSearch) => string;
@@ -96,16 +88,8 @@ export function ObservabilityHome({ project, env, environments, range, onRange, 
   const overview = useServiceOverview(scope, range, [], groupBy);
   const workloads = useWorkloads(scope, range);
   const alerts = useAlerts(orgId, envId ?? undefined);
-  const history = useAlertHistory(orgId, range, envId ?? undefined);
   const releases = useReleaseMarkers(scope, range, environments, !!scope);
-  const numberPanel = useMemo(() => redPanel("number"), []);
-  const linePanel = useMemo(() => redPanel("line"), []);
-  const totals = usePanelQuery(scope, range, numberPanel, []);
-  const previous = usePanelQuery(scope, range, numberPanel, [], [], { offsetKey: `period:${range}`, offsetMs: () => rangeMs(range) });
-  const trend = usePanelQuery(scope, range, linePanel, []);
 
-  const scopeEnvIds = useMemo(() => (envId ? [envId] : environments.map((candidate) => candidate.id)), [envId, environments]);
-  const firing = (alerts.data ?? []).filter((a) => a.state === "firing" && scopeEnvIds.includes(a.envId));
   const rows = useMemo(
     () => serviceRows(overview.data?.services ?? [], workloads.data?.workloads ?? [], alerts.data ?? [], (id) => environments.find((e) => e.id === id)?.name).sort(byAttention),
     [overview.data, workloads.data, alerts.data, environments]
@@ -163,23 +147,10 @@ export function ObservabilityHome({ project, env, environments, range, onRange, 
     );
   }
 
-  const markers = releases.markers;
-  const bands = alertBands(history.data ?? [], scopeEnvIds, Date.now());
-
   return (
     <div className="space-y-4" data-testid="observability-home">
       {header}
-      <Strip
-        totals={totals}
-        previous={previous.data}
-        trend={trend}
-        markers={markers}
-        firing={firing.length}
-        firingDetail={firing[0] ? `${firing[0].rule}${firing[0].firingAtMs ? ` · ${formatAgo(firing[0].firingAtMs).replace(" ago", "")}` : ""}` : null}
-        firingCounts={(timestamps) => firingCounts(timestamps, bands)}
-        range={range}
-        alertsHref={hrefs.alerts}
-      />
+      <HealthStrip scope={scope} range={range} environments={environments} envId={envId} alertsHref={hrefs.alerts} />
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
         <Card padding="none" className="min-w-0 overflow-hidden" data-testid="observability-services">
           <div className="px-4 pt-3">
@@ -262,155 +233,6 @@ function RailPanel({ title, children, testId }: { title: string; children: React
   );
 }
 
-// ── The strip ───────────────────────────────────────────────────────────────
-
-interface Query<T> {
-  data: T | undefined;
-  isLoading: boolean;
-  error: unknown;
-}
-
-function valueOf(result: PanelResult | undefined, label: string): number | null {
-  return result?.series.find((s) => s.label === label)?.value ?? null;
-}
-
-function change(now: number | null, before: number | null, format: (delta: number) => string, label: string): string | null {
-  if (now === null || before === null) return null;
-  const delta = now - before;
-  if (Math.abs(delta) < 1e-9) return `no change vs ${label}`;
-  return `${delta > 0 ? "+" : "−"}${format(Math.abs(delta))} vs ${label}`;
-}
-
-function Strip({
-  totals,
-  previous,
-  trend,
-  markers,
-  firing,
-  firingDetail,
-  firingCounts: countsOf,
-  range,
-  alertsHref,
-}: {
-  totals: Query<PanelResult>;
-  previous: PanelResult | undefined;
-  trend: Query<PanelResult>;
-  markers: readonly ChartMarker[];
-  firing: number;
-  firingDetail: string | null;
-  firingCounts: (timestamps: number[]) => number[];
-  range: RangePreset;
-  alertsHref: string;
-}) {
-  const label = `previous ${range === "7d" ? "week" : range === "24h" ? "day" : range}`;
-  const requests = valueOf(totals.data, "requests");
-  const errors = valueOf(totals.data, "errors");
-  const p95 = valueOf(totals.data, "p95");
-  const prevRequests = valueOf(previous, "requests");
-  const prevErrors = valueOf(previous, "errors");
-  const prevP95 = valueOf(previous, "p95");
-  const rate = requests ? (errors ?? 0) / requests : null;
-  const prevRate = prevRequests ? (prevErrors ?? 0) / prevRequests : null;
-
-  const timestamps = trend.data ? unionTimestamps(trend.data.series) : [];
-  const trendRequests = trend.data ? seriesValues(trend.data.series, "requests") : [];
-  const trendErrors = trend.data ? seriesValues(trend.data.series, "errors") : [];
-  const trendP95 = trend.data ? seriesValues(trend.data.series, "p95") : [];
-  const loading = totals.isLoading;
-  const failed = !!totals.error;
-
-  return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4" data-testid="observability-strip">
-      <Cell
-        label="Requests"
-        figure={loading ? null : failed ? "—" : formatCount(requests ?? 0)}
-        detail={requests !== null && prevRequests ? change(requests, prevRequests, (d) => formatPercent(d / prevRequests), label) : null}
-        spark={{ timestamps, values: trendRequests, unit: "count", tone: "primary" }}
-        markers={markers}
-      />
-      <Cell
-        label="Error rate"
-        figure={loading ? null : failed ? "—" : rate === null ? "—" : formatPercent(rate)}
-        tone={rate !== null && rate >= 0.05 ? "warning" : undefined}
-        detail={change(rate, prevRate, (d) => `${formatCount(d * 100)}pt`, label)}
-        spark={{ timestamps, values: ratioSeries(trendErrors, trendRequests), unit: "percent", tone: "destructive" }}
-        markers={markers}
-      />
-      <Cell
-        label="p95 latency"
-        figure={loading ? null : failed ? "—" : p95 === null ? "—" : formatDuration(p95)}
-        detail={change(p95, prevP95, (d) => formatDuration(d), label)}
-        spark={{ timestamps, values: trendP95, unit: "ms", tone: "secondary" }}
-        markers={markers}
-      />
-      <Cell
-        label="Alerts firing"
-        figure={String(firing)}
-        tone={firing > 0 ? "warning" : undefined}
-        detail={firingDetail ?? "none in this scope"}
-        spark={{ timestamps, values: countsOf(timestamps), unit: "count", tone: "warning" }}
-        markers={markers}
-        href={alertsHref}
-      />
-    </div>
-  );
-}
-
-function Cell({
-  label,
-  figure,
-  detail,
-  spark,
-  markers,
-  tone,
-  href,
-}: {
-  label: string;
-  /** Null while loading. */
-  figure: string | null;
-  detail: string | null;
-  spark: { timestamps: number[]; values: (number | null)[]; unit: "count" | "percent" | "ms"; tone: "primary" | "destructive" | "secondary" | "warning" };
-  markers: readonly ChartMarker[];
-  tone?: "warning";
-  href?: string;
-}) {
-  const body = (
-    <>
-      <div className="text-xs text-ink-muted">{label}</div>
-      {figure === null ? (
-        <div className="mt-1 h-7 w-20 animate-pulse rounded bg-ink/5 motion-reduce:animate-none" aria-busy="true" aria-label={`Loading ${label}`} />
-      ) : (
-        <div className={cn("mt-0.5 text-xl font-semibold tabular-nums", tone === "warning" ? "text-warning-ink" : "text-ink")}>{figure}</div>
-      )}
-      <div className="min-h-4 truncate text-xs text-ink-muted">{detail ?? " "}</div>
-      <div className="mt-2 h-9">
-        {spark.timestamps.length > 1 && (
-          <UPlotChart
-            compact
-            height={36}
-            timestamps={spark.timestamps}
-            series={[{ label, values: spark.values, tone: spark.tone }]}
-            unit={spark.unit}
-            label={`${label} over the window`}
-            markers={markers}
-          />
-        )}
-      </div>
-    </>
-  );
-  return (
-    <Card padding="none" className="min-w-0 px-4 pb-3 pt-3" data-testid={`observability-cell-${label.toLowerCase().replace(/\s+/g, "-")}`}>
-      {href ? (
-        <Link href={href} className="no-color block">
-          {body}
-        </Link>
-      ) : (
-        body
-      )}
-    </Card>
-  );
-}
-
 // ── Services ────────────────────────────────────────────────────────────────
 
 function ServicesTable({
@@ -488,7 +310,7 @@ function ServicesTable({
       <tbody>
         {rows.map((row) => {
           const href = workloadHref(row.name, row.env);
-          const cpu = row.workload?.containers[0]?.cpu ?? null;
+          const cpu = row.workload ? worstUsage(row.workload, "cpu") : null;
           return (
             <tr
               key={`${row.name}/${row.env ?? ""}`}
@@ -522,7 +344,7 @@ function ServicesTable({
               </td>
               <td className="h-10 px-4 text-right tabular-nums text-ink">{row.health.requestCount ? formatDuration(row.health.p95Ms) : "—"}</td>
               <td className="hidden h-10 w-40 px-4 lg:table-cell">
-                {cpu ? <UsageBar usage={cpu} format={formatCores} what="CPU" /> : <span className="text-xs text-ink-muted">—</span>}
+                {cpu ? <UsageMeter usage={cpu} format={formatCores} what="CPU" /> : <span className="text-xs text-ink-muted">—</span>}
               </td>
               <td className="h-10 px-4 text-right tabular-nums">
                 {row.alertsFiring > 0 ? <span className="text-warning-ink">{row.alertsFiring} firing</span> : <span className="text-ink-muted">·</span>}
