@@ -12,7 +12,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/observability"
 	"github.com/reliant-labs/reliant/internal/runenv"
 	"github.com/reliant-labs/reliant/internal/serverapi"
-	"github.com/reliant-labs/reliant/internal/servergateway"
 	"github.com/reliant-labs/reliant/internal/serverworker"
 	"github.com/reliant-labs/reliant/internal/telemetry"
 )
@@ -42,9 +41,9 @@ func observabilityOf(t *testing.T) map[string]observability.Settings {
 	require.NoError(t, loadServerAPIConfig(roleCommand(t, "api"), &api))
 	var worker serverworker.Options
 	require.NoError(t, loadServerWorkerConfig(roleCommand(t, "worker"), &worker))
-	var gateway servergateway.Options
-	require.NoError(t, loadServerGatewayConfig(roleCommand(t, "gateway"), &gateway))
-	return map[string]observability.Settings{"api": api.Observability, "worker": worker.Observability, "gateway": gateway.Observability}
+	gateway, err := loadGatewayRole(roleCommand(t, "gateway"))
+	require.NoError(t, err)
+	return map[string]observability.Settings{"api": api.Observability, "worker": worker.Observability, "gateway": gateway.observability}
 }
 
 // The prod values control-plane sets (prod/main.k) reach every role.

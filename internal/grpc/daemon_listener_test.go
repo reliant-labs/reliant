@@ -33,12 +33,11 @@ func TestToolsDaemonServiceDeclaresTheDaemonAudience(t *testing.T) {
 // A daemon chain refuses to serve a user service: a daemon credential can
 // never reach a user RPC, even through a hand-written route set.
 func TestDaemonChainRefusesAUserService(t *testing.T) {
-	chain, err := NewDaemonChain(DaemonChainDeps{DaemonTokens: tokenauthority.NewMemory()})
-	require.NoError(t, err)
+	chain := newTestDaemonChain(t, tokenauthority.NewMemory())
 	require.Equal(t, DaemonAudience, chain.Audience())
 
 	path, handler := reliantv1connect.NewSystemServiceHandler(reliantv1connect.UnimplementedSystemServiceHandler{})
-	_, err = serverkit.NewListener(serverkit.ListenerDeps{
+	_, err := serverkit.NewListener(serverkit.ListenerDeps{
 		Config: listenerConfig("127.0.0.1", 0).Listener(),
 		Chain:  chain.Chain,
 		Routes: mountOne(path, handler, reliantv1connect.SystemServiceName),
@@ -74,8 +73,7 @@ func mountOne(path string, handler http.Handler, service string) serverkit.Route
 // always had and reports slow ones as reliant does; it names no procedure,
 // so the daemon streams stay unbounded.
 func TestDaemonChainDeadline(t *testing.T) {
-	chain, err := NewDaemonChain(DaemonChainDeps{DaemonTokens: tokenauthority.NewMemory()})
-	require.NoError(t, err)
+	chain := newTestDaemonChain(t, tokenauthority.NewMemory())
 	var deadlines []serverkit.Deadline
 	for _, ic := range chain.Interceptors() {
 		if d, ok := ic.(serverkit.Deadline); ok {

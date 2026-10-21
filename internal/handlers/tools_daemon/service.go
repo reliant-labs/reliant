@@ -20,9 +20,9 @@ import (
 )
 
 // Deps holds dependencies for the tools_daemon service. The daemon-gateway
-// (internal/servergateway) constructs it today and hosts it on its own
-// server (internal/grpc/daemon_server.go), not on the API server; forge's
-// composition root takes over in P3c (research/forge-migration/PLAN.md).
+// (the gateway root of internal/app's composition graph) constructs it and
+// serves it on its own daemon listener (internal/grpc/daemon_listener.go), not
+// on the API server.
 // The rpc methods on *Service are where this service's logic lives; see the
 // forge `api` / `services` skill.
 type Deps struct {

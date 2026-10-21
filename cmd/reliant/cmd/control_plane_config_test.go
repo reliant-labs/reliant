@@ -14,7 +14,6 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/serverapi"
-	"github.com/reliant-labs/reliant/internal/servergateway"
 	"github.com/reliant-labs/reliant/internal/serverworker"
 )
 
@@ -35,9 +34,8 @@ var controlPlaneRoles = map[string]func(*cobra.Command) (controlplane.Endpoint, 
 		return opts.ControlPlane, err
 	},
 	"server gateway": func(cmd *cobra.Command) (controlplane.Endpoint, error) {
-		var opts servergateway.Options
-		err := loadServerGatewayConfig(cmd, &opts)
-		return opts.ControlPlane, err
+		role, err := loadGatewayRole(cmd)
+		return role.controlPlane, err
 	},
 }
 

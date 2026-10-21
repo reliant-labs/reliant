@@ -38575,6 +38575,34 @@
           "Sensitive": false,
           "Category": "",
           "ProtoFile": "config/v1/gateway_config.proto"
+        },
+        {
+          "Name": "liveness_paths",
+          "GoName": "LivenessPaths",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "LIVENESS_PATHS",
+          "Flag": "",
+          "DefaultValue": "/health,/healthz",
+          "Required": false,
+          "Description": "Liveness probe paths on the health port (comma-separated)",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "config/v1/gateway_config.proto"
+        },
+        {
+          "Name": "readiness_paths",
+          "GoName": "ReadinessPaths",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "READINESS_PATHS",
+          "Flag": "",
+          "DefaultValue": "/ready,/readyz",
+          "Required": false,
+          "Description": "Readiness probe paths on the health port (comma-separated)",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "config/v1/gateway_config.proto"
         }
       ],
       "Binary": "reliant",
@@ -39504,7 +39532,7 @@
     "config/v1/control_plane_config.proto": "baedb9e18f40a3711bad8e7c0572ff37257dddff3f3ff46d7e4e4f57b0c1454a",
     "config/v1/daemon_config.proto": "f50c66d5ee9c77735c670ce26b18216923002fee9f455a5db8ee013a4e0cb545",
     "config/v1/db_config.proto": "566e7ebb67f0eaac98cccfac4a9baf948f319c1a928ea8cf0b7f837d214d1bd0",
-    "config/v1/gateway_config.proto": "19cf0f91d4050f55f58da8c95001ec65e2b3579b37615d638d68024016217464",
+    "config/v1/gateway_config.proto": "c91125b938b40acad4037a936119ff1208d8fadc3ff59c0cf26cf0ed4aa3084f",
     "config/v1/integrations_config.proto": "3f051e70d4f454b353726dfc7a381921afe61fa021acb318ccf0ce592670faac",
     "config/v1/llm_config.proto": "4c697b1803e3b0f06470ac2538193be961dbf71d5be61c8712ab97d7488e257d",
     "config/v1/observability_config.proto": "d5e01af322359c3358ebcd3bc16bf03fbf4be4bad2b03b52e75a9d320193001b",

@@ -320,7 +320,7 @@ func NewAPI(cfg *Config) (*API, error) {
 
 	// Build a DaemonRouter for services that need transport-agnostic daemon access.
 	// The api-server itself never accepts daemon bidi streams — daemons connect to
-	// the daemon-gateway process (see internal/servergateway) and the api-server
+	// the daemon-gateway process (the gateway root, internal/app) and the api-server
 	// reaches them through this router (NATS-backed in production).
 	router := cfg.DaemonRouter
 

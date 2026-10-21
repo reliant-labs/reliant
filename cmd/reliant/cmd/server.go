@@ -8,38 +8,26 @@ import (
 
 	configv1 "github.com/reliant-labs/reliant/gen/config/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
-	"github.com/reliant-labs/reliant/internal/controlplane"
-	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/reliant-labs/reliant/internal/natsutil"
 	"github.com/reliant-labs/reliant/internal/worktreesweep"
 
+	"github.com/reliant-labs/reliant/internal/app"
 	"github.com/reliant-labs/reliant/internal/serverapi"
-	"github.com/reliant-labs/reliant/internal/servergateway"
 	"github.com/reliant-labs/reliant/internal/serverworker"
 	"github.com/reliant-labs/reliant/pkg/config"
 	"github.com/spf13/cobra"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-func newServerCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "server",
-		Short: "Run cloud server components",
-		Long: `Run Reliant cloud server components. Each subcommand starts a specific
-server role for split-deployment mode.`,
-	}
-
+// mergeServerRoles completes the generated `server` command (roots_gen.go:
+// the gateway root's parent, with ServerProcessConfig's and DatabaseConfig's
+// flags persistent on it) with its help text and the roles that are not roots
+// yet, `server api` and `server worker`.
+func mergeServerRoles(cmd *cobra.Command) {
+	cmd.Short = "Run cloud server components"
+	cmd.Long = `Run Reliant cloud server components. Each subcommand starts a specific
+server role for split-deployment mode.`
 	cmd.AddCommand(newServerAPICmd())
 	cmd.AddCommand(newServerWorkerCmd())
-	cmd.AddCommand(newServerGatewayCmd())
-
-	// What every role reads the same way — proto/config/v1
-	// ServerProcessConfig and DatabaseConfig — persistent here, so each
-	// role's command inherits the flags.
-	config.RegisterServerProcessConfigFlags(cmd)
-	config.RegisterDatabaseConfigFlags(cmd)
-
-	return cmd
 }
 
 func newServerAPICmd() *cobra.Command {
@@ -104,10 +92,10 @@ func loadServerAPIConfig(cmd *cobra.Command, opts *serverapi.Options) error {
 	if err != nil {
 		return err
 	}
-	if err := checkServerPorts(
-		serverPort{"GRPC_PORT (--grpc-port)", api.GetGrpcPort()},
-		serverPort{"HEALTH_PORT (--health-port)", api.GetHealthPort()},
-		serverPort{"TEMPORAL_PORT (--temporal-port)", process.GetTemporal().GetPort()},
+	if err := app.CheckPorts(
+		app.Port{Name: "GRPC_PORT (--grpc-port)", Port: api.GetGrpcPort()},
+		app.Port{Name: "HEALTH_PORT (--health-port)", Port: api.GetHealthPort()},
+		app.Port{Name: "TEMPORAL_PORT (--temporal-port)", Port: process.GetTemporal().GetPort()},
 	); err != nil {
 		return err
 	}
@@ -120,12 +108,12 @@ func loadServerAPIConfig(cmd *cobra.Command, opts *serverapi.Options) error {
 	opts.PprofPort = int(api.GetPprofPort())
 	opts.BindAddress = api.GetBindAddress()
 	opts.DataDir = process.GetDataDir()
-	opts.DatabaseDriver, opts.DatabaseURL, opts.DatabaseDirectURL = databaseSettings(shared.database)
-	if opts.DatabasePool, err = databasePool(shared.database); err != nil {
+	opts.DatabaseDriver, opts.DatabaseURL, opts.DatabaseDirectURL = app.DatabaseURLs(shared.database)
+	if opts.DatabasePool, err = app.DatabasePool(shared.database); err != nil {
 		return err
 	}
 	opts.TemporalHost, opts.TemporalPort, opts.TemporalNamespace = temporalSettings(process.GetTemporal())
-	opts.NATS = natsEndpoint(process.GetNats())
+	opts.NATS = app.NATSEndpoint(process.GetNats())
 	opts.StreamingDriver = process.GetStreamingDriver()
 	opts.CORSAllowedOrigins = api.GetCorsAllowedOrigins()
 	opts.TLSCertFile, opts.TLSKeyFile, opts.DisableTLS = tlsSettings(process.GetTls())
@@ -135,7 +123,7 @@ func loadServerAPIConfig(cmd *cobra.Command, opts *serverapi.Options) error {
 	opts.JWKSURL = api.GetJwksUrl()
 	opts.AllowedEmailDomains = api.GetAllowedEmailDomains()
 	opts.DisableForgeAPI = api.GetDisableForgeApi()
-	opts.ControlPlane = controlPlaneEndpoint(process.GetControlPlane())
+	opts.ControlPlane = app.ControlPlaneEndpoint(process.GetControlPlane())
 	opts.AuthMode = api.GetAuthMode()
 	opts.AuthAPIKey = api.GetAuthApiKey()
 	opts.RequireEmailVerifiedClaim = api.GetRequireEmailVerifiedClaim()
@@ -191,9 +179,9 @@ func loadServerWorkerConfig(cmd *cobra.Command, opts *serverworker.Options) erro
 	if err != nil {
 		return err
 	}
-	if err := checkServerPorts(
-		serverPort{"HEALTH_PORT (--health-port)", worker.GetHealthPort()},
-		serverPort{"TEMPORAL_PORT (--temporal-port)", process.GetTemporal().GetPort()},
+	if err := app.CheckPorts(
+		app.Port{Name: "HEALTH_PORT (--health-port)", Port: worker.GetHealthPort()},
+		app.Port{Name: "TEMPORAL_PORT (--temporal-port)", Port: process.GetTemporal().GetPort()},
 	); err != nil {
 		return err
 	}
@@ -204,15 +192,15 @@ func loadServerWorkerConfig(cmd *cobra.Command, opts *serverworker.Options) erro
 	opts.HealthPort = int(worker.GetHealthPort())
 	opts.PprofPort = int(worker.GetPprofPort())
 	opts.DataDir = process.GetDataDir()
-	opts.DatabaseDriver, opts.DatabaseURL, opts.DatabaseDirectURL = databaseSettings(shared.database)
-	if opts.DatabasePool, err = databasePool(shared.database); err != nil {
+	opts.DatabaseDriver, opts.DatabaseURL, opts.DatabaseDirectURL = app.DatabaseURLs(shared.database)
+	if opts.DatabasePool, err = app.DatabasePool(shared.database); err != nil {
 		return err
 	}
 	opts.TemporalHost, opts.TemporalPort, opts.TemporalNamespace = temporalSettings(process.GetTemporal())
-	opts.NATS = natsEndpoint(process.GetNats())
+	opts.NATS = app.NATSEndpoint(process.GetNats())
 	opts.StreamingDriver = process.GetStreamingDriver()
 	opts.PreStopDelay, opts.ShutdownTimeout = drainBudget(worker)
-	opts.ControlPlane = controlPlaneEndpoint(process.GetControlPlane())
+	opts.ControlPlane = app.ControlPlaneEndpoint(process.GetControlPlane())
 	in, err := integrations(process.GetIntegrations())
 	if err != nil {
 		return err
@@ -231,85 +219,6 @@ func loadServerWorkerConfig(cmd *cobra.Command, opts *serverworker.Options) erro
 	return err
 }
 
-// loadServerGatewayConfig fills opts with what `server gateway` reads through
-// typed config: the configs every role shares, and its own GatewayConfig.
-func loadServerGatewayConfig(cmd *cobra.Command, opts *servergateway.Options) error {
-	shared, err := loadServerConfigs(cmd)
-	if err != nil {
-		return err
-	}
-	base, process := shared.base, shared.process
-	gateway, err := config.LoadGatewayConfig(cmd)
-	if err != nil {
-		return err
-	}
-	if err := checkServerPorts(
-		serverPort{"TOOLS_DAEMON_PORT (--daemon-port)", gateway.GetDaemonPort()},
-		serverPort{"HEALTH_PORT (--health-port)", gateway.GetHealthPort()},
-	); err != nil {
-		return err
-	}
-	opts.Log = logSettings(base)
-	opts.ToolsDaemonPort = int(gateway.GetDaemonPort())
-	opts.HealthPort = int(gateway.GetHealthPort())
-	opts.BindAddress = gateway.GetBindAddress()
-	opts.DataDir = process.GetDataDir()
-	opts.PprofAddr = gateway.GetPprofAddr()
-	opts.DatabaseDriver, opts.DatabaseURL, opts.DatabaseDirectURL = databaseSettings(shared.database)
-	if opts.DatabasePool, err = databasePool(shared.database); err != nil {
-		return err
-	}
-	opts.NATS = natsEndpoint(process.GetNats())
-	opts.TLSCertFile, opts.TLSKeyFile, opts.DisableTLS = tlsSettings(process.GetTls())
-	opts.PreStopDelay, opts.ShutdownTimeout = drainBudget(gateway)
-	opts.ControlPlane = controlPlaneEndpoint(process.GetControlPlane())
-	opts.Observability = observabilitySettings(process.GetObservability(), base)
-	return nil
-}
-
-// controlPlaneEndpoint is the shared ControlPlaneConfig in the shape the
-// server packages take, trimmed as every reader of these variables trimmed
-// them.
-func controlPlaneEndpoint(cfg *configv1.ControlPlaneConfig) controlplane.Endpoint {
-	return controlplane.Endpoint{
-		URL:                   strings.TrimSpace(cfg.GetUrl()),
-		InternalServiceSecret: strings.TrimSpace(cfg.GetInternalServiceSecret()),
-	}
-}
-
-// databaseSettings is the DatabaseConfig in the shape the server packages'
-// Options take: driver, URL, direct (session) URL. The URLs are trimmed, as
-// the database layer trimmed them.
-func databaseSettings(cfg *configv1.DatabaseConfig) (driver, url, directURL string) {
-	return cfg.GetDatabaseDriver(), strings.TrimSpace(cfg.GetDatabaseUrl()), strings.TrimSpace(cfg.GetDatabaseDirectUrl())
-}
-
-// databasePool is the DatabaseConfig pool and wait settings in the shape
-// the database layer takes. A size or a wait that cannot be honoured is
-// refused rather than quietly replaced by its default.
-func databasePool(cfg *configv1.DatabaseConfig) (db.Pool, error) {
-	if n := cfg.GetDbMaxOpenConns(); n < 1 {
-		return db.Pool{}, fmt.Errorf("config: RELIANT_DB_MAX_OPEN_CONNS = %d must be at least 1", n)
-	}
-	if n := cfg.GetDbMaxIdleConns(); n < 1 {
-		return db.Pool{}, fmt.Errorf("config: RELIANT_DB_MAX_IDLE_CONNS = %d must be at least 1", n)
-	}
-	if s := cfg.GetDbSchemaWaitSeconds(); s < 1 {
-		return db.Pool{}, fmt.Errorf("config: RELIANT_DB_SCHEMA_WAIT_SECONDS = %d must be at least 1", s)
-	}
-	pool := db.Pool{
-		MaxOpenConns: int(cfg.GetDbMaxOpenConns()),
-		MaxIdleConns: int(cfg.GetDbMaxIdleConns()),
-		SchemaWait:   time.Duration(cfg.GetDbSchemaWaitSeconds()) * time.Second,
-	}
-	if d := cfg.GetDbConnectTimeout(); d != nil {
-		if pool.ConnectTimeout = d.AsDuration(); pool.ConnectTimeout <= 0 {
-			return db.Pool{}, fmt.Errorf("config: DB_CONNECT_TIMEOUT = %s is not a positive duration", pool.ConnectTimeout)
-		}
-	}
-	return pool, nil
-}
-
 // temporalSettings is the shared TemporalConfig in the shape the server
 // packages' Options take.
 func temporalSettings(cfg *configv1.TemporalConfig) (host string, port int, namespace string) {
@@ -320,11 +229,6 @@ func temporalSettings(cfg *configv1.TemporalConfig) (host string, port int, name
 // Options take.
 func tlsSettings(cfg *configv1.ServerTLSConfig) (certFile, keyFile string, disable bool) {
 	return cfg.GetCertFile(), cfg.GetKeyFile(), cfg.GetDisable()
-}
-
-// natsEndpoint is the shared NatsConfig as natsutil connects to it.
-func natsEndpoint(cfg *configv1.NatsConfig) natsutil.Endpoint {
-	return natsutil.Endpoint{URL: cfg.GetUrl(), User: cfg.GetUser(), Password: cfg.GetPassword()}
 }
 
 // roleDrain is a role config's rollout drain budget: each role declares its
@@ -344,32 +248,14 @@ func drainBudget(cfg roleDrain) (preStopDelay, shutdownTimeout time.Duration) {
 	return cfg.GetPreStopDelay().AsDuration(), cfg.GetShutdownTimeout().AsDuration()
 }
 
-// serverPort is a port setting, named as an operator sets it.
-type serverPort struct {
-	name string
-	port int32
-}
-
-// checkServerPorts refuses a port setting that is not a TCP port: the loader
-// has parsed it as an integer, but 0 or 70000 would fail later, at bind time,
-// as something less clear.
-func checkServerPorts(ports ...serverPort) error {
-	for _, p := range ports {
-		if p.port < 1 || p.port > 65535 {
-			return fmt.Errorf("config: %s = %d is not a TCP port (1-65535)", p.name, p.port)
-		}
-	}
-	return nil
-}
-
-// checkPprofPort is checkServerPorts for PPROF_PORT, where 0 is a setting
+// checkPprofPort is app.CheckPorts for PPROF_PORT, where 0 is a setting
 // rather than a mistake: no diagnostics listener (debugserver.Start serves
 // none on port 0), as an empty PPROF_ADDR is for the gateway.
 func checkPprofPort(port int32) error {
 	if port == 0 {
 		return nil
 	}
-	return checkServerPorts(serverPort{"PPROF_PORT (--pprof-port)", port})
+	return app.CheckPorts(app.Port{Name: "PPROF_PORT (--pprof-port)", Port: port})
 }
 
 func newServerWorkerCmd() *cobra.Command {
@@ -393,31 +279,6 @@ Designed to run as N replicas for horizontal scaling.`,
 	// Every flag and variable `server worker` reads: proto/config/v1
 	// WorkerConfig.
 	config.RegisterWorkerConfigFlags(cmd)
-
-	return cmd
-}
-
-func newServerGatewayCmd() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "gateway",
-		Short: "Run the daemon connection gateway",
-		Long: `Starts the daemon gateway that manages bidirectional gRPC streams to
-tools-daemon processes. Routes tool execution requests from API servers
-and Temporal workers to the correct daemon via NATS.
-
-Designed to run as few stateful replicas.`,
-		RunE: func(cmd *cobra.Command, args []string) error {
-			var opts servergateway.Options
-			if err := loadServerGatewayConfig(cmd, &opts); err != nil {
-				return err
-			}
-			return servergateway.Run(cmd.Context(), opts)
-		},
-	}
-
-	// Every flag and variable `server gateway` reads: proto/config/v1
-	// GatewayConfig.
-	config.RegisterGatewayConfigFlags(cmd)
 
 	return cmd
 }

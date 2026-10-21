@@ -15,14 +15,26 @@
     ".github/workflows/proto-breaking.yml": {
       "scaffolded_at": "2026-10-12T05:30:41Z"
     },
+    "cmd/reliant/cmd/commands.go": {
+      "declined": "reliant's command tree is root.go's (it never calls userCommands), and its sign-in is its own (internal/auth, internal/grpc/interceptors): forge's generic SetupAuth/UserAuth would be a second auth path"
+    },
     "cmd/reliant/cmd/metrics.go": {
       "declined": "reliant's roots arrive in R3 (research/forge-migration/09-roots-plan.md): serve.go's presence turns internal/app composition on for every component, and metrics.go (with internal/metrics/metrics.go) would add a `reliant metrics` command to a CLI surface kept fixed until then"
     },
     "cmd/reliant/cmd/serve.go": {
-      "declined": "reliant's roots arrive in R3 (research/forge-migration/09-roots-plan.md): serve.go's presence turns internal/app composition on for every component, and metrics.go (with internal/metrics/metrics.go) would add a `reliant metrics` command to a CLI surface kept fixed until then"
+      "scaffolded_at": "2026-10-21T14:18:30Z"
     },
     "cmd/reliant/cmd/version.go": {
       "scaffolded_at": "2026-10-21T04:21:32Z"
+    },
+    "cmd/reliant/main.go": {
+      "scaffolded_at": "2026-10-21T14:18:55Z"
+    },
+    "internal/app/auth.go": {
+      "declined": "reliant's command tree is root.go's (it never calls userCommands), and its sign-in is its own (internal/auth, internal/grpc/interceptors): forge's generic SetupAuth/UserAuth would be a second auth path"
+    },
+    "internal/app/providers.go": {
+      "scaffolded_at": "2026-10-21T14:18:41Z"
     },
     "internal/handlers/account/handlers_scaffold_delete_account_test.go": {
       "scaffolded_at": "2026-10-13T12:24:49Z"

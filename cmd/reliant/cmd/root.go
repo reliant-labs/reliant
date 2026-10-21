@@ -10,16 +10,15 @@
 //   - Factory     — the constructor shape registerCommand takes.
 //   - ServiceName — the binary's app identity, and the root command's name.
 //
-// There is deliberately NO serve.go beside this file. forge scaffolds one, the
-// runRoot every composition-graph root runs under, and its presence switches
-// on the internal/app composition step for every component. reliant's server
-// roles still construct themselves (`reliant server api|worker|gateway`, in
-// server.go), and become graph roots in R3
-// (research/forge-migration/09-roots-plan.md). Until then serve.go stays
-// deleted, which forge records in .forge/scaffolded.json and honours, so
-// composition stays off. metrics.go and internal/metrics are deleted for the
-// same reason: they add a `reliant metrics` command, and this tree's surface is
-// pinned (help_text_test, command_surface_test).
+// The server roles are roots of the composition graph (internal/app): each
+// root's command comes from rootCommands (roots_gen.go, generated) and runs
+// under the process policy in serve.go. Today only `reliant server gateway` is
+// a root; `reliant server api|worker` still construct themselves (server.go)
+// and are merged under the generated `server` command (mergeServerRoles) until
+// they become roots too (research/forge-migration/09-roots-plan.md, R4/R5).
+// metrics.go and internal/metrics stay declined (.forge/scaffolded.json):
+// they would add a `reliant metrics` command to a surface pinned by
+// help_text_test and command_surface_test.
 package cmd
 
 import (
@@ -102,7 +101,12 @@ Reliant server components.`,
 	// Register subcommand groups. The end-user groups carry CLIConfig.
 	daemonCmd, authCmd, projectCmd, workflowCmd, triggerCmd := newDaemonCmd(), newAuthCmd(), newProjectCmd(), newWorkflowCmd(), newTriggerCmd()
 	bindCLIConfig(authCmd, daemonCmd, projectCmd, triggerCmd, workflowCmd)
-	root.AddCommand(newServerCmd())
+	for _, c := range rootCommands(deps) {
+		if c.Name() == "server" {
+			mergeServerRoles(c)
+		}
+		root.AddCommand(c)
+	}
 	root.AddCommand(daemonCmd)
 	root.AddCommand(authCmd)
 	root.AddCommand(projectCmd)

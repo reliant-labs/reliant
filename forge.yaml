@@ -25,7 +25,7 @@
 
 name: reliant
 module_path: github.com/reliant-labs/reliant
-forge_version: v0.1.47-0.20261021172338-19e73851962e
+forge_version: v0.1.47-0.20261021183615-467229696f73
 harness: reliant
 config:
     # Every process setting is typed config (proto/config/v1, read through
@@ -34,6 +34,13 @@ config:
     enforce_typed_access: error
 lint:
     rules:
+        # The server roles become composition-graph roots one at a time
+        # (research/forge-migration/09-roots-plan.md): the gateway is one, the
+        # api and worker are not yet, so every node only they build — the
+        # user-audience handlers, the worker's — is reached by no root. Warn
+        # until R6 declares the last root and deletes this entry, so
+        # `forge lint --graph` gates the whole graph again.
+        forge-graph-unreachable: warn
         # forge's D3 rule ships hard-ERROR with no rollout default, and reliant
         # has 189 mutating rpcs with no `(forge.v1.method).activity`
         # declaration. Warn while the declarations are written; this goes back

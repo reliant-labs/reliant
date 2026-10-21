@@ -84,6 +84,8 @@ func comparableOptions(opts any) any {
 		got := clients(o.Webhooks.OAuthClients)
 		o.Webhooks.OAuthClients = nil
 		return []any{o, got}
+	case gatewayRole:
+		return o.options()
 	}
 	return opts
 }
@@ -127,6 +129,8 @@ var serverRoleSurfaceEnv = map[string]string{
 	"BIND_ADDRESS":      "127.0.0.2",
 	"DATA_DIR":          "/surface/data",
 	"TOOLS_DAEMON_PORT": "19191",
+	"LIVENESS_PATHS":    "/live,/health",
+	"READINESS_PATHS":   "/ready,/ready2",
 
 	// control plane
 	"RELIANT_CONTROL_PLANE_URL": "http://cp.surface.test:8080",

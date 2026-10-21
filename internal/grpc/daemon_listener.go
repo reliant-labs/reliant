@@ -12,9 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/http"
 
-	"connectrpc.com/connect"
 	"connectrpc.com/otelconnect"
 	"github.com/reliant-labs/forge/pkg/observe"
 	"github.com/reliant-labs/forge/pkg/serverkit"
@@ -23,14 +21,14 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/errclass"
 	"github.com/reliant-labs/reliant/internal/grpc/interceptors"
-	"github.com/reliant-labs/reliant/internal/handlers/tools_daemon"
 )
 
 // The daemon-gateway's daemon-facing listener, as forge components: a
-// DaemonChain (the interceptor chain, authenticating daemon credentials) and a
-// DaemonListener (the address daemons dial, serving ToolsDaemonService through
-// that chain). The gateway runs the listener under lifecyclekit.Supervise,
-// which drains it: see servergateway.Run.
+// DaemonAuth (the daemon credential, as an authenticator of the daemon
+// audience), a DaemonChain (the interceptor chain over it) and a
+// DaemonListener (the address daemons dial, serving the daemon-audience routes
+// through that chain). internal/app composes them into the gateway root, whose
+// supervisor drains the listener.
 
 // DaemonAudience is the trust domain of daemon credentials. The services a
 // daemon may call declare it — `option (forge.v1.service) = {audience:
@@ -38,14 +36,28 @@ import (
 // on a listener whose chain admits this one, or this one on any other.
 const DaemonAudience = "daemon"
 
+// DaemonAuth authenticates the daemon audience: a daemon's `rlat_` access
+// token, resolved by the token authority (DaemonAuthInterceptor).
+type DaemonAuth struct{ serverkit.Authenticator }
+
+// NewDaemonAuth builds the daemon audience's authenticator over tokens, which
+// resolves daemons' credentials (uncached: a revoked daemon credential is
+// refused on its next connect).
+func NewDaemonAuth(tokens auth.AccessTokenIntrospector) (*DaemonAuth, error) {
+	interceptor, err := interceptors.NewDaemonAuthInterceptor(tokens)
+	if err != nil {
+		return nil, fmt.Errorf("daemon auth: %w", err)
+	}
+	return &DaemonAuth{serverkit.AuthFor(DaemonAudience, interceptor)}, nil
+}
+
 // DaemonChain is the interceptor chain of the daemon listener.
 type DaemonChain struct{ *serverkit.Chain }
 
 // DaemonChainDeps configures a DaemonChain.
 type DaemonChainDeps struct {
-	// DaemonTokens resolves daemons' `rlat_` credentials (uncached).
-	// Required.
-	DaemonTokens auth.AccessTokenIntrospector
+	// Auth authenticates daemon credentials. Required.
+	Auth *DaemonAuth
 	// Logger feeds the chain's recovery and logging layers; nil is
 	// slog.Default().
 	Logger *slog.Logger
@@ -71,16 +83,15 @@ type DaemonChainDeps struct {
 //     what it sends, so the chain's 4 MiB default would end a stream mid-call
 //     on a large result. Bounding it needs a size both sides agree on first.
 func NewDaemonChain(deps DaemonChainDeps) (*DaemonChain, error) {
-	daemonAuth, err := interceptors.NewDaemonAuthInterceptor(deps.DaemonTokens)
-	if err != nil {
-		return nil, fmt.Errorf("daemon chain: %w", err)
+	if deps.Auth == nil {
+		return nil, errors.New("daemon chain: DaemonChainDeps.Auth is required")
 	}
 	trace, err := newDaemonTraceInterceptor()
 	if err != nil {
 		return nil, fmt.Errorf("daemon chain: %w", err)
 	}
 	chain, err := serverkit.NewChain(serverkit.ChainDeps{
-		Auth:   serverkit.AuthFor(DaemonAudience, daemonAuth),
+		Auth:   deps.Auth.Authenticator,
 		Logger: deps.Logger,
 		Trace:  trace,
 		Audit:  serverkit.NoAudit,
@@ -114,8 +125,8 @@ func newDaemonTraceInterceptor() (*otelconnect.Interceptor, error) {
 	return otelconnect.NewInterceptor()
 }
 
-// DaemonListener is the listener daemons dial: ToolsDaemonService's
-// bidirectional streams, served through a DaemonChain.
+// DaemonListener is the listener daemons dial: the daemon-audience services
+// (ToolsDaemonService's bidirectional streams), served through a DaemonChain.
 type DaemonListener struct{ *serverkit.Listener }
 
 // DaemonListenerDeps configures a DaemonListener.
@@ -130,8 +141,10 @@ type DaemonListenerDeps struct {
 
 	// Chain authenticates every call. Required.
 	Chain *DaemonChain
-	// ToolsDaemonService is what it serves. Required.
-	ToolsDaemonService *tools_daemon.Service
+	// Routes is what it serves: the daemon-audience route set (internal/app's
+	// generated DaemonRoutes). serverkit refuses a service of any other
+	// audience. Required.
+	Routes serverkit.Routes
 	// Logger receives the listener's lines and its drain phase; nil is
 	// slog.Default().
 	Logger *slog.Logger
@@ -158,8 +171,8 @@ func NewDaemonListener(deps DaemonListenerDeps) (*DaemonListener, error) {
 	if deps.Chain == nil {
 		errs = append(errs, errors.New("DaemonListenerDeps.Chain is required"))
 	}
-	if deps.ToolsDaemonService == nil {
-		errs = append(errs, errors.New("DaemonListenerDeps.ToolsDaemonService is required"))
+	if deps.Routes == nil {
+		errs = append(errs, errors.New("DaemonListenerDeps.Routes is required"))
 	}
 	if len(errs) > 0 {
 		return nil, fmt.Errorf("daemon listener: %w", errors.Join(errs...))
@@ -169,14 +182,10 @@ func NewDaemonListener(deps DaemonListenerDeps) (*DaemonListener, error) {
 	cfg.TLSCertPath, cfg.TLSKeyPath = deps.TLSCertFile, deps.TLSKeyFile
 	cfg.RedialOnDrain = []string{reliantv1connect.ToolsDaemonServiceName}
 
-	svc := deps.ToolsDaemonService
 	l, err := serverkit.NewListener(serverkit.ListenerDeps{
 		Config: cfg,
 		Chain:  deps.Chain.Chain,
-		Routes: serverkit.RoutesFunc(func(mux *http.ServeMux, opts ...connect.HandlerOption) []string {
-			svc.Register(mux, opts...)
-			return []string{reliantv1connect.ToolsDaemonServiceName}
-		}),
+		Routes: deps.Routes,
 		Logger: deps.Logger,
 		Edge:   securityHeaders,
 	})
