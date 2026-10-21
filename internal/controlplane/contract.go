@@ -95,6 +95,27 @@ type Service interface {
 	// refusals are a *RunResumeError carrying the control plane's
 	// client-safe message.
 	ResumeDaemonForRun(ctx context.Context, userID, daemonID string) (resumed bool, err error)
+
+	// UpsertAutopilotReceiver creates or replaces the control plane's alert
+	// receiver for one Autopilot automation (a webhook trigger declared
+	// `source: alerting`), in its owner's primary organization: every alert of
+	// the scoped environments that passes the receiver's default filter is
+	// delivered to r.URL with r.Token as the bearer. Signed with this
+	// process's internal-service identity (Deps.Sign).
+	//
+	// Errors: ErrAutopilotUnsupported when the control plane has no such
+	// service or this adapter cannot sign; otherwise an *AutopilotError, whose
+	// Reason is ReasonAutopilotNoOrg for an owner with no organization.
+	UpsertAutopilotReceiver(ctx context.Context, r AutopilotReceiver) error
+
+	// DeleteAutopilotReceiver removes one automation's receiver. Removing
+	// one that does not exist succeeds.
+	DeleteAutopilotReceiver(ctx context.Context, activationID string) error
+
+	// ListAutopilotReceivers returns the activation id of every autopilot
+	// receiver the control plane holds, across every organization, for the
+	// reconcile sweep.
+	ListAutopilotReceivers(ctx context.Context) ([]string, error)
 }
 
 // Deps configures the adapter.

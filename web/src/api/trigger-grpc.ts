@@ -249,6 +249,12 @@ export interface Trigger {
    * server has no PUBLIC_URL; see webhookUrlForDisplay.
    */
   webhookUrl?: string;
+  /**
+   * Webhook triggers: Reliant delivers to it itself (a `source: alerting`
+   * webhook on a hosted deployment), so there is no URL or token to configure
+   * and rotating re-connects rather than showing a token.
+   */
+  webhookManaged: boolean;
 }
 
 /** The trigger's schedule, or undefined for any other kind of source. */
@@ -451,6 +457,7 @@ export function triggerFromProto(proto: ProtoTrigger): Trigger {
     connectionId: proto.connectionId || undefined,
     filter: proto.filter || undefined,
     webhookUrl: proto.webhookUrl || undefined,
+    webhookManaged: proto.webhookManaged,
   };
 }
 

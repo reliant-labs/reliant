@@ -285,6 +285,21 @@ func (s *Service) RotateWebhookToken(
 	if trigger.Kind != core.TriggerKindWebhook {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("only a webhook trigger has a token"))
 	}
+	if s.managed(trigger) {
+		// The new token goes to the sender, not to the caller. A paused
+		// trigger has no receiver to give it to: its token is simply
+		// replaced, and the next enable provisions a fresh one anyway.
+		if trigger.Enabled {
+			err = s.provisionAlerting(ctx, trigger)
+		} else {
+			_, err = s.issueWebhookToken(ctx, trigger.ID)
+		}
+		if err != nil {
+			return nil, err
+		}
+		logging.InfoContext(ctx, "managed webhook trigger re-provisioned with a new token", "trigger_id", trigger.ID, "user_id", trigger.UserID)
+		return connect.NewResponse(&reliantv1.RotateWebhookTokenResponse{Trigger: s.render(ctx, trigger)}), nil
+	}
 	cred, err := s.issueWebhookToken(ctx, trigger.ID)
 	if err != nil {
 		return nil, err

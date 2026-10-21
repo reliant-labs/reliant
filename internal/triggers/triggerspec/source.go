@@ -51,6 +51,11 @@ func FromDefinition(def *reliantv1.TriggerDefinition) (*Source, error) {
 	case *reliantv1.TriggerDefinition_Schedule:
 		return fromSchedule(src.Schedule)
 	case *reliantv1.TriggerDefinition_Webhook:
+		if strings.TrimSpace(src.Webhook.GetSource()) != "" {
+			// A provisioned sender is reconciled against the activations of
+			// declared triggers; an ad hoc trigger has nothing to reconcile.
+			return nil, &ConfigError{Field: "webhook.source", Reason: "only a workflow's declared trigger can name a source; declare it in the workflow's triggers: block and enable that"}
+		}
 		return fromWebhook(src.Webhook)
 	case *reliantv1.TriggerDefinition_Integration:
 		if len(src.Integration.GetMatchInput()) > 0 {
@@ -163,7 +168,17 @@ func OverlapFromProto(p reliantv1.TriggerOverlapPolicy) string {
 // WebhookConfigFromProto validates a WebhookSource.
 func WebhookConfigFromProto(src *reliantv1.WebhookSource) (core.WebhookConfig, error) {
 	var cfg core.WebhookConfig
-	if src == nil || src.Hmac == nil {
+	if src == nil {
+		return cfg, nil
+	}
+	switch s := strings.ToLower(strings.TrimSpace(src.Source)); s {
+	case "":
+	case core.WebhookSourceAlerting:
+		cfg.Source = s
+	default:
+		return cfg, &ConfigError{Field: "webhook.source", Reason: `must be empty (a sender you configure) or "alerting", got ` + src.Source}
+	}
+	if src.Hmac == nil {
 		return cfg, nil
 	}
 	h := core.WebhookHMACConfig{

@@ -243,7 +243,14 @@ type Trigger struct {
 type WebhookConfig struct {
 	// HMAC, when set, accepts deliveries signed with the trigger's secret.
 	HMAC *WebhookHMACConfig `json:"hmac,omitempty"`
+	// Source names the sender Reliant wires itself (WebhookSourceAlerting),
+	// or "" for one the user configures.
+	Source string `json:"source,omitempty"`
 }
+
+// WebhookSourceAlerting is a webhook the control plane's alerting delivers
+// to: Reliant provisions the sender, and its token is never shown.
+const WebhookSourceAlerting = "alerting"
 
 // WebhookHMACConfig describes how a sender signs a body.
 type WebhookHMACConfig struct {

@@ -72,8 +72,13 @@ inputs:
 
 triggers:
   - name: alertmanager
-    description: Alertmanager's webhook_config POSTs here (Authorization Bearer, with the token shown once at Enable)
-    webhook: {}
+    description: >-
+      Your organization's alerts. On Reliant's hosted platform, Enable connects this automation to every alert of
+      this project's environments that is critical or error (and to the platform's new and regressed issue alerts),
+      with no token to copy and no route to write; disabling disconnects it. Self-hosted, it is a plain
+      Alertmanager webhook_config target (Authorization Bearer, with the token shown once at Enable).
+    webhook:
+      source: alerting
     # One run per alert group and status within the window: a repeat_interval re-send of a firing group does
     # nothing, and its resolved notification is a different key. Add the alerts' fingerprints so a group whose
     # membership changed is a new event.

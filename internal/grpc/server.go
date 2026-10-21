@@ -87,6 +87,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/toolexec/transport"
+	"github.com/reliant-labs/reliant/internal/triggers"
 	"github.com/reliant-labs/reliant/internal/workflow"
 	"github.com/reliant-labs/reliant/internal/worktreesweep"
 	"github.com/reliant-labs/reliant/pkg/config"
@@ -250,6 +251,12 @@ type Config struct {
 	// receives no events for has no directory, and nil (none at all) leaves
 	// it answering Unavailable.
 	TriggerSenders map[string]trigger.SenderDirectory
+
+	// TriggerAlerting wires the control plane's alert receivers of webhook
+	// triggers declared `source: alerting` (triggers.Alerting). Optional: nil
+	// — no control plane, or no internal-service secret to call it with —
+	// leaves those triggers plain webhooks.
+	TriggerAlerting *triggers.Alerting
 }
 
 // validate fails naming every required collaborator cfg lacks.
@@ -693,6 +700,11 @@ func NewAPI(cfg *Config) (*API, error) {
 	triggerDeps.Syncer, triggerDeps.Fires = trigger.TemporalBackend(cfg.TemporalClient, database, cfg.SharedTaskQueue, polled)
 	if cfg.ControlPlane.Hosted() {
 		triggerDeps.ControlPlane = controlplane.NewInstrumented(controlplane.Deps{BaseURL: cfg.ControlPlane.URL})
+	}
+	// Assigned only when set: a nil *triggers.Alerting in the interface
+	// field would be a non-nil interface.
+	if cfg.TriggerAlerting != nil {
+		triggerDeps.Alerting = cfg.TriggerAlerting
 	}
 	triggerService, err := trigger.New(triggerDeps)
 	if err != nil {

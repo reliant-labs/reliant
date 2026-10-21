@@ -413,6 +413,16 @@ export function WebhookCredentialPanel({ trigger, credential: initial }: { trigg
   const url = webhookUrlForDisplay(trigger.webhookUrl, origin);
   const tokenUrl = credential ? webhookUrlForDisplay(credential.url, origin) : "";
 
+  // Reliant wired the sender itself (a `source: alerting` webhook on a hosted
+  // deployment): there is nothing to copy, and no token to rotate by hand.
+  if (trigger.webhookManaged) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        Connected to your organization&apos;s alerts. There is no URL or token to set up; disabling this disconnects it.
+      </p>
+    );
+  }
+
   const rotate = async () => {
     setRotating(true);
     setError(null);

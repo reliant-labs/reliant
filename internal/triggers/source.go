@@ -44,7 +44,7 @@ func sourceToProto(t *core.Trigger, out *reliantv1.Trigger) error {
 		if err := unmarshalConfig(t, &cfg); err != nil {
 			return err
 		}
-		src := &reliantv1.WebhookSource{}
+		src := &reliantv1.WebhookSource{Source: cfg.Source}
 		if cfg.HMAC != nil {
 			src.Hmac = &reliantv1.WebhookHmac{
 				Header:    cfg.HMAC.Header,

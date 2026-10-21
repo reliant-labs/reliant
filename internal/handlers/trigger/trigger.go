@@ -104,7 +104,14 @@ func (s *Service) CreateTrigger(
 	// trigger with no token could never be called.
 	var cred *reliantv1.WebhookCredential
 	if trigger.Kind == core.TriggerKindWebhook {
-		cred, err = s.writeWebhookCredentials(ctx, trigger, def, true)
+		// A managed webhook's token goes to its sender, never to the caller:
+		// none is issued here, and Provision issues the one the control plane
+		// gets. Until then (a trigger created paused) no token opens it.
+		managed := s.managed(trigger)
+		cred, err = s.writeWebhookCredentials(ctx, trigger, def, !managed)
+		if err == nil && managed && trigger.Enabled {
+			err = s.provisionAlerting(ctx, trigger)
+		}
 		if err != nil {
 			if delErr := s.deps.Repo.DeleteTrigger(ctx, trigger.ID); delErr != nil {
 				logging.ErrorContext(ctx, "failed to remove a webhook trigger whose credentials could not be written",
@@ -252,6 +259,18 @@ func (s *Service) UpdateTrigger(
 		if _, err := s.writeWebhookCredentials(ctx, updated, def, false); err != nil {
 			return nil, err
 		}
+		// A managed webhook follows the edit: re-provisioned while enabled
+		// (its project, and so its scope, may have changed), removed while
+		// paused. A failed provision leaves the receiver it already had.
+		if s.managed(updated) {
+			if updated.Enabled {
+				if err := s.provisionAlerting(ctx, updated); err != nil {
+					return nil, err
+				}
+			} else {
+				s.retireAlerting(ctx, updated.ID)
+			}
+		}
 	}
 	// Unlike create, a failed converge here is not rolled back: the row is
 	// the truth and is now correct, and SyncAll repairs Temporal at the next
@@ -293,6 +312,9 @@ func (s *Service) DeleteTrigger(
 	if err := s.deps.Repo.DeleteTrigger(ctx, trigger.ID); err != nil {
 		return nil, triggerDBError("delete trigger", err)
 	}
+	if s.managed(trigger) {
+		s.retireAlerting(ctx, trigger.ID)
+	}
 	s.grants.releaseIfUnused(ctx, trigger.UserID, trigger.DaemonID)
 	return connect.NewResponse(&reliantv1.DeleteTriggerResponse{}), nil
 }
@@ -333,6 +355,20 @@ func (s *Service) SetTriggerEnabled(
 	// poll schedule.
 	if err := s.sync(ctx, trigger.Kind, trigger.ID); err != nil {
 		return nil, triggerSyncError(err)
+	}
+	// A managed webhook is connected while enabled and only then. Resuming
+	// one that cannot be connected is refused, and the row put back: an
+	// enabled trigger nothing delivers to looks working and is not.
+	if s.managed(trigger) {
+		if !trigger.Enabled {
+			s.retireAlerting(ctx, trigger.ID)
+		} else if err := s.provisionAlerting(ctx, trigger); err != nil {
+			if revertErr := s.deps.Repo.SetTriggerEnabled(ctx, trigger.ID, false); revertErr != nil {
+				logging.ErrorContext(ctx, "could not pause a trigger whose alerts could not be connected",
+					"trigger_id", trigger.ID, "error", err, "revert_error", revertErr)
+			}
+			return nil, err
+		}
 	}
 	if trigger.Enabled {
 		s.grants.ensure(ctx, trigger.UserID, trigger.DaemonID)
@@ -920,6 +956,7 @@ func (s *Service) renderFirings(ctx context.Context, t *core.Trigger, firings []
 	case core.TriggerKindWebhook:
 		webhookURL := triggers.WebhookURL(s.deps.PublicURL, t.ID)
 		proto.WebhookUrl = &webhookURL
+		proto.WebhookManaged = s.managed(t)
 	case core.TriggerKindIntegration:
 		// A provider whose webhook each user sets on their own resources
 		// (Twilio's per-number "A message comes in" URL) needs the user to

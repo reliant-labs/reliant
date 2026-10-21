@@ -186,3 +186,18 @@ func TestBracesInStringLiteralsAreEvaluatedInInputs(t *testing.T) {
 	assert.Equal(t, true, out["is_json"])
 	assert.Equal(t, "{\"a\":1}}", out["folded"])
 }
+
+// A declared webhook may name the sender Reliant wires (alerting); anything
+// else is refused, and an ad hoc definition may name none.
+func TestWebhookSource(t *testing.T) {
+	src, err := FromWorkflowTrigger(&reliantv1.WorkflowTrigger{Source: &reliantv1.WorkflowTrigger_Webhook{Webhook: &reliantv1.WebhookSource{Source: " Alerting "}}})
+	if err != nil || string(src.Config) != `{"source":"alerting"}` {
+		t.Fatalf("alerting: %s, %v", src.Config, err)
+	}
+	if _, err := FromWorkflowTrigger(&reliantv1.WorkflowTrigger{Source: &reliantv1.WorkflowTrigger_Webhook{Webhook: &reliantv1.WebhookSource{Source: "pagerduty"}}}); err == nil {
+		t.Fatal("an unknown source was accepted")
+	}
+	if _, err := FromDefinition(&reliantv1.TriggerDefinition{Source: &reliantv1.TriggerDefinition_Webhook{Webhook: &reliantv1.WebhookSource{Source: "alerting"}}}); err == nil {
+		t.Fatal("an ad hoc webhook named a source")
+	}
+}

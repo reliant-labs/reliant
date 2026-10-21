@@ -45,6 +45,15 @@ type Reconciler struct {
 	store     ProjectionStore
 	workflows WorkflowResolver
 	syncer    ProjectionSyncer
+	alerting  *Alerting
+}
+
+// WithAlerting also converges the control plane's alert receivers onto the
+// `source: alerting` activations on every pass (Alerting.Sweep). nil, a
+// deployment with no control plane, sweeps nothing.
+func (r *Reconciler) WithAlerting(a *Alerting) *Reconciler {
+	r.alerting = a
+	return r
 }
 
 // NewReconciler builds a reconciler. syncer may be nil in a deployment with
@@ -131,6 +140,19 @@ func (r *Reconciler) Run(ctx context.Context) {
 		} else if report.Updated > 0 {
 			logging.InfoContext(ctx, "trigger declarations re-projected",
 				"checked", report.Checked, "updated", report.Updated, "broken", report.Broken)
+		}
+		// After the projections: an activation whose declaration just became
+		// `source: alerting` is projected as one before its receiver is
+		// reconciled.
+		if r.alerting != nil {
+			rep, err := r.alerting.Sweep(ctx)
+			if err != nil {
+				logging.WarnContext(ctx, "alert receiver sweep had failures; the next pass retries",
+					"receivers", rep.Receivers, "removed", rep.Removed, "provisioned", rep.Provisioned, "error", err)
+			} else if rep.Removed+rep.Provisioned > 0 {
+				logging.InfoContext(ctx, "alert receivers reconciled",
+					"receivers", rep.Receivers, "removed", rep.Removed, "provisioned", rep.Provisioned)
+			}
 		}
 		select {
 		case <-ctx.Done():

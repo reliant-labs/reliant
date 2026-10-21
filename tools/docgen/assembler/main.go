@@ -401,7 +401,7 @@ triggers:
   - name: deploy-hook
     webhook: {}                     # POST <api>/hooks/<trigger id>; add hmac: {...} to verify signatures
   - name: alertmanager
-    webhook: {}
+    webhook: {source: alerting}     # hosted: Enable connects the org's alerts, no token to copy; self-hosted: a plain webhook
     dedupe_key: "{{ trigger.payload.body.groupKey }}:{{ trigger.payload.body.status }}"   # see below
     dedupe_window: 4h
   - name: after-review-fails

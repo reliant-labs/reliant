@@ -855,7 +855,23 @@ type WebhookSource struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Optional HMAC verification for senders that sign their deliveries.
 	// Configuring it adds a way in; it does not disable the token.
-	Hmac          *WebhookHmac `protobuf:"bytes,1,opt,name=hmac,proto3" json:"hmac,omitempty"`
+	Hmac *WebhookHmac `protobuf:"bytes,1,opt,name=hmac,proto3" json:"hmac,omitempty"`
+	// Who delivers to this webhook, when Reliant wires the sender itself.
+	//
+	//   ""          whatever the user points at it: Enable shows the URL and the
+	//               token once, and the user configures the sender.
+	//   "alerting"  the control plane's alerting (Alertmanager). On a hosted
+	//               deployment, enabling the activation provisions an Autopilot
+	//               receiver in the owner's organization that delivers every
+	//               alert of the project's environments that passes its filter,
+	//               and disabling or deleting it removes the receiver. The token
+	//               goes to the control plane and is never shown. A deployment
+	//               with no control plane treats it as "": a plain webhook.
+	//
+	// Only a workflow's declared trigger may set it; an ad hoc trigger is
+	// refused, because Reliant reconciles provisioned receivers against
+	// activations.
+	Source        string `protobuf:"bytes,2,opt,name=source,proto3" json:"source,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -895,6 +911,13 @@ func (x *WebhookSource) GetHmac() *WebhookHmac {
 		return x.Hmac
 	}
 	return nil
+}
+
+func (x *WebhookSource) GetSource() string {
+	if x != nil {
+		return x.Source
+	}
+	return ""
 }
 
 // WebhookHmac describes how a sender signs a webhook body. The signature is
@@ -1453,6 +1476,11 @@ type Trigger struct {
 	// UNSPECIFIED on a stored trigger: an activation made before identities
 	// existed reads as OWNER.
 	ActingIdentity ActingIdentity `protobuf:"varint,28,opt,name=acting_identity,json=actingIdentity,proto3,enum=reliant.v1.ActingIdentity" json:"acting_identity,omitempty"`
+	// Read-only: Reliant delivers to this webhook itself (WebhookSource.source
+	// on a deployment that can provision it), so there is no URL or token for
+	// the user to configure, and RotateWebhookToken re-provisions rather than
+	// returning a token.
+	WebhookManaged bool `protobuf:"varint,29,opt,name=webhook_managed,json=webhookManaged,proto3" json:"webhook_managed,omitempty"`
 	unknownFields  protoimpl.UnknownFields
 	sizeCache      protoimpl.SizeCache
 }
@@ -1696,6 +1724,13 @@ func (x *Trigger) GetActingIdentity() ActingIdentity {
 		return x.ActingIdentity
 	}
 	return ActingIdentity_ACTING_IDENTITY_UNSPECIFIED
+}
+
+func (x *Trigger) GetWebhookManaged() bool {
+	if x != nil {
+		return x.WebhookManaged
+	}
+	return false
 }
 
 type isTrigger_Source interface {
@@ -2451,7 +2486,8 @@ type RotateWebhookTokenResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The trigger after the rotation.
 	Trigger *Trigger `protobuf:"bytes,1,opt,name=trigger,proto3" json:"trigger,omitempty"`
-	// The new token, which is never shown again.
+	// The new token, which is never shown again. Unset for a managed webhook
+	// (Trigger.webhook_managed): the new token went to the sender directly.
 	Webhook       *WebhookCredential `protobuf:"bytes,2,opt,name=webhook,proto3" json:"webhook,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -3252,6 +3288,8 @@ type WorkflowTriggerResult struct {
 	// The activation, for ENABLED, RESUMED, UPDATED and ALREADY_ENABLED.
 	Activation *Trigger `protobuf:"bytes,4,opt,name=activation,proto3" json:"activation,omitempty"`
 	// A webhook trigger's token, for ENABLED only. Shown once, never again.
+	// Unset for a managed webhook (Trigger.webhook_managed): Reliant gave the
+	// token to the sender itself.
 	Webhook *WebhookCredential `protobuf:"bytes,5,opt,name=webhook,proto3" json:"webhook,omitempty"`
 	// Facts worth knowing about an enable that went through: a value that could
 	// not be checked for reachability because the integration errored, or one
@@ -4364,9 +4402,10 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\aoverlap\x18\x04 \x01(\x0e2 .reliant.v1.TriggerOverlapPolicyR\aoverlap\x12*\n" +
 	"\x0ecatchup_window\x18\x05 \x01(\tH\x01R\rcatchupWindow\x88\x01\x01B\v\n" +
 	"\t_intervalB\x11\n" +
-	"\x0f_catchup_window\"<\n" +
+	"\x0f_catchup_window\"T\n" +
 	"\rWebhookSource\x12+\n" +
-	"\x04hmac\x18\x01 \x01(\v2\x17.reliant.v1.WebhookHmacR\x04hmac\"w\n" +
+	"\x04hmac\x18\x01 \x01(\v2\x17.reliant.v1.WebhookHmacR\x04hmac\x12\x16\n" +
+	"\x06source\x18\x02 \x01(\tR\x06source\"w\n" +
 	"\vWebhookHmac\x12\x16\n" +
 	"\x06header\x18\x01 \x01(\tR\x06header\x12\x1c\n" +
 	"\talgorithm\x18\x02 \x01(\tR\talgorithm\x12\x16\n" +
@@ -4406,7 +4445,7 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\vInputsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\b\n" +
-	"\x06source\"\x96\v\n" +
+	"\x06source\"\xbf\v\n" +
 	"\aTrigger\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1d\n" +
@@ -4445,7 +4484,8 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\vwebhook_url\x18\x19 \x01(\tH\x05R\n" +
 	"webhookUrl\x88\x01\x01\x12.\n" +
 	"\x10workflow_trigger\x18\x1a \x01(\tH\x06R\x0fworkflowTrigger\x88\x01\x01\x12C\n" +
-	"\x0facting_identity\x18\x1c \x01(\x0e2\x1a.reliant.v1.ActingIdentityR\x0eactingIdentity\x1a:\n" +
+	"\x0facting_identity\x18\x1c \x01(\x0e2\x1a.reliant.v1.ActingIdentityR\x0eactingIdentity\x12'\n" +
+	"\x0fwebhook_managed\x18\x1d \x01(\bR\x0ewebhookManaged\x1a:\n" +
 	"\fPresetsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1aQ\n" +
