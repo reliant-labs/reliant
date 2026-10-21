@@ -2,8 +2,10 @@ package main
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"regexp"
 	"sort"
@@ -18,8 +20,14 @@ import (
 // every core. More cores is the only lever, so the packages are split across
 // several runners (the backend matrix in .github/workflows/pr-ci.yml).
 //
-// Two things decide a shard's wall time, and both are handled here:
+// Three things decide the lane's cost and wall time, and all are handled here:
 //
+//   - How many runners. Every runner costs its setup and a cache restore
+//     (~2 minutes before the first test), and every runner is a slot in the
+//     org's concurrent-job limit that another PR is queued for. So a
+//     selection gets as FEW shards as keep each under shardTarget of weight,
+//     at most maxShards: a PR that reaches a handful of packages runs one
+//     shard, and the whole module runs four.
 //   - Balance. Splitting the package list round-robin put every DB-heavy
 //     package in one shard (179s vs 527s, measured). Packages are instead
 //     assigned longest-first to the least-loaded shard (LPT), by their
@@ -28,6 +36,10 @@ import (
 //     internal/workflow/runtime/activities/handlers (~100s) started 440s into a
 //     540s run and was the whole tail. Each shard lists its packages heaviest
 //     first, so the long poles start as soon as they are compiled.
+//
+// The assignment is computed over the SELECTION, not over the whole module:
+// every shard restores the same build cache (pr-ci.yml, "ONE GO BUILD
+// CACHE"), so nothing ties a package to a fixed shard number any more.
 //
 // Correctness does not depend on the weights. Every package goes to exactly
 // one shard whatever the weights say (TestShardPartitionsEveryPackage); a
@@ -49,19 +61,57 @@ const perPackageCost = 2.0
 // to the repository root.
 const weightsFile = "tools/test-affected/go-test-weights.tsv"
 
-// shardPackages returns the packages shard index (1-based) of total runs,
-// heaviest first. pkgs is every package in the lane; weights maps a package
-// to its measured seconds.
-func shardPackages(pkgs []string, weights map[string]float64, index, total int) ([]string, error) {
-	if total < 1 || index < 1 || index > total {
-		return nil, fmt.Errorf("shard %d/%d: want 1 <= index <= total", index, total)
+// maxShards caps the lane's runners. The whole module (~1400 units of
+// weight) fills four; a fifth runner would wait on the slowest package
+// (~136s by itself) rather than shorten the lane.
+const maxShards = 4
+
+// shardTarget is the weight one shard is sized for. go test runs a shard's
+// packages four at a time, so a shard of this weight measured ~120-180s of
+// `go test` on a runner — under the five-minute PR budget with setup and
+// cache restore — and the whole module divides into maxShards of it.
+const shardTarget = 360.0
+
+// shardCount is how many shards a selection of total weight needs: as few as
+// keep each under target, at least one, at most limit, and never more than
+// there are packages to put in them.
+func shardCount(total, target float64, limit, pkgs int) int {
+	k := int(math.Ceil(total / target))
+	k = min(k, limit, pkgs)
+	return max(k, 1)
+}
+
+// planShards splits pkgs into shardCount shards, each heaviest first.
+// weights maps a package to its measured seconds. An empty selection has no
+// shards.
+func planShards(pkgs []string, weights map[string]float64, target float64, limit int) [][]string {
+	items := weighItems(pkgs, weights)
+	if len(items) == 0 {
+		return nil
 	}
-	type item struct {
-		pkg string
-		w   float64
+	var total float64
+	for _, it := range items {
+		total += it.w
 	}
+	k := shardCount(total, target, limit, len(items))
+	shards := make([][]string, k)
+	for i := 1; i <= k; i++ {
+		shards[i-1] = assign(items, i, k)
+	}
+	return shards
+}
+
+type weighedPkg struct {
+	pkg string
+	w   float64
+}
+
+// weighItems dedupes pkgs, weighs each (measured seconds plus
+// perPackageCost) and sorts them heaviest first; the package path breaks ties
+// so every runner, given the same input, computes the same assignment.
+func weighItems(pkgs []string, weights map[string]float64) []weighedPkg {
 	seen := map[string]bool{}
-	items := make([]item, 0, len(pkgs))
+	items := make([]weighedPkg, 0, len(pkgs))
 	for _, p := range pkgs {
 		if p == "" || seen[p] {
 			continue
@@ -71,16 +121,20 @@ func shardPackages(pkgs []string, weights map[string]float64, index, total int) 
 		if !ok {
 			w = defaultShardWeight
 		}
-		items = append(items, item{p, w + perPackageCost})
+		items = append(items, weighedPkg{p, w + perPackageCost})
 	}
-	// Heaviest first; the package path breaks ties so every runner, given the
-	// same input, computes the same assignment.
 	sort.Slice(items, func(i, j int) bool {
 		if items[i].w != items[j].w {
 			return items[i].w > items[j].w
 		}
 		return items[i].pkg < items[j].pkg
 	})
+	return items
+}
+
+// assign deals heaviest-first items onto total shards, each to the
+// least-loaded (LPT), and returns shard index's (1-based), heaviest first.
+func assign(items []weighedPkg, index, total int) []string {
 	load := make([]float64, total)
 	var out []string
 	for _, it := range items {
@@ -95,7 +149,7 @@ func shardPackages(pkgs []string, weights map[string]float64, index, total int) 
 			out = append(out, it.pkg)
 		}
 	}
-	return out, nil
+	return out
 }
 
 // readWeights parses go-test-weights.tsv: "<seconds>\t<package>" per line,
@@ -178,16 +232,31 @@ func writeWeights(w io.Writer, weights map[string]float64) error {
 	return nil
 }
 
-// runShard implements `test-affected shard -index K -total N`: it reads the
-// lane's packages from stdin (one per line, e.g. from `go list ./...`) and
-// prints shard K's, heaviest first.
+// shardMatrix is the GitHub Actions matrix the backend job expands.
+type shardMatrix struct {
+	Include []shardEntry `json:"include"`
+}
+
+type shardEntry struct {
+	Shard      int    `json:"shard"`
+	ShardTotal int    `json:"shard_total"`
+	Packages   string `json:"packages"` // space-separated, heaviest first
+}
+
+// runShard implements `test-affected shard`: it reads the selected packages
+// from stdin (one per line) and prints the backend job's matrix as one line
+// of JSON, {"include":[{shard,shard_total,packages}]}. An empty selection
+// prints nothing: the lane does not run.
 func runShard(args []string, stdin io.Reader, stdout io.Writer) error {
 	fs := newFlagSet("shard")
-	index := fs.Int("index", 0, "this shard, 1-based")
-	total := fs.Int("total", 0, "number of shards")
+	limit := fs.Int("max", maxShards, "most shards to use")
+	target := fs.Float64("target", shardTarget, "weight one shard is sized for")
 	weightsPath := fs.String("weights", weightsFile, "go-test-weights.tsv to balance by")
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+	if *limit < 1 || *target <= 0 {
+		return fmt.Errorf("want -max >= 1 and -target > 0, got %d and %v", *limit, *target)
 	}
 	weights := map[string]float64{}
 	if f, err := os.Open(*weightsPath); err == nil {
@@ -209,19 +278,20 @@ func runShard(args []string, stdin io.Reader, stdout io.Writer) error {
 	if err := sc.Err(); err != nil {
 		return err
 	}
-	if len(pkgs) == 0 {
-		return fmt.Errorf("no packages on stdin")
+	shards := planShards(pkgs, weights, *target, *limit)
+	if len(shards) == 0 {
+		return nil
 	}
-	out, err := shardPackages(pkgs, weights, *index, *total)
+	var m shardMatrix
+	for i, s := range shards {
+		m.Include = append(m.Include, shardEntry{Shard: i + 1, ShardTotal: len(shards), Packages: strings.Join(s, " ")})
+	}
+	b, err := json.Marshal(m)
 	if err != nil {
 		return err
 	}
-	for _, p := range out {
-		if _, err := fmt.Fprintln(stdout, p); err != nil {
-			return err
-		}
-	}
-	return nil
+	_, err = fmt.Fprintln(stdout, string(b))
+	return err
 }
 
 // runWeights implements `test-affected weights`: `go test` output on stdin,

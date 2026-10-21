@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"os"
 	"sort"
@@ -30,28 +31,66 @@ func TestShardPartitionsEveryPackage(t *testing.T) {
 		"unknown": {"example.com/m/gone": 500}, // a weight for a package that no longer exists
 	}
 	for name, weights := range weightSets {
-		for total := 1; total <= 5; total++ {
-			t.Run(fmt.Sprintf("%s/%d", name, total), func(t *testing.T) {
-				seen := map[string]int{}
-				for index := 1; index <= total; index++ {
-					got, err := shardPackages(pkgs, weights, index, total)
-					if err != nil {
-						t.Fatal(err)
+		for _, target := range []float64{1, 10, 60, 360, 1e9} {
+			for limit := 1; limit <= 5; limit++ {
+				t.Run(fmt.Sprintf("%s/target=%v/max=%d", name, target, limit), func(t *testing.T) {
+					shards := planShards(pkgs, weights, target, limit)
+					if len(shards) < 1 || len(shards) > limit {
+						t.Fatalf("%d shards, want 1..%d", len(shards), limit)
 					}
-					for _, p := range got {
-						seen[p]++
+					seen := map[string]int{}
+					for i, s := range shards {
+						if len(s) == 0 {
+							t.Errorf("shard %d/%d is empty: a runner launched to run nothing", i+1, len(shards))
+						}
+						for _, p := range s {
+							seen[p]++
+						}
 					}
-				}
-				for _, p := range pkgs {
-					if seen[p] != 1 {
-						t.Errorf("%s is in %d shards, want exactly 1", p, seen[p])
+					for _, p := range pkgs {
+						if seen[p] != 1 {
+							t.Errorf("%s is in %d shards, want exactly 1", p, seen[p])
+						}
 					}
-				}
-				if len(seen) != len(pkgs) {
-					t.Errorf("shards hold %d distinct packages, want %d", len(seen), len(pkgs))
-				}
-			})
+					if len(seen) != len(pkgs) {
+						t.Errorf("shards hold %d distinct packages, want %d", len(seen), len(pkgs))
+					}
+				})
+			}
 		}
+	}
+}
+
+// A small selection runs on one runner; only a large one pays for more. Each
+// extra shard is a runner's setup and cache restore, and a slot in the org's
+// concurrent-job limit.
+func TestShardCountFollowsTheSelectionsWeight(t *testing.T) {
+	weights := map[string]float64{"heavy": 300, "mid": 150}
+	cases := []struct {
+		name string
+		pkgs []string
+		want int
+	}{
+		{"nothing selected", nil, 0},
+		{"one light package", []string{"leaf"}, 1},
+		{"under one target", []string{"mid", "leaf"}, 1},                // 152+3 <= 360
+		{"just over one target", []string{"heavy", "mid"}, 2},           // 302+152 > 360
+		{"more weight than packages", []string{"heavy", "mid", "x"}, 2}, // 457 -> 2
+	}
+	for _, c := range cases {
+		if got := len(planShards(c.pkgs, weights, 360, 4)); got != c.want {
+			t.Errorf("%s: %d shards, want %d", c.name, got, c.want)
+		}
+	}
+	var many []string
+	for i := range 400 {
+		many = append(many, fmt.Sprintf("p%03d", i))
+	}
+	if got := len(planShards(many, nil, 360, 4)); got != 4 {
+		t.Errorf("the whole module: %d shards, want the cap of 4", got)
+	}
+	if got := shardCount(1e6, 1, 4, 2); got != 2 {
+		t.Errorf("shardCount with 2 packages = %d, want 2: a shard with no package is a wasted runner", got)
 	}
 }
 
@@ -64,23 +103,45 @@ func TestShardBalancesAndOrdersHeaviestFirst(t *testing.T) {
 		}
 		return sum
 	}
-	s1, _ := shardPackages(pkgs, weights, 1, 2)
-	s2, _ := shardPackages(pkgs, weights, 2, 2)
+	shards := planShards(pkgs, weights, 150, 2)
+	if len(shards) != 2 {
+		t.Fatalf("%d shards, want 2", len(shards))
+	}
+	s1, s2 := shards[0], shards[1]
 	if l1, l2 := load(s1), load(s2); l1 > 1.2*l2 || l2 > 1.2*l1 {
 		t.Errorf("unbalanced: %v=%.0f vs %v=%.0f", s1, l1, s2, l2)
 	}
-	for _, s := range [][]string{s1, s2} {
+	for _, s := range shards {
 		if !sort.SliceIsSorted(s, func(i, j int) bool { return weights[s[i]] > weights[s[j]] }) {
 			t.Errorf("shard %v is not heaviest first", s)
 		}
 	}
 }
 
-func TestShardRejectsBadIndex(t *testing.T) {
-	for _, c := range [][2]int{{0, 2}, {3, 2}, {1, 0}} {
-		if _, err := shardPackages([]string{"a"}, nil, c[0], c[1]); err == nil {
-			t.Errorf("shard %d/%d: want an error", c[0], c[1])
-		}
+// The workflow expands this output as the backend matrix verbatim.
+func TestShardPrintsTheBackendMatrix(t *testing.T) {
+	var out bytes.Buffer
+	in := strings.NewReader("example.com/m/a\nexample.com/m/b\n\n")
+	if err := runShard([]string{"-weights", "/nonexistent", "-target", "1", "-max", "4"}, in, &out); err != nil {
+		t.Fatal(err)
+	}
+	var m shardMatrix
+	if err := json.Unmarshal(out.Bytes(), &m); err != nil {
+		t.Fatalf("not JSON: %q: %v", out.String(), err)
+	}
+	if len(m.Include) != 2 || m.Include[0].Shard != 1 || m.Include[1].ShardTotal != 2 {
+		t.Fatalf("matrix = %+v, want shards 1/2 and 2/2", m)
+	}
+	if got := m.Include[0].Packages + " " + m.Include[1].Packages; !strings.Contains(got, "example.com/m/a") || !strings.Contains(got, "example.com/m/b") {
+		t.Errorf("packages %q lost one", got)
+	}
+
+	out.Reset()
+	if err := runShard(nil, strings.NewReader(""), &out); err != nil {
+		t.Fatal(err)
+	}
+	if out.Len() != 0 {
+		t.Errorf("an empty selection printed %q, want nothing (no Go lane)", out.String())
 	}
 }
 
