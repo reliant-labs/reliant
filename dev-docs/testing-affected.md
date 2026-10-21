@@ -194,7 +194,7 @@ waits for. Nothing a PR skips is deleted; it runs on the next push to main.
   10 GB, and per-shard caches did not fit it. Refresh the weights when a shard
   runs much longer than the others: `gh run view <run-id> --log | go run
   ./tools/test-affected weights > tools/test-affected/go-test-weights.tsv`.
-- **Other jobs**: `Lint (forge)` (`forge lint --no-fix` at the pinned forge,
+- **Other jobs**: `Lint (forge)` (`forge lint`, report-only, at the pinned forge,
   with forge's pinned golangci-lint and main's golangci-lint analysis cache;
   blocks; run it locally before pushing a Go or proto change), web
   lint/typecheck/build, vitest (`Web (vitest K/N)`, one shard for up to 150

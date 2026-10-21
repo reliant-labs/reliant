@@ -187,9 +187,7 @@ func UpdateTriggerEventPayload(ctx context.Context, db orm.Context, id string, p
 }
 
 func writeTriggerEvent(ctx context.Context, db orm.Context, row *TriggerEvent, what string, fields ...string) error {
-	// forge#1042: UpdateTriggerEventMasked takes no UpdateOption at this pin,
-	// so NoReadBack goes through the repo itself.
-	err := triggerEventRepo.UpdateMasked(ctx, db, row, fields, crud.NoReadBack())
+	err := UpdateTriggerEventMasked(ctx, db, row, fields, crud.NoReadBack())
 	if errors.Is(err, svcerr.ErrNotFound) {
 		return core.ErrTriggerEventNotFound
 	}

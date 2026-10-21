@@ -49,18 +49,15 @@ import (
 )
 
 // InsertBackgroundProcess stores a process record with the timestamps the
-// caller set. A builder insert rather than CreateBackgroundProcess, which
-// re-stamps updated_at over the caller's value (forge friction, being fixed
-// in forge).
+// caller set.
 func InsertBackgroundProcess(ctx context.Context, db orm.Context, p *core.BackgroundProcess) error {
-	_, err := db.Bun().NewInsert().Model(backgroundProcessFromCore(p)).Exec(ctx)
-	return err
+	return CreateBackgroundProcess(ctx, db, backgroundProcessFromCore(p))
 }
 
 // GetBackgroundProcess returns the process record, or "process not found".
 func GetBackgroundProcess(ctx context.Context, db orm.Context, id string) (*core.BackgroundProcess, error) {
 	row, err := GetBackgroundProcessByID(ctx, db, id)
-	if isNoRows(err) {
+	if errors.Is(err, orm.ErrNoRows) {
 		return nil, errors.New("process not found")
 	}
 	if err != nil {
@@ -106,8 +103,7 @@ func ListBackgroundProcesses(ctx context.Context, db orm.Context, f core.Backgro
 }
 
 // ListRunningBackgroundProcesses returns every record still RUNNING.
-// Unbounded: not the generated list, whose unlimited form is silently capped
-// at 10k rows (forge friction, being fixed in forge).
+// Unbounded.
 func ListRunningBackgroundProcesses(ctx context.Context, db orm.Context) ([]*core.BackgroundProcess, error) {
 	var rows []*BackgroundProcess
 	err := db.Bun().NewSelect().Model(&rows).

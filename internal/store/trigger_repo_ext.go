@@ -205,9 +205,7 @@ func SetTriggerWebhookSecret(ctx context.Context, db orm.Context, id string, sea
 
 // writeTrigger writes the named columns of a trigger and stamps updated_at.
 func writeTrigger(ctx context.Context, db orm.Context, row *Trigger, what string, fields ...string) error {
-	// forge#1042: UpdateTriggerMasked takes no UpdateOption at this pin, so
-	// NoReadBack goes through the repo itself.
-	err := triggerRepo.UpdateMasked(ctx, db, row, fields, crud.NoReadBack())
+	err := UpdateTriggerMasked(ctx, db, row, fields, crud.NoReadBack())
 	if errors.Is(err, svcerr.ErrNotFound) {
 		return core.ErrTriggerNotFound
 	}

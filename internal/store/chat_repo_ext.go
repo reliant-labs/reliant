@@ -37,7 +37,9 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -51,14 +53,10 @@ import (
 // chats_with_activity_repo_ext.go.
 
 // InsertChat stores a new chat with the caller's created_at, updated_at and
-// last_active. An unset State is IDLE (the column DEFAULT).
-//
-// forge friction: the generated CreateChat re-stamps updated_at to the time
-// of the write, overwriting the caller's value, so this inserts through bun
-// directly until forge's Create honours a caller-set updated_at.
+// last_active (the generated Create keeps a caller-set timestamp). An unset
+// State is IDLE (the column DEFAULT).
 func InsertChat(ctx context.Context, db orm.Context, chat *core.Chat) error {
-	row := chatToRow(chat)
-	if _, err := db.Bun().NewInsert().Model(row).Exec(ctx); err != nil {
+	if err := CreateChat(ctx, db, chatToRow(chat)); err != nil {
 		return fmt.Errorf("failed to create chat: %w", err)
 	}
 	return nil
@@ -76,8 +74,8 @@ var chatUpdateColumns = []string{
 // that does not exist is left alone, as the statement it replaced did. The
 // caller holds the row it wrote, so nothing is read back.
 func SaveChat(ctx context.Context, db orm.Context, chat *core.Chat) error {
-	err := chatRepo.UpdateMasked(ctx, db, chatToRow(chat), chatUpdateColumns, crud.NoReadBack())
-	if err != nil && !chatIsMissing(err) {
+	err := UpdateChatMasked(ctx, db, chatToRow(chat), chatUpdateColumns, crud.NoReadBack())
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return fmt.Errorf("failed to update chat: %w", err)
 	}
 	return nil
@@ -108,8 +106,8 @@ func UpdateChatUnread(ctx context.Context, db orm.Context, chatID string, unread
 	if unread {
 		row.Unread = 1
 	}
-	err := chatRepo.UpdateMasked(ctx, db, row, []string{ChatFieldUnread}, crud.NoReadBack())
-	if err != nil && !chatIsMissing(err) {
+	err := UpdateChatMasked(ctx, db, row, []string{ChatFieldUnread}, crud.NoReadBack())
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return fmt.Errorf("failed to update chat unread: %w", err)
 	}
 	return nil
@@ -159,7 +157,7 @@ func UnpinChatsFromDaemon(ctx context.Context, db orm.Context, daemonID string) 
 // RemoveChat deletes the chat (the generated DeleteChat), treating one that
 // does not exist as already deleted, as the statement it replaced did.
 func RemoveChat(ctx context.Context, db orm.Context, id string) error {
-	if err := DeleteChat(ctx, db, id); err != nil && !chatIsMissing(err) {
+	if err := DeleteChat(ctx, db, id); err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return err
 	}
 	return nil

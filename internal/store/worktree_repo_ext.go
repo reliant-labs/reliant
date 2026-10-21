@@ -61,14 +61,11 @@ import (
 type WorktreeExtra struct {
 }
 
-// worktrees.deleted_at is the ARCHIVE stamp, and forge projects any
-// deleted_at column as bun's ,soft_delete (forge friction: there is no
-// opt-out). An archived workspace is still a row callers address — read,
-// update, unarchive, sweep — so every query here that must see one says
-// WhereAllWithDeleted, and the one hard delete says ForceDelete. The
-// generated GetWorktreeByID / ListWorktree / UpdateWorktree / DeleteWorktree
-// would silently skip archived rows (or archive instead of deleting), which
-// is why only the live-row lookup below uses one.
+// worktrees.deleted_at is the ARCHIVE stamp, not a soft-delete tombstone
+// (COMMENT ON COLUMN … 'forge:no-soft-delete'): an archived workspace is
+// still a row callers read, update, unarchive and sweep, so no query here
+// filters it out implicitly. One that wants live rows only says
+// deleted_at IS NULL itself.
 
 // liveNameIndex is the partial unique index that holds a worktree name for
 // the project's unarchived rows.
@@ -85,10 +82,9 @@ func nameTakenOr(err error) error {
 }
 
 // InsertWorktree stores a new worktree with the timestamps the caller set.
-// A builder insert rather than CreateWorktree, which re-stamps updated_at
-// over the caller's value (forge friction, being fixed in forge). A second
-// live worktree with the same name in the project is
-// core.ErrWorktreeNameTaken.
+// A builder insert rather than CreateWorktree, so the two columns only later
+// writes set are left out and take their DEFAULTs. A second live worktree
+// with the same name in the project is core.ErrWorktreeNameTaken.
 func InsertWorktree(ctx context.Context, db orm.Context, w *core.Worktree) error {
 	// cleanup_metadata and failure_reason are written only by the later
 	// settle and sweep writes; a new row takes their column defaults.
@@ -134,16 +130,11 @@ func GetWorktreeByIdempotencyKey(ctx context.Context, db orm.Context, projectID,
 
 // GetLiveWorktreeByName returns the one unarchived worktree holding a name,
 // or nil; worktrees_project_id_name_live_key guarantees there is at most
-// one. The generated list's soft-delete filter is exactly "unarchived".
+// one.
 func GetLiveWorktreeByName(ctx context.Context, db orm.Context, projectID, name string) (*core.Worktree, error) {
-	rows, err := ListWorktree(ctx, db,
-		orm.WhereEq(WorktreeFieldProjectID, projectID),
-		orm.WhereEq(WorktreeFieldName, name),
-		orm.WithLimit(1))
-	if err != nil || len(rows) == 0 {
-		return nil, err
-	}
-	return worktreeToCore(rows[0]), nil
+	return firstWorktree(ctx, db, func(q *bun.SelectQuery) {
+		q.Where("project_id = ?", projectID).Where("name = ?", name).Where("deleted_at IS NULL")
+	})
 }
 
 // ListWorktreesByBranch returns every worktree, archived included, recorded
@@ -151,7 +142,7 @@ func GetLiveWorktreeByName(ctx context.Context, db orm.Context, projectID, name 
 // archive.
 func ListWorktreesByBranch(ctx context.Context, db orm.Context, projectID, branch string) ([]*core.Worktree, error) {
 	var rows []*Worktree
-	err := db.Bun().NewSelect().Model(&rows).WhereAllWithDeleted().
+	err := db.Bun().NewSelect().Model(&rows).
 		Where("project_id = ?", projectID).
 		Where("branch = ?", branch).
 		Scan(ctx)
@@ -171,7 +162,7 @@ func ListWorktrees(ctx context.Context, db orm.Context, f core.WorktreeFilters) 
 		limit = 100
 	}
 	var rows []*Worktree
-	q := db.Bun().NewSelect().Model(&rows).WhereAllWithDeleted()
+	q := db.Bun().NewSelect().Model(&rows)
 	if f.ProjectID != nil {
 		q.Where("project_id = ?", *f.ProjectID)
 	}
@@ -207,7 +198,7 @@ func ListWorktreesByIDs(ctx context.Context, db orm.Context, ids []string) ([]*c
 		return nil, nil
 	}
 	var rows []*Worktree
-	err := db.Bun().NewSelect().Model(&rows).WhereAllWithDeleted().
+	err := db.Bun().NewSelect().Model(&rows).
 		Where("id IN (?)", bun.List(ids)).
 		Scan(ctx)
 	if err != nil {
@@ -223,7 +214,7 @@ func ListWorktreesByIDs(ctx context.Context, db orm.Context, ids []string) ([]*c
 // failure_reason, when it settles FAILED. A missing worktree is not an
 // error.
 func ReplaceWorktree(ctx context.Context, db orm.Context, w *core.Worktree) error {
-	_, err := db.Bun().NewUpdate().Model(worktreeFromCore(w)).WhereAllWithDeleted().
+	_, err := db.Bun().NewUpdate().Model(worktreeFromCore(w)).
 		Column(WorktreeFieldName, WorktreeFieldBranch, WorktreeFieldStatus, WorktreeFieldBaseBranch,
 			WorktreeFieldBaseBranches, WorktreeFieldLastActive, WorktreeFieldPath, WorktreeFieldFailureReason).
 		Set("updated_at = NOW()").
@@ -239,7 +230,7 @@ func SetWorktreeCleanupMetadata(ctx context.Context, db orm.Context, id string, 
 	if err != nil {
 		return err
 	}
-	_, err = db.Bun().NewUpdate().Model((*Worktree)(nil)).WhereAllWithDeleted().
+	_, err = db.Bun().NewUpdate().Model((*Worktree)(nil)).
 		Set("cleanup_metadata = ?", encoded).
 		Set("updated_at = NOW()").
 		Where("id = ?", id).
@@ -264,7 +255,7 @@ func SetWorktreeCleanupMetadata(ctx context.Context, db orm.Context, id string, 
 func MergeWorktreeCleanupMetadata(ctx context.Context, db orm.Context, id string, fn func(m *core.CleanupMetadata, archived bool) bool) error {
 	return db.RunTxWithOptions(ctx, orm.TxOptions{Isolation: orm.IsolationReadCommitted}, func(ctx context.Context) error {
 		var row Worktree
-		err := db.Bun().NewSelect().Model(&row).WhereAllWithDeleted().
+		err := db.Bun().NewSelect().Model(&row).
 			Column(WorktreeFieldCleanupMetadata, WorktreeFieldDeletedAt).
 			Where("id = ?", id).
 			For("UPDATE").
@@ -293,12 +284,10 @@ const cleanupMetadataPending = `(CASE WHEN worktrees.cleanup_metadata IS NULL OR
 // may still hold: not main, has a path, and not already known to be
 // removed. CREATING and FAILED rows have no directory yet. Archived rows are
 // the ones to remove; the rest are locked as reliant-owned. owner_user_id
-// lets the sweep find the daemon's connection. Unbounded — a builder rather
-// than ListAllWorktree, whose unlimited list is silently capped at 10k rows
-// (forge friction, being fixed in forge).
+// lets the sweep find the daemon's connection. Unbounded.
 func ListWorktreesForReclaim(ctx context.Context, db orm.Context) ([]*core.ReclaimCandidate, error) {
 	var rows []worktreeWithProject
-	err := db.Bun().NewSelect().Model(&rows).WhereAllWithDeleted().
+	err := db.Bun().NewSelect().Model(&rows).
 		ColumnExpr("worktrees.*").
 		ColumnExpr("p.user_id AS owner_user_id").
 		ColumnExpr("p.path AS project_path").
@@ -329,7 +318,7 @@ func ListWorktreesForReclaim(ctx context.Context, db orm.Context) ([]*core.Recla
 // oldest archive first, for the storage inbox item.
 func ListHeldWorktreesForUser(ctx context.Context, db orm.Context, userID string) ([]*core.HeldWorktree, error) {
 	var rows []worktreeWithProject
-	err := db.Bun().NewSelect().Model(&rows).WhereAllWithDeleted().
+	err := db.Bun().NewSelect().Model(&rows).
 		ColumnExpr("worktrees.*").
 		ColumnExpr("p.name AS project_name").
 		ColumnExpr("p.path AS project_path").
@@ -369,7 +358,7 @@ type worktreeWithProject struct {
 // on its disk, which proves it owns it. Only a row created before daemon_id
 // was recorded is filled in, once.
 func AdoptWorktreeDaemon(ctx context.Context, db orm.Context, id, daemonID string) error {
-	_, err := db.Bun().NewUpdate().Model((*Worktree)(nil)).WhereAllWithDeleted().
+	_, err := db.Bun().NewUpdate().Model((*Worktree)(nil)).
 		Set("daemon_id = ?", daemonID).
 		Where("id = ?", id).
 		Where("daemon_id IS NULL").
@@ -383,7 +372,7 @@ func AdoptWorktreeDaemon(ctx context.Context, db orm.Context, id, daemonID strin
 // user's directories.
 func ListLiveWorktreePathsForUser(ctx context.Context, db orm.Context, userID string) ([]core.WorktreePath, error) {
 	var rows []*Worktree
-	err := db.Bun().NewSelect().Model(&rows).WhereAllWithDeleted().
+	err := db.Bun().NewSelect().Model(&rows).
 		Column(WorktreeFieldID, WorktreeFieldPath, WorktreeFieldProjectID).
 		Join("JOIN projects AS p ON p.id = worktrees.project_id").
 		Where("p.user_id = ?", userID).
@@ -403,16 +392,15 @@ func ListLiveWorktreePathsForUser(ctx context.Context, db orm.Context, userID st
 // RemoveWorktree hard-deletes the worktree row, archived or not; a missing
 // one is not an error.
 func RemoveWorktree(ctx context.Context, db orm.Context, id string) error {
-	_, err := db.Bun().NewDelete().Model((*Worktree)(nil)).WhereAllWithDeleted().
+	_, err := db.Bun().NewDelete().Model((*Worktree)(nil)).
 		Where("id = ?", id).
-		ForceDelete().
 		Exec(ctx)
 	return err
 }
 
 // ArchiveWorktree stamps the worktree archived as of now.
 func ArchiveWorktree(ctx context.Context, db orm.Context, id string) error {
-	_, err := db.Bun().NewUpdate().Model((*Worktree)(nil)).WhereAllWithDeleted().
+	_, err := db.Bun().NewUpdate().Model((*Worktree)(nil)).
 		Set("deleted_at = NOW()").
 		Set("updated_at = NOW()").
 		Where("id = ?", id).
@@ -423,7 +411,7 @@ func ArchiveWorktree(ctx context.Context, db orm.Context, id string) error {
 // UnarchiveWorktree makes the worktree live again; a live worktree that
 // already holds its name is core.ErrWorktreeNameTaken.
 func UnarchiveWorktree(ctx context.Context, db orm.Context, id string) error {
-	_, err := db.Bun().NewUpdate().Model((*Worktree)(nil)).WhereAllWithDeleted().
+	_, err := db.Bun().NewUpdate().Model((*Worktree)(nil)).
 		Set("deleted_at = NULL").
 		Set("updated_at = NOW()").
 		Where("id = ?", id).
@@ -435,7 +423,7 @@ func UnarchiveWorktree(ctx context.Context, db orm.Context, id string) error {
 // matches, or nil when none does.
 func firstWorktree(ctx context.Context, db orm.Context, filter func(*bun.SelectQuery)) (*core.Worktree, error) {
 	var rows []*Worktree
-	q := db.Bun().NewSelect().Model(&rows).WhereAllWithDeleted().Limit(1)
+	q := db.Bun().NewSelect().Model(&rows).Limit(1)
 	filter(q)
 	if err := q.Scan(ctx); err != nil || len(rows) == 0 {
 		return nil, err

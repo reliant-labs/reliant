@@ -514,10 +514,9 @@ func requireOneRow(res sql.Result, err error) error {
 }
 
 // ignoreNotFound keeps a by-key write of a missing row the no-op its sqlc
-// :exec twin was. The generated Delete and UpdateMasked report the miss as
-// sql.ErrNoRows (the generated Get as svcerr.NotFound).
+// :exec predecessor was. Every generated miss is errors.Is(sql.ErrNoRows).
 func ignoreNotFound(err error) error {
-	if errors.Is(err, sql.ErrNoRows) || svcerr.IsNotFound(err) {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil
 	}
 	return err

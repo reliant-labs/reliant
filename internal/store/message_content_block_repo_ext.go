@@ -98,7 +98,7 @@ func ListContentBlocksForMessages(ctx context.Context, db orm.Context, messageID
 func UpdateContentBlockBody(ctx context.Context, db orm.Context, block *core.MessageContentBlock) error {
 	NormalizeContentBlock(block)
 	row := &MessageContentBlock{ID: block.ID, Content: block.Content, ToolInput: block.ToolInput, Version: intToInt64Ptr(block.Version)}
-	err := messageContentBlockRepo.UpdateMasked(ctx, db, row,
+	err := UpdateMessageContentBlockMasked(ctx, db, row,
 		[]string{MessageContentBlockFieldContent, MessageContentBlockFieldToolInput, MessageContentBlockFieldVersion},
 		crud.NoReadBack())
 	if errors.Is(err, orm.ErrNoRows) {

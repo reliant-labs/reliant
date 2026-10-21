@@ -15,7 +15,10 @@ import (
 
 // IntegrationWrites returns the write ledger. It never joins an ambient
 // transaction: an intent row must be committed, and so visible to an event
-// that arrives first, before the call it describes goes out.
+// that arrives first, before the call it describes goes out. Every ledger
+// call is one statement run with orm.Detached(ctx): on the pool, as its own
+// autocommit transaction, committed before the call returns, so a caller's
+// rollback cannot take a ledger entry with it.
 func (r *Repo) IntegrationWrites() core.IntegrationWriteStore {
 	return integrationWriteLedger{orm: r.ORM()}
 }
@@ -24,26 +27,8 @@ func (r *Repo) IntegrationWrites() core.IntegrationWriteStore {
 // ledger queries.
 type integrationWriteLedger struct{ orm *orm.Client }
 
-// own runs fn outside any transaction ctx carries. Called inside one, the
-// statement runs in a detached transaction of its own, committed before own
-// returns, so the caller's rollback cannot take a ledger entry with it.
-func (l integrationWriteLedger) own(ctx context.Context, fn func(db orm.Context) error) error {
-	if !orm.InTx(ctx) {
-		return fn(l.orm)
-	}
-	tx, err := l.orm.BeginDetached(ctx, orm.TxOptions{Isolation: orm.IsolationReadCommitted})
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tx.Rollback() }()
-	if err := fn(tx); err != nil {
-		return err
-	}
-	return tx.Commit()
-}
-
 func (l integrationWriteLedger) CreateIntegrationWrite(ctx context.Context, w *core.IntegrationWrite) error {
-	if err := l.own(ctx, func(db orm.Context) error { return store.InsertIntegrationWrite(ctx, db, w) }); err != nil {
+	if err := store.InsertIntegrationWrite(orm.Detached(ctx), l.orm, w); err != nil {
 		return fmt.Errorf("create integration write: %w", err)
 	}
 	return nil
@@ -54,11 +39,7 @@ func (l integrationWriteLedger) CompleteIntegrationWrite(ctx context.Context, id
 	if at.IsZero() {
 		at = time.Now()
 	}
-	var settled bool
-	err := l.own(ctx, func(db orm.Context) (err error) {
-		settled, err = store.CompleteIntegrationWrite(ctx, db, id, res, at)
-		return err
-	})
+	settled, err := store.CompleteIntegrationWrite(orm.Detached(ctx), l.orm, id, res, at)
 	if err != nil {
 		return false, fmt.Errorf("complete integration write: %w", err)
 	}
@@ -66,11 +47,7 @@ func (l integrationWriteLedger) CompleteIntegrationWrite(ctx context.Context, id
 }
 
 func (l integrationWriteLedger) GetIntegrationWriteByObject(ctx context.Context, integration, scope, objectKind, objectID string) (*core.IntegrationWrite, error) {
-	var w *core.IntegrationWrite
-	err := l.own(ctx, func(db orm.Context) (err error) {
-		w, err = store.GetIntegrationWriteByObject(ctx, db, integration, scope, objectKind, objectID)
-		return err
-	})
+	w, err := store.GetIntegrationWriteByObject(orm.Detached(ctx), l.orm, integration, scope, objectKind, objectID)
 	if err != nil {
 		if errors.Is(err, core.ErrIntegrationWriteNotFound) {
 			return nil, core.ErrIntegrationWriteNotFound
@@ -84,11 +61,7 @@ func (l integrationWriteLedger) ListRecentIntegrationWrites(ctx context.Context,
 	if limit <= 0 {
 		limit = 50
 	}
-	var ws []*core.IntegrationWrite
-	err := l.own(ctx, func(db orm.Context) (err error) {
-		ws, err = store.ListRecentIntegrationWrites(ctx, db, integration, scope, since, limit)
-		return err
-	})
+	ws, err := store.ListRecentIntegrationWrites(orm.Detached(ctx), l.orm, integration, scope, since, limit)
 	if err != nil {
 		return nil, fmt.Errorf("list recent integration writes: %w", err)
 	}
@@ -96,11 +69,7 @@ func (l integrationWriteLedger) ListRecentIntegrationWrites(ctx context.Context,
 }
 
 func (l integrationWriteLedger) PruneIntegrationWrites(ctx context.Context, before time.Time) (int64, error) {
-	var n int64
-	err := l.own(ctx, func(db orm.Context) (err error) {
-		n, err = store.PruneIntegrationWrites(ctx, db, before)
-		return err
-	})
+	n, err := store.PruneIntegrationWrites(orm.Detached(ctx), l.orm, before)
 	if err != nil {
 		return 0, fmt.Errorf("prune integration writes: %w", err)
 	}

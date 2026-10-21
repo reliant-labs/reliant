@@ -1127,8 +1127,9 @@ jobs:
 
       # Includes the migration-safety lane, which enforces forge.yaml's
       # database.migration_safety.require_compat_declaration (internal/db/SCHEMA.md).
+      # Report-only: forge lint writes nothing without --fix.
       - name: Lint (forge)
-        run: forge lint --no-fix
+        run: forge lint
 
       - name: Report the analysis cache size
         if: ${{ !cancelled() }}

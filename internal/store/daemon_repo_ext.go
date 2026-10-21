@@ -113,7 +113,7 @@ func UpsertDaemonIdentity(ctx context.Context, db orm.Context, id core.DaemonIde
 // sql.ErrNoRows), as the Repository always reported it.
 func GetDaemon(ctx context.Context, db orm.Context, id string) (*core.Daemon, error) {
 	row, err := GetDaemonByID(ctx, db, id)
-	if isNoRows(err) {
+	if errors.Is(err, orm.ErrNoRows) {
 		return nil, orm.ErrNoRows
 	}
 	if err != nil {
@@ -205,7 +205,7 @@ func SetDaemonStorageState(ctx context.Context, db orm.Context, daemonID, stateJ
 // has none or there is no such daemon.
 func GetDaemonStorageState(ctx context.Context, db orm.Context, daemonID string) (string, error) {
 	row, err := GetDaemonByID(ctx, db, daemonID)
-	if isNoRows(err) {
+	if errors.Is(err, orm.ErrNoRows) {
 		return "", nil
 	}
 	if err != nil {
@@ -281,7 +281,7 @@ func DeleteDaemonRow(ctx context.Context, db orm.Context, daemonID string) (user
 // the project_daemons installs on it, re-recorded when the machine that has
 // the checkout connects.
 func ReleaseDaemonFromWorkspaces(ctx context.Context, db orm.Context, daemonID string) error {
-	if _, err := db.Bun().NewUpdate().Model((*Worktree)(nil)).WhereAllWithDeleted().
+	if _, err := db.Bun().NewUpdate().Model((*Worktree)(nil)).
 		Set("daemon_id = NULL").
 		Where("daemon_id = ?", daemonID).
 		Exec(ctx); err != nil {

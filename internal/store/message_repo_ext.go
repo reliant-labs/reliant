@@ -326,7 +326,7 @@ func ListMessagesInContextWindowRange(ctx context.Context, db orm.Context, conte
 // not an error.
 func UpdateMessageUsage(ctx context.Context, db orm.Context, id string, tokenCount *int, cost *float64) error {
 	row := &Message{ID: id, TokenCount: intToInt64Ptr(tokenCount), Cost: cost}
-	err := messageRepo.UpdateMasked(ctx, db, row, []string{MessageFieldTokenCount, MessageFieldCost}, crud.NoReadBack())
+	err := UpdateMessageMasked(ctx, db, row, []string{MessageFieldTokenCount, MessageFieldCost}, crud.NoReadBack())
 	if errors.Is(err, orm.ErrNoRows) {
 		return nil
 	}

@@ -44,7 +44,6 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/uptrace/bun"
-	"github.com/uptrace/bun/dialect/pgdialect"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
@@ -97,7 +96,7 @@ func ReplaceIntegrationAccess(ctx context.Context, db orm.Context, userID, integ
 	return db.RunTx(ctx, func(ctx context.Context) error {
 		if len(grants) > 0 {
 			if _, err := db.Bun().NewRaw(upsertIntegrationAccessSQL,
-				userID, integrationID, subjectID, at, orm.Arg(pgdialect.Array(accounts)), orm.Arg(pgdialect.Array(resources)), orm.Arg(pgdialect.Array(labels))).Exec(ctx); err != nil {
+				userID, integrationID, subjectID, at, orm.Arg(accounts), orm.Arg(resources), orm.Arg(labels)).Exec(ctx); err != nil {
 				return fmt.Errorf("record integration access: %w", err)
 			}
 		}

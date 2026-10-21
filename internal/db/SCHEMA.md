@@ -156,7 +156,9 @@ splits it. The rules every query follows:
    `forge lint` fails a `$1` left in bun-formatted SQL
    (`forgeconv-bun-dollar-placeholder`) and a literal `?` bun would consume
    (`forgeconv-bun-literal-question-mark`), for string literals it can read.
-   Arrays bind as `pgdialect.Array(v)`.
+   A slice binds as a postgres array through `orm.Arg(v)` (or
+   `pgdialect.Array(v)`); a bare slice argument is JSON, so always wrap it
+   (`orm.JSON(v)` for a document).
 
    **A hot hand-tuned statement binds its values.** bun formats every
    argument into the text, so under pgx's statement cache a statement whose
@@ -249,8 +251,10 @@ splits it. The rules every query follows:
    `runAfterCommit` is `orm.AfterCommit`, so post-commit effects registered
    by either layer run once, after the commit that keeps them. A lock that
    needs its own transaction uses `BeginDetached` (or the Repository's
-   `BeginTxWithOptions`), refusing when `orm.InTx(ctx)`. Tests that hold
-   this: `internal/store/storetest/txbridge_test.go`.
+   `BeginTxWithOptions`), refusing when `orm.InTx(ctx)`. A statement that
+   must commit whatever the caller's transaction does (the write ledger)
+   runs with `orm.Detached(ctx)`: on the pool, its own autocommit
+   transaction. Tests that hold this: `internal/store/storetest/txbridge_test.go`.
    (A one-column stamp through `Update<E>` reads every other column back;
    pass `crud.NoReadBack()` when the caller does not need the row.)
 

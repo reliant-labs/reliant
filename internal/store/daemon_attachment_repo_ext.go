@@ -117,7 +117,7 @@ func RenewDaemonAttachment(ctx context.Context, db orm.Context, att *core.Daemon
 // to RenewDaemonAttachment.
 func SetDaemonAttachmentMemory(ctx context.Context, db orm.Context, daemonID string, usedBytes, limitBytes int64, pressure bool) error {
 	row := &DaemonAttachment{DaemonID: daemonID, MemoryUsedBytes: usedBytes, MemoryLimitBytes: limitBytes, MemoryPressure: pressure}
-	return ignoreNoRows(daemonAttachmentRepo.UpdateMasked(ctx, db, row,
+	return ignoreNoRows(UpdateDaemonAttachmentMasked(ctx, db, row,
 		[]string{DaemonAttachmentFieldMemoryUsedBytes, DaemonAttachmentFieldMemoryLimitBytes, DaemonAttachmentFieldMemoryPressure},
 		crud.NoReadBack()))
 }
@@ -134,7 +134,7 @@ func SetDaemonAttachmentPorts(ctx context.Context, db orm.Context, daemonID stri
 	}
 	s := string(encoded)
 	row := &DaemonAttachment{DaemonID: daemonID, DetectedPorts: &s}
-	return ignoreNoRows(daemonAttachmentRepo.UpdateMasked(ctx, db, row,
+	return ignoreNoRows(UpdateDaemonAttachmentMasked(ctx, db, row,
 		[]string{DaemonAttachmentFieldDetectedPorts}, crud.NoReadBack()))
 }
 
@@ -233,9 +233,7 @@ func ListFreshDaemonAttachmentsForUser(ctx context.Context, db orm.Context, user
 	return scanDaemonAttachments(rows)
 }
 
-// ListOutboundAttachments returns every outbound lease. Unbounded: not the
-// generated ListDaemonAttachment, whose unlimited list is silently capped at
-// 10k rows (forge friction, being fixed in forge).
+// ListOutboundAttachments returns every outbound lease. Unbounded.
 func ListOutboundAttachments(ctx context.Context, db orm.Context) ([]*core.DaemonAttachment, error) {
 	return listDaemonAttachments(ctx, db, func(q *bun.SelectQuery) {
 		q.Where("source = ?", core.DaemonAttachmentSourceOutbound)
@@ -325,7 +323,7 @@ func daemonAttachmentToCore(daemonID, userID string, source core.DaemonAttachmen
 
 // ignoreNoRows turns a missing row into success.
 func ignoreNoRows(err error) error {
-	if isNoRows(err) {
+	if errors.Is(err, orm.ErrNoRows) {
 		return nil
 	}
 	return err

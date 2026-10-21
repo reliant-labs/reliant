@@ -18,10 +18,9 @@ import (
 )
 
 // InsertWorkflowScenario writes a new scenario at version 1, never run,
-// with the caller's created_at and updated_at (the generated
-// CreateWorkflowScenario would stamp updated_at itself).
+// with the caller's created_at and updated_at.
 func InsertWorkflowScenario(ctx context.Context, db orm.Context, s *core.WorkflowScenario) error {
-	_, err := db.Bun().NewInsert().Model(&WorkflowScenario{
+	return CreateWorkflowScenario(ctx, db, &WorkflowScenario{
 		ID:              s.ID,
 		WorkflowDraftID: nullStringPtr(s.WorkflowDraftID),
 		UserID:          s.UserID,
@@ -32,11 +31,7 @@ func InsertWorkflowScenario(ctx context.Context, db orm.Context, s *core.Workflo
 		CreatedAt:       s.CreatedAt,
 		UpdatedAt:       s.UpdatedAt,
 		Version:         1,
-	}).
-		ExcludeColumn(WorkflowScenarioFieldLastRunAt, WorkflowScenarioFieldLastRunStatus, WorkflowScenarioFieldLastRunResult).
-		Returning("NULL").
-		Exec(ctx)
-	return err
+	})
 }
 
 // FindWorkflowScenario is scenario id, or nil.

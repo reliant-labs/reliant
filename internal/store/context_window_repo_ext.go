@@ -37,6 +37,8 @@ package store
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 
 	"github.com/reliant-labs/forge/pkg/orm"
@@ -180,7 +182,7 @@ func SetCompactionSummaryMessage(ctx context.Context, db orm.Context, cwID, mess
 // RemoveContextWindow deletes the window; one that does not exist is already
 // gone.
 func RemoveContextWindow(ctx context.Context, db orm.Context, id string) error {
-	if err := DeleteContextWindow(ctx, db, id); err != nil && !chatIsMissing(err) {
+	if err := DeleteContextWindow(ctx, db, id); err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return err
 	}
 	return nil

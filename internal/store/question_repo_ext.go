@@ -37,6 +37,8 @@ package store
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -61,7 +63,7 @@ func InsertQuestion(ctx context.Context, db orm.Context, q *core.Question) error
 // GetQuestion returns the question, or nil with no error when there is none.
 func GetQuestion(ctx context.Context, db orm.Context, id string) (*core.Question, error) {
 	row, err := GetQuestionByID(ctx, db, id)
-	if chatIsMissing(err) {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
@@ -135,9 +137,9 @@ func ListPendingQuestionsByChat(ctx context.Context, db orm.Context, chatID stri
 func ResolveQuestion(ctx context.Context, db orm.Context, id string, responseData *string, resolvedAt time.Time) error {
 	status := int32(core.QuestionStatusResolved)
 	row := &Question{ID: id, Status: &status, ResponseData: responseData, ResolvedAt: &resolvedAt}
-	err := questionRepo.UpdateMasked(ctx, db, row,
+	err := UpdateQuestionMasked(ctx, db, row,
 		[]string{QuestionFieldStatus, QuestionFieldResponseData, QuestionFieldResolvedAt}, crud.NoReadBack())
-	if err != nil && !chatIsMissing(err) {
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return fmt.Errorf("failed to resolve question: %w", err)
 	}
 	return nil

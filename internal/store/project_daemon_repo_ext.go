@@ -38,6 +38,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/reliant-labs/forge/pkg/orm"
@@ -165,7 +166,7 @@ func ListProjectDaemonsForDaemon(ctx context.Context, db orm.Context, daemonID s
 // RemoveProjectDaemon deletes the installation row; a missing one is not an
 // error.
 func RemoveProjectDaemon(ctx context.Context, db orm.Context, projectID, daemonID string) error {
-	if err := DeleteProjectDaemonByPK(ctx, db, projectID, daemonID); err != nil && !isNoRows(err) {
+	if err := DeleteProjectDaemonByPK(ctx, db, projectID, daemonID); err != nil && !errors.Is(err, orm.ErrNoRows) {
 		return err
 	}
 	return nil

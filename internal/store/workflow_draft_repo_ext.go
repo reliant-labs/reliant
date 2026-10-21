@@ -45,14 +45,9 @@ func newWorkflowDraftRow(d *core.WorkflowDraft) *WorkflowDraft {
 }
 
 // InsertWorkflowDraft writes a new draft at version 1, with the caller's
-// created_at and updated_at. (The generated CreateWorkflowDraft would stamp
-// updated_at itself; a draft keeps the times its writer gives it.)
+// created_at and updated_at.
 func InsertWorkflowDraft(ctx context.Context, db orm.Context, d *core.WorkflowDraft) error {
-	_, err := db.Bun().NewInsert().Model(newWorkflowDraftRow(d)).
-		ExcludeColumn(WorkflowDraftFieldChatID).
-		Returning("NULL").
-		Exec(ctx)
-	return err
+	return CreateWorkflowDraft(ctx, db, newWorkflowDraftRow(d))
 }
 
 // UpsertWorkflowDraftBySlug writes d, or, when the user already has a draft

@@ -37,6 +37,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/reliant-labs/forge/pkg/orm"
@@ -58,10 +59,7 @@ type RepoExtra struct {
 }
 
 // InsertRepo stores a nested repo with the created_at and updated_at the
-// caller set (zero is the column DEFAULT). A builder insert rather than
-// CreateRepo, which re-stamps updated_at over the caller's value (forge
-// friction, being fixed in forge). A remote URL is stored without
-// credentials.
+// caller set (zero is now). A remote URL is stored without credentials.
 func InsertRepo(ctx context.Context, db orm.Context, r *core.Repo) error {
 	row := &Repo{
 		ID:           r.ID,
@@ -72,14 +70,13 @@ func InsertRepo(ctx context.Context, db orm.Context, r *core.Repo) error {
 		CreatedAt:    r.CreatedAt,
 		UpdatedAt:    r.UpdatedAt,
 	}
-	_, err := db.Bun().NewInsert().Model(row).Exec(ctx)
-	return err
+	return CreateRepo(ctx, db, row)
 }
 
 // GetRepo returns the repo, or an error naming it when there is none.
 func GetRepo(ctx context.Context, db orm.Context, id string) (*core.Repo, error) {
 	row, err := GetRepoByID(ctx, db, id)
-	if isNoRows(err) {
+	if errors.Is(err, orm.ErrNoRows) {
 		return nil, fmt.Errorf("repo not found: %s", id)
 	}
 	if err != nil {
@@ -124,7 +121,7 @@ func ListReposByProject(ctx context.Context, db orm.Context, projectID string) (
 func ReplaceRepo(ctx context.Context, db orm.Context, r *core.Repo) error {
 	row := &Repo{ID: r.ID, Name: r.Name, RemoteURL: gitremote.StripCredentialsPtr(r.RemoteURL)}
 	err := UpdateRepoMasked(ctx, db, row, []string{RepoFieldName, RepoFieldRemoteURL})
-	if err != nil && !isNoRows(err) {
+	if err != nil && !errors.Is(err, orm.ErrNoRows) {
 		return err
 	}
 	return nil
@@ -132,7 +129,7 @@ func ReplaceRepo(ctx context.Context, db orm.Context, r *core.Repo) error {
 
 // RemoveRepo deletes the repo; a missing one is not an error.
 func RemoveRepo(ctx context.Context, db orm.Context, id string) error {
-	if err := DeleteRepo(ctx, db, id); err != nil && !isNoRows(err) {
+	if err := DeleteRepo(ctx, db, id); err != nil && !errors.Is(err, orm.ErrNoRows) {
 		return err
 	}
 	return nil

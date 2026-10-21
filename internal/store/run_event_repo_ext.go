@@ -187,7 +187,7 @@ func ClaimRunEvents(ctx context.Context, db orm.Context, now, leaseUntil time.Ti
 // MarkRunEventDispatched records that the event's dispatch has started. It
 // writes one column and reads nothing back; a missing event is a no-op.
 func MarkRunEventDispatched(ctx context.Context, db orm.Context, id string, at time.Time) error {
-	return ignoreNotFound(runEventRepo.UpdateMasked(ctx, db,
+	return ignoreNotFound(UpdateRunEventMasked(ctx, db,
 		&RunEvent{ID: id, DispatchedAt: &at}, []string{RunEventFieldDispatchedAt}, crud.NoReadBack()))
 }
 

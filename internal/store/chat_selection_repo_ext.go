@@ -37,7 +37,9 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -59,7 +61,7 @@ func GetChatSelection(ctx context.Context, db orm.Context, chatID string, forUpd
 		q = q.For("UPDATE")
 	}
 	err := q.Scan(ctx)
-	if chatIsMissing(err) {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {

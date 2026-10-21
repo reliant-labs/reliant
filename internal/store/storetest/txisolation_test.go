@@ -214,19 +214,34 @@ func TestTransactionOpenersBeginAtTheirLevel(t *testing.T) {
 		}
 	})
 
-	// The write ledger never joins: inside a transaction it commits on a
-	// detached READ COMMITTED one of its own.
-	t.Run("the write ledger inside Repo.RunTx detaches at read committed", func(t *testing.T) {
+	// The write ledger never joins: inside a transaction each of its
+	// statements runs detached (orm.Detached), on the pool as its own
+	// autocommit transaction. It begins none, and the caller's rollback
+	// cannot take back an entry it wrote.
+	t.Run("the write ledger inside Repo.RunTx runs outside it", func(t *testing.T) {
 		p.Reset()
+		rollback := errors.New("roll the caller back")
 		err := p.Repo.RunTx(context.Background(), func(ctx context.Context) error {
-			_, err := p.Repo.IntegrationWrites().PruneIntegrationWrites(ctx, now.Add(-time.Hour))
-			return err
+			if err := p.Repo.IntegrationWrites().CreateIntegrationWrite(ctx, &core.IntegrationWrite{
+				ID: "iw-iso", UserID: "iso-user", ChatID: "iso-chat", Integration: "github", Action: "issue.comment",
+				Actor: core.IntegrationActorOwner, Scope: "github:acme/app", Target: "github:acme/app",
+			}); err != nil {
+				return err
+			}
+			return rollback
 		})
-		if err != nil {
-			t.Fatalf("Repo.RunTx: %v", err)
+		if !errors.Is(err, rollback) {
+			t.Fatalf("Repo.RunTx: %v, want the caller's own error", err)
 		}
-		if got := p.Isolations(); !slices.Equal(got, []string{serializable, readCommitted}) {
-			t.Fatalf("began %v, want the outer [serializable] then the ledger's own [read committed]", got)
+		if got := p.Isolations(); !slices.Equal(got, []string{serializable}) {
+			t.Fatalf("began %v, want only the outer [serializable]: the ledger begins none", got)
+		}
+		var n int
+		if err := env.SQL.QueryRow(`SELECT count(*) FROM integration_writes WHERE id = 'iw-iso'`).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		if n != 1 {
+			t.Fatalf("the ledger entry written inside the rolled-back transaction: %d rows, want 1", n)
 		}
 	})
 }

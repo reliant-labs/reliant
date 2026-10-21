@@ -38,6 +38,7 @@ package store
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -51,10 +52,10 @@ import (
 // missing thread or context window from a failed read with
 // errors.Is(err, sql.ErrNoRows).
 
-// noRows wraps a by-key miss — whichever of forge's two spellings it came
-// as (see chatIsMissing) — as sql.ErrNoRows under what.
+// noRows wraps a by-key miss (every generated miss is errors.Is
+// sql.ErrNoRows) as a bare sql.ErrNoRows under what.
 func noRows(what string, err error) error {
-	if chatIsMissing(err) {
+	if errors.Is(err, sql.ErrNoRows) {
 		return fmt.Errorf("%s: %w", what, sql.ErrNoRows)
 	}
 	return fmt.Errorf("%s: %w", what, err)
@@ -125,9 +126,7 @@ WHERE t.id = ?0`, id).Scan(ctx, &row)
 	return threadFromRow(&row.Thread), row.ParentChatID, nil
 }
 
-// The thread lists below have no natural bound, so they are built on the
-// builder rather than the generated List, which caps a limit-less list at its
-// default page (forge friction).
+// The thread lists below have no natural bound.
 
 // ListThreadsByConversation returns the chat's threads, oldest first.
 func ListThreadsByConversation(ctx context.Context, db orm.Context, chatID string) ([]*core.Thread, error) {
@@ -326,7 +325,7 @@ func ReapOrphanedThreads(ctx context.Context, db orm.Context) ([]core.ReapedThre
 
 // RemoveThread deletes the thread; one that does not exist is already gone.
 func RemoveThread(ctx context.Context, db orm.Context, id string) error {
-	if err := DeleteThread(ctx, db, id); err != nil && !chatIsMissing(err) {
+	if err := DeleteThread(ctx, db, id); err != nil && !errors.Is(err, sql.ErrNoRows) {
 		return err
 	}
 	return nil

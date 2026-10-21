@@ -39,6 +39,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"time"
@@ -236,7 +237,7 @@ func requireSlotHeldBySameSpawn(ctx context.Context, db orm.Context, msg *core.A
 // (nil, nil) when there is none.
 func GetAgentMessage(ctx context.Context, db orm.Context, id string) (*core.AgentMessage, error) {
 	row, err := GetAgentMessageByID(ctx, db, id)
-	if chatIsMissing(err) {
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {

@@ -27,8 +27,9 @@ import (
 // retries 40001/40P01 only. Whichever layer opens the transaction owns its
 // retry policy, and a nested RunTx of either kind joins it.
 
-// WrappedDBTX is the executor every hand-written Repository statement runs on: the transaction ctx carries, or the pool, with
-// statement-level retries outside a transaction.
+// WrappedDBTX is the executor every hand-written Repository statement runs
+// on: the transaction ctx carries, or the pool, with statement-level retries
+// outside a transaction.
 type WrappedDBTX struct {
 	db *sql.DB
 	// orm is the forge ORM client over db. Its transactions are the
@@ -37,31 +38,16 @@ type WrappedDBTX struct {
 	orm *orm.Client
 }
 
-// sqlExecutor is what a Repository statement runs on: *sql.DB, or the
-// transaction ctx carries.
-type sqlExecutor interface {
-	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
-	QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
-	QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row
+// DB returns the executor for a statement run with ctx: the *sql.Tx of the
+// transaction ctx carries on this pool, or the pool (orm.Client.SQLConn).
+func (w *WrappedDBTX) DB(ctx context.Context) orm.SQLConn {
+	return w.orm.SQLConn(ctx)
 }
 
-// DB returns the executor for a statement run with ctx: the transaction ctx
-// carries on this pool, or the pool.
-func (w *WrappedDBTX) DB(ctx context.Context) sqlExecutor {
-	if w.inTx(ctx) {
-		return ambientConn{w.orm}
-	}
-	return w.db
-}
-
-// inTx reports whether ctx carries an active transaction, opened by either
-// layer, that this Repository's statements join.
-//
-// orm.InTx answers for the innermost transaction on any database. Every
-// forge transaction in this process is on this pool, so that is this pool's;
-// once forge's orm.Client.InTx (per pool) is pinned, use it here.
+// inTx reports whether ctx carries an active transaction on this pool,
+// opened by either layer, that this Repository's statements join.
 func (w *WrappedDBTX) inTx(ctx context.Context) bool {
-	return orm.InTx(ctx)
+	return w.orm.InTx(ctx)
 }
 
 // beginSharedTx begins one Repo.RunTx attempt: a forge transaction on this
@@ -85,25 +71,4 @@ func (w *WrappedDBTX) beginSharedTx(ctx context.Context, opts TxOptions) (*orm.T
 		}
 	}
 	return tx, nil
-}
-
-// ambientConn runs statements through the ORM client's raw passthroughs
-// (Exec/Query/QueryRow: native $N placeholders, bun's formatter bypassed),
-// which run on the transaction ctx carries for the pool.
-//
-// It stands in for forge's orm.Client.SQLConn(ctx), which returns that
-// transaction's *sql.Tx itself and is not in the pinned forge yet; when it
-// is, DB returns w.orm.SQLConn(ctx) and this goes.
-type ambientConn struct{ c *orm.Client }
-
-func (a ambientConn) ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
-	return a.c.Exec(ctx, query, args...)
-}
-
-func (a ambientConn) QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {
-	return a.c.Query(ctx, query, args...)
-}
-
-func (a ambientConn) QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row {
-	return a.c.QueryRow(ctx, query, args...)
 }

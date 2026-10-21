@@ -41,7 +41,6 @@ import (
 	"fmt"
 
 	"github.com/reliant-labs/forge/pkg/orm"
-	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/gitremote"
@@ -60,13 +59,10 @@ type ProjectExtra struct {
 }
 
 // InsertProject stores a new project, with the created_at, updated_at and
-// last_active the caller set. It is a builder insert rather than
-// CreateProject because the generated Create re-stamps updated_at over the
-// caller's value (forge friction, being fixed in forge). A remote URL is
-// stored without credentials.
+// last_active the caller set (the generated Create keeps a caller-set
+// timestamp). A remote URL is stored without credentials.
 func InsertProject(ctx context.Context, db orm.Context, p *core.Project) error {
-	row := projectFromCore(p)
-	if _, err := db.Bun().NewInsert().Model(row).Exec(ctx); err != nil {
+	if err := CreateProject(ctx, db, projectFromCore(p)); err != nil {
 		return fmt.Errorf("failed to create project: %w", err)
 	}
 	return nil
@@ -75,7 +71,7 @@ func InsertProject(ctx context.Context, db orm.Context, p *core.Project) error {
 // GetProject returns the project, or an error naming it when there is none.
 func GetProject(ctx context.Context, db orm.Context, id string) (*core.Project, error) {
 	row, err := GetProjectByID(ctx, db, id)
-	if isNoRows(err) {
+	if errors.Is(err, orm.ErrNoRows) {
 		return nil, fmt.Errorf("project not found: %s", id)
 	}
 	if err != nil {
@@ -264,11 +260,4 @@ func projectToCore(row *Project) *core.Project {
 		UpdatedAt:        row.UpdatedAt,
 		LastActive:       row.LastActive,
 	}
-}
-
-// isNoRows reports a missing row in either of the shapes the ORM reports it:
-// orm.ErrNoRows from a builder Scan, svcerr.NotFound from a generated
-// Get…ByID. The two disagree today (forge friction, being fixed in forge).
-func isNoRows(err error) bool {
-	return errors.Is(err, orm.ErrNoRows) || errors.Is(err, svcerr.ErrNotFound)
 }
