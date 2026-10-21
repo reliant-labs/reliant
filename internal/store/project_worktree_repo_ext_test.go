@@ -351,7 +351,7 @@ func newWorktree(id, name, branch string, at time.Time) *core.Worktree {
 }
 
 // TestWorktreeQueries ports worktrees.sql and MergeWorktreeCleanupMetadata.
-// Archived rows (deleted_at set) must stay addressable everywhere the sqlc
+// Archived rows (deleted_at set) must stay addressable everywhere the original
 // queries addressed them, despite forge projecting deleted_at as soft delete.
 func TestWorktreeQueries(t *testing.T) {
 	env := storetest.New(t)

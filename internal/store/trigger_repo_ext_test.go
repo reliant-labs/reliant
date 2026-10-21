@@ -403,7 +403,7 @@ func TestTriggerRegistrationQueries(t *testing.T) {
 }
 
 // TestListAccessRoutedTriggers ports integration_access.sql's
-// ListAccessRoutedTriggers, interleaved with its sqlc twin.
+// ListAccessRoutedTriggers, interleaved with the Repository.
 func TestListAccessRoutedTriggers(t *testing.T) {
 	env := storetest.New(t)
 	ctx := context.Background()

@@ -48,7 +48,7 @@ import (
 )
 
 // The threads queries (P5b L1b). A by-key miss is reported as a wrapped
-// sql.ErrNoRows, the answer the sqlc queries gave: internal/threads tells a
+// sql.ErrNoRows, the answer the original queries gave: internal/threads tells a
 // missing thread or context window from a failed read with
 // errors.Is(err, sql.ErrNoRows).
 

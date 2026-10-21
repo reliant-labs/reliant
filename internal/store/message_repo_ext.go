@@ -1,7 +1,7 @@
 // yours: scaffolded once, never touched again — forge will not overwrite this file.
 //
 // This is the custom-query seam for Message: the message reads and writes of
-// internal/db's Repository, ported off sqlc (P5b lane L1a). Every function
+// internal/db's Repository (P5b lane L1a). Every function
 // takes and returns internal/db/core types; the generated Message row stays
 // inside this package (internal/db/SCHEMA.md, "Porting onto the forge ORM").
 //

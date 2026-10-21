@@ -45,9 +45,8 @@ func convChatIDs(chats []*core.Chat) []string {
 	return out
 }
 
-// requireSameChat compares the fields both layers map. The store also maps
-// archived_worktree_name, which the sqlc mapper dropped; the callers pass
-// chats without one.
+// requireSameChat compares two chats field by field, instants normalised to
+// UTC. Callers pass chats without an archived_worktree_name.
 func requireSameChat(t *testing.T, label string, got, want *core.Chat) {
 	t.Helper()
 	g, w := *got, *want

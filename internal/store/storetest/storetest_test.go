@@ -44,7 +44,7 @@ func TestGeneratedStoreRoundTripsAgainstPostgres(t *testing.T) {
 		t.Fatalf("store state = %v, want the column default CHAT_STATE_IDLE", row.State)
 	}
 
-	// The sqlc twin reads the same row.
+	// The Repository reads the same row.
 	twin, err := env.Repo.GetChat(ctx, "chat-roundtrip")
 	if err != nil {
 		t.Fatalf("Repo.GetChat: %v", err)
@@ -65,7 +65,7 @@ func TestGeneratedStoreRoundTripsAgainstPostgres(t *testing.T) {
 		t.Fatalf("view state = %v, want CHAT_STATE_IDLE", view.State)
 	}
 
-	// A composite-PK table: written by the sqlc twin, read by its whole key.
+	// A composite-PK table: written by the Repository, read by its whole key.
 	// cloned_at and install_state were left to their DEFAULTs.
 	if err := env.Repo.UpsertProjectDaemon(ctx, storetest.SeedProjectID, "daemon-roundtrip", "/srv/checkout", nil); err != nil {
 		t.Fatalf("Repo.UpsertProjectDaemon: %v", err)

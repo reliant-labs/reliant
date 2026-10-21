@@ -1,7 +1,7 @@
 // yours: scaffolded once, never touched again — forge will not overwrite this file.
 //
 // This is the custom-query seam for MessageContentBlock: the content block
-// reads and writes of internal/db's Repository, ported off sqlc (P5b lane
+// reads and writes of internal/db's Repository (P5b lane
 // L1a). Every function takes and returns internal/db/core types; the
 // generated MessageContentBlock row stays inside this package.
 //

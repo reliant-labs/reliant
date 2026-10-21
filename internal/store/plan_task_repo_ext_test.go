@@ -127,7 +127,7 @@ func TestPlanQueries(t *testing.T) {
 	}
 	wantIDs(t, "ListPlansByProject", byProject, "plan-older")
 
-	// The sqlc twins list the same plans in the same order.
+	// The Repository lists the same plans in the same order.
 	twinThread, err := env.Repo.ListPlansByThread(ctx, "thread-plans")
 	if err != nil {
 		t.Fatalf("Repo.ListPlansByThread: %v", err)

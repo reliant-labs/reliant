@@ -22,7 +22,7 @@ import (
 // The integration access and write-ledger ports (P5b lane L5). Each ext query
 // is written through one layer and read back through the other (env.Repo is
 // the Repository, which delegates to these functions once ported), and pins
-// the rows the sqlc twin returned.
+// the rows the queries are specified to return.
 
 func accessGrants(t *testing.T, env *storetest.Env, userID, integrationID string) map[string]store.IntegrationEventAccess {
 	t.Helper()

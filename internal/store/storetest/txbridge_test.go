@@ -15,7 +15,7 @@ import (
 
 // One transaction, either layer (internal/db/SCHEMA.md): a transaction opened
 // by the Repository (Repo.RunTx) or by the ORM (orm.Client.RunTx) is the
-// transaction every sqlc/Repository call AND every generated-store call made
+// transaction every Repository call AND every generated-store call made
 // with its ctx runs in. These pin it from both sides against Postgres.
 
 var errRollback = errors.New("roll the transaction back")
@@ -32,8 +32,7 @@ func newChat(t *testing.T, env *storetest.Env, id string) {
 	}
 }
 
-// writeBoth makes one sqlc write (a project_daemons upsert through the
-// Repository) and one generated-store write (a chat) with ctx.
+// writeBoth makes one Repository write (a project_daemons upsert) and one generated-store write (a chat) with ctx.
 func writeBoth(ctx context.Context, env *storetest.Env, tag string) error {
 	if err := env.Repo.UpsertProjectDaemon(ctx, storetest.SeedProjectID, "daemon-"+tag, "/srv/"+tag, nil); err != nil {
 		return err
@@ -59,7 +58,7 @@ func committedRows(t *testing.T, env *storetest.Env, tag string) (daemons, chats
 	return daemons, chats
 }
 
-func TestRepoRunTxRollsBackStoreAndSQLCWritesTogether(t *testing.T) {
+func TestRepoRunTxRollsBackStoreAndRepositoryWritesTogether(t *testing.T) {
 	env := storetest.New(t)
 	err := env.Repo.RunTx(context.Background(), orm.Serializable, func(ctx context.Context) error {
 		if !orm.InTx(ctx) {
@@ -78,7 +77,7 @@ func TestRepoRunTxRollsBackStoreAndSQLCWritesTogether(t *testing.T) {
 	}
 }
 
-func TestStoreRunTxRollsBackStoreAndSQLCWritesTogether(t *testing.T) {
+func TestStoreRunTxRollsBackStoreAndRepositoryWritesTogether(t *testing.T) {
 	env := storetest.New(t)
 	err := env.ORM.RunTx(context.Background(), orm.Serializable, func(ctx context.Context) error {
 		if err := writeBoth(ctx, env, "store-rollback"); err != nil {
@@ -114,7 +113,7 @@ func TestEachLayerSeesTheOthersUncommittedWrite(t *testing.T) {
 		}
 		pd, err := store.GetProjectDaemonByPK(ctx, env.ORM, storetest.SeedProjectID, "daemon-visible")
 		if err != nil {
-			t.Errorf("store read of the sqlc write: %v", err)
+			t.Errorf("store read of the Repository write: %v", err)
 		} else if pd.Path != "/srv/visible" {
 			t.Errorf("store read path %q, want /srv/visible", pd.Path)
 		}

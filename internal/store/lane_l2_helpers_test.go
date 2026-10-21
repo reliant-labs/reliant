@@ -13,9 +13,8 @@ import (
 	"github.com/reliant-labs/reliant/internal/store/storetest"
 )
 
-// Fixtures shared by the workflow/run lane's tests (P5b L2). Each ported
-// query's test writes through one layer and reads through the other, on one
-// database (internal/db/SCHEMA.md rule 6): env.Repo is the twin.
+// Fixtures shared by the workflow/run lane's tests (P5b L2). Each test seeds
+// rows it spells out and asserts the explicit rows or values it expects back.
 
 // l2Base is a fixed instant, so created_at orderings are total.
 var l2Base = time.Date(2026, 10, 19, 12, 0, 0, 0, time.UTC)
@@ -48,13 +47,21 @@ func mustExec(tb testing.TB, env *storetest.Env, q string, args ...any) {
 	}
 }
 
-// requireSame fails unless the port and its twin returned equal values.
-// Instants compare with time.Equal: the two layers scan timestamptz into
-// different locations.
-func requireSame(tb testing.TB, what string, port, twin any) {
+// requireSame fails unless got equals want. Instants compare with time.Equal:
+// timestamptz scans into a different location than a literal carries.
+func requireSame(tb testing.TB, what string, got, want any) {
 	tb.Helper()
-	if diff := cmp.Diff(twin, port, cmp.Comparer(func(a, b time.Time) bool { return a.Equal(b) })); diff != "" {
-		tb.Fatalf("%s: the port and its sqlc twin disagree (-twin +port):\n%s", what, diff)
+	if diff := cmp.Diff(want, got, cmp.Comparer(func(a, b time.Time) bool { return a.Equal(b) })); diff != "" {
+		tb.Fatalf("%s: got differs from want (-want +got):\n%s", what, diff)
+	}
+}
+
+// requireRecent fails unless at is within a minute of now: the instant a
+// NOW() the database stamped must be.
+func requireRecent(tb testing.TB, what string, at time.Time) {
+	tb.Helper()
+	if d := time.Since(at); d > time.Minute || d < -time.Minute {
+		tb.Fatalf("%s = %v, want a stamp of now (%v)", what, at, time.Now())
 	}
 }
 

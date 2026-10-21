@@ -498,7 +498,7 @@ func workflowToCore(row *Workflow) *core.Workflow {
 }
 
 // requireOneRow turns an UPDATE that matched no row into sql.ErrNoRows, the
-// answer the sqlc :one queries these replace gave.
+// answer the :one queries these replace gave.
 func requireOneRow(res sql.Result, err error) error {
 	if err != nil {
 		return err
@@ -513,8 +513,8 @@ func requireOneRow(res sql.Result, err error) error {
 	return nil
 }
 
-// ignoreNotFound keeps a by-key write of a missing row the no-op its sqlc
-// :exec predecessor was. Every generated miss is errors.Is(sql.ErrNoRows).
+// ignoreNotFound keeps a by-key write of a missing row the no-op its :exec
+// predecessor was. Every generated miss is errors.Is(sql.ErrNoRows).
 func ignoreNotFound(err error) error {
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil
