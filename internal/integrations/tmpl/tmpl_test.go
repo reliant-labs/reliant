@@ -136,7 +136,7 @@ func TestPrepareCompilesOnceAndEvaluatesManyTimes(t *testing.T) {
 		t.Fatal(err)
 	}
 	for in, want := range map[bool]string{true: "private", false: "public"} {
-		got, err := e.Eval(map[string]any{"item": map[string]any{"private": in}})
+		got, err := e(map[string]any{"item": map[string]any{"private": in}})
 		if err != nil || got != want {
 			t.Errorf("private=%v: got %v, %v", in, got, err)
 		}
@@ -144,7 +144,7 @@ func TestPrepareCompilesOnceAndEvaluatesManyTimes(t *testing.T) {
 	if _, err := Prepare("item.", "item"); err == nil {
 		t.Error("a bad expression is refused at Prepare, not at the first item")
 	}
-	if _, err := e.Eval(map[string]any{"item": 7}); err == nil {
+	if _, err := e(map[string]any{"item": 7}); err == nil {
 		t.Error("an item the expression cannot read is an error, not a zero value")
 	}
 }

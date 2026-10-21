@@ -12,23 +12,26 @@ import (
 	"github.com/reliant-labs/reliant/internal/integrations/tmpl"
 )
 
+// evaluator is one compiled expression.
+type evaluator = func(vars map[string]any) (any, error)
+
 // projector is a type's CEL, compiled once. The manifest is immutable, so it
 // is memoised per type.
 type projector struct {
-	items       *tmpl.Expr
-	value       *tmpl.Expr
-	label       *tmpl.Expr
-	description *tmpl.Expr
-	group       *tmpl.Expr
-	annotations map[string]*tmpl.Expr
+	items       evaluator
+	value       evaluator
+	label       evaluator
+	description evaluator
+	group       evaluator
+	annotations map[string]evaluator
 	warnings    []projectedWarning
 
-	resolveLabel       *tmpl.Expr
-	resolveDescription *tmpl.Expr
+	resolveLabel       evaluator
+	resolveDescription evaluator
 }
 
 type projectedWarning struct {
-	when    *tmpl.Expr
+	when    evaluator
 	message string
 }
 
@@ -46,13 +49,13 @@ func (s *service) projectorFor(rt *resolvedType) (*projector, error) {
 
 func buildProjector(rt *resolvedType) (*projector, error) {
 	o := rt.o
-	p := &projector{annotations: map[string]*tmpl.Expr{}}
+	p := &projector{annotations: map[string]evaluator{}}
 	var err error
-	prep := func(what, expr string, names ...string) *tmpl.Expr {
+	prep := func(what, expr string, names ...string) evaluator {
 		if err != nil || expr == "" {
 			return nil
 		}
-		var e *tmpl.Expr
+		var e evaluator
 		e, err = tmpl.Prepare(expr, names...)
 		if err != nil {
 			err = fmt.Errorf("%s: %w", what, err)
@@ -94,7 +97,7 @@ func buildProjector(rt *resolvedType) (*projector, error) {
 // cannot be computed is left out and logged: one odd row must not empty the
 // picker.
 func (p *projector) options(data map[string]any, identity string, log *slog.Logger) ([]Option, error) {
-	raw, err := p.items.Eval(map[string]any{manifest.VarOutput: data})
+	raw, err := p.items(map[string]any{manifest.VarOutput: data})
 	if err != nil {
 		return nil, &UpstreamError{Message: fmt.Sprintf("the integration's answer was not the list this type expects: %v", err)}
 	}
@@ -117,7 +120,7 @@ func (p *projector) options(data map[string]any, identity string, log *slog.Logg
 
 func (p *projector) option(item any, identity string, log *slog.Logger) (Option, bool) {
 	vars := map[string]any{manifest.VarItem: item}
-	raw, err := p.value.Eval(vars)
+	raw, err := p.value(vars)
 	value, ok := scalarString(raw)
 	if err != nil || !ok || value == "" {
 		log.Debug("input option skipped: no value", "error", err)
@@ -132,7 +135,7 @@ func (p *projector) option(item any, identity string, log *slog.Logger) (Option,
 	if len(p.annotations) > 0 {
 		opt.Annotations = make(map[string]any, len(p.annotations))
 		for name, e := range p.annotations {
-			v, err := e.Eval(vars)
+			v, err := e(vars)
 			if err != nil {
 				log.Debug("input option annotation skipped", "annotation", name, "error", err)
 				continue
@@ -150,7 +153,7 @@ func (p *projector) option(item any, identity string, log *slog.Logger) (Option,
 			},
 		}
 		for _, w := range p.warnings {
-			holds, err := w.when.Eval(wvars)
+			holds, err := w.when(wvars)
 			if err != nil {
 				log.Debug("input option warning skipped", "error", err)
 				continue
@@ -176,11 +179,11 @@ func (p *projector) resolved(value string, data map[string]any, log *slog.Logger
 	return Option{Value: value, Label: label, Description: p.evalString(p.resolveDescription, vars, log)}, true
 }
 
-func (p *projector) evalString(e *tmpl.Expr, vars map[string]any, log *slog.Logger) string {
+func (p *projector) evalString(e evaluator, vars map[string]any, log *slog.Logger) string {
 	if e == nil {
 		return ""
 	}
-	v, err := e.Eval(vars)
+	v, err := e(vars)
 	if err != nil {
 		log.Debug("input option projection skipped", "error", err)
 		return ""

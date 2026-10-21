@@ -354,15 +354,10 @@ func RenderWith(s string, vars map[string]any) (any, error) {
 	return b.String(), nil
 }
 
-// Expr is a bare expression compiled once, for a caller that evaluates it over
-// many inputs (one projection over every item of a list).
-type Expr struct {
-	src string
-	prg cel.Program
-}
-
-// Prepare compiles expr over the named variables. Eval takes values for them.
-func Prepare(expr string, names ...string) (*Expr, error) {
+// Prepare compiles expr once, over the named variables, for a caller that
+// evaluates it over many inputs (one projection over every item of a list).
+// The returned function takes values for the variables.
+func Prepare(expr string, names ...string) (func(vars map[string]any) (any, error), error) {
 	ast, err := Compile(expr, names...)
 	if err != nil {
 		return nil, err
@@ -375,8 +370,5 @@ func Prepare(expr string, names ...string) (*Expr, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Expr{src: expr, prg: prg}, nil
+	return func(vars map[string]any) (any, error) { return eval(prg, expr, vars) }, nil
 }
-
-// Eval evaluates the expression over vars.
-func (e *Expr) Eval(vars map[string]any) (any, error) { return eval(e.prg, e.src, vars) }

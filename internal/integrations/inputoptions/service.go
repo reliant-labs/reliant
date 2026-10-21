@@ -281,10 +281,9 @@ func (s *service) resolveByLookup(ctx context.Context, req ResolveRequest, rt *r
 		return err
 	}
 	type found struct {
-		opt      Option
-		ok       bool
-		missing  bool
-		resolved bool
+		opt     Option
+		ok      bool
+		missing bool
 	}
 	results := make([]found, len(values))
 	var g errgroup.Group
