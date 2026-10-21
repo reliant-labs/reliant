@@ -133,8 +133,16 @@ type TriggerServiceClient interface {
 	// All or nothing. Every declared trigger is validated before anything is
 	// written, so a missing connection on one of them refuses the lot and
 	// names it; the response says per trigger what happened, and when it is
-	// not `enabled` nothing new is running. A trigger the user already has an
-	// activation of (in this project) keeps its settings and is only resumed.
+	// not `enabled` nothing new is running.
+	//
+	// It is also how an automation's settings change. A trigger the user
+	// already has an activation of (in this project) is brought to the
+	// request's choices, re-validated exactly like a new one, and turned on:
+	// the request describes the whole setup, so a per-trigger difference the
+	// request does not restate in `overrides` is replaced. Only the
+	// activation's name, an unnamed connection and an unspecified acting
+	// identity are kept from what it had. A failed write puts every changed
+	// activation back as it was.
 	EnableWorkflow(context.Context, *connect.Request[v1.EnableWorkflowRequest]) (*connect.Response[v1.EnableWorkflowResponse], error)
 	// DisableWorkflow pauses every activation of a workflow. Unlike enabling it
 	// is not all-or-nothing: a pause that fails must not stop the others from
@@ -406,8 +414,16 @@ type TriggerServiceHandler interface {
 	// All or nothing. Every declared trigger is validated before anything is
 	// written, so a missing connection on one of them refuses the lot and
 	// names it; the response says per trigger what happened, and when it is
-	// not `enabled` nothing new is running. A trigger the user already has an
-	// activation of (in this project) keeps its settings and is only resumed.
+	// not `enabled` nothing new is running.
+	//
+	// It is also how an automation's settings change. A trigger the user
+	// already has an activation of (in this project) is brought to the
+	// request's choices, re-validated exactly like a new one, and turned on:
+	// the request describes the whole setup, so a per-trigger difference the
+	// request does not restate in `overrides` is replaced. Only the
+	// activation's name, an unnamed connection and an unspecified acting
+	// identity are kept from what it had. A failed write puts every changed
+	// activation back as it was.
 	EnableWorkflow(context.Context, *connect.Request[v1.EnableWorkflowRequest]) (*connect.Response[v1.EnableWorkflowResponse], error)
 	// DisableWorkflow pauses every activation of a workflow. Unlike enabling it
 	// is not all-or-nothing: a pause that fails must not stop the others from

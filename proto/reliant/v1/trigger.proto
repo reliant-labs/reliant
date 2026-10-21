@@ -87,8 +87,16 @@ service TriggerService {
   // All or nothing. Every declared trigger is validated before anything is
   // written, so a missing connection on one of them refuses the lot and
   // names it; the response says per trigger what happened, and when it is
-  // not `enabled` nothing new is running. A trigger the user already has an
-  // activation of (in this project) keeps its settings and is only resumed.
+  // not `enabled` nothing new is running.
+  //
+  // It is also how an automation's settings change. A trigger the user
+  // already has an activation of (in this project) is brought to the
+  // request's choices, re-validated exactly like a new one, and turned on:
+  // the request describes the whole setup, so a per-trigger difference the
+  // request does not restate in `overrides` is replaced. Only the
+  // activation's name, an unnamed connection and an unspecified acting
+  // identity are kept from what it had. A failed write puts every changed
+  // activation back as it was.
   rpc EnableWorkflow(EnableWorkflowRequest) returns (EnableWorkflowResponse) {}
 
   // DisableWorkflow pauses every activation of a workflow. Unlike enabling it
@@ -867,8 +875,9 @@ message EnableWorkflowRequest {
 
   // The connection each integration trigger listens through, keyed by
   // integration id (e.g. "github"). One entry serves every trigger of that
-  // integration. An integration with no entry uses the user's default
-  // connection for it; with none, that trigger is refused.
+  // integration. An integration with no entry keeps the connection an
+  // existing activation listens through, and otherwise uses the user's
+  // default connection for it; with none, that trigger is refused.
   map<string, string> connection_ids = 6;
 
   // Workflow inputs the activations set on every run, as
@@ -887,12 +896,17 @@ message EnableWorkflowRequest {
   // A declaration's own prompt is used when this is empty.
   string message = 10;
 
-  // Names the activations "<name_prefix> · <trigger>". Empty uses the
-  // workflow ref.
+  // Names new activations "<name_prefix> · <trigger>". Empty uses the
+  // workflow ref. An existing activation keeps its name.
   string name_prefix = 11;
 
   // Per-trigger exceptions to the shared choices above.
   repeated WorkflowTriggerOverride overrides = 12;
+
+  // Who the integration writes of every run speak as, as
+  // TriggerDefinition.acting_identity. Unspecified means the owner for a new
+  // activation and "unchanged" for an existing one.
+  ActingIdentity acting_identity = 13;
 }
 
 // WorkflowTriggerOverride changes one declared trigger's activation away from
@@ -924,9 +938,10 @@ enum WorkflowTriggerOutcome {
   // ENABLED: a new activation was created and is running.
   WORKFLOW_TRIGGER_OUTCOME_ENABLED = 1;
   // RESUMED: the user's paused activation of it was turned back on, with the
-  // settings it already had.
+  // request's settings.
   WORKFLOW_TRIGGER_OUTCOME_RESUMED = 2;
-  // ALREADY_ENABLED: an enabled activation already existed; nothing changed.
+  // ALREADY_ENABLED: an enabled activation already had exactly the request's
+  // settings; nothing changed.
   WORKFLOW_TRIGGER_OUTCOME_ALREADY_ENABLED = 3;
   // FAILED: this trigger could not be enabled; message says why. Because
   // enabling is all-or-nothing, it is also why no other trigger was.
@@ -937,6 +952,9 @@ enum WorkflowTriggerOutcome {
   // LEFT_ENABLED: the call failed but this trigger's activation could not be
   // undone and is still running; disable it. message says why.
   WORKFLOW_TRIGGER_OUTCOME_LEFT_ENABLED = 6;
+  // UPDATED: an enabled activation already existed and now has the request's
+  // settings; it kept running throughout.
+  WORKFLOW_TRIGGER_OUTCOME_UPDATED = 7;
 }
 
 // WorkflowTriggerResult is one declared trigger's part of an EnableWorkflow.
@@ -950,7 +968,7 @@ message WorkflowTriggerResult {
   // on ("connect GitHub first: ...").
   string message = 3;
 
-  // The activation, for ENABLED, RESUMED and ALREADY_ENABLED.
+  // The activation, for ENABLED, RESUMED, UPDATED and ALREADY_ENABLED.
   Trigger activation = 4;
 
   // A webhook trigger's token, for ENABLED only. Shown once, never again.

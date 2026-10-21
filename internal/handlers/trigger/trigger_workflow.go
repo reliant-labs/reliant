@@ -2,7 +2,9 @@
 package trigger
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -21,17 +23,25 @@ import (
 // A workflow declares WHEN it runs; the user turns that on. EnableWorkflow and
 // DisableWorkflow are that act for a whole workflow at once: one set of
 // choices (project, machine, connected accounts, params) applied to every
-// trigger it declares. Per-trigger activation (CreateTrigger with a
-// workflow_trigger source) stays for the single-trigger case and for
-// overrides, and both go through the same validation.
+// trigger it declares. EnableWorkflow is also how those choices change later:
+// an existing activation is brought to the request, so the workflow's setup is
+// edited as one unit and its triggers cannot drift apart. Per-trigger
+// activation (CreateTrigger with a workflow_trigger source) stays for the
+// single-trigger case, and every path goes through the same validation.
 
+// enableStep is what phase 2 writes for one declared trigger.
 type enableStep struct {
 	name     string
 	existing *core.Trigger // the user's activation of it in this project, if any
-	def      *reliantv1.TriggerDefinition
+	// def is the definition to write: a new activation's, or (with existing)
+	// the changed settings of an existing one. Nil with existing means its
+	// settings already match and it only needs resuming.
+	def *reliantv1.TriggerDefinition
 }
 
-// EnableWorkflow enables every trigger a workflow declares, or none of them.
+// EnableWorkflow enables every trigger a workflow declares, or none of them,
+// creating the activations that are missing and bringing the existing ones to
+// the request's settings.
 func (s *Service) EnableWorkflow(
 	ctx context.Context,
 	req *connect.Request[reliantv1.EnableWorkflowRequest],
@@ -95,24 +105,27 @@ func (s *Service) EnableWorkflow(
 		name := wt.GetName()
 		results[i] = &reliantv1.WorkflowTriggerResult{Trigger: name}
 		if existing := activations[name]; existing != nil {
-			if existing.Enabled {
-				results[i].Outcome = reliantv1.WorkflowTriggerOutcome_WORKFLOW_TRIGGER_OUTCOME_ALREADY_ENABLED
-				results[i].Activation = s.render(ctx, existing)
-				continue
-			}
-			resuming := *existing
-			resuming.Enabled = true
-			if err := s.refreshTriggerAccess(ctx, &resuming); err != nil {
+			step, err := s.existingActivationStep(ctx, userID, wt, msg, existing, overrides[name], taken)
+			if err != nil {
 				results[i].Outcome = reliantv1.WorkflowTriggerOutcome_WORKFLOW_TRIGGER_OUTCOME_FAILED
 				results[i].Message = connectMessage(err)
 				failed = true
 				continue
 			}
-			steps[i] = &enableStep{name: name, existing: existing}
+			if step == nil {
+				results[i].Outcome = reliantv1.WorkflowTriggerOutcome_WORKFLOW_TRIGGER_OUTCOME_ALREADY_ENABLED
+				results[i].Activation = s.render(ctx, existing)
+				continue
+			}
+			if step.def != nil && step.def.Name != existing.Name {
+				delete(taken, existing.Name)
+				taken[step.def.Name] = true
+			}
+			steps[i] = step
 			continue
 		}
 
-		def, err := s.workflowActivationDefinition(wt, msg, prefix, overrides[name])
+		def, err := s.workflowActivationDefinition(wt, msg, prefix+" · "+name, overrides[name])
 		if err == nil {
 			if taken[def.Name] {
 				// Only a name the caller chose for this trigger can still
@@ -162,7 +175,92 @@ func (s *Service) EnableWorkflow(
 	return connect.NewResponse(&reliantv1.EnableWorkflowResponse{Enabled: true, Results: results}), nil
 }
 
+// existingActivationStep decides what enabling does to an activation the user
+// already has: nothing (nil, when it is on with exactly the request's
+// settings), a resume, or an update to the request's settings. The update is
+// validated here, in phase 1, exactly as a new activation is, so a setting
+// that is no longer valid refuses the whole enable before anything is written.
+func (s *Service) existingActivationStep(
+	ctx context.Context,
+	userID string,
+	wt *reliantv1.WorkflowTrigger,
+	msg *reliantv1.EnableWorkflowRequest,
+	existing *core.Trigger,
+	override *reliantv1.WorkflowTriggerOverride,
+	taken map[string]bool,
+) (*enableStep, error) {
+	name := wt.GetName()
+	def, err := s.workflowActivationDefinition(wt, msg, existing.Name, override)
+	if err != nil {
+		return nil, err
+	}
+	// A connection the request does not name stays the one this activation
+	// listens through, rather than falling back to the default.
+	if def.ConnectionId == nil && existing.ConnectionID != nil {
+		id := *existing.ConnectionID
+		def.ConnectionId = &id
+	}
+	if def.Name != existing.Name && taken[def.Name] {
+		return nil, connect.NewError(connect.CodeAlreadyExists,
+			fmt.Errorf("you already have an automation named %q in this project; pick another name", def.Name))
+	}
+	row, err := s.triggerFromDefinition(ctx, userID, def, existing)
+	if err != nil {
+		return nil, err
+	}
+	row.Enabled = true
+	if err := s.refreshTriggerAccess(ctx, row); err != nil {
+		return nil, err
+	}
+	if sameActivationSettings(row, existing) {
+		if existing.Enabled {
+			return nil, nil
+		}
+		return &enableStep{name: name, existing: existing}, nil
+	}
+	return &enableStep{name: name, existing: existing, def: def}, nil
+}
+
+// sameActivationSettings reports whether two rows of one activation hold the
+// same user choices. The source projection (kind, config, filter) is the
+// declaration's, re-read at every fire, so it is not a choice and not compared.
+func sameActivationSettings(a, b *core.Trigger) bool {
+	return a.Name == b.Name &&
+		a.ProjectID == b.ProjectID &&
+		ptrValue(a.WorktreeID) == ptrValue(b.WorktreeID) &&
+		a.Message == b.Message &&
+		a.DaemonID == b.DaemonID &&
+		a.NoMachine == b.NoMachine &&
+		a.NotifyOnComplete == b.NotifyOnComplete &&
+		a.ActingIdentity.OrOwner() == b.ActingIdentity.OrOwner() &&
+		ptrValue(a.ConnectionID) == ptrValue(b.ConnectionID) &&
+		sameJSON(a.Presets, b.Presets) &&
+		sameJSON(a.Params, b.Params)
+}
+
+func ptrValue(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return *p
+}
+
+// sameJSON compares two maps as they are stored: params decoded from jsonb and
+// params decoded from the wire differ in Go types (json.Number, float64) while
+// meaning the same value. An empty map and a nil one are the same setting.
+func sameJSON[M ~map[string]V, V any](a, b M) bool {
+	if len(a) == 0 && len(b) == 0 {
+		return true
+	}
+	ja, errA := json.Marshal(a)
+	jb, errB := json.Marshal(b)
+	return errA == nil && errB == nil && bytes.Equal(ja, jb)
+}
+
 func (s *Service) applyEnableStep(ctx context.Context, step *enableStep, result *reliantv1.WorkflowTriggerResult, undo *[]func(context.Context) error) error {
+	if step.existing != nil && step.def != nil {
+		return s.applyActivationUpdate(ctx, step, result, undo)
+	}
 	if step.existing != nil {
 		resp, err := s.SetTriggerEnabled(ctx, connect.NewRequest(&reliantv1.SetTriggerEnabledRequest{Id: step.existing.ID, Enabled: true}))
 		if err != nil {
@@ -195,6 +293,53 @@ func (s *Service) applyEnableStep(ctx context.Context, step *enableStep, result 
 	return nil
 }
 
+// applyActivationUpdate writes an existing activation's new settings and turns
+// it on. Its undo writes back the row exactly as it was, not through
+// UpdateTrigger: the old settings were valid when chosen and are the user's,
+// and a restore that re-validated could refuse them and leave the new ones.
+func (s *Service) applyActivationUpdate(ctx context.Context, step *enableStep, result *reliantv1.WorkflowTriggerResult, undo *[]func(context.Context) error) error {
+	prev := *step.existing
+	enabled := true
+	def := step.def
+	def.Enabled = &enabled
+	resp, err := s.UpdateTrigger(ctx, connect.NewRequest(&reliantv1.UpdateTriggerRequest{Id: prev.ID, Trigger: def}))
+	if err != nil {
+		// UpdateTrigger writes the row before it converges, so a failure
+		// can leave the new settings stored; put the old ones back.
+		_ = s.restoreActivation(ctx, &prev)
+		return err
+	}
+	*undo = append(*undo, func(ctx context.Context) error { return s.restoreActivation(ctx, &prev) })
+	result.Outcome = reliantv1.WorkflowTriggerOutcome_WORKFLOW_TRIGGER_OUTCOME_UPDATED
+	if !prev.Enabled {
+		result.Outcome = reliantv1.WorkflowTriggerOutcome_WORKFLOW_TRIGGER_OUTCOME_RESUMED
+	}
+	result.Activation = resp.Msg.GetTrigger()
+	return nil
+}
+
+// restoreActivation writes a row back as it was before an update, reconverges
+// its schedule, and moves the machine grant back with it.
+func (s *Service) restoreActivation(ctx context.Context, prev *core.Trigger) error {
+	current, err := s.deps.Repo.GetTrigger(ctx, prev.ID)
+	if err != nil {
+		return err
+	}
+	if err := s.deps.Repo.UpdateTrigger(ctx, prev); err != nil {
+		return err
+	}
+	if err := s.sync(ctx, prev.Kind, prev.ID); err != nil {
+		return err
+	}
+	if prev.Enabled {
+		s.grants.ensure(ctx, prev.UserID, prev.DaemonID)
+	}
+	if current.DaemonID != prev.DaemonID || !prev.Enabled {
+		s.grants.releaseIfUnused(ctx, prev.UserID, current.DaemonID)
+	}
+	return nil
+}
+
 // undoEnable reverses what phase 2 wrote, newest first, and records on each
 // result what became of it. An undo that fails leaves that trigger running and
 // says so: that is the one outcome the user must act on.
@@ -203,21 +348,30 @@ func (s *Service) undoEnable(ctx context.Context, steps []*enableStep, results [
 	for i, r := range results {
 		switch r.Outcome {
 		case reliantv1.WorkflowTriggerOutcome_WORKFLOW_TRIGGER_OUTCOME_ENABLED,
-			reliantv1.WorkflowTriggerOutcome_WORKFLOW_TRIGGER_OUTCOME_RESUMED:
+			reliantv1.WorkflowTriggerOutcome_WORKFLOW_TRIGGER_OUTCOME_RESUMED,
+			reliantv1.WorkflowTriggerOutcome_WORKFLOW_TRIGGER_OUTCOME_UPDATED:
 			written = append(written, i)
 		}
 	}
 	for n := len(undo) - 1; n >= 0; n-- {
 		r := results[written[n]]
+		updated := r.Outcome == reliantv1.WorkflowTriggerOutcome_WORKFLOW_TRIGGER_OUTCOME_UPDATED
 		if err := undo[n](ctx); err != nil {
 			logging.ErrorContext(ctx, "could not undo a workflow enable; the trigger is still running",
 				"trigger", r.Trigger, "error", err)
 			r.Outcome = reliantv1.WorkflowTriggerOutcome_WORKFLOW_TRIGGER_OUTCOME_LEFT_ENABLED
-			r.Message = "Enabling failed and this trigger could not be switched back off: " + connectMessage(err) + " Disable it from Automations."
+			if updated {
+				r.Message = "Saving failed and this trigger's previous settings could not be put back: " + connectMessage(err) + " Check its settings."
+			} else {
+				r.Message = "Enabling failed and this trigger could not be switched back off: " + connectMessage(err) + " Disable it from Automations."
+			}
 			continue
 		}
 		r.Outcome = reliantv1.WorkflowTriggerOutcome_WORKFLOW_TRIGGER_OUTCOME_NOT_ENABLED
 		r.Message = "Undone because another trigger of this workflow could not be enabled."
+		if updated {
+			r.Message = "Undone because another trigger of this workflow could not be saved; it keeps its previous settings."
+		}
 		r.Activation, r.Webhook = nil, nil
 	}
 	for i, step := range steps {
@@ -284,16 +438,18 @@ func (s *Service) activationPrefix(
 }
 
 // workflowActivationDefinition is the definition of one declared trigger's
-// activation: the request's shared choices, then the trigger's override.
+// activation, named name: the request's shared choices, then the trigger's
+// override.
 func (s *Service) workflowActivationDefinition(
 	wt *reliantv1.WorkflowTrigger,
 	msg *reliantv1.EnableWorkflowRequest,
-	prefix string,
+	name string,
 	override *reliantv1.WorkflowTriggerOverride,
 ) (*reliantv1.TriggerDefinition, error) {
 	enabled := true
 	def := &reliantv1.TriggerDefinition{
-		Name:             prefix + " · " + wt.GetName(),
+		Name:             name,
+		ActingIdentity:   msg.ActingIdentity,
 		ProjectId:        msg.ProjectId,
 		WorktreeId:       msg.WorktreeId,
 		Enabled:          &enabled,
