@@ -40,7 +40,13 @@ import {
 import { SettingsPageHeader } from "../SettingsPageHeader";
 
 // The org-administration permissions, in the order they are shown. Grouped by
-// family so the two halves of a read/write pair sit together.
+// family so the two halves of a read/write pair sit together. Mirrors the
+// control plane's per-org grant set (control-plane internal/orggrants
+// OrgScopes): a grant missing here is one no admin can see or hand out.
+//
+// identity:read / identity:manage administer the END USERS of the org's apps
+// (invite, roles, lock, password-set codes) — their own product, deliberately
+// not implied by deploy:write.
 //
 // reliant:api, daemon:connect, llm:invoke, proxy:port and mcp:connector are
 // deliberately absent: they are every user's ordinary authority over their own
@@ -57,6 +63,8 @@ const ORG_PERMISSIONS = [
   "cluster:manage",
   "token:read",
   "token:write",
+  "identity:read",
+  "identity:manage",
 ] as const;
 
 // Holding this is what makes someone a permission administrator.
