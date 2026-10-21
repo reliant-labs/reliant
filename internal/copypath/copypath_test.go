@@ -61,6 +61,35 @@ func read(t *testing.T, path string) string {
 // The behaviour this package exists for: a bare name is an exact path, so
 // ".env" copies the ROOT .env and nothing else. It used to be a recursive
 // search, which walked node_modules on every workspace create.
+// A file deleted from the source between the directory listing and its copy
+// (git's detached maintenance removing its lock, a dev server's cache) is
+// skipped: the rest of the directory is still copied, and nothing fails.
+func TestCopyEntriesSkipsAChildThatVanishedFromTheSource(t *testing.T) {
+	src, dst := t.TempDir(), t.TempDir()
+	tree(t, src, map[string]string{"keep.txt": "keep", "maintenance.lock": "", "tmpdir/x": "x"})
+	entries, err := os.ReadDir(src)
+	require.NoError(t, err)
+	require.NoError(t, os.Remove(filepath.Join(src, "maintenance.lock")))
+	require.NoError(t, os.RemoveAll(filepath.Join(src, "tmpdir")))
+
+	require.NoError(t, copyEntries(src, dst, entries))
+	assert.Equal(t, "keep", read(t, filepath.Join(dst, "keep.txt")))
+	assert.NoFileExists(t, filepath.Join(dst, "maintenance.lock"))
+	assert.NoDirExists(t, filepath.Join(dst, "tmpdir"))
+}
+
+// Only a vanished SOURCE is forgiven: a child that is still there but cannot
+// be written to the destination fails the copy.
+func TestCopyEntriesStillFailsOnTheDestinationSide(t *testing.T) {
+	src, dst := t.TempDir(), t.TempDir()
+	tree(t, src, map[string]string{"a.txt": "a"})
+	tree(t, dst, map[string]string{"a.txt": "already here"}) // copyFile creates with O_EXCL
+	entries, err := os.ReadDir(src)
+	require.NoError(t, err)
+
+	assert.Error(t, copyEntries(src, dst, entries))
+}
+
 func TestCopyBareNameIsTheRootFileNotASearch(t *testing.T) {
 	src, dst := t.TempDir(), t.TempDir()
 	tree(t, src, map[string]string{

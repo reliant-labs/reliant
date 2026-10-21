@@ -153,16 +153,7 @@ func copyTree(src, dst string, info fs.FileInfo) error {
 		if err != nil {
 			return err
 		}
-		for _, entry := range entries {
-			childInfo, err := entry.Info()
-			if err != nil {
-				return err
-			}
-			if err := copyTree(filepath.Join(src, entry.Name()), filepath.Join(dst, entry.Name()), childInfo); err != nil {
-				return err
-			}
-		}
-		return nil
+		return copyEntries(src, dst, entries)
 	case info.Mode().IsRegular():
 		return copyFile(src, dst, info.Mode().Perm())
 	default:
@@ -170,6 +161,41 @@ func copyTree(src, dst string, info fs.FileInfo) error {
 		// socket left in a copied directory is skipped, not an error.
 		return nil
 	}
+}
+
+// copyEntries copies the listed children of src into dst.
+//
+// The source is a live tree, not a snapshot: a dev server's cache, an npm
+// install, or git's detached maintenance in a nested repository can delete a
+// file between the listing and its copy. A child that is gone from the source
+// had nothing left to copy, so it is skipped. Failing on it would fail the
+// whole entry and leave the destination half-copied. Any other error,
+// including one on the destination side, still fails the copy.
+func copyEntries(src, dst string, entries []fs.DirEntry) error {
+	for _, entry := range entries {
+		child := filepath.Join(src, entry.Name())
+		err := copyChild(child, filepath.Join(dst, entry.Name()), entry)
+		if err != nil && goneFromSource(child) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func copyChild(src, dst string, entry fs.DirEntry) error {
+	info, err := entry.Info()
+	if err != nil {
+		return err
+	}
+	return copyTree(src, dst, info)
+}
+
+func goneFromSource(path string) bool {
+	_, err := os.Lstat(path)
+	return errors.Is(err, fs.ErrNotExist)
 }
 
 func copyFile(src, dst string, perm fs.FileMode) (err error) {
