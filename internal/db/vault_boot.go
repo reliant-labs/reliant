@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log/slog"
 
-	postgresstore "github.com/reliant-labs/reliant/internal/db/postgres"
 	"github.com/reliant-labs/reliant/internal/vault"
 )
 
@@ -40,10 +39,8 @@ func BootVault(ctx context.Context, repo *Repo, hosted bool, dataDir, key string
 // sealAPIKeys enables sealing, backfills legacy rows, and finalizes the
 // api_keys contract. Readers are sealed-only, so a row left unsealed would be
 // unreadable; refuse to start rather than serve with it.
-func sealAPIKeys(ctx context.Context, repo *Repo, sealer postgresstore.CredentialSealer) error {
-	if err := repo.EnableCredentialSealing(sealer); err != nil {
-		return err
-	}
+func sealAPIKeys(ctx context.Context, repo *Repo, sealer CredentialSealer) error {
+	repo.EnableCredentialSealing(sealer)
 	sealed, err := repo.BackfillAPIKeys(ctx, 200)
 	if err != nil {
 		return fmt.Errorf("vault: backfilling api_keys: %w", err)

@@ -136,5 +136,5 @@ When `GetThreadTokenCount(thread, nil) > 185000`:
 
 - `internal/db/repository.go` - `GetThreadTokenCount` interface
 - `internal/db/repository_impl.go` - Implementation with fork recursion
-- `internal/db/postgres/queries/context_usage.sql` - `GetThreadTokenCountAtOrdinal` query
+- `internal/store/message_repo_ext.go` - `LatestMessageWithTokens`, the newest message with a token count at or before the cut
 - `internal/tokens/tokens.go` - Canonical estimation function

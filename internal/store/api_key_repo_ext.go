@@ -44,7 +44,7 @@ import (
 
 // api_keys (P5b lane L6). The table holds only automation credentials now, one per (user,
 // provider), and only sealed: api_key is the retired plaintext column, kept empty until a later
-// migration drops it. Sealing and opening are internal/db/postgres's settingStore's; nothing
+// migration drops it. Sealing and opening are internal/db's apiKeyStore's; nothing
 // here sees a credential except the backfill of rows that predate sealing.
 
 // GetAPIKeySealed returns the sealed value of the user's key for provider; sql.ErrNoRows when

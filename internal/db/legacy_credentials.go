@@ -9,7 +9,6 @@ import (
 	"github.com/reliant-labs/forge/pkg/orm"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
-	postgresstore "github.com/reliant-labs/reliant/internal/db/postgres"
 	"github.com/reliant-labs/reliant/internal/store"
 )
 
@@ -33,37 +32,37 @@ type legacyTable struct {
 
 var legacyTables = []legacyTable{
 	{
-		source: postgresstore.LegacySourceClaude, provider: "claude", authKind: core.AuthKindOAuth,
+		source: LegacySourceClaude, provider: "claude", authKind: core.AuthKindOAuth,
 		read:   store.ListLegacyClaudeCredentials,
 		sealed: []string{"access_token", "refresh_token"},
 	},
 	{
-		source: postgresstore.LegacySourceCodex, provider: "codex", authKind: core.AuthKindOAuth,
+		source: LegacySourceCodex, provider: "codex", authKind: core.AuthKindOAuth,
 		read:   store.ListLegacyCodexCredentials,
 		sealed: []string{"access_token", "refresh_token", "id_token"},
 	},
 	{
-		source: postgresstore.LegacySourceCopilot, provider: "copilot", authKind: core.AuthKindDevice,
+		source: LegacySourceCopilot, provider: "copilot", authKind: core.AuthKindDevice,
 		read:   store.ListLegacyCopilotCredentials,
 		sealed: []string{"github_access_token", "github_refresh_token"},
 	},
 	{
-		source: postgresstore.LegacySourceAntigravity, provider: "antigravity", authKind: core.AuthKindOAuth,
+		source: LegacySourceAntigravity, provider: "antigravity", authKind: core.AuthKindOAuth,
 		read:   store.ListLegacyAntigravityCredentials,
 		sealed: []string{"access_token", "refresh_token", "id_token"},
 	},
 	{
-		source: postgresstore.LegacySourceAPIKeys, provider: "", authKind: core.AuthKindAPIKey,
+		source: LegacySourceAPIKeys, provider: "", authKind: core.AuthKindAPIKey,
 		read:   store.ListLegacyAPIKeyCredentials,
 		sealed: []string{"api_key"},
 	},
 }
 
 func (t legacyTable) aad(userID, provider, column string) []byte {
-	if t.source == postgresstore.LegacySourceAPIKeys {
-		return postgresstore.LegacyAPIKeyAAD(userID, provider)
+	if t.source == LegacySourceAPIKeys {
+		return LegacyAPIKeyAAD(userID, provider)
 	}
-	return postgresstore.LegacyOAuthTokenAAD(t.source, userID, column)
+	return LegacyOAuthTokenAAD(t.source, userID, column)
 }
 
 // legacyRow is one raw row of a legacy table, secrets still sealed.
@@ -74,7 +73,7 @@ type legacyRow struct {
 
 // toImport opens the row's secrets under the legacy AAD and derives the account's identity.
 // (nil, nil) means the row is not an account (an OAuth marker, an unknown api_keys provider).
-func (r *Repo) legacyToImport(ctx context.Context, lr legacyRow) (*postgresstore.LegacyImport, error) {
+func (r *Repo) legacyToImport(ctx context.Context, lr legacyRow) (*LegacyImport, error) {
 	t := lr.table
 	cols := make([]string, len(t.sealed))
 	for i, column := range t.sealed {
@@ -84,7 +83,7 @@ func (r *Repo) legacyToImport(ctx context.Context, lr legacyRow) (*postgresstore
 		}
 		cols[i] = v
 	}
-	if t.source == postgresstore.LegacySourceAPIKeys && (cols[0] == "" || cols[0] == "dummy" || cols[0] == core.ProviderOAuthMarker) {
+	if t.source == LegacySourceAPIKeys && (cols[0] == "" || cols[0] == "dummy" || cols[0] == core.ProviderOAuthMarker) {
 		// An empty or "dummy" key is a cleared one; the marker only records that an OAuth provider is connected.
 		return nil, nil
 	}
@@ -105,26 +104,26 @@ func (r *Repo) legacyToImport(ctx context.Context, lr legacyRow) (*postgresstore
 	u.IdentityKey = placeholder
 
 	switch t.source {
-	case postgresstore.LegacySourceClaude:
+	case LegacySourceClaude:
 		u.ExternalAccountID, u.Email = lr.Meta[0], lr.Meta[1]
 		u.OrganizationID, u.OrganizationName, u.Scope = lr.Meta[2], lr.Meta[3], lr.Meta[4]
 		if u.ExternalAccountID != "" {
 			u.IdentityKey = core.ClaudeIdentityKey(u.ExternalAccountID, u.OrganizationID)
 		}
-	case postgresstore.LegacySourceCodex:
+	case LegacySourceCodex:
 		u.ExternalAccountID = lr.Meta[0]
 		if id, ok := core.CodexIdentityFromJWT(u.Secrets.IDToken, u.Secrets.Secret); ok {
 			u.IdentityKey, u.Email, u.PlanRaw, u.Plan = id.IdentityKey, id.Email, id.PlanRaw, id.Plan
 			u.ExternalAccountID = id.ExternalAccountID
 		}
-	case postgresstore.LegacySourceCopilot:
+	case LegacySourceCopilot:
 		u.PlanRaw = lr.Meta[0]
-	case postgresstore.LegacySourceAntigravity:
+	case LegacySourceAntigravity:
 		u.Scope = lr.Meta[0]
 		if id, ok := core.GoogleIdentityFromIDToken(u.Secrets.IDToken); ok {
 			u.IdentityKey, u.Email, u.ExternalAccountID = id.IdentityKey, id.Email, id.ExternalAccountID
 		}
-	case postgresstore.LegacySourceAPIKeys:
+	case LegacySourceAPIKeys:
 		if lr.Provider == providerReliant {
 			u.AuthKind, u.IdentityKey = core.AuthKindManaged, core.ManagedIdentityKey
 		} else {
@@ -132,7 +131,7 @@ func (r *Repo) legacyToImport(ctx context.Context, lr legacyRow) (*postgresstore
 			u.KeyHint = core.KeyHint(u.Secrets.Secret)
 		}
 	}
-	return &postgresstore.LegacyImport{Upsert: u, Source: t.source, CreatedAt: lr.CreatedAt, UpdatedAt: lr.UpdatedAt}, nil
+	return &LegacyImport{Upsert: u, Source: t.source, CreatedAt: lr.CreatedAt, UpdatedAt: lr.UpdatedAt}, nil
 }
 
 // MigrateLegacyCredentials copies every legacy credential into provider_accounts, once.
@@ -147,19 +146,19 @@ func (r *Repo) legacyToImport(ctx context.Context, lr legacyRow) (*postgresstore
 // and skipped; that user sees the provider as not connected and signs in again. It never
 // blocks boot. Because the marker is written regardless, the tables are kept until a later
 // release drops them, and the marker's failed count says whether anything remained behind.
-func (r *Repo) MigrateLegacyCredentials(ctx context.Context) (postgresstore.ImportResult, bool, error) {
+func (r *Repo) MigrateLegacyCredentials(ctx context.Context) (ImportResult, bool, error) {
 	done, err := r.accounts.LegacyCopyDone(ctx)
 	if err != nil || done {
-		return postgresstore.ImportResult{}, false, err
+		return ImportResult{}, false, err
 	}
 	var (
-		imports []postgresstore.LegacyImport
+		imports []LegacyImport
 		skipped int
 	)
 	for _, t := range legacyTables {
 		rows, err := t.read(ctx, r.ORM())
 		if err != nil {
-			return postgresstore.ImportResult{}, false, fmt.Errorf("reading %s: %w", t.source, err)
+			return ImportResult{}, false, fmt.Errorf("reading %s: %w", t.source, err)
 		}
 		for _, row := range rows {
 			lr := legacyRow{table: t, LegacyCredential: row}

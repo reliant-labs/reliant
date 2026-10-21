@@ -48,7 +48,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
-// Provider accounts (P5b lane L6). The statements of internal/db/postgres's AccountStore, which
+// Provider accounts (P5b lane L6). The statements of internal/db's accountStore, which
 // keeps everything that is not SQL: sealing and opening the secret columns (it holds the vault,
 // and binds each ciphertext to its account id and column), the advisory-lock-then-read-then-write
 // transactions, the identity merge, and the compare-and-swap loop. Nothing here ever sees a

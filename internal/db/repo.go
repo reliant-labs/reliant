@@ -8,16 +8,12 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
-	"strconv"
 	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/reliant-labs/forge/pkg/orm"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	core "github.com/reliant-labs/reliant/internal/db/core"
-	postgresstore "github.com/reliant-labs/reliant/internal/db/postgres"
-	pgdb "github.com/reliant-labs/reliant/internal/db/postgres/generated"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/observability"
 	"github.com/reliant-labs/reliant/internal/store"
@@ -104,14 +100,10 @@ type UserUpdateNotifier func(update *UserUpdate)
 type ChatUpdateNotifier func(chatID string, seqNum int64, update ChatUpdate)
 
 type Repo struct {
-	DB              *WrappedDBTX
-	driver          DatabaseDriver
-	runs            core.RunStore
-	settings        core.SettingStore
-	accounts        *postgresstore.AccountStore
-	workflows       core.WorkflowStore
-	workflowCatalog core.WorkflowCatalogStore
-	runEvents       core.RunEventStore
+	DB       *WrappedDBTX
+	driver   DatabaseDriver
+	apiKeys  *apiKeyStore
+	accounts *accountStore
 
 	// session is the DatabaseConfig.DirectURL pool, for work that needs a
 	// Postgres session to itself. Nil means DB already has session
@@ -153,18 +145,11 @@ func NewRepoWithDriver(db *sql.DB, driver DatabaseDriver) (*Repo, error) {
 	if err != nil {
 		return nil, fmt.Errorf("orm client: %w", err)
 	}
-	q := &WrappedDBTX{db: db, orm: client}
-	pgQueries := pgdb.New(q)
-
 	return &Repo{
-		DB:              q,
-		driver:          driver,
-		accounts:        postgresstore.NewProviderAccountStore(client),
-		runs:            postgresstore.NewRunStore(client),
-		settings:        postgresstore.NewSettingStore(pgQueries, client),
-		workflows:       postgresstore.NewWorkflowStore(client),
-		workflowCatalog: postgresstore.NewWorkflowCatalogStore(client),
-		runEvents:       postgresstore.NewRunEventStore(client),
+		DB:       &WrappedDBTX{db: db, orm: client},
+		driver:   driver,
+		apiKeys:  newAPIKeyStore(client),
+		accounts: newAccountStore(client),
 	}, nil
 }
 
@@ -183,30 +168,6 @@ func (r *Repo) ORM() *orm.Client {
 func (r *Repo) SetUpdateNotifiers(onUser UserUpdateNotifier, onChat ChatUpdateNotifier) {
 	r.onUserUpdate = onUser
 	r.onChatUpdate = onChat
-}
-
-// bindQuery rewrites generic '?' placeholders into Postgres-style positional
-// placeholders when running with the Postgres driver.
-func (r *Repo) bindQuery(query string) string {
-	if r.driver != DriverPostgres {
-		return query
-	}
-
-	var builder strings.Builder
-	builder.Grow(len(query) + 16)
-	argIndex := 1
-
-	for _, ch := range query {
-		if ch == '?' {
-			builder.WriteByte('$')
-			builder.WriteString(strconv.Itoa(argIndex))
-			argIndex++
-			continue
-		}
-		builder.WriteRune(ch)
-	}
-
-	return builder.String()
 }
 
 func NewRepoFromConfig(cfg DatabaseConfig) (*Repo, error) {
@@ -687,7 +648,7 @@ func (w *WrappedDBTX) BeginTxWithOptions(ctx context.Context, opts TxOptions) (*
 }
 
 // SQLDB exposes the underlying pool for stores that own their SQL rather than
-// going through sqlc-generated queries (see internal/connectorgrant). It
+// going through the Repository (see internal/connectorgrant). It
 // deliberately ignores any ambient transaction: callers of this are
 // self-contained stores, not participants in a caller's transaction.
 func (w *WrappedDBTX) SQLDB() *sql.DB {
@@ -704,10 +665,6 @@ func (w *WrappedDBTX) Ping(ctx context.Context) error {
 
 func (w *WrappedDBTX) ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
 	return w.execContextWithRetry(ctx, query, args...)
-}
-
-func (w *WrappedDBTX) PrepareContext(ctx context.Context, query string) (*sql.Stmt, error) {
-	return w.DB(ctx).PrepareContext(ctx, query)
 }
 
 func (w *WrappedDBTX) QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {

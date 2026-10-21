@@ -3,7 +3,6 @@ package db
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -171,53 +170,31 @@ func (r *Repo) removeDaemon(ctx context.Context, daemonID string) (string, bool,
 // Open clients hear of the unpinned chat through the same
 // chat_config_changed update SetChatDaemon sends.
 func (r *Repo) releaseDaemonBindings(ctx context.Context, daemonID string) error {
-	type unpinned struct {
-		id, userID, projectID string
-		worktreeID            sql.NullString
-	}
-	rows, err := r.DB.QueryContext(ctx, r.bindQuery(`
-		UPDATE chats SET active_daemon_id = NULL, updated_at = NOW()
-		WHERE active_daemon_id = ?
-		RETURNING id, user_id, project_id, worktree_id
-	`), daemonID)
+	chats, err := store.UnpinChatsFromDaemon(ctx, r.ORM(), daemonID)
 	if err != nil {
-		return fmt.Errorf("unpinning chats from removed daemon %s: %w", daemonID, err)
-	}
-	var chats []unpinned
-	for rows.Next() {
-		var c unpinned
-		if err := rows.Scan(&c.id, &c.userID, &c.projectID, &c.worktreeID); err != nil {
-			_ = rows.Close()
-			return fmt.Errorf("scanning chat unpinned from removed daemon %s: %w", daemonID, err)
-		}
-		chats = append(chats, c)
-	}
-	if err := rows.Close(); err != nil {
-		return fmt.Errorf("unpinning chats from removed daemon %s: %w", daemonID, err)
+		return err
 	}
 	if err := store.ReleaseDaemonFromWorkspaces(ctx, r.ORM(), daemonID); err != nil {
 		return err
 	}
 
 	for _, c := range chats {
-		data, err := json.Marshal(map[string]interface{}{"chat_id": c.id, "active_daemon_id": ""})
+		data, err := json.Marshal(map[string]interface{}{"chat_id": c.ID, "active_daemon_id": ""})
 		if err != nil {
 			return err
 		}
 		update := &UserUpdate{
-			UserID:     c.userID,
-			ProjectID:  &c.projectID,
-			ChatID:     &c.id,
+			UserID:     c.UserID,
+			ProjectID:  &c.ProjectID,
+			ChatID:     &c.ID,
+			WorktreeID: c.WorktreeID,
 			UpdateType: UserUpdateChatConfigChanged,
 			EntityType: EntityTypeChat,
-			EntityID:   c.id,
+			EntityID:   c.ID,
 			Data:       data,
 		}
-		if c.worktreeID.Valid {
-			update.WorktreeID = &c.worktreeID.String
-		}
 		if err := r.CreateUserUpdate(ctx, update); err != nil {
-			return fmt.Errorf("announcing chat %s unpinned from removed daemon %s: %w", c.id, daemonID, err)
+			return fmt.Errorf("announcing chat %s unpinned from removed daemon %s: %w", c.ID, daemonID, err)
 		}
 	}
 	return nil

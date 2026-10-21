@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package postgres
+package db
 
 import (
 	"context"
@@ -52,31 +52,31 @@ const (
 
 var errAccountVaultDisabled = errors.New("provider accounts require the credential vault; none is configured")
 
-// AccountStore is the Postgres implementation of core.ProviderAccountStore. Its statements are
+// accountStore is the Postgres implementation of core.ProviderAccountStore. Its statements are
 // internal/store's (provider_account*_repo_ext.go, thread_provider_account_repo_ext.go,
 // legacy_credential_copy_repo_ext.go); what stays here is everything that is not SQL: sealing
 // and opening the secret columns, the advisory-lock-then-read-then-write transactions, the
 // identity merge, and the compare-and-swap loop.
-type AccountStore struct {
+type accountStore struct {
 	db     orm.Context
 	sealer CredentialSealer
 	now    func() time.Time
 }
 
-var _ core.ProviderAccountStore = (*AccountStore)(nil)
+var _ core.ProviderAccountStore = (*accountStore)(nil)
 
-// NewProviderAccountStore creates the store. Without SetSealer every secret read or write fails.
-func NewProviderAccountStore(db orm.Context) *AccountStore {
-	return &AccountStore{db: db, now: func() time.Time { return time.Now().UTC() }}
+// newAccountStore creates the store. Without SetSealer every secret read or write fails.
+func newAccountStore(db orm.Context) *accountStore {
+	return &accountStore{db: db, now: func() time.Time { return time.Now().UTC() }}
 }
 
 // SetSealer enables the credential vault.
-func (s *AccountStore) SetSealer(sealer CredentialSealer) { s.sealer = sealer }
+func (s *accountStore) SetSealer(sealer CredentialSealer) { s.sealer = sealer }
 
 // SetClock replaces the clock used for timestamps the store stamps itself. For tests.
-func (s *AccountStore) SetClock(now func() time.Time) { s.now = now }
+func (s *accountStore) SetClock(now func() time.Time) { s.now = now }
 
-func (s *AccountStore) seal(ctx context.Context, userID, accountID, column, plaintext string) ([]byte, error) {
+func (s *accountStore) seal(ctx context.Context, userID, accountID, column, plaintext string) ([]byte, error) {
 	if s.sealer == nil {
 		return nil, errAccountVaultDisabled
 	}
@@ -90,7 +90,7 @@ func (s *AccountStore) seal(ctx context.Context, userID, accountID, column, plai
 	return sealed, nil
 }
 
-func (s *AccountStore) open(ctx context.Context, userID, accountID, column string, sealed []byte) (string, error) {
+func (s *accountStore) open(ctx context.Context, userID, accountID, column string, sealed []byte) (string, error) {
 	if s.sealer == nil {
 		return "", errAccountVaultDisabled
 	}
@@ -105,7 +105,7 @@ func (s *AccountStore) open(ctx context.Context, userID, accountID, column strin
 	return string(pt), nil
 }
 
-func (s *AccountStore) sealAll(ctx context.Context, userID, accountID string, sec core.AccountSecrets) (secret, refresh, idToken []byte, err error) {
+func (s *accountStore) sealAll(ctx context.Context, userID, accountID string, sec core.AccountSecrets) (secret, refresh, idToken []byte, err error) {
 	if secret, err = s.seal(ctx, userID, accountID, accountColSecret, sec.Secret); err != nil {
 		return nil, nil, nil, err
 	}
@@ -118,7 +118,7 @@ func (s *AccountStore) sealAll(ctx context.Context, userID, accountID string, se
 	return secret, refresh, idToken, nil
 }
 
-func (s *AccountStore) openAll(ctx context.Context, a store.SealedProviderAccount) (core.AccountSecrets, error) {
+func (s *accountStore) openAll(ctx context.Context, a store.SealedProviderAccount) (core.AccountSecrets, error) {
 	var out core.AccountSecrets
 	var err error
 	if out.Secret, err = s.open(ctx, a.UserID, a.ID, accountColSecret, a.Secret); err != nil {
@@ -137,15 +137,15 @@ func (s *AccountStore) openAll(ctx context.Context, a store.SealedProviderAccoun
 // (user, provider) serialize on an advisory lock rather than relying on serialization retries,
 // and a transaction is never retried: f seals with fresh randomness and reads under its locks,
 // so it is only correct as the one attempt.
-func (s *AccountStore) inTx(ctx context.Context, f func(ctx context.Context) error) error {
+func (s *accountStore) inTx(ctx context.Context, f func(ctx context.Context) error) error {
 	return s.db.RunTxWithOptions(ctx, orm.TxOptions{Isolation: orm.IsolationReadCommitted, MaxAttempts: 1}, f)
 }
 
-func (s *AccountStore) ListProviderAccounts(ctx context.Context, userID string) ([]core.ProviderAccount, error) {
+func (s *accountStore) ListProviderAccounts(ctx context.Context, userID string) ([]core.ProviderAccount, error) {
 	return store.ListUserProviderAccounts(ctx, s.db, userID)
 }
 
-func (s *AccountStore) ListProviderAccountsWithSecrets(ctx context.Context, userID string) ([]core.AccountWithSecrets, error) {
+func (s *accountStore) ListProviderAccountsWithSecrets(ctx context.Context, userID string) ([]core.AccountWithSecrets, error) {
 	rows, err := store.ListUserProviderAccountsSealed(ctx, s.db, userID)
 	if err != nil {
 		return nil, err
@@ -163,7 +163,7 @@ func (s *AccountStore) ListProviderAccountsWithSecrets(ctx context.Context, user
 	return out, nil
 }
 
-func (s *AccountStore) GetProviderAccountWithSecrets(ctx context.Context, userID, accountID string) (*core.AccountWithSecrets, error) {
+func (s *accountStore) GetProviderAccountWithSecrets(ctx context.Context, userID, accountID string) (*core.AccountWithSecrets, error) {
 	r, err := store.GetUserProviderAccountSealed(ctx, s.db, userID, accountID)
 	if err != nil {
 		return nil, err
@@ -183,7 +183,7 @@ type importMeta struct {
 	updatedAt time.Time
 }
 
-func (s *AccountStore) UpsertProviderAccount(ctx context.Context, u core.AccountUpsert) (core.ProviderAccount, bool, error) {
+func (s *accountStore) UpsertProviderAccount(ctx context.Context, u core.AccountUpsert) (core.ProviderAccount, bool, error) {
 	if err := validateUpsert(u); err != nil {
 		return core.ProviderAccount{}, false, err
 	}
@@ -222,7 +222,7 @@ func validateUpsert(u core.AccountUpsert) error {
 
 // upsertTx is the one write path for connecting an account: a fresh sign-in and the rewrite of a
 // placeholder identity after a refresh.
-func (s *AccountStore) upsertTx(ctx context.Context, u core.AccountUpsert) (acct core.ProviderAccount, created bool, err error) {
+func (s *accountStore) upsertTx(ctx context.Context, u core.AccountUpsert) (acct core.ProviderAccount, created bool, err error) {
 	if err := store.LockUserProviderAccounts(ctx, s.db, u.UserID, u.Provider); err != nil {
 		return core.ProviderAccount{}, false, err
 	}
@@ -259,7 +259,7 @@ func (s *AccountStore) upsertTx(ctx context.Context, u core.AccountUpsert) (acct
 // the new code has no legacy_source and is untouchable. A row that cannot be matched becomes a
 // new account, because a duplicate is harmless (the next refresh merges it into the real
 // identity) and a missing one is a user signed out.
-func (s *AccountStore) importTx(ctx context.Context, u core.AccountUpsert, imp importMeta) (created, applied bool, err error) {
+func (s *accountStore) importTx(ctx context.Context, u core.AccountUpsert, imp importMeta) (created, applied bool, err error) {
 	if err := store.LockUserProviderAccounts(ctx, s.db, u.UserID, u.Provider); err != nil {
 		return false, false, err
 	}
@@ -296,7 +296,7 @@ func (s *AccountStore) importTx(ctx context.Context, u core.AccountUpsert, imp i
 }
 
 // credential is u's write of identity, with its secrets sealed for account accountID.
-func (s *AccountStore) credential(ctx context.Context, userID, accountID string, u core.AccountUpsert, identity string, imp *importMeta) (store.ProviderAccountCredential, error) {
+func (s *accountStore) credential(ctx context.Context, userID, accountID string, u core.AccountUpsert, identity string, imp *importMeta) (store.ProviderAccountCredential, error) {
 	secret, refresh, idToken, err := s.sealAll(ctx, userID, accountID, u.Secrets)
 	if err != nil {
 		return store.ProviderAccountCredential{}, err
@@ -313,7 +313,7 @@ func (s *AccountStore) credential(ctx context.Context, userID, accountID string,
 	return c, nil
 }
 
-func (s *AccountStore) insertTx(ctx context.Context, u core.AccountUpsert, imp *importMeta) (core.ProviderAccount, error) {
+func (s *accountStore) insertTx(ctx context.Context, u core.AccountUpsert, imp *importMeta) (core.ProviderAccount, error) {
 	id := uuid.New().String()
 	c, err := s.credential(ctx, u.UserID, id, u, u.IdentityKey, imp)
 	if err != nil {
@@ -334,7 +334,7 @@ func (s *AccountStore) insertTx(ctx context.Context, u core.AccountUpsert, imp *
 // the new write does not carry is kept; the refresh and id tokens likewise (a re-consent that
 // omits a refresh token must not erase the one we hold). Label, priority and pause are the
 // user's and are never touched here.
-func (s *AccountStore) updateTx(ctx context.Context, cur core.ProviderAccount, u core.AccountUpsert, identity string, imp *importMeta) (core.ProviderAccount, error) {
+func (s *accountStore) updateTx(ctx context.Context, cur core.ProviderAccount, u core.AccountUpsert, identity string, imp *importMeta) (core.ProviderAccount, error) {
 	c, err := s.credential(ctx, cur.UserID, cur.ID, u, identity, imp)
 	if err != nil {
 		return core.ProviderAccount{}, err
@@ -352,7 +352,7 @@ func (s *AccountStore) updateTx(ctx context.Context, cur core.ProviderAccount, u
 // once did) lost all of that. What carries over from the placeholder is only what the target
 // lacks: the smaller priority, a label, a pause, its thread assignments. The tokens written are
 // u's, the refresh response that taught us the identity, which are newer than either row.
-func (s *AccountStore) renameTx(ctx context.Context, old core.ProviderAccount, u core.AccountUpsert) (core.ProviderAccount, error) {
+func (s *accountStore) renameTx(ctx context.Context, old core.ProviderAccount, u core.AccountUpsert) (core.ProviderAccount, error) {
 	target, err := store.LockProviderAccountByIdentity(ctx, s.db, u.UserID, u.Provider, u.IdentityKey)
 	if err != nil {
 		return core.ProviderAccount{}, err
@@ -406,7 +406,7 @@ const maxAccountSwapAttempts = 3
 // the UPDATE is conditioned on the exact ciphertexts that were read (the witness). Every write
 // re-seals the secret, so the witness changes whenever the row does: of two racers holding the
 // same expectation exactly one update matches.
-func (s *AccountStore) CompareAndSwapAccountTokens(ctx context.Context, userID, accountID, expectedRefresh string, next core.AccountTokens) (bool, error) {
+func (s *accountStore) CompareAndSwapAccountTokens(ctx context.Context, userID, accountID, expectedRefresh string, next core.AccountTokens) (bool, error) {
 	if next.Secret == "" {
 		return false, errors.New("account secret cannot be empty")
 	}
@@ -438,7 +438,7 @@ func (s *AccountStore) CompareAndSwapAccountTokens(ctx context.Context, userID, 
 	return false, nil
 }
 
-func (s *AccountStore) PatchProviderAccount(ctx context.Context, userID, accountID string, p core.AccountPatch) (core.ProviderAccount, error) {
+func (s *accountStore) PatchProviderAccount(ctx context.Context, userID, accountID string, p core.AccountPatch) (core.ProviderAccount, error) {
 	var out core.ProviderAccount
 	err := s.inTx(ctx, func(ctx context.Context) error {
 		cur, err := store.LockUserProviderAccount(ctx, s.db, userID, accountID)
@@ -476,7 +476,7 @@ func (s *AccountStore) PatchProviderAccount(ctx context.Context, userID, account
 	return out, err
 }
 
-func (s *AccountStore) ReorderProviderAccounts(ctx context.Context, userID, provider string, orderedIDs []string) error {
+func (s *accountStore) ReorderProviderAccounts(ctx context.Context, userID, provider string, orderedIDs []string) error {
 	return s.inTx(ctx, func(ctx context.Context) error {
 		if err := store.LockUserProviderAccounts(ctx, s.db, userID, provider); err != nil {
 			return err
@@ -509,7 +509,7 @@ func (s *AccountStore) ReorderProviderAccounts(ctx context.Context, userID, prov
 	})
 }
 
-func (s *AccountStore) DeleteProviderAccount(ctx context.Context, userID, accountID string) error {
+func (s *accountStore) DeleteProviderAccount(ctx context.Context, userID, accountID string) error {
 	provider, err := store.UserProviderAccountProvider(ctx, s.db, userID, accountID)
 	if err != nil {
 		return err
@@ -531,13 +531,13 @@ func (s *AccountStore) DeleteProviderAccount(ctx context.Context, userID, accoun
 
 // ---- limit state ----
 
-func (s *AccountStore) ListAccountLimits(ctx context.Context, userID string) (map[string]core.LimitState, error) {
+func (s *accountStore) ListAccountLimits(ctx context.Context, userID string) (map[string]core.LimitState, error) {
 	return store.ListUserAccountLimits(ctx, s.db, userID)
 }
 
 // GetAccountLimits returns one account's limit state, or (nil, nil) when it has none. Unlike
 // ListAccountLimits it is not scoped to a user: the usage poller leases bare account ids.
-func (s *AccountStore) GetAccountLimits(ctx context.Context, accountID string) (*core.LimitState, error) {
+func (s *accountStore) GetAccountLimits(ctx context.Context, accountID string) (*core.LimitState, error) {
 	return store.GetAccountLimitState(ctx, s.db, accountID)
 }
 
@@ -545,7 +545,7 @@ func (s *AccountStore) GetAccountLimits(ctx context.Context, accountID string) (
 // its provider is one of providers. It never moves an existing schedule, so a poll that is backing
 // off stays backed off while traffic keeps arriving, and it keeps the failure count (unlike
 // ScheduleUsagePoll). An absent account, or one whose limits row does not exist yet, is a no-op.
-func (s *AccountStore) EnsureUsagePollScheduled(ctx context.Context, accountID string, next time.Time, providers []string) error {
+func (s *accountStore) EnsureUsagePollScheduled(ctx context.Context, accountID string, next time.Time, providers []string) error {
 	if next.IsZero() {
 		return errors.New("a poll time is required")
 	}
@@ -558,11 +558,11 @@ func (s *AccountStore) EnsureUsagePollScheduled(ctx context.Context, accountID s
 // ClaimUsageFetch records that the caller is about to call the account's usage API and reports
 // whether it may: false when another caller claimed it within the last floor. The claim is one
 // atomic statement, so replicas share the floor. An absent account claims nothing.
-func (s *AccountStore) ClaimUsageFetch(ctx context.Context, accountID string, now time.Time, floor time.Duration) (bool, error) {
+func (s *accountStore) ClaimUsageFetch(ctx context.Context, accountID string, now time.Time, floor time.Duration) (bool, error) {
 	return store.ClaimUsageFetch(ctx, s.db, accountID, now, floor)
 }
 
-func (s *AccountStore) UpsertAccountLimitSnapshot(ctx context.Context, snap core.LimitState) error {
+func (s *accountStore) UpsertAccountLimitSnapshot(ctx context.Context, snap core.LimitState) error {
 	if snap.AccountID == "" || snap.UserID == "" {
 		return errors.New("account_id and user_id are required")
 	}
@@ -572,7 +572,7 @@ func (s *AccountStore) UpsertAccountLimitSnapshot(ctx context.Context, snap core
 	return store.UpsertAccountLimitSnapshot(ctx, s.db, snap, s.now())
 }
 
-func (s *AccountStore) BenchAccount(ctx context.Context, userID, accountID string, until time.Time, window string, probe bool) error {
+func (s *accountStore) BenchAccount(ctx context.Context, userID, accountID string, until time.Time, window string, probe bool) error {
 	if until.IsZero() {
 		return errors.New("bench needs a time; pass the probe time for an unknown reset")
 	}
@@ -586,14 +586,14 @@ func (s *AccountStore) BenchAccount(ctx context.Context, userID, accountID strin
 	return nil
 }
 
-func (s *AccountStore) LeaseUsagePolls(ctx context.Context, now time.Time, limit int, lease time.Duration) ([]string, error) {
+func (s *accountStore) LeaseUsagePolls(ctx context.Context, now time.Time, limit int, lease time.Duration) ([]string, error) {
 	if limit <= 0 {
 		return nil, nil
 	}
 	return store.LeaseUsagePolls(ctx, s.db, now, limit, lease)
 }
 
-func (s *AccountStore) ScheduleUsagePoll(ctx context.Context, accountID string, next time.Time, failures int, errText string) error {
+func (s *accountStore) ScheduleUsagePoll(ctx context.Context, accountID string, next time.Time, failures int, errText string) error {
 	found, err := store.ScheduleUsagePoll(ctx, s.db, accountID, next, failures, errText, s.now())
 	if err != nil {
 		return err
@@ -606,24 +606,24 @@ func (s *AccountStore) ScheduleUsagePoll(ctx context.Context, accountID string, 
 
 // ---- thread assignments ----
 
-func (s *AccountStore) GetThreadAssignment(ctx context.Context, threadID, provider string) (*core.Assignment, error) {
+func (s *accountStore) GetThreadAssignment(ctx context.Context, threadID, provider string) (*core.Assignment, error) {
 	return store.GetThreadAssignment(ctx, s.db, threadID, provider)
 }
 
 // LatestServingAccount returns the account that served the thread's newest assistant message
 // that names one, or "" when none does. Unlike a sticky assignment it follows the provider the
 // thread last ran on, so it is right after a cross-provider fallback returns.
-func (s *AccountStore) LatestServingAccount(ctx context.Context, threadID string) (string, error) {
+func (s *accountStore) LatestServingAccount(ctx context.Context, threadID string) (string, error) {
 	return store.LatestServingProviderAccount(ctx, s.db, threadID)
 }
 
 // ListThreadAssignments returns the thread's sticky account for every provider it has used,
 // most recently assigned first.
-func (s *AccountStore) ListThreadAssignments(ctx context.Context, threadID string) ([]core.Assignment, error) {
+func (s *accountStore) ListThreadAssignments(ctx context.Context, threadID string) ([]core.Assignment, error) {
 	return store.ListThreadAssignments(ctx, s.db, threadID)
 }
 
-func (s *AccountStore) SetThreadAssignment(ctx context.Context, a core.Assignment, expectedAccountID string) (bool, error) {
+func (s *accountStore) SetThreadAssignment(ctx context.Context, a core.Assignment, expectedAccountID string) (bool, error) {
 	if a.ThreadID == "" || a.Provider == "" || a.AccountID == "" {
 		return false, errors.New("thread_id, provider and account_id are required")
 	}
@@ -636,13 +636,13 @@ func (s *AccountStore) SetThreadAssignment(ctx context.Context, a core.Assignmen
 	return store.ReassignThread(ctx, s.db, a, expectedAccountID)
 }
 
-func (s *AccountStore) RecentAssignmentCounts(ctx context.Context, accountIDs []string, since time.Time) (map[string]int, error) {
+func (s *accountStore) RecentAssignmentCounts(ctx context.Context, accountIDs []string, since time.Time) (map[string]int, error) {
 	return store.RecentAssignmentCounts(ctx, s.db, accountIDs, since)
 }
 
 // ListUserIDsWithProviderAccount returns every user holding an account for provider, without
 // opening (decrypting) any of them.
-func (s *AccountStore) ListUserIDsWithProviderAccount(ctx context.Context, provider string) ([]string, error) {
+func (s *accountStore) ListUserIDsWithProviderAccount(ctx context.Context, provider string) ([]string, error) {
 	return store.ListUserIDsWithProviderAccount(ctx, s.db, provider)
 }
 
@@ -659,7 +659,7 @@ type ImportResult struct{ Created, Updated, Unchanged, Failed int }
 
 // LegacyCopyDone reports whether the one-time copy has completed. A cheap read, so a boot that
 // has nothing to do opens no secret.
-func (s *AccountStore) LegacyCopyDone(ctx context.Context) (bool, error) {
+func (s *accountStore) LegacyCopyDone(ctx context.Context) (bool, error) {
 	return store.LegacyCredentialCopyDone(ctx, s.db)
 }
 
@@ -670,7 +670,7 @@ func (s *AccountStore) LegacyCopyDone(ctx context.Context) (bool, error) {
 // crash leaves neither. A row that fails to write is rolled back to a savepoint, counted and
 // logged: one bad credential never blocks the rest or the boot, and the count is kept in the
 // marker so whoever drops the legacy tables can see whether anything was left behind.
-func (s *AccountStore) ImportLegacy(ctx context.Context, imports []LegacyImport, skipped int) (res ImportResult, ran bool, err error) {
+func (s *accountStore) ImportLegacy(ctx context.Context, imports []LegacyImport, skipped int) (res ImportResult, ran bool, err error) {
 	err = s.inTx(ctx, func(ctx context.Context) error {
 		if err := store.LockLegacyCredentialCopy(ctx, s.db); err != nil {
 			return err
@@ -725,7 +725,7 @@ func (s *AccountStore) ImportLegacy(ctx context.Context, imports []LegacyImport,
 }
 
 // OpenLegacy opens a value sealed by a legacy table under its old AAD.
-func (s *AccountStore) OpenLegacy(ctx context.Context, userID string, aad, sealed []byte) (string, error) {
+func (s *accountStore) OpenLegacy(ctx context.Context, userID string, aad, sealed []byte) (string, error) {
 	if s.sealer == nil {
 		return "", errAccountVaultDisabled
 	}

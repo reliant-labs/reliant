@@ -4,7 +4,7 @@
 // in internal/runs/contract.go). A contract.go here would be one wide
 // interface over every query, which no caller consumes.
 //
-//forge:exclude-contract: the sqlc-backed data layer facade (Repository); generated-query shaped, split per aggregate is its own project
+//forge:exclude-contract: the hand data layer facade (Repository) over internal/store; split per aggregate is its own project (P6)
 package db
 
 import (

@@ -13,9 +13,9 @@
 # test harness and dashboard; internal/grpc/server.go still mounts them by
 # hand until P3c. The contract packages the server or CLI builds by hand are
 # `//forge:not-a-component`. Beyond that, `forge generate` projects the
-# contract mocks/decorators, the descriptor and the open-procedure set, and
-# runs sqlc (below). The Makefile
-# stays the entrypoint: CI's "Generated code is up to date" job runs
+# contract mocks/decorators, the descriptor, the open-procedure set and the
+# ORM in internal/store (database.orm below). The Makefile stays the
+# entrypoint: CI's "Generated code is up to date" job runs
 # `make generate-all`, and `forge generate` leaves that output byte-identical.
 # After changing a proto service or a contract.go interface, run
 # `make forge-generate-check` (forge generate at forge_version below, which
@@ -64,13 +64,6 @@ lint:
             - call: github.com/reliant-labs/reliant/internal/logging.Error
             - call: github.com/reliant-labs/reliant/internal/logging.Trace
             - call: github.com/reliant-labs/reliant/internal/logging.Log
-generate:
-    hooks:
-        # sqlc until the forge ORM replaces it (P5b). `make sqlc` runs the
-        # sqlc version the Makefile pins.
-        - name: sqlc
-          command: [make, sqlc]
-          writes: [internal/db/postgres/generated]
 database:
     migration_safety:
         # Every migration after the baseline says whether the previous
@@ -84,7 +77,8 @@ database:
         # The generated data layer (entities, <Entity>Store, the _repo_ext.go
         # seams) lands in internal/store, beside the hand-owned internal/db
         # Repository, whose names (Chat, Message, Repo, …) it would otherwise
-        # collide with. Aggregates port onto it lane by lane (P5b,
+        # collide with. Every statement runs here: the hand Repository's SQL
+        # lives in its _repo_ext.go files (P5b,
         # research/forge-migration/08-p5b-spike.md; rules in
         # internal/db/SCHEMA.md).
         package: internal/store

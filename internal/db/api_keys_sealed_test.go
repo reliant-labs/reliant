@@ -26,7 +26,7 @@ func sealedRepo(t *testing.T) (*Repo, *sql.DB) {
 	require.NoError(t, err)
 	ring, err := crypto.ParseKeyring("v1:" + base64.StdEncoding.EncodeToString(k))
 	require.NoError(t, err)
-	require.NoError(t, repo.EnableCredentialSealing(vault.New(vault.Deps{DB: repo.ORM(), Keys: vault.NewEnvKeyWrapper(ring)})))
+	repo.EnableCredentialSealing(vault.New(vault.Deps{DB: repo.ORM(), Keys: vault.NewEnvKeyWrapper(ring)}))
 	return repo, raw
 }
 

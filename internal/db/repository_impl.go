@@ -16,10 +16,10 @@ import (
 	"github.com/reliant-labs/forge/pkg/orm"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
-	postgresstore "github.com/reliant-labs/reliant/internal/db/postgres"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/store"
+	"github.com/reliant-labs/reliant/internal/workflow/model"
 )
 
 // Ensure *Repo implements Repository interface at compile time
@@ -83,11 +83,11 @@ func (r *Repo) ListArchivedChats(ctx context.Context, userID string) ([]*Archive
 }
 
 func (r *Repo) ListRuns(ctx context.Context, filters RunListFilters) ([]*RunListItem, bool, error) {
-	return r.runs.ListRuns(ctx, filters)
+	return store.ListRuns(ctx, r.ORM(), filters)
 }
 
 func (r *Repo) LastRunPerWorkflow(ctx context.Context, filters RunListFilters) ([]*RunListItem, error) {
-	return r.runs.LastRunPerWorkflow(ctx, filters)
+	return store.LastRunPerWorkflow(ctx, r.ORM(), filters)
 }
 
 // ==================== Messages ====================
@@ -1751,8 +1751,6 @@ func (r *Repo) DeleteRepo(ctx context.Context, id string) error {
 	return store.RemoveRepo(ctx, r.ORM(), id)
 }
 
-// Plans and Tasks methods are provided by the embedded pgdb.Querier
-
 func (r *Repo) CreateSetting(ctx context.Context, setting *Setting) error {
 	if setting == nil {
 		return fmt.Errorf("setting cannot be nil")
@@ -1926,21 +1924,21 @@ func (r *Repo) GetAutomationToken(ctx context.Context, userID, daemonID string) 
 	if userID == "" || daemonID == "" {
 		return "", fmt.Errorf("user_id and daemon_id cannot be empty")
 	}
-	return r.settings.GetAutomationToken(ctx, userID, daemonID)
+	return r.apiKeys.GetAutomationToken(ctx, userID, daemonID)
 }
 
 func (r *Repo) SetAutomationToken(ctx context.Context, userID, daemonID, token string) error {
 	if userID == "" || daemonID == "" {
 		return fmt.Errorf("user_id and daemon_id cannot be empty")
 	}
-	return r.settings.SetAutomationToken(ctx, userID, daemonID, token)
+	return r.apiKeys.SetAutomationToken(ctx, userID, daemonID, token)
 }
 
 func (r *Repo) DeleteAutomationToken(ctx context.Context, userID, daemonID string) error {
 	if userID == "" || daemonID == "" {
 		return fmt.Errorf("user_id and daemon_id cannot be empty")
 	}
-	return r.settings.DeleteAutomationToken(ctx, userID, daemonID)
+	return r.apiKeys.DeleteAutomationToken(ctx, userID, daemonID)
 }
 
 // ==================== Visibility Methods ====================
@@ -2644,7 +2642,7 @@ func (r *Repo) CreateWorkflow(ctx context.Context, workflow *Workflow) error {
 	}
 
 	return r.RunTx(ctx, func(txCtx context.Context) error {
-		if err := r.workflows.CreateWorkflow(txCtx, workflow); err != nil {
+		if err := store.InsertWorkflowIfAbsent(txCtx, r.ORM(), workflow); err != nil {
 			return err
 		}
 		if workflow.ChatID != "" {
@@ -2655,36 +2653,36 @@ func (r *Repo) CreateWorkflow(ctx context.Context, workflow *Workflow) error {
 }
 
 func (r *Repo) GetWorkflow(ctx context.Context, id string) (*Workflow, error) {
-	return r.workflows.GetWorkflow(ctx, id)
+	return store.LoadWorkflow(ctx, r.ORM(), id)
 }
 
 func (r *Repo) GetWorkflowByThread(ctx context.Context, chatID, thread string) (*Workflow, error) {
-	return r.workflows.GetWorkflowByThread(ctx, chatID, thread)
+	return store.FindWorkflowByThread(ctx, r.ORM(), chatID, thread)
 }
 
 func (r *Repo) ListWorkflowsByChat(ctx context.Context, chatID string) ([]*Workflow, error) {
-	return r.workflows.ListWorkflowsByChat(ctx, chatID)
+	return store.ListChatWorkflows(ctx, r.ORM(), chatID)
 }
 
 func (r *Repo) ListChildWorkflows(ctx context.Context, parentID string) ([]*Workflow, error) {
-	return r.workflows.ListChildWorkflows(ctx, parentID)
+	return store.ListChildWorkflows(ctx, r.ORM(), parentID)
 }
 
 func (r *Repo) ListRootWorkflows(ctx context.Context, chatID string) ([]*Workflow, error) {
-	return r.workflows.ListRootWorkflows(ctx, chatID)
+	return store.ListRootWorkflows(ctx, r.ORM(), chatID)
 }
 
 func (r *Repo) GetRootWorkflowStatusForChats(ctx context.Context, chatIDs []string) (map[string]WorkflowStatus, error) {
 	if len(chatIDs) == 0 {
 		return make(map[string]WorkflowStatus), nil
 	}
-	return r.workflows.GetRootWorkflowStatusForChats(ctx, chatIDs)
+	return store.RootWorkflowStatusForChats(ctx, r.ORM(), chatIDs)
 }
 
 func (r *Repo) CompareAndSwapWorkflowStatus(ctx context.Context, id string, newStatus, expectedStatus WorkflowStatus) (bool, error) {
 	var swapped bool
 	err := r.RunTx(ctx, func(txCtx context.Context) error {
-		ok, err := r.workflows.CompareAndSwapWorkflowStatus(txCtx, id, newStatus, expectedStatus)
+		ok, err := store.CompareAndSwapWorkflowStatus(txCtx, r.ORM(), id, newStatus, expectedStatus)
 		if err != nil {
 			return err
 		}
@@ -2706,7 +2704,7 @@ func (r *Repo) CompareAndSwapWorkflowStatus(ctx context.Context, id string, newS
 
 func (r *Repo) UpdateWorkflowStatus(ctx context.Context, id string, status WorkflowStatus) error {
 	return r.RunTx(ctx, func(txCtx context.Context) error {
-		if err := r.workflows.UpdateWorkflowStatus(txCtx, id, status); err != nil {
+		if err := store.UpdateWorkflowStatus(txCtx, r.ORM(), id, status); err != nil {
 			return err
 		}
 		wf, err := r.GetWorkflow(txCtx, id)
@@ -2726,7 +2724,7 @@ func (r *Repo) UpdateWorkflowStatus(ctx context.Context, id string, status Workf
 // carry "the work did not pass". No chat-activity emit: the outcome does not
 // change whether the chat is busy, only what the finished run means.
 func (r *Repo) SetWorkflowOutcome(ctx context.Context, id string, outcome string) error {
-	return r.workflows.SetWorkflowOutcome(ctx, id, outcome)
+	return store.SetWorkflowOutcome(ctx, r.ORM(), id, outcome)
 }
 
 // EnsureWorkflowRunning is a lightweight idempotent check: if the workflow
@@ -2765,7 +2763,7 @@ func (r *Repo) EnsureWorkflowRunning(ctx context.Context, workflowID, chatID str
 // UpdateWorkflowName updates the workflow name. Only allowed when status is 'pending'.
 // Returns error if workflow doesn't exist or status is not pending.
 func (r *Repo) UpdateWorkflowName(ctx context.Context, id string, workflowName string) error {
-	return r.workflows.UpdateWorkflowName(ctx, id, workflowName)
+	return store.RenamePendingWorkflow(ctx, r.ORM(), id, workflowName)
 }
 
 // CascadeTerminalStatusToDescendants moves every descendant workflow record
@@ -2773,14 +2771,14 @@ func (r *Repo) UpdateWorkflowName(ctx context.Context, id string, workflowName s
 // when a workflow ends, to drain the children (spawn children, thread records,
 // etc.) that are still running or paused.
 func (r *Repo) CascadeTerminalStatusToDescendants(ctx context.Context, parentWorkflowID string, reason WorkflowStopReason) error {
-	return r.workflows.CascadeTerminalStatusToDescendants(ctx, parentWorkflowID, reason)
+	return store.CascadeTerminalStatusToDescendants(ctx, r.ORM(), parentWorkflowID, reason)
 }
 
 // ReapOrphanedWorkflowDescendants ends running/paused workflows whose parent is
 // already terminal, at the terminal ancestor's status, returning the rows
 // repaired. See the Repository interface for why the backstop is needed.
 func (r *Repo) ReapOrphanedWorkflowDescendants(ctx context.Context) ([]ReapedWorkflow, error) {
-	return r.workflows.ReapOrphanedWorkflowDescendants(ctx)
+	return store.ReapOrphanedWorkflowDescendants(ctx, r.ORM())
 }
 
 // ReviveSubtreeLiveAt brings a reset-and-replayed run's subtree back to life:
@@ -2793,12 +2791,12 @@ func (r *Repo) ReviveSubtreeLiveAt(ctx context.Context, rootWorkflowID string, a
 	if rootWorkflowID == "" {
 		return 0, 0, fmt.Errorf("root workflow ID cannot be empty")
 	}
-	return r.workflows.ReviveSubtreeLiveAt(ctx, rootWorkflowID, at)
+	return store.ReviveSubtreeLiveAt(ctx, r.ORM(), rootWorkflowID, at)
 }
 
 func (r *Repo) PauseRunningWorkflowsByChat(ctx context.Context, chatID string) error {
 	return r.RunTx(ctx, func(txCtx context.Context) error {
-		if err := r.workflows.PauseRunningWorkflowsByChat(txCtx, chatID); err != nil {
+		if err := store.PauseRunningWorkflowsByChat(txCtx, r.ORM(), chatID); err != nil {
 			return err
 		}
 		return r.emitChatActivityIfChanged(txCtx, chatID)
@@ -2807,7 +2805,7 @@ func (r *Repo) PauseRunningWorkflowsByChat(ctx context.Context, chatID string) e
 
 func (r *Repo) ResumeWorkflowsByChat(ctx context.Context, chatID string) error {
 	return r.RunTx(ctx, func(txCtx context.Context) error {
-		if err := r.workflows.ResumeWorkflowsByChat(txCtx, chatID); err != nil {
+		if err := store.ResumeWorkflowsByChat(txCtx, r.ORM(), chatID); err != nil {
 			return err
 		}
 		return r.emitChatActivityIfChanged(txCtx, chatID)
@@ -2815,11 +2813,11 @@ func (r *Repo) ResumeWorkflowsByChat(ctx context.Context, chatID string) error {
 }
 
 func (r *Repo) DeleteWorkflow(ctx context.Context, id string) error {
-	return r.workflows.DeleteWorkflow(ctx, id)
+	return store.RemoveWorkflow(ctx, r.ORM(), id)
 }
 
 func (r *Repo) DeleteWorkflowsByChat(ctx context.Context, chatID string) error {
-	return r.workflows.DeleteWorkflowsByChat(ctx, chatID)
+	return store.RemoveChatWorkflows(ctx, r.ORM(), chatID)
 }
 
 // ==================== Triggers ====================
@@ -3006,60 +3004,60 @@ func (r *Repo) CreateRunEvent(ctx context.Context, ev *core.RunEvent) (bool, err
 		// and the second real event would silently read as a retry.
 		return false, fmt.Errorf("run event dedupe key cannot be empty")
 	}
-	return r.runEvents.CreateRunEvent(ctx, ev)
+	return store.InsertRunEvent(ctx, r.ORM(), ev)
 }
 
 func (r *Repo) GetRunEvent(ctx context.Context, id string) (*core.RunEvent, error) {
 	if id == "" {
 		return nil, fmt.Errorf("run event ID cannot be empty")
 	}
-	return r.runEvents.GetRunEvent(ctx, id)
+	return store.LoadRunEvent(ctx, r.ORM(), id)
 }
 
 func (r *Repo) GetRunEventByDedupe(ctx context.Context, dedupeKey string) (*core.RunEvent, error) {
 	if dedupeKey == "" {
 		return nil, fmt.Errorf("run event dedupe key cannot be empty")
 	}
-	return r.runEvents.GetRunEventByDedupe(ctx, dedupeKey)
+	return store.LoadRunEventByDedupe(ctx, r.ORM(), dedupeKey)
 }
 
 func (r *Repo) HasEnabledTriggerOfKind(ctx context.Context, userID string, kind core.TriggerKind) (bool, error) {
 	if userID == "" {
 		return false, fmt.Errorf("user ID cannot be empty")
 	}
-	return r.runEvents.HasEnabledTriggerOfKind(ctx, userID, kind)
+	return store.HasEnabledTriggerOfKind(ctx, r.ORM(), userID, kind)
 }
 
 func (r *Repo) LockChatForRunEvent(ctx context.Context, chatID string) error {
 	if chatID == "" {
 		return fmt.Errorf("chat ID cannot be empty")
 	}
-	return r.runEvents.LockChatForRunEvent(ctx, chatID)
+	return store.LockChatForRunEvent(ctx, r.ORM(), chatID)
 }
 
 func (r *Repo) CountOtherPendingBlockers(ctx context.Context, chatID, excludeID string) (int, error) {
 	if chatID == "" {
 		return 0, fmt.Errorf("chat ID cannot be empty")
 	}
-	return r.runEvents.CountOtherPendingBlockers(ctx, chatID, excludeID)
+	return store.CountOtherPendingBlockers(ctx, r.ORM(), chatID, excludeID)
 }
 
 func (r *Repo) ClaimRunEvents(ctx context.Context, now, leaseUntil time.Time, max int) ([]*core.RunEvent, error) {
 	if max <= 0 {
 		return nil, nil
 	}
-	return r.runEvents.ClaimRunEvents(ctx, now, leaseUntil, max)
+	return store.ClaimRunEvents(ctx, r.ORM(), now, leaseUntil, max)
 }
 
 func (r *Repo) MarkRunEventDispatched(ctx context.Context, id string, at time.Time) error {
 	if id == "" {
 		return fmt.Errorf("run event ID cannot be empty")
 	}
-	return r.runEvents.MarkRunEventDispatched(ctx, id, at)
+	return store.MarkRunEventDispatched(ctx, r.ORM(), id, at)
 }
 
 func (r *Repo) DeleteDispatchedRunEventsBefore(ctx context.Context, cutoff time.Time) (int64, error) {
-	return r.runEvents.DeleteDispatchedRunEventsBefore(ctx, cutoff)
+	return store.DeleteDispatchedRunEventsBefore(ctx, r.ORM(), cutoff)
 }
 
 func (r *Repo) RecentTriggerFirings(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error) {
@@ -3145,7 +3143,7 @@ func (r *Repo) CreateStepExecution(ctx context.Context, exec *StepExecution) err
 		return fmt.Errorf("step execution cannot be nil")
 	}
 
-	return r.workflows.CreateStepExecution(ctx, exec)
+	return store.InsertStepExecution(ctx, r.ORM(), exec)
 }
 
 func (r *Repo) GetStepExecution(ctx context.Context, id string) (*StepExecution, error) {
@@ -3153,39 +3151,41 @@ func (r *Repo) GetStepExecution(ctx context.Context, id string) (*StepExecution,
 		return nil, fmt.Errorf("step execution ID cannot be empty")
 	}
 
-	return r.workflows.GetStepExecution(ctx, id)
+	return store.LoadStepExecution(ctx, r.ORM(), id)
 }
 
 func (r *Repo) GetBasicStepExecutionsForChat(ctx context.Context, chatID string) ([]*ChatStepExecution, error) {
-	return r.workflows.GetBasicStepExecutionsForChat(ctx, chatID)
+	return store.ListBasicChatStepExecutions(ctx, r.ORM(), chatID)
 }
 
+// GetStepExecutionsForChat is the FULL view: output only for user-facing
+// activities. model.InternalActivities crosses into SQL here and only here.
 func (r *Repo) GetStepExecutionsForChat(ctx context.Context, chatID string) ([]*ChatStepExecution, error) {
-	return r.workflows.GetStepExecutionsForChat(ctx, chatID)
+	return store.ListChatStepExecutions(ctx, r.ORM(), chatID, model.InternalActivities)
 }
 
 func (r *Repo) ListStepExecutionRecordsForChat(ctx context.Context, chatID, nodePath string, limit int) ([]*StepExecution, error) {
-	return r.workflows.ListStepExecutionRecordsForChat(ctx, chatID, nodePath, limit)
+	return store.ListStepExecutionRecordsForChat(ctx, r.ORM(), chatID, nodePath, limit)
 }
 
 func (r *Repo) GetStepExecutionsByWorkflow(ctx context.Context, workflowID string) ([]*StepExecution, error) {
-	return r.workflows.GetStepExecutionsByWorkflow(ctx, workflowID)
+	return store.ListWorkflowStepExecutions(ctx, r.ORM(), workflowID)
 }
 
 func (r *Repo) GetStepExecutionsByStep(ctx context.Context, workflowID, stepID string) ([]*StepExecution, error) {
-	return r.workflows.GetStepExecutionsByStep(ctx, workflowID, stepID)
+	return store.ListStepExecutionsByStep(ctx, r.ORM(), workflowID, stepID)
 }
 
 func (r *Repo) DeleteStepExecutionsByWorkflow(ctx context.Context, workflowID string) error {
-	return r.workflows.DeleteStepExecutionsByWorkflow(ctx, workflowID)
+	return store.RemoveWorkflowStepExecutions(ctx, r.ORM(), workflowID)
 }
 
 func (r *Repo) ListWorkflowsByStatus(ctx context.Context, status WorkflowStatus) ([]*Workflow, error) {
-	return r.workflows.ListWorkflowsByStatus(ctx, status)
+	return store.ListWorkflowsByStatus(ctx, r.ORM(), status)
 }
 
 func (r *Repo) ListRootWorkflowsByStatus(ctx context.Context, status WorkflowStatus) ([]*Workflow, error) {
-	return r.workflows.ListRootWorkflowsByStatus(ctx, status)
+	return store.ListRootWorkflowsByStatus(ctx, r.ORM(), status)
 }
 
 // ==================== Workflow Checkpoints ====================
@@ -3196,29 +3196,29 @@ func (r *Repo) UpsertWorkflowCheckpoint(ctx context.Context, checkpoint *Workflo
 	if checkpoint == nil {
 		return fmt.Errorf("checkpoint cannot be nil")
 	}
-	return r.workflows.UpsertWorkflowCheckpoint(ctx, checkpoint)
+	return store.SaveWorkflowCheckpoint(ctx, r.ORM(), checkpoint)
 }
 
 // GetWorkflowCheckpoint returns the recorded position for a workflow ID, or
 // (nil, nil) when no checkpoint exists.
 func (r *Repo) GetWorkflowCheckpoint(ctx context.Context, workflowID string) (*WorkflowCheckpoint, error) {
-	return r.workflows.GetWorkflowCheckpoint(ctx, workflowID)
+	return store.LoadWorkflowCheckpoint(ctx, r.ORM(), workflowID)
 }
 
 func (r *Repo) DeleteWorkflowCheckpoint(ctx context.Context, workflowID string) error {
-	return r.workflows.DeleteWorkflowCheckpoint(ctx, workflowID)
+	return store.ClearWorkflowCheckpoint(ctx, r.ORM(), workflowID)
 }
 
 // UpdateWorkflowWorkerStarted records when a worker was started for a workflow.
 // This is used by the reconciler to skip stuck-check for recently started workers.
 func (r *Repo) UpdateWorkflowWorkerStarted(ctx context.Context, workflowID string) error {
-	return r.workflows.UpdateWorkflowWorkerStarted(ctx, workflowID)
+	return store.MarkWorkflowWorkerStarted(ctx, r.ORM(), workflowID)
 }
 
 // UpdateWorkflowWorkerStopped records when a worker was stopped for a workflow.
 // This tracks the worker lifecycle for pause/resume scenarios.
 func (r *Repo) UpdateWorkflowWorkerStopped(ctx context.Context, workflowID string) error {
-	return r.workflows.UpdateWorkflowWorkerStopped(ctx, workflowID)
+	return store.MarkWorkflowWorkerStopped(ctx, r.ORM(), workflowID)
 }
 
 // ==================== Threads ====================
@@ -3484,7 +3484,7 @@ func (r *Repo) CreateWorkflowDraft(ctx context.Context, draft *WorkflowDraft) er
 		return fmt.Errorf("draft cannot be nil")
 	}
 	return r.runWorkflowDraftTx(ctx, func(txCtx context.Context) error {
-		if err := r.workflowCatalog.CreateWorkflowDraft(txCtx, draft); err != nil {
+		if err := store.InsertWorkflowDraft(txCtx, r.ORM(), draft); err != nil {
 			return mapWorkflowSlugConflict(err, draft.Slug)
 		}
 		return r.publishWorkflowDraftUpdatedByID(txCtx, draft.ID)
@@ -3497,7 +3497,7 @@ func (r *Repo) UpsertWorkflowDraft(ctx context.Context, draft *WorkflowDraft) (*
 	}
 	var saved *WorkflowDraft
 	err := r.runWorkflowDraftTx(ctx, func(txCtx context.Context) error {
-		row, err := r.workflowCatalog.UpsertWorkflowDraft(txCtx, draft)
+		row, err := store.UpsertWorkflowDraftBySlug(txCtx, r.ORM(), draft)
 		if err != nil {
 			return mapWorkflowSlugConflict(err, draft.Slug)
 		}
@@ -3541,7 +3541,7 @@ func (r *Repo) publishWorkflowDraftUpdated(ctx context.Context, draft *WorkflowD
 }
 
 func (r *Repo) publishWorkflowDraftUpdatedByID(ctx context.Context, id string) error {
-	row, err := r.workflowCatalog.GetWorkflowDraft(ctx, id)
+	row, err := store.LoadWorkflowDraft(ctx, r.ORM(), id)
 	if err != nil {
 		return err
 	}
@@ -3549,7 +3549,7 @@ func (r *Repo) publishWorkflowDraftUpdatedByID(ctx context.Context, id string) e
 }
 
 func (r *Repo) GetWorkflowDraft(ctx context.Context, id string) (*WorkflowDraft, error) {
-	row, err := r.workflowCatalog.GetWorkflowDraft(ctx, id)
+	row, err := store.LoadWorkflowDraft(ctx, r.ORM(), id)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, fmt.Errorf("workflow draft not found: %s", id)
@@ -3560,15 +3560,15 @@ func (r *Repo) GetWorkflowDraft(ctx context.Context, id string) (*WorkflowDraft,
 }
 
 func (r *Repo) GetWorkflowDraftBySlug(ctx context.Context, userID, slug string) (*WorkflowDraft, error) {
-	return r.workflowCatalog.GetWorkflowDraftBySlug(ctx, userID, slug)
+	return store.FindWorkflowDraftBySlug(ctx, r.ORM(), userID, slug)
 }
 
 func (r *Repo) GetWorkflowDraftByName(ctx context.Context, userID, name string) (*WorkflowDraft, error) {
-	return r.workflowCatalog.GetWorkflowDraftByName(ctx, userID, name)
+	return store.FindWorkflowDraftByName(ctx, r.ORM(), userID, name)
 }
 
 func (r *Repo) GetWorkflowDraftBySourcePath(ctx context.Context, userID, sourcePath string) (*WorkflowDraft, error) {
-	return r.workflowCatalog.GetWorkflowDraftBySourcePath(ctx, userID, sourcePath)
+	return store.FindWorkflowDraftBySourcePath(ctx, r.ORM(), userID, sourcePath)
 }
 
 // GetUsableWorkflowBySlug returns the runnable (complete, visible) workflow
@@ -3576,11 +3576,11 @@ func (r *Repo) GetWorkflowDraftBySourcePath(ctx context.Context, userID, sourceP
 // slug is reported as *WorkflowDraftNotRunnableError rather than hidden behind
 // "not found": the workflow exists, and the fix is to mark it complete.
 func (r *Repo) GetUsableWorkflowBySlug(ctx context.Context, userID, slug string) (*WorkflowDraft, error) {
-	usable, err := r.workflowCatalog.GetUsableWorkflowBySlug(ctx, userID, slug)
+	usable, err := store.FindUsableWorkflowBySlug(ctx, r.ORM(), userID, slug)
 	if err != nil || usable != nil {
 		return usable, err
 	}
-	draft, err := r.workflowCatalog.GetWorkflowDraftBySlug(ctx, userID, slug)
+	draft, err := store.FindWorkflowDraftBySlug(ctx, r.ORM(), userID, slug)
 	if err != nil {
 		return nil, err
 	}
@@ -3591,7 +3591,7 @@ func (r *Repo) GetUsableWorkflowBySlug(ctx context.Context, userID, slug string)
 }
 
 func (r *Repo) ListWorkflowDraftsByUser(ctx context.Context, userID string) ([]*WorkflowDraft, error) {
-	return r.workflowCatalog.ListWorkflowDraftsByUser(ctx, userID)
+	return store.ListUserWorkflowDrafts(ctx, r.ORM(), userID)
 }
 
 func (r *Repo) UpdateWorkflowDraft(ctx context.Context, draft *WorkflowDraft) error {
@@ -3599,7 +3599,7 @@ func (r *Repo) UpdateWorkflowDraft(ctx context.Context, draft *WorkflowDraft) er
 		return fmt.Errorf("draft cannot be nil")
 	}
 	return r.runWorkflowDraftTx(ctx, func(txCtx context.Context) error {
-		if err := r.workflowCatalog.UpdateWorkflowDraft(txCtx, draft); err != nil {
+		if err := store.ReplaceWorkflowDraft(txCtx, r.ORM(), draft); err != nil {
 			return mapWorkflowSlugConflict(err, draft.Slug)
 		}
 		return r.publishWorkflowDraftUpdatedByID(txCtx, draft.ID)
@@ -3608,7 +3608,7 @@ func (r *Repo) UpdateWorkflowDraft(ctx context.Context, draft *WorkflowDraft) er
 
 func (r *Repo) UpdateWorkflowDraftDefinition(ctx context.Context, id string, name string, slug string, definition string, status WorkflowDraftStatus) error {
 	return r.runWorkflowDraftTx(ctx, func(txCtx context.Context) error {
-		if err := r.workflowCatalog.UpdateWorkflowDraftDefinition(txCtx, id, name, slug, definition, status); err != nil {
+		if err := store.SetWorkflowDraftDefinition(txCtx, r.ORM(), id, name, slug, definition, status); err != nil {
 			return mapWorkflowSlugConflict(err, slug)
 		}
 		return r.publishWorkflowDraftUpdatedByID(txCtx, id)
@@ -3618,7 +3618,7 @@ func (r *Repo) UpdateWorkflowDraftDefinition(ctx context.Context, id string, nam
 func (r *Repo) SetWorkflowDraftStatus(ctx context.Context, id string, status WorkflowDraftStatus) (*WorkflowDraft, error) {
 	var saved *WorkflowDraft
 	err := r.runWorkflowDraftTx(ctx, func(txCtx context.Context) error {
-		row, err := r.workflowCatalog.SetWorkflowDraftStatus(txCtx, id, status)
+		row, err := store.SetWorkflowDraftStatus(txCtx, r.ORM(), id, status)
 		if err != nil {
 			return err
 		}
@@ -3634,7 +3634,7 @@ func (r *Repo) SetWorkflowDraftStatus(ctx context.Context, id string, status Wor
 func (r *Repo) SetWorkflowDraftHidden(ctx context.Context, id string, isHidden bool) (*WorkflowDraft, error) {
 	var saved *WorkflowDraft
 	err := r.runWorkflowDraftTx(ctx, func(txCtx context.Context) error {
-		row, err := r.workflowCatalog.SetWorkflowDraftHidden(txCtx, id, isHidden)
+		row, err := store.SetWorkflowDraftHidden(txCtx, r.ORM(), id, isHidden)
 		if err != nil {
 			return err
 		}
@@ -3652,7 +3652,7 @@ func (r *Repo) SetWorkflowDraftHidden(ctx context.Context, id string, isHidden b
 // delete are one atomic statement. Deleting a missing draft is a silent no-op.
 func (r *Repo) DeleteWorkflowDraft(ctx context.Context, id string) error {
 	return r.runWorkflowDraftTx(ctx, func(txCtx context.Context) error {
-		deleted, err := r.workflowCatalog.DeleteWorkflowDraft(txCtx, id)
+		deleted, err := store.RemoveWorkflowDraft(txCtx, r.ORM(), id)
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil
 		}
@@ -3665,7 +3665,7 @@ func (r *Repo) DeleteWorkflowDraft(ctx context.Context, id string) error {
 
 func (r *Repo) DeleteWorkflowDraftBySlug(ctx context.Context, userID, slug string) error {
 	return r.runWorkflowDraftTx(ctx, func(txCtx context.Context) error {
-		deleted, err := r.workflowCatalog.DeleteWorkflowDraftBySlug(txCtx, userID, slug)
+		deleted, err := store.RemoveWorkflowDraftBySlug(txCtx, r.ORM(), userID, slug)
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil
 		}
@@ -3677,17 +3677,17 @@ func (r *Repo) DeleteWorkflowDraftBySlug(ctx context.Context, userID, slug strin
 }
 
 func (r *Repo) WorkflowSlugExists(ctx context.Context, userID, slug string) (bool, error) {
-	return r.workflowCatalog.WorkflowSlugExists(ctx, userID, slug)
+	return store.WorkflowSlugExists(ctx, r.ORM(), userID, slug)
 }
 
 func (r *Repo) CountWorkflowDraftsByUser(ctx context.Context, userID string) (int64, error) {
-	return r.workflowCatalog.CountWorkflowDraftsByUser(ctx, userID)
+	return store.CountUserWorkflowDrafts(ctx, r.ORM(), userID)
 }
 
 func (r *Repo) UpdateWorkflowForkedFrom(ctx context.Context, draftID string, forkedFrom string) (*WorkflowDraft, error) {
 	var saved *WorkflowDraft
 	err := r.runWorkflowDraftTx(ctx, func(txCtx context.Context) error {
-		row, err := r.workflowCatalog.UpdateWorkflowForkedFrom(txCtx, draftID, forkedFrom)
+		row, err := store.SetWorkflowDraftForkedFrom(txCtx, r.ORM(), draftID, forkedFrom)
 		if err != nil {
 			return err
 		}
@@ -3760,42 +3760,42 @@ func (r *Repo) CreateWorkflowScenario(ctx context.Context, scenario *WorkflowSce
 	if scenario == nil {
 		return fmt.Errorf("scenario cannot be nil")
 	}
-	return r.workflowCatalog.CreateWorkflowScenario(ctx, scenario)
+	return store.InsertWorkflowScenario(ctx, r.ORM(), scenario)
 }
 
 func (r *Repo) GetWorkflowScenario(ctx context.Context, id string) (*WorkflowScenario, error) {
-	return r.workflowCatalog.GetWorkflowScenario(ctx, id)
+	return store.FindWorkflowScenario(ctx, r.ORM(), id)
 }
 
 func (r *Repo) GetWorkflowScenarioByName(ctx context.Context, workflowDraftID string, name string) (*WorkflowScenario, error) {
-	return r.workflowCatalog.GetWorkflowScenarioByName(ctx, workflowDraftID, name)
+	return store.FindWorkflowScenarioByName(ctx, r.ORM(), workflowDraftID, name)
 }
 
 func (r *Repo) ListWorkflowScenariosByDraft(ctx context.Context, workflowDraftID string) ([]*WorkflowScenario, error) {
-	return r.workflowCatalog.ListWorkflowScenariosByDraft(ctx, workflowDraftID)
+	return store.ListDraftWorkflowScenarios(ctx, r.ORM(), workflowDraftID)
 }
 
 func (r *Repo) ListWorkflowScenariosByUser(ctx context.Context, userID string) ([]*WorkflowScenario, error) {
-	return r.workflowCatalog.ListWorkflowScenariosByUser(ctx, userID)
+	return store.ListUserWorkflowScenarios(ctx, r.ORM(), userID)
 }
 
 func (r *Repo) UpdateWorkflowScenario(ctx context.Context, scenario *WorkflowScenario) error {
 	if scenario == nil {
 		return fmt.Errorf("scenario cannot be nil")
 	}
-	return r.workflowCatalog.UpdateWorkflowScenario(ctx, scenario)
+	return store.ReplaceWorkflowScenario(ctx, r.ORM(), scenario)
 }
 
 func (r *Repo) UpdateWorkflowScenarioResult(ctx context.Context, id string, status string, result string) error {
-	return r.workflowCatalog.UpdateWorkflowScenarioResult(ctx, id, status, result)
+	return store.RecordWorkflowScenarioResult(ctx, r.ORM(), id, status, result)
 }
 
 func (r *Repo) DeleteWorkflowScenario(ctx context.Context, id string) error {
-	return r.workflowCatalog.DeleteWorkflowScenario(ctx, id)
+	return store.RemoveWorkflowScenario(ctx, r.ORM(), id)
 }
 
 func (r *Repo) DeleteWorkflowScenariosByDraft(ctx context.Context, workflowDraftID string) error {
-	return r.workflowCatalog.DeleteWorkflowScenariosByDraft(ctx, workflowDraftID)
+	return store.RemoveDraftWorkflowScenarios(ctx, r.ORM(), workflowDraftID)
 }
 
 // ==================== Command Favorites ====================
@@ -3870,53 +3870,28 @@ func generateID() string {
 	return uuid.New().String()
 }
 
-// apiKeySealing is the optional sealing surface of the api_keys store.
-type apiKeySealing interface {
-	SetSealer(postgresstore.CredentialSealer)
-	BackfillAPIKeys(ctx context.Context, batch int) (int, error)
-	CountUnsealedAPIKeys(ctx context.Context) (int64, error)
-	ValidateAPIKeysSealedConstraint(ctx context.Context) error
-}
-
-// EnableCredentialSealing gives the settings store its vault; without one,
-// provider API keys and provider sign-in tokens (Claude, Codex, Copilot,
-// Antigravity) cannot be read or written. Call once at boot, before serving.
-func (r *Repo) EnableCredentialSealing(sealer postgresstore.CredentialSealer) error {
-	s, ok := r.settings.(apiKeySealing)
-	if !ok {
-		return fmt.Errorf("settings store does not support api key sealing")
-	}
-	s.SetSealer(sealer)
+// EnableCredentialSealing gives the api_keys and provider_accounts stores
+// their vault; without one, automation tokens and provider credentials cannot
+// be read or written. Call once at boot, before serving.
+func (r *Repo) EnableCredentialSealing(sealer CredentialSealer) {
+	r.apiKeys.SetSealer(sealer)
 	r.accounts.SetSealer(sealer)
-	return nil
 }
 
 // BackfillAPIKeys seals legacy plaintext api_keys rows. Idempotent; returns the
 // number of rows sealed. Requires EnableCredentialSealing.
 func (r *Repo) BackfillAPIKeys(ctx context.Context, batch int) (int, error) {
-	s, ok := r.settings.(apiKeySealing)
-	if !ok {
-		return 0, fmt.Errorf("settings store does not support api key sealing")
-	}
-	return s.BackfillAPIKeys(ctx, batch)
+	return r.apiKeys.BackfillAPIKeys(ctx, batch)
 }
 
 // CountUnsealedAPIKeys returns count(api_keys WHERE api_key_sealed IS NULL).
 func (r *Repo) CountUnsealedAPIKeys(ctx context.Context) (int64, error) {
-	s, ok := r.settings.(apiKeySealing)
-	if !ok {
-		return 0, fmt.Errorf("settings store does not support api key sealing")
-	}
-	return s.CountUnsealedAPIKeys(ctx)
+	return r.apiKeys.CountUnsealedAPIKeys(ctx)
 }
 
 // ValidateAPIKeysSealedConstraint validates the api_key_sealed NOT NULL check.
 func (r *Repo) ValidateAPIKeysSealedConstraint(ctx context.Context) error {
-	s, ok := r.settings.(apiKeySealing)
-	if !ok {
-		return fmt.Errorf("settings store does not support api key sealing")
-	}
-	return s.ValidateAPIKeysSealedConstraint(ctx)
+	return r.apiKeys.ValidateAPIKeysSealedConstraint(ctx)
 }
 
 // ListUserIDsWithProviderAccount returns every user holding an account for provider, without

@@ -247,7 +247,7 @@ func TestForgeInputsRunForgeGenerate(t *testing.T) {
 		"proto/reliant/v1/chat.proto", "db/migrations/20261101000000_x.up.sql", "internal/vault/contract.go",
 		"internal/vault/doc.go", "internal/handlers/chat/rpc_send.go", "internal/vault/mock_gen.go",
 		"gen/forge_descriptor.json", "deploy/observability/x.json", ".forge/hashes.json",
-		"internal/db/postgres/queries/chats.sql", "forge.yaml", "go.mod",
+		"forge.yaml", "go.mod",
 	} {
 		pl := classify(p)
 		if !pl.ForgeGen.Full {

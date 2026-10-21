@@ -486,7 +486,7 @@ jobs:
   # Two generators, two checks, ONE job:
   #
   #   1. `make generate-all` — every generator a contributor runs (protobuf with
-  #      the pinned local plugins, sqlc, the CLI/tools/models/... docs
+  #      the pinned local plugins, the CLI/tools/models/... docs
   #      references, the Mintlify pages) — then `git status` must be clean.
   #   2. `make forge-generate-check` — forge.yaml's pinned `forge generate`
   #      (mocks, gen/forge_descriptor.json, harnesses, observability files),
@@ -517,7 +517,7 @@ jobs:
   # forward everything it had restored), this job another (~4.9 GB) and the
   # e2e job a third: ~23 GB per push. So every push evicted most of the last
   # one, a PR shard usually restored ANOTHER shard's cache (or none), and the
-  # small entries (the forge binary, buf/sqlc, embedded Postgres, Playwright)
+  # small entries (the forge binary, buf, embedded Postgres, Playwright)
   # were evicted too and rebuilt on every run. One entry, trimmed to what this
   # job used, fits with room for the rest.
   #
@@ -580,8 +580,8 @@ jobs:
           cache: npm
           cache-dependency-path: tools/protoc-gen-es/package-lock.json
 
-      # The Makefile builds buf and sqlc from source at the versions it pins,
-      # into versioned paths it skips when present; forge runs `buf` from PATH
+      # The Makefile builds buf from source at the version it pins, into a
+      # versioned path it skips when present; forge runs `buf` from PATH
       # and the Makefile hands it that pinned build. The forge pin is read from
       # forge.yaml, which the check itself compares with go.mod.
       - name: Read pinned generator versions
@@ -589,18 +589,15 @@ jobs:
         run: |
           set -euo pipefail
           echo "buf=$(sed -n 's/^BUF_VERSION := //p' Makefile)" >> "$GITHUB_OUTPUT"
-          echo "sqlc=$(sed -n 's/^SQLC_VERSION := //p' Makefile)" >> "$GITHUB_OUTPUT"
           echo "forge=$(sed -n 's/^forge_version:[[:space:]]*//p' forge.yaml)" >> "$GITHUB_OUTPUT"
           echo "embedded_pg=$(sed -n 's|^[[:space:]]*github.com/fergusstrange/embedded-postgres \(v[^[:space:]]*\).*|\1|p' go.mod)" >> "$GITHUB_OUTPUT"
 
-      - name: Restore pinned buf and sqlc
+      - name: Restore pinned buf
         id: gen-bins
         uses: actions/cache/restore@v4
         with:
-          path: |
-            ~/go/bin/buf-${{ steps.pins.outputs.buf }}
-            ~/go/bin/sqlc-${{ steps.pins.outputs.sqlc }}
-          key: gen-bins-${{ runner.os }}-${{ runner.arch }}-buf-${{ steps.pins.outputs.buf }}-sqlc-${{ steps.pins.outputs.sqlc }}
+          path: ~/go/bin/buf-${{ steps.pins.outputs.buf }}
+          key: gen-bins-${{ runner.os }}-${{ runner.arch }}-buf-${{ steps.pins.outputs.buf }}
 
       # Shared with the lint job: the same key.
       - name: Restore forge binary
@@ -673,13 +670,11 @@ jobs:
 
       # Saves: main only, and after the checks — whatever they found, the tools
       # and the compile are good.
-      - name: Save pinned buf and sqlc (main only)
+      - name: Save pinned buf (main only)
         if: ${{ !cancelled() && github.ref == 'refs/heads/main' && github.event_name != 'pull_request' && steps.gen-bins.outputs.cache-hit != 'true' }}
         uses: actions/cache/save@v4
         with:
-          path: |
-            ~/go/bin/buf-${{ steps.pins.outputs.buf }}
-            ~/go/bin/sqlc-${{ steps.pins.outputs.sqlc }}
+          path: ~/go/bin/buf-${{ steps.pins.outputs.buf }}
           key: ${{ steps.gen-bins.outputs.cache-primary-key }}
 
       - name: Save forge binary (main only)

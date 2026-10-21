@@ -18,7 +18,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
-	postgresstore "github.com/reliant-labs/reliant/internal/db/postgres"
 	"github.com/reliant-labs/reliant/internal/vault"
 )
 
@@ -70,7 +69,7 @@ func newLegacyFixture(t *testing.T) *legacyFixture {
 	ring, err := crypto.ParseKeyring("v1:" + base64.StdEncoding.EncodeToString(k))
 	require.NoError(t, err)
 	sealer := vault.New(vault.Deps{DB: repo.ORM(), Keys: vault.NewEnvKeyWrapper(ring)})
-	require.NoError(t, repo.EnableCredentialSealing(sealer))
+	repo.EnableCredentialSealing(sealer)
 	return &legacyFixture{t: t, repo: repo, raw: raw, sealer: sealer}
 }
 
@@ -82,7 +81,7 @@ func (f *legacyFixture) seal(user string, aad []byte, plaintext string) []byte {
 }
 
 func (f *legacyFixture) oauth(table, user, column, plaintext string) []byte {
-	return f.seal(user, postgresstore.LegacyOAuthTokenAAD(table, user, column), plaintext)
+	return f.seal(user, LegacyOAuthTokenAAD(table, user, column), plaintext)
 }
 
 func (f *legacyFixture) exec(query string, args ...any) {
@@ -92,7 +91,7 @@ func (f *legacyFixture) exec(query string, args ...any) {
 }
 
 func (f *legacyFixture) claude(user, access, refresh, accountUUID, orgUUID string, exp time.Time) {
-	t := postgresstore.LegacySourceClaude
+	t := LegacySourceClaude
 	f.exec(`INSERT INTO claude_auth_tokens (id, user_id, expires_at, account_uuid, account_email, organization_uuid, organization_name, scope,
 			access_token_sealed, refresh_token_sealed) VALUES ($1,$2,$3,$4,$5,$6,'Acme','user:inference',$7,$8)`,
 		uuid.NewString(), user, exp.UTC(), nullIfEmpty(accountUUID), nullIfEmpty(accountUUID+"@example.com"), nullIfEmpty(orgUUID),
@@ -100,21 +99,21 @@ func (f *legacyFixture) claude(user, access, refresh, accountUUID, orgUUID strin
 }
 
 func (f *legacyFixture) codex(user, access, refresh, idToken, accountID string) {
-	t := postgresstore.LegacySourceCodex
+	t := LegacySourceCodex
 	f.exec(`INSERT INTO codex_auth_tokens (id, user_id, account_id, access_token_sealed, refresh_token_sealed, id_token_sealed)
 		VALUES ($1,$2,$3,$4,$5,$6)`, uuid.NewString(), user, accountID,
 		f.oauth(t, user, "access_token", access), f.oauth(t, user, "refresh_token", refresh), f.oauth(t, user, "id_token", idToken))
 }
 
 func (f *legacyFixture) copilot(user, access, refresh string) {
-	t := postgresstore.LegacySourceCopilot
+	t := LegacySourceCopilot
 	f.exec(`INSERT INTO copilot_auth_tokens (id, user_id, tier, github_access_token_sealed, github_refresh_token_sealed)
 		VALUES ($1,$2,'individual',$3,$4)`, uuid.NewString(), user,
 		f.oauth(t, user, "github_access_token", access), f.oauth(t, user, "github_refresh_token", refresh))
 }
 
 func (f *legacyFixture) antigravity(user, access, refresh, idToken string, exp time.Time) {
-	t := postgresstore.LegacySourceAntigravity
+	t := LegacySourceAntigravity
 	f.exec(`INSERT INTO antigravity_auth_tokens (id, user_id, expires_at, scope, access_token_sealed, refresh_token_sealed, id_token_sealed)
 		VALUES ($1,$2,$3,'openid',$4,$5,$6)`, uuid.NewString(), user, exp.UTC(),
 		f.oauth(t, user, "access_token", access), f.oauth(t, user, "refresh_token", refresh), f.oauth(t, user, "id_token", idToken))
@@ -122,7 +121,7 @@ func (f *legacyFixture) antigravity(user, access, refresh, idToken string, exp t
 
 func (f *legacyFixture) apiKey(user, provider, key string) {
 	f.exec(`INSERT INTO api_keys (id, user_id, provider, api_key, api_key_sealed) VALUES ($1,$2,$3,'',$4)`,
-		uuid.NewString(), user, provider, f.seal(user, postgresstore.LegacyAPIKeyAAD(user, provider), key))
+		uuid.NewString(), user, provider, f.seal(user, LegacyAPIKeyAAD(user, provider), key))
 }
 
 func nullIfEmpty(s string) any {

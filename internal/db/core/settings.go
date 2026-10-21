@@ -1,7 +1,6 @@
 package core
 
 import (
-	"context"
 	"time"
 )
 
@@ -46,13 +45,3 @@ const ProviderOAuthMarker = "oauth"
 // delegated automation credentials ("reliant-automation:<daemonID>"). api_keys holds nothing
 // else any more: LLM credentials live in provider_accounts.
 const AutomationProviderPrefix = "reliant-automation:"
-
-// SettingStore is the shared contract for the api_keys automation tokens and
-// the visibility overrides across drivers. Settings, item defaults and
-// default preset assignments are in internal/store.
-type SettingStore interface {
-	// Automation tokens: the daemon:resume credential minted for one (user, daemon), kept in api_keys.
-	GetAutomationToken(ctx context.Context, userID, daemonID string) (string, error)
-	SetAutomationToken(ctx context.Context, userID, daemonID, token string) error
-	DeleteAutomationToken(ctx context.Context, userID, daemonID string) error
-}

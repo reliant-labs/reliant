@@ -170,9 +170,7 @@ func setupTestRepoFrom(t *testing.T, baseDSN, template string) (*Repo, *sql.DB, 
 	if err != nil {
 		t.Fatalf("parse test vault key: %v", err)
 	}
-	if err := repo.EnableCredentialSealing(vault.NewInstrumented(vault.Deps{DB: repo.ORM(), Keys: vault.NewEnvKeyWrapper(ring)})); err != nil {
-		t.Fatalf("enable api key sealing: %v", err)
-	}
+	repo.EnableCredentialSealing(vault.NewInstrumented(vault.Deps{DB: repo.ORM(), Keys: vault.NewEnvKeyWrapper(ring)}))
 	cleanup := func() {
 		db.Close()
 		dropTestDB(name)

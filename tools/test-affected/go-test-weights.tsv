@@ -225,7 +225,6 @@
 0.0	github.com/reliant-labs/reliant/internal/dockerengine
 0.0	github.com/reliant-labs/reliant/internal/diskguard
 0.0	github.com/reliant-labs/reliant/internal/debugserver
-0.0	github.com/reliant-labs/reliant/internal/db/postgres
 0.0	github.com/reliant-labs/reliant/internal/db/migrationcheck
 0.0	github.com/reliant-labs/reliant/internal/db/core
 0.0	github.com/reliant-labs/reliant/internal/daemonpolicy

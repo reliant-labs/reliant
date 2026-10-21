@@ -365,6 +365,17 @@ its Repository methods, and the narrow consumer-side interfaces that replace the
 - Collapse what remains of `internal/db` into `internal/store`, or delete it.
 - P6's Repository split is then done against the stores.
 
+**Finish — done.** sqlc and `internal/db/postgres` are deleted. Its last two
+real stores moved into `internal/db` as the Repository's own
+(`provider_accounts_store.go`, `api_key_sealing.go`: vault sealing around the
+store statements); its pure delegates were inlined, so each Repository method
+calls its `internal/store` function directly, and the four `core.*Store`
+interfaces only they implemented are gone. The last hand data statement
+(`releaseDaemonBindings`' chat unpin) is `store.UnpinChatsFromDaemon`.
+`internal/db` stays as the hand Repository facade, `RunTx` and the
+`WrappedDBTX` bridge, the `core` aliases, the migrator and goose bridge, and
+the session/advisory-lock helpers; its split is P6.
+
 ## Effort estimate
 
 **Measured inputs:**

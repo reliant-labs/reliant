@@ -4,17 +4,14 @@ package db
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 
 	"github.com/reliant-labs/forge/pkg/orm"
-
-	pgdb "github.com/reliant-labs/reliant/internal/db/postgres/generated"
 )
 
 // One transaction, either layer.
 //
-// The Repository (sqlc and hand SQL) and internal/store (the forge ORM) run
+// The Repository (hand SQL) and internal/store (the forge ORM) run
 // on ONE pool and share ONE notion of "the transaction ctx carries": forge's.
 // Repo.RunTx opens its transaction through the ORM client (beginSharedTx)
 // and runs f under the ctx tx.RunTx hands it, so every generated delegate and
@@ -30,8 +27,7 @@ import (
 // retries 40001/40P01 only. Whichever layer opens the transaction owns its
 // retry policy, and a nested RunTx of either kind joins it.
 
-// WrappedDBTX is the executor every sqlc query and hand-written Repository
-// statement runs on: the transaction ctx carries, or the pool, with
+// WrappedDBTX is the executor every hand-written Repository statement runs on: the transaction ctx carries, or the pool, with
 // statement-level retries outside a transaction.
 type WrappedDBTX struct {
 	db *sql.DB
@@ -41,9 +37,17 @@ type WrappedDBTX struct {
 	orm *orm.Client
 }
 
+// sqlExecutor is what a Repository statement runs on: *sql.DB, or the
+// transaction ctx carries.
+type sqlExecutor interface {
+	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
+	QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
+	QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row
+}
+
 // DB returns the executor for a statement run with ctx: the transaction ctx
 // carries on this pool, or the pool.
-func (w *WrappedDBTX) DB(ctx context.Context) pgdb.DBTX {
+func (w *WrappedDBTX) DB(ctx context.Context) sqlExecutor {
 	if w.inTx(ctx) {
 		return ambientConn{w.orm}
 	}
@@ -83,26 +87,17 @@ func (w *WrappedDBTX) beginSharedTx(ctx context.Context, opts TxOptions) (*orm.T
 	return tx, nil
 }
 
-// errPrepareInTx is PrepareContext inside a transaction. sqlc's DBTX names
-// the method, but this module's queries are not emitted prepared and no
-// statement here prepares one.
-var errPrepareInTx = errors.New("db: PrepareContext inside a transaction is not supported")
-
 // ambientConn runs statements through the ORM client's raw passthroughs
 // (Exec/Query/QueryRow: native $N placeholders, bun's formatter bypassed),
 // which run on the transaction ctx carries for the pool.
 //
 // It stands in for forge's orm.Client.SQLConn(ctx), which returns that
-// transaction's *sql.Tx itself (PrepareContext included) and is not in the
-// pinned forge yet; when it is, DB returns w.orm.SQLConn(ctx) and this goes.
+// transaction's *sql.Tx itself and is not in the pinned forge yet; when it
+// is, DB returns w.orm.SQLConn(ctx) and this goes.
 type ambientConn struct{ c *orm.Client }
 
 func (a ambientConn) ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error) {
 	return a.c.Exec(ctx, query, args...)
-}
-
-func (a ambientConn) PrepareContext(context.Context, string) (*sql.Stmt, error) {
-	return nil, errPrepareInTx
 }
 
 func (a ambientConn) QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error) {

@@ -1,7 +1,6 @@
 package core
 
 import (
-	"context"
 	"time"
 )
 
@@ -88,14 +87,4 @@ type RunListItem struct {
 
 	// Archived is whether the run's chat is archived.
 	Archived bool
-}
-
-// RunStore reads the cross-cutting run list.
-type RunStore interface {
-	// ListRuns returns up to filters.Limit runs, newest first, and whether more
-	// follow.
-	ListRuns(ctx context.Context, filters RunListFilters) ([]*RunListItem, bool, error)
-	// LastRunPerWorkflow returns each workflow name's newest run, ordered by
-	// workflow name. Only UserID, ProjectID and Workflows of the filters apply.
-	LastRunPerWorkflow(ctx context.Context, filters RunListFilters) ([]*RunListItem, error)
 }

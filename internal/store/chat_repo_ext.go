@@ -133,6 +133,29 @@ func UpdateChatActiveDaemon(ctx context.Context, db orm.Context, chatID string, 
 	return err
 }
 
+// UnpinnedChat is a chat UnpinChatsFromDaemon released.
+type UnpinnedChat struct {
+	ID         string  `bun:"id"`
+	UserID     string  `bun:"user_id"`
+	ProjectID  string  `bun:"project_id"`
+	WorktreeID *string `bun:"worktree_id"`
+}
+
+const unpinChatsFromDaemonSQL = `
+UPDATE chats SET active_daemon_id = NULL, updated_at = NOW()
+WHERE active_daemon_id = ?0
+RETURNING id, user_id, project_id, worktree_id`
+
+// UnpinChatsFromDaemon clears every chat's pin to a removed daemon and
+// returns the chats it released, so the caller can announce each one.
+func UnpinChatsFromDaemon(ctx context.Context, db orm.Context, daemonID string) ([]UnpinnedChat, error) {
+	var rows []UnpinnedChat
+	if err := db.Bun().NewRaw(unpinChatsFromDaemonSQL, daemonID).Scan(ctx, &rows); err != nil {
+		return nil, fmt.Errorf("unpinning chats from removed daemon %s: %w", daemonID, err)
+	}
+	return rows, nil
+}
+
 // RemoveChat deletes the chat (the generated DeleteChat), treating one that
 // does not exist as already deleted, as the statement it replaced did.
 func RemoveChat(ctx context.Context, db orm.Context, id string) error {

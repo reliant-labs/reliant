@@ -283,8 +283,6 @@ jobs:
           # github.com/reliant-labs/reliant/gen/controlplane/v1".
           path: |
             gen
-            internal/db/sqlite/generated
-            internal/db/postgres/generated
             internal/workflow/v3/reference
             internal/workflow/v2/schema/field_descriptions.go
           retention-days: 1

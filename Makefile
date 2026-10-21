@@ -79,7 +79,7 @@ NC := \033[0m # No Color
 MINTLIFY_DOCS_DIR := docs
 MINTLIFY_PORT ?= 3000
 
-.PHONY: all build build-all clean test test-short test-affected test-affected-plan test-race test-coverage test-ci test-e2e replay-fixtures freeze-replay-fixtures deps fmt vet lint security help generate generate-cli generate-tools-ref generate-shortcuts generate-nodes generate-types generate-presets generate-workflow-builder-skill generate-changelog generate-mintlify-reference docs docs-build mint changelog changelog-draft postgres-up postgres-down db-driver-audit generate-yaml-bindings generate-manifest-schema generate-integrations build-api-server build-temporal-worker build-tools-daemon build-services docker-build pin-forge pin-drift pin-ancestry forge-generate-check release-rc release-patch release-minor release-major release-tag release-tag-dry-run check-release-tags
+.PHONY: all build build-all clean test test-short test-affected test-affected-plan test-race test-coverage test-ci test-e2e replay-fixtures freeze-replay-fixtures deps fmt vet lint security help generate generate-cli generate-tools-ref generate-shortcuts generate-nodes generate-types generate-presets generate-workflow-builder-skill generate-changelog generate-mintlify-reference docs docs-build mint changelog changelog-draft postgres-up postgres-down generate-yaml-bindings generate-manifest-schema generate-integrations build-api-server build-temporal-worker build-tools-daemon build-services docker-build pin-forge pin-drift pin-ancestry forge-generate-check release-rc release-patch release-minor release-major release-tag release-tag-dry-run check-release-tags
 
 # Default target
 all: deps fmt vet test build
@@ -351,8 +351,8 @@ deps: setup-hooks
 #                   protoc-gen-connect-go are `tool` directives in go.mod, run
 #                   with `go tool`; protoc-gen-es is pinned by
 #                   tools/protoc-gen-es/package-lock.json.
-#   buf             A versioned binary built from source, like sqlc below. buf
-#                   compiles the descriptors the generated code embeds.
+#   buf             A versioned binary built from source. buf compiles the
+#                   descriptors the generated code embeds.
 #   Go toolchain    GOTOOLCHAIN is exactly go.mod's. protoc-gen-go formats its
 #                   output with the go/printer of the Go that BUILT it, and doc
 #                   comment layout changes between releases: protoc-gen-go
@@ -370,8 +370,8 @@ GEN_GOTOOLCHAIN := $(shell sed -n 's/^toolchain //p' go.mod)
 ifeq ($(GEN_GOTOOLCHAIN),)
 GEN_GOTOOLCHAIN := go$(shell sed -n 's/^go //p' go.mod)
 endif
-generate proto-generate sqlc db-regenerate: export GOWORK := off
-generate proto-generate sqlc db-regenerate: export GOTOOLCHAIN := $(GEN_GOTOOLCHAIN)
+generate proto-generate: export GOWORK := off
+generate proto-generate: export GOTOOLCHAIN := $(GEN_GOTOOLCHAIN)
 generate-% proto-generate-%: export GOWORK := off
 generate-% proto-generate-%: export GOTOOLCHAIN := $(GEN_GOTOOLCHAIN)
 
@@ -430,11 +430,6 @@ proto-format: $(BUF_BIN)
 	@$(BUF_BIN) format -w
 	@echo "$(GREEN)✅ Protobuf formatting complete$(NC)"
 
-## db-driver-audit: Static dual-driver audit (SQLite/Postgres parity and bindQuery checks)
-db-driver-audit:
-	@echo "$(YELLOW)Running DB driver audit...$(NC)"
-	@./scripts/db-driver-audit.sh
-
 ## pin-forge: Pin forge to forge's current origin/main commit
 # Pre-launch we pin by COMMIT, not tag — a tag costs three CI cycles and up to
 # 20 minutes of module-proxy lag before a one-line forge fix can reach prod,
@@ -452,30 +447,7 @@ pin-drift:
 pin-ancestry:
 	@./scripts/check-pin-ancestry.sh
 
-## sqlc: Generate database code with sqlc
-SQLC_VERSION := v1.31.1
-SQLC_BIN := $(HOME)/go/bin/sqlc-$(SQLC_VERSION)
-
-$(SQLC_BIN):
-	@echo "$(YELLOW)Installing sqlc $(SQLC_VERSION) → $(SQLC_BIN)...$(NC)"
-	@tmp=$$(mktemp -d) && \
-		GOBIN=$$tmp $(GOCMD) install github.com/sqlc-dev/sqlc/cmd/sqlc@$(SQLC_VERSION) && \
-		mv "$$tmp/sqlc" "$(SQLC_BIN)" && rmdir "$$tmp"
-
-sqlc: $(SQLC_BIN)
-	@echo "$(YELLOW)Generating database code with sqlc $(SQLC_VERSION)...$(NC)"
-	@# sqlc never deletes a file it no longer writes: clear the per-query output
-	@# first, so deleting a queries/*.sql file (P5b) deletes its Go too.
-	@rm -f internal/db/postgres/generated/*.sql.go
-	@$(SQLC_BIN) generate
-	@echo "$(GREEN)✅ Database code generated$(NC)"
-
-## db-regenerate: Regenerate sqlc code (run after migration changes)
-db-regenerate: sqlc
-	@echo "$(GREEN)✅ Database schema and code regenerated$(NC)"
-	@echo "$(BLUE)You can now write Go code using the new schema types$(NC)"
-
-## generate-all: Run every code generator (protobuf, sqlc, docs) — what CI's "Generated code is up to date" job runs
+## generate-all: Run every code generator (protobuf, docs) — what CI's "Generated code is up to date" job runs
 generate-all: proto-generate generate
 	@echo "$(GREEN)✅ All code generation complete$(NC)"
 
@@ -489,8 +461,8 @@ forge-generate-check: export GOTOOLCHAIN := $(GEN_GOTOOLCHAIN)
 forge-generate-check: $(BUF_BIN) $(PROTOC_GEN_ES)
 	@BUF="$(BUF_BIN)" ./scripts/check-forge-generate.sh $(FORGE_CHECK_FLAGS)
 
-## generate-go: Run Go code generators only (protobuf Go + sqlc + Go reference files)
-generate-go: proto-generate-go generate-yaml-bindings generate-tool-catalog generate-manifest-schema generate-integrations sqlc generate-schema generate-refcheck generate-cel-reference generate-nodes
+## generate-go: Run Go code generators only (protobuf Go + Go reference files)
+generate-go: proto-generate-go generate-yaml-bindings generate-tool-catalog generate-manifest-schema generate-integrations generate-schema generate-refcheck generate-cel-reference generate-nodes
 	@echo "$(GREEN)✅ Go code generation complete$(NC)"
 
 ## generate-yaml-bindings: Generate YAML bindings from proto descriptors
@@ -543,8 +515,8 @@ migration:
 	@echo "     Additive (a column, table or index old code ignores): -- forge:backward-compatible — <why>."
 	@echo "     Otherwise expand now and contract in a later release, or declare -- forge:breaks-rollback <why>."
 	@echo "     forge lint --migration-safety fails the file until it says one."
-	@echo "  2. Run: make db-regenerate"
-	@echo "  3. Write your Go code using the new types"
+	@echo "  2. Run: make forge-generate-check — the pinned forge generate re-projects internal/store from the schema; commit what it writes"
+	@echo "  3. Write your queries in internal/store (internal/db/SCHEMA.md)"
 
 ## postgres-up: Start local Postgres container for DATABASE_DRIVER=postgres dev
 postgres-up:
@@ -574,8 +546,8 @@ CONFIG_DIR=config
 WEB_SRC_DIR=web/src
 CHANGELOG_DIR=$(MINTLIFY_DOCS_DIR)/data/releases
 
-## generate: Generate sqlc, Go protobuf, docs, presets and skills (generate-all minus the reliant TS protobufs)
-generate: generate-yaml-bindings generate-tool-catalog generate-manifest-schema generate-integrations sqlc generate-schema generate-scenario-schema generate-refcheck generate-cel-reference generate-cli generate-tools-ref generate-shortcuts generate-nodes generate-types generate-models generate-presets generate-workflow-builder-skill generate-changelog generate-mintlify-reference
+## generate: Generate Go protobuf, docs, presets and skills (generate-all minus the reliant TS protobufs)
+generate: generate-yaml-bindings generate-tool-catalog generate-manifest-schema generate-integrations generate-schema generate-scenario-schema generate-refcheck generate-cel-reference generate-cli generate-tools-ref generate-shortcuts generate-nodes generate-types generate-models generate-presets generate-workflow-builder-skill generate-changelog generate-mintlify-reference
 	@echo "$(GREEN)✅ All generated files up to date$(NC)"
 
 ## generate-schema: Generate workflow schema reference from proto types
@@ -698,7 +670,7 @@ dev-build: generate-all fmt vet test build
 	@echo "$(GREEN)✅ Development build complete$(NC)"
 
 ## ci: Continuous integration workflow
-ci: deps generate-all fmt vet schema-validate db-driver-audit test-race security
+ci: deps generate-all fmt vet schema-validate test-race security
 	@echo "$(GREEN)✅ CI checks complete$(NC)"
 
 ## check: Run all checks (format, vet, lint, test)

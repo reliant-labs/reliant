@@ -6,10 +6,8 @@
 //
 // New hands a test its own database, migrated the production way, reachable
 // through BOTH data layers over ONE pgx pool: the forge ORM client the
-// internal/store queries take, and the hand/sqlc db.Repo they replace. A lane
-// that ports a query asserts the two agree on the same rows (writes through
-// one, reads through the other) until the sqlc twin is deleted; the porting
-// rules are in internal/db/SCHEMA.md.
+// internal/store queries take, and the hand db.Repo facade over them. The
+// query rules are in internal/db/SCHEMA.md.
 //
 // The database is a clone of a template built once per migration set
 // (forge pgtest.NewFromTemplate), so a test pays a CREATE DATABASE … TEMPLATE,
@@ -59,8 +57,8 @@ type Env struct {
 	// Repo.ORM(): the two share one transaction, opened from either side
 	// (internal/db/SCHEMA.md, "One transaction, either layer").
 	ORM *orm.Client
-	// Repo is the hand/sqlc Repository over the same pool — the twin a
-	// ported query is checked against. Credential sealing is on, with a
+	// Repo is the hand Repository over the same pool, whose methods wrap
+	// the internal/store queries. Credential sealing is on, with a
 	// throwaway key, as in db.SetupTestDB.
 	Repo *db.Repo
 	// SQL is the shared pgx pool, for raw assertions.
@@ -144,9 +142,7 @@ func enableSealing(tb testing.TB, repo *db.Repo) {
 	if err != nil {
 		tb.Fatalf("storetest: parse vault key: %v", err)
 	}
-	if err := repo.EnableCredentialSealing(vault.NewInstrumented(vault.Deps{DB: repo.ORM(), Keys: vault.NewEnvKeyWrapper(ring)})); err != nil {
-		tb.Fatalf("storetest: enable credential sealing: %v", err)
-	}
+	repo.EnableCredentialSealing(vault.NewInstrumented(vault.Deps{DB: repo.ORM(), Keys: vault.NewEnvKeyWrapper(ring)}))
 }
 
 var (

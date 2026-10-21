@@ -1,7 +1,6 @@
 package core
 
 import (
-	"context"
 	"database/sql"
 	"fmt"
 	"time"
@@ -89,35 +88,4 @@ type Preset struct {
 	Params      map[string]interface{} `json:"params"` // Parameter values
 	CreatedAt   time.Time              `json:"created_at"`
 	UpdatedAt   time.Time              `json:"updated_at"`
-}
-
-// WorkflowCatalogStore is the shared contract for workflow draft/scenario persistence across drivers. Presets are in internal/store.
-type WorkflowCatalogStore interface {
-	CreateWorkflowDraft(ctx context.Context, draft *WorkflowDraft) error
-	UpsertWorkflowDraft(ctx context.Context, draft *WorkflowDraft) (*WorkflowDraft, error)
-	GetWorkflowDraft(ctx context.Context, id string) (*WorkflowDraft, error)
-	GetWorkflowDraftBySlug(ctx context.Context, userID, slug string) (*WorkflowDraft, error)
-	GetWorkflowDraftByName(ctx context.Context, userID, name string) (*WorkflowDraft, error)
-	GetWorkflowDraftBySourcePath(ctx context.Context, userID, sourcePath string) (*WorkflowDraft, error)
-	GetUsableWorkflowBySlug(ctx context.Context, userID, slug string) (*WorkflowDraft, error)
-	ListWorkflowDraftsByUser(ctx context.Context, userID string) ([]*WorkflowDraft, error)
-	UpdateWorkflowDraft(ctx context.Context, draft *WorkflowDraft) error
-	UpdateWorkflowDraftDefinition(ctx context.Context, id string, name string, slug string, definition string, status WorkflowDraftStatus) error
-	SetWorkflowDraftStatus(ctx context.Context, id string, status WorkflowDraftStatus) (*WorkflowDraft, error)
-	SetWorkflowDraftHidden(ctx context.Context, id string, isHidden bool) (*WorkflowDraft, error)
-	DeleteWorkflowDraft(ctx context.Context, id string) (*WorkflowDraft, error)
-	DeleteWorkflowDraftBySlug(ctx context.Context, userID, slug string) (*WorkflowDraft, error)
-	WorkflowSlugExists(ctx context.Context, userID, slug string) (bool, error)
-	CountWorkflowDraftsByUser(ctx context.Context, userID string) (int64, error)
-	UpdateWorkflowForkedFrom(ctx context.Context, draftID string, forkedFrom string) (*WorkflowDraft, error)
-
-	CreateWorkflowScenario(ctx context.Context, scenario *WorkflowScenario) error
-	GetWorkflowScenario(ctx context.Context, id string) (*WorkflowScenario, error)
-	GetWorkflowScenarioByName(ctx context.Context, workflowDraftID string, name string) (*WorkflowScenario, error)
-	ListWorkflowScenariosByDraft(ctx context.Context, workflowDraftID string) ([]*WorkflowScenario, error)
-	ListWorkflowScenariosByUser(ctx context.Context, userID string) ([]*WorkflowScenario, error)
-	UpdateWorkflowScenario(ctx context.Context, scenario *WorkflowScenario) error
-	UpdateWorkflowScenarioResult(ctx context.Context, id string, status string, result string) error
-	DeleteWorkflowScenario(ctx context.Context, id string) error
-	DeleteWorkflowScenariosByDraft(ctx context.Context, workflowDraftID string) error
 }

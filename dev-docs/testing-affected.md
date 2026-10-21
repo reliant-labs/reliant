@@ -20,7 +20,7 @@ It is the first thing to run before pushing. It does not replace the full lane
 | Go | `go test -short -timeout 60s <pkgs>` (cached, no `-race`) | the changed package, **plus every package whose test binary imports it** |
 | web | `npx vitest run <files>` in `web/` | every vitest file that imports a changed module, transitively |
 | electron | `npm test` in `electron/` | any change under `electron/`, or a changed file an electron test names |
-| forge-generate | `make forge-generate-check`, first: forge.yaml's pinned `forge generate`, failing (and naming each file) if it changed anything | a change to something forge reads or writes: `proto/**`, `db/**`, a `contract.go` or `doc.go`, `internal/handlers/**`, `*_gen.go`, `gen/**`, `deploy/**`, the sqlc queries, `forge.yaml`, `go.mod`/`go.sum`, `buf.yaml`/`buf.gen.yaml`/`sqlc.yaml` (`forgeInputs` in `rules.go`) |
+| forge-generate | `make forge-generate-check`, first: forge.yaml's pinned `forge generate`, failing (and naming each file) if it changed anything | a change to something forge reads or writes: `proto/**`, `db/**`, a `contract.go` or `doc.go`, `internal/handlers/**`, `*_gen.go`, `gen/**`, `deploy/**`, `forge.yaml`, `go.mod`/`go.sum`, `buf.yaml`/`buf.gen.yaml` (`forgeInputs` in `rules.go`) |
 
 The forge-generate lane is CI's **forge generate is a no-op** job, run locally.
 It leaves what it regenerated in your tree, so the fix is to commit those
@@ -57,7 +57,7 @@ rule claims and no Go package owns runs **everything** (fail-safe).
 | `go.mod`, `go.sum`, `tools/tools.go` | **Go: full** |
 | `package.json`, lockfiles at the root | **web and electron: full** |
 | `web/package.json`, `vite.config.ts`, `tsconfig*.json`, `tailwind`/`postcss` config, `web/src/test/setup.ts` | **web: full** |
-| `Makefile`, `forge.yaml`, `buf*.yaml`, `sqlc.yaml` | **everything: full** |
+| `Makefile`, `forge.yaml`, `buf*.yaml` | **everything: full** |
 | `proto/**` that is not a `.proto` | **Go and web: full** |
 | a deleted web module | **web: full** (its importers can no longer be found) |
 | anything else | **everything: full** |

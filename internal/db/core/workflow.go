@@ -1,7 +1,6 @@
 package core
 
 import (
-	"context"
 	"database/sql"
 	"time"
 )
@@ -122,63 +121,6 @@ type ChatStepExecution struct {
 	// activities. Empty for every internal activity by design — not because
 	// the row had no output. See model.InternalActivities.
 	OutputJSON string
-}
-
-// WorkflowStore is the shared contract for workflow persistence across drivers.
-type WorkflowStore interface {
-	CreateWorkflow(ctx context.Context, workflow *Workflow) error
-	GetWorkflow(ctx context.Context, id string) (*Workflow, error)
-	GetWorkflowByThread(ctx context.Context, chatID, thread string) (*Workflow, error)
-	ListWorkflowsByChat(ctx context.Context, chatID string) ([]*Workflow, error)
-	ListChildWorkflows(ctx context.Context, parentID string) ([]*Workflow, error)
-	ListRootWorkflows(ctx context.Context, chatID string) ([]*Workflow, error)
-	GetRootWorkflowStatusForChats(ctx context.Context, chatIDs []string) (map[string]WorkflowStatus, error)
-	CompareAndSwapWorkflowStatus(ctx context.Context, id string, newStatus, expectedStatus WorkflowStatus) (bool, error)
-	UpdateWorkflowStatus(ctx context.Context, id string, status WorkflowStatus) error
-	SetWorkflowOutcome(ctx context.Context, id string, outcome string) error
-	UpdateWorkflowName(ctx context.Context, id string, workflowName string) error
-	CascadeTerminalStatusToDescendants(ctx context.Context, parentWorkflowID string, reason WorkflowStopReason) error
-	ReapOrphanedWorkflowDescendants(ctx context.Context) ([]ReapedWorkflow, error)
-	// ReviveSubtreeLiveAt moves every descendant of a root that was live at
-	// a reset point back to active, along with the threads those rows own
-	// and the root's own thread, and reports how many of each it moved. The
-	// inverse of CascadeTerminalStatusToDescendants (and its thread twin)
-	// for a subtree a reset-and-replay is bringing back — see
-	// internal/store/workflow_repo_ext.go for why the predicate is a time
-	// window and why both halves are one statement.
-	ReviveSubtreeLiveAt(ctx context.Context, rootWorkflowID string, at time.Time) (workflowsRevived, threadsRevived int64, err error)
-	DeleteWorkflow(ctx context.Context, id string) error
-	DeleteWorkflowsByChat(ctx context.Context, chatID string) error
-	ListWorkflowsByStatus(ctx context.Context, status WorkflowStatus) ([]*Workflow, error)
-	ListRootWorkflowsByStatus(ctx context.Context, status WorkflowStatus) ([]*Workflow, error)
-	PauseRunningWorkflowsByChat(ctx context.Context, chatID string) error
-	ResumeWorkflowsByChat(ctx context.Context, chatID string) error
-	UpdateWorkflowWorkerStarted(ctx context.Context, workflowID string) error
-	UpdateWorkflowWorkerStopped(ctx context.Context, workflowID string) error
-
-	// Position checkpoints (resume-at-position support).
-	// GetWorkflowCheckpoint returns (nil, nil) when no checkpoint exists.
-	UpsertWorkflowCheckpoint(ctx context.Context, checkpoint *WorkflowCheckpoint) error
-	GetWorkflowCheckpoint(ctx context.Context, workflowID string) (*WorkflowCheckpoint, error)
-	DeleteWorkflowCheckpoint(ctx context.Context, workflowID string) error
-
-	CreateStepExecution(ctx context.Context, exec *StepExecution) error
-	GetStepExecution(ctx context.Context, id string) (*StepExecution, error)
-	GetStepExecutionsByWorkflow(ctx context.Context, workflowID string) ([]*StepExecution, error)
-	GetStepExecutionsByStep(ctx context.Context, workflowID, stepID string) ([]*StepExecution, error)
-	// GetStepExecutionsForChat returns every step of every workflow of one
-	// chat in a single query, without OutputJSON. It replaces a
-	// per-workflow loop over GetStepExecutionsByWorkflow.
-	GetStepExecutionsForChat(ctx context.Context, chatID string) ([]*ChatStepExecution, error)
-	// GetBasicStepExecutionsForChat returns only the steps the chat timeline
-	// renders: user-facing steps plus their "-save" siblings that recorded a
-	// message. The BASIC view of GetWorkflowExecutions.
-	GetBasicStepExecutionsForChat(ctx context.Context, chatID string) ([]*ChatStepExecution, error)
-	// ListStepExecutionRecordsForChat returns full rows — inputs, output and
-	// error — newest first, at most limit. A non-empty nodePath scopes them to
-	// that node and everything that ran inside it.
-	ListStepExecutionRecordsForChat(ctx context.Context, chatID, nodePath string, limit int) ([]*StepExecution, error)
-	DeleteStepExecutionsByWorkflow(ctx context.Context, workflowID string) error
 }
 
 // ReapedWorkflow is one workflow ReapOrphanedWorkflowDescendants closed: the
