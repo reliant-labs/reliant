@@ -30,7 +30,7 @@ function band(dimension: Partial<ComputeBandDimension>, usageUnavailable = false
           ...dimension,
         },
       ]}
-      grantedMinutesRemaining={0}
+      grantedSmallDaemonSecondsRemaining={0}
       planDetailUnavailable={false}
       usageUnavailable={usageUnavailable}
       onChangePlan={() => {}}

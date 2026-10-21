@@ -33,7 +33,7 @@ const eligibility = (maxDaemonStorageGib: number) => ({
   eligible: true,
   reason: 0,
   hasActiveSubscription: true,
-  grantedMinutesRemaining: 0,
+  grantedSmallDaemonSecondsRemaining: 0,
   planName: 'Compute XL',
   allowedDaemonSizes: ['small', 'medium', 'large', 'xl'],
   maxDaemonStorageGib,

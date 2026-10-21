@@ -51,7 +51,7 @@ const mockUseCloudEligibility = vi.fn(() => ({
   eligible: false,
   reason: null as string | null,
   isLoading: false,
-  grantedMinutesRemaining: 0,
+  grantedSmallDaemonSecondsRemaining: 0,
   refetch: vi.fn(),
 }));
 
@@ -73,8 +73,7 @@ vi.mock("@/hooks/useCloudBillingQueries", () => ({
           priceCents: 2000n,
           structuredLimits: {
             allowedDaemonSizes: ["small"],
-            daemonComputeIncludedMinutes: 1020,
-            daemonOveragePerMinuteCents: 2,
+            includedSmallDaemonHours: 17n,
           },
         },
         {
@@ -84,8 +83,7 @@ vi.mock("@/hooks/useCloudBillingQueries", () => ({
           priceCents: 4000n,
           structuredLimits: {
             allowedDaemonSizes: ["small", "medium"],
-            daemonComputeIncludedMinutes: 2520,
-            daemonOveragePerMinuteCents: 2,
+            includedSmallDaemonHours: 42n,
           },
         },
       ],
@@ -153,7 +151,7 @@ beforeEach(() => {
     eligible: false,
     reason: null,
     isLoading: false,
-    grantedMinutesRemaining: 0,
+    grantedSmallDaemonSecondsRemaining: 0,
     refetch: vi.fn(),
   });
 });
@@ -164,7 +162,7 @@ describe("ComputeStep — a coupon covered the machine", () => {
       eligible: true,
       reason: null,
       isLoading: false,
-      grantedMinutesRemaining: 6000,
+      grantedSmallDaemonSecondsRemaining: 360000,
       refetch: vi.fn(),
     });
   }

@@ -9,9 +9,7 @@
  * the day the catalog changed.
  *
  * The unit is the SMALL-DAEMON-SECOND (SDS): one second of a 1× machine. A
- * Large (4×) burns four per second. Before the cutover the server reports the
- * old minute model in the same unit (minutes × 60), so these labels read the
- * same either side of it.
+ * Large (4×) burns four per second.
  *
  * Pure functions only, so every sentence a user reads before paying is a unit
  * test.
@@ -53,6 +51,18 @@ export interface DaemonUsageLike {
 }
 
 const SDS_PER_HOUR = 3600;
+
+/**
+ * Small-daemon-seconds past the allowance and any grant so far this period:
+ * each size's overage seconds at its multiplier. The overage segment of the
+ * capacity band, in the same unit as included and used.
+ */
+export function overageSmallDaemonSeconds(usage: Pick<DaemonUsageLike, "bySize">): number {
+  return usage.bySize.reduce(
+    (sum, row) => sum + Number(row.overageSeconds) * Number(row.multiplier),
+    0,
+  );
+}
 
 /** "41.5" — hours to one decimal, trailing ".0" kept for a stable width. */
 function hours(sds: number): string {

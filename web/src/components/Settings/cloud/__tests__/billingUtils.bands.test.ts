@@ -132,11 +132,13 @@ describe("the spend sample comes from the server, not from the entries", () => {
 // ── Compute capacity ──────────────────────────────────────────────────
 
 describe("compute reads as a capacity with a ceiling", () => {
-  const capacity = (usedMinutes: number, includedMinutes: number, overageMinutes = 0) =>
-    deriveComputeCapacity({ usedMinutes, includedMinutes, overageMinutes });
+  // All three in small-daemon-seconds, the server's unit; an hour is 3600.
+  const H = 3600;
+  const capacity = (used: number, included: number, overage = 0) =>
+    deriveComputeCapacity({ used, included, overage });
 
   it("reports how much of the included allowance is consumed", () => {
-    const c = capacity(720, 2400); // 12 h of 40 h
+    const c = capacity(12 * H, 40 * H);
     expect(c.usedPct).toBeCloseTo(30);
     expect(c.state).toBe("under");
   });
@@ -145,33 +147,32 @@ describe("compute reads as a capacity with a ceiling", () => {
     // 80% is the point at which the bar changes state. The pair matters: a
     // predicate stuck on either side of the boundary satisfies one of these
     // and fails the other.
-    expect(capacity(1919, 2400).state).toBe("under");
-    expect(capacity(1920, 2400).state).toBe("near");
+    expect(capacity(32 * H - 1, 40 * H).state).toBe("under");
+    expect(capacity(32 * H, 40 * H).state).toBe("near");
   });
 
   it("distinguishes a spent allowance from one running into overage", () => {
     // Both are "past the line", and they are not the same thing: one stops
     // machines starting, the other is being charged for.
-    expect(capacity(2400, 2400).state).toBe("spent");
-    expect(capacity(2500, 2400, 100).state).toBe("overage");
+    expect(capacity(40 * H, 40 * H).state).toBe("spent");
+    expect(capacity(42 * H, 40 * H, 2 * H).state).toBe("overage");
   });
 
   it("never lets the included fill exceed the ceiling it is drawn against", () => {
     // The overage is a SEPARATE segment past the boundary; letting used
-    // minutes overflow the included bar erases the boundary the band exists
+    // time overflow the included bar erases the boundary the band exists
     // to show.
-    const c = capacity(3000, 2400, 600);
+    const c = capacity(50 * H, 40 * H, 10 * H);
     expect(c.usedPct).toBe(100);
     expect(c.overagePct).toBeGreaterThan(0);
   });
 
-  it("treats the unlimited sentinel as unlimited, not as a zero ceiling", () => {
-    // -1 is the catalog's "unlimited". Dividing by it produces a negative
-    // percentage and a bar that renders as though the user had overrun.
-    const c = capacity(5000, -1);
-    expect(c.state).toBe("unlimited");
+  it("reads a plan with nothing included as spent, never as a division by zero", () => {
+    const c = capacity(0, 0);
+    expect(c.state).toBe("spent");
     expect(c.usedPct).toBe(0);
     expect(c.overagePct).toBe(0);
+    expect(capacity(H, 0, H).state).toBe("overage");
   });
 });
 
@@ -186,8 +187,6 @@ function plan(limits: Partial<PlanLimits>): Plan {
     displayOrder: 1,
     structuredLimits: {
       allowedDaemonSizes: [],
-      daemonComputeIncludedMinutes: 0,
-      daemonOveragePerMinuteCents: 0,
       ...limits,
     },
   } as unknown as Plan;
@@ -200,54 +199,36 @@ function plan(limits: Partial<PlanLimits>): Plan {
  * instead of re-deriving it.
  */
 describe("a plan whose detail never loaded is distinguishable from a real one", () => {
-  it("flags the stale signature: no sizes, no minutes, no rate", () => {
+  it("flags the stale signature: no sizes, no included hours", () => {
     expect(
       isPlanDetailUnavailable(
-        plan({
-          allowedDaemonSizes: [],
-          daemonComputeIncludedMinutes: 0,
-          daemonOveragePerMinuteCents: 0,
-        }),
+        plan({ allowedDaemonSizes: [], includedSmallDaemonHours: 0n }),
       ),
     ).toBe(true);
   });
 
   /**
-   * The mutation guard. A predicate that merely checked "included minutes is
+   * The mutation guard. A predicate that merely checked "included hours is
    * zero" would flag this plan too — and this is a legitimate plan that
    * genuinely includes no hours, sold on pure overage. Getting it wrong
-   * disables the overage control for a user whose rate is right there.
+   * disables the overage control for a user whose plan is right there.
    */
-  it("does not flag a real plan that includes zero hours but has sizes and a rate", () => {
+  it("does not flag a real plan that includes zero hours but lists its sizes", () => {
     expect(
       isPlanDetailUnavailable(
-        plan({
-          allowedDaemonSizes: ["small"],
-          daemonComputeIncludedMinutes: 0,
-          daemonOveragePerMinuteCents: 0.4,
-        }),
+        plan({ allowedDaemonSizes: ["small"], includedSmallDaemonHours: 0n }),
       ),
     ).toBe(false);
   });
 
-  it("does not flag a plan carrying any one of the three facts", () => {
-    // All three absent TOGETHER is the signature. Any single one present
-    // means the row was populated, so the reading is a real plan.
+  it("does not flag a plan carrying either of the two facts", () => {
+    // Both absent TOGETHER is the signature. Either one present means the row
+    // was populated, so the reading is a real plan.
     expect(
       isPlanDetailUnavailable(plan({ allowedDaemonSizes: ["medium"] })),
     ).toBe(false);
     expect(
-      isPlanDetailUnavailable(plan({ daemonComputeIncludedMinutes: 2400 })),
-    ).toBe(false);
-    expect(
-      isPlanDetailUnavailable(plan({ daemonOveragePerMinuteCents: 0.4 })),
-    ).toBe(false);
-  });
-
-  it("does not flag an unlimited plan", () => {
-    // -1 included minutes with no sizes listed is still a populated row.
-    expect(
-      isPlanDetailUnavailable(plan({ daemonComputeIncludedMinutes: -1 })),
+      isPlanDetailUnavailable(plan({ includedSmallDaemonHours: 40n })),
     ).toBe(false);
   });
 
