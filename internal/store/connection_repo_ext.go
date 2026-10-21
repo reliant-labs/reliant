@@ -67,7 +67,7 @@ import (
 // twice.
 
 func connectionTx(ctx context.Context, db orm.Context, fn func(ctx context.Context) error) error {
-	return db.RunTxWithOptions(ctx, orm.TxOptions{Isolation: orm.IsolationReadCommitted, MaxAttempts: 1}, fn)
+	return db.RunTx(ctx, orm.TxOptions{Isolation: orm.ReadCommitted, MaxAttempts: 1}, fn)
 }
 
 // InsertUserConnection inserts c, its secrets and its created event in one

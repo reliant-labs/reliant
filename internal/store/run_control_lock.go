@@ -53,7 +53,7 @@ func LockChatRunControl(ctx context.Context, db orm.Context, chatID string) (rel
 		return nil, ErrRunControlInTx
 	}
 
-	tx, err := db.BeginDetached(ctx, orm.TxOptions{Isolation: orm.IsolationReadCommitted})
+	tx, err := db.BeginDetached(ctx, orm.ReadCommitted)
 	if err != nil {
 		return nil, fmt.Errorf("begin run-control lock transaction: %w", err)
 	}

@@ -182,12 +182,12 @@ func (v *sealer) detached(ctx context.Context, f func(ctx context.Context) error
 	if !orm.InTx(ctx) {
 		return f(ctx)
 	}
-	tx, err := v.db.BeginDetached(ctx, orm.TxOptions{Isolation: orm.IsolationReadCommitted})
+	tx, err := v.db.BeginDetached(ctx, orm.ReadCommitted)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if err := tx.RunTx(ctx, f); err != nil {
+	if err := tx.Join(ctx, f); err != nil {
 		return err
 	}
 	return tx.Commit()

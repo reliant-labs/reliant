@@ -253,7 +253,7 @@ func SetWorktreeCleanupMetadata(ctx context.Context, db orm.Context, id string, 
 // run more than once — a deadlock (40P01) is retried — each time on a fresh
 // copy of the stored value.
 func MergeWorktreeCleanupMetadata(ctx context.Context, db orm.Context, id string, fn func(m *core.CleanupMetadata, archived bool) bool) error {
-	return db.RunTxWithOptions(ctx, orm.TxOptions{Isolation: orm.IsolationReadCommitted}, func(ctx context.Context) error {
+	return db.RunTx(ctx, orm.ReadCommitted.WithMaxAttempts(orm.DefaultTxMaxAttempts), func(ctx context.Context) error {
 		var row Worktree
 		err := db.Bun().NewSelect().Model(&row).
 			Column(WorktreeFieldCleanupMetadata, WorktreeFieldDeletedAt).

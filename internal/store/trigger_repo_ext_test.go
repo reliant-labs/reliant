@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
@@ -127,7 +128,7 @@ func TestTriggerQueries(t *testing.T) {
 	}
 
 	// LockTrigger holds inside a transaction; a missing trigger is not found.
-	if err := env.ORM.RunTx(ctx, func(ctx context.Context) error {
+	if err := env.ORM.RunTx(ctx, orm.Serializable, func(ctx context.Context) error {
 		return store.LockTrigger(ctx, env.ORM, "trg-a")
 	}); err != nil {
 		t.Fatalf("LockTrigger: %v", err)

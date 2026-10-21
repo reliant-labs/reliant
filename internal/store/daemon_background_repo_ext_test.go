@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/orm"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
@@ -158,7 +159,7 @@ func TestDaemonQueries(t *testing.T) {
 		t.Fatalf("UpsertDaemonAttachment(d4): %v", err)
 	}
 	var absent []string
-	err = env.ORM.RunTx(ctx, func(ctx context.Context) error {
+	err = env.ORM.RunTx(ctx, orm.Serializable, func(ctx context.Context) error {
 		var err error
 		absent, err = store.LockDaemonsAbsentFromSnapshot(ctx, env.ORM, "u1", []string{"d3"}, time.Now().Add(time.Hour), time.Now().Add(-time.Minute))
 		return err

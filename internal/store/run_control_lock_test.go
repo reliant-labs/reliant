@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/store/storetest"
 )
@@ -110,7 +111,7 @@ func TestRunControlLockReleasedWhenCtxEnds(t *testing.T) {
 func TestRunControlLockRefusedInsideTx(t *testing.T) {
 	env := storetest.New(t)
 	ctx := context.Background()
-	err := env.ORM.RunTx(ctx, func(txCtx context.Context) error {
+	err := env.ORM.RunTx(ctx, orm.Serializable, func(txCtx context.Context) error {
 		_, err := store.LockChatRunControl(txCtx, env.ORM, "chat-rc-tx")
 		return err
 	})

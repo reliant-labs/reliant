@@ -90,7 +90,7 @@ func (s *LocalStore) MintForUser(ctx context.Context, req MintRequest) (Minted, 
 	// One READ COMMITTED transaction (as database/sql's default was), never
 	// retried: the advisory lock, not snapshot isolation, serializes rotations.
 	var m Minted
-	err := s.db.RunTxWithOptions(ctx, orm.TxOptions{Isolation: orm.IsolationReadCommitted, MaxAttempts: 1}, func(ctx context.Context) error {
+	err := s.db.RunTx(ctx, orm.TxOptions{Isolation: orm.ReadCommitted, MaxAttempts: 1}, func(ctx context.Context) error {
 		if err := store.LockUserAccessTokens(ctx, s.db, req.UserID); err != nil {
 			return err
 		}

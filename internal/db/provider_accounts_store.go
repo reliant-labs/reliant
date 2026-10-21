@@ -138,7 +138,7 @@ func (s *accountStore) openAll(ctx context.Context, a store.SealedProviderAccoun
 // and a transaction is never retried: f seals with fresh randomness and reads under its locks,
 // so it is only correct as the one attempt.
 func (s *accountStore) inTx(ctx context.Context, f func(ctx context.Context) error) error {
-	return s.db.RunTxWithOptions(ctx, orm.TxOptions{Isolation: orm.IsolationReadCommitted, MaxAttempts: 1}, f)
+	return s.db.RunTx(ctx, orm.TxOptions{Isolation: orm.ReadCommitted, MaxAttempts: 1}, f)
 }
 
 func (s *accountStore) ListProviderAccounts(ctx context.Context, userID string) ([]core.ProviderAccount, error) {

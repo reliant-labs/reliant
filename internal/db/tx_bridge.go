@@ -4,7 +4,6 @@ package db
 import (
 	"context"
 	"database/sql"
-	"fmt"
 
 	"github.com/reliant-labs/forge/pkg/orm"
 )
@@ -14,7 +13,7 @@ import (
 // The Repository (hand SQL) and internal/store (the forge ORM) run
 // on ONE pool and share ONE notion of "the transaction ctx carries": forge's.
 // Repo.RunTx opens its transaction through the ORM client (beginSharedTx)
-// and runs f under the ctx tx.RunTx hands it, so every generated delegate and
+// and runs f under the ctx tx.Join hands it, so every generated delegate and
 // _repo_ext.go query called with that ctx joins it. In the other direction,
 // WrappedDBTX resolves each statement against the transaction forge carries
 // in ctx, so a Repository call made inside orm.Client.RunTx — or inside any
@@ -52,23 +51,9 @@ func (w *WrappedDBTX) inTx(ctx context.Context) bool {
 
 // beginSharedTx begins one Repo.RunTx attempt: a forge transaction on this
 // pool, at opts' isolation, READ ONLY DEFERRABLE when opts.ReadOnly under
-// SERIALIZABLE (see TxOptions.ReadOnly). The ORM's BeginTx never retries
-// and never joins; runTxWithRetries does the former, RunTxWithOptions the
+// SERIALIZABLE (see TxOptions.ReadOnly). BeginDetached never retries and
+// never joins; runTxWithRetries does the former, RunTxWithOptions the
 // latter.
 func (w *WrappedDBTX) beginSharedTx(ctx context.Context, opts TxOptions) (*orm.Tx, error) {
-	tx, err := w.orm.BeginTx(ctx, &sql.TxOptions{
-		Isolation: opts.Isolation.sqlLevel(),
-		ReadOnly:  opts.ReadOnly,
-	})
-	if err != nil {
-		return nil, err
-	}
-	if opts.ReadOnly && opts.Isolation.sqlLevel() == sql.LevelSerializable {
-		// database/sql has no DEFERRABLE flag; see BeginTxWithOptions.
-		if _, err := tx.Exec(ctx, "SET TRANSACTION READ ONLY DEFERRABLE"); err != nil {
-			_ = tx.Rollback()
-			return nil, fmt.Errorf("set read-only deferrable: %w", err)
-		}
-	}
-	return tx, nil
+	return w.orm.BeginDetached(ctx, opts.ormPolicy())
 }

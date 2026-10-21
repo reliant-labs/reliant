@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/reliant-labs/forge/pkg/orm"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/store"
@@ -48,7 +49,7 @@ func TestChatUpdates_AcrossLayers(t *testing.T) {
 			continue
 		}
 		var got int64
-		if err := o.RunTx(ctx, func(ctx context.Context) error {
+		if err := o.RunTx(ctx, orm.Serializable, func(ctx context.Context) error {
 			u, err := store.AppendChatUpdate(ctx, o, f.chat, status, entity, data)
 			got = u.SequenceNumber
 			return err
@@ -155,7 +156,7 @@ func TestUserUpdates_AcrossLayers(t *testing.T) {
 			if err := f.env.Repo.CreateUserUpdate(ctx, u); err != nil {
 				t.Fatalf("Repo.CreateUserUpdate %d: %v", i, err)
 			}
-		} else if err := o.RunTx(ctx, func(ctx context.Context) error {
+		} else if err := o.RunTx(ctx, orm.Serializable, func(ctx context.Context) error {
 			return store.AppendUserUpdate(ctx, o, u, u.ID != "")
 		}); err != nil {
 			t.Fatalf("AppendUserUpdate %d: %v", i, err)

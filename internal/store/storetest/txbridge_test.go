@@ -80,7 +80,7 @@ func TestRepoRunTxRollsBackStoreAndSQLCWritesTogether(t *testing.T) {
 
 func TestStoreRunTxRollsBackStoreAndSQLCWritesTogether(t *testing.T) {
 	env := storetest.New(t)
-	err := env.ORM.RunTx(context.Background(), func(ctx context.Context) error {
+	err := env.ORM.RunTx(context.Background(), orm.Serializable, func(ctx context.Context) error {
 		if err := writeBoth(ctx, env, "store-rollback"); err != nil {
 			return err
 		}
@@ -94,7 +94,7 @@ func TestStoreRunTxRollsBackStoreAndSQLCWritesTogether(t *testing.T) {
 	}
 
 	// And committed, both land.
-	if err := env.ORM.RunTx(context.Background(), func(ctx context.Context) error {
+	if err := env.ORM.RunTx(context.Background(), orm.Serializable, func(ctx context.Context) error {
 		return writeBoth(ctx, env, "store-commit")
 	}); err != nil {
 		t.Fatalf("orm RunTx: %v", err)
@@ -163,7 +163,8 @@ func TestNoSelfDeadlockOnARowTheTransactionLocked(t *testing.T) {
 	t.Run("orm RunTx locks, the Repository writes", func(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		err := env.ORM.RunTx(ctx, func(ctx context.Context) error {
+		// forge:lint-disable-next-line forgeconv-tx-lock-under-serializable: the lock is the probe — a write outside the transaction would block on it — not concurrency control; nothing contends
+		err := env.ORM.RunTx(ctx, orm.Serializable, func(ctx context.Context) error {
 			if _, err := env.ORM.Exec(ctx, `SELECT 1 FROM chats WHERE id = $1 FOR UPDATE`, "chat-locked"); err != nil {
 				return err
 			}
