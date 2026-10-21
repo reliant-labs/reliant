@@ -102,7 +102,8 @@ func main() {
 		os.Exit(1)
 	}
 	if cmd == "run" {
-		r := &runner{root: mustAbs(*root), out: os.Stdout, errOut: os.Stderr, dry: *dry, goP: *gotestP, dbURL: os.Getenv("DATABASE_URL")}
+		r := &runner{root: mustAbs(*root), out: os.Stdout, errOut: os.Stderr, dry: *dry, goP: *gotestP, dbURL: os.Getenv("DATABASE_URL"),
+			slot: strings.Fields(os.Getenv("TEST_AFFECTED_SLOT"))}
 		os.Exit(r.run(ctx, pl, enabled))
 	}
 }
@@ -424,6 +425,17 @@ type runner struct {
 	dry    bool
 	goP    int
 	dbURL  string
+	// slot prefixes a FULL lane's command (the Makefile passes
+	// TEST_AFFECTED_SLOT='forge slot run --class heavy --'): a whole-module
+	// run is as heavy as any gate check, and outside a host slot it only steals
+	// CPU from the jobs queued in one. A scoped run stays out of the queue: it
+	// is the inner loop. Empty runs everything directly.
+	slot []string
+}
+
+// heavy is argv run inside a host heavy slot when there is one.
+func (r *runner) heavy(argv []string) []string {
+	return append(append([]string{}, r.slot...), argv...)
 }
 
 type step struct {
@@ -459,7 +471,7 @@ func (r *runner) goSteps(pl *Plan) []step {
 	}
 	switch {
 	case pl.Go.Full:
-		return []step{{name: "go (full)", dir: r.root, argv: append(append([]string{}, base...), "./...")}}
+		return []step{{name: "go (full)", dir: r.root, argv: r.heavy(append(append([]string{}, base...), "./..."))}}
 	case len(pl.Go.Packages) == 0:
 		return nil
 	}
@@ -490,7 +502,7 @@ func (r *runner) webSteps(pl *Plan) []step {
 	web := filepath.Join(r.root, "web")
 	switch {
 	case pl.Web.Full:
-		return []step{{name: "web (full)", dir: web, argv: []string{"npx", "vitest", "run"}}}
+		return []step{{name: "web (full)", dir: web, argv: r.heavy([]string{"npx", "vitest", "run"})}}
 	case len(pl.Web.Tests) == 0:
 		return nil
 	}

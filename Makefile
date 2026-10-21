@@ -35,6 +35,21 @@ LDFLAGS=-s -w \
 # CGO settings
 CGO_ENABLED ?= 0
 
+# GOFLAGS gets -trimpath for every go command a target runs, merged into the
+# caller's own (the environment, `go env -w`, or the toolchain's go.env).
+# Without it Go hashes each package's ABSOLUTE directory into its build-cache
+# key, so every worktree (agents run many: ~/.reliant/worktrees/*,
+# ~/src/rl-agent-worktrees/*) compiles the module from scratch and re-runs
+# every test instead of reusing a sibling's results. Measured on a 16-CPU Mac,
+# two worktrees of one commit: the second compiled 267 packages and cached 0 of
+# 73 test packages without it; 0 and 58 with it. The workspace image already
+# makes it the go.env default; a laptop does not. Code here must not locate
+# files from runtime.Caller (internal/architecture/trimpath_guard_test.go).
+# -trimpath=false in GOFLAGS or `go env -w GOFLAGS` opts out. `(pattern)`, not
+# `pattern)`: make counts parentheses inside $(shell ...).
+GOFLAGS := $(shell f="$$(go env GOFLAGS 2>/dev/null)"; case " $$f " in (*" -trimpath"*|*" --trimpath"*) echo "$$f" ;; (*) echo "$${f:+$$f }-trimpath" ;; esac)
+export GOFLAGS
+
 # Test parameters
 TEST_TIMEOUT=300s
 BENCH_TIMEOUT=60s
@@ -206,8 +221,10 @@ test-short:
 # packages it reaches, but only when YOU set DATABASE_URL (the compose default
 # is not exported here: it is a server shared by everyone on this machine).
 # Design and the rule table: dev-docs/testing-affected.md.
+# A FULL lane (a whole-module run) waits for a host heavy slot ($(SLOT));
+# a scoped one does not.
 test-affected:
-	$(GOCMD) run ./tools/test-affected run $(if $(LANES),-lanes $(LANES))
+	TEST_AFFECTED_SLOT='$(SLOT)' $(GOCMD) run ./tools/test-affected run $(if $(LANES),-lanes $(LANES))
 
 ## test-affected-plan: Print what test-affected would run and why, without running it
 test-affected-plan:
@@ -282,7 +299,7 @@ vet:
 lint:
 	@echo "$(YELLOW)Running golangci-lint...$(NC)"
 	@if command -v golangci-lint >/dev/null 2>&1; then \
-		GOFLAGS="-buildvcs=false" golangci-lint run; \
+		GOFLAGS="$(GOFLAGS) -buildvcs=false" golangci-lint run; \
 	else \
 		echo "$(RED)golangci-lint not installed. Install with: go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest$(NC)"; \
 		exit 1; \
