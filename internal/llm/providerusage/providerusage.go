@@ -44,6 +44,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/reliant-labs/forge/pkg/observe"
 )
 
 // Provider ids, the driver ids the rest of the system uses.
@@ -104,7 +106,7 @@ type Doer interface {
 	Do(*http.Request) (*http.Response, error)
 }
 
-var defaultClient = &http.Client{Timeout: defaultTimeout}
+var defaultClient = observe.NewHTTPClient(observe.HTTPClientOptions{Timeout: defaultTimeout})
 
 var (
 	// ErrThrottled matches (errors.Is) a *ThrottledError: the endpoint answered 429.

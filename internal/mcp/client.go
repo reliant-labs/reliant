@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/reliant-labs/forge/pkg/observe"
 	"github.com/reliant-labs/reliant/internal/cmdutil"
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -149,21 +150,16 @@ func (c *client) Initialize(ctx context.Context) error {
 		if c.cfg.URL == "" {
 			return fmt.Errorf("HTTP transport requires URL")
 		}
-		// Create HTTP client with custom headers if provided
-		httpClient := &http.Client{
-			Timeout: 60 * time.Second,
-		}
-
-		// For now, store transport without custom headers support
-		// TODO: The SDK's StreamableClientTransport doesn't directly support custom headers
-		// We may need to wrap the HTTPClient's Transport to add headers
+		// Custom headers ride on a transport under the tracing one: the SDK's
+		// StreamableClientTransport takes only an *http.Client.
+		var base http.RoundTripper
 		if len(c.cfg.Headers) > 0 {
-			// Wrap the transport to add custom headers
-			httpClient.Transport = &headerTransport{
+			base = &headerTransport{
 				base:    http.DefaultTransport,
 				headers: c.cfg.Headers,
 			}
 		}
+		httpClient := observe.NewHTTPClient(observe.HTTPClientOptions{Timeout: 60 * time.Second, Base: base})
 
 		transport = &mcp.StreamableClientTransport{
 			Endpoint:   c.cfg.URL,

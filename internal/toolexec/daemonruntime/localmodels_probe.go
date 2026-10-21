@@ -3,7 +3,6 @@ package daemonruntime
 
 import (
 	"context"
-	"net/http"
 	"os"
 	"os/exec"
 	"runtime"
@@ -131,7 +130,7 @@ type localModelProber struct {
 
 func newLocalModelProber() *localModelProber {
 	return &localModelProber{
-		probes:    localprobe.New(localprobe.Deps{HTTPClient: &http.Client{}}),
+		probes:    localprobe.New(localprobe.Deps{}),
 		wellKnown: defaultWellKnownLocalEndpoints(),
 		loadCfg:   loadLocalModelsConfig,
 		showCache: localprobe.NewShowCache(),

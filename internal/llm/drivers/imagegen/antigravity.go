@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/reliant-labs/forge/pkg/observe"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/agywire"
 )
 
@@ -60,7 +61,7 @@ func NewAntigravity(config Config) (*AntigravityClient, error) {
 
 	httpClient := config.HTTPClient
 	if httpClient == nil {
-		httpClient = &http.Client{Timeout: defaultRequestTimeout}
+		httpClient = observe.NewHTTPClient(observe.HTTPClientOptions{Timeout: defaultRequestTimeout})
 	}
 	return &AntigravityClient{config: config, httpClient: httpClient}, nil
 }

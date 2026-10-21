@@ -10,6 +10,8 @@ import (
 	"net/url"
 	"os"
 	"time"
+
+	"github.com/reliant-labs/forge/pkg/observe"
 )
 
 const (
@@ -34,13 +36,13 @@ func New(deps Deps) Service {
 // client dials the engine's socket whatever host a request names. Requests
 // use the placeholder host "docker", as the docker CLI does.
 func (e *engine) client(timeout time.Duration) *http.Client {
-	return &http.Client{
+	return observe.NewHTTPClient(observe.HTTPClientOptions{
 		Timeout: timeout,
-		Transport: &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+		Base: &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 			var d net.Dialer
 			return d.DialContext(ctx, "unix", e.socket)
 		}},
-	}
+	})
 }
 
 // systemDF is the part of GET /system/df this adapter reads.
