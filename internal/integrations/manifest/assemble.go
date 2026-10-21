@@ -228,7 +228,7 @@ func refTarget(n *yaml.Node) string {
 		if k.Value != "$ref" || v.Kind != yaml.ScalarNode {
 			continue
 		}
-		if strings.HasPrefix(v.Value, "#") || !(strings.HasSuffix(v.Value, ".yaml") || strings.HasSuffix(v.Value, ".yml")) {
+		if strings.HasPrefix(v.Value, "#") || (!strings.HasSuffix(v.Value, ".yaml") && !strings.HasSuffix(v.Value, ".yml")) {
 			return ""
 		}
 		return v.Value
