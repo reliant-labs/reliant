@@ -665,6 +665,8 @@ func (s *Service) triggerFromDefinition(
 		// The row's filter is the declaration's, as of now: a projection the
 		// fire path re-reads from the workflow.
 		trigger.Filter = decl.Filter
+		// ...and so is the typed scope, resolved from the params just validated.
+		trigger.Config = decl.ProjectedConfig(trigger.Params)
 	}
 	return trigger, nil
 }

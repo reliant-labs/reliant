@@ -281,3 +281,58 @@ func TestMarshalTriggersIsDeterministic(t *testing.T) {
 func TestTriggersAreNotWorkflowLoadTemplates(t *testing.T) {
 	assert.True(t, IsRuntimeEvaluatedTopLevelKey("triggers"))
 }
+
+// `match: {attr: {input: name}}` is IntegrationSource.match_input, and is
+// written back into `match:` beside the literal entries.
+func TestTriggerMatchInputSugar(t *testing.T) {
+	const src = `name: scoped
+inputs:
+    repos:
+        type: github.repository
+        multi: true
+        required: true
+entry: [a]
+nodes:
+    - id: a
+      type: approval
+      args: {title: ok}
+triggers:
+    - name: pr
+      integration:
+        integration: github
+        events: [pull_request.opened]
+        match:
+            action: opened
+            repository: {input: repos}
+`
+	wf, err := ParseWorkflow([]byte(src))
+	require.NoError(t, err)
+	got := wf.GetTriggers()[0].GetIntegration()
+	assert.Equal(t, map[string]string{"repository": "repos"}, got.GetMatchInput())
+	assert.Equal(t, map[string]string{"action": "opened"}, got.GetMatch())
+
+	out, err := MarshalWorkflow(wf)
+	require.NoError(t, err)
+	assert.Contains(t, string(out), "repository: {input: repos}")
+	assert.NotContains(t, string(out), "match_input")
+	again, err := ParseWorkflow(out)
+	require.NoError(t, err)
+	assert.True(t, proto.Equal(wf, again), "match_input must survive a round trip")
+}
+
+func TestTriggerMatchInputSugarRejects(t *testing.T) {
+	const head = "name: s\nentry: [a]\nnodes:\n  - id: a\n    type: approval\n    args: {title: ok}\ntriggers:\n  - name: pr\n    integration:\n      integration: github\n      events: [pull_request.opened]\n"
+	cases := []struct{ name, match, want string }{
+		{"a mapping that is not an input reference", "      match: {repository: {name: repos}}\n", "{input:"},
+		{"an empty input name", "      match: {repository: {input: ''}}\n", "{input:"},
+		{"a list", "      match: {repository: [a, b]}\n", "{input:"},
+		{"the proto field spelled out", "      match_input: {repository: repos}\n", "inside match"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := ParseWorkflow([]byte(head + tc.match))
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), tc.want)
+		})
+	}
+}

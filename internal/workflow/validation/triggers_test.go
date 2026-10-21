@@ -338,7 +338,11 @@ func TestIntegrationSourceMatchesDeclaredTriggers(t *testing.T) {
 	assert.Empty(t, triggerFindings(result, SeverityError))
 }
 
-type fakeIntegration struct{ events, attrs []string }
+type fakeIntegration struct {
+	events, attrs []string
+	// attrTypes is attribute -> qualified value type; absent is a plain string.
+	attrTypes map[string]string
+}
 
 type fakeIntegrationIndex map[string]fakeIntegration
 
@@ -348,6 +352,14 @@ func (f fakeIntegrationIndex) TriggerTypes(integration string) ([]string, []stri
 }
 
 func (f fakeIntegrationIndex) PayloadSchemas(string, string) []map[string]any { return nil }
+
+func (f fakeIntegrationIndex) EventAttributes(integration, _ string) map[string]string {
+	attrs := map[string]string{}
+	for _, a := range f[integration].attrs {
+		attrs[a] = f[integration].attrTypes[a]
+	}
+	return attrs
+}
 
 func TestTriggerDedupeKeyValidation(t *testing.T) {
 	const head = "name: dk\nentry: [a]\nnodes:\n  - id: a\n    type: save_message\n    args: {role: assistant, content: x}\ntriggers:\n"

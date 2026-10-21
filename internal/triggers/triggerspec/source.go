@@ -53,6 +53,9 @@ func FromDefinition(def *reliantv1.TriggerDefinition) (*Source, error) {
 	case *reliantv1.TriggerDefinition_Webhook:
 		return fromWebhook(src.Webhook)
 	case *reliantv1.TriggerDefinition_Integration:
+		if len(src.Integration.GetMatchInput()) > 0 {
+			return nil, &ConfigError{Field: "integration.match_input", Reason: "names a workflow input, and an ad hoc trigger has none; declare the trigger in a workflow, or match a literal value"}
+		}
 		return fromIntegration(src.Integration)
 	case *reliantv1.TriggerDefinition_WorkflowEvent:
 		return fromWorkflowEvent(src.WorkflowEvent)
@@ -220,7 +223,7 @@ func IntegrationConfigFromProto(src *reliantv1.IntegrationSource) (core.Integrat
 		}
 		cfg.Events = append(cfg.Events, ev)
 	}
-	if len(src.Match) > maxSourceMatch {
+	if len(src.Match)+len(src.MatchInput) > maxSourceMatch {
 		return cfg, &ConfigError{Field: "integration.match", Reason: fmt.Sprintf("at most %d entries", maxSourceMatch)}
 	}
 	for key, value := range src.Match {
@@ -231,6 +234,19 @@ func IntegrationConfigFromProto(src *reliantv1.IntegrationSource) (core.Integrat
 			cfg.Match = make(map[string]string, len(src.Match))
 		}
 		cfg.Match[key] = value
+	}
+	for attr, input := range src.MatchInput {
+		input = strings.TrimSpace(input)
+		if strings.TrimSpace(attr) == "" || len(attr) > maxSourceValueLen || input == "" || len(input) > maxSourceValueLen {
+			return cfg, &ConfigError{Field: "integration.match", Reason: fmt.Sprintf("invalid scope entry %q: name the attribute and the input whose values it must be one of", attr)}
+		}
+		if _, dup := src.Match[attr]; dup {
+			return cfg, &ConfigError{Field: "integration.match." + attr, Reason: "matches a literal value and an input at once; use one"}
+		}
+		if cfg.MatchInput == nil {
+			cfg.MatchInput = make(map[string]string, len(src.MatchInput))
+		}
+		cfg.MatchInput[attr] = input
 	}
 	if src.PollInterval != "" {
 		every, err := time.ParseDuration(src.PollInterval)

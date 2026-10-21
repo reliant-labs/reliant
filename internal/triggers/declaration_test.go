@@ -190,3 +190,67 @@ func TestDeclaredInputsMergeOverParams(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "issue_number")
 }
+
+const scopedWorkflow = `name: triage
+inputs:
+  repos:
+    type: github.repository
+    multi: true
+    required: true
+  one:
+    type: github.repository
+    default: acme/solo
+triggers:
+  - name: pr
+    integration:
+      integration: github
+      events: [pull_request.opened]
+      match: {repository: {input: repos}}
+  - name: solo
+    integration:
+      integration: github
+      events: [issues.opened]
+      match: {repository: {input: one}}
+entry: [a]
+nodes:
+  - id: a
+    type: approval
+    args: {title: ok}
+`
+
+func scopeOf(t *testing.T, raw json.RawMessage) core.IntegrationConfig {
+	t.Helper()
+	var cfg core.IntegrationConfig
+	require.NoError(t, json.Unmarshal(raw, &cfg))
+	return cfg
+}
+
+// The stored projection carries the scope resolved from the activation's
+// params: that is what the router checks before a row is written.
+func TestProjectedConfigResolvesTheScopeFromParams(t *testing.T) {
+	workflows := fakeWorkflows{yaml: map[string]string{"triage": scopedWorkflow}}
+	pr, err := ResolveDeclaration(context.Background(), workflows, activation("pr", core.TriggerKindIntegration))
+	require.NoError(t, err)
+
+	cfg := scopeOf(t, pr.ProjectedConfig(map[string]any{"repos": []any{"acme/app", "acme/web", ""}}))
+	assert.Equal(t, map[string]string{"repository": "repos"}, cfg.MatchInput)
+	assert.Equal(t, map[string][]string{"repository": {"acme/app", "acme/web"}}, cfg.MatchAny, "blank entries are no value")
+
+	// The declaration's own config is untouched; only the projection resolves.
+	assert.Empty(t, scopeOf(t, pr.Source.Config).MatchAny)
+
+	unset := scopeOf(t, pr.ProjectedConfig(nil))
+	assert.Equal(t, map[string][]string{"repository": {}}, unset.MatchAny, "an unset required scope projects as present and empty, which matches nothing")
+	assert.False(t, IntegrationEventMatches(unset, "pull_request.opened", map[string]string{"repository": "acme/app"}))
+
+	// A single-valued input is a one-element scope, and its default applies.
+	solo, err := ResolveDeclaration(context.Background(), workflows, activation("solo", core.TriggerKindIntegration))
+	require.NoError(t, err)
+	assert.Equal(t, map[string][]string{"repository": {"acme/solo"}}, scopeOf(t, solo.ProjectedConfig(nil)).MatchAny)
+	assert.Equal(t, map[string][]string{"repository": {"acme/other"}}, scopeOf(t, solo.ProjectedConfig(map[string]any{"one": "acme/other"})).MatchAny)
+
+	// A source with no scope is stored as declared.
+	plain, err := ResolveDeclaration(context.Background(), fakeWorkflows{yaml: map[string]string{"triage": declaringWorkflow}}, activation("new-issue", core.TriggerKindIntegration))
+	require.NoError(t, err)
+	assert.JSONEq(t, string(plain.Source.Config), string(plain.ProjectedConfig(map[string]any{"x": 1})))
+}

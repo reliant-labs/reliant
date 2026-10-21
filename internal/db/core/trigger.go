@@ -263,6 +263,16 @@ type IntegrationConfig struct {
 	Events []string `json:"events"`
 	// Match are attributes the event must carry with exactly these values.
 	Match map[string]string `json:"match,omitempty"`
+	// MatchInput is the declared scope: attribute -> the workflow input whose
+	// values the attribute must be one of. It is the declaration's, kept so a
+	// row can tell "scoped, projection missing" (matches nothing) from "not
+	// scoped".
+	MatchInput map[string]string `json:"match_input,omitempty"`
+	// MatchAny is MatchInput resolved against the activation's params:
+	// attribute -> the values it may take. An attribute present with no values
+	// matches nothing. It is a projection, rewritten whenever the activation's
+	// params or its declaration change.
+	MatchAny map[string][]string `json:"match_any,omitempty"`
 	// PollInterval is a Go duration for polled integrations; empty means the
 	// integration's default.
 	PollInterval string `json:"poll_interval,omitempty"`
