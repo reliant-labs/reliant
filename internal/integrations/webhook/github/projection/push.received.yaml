@@ -1,0 +1,34 @@
+# Push: the projection of the GitHub `push` webhook.
+id: push.received
+event: push
+display_name: Push
+summary: Commits or a tag were pushed to a repository.
+description: >-
+  Fires on every push. A branch push sets `branch` (match branch: main to
+  watch one branch); a tag push sets `tag` instead and has no `branch`.
+  data.commits lists up to 20 commits.
+keywords: [push, commit, deploy, branch, tag]
+omit: [action]
+attributes:
+  - { name: ref, description: The full ref pushed., example: refs/heads/main, from: ref }
+  - { name: branch, description: "The branch pushed, for a branch push only.", example: main, from: ref, strip_prefix: refs/heads/ }
+  - { name: tag, description: "The tag pushed, for a tag push only.", example: v1.2.0, from: ref, strip_prefix: refs/tags/ }
+data:
+  ref: string
+  before: string
+  after: string
+  created: boolean
+  deleted: boolean
+  forced: boolean
+  compare: string
+  commits: { kind: list, object: commit, max: commits }
+  head_commit: { kind: object, object: commit, omit_empty: true }
+  pusher:
+    kind: object
+    fields:
+      name: string
+shrink:
+  list: commits
+  drop: [added, removed, modified]
+  flag: truncated
+  description: Set when commits were cut to fit the size cap.

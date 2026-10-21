@@ -93,7 +93,7 @@ func LearnForgeName(
 	respBytes, err := daemons.SendDaemonCommandToDaemon(
 		ctx, userID, daemonID, "forge.project_name", payload, forgeNameReadTimeoutMs)
 	if err != nil {
-		logging.Info("could not read forge.yaml's name from the daemon; the Forge tab will backfill it",
+		logging.InfoContext(ctx, "could not read forge.yaml's name from the daemon; the Forge tab will backfill it",
 			"error", err, "project_id", projectID, "daemon_id", daemonID)
 		return ""
 	}
@@ -113,11 +113,11 @@ func LearnForgeName(
 	}
 
 	if _, err := projects.SetProjectForgeName(ctx, projectID, userID, name); err != nil {
-		logging.Warn("could not persist forge's name for a freshly cloned project",
+		logging.WarnContext(ctx, "could not persist forge's name for a freshly cloned project",
 			"error", err, "project_id", projectID, "forge_project_name", name)
 		return ""
 	}
-	logging.Info("learned forge's name for a project from its forge.yaml",
+	logging.InfoContext(ctx, "learned forge's name for a project from its forge.yaml",
 		"project_id", projectID, "daemon_id", daemonID, "forge_project_name", name)
 	return name
 }

@@ -90,7 +90,7 @@ func (e *RemoteExecutor) relayPreemptionToDaemon(ctx context.Context, req *ToolR
 		err := e.router.SendToolExecutionCancel(pushCtx, req.UserID, req.ToolCallID, PreemptedCancelReason)
 		cancelPush()
 		if err != nil {
-			logging.Warn("Could not tell the daemon to stop a preempted tool; abandoning the wait",
+			logging.WarnContext(ctx, "Could not tell the daemon to stop a preempted tool; abandoning the wait",
 				"error", err, "toolCallID", req.ToolCallID, "toolName", req.ToolName)
 			abandon()
 			return
@@ -100,7 +100,7 @@ func (e *RemoteExecutor) relayPreemptionToDaemon(ctx context.Context, req *ToolR
 		defer grace.Stop()
 		select {
 		case <-grace.C:
-			logging.Warn("Preempted tool did not answer in time; abandoning the wait",
+			logging.WarnContext(ctx, "Preempted tool did not answer in time; abandoning the wait",
 				"toolCallID", req.ToolCallID, "toolName", req.ToolName, "grace", e.preemptReplyGrace())
 			abandon()
 		case <-replied:

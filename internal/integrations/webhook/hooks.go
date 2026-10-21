@@ -130,7 +130,7 @@ func (h *HooksReceiver) serve(w http.ResponseWriter, r *http.Request) {
 		Sender:     webhookSender(trigger),
 	}, triggers.AcceptOptions{})
 	if err != nil {
-		logging.Error("webhook delivery could not be recorded", "trigger_id", trigger.ID, "error", err)
+		logging.ErrorContext(r.Context(), "webhook delivery could not be recorded", "trigger_id", trigger.ID, "error", err)
 		writeStatus(w, http.StatusServiceUnavailable, "could not record the delivery; retry")
 		return
 	}
@@ -166,7 +166,7 @@ func (h *HooksReceiver) authenticate(ctx context.Context, triggerID string, r *h
 	}
 	cfg, err = triggers.WebhookConfigFor(trigger)
 	if err != nil {
-		logging.Warn("webhook trigger config does not parse", "trigger_id", triggerID, "error", err)
+		logging.WarnContext(ctx, "webhook trigger config does not parse", "trigger_id", triggerID, "error", err)
 		return nil, cfg, false
 	}
 	creds, err := h.opts.Store.GetTriggerWebhookCredentials(ctx, triggerID)
@@ -183,7 +183,7 @@ func (h *HooksReceiver) authenticate(ctx context.Context, triggerID string, r *h
 	if cfg.HMAC != nil && len(creds.SecretSealed) > 0 && h.opts.Opener != nil {
 		secret, err := h.opts.Opener.Open(ctx, vault.UserTenant(trigger.UserID), creds.SecretSealed, triggers.WebhookSecretAAD(trigger.ID))
 		if err != nil {
-			logging.Error("webhook trigger secret does not open", "trigger_id", triggerID, "error", err)
+			logging.ErrorContext(ctx, "webhook trigger secret does not open", "trigger_id", triggerID, "error", err)
 			return nil, cfg, false
 		}
 		defer clear(secret)

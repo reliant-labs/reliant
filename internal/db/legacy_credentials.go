@@ -208,7 +208,7 @@ func (r *Repo) MigrateLegacyCredentials(ctx context.Context) (postgresstore.Impo
 		for _, lr := range rows {
 			in, err := r.legacyToImport(ctx, lr)
 			if err != nil {
-				slog.Warn("legacy credential skipped: could not be read", "source", t.source, "user_id", lr.userID, "provider", lr.provider, "error", err)
+				slog.WarnContext(ctx, "legacy credential skipped: could not be read", "source", t.source, "user_id", lr.userID, "provider", lr.provider, "error", err)
 				skipped++
 				continue
 			}
@@ -222,7 +222,7 @@ func (r *Repo) MigrateLegacyCredentials(ctx context.Context) (postgresstore.Impo
 		return res, false, fmt.Errorf("copying legacy credentials: %w", err)
 	}
 	if ran {
-		slog.Info("legacy credentials copied into provider accounts",
+		slog.InfoContext(ctx, "legacy credentials copied into provider accounts",
 			"created", res.Created, "updated", res.Updated, "unchanged", res.Unchanged, "failed", res.Failed)
 	}
 	return res, ran, nil

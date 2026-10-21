@@ -146,7 +146,7 @@ func catchUpGooseLocked(ctx context.Context, pool *sql.DB, logger *slog.Logger) 
 
 	missing := plan.Goose.Missing
 	head := plan.Goose.Declared[len(plan.Goose.Declared)-1]
-	logger.Warn("database is BEHIND goose's frozen history: running goose to its head before forge's migrator adopts it",
+	logger.WarnContext(ctx, "database is BEHIND goose's frozen history: running goose to its head before forge's migrator adopts it",
 		"goose_missing", len(missing), "first", missing[0], "last", missing[len(missing)-1], "goose_head", head)
 	if err := RunMigrations(pool); err != nil {
 		return nil, fmt.Errorf("goose catch-up (%d migration(s) behind goose's frozen head %d): %w", len(missing), head, err)
@@ -162,7 +162,7 @@ func catchUpGooseLocked(ctx context.Context, pool *sql.DB, logger *slog.Logger) 
 	if after.needsGooseCatchUp() {
 		return nil, fmt.Errorf("goose reported success, but goose version(s) %s are still not applied", formatVersions(after.Goose.Missing))
 	}
-	logger.Warn("goose catch-up complete: the database is at goose's frozen head", "goose_applied", len(missing), "goose_head", head)
+	logger.WarnContext(ctx, "goose catch-up complete: the database is at goose's frozen head", "goose_applied", len(missing), "goose_head", head)
 	return missing, nil
 }
 
@@ -184,7 +184,7 @@ func lockGooseBridge(ctx context.Context, pool *sql.DB, logger *slog.Logger) (fu
 			break
 		}
 		if time.Since(lastLog) >= 10*time.Second {
-			logger.Info("Waiting for another process's goose catch-up to finish", "waited", time.Since(start).Round(time.Second).String())
+			logger.InfoContext(ctx, "Waiting for another process's goose catch-up to finish", "waited", time.Since(start).Round(time.Second).String())
 			lastLog = time.Now()
 		}
 		select {

@@ -188,7 +188,7 @@ func NewRepoWithDriver(db *sql.DB, driver DatabaseDriver) (*Repo, error) {
 		workflows:       postgresstore.NewWorkflowStore(client, pgQueries),
 		threads:         postgresstore.NewThreadStore(pgQueries),
 		contextWindows:  postgresstore.NewContextWindowStore(pgQueries),
-		workflowCatalog: postgresstore.NewWorkflowCatalogStore(pgQueries),
+		workflowCatalog: postgresstore.NewWorkflowCatalogStore(client),
 		triggers:        postgresstore.NewTriggerStore(pgQueries),
 		inbox:           postgresstore.NewInboxStore(pgQueries),
 		runEvents:       postgresstore.NewRunEventStore(client),

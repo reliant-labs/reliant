@@ -171,7 +171,7 @@ func (m *Middleware) requireAuth(next http.Handler, tokens AccessTokenIntrospect
 		}
 
 		if tokenString == "" {
-			logging.Warn("Missing authorization token", "path", r.URL.Path, "method", r.Method)
+			logging.WarnContext(r.Context(), "Missing authorization token", "path", r.URL.Path, "method", r.Method)
 			http.Error(w, `{"error": "unauthorized", "message": "Missing authorization token"}`, http.StatusUnauthorized)
 			return
 		}
@@ -195,11 +195,11 @@ func (m *Middleware) requireAuth(next http.Handler, tokens AccessTokenIntrospect
 			// An authority that could not be reached has rejected nothing:
 			// 503, so the client retries instead of discarding a good token.
 			if isAccessToken && tokens != nil && !IsCredentialRejection(err) {
-				logging.Error("Access token verification unavailable", "error", err, "path", r.URL.Path, "method", r.Method)
+				logging.ErrorContext(r.Context(), "Access token verification unavailable", "error", err, "path", r.URL.Path, "method", r.Method)
 				http.Error(w, `{"error": "unavailable", "message": "Token verification unavailable"}`, http.StatusServiceUnavailable)
 				return
 			}
-			logging.Warn("Invalid token", "error", err, "path", r.URL.Path, "method", r.Method)
+			logging.WarnContext(r.Context(), "Invalid token", "error", err, "path", r.URL.Path, "method", r.Method)
 			http.Error(w, `{"error": "unauthorized", "message": "Invalid or expired token"}`, http.StatusUnauthorized)
 			return
 		}
@@ -251,7 +251,7 @@ func DomainWhitelist(allowedDomains []string) func(http.Handler) http.Handler {
 			domain := strings.ToLower(parts[1])
 
 			if !domainSet[domain] {
-				logging.Warn("[Domain Whitelist] Rejected email domain",
+				logging.WarnContext(r.Context(), "[Domain Whitelist] Rejected email domain",
 					"domain", domain,
 					"path", r.URL.Path,
 				)

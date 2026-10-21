@@ -80,7 +80,7 @@ func (c *client) Initialize(ctx context.Context) error {
 		return nil
 	}
 
-	logging.Debug("Initializing MCP client", "name", c.name)
+	logging.DebugContext(ctx, "Initializing MCP client", "name", c.name)
 
 	// Create the appropriate transport based on config type
 	var transport mcp.Transport
@@ -137,7 +137,7 @@ func (c *client) Initialize(ctx context.Context) error {
 				// A missing directory must not take the server down: inheriting
 				// the daemon's cwd is the pre-existing behaviour, and a warning
 				// is recoverable where a failed handshake is not.
-				logging.Warn("MCP server dir does not exist; inheriting daemon working directory",
+				logging.WarnContext(ctx, "MCP server dir does not exist; inheriting daemon working directory",
 					"name", c.name, "dir", dir)
 			}
 		}
@@ -205,7 +205,7 @@ func (c *client) Initialize(ctx context.Context) error {
 	}
 
 	c.initialized = true
-	logging.Debug("MCP client initialized successfully", "name", c.name)
+	logging.DebugContext(ctx, "MCP client initialized successfully", "name", c.name)
 
 	return nil
 }

@@ -1,0 +1,1 @@
+{ name: sender, description: Who acted., example: octocat }

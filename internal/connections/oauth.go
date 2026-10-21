@@ -423,7 +423,7 @@ func (b *Broker) Complete(ctx context.Context, p CompleteParams) (*Completion, e
 	if err != nil {
 		// The authorization code and the provider's error description stay out
 		// of the message; only a class is logged.
-		slog.Warn("oauth code exchange failed", "integration", prov.ID, "state", hex8(hash), "class", refreshFailureClass(err))
+		slog.WarnContext(ctx, "oauth code exchange failed", "integration", prov.ID, "state", hex8(hash), "class", refreshFailureClass(err))
 		var oerr *oauth2.Error
 		if errors.As(err, &oerr) && oerr.StatusCode >= 500 {
 			return nil, newError(CodeUnavailable, "%s is temporarily unavailable", prov.DisplayName)
@@ -458,7 +458,7 @@ func (b *Broker) Complete(ctx context.Context, p CompleteParams) (*Completion, e
 	if err != nil {
 		return nil, err
 	}
-	slog.Info("connection authorized", "integration", prov.ID, "connection_id", conn.ID, "state", hex8(hash))
+	slog.InfoContext(ctx, "connection authorized", "integration", prov.ID, "connection_id", conn.ID, "state", hex8(hash))
 	return &Completion{Connection: conn, RedirectAfter: flow.RedirectAfter}, nil
 }
 

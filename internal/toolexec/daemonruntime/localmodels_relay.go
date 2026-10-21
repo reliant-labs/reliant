@@ -111,7 +111,7 @@ func (m *localModelManager) probeAndPublish(ctx context.Context, send func(*reli
 	}
 	msg := &reliantv1.DaemonMessage{Message: &reliantv1.DaemonMessage_LocalModelInventory{LocalModelInventory: snap.inventory}}
 	if err := send(msg); err != nil {
-		logging.Warn(logPrefix+" Failed to send local model inventory", "error", err)
+		logging.WarnContext(ctx, logPrefix+" Failed to send local model inventory", "error", err)
 		return
 	}
 	m.mu.Lock()

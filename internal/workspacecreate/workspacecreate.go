@@ -282,7 +282,7 @@ func Finish(ctx context.Context, store Store, m Machine, req Request, wt *db.Wor
 				if err != nil {
 					detail = err.Error()
 				}
-				logging.Error("Failed to move adopted checkout back", "error", detail, "from", ex.Path, "to", ex.OriginalPath)
+				logging.ErrorContext(ctx, "Failed to move adopted checkout back", "error", detail, "from", ex.Path, "to", ex.OriginalPath)
 				reason = fmt.Errorf("%w; the adopted checkout could not be moved back and is still at %s (%s)", reason, ex.Path, detail)
 			}
 		}
@@ -314,7 +314,7 @@ func Finish(ctx context.Context, store Store, m Machine, req Request, wt *db.Wor
 			}, nil, commandTimeoutMs)
 		}
 
-		logging.Error("Worktree creation failed", "error", reason, "worktreeID", wt.ID)
+		logging.ErrorContext(ctx, "Worktree creation failed", "error", reason, "worktreeID", wt.ID)
 		wt.Status = int32(reliantv1.WorktreeStatus_WORKTREE_STATUS_FAILED)
 		// A create from the UI settles in the background, so the row is how
 		// the reason reaches the user. Only a reason that is theirs to fix
@@ -331,7 +331,7 @@ func Finish(ctx context.Context, store Store, m Machine, req Request, wt *db.Wor
 		wt.Path = ""
 		wt.UpdatedAt = time.Now().UTC()
 		if err := store.UpdateWorktree(ctx, wt); err != nil {
-			logging.Error("Failed to mark worktree failed", "error", err, "worktreeID", wt.ID)
+			logging.ErrorContext(ctx, "Failed to mark worktree failed", "error", err, "worktreeID", wt.ID)
 		}
 		return reason
 	}
@@ -385,7 +385,7 @@ func Finish(ctx context.Context, store Store, m Machine, req Request, wt *db.Wor
 			ReuseBranch: adopting,
 		}, &createResp, commandTimeoutMs)
 		if err != nil {
-			logging.Error("Failed to create git worktree via daemon", "error", err, "repo", repo.ID)
+			logging.ErrorContext(ctx, "Failed to create git worktree via daemon", "error", err, "repo", repo.ID)
 			return repoCreateResult{}, fmt.Errorf("failed to create worktree for repo %s: %w", repo.Name, err)
 		}
 		if !createResp.Success {
@@ -393,7 +393,7 @@ func Finish(ctx context.Context, store Store, m Machine, req Request, wt *db.Wor
 			// The error VALUE, not the daemon's text: the log policy
 			// classifies it, so a user's mistake is an INFO line and never
 			// reaches Sentry.
-			logging.Error("Failed to create git worktree", "error", err,
+			logging.ErrorContext(ctx, "Failed to create git worktree", "error", err,
 				"git_output", strings.TrimSpace(createResp.Error), "repo", repo.ID)
 			return repoCreateResult{}, err
 		}
@@ -491,12 +491,12 @@ func Finish(ctx context.Context, store Store, m Machine, req Request, wt *db.Wor
 		}, &copyResp, commandTimeoutMs)
 		switch {
 		case err != nil:
-			logging.Error("Failed to copy paths into worktree", "error", err, "worktreeID", wt.ID)
+			logging.ErrorContext(ctx, "Failed to copy paths into worktree", "error", err, "worktreeID", wt.ID)
 		case copyResp.Error != "" || len(copyResp.Failed) > 0:
-			logging.Error("Some paths were not copied into worktree", "error", copyResp.Error,
+			logging.ErrorContext(ctx, "Some paths were not copied into worktree", "error", copyResp.Error,
 				"failed", copyResp.Failed, "worktreeID", wt.ID)
 		case len(copyResp.Missing) > 0:
-			logging.Info("Requested copy paths not present in source", "missing", copyResp.Missing,
+			logging.InfoContext(ctx, "Requested copy paths not present in source", "missing", copyResp.Missing,
 				"source", copySource, "worktreeID", wt.ID)
 		}
 	}

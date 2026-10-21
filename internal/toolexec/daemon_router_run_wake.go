@@ -147,7 +147,7 @@ func (r *NATSDaemonRouter) WakeForRun(ctx context.Context, userID string, select
 		if err != nil && rec.state != recordSuspended {
 			// Not known to be suspended: the resume only hedged against a
 			// lagging mirror (see wakeable). Route as resolution would.
-			logging.Info("[DaemonRouter] speculative run-resume wake of an unattached managed daemon failed; routing to it as-is",
+			logging.InfoContext(ctx, "[DaemonRouter] speculative run-resume wake of an unattached managed daemon failed; routing to it as-is",
 				"user_id", userID, "daemon_id", rec.id, "error", err)
 			daemonID, err := routableDaemonID(userID, selector, rec, found, sawDaemonRecord)
 			return WakeResult{DaemonID: daemonID}, err
@@ -156,7 +156,7 @@ func (r *NATSDaemonRouter) WakeForRun(ctx context.Context, userID string, select
 			return WakeResult{}, err
 		}
 		if resumed {
-			logging.Info("[DaemonRouter] woke the machine for a resuming run", "user_id", userID, "daemon_id", rec.id)
+			logging.InfoContext(ctx, "[DaemonRouter] woke the machine for a resuming run", "user_id", userID, "daemon_id", rec.id)
 		}
 		return WakeResult{DaemonID: rec.id, Resumed: resumed}, nil
 	})
@@ -172,7 +172,7 @@ func (r *NATSDaemonRouter) resumeForRun(ctx context.Context, userID string, sele
 		if !errors.Is(err, ErrRunResumeUnsupported) {
 			return resumed, err
 		}
-		logging.Info("[DaemonRouter] control plane has no run-resume door; waking with the owner's token",
+		logging.InfoContext(ctx, "[DaemonRouter] control plane has no run-resume door; waking with the owner's token",
 			"user_id", userID, "daemon_id", daemonID)
 	}
 	if r.resumer == nil {

@@ -1,0 +1,27 @@
+provider: demo
+package: demo
+catalog: internal/integrations/catalog/demo
+hooks: hooks.go
+upstream:
+  package: "@demo/webhooks-schemas"
+  version: 1.0.0
+  file: upstream/schema.json
+  sha256: 27ac2293aa62bf63434f6352cbb6d6a442d54d75ce8ba74db6061dc3f926b278
+caps:
+  text_bytes: 100
+  data_bytes: 1000
+  list_items: 5
+  truncated_suffix: "..."
+  lists:
+    things: 3
+envelope:
+  attributes:
+    - use: sender
+    - use: action
+  data_first:
+    action: string
+  data:
+    sender: { kind: object, object: user }
+attribute_groups:
+  owned:
+    - { name: owner, description: Login of the owner., example: octocat, from: thing.owner.login }

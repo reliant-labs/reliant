@@ -82,7 +82,7 @@ func (d *recorded) RunAuthenticated(ctx context.Context, m *reliantv1.Integratio
 	}
 	r.attributeRun(ctx, w, site.RunID)
 	if err := r.store.CreateIntegrationWrite(ctx, w); err != nil {
-		slog.Warn("integration write ledger: could not record intent; the call was not made",
+		slog.WarnContext(ctx, "integration write ledger: could not record intent; the call was not made",
 			"integration", w.Integration, "action", w.Action, "run_id", site.RunID, "error", err)
 		return &httpaction.Result{
 			Content:   "Reliant could not record this write before sending it, so nothing was sent. Retry shortly. (" + err.Error() + ")",
@@ -130,7 +130,7 @@ func (r *Recorder) settle(ctx context.Context, w *core.IntegrationWrite, p plan,
 	ctx, cancel := settleContext(ctx)
 	defer cancel()
 	if _, err := r.store.CompleteIntegrationWrite(ctx, w.ID, out); err != nil {
-		slog.Warn("integration write ledger: could not settle a write; its intent row stays open",
+		slog.WarnContext(ctx, "integration write ledger: could not settle a write; its intent row stays open",
 			"write_id", w.ID, "integration", w.Integration, "action", w.Action, "error", err)
 	}
 }
@@ -202,9 +202,9 @@ func (r *Recorder) PruneLoop(ctx context.Context, pruner Pruner) {
 	defer tick.Stop()
 	for {
 		if n, err := r.Prune(ctx, pruner); err != nil {
-			slog.Warn("integration write ledger: prune failed", "error", err)
+			slog.WarnContext(ctx, "integration write ledger: prune failed", "error", err)
 		} else if n > 0 {
-			slog.Info("integration write ledger: pruned", "rows", n)
+			slog.InfoContext(ctx, "integration write ledger: pruned", "rows", n)
 		}
 		select {
 		case <-ctx.Done():

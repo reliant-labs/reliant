@@ -1,0 +1,5 @@
+# The GitHub App that ran a check: its slug is what a trigger matches
+# (github-actions for Actions), its name what a person reads.
+fields:
+  slug: string
+  name: string

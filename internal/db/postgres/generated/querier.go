@@ -98,9 +98,6 @@ type Querier interface {
 	CountMessagesByThread(ctx context.Context, threadID string) (int64, error)
 	CountQueuedAgentMessagesForThread(ctx context.Context, toThreadID string) (int64, error)
 	CountThreadsInConversation(ctx context.Context, chatID string) (int64, error)
-	CountWorkflowDraftsByUser(ctx context.Context, userID string) (int64, error)
-	CountWorkflowScenariosByDraft(ctx context.Context, workflowDraftID sql.NullString) (int64, error)
-	CountWorkflowScenariosByUser(ctx context.Context, userID string) (int64, error)
 	CreateChat(ctx context.Context, arg CreateChatParams) error
 	CreateChatUpdate(ctx context.Context, arg CreateChatUpdateParams) error
 	CreateContentBlock(ctx context.Context, arg CreateContentBlockParams) error
@@ -132,16 +129,6 @@ type Querier interface {
 	// outcome. The affected-row count is what tells the caller whether it won the
 	// race (1) or a prior firing already exists (0).
 	CreateTriggerEvent(ctx context.Context, arg CreateTriggerEventParams) (int64, error)
-	// Workflow Drafts - Simplified user-owned workflows
-	// Workflows are owned by users and available across all projects
-	// Project-specific workflows come from .reliant/workflows/*.yaml files (read-only)
-	// A workflow is "usable" (shows in agent selector, can be loaded at runtime)
-	// when status = 'complete' AND is_hidden = false. Validity is never stored: it
-	// is computed on read and re-checked at run start.
-	CreateWorkflowDraft(ctx context.Context, arg CreateWorkflowDraftParams) (CreateWorkflowDraftRow, error)
-	// Workflow Scenarios - Test scenarios for workflow simulation
-	// Scenarios define event sequences to test workflow behavior
-	CreateWorkflowScenario(ctx context.Context, arg CreateWorkflowScenarioParams) (WorkflowScenario, error)
 	CreateWorktree(ctx context.Context, arg CreateWorktreeParams) error
 	DeleteAllVisibilityOverrides(ctx context.Context, arg DeleteAllVisibilityOverridesParams) error
 	DeleteChat(ctx context.Context, id string) error
@@ -165,11 +152,6 @@ type Querier interface {
 	// be able to take its id; a queued or delivered row is never touched.
 	DeleteUndeliveredAgentMessage(ctx context.Context, arg DeleteUndeliveredAgentMessageParams) (int64, error)
 	DeleteVisibilityOverride(ctx context.Context, arg DeleteVisibilityOverrideParams) error
-	DeleteWorkflowDraft(ctx context.Context, id string) (DeleteWorkflowDraftRow, error)
-	DeleteWorkflowDraftBySlug(ctx context.Context, arg DeleteWorkflowDraftBySlugParams) (DeleteWorkflowDraftBySlugRow, error)
-	DeleteWorkflowScenario(ctx context.Context, id string) error
-	// Delete all scenarios for a workflow draft (used when deleting drafts)
-	DeleteWorkflowScenariosByDraft(ctx context.Context, workflowDraftID sql.NullString) error
 	DeleteWorktree(ctx context.Context, id string) error
 	DismissInboxItems(ctx context.Context, arg DismissInboxItemsParams) error
 	EnqueueAgentMessage(ctx context.Context, arg EnqueueAgentMessageParams) error
@@ -401,21 +383,7 @@ type Querier interface {
 	GetTriggerRegistration(ctx context.Context, triggerID string) (TriggerRegistration, error)
 	// Only the webhook receiver reads these. They are never rendered.
 	GetTriggerWebhookCredentials(ctx context.Context, id string) (GetTriggerWebhookCredentialsRow, error)
-	// Get a usable workflow by slug (for runtime loading)
-	GetUsableWorkflowBySlug(ctx context.Context, arg GetUsableWorkflowBySlugParams) (GetUsableWorkflowBySlugRow, error)
 	GetVisibilityOverride(ctx context.Context, arg GetVisibilityOverrideParams) (bool, error)
-	GetWorkflowDraft(ctx context.Context, id string) (GetWorkflowDraftRow, error)
-	// Check if a workflow with this exact name exists for the user
-	// Used for duplicate name validation (different from slug check)
-	GetWorkflowDraftByName(ctx context.Context, arg GetWorkflowDraftByNameParams) (GetWorkflowDraftByNameRow, error)
-	// Lookup by user and slug (simple, no scope complexity)
-	GetWorkflowDraftBySlug(ctx context.Context, arg GetWorkflowDraftBySlugParams) (GetWorkflowDraftBySlugRow, error)
-	GetWorkflowDraftBySourcePath(ctx context.Context, arg GetWorkflowDraftBySourcePathParams) (GetWorkflowDraftBySourcePathRow, error)
-	GetWorkflowScenario(ctx context.Context, id string) (WorkflowScenario, error)
-	// Get a scenario by name and draft ID (for upsert behavior)
-	GetWorkflowScenarioByName(ctx context.Context, arg GetWorkflowScenarioByNameParams) (WorkflowScenario, error)
-	// Get all workflows that were forked from a specific origin
-	GetWorkflowsForkedFrom(ctx context.Context, arg GetWorkflowsForkedFromParams) ([]GetWorkflowsForkedFromRow, error)
 	GetWorktree(ctx context.Context, id string) (Worktree, error)
 	// Scoped by project because the key is client-generated; two projects must be
 	// able to use the same key without colliding.
@@ -785,12 +753,6 @@ type Querier interface {
 	// passing an empty string.
 	ListTriggers(ctx context.Context, arg ListTriggersParams) ([]ListTriggersRow, error)
 	ListVisibilityOverrides(ctx context.Context, arg ListVisibilityOverridesParams) ([]ListVisibilityOverridesRow, error)
-	// List all workflows for a user, ordered by most recently updated
-	ListWorkflowDraftsByUser(ctx context.Context, userID string) ([]ListWorkflowDraftsByUserRow, error)
-	// List all scenarios for a workflow draft
-	ListWorkflowScenariosByDraft(ctx context.Context, workflowDraftID sql.NullString) ([]WorkflowScenario, error)
-	// List all scenarios for a user
-	ListWorkflowScenariosByUser(ctx context.Context, userID string) ([]WorkflowScenario, error)
 	// One user's activations of a workflow's declared triggers. The workflow is
 	// matched as stored on the row (the slug or builtin:// ref the activation
 	// named).
@@ -986,10 +948,6 @@ type Querier interface {
 	// and rotating it is one statement.
 	SetTriggerWebhookTokenHash(ctx context.Context, arg SetTriggerWebhookTokenHashParams) (int64, error)
 	SetVisibilityOverride(ctx context.Context, arg SetVisibilityOverrideParams) error
-	SetWorkflowDraftHidden(ctx context.Context, arg SetWorkflowDraftHiddenParams) (SetWorkflowDraftHiddenRow, error)
-	// Move a draft between 'draft' and 'complete'. The caller validates before
-	// marking complete; this query only records the decision.
-	SetWorkflowDraftStatus(ctx context.Context, arg SetWorkflowDraftStatusParams) (SetWorkflowDraftStatusRow, error)
 	// Records the verdict on an inbound event that did NOT launch. Conditional on
 	// pending, so it can never overwrite a launch that won a race.
 	SettlePendingTriggerEvent(ctx context.Context, arg SettlePendingTriggerEventParams) (int64, error)
@@ -1020,13 +978,6 @@ type Querier interface {
 	UpdateTrigger(ctx context.Context, arg UpdateTriggerParams) (int64, error)
 	UpdateTriggerEventOutcome(ctx context.Context, arg UpdateTriggerEventOutcomeParams) (int64, error)
 	UpdateTriggerEventPayload(ctx context.Context, arg UpdateTriggerEventPayloadParams) (int64, error)
-	UpdateWorkflowDraft(ctx context.Context, arg UpdateWorkflowDraftParams) (UpdateWorkflowDraftRow, error)
-	UpdateWorkflowDraftDefinition(ctx context.Context, arg UpdateWorkflowDraftDefinitionParams) (UpdateWorkflowDraftDefinitionRow, error)
-	// Set or update the forked_from origin
-	UpdateWorkflowForkedFrom(ctx context.Context, arg UpdateWorkflowForkedFromParams) (UpdateWorkflowForkedFromRow, error)
-	UpdateWorkflowScenario(ctx context.Context, arg UpdateWorkflowScenarioParams) (WorkflowScenario, error)
-	// Update the cached run result
-	UpdateWorkflowScenarioResult(ctx context.Context, arg UpdateWorkflowScenarioResultParams) (WorkflowScenario, error)
 	// `path` is settable because asynchronous creation only learns the on-disk
 	// location after the daemon reports it: the row is inserted as CREATING with
 	// an empty path, then settled here — as is `failure_reason`, when it settles
@@ -1078,10 +1029,6 @@ type Querier interface {
 	// status_since moves only when status changes, so it is the start of the
 	// current status episode however often the source is polled.
 	UpsertTriggerRegistration(ctx context.Context, arg UpsertTriggerRegistrationParams) error
-	// Create or update a workflow draft
-	// Unique on (user_id, slug)
-	UpsertWorkflowDraft(ctx context.Context, arg UpsertWorkflowDraftParams) (UpsertWorkflowDraftRow, error)
-	WorkflowSlugExists(ctx context.Context, arg WorkflowSlugExistsParams) (bool, error)
 }
 
 var _ Querier = (*Queries)(nil)

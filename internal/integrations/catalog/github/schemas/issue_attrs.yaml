@@ -1,4 +1,0 @@
-- { $ref: attr_repository.yaml }
-- { $ref: attr_installation.yaml }
-- { $ref: attr_sender.yaml }
-- { $ref: attr_action.yaml }

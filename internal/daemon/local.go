@@ -848,14 +848,14 @@ func (c *LocalClient) RunCommand(ctx context.Context, req *RunCommandRequest) (*
 		// Linux; best-effort everywhere.
 		if cmd.Process != nil {
 			if adjErr := osutil.AdjustChildOOMScore(cmd.Process.Pid); adjErr != nil {
-				logging.Debug("Failed to adjust command oom_score_adj", "pid", cmd.Process.Pid, "error", adjErr)
+				logging.DebugContext(ctx, "Failed to adjust command oom_score_adj", "pid", cmd.Process.Pid, "error", adjErr)
 			}
 			// Yield to the daemon, the UI and Docker when the machine is saturated.
 			if err := osutil.LowerChildPriority(cmd.Process.Pid); err != nil {
-				logging.Debug("Failed to lower command priority", "pid", cmd.Process.Pid, "error", err)
+				logging.DebugContext(ctx, "Failed to lower command priority", "pid", cmd.Process.Pid, "error", err)
 			}
 			if err := osutil.LowerChildIOPriority(cmd.Process.Pid); err != nil {
-				logging.Debug("Failed to lower command I/O priority", "pid", cmd.Process.Pid, "error", err)
+				logging.DebugContext(ctx, "Failed to lower command I/O priority", "pid", cmd.Process.Pid, "error", err)
 			}
 		}
 

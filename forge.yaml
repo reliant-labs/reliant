@@ -43,11 +43,24 @@ lint:
         # findings at the pin that introduced them (61 log-without-ctx, 18
         # raw-http-client, 18 contract-uninstrumented, 9 raw-sql-open). Warn
         # while that adoption is tracked separately; each goes back to error
-        # (delete the entry) once its findings are fixed.
-        forge-tracing-log-without-ctx: warn
+        # (delete the entry) once its findings are fixed. log-without-ctx is
+        # done: `forge lint --tracing` rewrote every call, including the
+        # internal/logging helpers listed under tracing.log_wrappers below.
         forge-tracing-raw-http-client: warn
         forge-tracing-contract-uninstrumented: warn
         forge-tracing-raw-sql-open: warn
+    tracing:
+        # internal/logging's ctx-less helpers write through slog without the
+        # request's context, so their lines carry no trace_id. Listing them
+        # makes forge-tracing-log-without-ctx flag and rewrite their calls to
+        # the logging.*Context twins, exactly as it does slog's own.
+        log_wrappers:
+            - call: github.com/reliant-labs/reliant/internal/logging.Info
+            - call: github.com/reliant-labs/reliant/internal/logging.Debug
+            - call: github.com/reliant-labs/reliant/internal/logging.Warn
+            - call: github.com/reliant-labs/reliant/internal/logging.Error
+            - call: github.com/reliant-labs/reliant/internal/logging.Trace
+            - call: github.com/reliant-labs/reliant/internal/logging.Log
 generate:
     hooks:
         # sqlc until the forge ORM replaces it (P5b). `make sqlc` runs the

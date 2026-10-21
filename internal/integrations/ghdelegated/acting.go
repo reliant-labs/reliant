@@ -61,7 +61,7 @@ func (b *broker) ActingCredential(ctx context.Context, ownerUserID string, req h
 		return nil, &httpaction.CredentialError{Code: httpaction.CodeNeedsReauth,
 			Message: "GitHub needs to be reconnected: reconnect GitHub in Settings", Err: err}
 	default:
-		b.logger.Warn("minting a GitHub App installation token failed", "err", err)
+		b.logger.WarnContext(ctx, "minting a GitHub App installation token failed", "err", err)
 		return nil, &httpaction.CredentialError{Code: httpaction.CodeUnavailable,
 			Message: "could not get a GitHub App token right now; try again", Err: err}
 	}

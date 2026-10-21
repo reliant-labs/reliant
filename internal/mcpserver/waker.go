@@ -81,7 +81,7 @@ func (w *PollingWaker) EnsureAwake(ctx context.Context, userID, daemonID string)
 	if err != nil {
 		// A readiness lookup failure should not, by itself, fail the call: the
 		// command may well succeed. Attempt it and let the real error surface.
-		w.logger.Warn("mcpserver: readiness check failed; attempting the command anyway",
+		w.logger.WarnContext(ctx, "mcpserver: readiness check failed; attempting the command anyway",
 			"daemonID", daemonID, "error", err)
 		return nil
 	}
@@ -89,7 +89,7 @@ func (w *PollingWaker) EnsureAwake(ctx context.Context, userID, daemonID string)
 		return nil
 	}
 
-	w.logger.Info("mcpserver: waking suspended workspace for connector request",
+	w.logger.InfoContext(ctx, "mcpserver: waking suspended workspace for connector request",
 		"daemonID", daemonID)
 
 	if err := w.readiness.Resume(ctx, userID, daemonID); err != nil {

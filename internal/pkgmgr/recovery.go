@@ -76,7 +76,7 @@ func (s *RecoveryService) RecoverProcesses(ctx context.Context) (*RecoveryResult
 	// Mark stale processes in the database
 	if len(staleIDs) > 0 {
 		if err := s.repo.MarkStaleProcesses(ctx, staleIDs); err != nil {
-			logging.Error("Failed to mark stale processes", "error", err)
+			logging.ErrorContext(ctx, "Failed to mark stale processes", "error", err)
 			return result, err
 		}
 		result.MarkedStale = len(staleIDs)

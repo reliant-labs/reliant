@@ -187,7 +187,7 @@ func TerminalWSHandler(router toolexec.DaemonRouter, validator auth.TokenValidat
 		}
 		claims, err := validator.ValidateToken(token)
 		if err != nil {
-			logging.Warn("[TerminalWS] Invalid token", "error", err)
+			logging.WarnContext(r.Context(), "[TerminalWS] Invalid token", "error", err)
 			http.Error(w, "invalid or expired token", http.StatusUnauthorized)
 			return
 		}
@@ -198,7 +198,7 @@ func TerminalWSHandler(router toolexec.DaemonRouter, validator auth.TokenValidat
 		// --- Upgrade to WebSocket ---
 		conn, err := wsUpgrader.Upgrade(w, r, nil)
 		if err != nil {
-			logging.Error("[TerminalWS] WebSocket upgrade failed", append([]any{"error", err}, logFields...)...)
+			logging.ErrorContext(r.Context(), "[TerminalWS] WebSocket upgrade failed", append([]any{"error", err}, logFields...)...)
 			return
 		}
 		defer conn.Close()
@@ -246,7 +246,7 @@ func TerminalWSHandler(router toolexec.DaemonRouter, validator auth.TokenValidat
 				if mayAppear {
 					code = wsErrorWorkingDirUnavailable
 				}
-				logging.Info("[TerminalWS] Working directory unavailable",
+				logging.InfoContext(r.Context(), "[TerminalWS] Working directory unavailable",
 					append([]any{"requested_working_dir", workingDir, "may_appear", mayAppear, "error", err}, logFields...)...)
 				writeWSJSON(conn, wsMessage{Type: "error", Code: code, Data: err.Error()})
 				return
@@ -283,7 +283,7 @@ func TerminalWSHandler(router toolexec.DaemonRouter, validator auth.TokenValidat
 		// Both directories, so a terminal in the wrong place is diagnosable
 		// from this line alone: this server cannot see the filesystem.
 		logFields = append(logFields, "session_id", sessionID)
-		logging.Info("[TerminalWS] Session created",
+		logging.InfoContext(r.Context(), "[TerminalWS] Session created",
 			append([]any{
 				"pid", createResp.PID,
 				"requested_working_dir", workingDir,
@@ -392,7 +392,7 @@ func TerminalWSHandler(router toolexec.DaemonRouter, validator auth.TokenValidat
 				_, raw, err := conn.ReadMessage()
 				if err != nil {
 					if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseNormalClosure) {
-						logging.Debug("[TerminalWS] WebSocket read error", append([]any{"error", err}, logFields...)...)
+						logging.DebugContext(r.Context(), "[TerminalWS] WebSocket read error", append([]any{"error", err}, logFields...)...)
 					}
 					setPumpErr(nil)
 					return
@@ -410,7 +410,7 @@ func TerminalWSHandler(router toolexec.DaemonRouter, validator auth.TokenValidat
 				}
 				if ctlOK && ctl.Type == "resize" {
 					if err := router.SendTerminalResize(ctx, userID, sessionID, ctl.Cols, ctl.Rows); err != nil {
-						logging.Error("[TerminalWS] Send resize failed", append([]any{"error", err}, logFields...)...)
+						logging.ErrorContext(r.Context(), "[TerminalWS] Send resize failed", append([]any{"error", err}, logFields...)...)
 						setPumpErr(err)
 						return
 					}
@@ -419,7 +419,7 @@ func TerminalWSHandler(router toolexec.DaemonRouter, validator auth.TokenValidat
 
 				// Otherwise treat as raw PTY input.
 				if err := router.SendTerminalInput(ctx, userID, sessionID, raw); err != nil {
-					logging.Error("[TerminalWS] Send input failed", append([]any{"error", err}, logFields...)...)
+					logging.ErrorContext(r.Context(), "[TerminalWS] Send input failed", append([]any{"error", err}, logFields...)...)
 					setPumpErr(err)
 					return
 				}
@@ -428,9 +428,9 @@ func TerminalWSHandler(router toolexec.DaemonRouter, validator auth.TokenValidat
 
 		wg.Wait()
 		if pumpErr != nil {
-			logging.Error("[TerminalWS] Session ended with error", append([]any{"error", pumpErr}, logFields...)...)
+			logging.ErrorContext(r.Context(), "[TerminalWS] Session ended with error", append([]any{"error", pumpErr}, logFields...)...)
 		} else {
-			logging.Info("[TerminalWS] Session ended", logFields...)
+			logging.InfoContext(r.Context(), "[TerminalWS] Session ended", logFields...)
 		}
 	}
 }
