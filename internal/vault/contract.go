@@ -10,7 +10,8 @@ package vault
 
 import (
 	"context"
-	"database/sql"
+
+	"github.com/reliant-labs/forge/pkg/orm"
 )
 
 // Service seals and opens values per tenant.
@@ -25,12 +26,6 @@ type Service interface {
 	OpenSecret(ctx context.Context, tenant Tenant, ciphertext, aad []byte) (Secret, error)
 }
 
-// DBTX is the slice of *sql.DB the vault needs.
-type DBTX interface {
-	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
-	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
-}
-
 // KeyWrapper wraps and unwraps per-tenant DEKs. It is the seam a KMS or Bao
 // Transit implementation would later fill without touching stored secrets.
 type KeyWrapper interface {
@@ -41,8 +36,10 @@ type KeyWrapper interface {
 
 // Deps are the vault's collaborators.
 type Deps struct {
-	// DB holds the wrapped DEKs (vault_keys).
-	DB DBTX
+	// DB holds the wrapped DEKs (vault_keys): the ORM client over the
+	// application pool. The vault never joins a transaction its caller's ctx
+	// carries (see sealer.detached).
+	DB orm.Context
 	// Keys wraps and unwraps DEKs under the KEK (NewEnvKeyWrapper).
 	Keys KeyWrapper
 }

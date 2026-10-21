@@ -5,7 +5,6 @@ package vault
 import (
 	"context"
 	"crypto/rand"
-	"database/sql"
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
@@ -13,6 +12,9 @@ import (
 	"sync"
 
 	"github.com/reliant-labs/forge/pkg/crypto"
+	"github.com/reliant-labs/forge/pkg/orm"
+
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 const (
@@ -47,7 +49,7 @@ type cachedKey struct {
 // sealer is the Service: it seals and opens values per tenant, caching the
 // unwrapped DEKs it has used.
 type sealer struct {
-	db      DBTX
+	db      orm.Context
 	wrapper KeyWrapper
 
 	mu      sync.RWMutex
@@ -159,16 +161,36 @@ func (v *sealer) primaryRing(ctx context.Context, tenant Tenant) (string, *crypt
 }
 
 func (v *sealer) selectPrimary(ctx context.Context, t Tenant) (id string, wrapped []byte, found bool, err error) {
-	err = v.db.QueryRowContext(ctx,
-		`SELECT id, wrapped_dek FROM vault_keys WHERE tenant_kind = $1 AND tenant_id = $2 AND state = $3`,
-		t.Kind, t.ID, stateGlobalPrimary).Scan(&id, &wrapped)
-	if errors.Is(err, sql.ErrNoRows) {
-		return "", nil, false, nil
-	}
+	var key store.WrappedVaultKey
+	err = v.detached(ctx, func(ctx context.Context) error {
+		var err error
+		key, found, err = store.GetTenantVaultKey(ctx, v.db, t.Kind, t.ID, stateGlobalPrimary)
+		return err
+	})
 	if err != nil {
 		return "", nil, false, fmt.Errorf("vault: loading primary key: %w", err)
 	}
-	return id, wrapped, true, nil
+	return key.ID, key.WrappedDEK, found, nil
+}
+
+// detached runs one key statement outside any transaction ctx carries, as the
+// vault always has: a DEK row must commit on its own, because the vault caches
+// it and seals under it at once, and a caller's rollback must never take back
+// a key some committed ciphertext already names. Reads are detached too, so a
+// caller's snapshot cannot hide a key another process just created.
+func (v *sealer) detached(ctx context.Context, f func(ctx context.Context) error) error {
+	if !orm.InTx(ctx) {
+		return f(ctx)
+	}
+	tx, err := v.db.BeginDetached(ctx, orm.TxOptions{Isolation: orm.IsolationReadCommitted})
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := tx.RunTx(ctx, f); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 // createPrimary inserts the tenant's first DEK. ON CONFLICT DO NOTHING makes
@@ -188,10 +210,10 @@ func (v *sealer) createPrimary(ctx context.Context, t Tenant) error {
 	if err != nil {
 		return err
 	}
-	_, err = v.db.ExecContext(ctx,
-		`INSERT INTO vault_keys (id, tenant_kind, tenant_id, version, kek_id, wrapped_dek, state)
-		 VALUES ($1, $2, $3, 1, $4, $5, $6) ON CONFLICT DO NOTHING`,
-		id, t.Kind, t.ID, kekID, wrapped, stateGlobalPrimary)
+	err = v.detached(ctx, func(ctx context.Context) error {
+		return store.InsertVaultKeyIfAbsent(ctx, v.db,
+			store.WrappedVaultKey{ID: id, TenantKind: t.Kind, TenantID: t.ID, State: stateGlobalPrimary, WrappedDEK: wrapped}, kekID)
+	})
 	if err != nil {
 		return fmt.Errorf("vault: storing key: %w", err)
 	}
@@ -210,25 +232,27 @@ func (v *sealer) ringByID(ctx context.Context, t Tenant, id string) (*crypto.Key
 	}
 
 	var (
-		kind, tenantID, state string
-		wrapped               []byte
+		key   store.WrappedVaultKey
+		found bool
 	)
-	err := v.db.QueryRowContext(ctx,
-		`SELECT tenant_kind, tenant_id, state, wrapped_dek FROM vault_keys WHERE id = $1`, id).
-		Scan(&kind, &tenantID, &state, &wrapped)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, fmt.Errorf("%w: %s", ErrKeyNotFound, id)
-	}
+	err := v.detached(ctx, func(ctx context.Context) error {
+		var err error
+		key, found, err = store.GetWrappedVaultKey(ctx, v.db, id)
+		return err
+	})
 	if err != nil {
 		return nil, fmt.Errorf("vault: loading key: %w", err)
 	}
-	if (Tenant{Kind: kind, ID: tenantID}) != t {
+	if !found {
+		return nil, fmt.Errorf("%w: %s", ErrKeyNotFound, id)
+	}
+	if (Tenant{Kind: key.TenantKind, ID: key.TenantID}) != t {
 		return nil, ErrTenantMismatch
 	}
-	if state == "destroyed" {
+	if key.State == "destroyed" {
 		return nil, ErrKeyDestroyed
 	}
-	return v.install(t, id, wrapped)
+	return v.install(t, id, key.WrappedDEK)
 }
 
 // install unwraps a DEK and caches the resulting single-key ring. The ring id

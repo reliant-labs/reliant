@@ -16,6 +16,7 @@ import (
 	"github.com/go-chi/cors"
 	"github.com/reliant-labs/forge/pkg/mountkit"
 	"github.com/reliant-labs/forge/pkg/oauth2"
+	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/serverkit"
 	"go.temporal.io/sdk/client"
 
@@ -181,6 +182,10 @@ type Config struct {
 	// per-entity Repository surface cannot express), and so does the
 	// self-hosted token store when TokenAuthority is nil.
 	SQL *sql.DB
+
+	// ORM is the forge ORM client over Database's pool. The self-hosted
+	// token store runs on it when TokenAuthority is nil.
+	ORM orm.Context
 
 	// ConnectorGrants stores connector grants, their audit log and the OAuth
 	// client bindings. Required. ConnectorService manages them and the /mcp
@@ -1218,7 +1223,7 @@ func securityHeaders(next http.Handler) http.Handler {
 
 // resolveTokenAuthority returns the deployment's ONE token authority: the
 // configured one, else control-plane or the local store as the environment
-// dictates (the self-hosted store keeps its tokens in cfg.SQL). A
+// dictates (the self-hosted store keeps its tokens through cfg.ORM). A
 // misconfiguration (control-plane URL without its secret) fails server start
 // loudly rather than serving a surface that can mint nothing.
 func resolveTokenAuthority(cfg *Config) (tokenauthority.Authority, tokenauthority.Mode, error) {
@@ -1227,7 +1232,7 @@ func resolveTokenAuthority(cfg *Config) (tokenauthority.Authority, tokenauthorit
 		// control-plane-side clipping is enabled for it.
 		return cfg.TokenAuthority, "", nil
 	}
-	authority, mode, err := tokenauthority.New(tokenauthority.DepsFor(cfg.ControlPlane, cfg.SQL))
+	authority, mode, err := tokenauthority.New(tokenauthority.DepsFor(cfg.ControlPlane, cfg.ORM))
 	if err != nil {
 		return nil, "", fmt.Errorf("token authority: %w", err)
 	}

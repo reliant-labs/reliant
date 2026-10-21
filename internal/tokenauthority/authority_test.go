@@ -2,7 +2,6 @@ package tokenauthority
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"reflect"
 	"strings"
@@ -12,6 +11,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/controlplane"
 
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
+	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/accesstokenclient"
@@ -21,7 +21,7 @@ import (
 
 func TestNewPicksExactlyOneStore(t *testing.T) {
 	t.Run("control-plane URL selects the hosted authority", func(t *testing.T) {
-		a, mode, err := New(Deps{ControlPlaneURL: "http://cp.invalid", InternalServiceSecret: "s3cret", DB: &sql.DB{}})
+		a, mode, err := New(Deps{ControlPlaneURL: "http://cp.invalid", InternalServiceSecret: "s3cret", DB: &orm.Client{}})
 		require.NoError(t, err)
 		require.Equal(t, ModeControlPlane, mode)
 		// The hosted store is accesstokenclient's, constructed through its
@@ -32,14 +32,14 @@ func TestNewPicksExactlyOneStore(t *testing.T) {
 	})
 
 	t.Run("control-plane URL without a secret is an error, never a local fallback", func(t *testing.T) {
-		a, _, err := New(Deps{ControlPlaneURL: "http://cp.invalid", DB: &sql.DB{}})
+		a, _, err := New(Deps{ControlPlaneURL: "http://cp.invalid", DB: &orm.Client{}})
 		require.Error(t, err)
 		require.Nil(t, a)
 		require.Contains(t, err.Error(), "INTERNAL_SERVICE_SECRET")
 	})
 
 	t.Run("no control-plane selects the local store", func(t *testing.T) {
-		a, mode, err := New(Deps{DB: &sql.DB{}})
+		a, mode, err := New(Deps{DB: &orm.Client{}})
 		require.NoError(t, err)
 		require.Equal(t, ModeLocal, mode)
 		_, ok := a.(*LocalStore)
@@ -78,9 +78,9 @@ func TestErrInactiveIsAuthInactive(t *testing.T) {
 func TestAuthorityConformance(t *testing.T) {
 	t.Run("memory", func(t *testing.T) { runConformance(t, NewMemory()) })
 	t.Run("local-postgres", func(t *testing.T) {
-		_, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
+		repo, _, cleanup := db.SetupTestDBWithRawDB(t)
 		t.Cleanup(cleanup)
-		runConformance(t, NewLocalStore(rawDB))
+		runConformance(t, NewLocalStore(repo.ORM()))
 	})
 }
 

@@ -2824,8 +2824,8 @@ func (r *Repo) DeleteWorkflowsByChat(ctx context.Context, chatID string) error {
 
 // ==================== Triggers ====================
 //
-// Every method here goes through r.triggers, whose queries run against
-// WrappedDBTX.DB(ctx) — so they pick up an ambient RunTx transaction
+// Every method here delegates to internal/store over r.ORM(), which joins the
+// transaction ctx carries — so they pick up an ambient RunTx transaction
 // automatically. That is what lets the launcher write the trigger event row in
 // the SAME transaction as the chat it launches: either both commit or neither
 // does, and there is no window where a chat exists with nothing recording why.
@@ -2834,32 +2834,32 @@ func (r *Repo) CreateTrigger(ctx context.Context, t *core.Trigger) error {
 	if t == nil {
 		return fmt.Errorf("trigger cannot be nil")
 	}
-	return r.triggers.CreateTrigger(ctx, t)
+	return store.InsertTrigger(ctx, r.ORM(), t)
 }
 
 func (r *Repo) GetTrigger(ctx context.Context, id string) (*core.Trigger, error) {
 	if id == "" {
 		return nil, fmt.Errorf("trigger ID cannot be empty")
 	}
-	return r.triggers.GetTrigger(ctx, id)
+	return store.GetTrigger(ctx, r.ORM(), id)
 }
 
 func (r *Repo) ListTriggers(ctx context.Context, f core.TriggerFilters) ([]*core.Trigger, error) {
 	if f.UserID == "" {
 		return nil, fmt.Errorf("user ID cannot be empty; use ListAllTriggers to list every user's triggers")
 	}
-	return r.triggers.ListTriggers(ctx, f)
+	return store.ListTriggersForUser(ctx, r.ORM(), f)
 }
 
 func (r *Repo) ListAllTriggers(ctx context.Context) ([]*core.Trigger, error) {
-	return r.triggers.ListAllTriggers(ctx)
+	return store.ListAllTriggers(ctx, r.ORM())
 }
 
 func (r *Repo) LockTrigger(ctx context.Context, id string) error {
 	if id == "" {
 		return fmt.Errorf("trigger ID cannot be empty")
 	}
-	return r.triggers.LockTrigger(ctx, id)
+	return store.LockTrigger(ctx, r.ORM(), id)
 }
 
 func (r *Repo) UpdateTrigger(ctx context.Context, t *core.Trigger) error {
@@ -2869,39 +2869,32 @@ func (r *Repo) UpdateTrigger(ctx context.Context, t *core.Trigger) error {
 	if t.ID == "" {
 		return fmt.Errorf("trigger ID cannot be empty")
 	}
-	return r.triggers.UpdateTrigger(ctx, t)
+	return store.ReplaceTrigger(ctx, r.ORM(), t)
 }
 
 func (r *Repo) DeleteTrigger(ctx context.Context, id string) error {
 	if id == "" {
 		return fmt.Errorf("trigger ID cannot be empty")
 	}
-	return r.triggers.DeleteTrigger(ctx, id)
+	return store.RemoveTrigger(ctx, r.ORM(), id)
 }
 
 func (r *Repo) SetTriggerEnabled(ctx context.Context, id string, enabled bool) error {
 	if id == "" {
 		return fmt.Errorf("trigger ID cannot be empty")
 	}
-	return r.triggers.SetTriggerEnabled(ctx, id, enabled)
+	return store.SetTriggerEnabled(ctx, r.ORM(), id, enabled)
 }
 
 func (r *Repo) SetTriggerProjection(ctx context.Context, id string, p core.TriggerProjection) error {
 	if id == "" {
 		return fmt.Errorf("trigger ID cannot be empty")
 	}
-	return r.triggers.SetTriggerProjection(ctx, id, p)
-}
-
-func (r *Repo) ListWorkflowTriggerActivations(ctx context.Context, userID, workflow string) ([]*core.Trigger, error) {
-	if userID == "" {
-		return nil, fmt.Errorf("user ID cannot be empty")
-	}
-	return r.triggers.ListWorkflowTriggerActivations(ctx, userID, workflow)
+	return store.SetTriggerProjection(ctx, r.ORM(), id, p)
 }
 
 func (r *Repo) ListAllWorkflowTriggerActivations(ctx context.Context) ([]*core.Trigger, error) {
-	return r.triggers.ListAllWorkflowTriggerActivations(ctx)
+	return store.ListAllWorkflowTriggerActivations(ctx, r.ORM())
 }
 
 func (r *Repo) CreateTriggerEvent(ctx context.Context, ev *core.TriggerEvent) (bool, error) {
@@ -2914,56 +2907,56 @@ func (r *Repo) CreateTriggerEvent(ctx context.Context, ev *core.TriggerEvent) (b
 		// second real firing would silently report "already launched".
 		return false, fmt.Errorf("trigger event dedupe key cannot be empty")
 	}
-	return r.triggers.CreateTriggerEvent(ctx, ev)
+	return store.InsertTriggerEventIfAbsent(ctx, r.ORM(), ev)
 }
 
 func (r *Repo) GetTriggerEventByDedupe(ctx context.Context, kind core.TriggerEventKind, dedupeKey string) (*core.TriggerEvent, error) {
 	if dedupeKey == "" {
 		return nil, fmt.Errorf("trigger event dedupe key cannot be empty")
 	}
-	return r.triggers.GetTriggerEventByDedupe(ctx, kind, dedupeKey)
+	return store.GetTriggerEventByDedupe(ctx, r.ORM(), kind, dedupeKey)
 }
 
 func (r *Repo) GetTriggerEventByChatID(ctx context.Context, chatID string) (*core.TriggerEvent, error) {
 	if chatID == "" {
 		return nil, fmt.Errorf("chat ID cannot be empty")
 	}
-	return r.triggers.GetTriggerEventByChatID(ctx, chatID)
+	return store.GetTriggerEventByChatID(ctx, r.ORM(), chatID)
 }
 
 func (r *Repo) GetTriggerEventByChat(ctx context.Context, kind core.TriggerEventKind, chatID string) (*core.TriggerEvent, error) {
 	if chatID == "" {
 		return nil, fmt.Errorf("chat ID cannot be empty")
 	}
-	return r.triggers.GetTriggerEventByChat(ctx, kind, chatID)
+	return store.GetTriggerEventByChat(ctx, r.ORM(), kind, chatID)
 }
 
 func (r *Repo) CountLiveLaunchedRuns(ctx context.Context, userID string, kind core.TriggerEventKind) (int, error) {
 	if userID == "" {
 		return 0, fmt.Errorf("user ID cannot be empty")
 	}
-	return r.triggers.CountLiveLaunchedRuns(ctx, userID, kind)
+	return store.CountLiveLaunchedRuns(ctx, r.ORM(), userID, kind)
 }
 
 func (r *Repo) UpdateTriggerEventOutcome(ctx context.Context, id string, outcome core.TriggerEventOutcome, detail string, chatID *string) error {
 	if id == "" {
 		return fmt.Errorf("trigger event ID cannot be empty")
 	}
-	return r.triggers.UpdateTriggerEventOutcome(ctx, id, outcome, detail, chatID)
+	return store.UpdateTriggerEventOutcome(ctx, r.ORM(), id, outcome, detail, chatID)
 }
 
 func (r *Repo) SetLaunchEventRunStatus(ctx context.Context, chatID, status string) error {
 	if chatID == "" {
 		return fmt.Errorf("chat ID cannot be empty")
 	}
-	return r.triggers.SetLaunchEventRunStatus(ctx, chatID, status)
+	return store.SetLaunchEventRunStatus(ctx, r.ORM(), chatID, status)
 }
 
 func (r *Repo) UpdateTriggerEventPayload(ctx context.Context, id string, payload map[string]any) error {
 	if id == "" {
 		return fmt.Errorf("trigger event ID cannot be empty")
 	}
-	return r.triggers.UpdateTriggerEventPayload(ctx, id, payload)
+	return store.UpdateTriggerEventPayload(ctx, r.ORM(), id, payload)
 }
 
 func (r *Repo) ListTriggerEvents(ctx context.Context, f core.TriggerEventFilters) ([]*core.TriggerEventWithRun, bool, error) {
@@ -2973,7 +2966,7 @@ func (r *Repo) ListTriggerEvents(ctx context.Context, f core.TriggerEventFilters
 	if f.UserID == "" {
 		return nil, false, fmt.Errorf("user ID cannot be empty")
 	}
-	return r.triggers.ListTriggerEvents(ctx, f)
+	return store.ListTriggerEventsPage(ctx, r.ORM(), f)
 }
 
 func (r *Repo) ListInboxPending(ctx context.Context, userID string) ([]*core.InboxPending, error) {
@@ -3073,80 +3066,76 @@ func (r *Repo) RecentTriggerFirings(ctx context.Context, userID string, triggerI
 	if userID == "" {
 		return nil, fmt.Errorf("user ID cannot be empty")
 	}
-	return r.triggers.RecentTriggerFirings(ctx, userID, triggerIDs, perTrigger)
+	return store.RecentTriggerFirings(ctx, r.ORM(), userID, triggerIDs, perTrigger)
 }
 
 func (r *Repo) FiringsSinceLastSuccess(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error) {
 	if userID == "" {
 		return nil, fmt.Errorf("user ID cannot be empty")
 	}
-	return r.triggers.FiringsSinceLastSuccess(ctx, userID, triggerIDs, perTrigger)
+	return store.FiringsSinceLastSuccess(ctx, r.ORM(), userID, triggerIDs, perTrigger)
 }
 
 func (r *Repo) GetLatestTriggerEvent(ctx context.Context, triggerID string, outcome *core.TriggerEventOutcome) (*core.TriggerEvent, error) {
 	if triggerID == "" {
 		return nil, fmt.Errorf("trigger ID cannot be empty")
 	}
-	return r.triggers.GetLatestTriggerEvent(ctx, triggerID, outcome)
+	return store.GetLatestTriggerEvent(ctx, r.ORM(), triggerID, outcome)
 }
 
 func (r *Repo) SetTriggerWebhookTokenHash(ctx context.Context, id string, hash []byte) error {
 	if id == "" {
 		return fmt.Errorf("trigger ID cannot be empty")
 	}
-	return r.triggers.SetTriggerWebhookTokenHash(ctx, id, hash)
+	return store.SetTriggerWebhookTokenHash(ctx, r.ORM(), id, hash)
 }
 
 func (r *Repo) SetTriggerWebhookSecret(ctx context.Context, id string, sealed []byte) error {
 	if id == "" {
 		return fmt.Errorf("trigger ID cannot be empty")
 	}
-	return r.triggers.SetTriggerWebhookSecret(ctx, id, sealed)
+	return store.SetTriggerWebhookSecret(ctx, r.ORM(), id, sealed)
 }
 
 func (r *Repo) GetTriggerWebhookCredentials(ctx context.Context, id string) (*core.TriggerWebhookCredentials, error) {
 	if id == "" {
 		return nil, core.ErrTriggerNotFound
 	}
-	return r.triggers.GetTriggerWebhookCredentials(ctx, id)
+	return store.GetTriggerWebhookCredentials(ctx, r.ORM(), id)
 }
 
 func (r *Repo) ListIntegrationTriggers(ctx context.Context, integration string) ([]*core.IntegrationTriggerRoute, error) {
-	return r.triggers.ListIntegrationTriggers(ctx, integration)
+	return store.ListIntegrationTriggers(ctx, r.ORM(), integration)
 }
 
 func (r *Repo) ListStalePendingTriggerEvents(ctx context.Context, olderThan time.Time, limit int) ([]*core.TriggerEvent, error) {
-	return r.triggers.ListStalePendingTriggerEvents(ctx, olderThan, limit)
+	return store.ListStalePendingTriggerEvents(ctx, r.ORM(), olderThan, limit)
 }
 
 func (r *Repo) ClaimPendingTriggerEvent(ctx context.Context, id string, payload map[string]any) (bool, error) {
-	return r.triggers.ClaimPendingTriggerEvent(ctx, id, payload)
+	return store.ClaimPendingTriggerEvent(ctx, r.ORM(), id, payload)
 }
 
 func (r *Repo) SettlePendingTriggerEvent(ctx context.Context, id string, outcome core.TriggerEventOutcome, detail string) (bool, error) {
-	return r.triggers.SettlePendingTriggerEvent(ctx, id, outcome, detail)
+	return store.SettlePendingTriggerEvent(ctx, r.ORM(), id, outcome, detail)
 }
 
 func (r *Repo) GetTriggerRegistration(ctx context.Context, triggerID string) (*core.TriggerRegistration, error) {
-	return r.triggers.GetTriggerRegistration(ctx, triggerID)
+	return store.GetTriggerRegistration(ctx, r.ORM(), triggerID)
 }
 
 func (r *Repo) ListTriggerRegistrations(ctx context.Context, userID string, triggerIDs []string) (map[string]*core.TriggerRegistration, error) {
 	if userID == "" {
 		return nil, fmt.Errorf("user ID cannot be empty")
 	}
-	return r.triggers.ListTriggerRegistrations(ctx, userID, triggerIDs)
+	return store.ListTriggerRegistrationsForUser(ctx, r.ORM(), userID, triggerIDs)
 }
 
 func (r *Repo) UpsertTriggerRegistration(ctx context.Context, reg *core.TriggerRegistration) error {
 	if reg == nil || reg.TriggerID == "" {
 		return fmt.Errorf("trigger registration needs a trigger ID")
 	}
-	return r.triggers.UpsertTriggerRegistration(ctx, reg)
-}
-
-func (r *Repo) DeleteTriggerRegistration(ctx context.Context, triggerID string) error {
-	return r.triggers.DeleteTriggerRegistration(ctx, triggerID)
+	return store.UpsertTriggerRegistration(ctx, r.ORM(), reg)
 }
 
 // ==================== Step Executions ====================

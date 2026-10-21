@@ -9,7 +9,6 @@ package servergateway
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -24,6 +23,7 @@ import (
 
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/reliant-labs/forge/pkg/lifecyclekit"
+	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/forge/pkg/serverkit"
 
 	"github.com/reliant-labs/reliant/internal/certs"
@@ -195,11 +195,11 @@ func Run(ctx context.Context, opts Options) error {
 	// authority — control-plane's Introspect when hosted, reliant's own store
 	// when self-hosted. Checked once per connect, UNCACHED: a revoked daemon
 	// credential is refused on its next connect.
-	var sqlDB *sql.DB
+	var ormDB orm.Context
 	if repo.DB != nil {
-		sqlDB = repo.DB.SQLDB()
+		ormDB = repo.ORM()
 	}
-	tokenAuthority, authorityMode, err := tokenauthority.New(tokenauthority.DepsFor(opts.ControlPlane, sqlDB))
+	tokenAuthority, authorityMode, err := tokenauthority.New(tokenauthority.DepsFor(opts.ControlPlane, ormDB))
 	if err != nil {
 		return fmt.Errorf("daemon credential authority: %w", err)
 	}

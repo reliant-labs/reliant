@@ -35,6 +35,541 @@
 //	}
 package store
 
+import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"time"
+
+	"github.com/reliant-labs/forge/pkg/crud"
+	"github.com/reliant-labs/forge/pkg/orm"
+	"github.com/reliant-labs/forge/pkg/svcerr"
+	"github.com/uptrace/bun"
+	"github.com/uptrace/bun/dialect/pgdialect"
+
+	"github.com/reliant-labs/reliant/internal/db/core"
+)
+
+// defaultTriggerEventLimit bounds an unspecified limit. An unbounded history
+// query is never what a caller wants here: the firing log grows once per
+// scheduled tick forever.
+const defaultTriggerEventLimit = 50
+
+// InsertTriggerEventIfAbsent records a firing, reporting created=false when a
+// row for its (kind, dedupe_key) already existed. DO NOTHING rather than DO
+// UPDATE: the first row for a key is the authoritative record of intent, and
+// a retry must not overwrite its outcome. "A chat starts exactly once" and "a
+// retried scheduled fire launches once" are the same database constraint, and
+// the affected-row count is how a caller learns which side of it it landed on.
+func InsertTriggerEventIfAbsent(ctx context.Context, db orm.Context, ev *core.TriggerEvent) (bool, error) {
+	row, err := triggerEventFromCore(ev)
+	if err != nil {
+		return false, err
+	}
+	res, err := db.Bun().NewInsert().Model(row).
+		On("CONFLICT (kind, dedupe_key) DO NOTHING").
+		Exec(ctx)
+	if err != nil {
+		return false, fmt.Errorf("failed to create trigger event: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return n > 0, nil
+}
+
+// GetTriggerEventByDedupe returns the firing recorded for (kind, dedupeKey),
+// or core.ErrTriggerEventNotFound.
+func GetTriggerEventByDedupe(ctx context.Context, db orm.Context, kind core.TriggerEventKind, dedupeKey string) (*core.TriggerEvent, error) {
+	return firstTriggerEvent(ctx, db, "get trigger event by dedupe key",
+		orm.WhereEq(TriggerEventFieldKind, kind),
+		orm.WhereEq(TriggerEventFieldDedupeKey, dedupeKey))
+}
+
+// GetTriggerEventByChatID returns the chat's launch event — the earliest
+// event that references it — or core.ErrTriggerEventNotFound. Served by
+// idx_trigger_events_chat.
+func GetTriggerEventByChatID(ctx context.Context, db orm.Context, chatID string) (*core.TriggerEvent, error) {
+	return firstTriggerEvent(ctx, db, "get trigger event by chat id",
+		orm.WhereEq(TriggerEventFieldChatID, chatID),
+		orm.WithOrderBy(TriggerEventFieldCreatedAt, orm.Asc),
+		orm.WithOrderBy(TriggerEventFieldID, orm.Asc))
+}
+
+// GetTriggerEventByChat returns the event of the given kind that launched a
+// chat, or core.ErrTriggerEventNotFound. The oldest wins: a chat is launched
+// once, and a later row naming it can only be a replay. Served by
+// idx_trigger_events_chat.
+func GetTriggerEventByChat(ctx context.Context, db orm.Context, kind core.TriggerEventKind, chatID string) (*core.TriggerEvent, error) {
+	return firstTriggerEvent(ctx, db, "get trigger event by chat",
+		orm.WhereEq(TriggerEventFieldKind, kind),
+		orm.WhereEq(TriggerEventFieldChatID, chatID),
+		orm.WithOrderBy(TriggerEventFieldOccurredAt, orm.Asc),
+		orm.WithOrderBy(TriggerEventFieldID, orm.Asc))
+}
+
+// GetLatestTriggerEvent returns the trigger's newest firing, of the given
+// outcome when outcome is set, or (nil, nil) when it has none: "no events
+// yet" is the ordinary state of a trigger that has never fired, and of the
+// overlap check's first run. The overlap check ("is this trigger's previous
+// run still going?") asks for the latest launched event; the detail view for
+// the latest of any outcome.
+func GetLatestTriggerEvent(ctx context.Context, db orm.Context, triggerID string, outcome *core.TriggerEventOutcome) (*core.TriggerEvent, error) {
+	opts := []orm.QueryOption{orm.WhereEq(TriggerEventFieldTriggerID, triggerID)}
+	if outcome != nil {
+		opts = append(opts, orm.WhereEq(TriggerEventFieldOutcome, *outcome))
+	}
+	opts = append(opts,
+		orm.WithOrderBy(TriggerEventFieldOccurredAt, orm.Desc),
+		orm.WithOrderBy(TriggerEventFieldID, orm.Desc))
+	ev, err := firstTriggerEvent(ctx, db, "get latest trigger event", opts...)
+	if errors.Is(err, core.ErrTriggerEventNotFound) {
+		return nil, nil
+	}
+	return ev, err
+}
+
+// firstTriggerEvent is the first event opts select, or
+// core.ErrTriggerEventNotFound.
+func firstTriggerEvent(ctx context.Context, db orm.Context, what string, opts ...orm.QueryOption) (*core.TriggerEvent, error) {
+	rows, err := ListTriggerEvent(ctx, db, append(opts, orm.WithLimit(1))...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to %s: %w", what, err)
+	}
+	if len(rows) == 0 {
+		return nil, core.ErrTriggerEventNotFound
+	}
+	return triggerEventToCore(rows[0])
+}
+
+// countLiveLaunchedRunsSQL counts the chats the user launched through this
+// kind of event whose ROOT run is still live: pending (1), active (2), or
+// stopped-because-paused (state 3, stop reason 3). The inner joins drop
+// events whose chat was deleted or never got a root workflow, neither of
+// which can be running.
+const countLiveLaunchedRunsSQL = `SELECT count(*) FROM trigger_events e
+JOIN chats c ON c.id = e.chat_id
+JOIN workflows w ON w.id = c.workflow_id
+WHERE e.user_id = ?0
+  AND e.kind = ?1
+  AND e.outcome = 'launched'
+  AND (w.state IN (1, 2) OR (w.state = 3 AND w.stop_reason = 3))`
+
+// CountLiveLaunchedRuns counts the user's chats launched by an event of the
+// given kind whose root run is still live.
+func CountLiveLaunchedRuns(ctx context.Context, db orm.Context, userID string, kind core.TriggerEventKind) (int, error) {
+	var count int
+	if err := db.Bun().NewRaw(countLiveLaunchedRunsSQL, userID, string(kind)).Scan(ctx, &count); err != nil {
+		return 0, fmt.Errorf("failed to count live launched runs: %w", err)
+	}
+	return count, nil
+}
+
+// UpdateTriggerEventOutcome records a firing's outcome and the chat it
+// launched (nil for none), or returns core.ErrTriggerEventNotFound.
+func UpdateTriggerEventOutcome(ctx context.Context, db orm.Context, id string, outcome core.TriggerEventOutcome, detail string, chatID *string) error {
+	row := &TriggerEvent{ID: id, Outcome: outcome, OutcomeDetail: detail, ChatID: chatID}
+	return writeTriggerEvent(ctx, db, row, "outcome",
+		TriggerEventFieldOutcome, TriggerEventFieldOutcomeDetail, TriggerEventFieldChatID)
+}
+
+// UpdateTriggerEventPayload replaces a firing's payload, or returns
+// core.ErrTriggerEventNotFound.
+func UpdateTriggerEventPayload(ctx context.Context, db orm.Context, id string, payload map[string]any) error {
+	encoded, err := triggerJSONObject(payload)
+	if err != nil {
+		return fmt.Errorf("marshal trigger event payload: %w", err)
+	}
+	return writeTriggerEvent(ctx, db, &TriggerEvent{ID: id, Payload: encoded}, "payload", TriggerEventFieldPayload)
+}
+
+func writeTriggerEvent(ctx context.Context, db orm.Context, row *TriggerEvent, what string, fields ...string) error {
+	// forge#1042: UpdateTriggerEventMasked takes no UpdateOption at this pin,
+	// so NoReadBack goes through the repo itself.
+	err := triggerEventRepo.UpdateMasked(ctx, db, row, fields, crud.NoReadBack())
+	if errors.Is(err, svcerr.ErrNotFound) {
+		return core.ErrTriggerEventNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("failed to update trigger event %s: %w", what, err)
+	}
+	return nil
+}
+
+// setLaunchEventRunStatusSQL records how the run a trigger fired ended, on
+// the chat's launch event (the same earliest-event rule as
+// GetTriggerEventByChatID).
+const setLaunchEventRunStatusSQL = `UPDATE trigger_events SET run_status = ?0::text
+WHERE id = (
+	SELECT l.id FROM trigger_events l
+	WHERE l.chat_id = ?1::text
+	ORDER BY l.created_at ASC, l.id ASC
+	LIMIT 1
+)`
+
+// SetLaunchEventRunStatus records status (a core.TriggerRun* value) on
+// chatID's launch event. A chat with no launch event is not an error: there
+// is nothing to record against.
+func SetLaunchEventRunStatus(ctx context.Context, db orm.Context, chatID, status string) error {
+	if _, err := db.Bun().NewRaw(setLaunchEventRunStatusSQL, status, chatID).Exec(ctx); err != nil {
+		return fmt.Errorf("failed to record launch event run status: %w", err)
+	}
+	return nil
+}
+
+// The pending-event statements below spell `outcome = 'pending'` into the SQL
+// rather than binding it: it is idx_trigger_events_pending's partial-index
+// predicate, which the planner must see at plan time, and for the claim and
+// settle it is the guard that makes them conditional.
+
+// ListStalePendingTriggerEvents returns inbound events recorded but not yet
+// settled, older than the cutoff, oldest first: the fire workflow for them was
+// never started (the receiver crashed between the insert and the start) or
+// died. The redriver restarts their fires. Served by idx_trigger_events_pending.
+func ListStalePendingTriggerEvents(ctx context.Context, db orm.Context, olderThan time.Time, limit int) ([]*core.TriggerEvent, error) {
+	if limit <= 0 {
+		limit = defaultTriggerEventLimit
+	}
+	rows, err := ListTriggerEvent(ctx, db,
+		func(q *bun.SelectQuery) { q.Where("outcome = 'pending'") },
+		orm.WhereLt(TriggerEventFieldCreatedAt, olderThan),
+		orm.WithOrderBy(TriggerEventFieldCreatedAt, orm.Asc),
+		orm.WithLimit(limit))
+	if err != nil {
+		return nil, fmt.Errorf("failed to list pending trigger events: %w", err)
+	}
+	out := make([]*core.TriggerEvent, 0, len(rows))
+	for _, row := range rows {
+		ev, err := triggerEventToCore(row)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, ev)
+	}
+	return out, nil
+}
+
+// ClaimPendingTriggerEvent adopts an inbound event the receiver recorded: the
+// row moves from pending to launched (chat attached later in the same
+// transaction) and takes the launch's start record as its payload. The
+// outcome predicate is what makes two concurrent fires of one event launch it
+// once: the loser updates zero rows, and reports claimed=false.
+func ClaimPendingTriggerEvent(ctx context.Context, db orm.Context, id string, payload map[string]any) (bool, error) {
+	encoded, err := triggerJSONObject(payload)
+	if err != nil {
+		return false, fmt.Errorf("marshal trigger event payload: %w", err)
+	}
+	res, err := db.Bun().NewUpdate().Model((*TriggerEvent)(nil)).
+		Set("outcome = 'launched'").
+		Set("outcome_detail = ''").
+		Set("payload = ?", string(encoded)).
+		Where("id = ?", id).
+		Where("outcome = 'pending'").
+		Exec(ctx)
+	if err != nil {
+		return false, fmt.Errorf("failed to claim pending trigger event: %w", err)
+	}
+	return oneRowTouched(res)
+}
+
+// SettlePendingTriggerEvent records the verdict on an inbound event that did
+// NOT launch. Conditional on pending, so it can never overwrite a launch that
+// won a race; settled=false means it did not apply.
+func SettlePendingTriggerEvent(ctx context.Context, db orm.Context, id string, outcome core.TriggerEventOutcome, detail string) (bool, error) {
+	res, err := db.Bun().NewUpdate().Model((*TriggerEvent)(nil)).
+		Set("outcome = ?", outcome).
+		Set("outcome_detail = ?", detail).
+		Where("id = ?", id).
+		Where("outcome = 'pending'").
+		Exec(ctx)
+	if err != nil {
+		return false, fmt.Errorf("failed to settle pending trigger event: %w", err)
+	}
+	return oneRowTouched(res)
+}
+
+func oneRowTouched(res sql.Result) (bool, error) {
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return n == 1, nil
+}
+
+// triggerFiringRow is a trigger_events row with the run it launched, as the
+// three firing reads select it. The run columns are NULL unless the firing
+// joined a chat that still exists.
+type triggerFiringRow struct {
+	TriggerEvent
+	RunChatID         *string `bun:"run_chat_id"`
+	RunTitle          *string `bun:"run_title"`
+	RunRootState      *int32  `bun:"run_root_state"`
+	RunRootStopReason *int32  `bun:"run_root_stop_reason"`
+	RunDisplayState   int32   `bun:"run_display_state"`
+}
+
+// triggerFiringRunColumns is the run a firing launched, for the firing reads
+// below. run_display_state is the SAME table as ListRuns' — keep the two in
+// step. It is meaningful only when run_chat_id is set.
+const triggerFiringRunColumns = `c.id AS run_chat_id,
+	c.title AS run_title,
+	rw.state AS run_root_state,
+	rw.stop_reason AS run_root_stop_reason,
+	COALESCE(c.display_state, 1)::integer AS run_display_state`
+
+// listTriggerEventsSQL is one page of a trigger's firings, newest first,
+// keyset on (occurred_at, id) so a firing recorded mid-pagination can neither
+// repeat nor be skipped; two fires can share an occurred_at, and id breaks the
+// tie. user_id scopes the rows even though the handler already checked
+// ownership. Served by idx_trigger_events_trigger_occurred_id.
+const listTriggerEventsSQL = `SELECT e.*,
+	` + triggerFiringRunColumns + `
+FROM trigger_events e
+LEFT JOIN chats_with_activity c ON c.id = e.chat_id AND c.user_id = e.user_id
+LEFT JOIN workflows rw ON rw.id = c.workflow_id
+WHERE e.trigger_id = ?0::text
+	AND e.user_id = ?1::text
+	AND (cardinality(?2::text[]) = 0 OR e.outcome = ANY(?2::text[]))
+	AND (?3::timestamptz IS NULL
+	     OR (e.occurred_at, e.id) < (?3::timestamptz, ?4::text))
+ORDER BY e.occurred_at DESC, e.id DESC
+LIMIT ?5`
+
+// ListTriggerEventsPage returns up to f.Limit of a trigger's firings, each
+// with the run it launched, and whether more follow. It reads one row beyond
+// the limit to learn that without a count.
+func ListTriggerEventsPage(ctx context.Context, db orm.Context, f core.TriggerEventFilters) ([]*core.TriggerEventWithRun, bool, error) {
+	limit := f.Limit
+	if limit <= 0 {
+		limit = defaultTriggerEventLimit
+	}
+	// Never nil: cardinality(NULL) is NULL, which would match no row.
+	outcomes := make([]string, len(f.Outcomes))
+	for i, o := range f.Outcomes {
+		outcomes[i] = string(o)
+	}
+	var cursorAt *time.Time
+	var cursorID *string
+	if f.After != nil {
+		cursorAt, cursorID = &f.After.OccurredAt, &f.After.ID
+	}
+	var rows []triggerFiringRow
+	err := db.Bun().NewRaw(listTriggerEventsSQL,
+		f.TriggerID, f.UserID, pgdialect.Array(outcomes), cursorAt, cursorID, orm.Arg(limit+1)).Scan(ctx, &rows)
+	if err != nil {
+		return nil, false, fmt.Errorf("failed to list trigger events: %w", err)
+	}
+	events, err := triggerFiringsToCore(rows)
+	if err != nil {
+		return nil, false, err
+	}
+	hasMore := len(events) > limit
+	if hasMore {
+		events = events[:limit]
+	}
+	return events, hasMore, nil
+}
+
+// recentTriggerFiringsSQL is the newest ?2 firings of each named trigger, with
+// their runs, in ONE query. This is what health and last_event are computed
+// from, so listing N triggers costs one extra query rather than N.
+const recentTriggerFiringsSQL = `WITH ranked AS (
+	SELECT
+		e.id,
+		row_number() OVER (PARTITION BY e.trigger_id ORDER BY e.occurred_at DESC, e.id DESC) AS rn
+	FROM trigger_events e
+	WHERE e.user_id = ?0::text
+		AND e.trigger_id = ANY(?1::text[])
+)
+SELECT e.*,
+	` + triggerFiringRunColumns + `
+FROM ranked r
+JOIN trigger_events e ON e.id = r.id
+LEFT JOIN chats_with_activity c ON c.id = e.chat_id AND c.user_id = e.user_id
+LEFT JOIN workflows rw ON rw.id = c.workflow_id
+WHERE r.rn <= ?2::integer
+ORDER BY e.trigger_id, e.occurred_at DESC, e.id DESC`
+
+// RecentTriggerFirings returns each named trigger's newest perTrigger firings
+// (newest first, with their runs), keyed by trigger id. A trigger with no
+// firings has no entry; triggers belonging to other users never appear.
+func RecentTriggerFirings(ctx context.Context, db orm.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error) {
+	return triggerFiringsByTrigger(ctx, db, "list recent trigger firings", recentTriggerFiringsSQL, userID, triggerIDs, perTrigger)
+}
+
+// firingsSinceLastSuccessSQL is every firing of each named trigger after its
+// newest SUCCESS (a launched firing whose run completed), newest first, capped
+// at ?2 rows. A trigger with no success returns its whole history up to the
+// cap. This is the failure episode: Go reads its length and its oldest
+// failure from it, so the episode is not truncated at the 10-firing health
+// window.
+//
+// "Completed" is the run the trigger fired (run_status), not whatever turn the
+// chat is on now — the same rule triggers.resolveFiring applies — so a
+// person's later reply in the chat neither ends nor extends the episode.
+const firingsSinceLastSuccessSQL = `WITH last_success AS (
+	SELECT DISTINCT ON (e.trigger_id) e.trigger_id, e.occurred_at, e.id
+	FROM trigger_events e
+	LEFT JOIN chats_with_activity c ON c.id = e.chat_id AND c.user_id = e.user_id
+	WHERE e.user_id = ?0::text
+		AND e.trigger_id = ANY(?1::text[])
+		AND e.outcome = 'launched'
+		AND (e.run_status = 'completed' OR (e.run_status IS NULL AND c.display_state = 5))
+	ORDER BY e.trigger_id, e.occurred_at DESC, e.id DESC
+), ranked AS (
+	SELECT
+		e.id,
+		row_number() OVER (PARTITION BY e.trigger_id ORDER BY e.occurred_at DESC, e.id DESC) AS rn
+	FROM trigger_events e
+	LEFT JOIN last_success s ON s.trigger_id = e.trigger_id
+	WHERE e.user_id = ?0::text
+		AND e.trigger_id = ANY(?1::text[])
+		AND (s.id IS NULL OR (e.occurred_at, e.id) > (s.occurred_at, s.id))
+)
+SELECT e.*,
+	` + triggerFiringRunColumns + `
+FROM ranked r
+JOIN trigger_events e ON e.id = r.id
+LEFT JOIN chats_with_activity c ON c.id = e.chat_id AND c.user_id = e.user_id
+LEFT JOIN workflows rw ON rw.id = c.workflow_id
+WHERE r.rn <= ?2::integer
+ORDER BY e.trigger_id, e.occurred_at DESC, e.id DESC`
+
+// FiringsSinceLastSuccess returns, per named trigger, every firing after its
+// newest success (newest first, with their runs, at most perTrigger), keyed by
+// trigger id.
+func FiringsSinceLastSuccess(ctx context.Context, db orm.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error) {
+	return triggerFiringsByTrigger(ctx, db, "list firings since last success", firingsSinceLastSuccessSQL, userID, triggerIDs, perTrigger)
+}
+
+func triggerFiringsByTrigger(ctx context.Context, db orm.Context, what, query, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error) {
+	out := make(map[string][]*core.TriggerEventWithRun, len(triggerIDs))
+	if len(triggerIDs) == 0 || perTrigger <= 0 {
+		return out, nil
+	}
+	var rows []triggerFiringRow
+	if err := db.Bun().NewRaw(query, userID, pgdialect.Array(triggerIDs), orm.Arg(perTrigger)).Scan(ctx, &rows); err != nil {
+		return nil, fmt.Errorf("failed to %s: %w", what, err)
+	}
+	firings, err := triggerFiringsToCore(rows)
+	if err != nil {
+		return nil, err
+	}
+	for _, f := range firings {
+		if f.Event.TriggerID == nil {
+			continue
+		}
+		out[*f.Event.TriggerID] = append(out[*f.Event.TriggerID], f)
+	}
+	return out, nil
+}
+
+func triggerFiringsToCore(rows []triggerFiringRow) ([]*core.TriggerEventWithRun, error) {
+	out := make([]*core.TriggerEventWithRun, 0, len(rows))
+	for i := range rows {
+		row := &rows[i]
+		ev, err := triggerEventToCore(&row.TriggerEvent)
+		if err != nil {
+			return nil, err
+		}
+		firing := &core.TriggerEventWithRun{Event: ev}
+		if row.RunChatID != nil {
+			firing.Run = &core.TriggerEventRun{
+				ChatID:       *row.RunChatID,
+				DisplayState: core.RunDisplayState(row.RunDisplayState),
+			}
+			if row.RunTitle != nil {
+				firing.Run.Title = *row.RunTitle
+			}
+			if row.RunRootState != nil {
+				firing.Run.RootStatus = core.WorkflowStatus{State: core.WorkflowState(*row.RunRootState)}
+				if row.RunRootStopReason != nil {
+					firing.Run.RootStatus.StopReason = core.WorkflowStopReason(*row.RunRootStopReason)
+				}
+			}
+		}
+		out = append(out, firing)
+	}
+	return out, nil
+}
+
+func triggerEventFromCore(ev *core.TriggerEvent) (*TriggerEvent, error) {
+	payload, err := triggerJSONObject(ev.Payload)
+	if err != nil {
+		return nil, fmt.Errorf("marshal trigger event payload: %w", err)
+	}
+	// sender and origin are NULL for none.
+	var sender, origin json.RawMessage
+	if ev.Sender != nil {
+		if sender, err = json.Marshal(ev.Sender); err != nil {
+			return nil, fmt.Errorf("marshal trigger event sender: %w", err)
+		}
+	}
+	if ev.Origin != nil {
+		if origin, err = json.Marshal(ev.Origin); err != nil {
+			return nil, fmt.Errorf("marshal trigger event origin: %w", err)
+		}
+	}
+	return &TriggerEvent{
+		ID:            ev.ID,
+		TriggerID:     ev.TriggerID,
+		UserID:        ev.UserID,
+		Kind:          ev.Kind,
+		DedupeKey:     ev.DedupeKey,
+		OccurredAt:    ev.OccurredAt,
+		Payload:       payload,
+		Outcome:       ev.Outcome,
+		OutcomeDetail: ev.OutcomeDetail,
+		ChatID:        ev.ChatID,
+		CreatedAt:     ev.CreatedAt,
+		Sender:        sender,
+		Origin:        origin,
+	}, nil
+}
+
+func triggerEventToCore(row *TriggerEvent) (*core.TriggerEvent, error) {
+	payload := map[string]any{}
+	if err := triggerJSONInto(row.Payload, &payload); err != nil {
+		return nil, fmt.Errorf("unmarshal trigger event payload (event %s): %w", row.ID, err)
+	}
+	var sender *core.TriggerSender
+	if len(row.Sender) > 0 {
+		sender = &core.TriggerSender{}
+		if err := json.Unmarshal(row.Sender, sender); err != nil {
+			return nil, fmt.Errorf("unmarshal trigger event sender (event %s): %w", row.ID, err)
+		}
+	}
+	var origin *core.TriggerOrigin
+	if len(row.Origin) > 0 {
+		origin = &core.TriggerOrigin{}
+		if err := json.Unmarshal(row.Origin, origin); err != nil {
+			return nil, fmt.Errorf("unmarshal trigger event origin (event %s): %w", row.ID, err)
+		}
+	}
+	ev := &core.TriggerEvent{
+		ID:            row.ID,
+		TriggerID:     row.TriggerID,
+		UserID:        row.UserID,
+		Kind:          row.Kind,
+		DedupeKey:     row.DedupeKey,
+		OccurredAt:    row.OccurredAt,
+		Payload:       payload,
+		Outcome:       row.Outcome,
+		OutcomeDetail: row.OutcomeDetail,
+		ChatID:        row.ChatID,
+		CreatedAt:     row.CreatedAt,
+		Sender:        sender,
+		Origin:        origin,
+	}
+	if row.RunStatus != nil {
+		ev.RunStatus = *row.RunStatus
+	}
+	return ev, nil
+}
+
 // TriggerEventExtra carries fields on TriggerEvent that are NOT columns — computed
 // values, transient state, anything derived rather than stored. TriggerEvent is
 // embedded on TriggerEventExtra (see trigger_event_orm.go), so a field added here is a field on
