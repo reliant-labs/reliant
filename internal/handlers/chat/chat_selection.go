@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"strings"
 
 	"connectrpc.com/connect"
@@ -225,18 +224,12 @@ func policyFromProto(p *reliantv1.ProviderPolicy) chatselection.ProviderPolicy {
 // with no fallback, or a fallback with nothing to fall back to.
 func validatePolicy(p chatselection.ProviderPolicy) error {
 	if p.FallbackModel != "" && p.OnLimit != chatselection.OnLimitFallback {
-		return fmt.Errorf("fallback_model is only meaningful with on_limit FALLBACK")
+		return svcerr.InvalidArgument("fallback_model is only meaningful with on_limit FALLBACK")
 	}
 	if p.OnLimit == chatselection.OnLimitFallback && !strings.Contains(p.FallbackModel, "@") {
-		return fmt.Errorf("on_limit FALLBACK needs a fallback_model of the form <model>@<driver>")
+		return svcerr.InvalidArgument("on_limit FALLBACK needs a fallback_model of the form <model>@<driver>")
 	}
 	return nil
-}
-
-// versionConflictError is the refusal for an edit made against a selection that
-// has since changed: ABORTED, so the client refetches and decides again.
-func versionConflictError() error {
-	return svcerr.ToConnect(svcerr.Aborted("the chat's selection changed since it was read; reload and try again"))
 }
 
 // UpdateChatProviderPolicy stores what the chat does when its provider is
@@ -249,15 +242,15 @@ func (s *Service) UpdateChatProviderPolicy(
 ) (*connect.Response[reliantv1.UpdateChatProviderPolicyResponse], error) {
 	userID := auth.MustGetUserID(ctx)
 	if req.Msg.ChatId == "" {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("chat_id is required"))
+		return nil, svcerr.InvalidArgument("chat_id is required")
 	}
 	chat, err := s.getChatForUser(ctx, req.Msg.ChatId, userID)
 	if err != nil {
-		return nil, svcerr.ToConnect(svcerr.NotFound("chat"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
 	policy := policyFromProto(req.Msg.ProviderPolicy)
 	if err := validatePolicy(policy); err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, err
 	}
 	workflowName := ""
 	if chat.WorkflowName != nil {
@@ -266,11 +259,7 @@ func (s *Service) UpdateChatProviderPolicy(
 	before, _ := s.selections().Get(ctx, chat.ID)
 	sel, err := s.selections().SetPolicy(ctx, chat.ID, userID, workflowName, policy, req.Msg.GetExpectedVersion())
 	if err != nil {
-		if errors.Is(err, chatselection.ErrVersionConflict) {
-			return nil, versionConflictError()
-		}
-		logging.ErrorContext(ctx, "Failed to store the chat's provider policy", "error", err, "chatID", chat.ID)
-		return nil, svcerr.ToConnect(svcerr.Internal("failed to update provider policy"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to update provider policy"))
 	}
 	if sel != nil && (before == nil || before.Version != sel.Version) {
 		s.announceSelection(ctx, userID, chat, sel)

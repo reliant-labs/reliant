@@ -135,7 +135,7 @@ func TestFailedResumeIsReportedNotSwallowed(t *testing.T) {
 
 	// Look at the error handling immediately following the resume call.
 	window := body[at:min(at+1600, len(body))]
-	assert.Contains(t, window, "connect.NewError(connect.CodeInternal",
+	assert.Contains(t, window, "return nil, svcerr.WrapOr(resumeErr,",
 		"a resume failure must surface to the caller so the user's client can retry; "+
 			"the saved message makes the retry safe")
 }

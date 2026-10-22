@@ -10,6 +10,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -370,8 +371,8 @@ func TestSendAgentMessage_RejectsCrossChatThread(t *testing.T) {
 		Message:  "should not be deliverable",
 	}))
 	require.Error(t, err)
-	connectErr := new(connect.Error)
-	require.ErrorAs(t, err, &connectErr)
+	require.Error(t, err)
+	connectErr := svcerr.ToConnect(err)
 	assert.Equal(t, connect.CodeNotFound, connectErr.Code())
 
 	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, otherFx.childThreadID)
@@ -416,8 +417,8 @@ func TestSendAgentMessage_WrongOwner(t *testing.T) {
 		Message:  "not yours to send",
 	}))
 	require.Error(t, err)
-	connectErr := new(connect.Error)
-	require.ErrorAs(t, err, &connectErr)
+	require.Error(t, err)
+	connectErr := svcerr.ToConnect(err)
 	assert.Equal(t, connect.CodeNotFound, connectErr.Code())
 }
 
@@ -474,8 +475,8 @@ func TestListQueuedAgentMessages_RejectsCrossChatThread(t *testing.T) {
 		ChatId: fx.chatID, ThreadId: otherFx.childThreadID,
 	}))
 	require.Error(t, err)
-	connectErr := new(connect.Error)
-	require.ErrorAs(t, err, &connectErr)
+	require.Error(t, err)
+	connectErr := svcerr.ToConnect(err)
 	assert.Equal(t, connect.CodeNotFound, connectErr.Code())
 }
 
@@ -491,8 +492,8 @@ func TestListQueuedAgentMessages_WrongOwner(t *testing.T) {
 		ChatId: fx.chatID, ThreadId: fx.childThreadID,
 	}))
 	require.Error(t, err)
-	connectErr := new(connect.Error)
-	require.ErrorAs(t, err, &connectErr)
+	require.Error(t, err)
+	connectErr := svcerr.ToConnect(err)
 	assert.Equal(t, connect.CodeNotFound, connectErr.Code())
 }
 
@@ -583,8 +584,8 @@ func TestCancelQueuedAgentMessage_RejectsWrongOwnerAndCrossChat(t *testing.T) {
 		ChatId: fx.chatID, MessageId: queued[0].ID,
 	}))
 	require.Error(t, err)
-	connectErr := new(connect.Error)
-	require.ErrorAs(t, err, &connectErr)
+	require.Error(t, err)
+	connectErr := svcerr.ToConnect(err)
 	assert.Equal(t, connect.CodeNotFound, connectErr.Code())
 
 	// Cross-chat: caller owns a different chat, but tries to cancel a
@@ -620,8 +621,8 @@ func TestSendAgentMessage_MissingFields(t *testing.T) {
 	for _, req := range cases {
 		_, err := service.SendAgentMessage(ctx, connect.NewRequest(req))
 		require.Error(t, err)
-		connectErr := new(connect.Error)
-		require.ErrorAs(t, err, &connectErr)
+		require.Error(t, err)
+		connectErr := svcerr.ToConnect(err)
 		assert.Equal(t, connect.CodeInvalidArgument, connectErr.Code())
 	}
 }

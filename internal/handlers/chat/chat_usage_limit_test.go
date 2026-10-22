@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/client"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -84,7 +85,7 @@ func TestRetryUsageLimitWait_SignalsOnlyAWaitingRun(t *testing.T) {
 	other := context.WithValue(context.Background(), auth.UserIDContextKey, "someone-else")
 	_, err = svc.RetryUsageLimitWait(other, connect.NewRequest(&reliantv1.RetryUsageLimitWaitRequest{ChatId: chatID}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
 }
 
 // Stop on a waiting run: TerminateWorkflow runs no workflow code, so the stop
@@ -141,7 +142,7 @@ func TestRetryUsageLimitWait_UseModel(t *testing.T) {
 		bad := "gpt-5.6-sol"
 		_, err := svc.RetryUsageLimitWait(ctx, connect.NewRequest(&reliantv1.RetryUsageLimitWaitRequest{ChatId: chatID, UseModel: &bad}))
 		require.Error(t, err)
-		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+		assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 		assert.Len(t, temporal.payloads, 1, "nothing was signalled")
 	})
 
@@ -149,7 +150,7 @@ func TestRetryUsageLimitWait_UseModel(t *testing.T) {
 		bad := "no-such-model@codex"
 		_, err := svc.RetryUsageLimitWait(ctx, connect.NewRequest(&reliantv1.RetryUsageLimitWaitRequest{ChatId: chatID, UseModel: &bad}))
 		require.Error(t, err)
-		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+		assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 	})
 
 }

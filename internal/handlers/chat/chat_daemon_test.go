@@ -7,6 +7,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -94,8 +95,8 @@ func TestSetChatDaemon_ChatNotFound(t *testing.T) {
 	}))
 	require.Error(t, err)
 
-	connectErr := new(connect.Error)
-	require.ErrorAs(t, err, &connectErr)
+	require.Error(t, err)
+	connectErr := svcerr.ToConnect(err)
 	assert.Equal(t, connect.CodeNotFound, connectErr.Code())
 }
 
@@ -112,8 +113,8 @@ func TestSetChatDaemon_MissingChatID(t *testing.T) {
 	}))
 	require.Error(t, err)
 
-	connectErr := new(connect.Error)
-	require.ErrorAs(t, err, &connectErr)
+	require.Error(t, err)
+	connectErr := svcerr.ToConnect(err)
 	assert.Equal(t, connect.CodeInvalidArgument, connectErr.Code())
 }
 
@@ -157,8 +158,8 @@ func TestSetChatDaemon_WrongOwner(t *testing.T) {
 	}))
 	require.Error(t, err)
 
-	connectErr := new(connect.Error)
-	require.ErrorAs(t, err, &connectErr)
+	require.Error(t, err)
+	connectErr := svcerr.ToConnect(err)
 	assert.Equal(t, connect.CodeNotFound, connectErr.Code())
 }
 

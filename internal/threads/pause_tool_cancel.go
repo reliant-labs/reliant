@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	"github.com/reliant-labs/reliant/internal/logging"
 )
 
@@ -38,15 +40,18 @@ type CancelChatToolCallsResult struct {
 // daemon-side push the workflow-level signal cannot deliver quickly.
 func (s *Service) CancelChatToolCalls(ctx context.Context, opts CancelChatToolCallsOpts) (CancelChatToolCallsResult, error) {
 	if opts.ChatID == "" {
-		return CancelChatToolCallsResult{}, validationError{message: "chat_id is required"}
+		return CancelChatToolCallsResult{}, svcerr.InvalidArgument("chat_id is required")
 	}
 	if opts.UserID == "" {
-		return CancelChatToolCallsResult{}, validationError{message: "user_id is required"}
+		return CancelChatToolCallsResult{}, svcerr.InvalidArgument("user_id is required")
 	}
 
 	chat, err := s.repo.GetChatWithUserCheck(ctx, opts.ChatID, opts.UserID)
-	if err != nil || chat == nil {
-		return CancelChatToolCallsResult{}, notFoundError{message: "chat not found"}
+	if err != nil {
+		return CancelChatToolCallsResult{}, fmt.Errorf("load chat: %w", err)
+	}
+	if chat == nil {
+		return CancelChatToolCallsResult{}, svcerr.NotFound("chat")
 	}
 
 	inFlight, err := s.inFlightToolCallsForChat(ctx, opts.ChatID)

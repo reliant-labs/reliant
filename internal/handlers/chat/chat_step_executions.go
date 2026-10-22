@@ -12,7 +12,6 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/reliant-labs/reliant/internal/logging"
 )
 
 // stepExecutionRecordLimit bounds one ListStepExecutions response. A node's
@@ -31,20 +30,22 @@ func (s *Service) ListStepExecutions(
 	userID := auth.MustGetUserID(ctx)
 
 	if req.Msg.ChatId == "" {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("chat_id is required"))
+		return nil, svcerr.InvalidArgument("chat_id is required")
 	}
 	nodePath := strings.TrimSpace(req.Msg.GetNodePath())
 
 	chat, err := s.deps.Repo.GetChat(ctx, req.Msg.ChatId)
-	if err != nil || chat.UserID != userID {
-		return nil, svcerr.ToConnect(svcerr.NotFound("chat"))
+	if err != nil {
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
+	}
+	if chat.UserID != userID {
+		return nil, svcerr.NotFound("chat")
 	}
 
 	// One more than the limit says whether anything was left out.
 	rows, err := s.deps.Repo.ListStepExecutionRecordsForChat(ctx, req.Msg.ChatId, nodePath, stepExecutionRecordLimit+1)
 	if err != nil {
-		logging.ErrorContext(ctx, "Failed to list step executions", "error", err, "chatID", req.Msg.ChatId, "nodePath", nodePath)
-		return nil, svcerr.ToConnect(svcerr.Internal("failed to list step executions"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list step executions"))
 	}
 	truncated := len(rows) > stepExecutionRecordLimit
 	if truncated {

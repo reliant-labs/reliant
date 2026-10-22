@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -282,7 +283,7 @@ func TestSendMessage_SameIDDifferentContentIsRefused(t *testing.T) {
 
 			_, err = service.SendMessage(ctx, sendNamed(t, fx.chatID, "different text", id))
 			require.Error(t, err, "an id that names one message must not be accepted for another")
-			assert.Equal(t, connect.CodeAlreadyExists, connect.CodeOf(err))
+			assert.Equal(t, connect.CodeAlreadyExists, svcerr.Code(err))
 
 			assert.Zero(t, countUserMessages(t, ctx, repo, fx.chatID, "different text"))
 			queued, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.rootThreadID)
@@ -311,7 +312,7 @@ func TestSendMessage_SameIDDifferentAttachmentsIsRefused(t *testing.T) {
 	req.Msg.Attachments = []string{"some-attachment"}
 	_, err = service.SendMessage(ctx, req)
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeAlreadyExists, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeAlreadyExists, svcerr.Code(err))
 }
 
 // An id is scoped to its owner. Another user's message under the same id must
@@ -333,7 +334,7 @@ func TestSendMessage_AnotherUsersIDIsRefusedWithoutDisclosure(t *testing.T) {
 	for _, content := range []string{"A's secret", "B's own words"} {
 		_, err = service.SendMessage(ctxB, sendNamed(t, fxB.chatID, content, id))
 		require.Error(t, err)
-		assert.Equal(t, connect.CodeAlreadyExists, connect.CodeOf(err))
+		assert.Equal(t, connect.CodeAlreadyExists, svcerr.Code(err))
 		assert.NotContains(t, err.Error(), "secret", "the refusal must not echo the other user's message")
 	}
 	assert.Zero(t, countUserMessages(t, ctxB, repo, fxB.chatID, "B's own words"))
@@ -342,7 +343,7 @@ func TestSendMessage_AnotherUsersIDIsRefusedWithoutDisclosure(t *testing.T) {
 	// And B cannot reach A's message by naming A's chat.
 	_, err = service.SendMessage(ctxB, sendNamed(t, fxA.chatID, "A's secret", id))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
 }
 
 // A message that is not a UUID is refused rather than quietly replaced.
@@ -355,7 +356,7 @@ func TestSendMessage_RefusesAnIDThatIsNotAUUID(t *testing.T) {
 
 	_, err := service.SendMessage(ctx, sendNamed(t, fx.chatID, "hi", "not-a-uuid"))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 	assert.Zero(t, countUserMessages(t, ctx, repo, fx.chatID, "hi"))
 	assert.Zero(t, temporal.startCount())
 }
@@ -555,7 +556,7 @@ func TestStartChat_SameIDDifferentContentIsRefused(t *testing.T) {
 	require.NoError(t, err)
 	_, err = startNamed(e, t, "a different message", id)
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeAlreadyExists, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeAlreadyExists, svcerr.Code(err))
 	assert.Equal(t, 1, countChats(t, e))
 	assert.Len(t, e.temporal.inputs, 1)
 }
@@ -629,7 +630,7 @@ func TestStartChat_RefusesAnIDThatIsNotAUUID(t *testing.T) {
 	e := newStartDaemonEnv(t)
 	_, err := startNamed(e, t, "hi", "nope")
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 	assert.Equal(t, 0, countChats(t, e))
 }
 
@@ -661,7 +662,7 @@ func TestStartChat_BranchFirstSendRepeatedStartsOnce(t *testing.T) {
 
 	_, err = send("something else")
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeAlreadyExists, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeAlreadyExists, svcerr.Code(err))
 }
 
 // A StartChat that committed and lost its response, followed by the client's
@@ -717,7 +718,7 @@ func TestSendAgentMessage_RepeatedWithTheSameIDQueuesOnce(t *testing.T) {
 
 	_, err = send("steer right")
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeAlreadyExists, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeAlreadyExists, svcerr.Code(err))
 	queued, err = repo.ListQueuedAgentMessagesForThread(ctx, fx.childThreadID)
 	require.NoError(t, err)
 	assert.Len(t, queued, 1)
@@ -727,7 +728,7 @@ func TestSendAgentMessage_RepeatedWithTheSameIDQueuesOnce(t *testing.T) {
 		ChatId: fx.chatID, ThreadId: fx.childThreadID, Message: "x", ClientMessageId: &bad,
 	}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 }
 
 var _ = core.AgentMessageStatusQueued

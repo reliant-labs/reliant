@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -279,7 +280,7 @@ func TestSendMessage_RunningWorkflowRefusesAMalformedClientID(t *testing.T) {
 	req.Msg.ClientMessageId = &bad
 	_, err := service.SendMessage(ctx, req)
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 
 	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.rootThreadID)
 	require.NoError(t, err)

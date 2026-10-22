@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/sdk/client"
 	"google.golang.org/protobuf/types/known/structpb"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -138,7 +139,7 @@ func TestStartChatRejectsADaemonTheCallerDoesNotOwn(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			_, err := e.start(t, func(r *reliantv1.StartChatRequest) { r.DaemonId = ptr.Of(id) })
 			require.Error(t, err)
-			assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+			assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
 			assert.Empty(t, e.temporal.inputs, "a rejected start must launch nothing")
 			assert.Empty(t, e.router.selectors, "a rejected start must not wake anything")
 		})
@@ -153,7 +154,7 @@ func TestStartChatRejectsADaemonTheProjectIsNotInstalledOn(t *testing.T) {
 
 	_, err := e.start(t, func(r *reliantv1.StartChatRequest) { r.DaemonId = ptr.Of(elsewhere) })
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
 	assert.Empty(t, e.temporal.inputs)
 
 	_, err = e.start(t, func(r *reliantv1.StartChatRequest) { r.DaemonId = ptr.Of(installedOn) })
@@ -174,7 +175,7 @@ func TestStartChatBranchRejectsADaemonThatConflictsWithItsWorktree(t *testing.T)
 		r.DaemonId = ptr.Of(other)
 	})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 	assert.Contains(t, err.Error(), "pinned daemon")
 	assert.Empty(t, e.router.selectors)
 	assert.Empty(t, e.temporal.inputs)
@@ -196,7 +197,7 @@ func TestStartChatBranchAcceptsTheDaemonItIsAlreadyPinnedTo(t *testing.T) {
 		r.DaemonId = ptr.Of(pinned)
 	})
 	if err != nil {
-		assert.NotEqual(t, connect.CodeInvalidArgument, connect.CodeOf(err), "a matching daemon_id is not a conflict: %v", err)
+		assert.NotEqual(t, connect.CodeInvalidArgument, svcerr.Code(err), "a matching daemon_id is not a conflict: %v", err)
 	}
 	require.Len(t, e.router.selectors, 1)
 	assert.Equal(t, pinned, e.router.selectors[0].ID)

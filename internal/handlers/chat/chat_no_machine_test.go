@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/ptr"
@@ -133,7 +134,7 @@ func TestSetChatDaemonRejectsADaemonTheCallerDoesNotOwn(t *testing.T) {
 
 	_, err := e.setDaemon(chat.ID, foreign)
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
 
 	stored, err := e.repo.GetChat(e.ctx, chat.ID)
 	require.NoError(t, err)
@@ -211,7 +212,7 @@ func TestBranchChatWithNoMachineRejectsAWorktree(t *testing.T) {
 		r.WorktreeId = &mainID
 	})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 }
 
 // Branching a chat that has no machine keeps the branch without one: there is
@@ -249,7 +250,7 @@ func TestStartChatRefusesNoMachineForAMachineBranch(t *testing.T) {
 		r.NoMachine = boolPtr(true)
 	})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 
 	stored, err := e.repo.GetChat(context.Background(), branchID)
 	require.NoError(t, err)

@@ -2,7 +2,6 @@ package chat_test
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -18,8 +17,9 @@ func TestGetThreadWorkflowInputs_Generated(t *testing.T) {
 	t.Parallel()
 
 	repo := newChatRepo()
+	// The store answers a thread with no workflow with (nil, nil).
 	repo.GetWorkflowByThreadFunc = func(context.Context, string, string) (*db.Workflow, error) {
-		return nil, errors.New("no workflow for thread")
+		return nil, nil
 	}
 	svc := chat.NewTestChat(t, chat.WithChatDeps(chat.Deps{Repo: repo}))
 

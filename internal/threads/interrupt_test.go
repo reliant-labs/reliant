@@ -11,6 +11,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
@@ -383,12 +385,12 @@ func TestInterruptThread_RejectsWrongOwnerAndCrossChat(t *testing.T) {
 	_, err := svc.InterruptThread(ctx, InterruptThreadOpts{
 		UserID: "other-user", ChatID: fx.chatID, ThreadID: fx.rootThreadID,
 	})
-	require.ErrorIs(t, err, ErrNotFound)
+	require.ErrorIs(t, err, svcerr.ErrNotFound)
 
 	_, err = svc.InterruptThread(ctx, InterruptThreadOpts{
 		UserID: fx.userID, ChatID: fx.chatID, ThreadID: otherFx.rootThreadID,
 	})
-	require.ErrorIs(t, err, ErrNotFound)
+	require.ErrorIs(t, err, svcerr.ErrNotFound)
 }
 
 func TestInterruptThread_RequiresChatThreadAndUser(t *testing.T) {
@@ -403,19 +405,19 @@ func TestInterruptThread_RequiresChatThreadAndUser(t *testing.T) {
 		UserID:   fx.userID,
 		ThreadID: fx.rootThreadID,
 	})
-	require.ErrorIs(t, err, ErrInvalidArgument)
+	require.ErrorIs(t, err, svcerr.ErrInvalidArgument)
 
 	_, err = svc.InterruptThread(ctx, InterruptThreadOpts{
 		UserID: fx.userID,
 		ChatID: fx.chatID,
 	})
-	require.ErrorIs(t, err, ErrInvalidArgument)
+	require.ErrorIs(t, err, svcerr.ErrInvalidArgument)
 
 	_, err = svc.InterruptThread(ctx, InterruptThreadOpts{
 		ChatID:   fx.chatID,
 		ThreadID: fx.rootThreadID,
 	})
-	require.ErrorIs(t, err, ErrInvalidArgument)
+	require.ErrorIs(t, err, svcerr.ErrInvalidArgument)
 }
 
 // orderRecordingCanceler and orderRecordingSignaler write into one shared,

@@ -13,6 +13,7 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -154,7 +155,7 @@ func TestStartChat_BuilderTestRequiresAnOwnedSavedDraft(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := f.start(tc.workflow, proto.Bool(true), tc.chatID)
 			require.Error(t, err)
-			assert.Equal(t, tc.want, connect.CodeOf(err), err.Error())
+			assert.Equal(t, tc.want, svcerr.Code(err), err.Error())
 		})
 	}
 

@@ -2,11 +2,11 @@ package threads
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/orm"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -15,14 +15,13 @@ import (
 
 const interruptToolCancelReason = "user interrupted the agent"
 
-var (
-	// ErrInvalidArgument means the interrupt request was malformed.
-	ErrInvalidArgument = errors.New("invalid argument")
-	// ErrNotFound means the addressed chat or thread does not exist for the caller.
-	ErrNotFound = errors.New("not found")
-	// ErrInterruptUndeliverable means the workflow could not be told to observe the interrupt.
-	ErrInterruptUndeliverable = errors.New("interrupt undeliverable")
-)
+// ErrInterruptUndeliverable means the workflow could not be told to observe
+// the interrupt. Its text is what the client reads; the signal's own failure is
+// the withheld cause.
+//
+// A malformed request is an svcerr.InvalidArgument, and a chat or thread the
+// caller cannot see an svcerr.NotFound, so a handler returns either as it is.
+var ErrInterruptUndeliverable = svcerr.Unavailable("interrupt undeliverable")
 
 // ServiceOption configures a threads Service.
 type ServiceOption func(*Service)
@@ -64,16 +63,6 @@ type InterruptThreadResult struct {
 	UndeliverableToolCalls []string
 }
 
-type validationError struct{ message string }
-
-func (e validationError) Error() string { return e.message }
-func (e validationError) Unwrap() error { return ErrInvalidArgument }
-
-type notFoundError struct{ message string }
-
-func (e notFoundError) Error() string { return e.message }
-func (e notFoundError) Unwrap() error { return ErrNotFound }
-
 // InterruptThread stops the work in flight on a thread so the agent reads its
 // mailbox now rather than after finishing what it started.
 //
@@ -108,28 +97,32 @@ func (e notFoundError) Unwrap() error { return ErrNotFound }
 // user typed is preserved with no window to lose.
 func (s *Service) InterruptThread(ctx context.Context, opts InterruptThreadOpts) (InterruptThreadResult, error) {
 	if opts.ChatID == "" {
-		return InterruptThreadResult{}, validationError{message: "chat_id is required"}
+		return InterruptThreadResult{}, svcerr.InvalidArgument("chat_id is required")
 	}
 	if opts.ThreadID == "" {
-		return InterruptThreadResult{}, validationError{message: "thread_id is required"}
+		return InterruptThreadResult{}, svcerr.InvalidArgument("thread_id is required")
 	}
 	if opts.UserID == "" {
-		return InterruptThreadResult{}, validationError{message: "user_id is required"}
+		return InterruptThreadResult{}, svcerr.InvalidArgument("user_id is required")
 	}
 
 	// Ownership: the same two checks, and the same indistinguishable NotFound,
 	// as SendAgentMessage and ClaimQueuedAgentMessages. Revealing that a thread
-	// exists but belongs to another chat is an enumeration leak.
+	// exists but belongs to another chat is an enumeration leak. A store miss
+	// is already a NotFound; any other read failure is the server's.
 	chat, err := s.repo.GetChatWithUserCheck(ctx, opts.ChatID, opts.UserID)
-	if err != nil || chat == nil {
-		return InterruptThreadResult{}, notFoundError{message: "chat not found"}
+	if err != nil {
+		return InterruptThreadResult{}, fmt.Errorf("load chat: %w", err)
+	}
+	if chat == nil {
+		return InterruptThreadResult{}, svcerr.NotFound("chat")
 	}
 	target, err := s.repo.GetThread(ctx, opts.ThreadID)
-	if err != nil || target == nil {
-		return InterruptThreadResult{}, notFoundError{message: "thread not found"}
+	if err != nil {
+		return InterruptThreadResult{}, fmt.Errorf("load thread: %w", err)
 	}
-	if target.ChatID != opts.ChatID {
-		return InterruptThreadResult{}, notFoundError{message: "thread not found"}
+	if target == nil || target.ChatID != opts.ChatID {
+		return InterruptThreadResult{}, svcerr.NotFound("thread")
 	}
 
 	// Kill the tools BEFORE freeing the workflow to re-dispatch. Signalling
@@ -178,7 +171,7 @@ func (s *Service) signalThreadInterrupt(ctx context.Context, chat *db.Chat, thre
 	if err := s.temporalSignaler.SignalWorkflow(ctx, workflowID, "", v2.InterruptThreadSignalName, v2.InterruptThreadSignal{
 		ThreadID: threadID,
 	}); err != nil {
-		return fmt.Errorf("%w: signal workflow %s: %v", ErrInterruptUndeliverable, workflowID, err)
+		return svcerr.WithCause(ErrInterruptUndeliverable, fmt.Errorf("signal workflow %s: %w", workflowID, err))
 	}
 	return nil
 }

@@ -163,7 +163,7 @@ func (s *Service) startChat(
 			// The branch's worktree lives on one machine, so a pinned chat's
 			// daemon is authoritative; a different choice cannot be honored.
 			if pinned := wakeChat.ActiveDaemonID; pinned != nil && *pinned != "" && *pinned != chosen {
-				return nil, svcerr.ToConnect(svcerr.InvalidArgument("daemon_id conflicts with the chat's pinned daemon: a branch runs on its worktree's machine"))
+				return nil, svcerr.InvalidArgument("daemon_id conflicts with the chat's pinned daemon: a branch runs on its worktree's machine")
 			}
 		}
 		if err := daemonchoice.Validate(ctx, s.deps.Repo, userID, projectID, chosen); err != nil {
@@ -197,10 +197,7 @@ func (s *Service) startChat(
 
 	result, err := s.launcher().Launch(ctx, event, spec)
 	if err != nil {
-		if errors.Is(err, launch.ErrClientMessageReused) {
-			return nil, errClientMessageReused()
-		}
-		return nil, launchErrorToConnect(err)
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to start chat"))
 	}
 
 	return connect.NewResponse(&reliantv1.StartChatResponse{
@@ -216,17 +213,17 @@ func (s *Service) startChat(
 // a test run of anything the caller is editing.
 func (s *Service) validateBuilderTest(ctx context.Context, userID string, msg *reliantv1.StartChatRequest) error {
 	if msg.GetChatId() != "" {
-		return svcerr.ToConnect(svcerr.InvalidArgument("builder_test starts a new chat; chat_id must be empty"))
+		return svcerr.InvalidArgument("builder_test starts a new chat; chat_id must be empty")
 	}
 	if msg.Workflow == "" {
-		return svcerr.ToConnect(svcerr.InvalidArgument("builder_test requires the workflow to run"))
+		return svcerr.InvalidArgument("builder_test requires the workflow to run")
 	}
 	draft, err := s.deps.Repo.GetWorkflowDraftBySlug(ctx, userID, launch.NormalizeWorkflowSlug(msg.Workflow))
 	if err != nil {
-		return connect.NewError(connect.CodeInternal, fmt.Errorf("failed to look up workflow draft: %w", err))
+		return svcerr.WrapOr(err, svcerr.Internal("failed to look up workflow draft"))
 	}
 	if draft == nil || draft.UserID != userID {
-		return svcerr.ToConnect(svcerr.WithMessage(svcerr.ErrNotFound, fmt.Sprintf("builder_test requires a saved workflow draft you own: %q", msg.Workflow)))
+		return svcerr.WithMessage(svcerr.ErrNotFound, fmt.Sprintf("builder_test requires a saved workflow draft you own: %q", msg.Workflow))
 	}
 	return nil
 }
@@ -239,7 +236,7 @@ func (s *Service) ListChats(
 	userID := auth.MustGetUserID(ctx)
 
 	if req.Msg.ProjectId == "" {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("project_id is required"))
+		return nil, svcerr.InvalidArgument("project_id is required")
 	}
 
 	limit := int(100)
@@ -257,8 +254,7 @@ func (s *Service) ListChats(
 
 	chats, err := s.deps.Repo.ListChats(ctx, filters)
 	if err != nil {
-		logging.ErrorContext(ctx, "Failed to list chats", "error", err)
-		return nil, svcerr.ToConnect(svcerr.Internal("failed to list chats"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list chats"))
 	}
 
 	// The background reconciler repairs stale DB status against Temporal.
@@ -292,17 +288,17 @@ func (s *Service) GetChat(
 	userID := auth.MustGetUserID(ctx)
 
 	if req.Msg.ChatId == "" {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("chat_id is required"))
+		return nil, svcerr.InvalidArgument("chat_id is required")
 	}
 
 	chat, err := s.deps.Repo.GetChat(ctx, req.Msg.ChatId)
 	if err != nil {
-		return nil, svcerr.ToConnect(svcerr.NotFound("chat"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
 
 	// Verify user owns the chat
 	if chat.UserID != userID {
-		return nil, svcerr.ToConnect(svcerr.NotFound("chat"))
+		return nil, svcerr.NotFound("chat")
 	}
 
 	// Check for ghost workflows (DB says running, but Temporal lost it).
@@ -346,16 +342,16 @@ func (s *Service) UpdateChat(
 	userID := auth.MustGetUserID(ctx)
 
 	if req.Msg.ChatId == "" {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("chat_id is required"))
+		return nil, svcerr.InvalidArgument("chat_id is required")
 	}
 
 	chat, err := s.deps.Repo.GetChat(ctx, req.Msg.ChatId)
 	if err != nil {
-		return nil, svcerr.ToConnect(svcerr.NotFound("chat"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
 
 	if chat.UserID != userID {
-		return nil, svcerr.ToConnect(svcerr.NotFound("chat"))
+		return nil, svcerr.NotFound("chat")
 	}
 
 	// Update fields
@@ -368,7 +364,7 @@ func (s *Service) UpdateChat(
 		// worktrees, but never to a foreign one and never cleared to null.
 		resolved, err := s.launcher().ResolveChatWorktreeID(ctx, chat.ProjectID, req.Msg.WorktreeId)
 		if err != nil {
-			return nil, err
+			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to resolve worktree"))
 		}
 		chat.WorktreeID = resolved
 	}
@@ -378,29 +374,28 @@ func (s *Service) UpdateChat(
 		newWorkflowName := *req.Msg.WorkflowName
 
 		// Validate workflow exists
+		// A failure to read it is classified; anything else is a verdict.
 		if _, err := s.launcher().LoadWorkflowForValidation(ctx, newWorkflowName, chat.ProjectID); err != nil {
-			return nil, svcerr.ToConnect(svcerr.WithMessage(svcerr.ErrNotFound, fmt.Sprintf("workflow not found: %s", newWorkflowName)))
+			return nil, svcerr.WrapOr(err, svcerr.WithMessage(svcerr.ErrNotFound, fmt.Sprintf("workflow not found: %s", newWorkflowName)))
 		}
 
 		// Check if root workflow is pending (chat hasn't started)
 		if chat.WorkflowID == nil || *chat.WorkflowID == "" {
-			return nil, svcerr.ToConnect(svcerr.FailedPrecondition("cannot change workflow: chat has no workflow assigned"))
+			return nil, svcerr.FailedPrecondition("cannot change workflow: chat has no workflow assigned")
 		}
 
 		rootWorkflow, err := s.deps.Repo.GetWorkflow(ctx, *chat.WorkflowID)
 		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal,
-				fmt.Errorf("failed to get root workflow: %w", err))
+			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get root workflow"))
 		}
 
 		if rootWorkflow.Status != db.Pending() {
-			return nil, svcerr.ToConnect(svcerr.FailedPrecondition("cannot change workflow after chat has started - use Branch instead"))
+			return nil, svcerr.FailedPrecondition("cannot change workflow after chat has started - use Branch instead")
 		}
 
 		// Update workflow name on the workflow record
 		if err := s.deps.Repo.UpdateWorkflowName(ctx, *chat.WorkflowID, newWorkflowName); err != nil {
-			logging.ErrorContext(ctx, "Failed to update workflow name", "error", err, "workflowID", *chat.WorkflowID)
-			return nil, svcerr.ToConnect(svcerr.Internal("failed to update workflow"))
+			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to update workflow"))
 		}
 
 		// Update chat's workflow name
@@ -411,8 +406,7 @@ func (s *Service) UpdateChat(
 	chat.LastActive = time.Now().UTC()
 
 	if err := s.deps.Repo.UpdateChat(ctx, chat); err != nil {
-		logging.ErrorContext(ctx, "Failed to update chat", "error", err)
-		return nil, svcerr.ToConnect(svcerr.Internal("failed to update chat"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to update chat"))
 	}
 
 	// Emit chat_title_changed if title was updated
@@ -492,12 +486,12 @@ func (s *Service) DeleteChat(
 	userID := auth.MustGetUserID(ctx)
 
 	if req.Msg.ChatId == "" {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("chat_id is required"))
+		return nil, svcerr.InvalidArgument("chat_id is required")
 	}
 
 	chat, err := s.getChatForUser(ctx, req.Msg.ChatId, userID)
 	if err != nil {
-		return nil, svcerr.ToConnect(svcerr.NotFound("chat"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
 
 	// If already archived, hard delete permanently
@@ -508,8 +502,7 @@ func (s *Service) DeleteChat(
 		}
 
 		if err := s.deps.Repo.DeleteChat(ctx, req.Msg.ChatId); err != nil {
-			logging.ErrorContext(ctx, "Failed to permanently delete chat", "error", err, "chatID", req.Msg.ChatId)
-			return nil, svcerr.ToConnect(svcerr.Internal("failed to permanently delete chat"))
+			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to permanently delete chat"))
 		}
 
 		return connect.NewResponse(&reliantv1.DeleteChatResponse{
@@ -521,8 +514,7 @@ func (s *Service) DeleteChat(
 
 	// Otherwise, archive the chat
 	if err := s.deps.Repo.UpdateChatState(ctx, req.Msg.ChatId, db.ChatStateArchived, "user_archived"); err != nil {
-		logging.ErrorContext(ctx, "Failed to archive chat", "error", err, "chatID", req.Msg.ChatId)
-		return nil, svcerr.ToConnect(svcerr.Internal("failed to archive chat"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to archive chat"))
 	}
 
 	s.cancelArchivedChatWorkflow(ctx, chat)
@@ -571,7 +563,7 @@ func (s *Service) SearchChats(
 	userID := auth.MustGetUserID(ctx)
 
 	if req.Msg.ProjectId == "" {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("project_id is required"))
+		return nil, svcerr.InvalidArgument("project_id is required")
 	}
 
 	// Return empty results if no query
@@ -596,8 +588,7 @@ func (s *Service) SearchChats(
 
 	chats, err := s.deps.Repo.SearchChats(ctx, filters)
 	if err != nil {
-		logging.ErrorContext(ctx, "Failed to search chats", "error", err)
-		return nil, svcerr.ToConnect(svcerr.Internal("failed to search chats"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to search chats"))
 	}
 
 	protoChats := make([]*reliantv1.Chat, len(chats))
@@ -620,8 +611,7 @@ func (s *Service) ListArchivedChats(
 
 	archivedChats, err := s.deps.Repo.ListArchivedChats(ctx, userID)
 	if err != nil {
-		logging.ErrorContext(ctx, "Failed to list archived chats", "error", err)
-		return nil, svcerr.ToConnect(svcerr.Internal("failed to list archived chats"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list archived chats"))
 	}
 
 	protoChats := make([]*reliantv1.ArchivedChat, len(archivedChats))
@@ -654,16 +644,16 @@ func (s *Service) ListMessages(
 	userID := auth.MustGetUserID(ctx)
 
 	if req.Msg.ChatId == "" {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("chat_id is required"))
+		return nil, svcerr.InvalidArgument("chat_id is required")
 	}
 
 	// Verify user owns the chat
 	chat, err := s.deps.Repo.GetChat(ctx, req.Msg.ChatId)
 	if err != nil {
-		return nil, svcerr.ToConnect(svcerr.NotFound("chat"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
 	if chat.UserID != userID {
-		return nil, svcerr.ToConnect(svcerr.NotFound("chat"))
+		return nil, svcerr.NotFound("chat")
 	}
 
 	// Parse pagination params
@@ -705,7 +695,7 @@ func (s *Service) ListMessages(
 
 		thread, err := s.deps.Repo.GetThread(ctx, threadID)
 		if err != nil {
-			return nil, svcerr.ToConnect(svcerr.NotFound("thread"))
+			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get thread"))
 		}
 		// Ownership is transitive through the chat, which is already
 		// authorized above. A thread from another chat is NotFound rather
@@ -713,13 +703,12 @@ func (s *Service) ListMessages(
 		// different question than the one asked is how the spawn preview
 		// came to render the wrong thing in the first place.
 		if thread.ChatID != req.Msg.ChatId {
-			return nil, svcerr.ToConnect(svcerr.NotFound("thread"))
+			return nil, svcerr.NotFound("thread")
 		}
 
 		messages, hasMore, err = s.listThreadMessages(ctx, threadsSvc, threadID, beforeSeq, recentLimit)
 		if err != nil {
-			logging.ErrorContext(ctx, "Failed to load thread messages", "error", err, "chatID", req.Msg.ChatId, "threadID", threadID)
-			return nil, loadMessagesError(ctx, err)
+			return nil, messagesReadError(ctx, err)
 		}
 		// The display count, not the LLM one: listThreadMessages reads the
 		// transcript (which crosses compaction boundaries), so a total that
@@ -727,8 +716,7 @@ func (s *Service) ListMessages(
 		// the one being returned.
 		totalCount, err = threadsSvc.CountDisplayMessages(ctx, threadID)
 		if err != nil {
-			logging.ErrorContext(ctx, "Failed to count thread messages", "error", err, "chatID", req.Msg.ChatId, "threadID", threadID)
-			return nil, loadMessagesError(ctx, err)
+			return nil, messagesReadError(ctx, err)
 		}
 		if len(messages) > 0 {
 			oldestSeq = messages[0].Seq
@@ -738,8 +726,7 @@ func (s *Service) ListMessages(
 		messages, totalCount, oldestSeq, hasMore, err = s.listMessagesBounded(
 			ctx, threadsSvc, req.Msg.ChatId, mainThreadID, beforeSeq, recentLimit)
 		if err != nil {
-			logging.ErrorContext(ctx, "Failed to load bounded messages", "error", err, "chatID", req.Msg.ChatId)
-			return nil, loadMessagesError(ctx, err)
+			return nil, messagesReadError(ctx, err)
 		}
 	default:
 		// No page size given: the caller wants the whole chat (e.g. the cold
@@ -747,8 +734,7 @@ func (s *Service) ListMessages(
 		// thread's full history and hand it to paginateBySeq unbounded.
 		messages, totalCount, err = s.listMessagesUnbounded(ctx, threadsSvc, req.Msg.ChatId, mainThreadID)
 		if err != nil {
-			logging.ErrorContext(ctx, "Failed to resolve messages", "error", err, "chatID", req.Msg.ChatId)
-			return nil, loadMessagesError(ctx, err)
+			return nil, messagesReadError(ctx, err)
 		}
 
 		var page messagePage
@@ -766,8 +752,7 @@ func (s *Service) ListMessages(
 	}
 	allBlocks, err := s.deps.Repo.ListContentBlocksForMessages(ctx, messageIDs)
 	if err != nil {
-		logging.ErrorContext(ctx, "Failed to batch list content blocks", "error", err, "chatID", req.Msg.ChatId)
-		return nil, loadMessagesError(ctx, err)
+		return nil, messagesReadError(ctx, err)
 	}
 	blocksByMessageID := make(map[string][]*db.MessageContentBlock, len(messages))
 	for _, block := range allBlocks {
@@ -822,7 +807,7 @@ func (s *Service) UpdateChatState(
 	userID := auth.MustGetUserID(ctx)
 
 	if req.Msg.ChatId == "" {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("chat_id is required"))
+		return nil, svcerr.InvalidArgument("chat_id is required")
 	}
 
 	// Validate state value
@@ -831,16 +816,16 @@ func (s *Service) UpdateChatState(
 	case db.ChatStateIdle, db.ChatStateArchived:
 		// Valid user-initiated transitions
 	default:
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("invalid state, must be 'idle' or 'archived'"))
+		return nil, svcerr.InvalidArgument("invalid state, must be 'idle' or 'archived'")
 	}
 
 	// Get chat to verify ownership
 	chat, err := s.deps.Repo.GetChat(ctx, req.Msg.ChatId)
 	if err != nil {
-		return nil, svcerr.ToConnect(svcerr.NotFound("chat"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
 	if chat.UserID != userID {
-		return nil, svcerr.ToConnect(svcerr.NotFound("chat"))
+		return nil, svcerr.NotFound("chat")
 	}
 
 	previousState := chat.State
@@ -856,8 +841,7 @@ func (s *Service) UpdateChatState(
 
 	// Update the state
 	if err := s.deps.Repo.UpdateChatState(ctx, req.Msg.ChatId, newState, reason); err != nil {
-		logging.ErrorContext(ctx, "Failed to update chat state", "error", err, "chatID", req.Msg.ChatId)
-		return nil, svcerr.ToConnect(svcerr.Internal("failed to update chat state"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to update chat state"))
 	}
 
 	// If unarchiving a chat, also unarchive the associated workspace
@@ -893,27 +877,19 @@ func (s *Service) TerminateChat(
 	userID := auth.MustGetUserID(ctx)
 
 	if req.Msg.ChatId == "" {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("chat_id is required"))
+		return nil, svcerr.InvalidArgument("chat_id is required")
 	}
 
 	chat, err := s.deps.Repo.GetChat(ctx, req.Msg.ChatId)
 	if err != nil {
-		return nil, svcerr.ToConnect(svcerr.NotFound("chat"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
 	if chat.UserID != userID {
-		return nil, svcerr.ToConnect(svcerr.NotFound("chat"))
+		return nil, svcerr.NotFound("chat")
 	}
 
 	if err := s.runs.Terminate(ctx, req.Msg.ChatId); err != nil {
-		switch {
-		case errors.Is(err, runs.ErrNoWorkflow):
-			return nil, connect.NewError(connect.CodeFailedPrecondition, err)
-		case errors.Is(err, runs.ErrChatNotFound):
-			return nil, svcerr.ToConnect(svcerr.NotFound("chat"))
-		default:
-			logging.ErrorContext(ctx, "Failed to terminate workflow", "error", err, "chatID", req.Msg.ChatId)
-			return nil, svcerr.ToConnect(svcerr.Internal("failed to terminate workflow"))
-		}
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to terminate workflow"))
 	}
 
 	return connect.NewResponse(&reliantv1.TerminateChatResponse{
@@ -932,20 +908,20 @@ func (s *Service) PauseChat(
 	userID := auth.MustGetUserID(ctx)
 
 	if req.Msg.ChatId == "" {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("chat_id is required"))
+		return nil, svcerr.InvalidArgument("chat_id is required")
 	}
 
 	// Get chat to verify ownership
 	chat, err := s.deps.Repo.GetChat(ctx, req.Msg.ChatId)
 	if err != nil {
-		return nil, svcerr.ToConnect(svcerr.NotFound("chat"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
 	if chat.UserID != userID {
-		return nil, svcerr.ToConnect(svcerr.NotFound("chat"))
+		return nil, svcerr.NotFound("chat")
 	}
 
 	if chat.WorkflowID == nil || *chat.WorkflowID == "" {
-		return nil, svcerr.ToConnect(svcerr.FailedPrecondition("chat has no workflow"))
+		return nil, svcerr.FailedPrecondition("chat has no workflow")
 	}
 
 	// From here to the paused-status write is one critical section: a
@@ -983,8 +959,7 @@ func (s *Service) PauseChat(
 	// A failed cancel push above must not strand the workflow un-paused, so
 	// this always runs regardless of that outcome.
 	if err := s.runs.Pause(ctx, req.Msg.ChatId); err != nil {
-		logging.ErrorContext(ctx, "Failed to pause workflow", "error", err, "chatID", req.Msg.ChatId)
-		return nil, svcerr.ToConnect(svcerr.Internal("failed to pause workflow"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to pause workflow"))
 	}
 
 	return connect.NewResponse(&reliantv1.PauseChatResponse{
@@ -1002,20 +977,20 @@ func (s *Service) ResumeChat(
 	userID := auth.MustGetUserID(ctx)
 
 	if req.Msg.ChatId == "" {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("chat_id is required"))
+		return nil, svcerr.InvalidArgument("chat_id is required")
 	}
 
 	// Get chat to verify ownership
 	chat, err := s.deps.Repo.GetChat(ctx, req.Msg.ChatId)
 	if err != nil {
-		return nil, svcerr.ToConnect(svcerr.NotFound("chat"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
 	if chat.UserID != userID {
-		return nil, svcerr.ToConnect(svcerr.NotFound("chat"))
+		return nil, svcerr.NotFound("chat")
 	}
 
 	if chat.WorkflowID == nil || *chat.WorkflowID == "" {
-		return nil, svcerr.ToConnect(svcerr.FailedPrecondition("chat has no workflow"))
+		return nil, svcerr.FailedPrecondition("chat has no workflow")
 	}
 
 	// A resume is a signal plus a status write, like a pause; interleaved
@@ -1026,13 +1001,12 @@ func (s *Service) ResumeChat(
 
 	outcome, err := s.runs.Resume(ctx, req.Msg.ChatId, nil)
 	if err != nil {
-		logging.ErrorContext(ctx, "Failed to resume workflow", "error", err, "chatID", req.Msg.ChatId)
-		return nil, svcerr.ToConnect(svcerr.Internal("failed to resume workflow"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to resume workflow"))
 	}
 
 	switch outcome.Kind {
 	case runs.OutcomeUnresumable:
-		return nil, svcerr.ToConnect(svcerr.FailedPrecondition("this conversation experienced a workflow error and cannot be resumed - use the branch feature to start a new conversation from any previous message"))
+		return nil, svcerr.FailedPrecondition("this conversation experienced a workflow error and cannot be resumed - use the branch feature to start a new conversation from any previous message")
 
 	case runs.OutcomeNeedsRecovery, runs.OutcomeNeedsRestart:
 		// The frontend prompts the user to confirm starting a new conversation.
@@ -1068,16 +1042,16 @@ func (s *Service) DismissChat(
 	userID := auth.MustGetUserID(ctx)
 
 	if req.Msg.ChatId == "" {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("chat_id is required"))
+		return nil, svcerr.InvalidArgument("chat_id is required")
 	}
 
 	// Get chat to verify ownership
 	chat, err := s.deps.Repo.GetChat(ctx, req.Msg.ChatId)
 	if err != nil {
-		return nil, svcerr.ToConnect(svcerr.NotFound("chat"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
 	if chat.UserID != userID {
-		return nil, svcerr.ToConnect(svcerr.NotFound("chat"))
+		return nil, svcerr.NotFound("chat")
 	}
 
 	// Only dismiss if currently unread
@@ -1091,8 +1065,7 @@ func (s *Service) DismissChat(
 
 	// Clear unread flag
 	if err := s.deps.Repo.UpdateChatUnread(ctx, req.Msg.ChatId, false, "user_dismissed"); err != nil {
-		logging.ErrorContext(ctx, "Failed to dismiss chat", "error", err, "chatID", req.Msg.ChatId)
-		return nil, svcerr.ToConnect(svcerr.Internal("failed to dismiss chat"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to dismiss chat"))
 	}
 
 	return connect.NewResponse(&reliantv1.DismissChatResponse{
@@ -1110,21 +1083,21 @@ func (s *Service) MarkUnreadChat(
 	userID := auth.MustGetUserID(ctx)
 
 	if req.Msg.ChatId == "" {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("chat_id is required"))
+		return nil, svcerr.InvalidArgument("chat_id is required")
 	}
 
 	// Get chat to verify ownership
 	chat, err := s.deps.Repo.GetChat(ctx, req.Msg.ChatId)
 	if err != nil {
-		return nil, svcerr.ToConnect(svcerr.NotFound("chat"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
 	if chat.UserID != userID {
-		return nil, svcerr.ToConnect(svcerr.NotFound("chat"))
+		return nil, svcerr.NotFound("chat")
 	}
 
 	// Don't allow marking archived chats as unread
 	if chat.State == db.ChatStateArchived {
-		return nil, svcerr.ToConnect(svcerr.FailedPrecondition("cannot mark archived chat as unread"))
+		return nil, svcerr.FailedPrecondition("cannot mark archived chat as unread")
 	}
 
 	// If already unread, no change needed
@@ -1138,8 +1111,7 @@ func (s *Service) MarkUnreadChat(
 
 	// Set unread flag
 	if err := s.deps.Repo.UpdateChatUnread(ctx, req.Msg.ChatId, true, "user_marked_unread"); err != nil {
-		logging.ErrorContext(ctx, "Failed to mark chat as unread", "error", err, "chatID", req.Msg.ChatId)
-		return nil, svcerr.ToConnect(svcerr.Internal("failed to mark chat as unread"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to mark chat as unread"))
 	}
 
 	return connect.NewResponse(&reliantv1.MarkUnreadChatResponse{
@@ -1157,19 +1129,19 @@ func (s *Service) CompactChat(
 	userID := auth.MustGetUserID(ctx)
 
 	if req.Msg.ChatId == "" {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("chat_id is required"))
+		return nil, svcerr.InvalidArgument("chat_id is required")
 	}
 	if req.Msg.ThreadId == "" {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("thread_id is required"))
+		return nil, svcerr.InvalidArgument("thread_id is required")
 	}
 
 	// Get chat to verify ownership
 	chat, err := s.deps.Repo.GetChat(ctx, req.Msg.ChatId)
 	if err != nil {
-		return nil, svcerr.ToConnect(svcerr.NotFound("chat"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
 	if chat.UserID != userID {
-		return nil, svcerr.ToConnect(svcerr.NotFound("chat"))
+		return nil, svcerr.NotFound("chat")
 	}
 
 	// Check if there are any messages to compact on the specified thread
@@ -1178,27 +1150,21 @@ func (s *Service) CompactChat(
 		Thread: &threadToCompact,
 	})
 	if err != nil {
-		logging.ErrorContext(ctx, "Failed to list messages", "error", err, "chatID", req.Msg.ChatId, "threadID", threadToCompact)
-		return nil, svcerr.ToConnect(svcerr.Internal("failed to check messages"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to check messages"))
 	}
 
 	if len(messages) == 0 {
-		return nil, svcerr.ToConnect(svcerr.FailedPrecondition("cannot compact: thread has no messages"))
+		return nil, svcerr.FailedPrecondition("cannot compact: thread has no messages")
 	}
 
 	// Check if a workflow is already running - use Temporal as source of truth
 	if workflowID := chat.MainThreadID(); workflowID != "" {
 		temporalState, err := s.runs.State(ctx, workflowID)
 		if err != nil {
-			logging.ErrorContext(ctx, "Failed to check workflow status for compaction",
-				"error", err,
-				"chatID", req.Msg.ChatId,
-				"workflowID", workflowID,
-			)
-			return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("failed to check workflow status: %w", err))
+			return nil, svcerr.WrapOr(err, svcerr.Unavailable("failed to check workflow status"))
 		}
 		if temporalState.Exists && temporalState.IsRunning {
-			return nil, svcerr.ToConnect(svcerr.FailedPrecondition("cannot compact while a workflow is running"))
+			return nil, svcerr.FailedPrecondition("cannot compact while a workflow is running")
 		}
 	}
 
@@ -1232,8 +1198,7 @@ func (s *Service) CompactChat(
 
 	workflowRun, err := s.deps.Temporal.ExecuteWorkflow(ctx, workflowOptions, v2.DynamicWorkflow, workflowInput)
 	if err != nil {
-		logging.ErrorContext(ctx, "Failed to start compact workflow", "error", err, "chatID", req.Msg.ChatId)
-		return nil, svcerr.ToConnect(svcerr.Internal("failed to start compaction"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to start compaction"))
 	}
 
 	runID := workflowRun.GetRunID()
@@ -1256,27 +1221,25 @@ func (s *Service) GetChatUpdates(
 	userID := auth.MustGetUserID(ctx)
 
 	if req.Msg.ChatId == "" {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("chat_id is required"))
+		return nil, svcerr.InvalidArgument("chat_id is required")
 	}
 
 	// Get chat with ownership check (defense-in-depth via single query)
 	_, err := s.getChatForUser(ctx, req.Msg.ChatId, userID)
 	if err != nil {
-		return nil, svcerr.ToConnect(svcerr.NotFound("chat"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
 
 	// Get updates since sequence
 	updates, err := s.deps.Repo.GetUpdatesSince(ctx, req.Msg.ChatId, req.Msg.SinceSeq, 0)
 	if err != nil {
-		logging.ErrorContext(ctx, "Failed to fetch updates", "error", err, "chatID", req.Msg.ChatId)
-		return nil, svcerr.ToConnect(svcerr.Internal("failed to fetch updates"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to fetch updates"))
 	}
 
 	// Get latest sequence for client
 	latestSeq, err := s.deps.Repo.GetLatestUpdateSequence(ctx, req.Msg.ChatId)
 	if err != nil {
-		logging.ErrorContext(ctx, "Failed to get latest sequence", "error", err, "chatID", req.Msg.ChatId)
-		return nil, svcerr.ToConnect(svcerr.Internal("failed to get latest sequence"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get latest sequence"))
 	}
 
 	// Convert to proto messages
@@ -1306,13 +1269,13 @@ func (s *Service) SetChatDaemon(
 	userID := auth.MustGetUserID(ctx)
 
 	if req.Msg.ChatId == "" {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("chat_id is required"))
+		return nil, svcerr.InvalidArgument("chat_id is required")
 	}
 
 	// Get chat and verify ownership
 	chat, err := s.getChatForUser(ctx, req.Msg.ChatId, userID)
 	if err != nil {
-		return nil, svcerr.ToConnect(svcerr.NotFound("chat"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
 
 	// Set or clear the active daemon. A daemon must be one the caller owns and,
@@ -1356,8 +1319,7 @@ func (s *Service) SetChatDaemon(
 			Data:       configData,
 		})
 	}); err != nil {
-		logging.ErrorContext(ctx, "Failed to set chat daemon", "error", err, "chatID", chat.ID)
-		return nil, svcerr.ToConnect(svcerr.Internal("failed to set chat daemon"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to set chat daemon"))
 	}
 	if connecting {
 		logging.InfoContext(ctx, "[SetChatDaemon] chat with no machine connected to a machine",
@@ -1367,7 +1329,7 @@ func (s *Service) SetChatDaemon(
 	// Re-fetch chat with updated daemon
 	updatedChat, err := s.deps.Repo.GetChat(ctx, chat.ID)
 	if err != nil {
-		return nil, svcerr.ToConnect(svcerr.Internal("failed to reload chat"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to reload chat"))
 	}
 
 	return connect.NewResponse(&reliantv1.SetChatDaemonResponse{
@@ -1404,30 +1366,28 @@ func (s *Service) UnadoptChat(
 func (s *Service) setChatAdopted(ctx context.Context, chatID string, adopted bool) (*db.Chat, error) {
 	userID := auth.MustGetUserID(ctx)
 	if chatID == "" {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("chat_id is required"))
+		return nil, svcerr.InvalidArgument("chat_id is required")
 	}
 	owned, err := s.deps.Repo.SetChatAdopted(ctx, chatID, userID, adopted)
 	if err != nil {
-		logging.ErrorContext(ctx, "Failed to set chat adoption", "error", err, "chatID", chatID, "adopted", adopted)
-		return nil, svcerr.ToConnect(svcerr.Internal("failed to update chat"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to update chat"))
 	}
 	if !owned {
-		return nil, svcerr.ToConnect(svcerr.NotFound("chat"))
+		return nil, svcerr.NotFound("chat")
 	}
 	chat, err := s.getChatForUser(ctx, chatID, userID)
 	if err != nil {
-		return nil, svcerr.ToConnect(svcerr.Internal("failed to reload chat"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to reload chat"))
 	}
 	// Adopting is taking the run into the chat list, so an archived one comes
 	// back out of the archive: an automation archives every run it finishes
 	// successfully, and "Open as chat" on one of those must land somewhere.
 	if adopted && chat.State == db.ChatStateArchived {
 		if err := s.deps.Repo.UpdateChatState(ctx, chatID, db.ChatStateIdle, "adopted"); err != nil {
-			logging.ErrorContext(ctx, "Failed to unarchive an adopted chat", "error", err, "chatID", chatID)
-			return nil, svcerr.ToConnect(svcerr.Internal("failed to update chat"))
+			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to update chat"))
 		}
 		if chat, err = s.getChatForUser(ctx, chatID, userID); err != nil {
-			return nil, svcerr.ToConnect(svcerr.Internal("failed to reload chat"))
+			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to reload chat"))
 		}
 	}
 	return chat, nil
@@ -1441,23 +1401,22 @@ func (s *Service) ListChatPlans(
 	userID := auth.MustGetUserID(ctx)
 
 	if req.Msg.ChatId == "" {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("chat_id is required"))
+		return nil, svcerr.InvalidArgument("chat_id is required")
 	}
 
 	// Get chat to verify ownership
 	chat, err := s.deps.Repo.GetChat(ctx, req.Msg.ChatId)
 	if err != nil {
-		return nil, svcerr.ToConnect(svcerr.NotFound("chat"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
 	if chat.UserID != userID {
-		return nil, svcerr.ToConnect(svcerr.NotFound("chat"))
+		return nil, svcerr.NotFound("chat")
 	}
 
 	// List plans for the chat (across all threads)
 	plans, err := s.deps.Repo.ListPlansByChatID(ctx, req.Msg.ChatId)
 	if err != nil {
-		logging.ErrorContext(ctx, "Failed to list plans", "error", err, "chatID", req.Msg.ChatId)
-		return nil, svcerr.ToConnect(svcerr.Internal("failed to list plans"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list plans"))
 	}
 
 	// Convert to proto messages
@@ -1809,17 +1768,12 @@ func paginateBySeq(messages []*db.Message, beforeSeq int64, recentLimit int, mai
 	}
 }
 
-// loadMessagesError maps a failed message read to its rpc error. A read the
-// client abandoned (tab closed, page resumed, navigation) fails with the
-// request's own cancellation; that is the caller's doing, not a server fault,
-// and reporting it as internal made every phone-browser suspend look like an
-// outage.
-func loadMessagesError(ctx context.Context, err error) error {
-	switch {
-	case errors.Is(err, context.Canceled) || errors.Is(ctx.Err(), context.Canceled):
-		return svcerr.ToConnect(svcerr.Canceled("request canceled"))
-	case errors.Is(err, context.DeadlineExceeded) || errors.Is(ctx.Err(), context.DeadlineExceeded):
-		return svcerr.ToConnect(svcerr.DeadlineExceeded("loading messages timed out"))
-	}
-	return svcerr.ToConnect(svcerr.Internal("failed to load messages"))
+// messagesReadError is a failed message read as the client reads it. A read
+// the client abandoned (tab closed, page resumed, navigation) fails with the
+// request's own cancellation or deadline even when the driver's error does not
+// say so; that is the caller's doing, not a server fault, and reporting it as
+// internal made every phone-browser suspend look like an outage. So the
+// request's end, when it has ended, is part of the error.
+func messagesReadError(ctx context.Context, err error) error {
+	return svcerr.WrapOr(errors.Join(ctx.Err(), err), svcerr.Internal("failed to load messages"))
 }

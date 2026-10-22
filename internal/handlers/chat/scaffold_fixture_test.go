@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	chat "github.com/reliant-labs/reliant/internal/handlers/chat"
 )
 
@@ -31,10 +32,12 @@ func newChatRepo() *chat.StubRepo {
 		otherChatID:    {ID: otherChatID, UserID: "someone-else", ProjectID: "project-1", Title: "Other chat", State: db.ChatStateIdle},
 		archivedChatID: {ID: archivedChatID, UserID: "test-user", ProjectID: "project-1", Title: "Archived chat", State: db.ChatStateArchived},
 	}
+	// A miss answers as the store does: core.ErrChatNotFound, the
+	// classified NotFound, wrapped with the id.
 	get := func(id string) (*db.Chat, error) {
 		c, ok := chats[id]
 		if !ok {
-			return nil, fmt.Errorf("chat %s not found", id)
+			return nil, fmt.Errorf("%w: %s", core.ErrChatNotFound, id)
 		}
 		return &c, nil
 	}
@@ -48,7 +51,7 @@ func newChatRepo() *chat.StubRepo {
 				return nil, err
 			}
 			if c.UserID != userID {
-				return nil, fmt.Errorf("chat %s not found", id)
+				return nil, fmt.Errorf("%w: %s", core.ErrChatNotFound, id)
 			}
 			return c, nil
 		},

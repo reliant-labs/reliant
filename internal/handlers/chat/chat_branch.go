@@ -30,20 +30,19 @@ func (s *Service) BranchChat(
 
 	// message_id is the primary way to identify the branch point
 	if req.Msg.MessageId == "" {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("message_id is required"))
+		return nil, svcerr.InvalidArgument("message_id is required")
 	}
 	// A worktree is a checkout on one machine, so a branch with no machine
 	// cannot name one, nor the workspace switch that describes copying into it.
 	requestedWorktree := req.Msg.WorktreeId != nil && *req.Msg.WorktreeId != ""
 	if req.Msg.GetNoMachine() && (requestedWorktree || req.Msg.WorkspaceContext != nil) {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("no_machine and worktree_id/workspace_context are mutually exclusive: a worktree lives on a machine"))
+		return nil, svcerr.InvalidArgument("no_machine and worktree_id/workspace_context are mutually exclusive: a worktree lives on a machine")
 	}
 
 	// Get the message directly by ID - simple and unambiguous
 	branchPointMsg, err := s.deps.Repo.GetMessage(ctx, req.Msg.MessageId)
 	if err != nil {
-		logging.ErrorContext(ctx, "Failed to get branch point message", "error", err, "messageID", req.Msg.MessageId)
-		return nil, svcerr.ToConnect(svcerr.NotFound("message"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get message"))
 	}
 
 	// The message knows its own chat - use that as the source
@@ -51,9 +50,11 @@ func (s *Service) BranchChat(
 
 	// Derive thread and context_sequence from context_window
 	cw, err := s.deps.Repo.GetContextWindow(ctx, branchPointMsg.ContextWindowID)
-	if err != nil || cw == nil {
-		logging.ErrorContext(ctx, "Failed to get context window for branch point message", "error", err, "messageID", req.Msg.MessageId)
-		return nil, svcerr.ToConnect(svcerr.NotFound("context window"))
+	if err != nil {
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get context window"))
+	}
+	if cw == nil {
+		return nil, svcerr.NotFound("context window")
 	}
 	branchThread := branchPointMsg.ThreadID
 	// Note: cw.Sequence was previously used for branch_snapshot but is no longer needed
@@ -62,11 +63,10 @@ func (s *Service) BranchChat(
 	// Get the source chat to verify ownership and get metadata
 	sourceChat, err := s.deps.Repo.GetChat(ctx, sourceChatID)
 	if err != nil {
-		logging.ErrorContext(ctx, "Failed to get source chat", "error", err, "chatID", sourceChatID)
-		return nil, svcerr.ToConnect(svcerr.NotFound("source chat"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get source chat"))
 	}
 	if sourceChat.UserID != userID {
-		return nil, svcerr.ToConnect(svcerr.NotFound("message"))
+		return nil, svcerr.NotFound("message")
 	}
 
 	// Get messages for context (for tool call adjustment and snapshot building)
@@ -82,8 +82,7 @@ func (s *Service) BranchChat(
 	if branchPointMsg.Role == reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT {
 		blocks, err := s.deps.Repo.ListContentBlocks(ctx, branchPointMsg.ID)
 		if err != nil {
-			logging.ErrorContext(ctx, "Failed to check for tool calls", "error", err, "messageID", branchPointMsg.ID)
-			return nil, svcerr.ToConnect(svcerr.Internal("failed to validate branch point"))
+			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to validate branch point"))
 		}
 
 		// Collect tool_call IDs from this assistant message
@@ -172,7 +171,7 @@ func (s *Service) BranchChat(
 	if noMachine {
 		mainWorktreeID, err := s.launcher().ResolveChatWorktreeID(ctx, sourceChat.ProjectID, nil)
 		if err != nil {
-			return nil, launchErrorToConnect(err)
+			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to resolve the project's main worktree"))
 		}
 		worktreeID = mainWorktreeID
 	}
@@ -181,11 +180,10 @@ func (s *Service) BranchChat(
 		// Verify the worktree exists and belongs to the same project
 		worktree, err := s.deps.Repo.GetWorktree(ctx, *req.Msg.WorktreeId)
 		if err != nil {
-			logging.ErrorContext(ctx, "Failed to get worktree for branch", "error", err, "worktreeID", *req.Msg.WorktreeId)
-			return nil, svcerr.ToConnect(svcerr.NotFound("worktree"))
+			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get worktree"))
 		}
 		if worktree.ProjectID != sourceChat.ProjectID {
-			return nil, svcerr.ToConnect(svcerr.InvalidArgument("worktree must belong to the same project"))
+			return nil, svcerr.InvalidArgument("worktree must belong to the same project")
 		}
 		worktreeID = req.Msg.WorktreeId
 		targetWorktree = worktree
@@ -209,8 +207,7 @@ func (s *Service) BranchChat(
 	if activeDaemonID == nil && !noMachine {
 		sourceDaemonID, err := daemonplacement.ChatDaemonID(ctx, s.deps.Repo, fromChat)
 		if err != nil {
-			logging.ErrorContext(ctx, "Failed to resolve source chat's machine for branch", "error", err, "chatID", fromChat.ID)
-			return nil, svcerr.ToConnect(svcerr.Internal("failed to resolve the source chat's machine"))
+			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to resolve the source chat's machine"))
 		}
 		if sourceDaemonID != "" {
 			activeDaemonID = &sourceDaemonID
@@ -259,7 +256,7 @@ func (s *Service) BranchChat(
 	// leave a branch whose first send is bound to fail.
 	if noMachine {
 		if err := s.launcher().ValidateNoMachine(ctx, userID, workflowName, sourceChat.ProjectID); err != nil {
-			return nil, launchErrorToConnect(err)
+			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to check the workflow can run without a machine"))
 		}
 	}
 
@@ -359,8 +356,7 @@ func (s *Service) BranchChat(
 
 		return nil
 	}); err != nil {
-		logging.ErrorContext(ctx, "Failed to create branched chat", "error", err, "chatID", branchChatID)
-		return nil, svcerr.ToConnect(svcerr.Internal("failed to create branch"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to create branch"))
 	}
 
 	// Answer from the committed row, not the in-memory struct: the root
@@ -369,8 +365,7 @@ func (s *Service) BranchChat(
 	// without drifting from it.
 	committed, err := s.deps.Repo.GetChat(ctx, branchChatID)
 	if err != nil {
-		logging.ErrorContext(ctx, "Failed to re-read branched chat after commit", "error", err, "chatID", branchChatID)
-		return nil, svcerr.ToConnect(svcerr.Internal("failed to load branch"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to load branch"))
 	}
 	// "Continue without machine" ends the chat it leaves waiting for its
 	// machine: the conversation now continues in the branch.
@@ -719,16 +714,16 @@ func (s *Service) ListBranches(
 	userID := auth.MustGetUserID(ctx)
 
 	if req.Msg.ChatId == "" {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("chat_id is required"))
+		return nil, svcerr.InvalidArgument("chat_id is required")
 	}
 
 	// Verify user owns the parent chat
 	chat, err := s.deps.Repo.GetChat(ctx, req.Msg.ChatId)
 	if err != nil {
-		return nil, svcerr.ToConnect(svcerr.NotFound("chat"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
 	if chat.UserID != userID {
-		return nil, svcerr.ToConnect(svcerr.NotFound("chat"))
+		return nil, svcerr.NotFound("chat")
 	}
 
 	// List all chats for the user
@@ -737,8 +732,7 @@ func (s *Service) ListBranches(
 		Limit:  1000,
 	})
 	if err != nil {
-		logging.ErrorContext(ctx, "Failed to list chats", "error", err)
-		return nil, svcerr.ToConnect(svcerr.Internal("failed to list branches"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list branches"))
 	}
 
 	// Find branches by checking each chat's root thread for fork metadata

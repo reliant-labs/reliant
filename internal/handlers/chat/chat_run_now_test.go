@@ -13,6 +13,7 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/known/structpb"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -125,7 +126,7 @@ func TestRunNow_RunsAnAutomationOnlyWorkflow(t *testing.T) {
 
 	_, err := f.start("nightly-digest", nil, nil)
 	require.Error(t, err, "a chat start of an automation-only workflow stays refused")
-	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
 
 	resp, err := f.runNow(&reliantv1.RunNowRequest{Workflow: "nightly-digest"})
 	require.NoError(t, err)
@@ -188,7 +189,7 @@ func TestRunNow_ReplayOfANonTriggerKindIsRefused(t *testing.T) {
 			Replay:   &reliantv1.ReplayEvent{TriggerName: "new-issue", Kind: kind},
 		})
 		require.Error(t, err, kind)
-		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err), kind)
+		assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err), kind)
 	}
 }
 
@@ -199,7 +200,7 @@ func TestRunNow_IsOwnerOnly(t *testing.T) {
 
 	_, err := f.runNow(&reliantv1.RunNowRequest{Workflow: "theirs"})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err), "the same refusal StartChat gives an unresolvable workflow: %v", err)
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err), "the same refusal StartChat gives an unresolvable workflow: %v", err)
 	assert.Contains(t, err.Error(), "theirs")
 
 	chats, err := f.repo.ListChats(f.ctx, db.ChatFilters{ProjectID: &f.projectID})
@@ -211,10 +212,10 @@ func TestRunNow_RequiresProjectAndWorkflow(t *testing.T) {
 	f := newBuilderTestFixture(t)
 	_, err := f.service.RunNow(f.ctx, connect.NewRequest(&reliantv1.RunNowRequest{Workflow: "x"}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 	_, err = f.service.RunNow(f.ctx, connect.NewRequest(&reliantv1.RunNowRequest{ProjectId: f.projectID}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 }
 
 // manual.run is not a launch kind StartChat can be asked for: the request has no
@@ -283,7 +284,7 @@ func TestRunNow_EnforcesRequiredAndItemBounds(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			_, err := f.runNow(&reliantv1.RunNowRequest{Workflow: "review", Inputs: tc.inputs})
 			require.Error(t, err)
-			assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+			assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 			assert.Contains(t, err.Error(), tc.want)
 		})
 	}

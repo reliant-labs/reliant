@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/client"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -229,11 +230,11 @@ func TestAdoptChat_OwnerScopedIdempotentAndExposedOnTheWire(t *testing.T) {
 	otherCtx := context.WithValue(context.Background(), auth.UserIDContextKey, "someone-else")
 	_, err := service.AdoptChat(otherCtx, connect.NewRequest(&reliantv1.AdoptChatRequest{ChatId: fx.chatID}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
 	_, err = service.UnadoptChat(otherCtx, connect.NewRequest(&reliantv1.UnadoptChatRequest{ChatId: fx.chatID}))
-	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
 	_, err = service.AdoptChat(ctx, connect.NewRequest(&reliantv1.AdoptChatRequest{}))
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 
 	first, err := service.AdoptChat(ctx, connect.NewRequest(&reliantv1.AdoptChatRequest{ChatId: fx.chatID}))
 	require.NoError(t, err)

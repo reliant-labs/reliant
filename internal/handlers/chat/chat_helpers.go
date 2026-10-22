@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -209,50 +208,6 @@ func displayStyleProtoToInt32Ptr(ds *reliantv1.DisplayStyle) *int32 {
 	}
 	v := int32(*ds)
 	return &v
-}
-
-// launchErrorToConnect maps a launch error onto the wire code this service has
-// always returned for that failure.
-//
-// internal/launch deliberately does not import connect — it runs on the worker
-// too, where there is no request to answer — so the handler owns the mapping.
-// The codes here are the ones chat creation returned before the start path moved,
-// and several are asserted by tests.
-func launchErrorToConnect(err error) error {
-	if err == nil {
-		return nil
-	}
-
-	var validationErr *launch.ValidationError
-	if errors.As(err, &validationErr) {
-		if validationErr.Kind == launch.ValidationFailedPrecondition {
-			return connect.NewError(connect.CodeFailedPrecondition, errors.New(validationErr.Reason))
-		}
-		return connect.NewError(connect.CodeInvalidArgument, errors.New(validationErr.Reason))
-	}
-
-	var notFoundErr *launch.NotFoundError
-	if errors.As(err, &notFoundErr) {
-		return connect.NewError(connect.CodeNotFound, errors.New(notFoundErr.Reason))
-	}
-
-	var alreadyErr *launch.AlreadyLaunchedError
-	if errors.As(err, &alreadyErr) {
-		return connect.NewError(connect.CodeAlreadyExists, errors.New(alreadyErr.Error()))
-	}
-
-	if errors.Is(err, launch.ErrNotPending) {
-		return connect.NewError(connect.CodeFailedPrecondition, err)
-	}
-
-	// Internal failures keep the terse message on the wire and the detail in
-	// the logs, exactly as the inline code did.
-	var internalErr *launch.InternalError
-	if errors.As(err, &internalErr) {
-		return connect.NewError(connect.CodeInternal, errors.New(internalErr.Reason))
-	}
-
-	return connect.NewError(connect.CodeInternal, err)
 }
 
 // seedMessagesFromInput converts wire InputMessages into launch seed messages.

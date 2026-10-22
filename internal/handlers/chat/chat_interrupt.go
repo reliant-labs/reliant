@@ -3,14 +3,12 @@ package chat
 
 import (
 	"context"
-	"errors"
 
 	"connectrpc.com/connect"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
-	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/threads"
 )
 
@@ -36,25 +34,11 @@ func (s *Service) InterruptThread(
 		ThreadID: req.Msg.ThreadId,
 	})
 	if err != nil {
-		return nil, interruptThreadError(err)
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to interrupt thread"))
 	}
 
 	return connect.NewResponse(&reliantv1.InterruptThreadResponse{
 		CancelledToolCalls:     int32(result.CancelledToolCalls),
 		UndeliverableToolCalls: result.UndeliverableToolCalls,
 	}), nil
-}
-
-func interruptThreadError(err error) error {
-	switch {
-	case errors.Is(err, threads.ErrInvalidArgument):
-		return connect.NewError(connect.CodeInvalidArgument, err)
-	case errors.Is(err, threads.ErrNotFound):
-		return connect.NewError(connect.CodeNotFound, err)
-	case errors.Is(err, threads.ErrInterruptUndeliverable):
-		return connect.NewError(connect.CodeUnavailable, err)
-	default:
-		logging.Error("Failed to interrupt thread", "error", err)
-		return svcerr.ToConnect(svcerr.Internal("failed to interrupt thread"))
-	}
 }

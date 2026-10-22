@@ -3,11 +3,11 @@ package chat
 
 import (
 	"context"
-	"fmt"
 
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/structpb"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -129,9 +129,7 @@ func (s *Service) resumePausedRunForMessage(ctx context.Context, userID string, 
 
 	outcome, err := s.resumePausedRun(ctx, userID, chat, root.WorkflowName, threadID, nil, nil)
 	if err != nil {
-		logging.ErrorContext(ctx, "Failed to resume a paused chat for a message queued to it",
-			"error", err, "chatID", chat.ID, "threadID", threadID)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to resume paused chat: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to resume paused chat"))
 	}
 	if outcome.Kind != runs.OutcomeResumed {
 		logging.WarnContext(ctx, "A paused chat could not be resumed in place for a queued message; withdrawing it",

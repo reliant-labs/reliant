@@ -515,7 +515,7 @@ func (s *Service) voidPendingQuestions(ctx context.Context, chatID string) {
 func (s *Service) chatRun(ctx context.Context, chatID string) (*db.Chat, string, error) {
 	chat, err := s.repo.GetChat(ctx, chatID)
 	if err != nil {
-		return nil, "", ErrChatNotFound
+		return nil, "", fmt.Errorf("load chat %s: %w", chatID, err)
 	}
 	workflowID := chat.MainThreadID()
 	if workflowID == "" {

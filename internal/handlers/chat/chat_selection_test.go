@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/sdk/client"
 	"google.golang.org/protobuf/types/known/structpb"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/chatselection"
@@ -285,7 +286,7 @@ func TestUpdateWorkflowParams_StaleVersionIsAborted(t *testing.T) {
 	req.Msg.ExpectedVersion = &stale
 	_, err := service.UpdateWorkflowParams(ctx, req)
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeAborted, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeAborted, svcerr.Code(err))
 
 	got, err := chatselection.New(repo).Get(ctx, fx.chatID)
 	require.NoError(t, err)
@@ -335,7 +336,7 @@ func TestUpdateChatProviderPolicy_RefusesNonsenseAndStaleVersions(t *testing.T) 
 		ChatId:         fx.chatID,
 		ProviderPolicy: &reliantv1.ProviderPolicy{OnLimit: reliantv1.ProviderPolicy_ON_LIMIT_FALLBACK},
 	}))
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err), "a fallback with no model is not a policy")
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err), "a fallback with no model is not a policy")
 
 	stale := first.Version
 	_, err = service.UpdateChatProviderPolicy(ctx, connect.NewRequest(&reliantv1.UpdateChatProviderPolicyRequest{
@@ -343,7 +344,7 @@ func TestUpdateChatProviderPolicy_RefusesNonsenseAndStaleVersions(t *testing.T) 
 		ProviderPolicy:  &reliantv1.ProviderPolicy{OnLimit: reliantv1.ProviderPolicy_ON_LIMIT_WAIT},
 		ExpectedVersion: &stale,
 	}))
-	assert.Equal(t, connect.CodeAborted, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeAborted, svcerr.Code(err))
 }
 
 // A second device opening the chat reads the same selection from the server.

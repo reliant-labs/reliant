@@ -13,6 +13,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/logging"
 )
 
@@ -46,7 +47,7 @@ func parseClientMessageID(raw string) (string, error) {
 	}
 	id, err := uuid.Parse(raw)
 	if err != nil {
-		return "", svcerr.ToConnect(svcerr.InvalidArgument("client_message_id must be a UUID"))
+		return "", svcerr.InvalidArgument("client_message_id must be a UUID")
 	}
 	return id.String(), nil
 }
@@ -56,21 +57,6 @@ func parseClientMessageID(raw string) (string, error) {
 func canonicalClientMessageID(raw string) string {
 	id, _ := parseClientMessageID(raw)
 	return id
-}
-
-// errClientMessageReused answers an id that already names a different message.
-func errClientMessageReused() error {
-	return svcerr.ToConnect(svcerr.AlreadyExists("client_message_id was already used for a different message; use a new id for a new message"))
-}
-
-// asConnectError keeps a handler-grade error as it is and files anything else
-// under code.
-func asConnectError(code connect.Code, err error) error {
-	var connectErr *connect.Error
-	if errors.As(err, &connectErr) {
-		return connectErr
-	}
-	return connect.NewError(code, err)
 }
 
 // priorSend is what an earlier send under the same client message id left.
@@ -101,7 +87,7 @@ func (p *priorSend) queued() bool {
 }
 
 // findPriorSend looks up what an earlier send under id left in chat. It reads:
-// it returns (nil, nil) for an id nothing has used, and errClientMessageReused
+// it returns (nil, nil) for an id nothing has used, and launch.ErrClientMessageReused
 // for one that names a different message.
 //
 // userContent is the text this send would save and attachments its attachment
@@ -118,14 +104,14 @@ func (s *Service) findPriorSend(ctx context.Context, chat *db.Chat, id, userCont
 	}
 	if msg != nil {
 		if msg.ChatID != chat.ID || msg.Role != reliantv1.MessageRole_MESSAGE_ROLE_USER {
-			return nil, errClientMessageReused()
+			return nil, launch.ErrClientMessageReused
 		}
 		same, err := s.historyMessageIs(ctx, msg.ID, userContent, attachments)
 		if err != nil {
 			return nil, err
 		}
 		if !same {
-			return nil, errClientMessageReused()
+			return nil, launch.ErrClientMessageReused
 		}
 		latest, err := s.deps.Repo.IsLatestTurnInThread(ctx, msg.ThreadID, msg.ID)
 		if err != nil {
@@ -142,7 +128,7 @@ func (s *Service) findPriorSend(ctx context.Context, chat *db.Chat, id, userCont
 		return nil, nil
 	}
 	if !humanMessageIs(row, chat.ID, userContent, attachments) {
-		return nil, errClientMessageReused()
+		return nil, launch.ErrClientMessageReused
 	}
 	return &priorSend{
 		mailbox:     row,
@@ -221,7 +207,7 @@ func replayResponse(chat *db.Chat, prior *priorSend) *connect.Response[reliantv1
 func (s *Service) priorSendOrReplay(ctx context.Context, chat *db.Chat, id, userContent string, attachments []string) (*priorSend, *connect.Response[reliantv1.SendMessageResponse], error) {
 	prior, err := s.findPriorSend(ctx, chat, id, userContent, attachments)
 	if err != nil {
-		return nil, nil, asConnectError(connect.CodeInternal, err)
+		return nil, nil, svcerr.WrapOr(err, svcerr.Internal("failed to check for an earlier send"))
 	}
 	if prior == nil {
 		return nil, nil, nil
@@ -230,7 +216,7 @@ func (s *Service) priorSendOrReplay(ctx context.Context, chat *db.Chat, id, user
 		// Never read, so it is not a message the agent has: the send starts over
 		// under the same id.
 		if _, err := s.deps.Repo.DeleteUndeliveredAgentMessage(ctx, prior.mailbox.ID, chat.ID); err != nil {
-			return nil, nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to retry an undelivered message: %w", err))
+			return nil, nil, svcerr.WrapOr(err, svcerr.Internal("failed to retry an undelivered message"))
 		}
 		return nil, nil, nil
 	}
@@ -271,7 +257,7 @@ func (s *Service) enqueueHumanMessage(ctx context.Context, msg *db.AgentMessage,
 			continue
 		}
 		if !humanMessageIs(existing, msg.ChatID, msg.Body, msg.Attachments) {
-			return nil, false, errClientMessageReused()
+			return nil, false, launch.ErrClientMessageReused
 		}
 		if existing.Status == core.AgentMessageStatusUndelivered {
 			if _, err := s.deps.Repo.DeleteUndeliveredAgentMessage(ctx, existing.ID, msg.ChatID); err != nil {
@@ -301,7 +287,7 @@ func (s *Service) savedSendID(ctx context.Context, chatID, id string) (string, e
 	}
 	if msg != nil {
 		if msg.ChatID != chatID {
-			return "", errClientMessageReused()
+			return "", launch.ErrClientMessageReused
 		}
 		return msg.ID, nil
 	}
@@ -313,7 +299,7 @@ func (s *Service) savedSendID(ctx context.Context, chatID, id string) (string, e
 		return "", nil
 	}
 	if row.ChatID != chatID {
-		return "", errClientMessageReused()
+		return "", launch.ErrClientMessageReused
 	}
 	return row.ID, nil
 }

@@ -45,27 +45,33 @@ func (s *Service) RunNow(
 	userID := auth.MustGetUserID(ctx)
 	msg := req.Msg
 	if strings.TrimSpace(msg.GetProjectId()) == "" {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("project_id is required"))
+		return nil, svcerr.InvalidArgument("project_id is required")
 	}
 	if strings.TrimSpace(msg.GetWorkflow()) == "" {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("workflow is required"))
+		return nil, svcerr.InvalidArgument("workflow is required")
 	}
 
 	message := strings.TrimSpace(msg.GetMessage())
 	var extra map[string]any
 	if msg.GetReplay() != nil {
+		// The replay's own validation speaks to the person who wrote it, so
+		// its words are the message.
 		replay, err := triggers.ReplayFromProto(msg.GetReplay(), nil)
 		if err != nil {
-			return nil, connect.NewError(connect.CodeInvalidArgument, err)
+			return nil, svcerr.InvalidArgument(err.Error())
 		}
 		if replay.Kind == "" {
+			// A failure to read the workflow is classified (an Internal, or the
+			// request's deadline); anything else is a verdict about the
+			// workflow, whose words name the remedy.
 			wf, err := launch.ResolveRunWorkflow(ctx, s.deps.Repo, userID, msg.GetWorkflow(), msg.GetProjectId())
 			if err != nil {
-				return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("workflow %q does not resolve to a runnable workflow: %w", msg.GetWorkflow(), err))
+				return nil, svcerr.WrapOr(err, svcerr.WithMessage(svcerr.ErrNotFound,
+					fmt.Sprintf("workflow %q does not resolve to a runnable workflow: %v", msg.GetWorkflow(), err)))
 			}
 			replay.Kind, err = triggers.ReplayKind(wf, replay.TriggerName)
 			if err != nil {
-				return nil, connect.NewError(connect.CodeInvalidArgument, err)
+				return nil, svcerr.InvalidArgument(err.Error())
 			}
 		}
 		message = triggers.SeedWithReplay(message, replay)

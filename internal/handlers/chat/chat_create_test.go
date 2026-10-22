@@ -8,6 +8,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -74,8 +75,8 @@ nodes:
 	}))
 	require.Error(t, err)
 
-	connectErr := new(connect.Error)
-	require.ErrorAs(t, err, &connectErr)
+	require.Error(t, err)
+	connectErr := svcerr.ToConnect(err)
 	require.Equal(t, connect.CodeFailedPrecondition, connectErr.Code())
 	require.Contains(t, connectErr.Message(), "workflow tree validation failed")
 	require.Contains(t, connectErr.Message(), "invalid-spawn-tree")

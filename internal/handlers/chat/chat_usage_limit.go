@@ -20,22 +20,23 @@ import (
 // usableFallbackModel checks the "<model>@<driver>" a person asked to continue
 // on: it must name a provider they have connected that serves the model. A
 // wait that was answered with a model nobody can serve would only fail the
-// next turn, so it is refused here, where the person can pick another.
+// next turn, so it is refused here, where the person can pick another. A
+// refusal is an svcerr.InvalidArgument.
 func usableFallbackModel(ctx context.Context, userID, modelAtDriver string) (string, error) {
 	modelID, driverID := drivers.ParseModelIDWithDriver(modelAtDriver)
 	if driverID == "" {
-		return "", fmt.Errorf("use_model must name a provider as <model>@<provider>")
+		return "", svcerr.InvalidArgument("use_model must name a provider as <model>@<provider>")
 	}
 	if _, ok := models.MustGetRegistry().GetDefinition(modelID); !ok {
-		return "", fmt.Errorf("unknown model %q", modelID)
+		return "", svcerr.InvalidArgument(fmt.Sprintf("unknown model %q", modelID))
 	}
 	avail := drivers.GetAvailableDrivers(ctx, userID)
 	cfg, ok := avail.Drivers[models.DriverID(driverID)]
 	if !ok || !cfg.IsConfigured() {
-		return "", fmt.Errorf("the %s provider is not connected", models.ProviderDisplayName(driverID))
+		return "", svcerr.InvalidArgument(fmt.Sprintf("the %s provider is not connected", models.ProviderDisplayName(driverID)))
 	}
 	if !models.CanDriverUseModel(models.Family(driverID), models.ModelID(modelID)) {
-		return "", fmt.Errorf("the %s provider does not serve %s", models.ProviderDisplayName(driverID), modelID)
+		return "", svcerr.InvalidArgument(fmt.Sprintf("the %s provider does not serve %s", models.ProviderDisplayName(driverID), modelID))
 	}
 	return modelAtDriver, nil
 }
@@ -63,11 +64,11 @@ func (s *Service) RetryUsageLimitWait(
 ) (*connect.Response[reliantv1.RetryUsageLimitWaitResponse], error) {
 	userID := auth.MustGetUserID(ctx)
 	if req.Msg.ChatId == "" {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("chat_id is required"))
+		return nil, svcerr.InvalidArgument("chat_id is required")
 	}
 	chat, err := s.getChatForUser(ctx, req.Msg.ChatId, userID)
 	if err != nil {
-		return nil, svcerr.ToConnect(svcerr.NotFound("chat"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
 	if !isWaitingOnUsageLimit(chat) {
 		return connect.NewResponse(&reliantv1.RetryUsageLimitWaitResponse{Woken: false}), nil
@@ -76,14 +77,12 @@ func (s *Service) RetryUsageLimitWait(
 	if req.Msg.UseModel != nil && *req.Msg.UseModel != "" {
 		useModel, err := usableFallbackModel(ctx, userID, *req.Msg.UseModel)
 		if err != nil {
-			return nil, connect.NewError(connect.CodeInvalidArgument, err)
+			return nil, err
 		}
 		signal.UseModel = useModel
 	}
 	if err := s.deps.Temporal.SignalWorkflow(ctx, *chat.WorkflowID, "", v2.UsageLimitRetrySignalName, signal); err != nil {
-		logging.WarnContext(ctx, "Could not wake a run waiting on a usage limit",
-			"error", err, "chatID", chat.ID, "workflowID", *chat.WorkflowID)
-		return nil, svcerr.ToConnect(svcerr.Internal("failed to wake the run"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to wake the run"))
 	}
 	logging.InfoContext(ctx, "Woke a run waiting on a usage limit", "chatID", chat.ID, "workflowID", *chat.WorkflowID)
 	return connect.NewResponse(&reliantv1.RetryUsageLimitWaitResponse{Woken: true}), nil

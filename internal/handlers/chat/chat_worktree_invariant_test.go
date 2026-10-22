@@ -8,6 +8,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -131,12 +132,13 @@ func TestResolveChatWorktreeID_RejectsUnknownWorktree(t *testing.T) {
 	_, resolveErr := service.launcher().ResolveChatWorktreeID(ctx, projectID, &missing)
 	require.Error(t, resolveErr, "a dangling worktree_id must be refused, not silently accepted")
 
-	// The resolver returns a launch domain error; the handler is what turns it
-	// into a wire code, so assert the pair rather than either half alone.
-	err := launchErrorToConnect(resolveErr)
+	// The resolver returns a launch error carrying its svcerr kind; svcerr.Wrap
+	// is what the interceptor makes of it, so assert the pair rather than
+	// either half alone.
+	err := svcerr.Wrap(resolveErr)
 
-	connectErr := new(connect.Error)
-	require.ErrorAs(t, err, &connectErr)
+	require.Error(t, err)
+	connectErr := svcerr.ToConnect(err)
 	require.Equal(t, connect.CodeNotFound, connectErr.Code())
 }
 
@@ -155,10 +157,10 @@ func TestResolveChatWorktreeID_RejectsForeignProjectWorktree(t *testing.T) {
 	// wrong tree and look like it worked.
 	_, resolveErr := service.launcher().ResolveChatWorktreeID(ctx, projectID, &otherMainWorktreeID)
 	require.Error(t, resolveErr)
-	err := launchErrorToConnect(resolveErr)
+	err := svcerr.Wrap(resolveErr)
 
-	connectErr := new(connect.Error)
-	require.ErrorAs(t, err, &connectErr)
+	require.Error(t, err)
+	connectErr := svcerr.ToConnect(err)
 	require.Equal(t, connect.CodeInvalidArgument, connectErr.Code())
 }
 
@@ -173,10 +175,10 @@ func TestResolveChatWorktreeID_RejectsProjectWithoutMainWorktree(t *testing.T) {
 	// The buggy state is refused rather than written as null.
 	_, resolveErr := service.launcher().ResolveChatWorktreeID(ctx, projectID, nil)
 	require.Error(t, resolveErr)
-	err := launchErrorToConnect(resolveErr)
+	err := svcerr.Wrap(resolveErr)
 
-	connectErr := new(connect.Error)
-	require.ErrorAs(t, err, &connectErr)
+	require.Error(t, err)
+	connectErr := svcerr.ToConnect(err)
 	require.Equal(t, connect.CodeFailedPrecondition, connectErr.Code())
 	require.Contains(t, connectErr.Message(), "no main worktree")
 }

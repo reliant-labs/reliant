@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -100,5 +101,5 @@ func TestListStepExecutions_OtherUsersChatIsNotFound(t *testing.T) {
 
 	otherCtx := context.WithValue(context.Background(), auth.UserIDContextKey, "someone-else")
 	_, err := (&Service{deps: Deps{Repo: repo}}).ListStepExecutions(otherCtx, connect.NewRequest(&reliantv1.ListStepExecutionsRequest{ChatId: chatID}))
-	require.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+	require.Equal(t, connect.CodeNotFound, svcerr.Code(err))
 }

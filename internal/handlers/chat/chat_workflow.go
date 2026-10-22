@@ -31,16 +31,16 @@ func (s *Service) UpdateWorkflowParams(
 	userID := auth.MustGetUserID(ctx)
 
 	if req.Msg.ChatId == "" {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("chat_id is required"))
+		return nil, svcerr.InvalidArgument("chat_id is required")
 	}
 
 	// Get chat to verify ownership
 	chat, err := s.deps.Repo.GetChat(ctx, req.Msg.ChatId)
 	if err != nil {
-		return nil, svcerr.ToConnect(svcerr.NotFound("chat"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
 	if chat.UserID != userID {
-		return nil, svcerr.ToConnect(svcerr.NotFound("chat"))
+		return nil, svcerr.NotFound("chat")
 	}
 
 	// Always signal the root workflow. Child workflows are inline goroutines
@@ -53,11 +53,11 @@ func (s *Service) UpdateWorkflowParams(
 			runID = *chat.RunID
 		}
 	} else {
-		return nil, svcerr.ToConnect(svcerr.FailedPrecondition("no active workflow for chat"))
+		return nil, svcerr.FailedPrecondition("no active workflow for chat")
 	}
 
 	if err := launch.ValidateWorkflowParamStructure(req.Msg.Params); err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, err
 	}
 
 	// If targeting a specific thread, verify there is a run of it for the
@@ -87,7 +87,7 @@ func (s *Service) UpdateWorkflowParams(
 		for i, e := range validationErrors {
 			errMsgs[i] = e.Error()
 		}
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument(fmt.Sprintf("workflow input validation failed: %s", strings.Join(errMsgs, "; "))))
+		return nil, svcerr.InvalidArgument(fmt.Sprintf("workflow input validation failed: %s", strings.Join(errMsgs, "; ")))
 	}
 
 	if threadScoped {
@@ -95,7 +95,7 @@ func (s *Service) UpdateWorkflowParams(
 		// are signalled and remembered by the run, never stored as the
 		// selection (which would hand the sub-agent's model to the next root run).
 		stateUpdate["__thread"] = *req.Msg.ThreadId
-		if err := s.signalParamUpdate(ctx, req.Msg.ChatId, workflowID, runID, req.Msg.ThreadId, stateUpdate); err != nil {
+		if err := s.signalParamUpdate(ctx, workflowID, runID, stateUpdate); err != nil {
 			return nil, err
 		}
 		return connect.NewResponse(&reliantv1.UpdateWorkflowParamsResponse{
@@ -116,7 +116,7 @@ func (s *Service) UpdateWorkflowParams(
 	}
 	sel, err := s.recordSelection(ctx, userID, chat, workflowName, req.Msg.Params, stateUpdate, moves, req.Msg.GetExpectedVersion())
 	if err != nil {
-		return nil, versionConflictError()
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to record the chat's selection"))
 	}
 	if sel == nil {
 		sel, _ = s.selections().Get(ctx, chat.ID)
@@ -131,7 +131,7 @@ func (s *Service) UpdateWorkflowParams(
 			}
 		}
 		s.postModelFallbackNotices(ctx, req.Msg.ChatId, workflowID, workflowID, news)
-		if err := s.signalParamUpdate(ctx, req.Msg.ChatId, workflowID, runID, nil, stateUpdate); err != nil {
+		if err := s.signalParamUpdate(ctx, workflowID, runID, stateUpdate); err != nil {
 			return nil, err
 		}
 	}
@@ -162,7 +162,7 @@ func (s *Service) rootRunIsLive(ctx context.Context, workflowID string) bool {
 
 // signalParamUpdate delivers an input update to the chat's run. Thread-scoped
 // updates ride in the payload under __thread.
-func (s *Service) signalParamUpdate(ctx context.Context, chatID, workflowID, runID string, threadID *string, update map[string]interface{}) error {
+func (s *Service) signalParamUpdate(ctx context.Context, workflowID, runID string, update map[string]interface{}) error {
 	err := s.deps.Temporal.SignalWorkflow(ctx, workflowID, runID, "update_workflow_state", update)
 	if err == nil {
 		return nil
@@ -170,12 +170,7 @@ func (s *Service) signalParamUpdate(ctx context.Context, chatID, workflowID, run
 	if stale := staleWorkflowSignalError(err); stale != nil {
 		return stale
 	}
-	logging.ErrorContext(ctx, "Failed to signal workflow for param update",
-		"chatID", chatID,
-		"workflowID", workflowID,
-		"threadID", threadID,
-		"error", err)
-	return svcerr.ToConnect(svcerr.Internal("failed to update workflow params"))
+	return svcerr.WrapOr(fmt.Errorf("signal workflow %s: %w", workflowID, err), svcerr.Internal("failed to update workflow params"))
 }
 
 // threadAcceptsParamUpdate reports whether thread-scoped params can be applied
@@ -185,8 +180,11 @@ func (s *Service) signalParamUpdate(ctx context.Context, chatID, workflowID, run
 // A thread that finished has no next run for them to apply to.
 func (s *Service) threadAcceptsParamUpdate(ctx context.Context, chat *db.Chat, threadID string) error {
 	wf, err := s.deps.Repo.GetWorkflowByThread(ctx, chat.ID, threadID)
-	if err != nil || wf == nil {
-		return svcerr.ToConnect(svcerr.WithMessage(svcerr.ErrNotFound, "no workflow found for thread"))
+	if err != nil {
+		return svcerr.WrapOr(err, svcerr.Internal("failed to get the thread's workflow"))
+	}
+	if wf == nil {
+		return svcerr.WithMessage(svcerr.ErrNotFound, "no workflow found for thread")
 	}
 	if wf.Status == db.Active() {
 		return nil
@@ -194,7 +192,7 @@ func (s *Service) threadAcceptsParamUpdate(ctx context.Context, chat *db.Chat, t
 	if s.canResumeStoppedAgent(ctx, chat, threadID) {
 		return nil
 	}
-	return svcerr.ToConnect(svcerr.FailedPrecondition("thread workflow is not running"))
+	return svcerr.FailedPrecondition("thread workflow is not running")
 }
 
 // staleWorkflowSignalError is the error for a param-update signal that found
@@ -210,7 +208,7 @@ func staleWorkflowSignalError(err error) error {
 	if !errors.As(err, &notFound) {
 		return nil
 	}
-	return svcerr.ToConnect(svcerr.FailedPrecondition("the chat's workflow is no longer running"))
+	return svcerr.FailedPrecondition("the chat's workflow is no longer running")
 }
 
 // GetWorkflowExecutions returns the workflow execution tree for a chat
@@ -221,23 +219,22 @@ func (s *Service) GetWorkflowExecutions(
 	userID := auth.MustGetUserID(ctx)
 
 	if req.Msg.ChatId == "" {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("chat_id is required"))
+		return nil, svcerr.InvalidArgument("chat_id is required")
 	}
 
 	// Verify ownership
 	chat, err := s.deps.Repo.GetChat(ctx, req.Msg.ChatId)
 	if err != nil {
-		return nil, svcerr.ToConnect(svcerr.NotFound("chat"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
 	if chat.UserID != userID {
-		return nil, svcerr.ToConnect(svcerr.NotFound("chat"))
+		return nil, svcerr.NotFound("chat")
 	}
 
 	// Get all workflows for this chat
 	workflows, err := s.deps.Repo.ListWorkflowsByChat(ctx, req.Msg.ChatId)
 	if err != nil {
-		logging.ErrorContext(ctx, "Failed to list workflows", "error", err, "chatID", req.Msg.ChatId)
-		return nil, svcerr.ToConnect(svcerr.Internal("failed to list workflows"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list workflows"))
 	}
 
 	if len(workflows) == 0 {
@@ -269,8 +266,7 @@ func (s *Service) GetWorkflowExecutions(
 		steps, err = s.deps.Repo.GetBasicStepExecutionsForChat(ctx, req.Msg.ChatId)
 	}
 	if err != nil {
-		logging.ErrorContext(ctx, "Failed to get step executions", "error", err, "chatID", req.Msg.ChatId)
-		return nil, svcerr.ToConnect(svcerr.Internal("failed to get step executions"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get step executions"))
 	}
 	stepsByWorkflow := make(map[string][]*db.ChatStepExecution)
 	for _, step := range steps {
@@ -389,25 +385,25 @@ func (s *Service) GetThreadWorkflowInputs(
 	userID := auth.MustGetUserID(ctx)
 
 	if req.Msg.ChatId == "" || req.Msg.ThreadId == "" {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("chat_id and thread_id are required"))
+		return nil, svcerr.InvalidArgument("chat_id and thread_id are required")
 	}
 
 	// Verify chat ownership
 	chat, err := s.deps.Repo.GetChat(ctx, req.Msg.ChatId)
 	if err != nil {
-		return nil, svcerr.ToConnect(svcerr.NotFound("chat"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
 	if chat.UserID != userID {
-		return nil, svcerr.ToConnect(svcerr.NotFound("chat"))
+		return nil, svcerr.NotFound("chat")
 	}
 
 	// Look up the workflow record for this thread
 	wf, err := s.deps.Repo.GetWorkflowByThread(ctx, req.Msg.ChatId, req.Msg.ThreadId)
 	if err != nil {
-		return nil, svcerr.ToConnect(svcerr.WithMessage(svcerr.ErrNotFound, "no workflow found for thread"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get the thread's workflow"))
 	}
 	if wf == nil {
-		return nil, svcerr.ToConnect(svcerr.WithMessage(svcerr.ErrNotFound, "no workflow found for thread"))
+		return nil, svcerr.WithMessage(svcerr.ErrNotFound, "no workflow found for thread")
 	}
 
 	isRunning := wf.Status == db.Active()

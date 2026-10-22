@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/enums/v1"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/runs"
@@ -48,8 +49,8 @@ func TestSendMessage_PendingChatIsRejected(t *testing.T) {
 	_, err := service.SendMessage(ctx, sendMessageRequest(t, fx.chatID, "first message of a branch"))
 	require.Error(t, err)
 
-	connectErr := new(connect.Error)
-	require.ErrorAs(t, err, &connectErr)
+	require.Error(t, err)
+	connectErr := svcerr.ToConnect(err)
 	assert.Equal(t, connect.CodeFailedPrecondition, connectErr.Code())
 	assert.Contains(t, connectErr.Message(), "StartChat",
 		"the error must name the RPC the caller should use instead")

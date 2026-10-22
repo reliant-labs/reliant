@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/sdk/client"
 	"google.golang.org/protobuf/types/known/structpb"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	llmdrivers "github.com/reliant-labs/reliant/internal/llm/drivers"
@@ -101,7 +102,7 @@ func TestSendMessage_RejectedParamsPersistNothing(t *testing.T) {
 
 			_, err := service.SendMessage(ctx, sendWithUnknownModel(t, fx.chatID, "continue"))
 			require.Error(t, err, "a model the registry does not know must be refused")
-			assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+			assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 			assert.Contains(t, err.Error(), retiredModelID,
 				"the refusal must name the model the user has to change")
 

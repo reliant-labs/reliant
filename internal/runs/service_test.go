@@ -14,6 +14,7 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/orm"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/workflow"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -696,12 +697,12 @@ func TestLifecycleCalls_RejectChatWithoutWorkflow(t *testing.T) {
 
 func TestLifecycleCalls_RejectMissingChat(t *testing.T) {
 	repo, temporal, pause, _ := fixture(t)
-	repo.chatErr = errors.New("no rows")
+	repo.chatErr = core.ErrChatNotFound
 	svc := NewService(repo, temporal, pause)
 
 	_, err := svc.Resume(context.Background(), "chat-1", nil)
-	assert.ErrorIs(t, err, ErrChatNotFound)
-	assert.ErrorIs(t, svc.Terminate(context.Background(), "chat-1"), ErrChatNotFound)
+	assert.ErrorIs(t, err, core.ErrChatNotFound)
+	assert.ErrorIs(t, svc.Terminate(context.Background(), "chat-1"), core.ErrChatNotFound)
 }
 
 // =========================================================================

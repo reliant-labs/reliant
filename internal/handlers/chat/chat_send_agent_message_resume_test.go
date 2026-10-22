@@ -9,6 +9,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -233,11 +234,11 @@ func TestThreadAcceptsParamUpdate_StoppedSubAgentDoesAFinishedOneDoesNot(t *test
 	require.NoError(t, repo.UpdateWorkflowStatus(ctx, fx.rootThreadID, db.Completed()))
 	err = service.threadAcceptsParamUpdate(ctx, chat, fx.childThreadID)
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err), "nothing will resume it once the chat's run has ended")
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err), "nothing will resume it once the chat's run has ended")
 	require.NoError(t, repo.UpdateWorkflowStatus(ctx, fx.rootThreadID, db.Active()))
 
 	stopSubAgent(t, repo, ctx, fx, db.ThreadStatusCompleted, db.Completed())
 	err = service.threadAcceptsParamUpdate(ctx, chat, fx.childThreadID)
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err), "a finished agent has no next run")
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err), "a finished agent has no next run")
 }

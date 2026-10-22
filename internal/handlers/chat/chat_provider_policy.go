@@ -29,7 +29,7 @@ func (s *Service) signalProviderPolicy(ctx context.Context, userID string, chat 
 	if len(update) == 0 {
 		return
 	}
-	if err := s.signalParamUpdate(ctx, chat.ID, workflowID, runID, nil, update); err != nil {
+	if err := s.signalParamUpdate(ctx, workflowID, runID, update); err != nil {
 		logging.WarnContext(ctx, "Could not signal the chat's provider policy to its live run", "chatID", chat.ID, "error", err)
 	}
 }

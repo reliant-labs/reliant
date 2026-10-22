@@ -20,6 +20,7 @@ import (
 
 	"google.golang.org/protobuf/types/known/structpb"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	cfg "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -43,11 +44,12 @@ import (
 
 // ValidateWorkflowParamStructure rejects dotted param keys, which silently
 // never reach the workflow: inputs are nested objects, so "agent.model" is a
-// top-level key named "agent.model" rather than a path into "agent".
+// top-level key named "agent.model" rather than a path into "agent". The
+// refusal is an svcerr.InvalidArgument naming the key.
 func ValidateWorkflowParamStructure(params map[string]*structpb.Value) error {
 	for key, value := range params {
 		if strings.Contains(key, ".") {
-			return fmt.Errorf("workflow_params contains dotted key %q; use nested objects instead (for example {\"agent\": {\"model\": ...}})", key)
+			return svcerr.InvalidArgument(fmt.Sprintf("workflow_params contains dotted key %q; use nested objects instead (for example {\"agent\": {\"model\": ...}})", key))
 		}
 		if err := validateWorkflowParamKeyPath(key, value); err != nil {
 			return err
@@ -70,7 +72,7 @@ func validateWorkflowParamKeyPath(keyPath string, value *structpb.Value) error {
 			nestedPath = keyPath + "." + nestedKey
 		}
 		if strings.Contains(nestedKey, ".") {
-			return fmt.Errorf("workflow_params contains dotted key %q; use nested objects instead (for example {\"agent\": {\"model\": ...}})", nestedPath)
+			return svcerr.InvalidArgument(fmt.Sprintf("workflow_params contains dotted key %q; use nested objects instead (for example {\"agent\": {\"model\": ...}})", nestedPath))
 		}
 		nestedProtoValue, err := structpb.NewValue(nestedValue)
 		if err != nil {
@@ -556,11 +558,14 @@ func (l *Launcher) LoadWorkflowForValidation(ctx context.Context, workflowName, 
 
 // WorkflowLookupError marks a failure to READ a workflow, as opposed to a
 // workflow that is absent or malformed. The first is a store problem and
-// retryable; only the second can never launch.
+// retryable; only the second can never launch. It is an Internal, with Err the
+// withheld cause.
 type WorkflowLookupError struct{ Err error }
 
 func (e *WorkflowLookupError) Error() string { return e.Err.Error() }
-func (e *WorkflowLookupError) Unwrap() error { return e.Err }
+func (e *WorkflowLookupError) Unwrap() error {
+	return svcerr.WithCause(svcerr.Internal("failed to look up workflow"), e.Err)
+}
 
 // draftRootFor names the workflow whose saved draft may run without being
 // marked complete: the root of a builder test run, and nothing else. A test run
