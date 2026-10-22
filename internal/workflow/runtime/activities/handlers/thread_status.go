@@ -55,11 +55,11 @@ type ThreadStatusOutput struct {
 // ThreadStatusActivity records thread lifecycle on the threads table and
 // mirrors it to chat_updates for the UI.
 type ThreadStatusActivity struct {
-	repo db.Repository
+	repo ThreadStatusStore
 }
 
 // NewThreadStatusActivity creates a new ThreadStatusActivity.
-func NewThreadStatusActivity(repo db.Repository) *ThreadStatusActivity {
+func NewThreadStatusActivity(repo ThreadStatusStore) *ThreadStatusActivity {
 	return &ThreadStatusActivity{repo: repo}
 }
 

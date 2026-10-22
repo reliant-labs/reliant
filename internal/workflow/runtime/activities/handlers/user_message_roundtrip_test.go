@@ -37,7 +37,7 @@ const (
 // handlers/chat StartChat and SendMessage.
 // Returns chatID, workflowID (= threadID for root), and the thread service.
 // =============================================================================
-func setupChatWithWorkflowAndThread(t *testing.T, repo db.Repository) (chatID, workflowID string, svc *threads.Service) {
+func setupChatWithWorkflowAndThread(t *testing.T, repo *db.Repo) (chatID, workflowID string, svc *threads.Service) {
 	t.Helper()
 	ctx := context.Background()
 

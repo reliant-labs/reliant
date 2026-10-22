@@ -234,7 +234,7 @@ func ptrValue(s *string) string {
 // ExecuteToolsActivity implements the execute_tools activity.
 // This activity executes multiple tool calls in parallel and returns all results
 type ExecuteToolsActivity struct {
-	repo         db.Repository
+	repo         ExecuteToolsStore
 	toolExecutor toolexec.ToolExecutor
 	// configProvider resolves the project's skills for the skill tool. Set by
 	// WithConfigProvider; nil means the skill tool sees none.
@@ -242,7 +242,7 @@ type ExecuteToolsActivity struct {
 }
 
 // NewExecuteToolsActivity creates a new ExecuteToolsActivity
-func NewExecuteToolsActivity(repo db.Repository, toolExecutor toolexec.ToolExecutor) *ExecuteToolsActivity {
+func NewExecuteToolsActivity(repo ExecuteToolsStore, toolExecutor toolexec.ToolExecutor) *ExecuteToolsActivity {
 	return &ExecuteToolsActivity{
 		repo:         repo,
 		toolExecutor: toolExecutor,

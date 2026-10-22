@@ -49,9 +49,9 @@ func (r *waitFakeRouter) EnsureAwake(_ context.Context, _ string, sel *toolexec.
 	return "d1", r.wakeErr
 }
 
-// markerRepo records every daemon-blocked write.
+// markerRepo records every daemon-blocked write over a real repository.
 type markerRepo struct {
-	db.Repository
+	*db.Repo
 	mu     sync.Mutex
 	writes []bool
 }
@@ -62,6 +62,11 @@ func (r *markerRepo) SetChatDaemonBlocked(_ context.Context, _ string, blocked b
 	r.writes = append(r.writes, blocked)
 	return nil
 }
+
+var (
+	_ PreflightDaemonCheckStore = (*markerRepo)(nil)
+	_ MachineResumeWakeStore    = (*markerRepo)(nil)
+)
 
 func (r *markerRepo) got() []bool {
 	r.mu.Lock()
@@ -91,7 +96,7 @@ func (r *machineStateRouter) MachineState(context.Context, string, *toolexec.Dae
 
 // chatActivity is the chat's activity as the chat list reads it
 // (chats_with_activity).
-func chatActivity(t *testing.T, repo db.Repository, chatID string) reliantv1.ChatActivity {
+func chatActivity(t *testing.T, repo RunOwnerReader, chatID string) reliantv1.ChatActivity {
 	t.Helper()
 	chat, err := repo.GetChat(context.Background(), chatID)
 	require.NoError(t, err)
@@ -109,7 +114,7 @@ func newWaitFixture(t *testing.T, noMachine bool, router toolexec.DaemonRouter) 
 		CreatedAt: time.Now(), UpdatedAt: time.Now()}))
 	require.NoError(t, base.CreateChat(ctx, &db.Chat{ID: chatID, UserID: "u1", Title: "t", ProjectID: projectID,
 		State: db.ChatStateIdle, NoMachine: noMachine, CreatedAt: time.Now(), UpdatedAt: time.Now()}))
-	repo := &markerRepo{Repository: base}
+	repo := &markerRepo{Repo: base}
 	a := NewPreflightDaemonCheckActivity(repo, toolexec.NewRemoteExecutor(router))
 	a.pollInterval = 10 * time.Millisecond
 	return a, repo, chatID

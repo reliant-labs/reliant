@@ -18,7 +18,7 @@ import (
 //
 // A missing thread row is not an error: callers pass thread ids that may not
 // have a row (a run that predates threads), and those have no binding.
-func effectiveWorktreeID(ctx context.Context, repo db.Repository, chat *db.Chat, thread string) (*string, bool, error) {
+func effectiveWorktreeID(ctx context.Context, repo ThreadWorktreeReader, chat *db.Chat, thread string) (*string, bool, error) {
 	if thread != "" {
 		t, err := repo.GetThread(ctx, thread)
 		switch {

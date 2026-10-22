@@ -87,11 +87,11 @@ type WorkflowStatusOutput struct {
 // WorkflowStatusActivity implements TypedActivity[WorkflowStatusInput, WorkflowStatusOutput]
 // This activity writes workflow status updates to chat_updates for UI notifications
 type WorkflowStatusActivity struct {
-	repo db.Repository
+	repo WorkflowStatusStore
 }
 
 // NewWorkflowStatusActivity creates a new WorkflowStatusActivity
-func NewWorkflowStatusActivity(repo db.Repository) *WorkflowStatusActivity {
+func NewWorkflowStatusActivity(repo WorkflowStatusStore) *WorkflowStatusActivity {
 	return &WorkflowStatusActivity{
 		repo: repo,
 	}

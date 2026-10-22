@@ -11,7 +11,6 @@ import (
 	"go.temporal.io/sdk/temporal"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/gitpublish"
 	"github.com/reliant-labs/reliant/internal/integrations/catalog"
@@ -41,7 +40,7 @@ import (
 
 // GitPublishActivity implements the git_publish node type.
 type GitPublishActivity struct {
-	repo         db.Repository
+	repo         GitPublishStore
 	daemonRouter toolexec.DaemonRouter
 	catalog      *catalog.Catalog
 	runner       writeledger.Runner
@@ -66,7 +65,7 @@ type pushTokenSource interface {
 // NewGitPublishActivity builds the activity. credentials resolves the GitHub
 // credential the same way an action node's does (a saved connection, else the
 // delegated broker); nil makes every publish fail with a FailedPrecondition.
-func NewGitPublishActivity(repo db.Repository, daemonRouter toolexec.DaemonRouter, credentials httpaction.CredentialSource) *GitPublishActivity {
+func NewGitPublishActivity(repo GitPublishStore, daemonRouter toolexec.DaemonRouter, credentials httpaction.CredentialSource) *GitPublishActivity {
 	cat := catalog.MustBuiltin()
 	return &GitPublishActivity{
 		repo: repo, daemonRouter: daemonRouter, catalog: cat,

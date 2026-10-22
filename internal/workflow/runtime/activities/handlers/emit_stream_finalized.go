@@ -35,11 +35,11 @@ type EmitStreamFinalizedOutput = types.EmitStreamFinalizedOutput
 // whether the corresponding SaveMessage succeeded — the marker's contract is
 // "this id will produce no more deltas", not "this message was persisted".
 type EmitStreamFinalizedActivity struct {
-	repo db.Repository
+	repo EmitStreamFinalizedStore
 }
 
 // NewEmitStreamFinalizedActivity creates a new EmitStreamFinalizedActivity.
-func NewEmitStreamFinalizedActivity(repo db.Repository) *EmitStreamFinalizedActivity {
+func NewEmitStreamFinalizedActivity(repo EmitStreamFinalizedStore) *EmitStreamFinalizedActivity {
 	return &EmitStreamFinalizedActivity{repo: repo}
 }
 

@@ -10,7 +10,6 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	cfg "github.com/reliant-labs/reliant/internal/config"
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/preset"
 	"github.com/reliant-labs/reliant/internal/workflow/builtin"
@@ -38,11 +37,11 @@ type LoadWorkflowOutput struct {
 
 // LoadWorkflowActivity loads a workflow definition from the filesystem
 type LoadWorkflowActivity struct {
-	repo db.Repository
+	repo LoadWorkflowStore
 }
 
 // NewLoadWorkflowActivity creates a new LoadWorkflow activity
-func NewLoadWorkflowActivity(repo db.Repository) *LoadWorkflowActivity {
+func NewLoadWorkflowActivity(repo LoadWorkflowStore) *LoadWorkflowActivity {
 	return &LoadWorkflowActivity{repo: repo}
 }
 

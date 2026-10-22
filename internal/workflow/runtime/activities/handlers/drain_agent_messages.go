@@ -48,12 +48,12 @@ type DrainAgentMessagesOutput = types.DrainAgentMessagesOutput
 // step boundary — after execute_tools has already saved its tool results —
 // keeps history always consistent at the point this activity runs.
 type DrainAgentMessagesActivity struct {
-	repo    db.Repository
+	repo    DrainAgentMessagesStore
 	threads *threads.Service
 }
 
 // NewDrainAgentMessagesActivity creates a new DrainAgentMessagesActivity.
-func NewDrainAgentMessagesActivity(repo db.Repository, threadsSvc *threads.Service) *DrainAgentMessagesActivity {
+func NewDrainAgentMessagesActivity(repo DrainAgentMessagesStore, threadsSvc *threads.Service) *DrainAgentMessagesActivity {
 	return &DrainAgentMessagesActivity{repo: repo, threads: threadsSvc}
 }
 

@@ -152,7 +152,7 @@ func providerReturnNotice(provider, model string) string {
 // postNotice saves text as a warning notice on thread. Best-effort, and
 // idempotent on key when one is given: a retried activity writes the notice
 // once.
-func postNotice(ctx context.Context, repo db.Repository, chatID, thread, workflowID, key, text string) {
+func postNotice(ctx context.Context, repo threads.Repository, chatID, thread, workflowID, key, text string) {
 	if repo == nil || chatID == "" || thread == "" || text == "" {
 		return
 	}

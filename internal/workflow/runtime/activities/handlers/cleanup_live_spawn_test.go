@@ -19,7 +19,7 @@ import (
 // given status. No tool_result block — a spawn writes that only at the end.
 func seedSpawnToolCall(
 	t *testing.T,
-	repo db.Repository,
+	repo *db.Repo,
 	ctx context.Context,
 	chatID, contextWindowID string,
 	callStatus core.ToolCallStatus,

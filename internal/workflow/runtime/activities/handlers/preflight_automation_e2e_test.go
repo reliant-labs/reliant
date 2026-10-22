@@ -184,7 +184,7 @@ func newAutomationHarnessWithChat(t *testing.T, launchKind core.TriggerEventKind
 	}
 }
 
-func newFastPollPreflight(repo db.Repository, router toolexec.DaemonRouter) *PreflightDaemonCheckActivity {
+func newFastPollPreflight(repo *db.Repo, router toolexec.DaemonRouter) *PreflightDaemonCheckActivity {
 	a := NewPreflightDaemonCheckActivity(repo, toolexec.NewRemoteExecutor(router))
 	a.pollInterval = 20 * time.Millisecond
 	return a

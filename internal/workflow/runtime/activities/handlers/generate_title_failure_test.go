@@ -57,7 +57,7 @@ func failingTitleResolver(d *failingTitleDriver) drivers.DriverResolver {
 }
 
 // seedTitleChat creates a chat with no title, as StartChat leaves it.
-func seedTitleChat(t *testing.T, repo db.Repository) string {
+func seedTitleChat(t *testing.T, repo *db.Repo) string {
 	t.Helper()
 	ctx := context.Background()
 	now := time.Now().UTC()

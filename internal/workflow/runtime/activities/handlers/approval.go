@@ -74,11 +74,11 @@ type ApprovalResolveOutput struct {
 // ApprovalCreateActivity creates an approval record in the DB and returns immediately.
 // The workflow then waits on a signal channel for resolution — no polling needed.
 type ApprovalCreateActivity struct {
-	repo db.Repository
+	repo ApprovalCreateStore
 }
 
 // NewApprovalCreateActivity creates a new ApprovalCreateActivity
-func NewApprovalCreateActivity(repo db.Repository) *ApprovalCreateActivity {
+func NewApprovalCreateActivity(repo ApprovalCreateStore) *ApprovalCreateActivity {
 	return &ApprovalCreateActivity{repo: repo}
 }
 
@@ -266,11 +266,11 @@ func (a *ApprovalCreateActivity) Execute(ctx context.Context, input ApprovalCrea
 // ApprovalResolveActivity resolves an approval record in the DB. Used by the workflow
 // when the signal timer expires (timeout case).
 type ApprovalResolveActivity struct {
-	repo db.Repository
+	repo ApprovalResolveStore
 }
 
 // NewApprovalResolveActivity creates a new ApprovalResolveActivity
-func NewApprovalResolveActivity(repo db.Repository) *ApprovalResolveActivity {
+func NewApprovalResolveActivity(repo ApprovalResolveStore) *ApprovalResolveActivity {
 	return &ApprovalResolveActivity{repo: repo}
 }
 

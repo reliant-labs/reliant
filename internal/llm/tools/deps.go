@@ -1,7 +1,7 @@
 // forge:deps — consumer-declared interfaces for this package's Deps.
 // The interfaces below are each tool's own declaration of what it needs from
 // the database; mock_gen.go mocks them. *db.Repo satisfies every one, and
-// ToolsFactory hands it to each tool as that tool's role (repoAs, factory.go).
+// ToolsFactory hands it to each tool as that tool's role (store, factory.go).
 //
 // A tool's store lists the methods the tool calls itself and embeds the role
 // of every helper or package it hands the store to, so when a callee needs
@@ -334,4 +334,15 @@ type worktreeStore interface {
 	ListChats(ctx context.Context, filters db.ChatFilters) ([]*db.Chat, error)
 	ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error)
 	ListWorktrees(ctx context.Context, filters db.WorktreeFilters) ([]*db.Worktree, error)
+}
+
+// listPendingQuestionsStore is list_pending_questions' store: the open
+// questions in the caller's thread subtree.
+type listPendingQuestionsStore interface {
+	ListPendingQuestionsInThreadSubtree(ctx context.Context, chatID, threadID string) ([]db.SubtreeQuestion, error)
+}
+
+// withdrawQuestionStore is withdraw_question's store.
+type withdrawQuestionStore interface {
+	WithdrawAsyncQuestion(ctx context.Context, chatID, threadID, questionID, reason string) (db.WithdrawOutcome, error)
 }

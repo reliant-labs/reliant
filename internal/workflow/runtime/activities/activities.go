@@ -26,7 +26,7 @@ import (
 // This is a SIMPLE struct that just holds shared dependencies
 // Unlike V1, it has NO methods - activities are separate structs
 type Activities struct {
-	Repo           db.Repository
+	Repo           *db.Repo
 	StreamingHub   streaming.StreamingHub
 	Threads        *threads.Service
 	ToolsFactory   *tools.ToolsFactory
@@ -55,7 +55,7 @@ type Activities struct {
 
 // NewActivities creates a new Activities container
 func NewActivities(
-	repo db.Repository,
+	repo *db.Repo,
 	hub streaming.StreamingHub,
 	threadsService *threads.Service,
 	toolsFactory *tools.ToolsFactory,

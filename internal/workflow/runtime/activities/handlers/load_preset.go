@@ -6,7 +6,6 @@ import (
 	"fmt"
 
 	cfg "github.com/reliant-labs/reliant/internal/config"
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/preset"
 	"github.com/reliant-labs/reliant/internal/workflow/builtin"
 	"go.temporal.io/sdk/activity"
@@ -22,11 +21,11 @@ type LoadPresetParamsInput struct {
 // LoadPresetParamsActivity loads preset params for use in spawned workflows.
 // This activity exists to avoid import cycles between v2 and preset packages.
 type LoadPresetParamsActivity struct {
-	repo db.Repository
+	repo LoadPresetParamsStore
 }
 
 // NewLoadPresetParamsActivity creates a new LoadPresetParamsActivity
-func NewLoadPresetParamsActivity(repo db.Repository) *LoadPresetParamsActivity {
+func NewLoadPresetParamsActivity(repo LoadPresetParamsStore) *LoadPresetParamsActivity {
 	return &LoadPresetParamsActivity{repo: repo}
 }
 

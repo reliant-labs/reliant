@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/automationcred"
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
@@ -49,7 +48,7 @@ type PreflightDaemonCheckOutput struct {
 // PreflightDaemonCheckActivity checks if a daemon is available before workflow execution.
 // This fails fast with a clear error message if a daemon is required but not available.
 type PreflightDaemonCheckActivity struct {
-	repo         db.Repository
+	repo         PreflightDaemonCheckStore
 	toolExecutor toolexec.ToolExecutor
 	// pollInterval is how often a waiting slice re-checks the daemon; zero
 	// means preflightPollInterval. Tests shrink it.
@@ -59,7 +58,7 @@ type PreflightDaemonCheckActivity struct {
 const preflightPollInterval = 2 * time.Second
 
 // NewPreflightDaemonCheckActivity creates a new PreflightDaemonCheckActivity.
-func NewPreflightDaemonCheckActivity(repo db.Repository, toolExecutor toolexec.ToolExecutor) *PreflightDaemonCheckActivity {
+func NewPreflightDaemonCheckActivity(repo PreflightDaemonCheckStore, toolExecutor toolexec.ToolExecutor) *PreflightDaemonCheckActivity {
 	return &PreflightDaemonCheckActivity{
 		repo:         repo,
 		toolExecutor: toolExecutor,

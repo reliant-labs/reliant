@@ -43,12 +43,12 @@ type DeleteWorktreeInput struct {
 // This activity creates a new git worktree for a chat's project on the
 // machine the run's tools execute on, via DaemonRouter.
 type CreateWorktreeActivity struct {
-	repo         db.Repository
+	repo         CreateWorktreeStore
 	daemonRouter toolexec.DaemonRouter
 }
 
 // NewCreateWorktreeActivity creates a new CreateWorktreeActivity
-func NewCreateWorktreeActivity(repo db.Repository, daemonRouter toolexec.DaemonRouter) *CreateWorktreeActivity {
+func NewCreateWorktreeActivity(repo CreateWorktreeStore, daemonRouter toolexec.DaemonRouter) *CreateWorktreeActivity {
 	return &CreateWorktreeActivity{
 		repo:         repo,
 		daemonRouter: daemonRouter,
@@ -245,12 +245,12 @@ func (m daemonMachine) Send(ctx context.Context, commandType string, payload, re
 // This activity deletes a git worktree for a chat's project
 // by routing git operations through the user's daemon via DaemonRouter.
 type DeleteWorktreeActivity struct {
-	repo         db.Repository
+	repo         DeleteWorktreeStore
 	daemonRouter toolexec.DaemonRouter
 }
 
 // NewDeleteWorktreeActivity creates a new DeleteWorktreeActivity
-func NewDeleteWorktreeActivity(repo db.Repository, daemonRouter toolexec.DaemonRouter) *DeleteWorktreeActivity {
+func NewDeleteWorktreeActivity(repo DeleteWorktreeStore, daemonRouter toolexec.DaemonRouter) *DeleteWorktreeActivity {
 	return &DeleteWorktreeActivity{
 		repo:         repo,
 		daemonRouter: daemonRouter,
@@ -438,7 +438,7 @@ type worktreeRemoveWorkspaceDaemonResponse struct {
 // worktreeID is unset, names no row, or the row records no owner — the cases in
 // which ExecuteTools routes by default resolution. Any other lookup failure is
 // returned rather than read as "no owner".
-func worktreeOwnerOf(ctx context.Context, repo db.Repository, worktreeID *string) (string, error) {
+func worktreeOwnerOf(ctx context.Context, repo WorktreeOwnerReader, worktreeID *string) (string, error) {
 	if worktreeID == nil || *worktreeID == "" {
 		return "", nil
 	}
