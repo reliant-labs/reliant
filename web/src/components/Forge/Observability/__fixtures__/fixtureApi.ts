@@ -661,11 +661,20 @@ function usage(latest: number, p95: number, limit: number | null, request: numbe
 const MiB = 1024 * 1024;
 
 /** The server-side summary fields of a fixture workload (kind, the health verdict, replicas, release). */
-function summary(health: WorkloadHealth, healthReason: string, ready: number, desired: number, release: string) {
+function summary(
+  health: WorkloadHealth,
+  healthReason: string,
+  ready: number,
+  desired: number,
+  release: string,
+  fault?: { cause: Workload["healthCause"]; detail: string }
+) {
   return {
     kind: "deployment" as const,
     health,
     healthReason,
+    healthCause: fault?.cause ?? ("none" as const),
+    healthDetail: fault?.detail ?? "",
     readyReplicas: ready,
     desiredReplicas: desired,
     releaseVersion: release,
@@ -685,11 +694,12 @@ export function fixtureWorkloads(scope: Pick<ObsScope, "envIds">, now: number): 
     const prod = env.name === "prod";
     const staging = env.name === "staging";
     const version = prod ? VERSIONS[1] : VERSIONS[envIndex % 2];
-    const event = (reason: string, message: string, minutesAgo: number, count: number, container: string, workload: string): WorkloadEvent => ({
+    const event = (reason: string, plainReason: string, message: string, minutesAgo: number, count: number, container: string, workload: string): WorkloadEvent => ({
       timeMs: now - minutesAgo * 60_000,
       envId: env.id,
       type: "Warning",
       reason,
+      plainReason,
       message,
       count,
       objectKind: "Pod",
@@ -705,8 +715,15 @@ export function fixtureWorkloads(scope: Pick<ObsScope, "envIds">, now: number): 
         serviceVersion: version,
         replicasObserved: prod ? 3 : 1,
         restartsInWindow: prod ? 3 : 0,
-        latestWarning: prod ? event("OOMKilling", "Memory cgroup out of memory: Killed process 1 (api)", 14, 3, "api", "api") : null,
-        ...summary(prod ? "degraded" : "healthy", prod ? "restarted 3x, last exit OOMKilled" : "", prod ? 3 : 1, prod ? 3 : 1, version),
+        latestWarning: prod ? event("OOMKilling", "Ran out of memory", "Memory cgroup out of memory: Killed process 1 (api)", 14, 3, "api", "api") : null,
+        ...summary(
+          prod ? "degraded" : "healthy",
+          prod ? "Restarted 3 times. It ran out of memory. Raise its memory or reduce its usage" : "",
+          prod ? 3 : 1,
+          prod ? 3 : 1,
+          version,
+          prod ? { cause: "workload", detail: "last exit OOMKilled; OOMKilling: Memory cgroup out of memory" } : undefined
+        ),
         containers: [
           {
             container: "api",
@@ -728,8 +745,15 @@ export function fixtureWorkloads(scope: Pick<ObsScope, "envIds">, now: number): 
         serviceVersion: version,
         replicasObserved: 1,
         restartsInWindow: staging ? 11 : 0,
-        latestWarning: staging ? event("BackOff", "Back-off restarting failed container worker in pod worker-7d9f8c-x1", 2, 11, "worker", "worker") : null,
-        ...summary(staging ? "crash_looping" : "healthy", staging ? "restarted 11x, last exit Error" : "", staging ? 0 : 1, 1, version),
+        latestWarning: staging ? event("BackOff", "Waiting before the next restart attempt", "Back-off restarting failed container worker in pod worker-7d9f8c-x1", 2, 11, "worker", "worker") : null,
+        ...summary(
+          staging ? "crash_looping" : "healthy",
+          staging ? "Restarting repeatedly (11 times). The app exited with an error" : "",
+          staging ? 0 : 1,
+          1,
+          version,
+          staging ? { cause: "workload", detail: "last exit Error; BackOff: Back-off restarting failed container" } : undefined
+        ),
         containers: [
           {
             container: "worker",
@@ -802,11 +826,11 @@ export function fixtureWorkloadDetail(scope: Pick<ObsScope, "envIds">, workload:
     if (row.envName === "prod") versionChanges.push({ envId: row.envId, serviceVersion: VERSIONS[1], firstSeenMs: pivot, lastSeenMs: window.endMs });
     if (row.latestWarning) events.push(row.latestWarning);
     events.push(
-      { timeMs: pivot + 30_000, envId: row.envId, type: "Normal", reason: "Pulled", message: `Successfully pulled image "${row.containers[0]?.imageName}:${row.serviceVersion}" in 2.1s`, count: 1, objectKind: "Pod", objectName: `${workload}-7d9f8c-x${rowIndex}`, container: row.containers[0]?.container ?? "" },
-      { timeMs: pivot, envId: row.envId, type: "Normal", reason: "Scheduled", message: `Successfully assigned ${row.namespace}/${workload}-7d9f8c-x${rowIndex} to node-a`, count: 1, objectKind: "Pod", objectName: `${workload}-7d9f8c-x${rowIndex}`, container: "" }
+      { timeMs: pivot + 30_000, envId: row.envId, type: "Normal", reason: "Pulled", plainReason: "Image fetched", message: `Successfully pulled image "${row.containers[0]?.imageName}:${row.serviceVersion}" in 2.1s`, count: 1, objectKind: "Pod", objectName: `${workload}-7d9f8c-x${rowIndex}`, container: row.containers[0]?.container ?? "" },
+      { timeMs: pivot, envId: row.envId, type: "Normal", reason: "Scheduled", plainReason: "", message: `Successfully assigned ${row.namespace}/${workload}-7d9f8c-x${rowIndex} to node-a`, count: 1, objectKind: "Pod", objectName: `${workload}-7d9f8c-x${rowIndex}`, container: "" }
     );
     if (row.envName === "prod" && workload === "api") {
-      events.push({ timeMs: pivot - 600_000, envId: row.envId, type: "Warning", reason: "Evicted", message: "The node was low on resource: memory. Container api was using 498Mi, request is 256Mi.", count: 1, objectKind: "Pod", objectName: "api-7d9f8c-old", container: "api" });
+      events.push({ timeMs: pivot - 600_000, envId: row.envId, type: "Warning", reason: "Evicted", plainReason: "Moved to another machine", message: "The node was low on resource: memory. Container api was using 498Mi, request is 256Mi.", count: 1, objectKind: "Pod", objectName: "api-7d9f8c-old", container: "api" });
     }
   });
   events.sort((a, b) => b.timeMs - a.timeMs);

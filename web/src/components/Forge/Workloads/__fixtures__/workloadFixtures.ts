@@ -150,6 +150,8 @@ interface Seed {
   name: string;
   health: WorkloadHealth;
   reason?: string;
+  detail?: string;
+  cause?: Workload["healthCause"];
   ready: number;
   desired: number | null;
   release: string;
@@ -168,7 +170,9 @@ const SEEDS: Seed[] = [
     env: "prod",
     name: "reliant-temporal-worker",
     health: "crash_looping",
-    reason: "restarted 14x, last exit OOMKilled",
+    reason: "Restarting repeatedly (14 times in the last 24 hours). It ran out of memory (limit 1 GiB). Raise its memory or reduce its usage",
+    detail: "last exit OOMKilled; OOMKilling: Memory cgroup out of memory",
+    cause: "workload",
     ready: 0,
     desired: 2,
     release: V[0]!,
@@ -178,7 +182,7 @@ const SEEDS: Seed[] = [
     memory: [1004 * MiB, 1024 * MiB],
     kind: "statefulset",
   },
-  { env: "prod", name: "litellm", health: "degraded", reason: "1 of 2 replicas ready", ready: 1, desired: 2, release: V[1]!, basis: "promotion", restarts: 2, exit: "Error", cpu: [0.3, 0.5], memory: [700 * MiB, 768 * MiB] },
+  { env: "prod", name: "litellm", health: "degraded", reason: "1 of 2 replicas ready. The app exited with an error (restarted 2 times)", cause: "workload", ready: 1, desired: 2, release: V[1]!, basis: "promotion", restarts: 2, exit: "Error", cpu: [0.3, 0.5], memory: [700 * MiB, 768 * MiB] },
   { env: "prod", name: "web", health: "healthy", ready: 2, desired: 2, release: V[0]!, basis: "promotion", cpu: [0.02, null], memory: [64 * MiB, null] },
   { env: "prod", name: "docs", health: "suspended", reason: "stopped by its owner", ready: 0, desired: 1, release: V[0]!, cpu: [0, 0.25], memory: [0, 256 * MiB] },
   { env: "e2e", name: "admin-server", health: "healthy", ready: 1, desired: 1, release: V[3]!, cpu: [0.06, 0.5], memory: [160 * MiB, 512 * MiB] },
@@ -216,7 +220,7 @@ function podsOf(seed: Seed, now: number): WorkloadPod[] {
   return Array.from({ length: count }, (_, i) => {
     const bad = i === 0 && seed.health !== "healthy" && seed.health !== "pending";
     const warning: WorkloadEvent | null = bad
-      ? { timeMs: now - 4 * MIN, envId: envIdOf(seed.env), type: "Warning", reason: "BackOff", message: `Back-off restarting failed container ${seed.name}`, count: seed.restarts ?? 1, objectKind: "Pod", objectName: `${seed.name}-7d9f8c-${i}`, container: seed.name }
+      ? { timeMs: now - 4 * MIN, envId: envIdOf(seed.env), type: "Warning", reason: "BackOff", plainReason: "Waiting before the next restart attempt", message: `Back-off restarting failed container ${seed.name}`, count: seed.restarts ?? 1, objectKind: "Pod", objectName: `${seed.name}-7d9f8c-${i}`, container: seed.name }
       : null;
     return {
       name: `${seed.name}-7d9f8c4b5-${["x2kqp", "m9tzc", "h4wrd"][i] ?? "z0000"}`,
@@ -246,7 +250,7 @@ function workloadOf(seed: Seed, now: number, detail: boolean): Workload {
     replicasObserved: seed.ready,
     restartsInWindow: seed.restarts ?? 0,
     latestWarning: seed.exit
-      ? { timeMs: now - 6 * MIN, envId, type: "Warning", reason: seed.exit === "OOMKilled" ? "OOMKilling" : "BackOff", message: `${seed.name}: ${seed.exit}`, count: seed.restarts ?? 1, objectKind: "Pod", objectName: `${seed.name}-7d9f8c4b5-x2kqp`, container: seed.name }
+      ? { timeMs: now - 6 * MIN, envId, type: "Warning", reason: seed.exit === "OOMKilled" ? "OOMKilling" : "BackOff", plainReason: seed.exit === "OOMKilled" ? "Ran out of memory" : "Waiting before the next restart attempt", message: `${seed.name}: ${seed.exit}`, count: seed.restarts ?? 1, objectKind: "Pod", objectName: `${seed.name}-7d9f8c4b5-x2kqp`, container: seed.name }
       : null,
     containers: [
       {
@@ -263,6 +267,8 @@ function workloadOf(seed: Seed, now: number, detail: boolean): Workload {
     kind: seed.kind ?? "deployment",
     health: seed.health,
     healthReason: seed.reason ?? "",
+    healthCause: seed.cause ?? "none",
+    healthDetail: seed.detail ?? "",
     readyReplicas: seed.ready,
     desiredReplicas: seed.desired,
     releaseVersion: seed.release,
@@ -321,14 +327,14 @@ export function fixtureWorkloadDetail(envIds: string[], name: string, window: Ti
     );
     if (seed.exit) {
       events.push(
-        { timeMs: window.endMs - 6 * MIN, envId, type: "Warning", reason: seed.exit === "OOMKilled" ? "OOMKilling" : "BackOff", message: `Container ${seed.name} ${seed.exit === "OOMKilled" ? `was OOMKilled (limit ${Math.round((seed.memory[1] ?? 0) / MiB)}Mi)` : "exited with an error"}`, count: seed.restarts ?? 1, objectKind: "Pod", objectName: `${seed.name}-7d9f8c4b5-x2kqp`, container: seed.name },
-        { timeMs: window.endMs - 5 * MIN, envId, type: "Warning", reason: "BackOff", message: "Back-off restarting failed container", count: seed.restarts ?? 1, objectKind: "Pod", objectName: `${seed.name}-7d9f8c4b5-x2kqp`, container: seed.name }
+        { timeMs: window.endMs - 6 * MIN, envId, type: "Warning", reason: seed.exit === "OOMKilled" ? "OOMKilling" : "BackOff", plainReason: seed.exit === "OOMKilled" ? "Ran out of memory" : "Waiting before the next restart attempt", message: `Container ${seed.name} ${seed.exit === "OOMKilled" ? `was OOMKilled (limit ${Math.round((seed.memory[1] ?? 0) / MiB)}Mi)` : "exited with an error"}`, count: seed.restarts ?? 1, objectKind: "Pod", objectName: `${seed.name}-7d9f8c4b5-x2kqp`, container: seed.name },
+        { timeMs: window.endMs - 5 * MIN, envId, type: "Warning", reason: "BackOff", plainReason: "Waiting before the next restart attempt", message: "Back-off restarting failed container", count: seed.restarts ?? 1, objectKind: "Pod", objectName: `${seed.name}-7d9f8c4b5-x2kqp`, container: seed.name }
       );
     }
     events.push(
-      { timeMs: pivot + 40_000, envId, type: "Normal", reason: "Pulled", message: `Successfully pulled image "us-docker.pkg.dev/reliant-labs/images/${seed.name}@sha256:e9a0c1d2b3f4" in 1.8s`, count: 1, objectKind: "Pod", objectName: `${seed.name}-7d9f8c4b5-m9tzc`, container: seed.name },
-      { timeMs: pivot, envId, type: "Normal", reason: "ScalingReplicaSet", message: `Scaled up replica set ${seed.name}-7d9f8c4b5 to ${seed.desired ?? 1}`, count: 1, objectKind: "Deployment", objectName: seed.name, container: "" },
-      { timeMs: pivot + 90_000, envId, type: "Warning", reason: "Unhealthy", message: "Readiness probe failed: HTTP probe failed with statuscode: 503", count: 1, objectKind: "Pod", objectName: `${seed.name}-7d9f8c4b5-m9tzc`, container: seed.name }
+      { timeMs: pivot + 40_000, envId, type: "Normal", reason: "Pulled", plainReason: "Image fetched", message: `Successfully pulled image "us-docker.pkg.dev/reliant-labs/images/${seed.name}@sha256:e9a0c1d2b3f4" in 1.8s`, count: 1, objectKind: "Pod", objectName: `${seed.name}-7d9f8c4b5-m9tzc`, container: seed.name },
+      { timeMs: pivot, envId, type: "Normal", reason: "ScalingReplicaSet", plainReason: "", message: `Scaled up replica set ${seed.name}-7d9f8c4b5 to ${seed.desired ?? 1}`, count: 1, objectKind: "Deployment", objectName: seed.name, container: "" },
+      { timeMs: pivot + 90_000, envId, type: "Warning", reason: "Unhealthy", plainReason: "Not passing its readiness check", message: "Readiness probe failed: HTTP probe failed with statuscode: 503", count: 1, objectKind: "Pod", objectName: `${seed.name}-7d9f8c4b5-m9tzc`, container: seed.name }
     );
   }
   events.sort((a, b) => b.timeMs - a.timeMs);

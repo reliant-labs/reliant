@@ -91,7 +91,7 @@ import (
 // Every anomaly class increments reliant_reconciler_anomalies_total and logs
 // at ERROR (which the logging package forwards to Sentry).
 type Reconciler struct {
-	repo       db.Repository
+	repo       ReconcilerStore
 	tempClient client.Client
 
 	// Background polling state
@@ -438,7 +438,7 @@ func DefaultConfig() *ReconcilerConfig {
 
 // NewReconciler creates a new workflow reconciler. Zero-valued config fields
 // fall back to DefaultConfig values.
-func NewReconciler(repo db.Repository, tempClient client.Client, config *ReconcilerConfig) *Reconciler {
+func NewReconciler(repo ReconcilerStore, tempClient client.Client, config *ReconcilerConfig) *Reconciler {
 	def := DefaultConfig()
 	if config == nil {
 		config = def

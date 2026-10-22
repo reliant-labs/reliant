@@ -96,7 +96,7 @@ func closedDescribe(status enumspb.WorkflowExecutionStatus, runID string, histor
 // --- Mock DB repository for PauseService tests ---
 
 type mockPauseRepo struct {
-	db.Repository // embed to satisfy interface
+	PauseStore // embedded nil: a method the fake does not override panics
 
 	updatedStatuses map[string]db.WorkflowStatus
 	updateErr       error
@@ -117,6 +117,10 @@ type mockPauseRepo struct {
 	// pausedForMachine is the chat -> mark state SetChatPausedForMachine keeps.
 	pausedForMachine map[string]bool
 }
+
+// The fake keeps state (call order, the paused-for-machine marks), so it stays
+// a fake rather than a MockPauseStore.
+var _ PauseStore = (*mockPauseRepo)(nil)
 
 type reviveCall struct {
 	rootWorkflowID string

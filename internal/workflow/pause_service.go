@@ -114,7 +114,7 @@ var ErrHistoryLimitExceeded = errors.New("temporal history limit exceeded")
 // workflow status in the database so the UI reflects the current state.
 type PauseService struct {
 	temporalClient client.Client
-	database       db.Repository
+	database       PauseStore
 
 	// resetGuard bounds reset-and-replay attempts so a deterministically-failing
 	// workflow is not reset forever. Optional (nil = always allow); shared with
@@ -124,7 +124,7 @@ type PauseService struct {
 
 // NewPauseService creates a PauseService with a Temporal client for signaling
 // and a database handle for status updates.
-func NewPauseService(temporalClient client.Client, database db.Repository) *PauseService {
+func NewPauseService(temporalClient client.Client, database PauseStore) *PauseService {
 	return &PauseService{
 		temporalClient: temporalClient,
 		database:       database,

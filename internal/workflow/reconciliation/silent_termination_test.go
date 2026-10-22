@@ -30,7 +30,7 @@ import (
 
 // CreateChatUpdate on the shared mockRepo is a deliberate no-op. Any test
 // whose workflow drifts to a terminal failed status now reaches the emit
-// path, and mockRepo's embedded db.Repository is a nil interface, so every
+// path, and mockRepo's embedded ReconcilerStore is a nil interface, so every
 // method the pass calls must exist here or it panics. Tests that care about
 // the emitted error use terminationRepo below, which records instead.
 func (m *mockRepo) CreateChatUpdate(_ context.Context, _ string, _ reliantv1.ChatUpdateType, _ string, _ string) error {

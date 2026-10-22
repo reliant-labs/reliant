@@ -80,6 +80,7 @@ import {
 } from "./workloadModel";
 import { ActionDialog, DriftTag, HealthStatus, WorkloadRelease } from "./workloadParts";
 import { OVERVIEW_RANGE } from "./OverviewHome";
+import { eventHeadline, eventRawReason, exitPhrase, jobFailurePhrase, plainErrorText } from "./plainHealth";
 
 // Its own chunk, as on the Observability pages: the explorers load only when a tab shows them.
 const ObservabilityPanel = lazy(() =>
@@ -385,7 +386,7 @@ function WorkloadHeader({
     { label: "View declared spec", onSelect: () => onTab("config"), testId: "workload-menu-config" },
   ];
   const link = observed ? workloadLink(observed) : "";
-  const lastError = observed ? workloadLastError(observed) : "";
+  const lastError = observed ? plainErrorText(workloadLastError(observed)) : "";
 
   return (
     <div className="space-y-3">
@@ -879,9 +880,6 @@ function PodsPanel({ summary, onLogs }: { summary: Workload | null; onLogs: () =
                 <th scope="col" className={TH}>
                   Last exit
                 </th>
-                <th scope="col" className={TH}>
-                  Node
-                </th>
                 <th scope="col" className={cn(TH, "text-right")}>
                   Age
                 </th>
@@ -895,7 +893,7 @@ function PodsPanel({ summary, onLogs }: { summary: Workload | null; onLogs: () =
                   pod.state === "gone"
                     ? { tone: "neutral" as const, label: "Gone" }
                     : warning
-                      ? { tone: "warning" as const, label: warning.reason }
+                      ? { tone: "warning" as const, label: eventHeadline(warning) }
                       : pod.state === "running"
                         ? { tone: "success" as const, label: "Running" }
                         : { tone: "neutral" as const, label: "Unknown" };
@@ -904,15 +902,12 @@ function PodsPanel({ summary, onLogs }: { summary: Workload | null; onLogs: () =
                     <td className={TD}>
                       <Mono value={pod.name} length={48} />
                     </td>
-                    <td className={TD} title={warning ? warning.message : undefined}>
+                    <td className={TD} title={warning ? plainErrorText(warning.message) : undefined}>
                       <Status tone={status.tone} label={status.label} />
                     </td>
                     <td className={cn(TD, "text-right tabular-nums", pod.restarts === 0 && "text-ink-muted")}>{pod.restarts}</td>
                     <td className={cn(TD, pod.lastExitReason ? "text-warning-ink" : "text-ink-muted")} title={pod.lastExitAtMs ? new Date(pod.lastExitAtMs).toLocaleString() : undefined}>
-                      {pod.lastExitReason || "·"}
-                    </td>
-                    <td className={cn(TD, !pod.node && "text-ink-muted")} title={pod.node ? undefined : "The cluster agent does not report the node yet"}>
-                      {pod.node || "not reported"}
+                      {pod.lastExitReason ? exitPhrase(pod.lastExitReason) : "·"}
                     </td>
                     <td className={cn(TD, "text-right tabular-nums text-ink-muted")} title={pod.ageIsLowerBound ? "Older than the window" : undefined}>
                       {age === null ? "—" : `${pod.ageIsLowerBound ? "≥" : ""}${formatAge(age)}`}
@@ -966,7 +961,7 @@ function RunsPanel({ runs, hrefs }: { runs: WorkloadJob[]; hrefs: WorkloadDetail
                     <td className={TD}>
                       <span className="inline-flex items-center gap-1.5">
                         <Status tone={status.tone} label={status.label} />
-                        {run.reason && <span className="text-xs text-danger-ink">· {run.reason}</span>}
+                        {run.reason && <span className="text-xs text-danger-ink">· {jobFailurePhrase(run.reason)}</span>}
                       </span>
                     </td>
                     <td className={TD}>
@@ -1033,12 +1028,17 @@ function EventsPanel({ events, range }: { events: WorkloadEvent[]; range: RangeP
                     {formatAgo(event.timeMs)}
                   </td>
                   <td className={TD}>
-                    <Status tone={event.type === "Warning" ? "warning" : "neutral"} label={event.reason} />
+                    <Status tone={event.type === "Warning" ? "warning" : "neutral"} label={eventHeadline(event)} />
+                    {eventRawReason(event) && (
+                      <span className="ml-2 font-mono text-ink-muted" title="The technical name of this event" data-testid="event-raw-reason">
+                        {eventRawReason(event)}
+                      </span>
+                    )}
                   </td>
                   <td className={cn(TD, "text-ink-muted")}>{event.objectName ? <Mono value={event.objectName} length={32} copy={false} /> : "—"}</td>
                   <td className="max-w-0 px-4 py-2 text-sm text-ink">
-                    <span className="line-clamp-2" title={event.message}>
-                      {event.message}
+                    <span className="line-clamp-2" title={plainErrorText(event.message)}>
+                      {plainErrorText(event.message)}
                     </span>
                   </td>
                   <td className={cn(TD, "text-right tabular-nums text-ink-muted")}>{event.count > 1 ? `×${event.count}` : ""}</td>
@@ -1320,7 +1320,7 @@ function Rail({
                 ] as [string, ReactNode][])
               : []),
             ["Declared in", declared ? <Mono key="d" value={declared.sourcePath || `deploy/kcl/${env.name}/main.k`} length={26} copy={false} /> : <span className="text-ink-muted">not declared</span>],
-            ...(exit ? ([["Last exit", <span key="e" className="text-warning-ink">{exit.reason}{exit.atMs ? ` · ${formatAgo(exit.atMs)}` : ""}</span>]] as [string, ReactNode][]) : []),
+            ...(exit ? ([["Last exit", <span key="e" className="text-warning-ink">{exitPhrase(exit.reason)}{exit.atMs ? ` · ${formatAgo(exit.atMs)}` : ""}</span>]] as [string, ReactNode][]) : []),
           ]}
         />
       </Panel>
@@ -1356,8 +1356,8 @@ function Rail({
               <li key={`${event.timeMs}-${index}`} className="flex items-start gap-2 py-2 first:pt-0 last:pb-0">
                 <Status tone={event.type === "Warning" ? "warning" : "neutral"} className="mt-1" />
                 <span className="min-w-0 flex-1">
-                  <span className="block text-ink" title={event.message}>
-                    <span className="font-medium">{event.reason}</span> <span className="line-clamp-2 inline">{event.message}</span>
+                  <span className="block text-ink" title={plainErrorText(event.message)}>
+                    <span className="font-medium">{eventHeadline(event)}</span> <span className="line-clamp-2 inline">{plainErrorText(event.message)}</span>
                   </span>
                 </span>
                 <span className="shrink-0 text-ink-muted">{formatAgo(event.timeMs).replace(" ago", "")}</span>

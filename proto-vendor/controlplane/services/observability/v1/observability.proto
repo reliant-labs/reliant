@@ -756,9 +756,35 @@ message Workload {
   // returns. Unset when the environment has no recorded bundle or the bundle
   // does not declare it.
   DeclaredWorkload declared = 18;
+  // Whose side the fault is on, when health is not HEALTHY. The platform alerts
+  // on PLATFORM; the console says "this is on us" instead of asking the user to
+  // fix something they cannot.
+  WorkloadCause health_cause = 19;
+  // The raw machinery behind health_reason (the container's last exit reason, the
+  // Kubernetes event reason and its message with addresses removed), for a
+  // "details" disclosure. Never the headline: health_reason is plain language.
+  string health_detail = 20;
 }
 
-// WorkloadHealth is computed once, on the server, from the deploy ledger's
+// WorkloadCause says whose side a workload's fault is on.
+enum WorkloadCause {
+  WORKLOAD_CAUSE_UNSPECIFIED = 0;
+  // Nothing is wrong, or nothing is wrong that anyone must fix (a rollout in
+  // flight, a workload its owner stopped, one nothing has observed yet).
+  WORKLOAD_CAUSE_NONE = 1;
+  // The workload's own: it crashes, runs out of memory, fails its health check,
+  // or names an image that cannot be pulled.
+  WORKLOAD_CAUSE_WORKLOAD = 2;
+  // The platform's: no capacity, our registry or a node or volume fault. The
+  // platform alerts on this.
+  WORKLOAD_CAUSE_PLATFORM = 3;
+  // Unhealthy, and nothing we hold says whose side.
+  WORKLOAD_CAUSE_UNDETERMINED = 4;
+}
+
+// WorkloadHealth is computed once, on the server (internal/workloadhealth), and
+// its reason is plain language: no Kubernetes vocabulary and no addresses. Whose
+// side a fault is on is health_cause. It is computed from the deploy ledger's
 // rollout verdict and observation, the replica counts, and the restarts in the
 // window. The first rule that matches wins:
 //
@@ -910,6 +936,11 @@ message WorkloadEvent {
   string object_kind = 7;
   string object_name = 8;
   string container = 9;
+  // The reason in plain language ("Waiting for capacity", "Not passing its
+  // readiness check at /readyz"); empty when there is no plain wording and the
+  // raw reason should be shown as it is. `message` is already stripped of pod
+  // and node addresses, node names and internal DNS names.
+  string plain_reason = 10;
 }
 
 message GetWorkloadRequest {

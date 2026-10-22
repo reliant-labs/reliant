@@ -31,6 +31,7 @@ import { ENV_ALL } from "../Console/envScope";
 import { alertService } from "../Observability/Home/homeModel";
 import { promoterOf } from "../Releases/releaseModel";
 import { HEALTH_STATUS } from "./health";
+import { jobFailurePhrase } from "./plainHealth";
 
 export { HEALTH_STATUS };
 
@@ -192,6 +193,8 @@ function unobservedRow(env: StripEnv, name: string): ServiceRow {
     kind: "unknown",
     health: "unknown",
     healthReason: "Declared by the last recorded render; nothing has observed it",
+    healthCause: "none",
+    healthDetail: "",
     readyReplicas: null,
     desiredReplicas: null,
     releaseVersion: "",
@@ -296,7 +299,7 @@ export interface AttentionItem {
   /** What is wrong, after the subject: "crash-looping", "failed", "firing". */
   what: string;
   envName: string;
-  /** The muted figure on the right: "14 restarts", "BackoffLimitExceeded", "since 52m". */
+  /** The muted figure on the right: "14 restarts", "Failed after exhausting its retries", "since 52m". */
   detail: string;
   /** For a workload or job, its name (the page it opens); for an alert, null (the Alerts page). */
   workload: string | null;
@@ -352,7 +355,7 @@ export function attentionItems(
       subject: job.workload,
       what: "failed",
       envName: job.envName,
-      detail: job.latest.reason || "failed",
+      detail: jobFailurePhrase(job.latest.reason),
       workload: job.workload,
     });
   }

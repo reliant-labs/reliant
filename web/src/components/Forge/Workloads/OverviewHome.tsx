@@ -75,6 +75,7 @@ import {
   type StripCell,
   type StripEnv,
 } from "./workloadModel";
+import { exitPhrase, jobFailurePhrase } from "./plainHealth";
 import { Chip, ChipMenu, HealthStatus, SkeletonRows, UsageMeter, WorkloadRelease } from "./workloadParts";
 
 export interface OverviewSearch {
@@ -782,7 +783,7 @@ function ServicesTable({
                             className={cn("ml-1", status.tone === "danger" ? "text-danger-ink" : status.tone === "warning" ? "text-warning-ink" : "text-ink-muted")}
                             title={exit.atMs ? `Last exited ${new Date(exit.atMs).toLocaleString()}` : undefined}
                           >
-                            · {exit.reason}
+                            · {exitPhrase(exit.reason)}
                           </span>
                         )}
                       </>
@@ -894,7 +895,7 @@ function JobsTable({ rows, loading, showEnv, hrefs, empty }: { rows: JobRow[]; l
                   <td className={TD}>
                     <span className="inline-flex items-center gap-1.5">
                       <Status tone={status.tone} label={status.label} />
-                      {job.result === "failed" && job.reason && <span className="text-xs text-danger-ink">· {job.reason}</span>}
+                      {job.result === "failed" && job.reason && <span className="text-xs text-danger-ink">· {jobFailurePhrase(job.reason)}</span>}
                     </span>
                   </td>
                   <td className={TD}>
