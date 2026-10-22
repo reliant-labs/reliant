@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
 )
@@ -100,6 +101,6 @@ func TestListProjectReposStillFailsWhenNothingOnDisk(t *testing.T) {
 
 	_, err := s.listProjectRepos(ctx, project)
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
 	assert.Equal(t, 1, router.discoverCalls)
 }

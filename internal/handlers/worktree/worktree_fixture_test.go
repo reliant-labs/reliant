@@ -2,11 +2,11 @@ package worktree_test
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	worktree "github.com/reliant-labs/reliant/internal/handlers/worktree"
 )
 
@@ -45,13 +45,13 @@ func ownedWorktreeRepo(t *testing.T) *worktree.StubRepo {
 			if w, ok := worktrees[id]; ok {
 				return &w, nil
 			}
-			return nil, errors.New("worktree not found")
+			return nil, core.ErrWorktreeNotFound
 		},
 		GetProjectWithUserCheckFunc: func(_ context.Context, id, userID string) (*db.Project, error) {
 			if id == ownProjectID && userID == "test-user" {
 				return &db.Project{ID: id, UserID: userID, Name: "proj", Path: "/work", IsGitRepo: true}, nil
 			}
-			return nil, errors.New("project not found")
+			return nil, core.ErrProjectNotFound
 		},
 	}
 }

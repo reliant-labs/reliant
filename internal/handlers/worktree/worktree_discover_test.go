@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -222,7 +223,7 @@ func TestPruneWorktrees_SendsReposAndReturnsPruned(t *testing.T) {
 	assert.Equal(t, filepath.Join("/proj", "b"), sent.Repos[1].Path)
 
 	_, err = f.svc.PruneWorktrees(f.ctx, connect.NewRequest(&reliantv1.PruneWorktreesRequest{}))
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 }
 
 func TestDiscoverWorktrees_BackgroundNeverWakesAnAsleepMachine(t *testing.T) {
@@ -237,7 +238,7 @@ func TestDiscoverWorktrees_BackgroundNeverWakesAnAsleepMachine(t *testing.T) {
 				ProjectId: f.projectID, Background: background,
 			}))
 			require.Error(t, err)
-			assert.Equal(t, connect.CodeUnavailable, connect.CodeOf(err))
+			assert.Equal(t, connect.CodeUnavailable, svcerr.Code(err))
 			if background {
 				assert.Empty(t, f.router.wakeCalls(), "a background poll must not start the machine")
 				assert.False(t, machinewake.IsWaking(err))
@@ -257,7 +258,7 @@ func TestImportWorktree_MultiRepoNeedsConfirmMove(t *testing.T) {
 		ProjectId: f.projectID, RepoId: f.repoIDs[0], Path: "/x/wt",
 	}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 	assert.Contains(t, err.Error(), "moves")
 	assert.Nil(t, f.router.payloads, "nothing reaches the daemon before the user confirms")
 }
@@ -269,7 +270,7 @@ func TestImportWorktree_RefusesPathsTheDaemonDoesNotReport(t *testing.T) {
 		ProjectId: f.projectID, Path: "/etc",
 	}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 	rows, _ := f.repo.ListWorktrees(context.Background(), db.WorktreeFilters{ProjectID: &f.projectID, IncludeArchived: true})
 	assert.Empty(t, rows)
 }
@@ -281,7 +282,7 @@ func TestImportWorktree_DetachedHeadIsRefused(t *testing.T) {
 		ProjectId: f.projectID, Path: "/x/det",
 	}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
 	assert.Contains(t, err.Error(), "detached")
 }
 
@@ -305,12 +306,12 @@ func TestImportWorktree_SingleRepoRegistersInPlace(t *testing.T) {
 	_, err = f.svc.ImportWorktree(f.ctx, connect.NewRequest(&reliantv1.ImportWorktreeRequest{
 		ProjectId: f.projectID, Path: "/x/other",
 	}))
-	assert.Equal(t, connect.CodeAlreadyExists, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeAlreadyExists, svcerr.Code(err))
 
 	// A branch held by another row: FailedPrecondition.
 	f.router.entries = []map[string]any{{"repo_id": f.repoIDs[0], "path": "/x/third", "name": "third", "branch": "feat/y"}}
 	_, err = f.svc.ImportWorktree(f.ctx, connect.NewRequest(&reliantv1.ImportWorktreeRequest{
 		ProjectId: f.projectID, Path: "/x/third",
 	}))
-	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
 }

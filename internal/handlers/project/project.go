@@ -19,6 +19,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/config"
+	"github.com/reliant-labs/reliant/internal/daemonerr"
 	"github.com/reliant-labs/reliant/internal/daemonevents"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -277,10 +278,10 @@ func (s *Service) verifyProjectDirectoryExists(ctx context.Context, userID, proj
 	if stat.Exists {
 		return nil
 	}
-	return svcerr.ToConnect(svcerr.FailedPrecondition(fmt.Sprintf(
+	return svcerr.FailedPrecondition(fmt.Sprintf(
 		"project %s is registered at %s but that directory does not exist; "+
 			"restore the directory or delete the project, then retry",
-		projectID, path)))
+		projectID, path))
 }
 
 // resolveProjectRepoPath resolves a per-RPC repo_id selector against the
@@ -297,12 +298,12 @@ func (s *Service) verifyProjectDirectoryExists(ctx context.Context, userID, proj
 func (s *Service) resolveProjectRepoPath(ctx context.Context, project *db.Project, repoID string) (string, *core.Repo, error) {
 	repos, err := s.deps.Repo.ListReposByProject(ctx, project.ID)
 	if err != nil {
-		return "", nil, svcerr.ToConnect(svcerr.Internal("failed to list repos for project"))
+		return "", nil, svcerr.WrapOr(err, svcerr.Internal("failed to list repos for project"))
 	}
 
 	if repoID == "" {
 		if len(repos) > 1 {
-			return "", nil, svcerr.ToConnect(svcerr.InvalidArgument("repo_id required in multi-repo projects"))
+			return "", nil, svcerr.InvalidArgument("repo_id required in multi-repo projects")
 		}
 		if len(repos) == 1 {
 			return filepath.Join(project.Path, repos[0].RelativePath), repos[0], nil
@@ -315,17 +316,15 @@ func (s *Service) resolveProjectRepoPath(ctx context.Context, project *db.Projec
 			return filepath.Join(project.Path, r.RelativePath), r, nil
 		}
 	}
-	return "", nil, svcerr.ToConnect(svcerr.WithMessage(svcerr.ErrNotFound, "repo not in project"))
+	return "", nil, svcerr.WithMessage(svcerr.ErrNotFound, "repo not in project")
 }
 
-// projectBelongsToUser checks if a project belongs to a user
+// projectBelongsToUser checks if a project belongs to a user. A project that
+// is missing and one owned by someone else are the same NotFound (the store's
+// core.ErrProjectNotFound), so the answer never reveals that a project exists.
 func (s *Service) projectBelongsToUser(ctx context.Context, projectID string, userID string) error {
-	_, err := s.deps.Repo.GetProjectWithUserCheck(ctx, projectID, userID)
-	if err != nil {
-		if strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "access denied") {
-			return svcerr.ToConnect(svcerr.NotFound("project"))
-		}
-		return svcerr.ToConnect(svcerr.Internal("database error"))
+	if _, err := s.deps.Repo.GetProjectWithUserCheck(ctx, projectID, userID); err != nil {
+		return svcerr.WrapOr(err, svcerr.Internal("database error"))
 	}
 	return nil
 }
@@ -366,14 +365,14 @@ func (s *Service) CreateProject(
 	userID := auth.MustGetUserID(ctx)
 
 	if req.Msg.Name == "" || req.Msg.Path == "" {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("name and path are required"))
+		return nil, svcerr.InvalidArgument("name and path are required")
 	}
 
 	// ospath, not filepath: the path names a directory on the user's DAEMON,
 	// which may run on Windows while this server runs on Linux. filepath.IsAbs
 	// compiles to the host's rules and judges every `C:\...` path relative.
 	if req.Msg.Path != "" && !ospath.IsAbs(req.Msg.Path) {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument(fmt.Sprintf("project path must be absolute, got: %q", req.Msg.Path)))
+		return nil, svcerr.InvalidArgument(fmt.Sprintf("project path must be absolute, got: %q", req.Msg.Path))
 	}
 
 	// Check if project already exists for this user and path. Path-only
@@ -388,7 +387,7 @@ func (s *Service) CreateProject(
 		if verr := s.verifyProjectDirectoryExists(ctx, userID, existing.ID, existing.Path); verr != nil {
 			return nil, verr
 		}
-		return nil, svcerr.ToConnect(svcerr.AlreadyExists("a project already exists at this path"))
+		return nil, svcerr.AlreadyExists("a project already exists at this path")
 	}
 
 	// Ensure the project directory exists on the daemon. The cloud
@@ -464,7 +463,8 @@ func (s *Service) CreateProject(
 	if req.Msg.DefaultBranch != nil {
 		defaultBranch = gitref.NormalizeBranchName(*req.Msg.DefaultBranch)
 		if err := gitref.ValidateBranchName(defaultBranch); err != nil {
-			return nil, connect.NewError(connect.CodeInvalidArgument, err)
+			// The validator's sentence names the branch and the rule it broke.
+			return nil, svcerr.InvalidArgument(err.Error())
 		}
 	}
 
@@ -563,10 +563,9 @@ func (s *Service) CreateProject(
 		// open the existing project instead of seeing an opaque Internal.
 		if strings.Contains(err.Error(), "UNIQUE constraint") || strings.Contains(err.Error(), "duplicate key") {
 			logging.InfoContext(ctx, "Project already exists at path (unique constraint)", "userID", userID, "path", req.Msg.Path)
-			return nil, svcerr.ToConnect(svcerr.AlreadyExists("a project already exists at this path"))
+			return nil, svcerr.AlreadyExists("a project already exists at this path")
 		}
-		logging.ErrorContext(ctx, "Failed to create project", "error", err)
-		return nil, svcerr.ToConnect(svcerr.Internal("failed to create project"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to create project"))
 	}
 
 	// Record which daemon this project was provisioned on so the picker can
@@ -740,8 +739,9 @@ func (s *Service) ListProjects(
 		Offset: offset,
 	})
 	if err != nil {
-		logging.ErrorContext(ctx, "Failed to list projects", "error", err)
-		return nil, svcerr.ToConnect(svcerr.Internal("failed to list projects"))
+		// A deadline or a cancellation is the client's to see as such, not a
+		// server fault: only an unclassified store failure is Internal.
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list projects"))
 	}
 
 	protoProjects := make([]*reliantv1.Project, len(projects))
@@ -768,7 +768,7 @@ func (s *Service) GetProject(
 
 	project, err := s.deps.Repo.GetProject(ctx, req.Msg.ProjectId)
 	if err != nil {
-		return nil, svcerr.ToConnect(svcerr.NotFound("project"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
 	}
 
 	// Live-check git status via daemon and reconcile in BOTH directions so the
@@ -812,7 +812,7 @@ func (s *Service) UpdateProject(
 
 	project, err := s.deps.Repo.GetProject(ctx, req.Msg.ProjectId)
 	if err != nil {
-		return nil, svcerr.ToConnect(svcerr.NotFound("project"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
 	}
 
 	// Update fields
@@ -830,8 +830,7 @@ func (s *Service) UpdateProject(
 	project.LastActive = time.Now().UTC()
 
 	if err := s.deps.Repo.UpdateProject(ctx, project, userID); err != nil {
-		logging.ErrorContext(ctx, "Failed to update project", "error", err)
-		return nil, svcerr.ToConnect(svcerr.Internal("failed to update project"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to update project"))
 	}
 
 	return connect.NewResponse(&reliantv1.UpdateProjectResponse{
@@ -851,8 +850,7 @@ func (s *Service) DeleteProject(
 	}
 
 	if err := s.deps.Repo.DeleteProject(ctx, req.Msg.ProjectId, userID); err != nil {
-		logging.ErrorContext(ctx, "Failed to delete project", "error", err)
-		return nil, svcerr.ToConnect(svcerr.Internal("failed to delete project"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to delete project"))
 	}
 
 	return connect.NewResponse(&reliantv1.DeleteProjectResponse{
@@ -873,8 +871,7 @@ func (s *Service) TouchProject(
 	}
 
 	if err := s.deps.Repo.TouchProject(ctx, req.Msg.ProjectId, userID); err != nil {
-		logging.ErrorContext(ctx, "Failed to touch project", "error", err, "projectID", req.Msg.ProjectId)
-		return nil, svcerr.ToConnect(svcerr.Internal("failed to update project activity"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to update project activity"))
 	}
 
 	if s.deps.Router != nil {
@@ -916,8 +913,7 @@ func (s *Service) GetProjectMetadata(
 
 	project, err := s.deps.Repo.GetProject(ctx, req.Msg.ProjectId)
 	if err != nil {
-		logging.ErrorContext(ctx, "Failed to get project", "error", err, "projectID", req.Msg.ProjectId)
-		return nil, svcerr.ToConnect(svcerr.NotFound("project"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
 	}
 
 	resp := &reliantv1.GetProjectMetadataResponse{
@@ -952,8 +948,7 @@ func (s *Service) UpdateProjectMetadata(
 
 	project, err := s.deps.Repo.GetProject(ctx, req.Msg.ProjectId)
 	if err != nil {
-		logging.ErrorContext(ctx, "Failed to get project", "error", err, "projectID", req.Msg.ProjectId)
-		return nil, svcerr.ToConnect(svcerr.NotFound("project"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
 	}
 
 	// Update fields
@@ -962,8 +957,7 @@ func (s *Service) UpdateProjectMetadata(
 	}
 
 	if err := s.deps.Repo.UpdateProject(ctx, project, userID); err != nil {
-		logging.ErrorContext(ctx, "Failed to update project", "error", err, "projectID", req.Msg.ProjectId)
-		return nil, svcerr.ToConnect(svcerr.Internal("failed to update project"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to update project"))
 	}
 
 	return connect.NewResponse(&reliantv1.UpdateProjectMetadataResponse{
@@ -984,8 +978,7 @@ func (s *Service) GetProjectGitInfo(
 
 	project, err := s.deps.Repo.GetProject(ctx, req.Msg.ProjectId)
 	if err != nil {
-		logging.ErrorContext(ctx, "Failed to get project", "error", err, "projectID", req.Msg.ProjectId)
-		return nil, svcerr.ToConnect(svcerr.NotFound("project"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
 	}
 
 	if !project.IsGitRepo {
@@ -1014,8 +1007,7 @@ func (s *Service) GetProjectGitInfo(
 		Behind         int32    `json:"behind"`
 	}
 	if err := s.sendProjectDaemonCommand(ctx, userID, "project.git_info", map[string]string{"path": repoPath}, &gitInfo); err != nil {
-		logging.ErrorContext(ctx, "Failed to get git info via daemon", "error", err, "projectID", project.ID)
-		return nil, svcerr.ToConnect(svcerr.Internal("failed to get git info"))
+		return nil, daemonerr.Error("get git info", err)
 	}
 
 	return connect.NewResponse(&reliantv1.GetProjectGitInfoResponse{
@@ -1046,8 +1038,7 @@ func (s *Service) GetProjectGitBranches(
 
 	project, err := s.deps.Repo.GetProject(ctx, req.Msg.ProjectId)
 	if err != nil {
-		logging.ErrorContext(ctx, "Failed to get project", "error", err, "projectID", req.Msg.ProjectId)
-		return nil, svcerr.ToConnect(svcerr.NotFound("project"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
 	}
 
 	if !project.IsGitRepo {
@@ -1112,8 +1103,7 @@ func (s *Service) GetProjectInitStatus(
 
 	project, err := s.deps.Repo.GetProject(ctx, req.Msg.ProjectId)
 	if err != nil {
-		logging.ErrorContext(ctx, "Failed to get project", "error", err, "projectID", req.Msg.ProjectId)
-		return nil, svcerr.ToConnect(svcerr.NotFound("project"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
 	}
 
 	// Check initialization status via daemon (filesystem checks)
@@ -1152,8 +1142,7 @@ func (s *Service) InitializeProject(
 
 	project, err := s.deps.Repo.GetProject(ctx, req.Msg.ProjectId)
 	if err != nil {
-		logging.ErrorContext(ctx, "Failed to get project", "error", err, "projectID", req.Msg.ProjectId)
-		return nil, svcerr.ToConnect(svcerr.NotFound("project"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
 	}
 
 	// Project initialization is a no-op in V2 (projects are initialized on creation)
@@ -1178,8 +1167,7 @@ func (s *Service) GetProjectChanges(
 
 	project, err := s.deps.Repo.GetProject(ctx, req.Msg.ProjectId)
 	if err != nil {
-		logging.ErrorContext(ctx, "Failed to get project", "error", err, "projectID", req.Msg.ProjectId)
-		return nil, svcerr.ToConnect(svcerr.NotFound("project"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
 	}
 
 	// Check if project is a git repository
@@ -1192,7 +1180,7 @@ func (s *Service) GetProjectChanges(
 	}
 
 	if project.Path == "" {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("project has no path configured"))
+		return nil, svcerr.InvalidArgument("project has no path configured")
 	}
 
 	repoPath, _, err := s.resolveProjectRepoPath(ctx, project, req.Msg.RepoId)
@@ -1275,8 +1263,7 @@ func (s *Service) GetProjectPrompts(
 	var prompts []promptData
 	if setting.Value != "" {
 		if err := json.Unmarshal([]byte(setting.Value), &prompts); err != nil {
-			logging.ErrorContext(ctx, "Failed to unmarshal project prompts", "error", err, "projectID", req.Msg.ProjectId)
-			return nil, svcerr.ToConnect(svcerr.Internal("failed to parse prompts"))
+			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to parse prompts"))
 		}
 	}
 
@@ -1324,7 +1311,7 @@ func (s *Service) SaveProjectPrompts(
 	// Marshal prompts to JSON
 	promptsJSON, err := json.Marshal(prompts)
 	if err != nil {
-		return nil, svcerr.ToConnect(svcerr.Internal("failed to serialize prompts"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to serialize prompts"))
 	}
 
 	projectID := req.Msg.ProjectId
@@ -1344,16 +1331,14 @@ func (s *Service) SaveProjectPrompts(
 			UpdatedAt: time.Now().UTC(),
 		}
 		if err := s.deps.Repo.CreateSetting(ctx, newSetting); err != nil {
-			logging.ErrorContext(ctx, "Failed to create project prompts", "error", err, "projectID", req.Msg.ProjectId)
-			return nil, svcerr.ToConnect(svcerr.Internal("failed to save prompts"))
+			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to save prompts"))
 		}
 	} else {
 		// Update existing setting
 		setting.Value = string(promptsJSON)
 		setting.UpdatedAt = time.Now().UTC()
 		if err := s.deps.Repo.UpdateSetting(ctx, setting); err != nil {
-			logging.ErrorContext(ctx, "Failed to update project prompts", "error", err, "projectID", req.Msg.ProjectId)
-			return nil, svcerr.ToConnect(svcerr.Internal("failed to save prompts"))
+			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to save prompts"))
 		}
 	}
 
@@ -1376,8 +1361,7 @@ func (s *Service) InitializeGitRepo(
 
 	project, err := s.deps.Repo.GetProject(ctx, req.Msg.ProjectId)
 	if err != nil {
-		logging.ErrorContext(ctx, "Failed to get project", "error", err, "projectID", req.Msg.ProjectId)
-		return nil, svcerr.ToConnect(svcerr.NotFound("project"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
 	}
 
 	logging.DebugContext(ctx, "Attempting to initialize git repository", "projectID", req.Msg.ProjectId, "path", project.Path, "is_git_repo", project.IsGitRepo)
@@ -1385,7 +1369,7 @@ func (s *Service) InitializeGitRepo(
 	// Check if already a git repository
 	if project.IsGitRepo {
 		logging.WarnContext(ctx, "Project is already marked as git repository", "projectID", req.Msg.ProjectId)
-		return nil, svcerr.ToConnect(svcerr.FailedPrecondition("project is already a git repository"))
+		return nil, svcerr.FailedPrecondition("project is already a git repository")
 	}
 
 	// Normalize + validate the branch name before anything touches disk or
@@ -1393,7 +1377,8 @@ func (s *Service) InitializeGitRepo(
 	// UI) fails as invalid_argument instead of half-initializing the repo.
 	initialBranch := gitref.NormalizeBranchName(req.Msg.InitialBranch)
 	if err := gitref.ValidateBranchName(initialBranch); err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		// The validator's sentence names the branch and the rule it broke.
+		return nil, svcerr.InvalidArgument(err.Error())
 	}
 
 	// Route git init through daemon (handles path existence check, adopting
@@ -1414,12 +1399,12 @@ func (s *Service) InitializeGitRepo(
 		InitialCommit:     req.Msg.InitialCommit,
 	}
 	if err := s.sendProjectDaemonCommand(ctx, userID, "project.init_git_repo", initPayload, &initResp); err != nil {
-		logging.ErrorContext(ctx, "Failed to initialize git repository via daemon", "error", err, "projectID", req.Msg.ProjectId)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to initialize git repository: %v", err))
+		return nil, daemonerr.Error("initialize git repository", err)
 	}
 	if !initResp.Success {
-		logging.ErrorContext(ctx, "Daemon reported git init failure", "error", initResp.Error, "projectID", req.Msg.ProjectId)
-		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("%s", initResp.Error))
+		// The daemon's own refusal (a missing path, a .git it cannot adopt),
+		// from the user's machine: the actionable part of the message.
+		return nil, svcerr.FailedPrecondition(initResp.Error)
 	}
 
 	// Update project to mark it as a git repository
@@ -1428,8 +1413,7 @@ func (s *Service) InitializeGitRepo(
 	project.DefaultBranch = &actualBranch
 
 	if err := s.deps.Repo.UpdateProject(ctx, project, userID); err != nil {
-		logging.ErrorContext(ctx, "Failed to update project", "error", err, "projectID", req.Msg.ProjectId)
-		return nil, svcerr.ToConnect(svcerr.Internal("failed to update project"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to update project"))
 	}
 
 	// Register the project root as a Repo row. Worktree creation gates on
@@ -1534,13 +1518,12 @@ func (s *Service) ListProjectDaemonsForDaemon(
 	userID := auth.MustGetUserID(ctx)
 
 	if req.Msg.DaemonId == "" {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("daemon_id is required"))
+		return nil, svcerr.InvalidArgument("daemon_id is required")
 	}
 
 	rows, err := s.deps.Repo.ListProjectDaemonsForDaemon(ctx, req.Msg.DaemonId)
 	if err != nil {
-		logging.ErrorContext(ctx, "Failed to list project_daemons for daemon", "error", err, "daemon_id", req.Msg.DaemonId)
-		return nil, svcerr.ToConnect(svcerr.Internal("failed to list project_daemons"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list project_daemons"))
 	}
 
 	// Filter by ownership: a project_daemons row is only visible to a user
@@ -1572,17 +1555,14 @@ func (s *Service) ListProjectDaemons(
 
 	projects, err := s.deps.Repo.ListProjects(ctx, db.ProjectFilters{UserID: userID})
 	if err != nil {
-		logging.ErrorContext(ctx, "Failed to list projects for ListProjectDaemons", "error", err, "user_id", userID)
-		return nil, svcerr.ToConnect(svcerr.Internal("failed to list project_daemons"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list project_daemons"))
 	}
 
 	out := make([]*reliantv1.ProjectDaemon, 0)
 	for _, p := range projects {
 		rows, err := s.deps.Repo.ListProjectDaemonsForProject(ctx, p.ID)
 		if err != nil {
-			logging.ErrorContext(ctx, "Failed to list project_daemons for project",
-				"error", err, "project_id", p.ID, "user_id", userID)
-			return nil, svcerr.ToConnect(svcerr.Internal("failed to list project_daemons"))
+			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list project_daemons"))
 		}
 		for _, pd := range rows {
 			out = append(out, projectDaemonToProto(pd))
@@ -1605,7 +1585,7 @@ func (s *Service) MarkProjectInstalled(
 	userID := auth.MustGetUserID(ctx)
 
 	if req.Msg.ProjectId == "" || req.Msg.DaemonId == "" || req.Msg.Path == "" {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("project_id, daemon_id, and path are required"))
+		return nil, svcerr.InvalidArgument("project_id, daemon_id, and path are required")
 	}
 
 	if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userID); err != nil {
@@ -1619,12 +1599,7 @@ func (s *Service) MarkProjectInstalled(
 	}
 
 	if err := s.deps.Repo.UpsertProjectDaemon(ctx, req.Msg.ProjectId, req.Msg.DaemonId, req.Msg.Path, defaultBranch); err != nil {
-		logging.ErrorContext(ctx, "Failed to upsert project_daemons row",
-			"error", err,
-			"project_id", req.Msg.ProjectId,
-			"daemon_id", req.Msg.DaemonId,
-		)
-		return nil, svcerr.ToConnect(svcerr.Internal("failed to record project installation"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to record project installation"))
 	}
 
 	// The caller just cloned onto this daemon, so forge.yaml is on its disk
@@ -1659,12 +1634,11 @@ func (s *Service) ListRepositoriesForDaemon(
 ) (*connect.Response[reliantv1.ListRepositoriesForDaemonResponse], error) {
 	userID := auth.MustGetUserID(ctx)
 	if req.Msg.DaemonId == "" {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("daemon_id is required"))
+		return nil, svcerr.InvalidArgument("daemon_id is required")
 	}
 	rows, err := s.deps.Repo.ListProjectDaemonsForDaemon(ctx, req.Msg.DaemonId)
 	if err != nil {
-		logging.ErrorContext(ctx, "ListRepositoriesForDaemon: failed to list project_daemons", "error", err, "daemon_id", req.Msg.DaemonId)
-		return nil, svcerr.ToConnect(svcerr.Internal("failed to list repositories"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list repositories"))
 	}
 	out := make([]*reliantv1.DaemonRepository, 0, len(rows))
 	for _, pd := range rows {
@@ -1704,22 +1678,24 @@ func (s *Service) ListRepositoriesForDaemon(
 // NotFound when there's no clone of that project on that daemon.
 func (s *Service) resolveProjectDaemonRow(ctx context.Context, projectID, daemonID, userID string) (*db.Project, *core.ProjectDaemon, error) {
 	if projectID == "" || daemonID == "" {
-		return nil, nil, svcerr.ToConnect(svcerr.InvalidArgument("project_id and daemon_id are required"))
+		return nil, nil, svcerr.InvalidArgument("project_id and daemon_id are required")
 	}
+	// A project owned by someone else is the store's NotFound, the same as a
+	// missing one, so the answer never reveals that it exists.
 	project, err := s.deps.Repo.GetProjectWithUserCheck(ctx, projectID, userID)
 	if err != nil {
-		return nil, nil, svcerr.ToConnect(svcerr.NotFound("project"))
+		return nil, nil, svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
 	}
 	rows, err := s.deps.Repo.ListProjectDaemonsForProject(ctx, projectID)
 	if err != nil {
-		return nil, nil, svcerr.ToConnect(svcerr.Internal("failed to look up project_daemons"))
+		return nil, nil, svcerr.WrapOr(err, svcerr.Internal("failed to look up project_daemons"))
 	}
 	for _, pd := range rows {
 		if pd.DaemonID == daemonID {
 			return project, pd, nil
 		}
 	}
-	return nil, nil, svcerr.ToConnect(svcerr.WithMessage(svcerr.ErrNotFound, "project is not cloned on that daemon"))
+	return nil, nil, svcerr.WithMessage(svcerr.ErrNotFound, "project is not cloned on that daemon")
 }
 
 // PullProjectOnDaemon runs `git pull` for the project's clone on a daemon.
@@ -1745,7 +1721,7 @@ func (s *Service) PullProjectOnDaemon(
 	}
 	payload := map[string]string{"path": pd.Path, "branch": branch}
 	if err := s.sendProjectDaemonCommand(ctx, userID, "git.pull", payload, &pullResp); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("git pull failed: %w", err))
+		return nil, daemonerr.Error("git pull", err)
 	}
 	// Refresh cloned_at so the admin UI shows "just now" after a successful
 	// pull. Errors here are non-fatal — the pull already landed.
@@ -1771,8 +1747,7 @@ func (s *Service) RemoveProjectFromDaemon(
 		// NotFound is treated as success — the row's already gone and
 		// there's nothing on disk to delete from our perspective. Anything
 		// else is a real error.
-		var ce *connect.Error
-		if errors.As(err, &ce) && ce.Code() == connect.CodeNotFound {
+		if svcerr.IsNotFound(err) {
 			return connect.NewResponse(&reliantv1.RemoveProjectFromDaemonResponse{}), nil
 		}
 		return nil, err
@@ -1789,7 +1764,7 @@ func (s *Service) RemoveProjectFromDaemon(
 		logging.WarnContext(ctx, "RemoveProjectFromDaemon: on-disk remove failed (will still drop project_daemons row)", "error", err, "path", pd.Path)
 	}
 	if err := s.deps.Repo.DeleteProjectDaemon(ctx, req.Msg.ProjectId, req.Msg.DaemonId); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to delete project_daemons row: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to delete project_daemons row"))
 	}
 	return connect.NewResponse(&reliantv1.RemoveProjectFromDaemonResponse{}), nil
 }
@@ -1807,7 +1782,7 @@ func (s *Service) RecloneProjectOnDaemon(
 		return nil, err
 	}
 	if project.RemoteURL == nil || *project.RemoteURL == "" {
-		return nil, svcerr.ToConnect(svcerr.FailedPrecondition("project has no remote_url; cannot reclone"))
+		return nil, svcerr.FailedPrecondition("project has no remote_url; cannot reclone")
 	}
 	branch := ""
 	if pd.DefaultBranch != nil {
@@ -1826,7 +1801,7 @@ func (s *Service) RecloneProjectOnDaemon(
 		"branch": branch,
 	}
 	if err := s.sendProjectDaemonCommand(ctx, userID, "git.reclone", payload, &recloneResp); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("git reclone failed: %w", err))
+		return nil, daemonerr.Error("git reclone", err)
 	}
 	// Refresh cloned_at — the row's path/branch are unchanged but the
 	// "Last cloned/pulled" column should now show "just now".

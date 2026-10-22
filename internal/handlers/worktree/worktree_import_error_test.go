@@ -48,8 +48,8 @@ func TestImportWorktreeError_CodeSaysWhoMustAct(t *testing.T) {
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
-			err := importWorktreeError("import worktree", tc.err, "")
-			assert.Equal(t, tc.code, connect.CodeOf(err))
+			err := importWorktreeError("import worktree", tc.err)
+			assert.Equal(t, tc.code, svcerr.Code(err))
 			assert.Contains(t, err.Error(), tc.contains)
 		})
 	}
@@ -57,7 +57,7 @@ func TestImportWorktreeError_CodeSaysWhoMustAct(t *testing.T) {
 
 // Internal keeps its cause off the wire: the log has it, the client does not.
 func TestImportWorktreeError_InternalDoesNotLeakTheCause(t *testing.T) {
-	err := importWorktreeError("import worktree", errors.New("pq: password authentication failed for user reliant"), "")
-	assert.Equal(t, connect.CodeInternal, connect.CodeOf(err))
+	err := importWorktreeError("import worktree", errors.New("pq: password authentication failed for user reliant"))
+	assert.Equal(t, connect.CodeInternal, svcerr.Code(err))
 	assert.NotContains(t, err.Error(), "pq:")
 }

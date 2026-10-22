@@ -17,6 +17,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -183,7 +184,7 @@ func TestRecreate_AppliesTheSavedSnapshotAndKeepsRefsUntilThen(t *testing.T) {
 	// Plain unarchive cannot work: there is no directory.
 	_, err = e.svc.UnarchiveWorktree(e.ctx, connect.NewRequest(&reliantv1.UnarchiveWorktreeRequest{WorktreeId: wt.ID}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
 
 	_, err = e.svc.RecreateWorktree(e.ctx, connect.NewRequest(&reliantv1.RecreateWorktreeRequest{WorktreeId: wt.ID}))
 	require.NoError(t, err)
@@ -207,7 +208,7 @@ func TestPermanentDelete_RefusesWhileTheDirectoryIsStillOnDisk(t *testing.T) {
 	age(t, path)
 	_, err := e.svc.DeleteWorktree(e.ctx, connect.NewRequest(&reliantv1.DeleteWorktreeRequest{WorktreeId: wt.ID}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
 	_, getErr := e.repo.GetWorktree(e.ctx, wt.ID)
 	assert.NoError(t, getErr, "the row must survive so the directory can still be found")
 	assert.True(t, exists(path))
@@ -230,7 +231,7 @@ func TestImportWorktree_RejectsAnArchivedRowsPath(t *testing.T) {
 	require.NoError(t, e.repo.ArchiveWorktree(e.ctx, wt.ID))
 	_, err := e.svc.ImportWorktree(e.ctx, connect.NewRequest(&reliantv1.ImportWorktreeRequest{ProjectId: e.project.ID, Path: path}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err), "an archived row's path is excluded from discovery, so it cannot be imported")
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err), "an archived row's path is excluded from discovery, so it cannot be imported")
 }
 
 // NIT: storeCleanupMetadata merges instead of wiping held state.
@@ -396,7 +397,7 @@ func TestUnarchive_RefusedWhenTheMachineSaysGone(t *testing.T) {
 	require.False(t, exists(path))
 	_, err := e.svc.UnarchiveWorktree(e.ctx, connect.NewRequest(&reliantv1.UnarchiveWorktreeRequest{WorktreeId: wt.ID}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
 	got, _ := e.repo.GetWorktree(e.ctx, wt.ID)
 	assert.NotNil(t, got.DeletedAt, "the row must NOT flip to active over a missing directory")
 	assert.True(t, got.CleanupMetadata.DirectoryDeleted, "and it now records that the files are gone")

@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/filepreview"
@@ -234,7 +235,7 @@ func TestFileSystemProxy_RefusesAnotherUsersChat(t *testing.T) {
 
 	err := f.browse(t, nil, &chatID)
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
 	assert.False(t, f.router.sent(), "nothing may reach a daemon for another user's chat")
 }
 

@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
@@ -60,6 +61,6 @@ func TestRecreateWorktree_ReportsWhyAnActiveWorktreeCannotBeRebuilt(t *testing.T
 
 	_, err := e.svc.RecreateWorktree(e.ctx, connect.NewRequest(&reliantv1.RecreateWorktreeRequest{WorktreeId: wt.ID}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
 	assert.Contains(t, err.Error(), "no longer exists")
 }

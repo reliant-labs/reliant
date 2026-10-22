@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	worktree "github.com/reliant-labs/reliant/internal/handlers/worktree"
@@ -82,5 +83,5 @@ func TestListWorktrees_RejectsMalformedPageToken(t *testing.T) {
 	bad := "not-a-token!"
 	_, err := svc.ListWorktrees(worktree.AuthedContext(t), connect.NewRequest(&reliantv1.ListWorktreesRequest{ProjectId: ownProjectID, PageToken: &bad}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 }

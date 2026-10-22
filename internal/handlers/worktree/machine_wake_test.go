@@ -16,6 +16,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -216,9 +217,10 @@ func asWire(t *testing.T, err error) *connect.Error {
 		return nil, err
 	})
 	_, wireErr := wrapped(context.Background(), connect.NewRequest(&reliantv1.GetFileTreeRequest{}))
-	var cerr *connect.Error
-	require.True(t, errors.As(wireErr, &cerr), "not a connect error: %v", wireErr)
-	return cerr
+	require.Error(t, wireErr)
+	// What the transport sends: the svcerr interceptor's ToConnect, which
+	// returns a *connect.Error (the waking one) as it is.
+	return svcerr.ToConnect(wireErr)
 }
 
 // requireWaking asserts err reaches the client as "your machine daemonID is
@@ -364,8 +366,8 @@ func TestMachineWakingInterceptor_OnTheWire(t *testing.T) {
 	_, err := client.GetFileTree(context.Background(), connect.NewRequest(&reliantv1.GetFileTreeRequest{
 		ProjectId: f.projectID, Path: "/", ChatId: &chatID,
 	}))
-	var cerr *connect.Error
-	require.True(t, errors.As(err, &cerr), "got %v", err)
+	require.Error(t, err)
+	cerr := svcerr.ToConnect(err) // a client's error is a *connect.Error already
 	assert.Equal(t, connect.CodeUnavailable, cerr.Code())
 	assert.Contains(t, cerr.Message(), "no daemon connected")
 	require.Len(t, cerr.Details(), 1)
@@ -503,7 +505,7 @@ func TestFileSystemProxy_GetFilePreview_Refusals(t *testing.T) {
 				ProjectId: f.projectID, Path: "x", ChatId: &chatID,
 			}))
 			require.Error(t, err)
-			assert.Equal(t, tc.code, connect.CodeOf(err))
+			assert.Equal(t, tc.code, svcerr.Code(err))
 			assert.Empty(t, router.daemonsFor("fs.read_binary_file"), "a refused preview reads nothing")
 		})
 	}

@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -274,7 +275,7 @@ func TestCreateWorktreeRefusesAnInvalidBranchNameUpFront(t *testing.T) {
 		Branch:    "feat..x",
 	}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 	assert.Contains(t, err.Error(), "feat..x")
 
 	rows, err := repo.ListWorktrees(ctx, db.WorktreeFilters{ProjectID: &projectID, Limit: 10})

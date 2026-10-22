@@ -5,12 +5,10 @@ import (
 	"context"
 	"fmt"
 
-	"connectrpc.com/connect"
-
 	"github.com/reliant-labs/forge/pkg/svcerr"
+	"github.com/reliant-labs/reliant/internal/daemonerr"
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/machinewake"
 )
 
@@ -29,16 +27,19 @@ func (s *Service) placeNewWorktree(ctx context.Context, userID, projectID string
 	noMachine := false
 	if chatID != nil && *chatID != "" {
 		chat, err := s.deps.Repo.GetChat(ctx, *chatID)
-		if err != nil || chat == nil || chat.UserID != userID {
-			return machinewake.Target{}, svcerr.ToConnect(svcerr.NotFound("chat"))
+		if err != nil {
+			return machinewake.Target{}, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
+		}
+		// Someone else's chat is not found, so the answer never reveals it.
+		if chat == nil || chat.UserID != userID {
+			return machinewake.Target{}, svcerr.NotFound("chat")
 		}
 		if chat.ProjectID != projectID {
-			return machinewake.Target{}, svcerr.ToConnect(svcerr.InvalidArgument("chat belongs to a different project"))
+			return machinewake.Target{}, svcerr.InvalidArgument("chat belongs to a different project")
 		}
 		daemonID, err := daemonplacement.ChatDaemonID(ctx, s.deps.Repo, chat)
 		if err != nil {
-			logging.ErrorContext(ctx, "Failed to resolve the chat's machine for worktree "+verb, "error", err, "chatID", chat.ID)
-			return machinewake.Target{}, svcerr.ToConnect(svcerr.Internal("failed to resolve the chat's machine"))
+			return machinewake.Target{}, svcerr.WrapOr(err, svcerr.Internal("failed to resolve the chat's machine"))
 		}
 		if daemonID != "" {
 			return machinewake.Target{DaemonID: daemonID, NoMachine: chat.NoMachine}, nil
@@ -51,13 +52,21 @@ func (s *Service) placeNewWorktree(ctx context.Context, userID, projectID string
 	}
 
 	if s.deps.Router == nil {
-		return machinewake.Target{}, svcerr.ToConnect(svcerr.Unavailable(fmt.Sprintf("no daemon available to %s worktree: no daemon router", verb)))
+		return machinewake.Target{}, svcerr.Unavailable(fmt.Sprintf("no daemon available to %s worktree: no daemon router", verb))
 	}
 	daemonID, err := s.deps.Router.ResolveDaemonID(ctx, userID)
 	if err != nil {
 		err = s.wake().AfterFailure(ctx, userID, machinewake.Target{NoMachine: noMachine}, err)
-		logging.ErrorContext(ctx, "Failed to resolve daemon for worktree "+verb, "error", err, "userID", userID)
-		return machinewake.Target{}, connect.NewError(connect.CodeUnavailable, fmt.Errorf("no daemon available to %s worktree: %w", verb, err))
+		// "no daemon available" is a marker the web keys on, so it leads the
+		// message. A machine state picks the code daemonerr gives it everywhere
+		// and appends the router's sentence for it ("no daemon connected …
+		// still starting"), the marker the web's machine wait keys on; any
+		// other resolution failure is Unavailable, its text withheld.
+		doing := fmt.Sprintf("no daemon available to %s worktree", verb)
+		if serr, ok := daemonerr.MachineState(doing, err); ok {
+			return machinewake.Target{}, serr
+		}
+		return machinewake.Target{}, svcerr.WithCause(svcerr.Unavailable(doing), err)
 	}
 	return machinewake.Target{DaemonID: daemonID, NoMachine: noMachine}, nil
 }

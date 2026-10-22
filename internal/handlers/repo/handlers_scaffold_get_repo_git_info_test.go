@@ -27,7 +27,7 @@ func TestGetRepoGitInfo_Generated(t *testing.T) {
 			Name:    "without a daemon router the git status cannot be read",
 			Req:     connect.NewRequest(&pb.GetRepoGitInfoRequest{RepoId: "r-1"}),
 			Ctx:     repo.AuthedContext(t),
-			WantErr: connect.CodeInternal,
+			WantErr: connect.CodeUnavailable, // a daemon command that could not run (daemonerr), not a server fault
 		},
 	}, unrouted.GetRepoGitInfo)
 
