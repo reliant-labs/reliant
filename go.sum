@@ -600,8 +600,8 @@ github.com/prometheus/sigv4 v0.1.0 h1:FgxH+m1qf9dGQ4w8Dd6VkthmpFQfGTzUeavMoQeG1L
 github.com/prometheus/sigv4 v0.1.0/go.mod h1:doosPW9dOitMzYe2I2BN0jZqUuBrGPbXrNsTScN18iU=
 github.com/puzpuzpuz/xsync/v3 v3.5.1 h1:GJYJZwO6IdxN/IKbneznS6yPkVC+c3zyY/j19c++5Fg=
 github.com/puzpuzpuz/xsync/v3 v3.5.1/go.mod h1:VjzYrABPabuM4KyBh1Ftq6u8nhwY5tBPKP9jpmh0nnA=
-github.com/reliant-labs/forge v0.1.47-0.20261022164453-f1e8f2ebdbb6 h1:1S6g07wC89tKaRc2VXo4dVuPY4UMkhAGEmVyoQT2kXY=
-github.com/reliant-labs/forge v0.1.47-0.20261022164453-f1e8f2ebdbb6/go.mod h1:IrkTWZzD46kmkOUYEGnak7LYLHX9wMnqNeBhxrZ74dA=
+github.com/reliant-labs/forge v0.1.47-0.20261022184512-81506ca5a324 h1:RmDmpCmmTsRIfmDswWX3TVn4scMa54SiXfSN3NIAlNI=
+github.com/reliant-labs/forge v0.1.47-0.20261022184512-81506ca5a324/go.mod h1:IrkTWZzD46kmkOUYEGnak7LYLHX9wMnqNeBhxrZ74dA=
 github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec h1:W09IVJc94icq4NjY3clb7Lk8O1qJ8BdBEF8z0ibU0rE=
 github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec/go.mod h1:qqbHyh8v60DhA7CoWK5oRCqLrMHRGoxYCSS9EjAz6Eo=
 github.com/rivo/uniseg v0.1.0/go.mod h1:J6wj4VEh+S6ZtnVlnTBMWIodfgj8LQOQFoIToxlJtxc=
