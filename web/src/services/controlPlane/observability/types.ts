@@ -567,6 +567,12 @@ export interface WorkloadEvent {
   objectKind: string;
   objectName: string;
   container: string;
+  /**
+   * The reason in plain language ("Waiting for capacity"). Empty when there is
+   * none, and then `reason` is shown as it is. `reason` stays the raw Kubernetes
+   * word so a row can disclose it and a filter can match it.
+   */
+  plainReason: string;
 }
 
 /** How a workload runs, from the environment's recorded bundle; "unknown" when no bundle declares it. */
@@ -577,6 +583,12 @@ export type WorkloadKind = "deployment" | "statefulset" | "daemonset" | "cronjob
  * detail page and every badge read this, never a client-side re-derivation.
  */
 export type WorkloadHealth = "healthy" | "degraded" | "crash_looping" | "pending" | "suspended" | "unknown";
+
+/**
+ * Whose side a fault is on. "platform" is ours (no capacity, our registry, a node
+ * or volume fault): the console says so instead of asking the user to fix it.
+ */
+export type WorkloadCause = "none" | "workload" | "platform" | "undetermined";
 
 /**
  * How `releaseVersion` was established: "digest" — the observed image digest
@@ -646,8 +658,12 @@ export interface Workload {
   latestWarning: WorkloadEvent | null;
   kind: WorkloadKind;
   health: WorkloadHealth;
-  /** Why, in one line ("2 of 3 replicas ready"). Empty when healthy. */
+  /** Why, in one plain sentence ("1 of 2 replicas ready. It ran out of memory"). Empty when healthy. */
   healthReason: string;
+  /** Whose side the fault is on; "none" when nothing is wrong. */
+  healthCause: WorkloadCause;
+  /** The raw machinery behind healthReason, for a "details" disclosure. Never the headline. */
+  healthDetail: string;
   /** The deploy ledger's observed ready count, else the pods reporting. */
   readyReplicas: number | null;
   /** Null when neither the ledger nor the bundle knows it: render ready alone. */

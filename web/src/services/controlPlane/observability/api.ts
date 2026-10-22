@@ -32,6 +32,7 @@ import {
   ObservabilityService,
   Signal as WireSignal,
   SortOrder,
+  WorkloadCause as WireWorkloadCause,
   WorkloadHealth as WireWorkloadHealth,
   WorkloadJobResult as WireWorkloadJobResult,
   WorkloadMetric as WireWorkloadMetric,
@@ -57,6 +58,7 @@ import type {
   AttributeOp,
   DeclaredWorkload,
   Workload,
+  WorkloadCause,
   WorkloadHealth,
   WorkloadJob,
   WorkloadJobResult,
@@ -557,6 +559,7 @@ function mapEvent(e: WireWorkloadEvent): WorkloadEvent {
     objectKind: e.objectKind,
     objectName: e.objectName,
     container: e.container,
+    plainReason: e.plainReason,
   };
 }
 
@@ -577,6 +580,14 @@ const WORKLOAD_HEALTH: Record<WireWorkloadHealth, WorkloadHealth> = {
   [WireWorkloadHealth.PENDING]: "pending",
   [WireWorkloadHealth.SUSPENDED]: "suspended",
   [WireWorkloadHealth.UNKNOWN]: "unknown",
+};
+
+const WORKLOAD_CAUSE: Record<WireWorkloadCause, WorkloadCause> = {
+  [WireWorkloadCause.UNSPECIFIED]: "none",
+  [WireWorkloadCause.NONE]: "none",
+  [WireWorkloadCause.WORKLOAD]: "workload",
+  [WireWorkloadCause.PLATFORM]: "platform",
+  [WireWorkloadCause.UNDETERMINED]: "undetermined",
 };
 
 const RELEASE_BASIS: Record<WireWorkloadReleaseBasis, WorkloadReleaseBasis> = {
@@ -656,6 +667,8 @@ function mapWorkload(w: WireWorkload): Workload {
     kind: kindOf(w.kind),
     health: healthOf(w.health),
     healthReason: w.healthReason,
+    healthCause: WORKLOAD_CAUSE[w.healthCause] ?? "none",
+    healthDetail: w.healthDetail,
     readyReplicas: w.readyReplicas ?? null,
     desiredReplicas: w.desiredReplicas ?? null,
     releaseVersion: w.releaseVersion,

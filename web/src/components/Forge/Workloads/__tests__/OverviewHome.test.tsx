@@ -51,7 +51,8 @@ describe("the Overview", () => {
     expect(worker).toHaveTextContent("Crash-looping");
     expect(worker).toHaveTextContent("StatefulSet");
     expect(worker).toHaveTextContent("0/2");
-    expect(worker).toHaveTextContent(/14\s*· OOMKilled/);
+    expect(worker).toHaveTextContent(/14\s*· Ran out of memory/);
+    expect(worker).not.toHaveTextContent("OOMKilled");
     // A workload with restarts that the server calls degraded reads Degraded (not Crash-looping).
     expect(within(table).getByTestId("overview-service-litellm")).toHaveTextContent("Degraded");
     // The whole row opens the workload, in its environment.
@@ -98,7 +99,7 @@ describe("the Overview", () => {
     const rows = within(attention).getAllByRole("row");
     expect(rows.map((row) => row.getAttribute("data-tone"))).toEqual(["warning", "warning", "danger", "warning"]);
     expect(rows[2]).toHaveTextContent("reliant-temporal-worker crash-looping");
-    await userEvent.click(within(rows[2]!).getByText("restarted 14x, last exit OOMKilled"));
+    await userEvent.click(within(rows[2]!).getByText(/Restarting repeatedly \(14 times in the last 24 hours\)/));
     expect(harness.navigateTo).toHaveBeenCalledWith("/w/prod/reliant-temporal-worker");
   });
 
@@ -107,7 +108,8 @@ describe("the Overview", () => {
     await ready();
     const job = screen.getByTestId("overview-job-control-plane-migrate");
     expect(job).toHaveAttribute("data-result", "failed");
-    expect(job).toHaveTextContent(/Failed\s*· BackoffLimitExceeded/);
+    expect(job).toHaveTextContent(/Failed\s*· Failed after exhausting its retries/);
+    expect(job).not.toHaveTextContent("BackoffLimitExceeded");
     expect(job).toHaveTextContent("2 runs, 1 failed");
     expect(job).toHaveTextContent("5m 12s");
   });
