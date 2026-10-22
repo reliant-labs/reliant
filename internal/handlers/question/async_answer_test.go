@@ -19,7 +19,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/workflow/threadwake"
 )
 
-// ResolveQuestion on an async question (ask_user async: true) delivers the
+// ResolveQuestion on an async question (ask_user without blocking: true) delivers the
 // answer to the asking thread the way a message the user types to it is
 // delivered — SendAgentMessage for a sub-agent, SendMessage for the main
 // thread — and only then resolves the question. Nothing waits on it, so no

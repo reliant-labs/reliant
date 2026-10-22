@@ -39,14 +39,14 @@ type EndpointLister interface {
 	ConfiguredEndpoints(ctx context.Context, userID string) ([]EndpointConfig, error)
 }
 
-// Source is the slice of db.Repository RepoDirectory reads.
+// Source is the slice of *db.Repo RepoDirectory reads.
 type Source interface {
 	ListDaemonsByUserID(ctx context.Context, userID string) ([]*db.Daemon, error)
 	ListDaemonLocalModels(ctx context.Context, userID string) (map[string]string, error)
 	ListFreshDaemonAttachmentsForUser(ctx context.Context, userID string, staleThreshold time.Duration) ([]*db.DaemonAttachment, error)
 }
 
-// EndpointSource is the slice of db.Repository the endpoint listing reads,
+// EndpointSource is the slice of *db.Repo the endpoint listing reads,
 // beyond Source.
 type EndpointSource interface {
 	ListModelEndpoints(ctx context.Context, userID string) ([]*db.ModelEndpoint, error)

@@ -26,7 +26,7 @@ const (
 // newChatRepo returns a StubRepo whose chat reads answer from the three
 // fixture chats, with a missing id as an error, as the real store does.
 // Every other method is left for a row to program.
-func newChatRepo() *chat.StubRepo {
+func newChatRepo() *chat.MockRepository {
 	chats := map[string]db.Chat{
 		ownChatID:      {ID: ownChatID, UserID: "test-user", ProjectID: "project-1", Title: "Own chat", State: db.ChatStateIdle},
 		otherChatID:    {ID: otherChatID, UserID: "someone-else", ProjectID: "project-1", Title: "Other chat", State: db.ChatStateIdle},
@@ -41,7 +41,7 @@ func newChatRepo() *chat.StubRepo {
 		}
 		return &c, nil
 	}
-	return &chat.StubRepo{
+	return &chat.MockRepository{
 		GetChatFunc: func(_ context.Context, id string) (*db.Chat, error) {
 			return get(id)
 		},

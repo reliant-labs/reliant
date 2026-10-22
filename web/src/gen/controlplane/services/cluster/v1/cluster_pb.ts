@@ -20,7 +20,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file services/cluster/v1/cluster.proto.
  */
 export const file_services_cluster_v1_cluster: GenFile = /*@__PURE__*/
-  fileDesc("CiFzZXJ2aWNlcy9jbHVzdGVyL3YxL2NsdXN0ZXIucHJvdG8SD2NvbnRyb2xwbGFuZS52MSI2CgtIdWJJZGVudGl0eRIbChNnY3Bfc2VydmljZV9hY2NvdW50GAEgASgJSgQIAhADSgQIAxAEIqwCCgdDbHVzdGVyEgoKAmlkGAEgASgJEgwKBG5hbWUYAiABKAkSMgoIcHJvdmlkZXIYAyABKA4yIC5jb250cm9scGxhbmUudjEuQ2x1c3RlclByb3ZpZGVyEjYKCmNvbm5lY3Rpb24YBCABKA4yIi5jb250cm9scGxhbmUudjEuQ2x1c3RlckNvbm5lY3Rpb24SFwoPZW52aXJvbm1lbnRfaWRzGAkgAygJEi4KCmNyZWF0ZWRfYXQYCiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEioKBGF1dGgYDCABKA4yHC5jb250cm9scGxhbmUudjEuQ2x1c3RlckF1dGgSDwoHYWRkcmVzcxgNIAEoCRIVCg1jbG91ZF9jbHVzdGVyGA4gASgJIhUKE0xpc3RDbHVzdGVyc1JlcXVlc3QiQgoUTGlzdENsdXN0ZXJzUmVzcG9uc2USKgoIY2x1c3RlcnMYASADKAsyGC5jb250cm9scGxhbmUudjEuQ2x1c3RlciIfChFHZXRDbHVzdGVyUmVxdWVzdBIKCgJpZBgBIAEoCSI/ChJHZXRDbHVzdGVyUmVzcG9uc2USKQoHY2x1c3RlchgBIAEoCzIYLmNvbnRyb2xwbGFuZS52MS5DbHVzdGVyIiIKFFJlbW92ZUNsdXN0ZXJSZXF1ZXN0EgoKAmlkGAEgASgJIhcKFVJlbW92ZUNsdXN0ZXJSZXNwb25zZSLOAQoVQ29ubmVjdENsdXN0ZXJSZXF1ZXN0EgwKBG5hbWUYASABKAkSKgoEYXV0aBgCIAEoDjIcLmNvbnRyb2xwbGFuZS52MS5DbHVzdGVyQXV0aBIPCgdhZGRyZXNzGAMgASgJEg4KBmNhX3BlbRgEIAEoCRIVCg1jbG91ZF9jbHVzdGVyGAUgASgJEg0KBXRva2VuGAYgASgJEjQKEHRva2VuX2V4cGlyZXNfYXQYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIncKFkNvbm5lY3RDbHVzdGVyUmVzcG9uc2USKQoHY2x1c3RlchgBIAEoCzIYLmNvbnRyb2xwbGFuZS52MS5DbHVzdGVyEjIKDGh1Yl9pZGVudGl0eRgCIAEoCzIcLmNvbnRyb2xwbGFuZS52MS5IdWJJZGVudGl0eSpNCg9DbHVzdGVyUHJvdmlkZXISIAocQ0xVU1RFUl9QUk9WSURFUl9VTlNQRUNJRklFRBAAEhgKFENMVVNURVJfUFJPVklERVJfQllPEAEqlwEKEUNsdXN0ZXJDb25uZWN0aW9uEiIKHkNMVVNURVJfQ09OTkVDVElPTl9VTlNQRUNJRklFRBAAEh4KGkNMVVNURVJfQ09OTkVDVElPTl9XQUlUSU5HEAESIAocQ0xVU1RFUl9DT05ORUNUSU9OX0NPTk5FQ1RFRBACEhwKGENMVVNURVJfQ09OTkVDVElPTl9TVEFMRRADKocBCgtDbHVzdGVyQXV0aBIcChhDTFVTVEVSX0FVVEhfVU5TUEVDSUZJRUQQABImCiJDTFVTVEVSX0FVVEhfV09SS0xPQURfSURFTlRJVFlfR0NQEAESJgoiQ0xVU1RFUl9BVVRIX1NFUlZJQ0VfQUNDT1VOVF9UT0tFThAEIgQIAhACIgQIAxADMvIDCg5DbHVzdGVyU2VydmljZRJjCgxMaXN0Q2x1c3RlcnMSJC5jb250cm9scGxhbmUudjEuTGlzdENsdXN0ZXJzUmVxdWVzdBolLmNvbnRyb2xwbGFuZS52MS5MaXN0Q2x1c3RlcnNSZXNwb25zZSIGorsYAggBEl0KCkdldENsdXN0ZXISIi5jb250cm9scGxhbmUudjEuR2V0Q2x1c3RlclJlcXVlc3QaIy5jb250cm9scGxhbmUudjEuR2V0Q2x1c3RlclJlc3BvbnNlIgaiuxgCCAESfwoNUmVtb3ZlQ2x1c3RlchIlLmNvbnRyb2xwbGFuZS52MS5SZW1vdmVDbHVzdGVyUmVxdWVzdBomLmNvbnRyb2xwbGFuZS52MS5SZW1vdmVDbHVzdGVyUmVzcG9uc2UiH6K7GBsIAToXCgZyZW1vdmUSDQoHY2x1c3RlchICaWQSmgEKDkNvbm5lY3RDbHVzdGVyEiYuY29udHJvbHBsYW5lLnYxLkNvbm5lY3RDbHVzdGVyUmVxdWVzdBonLmNvbnRyb2xwbGFuZS52MS5Db25uZWN0Q2x1c3RlclJlc3BvbnNlIjeiuxgzCAE6LwoHY29ubmVjdBIkCgdjbHVzdGVyEhNyZXNwb25zZS5jbHVzdGVyLmlkGgRuYW1lQtUBChNjb20uY29udHJvbHBsYW5lLnYxQgxDbHVzdGVyUHJvdG9QAVpTZ2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vY29udHJvbHBsYW5lL3NlcnZpY2VzL2NsdXN0ZXIvdjE7Y29udHJvbHBsYW5ldjGiAgNDWFiqAg9Db250cm9scGxhbmUuVjHKAg9Db250cm9scGxhbmVcVjHiAhtDb250cm9scGxhbmVcVjFcR1BCTWV0YWRhdGHqAhBDb250cm9scGxhbmU6OlYxYgZwcm90bzM", [file_forge_v1_forge, file_google_protobuf_timestamp]);
+  fileDesc("CiFzZXJ2aWNlcy9jbHVzdGVyL3YxL2NsdXN0ZXIucHJvdG8SD2NvbnRyb2xwbGFuZS52MSI2CgtIdWJJZGVudGl0eRIbChNnY3Bfc2VydmljZV9hY2NvdW50GAEgASgJSgQIAhADSgQIAxAEItwCCgdDbHVzdGVyEgoKAmlkGAEgASgJEgwKBG5hbWUYAiABKAkSMgoIcHJvdmlkZXIYAyABKA4yIC5jb250cm9scGxhbmUudjEuQ2x1c3RlclByb3ZpZGVyEjYKCmNvbm5lY3Rpb24YBCABKA4yIi5jb250cm9scGxhbmUudjEuQ2x1c3RlckNvbm5lY3Rpb24SFwoPZW52aXJvbm1lbnRfaWRzGAkgAygJEi4KCmNyZWF0ZWRfYXQYCiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEioKBGF1dGgYDCABKA4yHC5jb250cm9scGxhbmUudjEuQ2x1c3RlckF1dGgSDwoHYWRkcmVzcxgNIAEoCRIVCg1jbG91ZF9jbHVzdGVyGA4gASgJEi4KBmlzc3VlchgPIAEoCzIeLmNvbnRyb2xwbGFuZS52MS5DbHVzdGVySXNzdWVyIhUKE0xpc3RDbHVzdGVyc1JlcXVlc3QiQgoUTGlzdENsdXN0ZXJzUmVzcG9uc2USKgoIY2x1c3RlcnMYASADKAsyGC5jb250cm9scGxhbmUudjEuQ2x1c3RlciIfChFHZXRDbHVzdGVyUmVxdWVzdBIKCgJpZBgBIAEoCSI/ChJHZXRDbHVzdGVyUmVzcG9uc2USKQoHY2x1c3RlchgBIAEoCzIYLmNvbnRyb2xwbGFuZS52MS5DbHVzdGVyIiIKFFJlbW92ZUNsdXN0ZXJSZXF1ZXN0EgoKAmlkGAEgASgJIhcKFVJlbW92ZUNsdXN0ZXJSZXNwb25zZSKKAgoVQ29ubmVjdENsdXN0ZXJSZXF1ZXN0EgwKBG5hbWUYASABKAkSKgoEYXV0aBgCIAEoDjIcLmNvbnRyb2xwbGFuZS52MS5DbHVzdGVyQXV0aBIPCgdhZGRyZXNzGAMgASgJEg4KBmNhX3BlbRgEIAEoCRIVCg1jbG91ZF9jbHVzdGVyGAUgASgJEg0KBXRva2VuGAYgASgJEjQKEHRva2VuX2V4cGlyZXNfYXQYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjoKBmlzc3VlchgIIAEoCzIqLmNvbnRyb2xwbGFuZS52MS5DbHVzdGVySXNzdWVyUmVnaXN0cmF0aW9uIlcKGUNsdXN0ZXJJc3N1ZXJSZWdpc3RyYXRpb24SDgoGaXNzdWVyGAEgASgJEhIKCGRpc2NvdmVyGAIgASgISAASDgoEandrcxgDIAEoCUgAQgYKBGtleXMijgEKDUNsdXN0ZXJJc3N1ZXISGAoQc3RvcmVfY2x1c3Rlcl9pZBgBIAEoCRIOCgZpc3N1ZXIYAiABKAkSEAoIZGlzY292ZXIYAyABKAgSEQoJa2V5X2NvdW50GAQgASgFEi4KCnVwZGF0ZWRfYXQYBSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIncKFkNvbm5lY3RDbHVzdGVyUmVzcG9uc2USKQoHY2x1c3RlchgBIAEoCzIYLmNvbnRyb2xwbGFuZS52MS5DbHVzdGVyEjIKDGh1Yl9pZGVudGl0eRgCIAEoCzIcLmNvbnRyb2xwbGFuZS52MS5IdWJJZGVudGl0eSpNCg9DbHVzdGVyUHJvdmlkZXISIAocQ0xVU1RFUl9QUk9WSURFUl9VTlNQRUNJRklFRBAAEhgKFENMVVNURVJfUFJPVklERVJfQllPEAEqlwEKEUNsdXN0ZXJDb25uZWN0aW9uEiIKHkNMVVNURVJfQ09OTkVDVElPTl9VTlNQRUNJRklFRBAAEh4KGkNMVVNURVJfQ09OTkVDVElPTl9XQUlUSU5HEAESIAocQ0xVU1RFUl9DT05ORUNUSU9OX0NPTk5FQ1RFRBACEhwKGENMVVNURVJfQ09OTkVDVElPTl9TVEFMRRADKocBCgtDbHVzdGVyQXV0aBIcChhDTFVTVEVSX0FVVEhfVU5TUEVDSUZJRUQQABImCiJDTFVTVEVSX0FVVEhfV09SS0xPQURfSURFTlRJVFlfR0NQEAESJgoiQ0xVU1RFUl9BVVRIX1NFUlZJQ0VfQUNDT1VOVF9UT0tFThAEIgQIAhACIgQIAxADMvIDCg5DbHVzdGVyU2VydmljZRJjCgxMaXN0Q2x1c3RlcnMSJC5jb250cm9scGxhbmUudjEuTGlzdENsdXN0ZXJzUmVxdWVzdBolLmNvbnRyb2xwbGFuZS52MS5MaXN0Q2x1c3RlcnNSZXNwb25zZSIGorsYAggBEl0KCkdldENsdXN0ZXISIi5jb250cm9scGxhbmUudjEuR2V0Q2x1c3RlclJlcXVlc3QaIy5jb250cm9scGxhbmUudjEuR2V0Q2x1c3RlclJlc3BvbnNlIgaiuxgCCAESfwoNUmVtb3ZlQ2x1c3RlchIlLmNvbnRyb2xwbGFuZS52MS5SZW1vdmVDbHVzdGVyUmVxdWVzdBomLmNvbnRyb2xwbGFuZS52MS5SZW1vdmVDbHVzdGVyUmVzcG9uc2UiH6K7GBsIAToXCgZyZW1vdmUSDQoHY2x1c3RlchICaWQSmgEKDkNvbm5lY3RDbHVzdGVyEiYuY29udHJvbHBsYW5lLnYxLkNvbm5lY3RDbHVzdGVyUmVxdWVzdBonLmNvbnRyb2xwbGFuZS52MS5Db25uZWN0Q2x1c3RlclJlc3BvbnNlIjeiuxgzCAE6LwoHY29ubmVjdBIkCgdjbHVzdGVyEhNyZXNwb25zZS5jbHVzdGVyLmlkGgRuYW1lQtUBChNjb20uY29udHJvbHBsYW5lLnYxQgxDbHVzdGVyUHJvdG9QAVpTZ2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vY29udHJvbHBsYW5lL3NlcnZpY2VzL2NsdXN0ZXIvdjE7Y29udHJvbHBsYW5ldjGiAgNDWFiqAg9Db250cm9scGxhbmUuVjHKAg9Db250cm9scGxhbmVcVjHiAhtDb250cm9scGxhbmVcVjFcR1BCTWV0YWRhdGHqAhBDb250cm9scGxhbmU6OlYxYgZwcm90bzM", [file_forge_v1_forge, file_google_protobuf_timestamp]);
 
 /**
  * HubIdentity is the principal the CONTROL PLANE acts as.
@@ -123,6 +123,14 @@ export type Cluster = Message<"controlplane.v1.Cluster"> & {
    * @generated from field: string cloud_cluster = 14;
    */
   cloudCluster: string;
+
+  /**
+   * The secret-store issuer registered for this cluster, or unset when none
+   * is. See ClusterIssuer.
+   *
+   * @generated from field: controlplane.v1.ClusterIssuer issuer = 15;
+   */
+  issuer?: ClusterIssuer | undefined;
 };
 
 /**
@@ -320,6 +328,24 @@ export type ConnectClusterRequest = Message<"controlplane.v1.ConnectClusterReque
    * @generated from field: google.protobuf.Timestamp token_expires_at = 7;
    */
   tokenExpiresAt?: Timestamp | undefined;
+
+  /**
+   * The service-account issuer the platform's secret store trusts for this
+   * cluster. Optional, and only needed by a cluster that delivers
+   * store-backed Secrets (forge.StoreSource): it is how the store verifies the
+   * projected token an External Secrets Operator in the cluster logs in with.
+   * See ClusterIssuerRegistration.
+   *
+   * PRESENCE IS THE SWITCH, because an older `forge cluster connect` sends no
+   * issuer and re-running it must not silently withdraw one:
+   *   absent          the registration is left as it is;
+   *   present         it is replaced by this one;
+   *   present, empty  the registration is removed, and the store stops
+   *                   trusting the cluster.
+   *
+   * @generated from field: controlplane.v1.ClusterIssuerRegistration issuer = 8;
+   */
+  issuer?: ClusterIssuerRegistration | undefined;
 };
 
 /**
@@ -328,6 +354,114 @@ export type ConnectClusterRequest = Message<"controlplane.v1.ConnectClusterReque
  */
 export const ConnectClusterRequestSchema: GenMessage<ConnectClusterRequest> = /*@__PURE__*/
   messageDesc(file_services_cluster_v1_cluster, 8);
+
+/**
+ * ClusterIssuerRegistration declares the service-account issuer of a cluster.
+ *
+ * The cluster's own API server signs the tokens its pods are projected, so the
+ * store verifies them against THAT cluster's keys: no stored credential, and no
+ * call from the store back into the cluster. Exactly one way of learning the
+ * keys is declared.
+ *
+ * @generated from message controlplane.v1.ClusterIssuerRegistration
+ */
+export type ClusterIssuerRegistration = Message<"controlplane.v1.ClusterIssuerRegistration"> & {
+  /**
+   * The `iss` claim the cluster's tokens carry, e.g.
+   * `https://container.googleapis.com/v1/projects/p/locations/l/clusters/c`
+   * (GKE) or the `--service-account-issuer` of the API server. https only. The
+   * store requires a token to carry exactly this issuer.
+   *
+   * @generated from field: string issuer = 1;
+   */
+  issuer: string;
+
+  /**
+   * @generated from oneof controlplane.v1.ClusterIssuerRegistration.keys
+   */
+  keys: {
+    /**
+     * The store fetches the signing keys itself, from
+     * `<issuer>/.well-known/openid-configuration`. For an issuer that is
+     * reachable from the internet, as GKE's is. The issuer's host must resolve
+     * to public addresses only: the store dials it.
+     *
+     * @generated from field: bool discover = 2;
+     */
+    value: boolean;
+    case: "discover";
+  } | {
+    /**
+     * The JWKS the cluster serves at `/openid/v1/jwks`, uploaded by the
+     * connecting side. For a cluster whose issuer the store cannot reach
+     * (private, k3d). Public keys only: a JWKS carrying private or symmetric
+     * key material is refused. Re-send it to follow a key rotation.
+     *
+     * @generated from field: string jwks = 3;
+     */
+    value: string;
+    case: "jwks";
+  } | { case: undefined; value?: undefined };
+};
+
+/**
+ * Describes the message controlplane.v1.ClusterIssuerRegistration.
+ * Use `create(ClusterIssuerRegistrationSchema)` to create a new message.
+ */
+export const ClusterIssuerRegistrationSchema: GenMessage<ClusterIssuerRegistration> = /*@__PURE__*/
+  messageDesc(file_services_cluster_v1_cluster, 9);
+
+/**
+ * ClusterIssuer is what is registered for a cluster. The keys themselves are
+ * public but bulky, and nothing reading a cluster needs them, so only their
+ * count is returned.
+ *
+ * @generated from message controlplane.v1.ClusterIssuer
+ */
+export type ClusterIssuer = Message<"controlplane.v1.ClusterIssuer"> & {
+  /**
+   * The id the cluster is known by in the secret store. The store's auth mount
+   * is `jwt-<store_cluster_id>`, the audience its roles require ends
+   * `/c/<store_cluster_id>`, and a rendered SecretStore names it. Today it is
+   * the cluster's name, and it is unique across ALL orgs: the first org to
+   * register an id owns it, and registering it from another org is refused.
+   * Read it from here rather than assuming it is the name.
+   *
+   * @generated from field: string store_cluster_id = 1;
+   */
+  storeClusterId: string;
+
+  /**
+   * @generated from field: string issuer = 2;
+   */
+  issuer: string;
+
+  /**
+   * True when the store fetches the keys from the issuer itself.
+   *
+   * @generated from field: bool discover = 3;
+   */
+  discover: boolean;
+
+  /**
+   * The number of uploaded signing keys; zero when discover is true.
+   *
+   * @generated from field: int32 key_count = 4;
+   */
+  keyCount: number;
+
+  /**
+   * @generated from field: google.protobuf.Timestamp updated_at = 5;
+   */
+  updatedAt?: Timestamp | undefined;
+};
+
+/**
+ * Describes the message controlplane.v1.ClusterIssuer.
+ * Use `create(ClusterIssuerSchema)` to create a new message.
+ */
+export const ClusterIssuerSchema: GenMessage<ClusterIssuer> = /*@__PURE__*/
+  messageDesc(file_services_cluster_v1_cluster, 10);
 
 /**
  * @generated from message controlplane.v1.ConnectClusterResponse
@@ -351,7 +485,7 @@ export type ConnectClusterResponse = Message<"controlplane.v1.ConnectClusterResp
  * Use `create(ConnectClusterResponseSchema)` to create a new message.
  */
 export const ConnectClusterResponseSchema: GenMessage<ConnectClusterResponse> = /*@__PURE__*/
-  messageDesc(file_services_cluster_v1_cluster, 9);
+  messageDesc(file_services_cluster_v1_cluster, 11);
 
 /**
  * ClusterProvider is who runs the cluster. BYO — the customer's own, whether

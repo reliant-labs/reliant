@@ -23,7 +23,7 @@ import (
 // look either up is no longer "not found" but the failure it is.
 func TestRepoOwnership_ErrorClasses(t *testing.T) {
 	t.Parallel()
-	remove := func(t *testing.T, store *repo.StubRepo) error {
+	remove := func(t *testing.T, store *repo.MockRepository) error {
 		svc := repo.NewTestRepo(t, repo.WithRepoDeps(repo.Deps{Repo: store}))
 		_, err := svc.RemoveRepo(repo.AuthedContext(t), connect.NewRequest(&pb.RemoveRepoRequest{RepoId: "r-1"}))
 		return err
@@ -46,7 +46,7 @@ func TestRepoOwnership_ErrorClasses(t *testing.T) {
 		{"a cancellation", fmt.Errorf("query: %w", context.Canceled), connect.CodeCanceled},
 		{"an opaque failure", errors.New("dsn=postgres://u:secret@h"), connect.CodeInternal},
 	} {
-		for what, store := range map[string]*repo.StubRepo{
+		for what, store := range map[string]*repo.MockRepository{
 			"reading the repo":    {GetRepoFunc: func(context.Context, string) (*core.Repo, error) { return nil, tc.err }},
 			"reading its project": withProjectErr(ownedProjectRepo(t), tc.err),
 		} {
@@ -60,7 +60,7 @@ func TestRepoOwnership_ErrorClasses(t *testing.T) {
 	}
 }
 
-func withProjectErr(store *repo.StubRepo, err error) *repo.StubRepo {
+func withProjectErr(store *repo.MockRepository, err error) *repo.MockRepository {
 	store.GetProjectWithUserCheckFunc = func(context.Context, string, string) (*db.Project, error) { return nil, err }
 	return store
 }

@@ -9,7 +9,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 )
 
-// Repository is the slice of db.Repository the attachment handlers use.
+// Repository is the slice of *db.Repo the attachment handlers use.
 type Repository interface {
 	CreateAttachment(ctx context.Context, attachment *db.Attachment) error
 	GetAttachment(ctx context.Context, id string) (*db.Attachment, error)

@@ -11,7 +11,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 )
 
-// Repository is the slice of db.Repository the approval handlers use.
+// Repository is the slice of *db.Repo the approval handlers use.
 type Repository interface {
 	RunTx(ctx context.Context, policy orm.TxPolicy, f func(ctx context.Context) error) error
 

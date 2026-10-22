@@ -4,7 +4,6 @@ import (
 	"context"
 	"io"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -13,6 +12,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/integrations/catalog"
 	"github.com/reliant-labs/reliant/internal/integrations/manifest"
+	"github.com/reliant-labs/reliant/internal/netguard/netguardtest"
 )
 
 // The per-call request options (timeout, body/response format, redirects)
@@ -36,8 +36,7 @@ func runHTTP(t *testing.T, params map[string]any) (*Result, error) {
 
 func TestHTTPRequestTimeoutParam(t *testing.T) {
 	release := make(chan struct{})
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { <-release }))
-	defer srv.Close()
+	srv := netguardtest.NewServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { <-release }))
 	defer close(release)
 
 	start := time.Now()
@@ -58,8 +57,7 @@ func TestHTTPRequestTimeoutParam(t *testing.T) {
 }
 
 func TestTimeoutExprMustYieldSecondsInRange(t *testing.T) {
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(`{}`)) }))
-	defer srv.Close()
+	srv := netguardtest.NewTLSServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(`{}`)) }))
 	// No schema bounds here, so the runner is the backstop.
 	m, a := mustParse(t, manifestFor(srv.URL, "    params: { type: object }\n    request: { method: GET, path: /x, timeout_expr: params.t }\n"))
 	r := newRunner()
@@ -76,11 +74,10 @@ func TestTimeoutExprMustYieldSecondsInRange(t *testing.T) {
 
 func TestHTTPRequestResponseFormat(t *testing.T) {
 	var body, contentType string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	srv := netguardtest.NewServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", contentType)
 		_, _ = w.Write([]byte(body))
 	}))
-	defer srv.Close()
 
 	for _, tc := range []struct {
 		name, format, body, contentType string
@@ -154,13 +151,12 @@ func equalJSON(a, b any) bool {
 
 func TestHTTPRequestBodyType(t *testing.T) {
 	var gotType, gotBody string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := netguardtest.NewServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotType = r.Header.Get("Content-Type")
 		raw, _ := io.ReadAll(r.Body)
 		gotBody = string(raw)
 		_, _ = w.Write([]byte(`{}`))
 	}))
-	defer srv.Close()
 
 	for _, tc := range []struct {
 		name     string
@@ -207,8 +203,7 @@ func TestHTTPRequestFollowRedirects(t *testing.T) {
 		landed.Add(1)
 		_, _ = w.Write([]byte(`{"page":"new"}`))
 	})
-	srv := httptest.NewServer(mux)
-	defer srv.Close()
+	srv := netguardtest.NewServer(t, mux)
 
 	res, err := runHTTP(t, map[string]any{"url": srv.URL + "/old"})
 	if err != nil || res.IsError {
@@ -237,10 +232,9 @@ func TestHTTPRequestFollowRedirects(t *testing.T) {
 // redirects: return never requests the Location, so a redirect to a host the
 // rules would refuse is reported as the answer instead of an error.
 func TestReturnedRedirectIsNotFollowedOffHost(t *testing.T) {
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := netguardtest.NewTLSServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "https://169.254.169.254/latest/meta-data", http.StatusFound)
 	}))
-	defer srv.Close()
 	m, a := mustParse(t, manifestFor(srv.URL, "    params: { type: object }\n    request: { method: GET, path: /r, redirects: return }\n"))
 	r := newRunner()
 	r.client.Transport.(*http.Transport).TLSClientConfig = srv.Client().Transport.(*http.Transport).TLSClientConfig

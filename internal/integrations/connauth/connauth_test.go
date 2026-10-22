@@ -18,6 +18,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/reliant-labs/forge/pkg/crypto"
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -26,11 +29,9 @@ import (
 	"github.com/reliant-labs/reliant/internal/integrations/connauth"
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
-	"github.com/reliant-labs/reliant/internal/netguard"
+	"github.com/reliant-labs/reliant/internal/netguard/netguardtest"
 	"github.com/reliant-labs/reliant/internal/rctx"
 	"github.com/reliant-labs/reliant/internal/vault"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 const canary = "sk-canary-7f3a9c1e5d2b8046"
@@ -111,8 +112,7 @@ func (e *env) basic(userID, integration, name string) string {
 }
 
 func localRunner() *httpaction.Runner {
-	g := netguard.New()
-	g.AllowLoopback = true
+	g := netguardtest.Guard()
 	return httpaction.NewRunner(g)
 }
 
@@ -132,7 +132,7 @@ func httpRequest(t *testing.T) (*catalog.Action, map[string]any) {
 func serve(t *testing.T, echo bool) (srvURL string, runner *httpaction.Runner, seen *http.Header) {
 	t.Helper()
 	got := http.Header{}
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := netguardtest.NewTLSServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		got = r.Header.Clone()
 		w.Header().Set("Content-Type", "application/json")
 		if echo {
@@ -142,7 +142,6 @@ func serve(t *testing.T, echo bool) (srvURL string, runner *httpaction.Runner, s
 		}
 		_, _ = w.Write([]byte(`{"ok":true}`))
 	}))
-	t.Cleanup(srv.Close)
 	return srv.URL, trusting(srv), &got
 }
 
@@ -267,14 +266,12 @@ func TestDaemonPlacedCallerIsRefused(t *testing.T) {
 
 func TestCredentialNeverFollowsARedirectToAnotherHost(t *testing.T) {
 	e := newEnv(t)
-	other := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	other := netguardtest.NewTLSServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		t.Errorf("credential reached a second host: %v", r.Header)
 	}))
-	defer other.Close()
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := netguardtest.NewTLSServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, other.URL+"/steal", http.StatusFound)
 	}))
-	defer srv.Close()
 	runner := trusting(srv)
 	a, params := httpRequest(t)
 	params["url"] = srv.URL
@@ -348,7 +345,7 @@ func TestForTriggerRefusesAnotherUsersConnection(t *testing.T) {
 func TestForTriggerNeedsReauthIsTyped(t *testing.T) {
 	e := newEnv(t)
 	pat := e.githubPAT("alice")
-	require.NoError(t, e.repo.Connections().WithSecretsLock(context.Background(), "alice", pat, func(tx core.SecretsTx) error {
+	require.NoError(t, e.repo.Connections().WithSecretsLock(context.Background(), "alice", pat, func(tx *db.SecretsTx) error {
 		return tx.MarkStatus(context.Background(), core.ConnectionStatusNeedsReauth, "invalid_grant")
 	}))
 	trigger := e.trigger("alice", "github", &pat)
@@ -371,12 +368,11 @@ func TestForTriggerWithoutAResolverRefuses(t *testing.T) {
 func TestToolFormUsesTheRunOwner(t *testing.T) {
 	e := newEnv(t)
 	got := http.Header{}
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := netguardtest.NewTLSServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		got = r.Header.Clone()
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"ok":true}`))
 	}))
-	defer srv.Close()
 	restore := tools.UseIntegrationRunner(trusting(srv))
 	defer restore()
 

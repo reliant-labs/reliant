@@ -172,6 +172,7 @@ func TestReconcile_CopiesDoNotFillTheDataCap(t *testing.T) {
 // venv's bin/python3 -> /usr/bin/python3.12 was reported as a file outside
 // every checkout, which holds the workspace for good. The target survives.
 func TestReconcile_SymlinkOutOfCheckoutIsInsideIt(t *testing.T) {
+	heavyUnderShort(t, "~36 git processes")
 	f := newFixture(t)
 	f.idle()
 	ignore(t, f, ".tools/\n")

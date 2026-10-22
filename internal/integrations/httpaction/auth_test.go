@@ -14,6 +14,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/integrations/manifest"
 	"github.com/reliant-labs/reliant/internal/netguard"
+	"github.com/reliant-labs/reliant/internal/netguard/netguardtest"
 )
 
 // fakeCred is a credential that writes a header, carries connection params,
@@ -51,8 +52,7 @@ func (s *fixedSource) Credential(_ context.Context, req CredentialRequest) (Cred
 // Host header shows which tenant the request was built for.
 func tenantRunner(t *testing.T, srv *httptest.Server) *Runner {
 	t.Helper()
-	g := netguard.New()
-	g.AllowLoopback = true
+	g := netguardtest.Guard()
 	u, _ := url.Parse(srv.URL)
 	pool := x509.NewCertPool()
 	pool.AddCert(srv.Certificate())
@@ -91,11 +91,10 @@ actions:
 // templates; the credential is applied there and nowhere else.
 func TestConnectionParamsTemplateBaseURL(t *testing.T) {
 	var gotHost, gotPath, gotQuery, gotKey string
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := netguardtest.NewTLSServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotHost, gotPath, gotQuery, gotKey = r.Host, r.URL.Path, r.URL.RawQuery, r.Header.Get("X-Key")
 		_, _ = w.Write([]byte(`{"ok":true}`))
 	}))
-	defer srv.Close()
 	m, err := manifest.Parse([]byte(tenantManifest), manifest.TrustCurated)
 	if err != nil {
 		t.Fatal(err)

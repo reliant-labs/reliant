@@ -190,7 +190,8 @@ nodes:
           code answers most questions. Use `ask_user` ONLY for decisions the
           code cannot answer — e.g. which components are in/out of scope,
           module-path preference, how strict the behavior-parity bar is.
-          Ask few, high-leverage questions; batch them.
+          Ask few, high-leverage questions; batch them, with `blocking: true`:
+          the plan rests on the answers.
 
           **Then produce, in this order:**
           1. `{{inputs.working_directory}}/MIGRATION_PLAN.md` — the durable

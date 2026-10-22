@@ -33,7 +33,7 @@ func TestAttachment_StoreFailuresOnTheWire(t *testing.T) {
 		{"opaque", errors.New("dial tcp: dsn=postgres://u:secret@h"), connect.CodeInternal},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			repo := &attachment.StubRepo{
+			repo := &attachment.MockRepository{
 				GetAttachmentFunc: func(context.Context, string) (*db.Attachment, error) { return nil, tc.err },
 			}
 			_, client := attachment.NewTestAttachmentServer(t, attachment.WithAttachmentDeps(attachment.Deps{Repo: repo}))

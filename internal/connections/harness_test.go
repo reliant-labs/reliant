@@ -222,7 +222,7 @@ type env struct {
 	repo      *db.Repo
 	raw       *sql.DB
 	vault     vault.Service
-	store     core.ConnectionStore
+	store     db.ConnectionStore
 	gh        *fakeGitHub
 	providers *connections.Registry
 	tokens    *connections.TokenSource

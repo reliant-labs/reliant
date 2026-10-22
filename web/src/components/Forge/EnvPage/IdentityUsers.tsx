@@ -42,6 +42,7 @@ import { identityErrorKind, identityErrorMessage } from "@/services/controlPlane
 import { toast } from "@/lib/toast-manager";
 import { cn } from "@/lib/utils";
 
+import { formatAgo } from "../Observability/format";
 import { Panel } from "./EnvTabPanels";
 import { IdentityPasswordCodeDialog, type IssuedCode } from "./IdentityPasswordCodeDialog";
 
@@ -102,6 +103,8 @@ export function IdentityUsers({
 
   const roles: IdentityRole[] = users.data?.pages[0]?.roles ?? [];
   const rows = users.data?.pages.flatMap((page) => page.users) ?? [];
+  const total = users.data?.pages[0]?.totalSize ?? null;
+  const reportsSignIns = users.data?.pages[0]?.reportsSignIns ?? false;
 
   const done = (message: string) => () => toast.success(message);
   const failed = (what: string) => (error: unknown) =>
@@ -208,6 +211,7 @@ export function IdentityUsers({
             onEdit={() => setEditing(editing === user.userId ? null : user.userId)}
             orgId={orgId}
             envId={envId}
+            reportsSignIns={reportsSignIns}
             busy={reset.isPending || resetLink.isPending || unlock.isPending}
             canEmail={canEmail}
             onReset={() =>
@@ -227,6 +231,14 @@ export function IdentityUsers({
       <Panel
         title="Users"
         description="Everyone who can sign in to this environment's applications."
+        actions={
+          serving &&
+          total !== null && (
+            <span className="text-xs text-muted-foreground" data-testid="identity-users-total">
+              {rows.length < total ? `${rows.length} of ${total}` : total} {total === 1 ? "user" : "users"}
+            </span>
+          )
+        }
         testId="identity-users-panel"
         flush
       >
@@ -322,6 +334,7 @@ function UserRow({
   onEdit,
   orgId,
   envId,
+  reportsSignIns,
   busy,
   canEmail,
   onReset,
@@ -336,6 +349,8 @@ function UserRow({
   onEdit: () => void;
   orgId: string;
   envId: string;
+  /** Whether a missing last sign-in means "never" (the server reports them). */
+  reportsSignIns: boolean;
   busy: boolean;
   canEmail: boolean;
   onReset: () => void;
@@ -356,6 +371,13 @@ function UserRow({
           <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
             {user.displayName && user.displayName !== user.email && <span>{user.displayName}</span>}
             {user.createdAtMs && <span>added {new Date(user.createdAtMs).toLocaleDateString()}</span>}
+            {user.lastSignInAtMs ? (
+              <span data-testid="identity-user-last-sign-in" title={new Date(user.lastSignInAtMs).toLocaleString()}>
+                signed in {formatAgo(user.lastSignInAtMs)}
+              </span>
+            ) : (
+              reportsSignIns && <span data-testid="identity-user-last-sign-in">never signed in</span>
+            )}
             {user.roles.length === 0 ? (
               <span>no roles</span>
             ) : (

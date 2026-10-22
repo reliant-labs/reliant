@@ -11,8 +11,9 @@ import (
 	"go.temporal.io/sdk/workflow"
 )
 
-// An async ask_user (input async: true) asks without waiting. The question is
-// recorded like any other — a questions row the timeline renders and the
+// An async ask_user asks without waiting, and it is the default: a call
+// waits for the answer only when its input says blocking: true. The question
+// is recorded like any other — a questions row the timeline renders and the
 // user's inbox lists — but flagged async, and the tool returns at once, so
 // the agent's loop goes on. Nothing in the run waits for the answer: the
 // question service delivers it to the asking thread as a message from the
@@ -25,12 +26,22 @@ import (
 // semantics for that, and a background listener per question would have to
 // survive continue-as-new and completion to match them.
 
-// askUserAsyncVersion is the version an async ask_user records. Its change
-// id is per tool call (askUserAsyncVersionID) and asked only for a call whose
-// input says async, so a history with no such call never records a marker,
-// and one that held an async call before the option existed replays as
-// DefaultVersion: the blocking wait it took then.
-const askUserAsyncVersion workflow.Version = 1
+// The change id askUserAsyncVersionID(<tool call id>) decides, per ask_user
+// call, which rule picks between the async and the blocking path. Each
+// version is the rule a build recorded with; a history replays the rule its
+// marker names:
+//
+//   - DefaultVersion (no marker): every call blocks. Builds before
+//     askUserAsyncOptIn asked no version at all, and that build asked only
+//     for a call whose input said async: true — so every call it recorded
+//     without the flag, the default then, has no marker and blocks again.
+//   - askUserAsyncOptIn (1): async only when the input says async: true.
+//   - askUserAsyncByDefault (2): async unless the input says blocking: true.
+//     Every call recorded now carries it, whichever path it takes.
+const (
+	askUserAsyncOptIn     workflow.Version = 1
+	askUserAsyncByDefault workflow.Version = 2
+)
 
 // askUserAsyncChangeID prefixes askUserAsyncVersionID.
 const askUserAsyncChangeID = "ask-user-async"
@@ -41,11 +52,28 @@ func askUserAsyncVersionID(toolCallID string) string {
 	return fmt.Sprintf("%s/%s", askUserAsyncChangeID, toolCallID)
 }
 
-// askUserInputAsync reports whether an ask_user call's parsed input asks to
-// post the question without waiting. A quoted boolean counts: tool input
-// coercion is the norm elsewhere, and a model that wrote "true" meant it.
-func askUserInputAsync(input map[string]interface{}) bool {
-	switch v := input["async"].(type) {
+// askUserIsAsync reports whether an ask_user call posts its question without
+// waiting, under the rule its history recorded (see askUserAsyncByDefault).
+// It must be reached at the point the opt-in build asked its GetVersion:
+// after the unattended short-circuit, before QuestionCreate.
+func askUserIsAsync(ctx workflow.Context, toolCallID string, input map[string]interface{}) bool {
+	switch workflow.GetVersion(ctx, askUserAsyncVersionID(toolCallID), workflow.DefaultVersion, askUserAsyncByDefault) {
+	case workflow.DefaultVersion:
+		return false
+	case askUserAsyncOptIn:
+		return askUserInputFlag(input, "async")
+	default:
+		return !askUserInputFlag(input, "blocking")
+	}
+}
+
+// askUserInputFlag reports whether a boolean field of an ask_user call's
+// parsed input is set. A quoted boolean counts: tool input coercion is the
+// norm elsewhere, and a model that wrote "true" meant it. "async" is read only
+// to replay a history recorded under askUserAsyncOptIn; the tool's schema
+// offers "blocking".
+func askUserInputFlag(input map[string]interface{}, field string) bool {
+	switch v := input[field].(type) {
 	case bool:
 		return v
 	case string:

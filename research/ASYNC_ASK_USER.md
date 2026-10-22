@@ -7,9 +7,16 @@ will show in the user's inbox."
 
 ## Behaviour
 
-- `ask_user` takes `async: true`. The tool returns at once ("posted, keep
+- `ask_user` is **async by default**: the tool returns at once ("posted, keep
   working, the answer arrives later as a message from the user"); the agent's
-  loop continues. Unattended runs resolve it like a blocking ask (no human).
+  loop continues. `blocking: true` is the explicit opt-in to stop and wait, for
+  when the agent truly cannot make progress without the answer. (The option
+  shipped first as an opt-in `async: true`; the default flipped, and the schema
+  now offers only `blocking`.) Unattended runs resolve either kind the same way
+  (no human).
+- `ask_user` is in `tag:coding:default` and `tag:coding:plan`, so the coding
+  agent has it preloaded, without `load_tool`; `list_pending_questions` and
+  `withdraw_question` follow it in structurally (below).
 - The question is a `questions` row with `async = true`
   (`db/migrations/20261022020559_async_questions.up.sql`). Its metadata JSON
   also carries `"async": true`.
@@ -70,12 +77,27 @@ through the chat service's own send paths (no parallel implementation):
 
 ## Determinism
 
-`executeAskUserInline` reads `async` from the tool input (history data) and
-only then calls `workflow.GetVersion("ask-user-async/<tool_call_id>", Default,
-1)`. Existing histories never had an async call, so they never reach the
-GetVersion; a hypothetical old call with `async: true` replays as DefaultVersion
-→ the blocking path. The async path is QuestionCreate (same activity) and
-return — no timer, no signal wait.
+`executeAskUserInline` decides the path in `askUserIsAsync`, after the
+unattended short-circuit and before `QuestionCreate`, with
+`workflow.GetVersion("ask-user-async/<tool_call_id>", Default, 2)` — asked for
+every attended call. The version names the rule the history recorded:
+
+| Version | Recorded by | Async when |
+|---|---|---|
+| `DefaultVersion` (no marker) | builds before the async option, and the opt-in build for a call without `async: true` | never: the call blocked |
+| 1 `askUserAsyncOptIn` | the opt-in build (#1262), only for `async: true` | input `async: true` |
+| 2 `askUserAsyncByDefault` | every call now | input lacks `blocking: true` |
+
+So an in-flight history whose ask_user omitted the flag replays the blocking
+wait it took (`frozen/2026-10-22-ask-user-blocks-by-default`, which fails
+replay with TMPRL1100 if the default is unversioned). The async path is
+QuestionCreate (same activity) and return — no timer, no signal wait
+(`fixtures/ask_user_async_by_default.json`).
+
+The web client classifies a tool call from its input (`isAsyncAskUserInput`:
+async unless `blocking: true`). A call recorded before the flip reads as async
+there too; its `AsyncQuestionCard` renders nothing once the call has a result
+and no async question row matches it.
 
 ## Alternatives considered
 
@@ -96,7 +118,9 @@ return — no timer, no signal wait.
 An agent that keeps going needs to see what it is still waiting on, and to
 retract a question its default has made moot, or the user's inbox fills with
 stale ones. Two tools, handed to any agent that can ask or that has
-sub-agents (`capabilities.go`, structural tools):
+sub-agents (`capabilities.go`, structural tools) — so they are never deferred
+behind `load_tool` for an agent that has `ask_user`, and are not offered to one
+that cannot ask and owns no askers:
 
 - `list_pending_questions` — no parameters. Lists the pending questions,
   async and blocking, of the caller's thread and every sub-agent below it,

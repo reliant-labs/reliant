@@ -21,7 +21,7 @@ import (
 // real database because the contract lives in the SQL (the literal activity
 // list, the loop-scoped sibling join), not in Go.
 
-func basicViewStepIDs(t *testing.T, view reliantv1.WorkflowExecutionView, repo db.Repository, ctx context.Context, chatID string) (map[string]*reliantv1.StepExecution, *countingRepo) {
+func basicViewStepIDs(t *testing.T, view reliantv1.WorkflowExecutionView, repo Repository, ctx context.Context, chatID string) (map[string]*reliantv1.StepExecution, *countingRepo) {
 	t.Helper()
 	counting := &countingRepo{Repository: repo}
 	service := &Service{deps: Deps{Repo: counting}}
@@ -84,7 +84,7 @@ func TestGetWorkflowExecutions_BasicViewReturnsOnlyTimelineSteps(t *testing.T) {
 
 	require.Equal(t, 1, counting.basicCalls, "BASIC must use exactly one chat-scoped query")
 	require.Zero(t, counting.chatScopedCalls, "BASIC must not run the FULL query")
-	require.Zero(t, counting.perWorkflowCalls)
+	requireRepositoryLacks(t, "GetStepExecutionsByWorkflow", "BASIC must not read steps per workflow")
 
 	require.Len(t, steps, 3, "got %v", keys(steps))
 	require.Equal(t, `{"tokens":7}`, steps["compact"].GetOutputJson(), "user-facing output is what ActivityIndicator renders")

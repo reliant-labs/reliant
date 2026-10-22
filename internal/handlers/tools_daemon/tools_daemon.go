@@ -792,7 +792,7 @@ func (c *daemonConnection) closedReason() error {
 func daemonRegistrationUserID(ctx context.Context, reg *reliantv1.DaemonRegister) (string, error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok || strings.TrimSpace(userID) == "" {
-		return "", svcerr.ToConnect(svcerr.Unauthenticated("PAT authentication required — no user identity in context"))
+		return "", svcerr.Unauthenticated("PAT authentication required — no user identity in context")
 	}
 	return userID, nil
 }
@@ -879,7 +879,7 @@ func validateAssertedDaemonID(id string) error {
 	if id == "" || assertedDaemonIDPattern.MatchString(id) {
 		return nil
 	}
-	return svcerr.ToConnect(svcerr.InvalidArgument("daemon_id must match [A-Za-z0-9-]{1,64}"))
+	return svcerr.InvalidArgument("daemon_id must match [A-Za-z0-9-]{1,64}")
 }
 
 func truncateForLog(s string) string {
@@ -925,7 +925,7 @@ func (s *Service) WhoAmI(
 ) (*connect.Response[reliantv1.WhoAmIResponse], error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok || strings.TrimSpace(userID) == "" {
-		return nil, svcerr.ToConnect(svcerr.Unauthenticated("a daemon credential is required"))
+		return nil, svcerr.Unauthenticated("a daemon credential is required")
 	}
 	return connect.NewResponse(&reliantv1.WhoAmIResponse{UserId: userID}), nil
 }
@@ -961,7 +961,7 @@ func (s *Service) ConnectDaemon(
 	// racing, a parked Receive.
 	if !serverkit.CanAbortReceive(ctx) {
 		logging.ErrorContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" ConnectDaemon is served without an abortable request body; serve it through a serverkit listener")
-		return svcerr.ToConnect(svcerr.Internal("daemon stream handler is misconfigured"))
+		return svcerr.Internal("daemon stream handler is misconfigured")
 	}
 
 	// Wait for registration message
@@ -1746,7 +1746,7 @@ func (c *daemonConnection) routeInboundReply(msg *reliantv1.DaemonMessage) bool 
 // to report tool execution results when the bidirectional stream was unavailable.
 // This path has been removed in favour of the bidi stream.
 func (s *Service) ReportToolResult(ctx context.Context, req *connect.Request[reliantv1.ReportToolResultRequest]) (*connect.Response[reliantv1.ReportToolResultResponse], error) {
-	return nil, svcerr.ToConnect(svcerr.Unimplemented("ReportToolResult is no longer supported; use the bidi stream"))
+	return nil, svcerr.Unimplemented("ReportToolResult is no longer supported; use the bidi stream")
 }
 
 func (s *Service) handleProjectDiscovery(ctx context.Context, conn *daemonConnection, discovery *reliantv1.ProjectDiscovery) error {

@@ -10,7 +10,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
-// An async question (ask_user async: true) is a question item marked async,
+// An async question (ask_user without blocking: true) is a question item marked async,
 // and it blocks nothing: the agent kept working, so it is not counted in the
 // badge's blocking number. A blocking question still is.
 func TestInboxAsyncQuestionIsNotBlocking(t *testing.T) {

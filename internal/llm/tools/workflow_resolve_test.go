@@ -197,14 +197,14 @@ func TestCreateWorkflow_DuplicateSlugIsClearToolError(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, first.IsError, first.Content)
 
-	start := time.Now()
+	retries := db.RecordRetryBackoffs(repo)
 	second, err := NewCreateWorkflowTool(repo).Run(ctx, call)
 	require.NoError(t, err)
 	require.True(t, second.IsError)
 	assert.Contains(t, second.Content, name)
 	assert.Contains(t, second.Content, "list_workflows")
 	assert.NotContains(t, second.Content, "SQLSTATE")
-	assert.Less(t, time.Since(start), 700*time.Millisecond)
+	assert.Zero(t, retries.Len(), "a duplicate slug must not walk the retry ladder")
 }
 
 // TestCreateWorkflow_ReturnedIDWorksWithoutChatBinding: create_workflow's id is

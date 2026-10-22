@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/reliant-labs/reliant/internal/connections"
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/stretchr/testify/require"
 )
@@ -117,7 +118,7 @@ func TestRefresh_GenerationCASRejectsStaleWriter(t *testing.T) {
 	conn := e.connect("alice", "a")
 	gen := e.generation(conn.ID, "access_token")
 
-	err := e.store.WithSecretsLock(ctx, "alice", conn.ID, func(tx core.SecretsTx) error {
+	err := e.store.WithSecretsLock(ctx, "alice", conn.ID, func(tx *db.SecretsTx) error {
 		return tx.Replace(ctx, gen-1, []core.ConnectionSecret{{Field: "access_token", VaultKeyID: "x", Ciphertext: []byte("x")}}, nil)
 	})
 	require.ErrorIs(t, err, core.ErrGenerationConflict)
@@ -202,11 +203,11 @@ func TestRefresh_MissingRefreshTokenNeedsReauth(t *testing.T) {
 
 // countingStore counts how many refresh transactions reach the database.
 type countingStore struct {
-	core.ConnectionStore
+	db.ConnectionStore
 	locks atomic.Int32
 }
 
-func (c *countingStore) WithSecretsLock(ctx context.Context, userID, id string, fn func(core.SecretsTx) error) error {
+func (c *countingStore) WithSecretsLock(ctx context.Context, userID, id string, fn func(*db.SecretsTx) error) error {
 	c.locks.Add(1)
 	return c.ConnectionStore.WithSecretsLock(ctx, userID, id, fn)
 }

@@ -1,6 +1,15 @@
 # 10 — P6: the Repository split
 
-Status: **plan**, for the implementing agents. It has one owner decision (§2.4). Shared
+Status: **done** — every lane merged; Y (the last) deleted `db.Repository`. The
+numbers below are the measurement the plan was built on, not the end state. Y
+re-measured the dead set with a type-checked scan: 41 methods, not 31 (the 31
+here, the 8 only `internal/db`'s own tests called, and
+`UpdateWorkflowWorkerStarted`/`Stopped`, which have no caller either); the 7 "test-only" methods that are live through wrapper interfaces
+stayed. Of the internal-only methods, 11 are unexported; `CreateMessageOnce`,
+`GetContextWindowWithThread`, `GetItemDefault`, `GetThreadTokenCount`,
+`GetVisibilityOverride`, `MigrateLegacyCredentials` and `WithSessionPool` stay
+exported because tests outside the package (the `internal/store` twin checks,
+`threads`) call them. It had one owner decision (§2.4). Shared
 context: `00-BRIEF.md`, `PLAN.md` (P6), `02-contracts-classification.md` §2 (the first
 Repository census), `08-p5b-spike.md` (where the stores went), `09-roots-plan.md` (the
 graph roots).

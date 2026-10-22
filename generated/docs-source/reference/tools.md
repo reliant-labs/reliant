@@ -2048,7 +2048,7 @@ _Miscellaneous tools and utilities._
 
 | Tool | Tags | Description |
 |------|------|-------------|
-| [`ask_user`](#ask_user) | - | Ask the user one or more questions. By default you stop and wait for their responses. Use this wh... |
+| [`ask_user`](#ask_user) | coding:default, coding:plan | Ask the user one or more questions. By default the question is posted to the user (in the chat an... |
 | [`component_library`](#component_library) | readonly, coding:plan | Component library with 61 production-ready React/TypeScript components for building UIs, dashboar... |
 | [`control_run`](#control_run) | runs | Pause, resume or cancel another top-level run the user owns. |
 | [`generate_image`](#generate_image) | media | Generate an image from a text description. |
@@ -2115,26 +2115,28 @@ _Miscellaneous tools and utilities._
 | [`twilio__message_send`](#twilio__message_send) | integration | Send a message from one of your Twilio senders. For SMS give E.164 numbers (+15551234567); for Wh... |
 | [`twilio__phone_number_list`](#twilio__phone_number_list) | integration | List the phone numbers the account owns, with what each can do (sms, mms, voice) and where its in... |
 | [`wait_for_machine`](#wait_for_machine) | readonly, coding:plan, coding:default | Wait for this run's machine to reconnect, then return so you can retry. |
-| [`withdraw_question`](#withdraw_question) | - | Withdraw an async question (ask_user async: true) that you or one of your sub-agents asked and th... |
+| [`withdraw_question`](#withdraw_question) | - | Withdraw an async question (an ask_user call without blocking: true) that you or one of your sub-... |
 | [`worktree`](#worktree) | - | Create and manage worktrees: isolated workspaces for working on a separate branch. |
 
 ### ask_user
 
-Ask the user one or more questions. By default you stop and wait for their responses. Use this when you need to:
+**Tags:** `coding:default`, `coding:plan`
+
+Ask the user one or more questions. By default the question is posted to the user (in the chat and their inbox) and the tool returns at once: you keep working. Use this when you want to:
 1. Clarify ambiguous instructions
 2. Get user preferences or decisions
 3. Offer choices about implementation direction
 4. Confirm before taking significant actions
 
-Blocking (default) vs async:
-- Blocking: use when you cannot sensibly proceed without the answer — the instructions are ambiguous in a way that changes the work, or the next action is significant or hard to undo.
-- async: true: use when you can proceed on a reasonable default and the answer would only refine the work — an FYI, a preference, or a decision where you will go with your recommended option unless told otherwise. The question is posted to the user (in the chat and their inbox) and the tool returns at once; keep working on your default. If the user answers, the answer arrives later as a message from the user; adjust then. Do not ask the same question again while waiting.
+Default (async) — the norm: proceed on a sensible default, usually the option you recommend, and say in the question which one you are going with. If the user answers, the answer arrives later as a message from the user; adjust your work then if it changes anything. Do not wait for it and do not ask the same question again. If your work makes a question moot before it is answered, withdraw it (withdraw_question) so it leaves the user's inbox.
 
-Before asking, call list_pending_questions if you may have asked already: do not ask a question that is still pending. Before finishing, withdraw async questions your default made moot (withdraw_question).
+blocking: true — the exception: stop and wait for the answer. Use it only when you truly cannot make progress without it — every reasonable default would be wrong or wasted work, or the next action is significant or hard to undo and needs the user's go-ahead first.
+
+Before asking, call list_pending_questions if you may have asked already: do not ask a question that is still pending. Before finishing, withdraw questions your default made moot.
 
 Usage notes:
 - The user will always have an option to provide freetext input in addition to any predefined options.
-- If you recommend a specific option, list it first and add "(Recommended)" to the label. With async: true, say in the question which option you are proceeding with.
+- If you recommend a specific option, list it first and add "(Recommended)" to the label.
 - Use allow_multiple: true when choices are not mutually exclusive.
 - Group related questions in a single call (up to 4 questions).
 
@@ -2953,7 +2955,7 @@ RETURNS:
 
 ### withdraw_question
 
-Withdraw an async question (ask_user async: true) that you or one of your sub-agents asked and that no longer needs an answer — typically because you proceeded on a default and the outcome is settled.
+Withdraw an async question (an ask_user call without blocking: true) that you or one of your sub-agents asked and that no longer needs an answer — typically because you proceeded on a default and the outcome is settled.
 
 Withdrawing closes the question: it leaves the user's inbox and its card in the chat shows "Withdrawn: <reason>". The reason is shown to the user, so make it a short, plain sentence (e.g. "Went with Postgres; the schema is already migrated").
 

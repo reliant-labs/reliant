@@ -12,7 +12,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 )
 
-// Repository is the slice of db.Repository the run handlers use.
+// Repository is the slice of *db.Repo the run handlers use.
 type Repository interface {
 	GetWorkflow(ctx context.Context, id string) (*db.Workflow, error)
 	GetChat(ctx context.Context, id string) (*db.Chat, error)

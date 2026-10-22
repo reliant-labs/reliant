@@ -153,6 +153,15 @@ Tally (top-level units): S≈33, A≈12, M≈7, P≈38, W≈7, C≈10, H 1, D 1.
 
 ## 2. `internal/db` Repository
 
+> **Outcome (P6, superseded by `10-repo-split-plan.md`).** The split shipped as
+> that plan's option A, not as step 3 below: `*db.Repo` stayed the one concrete
+> persistence type, every consumer declares the role it calls in its own
+> package, and `db.Repository` (463 methods by then), its `var _` assertion and
+> the remaining implementation-side `core.*Store` interfaces are deleted (lane
+> Y). The accessors return concrete stores (`db.ConnectionStore`,
+> `db.IntegrationWriteLedger`). The census below is the 2026-10 input, kept
+> for the record.
+
 **Shape.** One interface `Repository` (`internal/db/repository.go:13`) with **442 methods**, no embeds. The only implementation is `*db.Repo` (`internal/db/repo.go:116`, plus `repository_impl.go`, which is over 5.1k lines). Beneath it sit 21 `core.*Store` interfaces in `internal/db/core/` (313 methods; overlap by name) and the sqlc `Querier` (350).
 
 core store sizes: WorkflowCatalogStore 39 · WorkflowStore 36 · TriggerStore 34 · SettingStore 32 · MessageStore 27 · PlanTaskStore 22 · ProjectStore 18 · ConnectionStore 18 · ThreadStore 17 · WorktreeStore 16 · ChatStore 15 · AgentMessageStore 15 · ToolCallStore 13 · ContextWindowStore 11 · RunEventStore 9 · ApprovalStore 6 · RepoStore 6 · SecretsTx 5 · InboxStore 4 · AttachmentStore 4 · RunStore 2.

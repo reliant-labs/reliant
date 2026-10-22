@@ -9,8 +9,8 @@ import (
 )
 
 // daemonPlatformReader is the narrow slice of the repository this resolver
-// needs. Declared here, at the consumer, rather than reaching for the full
-// db.Repository interface: the question "what OS is this daemon" needs two
+// needs. Declared here, at the consumer, rather than reaching for the whole
+// *db.Repo: the question "what OS is this daemon" needs two
 // lookups, and naming them makes the dependency legible and trivially fakeable
 // in a test that must assert a Windows record from a Linux test process.
 type daemonPlatformReader interface {

@@ -2,7 +2,6 @@
 package core
 
 import (
-	"context"
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -89,23 +88,3 @@ type IntegrationWriteResult struct {
 
 // ErrIntegrationWriteNotFound is returned when no ledger entry matches.
 var ErrIntegrationWriteNotFound = svcerr.NotFound("integration write")
-
-// IntegrationWriteStore is the write ledger.
-type IntegrationWriteStore interface {
-	// CreateIntegrationWrite records w. It is committed on its own, before the
-	// call it describes, so it is visible to an event that arrives first.
-	CreateIntegrationWrite(ctx context.Context, w *IntegrationWrite) error
-	// CompleteIntegrationWrite settles an intent row. It reports whether it
-	// did: a row already settled is left as it is.
-	CompleteIntegrationWrite(ctx context.Context, id string, res IntegrationWriteResult) (bool, error)
-	// GetIntegrationWriteByObject finds the completed write that produced or
-	// touched object (kind, id) in scope, newest first; ErrIntegrationWriteNotFound
-	// on a miss.
-	GetIntegrationWriteByObject(ctx context.Context, integration, scope, objectKind, objectID string) (*IntegrationWrite, error)
-	// ListRecentIntegrationWrites lists writes into scope since since that
-	// could still be the cause of an arriving event (intent, done, or failed
-	// with an unknown outcome), newest first.
-	ListRecentIntegrationWrites(ctx context.Context, integration, scope string, since time.Time, limit int) ([]*IntegrationWrite, error)
-	// PruneIntegrationWrites deletes entries created before before.
-	PruneIntegrationWrites(ctx context.Context, before time.Time) (int64, error)
-}

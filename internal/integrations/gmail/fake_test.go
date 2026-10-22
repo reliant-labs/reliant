@@ -23,7 +23,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/integrations/catalog"
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
-	"github.com/reliant-labs/reliant/internal/netguard"
+	"github.com/reliant-labs/reliant/internal/netguard/netguardtest"
 )
 
 // fakeGmail is an httptest TLS server standing in for
@@ -70,8 +70,7 @@ const token = "ya29.fake-gmail-access-token-7c1d"
 func newFakeGmail(t *testing.T) *fakeGmail {
 	t.Helper()
 	f := &fakeGmail{t: t, email: "me@example.com", history: 1000, messages: map[string]map[string]any{}}
-	f.srv = httptest.NewTLSServer(http.HandlerFunc(f.serve))
-	t.Cleanup(f.srv.Close)
+	f.srv = netguardtest.NewTLSServer(t, http.HandlerFunc(f.serve))
 	return f
 }
 
@@ -330,8 +329,7 @@ func (f *fakeGmail) action(id string) (*reliantv1.IntegrationManifest, *reliantv
 func (f *fakeGmail) runner() *httpaction.Runner {
 	pool := x509.NewCertPool()
 	pool.AddCert(f.srv.Certificate())
-	g := netguard.New()
-	g.AllowLoopback = true
+	g := netguardtest.Guard()
 	return httpaction.NewRunner(g).WithRootCAs(pool)
 }
 

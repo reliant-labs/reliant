@@ -1,5 +1,5 @@
 /**
- * An async ask_user (input async: true) never takes over the composer.
+ * An async ask_user (the default: no blocking: true) never takes over the composer.
  *
  * Nothing is parked on an async question — the agent kept working — so the
  * composer must stay the composer: no question prompt, and a typed message

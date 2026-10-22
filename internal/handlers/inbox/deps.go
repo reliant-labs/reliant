@@ -13,7 +13,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/worktreesweep"
 )
 
-// Repository is the slice of db.Repository the inbox handlers use. It
+// Repository is the slice of *db.Repo the inbox handlers use. It
 // includes worktreesweep.StorageStore because the storage view and the
 // clean-up read through the same store.
 type Repository interface {

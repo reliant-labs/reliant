@@ -49,7 +49,7 @@ type Service interface {
 	BeginPush(ctx context.Context, p Push) (*PushIntent, error)
 }
 
-// Pruner deletes old ledger entries. core.IntegrationWriteStore satisfies it.
+// Pruner deletes old ledger entries. db.IntegrationWriteLedger satisfies it.
 type Pruner interface {
 	PruneIntegrationWrites(ctx context.Context, before time.Time) (int64, error)
 }
@@ -60,7 +60,7 @@ type Runner interface {
 	RunAuthenticated(ctx context.Context, integration *reliantv1.IntegrationManifest, action *reliantv1.ActionSpec, params map[string]any, src httpaction.CredentialSource, site httpaction.CallSite) (*httpaction.Result, error)
 }
 
-// Store is the ledger a Recorder writes to. core.IntegrationWriteStore
+// Store is the ledger a Recorder writes to. db.IntegrationWriteLedger
 // satisfies it.
 type Store interface {
 	CreateIntegrationWrite(ctx context.Context, w *core.IntegrationWrite) error

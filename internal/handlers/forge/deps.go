@@ -22,7 +22,7 @@ type Router interface {
 // Two methods are all this service uses, and a narrow dependency is what makes
 // the handler testable without a database — which is what lets the
 // secret-safety and reachability tests run as plain unit tests.
-// db.Repository satisfies it.
+// *db.Repo satisfies it.
 type Repository interface {
 	GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*db.Project, error)
 	SetProjectForgeName(ctx context.Context, id, userID, forgeProjectName string) (bool, error)

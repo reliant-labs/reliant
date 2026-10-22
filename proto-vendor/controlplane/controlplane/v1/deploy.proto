@@ -401,6 +401,14 @@ message DeployEnvironment {
   // held (see DeployHold) — "waiting on billing". Empty means nothing is
   // queued.
   repeated DeployHold holds = 23;
+
+  // PROTECTED: changing this environment's secrets needs org admin AND a fresh
+  // step-up re-authentication (SecretStoreService.BeginStepUp / CompleteStepUp),
+  // and so does turning this flag off. Set through DeployEnvironmentSpec.
+  //
+  // This is the secrets half of protection only. The source-of-truth half
+  // (`protection`, `main_ref`: tags 18 and 19, reserved above) stays deferred to #516.
+  bool protected = 24;
 }
 
 // DeployEnvironmentSpec is THE WRITABLE HALF of an environment — the whole of
@@ -492,6 +500,11 @@ message DeployEnvironmentSpec {
   // that never declared it is treated as forge-applied: the hub becomes an
   // applier only when the render says so.
   optional bool hub_converged = 15;
+
+  // Sets DeployEnvironment.protected. Absent leaves the stored value, so a
+  // read-modify-write client that predates the field cannot clear it. Turning
+  // protection OFF needs a fresh step-up; turning it on does not.
+  optional bool protected = 16;
 }
 
 // ClusterBinding maps ONE cluster the bundle renders for to ONE registered

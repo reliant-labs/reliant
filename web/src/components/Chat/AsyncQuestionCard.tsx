@@ -1,8 +1,8 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * An async ask_user (input async: true; research/ASYNC_ASK_USER.md): the agent
- * asked without waiting and kept working. The question renders here, on its
+ * An async ask_user (the default — any call without blocking: true;
+ * research/ASYNC_ASK_USER.md): the agent asked without waiting and kept working. The question renders here, on its
  * tool call in the timeline, as a card the user can answer whenever they like
  * — never in the composer, which still talks to the agent. The answer goes
  * through ResolveQuestion, the same call the Inbox's answer form makes, and
@@ -27,9 +27,11 @@ interface AsyncQuestionCardProps {
   toolCallId: string;
   /** The tool call's input: the questions, shown before the row exists. */
   input: unknown;
+  /** The tool call has its result: an async one's question row exists by then. */
+  finished?: boolean;
 }
 
-function AsyncQuestionCardComponent({ chatId, toolCallId, input }: AsyncQuestionCardProps) {
+function AsyncQuestionCardComponent({ chatId, toolCallId, input, finished }: AsyncQuestionCardProps) {
   const { data: asyncQuestions } = useAsyncQuestions(chatId);
   const question = asyncQuestions?.find((q) => q.tool_call_id === toolCallId);
   const items = useMemo(() => askUserQuestionItemsFromInput(input), [input]);
@@ -38,6 +40,11 @@ function AsyncQuestionCardComponent({ chatId, toolCallId, input }: AsyncQuestion
   const [attempt, setAttempt] = useState(0);
 
   if (!items) return null;
+  // A finished call with no async question row was not async: it blocked
+  // (recorded before async became the default) or ran unattended, where no
+  // question is posted. The stream adds an async row before the call's
+  // result lands, so this never hides a real one.
+  if (finished && asyncQuestions !== undefined && !question) return null;
 
   const resolved = question?.status === "resolved";
   // Withdrawn by the agent (withdraw_question): moot, not answered.

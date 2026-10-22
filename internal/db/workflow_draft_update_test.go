@@ -98,16 +98,11 @@ func TestWorkflowDraftWrites_EachPublishesOneUpdate(t *testing.T) {
 		requireDraftUpdate(t, ups[len(ups)-1], draft.ID, draft.Slug, step.version)
 	}
 
-	require.NoError(t, repo.DeleteWorkflowDraft(ctx, draft.ID))
-	ups = draftUpdates(t, repo, userID)
-	require.Len(t, ups, len(steps)+2)
-	requireDraftUpdate(t, ups[len(ups)-1], draft.ID, draft.Slug, 6, true)
-
 	second := newDraftForTest(userID)
 	require.NoError(t, repo.CreateWorkflowDraft(ctx, second))
 	require.NoError(t, repo.DeleteWorkflowDraftBySlug(ctx, userID, second.Slug))
 	ups = draftUpdates(t, repo, userID)
-	require.Len(t, ups, len(steps)+4)
+	require.Len(t, ups, len(steps)+3)
 	requireDraftUpdate(t, ups[len(ups)-1], second.ID, second.Slug, 1, true)
 }
 
@@ -133,11 +128,11 @@ func TestWorkflowDraftWrite_RolledBackEmitsNothing(t *testing.T) {
 	require.Len(t, draftUpdates(t, repo, userID), 1)
 	dup := newDraftForTest(userID)
 	dup.Slug = draft.Slug
-	start := time.Now()
+	retries := RecordRetryBackoffs(repo)
 	err = repo.CreateWorkflowDraft(ctx, dup)
 	require.ErrorIs(t, err, ErrWorkflowSlugTaken)
 	require.Contains(t, err.Error(), draft.Slug)
-	require.Less(t, time.Since(start), 700*time.Millisecond, "a unique violation must not walk the retry ladder")
+	require.Zero(t, retries.Len(), "a unique violation must not walk the retry ladder")
 	require.Len(t, draftUpdates(t, repo, userID), 1)
 }
 

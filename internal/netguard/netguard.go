@@ -252,6 +252,12 @@ type Guard struct {
 
 	// Resolve overrides DNS lookup; tests use it to make a hostname resolve to a chosen address.
 	Resolve func(ctx context.Context, host string) ([]net.IP, error)
+
+	// Dial connects to one vetted address, an IP literal and port, within
+	// Timeout. nil is a net.Dialer. Tests route it to an in-process server
+	// (netguardtest), which a loopback TCP dial would reach only while the
+	// host's conntrack table has room.
+	Dial func(ctx context.Context, network, address string) (net.Conn, error)
 }
 
 // New returns a Guard with a 10s connect timeout.
@@ -295,16 +301,29 @@ func (g *Guard) DialContext(ctx context.Context, network, address string) (net.C
 			return nil, fmt.Errorf("netguard: connection to %s (%s) blocked: not a public address", host, ip)
 		}
 	}
-	dialer := &net.Dialer{Timeout: g.Timeout}
 	var lastErr error
 	for _, ip := range ips {
-		conn, err := dialer.DialContext(ctx, network, net.JoinHostPort(ip.String(), port))
+		conn, err := g.dialVetted(ctx, network, net.JoinHostPort(ip.String(), port))
 		if err == nil {
 			return conn, nil
 		}
 		lastErr = err
 	}
 	return nil, lastErr
+}
+
+// dialVetted connects to one address that already passed the policy, with
+// Timeout per attempt.
+func (g *Guard) dialVetted(ctx context.Context, network, address string) (net.Conn, error) {
+	if g.Dial == nil {
+		return (&net.Dialer{Timeout: g.Timeout}).DialContext(ctx, network, address)
+	}
+	if g.Timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, g.Timeout)
+		defer cancel()
+	}
+	return g.Dial(ctx, network, address)
 }
 
 // Transport returns an http.Transport that dials through the guard and never

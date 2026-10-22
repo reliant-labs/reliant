@@ -87,22 +87,22 @@ func TestBackfillSealsLegacyRowsAndIsIdempotent(t *testing.T) {
 			"legacy-"+p, "u"+string(rune('1'+i%2)), p, "legacy-"+p)
 		require.NoError(t, err)
 	}
-	n, err := repo.CountUnsealedAPIKeys(ctx)
+	n, err := repo.countUnsealedAPIKeys(ctx)
 	require.NoError(t, err)
 	require.EqualValues(t, 3, n)
 
 	// batch of 2 forces more than one pass.
-	sealed, err := repo.BackfillAPIKeys(ctx, 2)
+	sealed, err := repo.backfillAPIKeys(ctx, 2)
 	require.NoError(t, err)
 	require.Equal(t, 3, sealed)
-	n, err = repo.CountUnsealedAPIKeys(ctx)
+	n, err = repo.countUnsealedAPIKeys(ctx)
 	require.NoError(t, err)
 	require.EqualValues(t, 0, n, "count(api_key_sealed IS NULL) must reach zero")
 
 	var before []byte
 	require.NoError(t, raw.QueryRowContext(ctx, `SELECT api_key_sealed FROM api_keys WHERE id='legacy-reliant-automation:openai'`).Scan(&before))
 
-	sealed, err = repo.BackfillAPIKeys(ctx, 2)
+	sealed, err = repo.backfillAPIKeys(ctx, 2)
 	require.NoError(t, err)
 	require.Equal(t, 0, sealed, "second run is a no-op")
 	var after []byte
@@ -242,7 +242,7 @@ func TestContractMigrationOnCleanDB(t *testing.T) {
 	var plain string
 	require.NoError(t, raw.QueryRow(`SELECT api_key FROM api_keys`).Scan(&plain))
 	require.Equal(t, "", plain)
-	require.NoError(t, repo.ValidateAPIKeysSealedConstraint(ctx))
+	require.NoError(t, repo.validateAPIKeysSealedConstraint(ctx))
 }
 
 func TestAutomationCredResolverEndToEndOverSealedStore(t *testing.T) {

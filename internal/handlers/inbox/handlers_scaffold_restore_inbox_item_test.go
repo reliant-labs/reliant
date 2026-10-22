@@ -19,7 +19,7 @@ func TestRestoreInboxItem_Generated(t *testing.T) {
 	t.Parallel()
 
 	// The one write this rpc makes is programmed; every read refuses.
-	svc := inbox.NewTestInbox(t, inbox.WithInboxDeps(inbox.Deps{Repo: &inbox.StubRepo{
+	svc := inbox.NewTestInbox(t, inbox.WithInboxDeps(inbox.Deps{Repo: &inbox.MockRepository{
 		RestoreInboxItemsFunc: func(context.Context, string, []string) error { return nil },
 	}}))
 

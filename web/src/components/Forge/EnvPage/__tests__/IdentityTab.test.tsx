@@ -48,6 +48,7 @@ function status(overrides: Partial<IdentityStatus> = {}): IdentityStatus {
         state: "delivered",
         lastError: "",
         lastVerifiedAtMs: NOW - 120_000,
+        lastWrittenAtMs: null,
       },
     ],
     ownerEnvironmentId: "env-prod",
@@ -62,16 +63,22 @@ function status(overrides: Partial<IdentityStatus> = {}): IdentityStatus {
     callerCanManage: true,
     exportEnabled: false,
     mailDelivery: "smtp",
+    notEnabledReason: "unknown",
+    notEnabledMessage: "",
+    ownerEnvironment: null,
+    sharerEnvironments: [],
     ...overrides,
   };
 }
 
 const USERS: IdentityUsersPage = {
   users: [
-    { userId: "u-alice", email: "alice@acme.test", displayName: "Alice", state: "active", roles: ["operator"], createdAtMs: NOW },
-    { userId: "u-bob", email: "bob@acme.test", displayName: "", state: "locked", roles: ["admin"], createdAtMs: NOW },
+    { userId: "u-alice", email: "alice@acme.test", displayName: "Alice", state: "active", roles: ["operator"], createdAtMs: NOW, lastSignInAtMs: null },
+    { userId: "u-bob", email: "bob@acme.test", displayName: "", state: "locked", roles: ["admin"], createdAtMs: NOW, lastSignInAtMs: null },
   ],
   nextPageToken: "",
+  totalSize: null,
+  reportsSignIns: false,
   roles: [
     { key: "admin", displayName: "Administrator", group: "", declared: true },
     { key: "operator", displayName: "Operator", group: "", declared: false },
@@ -92,6 +99,7 @@ function fakeApi(overrides: Partial<IdentityApi> = {}): IdentityApi {
     deleteUser: vi.fn(async () => {}),
     revokeSessions: vi.fn(async () => 2),
     getExportURL: vi.fn(async () => ({ url: "https://signed.example/x", expiresAtMs: NOW + 600_000 })),
+    requestExport: vi.fn(async () => ({ url: "https://signed.example/on-demand", expiresAtMs: NOW + 600_000 })),
     ...overrides,
   };
 }
@@ -305,6 +313,118 @@ describe("IdentityTab", () => {
     renderTab(api);
     expect(await screen.findByTestId("identity-users-not-serving")).toBeInTheDocument();
     expect(api.listUsers).not.toHaveBeenCalled();
+  });
+
+  it("says a declared identity is being created, rather than that none is declared", async () => {
+    const api = fakeApi({ getStatus: vi.fn(async () => status({ hasInstance: false, notEnabledReason: "pending" })) });
+    renderTab(api);
+    expect(await screen.findByTestId("identity-pending")).toHaveTextContent("hasn't created it yet");
+    expect(screen.queryByTestId("identity-none")).not.toBeInTheDocument();
+  });
+
+  it("says when the control plane cannot tell whether one is declared", async () => {
+    const message = "The control plane has no deployed shape for this environment yet. Deploy it first.";
+    renderTab(fakeApi({ getStatus: vi.fn(async () => status({ hasInstance: false, notEnabledReason: "no-shape", notEnabledMessage: message })) }));
+    expect(await screen.findByTestId("identity-no-shape")).toHaveTextContent(message);
+  });
+
+  it("names the owner and sharers as the control plane resolves them, even outside this project", async () => {
+    renderTab(
+      fakeApi({
+        getStatus: vi.fn(async () =>
+          status({
+            ownerEnvironmentId: "env-prod",
+            ownerEnvironment: { id: "env-prod", name: "prod", project: "acme" },
+            sharerEnvironmentIds: ["env-other", "env-gone"],
+            sharerEnvironments: [
+              { id: "env-other", name: "staging", project: "acme-web" },
+              { id: "env-gone", name: "", project: "" },
+            ],
+          })
+        ),
+      })
+    );
+    const sharing = await screen.findByTestId("identity-sharing");
+    expect(sharing).toHaveTextContent("Also used by staging, env-gone.");
+    expect(within(sharing).getByText("staging")).toHaveAttribute("title", "acme-web / staging (env-other)");
+  });
+
+  it("shows when each delivery was last written", async () => {
+    const api = fakeApi({
+      getStatus: vi.fn(async () =>
+        status({
+          deliveries: [
+            {
+              kind: "identity",
+              cluster: "acme-prod",
+              namespace: "acme",
+              name: "forge-identity-identity",
+              state: "delivered",
+              lastError: "",
+              lastVerifiedAtMs: NOW - 120_000,
+              lastWrittenAtMs: NOW - 3 * 3_600_000,
+            },
+          ],
+        })
+      ),
+    });
+    renderTab(api);
+    expect(await screen.findByTestId("identity-deliveries")).toHaveTextContent(/written 3h ago.*verified 2m ago/);
+  });
+
+  it("shows each user's last sign-in and the total, and 'never' only from a server that reports sign-ins", async () => {
+    const page: IdentityUsersPage = {
+      ...USERS,
+      users: [
+        { ...USERS.users[0], lastSignInAtMs: NOW - 2 * 86_400_000 },
+        { ...USERS.users[1], lastSignInAtMs: null },
+      ],
+      totalSize: 7,
+      reportsSignIns: true,
+    };
+    renderTab(fakeApi({ listUsers: vi.fn(async () => page) }));
+    const alice = await screen.findByTestId("identity-user-u-alice");
+    expect(within(alice).getByTestId("identity-user-last-sign-in")).toHaveTextContent("signed in 2d ago");
+    expect(within(screen.getByTestId("identity-user-u-bob")).getByTestId("identity-user-last-sign-in")).toHaveTextContent("never signed in");
+    expect(screen.getByTestId("identity-users-total")).toHaveTextContent("2 of 7 users");
+  });
+
+  it("claims nothing about sign-ins a server does not report", async () => {
+    renderTab(fakeApi());
+    const bob = await screen.findByTestId("identity-user-u-bob");
+    expect(within(bob).queryByTestId("identity-user-last-sign-in")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("identity-users-total")).not.toBeInTheDocument();
+  });
+
+  it("exports a live identity on demand for an admin, and shows the link once", async () => {
+    const api = fakeApi({ getStatus: vi.fn(async () => status({ exportEnabled: true })) });
+    renderTab(api);
+    const panel = await screen.findByTestId("identity-export-on-demand");
+    await userEvent.click(within(panel).getByRole("button", { name: /Export users/ }));
+    const link = await within(panel).findByTestId("identity-export-link");
+    expect(within(link).getByRole("link", { name: "Download the export" })).toHaveAttribute("href", "https://signed.example/on-demand");
+    expect(api.requestExport).toHaveBeenCalledWith("org-a", "env-prod");
+    expect(api.getExportURL).not.toHaveBeenCalled();
+    for (const fn of Object.values(toasts)) expect(fn).not.toHaveBeenCalled();
+  });
+
+  it("explains a refused export in the panel", async () => {
+    const api = fakeApi({
+      getStatus: vi.fn(async () => status({ exportEnabled: true })),
+      requestExport: vi.fn(async () => {
+        throw new ConnectError("downloading an identity export needs the identity:manage permission", Code.PermissionDenied);
+      }),
+    });
+    renderTab(api);
+    const panel = await screen.findByTestId("identity-export-on-demand");
+    await userEvent.click(within(panel).getByRole("button", { name: /Export users/ }));
+    expect(await within(panel).findByRole("alert")).toHaveTextContent("identity:manage");
+  });
+
+  it("offers a member no export", async () => {
+    renderTab(fakeApi({ getStatus: vi.fn(async () => status({ exportEnabled: true, callerCanManage: false })) }));
+    expect(await screen.findByTestId("identity-export-admin-only")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Export users/ })).not.toBeInTheDocument();
   });
 
   it("says plainly that a local environment's IdP reports nothing here, and asks the control plane nothing", () => {

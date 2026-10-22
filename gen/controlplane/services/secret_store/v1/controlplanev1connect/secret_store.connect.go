@@ -57,6 +57,12 @@ const (
 	// SecretStoreServiceDestroySecretProcedure is the fully-qualified name of the SecretStoreService's
 	// DestroySecret RPC.
 	SecretStoreServiceDestroySecretProcedure = "/controlplane.v1.SecretStoreService/DestroySecret"
+	// SecretStoreServiceBeginStepUpProcedure is the fully-qualified name of the SecretStoreService's
+	// BeginStepUp RPC.
+	SecretStoreServiceBeginStepUpProcedure = "/controlplane.v1.SecretStoreService/BeginStepUp"
+	// SecretStoreServiceCompleteStepUpProcedure is the fully-qualified name of the SecretStoreService's
+	// CompleteStepUp RPC.
+	SecretStoreServiceCompleteStepUpProcedure = "/controlplane.v1.SecretStoreService/CompleteStepUp"
 )
 
 // SecretStoreServiceClient is a client for the controlplane.v1.SecretStoreService service.
@@ -82,6 +88,16 @@ type SecretStoreServiceClient interface {
 	// it is a distinct RPC on a distinct Bao path rather than a flag on
 	// DeleteSecret.
 	DestroySecret(context.Context, *connect.Request[v1.DestroySecretRequest]) (*connect.Response[v1.DestroySecretResponse], error)
+	// BeginStepUp starts a step-up re-authentication for ONE environment: the
+	// server emails a one-time code to the caller's verified account address.
+	// Nothing changes until CompleteStepUp. Required before any secret MUTATION
+	// in a `protected` environment (ListSecretsResponse.protected); a caller who
+	// skips it is refused with reason `step_up_required`.
+	BeginStepUp(context.Context, *connect.Request[v1.BeginStepUpRequest]) (*connect.Response[v1.BeginStepUpResponse], error)
+	// CompleteStepUp redeems the code. On success the caller may mutate this
+	// environment's secrets until `valid_until`; the grant belongs to the
+	// caller, to this environment, and to nothing else.
+	CompleteStepUp(context.Context, *connect.Request[v1.CompleteStepUpRequest]) (*connect.Response[v1.CompleteStepUpResponse], error)
 }
 
 // NewSecretStoreServiceClient constructs a client for the controlplane.v1.SecretStoreService
@@ -131,6 +147,18 @@ func NewSecretStoreServiceClient(httpClient connect.HTTPClient, baseURL string, 
 			connect.WithSchema(secretStoreServiceMethods.ByName("DestroySecret")),
 			connect.WithClientOptions(opts...),
 		),
+		beginStepUp: connect.NewClient[v1.BeginStepUpRequest, v1.BeginStepUpResponse](
+			httpClient,
+			baseURL+SecretStoreServiceBeginStepUpProcedure,
+			connect.WithSchema(secretStoreServiceMethods.ByName("BeginStepUp")),
+			connect.WithClientOptions(opts...),
+		),
+		completeStepUp: connect.NewClient[v1.CompleteStepUpRequest, v1.CompleteStepUpResponse](
+			httpClient,
+			baseURL+SecretStoreServiceCompleteStepUpProcedure,
+			connect.WithSchema(secretStoreServiceMethods.ByName("CompleteStepUp")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -142,6 +170,8 @@ type secretStoreServiceClient struct {
 	deleteSecret      *connect.Client[v1.DeleteSecretRequest, v1.DeleteSecretResponse]
 	undeleteSecret    *connect.Client[v1.UndeleteSecretRequest, v1.UndeleteSecretResponse]
 	destroySecret     *connect.Client[v1.DestroySecretRequest, v1.DestroySecretResponse]
+	beginStepUp       *connect.Client[v1.BeginStepUpRequest, v1.BeginStepUpResponse]
+	completeStepUp    *connect.Client[v1.CompleteStepUpRequest, v1.CompleteStepUpResponse]
 }
 
 // ListSecrets calls controlplane.v1.SecretStoreService.ListSecrets.
@@ -174,6 +204,16 @@ func (c *secretStoreServiceClient) DestroySecret(ctx context.Context, req *conne
 	return c.destroySecret.CallUnary(ctx, req)
 }
 
+// BeginStepUp calls controlplane.v1.SecretStoreService.BeginStepUp.
+func (c *secretStoreServiceClient) BeginStepUp(ctx context.Context, req *connect.Request[v1.BeginStepUpRequest]) (*connect.Response[v1.BeginStepUpResponse], error) {
+	return c.beginStepUp.CallUnary(ctx, req)
+}
+
+// CompleteStepUp calls controlplane.v1.SecretStoreService.CompleteStepUp.
+func (c *secretStoreServiceClient) CompleteStepUp(ctx context.Context, req *connect.Request[v1.CompleteStepUpRequest]) (*connect.Response[v1.CompleteStepUpResponse], error) {
+	return c.completeStepUp.CallUnary(ctx, req)
+}
+
 // SecretStoreServiceHandler is an implementation of the controlplane.v1.SecretStoreService service.
 type SecretStoreServiceHandler interface {
 	// ListSecrets returns METADATA ONLY for every secret in one deploy
@@ -197,6 +237,16 @@ type SecretStoreServiceHandler interface {
 	// it is a distinct RPC on a distinct Bao path rather than a flag on
 	// DeleteSecret.
 	DestroySecret(context.Context, *connect.Request[v1.DestroySecretRequest]) (*connect.Response[v1.DestroySecretResponse], error)
+	// BeginStepUp starts a step-up re-authentication for ONE environment: the
+	// server emails a one-time code to the caller's verified account address.
+	// Nothing changes until CompleteStepUp. Required before any secret MUTATION
+	// in a `protected` environment (ListSecretsResponse.protected); a caller who
+	// skips it is refused with reason `step_up_required`.
+	BeginStepUp(context.Context, *connect.Request[v1.BeginStepUpRequest]) (*connect.Response[v1.BeginStepUpResponse], error)
+	// CompleteStepUp redeems the code. On success the caller may mutate this
+	// environment's secrets until `valid_until`; the grant belongs to the
+	// caller, to this environment, and to nothing else.
+	CompleteStepUp(context.Context, *connect.Request[v1.CompleteStepUpRequest]) (*connect.Response[v1.CompleteStepUpResponse], error)
 }
 
 // NewSecretStoreServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -242,6 +292,18 @@ func NewSecretStoreServiceHandler(svc SecretStoreServiceHandler, opts ...connect
 		connect.WithSchema(secretStoreServiceMethods.ByName("DestroySecret")),
 		connect.WithHandlerOptions(opts...),
 	)
+	secretStoreServiceBeginStepUpHandler := connect.NewUnaryHandler(
+		SecretStoreServiceBeginStepUpProcedure,
+		svc.BeginStepUp,
+		connect.WithSchema(secretStoreServiceMethods.ByName("BeginStepUp")),
+		connect.WithHandlerOptions(opts...),
+	)
+	secretStoreServiceCompleteStepUpHandler := connect.NewUnaryHandler(
+		SecretStoreServiceCompleteStepUpProcedure,
+		svc.CompleteStepUp,
+		connect.WithSchema(secretStoreServiceMethods.ByName("CompleteStepUp")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/controlplane.v1.SecretStoreService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case SecretStoreServiceListSecretsProcedure:
@@ -256,6 +318,10 @@ func NewSecretStoreServiceHandler(svc SecretStoreServiceHandler, opts ...connect
 			secretStoreServiceUndeleteSecretHandler.ServeHTTP(w, r)
 		case SecretStoreServiceDestroySecretProcedure:
 			secretStoreServiceDestroySecretHandler.ServeHTTP(w, r)
+		case SecretStoreServiceBeginStepUpProcedure:
+			secretStoreServiceBeginStepUpHandler.ServeHTTP(w, r)
+		case SecretStoreServiceCompleteStepUpProcedure:
+			secretStoreServiceCompleteStepUpHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -287,4 +353,12 @@ func (UnimplementedSecretStoreServiceHandler) UndeleteSecret(context.Context, *c
 
 func (UnimplementedSecretStoreServiceHandler) DestroySecret(context.Context, *connect.Request[v1.DestroySecretRequest]) (*connect.Response[v1.DestroySecretResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.SecretStoreService.DestroySecret is not implemented"))
+}
+
+func (UnimplementedSecretStoreServiceHandler) BeginStepUp(context.Context, *connect.Request[v1.BeginStepUpRequest]) (*connect.Response[v1.BeginStepUpResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.SecretStoreService.BeginStepUp is not implemented"))
+}
+
+func (UnimplementedSecretStoreServiceHandler) CompleteStepUp(context.Context, *connect.Request[v1.CompleteStepUpRequest]) (*connect.Response[v1.CompleteStepUpResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.SecretStoreService.CompleteStepUp is not implemented"))
 }

@@ -9,7 +9,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 )
 
-// Repository is the slice of db.Repository the message handlers use.
+// Repository is the slice of *db.Repo the message handlers use.
 type Repository interface {
 	GetMessage(ctx context.Context, id string) (*db.Message, error)
 	GetChat(ctx context.Context, id string) (*db.Chat, error)

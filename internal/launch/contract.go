@@ -300,7 +300,7 @@ func (e *InternalError) Unwrap() error { return svcerr.WithCause(svcerr.Internal
 func (e *InternalError) Is(target error) bool { return target == ErrInternal }
 
 // The Launcher reads and writes through these role interfaces instead of the
-// whole db.Repository, so each dependency of a launch is visible here and a
+// whole *db.Repo, so each dependency of a launch is visible here and a
 // fake implements only what a test exercises.
 
 // ChatWriter creates and updates the chat a launch materializes.

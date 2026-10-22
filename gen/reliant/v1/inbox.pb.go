@@ -654,7 +654,7 @@ type InboxQuestion struct {
 	Prompt string `protobuf:"bytes,3,opt,name=prompt,proto3" json:"prompt,omitempty"`
 	// The raw question metadata (JSON), so the client can render the full form.
 	Metadata *string `protobuf:"bytes,4,opt,name=metadata,proto3,oneof" json:"metadata,omitempty"`
-	// Asked without waiting (ask_user async: true): the agent kept working, so
+	// Asked without waiting (ask_user without blocking: true): the agent kept working, so
 	// the item waits on the user without blocking a run. Not counted in
 	// blocking_count.
 	Async         bool `protobuf:"varint,5,opt,name=async,proto3" json:"async,omitempty"`

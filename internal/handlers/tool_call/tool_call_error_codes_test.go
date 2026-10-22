@@ -34,8 +34,8 @@ func TestToolCallRPCs_RepositoryFailureCodes(t *testing.T) {
 		{"a cancellation is Canceled", context.Canceled, connect.CodeCanceled},
 		{"an opaque error is Internal", errors.New("dsn=postgres://u:secret@h"), connect.CodeInternal},
 	} {
-		repo := func() *tool_call.StubRepo {
-			return &tool_call.StubRepo{
+		repo := func() *tool_call.MockRepository {
+			return &tool_call.MockRepository{
 				GetContentBlockByToolCallIDFunc: func(context.Context, string) (*db.MessageContentBlock, error) { return nil, tc.err },
 			}
 		}
@@ -88,9 +88,9 @@ func TestConvertToBackground_DaemonFailureCodes(t *testing.T) {
 }
 
 // ownedToolCallRepo answers call-1 as a tool call in a chat the caller owns.
-func ownedToolCallRepo() *tool_call.StubRepo {
+func ownedToolCallRepo() *tool_call.MockRepository {
 	callID := "call-1"
-	return &tool_call.StubRepo{
+	return &tool_call.MockRepository{
 		GetContentBlockByToolCallIDFunc: func(context.Context, string) (*db.MessageContentBlock, error) {
 			return &db.MessageContentBlock{ID: "block-1", MessageID: "msg-1", ToolCallID: &callID}, nil
 		},

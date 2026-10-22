@@ -27,7 +27,7 @@ import (
 // resolvers that implement it.
 
 // Repo is the slice of the repository this package reads and writes. The
-// signatures match db.Repository exactly.
+// signatures match *db.Repo exactly.
 type Repo interface {
 	GetTrigger(ctx context.Context, id string) (*core.Trigger, error)
 	ListAllTriggers(ctx context.Context) ([]*core.Trigger, error)

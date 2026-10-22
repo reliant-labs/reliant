@@ -211,6 +211,10 @@ message Cluster {
   // otherwise.
   string cloud_cluster = 14;
 
+  // The secret-store issuer registered for this cluster, or unset when none
+  // is. See ClusterIssuer.
+  ClusterIssuer issuer = 15;
+
   // THERE IS NO ca_pem AND NO token HERE, AND THAT IS DELIBERATE. The CA is
   // not secret but it is bulky and nothing in a UI needs it, and a token must
   // never be returned at all — a field that exists is a field some future
@@ -298,6 +302,66 @@ message ConnectClusterRequest {
   // refusal is diagnosable ("the token expired at T") rather than an
   // authentication failure against the target.
   google.protobuf.Timestamp token_expires_at = 7;
+
+  // The service-account issuer the platform's secret store trusts for this
+  // cluster. Optional, and only needed by a cluster that delivers
+  // store-backed Secrets (forge.StoreSource): it is how the store verifies the
+  // projected token an External Secrets Operator in the cluster logs in with.
+  // See ClusterIssuerRegistration.
+  //
+  // PRESENCE IS THE SWITCH, because an older `forge cluster connect` sends no
+  // issuer and re-running it must not silently withdraw one:
+  //   absent          the registration is left as it is;
+  //   present         it is replaced by this one;
+  //   present, empty  the registration is removed, and the store stops
+  //                   trusting the cluster.
+  ClusterIssuerRegistration issuer = 8;
+}
+
+// ClusterIssuerRegistration declares the service-account issuer of a cluster.
+//
+// The cluster's own API server signs the tokens its pods are projected, so the
+// store verifies them against THAT cluster's keys: no stored credential, and no
+// call from the store back into the cluster. Exactly one way of learning the
+// keys is declared.
+message ClusterIssuerRegistration {
+  // The `iss` claim the cluster's tokens carry, e.g.
+  // `https://container.googleapis.com/v1/projects/p/locations/l/clusters/c`
+  // (GKE) or the `--service-account-issuer` of the API server. https only. The
+  // store requires a token to carry exactly this issuer.
+  string issuer = 1;
+
+  oneof keys {
+    // The store fetches the signing keys itself, from
+    // `<issuer>/.well-known/openid-configuration`. For an issuer that is
+    // reachable from the internet, as GKE's is. The issuer's host must resolve
+    // to public addresses only: the store dials it.
+    bool discover = 2;
+    // The JWKS the cluster serves at `/openid/v1/jwks`, uploaded by the
+    // connecting side. For a cluster whose issuer the store cannot reach
+    // (private, k3d). Public keys only: a JWKS carrying private or symmetric
+    // key material is refused. Re-send it to follow a key rotation.
+    string jwks = 3;
+  }
+}
+
+// ClusterIssuer is what is registered for a cluster. The keys themselves are
+// public but bulky, and nothing reading a cluster needs them, so only their
+// count is returned.
+message ClusterIssuer {
+  // The id the cluster is known by in the secret store. The store's auth mount
+  // is `jwt-<store_cluster_id>`, the audience its roles require ends
+  // `/c/<store_cluster_id>`, and a rendered SecretStore names it. Today it is
+  // the cluster's name, and it is unique across ALL orgs: the first org to
+  // register an id owns it, and registering it from another org is refused.
+  // Read it from here rather than assuming it is the name.
+  string store_cluster_id = 1;
+  string issuer = 2;
+  // True when the store fetches the keys from the issuer itself.
+  bool discover = 3;
+  // The number of uploaded signing keys; zero when discover is true.
+  int32 key_count = 4;
+  google.protobuf.Timestamp updated_at = 5;
 }
 
 message ConnectClusterResponse {

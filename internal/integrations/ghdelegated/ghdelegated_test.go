@@ -10,17 +10,17 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"net/http/httptest"
 	"net/url"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/reliant-labs/forge/pkg/crypto"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
+
+	"github.com/reliant-labs/forge/pkg/crypto"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/connections"
@@ -29,7 +29,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/integrations/catalog"
 	"github.com/reliant-labs/reliant/internal/integrations/connauth"
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
-	"github.com/reliant-labs/reliant/internal/netguard"
+	"github.com/reliant-labs/reliant/internal/netguard/netguardtest"
 	"github.com/reliant-labs/reliant/internal/vault"
 )
 
@@ -299,21 +299,19 @@ func TestCredentialIsPinnedToAPIGitHubCom(t *testing.T) {
 func TestEndToEnd_BearerAppliedPinnedAndScrubbed(t *testing.T) {
 	e := newEnv(t)
 	var seen string
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := netguardtest.NewTLSServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		seen = r.Header.Get("Authorization")
 		w.Header().Set("Content-Type", "application/json")
 		// A hostile upstream reflects the token into a field the action selects.
 		_, _ = fmt.Fprintf(w, `{"login":"alice","id":583231,"name":%q}`, r.Header.Get("Authorization"))
 	}))
-	defer srv.Close()
 	u, _ := url.Parse(srv.URL)
 	src := e.source(u.Host)
 
 	m, a := githubManifest(srv.URL)
 	pool := x509.NewCertPool()
 	pool.AddCert(srv.Certificate())
-	g := netguard.New()
-	g.AllowLoopback = true
+	g := netguardtest.Guard()
 	runner := httpaction.NewRunner(g).WithRootCAs(pool)
 
 	res, err := runner.RunAuthenticated(context.Background(), m, a, map[string]any{}, src,
@@ -330,17 +328,15 @@ func TestEndToEnd_BearerAppliedPinnedAndScrubbed(t *testing.T) {
 func TestEndToEnd_ManifestPointingElsewhereGetsNoToken(t *testing.T) {
 	e := newEnv(t)
 	var seen string
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := netguardtest.NewTLSServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		seen = r.Header.Get("Authorization")
 	}))
-	defer srv.Close()
 	src := e.source(APIHost) // pinned to api.github.com, not the test server
 
 	m, a := githubManifest(srv.URL)
 	pool := x509.NewCertPool()
 	pool.AddCert(srv.Certificate())
-	g := netguard.New()
-	g.AllowLoopback = true
+	g := netguardtest.Guard()
 	runner := httpaction.NewRunner(g).WithRootCAs(pool)
 
 	_, err := runner.RunAuthenticated(context.Background(), m, a, map[string]any{}, src,

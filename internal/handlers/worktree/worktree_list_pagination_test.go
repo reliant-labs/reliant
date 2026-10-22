@@ -17,7 +17,7 @@ import (
 
 // pagedWorktreeRepo serves total worktrees in the order the store returns
 // them, honouring Limit and Offset the way the SQL does.
-func pagedWorktreeRepo(t *testing.T, total int) *worktree.StubRepo {
+func pagedWorktreeRepo(t *testing.T, total int) *worktree.MockRepository {
 	repo := ownedWorktreeRepo(t)
 	all := make([]*db.Worktree, total)
 	for i := range all {

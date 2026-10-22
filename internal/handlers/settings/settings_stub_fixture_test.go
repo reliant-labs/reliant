@@ -16,8 +16,8 @@ import (
 // accepted and dropped.
 type memorySettings map[string]*db.Setting
 
-func (m memorySettings) repo() *settings.StubRepo {
-	return &settings.StubRepo{
+func (m memorySettings) repo() *settings.MockRepository {
+	return &settings.MockRepository{
 		GetSettingFunc: func(_ context.Context, _ string, _ *string, key string) (*db.Setting, error) {
 			if s, ok := m[key]; ok {
 				cp := *s

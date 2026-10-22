@@ -55,14 +55,16 @@ func TestAskUserTool_SchemaProperties(t *testing.T) {
 	assert.True(t, ok)
 	assert.Equal(t, "array", questionsMap["type"])
 
-	// async: post without waiting (research/ASYNC_ASK_USER.md). Optional,
-	// default false — blocking stays the default.
-	asyncRaw, hasAsync := props["async"]
-	require.True(t, hasAsync, "Schema should have the 'async' option")
-	asyncMap, ok := asyncRaw.(map[string]interface{})
+	// Async is the default (research/ASYNC_ASK_USER.md): blocking is the
+	// opt-in, optional, default false, and the old async option is gone.
+	blockingRaw, hasBlocking := props["blocking"]
+	require.True(t, hasBlocking, "Schema should have the 'blocking' option")
+	blockingMap, ok := blockingRaw.(map[string]interface{})
 	require.True(t, ok)
-	assert.Equal(t, "boolean", asyncMap["type"])
-	assert.Equal(t, false, asyncMap["default"])
-	assert.NotContains(t, required, "async")
-	assert.Contains(t, tool.Description(), "async: true")
+	assert.Equal(t, "boolean", blockingMap["type"])
+	assert.Equal(t, false, blockingMap["default"])
+	assert.NotContains(t, required, "blocking")
+	assert.NotContains(t, props, "async", "async is the default, not an option")
+	assert.Contains(t, tool.Description(), "blocking: true")
+	assert.Contains(t, tool.Description(), "withdraw_question")
 }

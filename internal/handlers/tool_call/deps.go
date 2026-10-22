@@ -9,7 +9,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 )
 
-// Repository is the slice of db.Repository the tool_call handlers use. It
+// Repository is the slice of *db.Repo the tool_call handlers use. It
 // includes db.ToolCallStatusStore (the durable status write) and
 // temporal.SpawnWorkflowReconciler (the spawn stopper's reconcile).
 type Repository interface {

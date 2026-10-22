@@ -33,7 +33,7 @@ func TestPackageCommands_StoreFailuresOnTheWire(t *testing.T) {
 		{"opaque", errors.New("dial tcp: dsn=postgres://u:secret@h"), connect.CodeInternal},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			repo := &package_commands.StubRepo{
+			repo := &package_commands.MockRepository{
 				GetProjectWithUserCheckFunc: func(context.Context, string, string) (*db.Project, error) { return nil, tc.err },
 				GetWorktreeFunc:             func(context.Context, string) (*db.Worktree, error) { return nil, tc.err },
 			}

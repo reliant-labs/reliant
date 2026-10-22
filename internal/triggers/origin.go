@@ -21,7 +21,7 @@ import (
 const IntentWindow = 10 * time.Minute
 
 // LedgerReader is the write ledger as the origin enricher reads it. It is
-// declared here, at the consumer; core.IntegrationWriteStore satisfies it.
+// declared here, at the consumer; db.IntegrationWriteLedger satisfies it.
 type LedgerReader interface {
 	GetIntegrationWriteByObject(ctx context.Context, integration, scope, objectKind, objectID string) (*core.IntegrationWrite, error)
 	ListRecentIntegrationWrites(ctx context.Context, integration, scope string, since time.Time, limit int) ([]*core.IntegrationWrite, error)

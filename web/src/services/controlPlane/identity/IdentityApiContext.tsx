@@ -23,6 +23,7 @@ export interface IdentityApi {
   deleteUser: typeof rpc.deleteIdentityUser;
   revokeSessions: typeof rpc.revokeIdentitySessions;
   getExportURL: typeof rpc.getIdentityExportURL;
+  requestExport: typeof rpc.requestIdentityExport;
 }
 
 export const controlPlaneIdentityApi: IdentityApi = {
@@ -37,6 +38,7 @@ export const controlPlaneIdentityApi: IdentityApi = {
   deleteUser: rpc.deleteIdentityUser,
   revokeSessions: rpc.revokeIdentitySessions,
   getExportURL: rpc.getIdentityExportURL,
+  requestExport: rpc.requestIdentityExport,
 };
 
 const IdentityApiContext = createContext<IdentityApi>(controlPlaneIdentityApi);

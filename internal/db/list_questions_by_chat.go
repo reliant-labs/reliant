@@ -68,7 +68,7 @@ func (r *Repo) ListPendingQuestionsByChat(ctx context.Context, chatID string) ([
 }
 
 // ListAsyncQuestionsByChat returns every async question in a chat — asked
-// with ask_user async: true, so its thread carried on — pending and resolved
+// with ask_user without blocking: true, so its thread carried on — pending and resolved
 // alike, oldest first. None of them is a gate, so ListPendingQuestionsByChat
 // leaves them out; the chat timeline renders them from this.
 func (r *Repo) ListAsyncQuestionsByChat(ctx context.Context, chatID string) ([]*Question, error) {

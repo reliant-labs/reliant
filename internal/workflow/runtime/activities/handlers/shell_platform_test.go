@@ -14,7 +14,7 @@ import (
 
 // fakeDaemonReader is a hand-rolled stand-in for the two repository reads the
 // resolver performs. It is deliberately tiny: the interface it satisfies is
-// declared at the consumer, so a fake needs no knowledge of db.Repository.
+// declared at the consumer, so a fake needs no knowledge of *db.Repo.
 type fakeDaemonReader struct {
 	byID    map[string]*db.Daemon
 	byUser  map[string][]*db.Daemon

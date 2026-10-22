@@ -1,5 +1,5 @@
 /**
- * The timeline card of an async ask_user (input async: true): the agent asked
+ * The timeline card of an async ask_user (no blocking: true): the agent asked
  * without waiting, and the user answers here whenever they like. The answer
  * goes through ResolveQuestion — the Inbox's call — and the card then shows
  * it. research/ASYNC_ASK_USER.md.
@@ -31,7 +31,6 @@ import { AsyncQuestionCard } from "../AsyncQuestionCard";
 const CHAT_ID = "chat-card";
 const TOOL_CALL = "call_async_1";
 const input = {
-  async: true,
   questions: [
     {
       question: "Which database?",
@@ -58,10 +57,10 @@ function asyncQuestion(overrides: Partial<QuestionInfo> = {}): QuestionInfo {
   };
 }
 
-function renderCard() {
+function renderCard(finished = false) {
   return render(
     <QueryClientProvider client={queryClient}>
-      <AsyncQuestionCard chatId={CHAT_ID} toolCallId={TOOL_CALL} input={input} />
+      <AsyncQuestionCard chatId={CHAT_ID} toolCallId={TOOL_CALL} input={input} finished={finished} />
     </QueryClientProvider>,
   );
 }
@@ -130,6 +129,23 @@ describe("AsyncQuestionCard", () => {
 
     expect(await screen.findByTestId("async-question-posting")).toHaveTextContent("Which database?");
     expect(screen.queryByRole("button", { name: /submit/i })).toBeNull();
+  });
+
+  it("shows a finished call's async question", async () => {
+    listAsyncQuestionsMock.mockResolvedValue([asyncQuestion()]);
+    renderCard(true);
+
+    expect(await screen.findByText("Question for you · not blocking")).toBeInTheDocument();
+  });
+
+  // A call recorded before async became the default blocked, though its input
+  // carries no flag; it finished with no async question row.
+  it("renders nothing for a finished call that has no async question", async () => {
+    listAsyncQuestionsMock.mockResolvedValue([]);
+    renderCard(true);
+
+    await waitFor(() => expect(listAsyncQuestionsMock).toHaveBeenCalled());
+    await waitFor(() => expect(screen.queryByTestId("async-question-card")).toBeNull());
   });
 
   it("re-arms the form when the answer could not be delivered", async () => {

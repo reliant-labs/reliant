@@ -864,7 +864,7 @@ func (r *Repo) GetUpdatesSince(ctx context.Context, chatID string, sinceSeq int6
 			if err := json.Unmarshal(update.Data, &dataMap); err == nil {
 				// Only enrich if content_blocks is missing
 				if _, hasContentBlocks := dataMap["content_blocks"]; !hasContentBlocks {
-					enrichedData, err := r.EnrichMessageUpdate(ctx, *update)
+					enrichedData, err := r.enrichMessageUpdate(ctx, *update)
 					if err != nil {
 						// Log error but continue with original data
 						logging.WarnContext(ctx, "Failed to enrich message update",
@@ -881,9 +881,9 @@ func (r *Repo) GetUpdatesSince(ctx context.Context, chatID string, sinceSeq int6
 	return updates, nil
 }
 
-// EnrichMessageUpdate adds content blocks to a message update
+// enrichMessageUpdate adds content blocks to a message update
 // This ensures websocket clients receive complete MessageWithBlocks objects
-func (r *Repo) EnrichMessageUpdate(ctx context.Context, update ChatUpdate) (json.RawMessage, error) {
+func (r *Repo) enrichMessageUpdate(ctx context.Context, update ChatUpdate) (json.RawMessage, error) {
 	// Parse the existing update data
 	var updateData map[string]interface{}
 	if err := json.Unmarshal(update.Data, &updateData); err != nil {
@@ -977,8 +977,8 @@ func (r *Repo) EnrichMessageUpdate(ctx context.Context, update ChatUpdate) (json
 		}
 
 	}
-	// One serializer for a block's wire shape (see ContentBlockPayloads).
-	contentBlocks := r.ContentBlockPayloads(ctx, blocks)
+	// One serializer for a block's wire shape (see contentBlockPayloads).
+	contentBlocks := r.contentBlockPayloads(ctx, blocks)
 
 	// Get context_sequence from context_window for frontend compatibility
 	var contextSequence int
@@ -1268,20 +1268,23 @@ func (r *Repo) SetChatQueuedForMachine(ctx context.Context, chatID string, queue
 	return changed, err
 }
 
-// ListChatsQueuedForMachine lists chats holding a message queued for their
-// machine; see the Repository interface.
+// ListChatsQueuedForMachine lists non-archived chats holding a message
+// queued for their machine, oldest first, at most limit; userID "" lists
+// every user's.
 func (r *Repo) ListChatsQueuedForMachine(ctx context.Context, userID string, limit int) ([]QueuedForMachineChat, error) {
 	return store.ListChatsQueuedForMachine(ctx, r.ORM(), userID, limit)
 }
 
 // SetChatPausedForMachine records (or clears) that the daemon-offline breaker
-// paused the chat's run, and reports whether the stored value changed.
+// paused the chat's run (as opposed to the user), and reports whether the
+// stored value changed — clearing it is how a resumer claims the chat.
 func (r *Repo) SetChatPausedForMachine(ctx context.Context, chatID string, paused bool) (bool, error) {
 	return store.SetChatPausedForMachine(ctx, r.ORM(), chatID, paused)
 }
 
-// ListChatsPausedForMachine lists chats the breaker paused; see the Repository
-// interface.
+// ListChatsPausedForMachine lists non-archived chats the breaker paused
+// whose root run still reads paused, oldest first, at most limit; userID ""
+// lists every user's.
 func (r *Repo) ListChatsPausedForMachine(ctx context.Context, userID string, limit int) ([]PausedForMachineChat, error) {
 	return store.ListChatsPausedForMachine(ctx, r.ORM(), userID, limit)
 }

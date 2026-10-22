@@ -31,13 +31,13 @@ func (r *retirer) RetireDeletedTriggers(_ context.Context, deleted []*core.Trigg
 // function and, as a transaction does, discards the deletions it made when the
 // function fails.
 type automationsStore struct {
-	*workflow.StubRepo
+	*workflow.MockRepository
 	triggers []*core.Trigger
 	deleted  []string
 }
 
 func newAutomationsStore(slug string, triggers ...*core.Trigger) *automationsStore {
-	s := &automationsStore{StubRepo: draftsRepo(callerDraftNoT(slug)), triggers: triggers}
+	s := &automationsStore{MockRepository: draftsRepo(callerDraftNoT(slug)), triggers: triggers}
 	s.DeleteWorkflowDraftBySlugFunc = func(context.Context, string, string) error { return nil }
 	s.ListTriggersFunc = func(context.Context, core.TriggerFilters) ([]*core.Trigger, error) { return s.triggers, nil }
 	s.DeleteTriggerFunc = func(_ context.Context, id string) error {

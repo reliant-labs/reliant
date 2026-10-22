@@ -169,7 +169,7 @@ message InboxQuestion {
   string prompt = 3;
   // The raw question metadata (JSON), so the client can render the full form.
   optional string metadata = 4;
-  // Asked without waiting (ask_user async: true): the agent kept working, so
+  // Asked without waiting (ask_user without blocking: true): the agent kept working, so
   // the item waits on the user without blocking a run. Not counted in
   // blocking_count.
   bool async = 5;

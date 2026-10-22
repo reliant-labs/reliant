@@ -741,7 +741,10 @@ func GetToolRegistry() []ToolDefinition {
 		// Interaction tools
 		// ask_user is a schema-only tool — execution is intercepted by the workflow
 		// runtime (splitProtoToolCalls → executeAskUserInline), not the normal tool path.
-		{ToolAskUser, (*ToolsFactory).AskUser, nil, PlacementServer, false},
+		// Preloaded for the coding agent (and its plan mode): asking is async by
+		// default, so an agent that can ask without stopping should never have to
+		// load_tool first to do it. Its companions follow it in (below).
+		{ToolAskUser, (*ToolsFactory).AskUser, []ToolTag{TagCodingDefault, TagCodingPlan}, PlacementServer, false},
 		// ask_user's companions: what you (and your sub-agents) still wait
 		// on, and retracting an async question its default made moot. No
 		// tags: they are handed to any agent that can ask, or that has

@@ -145,7 +145,7 @@ nodes:
         ## Which Website to Analyze
         {{inputs.website_url != '' ?
           'Analyze this company website: ' + inputs.website_url :
-          'No website URL was set as a parameter. Find the company website in the request above. If the request has no usable URL, call the ask_user tool ONCE to ask for the company website URL before going further. Never guess or invent a URL.'}}
+          'No website URL was set as a parameter. Find the company website in the request above. If the request has no usable URL, call the ask_user tool ONCE, with blocking: true, to ask for the company website URL and wait for it before going further. Never guess or invent a URL.'}}
 
         ## Page Discovery Strategy
         1. Fetch the homepage first
@@ -253,7 +253,7 @@ nodes:
         content: |
           {{inputs.website_url != '' ?
             'Analyze the company website at ' + inputs.website_url + ' and extract both content claims and brand identity.' :
-            'Analyze the company website for this pitch deck and extract both content claims and brand identity. Determine the URL from my request above; if it is not there, use the ask_user tool to ask me for it first.'}}
+            'Analyze the company website for this pitch deck and extract both content claims and brand identity. Determine the URL from my request above; if it is not there, use the ask_user tool with blocking: true to ask me for it first.'}}
           {{inputs.existing_deck_dir != '' ? 'Also read the existing pitch deck at ' + inputs.existing_deck_dir + ' and assess what to keep vs rewrite.' : ''}}
     save_message:
       role: assistant

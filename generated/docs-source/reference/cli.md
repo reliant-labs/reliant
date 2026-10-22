@@ -57,6 +57,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge cloud`](#reliant-forge-cloud) | Talk to the hosted control plane an environment declares |
 | [`reliant forge cloud identity`](#reliant-forge-cloud-identity) | Inspect managed identity and administer its users |
 | [`reliant forge cloud identity delete`](#reliant-forge-cloud-identity-delete) | Delete a user's account (org admin; asks first) |
+| [`reliant forge cloud identity export`](#reliant-forge-cloud-identity-export) | Export the identity's users now and print a short-lived download URL (identity:manage) |
 | [`reliant forge cloud identity invite`](#reliant-forge-cloud-identity-invite) | Create an account (or grant roles) and issue a password-set code (org admin) |
 | [`reliant forge cloud identity lock`](#reliant-forge-cloud-identity-lock) | Block a user from signing in (org admin) |
 | [`reliant forge cloud identity reset`](#reliant-forge-cloud-identity-reset) | Issue a user a one-time password-set code (org admin) |
@@ -166,6 +167,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge fix composition-graph`](#reliant-forge-fix-composition-graph) | Move a project off Infra / NewComponents / ServeSpec onto the composition graph |
 | [`reliant forge fix config-proto-package`](#reliant-forge-fix-config-proto-package) | Move the config protos to proto/<project>/config/v1, package <project>.config.v1 (no shared config.v1 since v0.1.47) |
 | [`reliant forge fix connect-errors`](#reliant-forge-fix-connect-errors) | Rewrite fixed-message connect.NewError calls to pkg/svcerr, wire-identically, and list the rest |
+| [`reliant forge fix harness-mocks`](#reliant-forge-fix-harness-mocks) | Rename the harness's Stub<Field> doubles to the forge mocks that replace them (one double per interface since v0.1.47) |
 | [`reliant forge fix narrow-deps`](#reliant-forge-fix-narrow-deps) | Declare the interfaces a component's Deps actually use, and retype its fields to them |
 | [`reliant forge fix operatorkit`](#reliant-forge-fix-operatorkit) | Rename lifecyclekit.Run / Controller / Options to operatorkit (moved in v0.1.46) |
 | [`reliant forge fix tx-isolation`](#reliant-forge-fix-tx-isolation) | Spell out every pkg/orm transaction's isolation level and attempt budget (no default since v0.1.47) |
@@ -190,6 +192,8 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge obs alerts`](#reliant-forge-obs-alerts) | Alert rules declared for an environment |
 | [`reliant forge obs alerts check`](#reliant-forge-obs-alerts-check) | Evaluate the env's alert rules against the local ClickStack and print what would fire |
 | [`reliant forge obs alerts run`](#reliant-forge-obs-alerts-run) | Evaluate the env's alert rules continuously and deliver what fires through the local Alertmanager |
+| [`reliant forge obs changes`](#reliant-forge-obs-changes) | What changed? Promotions, rollbacks, failed deploys and activity, newest first |
+| [`reliant forge obs check`](#reliant-forge-obs-check) | Did the deploy work? Judge a release by the window after it against the window before |
 | [`reliant forge obs dashboards`](#reliant-forge-obs-dashboards) | Work with the dashboards a release carries |
 | [`reliant forge obs dashboards check`](#reliant-forge-obs-dashboards-check) | Validate the dashboards a release bundle would carry |
 | [`reliant forge obs endpoints`](#reliant-forge-obs-endpoints) | The slowest or most failing endpoints |
@@ -205,6 +209,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge obs metrics query`](#reliant-forge-obs-metrics-query) | One metric as time series |
 | [`reliant forge obs profile`](#reliant-forge-obs-profile) | Export an aggregated continuous profile as pprof, speedscope or collapsed stacks |
 | [`reliant forge obs query`](#reliant-forge-obs-query) | Anything else: raw SQL or a dashboard panel, with the scope bound |
+| [`reliant forge obs status`](#reliant-forge-obs-status) | What is wrong right now? Services, open issues, alerts, telemetry and the release in force |
 | [`reliant forge obs trace`](#reliant-forge-obs-trace) | One trace as a tree, with its errors and logs |
 | [`reliant forge obs traces`](#reliant-forge-obs-traces) | Find traces: the slowest, the failing, by route |
 | [`reliant forge package`](#reliant-forge-package) | Manage internal packages |
@@ -275,7 +280,6 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge storage configure-nodes`](#reliant-forge-storage-configure-nodes) | Preview kubelet GC migration for existing registered nodes; --apply restarts them |
 | [`reliant forge storage daemon`](#reliant-forge-storage-daemon) | Run maintenance periodically, reloading policy for every pass |
 | [`reliant forge storage gc`](#reliant-forge-storage-gc) | Preview cleanup; --apply deletes only eligible cache and registry versions |
-| [`reliant forge storage gocache`](#reliant-forge-storage-gocache) | Trim the Go build caches now (preview unless --apply); the bounded pass to run every few minutes |
 | [`reliant forge storage install`](#reliant-forge-storage-install) | Install daily maintenance (launchd, systemd timer, or Windows Task Scheduler) using a stable copy of this executable |
 | [`reliant forge storage policy`](#reliant-forge-storage-policy) | Print the effective storage policy |
 | [`reliant forge storage register`](#reliant-forge-storage-register) | Register local cluster contexts, declared repositories or release pins |
@@ -1501,8 +1505,8 @@ Inspect managed identity and administer its users
 Manage the identity an environment declares in KCL, using its control plane.
 
 Reads (status, users) need identity:read; every verb that changes a user
-(invite, set-roles, reset, lock, unlock, delete, revoke-sessions) needs
-identity:manage and an org admin. Under Reliant, or after forge login, nothing
+(invite, set-roles, reset, lock, unlock, delete, revoke-sessions) and export
+need identity:manage and an org admin. Under Reliant, or after forge login, nothing
 extra is needed: when the control plane answers that the credential lacks one of
 those scopes, forge trades it for the scope on demand (an hour, and only while
 the person behind the session holds the grant), as deploy does for deploy:read.
@@ -1531,6 +1535,7 @@ reliant forge cloud identity
 | Command | Description |
 |---------|-------------|
 | [`delete`](#reliant-forge-cloud-identity-delete) | Delete a user's account (org admin; asks first) |
+| [`export`](#reliant-forge-cloud-identity-export) | Export the identity's users now and print a short-lived download URL (identity:manage) |
 | [`invite`](#reliant-forge-cloud-identity-invite) | Create an account (or grant roles) and issue a password-set code (org admin) |
 | [`lock`](#reliant-forge-cloud-identity-lock) | Block a user from signing in (org admin) |
 | [`reset`](#reliant-forge-cloud-identity-reset) | Issue a user a one-time password-set code (org admin) |
@@ -1562,6 +1567,35 @@ reliant forge cloud identity delete <env> --user <id|email> [flags]
 | `--token` | `string` | - | Credential to use, ahead of the env var, stored login and session helper |
 | `--user` | `string` | - | The user, by user id or exact email address (required) |
 | `--yes`, `-y` | `bool` | - | Delete without asking |
+
+---
+
+#### reliant forge cloud identity export
+
+Export the identity's users now and print a short-lived download URL (identity:manage)
+
+Ask the control plane to export the environment's identity instance — every
+user, password hashes included, in Zitadel's import format — and print a signed
+download URL valid for minutes. Requests within the same 15 minutes share one
+export. For a withdrawn identity the URL is for the export written when it was
+withdrawn.
+
+The URL is a credential: anyone holding it can download every user's password
+hash until it expires. It is printed once and never logged; do not paste it
+into a ticket or a chat. Needs identity:manage and, for a person, an org admin
+holding the identity:manage grant. Refused where export is not enabled for the
+control plane, or the instance is not ready.
+
+```
+reliant forge cloud identity export <env> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--json` | `bool` | - | Emit machine-readable JSON (never credentials) |
+| `--token` | `string` | - | Credential to use, ahead of the env var, stored login and session helper |
 
 ---
 
@@ -5376,6 +5410,13 @@ status is non-zero if any key is not a match.
 <secret> is a Secret name, or <namespace>/<name>; omit it to verify every
 store-backed Secret the env declares.
 
+With --against gsm: and an explicit --map, <secret> need not be declared by any
+store-backed ExternalSecret: the --map keys are the Secret's keys and their
+values the GSM ids to compare with. This is the pre-migration escrow check:
+
+  forge env secrets verify prod control-plane-prod/control-plane-openbao-unseal \
+      --against gsm:reliant-labs-475814 --map static-key=openbao-unseal-prod
+
 ```
 reliant forge env secrets verify <environment> [<secret>] [flags]
 ```
@@ -5542,6 +5583,12 @@ WHAT ONE ENV'S REPORT CARRIES:
     missing / untagged / unreachable. A hosted env is read through its
     control plane's observer, because forge cannot read a hosted cluster;
   * the ROLLOUT PHASE per workload, as the control plane computes it;
+  * IDENTITY — a hosted env that declares forge.ManagedIdentity gets one line,
+    "identity: ready / provisioning / failed: <reason>", as its control plane
+    reports it. It never changes the exit code here; --wait (and env deploy)
+    waits on it: a release whose rollout succeeded is WAITING ON IDENTITY until
+    the identity is ready (1 if it failed, the timed-out code if it was still
+    provisioning at the deadline);
   * RUNTIME HEALTH — every host service and frontend with its URL, log file
     and whether a listener is accepting right now, plus the compose infra,
     the app's /healthz + /readyz, pprof and the telemetry backends;
@@ -5852,6 +5899,7 @@ reliant forge fix
 | [`composition-graph`](#reliant-forge-fix-composition-graph) | Move a project off Infra / NewComponents / ServeSpec onto the composition graph |
 | [`config-proto-package`](#reliant-forge-fix-config-proto-package) | Move the config protos to proto/<project>/config/v1, package <project>.config.v1 (no shared config.v1 since v0.1.47) |
 | [`connect-errors`](#reliant-forge-fix-connect-errors) | Rewrite fixed-message connect.NewError calls to pkg/svcerr, wire-identically, and list the rest |
+| [`harness-mocks`](#reliant-forge-fix-harness-mocks) | Rename the harness's Stub<Field> doubles to the forge mocks that replace them (one double per interface since v0.1.47) |
 | [`narrow-deps`](#reliant-forge-fix-narrow-deps) | Declare the interfaces a component's Deps actually use, and retype its fields to them |
 | [`operatorkit`](#reliant-forge-fix-operatorkit) | Rename lifecyclekit.Run / Controller / Options to operatorkit (moved in v0.1.46) |
 | [`tx-isolation`](#reliant-forge-fix-tx-isolation) | Spell out every pkg/orm transaction's isolation level and attempt budget (no default since v0.1.47) |
@@ -5925,6 +5973,10 @@ and rewrites what points at them:
   import "config/v1/<file>.proto"     in every other proto under proto/
   config.v1.<Message> references      in every proto (fully qualified type names)
   "<mod>/gen/config/v1" Go imports    in the project's own Go files
+  "config.v1", "config.v1.Msg"        Go string literals that are exactly the old
+                                      package or a name in it (a registry filter
+                                      such as RangeFilesByPackage("config.v1", …)
+                                      silently matches nothing once it moves)
   proto/config/v1, gen/config/v1      as paths in the project's own protos, Go,
                                       TS/JS, KCL, YAML, shell and Make files
                                       (TS imports of the generated _pb modules too)
@@ -5939,8 +5991,9 @@ the new package.
 Nothing a config DECLARES changes: fields, annotations, env var names, flags
 and the generated KCL schemas are the same, and the Go package keeps its name
 (configv1). Run forge generate afterwards to regenerate pkg/config, gen/ and
-the descriptor. Remaining mentions of the old layout (docs, an import of another
-project's gen/config/v1) are listed for you; nothing else is decided for you.
+the descriptor. Remaining mentions of the old layout (docs, a Go string that only contains config.v1, an import of another
+project's gen/config/v1) are listed
+for you with file:line; nothing else is decided for you.
 
 The rest of the v0.1.47 story is the migration skill: `forge skill load migrations/v0.1.47`.
 
@@ -6029,6 +6082,51 @@ reliant forge fix connect-errors [flags]
 
 ---
 
+#### reliant forge fix harness-mocks
+
+Rename the harness's Stub<Field> doubles to the forge mocks that replace them (one double per interface since v0.1.47)
+
+Point your handler tests at the forge mock the test harness now installs.
+
+forge v0.1.47 stops synthesizing a Stub<Field> in helpers_gen_test.go for a Deps
+field whose interface forge already mocks in a mock_gen.go — the declaring
+package's (contract.go or a forge:deps deps.go), or the handler's own. The
+harness installs that mock instead:
+
+  Deps.Pause runs.PauseController   StubPause → runs.MockPauseController
+  Deps.Narrow Narrow (deps.go)      StubNarrow → MockNarrow
+  Deps.Estimates db.EstimateStore   StubEstimates → MockEstimateStore
+                                    (the handler's Deps-discovered mock)
+
+Both doubles have the same fields (<Method>Func, an embedded
+contractkit.Recorder), so this renames the type in every test file of the
+handler, qualifying it the way the file already reaches the package, and adds
+the declaring package's import where a file lacks it. A test struct that embeds
+a stub has its embedded field renamed with it (StubPause: → MockPauseController:,
+w.StubPause → w.MockPauseController). Stub<Field> stays for
+an interface no mock_gen.go has (a third-party or standard-library one).
+
+One behaviour moves with the name: an unset method returns
+contractkit.MockNotSet ("MockPauseController.PauseFunc not set") instead of
+testkit.StubNotConfigured ("StubPause.PauseFunc not set: forge test stub not
+configured ..."). Both are a non-nil error from every error-returning method;
+a test that asserts on the old text is listed for you, not rewritten.
+
+The rest of the v0.1.47 story is the migration skill: `forge skill load migrations/v0.1.47`.
+
+```
+reliant forge fix harness-mocks [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--dry-run` | `bool` | - | List what would be rewritten; change nothing |
+| `--scope` | `stringSlice` | `[]` | Rewrite only files under `PATH` (repeatable or comma-separated, project-relative), as forge lint --scope lints one slice of a shared checkout. What decides a rewrite is still read from the whole project; only the writes, and the report, are bounded |
+
+---
+
 #### reliant forge fix narrow-deps
 
 Declare the interfaces a component's Deps actually use, and retype its fields to them
@@ -6043,9 +6141,12 @@ untouched: the value internal/app/compose.go hands the field still satisfies
 the narrower interface, structurally. Its mock is written beside it
 (mock_gen.go), and `forge generate` keeps it in step.
 
-A field whose value the package passes on is left alone (what it needs is not
-all visible here), as is one it never calls (delete it) and an interface the
-package already declares (edit that one).
+A field the package passes on as an interface — a parameter, a struct field —
+needs that interface's methods too: the new interface embeds it, so every call
+that passes the value on still type-checks. A field whose value also leaves as
+`any`, a concrete type or a return value is left alone (what it needs is
+not all visible here), as is one it never uses (delete it) and an interface
+the package already declares (edit that one).
 
 ```
 reliant forge fix narrow-deps <package-dir>
@@ -6901,6 +7002,7 @@ reliant forge lint [paths...] [flags]
 | `--contract` | `bool` | - | Run contract interface enforcement linter |
 | `--conventions` | `bool` | - | Run forge convention rules on proto files |
 | `--create-nullability` | `bool` | - | Fail when a field's optional label disagrees between an entity message and its Create<Entity>Request — the flattened request drops write presence silently |
+| `--db-grants` | `bool` | - | Fail on a credential-shaped column (token, password, key, ciphertext, hash…) that carries neither forge:secret nor forge:readable <reason>: the read-only forge_ro role is refused it until someone decides |
 | `--fix` | `bool` | - | Apply the mechanical fixes in place (Go formatting, the tracing log rewrite, frontend prettier, eslint --fix), each Go rewrite type-checked and taken back if it breaks its package. Never golangci-lint fixes. Off by default: lint is a gate and reports |
 | `--fixture-drift` | `bool` | - | Execute every literal fixture statement in a scaffolded handlers_crud_test.go against the current schema — migrations applied to a shadow postgres, each statement run in a rolled-back transaction — and report postgres's own error for each one it rejects: a GENERATED column, a UNIQUE collision, a dangling foreign key, a CHECK a later migration added (warnings only) |
 | `--frontend-stores` | `bool` | - | Flag Zustand stores that import generated Connect clients (warnings only) |
@@ -7023,6 +7125,8 @@ reliant forge obs
 | Command | Description |
 |---------|-------------|
 | [`alerts`](#reliant-forge-obs-alerts) | Alert rules declared for an environment |
+| [`changes`](#reliant-forge-obs-changes) | What changed? Promotions, rollbacks, failed deploys and activity, newest first |
+| [`check`](#reliant-forge-obs-check) | Did the deploy work? Judge a release by the window after it against the window before |
 | [`dashboards`](#reliant-forge-obs-dashboards) | Work with the dashboards a release carries |
 | [`endpoints`](#reliant-forge-obs-endpoints) | The slowest or most failing endpoints |
 | [`issue`](#reliant-forge-obs-issue) | Everything needed to fix one issue; resolve, ignore and unresolve triage it |
@@ -7031,6 +7135,7 @@ reliant forge obs
 | [`metrics`](#reliant-forge-obs-metrics) | List and query metrics; print the declared schema |
 | [`profile`](#reliant-forge-obs-profile) | Export an aggregated continuous profile as pprof, speedscope or collapsed stacks |
 | [`query`](#reliant-forge-obs-query) | Anything else: raw SQL or a dashboard panel, with the scope bound |
+| [`status`](#reliant-forge-obs-status) | What is wrong right now? Services, open issues, alerts, telemetry and the release in force |
 | [`trace`](#reliant-forge-obs-trace) | One trace as a tree, with its errors and logs |
 | [`traces`](#reliant-forge-obs-traces) | Find traces: the slowest, the failing, by route |
 
@@ -7127,6 +7232,169 @@ reliant forge obs alerts run [flags]
 | `--listen` | `string` | - | address of the in-app sink the local Alertmanager delivers to, host:port (required). It must be reachable from the Alertmanager container, so not 127.0.0.1 |
 | `--max-rows` | `int` | `200` | a rule returning more rows than this fails its evaluation |
 | `--timeout` | `duration` | `20s` | per-rule query timeout |
+
+---
+
+#### reliant forge obs changes
+
+What changed? Promotions, rollbacks, failed deploys and activity, newest first
+
+List what changed in [env] (default dev) over --since (default 2h): releases
+promoted or rolled back, deploys that failed, and the activity feed (restarts,
+secret rotations, triage). Locally it is this machine's ledger: promotions,
+failed applies and the times the dev stack started.
+
+  cli forge obs changes prod --since 6h
+  cli forge obs changes dev --json
+
+JSON schema forge.obs.changes/v1. --fields takes dotted paths of:
+  changes
+  changes.actor
+  changes.at
+  changes.direction
+  changes.kind
+  changes.promotion_id
+  changes.summary
+  changes.target
+  changes.verb
+  changes.version
+  changes.via
+  query_mode
+  scope
+  scope.backend
+  scope.env
+  scope.env_id
+  scope.from
+  scope.to
+  suggested
+  warnings
+Always kept: schema, ok, exit_code, error, truncated, omitted, next_page_token.
+
+
+```
+reliant forge obs changes [env] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
+| `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
+| `--from` | `string` | - | range start, RFC 3339 |
+| `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
+| `--limit` | `int` | `50` | most items to return |
+| `--since` | `duration` | `2h0m0s` | how far back to read (ignored with --from) |
+| `--to` | `string` | - | range end, RFC 3339 (default now) |
+
+---
+
+#### reliant forge obs check
+
+Did the deploy work? Judge a release by the window after it against the window before
+
+Judge one promotion of [env] (default dev): compare the [P, P+window) after it
+with the [P-window, P) before it, per service, over weighted server spans, and
+list what the release opened: new and regressed issues, alerts still firing,
+workload restarts. The verdict is PASS, FAIL or INCONCLUSIVE. Each window
+stops at the neighbouring promotion; the after window also stops at now.
+
+  cli forge obs check prod --wait --json
+  cli forge obs check prod --release v1.4.2 --window 30m
+  cli forge obs check prod --fail-on error_rate,new_issue --threshold min_requests=20
+  cli forge obs check prod --wait --gate-json check.json && cli forge gate record prod --from check.json
+  cli forge obs check dev --since 20m          # local: no promotions, P is --since
+
+Exit status:
+  0  PASS (also INCONCLUSIVE with --allow-inconclusive)
+  1  FAIL: we looked, and the release made things worse
+  2  INCONCLUSIVE, or we could not look (control plane unreachable, auth
+     refused, telemetry off). Both mean "not proven good"; a gate must not
+     read either as a pass.
+  8  --wait ran out before the after window finished
+
+Thresholds come from the env's release_health declaration (KCL); --threshold
+name=value overrides one for this call (max_error_rate_increase, max_p95_ratio, min_requests, new_issue_min_events).
+The document says where each effective threshold came from: release_shape,
+default or request.
+
+JSON schema forge.obs.check/v1. --fields takes dotted paths of:
+  findings
+  findings.code
+  findings.message
+  findings.policy
+  findings.ref
+  findings.service
+  findings.threshold
+  findings.value
+  firing_alerts
+  new_issues
+  not_evaluated
+  query_mode
+  reason
+  regressed_issues
+  scope
+  scope.backend
+  scope.env
+  scope.env_id
+  scope.from
+  scope.to
+  services
+  services.after
+  services.before
+  services.service
+  services.version_share
+  statements
+  statements.params.*
+  statements.purpose
+  statements.sql
+  subject
+  subject.git_commit
+  subject.previous_release
+  subject.promoted_at
+  subject.promotion_id
+  subject.release
+  suggested
+  thresholds
+  thresholds.name
+  thresholds.source
+  thresholds.value
+  verdict
+  waited
+  windows
+  windows.after
+  windows.after.from
+  windows.after.to
+  windows.after_complete
+  windows.before
+  windows.before.from
+  windows.before.to
+  workload_findings
+Always kept: schema, ok, exit_code, error, truncated, omitted, next_page_token.
+
+
+```
+reliant forge obs check [env] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-inconclusive` | `bool` | - | exit 0 on INCONCLUSIVE instead of 2 |
+| `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
+| `--explain` | `bool` | - | local env only: print the compiled statements instead of running them |
+| `--fail-on` | `string` | - | comma-separated finding codes that fail the release (default: the env's release_health.fail_on): error_rate, latency, new_issue, regressed_issue, alert_firing, workload_restarts |
+| `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
+| `--gate-json` | `string` | - | also write the verdict to `FILE` as a gate document, for `cli forge gate record --from FILE` |
+| `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
+| `--promotion` | `string` | - | judge this promotion id |
+| `--release` | `string` | - | judge the promotion of this release version (default: the env's current one) |
+| `--since` | `string` | - | local env only: when the release started, as a duration ago (20m) or an RFC 3339 time (default: the start of the last env up) |
+| `--threshold` | `stringArray` | `[]` | override one threshold for this call, name=value (repeatable) |
+| `--timeout` | `duration` | `30m0s` | with --wait: give up (exit 8) after this long |
+| `--wait` | `bool` | - | poll until the after window has finished |
+| `--window` | `duration` | `0s` | width of each window (default: the env's release_health.window, 15m; max 6h) |
 
 ---
 
@@ -7309,6 +7577,11 @@ JSON schema forge.obs.issue/v1. --fields takes dotted paths of:
   latest_event.url_path
   latest_event.version
   query_mode
+  release
+  release.promoted_at
+  release.promotion_id
+  release.unsettled
+  release.version
   scope
   scope.backend
   scope.env
@@ -7425,6 +7698,11 @@ JSON schema forge.obs.issue/v1. --fields takes dotted paths of:
   latest_event.url_path
   latest_event.version
   query_mode
+  release
+  release.promoted_at
+  release.promotion_id
+  release.unsettled
+  release.version
   scope
   scope.backend
   scope.env
@@ -7526,6 +7804,11 @@ JSON schema forge.obs.issue/v1. --fields takes dotted paths of:
   latest_event.url_path
   latest_event.version
   query_mode
+  release
+  release.promoted_at
+  release.promotion_id
+  release.unsettled
+  release.version
   scope
   scope.backend
   scope.env
@@ -7627,6 +7910,11 @@ JSON schema forge.obs.issue/v1. --fields takes dotted paths of:
   latest_event.url_path
   latest_event.version
   query_mode
+  release
+  release.promoted_at
+  release.promotion_id
+  release.unsettled
+  release.version
   scope
   scope.backend
   scope.env
@@ -8138,6 +8426,135 @@ reliant forge obs query [env] [flags]
 
 ---
 
+#### reliant forge obs status
+
+What is wrong right now? Services, open issues, alerts, telemetry and the release in force
+
+One look at [env] (default dev) over --since (default 1h):
+
+  services         requests, error rate and latency per service, busiest first
+  issues           the new and regressed issues (locally: every error group)
+  alerts           the alerts firing or pending (hosted envs)
+  telemetry        when the newest log and span arrived; hosted, whether the
+                   control plane's telemetry token reached the cluster
+  current_release  the promotion in force, and the last few changes
+
+Each section is read on its own: one the backend cannot answer is listed in
+`unread` with the reason in `warnings`, and the rest are still shown. The exit
+status is 0 whenever anything was read; status reports, it does not judge (use
+`cli forge obs check` to gate a release).
+
+  cli forge obs status prod
+  cli forge obs status dev --since 15m --service api
+  cli forge obs status prod --json --fields services,issues.id,issues.title
+
+JSON schema forge.obs.status/v1. --fields takes dotted paths of:
+  alerts
+  alerts.active_at
+  alerts.fingerprint
+  alerts.firing_at
+  alerts.labels.*
+  alerts.rule
+  alerts.state
+  alerts.summary
+  alerts.value
+  changes
+  changes.actor
+  changes.at
+  changes.direction
+  changes.kind
+  changes.promotion_id
+  changes.summary
+  changes.target
+  changes.verb
+  changes.version
+  changes.via
+  current_release
+  current_release.actor
+  current_release.direction
+  current_release.promoted_at
+  current_release.promotion_id
+  current_release.unsettled
+  current_release.version
+  current_release.via
+  issues
+  issues.affected
+  issues.culprit
+  issues.events
+  issues.exception_type
+  issues.first_seen
+  issues.first_version
+  issues.id
+  issues.ignored_until
+  issues.last_seen
+  issues.last_version
+  issues.latest_trace_id
+  issues.platform
+  issues.regressed_at
+  issues.resolved_at
+  issues.resolved_version
+  issues.service
+  issues.status
+  issues.title
+  issues_truncated
+  not_evaluated
+  query_mode
+  scope
+  scope.backend
+  scope.env
+  scope.env_id
+  scope.from
+  scope.services
+  scope.to
+  services
+  services.error_logs
+  services.error_rate
+  services.errors
+  services.p50_ms
+  services.p95_ms
+  services.p99_ms
+  services.rate_per_second
+  services.requests
+  services.service
+  suggested
+  telemetry
+  telemetry.deliveries
+  telemetry.deliveries.cluster
+  telemetry.deliveries.consecutive_failures
+  telemetry.deliveries.expires_at
+  telemetry.deliveries.last_error
+  telemetry.deliveries.last_verified_at
+  telemetry.deliveries.name
+  telemetry.deliveries.namespace
+  telemetry.deliveries.state
+  telemetry.deliveries_enabled
+  telemetry.last_log_at
+  telemetry.last_span_at
+  telemetry.lookback
+  unread
+  warnings
+Always kept: schema, ok, exit_code, error, truncated, omitted, next_page_token.
+
+
+```
+reliant forge obs status [env] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
+| `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
+| `--from` | `string` | - | range start, RFC 3339 |
+| `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
+| `--limit` | `int` | `10` | most items to return |
+| `--service` | `stringArray` | `[]` | only this service.name (repeatable) |
+| `--since` | `duration` | `1h0m0s` | how far back to read (ignored with --from) |
+| `--to` | `string` | - | range end, RFC 3339 (default now) |
+
+---
+
 #### reliant forge obs trace
 
 One trace as a tree, with its errors and logs
@@ -8171,6 +8588,11 @@ JSON schema forge.obs.trace/v1. --fields takes dotted paths of:
   logs_truncated
   orphans
   query_mode
+  release
+  release.promoted_at
+  release.promotion_id
+  release.unsettled
+  release.version
   scope
   scope.backend
   scope.env
@@ -10472,7 +10894,7 @@ that holds it (default: Bundle.bootstrap_source's):
 The destination store comes from the ExternalSecret that reads each name
 (--store picks one when two do). Google Secret Manager uses your Application
 Default Credentials. No value is ever printed, and none is taken as an
-argument. --dry-run reads the source and reports what would be created.
+argument. --dry-run reads the source and reports what would be created; for a Google\nSecret Manager destination it also checks (metadata only) which names already\nhold a value and would be left alone.
 
 ```
 reliant forge secret import --env <environment> (--from <namespace>/<secret> --map key=NAME[,key=NAME...] | <NAME>) [flags]
@@ -10482,7 +10904,7 @@ reliant forge secret import --env <environment> (--from <namespace>/<secret> --m
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `--dry-run` | `bool` | - | Read the source and report what would be created; write nothing |
+| `--dry-run` | `bool` | - | Read the source and report what would be created or left alone; write nothing |
 | `--env` | `string` | - | Environment whose secret store to act on (required; deploy/kcl/<env>/) |
 | `--from` | `string` | - | Cluster Secret to read, as <namespace>/<secret> (uses your kube context) |
 | `--from-file` | `string` | - | Read the single NAME's value from a file instead of stdin |
@@ -10790,7 +11212,6 @@ reliant forge storage
 | [`configure-nodes`](#reliant-forge-storage-configure-nodes) | Preview kubelet GC migration for existing registered nodes; --apply restarts them |
 | [`daemon`](#reliant-forge-storage-daemon) | Run maintenance periodically, reloading policy for every pass |
 | [`gc`](#reliant-forge-storage-gc) | Preview cleanup; --apply deletes only eligible cache and registry versions |
-| [`gocache`](#reliant-forge-storage-gocache) | Trim the Go build caches now (preview unless --apply); the bounded pass to run every few minutes |
 | [`install`](#reliant-forge-storage-install) | Install daily maintenance (launchd, systemd timer, or Windows Task Scheduler) using a stable copy of this executable |
 | [`policy`](#reliant-forge-storage-policy) | Print the effective storage policy |
 | [`register`](#reliant-forge-storage-register) | Register local cluster contexts, declared repositories or release pins |
@@ -10860,38 +11281,6 @@ reliant forge storage gc [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--apply` | `bool` | - | execute the cleanup plan |
-| `--dry-run` | `bool` | - | preview only (the default) |
-
----
-
-#### reliant forge storage gocache
-
-Trim the Go build caches now (preview unless --apply); the bounded pass to run every few minutes
-
-Trim the shared Go build cache, the golangci-lint cache, orphaned private
-Go caches and stale goimports indexes — the Go-cache layer of every other pass,
-alone, with the whole budget to itself.
-
-Entries used in the last 2h are never removed (a running build may be using
-them); past that, the cache is trimmed to go_cache_gib. Under agent load more
-than that budget can be written inside 2h, and entries cross the floor at tens
-of GiB an hour: run this every few minutes so they leave as they cross it,
-rather than piling up until an hourly pass.
-
-With --apply the outcome, including each cache's estimated size, the part
-inside the floor and whether the walk covered every shard, is recorded in
-last-gocache-gc.json beside the policy.
-
-```
-reliant forge storage gocache [flags]
-```
-
-**Flags:**
-
-| Flag | Type | Default | Description |
-|------|------|---------|-------------|
-| `--apply` | `bool` | - | remove what the preview lists |
-| `--budget` | `duration` | `10m0s` | wall time for the pass; what it does not reach is resumed by the next one |
 | `--dry-run` | `bool` | - | preview only (the default) |
 
 ---

@@ -5,7 +5,9 @@ import (
 	"context"
 	"errors"
 	"os/exec"
+	"runtime"
 	"strings"
+	"syscall"
 	"testing"
 
 	"github.com/reliant-labs/reliant/internal/cgroupmem"
@@ -106,6 +108,35 @@ func TestClassifyExecOutcome(t *testing.T) {
 		}
 		if out.Stderr == "" {
 			t.Error("Stderr is empty — a timed-out start still owes the caller a reason")
+		}
+	})
+
+	// The deadline's own SIGTERM can land before the child installed a TERM
+	// handler (a shell still starting on a loaded machine), killing it with a
+	// signal status, or after, letting it exit with a status of its choosing.
+	// Either way the command timed out, and the code must say so.
+	t.Run("timeout reports the timeout code however the child died", func(t *testing.T) {
+		if runtime.GOOS == "windows" {
+			t.Skip("needs a POSIX signal death")
+		}
+		killed := exec.Command("sleep", "30")
+		if err := killed.Start(); err != nil {
+			t.Fatal(err)
+		}
+		_ = killed.Process.Signal(syscall.SIGTERM)
+		signalled := killed.Wait()
+		var exitErr *exec.ExitError
+		if !errors.As(signalled, &exitErr) || exitErr.ExitCode() != -1 {
+			t.Fatalf("expected a signal-death *exec.ExitError (code -1), got %v", signalled)
+		}
+		for name, err := range map[string]error{
+			"killed by the signal":  signalled,
+			"exited non-zero on it": realStartError(t, exec.Command("sh", "-c", "exit 3")),
+		} {
+			out := ClassifyExecOutcome(err, context.DeadlineExceeded, "", "", nil, noSnap, nil)
+			if !out.TimedOut || out.ExitCode != TimeoutExitCode {
+				t.Errorf("%s: outcome = %+v, want TimedOut with exit %d", name, out, TimeoutExitCode)
+			}
 		}
 	})
 

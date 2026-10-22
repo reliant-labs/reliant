@@ -52,7 +52,7 @@ func TestApprovalRPCs_RepositoryFailureCodes(t *testing.T) {
 	for _, tc := range readFailures {
 		t.Run("Approve, reading the approval: "+tc.name, func(t *testing.T) {
 			t.Parallel()
-			svc := approval.NewTestApproval(t, approval.WithApprovalDeps(approval.Deps{Repo: &approval.StubRepo{
+			svc := approval.NewTestApproval(t, approval.WithApprovalDeps(approval.Deps{Repo: &approval.MockRepository{
 				GetApprovalFunc: func(context.Context, string) (*db.Approval, error) { return nil, tc.err },
 			}}))
 			_, err := svc.Approve(approval.AuthedContext(t), connect.NewRequest(&pb.ApproveRequest{RequestId: "a-1"}))
@@ -60,7 +60,7 @@ func TestApprovalRPCs_RepositoryFailureCodes(t *testing.T) {
 		})
 		t.Run("ListApprovalsByChat, reading the chat: "+tc.name, func(t *testing.T) {
 			t.Parallel()
-			svc := approval.NewTestApproval(t, approval.WithApprovalDeps(approval.Deps{Repo: &approval.StubRepo{
+			svc := approval.NewTestApproval(t, approval.WithApprovalDeps(approval.Deps{Repo: &approval.MockRepository{
 				GetChatFunc: func(context.Context, string) (*db.Chat, error) { return nil, tc.err },
 			}}))
 			_, err := svc.ListApprovalsByChat(approval.AuthedContext(t), connect.NewRequest(&pb.ListApprovalsByChatRequest{ChatId: "chat-1"}))
@@ -68,7 +68,7 @@ func TestApprovalRPCs_RepositoryFailureCodes(t *testing.T) {
 		})
 		t.Run("Deny, writing the resolution: "+tc.name, func(t *testing.T) {
 			t.Parallel()
-			svc := approval.NewTestApproval(t, approval.WithApprovalDeps(approval.Deps{Repo: &approval.StubRepo{
+			svc := approval.NewTestApproval(t, approval.WithApprovalDeps(approval.Deps{Repo: &approval.MockRepository{
 				GetApprovalFunc: pending,
 				GetChatFunc:     own,
 				RunTxFunc: func(context.Context, orm.TxPolicy, func(context.Context) error) error {

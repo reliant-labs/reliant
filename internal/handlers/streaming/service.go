@@ -24,10 +24,10 @@ type Deps struct {
 	Config *config.Config
 
 	// Repo reads the user and chat update logs and everything a chat
-	// snapshot is assembled from. It is the whole db.Repository: the
-	// snapshot reads messages through threads.Service, which takes most of
-	// it.
-	Repo db.Repository
+	// snapshot is assembled from. Repository (deps.go) is what the handlers
+	// call plus the roles of threads.Service and messageproto, which the
+	// snapshot reads messages and tool calls through.
+	Repo Repository
 	// Deltas carries a chat's ephemeral streaming deltas (LLM output as it
 	// is generated) to a subscriber of that chat. The API server always has
 	// one; without it a chat subscription still gets its snapshot and its

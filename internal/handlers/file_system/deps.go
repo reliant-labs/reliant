@@ -10,7 +10,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
-// Repository is the slice of db.Repository the filesystem handlers use.
+// Repository is the slice of *db.Repo the filesystem handlers use.
 type Repository interface {
 	// GetChat, GetWorktree and GetProject resolve a request's workspace
 	// (filepreview.ResolveBasePath) and its machine (daemonplacement).

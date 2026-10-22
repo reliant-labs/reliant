@@ -304,7 +304,10 @@ type Cluster struct {
 	// The provider's own resource name for the cluster, set iff auth is a
 	// workload-identity auth (today only WORKLOAD_IDENTITY_GCP). Empty
 	// otherwise.
-	CloudCluster  string `protobuf:"bytes,14,opt,name=cloud_cluster,json=cloudCluster,proto3" json:"cloud_cluster,omitempty"`
+	CloudCluster string `protobuf:"bytes,14,opt,name=cloud_cluster,json=cloudCluster,proto3" json:"cloud_cluster,omitempty"`
+	// The secret-store issuer registered for this cluster, or unset when none
+	// is. See ClusterIssuer.
+	Issuer        *ClusterIssuer `protobuf:"bytes,15,opt,name=issuer,proto3" json:"issuer,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -400,6 +403,13 @@ func (x *Cluster) GetCloudCluster() string {
 		return x.CloudCluster
 	}
 	return ""
+}
+
+func (x *Cluster) GetIssuer() *ClusterIssuer {
+	if x != nil {
+		return x.Issuer
+	}
+	return nil
 }
 
 type ListClustersRequest struct {
@@ -706,8 +716,21 @@ type ConnectClusterRequest struct {
 	// refusal is diagnosable ("the token expired at T") rather than an
 	// authentication failure against the target.
 	TokenExpiresAt *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=token_expires_at,json=tokenExpiresAt,proto3" json:"token_expires_at,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// The service-account issuer the platform's secret store trusts for this
+	// cluster. Optional, and only needed by a cluster that delivers
+	// store-backed Secrets (forge.StoreSource): it is how the store verifies the
+	// projected token an External Secrets Operator in the cluster logs in with.
+	// See ClusterIssuerRegistration.
+	//
+	// PRESENCE IS THE SWITCH, because an older `forge cluster connect` sends no
+	// issuer and re-running it must not silently withdraw one:
+	//   absent          the registration is left as it is;
+	//   present         it is replaced by this one;
+	//   present, empty  the registration is removed, and the store stops
+	//                   trusting the cluster.
+	Issuer        *ClusterIssuerRegistration `protobuf:"bytes,8,opt,name=issuer,proto3" json:"issuer,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ConnectClusterRequest) Reset() {
@@ -789,6 +812,208 @@ func (x *ConnectClusterRequest) GetTokenExpiresAt() *timestamppb.Timestamp {
 	return nil
 }
 
+func (x *ConnectClusterRequest) GetIssuer() *ClusterIssuerRegistration {
+	if x != nil {
+		return x.Issuer
+	}
+	return nil
+}
+
+// ClusterIssuerRegistration declares the service-account issuer of a cluster.
+//
+// The cluster's own API server signs the tokens its pods are projected, so the
+// store verifies them against THAT cluster's keys: no stored credential, and no
+// call from the store back into the cluster. Exactly one way of learning the
+// keys is declared.
+type ClusterIssuerRegistration struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The `iss` claim the cluster's tokens carry, e.g.
+	// `https://container.googleapis.com/v1/projects/p/locations/l/clusters/c`
+	// (GKE) or the `--service-account-issuer` of the API server. https only. The
+	// store requires a token to carry exactly this issuer.
+	Issuer string `protobuf:"bytes,1,opt,name=issuer,proto3" json:"issuer,omitempty"`
+	// Types that are valid to be assigned to Keys:
+	//
+	//	*ClusterIssuerRegistration_Discover
+	//	*ClusterIssuerRegistration_Jwks
+	Keys          isClusterIssuerRegistration_Keys `protobuf_oneof:"keys"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ClusterIssuerRegistration) Reset() {
+	*x = ClusterIssuerRegistration{}
+	mi := &file_services_cluster_v1_cluster_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ClusterIssuerRegistration) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ClusterIssuerRegistration) ProtoMessage() {}
+
+func (x *ClusterIssuerRegistration) ProtoReflect() protoreflect.Message {
+	mi := &file_services_cluster_v1_cluster_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ClusterIssuerRegistration.ProtoReflect.Descriptor instead.
+func (*ClusterIssuerRegistration) Descriptor() ([]byte, []int) {
+	return file_services_cluster_v1_cluster_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *ClusterIssuerRegistration) GetIssuer() string {
+	if x != nil {
+		return x.Issuer
+	}
+	return ""
+}
+
+func (x *ClusterIssuerRegistration) GetKeys() isClusterIssuerRegistration_Keys {
+	if x != nil {
+		return x.Keys
+	}
+	return nil
+}
+
+func (x *ClusterIssuerRegistration) GetDiscover() bool {
+	if x != nil {
+		if x, ok := x.Keys.(*ClusterIssuerRegistration_Discover); ok {
+			return x.Discover
+		}
+	}
+	return false
+}
+
+func (x *ClusterIssuerRegistration) GetJwks() string {
+	if x != nil {
+		if x, ok := x.Keys.(*ClusterIssuerRegistration_Jwks); ok {
+			return x.Jwks
+		}
+	}
+	return ""
+}
+
+type isClusterIssuerRegistration_Keys interface {
+	isClusterIssuerRegistration_Keys()
+}
+
+type ClusterIssuerRegistration_Discover struct {
+	// The store fetches the signing keys itself, from
+	// `<issuer>/.well-known/openid-configuration`. For an issuer that is
+	// reachable from the internet, as GKE's is. The issuer's host must resolve
+	// to public addresses only: the store dials it.
+	Discover bool `protobuf:"varint,2,opt,name=discover,proto3,oneof"`
+}
+
+type ClusterIssuerRegistration_Jwks struct {
+	// The JWKS the cluster serves at `/openid/v1/jwks`, uploaded by the
+	// connecting side. For a cluster whose issuer the store cannot reach
+	// (private, k3d). Public keys only: a JWKS carrying private or symmetric
+	// key material is refused. Re-send it to follow a key rotation.
+	Jwks string `protobuf:"bytes,3,opt,name=jwks,proto3,oneof"`
+}
+
+func (*ClusterIssuerRegistration_Discover) isClusterIssuerRegistration_Keys() {}
+
+func (*ClusterIssuerRegistration_Jwks) isClusterIssuerRegistration_Keys() {}
+
+// ClusterIssuer is what is registered for a cluster. The keys themselves are
+// public but bulky, and nothing reading a cluster needs them, so only their
+// count is returned.
+type ClusterIssuer struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The id the cluster is known by in the secret store. The store's auth mount
+	// is `jwt-<store_cluster_id>`, the audience its roles require ends
+	// `/c/<store_cluster_id>`, and a rendered SecretStore names it. Today it is
+	// the cluster's name, and it is unique across ALL orgs: the first org to
+	// register an id owns it, and registering it from another org is refused.
+	// Read it from here rather than assuming it is the name.
+	StoreClusterId string `protobuf:"bytes,1,opt,name=store_cluster_id,json=storeClusterId,proto3" json:"store_cluster_id,omitempty"`
+	Issuer         string `protobuf:"bytes,2,opt,name=issuer,proto3" json:"issuer,omitempty"`
+	// True when the store fetches the keys from the issuer itself.
+	Discover bool `protobuf:"varint,3,opt,name=discover,proto3" json:"discover,omitempty"`
+	// The number of uploaded signing keys; zero when discover is true.
+	KeyCount      int32                  `protobuf:"varint,4,opt,name=key_count,json=keyCount,proto3" json:"key_count,omitempty"`
+	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ClusterIssuer) Reset() {
+	*x = ClusterIssuer{}
+	mi := &file_services_cluster_v1_cluster_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ClusterIssuer) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ClusterIssuer) ProtoMessage() {}
+
+func (x *ClusterIssuer) ProtoReflect() protoreflect.Message {
+	mi := &file_services_cluster_v1_cluster_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ClusterIssuer.ProtoReflect.Descriptor instead.
+func (*ClusterIssuer) Descriptor() ([]byte, []int) {
+	return file_services_cluster_v1_cluster_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *ClusterIssuer) GetStoreClusterId() string {
+	if x != nil {
+		return x.StoreClusterId
+	}
+	return ""
+}
+
+func (x *ClusterIssuer) GetIssuer() string {
+	if x != nil {
+		return x.Issuer
+	}
+	return ""
+}
+
+func (x *ClusterIssuer) GetDiscover() bool {
+	if x != nil {
+		return x.Discover
+	}
+	return false
+}
+
+func (x *ClusterIssuer) GetKeyCount() int32 {
+	if x != nil {
+		return x.KeyCount
+	}
+	return 0
+}
+
+func (x *ClusterIssuer) GetUpdatedAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.UpdatedAt
+	}
+	return nil
+}
+
 type ConnectClusterResponse struct {
 	state   protoimpl.MessageState `protogen:"open.v1"`
 	Cluster *Cluster               `protobuf:"bytes,1,opt,name=cluster,proto3" json:"cluster,omitempty"`
@@ -800,7 +1025,7 @@ type ConnectClusterResponse struct {
 
 func (x *ConnectClusterResponse) Reset() {
 	*x = ConnectClusterResponse{}
-	mi := &file_services_cluster_v1_cluster_proto_msgTypes[9]
+	mi := &file_services_cluster_v1_cluster_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -812,7 +1037,7 @@ func (x *ConnectClusterResponse) String() string {
 func (*ConnectClusterResponse) ProtoMessage() {}
 
 func (x *ConnectClusterResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_cluster_v1_cluster_proto_msgTypes[9]
+	mi := &file_services_cluster_v1_cluster_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -825,7 +1050,7 @@ func (x *ConnectClusterResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConnectClusterResponse.ProtoReflect.Descriptor instead.
 func (*ConnectClusterResponse) Descriptor() ([]byte, []int) {
-	return file_services_cluster_v1_cluster_proto_rawDescGZIP(), []int{9}
+	return file_services_cluster_v1_cluster_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *ConnectClusterResponse) GetCluster() *Cluster {
@@ -848,7 +1073,7 @@ const file_services_cluster_v1_cluster_proto_rawDesc = "" +
 	"\n" +
 	"!services/cluster/v1/cluster.proto\x12\x0fcontrolplane.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"I\n" +
 	"\vHubIdentity\x12.\n" +
-	"\x13gcp_service_account\x18\x01 \x01(\tR\x11gcpServiceAccountJ\x04\b\x02\x10\x03J\x04\b\x03\x10\x04\"\x84\x03\n" +
+	"\x13gcp_service_account\x18\x01 \x01(\tR\x11gcpServiceAccountJ\x04\b\x02\x10\x03J\x04\b\x03\x10\x04\"\xbc\x03\n" +
 	"\aCluster\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12<\n" +
@@ -862,7 +1087,8 @@ const file_services_cluster_v1_cluster_proto_rawDesc = "" +
 	" \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x120\n" +
 	"\x04auth\x18\f \x01(\x0e2\x1c.controlplane.v1.ClusterAuthR\x04auth\x12\x18\n" +
 	"\aaddress\x18\r \x01(\tR\aaddress\x12#\n" +
-	"\rcloud_cluster\x18\x0e \x01(\tR\fcloudCluster\"\x15\n" +
+	"\rcloud_cluster\x18\x0e \x01(\tR\fcloudCluster\x126\n" +
+	"\x06issuer\x18\x0f \x01(\v2\x1e.controlplane.v1.ClusterIssuerR\x06issuer\"\x15\n" +
 	"\x13ListClustersRequest\"L\n" +
 	"\x14ListClustersResponse\x124\n" +
 	"\bclusters\x18\x01 \x03(\v2\x18.controlplane.v1.ClusterR\bclusters\"#\n" +
@@ -872,7 +1098,7 @@ const file_services_cluster_v1_cluster_proto_rawDesc = "" +
 	"\acluster\x18\x01 \x01(\v2\x18.controlplane.v1.ClusterR\acluster\"&\n" +
 	"\x14RemoveClusterRequest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"\x17\n" +
-	"\x15RemoveClusterResponse\"\x8f\x02\n" +
+	"\x15RemoveClusterResponse\"\xd3\x02\n" +
 	"\x15ConnectClusterRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x120\n" +
 	"\x04auth\x18\x02 \x01(\x0e2\x1c.controlplane.v1.ClusterAuthR\x04auth\x12\x18\n" +
@@ -880,7 +1106,20 @@ const file_services_cluster_v1_cluster_proto_rawDesc = "" +
 	"\x06ca_pem\x18\x04 \x01(\tR\x05caPem\x12#\n" +
 	"\rcloud_cluster\x18\x05 \x01(\tR\fcloudCluster\x12\x14\n" +
 	"\x05token\x18\x06 \x01(\tR\x05token\x12D\n" +
-	"\x10token_expires_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\x0etokenExpiresAt\"\x8d\x01\n" +
+	"\x10token_expires_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\x0etokenExpiresAt\x12B\n" +
+	"\x06issuer\x18\b \x01(\v2*.controlplane.v1.ClusterIssuerRegistrationR\x06issuer\"o\n" +
+	"\x19ClusterIssuerRegistration\x12\x16\n" +
+	"\x06issuer\x18\x01 \x01(\tR\x06issuer\x12\x1c\n" +
+	"\bdiscover\x18\x02 \x01(\bH\x00R\bdiscover\x12\x14\n" +
+	"\x04jwks\x18\x03 \x01(\tH\x00R\x04jwksB\x06\n" +
+	"\x04keys\"\xc5\x01\n" +
+	"\rClusterIssuer\x12(\n" +
+	"\x10store_cluster_id\x18\x01 \x01(\tR\x0estoreClusterId\x12\x16\n" +
+	"\x06issuer\x18\x02 \x01(\tR\x06issuer\x12\x1a\n" +
+	"\bdiscover\x18\x03 \x01(\bR\bdiscover\x12\x1b\n" +
+	"\tkey_count\x18\x04 \x01(\x05R\bkeyCount\x129\n" +
+	"\n" +
+	"updated_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\x8d\x01\n" +
 	"\x16ConnectClusterResponse\x122\n" +
 	"\acluster\x18\x01 \x01(\v2\x18.controlplane.v1.ClusterR\acluster\x12?\n" +
 	"\fhub_identity\x18\x02 \x01(\v2\x1c.controlplane.v1.HubIdentityR\vhubIdentity*M\n" +
@@ -917,47 +1156,52 @@ func file_services_cluster_v1_cluster_proto_rawDescGZIP() []byte {
 }
 
 var file_services_cluster_v1_cluster_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_services_cluster_v1_cluster_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_services_cluster_v1_cluster_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
 var file_services_cluster_v1_cluster_proto_goTypes = []any{
-	(ClusterProvider)(0),           // 0: controlplane.v1.ClusterProvider
-	(ClusterConnection)(0),         // 1: controlplane.v1.ClusterConnection
-	(ClusterAuth)(0),               // 2: controlplane.v1.ClusterAuth
-	(*HubIdentity)(nil),            // 3: controlplane.v1.HubIdentity
-	(*Cluster)(nil),                // 4: controlplane.v1.Cluster
-	(*ListClustersRequest)(nil),    // 5: controlplane.v1.ListClustersRequest
-	(*ListClustersResponse)(nil),   // 6: controlplane.v1.ListClustersResponse
-	(*GetClusterRequest)(nil),      // 7: controlplane.v1.GetClusterRequest
-	(*GetClusterResponse)(nil),     // 8: controlplane.v1.GetClusterResponse
-	(*RemoveClusterRequest)(nil),   // 9: controlplane.v1.RemoveClusterRequest
-	(*RemoveClusterResponse)(nil),  // 10: controlplane.v1.RemoveClusterResponse
-	(*ConnectClusterRequest)(nil),  // 11: controlplane.v1.ConnectClusterRequest
-	(*ConnectClusterResponse)(nil), // 12: controlplane.v1.ConnectClusterResponse
-	(*timestamppb.Timestamp)(nil),  // 13: google.protobuf.Timestamp
+	(ClusterProvider)(0),              // 0: controlplane.v1.ClusterProvider
+	(ClusterConnection)(0),            // 1: controlplane.v1.ClusterConnection
+	(ClusterAuth)(0),                  // 2: controlplane.v1.ClusterAuth
+	(*HubIdentity)(nil),               // 3: controlplane.v1.HubIdentity
+	(*Cluster)(nil),                   // 4: controlplane.v1.Cluster
+	(*ListClustersRequest)(nil),       // 5: controlplane.v1.ListClustersRequest
+	(*ListClustersResponse)(nil),      // 6: controlplane.v1.ListClustersResponse
+	(*GetClusterRequest)(nil),         // 7: controlplane.v1.GetClusterRequest
+	(*GetClusterResponse)(nil),        // 8: controlplane.v1.GetClusterResponse
+	(*RemoveClusterRequest)(nil),      // 9: controlplane.v1.RemoveClusterRequest
+	(*RemoveClusterResponse)(nil),     // 10: controlplane.v1.RemoveClusterResponse
+	(*ConnectClusterRequest)(nil),     // 11: controlplane.v1.ConnectClusterRequest
+	(*ClusterIssuerRegistration)(nil), // 12: controlplane.v1.ClusterIssuerRegistration
+	(*ClusterIssuer)(nil),             // 13: controlplane.v1.ClusterIssuer
+	(*ConnectClusterResponse)(nil),    // 14: controlplane.v1.ConnectClusterResponse
+	(*timestamppb.Timestamp)(nil),     // 15: google.protobuf.Timestamp
 }
 var file_services_cluster_v1_cluster_proto_depIdxs = []int32{
 	0,  // 0: controlplane.v1.Cluster.provider:type_name -> controlplane.v1.ClusterProvider
 	1,  // 1: controlplane.v1.Cluster.connection:type_name -> controlplane.v1.ClusterConnection
-	13, // 2: controlplane.v1.Cluster.created_at:type_name -> google.protobuf.Timestamp
+	15, // 2: controlplane.v1.Cluster.created_at:type_name -> google.protobuf.Timestamp
 	2,  // 3: controlplane.v1.Cluster.auth:type_name -> controlplane.v1.ClusterAuth
-	4,  // 4: controlplane.v1.ListClustersResponse.clusters:type_name -> controlplane.v1.Cluster
-	4,  // 5: controlplane.v1.GetClusterResponse.cluster:type_name -> controlplane.v1.Cluster
-	2,  // 6: controlplane.v1.ConnectClusterRequest.auth:type_name -> controlplane.v1.ClusterAuth
-	13, // 7: controlplane.v1.ConnectClusterRequest.token_expires_at:type_name -> google.protobuf.Timestamp
-	4,  // 8: controlplane.v1.ConnectClusterResponse.cluster:type_name -> controlplane.v1.Cluster
-	3,  // 9: controlplane.v1.ConnectClusterResponse.hub_identity:type_name -> controlplane.v1.HubIdentity
-	5,  // 10: controlplane.v1.ClusterService.ListClusters:input_type -> controlplane.v1.ListClustersRequest
-	7,  // 11: controlplane.v1.ClusterService.GetCluster:input_type -> controlplane.v1.GetClusterRequest
-	9,  // 12: controlplane.v1.ClusterService.RemoveCluster:input_type -> controlplane.v1.RemoveClusterRequest
-	11, // 13: controlplane.v1.ClusterService.ConnectCluster:input_type -> controlplane.v1.ConnectClusterRequest
-	6,  // 14: controlplane.v1.ClusterService.ListClusters:output_type -> controlplane.v1.ListClustersResponse
-	8,  // 15: controlplane.v1.ClusterService.GetCluster:output_type -> controlplane.v1.GetClusterResponse
-	10, // 16: controlplane.v1.ClusterService.RemoveCluster:output_type -> controlplane.v1.RemoveClusterResponse
-	12, // 17: controlplane.v1.ClusterService.ConnectCluster:output_type -> controlplane.v1.ConnectClusterResponse
-	14, // [14:18] is the sub-list for method output_type
-	10, // [10:14] is the sub-list for method input_type
-	10, // [10:10] is the sub-list for extension type_name
-	10, // [10:10] is the sub-list for extension extendee
-	0,  // [0:10] is the sub-list for field type_name
+	13, // 4: controlplane.v1.Cluster.issuer:type_name -> controlplane.v1.ClusterIssuer
+	4,  // 5: controlplane.v1.ListClustersResponse.clusters:type_name -> controlplane.v1.Cluster
+	4,  // 6: controlplane.v1.GetClusterResponse.cluster:type_name -> controlplane.v1.Cluster
+	2,  // 7: controlplane.v1.ConnectClusterRequest.auth:type_name -> controlplane.v1.ClusterAuth
+	15, // 8: controlplane.v1.ConnectClusterRequest.token_expires_at:type_name -> google.protobuf.Timestamp
+	12, // 9: controlplane.v1.ConnectClusterRequest.issuer:type_name -> controlplane.v1.ClusterIssuerRegistration
+	15, // 10: controlplane.v1.ClusterIssuer.updated_at:type_name -> google.protobuf.Timestamp
+	4,  // 11: controlplane.v1.ConnectClusterResponse.cluster:type_name -> controlplane.v1.Cluster
+	3,  // 12: controlplane.v1.ConnectClusterResponse.hub_identity:type_name -> controlplane.v1.HubIdentity
+	5,  // 13: controlplane.v1.ClusterService.ListClusters:input_type -> controlplane.v1.ListClustersRequest
+	7,  // 14: controlplane.v1.ClusterService.GetCluster:input_type -> controlplane.v1.GetClusterRequest
+	9,  // 15: controlplane.v1.ClusterService.RemoveCluster:input_type -> controlplane.v1.RemoveClusterRequest
+	11, // 16: controlplane.v1.ClusterService.ConnectCluster:input_type -> controlplane.v1.ConnectClusterRequest
+	6,  // 17: controlplane.v1.ClusterService.ListClusters:output_type -> controlplane.v1.ListClustersResponse
+	8,  // 18: controlplane.v1.ClusterService.GetCluster:output_type -> controlplane.v1.GetClusterResponse
+	10, // 19: controlplane.v1.ClusterService.RemoveCluster:output_type -> controlplane.v1.RemoveClusterResponse
+	14, // 20: controlplane.v1.ClusterService.ConnectCluster:output_type -> controlplane.v1.ConnectClusterResponse
+	17, // [17:21] is the sub-list for method output_type
+	13, // [13:17] is the sub-list for method input_type
+	13, // [13:13] is the sub-list for extension type_name
+	13, // [13:13] is the sub-list for extension extendee
+	0,  // [0:13] is the sub-list for field type_name
 }
 
 func init() { file_services_cluster_v1_cluster_proto_init() }
@@ -965,13 +1209,17 @@ func file_services_cluster_v1_cluster_proto_init() {
 	if File_services_cluster_v1_cluster_proto != nil {
 		return
 	}
+	file_services_cluster_v1_cluster_proto_msgTypes[9].OneofWrappers = []any{
+		(*ClusterIssuerRegistration_Discover)(nil),
+		(*ClusterIssuerRegistration_Jwks)(nil),
+	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_services_cluster_v1_cluster_proto_rawDesc), len(file_services_cluster_v1_cluster_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   10,
+			NumMessages:   12,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

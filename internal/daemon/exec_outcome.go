@@ -197,6 +197,16 @@ func ClassifyExecOutcome(cmdErr, ctxErr error, stdout, stderr string, mem OOMChe
 		// The child ran and reported a status; its own stderr is the
 		// explanation and needs no annotation from us.
 		out.ExitCode = exitErr.ExitCode()
+		// Unless the deadline stopped it: then the status is what our own
+		// SIGTERM/SIGKILL made of it (-1 for a shell killed outright, 143 or
+		// 137 for one reporting a killed child), and which one depends on
+		// whether the child had installed a TERM handler by then — on a
+		// loaded machine a shell is still starting up when a short deadline
+		// fires. A timeout reports 124 however the child died, as coreutils
+		// `timeout` does, so the code says "timed out" every time.
+		if out.TimedOut {
+			out.ExitCode = TimeoutExitCode
+		}
 	} else {
 		if out.TimedOut {
 			out.ExitCode = TimeoutExitCode

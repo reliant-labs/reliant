@@ -199,7 +199,7 @@ Test coverage includes:
 import "github.com/reliant-labs/reliant/internal/recovery"
 
 // At workflow start, before any processing
-func StartWorkflow(ctx context.Context, repo db.Repository, temporalClient client.Client, chatID string, thread string) error {
+func StartWorkflow(ctx context.Context, repo *db.Repo, temporalClient client.Client, chatID string, thread string) error {
     // Recover from any interrupted state
     if err := recovery.RecoverConversationState(ctx, repo, temporalClient, chatID, thread); err != nil {
         return fmt.Errorf("recovery failed: %w", err)

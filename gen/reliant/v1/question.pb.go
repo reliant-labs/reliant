@@ -371,7 +371,7 @@ type QuestionInfo struct {
 	// omitting it here made every RPC consumer chat-scoped, so a supervision view
 	// over several spawned threads could not say WHICH one is waiting.
 	ThreadId string `protobuf:"bytes,8,opt,name=thread_id,json=threadId,proto3" json:"thread_id,omitempty"`
-	// The question was asked without waiting (ask_user async: true): its thread
+	// The question was asked without waiting (ask_user without blocking: true): its thread
 	// carried on, and an answer reaches it later as a message from the user. It
 	// is never a gate on the chat.
 	Async bool `protobuf:"varint,9,opt,name=async,proto3" json:"async,omitempty"`

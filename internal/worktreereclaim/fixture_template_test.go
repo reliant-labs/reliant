@@ -28,13 +28,20 @@ var fixtureTemplate struct {
 	err  error
 }
 
-// heavyUnderShort skips, under -short, a test whose scenario itself drives
-// well over a hundred git processes. On a loaded machine a process costs tens
-// of milliseconds, so a few of these hold the package past make test-short's
-// 60s budget. Such a test runs in full mode (go test without -short: main and
-// nightly CI, and before committing a change here). Most of what once needed
-// this was the reaper's own git work, since cut (gitbudget_test.go), so reach
-// for it only for a test that is heavy by design.
+// heavyUnderShort skips, under -short, a test that drives thirty or more git
+// processes. Such a test runs in full mode (go test without -short: main and
+// nightly CI, and before committing a change here).
+//
+// The package's cost is process spawns and nothing else: no test waits on a
+// clock, and a tmpfs for the repos measured no faster. A git process costs
+// ~70ms of wall time on a shared dev machine at ordinary load, so thirty is
+// the repo's 2s line for a -short test; and with every heavy slot busy the
+// machine sustains only ~30 execs a second across ALL its processes. Under
+// -short the package ran ~3100 git processes and took 44-108s, then timed out
+// at make test-affected's 60s with ~2100. The reaper's own git work per pass
+// is already cut and pinned (gitbudget_test.go) — one full pass is ~31 — so
+// what is left in -short is the tests below a full pass plus the two guards,
+// TestGitProcessesPerPass and TestGitFileReadersAgreeWithGit.
 func heavyUnderShort(t *testing.T, why string) {
 	t.Helper()
 	if testing.Short() {

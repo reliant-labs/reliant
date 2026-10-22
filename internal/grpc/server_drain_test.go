@@ -17,7 +17,6 @@ import (
 	"github.com/reliant-labs/forge/pkg/serverkit"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
 )
 
@@ -36,14 +35,10 @@ import (
 
 const drainTestAPIKey = "drain-test-api-key"
 
-// drainTestRepo answers the one query StreamUserUpdates makes for a client
-// with nothing to catch up on. Any other query panics on the nil embedded
-// Repository, which is how a test of this size says "not expected here".
-type drainTestRepo struct{ db.Repository }
-
-func (drainTestRepo) GetLatestUserUpdateSequence(context.Context, string) (int64, error) {
-	return 0, nil
-}
+// drainTestRoutesStore stands in for the database behind the plain-HTTP
+// routes, which nothing in these tests reaches: any query panics on the nil
+// embedded store, which is how a test of this size says "not expected here".
+type drainTestRoutesStore struct{ APIHTTPRoutesStore }
 
 // drainTestAuthority stands in for the token authority, which nothing in
 // these tests reaches: the API-key credential is checked by the auth
@@ -55,7 +50,7 @@ type drainTestAuthority struct{ tokenauthority.Authority }
 // them, returning the listener and its base URL.
 func startDrainTestServer(t *testing.T, extra ...func(mux *http.ServeMux)) (*APIListener, string) {
 	t.Helper()
-	return startTestServer(t, testStreaming(t, drainTestRepo{}), testHTTPRoutes(t, testUserAuth(t)), plainRoutes(extra...))
+	return startTestServer(t, testStreaming(t), testHTTPRoutes(t, testUserAuth(t)), plainRoutes(extra...))
 }
 
 // h2cClient speaks prior-knowledge HTTP/2, as the load balancer does to the pod.
