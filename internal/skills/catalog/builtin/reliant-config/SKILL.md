@@ -463,6 +463,25 @@ Put API keys in `.reliant.local/mcp.json` (gitignored) rather than `.reliant/mcp
 }
 ```
 
+Or keep the secret out of every file and reference your environment instead.
+`${VAR}`, `${VAR:-default}` and `$VAR` work in `command`, `args`, `url`,
+`headers`, `dir` and `env` values. The config is stored and shown exactly as
+written; the reference is resolved on your machine, from the environment the
+Reliant daemon runs in, when the server starts. A reference resolves against
+the server's own `env` block first:
+
+```json
+{
+  "mcpServers": {
+    "github": {
+      "type": "http",
+      "url": "https://api.githubcopilot.com/mcp/",
+      "headers": { "Authorization": "Bearer ${GITHUB_TOKEN}" }
+    }
+  }
+}
+```
+
 ---
 
 ## 4. Presets
