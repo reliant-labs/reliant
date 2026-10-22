@@ -56,6 +56,7 @@ import { useCallback, useMemo, useState } from "react";
 import {
   useDeleteManagedSecret,
   useDestroyManagedSecret,
+  useInvalidateManagedSecrets,
   useManagedSecretVersions,
   useManagedSecrets,
   useSetManagedSecret,
@@ -69,6 +70,8 @@ import type { SecretSurfaceRow } from "@/services/forge/secretSurface";
 
 import { ManagedSecretsView } from "../Secrets/ManagedSecretsView";
 import { SetSecretModal } from "../Secrets/SetSecretModal";
+import { StepUpDialog, StepUpPanel } from "../Secrets/StepUpDialog";
+import { isStepUpCancelled, useStepUpGate } from "../Secrets/useStepUpGate";
 
 /**
  * §10 STATE 3's remedy, in the exact words the design settles on.
@@ -138,6 +141,16 @@ export function LiveSecretsSection({
   const [modal, setModal] = useState<{ existing: { name: string; currentVersion: number } | null } | null>(
     null
   );
+  /** Why the last row action failed; cleared by the next one. */
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  // A protected environment (design D6) refuses a change without a live
+  // step-up. Every write below goes through the gate, which opens the code
+  // dialog on that refusal and retries the write once the user confirms. A
+  // confirmed step-up also refreshes the listing, whose grant drives the
+  // header's countdown.
+  const invalidate = useInvalidateManagedSecrets(projectId, name);
+  const gate = useStepUpGate(environmentId, { onGranted: invalidate });
 
   /**
    * The declared names, in the shape ManagedSecretsView's join already reads.
@@ -176,21 +189,43 @@ export function LiveSecretsSection({
   const storeAvailable = availability === "available";
 
   const closeModal = useCallback(() => {
+    // Closing the form while it waits on a code abandons the change: the
+    // held write is rejected and nothing is saved.
+    gate.cancel();
     setModal(null);
     setMutation.reset();
-  }, [setMutation]);
+  }, [setMutation, gate]);
 
   const handleSubmit = useCallback(
     async (args: { name: string; value: string; cas?: number }) => {
-      await setMutation.mutateAsync(args).then(
-        () => closeModal(),
+      await gate.run(() => setMutation.mutateAsync(args)).then(
+        () => {
+          setModal(null);
+          setMutation.reset();
+        },
         // Swallowed: the modal renders the mutation's error itself, and an
         // unhandled rejection here would surface the value-carrying request
         // in a console trace.
         () => undefined
       );
     },
-    [setMutation, closeModal]
+    [setMutation, gate]
+  );
+
+  /**
+   * A row action (delete / undelete / destroy) through the gate. A failure
+   * other than the user closing the code dialog gets a sentence on the
+   * detail view — these used to fail silently.
+   */
+  const runAction = useCallback(
+    (label: string, action: () => Promise<unknown>) => {
+      setActionError(null);
+      gate.run(action).catch((err: unknown) => {
+        if (isStepUpCancelled(err)) return;
+        setActionError(`${label} failed: ${err instanceof Error ? err.message : "unknown error"}`);
+      });
+    },
+    [gate]
   );
 
   const pendingVersion =
@@ -271,11 +306,40 @@ export function LiveSecretsSection({
         onSet={(row: SecretSurfaceRow) =>
           setModal({ existing: { name: row.name, currentVersion: row.summary?.currentVersion ?? 0 } })
         }
-        onDelete={(secret, version) => deleteMutation.mutate({ name: secret, versions: [version] })}
-        onUndelete={(secret, version) => undeleteMutation.mutate({ name: secret, versions: [version] })}
-        onDestroy={(secret, version) => destroyMutation.mutate({ name: secret, versions: [version] })}
+        onDelete={(secret, version) =>
+          runAction(`Deleting version ${version}`, () =>
+            deleteMutation.mutateAsync({ name: secret, versions: [version] })
+          )
+        }
+        onUndelete={(secret, version) =>
+          runAction(`Restoring version ${version}`, () =>
+            undeleteMutation.mutateAsync({ name: secret, versions: [version] })
+          )
+        }
+        onDestroy={(secret, version) =>
+          runAction(`Destroying version ${version}`, () =>
+            destroyMutation.mutateAsync({ name: secret, versions: [version] })
+          )
+        }
         pendingVersion={typeof pendingVersion === "number" ? pendingVersion : null}
+        envKind={env.kind}
+        protection={
+          managed.data
+            ? {
+                protected: managed.data.protected,
+                stepUpValidUntil: managed.data.stepUpValidUntil,
+                localGrantUntil: gate.grantUntil,
+              }
+            : undefined
+        }
+        onUnlock={gate.unlock}
+        actionError={actionError}
       />
+
+      {/* Row actions and "Confirm now" confirm in their own dialog; the
+          set-secret form hosts the same panel inside itself instead, so two
+          modals never stack. */}
+      <StepUpDialog gate={gate} env={env.name} open={gate.isOpen && modal === null} />
 
       <SetSecretModal
         open={modal !== null}
@@ -286,6 +350,8 @@ export function LiveSecretsSection({
         onSubmit={handleSubmit}
         isSubmitting={setMutation.isPending}
         error={(setMutation.error as Error | null) ?? null}
+        isProtected={managed.data?.protected === true}
+        stepUp={gate.isOpen ? <StepUpPanel gate={gate} env={env.name} /> : null}
         // No disabledReason: a row exists, so its kind is already recorded
         // and the write has a destination. §10 state 1, the common case.
       />

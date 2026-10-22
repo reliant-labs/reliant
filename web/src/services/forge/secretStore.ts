@@ -48,9 +48,13 @@
 import { ConnectError, Code } from "@connectrpc/connect";
 import { timestampDate, type Timestamp } from "@bufbuild/protobuf/wkt";
 
-import { SecretStoreService } from "@/gen/controlplane/services/secret_store/v1/secret_store_pb";
+import {
+  SecretAuthorKind,
+  SecretStoreService,
+} from "@/gen/controlplane/services/secret_store/v1/secret_store_pb";
 import { getControlPlaneClient } from "@/services/controlPlane/client";
 import { CONTROL_PLANE_API_URL } from "@/services/controlPlane/config";
+import type { SendFailure, VerifyFailure } from "./stepUp";
 import { destinationOf } from "./topology";
 
 // ── Domain types ────────────────────────────────────────────────────────────
@@ -82,6 +86,20 @@ export interface ManagedSecretSummary {
   currentVersionDestroyed: boolean;
 }
 
+/**
+ * Who wrote a version, from the control plane's audit trail. An identity,
+ * never a value.
+ *
+ *   user      a person — the console, or `forge secret set` with a personal
+ *             token. `email` is their address when the session carried one.
+ *   token     an org automation token, with no person behind it.
+ *   platform  the platform, minting a generated secret at promotion.
+ */
+export interface SecretVersionAuthor {
+  kind: "user" | "token" | "platform";
+  email?: string;
+}
+
 /** One immutable version's metadata. */
 export interface ManagedSecretVersion {
   version: number;
@@ -89,6 +107,31 @@ export interface ManagedSecretVersion {
   /** Set when soft-deleted; absent otherwise. Presence IS the soft-deleted flag. */
   deletedAt?: string;
   destroyed: boolean;
+  /**
+   * Who wrote it. NULL MEANS "NOT RECORDED", never "nobody": a write made
+   * before writes were attributed, or a trail the control plane could not
+   * read, has no author to show.
+   */
+  setBy: SecretVersionAuthor | null;
+}
+
+/**
+ * One environment's managed store, as the list view reads it: the secrets,
+ * and whether changing them needs a step-up (design D6).
+ */
+export interface ManagedSecretListing {
+  secrets: ManagedSecretSummary[];
+  /** Changes here need org admin AND a live step-up. Reading never does. */
+  protected: boolean;
+  /** When the caller's step-up grant for this environment ends; absent when none is held. */
+  stepUpValidUntil?: string;
+}
+
+/** What BeginStepUp answers: where the code went, and until when it is good. */
+export interface StepUpChallenge {
+  /** The destination with its local part masked (j***@example.com). */
+  sentTo: string;
+  expiresAt?: string;
 }
 
 export interface ManagedSecretHistory {
@@ -375,13 +418,29 @@ function toVersion(msg: {
   createdTime?: Timestamp;
   deletionTime?: Timestamp;
   destroyed: boolean;
+  setBy?: { kind: SecretAuthorKind; email: string };
 }): ManagedSecretVersion {
   return {
     version: msg.version,
     createdAt: toISO(msg.createdTime),
     deletedAt: toISO(msg.deletionTime),
     destroyed: msg.destroyed === true,
+    setBy: toAuthor(msg.setBy),
   };
+}
+
+/** An author kind this build does not know is "not recorded", not a guess. */
+function toAuthor(msg: { kind: SecretAuthorKind; email: string } | undefined): SecretVersionAuthor | null {
+  switch (msg?.kind) {
+    case SecretAuthorKind.USER:
+      return msg.email ? { kind: "user", email: msg.email } : { kind: "user" };
+    case SecretAuthorKind.TOKEN:
+      return { kind: "token" };
+    case SecretAuthorKind.PLATFORM:
+      return { kind: "platform" };
+    default:
+      return null;
+  }
 }
 
 // ── RPCs ────────────────────────────────────────────────────────────────────
@@ -390,13 +449,102 @@ function client() {
   return getControlPlaneClient(SecretStoreService);
 }
 
-/** Metadata for every secret in one hosted environment. Sorted by name. */
-export async function listSecrets(environmentId: string): Promise<ManagedSecretSummary[]> {
+/**
+ * Metadata for every secret in one environment, sorted by name, plus the
+ * environment's protection and the caller's step-up grant — the two facts a
+ * console needs to know BEFORE the user types a value.
+ */
+export async function listSecrets(environmentId: string): Promise<ManagedSecretListing> {
   const res = await client().listSecrets({ environmentId });
-  return (res.secrets ?? [])
-    .filter((s) => typeof s?.name === "string" && s.name !== "")
-    .map(toSummary)
-    .sort((a, b) => a.name.localeCompare(b.name));
+  const stepUpValidUntil = toISO(res.stepUpValidUntil);
+  return {
+    secrets: (res.secrets ?? [])
+      .filter((s) => typeof s?.name === "string" && s.name !== "")
+      .map(toSummary)
+      .sort((a, b) => a.name.localeCompare(b.name)),
+    protected: res.protected === true,
+    ...(stepUpValidUntil ? { stepUpValidUntil } : {}),
+  };
+}
+
+// ── Step-up (protected environments, design D6) ─────────────────────────────
+
+/**
+ * The error reason a protected environment refuses a change with. Clients
+ * branch on this, never on the message text (control-plane
+ * internal/handlers/secret_store/errors.go, ReasonStepUpRequired).
+ */
+export const STEP_UP_REQUIRED_REASON = "step_up_required";
+
+/** forge's svcerr.ReasonHeader: the Connect error metadata key a reason rides under. */
+const ERROR_REASON_HEADER = "x-forge-error-reason";
+
+/**
+ * True when a write was refused because this protected environment needs a
+ * fresh step-up. FailedPrecondition alone is NOT enough: a create racing
+ * another create is FailedPrecondition on older control planes too, and
+ * opening a code dialog for that would ask the user to prove who they are
+ * about a concurrent edit.
+ */
+export function isStepUpRequired(err: unknown): boolean {
+  return (
+    err instanceof ConnectError &&
+    err.code === Code.FailedPrecondition &&
+    err.metadata.get(ERROR_REASON_HEADER) === STEP_UP_REQUIRED_REASON
+  );
+}
+
+/**
+ * How a BeginStepUp failed, in the step-up dialog's vocabulary.
+ *
+ *   ResourceExhausted  a code went out within the last minute.
+ *   PermissionDenied   the caller is not an org admin; no code is sent.
+ *   Unavailable        no mailer or step-up store on this deployment, so a
+ *                      protected environment is read-only here.
+ */
+export function sendFailureOf(err: unknown): SendFailure {
+  if (err instanceof ConnectError) {
+    if (err.code === Code.ResourceExhausted) return "rate-limited";
+    if (err.code === Code.PermissionDenied) return "forbidden";
+    if (err.code === Code.Unavailable) return "unavailable";
+  }
+  return "other";
+}
+
+/**
+ * How a CompleteStepUp failed. PermissionDenied is the server's ONE answer for
+ * wrong, expired, used and exhausted; the dialog tells those apart from what
+ * it knows itself (see services/forge/stepUp.ts).
+ */
+export function verifyFailureOf(err: unknown): VerifyFailure {
+  if (err instanceof ConnectError) {
+    if (err.code === Code.PermissionDenied) return "invalid";
+    if (err.code === Code.Unavailable) return "unavailable";
+  }
+  return "network";
+}
+
+/**
+ * Email a one-time code to the caller's verified address. Org admin only.
+ * The code is never in the response — only where it went.
+ */
+export async function beginStepUp(environmentId: string): Promise<StepUpChallenge> {
+  const res = await client().beginStepUp({ environmentId });
+  const expiresAt = toISO(res.expiresAt);
+  return { sentTo: res.sentTo, ...(expiresAt ? { expiresAt } : {}) };
+}
+
+/**
+ * Redeem the code. On success the caller may change this environment's
+ * secrets until `validUntil`. The code travels inbound only and is not kept.
+ */
+export async function completeStepUp(
+  environmentId: string,
+  code: string
+): Promise<{ validUntil?: string }> {
+  const res = await client().completeStepUp({ environmentId, code });
+  const validUntil = toISO(res.validUntil);
+  return validUntil ? { validUntil } : {};
 }
 
 /**

@@ -143,16 +143,19 @@ function renderSection(props: Partial<React.ComponentProps<typeof LiveSecretsSec
 beforeEach(() => {
   daemonCalls.length = 0;
   vi.clearAllMocks();
-  listSecrets.mockResolvedValue([
-    {
-      name: "STRIPE_WEBHOOK_SECRET",
-      currentVersion: 3,
-      oldestVersion: 1,
-      maxVersions: 10,
-      currentVersionDeleted: false,
-      currentVersionDestroyed: false,
-    },
-  ]);
+  listSecrets.mockResolvedValue({
+    secrets: [
+      {
+        name: "STRIPE_WEBHOOK_SECRET",
+        currentVersion: 3,
+        oldestVersion: 1,
+        maxVersions: 10,
+        currentVersionDeleted: false,
+        currentVersionDestroyed: false,
+      },
+    ],
+    protected: false,
+  });
   setSecret.mockResolvedValue({ version: 4 });
   ensureEnvironment.mockResolvedValue({ environment: { id: "cp-prod" } });
 });

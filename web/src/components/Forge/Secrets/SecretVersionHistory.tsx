@@ -6,7 +6,9 @@
  * "Who changed this and when" is the question this panel answers, and it is the
  * only screen in the product where an immutable audit line exists at all. Every
  * row is metadata: a version number, a creation time, a deletion time, a
- * destroyed flag. No row has, or can have, a value — see services/forge/
+ * destroyed flag, and who set it (from the control plane's audit trail — "not
+ * recorded" when the trail has no row for it, never a blank that reads as
+ * "nobody"). No row has, or can have, a value — see services/forge/
  * secretStore.ts for why that is the storage engine's refusal rather than this
  * component's restraint.
  *
@@ -41,6 +43,7 @@ import { RotateCcw, Trash2, Flame } from "lucide-react";
 import ConfirmationDialog from "@/components/forge-ui/confirmation_dialog";
 import { cn } from "@/lib/utils";
 import type { ManagedSecretVersion } from "@/services/forge/secretStore";
+import { authorLabel } from "@/services/forge/secretSurface";
 
 export interface SecretVersionHistoryProps {
   name: string;
@@ -156,6 +159,21 @@ export function SecretVersionHistory({
                 ) : (
                   <>Created {formatWhen(version.createdAt)}</>
                 )}
+                {/* Who set it, for every state: a destroyed version's author
+                    is still the audit fact the row exists to keep. */}
+                <span data-testid={`version-author-${version.version}`}>
+                  {" · "}
+                  {version.setBy ? (
+                    <>
+                      by{" "}
+                      <span className={cn(version.setBy.kind === "user" && version.setBy.email && "text-foreground")}>
+                        {authorLabel(version.setBy)}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="italic">{authorLabel(null)}</span>
+                  )}
+                </span>
               </span>
 
               {canMutate && (

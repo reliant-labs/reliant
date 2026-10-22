@@ -218,7 +218,7 @@ beforeEach(() => {
   getEnvShape.mockImplementation(OFFLINE);
   getEnvStatus.mockImplementation(OFFLINE);
   getLiveView.mockImplementation(() => Promise.resolve(liveEnvs));
-  listSecrets.mockResolvedValue([]);
+  listSecrets.mockResolvedValue({ secrets: [], protected: false });
 });
 
 describe("an environment Reliant has no record of, with the daemon offline", () => {

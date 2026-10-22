@@ -223,6 +223,12 @@ var corsExposedHeaders = []string{
 	// them on errors from every transport to open the upgrade and
 	// billing-email modals instead of a raw error toast.
 	"X-Reliant-Reason", "X-Reliant-Upgrade-Url",
+	// forge's svcerr.ReasonHeader: the stable reason on a Connect error that
+	// the web client branches on (a protected environment's step_up_required,
+	// services/forge/secretStore.ts). The control plane exposes it through
+	// forge's DefaultCORSExposeHeaders; any reliant RPC that returns one must
+	// be readable the same way.
+	"X-Forge-Error-Reason",
 }
 
 // newCORSHandler builds the CORS middleware that wraps the entire mux. An

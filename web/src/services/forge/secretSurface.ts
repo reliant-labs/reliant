@@ -61,7 +61,12 @@
 import type { ForgeSecretsReport } from "./secrets";
 import { declarationsOf, presenceOf, providerKind, secretEntries } from "./secrets";
 import type { ForgeSecretDeclaration } from "./secrets";
-import type { ManagedSecretState, ManagedSecretSummary } from "./secretStore";
+import type {
+  ManagedSecretListing,
+  ManagedSecretState,
+  ManagedSecretSummary,
+  SecretVersionAuthor,
+} from "./secretStore";
 import { managedSecretState } from "./secretStore";
 
 // ── Mode ────────────────────────────────────────────────────────────────────
@@ -127,9 +132,16 @@ export function modeLabel(mode: SecretSurfaceMode): string {
  * that stands in for a create button when there is not going to be one, so it
  * has to answer "then how DO I set this" rather than just refusing.
  */
-export function modeExplanation(mode: SecretSurfaceMode): string {
+export function modeExplanation(mode: SecretSurfaceMode, envKind?: string): string {
   switch (mode) {
     case "managed":
+      // A self-managed environment runs on the customer's own cluster, and
+      // its values reach pods through External Secrets reading this same
+      // store — not through a deploy the platform runs. Saying "fetched at
+      // deploy time" there would describe a delivery that does not happen.
+      if (envKind === "self_managed") {
+        return "Values live in the managed store. Your cluster reads them through External Secrets, so a new version reaches its workloads without a deploy from here. You can set them here; you cannot read them back.";
+      }
       return "Values live in the managed store and are fetched at deploy time over an authenticated channel. You can set them here; you cannot read them back.";
     case "managed-remote":
       return "Values live in this environment's managed store on its control plane. This console cannot write to it — set them with `forge secret set`.";
@@ -348,5 +360,57 @@ export function rowStatusVariant(
       return "neutral";
     default:
       return "neutral";
+  }
+}
+
+// ── Protection (design D6) ──────────────────────────────────────────────────
+
+/**
+ * Whether changes here need a step-up, and until when the caller holds one.
+ *
+ * `grantUntil` is non-null ONLY while the grant is live: an expired grant is
+ * the same as none, and a countdown that reached zero and stayed on screen
+ * would tell the user they could still write.
+ */
+export interface SecretProtection {
+  protected: boolean;
+  /** Epoch ms the caller's grant ends, or null when none is live. */
+  grantUntil: number | null;
+}
+
+/**
+ * Two sources for the grant, and the later wins. The listing's
+ * `stepUpValidUntil` is the server's word as of the last read; the dialog's
+ * own CompleteStepUp answer arrives before the refetch does. Either alone
+ * would flash "locked" for the moment between the two.
+ */
+export function protectionOf(
+  listing: Pick<ManagedSecretListing, "protected" | "stepUpValidUntil"> | null | undefined,
+  localGrantUntil: number | null,
+  now: number
+): SecretProtection {
+  if (!listing?.protected) return { protected: false, grantUntil: null };
+  const listed = listing.stepUpValidUntil ? Date.parse(listing.stepUpValidUntil) : NaN;
+  const candidates = [Number.isFinite(listed) ? listed : null, localGrantUntil].filter(
+    (t): t is number => t !== null && t > now
+  );
+  return { protected: true, grantUntil: candidates.length > 0 ? Math.max(...candidates) : null };
+}
+
+/**
+ * Who wrote a version, as a phrase that follows "by". Null is "not
+ * recorded", said as such: a blank would read as "nobody".
+ */
+export function authorLabel(setBy: SecretVersionAuthor | null): string {
+  if (!setBy) return "author not recorded";
+  switch (setBy.kind) {
+    case "user":
+      return setBy.email ? setBy.email : "a signed-in user";
+    case "token":
+      return "an automation token";
+    case "platform":
+      return "the platform (generated)";
+    default:
+      return "author not recorded";
   }
 }

@@ -80,7 +80,7 @@ import {
   setSecret,
   undeleteSecret,
   type ManagedSecretHistory,
-  type ManagedSecretSummary,
+  type ManagedSecretListing,
   type ManagedStoreAvailability,
   type ManagedStoreTarget,
   type SetSecretResult,
@@ -1029,21 +1029,21 @@ export function useManagedSecrets(
   target: ManagedStoreTarget | null
 ) {
   const environmentId = target?.kind === "lookup" ? target.environmentId : "";
-  return useQuery<{ availability: ManagedStoreAvailability; secrets: ManagedSecretSummary[] }>({
+  return useQuery<{ availability: ManagedStoreAvailability } & ManagedSecretListing>({
     queryKey: [...forgeKeys.managedSecrets(projectId ?? "", env ?? ""), target?.kind ?? "", environmentId],
     queryFn: async () => {
-      if (!target) return { availability: "unreachable" as const, secrets: [] };
-      if (target.kind === "none") return { availability: target.availability, secrets: [] };
+      // `protected: false` when nothing was read: an environment whose store
+      // could not be read offers no write at all, so there is nothing for a
+      // protection badge to qualify.
+      if (!target) return { availability: "unreachable" as const, secrets: [], protected: false };
+      if (target.kind === "none") return { availability: target.availability, secrets: [], protected: false };
       try {
-        return {
-          availability: "available" as const,
-          secrets: await listSecrets(target.environmentId),
-        };
+        return { availability: "available" as const, ...(await listSecrets(target.environmentId)) };
       } catch (err) {
         // The error object itself is NOT propagated into the cache or into any
         // message. Only the classification survives — a Connect error's detail
         // string is the kind of place a request echo could end up.
-        return { availability: availabilityFromError(err), secrets: [] };
+        return { availability: availabilityFromError(err), secrets: [], protected: false };
       }
     },
     enabled: !!projectId && !!env && !!target,
@@ -1084,7 +1084,7 @@ export function useManagedSecretVersions(
  * store — KV-v2's cas can reject a write, another actor can write between our
  * read and our write, and a fabricated row would paper over both.
  */
-function useInvalidateManagedSecrets(
+export function useInvalidateManagedSecrets(
   projectId: string | null | undefined,
   env: string | null | undefined
 ) {

@@ -69,11 +69,14 @@
  */
 
 import { useEffect, useId, useRef, useState } from "react";
-import { AlertTriangle, EyeOff } from "lucide-react";
+import { AlertTriangle, EyeOff, Lock } from "lucide-react";
 import { ConnectError, Code } from "@connectrpc/connect";
 
 import Modal from "@/components/forge-ui/modal";
 import { cn } from "@/lib/utils";
+import { isStepUpRequired } from "@/services/forge/secretStore";
+
+import { isStepUpCancelled } from "./useStepUpGate";
 
 export interface SetSecretModalProps {
   open: boolean;
@@ -103,6 +106,15 @@ export interface SetSecretModalProps {
    * Absent in states 1 and 2, which is the ordinary case.
    */
   disabledReason?: string | null;
+  /**
+   * The step-up panel, when this environment is protected and refused the
+   * save for want of one (design D6). It replaces the form's body while it is
+   * shown; the form stays mounted underneath, so the value typed is the value
+   * the confirmed retry saves, and Cancel still clears it.
+   */
+  stepUp?: React.ReactNode;
+  /** The environment is protected: say so beside the save, before it is refused. */
+  isProtected?: boolean;
 }
 
 /** forge's env-var naming shape. Matching it early beats a server rejection. */
@@ -118,6 +130,8 @@ export function SetSecretModal({
   isSubmitting,
   error,
   disabledReason = null,
+  stepUp = null,
+  isProtected = false,
 }: SetSecretModalProps) {
   const nameId = useId();
   const valueId = useId();
@@ -181,7 +195,12 @@ export function SetSecretModal({
       size="md"
       title={isUpdate ? `Set a new version of ${existing.name}` : "Add a secret"}
     >
-      <form onSubmit={handleSubmit} className="space-y-5" data-testid="set-secret-form">
+      {stepUp}
+      <form
+        onSubmit={handleSubmit}
+        className={cn("space-y-5", stepUp && "hidden")}
+        data-testid="set-secret-form"
+      >
         {/*
          * §10 STATE 3. First, because it is the reason everything below it is
          * inert — a reader who meets the disabled fields first has to hunt for
@@ -314,6 +333,13 @@ export function SetSecretModal({
           </div>
         </div>
 
+        {isProtected && !error && (
+          <p className="text-xs text-muted-foreground" data-testid="set-secret-protected">
+            <span className="font-mono text-foreground">{env}</span> is protected: saving asks for a
+            one-time code from your email unless you confirmed in the last 15 minutes.
+          </p>
+        )}
+
         {error && <SubmitError error={error} isUpdate={isUpdate} />}
 
         <div className="flex justify-end gap-2 border-t border-border pt-4">
@@ -354,9 +380,31 @@ export function SetSecretModal({
  * state into a message.
  */
 function SubmitError({ error, isUpdate }: { error: Error; isUpdate: boolean }) {
+  // A protected environment's refusal is FailedPrecondition too, but it is
+  // not a concurrent edit, and it has its own sentence. Closing the step-up
+  // dialog unconfirmed lands here with nothing saved.
+  if (isStepUpRequired(error) || isStepUpCancelled(error)) {
+    return (
+      <div
+        role="status"
+        data-testid="set-secret-step-up-needed"
+        className="flex gap-2.5 rounded-md border border-border/60 bg-background px-3 py-2.5"
+      >
+        <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          Nothing was saved: this environment is protected, and the change was not confirmed with a
+          code. Save again to get one.
+        </p>
+      </div>
+    );
+  }
+  // Aborted is the control plane's CAS conflict; AlreadyExists and
+  // FailedPrecondition are what older control planes answered for it.
   const isCas =
     error instanceof ConnectError &&
-    (error.code === Code.AlreadyExists || error.code === Code.FailedPrecondition);
+    (error.code === Code.Aborted ||
+      error.code === Code.AlreadyExists ||
+      error.code === Code.FailedPrecondition);
 
   return (
     <div

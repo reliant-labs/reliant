@@ -104,9 +104,9 @@ describe("managedStoreTarget", () => {
 
 describe("the RPCs are keyed by environmentId", () => {
   it("lists with environmentId and nothing else", async () => {
-    const rows = await listSecrets("denv_1");
+    const listing = await listSecrets("denv_1");
     expect(listSecretsRpc).toHaveBeenCalledWith({ environmentId: "denv_1" });
-    expect(rows.map((r) => r.name)).toEqual(["A", "B"]);
+    expect(listing.secrets.map((r) => r.name)).toEqual(["A", "B"]);
   });
 
   it("writes with environmentId", async () => {

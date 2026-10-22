@@ -347,9 +347,10 @@ beforeEach(() => {
   listEnvironmentPromotions.mockImplementation((id: string) =>
     Promise.resolve(id === "cp-prod" ? PROMOTIONS : [])
   );
-  listSecrets.mockResolvedValue([
-    { name: "STRIPE_WEBHOOK_SECRET", currentVersion: 3, oldestVersion: 1, versions: [] },
-  ]);
+  listSecrets.mockResolvedValue({
+    secrets: [{ name: "STRIPE_WEBHOOK_SECRET", currentVersion: 3, oldestVersion: 1, versions: [] }],
+    protected: false,
+  });
 });
 
 /** No banner, no error text, anywhere. The page is not "degraded". */

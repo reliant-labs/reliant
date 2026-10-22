@@ -45,7 +45,7 @@
  */
 
 import { useMemo } from "react";
-import { ArrowLeft, ExternalLink, KeyRound, Plus } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ExternalLink, KeyRound, Lock, LockOpen, Plus } from "lucide-react";
 
 /**
  * The tenant-facing secrets documentation. Declared here, beside its one use,
@@ -64,6 +64,7 @@ import {
   modeExplanation,
   modeLabel,
   modeSupportsWrite,
+  protectionOf,
   rowStatusLabel,
   rowStatusVariant,
   tallyRows,
@@ -71,7 +72,10 @@ import {
   type SecretSurfaceRow,
 } from "@/services/forge/secretSurface";
 
+import { formatCountdown } from "@/services/forge/stepUp";
+
 import { SecretVersionHistory } from "./SecretVersionHistory";
+import { useNow } from "./useStepUpGate";
 import type { ManagedSecretVersion } from "@/services/forge/secretStore";
 
 export interface ManagedSecretsViewProps {
@@ -95,6 +99,23 @@ export interface ManagedSecretsViewProps {
   onUndelete: (name: string, version: number) => void;
   onDestroy: (name: string, version: number) => void;
   pendingVersion: number | null;
+
+  /** The environment's kind (persistent, self_managed, …), for the store sentence. */
+  envKind?: string;
+  /**
+   * Whether changes need a step-up (design D6), and the caller's grant: the
+   * listing's word and the dialog's own, merged by protectionOf. Absent means
+   * not protected.
+   */
+  protection?: {
+    protected: boolean;
+    stepUpValidUntil?: string;
+    localGrantUntil: number | null;
+  };
+  /** Start a step-up ahead of any change. */
+  onUnlock?: () => void;
+  /** Why the last delete/undelete/destroy failed, in a sentence; null when it did not. */
+  actionError?: string | null;
 }
 
 /**
@@ -155,11 +176,14 @@ export function ManagedSecretsView(props: ManagedSecretsViewProps) {
     <div className="space-y-5" data-testid="managed-secrets">
       <StoreHeader
         env={env}
+        envKind={props.envKind}
         mode={mode}
         availability={availability}
         tally={tally}
         canWrite={canWrite}
         onAdd={props.onAdd}
+        protection={canWrite ? props.protection : undefined}
+        onUnlock={props.onUnlock}
       />
 
       {isLoading ? (
@@ -188,31 +212,40 @@ export function ManagedSecretsView(props: ManagedSecretsViewProps) {
  */
 function StoreHeader({
   env,
+  envKind,
   mode,
   availability,
   tally,
   canWrite,
   onAdd,
+  protection,
+  onUnlock,
 }: {
   env: string;
+  envKind?: string;
   mode: SecretSurfaceMode;
   availability: ManagedStoreAvailability;
   tally: ReturnType<typeof tallyRows>;
   canWrite: boolean;
   onAdd: () => void;
+  protection?: ManagedSecretsViewProps["protection"];
+  onUnlock?: () => void;
 }) {
   return (
     <div className="flex flex-wrap items-start justify-between gap-4">
       <div className="space-y-1.5">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <h2 className="text-sm font-semibold text-foreground">{modeLabel(mode)}</h2>
           <span className="font-mono text-xs text-muted-foreground">{env}</span>
+          {protection?.protected && <ProtectedBadge />}
         </div>
         <p className="max-w-2xl text-xs leading-relaxed text-muted-foreground">
           {/* A reason there is no lookup outranks the mode sentence: it is the
               more specific answer to "why can I not set this here". */}
-          <WithCode text={availabilityExplanation(availability) ?? modeExplanation(mode)} />
+          <WithCode text={availabilityExplanation(availability) ?? modeExplanation(mode, envKind)} />
         </p>
+
+        {protection?.protected && <ProtectionLine protection={protection} onUnlock={onUnlock} />}
 
         {/* The one documentation link on this surface. It sits under the
             explanation rather than beside the heading because it is the
@@ -279,6 +312,76 @@ function StoreHeader({
         </button>
       )}
     </div>
+  );
+}
+
+/**
+ * The protected-environment badge. Outlined, never filled: the accent is
+ * spent on "Add secret", and a filled chip would compete with it. The lock is
+ * the signal; the word says what it means.
+ */
+function ProtectedBadge() {
+  return (
+    <span
+      data-testid="secrets-protected-badge"
+      title="Changes need org admin and a one-time code from your email"
+      className="inline-flex items-center gap-1 rounded-md border border-border px-1.5 py-0.5 text-2xs font-medium text-foreground"
+    >
+      <Lock className="h-3 w-3" aria-hidden="true" />
+      Protected
+    </span>
+  );
+}
+
+/**
+ * What protection means for THIS user right now: locked, with the way to
+ * confirm ahead of time; or unlocked, counting down.
+ *
+ * It owns its clock, so a ticking countdown re-renders one line rather than
+ * the whole table every second. The countdown reaching zero flips it back to
+ * locked by itself — a stale "unlocked" would promise a write the server will
+ * refuse.
+ */
+function ProtectionLine({
+  protection,
+  onUnlock,
+}: {
+  protection: NonNullable<ManagedSecretsViewProps["protection"]>;
+  onUnlock?: () => void;
+}) {
+  const now = useNow(true);
+  const { grantUntil } = protectionOf(protection, protection.localGrantUntil, now);
+
+  if (grantUntil !== null) {
+    return (
+      <p className="flex items-center gap-1.5 text-xs text-muted-foreground" data-testid="secrets-step-up-live">
+        <LockOpen className="h-3 w-3 text-success-ink" aria-hidden="true" />
+        <span>
+          Confirmed — you can change secrets here for{" "}
+          <span className="tabular-nums text-foreground" data-testid="secrets-step-up-countdown">
+            {formatCountdown(grantUntil - now)}
+          </span>
+          . This also covers <code className="font-mono text-foreground">forge secret set</code> from your
+          machine.
+        </span>
+      </p>
+    );
+  }
+  return (
+    <p className="text-xs text-muted-foreground" data-testid="secrets-step-up-locked">
+      Changes here need a one-time code from your email, and are allowed for 15 minutes after you
+      confirm.{" "}
+      {onUnlock && (
+        <button
+          type="button"
+          onClick={onUnlock}
+          data-testid="secrets-unlock"
+          className="text-foreground underline underline-offset-2 hover:text-primary"
+        >
+          Confirm now
+        </button>
+      )}
+    </p>
   );
 }
 
@@ -461,6 +564,7 @@ function SecretDetail({
   onUndelete,
   onDestroy,
   pendingVersion,
+  ...props
 }: ManagedSecretsViewProps & { row: SecretSurfaceRow; onBack: () => void }) {
   const canWrite = canWriteHere(mode, availability);
 
@@ -529,6 +633,17 @@ function SecretDetail({
             ))}
           </ul>
         </section>
+      )}
+
+      {props.actionError && (
+        <p
+          role="alert"
+          data-testid="secret-action-error"
+          className="flex max-w-2xl gap-2 text-xs leading-relaxed text-destructive-ink"
+        >
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          <span>{props.actionError}</span>
+        </p>
       )}
 
       {availability === "not-ensured" || availability === "provider-unknown" ? (

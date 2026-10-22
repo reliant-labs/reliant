@@ -28,6 +28,62 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// SecretAuthorKind is the kind of actor that wrote a version.
+type SecretAuthorKind int32
+
+const (
+	SecretAuthorKind_SECRET_AUTHOR_KIND_UNSPECIFIED SecretAuthorKind = 0
+	// A person: the console, or `forge secret set` with a personal token.
+	SecretAuthorKind_SECRET_AUTHOR_KIND_USER SecretAuthorKind = 1
+	// An org automation token, with no person behind it.
+	SecretAuthorKind_SECRET_AUTHOR_KIND_TOKEN SecretAuthorKind = 2
+	// The platform, minting a generated secret at promotion.
+	SecretAuthorKind_SECRET_AUTHOR_KIND_PLATFORM SecretAuthorKind = 3
+)
+
+// Enum value maps for SecretAuthorKind.
+var (
+	SecretAuthorKind_name = map[int32]string{
+		0: "SECRET_AUTHOR_KIND_UNSPECIFIED",
+		1: "SECRET_AUTHOR_KIND_USER",
+		2: "SECRET_AUTHOR_KIND_TOKEN",
+		3: "SECRET_AUTHOR_KIND_PLATFORM",
+	}
+	SecretAuthorKind_value = map[string]int32{
+		"SECRET_AUTHOR_KIND_UNSPECIFIED": 0,
+		"SECRET_AUTHOR_KIND_USER":        1,
+		"SECRET_AUTHOR_KIND_TOKEN":       2,
+		"SECRET_AUTHOR_KIND_PLATFORM":    3,
+	}
+)
+
+func (x SecretAuthorKind) Enum() *SecretAuthorKind {
+	p := new(SecretAuthorKind)
+	*p = x
+	return p
+}
+
+func (x SecretAuthorKind) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (SecretAuthorKind) Descriptor() protoreflect.EnumDescriptor {
+	return file_services_secret_store_v1_secret_store_proto_enumTypes[0].Descriptor()
+}
+
+func (SecretAuthorKind) Type() protoreflect.EnumType {
+	return &file_services_secret_store_v1_secret_store_proto_enumTypes[0]
+}
+
+func (x SecretAuthorKind) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use SecretAuthorKind.Descriptor instead.
+func (SecretAuthorKind) EnumDescriptor() ([]byte, []int) {
+	return file_services_secret_store_v1_secret_store_proto_rawDescGZIP(), []int{0}
+}
+
 // SecretSummary is one secret's list-view metadata. It answers "does this
 // secret exist, how many times has it been set, and when" — the whole
 // Secret-Manager-style list surface — with nothing on the wire that could be
@@ -153,7 +209,11 @@ type SecretVersion struct {
 	DeletionTime *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=deletion_time,json=deletionTime,proto3" json:"deletion_time,omitempty"`
 	// destroyed reports permanent destruction. A destroyed version keeps its
 	// metadata row (so history stays honest) but its contents are gone.
-	Destroyed     bool `protobuf:"varint,4,opt,name=destroyed,proto3" json:"destroyed,omitempty"`
+	Destroyed bool `protobuf:"varint,4,opt,name=destroyed,proto3" json:"destroyed,omitempty"`
+	// set_by is who wrote this version, from the audit trail. Absent when the
+	// trail holds no record of the write (one made before writes were audited,
+	// or a trail that could not be read): "not recorded", never "nobody".
+	SetBy         *SecretAuthor `protobuf:"bytes,5,opt,name=set_by,json=setBy,proto3" json:"set_by,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -216,6 +276,68 @@ func (x *SecretVersion) GetDestroyed() bool {
 	return false
 }
 
+func (x *SecretVersion) GetSetBy() *SecretAuthor {
+	if x != nil {
+		return x.SetBy
+	}
+	return nil
+}
+
+// SecretAuthor names who wrote a secret version. An identity, never a value.
+type SecretAuthor struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Kind  SecretAuthorKind       `protobuf:"varint,1,opt,name=kind,proto3,enum=controlplane.v1.SecretAuthorKind" json:"kind,omitempty"`
+	// email is the signed-in person's address for KIND_USER (a personal token
+	// acts as its user). Empty when the session carried none.
+	Email         string `protobuf:"bytes,2,opt,name=email,proto3" json:"email,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SecretAuthor) Reset() {
+	*x = SecretAuthor{}
+	mi := &file_services_secret_store_v1_secret_store_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SecretAuthor) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SecretAuthor) ProtoMessage() {}
+
+func (x *SecretAuthor) ProtoReflect() protoreflect.Message {
+	mi := &file_services_secret_store_v1_secret_store_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SecretAuthor.ProtoReflect.Descriptor instead.
+func (*SecretAuthor) Descriptor() ([]byte, []int) {
+	return file_services_secret_store_v1_secret_store_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *SecretAuthor) GetKind() SecretAuthorKind {
+	if x != nil {
+		return x.Kind
+	}
+	return SecretAuthorKind_SECRET_AUTHOR_KIND_UNSPECIFIED
+}
+
+func (x *SecretAuthor) GetEmail() string {
+	if x != nil {
+		return x.Email
+	}
+	return ""
+}
+
 type ListSecretsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	EnvironmentId string                 `protobuf:"bytes,1,opt,name=environment_id,json=environmentId,proto3" json:"environment_id,omitempty"`
@@ -225,7 +347,7 @@ type ListSecretsRequest struct {
 
 func (x *ListSecretsRequest) Reset() {
 	*x = ListSecretsRequest{}
-	mi := &file_services_secret_store_v1_secret_store_proto_msgTypes[2]
+	mi := &file_services_secret_store_v1_secret_store_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -237,7 +359,7 @@ func (x *ListSecretsRequest) String() string {
 func (*ListSecretsRequest) ProtoMessage() {}
 
 func (x *ListSecretsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_secret_store_v1_secret_store_proto_msgTypes[2]
+	mi := &file_services_secret_store_v1_secret_store_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -250,7 +372,7 @@ func (x *ListSecretsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSecretsRequest.ProtoReflect.Descriptor instead.
 func (*ListSecretsRequest) Descriptor() ([]byte, []int) {
-	return file_services_secret_store_v1_secret_store_proto_rawDescGZIP(), []int{2}
+	return file_services_secret_store_v1_secret_store_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *ListSecretsRequest) GetEnvironmentId() string {
@@ -276,7 +398,7 @@ type ListSecretsResponse struct {
 
 func (x *ListSecretsResponse) Reset() {
 	*x = ListSecretsResponse{}
-	mi := &file_services_secret_store_v1_secret_store_proto_msgTypes[3]
+	mi := &file_services_secret_store_v1_secret_store_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -288,7 +410,7 @@ func (x *ListSecretsResponse) String() string {
 func (*ListSecretsResponse) ProtoMessage() {}
 
 func (x *ListSecretsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_secret_store_v1_secret_store_proto_msgTypes[3]
+	mi := &file_services_secret_store_v1_secret_store_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -301,7 +423,7 @@ func (x *ListSecretsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListSecretsResponse.ProtoReflect.Descriptor instead.
 func (*ListSecretsResponse) Descriptor() ([]byte, []int) {
-	return file_services_secret_store_v1_secret_store_proto_rawDescGZIP(), []int{3}
+	return file_services_secret_store_v1_secret_store_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *ListSecretsResponse) GetSecrets() []*SecretSummary {
@@ -335,7 +457,7 @@ type GetSecretVersionsRequest struct {
 
 func (x *GetSecretVersionsRequest) Reset() {
 	*x = GetSecretVersionsRequest{}
-	mi := &file_services_secret_store_v1_secret_store_proto_msgTypes[4]
+	mi := &file_services_secret_store_v1_secret_store_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -347,7 +469,7 @@ func (x *GetSecretVersionsRequest) String() string {
 func (*GetSecretVersionsRequest) ProtoMessage() {}
 
 func (x *GetSecretVersionsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_secret_store_v1_secret_store_proto_msgTypes[4]
+	mi := &file_services_secret_store_v1_secret_store_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -360,7 +482,7 @@ func (x *GetSecretVersionsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSecretVersionsRequest.ProtoReflect.Descriptor instead.
 func (*GetSecretVersionsRequest) Descriptor() ([]byte, []int) {
-	return file_services_secret_store_v1_secret_store_proto_rawDescGZIP(), []int{4}
+	return file_services_secret_store_v1_secret_store_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *GetSecretVersionsRequest) GetEnvironmentId() string {
@@ -388,7 +510,7 @@ type GetSecretVersionsResponse struct {
 
 func (x *GetSecretVersionsResponse) Reset() {
 	*x = GetSecretVersionsResponse{}
-	mi := &file_services_secret_store_v1_secret_store_proto_msgTypes[5]
+	mi := &file_services_secret_store_v1_secret_store_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -400,7 +522,7 @@ func (x *GetSecretVersionsResponse) String() string {
 func (*GetSecretVersionsResponse) ProtoMessage() {}
 
 func (x *GetSecretVersionsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_secret_store_v1_secret_store_proto_msgTypes[5]
+	mi := &file_services_secret_store_v1_secret_store_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -413,7 +535,7 @@ func (x *GetSecretVersionsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetSecretVersionsResponse.ProtoReflect.Descriptor instead.
 func (*GetSecretVersionsResponse) Descriptor() ([]byte, []int) {
-	return file_services_secret_store_v1_secret_store_proto_rawDescGZIP(), []int{5}
+	return file_services_secret_store_v1_secret_store_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *GetSecretVersionsResponse) GetSummary() *SecretSummary {
@@ -452,7 +574,7 @@ type SetSecretRequest struct {
 
 func (x *SetSecretRequest) Reset() {
 	*x = SetSecretRequest{}
-	mi := &file_services_secret_store_v1_secret_store_proto_msgTypes[6]
+	mi := &file_services_secret_store_v1_secret_store_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -464,7 +586,7 @@ func (x *SetSecretRequest) String() string {
 func (*SetSecretRequest) ProtoMessage() {}
 
 func (x *SetSecretRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_secret_store_v1_secret_store_proto_msgTypes[6]
+	mi := &file_services_secret_store_v1_secret_store_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -477,7 +599,7 @@ func (x *SetSecretRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetSecretRequest.ProtoReflect.Descriptor instead.
 func (*SetSecretRequest) Descriptor() ([]byte, []int) {
-	return file_services_secret_store_v1_secret_store_proto_rawDescGZIP(), []int{6}
+	return file_services_secret_store_v1_secret_store_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *SetSecretRequest) GetEnvironmentId() string {
@@ -517,7 +639,7 @@ type BeginStepUpRequest struct {
 
 func (x *BeginStepUpRequest) Reset() {
 	*x = BeginStepUpRequest{}
-	mi := &file_services_secret_store_v1_secret_store_proto_msgTypes[7]
+	mi := &file_services_secret_store_v1_secret_store_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -529,7 +651,7 @@ func (x *BeginStepUpRequest) String() string {
 func (*BeginStepUpRequest) ProtoMessage() {}
 
 func (x *BeginStepUpRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_secret_store_v1_secret_store_proto_msgTypes[7]
+	mi := &file_services_secret_store_v1_secret_store_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -542,7 +664,7 @@ func (x *BeginStepUpRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BeginStepUpRequest.ProtoReflect.Descriptor instead.
 func (*BeginStepUpRequest) Descriptor() ([]byte, []int) {
-	return file_services_secret_store_v1_secret_store_proto_rawDescGZIP(), []int{7}
+	return file_services_secret_store_v1_secret_store_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *BeginStepUpRequest) GetEnvironmentId() string {
@@ -565,7 +687,7 @@ type BeginStepUpResponse struct {
 
 func (x *BeginStepUpResponse) Reset() {
 	*x = BeginStepUpResponse{}
-	mi := &file_services_secret_store_v1_secret_store_proto_msgTypes[8]
+	mi := &file_services_secret_store_v1_secret_store_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -577,7 +699,7 @@ func (x *BeginStepUpResponse) String() string {
 func (*BeginStepUpResponse) ProtoMessage() {}
 
 func (x *BeginStepUpResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_secret_store_v1_secret_store_proto_msgTypes[8]
+	mi := &file_services_secret_store_v1_secret_store_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -590,7 +712,7 @@ func (x *BeginStepUpResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BeginStepUpResponse.ProtoReflect.Descriptor instead.
 func (*BeginStepUpResponse) Descriptor() ([]byte, []int) {
-	return file_services_secret_store_v1_secret_store_proto_rawDescGZIP(), []int{8}
+	return file_services_secret_store_v1_secret_store_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *BeginStepUpResponse) GetSentTo() string {
@@ -618,7 +740,7 @@ type CompleteStepUpRequest struct {
 
 func (x *CompleteStepUpRequest) Reset() {
 	*x = CompleteStepUpRequest{}
-	mi := &file_services_secret_store_v1_secret_store_proto_msgTypes[9]
+	mi := &file_services_secret_store_v1_secret_store_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -630,7 +752,7 @@ func (x *CompleteStepUpRequest) String() string {
 func (*CompleteStepUpRequest) ProtoMessage() {}
 
 func (x *CompleteStepUpRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_secret_store_v1_secret_store_proto_msgTypes[9]
+	mi := &file_services_secret_store_v1_secret_store_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -643,7 +765,7 @@ func (x *CompleteStepUpRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompleteStepUpRequest.ProtoReflect.Descriptor instead.
 func (*CompleteStepUpRequest) Descriptor() ([]byte, []int) {
-	return file_services_secret_store_v1_secret_store_proto_rawDescGZIP(), []int{9}
+	return file_services_secret_store_v1_secret_store_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *CompleteStepUpRequest) GetEnvironmentId() string {
@@ -670,7 +792,7 @@ type CompleteStepUpResponse struct {
 
 func (x *CompleteStepUpResponse) Reset() {
 	*x = CompleteStepUpResponse{}
-	mi := &file_services_secret_store_v1_secret_store_proto_msgTypes[10]
+	mi := &file_services_secret_store_v1_secret_store_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -682,7 +804,7 @@ func (x *CompleteStepUpResponse) String() string {
 func (*CompleteStepUpResponse) ProtoMessage() {}
 
 func (x *CompleteStepUpResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_secret_store_v1_secret_store_proto_msgTypes[10]
+	mi := &file_services_secret_store_v1_secret_store_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -695,7 +817,7 @@ func (x *CompleteStepUpResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompleteStepUpResponse.ProtoReflect.Descriptor instead.
 func (*CompleteStepUpResponse) Descriptor() ([]byte, []int) {
-	return file_services_secret_store_v1_secret_store_proto_rawDescGZIP(), []int{10}
+	return file_services_secret_store_v1_secret_store_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *CompleteStepUpResponse) GetValidUntil() *timestamppb.Timestamp {
@@ -716,7 +838,7 @@ type SetSecretResponse struct {
 
 func (x *SetSecretResponse) Reset() {
 	*x = SetSecretResponse{}
-	mi := &file_services_secret_store_v1_secret_store_proto_msgTypes[11]
+	mi := &file_services_secret_store_v1_secret_store_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -728,7 +850,7 @@ func (x *SetSecretResponse) String() string {
 func (*SetSecretResponse) ProtoMessage() {}
 
 func (x *SetSecretResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_secret_store_v1_secret_store_proto_msgTypes[11]
+	mi := &file_services_secret_store_v1_secret_store_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -741,7 +863,7 @@ func (x *SetSecretResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetSecretResponse.ProtoReflect.Descriptor instead.
 func (*SetSecretResponse) Descriptor() ([]byte, []int) {
-	return file_services_secret_store_v1_secret_store_proto_rawDescGZIP(), []int{11}
+	return file_services_secret_store_v1_secret_store_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *SetSecretResponse) GetVersion() uint32 {
@@ -771,7 +893,7 @@ type DeleteSecretRequest struct {
 
 func (x *DeleteSecretRequest) Reset() {
 	*x = DeleteSecretRequest{}
-	mi := &file_services_secret_store_v1_secret_store_proto_msgTypes[12]
+	mi := &file_services_secret_store_v1_secret_store_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -783,7 +905,7 @@ func (x *DeleteSecretRequest) String() string {
 func (*DeleteSecretRequest) ProtoMessage() {}
 
 func (x *DeleteSecretRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_secret_store_v1_secret_store_proto_msgTypes[12]
+	mi := &file_services_secret_store_v1_secret_store_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -796,7 +918,7 @@ func (x *DeleteSecretRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteSecretRequest.ProtoReflect.Descriptor instead.
 func (*DeleteSecretRequest) Descriptor() ([]byte, []int) {
-	return file_services_secret_store_v1_secret_store_proto_rawDescGZIP(), []int{12}
+	return file_services_secret_store_v1_secret_store_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *DeleteSecretRequest) GetEnvironmentId() string {
@@ -828,7 +950,7 @@ type DeleteSecretResponse struct {
 
 func (x *DeleteSecretResponse) Reset() {
 	*x = DeleteSecretResponse{}
-	mi := &file_services_secret_store_v1_secret_store_proto_msgTypes[13]
+	mi := &file_services_secret_store_v1_secret_store_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -840,7 +962,7 @@ func (x *DeleteSecretResponse) String() string {
 func (*DeleteSecretResponse) ProtoMessage() {}
 
 func (x *DeleteSecretResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_secret_store_v1_secret_store_proto_msgTypes[13]
+	mi := &file_services_secret_store_v1_secret_store_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -853,7 +975,7 @@ func (x *DeleteSecretResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteSecretResponse.ProtoReflect.Descriptor instead.
 func (*DeleteSecretResponse) Descriptor() ([]byte, []int) {
-	return file_services_secret_store_v1_secret_store_proto_rawDescGZIP(), []int{13}
+	return file_services_secret_store_v1_secret_store_proto_rawDescGZIP(), []int{14}
 }
 
 type UndeleteSecretRequest struct {
@@ -870,7 +992,7 @@ type UndeleteSecretRequest struct {
 
 func (x *UndeleteSecretRequest) Reset() {
 	*x = UndeleteSecretRequest{}
-	mi := &file_services_secret_store_v1_secret_store_proto_msgTypes[14]
+	mi := &file_services_secret_store_v1_secret_store_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -882,7 +1004,7 @@ func (x *UndeleteSecretRequest) String() string {
 func (*UndeleteSecretRequest) ProtoMessage() {}
 
 func (x *UndeleteSecretRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_secret_store_v1_secret_store_proto_msgTypes[14]
+	mi := &file_services_secret_store_v1_secret_store_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -895,7 +1017,7 @@ func (x *UndeleteSecretRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UndeleteSecretRequest.ProtoReflect.Descriptor instead.
 func (*UndeleteSecretRequest) Descriptor() ([]byte, []int) {
-	return file_services_secret_store_v1_secret_store_proto_rawDescGZIP(), []int{14}
+	return file_services_secret_store_v1_secret_store_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *UndeleteSecretRequest) GetEnvironmentId() string {
@@ -927,7 +1049,7 @@ type UndeleteSecretResponse struct {
 
 func (x *UndeleteSecretResponse) Reset() {
 	*x = UndeleteSecretResponse{}
-	mi := &file_services_secret_store_v1_secret_store_proto_msgTypes[15]
+	mi := &file_services_secret_store_v1_secret_store_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -939,7 +1061,7 @@ func (x *UndeleteSecretResponse) String() string {
 func (*UndeleteSecretResponse) ProtoMessage() {}
 
 func (x *UndeleteSecretResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_secret_store_v1_secret_store_proto_msgTypes[15]
+	mi := &file_services_secret_store_v1_secret_store_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -952,7 +1074,7 @@ func (x *UndeleteSecretResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UndeleteSecretResponse.ProtoReflect.Descriptor instead.
 func (*UndeleteSecretResponse) Descriptor() ([]byte, []int) {
-	return file_services_secret_store_v1_secret_store_proto_rawDescGZIP(), []int{15}
+	return file_services_secret_store_v1_secret_store_proto_rawDescGZIP(), []int{16}
 }
 
 type DestroySecretRequest struct {
@@ -968,7 +1090,7 @@ type DestroySecretRequest struct {
 
 func (x *DestroySecretRequest) Reset() {
 	*x = DestroySecretRequest{}
-	mi := &file_services_secret_store_v1_secret_store_proto_msgTypes[16]
+	mi := &file_services_secret_store_v1_secret_store_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -980,7 +1102,7 @@ func (x *DestroySecretRequest) String() string {
 func (*DestroySecretRequest) ProtoMessage() {}
 
 func (x *DestroySecretRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_secret_store_v1_secret_store_proto_msgTypes[16]
+	mi := &file_services_secret_store_v1_secret_store_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -993,7 +1115,7 @@ func (x *DestroySecretRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DestroySecretRequest.ProtoReflect.Descriptor instead.
 func (*DestroySecretRequest) Descriptor() ([]byte, []int) {
-	return file_services_secret_store_v1_secret_store_proto_rawDescGZIP(), []int{16}
+	return file_services_secret_store_v1_secret_store_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *DestroySecretRequest) GetEnvironmentId() string {
@@ -1025,7 +1147,7 @@ type DestroySecretResponse struct {
 
 func (x *DestroySecretResponse) Reset() {
 	*x = DestroySecretResponse{}
-	mi := &file_services_secret_store_v1_secret_store_proto_msgTypes[17]
+	mi := &file_services_secret_store_v1_secret_store_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1037,7 +1159,7 @@ func (x *DestroySecretResponse) String() string {
 func (*DestroySecretResponse) ProtoMessage() {}
 
 func (x *DestroySecretResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_secret_store_v1_secret_store_proto_msgTypes[17]
+	mi := &file_services_secret_store_v1_secret_store_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1050,7 +1172,7 @@ func (x *DestroySecretResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DestroySecretResponse.ProtoReflect.Descriptor instead.
 func (*DestroySecretResponse) Descriptor() ([]byte, []int) {
-	return file_services_secret_store_v1_secret_store_proto_rawDescGZIP(), []int{17}
+	return file_services_secret_store_v1_secret_store_proto_rawDescGZIP(), []int{18}
 }
 
 var File_services_secret_store_v1_secret_store_proto protoreflect.FileDescriptor
@@ -1066,12 +1188,16 @@ const file_services_secret_store_v1_secret_store_proto_rawDesc = "" +
 	"\fcreated_time\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\vcreatedTime\x12=\n" +
 	"\fupdated_time\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\vupdatedTime\x126\n" +
 	"\x17current_version_deleted\x18\a \x01(\bR\x15currentVersionDeleted\x12:\n" +
-	"\x19current_version_destroyed\x18\b \x01(\bR\x17currentVersionDestroyed\"\xc7\x01\n" +
+	"\x19current_version_destroyed\x18\b \x01(\bR\x17currentVersionDestroyed\"\xfd\x01\n" +
 	"\rSecretVersion\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\rR\aversion\x12=\n" +
 	"\fcreated_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\vcreatedTime\x12?\n" +
 	"\rdeletion_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\fdeletionTime\x12\x1c\n" +
-	"\tdestroyed\x18\x04 \x01(\bR\tdestroyed\";\n" +
+	"\tdestroyed\x18\x04 \x01(\bR\tdestroyed\x124\n" +
+	"\x06set_by\x18\x05 \x01(\v2\x1d.controlplane.v1.SecretAuthorR\x05setBy\"[\n" +
+	"\fSecretAuthor\x125\n" +
+	"\x04kind\x18\x01 \x01(\x0e2!.controlplane.v1.SecretAuthorKindR\x04kind\x12\x14\n" +
+	"\x05email\x18\x02 \x01(\tR\x05email\";\n" +
 	"\x12ListSecretsRequest\x12%\n" +
 	"\x0eenvironment_id\x18\x01 \x01(\tR\renvironmentId\"\xb8\x01\n" +
 	"\x13ListSecretsResponse\x128\n" +
@@ -1119,7 +1245,12 @@ const file_services_secret_store_v1_secret_store_proto_rawDesc = "" +
 	"\x0eenvironment_id\x18\x01 \x01(\tR\renvironmentId\x12\x12\n" +
 	"\x04name\x18\x03 \x01(\tR\x04name\x12\x1a\n" +
 	"\bversions\x18\x04 \x03(\rR\bversions\"\x17\n" +
-	"\x15DestroySecretResponse2\x8b\x06\n" +
+	"\x15DestroySecretResponse*\x92\x01\n" +
+	"\x10SecretAuthorKind\x12\"\n" +
+	"\x1eSECRET_AUTHOR_KIND_UNSPECIFIED\x10\x00\x12\x1b\n" +
+	"\x17SECRET_AUTHOR_KIND_USER\x10\x01\x12\x1c\n" +
+	"\x18SECRET_AUTHOR_KIND_TOKEN\x10\x02\x12\x1f\n" +
+	"\x1bSECRET_AUTHOR_KIND_PLATFORM\x10\x032\x8b\x06\n" +
 	"\x12SecretStoreService\x12X\n" +
 	"\vListSecrets\x12#.controlplane.v1.ListSecretsRequest\x1a$.controlplane.v1.ListSecretsResponse\x12j\n" +
 	"\x11GetSecretVersions\x12).controlplane.v1.GetSecretVersionsRequest\x1a*.controlplane.v1.GetSecretVersionsResponse\x12R\n" +
@@ -1143,61 +1274,66 @@ func file_services_secret_store_v1_secret_store_proto_rawDescGZIP() []byte {
 	return file_services_secret_store_v1_secret_store_proto_rawDescData
 }
 
-var file_services_secret_store_v1_secret_store_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
+var file_services_secret_store_v1_secret_store_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_services_secret_store_v1_secret_store_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
 var file_services_secret_store_v1_secret_store_proto_goTypes = []any{
-	(*SecretSummary)(nil),             // 0: controlplane.v1.SecretSummary
-	(*SecretVersion)(nil),             // 1: controlplane.v1.SecretVersion
-	(*ListSecretsRequest)(nil),        // 2: controlplane.v1.ListSecretsRequest
-	(*ListSecretsResponse)(nil),       // 3: controlplane.v1.ListSecretsResponse
-	(*GetSecretVersionsRequest)(nil),  // 4: controlplane.v1.GetSecretVersionsRequest
-	(*GetSecretVersionsResponse)(nil), // 5: controlplane.v1.GetSecretVersionsResponse
-	(*SetSecretRequest)(nil),          // 6: controlplane.v1.SetSecretRequest
-	(*BeginStepUpRequest)(nil),        // 7: controlplane.v1.BeginStepUpRequest
-	(*BeginStepUpResponse)(nil),       // 8: controlplane.v1.BeginStepUpResponse
-	(*CompleteStepUpRequest)(nil),     // 9: controlplane.v1.CompleteStepUpRequest
-	(*CompleteStepUpResponse)(nil),    // 10: controlplane.v1.CompleteStepUpResponse
-	(*SetSecretResponse)(nil),         // 11: controlplane.v1.SetSecretResponse
-	(*DeleteSecretRequest)(nil),       // 12: controlplane.v1.DeleteSecretRequest
-	(*DeleteSecretResponse)(nil),      // 13: controlplane.v1.DeleteSecretResponse
-	(*UndeleteSecretRequest)(nil),     // 14: controlplane.v1.UndeleteSecretRequest
-	(*UndeleteSecretResponse)(nil),    // 15: controlplane.v1.UndeleteSecretResponse
-	(*DestroySecretRequest)(nil),      // 16: controlplane.v1.DestroySecretRequest
-	(*DestroySecretResponse)(nil),     // 17: controlplane.v1.DestroySecretResponse
-	(*timestamppb.Timestamp)(nil),     // 18: google.protobuf.Timestamp
+	(SecretAuthorKind)(0),             // 0: controlplane.v1.SecretAuthorKind
+	(*SecretSummary)(nil),             // 1: controlplane.v1.SecretSummary
+	(*SecretVersion)(nil),             // 2: controlplane.v1.SecretVersion
+	(*SecretAuthor)(nil),              // 3: controlplane.v1.SecretAuthor
+	(*ListSecretsRequest)(nil),        // 4: controlplane.v1.ListSecretsRequest
+	(*ListSecretsResponse)(nil),       // 5: controlplane.v1.ListSecretsResponse
+	(*GetSecretVersionsRequest)(nil),  // 6: controlplane.v1.GetSecretVersionsRequest
+	(*GetSecretVersionsResponse)(nil), // 7: controlplane.v1.GetSecretVersionsResponse
+	(*SetSecretRequest)(nil),          // 8: controlplane.v1.SetSecretRequest
+	(*BeginStepUpRequest)(nil),        // 9: controlplane.v1.BeginStepUpRequest
+	(*BeginStepUpResponse)(nil),       // 10: controlplane.v1.BeginStepUpResponse
+	(*CompleteStepUpRequest)(nil),     // 11: controlplane.v1.CompleteStepUpRequest
+	(*CompleteStepUpResponse)(nil),    // 12: controlplane.v1.CompleteStepUpResponse
+	(*SetSecretResponse)(nil),         // 13: controlplane.v1.SetSecretResponse
+	(*DeleteSecretRequest)(nil),       // 14: controlplane.v1.DeleteSecretRequest
+	(*DeleteSecretResponse)(nil),      // 15: controlplane.v1.DeleteSecretResponse
+	(*UndeleteSecretRequest)(nil),     // 16: controlplane.v1.UndeleteSecretRequest
+	(*UndeleteSecretResponse)(nil),    // 17: controlplane.v1.UndeleteSecretResponse
+	(*DestroySecretRequest)(nil),      // 18: controlplane.v1.DestroySecretRequest
+	(*DestroySecretResponse)(nil),     // 19: controlplane.v1.DestroySecretResponse
+	(*timestamppb.Timestamp)(nil),     // 20: google.protobuf.Timestamp
 }
 var file_services_secret_store_v1_secret_store_proto_depIdxs = []int32{
-	18, // 0: controlplane.v1.SecretSummary.created_time:type_name -> google.protobuf.Timestamp
-	18, // 1: controlplane.v1.SecretSummary.updated_time:type_name -> google.protobuf.Timestamp
-	18, // 2: controlplane.v1.SecretVersion.created_time:type_name -> google.protobuf.Timestamp
-	18, // 3: controlplane.v1.SecretVersion.deletion_time:type_name -> google.protobuf.Timestamp
-	0,  // 4: controlplane.v1.ListSecretsResponse.secrets:type_name -> controlplane.v1.SecretSummary
-	18, // 5: controlplane.v1.ListSecretsResponse.step_up_valid_until:type_name -> google.protobuf.Timestamp
-	0,  // 6: controlplane.v1.GetSecretVersionsResponse.summary:type_name -> controlplane.v1.SecretSummary
-	1,  // 7: controlplane.v1.GetSecretVersionsResponse.versions:type_name -> controlplane.v1.SecretVersion
-	18, // 8: controlplane.v1.BeginStepUpResponse.expires_at:type_name -> google.protobuf.Timestamp
-	18, // 9: controlplane.v1.CompleteStepUpResponse.valid_until:type_name -> google.protobuf.Timestamp
-	18, // 10: controlplane.v1.SetSecretResponse.created_time:type_name -> google.protobuf.Timestamp
-	2,  // 11: controlplane.v1.SecretStoreService.ListSecrets:input_type -> controlplane.v1.ListSecretsRequest
-	4,  // 12: controlplane.v1.SecretStoreService.GetSecretVersions:input_type -> controlplane.v1.GetSecretVersionsRequest
-	6,  // 13: controlplane.v1.SecretStoreService.SetSecret:input_type -> controlplane.v1.SetSecretRequest
-	12, // 14: controlplane.v1.SecretStoreService.DeleteSecret:input_type -> controlplane.v1.DeleteSecretRequest
-	14, // 15: controlplane.v1.SecretStoreService.UndeleteSecret:input_type -> controlplane.v1.UndeleteSecretRequest
-	16, // 16: controlplane.v1.SecretStoreService.DestroySecret:input_type -> controlplane.v1.DestroySecretRequest
-	7,  // 17: controlplane.v1.SecretStoreService.BeginStepUp:input_type -> controlplane.v1.BeginStepUpRequest
-	9,  // 18: controlplane.v1.SecretStoreService.CompleteStepUp:input_type -> controlplane.v1.CompleteStepUpRequest
-	3,  // 19: controlplane.v1.SecretStoreService.ListSecrets:output_type -> controlplane.v1.ListSecretsResponse
-	5,  // 20: controlplane.v1.SecretStoreService.GetSecretVersions:output_type -> controlplane.v1.GetSecretVersionsResponse
-	11, // 21: controlplane.v1.SecretStoreService.SetSecret:output_type -> controlplane.v1.SetSecretResponse
-	13, // 22: controlplane.v1.SecretStoreService.DeleteSecret:output_type -> controlplane.v1.DeleteSecretResponse
-	15, // 23: controlplane.v1.SecretStoreService.UndeleteSecret:output_type -> controlplane.v1.UndeleteSecretResponse
-	17, // 24: controlplane.v1.SecretStoreService.DestroySecret:output_type -> controlplane.v1.DestroySecretResponse
-	8,  // 25: controlplane.v1.SecretStoreService.BeginStepUp:output_type -> controlplane.v1.BeginStepUpResponse
-	10, // 26: controlplane.v1.SecretStoreService.CompleteStepUp:output_type -> controlplane.v1.CompleteStepUpResponse
-	19, // [19:27] is the sub-list for method output_type
-	11, // [11:19] is the sub-list for method input_type
-	11, // [11:11] is the sub-list for extension type_name
-	11, // [11:11] is the sub-list for extension extendee
-	0,  // [0:11] is the sub-list for field type_name
+	20, // 0: controlplane.v1.SecretSummary.created_time:type_name -> google.protobuf.Timestamp
+	20, // 1: controlplane.v1.SecretSummary.updated_time:type_name -> google.protobuf.Timestamp
+	20, // 2: controlplane.v1.SecretVersion.created_time:type_name -> google.protobuf.Timestamp
+	20, // 3: controlplane.v1.SecretVersion.deletion_time:type_name -> google.protobuf.Timestamp
+	3,  // 4: controlplane.v1.SecretVersion.set_by:type_name -> controlplane.v1.SecretAuthor
+	0,  // 5: controlplane.v1.SecretAuthor.kind:type_name -> controlplane.v1.SecretAuthorKind
+	1,  // 6: controlplane.v1.ListSecretsResponse.secrets:type_name -> controlplane.v1.SecretSummary
+	20, // 7: controlplane.v1.ListSecretsResponse.step_up_valid_until:type_name -> google.protobuf.Timestamp
+	1,  // 8: controlplane.v1.GetSecretVersionsResponse.summary:type_name -> controlplane.v1.SecretSummary
+	2,  // 9: controlplane.v1.GetSecretVersionsResponse.versions:type_name -> controlplane.v1.SecretVersion
+	20, // 10: controlplane.v1.BeginStepUpResponse.expires_at:type_name -> google.protobuf.Timestamp
+	20, // 11: controlplane.v1.CompleteStepUpResponse.valid_until:type_name -> google.protobuf.Timestamp
+	20, // 12: controlplane.v1.SetSecretResponse.created_time:type_name -> google.protobuf.Timestamp
+	4,  // 13: controlplane.v1.SecretStoreService.ListSecrets:input_type -> controlplane.v1.ListSecretsRequest
+	6,  // 14: controlplane.v1.SecretStoreService.GetSecretVersions:input_type -> controlplane.v1.GetSecretVersionsRequest
+	8,  // 15: controlplane.v1.SecretStoreService.SetSecret:input_type -> controlplane.v1.SetSecretRequest
+	14, // 16: controlplane.v1.SecretStoreService.DeleteSecret:input_type -> controlplane.v1.DeleteSecretRequest
+	16, // 17: controlplane.v1.SecretStoreService.UndeleteSecret:input_type -> controlplane.v1.UndeleteSecretRequest
+	18, // 18: controlplane.v1.SecretStoreService.DestroySecret:input_type -> controlplane.v1.DestroySecretRequest
+	9,  // 19: controlplane.v1.SecretStoreService.BeginStepUp:input_type -> controlplane.v1.BeginStepUpRequest
+	11, // 20: controlplane.v1.SecretStoreService.CompleteStepUp:input_type -> controlplane.v1.CompleteStepUpRequest
+	5,  // 21: controlplane.v1.SecretStoreService.ListSecrets:output_type -> controlplane.v1.ListSecretsResponse
+	7,  // 22: controlplane.v1.SecretStoreService.GetSecretVersions:output_type -> controlplane.v1.GetSecretVersionsResponse
+	13, // 23: controlplane.v1.SecretStoreService.SetSecret:output_type -> controlplane.v1.SetSecretResponse
+	15, // 24: controlplane.v1.SecretStoreService.DeleteSecret:output_type -> controlplane.v1.DeleteSecretResponse
+	17, // 25: controlplane.v1.SecretStoreService.UndeleteSecret:output_type -> controlplane.v1.UndeleteSecretResponse
+	19, // 26: controlplane.v1.SecretStoreService.DestroySecret:output_type -> controlplane.v1.DestroySecretResponse
+	10, // 27: controlplane.v1.SecretStoreService.BeginStepUp:output_type -> controlplane.v1.BeginStepUpResponse
+	12, // 28: controlplane.v1.SecretStoreService.CompleteStepUp:output_type -> controlplane.v1.CompleteStepUpResponse
+	21, // [21:29] is the sub-list for method output_type
+	13, // [13:21] is the sub-list for method input_type
+	13, // [13:13] is the sub-list for extension type_name
+	13, // [13:13] is the sub-list for extension extendee
+	0,  // [0:13] is the sub-list for field type_name
 }
 
 func init() { file_services_secret_store_v1_secret_store_proto_init() }
@@ -1205,19 +1341,20 @@ func file_services_secret_store_v1_secret_store_proto_init() {
 	if File_services_secret_store_v1_secret_store_proto != nil {
 		return
 	}
-	file_services_secret_store_v1_secret_store_proto_msgTypes[6].OneofWrappers = []any{}
+	file_services_secret_store_v1_secret_store_proto_msgTypes[7].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_services_secret_store_v1_secret_store_proto_rawDesc), len(file_services_secret_store_v1_secret_store_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   18,
+			NumEnums:      1,
+			NumMessages:   19,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_services_secret_store_v1_secret_store_proto_goTypes,
 		DependencyIndexes: file_services_secret_store_v1_secret_store_proto_depIdxs,
+		EnumInfos:         file_services_secret_store_v1_secret_store_proto_enumTypes,
 		MessageInfos:      file_services_secret_store_v1_secret_store_proto_msgTypes,
 	}.Build()
 	File_services_secret_store_v1_secret_store_proto = out.File

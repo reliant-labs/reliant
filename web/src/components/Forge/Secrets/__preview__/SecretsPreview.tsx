@@ -25,10 +25,13 @@ import { useState } from "react";
 import type { ForgeSecretsReport } from "@/services/forge/secrets";
 import type { ManagedSecretSummary, ManagedSecretVersion } from "@/services/forge/secretStore";
 import type { SecretSurfaceMode } from "@/services/forge/secretSurface";
+import type { StepUpState } from "@/services/forge/stepUp";
 
 import { ConsolePreviewShell } from "../../Console/ConsolePreviewShell";
 import { ManagedSecretsView } from "../ManagedSecretsView";
 import { SetSecretModal } from "../SetSecretModal";
+import { StepUpDialog } from "../StepUpDialog";
+import type { StepUpGate } from "../useStepUpGate";
 
 const SCHEMES = [
   "professional-blue",
@@ -82,11 +85,59 @@ const POPULATED: ManagedSecretSummary[] = [
 ];
 
 const VERSIONS: ManagedSecretVersion[] = [
-  { version: 7, createdAt: "2026-03-02T16:40:00Z", destroyed: false },
-  { version: 6, createdAt: "2026-02-11T11:05:00Z", deletedAt: "2026-02-20T08:00:00Z", destroyed: false },
-  { version: 5, createdAt: "2026-01-30T14:22:00Z", destroyed: true },
-  { version: 4, createdAt: "2026-01-14T09:12:00Z", destroyed: true },
+  { version: 7, createdAt: "2026-03-02T16:40:00Z", destroyed: false, setBy: { kind: "user", email: "alice@acme.dev" } },
+  {
+    version: 6,
+    createdAt: "2026-02-11T11:05:00Z",
+    deletedAt: "2026-02-20T08:00:00Z",
+    destroyed: false,
+    setBy: { kind: "token" },
+  },
+  { version: 5, createdAt: "2026-01-30T14:22:00Z", destroyed: true, setBy: { kind: "platform" } },
+  { version: 4, createdAt: "2026-01-14T09:12:00Z", destroyed: true, setBy: null },
 ];
+
+/** Every step-up phase, as a fixed state the dialog renders. */
+const STEP_UP_NOW = Date.parse("2026-03-02T16:40:00Z");
+const SENT_CODE = {
+  sentTo: "a***@acme.dev",
+  expiresAt: STEP_UP_NOW + 9 * 60_000 + 41_000,
+  sentAt: STEP_UP_NOW - 18_000,
+  attempts: 0,
+};
+const STEP_UP_CASES: Record<string, StepUpState> = {
+  intro: { phase: "intro", notice: null },
+  "send-failed": { phase: "intro", notice: "send-failed" },
+  sending: { phase: "sending", code: null },
+  entering: { phase: "entering", code: SENT_CODE, notice: null },
+  invalid: { phase: "entering", code: { ...SENT_CODE, attempts: 2 }, notice: "invalid" },
+  "rate-limited": {
+    phase: "entering",
+    code: { sentTo: null, expiresAt: null, sentAt: STEP_UP_NOW - 5_000, attempts: 0 },
+    notice: "rate-limited",
+  },
+  verifying: { phase: "verifying", code: SENT_CODE },
+  exhausted: { phase: "exhausted", code: { ...SENT_CODE, attempts: 5 } },
+  expired: { phase: "expired", code: { ...SENT_CODE, sentAt: STEP_UP_NOW - 11 * 60_000 } },
+  retrying: { phase: "retrying", validUntil: STEP_UP_NOW + 15 * 60_000 },
+  unavailable: { phase: "failed", reason: "unavailable" },
+  forbidden: { phase: "failed", reason: "forbidden" },
+};
+
+function staticGate(state: StepUpState, close: () => void): StepUpGate {
+  return {
+    state,
+    isOpen: true,
+    hasPendingWrite: true,
+    grantUntil: null,
+    now: STEP_UP_NOW,
+    run: (write) => write(),
+    unlock: () => undefined,
+    send: () => undefined,
+    submit: () => undefined,
+    cancel: close,
+  };
+}
 
 interface Case {
   id: string;
@@ -95,6 +146,8 @@ interface Case {
   report: ForgeSecretsReport | null;
   managed: ManagedSecretSummary[];
   availability: "available" | "not-configured" | "no-control-plane" | "unreachable";
+  envKind?: string;
+  protection?: { protected: boolean; stepUpValidUntil?: string; localGrantUntil: number | null };
 }
 
 const CASES: Case[] = [
@@ -105,6 +158,26 @@ const CASES: Case[] = [
     report: declared("none", ["ANTHROPIC_API_KEY", "DATABASE_URL", "STRIPE_SECRET_KEY", "NEVER_SET"]),
     managed: POPULATED,
     availability: "available",
+  },
+  {
+    id: "protected-locked",
+    label: "self-managed, protected — no step-up held",
+    mode: "managed",
+    report: declared("hosted", ["ANTHROPIC_API_KEY", "DATABASE_URL", "STRIPE_SECRET_KEY", "NEVER_SET"]),
+    managed: POPULATED,
+    availability: "available",
+    envKind: "self_managed",
+    protection: { protected: true, localGrantUntil: null },
+  },
+  {
+    id: "protected-unlocked",
+    label: "self-managed, protected — step-up held (countdown)",
+    mode: "managed",
+    report: declared("hosted", ["ANTHROPIC_API_KEY", "DATABASE_URL", "STRIPE_SECRET_KEY"]),
+    managed: POPULATED,
+    availability: "available",
+    envKind: "self_managed",
+    protection: { protected: true, localGrantUntil: null },
   },
   {
     id: "managed-empty",
@@ -174,6 +247,9 @@ export default function SecretsPreview() {
   const [caseId, setCaseId] = useState<string>(CASES[0].id);
   const [selected, setSelected] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
+  const [stepUpCase, setStepUpCase] = useState<string>("");
+  // The unlocked case's grant is fixed at first render, so its countdown runs.
+  const [grantUntil] = useState(() => Date.now() + 14 * 60_000 + 32_000);
 
   const active = CASES.find((c) => c.id === caseId) ?? CASES[0];
 
@@ -238,6 +314,19 @@ export default function SecretsPreview() {
         >
           {dark ? "Dark" : "Light"}
         </button>
+        <select
+          data-testid="preview-step-up"
+          value={stepUpCase}
+          onChange={(e) => setStepUpCase(e.target.value)}
+          className="rounded-md border border-border bg-card px-2 py-1 text-sm text-foreground"
+        >
+          <option value="">step-up: closed</option>
+          {Object.keys(STEP_UP_CASES).map((id) => (
+            <option key={id} value={id}>
+              step-up: {id}
+            </option>
+          ))}
+        </select>
         <button
           type="button"
           data-testid="preview-modal"
@@ -267,7 +356,22 @@ export default function SecretsPreview() {
           onUndelete={() => undefined}
           onDestroy={() => undefined}
           pendingVersion={null}
+          envKind={active.envKind}
+          protection={
+            active.id === "protected-unlocked" && active.protection
+              ? { ...active.protection, localGrantUntil: grantUntil }
+              : active.protection
+          }
+          onUnlock={() => setStepUpCase("intro")}
         />
+
+        {STEP_UP_CASES[stepUpCase] && (
+          <StepUpDialog
+            open
+            env="prod"
+            gate={staticGate(STEP_UP_CASES[stepUpCase], () => setStepUpCase(""))}
+          />
+        )}
 
         <SetSecretModal
           open={modalOpen}
