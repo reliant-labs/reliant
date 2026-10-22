@@ -751,7 +751,10 @@ type Repository interface {
 	// DB: 288 threads stranded this way (see
 	// dev-docs/incidents/2026-08-12-spawn-history-cap.md), which also makes their
 	// own orphaned mailboxes invisible to ListThreadsWithOrphanedAgentMessages
-	// (it only matches threads already in a terminal status).
+	// (it only matches threads already in a terminal status). A subtree that
+	// completed or was cancelled has its pending questions closed with its
+	// threads (question_close.go), as UpdateThreadStatus and
+	// ReapOrphanedThreads do for the same statuses.
 	CascadeTerminalStatusToThreadSubtree(ctx context.Context, workflowID string, reason WorkflowStopReason) error
 	// ReapOrphanedThreads ends every running/paused thread whose workflow is
 	// already terminal, at the workflow's own status, and returns the rows it

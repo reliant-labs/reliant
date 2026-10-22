@@ -3297,7 +3297,15 @@ func (r *Repo) UpdateThreadStatus(ctx context.Context, threadID string, status T
 	if threadID == "" {
 		return nil, fmt.Errorf("thread ID cannot be empty")
 	}
-	return store.UpdateThreadStatus(ctx, r.ORM(), threadID, status, completedAt)
+	updated, err := store.UpdateThreadStatus(ctx, r.ORM(), threadID, status, completedAt)
+	if err != nil || !threadEndClosesQuestions(status) {
+		return updated, err
+	}
+	// A thread that finished has no pending question (question_close.go).
+	if err := r.closePendingQuestionsOfThreads(ctx, threadID); err != nil {
+		return updated, err
+	}
+	return updated, nil
 }
 
 // ReviveThread moves a terminal thread back to running because a new run has
@@ -3327,14 +3335,40 @@ func (r *Repo) CascadeTerminalStatusToThreadSubtree(ctx context.Context, workflo
 	if !terminal {
 		return nil
 	}
-	return store.CascadeTerminalStatusToThreadSubtree(ctx, r.ORM(), workflowID, threadStatus)
+	if err := store.CascadeTerminalStatusToThreadSubtree(ctx, r.ORM(), workflowID, threadStatus); err != nil {
+		return err
+	}
+	// A subtree that finished closes its questions with its threads
+	// (question_close.go).
+	if !threadEndClosesQuestions(threadStatus) {
+		return nil
+	}
+	if _, err := r.closePendingQuestionsInWorkflowSubtree(ctx, workflowID); err != nil {
+		return err
+	}
+	return nil
 }
 
 // ReapOrphanedThreads ends running/paused threads whose workflow is already
 // terminal, at the workflow's own status, returning the rows repaired. See
 // the Repository interface for why the backstop is needed.
 func (r *Repo) ReapOrphanedThreads(ctx context.Context) ([]ReapedThread, error) {
-	return store.ReapOrphanedThreads(ctx, r.ORM())
+	reaped, err := store.ReapOrphanedThreads(ctx, r.ORM())
+	if err != nil || len(reaped) == 0 {
+		return reaped, err
+	}
+	// A reaped thread that finished closes its questions with it
+	// (question_close.go).
+	var threadIDs []string
+	for _, t := range reaped {
+		if threadEndClosesQuestions(t.Status) {
+			threadIDs = append(threadIDs, t.ThreadID)
+		}
+	}
+	if err := r.closePendingQuestionsOfThreads(ctx, threadIDs...); err != nil {
+		return reaped, err
+	}
+	return reaped, nil
 }
 
 func (r *Repo) ListThreadsByOrigin(ctx context.Context, conversationID string, origin ThreadOrigin) ([]*Thread, error) {
