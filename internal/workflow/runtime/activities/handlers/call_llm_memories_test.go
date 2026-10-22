@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/reliant-labs/reliant/internal/config"
@@ -138,4 +139,16 @@ func TestGetSystemPrompts_StatesWorkingDirectoryAsTheProjectRoot(t *testing.T) {
 		require.Contains(t, prompt, "/srv/worktrees/feature-x",
 			"a chat bound to a worktree works in the worktree, and the prompt must name that path")
 	})
+}
+
+func TestSystemPrompt_TellsAgentsToKeepScratchOutsideTheWorkspaceRoot(t *testing.T) {
+	activity := &CallLLMActivity{}
+	with := activity.getSystemPrompts(nil, "/tmp/project", "", nil, nil, nil, true)[0]
+	if !strings.Contains(with, "Keep scratch files") || !strings.Contains(with, "outside this directory") {
+		t.Fatalf("the prompt must steer scratch away from the workspace root:\n%s", with)
+	}
+	none := activity.getSystemPrompts(nil, "", "", nil, nil, nil, true)[0]
+	if strings.Contains(none, "Keep scratch files") {
+		t.Fatal("with no working directory there is no root to keep scratch out of")
+	}
 }

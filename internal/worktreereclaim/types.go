@@ -199,7 +199,11 @@ type Result struct {
 	// the workspace root; StrippedBytes is at least what that freed.
 	Stripped      []string `json:"stripped,omitempty"`
 	StrippedBytes int64    `json:"stripped_bytes,omitempty"`
-	Error         string   `json:"error,omitempty"`
+	// ReclaimedTo is the directory the files that sat loose at the workspace
+	// root (outside every checkout) were saved to before the workspace was
+	// removed; empty when there were none.
+	ReclaimedTo string `json:"reclaimed_to,omitempty"`
+	Error       string `json:"error,omitempty"`
 }
 
 // Request is the payload of worktree.reconcile and worktree.snapshot_remove.
