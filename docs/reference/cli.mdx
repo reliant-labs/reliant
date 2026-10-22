@@ -192,6 +192,8 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge obs alerts`](#reliant-forge-obs-alerts) | Alert rules declared for an environment |
 | [`reliant forge obs alerts check`](#reliant-forge-obs-alerts-check) | Evaluate the env's alert rules against the local ClickStack and print what would fire |
 | [`reliant forge obs alerts run`](#reliant-forge-obs-alerts-run) | Evaluate the env's alert rules continuously and deliver what fires through the local Alertmanager |
+| [`reliant forge obs changes`](#reliant-forge-obs-changes) | What changed? Promotions, rollbacks, failed deploys and activity, newest first |
+| [`reliant forge obs check`](#reliant-forge-obs-check) | Did the deploy work? Judge a release by the window after it against the window before |
 | [`reliant forge obs dashboards`](#reliant-forge-obs-dashboards) | Work with the dashboards a release carries |
 | [`reliant forge obs dashboards check`](#reliant-forge-obs-dashboards-check) | Validate the dashboards a release bundle would carry |
 | [`reliant forge obs endpoints`](#reliant-forge-obs-endpoints) | The slowest or most failing endpoints |
@@ -6123,9 +6125,12 @@ untouched: the value internal/app/compose.go hands the field still satisfies
 the narrower interface, structurally. Its mock is written beside it
 (mock_gen.go), and `forge generate` keeps it in step.
 
-A field whose value the package passes on is left alone (what it needs is not
-all visible here), as is one it never calls (delete it) and an interface the
-package already declares (edit that one).
+A field the package passes on as an interface — a parameter, a struct field —
+needs that interface's methods too: the new interface embeds it, so every call
+that passes the value on still type-checks. A field whose value also leaves as
+`any`, a concrete type or a return value is left alone (what it needs is
+not all visible here), as is one it never uses (delete it) and an interface
+the package already declares (edit that one).
 
 ```
 reliant forge fix narrow-deps <package-dir>
@@ -7103,6 +7108,8 @@ reliant forge obs
 | Command | Description |
 |---------|-------------|
 | [`alerts`](#reliant-forge-obs-alerts) | Alert rules declared for an environment |
+| [`changes`](#reliant-forge-obs-changes) | What changed? Promotions, rollbacks, failed deploys and activity, newest first |
+| [`check`](#reliant-forge-obs-check) | Did the deploy work? Judge a release by the window after it against the window before |
 | [`dashboards`](#reliant-forge-obs-dashboards) | Work with the dashboards a release carries |
 | [`endpoints`](#reliant-forge-obs-endpoints) | The slowest or most failing endpoints |
 | [`issue`](#reliant-forge-obs-issue) | Everything needed to fix one issue; resolve, ignore and unresolve triage it |
@@ -7207,6 +7214,167 @@ reliant forge obs alerts run [flags]
 | `--listen` | `string` | - | address of the in-app sink the local Alertmanager delivers to, host:port (required). It must be reachable from the Alertmanager container, so not 127.0.0.1 |
 | `--max-rows` | `int` | `200` | a rule returning more rows than this fails its evaluation |
 | `--timeout` | `duration` | `20s` | per-rule query timeout |
+
+---
+
+#### reliant forge obs changes
+
+What changed? Promotions, rollbacks, failed deploys and activity, newest first
+
+List what changed in [env] (default dev) over --since (default 2h): releases
+promoted or rolled back, deploys that failed, and the activity feed (restarts,
+secret rotations, triage). Locally it is this machine's ledger: promotions,
+failed applies and the times the dev stack started.
+
+  cli forge obs changes prod --since 6h
+  cli forge obs changes dev --json
+
+JSON schema forge.obs.changes/v1. --fields takes dotted paths of:
+  changes
+  changes.actor
+  changes.at
+  changes.direction
+  changes.kind
+  changes.promotion_id
+  changes.summary
+  changes.target
+  changes.verb
+  changes.version
+  changes.via
+  query_mode
+  scope
+  scope.backend
+  scope.env
+  scope.env_id
+  scope.from
+  scope.to
+  suggested
+  warnings
+Always kept: schema, ok, exit_code, error, truncated, omitted, next_page_token.
+
+```
+reliant forge obs changes [env] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
+| `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
+| `--from` | `string` | - | range start, RFC 3339 |
+| `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
+| `--limit` | `int` | `50` | most items to return |
+| `--since` | `duration` | `2h0m0s` | how far back to read (ignored with --from) |
+| `--to` | `string` | - | range end, RFC 3339 (default now) |
+
+---
+
+#### reliant forge obs check
+
+Did the deploy work? Judge a release by the window after it against the window before
+
+Judge one promotion of [env] (default dev): compare the [P, P+window) after it
+with the [P-window, P) before it, per service, over weighted server spans, and
+list what the release opened: new and regressed issues, alerts still firing,
+workload restarts. The verdict is PASS, FAIL or INCONCLUSIVE. Each window
+stops at the neighbouring promotion; the after window also stops at now.
+
+  cli forge obs check prod --wait --json
+  cli forge obs check prod --release v1.4.2 --window 30m
+  cli forge obs check prod --fail-on error_rate,new_issue --threshold min_requests=20
+  cli forge obs check prod --wait --gate-json check.json && cli forge gate record prod --from check.json
+  cli forge obs check dev --since 20m          # local: no promotions, P is --since
+
+Exit status:
+  0  PASS (also INCONCLUSIVE with --allow-inconclusive)
+  1  FAIL: we looked, and the release made things worse
+  2  INCONCLUSIVE, or we could not look (control plane unreachable, auth
+     refused, telemetry off). Both mean "not proven good"; a gate must not
+     read either as a pass.
+  8  --wait ran out before the after window finished
+
+Thresholds come from the env's release_health declaration (KCL); --threshold
+name=value overrides one for this call (max_error_rate_increase, max_p95_ratio, min_requests, new_issue_min_events).
+The document says where each effective threshold came from: release_shape,
+default or request.
+
+JSON schema forge.obs.check/v1. --fields takes dotted paths of:
+  findings
+  findings.code
+  findings.message
+  findings.policy
+  findings.ref
+  findings.service
+  findings.threshold
+  findings.value
+  firing_alerts
+  new_issues
+  not_evaluated
+  query_mode
+  reason
+  regressed_issues
+  scope
+  scope.backend
+  scope.env
+  scope.env_id
+  scope.from
+  scope.to
+  services
+  services.after
+  services.before
+  services.service
+  services.version_share
+  statements
+  statements.params.*
+  statements.purpose
+  statements.sql
+  subject
+  subject.git_commit
+  subject.previous_release
+  subject.promoted_at
+  subject.promotion_id
+  subject.release
+  suggested
+  thresholds
+  thresholds.name
+  thresholds.source
+  thresholds.value
+  verdict
+  waited
+  windows
+  windows.after
+  windows.after.from
+  windows.after.to
+  windows.after_complete
+  windows.before
+  windows.before.from
+  windows.before.to
+  workload_findings
+Always kept: schema, ok, exit_code, error, truncated, omitted, next_page_token.
+
+```
+reliant forge obs check [env] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-inconclusive` | `bool` | - | exit 0 on INCONCLUSIVE instead of 2 |
+| `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
+| `--explain` | `bool` | - | local env only: print the compiled statements instead of running them |
+| `--fail-on` | `string` | - | comma-separated finding codes that fail the release (default: the env's release_health.fail_on): error_rate, latency, new_issue, regressed_issue, alert_firing, workload_restarts |
+| `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
+| `--gate-json` | `string` | - | also write the verdict to `FILE` as a gate document, for `cli forge gate record --from FILE` |
+| `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
+| `--promotion` | `string` | - | judge this promotion id |
+| `--release` | `string` | - | judge the promotion of this release version (default: the env's current one) |
+| `--since` | `string` | - | local env only: when the release started, as a duration ago (20m) or an RFC 3339 time (default: the start of the last env up) |
+| `--threshold` | `stringArray` | `[]` | override one threshold for this call, name=value (repeatable) |
+| `--timeout` | `duration` | `30m0s` | with --wait: give up (exit 8) after this long |
+| `--wait` | `bool` | - | poll until the after window has finished |
+| `--window` | `duration` | `0s` | width of each window (default: the env's release_health.window, 15m; max 6h) |
 
 ---
 
@@ -8241,6 +8409,11 @@ JSON schema forge.obs.trace/v1. --fields takes dotted paths of:
   logs_truncated
   orphans
   query_mode
+  release
+  release.promoted_at
+  release.promotion_id
+  release.unsettled
+  release.version
   scope
   scope.backend
   scope.env
