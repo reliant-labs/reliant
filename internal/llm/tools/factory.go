@@ -665,27 +665,27 @@ func (f *ToolsFactory) ListAvailableTools() []string {
 // AskUser returns the ask_user schema-only tool.
 // The ask_user tool lets the LLM ask the user questions. Execution is intercepted
 // by the workflow runtime's splitProtoToolCalls → executeAskUserInline, not by
-// the normal tool execution path. With async: true the question is posted
-// without waiting and the answer arrives later as a user message
-// (research/ASYNC_ASK_USER.md).
+// the normal tool execution path. By default the question is posted without
+// waiting and the answer arrives later as a user message; blocking: true stops
+// and waits for it (research/ASYNC_ASK_USER.md).
 func (f *ToolsFactory) AskUser() Tool {
 	return NewSchemaOnlyTool(
 		ToolAskUser,
-		`Ask the user one or more questions. By default you stop and wait for their responses. Use this when you need to:
+		`Ask the user one or more questions. By default the question is posted to the user (in the chat and their inbox) and the tool returns at once: you keep working. Use this when you want to:
 1. Clarify ambiguous instructions
 2. Get user preferences or decisions
 3. Offer choices about implementation direction
 4. Confirm before taking significant actions
 
-Blocking (default) vs async:
-- Blocking: use when you cannot sensibly proceed without the answer — the instructions are ambiguous in a way that changes the work, or the next action is significant or hard to undo.
-- async: true: use when you can proceed on a reasonable default and the answer would only refine the work — an FYI, a preference, or a decision where you will go with your recommended option unless told otherwise. The question is posted to the user (in the chat and their inbox) and the tool returns at once; keep working on your default. If the user answers, the answer arrives later as a message from the user; adjust then. Do not ask the same question again while waiting.
+Default (async) — the norm: proceed on a sensible default, usually the option you recommend, and say in the question which one you are going with. If the user answers, the answer arrives later as a message from the user; adjust your work then if it changes anything. Do not wait for it and do not ask the same question again. If your work makes a question moot before it is answered, withdraw it (withdraw_question) so it leaves the user's inbox.
 
-Before asking, call list_pending_questions if you may have asked already: do not ask a question that is still pending. Before finishing, withdraw async questions your default made moot (withdraw_question).
+blocking: true — the exception: stop and wait for the answer. Use it only when you truly cannot make progress without it — every reasonable default would be wrong or wasted work, or the next action is significant or hard to undo and needs the user's go-ahead first.
+
+Before asking, call list_pending_questions if you may have asked already: do not ask a question that is still pending. Before finishing, withdraw questions your default made moot.
 
 Usage notes:
 - The user will always have an option to provide freetext input in addition to any predefined options.
-- If you recommend a specific option, list it first and add "(Recommended)" to the label. With async: true, say in the question which option you are proceeding with.
+- If you recommend a specific option, list it first and add "(Recommended)" to the label.
 - Use allow_multiple: true when choices are not mutually exclusive.
 - Group related questions in a single call (up to 4 questions).`,
 		map[string]interface{}{
@@ -738,9 +738,9 @@ Usage notes:
 						"additionalProperties": false,
 					},
 				},
-				"async": map[string]interface{}{
+				"blocking": map[string]interface{}{
 					"type":        "boolean",
-					"description": "If true, post the questions without waiting: the tool returns at once and you keep working on your best default; the user's answer, if any, arrives later as a message. Default is false (stop and wait for the answer).",
+					"description": "If true, stop and wait for the user's answer before continuing. Only when you cannot make progress without it. Default is false: the questions are posted, the tool returns at once, you keep working on your best default, and the user's answer, if any, arrives later as a message.",
 					"default":     false,
 				},
 			},

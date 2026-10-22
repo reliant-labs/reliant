@@ -20,7 +20,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/workflow/threadwake"
 )
 
-// An async question (ask_user async: true) has no wait behind it: the thread
+// An async question (ask_user without blocking: true) has no wait behind it: the thread
 // that asked carried on. Its answer is delivered the way a message the user
 // types to that thread is — through the chat service's own send paths, so it
 // queues for a working thread (whose next call_llm drains it), rings the

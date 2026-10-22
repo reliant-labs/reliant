@@ -1112,6 +1112,7 @@ function ChatMessageComponent({
                       chatId={chatId || undefined}
                       toolCallId={exec.call.id}
                       input={exec.call.input}
+                      finished={exec.result !== undefined}
                     />
                   ));
                 const userCards = [...machineRequestCards, ...asyncQuestionCards];

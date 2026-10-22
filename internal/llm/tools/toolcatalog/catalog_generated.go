@@ -25,7 +25,7 @@ var generatedToolParams = map[string]ToolParams{
 	},
 	"ask_user": {
 		Bindable: map[string]struct{}{
-			"async":     {},
+			"blocking":  {},
 			"questions": {},
 		},
 		Unbindable: map[string]string{},

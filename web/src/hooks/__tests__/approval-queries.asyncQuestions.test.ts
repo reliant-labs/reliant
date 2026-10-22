@@ -6,7 +6,7 @@ import { applyQuestionUpdate, questionKeys } from "../approval-queries";
 
 // The chat stream's question events: a blocking question lands in the pending
 // list the composer and the background-work pill read; an async one
-// (ask_user async: true) lands only in the timeline's async list, so it can
+// (ask_user without blocking: true) lands only in the timeline's async list, so it can
 // never take over the composer.
 
 function event(id: string, status: "pending" | "resolved", async: boolean): QuestionUpdate {

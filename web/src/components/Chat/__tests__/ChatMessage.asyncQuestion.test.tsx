@@ -1,10 +1,10 @@
 /**
- * An async ask_user (input async: true) renders in the transcript as its own
+ * An async ask_user (the default: no blocking: true) renders in the transcript as its own
  * answerable card, outside the tool rows; a blocking one renders nowhere in
  * the transcript — the composer answers it (research/ASYNC_ASK_USER.md).
  */
 
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ChatMessage } from "../ChatMessage";
@@ -91,7 +91,7 @@ function renderMessage(message: Message) {
 
 describe("ask_user in the transcript", () => {
   it("renders an async question as an answerable card, outside the tool rows", async () => {
-    renderMessage(assistantAsking("call-async", { async: true, questions }));
+    renderMessage(assistantAsking("call-async", { questions }));
 
     const card = await screen.findByTestId("async-question-card");
     expect(card).toHaveTextContent("Question for you · not blocking");
@@ -100,9 +100,17 @@ describe("ask_user in the transcript", () => {
   });
 
   it("leaves a blocking question out of the transcript", () => {
-    renderMessage(assistantAsking("call-blocking", { questions }));
+    renderMessage(assistantAsking("call-blocking", { blocking: true, questions }));
 
     expect(screen.queryByTestId("async-question-card")).toBeNull();
     expect(screen.queryByText("Which database?")).toBeNull();
+  });
+
+  // Recorded before async became the default: no flag, yet it blocked, so it
+  // finished with no async question row.
+  it("shows no card for a finished call without an async question", async () => {
+    renderMessage(assistantAsking("call-old-blocking", { questions }));
+
+    await waitFor(() => expect(screen.queryByTestId("async-question-card")).toBeNull());
   });
 });

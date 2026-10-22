@@ -16,7 +16,7 @@ export interface QuestionInfo {
   created_at: string;
   metadata?: string;
   /**
-   * Asked without waiting (ask_user async: true): the thread carried on, and
+   * Asked without waiting (ask_user without blocking: true): the thread carried on, and
    * an answer reaches it later as a message from the user. Never the chat's
    * or a thread's pending gate — it renders as a card in the timeline.
    */

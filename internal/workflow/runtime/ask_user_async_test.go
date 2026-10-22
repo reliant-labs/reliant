@@ -18,14 +18,17 @@ import (
 	"github.com/reliant-labs/reliant/internal/workflow/threadwake"
 )
 
-// An async ask_user (input async: true) posts its question and returns at
-// once: the agent's loop goes on with no wait on the answer, and the answer —
+// An async ask_user — the default, any call without blocking: true — posts
+// its question and returns at once: the agent's loop goes on with no wait on the answer, and the answer —
 // delivered later by the question service as a message from the user — is
 // read from the thread's mailbox at a later turn, like any message the user
 // sends it. research/ASYNC_ASK_USER.md.
 
-const asyncAskUserInput = `{"async":true,"questions":[{"question":"Which database?",` +
-	`"options":[{"label":"Postgres (Recommended)","description":"d"},{"label":"SQLite","description":"d"}]}]}`
+const askUserQuestionsJSON = `"questions":[{"question":"Which database?",` +
+	`"options":[{"label":"Postgres (Recommended)","description":"d"},{"label":"SQLite","description":"d"}]}]`
+
+// asyncAskUserInput asks the default way: no flag.
+const asyncAskUserInput = `{` + askUserQuestionsJSON + `}`
 
 func asyncAskUserToolCall(id string) map[string]interface{} {
 	return map[string]interface{}{"id": id, "name": "ask_user", "input": asyncAskUserInput}
@@ -113,18 +116,6 @@ func TestAskUserAsync_ReturnsAtOnceAndTheAnswerArrivesAsAMessage(t *testing.T) {
 	assert.Empty(t, queued)
 }
 
-// asyncAskUserWaitWorkflow is one async ask_user call, outside the agent loop.
-func asyncAskUserWaitWorkflow(ctx workflow.Context) (map[string]interface{}, error) {
-	tracker := &ChildWorkflowTracker{children: make(map[string]bool)}
-	setupThreadWakeHandler(ctx, tracker, "wf-ask-user-async")
-	interrupts := NewThreadInterruptCoordinator(ctx, "wf-ask-user-async")
-	call := &reliantv1.ToolCallMsg{Id: "call_async", Name: "ask_user", Input: asyncAskUserInput}
-	return executeAskUserInline(ctx, call, "chat-ask-user-async", "wf-ask-user-async", "thread-async",
-		"tools", "", 0, false,
-		askUserThreadInput{tracker: tracker, interrupt: interrupts.ForThread("thread-async")},
-		workflow.GetLogger(ctx)), nil
-}
-
 func TestAskUserAsync_ToolResultTellsTheModelToCarryOn(t *testing.T) {
 	t.Parallel()
 	var suite temporaltest.WorkflowTestSuite
@@ -132,7 +123,7 @@ func TestAskUserAsync_ToolResultTellsTheModelToCarryOn(t *testing.T) {
 	var questions questionActivities
 	questions.register(env)
 
-	env.ExecuteWorkflow(asyncAskUserWaitWorkflow)
+	env.ExecuteWorkflow(askUserOnceWorkflow, asyncAskUserInput)
 
 	require.True(t, env.IsWorkflowCompleted())
 	require.NoError(t, env.GetWorkflowError())
@@ -144,44 +135,97 @@ func TestAskUserAsync_ToolResultTellsTheModelToCarryOn(t *testing.T) {
 	assert.Empty(t, questions.resolved)
 }
 
-// A history recorded before the option existed, in which a model passed
-// async: true anyway, replays the blocking wait it took then: the GetVersion
-// it reaches has no marker, so it answers DefaultVersion.
-func TestAskUserAsync_AnOlderHistoryReplaysTheBlockingWait(t *testing.T) {
-	t.Parallel()
-	var suite temporaltest.WorkflowTestSuite
-	env := suite.NewTestWorkflowEnvironment()
-	env.OnGetVersion(askUserAsyncVersionID("call_async"), workflow.DefaultVersion, askUserAsyncVersion).Return(workflow.DefaultVersion)
-	var questions questionActivities
-	questions.register(env)
-
-	env.ExecuteWorkflow(asyncAskUserWaitWorkflow)
-
-	require.True(t, env.IsWorkflowCompleted())
-	require.NoError(t, env.GetWorkflowError())
-	var result map[string]interface{}
-	require.NoError(t, env.GetWorkflowResult(&result))
-	assert.Equal(t, "The user did not respond in time.", result["content"], "the blocking path waits until its timeout")
-	require.Len(t, questions.created, 1)
-	assert.Nil(t, questions.created[0]["async"], "the blocking path records a blocking question")
-	assert.Len(t, questions.resolved, 1)
+// askUserOnceWorkflow is one ask_user call with the given input, outside the
+// agent loop.
+func askUserOnceWorkflow(ctx workflow.Context, input string) (map[string]interface{}, error) {
+	tracker := &ChildWorkflowTracker{children: make(map[string]bool)}
+	setupThreadWakeHandler(ctx, tracker, "wf-ask-user-async")
+	interrupts := NewThreadInterruptCoordinator(ctx, "wf-ask-user-async")
+	call := &reliantv1.ToolCallMsg{Id: "call_async", Name: "ask_user", Input: input}
+	return executeAskUserInline(ctx, call, "chat-ask-user-async", "wf-ask-user-async", "thread-async",
+		"tools", "", 0, false,
+		askUserThreadInput{tracker: tracker, interrupt: interrupts.ForThread("thread-async")},
+		workflow.GetLogger(ctx)), nil
 }
 
-func TestAskUserInputAsync(t *testing.T) {
+// The rule per recorded version (askUserIsAsync): a history replays the path
+// its marker names, so the default can move without rewriting one.
+//   - no marker (DefaultVersion): recorded before the async option, or by the
+//     opt-in build for a call without async: true — every call blocked;
+//   - askUserAsyncOptIn: the opt-in build's async: true;
+//   - askUserAsyncByDefault: what a new execution records.
+func TestAskUser_PathFollowsTheRecordedVersion(t *testing.T) {
+	t.Parallel()
+	const (
+		noFlag   = `{` + askUserQuestionsJSON + `}`
+		optIn    = `{"async":true,` + askUserQuestionsJSON + `}`
+		blocking = `{"blocking":true,` + askUserQuestionsJSON + `}`
+		quoted   = `{"blocking":"true",` + askUserQuestionsJSON + `}`
+	)
+	recorded := func(v workflow.Version) *workflow.Version { return &v }
+	for _, tc := range []struct {
+		name     string
+		recorded *workflow.Version // the history's version; nil: a new execution
+		input    string
+		async    bool
+	}{
+		{"new execution, no flag: async", nil, noFlag, true},
+		{"new execution, blocking: true", nil, blocking, false},
+		{"new execution, quoted blocking", nil, quoted, false},
+		{"new execution, a stray async: true is async anyway", nil, optIn, true},
+		{"no marker, no flag: the wait it took", recorded(workflow.DefaultVersion), noFlag, false},
+		{"no marker, async: true before the option existed", recorded(workflow.DefaultVersion), optIn, false},
+		{"opt-in build, no flag: blocked", recorded(askUserAsyncOptIn), noFlag, false},
+		{"opt-in build, async: true", recorded(askUserAsyncOptIn), optIn, true},
+		{"by-default build, no flag", recorded(askUserAsyncByDefault), noFlag, true},
+		{"by-default build, blocking: true", recorded(askUserAsyncByDefault), blocking, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var suite temporaltest.WorkflowTestSuite
+			env := suite.NewTestWorkflowEnvironment()
+			if tc.recorded != nil {
+				env.OnGetVersion(askUserAsyncVersionID("call_async"), workflow.DefaultVersion, askUserAsyncByDefault).Return(*tc.recorded)
+			}
+			var questions questionActivities
+			questions.register(env)
+
+			env.ExecuteWorkflow(askUserOnceWorkflow, tc.input)
+
+			require.True(t, env.IsWorkflowCompleted())
+			require.NoError(t, env.GetWorkflowError())
+			var result map[string]interface{}
+			require.NoError(t, env.GetWorkflowResult(&result))
+			require.Len(t, questions.created, 1)
+			if tc.async {
+				assert.Equal(t, asyncAskUserResponse("q-async"), result["content"])
+				assert.Equal(t, true, questions.created[0]["async"], "an async question is recorded as async")
+				assert.Empty(t, questions.resolved, "nothing waits on an async question")
+				return
+			}
+			assert.Equal(t, "The user did not respond in time.", result["content"], "the blocking path waits until its timeout")
+			assert.Nil(t, questions.created[0]["async"], "the blocking path records a blocking question")
+			assert.Len(t, questions.resolved, 1)
+		})
+	}
+}
+
+func TestAskUserInputFlag(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
 		input map[string]interface{}
 		want  bool
 	}{
-		{map[string]interface{}{"async": true}, true},
-		{map[string]interface{}{"async": "true"}, true},
-		{map[string]interface{}{"async": " TRUE "}, true},
-		{map[string]interface{}{"async": false}, false},
-		{map[string]interface{}{"async": "no"}, false},
+		{map[string]interface{}{"blocking": true}, true},
+		{map[string]interface{}{"blocking": "true"}, true},
+		{map[string]interface{}{"blocking": " TRUE "}, true},
+		{map[string]interface{}{"blocking": false}, false},
+		{map[string]interface{}{"blocking": "no"}, false},
+		{map[string]interface{}{"async": true}, false},
 		{map[string]interface{}{}, false},
 		{nil, false},
 	} {
-		assert.Equal(t, tc.want, askUserInputAsync(tc.input), "%#v", tc.input)
+		assert.Equal(t, tc.want, askUserInputFlag(tc.input, "blocking"), "%#v", tc.input)
 	}
 }
 
@@ -201,7 +245,7 @@ func TestAskUserAsync_AnswerToAnotherQuestionLeavesABlockingWaitParked(t *testin
 	e.script = []scriptedToolCallsResponse{
 		{toolCalls: []map[string]interface{}{{
 			"id": "call_b", "name": "ask_user",
-			"input": `{"questions":[{"question":"Drop the old table?","options":[{"label":"Yes","description":"d"},{"label":"No","description":"d"}]}]}`,
+			"input": `{"blocking":true,"questions":[{"question":"Drop the old table?","options":[{"label":"Yes","description":"d"},{"label":"No","description":"d"}]}]}`,
 		}}},
 	}
 	var questions questionActivities

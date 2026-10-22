@@ -12,7 +12,7 @@ import (
 )
 
 // list_pending_questions and withdraw_question: an agent that asks without
-// waiting (ask_user async: true) keeps going, so it needs to see what it is
+// waiting (ask_user's default; blocking: true waits) keeps going, so it needs to see what it is
 // still waiting on, and to retract a question its default has made moot —
 // otherwise the user's inbox fills with stale ones. Both are scoped to the
 // caller's thread subtree: its own questions and those of every sub-agent
@@ -32,7 +32,7 @@ When to call it:
 
 Answers to async questions arrive as messages from the user that name the question_id, so you can match an answer to the question it came from.`
 
-	withdrawQuestionDescription = `Withdraw an async question (ask_user async: true) that you or one of your sub-agents asked and that no longer needs an answer — typically because you proceeded on a default and the outcome is settled.
+	withdrawQuestionDescription = `Withdraw an async question (an ask_user call without blocking: true) that you or one of your sub-agents asked and that no longer needs an answer — typically because you proceeded on a default and the outcome is settled.
 
 Withdrawing closes the question: it leaves the user's inbox and its card in the chat shows "Withdrawn: <reason>". The reason is shown to the user, so make it a short, plain sentence (e.g. "Went with Postgres; the schema is already migrated").
 

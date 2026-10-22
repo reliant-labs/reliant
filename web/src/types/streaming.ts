@@ -260,7 +260,7 @@ export interface QuestionUpdate {
   status: "pending" | "resolved";
   metadata?: string;
   /**
-   * Asked without waiting (ask_user async: true). Not a gate: it goes to the
+   * Asked without waiting (ask_user without blocking: true). Not a gate: it goes to the
    * timeline's async-question cache, never to the pending list the composer
    * and the background-work pill read.
    */

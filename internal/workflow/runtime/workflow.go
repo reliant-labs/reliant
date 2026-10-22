@@ -4506,11 +4506,12 @@ func executeToolsWithSpawnSupport(
 	return resultFuture
 }
 
-// executeAskUserInline handles an ask_user tool call by creating a question record
-// and waiting for a signal, using the same QuestionCreate/signal.question system
-// as the DAG ask_question node.
+// executeAskUserInline handles an ask_user tool call by creating a question
+// record. By default the question is async: it is posted and the call returns
+// at once (askUserAsync). With blocking: true it waits for a signal, using the
+// same QuestionCreate/signal.question system as the DAG ask_question node.
 //
-// The wait also ends when the user gives the asking thread something else to
+// A blocking wait also ends when the user gives the asking thread something else to
 // react to — a message to it, or an interrupt of it (see awaitAskUserYield).
 // The question is then resolved unanswered and the model is told why, so the
 // loop reaches its next call_llm, which is what delivers the message.
@@ -4612,12 +4613,10 @@ func executeAskUserInline(
 
 	temporalWorkflowID := workflow.GetInfo(ctx).WorkflowExecution.ID
 
-	// Async: post the question and return at once (askUserAsync). The input
-	// is read first, so a history without an async call never reaches the
-	// GetVersion, and one recorded before the option existed replays as
-	// DefaultVersion: the blocking path it took.
-	if askUserInputAsync(toolInput) &&
-		workflow.GetVersion(ctx, askUserAsyncVersionID(toolCallID), workflow.DefaultVersion, askUserAsyncVersion) == askUserAsyncVersion {
+	// Async — the default: post the question and return at once
+	// (askUserAsync). The rule is versioned per call (askUserIsAsync), so a
+	// history recorded when a call without a flag blocked replays that wait.
+	if askUserIsAsync(ctx, toolCallID, toolInput) {
 		metaObj["async"] = true
 		asyncMeta, _ := json.Marshal(metaObj)
 		return askUserAsync(ctx, toolCallID, askUserQuestionInput{

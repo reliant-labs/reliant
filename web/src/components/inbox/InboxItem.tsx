@@ -303,7 +303,7 @@ function rowDetail(item: InboxItemData): { node: ReactNode; title: string } | nu
     }
     case "question": {
       const prompt = payload.value.prompt;
-      // An async question (ask_user async: true): the agent kept working,
+      // An async question (ask_user without blocking: true): the agent kept working,
       // so it waits on the user without blocking a run.
       if (payload.value.async) {
         const title = prompt ? `${prompt} (not blocking: the agent kept working)` : "Not blocking: the agent kept working";

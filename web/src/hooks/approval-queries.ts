@@ -323,7 +323,7 @@ export function usePendingQuestions(chatId?: string) {
 }
 
 /**
- * Every async question in a chat (ask_user async: true), pending and
+ * Every async question in a chat (ask_user without blocking: true), pending and
  * answered, oldest first. The timeline renders each on its ask_user tool call
  * (match by tool_call_id). Never the composer's: nothing waits on one.
  */
