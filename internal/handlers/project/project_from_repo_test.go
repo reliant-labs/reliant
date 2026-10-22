@@ -59,7 +59,7 @@ func (s *cloneStubControlPlane) CloneRepoOntoDaemon(
 	return s.result, nil
 }
 
-func newFromRepoService(t *testing.T, cp *cloneStubControlPlane) (*Service, db.Repository, func()) {
+func newFromRepoService(t *testing.T, cp *cloneStubControlPlane) (*Service, *db.Repo, func()) {
 	t.Helper()
 	repo, cleanup := db.SetupTestDB(t)
 	svc := NewTestProject(t, WithProjectDeps(Deps{
@@ -323,7 +323,7 @@ func TestCreateProjectFromRepo_FailedQueuedCloneIsMarkedFailed(t *testing.T) {
 // daemon gateway (tools_daemon) over ConnectDaemon and returns the stream
 // once the gateway has acknowledged the registration, for the test to send
 // what a daemon sends.
-func dialToolsDaemon(t *testing.T, repo db.Repository, userID, daemonID string) *connect.BidiStreamForClient[reliantv1.DaemonMessage, reliantv1.ServerMessage] {
+func dialToolsDaemon(t *testing.T, repo tools_daemon.Repository, userID, daemonID string) *connect.BidiStreamForClient[reliantv1.DaemonMessage, reliantv1.ServerMessage] {
 	t.Helper()
 	gateway, err := tools_daemon.New(tools_daemon.Deps{
 		Logger: slog.New(slog.DiscardHandler),

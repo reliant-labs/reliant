@@ -37,7 +37,9 @@ type fakeTriggerBackend struct {
 	nextFire  *time.Time
 
 	// repo is what the real syncer re-reads the row from.
-	repo db.Repository
+	repo interface {
+		GetTrigger(ctx context.Context, id string) (*core.Trigger, error)
+	}
 }
 
 func (b *fakeTriggerBackend) Sync(ctx context.Context, triggerID string) error {

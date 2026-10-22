@@ -9,7 +9,6 @@ import (
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
@@ -21,10 +20,8 @@ type Deps struct {
 	Config *config.Config
 
 	// Repo reads and writes presets, the settings that hold a user's
-	// defaults, and the workflows a preset applies to. The whole
-	// db.Repository: the handlers call 19 of its methods, more than a
-	// consumer-declared slice is worth until P6 splits it.
-	Repo db.Repository
+	// defaults, and the workflows a preset applies to (deps.go).
+	Repo Repository
 }
 
 // validateDeps returns an error if any required Deps field is nil. The

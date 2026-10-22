@@ -797,7 +797,7 @@ func daemonRegistrationUserID(ctx context.Context, reg *reliantv1.DaemonRegister
 	return userID, nil
 }
 
-// daemonHostnameLookup is the subset of db.Repository needed to find an
+// daemonHostnameLookup is the slice of Repository needed to find an
 // existing daemon row by (userID, hostname). Kept narrow so the
 // hostname-reuse helper is trivially testable with a fake.
 type daemonHostnameLookup interface {
@@ -1159,11 +1159,6 @@ func (s *Service) ConnectDaemon(
 
 	// Handle incoming messages (blocking)
 	return s.handleIncoming(ctx, conn)
-}
-
-// Repo returns the underlying repository. Used by the daemon connector for resync queries.
-func (s *Service) Repo() db.Repository {
-	return s.deps.Repo
 }
 
 // RegisterOutboundConnection registers an outbound gateway→daemon connection.
@@ -2203,16 +2198,6 @@ func (s *Service) ensureOwnedProjectForPath(ctx context.Context, conn *daemonCon
 	return project, nil
 }
 
-// projectConfigPushedAtReader reads when the daemon pushed a project's stored
-// config record, and nothing else from it (db.Repo.GetProjectConfigPushedAt).
-// It returns sql.ErrNoRows, unwrapped, when the project has no record.
-type projectConfigPushedAtReader interface {
-	GetProjectConfigPushedAt(ctx context.Context, projectID string) (time.Time, error)
-}
-
-// The repository every server wires in must answer it, checked at build time.
-var _ projectConfigPushedAtReader = (*db.Repo)(nil)
-
 // shouldApplyProjectConfigUpdate drops a snapshot or delta older than the one
 // already stored. It runs on every push a daemon sends, and it needs only the
 // stored pushed_at: the whole record it used to read for that one timestamp
@@ -2223,15 +2208,7 @@ func (s *Service) shouldApplyProjectConfigUpdate(ctx context.Context, projectID 
 		return true, nil
 	}
 
-	// The method lives on *db.Repo, not on db.Repository; every production
-	// wiring passes a *db.Repo. A repository that cannot answer is a wiring
-	// fault, and it fails loudly here rather than quietly falling back to the
-	// full-record read.
-	reader, ok := s.deps.Repo.(projectConfigPushedAtReader)
-	if !ok {
-		return false, fmt.Errorf("project config staleness check: %T cannot read pushed_at (GetProjectConfigPushedAt)", s.deps.Repo)
-	}
-	pushedAt, err := reader.GetProjectConfigPushedAt(ctx, projectID)
+	pushedAt, err := s.deps.Repo.GetProjectConfigPushedAt(ctx, projectID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return true, nil

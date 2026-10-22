@@ -14,23 +14,19 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 )
 
-// listChangedRepo is the slice of the repository the daemon-list announcement
-// paths touch: teardown deletes the attachment, and an owner-less lifecycle
-// change looks the owner up.
-type listChangedRepo struct {
-	db.Repository
-	daemons map[string]*db.Daemon
-}
-
-func (listChangedRepo) ReleaseDaemonAttachment(context.Context, string, time.Time) error {
-	return nil
-}
-
-func (r listChangedRepo) GetDaemon(_ context.Context, id string) (*db.Daemon, error) {
-	if d, ok := r.daemons[id]; ok {
-		return d, nil
+// listChangedRepo programs the slice of the repository the daemon-list
+// announcement paths touch: teardown deletes the attachment, and an owner-less
+// lifecycle change looks the owner up in daemons.
+func listChangedRepo(daemons map[string]*db.Daemon) *MockRepository {
+	return &MockRepository{
+		ReleaseDaemonAttachmentFunc: func(context.Context, string, time.Time) error { return nil },
+		GetDaemonFunc: func(_ context.Context, id string) (*db.Daemon, error) {
+			if d, ok := daemons[id]; ok {
+				return d, nil
+			}
+			return nil, errors.New("not found")
+		},
 	}
-	return nil, errors.New("not found")
 }
 
 // daemonListRefetches returns the daemon ids of every "daemons" refetch the
@@ -58,7 +54,7 @@ func daemonListRefetches(t *testing.T, hub *recordingUserHub) map[string][]strin
 // owner's web clients are told to refetch — that signal is what lets them stop
 // polling ListDaemons every few seconds to notice.
 func TestTeardownConnection_AnnouncesDaemonListChange(t *testing.T) {
-	svc := newTestService(listChangedRepo{})
+	svc := newTestService(listChangedRepo(nil))
 	t.Cleanup(svc.Close)
 	hub := &recordingUserHub{}
 	svc.deps.UserUpdateHub = hub
@@ -82,9 +78,9 @@ func TestTeardownConnection_AnnouncesDaemonListChange(t *testing.T) {
 // is addressed by user, so the owner is resolved from the registry row; a
 // daemon with no row has nothing for a client to list and is skipped.
 func TestPublishDaemonListChanged_ResolvesOwner(t *testing.T) {
-	svc := newTestService(listChangedRepo{daemons: map[string]*db.Daemon{
+	svc := newTestService(listChangedRepo(map[string]*db.Daemon{
 		"daemon-1": {ID: "daemon-1", UserID: "user-1"},
-	}})
+	}))
 	t.Cleanup(svc.Close)
 	hub := &recordingUserHub{}
 	svc.deps.UserUpdateHub = hub

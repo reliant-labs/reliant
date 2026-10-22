@@ -16,7 +16,7 @@ import (
 // state messages until the test releases them — a slow DB round trip from the
 // gateway pod, or a 10MB project-config upsert, held open on purpose.
 type stallingRepo struct {
-	db.Repository
+	Repository
 
 	entered chan string   // receives the name of each stalled call as it starts
 	release chan struct{} // closed to let every stalled call return
@@ -24,6 +24,8 @@ type stallingRepo struct {
 	mu          sync.Mutex
 	userUpdates []*db.UserUpdate
 }
+
+var _ Repository = (*stallingRepo)(nil)
 
 func newStallingRepo() *stallingRepo {
 	return &stallingRepo{entered: make(chan string, 16), release: make(chan struct{})}

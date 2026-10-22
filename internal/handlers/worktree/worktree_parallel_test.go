@@ -153,7 +153,7 @@ func (r *concurrentCreateRouter) workspaceRoot() string {
 
 // seedMultiRepoProject creates a project whose repos sit at the given
 // relative paths.
-func seedMultiRepoProject(t *testing.T, repo db.Repository, userID string, relPaths ...string) string {
+func seedMultiRepoProject(t *testing.T, repo *db.Repo, userID string, relPaths ...string) string {
 	t.Helper()
 	projectID := uuid.New().String()
 	now := time.Now().UTC()

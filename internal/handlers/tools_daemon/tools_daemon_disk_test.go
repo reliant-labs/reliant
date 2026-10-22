@@ -11,16 +11,17 @@ import (
 	"github.com/stretchr/testify/require"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/diskwatch"
 )
 
 // diskStateRepo records the disk reports the gateway stores on the daemon row.
 type diskStateRepo struct {
-	db.Repository
+	Repository
 	mu     sync.Mutex
 	stored []string
 }
+
+var _ Repository = (*diskStateRepo)(nil)
 
 func (r *diskStateRepo) SetDaemonStorageState(_ context.Context, _ string, state string) error {
 	r.mu.Lock()

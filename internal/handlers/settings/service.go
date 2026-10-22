@@ -11,7 +11,6 @@ import (
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/controlplane"
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/antigravity"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/claude"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/codex"
@@ -35,10 +34,9 @@ type Deps struct {
 	Logger *slog.Logger
 	Config *config.Config
 
-	// Repo stores settings, provider credentials and privacy choices. It is
-	// the whole db.Repository: the handlers call over 25 of its methods and
-	// hand it to drivers.HasStaleReliantKey, which takes the whole thing.
-	Repo db.Repository
+	// Repo stores settings, provider credentials and privacy choices
+	// (deps.go).
+	Repo Repository
 	// ControlPlane mints the Reliant provider's LLM key (SyncReliantProvider).
 	// server.go passes the deployment's controlplane adapter.
 	ControlPlane LLMKeyMinter

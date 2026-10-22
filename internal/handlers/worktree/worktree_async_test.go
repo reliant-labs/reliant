@@ -87,7 +87,7 @@ func (r *blockingWorktreeDaemonRouter) SendDaemonCommand(ctx context.Context, us
 }
 
 // seedWorktreeProject creates the project + one nested repo CreateWorktree needs.
-func seedWorktreeProject(t *testing.T, repo db.Repository, userID string) string {
+func seedWorktreeProject(t *testing.T, repo *db.Repo, userID string) string {
 	t.Helper()
 	projectID := uuid.New().String()
 	now := time.Now().UTC()

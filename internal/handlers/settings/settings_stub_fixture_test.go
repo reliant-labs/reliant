@@ -56,7 +56,7 @@ func (m memorySettings) repo() *settings.StubRepo {
 // The control plane and the code exchanges are stand-ins that fail loudly if a row
 // reaches them. The Copilot poll is the one the real flow has: it fails on a cancelled
 // context before anything leaves the process.
-func newSettingsService(t *testing.T, repo db.Repository) *settings.Service {
+func newSettingsService(t *testing.T, repo settings.Repository) *settings.Service {
 	t.Helper()
 	return settings.NewTestSettings(t, settings.WithSettingsDeps(settings.Deps{
 		Repo: repo,

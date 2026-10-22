@@ -20,7 +20,7 @@ import (
 // handler used to issue one GetSetting per typed preference; a regression back
 // to that shape is invisible in the response but is the whole cost.
 type countingSettingsRepo struct {
-	db.Repository
+	Repository
 
 	getSettingCalls   atomic.Int32
 	listSettingsCalls atomic.Int32
@@ -36,7 +36,9 @@ func (r *countingSettingsRepo) ListSettings(ctx context.Context, userID string, 
 	return r.Repository.ListSettings(ctx, userID, projectID)
 }
 
-func writeSetting(t *testing.T, ctx context.Context, repo db.Repository, projectID *string, key, value string) {
+var _ Repository = (*countingSettingsRepo)(nil)
+
+func writeSetting(t *testing.T, ctx context.Context, repo *db.Repo, projectID *string, key, value string) {
 	t.Helper()
 	require.NoError(t, repo.CreateSetting(ctx, &db.Setting{
 		ID:        uuid.New().String(),
@@ -50,7 +52,7 @@ func writeSetting(t *testing.T, ctx context.Context, repo db.Repository, project
 	}))
 }
 
-func writeUserSetting(t *testing.T, ctx context.Context, repo db.Repository, key, value string) {
+func writeUserSetting(t *testing.T, ctx context.Context, repo *db.Repo, key, value string) {
 	t.Helper()
 	writeSetting(t, ctx, repo, nil, key, value)
 }

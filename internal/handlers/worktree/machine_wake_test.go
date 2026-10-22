@@ -163,7 +163,7 @@ const asleepMachineB = "daemon-b"
 // next to a worktree Service. The tests live with Worktree, the second of the
 // two services to move, and build FileSystem through its exported New
 // (research/forge-migration/06-p3b-recipe.md, §3.7).
-func newFileSystemService(t *testing.T, router file_system.Router, repo db.Repository) *file_system.Service {
+func newFileSystemService(t *testing.T, router file_system.Router, repo file_system.Repository) *file_system.Service {
 	t.Helper()
 	svc, err := file_system.New(file_system.Deps{
 		Logger: slog.Default(),

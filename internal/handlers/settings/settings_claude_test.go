@@ -6,23 +6,21 @@ import (
 
 	"connectrpc.com/connect"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// accountsRepo embeds db.Repository so it satisfies the whole interface while overriding only the
-// read the provider-status and validation paths touch. Any other method the code under test starts
-// calling will nil-panic loudly rather than silently returning a zero value. No database: the
-// question under test is purely how stored account state is read.
-type accountsRepo struct {
-	db.Repository
-	accounts []core.ProviderAccount
-}
-
-func (r *accountsRepo) ListProviderAccounts(context.Context, string) ([]core.ProviderAccount, error) {
-	return r.accounts, nil
+// accountsRepo programs only the read the provider-status and validation paths touch. Any other
+// method the code under test starts calling answers the mock's "Func not set" error rather than a
+// silent zero value. No database: the question under test is purely how stored account state is
+// read.
+func accountsRepo(accounts []core.ProviderAccount) *MockRepository {
+	return &MockRepository{
+		ListProviderAccountsFunc: func(context.Context, string) ([]core.ProviderAccount, error) {
+			return accounts, nil
+		},
+	}
 }
 
 func claudeAccount(needsReauth bool) core.ProviderAccount {
@@ -37,7 +35,7 @@ func claudeAccount(needsReauth bool) core.ProviderAccount {
 
 func claudeStatus(t *testing.T, accounts ...core.ProviderAccount) *reliantv1.ProviderStatus {
 	t.Helper()
-	svc := newTestService(t, Deps{Repo: &accountsRepo{accounts: accounts}})
+	svc := newTestService(t, Deps{Repo: accountsRepo(accounts)})
 	resp, err := svc.GetProviderStatuses(newSettingsServiceTestContext(), connect.NewRequest(&reliantv1.GetProviderStatusesRequest{}))
 	require.NoError(t, err)
 	return findProviderStatus(t, resp.Msg.Providers, "claude")
@@ -69,7 +67,7 @@ func TestSettingsService_GetProviderStatuses_ClaudeIsConnectedUntilARefreshFails
 func TestSettingsService_ValidateProviderAPIKey_ClaudeMatchesConfiguredSemantics(t *testing.T) {
 	validate := func(t *testing.T, accounts ...core.ProviderAccount) *reliantv1.ValidateProviderAPIKeyResponse {
 		t.Helper()
-		svc := newTestService(t, Deps{Repo: &accountsRepo{accounts: accounts}})
+		svc := newTestService(t, Deps{Repo: accountsRepo(accounts)})
 		resp, err := svc.ValidateProviderAPIKey(newSettingsServiceTestContext(), connect.NewRequest(&reliantv1.ValidateProviderAPIKeyRequest{
 			Provider: "claude",
 		}))

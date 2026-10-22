@@ -20,7 +20,7 @@ import (
 
 // seedInstallingProject creates a project with a queued clone row against a
 // daemon, as CreateProjectFromRepo would leave it.
-func seedInstallingProject(t *testing.T, repo db.Repository, userID, daemonID, requestID string) *core.Project {
+func seedInstallingProject(t *testing.T, repo *db.Repo, userID, daemonID, requestID string) *core.Project {
 	t.Helper()
 	ctx := context.Background()
 	project := &core.Project{

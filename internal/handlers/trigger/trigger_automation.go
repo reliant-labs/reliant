@@ -19,14 +19,9 @@ import (
 // signed in. A failure is logged and never fails the trigger write: the trigger
 // still exists, and its fire reports "automation access not granted" instead.
 type automationGrants struct {
-	client AutomationTokens
-	keys   interface {
-		SetAutomationToken(ctx context.Context, userID, daemonID, token string) error
-		DeleteAutomationToken(ctx context.Context, userID, daemonID string) error
-	}
-	triggers interface {
-		ListTriggers(ctx context.Context, f core.TriggerFilters) ([]*core.Trigger, error)
-	}
+	client   AutomationTokens
+	keys     AutomationKeyStore
+	triggers TriggerLister
 }
 
 // ensure mints and stores the token for (userID, daemonID).

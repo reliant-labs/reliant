@@ -196,22 +196,21 @@ func TestListTriggersUsesConstantQueries(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, resp.Msg.Triggers, 6)
 	assert.Equal(t, 1, counting.recent, "one batched firings query, not one per trigger")
-	assert.Equal(t, 0, counting.latest)
 }
 
+// triggerQueryCounter counts the batched firings read over a real repository.
+// The per-trigger read it replaced (GetLatestTriggerEvent) is not in
+// Repository (deps.go) at all, so the handlers cannot fall back to it.
 type triggerQueryCounter struct {
-	db.Repository
-	recent, latest int
+	Repository
+	recent int
 }
+
+var _ Repository = (*triggerQueryCounter)(nil)
 
 func (c *triggerQueryCounter) RecentTriggerFirings(ctx context.Context, userID string, ids []string, n int) (map[string][]*core.TriggerEventWithRun, error) {
 	c.recent++
 	return c.Repository.RecentTriggerFirings(ctx, userID, ids, n)
-}
-
-func (c *triggerQueryCounter) GetLatestTriggerEvent(ctx context.Context, id string, o *core.TriggerEventOutcome) (*core.TriggerEvent, error) {
-	c.latest++
-	return c.Repository.GetLatestTriggerEvent(ctx, id, o)
 }
 
 func TestTriggerFeedHidesOtherUsersData(t *testing.T) {

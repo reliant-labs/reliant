@@ -23,7 +23,7 @@ import (
 // newTestService builds the gateway service over repo as the daemon-gateway
 // does, with no publishers; a test that needs one sets it in svc.deps. A nil
 // repo exercises the in-memory routing alone.
-func newTestService(repo db.Repository) *Service {
+func newTestService(repo Repository) *Service {
 	return newService(Deps{Logger: slog.New(slog.DiscardHandler), Config: &typedconfig.Config{}, Repo: repo})
 }
 

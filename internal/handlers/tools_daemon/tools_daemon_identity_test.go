@@ -30,10 +30,12 @@ import (
 // contract as the real UpsertDaemon. Embedding the interface means any method
 // the registration path should NOT reach panics instead of silently passing.
 type ownershipRepo struct {
-	db.Repository
+	Repository
 	mu     sync.Mutex
 	owners map[string]string
 }
+
+var _ Repository = (*ownershipRepo)(nil)
 
 func newOwnershipRepo(owners map[string]string) *ownershipRepo {
 	return &ownershipRepo{owners: owners}

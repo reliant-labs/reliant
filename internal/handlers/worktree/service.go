@@ -10,7 +10,6 @@ import (
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
@@ -25,10 +24,9 @@ type Deps struct {
 	Logger *slog.Logger
 	Config *config.Config
 
-	// Repo reads and writes worktrees, their projects, repos and chats. The
-	// whole db.Repository: the handlers call over 20 of its methods, and
-	// repo.AdoptFromDaemon and workspacecreate take it whole.
-	Repo db.Repository
+	// Repo reads and writes worktrees, their projects, repos and chats
+	// (deps.go).
+	Repo Repository
 	// Router carries each worktree command to the machine that holds the
 	// workspace. A router that can also resume a suspended machine
 	// (machinewake.Resumer) has asleep machines woken; see wake. The API

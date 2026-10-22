@@ -13,7 +13,6 @@ import (
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/controlplane"
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/triggers"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
@@ -28,11 +27,9 @@ type Deps struct {
 	Config *config.Config
 
 	// Repo stores triggers, their firings and webhook credentials, and reads
-	// the projects, chats, daemons, workflows and presets a trigger names. It
-	// is the whole db.Repository: the handlers call over 25 of its methods,
-	// hand it to launch, daemonchoice and triggers, and reach the connection
-	// store through db.Repo.Connections by assertion.
-	Repo db.Repository
+	// the projects, chats, daemons, workflows and presets a trigger names
+	// (deps.go).
+	Repo Repository
 
 	// Syncer converges a trigger's Temporal Schedule, and Fires starts a
 	// manual fire. TemporalBackend builds both over a Temporal client.
@@ -124,7 +121,7 @@ type AutomationTokens interface {
 // Deps.Syncer is a non-nil interface holding a nil pointer, which passes
 // the handlers' nil checks and panics on the first write. New does not
 // unwrap one, so every composition builds Syncer and Fires through here.
-func TemporalBackend(temporalClient client.Client, repo db.Repository, taskQueue string, polled func(integration string) bool) (Syncer, FireStarter) {
+func TemporalBackend(temporalClient client.Client, repo triggers.Repo, taskQueue string, polled func(integration string) bool) (Syncer, FireStarter) {
 	if temporalClient == nil {
 		return nil, nil
 	}

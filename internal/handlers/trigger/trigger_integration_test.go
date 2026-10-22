@@ -383,7 +383,7 @@ func mockModelTriggerParams(t *testing.T) map[string]*structpb.Value {
 // launch.Launcher refuses to create a chat in a project with no main worktree
 // (internal/launch/session.go), so a project row alone is not a usable fixture
 // — a trigger against one records a `failed` event rather than launching.
-func createMainWorktree(t *testing.T, repo db.Repository, projectID string, now time.Time) {
+func createMainWorktree(t *testing.T, repo *db.Repo, projectID string, now time.Time) {
 	t.Helper()
 	require.NoError(t, repo.CreateWorktree(context.Background(), &db.Worktree{
 		ID:         uuid.NewString(),

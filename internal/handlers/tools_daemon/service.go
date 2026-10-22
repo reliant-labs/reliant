@@ -31,9 +31,8 @@ type Deps struct {
 
 	// Repo holds what the gateway learns from its daemons: the daemon rows,
 	// their attachment leases, the projects and project configs they
-	// report. It calls far more than ~15 db.Repository methods, so it takes
-	// the whole interface until P6 splits it.
-	Repo db.Repository
+	// report (deps.go).
+	Repo Repository
 	// UserUpdateHub forwards daemon heartbeats, list changes and local-model
 	// inventories to the owner's web clients as ephemeral user updates.
 	// Without it they are not published.

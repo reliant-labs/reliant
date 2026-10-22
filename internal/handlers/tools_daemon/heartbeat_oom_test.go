@@ -18,7 +18,7 @@ import (
 // call ran it (a dev server, a docker build). A workspace with none sends no
 // key, and the app shows nothing.
 func TestPublishDaemonHeartbeat_CarriesOOMKills(t *testing.T) {
-	svc := newTestService(listChangedRepo{})
+	svc := newTestService(listChangedRepo(nil))
 	t.Cleanup(svc.Close)
 	hub := &recordingUserHub{}
 	svc.deps.UserUpdateHub = hub

@@ -37,7 +37,7 @@ func (r *adoptTestDaemonRouter) SendDaemonCommand(ctx context.Context, userID, c
 	return r.Stub.SendDaemonCommand(ctx, userID, commandType, payload, timeoutMs)
 }
 
-func newAdoptTestProject(t *testing.T, repo db.Repository) *db.Project {
+func newAdoptTestProject(t *testing.T, repo *db.Repo) *db.Project {
 	t.Helper()
 	now := time.Now().UTC()
 	project := &db.Project{

@@ -1,0 +1,65 @@
+// forge:deps — consumer-declared interfaces for this package's Deps.
+// Repository is this package's own declaration of what the trigger handlers
+// read and write; mock_gen.go mocks it. *db.Repo satisfies it, and the
+// composition root hands it to New.
+//
+// It lists the methods the handlers call directly, then embeds the role of
+// every callee they hand the repository to (launch's workflow resolution,
+// daemonchoice, automationGrants), so a callee that needs more points the
+// compiler here. The connection store is still reached through
+// db.Repo.Connections by assertion (Service.connections) until P6 lane Y.
+package trigger
+
+import (
+	"context"
+
+	"github.com/reliant-labs/reliant/internal/daemonchoice"
+	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/launch"
+)
+
+// Repository is everything the trigger handlers read and write.
+type Repository interface {
+	// Trigger rows and their webhook credentials.
+	CreateTrigger(ctx context.Context, t *core.Trigger) error
+	GetTrigger(ctx context.Context, id string) (*core.Trigger, error)
+	UpdateTrigger(ctx context.Context, t *core.Trigger) error
+	DeleteTrigger(ctx context.Context, id string) error
+	SetTriggerEnabled(ctx context.Context, id string, enabled bool) error
+	SetTriggerWebhookSecret(ctx context.Context, id string, sealed []byte) error
+	SetTriggerWebhookTokenHash(ctx context.Context, id string, hash []byte) error
+	GetTriggerWebhookCredentials(ctx context.Context, id string) (*core.TriggerWebhookCredentials, error)
+
+	// Firings, the feed and the integration registrations a trigger holds.
+	RecentTriggerFirings(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error)
+	ListTriggerEvents(ctx context.Context, f core.TriggerEventFilters) ([]*core.TriggerEventWithRun, bool, error)
+	GetTriggerEventByChatID(ctx context.Context, chatID string) (*core.TriggerEvent, error)
+	ListTriggerRegistrations(ctx context.Context, userID string, triggerIDs []string) (map[string]*core.TriggerRegistration, error)
+
+	// The project, worktree and chat a trigger names, checked against the
+	// caller.
+	GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*db.Project, error)
+	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)
+	GetChat(ctx context.Context, id string) (*db.Chat, error)
+
+	// ListTriggers is called directly too; TriggerLister declares it.
+	launch.WorkflowResolver
+	daemonchoice.Reader
+	AutomationKeyStore
+	TriggerLister
+}
+
+// AutomationKeyStore is where automationGrants keeps the delegated
+// daemon:resume token of each (user, daemon) with an enabled trigger.
+type AutomationKeyStore interface {
+	SetAutomationToken(ctx context.Context, userID, daemonID, token string) error
+	DeleteAutomationToken(ctx context.Context, userID, daemonID string) error
+}
+
+// TriggerLister lists a user's triggers: the handlers' List, and
+// automationGrants' check that no enabled trigger still names a daemon
+// before it revokes that daemon's token.
+type TriggerLister interface {
+	ListTriggers(ctx context.Context, f core.TriggerFilters) ([]*core.Trigger, error)
+}

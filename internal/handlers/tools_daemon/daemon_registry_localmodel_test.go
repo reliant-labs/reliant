@@ -179,7 +179,8 @@ func TestInventory_WakesRefreshWaiter(t *testing.T) {
 	svc.mu.Lock()
 	svc.connections["daemon-1"] = conn
 	svc.mu.Unlock()
-	svc.deps.Repo = nopLocalModelsRepo{}
+	repo := &MockRepository{SetDaemonLocalModelsFunc: func(context.Context, string, string) error { return nil }}
+	svc.deps.Repo = repo
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
@@ -206,12 +207,12 @@ func TestInventory_WakesRefreshWaiter(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("refresh waiter was not woken by the inventory")
 	}
+	// ...and is stored on the daemon's row.
+	stored := repo.Calls("SetDaemonLocalModels")
+	require.Len(t, stored, 1)
+	assert.Equal(t, "daemon-1", stored[0].Args[1])
+	assert.Contains(t, stored[0].Args[2], `"ollama"`)
 }
-
-// nopLocalModelsRepo satisfies the one method handleLocalModelInventory calls.
-type nopLocalModelsRepo struct{ db.Repository }
-
-func (nopLocalModelsRepo) SetDaemonLocalModels(context.Context, string, string) error { return nil }
 
 // Chunks are handed to the request's consumer in order, a done chunk retires
 // the registration, and teardown fails in-flight relays with an error chunk.

@@ -132,7 +132,7 @@ func TestHeartbeatOnALiveStreamRecreatesAReapedLease(t *testing.T) {
 // leaseRecordingRepo parks state-message writes (a FileSystemChanged's project
 // lookup) until released, and records lease renewals as they happen.
 type leaseRecordingRepo struct {
-	db.Repository
+	Repository
 
 	stateEntered chan struct{}
 	release      chan struct{}
@@ -140,6 +140,8 @@ type leaseRecordingRepo struct {
 	mu       sync.Mutex
 	renewals []*db.DaemonAttachment
 }
+
+var _ Repository = (*leaseRecordingRepo)(nil)
 
 func (r *leaseRecordingRepo) GetProjectByPathAndUser(context.Context, string, string) (*db.Project, error) {
 	r.stateEntered <- struct{}{}
@@ -199,26 +201,14 @@ func TestLeaseRenewalIsNotQueuedBehindStatePersistence(t *testing.T) {
 		renewal.AttachedAt, conn.attachedAt)
 }
 
-// releaseRecordingRepo satisfies teardown's lease release without a database.
-type releaseRecordingRepo struct {
-	db.Repository
-	mu       sync.Mutex
-	released []string
-}
-
-func (r *releaseRecordingRepo) ReleaseDaemonAttachment(_ context.Context, daemonID string, _ time.Time) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.released = append(r.released, daemonID)
-	return nil
-}
-
 // A stream the gateway has read nothing from for longer than the threshold is
 // dead, however recently the gateway itself wrote to it. The gateway's 15s
 // heartbeat send succeeds into a buffer whether or not the daemon's side is
 // moving, so liveness keyed on it never runs out.
 func TestSweeperReapsAStreamSilentInboundWhileTheGatewayKeepsSending(t *testing.T) {
-	repo := &releaseRecordingRepo{}
+	// Teardown's lease release, without a database; the recorder keeps what
+	// was released.
+	repo := &MockRepository{ReleaseDaemonAttachmentFunc: func(context.Context, string, time.Time) error { return nil }}
 	svc := newTestService(repo)
 	t.Cleanup(svc.Close)
 
@@ -257,7 +247,11 @@ func TestSweeperReapsAStreamSilentInboundWhileTheGatewayKeepsSending(t *testing.
 	}
 	require.Equal(t, connect.CodeUnavailable, svcerr.Code(silent.closedReason()),
 		"the stream must end with a status the daemon treats as retryable, not a bare EOF")
-	require.Equal(t, []string{silent.daemonID}, repo.released)
+	var released []string
+	for _, call := range repo.Calls("ReleaseDaemonAttachment") {
+		released = append(released, call.Args[1].(string))
+	}
+	require.Equal(t, []string{silent.daemonID}, released)
 	require.True(t, svc.HasConnectedDaemonsForUser(reading.userID),
 		"a stream read from 10s ago is alive and must not be reaped")
 }
@@ -418,9 +412,11 @@ func TestHeartbeatRestoresAMissingLeaseAndDisconnectIsStillPrompt(t *testing.T) 
 
 // livenessDownRepo lists the user's daemon but cannot read the lease table.
 type livenessDownRepo struct {
-	db.Repository
+	daemon_registry.Repository
 	daemon *db.Daemon
 }
+
+var _ daemon_registry.Repository = livenessDownRepo{}
 
 func (r livenessDownRepo) ListDaemonsByUserID(context.Context, string) ([]*db.Daemon, error) {
 	return []*db.Daemon{r.daemon}, nil

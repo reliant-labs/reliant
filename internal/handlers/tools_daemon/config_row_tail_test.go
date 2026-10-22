@@ -21,9 +21,10 @@ import (
 // record carries every skill body and repo memory the daemon indexed — 18 MB
 // in prod — and none of the paths below needs more than one small column.
 //
-// It embeds the concrete *db.Repo, not db.Repository, so the narrow column
-// read the config sync uses (GetProjectConfigPushedAt) is still there to be
-// used.
+// It embeds the concrete *db.Repo, so every other read is real. Repository
+// (deps.go) does not declare GetProjectConfigRecord, so the compiler already
+// keeps the gateway off the whole row; the spy catches the role growing it
+// back.
 type wholeConfigRowReads struct {
 	*db.Repo
 

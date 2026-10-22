@@ -98,7 +98,7 @@ func (s *Service) reconcileProjectDaemonsOnConnect(conn *daemonConnection) {
 // are logged and skipped, never fatal.
 func reconcileProjectDaemons(
 	ctx context.Context,
-	database db.Repository,
+	database ProjectReconcileStore,
 	daemonID, userID string,
 	check daemonPathChecker,
 ) {
@@ -158,7 +158,7 @@ func reconcileProjectDaemons(
 // partial unique index projects_user_remote_url_uniq (user_id, remote_url): if
 // another of the user's projects already holds that remote, it skips and logs
 // rather than colliding. Returns true when the row was updated.
-func backfillProjectRemoteURL(ctx context.Context, database db.Repository, project *db.Project, remoteURL string) bool {
+func backfillProjectRemoteURL(ctx context.Context, database ProjectReconcileStore, project *db.Project, remoteURL string) bool {
 	existing, err := database.GetProjectByRemoteURLAndUser(ctx, remoteURL, project.UserID)
 	switch {
 	case err == nil && existing != nil && existing.ID != project.ID:

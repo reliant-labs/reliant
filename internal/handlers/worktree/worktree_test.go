@@ -29,7 +29,7 @@ import (
 // newWorktreeService builds the Service these tests drive, as server.go
 // does but without Temporal. A settler, when given, settles archived
 // directories (worktreesweep); without one archiving leaves them.
-func newWorktreeService(t testing.TB, repo db.Repository, router Router, settler ...Settler) *Service {
+func newWorktreeService(t testing.TB, repo Repository, router Router, settler ...Settler) *Service {
 	t.Helper()
 	deps := Deps{Logger: slog.Default(), Config: &typedconfig.Config{}, Repo: repo, Router: router}
 	if len(settler) > 0 {
@@ -132,7 +132,7 @@ func setupTestGitRepoWithRemote(t *testing.T, defaultBranch string) (repoDir str
 // CreateWorktree returns as soon as the CREATING row is written and finishes
 // the daemon work on a detached goroutine, so every assertion about the
 // finished state has to wait for that goroutine rather than read immediately.
-func awaitWorktreeStatus(t *testing.T, repo db.Repository, worktreeID string, want reliantv1.WorktreeStatus) *db.Worktree {
+func awaitWorktreeStatus(t *testing.T, repo Repository, worktreeID string, want reliantv1.WorktreeStatus) *db.Worktree {
 	t.Helper()
 	var last *db.Worktree
 	require.Eventually(t, func() bool {
