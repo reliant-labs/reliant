@@ -77,10 +77,10 @@ func TestScenarioRPCs_RepositoryFailureCodes(t *testing.T) {
 }
 
 // failingSender fails every daemon command with err.
-type failingSender struct{ err error }
-
-func (f failingSender) SendDaemonCommand(context.Context, string, string, []byte, int32) ([]byte, error) {
-	return nil, f.err
+func failingSender(err error) *scenario.MockSender {
+	return &scenario.MockSender{SendDaemonCommandFunc: func(context.Context, string, string, []byte, int32) ([]byte, error) {
+		return nil, err
+	}}
 }
 
 // A scenario file the daemon cannot write is classified by the machine's state
@@ -104,7 +104,7 @@ func TestUploadScenario_DaemonFailureCodes(t *testing.T) {
 			t.Parallel()
 			svc := scenario.NewTestScenario(t, scenario.WithScenarioDeps(scenario.Deps{
 				Repo:   newScenarioRepo(&fixture{}),
-				Router: failingSender{err: tc.err},
+				Router: failingSender(tc.err),
 			}))
 			_, err := svc.UploadScenario(scenario.AuthedContext(t), connect.NewRequest(&pb.UploadScenarioRequest{
 				ProjectId: ownProjectID, WorkflowSlug: ownWorkflowSlug, Filename: "drafts.yaml", YamlContent: fixtureScenario,
@@ -121,7 +121,7 @@ func TestUploadScenario_DaemonFailureCodes(t *testing.T) {
 func TestUploadScenario_InvalidYAMLKeepsTheParserText(t *testing.T) {
 	t.Parallel()
 
-	svc := scenario.NewTestScenario(t, scenario.WithScenarioDeps(scenario.Deps{Repo: newScenarioRepo(&fixture{}), Router: failingSender{}}))
+	svc := scenario.NewTestScenario(t, scenario.WithScenarioDeps(scenario.Deps{Repo: newScenarioRepo(&fixture{}), Router: &scenario.MockSender{}}))
 	_, err := svc.UploadScenario(scenario.AuthedContext(t), connect.NewRequest(&pb.UploadScenarioRequest{
 		ProjectId: ownProjectID, WorkflowSlug: ownWorkflowSlug, Filename: "drafts.yaml", YamlContent: "events: [",
 	}))

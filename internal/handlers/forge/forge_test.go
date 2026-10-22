@@ -55,22 +55,23 @@ func (r *forgeTestRouter) SendDaemonCommand(_ context.Context, _ string, command
 	return r.reply, r.replyErr
 }
 
-// forgeTestProjects resolves one project owned by the authed test user.
-type forgeTestProjects struct {
-	path string
-	err  error
-}
-
-func (p forgeTestProjects) GetProjectWithUserCheck(_ context.Context, id, _ string) (*db.Project, error) {
-	if p.err != nil {
-		return nil, p.err
+// forgeTestProjects resolves one project owned by the authed test user, at
+// path. Its forge name is never written: the tests that use it assert on the
+// dispatch, not on the row.
+func forgeTestProjects(path string) *MockRepository {
+	return &MockRepository{
+		GetProjectWithUserCheckFunc: func(_ context.Context, id, _ string) (*db.Project, error) {
+			return &db.Project{ID: id, Path: path}, nil
+		},
+		SetProjectForgeNameFunc: func(context.Context, string, string, string) (bool, error) {
+			return false, nil
+		},
 	}
-	return &db.Project{ID: id, Path: p.path}, nil
 }
 
 // newForgeTestService wires the Service over a stub router and project lookup.
 func newForgeTestService(router *forgeTestRouter) *Service {
-	return newForgeService(router, forgeTestProjects{path: "/daemon/workspace/control-plane"})
+	return newForgeService(router, forgeTestProjects("/daemon/workspace/control-plane"))
 }
 
 // newForgeService builds the Service as server.go does. Every required Dep is

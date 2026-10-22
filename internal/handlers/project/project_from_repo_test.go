@@ -59,6 +59,8 @@ func (s *cloneStubControlPlane) CloneRepoOntoDaemon(
 	return s.result, nil
 }
 
+var _ CloneDispatcher = (*cloneStubControlPlane)(nil)
+
 func newFromRepoService(t *testing.T, cp *cloneStubControlPlane) (*Service, *db.Repo, func()) {
 	t.Helper()
 	repo, cleanup := db.SetupTestDB(t)

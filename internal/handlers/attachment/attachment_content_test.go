@@ -15,24 +15,18 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 )
 
-// contentRepo embeds the Repository interface so only GetAttachment needs a body.
-type contentRepo struct {
-	db.Repository
-	atts map[string]*db.Attachment
-}
-
-func (r *contentRepo) GetAttachment(_ context.Context, id string) (*db.Attachment, error) {
-	return r.atts[id], nil
-}
-
 func newContentHandler(t *testing.T, userID string) (http.Handler, []byte) {
 	t.Helper()
 	body := make([]byte, 1000)
 	for i := range body {
 		body[i] = byte(i % 251)
 	}
-	repo := &contentRepo{atts: map[string]*db.Attachment{
+	atts := map[string]*db.Attachment{
 		"vid-1": {ID: "vid-1", UserID: "owner", Filename: "generated-1.mp4", MimeType: "video/mp4", Content: body, UpdatedAt: time.Unix(1700000000, 0)},
+	}
+	// Only GetAttachment is programmed: the content handler reads, never writes.
+	repo := &MockRepository{GetAttachmentFunc: func(_ context.Context, id string) (*db.Attachment, error) {
+		return atts[id], nil
 	}}
 	auth := func(r *http.Request) (string, error) {
 		if userID == "" {

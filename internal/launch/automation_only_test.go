@@ -30,7 +30,7 @@ nodes:
       model: "{{inputs.model}}"
 `
 
-func seedCompleteWorkflow(t *testing.T, ctx context.Context, repo db.Repository, slug, definition string) {
+func seedCompleteWorkflow(t *testing.T, ctx context.Context, repo *db.Repo, slug, definition string) {
 	t.Helper()
 	now := time.Now().UTC()
 	require.NoError(t, repo.CreateWorkflowDraft(ctx, &db.WorkflowDraft{

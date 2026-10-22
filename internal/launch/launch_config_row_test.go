@@ -16,9 +16,11 @@ import (
 // wholeConfigRowCounter counts reads of the whole project config record. The
 // row carries every skill body the daemon indexed and was 18 MB in prod; a
 // chat start read it once per workflow resolution and once per preset, which
-// is where StartChat's 2.3s p50 went.
+// is where StartChat's 2.3s p50 went. It embeds the concrete *db.Repo, so a
+// read of the whole row through any path the Launcher hands its store to is
+// still there to be counted.
 type wholeConfigRowCounter struct {
-	db.Repository
+	*db.Repo
 
 	mu    sync.Mutex
 	reads int
@@ -28,7 +30,7 @@ func (c *wholeConfigRowCounter) GetProjectConfigRecord(ctx context.Context, proj
 	c.mu.Lock()
 	c.reads++
 	c.mu.Unlock()
-	return c.Repository.GetProjectConfigRecord(ctx, projectID)
+	return c.Repo.GetProjectConfigRecord(ctx, projectID)
 }
 
 // A chat start resolves its workflow, validates the workflow tree and its
@@ -45,7 +47,7 @@ func TestLaunchChatStartReadsOnlyTheConfigColumnsItNeeds(t *testing.T) {
 		ProjectPresetsJSON: &presets, ProjectSkillsJSON: &skills,
 	}))
 
-	counter := &wholeConfigRowCounter{Repository: repo}
+	counter := &wholeConfigRowCounter{Repo: repo}
 	starter := &fakeStarter{}
 	launcher, _ := newTestLauncher(t, counter, starter)
 

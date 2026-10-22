@@ -10,7 +10,6 @@ import (
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
@@ -32,25 +31,6 @@ type Deps struct {
 	// daemon fail through their existing error paths.
 	// forge:optional-dep
 	Router Router
-}
-
-// Repository is the slice of db.Repository the mcp handlers use.
-type Repository interface {
-	GetProject(ctx context.Context, id string) (*db.Project, error)
-	GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*db.Project, error)
-	ListProjects(ctx context.Context, filters db.ProjectFilters) ([]*db.Project, error)
-
-	GetProjectConfigRecord(ctx context.Context, projectID string) (*db.ProjectConfigRecord, error)
-	GetProjectMCPConfigsJSON(ctx context.Context, projectID string) (*string, error)
-	UpsertProjectConfigRecord(ctx context.Context, record *db.ProjectConfigRecord) error
-
-	EmitUserRefetch(ctx context.Context, userID string, refetchType db.RefetchType, opts db.RefetchOpts) error
-}
-
-// Router sends one request/response command to a user's daemon.
-// toolexec.DaemonRouter implements it.
-type Router interface {
-	SendDaemonCommand(ctx context.Context, userID, commandType string, payload []byte, timeoutMs int32) ([]byte, error)
 }
 
 // validateDeps returns an error if any required Deps field is nil. The

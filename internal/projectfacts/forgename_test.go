@@ -81,7 +81,7 @@ func (f *fakeForgeNameDaemon) calls() (daemons, commands, paths []string) {
 
 // seedProjectForForgeName creates a project with no forge name recorded —
 // exactly the state a clone leaves behind.
-func seedProjectForForgeName(t *testing.T, repo db.Repository, userID string) *db.Project {
+func seedProjectForForgeName(t *testing.T, repo *db.Repo, userID string) *db.Project {
 	t.Helper()
 	project := &db.Project{
 		ID:        uuid.NewString(),

@@ -24,7 +24,7 @@ import (
 // blocks becoming (or staying) complete, not every save. Validity itself is
 // never stored — it is computed on read.
 
-func saveTestSetup(t *testing.T) (context.Context, db.Repository, *Service, string) {
+func saveTestSetup(t *testing.T) (context.Context, *db.Repo, *Service, string) {
 	t.Helper()
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)

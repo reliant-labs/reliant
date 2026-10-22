@@ -16,7 +16,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
-func threadTexts(t *testing.T, ctx context.Context, repo db.Repository, chatID string) []string {
+func threadTexts(t *testing.T, ctx context.Context, repo *db.Repo, chatID string) []string {
 	t.Helper()
 	rootThread := chatID
 	messages, err := repo.ListMessages(ctx, chatID, db.MessageListOptions{Thread: &rootThread, Limit: 50})
@@ -163,9 +163,10 @@ func TestLaunchPendingConcurrentStartsDoNotLoseMessages(t *testing.T) {
 	assert.NotNil(t, eventsFor(t, ctx, repo, chatID))
 }
 
-// failingLookups makes the named reads fail the way a database outage does.
+// failingLookups makes the named reads fail the way a database outage does,
+// over a real *db.Repo.
 type failingLookups struct {
-	db.Repository
+	*db.Repo
 	failProject  bool
 	failChat     bool
 	failWorkflow bool
@@ -175,21 +176,21 @@ func (r *failingLookups) GetProjectWithUserCheck(ctx context.Context, id, userID
 	if r.failProject {
 		return nil, errors.New("connection reset by peer")
 	}
-	return r.Repository.GetProjectWithUserCheck(ctx, id, userID)
+	return r.Repo.GetProjectWithUserCheck(ctx, id, userID)
 }
 
 func (r *failingLookups) GetChat(ctx context.Context, id string) (*db.Chat, error) {
 	if r.failChat {
 		return nil, errors.New("connection reset by peer")
 	}
-	return r.Repository.GetChat(ctx, id)
+	return r.Repo.GetChat(ctx, id)
 }
 
 func (r *failingLookups) GetUsableWorkflowBySlug(ctx context.Context, userID, slug string) (*core.WorkflowDraft, error) {
 	if r.failWorkflow {
 		return nil, errors.New("connection reset by peer")
 	}
-	return r.Repository.GetUsableWorkflowBySlug(ctx, userID, slug)
+	return r.Repo.GetUsableWorkflowBySlug(ctx, userID, slug)
 }
 
 // M1: a database error on a lookup is not "not found" and not "invalid": the
@@ -205,7 +206,7 @@ func TestLaunchStoreFailuresStayRetryable(t *testing.T) {
 	}{
 		{
 			name: "project lookup on a new chat",
-			repo: &failingLookups{Repository: repo, failProject: true},
+			repo: &failingLookups{Repo: repo, failProject: true},
 			spec: func(t *testing.T) (Event, Spec) {
 				return Event{Kind: core.TriggerEventKindSchedule, DedupeKey: "k-" + uuid.NewString()}, Spec{
 					OwnerUserID: launchTestUserID, ProjectID: projectID, Workflow: "builtin://agent",
@@ -215,7 +216,7 @@ func TestLaunchStoreFailuresStayRetryable(t *testing.T) {
 		},
 		{
 			name: "chat lookup on a pending start",
-			repo: &failingLookups{Repository: repo, failChat: true},
+			repo: &failingLookups{Repo: repo, failChat: true},
 			spec: func(t *testing.T) (Event, Spec) {
 				chatID := pendingBranch(t, repo, ctx, projectID, mainWorktreeID)
 				return chatStartSpec(t, chatID, "builtin://agent", "hi")
@@ -223,7 +224,7 @@ func TestLaunchStoreFailuresStayRetryable(t *testing.T) {
 		},
 		{
 			name: "workflow draft lookup",
-			repo: &failingLookups{Repository: repo, failWorkflow: true},
+			repo: &failingLookups{Repo: repo, failWorkflow: true},
 			spec: func(t *testing.T) (Event, Spec) {
 				return Event{Kind: core.TriggerEventKindSchedule, DedupeKey: "k-" + uuid.NewString()}, Spec{
 					OwnerUserID: launchTestUserID, ProjectID: projectID, Workflow: "my-custom-workflow",

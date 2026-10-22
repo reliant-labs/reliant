@@ -1,7 +1,6 @@
 package package_commands
 
 import (
-	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -10,9 +9,6 @@ import (
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
-	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/reliant-labs/reliant/internal/llm/tools/shell"
-	"github.com/reliant-labs/reliant/internal/pkgmgr"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
@@ -32,32 +28,6 @@ type Deps struct {
 	// Processes runs package commands and tracks their processes, on this
 	// server (see RunCommand).
 	Processes Processes
-}
-
-// Router is the slice of toolexec.DaemonRouter ListCommands uses
-// (daemoncmd.Sender).
-type Router interface {
-	SendDaemonCommand(ctx context.Context, userID, commandType string, payload []byte, timeoutMs int32) ([]byte, error)
-}
-
-// Repository is the slice of db.Repository the package-commands handlers use.
-type Repository interface {
-	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)
-	GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*db.Project, error)
-	ListCommandFavorites(ctx context.Context, userID, projectID string) ([]string, error)
-	AddCommandFavorite(ctx context.Context, userID, projectID, commandKey string) error
-	RemoveCommandFavorite(ctx context.Context, userID, projectID, commandKey string) error
-}
-
-// Processes is the slice of *pkgmgr.Service the process rpcs use.
-type Processes interface {
-	RunCommand(ctx context.Context, req pkgmgr.RunRequest) (*pkgmgr.RunResponse, error)
-	GetProcessesByWorktree(worktreeID string) []*shell.BackgroundProcess
-	GetAllProcesses() []*shell.BackgroundProcess
-	GetProcess(processID string) (*shell.BackgroundProcess, error)
-	GetProcessOutput(processID string) (stdout, stderr string, err error)
-	GetCombinedOutput(processID string) ([]shell.OutputLine, error)
-	KillProcess(processID string) error
 }
 
 // validateDeps returns an error if any required Deps field is nil. The

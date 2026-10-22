@@ -44,7 +44,7 @@ func (r *recordingFSDaemonRouter) SendDaemonCommand(_ context.Context, _ string,
 // newProxy builds the service on router and repo. A nil repo leaves the
 // harness's fail-closed stub in its place, for requests decided before any
 // lookup.
-func newProxy(t *testing.T, router Router, repo db.Repository) *Service {
+func newProxy(t *testing.T, router Router, repo Repository) *Service {
 	t.Helper()
 	return NewTestFileSystem(t, WithFileSystemDeps(Deps{Router: router, Repo: repo}))
 }
@@ -279,7 +279,7 @@ func fsProxyContext() context.Context {
 
 // seedFSProxyProject registers a project whose path is a real directory, and
 // returns the repository, the project id, and that workspace root.
-func seedFSProxyProject(t *testing.T) (db.Repository, string, string) {
+func seedFSProxyProject(t *testing.T) (*db.Repo, string, string) {
 	t.Helper()
 
 	repo, cleanup := db.SetupTestDB(t)

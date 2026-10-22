@@ -23,7 +23,7 @@ import (
 // other to be issued. Issued one after the other, the first waits for a second
 // that never comes and fails; issued concurrently, both proceed.
 type rendezvousStarter struct {
-	repo db.Repository
+	repo *db.Repo
 
 	rootEntered  chan struct{}
 	titleEntered chan struct{}
@@ -39,7 +39,7 @@ type rendezvousStarter struct {
 	failTitle bool
 }
 
-func newRendezvousStarter(repo db.Repository) *rendezvousStarter {
+func newRendezvousStarter(repo *db.Repo) *rendezvousStarter {
 	return &rendezvousStarter{
 		repo:         repo,
 		rootEntered:  make(chan struct{}),

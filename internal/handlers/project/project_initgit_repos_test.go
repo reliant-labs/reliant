@@ -35,7 +35,7 @@ func (r *initGitDaemonRouter) SendDaemonCommand(_ context.Context, _ string, com
 	return json.Marshal(map[string]any{})
 }
 
-func newInitGitProject(t *testing.T, repo db.Repository, userID, projectID string) {
+func newInitGitProject(t *testing.T, repo *db.Repo, userID, projectID string) {
 	t.Helper()
 	now := time.Now().UTC()
 	require.NoError(t, repo.CreateProject(context.Background(), &db.Project{

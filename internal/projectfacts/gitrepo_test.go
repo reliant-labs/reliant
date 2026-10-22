@@ -13,7 +13,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 )
 
-func newReconcileTestProject(t *testing.T, repo db.Repository, isGit bool) *db.Project {
+func newReconcileTestProject(t *testing.T, repo *db.Repo, isGit bool) *db.Project {
 	t.Helper()
 	now := time.Now().UTC()
 	project := &db.Project{

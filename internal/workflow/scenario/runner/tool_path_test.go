@@ -74,7 +74,7 @@ edges:
 // seedScenarioDraft creates a chat and a workflow draft. The draft is NOT bound
 // to the chat — workflows never are — so the scenario tools are handed the
 // draft's id explicitly, the way an agent in any chat calls them.
-func seedScenarioDraft(t *testing.T, repo db.Repository, definition string) (*db.WorkflowDraft, string) {
+func seedScenarioDraft(t *testing.T, repo *db.Repo, definition string) (*db.WorkflowDraft, string) {
 	t.Helper()
 	ctx := context.Background()
 	now := time.Now()
@@ -96,7 +96,7 @@ func seedScenarioDraft(t *testing.T, repo db.Repository, definition string) (*db
 
 // writeScenario drives the real write_scenario tool, which saves the scenario,
 // runs it on the runner, and returns the formatted result.
-func writeScenario(t *testing.T, repo db.Repository, draft *db.WorkflowDraft, chatID, name, content string) string {
+func writeScenario(t *testing.T, repo *db.Repo, draft *db.WorkflowDraft, chatID, name, content string) string {
 	t.Helper()
 	input, err := json.Marshal(tools.WriteScenarioParams{ID: draft.ID, Name: name, Content: content})
 	require.NoError(t, err)
@@ -108,7 +108,7 @@ func writeScenario(t *testing.T, repo db.Repository, draft *db.WorkflowDraft, ch
 	return resp.Content
 }
 
-func setupTestDB(t *testing.T) (db.Repository, func()) {
+func setupTestDB(t *testing.T) (*db.Repo, func()) {
 	t.Helper()
 	return db.SetupTestDB(t)
 }

@@ -25,7 +25,7 @@ import (
 // newModelEndpoint builds the endpoint handler with no daemon router and no
 // credential store, under the network policy of a deployment hosted by
 // controlPlaneURL ("" is self-hosted).
-func newModelEndpoint(t *testing.T, repo db.Repository, controlPlaneURL string) *model_endpoint.Service {
+func newModelEndpoint(t *testing.T, repo *db.Repo, controlPlaneURL string) *model_endpoint.Service {
 	t.Helper()
 	svc, err := model_endpoint.New(model_endpoint.Deps{
 		Logger:       slog.New(slog.DiscardHandler),

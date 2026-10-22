@@ -22,9 +22,10 @@ import (
 )
 
 // mcpReadRepo is the repository the MCP read RPCs run against, in memory,
-// counting reads of the whole project config record.
+// counting reads of the whole project config record. Any other method falls
+// through to the embedded MockRepository, which fails it as "Func not set".
 type mcpReadRepo struct {
-	Repository
+	MockRepository
 
 	project     *db.Project
 	mcpConfigs  string

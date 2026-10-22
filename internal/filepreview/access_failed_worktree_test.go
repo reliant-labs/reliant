@@ -29,11 +29,9 @@ import (
 // which names the PROJECT — whose path was correct the whole time — and sends
 // whoever reads it to the wrong table.
 
-// stubRepo answers only the three lookups ResolveBasePath makes. The embedded
-// interface is nil, so any other call panics rather than silently passing.
+// stubRepo answers the three lookups ResolveBasePath makes: all of
+// BasePathReader, so there is nothing else it could be asked.
 type stubRepo struct {
-	db.Repository
-
 	worktree    *db.Worktree
 	worktreeErr error
 	project     *db.Project
@@ -53,6 +51,8 @@ func (s *stubRepo) GetProject(_ context.Context, _ string) (*db.Project, error) 
 func (s *stubRepo) GetChat(_ context.Context, _ string) (*db.Chat, error) {
 	return s.chat, s.chatErr
 }
+
+var _ BasePathReader = (*stubRepo)(nil)
 
 func strPtr(s string) *string { return &s }
 

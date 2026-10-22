@@ -64,7 +64,7 @@ func (*daemonDownError) Error() string { return "no daemon connected" }
 
 // seedProject creates a project row the way a first-ever open would, then
 // returns its id. The router used here reports the directory as present.
-func seedProject(t *testing.T, repo db.Repository, ctx context.Context, path string) string {
+func seedProject(t *testing.T, repo *db.Repo, ctx context.Context, path string) string {
 	t.Helper()
 	s := newProjectService(t, repo, &stalePathRouter{dirExists: true})
 	resp, err := s.CreateProject(ctx, connect.NewRequest(&reliantv1.CreateProjectRequest{

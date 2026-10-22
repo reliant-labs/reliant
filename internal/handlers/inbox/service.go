@@ -1,21 +1,15 @@
 package inbox
 
 import (
-	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"sync"
-	"time"
 
 	"connectrpc.com/connect"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
-	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/reliant-labs/reliant/internal/db/core"
-	"github.com/reliant-labs/reliant/internal/launch"
-	"github.com/reliant-labs/reliant/internal/worktreesweep"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
@@ -34,35 +28,6 @@ type Deps struct {
 	// unavailable.
 	// forge:optional-dep
 	Sweeper Sweeper
-}
-
-// Repository is the slice of db.Repository the inbox handlers use. It
-// includes worktreesweep.StorageStore because the storage view and the
-// clean-up read through the same store.
-type Repository interface {
-	worktreesweep.StorageStore
-	// WorkflowResolver reads an activation's workflow, to tell which
-	// automations still need setting up.
-	launch.WorkflowResolver
-
-	ListInboxPending(ctx context.Context, userID string) ([]*core.InboxPending, error)
-	ListDismissedInboxItemIDs(ctx context.Context, userID string, itemIDs []string) (map[string]bool, error)
-	DismissInboxItems(ctx context.Context, userID string, itemIDs []string, at time.Time) error
-	RestoreInboxItems(ctx context.Context, userID string, itemIDs []string) error
-
-	ListTriggers(ctx context.Context, f core.TriggerFilters) ([]*core.Trigger, error)
-	RecentTriggerFirings(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error)
-	FiringsSinceLastSuccess(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error)
-	ListTriggerRegistrations(ctx context.Context, userID string, triggerIDs []string) (map[string]*core.TriggerRegistration, error)
-
-	GetDaemon(ctx context.Context, id string) (*db.Daemon, error)
-	ListDaemonsByUserID(ctx context.Context, userID string) ([]*db.Daemon, error)
-}
-
-// Sweeper starts a storage clean-up on one of the caller's machines.
-// *worktreesweep.Sweeper implements it.
-type Sweeper interface {
-	StartCleanup(ctx context.Context, store worktreesweep.StorageStore, userID, daemonID string, wantIDs []string) (accepted []string, skipped []worktreesweep.CleanupResult, err error)
 }
 
 // validateDeps returns an error if any required Deps field is nil. The

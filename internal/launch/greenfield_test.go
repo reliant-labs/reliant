@@ -16,7 +16,7 @@ import (
 )
 
 // greenfieldFixture builds a user, project and chat row for the gating tests.
-func greenfieldFixture(t *testing.T) (db.Repository, context.Context, *db.Chat) {
+func greenfieldFixture(t *testing.T) (*db.Repo, context.Context, *db.Chat) {
 	t.Helper()
 
 	repo, cleanup := db.SetupTestDB(t)

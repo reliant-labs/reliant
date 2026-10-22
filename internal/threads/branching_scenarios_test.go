@@ -21,7 +21,7 @@ import (
 
 type testEnv struct {
 	t       *testing.T
-	repo    db.Repository
+	repo    *db.Repo
 	service *Service
 	ctx     context.Context
 }

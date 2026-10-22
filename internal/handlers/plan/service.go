@@ -1,7 +1,6 @@
 package plan
 
 import (
-	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -10,7 +9,6 @@ import (
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
@@ -24,19 +22,6 @@ type Deps struct {
 	// Repo reads and writes plans, and resolves the thread and chat that
 	// authorize them.
 	Repo Repository
-}
-
-// Repository is the slice of db.Repository the plan handlers use.
-type Repository interface {
-	GetChat(ctx context.Context, id string) (*db.Chat, error)
-	GetThread(ctx context.Context, id string) (*db.Thread, error)
-	CreatePlan(ctx context.Context, plan *db.Plan) error
-	GetPlan(ctx context.Context, id string) (*db.Plan, error)
-	ListPlansByChatID(ctx context.Context, chatID string) ([]*db.Plan, error)
-	UpdatePlan(ctx context.Context, plan *db.Plan) error
-	DeletePlan(ctx context.Context, id string) error
-	ListTasksByPlan(ctx context.Context, planID string) ([]*db.Task, error)
-	EmitChatRefetch(ctx context.Context, chatID string, refetchType db.RefetchType) error
 }
 
 // validateDeps returns an error if any required Deps field is nil. The

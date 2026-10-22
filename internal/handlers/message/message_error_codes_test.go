@@ -16,14 +16,11 @@ import (
 )
 
 // failingMessageRepo fails GetMessage with err. Every other method is
-// unreachable: the embedded nil Repository panics if one is called.
-type failingMessageRepo struct {
-	message.Repository
-	err error
-}
-
-func (r failingMessageRepo) GetMessage(context.Context, string) (*db.Message, error) {
-	return nil, r.err
+// unprogrammed and fails with the mock's "Func not set" error.
+func failingMessageRepo(err error) *message.MockRepository {
+	return &message.MockRepository{GetMessageFunc: func(context.Context, string) (*db.Message, error) {
+		return nil, err
+	}}
 }
 
 // GetMessage passes a classified repository error through and redacts an
@@ -43,7 +40,7 @@ func TestGetMessage_RepositoryFailureCodes(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			svc := message.NewTestMessage(t, message.WithMessageDeps(message.Deps{Repo: failingMessageRepo{err: tc.err}}))
+			svc := message.NewTestMessage(t, message.WithMessageDeps(message.Deps{Repo: failingMessageRepo(tc.err)}))
 			_, err := svc.GetMessage(message.AuthedContext(t), connect.NewRequest(&pb.GetMessageRequest{MessageId: "msg-1"}))
 			require.Equal(t, tc.want, svcerr.Code(err), "err = %v", err)
 			require.NotContains(t, svcerr.ToConnect(err).Message(), "secret")

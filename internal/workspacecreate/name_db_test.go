@@ -16,7 +16,7 @@ import (
 
 // seedProject returns the project every DB-backed test database starts with,
 // so rows go through the real unique index.
-func seedProject(t *testing.T, repo db.Repository) *db.Project {
+func seedProject(t *testing.T, repo *db.Repo) *db.Project {
 	t.Helper()
 	p, err := repo.GetProject(context.Background(), "test-project")
 	require.NoError(t, err)

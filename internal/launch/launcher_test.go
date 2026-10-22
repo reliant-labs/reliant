@@ -107,7 +107,7 @@ func (r *fakeWorkflowRun) GetRunID() string { return r.runID }
 // recordingRunRecorder stands in for runs.Service, which Launch calls to write
 // the run ids back onto the chat.
 type recordingRunRecorder struct {
-	repo  db.Repository
+	repo  ChatWriter
 	calls []string
 }
 
@@ -163,7 +163,14 @@ func launchFixture(t *testing.T) (*db.Repo, context.Context, string, string) {
 	return repo, ctx, projectID, mainWorktreeID
 }
 
-func newTestLauncher(t *testing.T, repo db.Repository, starter *fakeStarter) (*Launcher, *recordingRunRecorder) {
+// launchTestStore is what newTestLauncher hands the Launcher and its thread
+// creator: a *db.Repo, or a fake wrapping one.
+type launchTestStore interface {
+	Store
+	threads.Repository
+}
+
+func newTestLauncher(t *testing.T, repo launchTestStore, starter *fakeStarter) (*Launcher, *recordingRunRecorder) {
 	t.Helper()
 	recorder := &recordingRunRecorder{repo: repo}
 	return NewLauncher(repo, threads.NewService(repo), starter, recorder, "test-task-queue"), recorder
@@ -180,7 +187,7 @@ func userSeed(content string) []SeedMessage {
 
 // messageText reads a message's rendered text, which lives in its content
 // blocks rather than on the row.
-func messageText(t *testing.T, ctx context.Context, repo db.Repository, messageID string) string {
+func messageText(t *testing.T, ctx context.Context, repo *db.Repo, messageID string) string {
 	t.Helper()
 	blocks, err := repo.ListContentBlocks(ctx, messageID)
 	require.NoError(t, err)
@@ -525,7 +532,7 @@ func pendingBranch(t *testing.T, repo *db.Repo, ctx context.Context, projectID, 
 
 func ptr[T any](v T) *T { return &v }
 
-func eventsFor(t *testing.T, ctx context.Context, repo db.Repository, chatID string) *core.TriggerEvent {
+func eventsFor(t *testing.T, ctx context.Context, repo *db.Repo, chatID string) *core.TriggerEvent {
 	t.Helper()
 	ev, err := repo.GetTriggerEventByDedupe(ctx, core.TriggerEventKindChatStart, chatID)
 	require.NoError(t, err)

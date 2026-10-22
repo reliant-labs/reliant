@@ -10,26 +10,26 @@ import (
 	"github.com/stretchr/testify/require"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 )
 
-// claudeOnlyRepo is prod user 30542add's provider settings on 2026-10-10:
+// claudeOnlyAccounts is prod user 30542add's provider settings on 2026-10-10:
 // Codex disconnected, Claude connected — here as an Anthropic API key, which
 // BuildAvailableDrivers registers under the same anthropic driver.
-type claudeOnlyRepo struct{ db.Repository }
-
-func (claudeOnlyRepo) ListProviderAccountsWithSecrets(context.Context, string) ([]core.AccountWithSecrets, error) {
-	return []core.AccountWithSecrets{{
-		ProviderAccount: core.ProviderAccount{ID: "key-1", UserID: "user-1", Provider: "anthropic", AuthKind: core.AuthKindAPIKey},
-		Secrets:         core.AccountSecrets{Secret: "sk-ant-api03-test"},
-	}}, nil
-}
-
-func (claudeOnlyRepo) ListAccountLimits(context.Context, string) (map[string]core.LimitState, error) {
-	return nil, nil
+func claudeOnlyAccounts() *drivers.MockAPIKeyStore {
+	return &drivers.MockAPIKeyStore{
+		ListProviderAccountsWithSecretsFunc: func(context.Context, string) ([]core.AccountWithSecrets, error) {
+			return []core.AccountWithSecrets{{
+				ProviderAccount: core.ProviderAccount{ID: "key-1", UserID: "user-1", Provider: "anthropic", AuthKind: core.AuthKindAPIKey},
+				Secrets:         core.AccountSecrets{Secret: "sk-ant-api03-test"},
+			}}, nil
+		},
+		ListAccountLimitsFunc: func(context.Context, string) (map[string]core.LimitState, error) {
+			return nil, nil
+		},
+	}
 }
 
 // THE REGRESSION (prod chat 66a045ce, 2026-10-10T14:41:32Z): "continue" was
@@ -39,11 +39,11 @@ func (claudeOnlyRepo) ListAccountLimits(context.Context, string) (map[string]cor
 // providers cannot serve right now is not an invalid input.
 //
 // The API key provider is process-global and has no way back to "unset", so
-// this leaves claudeOnlyRepo installed. That is safe in this package: every
+// this leaves claudeOnlyAccounts installed. That is safe in this package: every
 // other test here uses the "mock" model, which validation resolves without
 // reading providers.
 func TestValidateWorkflowInputs_UnservableModelIsNotAValidationError(t *testing.T) {
-	drivers.InitializeAPIKeyProvider(claudeOnlyRepo{})
+	drivers.InitializeAPIKeyProvider(claudeOnlyAccounts())
 	launcher := NewLauncher(nil, nil, nil, nil, "")
 	ctx := context.Background()
 

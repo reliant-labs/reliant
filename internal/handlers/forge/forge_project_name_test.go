@@ -13,12 +13,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 )
 
-// SetProjectForgeName completes Repository for the shared stub: the
-// tests that use it assert on the dispatch, not on the row.
-func (p forgeTestProjects) SetProjectForgeName(context.Context, string, string, string) (bool, error) {
-	return false, nil
-}
-
 // forgeNameRecordingProjects is a project row whose forge name writes are
 // recorded, so a test can assert what GetTopology persisted — and that the
 // steady state persists nothing.
@@ -26,6 +20,8 @@ type forgeNameRecordingProjects struct {
 	project *db.Project
 	writes  []string
 }
+
+var _ Repository = (*forgeNameRecordingProjects)(nil)
 
 func (p *forgeNameRecordingProjects) GetProjectWithUserCheck(_ context.Context, id, _ string) (*db.Project, error) {
 	row := *p.project

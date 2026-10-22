@@ -18,7 +18,10 @@ import (
 	"github.com/reliant-labs/reliant/internal/workflow/workflowref"
 )
 
+// retirer accumulates every trigger the delete hands it to retire.
 type retirer struct{ retired []*core.Trigger }
+
+var _ workflow.AutomationRetirer = (*retirer)(nil)
 
 func (r *retirer) RetireDeletedTriggers(_ context.Context, deleted []*core.Trigger) {
 	r.retired = append(r.retired, deleted...)

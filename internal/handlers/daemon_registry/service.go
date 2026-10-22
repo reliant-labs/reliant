@@ -1,18 +1,14 @@
 package daemon_registry
 
 import (
-	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
-	"time"
 
 	"connectrpc.com/connect"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
-	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
@@ -33,23 +29,6 @@ type Deps struct {
 	// daemon is external) the relays report Unavailable.
 	// forge:optional-dep
 	Router Router
-}
-
-// Repository is the slice of db.Repository the daemon_registry handlers use.
-type Repository interface {
-	GetDaemon(ctx context.Context, id string) (*db.Daemon, error)
-	ListDaemonsByUserID(ctx context.Context, userID string) ([]*db.Daemon, error)
-	ListFreshDaemonAttachmentsForUser(ctx context.Context, userID string, staleThreshold time.Duration) ([]*db.DaemonAttachment, error)
-	ListDaemonLocalModels(ctx context.Context, userID string) (map[string]string, error)
-	ListDaemonStorageState(ctx context.Context, userID string) (map[string]string, error)
-}
-
-// Router is the slice of toolexec.DaemonRouter the daemon_registry handlers
-// use. toolexec.DaemonRouter implements it.
-type Router interface {
-	IsDaemonOnline(ctx context.Context, userID string, selector *toolexec.DaemonSelector) (bool, error)
-	SendDaemonCommandToDaemon(ctx context.Context, userID, daemonID, commandType string, payload []byte, timeoutMs int32) ([]byte, error)
-	RefreshLocalModels(ctx context.Context, userID, daemonID string) (*pb.LocalModelInventory, error)
 }
 
 // validateDeps returns an error if any required Deps field is nil. The

@@ -15,21 +15,13 @@ import (
 	scenario "github.com/reliant-labs/reliant/internal/handlers/scenario"
 )
 
-// recordingSender records the daemon commands UploadScenario sends.
-type recordingSender struct {
-	userID, command string
-	payload         map[string]string
-}
-
-func (r *recordingSender) SendDaemonCommand(_ context.Context, userID, commandType string, payload []byte, _ int32) ([]byte, error) {
-	r.userID, r.command = userID, commandType
-	return nil, json.Unmarshal(payload, &r.payload)
-}
-
 func TestUploadScenario_Generated(t *testing.T) {
 	t.Parallel()
 
-	router := &recordingSender{}
+	// The daemon accepts every write; the Recorder keeps what was sent.
+	router := &scenario.MockSender{SendDaemonCommandFunc: func(context.Context, string, string, []byte, int32) ([]byte, error) {
+		return nil, nil
+	}}
 	svc := scenario.NewTestScenario(t, scenario.WithScenarioDeps(scenario.Deps{Repo: newScenarioRepo(&fixture{}), Router: router}))
 	upload := func(mut func(*pb.UploadScenarioRequest)) *connect.Request[pb.UploadScenarioRequest] {
 		req := &pb.UploadScenarioRequest{ProjectId: ownProjectID, WorkflowSlug: ownWorkflowSlug, Filename: "drafts.yaml", YamlContent: fixtureScenario}
@@ -73,10 +65,14 @@ func TestUploadScenario_Generated(t *testing.T) {
 			Req:  upload(func(*pb.UploadScenarioRequest) {}),
 			Ctx:  scenario.AuthedContext(t),
 			Check: func(t *testing.T, resp *connect.Response[pb.UploadScenarioResponse]) {
-				require.Equal(t, "test-user", router.userID)
-				require.Equal(t, "fs.write_file", router.command)
-				require.Equal(t, "/home/test/project/.reliant/workflows/tail-flow/scenarios/drafts.yaml", router.payload["path"])
-				require.Equal(t, router.payload["path"], resp.Msg.GetPath())
+				sends := router.Calls("SendDaemonCommand")
+				require.Len(t, sends, 1, "only the valid upload reaches the machine")
+				var payload map[string]string
+				require.NoError(t, json.Unmarshal(sends[0].Args[3].([]byte), &payload))
+				require.Equal(t, "test-user", sends[0].Args[1])
+				require.Equal(t, "fs.write_file", sends[0].Args[2])
+				require.Equal(t, "/home/test/project/.reliant/workflows/tail-flow/scenarios/drafts.yaml", payload["path"])
+				require.Equal(t, payload["path"], resp.Msg.GetPath())
 				require.Equal(t, "project:tail-flow:drafts", resp.Msg.GetScenario().GetId())
 			},
 		},

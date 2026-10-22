@@ -1,7 +1,6 @@
 package forge
 
 import (
-	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -10,7 +9,6 @@ import (
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
@@ -29,25 +27,6 @@ type Deps struct {
 	// Repo resolves a project to its path on the daemon, enforcing that the
 	// caller owns it, and records forge's name for the project.
 	Repo Repository
-}
-
-// Router is the slice of toolexec.DaemonRouter the forge handlers use
-// (daemoncmd.Sender).
-type Router interface {
-	SendDaemonCommand(ctx context.Context, userID, commandType string, payload []byte, timeoutMs int32) ([]byte, error)
-}
-
-// Repository is the only database capability this service needs: resolve a
-// project id to its row, enforcing that the caller owns it, and record forge's
-// name for the project when a topology report carries one.
-//
-// Two methods are all this service uses, and a narrow dependency is what makes
-// the handler testable without a database — which is what lets the
-// secret-safety and reachability tests run as plain unit tests.
-// db.Repository satisfies it.
-type Repository interface {
-	GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*db.Project, error)
-	SetProjectForgeName(ctx context.Context, id, userID, forgeProjectName string) (bool, error)
 }
 
 // validateDeps returns an error if any required Deps field is nil. The
