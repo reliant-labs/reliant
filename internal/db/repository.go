@@ -534,6 +534,10 @@ type Repository interface {
 	// ListPendingQuestionsByChat returns every pending question in a chat,
 	// oldest first, each with the thread that asked it.
 	ListPendingQuestionsByChat(ctx context.Context, chatID string) ([]*Question, error)
+	// ListAnswerablePendingQuestionsByChat is ListPendingQuestionsByChat
+	// without questions whose asking run completed or was cancelled: what
+	// the UI shows and lets the user answer.
+	ListAnswerablePendingQuestionsByChat(ctx context.Context, chatID string) ([]*Question, error)
 	GetQuestionsByWorkflowStepIteration(ctx context.Context, workflowID, stepID string, iteration int) ([]*Question, error)
 	ResolveQuestion(ctx context.Context, id string, responseData *string) error
 	// PendingQuestionsByThread returns each thread's newest PENDING question

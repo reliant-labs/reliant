@@ -1157,6 +1157,9 @@
     ".github/workflows/deploy.yml",
     ".github/workflows/e2e.yml",
     ".github/workflows/proto-breaking.yml",
+    "cmd/reliant/cmd/commands.go",
+    "cmd/reliant/cmd/metrics.go",
+    "internal/app/auth.go",
     "internal/handlers/catalog/handlers_scaffold_get_catalog_entry_test.go",
     "internal/handlers/catalog/handlers_scaffold_get_cel_completions_test.go",
     "internal/handlers/catalog/handlers_scaffold_list_catalog_integrations_test.go",
@@ -1288,6 +1291,7 @@
     "internal/handlers/worktree/handlers_scaffold_prune_worktrees_test.go",
     "internal/handlers/worktree/handlers_scaffold_recreate_worktree_test.go",
     "internal/handlers/worktree/handlers_scaffold_revert_files_test.go",
-    "internal/handlers/worktree/handlers_scaffold_unarchive_worktree_test.go"
+    "internal/handlers/worktree/handlers_scaffold_unarchive_worktree_test.go",
+    "internal/metrics/metrics.go"
   ]
 }

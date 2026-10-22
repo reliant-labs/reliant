@@ -94,7 +94,10 @@ func (s *Service) ResolveQuestion(
 }
 
 // ListPendingQuestions returns every pending question in a chat, oldest first,
-// each carrying the thread that asked it.
+// each carrying the thread that asked it. A question whose asking run
+// completed or was cancelled is left out: nothing can answer it, and shown in
+// its thread's composer it would replace the input the user needs to message
+// that thread.
 //
 // All of them, not "the chat's question": each spawned agent is a thread that
 // can park on its own ask_user, so one chat can be waiting on the user in
@@ -124,7 +127,7 @@ func (s *Service) ListPendingQuestions(
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
 	}
 
-	questions, err := s.deps.Repo.ListPendingQuestionsByChat(ctx, req.Msg.ChatId)
+	questions, err := s.deps.Repo.ListAnswerablePendingQuestionsByChat(ctx, req.Msg.ChatId)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("list pending questions: %w", err))
 	}

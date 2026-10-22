@@ -275,3 +275,53 @@ func TestInboxPending_DropsGatesOfFinishedAskingRuns(t *testing.T) {
 		t.Fatalf("inbox items for chat = %v, want [q-failed q-live]", keys)
 	}
 }
+
+// The pending questions the UI lists (QuestionService.ListPendingQuestions)
+// follow the inbox's rule: a question whose asking run completed or was
+// cancelled can never be answered and is not listed; a failed or paused run
+// resumes into the same wait and keeps its question. Every live thread's
+// question is listed, oldest first — not only the chat's newest.
+func TestListAnswerablePendingQuestionsByChat(t *testing.T) {
+	c := newLiveGateChat(t, "chat-answerable-questions")
+	c.spawn("spawn-live", Active())
+	c.spawn("spawn-done", Active())
+	c.spawn("spawn-cancelled", Active())
+	c.spawn("spawn-failed", Active())
+	c.spawn("spawn-paused", Active())
+	for _, id := range []string{"spawn-live", "spawn-done", "spawn-cancelled", "spawn-failed", "spawn-paused"} {
+		c.ask("q-"+id, id, id)
+		time.Sleep(2 * time.Millisecond) // distinct created_at, so the order is the asking order
+	}
+	c.setStatus("spawn-done", Completed())
+	c.setStatus("spawn-cancelled", Cancelled())
+	c.setStatus("spawn-failed", Failed())
+	c.setStatus("spawn-paused", Paused())
+
+	got, err := c.repo.ListAnswerablePendingQuestionsByChat(context.Background(), c.chatID)
+	if err != nil {
+		t.Fatalf("ListAnswerablePendingQuestionsByChat: %v", err)
+	}
+	var ids []string
+	for _, q := range got {
+		ids = append(ids, q.ID)
+	}
+	want := []string{"q-spawn-live", "q-spawn-failed", "q-spawn-paused"}
+	if len(ids) != len(want) {
+		t.Fatalf("ids = %v, want %v", ids, want)
+	}
+	for i := range want {
+		if ids[i] != want[i] {
+			t.Fatalf("ids = %v, want %v", ids, want)
+		}
+	}
+
+	// Every pending row is still there for the callers that must see them
+	// all (terminating a run voids each one).
+	all, err := c.repo.ListPendingQuestionsByChat(context.Background(), c.chatID)
+	if err != nil {
+		t.Fatalf("ListPendingQuestionsByChat: %v", err)
+	}
+	if len(all) != 5 {
+		t.Fatalf("ListPendingQuestionsByChat returned %d, want all 5 pending", len(all))
+	}
+}

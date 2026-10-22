@@ -132,6 +132,29 @@ func ListPendingQuestionsByChat(ctx context.Context, db orm.Context, chatID stri
 	return questionsFromRows(rows), nil
 }
 
+// ListAnswerablePendingQuestionsByChat returns a chat's pending questions that
+// can still be answered, oldest first, across every thread. It is the inbox's
+// rule (ListInboxPending): a question whose asking run — pending_input_gates
+// names it — completed or was cancelled can never be answered, since nothing
+// expires the row when its run stops, so it is not listed. A failed or paused
+// run resumes into the same wait and keeps its question.
+func ListAnswerablePendingQuestionsByChat(ctx context.Context, db orm.Context, chatID string) ([]*core.Question, error) {
+	var rows []*Question
+	err := db.Bun().NewSelect().Model(&rows).
+		Where("questions.chat_id = ?", chatID).
+		Where("questions.status = ?", core.QuestionStatusPending).
+		Where(`NOT EXISTS (
+            SELECT 1 FROM pending_input_gates g
+            WHERE g.kind = 'question' AND g.id = questions.id
+              AND g.run_state = 3 AND g.run_stop_reason IN (1, 4))`).
+		OrderExpr("questions.created_at ASC, questions.id ASC").
+		Scan(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list answerable pending questions by chat: %w", err)
+	}
+	return questionsFromRows(rows), nil
+}
+
 // ResolveQuestion marks the question answered with responseData at
 // resolvedAt. Resolving one that does not exist is a no-op.
 func ResolveQuestion(ctx context.Context, db orm.Context, id string, responseData *string, resolvedAt time.Time) error {
