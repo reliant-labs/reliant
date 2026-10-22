@@ -209,6 +209,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge obs metrics query`](#reliant-forge-obs-metrics-query) | One metric as time series |
 | [`reliant forge obs profile`](#reliant-forge-obs-profile) | Export an aggregated continuous profile as pprof, speedscope or collapsed stacks |
 | [`reliant forge obs query`](#reliant-forge-obs-query) | Anything else: raw SQL or a dashboard panel, with the scope bound |
+| [`reliant forge obs status`](#reliant-forge-obs-status) | What is wrong right now? Services, open issues, alerts, telemetry and the release in force |
 | [`reliant forge obs trace`](#reliant-forge-obs-trace) | One trace as a tree, with its errors and logs |
 | [`reliant forge obs traces`](#reliant-forge-obs-traces) | Find traces: the slowest, the failing, by route |
 | [`reliant forge package`](#reliant-forge-package) | Manage internal packages |
@@ -5409,6 +5410,13 @@ status is non-zero if any key is not a match.
 <secret> is a Secret name, or <namespace>/<name>; omit it to verify every
 store-backed Secret the env declares.
 
+With --against gsm: and an explicit --map, <secret> need not be declared by any
+store-backed ExternalSecret: the --map keys are the Secret's keys and their
+values the GSM ids to compare with. This is the pre-migration escrow check:
+
+  forge env secrets verify prod control-plane-prod/control-plane-openbao-unseal \
+      --against gsm:reliant-labs-475814 --map static-key=openbao-unseal-prod
+
 ```
 reliant forge env secrets verify <environment> [<secret>] [flags]
 ```
@@ -5965,6 +5973,10 @@ and rewrites what points at them:
   import "config/v1/<file>.proto"     in every other proto under proto/
   config.v1.<Message> references      in every proto (fully qualified type names)
   "<mod>/gen/config/v1" Go imports    in the project's own Go files
+  "config.v1", "config.v1.Msg"        Go string literals that are exactly the old
+                                      package or a name in it (a registry filter
+                                      such as RangeFilesByPackage("config.v1", …)
+                                      silently matches nothing once it moves)
   proto/config/v1, gen/config/v1      as paths in the project's own protos, Go,
                                       TS/JS, KCL, YAML, shell and Make files
                                       (TS imports of the generated _pb modules too)
@@ -5979,8 +5991,9 @@ the new package.
 Nothing a config DECLARES changes: fields, annotations, env var names, flags
 and the generated KCL schemas are the same, and the Go package keeps its name
 (configv1). Run forge generate afterwards to regenerate pkg/config, gen/ and
-the descriptor. Remaining mentions of the old layout (docs, an import of another
-project's gen/config/v1) are listed for you; nothing else is decided for you.
+the descriptor. Remaining mentions of the old layout (docs, a Go string that only contains config.v1, an import of another
+project's gen/config/v1) are listed
+for you with file:line; nothing else is decided for you.
 
 The rest of the v0.1.47 story is the migration skill: `forge skill load migrations/v0.1.47`.
 
@@ -6989,6 +7002,7 @@ reliant forge lint [paths...] [flags]
 | `--contract` | `bool` | - | Run contract interface enforcement linter |
 | `--conventions` | `bool` | - | Run forge convention rules on proto files |
 | `--create-nullability` | `bool` | - | Fail when a field's optional label disagrees between an entity message and its Create<Entity>Request — the flattened request drops write presence silently |
+| `--db-grants` | `bool` | - | Fail on a credential-shaped column (token, password, key, ciphertext, hash…) that carries neither forge:secret nor forge:readable <reason>: the read-only forge_ro role is refused it until someone decides |
 | `--fix` | `bool` | - | Apply the mechanical fixes in place (Go formatting, the tracing log rewrite, frontend prettier, eslint --fix), each Go rewrite type-checked and taken back if it breaks its package. Never golangci-lint fixes. Off by default: lint is a gate and reports |
 | `--fixture-drift` | `bool` | - | Execute every literal fixture statement in a scaffolded handlers_crud_test.go against the current schema — migrations applied to a shadow postgres, each statement run in a rolled-back transaction — and report postgres's own error for each one it rejects: a GENERATED column, a UNIQUE collision, a dangling foreign key, a CHECK a later migration added (warnings only) |
 | `--frontend-stores` | `bool` | - | Flag Zustand stores that import generated Connect clients (warnings only) |
@@ -7121,6 +7135,7 @@ reliant forge obs
 | [`metrics`](#reliant-forge-obs-metrics) | List and query metrics; print the declared schema |
 | [`profile`](#reliant-forge-obs-profile) | Export an aggregated continuous profile as pprof, speedscope or collapsed stacks |
 | [`query`](#reliant-forge-obs-query) | Anything else: raw SQL or a dashboard panel, with the scope bound |
+| [`status`](#reliant-forge-obs-status) | What is wrong right now? Services, open issues, alerts, telemetry and the release in force |
 | [`trace`](#reliant-forge-obs-trace) | One trace as a tree, with its errors and logs |
 | [`traces`](#reliant-forge-obs-traces) | Find traces: the slowest, the failing, by route |
 
@@ -7562,6 +7577,11 @@ JSON schema forge.obs.issue/v1. --fields takes dotted paths of:
   latest_event.url_path
   latest_event.version
   query_mode
+  release
+  release.promoted_at
+  release.promotion_id
+  release.unsettled
+  release.version
   scope
   scope.backend
   scope.env
@@ -7678,6 +7698,11 @@ JSON schema forge.obs.issue/v1. --fields takes dotted paths of:
   latest_event.url_path
   latest_event.version
   query_mode
+  release
+  release.promoted_at
+  release.promotion_id
+  release.unsettled
+  release.version
   scope
   scope.backend
   scope.env
@@ -7779,6 +7804,11 @@ JSON schema forge.obs.issue/v1. --fields takes dotted paths of:
   latest_event.url_path
   latest_event.version
   query_mode
+  release
+  release.promoted_at
+  release.promotion_id
+  release.unsettled
+  release.version
   scope
   scope.backend
   scope.env
@@ -7880,6 +7910,11 @@ JSON schema forge.obs.issue/v1. --fields takes dotted paths of:
   latest_event.url_path
   latest_event.version
   query_mode
+  release
+  release.promoted_at
+  release.promotion_id
+  release.unsettled
+  release.version
   scope
   scope.backend
   scope.env
@@ -8387,6 +8422,135 @@ reliant forge obs query [env] [flags]
 | `--sql` | `string` | - | one read-only SELECT, with the scope parameters above |
 | `--sql-file` | `string` | - | read the statement from this file (- for stdin) |
 | `--step` | `duration` | `0s` | the {step} parameter / a panel's bucket width (default: about 120 points) |
+| `--to` | `string` | - | range end, RFC 3339 (default now) |
+
+---
+
+#### reliant forge obs status
+
+What is wrong right now? Services, open issues, alerts, telemetry and the release in force
+
+One look at [env] (default dev) over --since (default 1h):
+
+  services         requests, error rate and latency per service, busiest first
+  issues           the new and regressed issues (locally: every error group)
+  alerts           the alerts firing or pending (hosted envs)
+  telemetry        when the newest log and span arrived; hosted, whether the
+                   control plane's telemetry token reached the cluster
+  current_release  the promotion in force, and the last few changes
+
+Each section is read on its own: one the backend cannot answer is listed in
+`unread` with the reason in `warnings`, and the rest are still shown. The exit
+status is 0 whenever anything was read; status reports, it does not judge (use
+`cli forge obs check` to gate a release).
+
+  cli forge obs status prod
+  cli forge obs status dev --since 15m --service api
+  cli forge obs status prod --json --fields services,issues.id,issues.title
+
+JSON schema forge.obs.status/v1. --fields takes dotted paths of:
+  alerts
+  alerts.active_at
+  alerts.fingerprint
+  alerts.firing_at
+  alerts.labels.*
+  alerts.rule
+  alerts.state
+  alerts.summary
+  alerts.value
+  changes
+  changes.actor
+  changes.at
+  changes.direction
+  changes.kind
+  changes.promotion_id
+  changes.summary
+  changes.target
+  changes.verb
+  changes.version
+  changes.via
+  current_release
+  current_release.actor
+  current_release.direction
+  current_release.promoted_at
+  current_release.promotion_id
+  current_release.unsettled
+  current_release.version
+  current_release.via
+  issues
+  issues.affected
+  issues.culprit
+  issues.events
+  issues.exception_type
+  issues.first_seen
+  issues.first_version
+  issues.id
+  issues.ignored_until
+  issues.last_seen
+  issues.last_version
+  issues.latest_trace_id
+  issues.platform
+  issues.regressed_at
+  issues.resolved_at
+  issues.resolved_version
+  issues.service
+  issues.status
+  issues.title
+  issues_truncated
+  not_evaluated
+  query_mode
+  scope
+  scope.backend
+  scope.env
+  scope.env_id
+  scope.from
+  scope.services
+  scope.to
+  services
+  services.error_logs
+  services.error_rate
+  services.errors
+  services.p50_ms
+  services.p95_ms
+  services.p99_ms
+  services.rate_per_second
+  services.requests
+  services.service
+  suggested
+  telemetry
+  telemetry.deliveries
+  telemetry.deliveries.cluster
+  telemetry.deliveries.consecutive_failures
+  telemetry.deliveries.expires_at
+  telemetry.deliveries.last_error
+  telemetry.deliveries.last_verified_at
+  telemetry.deliveries.name
+  telemetry.deliveries.namespace
+  telemetry.deliveries.state
+  telemetry.deliveries_enabled
+  telemetry.last_log_at
+  telemetry.last_span_at
+  telemetry.lookback
+  unread
+  warnings
+Always kept: schema, ok, exit_code, error, truncated, omitted, next_page_token.
+
+
+```
+reliant forge obs status [env] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
+| `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
+| `--from` | `string` | - | range start, RFC 3339 |
+| `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
+| `--limit` | `int` | `10` | most items to return |
+| `--service` | `stringArray` | `[]` | only this service.name (repeatable) |
+| `--since` | `duration` | `1h0m0s` | how far back to read (ignored with --from) |
 | `--to` | `string` | - | range end, RFC 3339 (default now) |
 
 ---
@@ -10730,7 +10894,7 @@ that holds it (default: Bundle.bootstrap_source's):
 The destination store comes from the ExternalSecret that reads each name
 (--store picks one when two do). Google Secret Manager uses your Application
 Default Credentials. No value is ever printed, and none is taken as an
-argument. --dry-run reads the source and reports what would be created.
+argument. --dry-run reads the source and reports what would be created; for a Google\nSecret Manager destination it also checks (metadata only) which names already\nhold a value and would be left alone.
 
 ```
 reliant forge secret import --env <environment> (--from <namespace>/<secret> --map key=NAME[,key=NAME...] | <NAME>) [flags]
@@ -10740,7 +10904,7 @@ reliant forge secret import --env <environment> (--from <namespace>/<secret> --m
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `--dry-run` | `bool` | - | Read the source and report what would be created; write nothing |
+| `--dry-run` | `bool` | - | Read the source and report what would be created or left alone; write nothing |
 | `--env` | `string` | - | Environment whose secret store to act on (required; deploy/kcl/<env>/) |
 | `--from` | `string` | - | Cluster Secret to read, as <namespace>/<secret> (uses your kube context) |
 | `--from-file` | `string` | - | Read the single NAME's value from a file instead of stdin |
