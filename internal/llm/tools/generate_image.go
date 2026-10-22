@@ -140,12 +140,12 @@ type GenerateImageOutput struct {
 // still works from here — that goes through the daemon client on the tool
 // context, which is exactly how every other server-run tool reaches disk.
 type generateImageTool struct {
-	repo    db.Repository
+	repo    generateImageStore
 	resolve ImageGeneratorResolver
 }
 
 // NewGenerateImageTool creates the generate_image tool.
-func NewGenerateImageTool(repo db.Repository, resolve ImageGeneratorResolver) Tool {
+func NewGenerateImageTool(repo generateImageStore, resolve ImageGeneratorResolver) Tool {
 	return NewToolWrapper[GenerateImageParams, ToolResponse](&generateImageTool{repo: repo, resolve: resolve})
 }
 

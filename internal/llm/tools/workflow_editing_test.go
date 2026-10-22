@@ -18,7 +18,7 @@ import (
 // setupTestDB returns this package's isolated, reset-per-test database. It
 // already seeds the shared "test-project" (see db.SetupTestDB), so tests can
 // reference that project ID without creating it themselves.
-func setupTestDB(t *testing.T) (db.Repository, func()) {
+func setupTestDB(t *testing.T) (*db.Repo, func()) {
 	t.Helper()
 	return db.SetupTestDB(t)
 }
@@ -34,7 +34,7 @@ func createTestContext(t *testing.T, chatID string) *rctx.ToolContext {
 }
 
 // createTestChat creates a chat in the database for tests that need chat association
-func createTestChat(t *testing.T, repo db.Repository, chatID string) {
+func createTestChat(t *testing.T, repo *db.Repo, chatID string) {
 	t.Helper()
 	workflowName := "test-workflow"
 	now := time.Now()

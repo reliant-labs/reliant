@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/rctx"
 )
 
@@ -28,11 +27,11 @@ You cannot message the run you are executing in, and you can only message runs t
 )
 
 type sendToRunTool struct {
-	repo      db.Repository
+	repo      runCallerStore
 	messenger RunMessenger
 }
 
-func NewSendToRunTool(repo db.Repository, messenger RunMessenger) Tool {
+func NewSendToRunTool(repo runCallerStore, messenger RunMessenger) Tool {
 	return NewToolWrapper[SendToRunParams, ToolResponse](&sendToRunTool{repo: repo, messenger: messenger})
 }
 

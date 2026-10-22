@@ -25,11 +25,11 @@ import (
 
 // AddTaskTool allows agents to add new tasks to an existing plan
 type AddTaskTool struct {
-	repo db.Repository
+	repo addTaskStore
 }
 
 // NewAddTaskTool creates a new task addition tool
-func NewAddTaskTool(repo db.Repository) Tool {
+func NewAddTaskTool(repo addTaskStore) Tool {
 	return NewToolWrapper(&AddTaskTool{
 		repo: repo,
 	})

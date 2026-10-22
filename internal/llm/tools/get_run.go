@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/rctx"
 	"github.com/reliant-labs/reliant/internal/threads"
 )
@@ -28,11 +27,11 @@ Only runs the user owns can be inspected. To check on a sub-agent you spawned, u
 )
 
 type getRunTool struct {
-	repo    db.Repository
+	repo    getRunStore
 	threads *threads.Service
 }
 
-func NewGetRunTool(repo db.Repository) Tool {
+func NewGetRunTool(repo getRunStore) Tool {
 	t := &getRunTool{repo: repo}
 	if repo != nil {
 		t.threads = threads.NewService(repo)

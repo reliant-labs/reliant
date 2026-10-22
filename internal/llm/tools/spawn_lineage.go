@@ -27,7 +27,7 @@ import (
 // Best-effort: it backs a read-only view and a better refusal message, so a
 // failed lookup degrades to "not inherited" — the answer every caller gave
 // before inheritance existed — rather than failing the tool call.
-func findInheritedSpawnChild(rctx *rctx.ToolContext, repo db.Repository, callerThreadID, agentID string) *db.InheritedSpawnChild {
+func findInheritedSpawnChild(rctx *rctx.ToolContext, repo inheritedSpawnLookup, callerThreadID, agentID string) *db.InheritedSpawnChild {
 	inherited, err := repo.ListInheritedSpawnChildren(rctx.Context, callerThreadID)
 	if err != nil {
 		logging.Warn("[spawn] Failed to resolve inherited sub-agents", "thread", callerThreadID, "error", err)

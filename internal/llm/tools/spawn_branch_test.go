@@ -33,7 +33,7 @@ type branchedSpawnFixture struct {
 	laterChildID     string // spawned by the original AFTER the branch point
 }
 
-func saveFixtureMessage(t *testing.T, repo db.Repository, ctx context.Context, chatID, threadID string, role reliantv1.MessageRole, content string) string {
+func saveFixtureMessage(t *testing.T, repo *db.Repo, ctx context.Context, chatID, threadID string, role reliantv1.MessageRole, content string) string {
 	t.Helper()
 	if _, err := repo.GetLatestContextWindow(ctx, threadID); err != nil {
 		_, cwErr := repo.CreateContextWindow(ctx, &db.ContextWindow{
@@ -56,7 +56,7 @@ func saveFixtureMessage(t *testing.T, repo db.Repository, ctx context.Context, c
 // seedFixtureSpawn records a spawn issued by parentThreadID from the assistant
 // message issuingMessageID, exactly as the runtime persists one: a spawn child
 // thread, its workflow row, and a tool_calls row naming the parent.
-func seedFixtureSpawn(t *testing.T, repo db.Repository, ctx context.Context, chatID, parentThreadID, issuingMessageID, title string) string {
+func seedFixtureSpawn(t *testing.T, repo *db.Repo, ctx context.Context, chatID, parentThreadID, issuingMessageID, title string) string {
 	t.Helper()
 	now := time.Now()
 	childThreadID := uuid.New().String()
@@ -80,7 +80,7 @@ func seedFixtureSpawn(t *testing.T, repo db.Repository, ctx context.Context, cha
 	return childThreadID
 }
 
-func seedBranchedSpawnFixture(t *testing.T, repo db.Repository, ctx context.Context) branchedSpawnFixture {
+func seedBranchedSpawnFixture(t *testing.T, repo *db.Repo, ctx context.Context) branchedSpawnFixture {
 	t.Helper()
 	var f branchedSpawnFixture
 

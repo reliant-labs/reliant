@@ -53,10 +53,10 @@ func runListStateLabel(run *db.RunListItem) string {
 }
 
 type listRunsTool struct {
-	repo db.Repository
+	repo listRunsStore
 }
 
-func NewListRunsTool(repo db.Repository) Tool {
+func NewListRunsTool(repo listRunsStore) Tool {
 	return NewToolWrapper[ListRunsParams, ToolResponse](&listRunsTool{repo: repo})
 }
 

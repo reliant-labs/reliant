@@ -16,10 +16,10 @@ import (
 
 // AddDependencyTool allows agents to create typed dependencies between tasks
 type AddDependencyTool struct {
-	repo db.Repository
+	repo addDependencyStore
 }
 
-func NewAddDependencyTool(repo db.Repository) Tool {
+func NewAddDependencyTool(repo addDependencyStore) Tool {
 	return NewToolWrapper(&AddDependencyTool{repo: repo})
 }
 
@@ -177,10 +177,10 @@ func (t *AddDependencyTool) resolveTask(rctx *rctx.ToolContext, taskRef string) 
 
 // RemoveDependencyTool allows agents to remove dependencies between tasks
 type RemoveDependencyTool struct {
-	repo db.Repository
+	repo removeDependencyStore
 }
 
-func NewRemoveDependencyTool(repo db.Repository) Tool {
+func NewRemoveDependencyTool(repo removeDependencyStore) Tool {
 	return NewToolWrapper(&RemoveDependencyTool{repo: repo})
 }
 
@@ -231,10 +231,10 @@ func (t *RemoveDependencyTool) Execute(rctx *rctx.ToolContext, params RemoveDepe
 
 // ListReadyTasksTool lists tasks that are ready to work on (no unresolved blockers)
 type ListReadyTasksTool struct {
-	repo db.Repository
+	repo listReadyTasksStore
 }
 
-func NewListReadyTasksTool(repo db.Repository) Tool {
+func NewListReadyTasksTool(repo listReadyTasksStore) Tool {
 	return NewToolWrapper(&ListReadyTasksTool{repo: repo})
 }
 

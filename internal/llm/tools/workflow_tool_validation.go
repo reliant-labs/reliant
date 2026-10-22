@@ -34,7 +34,7 @@ func (c workflowToolCheck) hasErrors() bool {
 // outputs are dyn, which is weaker than the run-start validation the
 // workflow will later face: the agent would be told "valid" and meet the
 // error only when someone runs it.
-func validateWorkflowForTool(ctx context.Context, repo db.Repository, content string) workflowToolCheck {
+func validateWorkflowForTool(ctx context.Context, repo workflowsource.Store, content string) workflowToolCheck {
 	var raw interface{}
 	if err := yaml.Unmarshal([]byte(content), &raw); err != nil {
 		return workflowToolCheck{syntaxErr: fmt.Errorf("invalid YAML syntax: %w", err)}
@@ -56,7 +56,7 @@ func validateWorkflowForTool(ctx context.Context, repo db.Repository, content st
 // of theirs is left unresolved (nil, nil) — it may name a project workflow,
 // which run start validates in its project. The workflow being validated
 // resolves to itself, so self-spawning works while it is a draft.
-func workflowToolLoader(ctx context.Context, repo db.Repository, self *reliantv1.Workflow) v2.WorkflowLoader {
+func workflowToolLoader(ctx context.Context, repo workflowsource.Store, self *reliantv1.Workflow) v2.WorkflowLoader {
 	userID, _ := auth.GetUserIDFromContext(ctx)
 	// Resolve refs exactly as run start does (workflowsource): only a
 	// complete workflow loads, and a draft child is an error here too, so

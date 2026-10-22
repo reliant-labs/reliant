@@ -85,7 +85,7 @@ func (m *fakeRunMachine) to(commandType string) []sentWorktreeCommand {
 }
 
 type worktreeToolFixture struct {
-	repo    db.Repository
+	repo    *db.Repo
 	machine *fakeRunMachine
 	project *db.Project
 	chatID  string

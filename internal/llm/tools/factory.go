@@ -26,7 +26,15 @@ type ToolsOptions struct {
 	// tools (netguard.ForDeployment): a hosted deployment's shared worker must
 	// not reach its own network; a self-hosted one is the user's machine.
 	ControlPlaneURL string
-	// Repository
+	// Repo is the database the tools read and write. The factory is
+	// composition: it hands Repo to each tool as the role that tool declares
+	// (deps.go). Optional: nil means every database-backed tool reports that
+	// it is unavailable here (the daemon runtime, catalog listings).
+	//
+	// It becomes *db.Repo once no caller passes a db.Repository (P6). That
+	// change must keep an absent repo a nil role in each tool: a nil *db.Repo
+	// handed to a role is a non-nil interface, which every tool's "requires a
+	// database connection" check would miss.
 	Repo db.Repository
 	// Skills are injected from the config sync pipeline (daemon → DB → provider).
 	// The skill tool operates on this slice exclusively — no filesystem access.
@@ -156,14 +164,6 @@ func (f *ToolsFactory) GetMCPToolSet(runtime MCPRuntime) MCPToolSet {
 		return MCPToolSet{Tools: []Tool{}, Source: MCPToolsUnrequested}
 	}
 	return f.mcpProvider.GetToolSet(runtime)
-}
-
-// GetRepo returns the repository dependency used by this factory.
-func (f *ToolsFactory) GetRepo() db.Repository {
-	if f.opts == nil {
-		return nil
-	}
-	return f.opts.Repo
 }
 
 // cloneOpts copies this factory's options so a With* helper can override one

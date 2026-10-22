@@ -16,7 +16,7 @@ import (
 // createResolverDraft inserts a draft owned by "test-user", with unique
 // names. Names and slugs are unique per call because drafts are unique on
 // (user_id, slug) and these tests run in parallel against one database.
-func createResolverDraft(t *testing.T, repo db.Repository) *db.WorkflowDraft {
+func createResolverDraft(t *testing.T, repo *db.Repo) *db.WorkflowDraft {
 	t.Helper()
 	now := time.Now()
 	unique := uuid.New().String()[:8]

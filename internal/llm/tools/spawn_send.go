@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/rctx"
 )
@@ -57,11 +56,11 @@ type AgentMessageNotifier interface {
 }
 
 type spawnSendTool struct {
-	repo     db.Repository
+	repo     spawnSendStore
 	notifier AgentMessageNotifier
 }
 
-func NewSpawnSendTool(repo db.Repository, notifier AgentMessageNotifier) Tool {
+func NewSpawnSendTool(repo spawnSendStore, notifier AgentMessageNotifier) Tool {
 	return NewToolWrapper[SpawnSendParams, ToolResponse](&spawnSendTool{repo: repo, notifier: notifier})
 }
 
@@ -184,7 +183,7 @@ const (
 // child of callerThreadID, or callerThreadID's own parent. Any other
 // relationship (sibling, cousin, unrelated) is rejected — v1 is parent<->child
 // only per spec.
-func spawnSendRelationship(rctx *rctx.ToolContext, repo db.Repository, callerThreadID, targetThreadID string) (spawnRelationship, error) {
+func spawnSendRelationship(rctx *rctx.ToolContext, repo spawnRelationStore, callerThreadID, targetThreadID string) (spawnRelationship, error) {
 	children, err := repo.ListSpawnChildren(rctx.Context, callerThreadID)
 	if err != nil {
 		return spawnRelationshipNone, fmt.Errorf("failed to verify agent relationship: %w", err)

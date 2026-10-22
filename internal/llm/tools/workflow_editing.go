@@ -34,7 +34,7 @@ type CreateWorkflowResult struct {
 }
 
 type createWorkflowTool struct {
-	repo db.Repository
+	repo createWorkflowStore
 }
 
 const (
@@ -67,7 +67,7 @@ JSON with id, name, slug, and status.
 }`
 )
 
-func NewCreateWorkflowTool(repo db.Repository) Tool {
+func NewCreateWorkflowTool(repo createWorkflowStore) Tool {
 	tool := &createWorkflowTool{repo: repo}
 	return NewToolWrapper[CreateWorkflowParams, ToolResponse](tool)
 }
@@ -197,7 +197,7 @@ type EditWorkflowParams struct {
 }
 
 type editWorkflowTool struct {
-	repo db.Repository
+	repo workflowWriteStore
 }
 
 const (
@@ -237,7 +237,7 @@ every current error and warning.
 }`
 )
 
-func NewEditWorkflowTool(repo db.Repository) Tool {
+func NewEditWorkflowTool(repo workflowWriteStore) Tool {
 	tool := &editWorkflowTool{repo: repo}
 	return NewToolWrapper[EditWorkflowParams, ToolResponse](tool)
 }
@@ -366,7 +366,7 @@ type WriteWorkflowResult struct {
 }
 
 type writeWorkflowTool struct {
-	repo db.Repository
+	repo workflowWriteStore
 }
 
 const (
@@ -403,7 +403,7 @@ JSON with id, name, slug, status, and created (false for updates).
 The slug can be used in ref: fields to reference this workflow.`
 )
 
-func NewWriteWorkflowTool(repo db.Repository) Tool {
+func NewWriteWorkflowTool(repo workflowWriteStore) Tool {
 	tool := &writeWorkflowTool{repo: repo}
 	return NewToolWrapper[WriteWorkflowParams, ToolResponse](tool)
 }

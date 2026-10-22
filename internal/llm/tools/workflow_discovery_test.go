@@ -34,7 +34,7 @@ func listWorkflowsRow(t *testing.T, listing, workflowName string) []string {
 	return nil
 }
 
-func runListWorkflows(t *testing.T, repo db.Repository, chatID string) string {
+func runListWorkflows(t *testing.T, repo *db.Repo, chatID string) string {
 	t.Helper()
 	resp, err := NewListWorkflowsTool(repo).Run(createTestContext(t, chatID), ToolCall{
 		ID: "list", Name: ListWorkflowsToolName, Input: "{}",
@@ -44,7 +44,7 @@ func runListWorkflows(t *testing.T, repo db.Repository, chatID string) string {
 	return resp.Content
 }
 
-func runGetWorkflow(t *testing.T, repo db.Repository, chatID, id string) ToolResponse {
+func runGetWorkflow(t *testing.T, repo *db.Repo, chatID, id string) ToolResponse {
 	t.Helper()
 	inputJSON, err := json.Marshal(GetWorkflowParams{ID: id})
 	require.NoError(t, err)

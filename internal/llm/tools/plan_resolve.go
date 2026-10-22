@@ -48,7 +48,7 @@ type resolvedPlan struct {
 // editing its parent's plan concurrently with its siblings is a shared-memory
 // problem — several agents mutating one task list with no conflict resolution —
 // and nothing here needs it. Seeing the board is the part that was missing.
-func resolvePlanForRead(ctx context.Context, repo db.Repository, threadID string) (*resolvedPlan, error) {
+func resolvePlanForRead(ctx context.Context, repo planLookupStore, threadID string) (*resolvedPlan, error) {
 	if threadID == "" {
 		return nil, fmt.Errorf("no thread context available")
 	}
@@ -100,7 +100,7 @@ func resolvePlanForRead(ctx context.Context, repo db.Repository, threadID string
 // Kept separate from resolvePlanForRead so the read-through can never silently
 // become a write-through: an inherited plan is returned to readers and refused
 // here, with a message that says which thread owns it.
-func resolvePlanForWrite(ctx context.Context, repo db.Repository, threadID string) (*db.Plan, error) {
+func resolvePlanForWrite(ctx context.Context, repo planLookupStore, threadID string) (*db.Plan, error) {
 	if threadID == "" {
 		return nil, fmt.Errorf("no thread context available")
 	}

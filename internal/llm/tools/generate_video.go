@@ -152,14 +152,14 @@ type GenerateVideoOutput struct {
 }
 
 type generateVideoTool struct {
-	repo    db.Repository
+	repo    generateVideoStore
 	jobs    VideoJobStore
 	resolve VideoGeneratorResolver
 	wait    videogen.WaitOptions
 }
 
 // NewGenerateVideoTool creates the generate_video tool.
-func NewGenerateVideoTool(repo db.Repository, jobs VideoJobStore, resolve VideoGeneratorResolver) Tool {
+func NewGenerateVideoTool(repo generateVideoStore, jobs VideoJobStore, resolve VideoGeneratorResolver) Tool {
 	return NewToolWrapper[GenerateVideoParams, ToolResponse](&generateVideoTool{repo: repo, jobs: jobs, resolve: resolve})
 }
 

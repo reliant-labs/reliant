@@ -7,7 +7,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/rctx"
 )
 
@@ -67,11 +66,11 @@ Narrow by workflow to see a workflow's activations. Health is HEALTHY, DEGRADED,
 )
 
 type listTriggersTool struct {
-	repo   db.Repository
+	repo   runCallerStore
 	lister TriggerLister
 }
 
-func NewListTriggersTool(repo db.Repository, lister TriggerLister) Tool {
+func NewListTriggersTool(repo runCallerStore, lister TriggerLister) Tool {
 	return NewToolWrapper[ListTriggersParams, ToolResponse](&listTriggersTool{lister: lister, repo: repo})
 }
 

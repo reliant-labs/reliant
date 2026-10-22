@@ -25,7 +25,7 @@ type ListWorkflowsParams struct {
 }
 
 type listWorkflowsTool struct {
-	repo db.Repository
+	repo listWorkflowsStore
 }
 
 const (
@@ -44,7 +44,7 @@ User workflows also list their draft UUID; builtin and project workflows have no
 Any handle in the Workflow column can be passed straight to get_workflow as id.`
 )
 
-func NewListWorkflowsTool(repo db.Repository) Tool {
+func NewListWorkflowsTool(repo listWorkflowsStore) Tool {
 	tool := &listWorkflowsTool{repo: repo}
 	return NewToolWrapper[ListWorkflowsParams, ToolResponse](tool)
 }
@@ -240,7 +240,7 @@ type GetWorkflowParams struct {
 }
 
 type getWorkflowTool struct {
-	repo db.Repository
+	repo getWorkflowStore
 }
 
 const (
@@ -265,7 +265,7 @@ Builtin and project workflows are read-only and have no version — copy one int
 create_workflow to get an editable draft.`
 )
 
-func NewGetWorkflowTool(repo db.Repository) Tool {
+func NewGetWorkflowTool(repo getWorkflowStore) Tool {
 	tool := &getWorkflowTool{repo: repo}
 	return NewToolWrapper[GetWorkflowParams, ToolResponse](tool)
 }

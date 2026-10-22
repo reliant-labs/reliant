@@ -32,7 +32,7 @@ func runSpawnStatus(t *testing.T, tool Tool, rc *rctx.ToolContext, params SpawnS
 // seedMessage creates the child thread's context window (if not already
 // present) and saves one message of the given role/content via
 // threads.Service, mirroring how real messages land during a spawn's run.
-func seedMessage(t *testing.T, repo db.Repository, ctx context.Context, chatID, threadID string, role reliantv1.MessageRole, content string) {
+func seedMessage(t *testing.T, repo *db.Repo, ctx context.Context, chatID, threadID string, role reliantv1.MessageRole, content string) {
 	t.Helper()
 	if _, err := repo.GetLatestContextWindow(ctx, threadID); err != nil {
 		_, cwErr := repo.CreateContextWindow(ctx, &db.ContextWindow{

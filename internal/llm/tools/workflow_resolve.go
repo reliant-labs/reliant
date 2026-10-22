@@ -26,7 +26,7 @@ import (
 //  1. idOrName is a UUID          -> by primary key
 //  2. idOrName is anything else   -> by slug, then by name, scoped to the user
 //  3. idOrName is empty           -> error telling the model to pass an id
-func resolveWorkflowDraft(ctx *rctx.ToolContext, repo db.Repository, idOrName string) (*db.WorkflowDraft, error) {
+func resolveWorkflowDraft(ctx *rctx.ToolContext, repo workflowDraftLookup, idOrName string) (*db.WorkflowDraft, error) {
 	if repo == nil {
 		return nil, fmt.Errorf("this tool requires a database connection and is not available in daemon-only mode")
 	}
