@@ -14,6 +14,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/serverkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/http2"
@@ -333,9 +334,11 @@ func dialToolsDaemon(t *testing.T, repo db.Repository, userID, daemonID string) 
 
 	routes := http.NewServeMux()
 	gateway.Register(routes) // the production mount
-	mux := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	// A serverkit listener gives every request an abortable body; ConnectDaemon
+	// refuses a stream without one.
+	mux := serverkit.NewStreams().Install(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		routes.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), auth.UserIDContextKey, userID)))
-	})
+	}))
 	srv := httptest.NewUnstartedServer(h2c.NewHandler(mux, &http2.Server{}))
 	srv.Start()
 	t.Cleanup(srv.Close)
