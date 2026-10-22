@@ -4,6 +4,8 @@ package tools
 import (
 	"sort"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestExpandToolFilter(t *testing.T) {
@@ -551,15 +553,16 @@ func TestExpandToolFilterWithSpawn_AskUser(t *testing.T) {
 		}
 	})
 
-	t.Run("ask_user not in ToolNames when not in filter", func(t *testing.T) {
-		filter := []string{"tag:coding:default"}
-		result := ExpandToolFilterWithSpawn(filter, mcpTools)
+	// ask_user is in the coding agent's starting bundle: asking is async by
+	// default, so the agent never needs load_tool to ask.
+	t.Run("tag:coding:default preloads ask_user", func(t *testing.T) {
+		result := ExpandToolFilterWithSpawn([]string{"tag:coding:default"}, mcpTools)
+		assert.Contains(t, result.ToolNames, "ask_user")
+	})
 
-		for _, name := range result.ToolNames {
-			if name == "ask_user" {
-				t.Error("ask_user should not be in ToolNames when not in filter")
-			}
-		}
+	t.Run("ask_user not in ToolNames when nothing names it", func(t *testing.T) {
+		result := ExpandToolFilterWithSpawn([]string{"tag:file", ShellToolName}, mcpTools)
+		assert.NotContains(t, result.ToolNames, "ask_user")
 	})
 }
 
