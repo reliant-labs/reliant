@@ -114,8 +114,8 @@ func (s *Service) checkReachability(
 		}
 	}
 	if len(refusals) > 0 {
-		return nil, svcerr.ToConnect(svcerr.FailedPrecondition(fmt.Sprintf(
-			"params: %s with the connected account. Choose values it can see, or reconnect with more access", strings.Join(refusals, "; "))))
+		return nil, svcerr.FailedPrecondition(fmt.Sprintf(
+			"params: %s with the connected account. Choose values it can see, or reconnect with more access", strings.Join(refusals, "; ")))
 	}
 	return warnings, nil
 }

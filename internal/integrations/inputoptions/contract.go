@@ -31,6 +31,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
 )
@@ -151,30 +152,33 @@ const (
 	MaxResolveValues = 100
 )
 
-// Typed failures. A caller maps them onto its own wire codes.
+// Typed failures. Each is a svcerr kind, so a handler's svcerr.Wrap sends the
+// right code; a detailError carrying one shows the person its msg.
 var (
 	// ErrUnknownType: no integration declares the type.
-	ErrUnknownType = errors.New("inputoptions: unknown type")
+	ErrUnknownType = svcerr.WithMessage(svcerr.ErrNotFound, "inputoptions: unknown type")
 	// ErrNoOptions: the type declares no option list (free entry only).
-	ErrNoOptions = errors.New("inputoptions: type has no options")
+	ErrNoOptions = svcerr.InvalidArgument("inputoptions: type has no options")
 	// ErrBadScope: a required scope value is missing or malformed.
-	ErrBadScope = errors.New("inputoptions: invalid scope")
+	ErrBadScope = svcerr.InvalidArgument("inputoptions: invalid scope")
 	// ErrBadPageToken: the token is malformed or belongs to another listing.
-	ErrBadPageToken = errors.New("inputoptions: invalid page token")
+	ErrBadPageToken = svcerr.InvalidArgument("inputoptions: invalid page token")
 	// ErrBadRequest: any other malformed request.
-	ErrBadRequest = errors.New("inputoptions: invalid request")
+	ErrBadRequest = svcerr.InvalidArgument("inputoptions: invalid request")
 	// ErrInvalidType: the type's own declaration cannot be run (its list
 	// action is missing, mutates, or is placed on a daemon). The manifest
-	// loader refuses these, so it is a defect, not a request error.
+	// loader refuses these, so it is a defect, not a request error: it has no
+	// kind, and a handler answers it with its own Internal.
 	ErrInvalidType = errors.New("inputoptions: invalid type declaration")
 	// ErrConnectionNotFound: the connection the request names does not exist
 	// for this caller. Another user's connection reads exactly like a missing
 	// one, so a caller cannot probe for ids.
-	ErrConnectionNotFound = errors.New("inputoptions: no such connection")
+	ErrConnectionNotFound = svcerr.WithMessage(svcerr.ErrNotFound, "inputoptions: no such connection")
 )
 
 // UpstreamError is the provider (or the action's declaration) failing to
-// produce a list. Message is safe to show a user.
+// produce a list. Message is safe to show a user: it is the text a handler
+// sends, as Unavailable when Retryable and FailedPrecondition otherwise.
 type UpstreamError struct {
 	Message string
 	// Retryable is whether trying again can help (a rate limit, a 5xx).
@@ -184,6 +188,14 @@ type UpstreamError struct {
 
 func (e *UpstreamError) Error() string { return e.Message }
 
+// Unwrap is the svcerr kind the failure is, carrying Message as its text.
+func (e *UpstreamError) Unwrap() error {
+	if e.Retryable {
+		return svcerr.WithMessage(svcerr.ErrUnavailable, e.Message)
+	}
+	return svcerr.WithMessage(svcerr.ErrFailedPrecondition, e.Message)
+}
+
 // detailError is a typed failure with a message for the person.
 type detailError struct {
 	kind error
@@ -191,7 +203,10 @@ type detailError struct {
 }
 
 func (e *detailError) Error() string { return fmt.Sprintf("%v: %s", e.kind, e.msg) }
-func (e *detailError) Unwrap() error { return e.kind }
+
+// Unwrap reaches kind through msg, so the client reads msg (svcerr publishes
+// the nearest message) while Error keeps the kind's name for the log.
+func (e *detailError) Unwrap() error { return svcerr.WithMessage(e.kind, e.msg) }
 
 // Message is the part of err a person should read.
 func Message(err error) string {

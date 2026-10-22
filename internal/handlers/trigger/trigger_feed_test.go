@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -94,7 +95,7 @@ func TestListTriggerEventsPagesWithTiedOccurredAt(t *testing.T) {
 
 	bad := "not-a-token"
 	_, err := env.svc.ListTriggerEvents(env.ctx, connect.NewRequest(&reliantv1.ListTriggerEventsRequest{TriggerId: trig.Id, PageToken: &bad}))
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 }
 
 func TestListTriggerEventsFiltersByOutcomeAndCarriesRun(t *testing.T) {
@@ -126,7 +127,7 @@ func TestListTriggerEventsFiltersByOutcomeAndCarriesRun(t *testing.T) {
 	_, err := env.svc.ListTriggerEvents(env.ctx, connect.NewRequest(&reliantv1.ListTriggerEventsRequest{
 		TriggerId: trig.Id, Outcomes: []reliantv1.TriggerEventOutcome{reliantv1.TriggerEventOutcome_TRIGGER_EVENT_OUTCOME_UNSPECIFIED},
 	}))
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 }
 
 func TestListTriggersCarriesNamesHealthAndLastRun(t *testing.T) {
@@ -220,7 +221,7 @@ func TestTriggerFeedHidesOtherUsersData(t *testing.T) {
 
 	otherCtx := context.WithValue(context.Background(), auth.UserIDContextKey, uuid.NewString())
 	_, err := env.svc.ListTriggerEvents(otherCtx, connect.NewRequest(&reliantv1.ListTriggerEventsRequest{TriggerId: trig.Id}))
-	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
 
 	list, err := env.svc.ListTriggers(otherCtx, connect.NewRequest(&reliantv1.ListTriggersRequest{}))
 	require.NoError(t, err)
@@ -318,10 +319,10 @@ func TestGetLaunchEventIsOwnerOnly(t *testing.T) {
 	other := context.WithValue(context.Background(), auth.UserIDContextKey, uuid.NewString())
 	_, err := env.launchEvent(t, other, chatID)
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
 
 	_, err = env.launchEvent(t, env.ctx, "no-such-chat")
-	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
 	_, err = env.launchEvent(t, env.ctx, "")
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 }

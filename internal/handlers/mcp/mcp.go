@@ -21,6 +21,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/cmdutil"
 	"github.com/reliant-labs/reliant/internal/config"
+	"github.com/reliant-labs/reliant/internal/daemonerr"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/ptr"
@@ -445,25 +446,22 @@ func (s *Service) readMergedScopedServers(ctx context.Context, projectID string)
 // projectBelongsToUser checks if a project belongs to the authenticated user.
 func (s *Service) projectBelongsToUser(ctx context.Context, projectID string, userID string) error {
 	_, err := s.deps.Repo.GetProjectWithUserCheck(ctx, projectID, userID)
-	if err != nil {
-		if strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "access denied") {
-			return svcerr.NotFound("project")
-		}
-		return svcerr.Internal("database error")
+	if svcerr.IsNotFound(err) {
+		return svcerr.NotFound("project")
 	}
-	return nil
+	return svcerr.WrapOr(err, svcerr.Internal("database error"))
 }
 
 func (s *Service) getProjectPath(ctx context.Context, projectID string, userID string) (string, error) {
 	if strings.TrimSpace(projectID) == "" {
-		return "", fmt.Errorf("project_id is required")
+		return "", svcerr.InvalidArgument("project_id is required")
 	}
 	project, err := s.deps.Repo.GetProjectWithUserCheck(ctx, projectID, userID)
-	if err != nil {
-		return "", fmt.Errorf("project not found")
+	if svcerr.IsNotFound(err) || (err == nil && (project == nil || strings.TrimSpace(project.Path) == "")) {
+		return "", svcerr.NotFound("project")
 	}
-	if project == nil || strings.TrimSpace(project.Path) == "" {
-		return "", fmt.Errorf("project not found")
+	if err != nil {
+		return "", svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
 	}
 
 	return project.Path, nil
@@ -555,7 +553,7 @@ func (s *Service) writeMCPConfigViaDaemon(ctx context.Context, projectID, projec
 	defer s.statuses.invalidateUser(userID)
 	respBytes, err := s.deps.Router.SendDaemonCommand(ctx, userID, "mcp.write_config", payload, 15000)
 	if err != nil {
-		return fmt.Errorf("daemon config write failed: %w", err)
+		return daemonerr.Error("daemon config write", err)
 	}
 
 	var resp struct {
@@ -566,7 +564,7 @@ func (s *Service) writeMCPConfigViaDaemon(ctx context.Context, projectID, projec
 		return fmt.Errorf("failed to parse daemon write response: %w", err)
 	}
 	if !resp.Success {
-		return fmt.Errorf("daemon config write failed: %s", resp.Error)
+		return fmt.Errorf("daemon config write failed: %w", daemonReported(resp.Error))
 	}
 
 	return nil
@@ -718,13 +716,13 @@ func (s *Service) ListServers(
 	userID := auth.MustGetUserID(ctx)
 	projectPath, err := s.getProjectPath(ctx, projectID, userID)
 	if err != nil {
-		return nil, svcerr.NotFound("project")
+		return nil, svcerr.Wrap(err)
 	}
 
 	// Read merged scoped config to get all configured servers
 	scopedServers, err := s.readMergedScopedServers(ctx, projectID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to read MCP configuration: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to read MCP configuration"))
 	}
 
 	// Check if MCP manager is available
@@ -781,7 +779,7 @@ func (s *Service) GetServer(
 	userID := auth.MustGetUserID(ctx)
 	projectPath, err := s.getProjectPath(ctx, projectID, userID)
 	if err != nil {
-		return nil, svcerr.NotFound("project")
+		return nil, svcerr.Wrap(err)
 	}
 
 	name := req.Msg.Name
@@ -791,7 +789,7 @@ func (s *Service) GetServer(
 
 	scopedServers, err := s.readMergedScopedServers(ctx, projectID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to read MCP configuration: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to read MCP configuration"))
 	}
 
 	if s.deps.Router == nil {
@@ -832,7 +830,7 @@ func (s *Service) GetServerTools(
 	userID := auth.MustGetUserID(ctx)
 	projectPath, err := s.getProjectPath(ctx, projectID, userID)
 	if err != nil {
-		return nil, svcerr.NotFound("project")
+		return nil, svcerr.Wrap(err)
 	}
 
 	name := req.Msg.Name
@@ -842,7 +840,7 @@ func (s *Service) GetServerTools(
 
 	scopedServers, err := s.readMergedScopedServers(ctx, projectID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to read MCP configuration: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to read MCP configuration"))
 	}
 
 	scoped, configured := scopedServers[name]
@@ -867,7 +865,7 @@ func (s *Service) GetServerTools(
 	// the request's own budget.
 	tools, err := newDaemonMCPProxy(s.deps.Router, userID).listTools(ctx, projectPath, name)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list tools: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal(withDaemonText("failed to list tools", err)))
 	}
 
 	respTools := make([]*reliantv1.MCPTool, 0, len(tools))
@@ -895,19 +893,17 @@ func (s *Service) InstallServer(
 ) (*connect.Response[reliantv1.InstallServerResponse], error) {
 	projectID := req.Msg.ProjectId
 	if projectID == "" {
-		logging.ErrorContext(ctx, "InstallServer: project_id is required")
 		return nil, svcerr.InvalidArgument("project_id is required")
 	}
 
 	userID := auth.MustGetUserID(ctx)
 	projectPath, err := s.getProjectPath(ctx, projectID, userID)
 	if err != nil {
-		return nil, svcerr.NotFound("project")
+		return nil, svcerr.Wrap(err)
 	}
 
 	name := req.Msg.Name
 	if name == "" {
-		logging.ErrorContext(ctx, "InstallServer: server name is required")
 		return nil, svcerr.InvalidArgument("server name is required")
 	}
 
@@ -915,15 +911,13 @@ func (s *Service) InstallServer(
 	logging.DebugContext(ctx, "InstallServer request received", "project_id", projectID, "name", name, "scope", scope.String())
 
 	if s.deps.Router == nil {
-		logging.ErrorContext(ctx, "InstallServer: MCP manager is nil")
 		return nil, svcerr.Internal("MCP not available - manager not initialized")
 	}
 
 	// Read MCP config for the requested scope
 	mcpConfig, err := s.readMCPConfigForScope(ctx, projectID, scope)
 	if err != nil {
-		logging.ErrorContext(ctx, "InstallServer: failed to read MCP config", "error", err, "scope", scope.String())
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to read MCP configuration: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to read MCP configuration"))
 	}
 
 	// Convert proto config to internal format
@@ -963,8 +957,7 @@ func (s *Service) InstallServer(
 
 	// Write updated config via daemon
 	if err := s.writeMCPConfigViaDaemon(ctx, projectID, projectPath, scope, mcpConfig); err != nil {
-		logging.ErrorContext(ctx, "Failed to write MCP config", "error", err)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to save MCP configuration: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal(withDaemonText("failed to save MCP configuration", err)))
 	}
 
 	if scope == reliantv1.ConfigScope_CONFIG_SCOPE_PROJECT_LOCAL {
@@ -974,7 +967,7 @@ func (s *Service) InstallServer(
 	if err := s.persistStoredMCPConfigScopes(ctx, projectID, map[reliantv1.ConfigScope]*MCPConfigFile{
 		normalizeScope(scope): mcpConfig,
 	}); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to store MCP configuration snapshot"))
 	}
 
 	bundleSummary, bundleErr := s.installBundledSkillsForRecommended(ctx, projectPath, scope, recommendedEntry)
@@ -1273,7 +1266,7 @@ func (s *Service) UninstallServer(
 	userID := auth.MustGetUserID(ctx)
 	projectPath, err := s.getProjectPath(ctx, projectID, userID)
 	if err != nil {
-		return nil, svcerr.NotFound("project")
+		return nil, svcerr.Wrap(err)
 	}
 
 	name := req.Msg.Name
@@ -1293,12 +1286,11 @@ func (s *Service) UninstallServer(
 
 	updatedScopes, err := s.removeServerFromAllScopes(ctx, projectID, userID, name)
 	if err != nil {
-		logging.ErrorContext(ctx, "Failed to remove MCP server from scoped configs", "error", err, "name", name)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to save MCP configuration: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal(withDaemonText("failed to save MCP configuration", err)))
 	}
 
 	if err := s.persistStoredMCPConfigScopes(ctx, projectID, updatedScopes); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to store MCP configuration snapshot"))
 	}
 
 	logging.InfoContext(ctx, "MCP server uninstalled successfully", "name", name)
@@ -1327,7 +1319,7 @@ func (s *Service) RestartServer(
 	userID := auth.MustGetUserID(ctx)
 	projectPath, err := s.getProjectPath(ctx, projectID, userID)
 	if err != nil {
-		return nil, svcerr.NotFound("project")
+		return nil, svcerr.Wrap(err)
 	}
 
 	name := req.Msg.Name
@@ -1343,7 +1335,7 @@ func (s *Service) RestartServer(
 
 	scopedServers, err := s.readMergedScopedServers(ctx, projectID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to read MCP configuration: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to read MCP configuration"))
 	}
 
 	scoped, found := scopedServers[name]
@@ -1427,8 +1419,7 @@ func (s *Service) ListRecommended(
 	// Load recommended MCPs from YAML config
 	recommendedConfig, err := config.LoadRecommendedMCPs()
 	if err != nil {
-		logging.ErrorContext(ctx, "Failed to load recommended MCPs", "error", err)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to load recommended MCPs: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to load recommended MCPs"))
 	}
 
 	// Get currently installed servers from merged scoped configs (source of truth)
@@ -1537,7 +1528,7 @@ func (s *Service) UpdateServerConfig(
 	userID := auth.MustGetUserID(ctx)
 	projectPath, err := s.getProjectPath(ctx, projectID, userID)
 	if err != nil {
-		return nil, svcerr.NotFound("project")
+		return nil, svcerr.Wrap(err)
 	}
 
 	name := req.Msg.Name
@@ -1549,7 +1540,7 @@ func (s *Service) UpdateServerConfig(
 
 	scopedServers, err := s.readMergedScopedServers(ctx, projectID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to read MCP configuration: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to read MCP configuration"))
 	}
 
 	scoped, exists := scopedServers[name]
@@ -1559,7 +1550,7 @@ func (s *Service) UpdateServerConfig(
 
 	mcpConfig, err := s.readMCPConfigForScope(ctx, projectID, scoped.Scope)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to read MCP configuration: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to read MCP configuration"))
 	}
 	serverCfg, existsInTargetScope := mcpConfig.MCPServers[name]
 	if !existsInTargetScope {
@@ -1577,13 +1568,13 @@ func (s *Service) UpdateServerConfig(
 	mcpConfig.MCPServers[name] = serverCfg
 
 	if err := s.writeMCPConfigViaDaemon(ctx, projectID, projectPath, scoped.Scope, mcpConfig); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to save MCP configuration: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal(withDaemonText("failed to save MCP configuration", err)))
 	}
 
 	if err := s.persistStoredMCPConfigScopes(ctx, projectID, map[reliantv1.ConfigScope]*MCPConfigFile{
 		scoped.Scope: mcpConfig,
 	}); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to store MCP configuration snapshot"))
 	}
 
 	if s.deps.Router != nil {
@@ -1595,7 +1586,7 @@ func (s *Service) UpdateServerConfig(
 		intCfg := scopedConfigToInternal(serverCfg)
 		if intCfg.Enabled {
 			if err := mgr.AddProjectServer(ctx, projectPath, name, intCfg); err != nil {
-				return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("configuration saved to %s scope but failed to restart server: %w", scoped.Scope.String(), err))
+				return nil, svcerr.WrapOr(err, svcerr.Internal(withDaemonText(fmt.Sprintf("configuration saved to %s scope but failed to restart server", scoped.Scope.String()), err)))
 			}
 		}
 	}
@@ -1627,12 +1618,12 @@ func (s *Service) SetServerEnabled(
 	userID := auth.MustGetUserID(ctx)
 	projectPath, err := s.getProjectPath(ctx, projectID, userID)
 	if err != nil {
-		return nil, svcerr.NotFound("project")
+		return nil, svcerr.Wrap(err)
 	}
 
 	scopedServers, err := s.readMergedScopedServers(ctx, projectID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to read MCP configuration: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to read MCP configuration"))
 	}
 
 	scoped, exists := scopedServers[name]
@@ -1642,7 +1633,7 @@ func (s *Service) SetServerEnabled(
 
 	mcpConfig, err := s.readMCPConfigForScope(ctx, projectID, scoped.Scope)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to read MCP configuration: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to read MCP configuration"))
 	}
 
 	serverCfg, existsInTargetScope := mcpConfig.MCPServers[name]
@@ -1653,13 +1644,13 @@ func (s *Service) SetServerEnabled(
 	mcpConfig.MCPServers[name] = serverCfg
 
 	if err := s.writeMCPConfigViaDaemon(ctx, projectID, projectPath, scoped.Scope, mcpConfig); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to save MCP configuration: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal(withDaemonText("failed to save MCP configuration", err)))
 	}
 
 	if err := s.persistStoredMCPConfigScopes(ctx, projectID, map[reliantv1.ConfigScope]*MCPConfigFile{
 		scoped.Scope: mcpConfig,
 	}); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to store MCP configuration snapshot"))
 	}
 
 	if s.deps.Router != nil {
@@ -1740,14 +1731,14 @@ func (s *Service) MoveServerScope(
 	userID := auth.MustGetUserID(ctx)
 	projectPath, err := s.getProjectPath(ctx, projectID, userID)
 	if err != nil {
-		return nil, svcerr.NotFound("project")
+		return nil, svcerr.Wrap(err)
 	}
 
 	targetScope := normalizeScope(req.Msg.Scope)
 
 	scopedServers, err := s.readMergedScopedServers(ctx, projectID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to read MCP configuration: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to read MCP configuration"))
 	}
 
 	scoped, exists := scopedServers[name]
@@ -1767,12 +1758,12 @@ func (s *Service) MoveServerScope(
 
 	sourceConfig, err := s.readMCPConfigForScope(ctx, projectID, sourceScope)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to read source MCP configuration: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to read source MCP configuration"))
 	}
 
 	targetConfig, err := s.readMCPConfigForScope(ctx, projectID, targetScope)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to read target MCP configuration: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to read target MCP configuration"))
 	}
 
 	serverCfg, sourceExists := sourceConfig.MCPServers[name]
@@ -1782,7 +1773,7 @@ func (s *Service) MoveServerScope(
 
 	targetConfig.MCPServers[name] = serverCfg
 	if err := s.writeMCPConfigViaDaemon(ctx, projectID, projectPath, targetScope, targetConfig); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to write target MCP configuration: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal(withDaemonText("failed to write target MCP configuration", err)))
 	}
 
 	delete(sourceConfig.MCPServers, name)
@@ -1790,14 +1781,14 @@ func (s *Service) MoveServerScope(
 		// Best effort rollback: restore source entry if source write failed after target write.
 		sourceConfig.MCPServers[name] = serverCfg
 		_ = s.writeMCPConfigViaDaemon(ctx, projectID, projectPath, sourceScope, sourceConfig)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to finalize move from %s to %s: %w", scoped.Scope.String(), targetScope.String(), err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal(withDaemonText(fmt.Sprintf("failed to finalize move from %s to %s", scoped.Scope.String(), targetScope.String()), err)))
 	}
 
 	if err := s.persistStoredMCPConfigScopes(ctx, projectID, map[reliantv1.ConfigScope]*MCPConfigFile{
 		sourceScope: sourceConfig,
 		targetScope: targetConfig,
 	}); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to store MCP configuration snapshot"))
 	}
 
 	if targetScope == reliantv1.ConfigScope_CONFIG_SCOPE_PROJECT_LOCAL {

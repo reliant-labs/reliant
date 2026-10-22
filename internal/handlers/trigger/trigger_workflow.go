@@ -53,10 +53,10 @@ func (s *Service) EnableWorkflow(
 	userID := auth.MustGetUserID(ctx)
 	msg := req.Msg
 	if strings.TrimSpace(msg.Workflow) == "" {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("workflow is required"))
+		return nil, svcerr.InvalidArgument("workflow is required")
 	}
 	if msg.ProjectId == "" {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("project_id is required"))
+		return nil, svcerr.InvalidArgument("project_id is required")
 	}
 
 	wf, err := launch.ResolveRunWorkflow(ctx, s.deps.Repo, userID, msg.Workflow, msg.ProjectId)
@@ -65,12 +65,11 @@ func (s *Service) EnableWorkflow(
 		if errors.As(err, &lookup) {
 			return nil, triggerDBError("resolve workflow", err)
 		}
-		return nil, connect.NewError(connect.CodeNotFound,
-			fmt.Errorf("workflow %q does not resolve to a runnable workflow: %w", msg.Workflow, err))
+		return nil, unresolvedWorkflow(msg.Workflow, err)
 	}
 	declared := wf.GetTriggers()
 	if len(declared) == 0 {
-		return nil, svcerr.ToConnect(svcerr.FailedPrecondition(fmt.Sprintf("workflow %q declares no triggers, so there is nothing to enable", msg.Workflow)))
+		return nil, svcerr.FailedPrecondition(fmt.Sprintf("workflow %q declares no triggers, so there is nothing to enable", msg.Workflow))
 	}
 
 	mine, err := s.deps.Repo.ListTriggers(ctx, core.TriggerFilters{UserID: userID, ProjectID: &msg.ProjectId})
@@ -92,8 +91,8 @@ func (s *Service) EnableWorkflow(
 	}
 	for name := range overrides {
 		if triggers.FindDeclaredTrigger(wf, name) == nil {
-			return nil, svcerr.ToConnect(svcerr.InvalidArgument(fmt.Sprintf("override names %q, which workflow %q does not declare (it declares: %s)",
-				name, msg.Workflow, strings.Join(triggers.DeclaredTriggerNames(wf), ", "))))
+			return nil, svcerr.InvalidArgument(fmt.Sprintf("override names %q, which workflow %q does not declare (it declares: %s)",
+				name, msg.Workflow, strings.Join(triggers.DeclaredTriggerNames(wf), ", ")))
 		}
 	}
 
@@ -133,7 +132,7 @@ func (s *Service) EnableWorkflow(
 			if taken[def.Name] {
 				// Only a name the caller chose for this trigger can still
 				// collide: the default prefix was picked to be free.
-				err = svcerr.ToConnect(svcerr.AlreadyExists(fmt.Sprintf("you already have an automation named %q in this project; pick another name", def.Name)))
+				err = svcerr.AlreadyExists(fmt.Sprintf("you already have an automation named %q in this project; pick another name", def.Name))
 			} else {
 				var row *core.Trigger
 				if row, err = s.triggerFromDefinition(ctx, userID, def, nil); err == nil {
@@ -212,7 +211,7 @@ func (s *Service) existingActivationStep(
 		def.ConnectionId = &id
 	}
 	if def.Name != existing.Name && taken[def.Name] {
-		return nil, svcerr.ToConnect(svcerr.AlreadyExists(fmt.Sprintf("you already have an automation named %q in this project; pick another name", def.Name)))
+		return nil, svcerr.AlreadyExists(fmt.Sprintf("you already have an automation named %q in this project; pick another name", def.Name))
 	}
 	row, err := s.triggerFromDefinition(ctx, userID, def, existing)
 	if err != nil {
@@ -530,7 +529,7 @@ func (s *Service) DisableWorkflow(
 ) (*connect.Response[reliantv1.DisableWorkflowResponse], error) {
 	userID := auth.MustGetUserID(ctx)
 	if strings.TrimSpace(req.Msg.Workflow) == "" {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("workflow is required"))
+		return nil, svcerr.InvalidArgument("workflow is required")
 	}
 	mine, err := s.deps.Repo.ListTriggers(ctx, core.TriggerFilters{UserID: userID, ProjectID: req.Msg.ProjectId})
 	if err != nil {
@@ -569,13 +568,11 @@ func sameWorkflowRef(a, b string) bool {
 	return ka != "" && ka == kb
 }
 
-// connectMessage is the text of a handler's error as a person reads it.
+// connectMessage is the text of a handler's error as a person reads it: what
+// the svcerr interceptor would send, so an unclassified error's own text stays
+// withheld here too.
 func connectMessage(err error) string {
-	var ce *connect.Error
-	if errors.As(err, &ce) {
-		return ce.Message()
-	}
-	return err.Error()
+	return svcerr.ToConnect(err).Message()
 }
 
 // RetireDeletedTriggers stops what outlives the rows of triggers already

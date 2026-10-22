@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
@@ -67,10 +68,10 @@ func TestResolveTriggerSendersErrors(t *testing.T) {
 	env := setupTriggerTest(t)
 
 	_, err := resolveSenders(env, "slack", []string{"U123"}, nil)
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err), "Slack ids are already what a person pastes")
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err), "Slack ids are already what a person pastes")
 
 	_, err = resolveSenders(env, "github", []string{"octocat"}, nil)
-	assert.Equal(t, connect.CodeUnavailable, connect.CodeOf(err), "no GitHub on this server")
+	assert.Equal(t, connect.CodeUnavailable, svcerr.Code(err), "no GitHub on this server")
 
 	cases := map[string]struct {
 		dir  *fakeSenders
@@ -85,7 +86,7 @@ func TestResolveTriggerSendersErrors(t *testing.T) {
 			env.configure(t, func(d *Deps) { d.Senders = map[string]SenderDirectory{"github": tc.dir} })
 			_, err := resolveSenders(env, "github", []string{"octocat"}, nil)
 			require.Error(t, err)
-			assert.Equal(t, tc.code, connect.CodeOf(err))
+			assert.Equal(t, tc.code, svcerr.Code(err))
 		})
 	}
 }

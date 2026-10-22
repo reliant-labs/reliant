@@ -27,6 +27,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/vault"
 )
 
@@ -69,7 +70,29 @@ func (e *Error) Error() string {
 	return e.Message
 }
 
-func (e *Error) Unwrap() error { return e.Err }
+// Unwrap is the svcerr kind of Code, so a handler's svcerr.Wrap sends the
+// matching Connect code with Message as the text the caller reads. Err stays
+// server-side: it is the kind's cause, reachable through errors.Is/As and
+// svcerr.Cause (the log), and never published. CodeInternal has no kind, so
+// the handler's own fallback names it and Message is withheld too.
+func (e *Error) Unwrap() error {
+	var kind error
+	switch e.Code {
+	case CodeNotFound:
+		kind = svcerr.ErrNotFound
+	case CodeInvalidArgument:
+		kind = svcerr.ErrInvalidArgument
+	case CodeAlreadyExists:
+		kind = svcerr.ErrAlreadyExists
+	case CodeFailedPrecondition, CodeNeedsReauth:
+		kind = svcerr.ErrFailedPrecondition
+	case CodeUnavailable:
+		kind = svcerr.ErrUnavailable
+	default:
+		return e.Err
+	}
+	return svcerr.WithCause(svcerr.WithMessage(kind, e.Message), e.Err)
+}
 
 // Is matches by code, so errors.Is(err, connections.ErrNeedsReauth) works
 // regardless of the message.

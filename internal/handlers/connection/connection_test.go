@@ -11,6 +11,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/crypto"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/descriptorpb"
@@ -272,7 +273,7 @@ func (f *connectionFixture) createKey(t *testing.T, user, integration, name stri
 func requireConnectCode(t *testing.T, err error, want connect.Code) {
 	t.Helper()
 	require.Error(t, err)
-	require.Equal(t, want, connect.CodeOf(err), "%v", err)
+	require.Equal(t, want, svcerr.Code(err), "%v", err)
 }
 
 func TestConnectionService_RequiresAuthentication(t *testing.T) {

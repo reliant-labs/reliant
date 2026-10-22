@@ -9,6 +9,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
@@ -413,7 +414,7 @@ func (s *Service) ListAvailableModels(
 
 	infos, err := drivers.ListAvailableModels(ctx, userID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list available models"))
 	}
 
 	out := make([]*reliantv1.AvailableModelInfo, 0, len(infos))

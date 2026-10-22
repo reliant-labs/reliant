@@ -10,6 +10,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/serverkit"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -311,11 +312,11 @@ func TestCleanupStorage_RejectsAnotherUsersMachineAndAskedNothing(t *testing.T) 
 	otherCtx, _, _ := f.otherUser(t)
 	_, err := f.inbox.CleanupStorage(otherCtx, connect.NewRequest(&reliantv1.CleanupStorageRequest{DaemonId: daemonID, WorktreeIds: []string{wtID}}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
 	assert.False(t, sender.called, "another user's machine must never be contacted")
 
 	_, err = f.inbox.CleanupStorage(f.ctx, connect.NewRequest(&reliantv1.CleanupStorageRequest{DaemonId: daemonID}))
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 }
 
 func TestCleanupStorage_OfflineMachineIsAPreconditionNotAnError(t *testing.T) {
@@ -324,13 +325,13 @@ func TestCleanupStorage_OfflineMachineIsAPreconditionNotAnError(t *testing.T) {
 	require.NoError(t, err)
 	f.withSweeper(t, worktreesweep.New(f.repo, &neverSender{}))
 	_, err = f.inbox.CleanupStorage(f.ctx, connect.NewRequest(&reliantv1.CleanupStorageRequest{DaemonId: daemonID, WorktreeIds: []string{wtID}}))
-	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
 }
 
 func TestCleanupStorage_UnavailableWithoutASweeper(t *testing.T) {
 	f, daemonID, wtID := storageFixture(t)
 	_, err := f.inbox.CleanupStorage(f.ctx, connect.NewRequest(&reliantv1.CleanupStorageRequest{DaemonId: daemonID, WorktreeIds: []string{wtID}}))
-	assert.Equal(t, connect.CodeUnavailable, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeUnavailable, svcerr.Code(err))
 }
 
 // heldSender does not answer until the test releases it, so an RPC that waits

@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	configv1 "github.com/reliant-labs/reliant/gen/config/v1"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -83,9 +84,9 @@ func TestModelEndpointServiceCRUDOverTheHandler(t *testing.T) {
 		assert.Empty(t, list.Msg.GetEndpoints())
 
 		_, err = svc.DeleteModelEndpoint(ctxFor("svc-user-b"), connect.NewRequest(&reliantv1.DeleteModelEndpointRequest{Id: ep.GetId()}))
-		assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+		assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
 		_, err = svc.TestModelEndpoint(ctxFor("svc-user-b"), connect.NewRequest(&reliantv1.TestModelEndpointRequest{Target: &reliantv1.TestModelEndpointRequest_Id{Id: ep.GetId()}}))
-		assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+		assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
 	})
 
 	t.Run("an API key is rejected with a clear message and nothing is stored", func(t *testing.T) {
@@ -94,7 +95,7 @@ func TestModelEndpointServiceCRUDOverTheHandler(t *testing.T) {
 			Endpoint: &reliantv1.ModelEndpointInput{Name: "Keyed", BaseUrl: srv.URL + "/v1", Route: reliantv1.ModelEndpointRoute_MODEL_ENDPOINT_ROUTE_DIRECT, ApiKey: &key},
 		}))
 		require.Error(t, err)
-		assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+		assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
 		assert.Contains(t, err.Error(), "API keys for custom endpoints need the sealed credential store; coming with the next sync")
 		list, _ := svc.ListModelEndpoints(ctxFor("svc-user-a"), connect.NewRequest(&reliantv1.ListModelEndpointsRequest{}))
 		assert.Len(t, list.Msg.GetEndpoints(), 1)
@@ -104,26 +105,26 @@ func TestModelEndpointServiceCRUDOverTheHandler(t *testing.T) {
 		_, err := svc.CreateModelEndpoint(ctxFor("svc-user-a"), connect.NewRequest(&reliantv1.CreateModelEndpointRequest{
 			Endpoint: &reliantv1.ModelEndpointInput{Name: "Bad", BaseUrl: "https://u:p@x.example.com/v1", Route: reliantv1.ModelEndpointRoute_MODEL_ENDPOINT_ROUTE_DIRECT},
 		}))
-		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+		assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 	})
 
 	t.Run("duplicate name is AlreadyExists", func(t *testing.T) {
 		_, err := svc.CreateModelEndpoint(ctxFor("svc-user-a"), connect.NewRequest(&reliantv1.CreateModelEndpointRequest{
 			Endpoint: &reliantv1.ModelEndpointInput{Name: "Lab", BaseUrl: srv.URL + "/v1", Route: reliantv1.ModelEndpointRoute_MODEL_ENDPOINT_ROUTE_DIRECT},
 		}))
-		assert.Equal(t, connect.CodeAlreadyExists, connect.CodeOf(err))
+		assert.Equal(t, connect.CodeAlreadyExists, svcerr.Code(err))
 	})
 
 	t.Run("unauthenticated", func(t *testing.T) {
 		_, err := svc.ListModelEndpoints(context.Background(), connect.NewRequest(&reliantv1.ListModelEndpointsRequest{}))
-		assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
+		assert.Equal(t, connect.CodeUnauthenticated, svcerr.Code(err))
 	})
 
 	t.Run("via_daemon needs a daemon the user owns", func(t *testing.T) {
 		_, err := svc.CreateModelEndpoint(ctxFor("svc-user-a"), connect.NewRequest(&reliantv1.CreateModelEndpointRequest{
 			Endpoint: &reliantv1.ModelEndpointInput{Name: "Via", BaseUrl: "http://10.0.0.5:8000/v1", Route: reliantv1.ModelEndpointRoute_MODEL_ENDPOINT_ROUTE_VIA_DAEMON, DaemonId: "not-mine"},
 		}))
-		assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+		assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
 	})
 
 	t.Run("the catalog lists the endpoint's models grouped under its name, hidden ones omitted", func(t *testing.T) {
@@ -168,7 +169,7 @@ func TestModelEndpointServiceRefusesPrivateTargetsWhenHosted(t *testing.T) {
 			Endpoint: &reliantv1.ModelEndpointInput{Name: url, BaseUrl: url, Route: reliantv1.ModelEndpointRoute_MODEL_ENDPOINT_ROUTE_DIRECT},
 		}))
 		require.Error(t, err, url)
-		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err), url)
+		assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err), url)
 		assert.Contains(t, err.Error(), "through one of your machines", url)
 	}
 	list, _ := svc.ListModelEndpoints(ctxFor("hosted-user"), connect.NewRequest(&reliantv1.ListModelEndpointsRequest{}))

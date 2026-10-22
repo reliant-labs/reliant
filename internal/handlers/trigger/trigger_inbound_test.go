@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -129,14 +130,14 @@ func TestRotateWebhookTokenInvalidatesTheOldOne(t *testing.T) {
 
 	otherCtx := context.WithValue(context.Background(), auth.UserIDContextKey, uuid.NewString())
 	_, err = env.svc.RotateWebhookToken(otherCtx, connect.NewRequest(&reliantv1.RotateWebhookTokenRequest{Id: id}))
-	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err), "another user's trigger is not found")
+	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err), "another user's trigger is not found")
 }
 
 func TestRotateWebhookTokenRejectsANonWebhookTrigger(t *testing.T) {
 	env, _ := setupInboundTriggerTest(t)
 	created := env.create(t, env.definition(nil))
 	_, err := env.svc.RotateWebhookToken(env.ctx, connect.NewRequest(&reliantv1.RotateWebhookTokenRequest{Id: created.GetId()}))
-	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
 }
 
 func TestWebhookHmacSecretIsSealedForTheOwnerAndRequired(t *testing.T) {
@@ -148,7 +149,7 @@ func TestWebhookHmacSecretIsSealedForTheOwnerAndRequired(t *testing.T) {
 	_, err := env.svc.CreateTrigger(env.ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{
 		Trigger: webhookDefinition(env, func(d *reliantv1.TriggerDefinition) { d.Source = hmacSource }),
 	}))
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err), "hmac without a secret can never verify")
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err), "hmac without a secret can never verify")
 
 	secret := "s3cret"
 	resp, err := env.svc.CreateTrigger(env.ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{
@@ -181,13 +182,13 @@ func TestTriggerFilterIsValidatedOnWrite(t *testing.T) {
 		Trigger: webhookDefinition(env, func(d *reliantv1.TriggerDefinition) { d.Filter = "trigger.payload.body ==" }),
 	}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 	assert.Contains(t, err.Error(), "filter")
 
 	_, err = env.svc.CreateTrigger(env.ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{
 		Trigger: env.definition(func(d *reliantv1.TriggerDefinition) { d.Filter = "true" }),
 	}))
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err), "a schedule has no event to filter")
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err), "a schedule has no event to filter")
 
 	created := env.create(t, webhookDefinition(env, func(d *reliantv1.TriggerDefinition) {
 		d.Filter = "trigger.payload.body.action == 'deploy'"
@@ -220,12 +221,12 @@ func TestCreateIntegrationTriggerBindsTheCallersConnection(t *testing.T) {
 
 	// Another user's connection is indistinguishable from a missing one.
 	_, err := env.svc.CreateTrigger(env.ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{Trigger: def(&theirs.ID)}))
-	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
 
 	// A connection for a different integration is refused.
 	other := env.createConnection(t, env.userID, "other", "acct-2", core.ConnectionStatusActive)
 	_, err = env.svc.CreateTrigger(env.ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{Trigger: def(&other.ID)}))
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 }
 
 func TestCreateIntegrationTriggerRequiresAnInboundIntegration(t *testing.T) {
@@ -238,7 +239,7 @@ func TestCreateIntegrationTriggerRequiresAnInboundIntegration(t *testing.T) {
 		}),
 	}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 	assert.True(t, strings.Contains(err.Error(), "nope"))
 }
 
@@ -248,7 +249,7 @@ func TestTriggerKindIsNotUpdatable(t *testing.T) {
 	_, err := env.svc.UpdateTrigger(env.ctx, connect.NewRequest(&reliantv1.UpdateTriggerRequest{
 		Id: created.GetId(), Trigger: webhookDefinition(env, nil),
 	}))
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 }
 
 // A reference to a trigger the workflow does not declare is NotFound, and
@@ -261,7 +262,7 @@ func TestWorkflowTriggerReferenceToAnUndeclaredTrigger(t *testing.T) {
 			d.Source = &reliantv1.TriggerDefinition_WorkflowTrigger{WorkflowTrigger: "on-push"}
 		}),
 	}))
-	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
 	assert.Contains(t, err.Error(), `does not declare a trigger named "on-push"`)
 }
 

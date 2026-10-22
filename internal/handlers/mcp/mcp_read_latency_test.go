@@ -17,6 +17,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	mcpclient "github.com/reliant-labs/reliant/internal/mcp"
 )
 
@@ -33,7 +34,8 @@ type mcpReadRepo struct {
 
 func (r *mcpReadRepo) GetProjectWithUserCheck(_ context.Context, id, userID string) (*db.Project, error) {
 	if r.project.ID != id || r.project.UserID != userID {
-		return nil, fmt.Errorf("project not found")
+		// The store's real answer for a project the caller does not own.
+		return nil, core.ErrProjectNotFound
 	}
 	return r.project, nil
 }

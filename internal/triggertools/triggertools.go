@@ -21,6 +21,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
@@ -150,12 +151,9 @@ func describeSource(tr *reliantv1.Trigger) (string, string) {
 	}
 }
 
-// unwrapConnect turns a handler's connect error into the message the agent
-// reads; the code adds nothing it can act on.
+// unwrapConnect turns a handler's error into the message the agent reads —
+// what the svcerr interceptor would send a client, so an unclassified
+// failure's own text stays server-side; the code adds nothing it can act on.
 func unwrapConnect(err error) error {
-	var ce *connect.Error
-	if errors.As(err, &ce) {
-		return errors.New(ce.Message())
-	}
-	return err
+	return errors.New(svcerr.ToConnect(err).Message())
 }

@@ -3,11 +3,8 @@ package trigger
 
 import (
 	"context"
-	"errors"
-	"fmt"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
-	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/triggers"
@@ -36,11 +33,9 @@ func (s *Service) managed(t *core.Trigger) bool {
 
 // provisionAlerting connects an enabled managed trigger to its org's alerts.
 func (s *Service) provisionAlerting(ctx context.Context, t *core.Trigger) error {
-	if err := s.deps.Alerting.Provision(ctx, t); err != nil {
-		logging.WarnContext(ctx, "could not connect a trigger to its organization's alerts", "trigger_id", t.ID, "error", err)
-		return alertingError(err)
-	}
-	return nil
+	// Provision's error is already what the person enabling is told; its
+	// control-plane cause stays server-side.
+	return svcerr.Wrap(s.deps.Alerting.Provision(ctx, t))
 }
 
 // retireAlerting disconnects a managed trigger. Best effort: the trigger is
@@ -50,21 +45,6 @@ func (s *Service) retireAlerting(ctx context.Context, triggerID string) {
 	if err := s.deps.Alerting.Retire(ctx, triggerID); err != nil {
 		logging.WarnContext(ctx, "could not remove a trigger's alert receiver; the reconcile sweep removes it",
 			"trigger_id", triggerID, "error", err)
-	}
-}
-
-// alertingError is a provisioning failure as the person enabling sees it.
-func alertingError(err error) error {
-	var refused *controlplane.AutopilotError
-	switch {
-	case errors.As(err, &refused) && refused.Reason == controlplane.ReasonAutopilotNoOrg:
-		return svcerr.ToConnect(svcerr.FailedPrecondition("on-call receives your organization's alerts, and your account belongs to no organization yet"))
-	case errors.Is(err, controlplane.ErrAutopilotUnsupported):
-		return svcerr.ToConnect(svcerr.Unavailable("this deployment's control plane cannot deliver alerts to automations yet"))
-	case errors.As(err, &refused):
-		return svcerr.ToConnect(svcerr.Unavailable(fmt.Sprintf("could not connect your organization's alerts: %s", refused.Message)))
-	default:
-		return svcerr.ToConnect(svcerr.Unavailable("could not connect your organization's alerts right now; try again"))
 	}
 }
 

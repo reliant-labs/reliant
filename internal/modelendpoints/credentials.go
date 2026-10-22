@@ -5,12 +5,13 @@ package modelendpoints
 
 import (
 	"context"
-	"errors"
+
+	"github.com/reliant-labs/forge/pkg/svcerr"
 )
 
 // ErrCredentialStoreUnavailable is returned when an endpoint needs a stored
 // credential and this deployment has no sealed credential store wired in.
-var ErrCredentialStoreUnavailable = errors.New("API keys for custom endpoints need the sealed credential store; coming with the next sync")
+var ErrCredentialStoreUnavailable = svcerr.FailedPrecondition("API keys for custom endpoints need the sealed credential store; coming with the next sync")
 
 // EndpointCredentials is where an endpoint's API key and header VALUES live.
 // They have exactly one home: the sealed connection store, never the

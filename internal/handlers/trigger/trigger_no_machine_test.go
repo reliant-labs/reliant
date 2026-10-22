@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/structpb"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 )
 
@@ -22,7 +23,7 @@ func TestCreateTrigger_EmptyDaemonWithoutNoMachineIsStillRequired(t *testing.T) 
 		Trigger: env.definition(func(d *reliantv1.TriggerDefinition) { d.DaemonId = "" }),
 	}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 }
 
 func TestCreateTrigger_NoMachineWithADaemonIsInvalid(t *testing.T) {
@@ -31,7 +32,7 @@ func TestCreateTrigger_NoMachineWithADaemonIsInvalid(t *testing.T) {
 		Trigger: env.definition(func(d *reliantv1.TriggerDefinition) { d.NoMachine = true }),
 	}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 }
 
 // The default builtin agent is given tag:coding:default — shell, view, edit —
@@ -46,7 +47,7 @@ func TestCreateTrigger_NoMachineRefusesAWorkflowThatNeedsAMachine(t *testing.T) 
 		}),
 	}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
 	assert.Contains(t, err.Error(), "needs a machine")
 	assert.Contains(t, err.Error(), "shell", "the error names what needs the machine")
 	assert.Contains(t, err.Error(), "Pick a machine", "the error says how to fix it")
@@ -61,7 +62,7 @@ func TestCreateTrigger_NoMachineRefusesAWorkflowThatNeedsAMachine(t *testing.T) 
 		}),
 	}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
 }
 
 // The same agent given only web tools runs without a machine, so the trigger is
@@ -110,5 +111,5 @@ func TestUpdateTrigger_NoMachineIsValidatedLikeCreate(t *testing.T) {
 		}),
 	}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
 }

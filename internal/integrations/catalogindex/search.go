@@ -5,11 +5,12 @@ package catalogindex
 import (
 	"encoding/base64"
 	"encoding/binary"
-	"errors"
 	"hash/fnv"
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/reliant-labs/forge/pkg/svcerr"
 )
 
 const (
@@ -24,9 +25,9 @@ const (
 var (
 	// ErrInvalidPageToken: the token is malformed or belongs to a different
 	// query or filter set.
-	ErrInvalidPageToken = errors.New("invalid page token")
+	ErrInvalidPageToken = svcerr.InvalidArgument("invalid page token")
 	// ErrQueryTooLong: the query text exceeds MaxQueryLen.
-	ErrQueryTooLong = errors.New("query is too long")
+	ErrQueryTooLong = svcerr.InvalidArgument("query is too long")
 )
 
 // Match tiers, strongest first. A query word scores the strongest tier it

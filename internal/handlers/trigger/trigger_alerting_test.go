@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -86,7 +87,9 @@ func TestEnableAlertingWorkflowProvisionsAndShowsNoToken(t *testing.T) {
 // The control plane refusing (no org) refuses the enable and leaves nothing.
 func TestEnableAlertingWorkflowIsRefusedWhenAlertsCannotBeConnected(t *testing.T) {
 	env, fa := setupAlertingTest(t)
-	fa.err = &controlplane.AutopilotError{Code: "failed_precondition", Reason: controlplane.ReasonAutopilotNoOrg}
+	// What triggers.Alerting.Provision returns for an org-less owner.
+	fa.err = svcerr.WithCause(svcerr.FailedPrecondition("on-call receives your organization's alerts, and your account belongs to no organization yet"),
+		&controlplane.AutopilotError{Code: "failed_precondition", Reason: controlplane.ReasonAutopilotNoOrg})
 	resp := env.enableOncall(t)
 	require.False(t, resp.Enabled)
 	assert.Equal(t, reliantv1.WorkflowTriggerOutcome_WORKFLOW_TRIGGER_OUTCOME_FAILED, resp.Results[0].Outcome)
@@ -107,11 +110,11 @@ func TestPauseResumeDeleteFollowTheReceiver(t *testing.T) {
 	assert.Equal(t, []string{id, id}, fa.provisioned, "resuming re-provisions with a fresh token")
 
 	// A resume that cannot connect is refused and the row put back.
-	fa.err = errors.New("control plane down")
+	fa.err = svcerr.WithCause(svcerr.Unavailable("could not connect your organization's alerts right now; try again"), errors.New("control plane down"))
 	_, err = env.svc.SetTriggerEnabled(env.ctx, connect.NewRequest(&reliantv1.SetTriggerEnabledRequest{Id: id, Enabled: false}))
 	require.NoError(t, err)
 	_, err = env.svc.SetTriggerEnabled(env.ctx, connect.NewRequest(&reliantv1.SetTriggerEnabledRequest{Id: id, Enabled: true}))
-	require.Equal(t, connect.CodeUnavailable, connect.CodeOf(err), "%v", err)
+	require.Equal(t, connect.CodeUnavailable, svcerr.Code(err), "%v", err)
 	stored, err := env.repo.GetTrigger(context.Background(), id)
 	require.NoError(t, err)
 	assert.False(t, stored.Enabled, "an enabled trigger nothing delivers to looks working and is not")
@@ -166,5 +169,5 @@ func TestAdHocWebhookCannotNameASource(t *testing.T) {
 			d.Source = &reliantv1.TriggerDefinition_Webhook{Webhook: &reliantv1.WebhookSource{Source: "alerting"}}
 		}),
 	}))
-	require.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err), "%v", err)
+	require.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err), "%v", err)
 }

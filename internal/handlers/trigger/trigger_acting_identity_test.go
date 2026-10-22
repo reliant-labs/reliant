@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
@@ -57,7 +58,7 @@ func TestCreateTrigger_AppIdentityIsRefusedWithoutAControlPlane(t *testing.T) {
 	env := setupTriggerTest(t) // no control plane
 	_, err := env.svc.CreateTrigger(env.ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{Trigger: env.definition(asApp)}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
 	assert.Contains(t, err.Error(), "control plane")
 	assert.Zero(t, env.backend.syncCount(), "a refused activation must not touch the schedule backend")
 }
@@ -111,7 +112,7 @@ func TestUpdateTrigger_AppIdentityIsRefusedWithoutAControlPlane(t *testing.T) {
 		Id: created.GetId(), Trigger: env.definition(asApp),
 	}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
 	assert.Equal(t, core.ActingIdentityOwner, env.storedIdentity(t, created.GetId()))
 }
 

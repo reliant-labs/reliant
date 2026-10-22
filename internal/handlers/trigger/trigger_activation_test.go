@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/structpb"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -162,7 +163,7 @@ func TestActivateDeclaredTriggerRejects(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			_, err := env.svc.CreateTrigger(env.ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{Trigger: tc.def}))
 			require.Error(t, err)
-			assert.Equal(t, tc.code, connect.CodeOf(err), err.Error())
+			assert.Equal(t, tc.code, svcerr.Code(err), err.Error())
 			assert.Contains(t, err.Error(), tc.reason)
 		})
 	}
@@ -198,7 +199,7 @@ func TestActivationParamsAreCheckedAgainstTheWorkflowsInputs(t *testing.T) {
 				Trigger: env.activation("nightly", func(d *reliantv1.TriggerDefinition) { d.Params = tc.params }),
 			}))
 			require.Error(t, err)
-			assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err), err.Error())
+			assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err), err.Error())
 			assert.Contains(t, err.Error(), tc.want)
 		})
 	}
@@ -274,12 +275,12 @@ func TestUpdateActivationKeepsItsDeclaration(t *testing.T) {
 		Id: got.GetId(), Trigger: env.definition(nil),
 	}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 
 	// Another declaration of another kind: rejected (the kind is not updatable).
 	_, err = env.svc.UpdateTrigger(env.ctx, connect.NewRequest(&reliantv1.UpdateTriggerRequest{
 		Id: got.GetId(), Trigger: env.activation("after-deploy", nil),
 	}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 }
