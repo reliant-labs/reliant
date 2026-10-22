@@ -29,7 +29,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
 	"github.com/reliant-labs/reliant/internal/integrations/inputoptions"
 	"github.com/reliant-labs/reliant/internal/integrations/manifest"
-	"github.com/reliant-labs/reliant/internal/netguard"
+	"github.com/reliant-labs/reliant/internal/netguard/netguardtest"
 )
 
 // Repo is a repository an installation reaches.
@@ -74,8 +74,7 @@ type Fake struct {
 func NewFake(t *testing.T, accounts map[string]*Account) *Fake {
 	t.Helper()
 	f := &Fake{t: t, accounts: accounts, people: map[int]string{583231: "octocat", 42: "hubot"}}
-	f.srv = httptest.NewTLSServer(http.HandlerFunc(f.serve))
-	t.Cleanup(f.srv.Close)
+	f.srv = netguardtest.NewTLSServer(t, http.HandlerFunc(f.serve))
 	return f
 }
 
@@ -215,8 +214,7 @@ func (p pointedAt) Lookup(ref string) (*reliantv1.IntegrationManifest, *reliantv
 func (f *Fake) Runner() *httpaction.Runner {
 	pool := x509.NewCertPool()
 	pool.AddCert(f.srv.Certificate())
-	g := netguard.New()
-	g.AllowLoopback = true
+	g := netguardtest.Guard()
 	return httpaction.NewRunner(g).WithRootCAs(pool)
 }
 

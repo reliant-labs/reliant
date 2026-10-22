@@ -7,13 +7,14 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/reliant-labs/reliant/internal/netguard/netguardtest"
 )
 
 type tokenFunc func(ctx context.Context, userID string) (string, error)
@@ -34,7 +35,7 @@ type fakeGitHub struct {
 
 func (g *fakeGitHub) serve(t *testing.T) Service {
 	t.Helper()
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := netguardtest.NewServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		g.mu.Lock()
 		g.asked = append(g.asked, r.URL.EscapedPath())
 		g.auth = append(g.auth, r.Header.Get("Authorization"))
@@ -55,7 +56,6 @@ func (g *fakeGitHub) serve(t *testing.T) Service {
 		}
 		http.Error(w, `{"message":"Not Found"}`, http.StatusNotFound)
 	}))
-	t.Cleanup(srv.Close)
 	return New(Deps{Tokens: tokenFunc(ownToken), APIBaseURL: srv.URL, HTTPClient: srv.Client()})
 }
 

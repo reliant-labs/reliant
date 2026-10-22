@@ -4,13 +4,13 @@ import (
 	"context"
 	"io"
 	"net/http"
-	"net/http/httptest"
 	"net/url"
 	"strings"
 	"sync"
 	"testing"
 
 	"github.com/reliant-labs/reliant/internal/integrations/manifest"
+	"github.com/reliant-labs/reliant/internal/netguard/netguardtest"
 )
 
 // A form body is application/x-www-form-urlencoded: scalars become one
@@ -19,14 +19,13 @@ import (
 func TestFormBodyEncodesScalarsListsAndOmitsNulls(t *testing.T) {
 	var gotType string
 	var gotForm url.Values
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := netguardtest.NewTLSServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotType = r.Header.Get("Content-Type")
 		raw, _ := io.ReadAll(r.Body)
 		gotForm, _ = url.ParseQuery(string(raw))
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"sid":"SM1"}`))
 	}))
-	defer srv.Close()
 	m, a := mustParse(t, manifestFor(srv.URL, `    params: { type: object }
     request:
       method: POST
@@ -63,10 +62,9 @@ func TestFormBodyEncodesScalarsListsAndOmitsNulls(t *testing.T) {
 // A form body is flat: a nested object has no encoding Twilio or Stripe
 // would read the same way, so it is a render error, not a guess.
 func TestFormBodyRefusesNestedObjects(t *testing.T) {
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	srv := netguardtest.NewTLSServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		t.Error("no request should be sent")
 	}))
-	defer srv.Close()
 	m, a := mustParse(t, manifestFor(srv.URL, `    params: { type: object }
     request:
       method: POST
@@ -85,13 +83,12 @@ func TestFormBodyRefusesNestedObjects(t *testing.T) {
 // Content-Type in the manifest is kept.
 func TestFormBodyFromStaticTemplate(t *testing.T) {
 	var gotType, gotRaw string
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := netguardtest.NewTLSServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotType = r.Header.Get("Content-Type")
 		raw, _ := io.ReadAll(r.Body)
 		gotRaw = string(raw)
 		_, _ = w.Write([]byte(`{}`))
 	}))
-	defer srv.Close()
 	m, a := mustParse(t, manifestFor(srv.URL, `    params: { type: object }
     request:
       method: POST
@@ -125,7 +122,7 @@ func TestPaginationNextURLRelativeAndAbsolute(t *testing.T) {
 	var mu sync.Mutex
 	var seen []string
 	var srvURL string
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := netguardtest.NewTLSServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
 		seen = append(seen, r.URL.RequestURI())
 		mu.Unlock()
@@ -139,7 +136,6 @@ func TestPaginationNextURLRelativeAndAbsolute(t *testing.T) {
 			_, _ = w.Write([]byte(`{"items":[4],"next_page_uri":null}`))
 		}
 	}))
-	defer srv.Close()
 	srvURL = srv.URL
 	m, a := mustParse(t, manifestFor(srv.URL+"/v1", `    params: { type: object }
     request:
@@ -171,10 +167,9 @@ func TestPaginationNextURLRelativeAndAbsolute(t *testing.T) {
 
 // A next_url may not leave the call's host, any more than a Link header may.
 func TestPaginationNextURLCannotLeaveTheHost(t *testing.T) {
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	srv := netguardtest.NewTLSServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(`{"items":[1],"next":"https://169.254.169.254/latest"}`))
 	}))
-	defer srv.Close()
 	m, a := mustParse(t, manifestFor(srv.URL, `    params: { type: object }
     request:
       method: GET

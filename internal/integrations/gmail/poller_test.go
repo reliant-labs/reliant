@@ -33,6 +33,15 @@ func (f *fakeGmail) poll(p gmail.Service, cursor string) (*triggers.PollResult, 
 	return p.Poll(context.Background(), triggers.PollRequest{TriggerID: "trg-1", OwnerUserID: "alice", ConnectionID: "conn_gmail", Credential: staticCred{}, Cursor: cursor})
 }
 
+// baseline is a trigger's first poll, which records the current position. A
+// test that goes on to read the cursor stops here when it failed.
+func (f *fakeGmail) baseline(p gmail.Service) *triggers.PollResult {
+	f.t.Helper()
+	res, err := f.poll(p, "")
+	require.NoError(f.t, err, "baseline poll")
+	return res
+}
+
 func (f *fakeGmail) inbox(id, from, subject string) {
 	f.addMessage(id, "th"+id, []string{"UNREAD", "INBOX", "CATEGORY_PERSONAL"}, map[string]string{
 		"From": from, "To": "me@example.com", "Subject": subject, "Date": "Mon, 5 Oct 2026 09:00:00 +0000",
@@ -218,7 +227,7 @@ func TestPollGarbageCursorRebaselines(t *testing.T) {
 func TestPollSkipsAMessageDeletedMeanwhile(t *testing.T) {
 	f := newFakeGmail(t)
 	p := f.poller()
-	base, _ := f.poll(p, "")
+	base := f.baseline(p)
 	f.inbox("e0001", "ann@x.com", "gone")
 	f.inbox("e0002", "ann@x.com", "kept")
 	delete(f.messages, "e0001")
@@ -247,7 +256,7 @@ func TestPollUnauthorizedIsNeedsReauth(t *testing.T) {
 func TestPollTransientFailureIsAnError(t *testing.T) {
 	f := newFakeGmail(t)
 	p := f.poller()
-	base, _ := f.poll(p, "")
+	base := f.baseline(p)
 	f.inbox("f0001", "ann@x.com", "x")
 	f.srv.Config.Handler = failing{}
 	_, err := f.poll(p, base.Cursor)
@@ -270,7 +279,7 @@ func TestPollCapsABurstAndResumes(t *testing.T) {
 	f := newFakeGmail(t)
 	f.historyPageSize = 40
 	p := f.poller()
-	base, _ := f.poll(p, "")
+	base := f.baseline(p)
 	total := gmail.MaxItemsPerPoll + 50
 	for i := 0; i < total; i++ {
 		f.inbox(fmt.Sprintf("%06x", 0xa00000+i), "ann@x.com", "burst")
@@ -296,7 +305,7 @@ func TestPollCapsABurstAndResumes(t *testing.T) {
 func TestPollerItemsMatchTheManifestTrigger(t *testing.T) {
 	f := newFakeGmail(t)
 	p := f.poller()
-	base, _ := f.poll(p, "")
+	base := f.baseline(p)
 	f.inbox("a0f001", "Ann <ann@x.com>", "hello")
 	res, err := f.poll(p, base.Cursor)
 	require.NoError(t, err)

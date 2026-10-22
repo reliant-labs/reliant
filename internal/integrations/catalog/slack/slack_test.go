@@ -31,7 +31,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/integrations/catalog"
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
-	"github.com/reliant-labs/reliant/internal/netguard"
+	"github.com/reliant-labs/reliant/internal/netguard/netguardtest"
 )
 
 const token = "xoxb-fake-bot-token-5be1"
@@ -57,8 +57,7 @@ type fakeSlack struct {
 func newFake(t *testing.T) *fakeSlack {
 	t.Helper()
 	f := &fakeSlack{t: t, routes: map[string]http.HandlerFunc{}}
-	f.srv = httptest.NewTLSServer(http.HandlerFunc(f.serve))
-	t.Cleanup(f.srv.Close)
+	f.srv = netguardtest.NewTLSServer(t, http.HandlerFunc(f.serve))
 	return f
 }
 
@@ -138,8 +137,7 @@ func (f *fakeSlack) action(id string) (*reliantv1.IntegrationManifest, *reliantv
 func (f *fakeSlack) runner() *httpaction.Runner {
 	pool := x509.NewCertPool()
 	pool.AddCert(f.srv.Certificate())
-	g := netguard.New()
-	g.AllowLoopback = true
+	g := netguardtest.Guard()
 	return httpaction.NewRunner(g).WithRootCAs(pool)
 }
 

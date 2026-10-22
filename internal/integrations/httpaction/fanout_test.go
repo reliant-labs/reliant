@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/integrations/manifest"
+	"github.com/reliant-labs/reliant/internal/netguard/netguardtest"
 )
 
 // A fan-out action lists parents, then runs one request for each. These tests
@@ -57,7 +58,7 @@ func (f *fanOutServer) paths() []string {
 func newFanOutServer(t *testing.T, handler func(w http.ResponseWriter, r *http.Request, srvURL string) bool) *fanOutServer {
 	t.Helper()
 	f := &fanOutServer{}
-	f.Server = httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	f.Server = netguardtest.NewTLSServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		f.mu.Lock()
 		f.hits = append(f.hits, r.URL.RequestURI())
 		f.mu.Unlock()
@@ -68,7 +69,6 @@ func newFanOutServer(t *testing.T, handler func(w http.ResponseWriter, r *http.R
 		w.WriteHeader(http.StatusNotFound)
 		_, _ = w.Write([]byte(`{"message":"Not Found"}`))
 	}))
-	t.Cleanup(f.Close)
 	return f
 }
 

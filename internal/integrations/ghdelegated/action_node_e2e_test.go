@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"net/http/httptest"
 	"net/url"
 	"testing"
 
@@ -23,7 +22,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/integrations/catalog"
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
-	"github.com/reliant-labs/reliant/internal/netguard"
+	"github.com/reliant-labs/reliant/internal/netguard/netguardtest"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
@@ -44,7 +43,7 @@ func TestHostedGitHubActionNodeEndToEnd(t *testing.T) {
 
 	var gotAuth, gotPath, gotAccept, gotVersion string
 	var gotBody map[string]any
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := netguardtest.NewTLSServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotAuth, gotPath = r.Header.Get("Authorization"), r.URL.EscapedPath()
 		gotAccept, gotVersion = r.Header.Get("Accept"), r.Header.Get("X-GitHub-Api-Version")
 		raw, _ := io.ReadAll(r.Body)
@@ -55,7 +54,6 @@ func TestHostedGitHubActionNodeEndToEnd(t *testing.T) {
 		_, _ = w.Write([]byte(`{"id": 555, "html_url": "https://github.com/acme/app/issues/42#issuecomment-555",
 		  "created_at": "2026-01-04T00:00:00Z", "body": "` + r.Header.Get("Authorization") + `"}`))
 	}))
-	defer srv.Close()
 	host, err := url.Parse(srv.URL)
 	require.NoError(t, err)
 
@@ -64,8 +62,7 @@ func TestHostedGitHubActionNodeEndToEnd(t *testing.T) {
 	cat := githubCatalogAt(t, srv.URL)
 	pool := x509.NewCertPool()
 	pool.AddCert(srv.Certificate())
-	guard := netguard.New()
-	guard.AllowLoopback = true
+	guard := netguardtest.Guard()
 	action := handlers.NewActionActivityWith(cat, httpaction.NewRunner(guard).WithRootCAs(pool), e.source(host.Host))
 
 	wf := &reliantv1.Workflow{

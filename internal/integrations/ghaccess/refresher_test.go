@@ -18,6 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/netguard/netguardtest"
 )
 
 // fakeGitHub serves the three endpoints a refresh reads, per token: who the
@@ -46,8 +47,7 @@ type fakeRepo struct {
 
 func newFakeGitHub(t *testing.T) *fakeGitHub {
 	f := &fakeGitHub{t: t, perPage: 2, users: map[string]fakeUser{}, fail: map[string]int{}}
-	f.srv = httptest.NewServer(http.HandlerFunc(f.serve))
-	t.Cleanup(f.srv.Close)
+	f.srv = netguardtest.NewServer(t, http.HandlerFunc(f.serve))
 	return f
 }
 

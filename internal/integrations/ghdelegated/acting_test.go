@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/http/httptest"
 	"net/url"
 	"sync"
 	"testing"
@@ -23,7 +22,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/gitcredentialclient"
 	"github.com/reliant-labs/reliant/internal/integrations/connauth"
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
-	"github.com/reliant-labs/reliant/internal/netguard"
+	"github.com/reliant-labs/reliant/internal/netguard/netguardtest"
 )
 
 // fakeInstallations is control-plane's MintInstallationToken: it records what
@@ -373,7 +372,7 @@ func TestActingAsApp_EndToEndWriteCarriesTheBotTokenAndTheFooter(t *testing.T) {
 			inst := &fakeInstallations{}
 			var gotAuth string
 			var gotBody map[string]any
-			srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			srv := netguardtest.NewTLSServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				gotAuth = r.Header.Get("Authorization")
 				raw, _ := io.ReadAll(r.Body)
 				_ = json.Unmarshal(raw, &gotBody)
@@ -381,7 +380,6 @@ func TestActingAsApp_EndToEndWriteCarriesTheBotTokenAndTheFooter(t *testing.T) {
 				w.WriteHeader(http.StatusCreated)
 				_, _ = fmt.Fprintf(w, `{"id":1,"number":1,"html_url":"https://github.com/acme/widgets/x/1","title":"t","state":"open","body":%q}`, gotAuth)
 			}))
-			defer srv.Close()
 			u, _ := url.Parse(srv.URL)
 			src := e.botSource(u.Host, inst)
 
@@ -390,8 +388,7 @@ func TestActingAsApp_EndToEndWriteCarriesTheBotTokenAndTheFooter(t *testing.T) {
 			require.NoError(t, err)
 			pool := x509.NewCertPool()
 			pool.AddCert(srv.Certificate())
-			g := netguard.New()
-			g.AllowLoopback = true
+			g := netguardtest.Guard()
 			runner := httpaction.NewRunner(g).WithRootCAs(pool)
 
 			site := httpaction.CallSite{RunID: e.newRun("idp|alice"), ActingIdentity: httpaction.IdentityApp, Automation: "pr-review"}
@@ -418,7 +415,7 @@ func TestActingAsApp_ActionsThatAuthorNothingAreNotSigned(t *testing.T) {
 	e := newEnv(t)
 	inst := &fakeInstallations{}
 	var gotBody map[string]any
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := netguardtest.NewTLSServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		raw, _ := io.ReadAll(r.Body)
 		gotBody = nil
 		_ = json.Unmarshal(raw, &gotBody)
@@ -429,14 +426,12 @@ func TestActingAsApp_ActionsThatAuthorNothingAreNotSigned(t *testing.T) {
 		}
 		_, _ = w.Write([]byte(`[]`))
 	}))
-	defer srv.Close()
 	u, _ := url.Parse(srv.URL)
 	src := e.botSource(u.Host, inst)
 	cat := githubCatalogAt(t, srv.URL)
 	pool := x509.NewCertPool()
 	pool.AddCert(srv.Certificate())
-	g := netguard.New()
-	g.AllowLoopback = true
+	g := netguardtest.Guard()
 	runner := httpaction.NewRunner(g).WithRootCAs(pool)
 	site := httpaction.CallSite{RunID: e.newRun("idp|alice"), ActingIdentity: httpaction.IdentityApp, Automation: "pr-review"}
 

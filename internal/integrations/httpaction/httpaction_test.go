@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/http/httptest"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -14,13 +13,13 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/integrations/manifest"
 	"github.com/reliant-labs/reliant/internal/netguard"
+	"github.com/reliant-labs/reliant/internal/netguard/netguardtest"
 )
 
 // newRunner returns a runner that may reach loopback (the httptest server) but
 // is otherwise the production guard.
 func newRunner() *Runner {
-	g := netguard.New()
-	g.AllowLoopback = true
+	g := netguardtest.Guard()
 	return NewRunner(g)
 }
 
@@ -39,14 +38,13 @@ func manifestFor(base, action string) string {
 
 func TestRendersRequestFromParams(t *testing.T) {
 	var gotPath, gotQuery, gotBody, gotHeader, gotMethod string
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := netguardtest.NewTLSServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotMethod, gotPath, gotQuery, gotHeader = r.Method, r.URL.EscapedPath(), r.URL.RawQuery, r.Header.Get("X-Trace")
 		b, _ := io.ReadAll(r.Body)
 		gotBody = string(b)
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"number": 7, "html_url": "https://x/7"}`))
 	}))
-	defer srv.Close()
 
 	m, a := mustParse(t, manifestFor(srv.URL+"/api", `    params: { type: object }
     request:
@@ -90,11 +88,10 @@ func TestRendersRequestFromParams(t *testing.T) {
 // output.select sees the validated params — defaults applied — so an action
 // can shape its output by what was asked, on every page of a paginated one.
 func TestSelectSeesTheParams(t *testing.T) {
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	srv := netguardtest.NewTLSServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`[{"path": "a/x"}, {"path": "b/y"}]`))
 	}))
-	defer srv.Close()
 	m, a := mustParse(t, manifestFor(srv.URL, `    params:
       type: object
       properties:
@@ -118,11 +115,10 @@ func TestSelectSeesTheParams(t *testing.T) {
 }
 
 func TestResponseSelection(t *testing.T) {
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	srv := netguardtest.NewTLSServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"data": {"id": 9, "name": "n"}, "meta": 1}`))
 	}))
-	defer srv.Close()
 	run := func(sel string) *Result {
 		m, a := mustParse(t, manifestFor(srv.URL, "    params: { type: object }\n    request: { method: GET, path: /x }\n    output: { select: \""+sel+"\" }\n"))
 		r := newRunner()
@@ -146,11 +142,10 @@ func TestResponseSelection(t *testing.T) {
 
 func TestErrorMapping(t *testing.T) {
 	status := int32(404)
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	srv := netguardtest.NewTLSServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(int(atomic.LoadInt32(&status)))
 		_, _ = w.Write([]byte(`{"message": "nope"}`))
 	}))
-	defer srv.Close()
 	m, a := mustParse(t, manifestFor(srv.URL, `    params: { type: object }
     request:
       method: GET
@@ -192,14 +187,13 @@ func TestErrorMapping(t *testing.T) {
 // a rule's `when` (CEL over status, headers and response) narrows the match.
 func TestErrorRuleWhenDistinguishesOneStatus(t *testing.T) {
 	var limited atomic.Bool
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	srv := netguardtest.NewTLSServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		if limited.Load() {
 			w.Header().Set("X-RateLimit-Remaining", "0")
 		}
 		w.WriteHeader(http.StatusForbidden)
 		_, _ = w.Write([]byte(`{"message": "denied"}`))
 	}))
-	defer srv.Close()
 	m, a := mustParse(t, manifestFor(srv.URL, `    params: { type: object }
     request:
       method: GET
@@ -233,11 +227,10 @@ func TestErrorRuleWhenDistinguishesOneStatus(t *testing.T) {
 // that is not the expected shape) does not match, so the next rule still
 // classifies the failure instead of the error path breaking.
 func TestErrorRuleWhenThatErrorsDoesNotMatch(t *testing.T) {
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	srv := netguardtest.NewTLSServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusForbidden)
 		_, _ = w.Write([]byte(`{"message": null}`))
 	}))
-	defer srv.Close()
 	m, a := mustParse(t, manifestFor(srv.URL, `    params: { type: object }
     request:
       method: GET
@@ -261,7 +254,7 @@ func TestErrorRuleWhenThatErrorsDoesNotMatch(t *testing.T) {
 // runs over that response and sees its status, and a failure the guard does
 // not name is still an error.
 func TestErrorRuleAcceptTurnsAMatchingFailureIntoASuccess(t *testing.T) {
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := netguardtest.NewTLSServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("bad") != "" {
 			w.WriteHeader(http.StatusUnprocessableEntity)
 			_, _ = w.Write([]byte(`{"errors": [{"code": "invalid"}]}`))
@@ -270,7 +263,6 @@ func TestErrorRuleAcceptTurnsAMatchingFailureIntoASuccess(t *testing.T) {
 		w.WriteHeader(http.StatusUnprocessableEntity)
 		_, _ = w.Write([]byte(`{"errors": [{"code": "already_exists"}]}`))
 	}))
-	defer srv.Close()
 	m, a := mustParse(t, manifestFor(srv.URL, `    params: { type: object }
     request:
       method: POST
@@ -308,10 +300,9 @@ func TestErrorRuleAcceptTurnsAMatchingFailureIntoASuccess(t *testing.T) {
 func TestErrorRuleMatchesAFailureReportedIn2xx(t *testing.T) {
 	var body atomic.Value
 	body.Store(`{"ok": true, "ts": "1.2"}`)
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	srv := netguardtest.NewTLSServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(body.Load().(string)))
 	}))
-	defer srv.Close()
 	m, a := mustParse(t, manifestFor(srv.URL, `    params: { type: object }
     request:
       method: POST
@@ -354,14 +345,13 @@ func TestErrorRuleMatchesAFailureReportedIn2xx(t *testing.T) {
 // A page that reports failure in its body stops a paginated walk as an
 // error: the items gathered so far are not a complete answer.
 func TestErrorRuleIn2xxStopsPagination(t *testing.T) {
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := netguardtest.NewTLSServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("cursor") == "" {
 			_, _ = w.Write([]byte(`{"ok":true,"items":[1],"next":"c2"}`))
 			return
 		}
 		_, _ = w.Write([]byte(`{"ok":false,"error":"invalid_cursor"}`))
 	}))
-	defer srv.Close()
 	m, a := mustParse(t, manifestFor(srv.URL, `    params: { type: object }
     request:
       method: GET
@@ -384,7 +374,7 @@ func TestErrorRuleIn2xxStopsPagination(t *testing.T) {
 
 func TestPaginationCursor(t *testing.T) {
 	var calls int32
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := netguardtest.NewTLSServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		atomic.AddInt32(&calls, 1)
 		switch r.URL.Query().Get("cursor") {
 		case "":
@@ -393,7 +383,6 @@ func TestPaginationCursor(t *testing.T) {
 			_, _ = w.Write([]byte(`{"items":[3],"next":null}`))
 		}
 	}))
-	defer srv.Close()
 	m, a := mustParse(t, manifestFor(srv.URL, `    params: { type: object }
     request:
       method: GET
@@ -415,11 +404,10 @@ func TestPaginationCursor(t *testing.T) {
 
 func TestPaginationPageAndMaxPages(t *testing.T) {
 	var calls int32
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := netguardtest.NewTLSServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		atomic.AddInt32(&calls, 1)
 		_, _ = w.Write([]byte(`[1]`))
 	}))
-	defer srv.Close()
 	m, a := mustParse(t, manifestFor(srv.URL, `    params: { type: object }
     request:
       method: GET
@@ -440,7 +428,7 @@ func TestPaginationPageAndMaxPages(t *testing.T) {
 
 func TestPaginationLinkHeader(t *testing.T) {
 	var srvURL string
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := netguardtest.NewTLSServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("p") == "" {
 			w.Header().Set("Link", `<`+srvURL+`/list?p=2>; rel="next"`)
 			_, _ = w.Write([]byte(`[1,2]`))
@@ -448,7 +436,6 @@ func TestPaginationLinkHeader(t *testing.T) {
 		}
 		_, _ = w.Write([]byte(`[3]`))
 	}))
-	defer srv.Close()
 	srvURL = srv.URL
 	m, a := mustParse(t, manifestFor(srv.URL, `    params: { type: object }
     request:
@@ -469,11 +456,10 @@ func TestPaginationLinkHeader(t *testing.T) {
 }
 
 func TestLinkHeaderCannotLeaveAllowedHosts(t *testing.T) {
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	srv := netguardtest.NewTLSServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Link", `<https://169.254.169.254/latest>; rel="next"`)
 		_, _ = w.Write([]byte(`[1]`))
 	}))
-	defer srv.Close()
 	m, a := mustParse(t, manifestFor(srv.URL, `    params: { type: object }
     request: { method: GET, path: /list, pagination: { style: link_header } }
     output: { select: "response" }
@@ -487,10 +473,9 @@ func TestLinkHeaderCannotLeaveAllowedHosts(t *testing.T) {
 }
 
 func TestResponseSizeLimit(t *testing.T) {
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	srv := netguardtest.NewTLSServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_, _ = w.Write([]byte(strings.Repeat("a", 5000)))
 	}))
-	defer srv.Close()
 	m, a := mustParse(t, manifestFor(srv.URL, "    params: { type: object }\n    request: { method: GET, path: /big, max_response_bytes: 1000 }\n"))
 	r := newRunner()
 	r.client.Transport.(*http.Transport).TLSClientConfig = srv.Client().Transport.(*http.Transport).TLSClientConfig
@@ -502,8 +487,7 @@ func TestResponseSizeLimit(t *testing.T) {
 
 func TestTimeout(t *testing.T) {
 	release := make(chan struct{})
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { <-release }))
-	defer srv.Close()
+	srv := netguardtest.NewTLSServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { <-release }))
 	defer close(release)
 	m, a := mustParse(t, manifestFor(srv.URL, "    params: { type: object }\n    request: { method: GET, path: /slow, timeout_seconds: 1 }\n"))
 	r := newRunner()
@@ -515,10 +499,9 @@ func TestTimeout(t *testing.T) {
 }
 
 func TestRedirectToOtherHostRefused(t *testing.T) {
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := netguardtest.NewTLSServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "https://169.254.169.254/latest/meta-data", http.StatusFound)
 	}))
-	defer srv.Close()
 	m, a := mustParse(t, manifestFor(srv.URL, "    params: { type: object }\n    request: { method: GET, path: /r }\n"))
 	r := newRunner()
 	r.client.Transport.(*http.Transport).TLSClientConfig = srv.Client().Transport.(*http.Transport).TLSClientConfig
@@ -615,12 +598,11 @@ func TestParamValidationAgainstSchema(t *testing.T) {
 // it, and a JSON-encoded list would be read as one malformed id.
 func TestQueryExprListBecomesRepeatedParam(t *testing.T) {
 	var got map[string][]string
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := netguardtest.NewTLSServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		got = r.URL.Query()
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{}`))
 	}))
-	defer srv.Close()
 	m, a := mustParse(t, manifestFor(srv.URL, `    params: { type: object }
     request:
       method: GET
@@ -655,7 +637,7 @@ func TestQueryExprListBecomesRepeatedParam(t *testing.T) {
 // reads "not in the list" as "gone" can tell a prefix from the whole.
 func TestPaginationReportsATruncatedWalk(t *testing.T) {
 	run := func(maxPages, pages int) *Result {
-		srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		srv := netguardtest.NewTLSServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			n := 1
 			if c := r.URL.Query().Get("cursor"); c != "" {
 				_, _ = fmt.Sscanf(c, "c%d", &n)
@@ -666,7 +648,6 @@ func TestPaginationReportsATruncatedWalk(t *testing.T) {
 			}
 			_, _ = fmt.Fprintf(w, `{"items":[%d],"next":%s}`, n, next)
 		}))
-		defer srv.Close()
 		m, a := mustParse(t, manifestFor(srv.URL, fmt.Sprintf(`    params: { type: object }
     request:
       method: GET
