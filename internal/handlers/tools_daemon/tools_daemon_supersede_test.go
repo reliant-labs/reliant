@@ -3,7 +3,10 @@ package tools_daemon
 
 import (
 	"context"
+	"errors"
 	"io"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -28,15 +31,23 @@ func newDaemonlessService(t *testing.T) *Service {
 
 // parkedStream blocks in Receive until a message is pushed or recv is closed —
 // exactly what a healthy idle daemon stream does between heartbeats.
+// Like a real one, it is woken out of Receive only by a message, the daemon
+// hanging up (recv closed), or abort.
 type parkedStream struct {
 	recv chan *reliantv1.DaemonMessage
 	sent chan *reliantv1.ServerMessage
+
+	abortOnce sync.Once
+	aborted   chan struct{}
+	// receiving counts the goroutines inside Receive right now.
+	receiving atomic.Int32
 }
 
 func newParkedStream() *parkedStream {
 	return &parkedStream{
-		recv: make(chan *reliantv1.DaemonMessage),
-		sent: make(chan *reliantv1.ServerMessage, 8),
+		recv:    make(chan *reliantv1.DaemonMessage),
+		sent:    make(chan *reliantv1.ServerMessage, 8),
+		aborted: make(chan struct{}),
 	}
 }
 
@@ -46,12 +57,20 @@ func (s *parkedStream) Send(msg *reliantv1.ServerMessage) error {
 }
 
 func (s *parkedStream) Receive() (*reliantv1.DaemonMessage, error) {
-	msg, ok := <-s.recv
-	if !ok {
-		return nil, io.EOF
+	s.receiving.Add(1)
+	defer s.receiving.Add(-1)
+	select {
+	case msg, ok := <-s.recv:
+		if !ok {
+			return nil, io.EOF
+		}
+		return msg, nil
+	case <-s.aborted:
+		return nil, errors.New("stream aborted")
 	}
-	return msg, nil
 }
+
+func (s *parkedStream) abort() { s.abortOnce.Do(func() { close(s.aborted) }) }
 
 func newTestConn(userID, daemonID string, stream daemonStream) *daemonConnection {
 	return &daemonConnection{

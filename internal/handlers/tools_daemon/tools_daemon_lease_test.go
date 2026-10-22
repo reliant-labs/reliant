@@ -291,13 +291,12 @@ func TestServerHeartbeatAcknowledgesTheNewestDaemonHeartbeatRead(t *testing.T) {
 // The stream stays open until the test closes it or ends.
 func dialDaemon(t *testing.T, svc *Service, userID, daemonID string) *connect.BidiStreamForClient[reliantv1.DaemonMessage, reliantv1.ServerMessage] {
 	t.Helper()
-	path, h := reliantv1connect.NewToolsDaemonServiceHandler(svc)
-	wrapped := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	routes := http.NewServeMux()
+	svc.Register(routes) // the production mount
+	mux := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), auth.UserIDContextKey, r.Header.Get("X-Test-User"))
-		h.ServeHTTP(w, r.WithContext(ctx))
+		routes.ServeHTTP(w, r.WithContext(ctx))
 	})
-	mux := http.NewServeMux()
-	mux.Handle(path, wrapped)
 	srv := httptest.NewUnstartedServer(h2c.NewHandler(mux, &http2.Server{}))
 	srv.Start()
 	t.Cleanup(srv.Close)

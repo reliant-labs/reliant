@@ -83,6 +83,8 @@ type pipeStream struct {
 	toDaemon   chan *reliantv1.ServerMessage
 	fromDaemon chan *reliantv1.DaemonMessage
 	hangUpOnce sync.Once
+	abortOnce  sync.Once
+	aborted    chan struct{}
 }
 
 func (p *pipeStream) Send(msg *reliantv1.ServerMessage) error {
@@ -91,12 +93,19 @@ func (p *pipeStream) Send(msg *reliantv1.ServerMessage) error {
 }
 
 func (p *pipeStream) Receive() (*reliantv1.DaemonMessage, error) {
-	msg, ok := <-p.fromDaemon
-	if !ok {
-		return nil, io.EOF
+	select {
+	case msg, ok := <-p.fromDaemon:
+		if !ok {
+			return nil, io.EOF
+		}
+		return msg, nil
+	case <-p.aborted:
+		return nil, io.ErrClosedPipe
 	}
-	return msg, nil
 }
+
+// abort is the replica ending its read of the stream.
+func (p *pipeStream) abort() { p.abortOnce.Do(func() { close(p.aborted) }) }
 
 // hangUp is the daemon closing the stream (retiring it).
 func (p *pipeStream) hangUp() { p.hangUpOnce.Do(func() { close(p.fromDaemon) }) }
@@ -112,6 +121,7 @@ func attach(t *testing.T, svc *Service, userID, daemonID string) (*pipeStream, b
 	stream := &pipeStream{
 		toDaemon:   make(chan *reliantv1.ServerMessage, 64),
 		fromDaemon: make(chan *reliantv1.DaemonMessage, 64),
+		aborted:    make(chan struct{}),
 	}
 	conn := newTestConn(userID, daemonID, stream)
 	conn.movesOnDrain = true // registered as a current daemon does

@@ -30,6 +30,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/ospath"
 	"github.com/reliant-labs/reliant/internal/projectfacts"
+	"github.com/reliant-labs/reliant/internal/streamabort"
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/toolexec/bootstrap"
@@ -74,23 +75,41 @@ const (
 type daemonStream interface {
 	Send(msg *reliantv1.ServerMessage) error
 	Receive() (*reliantv1.DaemonMessage, error)
+	// abort makes a Receive pending on the stream, and every later one,
+	// return an error. It is how the stream's owner stops the goroutine
+	// reading it before the stream is released (releaseStream): nothing
+	// else ends a server-side Receive while the daemon is still connected.
+	// Idempotent; safe from any goroutine.
+	abort()
 }
 
 // inboundStream wraps a connect.BidiStream (server-side, inbound daemon connection).
 type inboundStream struct {
 	stream *connect.BidiStream[reliantv1.DaemonMessage, reliantv1.ServerMessage]
+	// ctx is the handler's: its request was served through
+	// streamabort.Handler (Service.Register), which abort closes the body of.
+	ctx context.Context
 }
 
 func (s *inboundStream) Send(msg *reliantv1.ServerMessage) error    { return s.stream.Send(msg) }
 func (s *inboundStream) Receive() (*reliantv1.DaemonMessage, error) { return s.stream.Receive() }
+func (s *inboundStream) abort()                                     { streamabort.Abort(s.ctx) }
 
 // outboundStream wraps a connect.BidiStreamForClient (client-side, outbound gateway connection).
 type outboundStream struct {
 	stream *connect.BidiStreamForClient[reliantv1.ServerMessage, reliantv1.DaemonMessage]
+	// cancel cancels the context the stream was opened with: the way to end
+	// a client-side Receive (CloseResponse must not race one).
+	cancel context.CancelFunc
 }
 
 func (s *outboundStream) Send(msg *reliantv1.ServerMessage) error    { return s.stream.Send(msg) }
 func (s *outboundStream) Receive() (*reliantv1.DaemonMessage, error) { return s.stream.Receive() }
+func (s *outboundStream) abort() {
+	if s.cancel != nil {
+		s.cancel()
+	}
+}
 
 // daemonConnection represents an active daemon connection
 type daemonConnection struct {
@@ -116,6 +135,13 @@ type daemonConnection struct {
 	// reap. Guarded by Service.mu, like lastActivity.
 	lastReceived time.Time
 	stream       daemonStream
+	// streamUsers counts the goroutines besides the stream's owner that use
+	// stream (the sender, startSender). The owner — ConnectDaemon's handler,
+	// or the connector driving an outbound stream — joins them in
+	// releaseStream before it lets the stream go: Connect forbids touching
+	// a stream once its handler has returned, and what runs after the
+	// handler (otelconnect's span bookkeeping) races a straggler that does.
+	streamUsers sync.WaitGroup
 
 	// The session's reachability lease (daemon_attachment), as its connect
 	// wrote it. attachedAt is that row's attached_at, at the column's
@@ -703,6 +729,23 @@ var errDaemonSuperseded = connect.NewError(connect.CodeAborted, fmt.Errorf(
 
 func (c *daemonConnection) closeDone() { c.closeWith(nil) }
 
+// releaseStream ends every use of the connection's stream and returns once
+// there is none left: done closes (the sender stops), the stream is aborted
+// (a pending Receive returns), and the sender is joined. The stream's owner
+// calls it before it lets the stream go — before ConnectDaemon returns,
+// before the connector closes an outbound stream. Idempotent; call it only
+// from the owner's goroutine.
+//
+// It can wait out one Send already blocked on a daemon that stopped reading,
+// which the listener's write-stall guard bounds (serverkit.WriteStallGuard).
+func (c *daemonConnection) releaseStream() {
+	c.closeDone()
+	if c.stream != nil {
+		c.stream.abort()
+	}
+	c.streamUsers.Wait()
+}
+
 // closeWith closes the connection's done channel, recording why. The reason is
 // what the stream handler returns to the daemon, so a superseded daemon can
 // tell "another process took my identity" from an ordinary EOF.
@@ -913,6 +956,14 @@ func (s *Service) ConnectDaemon(
 		return errGatewayDraining
 	}
 
+	// The stream is read on a goroutine of its own (handleIncoming), which
+	// this handler must stop before it returns; only an abortable request
+	// body lets it stop one parked in Receive. Service.Register mounts that.
+	if !streamabort.Installed(ctx) {
+		logging.ErrorContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" ConnectDaemon is mounted without streamabort.Handler; mount it through Service.Register")
+		return connect.NewError(connect.CodeInternal, errors.New("daemon stream handler is misconfigured"))
+	}
+
 	// Wait for registration message
 	msg, err := stream.Receive()
 	if err != nil {
@@ -1015,7 +1066,7 @@ func (s *Service) ConnectDaemon(
 		lastActivity:        now2,
 		lastReceived:        now2,
 		attachedAt:          now,
-		stream:              &inboundStream{stream: stream},
+		stream:              &inboundStream{stream: stream, ctx: ctx},
 		attachSource:        db.DaemonAttachmentSourceInbound,
 		movesOnDrain:        reg.GetMovesOnDrain(),
 		sendCh:              make(chan *reliantv1.ServerMessage, 256),
@@ -1039,6 +1090,15 @@ func (s *Service) ConnectDaemon(
 		s.userDaemons[userID] = append(s.userDaemons[userID], daemonID)
 	}
 	s.mu.Unlock()
+
+	// Cleanup on disconnect via defer so it runs even on panic from the
+	// receive loop, and on a registration_ack that never went out.
+	// Idempotent — safe if the sweeper or a reconnect-driven replace already
+	// removed the slot.
+	defer func() {
+		s.teardownConnection(conn, "inbound stream ended")
+		logging.InfoContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Daemon disconnected", "userID", userID, "daemonID", daemonID)
+	}()
 
 	// Close old connection if this daemon id was already connected.
 	s.supersedeIncumbent(oldConn)
@@ -1072,8 +1132,11 @@ func (s *Service) ConnectDaemon(
 		return err
 	}
 
-	// Start sender goroutine.
-	go s.runSender(conn)
+	// Start sender goroutine. It uses the stream, so it is joined before
+	// this handler returns (deferred after teardown's defer, so it runs
+	// first; handleIncoming has normally released the stream already).
+	s.startSender(conn)
+	defer conn.releaseStream()
 
 	// Start heartbeat goroutine
 	go s.runHeartbeat(conn)
@@ -1094,14 +1157,6 @@ func (s *Service) ConnectDaemon(
 		}
 	}
 
-	// Cleanup on disconnect via defer so it runs even on panic from the
-	// receive loop. Idempotent — safe if the sweeper or a reconnect-driven
-	// replace already removed the slot.
-	defer func() {
-		s.teardownConnection(conn, "inbound stream ended")
-		logging.InfoContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Daemon disconnected", "userID", userID, "daemonID", daemonID)
-	}()
-
 	// When the listener drains, tell this daemon to move.
 	defer s.handOverOnDrain(ctx, conn)()
 
@@ -1118,13 +1173,16 @@ func (s *Service) Repo() db.Repository {
 // The DaemonConnector calls this after opening a ConnectGateway bidi stream and
 // receiving the DaemonRegister message. Identity (userID, daemonID) is provided
 // by the caller (from the NATS command), not from the daemon's register message.
-// The caller is responsible for running the receive loop via HandleIncomingLoop.
+// The caller is responsible for running the receive loop via HandleIncoming.
+// cancel cancels the context stream was opened with; the connection calls it
+// to end a pending Receive when it stops reading (releaseStream).
 func (s *Service) RegisterOutboundConnection(
 	ctx context.Context,
 	userID, daemonID, podIP string,
 	podPort int,
 	reg *reliantv1.DaemonRegister,
 	stream *connect.BidiStreamForClient[reliantv1.ServerMessage, reliantv1.DaemonMessage],
+	cancel context.CancelFunc,
 ) (*OutboundConn, error) {
 	if daemonID == "" || userID == "" {
 		return nil, fmt.Errorf("missing daemonID or userID")
@@ -1180,7 +1238,7 @@ func (s *Service) RegisterOutboundConnection(
 		lastActivity:        now,
 		lastReceived:        now,
 		attachedAt:          now,
-		stream:              &outboundStream{stream: stream},
+		stream:              &outboundStream{stream: stream, cancel: cancel},
 		attachSource:        db.DaemonAttachmentSourceOutbound,
 		podIP:               &podIP,
 		podPort:             &podPort,
@@ -1218,7 +1276,7 @@ func (s *Service) RegisterOutboundConnection(
 	s.publishDaemonListChanged(userID, daemonID)
 
 	// Start sender and heartbeat goroutines.
-	go s.runSender(conn)
+	s.startSender(conn)
 	go s.runHeartbeat(conn)
 
 	return &OutboundConn{service: s, conn: conn}, nil
@@ -1232,16 +1290,20 @@ type OutboundConn struct {
 }
 
 // HandleIncoming runs the blocking receive loop, dispatching incoming daemon
-// messages exactly like ConnectDaemon does. Returns when the stream ends.
+// messages exactly like ConnectDaemon does. Returns when the stream ends, and
+// only once nothing of this connection uses the stream any more, so the
+// caller may close it then.
 func (o *OutboundConn) HandleIncoming(ctx context.Context) error {
 	return o.service.handleIncoming(ctx, o.conn)
 }
 
-// Disconnect removes the connection from the service's internal state and
-// notifies listeners. Must be called when the stream ends. Idempotent —
-// safe to call multiple times (e.g. from a `defer` in the caller AND from
-// the stale-connection sweeper).
+// Disconnect stops every use of the stream (releaseStream), removes the
+// connection from the service's internal state and notifies listeners. Must
+// be called by the stream's owner when the stream ends, before it closes the
+// stream. Idempotent — safe to call more than once, and after the
+// stale-connection sweeper already tore the connection down.
 func (o *OutboundConn) Disconnect() {
+	o.conn.releaseStream()
 	o.service.teardownConnection(o.conn, "outbound stream ended")
 }
 
@@ -1300,15 +1362,28 @@ func (s *Service) handleIncoming(ctx context.Context, conn *daemonConnection) er
 	}()
 	var lastQueueFullLog time.Time
 
+	// The reader is joined before this returns, however it returns: the
+	// stream is released (aborted, so a Receive parked on a daemon that is
+	// still connected returns; the sender stopped) and then the reader is
+	// waited for. Returning with the reader still inside Receive let it use
+	// the stream after ConnectDaemon's handler had returned — a data race
+	// with otelconnect finishing the stream's span, which Connect forbids.
+	// Deferred after the queue closes above, so it runs before them.
 	received := make(chan receivedMessage)
+	stopReader := make(chan struct{})
+	readerDone := make(chan struct{})
+	defer func() {
+		close(stopReader)
+		conn.releaseStream()
+		<-readerDone
+	}()
 	go func() {
+		defer close(readerDone)
 		for {
 			msg, err := conn.stream.Receive()
 			select {
 			case received <- receivedMessage{msg: msg, err: err}:
-			case <-conn.done:
-				return
-			case <-ctx.Done():
+			case <-stopReader:
 				return
 			}
 			if err != nil {
@@ -2441,6 +2516,17 @@ func (s *Service) sendToConn(conn *daemonConnection, msg *reliantv1.ServerMessag
 		logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" daemon send buffer full, message dropped", "userID", conn.userID)
 		return fmt.Errorf("daemon send buffer full, message dropped for user %s", conn.userID)
 	}
+}
+
+// startSender runs conn's sender as one of the stream's users, so the
+// stream's owner joins it before letting the stream go (releaseStream).
+// Called from the owner's goroutine, before the owner can release.
+func (s *Service) startSender(conn *daemonConnection) {
+	conn.streamUsers.Add(1)
+	go func() {
+		defer conn.streamUsers.Done()
+		s.runSender(conn)
+	}()
 }
 
 // runSender handles sending messages to the daemon

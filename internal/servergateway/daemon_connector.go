@@ -167,6 +167,7 @@ func (dc *DaemonConnector) connectOnce(ctx context.Context, daemonID, userID, po
 	// succeeds we stop the timer so the cancel is never invoked and the
 	// stream can run indefinitely.
 	regCtx, regCancel := context.WithCancel(ctx)
+	defer regCancel()
 	regTimer := time.AfterFunc(10*time.Second, regCancel)
 
 	stream := client.ConnectGateway(regCtx)
@@ -238,7 +239,9 @@ func (dc *DaemonConnector) connectOnce(ctx context.Context, daemonID, userID, po
 
 	// Register with ToolsDaemonService — identity comes from the reconciler,
 	// capabilities/platform from the daemon.
-	outbound, err := dc.daemonService.RegisterOutboundConnection(ctx, userID, daemonID, podIP, podPort, reg, stream)
+	// regCancel is how the connection ends a Receive pending on the stream
+	// once it stops reading it.
+	outbound, err := dc.daemonService.RegisterOutboundConnection(ctx, userID, daemonID, podIP, podPort, reg, stream, regCancel)
 	if err != nil {
 		_ = stream.CloseRequest()
 		_ = stream.CloseResponse()
@@ -246,10 +249,12 @@ func (dc *DaemonConnector) connectOnce(ctx context.Context, daemonID, userID, po
 	}
 
 	// Cleanup via defer so the connections map is freed even if
-	// HandleIncoming panics. Disconnect is idempotent — if the sweeper
-	// already nuked this connection, this is a no-op.
-	defer outbound.Disconnect()
+	// HandleIncoming panics. Disconnect stops every goroutine using the
+	// stream, so it runs BEFORE the stream is closed (defers run in reverse).
+	// It is idempotent — if the sweeper already nuked this connection, the
+	// teardown half is a no-op.
 	defer func() { _ = stream.CloseResponse() }()
+	defer outbound.Disconnect()
 
 	// Run the receive loop — blocks until the stream ends.
 	return outbound.HandleIncoming(ctx)

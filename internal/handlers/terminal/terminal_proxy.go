@@ -17,6 +17,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/daemonerr"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/streamabort"
 	"github.com/reliant-labs/reliant/internal/terminal"
 )
 
@@ -308,9 +309,15 @@ func (s *Service) StreamTerminal(
 		})
 	}
 
-	// Output pump: daemon output -> browser stream.
+	// Output pump: daemon output -> browser stream. However it ends — the
+	// session closed, a send failed, the stream's context ended (a drain) —
+	// it aborts the request body on the way out, which is the only thing
+	// that wakes the input pump out of a Receive while the browser is still
+	// connected; cancelling pumpCtx does not. Without it the handler waited
+	// in wg.Wait for the browser's next keystroke.
 	go func() {
 		defer wg.Done()
+		defer streamabort.Abort(ctx)
 		for {
 			select {
 			case <-pumpCtx.Done():

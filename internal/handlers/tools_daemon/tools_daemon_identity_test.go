@@ -87,13 +87,12 @@ func (l *recordingListener) OnDaemonDisconnected(string, string) {}
 // asserting assertedID, and returns the first thing the gateway answers.
 func registerAs(t *testing.T, svc *Service, userID, assertedID string) error {
 	t.Helper()
-	path, h := reliantv1connect.NewToolsDaemonServiceHandler(svc)
-	wrapped := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	routes := http.NewServeMux()
+	svc.Register(routes) // the production mount
+	mux := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), auth.UserIDContextKey, r.Header.Get("X-Test-User"))
-		h.ServeHTTP(w, r.WithContext(ctx))
+		routes.ServeHTTP(w, r.WithContext(ctx))
 	})
-	mux := http.NewServeMux()
-	mux.Handle(path, wrapped)
 	srv := httptest.NewUnstartedServer(h2c.NewHandler(mux, &http2.Server{}))
 	srv.Start()
 	defer srv.Close()

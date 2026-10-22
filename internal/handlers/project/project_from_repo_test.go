@@ -331,11 +331,11 @@ func dialToolsDaemon(t *testing.T, repo db.Repository, userID, daemonID string) 
 	require.NoError(t, err)
 	t.Cleanup(gateway.Close)
 
-	path, h := reliantv1connect.NewToolsDaemonServiceHandler(gateway)
-	mux := http.NewServeMux()
-	mux.Handle(path, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		h.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), auth.UserIDContextKey, userID)))
-	}))
+	routes := http.NewServeMux()
+	gateway.Register(routes) // the production mount
+	mux := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		routes.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), auth.UserIDContextKey, userID)))
+	})
 	srv := httptest.NewUnstartedServer(h2c.NewHandler(mux, &http2.Server{}))
 	srv.Start()
 	t.Cleanup(srv.Close)

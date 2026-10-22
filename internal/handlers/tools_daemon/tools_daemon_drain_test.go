@@ -275,7 +275,7 @@ func TestDrainingReplicaRefusesNewDaemonStreams(t *testing.T) {
 	require.Equal(t, connect.CodeUnavailable, connect.CodeOf(err), "Unavailable keeps the daemon on its reconnect path")
 	require.True(t, svcerr.IsServerDraining(err))
 
-	_, err = svc.RegisterOutboundConnection(context.Background(), "user-1", "daemon-1", "10.0.0.1", 9190, &reliantv1.DaemonRegister{}, nil)
+	_, err = svc.RegisterOutboundConnection(context.Background(), "user-1", "daemon-1", "10.0.0.1", 9190, &reliantv1.DaemonRegister{}, nil, nil)
 	require.Equal(t, connect.CodeUnavailable, connect.CodeOf(err))
 }
 
