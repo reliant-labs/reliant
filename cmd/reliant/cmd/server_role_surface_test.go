@@ -253,11 +253,11 @@ func serverRoleSurface(t *testing.T, cmd *cobra.Command, path []string) string {
 	return b.String()
 }
 
-// reliantConfigMessages is every message in config.v1 bound to the reliant
+// reliantConfigMessages is every message in reliant.config.v1 bound to the reliant
 // binary.
 func reliantConfigMessages() []protoreflect.MessageDescriptor {
 	var out []protoreflect.MessageDescriptor
-	protoregistry.GlobalFiles.RangeFilesByPackage("config.v1", func(fd protoreflect.FileDescriptor) bool {
+	protoregistry.GlobalFiles.RangeFilesByPackage("reliant.config.v1", func(fd protoreflect.FileDescriptor) bool {
 		for i := 0; i < fd.Messages().Len(); i++ {
 			if b := binaryConfig(fd.Messages().Get(i)); b != nil && b.GetBinary() == ServiceName {
 				out = append(out, fd.Messages().Get(i))

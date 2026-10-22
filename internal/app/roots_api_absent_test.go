@@ -89,10 +89,10 @@ func TestAPIOmitsAbsentLoops(t *testing.T) {
 			require.Contains(t, supervised, "db_repo")
 			if tc.want {
 				require.Contains(t, supervised, "reliant_key_sweep")
-				require.Contains(t, supervised, "git_hub_access_loop")
+				require.Contains(t, supervised, "github_access_loop")
 			} else {
 				require.NotContains(t, supervised, "reliant_key_sweep")
-				require.NotContains(t, supervised, "git_hub_access_loop")
+				require.NotContains(t, supervised, "github_access_loop")
 			}
 		})
 	}
