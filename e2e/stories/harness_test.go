@@ -570,7 +570,7 @@ func (h *Harness) WaitPendingQuestion(chatID string) *db.Question {
 	h.T.Helper()
 	var q *db.Question
 	h.eventually("pending question on chat "+chatID, func() (bool, string) {
-		got, err := h.Stack.Repo.GetPendingQuestionByChatID(h.Ctx, chatID)
+		got, err := h.NewestPendingQuestion(chatID)
 		if err != nil || got == nil {
 			return false, fmt.Sprintf("pending question: %v", err)
 		}
@@ -578,6 +578,16 @@ func (h *Harness) WaitPendingQuestion(chatID string) *db.Question {
 		return true, ""
 	})
 	return q
+}
+
+// NewestPendingQuestion returns the chat's newest pending question, or nil.
+func (h *Harness) NewestPendingQuestion(chatID string) (*db.Question, error) {
+	// Oldest first: the newest pending question is the last.
+	pending, err := h.Stack.Repo.ListPendingQuestionsByChat(h.Ctx, chatID)
+	if err != nil || len(pending) == 0 {
+		return nil, err
+	}
+	return pending[len(pending)-1], nil
 }
 
 // WaitPendingApproval polls until the chat has exactly one pending approval.

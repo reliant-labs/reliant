@@ -577,11 +577,12 @@ func (h *Harness) WaitPendingQuestion(chatID string) *db.Question {
 	h.T.Helper()
 	var q *db.Question
 	h.eventually("pending question on chat "+chatID, func() (bool, string) {
-		got, err := h.Stack.Repo.GetPendingQuestionByChatID(h.Ctx, chatID)
-		if err != nil || got == nil {
-			return false, fmt.Sprintf("pending question: %v", err)
+		// Oldest first: the newest pending question is the last.
+		pending, err := h.Stack.Repo.ListPendingQuestionsByChat(h.Ctx, chatID)
+		if err != nil || len(pending) == 0 {
+			return false, fmt.Sprintf("pending questions: %d, %v", len(pending), err)
 		}
-		q = got
+		q = pending[len(pending)-1]
 		return true, ""
 	})
 	return q

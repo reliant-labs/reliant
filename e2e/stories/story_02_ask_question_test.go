@@ -99,7 +99,7 @@ func TestStory02_AskQuestionPauseResumeCompletes(t *testing.T) {
 	assert.True(t, feedbackInHistory, "user feedback must be in the second LLM call's conversation history")
 
 	// No pending question left; chat idle; script fully consumed.
-	pending, err := h.Stack.Repo.GetPendingQuestionByChatID(h.Ctx, chatID)
+	pending, err := h.NewestPendingQuestion(chatID)
 	if err == nil {
 		assert.Nil(t, pending, "no pending question after completion")
 	}

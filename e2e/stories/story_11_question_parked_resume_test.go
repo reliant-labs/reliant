@@ -122,7 +122,7 @@ func TestStory11_TerminateQuestionParkedResumesViaMarkedAnswer(t *testing.T) {
 	h.ResolveQuestion(q0.ID, []string{"Feedback"}, "keep going")
 	var q1 *db.Question
 	h.eventually("second (inner iteration 1) pending question", func() (bool, string) {
-		got, e := h.Stack.Repo.GetPendingQuestionByChatID(h.Ctx, chatID)
+		got, e := h.NewestPendingQuestion(chatID)
 		if e != nil || got == nil || got.ID == q0.ID {
 			return false, "still q0 / none"
 		}
@@ -156,7 +156,7 @@ func TestStory11_TerminateQuestionParkedResumesViaMarkedAnswer(t *testing.T) {
 	//    once more → inner iteration 2 (LLM turn 3) → parks on a NEW question q2.
 	var q2 *db.Question
 	h.eventually("post-resume pending question (inner iteration 2)", func() (bool, string) {
-		got, e := h.Stack.Repo.GetPendingQuestionByChatID(h.Ctx, chatID)
+		got, e := h.NewestPendingQuestion(chatID)
 		if e != nil || got == nil || got.ID == q1.ID {
 			return false, "still q1 / none"
 		}
