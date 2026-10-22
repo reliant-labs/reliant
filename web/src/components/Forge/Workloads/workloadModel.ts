@@ -193,6 +193,8 @@ function unobservedRow(env: StripEnv, name: string): ServiceRow {
     kind: "unknown",
     health: "unknown",
     healthReason: "Declared by the last recorded render; nothing has observed it",
+    healthCause: "none",
+    healthDetail: "",
     readyReplicas: null,
     desiredReplicas: null,
     releaseVersion: "",
