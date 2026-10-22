@@ -66,7 +66,7 @@ func TestBuiltinValidationIsIndependentOfIntegrationInputTypes(t *testing.T) {
 func TestAutopilotPackValidatesCleanWithTypedInputs(t *testing.T) {
 	for _, name := range []string{
 		"autopilot-pr-review.yaml", "autopilot-review-responder.yaml",
-		"autopilot-issue-worker.yaml", "autopilot-alert-triage.yaml",
+		"autopilot-issue-worker.yaml", "autopilot-alert-triage.yaml", "autopilot-security-review.yaml",
 	} {
 		t.Run(name, func(t *testing.T) {
 			wf, err := parseBuiltin(name)
@@ -85,6 +85,7 @@ func TestAutopilotPackValidatesCleanWithTypedInputs(t *testing.T) {
 func TestAutopilotRepositoryScopeIsDeclaredNotFiltered(t *testing.T) {
 	for _, name := range []string{
 		"autopilot-pr-review.yaml", "autopilot-review-responder.yaml", "autopilot-issue-worker.yaml",
+		"autopilot-security-review.yaml",
 	} {
 		t.Run(name, func(t *testing.T) {
 			wf, err := parseBuiltin(name)

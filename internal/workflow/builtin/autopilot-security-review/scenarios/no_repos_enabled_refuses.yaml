@@ -1,0 +1,9 @@
+name: no_repos_enabled_refuses
+description: repos is required, so a run that names no repositories never starts. An activation without repos is NEEDS_SETUP.
+inputs:
+  repo: reliant-labs/reliant
+  pr_number: 1
+expect:
+  outcome: error
+  error_contains: "required input 'repos' is not provided"
+  not_reached: [check, me, pr, dir, review, post]

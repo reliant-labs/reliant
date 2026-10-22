@@ -1,13 +1,14 @@
 ---
 title: "Autopilot"
-description: "Four built-in workflows that review pull requests, work issues, answer review feedback and triage alerts on your GitHub repositories, and never merge"
+description: "Five built-in workflows that review pull requests, security-review them, work issues, answer review feedback and triage alerts on your GitHub repositories, and never merge"
 ---
 
-**Autopilot** is a pack of four built-in workflows for GitHub. Each is an [automation](/automations/overview): it waits for an event, runs unattended, and leaves its work as ordinary issues, comments, reviews, branches and pull requests that you can read and overrule. You turn each one on, and nothing is on until you do.
+**Autopilot** is a pack of five built-in workflows for GitHub. Each is an [automation](/automations/overview): it waits for an event, runs unattended, and leaves its work as ordinary issues, comments, reviews, branches and pull requests that you can read and overrule. You turn each one on, and nothing is on until you do.
 
 | Workflow | Reacts to | Does | Needs a machine |
 |----------|-----------|------|-----------------|
 | **PR review** (`autopilot-pr-review`) | A pull request opened or marked ready; the re-review label; `/autopilot re-review` | Reads the diff and the code around it, posts one review | No |
+| **Security review** (`autopilot-security-review`) | A pull request opened, reopened, marked ready or given new commits (optionally only with a label); `/autopilot security-review`; Run now | Threat-models the diff read-only and posts one review comment: findings by severity, each confirmed or suspected, with evidence, an exploit sketch and a fix | Yes |
 | **Issue worker** (`autopilot-issue-worker`) | `agent:ready` added to an issue; an `@reliant` mention | Writes a failing test and the fix in a worktree, runs your fast checks, pushes a branch, opens a PR that closes the issue | Yes |
 | **Review responder** (`autopilot-review-responder`) | A review, an inline comment or a comment on an `agent:authored` PR | Changes the code to address the feedback, pushes to that PR's own branch, replies in each thread | Yes |
 | **Alert triage** (`autopilot-alert-triage`) | An Alertmanager webhook | Files one issue per new alert, investigates it read-only, writes up severity, evidence, cause and a proposed fix | Yes |
@@ -37,7 +38,7 @@ An automation that was turned on with no repositories (one created before reposi
 
 Enable each workflow you want. They are independent, and none requires the others, though the loop above only closes when all three code workflows are on for the same repositories.
 
-PR review needs no machine, so choose **No machine** for it. The other three work in a checkout, so pick the machine that holds your repositories as sibling folders of one project (`forge`, `control-plane`, `reliant`, say), or one project per repository.
+PR review needs no machine, so choose **No machine** for it. The other four work in a checkout, so pick the machine that holds your repositories as sibling folders of one project (`forge`, `control-plane`, `reliant`, say), or one project per repository.
 
 Alert triage also shows a **webhook URL and token, once**, when you enable it. See [Wiring Alertmanager](#wiring-alertmanager).
 
@@ -47,7 +48,7 @@ Autopilot workflows only start from their triggers, so the chat composer's workf
 
 These are the workflows' inputs, so they appear in the Enable dialog with their defaults. Each activation has its own values, which is how two projects can run the same workflow on different repositories.
 
-### Shared by PR review, issue worker and review responder
+### Shared by PR review, security review, issue worker and review responder
 
 | Setting | Default | What it does |
 |---------|---------|--------------|
@@ -68,6 +69,27 @@ These are the workflows' inputs, so they appear in the Enable dialog with their 
 Every label setting is a `github.label`: the picker offers the labels of the repositories you picked, and accepts a name that does not exist yet (the workflow creates it with a colour on first use).
 
 PR review covers **every non-draft PR** in your repositories when it is opened or marked ready for review. Add `skip-review` to opt one out. A review can be asked for again by adding the re-review label or by commenting `/autopilot re-review` as you or a trusted person.
+
+### Security review
+
+| Setting | Default | What it does |
+|---------|---------|--------------|
+| `require_labels` | none | Empty reviews every non-draft PR. Pick labels (e.g. `security-review`) to review only PRs carrying one; adding one to a PR starts a review |
+| `review_model` | `powerful` tag, high thinking | The reviewer |
+| `review_guidance` | empty | Your threat model, appended to the reviewer's instructions: which services face the internet, how tenants are scoped, what to ignore |
+| `max_turns` | 50 | The most agent turns for one review |
+
+Security review covers every non-draft PR in your repositories when it is opened, reopened, marked ready for review or gets new commits, or only the PRs carrying one of `require_labels`. Each head commit is reviewed once: a review it already posted for that commit (as you or as the Reliant bot) is not posted again. Comment `/autopilot security-review` as you or a trusted person, or use **Run now** with `repo` and `pr_number`, to review any open PR on demand, a draft or an already-reviewed commit included.
+
+The reviewer works on code only. It runs in your checkout of the repository with the same tools as alert triage's investigator, a shell without credentials, `view` and `code_context`, plus GitHub reads of the PR at its head commit. It has no edit tools and no GitHub write tools. It is told never to scan or probe any host, never to deploy or touch a cluster or production, and never to execute the repository's code (no tests, builds or installs); the only network calls it is told to make are lookups of the changed dependencies in public advisory databases (OSV, or `npm audit` when npm is installed). It threat-models the diff for:
+
+- authentication and authorization on new endpoints and rpcs, and multi-tenant data scoping
+- injection (SQL, shell, template), SSRF, path traversal and unsafe deserialization
+- secrets committed in code, weak crypto and token handling
+- CSRF, CORS and cookie flags on web changes
+- dependency changes and their known advisories
+
+The workflow, not the model, writes the review: ONE comment, always a `COMMENT` (never an approval or a change request), with the findings grouped Critical, High, Medium, Low. Each names `path:line`, is marked **confirmed** (the path from attacker input to the vulnerable code was traced) or **suspected** (a link is unverified), and carries evidence, an exploit sketch and a fix. The comment ends by saying the review covered the code only and nothing was run against live systems. It is not a penetration test.
 
 ### Issue worker
 
@@ -145,6 +167,7 @@ Each workflow creates the labels it needs on first use, with a colour and a desc
 | `agent:blocked` | The agent tried and could not finish, or hit the round cap | The workflows |
 | `agent:punted` | The agent needs a human decision (unclear, too large, or it would touch CI, secrets or deploy configuration) | Issue worker |
 | `skip-review` | Do not review this PR | **You** |
+| the labels in `require_labels` (e.g. `security-review`) | Security-review this PR; only when you set `require_labels` | **You** |
 | `agent:re-review` | Review this PR again | **You** |
 | `size:S`, `size:M`, `size:L` | The size of the change an agent opened (under 60, under 400, more changed lines) | Issue worker |
 
@@ -182,6 +205,7 @@ Logs and traces are not reachable from the investigator unless you give it a too
 Nothing here has a budget of its own yet, so this is where your spend comes from:
 
 - **PR review** runs one reviewer per PR, up to 40 turns, on the `powerful` tag with high thinking. It runs for **every** non-draft PR in the repositories you picked, including the ones agents open, so in a busy repository it is the largest line. Use `skip-review` on PRs that do not need it, and consider starting with one quiet repository.
+- **Security review** runs one reviewer per head commit, up to 50 turns, on the `powerful` tag with high thinking. Without `require_labels` that is **every push** to every non-draft PR in the repositories you picked, so in a busy repository set a label and opt PRs in.
 - **Issue worker** runs an agent for up to 120 turns per issue, plus a retry of up to 60 if the fast checks fail. It runs only for issues someone trusted opted in.
 - **Review responder** runs up to 80 turns per round, three rounds at most per PR, plus a retry.
 - **Alert triage** runs one investigation of up to 45 turns per *new* alert, at most five per notification, nothing for a repeat.

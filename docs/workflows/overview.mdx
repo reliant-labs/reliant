@@ -82,7 +82,7 @@ While the agent workflow handles most tasks, Reliant ships additional workflows 
 
 **Import from Claude Code / Cursor** (`migrate`) brings configuration across from Claude Code, Cursor, Codex, or Windsurf.
 
-**Autopilot** is four workflows that run only as [automations](/automations/overview), never from a chat: PR review (`autopilot-pr-review`), issue worker (`autopilot-issue-worker`), review responder (`autopilot-review-responder`) and alert triage (`autopilot-alert-triage`). They are listed in the library, where you enable them; see [Autopilot](/guides/autopilot).
+**Autopilot** is five workflows that run only as [automations](/automations/overview), never from a chat: PR review (`autopilot-pr-review`), security review (`autopilot-security-review`), issue worker (`autopilot-issue-worker`), review responder (`autopilot-review-responder`) and alert triage (`autopilot-alert-triage`). They are listed in the library, where you enable them; see [Autopilot](/guides/autopilot).
 
 The rest ship as **building blocks**: `structured-agent` (an agent that must answer through a response tool, for structured output), `scope-conversation` (a reusable scoping conversation), and the steps the Autopilot workflows share. They're hidden from the workflow selector, but any workflow can `ref:` them, and they appear under *Building blocks* in the workflow library.
 
