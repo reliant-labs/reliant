@@ -147,7 +147,7 @@ describe("ChatPresenter timeline catch-up overlay", () => {
     advance(CATCH_UP_SHOW_DELAY_MS);
 
     expect(overlay()).toBeInTheDocument();
-    expect(overlay()).toHaveClass("backdrop-blur-sm");
+    expect(overlay()).toHaveClass("backdrop-blur-xs");
     expect(frame()).toHaveAttribute("aria-busy", "true");
     expect(status()).toHaveTextContent("Loading conversation…");
     // The stale transcript stays rendered underneath, but out of reach.
@@ -163,7 +163,7 @@ describe("ChatPresenter timeline catch-up overlay", () => {
     advance(CATCH_UP_SHOW_DELAY_MS);
 
     expect(overlay()).toBeInTheDocument();
-    expect(overlay()).not.toHaveClass("backdrop-blur-sm");
+    expect(overlay()).not.toHaveClass("backdrop-blur-xs");
   });
 
   it("lifts once caught up, after holding long enough not to flicker, and lands at the bottom", () => {

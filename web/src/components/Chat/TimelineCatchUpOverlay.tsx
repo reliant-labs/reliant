@@ -21,7 +21,7 @@ export function TimelineCatchUpOverlay({ hasContent }: { hasContent: boolean }) 
       aria-hidden="true"
       className={cn(
         "timeline-catchup-in absolute inset-0 z-20 flex items-center justify-center",
-        hasContent && "bg-background/40 backdrop-blur-sm",
+        hasContent && "bg-background/40 backdrop-blur-xs",
       )}
     >
       <span className="flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1.5 text-sm text-muted-foreground shadow-sm">
