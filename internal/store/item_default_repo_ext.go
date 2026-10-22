@@ -37,7 +37,6 @@ package store
 
 import (
 	"context"
-	"database/sql"
 
 	"github.com/reliant-labs/forge/pkg/orm"
 
@@ -56,7 +55,7 @@ func GetItemDefault(ctx context.Context, db orm.Context, itemType int32, slug st
 		return nil, err
 	}
 	if len(rows) == 0 {
-		return nil, sql.ErrNoRows
+		return nil, missing("item default")
 	}
 	row := rows[0]
 	return &core.ItemDefault{ItemType: itemType, Slug: slug, IsHidden: row.IsHidden, Reason: row.Reason}, nil

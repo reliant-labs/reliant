@@ -84,8 +84,10 @@ const runChildOfSQL = `
               AND te.payload->>'parent_chat_id' = ?1::text
               AND te.chat_id IS NOT NULL)`
 
-// selectRuns is SELECT r.* over the runs of userID, narrowed to the
-// children of parentChatID when it is set.
+var runRowColumns = columnsOf[runRow]("r")
+
+// selectRuns selects runRow's columns over the runs of userID, narrowed to
+// the children of parentChatID when it is set.
 func selectRuns(db orm.Context, userID string, parentChatID *string, distinctOn string) *bun.SelectQuery {
 	rowsSQL, args := runRowsSQL, []any{userID}
 	if parentChatID != nil {
@@ -94,9 +96,9 @@ func selectRuns(db orm.Context, userID string, parentChatID *string, distinctOn 
 	}
 	q := db.Bun().NewSelect().TableExpr("("+rowsSQL+") AS r", args...)
 	if distinctOn != "" {
-		return q.DistinctOn(distinctOn).ColumnExpr("r.*")
+		q = q.DistinctOn(distinctOn)
 	}
-	return q.ColumnExpr("r.*")
+	return q.ColumnExpr(runRowColumns)
 }
 
 // whereProjectAndWorkflows applies the two filters both list queries share.

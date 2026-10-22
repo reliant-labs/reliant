@@ -1624,11 +1624,14 @@ func (s *Service) notifyThreadWake(ctx context.Context, chat *db.Chat, threadID 
 		workflowID = *chat.WorkflowID
 	}
 	// Every caller is delivering a person's input, so the doorbell says so:
-	// a thread waiting on the user's answer to a question yields to it.
+	// a thread waiting on the user's answer to a question yields to it. The
+	// one exception is an async question's answer (the question service,
+	// threadwake.WithoutQuestionYield): it answers a different question
+	// than the one its thread may be parked on, which must stay open.
 	if err := s.deps.Temporal.SignalWorkflow(ctx, workflowID, "", v2.ThreadWakeSignalName, v2.ThreadWakeSignal{
 		Thread:   threadID,
 		Reason:   reason,
-		FromUser: true,
+		FromUser: threadwake.YieldsQuestions(ctx),
 	}); err != nil {
 		logging.WarnContext(ctx, "Could not wake thread",
 			"error", err, "chatID", chat.ID, "threadID", threadID, "workflowID", workflowID, "reason", string(reason))

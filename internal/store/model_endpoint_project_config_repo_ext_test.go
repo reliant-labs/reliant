@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/store/storetest"
@@ -145,8 +146,10 @@ func TestProjectConfigQueries(t *testing.T) {
 		func() error { _, err := store.GetProjectConfigVersion(ctx, env.ORM, project); return err },
 		func() error { _, err := store.GetProjectWorkflowsJSON(ctx, env.ORM, project); return err },
 	} {
-		if err := read(); err != sql.ErrNoRows { //nolint:errorlint // the contract is sql.ErrNoRows, unwrapped
-			t.Fatalf("read with no record err = %v, want sql.ErrNoRows unwrapped", err)
+		// No record is a classified miss: NotFound for a handler, and still
+		// sql.ErrNoRows for the callers that read it as an empty config.
+		if err := read(); !svcerr.IsNotFound(err) || !errors.Is(err, sql.ErrNoRows) {
+			t.Fatalf("read with no record err = %v, want svcerr.NotFound and sql.ErrNoRows", err)
 		}
 	}
 

@@ -44,7 +44,7 @@ Tools are organized by tags for filtering:
 - [Information Retrieval](#information-retrieval) (6 tools)
 - [Workflow Management](#workflow-management) (20 tools)
 - [System & Execution](#system--execution) (4 tools)
-- [Other Tools](#other-tools) (67 tools)
+- [Other Tools](#other-tools) (69 tools)
 
 ---
 
@@ -2086,6 +2086,7 @@ _Miscellaneous tools and utilities._
 | [`gmail__message_list`](#gmail__message_list) | integration | List message ids in the mailbox, newest first, matching q (Gmail's search box syntax: "from:ann i... |
 | [`gmail__message_send`](#gmail__message_send) | integration | Send an email as the connected Google account. Give to (and optionally cc and bcc) as addresses, ... |
 | [`http__request`](#http__request) | integration | Send an HTTP request to a public http(s) URL and return the status, headers and body. Private, lo... |
+| [`list_pending_questions`](#list_pending_questions) | readonly | List the questions you and your sub-agents have asked the user (ask_user) that are still unanswered. |
 | [`list_runs`](#list_runs) | runs, readonly | List the user's recent top-level runs (chats), most recently active first, with the state of each... |
 | [`load_tool`](#load_tool) | coding:default, readonly, coding:plan | Dynamically load a tool by name or search for available tools. |
 | [`metadata_writer`](#metadata_writer) | - | Writes and updates project metadata YAML file |
@@ -2114,6 +2115,7 @@ _Miscellaneous tools and utilities._
 | [`twilio__message_send`](#twilio__message_send) | integration | Send a message from one of your Twilio senders. For SMS give E.164 numbers (+15551234567); for Wh... |
 | [`twilio__phone_number_list`](#twilio__phone_number_list) | integration | List the phone numbers the account owns, with what each can do (sms, mms, voice) and where its in... |
 | [`wait_for_machine`](#wait_for_machine) | readonly, coding:plan, coding:default | Wait for this run's machine to reconnect, then return so you can retry. |
+| [`withdraw_question`](#withdraw_question) | - | Withdraw an async question (ask_user async: true) that you or one of your sub-agents asked and th... |
 | [`worktree`](#worktree) | - | Create and manage worktrees: isolated workspaces for working on a separate branch. |
 
 ### ask_user
@@ -2127,6 +2129,8 @@ Ask the user one or more questions. By default you stop and wait for their respo
 Blocking (default) vs async:
 - Blocking: use when you cannot sensibly proceed without the answer — the instructions are ambiguous in a way that changes the work, or the next action is significant or hard to undo.
 - async: true: use when you can proceed on a reasonable default and the answer would only refine the work — an FYI, a preference, or a decision where you will go with your recommended option unless told otherwise. The question is posted to the user (in the chat and their inbox) and the tool returns at once; keep working on your default. If the user answers, the answer arrives later as a message from the user; adjust then. Do not ask the same question again while waiting.
+
+Before asking, call list_pending_questions if you may have asked already: do not ask a question that is still pending. Before finishing, withdraw async questions your default made moot (withdraw_question).
 
 Usage notes:
 - The user will always have an option to provide freetext input in addition to any predefined options.
@@ -2547,6 +2551,22 @@ Send an HTTP request to a public http(s) URL and return the status, headers and 
 
 ---
 
+### list_pending_questions
+
+**Tags:** `readonly`
+
+List the questions you and your sub-agents have asked the user (ask_user) that are still unanswered.
+
+Shows your own thread's questions and those of every sub-agent below you, recursively — never a sibling's. For each: question_id, who asked (you, or the sub-agent's agent_id and title), whether it is async (asked without waiting — nobody is blocked on it) or blocking (that agent is parked until the user answers), the question and its options, and how long it has been waiting.
+
+When to call it:
+- Before you finish a task: check for async questions still unanswered. If you went ahead on a default and the answer no longer matters, withdraw it with withdraw_question so it leaves the user's inbox. If it still matters, say so in your final answer.
+- Before asking the user something: avoid asking a question that is already pending.
+
+Answers to async questions arrive as messages from the user that name the question_id, so you can match an answer to the question it came from.
+
+---
+
 ### list_runs
 
 **Tags:** `runs`, `readonly`
@@ -2928,6 +2948,16 @@ If a message arrives for you while you wait — from the user, your parent, or a
 RETURNS:
 - connected: true once the machine is attached — retry the call that failed
 - otherwise its last known state (disconnected, starting, suspended, failed, removed) with what to do about it
+
+---
+
+### withdraw_question
+
+Withdraw an async question (ask_user async: true) that you or one of your sub-agents asked and that no longer needs an answer — typically because you proceeded on a default and the outcome is settled.
+
+Withdrawing closes the question: it leaves the user's inbox and its card in the chat shows "Withdrawn: <reason>". The reason is shown to the user, so make it a short, plain sentence (e.g. "Went with Postgres; the schema is already migrated").
+
+Only async questions can be withdrawn, and only those in your own thread or a sub-agent's below you. A blocking question cannot be: its agent is waiting on the user's answer, and only the user (or that agent finishing) can close it. Find question ids with list_pending_questions.
 
 ---
 

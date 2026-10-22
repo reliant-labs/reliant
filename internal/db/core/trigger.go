@@ -3,9 +3,10 @@ package core
 
 import (
 	"encoding/json"
-	"errors"
 	"sort"
 	"time"
+
+	"github.com/reliant-labs/forge/pkg/svcerr"
 )
 
 // A Trigger is a standing instruction to start a run without a human typing:
@@ -148,10 +149,10 @@ const (
 )
 
 // ErrTriggerNotFound is returned when a trigger id does not resolve.
-var ErrTriggerNotFound = errors.New("trigger not found")
+var ErrTriggerNotFound = svcerr.NotFound("trigger")
 
 // ErrTriggerEventNotFound is returned when a trigger event lookup misses.
-var ErrTriggerEventNotFound = errors.New("trigger event not found")
+var ErrTriggerEventNotFound = svcerr.NotFound("trigger event")
 
 // ActingIdentity names who an automation's integration writes speak as.
 type ActingIdentity string
@@ -355,7 +356,7 @@ const (
 
 // ErrTriggerRegistrationNotFound is returned when a trigger has no
 // registration yet — for a poll, that is "no baseline taken".
-var ErrTriggerRegistrationNotFound = errors.New("trigger registration not found")
+var ErrTriggerRegistrationNotFound = svcerr.NotFound("trigger registration")
 
 // ScheduleConfig is Trigger.Config for TriggerKindSchedule.
 type ScheduleConfig struct {

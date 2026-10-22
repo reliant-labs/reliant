@@ -163,8 +163,8 @@ func ListToolCallsByMessageIDs(ctx context.Context, db orm.Context, messageIDs [
 // failure for a live spawn writes a lie into conversation history that no
 // later pass can distinguish from a real one. A missing result is recoverable;
 // an invented one is not.
-const listStrandedSpawnToolCallsSQL = `
-SELECT tc.* FROM tool_calls tc
+var listStrandedSpawnToolCallsSQL = `
+SELECT ` + columnsOf[ToolCall]("tc") + ` FROM tool_calls tc
 JOIN workflows w ON w.id = tc.child_workflow_id
 WHERE tc.tool_name = 'spawn'
   AND tc.status IN (1, 2)

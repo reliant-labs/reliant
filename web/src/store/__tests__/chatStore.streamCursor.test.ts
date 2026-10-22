@@ -246,7 +246,7 @@ describe("end to end through globalUpdatesStore", () => {
   });
 });
 
-describe("chat sync pending (transcript syncing indicator)", () => {
+describe("chat sync pending (timeline catch-up signal)", () => {
   it("is set for a chat with cached content", () => {
     cacheChat(CHAT);
 
@@ -255,10 +255,10 @@ describe("chat sync pending (transcript syncing indicator)", () => {
     expect(useChatStore.getState().chatSyncPendingId).toBe(CHAT);
   });
 
-  it("is NOT set for a chat with nothing cached — the loading state covers that", () => {
+  it("is set for a chat with nothing cached — a cold open is loading too", () => {
     useChatStore.getState().setChatSyncPending(CHAT);
 
-    expect(useChatStore.getState().chatSyncPendingId).toBeNull();
+    expect(useChatStore.getState().chatSyncPendingId).toBe(CHAT);
   });
 
   it("clears on null", () => {

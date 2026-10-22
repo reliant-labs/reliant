@@ -49,7 +49,7 @@ func LoadStepExecution(ctx context.Context, db orm.Context, id string) (*core.St
 	row, err := GetStepExecutionByID(ctx, db, id)
 	if err != nil {
 		if svcerr.IsNotFound(err) {
-			return nil, fmt.Errorf("step execution not found: %s", id)
+			return nil, fmt.Errorf("%w: %s", svcerr.NotFound("step execution"), id)
 		}
 		return nil, err
 	}

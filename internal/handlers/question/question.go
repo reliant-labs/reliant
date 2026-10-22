@@ -100,6 +100,8 @@ func (s *Service) ResolveQuestion(
 }
 
 // ListPendingQuestions returns every pending question in a chat, oldest first,
+// or, with chat_id unset, in every chat the caller owns (set is a filter,
+// unset is none; an empty chat_id is rejected rather than read as unset),
 // each carrying the thread that asked it. A question whose asking run
 // completed or was cancelled is left out: nothing can answer it, and shown in
 // its thread's composer it would replace the input the user needs to message
@@ -111,7 +113,7 @@ func (s *Service) ResolveQuestion(
 // question, and the user's reply to that thread went to its mailbox — which a
 // thread parked on a question never drains.
 //
-// The chat is verified to exist and be the caller's BEFORE the question lookup,
+// A set chat is verified to exist and be the caller's BEFORE the question lookup,
 // which is the difference between "there is no gate" and "that is not a chat".
 // Without the check both collapse into an empty-but-successful response, and
 // the CLI renders it as "No open questions." with exit 0 — a clean-looking
@@ -124,16 +126,23 @@ func (s *Service) ListPendingQuestions(
 ) (*connect.Response[reliantv1.ListPendingQuestionsResponse], error) {
 	userID := auth.MustGetUserID(ctx)
 
-	if req.Msg.ChatId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("chat_id is required"))
+	var (
+		questions []*db.Question
+		err       error
+	)
+	if req.Msg.ChatId == nil {
+		questions, err = s.deps.Repo.ListAnswerablePendingQuestionsByUser(ctx, userID)
+	} else {
+		chatID := req.Msg.GetChatId()
+		if chatID == "" {
+			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("chat_id, when set, must not be empty"))
+		}
+		chat, getErr := s.deps.Repo.GetChat(ctx, chatID)
+		if getErr != nil || chat == nil || chat.UserID != userID {
+			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
+		}
+		questions, err = s.deps.Repo.ListAnswerablePendingQuestionsByChat(ctx, chatID)
 	}
-
-	chat, err := s.deps.Repo.GetChat(ctx, req.Msg.ChatId)
-	if err != nil || chat == nil || chat.UserID != userID {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
-	}
-
-	questions, err := s.deps.Repo.ListAnswerablePendingQuestionsByChat(ctx, req.Msg.ChatId)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("list pending questions: %w", err))
 	}
@@ -171,6 +180,9 @@ func questionToProto(q *db.Question) *reliantv1.QuestionInfo {
 	}
 	if q.ResponseData != nil {
 		info.ResponseData = q.ResponseData
+	}
+	if q.WithdrawnReason != nil {
+		info.WithdrawnReason = q.WithdrawnReason
 	}
 	return info
 }

@@ -1,8 +1,9 @@
 package core
 
 import (
-	"errors"
 	"time"
+
+	"github.com/reliant-labs/forge/pkg/svcerr"
 )
 
 // ErrProjectNotFound is returned when no project matches the id and owner.
@@ -10,14 +11,16 @@ import (
 // never this error.
 // ErrWorktreeNotFound is returned when no worktree matches the id. A store
 // failure is never this error.
-var ErrWorktreeNotFound = errors.New("worktree not found")
+var ErrWorktreeNotFound = svcerr.NotFound("worktree")
 
 // ErrWorktreeNameTaken is returned when a create or unarchive would give two
 // live (unarchived) worktrees of one project the same name. Archived rows do
 // not hold a name.
-var ErrWorktreeNameTaken = errors.New("a live worktree already has this name")
+var ErrWorktreeNameTaken = svcerr.AlreadyExists("a live worktree already has this name")
 
-var ErrProjectNotFound = errors.New("project not found or access denied")
+// ErrProjectNotFound covers a missing project and one the caller may not see
+// alike, so ids are not an oracle. A svcerr NotFound with its own sentence.
+var ErrProjectNotFound = svcerr.WithMessage(svcerr.ErrNotFound, "project not found or access denied")
 
 // Project represents a code repository.
 //

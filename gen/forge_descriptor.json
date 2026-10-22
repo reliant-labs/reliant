@@ -26614,7 +26614,7 @@
           {
             "Name": "chat_id",
             "ProtoType": "string",
-            "IsOptional": false
+            "IsOptional": true
           }
         ],
         "ListPendingQuestionsResponse": [
@@ -26655,7 +26655,10 @@
         "reliant.v1.ListAsyncQuestionsRequest": [
           {
             "name": "chat_id",
-            "kind": "string"
+            "kind": "string",
+            "validate": {
+              "required": true
+            }
           }
         ],
         "reliant.v1.ListAsyncQuestionsResponse": [
@@ -26669,7 +26672,8 @@
         "reliant.v1.ListPendingQuestionsRequest": [
           {
             "name": "chat_id",
-            "kind": "string"
+            "kind": "string",
+            "optional": true
           }
         ],
         "reliant.v1.ListPendingQuestionsResponse": [
@@ -26724,6 +26728,11 @@
           },
           {
             "name": "response_data",
+            "kind": "string",
+            "optional": true
+          },
+          {
+            "name": "withdrawn_reason",
             "kind": "string",
             "optional": true
           }
@@ -39688,7 +39697,7 @@
     "reliant/v1/preset.proto": "27acb3ba272869868343c82279adc59b24a15bdc22f500ea36e5aa73a709dae8",
     "reliant/v1/project.proto": "9cd193101501187b898646fa617f711dd1bbbd93fe63879871bac58c38226929",
     "reliant/v1/provider_account.proto": "50649efde02dd84bad1d334053b066859d0e8627b88b202e98447d6654f375e4",
-    "reliant/v1/question.proto": "50cb09eb51220266d3489f6dc71f40105cffd6b5bd2e0176bcb57a18fac9e86f",
+    "reliant/v1/question.proto": "131728fce3c8befa7ff663030c9ff2657673bc5ef34db53508f7b8edcd2279c7",
     "reliant/v1/repo.proto": "5ea880bc3bb10123c803298ab7fe6c6a3c57dde359b2f5b339e774ab880864a0",
     "reliant/v1/run.proto": "b0304388de799c989705f8ce41e8ec8ed725f2ecdae83c8be02ae284e461ca37",
     "reliant/v1/scenario.proto": "5be8a10f590bf6a518a4963e7ea5e9a2f847fa5d8f55a50ea07ee55e940e0a1b",

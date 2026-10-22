@@ -30,6 +30,8 @@
 // what lets both senders be honest; Reason records which cause it was.
 package threadwake
 
+import "context"
+
 // SignalName is the Temporal signal a sender rings to wake a parked thread.
 // Changing it breaks delivery silently — a signal to a name nothing listens on
 // is not an error — so it is defined once and shared.
@@ -83,4 +85,30 @@ type Signal struct {
 	Thread   string `json:"thread,omitempty"`
 	Reason   Reason `json:"reason,omitempty"`
 	FromUser bool   `json:"from_user,omitempty"`
+}
+
+// noYieldKey marks a context whose doorbells must not end a blocking
+// question's wait (WithoutQuestionYield).
+type noYieldKey struct{}
+
+// WithoutQuestionYield marks ctx so the doorbells a send rings under it say
+// FromUser false: they wake the thread like any mail, but a thread parked on
+// a blocking ask_user keeps waiting on it, as for spawn_send.
+//
+// The answer to an async question is the user's input, but it answers THAT
+// question, not the one its thread may now be parked on. Ringing the user's
+// doorbell would end that wait with the question closed unanswered and make
+// the agent ask again (research/ASYNC_ASK_USER.md). It is a context value
+// rather than an rpc field because only an in-process caller (the question
+// service) may ask for it: a client sending a message is the user, and its
+// message always yields.
+func WithoutQuestionYield(ctx context.Context) context.Context {
+	return context.WithValue(ctx, noYieldKey{}, true)
+}
+
+// YieldsQuestions reports whether a doorbell rung under ctx should end a
+// blocking question's wait: true unless WithoutQuestionYield marked it.
+func YieldsQuestions(ctx context.Context) bool {
+	noYield, _ := ctx.Value(noYieldKey{}).(bool)
+	return !noYield
 }

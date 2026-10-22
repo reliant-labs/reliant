@@ -144,6 +144,15 @@ export function failedSendId(clientMessageId: string): string {
   return FAILED_SEND_PREFIX + clientMessageId;
 }
 
+/**
+ * A transcript entry that exists only in this client — a send in flight or one
+ * that failed for good. It has no server row, so no snapshot or replay is
+ * coming to describe it.
+ */
+export function isLocalOnlyMessageId(messageId: string): boolean {
+  return messageId.startsWith("optimistic-");
+}
+
 /** The client message id of a failed send's transcript entry, or null. */
 export function clientIdOfFailedSend(messageId: string): string | null {
   return messageId.startsWith(FAILED_SEND_PREFIX)

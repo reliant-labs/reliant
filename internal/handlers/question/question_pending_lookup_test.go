@@ -52,7 +52,7 @@ func TestListPendingQuestionsRejectsUnknownChat(t *testing.T) {
 	svc := NewTestQuestion(t, WithQuestionDeps(Deps{Repo: repo}))
 
 	get := func(ctx context.Context, id string) (*connect.Response[reliantv1.ListPendingQuestionsResponse], error) {
-		return svc.ListPendingQuestions(ctx, connect.NewRequest(&reliantv1.ListPendingQuestionsRequest{ChatId: id}))
+		return svc.ListPendingQuestions(ctx, connect.NewRequest(&reliantv1.ListPendingQuestionsRequest{ChatId: &id}))
 	}
 
 	t.Run("short id prefix of a real chat is not found", func(t *testing.T) {
@@ -127,7 +127,7 @@ func TestListPendingQuestionsReturnsEveryThreadsQuestion(t *testing.T) {
 	ask(qB, spawnB, db.QuestionStatusPending, now.Add(-time.Minute))
 
 	svc := NewTestQuestion(t, WithQuestionDeps(Deps{Repo: repo}))
-	resp, err := svc.ListPendingQuestions(ctx, connect.NewRequest(&reliantv1.ListPendingQuestionsRequest{ChatId: chatID}))
+	resp, err := svc.ListPendingQuestions(ctx, connect.NewRequest(&reliantv1.ListPendingQuestionsRequest{ChatId: &chatID}))
 	require.NoError(t, err)
 
 	got := resp.Msg.GetQuestions()
@@ -138,4 +138,64 @@ func TestListPendingQuestionsReturnsEveryThreadsQuestion(t *testing.T) {
 	assert.Equal(t, "pending", got[0].GetStatus())
 	assert.Equal(t, qB, got[1].GetQuestionId())
 	assert.Equal(t, spawnB, got[1].GetThreadId())
+}
+
+// chat_id is a filter: unset lists the caller's pending questions in every chat
+// they own (and no one else's), set narrows to that chat.
+func TestListPendingQuestionsChatIDIsAFilter(t *testing.T) {
+	repo, cleanup := db.SetupTestDB(t)
+	t.Cleanup(cleanup)
+
+	ctx := AuthedContext(t)
+	now := time.Now().UTC().Truncate(time.Second)
+
+	projectID := "test-project-questions-" + uuid.NewString()
+	require.NoError(t, repo.CreateProject(ctx, &db.Project{
+		ID: projectID, UserID: "test-user", Name: "Questions Filter Project",
+		Path: t.TempDir(), CreatedAt: now, UpdatedAt: now, LastActive: now,
+	}))
+	newChat := func(userID string) string {
+		id := uuid.NewString()
+		require.NoError(t, repo.CreateChat(ctx, &db.Chat{
+			ID: id, UserID: userID, Title: "chat", ProjectID: projectID,
+			State: db.ChatStateIdle, CreatedAt: now, UpdatedAt: now,
+		}))
+		return id
+	}
+	ask := func(chatID string, status int, at time.Time) string {
+		id := uuid.NewString()
+		metadata := `{"questions":[{"question":"?"}]}`
+		require.NoError(t, repo.CreateQuestion(ctx, &db.Question{
+			ID: id, ChatID: chatID, WorkflowID: "wf-" + id, TemporalWorkflowID: chatID,
+			ThreadID: "thread-" + id, StepID: "ask_user", Status: status, Metadata: &metadata, CreatedAt: at,
+		}))
+		return id
+	}
+	chatA, chatB, othersChat := newChat("test-user"), newChat("test-user"), newChat("other-user")
+	qA := ask(chatA, db.QuestionStatusPending, now.Add(-2*time.Minute))
+	qB := ask(chatB, db.QuestionStatusPending, now.Add(-time.Minute))
+	ask(chatB, db.QuestionStatusResolved, now.Add(-3*time.Minute))
+	ask(othersChat, db.QuestionStatusPending, now.Add(-4*time.Minute))
+
+	svc := NewTestQuestion(t, WithQuestionDeps(Deps{Repo: repo}))
+	ids := func(req *reliantv1.ListPendingQuestionsRequest) []string {
+		t.Helper()
+		resp, err := svc.ListPendingQuestions(ctx, connect.NewRequest(req))
+		require.NoError(t, err)
+		var out []string
+		for _, q := range resp.Msg.GetQuestions() {
+			out = append(out, q.GetQuestionId())
+		}
+		return out
+	}
+
+	assert.Equal(t, []string{qA, qB}, ids(&reliantv1.ListPendingQuestionsRequest{}),
+		"unset: every chat the caller owns, oldest first, never another user's")
+	assert.Equal(t, []string{qB}, ids(&reliantv1.ListPendingQuestionsRequest{ChatId: &chatB}),
+		"set: only that chat's")
+
+	empty := ""
+	_, err := svc.ListPendingQuestions(ctx, connect.NewRequest(&reliantv1.ListPendingQuestionsRequest{ChatId: &empty}))
+	require.Error(t, err)
+	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err), "an empty string is not 'unset'")
 }

@@ -9,6 +9,7 @@
 package reliantv1
 
 import (
+	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"
@@ -178,8 +179,10 @@ func (x *ResolveQuestionResponse) GetSuccess() bool {
 }
 
 type ListPendingQuestionsRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ChatId        string                 `protobuf:"bytes,1,opt,name=chat_id,json=chatId,proto3" json:"chat_id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Filter: unset lists the caller's pending questions in every chat they own;
+	// set limits it to that chat (which must exist and be theirs).
+	ChatId        *string `protobuf:"bytes,1,opt,name=chat_id,json=chatId,proto3,oneof" json:"chat_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -215,8 +218,8 @@ func (*ListPendingQuestionsRequest) Descriptor() ([]byte, []int) {
 }
 
 func (x *ListPendingQuestionsRequest) GetChatId() string {
-	if x != nil {
-		return x.ChatId
+	if x != nil && x.ChatId != nil {
+		return *x.ChatId
 	}
 	return ""
 }
@@ -375,9 +378,12 @@ type QuestionInfo struct {
 	// The ask_user tool call that raised the question, when one did.
 	ToolCallId string `protobuf:"bytes,10,opt,name=tool_call_id,json=toolCallId,proto3" json:"tool_call_id,omitempty"`
 	// The answer, once resolved.
-	ResponseData  *string `protobuf:"bytes,11,opt,name=response_data,json=responseData,proto3,oneof" json:"response_data,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	ResponseData *string `protobuf:"bytes,11,opt,name=response_data,json=responseData,proto3,oneof" json:"response_data,omitempty"`
+	// Set when the agent withdrew the question (withdraw_question) instead of
+	// the user answering it: why it no longer needs an answer.
+	WithdrawnReason *string `protobuf:"bytes,12,opt,name=withdrawn_reason,json=withdrawnReason,proto3,oneof" json:"withdrawn_reason,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *QuestionInfo) Reset() {
@@ -487,12 +493,19 @@ func (x *QuestionInfo) GetResponseData() string {
 	return ""
 }
 
+func (x *QuestionInfo) GetWithdrawnReason() string {
+	if x != nil && x.WithdrawnReason != nil {
+		return *x.WithdrawnReason
+	}
+	return ""
+}
+
 var File_reliant_v1_question_proto protoreflect.FileDescriptor
 
 const file_reliant_v1_question_proto_rawDesc = "" +
 	"\n" +
 	"\x19reliant/v1/question.proto\x12\n" +
-	"reliant.v1\"\x8d\x01\n" +
+	"reliant.v1\x1a\x1bbuf/validate/validate.proto\"\x8d\x01\n" +
 	"\x16ResolveQuestionRequest\x12\x1f\n" +
 	"\vquestion_id\x18\x01 \x01(\tR\n" +
 	"questionId\x12\x16\n" +
@@ -500,15 +513,17 @@ const file_reliant_v1_question_proto_rawDesc = "" +
 	"\rresponse_data\x18\x03 \x01(\tH\x00R\fresponseData\x88\x01\x01B\x10\n" +
 	"\x0e_response_data\"3\n" +
 	"\x17ResolveQuestionResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess\"6\n" +
-	"\x1bListPendingQuestionsRequest\x12\x17\n" +
-	"\achat_id\x18\x01 \x01(\tR\x06chatId\"V\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess\"G\n" +
+	"\x1bListPendingQuestionsRequest\x12\x1c\n" +
+	"\achat_id\x18\x01 \x01(\tH\x00R\x06chatId\x88\x01\x01B\n" +
+	"\n" +
+	"\b_chat_id\"V\n" +
 	"\x1cListPendingQuestionsResponse\x126\n" +
-	"\tquestions\x18\x01 \x03(\v2\x18.reliant.v1.QuestionInfoR\tquestions\"4\n" +
-	"\x19ListAsyncQuestionsRequest\x12\x17\n" +
-	"\achat_id\x18\x01 \x01(\tR\x06chatId\"T\n" +
+	"\tquestions\x18\x01 \x03(\v2\x18.reliant.v1.QuestionInfoR\tquestions\"<\n" +
+	"\x19ListAsyncQuestionsRequest\x12\x1f\n" +
+	"\achat_id\x18\x01 \x01(\tB\x06\xbaH\x03\xc8\x01\x01R\x06chatId\"T\n" +
 	"\x1aListAsyncQuestionsResponse\x126\n" +
-	"\tquestions\x18\x01 \x03(\v2\x18.reliant.v1.QuestionInfoR\tquestions\"\xf8\x02\n" +
+	"\tquestions\x18\x01 \x03(\v2\x18.reliant.v1.QuestionInfoR\tquestions\"\xbd\x03\n" +
 	"\fQuestionInfo\x12\x1f\n" +
 	"\vquestion_id\x18\x01 \x01(\tR\n" +
 	"questionId\x12\x17\n" +
@@ -525,9 +540,11 @@ const file_reliant_v1_question_proto_rawDesc = "" +
 	"\ftool_call_id\x18\n" +
 	" \x01(\tR\n" +
 	"toolCallId\x12(\n" +
-	"\rresponse_data\x18\v \x01(\tH\x01R\fresponseData\x88\x01\x01B\v\n" +
+	"\rresponse_data\x18\v \x01(\tH\x01R\fresponseData\x88\x01\x01\x12.\n" +
+	"\x10withdrawn_reason\x18\f \x01(\tH\x02R\x0fwithdrawnReason\x88\x01\x01B\v\n" +
 	"\t_metadataB\x10\n" +
-	"\x0e_response_data*l\n" +
+	"\x0e_response_dataB\x13\n" +
+	"\x11_withdrawn_reason*l\n" +
 	"\x0eQuestionStatus\x12\x1f\n" +
 	"\x1bQUESTION_STATUS_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17QUESTION_STATUS_PENDING\x10\x01\x12\x1c\n" +
@@ -583,6 +600,7 @@ func file_reliant_v1_question_proto_init() {
 		return
 	}
 	file_reliant_v1_question_proto_msgTypes[0].OneofWrappers = []any{}
+	file_reliant_v1_question_proto_msgTypes[2].OneofWrappers = []any{}
 	file_reliant_v1_question_proto_msgTypes[6].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{

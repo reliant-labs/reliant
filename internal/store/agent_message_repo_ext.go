@@ -394,7 +394,7 @@ func ClaimQueuedAgentMessagesForThread(ctx context.Context, db orm.Context, toTh
 		q = q.Where("id = ?", messageID)
 	}
 	var rows []*AgentMessage
-	if _, err := q.Returning("*").Exec(ctx, &rows); err != nil {
+	if _, err := q.Returning("?TableColumns").Exec(ctx, &rows); err != nil {
 		return nil, err
 	}
 	claimed := make([]*core.AgentMessage, len(rows))
@@ -417,11 +417,21 @@ func ClaimQueuedAgentMessagesForThread(ctx context.Context, db orm.Context, toTh
 // final drain, and a row that drain delivered must never be relabelled.
 // delivered_at stays NULL: its absence is the record that no delivery
 // occurred. Returns how many rows it moved.
+//
+// A thread with a pending blocking question is not dead, whatever its status:
+// a failed run is resumed from that question (question_close.go — FAILED keeps
+// its questions answerable), and the call_llm after the answer drains the
+// mailbox. The answer to an async question is queued there on purpose while
+// its thread is parked on a blocking one (question/async_answer.go), so such a
+// mailbox is left alone. A completed or cancelled thread has no pending
+// blocking question — UpdateThreadStatus closes them in the same write — so
+// its mail is still resolved.
 func MarkQueuedAgentMessagesUndeliveredForThread(ctx context.Context, db orm.Context, toThreadID string) (int64, error) {
 	res, err := db.Bun().NewUpdate().Model((*AgentMessage)(nil)).
 		Set("status = ?", core.AgentMessageStatusUndelivered).
 		Where("to_thread_id = ?", toThreadID).
 		Where("status = ?", core.AgentMessageStatusQueued).
+		Where(threadHasNoPendingBlockingQuestion, toThreadID).
 		Exec(ctx)
 	if err != nil {
 		return 0, err
@@ -437,6 +447,9 @@ func MarkQueuedAgentMessagesUndeliveredForThread(ctx context.Context, db orm.Con
 // message waiting for a live agent's next boundary can never be swept.
 // Terminal thread statuses: 3 completed, 4 failed, 5 cancelled, 7 the retired
 // expired (core.ThreadStatusIsTerminal).
+//
+// A thread parked on a pending blocking question is not orphaned (see
+// MarkQueuedAgentMessagesUndeliveredForThread): its question resumes it.
 func ListThreadsWithOrphanedAgentMessages(ctx context.Context, db orm.Context) ([]string, error) {
 	var ids []string
 	err := db.Bun().NewRaw(`
@@ -444,9 +457,18 @@ SELECT DISTINCT m.to_thread_id
 FROM agent_messages m
 JOIN threads t ON t.id = m.to_thread_id
 WHERE m.status = 1
-  AND t.status IN (3, 4, 5, 7)`).Scan(ctx, &ids)
+  AND t.status IN (3, 4, 5, 7)
+  AND NOT EXISTS (
+      SELECT 1 FROM questions q
+      WHERE q.thread_id = t.id AND q.status = 1 AND NOT q.async)`).Scan(ctx, &ids)
 	return ids, err
 }
+
+// threadHasNoPendingBlockingQuestion is the WHERE clause, over a thread id,
+// that keeps a parked thread's mailbox (MarkQueuedAgentMessagesUndeliveredForThread).
+const threadHasNoPendingBlockingQuestion = `NOT EXISTS (
+    SELECT 1 FROM questions q
+    WHERE q.thread_id = ? AND q.status = 1 AND NOT q.async)`
 
 // scanAgentMessage reads one row of agentMessageColumns.
 func scanAgentMessage(rows *sql.Rows) (*core.AgentMessage, error) {

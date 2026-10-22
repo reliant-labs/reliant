@@ -93,6 +93,17 @@ func (r *Repo) ListAnswerablePendingQuestionsByChat(ctx context.Context, chatID 
 	return store.ListAnswerablePendingQuestionsByChat(ctx, r.ORM(), chatID)
 }
 
+// ListAnswerablePendingQuestionsByUser is ListAnswerablePendingQuestionsByChat
+// across every chat the user owns: the unfiltered form of the UI's pending
+// question list.
+func (r *Repo) ListAnswerablePendingQuestionsByUser(ctx context.Context, userID string) ([]*Question, error) {
+	if userID == "" {
+		return nil, fmt.Errorf("user ID cannot be empty")
+	}
+
+	return store.ListAnswerablePendingQuestionsByUser(ctx, r.ORM(), userID)
+}
+
 // PendingQuestionsByThread returns each thread's newest PENDING question for a
 // chat, keyed by the question's thread id — which is exactly a workflow row's
 // `thread` column, so the result joins straight onto workflow rows.

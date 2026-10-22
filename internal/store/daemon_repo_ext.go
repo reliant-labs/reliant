@@ -109,13 +109,10 @@ func UpsertDaemonIdentity(ctx context.Context, db orm.Context, id core.DaemonIde
 	return rowsWritten(res, err)
 }
 
-// GetDaemon returns the daemon; a missing one is orm.ErrNoRows (which is
-// sql.ErrNoRows), as the Repository always reported it.
+// GetDaemon returns the daemon. A missing one is svcerr.NotFound, and
+// errors.Is(err, sql.ErrNoRows), as the Repository always reported it.
 func GetDaemon(ctx context.Context, db orm.Context, id string) (*core.Daemon, error) {
 	row, err := GetDaemonByID(ctx, db, id)
-	if errors.Is(err, orm.ErrNoRows) {
-		return nil, orm.ErrNoRows
-	}
 	if err != nil {
 		return nil, err
 	}

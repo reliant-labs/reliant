@@ -58,8 +58,8 @@ type ConnectorGrantExtra struct {
 // internal/connectorgrant maps the rows onto its own Grant.
 
 // GetLiveConnectorGrant returns a grant by id only while it is live — not
-// revoked and not expired — or orm.ErrNoRows, so a revoked or expired grant
-// cannot be re-resolved.
+// revoked and not expired. Anything else is svcerr.NotFound (and
+// orm.ErrNoRows), so a revoked or expired grant cannot be re-resolved.
 func GetLiveConnectorGrant(ctx context.Context, db orm.Context, id string) (*ConnectorGrant, error) {
 	var row ConnectorGrant
 	err := db.Bun().NewSelect().Model(&row).
@@ -68,7 +68,7 @@ func GetLiveConnectorGrant(ctx context.Context, db orm.Context, id string) (*Con
 		Where("(? IS NULL OR ? > now())", bun.Ident(ConnectorGrantFieldExpiresAt), bun.Ident(ConnectorGrantFieldExpiresAt)).
 		Scan(ctx)
 	if err != nil {
-		return nil, err
+		return nil, classifyMissing(err, "connector grant")
 	}
 	return &row, nil
 }

@@ -184,3 +184,63 @@ func TestAskUserInputAsync(t *testing.T) {
 		assert.Equal(t, tc.want, askUserInputAsync(tc.input), "%#v", tc.input)
 	}
 }
+
+// A thread parked on a blocking question B is not released by the answer to
+// its earlier async question A. The answer is A's, not B's: B stays pending and
+// the thread keeps waiting on it, and A's answer, waiting in the mailbox, is
+// read at the turn after the user answers B. The question service queues it
+// without the user's doorbell (threadwake.WithoutQuestionYield / no wake at
+// all for a parked thread); this pins that such mail, and a non-user
+// doorbell, leave the wait alone.
+func TestAskUserAsync_AnswerToAnotherQuestionLeavesABlockingWaitParked(t *testing.T) {
+	t.Parallel()
+	var suite temporaltest.WorkflowTestSuite
+	env := suite.NewTestWorkflowEnvironment()
+	e := newLateUserMessageEnv(t, env)
+	// Turn 1 asks B and blocks; the turn after it ends the loop.
+	e.script = []scriptedToolCallsResponse{
+		{toolCalls: []map[string]interface{}{{
+			"id": "call_b", "name": "ask_user",
+			"input": `{"questions":[{"question":"Drop the old table?","options":[{"label":"Yes","description":"d"},{"label":"No","description":"d"}]}]}`,
+		}}},
+	}
+	var questions questionActivities
+	questions.register(env)
+
+	const answerA = "Answer to the question you asked without waiting (ask_user, question_id: q-a):\n\nQ: Which database?\nA: SQLite"
+	var turnsWhileParked int
+	env.RegisterDelayedCallback(func() {
+		// Parked on B: A's answer arrives — queued, with a doorbell that is
+		// not the user's.
+		e.mailbox.enqueue(e.parentThread, answerA)
+		env.SignalWorkflow(ThreadWakeSignalName, ThreadWakeSignal{Thread: e.parentThread, Reason: threadwake.ReasonMailbox})
+	}, time.Minute)
+	env.RegisterDelayedCallback(func() {
+		questions.mu.Lock()
+		resolved := len(questions.resolved)
+		questions.mu.Unlock()
+		assert.Zero(t, resolved, "B must not be closed by A's answer")
+		turnsWhileParked = e.parentTurns()
+		_, queued := e.mailbox.snapshot(e.parentThread)
+		assert.Equal(t, []string{answerA}, queued, "A's answer waits in the mailbox while the thread is parked on B")
+		// Now the user answers B.
+		env.SignalWorkflow("signal.question.q-async", map[string]interface{}{
+			"action":        "reply",
+			"response_data": `{"answers":[{"question":"Drop the old table?","selected":["No"]}]}`,
+		})
+	}, 2*time.Hour)
+
+	e.execute("chat-parked-on-b")
+
+	require.True(t, env.IsWorkflowCompleted())
+	require.NoError(t, env.GetWorkflowError())
+	require.Len(t, questions.created, 1)
+	assert.Nil(t, questions.created[0]["async"], "B is a blocking question")
+	assert.Empty(t, questions.resolved, "B was answered by the user, never closed by the workflow")
+	assert.Equal(t, 1, turnsWhileParked, "no turn ran while the thread was parked on B")
+	assert.Greater(t, e.parentTurns(), 1, "answering B released the loop")
+	assert.True(t, e.readInThisRun(answerA), "the turn after B was answered read A's answer from the mailbox")
+	delivered, queued := e.mailbox.snapshot(e.parentThread)
+	assert.Contains(t, delivered, answerA)
+	assert.Empty(t, queued)
+}

@@ -106,6 +106,10 @@ while IFS= read -r f; do if [ -n "${f}" ]; then changed+=("${f}"); fi; done < <(
 )
 if [ "${#changed[@]}" = 0 ]; then
   echo "forge generate is a no-op: the generated code matches its inputs."
+  # The proto-convention lane (forgeconv-list-filter-optional, ...) judges the
+  # same inputs and takes ~10s; golangci-lint and buf lint stay on main.
+  echo "==> forge lint --conventions (forge ${pin})"
+  "${forge[@]}" lint --no-fix --conventions || fail "forge lint --conventions failed" "A proto or handler convention is broken; fix the findings above (the same lane gates main)."
   exit 0
 fi
 

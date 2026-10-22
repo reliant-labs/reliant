@@ -25,6 +25,8 @@ export interface QuestionInfo {
   tool_call_id?: string;
   /** The answer (ResolveQuestion response_data), once resolved. */
   response_data?: string;
+  /** Why the agent withdrew it (withdraw_question), when it did. */
+  withdrawn_reason?: string;
 }
 
 function fromProto(q: QuestionInfoPb): QuestionInfo {
@@ -40,6 +42,7 @@ function fromProto(q: QuestionInfoPb): QuestionInfo {
     async: q.async,
     tool_call_id: q.toolCallId || undefined,
     response_data: q.responseData ?? undefined,
+    withdrawn_reason: q.withdrawnReason ?? undefined,
   };
 }
 

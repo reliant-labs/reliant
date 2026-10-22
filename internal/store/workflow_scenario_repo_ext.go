@@ -112,7 +112,7 @@ func updateWorkflowScenario(ctx context.Context, db orm.Context, id string, set 
 		Set("version = version + 1").
 		Where("id = ?", id).
 		Exec(ctx)
-	return requireOneRow(res, err)
+	return requireOneRow(res, err, "workflow scenario")
 }
 
 // RemoveWorkflowScenario deletes one scenario; a missing one is not an

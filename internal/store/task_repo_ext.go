@@ -76,7 +76,7 @@ func InsertTask(ctx context.Context, db orm.Context, t *core.Task) error {
 func GetTask(ctx context.Context, db orm.Context, id string) (*core.Task, error) {
 	row, err := GetTaskByID(ctx, db, id)
 	if errors.Is(err, svcerr.ErrNotFound) {
-		return nil, fmt.Errorf("task not found: %s", id)
+		return nil, fmt.Errorf("%w: %s", svcerr.NotFound("task"), id)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to get task: %w", err)

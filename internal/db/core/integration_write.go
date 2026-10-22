@@ -3,8 +3,9 @@ package core
 
 import (
 	"context"
-	"errors"
 	"time"
+
+	"github.com/reliant-labs/forge/pkg/svcerr"
 )
 
 // IntegrationWriteStatus is where a ledger entry is in its life.
@@ -87,7 +88,7 @@ type IntegrationWriteResult struct {
 }
 
 // ErrIntegrationWriteNotFound is returned when no ledger entry matches.
-var ErrIntegrationWriteNotFound = errors.New("integration write not found")
+var ErrIntegrationWriteNotFound = svcerr.NotFound("integration write")
 
 // IntegrationWriteStore is the write ledger.
 type IntegrationWriteStore interface {

@@ -6,7 +6,7 @@
  */
 
 import { useRef, useState, memo, useMemo, useEffect, useCallback } from "react";
-import { GripHorizontal, GripVertical, Loader2 } from "lucide-react";
+import { GripHorizontal, GripVertical } from "lucide-react";
 import { ChatInputWrapper } from "./ChatInputWrapper";
 import { ChatThinkingIndicator } from "./ChatThinkingIndicator";
 import { ChatMachineNoticeLine } from "./ChatMachineNotice";
@@ -15,6 +15,12 @@ import { UsageLimitWaitNote } from "./UsageLimitWaitNote";
 import { usageLimitWaitOf } from "@/lib/usageLimitWait";
 import { ChatMessagesContainer } from "./ChatMessagesContainer";
 import { ScrollToBottomButton } from "./ScrollToBottomButton";
+import { TimelineCatchUpOverlay, TimelineCatchUpStatus } from "./TimelineCatchUpOverlay";
+import { useDelayedVisibility } from "../../hooks/useDelayedVisibility";
+import {
+  CATCH_UP_MIN_VISIBLE_MS,
+  CATCH_UP_SHOW_DELAY_MS,
+} from "../../lib/timelineCatchUp";
 import { PermissionsPanelWrapper } from "./PermissionsPanelWrapper";
 import { PermissionsPanel } from "./PermissionsPanel";
 import { ChatHeader } from "./ChatHeader";
@@ -103,10 +109,12 @@ interface ChatPresenterProps {
   hasOlderMessages?: boolean;
 
   /**
-   * The transcript on screen is the chat's cached state and the stream has
-   * not yet delivered what changed since (snapshot or replay outstanding).
+   * The timeline has not caught up to the stream yet: what is on screen is
+   * the chat's cached state (or nothing) and the snapshot or replay is still
+   * outstanding. Never true for a caught-up chat, streaming or not; see
+   * lib/timelineCatchUp.
    */
-  isChatSyncing?: boolean;
+  isTimelineCatchingUp?: boolean;
 
   /** The host shows the chat's title itself; see ChatHeader.hideTitle. */
   hideChatTitle?: boolean;
@@ -135,7 +143,7 @@ export const ChatPresenter = memo(function ChatPresenter({
   onLoadOlderMessages,
   isLoadingOlderMessages,
   hasOlderMessages,
-  isChatSyncing = false,
+  isTimelineCatchingUp = false,
   hideChatTitle,
 }: ChatPresenterProps) {
   const chatInputRef = useRef<HTMLTextAreaElement>(null);
@@ -476,6 +484,22 @@ export const ChatPresenter = memo(function ChatPresenter({
     resumeFollowRef.current?.();
   }, []);
 
+  // Catch-up overlay: delayed so a cached, instant switch shows nothing, and
+  // held briefly once up so it never flickers.
+  const catchUpOverlayVisible = useDelayedVisibility(isTimelineCatchingUp, {
+    showDelayMs: CATCH_UP_SHOW_DELAY_MS,
+    minVisibleMs: CATCH_UP_MIN_VISIBLE_MS,
+  });
+  // The reader could not scroll while the overlay was up, so where they are
+  // meant to be when it lifts is the end of the caught-up transcript.
+  const catchUpOverlayWasVisibleRef = useRef(false);
+  useEffect(() => {
+    if (catchUpOverlayWasVisibleRef.current && !catchUpOverlayVisible) {
+      scrollToBottom();
+    }
+    catchUpOverlayWasVisibleRef.current = catchUpOverlayVisible;
+  }, [catchUpOverlayVisible, scrollToBottom]);
+
   // Thinking indicator element, rendered as the timeline's footer
   const hasThinkingFooter =
     (isChatBusy || waitingOnMachine) && pendingApprovals.length === 0 && !hasPendingQuestion;
@@ -732,24 +756,15 @@ export const ChatPresenter = memo(function ChatPresenter({
 
         {/* Messages Area - hidden when workflow viewer is expanded in inline mode */}
         {!(isWorkflowViewerExpanded && workflowViewerMode === 'inline') && (
-        <ChatMessagesContainer chatId={chatId ?? undefined}>
-          {showsTimeline && renderTimeline()}
-          {/* Cached transcript, live catch-up still in flight. Overlaid
-              rather than inserted, so the transcript never shifts when it
-              appears or clears, and non-interactive so it never blocks
-              scrolling or text selection beneath it. */}
-          {isChatSyncing && (
-            <div
-              role="status"
-              data-testid="chat-syncing-indicator"
-              className="pointer-events-none absolute inset-x-0 top-2 z-10 flex justify-center"
-            >
-              <span className="flex items-center gap-1.5 rounded-full border border-border bg-card/90 px-2.5 py-1 text-xs text-muted-foreground shadow-sm">
-                <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
-                Syncing…
-              </span>
-            </div>
-          )}
+        <ChatMessagesContainer chatId={chatId ?? undefined} busy={catchUpOverlayVisible}>
+          {/* display:contents, so this wrapper is invisible to layout; it
+              exists to make the content under the catch-up overlay inert. */}
+          <div className="contents" inert={catchUpOverlayVisible || undefined}>
+            {showsTimeline && renderTimeline()}
+          </div>
+          {/* Overlaid rather than inserted, so the transcript never shifts
+              when it appears or lifts. */}
+          {catchUpOverlayVisible && <TimelineCatchUpOverlay hasContent={showsTimeline} />}
           {/* Inside the transcript frame, anchored to its bottom edge, so the
               band between the transcript and the composer (queued strip,
               background-work pill, permissions) can never sit on top of it. */}
@@ -759,6 +774,9 @@ export const ChatPresenter = memo(function ChatPresenter({
           />
         </ChatMessagesContainer>
         )}
+        {/* Outside the busy frame: a live region inside an aria-busy one may
+            not be announced. */}
+        <TimelineCatchUpStatus visible={catchUpOverlayVisible} />
 
         {/* Messages already queued into the running agent's mailbox. Above the
             background-work pill deliberately: this is what the user already

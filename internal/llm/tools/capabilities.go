@@ -215,13 +215,20 @@ func ResolveCapabilities(in CapabilityInputs) *Capabilities {
 	//   - spawn_stop when the agent may spawn or has spawned. It refuses
 	//     anything but the caller's own direct child, so an agent with none
 	//     could only misuse it.
+	//   - list_pending_questions and withdraw_question when the agent can
+	//     ask (ask_user is offered) or has sub-agents that might have: the
+	//     read and retract sides of asking without waiting, scoped to its
+	//     own subtree.
 	// A branch's inherited sub-agents grant spawn_status alone: the original
 	// conversation owns them.
+	asksOrOwnsAskers := offered[ToolAskUser] || in.OwnChildren
 	structural := map[string]bool{
-		ToolLoadTool:    caps.LoadableAll || len(caps.Loadable) > 0,
-		ToolSpawnStatus: in.OwnChildren || in.InheritedChildren,
-		ToolSpawnSend:   in.MailboxReachable || in.OwnChildren,
-		ToolSpawnStop:   in.CanSpawnChildren || in.OwnChildren,
+		ToolListPendingQuestions: asksOrOwnsAskers,
+		ToolWithdrawQuestion:     asksOrOwnsAskers,
+		ToolLoadTool:             caps.LoadableAll || len(caps.Loadable) > 0,
+		ToolSpawnStatus:          in.OwnChildren || in.InheritedChildren,
+		ToolSpawnSend:            in.MailboxReachable || in.OwnChildren,
+		ToolSpawnStop:            in.CanSpawnChildren || in.OwnChildren,
 	}
 	for name, grant := range structural {
 		if grant && caps.exclusion(registry, name) == reachable {

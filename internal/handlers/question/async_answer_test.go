@@ -15,6 +15,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/workflow/threadwake"
 )
 
 // ResolveQuestion on an async question (ask_user async: true) delivers the
@@ -39,6 +40,9 @@ type recordingMessenger struct {
 	mu         sync.Mutex
 	agentSends []*reliantv1.SendAgentMessageRequest
 	mainSends  []*reliantv1.SendMessageRequest
+	// yielded records, per send, whether its doorbell would make a blocking
+	// question's wait yield (threadwake.YieldsQuestions on its ctx).
+	yielded []bool
 
 	// agentReply answers SendAgentMessage; nil accepts it.
 	agentReply func(*reliantv1.SendAgentMessageRequest) (*reliantv1.SendAgentMessageResponse, error)
@@ -46,9 +50,10 @@ type recordingMessenger struct {
 	mainErr error
 }
 
-func (m *recordingMessenger) SendAgentMessage(_ context.Context, req *connect.Request[reliantv1.SendAgentMessageRequest]) (*connect.Response[reliantv1.SendAgentMessageResponse], error) {
+func (m *recordingMessenger) SendAgentMessage(ctx context.Context, req *connect.Request[reliantv1.SendAgentMessageRequest]) (*connect.Response[reliantv1.SendAgentMessageResponse], error) {
 	m.mu.Lock()
 	m.agentSends = append(m.agentSends, req.Msg)
+	m.yielded = append(m.yielded, threadwake.YieldsQuestions(ctx))
 	reply := m.agentReply
 	m.mu.Unlock()
 	if reply == nil {
@@ -61,10 +66,11 @@ func (m *recordingMessenger) SendAgentMessage(_ context.Context, req *connect.Re
 	return connect.NewResponse(resp), nil
 }
 
-func (m *recordingMessenger) SendMessage(_ context.Context, req *connect.Request[reliantv1.SendMessageRequest]) (*connect.Response[reliantv1.SendMessageResponse], error) {
+func (m *recordingMessenger) SendMessage(ctx context.Context, req *connect.Request[reliantv1.SendMessageRequest]) (*connect.Response[reliantv1.SendMessageResponse], error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.mainSends = append(m.mainSends, req.Msg)
+	m.yielded = append(m.yielded, threadwake.YieldsQuestions(ctx))
 	if m.mainErr != nil {
 		return nil, m.mainErr
 	}
@@ -152,6 +158,9 @@ func TestResolveAsyncQuestion_DeliversToTheAskingSubAgent(t *testing.T) {
 	assert.Equal(t, asyncAnswerMessageID("q-live", f.spawnID, sent.Message), sent.GetClientMessageId(),
 		"named by its content, so a retry of the same answer never queues it twice")
 	assert.Empty(t, f.messages.mainSends)
+
+	assert.Equal(t, []bool{false}, f.messages.yielded,
+		"the answer's doorbell is not the user's: a blocking question its thread is parked on stays open")
 
 	q := f.status(t, "q-live")
 	assert.Equal(t, db.QuestionStatusResolved, q.Status)
@@ -252,7 +261,7 @@ func TestListAsyncQuestions(t *testing.T) {
 	assert.Equal(t, "call-q-async", got.ToolCallId)
 	assert.Equal(t, f.spawnID, got.ThreadId)
 
-	pending, err := f.svc.ListPendingQuestions(AuthedContext(t), connect.NewRequest(&reliantv1.ListPendingQuestionsRequest{ChatId: f.chatID}))
+	pending, err := f.svc.ListPendingQuestions(AuthedContext(t), connect.NewRequest(&reliantv1.ListPendingQuestionsRequest{ChatId: &f.chatID}))
 	require.NoError(t, err)
 	require.Len(t, pending.Msg.Questions, 1, "the composer's list holds only the blocking question")
 	assert.Equal(t, "q-blocking", pending.Msg.Questions[0].QuestionId)
@@ -275,6 +284,62 @@ func TestFormatAsyncAnswer(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			assert.Equal(t, tc.want, formatAsyncAnswer(&metadata, tc.data))
+		})
+	}
+}
+
+// The asking thread is parked on a blocking question B when the user answers
+// async question A. The answer is A's, not B's: it goes into the thread's
+// mailbox and nothing else happens — no doorbell, no resume, no run started,
+// no answer-as-resume of B — so B stays pending and the thread reads A's
+// answer at the call_llm after B is answered.
+func TestResolveAsyncQuestion_ThreadParkedOnABlockingQuestionGetsItInItsMailboxOnly(t *testing.T) {
+	for name, thread := range map[string]func(*asyncAnswerFixture) string{
+		"sub-agent":   func(f *asyncAnswerFixture) string { return f.spawnID },
+		"main thread": func(f *asyncAnswerFixture) string { return f.mainID },
+	} {
+		t.Run(name, func(t *testing.T) {
+			f := newAsyncAnswerFixture(t)
+			asker := thread(f)
+			ctx := context.Background()
+			// The mailbox row names threads: the main thread (its sender)
+			// and the asker.
+			_, err := f.repo.CreateThread(ctx, &db.Thread{
+				ID: f.mainID, ChatID: f.chatID, Status: db.ThreadStatusRunning, CreatedAt: time.Now(),
+			})
+			require.NoError(t, err)
+			if asker != f.mainID {
+				parent := f.mainID
+				_, err := f.repo.CreateThread(ctx, &db.Thread{
+					ID: asker, ChatID: f.chatID, ParentThreadID: &parent, Origin: db.ThreadOriginSpawn,
+					Status: db.ThreadStatusRunning, CreatedAt: time.Now(),
+				})
+				require.NoError(t, err)
+			}
+			f.askAsync(t, "q-a", asker)
+			require.NoError(t, f.repo.CreateQuestion(ctx, &db.Question{
+				ID: "q-b", ChatID: f.chatID, WorkflowID: asker, ThreadID: asker,
+				StepID: "agent_loop", Status: db.QuestionStatusPending, CreatedAt: time.Now().UTC(),
+			}))
+
+			require.NoError(t, f.answer(t, "q-a", sqliteAnswer))
+
+			assert.Empty(t, f.messages.agentSends, "no send path: they ring doorbells and resume runs")
+			assert.Empty(t, f.messages.mainSends)
+			assert.Equal(t, db.QuestionStatusResolved, f.status(t, "q-a").Status, "A is answered")
+			assert.Equal(t, db.QuestionStatusPending, f.status(t, "q-b").Status, "B stays the user's to answer")
+
+			queued, err := f.repo.ListQueuedAgentMessagesForThread(ctx, asker)
+			require.NoError(t, err)
+			require.Len(t, queued, 1, "A's answer waits in the asking thread's mailbox")
+			assert.Equal(t, asyncAnswerBody("q-a", wantSQLiteAnswer), queued[0].Body)
+			assert.Equal(t, asyncAnswerMessageID("q-a", asker, queued[0].Body), queued[0].ID)
+
+			// The thread failing while parked does not lose it: its pending
+			// question is what resumes it.
+			moved, err := f.repo.MarkQueuedAgentMessagesUndeliveredForThread(ctx, asker)
+			require.NoError(t, err)
+			assert.Zero(t, moved, "a parked thread's mailbox is not swept")
 		})
 	}
 }

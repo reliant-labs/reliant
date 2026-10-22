@@ -66,7 +66,7 @@ func InsertContextWindow(ctx context.Context, db orm.Context, cw *core.ContextWi
 func GetContextWindow(ctx context.Context, db orm.Context, id string) (*core.ContextWindow, error) {
 	row, err := GetContextWindowByID(ctx, db, id)
 	if err != nil {
-		return nil, noRows("failed to get context window", err)
+		return nil, noRows("failed to get context window", "context window", err)
 	}
 	return contextWindowFromRow(row), nil
 }
@@ -81,7 +81,7 @@ func GetLatestContextWindow(ctx context.Context, db orm.Context, threadID string
 		Limit(1).
 		Scan(ctx)
 	if err != nil {
-		return nil, noRows("failed to get latest context window", err)
+		return nil, noRows("failed to get latest context window", "context window", err)
 	}
 	return contextWindowFromRow(row), nil
 }
@@ -95,7 +95,7 @@ func GetContextWindowBySequence(ctx context.Context, db orm.Context, threadID st
 		Where("sequence = ?", sequence).
 		Scan(ctx)
 	if err != nil {
-		return nil, noRows("failed to get context window by sequence", err)
+		return nil, noRows("failed to get context window by sequence", "context window", err)
 	}
 	return contextWindowFromRow(row), nil
 }
@@ -128,6 +128,12 @@ func GetMaxSequenceForThread(ctx context.Context, db orm.Context, threadID strin
 	return seq, nil
 }
 
+var getContextWindowWithThreadSQL = `
+SELECT ` + columnsOf[ContextWindow]("cw") + `, t.chat_id, t.parent_thread_id, t.fork_at_message_id AS thread_fork_at_message_id
+FROM context_windows cw
+JOIN threads t ON t.id = cw.thread_id
+WHERE cw.id = ?0`
+
 // GetContextWindowWithThread returns the window with its thread's chat id,
 // parent thread id and fork point, for fork resolution.
 func GetContextWindowWithThread(ctx context.Context, db orm.Context, id string) (*core.ContextWindow, string, *string, *string, error) {
@@ -137,13 +143,9 @@ func GetContextWindowWithThread(ctx context.Context, db orm.Context, id string) 
 		ParentThreadID        *string `bun:"parent_thread_id"`
 		ThreadForkAtMessageID *string `bun:"thread_fork_at_message_id"`
 	}
-	err := db.Bun().NewRaw(`
-SELECT cw.*, t.chat_id, t.parent_thread_id, t.fork_at_message_id AS thread_fork_at_message_id
-FROM context_windows cw
-JOIN threads t ON t.id = cw.thread_id
-WHERE cw.id = ?0`, id).Scan(ctx, &row)
+	err := db.Bun().NewRaw(getContextWindowWithThreadSQL, id).Scan(ctx, &row)
 	if err != nil {
-		return nil, "", nil, nil, noRows("failed to get context window with thread", err)
+		return nil, "", nil, nil, noRows("failed to get context window with thread", "context window", err)
 	}
 	return contextWindowFromRow(&row.ContextWindow), row.ChatID, row.ParentThreadID, row.ThreadForkAtMessageID, nil
 }
@@ -174,7 +176,7 @@ func SetCompactionSummaryMessage(ctx context.Context, db orm.Context, cwID, mess
 		row.CompactionSummaryMessageID = &messageID
 	}
 	if err := UpdateContextWindowMasked(ctx, db, row, []string{ContextWindowFieldCompactionSummaryMessageID}); err != nil {
-		return nil, noRows("failed to set compaction summary message", err)
+		return nil, noRows("failed to set compaction summary message", "context window", err)
 	}
 	return contextWindowFromRow(row), nil
 }

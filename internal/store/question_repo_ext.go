@@ -126,9 +126,20 @@ func ListPendingQuestionsByChat(ctx context.Context, db orm.Context, chatID stri
 // run resumes into the same wait and keeps its question. An async question is
 // not listed: nothing waits on it, so it must not take over the composer.
 func ListAnswerablePendingQuestionsByChat(ctx context.Context, db orm.Context, chatID string) ([]*core.Question, error) {
+	return listAnswerablePendingQuestions(ctx, db, "questions.chat_id = ?", chatID)
+}
+
+// ListAnswerablePendingQuestionsByUser is ListAnswerablePendingQuestionsByChat
+// across every chat the user owns, oldest first.
+func ListAnswerablePendingQuestionsByUser(ctx context.Context, db orm.Context, userID string) ([]*core.Question, error) {
+	return listAnswerablePendingQuestions(ctx, db,
+		"questions.chat_id IN (SELECT c.id FROM chats c WHERE c.user_id = ?)", userID)
+}
+
+func listAnswerablePendingQuestions(ctx context.Context, db orm.Context, scope string, arg string) ([]*core.Question, error) {
 	var rows []*Question
 	err := db.Bun().NewSelect().Model(&rows).
-		Where("questions.chat_id = ?", chatID).
+		Where(scope, arg).
 		Where("questions.status = ?", core.QuestionStatusPending).
 		Where("NOT questions.async").
 		Where(`NOT EXISTS (
@@ -138,7 +149,7 @@ func ListAnswerablePendingQuestionsByChat(ctx context.Context, db orm.Context, c
 		OrderExpr("questions.created_at ASC, questions.id ASC").
 		Scan(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("failed to list answerable pending questions by chat: %w", err)
+		return nil, fmt.Errorf("failed to list answerable pending questions: %w", err)
 	}
 	return questionsFromRows(rows), nil
 }
@@ -190,6 +201,7 @@ func questionToRow(q *core.Question) *Question {
 		ResolvedAt:         q.ResolvedAt,
 		ToolCallID:         q.ToolCallID,
 		Async:              q.Async,
+		WithdrawnReason:    q.WithdrawnReason,
 	}
 	if q.LoopIteration != nil {
 		it := int64(*q.LoopIteration)
@@ -213,6 +225,7 @@ func questionFromRow(row *Question) *core.Question {
 		ResolvedAt:         row.ResolvedAt,
 		ToolCallID:         row.ToolCallID,
 		Async:              row.Async,
+		WithdrawnReason:    row.WithdrawnReason,
 	}
 	if row.Status != nil {
 		q.Status = int(*row.Status)

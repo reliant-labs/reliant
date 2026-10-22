@@ -4,6 +4,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -37,7 +38,7 @@ func mustGetDaemon(t *testing.T, repo *Repo, id string) *Daemon {
 func daemonExists(t *testing.T, repo *Repo, id string) bool {
 	t.Helper()
 	_, err := repo.GetDaemon(context.Background(), id)
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		return false
 	}
 	if err != nil {

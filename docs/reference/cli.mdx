@@ -149,7 +149,9 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge env ps`](#reliant-forge-env-ps) | List every forge stack running on this machine, across all projects |
 | [`reliant forge env render`](#reliant-forge-env-render) | Print the Kubernetes objects deploy/kcl/`<env>`/ renders, with the cluster each lands on |
 | [`reliant forge env secrets`](#reliant-forge-env-secrets) | Project the env's secret_provider into the cluster |
+| [`reliant forge env secrets adopt`](#reliant-forge-env-secrets-adopt) | Hand a verified, store-backed Secret to ESO (strip the stale last-applied annotation) |
 | [`reliant forge env secrets sync`](#reliant-forge-env-secrets-sync) | Render + apply the k8s Secrets for an env's dotenv secret_provider (local clusters only) |
+| [`reliant forge env secrets verify`](#reliant-forge-env-secrets-verify) | Compare a live Secret with its store copy, per key (match / no-match; never a value or hash) |
 | [`reliant forge env shape`](#reliant-forge-env-shape) | Print what an environment DECLARES — kind, workloads, secrets, domains, and one hash per object |
 | [`reliant forge env smoke`](#reliant-forge-env-smoke) | Probe every declared ingress route after deploy (TLS + routing + CORS) |
 | [`reliant forge env start`](#reliant-forge-env-start) | Resume a HOSTED environment's workloads on the control plane (not local processes) |
@@ -158,6 +160,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge env up`](#reliant-forge-env-up) | Bring the whole dev loop up on this machine: build + deploy + host + frontend |
 | [`reliant forge fix`](#reliant-forge-fix) | Rewrite your code to what a lint asks for (codemods, run on request) |
 | [`reliant forge fix composition-graph`](#reliant-forge-fix-composition-graph) | Move a project off Infra / NewComponents / ServeSpec onto the composition graph |
+| [`reliant forge fix connect-errors`](#reliant-forge-fix-connect-errors) | Rewrite fixed-message connect.NewError calls to pkg/svcerr, wire-identically, and list the rest |
 | [`reliant forge fix narrow-deps`](#reliant-forge-fix-narrow-deps) | Declare the interfaces a component's Deps actually use, and retype its fields to them |
 | [`reliant forge fix operatorkit`](#reliant-forge-fix-operatorkit) | Rename lifecyclekit.Run / Controller / Options to operatorkit (moved in v0.1.46) |
 | [`reliant forge fix tx-isolation`](#reliant-forge-fix-tx-isolation) | Spell out every pkg/orm transaction's isolation level and attempt budget (no default since v0.1.47) |
@@ -235,6 +238,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge scaffold worker`](#reliant-forge-scaffold-worker) | Scaffold a new background worker |
 | [`reliant forge secret`](#reliant-forge-secret) | Manage an environment's secret store (local file or hosted control plane) |
 | [`reliant forge secret ensure`](#reliant-forge-secret-ensure) | Create the FileSecrets store and report missing values |
+| [`reliant forge secret import`](#reliant-forge-secret-import) | Copy existing values into the env's secret store, create-only |
 | [`reliant forge secret list`](#reliant-forge-secret-list) | List declared secrets and whether each has a value |
 | [`reliant forge secret migrate`](#reliant-forge-secret-migrate) | Convert a legacy .env secrets file into the YAML store |
 | [`reliant forge secret set`](#reliant-forge-secret-set) | Add or replace one secret value (read from stdin) |
@@ -4804,6 +4808,12 @@ forge can render the declared cluster secret_refs into k8s Secret objects
 and apply them. ExternalSecrets envs are a no-op (their values are
 provisioned out-of-band).
 
+For a Secret ESO syncs from a store (forge.StoreSource), the migration steps are:
+
+  forge secret import      --env prod --from `<ns>`/`<secret>` --map key=NAME   # copy in, create-only
+  forge env secrets verify prod `<secret>`                                    # live vs the store's copy: match / no-match
+  forge env secrets adopt  prod `<ns>`/`<secret>`                               # hand the verified Secret to ESO
+
 ```
 reliant forge env secrets
 ```
@@ -4812,7 +4822,43 @@ reliant forge env secrets
 
 | Command | Description |
 |---------|-------------|
+| [`adopt`](#reliant-forge-env-secrets-adopt) | Hand a verified, store-backed Secret to ESO (strip the stale last-applied annotation) |
 | [`sync`](#reliant-forge-env-secrets-sync) | Render + apply the k8s Secrets for an env's dotenv secret_provider (local clusters only) |
+| [`verify`](#reliant-forge-env-secrets-verify) | Compare a live Secret with its store copy, per key (match / no-match; never a value or hash) |
+
+---
+
+#### reliant forge env secrets adopt
+
+Hand a verified, store-backed Secret to ESO (strip the stale last-applied annotation)
+
+Step 3 of migrating a Secret onto ESO. Run it after 'forge env secrets verify'
+reports every key a match and the ExternalSecret's source has shadow = False.
+
+It does two things to the live Secret `<namespace>`/`<secret>`:
+
+  - asserts nothing owns it by ownerReference (a controller that does would
+    garbage-collect it, or fight ESO for it), and
+  - removes the kubectl.kubernetes.io/last-applied-configuration annotation.
+    'kubectl apply' keeps a full copy of the applied manifest there, so a
+    Secret seeded that way carries every value in clear in its metadata, and a
+    later 'kubectl apply' would treat the fields as its own.
+
+It does not touch the Secret's data, and prints no value. ESO takes the Secret
+over on its next sync (it adds its managed label and rebuilds the data from the
+store). Re-running is a no-op. `<secret>` is `<namespace>`/`<name>`, or a name unique
+among the env's store-backed Secrets.
+
+```
+reliant forge env secrets adopt <environment> <secret> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--dry-run` | `bool` | - | Report what would change; patch nothing |
+| `--kube-context` | `string` | - | Kube context holding the Secret (default: the env's declared cluster) |
 
 ---
 
@@ -4843,6 +4889,48 @@ reliant forge env secrets sync <environment> [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--dry-run` | `bool` | - | Print the Secret manifests instead of applying them |
+
+---
+
+#### reliant forge env secrets verify
+
+Compare a live Secret with its store copy, per key (match / no-match; never a value or hash)
+
+Compare, key by key, the Secret that is live in the cluster with the value
+the store holds. This is step 2 of migrating a Secret onto ESO: any no-match
+stops the migration.
+
+  forge env secrets verify prod control-plane-secrets
+
+compares `<ns>`/`<secret>` with `<ns>`/`<secret>`-eso-shadow, the copy ESO syncs from
+the store while the Secret's StoreSource declares shadow = True.
+
+  forge env secrets verify prod control-plane-secrets --against gsm:reliant-labs-475814 \
+      --map github_app_private_key=github-app-private-key-prod
+
+compares the live Secret with Google Secret Manager, using your Application
+Default Credentials. A key reads the GSM secret of its store name unless --map
+names another id.
+
+The output is a verdict per key (match / no-match, with which side is missing)
+and nothing else. No value is printed, and no hash of one: a digest of a
+low-entropy secret is as good as the secret to anyone who can guess. The exit
+status is non-zero if any key is not a match.
+
+`<secret>` is a Secret name, or `<namespace>`/`<name>`; omit it to verify every
+store-backed Secret the env declares.
+
+```
+reliant forge env secrets verify <environment> [<secret>] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--against` | `string` | - | Compare with another store instead of the shadow Secret: gsm:`<project>` |
+| `--kube-context` | `string` | - | Kube context to read the live Secrets from (default: the env's declared cluster) |
+| `--map` | `stringSlice` | `[]` | With --against gsm: key=gsm-secret-id for a key whose GSM id is not its store name (repeatable) |
 
 ---
 
@@ -5306,6 +5394,7 @@ reliant forge fix
 | Command | Description |
 |---------|-------------|
 | [`composition-graph`](#reliant-forge-fix-composition-graph) | Move a project off Infra / NewComponents / ServeSpec onto the composition graph |
+| [`connect-errors`](#reliant-forge-fix-connect-errors) | Rewrite fixed-message connect.NewError calls to pkg/svcerr, wire-identically, and list the rest |
 | [`narrow-deps`](#reliant-forge-fix-narrow-deps) | Declare the interfaces a component's Deps actually use, and retype its fields to them |
 | [`operatorkit`](#reliant-forge-fix-operatorkit) | Rename lifecyclekit.Run / Controller / Options to operatorkit (moved in v0.1.46) |
 | [`tx-isolation`](#reliant-forge-fix-tx-isolation) | Spell out every pkg/orm transaction's isolation level and attempt budget (no default since v0.1.47) |
@@ -5346,6 +5435,68 @@ The rest of the v0.1.47 story is the migration skill: `forge skill load migratio
 
 ```
 reliant forge fix composition-graph [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-dirty` | `bool` | - | Run over uncommitted changes |
+| `--dry-run` | `bool` | - | List what would be rewritten; change nothing |
+
+---
+
+#### reliant forge fix connect-errors
+
+Rewrite fixed-message connect.NewError calls to pkg/svcerr, wire-identically, and list the rest
+
+Move hand-built Connect errors onto pkg/svcerr where that changes nothing a client reads.
+
+connect.NewError(code, err) publishes err.Error() to the caller, and svcerr's
+redaction cannot help: a *connect.Error passes svcerr.Interceptor as built. This
+rewrites every connect.NewError whose client-visible code AND message an svcerr
+spelling reproduces exactly:
+
+  connect.NewError(connect.CodeNotFound, errors.New("chat not found"))  → svcerr.NotFound("chat")
+  connect.NewError(connect.CodeNotFound, errors.New("no such chat"))    → svcerr.WithMessage(svcerr.ErrNotFound, "no such chat")
+  connect.NewError(connect.CodeInvalidArgument, errors.New("id is required"))
+                                                                        → svcerr.InvalidArgument("id is required")
+  connect.NewError(connect.CodeAlreadyExists, fmt.Errorf("name %q is taken", n))
+                                                                        → svcerr.AlreadyExists(fmt.Sprintf("name %q is taken", n))
+
+A bare svcerr kind is written only in a handler package, where the expression is
+an error and nothing reads a *connect.Error in process (connect.CodeOf, errors.As
+into one) in the package, its tests, or the code of a package importing it;
+elsewhere (interceptors, clients, a
+*connect.Error-typed result, a package such a reader can see) the same value is
+kept a *connect.Error with svcerr.ToConnect(…), and the report names the reader;
+once that reader reads svcerr.Code, a re-run drops the wrappers.
+In the test files of every package that got a bare kind, and of every package
+importing one, connect.CodeOf(x) becomes svcerr.Code(x) — the code the
+interceptor sends, which a handler test calling a *Service method directly needs
+once the handler returns a bare kind.
+
+It never changes a code or a message. A site it cannot rewrite exactly is listed
+with the reason, file and line, and is the worklist for the change that does
+change what clients read:
+
+  wraps an error value     connect.NewError(code, err), fmt.Errorf("…: %w", err), an error-typed
+                           or .Error() argument: publishes err.Error(). svcerr.WrapOr(err,
+                           svcerr.`<Kind>`("`<summary>`")) redacts it and passes a classified err
+                           through — which changes the code or text, so review it.
+  nil error                the message is ""; every svcerr kind has text
+  computed message         errors.New(msg) / a format with no literal text could be "", which no
+                           svcerr constructor reproduces
+  computed code            the code is not a connect.Code constant
+
+Generated files, vendor/ and testdata/ are left alone, as is every
+connect.NewError in a test (a fixture). Re-running it changes nothing.
+--dry-run prints each rewrite as file:line: old → new, and the worklist.
+
+The rest of the v0.1.47 story is the migration skill: `forge skill load migrations/v0.1.47`.
+
+```
+reliant forge fix connect-errors [flags]
 ```
 
 **Flags:**
@@ -8603,6 +8754,26 @@ Manage the secret store an environment's secret_provider declares:
                        (control_plane with no hosted tier) are pulled into
                        memory by `forge env up` and nothing else.
 
+A name that a store-backed ExternalSecret (forge.StoreSource) reads or
+generates lives in that ExternalSecret's STORE instead, whatever the env's
+secret_provider is, and set / list / import act on it there:
+
+  forge.HostedStore             the hosted control plane's store — written
+                                through its write-only API.
+  forge.OpenBaoStore            the env's own OpenBao (Bundle.openbao). set
+                                signs in as the forge-rendered
+                                forge-secret-writer service account with a
+                                ten-minute token minted from YOUR kube context,
+                                so it needs cluster access and nothing else.
+  forge.GCPSecretManagerStore   Google Secret Manager, with your Application
+                                Default Credentials.
+
+  forge secret import   copy values that already exist into a store, create-only
+                        (the first step of moving a Secret onto ESO)
+
+Verifying and handing a Secret to ESO are 'forge env secrets verify' and
+'forge env secrets adopt'.
+
 Every command names its environment with a REQUIRED --env flag. There is no
 default and no positional form: the env is the one thing a secret command
 must never guess.
@@ -8627,6 +8798,7 @@ reliant forge secret
 | Command | Description |
 |---------|-------------|
 | [`ensure`](#reliant-forge-secret-ensure) | Create the FileSecrets store and report missing values |
+| [`import`](#reliant-forge-secret-import) | Copy existing values into the env's secret store, create-only |
 | [`list`](#reliant-forge-secret-list) | List declared secrets and whether each has a value |
 | [`migrate`](#reliant-forge-secret-migrate) | Convert a legacy .env secrets file into the YAML store |
 | [`set`](#reliant-forge-secret-set) | Add or replace one secret value (read from stdin) |
@@ -8658,6 +8830,60 @@ reliant forge secret ensure --env <environment> [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--env` | `string` | - | Environment whose secret store to act on (required; deploy/kcl/`<env>`/) |
+
+---
+
+#### reliant forge secret import
+
+Copy existing values into the env's secret store, create-only
+
+Copy values that already exist into a store-backed ExternalSecret's store.
+This is the first step of migrating a Secret onto ESO: the store must hold the
+bytes the cluster holds today before ESO takes the Secret over.
+
+Create-only. A name the store already holds is reported and left untouched, so
+re-running an import is always safe and can never overwrite a value that was
+rotated since. Rotating is 'forge secret set'.
+
+From a cluster Secret, using your own kube context:
+
+  forge secret import --env prod --from control-plane-prod/control-plane-secrets \
+      --map github_app_private_key=GITHUB_APP_PRIVATE_KEY
+
+From stdin or a file, one name:
+
+  forge secret import --env prod GITHUB_WEBHOOK_SECRET --from-file ./secret.txt
+
+--to-bootstrap writes a BootstrapSecret's Google Secret Manager container (the
+OpenBao seal key and Postgres password, which cannot live in the store they
+bootstrap). NAME is the container's secret id; --project is the Google project
+that holds it (default: Bundle.bootstrap_source's):
+
+  forge secret import --env prod --to-bootstrap --project acme-prod \
+      --from control-plane-prod/control-plane-openbao-unseal --map static-key=openbao-unseal-prod
+
+The destination store comes from the ExternalSecret that reads each name
+(--store picks one when two do). Google Secret Manager uses your Application
+Default Credentials. No value is ever printed, and none is taken as an
+argument. --dry-run reads the source and reports what would be created.
+
+```
+reliant forge secret import --env <environment> (--from <namespace>/<secret> --map key=NAME[,key=NAME...] | <NAME>) [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--dry-run` | `bool` | - | Read the source and report what would be created; write nothing |
+| `--env` | `string` | - | Environment whose secret store to act on (required; deploy/kcl/`<env>`/) |
+| `--from` | `string` | - | Cluster Secret to read, as `<namespace>`/`<secret>` (uses your kube context) |
+| `--from-file` | `string` | - | Read the single NAME's value from a file instead of stdin |
+| `--kube-context` | `string` | - | Kube context to use (default: the env's declared cluster) |
+| `--map` | `stringSlice` | `[]` | key=NAME: the Secret key to read and the store name it fills (repeatable, or comma-separated) |
+| `--project` | `string` | - | With --to-bootstrap: the Google project holding the container (default: Bundle.bootstrap_source's) |
+| `--store` | `string` | - | Store kind to act on when two stores declare a name (hosted, openbao, gcpsm) |
+| `--to-bootstrap` | `bool` | - | Write a BootstrapSecret's Google Secret Manager container instead of the store |
 
 ---
 
@@ -8742,6 +8968,8 @@ reliant forge secret set --env <environment> <KEY> [flags]
 |------|------|---------|-------------|
 | `--env` | `string` | - | Environment whose secret store to act on (required; deploy/kcl/`<env>`/) |
 | `--from-file` | `string` | - | Read the value from a file instead of stdin |
+| `--kube-context` | `string` | - | Kube context to use (default: the env's declared cluster) |
+| `--store` | `string` | - | Store kind to act on when two stores declare a name (hosted, openbao, gcpsm) |
 
 ---
 

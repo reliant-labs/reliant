@@ -131,6 +131,10 @@ const (
 
 	// Interaction tools
 	ToolAskUser = "ask_user"
+	// ToolListPendingQuestions and ToolWithdrawQuestion are ask_user's read
+	// and retract sides, scoped to the caller's thread subtree.
+	ToolListPendingQuestions = ListPendingQuestionsToolName
+	ToolWithdrawQuestion     = WithdrawQuestionToolName
 
 	// ToolRequestMachine offers the user a machine from a chat that has none.
 	// Reachable only in a run with no machine (OnlyWithoutMachine; enforced by
@@ -738,6 +742,12 @@ func GetToolRegistry() []ToolDefinition {
 		// ask_user is a schema-only tool — execution is intercepted by the workflow
 		// runtime (splitProtoToolCalls → executeAskUserInline), not the normal tool path.
 		{ToolAskUser, (*ToolsFactory).AskUser, nil, PlacementServer, false},
+		// ask_user's companions: what you (and your sub-agents) still wait
+		// on, and retracting an async question its default made moot. No
+		// tags: they are handed to any agent that can ask, or that has
+		// sub-agents that might (capabilities.go, structural tools).
+		{ToolListPendingQuestions, (*ToolsFactory).ListPendingQuestions, []ToolTag{TagReadOnly}, PlacementServer, false},
+		{ToolWithdrawQuestion, (*ToolsFactory).WithdrawQuestion, nil, PlacementServer, false},
 		// request_machine has no tags: a run with no machine is handed it
 		// directly (handlers/no_machine.go), and the capability resolver
 		// excludes it from every other run however a filter names it. See

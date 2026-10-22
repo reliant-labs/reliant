@@ -531,7 +531,7 @@ func runWorkflowStatus(cmd *cobra.Command, executionID string, jsonOut bool) err
 	// of leaving every sibling reading RUNNING.
 	gateByThread := map[string]string{}
 	if q, err := clients.question.ListPendingQuestions(ctx, connect.NewRequest(&reliantv1.ListPendingQuestionsRequest{
-		ChatId: executionID,
+		ChatId: &executionID,
 	})); err == nil {
 		for _, qi := range q.Msg.GetQuestions() {
 			open := 1
@@ -931,7 +931,7 @@ func runWorkflowQuestions(cmd *cobra.Command, executionID string, jsonOut bool) 
 	}
 
 	resp, err := clients.question.ListPendingQuestions(cmd.Context(), connect.NewRequest(&reliantv1.ListPendingQuestionsRequest{
-		ChatId: executionID,
+		ChatId: &executionID,
 	}))
 	if err != nil {
 		return clients.rpcError(err, "fetching pending questions")
@@ -1068,7 +1068,7 @@ func runWorkflowAnswer(cmd *cobra.Command, executionID, questionID string, selec
 	ctx := cmd.Context()
 
 	resp, err := clients.question.ListPendingQuestions(ctx, connect.NewRequest(&reliantv1.ListPendingQuestionsRequest{
-		ChatId: executionID,
+		ChatId: &executionID,
 	}))
 	if err != nil {
 		return clients.rpcError(err, "fetching pending questions")

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"connectrpc.com/connect"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 )
 
 func TestIsError(t *testing.T) {
@@ -51,6 +52,18 @@ func TestIsError(t *testing.T) {
 			name: "plain error with substring (RemoteExecutor flattened path)",
 			err:  errors.New("Failed to execute tool on daemon: unavailable: no daemon connected for user"),
 			want: true,
+		},
+		{
+			// toolexec.ErrDaemonPending's shape: a svcerr kind, no connect.Error.
+			name: "svcerr Unavailable with the substring",
+			err: fmt.Errorf("your machine is still starting: %w",
+				svcerr.WithClass(svcerr.Unavailable("no daemon connected: daemon record exists but has not registered yet (still starting)"), svcerr.ClassUser)),
+			want: true,
+		},
+		{
+			name: "svcerr kind under another code with the substring is rejected",
+			err:  svcerr.FailedPrecondition("no daemon connected anywhere, and none will be"),
+			want: false,
 		},
 		{
 			name: "unrelated error",

@@ -375,6 +375,17 @@ func (f *ToolsFactory) ListReadyTasks() Tool {
 	return NewListReadyTasksTool(f.opts.Repo)
 }
 
+// ListPendingQuestions lists the caller's and its sub-agents' unanswered
+// ask_user questions.
+func (f *ToolsFactory) ListPendingQuestions() Tool {
+	return NewListPendingQuestionsTool(f.opts.Repo)
+}
+
+// WithdrawQuestion withdraws an async question in the caller's subtree.
+func (f *ToolsFactory) WithdrawQuestion() Tool {
+	return NewWithdrawQuestionTool(f.opts.Repo)
+}
+
 // Spawn observability/messaging tools
 func (f *ToolsFactory) SpawnStatus() Tool {
 	return NewSpawnStatusTool(f.opts.Repo)
@@ -620,6 +631,8 @@ func (f *ToolsFactory) AskUser() Tool {
 Blocking (default) vs async:
 - Blocking: use when you cannot sensibly proceed without the answer — the instructions are ambiguous in a way that changes the work, or the next action is significant or hard to undo.
 - async: true: use when you can proceed on a reasonable default and the answer would only refine the work — an FYI, a preference, or a decision where you will go with your recommended option unless told otherwise. The question is posted to the user (in the chat and their inbox) and the tool returns at once; keep working on your default. If the user answers, the answer arrives later as a message from the user; adjust then. Do not ask the same question again while waiting.
+
+Before asking, call list_pending_questions if you may have asked already: do not ask a question that is still pending. Before finishing, withdraw async questions your default made moot (withdraw_question).
 
 Usage notes:
 - The user will always have an option to provide freetext input in addition to any predefined options.

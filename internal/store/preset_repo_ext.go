@@ -37,14 +37,12 @@ package store
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/orm"
-	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/uptrace/bun"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -52,7 +50,7 @@ import (
 
 // A preset is either global (project_id NULL: every project of the user) or
 // scoped to one project. Every lookup by slug names its scope; a missing
-// preset is sql.ErrNoRows.
+// preset is svcerr.NotFound, and errors.Is(err, sql.ErrNoRows).
 
 // InsertPreset stores a new preset and returns it as stored.
 func InsertPreset(ctx context.Context, db orm.Context, p *core.Preset) (*core.Preset, error) {
@@ -85,7 +83,7 @@ func UpsertPreset(ctx context.Context, db orm.Context, p *core.Preset) (*core.Pr
 		Set("tag = EXCLUDED.tag").
 		Set("params = EXCLUDED.params").
 		Set("updated_at = EXCLUDED.updated_at").
-		Returning("*").
+		Returning("?TableColumns").
 		Scan(ctx)
 	if err != nil {
 		return nil, err
@@ -93,20 +91,18 @@ func UpsertPreset(ctx context.Context, db orm.Context, p *core.Preset) (*core.Pr
 	return presetToCore(row), nil
 }
 
-// GetPreset returns the preset, or sql.ErrNoRows.
+// GetPreset returns the preset. A miss is svcerr.NotFound, and
+// errors.Is(err, sql.ErrNoRows).
 func GetPreset(ctx context.Context, db orm.Context, id string) (*core.Preset, error) {
 	row, err := GetPresetByID(ctx, db, id)
-	if errors.Is(err, svcerr.ErrNotFound) {
-		return nil, sql.ErrNoRows
-	}
 	if err != nil {
 		return nil, err
 	}
 	return presetToCore(row), nil
 }
 
-// GetPresetBySlug returns the user's global preset with that slug, or
-// sql.ErrNoRows.
+// GetPresetBySlug returns the user's global preset with that slug; a miss is
+// svcerr.NotFound (and sql.ErrNoRows).
 func GetPresetBySlug(ctx context.Context, db orm.Context, userID, slug string) (*core.Preset, error) {
 	return firstPreset(ListPreset(ctx, db,
 		orm.WhereEq(PresetFieldUserID, userID),
@@ -116,7 +112,8 @@ func GetPresetBySlug(ctx context.Context, db orm.Context, userID, slug string) (
 }
 
 // GetPresetBySlugAndProject returns the user's preset with that slug scoped to
-// the project, or sql.ErrNoRows. A global preset of that slug does not match.
+// the project; a miss is svcerr.NotFound (and sql.ErrNoRows). A global preset
+// of that slug does not match.
 func GetPresetBySlugAndProject(ctx context.Context, db orm.Context, userID, slug, projectID string) (*core.Preset, error) {
 	return firstPreset(ListPreset(ctx, db,
 		orm.WhereEq(PresetFieldUserID, userID),
@@ -168,7 +165,8 @@ func globalOrProject(projectID string) orm.QueryOption {
 }
 
 // ReplacePreset rewrites the preset's name, description, tag and params and
-// returns it as stored. A missing preset is sql.ErrNoRows.
+// returns it as stored. A missing preset is svcerr.NotFound (and
+// sql.ErrNoRows).
 func ReplacePreset(ctx context.Context, db orm.Context, p *core.Preset) (*core.Preset, error) {
 	row, err := presetFromCore(p)
 	if err != nil {
@@ -215,7 +213,7 @@ func firstPreset(rows []*Preset, err error) (*core.Preset, error) {
 		return nil, err
 	}
 	if len(rows) == 0 {
-		return nil, sql.ErrNoRows
+		return nil, missing("preset")
 	}
 	return presetToCore(rows[0]), nil
 }

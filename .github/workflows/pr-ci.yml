@@ -1271,7 +1271,7 @@ jobs:
       - name: Forge lint lanes (PR; golangci-lint and buf on main)
         if: github.event_name == 'pull_request'
         run: >
-          forge lint --no-fix --contract --migration-safety --generated-drift
+          forge lint --no-fix --conventions --contract --migration-safety --generated-drift
           --create-nullability --computed-fields --read-only-fields --tracing --graph
 
       # Main: everything, golangci-lint and buf lint included.

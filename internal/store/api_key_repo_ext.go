@@ -47,13 +47,16 @@ import (
 // migration drops it. Sealing and opening are internal/db's apiKeyStore's; nothing
 // here sees a credential except the backfill of rows that predate sealing.
 
-// GetAPIKeySealed returns the sealed value of the user's key for provider; sql.ErrNoRows when
-// there is no such key. The value is nil for a row that was never sealed.
+// GetAPIKeySealed returns the sealed value of the user's key for provider; svcerr.NotFound
+// (and sql.ErrNoRows) when there is no such key. The value is nil for a row that was never sealed.
 func GetAPIKeySealed(ctx context.Context, db orm.Context, userID, provider string) ([]byte, error) {
 	var row ApiKey
 	err := db.Bun().NewSelect().Model(&row).Column(ApiKeyFieldAPIKeySealed).
 		Where("user_id = ?", userID).Where("provider = ?", provider).Scan(ctx)
-	return row.APIKeySealed, err
+	if err != nil {
+		return nil, classifyMissing(err, "api key")
+	}
+	return row.APIKeySealed, nil
 }
 
 // UpsertSealedAPIKey writes the user's key for provider, sealed, replacing an existing one in

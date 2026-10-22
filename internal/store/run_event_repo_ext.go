@@ -168,7 +168,7 @@ func ClaimRunEvents(ctx context.Context, db orm.Context, now, leaseUntil time.Ti
 		Model((*RunEvent)(nil)).
 		Set("claimed_until = ?", leaseUntil).
 		Where("id IN (?)", claimable).
-		Returning("*").
+		Returning("?TableColumns").
 		Scan(ctx, &rows)
 	if err != nil {
 		return nil, fmt.Errorf("failed to claim run events: %w", err)

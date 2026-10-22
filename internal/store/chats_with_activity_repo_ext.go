@@ -161,9 +161,13 @@ func SearchChats(ctx context.Context, db orm.Context, f core.ChatSearchFilters) 
 // list_in_sidebar policy, as ListChats applies it with SidebarOnly. An
 // automation archives its own runs once they succeed; those are history in
 // Runs (ListRuns with include_archived), not chats the user put away.
-const listArchivedChatsSQL = `
+//
+// The view's columns are named, never c.*: migrations re-create this view
+// with new columns, and a star prepared before one fails after it
+// (columns.go).
+var listArchivedChatsSQL = `
 SELECT
-    c.*,
+    ` + columnsOf[ChatsWithActivity]("c") + `,
     COALESCE(w.name, c.archived_worktree_name, p.name) AS worktree_name,
     w.deleted_at AS worktree_deleted_at
 FROM chats_with_activity c

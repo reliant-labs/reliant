@@ -167,18 +167,21 @@ func TestProve_RestoresWhenTheRunnerHangs(t *testing.T) {
 	dir := gitRepo(t)
 	release := make(chan struct{})
 	t.Cleanup(func() { close(release) })
+	var runnerReturned atomic.Bool
 	run := func(context.Context) RunOutcome {
 		<-release
+		runnerReturned.Store(true)
 		return RunOutcome{}
 	}
 
-	start := time.Now()
 	report, err := Prove(context.Background(), Options{
 		Workspace: dir, Files: []string{"calc.go"}, Run: run, RunTimeout: 200 * time.Millisecond,
 	})
 	require.NoError(t, err)
 
-	assert.Less(t, time.Since(start), 5*time.Second)
+	// Prove returned while the runner is still parked on release: it abandoned
+	// the hung command rather than waiting for it. No wall-clock bound needed.
+	assert.False(t, runnerReturned.Load(), "Prove must return without the hung runner having finished")
 	assert.Equal(t, VerdictInconclusive, report.Verdict)
 	assert.True(t, report.Before.TimedOut)
 	assert.Equal(t, fixedCalc, readFile(t, dir, "calc.go"), "the fix must be back while the hung command is still running")
