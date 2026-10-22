@@ -8,7 +8,7 @@
  * that as outbound, cancels it, and hands it to shell.openExternal — which
  * spawns a browser tab and leaves the renderer stranded on the old route.
  *
- * That is not hypothetical. The 401 interceptor in web/src/api/transport.ts
+ * That is not hypothetical. The 401 interceptor in frontends/web/src/api/transport.ts
  * redirects to /auth to recover from a rejected token; under a string
  * comparison every such redirect became a new browser tab, and because the
  * navigation never happened the dead session kept firing 401s — one tab per

@@ -115,7 +115,7 @@ func TestCheckBufPluginPins(t *testing.T) {
 				"buf.gen.yaml": "version: v2\nplugins:\n" +
 					"  - local: [go, tool, protoc-gen-go]\n    out: gen\n" +
 					"  - local: [go, tool, protoc-gen-connect-go]\n    out: gen\n" +
-					"  - local: " + es215 + "\n    out: web/src/gen\n",
+					"  - local: " + es215 + "\n    out: frontends/web/src/gen\n",
 			},
 		},
 		{
@@ -149,37 +149,37 @@ func TestCheckBufPluginPins(t *testing.T) {
 		{
 			name: "node plugin outside the pinned package",
 			templates: map[string]string{
-				"buf.gen.yaml": "version: v2\nplugins:\n  - local: [node, web/node_modules/@bufbuild/protoc-gen-es/bin/protoc-gen-es]\n    out: web/src/gen\n",
+				"buf.gen.yaml": "version: v2\nplugins:\n  - local: [node, frontends/web/node_modules/@bufbuild/protoc-gen-es/bin/protoc-gen-es]\n    out: frontends/web/src/gen\n",
 			},
 			wantFound: []string{`is neither [go, tool, <name>] nor`},
 		},
 		{
 			name: "node plugin alias missing from package.json",
 			templates: map[string]string{
-				"buf.gen.yaml": "version: v2\nplugins:\n  - local: [node, tools/protoc-gen-es/node_modules/protoc-gen-es-v9.9.9/bin/protoc-gen-es]\n    out: web/src/gen\n",
+				"buf.gen.yaml": "version: v2\nplugins:\n  - local: [node, tools/protoc-gen-es/node_modules/protoc-gen-es-v9.9.9/bin/protoc-gen-es]\n    out: frontends/web/src/gen\n",
 			},
 			wantFound: []string{`runs "protoc-gen-es-v9.9.9", which is not a devDependency of tools/protoc-gen-es/package.json`},
 		},
 		{
 			name: "node plugin alias with a range",
 			templates: map[string]string{
-				"buf.gen.yaml": "version: v2\nplugins:\n  - local: [node, tools/protoc-gen-es/node_modules/protoc-gen-es-loose/bin/protoc-gen-es]\n    out: web/src/gen\n",
+				"buf.gen.yaml": "version: v2\nplugins:\n  - local: [node, tools/protoc-gen-es/node_modules/protoc-gen-es-loose/bin/protoc-gen-es]\n    out: frontends/web/src/gen\n",
 			},
 			wantFound: []string{`"protoc-gen-es-loose" is "npm:@bufbuild/protoc-gen-es@^2.15.0", not an exact`},
 		},
 		{
 			name: "same plugin and out dir, different versions",
 			templates: map[string]string{
-				"buf.gen.yaml":       "version: v2\nplugins:\n  - local: " + es215 + "\n    out: web/src/gen\n",
-				"buf.gen-other.yaml": "version: v2\nplugins:\n  - local: " + es212 + "\n    out: web/src/gen\n",
+				"buf.gen.yaml":       "version: v2\nplugins:\n  - local: " + es215 + "\n    out: frontends/web/src/gen\n",
+				"buf.gen-other.yaml": "version: v2\nplugins:\n  - local: " + es212 + "\n    out: frontends/web/src/gen\n",
 			},
-			wantFound: []string{`@bufbuild/protoc-gen-es writes web/src/gen/ at different versions`},
+			wantFound: []string{`@bufbuild/protoc-gen-es writes frontends/web/src/gen/ at different versions`},
 		},
 		{
 			name: "same plugin, different out dirs may differ",
 			templates: map[string]string{
-				"buf.gen.yaml":              "version: v2\nplugins:\n  - local: " + es215 + "\n    out: web/src/gen\n",
-				"buf.gen.controlplane.yaml": "version: v2\nplugins:\n  - local: " + es212 + "\n    out: web/src/gen/controlplane\n",
+				"buf.gen.yaml":              "version: v2\nplugins:\n  - local: " + es215 + "\n    out: frontends/web/src/gen\n",
+				"buf.gen.controlplane.yaml": "version: v2\nplugins:\n  - local: " + es212 + "\n    out: frontends/web/src/gen/controlplane\n",
 			},
 		},
 		{

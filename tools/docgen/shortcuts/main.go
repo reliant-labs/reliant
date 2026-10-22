@@ -5,7 +5,7 @@
 // SOURCE OF TRUTH: config/shortcuts.yaml
 //
 // GENERATED FILES:
-//   - web/src/store/shortcutsData.generated.ts
+//   - frontends/web/src/store/shortcutsData.generated.ts
 //   - generated/docs-source/settings/keyboard-shortcuts.generated.md
 //
 // Usage: go run ./tools/docgen/shortcuts <yaml_file> <ts_output> <md_output>

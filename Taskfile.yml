@@ -154,7 +154,7 @@ tasks:
     cmds:
       - go mod download
       - task: deps:protoc-gen-es
-      - cd web && npm ci
+      - cd frontends/web && npm ci
       - cd electron && npm ci
 
   deps:protoc-gen-es:
@@ -226,8 +226,8 @@ tasks:
       - go build -buildvcs=false -o dist/reliant-dev ./tools/reliant-dev
 
   build:web:
-    desc: Build the web application (web/dist)
-    dir: web
+    desc: Build the web application (frontends/web/dist)
+    dir: frontends/web
     cmds:
       - npm run build
 
@@ -402,19 +402,19 @@ tasks:
 
   test:web:
     desc: Run the web unit tests (vitest, every file — prefer task test:affected LANES=web)
-    dir: web
+    dir: frontends/web
     cmds:
       - '{{.SLOT}} npm test -- --run'
 
   test:web:coverage:
     desc: Run the web unit tests with coverage
-    dir: web
+    dir: frontends/web
     cmds:
       - '{{.SLOT}} npm test -- --run --coverage'
 
   test:web:watch:
     desc: Run the web unit tests in watch mode
-    dir: web
+    dir: frontends/web
     cmds:
       - npm test
 
@@ -476,7 +476,7 @@ tasks:
 
   lint:web:
     desc: Lint the web app
-    dir: web
+    dir: frontends/web
     cmds:
       - npm run lint
 
@@ -500,7 +500,7 @@ tasks:
 
   fmt:web:
     desc: Format the web app (eslint --fix)
-    dir: web
+    dir: frontends/web
     cmds:
       - npm run lint -- --fix
 
@@ -550,10 +550,10 @@ tasks:
     # control-plane's public contract. To pull a new contract first:
     # node .github/scripts/sync-controlplane-proto.mjs. Both output dirs are
     # replaced wholesale, but only after buf succeeds.
-    desc: Regenerate the control-plane clients (gen/controlplane, web/src/gen/controlplane) from proto-vendor/
+    desc: Regenerate the control-plane clients (gen/controlplane, frontends/web/src/gen/controlplane) from proto-vendor/
     deps: [deps:protoc-gen-es]
     cmds:
-      - '{{.GEN_ENV}} scripts/proto-generate-atomic.sh buf.gen.controlplane.yaml gen/controlplane web/src/gen/controlplane'
+      - '{{.GEN_ENV}} scripts/proto-generate-atomic.sh buf.gen.controlplane.yaml gen/controlplane frontends/web/src/gen/controlplane'
 
   generate:docs:
     # Every docs generator — each tools/docgen program and the Mintlify
@@ -625,7 +625,7 @@ tasks:
   generate:docs:shortcuts:
     desc: Generate the keyboard shortcuts from config/shortcuts.yaml
     cmds:
-      - '{{.GEN_GO}} run ./tools/docgen/shortcuts/... config/shortcuts.yaml web/src/store/shortcutsData.generated.ts {{.SETTINGS_DIR}}/keyboard-shortcuts.generated.md'
+      - '{{.GEN_GO}} run ./tools/docgen/shortcuts/... config/shortcuts.yaml frontends/web/src/store/shortcutsData.generated.ts {{.SETTINGS_DIR}}/keyboard-shortcuts.generated.md'
 
   generate:docs:nodes:
     desc: Generate the node type I/O reference from the node type registry

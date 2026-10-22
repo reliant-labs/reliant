@@ -5,13 +5,13 @@ description: How the onboarding step is derived (only from the `plan` URL param)
 
 # Onboarding: the step you see is derived, and a background effect can end the flow
 
-`deriveStep(plan)` (`web/src/components/OnboardingFlow/stepConfig.ts`) is the
+`deriveStep(plan)` (`frontends/web/src/components/OnboardingFlow/stepConfig.ts`) is the
 ONLY thing that decides which step renders — from the `plan` search param in
 the URL, nothing else. `onNext()` is a no-op. So "it skipped steps" is always a
 question about what wrote `plan`, or about whether the flow was exited
 entirely.
 
-**`web/src/components/OnboardingFlow/OnboardingRoute.tsx` can complete
+**`frontends/web/src/components/OnboardingFlow/OnboardingRoute.tsx` can complete
 onboarding on its own, from a `useEffect`, with no user action.** The
 returning-user heal fires when
 `hasUsableControlPlaneDaemonForOnboarding(daemonsPostdating(daemons, user.createdAtMs))`

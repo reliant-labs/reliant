@@ -505,7 +505,7 @@ func (r *runner) goSteps(pl *Plan) []step {
 }
 
 func (r *runner) webSteps(pl *Plan) []step {
-	web := filepath.Join(r.root, "web")
+	web := filepath.Join(r.root, "frontends", "web")
 	switch {
 	case pl.Web.Full:
 		return []step{{name: "web (full)", dir: web, argv: r.heavy([]string{"npx", "vitest", "run"})}}

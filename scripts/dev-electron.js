@@ -15,7 +15,7 @@ const colors = {
 };
 
 const PROJECT_ROOT = path.resolve(__dirname, '..');
-const WEB_DIR = path.join(PROJECT_ROOT, 'web');
+const WEB_DIR = path.join(PROJECT_ROOT, 'frontends', 'web');
 const ELECTRON_DIR = path.join(PROJECT_ROOT, 'electron');
 
 // Track Docker container name for cleanup

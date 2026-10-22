@@ -60,7 +60,7 @@ func (s *Service) getUserID(ctx context.Context) (string, error) {
 // that names no workspace is refused instead of being run against the
 // daemon's filesystem root or its working directory.
 //
-// Every client reaches these RPCs with a project id (web/src/api/fileSystem.ts
+// Every client reaches these RPCs with a project id (frontends/web/src/api/fileSystem.ts
 // returns early when there is no current project), so nothing legitimate
 // depended on the passthrough.
 func (s *Service) requireProjectBase(ctx context.Context, projectID string, worktreeID *string, chatID *string) (string, error) {

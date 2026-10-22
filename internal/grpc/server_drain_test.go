@@ -117,7 +117,7 @@ func TestDrainEndsOpenStreamsAndReturnsPromptly(t *testing.T) {
 	require.Less(t, elapsed, budget/2, "Drain must not wait on a stream that cannot finish by itself")
 
 	// Ended with OK: the end of a watch, which the web client answers by
-	// reconnecting from its cursor (web/src/api/streaming-grpc.ts, "Stream
+	// reconnecting from its cursor (frontends/web/src/api/streaming-grpc.ts, "Stream
 	// ended normally"). Not Unavailable, which it treats as the network
 	// under every read on the connection dying. The trailer says the server
 	// ended it, not the watch.

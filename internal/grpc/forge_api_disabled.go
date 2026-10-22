@@ -10,7 +10,7 @@ import (
 )
 
 // forgeAPIDisabledReason is the X-Reliant-Reason a forgeAPIDisabled refusal
-// carries. The web app reads it (isForgeAPIDisabled, web/src/api/forge-grpc.ts)
+// carries. The web app reads it (isForgeAPIDisabled, frontends/web/src/api/forge-grpc.ts)
 // to say "turned off on this server" rather than blame the user's daemon:
 // FailedPrecondition alone is also what a forge rpc answers when forge ran and
 // failed, so the code cannot tell the two apart.

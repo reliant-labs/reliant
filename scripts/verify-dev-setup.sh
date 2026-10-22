@@ -116,7 +116,7 @@ fi
 
 # Check npm dependencies
 echo ""
-if [ -d "web/node_modules" ]; then
+if [ -d "frontends/web/node_modules" ]; then
     echo -e "${GREEN}✅ Web dependencies${NC} installed"
 else
     echo -e "${YELLOW}⚠️  Web dependencies${NC} not installed"

@@ -23,7 +23,7 @@ func (rf *rootFacts) literal(e ast.Expr) (string, bool) {
 // rootFacts is where one package's sources say the repo root is: which
 // functions return it (or a path under it), and which package variables and
 // struct fields hold one. literalCandidates reads it to tell
-// filepath.Join(repoRoot(t), "web") (a read of web/) from
+// filepath.Join(repoRoot(t), "frontends", "web") (a read of frontends/web/) from
 // filepath.Join(t.TempDir(), "web") (a fixture's directory).
 //
 // It is syntactic and per package, so it over-approximates where names meet:

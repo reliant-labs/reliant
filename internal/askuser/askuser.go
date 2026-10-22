@@ -2,7 +2,7 @@
 
 // Package askuser parses the `ask_user` question metadata a workflow persists
 // on a pending question and constructs the ResolveQuestion response_data
-// payload. It is the Go counterpart of web/src/components/Chat/askUserUtils.ts
+// payload. It is the Go counterpart of frontends/web/src/components/Chat/askUserUtils.ts
 // and MUST agree with it: the two produce/consume the same wire shapes.
 //
 // Metadata shape (a question's Metadata JSON):

@@ -10,7 +10,7 @@ PURPLE='\033[0;35m'
 NC='\033[0m' # No Color
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-WEB_DIR="$PROJECT_ROOT/web"
+WEB_DIR="$PROJECT_ROOT/frontends/web"
 ELECTRON_DIR="$PROJECT_ROOT/electron"
 DIST_DIR="$PROJECT_ROOT/dist"
 RESOURCES_DIR="$ELECTRON_DIR/resources"

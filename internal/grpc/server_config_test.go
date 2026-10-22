@@ -164,7 +164,7 @@ func TestAPIHTTPRoutesAreMounted(t *testing.T) {
 }
 
 // /health on the API port is what the web client reads the auth mode from
-// (web/src/hooks/useAuthMode.ts): its JSON is unchanged.
+// (frontends/web/src/hooks/useAuthMode.ts): its JSON is unchanged.
 func TestAPIHealthReportsTheAuthMode(t *testing.T) {
 	_, baseURL := startTestServer(t, testHTTPRoutes(t, testUserAuth(t)))
 

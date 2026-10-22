@@ -13,7 +13,7 @@ import (
 )
 
 // The UI treats a thread as active only when its record says "running" or
-// "active" (useIsThreadActive, web/src/store/threadActivityStore.ts). The
+// "active" (useIsThreadActive, frontends/web/src/store/threadActivityStore.ts). The
 // spawn path writes a "running" record when the sub-thread is created, and
 // ThreadStatus then emits its own update for the same thread — so if that
 // second update carries the raw lifecycle verb "started", it OVERWRITES the

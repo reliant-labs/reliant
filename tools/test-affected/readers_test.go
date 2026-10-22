@@ -14,7 +14,7 @@ import (
 // out by the package-level gate: the Join anchor alone decides.
 var readerSources = map[string]string{
 	// A fixture that builds a multi-repo workspace named like this repo's
-	// own directories, under a temp dir: no read of web/.
+	// own directories, under a temp dir: no read of frontends/web/.
 	"internal/fixtures": `package fixtures
 
 import (
@@ -33,7 +33,7 @@ func TestWorkspace(t *testing.T) {
 	_ = cwd
 }
 `,
-	// Reads web/src relative to the package directory, as internal/grpc's
+	// Reads frontends/web/src relative to the package directory, as internal/grpc's
 	// CORS test does.
 	"internal/relreader": `package relreader
 
@@ -43,11 +43,11 @@ import (
 )
 
 func TestReadsWebSrc(t *testing.T) {
-	dir, _ := filepath.Abs(filepath.Join("..", "..", "web", "src"))
+	dir, _ := filepath.Abs(filepath.Join("..", "..", "frontends", "web", "src"))
 	_ = dir
 }
 `,
-	// Reads web/ through a repo-root helper.
+	// Reads frontends/web/ through a repo-root helper.
 	"internal/rootreader": `package rootreader
 
 import (
@@ -66,7 +66,7 @@ func repoRootDir(t *testing.T) string {
 
 func TestReadsWeb(t *testing.T) {
 	root := repoRootDir(t)
-	_, _ = os.ReadDir(filepath.Join(root, "web"))
+	_, _ = os.ReadDir(filepath.Join(root, "frontends", "web"))
 }
 `,
 	// A constant between the root and the literal is part of the path.
@@ -78,10 +78,10 @@ import (
 	"testing"
 )
 
-const webDir = "web"
+const frontendsDir = "frontends"
 
 func TestReadsWebManifest(t *testing.T) {
-	_, _ = os.ReadFile(filepath.Join(repoRoot(t), webDir, "manifest.json"))
+	_, _ = os.ReadFile(filepath.Join(repoRoot(t), frontendsDir, "web", "manifest.json"))
 }
 
 func repoRoot(t *testing.T) string { return "../.." }
@@ -91,8 +91,8 @@ func repoRoot(t *testing.T) string { return "../.." }
 // The web files these tests change. Neither exists: a real one, named here,
 // would make this package a reader of it.
 const (
-	webSource   = "web/src/fixture/Widget.tsx"
-	webManifest = "web/manifest.json"
+	webSource   = "frontends/web/src/fixture/Widget.tsx"
+	webManifest = "frontends/web/manifest.json"
 )
 
 // readerGraph is the test graph plus the named readerSources packages,
@@ -127,7 +127,7 @@ func readerGraph(t *testing.T, pkgs ...string) *Graph {
 var allReaders = []string{"internal/fixtures", "internal/relreader", "internal/rootreader", "internal/constreader"}
 
 // A bare "web" in a fixture (a map key, a Join onto a temp dir) is not a read
-// of web/: it used to make every web-only diff run the fixture's package.
+// of frontends/web/: it used to make every web-only diff run the fixture's package.
 func TestWebOnlyDiffSelectsNoGoPackage(t *testing.T) {
 	g := readerGraph(t, "internal/fixtures")
 	if r := g.Readers[mod+"/internal/fixtures"]; len(r) != 0 {
@@ -139,13 +139,13 @@ func TestWebOnlyDiffSelectsNoGoPackage(t *testing.T) {
 	}
 }
 
-// A Go test that really reads web/ still runs when it changes, however it
+// A Go test that really reads frontends/web/ still runs when it changes, however it
 // anchors the path.
 func TestGoReaderOfWebIsStillSelected(t *testing.T) {
 	g := readerGraph(t, allReaders...)
 	for pkg, want := range map[string][]string{
-		"internal/relreader":   {"web/src"},
-		"internal/rootreader":  {"web"},
+		"internal/relreader":   {"frontends/web/src"},
+		"internal/rootreader":  {"frontends/web"},
 		"internal/constreader": {webManifest},
 	} {
 		if got := g.Readers[mod+"/"+pkg]; !slices.Equal(got, want) {

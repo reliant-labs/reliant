@@ -80,19 +80,19 @@ const PR_WEB = jobBlock(read(".github", "workflows", "pr-ci.yml"), "web");
 const RELEASE_PREPARE = jobBlock(read(".github", "workflows", "release.yml"), "prepare");
 
 const EXPORT = `jq -er '.vite | to_entries[] | "\\(.key)=\\(.value)"' electron/release.config.json >> "$GITHUB_ENV"`;
-const BUILD = /working-directory: web\n\s+run: NODE_ENV=production npm run build\n/;
-const VERIFY_STEP = "run: node .github/scripts/verify-bundle.mjs --dist web/dist\n";
+const BUILD = /working-directory: frontends\/web\n\s+run: NODE_ENV=production npm run build\n/;
+const VERIFY_STEP = "run: node .github/scripts/verify-bundle.mjs --dist frontends/web/dist\n";
 
 for (const [name, block] of [
   ["release.yml's prepare job", RELEASE_PREPARE],
   ["pr-ci.yml's web job", PR_WEB],
 ]) {
-  test(`${name} exports .vite, builds with NODE_ENV=production in web/, then verifies the bundle`, () => {
+  test(`${name} exports .vite, builds with NODE_ENV=production in frontends/web/, then verifies the bundle`, () => {
     const exported = block.indexOf(EXPORT);
     const built = block.search(BUILD);
     const verified = block.indexOf(VERIFY_STEP);
     assert.notEqual(exported, -1, `${name} no longer exports release.config.json's .vite block with:\n  ${EXPORT}`);
-    assert.notEqual(built, -1, `${name} no longer runs \`NODE_ENV=production npm run build\` in web/`);
+    assert.notEqual(built, -1, `${name} no longer runs \`NODE_ENV=production npm run build\` in frontends/web/`);
     assert.notEqual(verified, -1, `${name} no longer runs:\n  ${VERIFY_STEP}`);
     assert.ok(exported < built && built < verified, `${name} must export the config, then build, then verify`);
   });
@@ -116,7 +116,7 @@ test("PR CI's web job runs on every change that can alter the bundle it verifies
   const m = /if grep -qE '([^']+)' <<< "\$\{changed\}"; then web=true; fi/.exec(changes);
   assert.ok(m, "the `changes` job no longer classifies the web lane with `if grep -qE '<regex>' ...; then web=true; fi`; update this test");
   const webLane = new RegExp(m[1]);
-  for (const path of [".github/scripts/verify-bundle.mjs", "electron/release.config.json", "web/src/App.tsx", "web/package-lock.json", "package.json"]) {
+  for (const path of [".github/scripts/verify-bundle.mjs", "electron/release.config.json", "frontends/web/src/App.tsx", "frontends/web/package-lock.json", "package.json"]) {
     assert.ok(webLane.test(path), `a change to ${path} must run the web job`);
   }
   for (const path of ["go.mod", "internal/db/db.go", "docs/index.mdx"]) {

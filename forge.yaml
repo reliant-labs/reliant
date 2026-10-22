@@ -31,7 +31,7 @@
 
 name: reliant
 module_path: github.com/reliant-labs/reliant
-forge_version: v0.1.47-0.20261022184512-81506ca5a324
+forge_version: v0.1.47-0.20261022211527-ce1870c66476
 harness: reliant
 config:
     # Every process setting is typed config (proto/reliant/config/v1, read through
@@ -111,8 +111,8 @@ generate:
         # control-plane's exported public contract. Both dirs are replaced
         # wholesale, only after buf succeeds.
         - name: controlplane-client
-          command: [scripts/proto-generate-atomic.sh, buf.gen.controlplane.yaml, gen/controlplane, web/src/gen/controlplane]
-          writes: [gen/controlplane, web/src/gen/controlplane]
+          command: [scripts/proto-generate-atomic.sh, buf.gen.controlplane.yaml, gen/controlplane, frontends/web/src/gen/controlplane]
+          writes: [gen/controlplane, frontends/web/src/gen/controlplane]
         - name: yaml-bindings
           command: [go, generate, ./internal/workflow/yaml]
           writes: [internal/workflow/yaml/bindings_generated.go]
@@ -164,7 +164,7 @@ ci:
               heavy: true
               mutates_tree: true
             - name: lint-web
-              dir: web
+              dir: frontends/web
               command: [npm, run, lint]
               requires: [npm]
             # forge.yaml's forge_version and go.mod's forge require are one pin.

@@ -1029,6 +1029,659 @@
           "height": 7
         }
       ]
+    },
+    {
+      "id": "frontend",
+      "title": "reliant: frontend",
+      "description": "Browser errors, page loads, web vitals and API calls from the HyperDX browser SDK (service.name reliant-frontend). Panels follow HyperDX's Browser RUM template: a browser span carries the rum.sessionId resource attribute.",
+      "filters": [
+        {
+          "id": "service",
+          "label": "service.name",
+          "field": "service.name"
+        },
+        {
+          "id": "env",
+          "label": "deployment.environment.name",
+          "field": "deployment.environment.name"
+        }
+      ],
+      "annotations": [
+        {
+          "source": "releases",
+          "label": "Releases"
+        }
+      ],
+      "panels": [
+        {
+          "id": "js-errors",
+          "title": "JS errors",
+          "kind": "number",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "errors",
+              "agg": "count"
+            }
+          ],
+          "where": [
+            {
+              "field": "resource.attr.rum.sessionId",
+              "op": "exists"
+            },
+            {
+              "field": "span.status",
+              "op": "eq",
+              "value": "error"
+            },
+            {
+              "field": "span.attr.component",
+              "op": "not_in",
+              "values": [
+                "fetch",
+                "xml-http-request"
+              ]
+            }
+          ],
+          "unit": "count",
+          "width": 6,
+          "height": 4
+        },
+        {
+          "id": "sessions",
+          "title": "Sessions",
+          "kind": "number",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "sessions",
+              "agg": "count_distinct",
+              "field": "resource.attr.rum.sessionId"
+            }
+          ],
+          "where": [
+            {
+              "field": "resource.attr.rum.sessionId",
+              "op": "exists"
+            }
+          ],
+          "unit": "count",
+          "width": 6,
+          "height": 4
+        },
+        {
+          "id": "page-views",
+          "title": "Page views",
+          "kind": "number",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "views",
+              "agg": "count"
+            }
+          ],
+          "where": [
+            {
+              "field": "resource.attr.rum.sessionId",
+              "op": "exists"
+            },
+            {
+              "field": "span.name",
+              "op": "in",
+              "values": [
+                "documentLoad",
+                "routeChange"
+              ]
+            }
+          ],
+          "unit": "count",
+          "width": 6,
+          "height": 4
+        },
+        {
+          "id": "api-failures",
+          "title": "Failed API calls",
+          "description": "fetch / XHR spans with an HTTP status of 400 or more.",
+          "kind": "number",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "failures",
+              "agg": "count"
+            }
+          ],
+          "where": [
+            {
+              "field": "resource.attr.rum.sessionId",
+              "op": "exists"
+            },
+            {
+              "field": "span.attr.component",
+              "op": "in",
+              "values": [
+                "fetch",
+                "xml-http-request"
+              ]
+            },
+            {
+              "field": "span.attr.http.status_code",
+              "op": "gte",
+              "value": "400"
+            }
+          ],
+          "unit": "count",
+          "width": 6,
+          "height": 4
+        },
+        {
+          "id": "errors-over-time",
+          "title": "JS errors over time",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "errors",
+              "agg": "count"
+            }
+          ],
+          "where": [
+            {
+              "field": "resource.attr.rum.sessionId",
+              "op": "exists"
+            },
+            {
+              "field": "span.status",
+              "op": "eq",
+              "value": "error"
+            },
+            {
+              "field": "span.attr.component",
+              "op": "not_in",
+              "values": [
+                "fetch",
+                "xml-http-request"
+              ]
+            }
+          ],
+          "unit": "count",
+          "width": 24,
+          "height": 6
+        },
+        {
+          "id": "issues",
+          "title": "Issues",
+          "description": "Errors grouped by cause (type, message and the top in-app frames): new and regressed first, then the most frequent. A string-only console.error is not an issue.",
+          "kind": "issues",
+          "signal": "traces",
+          "where": [
+            {
+              "field": "resource.attr.rum.sessionId",
+              "op": "exists"
+            }
+          ],
+          "width": 24,
+          "height": 9
+        },
+        {
+          "id": "sessions-with-errors",
+          "title": "Sessions with errors",
+          "description": "Sessions that hit an error, newest first; a session that was recorded links to its replay.",
+          "kind": "sessions",
+          "signal": "traces",
+          "where": [
+            {
+              "field": "resource.attr.rum.sessionId",
+              "op": "exists"
+            }
+          ],
+          "hasError": true,
+          "width": 24,
+          "height": 8
+        },
+        {
+          "id": "lcp",
+          "title": "LCP p75",
+          "kind": "number",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "lcp p75",
+              "agg": "quantile",
+              "quantile": 0.75,
+              "field": "span.attr.lcp"
+            }
+          ],
+          "where": [
+            {
+              "field": "resource.attr.rum.sessionId",
+              "op": "exists"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "webvitals"
+            },
+            {
+              "field": "span.attr.lcp",
+              "op": "exists"
+            }
+          ],
+          "unit": "ms",
+          "width": 6,
+          "height": 4
+        },
+        {
+          "id": "inp",
+          "title": "INP p75",
+          "kind": "number",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "inp p75",
+              "agg": "quantile",
+              "quantile": 0.75,
+              "field": "span.attr.inp"
+            }
+          ],
+          "where": [
+            {
+              "field": "resource.attr.rum.sessionId",
+              "op": "exists"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "webvitals"
+            },
+            {
+              "field": "span.attr.inp",
+              "op": "exists"
+            }
+          ],
+          "unit": "ms",
+          "width": 6,
+          "height": 4
+        },
+        {
+          "id": "cls",
+          "title": "CLS p75",
+          "kind": "number",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "cls p75",
+              "agg": "quantile",
+              "quantile": 0.75,
+              "field": "span.attr.cls"
+            }
+          ],
+          "where": [
+            {
+              "field": "resource.attr.rum.sessionId",
+              "op": "exists"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "webvitals"
+            },
+            {
+              "field": "span.attr.cls",
+              "op": "exists"
+            }
+          ],
+          "width": 6,
+          "height": 4
+        },
+        {
+          "id": "fcp",
+          "title": "FCP p75",
+          "kind": "number",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "fcp p75",
+              "agg": "quantile",
+              "quantile": 0.75,
+              "field": "span.attr.fcp"
+            }
+          ],
+          "where": [
+            {
+              "field": "resource.attr.rum.sessionId",
+              "op": "exists"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "webvitals"
+            },
+            {
+              "field": "span.attr.fcp",
+              "op": "exists"
+            }
+          ],
+          "unit": "ms",
+          "width": 6,
+          "height": 4
+        },
+        {
+          "id": "ttfb",
+          "title": "TTFB p75",
+          "kind": "number",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "ttfb p75",
+              "agg": "quantile",
+              "quantile": 0.75,
+              "field": "span.attr.ttfb"
+            }
+          ],
+          "where": [
+            {
+              "field": "resource.attr.rum.sessionId",
+              "op": "exists"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "webvitals"
+            },
+            {
+              "field": "span.attr.ttfb",
+              "op": "exists"
+            }
+          ],
+          "unit": "ms",
+          "width": 6,
+          "height": 4
+        },
+        {
+          "id": "vitals-by-route",
+          "title": "Web vitals by route",
+          "description": "p75 per page. LCP good at 2500 ms or less and poor above 4000 ms; INP 200 / 500 ms; CLS 0.1 / 0.25.",
+          "kind": "table",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "lcp p75",
+              "agg": "quantile",
+              "quantile": 0.75,
+              "field": "span.attr.lcp",
+              "where": [
+                {
+                  "field": "span.attr.lcp",
+                  "op": "exists"
+                }
+              ],
+              "thresholds": {
+                "good": 2500,
+                "poor": 4000
+              }
+            },
+            {
+              "label": "inp p75",
+              "agg": "quantile",
+              "quantile": 0.75,
+              "field": "span.attr.inp",
+              "where": [
+                {
+                  "field": "span.attr.inp",
+                  "op": "exists"
+                }
+              ],
+              "thresholds": {
+                "good": 200,
+                "poor": 500
+              }
+            },
+            {
+              "label": "cls p75",
+              "agg": "quantile",
+              "quantile": 0.75,
+              "field": "span.attr.cls",
+              "where": [
+                {
+                  "field": "span.attr.cls",
+                  "op": "exists"
+                }
+              ],
+              "thresholds": {
+                "good": 0.1,
+                "poor": 0.25
+              }
+            },
+            {
+              "label": "samples",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.attr.lcp",
+                  "op": "exists"
+                }
+              ]
+            }
+          ],
+          "where": [
+            {
+              "field": "resource.attr.rum.sessionId",
+              "op": "exists"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "webvitals"
+            }
+          ],
+          "groupBy": [
+            "span.attr.location.href"
+          ],
+          "width": 24,
+          "height": 8
+        },
+        {
+          "id": "errors-by-release",
+          "title": "JS errors by release",
+          "description": "The same error spans as above, one line per service.version (the build id), so a release that introduced a regression shows as its own line. Release markers are drawn from the ledger.",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "errors",
+              "agg": "count"
+            }
+          ],
+          "where": [
+            {
+              "field": "resource.attr.rum.sessionId",
+              "op": "exists"
+            },
+            {
+              "field": "span.status",
+              "op": "eq",
+              "value": "error"
+            },
+            {
+              "field": "span.attr.component",
+              "op": "not_in",
+              "values": [
+                "fetch",
+                "xml-http-request"
+              ]
+            }
+          ],
+          "groupBy": [
+            "resource.attr.service.version"
+          ],
+          "unit": "count",
+          "width": 24,
+          "height": 7
+        },
+        {
+          "id": "page-load",
+          "title": "Page load p50 / p90 / p99",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "p50",
+              "agg": "quantile",
+              "quantile": 0.5,
+              "field": "span.duration"
+            },
+            {
+              "label": "p90",
+              "agg": "quantile",
+              "quantile": 0.9,
+              "field": "span.duration"
+            },
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "resource.attr.rum.sessionId",
+              "op": "exists"
+            },
+            {
+              "field": "span.name",
+              "op": "eq",
+              "value": "documentLoad"
+            }
+          ],
+          "unit": "ms",
+          "width": 24,
+          "height": 7
+        },
+        {
+          "id": "api-latency",
+          "title": "API call latency (browser)",
+          "description": "Browser-side fetch / XHR spans; the same calls appear server-side on the service dashboards, joined by traceparent.",
+          "kind": "line",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "p50",
+              "agg": "quantile",
+              "quantile": 0.5,
+              "field": "span.duration"
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            },
+            {
+              "label": "p99",
+              "agg": "quantile",
+              "quantile": 0.99,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "resource.attr.rum.sessionId",
+              "op": "exists"
+            },
+            {
+              "field": "span.attr.component",
+              "op": "in",
+              "values": [
+                "fetch",
+                "xml-http-request"
+              ]
+            }
+          ],
+          "unit": "ms",
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "api-calls",
+          "title": "API calls by URL",
+          "kind": "table",
+          "signal": "traces",
+          "series": [
+            {
+              "label": "calls",
+              "agg": "count"
+            },
+            {
+              "label": "failures",
+              "agg": "count",
+              "where": [
+                {
+                  "field": "span.attr.http.status_code",
+                  "op": "gte",
+                  "value": "400"
+                }
+              ]
+            },
+            {
+              "label": "p95",
+              "agg": "quantile",
+              "quantile": 0.95,
+              "field": "span.duration"
+            }
+          ],
+          "where": [
+            {
+              "field": "resource.attr.rum.sessionId",
+              "op": "exists"
+            },
+            {
+              "field": "span.attr.component",
+              "op": "in",
+              "values": [
+                "fetch",
+                "xml-http-request"
+              ]
+            }
+          ],
+          "groupBy": [
+            "span.attr.http.url"
+          ],
+          "width": 12,
+          "height": 7
+        },
+        {
+          "id": "browser-console",
+          "title": "Browser console and error events",
+          "description": "The HyperDX SDK ships console output and uncaught errors as spans (console.*, onerror, unhandledrejection), not as OTLP logs.",
+          "kind": "search",
+          "signal": "traces",
+          "where": [
+            {
+              "field": "resource.attr.rum.sessionId",
+              "op": "exists"
+            },
+            {
+              "field": "span.name",
+              "op": "in",
+              "values": [
+                "console.error",
+                "console.warn",
+                "onerror",
+                "unhandledrejection"
+              ]
+            }
+          ],
+          "columns": [
+            "timestamp",
+            "service.name",
+            "span.name",
+            "span.attr.error.message"
+          ],
+          "width": 24,
+          "height": 9
+        }
+      ]
     }
   ]
 }

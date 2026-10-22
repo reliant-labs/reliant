@@ -21,7 +21,7 @@ package telemetry
 // with the report_bug tool keeps its authored text (redacted and bounded),
 // because that text is the report. See bug_report.go.
 //
-// The same policy is implemented for the browser in web/src/lib/sentryScrub.ts
+// The same policy is implemented for the browser in frontends/web/src/lib/sentryScrub.ts
 // and for Electron's main process in electron/src/sentry-scrub.js. Keep them in
 // step: the three runtimes report into one Sentry organisation.
 

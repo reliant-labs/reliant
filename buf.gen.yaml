@@ -34,7 +34,7 @@ managed:
 # targets: their Go homes are github.com/reliant-labs/forge/pkg/forgepb and
 # buf.build/gen/go/bufbuild/protovalidate (which the generated code imports),
 # and a second Go copy would register the same file twice and panic at init.
-# web/src/gen still gets both, through include_imports.
+# frontends/web/src/gen still gets both, through include_imports.
 inputs:
   - directory: proto
     exclude_paths:
@@ -56,7 +56,7 @@ plugins:
 
   # Generate TypeScript protobuf code for web
   - local: [node, tools/protoc-gen-es/node_modules/protoc-gen-es-v2.15.0/bin/protoc-gen-es]
-    out: web/src/gen
+    out: frontends/web/src/gen
     include_imports: true
     opt:
       - target=ts

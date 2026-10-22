@@ -58,7 +58,7 @@ import (
 
 // DefaultPort is the fixed port the web app probes. It is FIXED on purpose:
 // the browser has to know where to look before anything has told it, so this
-// value is a published contract shared with web/src/lib/oauth-local.ts. Do not
+// value is a published contract shared with frontends/web/src/lib/oauth-local.ts. Do not
 // make it dynamic without changing that too.
 const DefaultPort = 19284
 
@@ -67,7 +67,7 @@ const DefaultPort = 19284
 const ServiceName = "reliant"
 
 // hostedWebOrigin is the production reliant web app's origin — the same
-// hosted address as web/src/lib/constants.ts's DEFAULT_APP_URL and
+// hosted address as frontends/web/src/lib/constants.ts's DEFAULT_APP_URL and
 // electron/release.config.json's VITE_APP_URL.
 const hostedWebOrigin = "https://app.reliantlabs.io"
 
@@ -504,8 +504,8 @@ func WebOrigins(origins []string, frontendPort string) []string {
 func buildAllowedOrigins(extra []string) map[string]bool {
 	origins := []string{
 		hostedWebOrigin,
-		"http://localhost:5173", // vite dev default (web/README.md)
-		"http://localhost:3000", // common dev port (web/src/routes.tsx, scripts/dev.sh)
+		"http://localhost:5173", // vite dev default (frontends/web/README.md)
+		"http://localhost:3000", // common dev port (frontends/web/src/routes.tsx, scripts/dev.sh)
 	}
 	origins = append(origins, extra...)
 

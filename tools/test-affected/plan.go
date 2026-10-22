@@ -45,7 +45,7 @@ type GoPlan struct {
 // WebPlan is the vitest lane: `vitest run <Tests...>`.
 type WebPlan struct {
 	LaneFull
-	// Tests are the test files to run, relative to web/.
+	// Tests are the test files to run, relative to frontends/web/.
 	Tests []string          `json:"tests"`
 	Why   map[string]string `json:"why,omitempty"`
 }
@@ -128,7 +128,7 @@ type classifier struct {
 	// (forgeHookGenerators).
 	hookGenDeps map[string]string
 
-	web       *reasons // web test file (relative to web/) -> why
+	web       *reasons // web test file (relative to frontends/web/) -> why
 	webTouch  bool     // a non-test web module changed
 	elecReads []string // why the electron lane runs, from tests naming a changed file
 }
@@ -350,9 +350,9 @@ func (c *classifier) applyRule(ch Change, r *rule, rep *FileReport) bool {
 			c.full[laneGo] = append(c.full[laneGo], fmt.Sprintf("%s: no generated Go package under gen/ for this proto (fail-safe)", ch.Path))
 		}
 		if w := c.g.Web; w != nil {
-			gen := "web/" + webGenPath(ch.Path)
+			gen := "frontends/web/" + webGenPath(ch.Path)
 			for _, t := range w.Reach[gen] {
-				c.web.add(strings.TrimPrefix(t, "web/"), ch.Path+" regenerates "+path.Base(gen))
+				c.web.add(strings.TrimPrefix(t, "frontends/web/"), ch.Path+" regenerates "+path.Base(gen))
 			}
 			c.webTouch = true
 		}
@@ -376,7 +376,7 @@ func (c *classifier) attributeToWeb(ch Change) {
 		return
 	}
 	if IsWebTestFile(ch.Path) {
-		c.web.add(strings.TrimPrefix(ch.Path, "web/"), "the test itself changed")
+		c.web.add(strings.TrimPrefix(ch.Path, "frontends/web/"), "the test itself changed")
 		return
 	}
 	c.webTouch = true
@@ -385,7 +385,7 @@ func (c *classifier) attributeToWeb(ch Change) {
 		return
 	}
 	for _, t := range w.Reach[ch.Path] {
-		c.web.add(strings.TrimPrefix(t, "web/"), "imports "+path.Base(ch.Path))
+		c.web.add(strings.TrimPrefix(t, "frontends/web/"), "imports "+path.Base(ch.Path))
 	}
 }
 
@@ -396,7 +396,7 @@ func (c *classifier) attributeToElectron(ch Change) {
 }
 
 // attributeToReaders selects the tests that name this file: Go packages whose
-// sources spell its path, and web/electron tests whose text names it.
+// sources spell its path, and web or electron tests whose text names it.
 func (c *classifier) attributeToReaders(ch Change) {
 	for _, pkg := range sortedKeys(c.g.Readers) {
 		if readsPath(c.g.Readers[pkg], ch.Path) {
@@ -406,7 +406,7 @@ func (c *classifier) attributeToReaders(ch Change) {
 	if w := c.g.Web; w != nil {
 		for _, t := range sortedKeys(w.Text) {
 			if t != ch.Path && namesFile(w.Text[t], ch.Path) {
-				c.web.add(strings.TrimPrefix(t, "web/"), "reads "+ch.Path)
+				c.web.add(strings.TrimPrefix(t, "frontends/web/"), "reads "+ch.Path)
 			}
 		}
 	}
@@ -462,7 +462,7 @@ func (c *classifier) selectWeb() {
 	wp.Why = map[string]string{}
 	if w := c.g.Web; w != nil && c.webTouch {
 		for _, t := range w.Walkers {
-			c.web.add(strings.TrimPrefix(t, "web/"), "reads whole directories of web/")
+			c.web.add(strings.TrimPrefix(t, "frontends/web/"), "reads whole directories of frontends/web/")
 		}
 	}
 	for _, f := range sortedKeys(c.web.m) {
@@ -543,7 +543,7 @@ func protoToGen(g *Graph, p string) (string, bool) {
 	return "", false
 }
 
-// webGenPath maps a .proto to its generated TypeScript client, relative to web/.
+// webGenPath maps a .proto to its generated TypeScript client, relative to frontends/web/.
 func webGenPath(p string) string {
 	name := strings.TrimSuffix(path.Base(p), ".proto") + "_pb.ts"
 	switch {

@@ -39,10 +39,10 @@ run_test_section "Go E2E Tests" "go test -v ./test/e2e"
 run_test_section "Go Integration Tests" "go test -v ./test/integration/..."
 
 # Web Tests
-run_test_section "Web Dependencies" "cd web && npm ci"
-run_test_section "Web Lint" "cd web && npm run lint"
-run_test_section "Web Type Check" "cd web && npx tsc --noEmit"
-run_test_section "Web Unit Tests" "cd web && npm test -- --run"
+run_test_section "Web Dependencies" "cd frontends/web && npm ci"
+run_test_section "Web Lint" "cd frontends/web && npm run lint"
+run_test_section "Web Type Check" "cd frontends/web && npx tsc --noEmit"
+run_test_section "Web Unit Tests" "cd frontends/web && npm test -- --run"
 
 # Summary
 echo ""

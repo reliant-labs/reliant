@@ -228,7 +228,7 @@ func events(event string, body *payload, receivedAt time.Time) []Event {
 // one registered by someone else, so an allowlist of logins would admit
 // whoever claims a name after its owner gave it up. The numeric id is
 // assigned once and never reused. "Only from" shows the login and stores the
-// id (web/src/lib/onlyFromFilter.ts).
+// id (frontends/web/src/lib/onlyFromFilter.ts).
 func sender(body *payload) *core.TriggerSender {
 	login := senderLogin(body)
 	return &core.TriggerSender{

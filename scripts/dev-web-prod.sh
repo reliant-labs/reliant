@@ -2,7 +2,7 @@
 # Run the normal Vite dev server (HMR, source maps, instant reload) against the
 # PRODUCTION backends instead of localhost.
 #
-# This is `npm run dev`, not a static preview of `web/dist`. You get the full
+# This is `npm run dev`, not a static preview of `frontends/web/dist`. You get the full
 # dev loop — edit a file, see it — while every RPC goes to prod.
 #
 # ── How it works ──────────────────────────────────────────────────────
@@ -70,5 +70,5 @@ prod Supabase redirect allow-list.
 
 EOF
 
-cd web
+cd frontends/web
 exec npm run dev

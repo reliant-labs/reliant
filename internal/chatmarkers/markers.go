@@ -39,7 +39,7 @@
 //  1. Append a new exported Kind* constant below.
 //  2. Mirror it in reliant/web/src/lib/chatMarkers.ts.
 //  3. Add an entry to the cross-process drift-guard tests on both sides
-//     (markers_test.go here, chatMarkers.test.ts in web/).
+//     (markers_test.go here, chatMarkers.test.ts in frontends/web/).
 //  4. Producer call sites use chatmarkers.Wrap(kind, payload); consumer
 //     call sites use Extract / Strip.
 //

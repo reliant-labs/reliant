@@ -156,7 +156,7 @@ jobs:
       # package is selected.
       go_matrix: ${{ steps.lanes.outputs.go_matrix }}
       # {"include":[{shard,shard_total}]} for vitest, or empty; vitest_files is
-      # the file list (relative to web/) when the selection is partial.
+      # the file list (relative to frontends/web/) when the selection is partial.
       vitest_matrix: ${{ steps.lanes.outputs.vitest_matrix }}
       vitest_files: ${{ steps.lanes.outputs.vitest_files }}
       # "<./pkg>\t<-run regexp>" lines for the new-flake gate.
@@ -252,21 +252,21 @@ jobs:
             # packages too, and golangci-lint lints every one of them.
             backend=false generated=false web=false playwright=false electron=false
             if grep -qE '\.go$' <<< "${changed}" \
-              || grep -qvE '^(web/|electron/|docs/|research/|dev-docs/|contributing/|\.github/|\.reliant/|LICENSE|\.license-allowlist|[^/]+\.md$)' <<< "${changed}"; then backend=true; fi
+              || grep -qvE '^(frontends/web/|electron/|docs/|research/|dev-docs/|contributing/|\.github/|\.reliant/|LICENSE|\.license-allowlist|[^/]+\.md$)' <<< "${changed}"; then backend=true; fi
             # Codegen drift: generators read Go, proto, SQL, config and docs
-            # and write into gen/, docs/, generated/ and two web/src paths.
+            # and write into gen/, docs/, generated/ and two frontends/web/src paths.
             if grep -qE '\.go$' <<< "${changed}" \
-              || grep -vE '^(web/|electron/|research/|dev-docs/|\.github/)' <<< "${changed}" | grep -q . \
-              || grep -qE '^web/src/(gen/|store/shortcutsData\.generated\.ts$)' <<< "${changed}"; then generated=true; fi
+              || grep -vE '^(frontends/web/|electron/|research/|dev-docs/|\.github/)' <<< "${changed}" | grep -q . \
+              || grep -qE '^frontends/web/src/(gen/|store/shortcutsData\.generated\.ts$)' <<< "${changed}"; then generated=true; fi
             # The web build (lint, typecheck, vite build, verify-bundle).
-            if grep -qE '^(web/|package(-lock)?\.json$|electron/release\.config\.json$|\.github/scripts/verify-bundle\.mjs$)' <<< "${changed}"; then web=true; fi
+            if grep -qE '^(frontends/web/|package(-lock)?\.json$|electron/release\.config\.json$|\.github/scripts/verify-bundle\.mjs$)' <<< "${changed}"; then web=true; fi
             # Playwright drives the built renderer: any web change but unit
             # tests and their fixtures.
-            if grep -E '^(web/|package(-lock)?\.json$|electron/release\.config\.json$)' <<< "${changed}" \
-              | grep -qvE '(/__tests__/|\.test\.tsx?$|^web/README\.md$)'; then playwright=true; fi
+            if grep -E '^(frontends/web/|package(-lock)?\.json$|electron/release\.config\.json$)' <<< "${changed}" \
+              | grep -qvE '(/__tests__/|\.test\.tsx?$|^frontends/web/README\.md$)'; then playwright=true; fi
             # The electron package: electron itself, or what it bundles the
             # renderer with. Renderer source is the web job's to build.
-            if grep -qE '^(electron/|package(-lock)?\.json$|web/package(-lock)?\.json$|web/vite\.config\.ts$)' <<< "${changed}"; then electron=true; fi
+            if grep -qE '^(electron/|package(-lock)?\.json$|frontends/web/package(-lock)?\.json$|frontends/web/vite\.config\.ts$)' <<< "${changed}"; then electron=true; fi
           fi
           out backend "${backend}"; out generated "${generated}"; out web "${web}"
           out playwright "${playwright}"; out electron "${electron}"
@@ -514,7 +514,7 @@ jobs:
   #
   # Path-filtered by `changes`: a change confined to the frontends, electron,
   # research/dev-docs or CI plumbing cannot move a generator's input (the two
-  # web/src paths generators WRITE still count). A forge bump "only" touches
+  # frontends/web/src paths generators WRITE still count). A forge bump "only" touches
   # go.mod but changes codegen output (cli.md at minimum), and go.mod is not in
   # the skip list, so it runs.
   #
@@ -1372,8 +1372,8 @@ jobs:
   web:
     name: Web (lint, typecheck, build)
     # Pure Node: npm lint, then the release's renderer build and artifact gate.
-    # The generated TypeScript (web/src/gen/**) is COMMITTED, so nothing here is
-    # derived from Go at build time. Runs on any change under web/, the root
+    # The generated TypeScript (frontends/web/src/gen/**) is COMMITTED, so nothing here is
+    # derived from Go at build time. Runs on any change under frontends/web/, the root
     # Node manifests, electron/release.config.json (its build config) or
     # verify-bundle.mjs (`changes`).
     needs: changes
@@ -1388,14 +1388,14 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
-          cache-dependency-path: web/package-lock.json
+          cache-dependency-path: frontends/web/package-lock.json
 
       - name: Install deps
-        working-directory: web
+        working-directory: frontends/web
         run: npm ci || npm install
 
       - name: Lint
-        working-directory: web
+        working-directory: frontends/web
         # Block PRs on lint errors, but allow warnings.
         run: npm run lint
 
@@ -1423,11 +1423,11 @@ jobs:
       # vite and typescript among them.
       - name: Type check and build (as release.yml builds it)
         id: build
-        working-directory: web
+        working-directory: frontends/web
         run: NODE_ENV=production npm run build
 
       - name: Verify the built bundle (release.yml's artifact gate)
-        run: node .github/scripts/verify-bundle.mjs --dist web/dist
+        run: node .github/scripts/verify-bundle.mjs --dist frontends/web/dist
 
       # Also uploaded when verification fails, so the offending asset can be
       # downloaded and grepped.
@@ -1436,7 +1436,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: web-dist
-          path: web/dist
+          path: frontends/web/dist
           retention-days: 1
 
   # vitest, over the files `changes` selected (or all of them), split across
@@ -1462,14 +1462,14 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
-          cache-dependency-path: web/package-lock.json
+          cache-dependency-path: frontends/web/package-lock.json
 
       - name: Install deps
-        working-directory: web
+        working-directory: frontends/web
         run: npm ci || npm install
 
       - name: Unit tests (shard ${{ matrix.shard }}/${{ matrix.shard_total }})
-        working-directory: web
+        working-directory: frontends/web
         env:
           CI: true
           FILES: ${{ needs.changes.outputs.vitest_files }}
@@ -1485,8 +1485,8 @@ jobs:
         with:
           name: web-test-artifacts-${{ matrix.shard }}
           path: |
-            web/coverage
-            web/test-results
+            frontends/web/coverage
+            frontends/web/test-results
           if-no-files-found: ignore
 
   # Playwright against the built renderer, no Go backend, single-worker (tests
@@ -1513,10 +1513,10 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
-          cache-dependency-path: web/package-lock.json
+          cache-dependency-path: frontends/web/package-lock.json
 
       - name: Install deps
-        working-directory: web
+        working-directory: frontends/web
         run: npm ci || npm install
 
       # Restored everywhere, saved on main only (see the backend job).
@@ -1525,7 +1525,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ hashFiles('web/package-lock.json') }}
+          key: playwright-${{ runner.os }}-${{ hashFiles('frontends/web/package-lock.json') }}
 
       # The public KCL-sourced values only (VITE_SUPABASE_ANON_KEY is a
       # publishable client-side key committed in electron/release.config.json);
@@ -1534,11 +1534,11 @@ jobs:
         run: jq -er '.vite | to_entries[] | "\(.key)=\(.value)"' electron/release.config.json >> "$GITHUB_ENV"
 
       - name: Build (alpha)
-        working-directory: web
+        working-directory: frontends/web
         run: npm run build:alpha
 
       - name: Install Playwright browsers
-        working-directory: web
+        working-directory: frontends/web
         run: npx playwright install chromium --with-deps
 
       - name: Save Playwright browsers (main only)
@@ -1549,7 +1549,7 @@ jobs:
           key: ${{ steps.playwright-cache.outputs.cache-primary-key }}
 
       - name: Run E2E tests
-        working-directory: web
+        working-directory: frontends/web
         env:
           CI: true
         run: npm run test:e2e -- --project=chromium
@@ -1560,8 +1560,8 @@ jobs:
         with:
           name: playwright-report
           path: |
-            web/playwright-report
-            web/test-results
+            frontends/web/playwright-report
+            frontends/web/test-results
           retention-days: 7
           if-no-files-found: ignore
 
@@ -1585,11 +1585,11 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
           cache-dependency-path: |
-            web/package-lock.json
+            frontends/web/package-lock.json
             electron/package-lock.json
 
       - name: Install web deps
-        working-directory: web
+        working-directory: frontends/web
         run: npm ci || npm install
 
       - name: Install electron deps

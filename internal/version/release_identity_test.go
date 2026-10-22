@@ -19,7 +19,7 @@ import (
 // the server's comparable on the About page, and the script refuses — exits
 // non-zero — rather than print nothing, which each caller's `set -e` turns
 // into a failed build. The script's behaviour is tested against real git
-// repositories in web/src/lib/__tests__/versionJson.test.ts.
+// repositories in frontends/web/src/lib/__tests__/versionJson.test.ts.
 //
 // control-plane's scripts/build-reliant-image.sh (the prod image) calls the
 // same script from the pinned tree and is pinned by its own test there.

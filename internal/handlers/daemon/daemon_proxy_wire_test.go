@@ -19,7 +19,7 @@ import (
 
 // What a client reads, over a real Connect client and the svcerr interceptor,
 // when a daemon command fails. The markers are the web's contract
-// (web/src/lib/daemon-errors.ts) and stay byte for byte: "no daemon connected"
+// (frontends/web/src/lib/daemon-errors.ts) and stay byte for byte: "no daemon connected"
 // with "still starting" / "suspended" means wait, "no daemon available" means
 // connect a machine. The daemon's own words reach the user; the router's and
 // the transport's do not.

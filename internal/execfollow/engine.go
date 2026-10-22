@@ -50,7 +50,7 @@ const maxConsecutiveErrors = 15
 type RawUpdate struct {
 	Seq       int64
 	Type      string // proto enum name, e.g. "CHAT_UPDATE_TYPE_NODE_EXECUTION"
-	Data      []byte // JSON payload (see web/src/types/streaming.ts shapes)
+	Data      []byte // JSON payload (see frontends/web/src/types/streaming.ts shapes)
 	CreatedAt time.Time
 }
 
@@ -490,7 +490,7 @@ func Succeeded(status, outcome string) bool {
 // ---- update mapping ----
 
 // nodeExecutionPayload mirrors the node_execution data JSON emitted by the
-// workflow runtime (see web/src/types/streaming.ts NodeExecutionUpdate).
+// workflow runtime (see frontends/web/src/types/streaming.ts NodeExecutionUpdate).
 type nodeExecutionPayload struct {
 	UpdateType       string          `json:"update_type"`
 	EventType        json.RawMessage `json:"event_type"`

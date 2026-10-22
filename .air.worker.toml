@@ -23,7 +23,7 @@ tmp_dir = "tmp/air-worker"
   args_bin = ["server", "worker"]
   cmd = "CGO_ENABLED=0 go build -buildvcs=false -o ./tmp/air-worker/reliant.tmp ./cmd/reliant && mv ./tmp/air-worker/reliant.tmp ./tmp/air-worker/reliant"
   delay = 1000
-  exclude_dir = ["assets", "tmp", "vendor", "testdata", "web", "mobile", "dist", ".claude_plan", "test", "electron", "node_modules", "e2e", ".reliant", "examples", "data", ".git", "scripts", "docs"]
+  exclude_dir = ["assets", "tmp", "vendor", "testdata", "frontends", "mobile", "dist", ".claude_plan", "test", "electron", "node_modules", "e2e", ".reliant", "examples", "data", ".git", "scripts", "docs"]
   exclude_file = []
   exclude_regex = ["_test\\.go$"]
   exclude_unchanged = false

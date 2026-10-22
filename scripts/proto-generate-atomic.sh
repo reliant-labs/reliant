@@ -12,7 +12,7 @@
 #
 # Why not `rm -rf <out-dirs> && buf generate`: that order deletes first and
 # generates second, so any generate failure (buf.build rate limiting, a
-# network blip, a bad proto) left gen/controlplane and web/src/gen/controlplane
+# network blip, a bad proto) left gen/controlplane and frontends/web/src/gen/controlplane
 # deleted — a tree that no longer builds, with nothing to roll back to.
 #
 # Instead buf writes into a scratch directory (`buf generate -o`, which

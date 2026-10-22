@@ -11,9 +11,9 @@ echo "🚀 Quick Installing Reliant..."
 
 # Ensure web dependencies are installed
 cd "$PROJECT_ROOT"
-if [ ! -d "web/node_modules" ]; then
+if [ ! -d "frontends/web/node_modules" ]; then
     echo "📦 Installing web dependencies..."
-    cd web && npm install && cd "$PROJECT_ROOT"
+    cd frontends/web && npm install && cd "$PROJECT_ROOT"
 fi
 
 # Ensure electron dependencies are installed
@@ -25,7 +25,7 @@ fi
 echo "📦 Generating Go docs/reference code..."
 go run tools/docgen/celref/main.go internal/workflow/v3 internal/workflow/v3/reference/cel_reference.go
 go run tools/docgen/refcheck/main.go
-go run tools/docgen/shortcuts/main.go config/shortcuts.yaml web/src/store/shortcutsData.generated.ts generated/docs-source/settings/keyboard-shortcuts.generated.md
+go run tools/docgen/shortcuts/main.go config/shortcuts.yaml frontends/web/src/store/shortcutsData.generated.ts generated/docs-source/settings/keyboard-shortcuts.generated.md
 
 # Generate protobuf code (pinned buf + local plugins)
 echo "📦 Generating protobuf code..."
@@ -36,9 +36,9 @@ echo "📦 Building V2 backend..."
 go build -buildvcs=false -o dist/reliant ./cmd/reliant/
 
 # Build web (if needed)
-if [ ! -d "web/dist" ] || [ "$1" = "--rebuild" ]; then
+if [ ! -d "frontends/web/dist" ] || [ "$1" = "--rebuild" ]; then
     echo "📦 Building web app..."
-    cd web && npm run build:alpha
+    cd frontends/web && npm run build:alpha
 else
     echo "⏭️  Skipping web build (already exists)"
 fi

@@ -103,7 +103,7 @@ echo "==> Writing electron/src/build-config.js"
 # skips devDependencies when it is "production", which would remove the very
 # toolchain (vite, typescript) this line invokes.
 echo "==> Building the renderer (tsc -b && vite build)"
-( cd web && NODE_ENV=production npm run build )
+( cd frontends/web && NODE_ENV=production npm run build )
 
 # The same gate the release and the web deploy run, on the artifact that is
 # about to be packaged. Without it this path could ship the leak above — a
@@ -111,7 +111,7 @@ echo "==> Building the renderer (tsc -b && vite build)"
 # release runs this in CI; a locally-packaged prod build has exactly as much
 # reason to.
 echo "==> Verifying the built bundle"
-node .github/scripts/verify-bundle.mjs --dist web/dist
+node .github/scripts/verify-bundle.mjs --dist frontends/web/dist
 
 echo "==> Building the Go backend binaries (mac)"
 ./scripts/build-electron.sh mac

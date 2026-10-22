@@ -1,7 +1,7 @@
 .git
-web/node_modules
-web/dist
-web/.vite
+frontends/web/node_modules
+frontends/web/dist
+frontends/web/.vite
 *.md
 **/*_test.go
 tmp/

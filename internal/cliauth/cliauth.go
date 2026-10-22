@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 	"os/exec"
 	"runtime"
 	"strings"
@@ -132,15 +131,9 @@ func New(deps Deps) Service {
 
 // DepsFromEnv locates the shared credentials file the way `forge login` does:
 // $FORGE_HOME, then $XDG_CONFIG_HOME, then the home directory
-// (forge/pkg/credentials.Dirs). It is the only place this package reads the
-// ambient environment.
+// (credentials.DirsFromEnv, forge's one reader of those variables).
 func DepsFromEnv() Deps {
-	home, _ := os.UserHomeDir()
-	return Deps{Dirs: credentials.Dirs{
-		ForgeHome:     os.Getenv("FORGE_HOME"),      //nolint:forbidigo // FORGE_HOME is forge's own variable (where forge keeps its credentials), not reliant configuration
-		XDGConfigHome: os.Getenv("XDG_CONFIG_HOME"), //nolint:forbidigo // ambient OS variable (XDG_CONFIG_HOME), not configuration
-		Home:          home,
-	}}
+	return Deps{Dirs: credentials.DirsFromEnv()}
 }
 
 func (a *adapter) Login(ctx context.Context, l Login) (credentials.Credential, error) {

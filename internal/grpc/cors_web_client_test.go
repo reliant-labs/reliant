@@ -17,7 +17,7 @@ package grpc
 // So these tests read the client's TypeScript source instead of a list copied
 // from it; a copied list is exactly what drifted. Every file is read with
 // os.ReadFile / os.ReadDir in this process, so Go's test cache sees the inputs
-// and an edit under web/src re-runs these tests even under -short.
+// and an edit under frontends/web/src re-runs these tests even under -short.
 
 import (
 	"io/fs"
@@ -42,10 +42,10 @@ var connectWebProtocolHeaders = []string{"Content-Type", "Connect-Protocol-Versi
 
 // dynamicRequestHeaders resolves header-name EXPRESSIONS the scanner cannot
 // read as a string literal or a same-file string const. Keyed by
-// "<path under web/src>:<expression>".
+// "<path under frontends/web/src>:<expression>".
 var dynamicRequestHeaders = map[string][]string{
 	// tracingInterceptor copies whatever the global OTel propagator injects.
-	// Nothing in web/src installs one, so the HyperDX SDK's provider.register()
+	// Nothing in frontends/web/src installs one, so the HyperDX SDK's provider.register()
 	// leaves the OTel default in place: W3C trace-context plus W3C baggage,
 	// which write exactly these three. requireDefaultPropagator keeps that
 	// assumption honest.
@@ -71,7 +71,7 @@ func TestCORSAllowsEveryWebClientRequestHeader(t *testing.T) {
 	// Guard the scanner itself: a regex that silently matches nothing would
 	// make this test pass vacuously.
 	if _, ok := sent["authorization"]; !ok {
-		t.Fatalf("scanner found no Authorization header in web/src (found %v); the extraction regex is broken", sortedKeys(sent))
+		t.Fatalf("scanner found no Authorization header in frontends/web/src (found %v); the extraction regex is broken", sortedKeys(sent))
 	}
 	for _, h := range connectWebProtocolHeaders {
 		sent[strings.ToLower(h)] = append(sent[strings.ToLower(h)], "@connectrpc/connect-web")
@@ -99,7 +99,7 @@ func TestCORSExposesEveryHeaderTheWebClientReads(t *testing.T) {
 
 	read := scanWebHeaderNames(t, webSrc, responseHeaderGetRe, nil)
 	if _, ok := read["x-reliant-reason"]; !ok {
-		t.Fatalf("scanner found no x-reliant-reason read in web/src (found %v); the extraction regex is broken", sortedKeys(read))
+		t.Fatalf("scanner found no x-reliant-reason read in frontends/web/src (found %v); the extraction regex is broken", sortedKeys(read))
 	}
 
 	handler := newCORSHandler([]string{webClientTestOrigin})(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
@@ -125,9 +125,9 @@ func TestCORSExposesEveryHeaderTheWebClientReads(t *testing.T) {
 // default) it reports a module-relative path, not a file on disk.
 func webSourceDir(t *testing.T) string {
 	t.Helper()
-	dir, err := filepath.Abs(filepath.Join("..", "..", "web", "src"))
+	dir, err := filepath.Abs(filepath.Join("..", "..", "frontends", "web", "src"))
 	if err != nil {
-		t.Fatalf("resolve web/src: %v", err)
+		t.Fatalf("resolve frontends/web/src: %v", err)
 	}
 	if _, err := os.Stat(dir); err != nil {
 		t.Fatalf("web client source not found at %s: %v", dir, err)
@@ -218,7 +218,7 @@ func resolveHeaderName(fileText, expr string) ([]string, bool) {
 }
 
 // requireDefaultPropagator pins the assumption behind
-// dynamicRequestHeaders["api/transport.ts:key"]: web/src never installs its own
+// dynamicRequestHeaders["api/transport.ts:key"]: frontends/web/src never installs its own
 // propagator, so the SDK's default (W3C trace-context and baggage) is the one
 // that injects headers. A custom or composite propagator added here would
 // inject headers this test does not know to check.
@@ -250,7 +250,7 @@ func requireDefaultPropagator(t *testing.T, webSrc string) {
 		return nil
 	})
 	if err != nil {
-		t.Fatalf("scanning web/src for propagators: %v", err)
+		t.Fatalf("scanning frontends/web/src for propagators: %v", err)
 	}
 	if len(installs) != 0 {
 		t.Fatalf("%v installs a global propagator; update dynamicRequestHeaders[\"api/transport.ts:key\"] "+

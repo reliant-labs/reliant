@@ -29,8 +29,8 @@ linters:
       # Gitignored scratch space for throwaway reproduction programs. Not part
       # of the build or the repo, so it should not gate the lint.
       - tmp
-      # npm packages that ship Go sources (web/node_modules/flatted/golang)
-      # once `task deps` installs web/ and electron/: not this module's code,
+      # npm packages that ship Go sources (frontends/web/node_modules/flatted/golang)
+      # once `task deps` installs frontends/web/ and electron/: not this module's code,
       # and `task ci` needs them installed for its web and electron rows.
       - node_modules
     

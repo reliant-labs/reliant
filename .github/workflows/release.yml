@@ -110,7 +110,7 @@ jobs:
           node-version: "24"
           cache: "npm"
           cache-dependency-path: |
-            web/package-lock.json
+            frontends/web/package-lock.json
             electron/package-lock.json
 
       - name: Extract Electron tool versions from package.json
@@ -138,7 +138,7 @@ jobs:
           echo "Using Electron cache versions: electron=$ELECTRON_VERSION, electron-builder=$ELECTRON_BUILDER_VERSION"
 
       - name: Install web dependencies
-        working-directory: web
+        working-directory: frontends/web
         run: npm ci --legacy-peer-deps --prefer-offline
 
       # NO CODE GENERATION HERE. Generated code is committed, and PR CI's
@@ -151,7 +151,7 @@ jobs:
       # UNREVIEWED code: protoc-gen-go/-connect-go `@latest` instead of the
       # go.mod pins, remote buf plugins on the rate-limited Buf Schema
       # Registry, and a cache keyed on proto/ alone that, on a hit, restored
-      # a web/src/gen from some earlier release over the committed one.
+      # a frontends/web/src/gen from some earlier release over the committed one.
 
       # The renderer's build-time config, from control-plane's KCL.
       #
@@ -215,7 +215,7 @@ jobs:
       # A release is the LAST place to skip the check, so it runs the same
       # gate the hosted frontend does.
       - name: Build React frontend
-        working-directory: web
+        working-directory: frontends/web
         # NODE_ENV=production is scoped to this command, NOT the step, and NOT
         # the job. Vite honours NODE_ENV even under `vite build`, so a leaked
         # `development` folds `import.meta.env.DEV` to TRUE inside a production
@@ -260,13 +260,13 @@ jobs:
       # this run fails anyway, release-health.yml opens a `release:failed`
       # issue for the tag.
       - name: Verify the built bundle
-        run: node .github/scripts/verify-bundle.mjs --dist web/dist
+        run: node .github/scripts/verify-bundle.mjs --dist frontends/web/dist
 
       - name: Upload web build artifact
         uses: actions/upload-artifact@v4
         with:
           name: web-dist
-          path: web/dist
+          path: frontends/web/dist
           retention-days: 1
           compression-level: 6 # Faster upload with good compression
 
@@ -582,7 +582,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: web-dist
-          path: web/dist
+          path: frontends/web/dist
 
       - name: Download backend (darwin-amd64)
         uses: actions/download-artifact@v4
@@ -772,7 +772,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: web-dist
-          path: web/dist
+          path: frontends/web/dist
 
       - name: Download backend (linux-amd64)
         uses: actions/download-artifact@v4
@@ -922,7 +922,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: web-dist
-          path: web/dist
+          path: frontends/web/dist
 
       - name: Download backend (windows-amd64)
         uses: actions/download-artifact@v4

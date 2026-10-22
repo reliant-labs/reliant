@@ -5,7 +5,7 @@
 # This file is the single source of truth for all keyboard shortcuts in Reliant.
 #
 # GENERATED FILES (do not edit directly):
-#   - web/src/store/shortcutsData.generated.ts  (TypeScript constants)
+#   - frontends/web/src/store/shortcutsData.generated.ts  (TypeScript constants)
 #   - generated/docs-source/settings/keyboard-shortcuts.generated.md (Documentation source)
 #
 # To regenerate after changes:
@@ -189,7 +189,7 @@ shortcuts:
   #
   # Each is a toggle-ish move: focusing a hidden pane reveals it first, and
   # `focusPrevious` sends the cursor back where it came from when a pane is
-  # closed or dismissed. See web/src/lib/keyboard/focus.ts.
+  # closed or dismissed. See frontends/web/src/lib/keyboard/focus.ts.
   - id: focusChat
     name: Focus Chat Input
     description: Move the cursor to the chat composer

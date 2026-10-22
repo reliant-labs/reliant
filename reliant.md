@@ -39,7 +39,7 @@ For the usual `forge env up` stack, every log — backend, browser console, Elec
 
 ## Load these skills before touching their area
 
-- `web-styling` — any styling/layout change under `web/src` (semantic tokens, the `bg-muted` elevation trap).
+- `web-styling` — any styling/layout change under `frontends/web/src` (semantic tokens, the `bg-muted` elevation trap).
 - `onboarding-flow` — onboarding, or anything that creates a daemon during it (a background effect can complete onboarding with no user action).
 - `oauth-provider-login` — Claude/Codex provider OAuth (Electron daemon callback vs `reliant auth serve`).
 

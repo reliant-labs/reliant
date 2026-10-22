@@ -318,7 +318,7 @@ func locateTypeScriptLib(t *testing.T) string {
 	dir := wd
 	for {
 		for _, candidate := range []string{
-			filepath.Join(dir, "web", "node_modules", "typescript"),
+			filepath.Join(dir, "frontends", "web", "node_modules", "typescript"),
 			filepath.Join(dir, "electron", "node_modules", "typescript"),
 			filepath.Join(dir, "node_modules", "typescript"),
 		} {
@@ -332,7 +332,7 @@ func locateTypeScriptLib(t *testing.T) string {
 		}
 		dir = parent
 	}
-	t.Skip("no typescript install found (run npm install in web/)")
+	t.Skip("no typescript install found (run npm install in frontends/web/)")
 	return ""
 }
 
@@ -642,7 +642,7 @@ func TestCodeContext_ScopeKeepsWorkspaceExcludesDependencies(t *testing.T) {
 		{filepath.Join(root, "forge/pkg/z.go"), true, "linked sibling repo"},
 		{"/usr/local/go/src/fmt/errors.go", false, "standard library"},
 		{"/home/u/go/pkg/mod/github.com/x/y@v1/a.go", false, "module cache"},
-		{filepath.Join(root, "web/node_modules/@types/react/index.d.ts"), false, "npm dependency inside the root"},
+		{filepath.Join(root, "frontends/web/node_modules/@types/react/index.d.ts"), false, "npm dependency inside the root"},
 		{filepath.Join(root, "vendor/github.com/a/b.go"), false, "vendored dependency inside the root"},
 		{filepath.Join(root, ".venv/lib/python3/site.py"), false, "python venv inside the root"},
 	} {

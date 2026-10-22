@@ -64,9 +64,9 @@ done
 
 ## How the browser half gets there — do not add another log location
 
-`web/src/lib/browser-log-boot.ts` (imported FIRST in `main.tsx`, before any
+`frontends/web/src/lib/browser-log-boot.ts` (imported FIRST in `main.tsx`, before any
 other import can log) wraps `console.*` and POSTs to `/__forge/log`; the Vite
-plugin in `web/vite-plugin-browser-logs.ts` prints each line to its own stdout,
+plugin in `frontends/web/vite-plugin-browser-logs.ts` prints each line to its own stdout,
 which forge already captures. It runs in Electron too — the renderer is the
 same origin as a browser tab, so treating them differently is what previously
 made the UI go dark with no clue why.

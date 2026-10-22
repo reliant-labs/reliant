@@ -70,7 +70,7 @@ func (a *ThreadStatusActivity) Name() string {
 
 // wireStatusFromVerb maps a lifecycle verb to the status string the UI's
 // thread records use. The UI treats a thread as active on "running"/"active"
-// only (useIsThreadActive in web/src/store/threadActivityStore.ts), so
+// only (useIsThreadActive in frontends/web/src/store/threadActivityStore.ts), so
 // emitting the raw verb "started" read as NOT-active: a spawned sub-thread
 // showed no thinking indicator for its whole run, because "started" arrives
 // last and overwrites the "running" record the spawn path had already
@@ -202,7 +202,7 @@ func (a *ThreadStatusActivity) resolveMailbox(ctx context.Context, threadID stri
 }
 
 // emitThreadUpdate mirrors the lifecycle change onto chat_updates. The shape
-// matches ActiveThreadUpdate in web/src/types/streaming.ts.
+// matches ActiveThreadUpdate in frontends/web/src/types/streaming.ts.
 //
 // Every field a consumer needs must be on THIS row, because it is frequently
 // read alone. The client merges successive thread updates and carries missing

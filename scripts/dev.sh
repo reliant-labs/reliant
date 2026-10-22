@@ -12,7 +12,7 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-WEB_DIR="$PROJECT_ROOT/web"
+WEB_DIR="$PROJECT_ROOT/frontends/web"
 ELECTRON_DIR="$PROJECT_ROOT/electron"
 DEV_DIR="$PROJECT_ROOT/data"
 LOG_FILE="$DEV_DIR/logs.txt"
@@ -295,7 +295,7 @@ fi
 echo -e "${GREEN}✅ Protobuf code generated${NC}"
 
 # Generate docs, shortcuts, and presets from sources of truth
-# Source: config/shortcuts.yaml -> web/src/store/shortcutsData.generated.ts
+# Source: config/shortcuts.yaml -> frontends/web/src/store/shortcutsData.generated.ts
 # Source: internal/llm/tools/*.go -> generated/docs/tools-reference.md
 # Source: generated reference docs -> docs/reference/*.mdx and workflow-builder SKILL.md
 print_step "Generating docs and shortcuts..."

@@ -14,7 +14,7 @@ import (
 // the identifiers live on Runtime — one struct deeper than extractChatID and
 // extractThread used to look. So writeErrorEvent answered "no chat_id in
 // input" for CallLLM and SaveMessage alike and wrote nothing, while
-// web/src/components/Chat/WorkflowErrorMessage.tsx sat fully built, retry
+// frontends/web/src/components/Chat/WorkflowErrorMessage.tsx sat fully built, retry
 // states and all, and never rendered once.
 //
 // Measured over a day of worker logs: 26 error events attempted, 26 skipped, 0

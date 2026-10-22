@@ -125,7 +125,7 @@ func copyEntry(src, dst string, info fs.FileInfo) error {
 		return fmt.Errorf("clear destination: %w", err)
 	}
 	// One clone call for the whole entry — file or directory tree — where the
-	// filesystem supports it. Measured on APFS, reliant's web/node_modules
+	// filesystem supports it. Measured on APFS, reliant's frontends/web/node_modules
 	// (605MB, 42k files): 1.2s cloned whole, 6.6s cloned file by file, 22s
 	// byte-copied. Clones also share blocks until written, so a copied
 	// node_modules costs almost no disk.

@@ -1,0 +1,500 @@
+{
+  "name": "reliant: frontend",
+  "tags": [
+    "forge",
+    "generated"
+  ],
+  "tiles": [
+    {
+      "id": "t-js-errors",
+      "x": 0,
+      "y": 0,
+      "w": 6,
+      "h": 4,
+      "config": {
+        "name": "JS errors",
+        "source": "Traces",
+        "displayType": "number",
+        "select": [
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "alias": "errors"
+          }
+        ],
+        "where": "ResourceAttributes['rum.sessionId'] != '' AND lower(StatusCode) = 'error' AND SpanAttributes['component'] NOT IN ('fetch', 'xml-http-request')",
+        "whereLanguage": "sql",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 0,
+          "thousandSeparated": true
+        }
+      }
+    },
+    {
+      "id": "t-sessions",
+      "x": 6,
+      "y": 0,
+      "w": 6,
+      "h": 4,
+      "config": {
+        "name": "Sessions",
+        "source": "Traces",
+        "displayType": "number",
+        "select": [
+          {
+            "aggFn": "count_distinct",
+            "valueExpression": "ResourceAttributes['rum.sessionId']",
+            "alias": "sessions"
+          }
+        ],
+        "where": "ResourceAttributes['rum.sessionId'] != ''",
+        "whereLanguage": "sql",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 0,
+          "thousandSeparated": true
+        }
+      }
+    },
+    {
+      "id": "t-page-views",
+      "x": 12,
+      "y": 0,
+      "w": 6,
+      "h": 4,
+      "config": {
+        "name": "Page views",
+        "source": "Traces",
+        "displayType": "number",
+        "select": [
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "alias": "views"
+          }
+        ],
+        "where": "ResourceAttributes['rum.sessionId'] != '' AND SpanName IN ('documentLoad', 'routeChange')",
+        "whereLanguage": "sql",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 0,
+          "thousandSeparated": true
+        }
+      }
+    },
+    {
+      "id": "t-api-failures",
+      "x": 18,
+      "y": 0,
+      "w": 6,
+      "h": 4,
+      "config": {
+        "name": "Failed API calls",
+        "source": "Traces",
+        "displayType": "number",
+        "select": [
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "alias": "failures"
+          }
+        ],
+        "where": "ResourceAttributes['rum.sessionId'] != '' AND SpanAttributes['component'] IN ('fetch', 'xml-http-request') AND toFloat64OrZero(SpanAttributes['http.status_code']) \u003e= 400",
+        "whereLanguage": "sql",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 0,
+          "thousandSeparated": true
+        }
+      }
+    },
+    {
+      "id": "t-errors-over-time",
+      "x": 0,
+      "y": 4,
+      "w": 24,
+      "h": 6,
+      "config": {
+        "name": "JS errors over time",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "alias": "errors"
+          }
+        ],
+        "where": "ResourceAttributes['rum.sessionId'] != '' AND lower(StatusCode) = 'error' AND SpanAttributes['component'] NOT IN ('fetch', 'xml-http-request')",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 0,
+          "thousandSeparated": true
+        }
+      }
+    },
+    {
+      "id": "t-lcp",
+      "x": 0,
+      "y": 10,
+      "w": 6,
+      "h": 4,
+      "config": {
+        "name": "LCP p75",
+        "source": "Traces",
+        "displayType": "number",
+        "select": [
+          {
+            "aggFn": "quantile",
+            "level": 0.75,
+            "valueExpression": "toFloat64OrZero(SpanAttributes['lcp'])",
+            "alias": "lcp p75"
+          }
+        ],
+        "where": "ResourceAttributes['rum.sessionId'] != '' AND SpanName = 'webvitals' AND SpanAttributes['lcp'] != ''",
+        "whereLanguage": "sql",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 1,
+          "thousandSeparated": true,
+          "unit": "ms"
+        }
+      }
+    },
+    {
+      "id": "t-inp",
+      "x": 6,
+      "y": 10,
+      "w": 6,
+      "h": 4,
+      "config": {
+        "name": "INP p75",
+        "source": "Traces",
+        "displayType": "number",
+        "select": [
+          {
+            "aggFn": "quantile",
+            "level": 0.75,
+            "valueExpression": "toFloat64OrZero(SpanAttributes['inp'])",
+            "alias": "inp p75"
+          }
+        ],
+        "where": "ResourceAttributes['rum.sessionId'] != '' AND SpanName = 'webvitals' AND SpanAttributes['inp'] != ''",
+        "whereLanguage": "sql",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 1,
+          "thousandSeparated": true,
+          "unit": "ms"
+        }
+      }
+    },
+    {
+      "id": "t-cls",
+      "x": 12,
+      "y": 10,
+      "w": 6,
+      "h": 4,
+      "config": {
+        "name": "CLS p75",
+        "source": "Traces",
+        "displayType": "number",
+        "select": [
+          {
+            "aggFn": "quantile",
+            "level": 0.75,
+            "valueExpression": "toFloat64OrZero(SpanAttributes['cls'])",
+            "alias": "cls p75"
+          }
+        ],
+        "where": "ResourceAttributes['rum.sessionId'] != '' AND SpanName = 'webvitals' AND SpanAttributes['cls'] != ''",
+        "whereLanguage": "sql"
+      }
+    },
+    {
+      "id": "t-fcp",
+      "x": 18,
+      "y": 10,
+      "w": 6,
+      "h": 4,
+      "config": {
+        "name": "FCP p75",
+        "source": "Traces",
+        "displayType": "number",
+        "select": [
+          {
+            "aggFn": "quantile",
+            "level": 0.75,
+            "valueExpression": "toFloat64OrZero(SpanAttributes['fcp'])",
+            "alias": "fcp p75"
+          }
+        ],
+        "where": "ResourceAttributes['rum.sessionId'] != '' AND SpanName = 'webvitals' AND SpanAttributes['fcp'] != ''",
+        "whereLanguage": "sql",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 1,
+          "thousandSeparated": true,
+          "unit": "ms"
+        }
+      }
+    },
+    {
+      "id": "t-ttfb",
+      "x": 0,
+      "y": 14,
+      "w": 6,
+      "h": 4,
+      "config": {
+        "name": "TTFB p75",
+        "source": "Traces",
+        "displayType": "number",
+        "select": [
+          {
+            "aggFn": "quantile",
+            "level": 0.75,
+            "valueExpression": "toFloat64OrZero(SpanAttributes['ttfb'])",
+            "alias": "ttfb p75"
+          }
+        ],
+        "where": "ResourceAttributes['rum.sessionId'] != '' AND SpanName = 'webvitals' AND SpanAttributes['ttfb'] != ''",
+        "whereLanguage": "sql",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 1,
+          "thousandSeparated": true,
+          "unit": "ms"
+        }
+      }
+    },
+    {
+      "id": "t-vitals-by-route",
+      "x": 0,
+      "y": 18,
+      "w": 24,
+      "h": 8,
+      "config": {
+        "name": "Web vitals by route",
+        "source": "Traces",
+        "displayType": "table",
+        "select": [
+          {
+            "aggFn": "quantile",
+            "level": 0.75,
+            "valueExpression": "toFloat64OrZero(SpanAttributes['lcp'])",
+            "aggCondition": "SpanAttributes['lcp'] != ''",
+            "aggConditionLanguage": "sql",
+            "alias": "lcp p75"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.75,
+            "valueExpression": "toFloat64OrZero(SpanAttributes['inp'])",
+            "aggCondition": "SpanAttributes['inp'] != ''",
+            "aggConditionLanguage": "sql",
+            "alias": "inp p75"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.75,
+            "valueExpression": "toFloat64OrZero(SpanAttributes['cls'])",
+            "aggCondition": "SpanAttributes['cls'] != ''",
+            "aggConditionLanguage": "sql",
+            "alias": "cls p75"
+          },
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "aggCondition": "SpanAttributes['lcp'] != ''",
+            "aggConditionLanguage": "sql",
+            "alias": "samples"
+          }
+        ],
+        "where": "ResourceAttributes['rum.sessionId'] != '' AND SpanName = 'webvitals'",
+        "whereLanguage": "sql",
+        "groupBy": "SpanAttributes['location.href']"
+      }
+    },
+    {
+      "id": "t-errors-by-release",
+      "x": 0,
+      "y": 26,
+      "w": 24,
+      "h": 7,
+      "config": {
+        "name": "JS errors by release",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "alias": "errors"
+          }
+        ],
+        "where": "ResourceAttributes['rum.sessionId'] != '' AND lower(StatusCode) = 'error' AND SpanAttributes['component'] NOT IN ('fetch', 'xml-http-request')",
+        "whereLanguage": "sql",
+        "groupBy": "ResourceAttributes['service.version']",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 0,
+          "thousandSeparated": true
+        }
+      }
+    },
+    {
+      "id": "t-page-load",
+      "x": 0,
+      "y": 33,
+      "w": 24,
+      "h": 7,
+      "config": {
+        "name": "Page load p50 / p90 / p99",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "quantile",
+            "level": 0.5,
+            "valueExpression": "Duration/1e6",
+            "alias": "p50"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.9,
+            "valueExpression": "Duration/1e6",
+            "alias": "p90"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.99,
+            "valueExpression": "Duration/1e6",
+            "alias": "p99"
+          }
+        ],
+        "where": "ResourceAttributes['rum.sessionId'] != '' AND SpanName = 'documentLoad'",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 1,
+          "thousandSeparated": true,
+          "unit": "ms"
+        }
+      }
+    },
+    {
+      "id": "t-api-latency",
+      "x": 0,
+      "y": 40,
+      "w": 12,
+      "h": 7,
+      "config": {
+        "name": "API call latency (browser)",
+        "source": "Traces",
+        "displayType": "line",
+        "select": [
+          {
+            "aggFn": "quantile",
+            "level": 0.5,
+            "valueExpression": "Duration/1e6",
+            "alias": "p50"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.95,
+            "valueExpression": "Duration/1e6",
+            "alias": "p95"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.99,
+            "valueExpression": "Duration/1e6",
+            "alias": "p99"
+          }
+        ],
+        "where": "ResourceAttributes['rum.sessionId'] != '' AND SpanAttributes['component'] IN ('fetch', 'xml-http-request')",
+        "whereLanguage": "sql",
+        "granularity": "auto",
+        "numberFormat": {
+          "output": "number",
+          "mantissa": 1,
+          "thousandSeparated": true,
+          "unit": "ms"
+        }
+      }
+    },
+    {
+      "id": "t-api-calls",
+      "x": 12,
+      "y": 40,
+      "w": 12,
+      "h": 7,
+      "config": {
+        "name": "API calls by URL",
+        "source": "Traces",
+        "displayType": "table",
+        "select": [
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "alias": "calls"
+          },
+          {
+            "aggFn": "count",
+            "valueExpression": "",
+            "aggCondition": "toFloat64OrZero(SpanAttributes['http.status_code']) \u003e= 400",
+            "aggConditionLanguage": "sql",
+            "alias": "failures"
+          },
+          {
+            "aggFn": "quantile",
+            "level": 0.95,
+            "valueExpression": "Duration/1e6",
+            "alias": "p95"
+          }
+        ],
+        "where": "ResourceAttributes['rum.sessionId'] != '' AND SpanAttributes['component'] IN ('fetch', 'xml-http-request')",
+        "whereLanguage": "sql",
+        "groupBy": "SpanAttributes['http.url']"
+      }
+    },
+    {
+      "id": "t-browser-console",
+      "x": 0,
+      "y": 47,
+      "w": 24,
+      "h": 9,
+      "config": {
+        "name": "Browser console and error events",
+        "source": "Traces",
+        "displayType": "search",
+        "select": "Timestamp, ServiceName, SpanName, SpanAttributes['error.message']",
+        "where": "ResourceAttributes['rum.sessionId'] != '' AND SpanName IN ('console.error', 'console.warn', 'onerror', 'unhandledrejection')",
+        "whereLanguage": "sql"
+      }
+    }
+  ],
+  "filters": [
+    {
+      "id": "filter-service",
+      "type": "QUERY_EXPRESSION",
+      "name": "service.name",
+      "expression": "ServiceName",
+      "source": "Traces",
+      "whereLanguage": "sql"
+    },
+    {
+      "id": "filter-env",
+      "type": "QUERY_EXPRESSION",
+      "name": "deployment.environment.name",
+      "expression": "ResourceAttributes['deployment.environment.name']",
+      "source": "Traces",
+      "whereLanguage": "sql"
+    }
+  ]
+}

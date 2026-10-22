@@ -147,7 +147,7 @@ func NewAPIHTTPRoutes(deps APIHTTPRoutesDeps) (*APIHTTPRoutes, error) {
 
 	// JSON health endpoint on the API listener so the frontend can discover
 	// auth_mode without needing to reach the dedicated health port
-	// (web/src/hooks/useAuthMode.ts).
+	// (frontends/web/src/hooks/useAuthMode.ts).
 	authMode := settings.ModeName()
 	handle("/health", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -202,7 +202,7 @@ func terminalTokenValidator(settings auth.Settings) auth.TokenValidator {
 var corsAllowedHeaders = []string{
 	"Accept", "Authorization", "Content-Type", "Connect-Protocol-Version", "Connect-Timeout-Ms",
 	"X-CSRF-Token", "traceparent", "tracestate", "sentry-trace", "baggage", "Range",
-	// The last DAEMON_HEARTBEAT the web client saw (web/src/api/transport.ts),
+	// The last DAEMON_HEARTBEAT the web client saw (frontends/web/src/api/transport.ts),
 	// which lets the auth interceptor skip the IsDaemonOnline query. The client
 	// attaches it to every RPC once a cloud machine heartbeats; missing here,
 	// it made every web RPC fail CORS for any user with a running machine.
@@ -219,7 +219,7 @@ var corsAllowedHeaders = []string{
 var corsExposedHeaders = []string{
 	"Link", "Content-Range", "Accept-Ranges", "Content-Length",
 	// The billing/quota reason and upgrade link on a Connect error. The web
-	// client's upgradeInterceptor (web/src/api/upgradeInterceptor.ts) reads
+	// client's upgradeInterceptor (frontends/web/src/api/upgradeInterceptor.ts) reads
 	// them on errors from every transport to open the upgrade and
 	// billing-email modals instead of a raw error toast.
 	"X-Reliant-Reason", "X-Reliant-Upgrade-Url",

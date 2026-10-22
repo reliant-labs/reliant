@@ -59,7 +59,7 @@ func IsDaemonPending(err error) bool {
 //
 // The text keeps the "no daemon connected" marker (daemonoffline.ErrorSubstring)
 // and the word "suspended", which together are what the web's machine-wait
-// classification keys on (web/src/lib/daemon-errors.ts), even where a surface
+// classification keys on (frontends/web/src/lib/daemon-errors.ts), even where a surface
 // shows this sentinel without the router's wrapping.
 //
 // It is ErrDaemonPending under its own message (svcerr.WithMessage), so the

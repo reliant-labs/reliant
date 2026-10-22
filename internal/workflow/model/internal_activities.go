@@ -4,7 +4,7 @@ package model
 // renders, because the work they did is already visible some other way.
 //
 // This is the server half of a decision the frontend also makes, in
-// web/src/components/Chat/thread-views/activityIndicators.ts
+// frontends/web/src/components/Chat/thread-views/activityIndicators.ts
 // (INTERNAL_ACTIVITIES). The two lists MUST agree, and this comment is the only
 // thing that says so, so they are worth changing together:
 //

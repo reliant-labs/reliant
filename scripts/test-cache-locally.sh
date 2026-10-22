@@ -51,7 +51,7 @@ echo "Checking required paths..."
 echo ""
 
 # Package lock files (must exist)
-check_path "web/package-lock.json" "Web package-lock.json exists" true
+check_path "frontends/web/package-lock.json" "Web package-lock.json exists" true
 check_path "electron/package-lock.json" "Electron package-lock.json exists" true
 check_path "go.sum" "Go.sum exists" true
 
@@ -60,7 +60,7 @@ echo "Checking cache target directories..."
 echo ""
 
 # Node modules (should exist if installed)
-check_path "web/node_modules" "Web node_modules" false
+check_path "frontends/web/node_modules" "Web node_modules" false
 check_path "electron/node_modules" "Electron node_modules" false
 
 # Electron cache (created on first electron-builder run)
@@ -68,9 +68,9 @@ check_path "$HOME/.cache/electron" "Electron cache directory" false
 check_path "$HOME/.cache/electron-builder" "Electron-builder cache directory" false
 
 # Build outputs (created after build)
-check_path "web/dist" "Web build output" false
-check_path "web/.vite" "Vite cache directory" false
-check_path "web/node_modules/.vite" "Vite module cache" false
+check_path "frontends/web/dist" "Web build output" false
+check_path "frontends/web/.vite" "Vite cache directory" false
+check_path "frontends/web/node_modules/.vite" "Vite module cache" false
 
 # Go cache
 check_path "$HOME/go/pkg/mod" "Go modules cache" false
@@ -95,7 +95,7 @@ else
     echo -e "${RED}❌ Some checks failed${NC}"
     echo ""
     echo "Missing required files. Please ensure:"
-    echo "  1. You've run 'npm install' in web/ and electron/"
+    echo "  1. You've run 'npm install' in frontends/web/ and electron/"
     echo "  2. Go dependencies are downloaded: 'go mod download'"
     echo "  3. You're in the project root directory"
 fi

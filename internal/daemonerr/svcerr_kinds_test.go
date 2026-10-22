@@ -15,7 +15,7 @@ import (
 )
 
 // What a client reads for each machine state. The markers are the web's
-// contract (web/src/lib/daemon-errors.ts): "no daemon connected" with "still
+// contract (frontends/web/src/lib/daemon-errors.ts): "no daemon connected" with "still
 // starting" / "suspended" means wait, "no daemon available" means connect a
 // machine. The router's sentence for the user stays; its plumbing ("resolving
 // daemon for command") does not.

@@ -7,7 +7,7 @@ Packages the web app + Go backend into a native desktop application.
 - **Main Process (`src/main.js`)**: App lifecycle, backend process management, window creation
 - **Preload Script (`src/preload.js`)**: Safely exposes APIs to the renderer process
 - **Supporting Modules** (`src/`): Backend management, window management, auth storage, auto-updates, logging, data migration
-- **Web App**: React frontend from `../web/`
+- **Web App**: React frontend from `../frontends/web/`
 - **Go Backend**: API server from the main project directory
 
 ## Development
@@ -181,4 +181,4 @@ electron/
 Check that a port was allocated in `.dev-ports.sh` and that Go is in PATH. Check console logs in DevTools.
 
 ### Build fails
-Ensure web app builds successfully first (`npm run build` in `web/`), then verify Go backend compiles.
+Ensure web app builds successfully first (`npm run build` in `frontends/web/`), then verify Go backend compiles.

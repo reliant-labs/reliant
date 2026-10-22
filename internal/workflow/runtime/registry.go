@@ -1222,7 +1222,7 @@ func (w *ActivityWrapper[I, O]) writeErrorEvent(
 	errorID := activityErrorEventID(workflowID, activityID)
 
 	// Build error data matching the ErrorUpdate interface expected by frontend
-	// See web/src/types/streaming.ts ErrorUpdate interface
+	// See frontends/web/src/types/streaming.ts ErrorUpdate interface
 	isRetrying := activityIsRetrying(attemptNumber, maxAttempts, err)
 	errorData := map[string]interface{}{
 		"update_type":    "error",
@@ -1466,7 +1466,7 @@ func extractChatID(input interface{}) string {
 // them, writeErrorEvent bailed out with "no chat_id in input", and NOT ONE
 // activity error ever reached the chat. Measured over a day of worker logs: 26
 // error events attempted, 26 skipped, 0 written — while
-// web/src/components/Chat/WorkflowErrorMessage.tsx sat fully built, retry
+// frontends/web/src/components/Chat/WorkflowErrorMessage.tsx sat fully built, retry
 // states and all, and never rendered once.
 //
 // That is how a chat can stop dead with nothing on screen: the failure is real,

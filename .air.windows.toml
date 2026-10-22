@@ -9,7 +9,7 @@ tmp_dir = "tmp"
   # Using cmd /c to properly chain commands on Windows
   cmd = "go build -buildvcs=false -o dist/reliant.exe ./cmd/reliant/"
   delay = 1000
-  exclude_dir = ["assets", "tmp", "vendor", "testdata", "web", "mobile", "dist", ".claude_plan", "test", "electron", "node_modules", "e2e", "internal/gen", "web/src/gen", "data"]
+  exclude_dir = ["assets", "tmp", "vendor", "testdata", "frontends", "mobile", "dist", ".claude_plan", "test", "electron", "node_modules", "e2e", "internal/gen", "frontends/web/src/gen", "data"]
   exclude_file = []
   exclude_regex = ["_test.go"]
   exclude_unchanged = false

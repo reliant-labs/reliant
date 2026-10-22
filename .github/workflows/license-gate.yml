@@ -26,8 +26,8 @@ on:
     paths:
       - "go.mod"
       - "go.sum"
-      - "web/package.json"
-      - "web/package-lock.json"
+      - "frontends/web/package.json"
+      - "frontends/web/package-lock.json"
       - ".license-allowlist"
       - ".license-allowlist-npm"
       - "scripts/check-licenses.sh"
@@ -38,8 +38,8 @@ on:
     paths:
       - "go.mod"
       - "go.sum"
-      - "web/package.json"
-      - "web/package-lock.json"
+      - "frontends/web/package.json"
+      - "frontends/web/package-lock.json"
       - ".license-allowlist"
       - ".license-allowlist-npm"
       - "scripts/check-licenses.sh"
@@ -105,18 +105,18 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: web/package-lock.json
+          cache-dependency-path: frontends/web/package-lock.json
 
       # `npm ci` installs from the lockfile, which is what the gate inspects —
       # and it is the same command the build and test jobs run, so the tree
       # checked here is the tree that ships.
       - name: Install
-        working-directory: web
+        working-directory: frontends/web
         run: npm ci --no-audit --no-fund
 
       - name: Check npm dependency licenses
-        run: ./scripts/check-npm-licenses.sh web
+        run: ./scripts/check-npm-licenses.sh frontends/web
 
       - name: Full license inventory (on failure)
         if: failure()
-        run: ./scripts/check-npm-licenses.sh --list web
+        run: ./scripts/check-npm-licenses.sh --list frontends/web

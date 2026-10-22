@@ -21,7 +21,7 @@ import (
 // chat rpcs' bare svcerr kinds reach a Connect client with the code and the
 // exact text the web and the CLI read. The markers here are contracts:
 //   - "chat has not started" (FailedPrecondition) routes a send to StartChat
-//     (web/src/lib/chatSendRouting.ts);
+//     (frontends/web/src/lib/chatSendRouting.ts);
 //   - Aborted is the selection version conflict ChatInput / chatSelection.ts
 //     reload on.
 func TestChatService_ErrorsOverTheWire(t *testing.T) {

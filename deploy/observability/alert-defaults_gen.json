@@ -1,7 +1,8 @@
 {
   "version": "forge.alert-defaults/v2",
   "input": {
-    "project": "reliant"
+    "project": "reliant",
+    "frontend_service": "reliant-frontend"
   },
   "defaults": [
     {
@@ -74,6 +75,63 @@
           "name": "min_active_hours",
           "default": 18,
           "doc": "of the previous 24h, the hours the service must have served requests in to count as steady (a quiet staging service never pages)"
+        }
+      ]
+    },
+    {
+      "id": "frontend-js-errors",
+      "alert": "FrontendJSErrorSpike",
+      "title": "Frontend JS errors spiking against the 1h baseline",
+      "severity": "warning",
+      "for": "10m",
+      "interval": "1m",
+      "signal": "traces",
+      "params": [
+        {
+          "name": "spike_factor",
+          "default": 3,
+          "doc": "times the baseline rate that fires"
+        },
+        {
+          "name": "window_minutes",
+          "default": 10,
+          "doc": "minutes of the current window"
+        },
+        {
+          "name": "baseline_minutes",
+          "default": 60,
+          "doc": "minutes before the window that set the baseline rate"
+        },
+        {
+          "name": "min_errors",
+          "default": 10,
+          "doc": "fewer errors than this in the window never fire"
+        }
+      ]
+    },
+    {
+      "id": "frontend-lcp-poor",
+      "alert": "FrontendLCPPoor",
+      "title": "Frontend Largest Contentful Paint p75 is poor",
+      "severity": "info",
+      "for": "10m",
+      "interval": "5m",
+      "signal": "traces",
+      "params": [
+        {
+          "name": "threshold_ms",
+          "default": 4000,
+          "doc": "p75 LCP in milliseconds that fires (Core Web Vitals call above 4000 poor)"
+        },
+        {
+          "name": "window_minutes",
+          "default": 30,
+          "doc": "minutes the percentile is computed over"
+        },
+        {
+          "name": "min_samples",
+          "default": 100,
+          "doc": "fewer LCP measurements than this in the window never fire"
         }
       ]
     },

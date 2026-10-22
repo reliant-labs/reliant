@@ -18,7 +18,7 @@ It is the first thing to run before pushing. It does not replace the full lane
 | Lane | Command it runs | Selected by |
 |---|---|---|
 | Go | `go test -short -timeout 60s <pkgs>` (cached, no `-race`) | the changed package, **plus every package whose test binary imports it** |
-| web | `npx vitest run <files>` in `web/` | every vitest file that imports a changed module, transitively |
+| web | `npx vitest run <files>` in `frontends/web/` | every vitest file that imports a changed module, transitively |
 | electron | `npm test` in `electron/` | any change under `electron/`, or a changed file an electron test names |
 | forge-generate | `make forge-generate-check`, first: forge.yaml's pinned `forge generate`, failing (and naming each file) if it changed anything | a change to something forge reads or writes: `proto/**`, `db/**`, a `contract.go` or `doc.go`, `internal/handlers/**`, `*_gen.go`, `gen/**`, `deploy/**`, `forge.yaml`, `go.mod`/`go.sum`, `buf.yaml`/`buf.gen.yaml` (`forgeInputs` in `rules.go`) |
 | docs-generate | `make docs-generate-check`, second (in a heavy slot): every docs generator (the Makefile's `DOCGEN_TARGETS`), failing (and naming each file) if it changed anything | a change to something a docs generator reads or writes (below) |
@@ -81,15 +81,15 @@ rule claims and no Go package owns runs **everything** (fail-safe).
 | a file a Go test names in a path literal (`deploy/...`, `config/...`) | only the packages that name it |
 | `db/migrations/**`, `internal/db/migrations/**` | the packages with DB-backed tests. Their tests skip under `-short`, so they run only when **you** set `DATABASE_URL` (then under `REQUIRE_TEST_DB=1`); otherwise the plan says so |
 | `proto/**/*.proto`, `proto-vendor/**/*.proto` | its generated Go package and the vitest files importing its `_pb.ts` |
-| `web/src/**` module | the vitest files importing it (import graph below) |
-| `web/src/**/*.test.ts(x)` | that test only |
+| `frontends/web/src/**` module | the vitest files importing it (import graph below) |
+| `frontends/web/src/**/*.test.ts(x)` | that test only |
 | a file a web or electron test reads at run time | those tests |
-| `web/e2e/**` | nothing (Playwright is separate) |
+| `frontends/web/e2e/**` | nothing (Playwright is separate) |
 | `electron/**` | the electron lane |
 | `docs/**`, `**/*.md`, `.github/**`, `research/**`, lint config | nothing, unless a test names the file |
 | `go.mod`, `go.sum`, `tools/tools.go` | **Go: full** (`go.mod`/`go.sum` also run forge-generate and docs-generate) |
 | `package.json`, lockfiles at the root | **web and electron: full** |
-| `web/package.json`, `vite.config.ts`, `tsconfig*.json`, `tailwind`/`postcss` config, `web/src/test/setup.ts` | **web: full** |
+| `frontends/web/package.json`, `vite.config.ts`, `tsconfig*.json`, `tailwind`/`postcss` config, `frontends/web/src/test/setup.ts` | **web: full** |
 | `Makefile`, `buf*.yaml` | **everything: full** |
 | `forge.yaml` (the forge pin) | Go and forge-generate: full |
 | `proto/**` that is not a `.proto` | **Go and web: full** |
@@ -113,8 +113,8 @@ What counts as naming a path (`scanSources`, `literalCandidates` in
   argument, because that is the directory the literals after it are relative to
   (package string constants count as literals):
   - joined from the first argument on, the path is relative to the package
-    directory, where `go test` runs: `filepath.Join("..", "..", "web", "src")` in
-    `internal/grpc` names `web/src`;
+    directory, where `go test` runs: `filepath.Join("..", "..", "frontends", "web", "src")` in
+    `internal/grpc` names `frontends/web/src`;
   - joined onto the repo root, it names that path under the root:
     `filepath.Join(repoRoot(t), "scripts", name)` names `scripts/`. The root is
     whatever the package's sources derive from `os.Getwd()`,
@@ -124,7 +124,7 @@ What counts as naming a path (`scanSources`, `literalCandidates` in
   - joined onto anything else (`t.TempDir()`, a fixture's checkout, a parameter)
     it names a directory outside the repo and is **no read at all**:
     `filepath.Join(ws, "web")` builds a fixture's `web` checkout, not a read of
-    `web/`. Before this rule such fixtures made every web-only diff run their
+    `frontends/web/`. Before this rule such fixtures made every web-only diff run their
     Go packages.
 - **Any other literal is judged alone**: a multi-segment one that is a tracked
   file or directory (`"deploy/kcl/main.k"` in a table) is a read wherever it is
@@ -144,7 +144,7 @@ without that, a type import of a hub module (`routeSchemas.ts`) made one
 leaf change select 523 of 750 test files. The result was checked against vitest's
 own `related` selection for five changed files (`logger.ts`, `transport.ts`, `ChatMessage.tsx`,
 `deliveryScope.ts`, a test file): it was a superset every time, with nothing missing
-(it also selects the tests that read whole directories of `web/`, which vitest
+(it also selects the tests that read whole directories of `frontends/web/`, which vitest
 cannot see).
 
 **Known blind spots** (both directions are over-selection except these):
@@ -178,12 +178,12 @@ waits for. Nothing a PR skips is deleted; it runs on the next push to main.
 - **What decides a PR's lanes.** The `Detect what changed` job runs this tool
   (`plan -base <merge base>`) for the Go package and vitest file selection, and
   path patterns (in the job's script) for the rest: lint and the e2e stories
-  run unless the change is confined to `web/`, `electron/`, docs, research or
+  run unless the change is confined to `frontends/web/`, `electron/`, docs, research or
   `.github/`; codegen drift runs unless it is confined to the frontends,
-  electron, research or `.github/` (the generated `web/src/gen/` and
-  `shortcutsData.generated.ts` still count); the web build runs on `web/`, the
+  electron, research or `.github/` (the generated `frontends/web/src/gen/` and
+  `shortcutsData.generated.ts` still count); the web build runs on `frontends/web/`, the
   root Node manifests, `electron/release.config.json` or `verify-bundle.mjs`;
-  Playwright on `web/` changes that are not unit tests; the electron package on
+  Playwright on `frontends/web/` changes that are not unit tests; the electron package on
   `electron/` or the web build config. Its job summary prints the decision.
 - **A PR that changes `pr-ci.yml` runs everything**, so a CI change is proven
   against the whole PR path it changes.
@@ -256,7 +256,7 @@ waits for. Nothing a PR skips is deleted; it runs on the next push to main.
 
 ## Parallelism and timeouts
 
-- **vitest** (`web/vite.config.ts`): one worker per core, capped at 8, and the
+- **vitest** (`frontends/web/vite.config.ts`): one worker per core, capped at 8, and the
   5-second test timeout scales 1x to 6x with the one-minute load per core. On an
   idle machine nothing changes. Under load (many agents share the box) a "timed
   out in 5000ms" is the machine, not the code. `VITEST_MAX_WORKERS` and

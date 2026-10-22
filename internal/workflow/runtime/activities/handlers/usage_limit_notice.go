@@ -68,7 +68,7 @@ func noticeWindowName(window string) string {
 // noticeClock is a time inside a notice's text: an RFC 3339 UTC instant in a
 // <time:...> token. The worker does not know the reader's time zone (it runs in
 // UTC), so it stores the instant and the web renders it in the reader's zone
-// (web/src/lib/providerNotice.ts). Read as plain text, as the model reads it,
+// (frontends/web/src/lib/providerNotice.ts). Read as plain text, as the model reads it,
 // the token is still an unambiguous time.
 func noticeClock(t time.Time) string {
 	return "<time:" + t.UTC().Format(time.RFC3339) + ">"

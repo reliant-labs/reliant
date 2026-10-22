@@ -124,7 +124,7 @@ type Graph struct {
 	Walkers map[string]bool
 	// DBTests are the packages whose test files use the DB test helpers.
 	DBTests map[string]bool
-	// Web is the import graph of web/ (nil when web/ is absent).
+	// Web is the import graph of frontends/web/ (nil when frontends/web/ is absent).
 	Web *WebGraph
 	// ElectronText holds the source of electron tests that name files outside
 	// electron/src (repo-relative path -> text).
@@ -430,15 +430,15 @@ func readPackageSources(dir, rel string) pkgSources {
 // directory the literals after it are relative to:
 //
 //   - literals from the first argument on are relative to the package
-//     directory, where go test runs: filepath.Join("..", "..", "web", "src")
-//     in internal/grpc names web/src;
+//     directory, where go test runs: filepath.Join("..", "..", "frontends", "web", "src")
+//     in internal/grpc names frontends/web/src;
 //   - literals joined onto the repo root (rootFacts.locates) name that path
 //     under the root: filepath.Join(repoRoot(t), "scripts", name) names
 //     scripts;
 //   - literals joined onto anything else (t.TempDir(), a fixture's checkout,
 //     a workspace) name a path under that directory, not in this repo, and
 //     are no read at all: filepath.Join(ws, "web") is a fixture's web
-//     checkout, not web/.
+//     checkout, not frontends/web/.
 //
 // Every other literal is judged alone, as it always was: a multi-segment
 // literal that matches a tracked path is a read wherever it is anchored, and a

@@ -17,7 +17,7 @@
 // reported, through the hooks below.
 //
 // This is the main-process copy of a policy that also runs in the renderer
-// (web/src/lib/sentryScrub.ts) and on the backend
+// (frontends/web/src/lib/sentryScrub.ts) and on the backend
 // (internal/telemetry/scrub.go). Keep the three in step.
 
 'use strict';

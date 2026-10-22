@@ -29,6 +29,115 @@
     "cmd/reliant/main.go": {
       "scaffolded_at": "2026-10-21T14:18:55Z"
     },
+    "frontends/web/src/hooks/approval-service-hooks.test.tsx": {
+      "scaffolded_at": "2026-10-22T21:38:55Z"
+    },
+    "frontends/web/src/hooks/attachment-service-hooks.test.tsx": {
+      "scaffolded_at": "2026-10-22T21:38:55Z"
+    },
+    "frontends/web/src/hooks/background-service-hooks.test.tsx": {
+      "scaffolded_at": "2026-10-22T21:38:55Z"
+    },
+    "frontends/web/src/hooks/catalog-service-hooks.test.tsx": {
+      "scaffolded_at": "2026-10-22T21:38:55Z"
+    },
+    "frontends/web/src/hooks/chat-service-hooks.test.tsx": {
+      "scaffolded_at": "2026-10-22T21:38:55Z"
+    },
+    "frontends/web/src/hooks/connection-service-hooks.test.tsx": {
+      "scaffolded_at": "2026-10-22T21:38:55Z"
+    },
+    "frontends/web/src/hooks/connector-service-hooks.test.tsx": {
+      "scaffolded_at": "2026-10-22T21:38:55Z"
+    },
+    "frontends/web/src/hooks/daemon-registry-service-hooks.test.tsx": {
+      "scaffolded_at": "2026-10-22T21:38:55Z"
+    },
+    "frontends/web/src/hooks/daemon-service-hooks.test.tsx": {
+      "scaffolded_at": "2026-10-22T21:38:55Z"
+    },
+    "frontends/web/src/hooks/file-system-service-hooks.test.tsx": {
+      "scaffolded_at": "2026-10-22T21:38:55Z"
+    },
+    "frontends/web/src/hooks/forge-service-hooks.test.tsx": {
+      "scaffolded_at": "2026-10-22T21:38:55Z"
+    },
+    "frontends/web/src/hooks/inbox-service-hooks.test.tsx": {
+      "scaffolded_at": "2026-10-22T21:38:55Z"
+    },
+    "frontends/web/src/hooks/mcp-service-hooks.test.tsx": {
+      "scaffolded_at": "2026-10-22T21:38:55Z"
+    },
+    "frontends/web/src/hooks/message-service-hooks.test.tsx": {
+      "scaffolded_at": "2026-10-22T21:38:55Z"
+    },
+    "frontends/web/src/hooks/model-endpoint-service-hooks.test.tsx": {
+      "scaffolded_at": "2026-10-22T21:38:55Z"
+    },
+    "frontends/web/src/hooks/package-commands-service-hooks.test.tsx": {
+      "scaffolded_at": "2026-10-22T21:38:55Z"
+    },
+    "frontends/web/src/hooks/plan-service-hooks.test.tsx": {
+      "scaffolded_at": "2026-10-22T21:38:55Z"
+    },
+    "frontends/web/src/hooks/preset-service-hooks.test.tsx": {
+      "scaffolded_at": "2026-10-22T21:38:55Z"
+    },
+    "frontends/web/src/hooks/project-service-hooks.test.tsx": {
+      "scaffolded_at": "2026-10-22T21:38:55Z"
+    },
+    "frontends/web/src/hooks/provider-account-service-hooks.test.tsx": {
+      "scaffolded_at": "2026-10-22T21:38:55Z"
+    },
+    "frontends/web/src/hooks/question-service-hooks.test.tsx": {
+      "scaffolded_at": "2026-10-22T21:38:55Z"
+    },
+    "frontends/web/src/hooks/repo-service-hooks.test.tsx": {
+      "scaffolded_at": "2026-10-22T21:38:55Z"
+    },
+    "frontends/web/src/hooks/run-service-hooks.test.tsx": {
+      "scaffolded_at": "2026-10-22T21:38:55Z"
+    },
+    "frontends/web/src/hooks/settings-service-hooks.test.tsx": {
+      "scaffolded_at": "2026-10-22T21:38:55Z"
+    },
+    "frontends/web/src/hooks/system-service-hooks.test.tsx": {
+      "scaffolded_at": "2026-10-22T21:38:55Z"
+    },
+    "frontends/web/src/hooks/task-service-hooks.test.tsx": {
+      "scaffolded_at": "2026-10-22T21:38:55Z"
+    },
+    "frontends/web/src/hooks/terminal-service-hooks.test.tsx": {
+      "scaffolded_at": "2026-10-22T21:38:56Z"
+    },
+    "frontends/web/src/hooks/token-service-hooks.test.tsx": {
+      "scaffolded_at": "2026-10-22T21:38:56Z"
+    },
+    "frontends/web/src/hooks/tool-call-service-hooks.test.tsx": {
+      "scaffolded_at": "2026-10-22T21:38:56Z"
+    },
+    "frontends/web/src/hooks/trigger-service-hooks.test.tsx": {
+      "scaffolded_at": "2026-10-22T21:38:55Z"
+    },
+    "frontends/web/src/hooks/workflow-service-hooks.test.tsx": {
+      "scaffolded_at": "2026-10-22T21:38:56Z"
+    },
+    "frontends/web/src/hooks/worktree-service-hooks.test.tsx": {
+      "scaffolded_at": "2026-10-22T21:38:55Z"
+    },
+    "frontends/web/src/lib/api-base.ts": {
+      "scaffolded_at": "2026-10-22T21:38:56Z"
+    },
+    "frontends/web/src/lib/connect.ts": {
+      "scaffolded_at": "2026-10-22T21:38:56Z"
+    },
+    "frontends/web/src/lib/test-utils.tsx": {
+      "scaffolded_at": "2026-10-22T21:38:56Z"
+    },
+    "frontends/web/src/mocks/scenarios/default.ts": {
+      "scaffolded_at": "2026-10-22T21:40:52Z",
+      "birth_hash": "1ec0efc7e39a0a83dd7bd360b6ebaa7bb0a7bcd37383563b2bfe0331611fc201"
+    },
     "internal/app/auth.go": {},
     "internal/app/providers.go": {
       "scaffolded_at": "2026-10-21T14:18:41Z"

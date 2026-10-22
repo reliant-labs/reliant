@@ -23,7 +23,7 @@ function captureRegistration() {
 }
 
 test('app:// is declared secure, so crypto.subtle exists in the renderer', () => {
-  // PKCE sign-in (web/src/lib/pkce.ts) needs SHA-256, and crypto.subtle is
+  // PKCE sign-in (frontends/web/src/lib/pkce.ts) needs SHA-256, and crypto.subtle is
   // exposed ONLY in a secure context. A custom scheme is not trustworthy by
   // default: without `secure` the renderer gets window.isSecureContext === false
   // and Claude/Codex sign-in fails in the S256 step with InsecureContextError.

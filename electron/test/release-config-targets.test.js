@@ -4,7 +4,7 @@
 //
 // The failure this prevents is the v1.7.5 one, and it is silent. `vite build`
 // reads VITE_* straight from the process environment, and `electron-builder`
-// happily packages whatever `web/dist` contains. So an npm target that runs
+// happily packages whatever `frontends/web/dist` contains. So an npm target that runs
 // them WITHOUT exporting the release config produces an installer that builds
 // green, passes every runtime check, and ships with VITE_CONTROL_PLANE_API_URL
 // undefined — which is what made coupons throw "Control plane API URL not

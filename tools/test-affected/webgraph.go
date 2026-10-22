@@ -20,7 +20,7 @@ import (
 var webSpecifier = regexp.MustCompile(`["'` + "`" + `]((?:\.{1,2}(?:/[^"'` + "`" + `\s]*)?|@/[^"'` + "`" + `\s]*))["'` + "`" + `]`)
 
 // typeOnly matches `import type ... from "x"` and `export type ... from "x"`:
-// web/tsconfig sets verbatimModuleSyntax, so esbuild erases them and they are
+// frontends/web/tsconfig sets verbatimModuleSyntax, so esbuild erases them and they are
 // never a runtime edge. (`import { type A } from "x"` is NOT erased: it stays
 // as a side-effect import, so it is kept.)
 var typeOnly = regexp.MustCompile(`(?s)\b(?:import|export)\s+type\b[^;"']*?\bfrom\s*["'][^"']*["']`)
@@ -29,7 +29,7 @@ var webExts = []string{".ts", ".tsx", ".js", ".jsx", ".mjs", ".json", ".css"}
 
 // isWebCode is a file whose text the graph scans.
 func isWebCode(p string) bool {
-	if !strings.HasPrefix(p, "web/") {
+	if !strings.HasPrefix(p, "frontends/web/") {
 		return false
 	}
 	switch path.Ext(p) {
@@ -41,7 +41,7 @@ func isWebCode(p string) bool {
 
 // IsWebTestFile is what vitest's default include picks up, minus the Playwright specs.
 func IsWebTestFile(p string) bool {
-	if !strings.HasPrefix(p, "web/") || strings.HasPrefix(p, "web/e2e/") || strings.Contains(p, "/node_modules/") {
+	if !strings.HasPrefix(p, "frontends/web/") || strings.HasPrefix(p, "frontends/web/e2e/") || strings.Contains(p, "/node_modules/") {
 		return false
 	}
 	b := path.Base(p)
@@ -59,7 +59,7 @@ var fileReadMarkers = []string{"readFileSync", "readdirSync", "existsSync", "sta
 // walkMarkers make a web test read a whole tree: any web source change selects it.
 var walkMarkers = []string{"readdirSync", "readdir(", "globSync", "fast-glob", "import.meta.glob", "walkDir", "walkSync"}
 
-// WebGraph is the import graph of web/, as the files reaching each test.
+// WebGraph is the import graph of frontends/web/, as the files reaching each test.
 type WebGraph struct {
 	// Tests are the vitest test files (repo-relative).
 	Tests []string
@@ -72,13 +72,13 @@ type WebGraph struct {
 	Walkers []string
 }
 
-// BuildWebGraph scans the web/ sources under root. files is every tracked or
+// BuildWebGraph scans the frontends/web/ sources under root. files is every tracked or
 // untracked repo path; read returns a file's text.
 func BuildWebGraph(files []string, read func(string) (string, bool)) *WebGraph {
 	exists := map[string]bool{}
 	var code []string
 	for _, f := range files {
-		if strings.HasPrefix(f, "web/") {
+		if strings.HasPrefix(f, "frontends/web/") {
 			exists[f] = true
 		}
 		if isWebCode(f) {
@@ -156,7 +156,7 @@ func webDeps(from, text string, exists map[string]bool) []string {
 		}
 		var target string
 		if strings.HasPrefix(spec, "@/") {
-			target = path.Join("web/src", strings.TrimPrefix(spec, "@/"))
+			target = path.Join("frontends/web/src", strings.TrimPrefix(spec, "@/"))
 		} else {
 			target = path.Join(path.Dir(from), spec)
 		}

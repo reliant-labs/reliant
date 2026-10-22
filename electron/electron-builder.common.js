@@ -65,7 +65,7 @@ const config = {
       filter: ["**/*"]
     },
     {
-      from: "../web/dist",
+      from: "../frontends/web/dist",
       to: "web",
       filter: ["**/*"]
     },

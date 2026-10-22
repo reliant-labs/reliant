@@ -31,8 +31,8 @@
 //
 // ## Usage
 //
-//   node .github/scripts/verify-bundle.mjs --dist web/dist
-//   node .github/scripts/verify-bundle.mjs --dist web/dist --config electron/release.config.json
+//   node .github/scripts/verify-bundle.mjs --dist frontends/web/dist
+//   node .github/scripts/verify-bundle.mjs --dist frontends/web/dist --config electron/release.config.json
 //
 // Exits non-zero on any failed check, printing a GitHub Actions ::error:: line.
 
@@ -48,7 +48,7 @@ function argValue(flag, fallback) {
   return i !== -1 ? args[i + 1] : fallback;
 }
 
-const distDir = resolve(argValue("--dist", join(REPO_ROOT, "web", "dist")));
+const distDir = resolve(argValue("--dist", join(REPO_ROOT, "frontends", "web", "dist")));
 const configPath = resolve(
   argValue("--config", join(REPO_ROOT, "electron", "release.config.json")),
 );
@@ -73,7 +73,7 @@ const NOT_IN_BUNDLE = {
   VITE_GATEWAY_URL:
     "read only by getGatewayURL(), reachable only through envPrefix(), which " +
     "returns early when VITE_CLI_DEFAULTS_BAKED is \"true\" (see " +
-    "web/src/lib/cli-commands.ts). In a prod build that branch is " +
+    "frontends/web/src/lib/cli-commands.ts). In a prod build that branch is " +
     "dead-code-eliminated, so the hostname is correctly absent.",
 };
 
@@ -131,7 +131,7 @@ if (!existsSync(indexHtmlPath)) {
 
 // ── 2. Not a dev build pointed at its own origin ─────────────────────────────
 //
-// web/src/lib/protocol.ts:
+// frontends/web/src/lib/protocol.ts:
 //   isSameOriginTransport = () => import.meta.env.DEV && !isPackagedRendererOrigin()
 //
 // In a correct production build that conjunct is statically false, the branch
@@ -208,7 +208,7 @@ if (localhostHits.length) {
 // vite.config.ts pins `base: "/"`. A RELATIVE base ("./") is silently fine at
 // depth 0 and broken at depth 2+: from /auth/github/callback, `./assets/x.js`
 // resolves to /auth/github/assets/x.js, 404s, receives the SPA fallback's
-// index.html, and dies with "Expected a JavaScript module". web/src/routes.tsx
+// index.html, and dies with "Expected a JavaScript module". frontends/web/src/routes.tsx
 // declares 21 routes with 2+ segments, and they are exactly the OAuth and
 // billing return URLs a user arrives at COLD from an external redirect with no
 // warm bundle — which is why this class presents as a redirect bug.

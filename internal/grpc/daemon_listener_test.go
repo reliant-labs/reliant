@@ -49,13 +49,13 @@ func TestDaemonChainRefusesAUserService(t *testing.T) {
 // open a daemon stream.
 func TestUserChainRefusesTheDaemonService(t *testing.T) {
 	passThrough := connect.UnaryInterceptorFunc(func(next connect.UnaryFunc) connect.UnaryFunc { return next })
-	chain, err := serverkit.NewChain(serverkit.ChainDeps{Auth: serverkit.AuthFor(serverkit.AudienceUser, passThrough)})
+	chain, err := NewUserChain(UserChainDeps{Auth: passThrough})
 	require.NoError(t, err)
 
 	path, handler := reliantv1connect.NewToolsDaemonServiceHandler(reliantv1connect.UnimplementedToolsDaemonServiceHandler{})
 	_, err = serverkit.NewListener(serverkit.ListenerDeps{
 		Config: listenerConfig("127.0.0.1", 0).Listener(),
-		Chain:  chain,
+		Chain:  chain.Chain,
 		Routes: mountOne(path, handler, reliantv1connect.ToolsDaemonServiceName),
 	})
 	require.ErrorContains(t, err, reliantv1connect.ToolsDaemonServiceName)

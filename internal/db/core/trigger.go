@@ -414,7 +414,7 @@ type TriggerEvent struct {
 // trigger. It is trigger.sender.kind.
 type TriggerSenderKind string
 
-// The sender kinds. A test in web/ mirrors this list.
+// The sender kinds. A test in frontends/web/ mirrors this list.
 const (
 	TriggerSenderKindSlack    TriggerSenderKind = "slack"
 	TriggerSenderKindGitHub   TriggerSenderKind = "github"

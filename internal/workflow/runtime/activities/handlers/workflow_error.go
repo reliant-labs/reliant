@@ -89,7 +89,7 @@ func (a *WorkflowErrorActivity) Execute(ctx context.Context, input WorkflowError
 // returns the id it was written under.
 //
 // This is the payload shape the frontend's ErrorUpdate interface reads
-// (web/src/types/streaming.ts), and it lives here — outside the activity — so
+// (frontends/web/src/types/streaming.ts), and it lives here — outside the activity — so
 // that callers who are NOT running inside a workflow can emit the same error
 // the workflow would have. The reconciler is the motivating one: on a hard
 // Temporal termination the worker never receives another workflow task, so no
@@ -110,7 +110,7 @@ func WriteWorkflowError(ctx context.Context, repo WorkflowErrorWriter, input Wor
 	}
 
 	// Build error data matching the ErrorUpdate interface expected by frontend
-	// See web/src/types/streaming.ts ErrorUpdate interface
+	// See frontends/web/src/types/streaming.ts ErrorUpdate interface
 	errorData := map[string]interface{}{
 		"update_type":   "error",
 		"id":            errorID,

@@ -48,7 +48,7 @@ is dropped (React StrictMode double effects, retried RPCs).
 
 ## Web: `trackEvent` → ClickStack span (and Sentry while it is on)
 
-`web/src/lib/analytics.ts` `trackEvent(name, props)` sends to the sinks
+`frontends/web/src/lib/analytics.ts` `trackEvent(name, props)` sends to the sinks
 `telemetrySinks.ts` selects:
 
 - **ClickStack**: forge web runtime `track("product.<name>", props)` — one span

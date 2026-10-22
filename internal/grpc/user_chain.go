@@ -7,6 +7,7 @@ import (
 	"log/slog"
 
 	"connectrpc.com/connect"
+	"github.com/reliant-labs/forge/pkg/activity"
 	"github.com/reliant-labs/forge/pkg/observe"
 	"github.com/reliant-labs/forge/pkg/serverkit"
 
@@ -90,6 +91,10 @@ type UserChainDeps struct {
 //     authenticator stashes (authn), and reliant's stashes its own
 //     (auth.WithUser), so every call would be audited as anonymous. The API
 //     has never been audited; auditing it is its own change.
+//   - The Activity slot names the caller through reliant's own auth context
+//     (Principal): forge's default reads forge claims, which reliant's auth
+//     does not stash, so it would record every event as system:anonymous.
+//     Events go to the log writer (activity.event at INFO), not a store.
 //   - No protovalidate. The protos carry buf.validate rules that no layer
 //     has ever enforced, and the handlers check what they need themselves;
 //     turning enforcement on changes what some requests are answered, so it
@@ -113,10 +118,15 @@ func NewUserChain(deps UserChainDeps) (*UserChain, error) {
 	if deps.Auth == nil {
 		return nil, errors.New("user chain: UserChainDeps.Auth is required")
 	}
+	activityIC, err := activity.Interceptor(activity.Deps{Principal: Principal{}, Logger: deps.Logger})
+	if err != nil {
+		return nil, fmt.Errorf("user chain: %w", err)
+	}
 	chain, err := serverkit.NewChain(serverkit.ChainDeps{
-		Auth:   serverkit.AuthFor(serverkit.AudienceUser, deps.Auth),
-		Logger: deps.Logger,
-		Audit:  serverkit.NoAudit,
+		Auth:     serverkit.AuthFor(serverkit.AudienceUser, deps.Auth),
+		Logger:   deps.Logger,
+		Audit:    serverkit.NoAudit,
+		Activity: activityIC,
 		// A failed RPC reaches Sentry once, as forge's "rpc failed" line
 		// through the slog bridge (internal/logging), grouped per procedure
 		// and code. The process handler trusts a record that already carries

@@ -88,7 +88,7 @@ differs from what its protos export.
 
 Generated clients:
 
-- TypeScript: \`web/src/gen/controlplane/\` (e.g. \`services/deploy/v1/deploy_pb.ts\`)
+- TypeScript: \`frontends/web/src/gen/controlplane/\` (e.g. \`services/deploy/v1/deploy_pb.ts\`)
 - Go:         \`gen/controlplane/\` (e.g. \`services/billing/v1\`)
 
 ## Status: EXPERIMENTAL

@@ -2,7 +2,7 @@
 # release-identity.sh — THE answer to "which reliant is this build?"
 #
 # Every artifact that reports a version derives it here: the web bundle (Vite,
-# web/vite-plugin-version-json.ts, which also writes /version.json), the Go
+# frontends/web/vite-plugin-version-json.ts, which also writes /version.json), the Go
 # binary's internal/version.Version (Makefile, release.yml, build-images.yml,
 # and control-plane's scripts/build-reliant-image.sh, which builds the prod
 # reliant image). One resolver, so the About page's "app" and "server" lines

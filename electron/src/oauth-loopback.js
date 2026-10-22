@@ -39,7 +39,7 @@
  * NOT a cross-origin fetch. The redirect is a TOP-LEVEL NAVIGATION to
  * loopback, which browsers permit; it does not trigger Chrome's Local Network
  * Access prompt (that fires for background requests from a public origin, like
- * the /health probe in web/src/hooks/useOAuthAvailability.ts).
+ * the /health probe in frontends/web/src/hooks/useOAuthAvailability.ts).
  */
 const http = require("http");
 const log = require("electron-log");

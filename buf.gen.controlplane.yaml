@@ -8,7 +8,7 @@
 # control-plane's CI. No *Admin or internal-service API is in it.
 #
 # Output mirrors the proto paths under a `controlplane/` root, e.g.
-#   services/deploy/v1/deploy.proto -> web/src/gen/controlplane/services/deploy/v1/deploy_pb.ts
+#   services/deploy/v1/deploy.proto -> frontends/web/src/gen/controlplane/services/deploy/v1/deploy_pb.ts
 #   services/billing/v1/billing.proto -> gen/controlplane/services/billing/v1/*.go
 #
 # Regenerate with:  make proto-generate-controlplane
@@ -57,7 +57,7 @@ plugins:
     opt:
       - paths=source_relative
   - local: [node, tools/protoc-gen-es/node_modules/protoc-gen-es-v2.12.0/bin/protoc-gen-es]
-    out: web/src/gen/controlplane
+    out: frontends/web/src/gen/controlplane
     # forge/v1/forge.proto is imported for method annotations only; it has to be
     # emitted too or the generated descriptors reference a file that is absent.
     include_imports: true

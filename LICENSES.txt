@@ -33,7 +33,7 @@ SOFTWARE.
 2. HyperDX (https://github.com/hyperdxio/hyperdx)
 -------------------------------------------------
 
-The trace waterfall in web/src/components/Forge/Observability/waterfall/
+The trace waterfall in frontends/web/src/components/Forge/Observability/waterfall/
 (traceTree.ts, TraceWaterfall.tsx) is ported from HyperDX's
 packages/app/src/components/DBTraceWaterfallChart.tsx: the span-tree build,
 its placeholder-parent and multi-root handling, the per-level collapse

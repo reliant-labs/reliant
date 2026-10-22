@@ -76,6 +76,9 @@ type DaemonChainDeps struct {
 //     acting-user id instead, so every daemon call would be audited as
 //     anonymous. The daemon surface has never been audited; auditing it is
 //     its own change.
+//   - No activity layer. The daemon audience's rpcs (ConnectDaemon,
+//     ConnectGateway, WhoAmI, ReportToolResult) write no activity event,
+//     and the daemon credential is not a forge claim the default could read.
 //   - The Deadline slot is reliant's, not forge's 30s default: see the
 //     field below.
 //   - No payload cap. A daemon stream carries tool results and file content
@@ -91,10 +94,11 @@ func NewDaemonChain(deps DaemonChainDeps) (*DaemonChain, error) {
 		return nil, fmt.Errorf("daemon chain: %w", err)
 	}
 	chain, err := serverkit.NewChain(serverkit.ChainDeps{
-		Auth:   deps.Auth.Authenticator,
-		Logger: deps.Logger,
-		Trace:  trace,
-		Audit:  serverkit.NoAudit,
+		Auth:     deps.Auth.Authenticator,
+		Logger:   deps.Logger,
+		Trace:    trace,
+		Audit:    serverkit.NoAudit,
+		Activity: serverkit.NoActivity,
 		// A failed RPC is classified as on the API listener (see
 		// NewUserChain): a stream this listener ends because it is
 		// draining is an expected outcome, never an ERROR.

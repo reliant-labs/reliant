@@ -137,9 +137,9 @@ coverage/
 test-results/
 playwright-report/
 playwright/.cache/
-web/test-results/
-web/playwright-report/
-web/coverage/
+frontends/web/test-results/
+frontends/web/playwright-report/
+frontends/web/coverage/
 
 # Temporary files
 *.tmp
@@ -264,7 +264,7 @@ dev/
 # Source of truth files and what they generate:
 #
 # Keyboard Shortcuts (from config/shortcuts.yaml):
-#   -> web/src/store/shortcutsData.generated.ts
+#   -> frontends/web/src/store/shortcutsData.generated.ts
 #   -> generated/docs-source/settings/keyboard-shortcuts.generated.md
 #
 # Workflow/schema/model/tool reference docs:
@@ -331,8 +331,8 @@ tools/docgen/*/types
 /tools-daemon
 /daemon-gateway
 /autotune
-# Stray binaries in subdirs (e.g. web/api-server)
-web/api-server
+# Stray binaries in subdirs (e.g. frontends/web/api-server)
+frontends/web/api-server
 logsnippet.txt
 internal/db/schema.sql
 
@@ -346,7 +346,7 @@ goroutines.txt
 .serena/
 console.logs
 
-web/data
+frontends/web/data
 # Local-only patterns for the forbidden-strings pre-commit guard (never committed)
 .forbidden-strings
 

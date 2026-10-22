@@ -9,7 +9,7 @@ function Write-ColorOutput {
 }
 
 $PROJECT_ROOT = Split-Path -Parent $PSScriptRoot
-$WEB_DIR = Join-Path $PROJECT_ROOT "web"
+$WEB_DIR = Join-Path $PROJECT_ROOT "frontends/web"
 $ELECTRON_DIR = Join-Path $PROJECT_ROOT "electron"
 $DEV_DIR = Join-Path $PROJECT_ROOT "data"
 $LOG_FILE = Join-Path $DEV_DIR "logs.txt"

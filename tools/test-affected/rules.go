@@ -42,7 +42,7 @@ var forgeInputs = []string{
 	"forge.yaml", "go.mod", "go.sum", "buf.yaml", "buf.gen.yaml",
 	"proto/**", "db/**",
 	"**/contract.go", "**/doc.go", "**/*_gen.go", "internal/handlers/**",
-	"gen/**", "web/src/gen/**", "pkg/config/**", "deploy/**",
+	"gen/**", "frontends/web/src/gen/**", "pkg/config/**", "deploy/**",
 	".forge/hashes.json", ".forge/scaffolded.json", ".forge/disowned.json",
 	// generate.hooks: controlplane-client.
 	"proto-vendor/**", "buf.gen.controlplane.yaml", "scripts/proto-generate-atomic.sh",
@@ -106,7 +106,7 @@ var docGenPaths = []string{
 	"generated/docs-source/**",
 	"docs/reference/*.mdx",
 	"docs/changelog.mdx",
-	"web/src/store/shortcutsData.generated.ts",
+	"frontends/web/src/store/shortcutsData.generated.ts",
 	"internal/workflow/runtime/schema/field_descriptions.go",
 	"internal/skills/catalog/builtin/workflow-builder/SKILL.md",
 }
@@ -135,7 +135,7 @@ type rule struct {
 
 	// noGraph: do not also map the file to the Go package owning its directory.
 	noGraph bool
-	// protoGen: map proto/<dir>/x.proto to gen/<dir> (Go) and web/src/gen/<dir>.
+	// protoGen: map proto/<dir>/x.proto to gen/<dir> (Go) and frontends/web/src/gen/<dir>.
 	protoGen bool
 	// dbFan: select every package with DB-backed tests.
 	dbFan bool
@@ -188,9 +188,9 @@ var rules = []rule{
 	{
 		id: "web-config",
 		patterns: []string{
-			"web/package.json", "web/package-lock.json", "web/pnpm-lock.yaml", "web/.nvmrc",
-			"web/vite.config.ts", "web/tsconfig*.json", "web/tailwind.config.js", "web/postcss.config.js",
-			"web/src/test/setup.ts",
+			"frontends/web/package.json", "frontends/web/package-lock.json", "frontends/web/pnpm-lock.yaml", "frontends/web/.nvmrc",
+			"frontends/web/vite.config.ts", "frontends/web/tsconfig*.json", "frontends/web/tailwind.config.js", "frontends/web/postcss.config.js",
+			"frontends/web/src/test/setup.ts",
 		},
 		full:   []lane{laneWeb},
 		reason: "web build/test configuration or dependencies changed (every vitest file runs through it)",
@@ -241,19 +241,19 @@ var rules = []rule{
 	},
 	{
 		id:       "web-source",
-		patterns: []string{"web/src/**", "web/vite-plugin-*.ts", "web/*.test.ts"},
+		patterns: []string{"frontends/web/src/**", "frontends/web/vite-plugin-*.ts", "frontends/web/*.test.ts"},
 		webSrc:   true,
 	},
 	{
 		id:       "web-static",
-		patterns: []string{"web/index.html", "web/public/**", "web/design-sandbox/**"},
+		patterns: []string{"frontends/web/index.html", "frontends/web/public/**", "frontends/web/design-sandbox/**"},
 		note:     "served assets: only tests that name the file run",
 	},
 	{
 		id: "web-inert",
 		patterns: []string{
-			"web/.gitignore", "web/README.md", "web/eslint.config.js", "web/stylelint.config.js",
-			"web/playwright.config.ts", "web/e2e/**",
+			"frontends/web/.gitignore", "frontends/web/README.md", "frontends/web/eslint.config.js", "frontends/web/stylelint.config.js",
+			"frontends/web/playwright.config.ts", "frontends/web/e2e/**",
 		},
 		note: "lint config and Playwright specs: no vitest file reads them (run Playwright separately)",
 	},
