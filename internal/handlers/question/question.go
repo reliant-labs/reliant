@@ -4,7 +4,6 @@ package question
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"strings"
 	"time"
 
@@ -31,7 +30,10 @@ func (s *Service) ResolveQuestion(
 
 	// Look up the question
 	question, err := s.deps.Repo.GetQuestionByID(ctx, req.Msg.QuestionId)
-	if err != nil || question == nil {
+	if err != nil {
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get question"))
+	}
+	if question == nil {
 		return nil, svcerr.NotFound("question")
 	}
 
@@ -44,7 +46,10 @@ func (s *Service) ResolveQuestion(
 		return nil, svcerr.Unauthenticated("user ID not found in context")
 	}
 	chat, err := s.deps.Repo.GetChat(ctx, question.ChatID)
-	if err != nil || chat == nil || chat.UserID != userID {
+	if err != nil {
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get question"))
+	}
+	if chat == nil || chat.UserID != userID {
 		return nil, svcerr.NotFound("question")
 	}
 
@@ -65,8 +70,7 @@ func (s *Service) ResolveQuestion(
 	}
 
 	if err := s.deps.Repo.ResolveQuestion(ctx, question.ID, responseData); err != nil {
-		logging.ErrorContext(ctx, "Failed to resolve question", "error", err, "questionID", question.ID)
-		return nil, svcerr.Internal("failed to resolve question")
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to resolve question"))
 	}
 
 	// Emit question update (resolved)
@@ -139,13 +143,16 @@ func (s *Service) ListPendingQuestions(
 			return nil, svcerr.InvalidArgument("chat_id, when set, must not be empty")
 		}
 		chat, getErr := s.deps.Repo.GetChat(ctx, chatID)
-		if getErr != nil || chat == nil || chat.UserID != userID {
+		if getErr != nil {
+			return nil, svcerr.WrapOr(getErr, svcerr.Internal("failed to get chat"))
+		}
+		if chat == nil || chat.UserID != userID {
 			return nil, svcerr.NotFound("chat")
 		}
 		questions, err = s.deps.Repo.ListAnswerablePendingQuestionsByChat(ctx, chatID)
 	}
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("list pending questions: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list pending questions"))
 	}
 
 	resp := &reliantv1.ListPendingQuestionsResponse{

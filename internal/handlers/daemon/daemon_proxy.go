@@ -4,7 +4,6 @@ package daemon
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 
 	"connectrpc.com/connect"
 
@@ -12,6 +11,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/daemonerr"
+	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
 // Every rpc forwards its request to the caller's daemon as one DaemonCommand
@@ -19,8 +19,8 @@ import (
 
 // errNoRouter answers every rpc of a service composed without a daemon
 // router: this server has no way to reach a daemon.
-func errNoRouter() *connect.Error {
-	return svcerr.ToConnect(svcerr.Unavailable("no daemon router: this server cannot reach a daemon"))
+func errNoRouter() error {
+	return svcerr.Unavailable("no daemon router: this server cannot reach a daemon")
 }
 
 // StartOAuthFlow proxies the OAuth flow to the daemon which starts a localhost
@@ -38,7 +38,7 @@ func (s *Service) StartOAuthFlow(
 		"authorize_url_template": req.Msg.AuthorizeUrlTemplate,
 	})
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("marshal request: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("marshal request"))
 	}
 
 	if s.deps.Router == nil {
@@ -58,7 +58,7 @@ func (s *Service) StartOAuthFlow(
 		RedirectURI string `json:"redirect_uri"`
 	}
 	if err := json.Unmarshal(respBytes, &resp); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("unmarshal response: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("unmarshal response"))
 	}
 
 	return connect.NewResponse(&reliantv1.StartOAuthFlowResponse{
@@ -68,8 +68,8 @@ func (s *Service) StartOAuthFlow(
 	}), nil
 }
 
-// oauthDaemonError maps a failed OAuth daemon command onto the Connect code
-// for what went wrong, wrapped with what was being done:
+// oauthDaemonError maps a failed OAuth daemon command onto the svcerr kind
+// for what went wrong, saying what was being done:
 //
 //   - The daemon is older than this server: FailedPrecondition, the daemon's
 //     own message. The production report that started this was
@@ -77,19 +77,24 @@ func (s *Service) StartOAuthFlow(
 //     unknown daemon command type` from a daemon that predated the handler —
 //     nothing was broken server-side, but `code: internal` said otherwise.
 //   - The command never reached a machine: the machine's state picks the code
-//     (daemonerr.MachineStateConnectError). "No machine is connected to your account
+//     (daemonerr.MachineState). "No machine is connected to your account
 //     yet" used to leave here as Internal (ELECTRON-B1); the settings page
 //     asks for the helper whether or not the user has connected a machine.
 //   - Anything else — the daemon ran the command and it failed, the reply
-//     timed out — is Internal.
-func oauthDaemonError(doing string, err error) *connect.Error {
+//     timed out — is Internal. The daemon's own words reach the user; the
+//     router's and the transport's stay on the error as its logged cause.
+func oauthDaemonError(doing string, err error) error {
 	if daemonerr.IsOutdated(err) {
-		return daemonerr.OutdatedConnectError(err)
+		return daemonerr.Outdated(err)
 	}
-	if cerr, ok := daemonerr.MachineStateConnectError(doing, err); ok {
-		return cerr
+	if serr, ok := daemonerr.MachineState(doing, err); ok {
+		return serr
 	}
-	return connect.NewError(connect.CodeInternal, fmt.Errorf("%s: %w", doing, err))
+	msg := doing
+	if text, ok := toolexec.DaemonReportedText(err); ok {
+		msg = doing + ": " + text
+	}
+	return svcerr.WithCause(svcerr.Internal(msg), err)
 }
 
 // openHelperTimeoutMs bounds the open/close commands. These return as soon as
@@ -112,7 +117,7 @@ func (s *Service) OpenOAuthHelper(
 		"web_origin": req.Msg.WebOrigin,
 	})
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("marshal request: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("marshal request"))
 	}
 
 	if s.deps.Router == nil {
@@ -129,7 +134,7 @@ func (s *Service) OpenOAuthHelper(
 		AlreadyRunning bool   `json:"already_running"`
 	}
 	if err := json.Unmarshal(respBytes, &resp); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("unmarshal response: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("unmarshal response"))
 	}
 
 	return connect.NewResponse(&reliantv1.OpenOAuthHelperResponse{
@@ -161,7 +166,7 @@ func (s *Service) CloseOAuthHelper(
 		Closed bool `json:"closed"`
 	}
 	if err := json.Unmarshal(respBytes, &resp); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("unmarshal response: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("unmarshal response"))
 	}
 
 	return connect.NewResponse(&reliantv1.CloseOAuthHelperResponse{Closed: resp.Closed}), nil

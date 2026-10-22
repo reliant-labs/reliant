@@ -20,6 +20,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/daemonerr"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
@@ -45,10 +46,7 @@ func (s *Service) projectBelongsToUser(ctx context.Context, projectID string, us
 func (s *Service) ownedProject(ctx context.Context, projectID string, userID string) (*db.Project, error) {
 	project, err := s.deps.Repo.GetProjectWithUserCheck(ctx, projectID, userID)
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "access denied") {
-			return nil, svcerr.NotFound("project")
-		}
-		return nil, svcerr.Internal("database error")
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
 	}
 	if project == nil {
 		return nil, svcerr.NotFound("project")
@@ -115,7 +113,7 @@ func (s *Service) ListWorkflows(
 	// 1. Load builtin workflows first (lowest priority)
 	builtinEntries, err := builtin.BuiltinWorkflowsFS.ReadDir(".")
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to read builtin workflows: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to read builtin workflows"))
 	}
 	for _, entry := range builtinEntries {
 		if entry.IsDir() {
@@ -447,7 +445,7 @@ func (s *Service) SaveWorkflow(
 		// Look up by draft ID first - this allows renames to work correctly
 		draft, err := s.deps.Repo.GetWorkflowDraft(ctx, *req.Msg.DraftId)
 		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to get workflow draft by ID: %w", err))
+			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get workflow draft by ID"))
 		}
 		if draft != nil && draft.UserID == userID {
 			existingUserWorkflow = draft
@@ -458,7 +456,7 @@ func (s *Service) SaveWorkflow(
 			if isRename {
 				conflicting, err := s.deps.Repo.GetWorkflowDraftBySlug(ctx, userID, slug)
 				if err != nil {
-					return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to check slug conflict: %w", err))
+					return nil, svcerr.WrapOr(err, svcerr.Internal("failed to check slug conflict"))
 				}
 				if conflicting != nil && conflicting.ID != draft.ID {
 					return nil, svcerr.AlreadyExists(fmt.Sprintf("workflow name '%s' conflicts with an existing workflow; please choose a different name", protoWf.Name))
@@ -471,7 +469,7 @@ func (s *Service) SaveWorkflow(
 	if existingUserWorkflow == nil {
 		draft, err := s.deps.Repo.GetWorkflowDraftBySlug(ctx, userID, slug)
 		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to check existing workflow: %w", err))
+			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to check existing workflow"))
 		}
 		if draft != nil {
 			// Found existing workflow by slug - check if names match
@@ -496,7 +494,7 @@ func (s *Service) SaveWorkflow(
 		// Check against project workflows - project not found is ok, just skip check
 		projectWf, _, err := launch.LoadProjectWorkflowBySlugFromDB(s.deps.Repo, ctx, req.Msg.ProjectId, slug)
 		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to load project workflow: %w", err))
+			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to load project workflow"))
 		}
 		if projectWf != nil {
 			return nil, svcerr.AlreadyExists(fmt.Sprintf("workflow name '%s' conflicts with a project workflow; please choose a different name", protoWf.Name))
@@ -506,7 +504,7 @@ func (s *Service) SaveWorkflow(
 		// Since !isUpdate means no existing workflow by this slug, any name match is a duplicate
 		existingByName, err := s.deps.Repo.GetWorkflowDraftByName(ctx, userID, protoWf.Name)
 		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to check existing workflow name: %w", err))
+			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to check existing workflow name"))
 		}
 		if existingByName != nil {
 			return nil, svcerr.AlreadyExists(fmt.Sprintf("a workflow with name '%s' already exists; please choose a different name", protoWf.Name))
@@ -516,7 +514,7 @@ func (s *Service) SaveWorkflow(
 	// Convert proto to YAML for storage and validation
 	definitionYAML, err := rpcWorkflowToYAML(protoWf)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to marshal workflow: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to marshal workflow"))
 	}
 
 	// Validate exactly as run start will. Whether errors BLOCK depends on
@@ -551,7 +549,7 @@ func (s *Service) SaveWorkflow(
 		// Validate that the source path is within the project's .reliant/workflows directory
 		project, err := s.deps.Repo.GetProject(ctx, req.Msg.ProjectId)
 		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to get project: %w", err))
+			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
 		}
 		if project == nil || project.Path == "" {
 			return nil, svcerr.FailedPrecondition("project not found or has no path")
@@ -560,11 +558,11 @@ func (s *Service) SaveWorkflow(
 		workflowsDir := filepath.Join(project.Path, ".reliant", "workflows")
 		absSourcePath, err := filepath.Abs(sourcePath)
 		if err != nil {
-			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid source path: %w", err))
+			return nil, svcerr.InvalidArgument("invalid source path: " + err.Error())
 		}
 		absWorkflowsDir, err := filepath.Abs(workflowsDir)
 		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to resolve workflows directory: %w", err))
+			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to resolve workflows directory"))
 		}
 
 		// Security check: ensure source path is within the workflows directory
@@ -582,7 +580,7 @@ func (s *Service) SaveWorkflow(
 			"content": string(definitionYAML),
 		})
 		if _, err := s.deps.Router.SendDaemonCommand(ctx, userID, "fs.write_file", writePayload, 15000); err != nil {
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to write workflow to file via daemon: %w", err))
+			return nil, daemonerr.Error("write the workflow file", err)
 		}
 
 		logging.DebugContext(ctx, "SaveWorkflow wrote to project file",
@@ -657,21 +655,19 @@ func (s *Service) SaveWorkflow(
 	if isRename {
 		// Rename case: update by ID to change the slug
 		if err := s.deps.Repo.UpdateWorkflowDraft(ctx, draft); err != nil {
-			if errors.Is(err, db.ErrWorkflowSlugTaken) {
-				return nil, connect.NewError(connect.CodeAlreadyExists, err)
-			}
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to update workflow: %w", err))
+			// A taken slug is the store's AlreadyExists (db.ErrWorkflowSlugTaken).
+			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to update workflow"))
 		}
 		// Fetch the updated draft to get the new version
 		saved, err = s.deps.Repo.GetWorkflowDraft(ctx, draftID)
 		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to get updated workflow: %w", err))
+			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get updated workflow"))
 		}
 	} else {
 		// Normal case: upsert by (user_id, slug)
 		saved, err = s.deps.Repo.UpsertWorkflowDraft(ctx, draft)
 		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to save workflow: %w", err))
+			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to save workflow"))
 		}
 	}
 
@@ -725,7 +721,7 @@ func (s *Service) SetWorkflowVisibility(
 	// Get the workflow draft by slug
 	draft, err := s.deps.Repo.GetWorkflowDraftBySlug(ctx, userID, req.Msg.Slug)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to get workflow: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get workflow"))
 	}
 	if draft == nil {
 		return nil, svcerr.NotFound("workflow")
@@ -734,12 +730,12 @@ func (s *Service) SetWorkflowVisibility(
 	// Update hidden status
 	updatedDraft, err := s.deps.Repo.SetWorkflowDraftHidden(ctx, draft.ID, req.Msg.IsHidden)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to update workflow visibility: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to update workflow visibility"))
 	}
 
 	item, err := userWorkflowListItem(updatedDraft, s.validateWorkflowDefinition(ctx, userID, []byte(updatedDraft.Definition)))
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to parse stored workflow: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to parse stored workflow"))
 	}
 
 	return connect.NewResponse(&reliantv1.SetWorkflowVisibilityResponse{
@@ -857,7 +853,7 @@ func (s *Service) CreateWorkflowDraft(
 	status := resolveDraftStatus(req.Msg.GetStatus(), nil)
 	if status == db.WorkflowDraftStatusComplete {
 		if check := s.validateWorkflowDefinition(ctx, userID, []byte(definition)); !check.valid() {
-			return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("%s", completeRejectedMessage(check)))
+			return nil, svcerr.FailedPrecondition(completeRejectedMessage(check))
 		}
 	}
 
@@ -873,11 +869,8 @@ func (s *Service) CreateWorkflowDraft(
 	}
 
 	if err := s.deps.Repo.CreateWorkflowDraft(ctx, draft); err != nil {
-		if errors.Is(err, db.ErrWorkflowSlugTaken) {
-			return nil, connect.NewError(connect.CodeAlreadyExists, err)
-		}
-		logging.ErrorContext(ctx, "Failed to create workflow draft", "error", err, "userID", userID)
-		return nil, svcerr.Internal("failed to create workflow draft")
+		// A taken slug is the store's AlreadyExists (db.ErrWorkflowSlugTaken).
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to create workflow draft"))
 	}
 
 	logging.InfoContext(ctx, "Created workflow draft", "draftID", draftID, "name", name, "slug", slug, "userID", userID)
@@ -945,21 +938,21 @@ func (s *Service) workflowSlugTaken(ctx context.Context, userID, projectID, slug
 	}
 	bySlug, err := s.deps.Repo.GetWorkflowDraftBySlug(ctx, userID, slug)
 	if err != nil {
-		return false, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to check existing workflow: %w", err))
+		return false, svcerr.WrapOr(err, svcerr.Internal("failed to check existing workflow"))
 	}
 	if bySlug != nil {
 		return true, nil
 	}
 	byName, err := s.deps.Repo.GetWorkflowDraftByName(ctx, userID, slug)
 	if err != nil {
-		return false, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to check existing workflow name: %w", err))
+		return false, svcerr.WrapOr(err, svcerr.Internal("failed to check existing workflow name"))
 	}
 	if byName != nil {
 		return true, nil
 	}
 	projectWf, _, err := launch.LoadProjectWorkflowBySlugFromDB(s.deps.Repo, ctx, projectID, slug)
 	if err != nil {
-		return false, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to load project workflow: %w", err))
+		return false, svcerr.WrapOr(err, svcerr.Internal("failed to load project workflow"))
 	}
 	return projectWf != nil, nil
 }
@@ -981,7 +974,7 @@ func newWorkflowDefinition(name, title, template string) ([]byte, error) {
 		}
 		parsed, err := wfyaml.ParseWorkflow(data)
 		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to parse template %q: %w", template, err))
+			return nil, svcerr.WithCause(svcerr.Internal(fmt.Sprintf("failed to parse template %q", template)), err)
 		}
 		wf = parsed
 		wf.Description = ""
@@ -990,7 +983,7 @@ func newWorkflowDefinition(name, title, template string) ([]byte, error) {
 	wf.Title = title
 	definition, err := rpcWorkflowToYAML(wf)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to marshal new workflow: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to marshal new workflow"))
 	}
 	return definition, nil
 }
@@ -1026,7 +1019,10 @@ func (s *Service) SetWorkflowStatus(
 	}
 
 	draft, err := s.deps.Repo.GetWorkflowDraft(ctx, req.Msg.DraftId)
-	if err != nil || draft == nil || draft.UserID != userID {
+	if err != nil {
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get workflow"))
+	}
+	if draft == nil || draft.UserID != userID {
 		return nil, svcerr.NotFound("workflow")
 	}
 	if req.Msg.ExpectedVersion != nil && draft.Version != *req.Msg.ExpectedVersion {
@@ -1050,7 +1046,7 @@ func (s *Service) SetWorkflowStatus(
 	if draft.Status != target {
 		updated, err = s.deps.Repo.SetWorkflowDraftStatus(ctx, draft.ID, target)
 		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to update workflow status: %w", err))
+			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to update workflow status"))
 		}
 		logging.InfoContext(ctx, "Workflow status changed", "draft_id", draft.ID, "slug", draft.Slug, "from", draft.Status, "to", target, "user_id", userID)
 	}
@@ -1082,7 +1078,7 @@ func (s *Service) GetWorkflow(
 	if draftID := req.Msg.GetDraftId(); draftID != "" {
 		draft, err := s.deps.Repo.GetWorkflowDraft(ctx, draftID)
 		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to load draft: %w", err))
+			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to load draft"))
 		}
 		if draft == nil {
 			return nil, svcerr.NotFound("workflow")
@@ -1093,7 +1089,7 @@ func (s *Service) GetWorkflow(
 
 		protoWf, err := parseDraftDefinitionV2([]byte(draft.Definition))
 		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to parse workflow: %w", err))
+			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to parse workflow"))
 		}
 
 		return connect.NewResponse(&reliantv1.GetWorkflowResponse{
@@ -1122,7 +1118,7 @@ func (s *Service) GetWorkflow(
 		}
 		protoWf, err := parseWorkflowYAML(data)
 		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to parse builtin workflow: %w", err))
+			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to parse builtin workflow"))
 		}
 		return connect.NewResponse(&reliantv1.GetWorkflowResponse{
 			Workflow:       protoWf,
@@ -1160,12 +1156,12 @@ func (s *Service) GetWorkflow(
 	// Look up user's workflow by slug
 	draft, err := s.deps.Repo.GetWorkflowDraftBySlug(ctx, userID, slug)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to look up workflow: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to look up workflow"))
 	}
 
 	if draft == nil {
 		if resolveErr != nil && !errors.Is(resolveErr, workflowref.ErrNotFound) {
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to resolve workflow: %w", resolveErr))
+			return nil, svcerr.WrapOr(resolveErr, svcerr.Internal("failed to resolve workflow"))
 		}
 		return nil, svcerr.WithMessage(svcerr.ErrNotFound, fmt.Sprintf("workflow not found: %s", workflowName))
 	}
@@ -1219,7 +1215,7 @@ func (s *Service) DeleteWorkflow(
 	// Check if workflow exists
 	existing, err := s.deps.Repo.GetWorkflowDraftBySlug(ctx, userID, slug)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to check workflow: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to check workflow"))
 	}
 	if existing == nil {
 		return nil, svcerr.WithMessage(svcerr.ErrNotFound, fmt.Sprintf("workflow not found: %s", name))
@@ -1242,7 +1238,7 @@ func (s *Service) DeleteWorkflow(
 		return s.deps.Repo.DeleteWorkflowDraftBySlug(ctx, userID, slug)
 	})
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to delete workflow: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to delete workflow"))
 	}
 	if s.deps.Automations != nil && len(removed) > 0 {
 		s.deps.Automations.RetireDeletedTriggers(ctx, removed)
@@ -1315,7 +1311,7 @@ func (s *Service) ImportWorkflow(
 	// Parse the YAML into RPC proto
 	protoWf, err := parseWorkflowYAML(req.Msg.YamlContent)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid YAML: %w", err))
+		return nil, svcerr.InvalidArgument("invalid YAML: " + err.Error())
 	}
 
 	if protoWf.Name == "" {
@@ -1333,7 +1329,7 @@ func (s *Service) ImportWorkflow(
 	// Check for existing workflow with same slug (user-owned)
 	existing, err := s.deps.Repo.GetWorkflowDraftBySlug(ctx, userID, slug)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to check existing workflow: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to check existing workflow"))
 	}
 
 	if existing != nil && !req.Msg.Overwrite {
@@ -1393,7 +1389,7 @@ func (s *Service) ImportWorkflow(
 	// Upsert to database
 	saved, err := s.deps.Repo.UpsertWorkflowDraft(ctx, draft)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to save workflow: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to save workflow"))
 	}
 
 	logging.InfoContext(ctx, "Workflow imported",
@@ -1447,7 +1443,7 @@ func (s *Service) ExportWorkflow(
 		}
 		protoWf, err := parseWorkflowYAML(data)
 		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to parse builtin workflow: %w", err))
+			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to parse builtin workflow"))
 		}
 		return connect.NewResponse(&reliantv1.ExportWorkflowResponse{
 			Success:     true,
@@ -1461,7 +1457,7 @@ func (s *Service) ExportWorkflow(
 	userID := auth.MustGetUserID(ctx)
 	draft, err := s.deps.Repo.GetWorkflowDraftBySlug(ctx, userID, req.Msg.Slug)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to look up workflow: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to look up workflow"))
 	}
 
 	if draft == nil {
@@ -1471,13 +1467,13 @@ func (s *Service) ExportWorkflow(
 	// Parse the stored definition into RPC proto
 	protoWf, err := parseWorkflowYAML([]byte(draft.Definition))
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to parse stored workflow: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to parse stored workflow"))
 	}
 
 	// Convert back to YAML with proper formatting via v2yaml
 	yamlData, err := rpcWorkflowToYAML(protoWf)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to marshal workflow to YAML: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to marshal workflow to YAML"))
 	}
 
 	return connect.NewResponse(&reliantv1.ExportWorkflowResponse{
@@ -1516,7 +1512,7 @@ func (s *Service) ValidateWorkflow(
 		var err error
 		yamlBytes, err = rpcWorkflowToYAML(protoWf)
 		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to marshal workflow to YAML: %w", err))
+			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to marshal workflow to YAML"))
 		}
 	}
 

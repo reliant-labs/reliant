@@ -59,7 +59,7 @@ func TestBackgroundProxy_ListProcesses_UsesAShortDaemonTimeout(t *testing.T) {
 
 // Failing fast must not mean failing loud: the list budget running out on a
 // busy machine is DeadlineExceeded (a WARN), not Internal (an ERROR and a
-// Sentry event per poll). The proxies share daemonerr.MachineStateConnectError with the
+// Sentry event per poll). The proxies share daemonerr.MachineState with the
 // file tree, whose 2026-10-10 timeouts paged as "[gRPC] Request error".
 func TestBackgroundProxy_DaemonTimeoutIsDeadlineExceeded(t *testing.T) {
 	router := &bgProxyRouter{err: fmt.Errorf("daemon command exec.bg_list (subject s) via NATS failed: %w: %w",

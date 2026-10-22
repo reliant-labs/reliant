@@ -4,10 +4,12 @@ package catalog
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"connectrpc.com/connect"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -34,11 +36,11 @@ func listInputOptions(ctx context.Context, svc *Service, req *reliantv1.ListInpu
 	return resp.Msg, nil
 }
 
+// codeOf is the code the svcerr interceptor sends for err.
 func codeOf(t *testing.T, err error) connect.Code {
 	t.Helper()
-	var ce *connect.Error
-	require.True(t, errors.As(err, &ce), "want a connect error, got %v", err)
-	return ce.Code()
+	require.Error(t, err)
+	return svcerr.Code(err)
 }
 
 func TestListInputOptions_ProjectsTheListingOntoTheWire(t *testing.T) {
@@ -184,6 +186,8 @@ func TestListInputOptions_MapsTypedFailuresToCodes(t *testing.T) {
 		"cancelled":          {context.Canceled, connect.CodeCanceled, ""},
 		"deadline":           {context.DeadlineExceeded, connect.CodeDeadlineExceeded, ""},
 		"anything else":      {errors.New("secret internals: token=abc"), connect.CodeInternal, "listing input options failed"},
+		"invalid type":       {fmt.Errorf("%w: acme.team: no list action", inputoptions.ErrInvalidType), connect.CodeInternal, "listing input options failed"},
+		"store not found":    {svcerr.NotFound("connection"), connect.CodeNotFound, "connection not found"},
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -191,10 +195,11 @@ func TestListInputOptions_MapsTypedFailuresToCodes(t *testing.T) {
 			_, err := listInputOptions(asUser("alice"), newInputOptionsService(t, io), &reliantv1.ListInputOptionsRequest{Type: ptr("github.repository")})
 			require.Error(t, err)
 			assert.Equal(t, c.code, codeOf(t, err))
+			msg := svcerr.ToConnect(err).Message()
 			if c.msg != "" {
-				assert.Contains(t, err.Error(), c.msg)
+				assert.Equal(t, c.msg, msg)
 			}
-			assert.NotContains(t, err.Error(), "token=abc", "internals never reach the caller")
+			assert.NotContains(t, msg, "token=abc", "internals never reach the caller")
 		})
 	}
 }

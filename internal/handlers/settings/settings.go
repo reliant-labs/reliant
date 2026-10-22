@@ -3,7 +3,6 @@ package settings
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -59,7 +58,8 @@ func settingToProto(s *db.Setting) *reliantv1.Setting {
 func (s *Service) upsertSetting(ctx context.Context, userID string, projectID *string, key, value string) error {
 	setting, err := s.deps.Repo.GetSetting(ctx, userID, projectID, key)
 	if err != nil {
-		if !isSettingNotFoundError(err) {
+		// The store says "unset" as its NotFound; anything else is a failure.
+		if !svcerr.IsNotFound(err) {
 			return err
 		}
 
@@ -81,16 +81,6 @@ func (s *Service) upsertSetting(ctx context.Context, userID string, projectID *s
 	setting.Value = value
 	setting.UpdatedAt = time.Now().UTC()
 	return s.deps.Repo.UpdateSetting(ctx, setting)
-}
-
-func isSettingNotFoundError(err error) bool {
-	if err == nil {
-		return false
-	}
-	if errors.Is(err, sql.ErrNoRows) {
-		return true
-	}
-	return strings.Contains(strings.ToLower(err.Error()), "setting not found")
 }
 
 // ============================================================================
@@ -131,8 +121,7 @@ func (s *Service) CreateSetting(ctx context.Context, req *connect.Request[relian
 	}
 
 	if err := s.deps.Repo.CreateSetting(ctx, setting); err != nil {
-		logging.ErrorContext(ctx, "Failed to create setting", "error", err)
-		return nil, svcerr.Internal("failed to create setting")
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to create setting"))
 	}
 
 	if err := s.deps.Repo.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{ProjectID: projectID}); err != nil {
@@ -155,8 +144,7 @@ func (s *Service) ListSettings(ctx context.Context, req *connect.Request[reliant
 
 	settings, err := s.deps.Repo.ListSettings(ctx, userID, projectID)
 	if err != nil {
-		logging.ErrorContext(ctx, "Failed to list settings", "error", err)
-		return nil, svcerr.Internal("failed to list settings")
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list settings"))
 	}
 
 	protoSettings := make([]*reliantv1.Setting, len(settings))
@@ -213,7 +201,7 @@ func (s *Service) UpdateSetting(ctx context.Context, req *connect.Request[relian
 
 	setting, err := s.deps.Repo.GetSetting(ctx, userID, projectID, req.Msg.Key)
 	if err != nil {
-		return nil, svcerr.NotFound("setting")
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get setting"))
 	}
 
 	if req.Msg.Value != nil {
@@ -225,8 +213,7 @@ func (s *Service) UpdateSetting(ctx context.Context, req *connect.Request[relian
 	setting.UpdatedAt = time.Now().UTC()
 
 	if err := s.deps.Repo.UpdateSetting(ctx, setting); err != nil {
-		logging.ErrorContext(ctx, "Failed to update setting", "error", err, "key", req.Msg.Key)
-		return nil, svcerr.Internal("failed to update setting")
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to update setting"))
 	}
 
 	if err := s.deps.Repo.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{ProjectID: projectID}); err != nil {
@@ -280,8 +267,7 @@ func (s *Service) BatchUpsertSettings(ctx context.Context, req *connect.Request[
 		}
 
 		if err := s.deps.Repo.CreateSetting(ctx, setting); err != nil {
-			logging.ErrorContext(ctx, "Failed to upsert setting in batch", "error", err, "key", write.GetKey())
-			return nil, svcerr.Internal(fmt.Sprintf("failed to upsert setting %q", write.GetKey()))
+			return nil, svcerr.WrapOr(err, svcerr.Internal(fmt.Sprintf("failed to upsert setting %q", write.GetKey())))
 		}
 
 		written = append(written, settingToProto(setting))
@@ -313,12 +299,11 @@ func (s *Service) DeleteSetting(ctx context.Context, req *connect.Request[relian
 
 	setting, err := s.deps.Repo.GetSetting(ctx, userID, projectID, req.Msg.Key)
 	if err != nil {
-		return nil, svcerr.NotFound("setting")
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get setting"))
 	}
 
 	if err := s.deps.Repo.DeleteSetting(ctx, setting.ID); err != nil {
-		logging.ErrorContext(ctx, "Failed to delete setting", "error", err, "key", req.Msg.Key)
-		return nil, svcerr.Internal("failed to delete setting")
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to delete setting"))
 	}
 
 	if err := s.deps.Repo.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{ProjectID: projectID}); err != nil {
@@ -357,8 +342,7 @@ func (s *Service) UpdateShortcuts(ctx context.Context, req *connect.Request[reli
 	userID := auth.MustGetUserID(ctx)
 
 	if err := s.upsertSetting(ctx, userID, nil, "shortcuts", req.Msg.Shortcuts); err != nil {
-		logging.ErrorContext(ctx, "Failed to update shortcuts", "error", err)
-		return nil, svcerr.Internal("failed to update shortcuts")
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to update shortcuts"))
 	}
 
 	return connect.NewResponse(&reliantv1.UpdateShortcutsResponse{
@@ -440,11 +424,11 @@ func (s *Service) GetPreferences(ctx context.Context, req *connect.Request[relia
 	// Compute effective hidden items by combining defaults and user overrides
 	hiddenWorkflows, err := s.getEffectiveHiddenItems(ctx, userID, int32(reliantv1.HiddenItemType_HIDDEN_ITEM_TYPE_WORKFLOW))
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to get hidden workflows: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get hidden workflows"))
 	}
 	hiddenPresets, err := s.getEffectiveHiddenItems(ctx, userID, int32(reliantv1.HiddenItemType_HIDDEN_ITEM_TYPE_PRESET))
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to get hidden presets: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get hidden presets"))
 	}
 
 	return connect.NewResponse(&reliantv1.GetPreferencesResponse{
@@ -483,8 +467,7 @@ func (s *Service) UpdatePreferences(ctx context.Context, req *connect.Request[re
 			value = "true"
 		}
 		if err := s.upsertSetting(ctx, userID, nil, "features.streaming_enabled", value); err != nil {
-			logging.ErrorContext(ctx, "Failed to update streaming_enabled", "error", err)
-			return nil, svcerr.Internal("failed to update preferences")
+			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to update preferences"))
 		}
 		markChanged("features.streaming_enabled")
 	}
@@ -495,8 +478,7 @@ func (s *Service) UpdatePreferences(ctx context.Context, req *connect.Request[re
 			return nil, svcerr.InvalidArgument("invalid worktree_archive_mode. Must be 'ask_me', 'always_cleanup', or 'always_keep'")
 		}
 		if err := s.upsertSetting(ctx, userID, nil, "worktree.archive_cleanup_mode", mode); err != nil {
-			logging.ErrorContext(ctx, "Failed to update worktree.archive_cleanup_mode", "error", err)
-			return nil, svcerr.Internal("failed to update preferences")
+			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to update preferences"))
 		}
 		markChanged("worktree.archive_cleanup_mode")
 	}
@@ -507,8 +489,7 @@ func (s *Service) UpdatePreferences(ctx context.Context, req *connect.Request[re
 			value = "true"
 		}
 		if err := s.upsertSetting(ctx, userID, nil, "worktree.default_delete_branch", value); err != nil {
-			logging.ErrorContext(ctx, "Failed to update worktree.default_delete_branch", "error", err)
-			return nil, svcerr.Internal("failed to update preferences")
+			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to update preferences"))
 		}
 		markChanged("worktree.default_delete_branch")
 	}
@@ -520,8 +501,7 @@ func (s *Service) UpdatePreferences(ctx context.Context, req *connect.Request[re
 			value = "true"
 		}
 		if err := s.upsertSetting(ctx, userID, nil, "chat.default_auto_approve", value); err != nil {
-			logging.ErrorContext(ctx, "Failed to update chat.default_auto_approve", "error", err)
-			return nil, svcerr.Internal("failed to update preferences")
+			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to update preferences"))
 		}
 		markChanged("chat.default_auto_approve")
 	}
@@ -533,8 +513,7 @@ func (s *Service) UpdatePreferences(ctx context.Context, req *connect.Request[re
 			value = "true"
 		}
 		if err := s.upsertSetting(ctx, userID, nil, "worktree.branch_copy_uncommitted_files_default", value); err != nil {
-			logging.ErrorContext(ctx, "Failed to update worktree.branch_copy_uncommitted_files_default", "error", err)
-			return nil, svcerr.Internal("failed to update preferences")
+			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to update preferences"))
 		}
 		markChanged("worktree.branch_copy_uncommitted_files_default")
 	}
@@ -554,8 +533,7 @@ func (s *Service) UpdatePreferences(ctx context.Context, req *connect.Request[re
 	if req.Msg.DefaultMcpScope != nil {
 		scopeValue := req.Msg.DefaultMcpScope.String()
 		if err := s.upsertSetting(ctx, userID, nil, "config.default_mcp_scope", scopeValue); err != nil {
-			logging.ErrorContext(ctx, "Failed to update config.default_mcp_scope", "error", err)
-			return nil, svcerr.Internal("failed to update preferences")
+			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to update preferences"))
 		}
 		markChanged("config.default_mcp_scope")
 	}
@@ -564,8 +542,7 @@ func (s *Service) UpdatePreferences(ctx context.Context, req *connect.Request[re
 	if req.Msg.DefaultWorkflowScope != nil {
 		scopeValue := req.Msg.DefaultWorkflowScope.String()
 		if err := s.upsertSetting(ctx, userID, nil, "config.default_workflow_scope", scopeValue); err != nil {
-			logging.ErrorContext(ctx, "Failed to update config.default_workflow_scope", "error", err)
-			return nil, svcerr.Internal("failed to update preferences")
+			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to update preferences"))
 		}
 		markChanged("config.default_workflow_scope")
 	}
@@ -573,8 +550,7 @@ func (s *Service) UpdatePreferences(ctx context.Context, req *connect.Request[re
 	// Handle default workflow
 	if req.Msg.DefaultWorkflow != nil {
 		if err := s.upsertSetting(ctx, userID, nil, "config.default_workflow", *req.Msg.DefaultWorkflow); err != nil {
-			logging.ErrorContext(ctx, "Failed to update config.default_workflow", "error", err)
-			return nil, svcerr.Internal("failed to update preferences")
+			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to update preferences"))
 		}
 		markChanged("config.default_workflow")
 	}
@@ -586,8 +562,7 @@ func (s *Service) UpdatePreferences(ctx context.Context, req *connect.Request[re
 			value = "true"
 		}
 		if err := s.upsertSetting(ctx, userID, nil, "ui.hide_builtin_workflows", value); err != nil {
-			logging.ErrorContext(ctx, "Failed to update ui.hide_builtin_workflows", "error", err)
-			return nil, svcerr.Internal("failed to update preferences")
+			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to update preferences"))
 		}
 		markChanged("ui.hide_builtin_workflows")
 	}
@@ -599,8 +574,7 @@ func (s *Service) UpdatePreferences(ctx context.Context, req *connect.Request[re
 			value = "true"
 		}
 		if err := s.upsertSetting(ctx, userID, nil, "ui.hide_builtin_presets", value); err != nil {
-			logging.ErrorContext(ctx, "Failed to update ui.hide_builtin_presets", "error", err)
-			return nil, svcerr.Internal("failed to update preferences")
+			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to update preferences"))
 		}
 		markChanged("ui.hide_builtin_presets")
 	}
@@ -641,8 +615,7 @@ func (s *Service) SetHiddenItem(ctx context.Context, req *connect.Request[relian
 	// hidden=true means is_visible=false, hidden=false means is_visible=true
 	isVisible := !req.Msg.Hidden
 	if err := s.deps.Repo.SetVisibilityOverride(ctx, userID, int32(req.Msg.ItemType), req.Msg.Slug, isVisible); err != nil {
-		logging.ErrorContext(ctx, "Failed to set visibility override", "error", err, "type", req.Msg.ItemType, "slug", req.Msg.Slug)
-		return nil, svcerr.Internal("failed to update hidden state")
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to update hidden state"))
 	}
 
 	action := "hidden"
@@ -720,8 +693,7 @@ func (s *Service) GetPrompts(ctx context.Context, req *connect.Request[reliantv1
 
 	if setting.Value != "" {
 		if err := json.Unmarshal([]byte(setting.Value), &prompts); err != nil {
-			logging.ErrorContext(ctx, "Failed to unmarshal prompts", "error", err)
-			return nil, svcerr.Internal("failed to parse prompts")
+			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to parse prompts"))
 		}
 	}
 
@@ -768,12 +740,11 @@ func (s *Service) SavePrompts(ctx context.Context, req *connect.Request[reliantv
 
 	promptsJSON, err := json.Marshal(prompts)
 	if err != nil {
-		return nil, svcerr.Internal("failed to serialize prompts")
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to serialize prompts"))
 	}
 
 	if err := s.upsertSetting(ctx, userID, nil, "global.prompts", string(promptsJSON)); err != nil {
-		logging.ErrorContext(ctx, "Failed to save prompts", "error", err)
-		return nil, svcerr.Internal("failed to save prompts")
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to save prompts"))
 	}
 
 	if err := s.deps.Repo.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{}); err != nil {
@@ -851,8 +822,7 @@ func (s *Service) GetProviderStatuses(ctx context.Context, req *connect.Request[
 
 	accounts, err := s.deps.Repo.ListProviderAccounts(ctx, userID)
 	if err != nil {
-		logging.ErrorContext(ctx, "Failed to list provider accounts", "error", err)
-		return nil, svcerr.Internal("failed to get provider statuses")
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get provider statuses"))
 	}
 	total := map[string]int32{}
 	usable := map[string]bool{}
@@ -944,8 +914,7 @@ func (s *Service) CompleteCodexOAuth(ctx context.Context, req *connect.Request[r
 
 	tokens, err := s.deps.ExchangeCodexCode(code, codeVerifier, redirectURI)
 	if err != nil {
-		logging.ErrorContext(ctx, "Codex OAuth code exchange failed", "error", err)
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("failed to complete Codex OAuth: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.InvalidArgument("failed to complete Codex OAuth"))
 	}
 
 	res, err := s.connectAccount(ctx, signIn{
@@ -978,8 +947,7 @@ func (s *Service) CompleteAntigravityOAuth(ctx context.Context, req *connect.Req
 
 	tokens, err := s.deps.ExchangeAntigravityCode(code, codeVerifier, redirectURI)
 	if err != nil {
-		logging.ErrorContext(ctx, "Antigravity OAuth code exchange failed", "error", err)
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("failed to complete Antigravity OAuth: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.InvalidArgument("failed to complete Antigravity OAuth"))
 	}
 
 	u := core.AccountUpsert{
@@ -1008,8 +976,7 @@ func (s *Service) StartCopilotDeviceAuth(ctx context.Context, req *connect.Reque
 
 	deviceAuth, err := copilot.StartDeviceAuth(ctx)
 	if err != nil {
-		logging.ErrorContext(ctx, "Failed to start Copilot device authorization", "error", err)
-		return nil, svcerr.Internal("failed to start GitHub Copilot login")
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to start GitHub Copilot login"))
 	}
 
 	return connect.NewResponse(&reliantv1.StartCopilotDeviceAuthResponse{
@@ -1103,8 +1070,7 @@ func (s *Service) CompleteClaudeOAuth(ctx context.Context, req *connect.Request[
 
 	tokens, err := s.deps.ExchangeClaudeCode(code, codeVerifier, redirectURI, state)
 	if err != nil {
-		logging.ErrorContext(ctx, "Claude OAuth code exchange failed", "error", err)
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("failed to complete Claude OAuth: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.InvalidArgument("failed to complete Claude OAuth"))
 	}
 
 	res, err := s.connectAccount(ctx, signIn{
@@ -1143,8 +1109,9 @@ func (s *Service) SyncReliantProvider(ctx context.Context, req *connect.Request[
 
 	key, err := s.deps.ControlPlane.MintLLMKey(ctx, jwt, controlplane.ReliantProviderKeyName)
 	if err != nil {
-		logging.ErrorContext(ctx, "Failed to mint Reliant LLM key via control-plane", "error", err)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to mint Reliant LLM key: %w", err))
+		// A remote Connect client's error describes control-plane's failure,
+		// not this rpc's: it is the logged cause, never the verdict.
+		return nil, svcerr.WithCause(svcerr.Internal("failed to mint Reliant LLM key"), err)
 	}
 	plaintext := strings.TrimSpace(key.Plaintext)
 	if plaintext == "" {
@@ -1156,8 +1123,7 @@ func (s *Service) SyncReliantProvider(ctx context.Context, req *connect.Request[
 		KeyHint: core.KeyHint(plaintext), Secrets: core.AccountSecrets{Secret: plaintext},
 	})
 	if err != nil {
-		logging.ErrorContext(ctx, "Failed to persist Reliant provider API key", "error", err)
-		return nil, svcerr.Internal("failed to persist Reliant API key")
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to persist Reliant API key"))
 	}
 
 	if err := s.deps.Repo.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{}); err != nil {
@@ -1192,8 +1158,7 @@ func (s *Service) GetPrivacySettings(ctx context.Context, req *connect.Request[r
 
 	analyticsEnabled, crashReportingEnabled, err := s.deps.Repo.GetPrivacySettings(ctx, userID)
 	if err != nil {
-		logging.ErrorContext(ctx, "Failed to get privacy settings", "error", err)
-		return nil, svcerr.Internal("failed to get privacy settings")
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get privacy settings"))
 	}
 
 	return connect.NewResponse(&reliantv1.GetPrivacySettingsResponse{
@@ -1209,8 +1174,7 @@ func (s *Service) UpdatePrivacySettings(ctx context.Context, req *connect.Reques
 	// Get current settings
 	analyticsEnabled, crashReportingEnabled, err := s.deps.Repo.GetPrivacySettings(ctx, userID)
 	if err != nil {
-		logging.ErrorContext(ctx, "Failed to get current privacy settings", "error", err)
-		return nil, svcerr.Internal("failed to update privacy settings")
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to update privacy settings"))
 	}
 
 	// Update only the fields that were provided
@@ -1223,8 +1187,7 @@ func (s *Service) UpdatePrivacySettings(ctx context.Context, req *connect.Reques
 
 	// Save the updated settings
 	if err := s.deps.Repo.SetPrivacySettings(ctx, userID, analyticsEnabled, crashReportingEnabled); err != nil {
-		logging.ErrorContext(ctx, "Failed to save privacy settings", "error", err)
-		return nil, svcerr.Internal("failed to save privacy settings")
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to save privacy settings"))
 	}
 
 	logging.InfoContext(ctx, "Privacy settings updated", "userID", userID, "analyticsEnabled", analyticsEnabled, "crashReportingEnabled", crashReportingEnabled)
@@ -1276,7 +1239,7 @@ func (s *Service) TrackPageVisited(ctx context.Context, req *connect.Request[rel
 // 		analytics.EventOnboardingSkipped:       true,
 // 	}
 // 	if !validTypes[eventType] {
-// 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid onboarding event type: %s", req.Msg.EventType))
+// 		return nil, svcerr.InvalidArgument(fmt.Sprintf("invalid onboarding event type: %s", req.Msg.EventType))
 // 	}
 //
 // 	metrics := analytics.OnboardingMetrics{

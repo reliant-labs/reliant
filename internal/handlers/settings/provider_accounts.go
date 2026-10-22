@@ -64,7 +64,7 @@ func (s *Service) connectAccount(ctx context.Context, in signIn) (signInResult, 
 	if in.targetID != "" {
 		accounts, err := repo.ListProviderAccounts(ctx, in.userID)
 		if err != nil {
-			return signInResult{}, svcerr.Internal("failed to read accounts")
+			return signInResult{}, svcerr.WrapOr(err, svcerr.Internal("failed to read accounts"))
 		}
 		for i := range accounts {
 			if accounts[i].ID == in.targetID {
@@ -83,8 +83,7 @@ func (s *Service) connectAccount(ctx context.Context, in signIn) (signInResult, 
 
 	acct, created, err := repo.UpsertProviderAccount(ctx, in.upsert)
 	if err != nil {
-		logging.ErrorContext(ctx, "Failed to persist provider account", "provider", in.provider, "error", err)
-		return signInResult{}, svcerr.Internal(fmt.Sprintf("failed to save %s credentials", providerName(in.provider)))
+		return signInResult{}, svcerr.WrapOr(err, svcerr.Internal(fmt.Sprintf("failed to save %s credentials", providerName(in.provider))))
 	}
 	if created && in.label != "" && acct.Label == "" && acct.Email == "" {
 		if acct, err = repo.PatchProviderAccount(ctx, in.userID, acct.ID, core.AccountPatch{Label: &in.label}); err != nil {

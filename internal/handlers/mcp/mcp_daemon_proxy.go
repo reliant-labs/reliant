@@ -4,11 +4,14 @@ package mcp
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/config"
+	"github.com/reliant-labs/reliant/internal/daemonerr"
 	mcpclient "github.com/reliant-labs/reliant/internal/mcp"
+	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
 // daemonMCPProxy implements mcpManagerRuntime by proxying all MCP operations
@@ -38,6 +41,25 @@ func (p *daemonMCPProxy) sendCommand(ctx context.Context, commandType string, pa
 		return nil, fmt.Errorf("marshal %s payload: %w", commandType, err)
 	}
 	return p.router.SendDaemonCommand(ctx, p.userID, commandType, data, timeoutMs)
+}
+
+// daemonReported is a failure the daemon itself answered a command with: its
+// words, from the user's own machine, which the user reads. A failure of the
+// round trip is daemonerr's to classify, and its text never reaches the wire.
+type daemonReported string
+
+func (e daemonReported) Error() string { return string(e) }
+
+// withDaemonText is msg followed by what the daemon said, when err carries it.
+func withDaemonText(msg string, err error) string {
+	var reported daemonReported
+	if errors.As(err, &reported) {
+		return msg + ": " + string(reported)
+	}
+	if text, ok := toolexec.DaemonReportedText(err); ok {
+		return msg + ": " + text
+	}
+	return msg
 }
 
 // --- server status ---
@@ -95,7 +117,7 @@ func (p *daemonMCPProxy) listTools(ctx context.Context, projectPath, serverName 
 	}
 	respData, err := p.sendCommand(ctx, "mcp.list_tools", req, int32(mcpStatusTimeout.Milliseconds()))
 	if err != nil {
-		return nil, err
+		return nil, daemonerr.Error("daemon command mcp.list_tools", err)
 	}
 	var resp struct {
 		Tools []mcpclient.Tool `json:"tools"`
@@ -105,7 +127,7 @@ func (p *daemonMCPProxy) listTools(ctx context.Context, projectPath, serverName 
 		return nil, err
 	}
 	if resp.Error != "" {
-		return nil, fmt.Errorf("%s", resp.Error)
+		return nil, daemonReported(resp.Error)
 	}
 	return resp.Tools, nil
 }
@@ -153,7 +175,7 @@ func (p *daemonMCPProxy) manageServer(ctx context.Context, action, projectPath, 
 		return fmt.Errorf("unmarshal manage_server response: %w", err)
 	}
 	if !resp.Success && resp.Error != "" {
-		return fmt.Errorf("%s", resp.Error)
+		return daemonReported(resp.Error)
 	}
 	return nil
 }

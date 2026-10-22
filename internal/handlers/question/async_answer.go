@@ -84,8 +84,7 @@ func (s *Service) resolveAsyncQuestion(
 	if err := s.deps.Repo.ResolveQuestion(ctx, question.ID, stored); err != nil {
 		// Delivered but still pending: an answer sent again finds the
 		// message already queued and resolves it then.
-		logging.ErrorContext(ctx, "Delivered an async answer but failed to resolve its question", "error", err, "questionID", question.ID)
-		return nil, svcerr.Internal("failed to resolve question")
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to resolve question"))
 	}
 
 	toolCallID := ""
@@ -162,7 +161,7 @@ func (s *Service) deliverAsyncAnswer(ctx context.Context, chat *db.Chat, questio
 func (s *Service) parkedOnBlockingQuestion(ctx context.Context, chatID, thread string) (bool, error) {
 	byThread, err := s.deps.Repo.PendingQuestionsByThread(ctx, chatID)
 	if err != nil {
-		return false, connect.NewError(connect.CodeInternal, fmt.Errorf("check the asking thread's questions: %w", err))
+		return false, svcerr.WrapOr(err, svcerr.Internal("failed to check the asking thread's questions"))
 	}
 	return byThread[thread] != nil, nil
 }
@@ -187,7 +186,7 @@ func (s *Service) queueBehindBlockingQuestion(ctx context.Context, chat *db.Chat
 		Status:       core.AgentMessageStatusQueued,
 		CreatedAt:    time.Now(),
 	}); err != nil {
-		return connect.NewError(connect.CodeInternal, fmt.Errorf("queue the answer: %w", err))
+		return svcerr.WrapOr(err, svcerr.Internal("failed to queue the answer"))
 	}
 	logging.InfoContext(ctx, "Queued an async answer behind the blocking question its thread is parked on",
 		"questionID", questionID, "chatID", chat.ID, "threadID", thread)

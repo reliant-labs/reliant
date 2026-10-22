@@ -2,10 +2,10 @@ package workflow_test
 
 import (
 	"context"
-	"errors"
 	"testing"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	workflow "github.com/reliant-labs/reliant/internal/handlers/workflow"
 	"github.com/reliant-labs/reliant/internal/workflow/builtin"
 )
@@ -34,7 +34,7 @@ func draftsRepo(drafts ...*db.WorkflowDraft) *workflow.StubRepo {
 			if id == "p-1" && userID == "test-user" {
 				return &db.Project{ID: id, UserID: userID, Name: "proj"}, nil
 			}
-			return nil, errors.New("project not found")
+			return nil, core.ErrProjectNotFound
 		},
 		GetWorkflowDraftBySlugFunc: func(_ context.Context, userID, slug string) (*db.WorkflowDraft, error) {
 			if d, ok := bySlug[slug]; ok && userID == d.UserID {

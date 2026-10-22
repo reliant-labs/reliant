@@ -98,6 +98,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge db migration`](#reliant-forge-db-migration) | Create and re-version forward-only SQL migration files |
 | [`reliant forge db migration new`](#reliant-forge-db-migration-new) | Create a new forward-only migration with a fresh UTC timestamp version |
 | [`reliant forge db migration rebase`](#reliant-forge-db-migration-rebase) | Re-version migrations to fresh timestamps that sort after everything merged |
+| [`reliant forge db query`](#reliant-forge-db-query) | Run one read-only SQL statement against an environment's app database |
 | [`reliant forge db reset`](#reliant-forge-db-reset) | DROP the dev database, recreate it, migrate to head, and seed (dev-only) |
 | [`reliant forge db seed`](#reliant-forge-db-seed) | Materialize deterministic development seed data at runtime |
 | [`reliant forge db seed apply`](#reliant-forge-db-seed-apply) | Materialize seed data into the dev database (dev-only) |
@@ -2398,6 +2399,9 @@ Forge uses a migration-first database model:
   'forge db migrate' and from the project's own binary alike
 - Entity types are projections of the applied schema (forge generate)
 
+To read an environment's data: 'forge db query `<env>` "`<sql>`"' runs one
+read-only statement and prints the rows.
+
 When something is wedged:
 
   A migration failed part-way and the state is marked dirty
@@ -2438,6 +2442,7 @@ reliant forge db
 | [`introspect`](#reliant-forge-db-introspect) | Inspect the migrated database schema |
 | [`migrate`](#reliant-forge-db-migrate) | Apply, inspect and repair migration state with forge's migrator |
 | [`migration`](#reliant-forge-db-migration) | Create and re-version forward-only SQL migration files |
+| [`query`](#reliant-forge-db-query) | Run one read-only SQL statement against an environment's app database |
 | [`reset`](#reliant-forge-db-reset) | DROP the dev database, recreate it, migrate to head, and seed (dev-only) |
 | [`seed`](#reliant-forge-db-seed) | Materialize deterministic development seed data at runtime |
 | [`squash`](#reliant-forge-db-squash) | Collapse N migrations into one canonical baseline (.up.sql) |
@@ -2755,6 +2760,60 @@ reliant forge db migration rebase [file...] [flags]
 |------|------|---------|-------------|
 | `--all-pending` | `bool` | - | Re-version every migration added on this branch (above the default branch's merge-base) |
 | `--dir` | `string` | - | Migrations directory (default: forge.yaml database.migrations_dir, else db/migrations; a relative path resolves against the project root, not the CWD) |
+
+---
+
+#### reliant forge db query
+
+Run one read-only SQL statement against an environment's app database
+
+Run one read-only statement against an environment's app database and print
+the rows. The env is required, dev included.
+
+Every query runs in a READ ONLY transaction with a statement timeout, as one
+statement, under row and size caps. Writes, nextval() and a second statement
+are refused: by a lexical guard first (so the message is readable), and by
+Postgres itself regardless.
+
+The connection is the workload's resolved DATABASE_URL (`--workload`, default
+"api"): the same value `cli forge env exec` gives the process. OnHost and OnCompose
+workloads are supported; hosted and cluster databases are not reachable from
+forge yet (exit 2).
+
+An env declared scratch (lifecycle local or ephemeral) or with no cluster at
+all is open. Any other env is a real one: pass --confirm-env `<env>` and a
+--reason.
+
+Output: a table, or --format json|csv. --json is --format json; the document
+carries ok, exit_code and error like every other forge --json verb, plus
+schema "forge.db.query/v1", scope, columns`[{name,pg_type}]`, rows, row_count,
+truncated, truncated_by, cells_truncated, duration_ms and bytes.
+
+Exit codes: 0 rows returned; 1 the statement or the request is wrong (refused
+by the guard or the read-only transaction, a SQL error, a permission error, a
+policy refusal); 2 forge could not look (no database reachable, timeout,
+connection lost).
+
+  cli forge db query dev "select count(*) from jobs where crew_id is null"
+  cli forge db query dev -f report.sql --format csv > report.csv
+  cli forge db query staging "select * from jobs limit 5" --confirm-env staging --reason "ISS-7f3a"
+
+```
+reliant forge db query <env> ["<sql>" | -f FILE] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--confirm-env` | `string` | - | Required on a real env: the env name again |
+| `--file`, `-f` | `string` | - | Read the statement from FILE (- for stdin) |
+| `--format` | `string` | `table` | Output format: table, json or csv |
+| `--json` | `bool` | - | Same as --format json |
+| `--max-rows` | `int` | `200` | Row cap (at most 10000) |
+| `--reason` | `string` | - | Required on a real env: why you are reading it (at most 500 characters) |
+| `--timeout` | `duration` | `5s` | Statement timeout (at most 30s) |
+| `--workload` | `string` | `api` | Workload whose DATABASE_URL to query |
 
 ---
 

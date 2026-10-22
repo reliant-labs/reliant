@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/structpb"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/triggers"
@@ -106,7 +107,7 @@ func TestCreateActivationRefusesAMissingRequiredParam(t *testing.T) {
 	_, err := env.svc.CreateTrigger(env.ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{Trigger: env.activationDef(nil)}))
 
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 	assert.Contains(t, err.Error(), "repos is required")
 	assert.Empty(t, env.storedTriggers(t), "nothing was written")
 }
@@ -125,7 +126,7 @@ func TestCreateActivationEnforcesItemBounds(t *testing.T) {
 				Trigger: env.activationDef(func(d *reliantv1.TriggerDefinition) { d.Params = setupReposParam(tc.repos...) }),
 			}))
 			require.Error(t, err)
-			assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+			assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 			assert.Contains(t, err.Error(), tc.want)
 		})
 	}
@@ -149,7 +150,7 @@ func TestUpdateActivationCannotClearARequiredParam(t *testing.T) {
 	}))
 
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 	assert.Contains(t, err.Error(), "repos is required")
 	assert.Equal(t, []any{"acme/web"}, env.storedTriggers(t)[0].Params["repos"], "the stored setup is untouched")
 }
@@ -215,7 +216,7 @@ func TestSetTriggerEnabledDoesNotResumeAnUnfinishedActivation(t *testing.T) {
 
 	_, err := env.svc.SetTriggerEnabled(env.ctx, connect.NewRequest(&reliantv1.SetTriggerEnabledRequest{Id: row.ID, Enabled: true}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
 	assert.Contains(t, err.Error(), "needs setup: repos is required")
 
 	// Pausing needs no setup.
@@ -233,7 +234,7 @@ func TestRunNowOfAnUnfinishedActivationSaysWhatToFinish(t *testing.T) {
 	_, err := env.svc.FireTrigger(env.ctx, connect.NewRequest(&reliantv1.FireTriggerRequest{Id: row.ID}))
 
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
 	assert.Contains(t, err.Error(), "needs setup: repos is required")
 	assert.Contains(t, err.Error(), "Finish setting up")
 }

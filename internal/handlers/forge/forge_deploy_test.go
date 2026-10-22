@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 )
 
@@ -251,7 +252,7 @@ func TestForgeService_PlanDeploy_RequiresEnv(t *testing.T) {
 	_, err := newForgeTestService(router).PlanDeploy(authedCtx(),
 		connect.NewRequest(&reliantv1.PlanForgeDeployRequest{ProjectId: "p"}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 	assert.Empty(t, router.lastCommandType, "no daemon call for an invalid request")
 }
 
@@ -285,13 +286,13 @@ func TestForgeService_StartDeploy_RefusesChangedDeclaredContext(t *testing.T) {
 		connect.NewRequest(authorisedStart("prod", "k3d-control-plane", "v1.5.15")))
 
 	require.Error(t, err, "a refusal must FAIL the RPC so an unchecked client fails closed")
-	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
 	assert.Contains(t, err.Error(), "nothing was applied")
 
 	// The structured detail is what makes this recoverable without a blind retry
 	// against production.
-	var connectErr *connect.Error
-	require.ErrorAs(t, err, &connectErr)
+	connectErr := svcerr.ToConnect(err) // the wire form svcerr.Interceptor sends
+	require.NotNil(t, connectErr)
 	details := connectErr.Details()
 	require.Len(t, details, 1, "the refusal must travel as a structured detail")
 	msg, detailErr := details[0].Value()
@@ -330,10 +331,10 @@ func TestForgeService_StartDeploy_RefusesChangedBoundRelease(t *testing.T) {
 		connect.NewRequest(authorisedStart("staging", "vke-staging", "v1.5.15")))
 
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
 
-	var connectErr *connect.Error
-	require.ErrorAs(t, err, &connectErr)
+	connectErr := svcerr.ToConnect(err) // the wire form svcerr.Interceptor sends
+	require.NotNil(t, connectErr)
 	require.Len(t, connectErr.Details(), 1)
 	msg, detailErr := connectErr.Details()[0].Value()
 	require.NoError(t, detailErr)
@@ -404,10 +405,10 @@ func TestForgeService_StartDeploy_RefusalReasonsAreDistinguishable(t *testing.T)
 				connect.NewRequest(authorisedStart("prod", "gke_prod", "v1.5.15")))
 
 			require.Error(t, err, "every refusal must fail the RPC")
-			assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+			assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
 
-			var connectErr *connect.Error
-			require.ErrorAs(t, err, &connectErr)
+			connectErr := svcerr.ToConnect(err) // the wire form svcerr.Interceptor sends
+			require.NotNil(t, connectErr)
 			require.Len(t, connectErr.Details(), 1)
 			msg, detailErr := connectErr.Details()[0].Value()
 			require.NoError(t, detailErr)
@@ -459,7 +460,7 @@ func TestForgeService_StartDeploy_RequiresConfirmationToken(t *testing.T) {
 			router := &forgeTestRouter{}
 			_, err := newForgeTestService(router).StartDeploy(authedCtx(), connect.NewRequest(req))
 			require.Error(t, err)
-			assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+			assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 			assert.Empty(t, router.lastCommandType,
 				"an unauthorised request must never reach the daemon")
 		})
@@ -752,7 +753,7 @@ func TestForgeService_GetDeployStatus_RequiresHandle(t *testing.T) {
 	_, err := newForgeTestService(router).GetDeployStatus(authedCtx(),
 		connect.NewRequest(&reliantv1.GetForgeDeployStatusRequest{ProjectId: "p"}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 	assert.Empty(t, router.lastCommandType)
 }
 

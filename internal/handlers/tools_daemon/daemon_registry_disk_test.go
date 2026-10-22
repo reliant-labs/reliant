@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/diskwatch"
@@ -88,9 +89,9 @@ func TestClearMachineCaches_RelaysToTheMachine(t *testing.T) {
 	assert.JSONEq(t, `{"kinds":["go_build_cache","docker_volumes"]}`, string(router.commands[0].payload))
 
 	_, err = reg.ClearMachineCaches(userCtx("user-2"), connect.NewRequest(&reliantv1.ClearMachineCachesRequest{DaemonId: "daemon-1", Kinds: []string{"go_build_cache"}}))
-	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err), "another user's machine")
+	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err), "another user's machine")
 	_, err = reg.ClearMachineCaches(userCtx("user-1"), connect.NewRequest(&reliantv1.ClearMachineCachesRequest{DaemonId: "daemon-off", Kinds: []string{"go_build_cache"}}))
-	assert.Equal(t, connect.CodeUnavailable, connect.CodeOf(err), "an offline machine")
+	assert.Equal(t, connect.CodeUnavailable, svcerr.Code(err), "an offline machine")
 	_, err = reg.ClearMachineCaches(userCtx("user-1"), connect.NewRequest(&reliantv1.ClearMachineCachesRequest{DaemonId: "daemon-1"}))
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 }

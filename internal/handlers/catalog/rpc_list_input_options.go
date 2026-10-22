@@ -3,7 +3,6 @@ package catalog
 
 import (
 	"context"
-	"errors"
 
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -13,7 +12,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/connectionrpc"
 	"github.com/reliant-labs/reliant/internal/integrations/inputoptions"
-	"github.com/reliant-labs/reliant/internal/logging"
 )
 
 // ListInputOptions lists the values a picker offers for an integration-defined
@@ -29,14 +27,14 @@ import (
 // own action with its own audit.
 func (s *Service) ListInputOptions(ctx context.Context, req *connect.Request[reliantv1.ListInputOptionsRequest]) (*connect.Response[reliantv1.ListInputOptionsResponse], error) {
 	if _, machine := auth.MachineTokenFromContext(ctx); machine {
-		return nil, svcerr.ToConnect(svcerr.PermissionDenied("listing input options requires an interactive session"))
+		return nil, svcerr.PermissionDenied("listing input options requires an interactive session")
 	}
 	userID, err := connectionrpc.Caller(ctx)
 	if err != nil {
 		return nil, err
 	}
 	if s.deps.InputOptions == nil {
-		return nil, svcerr.ToConnect(svcerr.Unimplemented("input options are not configured"))
+		return nil, svcerr.Unimplemented("input options are not configured")
 	}
 	msg := req.Msg
 	scope := make(map[string]any, len(msg.GetScope()))
@@ -51,7 +49,7 @@ func (s *Service) ListInputOptions(ctx context.Context, req *connect.Request[rel
 			Values: msg.GetResolve(), ActingIdentity: identity,
 		})
 		if err != nil {
-			return nil, s.inputOptionsError(ctx, err)
+			return nil, svcerr.WrapOr(err, svcerr.Internal("listing input options failed"))
 		}
 		return connect.NewResponse(&reliantv1.ListInputOptionsResponse{
 			Options:         inputOptionsToProto(res.Options),
@@ -64,7 +62,7 @@ func (s *Service) ListInputOptions(ctx context.Context, req *connect.Request[rel
 		Query: msg.GetQuery(), PageToken: msg.GetPageToken(), PageSize: int(msg.GetPageSize()), ActingIdentity: identity,
 	})
 	if err != nil {
-		return nil, s.inputOptionsError(ctx, err)
+		return nil, svcerr.WrapOr(err, svcerr.Internal("listing input options failed"))
 	}
 	return connect.NewResponse(&reliantv1.ListInputOptionsResponse{
 		Options:         inputOptionsToProto(res.Options),
@@ -107,29 +105,4 @@ func inputOptionsToProto(in []inputoptions.Option) []*reliantv1.InputOption {
 		out = append(out, p)
 	}
 	return out
-}
-
-// inputOptionsError maps the option service's typed failures onto wire codes.
-// What reaches the caller is the service's own message, which never carries a
-// credential or a provider response body.
-func (s *Service) inputOptionsError(ctx context.Context, err error) error {
-	var upstream *inputoptions.UpstreamError
-	switch {
-	case errors.Is(err, inputoptions.ErrUnknownType), errors.Is(err, inputoptions.ErrConnectionNotFound):
-		return connect.NewError(connect.CodeNotFound, errors.New(inputoptions.Message(err)))
-	case errors.Is(err, inputoptions.ErrNoOptions), errors.Is(err, inputoptions.ErrBadScope),
-		errors.Is(err, inputoptions.ErrBadPageToken), errors.Is(err, inputoptions.ErrBadRequest):
-		return connect.NewError(connect.CodeInvalidArgument, errors.New(inputoptions.Message(err)))
-	case errors.As(err, &upstream):
-		if upstream.Retryable {
-			return connect.NewError(connect.CodeUnavailable, errors.New(upstream.Message))
-		}
-		return connect.NewError(connect.CodeFailedPrecondition, errors.New(upstream.Message))
-	case errors.Is(err, context.Canceled):
-		return connect.NewError(connect.CodeCanceled, err)
-	case errors.Is(err, context.DeadlineExceeded):
-		return connect.NewError(connect.CodeDeadlineExceeded, err)
-	}
-	logging.ErrorContext(ctx, "list input options failed", "error", err)
-	return svcerr.ToConnect(svcerr.Internal("listing input options failed"))
 }

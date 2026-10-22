@@ -128,7 +128,7 @@ func (s *Service) StartOAuthSignIn(
 
 	result, err := auth.LoginWithOAuthProvider(ctx, s.deps.OAuthProvider, provider)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to complete %s OAuth sign-in: %w", provider, err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal(fmt.Sprintf("failed to complete %s OAuth sign-in", provider)))
 	}
 
 	return connect.NewResponse(&reliantv1.StartOAuthSignInResponse{

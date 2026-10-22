@@ -25,6 +25,7 @@ import (
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -269,7 +270,7 @@ func TestGitHubTriggersFireEndToEnd(t *testing.T) {
 		Name: "carol", ProjectId: carol.project, DaemonId: carol.daemon, Workflow: "builtin://agent", Message: "x",
 		Source: &reliantv1.TriggerDefinition_Integration{Integration: &reliantv1.IntegrationSource{Integration: "github", Events: []string{"push"}}},
 	}}))
-	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err), fmt.Sprint(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err), fmt.Sprint(err))
 }
 
 func waitForEventCount(t *testing.T, repo *db.Repo, userID, triggerID string, want int) {

@@ -3,7 +3,6 @@ package connection
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"connectrpc.com/connect"
@@ -14,44 +13,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
-
-// connectionError maps a domain error onto a Connect code. NotFound stays
-// NotFound (never PermissionDenied) so ids are not an oracle. Untyped errors
-// are internal and carry no detail to the client.
-func connectionError(err error) error {
-	if err == nil {
-		return nil
-	}
-	var ce *connect.Error
-	if errors.As(err, &ce) {
-		return err
-	}
-	var e *connections.Error
-	if !errors.As(err, &e) {
-		if errors.Is(err, context.Canceled) {
-			return connect.NewError(connect.CodeCanceled, err)
-		}
-		if errors.Is(err, context.DeadlineExceeded) {
-			return connect.NewError(connect.CodeDeadlineExceeded, err)
-		}
-		return svcerr.ToConnect(svcerr.Internal("connection service error"))
-	}
-	msg := errors.New(e.Message)
-	switch e.Code {
-	case connections.CodeNotFound:
-		return connect.NewError(connect.CodeNotFound, msg)
-	case connections.CodeInvalidArgument:
-		return connect.NewError(connect.CodeInvalidArgument, msg)
-	case connections.CodeAlreadyExists:
-		return connect.NewError(connect.CodeAlreadyExists, msg)
-	case connections.CodeFailedPrecondition, connections.CodeNeedsReauth:
-		return connect.NewError(connect.CodeFailedPrecondition, msg)
-	case connections.CodeUnavailable:
-		return connect.NewError(connect.CodeUnavailable, msg)
-	default:
-		return svcerr.ToConnect(svcerr.Internal("connection service error"))
-	}
-}
 
 func connectionStatusToProto(s string) reliantv1.ConnectionStatus {
 	switch s {
@@ -125,7 +86,7 @@ func (s *Service) ListConnections(ctx context.Context, req *connect.Request[reli
 	}
 	cs, err := s.deps.Connections.List(ctx, userID, req.Msg.GetIntegrationId())
 	if err != nil {
-		return nil, connectionError(err)
+		return nil, svcerr.WrapOr(err, svcerr.Internal("connection service error"))
 	}
 	out := make([]*reliantv1.Connection, 0, len(cs))
 	for _, c := range cs {
@@ -141,7 +102,7 @@ func (s *Service) GetConnection(ctx context.Context, req *connect.Request[relian
 	}
 	c, err := s.deps.Connections.Get(ctx, userID, req.Msg.GetId())
 	if err != nil {
-		return nil, connectionError(err)
+		return nil, svcerr.WrapOr(err, svcerr.Internal("connection service error"))
 	}
 	return connect.NewResponse(&reliantv1.GetConnectionResponse{Connection: connectionToProto(c)}), nil
 }
@@ -163,7 +124,7 @@ func (s *Service) CreateApiKeyConnection(ctx context.Context, req *connect.Reque
 		Kind: kind, Fields: req.Msg.GetFields(), Params: req.Msg.GetParams(),
 	})
 	if err != nil {
-		return nil, connectionError(err)
+		return nil, svcerr.WrapOr(err, svcerr.Internal("connection service error"))
 	}
 	return connect.NewResponse(&reliantv1.CreateApiKeyConnectionResponse{Connection: connectionToProto(c)}), nil
 }
@@ -183,7 +144,7 @@ func (s *Service) StartOAuth(ctx context.Context, req *connect.Request[reliantv1
 		LoopbackRedirect: req.Msg.GetLoopbackRedirect(),
 	})
 	if err != nil {
-		return nil, connectionError(err)
+		return nil, svcerr.WrapOr(err, svcerr.Internal("connection service error"))
 	}
 	return connect.NewResponse(&reliantv1.StartOAuthResponse{AuthorizeUrl: url}), nil
 }
@@ -195,7 +156,7 @@ func (s *Service) CompleteOAuth(ctx context.Context, req *connect.Request[relian
 	}
 	done, err := s.deps.Connections.CompleteOAuth(ctx, userID, req.Msg.GetState(), req.Msg.GetCode())
 	if err != nil {
-		return nil, connectionError(err)
+		return nil, svcerr.WrapOr(err, svcerr.Internal("connection service error"))
 	}
 	return connect.NewResponse(&reliantv1.CompleteOAuthResponse{
 		Connection: connectionToProto(done.Connection), RedirectAfter: done.RedirectAfter,
@@ -209,7 +170,7 @@ func (s *Service) TestConnection(ctx context.Context, req *connect.Request[relia
 	}
 	r, err := s.deps.Connections.Test(ctx, userID, req.Msg.GetId())
 	if err != nil {
-		return nil, connectionError(err)
+		return nil, svcerr.WrapOr(err, svcerr.Internal("connection service error"))
 	}
 	return connect.NewResponse(&reliantv1.TestConnectionResponse{
 		Ok: r.OK, Probed: r.Probed, AccountLabel: r.AccountLabel, ErrorClass: r.ErrorClass,
@@ -223,7 +184,7 @@ func (s *Service) RenameConnection(ctx context.Context, req *connect.Request[rel
 	}
 	c, err := s.deps.Connections.Rename(ctx, userID, req.Msg.GetId(), req.Msg.GetName())
 	if err != nil {
-		return nil, connectionError(err)
+		return nil, svcerr.WrapOr(err, svcerr.Internal("connection service error"))
 	}
 	return connect.NewResponse(&reliantv1.RenameConnectionResponse{Connection: connectionToProto(c)}), nil
 }
@@ -235,7 +196,7 @@ func (s *Service) SetDefaultConnection(ctx context.Context, req *connect.Request
 	}
 	c, err := s.deps.Connections.SetDefault(ctx, userID, req.Msg.GetId())
 	if err != nil {
-		return nil, connectionError(err)
+		return nil, svcerr.WrapOr(err, svcerr.Internal("connection service error"))
 	}
 	return connect.NewResponse(&reliantv1.SetDefaultConnectionResponse{Connection: connectionToProto(c)}), nil
 }
@@ -246,7 +207,7 @@ func (s *Service) DeleteConnection(ctx context.Context, req *connect.Request[rel
 		return nil, err
 	}
 	if err := s.deps.Connections.Delete(ctx, userID, req.Msg.GetId()); err != nil {
-		return nil, connectionError(err)
+		return nil, svcerr.WrapOr(err, svcerr.Internal("connection service error"))
 	}
 	return connect.NewResponse(&reliantv1.DeleteConnectionResponse{}), nil
 }
@@ -258,7 +219,7 @@ func (s *Service) ListConnectionEvents(ctx context.Context, req *connect.Request
 	}
 	evs, err := s.deps.Connections.Events(ctx, userID, req.Msg.GetId(), int(req.Msg.GetLimit()), req.Msg.GetBeforeId())
 	if err != nil {
-		return nil, connectionError(err)
+		return nil, svcerr.WrapOr(err, svcerr.Internal("connection service error"))
 	}
 	out := make([]*reliantv1.ConnectionEvent, 0, len(evs))
 	for _, e := range evs {

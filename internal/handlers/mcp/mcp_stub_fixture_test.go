@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	mcp "github.com/reliant-labs/reliant/internal/handlers/mcp"
 )
 
@@ -26,7 +27,8 @@ func ownedProjectRepo(t *testing.T, mcpConfigs string) *mcp.StubRepo {
 			if id == "p-1" && userID == "test-user" {
 				return &db.Project{ID: id, UserID: userID, Name: "proj", Path: "/work"}, nil
 			}
-			return nil, errors.New("project not found")
+			// The store's real answer for a project the caller does not own.
+			return nil, core.ErrProjectNotFound
 		},
 		GetProjectMCPConfigsJSONFunc: func(_ context.Context, projectID string) (*string, error) {
 			if projectID != "p-1" {

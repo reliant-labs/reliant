@@ -17,6 +17,7 @@ import (
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 )
@@ -149,5 +150,5 @@ func TestConnectDaemonRefusesAServerWithoutAbortableBodies(t *testing.T) {
 		Register: &reliantv1.DaemonRegister{Hostname: "h", Platform: "linux", DaemonType: "local"},
 	}})
 	_, err := stream.Receive()
-	require.Equal(t, connect.CodeInternal, connect.CodeOf(err))
+	require.Equal(t, connect.CodeInternal, svcerr.Code(err))
 }

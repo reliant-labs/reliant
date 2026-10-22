@@ -20,6 +20,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemonerr"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/terminal"
+	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
 // Every rpc forwards its request to the caller's daemon through Deps.Router:
@@ -29,7 +30,7 @@ import (
 func (s *Service) getUserID(ctx context.Context) (string, error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok {
-		return "", fmt.Errorf("user ID not found in context")
+		return "", svcerr.Unauthenticated("user ID not found in context")
 	}
 	return userID, nil
 }
@@ -88,6 +89,28 @@ func isTerminalSessionNotFound(err error) bool {
 	return err != nil && strings.Contains(err.Error(), terminalSessionNotFound)
 }
 
+// daemonFailure is a failed daemon round trip as the svcerr kind the rpc
+// returns. A machine that is starting, asleep or absent is not a server
+// fault: its state picks the code, the message prefixed with machineDoing
+// (daemonerr.MachineState; may be empty). A daemon older than this server is
+// FailedPrecondition in the daemon's own words (daemonerr.Outdated). Anything
+// else is Internal, saying what was being done: the daemon's own words reach
+// the user, the router's and the transport's stay on the error as its logged
+// cause.
+func daemonFailure(machineDoing, doing string, err error) error {
+	if daemonerr.IsOutdated(err) {
+		return daemonerr.Outdated(err)
+	}
+	if serr, ok := daemonerr.MachineState(machineDoing, err); ok {
+		return serr
+	}
+	msg := doing + " failed"
+	if text, ok := toolexec.DaemonReportedText(err); ok {
+		msg += ": " + text
+	}
+	return svcerr.WithCause(svcerr.Internal(msg), err)
+}
+
 // ListSessions returns all active terminal sessions.
 func (s *Service) ListSessions(
 	ctx context.Context,
@@ -95,20 +118,17 @@ func (s *Service) ListSessions(
 ) (*connect.Response[reliantv1.ListTerminalSessionsResponse], error) {
 	userID, err := s.getUserID(ctx)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnauthenticated, err)
+		return nil, err
 	}
 
 	payload, err := json.Marshal(struct{}{})
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("marshal request: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("marshal request"))
 	}
 
 	respBytes, err := s.deps.Router.SendDaemonCommand(ctx, userID, "terminal.list", payload, 30000)
 	if err != nil {
-		if cerr, ok := daemonerr.MachineStateConnectError("", err); ok {
-			return nil, cerr
-		}
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, daemonFailure("", "daemon command terminal.list", err)
 	}
 
 	var cmdResp struct {
@@ -121,7 +141,7 @@ func (s *Service) ListSessions(
 		} `json:"sessions"`
 	}
 	if err := json.Unmarshal(respBytes, &cmdResp); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("unmarshal response: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("unmarshal response"))
 	}
 
 	sessions := make([]*reliantv1.TerminalSession, len(cmdResp.Sessions))
@@ -152,7 +172,7 @@ func (s *Service) CloseSession(
 ) (*connect.Response[reliantv1.CloseTerminalSessionResponse], error) {
 	userID, err := s.getUserID(ctx)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnauthenticated, err)
+		return nil, err
 	}
 
 	if req.Msg.SessionId == "" {
@@ -164,7 +184,7 @@ func (s *Service) CloseSession(
 	}
 	payload, err := json.Marshal(cmdReq)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("marshal request: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("marshal request"))
 	}
 
 	respBytes, err := s.deps.Router.SendDaemonCommand(ctx, userID, "terminal.close", payload, 30000)
@@ -180,17 +200,14 @@ func (s *Service) CloseSession(
 				Message: "Session already closed",
 			}), nil
 		}
-		if cerr, ok := daemonerr.MachineStateConnectError("", err); ok {
-			return nil, cerr
-		}
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, daemonFailure("", "daemon command terminal.close", err)
 	}
 
 	var cmdResp struct {
 		Success bool `json:"success"`
 	}
 	if err := json.Unmarshal(respBytes, &cmdResp); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("unmarshal response: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("unmarshal response"))
 	}
 
 	msg := "Session closed successfully"
@@ -212,13 +229,13 @@ func (s *Service) StreamTerminal(
 ) error {
 	userID, err := s.getUserID(ctx)
 	if err != nil {
-		return connect.NewError(connect.CodeUnauthenticated, err)
+		return err
 	}
 
 	// Wait for the first message — must be a Create request.
 	firstMsg, err := stream.Receive()
 	if err != nil {
-		return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("failed to receive initial message: %w", err))
+		return svcerr.WrapOr(err, svcerr.InvalidArgument("failed to receive initial message"))
 	}
 
 	createReq := firstMsg.GetCreate()
@@ -232,7 +249,7 @@ func (s *Service) StreamTerminal(
 	}
 	payload, err := json.Marshal(cmdReq)
 	if err != nil {
-		return connect.NewError(connect.CodeInternal, fmt.Errorf("marshal create request: %w", err))
+		return svcerr.WrapOr(err, svcerr.Internal("marshal create request"))
 	}
 
 	respBytes, err := s.deps.Router.SendDaemonCommand(ctx, userID, "terminal.create", payload, 30000)
@@ -242,12 +259,13 @@ func (s *Service) StreamTerminal(
 		if terminal.IsWorkingDirUnavailable(err) {
 			logging.WarnContext(ctx, "[Terminal] Stream working directory unavailable",
 				"requested_working_dir", createReq.GetWorkingDir(), "user_id", userID, "error", err)
-			return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("create terminal session: %w", err))
+			text, ok := toolexec.DaemonReportedText(err)
+			if !ok {
+				text = terminal.ErrWorkingDirUnavailable.Error()
+			}
+			return svcerr.WithCause(svcerr.FailedPrecondition("create terminal session: "+text), err)
 		}
-		if cerr, ok := daemonerr.MachineStateConnectError("create terminal session", err); ok {
-			return cerr
-		}
-		return connect.NewError(connect.CodeInternal, fmt.Errorf("create terminal session: %w", err))
+		return daemonFailure("create terminal session", "create terminal session", err)
 	}
 
 	var createResp struct {
@@ -258,7 +276,7 @@ func (s *Service) StreamTerminal(
 		WorkingDir string `json:"working_dir"`
 	}
 	if err := json.Unmarshal(respBytes, &createResp); err != nil {
-		return connect.NewError(connect.CodeInternal, fmt.Errorf("unmarshal create response: %w", err))
+		return svcerr.WrapOr(err, svcerr.Internal("unmarshal create response"))
 	}
 
 	sessionID := createResp.SessionID
@@ -288,7 +306,7 @@ func (s *Service) StreamTerminal(
 	// Subscribe to terminal output from the daemon.
 	outputCh, unsub, err := s.deps.Router.SubscribeTerminalOutput(ctx, userID, sessionID)
 	if err != nil {
-		return connect.NewError(connect.CodeInternal, fmt.Errorf("subscribe terminal output: %w", err))
+		return daemonFailure("", "subscribe terminal output", err)
 	}
 	defer unsub()
 

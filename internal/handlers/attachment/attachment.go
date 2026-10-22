@@ -116,8 +116,7 @@ func (s *Service) UploadAttachment(
 	}
 
 	if err := s.deps.Repo.CreateAttachment(ctx, dbAttachment); err != nil {
-		logging.ErrorContext(ctx, "Failed to save attachment to database", "error", err, "attachmentID", attachmentID)
-		return nil, svcerr.Internal("failed to save attachment")
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to save attachment"))
 	}
 
 	logging.DebugContext(ctx, "File uploaded successfully via gRPC",
@@ -160,7 +159,10 @@ func (s *Service) GetAttachment(
 	}
 
 	dbAttachment, err := s.deps.Repo.GetAttachment(ctx, attachmentID)
-	if err != nil || dbAttachment == nil {
+	if err != nil {
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get attachment"))
+	}
+	if dbAttachment == nil {
 		return nil, svcerr.NotFound("attachment")
 	}
 
@@ -191,7 +193,10 @@ func (s *Service) DeleteAttachment(
 
 	// Verify the attachment exists and belongs to this user
 	dbAttachment, err := s.deps.Repo.GetAttachment(ctx, attachmentID)
-	if err != nil || dbAttachment == nil {
+	if err != nil {
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get attachment"))
+	}
+	if dbAttachment == nil {
 		return nil, svcerr.NotFound("attachment")
 	}
 	if dbAttachment.UserID != userID {
@@ -199,8 +204,7 @@ func (s *Service) DeleteAttachment(
 	}
 
 	if err := s.deps.Repo.DeleteAttachment(ctx, attachmentID); err != nil {
-		logging.ErrorContext(ctx, "Failed to delete attachment from database", "error", err, "attachmentID", attachmentID)
-		return nil, svcerr.Internal("failed to delete attachment")
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to delete attachment"))
 	}
 
 	logging.DebugContext(ctx, "Attachment deleted via gRPC", "attachmentID", attachmentID, "userID", userID)
@@ -276,8 +280,7 @@ func (s *Service) CreateFileReference(
 	}
 
 	if err := s.deps.Repo.CreateAttachment(ctx, dbAttachment); err != nil {
-		logging.ErrorContext(ctx, "Failed to save file reference to database", "error", err, "attachmentID", attachmentID)
-		return nil, svcerr.Internal("failed to create file reference")
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to create file reference"))
 	}
 
 	logging.DebugContext(ctx, "File reference created via gRPC",

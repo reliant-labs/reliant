@@ -3,7 +3,6 @@ package package_commands
 
 import (
 	"context"
-	"fmt"
 
 	"connectrpc.com/connect"
 
@@ -82,7 +81,7 @@ func (s *Service) resolveWorkingDir(
 	case worktreeID != "":
 		worktree, err := s.deps.Repo.GetWorktree(ctx, worktreeID)
 		if err != nil {
-			return "", connect.NewError(connect.CodeNotFound, fmt.Errorf("worktree not found: %w", err))
+			return "", svcerr.WrapOr(err, svcerr.Internal("failed to get worktree"))
 		}
 		return worktree.Path, nil
 	case path != "":

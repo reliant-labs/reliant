@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/local"
@@ -22,11 +23,11 @@ import (
 
 // ErrDaemonOffline means the machine that should reach the endpoint is not
 // connected right now.
-var ErrDaemonOffline = errors.New("that machine is offline")
+var ErrDaemonOffline = svcerr.Unavailable("that machine is offline")
 
 // ErrDaemonNotOwned means the daemon does not exist or belongs to someone
 // else; the two are indistinguishable on purpose.
-var ErrDaemonNotOwned = errors.New("machine not found")
+var ErrDaemonNotOwned = svcerr.NotFound("machine")
 
 // Store is the slice of db.Repository the manager uses. Declared here, at the
 // consumer.

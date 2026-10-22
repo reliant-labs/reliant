@@ -3,16 +3,19 @@ package scenario_test
 import (
 	"context"
 	"database/sql"
-	"errors"
+	"fmt"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	scenario "github.com/reliant-labs/reliant/internal/handlers/scenario"
 )
 
 // The fixture behind the scaffold tests, which need no database: one project
 // and one workflow the caller ("test-user", AuthedContext's default
 // principal) owns, a saved scenario of theirs on that workflow, and one
-// another user owns. Any other ID is missing.
+// another user owns. Any other ID is missing, answered as the store answers
+// it: a project is NotFound, a draft or a scenario is (nil, nil).
 const (
 	ownProjectID     = "project-own"
 	ownScenarioID    = "scenario-own"
@@ -74,19 +77,19 @@ func newScenarioRepo(f *fixture) *scenario.StubRepo {
 			if id == ownProjectID && userID == "test-user" {
 				return &db.Project{ID: id, UserID: userID, Path: "/home/test/project"}, nil
 			}
-			return nil, errors.New("project not found")
+			return nil, core.ErrProjectNotFound
 		},
 		GetProjectFunc: func(_ context.Context, id string) (*db.Project, error) {
 			if id == ownProjectID {
 				return &db.Project{ID: id, UserID: "test-user", Path: "/home/test/project"}, nil
 			}
-			return nil, sql.ErrNoRows
+			return nil, fmt.Errorf("%w: %s", svcerr.NotFound("project"), id)
 		},
 		GetWorkflowDraftBySlugFunc: func(_ context.Context, userID, slug string) (*db.WorkflowDraft, error) {
 			if userID == "test-user" && slug == ownWorkflowSlug {
 				return draft, nil
 			}
-			return nil, sql.ErrNoRows
+			return nil, nil
 		},
 		ListWorkflowScenariosByDraftFunc: func(_ context.Context, draftID string) ([]*db.WorkflowScenario, error) {
 			var out []*db.WorkflowScenario
@@ -101,7 +104,7 @@ func newScenarioRepo(f *fixture) *scenario.StubRepo {
 			if s, ok := scenarios[id]; ok {
 				return s, nil
 			}
-			return nil, sql.ErrNoRows
+			return nil, nil
 		},
 		CreateWorkflowScenarioFunc: func(_ context.Context, s *db.WorkflowScenario) error {
 			f.created = append(f.created, s)

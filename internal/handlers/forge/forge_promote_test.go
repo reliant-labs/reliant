@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 )
 
@@ -193,13 +194,13 @@ func TestForgeService_ApplyPromote_RefusesStaleBinding(t *testing.T) {
 	// forgot would tell a user the promote worked.
 	require.Error(t, err, "a refused promote must FAIL the RPC, not return a success with a flag")
 	assert.Nil(t, resp)
-	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err),
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err),
 		"a stale binding is a precondition failure, distinguishable from Internal/Unavailable")
 
 	// The structured facts must survive on the error path, or the only recovery
 	// is a blind retry — which is how a rollback gets applied twice.
-	connectErr := new(connect.Error)
-	require.ErrorAs(t, err, &connectErr)
+	connectErr := svcerr.ToConnect(err) // the wire form svcerr.Interceptor sends
+	require.NotNil(t, connectErr)
 	require.Len(t, connectErr.Details(), 1, "the refusal detail must be attached")
 
 	msg, detailErr := connectErr.Details()[0].Value()
@@ -292,7 +293,7 @@ func TestForgeService_ApplyPromote_RequiresAConfirmationToken(t *testing.T) {
 			_, err := newForgeTestService(router).ApplyPromote(authedCtx(), connect.NewRequest(tc.req))
 
 			require.Error(t, err)
-			assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+			assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 			assert.Empty(t, router.lastCommandType,
 				"an unauthorised promote must never reach the daemon")
 		})
@@ -341,7 +342,7 @@ func TestForgeService_ApplyPromote_ExpectUnbound(t *testing.T) {
 			}))
 
 		require.Error(t, err)
-		assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+		assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
 	})
 }
 
@@ -363,10 +364,10 @@ func TestForgeService_ApplyPromote_UnknownRefusalReasonStillFails(t *testing.T) 
 		}))
 
 	require.Error(t, err, "an unclassifiable refusal must not become a success")
-	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
 
-	connectErr := new(connect.Error)
-	require.ErrorAs(t, err, &connectErr)
+	connectErr := svcerr.ToConnect(err) // the wire form svcerr.Interceptor sends
+	require.NotNil(t, connectErr)
 	require.Len(t, connectErr.Details(), 1)
 	msg, detailErr := connectErr.Details()[0].Value()
 	require.NoError(t, detailErr)
@@ -748,7 +749,7 @@ func TestForgeService_Promote_Validation(t *testing.T) {
 			router := &forgeTestRouter{}
 			err := tc.call(newForgeTestService(router))
 			require.Error(t, err)
-			assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+			assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 			assert.Empty(t, router.lastCommandType, "must not dispatch an invalid request")
 		})
 	}
@@ -760,13 +761,13 @@ func TestForgeService_Promote_Validation(t *testing.T) {
 		_, err := svc.PlanPromote(t.Context(), connect.NewRequest(
 			&reliantv1.PlanForgePromoteRequest{ProjectId: "p", Env: "staging", Release: "v1"}))
 		require.Error(t, err)
-		assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
+		assert.Equal(t, connect.CodeUnauthenticated, svcerr.Code(err))
 
 		_, err = svc.ApplyPromote(t.Context(), connect.NewRequest(
 			&reliantv1.PromoteForgeEnvRequest{
 				ProjectId: "p", Env: "staging", Release: "v1", ExpectedCurrentRelease: "v0"}))
 		require.Error(t, err)
-		assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
+		assert.Equal(t, connect.CodeUnauthenticated, svcerr.Code(err))
 
 		assert.Empty(t, router.lastCommandType)
 	})
@@ -805,7 +806,7 @@ func TestForgeService_Promote_TimeoutIsARealFailureNotUnreachable(t *testing.T) 
 			err := tc.call(newForgeTestService(router))
 			require.Error(t, err,
 				"promote reads no cluster, so a timeout says nothing about reachability")
-			assert.Equal(t, connect.CodeUnavailable, connect.CodeOf(err))
+			assert.Equal(t, connect.CodeUnavailable, svcerr.Code(err))
 		})
 	}
 }
@@ -840,7 +841,7 @@ func TestForgeService_Promote_MissingProjectDirIsNotFound(t *testing.T) {
 			}
 			err := tc.call(newForgeTestService(router))
 			require.Error(t, err)
-			assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err),
+			assert.Equal(t, connect.CodeNotFound, svcerr.Code(err),
 				"a deleted directory is a missing resource, not a retryable outage")
 		})
 	}

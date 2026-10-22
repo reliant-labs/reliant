@@ -18,8 +18,8 @@ import (
 func TestListPendingQuestions_Generated(t *testing.T) {
 	t.Parallel()
 
-	// The generated harness stubs Repo, so no chat exists.
-	svc := question.NewTestQuestion(t)
+	// No question or chat exists (emptyQuestionRepo).
+	svc := question.NewTestQuestion(t, question.WithQuestionDeps(question.Deps{Repo: emptyQuestionRepo()}))
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ListPendingQuestionsRequest, pb.ListPendingQuestionsResponse]{
 		{

@@ -6,6 +6,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	tools_daemon "github.com/reliant-labs/reliant/internal/handlers/tools_daemon"
 )
 
@@ -18,6 +19,6 @@ func TestConnectGateway_AnswersUnimplemented(t *testing.T) {
 
 	svc := tools_daemon.NewTestToolsDaemon(t)
 	err := svc.ConnectGateway(tools_daemon.AuthedContext(t), nil)
-	require.Equal(t, connect.CodeUnimplemented, connect.CodeOf(err))
+	require.Equal(t, connect.CodeUnimplemented, svcerr.Code(err))
 	require.ErrorContains(t, err, "reliant.v1.ToolsDaemonService.ConnectGateway is not implemented")
 }

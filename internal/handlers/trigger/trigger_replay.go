@@ -38,7 +38,7 @@ func (s *Service) ListReplayEvents(
 	userID := auth.MustGetUserID(ctx)
 	msg := req.Msg
 	if strings.TrimSpace(msg.GetWorkflow()) == "" {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("workflow is required"))
+		return nil, svcerr.InvalidArgument("workflow is required")
 	}
 	limit := int(msg.GetLimit())
 	switch {
@@ -66,7 +66,7 @@ func (s *Service) ListReplayEvents(
 		for _, firing := range firings {
 			ev, err := triggers.EventWithRunToProto(firing)
 			if err != nil {
-				return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("render event %s: %w", firing.Event.ID, err))
+				return nil, svcerr.WrapOr(err, svcerr.Internal(fmt.Sprintf("render event %s failed", firing.Event.ID)))
 			}
 			candidates = append(candidates, &reliantv1.ReplayCandidate{Event: ev, TriggerName: *t.WorkflowTrigger})
 		}
@@ -95,14 +95,14 @@ func (s *Service) PreviewReplay(
 	userID := auth.MustGetUserID(ctx)
 	msg := req.Msg
 	if strings.TrimSpace(msg.GetWorkflow()) == "" {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("workflow is required"))
+		return nil, svcerr.InvalidArgument("workflow is required")
 	}
 	if msg.GetReplay() == nil {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("replay is required"))
+		return nil, svcerr.InvalidArgument("replay is required")
 	}
 	replay, err := triggers.ReplayFromProto(msg.GetReplay(), msg.GetSender())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, svcerr.InvalidArgument(err.Error())
 	}
 
 	wf, err := launch.ResolveRunWorkflow(ctx, s.deps.Repo, userID, msg.GetWorkflow(), msg.GetProjectId())
@@ -111,19 +111,18 @@ func (s *Service) PreviewReplay(
 		if errors.As(err, &lookup) {
 			return nil, triggerDBError("resolve workflow", err)
 		}
-		return nil, connect.NewError(connect.CodeNotFound,
-			fmt.Errorf("workflow %q does not resolve to a runnable workflow: %w", msg.GetWorkflow(), err))
+		return nil, unresolvedWorkflow(msg.GetWorkflow(), err)
 	}
 
 	mapping, err := triggers.MapReplay(ctx, s.deps.Repo, userID, msg.GetWorkflow(), wf, s.activationOf(ctx, userID, msg, replay.TriggerName), replay)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, svcerr.InvalidArgument(err.Error())
 	}
 	inputs := make(map[string]*structpb.Value, len(mapping.Inputs))
 	for name, value := range mapping.Inputs {
 		v, err := structpb.NewValue(value)
 		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("input %q is not representable: %w", name, err))
+			return nil, svcerr.WrapOr(err, svcerr.Internal(fmt.Sprintf("input %q is not representable", name)))
 		}
 		inputs[name] = v
 	}

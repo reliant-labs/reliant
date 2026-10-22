@@ -2,15 +2,16 @@ package daemon_registry_test
 
 import (
 	"context"
-	"fmt"
 	"time"
+
+	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	"github.com/reliant-labs/reliant/internal/db"
 	daemon_registry "github.com/reliant-labs/reliant/internal/handlers/daemon_registry"
 )
 
 // knownDaemonsRepo answers a daemon lookup the way db.Repo does: the row when
-// it exists, an error when it does not. The generated harness's stub answers
+// it exists, the store's classified NotFound when it does not. The generated harness's stub answers
 // (nil, nil) instead, which GetDaemon and ResumeDaemon read as found. No
 // daemon has a fresh attachment, so every known daemon is offline. Every
 // other method is unreachable from the rows that use it: the embedded nil
@@ -24,7 +25,7 @@ func (r knownDaemonsRepo) GetDaemon(_ context.Context, id string) (*db.Daemon, e
 	if d, ok := r.daemons[id]; ok {
 		return d, nil
 	}
-	return nil, fmt.Errorf("daemon not found: %s", id)
+	return nil, svcerr.NotFound("daemon")
 }
 
 func (knownDaemonsRepo) ListFreshDaemonAttachmentsForUser(context.Context, string, time.Duration) ([]*db.DaemonAttachment, error) {

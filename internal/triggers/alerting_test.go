@@ -8,9 +8,11 @@ import (
 	"testing"
 	"time"
 
+	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/ptr"
@@ -119,6 +121,33 @@ func TestARefusedProvisionKeepsTheCurrentToken(t *testing.T) {
 	st.hashes["t1"] = []byte("current")
 	require.Error(t, a.Provision(context.Background(), alertingTrigger("t1", true, time.Time{})))
 	assert.Equal(t, []byte("current"), st.hashes["t1"])
+}
+
+// A failed provision is the svcerr kind the person enabling is told, and the
+// control plane's own error is kept as its cause, never forwarded.
+func TestProvisionFailuresAreWhatThePersonEnablingIsTold(t *testing.T) {
+	cases := map[string]struct {
+		err  error
+		code connect.Code
+		msg  string
+	}{
+		"no organization": {&controlplane.AutopilotError{Code: "failed_precondition", Reason: controlplane.ReasonAutopilotNoOrg},
+			connect.CodeFailedPrecondition, "on-call receives your organization's alerts, and your account belongs to no organization yet"},
+		"unsupported": {controlplane.ErrAutopilotUnsupported, connect.CodeUnavailable, "this deployment's control plane cannot deliver alerts to automations yet"},
+		"refused":     {&controlplane.AutopilotError{Code: "invalid_argument", Message: "bad scope"}, connect.CodeUnavailable, "could not connect your organization's alerts: bad scope"},
+		"down":        {errors.New("dial tcp 10.0.0.7:443: connection refused"), connect.CodeUnavailable, "could not connect your organization's alerts right now; try again"},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			a, rec, _ := newAlertingFixture()
+			rec.upsertErr = c.err
+			err := a.Provision(context.Background(), alertingTrigger("t1", true, time.Time{}))
+			require.Error(t, err)
+			assert.Equal(t, c.code, svcerr.Code(err))
+			assert.Equal(t, c.msg, svcerr.ToConnect(err).Message())
+			assert.ErrorIs(t, err, c.err, "the cause stays reachable for the server")
+		})
+	}
 }
 
 func TestSweepConvergesReceiversOntoEnabledAlertingActivations(t *testing.T) {

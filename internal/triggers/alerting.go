@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -88,24 +89,45 @@ func (a *Alerting) Manages(t *core.Trigger) bool { return a != nil && IsAlerting
 // alerts to it with that token. The control plane is written first: if it
 // refuses, the stored token is untouched and a receiver it already held keeps
 // working.
+//
+// A failure is the svcerr kind the person enabling the trigger is told, with
+// the control plane's (or the store's) error kept as its cause: the remote
+// verdict is never forwarded as it is.
 func (a *Alerting) Provision(ctx context.Context, t *core.Trigger) error {
 	token, hash, err := NewWebhookToken()
 	if err != nil {
-		return err
+		return provisionError(err)
 	}
 	projects, repos := a.scope(ctx, t.ProjectID)
 	if err := a.receivers.UpsertAutopilotReceiver(ctx, controlplane.AutopilotReceiver{
 		ActivationID: t.ID, UserID: t.UserID, URL: WebhookURL(a.publicURL, t.ID), Token: token,
 		Projects: projects, Repos: repos,
 	}); err != nil {
-		return fmt.Errorf("provision alert receiver: %w", err)
+		return provisionError(fmt.Errorf("provision alert receiver: %w", err))
 	}
 	if err := a.store.SetTriggerWebhookTokenHash(ctx, t.ID, hash); err != nil {
-		return fmt.Errorf("store the alert receiver's token: %w", err)
+		return provisionError(fmt.Errorf("store the alert receiver's token: %w", err))
 	}
 	logging.InfoContext(ctx, "alert receiver provisioned for a trigger", "trigger_id", t.ID, "user_id", t.UserID,
 		"projects", projects, "repos", len(repos))
 	return nil
+}
+
+// provisionError is a provisioning failure as the person enabling sees it.
+func provisionError(err error) error {
+	var refused *controlplane.AutopilotError
+	var kind error
+	switch {
+	case errors.As(err, &refused) && refused.Reason == controlplane.ReasonAutopilotNoOrg:
+		kind = svcerr.FailedPrecondition("on-call receives your organization's alerts, and your account belongs to no organization yet")
+	case errors.Is(err, controlplane.ErrAutopilotUnsupported):
+		kind = svcerr.Unavailable("this deployment's control plane cannot deliver alerts to automations yet")
+	case errors.As(err, &refused):
+		kind = svcerr.Unavailable(fmt.Sprintf("could not connect your organization's alerts: %s", refused.Message))
+	default:
+		kind = svcerr.Unavailable("could not connect your organization's alerts right now; try again")
+	}
+	return svcerr.WithCause(kind, err)
 }
 
 // Retire removes t's receiver. Removing one that does not exist succeeds.

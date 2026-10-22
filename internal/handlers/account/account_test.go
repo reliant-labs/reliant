@@ -7,6 +7,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -38,7 +39,7 @@ func TestDeleteAccount_ConfirmEmailMismatch(t *testing.T) {
 	if err == nil {
 		t.Fatal("DeleteAccount accepted a mismatched confirmation")
 	}
-	if got := connect.CodeOf(err); got != connect.CodeInvalidArgument {
+	if got := svcerr.Code(err); got != connect.CodeInvalidArgument {
 		t.Errorf("code = %v, want InvalidArgument", got)
 	}
 }
@@ -88,7 +89,7 @@ func TestDeleteAccount_RequiresAuth(t *testing.T) {
 	if err == nil {
 		t.Fatal("DeleteAccount succeeded with no authenticated user")
 	}
-	if got := connect.CodeOf(err); got != connect.CodeUnauthenticated {
+	if got := svcerr.Code(err); got != connect.CodeUnauthenticated {
 		t.Errorf("code = %v, want Unauthenticated", got)
 	}
 }

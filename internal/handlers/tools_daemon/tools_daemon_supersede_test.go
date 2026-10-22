@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/toolexec"
@@ -113,7 +114,7 @@ func TestHandleIncomingEndsImmediatelyWhenSuperseded(t *testing.T) {
 	select {
 	case err := <-errCh:
 		require.Error(t, err, "a superseded stream must not end with a bare nil/EOF")
-		require.Equal(t, connect.CodeAborted, connect.CodeOf(err),
+		require.Equal(t, connect.CodeAborted, svcerr.Code(err),
 			"the daemon distinguishes supersession from a network drop by this code")
 	case <-time.After(3 * time.Second):
 		t.Fatal("handleIncoming stayed parked in Receive after the connection was superseded")
@@ -149,7 +150,7 @@ func TestSupersedeIncumbentRecordsAbortedReason(t *testing.T) {
 	conn := newTestConn("user-1", uuid.NewString(), newParkedStream())
 	svc.supersedeIncumbent(conn)
 
-	require.Equal(t, connect.CodeAborted, connect.CodeOf(conn.closedReason()))
+	require.Equal(t, connect.CodeAborted, svcerr.Code(conn.closedReason()))
 }
 
 // The connection that holds the pending-response entry must be the connection

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/db"
 	tool_call "github.com/reliant-labs/reliant/internal/handlers/tool_call"
 )
@@ -16,5 +17,5 @@ import (
 type unknownToolCallRepo struct{ tool_call.Repository }
 
 func (unknownToolCallRepo) GetContentBlockByToolCallID(_ context.Context, id string) (*db.MessageContentBlock, error) {
-	return nil, fmt.Errorf("tool call not found: %s", id)
+	return nil, fmt.Errorf("%w: %s", svcerr.NotFound("tool call"), id)
 }

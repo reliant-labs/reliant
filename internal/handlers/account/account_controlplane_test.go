@@ -10,6 +10,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -87,7 +88,7 @@ func TestDeleteAccount_ControlPlaneBlockStopsBeforeLocalPurge(t *testing.T) {
 	if err == nil {
 		t.Fatal("a control-plane block must fail the deletion")
 	}
-	if got := connect.CodeOf(err); got != connect.CodeFailedPrecondition {
+	if got := svcerr.Code(err); got != connect.CodeFailedPrecondition {
 		t.Errorf("code = %v, want FailedPrecondition", got)
 	}
 	// The user must be told WHAT to do, not handed a generic failure.
@@ -117,7 +118,7 @@ func TestDeleteAccount_ControlPlaneErrorAbortsWithNothingDeleted(t *testing.T) {
 	if err == nil {
 		t.Fatal("a control-plane failure must abort the deletion")
 	}
-	if got := connect.CodeOf(err); got != connect.CodeInternal {
+	if got := svcerr.Code(err); got != connect.CodeInternal {
 		t.Errorf("code = %v, want Internal", got)
 	}
 }
@@ -204,7 +205,7 @@ func TestPreviewAccountDeletion_FailsWhenWalletQuoteUnavailable(t *testing.T) {
 
 	_, err := svc.PreviewAccountDeletion(accountAuthedCtx("u-q", "owner@example.com"),
 		connect.NewRequest(&reliantv1.PreviewAccountDeletionRequest{}))
-	if connect.CodeOf(err) != connect.CodeUnavailable {
+	if svcerr.Code(err) != connect.CodeUnavailable {
 		t.Fatalf("want Unavailable, got %v", err)
 	}
 }
@@ -246,7 +247,7 @@ func TestDeleteAccount_UnconfirmedRefundIsRetryableAndPurgesNothing(t *testing.T
 	svc := newAccountService(t, rawDB, cp)
 
 	_, err := svc.DeleteAccount(accountAuthedCtx("u-u", "owner@example.com"), deleteReq("owner@example.com"))
-	if connect.CodeOf(err) != connect.CodeUnavailable {
+	if svcerr.Code(err) != connect.CodeUnavailable {
 		t.Fatalf("want Unavailable, got %v", err)
 	}
 	if !strings.Contains(err.Error(), "nothing was deleted") {

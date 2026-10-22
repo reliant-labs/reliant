@@ -77,7 +77,7 @@ func (s *Service) StreamUserUpdates(
 	// Note: Authentication is handled by the WrapStreamingHandler interceptor
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok {
-		return connect.NewError(connect.CodeUnauthenticated, nil)
+		return svcerr.ErrUnauthenticated
 	}
 
 	sinceSeq := req.Msg.SinceSeq
@@ -88,8 +88,7 @@ func (s *Service) StreamUserUpdates(
 	// --- User-level initialization ---
 	latestSeq, err := s.deps.Repo.GetLatestUserUpdateSequence(ctx, userID)
 	if err != nil {
-		logging.ErrorContext(ctx, LOG_PREFIX_STREAM_USER+" Failed to get latest sequence", "error", err, "userID", userID)
-		return err
+		return svcerr.WrapOr(err, svcerr.Internal("failed to read the latest update sequence"))
 	}
 
 	// Send initial sync info
@@ -118,8 +117,7 @@ func (s *Service) StreamUserUpdates(
 	lastUserSeq := sinceSeq
 	if latestSeq > sinceSeq {
 		if err := s.sendUserUpdateBatches(ctx, userID, sinceSeq, latestSeq, filter, stream); err != nil {
-			logging.ErrorContext(ctx, LOG_PREFIX_STREAM_USER+" Failed to send updates", "error", err, "userID", userID)
-			return err
+			return svcerr.WrapOr(err, svcerr.Internal("failed to send updates"))
 		}
 		lastUserSeq = latestSeq
 	}
@@ -133,10 +131,10 @@ func (s *Service) StreamUserUpdates(
 		// Verify user owns the chat before subscribing
 		chat, err := s.deps.Repo.GetChat(ctx, subscribeChatID)
 		if err != nil {
-			return svcerr.ToConnect(svcerr.NotFound("chat"))
+			return svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 		}
-		if chat.UserID != userID {
-			return svcerr.ToConnect(svcerr.NotFound("chat"))
+		if chat == nil || chat.UserID != userID {
+			return svcerr.NotFound("chat")
 		}
 
 		logging.DebugContext(ctx, LOG_PREFIX_STREAM_USER+" Subscribing to chat detail events",
@@ -170,8 +168,7 @@ func (s *Service) StreamUserUpdates(
 		if !useSnapshot {
 			chatLatestSeq, err = s.deps.Repo.GetLatestUpdateSequence(ctx, subscribeChatID)
 			if err != nil {
-				logging.ErrorContext(ctx, LOG_PREFIX_STREAM_CHAT+" Failed to get latest sequence", "error", err, "chatID", subscribeChatID[:8])
-				return err
+				return svcerr.WrapOr(err, svcerr.Internal("failed to read the latest chat update sequence"))
 			}
 			if chatCursorNeedsSnapshot(chatSinceSeq, chatLatestSeq) {
 				logging.DebugContext(ctx, LOG_PREFIX_STREAM_CHAT+" Cursor not replayable, sending snapshot",
@@ -186,15 +183,13 @@ func (s *Service) StreamUserUpdates(
 			// anything committed in between is in the snapshot.
 			snapshotSeq, err := s.sendChatSnapshotViaUserStream(ctx, subscribeChatID, stream)
 			if err != nil {
-				logging.ErrorContext(ctx, LOG_PREFIX_STREAM_CHAT+" Failed to send snapshot", "error", err, "chatID", subscribeChatID[:8])
-				return err
+				return svcerr.WrapOr(err, svcerr.Internal("failed to send chat snapshot"))
 			}
 			lastChatSeq = snapshotSeq
 		} else {
 			if chatLatestSeq > chatSinceSeq {
 				if err := s.sendChatUpdateBatchesViaUserStream(ctx, subscribeChatID, chatSinceSeq, chatLatestSeq, stream); err != nil {
-					logging.ErrorContext(ctx, LOG_PREFIX_STREAM_CHAT+" Failed to send updates", "error", err, "chatID", subscribeChatID[:8])
-					return err
+					return svcerr.WrapOr(err, svcerr.Internal("failed to send chat updates"))
 				}
 			}
 			lastChatSeq = chatLatestSeq
@@ -267,9 +262,7 @@ func (s *Service) StreamUserUpdates(
 			// revealed it. The client never infers loss from a skip.
 			if event.SequenceNumber > lastUserSeq+1 {
 				if err := s.sendUserUpdateBatches(ctx, userID, lastUserSeq, event.SequenceNumber-1, filter, stream); err != nil {
-					logging.ErrorContext(ctx, LOG_PREFIX_STREAM_USER+" Failed to backfill dropped updates", "error", err,
-						"userID", userID, "fromSeq", lastUserSeq, "toSeq", event.SequenceNumber-1)
-					return err
+					return svcerr.WrapOr(err, svcerr.Internal("failed to backfill dropped updates"))
 				}
 			}
 			lastUserSeq = event.SequenceNumber

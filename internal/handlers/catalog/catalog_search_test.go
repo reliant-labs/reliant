@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/connections"
@@ -213,7 +214,7 @@ func TestSearchCatalog_RejectsBadRequests(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			_, err := svc.SearchCatalog(asUser("bob"), connect.NewRequest(req))
 			require.Error(t, err)
-			assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+			assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 		})
 	}
 }
@@ -286,27 +287,27 @@ func TestListCatalogIntegrations_RejectsBadRequests(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			_, err := svc.ListCatalogIntegrations(asUser("bob"), connect.NewRequest(req))
 			require.Error(t, err)
-			assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+			assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 		})
 	}
 	_, err := svc.ListCatalogIntegrations(context.Background(), connect.NewRequest(&reliantv1.ListCatalogIntegrationsRequest{}))
-	assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeUnauthenticated, svcerr.Code(err))
 	_, err = NewTestCatalog(t).ListCatalogIntegrations(asUser("bob"), connect.NewRequest(&reliantv1.ListCatalogIntegrationsRequest{}))
-	assert.Equal(t, connect.CodeUnimplemented, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeUnimplemented, svcerr.Code(err))
 }
 
 func TestSearchCatalog_RequiresAUser(t *testing.T) {
 	svc := newCatalogSearchTestService(t)
 	_, err := svc.SearchCatalog(context.Background(), connect.NewRequest(&reliantv1.SearchCatalogRequest{}))
-	assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeUnauthenticated, svcerr.Code(err))
 	_, err = svc.GetCatalogEntry(context.Background(), connect.NewRequest(&reliantv1.GetCatalogEntryRequest{Ref: "web/fetch@1"}))
-	assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeUnauthenticated, svcerr.Code(err))
 }
 
 func TestSearchCatalog_UnconfiguredIsUnimplemented(t *testing.T) {
 	svc := NewTestCatalog(t)
 	_, err := svc.SearchCatalog(asUser("bob"), connect.NewRequest(&reliantv1.SearchCatalogRequest{}))
-	assert.Equal(t, connect.CodeUnimplemented, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeUnimplemented, svcerr.Code(err))
 }
 
 func TestGetCatalogEntry_ReturnsSchemasAndConnectionRequirement(t *testing.T) {
@@ -356,10 +357,10 @@ func TestGetCatalogEntry_UnknownRefIsNotFound(t *testing.T) {
 	svc := newCatalogSearchTestService(t)
 	for _, ref := range []string{"acme/contact.create@2", "acme/nope@1", "nope/fetch@1", "garbage"} {
 		_, err := svc.GetCatalogEntry(asUser("bob"), connect.NewRequest(&reliantv1.GetCatalogEntryRequest{Ref: ref}))
-		assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err), ref)
+		assert.Equal(t, connect.CodeNotFound, svcerr.Code(err), ref)
 	}
 	_, err := svc.GetCatalogEntry(asUser("bob"), connect.NewRequest(&reliantv1.GetCatalogEntryRequest{}))
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 }
 
 // The embedded catalog is what production serves; its entries must convert.

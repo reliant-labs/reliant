@@ -11,6 +11,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/daemonerr"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/tools/shell"
@@ -36,15 +37,13 @@ func (s *Service) CancelToolCall(
 	// Find the content block by tool_call_id
 	block, err := s.deps.Repo.GetContentBlockByToolCallID(ctx, toolCallID)
 	if err != nil {
-		logging.ErrorContext(ctx, "[CancelToolCall] Failed to find tool call", "error", err, "toolCallID", toolCallID)
-		return nil, svcerr.WithMessage(svcerr.ErrNotFound, fmt.Sprintf("tool call not found: %s", toolCallID))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get tool call"))
 	}
 
 	// Get the message to find the chat ID
 	msg, err := s.deps.Repo.GetMessage(ctx, block.MessageID)
 	if err != nil {
-		logging.ErrorContext(ctx, "[CancelToolCall] Failed to find message for tool call", "error", err, "messageID", block.MessageID)
-		return nil, svcerr.Internal("failed to find message for tool call")
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to find message for tool call"))
 	}
 
 	chatID := msg.ChatID
@@ -52,9 +51,9 @@ func (s *Service) CancelToolCall(
 	// Get the chat and verify ownership
 	chat, err := s.deps.Repo.GetChat(ctx, chatID)
 	if err != nil {
-		return nil, svcerr.NotFound("chat")
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
-	if chat.UserID != userID {
+	if chat == nil || chat.UserID != userID {
 		return nil, svcerr.NotFound("chat")
 	}
 
@@ -84,10 +83,7 @@ func (s *Service) CancelToolCall(
 	// marking the call cancelled — a cancel that says it worked and didn't is
 	// worse than one that admits it couldn't.
 	if err := s.cancelChildWorkflowForToolCall(ctx, toolCallID); err != nil {
-		logging.WarnContext(ctx, "[CancelToolCall] Could not deliver spawn cancellation",
-			"toolCallID", toolCallID, "error", err)
-		return nil, connect.NewError(connect.CodeUnavailable,
-			fmt.Errorf("could not cancel this spawn: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Unavailable("could not cancel this spawn"))
 	}
 
 	// Emit a tool_call cancelled status update for the UI, and record the same
@@ -229,15 +225,13 @@ func (s *Service) ConvertToBackground(
 	// Find the content block by tool_call_id
 	block, err := s.deps.Repo.GetContentBlockByToolCallID(ctx, toolCallID)
 	if err != nil {
-		logging.ErrorContext(ctx, "[ConvertToBackground] Failed to find tool call", "error", err, "toolCallID", toolCallID)
-		return nil, svcerr.WithMessage(svcerr.ErrNotFound, fmt.Sprintf("tool call not found: %s", toolCallID))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get tool call"))
 	}
 
 	// Get the message to find the chat ID
 	msg, err := s.deps.Repo.GetMessage(ctx, block.MessageID)
 	if err != nil {
-		logging.ErrorContext(ctx, "[ConvertToBackground] Failed to find message for tool call", "error", err, "messageID", block.MessageID)
-		return nil, svcerr.Internal("failed to find message for tool call")
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to find message for tool call"))
 	}
 
 	chatID := msg.ChatID
@@ -245,9 +239,9 @@ func (s *Service) ConvertToBackground(
 	// Get the chat and verify ownership
 	chat, err := s.deps.Repo.GetChat(ctx, chatID)
 	if err != nil {
-		return nil, svcerr.NotFound("chat")
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
-	if chat.UserID != userID {
+	if chat == nil || chat.UserID != userID {
 		return nil, svcerr.NotFound("chat")
 	}
 
@@ -295,10 +289,7 @@ func (s *Service) ConvertToBackground(
 		// Do not claim success. The command is still running in the foreground,
 		// and reporting otherwise is what made this look like a working feature
 		// for months.
-		logging.WarnContext(ctx, "[ConvertToBackground] Could not deliver background request to daemon",
-			"error", err, "toolCallID", toolCallID)
-		return nil, connect.NewError(connect.CodeUnavailable,
-			fmt.Errorf("could not reach the machine running this command: %w", err))
+		return nil, daemonerr.Error("background this command", err)
 	}
 
 	// Emit a tool_call backgrounded status update for the UI, and record the

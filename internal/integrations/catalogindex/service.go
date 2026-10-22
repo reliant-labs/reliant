@@ -4,10 +4,10 @@ package catalogindex
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sync"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/integrations/catalog"
@@ -15,7 +15,7 @@ import (
 )
 
 // ErrNotFound: no entry has the ref.
-var ErrNotFound = errors.New("catalog entry not found")
+var ErrNotFound = svcerr.NotFound("catalog entry")
 
 // ConnectionLister is the slice of the connection store search needs: the
 // caller's own connections. Declared here, where it is consumed.

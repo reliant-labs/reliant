@@ -59,7 +59,7 @@ func TestCloseEndsOpenDaemonStreamsWithUnavailable(t *testing.T) {
 	select {
 	case err := <-handlerErr:
 		require.Error(t, err, "Close must end the stream with a status, not a nil return")
-		require.Equal(t, connect.CodeUnavailable, connect.CodeOf(err),
+		require.Equal(t, connect.CodeUnavailable, svcerr.Code(err),
 			"the daemon must see Unavailable so it redials to a live replica; "+
 				"got %v", err)
 		require.Contains(t, err.Error(), "draining")
@@ -73,8 +73,8 @@ func TestCloseEndsOpenDaemonStreamsWithUnavailable(t *testing.T) {
 // classified terminal, a gateway rollout would permanently disconnect every
 // daemon instead of moving them to the surge pod.
 func TestDrainingErrorIsRecoverableForDaemons(t *testing.T) {
-	require.Equal(t, connect.CodeUnavailable, connect.CodeOf(errGatewayDraining))
-	require.NotEqual(t, connect.CodeAborted, connect.CodeOf(errGatewayDraining),
+	require.Equal(t, connect.CodeUnavailable, svcerr.Code(errGatewayDraining))
+	require.NotEqual(t, connect.CodeAborted, svcerr.Code(errGatewayDraining),
 		"Aborted is the supersede signal and is terminal — a draining gateway must not use it")
 }
 
@@ -116,7 +116,7 @@ func TestCloseIsIdempotent(t *testing.T) {
 	svc.Close()
 	svc.Close()
 
-	require.Equal(t, connect.CodeUnavailable, connect.CodeOf(conn.closedReason()),
+	require.Equal(t, connect.CodeUnavailable, svcerr.Code(conn.closedReason()),
 		"the first Close's reason must survive the second")
 }
 
@@ -204,7 +204,7 @@ func TestHandOverEndsAtOnceTheStreamsOfDaemonsThatCannotMove(t *testing.T) {
 	require.Equal(t, 1, drainReplica(svc, time.Now().Add(20*time.Second)), "only the daemon that can move is told to")
 	select {
 	case <-old.done:
-		require.Equal(t, connect.CodeUnavailable, connect.CodeOf(old.closedReason()))
+		require.Equal(t, connect.CodeUnavailable, svcerr.Code(old.closedReason()))
 	default:
 		t.Fatal("a daemon that cannot move must be ended at once, so it redials straight away")
 	}
@@ -261,7 +261,7 @@ func TestStreamArrivingDuringTheListenerDrainIsRefused(t *testing.T) {
 	defer release()
 
 	err := svc.ConnectDaemon(ctx, nil)
-	require.Equal(t, connect.CodeUnavailable, connect.CodeOf(err))
+	require.Equal(t, connect.CodeUnavailable, svcerr.Code(err))
 	require.True(t, svcerr.IsServerDraining(err))
 }
 
@@ -272,11 +272,11 @@ func TestDrainingReplicaRefusesNewDaemonStreams(t *testing.T) {
 	drainReplica(svc, time.Now().Add(time.Second))
 
 	err := svc.ConnectDaemon(context.Background(), nil)
-	require.Equal(t, connect.CodeUnavailable, connect.CodeOf(err), "Unavailable keeps the daemon on its reconnect path")
+	require.Equal(t, connect.CodeUnavailable, svcerr.Code(err), "Unavailable keeps the daemon on its reconnect path")
 	require.True(t, svcerr.IsServerDraining(err))
 
 	_, err = svc.RegisterOutboundConnection(context.Background(), "user-1", "daemon-1", "10.0.0.1", 9190, &reliantv1.DaemonRegister{}, nil, nil)
-	require.Equal(t, connect.CodeUnavailable, connect.CodeOf(err))
+	require.Equal(t, connect.CodeUnavailable, svcerr.Code(err))
 }
 
 // Once told to move, the daemon closes its old stream itself when it is done

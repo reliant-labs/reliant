@@ -15,6 +15,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/daemonerr"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/diskwatch"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -39,7 +40,7 @@ func (s *Service) ListDaemons(
 
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok {
-		return nil, connect.NewError(connect.CodeUnauthenticated, nil)
+		return nil, svcerr.ErrUnauthenticated
 	}
 
 	// Trigger daemon connection check and wait briefly for it to register
@@ -50,7 +51,7 @@ func (s *Service) ListDaemons(
 
 	daemons, err := s.deps.Repo.ListDaemonsByUserID(ctx, userID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list daemons: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list daemons"))
 	}
 
 	attached, err := s.attachedDaemonSet(ctx, userID)
@@ -75,7 +76,8 @@ func (s *Service) ListDaemons(
 // daemon ID. A daemon is attached (routable) iff its entry is non-nil; the
 // row also carries heartbeat-reported memory telemetry.
 //
-// A failed read is an error (Unavailable), not an empty set. Treating it as
+// A failed read is an error (Unavailable, or the read's own deadline or
+// cancellation), not an empty set. Treating it as
 // "nothing attached" turned a DB hiccup into a confident answer that every one
 // of the user's machines had disconnected — the client cannot tell that from
 // the truth, so it shows "Your machine disconnected" for machines that are
@@ -84,8 +86,7 @@ func (s *Service) ListDaemons(
 func (s *Service) attachedDaemonSet(ctx context.Context, userID string) (map[string]*db.DaemonAttachment, error) {
 	attachments, err := s.deps.Repo.ListFreshDaemonAttachmentsForUser(ctx, userID, AttachmentStaleThreshold)
 	if err != nil {
-		logging.WarnContext(ctx, "[DaemonRegistry] Failed to list attached daemons", "error", err, "userID", userID)
-		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("reading daemon liveness: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Unavailable("reading daemon liveness"))
 	}
 	attached := make(map[string]*db.DaemonAttachment, len(attachments))
 	for _, att := range attachments {
@@ -100,18 +101,18 @@ func (s *Service) GetDaemon(
 ) (*connect.Response[reliantv1.GetDaemonResponse], error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok {
-		return nil, connect.NewError(connect.CodeUnauthenticated, nil)
+		return nil, svcerr.ErrUnauthenticated
 	}
 	if req.Msg.GetDaemonId() == "" {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("daemon_id is required"))
+		return nil, svcerr.InvalidArgument("daemon_id is required")
 	}
 
 	daemon, err := s.deps.Repo.GetDaemon(ctx, req.Msg.GetDaemonId())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("daemon not found: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get daemon"))
 	}
 	if daemon.UserID != userID {
-		return nil, svcerr.ToConnect(svcerr.NotFound("daemon"))
+		return nil, svcerr.NotFound("daemon")
 	}
 
 	attached, err := s.attachedDaemonSet(ctx, userID)
@@ -146,7 +147,7 @@ func (s *Service) ClearMachineCaches(
 ) (*connect.Response[reliantv1.ClearMachineCachesResponse], error) {
 	daemonID := req.Msg.GetDaemonId()
 	if len(req.Msg.GetKinds()) == 0 {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("kinds is required"))
+		return nil, svcerr.InvalidArgument("kinds is required")
 	}
 	userID, router, err := s.ownedOnlineDaemon(ctx, daemonID)
 	if err != nil {
@@ -154,15 +155,15 @@ func (s *Service) ClearMachineCaches(
 	}
 	payload, err := json.Marshal(diskwatch.ClearCachesRequest{Kinds: req.Msg.GetKinds()})
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, svcerr.WrapOr(err, svcerr.Internal("marshal request"))
 	}
 	raw, err := router.SendDaemonCommandToDaemon(ctx, userID, daemonID, diskwatch.ClearCachesCommand, payload, 15000)
 	if err != nil {
-		return nil, localModelRelayError(err)
+		return nil, localModelRelayError("daemon command "+diskwatch.ClearCachesCommand, err)
 	}
 	var out diskwatch.ClearCachesResponse
 	if err := json.Unmarshal(raw, &out); err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("decode %s response: %w", diskwatch.ClearCachesCommand, err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal(fmt.Sprintf("decode %s response", diskwatch.ClearCachesCommand)))
 	}
 	resp := &reliantv1.ClearMachineCachesResponse{Started: out.Started}
 	for _, sk := range out.Skipped {
@@ -203,38 +204,53 @@ func localModelsFromJSON(stored string) *reliantv1.LocalModelInventory {
 func (s *Service) ownedOnlineDaemon(ctx context.Context, daemonID string) (userID string, router Router, err error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok {
-		return "", nil, connect.NewError(connect.CodeUnauthenticated, nil)
+		return "", nil, svcerr.ErrUnauthenticated
 	}
 	if daemonID == "" {
-		return "", nil, svcerr.ToConnect(svcerr.InvalidArgument("daemon_id is required"))
+		return "", nil, svcerr.InvalidArgument("daemon_id is required")
 	}
 	daemon, err := s.deps.Repo.GetDaemon(ctx, daemonID)
-	if err != nil || daemon == nil || daemon.UserID != userID {
-		return "", nil, svcerr.ToConnect(svcerr.NotFound("daemon"))
+	if err != nil {
+		return "", nil, svcerr.WrapOr(err, svcerr.Internal("failed to get daemon"))
+	}
+	if daemon == nil || daemon.UserID != userID {
+		return "", nil, svcerr.NotFound("daemon")
 	}
 	attached, err := s.attachedDaemonSet(ctx, userID)
 	if err != nil {
 		return "", nil, err
 	}
 	if attached[daemon.ID] == nil {
-		return "", nil, svcerr.ToConnect(svcerr.Unavailable(fmt.Sprintf("daemon %s is offline", daemonID)))
+		return "", nil, svcerr.Unavailable(fmt.Sprintf("daemon %s is offline", daemonID))
 	}
 	if s.deps.Router == nil {
-		return "", nil, svcerr.ToConnect(svcerr.Unavailable("no daemon router configured"))
+		return "", nil, svcerr.Unavailable("no daemon router configured")
 	}
 	return userID, s.deps.Router, nil
 }
 
-// localModelRelayError maps router failures to connect codes.
-func localModelRelayError(err error) error {
-	if errors.Is(err, toolexec.ErrLocalModelDaemonUnavailable) {
-		return connect.NewError(connect.CodeUnavailable, err)
+// localModelRelayError is a failed relay to a daemon as the svcerr kind the rpc
+// returns, saying what was being done. A daemon the relay could not reach
+// (toolexec.LocalModelDaemonUnavailableError) is Unavailable in the relay's
+// own words, which name the daemon and why; a machine whose state explains the
+// failure gets the code that state calls for (daemonerr.MachineState); an
+// error that already says what it is (a deadline, a cancellation, the
+// router's Unavailable) keeps its code. Anything else is Internal: the
+// daemon's own words reach the user, the router's and the transport's stay on
+// the error as its logged cause.
+func localModelRelayError(doing string, err error) error {
+	var unavailable *toolexec.LocalModelDaemonUnavailableError
+	if errors.As(err, &unavailable) {
+		return svcerr.WithCause(svcerr.Unavailable(unavailable.Error()), err)
 	}
-	var already *connect.Error
-	if errors.As(err, &already) {
-		return err
+	if serr, ok := daemonerr.MachineState(doing, err); ok {
+		return serr
 	}
-	return connect.NewError(connect.CodeInternal, err)
+	msg := doing + " failed"
+	if text, ok := toolexec.DaemonReportedText(err); ok {
+		msg += ": " + text
+	}
+	return svcerr.WrapOr(err, svcerr.Internal(msg))
 }
 
 func (s *Service) RefreshLocalModels(
@@ -247,7 +263,7 @@ func (s *Service) RefreshLocalModels(
 	}
 	inv, err := router.RefreshLocalModels(ctx, userID, req.Msg.GetDaemonId())
 	if err != nil {
-		return nil, localModelRelayError(err)
+		return nil, localModelRelayError("refresh local models", err)
 	}
 	return connect.NewResponse(&reliantv1.RefreshLocalModelsResponse{LocalModels: inv}), nil
 }
@@ -267,14 +283,14 @@ func (s *Service) SetLocalModelEndpoints(
 	}
 	payload, err := json.Marshal(map[string][]string{"base_urls": baseURLs})
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, svcerr.WrapOr(err, svcerr.Internal("marshal request"))
 	}
 	if _, err := router.SendDaemonCommandToDaemon(ctx, userID, daemonID, toolexec.CommandLocalModelsSetEndpoints, payload, 15000); err != nil {
-		return nil, localModelRelayError(fmt.Errorf("writing local model endpoints on daemon %s: %w", daemonID, err))
+		return nil, localModelRelayError("write local model endpoints", err)
 	}
 	inv, err := router.RefreshLocalModels(ctx, userID, daemonID)
 	if err != nil {
-		return nil, localModelRelayError(err)
+		return nil, localModelRelayError("refresh local models", err)
 	}
 	return connect.NewResponse(&reliantv1.SetLocalModelEndpointsResponse{LocalModels: inv}), nil
 }
@@ -285,12 +301,12 @@ func (s *Service) ResolveDaemon(
 ) (*connect.Response[reliantv1.ResolveDaemonResponse], error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok {
-		return nil, connect.NewError(connect.CodeUnauthenticated, nil)
+		return nil, svcerr.ErrUnauthenticated
 	}
 
 	daemons, err := s.deps.Repo.ListDaemonsByUserID(ctx, userID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("listing daemons: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("listing daemons"))
 	}
 
 	attached, err := s.attachedDaemonSet(ctx, userID)
@@ -331,20 +347,20 @@ func (s *Service) ResumeDaemon(
 ) (*connect.Response[reliantv1.ResumeDaemonResponse], error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok {
-		return nil, connect.NewError(connect.CodeUnauthenticated, nil)
+		return nil, svcerr.ErrUnauthenticated
 	}
 
 	if req.Msg.DaemonId == "" {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("daemon_id is required"))
+		return nil, svcerr.InvalidArgument("daemon_id is required")
 	}
 
 	// Verify ownership.
 	daemon, err := s.deps.Repo.GetDaemon(ctx, req.Msg.DaemonId)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("daemon not found: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get daemon"))
 	}
 	if daemon.UserID != userID {
-		return nil, svcerr.ToConnect(svcerr.NotFound("daemon"))
+		return nil, svcerr.NotFound("daemon")
 	}
 
 	// If the daemon currently has a fresh attachment row, it's already routable.

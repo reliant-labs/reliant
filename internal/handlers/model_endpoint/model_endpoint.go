@@ -9,9 +9,9 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/modelendpoints"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
@@ -20,9 +20,13 @@ import (
 // the same two operations DaemonRegistryService exposes to the browser.
 type routerDaemonControl struct{ router Router }
 
+// daemonErr reads a relay failure that says the machine is not connected as
+// modelendpoints.ErrDaemonOffline. The router's own text (which gateway, why)
+// is transport detail: it stays the cause, for the log, and never reaches the
+// wire.
 func daemonErr(err error) error {
 	if errors.Is(err, toolexec.ErrLocalModelDaemonUnavailable) {
-		return fmt.Errorf("%w: %v", modelendpoints.ErrDaemonOffline, err)
+		return svcerr.WithCause(modelendpoints.ErrDaemonOffline, err)
 	}
 	return err
 }
@@ -47,31 +51,10 @@ func (c routerDaemonControl) SetConfiguredEndpoints(ctx context.Context, userID,
 	return inv, daemonErr(err)
 }
 
-func modelEndpointErr(err error) error {
-	var already *connect.Error
-	switch {
-	case err == nil:
-		return nil
-	case errors.As(err, &already):
-		return err
-	case modelendpoints.IsValidation(err):
-		return connect.NewError(connect.CodeInvalidArgument, err)
-	case errors.Is(err, modelendpoints.ErrCredentialStoreUnavailable):
-		return connect.NewError(connect.CodeFailedPrecondition, err)
-	case errors.Is(err, db.ErrModelEndpointNotFound), errors.Is(err, modelendpoints.ErrDaemonNotOwned):
-		return connect.NewError(connect.CodeNotFound, err)
-	case errors.Is(err, db.ErrModelEndpointNameTaken):
-		return connect.NewError(connect.CodeAlreadyExists, err)
-	case errors.Is(err, modelendpoints.ErrDaemonOffline):
-		return connect.NewError(connect.CodeUnavailable, err)
-	}
-	return connect.NewError(connect.CodeInternal, err)
-}
-
 func endpointUser(ctx context.Context) (string, error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok || userID == "" {
-		return "", connect.NewError(connect.CodeUnauthenticated, nil)
+		return "", svcerr.ErrUnauthenticated
 	}
 	return userID, nil
 }
@@ -83,7 +66,7 @@ func (s *Service) ListModelEndpoints(ctx context.Context, _ *connect.Request[rel
 	}
 	eps, err := s.manager.List(ctx, userID)
 	if err != nil {
-		return nil, modelEndpointErr(err)
+		return nil, svcerr.WrapOr(err, svcerr.Internal("model endpoint request failed"))
 	}
 	return connect.NewResponse(&reliantv1.ListModelEndpointsResponse{Endpoints: eps}), nil
 }
@@ -95,7 +78,7 @@ func (s *Service) CreateModelEndpoint(ctx context.Context, req *connect.Request[
 	}
 	ep, err := s.manager.Create(ctx, userID, req.Msg.GetEndpoint())
 	if err != nil {
-		return nil, modelEndpointErr(err)
+		return nil, svcerr.WrapOr(err, svcerr.Internal("model endpoint request failed"))
 	}
 	return connect.NewResponse(&reliantv1.CreateModelEndpointResponse{Endpoint: ep}), nil
 }
@@ -107,7 +90,7 @@ func (s *Service) UpdateModelEndpoint(ctx context.Context, req *connect.Request[
 	}
 	ep, err := s.manager.Update(ctx, userID, req.Msg.GetId(), req.Msg.GetEndpoint())
 	if err != nil {
-		return nil, modelEndpointErr(err)
+		return nil, svcerr.WrapOr(err, svcerr.Internal("model endpoint request failed"))
 	}
 	return connect.NewResponse(&reliantv1.UpdateModelEndpointResponse{Endpoint: ep}), nil
 }
@@ -118,7 +101,7 @@ func (s *Service) DeleteModelEndpoint(ctx context.Context, req *connect.Request[
 		return nil, err
 	}
 	if err := s.manager.Delete(ctx, userID, req.Msg.GetId()); err != nil {
-		return nil, modelEndpointErr(err)
+		return nil, svcerr.WrapOr(err, svcerr.Internal("model endpoint request failed"))
 	}
 	return connect.NewResponse(&reliantv1.DeleteModelEndpointResponse{}), nil
 }
@@ -130,7 +113,7 @@ func (s *Service) TestModelEndpoint(ctx context.Context, req *connect.Request[re
 	}
 	probe, latency, err := s.manager.Test(ctx, userID, req.Msg.GetId(), req.Msg.GetDraft())
 	if err != nil {
-		return nil, modelEndpointErr(err)
+		return nil, svcerr.WrapOr(err, svcerr.Internal("model endpoint request failed"))
 	}
 	return connect.NewResponse(&reliantv1.TestModelEndpointResponse{Probe: probe, LatencyMs: latency.Milliseconds()}), nil
 }

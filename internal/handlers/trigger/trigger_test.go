@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -214,7 +215,7 @@ func TestCreateTriggerRollsBackWhenSyncFails(t *testing.T) {
 	_, err := env.svc.CreateTrigger(env.ctx,
 		connect.NewRequest(&reliantv1.CreateTriggerRequest{Trigger: env.definition(nil)}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeUnavailable, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeUnavailable, svcerr.Code(err))
 
 	stored, err := env.repo.ListTriggers(context.Background(), core.TriggerFilters{UserID: env.userID})
 	require.NoError(t, err)
@@ -289,7 +290,7 @@ func TestCreateTriggerValidates(t *testing.T) {
 			_, err := env.svc.CreateTrigger(env.ctx,
 				connect.NewRequest(&reliantv1.CreateTriggerRequest{Trigger: tc.def}))
 			require.Error(t, err)
-			assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+			assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 			assert.Zero(t, env.backend.syncCount(), "a rejected definition must not touch the schedule backend")
 		})
 	}
@@ -302,7 +303,7 @@ func TestCreateTriggerRejectsAnotherUsersProject(t *testing.T) {
 	_, err := env.svc.CreateTrigger(otherCtx,
 		connect.NewRequest(&reliantv1.CreateTriggerRequest{Trigger: env.definition(nil)}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
 }
 
 // Without a schedule backend there is nothing to make a trigger fire, so a
@@ -314,7 +315,7 @@ func TestCreateTriggerWithoutABackendIsUnavailable(t *testing.T) {
 	_, err := svc.CreateTrigger(env.ctx,
 		connect.NewRequest(&reliantv1.CreateTriggerRequest{Trigger: env.definition(nil)}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeUnavailable, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeUnavailable, svcerr.Code(err))
 }
 
 // A deployment without Temporal leaves Syncer and Fires nil, as nil
@@ -341,12 +342,12 @@ func TestServiceWithoutTemporal(t *testing.T) {
 			_, err := svc.CreateTrigger(env.ctx,
 				connect.NewRequest(&reliantv1.CreateTriggerRequest{Trigger: env.definition(nil)}))
 			require.Error(t, err)
-			assert.Equal(t, connect.CodeUnavailable, connect.CodeOf(err), "create a schedule trigger")
+			assert.Equal(t, connect.CodeUnavailable, svcerr.Code(err), "create a schedule trigger")
 
 			_, err = svc.FireTrigger(env.ctx,
 				connect.NewRequest(&reliantv1.FireTriggerRequest{Id: stored.GetId()}))
 			require.Error(t, err)
-			assert.Equal(t, connect.CodeUnavailable, connect.CodeOf(err), "fire a schedule trigger")
+			assert.Equal(t, connect.CodeUnavailable, svcerr.Code(err), "fire a schedule trigger")
 
 			got, err := svc.GetTrigger(env.ctx,
 				connect.NewRequest(&reliantv1.GetTriggerRequest{Id: stored.GetId()}))
@@ -374,7 +375,7 @@ func TestGetTriggerHidesOtherUsersTriggers(t *testing.T) {
 	require.Error(t, err)
 	// NotFound, not PermissionDenied: telling a caller an id exists but is not
 	// theirs leaks other users' triggers for nothing.
-	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
 }
 
 func TestListTriggersIsScopedToTheCaller(t *testing.T) {
@@ -495,7 +496,7 @@ func TestDeleteTriggerKeepsTheRowWhenTheScheduleCannotBeRemoved(t *testing.T) {
 	_, err := env.svc.DeleteTrigger(env.ctx,
 		connect.NewRequest(&reliantv1.DeleteTriggerRequest{Id: created.GetId()}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeUnavailable, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeUnavailable, svcerr.Code(err))
 
 	// The row must survive: deleting it while the schedule lives on would
 	// create exactly the orphan this ordering exists to prevent.
@@ -526,7 +527,7 @@ func TestFireTriggerHidesOtherUsersTriggers(t *testing.T) {
 	_, err := env.svc.FireTrigger(otherCtx,
 		connect.NewRequest(&reliantv1.FireTriggerRequest{Id: created.GetId()}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
 
 	env.backend.mu.Lock()
 	assert.Empty(t, env.backend.fires, "a trigger the caller does not own must not fire")
@@ -575,7 +576,7 @@ func TestListTriggerEventsHidesOtherUsersTriggers(t *testing.T) {
 	_, err := env.svc.ListTriggerEvents(otherCtx,
 		connect.NewRequest(&reliantv1.ListTriggerEventsRequest{TriggerId: created.GetId()}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
 }
 
 // A limit of zero is "the server default", not "no rows", and an unbounded
@@ -686,7 +687,7 @@ func TestCreateTriggerRejectsUnownedOrMissingDaemons(t *testing.T) {
 				Trigger: env.definition(func(d *reliantv1.TriggerDefinition) { d.DaemonId = daemonID }),
 			}))
 			require.Error(t, err)
-			assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+			assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
 			assert.ErrorContains(t, err, "daemon not found")
 			assert.Zero(t, env.backend.syncCount())
 		})
@@ -709,7 +710,7 @@ func TestCreateTriggerRequiresTheProjectInstalledOnTheDaemon(t *testing.T) {
 		Trigger: env.definition(func(d *reliantv1.TriggerDefinition) { d.Name = "elsewhere" }),
 	}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
 	assert.ErrorContains(t, err, "project is not installed on that daemon")
 
 	created := env.create(t, env.definition(func(d *reliantv1.TriggerDefinition) {
@@ -736,5 +737,5 @@ func TestUpdateTriggerReplacesAndValidatesTheDaemon(t *testing.T) {
 		Id:      created.GetId(),
 		Trigger: env.definition(func(d *reliantv1.TriggerDefinition) { d.DaemonId = uuid.NewString() }),
 	}))
-	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
 }

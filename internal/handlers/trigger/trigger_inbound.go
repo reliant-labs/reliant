@@ -64,7 +64,7 @@ type IntegrationAccess interface {
 
 // inboundUnavailable reports a kind this deployment cannot serve.
 func inboundUnavailable(what string) error {
-	return svcerr.ToConnect(svcerr.Unavailable(fmt.Sprintf("%s triggers are not available on this server", what)))
+	return svcerr.Unavailable(fmt.Sprintf("%s triggers are not available on this server", what))
 }
 
 // applyInboundDefinition fills the kind-specific fields of an inbound
@@ -75,9 +75,9 @@ func (s *Service) applyInboundDefinition(ctx context.Context, userID string, def
 		if _, err := triggers.CompileFilter(def.Filter); err != nil {
 			var fe *triggers.FilterError
 			if errors.As(err, &fe) {
-				return connect.NewError(connect.CodeInvalidArgument, fe)
+				return svcerr.InvalidArgument(fe.Error())
 			}
-			return connect.NewError(connect.CodeInternal, err)
+			return svcerr.WrapOr(err, svcerr.Internal("could not compile the filter"))
 		}
 		trigger.Filter = strings.TrimSpace(def.Filter)
 	}
@@ -92,14 +92,14 @@ func (s *Service) applyInboundDefinition(ctx context.Context, userID string, def
 		}
 		hasSecret := existing != nil && existing.Kind == core.TriggerKindWebhook && s.storedSecret(ctx, existing.ID)
 		if src.HMAC && def.WebhookHmacSecret == nil && !hasSecret {
-			return svcerr.ToConnect(svcerr.InvalidArgument("webhook_hmac_secret is required to verify signatures"))
+			return svcerr.InvalidArgument("webhook_hmac_secret is required to verify signatures")
 		}
 	case core.TriggerKindIntegration:
 		if s.deps.Intake == nil || s.deps.Catalog == nil {
 			return inboundUnavailable("integration")
 		}
 		if !s.deps.Catalog.HasInboundSource(src.Integration) {
-			return svcerr.ToConnect(svcerr.InvalidArgument(fmt.Sprintf("integration %q does not deliver events on this server", src.Integration)))
+			return svcerr.InvalidArgument(fmt.Sprintf("integration %q does not deliver events on this server", src.Integration))
 		}
 		if _, gated := s.deps.Access[src.Integration]; gated {
 			// Access-gated: events route by the owner's own access, so a
@@ -142,17 +142,20 @@ func (s *Service) resolveTriggerConnection(ctx context.Context, userID, integrat
 	} else {
 		conn, err = store.DefaultConnection(ctx, userID, integration)
 	}
+	if err != nil && !svcerr.IsNotFound(err) {
+		return "", svcerr.WrapOr(err, svcerr.Internal("failed to get connection"))
+	}
 	if err != nil || conn == nil || conn.UserID != userID {
 		if requested == nil || *requested == "" {
-			return "", svcerr.ToConnect(svcerr.FailedPrecondition(fmt.Sprintf("connect %s first: an integration trigger listens through one of your connections", integration)))
+			return "", svcerr.FailedPrecondition(fmt.Sprintf("connect %s first: an integration trigger listens through one of your connections", integration))
 		}
-		return "", svcerr.ToConnect(svcerr.NotFound("connection"))
+		return "", svcerr.NotFound("connection")
 	}
 	if conn.IntegrationID != integration {
-		return "", svcerr.ToConnect(svcerr.InvalidArgument(fmt.Sprintf("connection %q is for %s, not %s", conn.Name, conn.IntegrationID, integration)))
+		return "", svcerr.InvalidArgument(fmt.Sprintf("connection %q is for %s, not %s", conn.Name, conn.IntegrationID, integration))
 	}
 	if conn.Status == core.ConnectionStatusRevoked {
-		return "", svcerr.ToConnect(svcerr.NotFound("connection"))
+		return "", svcerr.NotFound("connection")
 	}
 	return conn.ID, nil
 }
@@ -190,7 +193,7 @@ func (s *Service) refreshTriggerAccess(ctx context.Context, trigger *core.Trigge
 	}
 	cfg, err := triggers.IntegrationConfigFor(trigger)
 	if err != nil {
-		return connect.NewError(connect.CodeInternal, err)
+		return svcerr.WrapOr(err, svcerr.Internal("could not read the trigger's integration config"))
 	}
 	access := s.deps.Access[cfg.Integration]
 	if access == nil {
@@ -198,11 +201,12 @@ func (s *Service) refreshTriggerAccess(ctx context.Context, trigger *core.Trigge
 	}
 	if err := access.Refresh(ctx, trigger.UserID); err != nil {
 		if access.IsPermanent(err) {
-			return connect.NewError(connect.CodeFailedPrecondition,
-				fmt.Errorf("%s triggers need access to your %s repositories: %w", cfg.Integration, cfg.Integration, err))
+			// The reason is the access check's own sentence (not connected,
+			// needs reconnecting): what the owner has to fix.
+			return svcerr.WithCause(svcerr.FailedPrecondition(
+				fmt.Sprintf("%s triggers need access to your %s repositories: %v", cfg.Integration, cfg.Integration, err)), err)
 		}
-		logging.WarnContext(ctx, "refreshing integration access failed", "integration", cfg.Integration, "user_id", trigger.UserID, "error", err)
-		return svcerr.ToConnect(svcerr.Unavailable(fmt.Sprintf("could not read your %s access right now; try again", cfg.Integration)))
+		return svcerr.WrapOr(err, svcerr.Unavailable(fmt.Sprintf("could not read your %s access right now; try again", cfg.Integration)))
 	}
 	return nil
 }
@@ -226,7 +230,7 @@ func (s *Service) writeWebhookCredentials(ctx context.Context, trigger *core.Tri
 	}
 	cfg, err := triggers.WebhookConfigFor(trigger)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, svcerr.WrapOr(err, svcerr.Internal("could not read the webhook config"))
 	}
 	switch {
 	case cfg.HMAC == nil:
@@ -236,7 +240,7 @@ func (s *Service) writeWebhookCredentials(ctx context.Context, trigger *core.Tri
 		}
 	case def.WebhookHmacSecret != nil:
 		if *def.WebhookHmacSecret == "" {
-			return nil, svcerr.ToConnect(svcerr.InvalidArgument("webhook_hmac_secret must not be empty"))
+			return nil, svcerr.InvalidArgument("webhook_hmac_secret must not be empty")
 		}
 		// applyInboundDefinition already refused a signed webhook without
 		// a sealer; this keeps the dereference safe on its own.
@@ -246,7 +250,7 @@ func (s *Service) writeWebhookCredentials(ctx context.Context, trigger *core.Tri
 		sealed, err := s.deps.Sealer.Seal(ctx, vault.UserTenant(trigger.UserID),
 			[]byte(*def.WebhookHmacSecret), triggers.WebhookSecretAAD(trigger.ID))
 		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("seal webhook secret: %w", err))
+			return nil, svcerr.WrapOr(err, svcerr.Internal("seal webhook secret failed"))
 		}
 		if err := s.deps.Repo.SetTriggerWebhookSecret(ctx, trigger.ID, sealed); err != nil {
 			return nil, triggerDBError("set webhook secret", err)
@@ -258,7 +262,7 @@ func (s *Service) writeWebhookCredentials(ctx context.Context, trigger *core.Tri
 func (s *Service) issueWebhookToken(ctx context.Context, triggerID string) (*reliantv1.WebhookCredential, error) {
 	token, hash, err := triggers.NewWebhookToken()
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, err)
+		return nil, svcerr.WrapOr(err, svcerr.Internal("could not issue a webhook token"))
 	}
 	if err := s.deps.Repo.SetTriggerWebhookTokenHash(ctx, triggerID, hash); err != nil {
 		return nil, triggerDBError("set webhook token", err)
@@ -279,7 +283,7 @@ func (s *Service) RotateWebhookToken(
 		return nil, err
 	}
 	if trigger.Kind != core.TriggerKindWebhook {
-		return nil, svcerr.ToConnect(svcerr.FailedPrecondition("only a webhook trigger has a token"))
+		return nil, svcerr.FailedPrecondition("only a webhook trigger has a token")
 	}
 	if s.managed(trigger) {
 		// The new token goes to the sender, not to the caller. A paused
@@ -323,7 +327,7 @@ func (s *Service) fireInbound(ctx context.Context, trigger *core.Trigger) (strin
 		Sender: &core.TriggerSender{Kind: core.TriggerSenderKindUser, ID: requester, Verified: true},
 	}, triggers.AcceptOptions{Manual: true})
 	if err != nil {
-		return "", connect.NewError(connect.CodeUnavailable, fmt.Errorf("record fire: %w", err))
+		return "", svcerr.WrapOr(err, svcerr.Unavailable("record fire failed"))
 	}
 	return triggers.EventFireWorkflowID(res.EventID), nil
 }

@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
@@ -93,7 +94,7 @@ func TestAccessGatedTriggerBindsASavedConnectionWhenThereIsOne(t *testing.T) {
 	_, err := env.svc.CreateTrigger(env.ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{
 		Trigger: ghDefinition(env, func(d *reliantv1.TriggerDefinition) { d.ConnectionId = &theirs.ID }),
 	}))
-	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
 }
 
 // A permanent refresh failure (GitHub not connected, or a token that cannot
@@ -104,12 +105,12 @@ func TestAccessGatedTriggerRefusesWhenAccessCannotBeRead(t *testing.T) {
 	access.err, access.permanent = fmt.Errorf("GitHub is not connected: connect GitHub in Settings"), true
 	_, err := env.svc.CreateTrigger(env.ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{Trigger: ghDefinition(env, nil)}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
 	assert.Contains(t, err.Error(), "connect GitHub")
 
 	access.err, access.permanent = errors.New("control-plane unreachable"), false
 	_, err = env.svc.CreateTrigger(env.ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{Trigger: ghDefinition(env, nil)}))
-	assert.Equal(t, connect.CodeUnavailable, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeUnavailable, svcerr.Code(err))
 
 	list, err := env.svc.ListTriggers(env.ctx, connect.NewRequest(&reliantv1.ListTriggersRequest{}))
 	require.NoError(t, err)
@@ -134,7 +135,7 @@ func TestAccessGatedTriggerRefreshesOnUpdateAndEnable(t *testing.T) {
 
 	access.err, access.permanent = errors.New("not connected"), true
 	_, err = env.svc.SetTriggerEnabled(env.ctx, connect.NewRequest(&reliantv1.SetTriggerEnabledRequest{Id: created.GetId(), Enabled: true}))
-	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
 }
 
 // Integrations that are not access-gated keep requiring a connection.
@@ -147,6 +148,6 @@ func TestNonAccessGatedIntegrationStillRequiresAConnection(t *testing.T) {
 			}}
 		}),
 	}))
-	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
 	assert.Empty(t, access.users())
 }

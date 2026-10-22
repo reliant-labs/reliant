@@ -2,9 +2,10 @@ package settings_test
 
 import (
 	"context"
-	"database/sql"
+	"fmt"
 	"testing"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/db"
 	settings "github.com/reliant-labs/reliant/internal/handlers/settings"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/copilot"
@@ -22,7 +23,7 @@ func (m memorySettings) repo() *settings.StubRepo {
 				cp := *s
 				return &cp, nil
 			}
-			return nil, sql.ErrNoRows
+			return nil, fmt.Errorf("%w: %s", svcerr.NotFound("setting"), key) // the store's shape
 		},
 		ListSettingsFunc: func(context.Context, string, *string) ([]*db.Setting, error) {
 			out := make([]*db.Setting, 0, len(m))

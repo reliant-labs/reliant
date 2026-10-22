@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/local"
@@ -18,6 +20,9 @@ import (
 type ValidationError struct{ Msg string }
 
 func (e *ValidationError) Error() string { return e.Msg }
+
+// Unwrap makes it an InvalidArgument whose client-visible text is Msg.
+func (e *ValidationError) Unwrap() error { return svcerr.InvalidArgument(e.Msg) }
 
 func invalid(format string, args ...any) error {
 	return &ValidationError{Msg: fmt.Sprintf(format, args...)}

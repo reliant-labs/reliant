@@ -14,7 +14,8 @@ import (
 
 // A successful start reaches GitHub's device-code endpoint. A cancelled
 // context fails the request before it leaves the process, which pins how the
-// handler reports a start that failed.
+// handler reports a start that failed: the cancellation is what happened, so it
+// is Canceled (svcerr.WrapOr passes it), not a server fault.
 func TestStartCopilotDeviceAuth_Generated(t *testing.T) {
 	t.Parallel()
 
@@ -23,6 +24,5 @@ func TestStartCopilotDeviceAuth_Generated(t *testing.T) {
 	cancel()
 
 	_, err := svc.StartCopilotDeviceAuth(ctx, connect.NewRequest(&pb.StartCopilotDeviceAuthRequest{}))
-	require.Equal(t, connect.CodeInternal, svcerr.Code(err))
-	require.ErrorContains(t, err, "failed to start GitHub Copilot login")
+	require.Equal(t, connect.CodeCanceled, svcerr.Code(err))
 }
