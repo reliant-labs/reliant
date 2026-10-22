@@ -33,6 +33,9 @@ var defaultRebuildable = []string{
 	".forge/logs", ".forge/workspace-base.tag",
 	// forge's own scratch and its generate fixed-point cache.
 	".forge/tmp", ".forge/generate-cache.json",
+	// forge's build/push state records (one JSON file per env or service) and
+	// the temp files its atomic writes leave behind when interrupted.
+	".forge/state", ".forge/.forge-tmp-*",
 	// Non-JS build and tool caches, the same additions forge is making.
 	"target", ".venv", "venv", ".pytest_cache", ".mypy_cache", ".ruff_cache", ".gradle",
 	// Pinned tools a project installs into its checkout (bin, stamps, tmp,
@@ -81,12 +84,17 @@ type dataWalk struct {
 	// and every git process a pass starts is budgeted.
 	source func() string
 	out    []string
+	// seen holds every path already judged. git lists both a directory and
+	// the ignored files inside it when the directory is only partly ignored
+	// (secrets/ and secrets/dev.yaml), and descending into the directory
+	// reaches the file a second time.
+	seen map[string]bool
 }
 
 // newDataWalk returns a walk of checkout whose source checkout is looked up
 // on first use.
 func newDataWalk(ctx context.Context, checkout string, nested []string) *dataWalk {
-	return &dataWalk{checkout: checkout, nested: nested, source: sync.OnceValue(func() string { return sourceCheckout(ctx, checkout) })}
+	return &dataWalk{checkout: checkout, nested: nested, seen: map[string]bool{}, source: sync.OnceValue(func() string { return sourceCheckout(ctx, checkout) })}
 }
 
 // visit judges one ignored path. git collapses a directory holding only
@@ -98,6 +106,11 @@ func (d *dataWalk) visit(rel string) {
 	if len(d.out) >= maxDataNames {
 		return
 	}
+	key := strings.TrimSuffix(rel, "/")
+	if d.seen[key] {
+		return
+	}
+	d.seen[key] = true
 	if rebuildablePath(rel) {
 		return
 	}

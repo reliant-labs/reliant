@@ -332,13 +332,13 @@ func TestRowLock_SerializesAcrossReclaimersOnOneRoot(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	other := NewReclaimer(f.r.Root)
-	release, err := f.r.rowLock("row1")
+	release, err := f.r.rowLock(context.Background(), "row1")
 	if err != nil {
 		t.Fatal(err)
 	}
 	acquired := make(chan struct{})
 	go func() {
-		un, err := other.rowLock("row1")
+		un, err := other.rowLock(context.Background(), "row1")
 		if err == nil {
 			un()
 		}
@@ -355,8 +355,8 @@ func TestRowLock_SerializesAcrossReclaimersOnOneRoot(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("the second reclaimer never got the lock after release")
 	}
-	r1, _ := f.r.rowLock("a")
-	r2, err := other.rowLock("b")
+	r1, _ := f.r.rowLock(context.Background(), "a")
+	r2, err := other.rowLock(context.Background(), "b")
 	if err != nil {
 		t.Fatal(err)
 	}

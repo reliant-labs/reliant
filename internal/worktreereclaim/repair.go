@@ -823,7 +823,7 @@ func (r *Reclaimer) repairOne(ctx context.Context, commonDir string, force bool)
 // prunes that itself when its directory is gone).
 func (r *Reclaimer) busy(checkout string) bool {
 	r.mu.Lock()
-	locks := make(map[string]*sync.Mutex, len(r.paths))
+	locks := make(map[string]pathLock, len(r.paths))
 	for k, m := range r.paths {
 		locks[k] = m
 	}
@@ -833,10 +833,10 @@ func (r *Reclaimer) busy(checkout string) bool {
 		if c != path && !within(path, c) {
 			continue
 		}
-		if !m.TryLock() {
+		if !m.tryLock() {
 			return true
 		}
-		m.Unlock()
+		m.unlock()
 	}
 	return false
 }

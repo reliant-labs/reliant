@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -55,6 +56,13 @@ type Reclaimer struct {
 	// back OutcomeDeferred, untouched, so a machine with many large archived
 	// worktrees makes progress each pass instead of timing out every one.
 	Budget time.Duration
+	// Workers bounds how many worktrees one request settles at once; zero
+	// means the default (reconcileWorkers).
+	Workers int
+	// ProbeBudget bounds one "is it finished" probe (ProbeIdle), apart from
+	// the locking that precedes it; zero means DefaultProbeBudget. A probe that
+	// runs out of it is OutcomeProbeInconclusive, not a "no".
+	ProbeBudget time.Duration
 	// Now is the clock; nil means time.Now.
 	Now func() time.Time
 	// PRMerged and FetchBase are the network checks behind "its work was merged"
@@ -73,7 +81,7 @@ type Reclaimer struct {
 	mu       sync.Mutex
 	netCache map[string]netEntry
 	sizes    map[string]cachedSize
-	paths    map[string]*sync.Mutex
+	paths    map[string]pathLock
 	cwdCache []string
 	cwdAt    time.Time
 	repairs  repairState
@@ -179,17 +187,17 @@ func (r *Reclaimer) now() time.Time {
 	return time.Now()
 }
 
-// pathLock returns the mutex for one worktree path.
-func (r *Reclaimer) pathLock(path string) *sync.Mutex {
+// pathLock returns the lock for one worktree path.
+func (r *Reclaimer) pathLock(path string) pathLock {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.paths == nil {
-		r.paths = map[string]*sync.Mutex{}
+		r.paths = map[string]pathLock{}
 	}
 	key := resolvePath(path)
 	m := r.paths[key]
 	if m == nil {
-		m = &sync.Mutex{}
+		m = newPathLock()
 		r.paths[key] = m
 	}
 	return m
@@ -200,40 +208,93 @@ func (r *Reclaimer) pathLock(path string) *sync.Mutex {
 // removed, when the request is the second phase) and otherwise reported held.
 // It never snapshots.
 func (r *Reclaimer) Reconcile(ctx context.Context, req Request) Response {
-	results := make([]Result, len(req.Worktrees))
+	n := len(req.Worktrees)
 	deadline := r.deadline()
-	sctx := ctx
-	if !deadline.IsZero() {
-		var cancel context.CancelFunc
+	var sctx context.Context
+	var cancel context.CancelFunc
+	if deadline.IsZero() {
+		sctx, cancel = context.WithCancel(ctx)
+	} else {
 		sctx, cancel = context.WithDeadline(ctx, deadline)
-		defer cancel()
 	}
+	// Cancelling on return is what stops work still running for a worktree
+	// whose answer was given up on at the deadline.
+	defer cancel()
+
 	// Worktrees settle concurrently: each is dominated by git and filesystem
 	// waits, and run one after another a single slow one (a big tree, a stalled
 	// network probe) used up the budget that the nine behind it needed. Every
 	// per-path and per-row lock still serializes work on the same worktree.
-	jobs := make(chan int)
-	var wg sync.WaitGroup
-	for range min(reconcileWorkers, max(len(req.Worktrees), 1)) {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for i := range jobs {
-				results[i] = r.settleWithin(sctx, req.Worktrees[i], deadline)
-			}
-		}()
+	//
+	// The reply is owed at the deadline whatever the workers are doing: waiting
+	// for them is what turned one wedged tree into a reply the server had given
+	// up on, and a re-send of the same rows while this one still worked.
+	type settled struct {
+		i   int
+		res Result
 	}
-	for i := range req.Worktrees {
+	finished := make(chan settled, n) // buffered: a worker that outlives the reply never blocks
+	started := make([]atomic.Bool, n)
+	jobs := make(chan int, n)
+	for i := range n {
 		jobs <- i
 	}
 	close(jobs)
-	wg.Wait()
+	workers := r.Workers
+	if workers <= 0 {
+		workers = reconcileWorkers
+	}
+	for range min(workers, max(n, 1)) {
+		go func() {
+			for i := range jobs {
+				if sctx.Err() != nil {
+					finished <- settled{i, Result{ID: req.Worktrees[i].ID, Outcome: OutcomeDeferred, Detail: DetailNotReached}}
+					continue
+				}
+				started[i].Store(true)
+				finished <- settled{i, r.settleWithin(sctx, req.Worktrees[i], deadline)}
+			}
+		}()
+	}
+
+	results := make([]Result, n)
+	got := make([]bool, n)
+	take := func(s settled) { results[s.i], got[s.i] = s.res, true }
+collect:
+	for remaining := n; remaining > 0; remaining-- {
+		select {
+		case s := <-finished:
+			take(s)
+		case <-sctx.Done():
+			for {
+				select {
+				case s := <-finished:
+					take(s)
+				default:
+					break collect
+				}
+			}
+		}
+	}
+	for i, w := range req.Worktrees {
+		switch {
+		case got[i]:
+		case started[i].Load():
+			results[i] = Result{ID: w.ID, Outcome: OutcomeDeferred, Detail: DetailTimedOut}
+		default:
+			results[i] = Result{ID: w.ID, Outcome: OutcomeDeferred, Detail: DetailNotReached}
+		}
+	}
 	return Response{Results: results}
 }
 
 // DetailTimedOut marks a deferred result whose work was started and then
 // stopped by the request's deadline, as opposed to never started.
 const DetailTimedOut = "out of time while checking it"
+
+// DetailNotReached marks a deferred result whose work never started: the
+// request's time ran out before the daemon got to it.
+const DetailNotReached = "out of time this pass"
 
 // reconcileWorkers bounds how many worktrees one request settles at once.
 const reconcileWorkers = 4
@@ -246,12 +307,12 @@ const reconcileWorkers = 4
 // is unsafe.
 func (r *Reclaimer) settleWithin(ctx context.Context, w Worktree, deadline time.Time) Result {
 	if !deadline.IsZero() && time.Now().After(deadline) {
-		return Result{ID: w.ID, Outcome: OutcomeDeferred, Detail: "out of time this pass"}
+		return Result{ID: w.ID, Outcome: OutcomeDeferred, Detail: DetailNotReached}
 	}
 	res := r.settle(ctx, w, false)
 	if ctx.Err() != nil {
 		switch res.Outcome {
-		case OutcomeRemoved, OutcomeClaimed, OutcomeLocked, OutcomeGone, OutcomeIdleDone, OutcomeForeign:
+		case OutcomeRemoved, OutcomeClaimed, OutcomeLocked, OutcomeGone, OutcomeIdleDone, OutcomeProbeInconclusive, OutcomeForeign:
 		default:
 			return Result{ID: w.ID, Outcome: OutcomeDeferred, Detail: DetailTimedOut}
 		}
@@ -271,7 +332,7 @@ func (r *Reclaimer) SnapshotRemove(ctx context.Context, req Request) Response {
 	deadline := r.deadline()
 	for _, w := range req.Worktrees {
 		if !deadline.IsZero() && time.Now().After(deadline) {
-			resp.Results = append(resp.Results, Result{ID: w.ID, Outcome: OutcomeDeferred, Detail: "out of time this pass"})
+			resp.Results = append(resp.Results, Result{ID: w.ID, Outcome: OutcomeDeferred, Detail: DetailNotReached})
 			continue
 		}
 		resp.Results = append(resp.Results, r.settle(ctx, w, true))
@@ -326,13 +387,20 @@ func (r *Reclaimer) settle(ctx context.Context, w Worktree, confirmed bool) Resu
 		res.Outcome, res.Detail = OutcomeForeign, "path is outside this machine's worktree root, or the root is not available"
 		return res
 	}
+	// Both locks give up when ctx does: a worktree another request is still
+	// working on is deferred, never waited for past the deadline.
 	m := r.pathLock(w.Path)
-	m.Lock()
-	defer m.Unlock()
+	if m.lock(ctx) != nil {
+		return Result{ID: w.ID, Outcome: OutcomeDeferred, Detail: DetailTimedOut}
+	}
+	defer m.unlock()
 	// The path lock serializes this process; the row's file lock serializes
 	// every other process sharing this root (two daemons on one $HOME).
-	unlock, err := r.rowLock(w.ID)
+	unlock, err := r.rowLock(ctx, w.ID)
 	if err != nil {
+		if ctx.Err() != nil {
+			return Result{ID: w.ID, Outcome: OutcomeDeferred, Detail: DetailTimedOut}
+		}
 		return Result{ID: w.ID, Outcome: OutcomeError, Error: "could not lock the row: " + err.Error()}
 	}
 	defer unlock()
@@ -415,7 +483,7 @@ func idleSince(path string, checkouts []string) time.Time {
 		if admin == "" {
 			continue
 		}
-		for _, name := range []string{"index", "HEAD", filepath.Join("logs", "HEAD")} {
+		for _, name := range []string{"HEAD", filepath.Join("logs", "HEAD")} {
 			bump(filepath.Join(admin, name))
 		}
 	}
@@ -961,32 +1029,90 @@ func (r *Reclaimer) lockActive(ctx context.Context, w Worktree) Result {
 			res.Outcome, res.Error = OutcomeError, relDetail(w.Path, c, err.Error())
 		}
 	}
-	if res.Outcome == OutcomeLocked && w.ProbeIdle && w.Retire == "" && len(checkouts) > 0 && r.finished(ctx, w) {
-		res.Outcome = OutcomeIdleDone
+	if res.Outcome == OutcomeLocked && w.ProbeIdle && w.Retire == "" && len(checkouts) > 0 {
+		switch r.finished(ctx, w) {
+		case probeFinished:
+			res.Outcome = OutcomeIdleDone
+		case probeInconclusive:
+			// Locked all the same; only the question "is it finished" went
+			// unanswered, and the server must not read that as a clean "no".
+			res.Outcome = OutcomeProbeInconclusive
+		}
 	}
 	return res
 }
 
+// probeAnswer is what finished concluded.
+type probeAnswer int
+
+const (
+	// probeUnfinished: a check ran to completion and said the worktree is
+	// still in use, dirty, unpushed, recently touched or otherwise not done.
+	probeUnfinished probeAnswer = iota
+	// probeFinished: every check passed.
+	probeFinished
+	// probeInconclusive: a check could not run to completion (out of time, a
+	// git failure, an unreadable process list), so nothing is known.
+	probeInconclusive
+)
+
+// DefaultProbeBudget bounds one finished probe: longer than the workspace scan
+// (scanBudget) it starts with, so a scan that hits its own limit is reported by
+// the scan, not by this.
+const DefaultProbeBudget = 60 * time.Second
+
 // finished reports whether an active worktree is done with: every check the
 // automatic removal makes (structure, data, quiet time, no process, clean and
 // merged or pushed) passes, with the longer ActiveIdleFloor. Read-only; it
-// takes no claim and removes nothing, and any doubt is false.
-func (r *Reclaimer) finished(ctx context.Context, w Worktree) bool {
+// takes no claim and removes nothing. A check that could not be completed is
+// probeInconclusive, never probeUnfinished.
+func (r *Reclaimer) finished(ctx context.Context, w Worktree) probeAnswer {
+	budget := r.ProbeBudget
+	if budget <= 0 {
+		budget = DefaultProbeBudget
+	}
+	ctx, cancel := context.WithTimeout(ctx, budget)
+	defer cancel()
+	answer := func(a probeAnswer) probeAnswer {
+		if ctx.Err() != nil && a != probeFinished {
+			return probeInconclusive
+		}
+		return a
+	}
 	checkouts, _, hold := r.structure(ctx, w, false)
-	if hold != nil || len(checkouts) == 0 {
-		return false
+	if hold != nil {
+		return answer(holdAnswer(hold))
+	}
+	if len(checkouts) == 0 {
+		return probeUnfinished
 	}
 	floor := r.ActiveIdleFloor
 	if floor <= 0 {
 		floor = DefaultActiveIdleFloor
 	}
 	if r.now().Sub(idleSince(w.Path, checkouts)) < floor {
-		return false
+		return probeUnfinished
 	}
-	if r.inUse(ctx, w, true) != nil {
-		return false
+	if hold := r.inUse(ctx, w, true); hold != nil {
+		return answer(holdAnswer(hold))
 	}
-	return classifyAll(ctx, w, checkouts, r.probe()).safe()
+	v := classifyAll(ctx, w, checkouts, r.probe())
+	switch {
+	case v.safe():
+		return answer(probeFinished)
+	case v.Reason == ReasonUnverified:
+		return probeInconclusive
+	}
+	return answer(probeUnfinished)
+}
+
+// holdAnswer maps a check's hold to what the probe concluded: only Unverified
+// means the check could not tell.
+func holdAnswer(hold *Result) probeAnswer {
+	if hold.Reason == ReasonUnverified {
+		return probeInconclusive
+	}
+	return probeUnfinished
 }
 
 func (r *Reclaimer) measure(ctx context.Context, res *Result, path string) {
@@ -1044,7 +1170,7 @@ func (r *Reclaimer) RecoverQuarantined(ctx context.Context, id string) (restored
 		}
 	}
 	for _, rowID := range ids {
-		unlock, err := r.rowLock(rowID)
+		unlock, err := r.rowLock(ctx, rowID)
 		if err != nil {
 			parked = append(parked, r.quarantined(rowID)...)
 			continue
@@ -1057,12 +1183,12 @@ func (r *Reclaimer) RecoverQuarantined(ctx context.Context, id string) (restored
 }
 
 // rowLock takes the cross-process lock for one row: <root>/.reclaim/<id>.lock.
-func (r *Reclaimer) rowLock(id string) (func(), error) {
+func (r *Reclaimer) rowLock(ctx context.Context, id string) (func(), error) {
 	dir := filepath.Join(r.Root, ".reclaim")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, err
 	}
-	return lockFile(filepath.Join(dir, id+".lock"))
+	return lockFile(ctx, filepath.Join(dir, id+".lock"))
 }
 
 // recoverLocked is RecoverQuarantined for one row whose row lock is held.

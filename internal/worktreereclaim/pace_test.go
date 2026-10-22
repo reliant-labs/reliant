@@ -63,8 +63,14 @@ func TestIdleDone_RefusesEverythingNotFinished(t *testing.T) {
 			w := f.worktree("x", "feat/x")
 			setup(t, f, w)
 			got := f.probeIdle(w)
-			if got.Outcome == OutcomeIdleDone {
-				t.Fatalf("%s: reported finished: %+v", name, got)
+			// A definite "no" is still locked; only a check that could not
+			// run says so with probe_inconclusive.
+			want := OutcomeLocked
+			if name == "process list unreadable" {
+				want = OutcomeProbeInconclusive
+			}
+			if got.Outcome != want {
+				t.Fatalf("%s: got %+v, want %s", name, got, want)
 			}
 			if !exists(w.Path) {
 				t.Fatalf("%s: directory removed", name)
