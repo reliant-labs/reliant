@@ -3,6 +3,7 @@ package tools
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/daemon"
+	"github.com/reliant-labs/reliant/internal/memtemp"
 	"github.com/reliant-labs/reliant/internal/rctx"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -27,7 +29,10 @@ const (
 // holds the fix plus a new, uncommitted regression test.
 func proveTestRepo(t *testing.T) string {
 	t.Helper()
-	dir := t.TempDir()
+	// In memory: a proof journals every swap with fsyncs, in this repo's .git,
+	// and on the shared disk under a full test lane those were 4-70s a test
+	// (internal/memtemp).
+	dir := memtemp.Dir(t)
 	gitCmd := func(args ...string) {
 		t.Helper()
 		cmd := exec.Command("git", append([]string{"-C", dir, "-c", "user.name=t", "-c", "user.email=t@example.com",
@@ -165,23 +170,32 @@ func TestProveTest_KeepsAConcurrentWritersContent(t *testing.T) {
 	assert.Equal(t, proveFixedCalc, string(preserved))
 }
 
-// The daemon's own timeout fires on the before-run; the fix must be back on
-// disk when the tool returns.
+// The daemon's own timeout fires on each run, the tool does not wait for the
+// command, and the fix is back on disk when the tool returns.
+//
+// "Did not wait" is judged on each run's own duration, as the report gives it:
+// a run cut off at its 300ms timeout reports well under a second, one that
+// waited for `sleep 30` reports 30s. The test's wall clock was the proxy for
+// this and also counted the proof's git and journal work, which a loaded
+// machine stretched to 41s (2026-10-22) while both runs still stopped at
+// ~300ms.
 func TestProveTest_RestoresWhenTheCommandTimesOut(t *testing.T) {
 	dir := proveTestRepo(t)
+	const childRuns = 30 * time.Second
 
-	start := time.Now()
 	resp, err := (&proveTestTool{}).Execute(proveTestCtx(dir), ProveTestParams{
-		Command: "sleep 30",
+		Command: fmt.Sprintf("sleep %d", int(childRuns.Seconds())),
 		Files:   []string{"calc.go"},
 		Timeout: 300,
 	})
 	require.NoError(t, err)
 	logProveOutputOnFailure(t, resp.Content)
 
-	assert.Less(t, time.Since(start), 25*time.Second)
 	assert.Contains(t, resp.Content, "VERDICT: inconclusive")
-	assert.Contains(t, resp.Content, "TIMED OUT")
+	for _, run := range []string{"BEFORE (fix reverted)", "AFTER (fix in place)"} {
+		took := timedOutAfter(t, resp.Content, run)
+		assert.Less(t, took, childRuns-5*time.Second, "%s waited for the command instead of stopping it at its timeout", run)
+	}
 	got, readErr := os.ReadFile(filepath.Join(dir, "calc.go"))
 	require.NoError(t, readErr)
 	assert.Equal(t, proveFixedCalc, string(got))
@@ -226,4 +240,23 @@ func TestProveTest_RegisteredOnTheDaemonOutsideTheDefaultBundle(t *testing.T) {
 
 	assert.True(t, slices.ContainsFunc(GetToolRegistry(), func(d ToolDefinition) bool { return d.Name == ToolProveTest }))
 	assert.True(t, strings.Contains(proveTestDescription, "SHARED CHECKOUTS"), "the concurrency caveat is part of the contract")
+}
+
+// timedOutAfter is the duration the report gives for run ("BEFORE (fix
+// reverted)" or "AFTER (fix in place)"), from its "— TIMED OUT after <d> —"
+// line; it fails the test if run did not time out.
+func timedOutAfter(t *testing.T, content, run string) time.Duration {
+	t.Helper()
+	for _, line := range strings.Split(content, "\n") {
+		rest, ok := strings.CutPrefix(line, run+" — TIMED OUT after ")
+		if !ok {
+			continue
+		}
+		text, _, _ := strings.Cut(rest, " ")
+		d, err := time.ParseDuration(text)
+		require.NoError(t, err, "duration in %q", line)
+		return d
+	}
+	t.Fatalf("the report has no %q run that TIMED OUT", run)
+	return 0
 }

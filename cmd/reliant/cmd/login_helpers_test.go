@@ -9,6 +9,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/credentials"
 
 	"github.com/reliant-labs/reliant/internal/cliauth"
+	"github.com/reliant-labs/reliant/internal/memtemp"
 )
 
 // isolateCLI points HOME and the shared credentials file at a temp dir and
@@ -18,7 +19,8 @@ import (
 // assert on; an empty value reads as unset. Returns the credentials path.
 func isolateCLI(t *testing.T) string {
 	t.Helper()
-	home := t.TempDir()
+	// In memory: every login these tests store is an fsync (internal/memtemp).
+	home := memtemp.Dir(t)
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
 	t.Setenv("FORGE_HOME", home)

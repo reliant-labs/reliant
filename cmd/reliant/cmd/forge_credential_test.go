@@ -25,6 +25,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/cliauth"
 	"github.com/reliant-labs/reliant/internal/handlers/token"
+	"github.com/reliant-labs/reliant/internal/memtemp"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
@@ -45,7 +46,9 @@ const testControlPlane = "https://admin.example.com"
 // any helper the developer's own shell exported. Returns forge's file path.
 func isolateForgeCredHome(t *testing.T) (credPath, home string) {
 	t.Helper()
-	home = t.TempDir()
+	// In memory: forge's credentials.Save fsyncs, and on the shared disk under
+	// a full test lane that made these tests 8-20s (internal/memtemp).
+	home = memtemp.Dir(t)
 	t.Setenv("HOME", home)
 	if runtime.GOOS == "windows" {
 		t.Setenv("USERPROFILE", home)
