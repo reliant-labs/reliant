@@ -37,6 +37,7 @@ func TestIdleDone_ReportsOnlyAFinishedWorktree(t *testing.T) {
 
 func TestIdleDone_RefusesEverythingNotFinished(t *testing.T) {
 	t.Parallel()
+	heavyUnderShort(t, "six fixtures through a probe (~41 git processes)")
 	cases := map[string]func(t *testing.T, f *fixture, w Worktree){
 		"untracked file": func(t *testing.T, f *fixture, w Worktree) { write(t, filepath.Join(w.Path, "wip.txt"), "x\n") },
 		"modified file":  func(t *testing.T, f *fixture, w Worktree) { write(t, filepath.Join(w.Path, "a.txt"), "changed\n") },

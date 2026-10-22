@@ -24,6 +24,7 @@ func (f *fixture) multiRepo(id string) Worktree {
 
 func TestRootFiles_SmallScratchIsSavedThenTheWorkspaceIsRemoved(t *testing.T) {
 	t.Parallel()
+	heavyUnderShort(t, "a two-checkout workspace through a full reclaim (~66 git processes)")
 	f := newFixture(t)
 	f.idle()
 	w := f.multiRepo("scratchy")
@@ -54,6 +55,7 @@ func TestRootFiles_SmallScratchIsSavedThenTheWorkspaceIsRemoved(t *testing.T) {
 
 func TestRootFiles_ConfirmedPathSavesThemToo(t *testing.T) {
 	t.Parallel()
+	heavyUnderShort(t, "a two-checkout workspace through the confirmed path (~59 git processes)")
 	f := newFixture(t)
 	f.idle()
 	w := f.multiRepo("confirmed")
@@ -151,23 +153,47 @@ func TestRootFiles_AFileWrittenAfterItWasSavedStaysAndKeepsTheWorkspace(t *testi
 
 // ---- secrets/dev.yaml ----------------------------------------------------
 
+// devSecretCases are the secrets/dev.yaml comparisons: a worktree's copy against
+// the source checkout's. wantHeld is whether the worktree holds a value the
+// source lacks, which removal would lose.
+var devSecretCases = []struct {
+	name, source, worktree string
+	wantHeld               bool
+}{
+	{"reordered and re-commented", "a: 1\nb: two\n", "# mine\nb: two\na: 1\n", false},
+	{"whitespace and quoting only", "a: 1\nb: two\n", "a:   1\nb: \"two\"\n", false},
+	{"empty values the source lacks", "a: 1\n", "a: 1\nnew_key: \"\"\nother:\n", false},
+	{"a subset of the source", "a: 1\nb: 2\nc: 3\n", "a: 1\n", false},
+	{"a new non-empty value", "a: 1\n", "a: 1\ntoken: abc\n", true},
+	{"a changed value", "token: new\n", "token: old\n", true},
+	{"nested new value", "db:\n  host: h\n", "db:\n  host: h\n  password: p\n", true},
+	{"a list item that differs", "k:\n  - a\n  - b\n", "k:\n  - a\n  - c\n", true},
+	{"not yaml", "a: 1\n", "a: [unterminated\n", true},
+}
+
+// The comparison itself, with no git: the -short counterpart of the fixture test
+// below, which drives the same cases through a whole reclaim (~22 git processes
+// each).
+func TestYamlValuesIn_DevSecretCases(t *testing.T) {
+	t.Parallel()
+	for _, tc := range devSecretCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			dir := t.TempDir()
+			source, worktree := filepath.Join(dir, "source.yaml"), filepath.Join(dir, "worktree.yaml")
+			write(t, source, tc.source)
+			write(t, worktree, tc.worktree)
+			if covered := yamlValuesIn(worktree, source); covered == tc.wantHeld {
+				t.Fatalf("yamlValuesIn = %v, but wantHeld=%v", covered, tc.wantHeld)
+			}
+		})
+	}
+}
+
 func TestDevSecrets_ProtectedOnlyForValuesTheSourceLacks(t *testing.T) {
 	t.Parallel()
-	cases := []struct {
-		name, source, worktree string
-		wantHeld               bool
-	}{
-		{"reordered and re-commented", "a: 1\nb: two\n", "# mine\nb: two\na: 1\n", false},
-		{"whitespace and quoting only", "a: 1\nb: two\n", "a:   1\nb: \"two\"\n", false},
-		{"empty values the source lacks", "a: 1\n", "a: 1\nnew_key: \"\"\nother:\n", false},
-		{"a subset of the source", "a: 1\nb: 2\nc: 3\n", "a: 1\n", false},
-		{"a new non-empty value", "a: 1\n", "a: 1\ntoken: abc\n", true},
-		{"a changed value", "token: new\n", "token: old\n", true},
-		{"nested new value", "db:\n  host: h\n", "db:\n  host: h\n  password: p\n", true},
-		{"a list item that differs", "k:\n  - a\n  - b\n", "k:\n  - a\n  - c\n", true},
-		{"not yaml", "a: 1\n", "a: [unterminated\n", true},
-	}
-	for _, tc := range cases {
+	heavyUnderShort(t, "nine reclaims of ~22 git processes each; TestYamlValuesIn_DevSecretCases covers the comparison")
+	for _, tc := range devSecretCases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			f := newFixture(t)
