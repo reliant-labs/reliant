@@ -16,7 +16,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/connectorgrant"
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/handlers/catalog"
 	"github.com/reliant-labs/reliant/internal/handlers/forge"
 	streaminghandler "github.com/reliant-labs/reliant/internal/handlers/streaming"
@@ -67,9 +66,14 @@ func testUserAuth(t *testing.T) *UserAuth {
 	return a
 }
 
-// testStreaming is the real StreamingService over repo, with no hubs.
-func testStreaming(t *testing.T, repo db.Repository) testRoute {
+// testStreaming is the real StreamingService, with no hubs, over a repository
+// answering the one query StreamUserUpdates makes for a client with nothing to
+// catch up on; any other query fails as not expected here.
+func testStreaming(t *testing.T) testRoute {
 	t.Helper()
+	repo := &streaminghandler.MockRepository{
+		GetLatestUserUpdateSequenceFunc: func(context.Context, string) (int64, error) { return 0, nil },
+	}
 	svc, err := streaminghandler.New(streaminghandler.Deps{Logger: slog.Default(), Config: &config.Config{}, Repo: repo})
 	require.NoError(t, err)
 	return mountService("reliant.v1.StreamingService", svc)
@@ -78,7 +82,7 @@ func testStreaming(t *testing.T, repo db.Repository) testRoute {
 // testForge is the real ForgeService, with mount's options over the chain.
 func testForge(t *testing.T, mount ...mountkit.Option) testRoute {
 	t.Helper()
-	svc, err := forge.New(forge.Deps{Logger: slog.Default(), Config: &config.Config{}, Router: testRouter{}, Repo: drainTestRepo{}})
+	svc, err := forge.New(forge.Deps{Logger: slog.Default(), Config: &config.Config{}, Router: testRouter{}, Repo: &forge.MockRepository{}})
 	require.NoError(t, err)
 	return mountService("reliant.v1.ForgeService", svc, mount...)
 }
@@ -98,7 +102,7 @@ func testHTTPRoutes(t *testing.T, authn *UserAuth) testRoute {
 	t.Helper()
 	routes, err := NewAPIHTTPRoutes(APIHTTPRoutesDeps{
 		Auth:    authn,
-		Repo:    drainTestRepo{},
+		Repo:    drainTestRoutesStore{},
 		Router:  testRouter{},
 		OAuth:   connections.NewOAuthHTTP(nil),
 		Inbound: webhook.NewInbound(nil, nil, nil, nil, ""),

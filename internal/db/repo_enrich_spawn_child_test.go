@@ -76,7 +76,7 @@ func TestEnrichMessageUpdate_CarriesSpawnChildWorkflowID(t *testing.T) {
 		RequestedAt:     now, CreatedAt: now, UpdatedAt: now,
 	}))
 
-	enriched, err := repo.EnrichMessageUpdate(ctx, ChatUpdate{
+	enriched, err := repo.enrichMessageUpdate(ctx, ChatUpdate{
 		ID:         uuid.New().String(),
 		ChatID:     chatID,
 		UpdateType: reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_MESSAGE,
@@ -145,7 +145,7 @@ func TestEnrichMessageUpdate_NonSpawnToolCallHasNoChildWorkflowID(t *testing.T) 
 		RequestedAt: now, CreatedAt: now, UpdatedAt: now,
 	}))
 
-	enriched, err := repo.EnrichMessageUpdate(ctx, ChatUpdate{
+	enriched, err := repo.enrichMessageUpdate(ctx, ChatUpdate{
 		ID: uuid.New().String(), ChatID: chatID,
 		UpdateType: reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_MESSAGE,
 		EntityID:   messageID,

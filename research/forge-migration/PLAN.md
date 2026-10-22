@@ -269,7 +269,7 @@ Then P2 onward proceed one service, one package or one concern at a time under t
 - Set `contracts: {strict: true}` in warn mode.
 - Classify all 104 packages: service / strategy / adapter (`forge:outbound-io`) / pure (`//forge:exclude-contract: <why>`) / worker.
 - Roll out `contract.go` in waves of disjoint packages. Highest seam value first: `llm`, `workflow`, `daemon`, `threads`, `mcp`, `integrations/*`, `temporal`.
-- Split `internal/db`'s Repository into consumer-declared narrow interfaces (`api/role-interface` pattern) rather than one generated mega-mock.
+- Split `internal/db`'s Repository into consumer-declared narrow interfaces (`api/role-interface` pattern) rather than one generated mega-mock. **Done** (`10-repo-split-plan.md`, option A): lanes W1, A–F and Z (reliant #1249 #1256 #1273 #1277 #1294 #1297 #1300 #1303) moved every consumer onto a role it declares, and lane Y deleted `db.Repository`, the implementation-side `core.{ProviderAccountStore,RunEventStore,ConnectionStore,SecretsTx,IntegrationWriteStore}`, 41 dead `*db.Repo` methods, and unexported 11 internal-only ones. `*db.Repo` is the one concrete persistence API; `Connections()` / `IntegrationWrites()` return the concrete `db.ConnectionStore` / `db.IntegrationWriteLedger`. The compiler is the regression gate: there is no interface left to widen.
 - Replace hand fakes where a recorder mock is enough; keep stateful in-memory fakes.
 - Each contract also gets the generated observability decorator, which is how per-component tracing and metrics arrive.
 
@@ -297,7 +297,7 @@ Then P2 onward proceed one service, one package or one concern at a time under t
 P0 ─► P1 ─┬─► P2 ─► P3a ─► P3b (×36 parallel) ─► P3c ─► P7
           ├─► P4 (parallel by package) ─────────────────┐
           ├─► P5a ─┬────────────────────────────────────┼─► P8
-          │        └─► P5b (needs F5/F12, + P3b per svc) ─► P6 Repository split
+          │        └─► P5b (needs F5/F12, + P3b per svc) ─► P6 Repository split (done)
           ├─► P6 (non-handler pkgs, parallel waves) ────┘
           └─► P9
 ```

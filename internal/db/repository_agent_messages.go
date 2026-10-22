@@ -195,6 +195,8 @@ func (r *Repo) EnqueueSpawnReport(ctx context.Context, msg *AgentMessage) (Spawn
 	return outcome, nil
 }
 
+// ListQueuedAgentMessagesForThread returns queued messages in send order
+// -- delivery order must match send order.
 func (r *Repo) ListQueuedAgentMessagesForThread(ctx context.Context, toThreadID string) ([]*AgentMessage, error) {
 	if toThreadID == "" {
 		return nil, fmt.Errorf("to thread ID cannot be empty")
@@ -202,6 +204,10 @@ func (r *Repo) ListQueuedAgentMessagesForThread(ctx context.Context, toThreadID 
 	return store.ListQueuedAgentMessagesForThread(ctx, r.ORM(), toThreadID)
 }
 
+// MarkAgentMessagesDelivered moves queued rows to delivered and returns the
+// ids it actually moved. A caller that gets back fewer ids than it asked for
+// lost a race to a concurrent drain and must not write its own copies of
+// those messages -- see core.AgentMessageStore.
 func (r *Repo) MarkAgentMessagesDelivered(ctx context.Context, ids []string, deliveredAt time.Time, deliveredMessageID string) ([]string, error) {
 	if len(ids) == 0 {
 		return nil, nil
@@ -211,6 +217,8 @@ func (r *Repo) MarkAgentMessagesDelivered(ctx context.Context, ids []string, del
 	return store.MarkAgentMessagesDelivered(ctx, r.ORM(), ids, deliveredAt, deliveredMessageID)
 }
 
+// SetAgentMessagesDeliveredMessageID backfills the envelope pointer on rows
+// already claimed by MarkAgentMessagesDelivered.
 func (r *Repo) SetAgentMessagesDeliveredMessageID(ctx context.Context, ids []string, deliveredMessageID string) error {
 	if len(ids) == 0 {
 		return nil

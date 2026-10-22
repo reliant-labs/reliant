@@ -823,7 +823,7 @@ func (s *Service) buildChatUpdateData(ctx context.Context, opts SaveMessageOpts,
 	}
 
 	// One serializer for a block's wire shape, shared with every other path
-	// that emits a live message update (db.ContentBlockPayloads). This is the
+	// that emits a live message update (db.ContentBlockPayloadsWithToolCalls). This is the
 	// PRIMARY live path: when it open-coded its own copy of the loop, a spawn's
 	// tool-call block shipped without the child_workflow_id that names the
 	// thread it owns, and the spawn's preview had nothing to render for the

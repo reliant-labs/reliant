@@ -86,7 +86,7 @@ func (te *tokenEndpoint) Do(req *http.Request) (*http.Response, error) {
 
 type pollCredEnv struct {
 	repo   *db.Repo
-	store  core.ConnectionStore
+	store  db.ConnectionStore
 	vault  vault.Service
 	tokens *tokenEndpoint
 	poller *credPoller
@@ -126,7 +126,7 @@ func newPollCredEnv(t *testing.T) *pollCredEnv {
 // pollRepoOver adds the owner-scoped connection read, as the worker does.
 type pollRepoOver struct {
 	*db.Repo
-	conns core.ConnectionStore
+	conns db.ConnectionStore
 }
 
 func (r pollRepoOver) GetConnection(ctx context.Context, userID, id string) (*core.Connection, error) {

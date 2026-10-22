@@ -21,7 +21,7 @@ type Machine interface {
 	Send(ctx context.Context, commandType string, payload, resp any, timeoutMs int32) error
 }
 
-// Store is the slice of db.Repository creation writes through.
+// Store is the slice of *db.Repo creation writes through.
 type Store interface {
 	CreateWorktree(ctx context.Context, worktree *db.Worktree) error
 	UpdateWorktree(ctx context.Context, worktree *db.Worktree) error

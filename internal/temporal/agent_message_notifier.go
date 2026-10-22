@@ -11,8 +11,8 @@ import (
 )
 
 // ChatWorkflowLookup resolves a chat id to the Temporal workflow id driving
-// it. Narrow by design: taking db.Repository here would pull the whole
-// database layer into this package for one field read.
+// it. Narrow by design: taking *db.Repo here would pull the whole database
+// layer into this package for one field read.
 //
 // Nil is valid — the notifier then addresses the workflow by chat id, which is
 // the default identity a chat's workflow is created with.

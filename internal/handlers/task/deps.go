@@ -9,7 +9,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 )
 
-// Repository is the slice of db.Repository the task handlers use.
+// Repository is the slice of *db.Repo the task handlers use.
 type Repository interface {
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	GetThread(ctx context.Context, id string) (*db.Thread, error)

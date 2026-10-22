@@ -27,7 +27,7 @@ import (
 // record carries every skill body and repo memory the daemon indexed — 18 MB
 // in prod — and none of the paths below needs more than one small column.
 //
-// It embeds the concrete *db.Repo, not db.Repository, so the narrow column
+// It embeds the concrete *db.Repo, not the Repository role, so the narrow column
 // read the scenario RPCs use (GetProjectScenariosJSON) is still there to be
 // used.
 type wholeConfigRowReads struct {

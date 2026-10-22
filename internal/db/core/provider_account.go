@@ -2,7 +2,6 @@
 package core
 
 import (
-	"context"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
@@ -187,52 +186,6 @@ type Assignment struct {
 	ThreadID, Provider, AccountID string
 	AssignedAt                    time.Time
 	Reason                        string // initial | limited | paused | removed | needs_reauth | pinned
-}
-
-// ProviderAccountStore persists provider accounts, their limit state and thread assignments.
-type ProviderAccountStore interface {
-	// ListProviderAccounts returns metadata only, ordered by (provider, priority).
-	ListProviderAccounts(ctx context.Context, userID string) ([]ProviderAccount, error)
-	// ListProviderAccountsWithSecrets opens every secret. An account whose secret does not open
-	// is skipped and logged, never fatal: one broken credential must not hide the others.
-	ListProviderAccountsWithSecrets(ctx context.Context, userID string) ([]AccountWithSecrets, error)
-	GetProviderAccountWithSecrets(ctx context.Context, userID, accountID string) (*AccountWithSecrets, error)
-	// UpsertProviderAccount inserts at priority max+1, or updates the row with the same identity
-	// (fresh secrets, needs_reauth cleared; label, priority and pause are kept).
-	UpsertProviderAccount(ctx context.Context, u AccountUpsert) (acct ProviderAccount, created bool, err error)
-	// CompareAndSwapAccountTokens writes next only if the stored refresh token still equals expectedRefresh.
-	CompareAndSwapAccountTokens(ctx context.Context, userID, accountID, expectedRefresh string, next AccountTokens) (bool, error)
-	PatchProviderAccount(ctx context.Context, userID, accountID string, p AccountPatch) (ProviderAccount, error)
-	// ReorderProviderAccounts sets priorities 0..n-1 in orderedIDs order, atomically. orderedIDs
-	// must be exactly the user's accounts for the provider (ErrInvalidAccountOrder otherwise).
-	ReorderProviderAccounts(ctx context.Context, userID, provider string, orderedIDs []string) error
-	// DeleteProviderAccount removes the account and re-densifies the provider's priorities.
-	// Thread assignments and limit state cascade. ErrProviderAccountNotFound if absent.
-	DeleteProviderAccount(ctx context.Context, userID, accountID string) error
-
-	// ListAccountLimits returns limit state by account id for the user's accounts that have any.
-	ListAccountLimits(ctx context.Context, userID string) (map[string]LimitState, error)
-	// UpsertAccountLimitSnapshot stores the windows only if s.ObservedAt is newer than the stored
-	// one (monotonic across processes). It never disturbs the bench or the poll schedule, except
-	// that an "allowed" snapshot observed after the bench was set lifts it and clears the probe count.
-	UpsertAccountLimitSnapshot(ctx context.Context, s LimitState) error
-	// BenchAccount refuses the account until `until` (GREATEST with an existing bench). probe marks
-	// an unknown-reset bench: it increments limited_probes; otherwise the count resets to 0.
-	BenchAccount(ctx context.Context, userID, accountID string, until time.Time, window string, probe bool) error
-	// LeaseUsagePolls returns ids whose usage_api_next_at <= now and pushes each to now+lease, so
-	// concurrent leasers get disjoint sets.
-	LeaseUsagePolls(ctx context.Context, now time.Time, limit int, lease time.Duration) ([]string, error)
-	// ScheduleUsagePoll sets the next poll time (zero = unschedule), failure count and last error.
-	ScheduleUsagePoll(ctx context.Context, accountID string, next time.Time, failures int, errText string) error
-
-	// GetThreadAssignment returns (nil, nil) when the thread has no account for the provider.
-	GetThreadAssignment(ctx context.Context, threadID, provider string) (*Assignment, error)
-	// SetThreadAssignment is a compare-and-set: it applies only if the thread's current account
-	// for the provider equals expectedAccountID, where "" means "no assignment yet". applied=false
-	// means another writer got there first; the caller reads the row and adopts it.
-	SetThreadAssignment(ctx context.Context, a Assignment, expectedAccountID string) (applied bool, err error)
-	// RecentAssignmentCounts counts threads assigned to each account since the given time.
-	RecentAssignmentCounts(ctx context.Context, accountIDs []string, since time.Time) (map[string]int, error)
 }
 
 // ManagedIdentityKey is the identity of the managed Reliant key; at most one per user.

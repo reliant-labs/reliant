@@ -24,7 +24,7 @@ import (
 // NotFound (core.ErrChatNotFound), returned wrapped.
 var ErrNoWorkflow = svcerr.FailedPrecondition("chat has no workflow")
 
-// Repository is the subset of db.Repository this service needs.
+// Repository is the subset of *db.Repo this service needs.
 type Repository interface {
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	UpdateChat(ctx context.Context, chat *db.Chat) error

@@ -95,7 +95,7 @@ func (a *WorkflowErrorActivity) Execute(ctx context.Context, input WorkflowError
 // Temporal termination the worker never receives another workflow task, so no
 // workflow code (and therefore no activity) ever runs again, and the
 // reconciler is the only component left that observes the death. It has a
-// db.Repository but no activity context, so it calls this directly.
+// repository but no activity context, so it calls this directly.
 //
 // Duplicating the payload in that caller instead would mean the two error
 // shapes drift the first time a field is added, and the UI would silently

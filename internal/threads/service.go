@@ -14,7 +14,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 )
 
-// Repository defines the subset of db.Repository needed by the threads service.
+// Repository defines the subset of *db.Repo needed by the threads service.
 // This allows for easier testing and decouples threads from the full repository.
 type Repository interface {
 	// Chat operations.
@@ -77,7 +77,7 @@ type Repository interface {
 
 	// Tool call operations. A live message update carries each tool-call
 	// block's durable status and, for a spawn, the thread it started — see
-	// db.ContentBlockPayloads.
+	// db.ContentBlockPayloadsWithToolCalls.
 	ListToolCallsByChat(ctx context.Context, chatID string) ([]*db.ToolCall, error)
 	ListToolCallsByMessageIDs(ctx context.Context, messageIDs []string) ([]*db.ToolCall, error)
 	// UpsertToolCall / UpsertToolCallResult let a cancel record its outcome

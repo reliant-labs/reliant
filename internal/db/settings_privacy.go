@@ -7,22 +7,22 @@ import (
 
 // GetAnalyticsEnabled returns whether analytics is enabled for the user
 func (r *Repo) GetAnalyticsEnabled(ctx context.Context, userID string) (bool, error) {
-	return r.GetBoolOrDefault(ctx, userID, nil, PrivacyAnalyticsEnabled, DefaultAnalyticsEnabled)
+	return r.getBoolOrDefault(ctx, userID, nil, PrivacyAnalyticsEnabled, DefaultAnalyticsEnabled)
 }
 
-// SetAnalyticsEnabled sets whether analytics is enabled for the user
-func (r *Repo) SetAnalyticsEnabled(ctx context.Context, userID string, enabled bool) error {
-	return r.SetBool(ctx, userID, nil, PrivacyAnalyticsEnabled, enabled)
+// setAnalyticsEnabled sets whether analytics is enabled for the user
+func (r *Repo) setAnalyticsEnabled(ctx context.Context, userID string, enabled bool) error {
+	return r.setBool(ctx, userID, nil, PrivacyAnalyticsEnabled, enabled)
 }
 
-// GetCrashReportingEnabled returns whether crash reporting is enabled for the user
-func (r *Repo) GetCrashReportingEnabled(ctx context.Context, userID string) (bool, error) {
-	return r.GetBoolOrDefault(ctx, userID, nil, PrivacyCrashReportingEnabled, DefaultCrashReportingEnabled)
+// getCrashReportingEnabled returns whether crash reporting is enabled for the user
+func (r *Repo) getCrashReportingEnabled(ctx context.Context, userID string) (bool, error) {
+	return r.getBoolOrDefault(ctx, userID, nil, PrivacyCrashReportingEnabled, DefaultCrashReportingEnabled)
 }
 
-// SetCrashReportingEnabled sets whether crash reporting is enabled for the user
-func (r *Repo) SetCrashReportingEnabled(ctx context.Context, userID string, enabled bool) error {
-	return r.SetBool(ctx, userID, nil, PrivacyCrashReportingEnabled, enabled)
+// setCrashReportingEnabled sets whether crash reporting is enabled for the user
+func (r *Repo) setCrashReportingEnabled(ctx context.Context, userID string, enabled bool) error {
+	return r.setBool(ctx, userID, nil, PrivacyCrashReportingEnabled, enabled)
 }
 
 // GetPrivacySettings returns both analytics and crash reporting settings
@@ -32,7 +32,7 @@ func (r *Repo) GetPrivacySettings(ctx context.Context, userID string) (analytics
 		return false, false, err
 	}
 
-	crashReportingEnabled, err = r.GetCrashReportingEnabled(ctx, userID)
+	crashReportingEnabled, err = r.getCrashReportingEnabled(ctx, userID)
 	if err != nil {
 		return false, false, err
 	}
@@ -42,9 +42,9 @@ func (r *Repo) GetPrivacySettings(ctx context.Context, userID string) (analytics
 
 // SetPrivacySettings sets both analytics and crash reporting settings
 func (r *Repo) SetPrivacySettings(ctx context.Context, userID string, analyticsEnabled, crashReportingEnabled bool) error {
-	if err := r.SetAnalyticsEnabled(ctx, userID, analyticsEnabled); err != nil {
+	if err := r.setAnalyticsEnabled(ctx, userID, analyticsEnabled); err != nil {
 		return err
 	}
 
-	return r.SetCrashReportingEnabled(ctx, userID, crashReportingEnabled)
+	return r.setCrashReportingEnabled(ctx, userID, crashReportingEnabled)
 }

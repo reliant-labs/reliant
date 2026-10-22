@@ -9,7 +9,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 )
 
-// Repository is the slice of db.Repository the mcp handlers use.
+// Repository is the slice of *db.Repo the mcp handlers use.
 type Repository interface {
 	GetProject(ctx context.Context, id string) (*db.Project, error)
 	GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*db.Project, error)

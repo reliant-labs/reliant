@@ -11,7 +11,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
-// Repository is the slice of db.Repository the project handlers use.
+// Repository is the slice of *db.Repo the project handlers use.
 type Repository interface {
 	CreateProject(ctx context.Context, project *db.Project) error
 	GetProject(ctx context.Context, id string) (*db.Project, error)

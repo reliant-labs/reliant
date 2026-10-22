@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/reliant-labs/reliant/internal/connections"
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/stretchr/testify/require"
 )
@@ -36,7 +37,7 @@ func TestResolver_UsableAgreesWithForCall(t *testing.T) {
 	require.NoError(t, err)
 	require.ErrorIs(t, got[github], connections.ErrFailedPrecondition, "alice's connection is not bob's")
 
-	require.NoError(t, e.store.WithSecretsLock(ctx, "alice", conn.ID, func(tx core.SecretsTx) error {
+	require.NoError(t, e.store.WithSecretsLock(ctx, "alice", conn.ID, func(tx *db.SecretsTx) error {
 		return tx.MarkStatus(ctx, core.ConnectionStatusNeedsReauth, "invalid_grant")
 	}))
 	got, err = e.resolver.Usable(ctx, site(aliceRun), []connections.Ref{github})

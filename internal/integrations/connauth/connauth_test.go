@@ -348,7 +348,7 @@ func TestForTriggerRefusesAnotherUsersConnection(t *testing.T) {
 func TestForTriggerNeedsReauthIsTyped(t *testing.T) {
 	e := newEnv(t)
 	pat := e.githubPAT("alice")
-	require.NoError(t, e.repo.Connections().WithSecretsLock(context.Background(), "alice", pat, func(tx core.SecretsTx) error {
+	require.NoError(t, e.repo.Connections().WithSecretsLock(context.Background(), "alice", pat, func(tx *db.SecretsTx) error {
 		return tx.MarkStatus(context.Background(), core.ConnectionStatusNeedsReauth, "invalid_grant")
 	}))
 	trigger := e.trigger("alice", "github", &pat)

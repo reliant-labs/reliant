@@ -329,7 +329,7 @@ func TaskQueueName(suffix string) string {
 // store rather than the main repository.
 type triggerPollRepo struct {
 	*db.Repo
-	connections core.ConnectionStore
+	connections db.ConnectionStore
 }
 
 func (r triggerPollRepo) GetConnection(ctx context.Context, userID, id string) (*core.Connection, error) {

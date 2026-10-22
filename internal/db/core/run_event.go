@@ -2,7 +2,6 @@
 package core
 
 import (
-	"context"
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -49,32 +48,4 @@ type RunEvent struct {
 	// dispatch workflow; nil while it is still queued.
 	DispatchedAt *time.Time
 	CreatedAt    time.Time
-}
-
-// RunEventStore is the persistence contract for the run-event outbox. Every
-// write honors the ambient transaction from RunTx, which is the point: the
-// emitter writes inside the transaction of the state change it reports.
-type RunEventStore interface {
-	// CreateRunEvent inserts the event, doing nothing when its DedupeKey
-	// already exists. created=false means the transition was already recorded.
-	CreateRunEvent(ctx context.Context, ev *RunEvent) (created bool, err error)
-	// GetRunEvent returns ErrRunEventNotFound on a miss.
-	GetRunEvent(ctx context.Context, id string) (*RunEvent, error)
-	// GetRunEventByDedupe returns ErrRunEventNotFound on a miss.
-	GetRunEventByDedupe(ctx context.Context, dedupeKey string) (*RunEvent, error)
-	// HasEnabledTriggerOfKind reports whether the user owns an enabled trigger
-	// of the kind.
-	HasEnabledTriggerOfKind(ctx context.Context, userID string, kind TriggerKind) (bool, error)
-	// LockChatForRunEvent row-locks the chat until the transaction ends.
-	LockChatForRunEvent(ctx context.Context, chatID string) error
-	// CountOtherPendingBlockers counts the chat's pending approvals and
-	// questions other than excludeID.
-	CountOtherPendingBlockers(ctx context.Context, chatID, excludeID string) (int, error)
-	// ClaimRunEvents leases up to max undispatched events until leaseUntil.
-	ClaimRunEvents(ctx context.Context, now, leaseUntil time.Time, max int) ([]*RunEvent, error)
-	// MarkRunEventDispatched records that the event's dispatch has started.
-	MarkRunEventDispatched(ctx context.Context, id string, at time.Time) error
-	// DeleteDispatchedRunEventsBefore prunes dispatched events older than
-	// cutoff, returning how many were removed.
-	DeleteDispatchedRunEventsBefore(ctx context.Context, cutoff time.Time) (int64, error)
 }

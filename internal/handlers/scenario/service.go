@@ -22,7 +22,7 @@ type Deps struct {
 	// Repo stores the caller's scenarios and reads the workflows and
 	// project-synced scenarios they run against. A project's synced
 	// scenarios come from db.Repo.GetProjectScenariosJSON, which is not on
-	// db.Repository; storedProjectScenarios reaches it by assertion.
+	// Repository; storedProjectScenarios reaches it by assertion.
 	Repo Repository
 	// Router writes an uploaded scenario file onto the caller's machine
 	// (UploadScenario). The API server always has one; without it

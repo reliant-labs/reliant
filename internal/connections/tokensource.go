@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/oauth2"
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/vault"
 	"golang.org/x/sync/singleflight"
@@ -23,7 +24,7 @@ const refreshWindow = 60 * time.Second
 type tokenStore interface {
 	GetConnection(ctx context.Context, userID, id string) (*core.Connection, error)
 	GetSecrets(ctx context.Context, userID, id string) (map[string]core.ConnectionSecret, error)
-	WithSecretsLock(ctx context.Context, userID, id string, fn func(core.SecretsTx) error) error
+	WithSecretsLock(ctx context.Context, userID, id string, fn func(*db.SecretsTx) error) error
 	AppendConnectionEvent(ctx context.Context, ev core.ConnectionEvent) error
 }
 
@@ -126,7 +127,7 @@ func (s *TokenSource) RefreshAfterRejection(ctx context.Context, userID, connect
 	s.Forget(connectionID)
 	if conn.AuthKind != core.ConnectionAuthOAuth2 {
 		var marked error
-		if err := s.store.WithSecretsLock(ctx, conn.UserID, conn.ID, func(tx core.SecretsTx) error {
+		if err := s.store.WithSecretsLock(ctx, conn.UserID, conn.ID, func(tx *db.SecretsTx) error {
 			marked = s.markNeedsReauth(ctx, tx, conn, "rejected")
 			return nil
 		}); err != nil {
@@ -273,7 +274,7 @@ func (s *TokenSource) refreshLocked(ctx context.Context, conn *core.Connection, 
 	}
 	var result refreshed
 	var permanent error
-	err = s.store.WithSecretsLock(ctx, conn.UserID, conn.ID, func(tx core.SecretsTx) error {
+	err = s.store.WithSecretsLock(ctx, conn.UserID, conn.ID, func(tx *db.SecretsTx) error {
 		secrets := tx.Secrets()
 		access := secrets[core.SecretFieldAccessToken]
 		// Another worker may have refreshed while we waited for the lock: use
@@ -385,7 +386,7 @@ func (s *TokenSource) refreshLocked(ctx context.Context, conn *core.Connection, 
 
 // markNeedsReauth records the permanent failure inside the refresh transaction
 // and returns the typed error. status_reason is a class, never the provider's body.
-func (s *TokenSource) markNeedsReauth(ctx context.Context, tx core.SecretsTx, conn *core.Connection, reason string) error {
+func (s *TokenSource) markNeedsReauth(ctx context.Context, tx *db.SecretsTx, conn *core.Connection, reason string) error {
 	if err := tx.MarkStatus(ctx, core.ConnectionStatusNeedsReauth, reason); err != nil {
 		return err
 	}

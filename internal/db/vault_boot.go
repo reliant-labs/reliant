@@ -41,18 +41,18 @@ func BootVault(ctx context.Context, repo *Repo, hosted bool, dataDir, key string
 // unreadable; refuse to start rather than serve with it.
 func sealAPIKeys(ctx context.Context, repo *Repo, sealer CredentialSealer) error {
 	repo.EnableCredentialSealing(sealer)
-	sealed, err := repo.BackfillAPIKeys(ctx, 200)
+	sealed, err := repo.backfillAPIKeys(ctx, 200)
 	if err != nil {
 		return fmt.Errorf("vault: backfilling api_keys: %w", err)
 	}
-	remaining, err := repo.CountUnsealedAPIKeys(ctx)
+	remaining, err := repo.countUnsealedAPIKeys(ctx)
 	if err != nil {
 		return fmt.Errorf("vault: counting unsealed api_keys: %w", err)
 	}
 	if remaining > 0 {
 		return fmt.Errorf("vault: %d api_keys row(s) still have no sealed value after backfill; refusing to start because readers no longer fall back to plaintext (a concurrent writer likely raced the backfill: restart, and if it persists re-save those keys)", remaining)
 	}
-	if err := repo.ValidateAPIKeysSealedConstraint(ctx); err != nil {
+	if err := repo.validateAPIKeysSealedConstraint(ctx); err != nil {
 		return fmt.Errorf("vault: validating api_keys sealed constraint: %w", err)
 	}
 	slog.InfoContext(ctx, "vault ready", "api_keys_sealed_now", sealed)
