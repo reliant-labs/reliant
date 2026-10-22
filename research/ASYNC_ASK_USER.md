@@ -43,13 +43,24 @@ through the chat service's own send paths (no parallel implementation):
 2. Asking thread is the chat's main thread → `SendMessage` (target main).
    That is the composer's path: queued to the mailbox while the run executes,
    resumes a paused or failed run, starts a run when the chat's run ended.
-3. Asking thread is a sub-agent → `SendAgentMessage` to it: queued + FromUser
-   doorbell (a thread parked on a blocking ask_user yields to it, #1241), a
-   paused chat is resumed first, a sub-agent that stopped on an error is
+3. Asking thread is a sub-agent → `SendAgentMessage` to it: queued + doorbell,
+   a paused chat is resumed first, a sub-agent that stopped on an error is
    resumed. If it refuses (the sub-agent has finished, or its parent has), the
    answer goes to the main thread via `SendMessage`, framed as "a sub-agent
    asked this and has since finished; resume it with spawn(agent_id=…) if it
    still matters".
+   The doorbell is never the user's (`threadwake.WithoutQuestionYield` →
+   `FromUser: false`, as for spawn_send): the answer is to THIS question, so a
+   blocking ask_user its thread may be parked on must not yield to it (#1241's
+   yield is for the user's own new input) and close unanswered.
+   **Asking thread parked on a blocking question B** (whatever its run's
+   state): the answer is only queued in its mailbox — no doorbell, no resume,
+   no run started, never SendMessage's answer-as-resume of B. B stays pending;
+   the thread reads the answer at the call_llm after the user answers B. That
+   mailbox is not swept as undelivered even if the thread fails meanwhile
+   (`MarkQueuedAgentMessagesUndeliveredForThread` /
+   `ListThreadsWithOrphanedAgentMessages` skip a thread with a pending blocking
+   question: that question resumes it).
 4. Only after a delivery succeeds is the question resolved (`response_data`
    kept) and a `resolved` update emitted. A refused or failed delivery returns
    an error and leaves the question pending, so an answer is never lost; the

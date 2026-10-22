@@ -38,6 +38,8 @@ type Repository interface {
 	GetQuestionByID(ctx context.Context, id string) (*db.Question, error)
 	ListAnswerablePendingQuestionsByChat(ctx context.Context, chatID string) ([]*db.Question, error)
 	ListAsyncQuestionsByChat(ctx context.Context, chatID string) ([]*db.Question, error)
+	PendingQuestionsByThread(ctx context.Context, chatID string) (map[string]*db.Question, error)
+	EnqueueAgentMessageOnce(ctx context.Context, msg *db.AgentMessage) (bool, error)
 	EmitUserRefetch(ctx context.Context, userID string, refetchType db.RefetchType, opts db.RefetchOpts) error
 	ResolveQuestion(ctx context.Context, id string, responseData *string) error
 	EmitQuestionUpdate(ctx context.Context, chatID string, update db.QuestionUpdate) error

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
@@ -13,7 +14,9 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/askuser"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/workflow/threadwake"
 )
 
 // An async question (ask_user async: true) has no wait behind it: the thread
@@ -29,6 +32,16 @@ import (
 //     stopped on an error. One that has finished (or whose parent has) is
 //     refused; the answer then goes to the main thread instead, saying who
 //     asked, so it is never dropped.
+//
+// The one difference from a typed message: the doorbell is not the user's
+// (threadwake.WithoutQuestionYield). The answer is to THIS question, so a
+// thread parked on another, blocking, question keeps waiting on it rather
+// than closing it unanswered. And a thread parked on a blocking question gets
+// the answer in its mailbox and nothing else — no resume, no restart, no
+// answer-as-resume of that question — so it reads the answer at the call_llm
+// after the user answers the question it is waiting on. Its mailbox survives
+// the thread failing meanwhile (store.MarkQueuedAgentMessagesUndeliveredForThread),
+// because the pending question is what resumes it.
 //
 // The question is resolved only after a delivery is accepted. A refusal or an
 // error is returned with the question still pending: the user can answer
@@ -102,10 +115,19 @@ func (s *Service) resolveAsyncQuestion(
 // thread is a sub-agent that can no longer take a message — to the chat's
 // main thread. A nil error means a send path accepted it.
 func (s *Service) deliverAsyncAnswer(ctx context.Context, chat *db.Chat, question *db.Question, answer string) error {
+	ctx = threadwake.WithoutQuestionYield(ctx)
 	mainThread := chat.MainThreadID()
 	asker := question.ThreadID
 	if asker == "" || asker == chat.ID {
 		asker = mainThread
+	}
+
+	parked, err := s.parkedOnBlockingQuestion(ctx, chat.ID, asker)
+	if err != nil {
+		return err
+	}
+	if parked {
+		return s.queueBehindBlockingQuestion(ctx, chat, question.ID, asker, asyncAnswerBody(question.ID, answer))
 	}
 
 	if asker != mainThread {
@@ -130,6 +152,45 @@ func (s *Service) deliverAsyncAnswer(ctx context.Context, chat *db.Chat, questio
 	}
 
 	return s.sendToMainThread(ctx, chat, question.ID, asyncAnswerBody(question.ID, answer))
+}
+
+// parkedOnBlockingQuestion reports whether thread has a pending blocking
+// question: the thread is waiting on the user there, whatever state its run
+// is in. PendingQuestionsByThread holds blocking questions only, so the async
+// one being answered is never it.
+func (s *Service) parkedOnBlockingQuestion(ctx context.Context, chatID, thread string) (bool, error) {
+	byThread, err := s.deps.Repo.PendingQuestionsByThread(ctx, chatID)
+	if err != nil {
+		return false, connect.NewError(connect.CodeInternal, fmt.Errorf("check the asking thread's questions: %w", err))
+	}
+	return byThread[thread] != nil, nil
+}
+
+// queueBehindBlockingQuestion puts the answer in the thread's mailbox and
+// does nothing else: the thread is parked on a blocking question, and its
+// next call_llm — after that question is answered — reads it. No doorbell
+// rings, no run is resumed or started: any of those would act on the
+// question the thread is waiting on. Queued once under its content-named id.
+func (s *Service) queueBehindBlockingQuestion(ctx context.Context, chat *db.Chat, questionID, thread, body string) error {
+	from := chat.MainThreadID()
+	if from == "" {
+		from = thread
+	}
+	if _, err := s.deps.Repo.EnqueueAgentMessageOnce(ctx, &db.AgentMessage{
+		ID:           asyncAnswerMessageID(questionID, thread, body),
+		FromThreadID: from,
+		ChatID:       chat.ID,
+		ToThreadID:   thread,
+		Kind:         core.AgentMessageKindHumanMessage,
+		Body:         body,
+		Status:       core.AgentMessageStatusQueued,
+		CreatedAt:    time.Now(),
+	}); err != nil {
+		return connect.NewError(connect.CodeInternal, fmt.Errorf("queue the answer: %w", err))
+	}
+	logging.InfoContext(ctx, "Queued an async answer behind the blocking question its thread is parked on",
+		"questionID", questionID, "chatID", chat.ID, "threadID", thread)
+	return nil
 }
 
 // sendToMainThread sends body to the chat's main thread as the user's
