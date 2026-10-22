@@ -1030,7 +1030,7 @@ function EventsPanel({ events, range }: { events: WorkloadEvent[]; range: RangeP
                   <td className={TD}>
                     <Status tone={event.type === "Warning" ? "warning" : "neutral"} label={eventHeadline(event)} />
                     {eventRawReason(event) && (
-                      <span className="ml-2 font-mono text-[11px] text-ink-muted" title="The technical name of this event" data-testid="event-raw-reason">
+                      <span className="ml-2 font-mono text-ink-muted" title="The technical name of this event" data-testid="event-raw-reason">
                         {eventRawReason(event)}
                       </span>
                     )}
