@@ -121,14 +121,17 @@ function askUserInputObject(input: unknown): Record<string, unknown> | null {
 }
 
 /**
- * Whether an ask_user call asks without waiting (input async: true). Such a
- * call renders as a question card in the timeline; a blocking one renders in
- * the composer instead. A quoted "true" counts, as it does on the server.
+ * Whether an ask_user call asks without waiting — the default: only input
+ * blocking: true waits. An async call renders as a question card in the
+ * timeline; a blocking one renders in the composer instead. A quoted "true"
+ * counts, as it does on the server. A call recorded before async became the
+ * default also reads as async here; its card hides itself, having no async
+ * question row (AsyncQuestionCard).
  */
 export function isAsyncAskUserInput(input: unknown): boolean {
   const obj = askUserInputObject(input);
-  const flag = obj?.async;
-  return flag === true || (typeof flag === "string" && flag.trim().toLowerCase() === "true");
+  const flag = obj?.blocking;
+  return !(flag === true || (typeof flag === "string" && flag.trim().toLowerCase() === "true"));
 }
 
 /** An ask_user call's questions as QuestionPrompt's items, from its tool input. */

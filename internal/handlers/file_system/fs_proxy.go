@@ -65,14 +65,14 @@ func (s *Service) getUserID(ctx context.Context) (string, error) {
 // depended on the passthrough.
 func (s *Service) requireProjectBase(ctx context.Context, projectID string, worktreeID *string, chatID *string) (string, error) {
 	if strings.TrimSpace(projectID) == "" {
-		return "", svcerr.ToConnect(svcerr.InvalidArgument("project_id is required to scope a filesystem request"))
+		return "", svcerr.InvalidArgument("project_id is required to scope a filesystem request")
 	}
 	basePath, err := filepreview.ResolveBasePath(ctx, s.deps.Repo, projectID, worktreeID, chatID)
 	if err != nil {
 		return "", svcerr.WrapOr(err, svcerr.Internal("failed to resolve project path"))
 	}
 	if strings.TrimSpace(basePath) == "" {
-		return "", svcerr.ToConnect(svcerr.FailedPrecondition(fmt.Sprintf("project %q has no workspace path to scope this request to", projectID)))
+		return "", svcerr.FailedPrecondition(fmt.Sprintf("project %q has no workspace path to scope this request to", projectID))
 	}
 	return basePath, nil
 }
@@ -147,7 +147,7 @@ func (s *Service) workspaceDaemonID(ctx context.Context, userID, projectID strin
 	case err != nil:
 		return machinewake.Target{}, svcerr.WrapOr(err, svcerr.Internal("failed to resolve the chat's machine"))
 	case chat.UserID != userID:
-		return machinewake.Target{}, svcerr.ToConnect(svcerr.NotFound("chat"))
+		return machinewake.Target{}, svcerr.NotFound("chat")
 	case chat.ProjectID != projectID:
 		// A chat from another project says nothing about this project's
 		// files. It is stale UI context (a project switch racing the tree),
@@ -536,7 +536,7 @@ func (s *Service) GetFileMetadata(
 	}
 
 	if !cmdResp.Exists {
-		return nil, svcerr.ToConnect(svcerr.WithMessage(svcerr.ErrNotFound, fmt.Sprintf("path not found: %s", req.Msg.Path)))
+		return nil, svcerr.WithMessage(svcerr.ErrNotFound, fmt.Sprintf("path not found: %s", req.Msg.Path))
 	}
 
 	nodeType := reliantv1.FileNodeType_FILE_NODE_TYPE_FILE
@@ -620,7 +620,7 @@ func (s *Service) previewInfo(ctx context.Context, userID string, target machine
 		// here (cmd_fs.go returns "path is a directory: <path>").
 		if strings.Contains(err.Error(), "path is a directory") {
 			logging.DebugContext(ctx, "[FSProxy] preview requested for a directory", "path", requestedPath)
-			return nil, svcerr.ToConnect(svcerr.FailedPrecondition("path is a directory"))
+			return nil, svcerr.FailedPrecondition("path is a directory")
 		}
 		return nil, err
 	}
@@ -657,7 +657,7 @@ func (s *Service) GetFilePreview(
 		return nil, err
 	}
 	if strings.TrimSpace(req.Msg.Path) == "" {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("path is required"))
+		return nil, svcerr.InvalidArgument("path is required")
 	}
 
 	scope, err := s.resolveScope(ctx, userID, req.Msg.ProjectId, req.Msg.WorktreeId, req.Msg.ChatId)
@@ -672,14 +672,14 @@ func (s *Service) GetFilePreview(
 	info, err := s.previewInfo(ctx, userID, scope.target, resolvedPath, req.Msg.Path)
 	if err != nil {
 		if strings.Contains(err.Error(), "file not found") {
-			return nil, svcerr.ToConnect(svcerr.WithMessage(svcerr.ErrNotFound, fmt.Sprintf("file not found: %s", req.Msg.Path)))
+			return nil, svcerr.WithMessage(svcerr.ErrNotFound, fmt.Sprintf("file not found: %s", req.Msg.Path))
 		}
 		return nil, err
 	}
 	switch filepreview.ViewerKind(info.ViewerKind) {
 	case filepreview.ViewerKindImage, filepreview.ViewerKindPDF, filepreview.ViewerKindAudio, filepreview.ViewerKindVideo:
 	default:
-		return nil, svcerr.ToConnect(svcerr.FailedPrecondition("file type is not previewable"))
+		return nil, svcerr.FailedPrecondition("file type is not previewable")
 	}
 	if info.Size > maxFilePreviewBytes {
 		return nil, filePreviewTooLarge(info.Size)
@@ -711,8 +711,8 @@ func (s *Service) GetFilePreview(
 
 // filePreviewTooLarge is the refusal for a file over maxFilePreviewBytes.
 func filePreviewTooLarge(size int64) error {
-	return svcerr.ToConnect(svcerr.FailedPrecondition(fmt.Sprintf(
-		"file is too large to preview (%d MB; the limit is %d MB)", (size+(1<<20)-1)>>20, maxFilePreviewBytes>>20)))
+	return svcerr.FailedPrecondition(fmt.Sprintf(
+		"file is too large to preview (%d MB; the limit is %d MB)", (size+(1<<20)-1)>>20, maxFilePreviewBytes>>20))
 }
 
 // CreateFileOrFolder creates a new file or folder.
@@ -1092,13 +1092,13 @@ func (s *Service) CreateDirectory(
 
 	path := req.Msg.Path
 	if path == "" {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("path is required"))
+		return nil, svcerr.InvalidArgument("path is required")
 	}
 	// The path is executed on the daemon's filesystem, which may be Windows
 	// even when this server is Linux, so it is judged OS-agnostically and
 	// forwarded verbatim rather than being cleaned into the host's convention.
 	if !ospath.IsAbs(path) {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("path must be absolute"))
+		return nil, svcerr.InvalidArgument("path must be absolute")
 	}
 
 	cmdReq := map[string]any{

@@ -85,20 +85,20 @@ func (s *Service) daemonCredential(ctx context.Context, header http.Header) (*fa
 	bearer, ok := strings.CutPrefix(header.Get("Authorization"), "Bearer ")
 	bearer = strings.TrimSpace(bearer)
 	if !ok || !auth.IsAccessTokenFormat(bearer) {
-		return nil, svcerr.ToConnect(svcerr.Unauthenticated("GetGitToken needs a Reliant daemon access token (rlat_) as its bearer"))
+		return nil, svcerr.Unauthenticated("GetGitToken needs a Reliant daemon access token (rlat_) as its bearer")
 	}
 	subject, err := s.deps.Authority.Introspect(ctx, bearer)
 	if errors.Is(err, tokenauthority.ErrInactive) {
-		return nil, svcerr.ToConnect(svcerr.Unauthenticated("this Reliant credential is no longer valid; sign in to Reliant again"))
+		return nil, svcerr.Unauthenticated("this Reliant credential is no longer valid; sign in to Reliant again")
 	}
 	if err != nil {
 		return nil, svcerr.WithCause(svcerr.Unavailable("token service unavailable"), err)
 	}
 	if strings.TrimSpace(subject.ActingUserID) == "" {
-		return nil, svcerr.ToConnect(svcerr.PermissionDenied("an organization token acts as no one, so it has no git account"))
+		return nil, svcerr.PermissionDenied("an organization token acts as no one, so it has no git account")
 	}
 	if !subject.Scopes.Has(fat.ScopeDaemonConnect) {
-		return nil, svcerr.ToConnect(svcerr.PermissionDenied("only a daemon credential can fetch a git token"))
+		return nil, svcerr.PermissionDenied("only a daemon credential can fetch a git token")
 	}
 	return subject, nil
 }

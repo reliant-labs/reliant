@@ -11,7 +11,7 @@ import (
 )
 
 // ListAsyncQuestions returns every async question in a chat — asked with
-// ask_user async: true, so the thread carried on — answered or not, oldest
+// ask_user without blocking: true, so the thread carried on — answered or not, oldest
 // first. The chat timeline renders each as a card on its tool call: an answer
 // form while pending, the answer once resolved. ListPendingQuestions leaves
 // them out, because nothing is parked on one: shown in the composer it would

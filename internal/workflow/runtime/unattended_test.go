@@ -248,7 +248,9 @@ func askUserToolWorkflowBytes(t *testing.T) []byte {
 						{
 							Id:   "call_1",
 							Name: "ask_user",
-							Input: `{"questions":[{"question":"What visual style?",` +
+							// blocking: the attended run parks on it; an
+							// unattended one short-circuits it all the same.
+							Input: `{"blocking":true,"questions":[{"question":"What visual style?",` +
 								`"options":[{"label":"Clinical Minimal"},{"label":"Bold"}]}]}`,
 						},
 					},

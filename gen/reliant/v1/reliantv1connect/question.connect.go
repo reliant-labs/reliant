@@ -55,8 +55,8 @@ type QuestionServiceClient interface {
 	// agents can have one question pending per thread, so a client must pick
 	// the one for the thread it is showing rather than "the chat's question".
 	ListPendingQuestions(context.Context, *connect.Request[v1.ListPendingQuestionsRequest]) (*connect.Response[v1.ListPendingQuestionsResponse], error)
-	// ListAsyncQuestions lists every async question in a chat (ask_user with
-	// async: true), answered or not, oldest first. An async question never
+	// ListAsyncQuestions lists every async question in a chat (ask_user without
+	// blocking: true), answered or not, oldest first. An async question never
 	// blocks its thread, so ListPendingQuestions leaves it out; this is what the
 	// chat timeline renders it from. Answer one with ResolveQuestion, like any
 	// other question: the answer is delivered to the asking thread as a message.
@@ -126,8 +126,8 @@ type QuestionServiceHandler interface {
 	// agents can have one question pending per thread, so a client must pick
 	// the one for the thread it is showing rather than "the chat's question".
 	ListPendingQuestions(context.Context, *connect.Request[v1.ListPendingQuestionsRequest]) (*connect.Response[v1.ListPendingQuestionsResponse], error)
-	// ListAsyncQuestions lists every async question in a chat (ask_user with
-	// async: true), answered or not, oldest first. An async question never
+	// ListAsyncQuestions lists every async question in a chat (ask_user without
+	// blocking: true), answered or not, oldest first. An async question never
 	// blocks its thread, so ListPendingQuestions leaves it out; this is what the
 	// chat timeline renders it from. Answer one with ResolveQuestion, like any
 	// other question: the answer is delivered to the asking thread as a message.

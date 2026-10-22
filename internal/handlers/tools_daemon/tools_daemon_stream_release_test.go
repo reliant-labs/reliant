@@ -128,7 +128,9 @@ func TestReleaseStreamWaitsForTheSendInFlight(t *testing.T) {
 // parked Receive.
 func TestConnectDaemonRefusesAServerWithoutAbortableBodies(t *testing.T) {
 	svc := newDaemonlessService(t)
-	path, h := reliantv1connect.NewToolsDaemonServiceHandler(svc)
+	// Only the listener's edge is missing: svcerr.Interceptor still ends the
+	// chain, as it does every production one, so the refusal keeps its code.
+	path, h := reliantv1connect.NewToolsDaemonServiceHandler(svc, connect.WithInterceptors(svcerr.Interceptor()))
 	mux := http.NewServeMux()
 	mux.Handle(path, h)
 	srv := httptest.NewUnstartedServer(h2c.NewHandler(mux, &http2.Server{}))

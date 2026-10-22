@@ -301,7 +301,7 @@ export type InboxQuestion = Message<"reliant.v1.InboxQuestion"> & {
   metadata?: string | undefined;
 
   /**
-   * Asked without waiting (ask_user async: true): the agent kept working, so
+   * Asked without waiting (ask_user without blocking: true): the agent kept working, so
    * the item waits on the user without blocking a run. Not counted in
    * blocking_count.
    *

@@ -14,7 +14,7 @@ The two evolve independently. An **entity** exists where both halves exist (CRUD
 
 ```
 proto/services/<svc>/v1/<svc>.proto   your API: services, RPCs, messages
-proto/config/v1/config.proto          your typed configuration: every setting, its env var and default
+proto/<project>/config/v1/            your typed configuration (config.proto): every setting, its env var and default
 db/migrations/                        your schema, as forward-only SQL migrations
 db/seeds/vocab.yaml                   words the dev-data seeder should use for your columns
 

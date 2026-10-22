@@ -248,7 +248,7 @@ Keep these names working anyway, unchanged (rule 3), until control-plane drops t
 
 ### 2.1 Shape
 
-One file per role-scope under `proto/config/v1/`. Shared blocks are DEFINITIONS that each role composes; this is the pattern forge documents in the scaffold header, `config.proto` lines 33-66. Tags are fresh, because reliant has no prior config proto.
+One file per role-scope under `proto/reliant/config/v1/` (`proto/config/v1/` until forge #1154 made the config package project-unique). Shared blocks are DEFINITIONS that each role composes; this is the pattern forge documents in the scaffold header, `config.proto` lines 33-66. Tags are fresh, because reliant has no prior config proto.
 
 ```proto
 // ---- shared blocks (no binary_config) ---------------------------------
@@ -404,14 +404,14 @@ grep -ho 'name = "[A-Z_0-9]*"' ../control-plane/deploy/kcl/{dev/main.k,lib/env.k
 rg -o 'Name: "[A-Z_]+"' ../control-plane/internal/operators/workspace/workspace_controller.go
 ```
 
-The test asserts each name that reliant read before P4 is still either an `env_var`/alias in `proto/config/v1/*.proto` or an allowlisted bespoke read. This mechanizes rule 3.
+The test asserts each name that reliant read before P4 is still either an `env_var`/alias in `proto/reliant/config/v1/*.proto` or an allowlisted bespoke read. This mechanizes rule 3.
 
 **Per-PR gate:** `go build ./...`, `make test-short PKGS=<touched>`, `reliant forge lint --scope proto/config --scope pkg/config`. For PRs touching server flags, also `go run ./cmd/reliant server api --help` and diff the flag list against the previous version (no flag removed).
 
 | # | PR | Size | Owns (disjoint) | Proves nothing broke |
 |---|---|---|---|---|
 | F | **forge first:** F3a (validate binary) + F3b (`command` path + reach lint) + F3d (aliases) + `config.path_env`. Release, then pin in reliant (rule 7). | M | forge `internal/codegen/config*`, `pkg/config`, `proto/forge/v1/forge.proto`, linter | forge `task test`; e2e fixture of a one-binary multi-command project |
-| 1 | Add `proto/config/v1/{shared,api,worker,gateway,daemon,cli}.proto` and generated `pkg/config`. **No call site changes.** `forge.yaml config: {enforce_typed_access: warn, loader_package: pkg/config}`. Add `TestEnvContract`. Delete `internal/envutil` (0 callers). | M | `proto/config/`, `pkg/config/`, `forge.yaml` | build; contract test green; `forge lint` warn only |
+| 1 | Add `proto/reliant/config/v1/{shared,api,worker,gateway,daemon,cli}.proto` and generated `pkg/config`. **No call site changes.** `forge.yaml config: {enforce_typed_access: warn, loader_package: pkg/config}`. Add `TestEnvContract`. Delete `internal/envutil` (0 callers). | M | `proto/reliant/config/`, `pkg/config/`, `forge.yaml` | build; contract test green; `forge lint` warn only |
 | 2 | Server flag registration: replace `serverEnvOrDefault*` in `cmd/reliant/commands/server.go` with `Register*Flags` + `Load*`. Map loaded values into the existing `serverapi/serverworker/servergateway.Options`. **Identical flag names** (`--grpc-port`, `--db-url`, …). | M | `cmd/reliant/commands/server.go` | `server {api,worker,gateway} --help` flag diff is empty; `forge env up dev` boots api+worker (rule 4) |
 | 3 | Daemon/CLI flags: `envOrDefault*` in daemon.go/daemon_instance.go/connection.go → `DaemonConfig`/`CliConfig`; `builddefaults` through the defaults hook | M | `cmd/reliant/commands/{daemon,daemon_instance,connection,auth,preview,root}.go`, `internal/builddefaults` | `reliant daemon --help` diff; Electron dev launch; operator env names (contract test) |
 | 4a | DB: `internal/db/connect.go` takes `DatabaseConfig` (envInt, raw DATABASE_* reads gone) | S | `internal/db/connect.go`, `repo.go` | `DATABASE_URL=… REQUIRE_TEST_DB=1 make test-short PKGS=./internal/db/...` |
@@ -448,7 +448,7 @@ CP-1 is independent of everything else.
 
 ```bash
 d=$(mktemp -d); cd $d && reliant forge project new x --mod example.com/x --disable frontend   # exit 0; cmd/ = [x]
-cat >> x/proto/config/v1/config.proto <<'EOF'
+cat >> x/proto/x/config/v1/config.proto <<'EOF'
 message ServerApiConfig {
   option (forge.v1.binary_config) = {binary: "x server api"};
   string jwks_url = 1 [(forge.v1.config) = {env_var: "RELIANT_JWKS_URL", flag: "jwks-url"}];
@@ -456,7 +456,7 @@ message ServerApiConfig {
 EOF
 cd x && reliant forge generate     # ✅ Code generation complete — 10 file(s) written, 4 changed
 grep -n ServerApi pkg/config/config_gen.go   # :108 "ServerApiConfig is the x server api binary's configuration." + Register/Load emitted
-sed -i 's/"x server api"/"nonexistent"/' proto/config/v1/config.proto && reliant forge generate
+sed -i 's/"x server api"/"nonexistent"/' proto/x/config/v1/config.proto && reliant forge generate
 # ✅ Code generation complete — 10 file(s) written, 3 changed   ← no error
 grep -c ServerApi deploy/kcl/config_gen.k pkg/config/config_gen.go   # 7, 13
 ```

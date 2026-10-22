@@ -92,7 +92,10 @@ func (l *recordingListener) OnDaemonDisconnected(string, string) {}
 func registerAs(t *testing.T, svc *Service, userID, assertedID string) error {
 	t.Helper()
 	routes := http.NewServeMux()
-	svc.Register(routes) // the production mount
+	// The production mount, with the end of the production chain
+	// (serverkit.NewChain): svcerr.Interceptor gives a handler's svcerr error
+	// its Connect code on the wire.
+	svc.Register(routes, connect.WithInterceptors(svcerr.Interceptor()))
 	// Streams.Install is the listener's edge: the abortable request body
 	// ConnectDaemon needs (serverkit.AbortReceive).
 	mux := serverkit.NewStreams().Install(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

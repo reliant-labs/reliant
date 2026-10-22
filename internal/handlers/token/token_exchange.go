@@ -116,21 +116,21 @@ func (s *Service) ExchangeToken(
 	}
 	userID := subject.ActingUserID
 	if strings.TrimSpace(s.deps.ControlPlane.Issuer) == "" {
-		return nil, svcerr.ToConnect(svcerr.FailedPrecondition("this server has no control plane, so it issues no control-plane credentials"))
+		return nil, svcerr.FailedPrecondition("this server has no control plane, so it issues no control-plane credentials")
 	}
 	audience := strings.TrimSpace(req.Msg.GetAudience())
 	if !sameControlPlane(audience, s.deps.ControlPlane.Issuer) {
-		return nil, svcerr.ToConnect(svcerr.FailedPrecondition(fmt.Sprintf(
+		return nil, svcerr.FailedPrecondition(fmt.Sprintf(
 			"tokens from this server are valid at %s, not %q; nothing was minted",
-			strings.TrimRight(s.deps.ControlPlane.Issuer, "/"), audience)))
+			strings.TrimRight(s.deps.ControlPlane.Issuer, "/"), audience))
 	}
 	requested, err := requestedExchangeScopes(req.Msg.GetScopes())
 	if err != nil {
 		return nil, err
 	}
 	if subject.Resource != nil && subject.Resource.Kind != fat.ResourceDaemon {
-		return nil, svcerr.ToConnect(svcerr.PermissionDenied(fmt.Sprintf(
-			"a token bound to a %s cannot be exchanged", subject.Resource.Kind)))
+		return nil, svcerr.PermissionDenied(fmt.Sprintf(
+			"a token bound to a %s cannot be exchanged", subject.Resource.Kind))
 	}
 
 	granted := make([]fat.Scope, 0, len(requested))
@@ -140,11 +140,11 @@ func (s *Service) ExchangeToken(
 		}
 	}
 	if len(granted) == 0 {
-		return nil, svcerr.ToConnect(svcerr.PermissionDenied(fmt.Sprintf(
+		return nil, svcerr.PermissionDenied(fmt.Sprintf(
 			"this Reliant credential cannot authorize %s: it holds %s. "+
 				"Sign in again with `reliant auth login` (it asks for deploy, secret and domain permission), "+
 				"or grant this credential those permissions in Reliant → Settings → Access Tokens",
-			fat.JoinScopes(requested), describeScopes(subject.Scopes))))
+			fat.JoinScopes(requested), describeScopes(subject.Scopes)))
 	}
 
 	expiresAt := time.Now().Add(exchangeTTL)
@@ -196,20 +196,20 @@ func (s *Service) sessionCredential(ctx context.Context, header http.Header) (*f
 	bearer, ok := strings.CutPrefix(header.Get("Authorization"), "Bearer ")
 	bearer = strings.TrimSpace(bearer)
 	if !ok || !auth.IsAccessTokenFormat(bearer) {
-		return nil, svcerr.ToConnect(svcerr.Unauthenticated("ExchangeToken needs a Reliant access token (rlat_) as its bearer; sign in to Reliant (`reliant auth login` / the app)"))
+		return nil, svcerr.Unauthenticated("ExchangeToken needs a Reliant access token (rlat_) as its bearer; sign in to Reliant (`reliant auth login` / the app)")
 	}
 	subject, err := s.deps.Authority.Introspect(ctx, bearer)
 	if errors.Is(err, tokenauthority.ErrInactive) {
-		return nil, svcerr.ToConnect(svcerr.Unauthenticated("this Reliant credential is no longer valid; sign in to Reliant again (`reliant auth login` / the app)"))
+		return nil, svcerr.Unauthenticated("this Reliant credential is no longer valid; sign in to Reliant again (`reliant auth login` / the app)")
 	}
 	if err != nil {
 		return nil, svcerr.WithCause(svcerr.Unavailable("token service unavailable"), err)
 	}
 	if strings.TrimSpace(subject.ActingUserID) == "" {
-		return nil, svcerr.ToConnect(svcerr.PermissionDenied("an organization token acts as no one, so there is no session to exchange; present it to the control plane directly"))
+		return nil, svcerr.PermissionDenied("an organization token acts as no one, so there is no session to exchange; present it to the control plane directly")
 	}
 	if !subject.Scopes.Has(fat.ScopeDaemonConnect) && !subject.Scopes.Has(fat.ScopeReliantAPI) {
-		return nil, svcerr.ToConnect(svcerr.PermissionDenied("only a Reliant session credential (a daemon's or the CLI's) can be exchanged"))
+		return nil, svcerr.PermissionDenied("only a Reliant session credential (a daemon's or the CLI's) can be exchanged")
 	}
 	return subject, nil
 }
@@ -230,7 +230,7 @@ func (s *Service) confirmSameOrg(ctx context.Context, userID string, minted toke
 	}
 	logging.WarnContext(ctx, "exchange refused: minted org differs from the calling token's", "user_id", userID,
 		"subject_token_id", subject.TokenID)
-	return svcerr.ToConnect(svcerr.FailedPrecondition("your primary organization is not the one this credential was issued for; sign in to Reliant again"))
+	return svcerr.FailedPrecondition("your primary organization is not the one this credential was issued for; sign in to Reliant again")
 }
 
 // requestedExchangeScopes parses a request's scopes. Empty means every

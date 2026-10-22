@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// An async question (ask_user async: true) is asked without waiting, so it is
+// An async question (ask_user without blocking: true) is asked without waiting, so it is
 // never a gate: not AWAITING_INPUT, not a pending or answerable question of
 // the chat, and its thread still works. It is an item in the user's inbox
 // until answered, whatever its runs did since, and a thread that finishes

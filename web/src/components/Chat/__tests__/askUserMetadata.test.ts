@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseAskUserMetadata } from "../askUserUtils";
+import { isAsyncAskUserInput, parseAskUserMetadata } from "../askUserUtils";
 
 describe("parseAskUserMetadata", () => {
   it("returns null for null/undefined/empty metadata", () => {
@@ -261,5 +261,19 @@ describe("parseAskUserMetadata", () => {
     expect(result!.questions).toHaveLength(1);
     expect(result!.questions[0].question).toBe("Keep me");
     expect(result!.questions[0].options).toEqual([]);
+  });
+});
+describe("isAsyncAskUserInput", () => {
+  it("is async by default: only blocking: true waits", () => {
+    expect(isAsyncAskUserInput({ questions: [] })).toBe(true);
+    expect(isAsyncAskUserInput('{"questions":[]}')).toBe(true);
+    expect(isAsyncAskUserInput({ blocking: false, questions: [] })).toBe(true);
+    expect(isAsyncAskUserInput({ blocking: true, questions: [] })).toBe(false);
+    expect(isAsyncAskUserInput({ blocking: " TRUE ", questions: [] })).toBe(false);
+  });
+
+  it("reads the flag inside the tool-meta envelope", () => {
+    const inner = JSON.stringify({ blocking: true, questions: [] });
+    expect(isAsyncAskUserInput({ __reliant_tool_meta__: {}, input: inner })).toBe(false);
   });
 });

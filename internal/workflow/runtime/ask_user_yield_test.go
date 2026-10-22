@@ -151,7 +151,7 @@ func askUserWaitTestWorkflow(ctx workflow.Context) (map[string]interface{}, erro
 	call := &reliantv1.ToolCallMsg{
 		Id:    "call_1",
 		Name:  "ask_user",
-		Input: `{"questions":[{"question":"What visual style?","options":[{"label":"Clinical Minimal"},{"label":"Bold"}]}]}`,
+		Input: `{"blocking":true,"questions":[{"question":"What visual style?","options":[{"label":"Clinical Minimal"},{"label":"Bold"}]}]}`,
 	}
 	return executeAskUserInline(ctx, call, "chat-ask-user-yield", "wf-ask-user-yield", askUserYieldThread,
 		"tools", "", 0, false,

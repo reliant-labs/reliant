@@ -188,7 +188,7 @@ export type QuestionInfo = Message<"reliant.v1.QuestionInfo"> & {
   threadId: string;
 
   /**
-   * The question was asked without waiting (ask_user async: true): its thread
+   * The question was asked without waiting (ask_user without blocking: true): its thread
    * carried on, and an answer reaches it later as a message from the user. It
    * is never a gate on the chat.
    *
@@ -282,8 +282,8 @@ export const QuestionService: GenService<{
     output: typeof ListPendingQuestionsResponseSchema;
   },
   /**
-   * ListAsyncQuestions lists every async question in a chat (ask_user with
-   * async: true), answered or not, oldest first. An async question never
+   * ListAsyncQuestions lists every async question in a chat (ask_user without
+   * blocking: true), answered or not, oldest first. An async question never
    * blocks its thread, so ListPendingQuestions leaves it out; this is what the
    * chat timeline renders it from. Answer one with ResolveQuestion, like any
    * other question: the answer is delivered to the asking thread as a message.

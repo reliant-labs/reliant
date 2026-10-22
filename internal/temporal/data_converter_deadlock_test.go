@@ -23,7 +23,7 @@ import (
 func TestFlexibleDataConverterActivityBindingDropsDeadlockPause(t *testing.T) {
 	dc := NewFlexibleDataConverter()
 
-	var wfBound converter.DataConverter = dc
+	wfBound := dc
 	wfBound = converter.WithDataConverterSerializationContext(wfBound, converter.ActivitySerializationContext{IsLocal: true})
 	wfBound = wfBound.(converter.ContextAware).WithWorkflowContext(nil)
 	if _, ok := wfBound.(*workflowDeadlockPausingConverter); !ok {

@@ -95,7 +95,7 @@ Workers run inside the same `server` process as your services, locally and when 
 
 ## Configuration
 
-Settings are declared once, in `proto/config/v1/config.proto`, with their environment variable and default. `forge generate` turns them into a typed config your code receives, and per-environment values go in `deploy/kcl/<env>/`. A field marked `sensitive: true` becomes a secret reference with no place in git to paste a value; set it with [`forge secret set`](/forge/secrets).
+Settings are declared once, in `proto/<project>/config/v1/config.proto` (package `<project>.config.v1`), with their environment variable and default. `forge generate` turns them into a typed config your code receives, and per-environment values go in `deploy/kcl/<env>/`. A field marked `sensitive: true` becomes a secret reference with no place in git to paste a value; set it with [`forge secret set`](/forge/secrets).
 
 ## Related topics
 
