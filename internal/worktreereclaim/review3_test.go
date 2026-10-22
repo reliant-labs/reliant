@@ -99,6 +99,7 @@ func TestReview3_Q2_PutBackFailureLeavesItUnlocked(t *testing.T) {
 // one out, then the root's quarantine re-scan expects 1+len(nested) repos.
 func TestReview3_Q3_RootCheckoutWithNestedCheckout(t *testing.T) {
 	t.Parallel()
+	heavyUnderShort(t, "a root checkout and a nested one, both through a full reclaim (~75 git processes)")
 	f := newFixture(t)
 	f.idle()
 	ignore(t, f, "web/\n")
@@ -131,6 +132,7 @@ func TestReview3_Q3_RootCheckoutWithNestedCheckout(t *testing.T) {
 // clean-up is applied again on a later restore.
 func TestReview3_R1_StaleSnapshotReappliedOverNewerCommits(t *testing.T) {
 	t.Parallel()
+	heavyUnderShort(t, "a snapshot, newer commits, and a reapply (~79 git processes)")
 	f := newFixture(t)
 	ctx := context.Background()
 	w := f.worktree("r1", "feat/r1")
@@ -181,6 +183,7 @@ func TestReview3_R1_StaleSnapshotReappliedOverNewerCommits(t *testing.T) {
 // (committed to from another workspace) before the restore.
 func TestReview3_R2_SnapshotOverAMovedBranch(t *testing.T) {
 	t.Parallel()
+	heavyUnderShort(t, "~41 git processes")
 	f := newFixture(t)
 	ctx := context.Background()
 	w := f.worktree("r2", "feat/r2")
@@ -220,6 +223,7 @@ func TestReview3_R2_SnapshotOverAMovedBranch(t *testing.T) {
 // R3: does ApplySnapshot leave partial writes behind when it fails?
 func TestReview3_R3_FailedApplyLeavesPartialState(t *testing.T) {
 	t.Parallel()
+	heavyUnderShort(t, "~44 git processes")
 	f := newFixture(t)
 	ctx := context.Background()
 	w := f.worktree("r3", "feat/r3")
@@ -253,6 +257,7 @@ func TestReview3_R3_FailedApplyLeavesPartialState(t *testing.T) {
 // P9: an empty ORIG_HEAD in the admin dir.
 func TestReview3_P9_EmptyPseudoRef(t *testing.T) {
 	t.Parallel()
+	heavyUnderShort(t, "~34 git processes")
 	f := newFixture(t)
 	f.idle()
 	w := f.worktree("p9", "feat/p9")

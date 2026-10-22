@@ -114,6 +114,37 @@ func SetupTestDB(t *testing.T) (*Repo, func()) {
 	return repo, cleanup
 }
 
+// RetryBackoffs is the record RecordRetryBackoffs keeps: one entry per backoff
+// RunTx would have slept before a retry.
+type RetryBackoffs struct {
+	mu       sync.Mutex
+	backoffs []time.Duration
+}
+
+// Len is how many retries RunTx has started since recording began.
+func (b *RetryBackoffs) Len() int {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return len(b.backoffs)
+}
+
+// RecordRetryBackoffs makes repo record RunTx's backoffs instead of sleeping
+// them, so a test can pin how many retries a call ran (none, for an error that
+// must not be retried) by counting rather than by timing it against a wall
+// clock a loaded machine can stretch past any bound. Set it before the calls it
+// observes.
+//
+// Exported for use by other packages' tests; call it only on a test's own Repo.
+func RecordRetryBackoffs(repo *Repo) *RetryBackoffs {
+	rec := &RetryBackoffs{}
+	repo.retrySleep = func(d time.Duration) {
+		rec.mu.Lock()
+		defer rec.mu.Unlock()
+		rec.backoffs = append(rec.backoffs, d)
+	}
+	return rec
+}
+
 // SetupTestDBWithRawDB is like SetupTestDB but also returns the underlying *sql.DB
 // for tests that need to run raw SQL queries (e.g., verifying side effects).
 func SetupTestDBWithRawDB(t *testing.T) (*Repo, *sql.DB, func()) {

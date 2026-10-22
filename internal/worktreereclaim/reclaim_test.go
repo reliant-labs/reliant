@@ -150,6 +150,7 @@ func ignore(t *testing.T, f *fixture, patterns string) {
 
 func TestReconcile_CleanMergedIsRemoved(t *testing.T) {
 	t.Parallel()
+	heavyUnderShort(t, "~35 git processes")
 	f := newFixture(t)
 	f.idle()
 	w := f.worktree("w1", "feat/a")
@@ -169,6 +170,7 @@ func TestReconcile_CleanMergedIsRemoved(t *testing.T) {
 // B2: ignored files are potentially work. Rebuildable output goes; data holds.
 func TestReconcile_RebuildableIgnoredFilesDoNotBlock(t *testing.T) {
 	t.Parallel()
+	heavyUnderShort(t, "~36 git processes")
 	f := newFixture(t)
 	f.idle()
 	ignore(t, f, "node_modules/\ndist/\n")
@@ -182,6 +184,7 @@ func TestReconcile_RebuildableIgnoredFilesDoNotBlock(t *testing.T) {
 
 func TestReconcile_IgnoredDataHoldsTheWorktree(t *testing.T) {
 	t.Parallel()
+	heavyUnderShort(t, "~52 git processes")
 	f := newFixture(t)
 	f.idle()
 	ignore(t, f, "data/\n.env*\n*.db\n*.sqlite\nsecrets/\n.forge/\nweird/\n")
@@ -228,6 +231,7 @@ func TestReconcile_DirtyIsHeld(t *testing.T) {
 // B3
 func TestReconcile_SkipWorktreeAndAssumeUnchangedEditsAreDirty(t *testing.T) {
 	t.Parallel()
+	heavyUnderShort(t, "skip-worktree and assume-unchanged edits across several passes (~74 git processes)")
 	f := newFixture(t)
 	f.idle()
 	for _, flag := range []string{"--skip-worktree", "--assume-unchanged"} {
@@ -256,6 +260,7 @@ func snapshotHas(t *testing.T, f *fixture, r Result, file, content string) bool 
 
 func TestReconcile_UnpushedCommitIsHeld_ThenSafeOnceMergedOrPushed(t *testing.T) {
 	t.Parallel()
+	heavyUnderShort(t, "~51 git processes")
 	f := newFixture(t)
 	f.idle()
 	w := f.worktree("w3", "feat/c")
@@ -309,6 +314,7 @@ func TestReconcile_CwdProbeFailureFailsClosed(t *testing.T) {
 // S3: the automatic path waits out an idle floor; the confirmed one does not.
 func TestReconcile_IdleFloorAppliesToAutoOnly(t *testing.T) {
 	t.Parallel()
+	heavyUnderShort(t, "~31 git processes")
 	f := newFixture(t)
 	f.r.IdleFloor = time.Hour
 	w := f.worktree("w6", "feat/f")
@@ -525,6 +531,7 @@ func TestReconcile_MultiRepoRootFilesHoldTheWorkspace(t *testing.T) {
 
 func TestReconcile_MultiRepoWorkspaceWithOnlyEmptyDirsBetweenIsRemoved(t *testing.T) {
 	t.Parallel()
+	heavyUnderShort(t, "a multi-repo workspace, every checkout through a full reclaim (~80 git processes)")
 	f := newFixture(t)
 	f.idle()
 	ws := filepath.Join(f.root, "proj", "ws1")
@@ -619,6 +626,7 @@ func TestSubmoduleIsHeldNotRemoved(t *testing.T) {
 
 func TestSnapshotRemove_SavesWorkThenRemoves(t *testing.T) {
 	t.Parallel()
+	heavyUnderShort(t, "~40 git processes")
 	f := newFixture(t)
 	ignore(t, f, "node_modules/\n")
 	w := f.worktree("w13", "feat/l")
@@ -709,6 +717,7 @@ func TestSnapshot_RefsAreUniqueAndNeverOverwritten(t *testing.T) {
 // S3: the work changes between the snapshot and the removal.
 func TestSnapshotRemove_WorkChangedAfterSnapshotIsNotRemoved(t *testing.T) {
 	t.Parallel()
+	heavyUnderShort(t, "~31 git processes")
 	f := newFixture(t)
 	w := f.worktree("w16", "feat/o")
 	write(t, filepath.Join(w.Path, "u.txt"), "v1\n")
@@ -817,6 +826,7 @@ func TestReconcile_EmptyHuskIsRemovedButAnyFileKeepsIt(t *testing.T) {
 // S8: operations on one path serialize.
 func TestReclaimer_SerializesOperationsPerPath(t *testing.T) {
 	t.Parallel()
+	heavyUnderShort(t, "concurrent full passes over one path (~68 git processes)")
 	f := newFixture(t)
 	f.idle()
 	w := f.worktree("w21", "feat/t")

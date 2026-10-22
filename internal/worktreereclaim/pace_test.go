@@ -166,6 +166,7 @@ func TestReconcile_AStalledWorktreeIsDeferredAndTheOthersFinish(t *testing.T) {
 
 func TestReconcile_ResultsKeepRequestOrder(t *testing.T) {
 	t.Parallel()
+	heavyUnderShort(t, "several worktrees through one reconcile (~72 git processes)")
 	f := newFixture(t)
 	f.idle()
 	var ws []Worktree
@@ -186,6 +187,7 @@ func TestReconcile_ResultsKeepRequestOrder(t *testing.T) {
 // Its change is on main, so losing the name loses nothing.
 func TestOrphan_TipWhoseWorkIsOnBaseDoesNotHold(t *testing.T) {
 	t.Parallel()
+	heavyUnderShort(t, "~57 git processes")
 	f := newFixture(t)
 	f.idle()
 	w := f.worktree("rb", "feat/rb")
@@ -210,6 +212,7 @@ func TestOrphan_TipWhoseWorkIsOnBaseDoesNotHold(t *testing.T) {
 // automatic pass saves it under a ref before removing (see backup_test.go).
 func TestOrphan_TipWithWorkNotOnBaseIsSavedBeforeRemoval(t *testing.T) {
 	t.Parallel()
+	heavyUnderShort(t, "an orphaned tip saved to a backup ref, then a full reclaim (~84 git processes)")
 	f := newFixture(t)
 	f.idle()
 	w := f.worktree("lost", "feat/lost")

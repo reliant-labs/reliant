@@ -4,6 +4,7 @@ package tools
 import (
 	"context"
 	"encoding/json"
+	"sync"
 	"testing"
 	"time"
 
@@ -15,14 +16,38 @@ import (
 // machine running the command: it reports a command duration of its own
 // choosing and burns `stall` on top of it, which is exactly the shape of a
 // slow NATS round trip or a queued request.
+//
+// The stall is spent on a fake clock the tool reads (shellTool.now), not
+// slept: a real sleep made the tool's wall clock the machine's scheduler, so
+// a loaded machine could put a second of "transport" on a call that stalled
+// for none, and the clocks-agree case would see a disagreement.
 type stallDaemon struct {
 	daemon.Client
 	stall      time.Duration
 	durationMs int64
+	clock      fakeClock
+}
+
+// fakeClock is a clock that moves only when advanced.
+type fakeClock struct {
+	mu  sync.Mutex
+	now time.Time
+}
+
+func (c *fakeClock) Now() time.Time {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.now
+}
+
+func (c *fakeClock) advance(d time.Duration) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.now = c.now.Add(d)
 }
 
 func (d *stallDaemon) RunCommand(_ context.Context, _ *daemon.RunCommandRequest) (*daemon.CommandResult, error) {
-	time.Sleep(d.stall)
+	d.clock.advance(d.stall)
 	return &daemon.CommandResult{
 		Stdout:     "hello\n",
 		Combined:   "hello\n",
@@ -38,7 +63,8 @@ func runShell(t *testing.T, d *stallDaemon) (ShellOutput, ShellResponseMetadata)
 		ChatID:   "chat-1",
 		Worktree: &rctx.WorktreeInfo{Path: t.TempDir()},
 	}
-	resp, err := (&shellTool{}).Execute(tc, ShellParams{Command: "echo hello"})
+	d.clock.now = time.Unix(1_800_000_000, 0)
+	resp, err := (&shellTool{now: d.clock.Now}).Execute(tc, ShellParams{Command: "echo hello"})
 	if err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
