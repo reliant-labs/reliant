@@ -18,6 +18,7 @@ import (
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 
+	"github.com/reliant-labs/forge/pkg/serverkit"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -89,10 +90,12 @@ func registerAs(t *testing.T, svc *Service, userID, assertedID string) error {
 	t.Helper()
 	routes := http.NewServeMux()
 	svc.Register(routes) // the production mount
-	mux := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	// Streams.Install is the listener's edge: the abortable request body
+	// ConnectDaemon needs (serverkit.AbortReceive).
+	mux := serverkit.NewStreams().Install(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), auth.UserIDContextKey, r.Header.Get("X-Test-User"))
 		routes.ServeHTTP(w, r.WithContext(ctx))
-	})
+	}))
 	srv := httptest.NewUnstartedServer(h2c.NewHandler(mux, &http2.Server{}))
 	srv.Start()
 	defer srv.Close()

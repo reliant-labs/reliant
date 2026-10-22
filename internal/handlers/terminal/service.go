@@ -10,7 +10,6 @@ import (
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
-	"github.com/reliant-labs/reliant/internal/streamabort"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
@@ -77,9 +76,7 @@ func (s *Service) Name() string {
 // Register registers the service handlers with the HTTP mux.
 func (s *Service) Register(mux *http.ServeMux, opts ...connect.HandlerOption) {
 	path, handler := reliantv1connect.NewTerminalServiceHandler(s, opts...)
-	// StreamTerminal aborts its request body to stop its input pump
-	// (streamabort).
-	mux.Handle(path, streamabort.Handler(handler))
+	mux.Handle(path, handler)
 }
 
 // RegisterHTTP registers plain HTTP handlers (callbacks, REST endpoints)

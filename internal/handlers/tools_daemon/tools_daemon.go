@@ -30,7 +30,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/ospath"
 	"github.com/reliant-labs/reliant/internal/projectfacts"
-	"github.com/reliant-labs/reliant/internal/streamabort"
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/toolexec/bootstrap"
@@ -86,14 +85,14 @@ type daemonStream interface {
 // inboundStream wraps a connect.BidiStream (server-side, inbound daemon connection).
 type inboundStream struct {
 	stream *connect.BidiStream[reliantv1.DaemonMessage, reliantv1.ServerMessage]
-	// ctx is the handler's: its request was served through
-	// streamabort.Handler (Service.Register), which abort closes the body of.
+	// ctx is the handler's: the listener served its request with a body
+	// serverkit.AbortReceive can end, which is what abort does.
 	ctx context.Context
 }
 
 func (s *inboundStream) Send(msg *reliantv1.ServerMessage) error    { return s.stream.Send(msg) }
 func (s *inboundStream) Receive() (*reliantv1.DaemonMessage, error) { return s.stream.Receive() }
-func (s *inboundStream) abort()                                     { streamabort.Abort(s.ctx) }
+func (s *inboundStream) abort()                                     { serverkit.AbortReceive(s.ctx) }
 
 // outboundStream wraps a connect.BidiStreamForClient (client-side, outbound gateway connection).
 type outboundStream struct {
@@ -958,9 +957,12 @@ func (s *Service) ConnectDaemon(
 
 	// The stream is read on a goroutine of its own (handleIncoming), which
 	// this handler must stop before it returns; only an abortable request
-	// body lets it stop one parked in Receive. Service.Register mounts that.
-	if !streamabort.Installed(ctx) {
-		logging.ErrorContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" ConnectDaemon is mounted without streamabort.Handler; mount it through Service.Register")
+	// body lets it stop one parked in Receive. Every serverkit listener
+	// serves one (serverkit.AbortReceive); a server built any other way does
+	// not, and the stream is refused rather than one day hanging on, or
+	// racing, a parked Receive.
+	if !serverkit.CanAbortReceive(ctx) {
+		logging.ErrorContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" ConnectDaemon is served without an abortable request body; serve it through a serverkit listener")
 		return connect.NewError(connect.CodeInternal, errors.New("daemon stream handler is misconfigured"))
 	}
 

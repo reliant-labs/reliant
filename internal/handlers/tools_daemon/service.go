@@ -14,7 +14,6 @@ import (
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/reliant-labs/reliant/internal/streamabort"
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/pkg/config"
@@ -155,13 +154,13 @@ func (s *Service) Name() string {
 	return "tools_daemon"
 }
 
-// Register registers the service handlers with the HTTP mux. The route is
-// served through streamabort.Handler: ConnectDaemon stops its stream's reader
-// before it returns by aborting the request body, and refuses a stream
-// mounted any other way.
+// Register registers the service handlers with the HTTP mux. ConnectDaemon
+// stops its stream's reader before it returns by aborting the request body
+// (serverkit.AbortReceive), which the serverkit listener the mux is served by
+// makes possible; it refuses a stream served any other way.
 func (s *Service) Register(mux *http.ServeMux, opts ...connect.HandlerOption) {
 	path, handler := reliantv1connect.NewToolsDaemonServiceHandler(s, opts...)
-	mux.Handle(path, streamabort.Handler(handler))
+	mux.Handle(path, handler)
 }
 
 // RegisterHTTP registers plain HTTP handlers (callbacks, REST endpoints)

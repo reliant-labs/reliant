@@ -121,10 +121,11 @@ func TestReleaseStreamWaitsForTheSendInFlight(t *testing.T) {
 	require.Zero(t, stream.sending.Load())
 }
 
-// ConnectDaemon can stop its reader only through the abortable request body
-// Service.Register mounts, so a handler mounted any other way refuses the
-// stream rather than one day hanging on, or racing, a parked Receive.
-func TestConnectDaemonRefusesAMountWithoutRegister(t *testing.T) {
+// ConnectDaemon can stop its reader only through the abortable request body a
+// serverkit listener serves (serverkit.AbortReceive), so a server built any
+// other way refuses the stream rather than one day hanging on, or racing, a
+// parked Receive.
+func TestConnectDaemonRefusesAServerWithoutAbortableBodies(t *testing.T) {
 	svc := newDaemonlessService(t)
 	path, h := reliantv1connect.NewToolsDaemonServiceHandler(svc)
 	mux := http.NewServeMux()

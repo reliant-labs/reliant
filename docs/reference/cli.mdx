@@ -6580,8 +6580,10 @@ Create a new internal package under internal/`<name>`/ with:
   - contract.go  — Go interface that IS the package contract
   - service.go   — Implementation with unexported concrete type
 
-After creation, define your interface methods in contract.go, then run
-'forge generate' to produce mock_gen.go and middleware_gen.go.
+It ends with a 'forge generate' run, which writes mock_gen.go and
+middleware_gen.go and wires the package into internal/app/compose.go, so
+the project lints clean straight away (--no-generate skips it). After you
+add methods to contract.go, run 'forge generate' again.
 
 package shape: service|adapter (default service)
 
@@ -6611,6 +6613,7 @@ reliant forge package new <name> [flags]
 |------|------|---------|-------------|
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--kind` | `string` | - | package kind template (e.g. eventbus, client) |
+| `--no-generate` | `bool` | - | skip the post-scaffold 'forge generate' run (scaffold-only mode for parallel-agent rounds); run 'forge generate' before 'forge lint' |
 | `--type` | `string` | `service` | package shape: service|adapter (see --help for details) |
 
 ---
@@ -7992,6 +7995,11 @@ This scaffolds internal/`<name>`/ with:
   cache.go           empty stub — fill in TTL + per-host rate budget,
                      or delete the file if the adapter is fully local
 
+It ends with a 'forge generate' run, which compiles the adapter's config
+block (config.`<Name>`Config) and wires the adapter into
+internal/app/compose.go, so the next 'forge lint' is green. --no-generate
+skips it.
+
 This is equivalent to 'forge scaffold package --type adapter `<name>`'; that
 form stays wired for existing scripts. Use whichever is shorter for you.
 
@@ -8010,6 +8018,7 @@ reliant forge scaffold adapter <name> [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
+| `--no-generate` | `bool` | - | skip the post-scaffold 'forge generate' run (scaffold-only mode for parallel-agent rounds); run 'forge generate' before 'forge lint' |
 
 ---
 
@@ -8194,6 +8203,12 @@ written against forge/pkg/devidp, not a flow spread through the frontend.
 Bringing the environment up registers the new frontend with the dev IdP;
 nothing else to run.
 
+The scaffold ends with a 'forge generate' run, because the frontend's
+config proto (proto/config/v1/`<name>`_config.proto) is a generate input: the
+run re-extracts gen/forge_descriptor.json and writes the frontend's typed
+config, so the next 'forge lint' is green. --no-generate skips it, for a
+round that stages several scaffolds and generates once.
+
 Example:
   forge scaffold frontend web
   forge scaffold frontend dashboard --port 3001
@@ -8216,6 +8231,7 @@ reliant forge scaffold frontend <name> [flags]
 | `--auth-mode` | `string` | - | Sign-in flow for this frontend. Only `native` (the default) is scaffolded: your own form POSTs credentials to your own API and gets an HttpOnly session cookie; the server runs the OIDC flow (internal/app/login_broker.go) and the browser never contacts the IdP. |
 | `--base-path` | `string` | - | URL prefix the frontend is mounted under (e.g. "/admin"). Only applies to --kind web. |
 | `--kind` | `string` | - | frontend kind (web, mobile, or vite-spa) |
+| `--no-generate` | `bool` | - | skip the post-scaffold 'forge generate' run (scaffold-only mode for parallel-agent rounds); run 'forge generate' before 'forge lint' |
 | `--output` | `string` | - | Next.js output shape: static (default — a static export into out/), standalone, or server. Only applies to --kind web. |
 | `--port` | `int` | `0` | Pin the frontend dev-server port. Default (unset) allocates a free port at launch — set this only when the port is externally fixed (e.g. an OAuth redirect URI registered with an IdP). |
 | `--routes` | `stringSlice` | `[]` | Only generate CRUD pages for these entity route slugs (e.g. --routes users,usage-events), or '--routes none' for no generated pages at all. Default (unset) generates a page set for EVERY entity. Persisted as frontends[].routes and honored by every later generate run. |
@@ -8353,6 +8369,10 @@ The --type flag picks the scaffold shape:
               third-party system. Marker: '// forge:outbound-io'.
               Skill: forge skill load adapter
 
+It ends with a 'forge generate' run, which writes the package's mock and
+middleware_gen.go and wires it into internal/app/compose.go, so the next
+'forge lint' is green. --no-generate skips it.
+
 Example:
   forge scaffold package cache
   forge scaffold package events --kind eventbus
@@ -8368,6 +8388,7 @@ reliant forge scaffold package <name> [flags]
 |------|------|---------|-------------|
 | `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--kind` | `string` | - | package kind template (e.g. eventbus, client) |
+| `--no-generate` | `bool` | - | skip the post-scaffold 'forge generate' run (scaffold-only mode for parallel-agent rounds); run 'forge generate' before 'forge lint' |
 | `--type` | `string` | `service` | package shape: service|adapter (see --help) |
 
 ---
