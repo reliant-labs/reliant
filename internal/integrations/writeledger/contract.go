@@ -15,7 +15,10 @@
 // (httpaction.Runner.RunAuthenticated: the workflow action node and the
 // agent's integration tools), so no mutating call can skip the ledger.
 //
-//forge:not-a-component: built by reliant's hand-wired worker (internal/serverworker), not forge's composition root — until P3c (research/forge-migration/PLAN.md)
+// Built by hand, by internal/app's NewWriteLedger provider
+// (providers_worker.go): never a node compose.go constructs from Deps.
+//
+//forge:provided
 package writeledger
 
 import (

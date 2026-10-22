@@ -3,8 +3,6 @@
 package app
 
 import (
-	"errors"
-	"fmt"
 	"strings"
 	"time"
 
@@ -26,8 +24,10 @@ import (
 
 // The server configs (proto/config/v1 ServerProcessConfig, DatabaseConfig and
 // each role's command config) in the shapes the packages they configure
-// take. The providers read them, and so does `reliant server api`, whose
-// hand-written command loads the same configs until it is a root too.
+// take. The providers read them. A value no process can run with is refused
+// by the config protos' buf.validate rules as the config loads, before the
+// process does anything (proto/config/v1/config.proto), so none is checked
+// here.
 
 // ControlPlaneEndpoint is the shared ControlPlaneConfig in the shape the
 // server packages take, trimmed as every reader of these variables trimmed
@@ -46,62 +46,23 @@ func DatabaseURLs(cfg *configv1.DatabaseConfig) (driver, url, directURL string) 
 }
 
 // DatabasePool is the DatabaseConfig pool and wait settings in the shape the
-// database layer takes. A size or a wait that cannot be honoured is refused
-// rather than quietly replaced by its default.
-func DatabasePool(cfg *configv1.DatabaseConfig) (db.Pool, error) {
-	if n := cfg.GetDbMaxOpenConns(); n < 1 {
-		return db.Pool{}, fmt.Errorf("config: RELIANT_DB_MAX_OPEN_CONNS = %d must be at least 1", n)
-	}
-	if n := cfg.GetDbMaxIdleConns(); n < 1 {
-		return db.Pool{}, fmt.Errorf("config: RELIANT_DB_MAX_IDLE_CONNS = %d must be at least 1", n)
-	}
-	if s := cfg.GetDbSchemaWaitSeconds(); s < 1 {
-		return db.Pool{}, fmt.Errorf("config: RELIANT_DB_SCHEMA_WAIT_SECONDS = %d must be at least 1", s)
-	}
+// database layer takes. A size or a wait that cannot be honoured never gets
+// here: db_config.proto's rules refuse it as the config loads.
+func DatabasePool(cfg *configv1.DatabaseConfig) db.Pool {
 	pool := db.Pool{
 		MaxOpenConns: int(cfg.GetDbMaxOpenConns()),
 		MaxIdleConns: int(cfg.GetDbMaxIdleConns()),
 		SchemaWait:   time.Duration(cfg.GetDbSchemaWaitSeconds()) * time.Second,
 	}
 	if d := cfg.GetDbConnectTimeout(); d != nil {
-		if pool.ConnectTimeout = d.AsDuration(); pool.ConnectTimeout <= 0 {
-			return db.Pool{}, fmt.Errorf("config: DB_CONNECT_TIMEOUT = %s is not a positive duration", pool.ConnectTimeout)
-		}
+		pool.ConnectTimeout = d.AsDuration()
 	}
-	return pool, nil
+	return pool
 }
 
 // NATSEndpoint is the shared NatsConfig as natsutil connects to it.
 func NATSEndpoint(cfg *configv1.NatsConfig) natsutil.Endpoint {
 	return natsutil.Endpoint{URL: cfg.GetUrl(), User: cfg.GetUser(), Password: cfg.GetPassword()}
-}
-
-// Port is a port setting, named as an operator sets it.
-type Port struct {
-	Name string
-	Port int32
-}
-
-// CheckPorts refuses a port setting that is not a TCP port: the loader has
-// parsed it as an integer, but 0 or 70000 would fail later, at bind time, as
-// something less clear.
-func CheckPorts(ports ...Port) error {
-	for _, p := range ports {
-		if p.Port < 1 || p.Port > 65535 {
-			return fmt.Errorf("config: %s = %d is not a TCP port (1-65535)", p.Name, p.Port)
-		}
-	}
-	return nil
-}
-
-// CheckPprofPort is CheckPorts for PPROF_PORT, where 0 is a setting rather
-// than a mistake: no diagnostics listener (debugserver serves none on port
-// 0), as an empty PPROF_ADDR is for the gateway.
-func CheckPprofPort(port int32) error {
-	if port == 0 {
-		return nil
-	}
-	return CheckPorts(Port{Name: "PPROF_PORT (--pprof-port)", Port: port})
 }
 
 // IntegrationSettings is the shared IntegrationsConfig in the shape the
@@ -125,10 +86,7 @@ type IntegrationSettings struct {
 
 // Integrations is the shared IntegrationsConfig, trimmed as every reader of
 // these variables trimmed them.
-func Integrations(cfg *configv1.IntegrationsConfig) (IntegrationSettings, error) {
-	if id := cfg.GetGithubBotUserId(); id < 0 {
-		return IntegrationSettings{}, fmt.Errorf("config: RELIANT_GITHUB_BOT_USER_ID = %d is not a GitHub user id", id)
-	}
+func Integrations(cfg *configv1.IntegrationsConfig) IntegrationSettings {
 	publicURL := strings.TrimSpace(cfg.GetPublicUrl())
 	return IntegrationSettings{
 		PublicURL: publicURL,
@@ -142,56 +100,45 @@ func Integrations(cfg *configv1.IntegrationsConfig) (IntegrationSettings, error)
 		},
 		GitHubAppSlug: strings.TrimSpace(cfg.GetGithubAppSlug()),
 		GitHubBot:     github.BotFrom(cfg.GetGithubBotUserId(), cfg.GetGithubBotLogin()),
-	}, nil
+	}
 }
 
 // LLMSettings is the shared LLMConfig in the shape the LLM driver layer
-// takes. A stream deadline that is not positive is refused here: zero would
-// silently take the default and a negative one would never fire, so either
-// misreads what the operator asked for.
-func LLMSettings(cfg *configv1.LLMConfig) (drivers.Settings, error) {
-	var errs []error
-	positive := func(name string, d *durationpb.Duration) time.Duration {
+// takes. An unset stream deadline is the LLM layer's default (mid-block:
+// derived); llm_config.proto's rules refuse one that is not positive as the
+// config loads, since zero would silently take the default and a negative
+// one would never fire.
+func LLMSettings(cfg *configv1.LLMConfig) drivers.Settings {
+	timeout := func(d *durationpb.Duration) time.Duration {
 		if d == nil {
-			return 0 // unset: the LLM layer's default (mid-block: derived)
+			return 0
 		}
-		v := d.AsDuration()
-		if v <= 0 {
-			errs = append(errs, fmt.Errorf("config: %s = %s is not a positive duration", name, v))
-		}
-		return v
-	}
-	timeouts := llm.StreamTimeouts{
-		Idle:         positive("RELIANT_LLM_STREAM_IDLE_TIMEOUT", cfg.GetStreamIdleTimeout()),
-		ContentStall: positive("RELIANT_LLM_STREAM_CONTENT_STALL_TIMEOUT", cfg.GetStreamContentStallTimeout()),
-		Progress:     positive("RELIANT_LLM_STREAM_PROGRESS_TIMEOUT", cfg.GetStreamProgressTimeout()),
-		MidBlock:     positive("RELIANT_LLM_STREAM_MID_BLOCK_STALL_TIMEOUT", cfg.GetStreamMidBlockStallTimeout()),
-	}
-	if err := errors.Join(errs...); err != nil {
-		return drivers.Settings{}, err
+		return d.AsDuration()
 	}
 	return drivers.Settings{
-		StreamTimeouts:            timeouts,
+		StreamTimeouts: llm.StreamTimeouts{
+			Idle:         timeout(cfg.GetStreamIdleTimeout()),
+			ContentStall: timeout(cfg.GetStreamContentStallTimeout()),
+			Progress:     timeout(cfg.GetStreamProgressTimeout()),
+			MidBlock:     timeout(cfg.GetStreamMidBlockStallTimeout()),
+		},
 		ReliantBaseURL:            cfg.GetReliantApiBaseUrl(),
 		VertexProject:             cfg.GetVertexaiProject(),
 		VertexLocation:            cfg.GetVertexaiLocation(),
 		DebugOpenAIResponsesInput: cfg.GetDebugOpenaiResponsesInput(),
 		DebugOpenAIToolSchemas:    cfg.GetDebugOpenaiToolSchemas(),
-	}, nil
+	}
 }
 
 // PreviewSettings is the shared PreviewConfig in the shape the tools package
 // takes.
-func PreviewSettings(cfg *configv1.PreviewConfig) (tools.PreviewSettings, error) {
-	if p := cfg.GetWorkspaceUrlPort(); p < 0 || p > 65535 {
-		return tools.PreviewSettings{}, fmt.Errorf("config: WORKSPACE_URL_PORT = %d is not a TCP port", p)
-	}
+func PreviewSettings(cfg *configv1.PreviewConfig) tools.PreviewSettings {
 	return tools.PreviewSettings{
 		ProxyHost:           strings.TrimSpace(cfg.GetProxyHost()),
 		WorkspaceBaseDomain: strings.TrimSpace(cfg.GetWorkspaceBaseDomain()),
 		WorkspaceURLScheme:  cfg.GetWorkspaceUrlScheme(),
 		WorkspaceURLPort:    int(cfg.GetWorkspaceUrlPort()),
-	}, nil
+	}
 }
 
 // AnalyticsSettings is the shared AnalyticsConfig in the shape
@@ -203,17 +150,13 @@ func AnalyticsSettings(cfg *configv1.AnalyticsConfig) analytics.Settings {
 // SentrySettings is the shared SentryConfig in the shape internal/telemetry
 // takes. Events are filed under the deployment environment the deploy states
 // (SENTRY_ENVIRONMENT, else ENVIRONMENT).
-func SentrySettings(cfg *configv1.SentryConfig, obs *configv1.ObservabilityConfig) (telemetry.SentryConfig, error) {
-	rate := cfg.GetTracesSampleRate()
-	if rate < 0 || rate > 1 {
-		return telemetry.SentryConfig{}, fmt.Errorf("config: SENTRY_TRACES_SAMPLE_RATE = %v is not a share between 0 and 1", rate)
-	}
+func SentrySettings(cfg *configv1.SentryConfig, obs *configv1.ObservabilityConfig) telemetry.SentryConfig {
 	return telemetry.SentryConfig{
 		Enabled:          cfg.GetEnabled(),
 		DSN:              cfg.GetDsn(),
 		Environment:      obs.GetEnvironment(),
-		TracesSampleRate: rate,
-	}, nil
+		TracesSampleRate: cfg.GetTracesSampleRate(),
+	}
 }
 
 // TemporalEndpoint is the shared TemporalConfig: host, port and namespace.

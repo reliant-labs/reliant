@@ -31,7 +31,11 @@ import (
 // asleep or suspended, and the system is behaving correctly by saying so. It
 // logs at INFO and never reaches Sentry — even under the Unavailable code
 // callers give it — while errors.Is(err, ErrDaemonPending) is unchanged.
-var ErrDaemonPending = svcerr.WithClass(errors.New("no daemon connected: daemon record exists but has not registered yet (still starting)"), svcerr.ClassUser)
+//
+// Its kind is Unavailable — retryable, what the web's daemon-wait machinery
+// expects — so a handler's bare svcerr.Wrap answers CodeUnavailable with the
+// marker in the message, never Internal "internal server error".
+var ErrDaemonPending = svcerr.WithClass(svcerr.Unavailable("no daemon connected: daemon record exists but has not registered yet (still starting)"), svcerr.ClassUser)
 
 // IsDaemonPending reports whether err indicates a daemon exists for the user
 // but has not connected yet (still provisioning) — as opposed to no daemon
@@ -57,17 +61,10 @@ func IsDaemonPending(err error) bool {
 // and the word "suspended", which together are what the web's machine-wait
 // classification keys on (web/src/lib/daemon-errors.ts), even where a surface
 // shows this sentinel without the router's wrapping.
-var ErrDaemonSuspended error = &pendingMachineError{msg: "no daemon connected: the machine is asleep (suspended)", cause: ErrDaemonPending}
-
-// pendingMachineError is a more specific ErrDaemonPending: its own text, and
-// ErrDaemonPending (with its ClassUser) on its chain.
-type pendingMachineError struct {
-	msg   string
-	cause error
-}
-
-func (e *pendingMachineError) Error() string { return e.msg }
-func (e *pendingMachineError) Unwrap() error { return e.cause }
+//
+// It is ErrDaemonPending under its own message (svcerr.WithMessage), so the
+// text a client reads through svcerr is this one, not the pending sentinel's.
+var ErrDaemonSuspended = svcerr.WithMessage(ErrDaemonPending, "no daemon connected: the machine is asleep (suspended)")
 
 // IsDaemonSuspended reports whether err says the machine is suspended, as
 // opposed to still starting. Both are IsDaemonPending.
@@ -80,14 +77,30 @@ func IsDaemonSuspended(err error) bool {
 // ErrDaemonPending there is nothing to wait for, so a surface shows "no
 // machine" rather than a spinner. Its text deliberately lacks
 // daemonoffline.ErrorSubstring ("no daemon connected"): it is not a machine
-// that went offline. A USER error (svcerr.ClassUser), like ErrDaemonPending.
-var ErrNoDaemon = svcerr.WithClass(errors.New("no daemon available"), svcerr.ClassUser)
+// that went offline. A USER error (svcerr.ClassUser), like ErrDaemonPending,
+// of kind FailedPrecondition: waiting cannot produce a machine the user has not
+// connected.
+var ErrNoDaemon = svcerr.WithClass(svcerr.FailedPrecondition("no daemon available"), svcerr.ClassUser)
 
 // errDaemonNotConnected is the cause daemonRequestError reports when NATS had
 // no responder for the daemon's subject: the daemon is not connected. A USER
 // error — the machine is closed or restarting — whose text carries
 // daemonoffline.ErrorSubstring, the marker every surface keys on.
-var errDaemonNotConnected = svcerr.WithClass(errors.New("no daemon connected for user"), svcerr.ClassUser)
+var errDaemonNotConnected = svcerr.WithClass(svcerr.Unavailable("no daemon connected for user"), svcerr.ClassUser)
+
+// machineState puts sentence, the router's account of a machine state, in
+// front of state's own text as the message a client reads through svcerr —
+// which publishes the nearest message on the chain, never an outer
+// fmt.Errorf. Error() reads the same, and errors.Is(err, state) holds.
+func machineState(sentence string, state error) error {
+	return svcerr.WithMessage(state, sentence+": "+state.Error())
+}
+
+// noMachine is ErrNoDaemon followed by sentence, as machineState does it for
+// a state whose marker leads.
+func noMachine(sentence string) error {
+	return svcerr.WithMessage(ErrNoDaemon, ErrNoDaemon.Error()+": "+sentence)
+}
 
 // IsNoDaemon reports whether err is ErrNoDaemon: the user has no machine for
 // this request.

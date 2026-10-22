@@ -78,7 +78,7 @@ func UpsertWorkflowDraftBySlug(ctx context.Context, db orm.Context, d *core.Work
 func LoadWorkflowDraft(ctx context.Context, db orm.Context, id string) (*core.WorkflowDraft, error) {
 	d, err := findWorkflowDraft(ctx, db, func(q *bun.SelectQuery) *bun.SelectQuery { return q.Where("id = ?", id) })
 	if err == nil && d == nil {
-		return nil, sql.ErrNoRows
+		return nil, missing("workflow draft")
 	}
 	return d, err
 }
@@ -241,7 +241,7 @@ func RemoveWorkflowDraftBySlug(ctx context.Context, db orm.Context, userID, slug
 func deleteWorkflowDraft(ctx context.Context, db orm.Context, where func(*bun.DeleteQuery) *bun.DeleteQuery) (*core.WorkflowDraft, error) {
 	row := new(WorkflowDraft)
 	if err := where(db.Bun().NewDelete().Model(row)).Returning("*").Scan(ctx); err != nil {
-		return nil, err
+		return nil, classifyMissing(err, "workflow draft")
 	}
 	return workflowDraftToCore(row), nil
 }

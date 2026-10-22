@@ -14,13 +14,12 @@ import (
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
-// Deps holds dependencies for the forge service. internal/grpc/server.go
-// constructs it today, and mounts it only when the API server has a daemon
-// router and RELIANT_DISABLE_FORGE_API is unset: a forge project's state is
-// on the user's machine, never on this server. forge's composition root takes
-// over in P3c (research/forge-migration/PLAN.md). The rpc methods on *Service
-// are where this service's logic lives; see the forge `api` / `services`
-// skill.
+// Deps holds dependencies for the forge service. The composition graph
+// constructs it (internal/app/compose.go); every rpc reaches a daemon through
+// the router, because a forge project's state is on the user's machine, never
+// on this server, and RELIANT_DISABLE_FORGE_API turns the whole service off
+// (apiMountOptions). The rpc methods on *Service are where this service's
+// logic lives; see the forge `api` / `services` skill.
 type Deps struct {
 	Logger *slog.Logger
 	Config *config.Config

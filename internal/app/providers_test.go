@@ -13,13 +13,13 @@ import (
 )
 
 // As a node, the diagnostics listener serves until its context ends and is
-// gone after; PPROF_PORT=0 is no node at all.
+// gone after; PPROF_PORT=0 is no node at all. (A PPROF_PORT outside 1-65535
+// never reaches it: the config's rules refuse it at load,
+// TestServerPprofPortOutOfRangeFailsBoot.)
 func TestDebugServerRunsUntilItsContextEnds(t *testing.T) {
 	off, err := NewDebugServer(DebugServerDeps{Port: 0})
 	require.NoError(t, err)
 	require.Nil(t, off, "PPROF_PORT=0 built a listener")
-	_, err = NewDebugServer(DebugServerDeps{Port: 70000})
-	require.ErrorContains(t, err, "PPROF_PORT")
 
 	l, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)

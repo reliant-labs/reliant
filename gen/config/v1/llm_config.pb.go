@@ -7,6 +7,7 @@
 package configv1
 
 import (
+	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	_ "github.com/reliant-labs/forge/pkg/forgepb"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -144,21 +145,21 @@ var File_config_v1_llm_config_proto protoreflect.FileDescriptor
 
 const file_config_v1_llm_config_proto_rawDesc = "" +
 	"\n" +
-	"\x1aconfig/v1/llm_config.proto\x12\tconfig.v1\x1a\x14forge/v1/forge.proto\x1a\x1egoogle/protobuf/duration.proto\"\xb5\v\n" +
+	"\x1aconfig/v1/llm_config.proto\x12\tconfig.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x1egoogle/protobuf/duration.proto\"\xd6\v\n" +
 	"\tLLMConfig\x12i\n" +
 	"\x14reliant_api_base_url\x18\x01 \x01(\tB8\x82\xce\x184\n" +
 	"\x14RELIANT_API_BASE_URL*\x1cReliant LLM gateway base URLR\x11reliantApiBaseUrl\x12x\n" +
 	"\x10vertexai_project\x18\x02 \x01(\tBM\x82\xce\x18I\n" +
 	"\x10VERTEXAI_PROJECT*5Vertex AI project (required to call Vertex AI models)R\x0fvertexaiProject\x12c\n" +
 	"\x11vertexai_location\x18\x03 \x01(\tB6\x82\xce\x182\n" +
-	"\x11VERTEXAI_LOCATION\x1a\vus-central1*\x10Vertex AI regionR\x10vertexaiLocation\x12\xa5\x01\n" +
-	"\x13stream_idle_timeout\x18\x04 \x01(\v2\x19.google.protobuf.DurationBZ\x82\xce\x18V\n" +
-	"\x1fRELIANT_LLM_STREAM_IDLE_TIMEOUT\x1a\x0390s*.Cut a stream that sends no bytes for this longR\x11streamIdleTimeout\x12\xd8\x01\n" +
-	"\x1cstream_content_stall_timeout\x18\x05 \x01(\v2\x19.google.protobuf.DurationB|\x82\xce\x18x\n" +
-	"(RELIANT_LLM_STREAM_CONTENT_STALL_TIMEOUT\x1a\x025m*HCut a stream that sends only keepalives before any content for this longR\x19streamContentStallTimeout\x12\xbb\x01\n" +
-	"\x17stream_progress_timeout\x18\x06 \x01(\v2\x19.google.protobuf.DurationBh\x82\xce\x18d\n" +
-	"#RELIANT_LLM_STREAM_PROGRESS_TIMEOUT\x1a\x0310m*8Cut a stream that produces no driver event for this longR\x15streamProgressTimeout\x12\xf5\x01\n" +
-	"\x1estream_mid_block_stall_timeout\x18\a \x01(\v2\x19.google.protobuf.DurationB\x95\x01\x82\xce\x18\x90\x01\n" +
+	"\x11VERTEXAI_LOCATION\x1a\vus-central1*\x10Vertex AI regionR\x10vertexaiLocation\x12\xad\x01\n" +
+	"\x13stream_idle_timeout\x18\x04 \x01(\v2\x19.google.protobuf.DurationBb\xbaH\x05\xaa\x01\x02*\x00\x82\xce\x18V\n" +
+	"\x1fRELIANT_LLM_STREAM_IDLE_TIMEOUT\x1a\x0390s*.Cut a stream that sends no bytes for this longR\x11streamIdleTimeout\x12\xe1\x01\n" +
+	"\x1cstream_content_stall_timeout\x18\x05 \x01(\v2\x19.google.protobuf.DurationB\x84\x01\xbaH\x05\xaa\x01\x02*\x00\x82\xce\x18x\n" +
+	"(RELIANT_LLM_STREAM_CONTENT_STALL_TIMEOUT\x1a\x025m*HCut a stream that sends only keepalives before any content for this longR\x19streamContentStallTimeout\x12\xc3\x01\n" +
+	"\x17stream_progress_timeout\x18\x06 \x01(\v2\x19.google.protobuf.DurationBp\xbaH\x05\xaa\x01\x02*\x00\x82\xce\x18d\n" +
+	"#RELIANT_LLM_STREAM_PROGRESS_TIMEOUT\x1a\x0310m*8Cut a stream that produces no driver event for this longR\x15streamProgressTimeout\x12\xfd\x01\n" +
+	"\x1estream_mid_block_stall_timeout\x18\a \x01(\v2\x19.google.protobuf.DurationB\x9d\x01\xbaH\x05\xaa\x01\x02*\x00\x82\xce\x18\x90\x01\n" +
 	"*RELIANT_LLM_STREAM_MID_BLOCK_STALL_TIMEOUT*bPin how long a content block may stay open on keepalives (default: derived from the output budget)R\x1astreamMidBlockStallTimeout\x12\x91\x01\n" +
 	"\x1cdebug_openai_responses_input\x18\b \x01(\bBP\x82\xce\x18L\n" +
 	"$RELIANT_DEBUG_OPENAI_RESPONSES_INPUT*$Log each OpenAI Responses input itemR\x19debugOpenaiResponsesInput\x12\x90\x01\n" +

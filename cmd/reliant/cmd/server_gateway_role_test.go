@@ -111,9 +111,7 @@ func loadGatewayRole(cmd *cobra.Command) (gatewayRole, error) {
 	}); err != nil {
 		return gatewayRole{}, err
 	}
-	if r.pool, err = app.DatabasePool(r.database); err != nil {
-		return gatewayRole{}, err
-	}
+	r.pool = app.DatabasePool(r.database)
 	r.nats = app.NATSEndpoint(r.process.GetNats())
 	r.controlPlane = app.ControlPlaneEndpoint(r.process.GetControlPlane())
 	r.observability = observabilitySettings(r.process.GetObservability(), base)

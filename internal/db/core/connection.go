@@ -4,8 +4,9 @@ package core
 
 import (
 	"context"
-	"errors"
 	"time"
+
+	"github.com/reliant-labs/forge/pkg/svcerr"
 )
 
 // Connection kinds and states (research/CONNECTIONS_VAULT.md §4.1).
@@ -43,14 +44,14 @@ const (
 var (
 	// ErrConnectionNotFound covers a missing, deleted, or someone else's
 	// connection alike: ids must not be an oracle.
-	ErrConnectionNotFound = errors.New("connection not found")
+	ErrConnectionNotFound = svcerr.NotFound("connection")
 	// ErrConnectionNameTaken: the user already has a connection with that name
 	// for the integration.
-	ErrConnectionNameTaken = errors.New("connection name already in use")
+	ErrConnectionNameTaken = svcerr.AlreadyExists("connection name already in use")
 	// ErrOAuthFlowInvalid: unknown, expired, or already-consumed OAuth state.
-	ErrOAuthFlowInvalid = errors.New("oauth flow is invalid, expired or already used")
+	ErrOAuthFlowInvalid = svcerr.FailedPrecondition("oauth flow is invalid, expired or already used")
 	// ErrGenerationConflict: a secret was rewritten since it was read.
-	ErrGenerationConflict = errors.New("connection secret changed concurrently")
+	ErrGenerationConflict = svcerr.Aborted("connection secret changed concurrently")
 )
 
 // Connection is a user's saved, authorized login to an external service.

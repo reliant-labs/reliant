@@ -7,6 +7,7 @@
 package configv1
 
 import (
+	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	_ "github.com/reliant-labs/forge/pkg/forgepb"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -172,7 +173,7 @@ var File_config_v1_observability_config_proto protoreflect.FileDescriptor
 
 const file_config_v1_observability_config_proto_rawDesc = "" +
 	"\n" +
-	"$config/v1/observability_config.proto\x12\tconfig.v1\x1a\x14forge/v1/forge.proto\"\x81\x04\n" +
+	"$config/v1/observability_config.proto\x12\tconfig.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\"\x81\x04\n" +
 	"\x13ObservabilityConfig\x12\x81\x01\n" +
 	"\rotlp_endpoint\x18\x01 \x01(\tB\\\x82\xce\x18X\n" +
 	"\x1bOTEL_EXPORTER_OTLP_ENDPOINT*9OTLP collector base URL (export is on whenever it is set)R\fotlpEndpoint\x12w\n" +
@@ -182,15 +183,15 @@ const file_config_v1_observability_config_proto_rawDesc = "" +
 	"\x12PROMETHEUS_ENABLED\x1a\x04true*\"Serve Reliant's Prometheus metricsR\x11prometheusEnabled\x12z\n" +
 	"\venvironment\x18\x04 \x01(\tBX\x82\xce\x18T\n" +
 	"\x12SENTRY_ENVIRONMENT*/Deployment environment telemetry is filed underZ\r\n" +
-	"\vENVIRONMENTR\venvironment\"\xbe\x02\n" +
+	"\vENVIRONMENTR\venvironment\"\xd6\x02\n" +
 	"\fSentryConfig\x12{\n" +
 	"\aenabled\x18\x01 \x01(\bBa\x82\xce\x18]\n" +
 	"\x0eSENTRY_ENABLED\x1a\x04true*EReport errors to Sentry (when SENTRY_DSN is set and the tier is prod)R\aenabled\x122\n" +
 	"\x03dsn\x18\x02 \x01(\tB \x82\xce\x18\x1c\n" +
 	"\n" +
 	"SENTRY_DSN*\n" +
-	"Sentry DSN0\x01P\x01R\x03dsn\x12}\n" +
-	"\x12traces_sample_rate\x18\x03 \x01(\x01BO\x82\xce\x18K\n" +
+	"Sentry DSN0\x01P\x01R\x03dsn\x12\x94\x01\n" +
+	"\x12traces_sample_rate\x18\x03 \x01(\x01Bf\xbaH\x14\x12\x12\x19\x00\x00\x00\x00\x00\x00\xf0?)\x00\x00\x00\x00\x00\x00\x00\x00\x82\xce\x18K\n" +
 	"\x19SENTRY_TRACES_SAMPLE_RATE\x1a\x010*+Share of transactions Sentry traces, 0 to 1R\x10tracesSampleRateB8Z6github.com/reliant-labs/reliant/gen/config/v1;configv1b\x06proto3"
 
 var (

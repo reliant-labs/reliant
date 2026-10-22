@@ -74,7 +74,7 @@ func InsertPlan(ctx context.Context, db orm.Context, p *core.Plan) error {
 func GetPlan(ctx context.Context, db orm.Context, id string) (*core.Plan, error) {
 	row, err := GetPlanByID(ctx, db, id)
 	if errors.Is(err, svcerr.ErrNotFound) {
-		return nil, fmt.Errorf("plan not found: %s", id)
+		return nil, fmt.Errorf("%w: %s", svcerr.NotFound("plan"), id)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to get plan: %w", err)

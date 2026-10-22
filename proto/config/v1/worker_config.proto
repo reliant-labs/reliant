@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package config.v1;
 
+import "buf/validate/validate.proto";
 import "forge/v1/forge.proto";
 import "google/protobuf/duration.proto";
 
@@ -23,18 +24,25 @@ message WorkerConfig {
   reserved "control_plane", "database", "nats", "temporal", "drain", "data_dir", "streaming_driver",
     "integrations", "observability", "sentry", "analytics", "llm", "preview";
 
-  int32 health_port = 14 [(forge.v1.config) = {
-    env_var: "HEALTH_PORT"
-    flag: "health-port"
-    default_value: "8081"
-    description: "Health check endpoint port"
-  }];
-  int32 pprof_port = 15 [(forge.v1.config) = {
-    env_var: "PPROF_PORT"
-    flag: "pprof-port"
-    default_value: "6060"
-    description: "pprof debug server port (binds 127.0.0.1 only)"
-  }];
+  int32 health_port = 14 [
+    (forge.v1.config) = {
+      env_var: "HEALTH_PORT"
+      flag: "health-port"
+      default_value: "8081"
+      description: "Health check endpoint port"
+    },
+    (buf.validate.field).int32 = {gte: 1, lte: 65535}
+  ];
+  int32 pprof_port = 15 [
+    (forge.v1.config) = {
+      env_var: "PPROF_PORT"
+      flag: "pprof-port"
+      default_value: "6060"
+      description: "pprof debug server port (binds 127.0.0.1 only)"
+    },
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE,
+    (buf.validate.field).int32 = {gte: 1, lte: 65535}
+  ];
 
   // The rollout drain budget, read as ApiServerConfig's is (its comment has
   // the rules). Each role declares its own, so one role's may differ.

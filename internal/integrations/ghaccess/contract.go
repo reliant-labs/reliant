@@ -26,7 +26,10 @@
 // periodically for every user with an enabled GitHub trigger (Run). Webhook
 // revocations cut access between refreshes; a refresh restores what remains.
 //
-//forge:not-a-component: built by reliant's hand-wired server (internal/serverapi), not forge's composition root — until P3c (research/forge-migration/PLAN.md)
+// Built by hand, by internal/app's NewGitHubAccess provider
+// (providers_api.go): never a node compose.go constructs from Deps.
+//
+//forge:provided
 package ghaccess
 
 import (

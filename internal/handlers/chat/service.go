@@ -23,10 +23,10 @@ import (
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
-// Deps holds dependencies for the chat service. internal/grpc/server.go (and
-// the worker, for the run-management tools) constructs it today; forge's
-// composition root takes over in P3c (research/forge-migration/PLAN.md). The
-// rpc methods on *Service are where this service's logic lives; see the forge
+// Deps holds dependencies for the chat service. The composition graph
+// constructs it (internal/app/compose.go), and the worker root builds its own
+// for the run-management tools (internal/app/providers_worker.go). The rpc
+// methods on *Service are where this service's logic lives; see the forge
 // `api` / `services` skill.
 type Deps struct {
 	Logger *slog.Logger

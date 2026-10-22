@@ -14,7 +14,7 @@
 // poll, which has no run, resolves by trigger id and reads the owner and the
 // connection from the trigger record instead (ForTrigger).
 //
-//forge:not-a-component: built by reliant's hand-wired worker (internal/serverworker), not forge's composition root — until P3c (research/forge-migration/PLAN.md)
+//forge:not-a-component: built by internal/integrations/credwire, which the worker root's providers call — never a node of the composition graph
 package connauth
 
 import (

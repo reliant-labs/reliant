@@ -1,6 +1,10 @@
 // Copyright (c) 2025 Reliant Labs
 //
-//forge:not-a-component: built by reliant's hand-wired server (internal/handlers, internal/serverworker), not forge's composition root — until P3c (research/forge-migration/PLAN.md)
+// Built by hand, by internal/app's NewRunLifecycle provider
+// (providers_worker.go) and the chat handler: never a node compose.go
+// constructs from Deps.
+//
+//forge:provided
 package runs
 
 import (

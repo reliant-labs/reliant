@@ -1,8 +1,9 @@
 package core
 
 import (
-	"errors"
 	"time"
+
+	"github.com/reliant-labs/forge/pkg/svcerr"
 )
 
 // Route values stored in model_endpoints.route.
@@ -13,11 +14,11 @@ const (
 
 // ErrModelEndpointNotFound is returned when an endpoint does not exist OR is
 // owned by another user; the two are deliberately indistinguishable.
-var ErrModelEndpointNotFound = errors.New("model endpoint not found")
+var ErrModelEndpointNotFound = svcerr.NotFound("model endpoint")
 
 // ErrModelEndpointNameTaken is returned when the user already has an endpoint
 // with that name.
-var ErrModelEndpointNameTaken = errors.New("a model endpoint with that name already exists")
+var ErrModelEndpointNameTaken = svcerr.AlreadyExists("a model endpoint with that name already exists")
 
 // ModelEndpoint is one row of model_endpoints. It carries NO secret:
 // CredentialConnectionID points at the sealed connection store.

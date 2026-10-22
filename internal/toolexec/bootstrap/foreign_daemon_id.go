@@ -34,18 +34,18 @@ const foreignDaemonIDMessage = "daemon id is owned by another user"
 // NewForeignDaemonIDError is the gateway's refusal of a daemon id owned by
 // another user.
 func NewForeignDaemonIDError() *connect.Error {
-	err := connect.NewError(connect.CodePermissionDenied, errors.New(foreignDaemonIDMessage))
-	err.Meta().Set(svcerr.ReasonHeader, ForeignDaemonIDReason)
-	return err
+	return svcerr.ToConnect(svcerr.WithReason(svcerr.PermissionDenied(foreignDaemonIDMessage), ForeignDaemonIDReason))
 }
 
 // IsForeignDaemonIDError reports whether err, or anything it wraps, is the
-// gateway refusing a daemon id because another user owns it.
+// gateway refusing a daemon id because another user owns it: the
+// *connect.Error a daemon receives over the wire, or the same refusal still
+// in process (svcerr.Code and ToConnect read both).
 func IsForeignDaemonIDError(err error) bool {
-	var connectErr *connect.Error
-	if !errors.As(err, &connectErr) || connectErr.Code() != connect.CodePermissionDenied {
+	if err == nil || svcerr.Code(err) != connect.CodePermissionDenied {
 		return false
 	}
+	connectErr := svcerr.ToConnect(err)
 	if connectErr.Meta().Get(svcerr.ReasonHeader) == ForeignDaemonIDReason {
 		return true
 	}

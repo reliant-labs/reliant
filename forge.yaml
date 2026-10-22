@@ -10,9 +10,14 @@
 # (research/forge-migration/PLAN.md). Every proto service is a forge handler
 # package under internal/handlers/<svc> (P3b, research/forge-migration/
 # 06-p3b-recipe.md), for which forge scaffolds and keeps a generated mock,
-# test harness and dashboard; internal/grpc/server.go still mounts them by
-# hand until P3c. The contract packages the server or CLI builds by hand are
-# `//forge:not-a-component`. Beyond that, `forge generate` projects the
+# test harness and dashboard. Every server role is a root of the composition
+# graph (research/forge-migration/09-roots-plan.md): `reliant server api`,
+# `worker` and `gateway` are the //forge:roots in internal/app, built from
+# compose.go and run under cmd/reliant/cmd/serve.go's process policy, and
+# `forge lint --graph` gates that every node is reached by one. A contract
+# package an internal/app provider builds by hand is `//forge:provided`; one
+# another package, the CLI or the daemon builds is `//forge:not-a-component`,
+# naming who. Beyond that, `forge generate` projects the
 # contract mocks/decorators, the descriptor, the open-procedure set and the
 # ORM in internal/store (database.orm below). The Makefile stays the
 # entrypoint: CI's "Generated code is up to date" job runs
@@ -34,13 +39,6 @@ config:
     enforce_typed_access: error
 lint:
     rules:
-        # The server roles become composition-graph roots one at a time
-        # (research/forge-migration/09-roots-plan.md): the gateway is one, the
-        # api and worker are not yet, so every node only they build — the
-        # user-audience handlers, the worker's — is reached by no root. Warn
-        # until R6 declares the last root and deletes this entry, so
-        # `forge lint --graph` gates the whole graph again.
-        forge-graph-unreachable: warn
         # forge's D3 rule ships hard-ERROR with no rollout default, and reliant
         # has 189 mutating rpcs with no `(forge.v1.method).activity`
         # declaration. Warn while the declarations are written; this goes back

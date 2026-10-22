@@ -14,7 +14,7 @@
 // parsers (ParseModelIDs, ParseOllamaShow, …), NormalizeRoot and EndpointID
 // stay free functions: they do no I/O.
 //
-//forge:not-a-component: built by reliant's hand-wired model-endpoint manager (internal/modelendpoints) and the daemon's local model prober (internal/toolexec/daemonruntime), not forge's composition root — until P3c (research/forge-migration/PLAN.md)
+//forge:not-a-component: built by the model-endpoint manager (internal/modelendpoints) and the daemon's local model prober (internal/toolexec/daemonruntime) — never a node of the composition graph
 package localprobe
 
 import (

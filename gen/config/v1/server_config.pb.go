@@ -7,6 +7,7 @@
 package configv1
 
 import (
+	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	_ "github.com/reliant-labs/forge/pkg/forgepb"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -367,7 +368,7 @@ var File_config_v1_server_config_proto protoreflect.FileDescriptor
 
 const file_config_v1_server_config_proto_rawDesc = "" +
 	"\n" +
-	"\x1dconfig/v1/server_config.proto\x12\tconfig.v1\x1a config/v1/analytics_config.proto\x1a$config/v1/control_plane_config.proto\x1a#config/v1/integrations_config.proto\x1a\x1aconfig/v1/llm_config.proto\x1a$config/v1/observability_config.proto\x1a\x1econfig/v1/preview_config.proto\x1a\x14forge/v1/forge.proto\"\xac\x06\n" +
+	"\x1dconfig/v1/server_config.proto\x12\tconfig.v1\x1a config/v1/analytics_config.proto\x1a$config/v1/control_plane_config.proto\x1a#config/v1/integrations_config.proto\x1a\x1aconfig/v1/llm_config.proto\x1a$config/v1/observability_config.proto\x1a\x1econfig/v1/preview_config.proto\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\"\xac\x06\n" +
 	"\x13ServerProcessConfig\x12B\n" +
 	"\rcontrol_plane\x18\x01 \x01(\v2\x1d.config.v1.ControlPlaneConfigR\fcontrolPlane\x12)\n" +
 	"\x04nats\x18\x02 \x01(\v2\x15.config.v1.NatsConfigR\x04nats\x125\n" +
@@ -393,11 +394,11 @@ const file_config_v1_server_config_proto_rawDesc = "" +
 	"\x04user\x18\x02 \x01(\tB9\x82\xce\x185\n" +
 	"\tNATS_USER*(NATS user name (used with NATS_PASSWORD)R\x04user\x12X\n" +
 	"\bpassword\x18\x03 \x01(\tB<\x82\xce\x188\n" +
-	"\rNATS_PASSWORD*#NATS password (used with NATS_USER)0\x01P\x01R\bpassword\"\xa6\x02\n" +
+	"\rNATS_PASSWORD*#NATS password (used with NATS_USER)0\x01P\x01R\bpassword\"\xb1\x02\n" +
 	"\x0eTemporalConfig\x12W\n" +
 	"\x04host\x18\x01 \x01(\tBC\x82\xce\x18?\n" +
-	"\rTEMPORAL_HOST\x12\rtemporal-host\x1a\tlocalhost*\x14Temporal server hostR\x04host\x12R\n" +
-	"\x04port\x18\x02 \x01(\x05B>\x82\xce\x18:\n" +
+	"\rTEMPORAL_HOST\x12\rtemporal-host\x1a\tlocalhost*\x14Temporal server hostR\x04host\x12]\n" +
+	"\x04port\x18\x02 \x01(\x05BI\xbaH\b\x1a\x06\x18\xff\xff\x03(\x01\x82\xce\x18:\n" +
 	"\rTEMPORAL_PORT\x12\rtemporal-port\x1a\x047233*\x14Temporal server portR\x04port\x12g\n" +
 	"\tnamespace\x18\x03 \x01(\tBI\x82\xce\x18E\n" +
 	"\x12TEMPORAL_NAMESPACE\x12\x12temporal-namespace\x1a\areliant*\x12Temporal namespaceR\tnamespace\"\x8f\x02\n" +

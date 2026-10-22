@@ -18,7 +18,10 @@
 // search box off the provider's rate limit. It holds the action's raw items,
 // so a different acting identity or page projects from the same call.
 //
-//forge:not-a-component: built by reliant's hand-wired API server (internal/serverapi), not forge's composition root — until P3c (research/forge-migration/PLAN.md)
+// Built by hand, by internal/app's NewInputOptions provider
+// (providers_api.go): never a node compose.go constructs from Deps.
+//
+//forge:provided
 package inputoptions
 
 import (

@@ -12,7 +12,10 @@
 // This package stores and resolves decisions. Enforcement happens at the
 // daemon's command dispatch; see internal/daemonpolicy.
 //
-//forge:not-a-component: built by reliant's hand-wired server (internal/grpc), not forge's composition root — until P3c (research/forge-migration/PLAN.md)
+// Built by hand, by internal/app's NewConnectorGrants provider
+// (providers_api.go): never a node compose.go constructs from Deps.
+//
+//forge:provided
 package connectorgrant
 
 import (

@@ -7,6 +7,7 @@
 package configv1
 
 import (
+	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	_ "github.com/reliant-labs/forge/pkg/forgepb"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -120,13 +121,13 @@ var File_config_v1_worker_config_proto protoreflect.FileDescriptor
 
 const file_config_v1_worker_config_proto_rawDesc = "" +
 	"\n" +
-	"\x1dconfig/v1/worker_config.proto\x12\tconfig.v1\x1a\x14forge/v1/forge.proto\x1a\x1egoogle/protobuf/duration.proto\"\xbb\b\n" +
-	"\fWorkerConfig\x12a\n" +
-	"\vhealth_port\x18\x0e \x01(\x05B@\x82\xce\x18<\n" +
+	"\x1dconfig/v1/worker_config.proto\x12\tconfig.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x1egoogle/protobuf/duration.proto\"\xd4\b\n" +
+	"\fWorkerConfig\x12l\n" +
+	"\vhealth_port\x18\x0e \x01(\x05BK\xbaH\b\x1a\x06\x18\xff\xff\x03(\x01\x82\xce\x18<\n" +
 	"\vHEALTH_PORT\x12\vhealth-port\x1a\x048081*\x1aHealth check endpoint portR\n" +
-	"healthPort\x12q\n" +
+	"healthPort\x12\x7f\n" +
 	"\n" +
-	"pprof_port\x18\x0f \x01(\x05BR\x82\xce\x18N\n" +
+	"pprof_port\x18\x0f \x01(\x05B`\xbaH\v\xd8\x01\x01\x1a\x06\x18\xff\xff\x03(\x01\x82\xce\x18N\n" +
 	"\n" +
 	"PPROF_PORT\x12\n" +
 	"pprof-port\x1a\x046060*.pprof debug server port (binds 127.0.0.1 only)R\tpprofPort\x12\xaa\x01\n" +

@@ -19,7 +19,10 @@
 //	GET /users/{login}        a login to its user
 //	GET /user/{account_id}    an id to its user's current login
 //
-//forge:not-a-component: built by reliant's hand-wired server (internal/serverapi), not forge's composition root — until P3c (research/forge-migration/PLAN.md)
+// Built by hand, by internal/app's trigger-sender wiring (wireGitHubSenders,
+// providers_api.go): never a node compose.go constructs from Deps.
+//
+//forge:provided
 package ghusers
 
 import (

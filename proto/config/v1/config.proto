@@ -53,6 +53,16 @@ option go_package = "github.com/reliant-labs/reliant/gen/config/v1;configv1";
 // Readers whose legacy semantics forge's loader cannot reproduce keep their
 // raw reads: a bool that only the exact string "true" (or "false") switched,
 // and a number whose malformed value fell back to the default.
+//
+// A VALUE IS REFUSED AT LOAD. What a process cannot run with — a port outside
+// 1-65535, a duration that is not positive, a mode missing the credential it
+// needs — is a buf.validate rule on the field or the message, which forge's
+// loader checks as the config loads: in the command's RunE, before the
+// process binds a port, dials a broker or applies a migration (and in
+// config.Root.Validate over a rendered environment). Never a check in the
+// provider that reads the setting first: that runs while the root is built,
+// after the api-server has migrated. Presence is (forge.v1.config).required;
+// a rule on a field that may be unset takes ignore: IGNORE_IF_ZERO_VALUE.
 
 // ReliantConfig is the reliant binary's root config: the surface every
 // reliant process reads.

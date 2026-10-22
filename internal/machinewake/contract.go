@@ -22,7 +22,11 @@
 // A run's tools never come through here: tool-time traffic does not wake a
 // machine (#406). The run's preflight and the attended send do.
 //
-//forge:not-a-component: built by reliant's hand-wired handlers (the handlers under internal/handlers), not forge's composition root — until P3c (research/forge-migration/PLAN.md)
+// Built by hand, by internal/app's apiMountOptions (providers_api.go), and the
+// worktree and file_system handlers: never a node compose.go constructs from
+// Deps.
+//
+//forge:provided
 package machinewake
 
 import (

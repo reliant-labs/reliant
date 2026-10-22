@@ -15,11 +15,10 @@ import (
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
-// Deps holds dependencies for the approval service. internal/grpc/server.go
-// (and the e2e story harness) constructs it today; forge's composition root
-// takes over in P3c (research/forge-migration/PLAN.md). The rpc methods on
-// *Service are where this service's logic lives; see the forge `api` /
-// `services` skill.
+// Deps holds dependencies for the approval service. The composition graph
+// (internal/app/compose.go) and the e2e story harness construct it. The rpc
+// methods on *Service are where this service's logic lives; see the forge
+// `api` / `services` skill.
 type Deps struct {
 	Logger *slog.Logger
 	Config *config.Config

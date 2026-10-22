@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package config.v1;
 
+import "buf/validate/validate.proto";
 import "forge/v1/forge.proto";
 
 option go_package = "github.com/reliant-labs/reliant/gen/config/v1;configv1";
@@ -33,8 +34,11 @@ message PreviewConfig {
   }];
   // The proxy's port when it is not the scheme's default (dev's host-mapped
   // HTTP gateway). Unset: none.
-  int32 workspace_url_port = 4 [(forge.v1.config) = {
-    env_var: "WORKSPACE_URL_PORT"
-    description: "Port of subdomain-routed preview URLs, when not the scheme's default"
-  }];
+  int32 workspace_url_port = 4 [
+    (forge.v1.config) = {
+      env_var: "WORKSPACE_URL_PORT"
+      description: "Port of subdomain-routed preview URLs, when not the scheme's default"
+    },
+    (buf.validate.field).int32 = {gte: 0, lte: 65535}
+  ];
 }

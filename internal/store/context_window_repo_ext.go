@@ -66,7 +66,7 @@ func InsertContextWindow(ctx context.Context, db orm.Context, cw *core.ContextWi
 func GetContextWindow(ctx context.Context, db orm.Context, id string) (*core.ContextWindow, error) {
 	row, err := GetContextWindowByID(ctx, db, id)
 	if err != nil {
-		return nil, noRows("failed to get context window", err)
+		return nil, noRows("failed to get context window", "context window", err)
 	}
 	return contextWindowFromRow(row), nil
 }
@@ -81,7 +81,7 @@ func GetLatestContextWindow(ctx context.Context, db orm.Context, threadID string
 		Limit(1).
 		Scan(ctx)
 	if err != nil {
-		return nil, noRows("failed to get latest context window", err)
+		return nil, noRows("failed to get latest context window", "context window", err)
 	}
 	return contextWindowFromRow(row), nil
 }
@@ -95,7 +95,7 @@ func GetContextWindowBySequence(ctx context.Context, db orm.Context, threadID st
 		Where("sequence = ?", sequence).
 		Scan(ctx)
 	if err != nil {
-		return nil, noRows("failed to get context window by sequence", err)
+		return nil, noRows("failed to get context window by sequence", "context window", err)
 	}
 	return contextWindowFromRow(row), nil
 }
@@ -143,7 +143,7 @@ FROM context_windows cw
 JOIN threads t ON t.id = cw.thread_id
 WHERE cw.id = ?0`, id).Scan(ctx, &row)
 	if err != nil {
-		return nil, "", nil, nil, noRows("failed to get context window with thread", err)
+		return nil, "", nil, nil, noRows("failed to get context window with thread", "context window", err)
 	}
 	return contextWindowFromRow(&row.ContextWindow), row.ChatID, row.ParentThreadID, row.ThreadForkAtMessageID, nil
 }
@@ -174,7 +174,7 @@ func SetCompactionSummaryMessage(ctx context.Context, db orm.Context, cwID, mess
 		row.CompactionSummaryMessageID = &messageID
 	}
 	if err := UpdateContextWindowMasked(ctx, db, row, []string{ContextWindowFieldCompactionSummaryMessageID}); err != nil {
-		return nil, noRows("failed to set compaction summary message", err)
+		return nil, noRows("failed to set compaction summary message", "context window", err)
 	}
 	return contextWindowFromRow(row), nil
 }

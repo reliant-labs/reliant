@@ -8,6 +8,7 @@ import "config/v1/integrations_config.proto";
 import "config/v1/llm_config.proto";
 import "config/v1/observability_config.proto";
 import "config/v1/preview_config.proto";
+import "buf/validate/validate.proto";
 import "forge/v1/forge.proto";
 
 option go_package = "github.com/reliant-labs/reliant/gen/config/v1;configv1";
@@ -96,12 +97,15 @@ message TemporalConfig {
     default_value: "localhost"
     description: "Temporal server host"
   }];
-  int32 port = 2 [(forge.v1.config) = {
-    env_var: "TEMPORAL_PORT"
-    flag: "temporal-port"
-    default_value: "7233"
-    description: "Temporal server port"
-  }];
+  int32 port = 2 [
+    (forge.v1.config) = {
+      env_var: "TEMPORAL_PORT"
+      flag: "temporal-port"
+      default_value: "7233"
+      description: "Temporal server port"
+    },
+    (buf.validate.field).int32 = {gte: 1, lte: 65535}
+  ];
   string namespace = 3 [(forge.v1.config) = {
     env_var: "TEMPORAL_NAMESPACE"
     flag: "temporal-namespace"

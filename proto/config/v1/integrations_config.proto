@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package config.v1;
 
+import "buf/validate/validate.proto";
 import "forge/v1/forge.proto";
 
 option go_package = "github.com/reliant-labs/reliant/gen/config/v1;configv1";
@@ -58,10 +59,13 @@ message IntegrationsConfig {
 
   // Who the App's bot is, as GitHub names it in a webhook's sender: its
   // numeric user id, else its login. Unset: the production App's bot.
-  int64 github_bot_user_id = 6 [(forge.v1.config) = {
-    env_var: "RELIANT_GITHUB_BOT_USER_ID"
-    description: "GitHub App bot's numeric user id (default: the production App's)"
-  }];
+  int64 github_bot_user_id = 6 [
+    (forge.v1.config) = {
+      env_var: "RELIANT_GITHUB_BOT_USER_ID"
+      description: "GitHub App bot's numeric user id (default: the production App's)"
+    },
+    (buf.validate.field).int64.gte = 0
+  ];
   string github_bot_login = 7 [(forge.v1.config) = {
     env_var: "RELIANT_GITHUB_BOT_LOGIN"
     description: "GitHub App bot's login, used when no user id is set"

@@ -71,7 +71,7 @@ type DBRepoDeps struct {
 // NewDBRepo opens the database, retrying the first connect for up to
 // DB_CONNECT_TIMEOUT, and waits for the schema the migrating process (the
 // api-server, or `reliant db migrate up`) applies: a server role never races
-// it (db.MigrationPolicy). It refuses a pool setting it cannot honour.
+// it (db.MigrationPolicy).
 func NewDBRepo(d DBRepoDeps) (*DBRepo, error) {
 	driver, url, directURL := DatabaseURLs(d.Database)
 	if url == "" {
@@ -81,16 +81,12 @@ func NewDBRepo(d DBRepoDeps) (*DBRepo, error) {
 	if err != nil {
 		return nil, fmt.Errorf("invalid DATABASE_DRIVER %q: %w", driver, err)
 	}
-	pool, err := DatabasePool(d.Database)
-	if err != nil {
-		return nil, err
-	}
 	repo, err := db.NewRepoFromConfig(db.DatabaseConfig{
 		Driver:    dbDriver,
 		DataDir:   d.DataDir,
 		URL:       url,
 		DirectURL: directURL,
-		Pool:      pool,
+		Pool:      DatabasePool(d.Database),
 		Migrate:   db.MigrateWait,
 	})
 	if err != nil {
@@ -275,9 +271,6 @@ type DebugServerDeps struct {
 // NewDebugServer is the listener on 127.0.0.1:PPROF_PORT. PPROF_PORT=0 serves
 // none: the node is absent.
 func NewDebugServer(d DebugServerDeps) (*DebugServer, error) {
-	if err := CheckPprofPort(d.Port); err != nil {
-		return nil, err
-	}
 	if d.Port == 0 {
 		logging.Info("Debug server (pprof) disabled", "pprof_port", 0)
 		return nil, nil
@@ -315,23 +308,18 @@ type IntegrationSettingsDeps struct {
 }
 
 // NewIntegrationSettings is the integrations config as the server packages
-// take it (Integrations): read and validated once, for every node that needs
-// a part of it — the vault key, the webhook registry, the OAuth clients, the
-// GitHub App.
+// take it (Integrations): read once, for every node that needs a part of it —
+// the vault key, the webhook registry, the OAuth clients, the GitHub App.
 func NewIntegrationSettings(d IntegrationSettingsDeps) (*IntegrationSettings, error) {
-	s, err := Integrations(d.Integrations)
-	if err != nil {
-		return nil, err
-	}
+	s := Integrations(d.Integrations)
 	return &s, nil
 }
 
 // ProcessSettings records that the process-wide settings that need nothing
 // but config are installed: what the LLM layer, the preview URLs, the model
 // registry and the GitHub App bot read from package state. A root lists it
-// as its LAST field, so it is built before any other node — none can observe
-// the settings unset — and a value they refuse stops the process before
-// anything is dialled.
+// as its LAST field, so it is built before any other node: none can observe
+// the settings unset.
 type ProcessSettings struct{}
 
 // ProcessSettingsDeps is the config the process-wide settings come from.
@@ -344,14 +332,8 @@ type ProcessSettingsDeps struct {
 
 // NewProcessSettings installs the config-only process globals.
 func NewProcessSettings(d ProcessSettingsDeps) (*ProcessSettings, error) {
-	llmSettings, err := LLMSettings(d.LLM)
-	if err != nil {
-		return nil, err
-	}
-	preview, err := PreviewSettings(d.Preview)
-	if err != nil {
-		return nil, err
-	}
+	llmSettings := LLMSettings(d.LLM)
+	preview := PreviewSettings(d.Preview)
 	// Activities locate files under the data directory through it.
 	if err := os.Setenv("RELIANT_DATA_DIR", d.DataDir); err != nil {
 		logging.Warn("Failed to set RELIANT_DATA_DIR env var", "error", err)
@@ -389,10 +371,7 @@ type ProcessRuntimeDeps struct {
 
 // NewProcessRuntime installs the database-backed process globals.
 func NewProcessRuntime(d ProcessRuntimeDeps) (*ProcessRuntime, error) {
-	sentry, err := SentrySettings(d.Sentry, d.Observability)
-	if err != nil {
-		return nil, err
-	}
+	sentry := SentrySettings(d.Sentry, d.Observability)
 	cp := ControlPlaneEndpoint(d.ControlPlane)
 	repo := d.Repo.Repo
 	// LLM drivers resolve per-user keys from the database.
@@ -436,9 +415,6 @@ func NewTemporalClient(d TemporalClientDeps) (*TemporalClient, error) {
 	host, port, namespace := TemporalEndpoint(d.Temporal)
 	if host == "" {
 		return nil, errors.New("config: TEMPORAL_HOST is required")
-	}
-	if err := CheckPorts(Port{Name: "TEMPORAL_PORT (--temporal-port)", Port: int32(port)}); err != nil {
-		return nil, err
 	}
 	var c client.Client
 	err := serverkit.RetryConnect(d.Ctx, serverkit.ConnectPolicy{Name: "temporal", Logger: slog.Default()}, func(ctx context.Context) error {

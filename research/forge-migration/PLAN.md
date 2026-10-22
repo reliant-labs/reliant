@@ -168,9 +168,16 @@ Every change ships as its own **small PR** that leaves everything that works tod
 | forge: harness/mock/decorator keep a cross-package embedded interface's methods; package directives from any file, conflicts refused; handler-error-mapping counts only sentinels mapped to connect errors; struct-value deps explained; migratekit run-lock waiters poll `pg_try_advisory_lock` (no deadlock with CONCURRENTLY); `forge:breaks-rollback` + opt-in compat lint; short `migration new` header | forge #771, #772, #774–#778 |
 | forge: generate reports what each step wrote and skips dependents of a failed step; ORM collision names the declared rpcs; `shapes` handler lines are `Service.Rpc` with `--service`/`--unimplemented`; the merge driver runs only the pinned forge; stale generated files deleted by default; `generate --steps harness`; harness stubs for optional deps; deps-are-interfaces accepts maps/slices of interfaces; observability spec/saved searches/alert inputs split per service so parallel branches merge into the render | forge #783–#785, #788, #789, #791–#793, #799 |
 
+**Merged: P3c, as composition-graph roots (2026-10-21, `09-roots-plan.md`):**
+
+| Item | PR |
+|---|---|
+| R1–R2: the shared server blocks are one `server` subtree config (`ServerProcessConfig`, `DatabaseConfig`); `cmd/reliant/commands` → forge's `cmd/reliant/cmd` | reliant #1155 (R2) |
+| R3–R5: the gateway, the Temporal worker and the api-server are `//forge:root`s in `internal/app` (`roots_gateway.go`, `roots_worker.go`, `roots_api.go`), each built from the composition graph and run under the one process policy (`cmd/reliant/cmd/serve.go`); `internal/serverapi`, `internal/serverworker` and `internal/grpc/server.go`'s `NewAPI` are gone | reliant #1221, #1234, #1236 |
+| R6: `forge lint --graph` gates through plain `forge lint` (no `lint.rules` override); `main.go` is forge's `pid1.Init(); heavyjob.Dispatch(); cmd.Execute()`; the server configs' invariants are `buf.validate` rules forge checks as the config loads, so a bad value stops `server api` before it migrates; the `//forge:not-a-component` markers that named the hand-wired servers are `//forge:provided` (built by an `internal/app` provider) or name the package that builds them | reliant (R6), forge #1103 |
+
 **In flight / next:**
 - **Re-pin reliant** onto forge main past #799: picks up `--steps harness`, optional-dep stubs and the per-service observability layout (one-time: ~53 new files, the two aggregates deleted). Check whether any local compose's HyperDX saved-search loader needs forge's new `listFiles` block.
-- **P3c:** compose the handlers through forge's composition root instead of `internal/grpc/server.go`.
 
 **Next:**
 - **1h (needs a human):** CI runs pinned `forge generate` plus a clean-tree check, and `forge lint` goes non-gating, then gating. The GitHub App token cannot push `.github/workflows/*`, so someone with workflow permission lands it.
@@ -223,12 +230,12 @@ Then P2 onward proceed one service, one package or one concern at a time under t
 - (Split `ScenarioService` out of `workflow.proto`: moved to P1 slice 1b.)
 - Make the 45 list filters `optional`, fixing Go/TS call sites. One PR per proto file; it's wire-compatible but changes Go/TS field types.
 - Declare the 9 public rpcs with `auth_required: false`, replacing the `publicMethods` slice.
-- Optionally add `buf.validate` rules + `forge/pkg/validate`.
+- Optionally add `buf.validate` rules + `forge/pkg/validate` to the rpc messages (the config messages have them since R6).
 
 **P3 — Handlers onto forge's `*Service` model (L, the biggest phase).** Depends on P2.
 - P3a (M, serial): extract the shared helpers in `internal/grpc/services` (`chat_helpers.go`, `daemon_proxy_base.go`, `daemon_choice.go`, `log_redact.go`, …) into real packages, so each service can move independently.
 - P3b (L, **parallel per service**; each lane owns `internal/handlers/<svc>/` + its source files in `internal/grpc/services/`): move each service's methods onto `internal/handlers/<svc>/Service`. In `internal/grpc/server.go`, swap that one `New*Handler` call for the forge handler. Delete the scaffold stubs as each lands.
-- P3c (M): replace `internal/grpc/server.go` + `internal/serverapi|serverworker|servergateway` with forge's `Serve` + `ServeSpec` per role:
+- P3c (M) — **done** as composition-graph roots (`09-roots-plan.md`, R1–R6): replace `internal/grpc/server.go` + `internal/serverapi|serverworker|servergateway` with forge's `Serve` + `ServeSpec` per role:
   - `server api` = subset `Mount`;
   - `server worker` = Temporal worker as a supervised component;
   - `server gateway` = the NATS bridge;

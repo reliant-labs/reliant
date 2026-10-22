@@ -15,12 +15,11 @@ import (
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
-// Deps holds dependencies for the file_system service. internal/grpc/server.go
-// constructs it today, and mounts it only when the API server has a daemon
-// router: the files live on the user's machines, never on this server.
-// forge's composition root takes over in P3c (research/forge-migration/PLAN.md).
-// The rpc methods on *Service are where this service's logic lives; see the
-// forge `api` / `services` skill.
+// Deps holds dependencies for the file_system service. The composition graph
+// constructs it (internal/app/compose.go); every rpc reaches a daemon through
+// the router, because the files live on the user's machines, never on this
+// server. The rpc methods on *Service are where this service's logic lives;
+// see the forge `api` / `services` skill.
 type Deps struct {
 	Logger *slog.Logger
 	Config *config.Config

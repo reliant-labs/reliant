@@ -7,6 +7,7 @@
 package configv1
 
 import (
+	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	_ "github.com/reliant-labs/forge/pkg/forgepb"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -145,21 +146,21 @@ var File_config_v1_db_config_proto protoreflect.FileDescriptor
 
 const file_config_v1_db_config_proto_rawDesc = "" +
 	"\n" +
-	"\x19config/v1/db_config.proto\x12\tconfig.v1\x1a\x14forge/v1/forge.proto\x1a\x1egoogle/protobuf/duration.proto\"\xd7\a\n" +
+	"\x19config/v1/db_config.proto\x12\tconfig.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x1egoogle/protobuf/duration.proto\"\xf4\a\n" +
 	"\x0eDatabaseConfig\x12R\n" +
 	"\fdatabase_url\x18\x01 \x01(\tB/\x82\xce\x18+\n" +
 	"\fDATABASE_URL \x01*\x17Postgres connection URL0\x01R\vdatabaseUrl\x12\xae\x01\n" +
 	"\x13database_direct_url\x18\x02 \x01(\tB~\x82\xce\x18z\n" +
 	"\x13DATABASE_DIRECT_URL*_Session-capable Postgres URL for session-scoped work, when DATABASE_URL is a transaction pooler0\x01P\x01R\x11databaseDirectUrl\x12y\n" +
 	"\x0fdatabase_driver\x18\x03 \x01(\tBP\x82\xce\x18L\n" +
-	"\x0fDATABASE_DRIVER\x12\tdb-driver\x1a\bpostgres*\x1aDatabase driver (postgres)J\bpostgresR\x0edatabaseDriver\x12n\n" +
-	"\x11db_max_open_conns\x18\x04 \x01(\x05BC\x82\xce\x18?\n" +
-	"\x19RELIANT_DB_MAX_OPEN_CONNS\x1a\x0225*\x1eMost open database connectionsR\x0edbMaxOpenConns\x12x\n" +
-	"\x11db_max_idle_conns\x18\x05 \x01(\x05BM\x82\xce\x18I\n" +
-	"\x19RELIANT_DB_MAX_IDLE_CONNS\x1a\x0210*(Most idle database connections kept openR\x0edbMaxIdleConns\x12\xa2\x01\n" +
-	"\x12db_connect_timeout\x18\x06 \x01(\v2\x19.google.protobuf.DurationBY\x82\xce\x18U\n" +
-	"\x12DB_CONNECT_TIMEOUT*?How long the startup ping retries a database that is not up yetR\x10dbConnectTimeout\x12\x8d\x01\n" +
-	"\x16db_schema_wait_seconds\x18\a \x01(\x05BX\x82\xce\x18T\n" +
+	"\x0fDATABASE_DRIVER\x12\tdb-driver\x1a\bpostgres*\x1aDatabase driver (postgres)J\bpostgresR\x0edatabaseDriver\x12u\n" +
+	"\x11db_max_open_conns\x18\x04 \x01(\x05BJ\xbaH\x04\x1a\x02(\x01\x82\xce\x18?\n" +
+	"\x19RELIANT_DB_MAX_OPEN_CONNS\x1a\x0225*\x1eMost open database connectionsR\x0edbMaxOpenConns\x12\x7f\n" +
+	"\x11db_max_idle_conns\x18\x05 \x01(\x05BT\xbaH\x04\x1a\x02(\x01\x82\xce\x18I\n" +
+	"\x19RELIANT_DB_MAX_IDLE_CONNS\x1a\x0210*(Most idle database connections kept openR\x0edbMaxIdleConns\x12\xaa\x01\n" +
+	"\x12db_connect_timeout\x18\x06 \x01(\v2\x19.google.protobuf.DurationBa\xbaH\x05\xaa\x01\x02*\x00\x82\xce\x18U\n" +
+	"\x12DB_CONNECT_TIMEOUT*?How long the startup ping retries a database that is not up yetR\x10dbConnectTimeout\x12\x94\x01\n" +
+	"\x16db_schema_wait_seconds\x18\a \x01(\x05B_\xbaH\x04\x1a\x02(\x01\x82\xce\x18T\n" +
 	"\x1eRELIANT_DB_SCHEMA_WAIT_SECONDS\x1a\x03300*-Seconds to wait for the schema to be migratedR\x13dbSchemaWaitSeconds:&\xca\xc1\x18\"\n" +
 	"\areliant\x1a\b\n" +
 	"\x06server\x1a\r\n" +

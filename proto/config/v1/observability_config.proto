@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package config.v1;
 
+import "buf/validate/validate.proto";
 import "forge/v1/forge.proto";
 
 option go_package = "github.com/reliant-labs/reliant/gen/config/v1;configv1";
@@ -62,9 +63,12 @@ message SentryConfig {
   }];
 
   // The share of transactions traced, 0 to 1.
-  double traces_sample_rate = 3 [(forge.v1.config) = {
-    env_var: "SENTRY_TRACES_SAMPLE_RATE"
-    default_value: "0"
-    description: "Share of transactions Sentry traces, 0 to 1"
-  }];
+  double traces_sample_rate = 3 [
+    (forge.v1.config) = {
+      env_var: "SENTRY_TRACES_SAMPLE_RATE"
+      default_value: "0"
+      description: "Share of transactions Sentry traces, 0 to 1"
+    },
+    (buf.validate.field).double = {gte: 0, lte: 1}
+  ];
 }

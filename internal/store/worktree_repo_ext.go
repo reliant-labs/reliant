@@ -114,7 +114,7 @@ func GetWorktreeByPath(ctx context.Context, db orm.Context, path string) (*core.
 		return nil, fmt.Errorf("failed to get worktree by path: %w", err)
 	}
 	if w == nil {
-		return nil, fmt.Errorf("worktree not found: %s", path)
+		return nil, fmt.Errorf("%w: %s", core.ErrWorktreeNotFound, path)
 	}
 	return w, nil
 }

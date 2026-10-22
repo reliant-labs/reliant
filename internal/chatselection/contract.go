@@ -15,7 +15,7 @@
 // The package knows nothing about workflows, models or providers: Params is an
 // opaque nested map, and the policy is stored, not acted on.
 //
-//forge:not-a-component: built by reliant's hand-wired server (internal/handlers, internal/serverworker), not forge's composition root — until P3c (research/forge-migration/PLAN.md)
+//forge:not-a-component: built by internal/launch and the chat handler (internal/handlers/chat) — never a node of the composition graph
 package chatselection
 
 import (

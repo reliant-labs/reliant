@@ -17,7 +17,11 @@
 //
 // See research/TRIGGERS.md.
 //
-//forge:not-a-component: built by reliant's hand-wired server (internal/handlers, internal/serverworker), not forge's composition root — until P3c (research/forge-migration/PLAN.md)
+// Built by hand, by internal/app's NewRunLauncher provider
+// (providers_worker.go) and the chat handler: never a node compose.go
+// constructs from Deps.
+//
+//forge:provided
 package launch
 
 import (

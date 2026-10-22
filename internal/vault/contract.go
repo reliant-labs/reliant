@@ -5,7 +5,10 @@
 // DEKs seal the values. Ciphertext and wrapped DEKs live in reliant Postgres.
 // See research/CONNECTIONS_VAULT.md.
 //
-//forge:not-a-component: built by reliant's hand-wired servers (db.BootVault, from internal/serverapi and internal/serverworker), not forge's composition root — until P3c (research/forge-migration/PLAN.md)
+// Built by hand, by internal/app's NewVault provider (providers.go, through
+// db.BootVault): never a node compose.go constructs from Deps.
+//
+//forge:provided
 package vault
 
 import (

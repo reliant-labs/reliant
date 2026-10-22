@@ -72,8 +72,8 @@ import (
 // variant, nor start a loop that runs only here.
 
 // APISettings is the api-server's own config (ApiServerConfig) in the shapes
-// its nodes take, read and validated once. The api root lists it as its LAST
-// field, so a value it refuses stops the process before anything is dialled.
+// its nodes take, read once. The api root lists it as its LAST field, so the
+// JWT key file it reads is read before anything is dialled.
 type APISettings struct {
 	// Auth is how callers authenticate: the auth mode, the shared API key or
 	// the JWT key (PEM — given directly or read from its file — else JWKS
@@ -102,15 +102,13 @@ type APISettingsDeps struct {
 	API *config.ApiServerConfig
 }
 
-// NewAPISettings reads and validates the api-server's config, refusing what
-// it cannot serve with rather than failing when the first request arrives.
+// NewAPISettings reads the api-server's config. A value it cannot serve with
+// never gets here: api_server_config.proto's rules refuse it as the config
+// loads, before the process binds a port or applies a migration.
 //
 //forge:root-only api
 func NewAPISettings(d APISettingsDeps) (*APISettings, error) {
 	api := d.API
-	if err := CheckAPIServerConfig(api); err != nil {
-		return nil, err
-	}
 	// JWT public key: explicit value > file.
 	jwtPublicKey := api.GetJwtPublicKey()
 	if file := api.GetJwtPublicKeyFile(); jwtPublicKey == "" && file != "" {
@@ -139,29 +137,6 @@ func NewAPISettings(d APISettingsDeps) (*APISettings, error) {
 		"auth_mode", s.Auth.ModeName(),
 	)
 	return s, nil
-}
-
-// CheckAPIServerConfig refuses an ApiServerConfig the api-server cannot serve
-// with: a port that is not one, an auth mode without its credential, an
-// upload limit or a payload horizon that is not positive. (HEALTH_PORT is the
-// process policy's to check; the JWT key file is read by NewAPISettings.)
-func CheckAPIServerConfig(api *config.ApiServerConfig) error {
-	if err := CheckPorts(Port{Name: "GRPC_PORT (--grpc-port)", Port: api.GetGrpcPort()}); err != nil {
-		return err
-	}
-	if err := CheckPprofPort(api.GetPprofPort()); err != nil {
-		return err
-	}
-	if api.GetAuthMode() == auth.ModeAPIKey && api.GetAuthApiKey() == "" {
-		return fmt.Errorf("config: AUTH_MODE=apikey requires AUTH_API_KEY")
-	}
-	if n := api.GetMaxUploadSize(); n <= 0 {
-		return fmt.Errorf("config: MAX_UPLOAD_SIZE = %d is not a positive byte count", n)
-	}
-	if h := api.GetPayloadBlobGcHorizon().AsDuration(); h <= 0 {
-		return fmt.Errorf("config: RELIANT_PAYLOAD_BLOB_GC_HORIZON = %s is not a positive duration", h)
-	}
-	return nil
 }
 
 // UserAuthDeps is how callers authenticate, and the authority `rlat_` access
