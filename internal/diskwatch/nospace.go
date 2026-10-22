@@ -162,9 +162,16 @@ func noSpaceMessage(v *reliantv1.DiskVolume, hasDocker bool) string {
 	if hasDocker {
 		b.WriteString(" Safe to free without asking: docker's build cache (`docker builder prune -f --filter until=2h`).")
 	}
-	b.WriteString(" Do not prune docker images or volumes, or run `go clean -cache`/`go clean -modcache`, without the user's go-ahead: volumes can hold databases, and clearing the Go cache under running builds breaks them. The user can free rebuildable caches from this machine's storage item in the Reliant inbox.")
+	b.WriteString(" Do not prune docker images or volumes, or run `go clean -cache`/`go clean -modcache`, without the user's go-ahead: volumes can hold databases, and clearing the Go cache under running builds breaks them. The user can free rebuildable caches from this machine's storage item in the Reliant inbox. ")
+	b.WriteString(NeverDelete)
 	return b.String()
 }
+
+// NeverDelete closes every message that asks an agent to free space. Told to
+// free space, an agent deleted another run's live state by glob
+// (`rm -rf /tmp/cp-ci-affected.*`, mid-gate, 2026-10-22): temp directories
+// look like litter and are often a running process's only copy of its work.
+const NeverDelete = "Never glob-delete under /tmp (`rm -rf /tmp/<prefix>*`) or remove a directory another process or agent created: running builds, test gates and dev stacks keep their live state there, and deleting it breaks their work mid-run. Remove only files you created yourself."
 
 // FormatBytes renders bytes in decimal units, one decimal under 10 ("1.4 GB"),
 // matching the web's formatBytes so a number reads the same in a tool result

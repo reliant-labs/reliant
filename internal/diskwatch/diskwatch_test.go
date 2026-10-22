@@ -324,7 +324,7 @@ func TestExplainNoSpace(t *testing.T) {
 
 	failing := "go: writing stat cache: write " + filepath.Join(cache, "go-build", "39", "abc-d") + ": no space left on device\nFAIL"
 	msg := w.ExplainNoSpace(failing)
-	for _, want := range []string{"[disk full]", "build caches volume", "0 B free of 43 GB", "Go build cache", "Retrying will fail"} {
+	for _, want := range []string{"[disk full]", "build caches volume", "0 B free of 43 GB", "Go build cache", "Retrying will fail", "Never glob-delete under /tmp"} {
 		if !strings.Contains(msg, want) {
 			t.Errorf("explanation missing %q:\n%s", want, msg)
 		}

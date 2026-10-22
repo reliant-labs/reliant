@@ -191,11 +191,20 @@ func TestGuard_RefusesPastTheThresholdAndRecoversWhenSpaceReturns(t *testing.T) 
 		", Docker images ",
 		"Reclaimed automatically at 14:02", // what was reclaimed
 		"Go build cache 3 GiB",
-		"To free more: archive the workspaces", // how to free more
+		"To free more, safely: load the `machine-disk` skill", // how to free more
+		"archive the worktrees you are done with",
+		"do not run `go clean -cache`",
+		"Never glob-delete under /tmp", // and what never to do
 		"start again once the volume is below 93%",
 	} {
 		if !strings.Contains(why, want) {
 			t.Errorf("refusal does not say %q:\n%s", want, why)
+		}
+	}
+	// Advice an agent would act on that can break other work running beside it.
+	for _, bad := range []string{"delete node_modules", "build output", "docker system prune", "`go clean -cache` when"} {
+		if strings.Contains(why, bad) {
+			t.Errorf("refusal suggests %q, which can delete another process's live state:\n%s", bad, why)
 		}
 	}
 

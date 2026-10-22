@@ -422,8 +422,12 @@ func refusalMessage(st *volume, cfg Config, reclaims bool) string {
 	default:
 		fmt.Fprintf(&b, "\nReclaimed automatically at %s: %s (%s).", st.reclaimedAt.Format("15:04 MST"), diskwatch.FormatBytes(st.reclaimedBytes), strings.Join(st.reclaimed, ", "))
 	}
-	fmt.Fprintf(&b, "\nTo free more: archive the workspaces you are done with (the storage item in the Inbox removes the ones that are safe to delete); delete node_modules and build output in idle checkouts; `docker system prune` for images and containers you no longer need; `go clean -cache` when no build is running. Heavy commands start again once the volume is below %s.",
-		percent(cfg.RefuseAt-cfg.ClearMargin))
+	// What an agent reads here is what it does next, so it names only actions
+	// that cannot break someone else's work. An earlier "delete … build output
+	// in idle checkouts" was read as licence to `rm -rf /tmp/cp-ci-affected.*`
+	// mid-gate, deleting a running gate's state (2026-10-22).
+	fmt.Fprintf(&b, "\nTo free more, safely: load the `machine-disk` skill, which shows what is using the disk; archive the worktrees you are done with (the worktree tool's delete; the storage item in the Inbox removes archived ones that are safe to delete). The build caches are trimmed by the daemon itself, beside running builds: do not run `go clean -cache` or prune docker images or volumes yourself. %s Heavy commands start again once the volume is below %s; until then, light commands still run.",
+		diskwatch.NeverDelete, percent(cfg.RefuseAt-cfg.ClearMargin))
 	return b.String()
 }
 
