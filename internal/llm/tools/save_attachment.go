@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/reliant-labs/reliant/internal/auth"
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/rctx"
 )
@@ -73,11 +72,11 @@ type SaveAttachmentOutput struct {
 // The file still lands on the user's machine, through the daemon client on the
 // tool context — the same route generate_image's save_to takes.
 type saveAttachmentTool struct {
-	repo db.Repository
+	repo saveAttachmentStore
 }
 
 // NewSaveAttachmentTool creates the save_attachment tool.
-func NewSaveAttachmentTool(repo db.Repository) Tool {
+func NewSaveAttachmentTool(repo saveAttachmentStore) Tool {
 	return NewToolWrapper[SaveAttachmentParams, ToolResponse](&saveAttachmentTool{repo: repo})
 }
 

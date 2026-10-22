@@ -19,7 +19,7 @@ import (
 // ids. childThreadStatus controls whether the child looks alive or finished.
 func seedSpawnRelationship(
 	t *testing.T,
-	repo db.Repository,
+	repo *db.Repo,
 	ctx context.Context,
 	chatID string,
 	childThreadStatus db.ThreadStatus,

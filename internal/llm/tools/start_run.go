@@ -39,11 +39,11 @@ LIMITS: an agent-started run may start further runs, but only 3 levels deep, and
 )
 
 type startRunTool struct {
-	repo    db.Repository
+	repo    startRunStore
 	starter RunStarter
 }
 
-func NewStartRunTool(repo db.Repository, starter RunStarter) Tool {
+func NewStartRunTool(repo startRunStore, starter RunStarter) Tool {
 	return NewToolWrapper[StartRunParams, ToolResponse](&startRunTool{repo: repo, starter: starter})
 }
 
@@ -181,7 +181,7 @@ func currentToolCallID(rctx *rctx.ToolContext) string {
 // The walk is bounded by MaxAgentStartRunDepth+1 steps rather than trusting the
 // data to be acyclic, so a corrupt lineage reports "too deep" instead of
 // looping.
-func agentStartRunDepth(rctx *rctx.ToolContext, repo db.Repository, chatID string) (int, error) {
+func agentStartRunDepth(rctx *rctx.ToolContext, repo startRunLineageReader, chatID string) (int, error) {
 	depth := 0
 	current := chatID
 	for depth <= MaxAgentStartRunDepth {

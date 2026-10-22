@@ -29,7 +29,7 @@ type fakeRunStarter struct {
 	err      error
 	// repo, when set, records the launch the way the real launcher does, so a
 	// test can drive lineage and the concurrency count through the real DB.
-	repo db.Repository
+	repo *db.Repo
 }
 
 func (f *fakeRunStarter) StartRun(ctx context.Context, req StartRunRequest) (StartedRun, error) {
@@ -101,7 +101,7 @@ type runSeed struct {
 
 // seedRun creates a chat whose root workflow (id == chat id) is in the given
 // state, which is what chats read back as RootStatus.
-func seedRun(t *testing.T, repo db.Repository, seed runSeed) {
+func seedRun(t *testing.T, repo *db.Repo, seed runSeed) {
 	if t != nil {
 		t.Helper()
 	}
@@ -159,7 +159,7 @@ func callRunTool(t *testing.T, tool Tool, rc *rctx.ToolContext, name string, par
 const runTestUser = "test-user"
 
 // A caller chat owned by runTestUser, ready for tools to act as.
-func newCaller(t *testing.T, repo db.Repository) string {
+func newCaller(t *testing.T, repo *db.Repo) string {
 	t.Helper()
 	id := uuid.NewString()
 	seedRun(t, repo, runSeed{id: id, user: runTestUser, title: "caller", status: db.Active()})

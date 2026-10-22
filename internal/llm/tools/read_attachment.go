@@ -40,11 +40,11 @@ NOTES:
 // PDFs, paginates them with pdfutil. It is a server-run tool because it needs
 // database access; the bytes never touch the daemon filesystem.
 type ReadAttachmentTool struct {
-	repo db.Repository
+	repo readAttachmentStore
 }
 
 // NewReadAttachmentTool creates the read_attachment tool.
-func NewReadAttachmentTool(repo db.Repository) Tool {
+func NewReadAttachmentTool(repo readAttachmentStore) Tool {
 	return NewToolWrapper(&ReadAttachmentTool{repo: repo})
 }
 

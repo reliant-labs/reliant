@@ -67,12 +67,12 @@ type probeOutcome struct {
 // provider accounts, without changing production code. They appear as API-key accounts of lowest
 // priority; a provider the database already has an account for is left alone.
 type envOverlayRepo struct {
-	db.Repository
+	drivers.APIKeyStore
 	extra map[string]string
 }
 
 func (r envOverlayRepo) ListProviderAccountsWithSecrets(ctx context.Context, userID string) ([]core.AccountWithSecrets, error) {
-	accounts, err := r.Repository.ListProviderAccountsWithSecrets(ctx, userID)
+	accounts, err := r.APIKeyStore.ListProviderAccountsWithSecrets(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -379,7 +379,7 @@ environment. Cost is a handful of tiny prompts per cell.`,
 				return err
 			}
 			defer repo.Close() //nolint:errcheck
-			drivers.InitializeAPIKeyProvider(envOverlayRepo{Repository: repo, extra: envProviderKeys()})
+			drivers.InitializeAPIKeyProvider(envOverlayRepo{APIKeyStore: repo, extra: envProviderKeys()})
 			if err := models.InitGlobalRegistryWithUserConfig(nil); err != nil {
 				return fmt.Errorf("model registry: %w", err)
 			}

@@ -2,7 +2,6 @@
 package tools
 
 import (
-	"context"
 	"fmt"
 	"strings"
 	"sync"
@@ -11,7 +10,6 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/ctxkeys"
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/rctx"
 	"github.com/reliant-labs/reliant/internal/telemetry"
@@ -82,14 +80,6 @@ type ReportBugMetadata struct {
 	RateLimited bool `json:"rate_limited,omitempty"`
 }
 
-// bugReportLookup is what report_bug reads to say where a report came from.
-type bugReportLookup interface {
-	GetChat(ctx context.Context, id string) (*db.Chat, error)
-	GetLatestMessageInThread(ctx context.Context, threadID string) (*db.Message, error)
-	GetDaemon(ctx context.Context, id string) (*db.Daemon, error)
-	ListDaemonsByUserID(ctx context.Context, userID string) ([]*db.Daemon, error)
-}
-
 // processBugReportLimiter is the process's one limiter. It has to outlive the
 // tool, because the executor builds a fresh tool for every call.
 var processBugReportLimiter = newBugReportLimiter(reportBugWindow, reportBugPerChat)
@@ -104,11 +94,7 @@ type reportBugTool struct {
 }
 
 // NewReportBugTool builds report_bug on the process's Sentry reporter.
-func NewReportBugTool(repo db.Repository) Tool {
-	var lookup bugReportLookup
-	if repo != nil {
-		lookup = repo
-	}
+func NewReportBugTool(lookup bugReportLookup) Tool {
 	return newReportBugTool(lookup, telemetry.CaptureBugReport, processBugReportLimiter, time.Now)
 }
 

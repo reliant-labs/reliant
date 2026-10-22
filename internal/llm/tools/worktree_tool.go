@@ -110,13 +110,13 @@ const (
 )
 
 type worktreeTool struct {
-	repo    db.Repository
+	repo    worktreeStore
 	machine RunMachine
 }
 
 const WorktreeToolName = "worktree"
 
-func NewWorktreeTool(repo db.Repository, machine RunMachine) Tool {
+func NewWorktreeTool(repo worktreeStore, machine RunMachine) Tool {
 	tool := &worktreeTool{repo: repo, machine: machine}
 	return NewToolWrapper(tool)
 }

@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/rctx"
 	"github.com/reliant-labs/reliant/internal/workflow/threadcancel"
@@ -63,11 +62,11 @@ type SpawnStopper interface {
 }
 
 type spawnStopTool struct {
-	repo    db.Repository
+	repo    spawnStopStore
 	stopper SpawnStopper
 }
 
-func NewSpawnStopTool(repo db.Repository, stopper SpawnStopper) Tool {
+func NewSpawnStopTool(repo spawnStopStore, stopper SpawnStopper) Tool {
 	return NewToolWrapper[SpawnStopParams, ToolResponse](&spawnStopTool{repo: repo, stopper: stopper})
 }
 
@@ -168,7 +167,7 @@ func (s *spawnStopTool) Execute(rctx *rctx.ToolContext, params SpawnStopParams) 
 // already-completed workflow row: the signal still landed because the runtime
 // also matches on thread id, but the reconcile CASed a finished row and the
 // executing one stayed active after a successful stop.
-func spawnStopRefForChild(rctx *rctx.ToolContext, repo db.Repository, callerThreadID, targetThreadID string) (threadcancel.SpawnRef, error) {
+func spawnStopRefForChild(rctx *rctx.ToolContext, repo spawnChildLister, callerThreadID, targetThreadID string) (threadcancel.SpawnRef, error) {
 	children, err := repo.ListSpawnChildren(rctx.Context, callerThreadID)
 	if err != nil {
 		return threadcancel.SpawnRef{}, fmt.Errorf("failed to verify agent relationship: %w", err)

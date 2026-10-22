@@ -76,7 +76,7 @@ type SpawnStatusResponseMetadata struct {
 }
 
 type spawnStatusTool struct {
-	repo    db.Repository
+	repo    spawnStatusStore
 	threads *threads.Service
 }
 
@@ -141,7 +141,7 @@ stopped. Call spawn_status with wait: true again to keep waiting.
 Use spawn_send to message an agent that is still running.`
 )
 
-func NewSpawnStatusTool(repo db.Repository) Tool {
+func NewSpawnStatusTool(repo spawnStatusStore) Tool {
 	return NewToolWrapper[SpawnStatusParams, ToolResponse](&spawnStatusTool{repo: repo, threads: threads.NewService(repo)})
 }
 
@@ -604,7 +604,7 @@ func (s *spawnStatusTool) lastMessageSnapshot(rctx *rctx.ToolContext, params Spa
 // verifyIsOwnChild confirms agentID names a spawn child of callerThreadID —
 // tool_calls.thread_id is always the parent's, so a match here is proof of
 // ownership, not just a plausible id.
-func verifyIsOwnChild(rctx *rctx.ToolContext, repo db.Repository, callerThreadID, agentID string) error {
+func verifyIsOwnChild(rctx *rctx.ToolContext, repo spawnChildLister, callerThreadID, agentID string) error {
 	if agentID == "" {
 		return fmt.Errorf("agent_id is required")
 	}

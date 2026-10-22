@@ -123,11 +123,11 @@ func parseTaskStatus(s string) (int32, bool) {
 
 // CreatePlanTool allows agents to create structured plans with tasks
 type CreatePlanTool struct {
-	repo db.Repository
+	repo createPlanStore
 }
 
 // NewCreatePlanTool creates a new plan creation tool
-func NewCreatePlanTool(repo db.Repository) Tool {
+func NewCreatePlanTool(repo createPlanStore) Tool {
 	return NewToolWrapper(&CreatePlanTool{
 		repo: repo,
 	})
@@ -500,11 +500,11 @@ Tasks (%d created):
 
 // UpdatePlanTool allows agents to update existing plans
 type UpdatePlanTool struct {
-	repo db.Repository
+	repo updatePlanStore
 }
 
 // NewUpdatePlanTool creates a new plan update tool
-func NewUpdatePlanTool(repo db.Repository) Tool {
+func NewUpdatePlanTool(repo updatePlanStore) Tool {
 	return NewToolWrapper[UpdatePlanParams, ToolResponse](&UpdatePlanTool{
 		repo: repo,
 	})
@@ -675,11 +675,11 @@ Description:
 
 // GetPlanTool allows agents to retrieve the current plan
 type GetPlanTool struct {
-	repo db.Repository
+	repo getPlanStore
 }
 
 // NewGetPlanTool creates a new plan retrieval tool
-func NewGetPlanTool(repo db.Repository) Tool {
+func NewGetPlanTool(repo getPlanStore) Tool {
 	return NewToolWrapper[GetPlanParams, ToolResponse](&GetPlanTool{
 		repo: repo,
 	})

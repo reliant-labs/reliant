@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/rctx"
 )
 
@@ -28,11 +27,11 @@ You cannot control the run you are executing in, and you can only touch runs the
 )
 
 type controlRunTool struct {
-	repo      db.Repository
+	repo      runCallerStore
 	lifecycle RunLifecycle
 }
 
-func NewControlRunTool(repo db.Repository, lifecycle RunLifecycle) Tool {
+func NewControlRunTool(repo runCallerStore, lifecycle RunLifecycle) Tool {
 	return NewToolWrapper[ControlRunParams, ToolResponse](&controlRunTool{repo: repo, lifecycle: lifecycle})
 }
 

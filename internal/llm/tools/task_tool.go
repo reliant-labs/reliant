@@ -19,11 +19,11 @@ import (
 
 // ListTasksTool allows agents to list tasks for the current plan
 type ListTasksTool struct {
-	repo db.Repository
+	repo listTasksStore
 }
 
 // NewListTasksTool creates a new task listing tool
-func NewListTasksTool(repo db.Repository) Tool {
+func NewListTasksTool(repo listTasksStore) Tool {
 	return NewToolWrapper(&ListTasksTool{
 		repo: repo,
 	})
@@ -297,11 +297,11 @@ func (l *ListTasksTool) formatTask(task *db.Task, num int, indent string, taskMa
 
 // UpdateTaskTool allows agents to update task status and details
 type UpdateTaskTool struct {
-	repo db.Repository
+	repo updateTaskStore
 }
 
 // NewUpdateTaskTool creates a new task update tool
-func NewUpdateTaskTool(repo db.Repository) Tool {
+func NewUpdateTaskTool(repo updateTaskStore) Tool {
 	return NewToolWrapper(&UpdateTaskTool{
 		repo: repo,
 	})
@@ -524,11 +524,11 @@ Status: %s`,
 
 // CreateSubtaskTool allows agents to create subtasks
 type CreateSubtaskTool struct {
-	repo db.Repository
+	repo createSubtaskStore
 }
 
 // NewCreateSubtaskTool creates a new subtask creation tool
-func NewCreateSubtaskTool(repo db.Repository) Tool {
+func NewCreateSubtaskTool(repo createSubtaskStore) Tool {
 	return NewToolWrapper(&CreateSubtaskTool{
 		repo: repo,
 	})

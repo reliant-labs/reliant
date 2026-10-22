@@ -17,7 +17,7 @@ import (
 // spawnChildThread creates a thread parented to parentID, the shape the spawn
 // path produces: a fresh thread of its own, linked to the thread that spawned
 // it.
-func spawnChildThread(t *testing.T, repo db.Repository, chatID, parentID string) string {
+func spawnChildThread(t *testing.T, repo *db.Repo, chatID, parentID string) string {
 	t.Helper()
 	childID := uuid.New().String()
 	_, err := repo.CreateThread(context.Background(), &db.Thread{

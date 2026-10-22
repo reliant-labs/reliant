@@ -16,7 +16,7 @@ import (
 )
 
 // startRunCall issues start_run from callerID with the given tool call id.
-func startRunCall(t *testing.T, repo db.Repository, starter RunStarter, callerID, toolCallID string, params StartRunParams) ToolResponse {
+func startRunCall(t *testing.T, repo *db.Repo, starter RunStarter, callerID, toolCallID string, params StartRunParams) ToolResponse {
 	t.Helper()
 	return callRunTool(t, NewStartRunTool(repo, starter), callerRC(callerID, toolCallID), StartRunToolName, params)
 }
@@ -32,7 +32,7 @@ func startedChatID(t *testing.T, resp ToolResponse) string {
 // recordAgentStart writes the launch event an agent-started run leaves behind,
 // for a run (child) started from parent. This is exactly what the launcher
 // records, so it builds lineage chains for the depth guard to walk.
-func recordAgentStart(t *testing.T, repo db.Repository, parent, child string) {
+func recordAgentStart(t *testing.T, repo *db.Repo, parent, child string) {
 	t.Helper()
 	created, err := repo.CreateTriggerEvent(context.Background(), &core.TriggerEvent{
 		ID: uuid.NewString(), UserID: runTestUser, Kind: core.TriggerEventKindAgentStartRun,
@@ -100,7 +100,7 @@ func TestStartRun_InheritsTheCallersNoMachine(t *testing.T) {
 	defer cleanup()
 	callerID := newCaller(t, repo)
 	// no_machine is set only at launch; there is no write path to flip it.
-	_, err := repo.(*db.Repo).DB.SQLDB().Exec(`UPDATE chats SET no_machine = true WHERE id = $1`, callerID)
+	_, err := repo.DB.SQLDB().Exec(`UPDATE chats SET no_machine = true WHERE id = $1`, callerID)
 	require.NoError(t, err)
 
 	starter := &fakeRunStarter{}

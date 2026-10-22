@@ -77,7 +77,7 @@ func TestSpawnStop_DirectChild_RequestsStopWithBothIDs(t *testing.T) {
 // executing workflows row is a fresh id derived from the new tool call, so the
 // workflow row id differs from the thread id.
 func seedResumption(
-	t *testing.T, repo db.Repository, ctx context.Context,
+	t *testing.T, repo *db.Repo, ctx context.Context,
 	chatID, parentThreadID, childThreadID string, requestedAt time.Time,
 ) (toolCallID, workflowID string) {
 	t.Helper()

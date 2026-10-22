@@ -116,19 +116,26 @@ func (d *recordingDaemon) WriteBinaryFile(ctx context.Context, path string, cont
 	return &daemon.WriteResult{Created: true, BytesWritten: len(content)}, nil
 }
 
-// fakeAttachmentRepo records attachment writes in memory. It embeds
-// db.Repository so the hundreds of methods this tool never calls do not have to
-// be spelled out; any of them being called is a bug and panics loudly rather
-// than passing silently.
+// fakeAttachmentRepo records attachment writes in memory. It is the store of
+// generate_image, generate_video and save_attachment. It embeds the widest of
+// their roles so a method none of these tests should reach (GetChat) need not
+// be spelled out; calling it is a bug and panics loudly rather than passing
+// silently.
 //
 // A fake rather than the package's Postgres harness because that harness
 // t.Skip()s when DATABASE_URL is unset, which would make every assertion below
 // vanish on a machine with no database instead of failing.
 type fakeAttachmentRepo struct {
-	db.Repository
+	generateVideoStore
 	stored map[string]*db.Attachment
 	err    error
 }
+
+var (
+	_ generateImageStore  = (*fakeAttachmentRepo)(nil)
+	_ generateVideoStore  = (*fakeAttachmentRepo)(nil)
+	_ saveAttachmentStore = (*fakeAttachmentRepo)(nil)
+)
 
 func newFakeAttachmentRepo() *fakeAttachmentRepo {
 	return &fakeAttachmentRepo{stored: map[string]*db.Attachment{}}

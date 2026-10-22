@@ -53,7 +53,7 @@ type ListScenariosParams struct {
 }
 
 type listScenariosTool struct {
-	repo db.Repository
+	repo listScenariosStore
 }
 
 const (
@@ -67,7 +67,7 @@ Pass id (required): the workflow UUID, slug, or name, as returned by
 create_workflow or list_workflows.`
 )
 
-func NewListScenariosTool(repo db.Repository) Tool {
+func NewListScenariosTool(repo listScenariosStore) Tool {
 	tool := &listScenariosTool{repo: repo}
 	return NewToolWrapper[ListScenariosParams, ToolResponse](tool)
 }
@@ -143,7 +143,7 @@ type ViewScenarioParams struct {
 }
 
 type viewScenarioTool struct {
-	repo db.Repository
+	repo viewScenarioStore
 }
 
 const (
@@ -157,7 +157,7 @@ Pass id (required): the workflow UUID, slug, or name, as returned by
 create_workflow or list_workflows.`
 )
 
-func NewViewScenarioTool(repo db.Repository) Tool {
+func NewViewScenarioTool(repo viewScenarioStore) Tool {
 	tool := &viewScenarioTool{repo: repo}
 	return NewToolWrapper[ViewScenarioParams, ToolResponse](tool)
 }
@@ -249,7 +249,7 @@ type EditScenarioParams struct {
 }
 
 type editScenarioTool struct {
-	repo db.Repository
+	repo editScenarioStore
 }
 
 const (
@@ -270,7 +270,7 @@ create_workflow or list_workflows.
 }`
 )
 
-func NewEditScenarioTool(repo db.Repository) Tool {
+func NewEditScenarioTool(repo editScenarioStore) Tool {
 	tool := &editScenarioTool{repo: repo}
 	return NewToolWrapper[EditScenarioParams, ToolResponse](tool)
 }
@@ -372,7 +372,7 @@ type WriteScenarioParams struct {
 }
 
 type writeScenarioTool struct {
-	repo   db.Repository
+	repo   writeScenarioStore
 	runner ScenarioRunner
 }
 
@@ -436,7 +436,7 @@ create_workflow or list_workflows.
 }`
 )
 
-func NewWriteScenarioTool(repo db.Repository, runner ScenarioRunner) Tool {
+func NewWriteScenarioTool(repo writeScenarioStore, runner ScenarioRunner) Tool {
 	tool := &writeScenarioTool{repo: repo, runner: runner}
 	return NewToolWrapper[WriteScenarioParams, ToolResponse](tool)
 }
@@ -550,7 +550,7 @@ type DeleteScenarioParams struct {
 }
 
 type deleteScenarioTool struct {
-	repo db.Repository
+	repo deleteScenarioStore
 }
 
 const (
@@ -563,7 +563,7 @@ Pass id (required): the workflow UUID, slug, or name, as returned by
 create_workflow or list_workflows.`
 )
 
-func NewDeleteScenarioTool(repo db.Repository) Tool {
+func NewDeleteScenarioTool(repo deleteScenarioStore) Tool {
 	tool := &deleteScenarioTool{repo: repo}
 	return NewToolWrapper[DeleteScenarioParams, ToolResponse](tool)
 }
@@ -619,7 +619,7 @@ type RunScenarioParams struct {
 }
 
 type runScenarioTool struct {
-	repo   db.Repository
+	repo   runScenarioStore
 	runner ScenarioRunner
 }
 
@@ -642,7 +642,7 @@ Pass id (required): the workflow UUID, slug, or name, as returned by
 create_workflow or list_workflows.`
 )
 
-func NewRunScenarioTool(repo db.Repository, runner ScenarioRunner) Tool {
+func NewRunScenarioTool(repo runScenarioStore, runner ScenarioRunner) Tool {
 	tool := &runScenarioTool{repo: repo, runner: runner}
 	return NewToolWrapper[RunScenarioParams, ToolResponse](tool)
 }
@@ -685,7 +685,7 @@ func (t *runScenarioTool) Execute(ctx *rctx.ToolContext, args RunScenarioParams)
 // =============================================================================
 
 // runScenarioByName runs a scenario and returns the formatted result
-func runScenarioByName(ctx *rctx.ToolContext, repo db.Repository, runner ScenarioRunner, draft *db.WorkflowDraft, name string) (ToolResponse, error) {
+func runScenarioByName(ctx *rctx.ToolContext, repo scenarioExecStore, runner ScenarioRunner, draft *db.WorkflowDraft, name string) (ToolResponse, error) {
 	scenario, err := repo.GetWorkflowScenarioByName(ctx, draft.ID, name)
 	if err != nil {
 		return NewTextErrorResponse(fmt.Sprintf("Failed to find scenario: %v", err)), nil
@@ -721,7 +721,7 @@ func runScenarioByName(ctx *rctx.ToolContext, repo db.Repository, runner Scenari
 // createScenarioWorkflowLoader resolves the refs a scenario reaches the way a
 // run resolves them (workflowsource): the chat owner's own workflows, then
 // the project's synced workflows by name:.
-func createScenarioWorkflowLoader(ctx *rctx.ToolContext, repo db.Repository) func(string) (*reliantv1.Workflow, error) {
+func createScenarioWorkflowLoader(ctx *rctx.ToolContext, repo scenarioLoaderStore) func(string) (*reliantv1.Workflow, error) {
 	opts := workflowsource.Options{}
 	if ctx != nil && ctx.Project != nil {
 		opts.ProjectID = ctx.Project.ID
