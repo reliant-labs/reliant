@@ -22,17 +22,40 @@ import { formatPercent } from "../Observability/format";
 import { BUTTON_PRIMARY, BUTTON_SECONDARY, INK_LINK } from "../Releases/releaseParts";
 import { shortVersion } from "../Releases/releaseModel";
 import { HEALTH_STATUS } from "./health";
+import { causeNote, healthDetailText, healthLine } from "./plainHealth";
 
 /** The share of the limit at which a meter turns to the warning tone (the mockup's 85%). */
 export const USAGE_HOT = 0.85;
 
 /** The server's verdict, as a dot and a word; the reason on hover. The word is tinted only when it is not fine (D8). */
-export function HealthStatus({ workload, withReason = false }: { workload: Pick<Workload, "health" | "healthReason">; withReason?: boolean }) {
+export function HealthStatus({
+  workload,
+  withReason = false,
+}: {
+  workload: Pick<Workload, "health" | "healthReason"> & Partial<Pick<Workload, "healthCause" | "healthDetail">>;
+  withReason?: boolean;
+}) {
   const status = HEALTH_STATUS[workload.health];
+  const line = healthLine(workload);
+  // The plain sentence on hover; the raw machinery only when it is asked for, and
+  // never in the cell. A fault that is ours says so beside the verdict.
+  const detail = healthDetailText({ healthDetail: workload.healthDetail ?? "" });
+  const note = causeNote({ health: workload.health, healthCause: workload.healthCause ?? "none" });
   return (
-    <span className="inline-flex min-w-0 items-center gap-2" title={workload.healthReason || undefined} data-health={workload.health}>
+    <span className="inline-flex min-w-0 items-center gap-2" title={line || undefined} data-health={workload.health} data-cause={workload.healthCause ?? "none"}>
       <Status tone={status.tone} label={status.label} />
-      {withReason && workload.healthReason && <span className="truncate text-xs text-ink-muted">{workload.healthReason}</span>}
+      {note && (
+        <span className="shrink-0 rounded border border-info/40 bg-info/10 px-1.5 py-0.5 text-xs font-medium text-info" data-testid="health-platform-note">
+          {note}
+        </span>
+      )}
+      {withReason && line && <span className="truncate text-xs text-ink-muted">{line}</span>}
+      {withReason && detail && (
+        <details className="shrink-0 text-xs text-ink-muted" data-testid="health-details">
+          <summary className="cursor-pointer select-none">Details</summary>
+          <span className="mt-1 block max-w-[48ch] break-words font-mono">{detail}</span>
+        </details>
+      )}
     </span>
   );
 }

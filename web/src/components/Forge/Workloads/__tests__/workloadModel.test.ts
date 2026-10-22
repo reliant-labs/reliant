@@ -119,8 +119,9 @@ describe("needs attention", () => {
       "job:control-plane-migrate:e2e",
     ]);
     expect(items[0]).toMatchObject({ detail: "for 52m", workload: null });
-    expect(items[1]).toMatchObject({ what: "crash-looping", detail: "restarted 14x, last exit OOMKilled", tone: "danger" });
-    expect(items[3]).toMatchObject({ what: "failed", detail: "BackoffLimitExceeded" });
+    expect(items[1]).toMatchObject({ what: "crash-looping", detail: expect.stringContaining("Restarting repeatedly (14 times"), tone: "danger" });
+    // the Job controller's word is not the headline
+    expect(items[3]).toMatchObject({ what: "failed", detail: "Failed after exhausting its retries" });
   });
 
   it("leaves a job that failed and then succeeded off the list", () => {

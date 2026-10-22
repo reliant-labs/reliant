@@ -33,7 +33,14 @@ describe("a workload", () => {
     expect(within(page).getByRole("heading", { level: 1 })).toHaveTextContent("reliant-temporal-worker");
     expect(page).toHaveTextContent("Crash-looping");
     expect(page).toHaveTextContent("StatefulSet · 0/2 ready");
-    expect(page).toHaveTextContent("restarted 14x, last exit OOMKilled");
+    expect(page).toHaveTextContent("Restarting repeatedly (14 times in the last 24 hours). It ran out of memory (limit 1 GiB)");
+    // the raw Kubernetes word is only inside the collapsed Details disclosure, never in the headline
+    const details = within(page).getAllByTestId("health-details")[0]!;
+    expect(details).not.toHaveAttribute("open");
+    expect(details).toHaveTextContent("last exit OOMKilled");
+    const headline = page.cloneNode(true) as HTMLElement;
+    headline.querySelectorAll("[data-testid=health-details]").forEach((d) => d.remove());
+    expect(headline).not.toHaveTextContent(/OOMKilled|OOMKilling/);
     // The breadcrumb leads back to the Overview.
     expect(within(page).getByRole("link", { name: "Overview" })).toHaveAttribute("href", "/overview");
   });
@@ -101,7 +108,9 @@ describe("a workload", () => {
     renderWorkload("reliant-temporal-worker");
     await ready();
     expect(screen.queryByTestId("workload-url")).toBeNull();
-    expect(screen.getByTestId("workload-last-error")).toHaveTextContent("OOMKilled: exceeded its 1Gi memory limit");
+    // the platform's own words, in plain language: the runtime's reason name is gone, the figures stay
+    expect(screen.getByTestId("workload-last-error")).toHaveTextContent("ran out of memory: exceeded its 1Gi memory limit");
+    expect(screen.getByTestId("workload-last-error")).not.toHaveTextContent("OOMKilled");
   });
 
   it("says the workload runs the wrong version when the observed digest is not the published one — never 'declared'", async () => {
@@ -156,15 +165,20 @@ describe("a workload", () => {
     expect(within(popover).getByRole("button", { name: "Copy path" })).toBeInTheDocument();
   });
 
-  it("lists its pods, saying when a node is not reported and when an age is a lower bound", async () => {
+  it("lists its pods, never showing a node name, and saying when an age is a lower bound", async () => {
     renderWorkload("reliant-temporal-worker");
     await ready();
     const pods = screen.getByTestId("workload-pods");
     const [bad, other] = within(pods).getAllByRole("row").slice(1);
-    expect(bad).toHaveTextContent("BackOff");
-    expect(bad).toHaveTextContent("OOMKilled");
-    expect(other).toHaveTextContent("not reported");
+    // plain wording for the pod's last exit and its warning; the raw words are not the headline
+    expect(bad).toHaveTextContent("Waiting before the next restart attempt");
+    expect(bad).toHaveTextContent("Ran out of memory");
+    expect(bad).not.toHaveTextContent("OOMKilled");
+    expect(bad).not.toHaveTextContent("BackOff");
     expect(other).toHaveTextContent("≥24h");
+    // the node is a machine the user never chose: no Node column, no gke-… name anywhere
+    expect(within(pods).queryByRole("columnheader", { name: "Node" })).toBeNull();
+    expect(pods).not.toHaveTextContent(/gke-|not reported/);
   });
 
   it("shows the declared spec with environment variables by name only", async () => {
@@ -205,7 +219,8 @@ describe("a Job", () => {
     expect(screen.getByTestId("workload-detail")).toHaveAttribute("data-kind", "job");
     const runs = screen.getByTestId("workload-runs");
     expect(within(runs).getAllByRole("row")).toHaveLength(1 + 2);
-    expect(runs).toHaveTextContent("Failed· BackoffLimitExceeded");
+    expect(runs).toHaveTextContent("Failed· Failed after exhausting its retries");
+    expect(runs).not.toHaveTextContent("BackoffLimitExceeded");
     expect(screen.queryByTestId("workload-restart")).toBeNull();
     expect(screen.queryByTestId("workload-scale")).toBeNull();
     expect(screen.queryByRole("tab", { name: "Profiles" })).toBeNull();
