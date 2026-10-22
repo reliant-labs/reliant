@@ -171,7 +171,7 @@ func (f *fakeHistoryIterator) Next() (*historypb.HistoryEvent, error) {
 // Only implements the methods used by ReconcileWorkflow.
 
 type mockRepo struct {
-	db.Repository // embed to satisfy interface
+	ReconcilerStore // embedded nil: a method the fake does not override panics
 
 	mu                sync.Mutex
 	updatedStatuses   map[string]db.WorkflowStatus // workflowID -> new status
@@ -246,6 +246,10 @@ type mockRepo struct {
 	inTx                   bool
 	deletedCheckpoints     []string
 }
+
+// The fake keeps state (rows by id, call order), so it stays a fake rather
+// than a MockReconcilerStore.
+var _ ReconcilerStore = (*mockRepo)(nil)
 
 func (m *mockRepo) CascadeTerminalStatusToDescendants(_ context.Context, workflowID string, reason db.WorkflowStopReason) error {
 	m.mu.Lock()
@@ -464,7 +468,7 @@ func (m *mockRepo) GetWorkflow(_ context.Context, id string) (*db.Workflow, erro
 	return nil, sql.ErrNoRows
 }
 
-// The embedded db.Repository is a nil interface, so every method the pass calls
+// The embedded ReconcilerStore is a nil interface, so every method the pass calls
 // must be implemented here or it panics. The stranded-spawn repair runs on
 // every pass; the default is "nothing stranded".
 func (m *mockRepo) ListStrandedSpawnToolCalls(_ context.Context) ([]*db.ToolCall, error) {

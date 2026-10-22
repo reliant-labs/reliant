@@ -3,8 +3,6 @@ package workersetup
 
 import (
 	"context"
-
-	"github.com/reliant-labs/reliant/internal/db"
 )
 
 // ChatWorkflowLookup returns a resolver from chat id to the Temporal workflow
@@ -18,7 +16,7 @@ import (
 // Returns ok=false rather than an error when the row cannot be read: the
 // caller's fallback (address the workflow by chat id) is the right behavior
 // for a doorbell that is best-effort anyway.
-func ChatWorkflowLookup(repo db.Repository) func(ctx context.Context, chatID string) (string, bool) {
+func ChatWorkflowLookup(repo ChatWorkflowReader) func(ctx context.Context, chatID string) (string, bool) {
 	return func(ctx context.Context, chatID string) (string, bool) {
 		if repo == nil {
 			return "", false

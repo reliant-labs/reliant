@@ -5,7 +5,6 @@ import (
 	"context"
 	"time"
 
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/accountrouter"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/handlers"
@@ -15,7 +14,7 @@ import (
 // The router declares its own copies of the limit and assignment types (it is
 // consumed, not coupled to the database), so this is only a field-for-field
 // translation.
-type accountRouterStore struct{ repo core.ProviderAccountStore }
+type accountRouterStore struct{ repo AccountAssignmentStore }
 
 var _ accountrouter.Store = accountRouterStore{}
 
@@ -61,7 +60,7 @@ func (s accountRouterStore) RecentAssignmentCounts(ctx context.Context, accountI
 // activities share. It is inactive until a per-account driver builder is wired
 // (see handlers.AccountRouting.DriverFor): accounts are never assigned that
 // cannot then be used.
-func accountRouting(repo db.Repository, recorder handlers.AccountLimitRecorder) *handlers.AccountRouting {
+func accountRouting(repo AccountRoutingStore, recorder handlers.AccountLimitRecorder) *handlers.AccountRouting {
 	store := accountRouterStore{repo: repo}
 	return &handlers.AccountRouting{
 		Router:      accountrouter.NewInstrumented(accountrouter.Deps{Store: store}),
@@ -75,7 +74,7 @@ func accountRouting(repo db.Repository, recorder handlers.AccountLimitRecorder) 
 
 // credentialMarker retires an account whose API key the provider rejected, the
 // way the token refresh coordinator retires one whose refresh token it did.
-type credentialMarker struct{ repo core.ProviderAccountStore }
+type credentialMarker struct{ repo AccountCredentialStore }
 
 func (m credentialMarker) MarkNeedsSignIn(ctx context.Context, userID, accountID, reason string) error {
 	_, err := m.repo.PatchProviderAccount(ctx, userID, accountID, core.AccountPatch{NeedsReauth: &reason})
