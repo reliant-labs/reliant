@@ -40,17 +40,15 @@ import (
 
 // countingRepo counts the step-execution reads GetWorkflowExecutions performs.
 //
-// It embeds db.Repository rather than reimplementing it, so it stays a thin
+// It embeds the chat Repository rather than reimplementing it, so it stays a thin
 // spy: every method not named here is the real one, and the counters describe
 // only the calls under test.
 type countingRepo struct {
-	db.Repository
+	Repository
 
-	mu                  sync.Mutex
-	perWorkflowCalls    int
-	chatScopedCalls     int
-	perWorkflowArgument []string
-	basicCalls          int
+	mu              sync.Mutex
+	chatScopedCalls int
+	basicCalls      int
 
 	// Thread-identity reads the tree walk must NOT make per workflow.
 	getThreadCalls           int
@@ -58,6 +56,8 @@ type countingRepo struct {
 	listThreadsCalls         int
 	listForkedThreadIDsCalls int
 }
+
+var _ Repository = (*countingRepo)(nil)
 
 func (r *countingRepo) GetBasicStepExecutionsForChat(ctx context.Context, chatID string) ([]*db.ChatStepExecution, error) {
 	r.mu.Lock()
@@ -94,14 +94,6 @@ func (r *countingRepo) ListForkedThreadIDs(ctx context.Context, threadIDs []stri
 	return r.Repository.ListForkedThreadIDs(ctx, threadIDs)
 }
 
-func (r *countingRepo) GetStepExecutionsByWorkflow(ctx context.Context, workflowID string) ([]*db.StepExecution, error) {
-	r.mu.Lock()
-	r.perWorkflowCalls++
-	r.perWorkflowArgument = append(r.perWorkflowArgument, workflowID)
-	r.mu.Unlock()
-	return r.Repository.GetStepExecutionsByWorkflow(ctx, workflowID)
-}
-
 func (r *countingRepo) GetStepExecutionsForChat(ctx context.Context, chatID string) ([]*db.ChatStepExecution, error) {
 	r.mu.Lock()
 	r.chatScopedCalls++
@@ -109,10 +101,10 @@ func (r *countingRepo) GetStepExecutionsForChat(ctx context.Context, chatID stri
 	return r.Repository.GetStepExecutionsForChat(ctx, chatID)
 }
 
-func (r *countingRepo) counts() (perWorkflow, chatScoped int) {
+func (r *countingRepo) chatScoped() int {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.perWorkflowCalls, r.chatScopedCalls
+	return r.chatScopedCalls
 }
 
 // seedWorkflowWithSteps creates one workflow under chatID plus its thread, and
@@ -215,13 +207,11 @@ func TestGetWorkflowExecutions_OneStepQueryRegardlessOfWorkflowCount(t *testing.
 	require.NoError(t, err)
 	require.NotNil(t, resp.Msg.RootWorkflow)
 
-	perWorkflow, chatScoped := counting.counts()
-	require.Equal(t, 1, chatScoped,
+	require.Equal(t, 1, counting.chatScoped(),
 		"steps must be read in exactly one chat-scoped query")
 	require.Zero(t, counting.basicCalls, "FULL view must not run the BASIC query")
-	require.Zero(t, perWorkflow,
-		"no per-workflow step query may run; the N+1 is back (called for: %v)",
-		counting.perWorkflowArgument)
+	requireRepositoryLacks(t, "GetStepExecutionsByWorkflow",
+		"no per-workflow step query may run; the N+1 is back")
 
 	// The batching must not have cost us the data: every workflow's steps are
 	// still attached to the right workflow.

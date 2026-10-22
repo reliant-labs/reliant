@@ -40,7 +40,7 @@ func TestStreamUserUpdates_Generated(t *testing.T) {
 	t.Run("anonymous caller is unauthenticated", func(t *testing.T) {
 		t.Parallel()
 		_, client := streaming.NewTestStreamingServer(t,
-			streaming.WithStreamingDeps(streaming.Deps{Repo: foreignChatRepo{}}),
+			streaming.WithStreamingDeps(streaming.Deps{Repo: foreignChatRepo()}),
 			streaming.WithoutPrincipal())
 		err := open(t, client, &pb.StreamUserUpdatesRequest{})
 		require.Equal(t, connect.CodeUnauthenticated, svcerr.Code(err))
@@ -49,7 +49,7 @@ func TestStreamUserUpdates_Generated(t *testing.T) {
 	t.Run("another user's chat is not found", func(t *testing.T) {
 		t.Parallel()
 		_, client := streaming.NewTestStreamingServer(t,
-			streaming.WithStreamingDeps(streaming.Deps{Repo: foreignChatRepo{}}),
+			streaming.WithStreamingDeps(streaming.Deps{Repo: foreignChatRepo()}),
 			streaming.WithPrincipal(testkit.WithUserID("test-user")))
 		chatID := "chat-of-someone-else"
 		err := open(t, client, &pb.StreamUserUpdatesRequest{SubscribeChatId: &chatID})
@@ -59,14 +59,13 @@ func TestStreamUserUpdates_Generated(t *testing.T) {
 
 // foreignChatRepo has an empty user update log and every chat belongs to
 // another user. Everything past the ownership check is unreachable from the
-// rows that use it: the embedded nil db.Repository makes calling one a panic,
+// rows that use it: any other read fails with the mock's "Func not set" error,
 // never a silent pass.
-type foreignChatRepo struct{ db.Repository }
-
-func (foreignChatRepo) GetLatestUserUpdateSequence(context.Context, string) (int64, error) {
-	return 0, nil
-}
-
-func (foreignChatRepo) GetChat(_ context.Context, id string) (*db.Chat, error) {
-	return &db.Chat{ID: id, UserID: "someone-else"}, nil
+func foreignChatRepo() *streaming.MockRepository {
+	return &streaming.MockRepository{
+		GetLatestUserUpdateSequenceFunc: func(context.Context, string) (int64, error) { return 0, nil },
+		GetChatFunc: func(_ context.Context, id string) (*db.Chat, error) {
+			return &db.Chat{ID: id, UserID: "someone-else"}, nil
+		},
+	}
 }

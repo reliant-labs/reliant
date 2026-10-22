@@ -75,7 +75,7 @@ func (noopSubscription) Unsubscribe()                            {}
 
 // firstChatSyncEvent opens a stream subscribed to the chat at chatSinceSeq and
 // returns the first event that carries chat state: a snapshot or a batch.
-func firstChatSyncEvent(t *testing.T, repo db.Repository, chatSinceSeq int64) *reliantv1.UserStreamEvent {
+func firstChatSyncEvent(t *testing.T, repo Repository, chatSinceSeq int64) *reliantv1.UserStreamEvent {
 	t.Helper()
 
 	svc := NewTestStreaming(t, WithStreamingDeps(Deps{Repo: repo, Deltas: noopHub{}}))

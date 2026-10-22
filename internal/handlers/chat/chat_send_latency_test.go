@@ -3,9 +3,7 @@ package chat
 
 import (
 	"context"
-	"runtime"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -18,56 +16,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/runs"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 )
-
-// fullConfigRowSpy is the repository a send runs against, with one read
-// instrumented: GetProjectConfigRecord, which fetches the whole project_configs
-// row.
-//
-// That row carries every skill body and repo memory the daemon indexed,
-// recursively across nested repos. In prod a workspace of ~30 checkouts synced
-// an 18 MB row (23.6 MB of it project_skills_json when re-measured from the
-// same workspace), and SendMessage read it 3+N times per send (N = selected
-// presets) to learn what two empty columns said: there are no project
-// workflows and no project presets. Goroutine dumps sampled while sends were
-// in flight caught the handler inside that read 70 times out of 74; SendMessage
-// p50 was 1.7s, StartChat 2.3s.
-type fullConfigRowSpy struct {
-	db.Repository
-
-	mu      sync.Mutex
-	callers []string
-}
-
-func (s *fullConfigRowSpy) GetProjectConfigRecord(ctx context.Context, projectID string) (*db.ProjectConfigRecord, error) {
-	s.mu.Lock()
-	s.callers = append(s.callers, callerChain())
-	s.mu.Unlock()
-	return s.Repository.GetProjectConfigRecord(ctx, projectID)
-}
-
-func (s *fullConfigRowSpy) reads() []string {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return append([]string(nil), s.callers...)
-}
-
-// callerChain names the reliant frames that made a read, innermost first, so a
-// regression says which path brought the whole-row read back.
-func callerChain() string {
-	pcs := make([]uintptr, 32)
-	frames := runtime.CallersFrames(pcs[:runtime.Callers(3, pcs)])
-	var chain []string
-	for {
-		f, more := frames.Next()
-		if strings.Contains(f.Function, "reliant-labs/reliant/internal/") && !strings.Contains(f.Function, "_test") {
-			chain = append(chain, f.Function[strings.LastIndex(f.Function, "/")+1:])
-		}
-		if !more || len(chain) == 6 {
-			break
-		}
-	}
-	return strings.Join(chain, " <- ")
-}
 
 // slowQueryTemporalClient is a run whose worker is too busy to answer a query:
 // QueryWorkflow returns only when its context ends.
@@ -128,6 +76,17 @@ func TestSendMessage_DoesNotWaitOnASlowParamsQuery(t *testing.T) {
 // and starting a new run after a finished one. Each sends what the composer
 // does — workflow params and a preset selection — on the default workflow, so
 // it exercises preset loading, workflow resolution and input validation.
+//
+// The whole-row read is GetProjectConfigRecord, which fetches the entire
+// project_configs row. That row carries every skill body and repo memory the
+// daemon indexed, recursively across nested repos. In prod a workspace of ~30
+// checkouts synced an 18 MB row (23.6 MB of it project_skills_json when
+// re-measured from the same workspace), and SendMessage read it 3+N times per
+// send (N = selected presets) to learn what two empty columns said: there are
+// no project workflows and no project presets. Goroutine dumps sampled while
+// sends were in flight caught the handler inside that read 70 times out of 74;
+// SendMessage p50 was 1.7s, StartChat 2.3s. A spy used to count that read;
+// now Repository simply does not declare it, so no send can make it.
 func TestSendMessage_DoesNotReadTheWholeProjectConfigRow(t *testing.T) {
 	cases := []struct {
 		name     string
@@ -160,10 +119,9 @@ func TestSendMessage_DoesNotReadTheWholeProjectConfigRow(t *testing.T) {
 			if tc.pause {
 				pause = succeedingPauseController{}
 			}
-			spy := &fullConfigRowSpy{Repository: repo}
 			service := &Service{
 				deps: Deps{
-					Repo:     spy,
+					Repo:     repo,
 					Temporal: temporal,
 				},
 				runs: runs.NewService(repo, temporal, pause),
@@ -174,7 +132,7 @@ func TestSendMessage_DoesNotReadTheWholeProjectConfigRow(t *testing.T) {
 			_, err = service.SendMessage(ctx, req)
 			require.NoError(t, err)
 
-			assert.Empty(t, spy.reads(),
+			requireRepositoryLacks(t, "GetProjectConfigRecord",
 				"a send must read the project config columns it needs, never the whole row: "+
 					"the row holds every indexed skill body and was 18 MB in prod")
 		})
