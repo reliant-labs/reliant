@@ -36,18 +36,18 @@ var machineStates = []struct {
 }{
 	{
 		name:     "no machine connected to the account (A6, B1)",
-		err:      fmt.Errorf("%w: no machine is connected to your account yet", toolexec.ErrNoDaemon),
+		err:      svcerr.WithMessage(toolexec.ErrNoDaemon, "no daemon available: no machine is connected to your account yet"),
 		wantCode: connect.CodeFailedPrecondition,
 	},
 	{
 		name:     "machine still starting",
-		err:      fmt.Errorf("your machine is still starting: %w", toolexec.ErrDaemonPending),
+		err:      svcerr.WithMessage(toolexec.ErrDaemonPending, "your machine is still starting: "+toolexec.ErrDaemonPending.Error()),
 		wantCode: connect.CodeUnavailable,
 	},
 	{
 		// As daemonRequestError builds it for nats.ErrNoResponders.
 		name:     "no NATS responder for the machine",
-		err:      connect.NewError(connect.CodeUnavailable, svcerr.WithClass(errors.New("no daemon connected for user"), svcerr.ClassUser)),
+		err:      connect.NewError(connect.CodeUnavailable, svcerr.WithClass(svcerr.Unavailable("no daemon connected for user"), svcerr.ClassUser)),
 		wantCode: connect.CodeUnavailable,
 	},
 }
@@ -79,7 +79,9 @@ func TestOAuthHelper_MachineStatesKeepTheirCode(t *testing.T) {
 				err := call(svc)
 				require.Error(t, err)
 				assert.Equal(t, state.wantCode, svcerr.Code(err))
-				assert.Contains(t, err.Error(), state.err.Error(), "the router's message must survive")
+				msg := svcerr.ToConnect(err).Message()
+				assert.Contains(t, msg, svcerr.ToConnect(state.err).Message(), "the router's sentence must survive")
+				assert.NotContains(t, msg, "resolving daemon", "the router's plumbing must not")
 				assert.False(t, errclass.IsServerError(err))
 			})
 		}
@@ -94,6 +96,14 @@ func TestOAuthHelper_OtherFailuresStayInternal(t *testing.T) {
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeInternal, svcerr.Code(err))
 	assert.True(t, errclass.IsServerError(err))
+	assert.Equal(t, "open OAuth helper", svcerr.ToConnect(err).Message(), "router text is withheld")
+
+	// The daemon's own words reach the user.
+	svc = NewTestDaemon(t, WithDaemonDeps(Deps{Router: &failingCommandRouter{err: toolexec.DaemonReportedFailure("auth.open_oauth_helper", "bind: address already in use")}}))
+	_, err = svc.OpenOAuthHelper(ctx, connect.NewRequest(&reliantv1.OpenOAuthHelperRequest{}))
+	require.Error(t, err)
+	assert.Equal(t, connect.CodeInternal, svcerr.Code(err))
+	assert.Equal(t, "open OAuth helper: bind: address already in use", svcerr.ToConnect(err).Message())
 
 	// NATS timing out is not "no machine": the machine may be wedged.
 	svc = NewTestDaemon(t, WithDaemonDeps(Deps{Router: &failingCommandRouter{err: fmt.Errorf("daemon command via NATS failed: %w", nats.ErrTimeout)}}))

@@ -256,8 +256,8 @@ type daemonConnection struct {
 // expected outcome: every held stream ends this way on every rollout, and
 // logging each one as a failed stream at ERROR paged on a rollout that went
 // exactly as designed.
-var errGatewayDraining = connect.NewError(connect.CodeUnavailable, svcerr.Draining(
-	"gateway draining: this daemon-gateway replica is shutting down; reconnect to reach a live replica"))
+var errGatewayDraining = svcerr.Draining(
+	"gateway draining: this daemon-gateway replica is shutting down; reconnect to reach a live replica")
 
 // Close ends every daemon stream this service is holding, with a status the
 // daemon can act on.
@@ -973,8 +973,7 @@ func (s *Service) ConnectDaemon(
 
 	reg := msg.GetRegister()
 	if reg == nil {
-		logging.ErrorContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" First message must be registration")
-		return connect.NewError(connect.CodeInvalidArgument, nil)
+		return svcerr.InvalidArgument("first message must be registration")
 	}
 
 	userID, err := daemonRegistrationUserID(ctx, reg)
@@ -1001,18 +1000,17 @@ func (s *Service) ConnectDaemon(
 
 	requestedProjectPaths, err := s.listAllProjectPaths(ctx, userID)
 	if err != nil {
-		logging.ErrorContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Failed to list project paths", "error", err, "userID", userID)
-		return connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list project paths: %w", err))
+		return svcerr.WrapOr(err, svcerr.Internal("failed to list project paths"))
 	}
 
 	now := leaseTime(time.Now())
 	capabilitiesJSON, err := jsonStringSlicePtr(reg.Capabilities)
 	if err != nil {
-		return connect.NewError(connect.CodeInternal, fmt.Errorf("failed to encode capabilities: %w", err))
+		return svcerr.WrapOr(err, svcerr.Internal("failed to encode capabilities"))
 	}
 	projectPathsJSON, err := jsonStringSlicePtr(requestedProjectPaths)
 	if err != nil {
-		return connect.NewError(connect.CodeInternal, fmt.Errorf("failed to encode project paths: %w", err))
+		return svcerr.WrapOr(err, svcerr.Internal("failed to encode project paths"))
 	}
 
 	if err := s.deps.Repo.UpsertDaemon(ctx, &db.Daemon{
@@ -1027,8 +1025,7 @@ func (s *Service) ConnectDaemon(
 		if errors.Is(err, db.ErrDaemonOwnedByAnotherUser) {
 			return s.rejectForeignDaemon(ctx, userID, daemonID)
 		}
-		logging.ErrorContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Failed to persist daemon registration", "error", err, "daemonID", daemonID)
-		return connect.NewError(connect.CodeInternal, fmt.Errorf("failed to persist daemon registration: %w", err))
+		return svcerr.WrapOr(err, svcerr.Internal("failed to persist daemon registration"))
 	}
 
 	if err := s.deps.Repo.UpsertDaemonAttachment(ctx, &db.DaemonAttachment{

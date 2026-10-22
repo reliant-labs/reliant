@@ -6,8 +6,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"connectrpc.com/connect"
-
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/checkoutstate"
@@ -62,10 +60,13 @@ func isMissingPathError(err error) bool {
 // raw "no such file or directory" 500), a failed one is CLONE_FAILED, and no
 // record at all is ABSENT — the project was cloned onto another machine, as
 // houndersclub was on 2026-10-07 when the owner's new machine came up empty.
+//
+// err is sendCommand's failure, already classified: a path the daemon could
+// not find is its NotFound (fsProxyDaemonError).
 func (s *Service) checkoutMissingError(
 	ctx context.Context, userID, projectID string, worktreeID *string, scope workspaceScope, resolvedPath string, err error,
 ) error {
-	if filepath.Clean(resolvedPath) != filepath.Clean(scope.basePath) || !isMissingPathError(err) {
+	if filepath.Clean(resolvedPath) != filepath.Clean(scope.basePath) || !svcerr.IsNotFound(err) {
 		return nil
 	}
 	// The client names the main worktree when the user is on the project's
@@ -102,9 +103,6 @@ func (s *Service) checkoutMissingError(
 		detail.State, detail.InstallError = checkoutstate.On(rows, detail.DaemonId)
 	}
 
-	cerr := svcerr.ToConnect(svcerr.WithMessage(svcerr.ErrNotFound, fmt.Sprintf("project directory %s does not exist on this machine", scope.basePath)))
-	if d, derr := connect.NewErrorDetail(detail); derr == nil {
-		cerr.AddDetail(d)
-	}
-	return cerr
+	missing := svcerr.WithMessage(svcerr.ErrNotFound, fmt.Sprintf("project directory %s does not exist on this machine", scope.basePath))
+	return svcerr.WithDetail(svcerr.WithCause(missing, err), detail)
 }

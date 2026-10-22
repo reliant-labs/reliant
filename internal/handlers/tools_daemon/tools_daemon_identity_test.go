@@ -19,6 +19,7 @@ import (
 	"golang.org/x/net/http2/h2c"
 
 	"github.com/reliant-labs/forge/pkg/serverkit"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -137,7 +138,7 @@ func TestConnectDaemonRefusesDaemonIDOwnedByAnotherUser(t *testing.T) {
 	err := registerAs(t, svc, "user-B", daemonID)
 
 	require.Error(t, err)
-	require.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err))
+	require.Equal(t, connect.CodePermissionDenied, svcerr.Code(err))
 	require.Equal(t, "user-A", repo.ownerOf(daemonID), "row must still belong to A")
 	require.NoError(t, victim.closedReason(), "A's connection must not be superseded")
 	svc.mu.RLock()
@@ -161,8 +162,8 @@ func TestConnectDaemonForeignRefusalCarriesStableReasonAndNoOwner(t *testing.T) 
 
 	err := registerAs(t, svc, "user-B", daemonID)
 
-	var connectErr *connect.Error
-	require.ErrorAs(t, err, &connectErr)
+	connectErr := svcerr.ToConnect(err) // the wire form svcerr.Interceptor sends
+	require.NotNil(t, connectErr)
 	require.Equal(t, connect.CodePermissionDenied, connectErr.Code())
 	require.Equal(t, "daemon_id_owned_by_another_user", connectErr.Meta().Get("x-forge-error-reason"),
 		"the refusal must carry a stable machine-readable reason")
@@ -185,7 +186,7 @@ func TestWhoAmINamesOnlyTheCallersAccount(t *testing.T) {
 	require.Empty(t, repo.owners, "WhoAmI must not register or touch any daemon row")
 
 	_, err = svc.WhoAmI(context.Background(), connect.NewRequest(&reliantv1.WhoAmIRequest{}))
-	require.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err),
+	require.Equal(t, connect.CodeUnauthenticated, svcerr.Code(err),
 		"no authenticated principal is a credential problem")
 }
 
@@ -203,7 +204,7 @@ func TestConnectDaemonRefusesSupersedingAnotherUsersLiveConnection(t *testing.T)
 
 	err := registerAs(t, svc, "user-B", daemonID)
 
-	require.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err))
+	require.Equal(t, connect.CodePermissionDenied, svcerr.Code(err))
 	require.NoError(t, victim.closedReason())
 }
 
@@ -218,7 +219,7 @@ func TestValidateAssertedDaemonID(t *testing.T) {
 	for _, bad := range []string{"a.b", "a>b", "a*b", "a b\tc", "a_b", "../x", "a\x00b", string(long), "é"} {
 		err := validateAssertedDaemonID(bad)
 		require.Error(t, err, "%q", bad)
-		require.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+		require.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 	}
 }
 
@@ -226,5 +227,5 @@ func TestConnectDaemonRejectsMalformedAssertedID(t *testing.T) {
 	svc := newTestService(newOwnershipRepo(map[string]string{}))
 	t.Cleanup(svc.Close)
 	err := registerAs(t, svc, "user-B", "evil.>")
-	require.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	require.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 }

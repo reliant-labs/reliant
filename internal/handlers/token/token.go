@@ -3,6 +3,7 @@ package token
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/accesstokenclient"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
@@ -124,15 +126,24 @@ func tokenInfoProto(t tokenauthority.TokenInfo) *reliantv1.TokenInfo {
 	return info
 }
 
+// authorityError is a failed token-authority call as the svcerr kind the rpc
+// returns. The authority may be control-plane's (a remote client), so its error
+// is never the verdict itself: it is the logged cause, and the client reads
+// what this rpc says — except a grant the caller asked for and may not have,
+// which is theirs to correct and is reported in the authority's own words.
 func authorityError(op string, err error) error {
 	switch {
 	case tokenauthority.IsNotFound(err):
-		return svcerr.ToConnect(svcerr.NotFound("token"))
+		return svcerr.WithCause(svcerr.NotFound("token"), err)
 	case tokenauthority.IsInvalidGrant(err):
-		return connect.NewError(connect.CodeInvalidArgument, err)
+		msg := err.Error()
+		var refused *accesstokenclient.RPCError
+		if errors.As(err, &refused) {
+			msg = refused.Message
+		}
+		return svcerr.WithCause(svcerr.InvalidArgument(msg), err)
 	}
-	logging.Error("token authority failed", "op", op, "error", tokenauthority.Describe(err))
-	return svcerr.ToConnect(svcerr.Unavailable("token service unavailable"))
+	return svcerr.WithCause(svcerr.Unavailable("token service unavailable"), fmt.Errorf("token authority %s: %w", op, err))
 }
 
 // CreateToken mints a token acting as the caller. Interactive session only: a
@@ -288,7 +299,8 @@ func (s *Service) UpdateToken(
 	if req.Msg.Scopes != nil {
 		scopes, err = fat.NewSet(req.Msg.GetScopes().GetScopes())
 		if err != nil {
-			return nil, connect.NewError(connect.CodeInvalidArgument, err)
+			// fat's refusal names the scope it does not know: the caller's to fix.
+			return nil, svcerr.InvalidArgument(err.Error())
 		}
 	}
 	if name == nil && scopes == nil {

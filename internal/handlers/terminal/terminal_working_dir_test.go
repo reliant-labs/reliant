@@ -41,14 +41,17 @@ import (
 const projectWorkingDir = "/home/workspace/projects/forge"
 
 // errMissingWorkingDirTransport is terminal.create's failure for a missing
-// directory as the api-server receives it: the daemon's error message,
-// flattened to a string by the NATS router (daemon_router_nats.go).
+// directory as the api-server receives it: the daemon's error message, as the
+// NATS router reports a failure the daemon answered with
+// (toolexec.DaemonReportedFailure, daemon_router_nats.go). Its Error() is
+// `daemon command "terminal.create" failed: <the daemon's message>`.
 //
-// Spelled out rather than built from terminal.ErrWorkingDirUnavailable on
-// purpose. Daemons in the field send this text; if the sentinel's wording
-// changes, the server stops recognising them, and this test is what says so.
-var errMissingWorkingDirTransport = errors.New(`daemon command "terminal.create" failed: create session: ` +
-	`terminal working directory unavailable: ` + projectWorkingDir + ` does not exist`)
+// The daemon's message is spelled out rather than built from
+// terminal.ErrWorkingDirUnavailable on purpose. Daemons in the field send this
+// text; if the sentinel's wording changes, the server stops recognising them,
+// and this test is what says so.
+var errMissingWorkingDirTransport = toolexec.DaemonReportedFailure("terminal.create",
+	`create session: terminal working directory unavailable: `+projectWorkingDir+` does not exist`)
 
 // terminalCreateRouter answers terminal.create with a fixed response or
 // error, and records the create payloads it was sent.
@@ -183,7 +186,8 @@ func TestTerminalWS_MissingWorkingDirIsReportedAsWorkingDirUnavailable(t *testin
 // stream asking for workingDir, returning the stream's first receive.
 func openStreamTerminalAt(t *testing.T, router toolexec.DaemonRouter, workingDir string) (*reliantv1.TerminalStreamOutput, error) {
 	t.Helper()
-	path, handler := reliantv1connect.NewTerminalServiceHandler(NewTestTerminal(t, WithTerminalDeps(Deps{Router: router})))
+	path, handler := reliantv1connect.NewTerminalServiceHandler(NewTestTerminal(t, WithTerminalDeps(Deps{Router: router})),
+		connect.WithInterceptors(svcerr.Interceptor()))
 	mux := http.NewServeMux()
 	mux.Handle(path, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), auth.UserIDContextKey, terminalTestUserID)
@@ -214,7 +218,10 @@ func TestStreamTerminal_MissingWorkingDirIsFailedPrecondition(t *testing.T) {
 	require.Error(t, err)
 	require.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err),
 		"a directory that does not exist is the caller's precondition, not a server fault")
-	require.Contains(t, err.Error(), projectWorkingDir)
+	var cerr *connect.Error
+	require.ErrorAs(t, err, &cerr)
+	require.Equal(t, "create terminal session: create session: terminal working directory unavailable: "+projectWorkingDir+" does not exist",
+		cerr.Message(), "the daemon's words reach the user; the router's do not")
 }
 
 func TestStreamTerminal_SessionCreatedLogsRequestedAndEffectiveWorkingDir(t *testing.T) {

@@ -22,10 +22,10 @@ func TestFsProxyDaemonError_MachineStateIsAUserError(t *testing.T) {
 		"starting":   fmt.Errorf("resolving daemon for command: your machine is still starting: %w", toolexec.ErrDaemonPending),
 		"no machine": fmt.Errorf("resolving daemon for command: %w", toolexec.ErrNoDaemon),
 	} {
-		mapped := fsProxyDaemonError(err)
+		mapped := fsProxyDaemonError("fs.get_tree", err)
 		assert.Equal(t, svcerr.ClassUser, svcerr.Classify(mapped), name)
 	}
-	assert.Equal(t, svcerr.ClassServer, svcerr.Classify(fsProxyDaemonError(errors.New("decode tree: unexpected EOF"))))
+	assert.Equal(t, svcerr.ClassServer, svcerr.Classify(fsProxyDaemonError("fs.get_tree", errors.New("decode tree: unexpected EOF"))))
 }
 
 // levelRecorder keeps the level of every record logged through it.
@@ -48,8 +48,8 @@ func (r *levelRecorder) WithGroup(string) slog.Handler      { return r }
 func TestFsProxyDaemonError_TimeoutLogsAtWarnNotError(t *testing.T) {
 	timeout := fmt.Errorf("daemon command fs.get_tree (subject s) via NATS failed: %w: %w",
 		toolexec.ErrDaemonTimeout, context.DeadlineExceeded)
-	mapped := fsProxyDaemonError(timeout)
-	assert.Equal(t, connect.CodeDeadlineExceeded, connect.CodeOf(mapped))
+	mapped := fsProxyDaemonError("fs.get_tree", timeout)
+	assert.Equal(t, connect.CodeDeadlineExceeded, svcerr.Code(mapped))
 	assert.Equal(t, svcerr.ClassServer, svcerr.Classify(mapped), "still a server condition, still logged")
 
 	rec := &levelRecorder{}

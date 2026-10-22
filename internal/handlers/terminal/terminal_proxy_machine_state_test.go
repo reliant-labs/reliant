@@ -3,7 +3,6 @@ package terminal
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"testing"
 
@@ -36,18 +35,18 @@ var machineStates = []struct {
 }{
 	{
 		name:     "no machine connected to the account (A6, B1)",
-		err:      fmt.Errorf("%w: no machine is connected to your account yet", toolexec.ErrNoDaemon),
+		err:      svcerr.WithMessage(toolexec.ErrNoDaemon, "no daemon available: no machine is connected to your account yet"),
 		wantCode: connect.CodeFailedPrecondition,
 	},
 	{
 		name:     "machine still starting",
-		err:      fmt.Errorf("your machine is still starting: %w", toolexec.ErrDaemonPending),
+		err:      svcerr.WithMessage(toolexec.ErrDaemonPending, "your machine is still starting: "+toolexec.ErrDaemonPending.Error()),
 		wantCode: connect.CodeUnavailable,
 	},
 	{
 		// As daemonRequestError builds it for nats.ErrNoResponders.
 		name:     "no NATS responder for the machine",
-		err:      connect.NewError(connect.CodeUnavailable, svcerr.WithClass(errors.New("no daemon connected for user"), svcerr.ClassUser)),
+		err:      connect.NewError(connect.CodeUnavailable, svcerr.WithClass(svcerr.Unavailable("no daemon connected for user"), svcerr.ClassUser)),
 		wantCode: connect.CodeUnavailable,
 	},
 }

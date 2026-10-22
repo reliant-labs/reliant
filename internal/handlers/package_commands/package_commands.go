@@ -93,8 +93,7 @@ func (s *Service) RunCommand(
 		// Look up worktree to get its path
 		worktree, err := s.deps.Repo.GetWorktree(ctx, worktreeID)
 		if err != nil {
-			return nil, connect.NewError(connect.CodeNotFound,
-				fmt.Errorf("worktree not found: %w", err))
+			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get worktree"))
 		}
 		rootDir = worktree.Path
 	} else if req.Msg.Path != nil && *req.Msg.Path != "" {
@@ -125,8 +124,7 @@ func (s *Service) RunCommand(
 		Env:         req.Msg.Env,
 	})
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal,
-			fmt.Errorf("failed to run command: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to run command"))
 	}
 
 	return connect.NewResponse(&reliantv1.RunPackageCommandResponse{
@@ -168,12 +166,12 @@ func (s *Service) GetProcess(
 ) (*connect.Response[reliantv1.GetPackageProcessResponse], error) {
 	processID := req.Msg.ProcessId
 	if processID == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, nil)
+		return nil, svcerr.InvalidArgument("process_id is required")
 	}
 
 	process, err := s.deps.Processes.GetProcess(processID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, err)
+		return nil, svcerr.WithCause(svcerr.NotFound("process"), err)
 	}
 
 	return connect.NewResponse(&reliantv1.GetPackageProcessResponse{
@@ -188,19 +186,19 @@ func (s *Service) GetProcessLogs(
 ) (*connect.Response[reliantv1.GetPackageProcessLogsResponse], error) {
 	processID := req.Msg.ProcessId
 	if processID == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, nil)
+		return nil, svcerr.InvalidArgument("process_id is required")
 	}
 
 	// Get separate stdout/stderr for backwards compatibility
 	stdout, stderr, err := s.deps.Processes.GetProcessOutput(processID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, err)
+		return nil, svcerr.WithCause(svcerr.NotFound("process"), err)
 	}
 
 	// Get combined interleaved output
 	combinedOutput, err := s.deps.Processes.GetCombinedOutput(processID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, err)
+		return nil, svcerr.WithCause(svcerr.NotFound("process"), err)
 	}
 
 	// Convert to proto format
@@ -226,7 +224,7 @@ func (s *Service) KillProcess(
 ) (*connect.Response[reliantv1.KillPackageProcessResponse], error) {
 	processID := req.Msg.ProcessId
 	if processID == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, nil)
+		return nil, svcerr.InvalidArgument("process_id is required")
 	}
 
 	err := s.deps.Processes.KillProcess(processID)
@@ -237,8 +235,7 @@ func (s *Service) KillProcess(
 				Message: "Process was already stopped",
 			}), nil
 		}
-		return nil, connect.NewError(connect.CodeInternal,
-			fmt.Errorf("failed to kill process: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to kill process"))
 	}
 
 	return connect.NewResponse(&reliantv1.KillPackageProcessResponse{
@@ -253,7 +250,7 @@ func (s *Service) GetCommandFavorites(
 ) (*connect.Response[reliantv1.GetCommandFavoritesResponse], error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok {
-		return nil, connect.NewError(connect.CodeUnauthenticated, nil)
+		return nil, svcerr.ErrUnauthenticated
 	}
 
 	projectID := req.Msg.ProjectId
@@ -264,15 +261,13 @@ func (s *Service) GetCommandFavorites(
 	// Verify project exists and belongs to user
 	_, err := s.deps.Repo.GetProjectWithUserCheck(ctx, projectID, userID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound,
-			fmt.Errorf("project not found: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
 	}
 
 	// Get favorites from database
 	commandKeys, err := s.deps.Repo.ListCommandFavorites(ctx, userID, projectID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal,
-			fmt.Errorf("failed to list command favorites: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list command favorites"))
 	}
 
 	return connect.NewResponse(&reliantv1.GetCommandFavoritesResponse{
@@ -287,7 +282,7 @@ func (s *Service) SetCommandFavorite(
 ) (*connect.Response[reliantv1.SetCommandFavoriteResponse], error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok {
-		return nil, connect.NewError(connect.CodeUnauthenticated, nil)
+		return nil, svcerr.ErrUnauthenticated
 	}
 
 	projectID := req.Msg.ProjectId
@@ -303,8 +298,7 @@ func (s *Service) SetCommandFavorite(
 	// Verify project exists and belongs to user
 	_, err := s.deps.Repo.GetProjectWithUserCheck(ctx, projectID, userID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound,
-			fmt.Errorf("project not found: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
 	}
 
 	// Add or remove favorite based on is_favorite flag
@@ -315,8 +309,7 @@ func (s *Service) SetCommandFavorite(
 	}
 
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal,
-			fmt.Errorf("failed to update command favorite: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to update command favorite"))
 	}
 
 	return connect.NewResponse(&reliantv1.SetCommandFavoriteResponse{

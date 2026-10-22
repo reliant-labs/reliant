@@ -8,6 +8,7 @@ import (
 
 	"connectrpc.com/connect"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -90,8 +91,8 @@ func TestTokenServiceCreateListRevokeFlow(t *testing.T) {
 	if len(otherList.Msg.GetTokens()) != 0 {
 		t.Fatalf("other user sees %d tokens, want 0", len(otherList.Msg.GetTokens()))
 	}
-	if _, err := svc.RevokeToken(tokenAuthCtx("user-2"), req(&reliantv1.RevokeTokenRequest{Id: info.GetId()})); connect.CodeOf(err) != connect.CodeNotFound {
-		t.Errorf("foreign revoke code = %v, want NotFound", connect.CodeOf(err))
+	if _, err := svc.RevokeToken(tokenAuthCtx("user-2"), req(&reliantv1.RevokeTokenRequest{Id: info.GetId()})); svcerr.Code(err) != connect.CodeNotFound {
+		t.Errorf("foreign revoke code = %v, want NotFound", svcerr.Code(err))
 	}
 
 	// Owner revoke kills the token at the authority.
@@ -169,8 +170,8 @@ func TestTokenServiceCreateRejectsMachineCaller(t *testing.T) {
 	_, err := svc.CreateToken(machineAuthCtx("user-1"), req(&reliantv1.CreateTokenRequest{
 		Name: "x", Kind: reliantv1.TokenKind_TOKEN_KIND_API,
 	}))
-	if connect.CodeOf(err) != connect.CodePermissionDenied {
-		t.Fatalf("machine-authed create code = %v, want PermissionDenied", connect.CodeOf(err))
+	if svcerr.Code(err) != connect.CodePermissionDenied {
+		t.Fatalf("machine-authed create code = %v, want PermissionDenied", svcerr.Code(err))
 	}
 	if !strings.Contains(err.Error(), "interactive session") {
 		t.Errorf("error = %v, want an interactive-session message", err)
@@ -205,8 +206,8 @@ func TestTokenServiceCreateValidation(t *testing.T) {
 		"no kind":      {Name: "x"},
 	}
 	for name, msg := range cases {
-		if _, err := svc.CreateToken(ctx, req(msg)); connect.CodeOf(err) != connect.CodeInvalidArgument {
-			t.Errorf("%s: code = %v, want InvalidArgument", name, connect.CodeOf(err))
+		if _, err := svc.CreateToken(ctx, req(msg)); svcerr.Code(err) != connect.CodeInvalidArgument {
+			t.Errorf("%s: code = %v, want InvalidArgument", name, svcerr.Code(err))
 		}
 	}
 }
@@ -214,20 +215,20 @@ func TestTokenServiceCreateValidation(t *testing.T) {
 func TestTokenServiceRequiresIdentity(t *testing.T) {
 	svc, _ := newTokenSvc(t)
 	anon := context.Background()
-	if _, err := svc.CreateToken(anon, req(&reliantv1.CreateTokenRequest{Name: "x", Kind: reliantv1.TokenKind_TOKEN_KIND_API})); connect.CodeOf(err) != connect.CodeUnauthenticated {
-		t.Errorf("create without identity code = %v, want Unauthenticated", connect.CodeOf(err))
+	if _, err := svc.CreateToken(anon, req(&reliantv1.CreateTokenRequest{Name: "x", Kind: reliantv1.TokenKind_TOKEN_KIND_API})); svcerr.Code(err) != connect.CodeUnauthenticated {
+		t.Errorf("create without identity code = %v, want Unauthenticated", svcerr.Code(err))
 	}
-	if _, err := svc.ListTokens(anon, req(&reliantv1.ListTokensRequest{})); connect.CodeOf(err) != connect.CodeUnauthenticated {
-		t.Errorf("list without identity code = %v, want Unauthenticated", connect.CodeOf(err))
+	if _, err := svc.ListTokens(anon, req(&reliantv1.ListTokensRequest{})); svcerr.Code(err) != connect.CodeUnauthenticated {
+		t.Errorf("list without identity code = %v, want Unauthenticated", svcerr.Code(err))
 	}
-	if _, err := svc.RevokeToken(anon, req(&reliantv1.RevokeTokenRequest{Id: "x"})); connect.CodeOf(err) != connect.CodeUnauthenticated {
-		t.Errorf("revoke without identity code = %v, want Unauthenticated", connect.CodeOf(err))
+	if _, err := svc.RevokeToken(anon, req(&reliantv1.RevokeTokenRequest{Id: "x"})); svcerr.Code(err) != connect.CodeUnauthenticated {
+		t.Errorf("revoke without identity code = %v, want Unauthenticated", svcerr.Code(err))
 	}
 }
 
 func TestTokenServiceRevokeRequiresID(t *testing.T) {
 	svc, _ := newTokenSvc(t)
-	if _, err := svc.RevokeToken(tokenAuthCtx("user-1"), req(&reliantv1.RevokeTokenRequest{Id: ""})); connect.CodeOf(err) != connect.CodeInvalidArgument {
-		t.Errorf("empty id code = %v, want InvalidArgument", connect.CodeOf(err))
+	if _, err := svc.RevokeToken(tokenAuthCtx("user-1"), req(&reliantv1.RevokeTokenRequest{Id: ""})); svcerr.Code(err) != connect.CodeInvalidArgument {
+		t.Errorf("empty id code = %v, want InvalidArgument", svcerr.Code(err))
 	}
 }

@@ -3,17 +3,19 @@ package filepreview
 
 import (
 	"context"
-	"errors"
 	"path/filepath"
 	"strings"
+
+	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/ospath"
 )
 
 // ErrPathOutsideBase is returned when a RELATIVE path climbs out of its base
-// directory. That is always a traversal attempt and is always refused.
-var ErrPathOutsideBase = errors.New("requested path is outside base directory")
+// directory. That is always a traversal attempt and is always refused. It is a
+// PermissionDenied kind (svcerr), so an rpc returns it as it is.
+var ErrPathOutsideBase = svcerr.PermissionDenied("requested path is outside base directory")
 
 // ErrAbsolutePathOutsideBase is returned when an ABSOLUTE path names a location
 // outside the workspace and the caller is not permitted to read host files.
@@ -22,8 +24,9 @@ var ErrPathOutsideBase = errors.New("requested path is outside base directory")
 // different acts: a relative path escaping its base is a traversal, while an
 // absolute path is a location the user named outright. Callers surface them
 // with different messages, so collapsing them into one sentinel would make the
-// UI unable to explain which happened.
-var ErrAbsolutePathOutsideBase = errors.New("absolute path is outside the workspace")
+// UI unable to explain which happened. A PermissionDenied kind, like
+// ErrPathOutsideBase.
+var ErrAbsolutePathOutsideBase = svcerr.PermissionDenied("absolute path is outside the workspace")
 
 // PathScope selects how an absolute requested path is treated.
 type PathScope int

@@ -67,8 +67,10 @@ func gitSvc(t *testing.T, src *fakeGitTokens) (*Service, *tokenauthority.Memory)
 
 func wantCode(t *testing.T, err error, code connect.Code, reason string) {
 	t.Helper()
-	var ce *connect.Error
-	if !errors.As(err, &ce) || ce.Code() != code {
+	// What the svcerr interceptor puts on the wire: the code and the reason
+	// header, whether the handler returned a svcerr kind or a *connect.Error.
+	ce := svcerr.ToConnect(err)
+	if ce == nil || ce.Code() != code {
 		t.Fatalf("err = %v, want code %v", err, code)
 	}
 	if got := ce.Meta().Get(svcerr.ReasonHeader); got != reason {

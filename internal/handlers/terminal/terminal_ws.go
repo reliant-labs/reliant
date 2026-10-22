@@ -472,7 +472,7 @@ const terminalMachineNotAnswering = "not_answering"
 
 // terminalMachineState names why a terminal could not be created when the
 // reason is the machine's state rather than the command itself — the
-// distinctions daemonerr.MachineStateConnectError draws for every daemon-proxy
+// distinctions daemonerr.MachineState draws for every daemon-proxy
 // RPC. ok is false for anything else, which is a real failure.
 //
 //   - no_machine, starting_or_asleep, not_connected (NATS had no responder):

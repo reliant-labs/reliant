@@ -9,6 +9,7 @@ import (
 
 	"connectrpc.com/connect"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
@@ -147,7 +148,7 @@ func TestExchangeToken_Audience(t *testing.T) {
 			t.Errorf("issuer %s, audience %q: %v", tc.issuer, tc.audience, err)
 		}
 		if !tc.ok {
-			if connect.CodeOf(err) != connect.CodeFailedPrecondition {
+			if svcerr.Code(err) != connect.CodeFailedPrecondition {
 				t.Errorf("issuer %s, audience %q: err = %v, want FailedPrecondition", tc.issuer, tc.audience, err)
 			}
 			if n := len(listNames(t, authority, "user-1")); n != 1 {
@@ -162,7 +163,7 @@ func TestExchangeToken_SelfHostedIssuesNothing(t *testing.T) {
 	svc := newTokenService(t, authority, TokenControlPlane{})
 	bearer := mintSession(t, authority, "user-1", tokenauthority.MintRequest{Scopes: fullDaemon})
 	_, err := svc.ExchangeToken(context.Background(), exchangeReq(bearer, &reliantv1.ExchangeTokenRequest{Audience: testControlPlane}))
-	if connect.CodeOf(err) != connect.CodeFailedPrecondition || !strings.Contains(err.Error(), "no control plane") {
+	if svcerr.Code(err) != connect.CodeFailedPrecondition || !strings.Contains(err.Error(), "no control plane") {
 		t.Fatalf("err = %v, want FailedPrecondition naming the missing control plane", err)
 	}
 }
@@ -186,7 +187,7 @@ func TestExchangeToken_ScopeRequests(t *testing.T) {
 			Audience: testControlPlane, Scopes: tc.scopes,
 		}))
 		if tc.code != 0 {
-			if connect.CodeOf(err) != tc.code {
+			if svcerr.Code(err) != tc.code {
 				t.Errorf("scopes %v: err = %v, want %v", tc.scopes, err, tc.code)
 			}
 			continue
@@ -214,7 +215,7 @@ func TestExchangeToken_RefusesNonSessionCallers(t *testing.T) {
 	// It does act as user-1 in Memory (acting user = minting user), but holds
 	// no session scope: it is a deploy token, not a Reliant session.
 	_, err = svc.ExchangeToken(ctx, exchangeReq(orgToken.Plaintext, &reliantv1.ExchangeTokenRequest{Audience: testControlPlane}))
-	if connect.CodeOf(err) != connect.CodePermissionDenied {
+	if svcerr.Code(err) != connect.CodePermissionDenied {
 		t.Errorf("a non-session token: err = %v, want PermissionDenied", err)
 	}
 
@@ -224,7 +225,7 @@ func TestExchangeToken_RefusesNonSessionCallers(t *testing.T) {
 		if header != "" {
 			r.Header().Set("Authorization", header)
 		}
-		if _, err := svc.ExchangeToken(ctx, r); connect.CodeOf(err) != connect.CodeUnauthenticated {
+		if _, err := svc.ExchangeToken(ctx, r); svcerr.Code(err) != connect.CodeUnauthenticated {
 			t.Errorf("header %q: err = %v, want Unauthenticated", header, err)
 		}
 	}
@@ -235,7 +236,7 @@ func TestExchangeToken_RefusesNonSessionCallers(t *testing.T) {
 	if err := authority.RevokeForUser(ctx, "user-1", p.TokenID); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := svc.ExchangeToken(ctx, exchangeReq(bearer, &reliantv1.ExchangeTokenRequest{Audience: testControlPlane})); connect.CodeOf(err) != connect.CodeUnauthenticated {
+	if _, err := svc.ExchangeToken(ctx, exchangeReq(bearer, &reliantv1.ExchangeTokenRequest{Audience: testControlPlane})); svcerr.Code(err) != connect.CodeUnauthenticated {
 		t.Errorf("revoked: err = %v, want Unauthenticated", err)
 	}
 }
@@ -263,7 +264,7 @@ func TestExchangeToken_NeverCrossesOrgs(t *testing.T) {
 	svc := newTokenService(t, orgShiftAuthority{Memory: mem, parentToken: bearer}, TokenControlPlane{Issuer: testControlPlane})
 
 	_, err := svc.ExchangeToken(context.Background(), exchangeReq(bearer, &reliantv1.ExchangeTokenRequest{Audience: testControlPlane}))
-	if connect.CodeOf(err) != connect.CodeFailedPrecondition {
+	if svcerr.Code(err) != connect.CodeFailedPrecondition {
 		t.Fatalf("err = %v, want FailedPrecondition", err)
 	}
 	// The mis-scoped token was revoked, leaving only the parent live.

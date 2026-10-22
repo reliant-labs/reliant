@@ -4,7 +4,6 @@ package background
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"time"
 
 	"connectrpc.com/connect"
@@ -15,6 +14,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/daemonerr"
 	"github.com/reliant-labs/reliant/internal/processproto"
+	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
 // bgListTimeoutMs bounds the daemon round trip for a process LIST.
@@ -33,7 +33,7 @@ const bgListTimeoutMs int32 = 5_000
 func (s *Service) getUserID(ctx context.Context) (string, error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok {
-		return "", fmt.Errorf("user ID not found in context")
+		return "", svcerr.Unauthenticated("user ID not found in context")
 	}
 	return userID, nil
 }
@@ -41,25 +41,40 @@ func (s *Service) getUserID(ctx context.Context) (string, error) {
 func (s *Service) sendCommand(ctx context.Context, userID, commandType string, req any, resp any, timeoutMs int32) error {
 	payload, err := json.Marshal(req)
 	if err != nil {
-		return connect.NewError(connect.CodeInternal, fmt.Errorf("marshal request: %w", err))
+		return svcerr.WrapOr(err, svcerr.Internal("marshal request"))
 	}
 
 	respBytes, err := s.deps.Router.SendDaemonCommand(ctx, userID, commandType, payload, timeoutMs)
 	if err != nil {
-		// A machine that is starting, asleep or absent is not a server
-		// fault: Unavailable while it is on its way, FailedPrecondition when
-		// the user has none. ListProcesses used to return the second as
-		// Internal (ELECTRON-A6).
-		if cerr, ok := daemonerr.MachineStateConnectError("", err); ok {
-			return cerr
-		}
-		return connect.NewError(connect.CodeInternal, err)
+		return daemonFailure("daemon command "+commandType, err)
 	}
 
 	if err := json.Unmarshal(respBytes, resp); err != nil {
-		return connect.NewError(connect.CodeInternal, fmt.Errorf("unmarshal response: %w", err))
+		return svcerr.WrapOr(err, svcerr.Internal("unmarshal response"))
 	}
 	return nil
+}
+
+// daemonFailure is a failed daemon round trip as the svcerr kind the rpc
+// returns. A machine that is starting, asleep or absent is not a server
+// fault: Unavailable while it is on its way, FailedPrecondition when the user
+// has none (daemonerr.MachineState; ListProcesses used to return the second as
+// Internal, ELECTRON-A6). A daemon older than this server is FailedPrecondition
+// in the daemon's own words (daemonerr.Outdated). Anything else is Internal,
+// saying what was being done: the daemon's own words reach the user, the
+// router's and the transport's stay on the error as its logged cause.
+func daemonFailure(doing string, err error) error {
+	if daemonerr.IsOutdated(err) {
+		return daemonerr.Outdated(err)
+	}
+	if serr, ok := daemonerr.MachineState("", err); ok {
+		return serr
+	}
+	msg := doing + " failed"
+	if text, ok := toolexec.DaemonReportedText(err); ok {
+		msg += ": " + text
+	}
+	return svcerr.WithCause(svcerr.Internal(msg), err)
 }
 
 // ListProcesses returns all background processes.
@@ -69,7 +84,7 @@ func (s *Service) ListProcesses(
 ) (*connect.Response[reliantv1.ListBackgroundProcessesResponse], error) {
 	userID, err := s.getUserID(ctx)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnauthenticated, err)
+		return nil, err
 	}
 
 	var cmdResp []daemonProcessInfo
@@ -117,7 +132,7 @@ func (s *Service) GetProcessOutput(
 ) (*connect.Response[reliantv1.GetProcessOutputResponse], error) {
 	userID, err := s.getUserID(ctx)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnauthenticated, err)
+		return nil, err
 	}
 
 	if req.Msg.ProcessId == "" {
@@ -150,7 +165,7 @@ func (s *Service) KillProcess(
 ) (*connect.Response[reliantv1.KillProcessResponse], error) {
 	userID, err := s.getUserID(ctx)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnauthenticated, err)
+		return nil, err
 	}
 
 	if req.Msg.ProcessId == "" {
@@ -180,7 +195,7 @@ func (s *Service) StreamProcessOutput(
 ) error {
 	userID, err := s.getUserID(ctx)
 	if err != nil {
-		return connect.NewError(connect.CodeUnauthenticated, err)
+		return err
 	}
 
 	if req.Msg.ProcessId == "" {
@@ -189,7 +204,7 @@ func (s *Service) StreamProcessOutput(
 
 	outputCh, unsub, err := s.deps.Router.SubscribeProcessOutput(ctx, userID, req.Msg.ProcessId, req.Msg.NewOnly)
 	if err != nil {
-		return connect.NewError(connect.CodeInternal, fmt.Errorf("subscribe process output: %w", err))
+		return daemonFailure("subscribe process output", err)
 	}
 	defer unsub()
 

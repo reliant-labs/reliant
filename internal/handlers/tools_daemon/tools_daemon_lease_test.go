@@ -20,6 +20,7 @@ import (
 	"golang.org/x/net/http2/h2c"
 
 	"github.com/reliant-labs/forge/pkg/serverkit"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -254,7 +255,7 @@ func TestSweeperReapsAStreamSilentInboundWhileTheGatewayKeepsSending(t *testing.
 	default:
 		t.Fatal("reaping must close the connection so its stream handler ends and the daemon redials")
 	}
-	require.Equal(t, connect.CodeUnavailable, connect.CodeOf(silent.closedReason()),
+	require.Equal(t, connect.CodeUnavailable, svcerr.Code(silent.closedReason()),
 		"the stream must end with a status the daemon treats as retryable, not a bare EOF")
 	require.Equal(t, []string{silent.daemonID}, repo.released)
 	require.True(t, svc.HasConnectedDaemonsForUser(reading.userID),
@@ -451,8 +452,8 @@ func TestRegistryReportsUnavailableRatherThanDisconnectedWhenLivenessCannotBeRea
 	if err == nil {
 		t.Fatalf("ListDaemons answered %v for a daemon whose liveness it could not read", resp.Msg.GetDaemons()[0].GetStatus())
 	}
-	require.Equal(t, connect.CodeUnavailable, connect.CodeOf(err))
+	require.Equal(t, connect.CodeUnavailable, svcerr.Code(err))
 
 	_, err = registry.GetDaemon(ctx, connect.NewRequest(&reliantv1.GetDaemonRequest{DaemonId: daemon.ID}))
-	require.Equal(t, connect.CodeUnavailable, connect.CodeOf(err))
+	require.Equal(t, connect.CodeUnavailable, svcerr.Code(err))
 }

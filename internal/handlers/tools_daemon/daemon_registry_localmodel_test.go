@@ -4,7 +4,6 @@ package tools_daemon
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"log/slog"
 	"sync"
 	"testing"
@@ -15,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/encoding/protojson"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -309,20 +309,20 @@ func TestDaemonRegistry_RefreshLocalModels(t *testing.T) {
 	assert.Equal(t, "ollama", resp.Msg.GetLocalModels().GetEndpoints()[0].GetId())
 
 	_, err = svc.RefreshLocalModels(userCtx("user-1"), connect.NewRequest(&reliantv1.RefreshLocalModelsRequest{DaemonId: "offline"}))
-	assert.Equal(t, connect.CodeUnavailable, connect.CodeOf(err), "offline daemon => Unavailable")
+	assert.Equal(t, connect.CodeUnavailable, svcerr.Code(err), "offline daemon => Unavailable")
 
 	_, err = svc.RefreshLocalModels(userCtx("user-1"), connect.NewRequest(&reliantv1.RefreshLocalModelsRequest{DaemonId: "theirs"}))
-	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err), "another user's daemon is indistinguishable from absent")
+	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err), "another user's daemon is indistinguishable from absent")
 
 	_, err = svc.RefreshLocalModels(context.Background(), connect.NewRequest(&reliantv1.RefreshLocalModelsRequest{DaemonId: "online"}))
-	assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeUnauthenticated, svcerr.Code(err))
 
 	_, err = svc.RefreshLocalModels(userCtx("user-1"), connect.NewRequest(&reliantv1.RefreshLocalModelsRequest{}))
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 
 	router.refreshErr = &toolexec.LocalModelDaemonUnavailableError{DaemonID: "online", Reason: "no inventory within 10s"}
 	_, err = svc.RefreshLocalModels(userCtx("user-1"), connect.NewRequest(&reliantv1.RefreshLocalModelsRequest{DaemonId: "online"}))
-	assert.Equal(t, connect.CodeUnavailable, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeUnavailable, svcerr.Code(err))
 	assert.Contains(t, err.Error(), "online")
 }
 
@@ -361,8 +361,6 @@ func TestDaemonRegistry_SetLocalModelEndpoints(t *testing.T) {
 	}
 	assert.Equal(t, before, len(router.commands), "no command may reach an offline or foreign daemon")
 
-	var ce *connect.Error
 	_, err = svc.SetLocalModelEndpoints(userCtx("user-1"), connect.NewRequest(&reliantv1.SetLocalModelEndpointsRequest{DaemonId: "offline"}))
-	require.True(t, errors.As(err, &ce))
-	assert.Equal(t, connect.CodeUnavailable, ce.Code())
+	assert.Equal(t, connect.CodeUnavailable, svcerr.Code(err))
 }

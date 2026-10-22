@@ -25,6 +25,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/machinewake"
 	"github.com/reliant-labs/reliant/internal/ospath"
+	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
 // The service forwards every request to a daemon via DaemonCommand
@@ -42,7 +43,7 @@ func (s *Service) wake() machinewake.Service {
 func (s *Service) getUserID(ctx context.Context) (string, error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok {
-		return "", fmt.Errorf("user ID not found in context")
+		return "", svcerr.Unauthenticated("user ID not found in context")
 	}
 	return userID, nil
 }
@@ -68,7 +69,7 @@ func (s *Service) requireProjectBase(ctx context.Context, projectID string, work
 	}
 	basePath, err := filepreview.ResolveBasePath(ctx, s.deps.Repo, projectID, worktreeID, chatID)
 	if err != nil {
-		return "", connect.NewError(connect.CodeNotFound, fmt.Errorf("resolve project path: %w", err))
+		return "", svcerr.WrapOr(err, svcerr.Internal("failed to resolve project path"))
 	}
 	if strings.TrimSpace(basePath) == "" {
 		return "", svcerr.ToConnect(svcerr.FailedPrecondition(fmt.Sprintf("project %q has no workspace path to scope this request to", projectID)))
@@ -127,8 +128,7 @@ func (s *Service) workspaceDaemonID(ctx context.Context, userID, projectID strin
 		case errors.Is(err, core.ErrWorktreeNotFound):
 			// A missing row means "no owner", as it does for tool routing.
 		case err != nil:
-			logging.ErrorContext(ctx, "[FSProxy] Failed to load worktree to route request", "error", err, "worktreeID", *worktreeID)
-			return machinewake.Target{}, svcerr.ToConnect(svcerr.Internal("failed to resolve the workspace's machine"))
+			return machinewake.Target{}, svcerr.WrapOr(err, svcerr.Internal("failed to resolve the workspace's machine"))
 		default:
 			worktree = wt
 		}
@@ -145,8 +145,7 @@ func (s *Service) workspaceDaemonID(ctx context.Context, userID, projectID strin
 		// routing a request without a chat gets rather than fail the tree.
 		return machinewake.Target{DaemonID: owner}, nil
 	case err != nil:
-		logging.ErrorContext(ctx, "[FSProxy] Failed to load chat to route request", "error", err, "chatID", *chatID)
-		return machinewake.Target{}, svcerr.ToConnect(svcerr.Internal("failed to resolve the chat's machine"))
+		return machinewake.Target{}, svcerr.WrapOr(err, svcerr.Internal("failed to resolve the chat's machine"))
 	case chat.UserID != userID:
 		return machinewake.Target{}, svcerr.ToConnect(svcerr.NotFound("chat"))
 	case chat.ProjectID != projectID:
@@ -160,8 +159,7 @@ func (s *Service) workspaceDaemonID(ctx context.Context, userID, projectID strin
 	}
 	daemonID, err := daemonplacement.ChatDaemonID(ctx, s.deps.Repo, chat)
 	if err != nil {
-		logging.ErrorContext(ctx, "[FSProxy] Failed to resolve the chat's machine", "error", err, "chatID", chat.ID)
-		return machinewake.Target{}, svcerr.ToConnect(svcerr.Internal("failed to resolve the chat's machine"))
+		return machinewake.Target{}, svcerr.WrapOr(err, svcerr.Internal("failed to resolve the chat's machine"))
 	}
 	if daemonID != "" {
 		return machinewake.Target{DaemonID: daemonID, NoMachine: chat.NoMachine}, nil
@@ -181,7 +179,7 @@ func (s *Service) workspaceDaemonID(ctx context.Context, userID, projectID strin
 // The returned path is always absolute, so "" and "/" never cross the wire to
 // the daemon.
 //
-// Errors are already typed connect errors — PermissionDenied for an escape,
+// Errors are already svcerr kinds — PermissionDenied for an escape,
 // InvalidArgument for a malformed request — so callers return them unchanged.
 // Re-wrapping them as NotFound (which every call site used to do) reported a
 // refused traversal as a missing file.
@@ -189,14 +187,17 @@ func (w workspaceScope) resolve(requestedPath string) (string, error) {
 	return validateWorkspacePath(w.basePath, requestedPath, filepreview.ScopeBaseOnly)
 }
 
-// validateWorkspacePath is the single place this package turns the shared path
-// contract into transport errors.
+// validateWorkspacePath is the single place this package applies the shared
+// path contract.
 //
 // The contract itself is filepreview.ValidatePathScoped and lives there alone:
 // "" and "/" name the workspace root, a relative path is joined onto the base
 // and must stay beneath it, and an absolute path means the location it names.
 // Every path-scoped rpc resolves through this function, so none can drift from
-// that rule or report it with a different code.
+// that rule or report it with a different code. The code is the contract's
+// own: its refusals are PermissionDenied kinds (filepreview.ErrPathOutsideBase,
+// ErrAbsolutePathOutsideBase), and anything else it fails with is a malformed
+// request.
 func validateWorkspacePath(basePath, requestedPath string, scope filepreview.PathScope) (string, error) {
 	absFullPath, err := filepreview.ValidatePathScoped(basePath, requestedPath, scope)
 	if err != nil {
@@ -207,14 +208,9 @@ func validateWorkspacePath(basePath, requestedPath string, scope filepreview.Pat
 		// request resolved to (a chat on a worktree whose base is not under
 		// the project root, say). Both are needed, so both are logged here,
 		// once, at the single place the refusal is produced.
-		if errors.Is(err, filepreview.ErrPathOutsideBase) || errors.Is(err, filepreview.ErrAbsolutePathOutsideBase) {
-			logging.Warn("Refused a path outside the workspace",
-				"requested_path", requestedPath, "base_path", basePath, "scope", scope, "error", err)
-			return "", connect.NewError(connect.CodePermissionDenied, err)
-		}
-		logging.Warn("Rejected a malformed workspace path",
+		logging.Warn("Refused a workspace path",
 			"requested_path", requestedPath, "base_path", basePath, "scope", scope, "error", err)
-		return "", connect.NewError(connect.CodeInvalidArgument, err)
+		return "", svcerr.WrapOr(err, svcerr.InvalidArgument("malformed workspace path"))
 	}
 	return absFullPath, nil
 }
@@ -245,7 +241,7 @@ func projectRelativePrefix(basePath, resolvedPath string) string {
 func (s *Service) sendCommand(ctx context.Context, userID string, target machinewake.Target, commandType string, req any, resp any, timeoutMs int32) error {
 	payload, err := json.Marshal(req)
 	if err != nil {
-		return connect.NewError(connect.CodeInternal, fmt.Errorf("marshal request: %w", err))
+		return svcerr.WrapOr(err, svcerr.Internal("marshal request"))
 	}
 
 	var respBytes []byte
@@ -259,11 +255,11 @@ func (s *Service) sendCommand(ctx context.Context, userID string, target machine
 		// which machinewake.NewInterceptor turns into Unavailable + DaemonWaking
 		// whatever code is chosen below.
 		err = s.wake().AfterFailure(ctx, userID, target, err)
-		return fsProxyDaemonError(err)
+		return fsProxyDaemonError(commandType, err)
 	}
 
 	if err := json.Unmarshal(respBytes, resp); err != nil {
-		return connect.NewError(connect.CodeInternal, fmt.Errorf("unmarshal response: %w", err))
+		return svcerr.WrapOr(err, svcerr.Internal("unmarshal response"))
 	}
 	return nil
 }
@@ -278,26 +274,44 @@ func (s *Service) sendCommand(ctx context.Context, userID string, target machine
 //   - no machine at all is FailedPrecondition: nothing to wait for, and the
 //     file tree says "no machine" instead of an error;
 //   - connected but too busy to answer in time is DeadlineExceeded (see
-//     daemonerr.MachineStateConnectError).
+//     daemonerr.MachineState).
 //
 // The path the request named not being on the machine — a folder the user
 // deleted, a worktree that was removed, a checkout never cloned there — is the
 // state of the user's disk too: NotFound. As Internal it reached Sentry from
 // both the server and the browser (ELECTRON-AW, ELECTRON-9Y).
 //
+// A daemon older than this server is FailedPrecondition in the daemon's own
+// words (daemonerr.Outdated): retrying cannot help, updating the machine does.
+//
 // Only what is left is Internal. Mapping the not-connected case there (it used
 // to fall through) logged an ERROR "rpc failed" for every file-tree poll while
 // a machine restarted — 117 in five hours for one user's crash-looping machine
 // on 2026-10-09 — and handed the UI a 500-class error for a machine that was
 // merely starting.
-func fsProxyDaemonError(err error) error {
-	if cerr, ok := daemonerr.MachineStateConnectError("", err); ok {
-		return cerr
+//
+// What the client reads: the daemon's own words (the path it could not find,
+// the read that failed) reach the user, whose machine it is; the router's and
+// the transport's stay on the error as its logged cause.
+func fsProxyDaemonError(commandType string, err error) error {
+	if daemonerr.IsOutdated(err) {
+		return daemonerr.Outdated(err)
 	}
+	if serr, ok := daemonerr.MachineState("", err); ok {
+		return serr
+	}
+	text, reported := toolexec.DaemonReportedText(err)
 	if isMissingPathError(err) {
-		return connect.NewError(connect.CodeNotFound, err)
+		if !reported {
+			text = "path not found on this machine"
+		}
+		return svcerr.WithCause(svcerr.WithMessage(svcerr.ErrNotFound, text), err)
 	}
-	return connect.NewError(connect.CodeInternal, err)
+	msg := "daemon command " + commandType + " failed"
+	if reported {
+		msg += ": " + text
+	}
+	return svcerr.WithCause(svcerr.Internal(msg), err)
 }
 
 // GetFileTree returns the file tree structure for a project.
@@ -307,7 +321,7 @@ func (s *Service) GetFileTree(
 ) (*connect.Response[reliantv1.GetFileTreeResponse], error) {
 	userID, err := s.getUserID(ctx)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnauthenticated, err)
+		return nil, err
 	}
 
 	scope, err := s.resolveScope(ctx, userID, req.Msg.ProjectId, req.Msg.WorktreeId, req.Msg.ChatId)
@@ -418,7 +432,7 @@ func (s *Service) GetFileContent(
 ) (*connect.Response[reliantv1.GetFileContentResponse], error) {
 	userID, err := s.getUserID(ctx)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnauthenticated, err)
+		return nil, err
 	}
 
 	scope, err := s.resolveScope(ctx, userID, req.Msg.ProjectId, req.Msg.WorktreeId, req.Msg.ChatId)
@@ -456,7 +470,7 @@ func (s *Service) SaveFileContent(
 ) (*connect.Response[reliantv1.SaveFileContentResponse], error) {
 	userID, err := s.getUserID(ctx)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnauthenticated, err)
+		return nil, err
 	}
 
 	scope, err := s.resolveScope(ctx, userID, req.Msg.ProjectId, req.Msg.WorktreeId, req.Msg.ChatId)
@@ -494,7 +508,7 @@ func (s *Service) GetFileMetadata(
 ) (*connect.Response[reliantv1.GetFileMetadataResponse], error) {
 	userID, err := s.getUserID(ctx)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnauthenticated, err)
+		return nil, err
 	}
 
 	scope, err := s.resolveScope(ctx, userID, req.Msg.ProjectId, req.Msg.WorktreeId, req.Msg.ChatId)
@@ -549,7 +563,7 @@ func (s *Service) GetFilePreviewInfo(
 ) (*connect.Response[reliantv1.GetFilePreviewInfoResponse], error) {
 	userID, err := s.getUserID(ctx)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnauthenticated, err)
+		return nil, err
 	}
 
 	scope, err := s.resolveScope(ctx, userID, req.Msg.ProjectId, req.Msg.WorktreeId, req.Msg.ChatId)
@@ -640,7 +654,7 @@ func (s *Service) GetFilePreview(
 ) (*connect.Response[reliantv1.GetFilePreviewResponse], error) {
 	userID, err := s.getUserID(ctx)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnauthenticated, err)
+		return nil, err
 	}
 	if strings.TrimSpace(req.Msg.Path) == "" {
 		return nil, svcerr.ToConnect(svcerr.InvalidArgument("path is required"))
@@ -684,7 +698,7 @@ func (s *Service) GetFilePreview(
 	}
 	content, err := base64.StdEncoding.DecodeString(bin.Data)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("decode preview bytes: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("decode preview bytes"))
 	}
 
 	return connect.NewResponse(&reliantv1.GetFilePreviewResponse{
@@ -708,7 +722,7 @@ func (s *Service) CreateFileOrFolder(
 ) (*connect.Response[reliantv1.CreateFileOrFolderResponse], error) {
 	userID, err := s.getUserID(ctx)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnauthenticated, err)
+		return nil, err
 	}
 
 	scope, err := s.resolveScope(ctx, userID, req.Msg.ProjectId, req.Msg.WorktreeId, req.Msg.ChatId)
@@ -762,7 +776,7 @@ func (s *Service) DeleteFileOrFolder(
 ) (*connect.Response[reliantv1.DeleteFileOrFolderResponse], error) {
 	userID, err := s.getUserID(ctx)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnauthenticated, err)
+		return nil, err
 	}
 
 	scope, err := s.resolveScope(ctx, userID, req.Msg.ProjectId, req.Msg.WorktreeId, req.Msg.ChatId)
@@ -795,7 +809,7 @@ func (s *Service) CopyFile(
 ) (*connect.Response[reliantv1.CopyFileResponse], error) {
 	userID, err := s.getUserID(ctx)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnauthenticated, err)
+		return nil, err
 	}
 
 	// Both endpoints are confined, not merely joined: filepath.Join(base,
@@ -840,7 +854,7 @@ func (s *Service) SearchFiles(
 ) (*connect.Response[reliantv1.SearchFilesResponse], error) {
 	userID, err := s.getUserID(ctx)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnauthenticated, err)
+		return nil, err
 	}
 
 	searchPath := ""
@@ -936,7 +950,7 @@ func (s *Service) ReplaceInFiles(
 ) (*connect.Response[reliantv1.ReplaceInFilesResponse], error) {
 	userID, err := s.getUserID(ctx)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnauthenticated, err)
+		return nil, err
 	}
 
 	// base_dir is the only thing bounding this walk. Omitting it (which an
@@ -1019,7 +1033,7 @@ func (s *Service) ListDirectory(
 ) (*connect.Response[reliantv1.ListDirectoryResponse], error) {
 	userID, err := s.getUserID(ctx)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnauthenticated, err)
+		return nil, err
 	}
 
 	path := req.Msg.GetPath()
@@ -1073,7 +1087,7 @@ func (s *Service) CreateDirectory(
 ) (*connect.Response[reliantv1.CreateDirectoryResponse], error) {
 	userID, err := s.getUserID(ctx)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeUnauthenticated, err)
+		return nil, err
 	}
 
 	path := req.Msg.Path

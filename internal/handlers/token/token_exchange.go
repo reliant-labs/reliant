@@ -126,7 +126,7 @@ func (s *Service) ExchangeToken(
 	}
 	requested, err := requestedExchangeScopes(req.Msg.GetScopes())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return nil, err
 	}
 	if subject.Resource != nil && subject.Resource.Kind != fat.ResourceDaemon {
 		return nil, svcerr.ToConnect(svcerr.PermissionDenied(fmt.Sprintf(
@@ -203,8 +203,7 @@ func (s *Service) sessionCredential(ctx context.Context, header http.Header) (*f
 		return nil, svcerr.ToConnect(svcerr.Unauthenticated("this Reliant credential is no longer valid; sign in to Reliant again (`reliant auth login` / the app)"))
 	}
 	if err != nil {
-		logging.ErrorContext(ctx, "token authority failed", "op", "exchange-introspect", "error", tokenauthority.Describe(err))
-		return nil, svcerr.ToConnect(svcerr.Unavailable("token service unavailable"))
+		return nil, svcerr.WithCause(svcerr.Unavailable("token service unavailable"), err)
 	}
 	if strings.TrimSpace(subject.ActingUserID) == "" {
 		return nil, svcerr.ToConnect(svcerr.PermissionDenied("an organization token acts as no one, so there is no session to exchange; present it to the control plane directly"))
@@ -227,8 +226,7 @@ func (s *Service) confirmSameOrg(ctx context.Context, userID string, minted toke
 			"error", tokenauthority.Describe(revokeErr))
 	}
 	if err != nil {
-		logging.ErrorContext(ctx, "token authority failed", "op", "exchange-confirm", "error", tokenauthority.Describe(err))
-		return svcerr.ToConnect(svcerr.Unavailable("token service unavailable"))
+		return svcerr.WithCause(svcerr.Unavailable("token service unavailable"), err)
 	}
 	logging.WarnContext(ctx, "exchange refused: minted org differs from the calling token's", "user_id", userID,
 		"subject_token_id", subject.TokenID)
@@ -245,7 +243,8 @@ func requestedExchangeScopes(raw []string) ([]fat.Scope, error) {
 	}
 	asked, err := fat.NewSet(raw)
 	if err != nil {
-		return nil, err
+		// fat's refusal names the scope it does not know: the caller's to fix.
+		return nil, svcerr.InvalidArgument(err.Error())
 	}
 	out := make([]fat.Scope, 0, len(exchangeableScopes))
 	for _, scope := range exchangeableScopes {
@@ -254,7 +253,7 @@ func requestedExchangeScopes(raw []string) ([]fat.Scope, error) {
 		}
 	}
 	if len(out) == 0 {
-		return nil, fmt.Errorf("none of the requested scopes is exchangeable (exchangeable: %s)", fat.JoinScopes(exchangeableScopes))
+		return nil, svcerr.InvalidArgument(fmt.Sprintf("none of the requested scopes is exchangeable (exchangeable: %s)", fat.JoinScopes(exchangeableScopes)))
 	}
 	return out, nil
 }

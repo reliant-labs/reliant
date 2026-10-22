@@ -11,6 +11,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -141,7 +142,7 @@ func TestSendDaemonCommandToDaemon_ReachesTheNamedDaemonNotTheDefault(t *testing
 func TestDaemonRegistrationUserIDRequiresAuthContext(t *testing.T) {
 	_, err := daemonRegistrationUserID(context.Background(), &reliantv1.DaemonRegister{})
 	require.Error(t, err)
-	require.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
+	require.Equal(t, connect.CodeUnauthenticated, svcerr.Code(err))
 }
 
 func TestDaemonRegistrationUserIDReturnsContextUserID(t *testing.T) {

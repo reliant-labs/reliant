@@ -3,7 +3,6 @@ package account
 
 import (
 	"context"
-	"errors"
 	"strings"
 
 	"connectrpc.com/connect"
@@ -47,11 +46,11 @@ var retainedElsewhere = []string{
 // mirrors TokenService.CreateToken, for the same reason.
 func (s *Service) callerIdentity(ctx context.Context, authHeader string) (userID, email string, err error) {
 	if _, isMachine := auth.MachineTokenFromContext(ctx); isMachine || auth.IsAccessTokenFormat(auth.BearerToken(authHeader)) {
-		return "", "", svcerr.ToConnect(svcerr.Unauthenticated("account deletion requires an interactive session"))
+		return "", "", svcerr.Unauthenticated("account deletion requires an interactive session")
 	}
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok || userID == "" {
-		return "", "", svcerr.ToConnect(svcerr.Unauthenticated("no authenticated user"))
+		return "", "", svcerr.Unauthenticated("no authenticated user")
 	}
 	email, _ = auth.GetUserEmailFromContext(ctx)
 	return userID, email, nil
@@ -69,8 +68,7 @@ func (s *Service) PreviewAccountDeletion(
 
 	counts, err := accountpurge.Preview(ctx, s.deps.SQL, userID)
 	if err != nil {
-		logging.ErrorContext(ctx, "[AccountService] preview failed", "user_id", userID, "error", err)
-		return nil, svcerr.ToConnect(svcerr.Internal("could not read account contents"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("could not read account contents"))
 	}
 
 	// The wallet quote comes from the control plane, which owns the wallet.
@@ -83,8 +81,9 @@ func (s *Service) PreviewAccountDeletion(
 		quote, cpErr := s.deps.ControlPlane.PreviewAccountDeletionWallet(ctx,
 			auth.BearerToken(req.Header().Get("Authorization")))
 		if cpErr != nil {
-			logging.ErrorContext(ctx, "[AccountService] control-plane wallet quote failed", "user_id", userID, "error", cpErr)
-			return nil, svcerr.ToConnect(svcerr.Unavailable("could not load your wallet balance; please try again"))
+			// control-plane's error is a remote client's: the logged cause,
+			// never this rpc's verdict.
+			return nil, svcerr.WithCause(svcerr.Unavailable("could not load your wallet balance; please try again"), cpErr)
 		}
 		wallet = walletQuoteToProto(quote)
 	}
@@ -122,7 +121,7 @@ func (s *Service) DeleteAccount(
 		got := strings.ToLower(strings.TrimSpace(req.Msg.GetConfirmEmail()))
 		want := strings.ToLower(strings.TrimSpace(email))
 		if got != want {
-			return nil, svcerr.ToConnect(svcerr.InvalidArgument("confirmation does not match your email address"))
+			return nil, svcerr.InvalidArgument("confirmation does not match your email address")
 		}
 	}
 
@@ -143,20 +142,21 @@ func (s *Service) DeleteAccount(
 		result, cpErr := s.deps.ControlPlane.DeleteCurrentUserAccount(ctx,
 			auth.BearerToken(req.Header().Get("Authorization")))
 		if cpErr != nil {
-			logging.ErrorContext(ctx, "[AccountService] control-plane deletion failed", "user_id", userID, "error", cpErr)
-			if connect.CodeOf(cpErr) == connect.CodeUnavailable {
+			// control-plane's error is a remote client's: it decides which
+			// sentence this rpc says, and is the logged cause, never the
+			// verdict itself (svcerr.Code reads the *connect.Error it is).
+			if svcerr.Code(cpErr) == connect.CodeUnavailable {
 				// A refund's outcome could not be confirmed with the payment
 				// provider. Nothing irreversible happened and retrying replays
 				// the same refund rather than issuing another.
-				return nil, svcerr.ToConnect(svcerr.Unavailable("we could not confirm your refund with our payment provider; nothing was deleted, please try again in a minute"))
+				return nil, svcerr.WithCause(svcerr.Unavailable("we could not confirm your refund with our payment provider; nothing was deleted, please try again in a minute"), cpErr)
 			}
-			return nil, svcerr.ToConnect(svcerr.Internal("could not delete your platform account; nothing was deleted"))
+			return nil, svcerr.WithCause(svcerr.Internal("could not delete your platform account; nothing was deleted"), cpErr)
 		}
 		if len(result.Blockers) > 0 {
 			// FailedPrecondition with the blocker's own sentence: the user
 			// gets "cancel your subscription first", not a generic error.
-			return nil, connect.NewError(connect.CodeFailedPrecondition,
-				errors.New(result.Blockers[0].Detail))
+			return nil, svcerr.FailedPrecondition(result.Blockers[0].Detail)
 		}
 		resp.RefundedCents = result.RefundedCents
 		resp.RefundDestinations = refundDestinationsToProto(result.RefundDestinations)
@@ -167,10 +167,9 @@ func (s *Service) DeleteAccount(
 
 	deleted, err := accountpurge.Purge(ctx, s.deps.SQL, userID)
 	if err != nil {
-		logging.ErrorContext(ctx, "[AccountService] purge failed", "user_id", userID, "error", err)
 		// The purge is transactional: a failure changed nothing, so the client
 		// can safely retry.
-		return nil, svcerr.ToConnect(svcerr.Internal("account deletion failed; nothing was deleted"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("account deletion failed; nothing was deleted"))
 	}
 
 	logging.WarnContext(ctx, "[AccountService] account deleted", "user_id", userID, "rows", deleted,
