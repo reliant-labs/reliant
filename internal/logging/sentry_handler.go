@@ -51,7 +51,7 @@ func (h *sentryHandler) Handle(ctx context.Context, r slog.Record) error {
 	// Read on the report goroutine, a record logged just before a reporter
 	// swap reached the reporter installed after it.
 	frames := callerFrames(r.PC)
-	go h.reportToSentry(telemetry.GetReporter(), r, frames)
+	go h.reportToSentry(telemetry.GetReporter(), r, frames, telemetry.UserIDFromContext(ctx))
 
 	return err
 }
@@ -214,7 +214,7 @@ var sentryWarnPatterns = []string{
 // titled and grouped by its message and call site (frames, captured on the
 // logging goroutine), with its fields as tags and context. Runs in a separate
 // goroutine to avoid blocking log callers.
-func (h *sentryHandler) reportToSentry(reporter telemetry.ErrorReporter, r slog.Record, frames []runtime.Frame) {
+func (h *sentryHandler) reportToSentry(reporter telemetry.ErrorReporter, r slog.Record, frames []runtime.Frame, userID string) {
 	// Every attribute, resolved once: the logger's (from WithAttrs calls),
 	// then the record's own.
 	attrs := make([]slog.Attr, 0, len(h.preformatted)+r.NumAttrs())
@@ -273,6 +273,7 @@ func (h *sentryHandler) reportToSentry(reporter telemetry.ErrorReporter, r slog.
 		Err:     capturedErr,
 		Tags:    tags,
 		Extra:   extra,
+		UserID:  userID,
 	})
 }
 

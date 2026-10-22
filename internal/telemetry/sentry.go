@@ -135,24 +135,6 @@ func (r *SentryReporter) CaptureMessage(message string) string {
 	return ""
 }
 
-// SetUser sets the user context for error reports
-func (r *SentryReporter) SetUser(userID string, email string) {
-	r.mu.RLock()
-	initialized := r.initialized
-	r.mu.RUnlock()
-
-	if !initialized {
-		return
-	}
-
-	sentry.ConfigureScope(func(scope *sentry.Scope) {
-		scope.SetUser(sentry.User{
-			ID:    userID,
-			Email: email,
-		})
-	})
-}
-
 // SetTag sets a tag for error reports
 func (r *SentryReporter) SetTag(key string, value string) {
 	r.mu.RLock()

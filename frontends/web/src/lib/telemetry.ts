@@ -28,6 +28,7 @@ import {
 import { getPrivacySettings, usePrivacyStore } from "../store/privacyStore";
 import { appBuild } from "./appBuild";
 import { isDev } from "./constants";
+import { reportFirstLaunch } from "./appFirstLaunch";
 import { clickstackEnabled } from "./telemetrySinks";
 
 const PRERELEASE_REGEX = /-rc\.|rc[0-9]+|-beta\.|beta[0-9]+|-alpha\.|alpha[0-9]+/i;
@@ -122,6 +123,9 @@ export function buildTelemetryConfig(
       env.VITE_GATEWAY_URL,
       ...(input.extraApiOrigins ?? []),
     ],
+    // FOLLOW-UP: once web depends on forge web-runtime >= 0.7, pass
+    // `appClient: desktop ? "electron" : "web"` here and drop the app.client
+    // global attribute stamped in start(); the runtime then stamps it itself.
     consoleCapture: false,
     advancedNetworkCapture: false,
     replay: env.VITE_OTEL_REPLAY === "true",
@@ -149,8 +153,9 @@ function findClient(mod: unknown): GlobalAttributeClient | null {
   return isClient(cur) ? cur : null;
 }
 
-// The runtime exposes no resource-attribute hook for these two, so they ride
-// as global span attributes.
+// The pinned runtime exposes no resource-attribute hook for these two, so they
+// ride as global span attributes. app.client is the product-event contract's
+// client tag (docs: dev-docs/product-events.md).
 async function stampClientAttributes(
   attributes: Record<string, string>,
 ): Promise<void> {
@@ -222,11 +227,16 @@ async function start(): Promise<boolean> {
 
   try {
     await stampClientAttributes({
-      "reliant.client": desktop ? "desktop" : "web",
+      "app.client": desktop ? "electron" : "web",
       "reliant.build": buildVersion,
     });
   } catch (e) {
     console.debug("[telemetry] client attributes not set:", e);
+  }
+  if (desktop) {
+    reportFirstLaunch().catch((e) => {
+      console.debug("[telemetry] app_first_launch not reported:", e);
+    });
   }
   return true;
 }

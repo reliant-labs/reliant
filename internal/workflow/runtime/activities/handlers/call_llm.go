@@ -13,7 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/auth"
 	cfgpkg "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -1833,13 +1832,12 @@ streamLoop:
 		a.cancelInFlightStreamingToolCalls(ctx, chat.ID, thread, streamState)
 	}
 
-	// Track LLM call completion for analytics.
 	llmLatencyMs := time.Since(llmCallStart).Milliseconds()
-	analyticsErr := streamErr
+	usageErr := streamErr
 	if streamInterrupted {
-		analyticsErr = nil
+		usageErr = nil
 	}
-	a.trackLLMCallCompleted(ctx, chat, driver, llmLatencyMs, streamState.usage, analyticsErr, shape, shapeDiff)
+	a.logLLMUsage(ctx, chat, driver, llmLatencyMs, streamState.usage, usageErr, shape, shapeDiff)
 
 	if streamState.upstreamRequestID != "" || streamState.upstreamProxymanID != "" {
 		activity.GetLogger(ctx).Info("[CallLLM] Upstream correlation",
@@ -3070,8 +3068,8 @@ func (a *CallLLMActivity) handleComplete(ctx context.Context, event llm.DriverEv
 	}
 }
 
-// trackLLMCallCompleted fires an analytics event after each LLM API call.
-func (a *CallLLMActivity) trackLLMCallCompleted(ctx context.Context, chat *db.Chat, driver llm.Driver, latencyMs int64, usage llm.TokenUsage, streamErr error, shape promptShape, diff shapeDiff) {
+// logLLMUsage logs per-call usage next to the latency that produced it.
+func (a *CallLLMActivity) logLLMUsage(ctx context.Context, chat *db.Chat, driver llm.Driver, latencyMs int64, usage llm.TokenUsage, streamErr error, shape promptShape, diff shapeDiff) {
 	model := driver.Model()
 
 	// Per-call usage, logged next to the latency that produced it. This is the
@@ -3111,52 +3109,6 @@ func (a *CallLLMActivity) trackLLMCallCompleted(ctx context.Context, chat *db.Ch
 		"totalTokens", usage.TokenCount,
 	}
 	logging.InfoContext(ctx, "[CallLLM] Usage", append(usageFields, shape.logFields(diff)...)...)
-	metrics := analytics.LLMCallMetrics{
-		Provider:    driver.Name(),
-		Model:       string(model.ID),
-		LatencyMs:   latencyMs,
-		Success:     streamErr == nil,
-		IsStreaming: true,
-		ChatID:      chat.ID,
-	}
-	if streamErr != nil {
-		metrics.ErrorType = classifyLLMError(streamErr)
-	}
-	metrics.InputTokens = int(usage.InputTokens)
-	metrics.OutputTokens = int(usage.OutputTokens)
-	if metrics.InputTokens == 0 && metrics.OutputTokens == 0 {
-		metrics.InputTokens = int(usage.TokenCount)
-	}
-	if chat.WorkflowID != nil {
-		metrics.WorkflowID = *chat.WorkflowID
-	}
-
-	analyticsClient := analytics.ForUser(ctx, chat.UserID)
-	analyticsClient.TrackLLMCallCompleted(metrics)
-}
-
-// classifyLLMError maps an LLM error to a category string for analytics.
-func classifyLLMError(err error) string {
-	if err == nil {
-		return ""
-	}
-	errMsg := strings.ToLower(err.Error())
-	switch {
-	case strings.Contains(errMsg, "rate limit") || strings.Contains(errMsg, "429"):
-		return "rate_limit"
-	case strings.Contains(errMsg, "context length") || strings.Contains(errMsg, "too many tokens") || strings.Contains(errMsg, "maximum context"):
-		return "context_length"
-	case strings.Contains(errMsg, "auth") || strings.Contains(errMsg, "401") || strings.Contains(errMsg, "403") || strings.Contains(errMsg, "invalid api key"):
-		return "auth"
-	case strings.Contains(errMsg, "timeout") || strings.Contains(errMsg, "deadline"):
-		return "timeout"
-	case strings.Contains(errMsg, "cancelled") || strings.Contains(errMsg, "canceled"):
-		return "cancelled"
-	case strings.Contains(errMsg, "connection") || strings.Contains(errMsg, "network") || strings.Contains(errMsg, "eof"):
-		return "network"
-	default:
-		return "unknown"
-	}
 }
 
 // trimBashWorkspaceCD removes redundant "cd <workspace> && " prefix from Bash tool input.

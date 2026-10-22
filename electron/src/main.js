@@ -77,6 +77,7 @@ const {
 const oauthLoopback = require("./oauth-loopback");
 const oauthProviderLogin = require("./oauth-provider-login");
 const { openStripeCheckout } = require("./stripe-checkout");
+const installRecord = require("./install-info");
 const { watchRendererHealth } = require("./renderer-health");
 const {
   formatDiagnosticsReport,
@@ -1539,6 +1540,32 @@ ipcMain.handle("get-app-info", () => {
 
 ipcMain.handle("get-version", () => {
   return app.getVersion();
+});
+
+// The install record behind product.app_first_launch. The renderer emits the
+// event (it owns consent and the telemetry pipeline) and tells main once it
+// has gone out, so a launch that could not report stays pending.
+ipcMain.handle("install:get-info", () =>
+  installRecord.installInfo(app.getPath("userData"), {
+    platform: process.platform,
+    arch: process.arch,
+    version: app.getVersion(),
+  }),
+);
+
+ipcMain.handle("install:mark-first-launch-reported", () => {
+  installRecord.markFirstLaunchReported(app.getPath("userData"));
+});
+
+// The signed-in user, for main-process crash reports. Only the id is kept: the
+// scrubber would drop anything else, and an email has no business here.
+ipcMain.handle("telemetry:set-user", (_event, userId) => {
+  if (!sentryInitialized) return;
+  if (userId === null) {
+    Sentry.setUser(null);
+  } else if (typeof userId === "string" && userId !== "" && userId.length <= 128) {
+    Sentry.setUser({ id: userId });
+  }
 });
 
 ipcMain.handle("tray:set-status", async (_event, status) => {

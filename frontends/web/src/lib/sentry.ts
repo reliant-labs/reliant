@@ -216,4 +216,11 @@ export function setSentryUser(user: { id: string; email?: string } | null) {
   } else {
     Sentry.setUser(null);
   }
+  // Electron's main process reports its own crashes through a separate Sentry
+  // client that cannot see the renderer's user.
+  try {
+    void window.electronAPI?.setTelemetryUser?.(user ? user.id : null)?.catch(() => {});
+  } catch {
+    // Best-effort.
+  }
 }

@@ -200,6 +200,10 @@ func (s *Service) startChat(
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to start chat"))
 	}
 
+	if eventKind == core.TriggerEventKindChatStart {
+		s.trackStartedChatMessage(ctx, userID, result.Chat, clientID, msg)
+	}
+
 	return connect.NewResponse(&reliantv1.StartChatResponse{
 		Chat:       s.chatToProtoWithSelection(ctx, result.Chat),
 		WorkflowId: result.WorkflowID,

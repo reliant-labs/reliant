@@ -174,6 +174,7 @@ func install(output io.Writer, s Settings, level slog.Level, options ...installO
 	// to their traces at all. It sits inside withReporting, as in serverkit's
 	// logger, so it sees the level the error-class policy decided.
 	handler = observe.NewTraceHandler(handler)
+	handler = newUserHandler(handler)
 	handler = withReporting(handler)
 	if cfg.fields != nil {
 		handler = newIdentityHandler(handler, cfg.fields)

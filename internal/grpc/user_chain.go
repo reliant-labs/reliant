@@ -7,6 +7,7 @@ import (
 	"log/slog"
 
 	"connectrpc.com/connect"
+	"connectrpc.com/otelconnect"
 	"github.com/reliant-labs/forge/pkg/activity"
 	"github.com/reliant-labs/forge/pkg/observe"
 	"github.com/reliant-labs/forge/pkg/serverkit"
@@ -122,9 +123,17 @@ func NewUserChain(deps UserChainDeps) (*UserChain, error) {
 	if err != nil {
 		return nil, fmt.Errorf("user chain: %w", err)
 	}
+	trace, err := otelconnect.NewInterceptor(otelconnect.WithTrustRemote())
+	if err != nil {
+		return nil, fmt.Errorf("user chain: trace interceptor: %w", err)
+	}
 	chain, err := serverkit.NewChain(serverkit.ChainDeps{
-		Auth:     serverkit.AuthFor(serverkit.AudienceUser, deps.Auth),
-		Logger:   deps.Logger,
+		Auth:   serverkit.AuthFor(serverkit.AudienceUser, deps.Auth),
+		Logger: deps.Logger,
+		// forge's default trace interceptor, inside a request scope so the
+		// authenticator can attribute the request's logs and spans to its
+		// user (interceptors.RequestScope).
+		Trace:    interceptors.RequestScope(trace),
 		Audit:    serverkit.NoAudit,
 		Activity: activityIC,
 		// A failed RPC reaches Sentry once, as forge's "rpc failed" line

@@ -43,7 +43,7 @@ func installCapturingReporter(t *testing.T) *capturingReporter {
 func reportRecord(handler *sentryHandler, attrs ...slog.Attr) {
 	record := slog.NewRecord(time.Time{}, slog.LevelError, "tool execution failed", 0)
 	record.AddAttrs(attrs...)
-	handler.reportToSentry(telemetry.GetReporter(), record, nil)
+	handler.reportToSentry(telemetry.GetReporter(), record, nil, "")
 }
 
 // Short content is still content. Before the allowlist, every attribute of 64

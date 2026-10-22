@@ -28,14 +28,12 @@ import (
 // sessionTracker tracks active user sessions to avoid duplicate session_start events
 type sessionTracker struct {
 	sessions map[string]time.Time // userID -> last seen time
-	everSeen map[string]bool      // userID -> has been seen at least once
 	mu       sync.RWMutex
 }
 
 func newSessionTracker() *sessionTracker {
 	tracker := &sessionTracker{
 		sessions: make(map[string]time.Time),
-		everSeen: make(map[string]bool),
 	}
 	// Clean up old sessions every hour
 	go tracker.cleanup()
@@ -59,13 +57,6 @@ func (t *sessionTracker) updateSession(userID string) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.sessions[userID] = time.Now()
-	t.everSeen[userID] = true
-}
-
-func (t *sessionTracker) isFirstTimeSeen(userID string) bool {
-	t.mu.RLock()
-	defer t.mu.RUnlock()
-	return !t.everSeen[userID]
 }
 
 func (t *sessionTracker) cleanup() {
@@ -224,6 +215,7 @@ func (i *AuthInterceptor) authenticateRequest(ctx context.Context, procedure str
 
 	// Add claims to context
 	ctx = auth.WithUser(ctx, claims.Sub, claims.Role, claims.Email)
+	ctx = telemetry.BindUser(ctx, claims.Sub)
 	if principal != nil {
 		ctx = auth.WithMachineToken(ctx, principal)
 	}
@@ -275,11 +267,6 @@ func (i *AuthInterceptor) AuthenticateHTTP(r *http.Request) (string, error) {
 func (i *AuthInterceptor) trackSession(ctx context.Context, claims *auth.JWTClaims) {
 	if claims == nil {
 		return
-	}
-
-	// Update the Sentry user context on first authentication
-	if i.sessionTracker.isFirstTimeSeen(claims.Sub) {
-		telemetry.GetReporter().SetUser(claims.Sub, claims.Email)
 	}
 
 	// Track session if new (first request in 30 minutes)

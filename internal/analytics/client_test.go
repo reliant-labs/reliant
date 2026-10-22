@@ -70,6 +70,7 @@ func TestEmitsProductRecordWithUserAndTypedFields(t *testing.T) {
 	assert.Equal(t, "product.message_sent", rec[AttrEventName])
 	assert.Equal(t, "user-1", rec[AttrUserID])
 	assert.Equal(t, version.Version, rec[AttrAppVersion])
+	assert.Equal(t, "backend", rec[AttrAppClient])
 	assert.Equal(t, "msg-1", rec["product.message_id"])
 	assert.Equal(t, "chat-1", rec["product.chat_id"])
 	assert.Equal(t, "proj-1", rec["product.project_id"])
@@ -104,7 +105,6 @@ func TestOptOutRecordsNothing(t *testing.T) {
 	opted := c.ForUser(ctx, "opted-out")
 	opted.TrackSessionStart()
 	opted.TrackMessageSent(MessageSentMetrics{MessageID: "m"})
-	opted.TrackLLMCallCompleted(LLMCallMetrics{Provider: "anthropic"})
 	// A consent read that fails records nothing either: no event is written
 	// for a user whose consent was not confirmed.
 	c.ForUser(ctx, "unknown-user").TrackSessionStart()

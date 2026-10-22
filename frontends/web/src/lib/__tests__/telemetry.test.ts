@@ -200,21 +200,21 @@ describe("initTelemetry: the options it passes", () => {
     expect(lastConfig()).toMatchObject({ environment: "prerelease", replaySampleRate: 1 });
   });
 
-  it("stamps reliant.client=web and reliant.build on a browser", async () => {
+  it("stamps app.client=web and reliant.build on a browser", async () => {
     await initTelemetry();
     expect(runtime.setGlobalAttributes).toHaveBeenCalledWith({
-      "reliant.client": "web",
+      "app.client": "web",
       "reliant.build": "1.8.1",
     });
   });
 
-  it("stamps reliant.client=desktop in the Electron renderer", async () => {
+  it("stamps app.client=electron in the Electron renderer", async () => {
     (window as { electronAPI?: unknown }).electronAPI = {
       getVersion: async () => "1.8.1",
     };
     await initTelemetry();
     expect(runtime.setGlobalAttributes).toHaveBeenCalledWith(
-      expect.objectContaining({ "reliant.client": "desktop" }),
+      expect.objectContaining({ "app.client": "electron" }),
     );
   });
 });

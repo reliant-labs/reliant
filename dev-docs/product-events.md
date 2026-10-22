@@ -18,6 +18,7 @@ message is `product.<event>` and its attributes are:
 | --- | --- |
 | `event.name` | `product.<event>`, e.g. `product.message_sent` (the same string as the message) |
 | `user.id` | the user the event is about; absent only for an event with no user |
+| `app.client` | `backend` on every event this package writes; the web runtime stamps `web`, and the desktop renderer `electron`, on the events it emits |
 | `app.version` | Reliant build version |
 | `product.<field>` | the event's typed fields, snake_case: `product.chat_id`, `product.input_tokens`, ... |
 | `trace_id`, `span_id` | stamped by the trace handler when the request carries a span |
@@ -62,6 +63,30 @@ is dropped (React StrictMode double effects, retried RPCs).
 The user's in-app analytics toggle gates both. The ClickStack sink is live only
 in a build that sets `VITE_OTEL_ENDPOINT`; until a deploy sets it, web events
 reach Sentry alone.
+
+## Who emits what
+
+Each event has exactly one producer, so a count never has to be de-duplicated.
+`message_sent` (and `first_message_sent`) are the backend's: it knows the
+message id, workflow and thread, sees every client (web, desktop, CLI,
+triggers) and is immune to ad blockers. The web has no `message_sent`.
+`llm_call_completed` is not a product event: LLM usage lives in control-plane
+usage records and metrics.
+
+`product.app_first_launch` is the desktop app's, once per install, from the
+renderer (it owns consent and the telemetry pipeline) with `install_id`,
+`installed_at`, `platform`, `arch` and `version`. Electron main keeps the
+install record in `userData/install.json` and marks the launch reported only
+after the renderer says the event went out, so a first launch made offline or
+before consent is sent on a later launch, dated by `installed_at`.
+
+## Who a failure belongs to
+
+A server's errors name the user of the request that failed, not the last user
+the process saw. The auth layer binds the caller to its request
+(`telemetry.BindUser`); the logger stamps `user.id` on records logged in that
+request's context, the server span carries `user.id`, and a forwarded ERROR
+record reaches Sentry with that user. There is no process-wide Sentry user.
 
 ## Retention
 

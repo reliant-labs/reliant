@@ -22,9 +22,6 @@ const (
 	EventPreferencesUpdated     EventType = "preferences_updated"
 	EventProviderSettingsUpdate EventType = "provider_settings_updated"
 
-	// LLM call tracking
-	EventLLMCallCompleted EventType = "llm_call_completed"
-
 	// API key configuration
 	// #nosec G101 -- analytics event identifier, not a credential
 	EventAPIKeyConfigured EventType = "api_key_configured"
@@ -39,23 +36,6 @@ const (
 	EventOnboardingCompleted     EventType = "onboarding_completed"
 	EventOnboardingSkipped       EventType = "onboarding_skipped"
 )
-
-// LLMCallMetrics tracks individual LLM API call completions
-type LLMCallMetrics struct {
-	Provider         string `json:"provider"` // anthropic, openai, gemini, groq, openrouter
-	Model            string `json:"model"`    // claude-sonnet-4-20250514, gpt-4o, etc.
-	InputTokens      int    `json:"inputTokens"`
-	OutputTokens     int    `json:"outputTokens"`
-	LatencyMs        int64  `json:"latencyMs"`
-	Success          bool   `json:"success"`
-	ErrorType        string `json:"errorType,omitempty"` // rate_limit, context_length, auth, network, etc.
-	IsStreaming      bool   `json:"isStreaming"`
-	WorkflowID       string `json:"workflowId,omitempty"`
-	ChatID           string `json:"chatId,omitempty"`
-	StepName         string `json:"stepName,omitempty"` // workflow step that triggered this call
-	CacheReadTokens  int    `json:"cacheReadTokens,omitempty"`
-	CacheWriteTokens int    `json:"cacheWriteTokens,omitempty"`
-}
 
 // APIKeyConfiguredMetrics tracks when a provider API key is configured
 type APIKeyConfiguredMetrics struct {

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"sync"
 
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -59,32 +58,7 @@ func (s Settings) JWTOptions() []ValidatorOption {
 
 // Middleware provides token authentication for HTTP requests
 type Middleware struct {
-	validator        TokenValidator
-	firstSeenTracker *firstSeenTracker
-}
-
-// firstSeenTracker tracks which users have been seen to avoid redundant SetUserID calls
-type firstSeenTracker struct {
-	seen map[string]bool
-	mu   sync.RWMutex
-}
-
-func newFirstSeenTracker() *firstSeenTracker {
-	return &firstSeenTracker{
-		seen: make(map[string]bool),
-	}
-}
-
-func (t *firstSeenTracker) isFirstTimeSeen(userID string) bool {
-	t.mu.RLock()
-	result := !t.seen[userID]
-	t.mu.RUnlock()
-	if result {
-		t.mu.Lock()
-		t.seen[userID] = true
-		t.mu.Unlock()
-	}
-	return result
+	validator TokenValidator
 }
 
 // NewMiddleware creates a new auth middleware for settings' mode:
@@ -105,8 +79,7 @@ func NewMiddleware(settings Settings) (*Middleware, error) {
 		logging.Info("[HTTP Auth] API key auth mode enabled",
 			"user_id", validator.userID)
 		return &Middleware{
-			validator:        validator,
-			firstSeenTracker: newFirstSeenTracker(),
+			validator: validator,
 		}, nil
 
 	default: // "supabase"
@@ -129,8 +102,7 @@ func NewMiddleware(settings Settings) (*Middleware, error) {
 		}
 		logging.Info("[HTTP Auth] Supabase JWT auth mode enabled")
 		return &Middleware{
-			validator:        validator,
-			firstSeenTracker: newFirstSeenTracker(),
+			validator: validator,
 		}, nil
 	}
 }
@@ -210,10 +182,7 @@ func (m *Middleware) requireAuth(next http.Handler, tokens AccessTokenIntrospect
 			ctx = WithMachineToken(ctx, principal)
 		}
 
-		// Update the Sentry user context on first authentication
-		if m.firstSeenTracker.isFirstTimeSeen(claims.Sub) {
-			telemetry.GetReporter().SetUser(claims.Sub, claims.Email)
-		}
+		ctx = telemetry.BindUser(ctx, claims.Sub)
 
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
