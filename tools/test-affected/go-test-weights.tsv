@@ -234,7 +234,6 @@
 0.0	github.com/reliant-labs/reliant/pkg/config
 0.0	github.com/reliant-labs/reliant/internal/daemonoffline
 0.0	github.com/reliant-labs/reliant/internal/workflow/threadcancel
-0.0	github.com/reliant-labs/reliant/internal/db/migrationcheck
 0.0	github.com/reliant-labs/reliant/internal/gitpublish
 0.0	github.com/reliant-labs/reliant/internal/llm/cache
 0.0	github.com/reliant-labs/reliant/pkg/daemonwire

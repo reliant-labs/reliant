@@ -43,9 +43,8 @@ const (
 // is a backfill plus an ADD CONSTRAINT — there is no "if not exists" spelling
 // of it that stays correct when two processes interleave.
 //
-// forge's migrator, which replaced goose, takes a run lock, and the goose
-// bridge that still runs goose for a database behind its frozen head takes its
-// own, so two migrators now take turns instead of colliding (Migrate). One
+// forge's migrator, which replaced goose, takes a run lock, so two migrators
+// now take turns instead of colliding (Migrate). One
 // owner is still the model: the waiters need no DDL rights, and there is one
 // place to look when a migration fails.
 type MigrationPolicy int
@@ -190,7 +189,7 @@ func connectPostgres(cfg DatabaseConfig) (*sql.DB, error) {
 		}
 	default:
 		logging.Debug("Applying database migrations...")
-		res, err := Migrate(context.Background(), cfg.MigrationURL(), slog.Default())
+		res, err := Migrate(context.Background(), cfg.MigrationURL())
 		if err != nil {
 			logging.Error("Failed to apply migrations", "error", err)
 			if closeErr := db.Close(); closeErr != nil {

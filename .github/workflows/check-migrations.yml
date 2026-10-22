@@ -3,24 +3,14 @@ name: Migration & DB Schema Check
 on:
   pull_request:
     paths:
-      - "internal/db/migrations/**"
       - "db/migrations/**"
       - "internal/db/migrate*.go"
-      - "internal/db/goose_bridge.go"
-      - "scripts/check-migrations.sh"
-      - "cmd/check-migrations/**"
-      - "internal/db/migrationcheck/**"
   push:
     branches:
       - main
     paths:
-      - "internal/db/migrations/**"
       - "db/migrations/**"
       - "internal/db/migrate*.go"
-      - "internal/db/goose_bridge.go"
-      - "scripts/check-migrations.sh"
-      - "cmd/check-migrations/**"
-      - "internal/db/migrationcheck/**"
 
 # A newer push to a PR obsoletes the run in progress; a run on main finishes.
 concurrency:
@@ -48,160 +38,21 @@ jobs:
     steps:
       - name: Checkout PR branch
         uses: actions/checkout@v6
-        with:
-          fetch-depth: 0 # Need full history to compare with main
 
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
           go-version-file: go.mod
 
-      - name: Install goose
-        run: go install github.com/pressly/goose/v3/cmd/goose@latest
-
-      - name: Fetch main branch
-        run: |
-          git fetch origin main:refs/remotes/origin/main
-
-      - name: Check for migration conflicts
-        id: check
-        run: |
-          chmod +x scripts/fix-migration-conflicts.sh
-
-          # Run in check mode first
-          echo "🔍 Checking for migration conflicts..."
-
-          HAS_CONFLICTS=false
-
-          for MIGRATION_DIR in internal/db/migrations/postgres; do
-            DIR_NAME=$(basename "$MIGRATION_DIR")
-
-            # Get highest migration in main for this directory
-            MAIN_MAX=0
-            while IFS= read -r file; do
-              if [ -n "$file" ]; then
-                filename=$(basename "$file")
-                number=$(echo "$filename" | grep -oE '^[0-9]+' || echo "0")
-                number=$((10#$number))
-                if [ "$number" -gt "$MAIN_MAX" ]; then
-                  MAIN_MAX=$number
-                fi
-              fi
-            done < <(git ls-tree -r --name-only origin/main "$MIGRATION_DIR/" 2>/dev/null | grep '\.sql$' || true)
-
-            echo "📊 [$DIR_NAME] Highest migration in main: $MAIN_MAX"
-
-            # Get migrations added in this PR for this directory
-            ADDED_MIGRATIONS=$(git diff --name-only --diff-filter=A origin/main HEAD -- "$MIGRATION_DIR/*.sql" 2>/dev/null || true)
-
-            if [ -z "$ADDED_MIGRATIONS" ]; then
-              echo "✅ [$DIR_NAME] No new migrations in this PR"
-              continue
-            fi
-
-            echo "📋 [$DIR_NAME] New migrations in this PR:"
-            echo "$ADDED_MIGRATIONS" | while read -r file; do
-              [ -n "$file" ] && echo "   - $(basename "$file")"
-            done
-
-            while IFS= read -r file; do
-              if [ -n "$file" ]; then
-                filename=$(basename "$file")
-                number=$(echo "$filename" | grep -oE '^[0-9]+' || echo "0")
-                number=$((10#$number))
-
-                if [ "$number" -le "$MAIN_MAX" ]; then
-                  echo "❌ [$DIR_NAME] CONFLICT: $filename (number $number ≤ main's max $MAIN_MAX)"
-                  HAS_CONFLICTS=true
-                else
-                  echo "✅ [$DIR_NAME] OK: $filename (number $number > main's max $MAIN_MAX)"
-                fi
-              fi
-            done <<< "$ADDED_MIGRATIONS"
-          done
-
-          if [ "$HAS_CONFLICTS" = true ]; then
-              echo "has_conflicts=true" >> $GITHUB_OUTPUT
-              exit 1
-          else
-              echo "has_conflicts=false" >> $GITHUB_OUTPUT
-              echo ""
-              echo "✅ No migration conflicts detected"
-          fi
-
-      - name: Suggest fix
-        if: failure() && steps.check.outputs.has_conflicts == 'true'
-        run: |
-          echo "::error::Migration number conflicts detected!"
-          echo ""
-          echo "To fix this issue, run:"
-          echo "  git rebase origin/main"
-          echo "  (The post-rebase hook will auto-renumber your migrations)"
-          echo ""
-          echo "Or manually run:"
-          echo "  ./scripts/fix-migration-conflicts.sh"
-          echo "  git add internal/db/migrations/postgres/"
-          echo "  git commit --amend --no-edit"
-          echo "  git push --force-with-lease"
-          exit 1
-
-      - name: Ensure no root-level migrations remain
-        run: |
-          shopt -s nullglob
-          ROOT_MIGRATIONS=(internal/db/migrations/*.sql)
-          shopt -u nullglob
-
-          if [ ${#ROOT_MIGRATIONS[@]} -gt 0 ]; then
-            echo "❌ Found unexpected root-level migrations (must be in postgres/):"
-            printf '  - %s\n' "${ROOT_MIGRATIONS[@]}"
-            exit 1
-          fi
-
-          echo "✅ No root-level migrations found"
-
-      # Filenames, real timestamps, unique versions and no `-- +goose Down`:
-      # the rules in internal/db/migrationcheck, shared with the internal/db
-      # tests. Plain sh + go run, so it is the same command locally on macOS.
-      - name: Validate migration names, versions and contents
-        run: sh ./scripts/check-migrations.sh
-
-      - name: Validate Postgres migrations apply cleanly
-        env:
-          DATABASE_URL: postgres://postgres:postgres@localhost:5432/reliant_ci?sslmode=disable
-        run: |
-          goose -dir internal/db/migrations/postgres postgres "$DATABASE_URL" up
-
-      # schema.sql and its drift tests are gone (P5a, reliant #914): the schema
-      # is db/migrations (forge), and goose's history is frozen. This proves the
-      # one migration path (internal/db/migrate.go) applies the baseline to a
-      # fresh database, adopts or catches up goose databases, and refuses what
-      # it must, against a real Postgres.
-      - name: Validate migrations apply, adopt, catch up and refuse
+      # The one migration path (internal/db/migrate.go) against a real
+      # Postgres: it builds a fresh database, leaves a current (and an
+      # adopted) one alone, refuses what it must, and takes turns under
+      # contention. Version and compatibility rules for db/migrations are
+      # `forge lint --migration-safety`, in PR CI.
+      - name: Validate migrations apply and refuse
         env:
           DATABASE_URL: postgres://postgres:postgres@localhost:5432/reliant_ci?sslmode=disable
           REQUIRE_TEST_DB: "1"
         run: |
           go test ./internal/db/ -count=1 \
-            -run 'TestBaselineAdopts|TestGooseHistoryIsFrozen|TestMigrate_|TestPlanMigration|TestPendingMigrations|TestWaitForSchema'
-
-      - name: Summary
-        if: always()
-        run: |
-          echo "### Migration Check Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-
-          if [ "${{ steps.check.outputs.has_conflicts }}" = "true" ]; then
-              echo "❌ **Migration conflicts detected**" >> $GITHUB_STEP_SUMMARY
-              echo "" >> $GITHUB_STEP_SUMMARY
-              echo "One or more postgres migrations need to be renumbered to come after main's highest migration." >> $GITHUB_STEP_SUMMARY
-              echo "" >> $GITHUB_STEP_SUMMARY
-              echo "**To fix:**" >> $GITHUB_STEP_SUMMARY
-              echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
-              echo "git rebase origin/main" >> $GITHUB_STEP_SUMMARY
-              echo "# Post-rebase hook will auto-fix migrations" >> $GITHUB_STEP_SUMMARY
-              echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-          else
-              echo "✅ **No migration conflicts**" >> $GITHUB_STEP_SUMMARY
-              echo "" >> $GITHUB_STEP_SUMMARY
-              echo "All migrations are numbered correctly relative to main branch." >> $GITHUB_STEP_SUMMARY
-          fi
+            -run 'TestMigrate_|TestPlanMigration|TestPendingMigrations|TestWaitForSchema'

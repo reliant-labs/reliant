@@ -7,8 +7,6 @@ import (
 	"crypto/rand"
 	"database/sql"
 	"encoding/base64"
-	"io/fs"
-	"strings"
 	"testing"
 
 	"github.com/reliant-labs/forge/pkg/crypto"
@@ -198,51 +196,6 @@ func TestBootRefusesWhenUnsealedRowRemainsAfterBackfill(t *testing.T) {
 	got, err := repo.GetAutomationToken(ctx, "u1", "openai")
 	require.NoError(t, err)
 	require.Equal(t, "legacyx", got)
-}
-
-func runContractMigration(t *testing.T, raw *sql.DB) {
-	t.Helper()
-	body, err := fs.ReadFile(FS, "migrations/postgres/20261004193347_api_keys_contract.sql")
-	require.NoError(t, err)
-	_, err = raw.Exec(strings.TrimPrefix(string(body), "-- +goose Up"))
-	require.NoError(t, err)
-}
-
-func TestContractMigrationToleratesLegacyNullRow(t *testing.T) {
-	_, raw, cleanup := SetupTestDBWithRawDB(t)
-	defer cleanup()
-	// Rewind to the pre-contract state: no constraint, one unsealed and one sealed row.
-	_, err := raw.Exec(`ALTER TABLE api_keys DROP CONSTRAINT IF EXISTS api_keys_sealed_not_null`)
-	require.NoError(t, err)
-	_, err = raw.Exec(`INSERT INTO api_keys (id, user_id, provider, api_key) VALUES ('legacy','u1','reliant-automation:openai','plain-legacy')`)
-	require.NoError(t, err)
-	_, err = raw.Exec(`INSERT INTO api_keys (id, user_id, provider, api_key, api_key_sealed) VALUES ('done','u1','reliant-automation:google','plain-done','\x01')`)
-	require.NoError(t, err)
-
-	runContractMigration(t, raw)
-	runContractMigration(t, raw) // idempotent
-
-	var legacy, done string
-	require.NoError(t, raw.QueryRow(`SELECT api_key FROM api_keys WHERE id='legacy'`).Scan(&legacy))
-	require.NoError(t, raw.QueryRow(`SELECT api_key FROM api_keys WHERE id='done'`).Scan(&done))
-	require.Equal(t, "plain-legacy", legacy, "unsealed rows keep plaintext so the backfill can seal them")
-	require.Equal(t, "", done, "sealed rows are blanked")
-
-	_, err = raw.Exec(`INSERT INTO api_keys (id, user_id, provider, api_key) VALUES ('new','u2','openai','x')`)
-	require.Error(t, err, "NOT VALID check still rejects new NULL rows")
-}
-
-func TestContractMigrationOnCleanDB(t *testing.T) {
-	repo, raw := sealedRepo(t)
-	ctx := context.Background()
-	require.NoError(t, repo.SetAutomationToken(ctx, "u1", "anthropic", "sk"))
-	_, err := raw.Exec(`UPDATE api_keys SET api_key='leftover'`)
-	require.NoError(t, err)
-	runContractMigration(t, raw)
-	var plain string
-	require.NoError(t, raw.QueryRow(`SELECT api_key FROM api_keys`).Scan(&plain))
-	require.Equal(t, "", plain)
-	require.NoError(t, repo.validateAPIKeysSealedConstraint(ctx))
 }
 
 func TestAutomationCredResolverEndToEndOverSealedStore(t *testing.T) {

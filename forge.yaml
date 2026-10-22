@@ -173,8 +173,6 @@ ci:
             - name: pin-ancestry
               command: [scripts/check-pin-ancestry.sh]
               cache: false
-            - name: migrations
-              command: [scripts/check-migrations.sh]
             - name: npm-licenses
               command: [scripts/check-npm-licenses.sh, web]
               requires: [npm]

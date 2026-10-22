@@ -839,8 +839,7 @@ Preview what `db migrate up` would do, changing nothing
 
 Read the database's migration state and print what `db migrate up` from
 this binary would do to it: nothing (up to date), apply pending migrations,
-build a fresh database, adopt a database the goose releases migrated, catch an
-older goose database up with goose and then adopt it, or refuse — and why.
+build a fresh database, or refuse — and why.
 
 The first line is the verdict. Exits non-zero when `up` would refuse.
 
@@ -865,11 +864,8 @@ recorded applied, then exit.
 Exits 0 when the schema is already current, so it is safe to run on every
 deploy and safe to re-run after a failure.
 
-A database the goose releases migrated is adopted on its first run: the
-baseline migration is recorded as applied without running its SQL. One an
-older goose release migrated is first brought to goose's frozen head by goose
-itself, then adopted. A goose history the baseline does not describe is
-refused with nothing applied. `db migrate status` previews which.
+A database with reliant's tables but no migration record is refused with
+nothing applied. `db migrate status` previews what `up` will do.
 
 ```
 reliant db migrate up

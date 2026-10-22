@@ -450,7 +450,7 @@ interface plus everything else".
 | `tx_bridge.go`, `RunTx`/`RunTxReadOnly`, `isRetryableError` | **stay** (§3) |
 | `connect.go` (pools, the `DirectURL` session pool), `run_control_lock.go`, `provider_key_lock.go` (advisory locks) | **stay** |
 | `migrate.go`, `migrate_plan.go`, `embed.go` (`db.Migrate`, `WaitForSchema`, `reliant db migrate status`) | **stay**: the migrator entry over forge's `migratekit` |
-| `goose_bridge.go` + `internal/db/migrations/postgres/` (156 frozen goose files) | **stay until runbook 04 §9 holds** (every kept DB adopted, a support window for self-hosted users, a forge release shipped to prod). That's a separate `chore/p5a-remove-goose` PR and an owner call, not P6 |
+| `goose_bridge.go` + `internal/db/migrations/postgres/` (156 frozen goose files) | **removed 2026-10-22** (owner decision; runbook 04 §9), separately from P6 |
 | `migrationcheck/` (`cmd/check-migrations`) | stays |
 | `models.go` (109 `type X = core.X` aliases), `internal/db/core/` (domain types with behaviour) | **stay** (08: names stay; `core` collapses into entities only after F12.6, one type at a time) |
 | `core.ProviderAccountStore`, `core.RunEventStore` (embedded in `Repository`), `core.ConnectionStore`/`SecretsTx`/`IntegrationWriteStore` (returned by `Connections()`/`IntegrationWrites()`) | **deleted / moved to consumers** (Y): implementation-side interfaces; the accessors return their concrete stores |

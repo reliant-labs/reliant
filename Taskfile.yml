@@ -668,8 +668,7 @@ tasks:
     # Migrations are forge migrations (db/migrations/<YYYYMMDDHHMMSS>_<name>.up.sql,
     # forward only), created by the pinned forge so the version allocator is
     # the one the migrator was built with; never hand-type the version.
-    # goose's internal/db/migrations/postgres is frozen history: a file added
-    # there never runs, and TestGooseHistoryIsFrozen fails. forge.yaml sets
+    # forge.yaml sets
     # database.migration_safety.require_compat_declaration, so forge opens the
     # file with both compatibility declarations as a comment to replace, and
     # `forge lint --migration-safety` fails it until it says one, with a

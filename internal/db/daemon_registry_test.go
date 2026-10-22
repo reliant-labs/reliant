@@ -5,13 +5,10 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"fmt"
 	"sort"
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/pressly/goose/v3"
 )
 
 // These run the real SQL. The registry writes in daemon_registry.go carry
@@ -299,41 +296,6 @@ func TestApplyDaemonRegistrySnapshot_ReleasesWhatWasBoundToARemovedRow(t *testin
 	}
 	assertReleased(t, rawDB, "ghost-1")
 	assertKept(t, rawDB, "listed-1")
-}
-
-// releaseBindingsMigrationVersion is
-// 20261010020219_release_bindings_to_removed_daemons.sql.
-const releaseBindingsMigrationVersion int64 = 20261010020219
-
-// TestReleaseBindingsMigration_HealsRowsLeftByEarlierRemovals: removals made
-// before releaseDaemonBindings existed left their bindings dangling (in prod,
-// one live worktree owner and 13 project installs). The migration releases
-// exactly those, and nothing bound to a machine that still exists.
-func TestReleaseBindingsMigration_HealsRowsLeftByEarlierRemovals(t *testing.T) {
-	repo, rawDB, cleanup := setupGooseTestDBWithRawDB(t)
-	t.Cleanup(cleanup)
-	ctx := context.Background()
-	if _, err := repo.UpsertDaemonIdentity(ctx, DaemonIdentity{DaemonID: "kept-2", UserID: "test-user", DaemonType: "managed"}); err != nil {
-		t.Fatalf("seed: %v", err)
-	}
-	// "gone-2" has bindings and no registry row: what a pre-release removal left.
-	seedMachineBindings(t, rawDB, "test-user", "gone-2", "kept-2")
-
-	if _, err := rawDB.Exec(fmt.Sprintf(`DELETE FROM %s WHERE version_id = $1`, goose.TableName()), releaseBindingsMigrationVersion); err != nil { //nolint:gosec // goose.TableName is a compile-time constant
-		t.Fatalf("rewind: %v", err)
-	}
-	if err := initGoose(); err != nil {
-		t.Fatalf("init goose: %v", err)
-	}
-	if err := goose.UpTo(rawDB, migrationsDir, releaseBindingsMigrationVersion, goose.WithAllowMissing()); err != nil {
-		t.Fatalf("apply migration: %v", err)
-	}
-
-	b := readMachineBindings(t, rawDB, "gone-2")
-	if b.chatPin.Valid || b.worktreeOwner.Valid || b.installs != 0 {
-		t.Errorf("bindings to the removed daemon after the migration = %+v; want released", b)
-	}
-	assertKept(t, rawDB, "kept-2")
 }
 
 // TestApplyDaemonRegistrySnapshot_ReconcilesOneOwner reproduces the owner's

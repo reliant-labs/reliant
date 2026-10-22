@@ -169,8 +169,8 @@ func flushTelemetry(obs *observability.Provider) func(context.Context) error {
 	}
 }
 
-// migrateSchema applies every migration this binary embeds (db.ApplyOnBoot,
-// through the goose bridge), on a connection of its own to the session-capable
+// migrateSchema applies every migration this binary embeds (db.ApplyOnBoot),
+// on a connection of its own to the session-capable
 // DATABASE_DIRECT_URL when one is set (db.DatabaseConfig.MigrationURL), never
 // the serving pool. The connect retries within DB_CONNECT_TIMEOUT — a database
 // that comes up seconds after the api-server is a wait, with the database

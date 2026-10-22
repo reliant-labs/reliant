@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"strconv"
 
 	_ "github.com/jackc/pgx/v5/stdlib" // registers the "pgx" database/sql driver
@@ -67,11 +66,8 @@ recorded applied, then exit.
 Exits 0 when the schema is already current, so it is safe to run on every
 deploy and safe to re-run after a failure.
 
-A database the goose releases migrated is adopted on its first run: the
-baseline migration is recorded as applied without running its SQL. One an
-older goose release migrated is first brought to goose's frozen head by goose
-itself, then adopted. A goose history the baseline does not describe is
-refused with nothing applied. ` + "`db migrate status`" + ` previews which.`,
+A database with reliant's tables but no migration record is refused with
+nothing applied. ` + "`db migrate status`" + ` previews what ` + "`up`" + ` will do.`,
 		Args:         cobra.NoArgs,
 		SilenceUsage: true,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -82,10 +78,8 @@ refused with nothing applied. ` + "`db migrate status`" + ` previews which.`,
 			migrationURL := migrationURL(cfg)
 
 			out := cmd.OutOrStdout()
-			// The goose bridge logs its progress while it runs (goose prints
-			// a line per file); the migrator's report follows, one fact per
-			// line.
-			res, err := db.Migrate(cmd.Context(), migrationURL, slog.New(slog.NewTextHandler(out, nil)))
+			// The migrator's report, one fact per line.
+			res, err := db.Migrate(cmd.Context(), migrationURL)
 			if err != nil {
 				return err
 			}
@@ -131,8 +125,7 @@ refused with nothing applied. ` + "`db migrate status`" + ` previews which.`,
 		Short: "Preview what `db migrate up` would do, changing nothing",
 		Long: `Read the database's migration state and print what ` + "`db migrate up`" + ` from
 this binary would do to it: nothing (up to date), apply pending migrations,
-build a fresh database, adopt a database the goose releases migrated, catch an
-older goose database up with goose and then adopt it, or refuse — and why.
+build a fresh database, or refuse — and why.
 
 The first line is the verdict. Exits non-zero when ` + "`up`" + ` would refuse.
 
@@ -238,15 +231,6 @@ func printPlan(out io.Writer, p db.MigrationPlan) (refuses bool) {
 	fmt.Fprintf(out, "verdict: %s\n", verdict)
 	fmt.Fprintf(out, "forge:   schema_migrations version %s (dirty %t); this binary embeds %d migration(s), %s through %d\n",
 		versionLabel(p.State.Applied, p.State.Version), p.State.Dirty, len(p.Embedded), p.Baseline.Name, p.Latest())
-	switch g := p.Goose; {
-	case g != nil:
-		fmt.Fprintf(out, "goose:   goose_db_version holds %d applied version(s); goose's frozen history, which %s adopts, is %d through %d; missing %d, not in it %d, recorded rolled back %d\n",
-			g.Applied, p.Baseline.Name, len(g.Declared), g.Declared[len(g.Declared)-1], len(g.Missing), len(g.Unexpected), len(g.RolledBack))
-	case p.State.Applied || p.State.Dirty:
-		fmt.Fprintln(out, "goose:   not read: forge's migrator has a record, so goose_db_version is never read again")
-	default:
-		fmt.Fprintln(out, "goose:   no goose_db_version")
-	}
 	return refuses
 }
 

@@ -278,7 +278,7 @@ so a human with workflow scope lands this lane.
 | `docs-generate` | `scripts/check-docs-generate.sh` | `heavy: true` |
 | `pin-coherence` | forge.yaml `forge_version` == go.mod forge (from `check-forge-generate.sh`) | cheap |
 | `pin-ancestry` | `scripts/check-pin-ancestry.sh` | `cache: false` (network) |
-| `migrations` | `scripts/check-migrations.sh` | goose-era rules; audit against forge `migration-safety` and delete what overlaps |
+| `migrations` | `scripts/check-migrations.sh` | goose-era rules over goose's files; deleted with goose (2026-10-22, runbook 04 §9) |
 | `npm-licenses` | `scripts/check-npm-licenses.sh` | forge `license-check` covers Go only |
 | `release-config`, `gh-scripts` | `node .github/scripts/sync-release-config.mjs --check`, `node --test '.github/scripts/*.test.mjs'` | — |
 | `cp-contract` | proto-vendor vs control-plane main | `cache: false`, `skip_exit_code: 77` when the private sibling is unreachable (an outside contributor) |

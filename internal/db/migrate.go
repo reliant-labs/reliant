@@ -23,24 +23,16 @@ import (
 // (forge/pkg/migratekit, golang-migrate underneath). Forward only; a version is
 // applied once, in order, and recorded in schema_migrations.
 //
-// The first migration is the baseline that replaced goose's history, and
-// three kinds of database meet it:
-//
-//   - a FRESH one applies the baseline's SQL;
-//   - one goose migrated to goose's frozen head is ADOPTED: the baseline is
-//     recorded as applied and none of its SQL runs;
-//   - one goose migrated to an OLDER version is first brought to that head by
-//     goose itself (the goose bridge, goose_bridge.go), then adopted.
-//
-// Adoption writes only forge's own bookkeeping (schema_migrations*), and
-// goose_db_version is never written once a database is at goose's head. That
-// is what keeps a rollback to the last goose release a no-op: goose finds every
-// version it knows applied. It is also why every forge migration after the
-// baseline must be declared `-- forge:backward-compatible` unless it
-// deliberately ends that rollback (`-- forge:breaks-rollback`; forge.yaml's
+// The first migration is the baseline: it builds a fresh database. Every
+// database we keep was migrated by goose until 2026-10 and adopted by forge's
+// migrator on its first boot of a release carrying the goose bridge (reliant
+// v1.8.2 onwards). So beside a fresh database, this binary meets only ones
+// forge's migrator has a record in, and refuses the rest (MigrationPlan).
+// Every forge migration after the baseline must be declared
+// `-- forge:backward-compatible` unless it deliberately ends rollback to the
+// previous release (`-- forge:breaks-rollback`; forge.yaml's
 // database.migration_safety.require_compat_declaration, enforced by
-// `forge lint --migration-safety`).
-// See research/forge-migration/04-p5a-cutover-runbook.md.
+// `forge lint --migration-safety`). See internal/db/SCHEMA.md.
 
 // migrationsTable is golang-migrate's version record: one row, (version, dirty).
 const migrationsTable = "schema_migrations"
@@ -50,7 +42,7 @@ const migrationsTable = "schema_migrations"
 //
 // forge's migrator holds session-level advisory locks for the whole run — its
 // run lock, which takes replicas and `db migrate up` one at a time, and
-// golang-migrate's own — and so does the goose bridge. Behind a
+// golang-migrate's own. Behind a
 // transaction-pooling PgBouncer a session lock lands on a backend the caller
 // does not keep, exactly as for TryAdvisoryLock, so migrations need the
 // session-capable URL whenever there is one.
@@ -61,20 +53,14 @@ func (c DatabaseConfig) MigrationURL() string {
 	return c.URL
 }
 
-// MigrateResult is what one Migrate run did.
+// MigrateResult is what one Migrate run did: forge's migrator's report — the
+// versions applied, or a schema ahead of this binary.
 type MigrateResult struct {
-	// GooseApplied is every goose version the goose bridge applied before
-	// forge's migrator ran, ascending. Empty unless the database was behind
-	// goose's frozen head and this run caught it up.
-	GooseApplied []int64
-	// Forge is forge's migrator's report: an adoption, the versions applied,
-	// a schema ahead of this binary.
-	Forge migratekit.Result
+	migratekit.Result
 }
 
 // Migrate applies every migration this binary embeds that the database has
-// not applied — catching a goose database up to goose's frozen head first, and
-// adopting it — and reports what it did. It is the one migration path: the
+// not applied, and reports what it did. It is the one migration path: the
 // api-server's MigrateApply and `reliant db migrate up` both call it, with
 // DatabaseConfig.MigrationURL.
 //
@@ -83,24 +69,22 @@ type MigrateResult struct {
 // and one session is what keeps concurrent runs from deadlocking behind a
 // session pooler with few server connections (prod's reliant_cp_session pool
 // has two per PgBouncer replica). Several callers may run it at once — api
-// replicas booting together, or a migrate Job beside them: the goose bridge's
-// lock and the migrator's run lock make them take turns, a waiter holds only
-// its own session while it waits, and every one after the first finds nothing
-// to do.
+// replicas booting together, or a migrate Job beside them: the migrator's run
+// lock makes them take turns, a waiter holds only its own session while it
+// waits, and every one after the first finds nothing to do.
 //
-// What it refuses, it refuses before changing anything: a goose history the
-// baseline cannot adopt (MigrationPlan.bridgeRefusal), a schema left dirty by
-// a migration that failed partway (`reliant db migrate force` is the way out),
-// a goose history migratekit will not adopt (*migratekit.AdoptionError), and a
-// schema ahead of this binary that was not declared backward-compatible
+// What it refuses, it refuses before changing anything: reliant's tables with
+// no migration record (MigrationPlan.refusal), a schema left dirty by a
+// migration that failed partway (`reliant db migrate force` is the way out),
+// and a schema ahead of this binary that was not declared backward-compatible
 // (*migratekit.SchemaAheadError).
-func Migrate(ctx context.Context, dsn string, logger *slog.Logger) (MigrateResult, error) {
+func Migrate(ctx context.Context, dsn string) (MigrateResult, error) {
 	pool, err := dbtrace.Open("pgx", dsn)
 	if err != nil {
 		return MigrateResult{}, fmt.Errorf("open migration connection: %w", err)
 	}
 	defer func() { _ = pool.Close() }()
-	return MigrateDB(ctx, pool, logger)
+	return MigrateDB(ctx, pool)
 }
 
 // ApplyOnBoot is the migrating server's boot step — the api-server's process
@@ -108,7 +92,7 @@ func Migrate(ctx context.Context, dsn string, logger *slog.Logger) (MigrateResul
 // connection of its own opened for it on DatabaseConfig.MigrationURL: Migrate,
 // then the boot log of what it did.
 func ApplyOnBoot(ctx context.Context, pool *sql.DB, logger *slog.Logger) error {
-	res, err := MigrateDB(ctx, pool, logger)
+	res, err := MigrateDB(ctx, pool)
 	if err != nil {
 		return fmt.Errorf("failed to apply migrations: %w", err)
 	}
@@ -118,58 +102,50 @@ func ApplyOnBoot(ctx context.Context, pool *sql.DB, logger *slog.Logger) error {
 
 // MigrateDB is Migrate on pool, which it narrows to the one session the run
 // needs and the caller closes.
-func MigrateDB(ctx context.Context, pool *sql.DB, logger *slog.Logger) (MigrateResult, error) {
-	// One session for the whole run: the goose bridge holds its lock on it
-	// while goose (which takes a *sql.DB) runs on it, and migratekit.Apply
-	// borrows that same connection. Idle connections are never retired, so
-	// the session is not swapped out from under the lock.
+func MigrateDB(ctx context.Context, pool *sql.DB) (MigrateResult, error) {
+	// One session for the whole run: migratekit.Apply holds its run lock on
+	// it. Idle connections are never retired, so the session is not swapped
+	// out from under the lock.
 	pool.SetMaxOpenConns(1)
 	pool.SetMaxIdleConns(1)
 	pool.SetConnMaxLifetime(0)
 	pool.SetConnMaxIdleTime(0)
 
-	var res MigrateResult
-	var err error
-	if res.GooseApplied, err = catchUpGoose(ctx, pool, logger); err != nil {
-		return res, err
+	plan, err := PlanMigration(ctx, pool)
+	if err != nil {
+		return MigrateResult{}, err
 	}
-	if res.Forge, err = migratekit.Apply(ctx, pool, forgedb.Source(), forgedb.SourceDir); err != nil {
-		return res, fmt.Errorf("migrate up: %w", err)
+	if err := plan.refusal(); err != nil {
+		return MigrateResult{}, err
 	}
-	return res, nil
+	res, err := migratekit.Apply(ctx, pool, forgedb.Source(), forgedb.SourceDir)
+	if err != nil {
+		return MigrateResult{Result: res}, fmt.Errorf("migrate up: %w", err)
+	}
+	return MigrateResult{Result: res}, nil
 }
 
 // Lines reports the run one fact per line: what `reliant db migrate up`
 // prints, and what the api-server logs at boot.
 func (r MigrateResult) Lines() []string {
-	var out []string
-	if n := len(r.GooseApplied); n > 0 {
-		out = append(out, fmt.Sprintf("goose caught up: applied %d goose migration(s) the database was missing (%s), with goose, as the last goose release would have",
-			n, formatVersions(r.GooseApplied)))
-	}
-	f := r.Forge
-	if f.Adopted != nil {
-		out = append(out, f.Adopted.String())
-	}
 	switch {
-	case f.NothingEmbedded:
-		out = append(out, "no migrations embedded; nothing to do")
-	case f.Ahead != nil:
-		out = append(out, fmt.Sprintf("schema is AHEAD of this binary (version %d; this binary's newest is %d) and every newer version (%s) is declared backward-compatible: nothing applied",
-			f.Ahead.Version, f.Ahead.Latest, formatUints(f.Ahead.Versions)))
-	case f.Changed:
-		out = append(out, fmt.Sprintf("migrations applied: %s -> %d", versionLabel(f.Before), f.After.Version))
-	case f.Adopted == nil:
-		out = append(out, fmt.Sprintf("no pending migrations (version %s)", versionLabel(f.After)))
+	case r.NothingEmbedded:
+		return []string{"no migrations embedded; nothing to do"}
+	case r.Ahead != nil:
+		return []string{fmt.Sprintf("schema is AHEAD of this binary (version %d; this binary's newest is %d) and every newer version (%s) is declared backward-compatible: nothing applied",
+			r.Ahead.Version, r.Ahead.Latest, formatUints(r.Ahead.Versions))}
+	case r.Changed:
+		return []string{fmt.Sprintf("migrations applied: %s -> %d", versionLabel(r.Before), r.After.Version)}
+	default:
+		return []string{fmt.Sprintf("no pending migrations (version %s)", versionLabel(r.After))}
 	}
-	return out
 }
 
-// logMigrateResult logs Lines at boot. An adoption, a goose catch-up and a
-// schema ahead of the binary are healthy but must not be missed: WARN.
+// logMigrateResult logs Lines at boot. A schema ahead of the binary is
+// healthy but must not be missed: WARN.
 func logMigrateResult(logger *slog.Logger, r MigrateResult) {
 	level := slog.LevelInfo
-	if len(r.GooseApplied) > 0 || r.Forge.Adopted != nil || r.Forge.Ahead != nil {
+	if r.Ahead != nil {
 		level = slog.LevelWarn
 	}
 	for _, line := range r.Lines() {
@@ -251,9 +227,8 @@ func WaitForSchema(db *sql.DB, timeout time.Duration) error {
 			)
 		}
 
-		// One line every 10s, not one per poll: a slow backfill (or a goose
-		// catch-up) can hold this loop for minutes and the log still has to
-		// be readable.
+		// One line every 10s, not one per poll: a slow backfill can hold
+		// this loop for minutes and the log still has to be readable.
 		if time.Since(lastLog) >= 10*time.Second {
 			logging.Info("Waiting for database migrations to be applied by api-server",
 				"pending", len(missing), "total", len(want), "oldest_pending", missing[0])
@@ -265,8 +240,8 @@ func WaitForSchema(db *sql.DB, timeout time.Duration) error {
 }
 
 // ReadMigrationState reads the version forge's migrator recorded, without
-// opening a migrator (see WaitForSchema). A database with no record yet —
-// fresh, or goose-migrated and not adopted — reports Applied false.
+// opening a migrator (see WaitForSchema). A database with no record yet
+// reports Applied false.
 func ReadMigrationState(db *sql.DB) (migratekit.State, error) {
 	return readMigrationState(context.Background(), db)
 }

@@ -209,16 +209,3 @@ func StartWorkflow(ctx context.Context, repo *db.Repo, temporalClient client.Cli
     return nil
 }
 ```
-
-## Migration
-
-Apply migration 041 to add required schema changes:
-
-```bash
-goose -dir internal/db/migrations/postgres up
-```
-
-This adds:
-
-- `assistant_message_streams` table
-- `cancellation_reason` column to `tool_calls` table

@@ -25,7 +25,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io/fs"
-	"log/slog"
 	"net/url"
 	"os"
 	"sort"
@@ -108,8 +107,7 @@ func New(tb testing.TB) *Env {
 }
 
 // buildTemplate migrates the empty template database through db.Migrate —
-// the goose bridge then forge's migrator, the path a server boots on — and
-// seeds the shared project.
+// the path a server boots on — and seeds the shared project.
 func buildTemplate(build *sql.DB, base string) error {
 	var name string
 	if err := build.QueryRow(`SELECT current_database()`).Scan(&name); err != nil {
@@ -119,7 +117,7 @@ func buildTemplate(build *sql.DB, base string) error {
 	if err != nil {
 		return err
 	}
-	if _, err := db.Migrate(context.Background(), dsn, slog.New(slog.DiscardHandler)); err != nil {
+	if _, err := db.Migrate(context.Background(), dsn); err != nil {
 		return fmt.Errorf("migrate template: %w", err)
 	}
 	_, err = build.Exec(`INSERT INTO projects (id, user_id, name, path, created_at, updated_at, last_active)

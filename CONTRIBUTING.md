@@ -5,7 +5,7 @@
 - Go (the version in `go.mod`; code generation downloads it if yours differs)
 - Node.js 20.19+
 - Make, and Python 3 for the generated docs pages
-- Go dev tools: [air](https://github.com/air-verse/air) (hot reload), [goose](https://github.com/pressly/goose) (migrations)
+- Go dev tools: [air](https://github.com/air-verse/air) (hot reload)
 
 ## Development Setup
 

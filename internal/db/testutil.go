@@ -10,7 +10,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"log/slog"
 	"net/url"
 	"os"
 	"strconv"
@@ -429,7 +428,7 @@ func createTemplateDB(baseDSN string) error {
 	// Migrate and seed the template ONCE. Everything below is inherited by
 	// every per-test copy, which is what makes the copies cheap. Migrate
 	// opens and closes its own connections, the same path a server boots on.
-	if _, err := Migrate(context.Background(), templateDSN, slog.New(slog.DiscardHandler)); err != nil {
+	if _, err := Migrate(context.Background(), templateDSN); err != nil {
 		return fmt.Errorf("migrate template database: %w", err)
 	}
 	// forge:lint-disable-next-line forge-tracing-raw-sql-open: test-only template seeding, never in a served request

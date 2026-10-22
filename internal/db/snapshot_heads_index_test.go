@@ -4,12 +4,15 @@ package db
 import (
 	"context"
 	"database/sql"
+	"io/fs"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
+	forgedb "github.com/reliant-labs/reliant/db"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/store"
 )
@@ -151,16 +154,35 @@ func TestSnapshotHeadsQueryMatchesPartialIndex(t *testing.T) {
 	require.Contains(t, store.SnapshotHeadsSQL,
 		"WHEN update_type = "+strconv.Itoa(int(reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_QUESTION))+" THEN")
 
-	migration, err := FS.ReadFile("migrations/postgres/20261004010819_bound_chat_open_reads.sql")
-	require.NoError(t, err)
-	require.Contains(t, string(migration), "WHERE update_type NOT IN ("+joinEnum(indexExcluded)+");",
+	require.Contains(t, latestIndexDefinition(t, "idx_chat_updates_snapshot_heads"),
+		"WHERE (update_type <> ALL (ARRAY["+joinEnum(indexExcluded)+"]))",
 		"idx_chat_updates_snapshot_heads must exclude exactly the types the query's skip scan relies on it excluding")
-
-	rekeyedMigration, err := FS.ReadFile("migrations/postgres/20261004172515_snapshot_rekeyed_updates_index.sql")
-	require.NoError(t, err)
-	require.Contains(t, string(rekeyedMigration), "WHERE update_type IN ("+joinEnum(rekeyed)+");",
+	require.Contains(t, latestIndexDefinition(t, "idx_chat_updates_snapshot_rekeyed"),
+		"WHERE (update_type = ANY (ARRAY["+joinEnum(rekeyed)+"]))",
 		"idx_chat_updates_snapshot_rekeyed must cover exactly the types the query's re-keyed read selects; "+
 			"the planner uses a partial index only when the query's literal predicate implies the index's")
+}
+
+// latestIndexDefinition returns the last CREATE INDEX statement for index
+// across the embedded migrations, in version order: the definition a database
+// they build ends up with. The baseline spells it the way pg_dump does.
+func latestIndexDefinition(t *testing.T, index string) string {
+	t.Helper()
+	files, err := fs.Glob(forgedb.Source(), forgedb.SourceDir+"/*.up.sql")
+	require.NoError(t, err)
+	sort.Strings(files)
+	var def string
+	for _, f := range files {
+		body, err := fs.ReadFile(forgedb.Source(), f)
+		require.NoError(t, err)
+		for _, line := range strings.Split(string(body), "\n") {
+			if strings.HasPrefix(line, "CREATE INDEX") && strings.Contains(line, " "+index+" ON ") {
+				def = line
+			}
+		}
+	}
+	require.NotEmpty(t, def, "no migration creates %s", index)
+	return def
 }
 
 func joinEnum(values []reliantv1.ChatUpdateType) string {

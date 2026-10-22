@@ -50,7 +50,6 @@ Install required Go dev tools:
 
 ```bash
 go install github.com/air-verse/air@latest
-go install github.com/pressly/goose/v3/cmd/goose@latest
 ```
 
 Ensure Go bin is on PATH:
@@ -94,7 +93,7 @@ Stop with `Ctrl+C`.
 
 - Upgrade Node to `22.12+`.
 
-`air` or `goose` not found:
+`air` not found:
 
 - Re-run the `go install ...` commands above.
 - Confirm `echo $PATH` includes `$HOME/go/bin`.

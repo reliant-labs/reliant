@@ -524,7 +524,7 @@ The JSON `/health` with `auth_mode` is on the **API** port, which the web client
 ### 4.3 Migrations
 Today: **api = `MigrateApply`** (`serverapi/run.go:284`, the only schema owner); **worker =
 `MigrateWait`** (`serverworker/run.go:212`); **gateway = `MigrateWait`** (`servergateway/run.go:175`);
-plus `reliant db migrate up`. All go through `db.Migrate` (goose bridge → migratekit, on
+plus `reliant db migrate up`. All go through `db.Migrate` (migratekit; the goose bridge until 2026-10-22, on
 `MigrationURL`). Under the graph, the Repo provider is always `MigrateWait`, which returns at
 once when the schema is at head. The **api's `runRoot` runs `db.Migrate` before building**
 (after boot probes, so `/readyz` reports `migrating`). With F6 this is declared: `migrate=apply`

@@ -1,21 +1,24 @@
 # 04 — P5a cutover runbook: goose → forge migratekit
 
-**Never run any of this against port 5434, prod, Cloud SQL or a gke context
-from an agent session.** Steps marked **(human)** touch a deployed database and
-are run by a person with the user's sign-off.
+> **Status: complete, and goose is gone.** Prod's `reliant_cp` was adopted on
+> 2026-10-19 and goose was removed on 2026-10-22 (§9). This file is the record
+> of how the cutover was done; nothing in it is still to run. The live rules
+> are `internal/db/SCHEMA.md`.
+
+The pre-flight, rollout and rollback steps (old §5–§8) and the CI workflow
+edit (old §10) were run and are deleted; git history has them.
 
 Revised 2026-10-14 for the user's condition on approving P5a: *"Let's not break
 prior users or the prod db."* Against forge `8d812662` (reliant #885), on
-throwaway Postgres 16. The implementation is two reliant branches, merged back
-to back (§6.0):
+throwaway Postgres 16. The implementation was two reliant branches, merged back
+to back (#912, #914):
 
 | Branch | What | Changes a deployed DB? |
 |---|---|---|
 | `feat/p5a-forge-migrations-baseline-r2` | `db/migrations/20261014050404_baseline.up.sql` (goose's 156 migrations, squashed by `forge db squash --from-dsn`, with its `-- forge:adopts goose` list); `db/embed_gen.go`; tests that freeze goose's history by version AND content | No — nothing runs forge's migrator yet |
 | `feat/p5a-migrate-up-migratekit-r2` | `db.Migrate`: the goose bridge, then `migratekit.Apply`; `db migrate status` as a read-only preview; `force`; the backward-compatible rule; sqlc reads `db/migrations` | **Yes — this is the cutover** |
 
-`chore/p5a-remove-goose` is **not** part of the cutover; §9 says what must be
-true before goose can go.
+Removing goose was not part of the cutover; §9 records when and how it went.
 
 ## What this revision changes
 
@@ -49,7 +52,7 @@ true before goose can go.
    the bridge's report; the stale "a Migrator holds a second session" notes are
    gone (forge #706 made every migratekit path one session).
 
-## 1. Cut the baseline (done; how to re-cut)
+## 1. How the baseline was cut
 
 The goose database must be built by **the last goose release** — the code path
 that built prod — not by a goose CLI.
@@ -72,10 +75,9 @@ Use the pinned forge for every `forge` here
 Squash reads `goose_db_version` for the adoption list and leaves goose's table
 and sequence out of the body. Do not edit the file.
 
-Then update `frozenGooseDigest` in `internal/db/baseline_adoption_test.go`
-(the test prints the new digest). A goose migration that must ship before the
-cutover means re-cutting from the new goose head; after the cutover, goose is
-frozen and a schema change is a forge migration.
+The baseline's `-- forge:adopts goose` lines were removed with goose (§9):
+every database we keep had been adopted by then, and migratekit reads the
+declaration only on a database it has no record in.
 
 ## 2. What the cutover binary does
 
@@ -129,13 +131,11 @@ opens a one-connection pool — one Postgres session for the whole run — and:
   `-- forge:backward-compatible — <why>` nor `-- forge:breaks-rollback <why>`,
   gives no reason (a `<why …>` placeholder is none), or declares both.
 - Why it matters: rolling back is redeploying the previous release onto the
-  schema the new one left. Until a release after the cutover ships, that is
-  the **last goose release**, whose code must run on every forge migration
-  applied since. After that it is an older forge release, whose migrator
-  refuses to start on a schema ahead of it unless every newer version was
-  declared compatible. Expand in one release, contract in a later one.
-- A `-- forge:breaks-rollback` migration changes §7: from that release on,
-  rollback means a forward fix.
+  schema the new one left: an older forge release, whose migrator refuses to
+  start on a schema ahead of it unless every newer version was declared
+  compatible. Expand in one release, contract in a later one.
+- A `-- forge:breaks-rollback` migration means that, from that release on,
+  rollback is a forward fix.
 - `CREATE INDEX CONCURRENTLY` must be the only statement in its file
   (`forge lint --migration-safety` enforces it). With forge `8d812662`,
   migratekit's run-lock waiters blocked in `pg_advisory_lock`, holding a
@@ -187,146 +187,42 @@ bookkeeping included) byte-identical before and after.
 | Same on a goose-head database, then a second boot of it | first: api ADOPTS, worker starts; second: `no pending migrations (version 20261014050404)` |
 | `go vet ./...`; pinned `forge generate`; control-plane `go build ./...` through an uncommitted go.work | vet clean; generate changes nothing under `db/` or `internal/db/` (only main's pre-existing dashboard/descriptor drift); control-plane builds except `internal/alerting` (`RuleSource` lacks `Owners` against forge `8d812662`, known and unrelated) |
 
-## 5. Read-only pre-flight, per database we keep
+## 9. goose removal (done 2026-10-22)
 
-```bash
-DATABASE_URL=<dsn> reliant db migrate status      # the NEW binary
-```
+Owner decision 2026-10-22: remove goose, no backwards compatibility. The
+conditions this section used to list, and how each stood:
 
-The first line is the verdict. For prod it should be `adopt: …`, or
-`goose catch-up N, then adopt` if the newest goose migrations (#861, #893, #909)
-never deployed there; both are fine.
-Anything starting `refuse:` is resolved first, with the user. Exit 1 means
-`up` would refuse.
-
-## 6. Rollout
-
-### 6.0 Merge order
-1. `docs/p5a-runbook-r2` any time.
-2. `feat/p5a-forge-migrations-baseline-r2`, then `feat/p5a-migrate-up-migratekit-r2`
-   **back to back** (the second is stacked on the first). The baseline
-   freezes goose the moment it merges. A goose migration merged in between
-   fails `TestBaselineAdoptsExactlyTheGooseHistory` and needs a re-cut (§1).
-3. **The next prod deploy after (2) carries adoption.** Do §6.3 first, and
-   tag the last pre-cutover release image (`[keep]`): it is the rollback.
-4. A human with workflow permission lands the `check-migrations.yml` change (§10).
-
-### 6.1 Dev databases **(human)**
-Destroyable (user decision 2026-10-12), but no longer required to be dropped:
-a dev database at any goose version on the frozen history is caught up and
-adopted on the next `forge env up dev`. Run `status` first. One holding a
-branch-only goose version is refused; drop and recreate that one:
-
-```bash
-cd ../control-plane
-docker compose exec postgres psql -U postgres -c 'DROP DATABASE "reliant<sfx>" WITH (FORCE)' -c 'CREATE DATABASE "reliant<sfx>"'
-forge env up dev        # the reliant-migrate initContainer runs `reliant db migrate up`
-```
-
-Check: `reliant-migrate` ends `schema is current (version 20261014050404)`.
-
-### 6.2 dev-k8s / e2e
-Same: `status`, then the next deploy adopts (or rebuild if refused).
-
-### 6.3 Prod rehearsal on a Cloud SQL clone **(human, before the merge's first prod deploy)**
-```bash
-# 1. backup
-gcloud sql backups create --instance=reliant-pg --project=reliant-labs-475814 \
-  --description="pre-P5a goose->forge cutover [keep]"
-# 2. clone
-gcloud sql instances clone reliant-pg reliant-pg-p5a-rehearsal --project=reliant-labs-475814
-# 3. status, up and a schema diff against the clone (cloud-sql-proxy to the clone; the NEW binary; role `reliant`)
-export PGPASSWORD=<pw>; C=postgres://reliant@127.0.0.1:<port>/reliant_cp
-DATABASE_URL=$C reliant db migrate status                    # "adopt: …" (or "goose catch-up N, then adopt")
-pg_dump --schema-only --no-owner --no-privileges -T goose_db_version -T goose_db_version_id_seq -T 'schema_migrations*' "$C" > before.sql
-psql "$C" -tAc 'SELECT count(*) FROM goose_db_version' > goose-before.txt
-DATABASE_URL=$C reliant db migrate up                         # ADOPTED … (156 goose versions verified); schema is current (version 20261014050404)
-pg_dump --schema-only --no-owner --no-privileges -T goose_db_version -T goose_db_version_id_seq -T 'schema_migrations*' "$C" > after.sql
-diff before.sql after.sql                                     # empty for "adopt"; for a catch-up, only what the caught-up goose migrations add
-psql "$C" -tAc 'SELECT count(*) FROM goose_db_version'        # = goose-before.txt for "adopt" (+1 for a catch-up)
-DATABASE_URL=$C <last goose release> db migrate up            # rollback rehearsal: "goose: no migrations to run", "schema is current"
-DATABASE_URL=$C reliant db migrate status                     # "up to date (version 20261014050404)"
-# 4. delete the clone
-gcloud sql instances delete reliant-pg-p5a-rehearsal --project=reliant-labs-475814
-```
-
-### 6.4 Prod **(human)**
-5. **status against prod**, with the new image: a one-off pod in
-   `control-plane-prod` with the reliant-api-server env (`DATABASE_URL`,
-   `DATABASE_DIRECT_URL`, `PGPASSWORD` from
-   `pgb.client_env(..., "reliant", "reliant-db-role", "reliant_cp", "reliant_cp_session")`).
-   It must match the clone's verdict. Note `SELECT count(*) FROM goose_db_version`.
-6. **Deploy.** The first new api-server pod adopts (under a second); the old
-   pods keep serving untouched; new workers and gateways wait for it.
-7. **Verify:**
-   - an api-server log line `ADOPTED a database goose migrated: 20261014050404_baseline.up.sql recorded as applied without running its SQL (156 goose versions verified; …)` at WARN, on exactly one pod;
-   - `SELECT version, dirty FROM schema_migrations` → `20261014050404 | f`;
-   - `goose_db_version` row count equal to step 5's (N more if step 5 said `goose catch-up N`);
-   - `reliant db migrate status` → `up to date (version 20261014050404)`;
-   - api `/ready`, workers started, chats work.
-8. **Rollback = redeploy the last goose image** (§7).
-
-## 7. Rollback
-
-Redeploy the last goose release image. goose finds every version it knows
-applied and does nothing; its waiters read `goose_db_version`, which still says
-current. `schema_migrations*` stay, ignored. Rolling forward again is a no-op
-(already adopted). This holds as long as every forge migration since the
-cutover is `-- forge:backward-compatible` (§3).
-
-## 8. Desktop and self-hosted
-
-- **Desktop (Electron) has no database.** It spawns only
-  `reliant daemon start --server <api url>`; `data-migration.js`'s `reliant.db`
-  moves are a SQLite-era leftover.
-- **Self-hosted compose** (`docker-compose.cloud.yml`) runs `server api`
-  against its own Postgres and migrates at boot through `db.Migrate`. Any
-  install on the goose history — at head, or any number of releases behind —
-  is caught up and adopted by the first new release it runs. The catch-up of
-  a very old database runs goose's whole remaining history at boot (152
-  migrations took about 5–10 s on an empty test database; data migrations scale
-  with the data).
-
-## 9. What must be true before goose can go (`chore/p5a-remove-goose`)
-
-Removing goose deletes the bridge: a database behind goose's head is then
-refused (migratekit's `AdoptionError`) and needs the last bridge-carrying
-release first. So, all of:
-
-1. Every database we keep has adopted: `status` says `up to date` (prod,
-   dev-k8s, e2e, any dev stack someone keeps).
-2. Self-hosted users have had a bridge-carrying release for a support window
-   the user chooses, and that release's image tag is kept and documented as
-   the upgrade step for anything older.
-3. Rollback to a goose release is no longer wanted: at least one forge release
-   after the cutover has shipped to prod, so the rollback target is a forge
-   release.
-4. The removal changes the refusal text to name that bridge release, and
-   takes with it goose's files, `RunMigrations`, the goose-history tests, the
-   `goose` module and the CI goose steps. `chore/p5a-remove-goose` (b3ebfbf7)
-   predates the bridge and the re-cut and must be redone, not merged.
-5. Optionally later: a forge migration drops `goose_db_version`.
-
-## 10. CI workflow edit (applied 2026-10-15)
-
-Applied to `.github/workflows/check-migrations.yml` once the merge token could
-push workflow files (it pushed `pr-ci.yml` in #941). Verified by replaying the
-job locally: goose up into a fresh database, then the new step (14 tests pass,
-none skipped). What changed:
-- `paths:` add `db/migrations/**` and `internal/db/migrate*.go`,
-  `internal/db/goose_bridge.go`; drop `internal/db/postgres/schema.sql`.
-- Replace "Validate schema.sql agrees with the migrations" (the schema.sql
-  drift tests are deleted, so that step now fails) with:
-  ```yaml
-  - name: Validate migrations apply, adopt, catch up and refuse
-    env:
-      DATABASE_URL: postgres://postgres:postgres@localhost:5432/reliant_ci?sslmode=disable
-      REQUIRE_TEST_DB: "1"
-    run: |
-      go test ./internal/db/ -count=1 \
-        -run 'TestBaselineAdopts|TestGooseHistoryIsFrozen|TestMigrate_|TestPlanMigration|TestPendingMigrations|TestWaitForSchema'
-  ```
-- Keep the goose steps (they still check the frozen files) until §9.
+1. **Every database we keep has adopted.** Prod: control-plane #1013
+   (2026-10-19) records release `20261019.065845-812e040da1af` live in prod.
+   That release tree pins reliant `15495975` (2026-10-18), which contains
+   #912 and #914, so its api-server booted through `db.Migrate` (bridge, then
+   `migratekit.Apply`): a goose database is adopted on that boot or the
+   api-server does not start. Later prod releases carry forge migrations past
+   the baseline (release `20261021.105910-4bc2c382a106` pins reliant `5454ad45`,
+   17 of them), which the migrator applies only on an adopted database.
+   control-plane's go.mod has pinned a reliant containing #914 since #930
+   (2026-10-15), and `scripts/build-reliant-image.sh` builds the reliant image
+   from that pin. dev, dev-k8s and e2e are destroyable (user decision
+   2026-10-12). Desktop has no database.
+2. **Self-hosted support window.** Waived by the owner: nobody runs the old
+   path. reliant v1.8.2 (2026-10-18) is the first tagged release carrying the
+   bridge, and the refusal names it as the upgrade step.
+3. **Rollback to a goose release is no longer wanted.** Every prod release
+   since 2026-10-19 is a forge release, so a rollback lands on one.
+4. **What went:** `internal/db/goose_bridge.go`, `RunMigrations`, goose's 156
+   frozen files and their embed, the goose-history and goose-data-migration
+   tests, `internal/db/migrationcheck` + `cmd/check-migrations` +
+   `scripts/check-migrations.sh` (rules over goose's files), the goose-era
+   renumbering scripts and hooks, the CI goose steps, and the
+   `github.com/pressly/goose/v3` module. `db.Migrate` is `migratekit.Apply`,
+   after one refusal of its own: reliant's tables with no forge record
+   (`MigrationPlan.refusal`, naming v1.8.2). The baseline's
+   `-- forge:adopts goose` lines went too; migratekit records a migration by
+   its filename descriptor, not its content, so editing that comment block
+   changes nothing on an adopted database
+   (`TestMigrate_AdoptedDatabaseIsANoOp`).
+5. **Not done:** dropping `goose_db_version` from the databases that still
+   hold it. Nothing reads it; a forge migration can drop it whenever.
 
 ## 11. Decisions and open items for the user
 

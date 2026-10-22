@@ -42,11 +42,10 @@ query the Repo runs lives (P5b in `research/forge-migration/PLAN.md`).
    its run lock by polling `pg_try_advisory_lock`, holding no statement or
    snapshot between attempts, so the index build never waits on a waiter
    (forge #776; before it, every waiting replica failed its boot with
-   `deadlock detected`. The goose bridge polls for its own lock the same way).
+   `deadlock detected`).
 
    **Say whether the previous release survives it.** Rolling back is
-   redeploying the previous release onto the schema this one left — until a
-   release after the cutover ships, that is the last goose release. Every
+   redeploying the previous release onto the schema this one left. Every
    migration after the baseline carries one of:
 
    ```sql
@@ -93,32 +92,23 @@ forge db migration rebase db/migrations/<version>_my_changes.up.sql
 | Command | Description |
 | ------- | ----------- |
 | `reliant db migrate up` | Apply every pending migration (DATABASE_URL, or DATABASE_DIRECT_URL when set) |
-| `reliant db migrate status` | Read-only (one READ ONLY transaction): what `up` would do — up to date, apply N, build fresh, adopt, goose catch-up then adopt, or refuse and why. Exits non-zero on a refusal |
+| `reliant db migrate status` | Read-only (one READ ONLY transaction): what `up` would do — up to date, apply N, build fresh, or refuse and why. Exits non-zero on a refusal |
 | `reliant db migrate force <version>` | Clear a dirty schema after a hand repair (records the version, runs no SQL) |
 
-## goose history (frozen) and the goose bridge
+## Before forge migrations
 
-Until 2026-10 the schema was goose migrations in `migrations/postgres/`. They
-are frozen, byte for byte (`TestGooseHistoryIsFrozen`): a file added or edited
-there fails the build. The baseline in `db/migrations/` is their squashed
-result and lists every goose version in its `-- forge:adopts goose` lines
-(`TestBaselineAdoptsExactlyTheGooseHistory` keeps the list and the directory
-equal). Three kinds of database meet it, through the same `Migrate`:
+Until 2026-10 the schema was goose migrations. The baseline in
+`db/migrations/` is their squashed result (`forge db squash --from-dsn`).
+Every database we keep was adopted from goose by a release carrying the goose
+bridge (v1.8.2 onwards; the cutover runbook,
+`research/forge-migration/04-p5a-cutover-runbook.md`, has the history), and
+goose itself was removed afterwards. `goose_db_version` may still sit in such a
+database; nothing reads it.
 
-- **fresh** (no `goose_db_version`): the baseline's SQL runs;
-- **at goose's frozen head**: **adopted** — the baseline is recorded as
-  applied in forge's bookkeeping (`schema_migrations*`), none of its SQL runs,
-  and `goose_db_version` is left exactly as it was;
-- **behind goose's head** (an older goose release migrated it): the **goose
-  bridge** (`goose_bridge.go`) first runs goose itself — the same `goose.Up`
-  every goose release ran at boot, over these frozen files — to goose's head,
-  then the migrator adopts it, in the same run.
-
-A goose version the frozen history does not hold, a frozen version recorded as
-rolled back, or reliant's tables with no history at all are refused before
-anything runs. `reliant db migrate status` says which of these a database is.
-The goose files and library stay compiled in for the bridge; when they can go
-is in the cutover runbook, `research/forge-migration/04-p5a-cutover-runbook.md`.
+So `Migrate` meets a fresh database (the baseline builds it) or one forge's
+migrator has a record in. reliant's tables with no record are refused before
+anything runs: a goose-era database nobody adopted upgrades by running v1.8.2
+first.
 
 ## Queries on the forge ORM (P5b)
 
