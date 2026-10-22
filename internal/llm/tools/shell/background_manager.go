@@ -158,7 +158,7 @@ type BackgroundManager struct {
 	persistenceMu       sync.RWMutex
 
 	// Optional repo for DB-backed operations (e.g., killing recovered processes by PID)
-	repo db.Repository
+	repo ProcessStore
 }
 
 var (
@@ -195,7 +195,7 @@ func (m *BackgroundManager) SetPersistenceCallback(callback *PersistenceCallback
 
 // SetRepository sets the DB repository for operations that need database access.
 // This is optional; when unset, DB-backed operations will not be available.
-func (m *BackgroundManager) SetRepository(repo db.Repository) {
+func (m *BackgroundManager) SetRepository(repo ProcessStore) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.repo = repo

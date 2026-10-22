@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/nats-io/nats.go"
-	"github.com/reliant-labs/reliant/internal/db"
 )
 
 // RouterDriver identifies which daemon router backend to use.
@@ -30,7 +29,7 @@ func ParseRouterDriver(raw string) (RouterDriver, error) {
 type RouterConfig struct {
 	Driver   RouterDriver
 	NATSConn *nats.Conn    // Required when Driver == RouterDriverNATS
-	DB       db.Repository // Optional: the daemon registry's records, read for resolution and liveness
+	DB       DaemonRecords // Optional: the daemon registry's records, read for resolution and liveness
 	Resumer  DaemonResumer // Optional: wakes a suspended managed daemon through the control plane
 }
 

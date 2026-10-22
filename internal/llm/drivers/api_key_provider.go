@@ -14,7 +14,6 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/logging"
 )
@@ -27,12 +26,12 @@ var (
 
 // APIKeyProvider manages API keys for drivers
 type APIKeyProvider struct {
-	repo db.Repository
+	repo APIKeyStore
 }
 
 // InitializeAPIKeyProvider initializes or updates the global API key provider.
 // This can be called multiple times (e.g., in tests) to update the repo reference.
-func InitializeAPIKeyProvider(repo db.Repository) {
+func InitializeAPIKeyProvider(repo APIKeyStore) {
 	providerMu.Lock()
 	defer providerMu.Unlock()
 	globalAPIKeyProvider = &APIKeyProvider{

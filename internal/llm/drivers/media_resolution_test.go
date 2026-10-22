@@ -134,7 +134,7 @@ func TestResolveImage_FastTierAndPreference(t *testing.T) {
 	assert.Equal(t, "gemini-3.1-flash-lite-image", resolve("image-gen", "fast"), "preference does not override an explicit fast tier")
 }
 
-func setTagPref(ctx context.Context, repo db.Repository, userID, tag, value string) error {
+func setTagPref(ctx context.Context, repo *db.Repo, userID, tag, value string) error {
 	now := time.Now().UTC()
 	return repo.CreateSetting(ctx, &db.Setting{
 		ID: uuid.NewString(), UserID: userID, Key: modelprefs.KeyPrefix + tag, Value: value, ValueType: "json", CreatedAt: now, UpdatedAt: now,

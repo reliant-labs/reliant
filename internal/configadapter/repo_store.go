@@ -1,29 +1,28 @@
 // Copyright (c) 2025 Reliant Labs
 
-// Package configadapter bridges db.Repository to config.StoredConfigStore.
+// Package configadapter bridges the database's project config records to config.StoredConfigStore.
 //
 // Leaf utility package: the exported surface is concrete helpers over the
 // stdlib or the OS, with no collaborator to fake and no second implementation.
 // An interface here would have exactly one implementor and one caller shape,
 // which is indirection without a seam.
 //
-//forge:exclude-contract: one adapter function bridging db.Repository to config.StoredConfigStore; nothing of its own to mock
+//forge:exclude-contract: one adapter function bridging the database's config records to config.StoredConfigStore; no Service of its own
 package configadapter
 
 import (
 	"context"
 
 	"github.com/reliant-labs/reliant/internal/config"
-	"github.com/reliant-labs/reliant/internal/db"
 )
 
-// NewRepoConfigStore creates a StoredConfigStore backed by a db.Repository.
-func NewRepoConfigStore(repo db.Repository) config.StoredConfigStore {
+// NewRepoConfigStore creates a StoredConfigStore backed by the stored project config records.
+func NewRepoConfigStore(repo ConfigRecordReader) config.StoredConfigStore {
 	return &repoConfigStore{repo: repo}
 }
 
 type repoConfigStore struct {
-	repo db.Repository
+	repo ConfigRecordReader
 }
 
 func (s *repoConfigStore) GetProjectConfigRecord(ctx context.Context, projectID string) (*config.StoredProjectConfigRecord, error) {

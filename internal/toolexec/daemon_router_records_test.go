@@ -19,7 +19,7 @@ import (
 // reads: the user's daemon rows (with the lifecycle phase control-plane
 // mirrors in) and which of them hold a fresh attachment lease.
 type fakeDaemonRecords struct {
-	db.Repository
+	DaemonRecords
 	daemons  []*db.Daemon
 	attached []string
 }

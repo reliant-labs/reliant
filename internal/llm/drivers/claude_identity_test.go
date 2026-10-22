@@ -8,7 +8,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/anthropic"
@@ -18,9 +17,9 @@ import (
 
 // subscriptionAndKeyRepo is a user with BOTH a Claude subscription (OAuth) and
 // an Anthropic API key connected.
-type subscriptionAndKeyRepo struct {
-	db.Repository
-}
+type subscriptionAndKeyRepo struct{}
+
+var _ AvailabilityStore = subscriptionAndKeyRepo{}
 
 func (subscriptionAndKeyRepo) ListProviderAccountsWithSecrets(context.Context, string) ([]core.AccountWithSecrets, error) {
 	return []core.AccountWithSecrets{

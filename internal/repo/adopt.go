@@ -38,7 +38,7 @@ type DaemonCommander interface {
 //
 // Best-effort by design: on daemon or discovery failure it returns nil so the
 // caller keeps its own precondition semantics.
-func AdoptFromDaemon(ctx context.Context, database db.Repository, router DaemonCommander, project *db.Project) []*core.Repo {
+func AdoptFromDaemon(ctx context.Context, database AdoptStore, router DaemonCommander, project *db.Project) []*core.Repo {
 	payload, err := json.Marshal(map[string]string{"path": project.Path})
 	if err != nil {
 		return nil

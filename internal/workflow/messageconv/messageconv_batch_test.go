@@ -13,7 +13,7 @@ import (
 // the conversion path touches are implemented; anything else nil-panics loudly
 // rather than silently returning a zero value.
 type countingRepo struct {
-	db.Repository
+	Store
 
 	blocks   map[string][]*db.MessageContentBlock
 	windows  map[string]*db.ContextWindow

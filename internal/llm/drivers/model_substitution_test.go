@@ -15,7 +15,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/drivererrors"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/codex"
@@ -154,10 +153,10 @@ func TestSubstituteUnservableModel_LeavesEverythingElseAlone(t *testing.T) {
 	}
 }
 
-// providerKeysRepo is the slice of db.Repository BuildAvailableDrivers reads
+// providerKeysRepo is the slice of APIKeyStore BuildAvailableDrivers reads
 // for API-key providers. Any other method panics (nil embedded interface).
 type providerKeysRepo struct {
-	db.Repository
+	APIKeyStore
 	keys map[string]string
 }
 

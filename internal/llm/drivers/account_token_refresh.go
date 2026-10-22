@@ -9,7 +9,6 @@ import (
 
 	"golang.org/x/sync/singleflight"
 
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/antigravity"
@@ -40,15 +39,6 @@ import (
 // the account needs-sign-in. That removes it from AvailableDrivers.Accounts, so the account
 // router moves the chat to another account instead of failing it forever. A refresh that merely
 // fails (network, 5xx) never does: the credential is not in question.
-
-// AccountTokenStore is the slice of the account store the coordinator needs. db.Repository
-// satisfies it.
-type AccountTokenStore interface {
-	GetProviderAccountWithSecrets(ctx context.Context, userID, accountID string) (*core.AccountWithSecrets, error)
-	CompareAndSwapAccountTokens(ctx context.Context, userID, accountID, expectedRefresh string, next core.AccountTokens) (bool, error)
-	PatchProviderAccount(ctx context.Context, userID, accountID string, p core.AccountPatch) (core.ProviderAccount, error)
-	UpsertProviderAccount(ctx context.Context, u core.AccountUpsert) (core.ProviderAccount, bool, error)
-}
 
 // ProviderRefresh is one provider's token exchange: refresh token in, the new credential out.
 // It carries whatever identity the provider's response states (see core.AccountTokens).
@@ -325,8 +315,8 @@ func rewriteIdentity(ctx context.Context, store AccountTokenStore, before *core.
 	}
 }
 
-// accountTokenRepo returns the repository backing the global API key provider.
-func accountTokenRepo() (db.Repository, error) {
+// accountTokenRepo returns the store backing the global API key provider.
+func accountTokenRepo() (AccountTokenStore, error) {
 	providerMu.Lock()
 	defer providerMu.Unlock()
 	if globalAPIKeyProvider == nil || globalAPIKeyProvider.repo == nil {

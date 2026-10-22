@@ -546,7 +546,7 @@ type ActivityWrapper[I any, O any] struct {
 	outputType reflect.Type
 	name       string
 	activity   func(ctx context.Context, input I) (O, error)
-	repo       db.Repository
+	repo       ActivityStore
 	workKind   lifecycle.WorkKind
 	// messageWriter supplies the writer for a delegated save_message (see
 	// activity_message_save.go). A func so the registry's writer is read at
@@ -577,7 +577,7 @@ func (w *ActivityWrapper[I, O]) writer() MessageWriter {
 func NewActivityWrapper[I any, O any](
 	name string,
 	activity func(ctx context.Context, input I) (O, error),
-	repo db.Repository,
+	repo ActivityStore,
 ) *ActivityWrapper[I, O] {
 	var o O
 	return &ActivityWrapper[I, O]{
@@ -1894,7 +1894,7 @@ func deriveRecordedVerdict(outputMap map[string]interface{}, execErr error) reco
 // ActivityRegistry manages activity registration and wrapping with middleware
 // Similar to tool registry but for Temporal activities
 type ActivityRegistry struct {
-	repo        db.Repository
+	repo        ActivityStore
 	activities  map[string]interface{}  // activity name -> wrapped activity function
 	outputTypes map[string]reflect.Type // activity name -> output type for schema introspection
 	// messageWriter writes a node's delegated save_message; see SetMessageWriter.
@@ -1905,7 +1905,7 @@ type ActivityRegistry struct {
 }
 
 // NewActivityRegistry creates a new activity registry
-func NewActivityRegistry(repo db.Repository) *ActivityRegistry {
+func NewActivityRegistry(repo ActivityStore) *ActivityRegistry {
 	return &ActivityRegistry{
 		repo:              repo,
 		activities:        make(map[string]interface{}),
@@ -2121,7 +2121,7 @@ func getActivityLogger(ctx context.Context) log.Logger {
 /*
 // Define a typed activity
 type ProcessMessageActivity struct {
-	repo db.Repository
+	repo processMessageStore // declares only the methods this activity calls
 	llm  llm.Client
 }
 

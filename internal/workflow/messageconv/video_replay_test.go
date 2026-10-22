@@ -13,22 +13,16 @@ import (
 	"github.com/reliant-labs/reliant/internal/models/message"
 )
 
-type attachmentRepo struct {
-	db.Repository
-	atts map[string]*db.Attachment
-}
-
-func (r *attachmentRepo) GetAttachment(_ context.Context, id string) (*db.Attachment, error) {
-	return r.atts[id], nil
-}
-
 // A generated video lives in an IMAGE-typed block but must never be replayed to
 // a model: no routed chat model accepts it and the bytes would inflate every
 // later request.
 func TestContentBlockToPart_VideoIsNotReplayedToTheModel(t *testing.T) {
-	repo := &attachmentRepo{atts: map[string]*db.Attachment{
+	atts := map[string]*db.Attachment{
 		"vid": {ID: "vid", Filename: "g.mp4", MimeType: "video/mp4", Content: []byte("mp4")},
 		"img": {ID: "img", Filename: "g.png", MimeType: "image/png", Content: []byte("png")},
+	}
+	repo := &MockAttachmentReader{GetAttachmentFunc: func(_ context.Context, id string) (*db.Attachment, error) {
+		return atts[id], nil
 	}}
 	block := func(id string) *db.MessageContentBlock {
 		return &db.MessageContentBlock{BlockType: reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_IMAGE, Content: &id}

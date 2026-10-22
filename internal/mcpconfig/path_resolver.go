@@ -15,7 +15,7 @@ import (
 // Resolution order is deterministic and DB-backed only:
 //  1. Exact project path match
 //  2. Exact worktree path match -> owning project
-func ResolveProjectForMCPPath(ctx context.Context, repo db.Repository, projectPath string) (*db.Project, error) {
+func ResolveProjectForMCPPath(ctx context.Context, repo PathStore, projectPath string) (*db.Project, error) {
 	path := strings.TrimSpace(projectPath)
 	if path == "" {
 		return nil, fmt.Errorf("project path is required for MCP config resolution")

@@ -62,7 +62,7 @@ func daemonSubject(base, userID, daemonID string) string {
 // daemon operations to the api-server that holds the daemon's gRPC connection.
 type NATSDaemonRouter struct {
 	nc          *nats.Conn
-	db          db.Repository           // the daemon registry's records: resolution reads them directly
+	db          DaemonRecords           // the daemon registry's records: resolution reads them directly
 	resolver    DaemonResolver          // optional: used to resolve daemonID for a user
 	resumer     DaemonResumer           // optional: wakes a suspended managed daemon (control plane)
 	credentials ControlPlaneCredentials // optional: token source for resumes
@@ -96,7 +96,7 @@ func NewNATSDaemonRouter(nc *nats.Conn, opts ...NATSRouterOption) *NATSDaemonRou
 type NATSRouterOption func(*NATSDaemonRouter)
 
 // WithDatabase adds a DB repository for fast daemon-online checks.
-func WithDatabase(repo db.Repository) NATSRouterOption {
+func WithDatabase(repo DaemonRecords) NATSRouterOption {
 	return func(r *NATSDaemonRouter) {
 		r.db = repo
 	}
@@ -773,11 +773,11 @@ func (r *NATSDaemonRouter) isSelectedDaemonOnline(ctx context.Context, userID st
 }
 
 // dbAdapter implements daemonliveness.Repository by delegating to
-// db.Repository's attachment-lease checks: IsDaemonAttached per user,
+// DaemonRecords' attachment-lease checks: IsDaemonAttached per user,
 // IsDaemonIDAttached per daemon. LastSeen=zero is acceptable for the current
 // callers (none read it).
 type dbAdapter struct {
-	repo db.Repository
+	repo DaemonRecords
 }
 
 func (a dbAdapter) GetUserLiveness(ctx context.Context, userID string, staleThreshold time.Duration) (daemonliveness.Status, error) {

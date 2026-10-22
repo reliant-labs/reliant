@@ -14,7 +14,7 @@ import (
 
 // SetupPersistence wires up the BackgroundManager to persist
 // process state to the database. This enables recovery after server restarts.
-func SetupPersistence(database db.Repository) {
+func SetupPersistence(database PersistenceStore) {
 	bgManager := shell.GetBackgroundManager()
 	// Allow BackgroundManager to perform DB-backed operations (e.g., kill recovered processes by PID)
 	bgManager.SetRepository(database)
@@ -162,7 +162,7 @@ func SetupPersistence(database db.Repository) {
 
 // SetupEvents wires up the background process event callback
 // to publish events to the user_updates table for real-time streaming delivery.
-func SetupEvents(database db.Repository) {
+func SetupEvents(database EventStore) {
 	bgManager := shell.GetBackgroundManager()
 
 	// Start the process monitor to detect port changes and external kills
@@ -319,7 +319,7 @@ func SetupEvents(database db.Repository) {
 
 // RecoverProcesses loads running processes from the database after
 // validating they are still alive. This is called on server startup.
-func RecoverProcesses(database db.Repository) {
+func RecoverProcesses(database RecoveryStore) {
 	ctx := context.Background()
 
 	// First, run recovery to validate and mark stale processes

@@ -36,7 +36,7 @@ func ProtoMessageRoleToModelRole(role reliantv1.MessageRole) message.MessageRole
 //
 // Converting a whole thread this way is one round trip per message per lookup.
 // Prefer DbMessagesToMessages, which fetches both in bulk.
-func DbMessageToMessage(ctx context.Context, dbMsg *db.Message, repo db.Repository) (message.Message, error) {
+func DbMessageToMessage(ctx context.Context, dbMsg *db.Message, repo Store) (message.Message, error) {
 	blocks, err := repo.ListContentBlocks(ctx, dbMsg.ID)
 	if err != nil {
 		return message.Message{}, fmt.Errorf("failed to load content blocks: %w", err)
@@ -57,7 +57,7 @@ func DbMessageToMessage(ctx context.Context, dbMsg *db.Message, repo db.Reposito
 // becomes hundreds of sequential round trips. That is slow, and it holds the
 // caller's context open across all of them — which turns any mid-flight
 // cancellation into a failure of the whole history load.
-func DbMessagesToMessages(ctx context.Context, dbMessages []*db.Message, repo db.Repository) ([]message.Message, error) {
+func DbMessagesToMessages(ctx context.Context, dbMessages []*db.Message, repo Store) ([]message.Message, error) {
 	if len(dbMessages) == 0 {
 		return []message.Message{}, nil
 	}
@@ -99,7 +99,7 @@ func DbMessagesToMessages(ctx context.Context, dbMessages []*db.Message, repo db
 }
 
 // buildMessage assembles a message.Message from already-loaded rows.
-func buildMessage(ctx context.Context, dbMsg *db.Message, blocks []*db.MessageContentBlock, cw *db.ContextWindow, repo db.Repository) message.Message {
+func buildMessage(ctx context.Context, dbMsg *db.Message, blocks []*db.MessageContentBlock, cw *db.ContextWindow, repo AttachmentReader) message.Message {
 	parts := make([]message.ContentPart, 0, len(blocks))
 	for _, block := range blocks {
 		part := ContentBlockToPart(ctx, dbMsg.ChatID, block, repo)
@@ -140,7 +140,7 @@ func buildMessage(ctx context.Context, dbMsg *db.Message, blocks []*db.MessageCo
 }
 
 // ContentBlockToPart converts a content block to a message part.
-func ContentBlockToPart(ctx context.Context, chatID string, block *db.MessageContentBlock, repo db.Repository) message.ContentPart {
+func ContentBlockToPart(ctx context.Context, chatID string, block *db.MessageContentBlock, repo AttachmentReader) message.ContentPart {
 	switch block.BlockType {
 	case reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TEXT:
 		if block.Content != nil {
@@ -272,7 +272,7 @@ func ContentBlockToPart(ctx context.Context, chatID string, block *db.MessageCon
 }
 
 // LoadAttachment loads an attachment from the database.
-func LoadAttachment(ctx context.Context, chatID string, attachmentID string, repo db.Repository) (*message.Attachment, error) {
+func LoadAttachment(ctx context.Context, chatID string, attachmentID string, repo AttachmentReader) (*message.Attachment, error) {
 	att, err := repo.GetAttachment(ctx, attachmentID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get attachment: %w", err)
@@ -291,7 +291,7 @@ func LoadAttachment(ctx context.Context, chatID string, attachmentID string, rep
 // LoadFileReference loads a file reference and returns its text content.
 // Content is read from the DB (captured at attach time). Falls back to
 // reading from the filesystem for legacy records that pre-date content capture.
-func LoadFileReference(ctx context.Context, chatID string, attachmentID string, repo db.Repository) (content string, filename string, err error) {
+func LoadFileReference(ctx context.Context, chatID string, attachmentID string, repo AttachmentReader) (content string, filename string, err error) {
 	// Get the attachment metadata from database
 	att, err := repo.GetAttachment(ctx, attachmentID)
 	if err != nil {

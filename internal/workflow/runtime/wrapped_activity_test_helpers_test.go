@@ -12,12 +12,12 @@ import (
 	"go.temporal.io/sdk/activity"
 )
 
-// wrapperTestRepo is the minimum db.Repository the ActivityWrapper touches on
+// wrapperTestRepo is the minimum ActivityStore the ActivityWrapper touches on
 // its success path: the stopped-run check, the liveness write, the step row
 // and the node event. Everything else panics (nil embedded interface), which
 // is how a test learns it strayed off that path.
 type wrapperTestRepo struct {
-	db.Repository
+	ActivityStore
 
 	mu     sync.Mutex
 	steps  []*db.StepExecution

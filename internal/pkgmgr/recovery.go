@@ -4,17 +4,16 @@ package pkgmgr
 import (
 	"context"
 
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
 )
 
 // RecoveryService handles process state recovery on startup
 type RecoveryService struct {
-	repo db.Repository
+	repo ProcessStore
 }
 
 // NewRecoveryService creates a new recovery service
-func NewRecoveryService(repo db.Repository) *RecoveryService {
+func NewRecoveryService(repo ProcessStore) *RecoveryService {
 	return &RecoveryService{repo: repo}
 }
 

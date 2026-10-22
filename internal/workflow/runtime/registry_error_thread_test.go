@@ -15,7 +15,7 @@ import (
 // asserts the PAYLOAD the frontend actually receives rather than just the
 // helper that feeds it.
 type capturingRepo struct {
-	db.Repository
+	ActivityStore
 	updates []string
 }
 
