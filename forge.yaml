@@ -19,14 +19,15 @@
 # another package, the CLI or the daemon builds is `//forge:not-a-component`,
 # naming who. Beyond that, `forge generate` projects the
 # contract mocks/decorators, the descriptor, the open-procedure set and the
-# ORM in internal/store (database.orm below). The Makefile stays the
-# entrypoint: CI's "Generated code is up to date" job runs
-# `make generate-all`, and `forge generate` leaves that output byte-identical.
-# After changing a proto service or a contract.go interface, run
-# `make forge-generate-check` (forge generate at forge_version below, which
+# ORM in internal/store (database.orm below), and runs generate.hooks below:
+# the compiled-code generators forge does not own. Taskfile.yml is the
+# entrypoint (`task --list`; the Makefile forwards to it for one merge). After
+# changing a proto, a contract.go interface, a migration or a hook's input,
+# run `task generate:check` (forge generate at forge_version below, which
 # must equal go.mod's) and commit what it writes: the generated mocks assert
 # their interface at compile time, and gen/forge_descriptor.json mirrors the
-# protos. CI's "forge generate is a no-op" job fails a change that skipped it.
+# protos. `forge ci verify-generated` (in `task ci`) and CI fail a change that
+# skipped it.
 
 name: reliant
 module_path: github.com/reliant-labs/reliant
@@ -76,6 +77,11 @@ lint:
             - call: github.com/reliant-labs/reliant/internal/logging.Trace
             - call: github.com/reliant-labs/reliant/internal/logging.Log
 database:
+    # Prod's Postgres major (Cloud SQL reliant-pg is POSTGRES_16). forge's
+    # pgtest boots its embedded test server at this major, so a test run
+    # proves the SQL on the server it ships to, and checks a
+    # FORGE_TEST_POSTGRES_URL server's major against it.
+    postgres_version: "16"
     migration_safety:
         # Every migration after the baseline says whether the previous
         # release keeps working on the schema it leaves:
@@ -93,3 +99,90 @@ database:
         # research/forge-migration/08-p5b-spike.md; rules in
         # internal/db/SCHEMA.md).
         package: internal/store
+generate:
+    # The compiled-code generators forge does not own (P8 D-P8-4). `forge
+    # generate` runs them after its own buf step (their inputs need gen/) and
+    # before the go mod tidy + build that validate the tree, with go.mod's
+    # pinned buf and protoc plugins on PATH; so `forge ci verify-generated`
+    # is their drift gate too. The docs generators are not here: they are
+    # docs, too slow for every generate, and need python3 (`task generate:docs`).
+    hooks:
+        # The control-plane clients (Go + TS) from proto-vendor/controlplane/,
+        # control-plane's exported public contract. Both dirs are replaced
+        # wholesale, only after buf succeeds.
+        - name: controlplane-client
+          command: [scripts/proto-generate-atomic.sh, buf.gen.controlplane.yaml, gen/controlplane, web/src/gen/controlplane]
+          writes: [gen/controlplane, web/src/gen/controlplane]
+        - name: yaml-bindings
+          command: [go, generate, ./internal/workflow/yaml]
+          writes: [internal/workflow/yaml/bindings_generated.go]
+        - name: tool-catalog
+          command: [go, generate, ./internal/llm/tools]
+          writes: [internal/llm/tools/toolcatalog/catalog_generated.go]
+        - name: manifest-schema
+          command: [go, generate, ./internal/integrations/manifest/schema]
+          writes:
+            - internal/integrations/manifest/schema/action.schema.json
+            - internal/integrations/manifest/schema/event.schema.json
+            - internal/integrations/manifest/schema/manifest.schema.json
+        # Webhook event typing: parser projections + catalog event fragments,
+        # from the projection specs and the pinned upstream schema.
+        - name: integrations
+          command: [go, run, ./tools/integrationgen]
+          writes:
+            - internal/integrations/webhook/github/zz_projection_generated.go
+            - internal/integrations/catalog/github/events
+            - internal/integrations/catalog/github/schemas
+            - internal/integrations/catalog/github/manifest.yaml
+ci:
+    gate:
+        # `task ci` = forge's checks + these. Files no Go test reads.
+        affected_ignore: ["*.md", "docs/**", "research/**", "dev-docs/**"]
+        extra_checks:
+            # tools/test-affected in place of forge's unit-tests: it selects
+            # web, electron and codegen lanes too, and maps a migration to the
+            # DB-backed packages (forge's affected mode is Go-only and runs the
+            # whole suite on any non-Go change). Each lane is its own row.
+            - name: test-affected
+              replaces: unit-tests
+              command: [go, run, ./tools/test-affected, run, -lanes, go]
+              heavy: true
+            - name: web
+              lane: test
+              command: [go, run, ./tools/test-affected, run, -lanes, web]
+              requires: [npm]
+              heavy: true
+            - name: electron
+              lane: test
+              command: [go, run, ./tools/test-affected, run, -lanes, electron]
+              requires: [npm]
+            # The docs generators are a no-op (task generate:docs:check), when
+            # the diff reaches one. It rewrites what it regenerates.
+            - name: docs-generate
+              command: [go, run, ./tools/test-affected, run, -lanes, docs-generate]
+              requires: [task, python3]
+              heavy: true
+              mutates_tree: true
+            - name: lint-web
+              dir: web
+              command: [npm, run, lint]
+              requires: [npm]
+            # forge.yaml's forge_version and go.mod's forge require are one pin.
+            - name: pin-coherence
+              command: [scripts/check-forge-generate.sh, --pins-only]
+            - name: pin-ancestry
+              command: [scripts/check-pin-ancestry.sh]
+              cache: false
+            - name: migrations
+              command: [scripts/check-migrations.sh]
+            - name: npm-licenses
+              command: [scripts/check-npm-licenses.sh, web]
+              requires: [npm]
+            - name: release-config
+              command: [node, .github/scripts/sync-release-config.mjs, --check]
+              requires: [node]
+            - name: gh-scripts
+              command: [sh, -c, "node --test .github/scripts/*.test.mjs"]
+              requires: [node]
+            - name: no-binaries
+              command: [.githooks/check-binary-files-ci.sh, origin/main, HEAD]

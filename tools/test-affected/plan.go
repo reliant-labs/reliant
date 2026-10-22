@@ -4,6 +4,7 @@ package main
 import (
 	"fmt"
 	"path"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -61,7 +62,7 @@ type ForgeGenPlan struct {
 }
 
 // DocGenPlan is the docs-generate lane (all or nothing): every docs
-// generator (the Makefile's DOCGEN_TARGETS) must leave the tree as it found it.
+// generator (Taskfile.yml's generate:docs) must leave the tree as it found it.
 type DocGenPlan struct {
 	LaneFull
 }
@@ -123,6 +124,9 @@ type classifier struct {
 	// docGenDeps maps every module package a docs generator compiles to the
 	// first generator (tools/docgen/<name>) that does.
 	docGenDeps map[string]string
+	// hookGenDeps is the same for forge.yaml's generate hooks
+	// (forgeHookGenerators).
+	hookGenDeps map[string]string
 
 	web       *reasons // web test file (relative to web/) -> why
 	webTouch  bool     // a non-test web module changed
@@ -136,8 +140,9 @@ func Classify(changes []Change, g *Graph) *Plan {
 		pl:   &Plan{},
 		full: map[lane][]string{},
 		code: newReasons(), embed: newReasons(), testOnly: newReasons(), dbSel: newReasons(),
-		web:        newReasons(),
-		docGenDeps: docGenDeps(g),
+		web:         newReasons(),
+		docGenDeps:  generatorDeps(g, func(dir string) bool { return strings.HasPrefix(dir+"/", docGenDir) }),
+		hookGenDeps: generatorDeps(g, func(dir string) bool { return slices.Contains(forgeHookGenerators, dir) }),
 	}
 	for _, ch := range changes {
 		c.attribute(ch)
@@ -178,9 +183,9 @@ func (c *classifier) attribute(ch Change) {
 		}
 	}
 	c.attributeToReaders(ch)
-	if isForgeInput(ch.Path) {
+	if why, ok := c.forgeGenInput(ch); ok {
 		rep.Rules = append(rep.Rules, "forge-input")
-		c.full[laneForgeGen] = append(c.full[laneForgeGen], ch.Path+": forge generate reads or writes it")
+		c.full[laneForgeGen] = append(c.full[laneForgeGen], ch.Path+": "+why)
 	}
 	if why, ok := c.docGenInput(ch); ok {
 		rep.Rules = append(rep.Rules, "docgen-input")
@@ -212,14 +217,19 @@ func (c *classifier) attribute(ch Change) {
 // docGenDir is where the docs generators live: every package under it is one.
 const docGenDir = "tools/docgen/"
 
-// docGenDeps is the union of the build deps of every docs generator package.
-func docGenDeps(g *Graph) map[string]string {
+// generatorDeps is the union of the build deps of every generator package
+// (a package whose directory isGen accepts), each mapped to the first
+// generator that compiles it.
+func generatorDeps(g *Graph, isGen func(dir string) bool) map[string]string {
 	deps := map[string]string{}
 	for _, dir := range sortedKeys(g.DirPkg) {
-		if !strings.HasPrefix(dir+"/", docGenDir) {
+		if !isGen(dir) {
 			continue
 		}
 		gen := g.DirPkg[dir]
+		if _, ok := deps[gen]; !ok {
+			deps[gen] = dir
+		}
 		for _, p := range sortedKeys(g.BuildDeps[gen]) {
 			if _, ok := deps[p]; !ok {
 				deps[p] = dir
@@ -236,12 +246,28 @@ func (c *classifier) docGenInput(ch Change) (string, bool) {
 	if isDocGenPath(ch.Path) {
 		return "a docs generator reads or writes it", true
 	}
+	return c.compiledBy(ch, c.docGenDeps, "")
+}
+
+// forgeGenInput is docGenInput for the forge-generate lane: a path in
+// forgeInputs, or code a forge.yaml generate hook's generator compiles.
+func (c *classifier) forgeGenInput(ch Change) (string, bool) {
+	if isForgeInput(ch.Path) {
+		return "forge generate reads or writes it", true
+	}
+	return c.compiledBy(ch, c.hookGenDeps, "the forge.yaml generate hook ")
+}
+
+// compiledBy reports whether ch is built code (or an embedded file) of a
+// package in deps, or a .proto whose generated package is, naming the
+// generator that compiles it.
+func (c *classifier) compiledBy(ch Change, deps map[string]string, label string) (string, bool) {
 	compiled := func(pkg string) (string, bool) {
-		gen, ok := c.docGenDeps[pkg]
+		gen, ok := deps[pkg]
 		if !ok {
 			return "", false
 		}
-		return fmt.Sprintf("%s compiles %s", gen, rel(c.g.Module, pkg)), true
+		return fmt.Sprintf("%s%s compiles %s", label, gen, rel(c.g.Module, pkg)), true
 	}
 	if fi, ok := c.g.Files[ch.Path]; ok {
 		if fi.Kind != KindCode {

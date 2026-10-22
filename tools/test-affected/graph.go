@@ -132,7 +132,7 @@ type Graph struct {
 }
 
 // LoadGraph reads the module's package graph with `go list` (default tags: what
-// `make test-short` builds) and scans the sources for what their tests read.
+// `task test:short` builds) and scans the sources for what their tests read.
 func LoadGraph(ctx context.Context, root, module string, tracked []string) (*Graph, error) {
 	list, err := goList(ctx, root)
 	if err != nil {

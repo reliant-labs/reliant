@@ -1,0 +1,761 @@
+version: '3'
+
+# ┌──────────────────────────────────────────────────────────────┐
+# │ reliant's tasks. Born from `forge project rescaffold          │
+# │ Taskfile.yml`, then edited for this repo (P8 lane L1,         │
+# │ research/forge-migration/12-p8-devtooling-plan.md §2/§3).     │
+# │ The Makefile is a set of one-line `make → task` forwarders    │
+# │ for one merge; this file is where the behaviour lives.        │
+# │                                                              │
+# │   task test:affected     Only what your diff reaches (start)  │
+# │   task test:short        Inner loop: Go, -short, cached       │
+# │   task test              Go (-race) + web + electron          │
+# │   task test:integration  `integration`-tagged tests           │
+# │   task test:e2e          e2e/stories (Temporal dev server)    │
+# │   task ci                The whole local gate, one table      │
+# │   task ci:checks         Static + build lane of it            │
+# │   task generate          forge generate (+ hooks), then docs  │
+# │   task generate:check    Pinned forge generate is a no-op     │
+# │   task generate:docs:check  Docs generators are a no-op       │
+# │                                                              │
+# │ Every forge call runs the forge forge.yaml pins (FORGE),      │
+# │ never whichever forge is first on PATH. `task --list` names   │
+# │ every task.                                                   │
+# └──────────────────────────────────────────────────────────────┘
+
+env:
+  # GOFLAGS gets -trimpath, merged into whatever GOFLAGS you already use (from
+  # the environment, `go env -w` or the toolchain's go.env). Without it Go
+  # hashes each package's ABSOLUTE directory into its build-cache key, so every
+  # worktree and scratch copy of this module (forge ci verify-generated
+  # regenerates in a fresh one every run) compiles the whole module again and
+  # re-runs every test instead of reusing what a sibling already built.
+  # Measured: a second worktree of one commit compiled 267 packages and cached
+  # 0 of 73 test packages without it; 0 and 58 with it. A GOFLAGS already in
+  # your environment wins over this block (Task never overrides one), and
+  # -trimpath=false in it, or in `go env -w GOFLAGS`, opts out. Code here must
+  # not locate files from runtime.Caller (internal/architecture/trimpath_guard_test.go).
+  GOFLAGS:
+    sh: 'f="$(go env GOFLAGS 2>/dev/null)"; case " $f " in *" -trimpath"*|*" --trimpath"*) echo "$f" ;; *) echo "${f:+$f }-trimpath" ;; esac'
+  # The forge pin is a commit pseudo-version (dev-docs/pinning.md), which
+  # proxy.golang.org may not have ingested yet: fetch reliant-labs modules
+  # straight from GitHub. Yours wins when set.
+  GOPRIVATE: github.com/reliant-labs/*
+
+vars:
+  # FORGE runs the forge THIS PROJECT pins: forge.yaml's forge_version, which
+  # `forge generate` keeps equal to go.mod's forge require. It is never
+  # whatever `forge` is first on PATH — that is routinely another version (a
+  # bundled forge, a months-old `go install`), and an older forge rejects a
+  # newer forge.yaml ("unknown key") or lints, gates and generates with
+  # templates the project did not pin. `go run module@version` builds the
+  # pinned forge once and then reuses the cached executable.
+  #
+  # Overrides, for forge developers and pins no proxy serves:
+  #   FORGE_BIN=/path/to/forge task lint   (environment), or
+  #   task lint FORGE=forge                (command line).
+  # A pin that names no published forge (a +dirty build, `dev`) falls back to
+  # the forge on PATH, which then hands the command to the pin when it can.
+  FORGE_YAML:
+    sh: cat forge.yaml
+  FORGE: '{{$pin := index (fromYaml .FORGE_YAML) "forge_version" | default "" | toString}}{{if .FORGE_BIN}}{{.FORGE_BIN}}{{else if or (eq $pin "") (eq $pin "dev") (contains "+" $pin)}}forge{{else}}go run github.com/reliant-labs/forge/cmd/forge@{{$pin}}{{end}}'
+  # GOTESTRACE is a TOP-LEVEL var on purpose: only global vars can be
+  # overridden from the command line (`task test GOTESTRACE=`). Clearing it
+  # drops the race detector for one run; leave it set otherwise.
+  GOTESTRACE: '-race'
+  # SLOT runs the heavy lanes (`test`, `test:integration`, `coverage`, a full
+  # `test:affected` lane, the docs check) inside one of this machine's
+  # host-wide heavy slots: `forge slot run` waits while N other heavy jobs
+  # (builds, test lanes, codegen, lints — from any agent, worktree or
+  # terminal) are running, because past a handful every one of them slows
+  # down. N comes from the machine; set FORGE_HEAVY_SLOTS=<n> to change it or
+  # =off to switch it off. Inside a slot already (a gate check, a parent
+  # `forge slot run`) it does not wait. Empty when forge is absent or predates
+  # `forge slot` (the probe fails), so these tasks still run without it;
+  # `task test SLOT=` skips the slot for one run. `test:short` takes no slot:
+  # the scoped inner loop is not heavy and must not queue.
+  #
+  # The one deliberate use of the forge on PATH rather than FORGE: slots are
+  # machine-wide (every project and forge version shares one queue), and this
+  # probe runs on every `task` invocation, so it must cost nothing — never a
+  # `go run`.
+  SLOT:
+    sh: forge slot status --class heavy >/dev/null 2>&1 && echo 'forge slot run --class heavy --' || true
+
+  # ── Code generation: local, pinned, reproducible ──────────────────────
+  # Generated code is committed, and CI fails on any diff a regenerate makes.
+  # That only holds if every machine writes the same bytes, so nothing a
+  # generator runs may come from the machine it happens to run on:
+  #
+  #   protoc plugins  Local, never `remote:` — the Buf Schema Registry
+  #                   rate-limits. protoc-gen-go and protoc-gen-connect-go are
+  #                   `tool` directives in go.mod, run with `go tool`;
+  #                   protoc-gen-es is pinned by tools/protoc-gen-es's lockfile
+  #                   (deps:protoc-gen-es installs it).
+  #   buf             go.mod's `tool github.com/bufbuild/buf/cmd/buf` line, the
+  #                   one pin forge reads too (BUF below).
+  #   Go toolchain    GOTOOLCHAIN is exactly go.mod's. protoc-gen-go formats
+  #                   its output with the go/printer of the Go that BUILT it,
+  #                   and doc comment layout changes between releases.
+  #   GOWORK=off      A machine-local go.work (`use ../forge`) would compile
+  #                   the plugins and docgen tools against a sibling checkout
+  #                   instead of go.mod's pins (cli.md embeds forge's whole
+  #                   command tree).
+  #
+  # GEN_ENV is spelled into each generation command rather than set in an
+  # `env:` block because Task never overrides a variable your shell already
+  # exports, and these must win.
+  GEN_GOTOOLCHAIN:
+    sh: 't="$(sed -n "s/^toolchain //p" go.mod)"; [ -n "$t" ] || t="go$(sed -n "s/^go //p" go.mod)"; echo "$t"'
+  GEN_ENV: 'env GOWORK=off GOTOOLCHAIN={{.GEN_GOTOOLCHAIN}}'
+  GEN_GO: '{{.GEN_ENV}} go'
+  # buf at go.mod's pin, built in its own module graph as forge builds it:
+  # reliant's newer protovalidate (cel.dev/cel-go) does not build buf
+  # v1.57.0, so `go tool buf` cannot run it. GOFLAGS is reset to -trimpath
+  # because `go run pkg@version` refuses a repo-level -mod.
+  BUF_VERSION:
+    sh: "awk '$1 == \"github.com/bufbuild/buf\" { print $2; exit }' go.mod"
+  BUF: 'env GOWORK=off GOFLAGS=-trimpath go run github.com/bufbuild/buf/cmd/buf@{{.BUF_VERSION}}'
+
+  # ── Which Postgres the Go tests use ────────────────────────────────────
+  # DB-backed tests read DATABASE_URL and nothing else. With it unset they
+  # skip, or fail under REQUIRE_TEST_DB=1 (resolveTestDSN in
+  # internal/db/testutil.go); they never pick a server on their own. The
+  # convenient default lives HERE instead, where choosing it is visible: every
+  # task that runs Go tests sets DATABASE_URL to TEST_DATABASE_URL.
+  #
+  # A DATABASE_URL you set always wins (Task never overrides your
+  # environment). Only when it is unset do these tasks use this repo's
+  # compose Postgres (`task postgres:up`). On a shared machine that server is
+  # everyone's — point DATABASE_URL at a database of your own. And never at
+  # the control-plane dev stack's Postgres (5434): it is a different server
+  # whose `reliant` database holds real data. (P8 L3 replaces all of this
+  # with forge pgtest's embedded server.)
+  COMPOSE_DATABASE_URL: postgres://postgres:postgres@localhost:5433/reliant?sslmode=disable
+  TEST_DATABASE_URL: '{{.DATABASE_URL | default .COMPOSE_DATABASE_URL}}'
+
+  # Docs generator paths.
+  REFERENCE_DIR: generated/docs-source/reference
+  WORKFLOWS_DIR: generated/docs-source/workflows
+  SETTINGS_DIR: generated/docs-source/settings
+  MINTLIFY_DOCS_DIR: docs
+  FROZEN_FIXTURES_DIR: internal/workflow/runtime/replaytest/fixtures/frozen
+
+tasks:
+  default:
+    desc: List available tasks
+    cmds:
+      - task --list
+
+  # ── Dependencies ──────────────────────────────────────────────────────
+
+  deps:
+    desc: Install Go modules and the web, electron and protoc-gen-es npm packages
+    cmds:
+      - go mod download
+      - task: deps:protoc-gen-es
+      - cd web && npm ci
+      - cd electron && npm ci
+
+  deps:protoc-gen-es:
+    # npm ci rewrites node_modules/.package-lock.json, so it doubles as the
+    # stamp: a lockfile edit (a version bump) reinstalls, an unchanged one is a
+    # no-op. Every buf template's TypeScript plugin runs from here.
+    desc: Install the pinned protoc-gen-es (tools/protoc-gen-es) when its lockfile changed
+    status:
+      - test tools/protoc-gen-es/node_modules/.package-lock.json -nt tools/protoc-gen-es/package-lock.json
+    cmds:
+      - npm ci --prefix tools/protoc-gen-es --ignore-scripts --no-audit --no-fund --loglevel=error
+
+  # ── Build ─────────────────────────────────────────────────────────────
+
+  build:
+    desc: Build dist/reliant with the release identity stamped in (internal/version)
+    cmds:
+      - task: go:release
+        vars: {GO_ARGS: build -o dist/reliant}
+
+  build:cross:
+    desc: Build release binaries for linux/amd64, darwin/amd64, darwin/arm64 and windows/amd64 into dist/
+    cmds:
+      - for: [linux/amd64, darwin/amd64, darwin/arm64, windows/amd64]
+        task: go:release
+        vars:
+          GOOS: '{{index (splitList "/" .ITEM) 0}}'
+          GOARCH: '{{index (splitList "/" .ITEM) 1}}'
+          GO_ARGS: 'build -o dist/reliant-{{index (splitList "/" .ITEM) 0}}-{{index (splitList "/" .ITEM) 1}}{{if eq (index (splitList "/" .ITEM) 0) "windows"}}.exe{{end}}'
+
+  install:
+    desc: go install reliant with the release identity stamped in
+    cmds:
+      - task: go:release
+        vars: {GO_ARGS: install}
+
+  go:release:
+    # The version stamp is load-bearing (internal/version/release_identity_test.go):
+    # VERSION is the release identity — 1.8.1 at a tag, 1.8.2-dev+<sha8> after
+    # it — from scripts/release-identity.sh, the resolver every shipped build
+    # (web bundle, release.yml, control-plane's prod image) stamps from.
+    # CGO_ENABLED defaults to 0; yours wins.
+    internal: true
+    vars:
+      VERSION:
+        sh: ./scripts/release-identity.sh 2>/dev/null || echo unknown
+      COMMIT:
+        sh: git rev-parse --short HEAD 2>/dev/null || echo unknown
+      DATE:
+        sh: date -u +"%Y-%m-%dT%H:%M:%SZ"
+      BRANCH:
+        sh: git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown
+      PKG: github.com/reliant-labs/reliant/internal/version
+    env:
+      CGO_ENABLED: '0'
+    cmds:
+      - mkdir -p dist
+      - >-
+        {{if .GOOS}}GOOS={{.GOOS}} GOARCH={{.GOARCH}} {{end}}go {{.GO_ARGS}} -buildvcs=false
+        -ldflags="-s -w -X {{.PKG}}.Version={{.VERSION}} -X {{.PKG}}.Commit={{.COMMIT}} -X {{.PKG}}.Date={{.DATE}} -X {{.PKG}}.Branch={{.BRANCH}}"
+        ./cmd/reliant/
+
+  build:dev-cli:
+    desc: Build dist/reliant-dev, the internal forensics CLI (reads the DB directly)
+    env:
+      CGO_ENABLED: '0'
+    cmds:
+      - mkdir -p dist
+      - go build -buildvcs=false -o dist/reliant-dev ./tools/reliant-dev
+
+  build:web:
+    desc: Build the web application (web/dist)
+    dir: web
+    cmds:
+      - npm run build
+
+  clean:
+    desc: Remove build artifacts (dist/, coverage, logs)
+    cmds:
+      - go clean
+      - rm -rf dist/ reports/ artifacts/ coverage.out coverage.html
+      - rm -f ./*.log
+
+  # ── Tests ─────────────────────────────────────────────────────────────
+
+  test:affected:
+    # The first thing to run before pushing. Reads the diff (committed,
+    # staged, unstaged, untracked) against the merge-base with origin/main,
+    # maps each path to the Go packages and their reverse dependencies, the
+    # vitest files that import it, and the electron tests, runs those and the
+    # codegen checks it can affect (task generate:check,
+    # task generate:docs:check), and prints why each ran. A path it cannot
+    # place, a go.mod/package.json/Taskfile/config change, or a diff it
+    # cannot compute runs the whole lane.
+    #
+    #   task test:affected                  every lane
+    #   task test:affected LANES=go,web     some lanes
+    #   task test:affected -- -dry-run      any other tools/test-affected flag
+    #
+    # TEST_BASE=<rev> moves the diff base, TEST_FULL=1 runs everything. A
+    # migration also runs the DB-backed packages it reaches, but only when YOU
+    # set DATABASE_URL (the compose default is not set here: it is a server
+    # shared by everyone on this machine). A FULL lane waits for a host heavy
+    # slot; a scoped one does not. Design and the rule table:
+    # dev-docs/testing-affected.md.
+    desc: "Run ONLY the tests and codegen checks your diff can reach, and say why (LANES=go,web,electron,forge-generate,docs-generate)"
+    cmds:
+      - TEST_AFFECTED_SLOT='{{.SLOT}}' go run ./tools/test-affected run {{if .LANES}}-lanes {{.LANES}} {{end}}{{.CLI_ARGS}}
+
+  test:affected:plan:
+    desc: Print what test:affected would run and why, without running it
+    cmds:
+      - go run ./tools/test-affected {{if .LANES}}-lanes {{.LANES}} {{end}}{{.CLI_ARGS}}
+
+  test:short:
+    # The inner loop: run this after each edit, scoped to the packages you
+    # touched (`task test:short -- ./internal/lifecycle/...`), and
+    # `task test:affected` before you push. Every flag difference from
+    # `task test` is on purpose:
+    #
+    #   -short        slow paths sit behind `if testing.Short() { t.Skip() }`;
+    #                 the full lane still runs them. DB-backed tests skip.
+    #   no -count=1   Go's test cache keys on the test binary, its flags, and
+    #                 the files and env vars the test reads, so a cached pass
+    #                 is a real pass for any test that builds its own state.
+    #                 The cache sees only what the TEST PROCESS reads: a test
+    #                 that execs a child (go, git, node, cat...) which reads
+    #                 repo files not go:embed'd and not written into
+    #                 t.TempDir() must read those inputs itself or skip under
+    #                 -short, or this tier can report a stale pass.
+    #   no -race      the race detector rebuilds every package under its own
+    #                 cache key and slows tests 2-10x; `task test` keeps it on.
+    #   -timeout 60s  a test that needs longer under -short wants a
+    #                 testing.Short() gate, not a bigger budget.
+    #   no stop       nothing here stops another agent's environment.
+    #
+    # Go only — web and electron run in `task test` / `task test:web`.
+    desc: "Inner-loop Go tests: -short, cached, no race. Scope it: task test:short -- ./internal/foo/..."
+    env:
+      DATABASE_URL: '{{.TEST_DATABASE_URL}}'
+    cmds:
+      - go test -short -timeout 60s {{if .CLI_ARGS}}{{.CLI_ARGS}}{{else}}./...{{end}}
+
+  test:
+    # Everything after `--` REPLACES the default `./...`, so it takes both
+    # flags and package patterns:
+    #
+    #   task test                                  whole module + web + electron
+    #   task test -- ./internal/lifecycle/...       only those Go packages
+    #   task test -- -run TestFoo ./internal/...    one test
+    #   task test GOTESTRACE=                       without the race detector
+    #
+    # A scoped run skips the web and electron lanes — a Go package pattern
+    # says nothing about them. Integration and e2e tests are guarded by the
+    # `integration` and `e2e` build tags, so they are excluded here.
+    #
+    # -timeout 300s per package is what the Makefile's `make test` used; P8
+    # moves it toward forge's 120s once the overruns are measured and gated.
+    # Unlike `make test` this never runs `make stop`, which stopped other
+    # agents' environments.
+    desc: Run Go unit tests (-race -count=1) and the web and electron tests (excludes integration + e2e)
+    env:
+      DATABASE_URL: '{{.TEST_DATABASE_URL}}'
+    cmds:
+      - '{{.SLOT}} go test {{.GOTESTRACE}} -count=1 -timeout 300s {{if .CLI_ARGS}}{{.CLI_ARGS}}{{else}}./...{{end}}'
+      - task: test:web
+        if: '[ -z "{{.CLI_ARGS}}" ]'
+      - task: test:electron
+        if: '[ -z "{{.CLI_ARGS}}" ]'
+
+  test:integration:
+    desc: Run integration tests (-tags=integration)
+    env:
+      DATABASE_URL: '{{.TEST_DATABASE_URL}}'
+    cmds:
+      - '{{.SLOT}} go test {{.GOTESTRACE}} -tags=integration -count=1 -timeout=10m {{if .CLI_ARGS}}{{.CLI_ARGS}}{{else}}./...{{end}}'
+
+  test:e2e:
+    # e2e/stories: real Postgres + an ephemeral Temporal dev server (the test
+    # starts it) + a scripted LLM. With DATABASE_URL set that database is used
+    # and nothing is started; only when it is unset does this bring up the
+    # compose Postgres. `--` args replace the default package.
+    desc: Run the hermetic story e2e tests (-tags e2e, ./e2e/stories/)
+    env:
+      DATABASE_URL: '{{.TEST_DATABASE_URL}}'
+    cmds:
+      - task: postgres:up-for-tests
+      - go test -tags e2e -count=1 -timeout=10m -v {{if .CLI_ARGS}}{{.CLI_ARGS}}{{else}}./e2e/stories/{{end}}
+
+  test:all:
+    desc: Run the unit (Go + web + electron) and integration suites (e2e has its own task)
+    cmds:
+      - task: test
+      - task: test:integration
+
+  coverage:
+    desc: Run Go unit tests with coverage and emit coverage.html
+    env:
+      DATABASE_URL: '{{.TEST_DATABASE_URL}}'
+    cmds:
+      - '{{.SLOT}} go test -race -coverprofile=coverage.out -covermode=atomic ./...'
+      - go tool cover -html=coverage.out -o coverage.html
+
+  bench:
+    desc: Run Go benchmarks (go test -bench=. across the module)
+    cmds:
+      - go test -bench=. -benchmem -run=^$ ./...
+
+  replay-fixtures:
+    # See internal/workflow/runtime/replaytest/fixtures/README.md: regenerating
+    # accepts a replay break for in-flight runs. With DATABASE_URL set the
+    # generator uses that database and nothing is started; only when it is
+    # unset does this bring up the repo's compose Postgres — a shared server
+    # that an isolated run (an agent, a second worktree) must not start or
+    # write to.
+    desc: Regenerate the Temporal replay-compatibility history fixtures, then verify they replay
+    env:
+      DATABASE_URL: '{{.TEST_DATABASE_URL}}'
+    cmds:
+      - task: postgres:up-for-tests
+      - go test -tags replayfixtures -count=1 -timeout=10m -v ./internal/workflow/runtime/replaytest/
+      - go test -count=1 -timeout=5m -v -run TestReplayFixtures ./internal/workflow/runtime/replaytest/
+      - cmd: echo "Replay fixtures regenerated and verified — commit fixtures/*.json with your change"
+        silent: true
+
+  replay-fixtures:freeze:
+    # Run BEFORE `task replay-fixtures` when a change alters the workflow
+    # command sequence: the current fixtures are the shape in-flight runs were
+    # recorded with, and the change must stay replay-compatible with them
+    # (gate it with workflow.GetVersion). A frozen set is never rewritten;
+    # TestReplayFixtures replays it and TestFrozenFixturesAreUnchanged pins
+    # its bytes.
+    desc: "Pin the current replay fixtures as a frozen set that must keep replaying (NAME=<yyyy-mm-dd>-<what-changed>)"
+    requires:
+      vars: [NAME]
+    preconditions:
+      - sh: '[ ! -e "{{.FROZEN_FIXTURES_DIR}}/{{.NAME}}" ]'
+        msg: "frozen set {{.NAME}} already exists; frozen sets are never rewritten"
+    cmds:
+      - mkdir -p "{{.FROZEN_FIXTURES_DIR}}/{{.NAME}}"
+      - cp internal/workflow/runtime/replaytest/fixtures/*.json "{{.FROZEN_FIXTURES_DIR}}/{{.NAME}}/"
+      - cd "{{.FROZEN_FIXTURES_DIR}}/{{.NAME}}" && shasum -a 256 *.json > SHA256SUMS
+      - cmd: echo "Froze the current fixtures as {{.FROZEN_FIXTURES_DIR}}/{{.NAME}} — add a README.md saying which shape it pins and which version gate keeps it replaying"
+        silent: true
+
+  test:web:
+    desc: Run the web unit tests (vitest, every file — prefer task test:affected LANES=web)
+    dir: web
+    cmds:
+      - '{{.SLOT}} npm test -- --run'
+
+  test:web:coverage:
+    desc: Run the web unit tests with coverage
+    dir: web
+    cmds:
+      - '{{.SLOT}} npm test -- --run --coverage'
+
+  test:web:watch:
+    desc: Run the web unit tests in watch mode
+    dir: web
+    cmds:
+      - npm test
+
+  test:electron:
+    desc: Run the electron tests (node --test)
+    dir: electron
+    cmds:
+      - npm test --silent
+
+  postgres:up:
+    # The 5433 compose server TEST_DATABASE_URL defaults to. Deleted with it
+    # (P8 L3/L5) once the tests boot forge pgtest's embedded server.
+    desc: Start this repo's compose Postgres on localhost:5433 (the shared test default)
+    cmds:
+      - docker compose up -d postgres
+      - cmd: echo "Postgres on localhost:5433. The test tasks pass it when DATABASE_URL is unset; for a bare go test, DATABASE_URL='{{.COMPOSE_DATABASE_URL}}'"
+        silent: true
+
+  postgres:down:
+    desc: Stop this repo's compose Postgres
+    cmds:
+      - docker compose stop postgres
+
+  postgres:up-for-tests:
+    # Only when the compose Postgres is the one the tests will use: a caller
+    # who chose their own DATABASE_URL gets nothing started.
+    internal: true
+    cmds:
+      - '{{if .DATABASE_URL}}echo "Using your DATABASE_URL; not starting docker compose"{{else}}docker compose up -d postgres{{end}}'
+
+  # ── The gate ──────────────────────────────────────────────────────────
+
+  ci:
+    # The whole local gate: forge's checks (verify-generated, golangci-lint,
+    # buf-lint, migration-safety, go-build, vuln-go, license-check) plus
+    # forge.yaml's ci.gate.extra_checks (test-affected in place of forge's
+    # unit-tests, web, electron, docs-generate, the pin and repo checks), in
+    # ONE summary table. Every check runs even if an earlier one failed; a
+    # check that could not run is SKIPPED, and fails the gate unless named
+    # (CI_SKIP=<check> task ci). CI_ONLY=<check>,... runs a subset.
+    #
+    # Not run under SLOT: the gate schedules host slots itself, one per heavy
+    # check.
+    desc: "The whole local gate, one summary: forge's checks + reliant's ci.gate.extra_checks (forge.yaml)"
+    cmds:
+      - '{{.FORGE}} ci gate all'
+
+  ci:checks:
+    desc: "Static + build lane of the gate (forge ci gate checks)"
+    cmds:
+      - '{{.FORGE}} ci gate checks'
+
+  # ── Lint and format ───────────────────────────────────────────────────
+
+  lint:
+    desc: Run the pinned forge lint (golangci-lint, buf lint, the contract/convention/migration-safety lanes)
+    cmds:
+      - '{{.FORGE}} lint'
+
+  lint:web:
+    desc: Lint the web app
+    dir: web
+    cmds:
+      - npm run lint
+
+  lint:electron:
+    desc: Lint the electron app
+    dir: electron
+    cmds:
+      - npx eslint src/
+
+  proto:lint:
+    desc: buf lint the protos, at go.mod's buf pin (forge lint's buf-lint lane runs the same)
+    cmds:
+      - '{{.BUF}} lint'
+
+  fmt:
+    # go fmt only: .githooks/pre-commit runs `make fmt` on every commit, so it
+    # must stay fast and must not rewrite go.mod.
+    desc: Format Go code (go fmt)
+    cmds:
+      - go fmt ./...
+
+  fmt:web:
+    desc: Format the web app (eslint --fix)
+    dir: web
+    cmds:
+      - npm run lint -- --fix
+
+  fmt:electron:
+    desc: Format the electron app (eslint --fix)
+    dir: electron
+    cmds:
+      - npx eslint src/ --fix
+
+  proto:fmt:
+    desc: buf format -w the protos, at go.mod's buf pin
+    cmds:
+      - '{{.BUF}} format -w'
+
+  # ── Code generation ───────────────────────────────────────────────────
+
+  generate:
+    desc: "Regenerate everything: the pinned forge generate (protos, ORM, mocks, forge.yaml generate.hooks), then every docs generator"
+    cmds:
+      - task: generate:forge
+      - task: generate:docs
+
+  generate:forge:
+    # forge generate runs buf (go.mod's pin) over buf.gen.yaml, projects the
+    # ORM, mocks, descriptor and composition graph, then forge.yaml's
+    # generate.hooks: the compiled-code generators forge does not own (the
+    # control-plane client, the YAML bindings, the tool catalog, the
+    # integration manifest schema, the integration event projections).
+    desc: Run the pinned forge generate (protos, ORM, mocks and the forge.yaml generate hooks)
+    deps: [deps:protoc-gen-es]
+    cmds:
+      - '{{.GEN_ENV}} {{.FORGE}} generate'
+
+  generate:check:
+    # It judges only what generate changes, so it runs on a tree with
+    # uncommitted edits too. `task test:affected` runs it when the diff
+    # touches a forge input. `-- --github` adds CI annotations. FORGE=<binary>
+    # in the environment uses a prebuilt forge, refused unless it is the pin.
+    desc: Run the pinned forge generate and fail, naming each file, if it changes anything
+    deps: [deps:protoc-gen-es]
+    cmds:
+      - '{{.GEN_ENV}} ./scripts/check-forge-generate.sh {{.CLI_ARGS}}'
+
+  generate:controlplane:
+    # The `controlplane-client` generate hook, alone: the control-plane clients
+    # (Go + TS) from proto-vendor/controlplane/, a generated export of
+    # control-plane's public contract. To pull a new contract first:
+    # node .github/scripts/sync-controlplane-proto.mjs. Both output dirs are
+    # replaced wholesale, but only after buf succeeds.
+    desc: Regenerate the control-plane clients (gen/controlplane, web/src/gen/controlplane) from proto-vendor/
+    deps: [deps:protoc-gen-es]
+    cmds:
+      - '{{.GEN_ENV}} scripts/proto-generate-atomic.sh buf.gen.controlplane.yaml gen/controlplane web/src/gen/controlplane'
+
+  generate:docs:
+    # Every docs generator — each tools/docgen program and the Mintlify
+    # conversion — in dependency order (the assembler and the Mintlify
+    # conversion read what the reference generators write). It is the ONE
+    # list: `task generate` runs it, `task generate:docs:check` checks it, and
+    # so do CI and `task test:affected`'s docs-generate lane.
+    # tools/test-affected's TestDocGenTargetsCoverEveryDocsGenerator fails
+    # when a docs generator is missing from it, or when a path one reads or
+    # writes is not a docs-generate input. Not forge generate hooks on
+    # purpose: they are docs, not compiled code, too slow for every
+    # `forge generate`, and they need python3.
+    desc: Regenerate the reference docs, the workflow-builder skill and the keyboard-shortcut tables
+    cmds:
+      - task: generate:docs:schema
+      - task: generate:docs:scenario-schema
+      - task: generate:docs:refcheck
+      - task: generate:docs:cel-reference
+      - task: generate:docs:cli
+      - task: generate:docs:tools-ref
+      - task: generate:docs:shortcuts
+      - task: generate:docs:nodes
+      - task: generate:docs:types
+      - task: generate:docs:models
+      - task: generate:docs:presets
+      - task: generate:docs:workflow-builder-skill
+      - task: generate:docs:changelog
+      - task: generate:docs:mintlify-reference
+
+  generate:docs:check:
+    # It judges only what the generators change, so it runs on a tree with
+    # uncommitted edits too, and it leaves what it regenerated in the tree:
+    # commit that, or, if it reverted a hand edit, move the edit into the
+    # generator. `-- --github` adds CI annotations.
+    desc: Run every docs generator (task generate:docs) and fail, naming each file, if it changes anything
+    cmds:
+      - ./scripts/check-docs-generate.sh {{.CLI_ARGS}}
+
+  generate:docs:schema:
+    desc: Generate the workflow schema reference from proto types
+    cmds:
+      - '{{.GEN_GO}} run ./tools/docgen/schema/... {{.REFERENCE_DIR}}/workflow-schema.md'
+
+  generate:docs:scenario-schema:
+    desc: Generate the scenario schema reference from internal/workflow/scenario types
+    cmds:
+      - '{{.GEN_GO}} run ./tools/docgen/scenarios/... internal/workflow/scenario {{.REFERENCE_DIR}}/scenario-schema.md'
+
+  generate:docs:refcheck:
+    desc: Validate the reference data from proto descriptors (a check; writes nothing)
+    cmds:
+      - '{{.GEN_GO}} run ./tools/docgen/refcheck/...'
+
+  generate:docs:cel-reference:
+    desc: Generate the CEL reference for the discovery tools
+    cmds:
+      - '{{.GEN_GO}} run ./tools/docgen/celref/...'
+
+  generate:docs:cli:
+    desc: Generate the CLI reference from the Cobra command tree
+    cmds:
+      - '{{.GEN_GO}} run ./tools/docgen/cli/... {{.REFERENCE_DIR}}/cli.md'
+
+  generate:docs:tools-ref:
+    desc: Generate the tool reference from the tool registry
+    cmds:
+      - '{{.GEN_GO}} run ./tools/docgen/tools/... {{.REFERENCE_DIR}}/tools.md'
+
+  generate:docs:shortcuts:
+    desc: Generate the keyboard shortcuts from config/shortcuts.yaml
+    cmds:
+      - '{{.GEN_GO}} run ./tools/docgen/shortcuts/... config/shortcuts.yaml web/src/store/shortcutsData.generated.ts {{.SETTINGS_DIR}}/keyboard-shortcuts.generated.md'
+
+  generate:docs:nodes:
+    desc: Generate the node type I/O reference from the node type registry
+    cmds:
+      - '{{.GEN_GO}} run ./tools/docgen/nodes/... {{.REFERENCE_DIR}}/nodes.md'
+
+  generate:docs:types:
+    desc: Generate the types reference
+    cmds:
+      - '{{.GEN_GO}} run ./tools/docgen/types/... {{.REFERENCE_DIR}}/types.md'
+
+  generate:docs:models:
+    desc: Generate the models reference from the registry
+    cmds:
+      - '{{.GEN_GO}} run ./tools/docgen/models/... {{.REFERENCE_DIR}}/models.md'
+
+  generate:docs:presets:
+    desc: Generate the presets reference from the preset YAML files
+    cmds:
+      - '{{.GEN_GO}} run ./tools/docgen/presets/... {{.WORKFLOWS_DIR}}/presets-reference.generated.md'
+
+  generate:docs:workflow-builder-skill:
+    desc: Generate the workflow-builder SKILL.md
+    cmds:
+      - '{{.GEN_GO}} run ./tools/docgen/assembler/... {{.REFERENCE_DIR}} internal/skills/catalog/builtin/workflow-builder/SKILL.md'
+
+  generate:docs:changelog:
+    desc: Generate the Mintlify changelog page from the release YAML files
+    cmds:
+      - '{{.GEN_GO}} run ./tools/docgen/changelog/... {{.MINTLIFY_DOCS_DIR}}/data/releases {{.MINTLIFY_DOCS_DIR}}/changelog.mdx'
+
+  generate:docs:mintlify-reference:
+    desc: Convert the generated reference markdown into Mintlify .mdx pages
+    cmds:
+      - python3 scripts/generate-mintlify-reference.py
+
+  # ── Database ──────────────────────────────────────────────────────────
+
+  db:migration:
+    # Migrations are forge migrations (db/migrations/<YYYYMMDDHHMMSS>_<name>.up.sql,
+    # forward only), created by the pinned forge so the version allocator is
+    # the one the migrator was built with; never hand-type the version.
+    # goose's internal/db/migrations/postgres is frozen history: a file added
+    # there never runs, and TestGooseHistoryIsFrozen fails. forge.yaml sets
+    # database.migration_safety.require_compat_declaration, so forge opens the
+    # file with both compatibility declarations as a comment to replace, and
+    # `forge lint --migration-safety` fails it until it says one, with a
+    # reason.
+    desc: "Create a new forge migration (NAME=my_changes), then: write the SQL and its compat declaration, task generate:check, queries in internal/store (internal/db/SCHEMA.md)"
+    requires:
+      vars: [NAME]
+    cmds:
+      - '{{.GEN_ENV}} {{.FORGE}} db migration new {{.NAME}}'
+
+  migrate:
+    desc: Apply pending database migrations (wraps `reliant db migrate up`)
+    cmds:
+      - go run ./cmd/reliant db migrate up
+
+  # ── Pins, releases, docs site ─────────────────────────────────────────
+
+  pin:forge:
+    # Pre-launch we pin by COMMIT, not tag (dev-docs/pinning.md).
+    # `task pin:forge -- <sha|branch|tag>` pins something else.
+    desc: Pin forge to forge's current origin/main commit (or `-- <ref>`)
+    cmds:
+      - ./scripts/pin-forge.sh {{.CLI_ARGS}}
+
+  pin:drift:
+    desc: Report how many commits behind forge's main the pin has fallen
+    cmds:
+      - ./scripts/pin-drift.sh
+
+  pin:ancestry:
+    desc: Fail if the forge pin is not a commit on forge's main
+    cmds:
+      - ./scripts/check-pin-ancestry.sh
+
+  # A release is TWO steps. `release:<bump>` opens the version-bump PR;
+  # `release:tag` tags the commit once that PR has MERGED. They are separate
+  # because main squash-merges: tagging before the merge strands the tag off
+  # the trunk (v1.7.8..v1.7.12). See the header of scripts/release.sh.
+  release:rc:
+    desc: Open the version-bump PR for a release candidate (0.0.1-rc38 → 0.0.1-rc39)
+    cmds:
+      - ./scripts/release.sh prerelease
+
+  release:patch:
+    desc: Open the version-bump PR for a patch release (0.0.1-rc38 → 0.0.1, 0.0.1 → 0.0.2)
+    cmds:
+      - ./scripts/release.sh patch
+
+  release:minor:
+    desc: Open the version-bump PR for a minor release (0.0.1 → 0.1.0)
+    cmds:
+      - ./scripts/release.sh minor
+
+  release:major:
+    desc: Open the version-bump PR for a major release (0.1.0 → 1.0.0)
+    cmds:
+      - ./scripts/release.sh major
+
+  release:tag:
+    desc: STEP 2 — tag the merged release commit on main (run after the PR merges)
+    cmds:
+      - ./scripts/release-tag.sh
+
+  release:tag:dry-run:
+    desc: Preview which commit release:tag would tag, creating nothing
+    cmds:
+      - ./scripts/release-tag.sh --dry-run
+
+  release:check-tags:
+    desc: Verify every release tag is an ancestor of main
+    cmds:
+      - ./scripts/check-release-tags.sh
+
+  docs:serve:
+    desc: Serve the Mintlify docs (docs/) locally on MINTLIFY_PORT (default 3000)
+    vars:
+      MINTLIFY_PORT: '{{.MINTLIFY_PORT | default "3000"}}'
+    cmds:
+      - |
+        export NVM_DIR="$HOME/.nvm" && unset npm_config_prefix && . "$NVM_DIR/nvm.sh" && nvm use 22 --silent
+        cd {{.MINTLIFY_DOCS_DIR}}
+        echo "Site available at: http://localhost:{{.MINTLIFY_PORT}}/"
+        if command -v mint >/dev/null 2>&1; then
+          exec mint dev --port {{.MINTLIFY_PORT}}
+        elif command -v mintlify >/dev/null 2>&1; then
+          exec mintlify dev --port {{.MINTLIFY_PORT}}
+        fi
+        echo "Neither the 'mint' nor the 'mintlify' CLI is installed: nvm use 22 && npm i -g mint" >&2
+        exit 1

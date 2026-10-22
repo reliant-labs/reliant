@@ -13,6 +13,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"gopkg.in/yaml.v3"
 )
 
 // repoRoot is the checkout this package sits in (tools/test-affected).
@@ -21,28 +23,29 @@ const repoRoot = "../.."
 // TestDocGenTargetsCoverEveryDocsGenerator pins the docs-generate lane to the
 // generators it stands for, so neither half can drift from the other:
 //
-//   - DOCGEN_TARGETS in the Makefile names every target that runs a
-//     tools/docgen program or the Mintlify conversion, and every
-//     tools/docgen program has one;
-//   - every path those recipes pass (their inputs and outputs), every repo
+//   - Taskfile.yml's generate:docs runs every task that runs a tools/docgen
+//     program or the Mintlify conversion, and every tools/docgen program has
+//     one;
+//   - every path those tasks pass (their inputs and outputs), every repo
 //     path a generator's Go source names, and every directory the Mintlify
 //     script joins onto the repo root is in docGenPaths;
-//   - CI runs `make docs-generate-check` and spells no docs target itself.
+//   - CI runs the docs check (`task generate:docs:check`, or its `make
+//     docs-generate-check` forwarder) and spells no docs task itself.
 //
 // It reads every file it judges itself, so a cached pass is never stale.
 func TestDocGenTargetsCoverEveryDocsGenerator(t *testing.T) {
-	mk := parseMakefile(t, filepath.Join(repoRoot, "Makefile"))
-	targets := strings.Fields(mk.expand(mk.vars["DOCGEN_TARGETS"]))
+	tf := parseTaskfile(t, filepath.Join(repoRoot, "Taskfile.yml"))
+	targets := tf.subtasks("generate:docs")
 	if len(targets) == 0 {
-		t.Fatal("the Makefile defines no DOCGEN_TARGETS")
+		t.Fatal("Taskfile.yml's generate:docs runs no task")
 	}
 
-	// Which targets are docs generators, and which generators they run.
+	// Which tasks are docs generators, and which generators they run.
 	var docsTargets []string
 	ran := map[string]bool{}
 	genRun := regexp.MustCompile(`\./tools/docgen/([^/\s]+)/\.\.\.`)
-	for _, name := range slices.Sorted(maps.Keys(mk.recipes)) {
-		recipe := mk.expand(strings.Join(mk.recipes[name], "\n"))
+	for _, name := range slices.Sorted(maps.Keys(tf.Tasks)) {
+		recipe := strings.Join(tf.commands(name), "\n")
 		ms := genRun.FindAllStringSubmatch(recipe, -1)
 		if len(ms) == 0 && !strings.Contains(recipe, "scripts/generate-mintlify-reference.py") {
 			continue
@@ -54,12 +57,12 @@ func TestDocGenTargetsCoverEveryDocsGenerator(t *testing.T) {
 	}
 	for _, name := range docsTargets {
 		if !slices.Contains(targets, name) {
-			t.Errorf("make %s runs a docs generator but is not in DOCGEN_TARGETS: make docs-generate-check (and so CI and make test-affected) would not check it", name)
+			t.Errorf("task %s runs a docs generator but generate:docs does not run it: task generate:docs:check (and so CI and task test:affected) would not check it", name)
 		}
 	}
 	for _, name := range targets {
 		if !slices.Contains(docsTargets, name) {
-			t.Errorf("DOCGEN_TARGETS names %s, which runs no docs generator (or is not a target)", name)
+			t.Errorf("generate:docs runs %s, which runs no docs generator (or is not a task)", name)
 		}
 	}
 	entries, err := os.ReadDir(filepath.Join(repoRoot, "tools", "docgen"))
@@ -68,24 +71,20 @@ func TestDocGenTargetsCoverEveryDocsGenerator(t *testing.T) {
 	}
 	for _, e := range entries {
 		if e.IsDir() && !ran[e.Name()] {
-			t.Errorf("tools/docgen/%s is run by no DOCGEN_TARGETS recipe: add its make target to DOCGEN_TARGETS, or delete it", e.Name())
+			t.Errorf("tools/docgen/%s is run by no generate:docs task: add a generate:docs:<name> task for it to generate:docs, or delete it", e.Name())
 		}
 	}
 
-	// Every path a recipe passes.
+	// Every path a task passes.
 	for _, name := range targets {
-		for _, line := range mk.recipes[name] {
-			line = strings.TrimSpace(mk.expand(line))
-			if strings.HasPrefix(strings.TrimPrefix(line, "@"), "echo") {
-				continue
-			}
+		for _, line := range tf.commands(name) {
 			for _, tok := range strings.Fields(line) {
 				p := strings.TrimSuffix(strings.TrimPrefix(tok, "./"), "/...")
-				if !strings.Contains(p, "/") || strings.HasPrefix(p, "-") || strings.HasPrefix(p, "$") {
+				if !strings.Contains(p, "/") || strings.HasPrefix(p, "-") || strings.HasPrefix(p, "$") || strings.Contains(p, "{{") {
 					continue
 				}
 				if !docGenCovers(t, p) {
-					t.Errorf("make %s passes %s, which is not in docGenPaths (tools/test-affected/rules.go): a change to it would not run the docs check", name, p)
+					t.Errorf("task %s passes %s, which is not in docGenPaths (tools/test-affected/rules.go): a change to it would not run the docs check", name, p)
 				}
 			}
 		}
@@ -133,12 +132,16 @@ func TestDocGenTargetsCoverEveryDocsGenerator(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(ci), "make docs-generate-check") {
-		t.Error(".github/workflows/pr-ci.yml must run `make docs-generate-check` (CI's \"Generated code is up to date\" job)")
+	if !strings.Contains(string(ci), "task generate:docs:check") && !strings.Contains(string(ci), "make docs-generate-check") {
+		t.Error(".github/workflows/pr-ci.yml must run `task generate:docs:check` (CI's \"Generated code is up to date\" job)")
 	}
 	for _, name := range targets {
-		if regexp.MustCompile(`(^|[^\w-])` + regexp.QuoteMeta(name) + `($|[^\w-])`).Match(ci) {
-			t.Errorf(".github/workflows/pr-ci.yml names %s itself: run `make docs-generate-check`, so the docs targets are listed once (DOCGEN_TARGETS)", name)
+		// The task, and the Makefile forwarder named for it (generate-<name>).
+		legacy := "generate-" + strings.TrimPrefix(name, "generate:docs:")
+		for _, spelled := range []string{name, legacy} {
+			if regexp.MustCompile(`(^|[^\w:-])` + regexp.QuoteMeta(spelled) + `($|[^\w:-])`).Match(ci) {
+				t.Errorf(".github/workflows/pr-ci.yml names %s itself: run `task generate:docs:check`, so the docs tasks are listed once (generate:docs)", spelled)
+			}
 		}
 	}
 }
@@ -181,65 +184,66 @@ func goStringLiterals(t *testing.T, file string) []string {
 	return out
 }
 
-// makefile is the little of a Makefile this test reads: simple variable
-// assignments and each rule's recipe (continuation lines joined).
-type makefile struct {
-	vars    map[string]string
-	recipes map[string][]string
+// taskfile is the little of a Taskfile this test reads: the top-level string
+// vars and each task's cmds.
+type taskfile struct {
+	Vars  map[string]any `yaml:"vars"`
+	Tasks map[string]struct {
+		Cmds []any `yaml:"cmds"`
+	} `yaml:"tasks"`
 }
 
-var (
-	makeAssign = regexp.MustCompile(`^([A-Za-z_][A-Za-z0-9_]*)\s*:?=\s*(.*)$`)
-	makeRule   = regexp.MustCompile(`^([A-Za-z0-9_.-]+):(?:\s|$)`)
-	makeRef    = regexp.MustCompile(`\$\(([A-Za-z_][A-Za-z0-9_]*)\)`)
-)
+var taskRef = regexp.MustCompile(`\{\{\s*\.([A-Za-z_][A-Za-z0-9_]*)\s*\}\}`)
 
-func parseMakefile(t *testing.T, file string) *makefile {
+func parseTaskfile(t *testing.T, file string) *taskfile {
 	t.Helper()
 	b, err := os.ReadFile(file)
 	if err != nil {
 		t.Fatal(err)
 	}
-	mk := &makefile{vars: map[string]string{}, recipes: map[string][]string{}}
-	var lines []string
-	for _, l := range strings.Split(string(b), "\n") {
-		if n := len(lines); n > 0 && strings.HasSuffix(lines[n-1], "\\") {
-			lines[n-1] = strings.TrimSuffix(lines[n-1], "\\") + " " + strings.TrimSpace(l)
-			continue
-		}
-		lines = append(lines, l)
+	var tf taskfile
+	if err := yaml.Unmarshal(b, &tf); err != nil {
+		t.Fatalf("parse %s: %v", file, err)
 	}
-	current := ""
-	for _, l := range lines {
-		if strings.HasPrefix(l, "\t") {
-			if current != "" {
-				mk.recipes[current] = append(mk.recipes[current], strings.TrimPrefix(l, "\t"))
-			}
-			continue
-		}
-		current = ""
-		if m := makeRule.FindStringSubmatch(l); m != nil && !strings.Contains(l, ":=") {
-			current = m[1]
-			if _, ok := mk.recipes[current]; !ok {
-				mk.recipes[current] = nil
-			}
-			continue
-		}
-		if m := makeAssign.FindStringSubmatch(l); m != nil {
-			if _, seen := mk.vars[m[1]]; !seen {
-				mk.vars[m[1]] = m[2]
-			}
-		}
-	}
-	return mk
+	return &tf
 }
 
-// expand substitutes the variables the Makefile assigns; others are left as
-// they are (a $(shell ...) or an automatic variable).
-func (mk *makefile) expand(s string) string {
+// commands are a task's shell commands (a bare string or a `cmd:`), with the
+// top-level string vars substituted.
+func (tf *taskfile) commands(name string) []string {
+	var out []string
+	for _, c := range tf.Tasks[name].Cmds {
+		switch c := c.(type) {
+		case string:
+			out = append(out, tf.expand(c))
+		case map[string]any:
+			if s, ok := c["cmd"].(string); ok {
+				out = append(out, tf.expand(s))
+			}
+		}
+	}
+	return out
+}
+
+// subtasks are the tasks a task's cmds run (`- task: <name>`), in order.
+func (tf *taskfile) subtasks(name string) []string {
+	var out []string
+	for _, c := range tf.Tasks[name].Cmds {
+		if m, ok := c.(map[string]any); ok {
+			if s, ok := m["task"].(string); ok {
+				out = append(out, s)
+			}
+		}
+	}
+	return out
+}
+
+// expand substitutes the string vars the Taskfile assigns; others (an `sh:`
+// var, a CLI or environment variable) are left as they are.
+func (tf *taskfile) expand(s string) string {
 	for range 10 {
-		next := makeRef.ReplaceAllStringFunc(s, func(ref string) string {
-			if v, ok := mk.vars[makeRef.FindStringSubmatch(ref)[1]]; ok {
+		next := taskRef.ReplaceAllStringFunc(s, func(ref string) string {
+			if v, ok := tf.Vars[taskRef.FindStringSubmatch(ref)[1]].(string); ok {
 				return v
 			}
 			return ref
@@ -249,5 +253,5 @@ func (mk *makefile) expand(s string) string {
 		}
 		s = next
 	}
-	return s
+	return strings.TrimSpace(s)
 }

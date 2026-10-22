@@ -16,24 +16,24 @@
 #
 # The CHANGE regeneration makes, not the cleanliness of the tree: every dirty
 # or untracked file is hashed before and after, so it runs as well on a
-# working tree with your uncommitted edits (`make test-affected`) as on a
+# working tree with your uncommitted edits (`task test:affected`) as on a
 # clean checkout (CI). Any file the generators create, rewrite or delete is
 # named and fails it. What they regenerated is left in the tree.
 #
-# Run it through `make docs-generate-check`, which passes the Makefile's
-# DOCGEN_TARGETS: the one list of docs generators. Each generate-* target pins
-# GOTOOLCHAIN and GOWORK=off itself, so this regenerates exactly as
-# `make generate-all` does.
+# It regenerates with `task generate:docs`, the one list of docs generators
+# (Taskfile.yml). Each generate:docs:<name> task pins GOTOOLCHAIN and
+# GOWORK=off itself, so this regenerates exactly as `task generate` does.
+# TASK=<command> runs another task binary.
 #
 # Usage:
-#   scripts/check-docs-generate.sh [--github] <make target>...
+#   scripts/check-docs-generate.sh [--github]   (or: task generate:docs:check)
 #     --github   also ::error annotations and the diff, for CI
 set -euo pipefail
 
 github=0
 if [ "${1:-}" = "--github" ]; then github=1; shift; fi
-if [ "$#" = 0 ]; then
-  echo "usage: $0 [--github] <make target>... (run it as: make docs-generate-check)" >&2
+if [ "$#" != 0 ]; then
+  echo "usage: $0 [--github] (run it as: task generate:docs:check)" >&2
   exit 2
 fi
 
@@ -53,8 +53,9 @@ snapshot() {
 }
 
 before="$(snapshot)"
-echo "==> regenerating the docs: $*"
-"${MAKE:-make}" --no-print-directory "$@"
+echo "==> regenerating the docs: task generate:docs"
+read -r -a task <<<"${TASK:-task}"
+"${task[@]}" generate:docs
 after="$(snapshot)"
 
 changed=()
@@ -75,7 +76,7 @@ if [ "${github}" = 1 ]; then
   echo "--- diff (tracked files) ---"
   git --no-pager diff -- "${changed[@]}" || true
 fi
-msg="Commit what they wrote (now in your tree), in the change that caused it. If a file above is one you edited by hand, regeneration reverted your edit: put the text in its generator's source (tools/docgen/..., or the input it reads) and run make docs-generate-check again."
+msg="Commit what they wrote (now in your tree), in the change that caused it. If a file above is one you edited by hand, regeneration reverted your edit: put the text in its generator's source (tools/docgen/..., or the input it reads) and run task generate:docs:check again."
 if [ "${github}" = 1 ]; then echo "::error title=Generated docs are out of date::${msg}"; fi
 echo "error: generated docs are out of date" >&2
 echo "${msg}" >&2

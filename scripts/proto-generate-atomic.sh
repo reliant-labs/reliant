@@ -3,8 +3,8 @@
 # tree without generated code.
 #
 # Usage: scripts/proto-generate-atomic.sh <buf-template> <out-dir> [<out-dir>...]
-# Run it through `make proto-generate-controlplane`, which supplies the pinned
-# buf ($BUF), the pinned plugins and the pinned Go toolchain.
+# `forge generate` runs it as the `controlplane-client` hook (forge.yaml
+# generate.hooks), with the pinned plugins and Go toolchain.
 #
 # The out-dirs are the template's plugin `out:` directories, relative to the
 # repo root. They are regenerated WHOLESALE: anything not produced by this run
@@ -48,9 +48,19 @@ mkdir -p tmp
 staging=$(mktemp -d "$repo_root/tmp/proto-generate.XXXXXX")
 trap 'rm -rf "$staging"' EXIT
 
-# BUF is the Makefile's pinned buf binary (`make proto-generate-controlplane`);
-# the templates' plugins are all local and resolve relative to the repo root.
-"${BUF:-buf}" generate --template "$template" -o "$staging"
+# buf is go.mod's `tool github.com/bufbuild/buf/cmd/buf` pin, the one forge
+# runs too. `go run pkg@version` builds it in its own module graph (reliant's
+# newer protovalidate does not build buf v1.57.0, so `go tool buf` cannot);
+# GOFLAGS is reset to -trimpath because `go run pkg@version` refuses a
+# repo-level -mod. BUF=<command> overrides it. The templates' plugins are all
+# local and resolve relative to the repo root.
+if [[ -n "${BUF:-}" ]]; then
+  read -r -a buf <<<"$BUF"
+else
+  buf_version=$(GOWORK=off go list -m -f '{{.Version}}' github.com/bufbuild/buf)
+  buf=(env GOWORK=off GOFLAGS=-trimpath go run "github.com/bufbuild/buf/cmd/buf@${buf_version}")
+fi
+"${buf[@]}" generate --template "$template" -o "$staging"
 
 for dir in "$@"; do
   if [[ ! -d "$staging/$dir" ]] || [[ -z "$(ls -A "$staging/$dir")" ]]; then

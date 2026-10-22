@@ -18,7 +18,7 @@
 //
 //	go run ./tools/test-affected changed-tests   # ./pkg<TAB>^(TestA|TestB)$
 //
-// `make test-affected` is the front door. The decision is Classify (plan.go)
+// `task test:affected` is the front door. The decision is Classify (plan.go)
 // over rules.go, the Go package graph (graph.go) and the web import graph
 // (webgraph.go); this file is the I/O. A path no rule and no Go package claims,
 // a dependency or config pin, or a failure to compute the diff makes the
@@ -426,7 +426,7 @@ type runner struct {
 	dry    bool
 	goP    int
 	dbURL  string
-	// slot prefixes a FULL lane's command (the Makefile passes
+	// slot prefixes a FULL lane's command (Taskfile.yml passes
 	// TEST_AFFECTED_SLOT='forge slot run --class heavy --'): a whole-module
 	// run is as heavy as any gate check, and outside a host slot it only steals
 	// CPU from the jobs queued in one. A scoped run stays out of the queue: it
@@ -451,12 +451,12 @@ func (r *runner) steps(pl *Plan, enabled map[lane]bool) []step {
 	// First, so the tests below run against what generate leaves behind. It
 	// writes what it regenerates into the tree, naming every file it changed.
 	if enabled[laneForgeGen] && pl.ForgeGen.Full {
-		out = append(out, step{name: "forge generate is a no-op", dir: r.root, argv: []string{"make", "--no-print-directory", "forge-generate-check"}})
+		out = append(out, step{name: "forge generate is a no-op", dir: r.root, argv: []string{"task", "generate:check"}})
 	}
 	// Likewise: the docs generators write into the tree (one of them a Go
 	// file). They compile most of the module, so the step takes a heavy slot.
 	if enabled[laneDocGen] && pl.DocGen.Full {
-		out = append(out, step{name: "docs generators are a no-op", dir: r.root, argv: r.heavy([]string{"make", "--no-print-directory", "docs-generate-check"})})
+		out = append(out, step{name: "docs generators are a no-op", dir: r.root, argv: r.heavy([]string{"task", "generate:docs:check"})})
 	}
 	if enabled[laneGo] {
 		out = append(out, r.goSteps(pl)...)

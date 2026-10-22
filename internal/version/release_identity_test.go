@@ -43,7 +43,7 @@ func TestShippedBuildsStampTheReleaseIdentity(t *testing.T) {
 	}
 
 	for _, rel := range []string{
-		"Makefile",
+		"Taskfile.yml",
 		".github/workflows/release.yml",
 		".github/workflows/build-images.yml",
 	} {

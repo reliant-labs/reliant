@@ -205,6 +205,7 @@ func TestPinsAndConfigForceFull(t *testing.T) {
 		// documents forge's command tree).
 		{"go.mod", []lane{laneGo, laneForgeGen, laneDocGen}},
 		{"go.sum", []lane{laneGo, laneForgeGen, laneDocGen}},
+		{"Taskfile.yml", allLanes},
 		{"Makefile", allLanes},
 		// The forge pin and forge's own config reach Go and codegen, never a
 		// vitest file or electron: a forge bump must not run the whole web lane.
@@ -593,11 +594,11 @@ func TestRunnerRunsOnlyFullLanesInAHeavySlot(t *testing.T) {
 func TestRunnerRunsTheForgeGenerateCheckFirst(t *testing.T) {
 	pl := classify("internal/vault/contract.go")
 	steps := (&runner{root: "/repo"}).steps(pl, laneSet("go,web,electron,forge-generate"))
-	if len(steps) == 0 || strings.Join(steps[0].argv, " ") != "make --no-print-directory forge-generate-check" || steps[0].dir != "/repo" {
+	if len(steps) == 0 || strings.Join(steps[0].argv, " ") != "task generate:check" || steps[0].dir != "/repo" {
 		t.Fatalf("the forge-generate check must run first, from the repo root: %+v", steps)
 	}
 	for _, s := range (&runner{root: "/repo"}).steps(pl, laneSet("go")) {
-		if strings.Contains(strings.Join(s.argv, " "), "forge-generate-check") {
+		if strings.Contains(strings.Join(s.argv, " "), "generate:check") {
 			t.Fatal("-lanes go must not run the forge-generate check")
 		}
 	}
@@ -610,12 +611,12 @@ func TestRunnerRunsTheDocsCheckAfterForgeAndBeforeTests(t *testing.T) {
 	for _, s := range r.steps(pl, laneSet("go,web,electron,forge-generate,docs-generate")) {
 		got = append(got, strings.Join(s.argv, " "))
 	}
-	if len(got) < 3 || got[0] != "make --no-print-directory forge-generate-check" ||
-		got[1] != "forge slot run --class heavy -- make --no-print-directory docs-generate-check" {
+	if len(got) < 3 || got[0] != "task generate:check" ||
+		got[1] != "forge slot run --class heavy -- task generate:docs:check" {
 		t.Fatalf("the docs check runs second (after forge, before the tests), in a heavy slot: %v", got)
 	}
 	for _, s := range r.steps(pl, laneSet("go,forge-generate")) {
-		if strings.Contains(strings.Join(s.argv, " "), "docs-generate-check") {
+		if strings.Contains(strings.Join(s.argv, " "), "generate:docs:check") {
 			t.Fatal("-lanes without docs-generate must not run the docs check")
 		}
 	}

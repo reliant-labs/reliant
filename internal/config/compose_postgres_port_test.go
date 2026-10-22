@@ -38,14 +38,14 @@ func TestComposePostgresPortIsConsistent(t *testing.T) {
 
 	// Consumers of the compose-hosted Postgres: the value each one resolves to
 	// is extracted from its own syntax, not matched against a literal.
-	// The DSN every Make test target hands DB-backed tests when the caller set
-	// no DATABASE_URL of their own.
-	t.Run("Makefile COMPOSE_DATABASE_URL", func(t *testing.T) {
-		body := readRepoFile(t, filepath.Join(root, "Makefile"))
+	// The DSN every test task hands DB-backed tests when the caller set no
+	// DATABASE_URL of their own.
+	t.Run("Taskfile.yml COMPOSE_DATABASE_URL", func(t *testing.T) {
+		body := readRepoFile(t, filepath.Join(root, "Taskfile.yml"))
 		dsn := captureOne(t, body,
-			regexp.MustCompile(`(?m)^COMPOSE_DATABASE_URL\s*:=\s*(\S+)`),
-			"COMPOSE_DATABASE_URL assignment in Makefile")
-		assertPortEquals(t, portOfDSN(t, dsn), want, "Makefile COMPOSE_DATABASE_URL")
+			regexp.MustCompile(`(?m)^\s+COMPOSE_DATABASE_URL:\s*(\S+)`),
+			"COMPOSE_DATABASE_URL var in Taskfile.yml")
+		assertPortEquals(t, portOfDSN(t, dsn), want, "Taskfile.yml COMPOSE_DATABASE_URL")
 	})
 
 	t.Run("scripts/dev.sh per-worktree bootstrap default", func(t *testing.T) {
@@ -102,7 +102,7 @@ func composePostgresHostPort(t *testing.T, composePath string) int {
 
 func portOfDSN(t *testing.T, dsn string) int {
 	t.Helper()
-	// Makefile values may be single-quoted in the assignment.
+	// Taskfile values may be quoted.
 	parsed, err := url.Parse(strings.Trim(dsn, `'"`))
 	if err != nil {
 		t.Fatalf("parse DSN %q: %v", dsn, err)

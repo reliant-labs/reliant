@@ -150,22 +150,26 @@ echo "==> GOWORK=off go build ./..."
 GOWORK=off go build ./...
 
 # ── Regenerate what the pin feeds ────────────────────────────────────────
-# A forge bump changes generated output: cli.md embeds forge's whole command
-# tree, and MVS can raise google.golang.org/protobuf or connect, which are the
-# protoc plugins' versions. CI's "Generated code is up to date" gate fails a
-# pin bump that does not carry that output, so produce it here, through the
-# same pinned `make` target CI runs.
-echo "==> make generate-all"
-make --no-print-directory generate-all
-
-# forge's own outputs (descriptor, mocks, vendored protos, generated config)
-# come from the PINNED forge, never whatever `forge` is on PATH: `go run
+# A forge bump changes generated output: forge's own (descriptor, mocks,
+# vendored protos, generated config, and forge.yaml's generate hooks), and
+# cli.md embeds forge's whole command tree; MVS can raise
+# google.golang.org/protobuf or connect, which are the protoc plugins'
+# versions. CI fails a pin bump that does not carry that output, so produce
+# it here.
+#
+# forge generate runs the NEW pin, never whatever `forge` is on PATH nor
+# forge.yaml's (still the old one until this generate rewrites it): `go run
 # module@version` builds exactly the version go.mod now records. GOFLAGS is
 # reset to just -trimpath because -mod is not allowed with module@version
 # (and an empty one would drop -trimpath under a switched toolchain);
-# FORGE_NO_HOOKS keeps it from touching git hook activation.
+# FORGE_NO_HOOKS keeps it from touching git hook activation. Then the docs
+# generators, through the same pinned task CI runs.
 echo "==> forge generate (${after_forge})"
 GOFLAGS=-trimpath FORGE_NO_HOOKS=1 go run "${FORGE_MOD}/cmd/forge@${after_forge}" generate
+
+echo "==> task generate:docs"
+read -r -a task <<<"${TASK:-task}"
+"${task[@]}" generate:docs
 
 echo
 echo "pinned forge -> ${source_desc} (${sha})"

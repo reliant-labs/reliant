@@ -15,6 +15,9 @@
     ".github/workflows/proto-breaking.yml": {
       "scaffolded_at": "2026-10-12T05:30:41Z"
     },
+    "Taskfile.yml": {
+      "scaffolded_at": "2026-10-22T18:32:29Z"
+    },
     "cmd/reliant/cmd/commands.go": {},
     "cmd/reliant/cmd/metrics.go": {},
     "cmd/reliant/cmd/serve.go": {
