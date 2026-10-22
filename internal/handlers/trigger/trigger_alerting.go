@@ -60,7 +60,7 @@ func alertingError(err error) error {
 	switch {
 	case errors.As(err, &refused) && refused.Reason == controlplane.ReasonAutopilotNoOrg:
 		return connect.NewError(connect.CodeFailedPrecondition, errors.New(
-			"alert triage receives your organization's alerts, and your account belongs to no organization yet"))
+			"on-call receives your organization's alerts, and your account belongs to no organization yet"))
 	case errors.Is(err, controlplane.ErrAutopilotUnsupported):
 		return connect.NewError(connect.CodeUnavailable, errors.New(
 			"this deployment's control plane cannot deliver alerts to automations yet"))

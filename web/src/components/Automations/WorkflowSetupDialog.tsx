@@ -55,7 +55,7 @@ import { useWorkflowLibrary } from "@/hooks/workflow-library-queries";
 import { describeSchedule } from "@/lib/cronText";
 import { describeDeclaredSource, integrationOf, isAlertingWebhook, promptOf, type DeclaredTrigger } from "@/lib/declaredTriggers";
 import { repoGrpc } from "@/api/repo-grpc";
-import { DEFAULT_REPO_INPUT, singleGitHubRepo, withDefaultRepo } from "./alertTriage";
+import { DEFAULT_REPO_INPUT, singleGitHubRepo, withDefaultRepo } from "./oncallSetup";
 import { inputDefToSchema } from "@/lib/nodeFieldAdapter";
 import { getInputDescription, getInputMaxItems, getInputMinItems, getInputMulti, isIntegrationInput, type InputDef } from "@/lib/inputHelpers";
 import { classifyInputs, type SetupInput } from "@/lib/setupInputs";
@@ -301,13 +301,13 @@ function SetupBody({
     return map;
   }, [definition.inputGroups]);
 
-  // An alert-triage workflow (a `source: alerting` webhook) files alerts no
+  // An on-call workflow (a `source: alerting` webhook) files alerts no
   // service maps to in default_repo: with one GitHub repository in the
   // project, that is the repository, so the one click needs no other input.
   const alerting = useMemo(() => declared.some(isAlertingWebhook), [declared]);
   const wantsDefaultRepo = alerting && !!projectId && schemaByName.has(DEFAULT_REPO_INPUT);
   const projectRepos = useQuery({
-    queryKey: ["alert-triage", "repos", projectId],
+    queryKey: ["oncall", "repos", projectId],
     queryFn: () => repoGrpc.list(projectId),
     enabled: wantsDefaultRepo,
     staleTime: 60_000,
@@ -588,10 +588,10 @@ function SetupBody({
           </div>
 
           {alerting && (
-            <div role="note" className="space-y-1 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm" data-testid="alert-triage-note">
+            <div role="note" className="space-y-1 rounded-md border border-border bg-muted/40 px-3 py-2 text-sm" data-testid="oncall-note">
               <p className="text-foreground">
                 On Reliant&apos;s hosted platform, turning this on connects it to your organization&apos;s alerts: the critical and error
-                alerts of {projectName}&apos;s environments, and new or regressed errors. There is no token to copy and no alert route to write.
+                alerts of {projectName}&apos;s environments, and new, regressed or spiking errors. There is no token to copy and no alert route to write.
               </p>
               {fillsDefaultRepo && defaultRepo && (
                 <p className="text-xs text-muted-foreground">

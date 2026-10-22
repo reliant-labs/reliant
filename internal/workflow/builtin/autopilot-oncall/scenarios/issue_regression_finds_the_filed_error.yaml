@@ -1,0 +1,17 @@
+name: issue_regression_finds_the_filed_error
+description: >-
+  An IssueRegressed alert for an error whose GitHub issue is still open (filed from its NewIssue) is the same
+  issue key: it comments on that issue and files nothing.
+inputs: {"service_repos": {"web": "reliant-labs/reliant"}, "default_repo": "", "group_key": "g", "alerts": [{"status": "firing", "fingerprint": "bbbbbbbbbbbbbbbb", "labels": {"alertname": "IssueRegressed", "severity": "warning", "issue_id": "0b0c6d7e-1f2a-4b3c-8d9e-0f1a2b3c4d5e", "service": "web", "env": "prod", "title": "TypeError: x is undefined", "console_url": "https://app.example.test/i"}, "annotations": {"summary": "A resolved issue came back"}, "startsAt": "2026-10-15T20:00:00Z", "endsAt": "0001-01-01T00:00:00Z"}]}
+events:
+  - node: classify.search
+    output: {"is_error": false, "data": {"total_count": 1, "items": [{"number": 914, "html_url": "https://github.com/x/y/issues/914", "state": "open"}]}}
+  - node: classify.comment
+    output: {"is_error": false, "data": {"id": 6}}
+expect:
+  outcome: completed
+  completed: [classify, classify.comment]
+  not_reached: [file.created, file.agent, file.lease]
+  node_outputs:
+    verdicts: {summary: "0b0c6d7e1f2a4b3c8d9e0f1a2b3c4d5e=occurrence"}
+    fresh: {new: []}

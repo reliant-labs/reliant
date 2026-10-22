@@ -1,7 +1,7 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * One-click alert triage (research/feedback-loop/AUTOPILOT_TRIGGERS.md): the
+ * One-click Autopilot on-call (research/feedback-loop/AUTOPILOT_TRIGGERS.md): the
  * pieces of the Enable dialog that are pure, so they are tested without it.
  */
 

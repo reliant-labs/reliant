@@ -1,0 +1,15 @@
+name: issue_alert_without_an_issue_id_is_an_ordinary_alert
+description: >-
+  An alert named like an issue alert whose issue_id is not the registry's (a user rule, or a hand-written
+  payload) is keyed by its Alertmanager fingerprint like any other alert.
+inputs: {"service_repos": {"web": "reliant-labs/reliant"}, "default_repo": "", "group_key": "g", "alerts": [{"status": "firing", "fingerprint": "cccccccccccccccc", "labels": {"alertname": "NewIssue", "issue_id": "not-a-uuid", "service": "web"}, "annotations": {"summary": "s"}, "startsAt": "2026-10-14T20:00:00Z", "endsAt": "0001-01-01T00:00:00Z"}]}
+events:
+  - node: classify.search
+    output: {"is_error": false, "data": {"total_count": 1, "items": [{"number": 913, "html_url": "https://github.com/x/y/issues/913", "state": "open"}]}}
+  - node: classify.comment
+    output: {"is_error": false, "data": {"id": 5}}
+expect:
+  outcome: completed
+  completed: [classify.comment]
+  node_outputs:
+    verdicts: {summary: "cccccccccccccccc=occurrence"}

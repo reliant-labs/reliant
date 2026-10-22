@@ -455,7 +455,7 @@ describe("WorkflowSetupDialog: finish setup and settings (O2)", () => {
   });
 });
 
-describe("WorkflowSetupDialog: alert triage", () => {
+describe("WorkflowSetupDialog: on-call", () => {
   const alerts = {
     name: "alertmanager",
     filter: "",
@@ -488,7 +488,7 @@ describe("WorkflowSetupDialog: alert triage", () => {
     enableWorkflow.mockResolvedValue(create(EnableWorkflowResponseSchema, { enabled: true, results: [managed] }));
     render([alerts], { workflowRef: "oncall", title: "Oncall" });
 
-    const note = await screen.findByTestId("alert-triage-note");
+    const note = await screen.findByTestId("oncall-note");
     expect(note).toHaveTextContent("connects it to your organization's alerts");
     await waitFor(() => expect(note).toHaveTextContent("acme/shop"));
     await machineReady();

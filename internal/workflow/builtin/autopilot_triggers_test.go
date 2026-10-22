@@ -412,9 +412,9 @@ func TestReviewResponderTriggers_CommentFiltersDropReliantsOwnWrites(t *testing.
 	}
 }
 
-func TestAlertTriageTrigger_DedupeKeyAndFilter(t *testing.T) {
+func TestOnCallTrigger_DedupeKeyAndFilter(t *testing.T) {
 	t.Parallel()
-	wf := packWorkflow(t, "autopilot-alert-triage")
+	wf := packWorkflow(t, "autopilot-oncall")
 	wt := triggerNamed(t, wf, "alertmanager")
 	assert.Equal(t, "4h", wt.GetDedupeWindow())
 
@@ -468,7 +468,7 @@ func TestAlertTriageTrigger_DedupeKeyAndFilter(t *testing.T) {
 // is confident they are its own. Every pack trigger that declares none gets it.
 func TestPackTriggersUseTheDefaultOriginFilter(t *testing.T) {
 	t.Parallel()
-	for _, name := range []string{"autopilot-pr-review", "autopilot-issue-worker", "autopilot-review-responder", "autopilot-alert-triage", "autopilot-security-review"} {
+	for _, name := range []string{"autopilot-pr-review", "autopilot-issue-worker", "autopilot-review-responder", "autopilot-oncall", "autopilot-security-review"} {
 		wf := packWorkflow(t, name)
 		for _, wt := range wf.GetTriggers() {
 			assert.Empty(t, wt.GetOriginFilter(), "%s/%s declares no origin_filter, so the default applies", name, wt.GetName())
@@ -507,7 +507,7 @@ func TestPackTriggersUseTheDefaultOriginFilter(t *testing.T) {
 func TestPRReviewNeedsNoMachineAndOthersDo(t *testing.T) {
 	t.Parallel()
 	assert.True(t, packNeedsMachine(t, "autopilot-pr-review") == false, "pr-review reads GitHub only")
-	for _, name := range []string{"autopilot-issue-worker", "autopilot-review-responder", "autopilot-alert-triage", "autopilot-security-review"} {
+	for _, name := range []string{"autopilot-issue-worker", "autopilot-review-responder", "autopilot-oncall", "autopilot-security-review"} {
 		assert.True(t, packNeedsMachine(t, name), "%s works in a checkout", name)
 	}
 }

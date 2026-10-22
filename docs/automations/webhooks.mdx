@@ -45,7 +45,7 @@ triggers:
     webhook: {source: alerting}
 ```
 
-On Reliant's hosted platform, enabling it connects the automation to your organization's alerts: every critical or error alert of the project's environments, and the platform's new and regressed issue alerts, reaches it as an Alertmanager notification. There is no URL or token to copy and no alert route to write, and your other receivers and routes are unchanged. Disabling or deleting the automation disconnects it; rotating its token reconnects it with a new one. Two projects in one organization each receive only their own environments' alerts. Self-hosted, without the control plane, it is a plain webhook: point Alertmanager's `webhook_config` at it with the token shown at Enable. The built-in Autopilot alert-triage workflow declares its trigger this way.
+On Reliant's hosted platform, enabling it connects the automation to your organization's alerts: every critical or error alert of the project's environments, and the platform's new, regressed and spiking issue alerts, reaches it as an Alertmanager notification. There is no URL or token to copy and no alert route to write, and your other receivers and routes are unchanged. Disabling or deleting the automation disconnects it; rotating its token reconnects it with a new one. Two projects in one organization each receive only their own environments' alerts. Self-hosted, without the control plane, it is a plain webhook: point Alertmanager's `webhook_config` at it with the token shown at Enable. The built-in Autopilot on-call workflow declares its trigger this way.
 
 ## What the run sees
 

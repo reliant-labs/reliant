@@ -1,0 +1,15 @@
+name: resolved_issue_alert_does_nothing
+description: >-
+  An issue alert resolves when its window ends (a new issue's hour is over), not when the error is fixed, so its
+  resolved notification neither comments "Resolved" nor files anything, even with the issue open.
+inputs: {"service_repos": {"web": "reliant-labs/reliant"}, "default_repo": "", "group_key": "g", "alerts": [{"status": "resolved", "fingerprint": "aaaaaaaaaaaaaaaa", "labels": {"alertname": "NewIssue", "issue_id": "0b0c6d7e-1f2a-4b3c-8d9e-0f1a2b3c4d5e", "service": "web", "title": "TypeError: x is undefined"}, "annotations": {}, "startsAt": "2026-10-14T20:00:00Z", "endsAt": "2026-10-14T21:00:00Z"}]}
+events:
+  - node: classify.search
+    output: {"is_error": false, "data": {"total_count": 1, "items": [{"number": 914, "html_url": "https://github.com/x/y/issues/914", "state": "open"}]}}
+expect:
+  outcome: completed
+  completed: [classify, classify.skipped_note]
+  not_reached: [classify.comment, file.created, file.agent]
+  node_outputs:
+    verdicts: {summary: "0b0c6d7e1f2a4b3c8d9e0f1a2b3c4d5e=issue_alert_ended"}
+    fresh: {new: []}

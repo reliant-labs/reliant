@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { gitHubRepoSlug, singleGitHubRepo, withDefaultRepo } from "../alertTriage";
+import { gitHubRepoSlug, singleGitHubRepo, withDefaultRepo } from "../oncallSetup";
 
 describe("gitHubRepoSlug", () => {
   it.each([

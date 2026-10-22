@@ -1,6 +1,6 @@
 ---
 title: "Autopilot"
-description: "Five built-in workflows that review pull requests, security-review them, work issues, answer review feedback and triage alerts on your GitHub repositories, and never merge"
+description: "Five built-in workflows that review pull requests, security-review them, work issues, answer review feedback and take your alerts and errors on call, on your GitHub repositories, and never merge"
 ---
 
 **Autopilot** is a pack of five built-in workflows for GitHub. Each is an [automation](/automations/overview): it waits for an event, runs unattended, and leaves its work as ordinary issues, comments, reviews, branches and pull requests that you can read and overrule. You turn each one on, and nothing is on until you do.
@@ -11,16 +11,16 @@ description: "Five built-in workflows that review pull requests, security-review
 | **Security review** (`autopilot-security-review`) | A pull request opened, reopened, marked ready or given new commits (optionally only with a label); `/autopilot security-review`; Run now | Threat-models the diff read-only and posts one review comment: findings by severity, each confirmed or suspected, with evidence, an exploit sketch and a fix | Yes |
 | **Issue worker** (`autopilot-issue-worker`) | `agent:ready` added to an issue; an `@reliant` mention | Writes a failing test and the fix in a worktree, runs your fast checks, pushes a branch, opens a PR that closes the issue | Yes |
 | **Review responder** (`autopilot-review-responder`) | A review, an inline comment or a comment on an `agent:authored` PR | Changes the code to address the feedback, pushes to that PR's own branch, replies in each thread | Yes |
-| **Alert triage** (`autopilot-alert-triage`) | An Alertmanager webhook | Files one issue per new alert, investigates it read-only, writes up severity, evidence, cause and a proposed fix | Yes |
+| **On-call** (`autopilot-oncall`) | Your alerts, and new, regressed or spiking errors | Files one issue per new alert or error, investigates it read-only, writes up severity, evidence, cause and a proposed fix | Yes |
 
-The three that touch code form a loop. The issue worker opens a PR labelled `agent:authored`; PR review reviews it; if the review has findings, the review responder acts on them; a human merges. Alert triage feeds the same loop at its front: it files an issue labelled `agent:triage`, and a human who agrees adds `agent:ready` to hand it to the issue worker.
+The three that touch code form a loop. The issue worker opens a PR labelled `agent:authored`; PR review reviews it; if the review has findings, the review responder acts on them; a human merges. On-call feeds the same loop at its front: it files an issue labelled `agent:triage`, and a human who agrees adds `agent:ready` to hand it to the issue worker.
 
 ## What it will never do
 
 - **Merge.** There is no merge action in the GitHub integration, and no workflow in the pack calls one.
 - **Approve.** PR review's verdict is `COMMENT` or `REQUEST_CHANGES`. The event is computed in one node from the reviewer's answer by an expression with exactly those two outcomes, so a reviewer that returns `APPROVE` (confused, or steered by text in the PR) still posts a `COMMENT`. The reviewer is also given no tool that can post a review.
 - **Push to your default branch, to a protected branch, to a fork, or with `--force`.** Pushes go through a `git_publish` node, which checks the branch against GitHub's own answers before anything leaves your machine and refuses a push that is not a plain fast-forward. The issue worker may only push `autopilot/*` branches; the review responder only the head branch of the PR it is answering, and only if the PR is in the same repository.
-- **Add `agent:ready`.** Alert triage files issues as `agent:triage`. A human promotes them.
+- **Add `agent:ready`.** On-call files issues as `agent:triage`. A human promotes them.
 - **Act for a stranger.** Who may start a run is a filter on the event (below), and the text of issues, PRs and comments reaches an agent only as quoted data from the people you trust.
 - **Hold a credential in a shell.** Every agent shell and every `run` node in the pack is declared `credentials: none`. The push credential exists for the one push, inside `git_publish`, and never reaches a shell, a file or the environment.
 
@@ -40,7 +40,7 @@ Enable each workflow you want. They are independent, and none requires the other
 
 PR review needs no machine, so choose **No machine** for it. The other four work in a checkout, so pick the machine that holds your repositories as sibling folders of one project (`forge`, `control-plane`, `reliant`, say), or one project per repository.
 
-Alert triage also shows a **webhook URL and token, once**, when you enable it. See [Wiring Alertmanager](#wiring-alertmanager).
+On Reliant's hosted platform, turning on on-call connects it to your organization's alerts with nothing to copy; self-hosted, it shows a **webhook URL and token, once**. See [Alerts and errors](#alerts-and-errors).
 
 Autopilot workflows only start from their triggers, so the chat composer's workflow picker never offers them, and its helper workflows (leases, labels, the restricted agent loop) are listed nowhere. Their runs stay out of your chat list: each appears under **Workflows → Runs**, named by the automation that fired it. A run that finishes successfully archives itself and stays in Runs marked **Archived**; one that fails or is waiting on you stays unarchived. See [Where runs go](/automations/overview#where-runs-go).
 
@@ -111,7 +111,7 @@ Shares `model`, the `working_label`, `blocked_label` and `authored_label` labels
 | `max_review_rounds` | 3 | Rounds of changes per PR before it is labelled `agent:blocked` and left to a human |
 | `respond_label` | `agent:respond` | Add it to any other PR to have the responder look after it |
 
-### Alert triage
+### On-call
 
 | Setting | Default | What it does |
 |---------|---------|--------------|
@@ -158,7 +158,7 @@ Each workflow creates the labels it needs on first use, with a colour and a desc
 
 | Label | Meaning | Set by |
 |-------|---------|--------|
-| `agent:triage` | Filed from an alert; a human decides whether to work it | Alert triage |
+| `agent:triage` | Filed from an alert or an error; a human decides whether to work it | On-call |
 | `agent:ready` | An agent may work this issue | **You** |
 | `agent:working` | An agent holds this item right now (mirrors the lease) | The workflows |
 | `agent:in-review` | A PR is open for this | Issue worker |
@@ -182,9 +182,18 @@ Two runs must not work one issue or PR at once, for example a second label added
 
 Only comments by the connection's own account count, so a lease header pasted by someone else blocks and releases nothing. The lease is a convention between these workflows, not a lock GitHub enforces; a human can ignore it.
 
-## Wiring Alertmanager
+## Alerts and errors
 
-Enabling alert triage shows a webhook URL and a token, **once**. Add a receiver to Alertmanager:
+On-call takes two kinds of page, through one pipeline:
+
+- **Alerts**: the rules your environments declare, and the platform's own (a failed deploy, an exhausted quota), that are `critical` or `error`.
+- **Errors**: the platform groups the errors your services and frontends report into **issues**, and raises an alert when one is **new** (`NewIssue`), when a resolved one comes back in a later release (`IssueRegressed`), and when an open one's error rate spikes to five times its previous day (`IssueSpike`). These pass whatever their severity.
+
+Both reach Autopilot the way they reach Slack, PagerDuty and the console: through your organization's Alertmanager. So a [silence](/forge/observability#alerts) mutes Autopilot too, and an error that pages Slack is one that Autopilot investigates.
+
+**On Reliant's hosted platform** there is nothing to wire. Turning on-call on connects it to every alert of the project's environments that passes the filter above, with no token to copy and no route to write; your other receivers and routes are unchanged. Turning it off disconnects it.
+
+**Self-hosted**, without the control plane, it is a plain webhook. Turning it on shows a URL and a token, **once**. Add a receiver to Alertmanager:
 
 ```yaml
 receivers:
@@ -196,9 +205,19 @@ receivers:
           authorization: {type: Bearer, credentials_file: /etc/alertmanager/autopilot-token}
 ```
 
-then route the alerts you want triaged to it. The workflow de-duplicates in two layers. Alertmanager sends no idempotency header and repeats a firing group every `repeat_interval`, so the trigger names the event itself (`dedupe_key`): the group, its status and its alerts' fingerprints. A re-sent `firing` group within four hours is one event, and its `resolved` notification is another. Across those windows, each alert's fingerprint is shown in its issue as plain text and searched for among the repository's open issues: a match gets a comment ("Still firing" or "Resolved") instead of a second issue. A failed search files nothing, since a missed alert is cheaper than a duplicate.
+then route the alerts you want investigated to it.
 
-Logs and traces are not reachable from the investigator unless you give it a tool for them; its write-up says so rather than guessing.
+### One issue per alert, one issue per error
+
+The workflow de-duplicates in two layers. Alertmanager sends no idempotency header and repeats a firing group every `repeat_interval`, so the trigger names the event itself (`dedupe_key`): the group, its status and its alerts' fingerprints. A re-sent `firing` group within four hours is one event, and its `resolved` notification is another. Across those windows, each alert's key is shown in its GitHub issue as plain text and searched for among the repository's open issues: a match gets a comment ("Still firing" or "Resolved") instead of a second issue. A failed search files nothing, since a missed alert is cheaper than a duplicate.
+
+An alert's key is its Alertmanager fingerprint. An error's key is its **issue id**, so an error's new, regressed and spiking alerts all land on the one GitHub issue filed for it while that is open. An error alert fires once per transition and resolves an hour later by itself, which says nothing about the bug, so its `resolved` notification is ignored.
+
+### What the investigator sees
+
+For an alert: its labels and annotations. For an error: the issue the alert names (its id, service, environment, title, the file and function it was thrown in, the build it was first seen in) and a link to the issue in the console. The investigator reads the code from there: the culprit, the message, and what changed near them.
+
+The error's stack trace and breadcrumbs, and your logs and traces, are not reachable from the investigator unless a tool for them is given to it; its write-up says so, and cites the console link, rather than guessing.
 
 ## What it costs
 
@@ -208,7 +227,7 @@ Nothing here has a budget of its own yet, so this is where your spend comes from
 - **Security review** runs one reviewer per head commit, up to 50 turns, on the `powerful` tag with high thinking. Without `require_labels` that is **every push** to every non-draft PR in the repositories you picked, so in a busy repository set a label and opt PRs in.
 - **Issue worker** runs an agent for up to 120 turns per issue, plus a retry of up to 60 if the fast checks fail. It runs only for issues someone trusted opted in.
 - **Review responder** runs up to 80 turns per round, three rounds at most per PR, plus a retry.
-- **Alert triage** runs one investigation of up to 45 turns per *new* alert, at most five per notification, nothing for a repeat.
+- **On-call** runs one investigation of up to 45 turns per *new* alert or error, at most five per notification, nothing for a repeat.
 
 Open a finished run to see each model call's cost. The caps above are inputs, so lower `max_turns`, `max_investigations` and `max_review_rounds` to lower the ceiling.
 

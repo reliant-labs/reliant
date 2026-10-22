@@ -73,6 +73,7 @@ Alert rules are code. Forge generates a default set for every project, and you t
 | `FrontendJSErrorSpike` | Browser errors in the last 10 minutes run at more than three times the previous hour's rate. |
 | `FrontendLCPPoor` | Largest Contentful Paint at p75 passes 4 seconds. |
 | `WorkloadCrashLooping`, `WorkloadOOMKilled`, `WorkloadMemoryNearLimit`, `WorkloadImagePullFailed`, `WorkloadEvicted` | A container keeps restarting, is killed for memory, sits above 90% of its memory limit, cannot pull its image, or is evicted. |
+| `NewIssue`, `IssueRegressed`, `IssueSpike` | An error **issue** (see below) is new, a resolved one came back in a later release, or an open one's errors per hour reach five times its rate the day before (and at least 20). Each fires once per issue and transition, with the issue's id, service, title and a console link in its labels; it is how errors reach Slack, PagerDuty and [Autopilot on-call](/guides/autopilot#alerts-and-errors). |
 | `DeployFailed` | A promoted release fails to converge and stays failed for 5 minutes. |
 | `ObservabilityQuotaOver100`, `ObservabilityQuotaOver150` | Your organization passes its monthly observability allowance. |
 
