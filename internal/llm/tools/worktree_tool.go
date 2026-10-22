@@ -109,15 +109,27 @@ const (
 	worktreeCreateMax = 10 * time.Minute
 )
 
+// WorktreeSettler makes one immediate attempt to settle the directory of a
+// worktree that was just archived. *worktreesweep.Sweeper implements it.
+// Injected because the sweep lives above this package. Optional: nil leaves
+// the directory to the periodic sweep.
+type WorktreeSettler interface {
+	Settle(ctx context.Context, userID string, cand *core.ReclaimCandidate)
+}
+
+// worktreeSettleTimeout bounds the detached settle attempt after an archive.
+const worktreeSettleTimeout = 2 * time.Minute
+
 type worktreeTool struct {
 	repo    worktreeStore
 	machine RunMachine
+	settler WorktreeSettler
 }
 
 const WorktreeToolName = "worktree"
 
-func NewWorktreeTool(repo worktreeStore, machine RunMachine) Tool {
-	tool := &worktreeTool{repo: repo, machine: machine}
+func NewWorktreeTool(repo worktreeStore, machine RunMachine, settler WorktreeSettler) Tool {
+	tool := &worktreeTool{repo: repo, machine: machine, settler: settler}
 	return NewToolWrapper(tool)
 }
 
@@ -414,8 +426,10 @@ func (w *worktreeTool) handleGet(ctx context.Context, p *WorktreeParams, rc *rct
 // handleDelete archives the worktree. It never removes the directory itself:
 // removing a workspace is the reclaim loop's job (worktreesweep), which does it
 // only for a directory that is clean, pushed and not in use, and honours the
-// user's "keep everything" setting. The sweep runs in the API server every
-// ten minutes over every archived row, with no gRPC call involved.
+// user's "keep everything" setting. Like archiving from the UI, it asks for one
+// settle attempt right away (settleArchived); the sweep, which runs in the API
+// server every ten minutes over every archived row, catches whatever that
+// attempt could not.
 func (w *worktreeTool) handleDelete(ctx context.Context, p *WorktreeParams, rc *rctx.ToolContext) (ToolResponse, error) {
 	fail := func(format string, args ...any) (ToolResponse, error) {
 		return NewTextErrorResponse("Failed to delete worktree: " + fmt.Sprintf(format, args...)), nil
@@ -462,9 +476,30 @@ func (w *worktreeTool) handleDelete(ctx context.Context, p *WorktreeParams, rc *
 		return fail("archive: %v", err)
 	}
 	w.emitChanged(ctx, userID, project.ID, row.ID)
+	w.settleArchived(ctx, userID, project.Path, row.ID)
 
 	content := fmt.Sprintf("Archived worktree '%s'. Its directory is removed later, only if it is clean, its work is pushed or already merged, and it is unused; otherwise it is kept and listed in the Reliant inbox.", p.Name)
 	return WithResponseMetadata(NewTextResponse(content), WorktreeResponseMetadata{Action: "delete", WorktreeID: row.ID}), nil
+}
+
+// settleArchived asks the owning daemon to remove the archived worktree's
+// directory if that is safe, on a context detached from the tool call: the
+// archive has already succeeded, and a run that ends must not abandon a
+// half-finished removal. The daemon judges the directory; whatever it declines
+// is recorded and offered in the storage inbox.
+func (w *worktreeTool) settleArchived(ctx context.Context, userID, projectPath, worktreeID string) {
+	if w.settler == nil {
+		return
+	}
+	archived, err := w.repo.GetWorktree(ctx, worktreeID)
+	if err != nil || archived == nil {
+		return
+	}
+	bg, cancel := context.WithTimeout(context.WithoutCancel(ctx), worktreeSettleTimeout)
+	go func() {
+		defer cancel()
+		w.settler.Settle(bg, userID, &core.ReclaimCandidate{Worktree: archived, OwnerUserID: userID, ProjectPath: projectPath})
+	}()
 }
 
 // workspaceMachine is a workspacecreate.Machine bound to the run's machine.

@@ -334,6 +334,7 @@ type worktreeStore interface {
 	ListChats(ctx context.Context, filters db.ChatFilters) ([]*db.Chat, error)
 	ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error)
 	ListWorktrees(ctx context.Context, filters db.WorktreeFilters) ([]*db.Worktree, error)
+	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)
 }
 
 // listPendingQuestionsStore is list_pending_questions' store: the open

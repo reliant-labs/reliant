@@ -2606,6 +2606,11 @@ func (a *CallLLMActivity) getSystemPrompts(
 		bb.WriteString(workingDir)
 		bb.WriteString("/README.md) or by its plain relative path (README.md). ")
 		bb.WriteString("NEVER guess a project root and never write a placeholder path such as /path/to/project — the real one is on this line.")
+		// A workspace that is archived is cleaned up by reclaim. Files loose at
+		// its root, outside every git checkout, are saved only up to a size
+		// cap and otherwise keep the directory on disk, so scratch belongs
+		// elsewhere (and a worktree's checkout is the place for anything to keep).
+		bb.WriteString("\nKeep scratch files (notes, plans, logs, temporary output) outside this directory, e.g. under /tmp or a scratchpad directory you were given, so they never sit loose at the workspace root where git cannot see them; put anything meant to last inside a repository checkout.")
 	}
 
 	// Multi-repo hint. When the project has more than one repo, every fs/process

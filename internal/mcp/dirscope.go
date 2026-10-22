@@ -2,7 +2,6 @@
 package mcp
 
 import (
-	"os"
 	"strings"
 
 	"github.com/reliant-labs/reliant/internal/config"
@@ -52,8 +51,9 @@ func dirClientKey(serverName, projectPath string) string {
 }
 
 // resolveServerDir returns the working directory a server's process should start
-// in: its explicit Dir when set (expanded, so a config can reference $HOME),
-// else the project the tool call belongs to.
+// in: its explicit Dir when set (its ${VAR} references, such as $HOME, are
+// resolved at launch by resolveLaunchConfig), else the project the tool call
+// belongs to.
 //
 // An explicit Dir wins over the caller's project because pinning a server to one
 // tree is the reason to write the field at all. Returning "" means "inherit the
@@ -61,7 +61,7 @@ func dirClientKey(serverName, projectPath string) string {
 // for a server that does not care.
 func resolveServerDir(cfg config.MCPServer, projectPath string) string {
 	if d := strings.TrimSpace(cfg.Dir); d != "" {
-		return os.ExpandEnv(d)
+		return d
 	}
 	return normalizeProjectPath(projectPath)
 }
@@ -76,8 +76,9 @@ func resolveServerDir(cfg config.MCPServer, projectPath string) string {
 // wrong-tree failure in a different disguise.
 var projectPathPlaceholders = []string{"${projectPath}", "$projectPath", "${workspaceFolder}"}
 
-// expandArgs substitutes the project path into a server's args. Env-style
-// ${VAR} expansion is applied afterwards so a config can also reference $HOME.
+// expandArgs substitutes the project path into a server's args, returning a
+// new slice. Environment references are resolveLaunchConfig's, applied
+// afterwards, so a config can also reference $HOME.
 func expandArgs(args []string, projectPath string) []string {
 	if len(args) == 0 {
 		return args
@@ -87,7 +88,7 @@ func expandArgs(args []string, projectPath string) []string {
 		for _, ph := range projectPathPlaceholders {
 			a = strings.ReplaceAll(a, ph, projectPath)
 		}
-		out[i] = os.ExpandEnv(a)
+		out[i] = a
 	}
 	return out
 }

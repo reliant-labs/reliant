@@ -4,6 +4,7 @@ package worktreereclaim
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"path"
@@ -11,6 +12,8 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+
+	"gopkg.in/yaml.v3"
 )
 
 // This is forge's worktree policy (forge/internal/storage/worktrees.go,
@@ -70,7 +73,8 @@ const maxCompareBytes int64 = 64 << 20
 //     exists elsewhere, which is how a worktree gets its .env or dev secrets.
 //     This one applies to never-listed paths too, because nothing is lost.
 //     A file that differs from the source's, even only by being older, is
-//     data: it may hold a credential the source no longer has;
+//     data: it may hold a credential the source no longer has. The one
+//     exception is secrets/dev.yaml, compared by value (devSecrets);
 //   - it is inside another checkout, which is classified on its own.
 //
 // Judging these during the walk, not after it, matters: the walk stops at
@@ -161,13 +165,77 @@ func (d *dataWalk) copyInSource(rel, full string, info os.FileInfo) bool {
 	}
 	src := filepath.Join(source, filepath.FromSlash(rel))
 	si, err := os.Lstat(src)
-	if err != nil || !si.Mode().IsRegular() || si.Size() != info.Size() || os.SameFile(si, info) {
+	if err != nil || !si.Mode().IsRegular() || si.Size() > maxCompareBytes || os.SameFile(si, info) {
 		return false
 	}
 	if !within(source, src) || within(d.checkout, src) {
 		return false
 	}
-	return sameBytes(full, src)
+	if si.Size() == info.Size() && sameBytes(full, src) {
+		return true
+	}
+	return devSecrets(rel) && yamlValuesIn(full, src)
+}
+
+// devSecrets reports whether rel is a dev secrets file: secrets/dev.yaml, where
+// every developer's copy is the same handful of keys. What it holds that the
+// source's copy lacks is the only thing removal could lose; reordering, comments
+// and whitespace lose nothing.
+func devSecrets(rel string) bool {
+	return matchesRun(splitSegments(rel), "secrets/dev.yaml")
+}
+
+// yamlValuesIn reports whether every non-empty value in the YAML file `have` is
+// also in the YAML file `other` at the same key path. A file that does not parse
+// is not covered: the caller then holds the worktree.
+func yamlValuesIn(have, other string) bool {
+	a, ok := yamlLeaves(have)
+	if !ok {
+		return false
+	}
+	b, ok := yamlLeaves(other)
+	if !ok {
+		return false
+	}
+	for path, v := range a {
+		if v != "" && b[path] != v {
+			return false
+		}
+	}
+	return true
+}
+
+// yamlLeaves flattens a YAML document to its scalar leaves, keyed by key path
+// (list items by index). Anchors and aliases are resolved by the parser.
+func yamlLeaves(path string) (map[string]string, bool) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return nil, false
+	}
+	var doc any
+	if err := yaml.Unmarshal(b, &doc); err != nil {
+		return nil, false
+	}
+	out := map[string]string{}
+	var walk func(prefix string, v any)
+	walk = func(prefix string, v any) {
+		switch t := v.(type) {
+		case map[string]any:
+			for k, c := range t {
+				walk(prefix+"/"+k, c)
+			}
+		case []any:
+			for i, c := range t {
+				walk(fmt.Sprintf("%s/[%d]", prefix, i), c)
+			}
+		case nil:
+			out[prefix] = ""
+		default:
+			out[prefix] = fmt.Sprint(t)
+		}
+	}
+	walk("", doc)
+	return out, true
 }
 
 // sameBytes reports whether two files have identical contents. Any read error

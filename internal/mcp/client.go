@@ -87,51 +87,52 @@ func (c *client) Initialize(ctx context.Context) error {
 	var transport mcp.Transport
 	var err error
 
-	switch c.cfg.Type {
+	// The config arrives with its ${VAR} references as the user wrote them;
+	// this is where they are resolved, from this (the user's) environment.
+	// See expand.go.
+	launch := resolveLaunchConfig(c.cfg, os.LookupEnv) //nolint:forbidigo // resolves the user's ${VAR} references from the daemon's (the user's) environment, by design
+
+	switch launch.Type {
 	case config.MCPStdio:
-		if c.cfg.Command == "" {
+		if launch.Command == "" {
 			return fmt.Errorf("stdio transport requires command")
 		}
 
-		cmdArgs := append([]string(nil), c.cfg.Args...)
-		// The project path is substituted into args for servers that take the
-		// tree as an argument rather than reading their working directory. It is
-		// resolved by the manager into cfg before construction, so a client
-		// spawned directly (tests, one-off CLI use) simply gets no substitution.
-		cmdArgs = expandArgs(cmdArgs, normalizeProjectPath(c.cfg.Dir))
-		if c.cfg.Command == "uvx" && !hasArg(cmdArgs, "--native-tls") {
+		// The project path was substituted into args (expandArgs) for servers
+		// that take the tree as an argument rather than reading their working
+		// directory. It is resolved by the manager into cfg before construction,
+		// so a client spawned directly (tests, one-off CLI use) simply gets no
+		// substitution.
+		cmdArgs := append([]string(nil), launch.Args...)
+		if launch.Command == "uvx" && !hasArg(cmdArgs, "--native-tls") {
 			// Prefer uv's native-tls mode to use OS trust roots on managed/corporate machines.
 			cmdArgs = append([]string{"--native-tls"}, cmdArgs...)
 		}
 
 		// Resolve command via login shell so nvm/non-standard PATH entries are found.
-		finder := cmdutil.NewCommandFinder(c.cfg.Command)
+		finder := cmdutil.NewCommandFinder(launch.Command)
 		resolvedCmd, err := finder.Find()
 		if err != nil {
-			resolvedCmd = c.cfg.Command // fall back to original
+			resolvedCmd = launch.Command // fall back to original
 		}
 
 		// Create command with environment variables
 		cmd := exec.Command(resolvedCmd, cmdArgs...)
 		env := os.Environ() //nolint:forbidigo // an MCP server inherits the daemon environment; not configuration
-		for _, e := range c.cfg.Env {
-			// Support environment variable expansion
-			expanded := os.ExpandEnv(e)
-			env = append(env, expanded)
-		}
+		env = append(env, launch.Env...)
 
 		env = sanitizeMCPSubprocessEnv(env)
 
 		// uvx defaults to a bundled trust store which can miss enterprise/root CAs.
 		// Prefer native OS trust unless caller explicitly set UV_NATIVE_TLS.
-		if c.cfg.Command == "uvx" && !hasEnvKey(env, "UV_NATIVE_TLS") {
+		if launch.Command == "uvx" && !hasEnvKey(env, "UV_NATIVE_TLS") {
 			env = append(env, "UV_NATIVE_TLS=1")
 		}
 
 		// Start the process in its resolved directory. Unset until now, so every
 		// stdio server inherited the DAEMON's directory — which silently gave a
 		// tree-indexing server the wrong tree (see dirscope.go).
-		if dir := normalizeProjectPath(c.cfg.Dir); dir != "" {
+		if dir := normalizeProjectPath(launch.Dir); dir != "" {
 			if st, err := os.Stat(dir); err == nil && st.IsDir() {
 				cmd.Dir = dir
 			} else {
@@ -147,27 +148,27 @@ func (c *client) Initialize(ctx context.Context) error {
 		transport = &mcp.CommandTransport{Command: cmd}
 
 	case config.MCPSse, config.MCPHTTP:
-		if c.cfg.URL == "" {
+		if launch.URL == "" {
 			return fmt.Errorf("HTTP transport requires URL")
 		}
 		// Custom headers ride on a transport under the tracing one: the SDK's
 		// StreamableClientTransport takes only an *http.Client.
 		var base http.RoundTripper
-		if len(c.cfg.Headers) > 0 {
+		if len(launch.Headers) > 0 {
 			base = &headerTransport{
 				base:    http.DefaultTransport,
-				headers: c.cfg.Headers,
+				headers: launch.Headers,
 			}
 		}
 		httpClient := observe.NewHTTPClient(observe.HTTPClientOptions{Timeout: 60 * time.Second, Base: base})
 
 		transport = &mcp.StreamableClientTransport{
-			Endpoint:   c.cfg.URL,
+			Endpoint:   launch.URL,
 			HTTPClient: httpClient,
 		}
 
 	default:
-		return fmt.Errorf("unknown transport type: %s", c.cfg.Type)
+		return fmt.Errorf("unknown transport type: %s", launch.Type)
 	}
 
 	c.transport = transport
@@ -567,7 +568,8 @@ func (c *client) ServerInfo() *ServerInfo {
 	return c.serverInfo
 }
 
-// headerTransport is an http.RoundTripper that adds custom headers to requests
+// headerTransport is an http.RoundTripper that adds custom headers to requests.
+// The values are sent verbatim: their ${VAR} references were resolved at launch.
 type headerTransport struct {
 	base    http.RoundTripper
 	headers map[string]string
@@ -731,11 +733,9 @@ func (t *headerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	// Clone the request to avoid modifying the original
 	req = req.Clone(req.Context())
 
-	// Add custom headers
+	// Add custom headers, already resolved at launch (resolveLaunchConfig).
 	for key, value := range t.headers {
-		// Expand environment variables in header values
-		expandedValue := os.ExpandEnv(value)
-		req.Header.Set(key, expandedValue)
+		req.Header.Set(key, value)
 	}
 
 	// Use the base transport

@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
-	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -19,7 +18,6 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
-	"github.com/reliant-labs/reliant/internal/cmdutil"
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/daemonerr"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -595,28 +593,20 @@ func convertToMCPServerConfig(server config.MCPServer) MCPServerConfig {
 	return serverCfg
 }
 
+// The two converters below carry a server's command, args, url, headers and
+// env exactly as the user wrote them, ${VAR} references included. They run on
+// the API server, whose environment is Reliant's — database, vault and NATS
+// credentials, OAuth client secrets — and never the user's, so resolving a
+// reference here would substitute a server secret into a config that is then
+// stored, returned by ListServers and written to the user's machine. The
+// daemon resolves references when it launches the server, from the user's own
+// environment (mcp.resolveLaunchConfig).
+
 // protoConfigToInternal converts proto MCPServerConfig to internal config.MCPServer
 func protoConfigToInternal(cfg *reliantv1.MCPServerConfig) config.MCPServer {
 	serverType := config.MCPStdio
 	if cfg.Type != "" {
 		serverType = config.MCPType(cfg.Type)
-	}
-
-	envMap := make(map[string]string)
-	for _, envVar := range cfg.Env {
-		parts := strings.SplitN(envVar, "=", 2)
-		if len(parts) == 2 {
-			envMap[parts[0]] = parts[1]
-		}
-	}
-
-	expandWithEnv := func(input string) string {
-		return os.Expand(input, func(key string) string {
-			if value, ok := envMap[key]; ok {
-				return value
-			}
-			return os.Getenv(key) //nolint:forbidigo // expands ${VAR} in the user's MCP config from the user's environment, by design
-		})
 	}
 
 	// NOTE: this converter's source is the PROTO MCPServerConfig, which has no
@@ -625,21 +615,18 @@ func protoConfigToInternal(cfg *reliantv1.MCPServerConfig) config.MCPServer {
 	// and stored-JSON paths (configloader.LoadMCPServersFromFile,
 	// config.parseMCPServersFromJSON) do carry them.
 	server := config.MCPServer{
-		Command: expandWithEnv(cfg.Command),
-		Args:    make([]string, 0, len(cfg.Args)),
+		Command: cfg.Command,
+		Args:    append([]string(nil), cfg.Args...),
 		Env:     cfg.Env,
 		Type:    serverType,
 		Headers: make(map[string]string, len(cfg.Headers)),
 		Enabled: true,
 	}
-	for _, arg := range cfg.Args {
-		server.Args = append(server.Args, expandWithEnv(arg))
-	}
 	for k, v := range cfg.Headers {
-		server.Headers[k] = expandWithEnv(v)
+		server.Headers[k] = v
 	}
 	if cfg.Url != nil {
-		server.URL = expandWithEnv(*cfg.Url)
+		server.URL = *cfg.Url
 	}
 	return server
 }
@@ -650,39 +637,22 @@ func scopedConfigToInternal(cfg MCPServerConfig) config.MCPServer {
 		serverType = config.MCPType(cfg.Type)
 	}
 
-	envMap := make(map[string]string)
-	for k, v := range cfg.Env {
-		envMap[k] = v
-	}
-
-	expandWithEnv := func(input string) string {
-		return os.Expand(input, func(key string) string {
-			if value, ok := envMap[key]; ok {
-				return value
-			}
-			return os.Getenv(key) //nolint:forbidigo // expands ${VAR} in the user's MCP config from the user's environment, by design
-		})
-	}
-
 	server := config.MCPServer{
-		Command:       expandWithEnv(cfg.Command),
-		Args:          make([]string, 0, len(cfg.Args)),
+		Command:       cfg.Command,
+		Args:          append([]string(nil), cfg.Args...),
 		Type:          serverType,
-		URL:           expandWithEnv(cfg.URL),
+		URL:           cfg.URL,
 		Headers:       make(map[string]string, len(cfg.Headers)),
 		Enabled:       cfg.IsEnabled(),
 		Dir:           cfg.Dir,
 		DirScoped:     cfg.DirScoped,
 		RequiresFiles: cfg.RequiresFiles,
 	}
-	for _, arg := range cfg.Args {
-		server.Args = append(server.Args, expandWithEnv(arg))
-	}
 	for k, v := range cfg.Env {
 		server.Env = append(server.Env, k+"="+v)
 	}
 	for k, v := range cfg.Headers {
-		server.Headers[k] = expandWithEnv(v)
+		server.Headers[k] = v
 	}
 
 	return server
@@ -1166,20 +1136,24 @@ func (s *Service) preflightMCPServer(ctx context.Context, name string, cfg confi
 
 	switch cfg.Type {
 	case config.MCPStdio:
+		// Whether the command exists is a question about the user's machine,
+		// which the daemon answers when it launches the server. This process
+		// has neither the user's PATH nor any business running a lookup on a
+		// user-supplied command name.
 		if strings.TrimSpace(cfg.Command) == "" {
 			return fmt.Errorf("stdio server requires a command")
-		}
-		finder := cmdutil.NewCommandFinder(cfg.Command)
-		if _, err := finder.Find(); err != nil {
-			return fmt.Errorf("command %q not found on PATH", cfg.Command)
 		}
 	case config.MCPSse, config.MCPHTTP:
 		if strings.TrimSpace(cfg.URL) == "" {
 			return fmt.Errorf("http/sse server requires a URL")
 		}
-		u, err := url.Parse(cfg.URL)
-		if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
-			return fmt.Errorf("invalid sse URL %q (must start with http:// or https://)", cfg.URL)
+		// A URL built from ${VAR} references is only a URL once the daemon
+		// resolves them, so only a literal one can be checked here.
+		if !strings.Contains(cfg.URL, "$") {
+			u, err := url.Parse(cfg.URL)
+			if err != nil || (u.Scheme != "http" && u.Scheme != "https") {
+				return fmt.Errorf("invalid sse URL %q (must start with http:// or https://)", cfg.URL)
+			}
 		}
 	default:
 		return fmt.Errorf("unsupported MCP transport type: %s", cfg.Type)

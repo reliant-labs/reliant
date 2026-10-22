@@ -48,6 +48,15 @@ func (cf *CommandFinder) Find() (string, error) {
 		return path, nil
 	}
 
+	// The login-shell lookup below interpolates the name into a shell command
+	// line, and the name can come from configuration (an MCP server's
+	// `command`). Only a plain command name is safe to hand a shell; anything
+	// else — a path, or a name carrying shell syntax — was already answered,
+	// or ruled out, by the two lookups above.
+	if !isPlainCommandName(cf.CommandName) {
+		return "", fmt.Errorf("%s not found in PATH or common locations", cf.CommandName)
+	}
+
 	// If not found, try to use shell to find it with full PATH
 	shellPath := os.Getenv("SHELL") //nolint:forbidigo // ambient OS variable (SHELL), not configuration
 	if shellPath == "" {
@@ -81,6 +90,23 @@ func (cf *CommandFinder) Find() (string, error) {
 	}
 
 	return "", fmt.Errorf("%s not found in PATH or common locations", cf.CommandName)
+}
+
+// isPlainCommandName reports whether name is a bare executable name that a
+// shell reads as one literal word: letters, digits and . _ + - @ only.
+func isPlainCommandName(name string) bool {
+	if name == "" {
+		return false
+	}
+	for _, r := range name {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9':
+		case r == '.', r == '_', r == '+', r == '-', r == '@':
+		default:
+			return false
+		}
+	}
+	return name[0] != '-'
 }
 
 // getDefaultPaths returns common installation paths based on the command and OS

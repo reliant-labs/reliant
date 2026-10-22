@@ -503,11 +503,14 @@ func TestLockActive_AlwaysRewritesTheLock(t *testing.T) {
 	}
 }
 
-// B1: files at a multi-repo workspace root are work.
-func TestReconcile_MultiRepoRootFilesHoldTheWorkspace(t *testing.T) {
+// B1: files at a multi-repo workspace root are work. Small ones are saved to
+// <reclaimed>/<id>/ before the workspace goes (rootfiles_test.go); ones past the
+// cap hold it, on both paths, with nothing removed.
+func TestReconcile_MultiRepoRootFilesPastTheCapHoldTheWorkspace(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 	f.idle()
+	f.r.RootFilesCap = 16
 	ws := filepath.Join(f.root, "proj", "taxes-237184bf")
 	for i, c := range []string{"api", "web"} {
 		run(t, f.project, "worktree", "add", "-q", "-b", fmt.Sprintf("feat/m%d", i), filepath.Join(ws, c), "main")
@@ -516,8 +519,7 @@ func TestReconcile_MultiRepoRootFilesHoldTheWorkspace(t *testing.T) {
 		}
 	}
 	notes := filepath.Join(ws, "NOTES.md")
-	write(t, notes, "irreplaceable notes written at the workspace root\n")
-	write(t, filepath.Join(ws, "scratch", "plan.txt"), "a plan\n")
+	write(t, notes, "irreplaceable notes written at the workspace root, more than sixteen bytes\n")
 	w := Worktree{ID: "taxes", Path: ws, State: StateArchived, BaseBranch: "main", Fence: "5"}
 	got := f.one(w)
 	if got.Outcome != OutcomeHeld || got.Reason != ReasonOutsideFiles || !exists(notes) {
@@ -526,6 +528,9 @@ func TestReconcile_MultiRepoRootFilesHoldTheWorkspace(t *testing.T) {
 	got = f.confirmed(w)
 	if got.Outcome != OutcomeHeld || got.Reason != ReasonOutsideFiles || !exists(notes) || !exists(filepath.Join(ws, "api")) {
 		t.Fatalf("confirmed: got %+v, want held/files-outside-checkout, nothing removed", got)
+	}
+	if exists(f.r.reclaimedRoot()) {
+		t.Fatal("nothing is saved for a workspace that is held")
 	}
 }
 
@@ -541,8 +546,9 @@ func TestReconcile_MultiRepoWorkspaceWithOnlyEmptyDirsBetweenIsRemoved(t *testin
 			t.Fatal(err)
 		}
 	}
+	f.r.RootFilesCap = 1
 	w := Worktree{ID: "ws1", Path: ws, State: StateArchived, BaseBranch: "main", Fence: "5"}
-	write(t, filepath.Join(ws, "web-dirty.txt"), "x") // outside: holds
+	write(t, filepath.Join(ws, "web-dirty.txt"), "xx") // outside, past the cap: holds
 	if got := f.one(w); got.Outcome != OutcomeHeld {
 		t.Fatalf("got %+v", got)
 	}
@@ -746,7 +752,7 @@ func TestRemoval_NeverForcesPastGit(t *testing.T) {
 	}
 	checkouts := []string{w.Path}
 	write(t, filepath.Join(w.Path, "raced.txt"), "x") // lands after classification
-	got := f.r.removeWorkspace(context.Background(), Worktree{ID: w.ID, Path: w.Path, Fence: w.Fence}, checkouts, false)
+	got := f.r.removeWorkspace(context.Background(), Worktree{ID: w.ID, Path: w.Path, Fence: w.Fence}, checkouts, nil, false)
 	if got.Outcome == OutcomeRemoved || !exists(filepath.Join(w.Path, "raced.txt")) {
 		t.Fatalf("got %+v, want git to refuse a dirty checkout", got)
 	}

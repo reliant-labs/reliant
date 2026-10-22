@@ -56,6 +56,10 @@ type Reclaimer struct {
 	// back OutcomeDeferred, untouched, so a machine with many large archived
 	// worktrees makes progress each pass instead of timing out every one.
 	Budget time.Duration
+	// RootFilesCap bounds the total size of the files loose at a workspace
+	// root that removal saves (rootfiles.go) rather than holds the workspace
+	// for; zero means DefaultRootFilesCap.
+	RootFilesCap int64
 	// Workers bounds how many worktrees one request settles at once; zero
 	// means the default (reconcileWorkers).
 	Workers int
@@ -509,11 +513,11 @@ func adminDir(checkout string) string {
 // the scan either way.
 func (r *Reclaimer) structure(ctx context.Context, w Worktree, phase2 bool) ([]string, scan, *Result) {
 	sc := scanWorkspace(ctx, w.Path)
-	checkouts, hold := structureOf(ctx, w, sc, phase2)
+	checkouts, hold := structureOf(ctx, w, sc, phase2, r.rootFilesCap())
 	return checkouts, sc, hold
 }
 
-func structureOf(ctx context.Context, w Worktree, sc scan, phase2 bool) ([]string, *Result) {
+func structureOf(ctx context.Context, w Worktree, sc scan, phase2 bool, rootCap int64) ([]string, *Result) {
 	if sc.Truncated {
 		res := held(w, ReasonUnverified, "the workspace is too large to inspect completely")
 		return nil, &res
@@ -561,9 +565,11 @@ func structureOf(ctx context.Context, w Worktree, sc scan, phase2 bool) ([]strin
 		checkouts = append(checkouts, repo)
 	}
 	if len(sc.Outside) > 0 {
-		shown := relDetail(w.Path, sc.Outside[0], "")
-		res := held(w, ReasonOutsideFiles, fmt.Sprintf("%d file(s) sit outside every checkout, e.g. %s", len(sc.Outside), strings.TrimPrefix(shown, ": ")))
-		return nil, &res
+		if why := rootFilesUnsavable(sc.Outside, rootCap); why != "" {
+			shown := relDetail(w.Path, sc.Outside[0], "")
+			res := held(w, ReasonOutsideFiles, fmt.Sprintf("%d file(s) sit outside every checkout, e.g. %s (%s)", len(sc.Outside), strings.TrimPrefix(shown, ": "), why))
+			return nil, &res
+		}
 	}
 	for _, c := range checkouts {
 		if v := dataHold(ctx, c, nestedOf(c, checkouts)); !v.safe() {
@@ -638,7 +644,7 @@ func (r *Reclaimer) autoPhase(ctx context.Context, w Worktree) Result {
 }
 
 func (r *Reclaimer) autoRemove(ctx context.Context, w Worktree) Result {
-	checkouts, _, hold := r.structure(ctx, w, true)
+	checkouts, sc, hold := r.structure(ctx, w, true)
 	if hold != nil {
 		return *hold
 	}
@@ -657,7 +663,7 @@ func (r *Reclaimer) autoRemove(ctx context.Context, w Worktree) Result {
 	if v := classifyAll(ctx, w, checkouts, r.probe()); !v.safe() {
 		return held(w, v.Reason, v.Detail)
 	}
-	return r.removeWorkspace(ctx, w, checkouts, false)
+	return r.removeWorkspace(ctx, w, checkouts, sc.Outside, false)
 }
 
 // classifyAll classifies every checkout of a workspace, concurrently: each is
@@ -776,7 +782,7 @@ func (r *Reclaimer) confirmedPhase(ctx context.Context, w Worktree) Result {
 }
 
 func (r *Reclaimer) confirmedRemove(ctx context.Context, w Worktree) Result {
-	checkouts, _, hold := r.structure(ctx, w, true)
+	checkouts, sc, hold := r.structure(ctx, w, true)
 	if hold != nil {
 		return *hold
 	}
@@ -788,7 +794,7 @@ func (r *Reclaimer) confirmedRemove(ctx context.Context, w Worktree) Result {
 	if hold := r.inUse(ctx, w, true); hold != nil {
 		return *hold
 	}
-	return r.removeWorkspace(ctx, w, checkouts, true)
+	return r.removeWorkspace(ctx, w, checkouts, sc.Outside, true)
 }
 
 // ---- removal ------------------------------------------------------------
@@ -808,7 +814,13 @@ func (r *Reclaimer) confirmedRemove(ctx context.Context, w Worktree) Result {
 //     saved snapshot. On any change it is moved back and the worktree held.
 //
 // Then only directories left EMPTY are deleted, bottom-up.
-func (r *Reclaimer) removeWorkspace(ctx context.Context, w Worktree, checkouts []string, confirmed bool) Result {
+func (r *Reclaimer) removeWorkspace(ctx context.Context, w Worktree, checkouts, outside []string, confirmed bool) Result {
+	// Files loose at the workspace root are saved first, and verified, so a
+	// failure here leaves every checkout exactly as it was.
+	saved, err := r.saveRootFiles(w, outside)
+	if err != nil {
+		return held(w, ReasonOutsideFiles, "could not save the files at the workspace root, nothing was removed: "+err.Error())
+	}
 	ordered := append([]string(nil), checkouts...)
 	sort.Slice(ordered, func(i, j int) bool { return len(ordered[i]) > len(ordered[j]) })
 	remaining := append([]string(nil), checkouts...)
@@ -818,12 +830,13 @@ func (r *Reclaimer) removeWorkspace(ctx context.Context, w Worktree, checkouts [
 		}
 		remaining = without(remaining, c)
 	}
+	saved.removeOriginals()
 	if !removeEmptyDirs(emptyDirsUnder(w.Path)) {
-		return Result{ID: w.ID, Outcome: OutcomeError, Error: "checkouts were removed but files remain at " + w.Path}
+		return Result{ID: w.ID, Outcome: OutcomeError, Error: "checkouts were removed but files remain at " + w.Path, ReclaimedTo: saved.dir}
 	}
 	// The row's quarantine directory is empty once every checkout is gone.
 	_ = os.Remove(r.quarantineRoot(w.ID))
-	return Result{ID: w.ID, Outcome: OutcomeRemoved}
+	return Result{ID: w.ID, Outcome: OutcomeRemoved, ReclaimedTo: saved.dir}
 }
 
 func without(list []string, drop string) []string {

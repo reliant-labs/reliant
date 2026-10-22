@@ -102,7 +102,12 @@ func TestLoadMCPServersFromProjectScopes_Precedence(t *testing.T) {
 	}
 }
 
-func TestLoadMCPServersFromFile_ExpandsArgsFromServerEnv(t *testing.T) {
+// References are kept as written: the MCP client resolves them once, at launch
+// (internal/mcp expand.go), the same way it resolves a config that reached the
+// daemon from the server. Resolving here too would expand a file-loaded value
+// twice.
+func TestLoadMCPServersFromFile_KeepsReferencesForLaunch(t *testing.T) {
+	t.Setenv("AUTH_TOKEN", "from-daemon-env")
 	dir := t.TempDir()
 	mcpPath := filepath.Join(dir, config.MCPConfigFileName)
 
@@ -136,8 +141,11 @@ func TestLoadMCPServersFromFile_ExpandsArgsFromServerEnv(t *testing.T) {
 	if len(s.Args) < 5 {
 		t.Fatalf("expected args to be parsed, got %#v", s.Args)
 	}
-	if got := s.Args[4]; got != "statsig-api-key:console-test-token" {
-		t.Fatalf("expected header arg expansion from server env, got %q", got)
+	if got := s.Args[4]; got != "statsig-api-key:${AUTH_TOKEN}" {
+		t.Fatalf("expected the arg as written, got %q", got)
+	}
+	if len(s.Env) != 1 || s.Env[0] != "AUTH_TOKEN=console-test-token" {
+		t.Fatalf("expected the env block as written, got %q", s.Env)
 	}
 }
 

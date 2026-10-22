@@ -220,29 +220,17 @@ func LoadMCPServersFromFile(mcpConfigPath string) map[string]config.MCPServer {
 			Enabled: true,
 		}
 
-		// Parse env first so command/args/url can reference values defined in this server block
-		// (e.g. args: ["--header", "statsig-api-key:${AUTH_TOKEN}"] with env.AUTH_TOKEN).
-		serverEnv := make(map[string]string)
+		// Every value is kept as written, ${VAR} references included: the MCP
+		// client resolves them once, when it launches the server, against the
+		// server's env block and then this environment (internal/mcp expand.go).
+		// The config read here also reaches the daemon raw from the server, and
+		// resolving one path at load and the other at launch would expand a
+		// file-loaded value twice.
 		if env, ok := serverMap["env"].(map[string]interface{}); ok {
 			mcpServer.Env = make([]string, 0, len(env))
 			for key, value := range env {
-				resolvedValue := expandEnvVarsLoader(fmt.Sprintf("%v", value))
-				serverEnv[key] = resolvedValue
-				mcpServer.Env = append(mcpServer.Env, fmt.Sprintf("%s=%s", key, resolvedValue))
+				mcpServer.Env = append(mcpServer.Env, fmt.Sprintf("%s=%v", key, value))
 			}
-		}
-
-		expandWithServerEnv := func(s string) string {
-			return expandEnvVarsWithLookup(s, func(key string) (string, bool) {
-				if value, ok := serverEnv[key]; ok {
-					return value, true
-				}
-				value := os.Getenv(key) //nolint:forbidigo // expands ${VAR} in the user's MCP config from the user's environment, by design
-				if value == "" {
-					return "", false
-				}
-				return value, true
-			})
 		}
 
 		// Type (optional, defaults to stdio)
@@ -252,7 +240,7 @@ func LoadMCPServersFromFile(mcpConfigPath string) map[string]config.MCPServer {
 
 		// Command (required for stdio, optional for sse/http transports)
 		if command, ok := serverMap["command"].(string); ok {
-			mcpServer.Command = expandWithServerEnv(command)
+			mcpServer.Command = command
 		}
 
 		// Args (optional)
@@ -260,21 +248,21 @@ func LoadMCPServersFromFile(mcpConfigPath string) map[string]config.MCPServer {
 			mcpServer.Args = make([]string, len(args))
 			for i, arg := range args {
 				if argStr, ok := arg.(string); ok {
-					mcpServer.Args[i] = expandWithServerEnv(argStr)
+					mcpServer.Args[i] = argStr
 				}
 			}
 		}
 
 		// URL (optional, used by sse/http transports)
 		if url, ok := serverMap["url"].(string); ok && url != "" {
-			mcpServer.URL = expandWithServerEnv(url)
+			mcpServer.URL = url
 		}
 
 		// Headers (optional, used by sse/http transports)
 		if headers, ok := serverMap["headers"].(map[string]interface{}); ok {
 			mcpServer.Headers = make(map[string]string, len(headers))
 			for key, value := range headers {
-				mcpServer.Headers[key] = expandWithServerEnv(fmt.Sprintf("%v", value))
+				mcpServer.Headers[key] = fmt.Sprintf("%v", value)
 			}
 		}
 
@@ -289,7 +277,7 @@ func LoadMCPServersFromFile(mcpConfigPath string) map[string]config.MCPServer {
 		// and `dirScoped`: both were declared, documented in the reliant-config
 		// skill, and never read out of mcp.json.
 		if dir, ok := serverMap["dir"].(string); ok && dir != "" {
-			mcpServer.Dir = expandWithServerEnv(dir)
+			mcpServer.Dir = dir
 		}
 		if dirScoped, ok := serverMap["dirScoped"].(bool); ok {
 			mcpServer.DirScoped = dirScoped
@@ -457,57 +445,6 @@ func (l *Loader) validateConfig(cfg *config.Config) error {
 	}
 
 	return nil
-}
-
-// expandEnvVarsLoader expands environment variables in Claude format (${VAR} or ${VAR:-default})
-// using process environment variables.
-func expandEnvVarsLoader(s string) string {
-	return expandEnvVarsWithLookup(s, func(key string) (string, bool) {
-		value := os.Getenv(key) //nolint:forbidigo // expands ${VAR} in the user's MCP config from the user's environment, by design
-		if value == "" {
-			return "", false
-		}
-		return value, true
-	})
-}
-
-// expandEnvVarsWithLookup expands environment variables in Claude format (${VAR} or ${VAR:-default})
-// using the provided lookup function.
-func expandEnvVarsWithLookup(s string, lookup func(key string) (string, bool)) string {
-	result := s
-
-	for {
-		start := strings.Index(result, "${")
-		if start == -1 {
-			break
-		}
-
-		end := strings.Index(result[start:], "}")
-		if end == -1 {
-			break
-		}
-		end += start
-
-		varExpr := result[start+2 : end]
-		if colonIdx := strings.Index(varExpr, ":-"); colonIdx != -1 {
-			varName := varExpr[:colonIdx]
-			defaultValue := varExpr[colonIdx+2:]
-
-			if value, ok := lookup(varName); ok {
-				result = result[:start] + value + result[end+1:]
-			} else {
-				result = result[:start] + defaultValue + result[end+1:]
-			}
-		} else {
-			if value, ok := lookup(varExpr); ok {
-				result = result[:start] + value + result[end+1:]
-			} else {
-				result = result[:start] + result[end+1:]
-			}
-		}
-	}
-
-	return result
 }
 
 // mergeModelsConfig returns the models config from the user (global) scope only.

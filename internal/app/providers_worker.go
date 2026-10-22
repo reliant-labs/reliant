@@ -44,6 +44,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/workersetup"
 	v2workflow "github.com/reliant-labs/reliant/internal/workflow"
 	scenariorunner "github.com/reliant-labs/reliant/internal/workflow/scenario/runner"
+	"github.com/reliant-labs/reliant/internal/worktreesweep"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
@@ -460,6 +461,10 @@ func NewWorkerToolsFactory(d WorkerToolsFactoryDeps) (*WorkerToolsFactory, error
 		// user's files: its git work goes to the run's machine instead.
 		RunMachine:      runMachine,
 		MachineObserver: runMachine,
+		// delete archives here and asks for one immediate settle, as the UI's
+		// archive does; the api-server's periodic sweep catches the rest.
+		WorktreeSettler: worktreesweep.New(repo, d.Router.NATSDaemonRouter).
+			WithKeepFiles(worktreesweep.KeepSetting{R: repo}),
 	})}, nil
 }
 
