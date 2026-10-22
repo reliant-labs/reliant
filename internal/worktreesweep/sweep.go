@@ -18,6 +18,7 @@ package worktreesweep
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"sort"
@@ -28,6 +29,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/diskwatch"
@@ -157,6 +160,8 @@ type Sweeper struct {
 	archived   atomic.Int64
 	now        func() time.Time
 	slots      chan struct{}
+	// inflight is the rows with a request out to a daemon.
+	inflight leases
 	// owner names this process in a clean-up's metadata, so a flag left by a
 	// process that died is recognizable as not ours and expires on its own.
 	owner string
@@ -392,8 +397,14 @@ func (s *Sweeper) reconcileGroup(ctx context.Context, t target, group []*core.Re
 	// asking this daemon this pass.
 	var run func(batch []*core.ReclaimCandidate) bool
 	run = func(batch []*core.ReclaimCandidate) bool {
-		if s.settleBatch(ctx, t, batch, live, keep) {
+		switch s.settleBatch(ctx, t, batch, live, keep) {
+		case batchDone:
 			return true
+		case batchStalled:
+			// The daemon did not answer in time and may still be working on
+			// these rows. They are leased and recorded as failed; sending
+			// them again, whole or in halves, would only stack more work.
+			return false
 		}
 		failedSends++
 		if ctx.Err() != nil || failedSends >= maxFailedSends {
@@ -444,16 +455,66 @@ func (s *Sweeper) recordTransient(ctx context.Context, seen *core.Worktree, kind
 	})
 }
 
-// settleBatch runs the two phases for one batch. It reports false when the
-// daemon could not be reached, so the caller stops asking it this pass.
-func (s *Sweeper) settleBatch(ctx context.Context, t target, batch []*core.ReclaimCandidate, live []core.WorktreePath, keep bool) bool {
+// batchResult is how asking the daemon about one batch ended.
+type batchResult int
+
+const (
+	// batchDone: every row that could be asked was asked and answered.
+	batchDone batchResult = iota
+	// batchFailed: the request failed outright (the connection dropped, the
+	// daemon refused it). Splitting the batch and asking again is safe.
+	batchFailed
+	// batchStalled: the request ran out of time. The daemon may still be
+	// working on its rows, so they are neither split nor sent again.
+	batchStalled
+)
+
+// stalled reports whether err is a deadline: the daemon was reached and did not
+// answer, as opposed to an error that says it was not working on the request.
+func stalled(err error) bool {
+	return svcerr.IsDeadlineExceeded(err) || errors.Is(err, context.DeadlineExceeded)
+}
+
+// settleBatch runs the two phases for one batch. A row already out to this
+// daemon (a request that timed out and may still be running, a settle in
+// progress) is skipped: the next pass asks about it once the lease is free.
+func (s *Sweeper) settleBatch(ctx context.Context, t target, batch []*core.ReclaimCandidate, live []core.WorktreePath, keep bool) (result batchResult) {
+	keys := make([]leaseKey, len(batch))
+	for i, c := range batch {
+		keys[i] = leaseKey{t.daemonID, c.Worktree.ID}
+	}
+	got := s.inflight.acquire(s.now(), keys)
+	if len(got) == 0 {
+		return batchDone
+	}
+	if len(got) < len(batch) {
+		free := map[string]bool{}
+		for _, k := range got {
+			free[k.worktreeID] = true
+		}
+		kept := batch[:0:0]
+		for _, c := range batch {
+			if free[c.Worktree.ID] {
+				kept = append(kept, c)
+			}
+		}
+		batch = kept
+	}
+	defer func() {
+		if result == batchStalled {
+			s.inflight.holdUntil(got, s.now().Add(inFlightHold))
+			return
+		}
+		s.inflight.release(got)
+	}()
+
 	byID := map[string]*core.ReclaimCandidate{}
 	req, shared := s.describe(ctx, batch, live, keep)
 	for _, h := range shared {
 		s.recordHold(ctx, h.cand.Worktree, worktreereclaim.ReasonSharedWithLive, h.detail, 0, nil)
 	}
 	if len(req.Worktrees) == 0 {
-		return true
+		return batchDone
 	}
 	for _, c := range batch {
 		byID[c.Worktree.ID] = c
@@ -461,7 +522,15 @@ func (s *Sweeper) settleBatch(ctx context.Context, t target, batch []*core.Recla
 	resp, err := s.send(ctx, t, cmdReconcile, reconcileTimeoutMs, req)
 	if err != nil {
 		logging.WarnContext(ctx, "[WorktreeSweep] reconcile failed", "daemonID", t.daemonID, "error", err)
-		return false
+		if stalled(err) {
+			for _, w := range req.Worktrees {
+				if c := byID[w.ID]; c != nil {
+					s.recordFailure(ctx, c.Worktree, "the machine did not answer in time")
+				}
+			}
+			return batchStalled
+		}
+		return batchFailed
 	}
 
 	var second []worktreereclaim.Worktree
@@ -493,19 +562,22 @@ func (s *Sweeper) settleBatch(ctx context.Context, t target, batch []*core.Recla
 		s.apply(ctx, t.userID, t.daemonID, c.Worktree, c.ProjectPath, r, false)
 	}
 	if len(second) == 0 {
-		return true
+		return batchDone
 	}
 	resp2, err := s.send(ctx, t, cmdReconcile, reconcileTimeoutMs, worktreereclaim.Request{Worktrees: second})
 	if err != nil {
 		logging.WarnContext(ctx, "[WorktreeSweep] removal request failed", "daemonID", t.daemonID, "error", err)
-		return false
+		if stalled(err) {
+			return batchStalled
+		}
+		return batchFailed
 	}
 	for _, r := range resp2.Results {
 		if c := byID[r.ID]; c != nil {
 			s.apply(ctx, t.userID, t.daemonID, c.Worktree, c.ProjectPath, r, false)
 		}
 	}
-	return true
+	return batchDone
 }
 
 func fenceOf(req worktreereclaim.Request, id string) string {
@@ -737,6 +809,13 @@ func (s *Sweeper) apply(ctx context.Context, userID, daemonID string, seen *core
 		}
 	}
 	if wt.DeletedAt == nil {
+		if r.Outcome == worktreereclaim.OutcomeProbeInconclusive {
+			// Locked, but whether it is finished is unknown. LockedAt is not
+			// stamped (that is a 24h silence) and the row is not marked
+			// checked-and-found-busy: it waits the short transient back-off.
+			s.recordTransient(ctx, wt, "probe_inconclusive", nil)
+			return
+		}
 		if r.Outcome == worktreereclaim.OutcomeLocked || r.Outcome == worktreereclaim.OutcomeIdleDone {
 			s.mergeMeta(ctx, wt, func(m *core.CleanupMetadata) {
 				now := s.now().UTC()

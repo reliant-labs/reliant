@@ -113,6 +113,12 @@ const (
 	// the idle floor. The server decides whether to archive it; the daemon
 	// never removes an active worktree.
 	OutcomeIdleDone Outcome = "idle_done"
+	// OutcomeProbeInconclusive: an ACTIVE worktree asked about with ProbeIdle is
+	// locked as usual, but the question "is it finished" could not be answered
+	// (the probe ran out of time, or a git or process check failed). It says
+	// nothing about the worktree; the server asks again soon, not after the
+	// back-off of a worktree that was found in use.
+	OutcomeProbeInconclusive Outcome = "probe_inconclusive"
 	// OutcomeKept: safe to remove, but the user's setting says keep files.
 	OutcomeKept Outcome = "kept"
 	// OutcomeDeferred: the daemon ran out of its per-request time budget before
