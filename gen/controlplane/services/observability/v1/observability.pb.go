@@ -7238,7 +7238,10 @@ type GetReleaseHealthResponse struct {
 	Verdict          ReleaseVerdict     `protobuf:"varint,10,opt,name=verdict,proto3,enum=controlplane.v1.ReleaseVerdict" json:"verdict,omitempty"`
 	Findings         []*ReleaseFinding  `protobuf:"bytes,11,rep,name=findings,proto3" json:"findings,omitempty"`
 	// The thresholds actually applied, and where each came from.
-	Thresholds    []*EffectiveThreshold `protobuf:"bytes,12,rep,name=thresholds,proto3" json:"thresholds,omitempty"`
+	Thresholds []*EffectiveThreshold `protobuf:"bytes,12,rep,name=thresholds,proto3" json:"thresholds,omitempty"`
+	// Finding codes this server could not check (no alert state, no issue
+	// reader), so a PASS is not read as covering them.
+	NotEvaluated  []string `protobuf:"bytes,13,rep,name=not_evaluated,json=notEvaluated,proto3" json:"not_evaluated,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -7353,6 +7356,13 @@ func (x *GetReleaseHealthResponse) GetFindings() []*ReleaseFinding {
 func (x *GetReleaseHealthResponse) GetThresholds() []*EffectiveThreshold {
 	if x != nil {
 		return x.Thresholds
+	}
+	return nil
+}
+
+func (x *GetReleaseHealthResponse) GetNotEvaluated() []string {
+	if x != nil {
+		return x.NotEvaluated
 	}
 	return nil
 }
@@ -8486,7 +8496,7 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"\x17ThresholdOverridesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\t\n" +
-	"\asubject\"\xf9\x05\n" +
+	"\asubject\"\x9e\x06\n" +
 	"\x18GetReleaseHealthResponse\x12B\n" +
 	"\tpromotion\x18\x01 \x01(\v2$.controlplane.v1.ReleasePromotionRefR\tpromotion\x122\n" +
 	"\x06before\x18\x02 \x01(\v2\x1a.controlplane.v1.TimeRangeR\x06before\x120\n" +
@@ -8503,7 +8513,8 @@ const file_services_observability_v1_observability_proto_rawDesc = "" +
 	"\bfindings\x18\v \x03(\v2\x1f.controlplane.v1.ReleaseFindingR\bfindings\x12C\n" +
 	"\n" +
 	"thresholds\x18\f \x03(\v2#.controlplane.v1.EffectiveThresholdR\n" +
-	"thresholds\"\xe4\x01\n" +
+	"thresholds\x12#\n" +
+	"\rnot_evaluated\x18\r \x03(\tR\fnotEvaluated\"\xe4\x01\n" +
 	"\x13ReleasePromotionRef\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12'\n" +
 	"\x0frelease_version\x18\x02 \x01(\tR\x0ereleaseVersion\x12\x1d\n" +

@@ -1513,6 +1513,9 @@ message GetReleaseHealthResponse {
   repeated ReleaseFinding findings = 11;
   // The thresholds actually applied, and where each came from.
   repeated EffectiveThreshold thresholds = 12;
+  // Finding codes this server could not check (no alert state, no issue
+  // reader), so a PASS is not read as covering them.
+  repeated string not_evaluated = 13;
 }
 
 // ReleasePromotionRef names the promotion a health check judged.
