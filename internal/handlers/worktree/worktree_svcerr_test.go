@@ -20,9 +20,9 @@ import (
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
-// opaqueSecret is a store failure nobody on this side of the wire wrote: its
+// errOpaqueSecret is a store failure nobody on this side of the wire wrote: its
 // text must reach the log, never the client.
-var opaqueSecret = errors.New("dsn=postgres://u:secret@h")
+var errOpaqueSecret = errors.New("dsn=postgres://u:secret@h")
 
 func requireCode(t *testing.T, err error, code connect.Code) {
 	t.Helper()
@@ -60,7 +60,7 @@ func TestWorktreeOwnership_ErrorClasses(t *testing.T) {
 	}{
 		{"a deadline", fmt.Errorf("query: %w", context.DeadlineExceeded), connect.CodeDeadlineExceeded},
 		{"a cancellation", fmt.Errorf("query: %w", context.Canceled), connect.CodeCanceled},
-		{"an opaque failure", opaqueSecret, connect.CodeInternal},
+		{"an opaque failure", errOpaqueSecret, connect.CodeInternal},
 	} {
 		t.Run("reading the worktree: "+tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -88,7 +88,7 @@ func TestListWorktrees_StoreErrorClasses(t *testing.T) {
 	}{
 		{"a deadline", fmt.Errorf("query: %w", context.DeadlineExceeded), connect.CodeDeadlineExceeded},
 		{"a cancellation", fmt.Errorf("query: %w", context.Canceled), connect.CodeCanceled},
-		{"an opaque failure", opaqueSecret, connect.CodeInternal},
+		{"an opaque failure", errOpaqueSecret, connect.CodeInternal},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

@@ -20,9 +20,9 @@ import (
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
-// opaqueSecret is a store failure nobody on this side of the wire wrote: its
+// errOpaqueSecret is a store failure nobody on this side of the wire wrote: its
 // text must reach the log, never the client.
-var opaqueSecret = errors.New("dsn=postgres://u:secret@h")
+var errOpaqueSecret = errors.New("dsn=postgres://u:secret@h")
 
 // storeFailures are the store errors every converted rpc class is pinned
 // against: a verdict the store already made keeps its code, a deadline or a
@@ -41,7 +41,7 @@ func storeFailures(notFound error) []struct {
 		{"the store's not-found", notFound, connect.CodeNotFound},
 		{"a deadline", fmt.Errorf("query: %w", context.DeadlineExceeded), connect.CodeDeadlineExceeded},
 		{"a cancellation", fmt.Errorf("query: %w", context.Canceled), connect.CodeCanceled},
-		{"an opaque failure", opaqueSecret, connect.CodeInternal},
+		{"an opaque failure", errOpaqueSecret, connect.CodeInternal},
 	}
 }
 
