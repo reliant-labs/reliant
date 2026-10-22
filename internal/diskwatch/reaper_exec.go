@@ -26,6 +26,28 @@ func reaperCommandArgs(policyPath string) []string {
 	return []string{"forge", "storage", "auto-gc", "--policy", policyPath}
 }
 
+// goCacheCommandArgs is the Go-cache pass:
+// `reliant forge storage gocache --apply --budget <b> --policy <path>`.
+func goCacheCommandArgs(policyPath string) []string {
+	return []string{"forge", "storage", "gocache", "--apply", "--budget", goCachePassBudget.String(), "--policy", policyPath}
+}
+
+// execGoCacheReaper runs the Go-cache pass the same way execReaper runs the
+// full one: this binary's forge, low priority, its own process group.
+func execGoCacheReaper(ctx context.Context, policyPath string) (reaperRun, error) {
+	if testing.Testing() {
+		return reaperRun{}, errReaperUnderTest
+	}
+	if policyPath == "" {
+		return reaperRun{}, errors.New("no storage policy location: the user config directory is unknown; set FORGE_STORAGE_POLICY")
+	}
+	self, err := os.Executable()
+	if err != nil {
+		return reaperRun{}, fmt.Errorf("resolve own executable: %w", err)
+	}
+	return runReaperProcess(ctx, self, goCacheCommandArgs(policyPath))
+}
+
 // execReaper runs `<this binary> forge storage auto-gc --policy <path>`.
 //
 // It re-executes THIS binary rather than a `forge` found on PATH, as every

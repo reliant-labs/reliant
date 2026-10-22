@@ -160,7 +160,7 @@ func logSettings(cfg *config.ReliantConfig) logging.Settings {
 // whether the platform declared this a managed daemon (DaemonConfig).
 func storageReaperConfig(cfg *config.ReliantConfig, managed bool) diskwatch.ReaperConfig {
 	sr := cfg.GetStorageReaper()
-	out, warnings := diskwatch.ParseReaperConfig(sr.GetMode(), sr.GetInterval(), sr.GetPressureInterval(), sr.GetPolicyPath(), managed)
+	out, warnings := diskwatch.ParseReaperConfig(sr.GetMode(), sr.GetInterval(), sr.GetPressureInterval(), sr.GetGocacheInterval(), sr.GetPolicyPath(), managed)
 	for _, w := range warnings {
 		logging.Warn("Storage reaper config: " + w)
 	}

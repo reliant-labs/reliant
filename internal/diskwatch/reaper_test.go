@@ -514,9 +514,12 @@ func TestParseReaperConfig(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			cfg, warnings := ParseReaperConfig(tc.mode, tc.interval, tc.pressure, "/p/storage.json", tc.managed)
+			cfg, warnings := ParseReaperConfig(tc.mode, tc.interval, tc.pressure, "", "/p/storage.json", tc.managed)
 			if cfg.Enabled != tc.wantEnabled || cfg.Interval != tc.wantInterval || cfg.PressureInterval != tc.wantPress {
 				t.Errorf("cfg = %+v, want enabled=%t interval=%s pressure=%s", cfg, tc.wantEnabled, tc.wantInterval, tc.wantPress)
+			}
+			if cfg.GoCacheInterval != DefaultGoCacheInterval {
+				t.Errorf("GoCacheInterval = %s, want the %s default", cfg.GoCacheInterval, DefaultGoCacheInterval)
 			}
 			if len(warnings) != tc.wantWarnings {
 				t.Errorf("warnings = %v, want %d", warnings, tc.wantWarnings)
@@ -525,6 +528,140 @@ func TestParseReaperConfig(t *testing.T) {
 				t.Errorf("PolicyPath = %q", cfg.PolicyPath)
 			}
 		})
+	}
+}
+
+func TestParseReaperConfig_GoCacheInterval(t *testing.T) {
+	for _, tc := range []struct {
+		raw      string
+		want     time.Duration
+		warnings int
+	}{
+		{"", DefaultGoCacheInterval, 0},
+		{"5m", 5 * time.Minute, 0},
+		{"off", 0, 0},
+		{" 0 ", 0, 0},
+		{"30s", MinGoCacheInterval, 1},
+		{"often", DefaultGoCacheInterval, 1},
+	} {
+		cfg, warnings := ParseReaperConfig("on", "", "", tc.raw, "/p/storage.json", false)
+		if cfg.GoCacheInterval != tc.want || len(warnings) != tc.warnings {
+			t.Errorf("%q: GoCacheInterval=%s warnings=%v, want %s and %d warning(s)", tc.raw, cfg.GoCacheInterval, warnings, tc.want, tc.warnings)
+		}
+	}
+}
+
+// goCacheHarness is a reaper harness with the Go-cache pass on a 10m cadence
+// and an injected Go-cache runner that writes forge's record like forge does.
+func goCacheHarness(t *testing.T) (*reaperHarness, *[]time.Time) {
+	t.Helper()
+	h := newReaperHarness(t, plentyOfSpace)
+	h.w.ConfigureReaper(ReaperConfig{Enabled: true, Interval: time.Hour, PressureInterval: 10 * time.Minute,
+		GoCacheInterval: 10 * time.Minute, PolicyPath: h.policy})
+	var goRuns []time.Time
+	h.w.reaper.goCache = func(_ context.Context, policy string) (reaperRun, error) {
+		goRuns = append(goRuns, h.now)
+		h.writeRecordNamed(goCacheGCRecordName, autoGCRecord{At: h.now, OK: true, GoCaches: []goCacheTrim{{
+			Cache: "shared go build cache", Root: "/var/cache/workspace/go-build", EstimatedBytes: 56 << 30, BudgetBytes: 20 << 30,
+			YoungBytes: 45 << 30, Removed: 69621, FreedBytes: 10 << 30, ShardsCovered: 256, ShardsTotal: 256, Finished: true,
+		}}})
+		return reaperRun{}, nil
+	}
+	return h, &goRuns
+}
+
+func (h *reaperHarness) writeRecordNamed(name string, rec autoGCRecord) {
+	h.t.Helper()
+	b, err := json.Marshal(rec)
+	if err != nil {
+		h.t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(h.policy), 0o700); err != nil {
+		h.t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(filepath.Dir(h.policy), name), b, 0o600); err != nil {
+		h.t.Fatal(err)
+	}
+}
+
+// TestReaper_TrimsTheGoCacheBetweenFullPasses is the 2026-10-22 machine: the
+// full pass ran hourly while ~25 GiB/h of the shared Go build cache crossed
+// the 2h floor, so up to that much removable cache sat on the disk between
+// passes. The Go-cache pass runs on its own 10m cadence between them.
+func TestReaper_TrimsTheGoCacheBetweenFullPasses(t *testing.T) {
+	h, goRuns := goCacheHarness(t)
+	h.run = func(context.Context, string) (reaperRun, error) {
+		h.writeForgeRecord(autoGCRecord{At: h.now, OK: true})
+		return reaperRun{}, nil
+	}
+
+	if !h.tick() || h.runs() != 1 || len(*goRuns) != 0 {
+		t.Fatalf("first tick: want the full pass (it trims the Go caches first), runs=%d go=%d", h.runs(), len(*goRuns))
+	}
+	h.advance(5 * time.Minute)
+	if h.tick() {
+		t.Fatal("5m after a full pass that trimmed the Go caches: nothing is due")
+	}
+	h.advance(5 * time.Minute)
+	if !h.tick() || len(*goRuns) != 1 || h.runs() != 1 {
+		t.Fatalf("10m after: want the Go-cache pass alone, runs=%d go=%d", h.runs(), len(*goRuns))
+	}
+	for i := 0; i < 4; i++ {
+		h.advance(10 * time.Minute)
+		h.tick()
+	}
+	if len(*goRuns) != 5 || h.runs() != 1 {
+		t.Fatalf("50m after the full pass: want 5 Go-cache passes and still one full pass, go=%d runs=%d", len(*goRuns), h.runs())
+	}
+	h.advance(10 * time.Minute)
+	if !h.tick() || h.runs() != 2 || len(*goRuns) != 5 {
+		t.Fatalf("an hour after the full pass: the full pass is due and takes the tick, runs=%d go=%d", h.runs(), len(*goRuns))
+	}
+	if !h.logged("Go cache trimmed") || !h.logged("inside_floor=") || !h.logged("shards=256/256") {
+		t.Errorf("the Go-cache pass must log what it measured at INFO:\n%s", h.logs)
+	}
+}
+
+// TestReaper_AFullPassWhoseGoCacheLayerWasCutOffDoesNotCount: a full pass that
+// ran out of time in the Go caches did not trim them; the Go-cache pass is
+// still due at its own interval from the last trim that finished.
+func TestReaper_AFullPassWhoseGoCacheLayerWasCutOffDoesNotCount(t *testing.T) {
+	h, goRuns := goCacheHarness(t)
+	h.writeRecordNamed(goCacheGCRecordName, autoGCRecord{At: h.now.Add(-30 * time.Minute), OK: true})
+	h.writeForgeRecord(autoGCRecord{At: h.now.Add(-time.Minute), OK: true, CutOffLayers: []string{"go caches: shared build cache"}})
+	if !h.tick() || len(*goRuns) != 1 || h.runs() != 0 {
+		t.Fatalf("want the Go-cache pass, go=%d full=%d", len(*goRuns), h.runs())
+	}
+}
+
+// TestReaper_GoCacheTrimThatStoppedShortIsAWarning: a trim that did not reach
+// every shard is how removable entries pile up while every pass says it
+// finished, so it is a WARN with how far it got.
+func TestReaper_GoCacheTrimThatStoppedShortIsAWarning(t *testing.T) {
+	h := newReaperHarness(t, plentyOfSpace)
+	h.run = func(context.Context, string) (reaperRun, error) {
+		h.writeForgeRecord(autoGCRecord{At: h.now, OK: true, CutOffLayers: []string{"go caches: shared build cache"},
+			GoCaches: []goCacheTrim{{Cache: "shared go build cache", ShardsCovered: 40, ShardsTotal: 256, Removed: 9000}}})
+		return reaperRun{}, nil
+	}
+	if !h.tick() {
+		t.Fatal("no pass ran")
+	}
+	if !h.logged("level=WARN") || !h.logged("Go cache trim did not reach every shard") || !h.logged("shards=40/256") {
+		t.Fatalf("want a WARN naming how far the trim got:\n%s", h.logs)
+	}
+}
+
+// TestGoCacheCommandArgs pins the Go-cache pass's argv: this binary's forge,
+// applied, under the reaper's budget and policy.
+func TestGoCacheCommandArgs(t *testing.T) {
+	got := goCacheCommandArgs("/var/cache/workspace/forge-storage.json")
+	want := []string{"forge", "storage", "gocache", "--apply", "--budget", "10m0s", "--policy", "/var/cache/workspace/forge-storage.json"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("args = %q, want %q", got, want)
+	}
+	if _, err := execGoCacheReaper(context.Background(), "/p/storage.json"); !errors.Is(err, errReaperUnderTest) {
+		t.Fatalf("the real Go-cache runner must refuse under test, got %v", err)
 	}
 }
 

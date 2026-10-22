@@ -69,6 +69,17 @@ const (
 	// re-run in a loop.
 	DefaultReaperPressureInterval = 10 * time.Minute
 	MinReaperPressureInterval     = time.Minute
+	// DefaultGoCacheInterval is the Go-cache pass (`forge storage gocache`):
+	// under agent load ~25 GiB of the shared build cache crosses forge's 2h
+	// safety floor every hour, so an hourly trim leaves up to that much
+	// removable cache on the disk. Every 10 minutes it leaves ~4 GiB.
+	DefaultGoCacheInterval = 10 * time.Minute
+	// MinGoCacheInterval floors it: one pass walks every cache shard.
+	MinGoCacheInterval = 2 * time.Minute
+	// goCachePassBudget is the Go-cache pass's own wall time (forge's
+	// --budget); goCachePassWall the outer wall for a wedged child.
+	goCachePassBudget = 10 * time.Minute
+	goCachePassWall   = 12 * time.Minute
 
 	// reaperPollInterval is how often the routine decides whether a pass is
 	// due: a statfs-backed pressure read and one small file read.
@@ -81,7 +92,8 @@ const (
 	// reaperOutputTail caps the stdout/stderr kept per pass.
 	reaperOutputTail = 4096
 
-	autoGCRecordName = "last-auto-gc.json"
+	autoGCRecordName    = "last-auto-gc.json"
+	goCacheGCRecordName = "last-gocache-gc.json"
 	// forge's lock error for a pass that finds another one running.
 	reaperBusyMarker = "already running"
 )
@@ -92,6 +104,9 @@ type ReaperConfig struct {
 	Enabled          bool
 	Interval         time.Duration
 	PressureInterval time.Duration
+	// GoCacheInterval is how often the Go-cache pass runs between full
+	// passes; zero disables it (the full pass still trims the Go caches).
+	GoCacheInterval time.Duration
 	// PolicyPath is forge's machine storage policy file; empty resolves to
 	// <user config dir>/forge/storage.json like forge's own default.
 	PolicyPath string
@@ -102,7 +117,7 @@ type ReaperConfig struct {
 // daemon: "auto" enables the routine there and leaves a person's own machine
 // alone. A bad or out-of-range value falls back or is clamped, and is named in
 // the returned warnings; it never stops the daemon.
-func ParseReaperConfig(mode, interval, pressureInterval, policyPath string, managed bool) (ReaperConfig, []string) {
+func ParseReaperConfig(mode, interval, pressureInterval, goCacheInterval, policyPath string, managed bool) (ReaperConfig, []string) {
 	var warnings []string
 	cfg := ReaperConfig{PolicyPath: strings.TrimSpace(policyPath)}
 	switch m := strings.ToLower(strings.TrimSpace(mode)); m {
@@ -121,6 +136,12 @@ func ParseReaperConfig(mode, interval, pressureInterval, policyPath string, mana
 	warnings = appendIf(warnings, w)
 	cfg.PressureInterval, w = parseReaperDuration("RELIANT_STORAGE_REAPER_PRESSURE_INTERVAL", pressureInterval, DefaultReaperPressureInterval, MinReaperPressureInterval)
 	warnings = appendIf(warnings, w)
+	if v := strings.ToLower(strings.TrimSpace(goCacheInterval)); v == ReaperModeOff || v == "0" {
+		cfg.GoCacheInterval = 0
+	} else {
+		cfg.GoCacheInterval, w = parseReaperDuration("RELIANT_STORAGE_REAPER_GOCACHE_INTERVAL", goCacheInterval, DefaultGoCacheInterval, MinGoCacheInterval)
+		warnings = appendIf(warnings, w)
+	}
 	return cfg, warnings
 }
 
@@ -164,12 +185,16 @@ type reaperState struct {
 	// the schedule or a user's "clear caches" started it.
 	sem chan struct{}
 	run reaperRunner
+	// goCache runs the Go-cache pass (`forge storage gocache --apply`).
+	goCache reaperRunner
 	// budget overrides reaperPassBudget (tests).
 	budget time.Duration
 
 	// guarded by Watcher.mu
 	cfg     ReaperConfig
 	lastRun time.Time
+	// lastGoCache is this process's last Go-cache pass.
+	lastGoCache time.Time
 }
 
 // ConfigureReaper sets the routine's schedule. Call before RunReaper.
@@ -199,7 +224,8 @@ func (w *Watcher) RunReaper(ctx context.Context) {
 		logging.InfoContext(ctx, "[diskwatch] Storage reaper schedule disabled (RELIANT_STORAGE_REAPER=auto runs it on managed daemons only; on enables, off disables)")
 		return
 	}
-	logging.InfoContext(ctx, "[diskwatch] Storage reaper scheduled", "interval", cfg.Interval, "pressure_interval", cfg.PressureInterval, "policy", w.reaperPolicyPath(cfg))
+	logging.InfoContext(ctx, "[diskwatch] Storage reaper scheduled", "interval", cfg.Interval, "pressure_interval", cfg.PressureInterval,
+		"gocache_interval", cfg.GoCacheInterval, "policy", w.reaperPolicyPath(cfg))
 	ticker := time.NewTicker(reaperPollInterval)
 	defer ticker.Stop()
 	for {
@@ -225,13 +251,27 @@ func (w *Watcher) reaperTick(ctx context.Context) (ran bool) {
 		trigger, interval = "pressure", cfg.PressureInterval
 	}
 	policy := w.reaperPolicyPath(cfg)
-	if last := w.lastReaperRun(policy); !last.IsZero() && now.Sub(last) < interval {
+	last := w.lastReaperRun(policy)
+	fullDue := last.IsZero() || now.Sub(last) >= interval
+	// Between full passes, the Go-cache pass on its own, shorter cadence: the
+	// shared build cache is what fills the disk, and it fills faster than an
+	// hourly pass trims it.
+	goCacheDue := false
+	if !fullDue && cfg.GoCacheInterval > 0 {
+		lastGo := w.lastGoCacheRun(policy)
+		goCacheDue = lastGo.IsZero() || now.Sub(lastGo) >= cfg.GoCacheInterval
+	}
+	if !fullDue && !goCacheDue {
 		return false
 	}
 	if !w.tryAcquireReaper() {
 		return false
 	}
 	defer w.releaseReaper()
+	if goCacheDue {
+		w.goCachePass(ctx, policy, trigger)
+		return true
+	}
 	// The caches forge does not own (npm, the module cache's ceiling, killed
 	// builds' work dirs) on the same cadence; under pressure, to the urgent
 	// budgets.
@@ -305,6 +345,22 @@ func (w *Watcher) lastReaperRun(policyPath string) time.Time {
 	return last
 }
 
+// lastGoCacheRun is the last time the Go caches were trimmed to the end: this
+// process's last Go-cache pass, forge's record of one anywhere on the machine,
+// or a full pass whose Go-cache layer was not cut off (it trims them first).
+func (w *Watcher) lastGoCacheRun(policyPath string) time.Time {
+	w.mu.Lock()
+	last := w.reaper.lastGoCache
+	w.mu.Unlock()
+	if rec, err := readForgeRecord(policyPath, goCacheGCRecordName); err == nil && rec.At.After(last) {
+		last = rec.At
+	}
+	if rec, err := readAutoGCRecord(policyPath); err == nil && rec.At.After(last) && !rec.goCachesCutOff() {
+		last = rec.At
+	}
+	return last
+}
+
 func (w *Watcher) reaperPolicyPath(cfg ReaperConfig) string {
 	if cfg.PolicyPath != "" {
 		return cfg.PolicyPath
@@ -316,24 +372,55 @@ func (w *Watcher) reaperPolicyPath(cfg ReaperConfig) string {
 	return filepath.Join(dir, "forge", "storage.json")
 }
 
-// autoGCRecord is the part of forge's last-auto-gc.json this reads: the
-// machine-readable summary of a pass.
+// autoGCRecord is the part of a forge pass record (last-auto-gc.json,
+// last-gocache-gc.json) this reads: the machine-readable summary of a pass.
 type autoGCRecord struct {
-	At              time.Time `json:"at"`
-	OK              bool      `json:"ok"`
-	FailedLayers    []string  `json:"failed_layers"`
-	Error           string    `json:"error"`
-	CutOffLayers    []string  `json:"cut_off_layers"`
-	BackedOffLayers []string  `json:"backed_off_layers"`
-	OverBudget      []string  `json:"over_budget"`
+	At              time.Time     `json:"at"`
+	OK              bool          `json:"ok"`
+	FailedLayers    []string      `json:"failed_layers"`
+	Error           string        `json:"error"`
+	CutOffLayers    []string      `json:"cut_off_layers"`
+	BackedOffLayers []string      `json:"backed_off_layers"`
+	OverBudget      []string      `json:"over_budget"`
+	GoCaches        []goCacheTrim `json:"go_caches"`
+}
+
+// goCacheTrim is forge's report of one Go-format cache trim (storage.GoCacheTrim).
+type goCacheTrim struct {
+	Cache          string    `json:"cache"`
+	Root           string    `json:"root"`
+	EstimatedBytes uint64    `json:"estimated_bytes"`
+	BudgetBytes    uint64    `json:"budget_bytes"`
+	YoungBytes     uint64    `json:"young_bytes"`
+	Cutoff         time.Time `json:"cutoff"`
+	Removed        int       `json:"removed"`
+	FreedBytes     uint64    `json:"freed_bytes"`
+	ShardsCovered  int       `json:"shards_covered"`
+	ShardsTotal    int       `json:"shards_total"`
+	Finished       bool      `json:"finished"`
+}
+
+// goCachesCutOff reports whether the pass stopped any Go-cache step early.
+func (r autoGCRecord) goCachesCutOff() bool {
+	for _, layer := range append(append([]string(nil), r.CutOffLayers...), r.BackedOffLayers...) {
+		if strings.HasPrefix(layer, "go caches") {
+			return true
+		}
+	}
+	return false
 }
 
 func readAutoGCRecord(policyPath string) (autoGCRecord, error) {
+	return readForgeRecord(policyPath, autoGCRecordName)
+}
+
+// readForgeRecord reads the pass record name beside the policy.
+func readForgeRecord(policyPath, name string) (autoGCRecord, error) {
 	var rec autoGCRecord
 	if policyPath == "" {
 		return rec, os.ErrNotExist
 	}
-	b, err := os.ReadFile(filepath.Join(filepath.Dir(policyPath), autoGCRecordName))
+	b, err := os.ReadFile(filepath.Join(filepath.Dir(policyPath), name))
 	if err != nil {
 		return rec, err
 	}
@@ -420,6 +507,9 @@ func (w *Watcher) reaperPass(ctx context.Context, policyPath, trigger string) (r
 	for _, finding := range res.OverBudget {
 		logging.WarnContext(ctx, "[diskwatch] Storage reaper: a cache is over a budget no trim can reach", "trigger", trigger, "finding", finding)
 	}
+	if fresh {
+		logGoCacheTrims(ctx, trigger, rec.GoCaches)
+	}
 	fields := []any{
 		"trigger", trigger, "after", elapsed, "freed", FormatBytes(res.Freed),
 		"free_before", FormatBytes(freeBefore), "free_after", FormatBytes(freeAfter),
@@ -448,6 +538,93 @@ func (w *Watcher) reaperPass(ctx context.Context, policyPath, trigger string) (r
 		logging.DebugContext(ctx, "[diskwatch] Storage reaper output (tail)", "trigger", trigger, "output", out)
 	}
 	return res
+}
+
+// logGoCacheTrims logs what each Go-cache trim in a pass measured and did, at
+// INFO: the cache that fills the disk must be legible without DEBUG. A trim
+// that did not reach every shard is a WARN — it is how a backlog of removable
+// entries builds up while every pass reports success.
+func logGoCacheTrims(ctx context.Context, trigger string, trims []goCacheTrim) {
+	for _, t := range trims {
+		fields := []any{
+			"trigger", trigger, "cache", t.Cache, "path", t.Root,
+			"size", FormatBytes(t.EstimatedBytes), "budget", FormatBytes(t.BudgetBytes),
+			"inside_floor", FormatBytes(t.YoungBytes), "removed", t.Removed, "freed", FormatBytes(t.FreedBytes),
+			"shards", fmt.Sprintf("%d/%d", t.ShardsCovered, t.ShardsTotal),
+		}
+		if t.Finished {
+			logging.InfoContext(ctx, "[diskwatch] Go cache trimmed", fields...)
+		} else {
+			logging.WarnContext(ctx, "[diskwatch] Go cache trim did not reach every shard; the next pass resumes where it stopped", fields...)
+		}
+	}
+}
+
+// goCachePass runs `forge storage gocache --apply` once and logs the outcome.
+// The caller holds the single-flight. Like reaperPass it never panics and never
+// returns an error: a failed trim is a WARN line, and the next one runs at
+// GoCacheInterval.
+func (w *Watcher) goCachePass(ctx context.Context, policyPath, trigger string) {
+	defer func() {
+		if r := recover(); r != nil {
+			logging.WarnContext(ctx, "[diskwatch] Go cache pass panicked", "trigger", trigger, "panic", fmt.Sprint(r))
+		}
+	}()
+	ctx, cancel := context.WithTimeout(ctx, goCachePassWall)
+	defer cancel()
+
+	start := w.now()
+	freeBefore := w.reclaimableFree()
+	run, err := w.reaper.goCache(ctx, policyPath)
+	freeAfter := w.reclaimableFree()
+	w.mu.Lock()
+	w.reaper.lastGoCache = w.now()
+	w.mu.Unlock()
+	elapsed := w.now().Sub(start).Round(time.Second)
+	var freed uint64
+	if freeAfter > freeBefore {
+		freed = freeAfter - freeBefore
+	}
+
+	switch {
+	case err != nil && ctx.Err() != nil:
+		logging.WarnContext(ctx, "[diskwatch] Go cache pass stopped; forge resumes on the next pass", "trigger", trigger, "after", elapsed, "error", ctx.Err())
+		return
+	case err != nil:
+		logging.WarnContext(ctx, "[diskwatch] Go cache pass could not run (is forge available in this binary?)", "trigger", trigger, "error", err)
+		return
+	case run.ExitCode != 0 && strings.Contains(run.Stderr, reaperBusyMarker):
+		logging.InfoContext(ctx, "[diskwatch] Go cache pass skipped: another storage pass holds forge's lock", "trigger", trigger)
+		return
+	}
+	rec, recErr := readForgeRecord(policyPath, goCacheGCRecordName)
+	fresh := recErr == nil && !rec.At.Before(start.Add(-time.Second))
+	if fresh {
+		for _, finding := range rec.OverBudget {
+			logging.WarnContext(ctx, "[diskwatch] Storage reaper: a cache is over a budget no trim can reach", "trigger", trigger, "finding", finding)
+		}
+		logGoCacheTrims(ctx, trigger, rec.GoCaches)
+	}
+	fields := []any{"trigger", trigger, "after", elapsed, "freed", FormatBytes(freed), "free_after", FormatBytes(freeAfter)}
+	switch {
+	case run.ExitCode != 0:
+		fields = append(fields, "exit", run.ExitCode, "stderr", run.Stderr)
+		if fresh {
+			fields = append(fields, "failed", strings.Join(rec.FailedLayers, ", "), "error", rec.Error)
+		}
+		logging.WarnContext(ctx, "[diskwatch] Go cache pass failed", fields...)
+	case !fresh:
+		reason := "no record of this pass"
+		if recErr != nil {
+			reason = recErr.Error()
+		}
+		logging.WarnContext(ctx, "[diskwatch] Go cache pass finished but its summary is unreadable", append(fields, "record", reason)...)
+	default:
+		logging.InfoContext(ctx, "[diskwatch] Go cache pass finished", append(fields, "cut_off", strings.Join(rec.CutOffLayers, ", "))...)
+	}
+	if out := strings.TrimSpace(run.Stdout); out != "" {
+		logging.DebugContext(ctx, "[diskwatch] Go cache pass output (tail)", "trigger", trigger, "output", out)
+	}
 }
 
 // tailBuffer keeps the last max bytes written to it.

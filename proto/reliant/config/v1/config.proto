@@ -154,4 +154,15 @@ message StorageReaperConfig {
     env_var: "FORGE_STORAGE_POLICY"
     description: "Forge machine storage policy file (default: <user config dir>/forge/storage.json)"
   }];
+
+  // How often the Go-cache pass (`forge storage gocache --apply`) runs between
+  // full passes. Under agent load ~25 GiB of the shared Go build cache crosses
+  // forge's 2h safety floor every hour, so an hourly trim leaves that much
+  // removable cache on the disk. A Go duration; below 2m is raised to 2m;
+  // "off" or "0" leaves the Go caches to the full pass.
+  string gocache_interval = 5 [(forge.v1.config) = {
+    env_var: "RELIANT_STORAGE_REAPER_GOCACHE_INTERVAL"
+    default_value: "10m"
+    description: "Interval of the Go-cache trim between full storage reaper passes (Go duration, minimum 2m; off disables)"
+  }];
 }

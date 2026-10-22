@@ -16,7 +16,7 @@ import (
 // returns the schedule it hands the daemon runtime.
 func storageReaperFor(t *testing.T, env map[string]string, args ...string) diskwatch.ReaperConfig {
 	t.Helper()
-	for _, k := range []string{"RELIANT_STORAGE_REAPER", "RELIANT_STORAGE_REAPER_INTERVAL", "RELIANT_STORAGE_REAPER_PRESSURE_INTERVAL", "FORGE_STORAGE_POLICY", "RELIANT_DAEMON_TYPE"} {
+	for _, k := range []string{"RELIANT_STORAGE_REAPER", "RELIANT_STORAGE_REAPER_INTERVAL", "RELIANT_STORAGE_REAPER_PRESSURE_INTERVAL", "RELIANT_STORAGE_REAPER_GOCACHE_INTERVAL", "FORGE_STORAGE_POLICY", "RELIANT_DAEMON_TYPE"} {
 		t.Setenv(k, "")
 	}
 	for k, v := range env {
@@ -38,6 +38,7 @@ func TestStorageReaperConfig_DefaultsFollowTheDaemonType(t *testing.T) {
 	assert.True(t, managed.Enabled, "a managed daemon (a workspace pod) runs the reaper by default")
 	assert.Equal(t, time.Hour, managed.Interval)
 	assert.Equal(t, 10*time.Minute, managed.PressureInterval)
+	assert.Equal(t, 10*time.Minute, managed.GoCacheInterval, "the Go caches are trimmed every 10m between full passes")
 	assert.Empty(t, managed.PolicyPath, "unset: forge's own default location")
 
 	local := storageReaperFor(t, nil)
@@ -49,11 +50,13 @@ func TestStorageReaperConfig_EnvOverrides(t *testing.T) {
 		"RELIANT_STORAGE_REAPER":                   "on",
 		"RELIANT_STORAGE_REAPER_INTERVAL":          "30m",
 		"RELIANT_STORAGE_REAPER_PRESSURE_INTERVAL": "2m",
+		"RELIANT_STORAGE_REAPER_GOCACHE_INTERVAL":  "5m",
 		"FORGE_STORAGE_POLICY":                     "/var/cache/workspace/forge-storage.json",
 	})
 	assert.True(t, cfg.Enabled)
 	assert.Equal(t, 30*time.Minute, cfg.Interval)
 	assert.Equal(t, 2*time.Minute, cfg.PressureInterval)
+	assert.Equal(t, 5*time.Minute, cfg.GoCacheInterval)
 	assert.Equal(t, "/var/cache/workspace/forge-storage.json", cfg.PolicyPath)
 }
 

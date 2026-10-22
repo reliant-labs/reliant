@@ -219,9 +219,15 @@ type StorageReaperConfig struct {
 	// Forge's machine storage policy, the file `forge storage` reads. FORGE_STORAGE_POLICY
 	// is forge's own variable, so the daemon and the passes it starts agree on the
 	// file. Unset: forge's default, <user config dir>/forge/storage.json.
-	PolicyPath    string `protobuf:"bytes,4,opt,name=policy_path,json=policyPath,proto3" json:"policy_path,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	PolicyPath string `protobuf:"bytes,4,opt,name=policy_path,json=policyPath,proto3" json:"policy_path,omitempty"`
+	// How often the Go-cache pass (`forge storage gocache --apply`) runs between
+	// full passes. Under agent load ~25 GiB of the shared Go build cache crosses
+	// forge's 2h safety floor every hour, so an hourly trim leaves that much
+	// removable cache on the disk. A Go duration; below 2m is raised to 2m;
+	// "off" or "0" leaves the Go caches to the full pass.
+	GocacheInterval string `protobuf:"bytes,5,opt,name=gocache_interval,json=gocacheInterval,proto3" json:"gocache_interval,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *StorageReaperConfig) Reset() {
@@ -282,6 +288,13 @@ func (x *StorageReaperConfig) GetPolicyPath() string {
 	return ""
 }
 
+func (x *StorageReaperConfig) GetGocacheInterval() string {
+	if x != nil {
+		return x.GocacheInterval
+	}
+	return ""
+}
+
 var File_reliant_config_v1_config_proto protoreflect.FileDescriptor
 
 const file_reliant_config_v1_config_proto_rawDesc = "" +
@@ -303,7 +316,7 @@ const file_reliant_config_v1_config_proto_rawDesc = "" +
 	"\x06format\x18\x02 \x01(\tBd\x82\xce\x18`\n" +
 	"\n" +
 	"LOG_FORMAT\x12\n" +
-	"log-format*FLog line format: text or json (default text; json for a hosted daemon)R\x06format\"\x9f\x05\n" +
+	"log-format*FLog line format: text or json (default text; json for a hosted daemon)R\x06format\"\xeb\x06\n" +
 	"\x13StorageReaperConfig\x12\x9a\x01\n" +
 	"\x04mode\x18\x01 \x01(\tB\x85\x01\x82\xce\x18\x80\x01\n" +
 	"\x16RELIANT_STORAGE_REAPER\x1a\x04auto*QRun forge's storage reaper on a schedule: auto (managed daemons only), on, or offJ\x04autoJ\x02onJ\x03offR\x04mode\x12\x8e\x01\n" +
@@ -313,7 +326,9 @@ const file_reliant_config_v1_config_proto_rawDesc = "" +
 	"(RELIANT_STORAGE_REAPER_PRESSURE_INTERVAL\x1a\x0310m*dMinimum gap between storage reaper passes while a volume is under pressure (Go duration, minimum 1m)R\x10pressureInterval\x12\x8e\x01\n" +
 	"\vpolicy_path\x18\x04 \x01(\tBm\x82\xce\x18i\n" +
 	"\x14FORGE_STORAGE_POLICY*QForge machine storage policy file (default: <user config dir>/forge/storage.json)R\n" +
-	"policyPathB@Z>github.com/reliant-labs/reliant/gen/reliant/config/v1;configv1b\x06proto3"
+	"policyPath\x12\xc9\x01\n" +
+	"\x10gocache_interval\x18\x05 \x01(\tB\x9d\x01\x82\xce\x18\x98\x01\n" +
+	"'RELIANT_STORAGE_REAPER_GOCACHE_INTERVAL\x1a\x0310m*hInterval of the Go-cache trim between full storage reaper passes (Go duration, minimum 2m; off disables)R\x0fgocacheIntervalB@Z>github.com/reliant-labs/reliant/gen/reliant/config/v1;configv1b\x06proto3"
 
 var (
 	file_reliant_config_v1_config_proto_rawDescOnce sync.Once

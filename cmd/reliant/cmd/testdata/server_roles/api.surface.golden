@@ -60,6 +60,7 @@ RELIANT_OAUTH_*_CLIENT_SECRET kind=map flag="" default="" required=false optiona
 RELIANT_PAYLOAD_BLOB_GC_HORIZON kind=google.protobuf.Duration flag="" default="720h" required=false optional=false sensitive=false allowed=[] aliases=[]
 RELIANT_SLACK_SIGNING_SECRET kind=string flag="" default="" required=false optional=true sensitive=true allowed=[] aliases=[]
 RELIANT_STORAGE_REAPER kind=string flag="" default="auto" required=false optional=false sensitive=false allowed=[auto on off] aliases=[]
+RELIANT_STORAGE_REAPER_GOCACHE_INTERVAL kind=string flag="" default="10m" required=false optional=false sensitive=false allowed=[] aliases=[]
 RELIANT_STORAGE_REAPER_INTERVAL kind=string flag="" default="1h" required=false optional=false sensitive=false allowed=[] aliases=[]
 RELIANT_STORAGE_REAPER_PRESSURE_INTERVAL kind=string flag="" default="10m" required=false optional=false sensitive=false allowed=[] aliases=[]
 RELIANT_TEST_INTEGRATION_SECRET kind=string flag="" default="" required=false optional=true sensitive=true allowed=[] aliases=[]

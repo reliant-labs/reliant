@@ -96,7 +96,7 @@ func New(opts Options) *Watcher {
 		opts.reaper = execReaper
 	}
 	return &Watcher{
-		reaper:    reaperState{sem: make(chan struct{}, 1), run: opts.reaper},
+		reaper:    reaperState{sem: make(chan struct{}, 1), run: opts.reaper, goCache: execGoCacheReaper},
 		trim:      cacheTrimState{cfg: DefaultCacheTrimConfig()},
 		systemEnv: systemEnv,
 		env:       opts.Env,
