@@ -15,7 +15,6 @@ import (
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/threads"
@@ -32,10 +31,10 @@ type Deps struct {
 	Logger *slog.Logger
 	Config *config.Config
 
-	// Repo stores chats, threads, messages and runs. It is the whole
-	// db.Repository: the handlers call far more than ~15 of its methods and
-	// hand it whole to launch, threads and runs.
-	Repo db.Repository
+	// Repo stores chats, threads, messages and runs. Repository (deps.go)
+	// is what the handlers call plus the roles of launch, threads, runs and
+	// the other callees they hand it to.
+	Repo Repository
 	// Temporal starts, queries, signals and cancels chat runs.
 	Temporal Temporal
 	// Pause pauses and resumes runs. runs.Service drives it; the handlers

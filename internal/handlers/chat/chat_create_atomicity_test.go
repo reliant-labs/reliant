@@ -44,17 +44,23 @@ func (c *atomicityTestTemporalClient) ExecuteWorkflow(
 	return &fakeWorkflowRun{id: options.ID, runID: "test-run-" + options.ID}, nil
 }
 
-// failAfterUserUpdateRepo wraps db.Repository so it satisfies the whole
-// interface, but fails the CreateUserUpdate call — the last write inside
+// failAfterUserUpdateRepo wraps the real repository behind the chat
+// Repository role, but fails the CreateUserUpdate call — the last write inside
 // StartChat's transaction — so the test can assert that nothing earlier in
 // the transaction (chat row, workflow, thread, messages) survives the abort.
 type failAfterUserUpdateRepo struct {
-	db.Repository
+	Repository
 	shouldFail bool
+	// injected records that the failure fired, so a StartChat that failed
+	// earlier for another reason cannot pass for an atomic abort.
+	injected bool
 }
+
+var _ Repository = (*failAfterUserUpdateRepo)(nil)
 
 func (r *failAfterUserUpdateRepo) CreateUserUpdate(ctx context.Context, update *db.UserUpdate) error {
 	if r.shouldFail {
+		r.injected = true
 		return fmt.Errorf("injected failure: CreateUserUpdate")
 	}
 	return r.Repository.CreateUserUpdate(ctx, update)
@@ -85,6 +91,22 @@ func TestChatService_CreateChat_AtomicOnMidTransactionFailure(t *testing.T) {
 		LastActive: now,
 	}))
 
+	// StartChat requires a main worktree to bind the chat to. Without one it
+	// fails before the transaction this test is about ever opens.
+	require.NoError(t, repo.CreateWorktree(ctx, &db.Worktree{
+		ID:         uuid.NewString(),
+		Name:       "main",
+		Path:       t.TempDir(),
+		Branch:     "main",
+		BaseBranch: "main",
+		ProjectID:  projectID,
+		Status:     int32(reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE),
+		IsMain:     true,
+		CreatedAt:  now,
+		UpdatedAt:  now,
+		LastActive: now,
+	}))
+
 	failingRepo := &failAfterUserUpdateRepo{Repository: repo, shouldFail: true}
 	temporal := &atomicityTestTemporalClient{}
 	service := &Service{
@@ -108,6 +130,7 @@ func TestChatService_CreateChat_AtomicOnMidTransactionFailure(t *testing.T) {
 		},
 	}))
 	require.Error(t, err, "StartChat must fail when the trailing chat_created write fails")
+	require.True(t, failingRepo.injected, "StartChat must fail on the injected chat_created write, not before it: %v", err)
 
 	// No chat row should have been committed.
 	chats, listErr := repo.ListChats(ctx, db.ChatFilters{ProjectID: &projectID})

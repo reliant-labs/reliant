@@ -43,12 +43,12 @@ const (
 	raceTestChatID = "chat-race-1"
 )
 
-// snapshotGateRepo embeds db.Repository so it satisfies the 300+ method
-// interface while overriding only what the snapshot path touches. Any method
-// the code under test starts calling will nil-panic loudly rather than
-// silently returning a zero value.
+// snapshotGateRepo embeds the streaming Repository so it satisfies the role
+// while overriding only what the snapshot path touches. Any method the code
+// under test starts calling will nil-panic loudly rather than silently
+// returning a zero value.
 type snapshotGateRepo struct {
-	db.Repository
+	Repository
 
 	// snapshotEntered closes when the snapshot begins its DB work; released
 	// blocks it there until the test has published an update.
@@ -56,6 +56,8 @@ type snapshotGateRepo struct {
 	released        chan struct{}
 	enterOnce       sync.Once
 }
+
+var _ Repository = (*snapshotGateRepo)(nil)
 
 func (r *snapshotGateRepo) GetLatestUserUpdateSequence(context.Context, string) (int64, error) {
 	return 0, nil

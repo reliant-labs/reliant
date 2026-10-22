@@ -1271,7 +1271,7 @@ type userUpdateFilter struct {
 	childOfSubscribed map[string]bool
 }
 
-func newUserUpdateFilter(repo db.Repository, projectID, subscribeChatID string) *userUpdateFilter {
+func newUserUpdateFilter(repo Repository, projectID, subscribeChatID string) *userUpdateFilter {
 	f := &userUpdateFilter{projectID: projectID, subscribeChatID: subscribeChatID}
 	if subscribeChatID != "" && repo != nil {
 		f.childOfSubscribed = map[string]bool{}

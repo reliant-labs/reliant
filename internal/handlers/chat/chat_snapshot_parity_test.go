@@ -113,7 +113,7 @@ func TestChatSnapshot_MatchesListMessagesEnrichment(t *testing.T) {
 // chatSnapshotOverStream subscribes userID to chatID and returns the first
 // chat snapshot the streaming service sends: the snapshot a client receives,
 // read the way the client reads it.
-func chatSnapshotOverStream(t *testing.T, repo db.Repository, userID, chatID string) *reliantv1.ChatSyncSnapshot {
+func chatSnapshotOverStream(t *testing.T, repo streaming.Repository, userID, chatID string) *reliantv1.ChatSyncSnapshot {
 	t.Helper()
 
 	svc, err := streaming.New(streaming.Deps{
