@@ -223,6 +223,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge project delete service`](#reliant-forge-project-delete-service) | Retire a service (inverse of `forge scaffold service`) |
 | [`reliant forge project disown`](#reliant-forge-project-disown) | Permanently transfer a forge-generated file to user ownership (one-way), or decline a scaffold (--absent) |
 | [`reliant forge project features`](#reliant-forge-project-features) | Print the resolved feature graph (on/off, why, dependencies) |
+| [`reliant forge project frontends`](#reliant-forge-project-frontends) | Print the directories of this project's in-repo frontends, one per line (what task and the CI gate loop over) |
 | [`reliant forge project graph`](#reliant-forge-project-graph) | Emit a JSON dependency graph of the project's declared resources |
 | [`reliant forge project introspect`](#reliant-forge-project-introspect) | Inspect what the assembled binary will expose at runtime |
 | [`reliant forge project introspect handlers`](#reliant-forge-project-introspect-handlers) | Print every RPC path the binary will register |
@@ -280,6 +281,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge storage configure-nodes`](#reliant-forge-storage-configure-nodes) | Preview kubelet GC migration for existing registered nodes; --apply restarts them |
 | [`reliant forge storage daemon`](#reliant-forge-storage-daemon) | Run maintenance periodically, reloading policy for every pass |
 | [`reliant forge storage gc`](#reliant-forge-storage-gc) | Preview cleanup; --apply deletes only eligible cache and registry versions |
+| [`reliant forge storage gocache`](#reliant-forge-storage-gocache) | Trim the Go build caches now (preview unless --apply); the bounded pass to run every few minutes |
 | [`reliant forge storage install`](#reliant-forge-storage-install) | Install daily maintenance (launchd, systemd timer, or Windows Task Scheduler) using a stable copy of this executable |
 | [`reliant forge storage policy`](#reliant-forge-storage-policy) | Print the effective storage policy |
 | [`reliant forge storage register`](#reliant-forge-storage-register) | Register local cluster contexts, declared repositories or release pins |
@@ -8817,6 +8819,7 @@ reliant forge project
 | [`delete`](#reliant-forge-project-delete) | Delete (retire) a service from the project — the inverse of `forge scaffold service` |
 | [`disown`](#reliant-forge-project-disown) | Permanently transfer a forge-generated file to user ownership (one-way), or decline a scaffold (--absent) |
 | [`features`](#reliant-forge-project-features) | Print the resolved feature graph (on/off, why, dependencies) |
+| [`frontends`](#reliant-forge-project-frontends) | Print the directories of this project's in-repo frontends, one per line (what task and the CI gate loop over) |
 | [`graph`](#reliant-forge-project-graph) | Emit a JSON dependency graph of the project's declared resources |
 | [`introspect`](#reliant-forge-project-introspect) | Inspect what the assembled binary will expose at runtime |
 | [`libraries`](#reliant-forge-project-libraries) | Print forge/pkg's API — name a package to get its full signatures |
@@ -9137,6 +9140,37 @@ ingress, and the rest, with their edges.
 ```
 reliant forge project features
 ```
+
+---
+
+#### reliant forge project frontends
+
+Print the directories of this project's in-repo frontends, one per line (what task and the CI gate loop over)
+
+Print the project-relative directory of every frontend in this repository,
+one per line, sorted by name.
+
+The list is the one `forge ci gate` and the scaffolded workflows use: each
+frontend a forge.Frontend declaration in deploy/kcl/<env>/main.k names (any
+env, at any in-repo path), plus the frontends/<name> directories on disk. A
+frontend outside the repository (a sibling checkout, a cross-repo source pin)
+is not listed: nothing here can install or build it.
+
+Scripts loop over it rather than globbing frontends/*:
+
+  for dir in $(forge project frontends); do (cd "$dir" && npm test); done
+
+--json prints [{"name","path"}] instead.
+
+```
+reliant forge project frontends [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--json` | `bool` | - | Print [{name, path}] as JSON |
 
 ---
 
@@ -11212,6 +11246,7 @@ reliant forge storage
 | [`configure-nodes`](#reliant-forge-storage-configure-nodes) | Preview kubelet GC migration for existing registered nodes; --apply restarts them |
 | [`daemon`](#reliant-forge-storage-daemon) | Run maintenance periodically, reloading policy for every pass |
 | [`gc`](#reliant-forge-storage-gc) | Preview cleanup; --apply deletes only eligible cache and registry versions |
+| [`gocache`](#reliant-forge-storage-gocache) | Trim the Go build caches now (preview unless --apply); the bounded pass to run every few minutes |
 | [`install`](#reliant-forge-storage-install) | Install daily maintenance (launchd, systemd timer, or Windows Task Scheduler) using a stable copy of this executable |
 | [`policy`](#reliant-forge-storage-policy) | Print the effective storage policy |
 | [`register`](#reliant-forge-storage-register) | Register local cluster contexts, declared repositories or release pins |
@@ -11281,6 +11316,38 @@ reliant forge storage gc [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--apply` | `bool` | - | execute the cleanup plan |
+| `--dry-run` | `bool` | - | preview only (the default) |
+
+---
+
+#### reliant forge storage gocache
+
+Trim the Go build caches now (preview unless --apply); the bounded pass to run every few minutes
+
+Trim the shared Go build cache, the golangci-lint cache, orphaned private
+Go caches and stale goimports indexes — the Go-cache layer of every other pass,
+alone, with the whole budget to itself.
+
+Entries used in the last 2h are never removed (a running build may be using
+them); past that, the cache is trimmed to go_cache_gib. Under agent load more
+than that budget can be written inside 2h, and entries cross the floor at tens
+of GiB an hour: run this every few minutes so they leave as they cross it,
+rather than piling up until an hourly pass.
+
+With --apply the outcome, including each cache's estimated size, the part
+inside the floor and whether the walk covered every shard, is recorded in
+last-gocache-gc.json beside the policy.
+
+```
+reliant forge storage gocache [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--apply` | `bool` | - | remove what the preview lists |
+| `--budget` | `duration` | `10m0s` | wall time for the pass; what it does not reach is resumed by the next one |
 | `--dry-run` | `bool` | - | preview only (the default) |
 
 ---
@@ -11453,7 +11520,10 @@ With a tool name, print only its version — the form a CI step reads:
   GOLANGCI_LINT_VERSION="$(forge tools pins golangci-lint)"
 
 The versions are this forge binary's, so a workflow that runs the forge its
-go.mod pins reads the matching tool pins with no second place to bump.
+go.mod pins reads the matching tool pins with no second place to bump. The one
+the project can move is buf: inside a project whose go.mod requires
+github.com/bufbuild/buf (`go get -tool github.com/bufbuild/buf/cmd/buf@vX`),
+buf is that version, the one `forge generate` and `forge ci gate` run.
 
 Examples:
   forge tools pins
