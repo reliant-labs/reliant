@@ -8,7 +8,7 @@ description: |
   exploit sketch, confirmed or suspected, and a fix. The review is always a COMMENT: it never approves,
   never requests changes and never merges.
 
-  The reviewer works like alert triage's investigator: it reads the repository's checkout on your machine
+  The reviewer works like on-call's investigator: it reads the repository's checkout on your machine
   (view, code_context, a shell with no credentials) and the PR through GitHub reads. It has no edit tools
   and no GitHub write tools. It never runs a scanner against a live host, deploys anything or touches
   production; the review says so.
@@ -257,7 +257,7 @@ nodes:
     args:
       model: "{{ inputs.review_model }}"
       max_turns: "{{ inputs.max_turns }}"
-      # Read-only by tool choice, like alert triage's investigator: no edit or write tools, GitHub reads
+      # Read-only by tool choice, like on-call's investigator: no edit or write tools, GitHub reads
       # only, a shell with no credentials. The agent loop makes nothing else loadable, so the reviewer
       # cannot reach pr_review_create, issue_update or anything that writes.
       tools:
