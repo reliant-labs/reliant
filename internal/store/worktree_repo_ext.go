@@ -288,7 +288,7 @@ const cleanupMetadataPending = `(CASE WHEN worktrees.cleanup_metadata IS NULL OR
 func ListWorktreesForReclaim(ctx context.Context, db orm.Context) ([]*core.ReclaimCandidate, error) {
 	var rows []worktreeWithProject
 	err := db.Bun().NewSelect().Model(&rows).
-		ColumnExpr("worktrees.*").
+		ColumnExpr("?TableColumns").
 		ColumnExpr("p.user_id AS owner_user_id").
 		ColumnExpr("p.path AS project_path").
 		Join("JOIN projects AS p ON p.id = worktrees.project_id").
@@ -319,7 +319,7 @@ func ListWorktreesForReclaim(ctx context.Context, db orm.Context) ([]*core.Recla
 func ListHeldWorktreesForUser(ctx context.Context, db orm.Context, userID string) ([]*core.HeldWorktree, error) {
 	var rows []worktreeWithProject
 	err := db.Bun().NewSelect().Model(&rows).
-		ColumnExpr("worktrees.*").
+		ColumnExpr("?TableColumns").
 		ColumnExpr("p.name AS project_name").
 		ColumnExpr("p.path AS project_path").
 		Join("JOIN projects AS p ON p.id = worktrees.project_id").

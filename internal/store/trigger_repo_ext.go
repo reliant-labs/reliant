@@ -80,7 +80,7 @@ func (n *namedTrigger) toCore() (*core.Trigger, error) {
 // second lookup. LEFT JOINs: a daemon id is not a foreign key, and an absent
 // name must not hide the trigger. GetTrigger and ListTriggersForUser add
 // their WHERE and ORDER BY.
-const namedTriggerSQL = `SELECT t.*,
+var namedTriggerSQL = `SELECT ` + columnsOf[Trigger]("t") + `,
 	COALESCE(p.name, '')::text AS project_name,
 	COALESCE(d.hostname, '')::text AS daemon_name
 FROM triggers t
@@ -277,7 +277,7 @@ func ListAllWorkflowTriggerActivations(ctx context.Context, db orm.Context) ([]*
 // event can only reach a trigger through its own owner's live connection.
 // Status is returned rather than filtered so a caller can tell needs_reauth
 // apart.
-const listIntegrationTriggersSQL = `SELECT t.*,
+var listIntegrationTriggersSQL = `SELECT ` + columnsOf[Trigger]("t") + `,
 	c.external_account_id AS connection_account,
 	c.status AS connection_status
 FROM triggers t
@@ -324,7 +324,7 @@ func ListIntegrationTriggers(ctx context.Context, db orm.Context, integration st
 // must name its own owner's live one; one with no connection (a delegated
 // authority, e.g. GitHub via control-plane) is routed on access alone. The
 // model is in 20261005061008_integration_event_access.sql.
-const listAccessRoutedTriggersSQL = `SELECT t.*
+var listAccessRoutedTriggersSQL = `SELECT ` + columnsOf[Trigger]("t") + `
 FROM triggers t
 JOIN integration_event_access a
 	ON a.user_id = t.user_id

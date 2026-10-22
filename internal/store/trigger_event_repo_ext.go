@@ -323,7 +323,7 @@ const triggerFiringRunColumns = `c.id AS run_chat_id,
 // repeat nor be skipped; two fires can share an occurred_at, and id breaks the
 // tie. user_id scopes the rows even though the handler already checked
 // ownership. Served by idx_trigger_events_trigger_occurred_id.
-const listTriggerEventsSQL = `SELECT e.*,
+var listTriggerEventsSQL = `SELECT ` + columnsOf[TriggerEvent]("e") + `,
 	` + triggerFiringRunColumns + `
 FROM trigger_events e
 LEFT JOIN chats_with_activity c ON c.id = e.chat_id AND c.user_id = e.user_id
@@ -374,7 +374,7 @@ func ListTriggerEventsPage(ctx context.Context, db orm.Context, f core.TriggerEv
 // recentTriggerFiringsSQL is the newest ?2 firings of each named trigger, with
 // their runs, in ONE query. This is what health and last_event are computed
 // from, so listing N triggers costs one extra query rather than N.
-const recentTriggerFiringsSQL = `WITH ranked AS (
+var recentTriggerFiringsSQL = `WITH ranked AS (
 	SELECT
 		e.id,
 		row_number() OVER (PARTITION BY e.trigger_id ORDER BY e.occurred_at DESC, e.id DESC) AS rn
@@ -382,7 +382,7 @@ const recentTriggerFiringsSQL = `WITH ranked AS (
 	WHERE e.user_id = ?0::text
 		AND e.trigger_id = ANY(?1::text[])
 )
-SELECT e.*,
+SELECT ` + columnsOf[TriggerEvent]("e") + `,
 	` + triggerFiringRunColumns + `
 FROM ranked r
 JOIN trigger_events e ON e.id = r.id
@@ -408,7 +408,7 @@ func RecentTriggerFirings(ctx context.Context, db orm.Context, userID string, tr
 // "Completed" is the run the trigger fired (run_status), not whatever turn the
 // chat is on now — the same rule triggers.resolveFiring applies — so a
 // person's later reply in the chat neither ends nor extends the episode.
-const firingsSinceLastSuccessSQL = `WITH last_success AS (
+var firingsSinceLastSuccessSQL = `WITH last_success AS (
 	SELECT DISTINCT ON (e.trigger_id) e.trigger_id, e.occurred_at, e.id
 	FROM trigger_events e
 	LEFT JOIN chats_with_activity c ON c.id = e.chat_id AND c.user_id = e.user_id
@@ -427,7 +427,7 @@ const firingsSinceLastSuccessSQL = `WITH last_success AS (
 		AND e.trigger_id = ANY(?1::text[])
 		AND (s.id IS NULL OR (e.occurred_at, e.id) > (s.occurred_at, s.id))
 )
-SELECT e.*,
+SELECT ` + columnsOf[TriggerEvent]("e") + `,
 	` + triggerFiringRunColumns + `
 FROM ranked r
 JOIN trigger_events e ON e.id = r.id

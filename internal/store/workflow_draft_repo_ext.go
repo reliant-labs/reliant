@@ -66,7 +66,7 @@ func UpsertWorkflowDraftBySlug(ctx context.Context, db orm.Context, d *core.Work
 		Set("is_hidden = EXCLUDED.is_hidden").
 		Set("updated_at = NOW()").
 		Set("version = workflow_drafts.version + 1").
-		Returning("*").
+		Returning("?TableColumns").
 		Exec(ctx)
 	if err != nil {
 		return nil, err
@@ -167,7 +167,7 @@ func updateWorkflowDraft(ctx context.Context, db orm.Context, id string, set fun
 		Set("updated_at = NOW()").
 		Set("version = version + 1").
 		Where("id = ?", id).
-		Returning("*").
+		Returning("?TableColumns").
 		Scan(ctx)
 	if err != nil {
 		return nil, err
@@ -240,7 +240,7 @@ func RemoveWorkflowDraftBySlug(ctx context.Context, db orm.Context, userID, slug
 
 func deleteWorkflowDraft(ctx context.Context, db orm.Context, where func(*bun.DeleteQuery) *bun.DeleteQuery) (*core.WorkflowDraft, error) {
 	row := new(WorkflowDraft)
-	if err := where(db.Bun().NewDelete().Model(row)).Returning("*").Scan(ctx); err != nil {
+	if err := where(db.Bun().NewDelete().Model(row)).Returning("?TableColumns").Scan(ctx); err != nil {
 		return nil, classifyMissing(err, "workflow draft")
 	}
 	return workflowDraftToCore(row), nil

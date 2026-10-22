@@ -106,6 +106,12 @@ func GetRootThread(ctx context.Context, db orm.Context, chatID string) (*core.Th
 	return threadFromRow(row), nil
 }
 
+var getThreadWithParentSQL = `
+SELECT ` + columnsOf[Thread]("t") + `, pt.chat_id AS parent_chat_id
+FROM threads t
+LEFT JOIN threads pt ON t.parent_thread_id = pt.id
+WHERE t.id = ?0`
+
 // GetThreadWithParent returns the thread and its parent thread's chat id (nil
 // without a parent), for fork chain resolution.
 func GetThreadWithParent(ctx context.Context, db orm.Context, id string) (*core.Thread, *string, error) {
@@ -113,11 +119,7 @@ func GetThreadWithParent(ctx context.Context, db orm.Context, id string) (*core.
 		Thread
 		ParentChatID *string `bun:"parent_chat_id"`
 	}
-	err := db.Bun().NewRaw(`
-SELECT t.*, pt.chat_id AS parent_chat_id
-FROM threads t
-LEFT JOIN threads pt ON t.parent_thread_id = pt.id
-WHERE t.id = ?0`, id).Scan(ctx, &row)
+	err := db.Bun().NewRaw(getThreadWithParentSQL, id).Scan(ctx, &row)
 	if err != nil {
 		return nil, nil, noRows("failed to get thread with parent", "thread", err)
 	}

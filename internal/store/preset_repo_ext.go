@@ -83,7 +83,7 @@ func UpsertPreset(ctx context.Context, db orm.Context, p *core.Preset) (*core.Pr
 		Set("tag = EXCLUDED.tag").
 		Set("params = EXCLUDED.params").
 		Set("updated_at = EXCLUDED.updated_at").
-		Returning("*").
+		Returning("?TableColumns").
 		Scan(ctx)
 	if err != nil {
 		return nil, err

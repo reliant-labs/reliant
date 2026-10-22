@@ -394,7 +394,7 @@ func ClaimQueuedAgentMessagesForThread(ctx context.Context, db orm.Context, toTh
 		q = q.Where("id = ?", messageID)
 	}
 	var rows []*AgentMessage
-	if _, err := q.Returning("*").Exec(ctx, &rows); err != nil {
+	if _, err := q.Returning("?TableColumns").Exec(ctx, &rows); err != nil {
 		return nil, err
 	}
 	claimed := make([]*core.AgentMessage, len(rows))

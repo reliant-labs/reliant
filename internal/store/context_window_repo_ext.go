@@ -128,6 +128,12 @@ func GetMaxSequenceForThread(ctx context.Context, db orm.Context, threadID strin
 	return seq, nil
 }
 
+var getContextWindowWithThreadSQL = `
+SELECT ` + columnsOf[ContextWindow]("cw") + `, t.chat_id, t.parent_thread_id, t.fork_at_message_id AS thread_fork_at_message_id
+FROM context_windows cw
+JOIN threads t ON t.id = cw.thread_id
+WHERE cw.id = ?0`
+
 // GetContextWindowWithThread returns the window with its thread's chat id,
 // parent thread id and fork point, for fork resolution.
 func GetContextWindowWithThread(ctx context.Context, db orm.Context, id string) (*core.ContextWindow, string, *string, *string, error) {
@@ -137,11 +143,7 @@ func GetContextWindowWithThread(ctx context.Context, db orm.Context, id string) 
 		ParentThreadID        *string `bun:"parent_thread_id"`
 		ThreadForkAtMessageID *string `bun:"thread_fork_at_message_id"`
 	}
-	err := db.Bun().NewRaw(`
-SELECT cw.*, t.chat_id, t.parent_thread_id, t.fork_at_message_id AS thread_fork_at_message_id
-FROM context_windows cw
-JOIN threads t ON t.id = cw.thread_id
-WHERE cw.id = ?0`, id).Scan(ctx, &row)
+	err := db.Bun().NewRaw(getContextWindowWithThreadSQL, id).Scan(ctx, &row)
 	if err != nil {
 		return nil, "", nil, nil, noRows("failed to get context window with thread", "context window", err)
 	}

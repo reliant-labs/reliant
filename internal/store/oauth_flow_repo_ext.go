@@ -78,17 +78,18 @@ func PeekOAuthFlow(ctx context.Context, db orm.Context, stateHash []byte, now ti
 	return oauthFlowToCore(&row, err)
 }
 
+var consumeOAuthFlowSQL = `
+		UPDATE oauth_flows SET consumed_at = ?1
+		 WHERE state_hash = ?0 AND consumed_at IS NULL AND expires_at > ?1
+		RETURNING ` + columnsOf[OauthFlow]("oauth_flows")
+
 // ConsumeOAuthFlow marks an unexpired, unconsumed flow consumed and returns
 // it; anything else is core.ErrOAuthFlowInvalid. It is one statement: the
 // compare-and-swap on consumed_at is what makes the state single-use even
 // under concurrent replays.
 func ConsumeOAuthFlow(ctx context.Context, db orm.Context, stateHash []byte, now time.Time) (*core.OAuthFlow, error) {
 	var row OauthFlow
-	err := db.Bun().NewRaw(`
-		UPDATE oauth_flows SET consumed_at = ?1
-		 WHERE state_hash = ?0 AND consumed_at IS NULL AND expires_at > ?1
-		RETURNING *`, stateHash, now).
-		Scan(ctx, &row)
+	err := db.Bun().NewRaw(consumeOAuthFlowSQL, stateHash, now).Scan(ctx, &row)
 	return oauthFlowToCore(&row, err)
 }
 
