@@ -169,7 +169,3 @@ func (r *Repo) ListStrandedBackgroundSpawnToolCalls(ctx context.Context) ([]*Str
 func (r *Repo) ListBackgroundedProcessToolCalls(ctx context.Context) ([]*BackgroundedProcessCall, error) {
 	return store.ListBackgroundedProcessToolCalls(ctx, r.ORM())
 }
-
-func (r *Repo) ListToolCallResultsByMessageIDs(ctx context.Context, messageIDs []string) ([]*ToolCallResult, error) {
-	return store.ListToolCallResultsByMessageIDs(ctx, r.ORM(), messageIDs)
-}

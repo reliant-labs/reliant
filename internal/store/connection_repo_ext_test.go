@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/reliant-labs/reliant/internal/store/storetest"
@@ -225,10 +226,10 @@ func TestConnectionSecretsLock(t *testing.T) {
 		})
 	require.NoError(t, err)
 
-	// The adapter half (core.SecretsTx): the callback runs its statements
+	// The adapter half (*db.SecretsTx): the callback runs its statements
 	// with its own ctx, which does not carry the transaction, and they must
 	// still land in it (or they would block on the row the lock holds).
-	err = twin.WithSecretsLock(ctx, "alice", c.ID, func(tx core.SecretsTx) error {
+	err = twin.WithSecretsLock(ctx, "alice", c.ID, func(tx *db.SecretsTx) error {
 		assert.Equal(t, c.ID, tx.Connection().ID)
 		access := tx.Secrets()[core.SecretFieldAccessToken]
 		require.ErrorIs(t, tx.Replace(ctx, access.Generation+1, nil, nil), core.ErrGenerationConflict)
@@ -252,7 +253,7 @@ func TestConnectionSecretsLock(t *testing.T) {
 	assert.Equal(t, []byte("t3"), secrets[core.SecretFieldAccessToken].Ciphertext)
 
 	// A failed callback rolls back everything it wrote.
-	require.Error(t, twin.WithSecretsLock(ctx, "alice", c.ID, func(tx core.SecretsTx) error {
+	require.Error(t, twin.WithSecretsLock(ctx, "alice", c.ID, func(tx *db.SecretsTx) error {
 		require.NoError(t, tx.MarkStatus(ctx, core.ConnectionStatusActive, ""))
 		return assert.AnError
 	}))

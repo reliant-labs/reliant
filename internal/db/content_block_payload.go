@@ -7,7 +7,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 )
 
-// ContentBlockPayloads serializes content blocks for the `content_blocks`
+// contentBlockPayloads serializes content blocks for the `content_blocks`
 // field of a live message update — the wire shape the client parses through
 // MessageSchema.
 //
@@ -29,7 +29,7 @@ import (
 // read paths (see messageproto.AssembleForDisplay). A nil-safe lookup is used
 // rather than requiring callers to pre-fetch: the rows are keyed by the ids
 // already present in the blocks.
-func (r *Repo) ContentBlockPayloads(ctx context.Context, blocks []*MessageContentBlock) []map[string]interface{} {
+func (r *Repo) contentBlockPayloads(ctx context.Context, blocks []*MessageContentBlock) []map[string]interface{} {
 	toolCallIDs := make([]string, 0, len(blocks))
 	for _, block := range blocks {
 		if block.ToolCallID != nil && *block.ToolCallID != "" {

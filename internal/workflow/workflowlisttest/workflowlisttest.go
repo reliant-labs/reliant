@@ -7,7 +7,7 @@
 // (research/forge-migration/05-p3a-handler-map.md). Only _test.go files
 // import it.
 //
-//forge:exclude-contract: a test double of the workflow-listing reads on db.Repository, imported only by tests; nothing to fake behind it
+//forge:exclude-contract: a test double of the workflow-listing reads on *db.Repo, imported only by tests; nothing to fake behind it
 package workflowlisttest
 
 import (

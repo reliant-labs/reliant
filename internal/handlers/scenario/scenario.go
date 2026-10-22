@@ -46,7 +46,7 @@ var _ projectScenariosReader = (*db.Repo)(nil)
 // carries every skill body and repo memory the daemon indexed — 18 MB in
 // prod — for a column that is empty or a few KB.
 func storedProjectScenarios(ctx context.Context, repo Repository, projectID string) ([]cfg.StoredScenario, error) {
-	// The method lives on *db.Repo, not on db.Repository; every production
+	// The method lives on *db.Repo, not on Repository; every production
 	// wiring passes a *db.Repo. A repository that cannot answer is a wiring
 	// fault, reported rather than papered over with the full-record read.
 	reader, ok := repo.(projectScenariosReader)

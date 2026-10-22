@@ -58,7 +58,7 @@ type TriggerSite struct {
 }
 
 // runOwners reads who a run, or a trigger, belongs to. Satisfied by
-// db.Repository.
+// *db.Repo.
 type runOwners interface {
 	GetWorkflow(ctx context.Context, id string) (*core.Workflow, error)
 	GetThread(ctx context.Context, id string) (*core.Thread, error)

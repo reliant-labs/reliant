@@ -17,7 +17,7 @@ type Router interface {
 	SendDaemonCommand(ctx context.Context, userID, commandType string, payload []byte, timeoutMs int32) ([]byte, error)
 }
 
-// Repository is the slice of db.Repository the package-commands handlers use.
+// Repository is the slice of *db.Repo the package-commands handlers use.
 type Repository interface {
 	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)
 	GetProjectWithUserCheck(ctx context.Context, id string, userID string) (*db.Project, error)

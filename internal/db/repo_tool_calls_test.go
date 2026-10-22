@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 	"github.com/stretchr/testify/require"
 )
 
@@ -182,7 +183,7 @@ func TestUpsertToolCallResultIsIdempotent(t *testing.T) {
 	result.UpdatedAt = time.Now().UTC()
 	require.NoError(t, repo.UpsertToolCallResult(ctx, f.chatID, result))
 
-	results, err := repo.ListToolCallResultsByMessageIDs(ctx, []string{f.messageID})
+	results, err := store.ListToolCallResultsByMessageIDs(ctx, repo.ORM(), []string{f.messageID})
 	require.NoError(t, err)
 	require.Len(t, results, 1, "a second result for the same call must replace, not duplicate")
 	require.Equal(t, "second", results[0].Content)
@@ -274,7 +275,7 @@ func TestListToolCallsByMessageIDsMatchesEveryID(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, calls, 3, "every message id in the batch must match, not just the first")
 
-	results, err := repo.ListToolCallResultsByMessageIDs(ctx, ids)
+	results, err := store.ListToolCallResultsByMessageIDs(ctx, repo.ORM(), ids)
 	require.NoError(t, err)
 	require.Len(t, results, 3)
 }
@@ -288,7 +289,7 @@ func TestListToolCallsByMessageIDsEmptyInput(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, calls)
 
-	results, err := repo.ListToolCallResultsByMessageIDs(ctx, nil)
+	results, err := store.ListToolCallResultsByMessageIDs(ctx, repo.ORM(), nil)
 	require.NoError(t, err)
 	require.Empty(t, results)
 }

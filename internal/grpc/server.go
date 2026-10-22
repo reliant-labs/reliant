@@ -52,7 +52,7 @@ type APIHTTPRoutesDeps struct {
 	// Required.
 	Auth *UserAuth
 	// Repo is the database. Required.
-	Repo db.Repository
+	Repo APIHTTPRoutesStore
 	// Router reaches the user's daemons: the terminal websocket and the
 	// connector MCP endpoint are a route to one. Required.
 	Router toolexec.DaemonRouter
@@ -83,6 +83,18 @@ type APIHTTPRoutesDeps struct {
 	// ControlPlaneURL wakes a suspended workspace for a connector request;
 	// empty reports it as one that cannot be started.
 	ControlPlaneURL string
+}
+
+// APIHTTPRoutesStore is what the routes read from the database. The routes
+// only forward it: the attachment bytes to the attachment handler, the
+// working-directory classification to the terminal websocket, and the daemon
+// attachments to the connector endpoint's workspace waker.
+type APIHTTPRoutesStore interface {
+	attachment.Repository
+	mcpserver.AttachmentReader
+	// The terminal websocket's checkouts (terminal.WithTerminalCheckouts).
+	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)
+	ListProjectDaemonsForProject(ctx context.Context, projectID string) ([]*db.ProjectDaemon, error)
 }
 
 // NewAPIHTTPRoutes builds the routes; nothing is mounted until Register.
@@ -252,7 +264,7 @@ func bindEventStreams(next http.Handler) http.Handler {
 // it: grants resolves each call's connector grant and OAuth client binding,
 // and router carries the call to the grant's daemon.
 func connectorMCPRoutes(
-	database db.Repository,
+	database mcpserver.AttachmentReader,
 	grants connectorgrant.Store,
 	router toolexec.DaemonRouter,
 	publicURL string,

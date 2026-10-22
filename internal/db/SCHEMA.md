@@ -7,7 +7,7 @@ forward-only SQL files under `db/migrations/` (repo root), embedded into the
 binary by `forge generate` (`db/embed_gen.go`) and applied by forge's migrator
 (`forge/pkg/migratekit`, golang-migrate underneath). `forge generate` projects
 the applied schema into `internal/store`, the forge ORM package, where every
-query the Repository runs lives (P5b in `research/forge-migration/PLAN.md`).
+query the Repo runs lives (P5b in `research/forge-migration/PLAN.md`).
 
 ## Files
 
@@ -131,10 +131,12 @@ projects every applied table — and the `chats_with_activity` view, which its
 `Delete<E>`), `store_gen.go` (one `<Entity>Store` interface per entity plus the
 aggregate `Store`, from `store.NewStore(ormClient)`), and one hand-owned
 `<entity>_repo_ext.go` seam per entity that forge scaffolds once and never
-rewrites. P5b ported every query the Repository ran (sqlc's and its hand
+rewrites. P5b ported every query the Repo ran (sqlc's and its hand
 SQL) onto these seams, lane by lane (`research/forge-migration/08-p5b-spike.md`);
-sqlc is gone. This package keeps the Repository facade over them until P6
-splits it. The rules every query follows:
+sqlc is gone. This package keeps the concrete `*db.Repo` over them: the
+behaviour (guards, multi-statement transactions, hub emission, sealing) that
+is not one statement. The Repo is concrete; declare the role you need where
+you need it (rule 8). The rules every query follows:
 
 1. **Generated delegate, builder, or hand SQL — in that order.** A by-key get,
    a filtered list or count, or a stamp is a generated delegate (compose
@@ -197,7 +199,7 @@ splits it. The rules every query follows:
    workflow. Behavior stays on the `core` types (`ThreadStatusForStopReason`,
    chat activity, `ComputeStreamingState`). `internal/store` may import
    `internal/db/core` and `gen/`, and must **never** import `internal/db`:
-   the Repository delegates to the store, so the reverse edge is a cycle. Integer columns that hold a `reliantv1` enum already
+   the Repo delegates to the store, so the reverse edge is a cycle. Integer columns that hold a `reliantv1` enum already
    project to it (`COMMENT ON COLUMN … IS 'forge:go-type=…'`; see
    `db/migrations/20261020232630_chats_with_activity_view_entity.up.sql`).
    Mark a new one the same way. A view's comments, its columns' included,
@@ -236,22 +238,22 @@ splits it. The rules every query follows:
    test on `storetest.New(t)`, which hands the test its own migrated database
    reachable through both layers on one pgx pool (`env.ORM` and `env.Repo`).
    The tests the lanes wrote against a sqlc twin (`…AgreeWithSQLC`) now
-   compare the query with the Repository method over it. A new test asserts
+   compare the query with the Repo method over it. A new test asserts
    the rows it expects. Run them with
    `FORGE_TEST_POSTGRES_URL=postgres://…/postgres go test ./internal/store/...`
    (or a `DATABASE_URL`, whose server is used); like this package's tests
    they skip under `-short`.
 
-7. **One transaction, either layer.** The Repository and `internal/store`
+7. **One transaction, either layer.** The Repo and `internal/store`
    share one pool (`repo.ORM()` is the ORM client over it) and one
    transaction: forge's, carried in `ctx`. `Repo.RunTx` opens it through the
-   ORM client, and every hand Repository statement resolves to the
+   ORM client, and every hand Repo statement resolves to the
    transaction `ctx` carries (`tx_bridge.go`). So a transaction opened by
-   either side is joined by both, and Repository and store calls mix in one:
+   either side is joined by both, and Repo and store calls mix in one:
 
    ```go
    err := repo.RunTx(ctx, orm.Serializable, func(ctx context.Context) error { // or repo.ORM().RunTx
-       if err := repo.UpsertProjectDaemon(ctx, projectID, daemonID, path, nil); err != nil { // Repository
+       if err := repo.UpsertProjectDaemon(ctx, projectID, daemonID, path, nil); err != nil { // Repo
            return err
        }
        return store.UpdateChatMasked(ctx, repo.ORM(), chat, []string{store.ChatFieldActiveDaemonID}) // store
@@ -270,10 +272,10 @@ splits it. The rules every query follows:
    `orm.Client.RunTx` — `orm.Serializable`, `orm.ReadCommitted`, or a
    refinement (`.WithMaxAttempts(n)`, `.WithReadOnly()`) — with no default:
    a blank level is refused (`orm.ErrInvalidTxOptions`) naming the call site.
-   It is the Repository's one transaction primitive; `RunTxReadOnly` is sugar
+   It is the Repo's one transaction primitive; `RunTxReadOnly` is sugar
    for `orm.Serializable.WithReadOnly()`, as on the ORM client. The two
    compose like this: the policy's `MaxAttempts` is the TOTAL number of
-   times `fn` runs (begin failures included), and the Repository's ladder
+   times `fn` runs (begin failures included), and the Repo's ladder
    (`isRetryableError`) decides which failures spend an attempt, with
    `calculateBackoff` between them. So:
 
@@ -287,7 +289,7 @@ splits it. The rules every query follows:
    The ladder is the same at every level: the level decides how much budget a
    caller asks for, not which SQLSTATEs count. A failure the ladder does not
    accept, or the last attempt's, is returned verbatim. The last row is what
-   the Repository's READ COMMITTED writers (`CreateUserUpdate`,
+   the Repo's READ COMMITTED writers (`CreateUserUpdate`,
    `SaveMessageAtomic`, `MutateChatSelection`, the daemon registry, the
    workflow drafts) name, keeping the budget they had before the level
    became explicit. `Repo.RunTx` is declared `//forge:tx-opener level-arg=1`
@@ -296,7 +298,7 @@ splits it. The rules every query follows:
    judges `orm.Client.RunTx`'s.
    `runAfterCommit` is `orm.AfterCommit`, so post-commit effects registered
    by either layer run once, after the commit that keeps them. A lock that
-   needs its own transaction uses `BeginDetached` (or the Repository's
+   needs its own transaction uses `BeginDetached` (or the Repo's
    `BeginTxWithOptions`), refusing when `orm.InTx(ctx)`. A statement that
    must commit whatever the caller's transaction does (the write ledger)
    runs with `orm.Detached(ctx)`: on the pool, its own autocommit
@@ -330,12 +332,17 @@ splits it. The rules every query follows:
    is the pattern. A nested opener joins the outer transaction at the
    OUTER's level, whatever policy it passes (the policy is still validated).
 
-8. **Consumers depend on the least they use (P6).** A port never widens a
-   dependency. A handler, service or workflow that needs persistence
-   declares, in its own package, an interface listing only the methods it
-   calls, and takes that — never `db.Repository` or the aggregate
-   `store.Store`, and one `<Entity>Store` only when the generated CRUD is all
-   it needs. While a query is mid-port the Repository still satisfies that
-   interface; when the Repository method goes, a small adapter over
-   `orm.Context` and the ext functions does. A lane narrows the consumers of
-   the methods it ports, and only those.
+8. **The Repo is concrete; declare the role you need where you need it
+   (P6).** `internal/db` declares no interface over `*db.Repo`. A handler,
+   service or workflow that needs persistence declares, in its own package,
+   an interface listing only the methods it calls, and takes that: a
+   handler's or component's `Repository` in `deps.go` (forge mocks it into
+   `mock_gen.go`), a contract package's in `contract.go`, an unexported
+   `<thing>Store` beside the helper that takes it. A consumer that forwards
+   the repo to a callee embeds the callee's exported role. Never the
+   aggregate `store.Store`, and one `<Entity>Store` only when the generated
+   CRUD is all it needs. Composition code (`internal/app`, the activity and
+   tool registries, `workersetup`) takes `*db.Repo` itself. The sub-stores
+   the Repo hands out (`Connections()`, `IntegrationWrites()`) are concrete
+   too (`db.ConnectionStore`, `db.IntegrationWriteLedger`); their consumers
+   declare their own slice of them as well.

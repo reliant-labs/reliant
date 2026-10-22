@@ -16,10 +16,10 @@ import (
 // told to stop, so a page reload agrees with what was asked for instead of
 // showing the spawn as still running.
 //
-// A one-method consumer-side interface rather than db.Repository: the stopper
-// needs exactly one compare-and-swap, and taking the whole repository would
-// pull the database layer into this package for it. It is spelled in terms of
-// core.WorkflowStatus, which db.WorkflowStatus aliases, so db.Repository
+// A one-method consumer-side interface: the stopper needs exactly one
+// compare-and-swap, and taking the whole repository would pull the database
+// layer into this package for it. It is spelled in terms of
+// core.WorkflowStatus, which db.WorkflowStatus aliases, so *db.Repo
 // satisfies it without either side knowing about the other. Nil is valid and
 // means "signal only" — the signal is the part that actually stops the work.
 type SpawnWorkflowReconciler interface {

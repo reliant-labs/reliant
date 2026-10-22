@@ -219,7 +219,7 @@ type connectionReader interface {
 }
 
 type connectionStoreProvider interface {
-	Connections() core.ConnectionStore
+	Connections() db.ConnectionStore
 }
 
 type accessSubjectReader interface {

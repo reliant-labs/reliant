@@ -9,7 +9,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 )
 
-// Repository is the slice of db.Repository the scenario handlers use. The
+// Repository is the slice of *db.Repo the scenario handlers use. The
 // last three feed workflowsource.Loader and launch, which resolve the
 // workflows a scenario runs.
 type Repository interface {

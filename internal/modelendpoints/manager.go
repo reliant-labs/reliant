@@ -29,7 +29,7 @@ var ErrDaemonOffline = svcerr.Unavailable("that machine is offline")
 // else; the two are indistinguishable on purpose.
 var ErrDaemonNotOwned = svcerr.NotFound("machine")
 
-// Store is the slice of db.Repository the manager uses. Declared here, at the
+// Store is the slice of *db.Repo the manager uses. Declared here, at the
 // consumer.
 type Store interface {
 	CreateModelEndpoint(ctx context.Context, e *db.ModelEndpoint) error

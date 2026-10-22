@@ -52,7 +52,7 @@ const (
 
 var errAccountVaultDisabled = errors.New("provider accounts require the credential vault; none is configured")
 
-// accountStore is the Postgres implementation of core.ProviderAccountStore. Its statements are
+// accountStore is the Postgres implementation of the Repo's provider-account methods. Its statements are
 // internal/store's (provider_account*_repo_ext.go, thread_provider_account_repo_ext.go,
 // legacy_credential_copy_repo_ext.go); what stays here is everything that is not SQL: sealing
 // and opening the secret columns, the advisory-lock-then-read-then-write transactions, the
@@ -62,8 +62,6 @@ type accountStore struct {
 	sealer CredentialSealer
 	now    func() time.Time
 }
-
-var _ core.ProviderAccountStore = (*accountStore)(nil)
 
 // newAccountStore creates the store. Without SetSealer every secret read or write fails.
 func newAccountStore(db orm.Context) *accountStore {

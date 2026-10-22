@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/store"
 )
 
 // createTestPlan inserts a plan into the test DB and returns it.
@@ -118,7 +119,7 @@ func TestPlanCRUD(t *testing.T) {
 		}
 
 		// Test ListPlansByProject
-		plans, err := repo.ListPlansByProject(ctx, "test-project")
+		plans, err := store.ListPlansByProject(ctx, repo.ORM(), "test-project")
 		if err != nil {
 			t.Fatalf("ListPlansByProject: %v", err)
 		}
@@ -189,7 +190,7 @@ func TestPlanCRUD(t *testing.T) {
 		}
 
 		now := time.Now()
-		if err := repo.UpdatePlanStatus(ctx, plan.ID, int32(reliantv1.PlanStatus_PLAN_STATUS_COMPLETED), &now); err != nil {
+		if err := store.UpdatePlanStatus(ctx, repo.ORM(), plan.ID, int32(reliantv1.PlanStatus_PLAN_STATUS_COMPLETED), &now); err != nil {
 			t.Fatalf("UpdatePlanStatus: %v", err)
 		}
 
@@ -399,7 +400,8 @@ func TestTaskCRUD(t *testing.T) {
 			t.Fatalf("CreateTask: %v", err)
 		}
 
-		if err := repo.UpdateTaskStatus(ctx, task.ID, int32(reliantv1.TaskStatus_TASK_STATUS_COMPLETED), nil); err != nil {
+		now := time.Now()
+		if err := store.UpdateTaskStatus(ctx, repo.ORM(), task.ID, int32(reliantv1.TaskStatus_TASK_STATUS_COMPLETED), &now); err != nil {
 			t.Fatalf("UpdateTaskStatus: %v", err)
 		}
 
@@ -687,7 +689,7 @@ func TestTaskDependencies(t *testing.T) {
 			t.Fatalf("CreateTaskDependency: %v", err)
 		}
 
-		if err := repo.DeleteTaskDependency(ctx, dep.ID); err != nil {
+		if err := store.RemoveTaskDependency(ctx, repo.ORM(), dep.ID); err != nil {
 			t.Fatalf("DeleteTaskDependency: %v", err)
 		}
 
@@ -956,7 +958,7 @@ func TestReadyTaskComputation(t *testing.T) {
 		}
 
 		// Complete A -> B becomes ready
-		if err := repo.UpdateTaskStatus(ctx, a.ID, int32(reliantv1.TaskStatus_TASK_STATUS_COMPLETED), nil); err != nil {
+		if err := store.UpdateTaskStatus(ctx, repo.ORM(), a.ID, int32(reliantv1.TaskStatus_TASK_STATUS_COMPLETED), nil); err != nil {
 			t.Fatalf("UpdateTaskStatus: %v", err)
 		}
 		ready = computeReady(newPlan.ID)
@@ -965,7 +967,7 @@ func TestReadyTaskComputation(t *testing.T) {
 		}
 
 		// Complete B -> C becomes ready
-		if err := repo.UpdateTaskStatus(ctx, b.ID, int32(reliantv1.TaskStatus_TASK_STATUS_COMPLETED), nil); err != nil {
+		if err := store.UpdateTaskStatus(ctx, repo.ORM(), b.ID, int32(reliantv1.TaskStatus_TASK_STATUS_COMPLETED), nil); err != nil {
 			t.Fatalf("UpdateTaskStatus: %v", err)
 		}
 		ready = computeReady(newPlan.ID)
@@ -1005,7 +1007,7 @@ func TestReadyTaskComputation(t *testing.T) {
 		}
 
 		// Complete A -> B and C ready, D still blocked
-		if err := repo.UpdateTaskStatus(ctx, a.ID, int32(reliantv1.TaskStatus_TASK_STATUS_COMPLETED), nil); err != nil {
+		if err := store.UpdateTaskStatus(ctx, repo.ORM(), a.ID, int32(reliantv1.TaskStatus_TASK_STATUS_COMPLETED), nil); err != nil {
 			t.Fatalf("UpdateTaskStatus: %v", err)
 		}
 		ready = computeReady(newPlan.ID)
@@ -1018,7 +1020,7 @@ func TestReadyTaskComputation(t *testing.T) {
 		}
 
 		// Complete B only -> D still blocked (C not done)
-		if err := repo.UpdateTaskStatus(ctx, b.ID, int32(reliantv1.TaskStatus_TASK_STATUS_COMPLETED), nil); err != nil {
+		if err := store.UpdateTaskStatus(ctx, repo.ORM(), b.ID, int32(reliantv1.TaskStatus_TASK_STATUS_COMPLETED), nil); err != nil {
 			t.Fatalf("UpdateTaskStatus: %v", err)
 		}
 		ready = computeReady(newPlan.ID)
@@ -1034,7 +1036,7 @@ func TestReadyTaskComputation(t *testing.T) {
 		}
 
 		// Complete C -> D now ready
-		if err := repo.UpdateTaskStatus(ctx, c.ID, int32(reliantv1.TaskStatus_TASK_STATUS_COMPLETED), nil); err != nil {
+		if err := store.UpdateTaskStatus(ctx, repo.ORM(), c.ID, int32(reliantv1.TaskStatus_TASK_STATUS_COMPLETED), nil); err != nil {
 			t.Fatalf("UpdateTaskStatus: %v", err)
 		}
 		ready = computeReady(newPlan.ID)

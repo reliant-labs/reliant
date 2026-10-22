@@ -12,7 +12,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
-// Repository is the slice of db.Repository the daemon_registry handlers use.
+// Repository is the slice of *db.Repo the daemon_registry handlers use.
 type Repository interface {
 	GetDaemon(ctx context.Context, id string) (*db.Daemon, error)
 	ListDaemonsByUserID(ctx context.Context, userID string) ([]*db.Daemon, error)

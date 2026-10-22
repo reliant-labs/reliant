@@ -65,7 +65,7 @@ func ToolNameFromGlobalSettingKey(key string) (string, bool) {
 
 // SettingsReader is the one thing this package needs from the repository.
 // Declared here, at the consumer, so nothing has to depend on the full
-// db.Repository surface to resolve a binding.
+// *db.Repo surface to resolve a binding.
 type SettingsReader interface {
 	ListSettingsByKey(ctx context.Context, userID string, keyPattern string) ([]*db.Setting, error)
 }

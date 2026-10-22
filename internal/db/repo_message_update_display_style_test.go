@@ -60,7 +60,7 @@ func TestEnrichMessageUpdate_CarriesDisplayStyle(t *testing.T) {
 	}
 
 	raw, _ := json.Marshal(map[string]any{"id": msg.ID})
-	enriched, err := repo.EnrichMessageUpdate(ctx, ChatUpdate{
+	enriched, err := repo.enrichMessageUpdate(ctx, ChatUpdate{
 		Data: raw, EntityID: msg.ID, CreatedAt: time.Now(),
 	})
 	if err != nil {

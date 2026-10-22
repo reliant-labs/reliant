@@ -17,7 +17,7 @@ type AutomationRetirer interface {
 	RetireDeletedTriggers(ctx context.Context, deleted []*core.Trigger)
 }
 
-// Repository is the slice of db.Repository the workflow handlers use. The
+// Repository is the slice of *db.Repo the workflow handlers use. The
 // last three are what workflowcatalog, workflowsource and launch read
 // through it when they resolve a workflow's refs.
 type Repository interface {

@@ -32,7 +32,7 @@ import (
 var chatIDNamespace = uuid.MustParse("7d0f3a52-91c4-4b0e-a8f6-3c2e5b19d4a7")
 
 // Repo is the slice of the repository dispatch reads and writes. The
-// signatures match db.Repository, so *db.Repo satisfies it structurally.
+// signatures match *db.Repo's, so it satisfies it structurally.
 type Repo interface {
 	lineage.LaunchEventReader
 	ListTriggers(ctx context.Context, f core.TriggerFilters) ([]*core.Trigger, error)
