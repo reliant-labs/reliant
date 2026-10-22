@@ -83,6 +83,8 @@ func TestRunCommand_CancelledCommandRunsCleanup(t *testing.T) {
 // back as exit 1 with "context canceled" pasted onto its stderr — a failure
 // that never happened.
 func TestRunCommand_CleanCancellationIsNotAFailure(t *testing.T) {
+	dir := t.TempDir()
+	ready := filepath.Join(dir, "ready.txt")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -95,14 +97,28 @@ func TestRunCommand_CleanCancellationIsNotAFailure(t *testing.T) {
 		res, err := NewLocalClient().RunCommand(ctx, &RunCommandRequest{
 			// Exits 0 promptly on SIGTERM: a well-behaved process being
 			// cancelled, which is a success, not an error.
-			Command:    `trap 'exit 0' TERM; while true; do sleep 0.05; done`,
-			WorkingDir: t.TempDir(),
+			Command:    `trap 'exit 0' TERM; : > ` + ready + `; while true; do sleep 0.05; done`,
+			WorkingDir: dir,
 			TimeoutMs:  60_000,
 		})
 		done <- result{res, err}
 	}()
 
-	time.Sleep(500 * time.Millisecond)
+	// Cancel only once the trap is installed, as
+	// TestRunCommand_CancelledCommandRunsCleanup does. The fixed 500ms sleep
+	// this replaces raced the shell's startup under load (2026-10-22, the
+	// test lane at load ~70): SIGTERM arrived before the trap, killed the
+	// shell, and a correct implementation reported ExitCode -1.
+	readyBy := time.Now().Add(15 * time.Second)
+	for {
+		if _, err := os.Stat(ready); err == nil {
+			break
+		}
+		if time.Now().After(readyBy) {
+			t.Fatal("the command never installed its SIGTERM trap")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 	cancel()
 
 	var got result

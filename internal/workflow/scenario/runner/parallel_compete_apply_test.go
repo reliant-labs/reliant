@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/memtemp"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime"
 )
@@ -84,7 +85,9 @@ func writeFile(t *testing.T, path, content string) {
 func newSandbox(t *testing.T) *sandbox {
 	t.Helper()
 	requireTools(t)
-	root, err := filepath.EvalSymlinks(t.TempDir())
+	// In memory: a sandbox is ~10 git commands, and on the shared disk under a
+	// full test lane their writes are a third of the time (internal/memtemp).
+	root, err := filepath.EvalSymlinks(memtemp.Dir(t))
 	require.NoError(t, err)
 	s := &sandbox{
 		root:        root,
@@ -303,8 +306,13 @@ func renderApplyWinner(t *testing.T, projectPath, winnerPath string) (string, er
 
 // Every refusal leaves the project, the candidates and everything outside them
 // exactly as they were.
+//
+// The subtests run in parallel: each builds its own sandbox (about ten git
+// commands) and shares nothing, and one after another their process waits were
+// 32-58s of the package's 60s -short budget under a full test lane (2026-10-22).
 func TestApplyWinner_Guards(t *testing.T) {
 	t.Run("applies the winner and nothing else", func(t *testing.T) {
+		t.Parallel()
 		s := newSandbox(t)
 		command, err := renderApplyWinner(t, s.project, s.candidates[2])
 		require.NoError(t, err)
@@ -314,6 +322,7 @@ func TestApplyWinner_Guards(t *testing.T) {
 	})
 
 	t.Run("an empty project path never renders", func(t *testing.T) {
+		t.Parallel()
 		s := newSandbox(t)
 		_, err := renderApplyWinner(t, "", s.candidates[2])
 		require.Error(t, err)
@@ -321,6 +330,7 @@ func TestApplyWinner_Guards(t *testing.T) {
 	})
 
 	t.Run("an empty winner path never renders", func(t *testing.T) {
+		t.Parallel()
 		s := newSandbox(t)
 		_, err := renderApplyWinner(t, s.project, "")
 		require.Error(t, err)
@@ -375,6 +385,7 @@ func TestApplyWinner_Guards(t *testing.T) {
 	}
 	for _, tc := range refusals {
 		t.Run("refuses: "+tc.name, func(t *testing.T) {
+			t.Parallel()
 			s := newSandbox(t)
 			projectPath, winnerPath := tc.setup(t, s)
 			command, err := renderApplyWinner(t, projectPath, winnerPath)
