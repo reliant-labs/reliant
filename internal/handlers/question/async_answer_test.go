@@ -261,7 +261,7 @@ func TestListAsyncQuestions(t *testing.T) {
 	assert.Equal(t, "call-q-async", got.ToolCallId)
 	assert.Equal(t, f.spawnID, got.ThreadId)
 
-	pending, err := f.svc.ListPendingQuestions(AuthedContext(t), connect.NewRequest(&reliantv1.ListPendingQuestionsRequest{ChatId: f.chatID}))
+	pending, err := f.svc.ListPendingQuestions(AuthedContext(t), connect.NewRequest(&reliantv1.ListPendingQuestionsRequest{ChatId: &f.chatID}))
 	require.NoError(t, err)
 	require.Len(t, pending.Msg.Questions, 1, "the composer's list holds only the blocking question")
 	assert.Equal(t, "q-blocking", pending.Msg.Questions[0].QuestionId)

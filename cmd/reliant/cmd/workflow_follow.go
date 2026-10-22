@@ -208,7 +208,7 @@ func (s *chatUpdateSource) Pending(ctx context.Context) ([]execfollow.PendingGat
 
 	// Every thread's question: spawned agents each park on their own.
 	if q, err := s.question.ListPendingQuestions(ctx, connect.NewRequest(&reliantv1.ListPendingQuestionsRequest{
-		ChatId: s.chatID,
+		ChatId: &s.chatID,
 	})); err == nil {
 		for _, qi := range q.Msg.GetQuestions() {
 			gates = append(gates, execfollow.PendingGate{

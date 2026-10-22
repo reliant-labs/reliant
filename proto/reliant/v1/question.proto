@@ -3,6 +3,8 @@ syntax = "proto3";
 
 package reliant.v1;
 
+import "buf/validate/validate.proto";
+
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 
 // QuestionStatus tracks the lifecycle of a question
@@ -39,7 +41,9 @@ message ResolveQuestionResponse {
 }
 
 message ListPendingQuestionsRequest {
-  string chat_id = 1;
+  // Filter: unset lists the caller's pending questions in every chat they own;
+  // set limits it to that chat (which must exist and be theirs).
+  optional string chat_id = 1;
 }
 
 message ListPendingQuestionsResponse {
@@ -48,7 +52,7 @@ message ListPendingQuestionsResponse {
 }
 
 message ListAsyncQuestionsRequest {
-  string chat_id = 1;
+  string chat_id = 1 [(buf.validate.field).required = true];
 }
 
 message ListAsyncQuestionsResponse {

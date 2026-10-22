@@ -543,6 +543,9 @@ type Repository interface {
 	// without questions whose asking run completed or was cancelled: what
 	// the UI shows and lets the user answer.
 	ListAnswerablePendingQuestionsByChat(ctx context.Context, chatID string) ([]*Question, error)
+	// ListAnswerablePendingQuestionsByUser is the same across every chat the
+	// user owns.
+	ListAnswerablePendingQuestionsByUser(ctx context.Context, userID string) ([]*Question, error)
 	GetQuestionsByWorkflowStepIteration(ctx context.Context, workflowID, stepID string, iteration int) ([]*Question, error)
 	ResolveQuestion(ctx context.Context, id string, responseData *string) error
 	// PendingQuestionsByThread returns each thread's newest PENDING question
