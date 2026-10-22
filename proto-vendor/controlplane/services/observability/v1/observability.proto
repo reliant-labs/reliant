@@ -4,7 +4,9 @@ package controlplane.v1;
 
 import "buf/validate/validate.proto";
 import "controlplane/v1/deploy.proto";
+import "controlplane/v1/issues.proto";
 import "forge/v1/forge.proto";
+import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
 
 option go_package = "github.com/reliant-labs/control-plane/gen/services/observability/v1;observabilityv1";
@@ -21,7 +23,9 @@ option go_package = "github.com/reliant-labs/control-plane/gen/services/observab
 // ORG-SCOPED, AND THE ORG IS A REQUEST FIELD THAT IS NEVER TRUSTED. Every RPC
 // carries scope.org_id; the handler verifies the caller is a member of that org
 // (controlplane.org_memberships) before touching ClickHouse — a non-member gets
-// PermissionDenied. Every query then runs as THAT org's own ClickHouse user
+// PermissionDenied. A machine credential (CI, an agent) is let in by the obs:read
+// scope instead: it must act for scope.org_id, and its environment binding, if
+// any, must cover scope.env_ids. Every query then runs as THAT org's own ClickHouse user
 // (EXECUTE AS r_<org>), so the database, not this code, is the tenant boundary.
 //
 // BOUNDED. scope.time_range is required on every RPC and capped per RPC (see
@@ -187,6 +191,26 @@ service ObservabilityService {
   // (nothing here queries ClickHouse), so it works when the tenant is
   // unreachable. Membership-checked on org_id.
   rpc GetObservabilityUsage(GetObservabilityUsageRequest) returns (GetObservabilityUsageResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // GetReleaseHealth answers "did this release make things worse": for one
+  // environment and one promotion (default: the environment's current one) it
+  // compares the window before the promotion with the window after, per service,
+  // over weighted server spans, and lists what the release opened: issues first
+  // seen in it, issues it regressed, alerts that opened and are still firing,
+  // and workload restarts. The verdict is PASS, FAIL or INCONCLUSIVE. The
+  // windows, the findings and their default thresholds are defined once, here,
+  // so the console, `forge obs check` and alerting agree.
+  //
+  // scope must name exactly one environment (scope.env_ids has one id);
+  // scope.time_range is ignored: the windows come from the promotion. Reads
+  // issues and alerts as well as telemetry, all under obs:read for a machine
+  // credential.
+  rpc GetReleaseHealth(GetReleaseHealthRequest) returns (GetReleaseHealthResponse) {
     option (forge.v1.method) = {
       auth_required: true
       idempotent: true
@@ -378,10 +402,20 @@ message ListTracesRequest {
   // environment. scope.filters on span-level keys keep a trace when ANY of its
   // spans matches; on resource keys they select the spans counted.
   repeated string group_by = 8 [(buf.validate.field).repeated.max_items = 3];
+  // Row order. Default newest first.
+  optional TraceOrder order = 9 [(buf.validate.field).enum.defined_only = true];
+}
+
+enum TraceOrder {
+  // Newest first.
+  TRACE_ORDER_UNSPECIFIED = 0;
+  TRACE_ORDER_NEWEST = 1;
+  // Slowest first: the traces to open when latency regressed.
+  TRACE_ORDER_DURATION_DESC = 2;
 }
 
 message ListTracesResponse {
-  // Newest first.
+  // In request.order (default newest first).
   repeated TraceSummary traces = 1;
   string next_page_token = 2;
   // RED summary of the matched traces in the range (not just this page).
@@ -1437,4 +1471,131 @@ message ServiceUsage {
   string service = 1;
   string signal = 2;
   int64 billed_bytes = 3;
+}
+
+// === Release health ===
+
+message GetReleaseHealthRequest {
+  // Must name exactly one environment in env_ids.
+  QueryScope scope = 1 [(buf.validate.field).required = true];
+  // Which promotion. Unset = the environment's current one. At most one.
+  oneof subject {
+    option (buf.validate.oneof).required = false;
+    string promotion_id = 2 [(buf.validate.field).string.max_len = 128];
+    string release_version = 3 [(buf.validate.field).string.max_len = 256];
+  }
+  // The width of each of the two windows. Default 15 minutes, max 6 hours. A
+  // window stops at the neighbouring promotion and at now.
+  google.protobuf.Duration window = 4;
+  // Per-call overrides of the thresholds, by name (max_error_rate_increase,
+  // max_p95_ratio, min_requests, new_issue_min_events). An unknown name is
+  // InvalidArgument.
+  map<string, string> threshold_overrides = 5 [(buf.validate.field).map.max_pairs = 16];
+}
+
+message GetReleaseHealthResponse {
+  ReleasePromotionRef promotion = 1;
+  // [promotion - window, promotion) and [promotion, promotion + window), each
+  // cut off at the neighbouring promotion and at now.
+  TimeRange before = 2;
+  TimeRange after = 3;
+  // False while the after window is still open.
+  bool after_complete = 4;
+  repeated ServiceHealthDelta services = 5;
+  // Issues first seen in this release, and issues it regressed. Same shape the
+  // IssuesService returns.
+  repeated Issue new_issues = 6;
+  repeated Issue regressed_issues = 7;
+  // Alerts that opened at or after the promotion and are still firing.
+  repeated ReleaseAlertRef firing_alerts = 8;
+  repeated WorkloadFinding workload_findings = 9;
+  ReleaseVerdict verdict = 10;
+  repeated ReleaseFinding findings = 11;
+  // The thresholds actually applied, and where each came from.
+  repeated EffectiveThreshold thresholds = 12;
+}
+
+// ReleasePromotionRef names the promotion a health check judged.
+message ReleasePromotionRef {
+  string id = 1;
+  string release_version = 2;
+  string git_commit = 3;
+  google.protobuf.Timestamp promoted_at = 4;
+  // The release it replaced, empty for the first.
+  string previous_release_version = 5;
+}
+
+// ServiceHealthDelta is one service's before and after, over weighted server
+// spans (tail sampling is corrected for, so the rates are not inflated).
+message ServiceHealthDelta {
+  string service = 1;
+  ServiceWindowStats before = 2;
+  ServiceWindowStats after = 3;
+  // The fraction (0..1) of after-window traffic served by the judged version:
+  // rollout and canary progress.
+  double version_share = 4;
+}
+
+message ServiceWindowStats {
+  int64 requests = 1;
+  double error_rate = 2; // fraction, 0..1
+  double p50_ms = 3;
+  double p95_ms = 4;
+  double p99_ms = 5;
+}
+
+message ReleaseAlertRef {
+  string rule = 1;
+  string fingerprint = 2;
+  google.protobuf.Timestamp firing_at = 3;
+  map<string, string> labels = 4;
+}
+
+// WorkloadFinding is a restart or OOM kill during the after window.
+message WorkloadFinding {
+  string workload = 1;
+  int64 restarts = 2;
+  // The last terminated reason, e.g. "OOMKilled".
+  string last_terminated_reason = 3;
+}
+
+enum ReleaseVerdict {
+  RELEASE_VERDICT_UNSPECIFIED = 0;
+  RELEASE_VERDICT_PASS = 1;
+  // A finding whose policy is fail fired.
+  RELEASE_VERDICT_FAIL = 2;
+  // The after window has not finished, or every service is below min_requests:
+  // not proven good, not proven bad.
+  RELEASE_VERDICT_INCONCLUSIVE = 3;
+}
+
+enum ReleaseFindingCode {
+  RELEASE_FINDING_CODE_UNSPECIFIED = 0;
+  RELEASE_FINDING_CODE_ERROR_RATE = 1;
+  RELEASE_FINDING_CODE_LATENCY = 2;
+  RELEASE_FINDING_CODE_NEW_ISSUE = 3;
+  RELEASE_FINDING_CODE_REGRESSED_ISSUE = 4;
+  RELEASE_FINDING_CODE_ALERT_FIRING = 5;
+  RELEASE_FINDING_CODE_WORKLOAD_RESTARTS = 6;
+}
+
+message ReleaseFinding {
+  ReleaseFindingCode code = 1;
+  // Empty for a finding that is not about one service.
+  string service = 2;
+  // What was measured and the limit it crossed, in the unit the code implies
+  // (a fraction for error_rate, a ratio for latency, a count for the rest).
+  double value = 3;
+  double threshold = 4;
+  // "fail" or "warn".
+  string policy = 5;
+  // One line a person or an agent can act on.
+  string message = 6;
+}
+
+message EffectiveThreshold {
+  string name = 1;
+  string value = 2;
+  // "release_shape" (declared in KCL), "default" or "request".
+  string source = 3;
 }

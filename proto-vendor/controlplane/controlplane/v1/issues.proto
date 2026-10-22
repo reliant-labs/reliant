@@ -1,0 +1,95 @@
+syntax = "proto3";
+
+// EXPERIMENTAL: controlplane.v1 is unstable. See proto/controlplane/v1/README.md.
+
+package controlplane.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/reliant-labs/control-plane/gen/controlplane/v1;controlplanev1";
+
+// Enums and the Issue message shared by IssuesService (the issue inbox) and
+// ObservabilityService.GetReleaseHealth (which lists the issues a release
+// opened or regressed). Declared here, not in either service proto, because
+// this repo forbids service-to-service proto imports: a shared message lives in
+// a plain controlplane/v1 file that both services import.
+//
+// ONE ISSUE MODEL FOR TWO PLATFORMS. A browser issue is a group of frontend
+// errors; a server issue is a group of ERROR-severity logs from a service. Both
+// are one row in one table, told apart by `platform`, and they share the
+// lifecycle: new -> unresolved -> resolved -> regressed, with ignored reachable
+// from any state.
+
+// IssuePlatform is where the errors of an issue were emitted.
+enum IssuePlatform {
+  ISSUE_PLATFORM_UNSPECIFIED = 0;
+  // A browser frontend (RUM). `affected` counts sessions.
+  ISSUE_PLATFORM_BROWSER = 1;
+  // A server-side service. `affected` counts traces.
+  ISSUE_PLATFORM_SERVER = 2;
+}
+
+// IssueStatus is an issue's place in the triage lifecycle.
+enum IssueStatus {
+  ISSUE_STATUS_UNSPECIFIED = 0;
+  // Seen for the first time and not yet looked at.
+  ISSUE_STATUS_NEW = 1;
+  ISSUE_STATUS_UNRESOLVED = 2;
+  ISSUE_STATUS_RESOLVED = 3;
+  // Resolved, then seen again in a version promoted after the resolution.
+  ISSUE_STATUS_REGRESSED = 4;
+  ISSUE_STATUS_IGNORED = 5;
+}
+
+// IssueTrendPoint is one hour of an issue's event count.
+message IssueTrendPoint {
+  // The start of the hour.
+  google.protobuf.Timestamp hour = 1;
+  int64 events = 2;
+}
+
+// Issue is a group of errors that share a fingerprint, in one environment of
+// one service.
+message Issue {
+  string id = 1;
+  IssuePlatform platform = 2;
+  string env_id = 3;
+  string env_name = 4;
+  // service.name for a server issue; the frontend name for a browser one.
+  string service = 5;
+  // The grouping key and the version of the algorithm that produced it. A new
+  // algorithm version starts new issues rather than regrouping old ones.
+  string fingerprint = 6;
+  int32 fp_version = 7;
+  string title = 8;
+  // Where the error was raised: "<function> in <file>".
+  string culprit = 9;
+  string exception_type = 10;
+  IssueStatus status = 11;
+
+  google.protobuf.Timestamp first_seen_at = 12;
+  // service.version (server) or build id (browser) of the first event.
+  string first_version = 13;
+  // The release that version belongs to, when the ledger knows it.
+  string first_release = 14;
+  google.protobuf.Timestamp last_seen_at = 15;
+  string last_version = 16;
+  // Events in the queried window.
+  int64 events = 17;
+  // Distinct sessions (browser) or traces (server) in the queried window.
+  int64 affected = 18;
+  // Hourly event counts across the queried window, oldest first.
+  repeated IssueTrendPoint trend = 19;
+
+  google.protobuf.Timestamp resolved_at = 20;
+  string resolved_version = 21;
+  google.protobuf.Timestamp regressed_at = 22;
+  google.protobuf.Timestamp ignored_until = 23;
+  // The issue this one was merged into, when it was.
+  string merged_into = 24;
+  // False when a browser stack could not be mapped back to source.
+  bool symbolicated = 25;
+  // The row version: send it back as expected_version to update only the state
+  // you read.
+  int32 version = 26;
+}

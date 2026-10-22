@@ -1,0 +1,144 @@
+syntax = "proto3";
+
+package controlplane.v1;
+
+import "buf/validate/validate.proto";
+import "forge/v1/forge.proto";
+import "google/protobuf/struct.proto";
+
+option go_package = "github.com/reliant-labs/control-plane/gen/services/app_database/v1;app_databasev1";
+
+// === AppDatabaseService (controlplane.v1.AppDatabaseService) ===
+//
+// Read-only SQL against an environment's APPLICATION database (the Postgres a
+// forge.ManagedDatabase provisions for the customer's own app), for `forge db
+// query`. It is not control-plane's database and it is not telemetry.
+//
+// The control plane connects from inside the platform with the environment's
+// read-only role, inside a READ ONLY transaction, so a write is refused by
+// Postgres and not by a parser. The statement is also checked lexically first,
+// for a better error message.
+//
+// ADDRESSED BY ENVIRONMENT. The request carries environment_id and no org: the
+// handler loads the environment and checks the caller against the org that owns
+// it, so a caller outside it learns nothing about whether the environment
+// exists.
+//
+// POLICY comes from the environment's recorded release shape (forge.DataAccess
+// db_query): "open" lets anyone who may query run it; "audited" (the default for
+// a real environment) needs a person who holds the db:query grant, plus
+// confirm_env_id equal to the environment and a reason; "deny" refuses
+// everyone. A machine credential needs db:query and is never admitted to an
+// audited environment.
+//
+// EVERY CALL IS AUDITED: an audit_log row with the full SQL and a typed activity
+// event, so a production read shows up in the console's Activity feed.
+//
+// ERRORS:
+//   - InvalidArgument: the guard refused the statement (not one read-only
+//     statement), or a bound is out of range.
+//   - PermissionDenied: a deny environment, a missing db:query grant or scope, a
+//     machine credential on an audited environment, or another org's
+//     environment.
+//   - FailedPrecondition: reason "confirmation_required", when an audited
+//     environment is missing its confirm_env_id or reason; or the environment
+//     has no managed database.
+//   - NotFound: no such environment.
+//   - ResourceExhausted: a query from this principal is already in flight for
+//     the environment, or the rate limit was hit.
+//   - DeadlineExceeded: the statement ran past timeout_ms.
+//   - Unavailable: querying is not configured on this server, or the database
+//     is unreachable.
+service AppDatabaseService {
+  option (forge.v1.service) = {
+    name: "AppDatabaseService"
+    version: "1.0.0"
+    description: "Read-only SQL against an environment's application database"
+  };
+
+  // QueryDatabase runs one read-only statement and returns its rows, bounded by
+  // max_rows and timeout_ms.
+  rpc QueryDatabase(QueryDatabaseRequest) returns (QueryDatabaseResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "query_database"
+        target: {
+          kind: "database"
+          id: "response.database"
+        }
+        env: "environment_id"
+        detail: [
+          "reason",
+          "response.row_count",
+          "response.duration_ms",
+          "response.sql_sha256"
+        ]
+      }
+    };
+  }
+}
+
+message QueryDatabaseRequest {
+  // The control-plane environment id (deploy_environments.id).
+  string environment_id = 1 [
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).string.max_len = 128
+  ];
+  // Which database of the environment. Empty = the environment's only managed
+  // database; an environment with several must name one.
+  string database = 2 [(buf.validate.field).string.max_len = 128];
+  // One read-only statement: SELECT, WITH, TABLE, VALUES, SHOW or EXPLAIN.
+  string sql = 3 [
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).string.max_bytes = 16384
+  ];
+  // Rows returned before the result is cut and `truncated` is set. Default 200,
+  // max 10,000.
+  int32 max_rows = 4 [
+    (buf.validate.field).int32.gte = 0,
+    (buf.validate.field).int32.lte = 10000
+  ];
+  // Statement timeout. Default 5000, max 30000.
+  int32 timeout_ms = 5 [
+    (buf.validate.field).int32.gte = 0,
+    (buf.validate.field).int32.lte = 30000
+  ];
+  // For an audited environment: must equal environment_id. It makes a query
+  // against production a deliberate act (`--confirm-env prod`).
+  optional string confirm_env_id = 6 [(buf.validate.field).string.max_len = 128];
+  // For an audited environment: why. Recorded in the audit row and the activity
+  // feed.
+  optional string reason = 7 [(buf.validate.field).string.max_len = 500];
+}
+
+message QueryDatabaseResponse {
+  repeated DatabaseColumn columns = 1;
+  // In column order. A cell longer than 4 KiB is cut and marked.
+  repeated DatabaseRow rows = 2;
+  int64 row_count = 3;
+  // The row cap or the response-size cap cut the result short.
+  bool truncated = 4;
+  int64 duration_ms = 5;
+  // Which server answered: "ro" (a read replica) or "rw" (the primary).
+  string replica = 6;
+  // The audit_log row that recorded this call.
+  string audit_id = 7;
+  // sha256 of the statement as run, hex. The activity event carries it instead
+  // of the SQL.
+  string sql_sha256 = 8;
+  // The database that answered: the request's, or the environment's only one
+  // when the request left it empty.
+  string database = 9;
+}
+
+message DatabaseColumn {
+  string name = 1;
+  // The Postgres type name, e.g. "int8", "text", "timestamptz".
+  string pg_type = 2;
+}
+
+// DatabaseRow is one result row: one JSON value per column.
+message DatabaseRow {
+  repeated google.protobuf.Value values = 1;
+}

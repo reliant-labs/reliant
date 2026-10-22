@@ -72,6 +72,9 @@ const (
 	// ObservabilityServiceGetObservabilityUsageProcedure is the fully-qualified name of the
 	// ObservabilityService's GetObservabilityUsage RPC.
 	ObservabilityServiceGetObservabilityUsageProcedure = "/controlplane.v1.ObservabilityService/GetObservabilityUsage"
+	// ObservabilityServiceGetReleaseHealthProcedure is the fully-qualified name of the
+	// ObservabilityService's GetReleaseHealth RPC.
+	ObservabilityServiceGetReleaseHealthProcedure = "/controlplane.v1.ObservabilityService/GetReleaseHealth"
 )
 
 // ObservabilityServiceClient is a client for the controlplane.v1.ObservabilityService service.
@@ -152,6 +155,20 @@ type ObservabilityServiceClient interface {
 	// (nothing here queries ClickHouse), so it works when the tenant is
 	// unreachable. Membership-checked on org_id.
 	GetObservabilityUsage(context.Context, *connect.Request[v1.GetObservabilityUsageRequest]) (*connect.Response[v1.GetObservabilityUsageResponse], error)
+	// GetReleaseHealth answers "did this release make things worse": for one
+	// environment and one promotion (default: the environment's current one) it
+	// compares the window before the promotion with the window after, per service,
+	// over weighted server spans, and lists what the release opened: issues first
+	// seen in it, issues it regressed, alerts that opened and are still firing,
+	// and workload restarts. The verdict is PASS, FAIL or INCONCLUSIVE. The
+	// windows, the findings and their default thresholds are defined once, here,
+	// so the console, `forge obs check` and alerting agree.
+	//
+	// scope must name exactly one environment (scope.env_ids has one id);
+	// scope.time_range is ignored: the windows come from the promotion. Reads
+	// issues and alerts as well as telemetry, all under obs:read for a machine
+	// credential.
+	GetReleaseHealth(context.Context, *connect.Request[v1.GetReleaseHealthRequest]) (*connect.Response[v1.GetReleaseHealthResponse], error)
 }
 
 // NewObservabilityServiceClient constructs a client for the controlplane.v1.ObservabilityService
@@ -243,6 +260,12 @@ func NewObservabilityServiceClient(httpClient connect.HTTPClient, baseURL string
 			connect.WithSchema(observabilityServiceMethods.ByName("GetObservabilityUsage")),
 			connect.WithClientOptions(opts...),
 		),
+		getReleaseHealth: connect.NewClient[v1.GetReleaseHealthRequest, v1.GetReleaseHealthResponse](
+			httpClient,
+			baseURL+ObservabilityServiceGetReleaseHealthProcedure,
+			connect.WithSchema(observabilityServiceMethods.ByName("GetReleaseHealth")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -261,6 +284,7 @@ type observabilityServiceClient struct {
 	getWorkload           *connect.Client[v1.GetWorkloadRequest, v1.GetWorkloadResponse]
 	getDashboards         *connect.Client[v1.GetDashboardsRequest, v1.GetDashboardsResponse]
 	getObservabilityUsage *connect.Client[v1.GetObservabilityUsageRequest, v1.GetObservabilityUsageResponse]
+	getReleaseHealth      *connect.Client[v1.GetReleaseHealthRequest, v1.GetReleaseHealthResponse]
 }
 
 // SearchLogs calls controlplane.v1.ObservabilityService.SearchLogs.
@@ -326,6 +350,11 @@ func (c *observabilityServiceClient) GetDashboards(ctx context.Context, req *con
 // GetObservabilityUsage calls controlplane.v1.ObservabilityService.GetObservabilityUsage.
 func (c *observabilityServiceClient) GetObservabilityUsage(ctx context.Context, req *connect.Request[v1.GetObservabilityUsageRequest]) (*connect.Response[v1.GetObservabilityUsageResponse], error) {
 	return c.getObservabilityUsage.CallUnary(ctx, req)
+}
+
+// GetReleaseHealth calls controlplane.v1.ObservabilityService.GetReleaseHealth.
+func (c *observabilityServiceClient) GetReleaseHealth(ctx context.Context, req *connect.Request[v1.GetReleaseHealthRequest]) (*connect.Response[v1.GetReleaseHealthResponse], error) {
+	return c.getReleaseHealth.CallUnary(ctx, req)
 }
 
 // ObservabilityServiceHandler is an implementation of the controlplane.v1.ObservabilityService
@@ -407,6 +436,20 @@ type ObservabilityServiceHandler interface {
 	// (nothing here queries ClickHouse), so it works when the tenant is
 	// unreachable. Membership-checked on org_id.
 	GetObservabilityUsage(context.Context, *connect.Request[v1.GetObservabilityUsageRequest]) (*connect.Response[v1.GetObservabilityUsageResponse], error)
+	// GetReleaseHealth answers "did this release make things worse": for one
+	// environment and one promotion (default: the environment's current one) it
+	// compares the window before the promotion with the window after, per service,
+	// over weighted server spans, and lists what the release opened: issues first
+	// seen in it, issues it regressed, alerts that opened and are still firing,
+	// and workload restarts. The verdict is PASS, FAIL or INCONCLUSIVE. The
+	// windows, the findings and their default thresholds are defined once, here,
+	// so the console, `forge obs check` and alerting agree.
+	//
+	// scope must name exactly one environment (scope.env_ids has one id);
+	// scope.time_range is ignored: the windows come from the promotion. Reads
+	// issues and alerts as well as telemetry, all under obs:read for a machine
+	// credential.
+	GetReleaseHealth(context.Context, *connect.Request[v1.GetReleaseHealthRequest]) (*connect.Response[v1.GetReleaseHealthResponse], error)
 }
 
 // NewObservabilityServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -494,6 +537,12 @@ func NewObservabilityServiceHandler(svc ObservabilityServiceHandler, opts ...con
 		connect.WithSchema(observabilityServiceMethods.ByName("GetObservabilityUsage")),
 		connect.WithHandlerOptions(opts...),
 	)
+	observabilityServiceGetReleaseHealthHandler := connect.NewUnaryHandler(
+		ObservabilityServiceGetReleaseHealthProcedure,
+		svc.GetReleaseHealth,
+		connect.WithSchema(observabilityServiceMethods.ByName("GetReleaseHealth")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/controlplane.v1.ObservabilityService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ObservabilityServiceSearchLogsProcedure:
@@ -522,6 +571,8 @@ func NewObservabilityServiceHandler(svc ObservabilityServiceHandler, opts ...con
 			observabilityServiceGetDashboardsHandler.ServeHTTP(w, r)
 		case ObservabilityServiceGetObservabilityUsageProcedure:
 			observabilityServiceGetObservabilityUsageHandler.ServeHTTP(w, r)
+		case ObservabilityServiceGetReleaseHealthProcedure:
+			observabilityServiceGetReleaseHealthHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -581,4 +632,8 @@ func (UnimplementedObservabilityServiceHandler) GetDashboards(context.Context, *
 
 func (UnimplementedObservabilityServiceHandler) GetObservabilityUsage(context.Context, *connect.Request[v1.GetObservabilityUsageRequest]) (*connect.Response[v1.GetObservabilityUsageResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.ObservabilityService.GetObservabilityUsage is not implemented"))
+}
+
+func (UnimplementedObservabilityServiceHandler) GetReleaseHealth(context.Context, *connect.Request[v1.GetReleaseHealthRequest]) (*connect.Response[v1.GetReleaseHealthResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.ObservabilityService.GetReleaseHealth is not implemented"))
 }

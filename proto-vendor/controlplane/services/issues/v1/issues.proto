@@ -1,0 +1,300 @@
+syntax = "proto3";
+
+package controlplane.v1;
+
+import "buf/validate/validate.proto";
+import "controlplane/v1/issues.proto";
+import "forge/v1/forge.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/reliant-labs/control-plane/gen/services/issues/v1;issuesv1";
+
+// === IssuesService (controlplane.v1.IssuesService) ===
+//
+// The error inbox: the errors of an environment grouped into issues, with the
+// triage lifecycle on top (resolve, ignore, regress). It serves browser and
+// server issues alike (Issue.platform), for the console's Errors view, for
+// `forge obs issues|issue|resolve`, and for the release-health check.
+//
+// ORG-SCOPED. A list carries scope.org_id, which the handler verifies the caller
+// is a member of before reading anything. A call that names one issue does not
+// carry an org: the handler loads the issue and checks the caller against the
+// org that owns it, so an issue id says nothing about whether it exists to a
+// caller outside that org.
+//
+// AUTHORIZATION. A person: org membership. A machine credential: it must act for
+// that org and carry obs:read for the reads and obs:triage for
+// UpdateIssueStatus, and its env binding, if any, must cover the issue's
+// environment. Triage is its own scope on purpose: a read-only token must not
+// be able to silence an issue.
+//
+// ERRORS: InvalidArgument (bad range, unknown status), PermissionDenied (not a
+// member / a credential without the scope or for another org), NotFound (no
+// such issue), Aborted (expected_version is stale), FailedPrecondition
+// (observability is not set up for the org), Unavailable (issues are not
+// configured on this server).
+service IssuesService {
+  option (forge.v1.service) = {
+    name: "IssuesService"
+    version: "1.0.0"
+    description: "Error issues: grouping, triage lifecycle and release attribution"
+  };
+
+  // ListIssues returns the scope's issues, filtered, a page at a time. The
+  // counts and the trend are over scope.time_range (default: the last 24 hours).
+  //
+  // forge:custom — an issue is not an entity of the generic CRUD kit: its rows
+  // are written by the issues worker and read through the grouping queries.
+  rpc ListIssues(ListIssuesRequest) returns (ListIssuesResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // GetIssue returns one issue with its latest event, its symbolicated frames,
+  // the per-version breakdown, the issues that tend to occur with it, and the
+  // release it first appeared in.
+  //
+  // forge:custom — see ListIssues.
+  rpc GetIssue(GetIssueRequest) returns (GetIssueResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // ListIssueEvents returns the individual events of one issue, newest first.
+  rpc ListIssueEvents(ListIssueEventsRequest) returns (ListIssueEventsResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // UpdateIssueStatus resolves, ignores or reopens an issue. A person or a
+  // machine credential with obs:triage.
+  //
+  // The event the call records is the specific transition (resolve, ignore or
+  // unresolve); the declared verb is the fallback the activity interceptor
+  // writes when the handler records none.
+  rpc UpdateIssueStatus(UpdateIssueStatusRequest) returns (UpdateIssueStatusResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      activity: {
+        verb: "triage"
+        target: {
+          kind: "issue"
+          id: "issue_id"
+          label: "response.issue.title"
+        }
+        env: "env_id"
+        detail: ["status"]
+        writer: ACTIVITY_WRITER_HANDLER
+      }
+    };
+  }
+}
+
+// IssueTimeRange is a half-open range [start, end). Both ends are required when
+// the range is present, and end must be after start.
+message IssueTimeRange {
+  google.protobuf.Timestamp start = 1 [(buf.validate.field).required = true];
+  google.protobuf.Timestamp end = 2 [(buf.validate.field).required = true];
+}
+
+// IssueScope is console contract K1 as this service reads it. Field numbers
+// match ObservabilityService's QueryScope, so the console sends the one scope it
+// builds; the telemetry-only fields (env_id, filters) are reserved.
+message IssueScope {
+  reserved 2, 7;
+  reserved "env_id", "filters";
+  // The org whose issues are read. The caller MUST be a member; verified
+  // server-side, never assumed.
+  string org_id = 1 [(buf.validate.field).string.min_len = 1];
+  // Narrow to these services. Empty = every service.
+  repeated string services = 3 [(buf.validate.field).repeated.max_items = 50];
+  // The window the counts and the trend are over. Unset = the last 24 hours.
+  // Max 30 days.
+  IssueTimeRange time_range = 4;
+  // The forge project whose environments are in scope. Unset = not narrowed by
+  // project; set to "" = the project-less environments.
+  optional string project_id = 5 [(buf.validate.field).string.max_len = 128];
+  // Control-plane environment ids (deploy_environments.id). Empty = every
+  // environment of the org (of the project, when project_id is set).
+  repeated string env_ids = 6 [(buf.validate.field).repeated.max_items = 50];
+}
+
+enum IssueSort {
+  // Most recently seen first.
+  ISSUE_SORT_UNSPECIFIED = 0;
+  ISSUE_SORT_LAST_SEEN_DESC = 1;
+  ISSUE_SORT_FIRST_SEEN_DESC = 2;
+  ISSUE_SORT_EVENTS_DESC = 3;
+  ISSUE_SORT_AFFECTED_DESC = 4;
+}
+
+message ListIssuesRequest {
+  IssueScope scope = 1 [(buf.validate.field).required = true];
+  // Only issues in one of these states. Empty = new, unresolved and regressed
+  // (the open ones).
+  repeated IssueStatus statuses = 2 [
+    (buf.validate.field).repeated.max_items = 5,
+    (buf.validate.field).repeated.items.enum.defined_only = true
+  ];
+  optional IssuePlatform platform = 3 [(buf.validate.field).enum.defined_only = true];
+  // Only issues first seen in this release version.
+  optional string first_seen_release = 4 [(buf.validate.field).string.max_len = 256];
+  // Only issues first seen at or after this promotion: "what did this release
+  // open".
+  optional string since_promotion_id = 5 [(buf.validate.field).string.max_len = 128];
+  // Substring of the title or the culprit.
+  optional string text = 6 [(buf.validate.field).string.max_len = 256];
+  IssueSort sort = 7 [(buf.validate.field).enum.defined_only = true];
+  // Rows per page. Default 50, max 100.
+  int32 page_size = 8 [
+    (buf.validate.field).int32.gte = 0,
+    (buf.validate.field).int32.lte = 100
+  ];
+  // next_page_token from the previous page; valid only with the same request.
+  string page_token = 9 [(buf.validate.field).string.max_len = 512];
+}
+
+message ListIssuesResponse {
+  repeated Issue issues = 1;
+  // Empty on the last page.
+  string next_page_token = 2;
+}
+
+message GetIssueRequest {
+  string issue_id = 1 [(buf.validate.field).string.min_len = 1];
+  // The window the counts and the trend are over. Unset = the last 24 hours.
+  // Max 30 days.
+  IssueTimeRange time_range = 2;
+}
+
+message GetIssueResponse {
+  Issue issue = 1;
+  // The newest event, or unset when it has aged out of retention.
+  IssueEvent latest_event = 2;
+  // The latest event's stack, innermost frame first.
+  repeated IssueFrame frames = 3;
+  // Events and affected count per version, newest version first.
+  repeated IssueVersionBreakdown by_version = 4;
+  // Issues that fired in the same traces or sessions, most frequent first (max
+  // 10).
+  repeated string co_occurring_issue_ids = 5;
+  // The release the issue first appeared in. Unset when the version is not a
+  // release the ledger knows.
+  IssueReleaseRef first_release = 6;
+}
+
+// IssueEvent is one occurrence of an issue.
+message IssueEvent {
+  google.protobuf.Timestamp timestamp = 1;
+  string trace_id = 2;
+  string span_id = 3;
+  string service_version = 4;
+  string message = 5;
+  // An allowlisted, bounded subset of the event's attributes. Never a secret.
+  map<string, string> attributes = 6;
+  // Browser issues only.
+  string session_id = 7;
+  string url_path = 8;
+}
+
+// IssueFrame is one stack frame. For a browser issue, symbolicated frames are
+// source locations; unsymbolicated ones keep the bundle's.
+message IssueFrame {
+  string function = 1;
+  string file = 2;
+  int32 line = 3;
+  int32 column = 4;
+  // False for a library or runtime frame.
+  bool in_app = 5;
+}
+
+message IssueVersionBreakdown {
+  string version = 1;
+  int64 events = 2;
+  int64 affected = 3;
+  google.protobuf.Timestamp first_seen_at = 4;
+  google.protobuf.Timestamp last_seen_at = 5;
+}
+
+// IssueReleaseRef names the release an issue first appeared in and what changed
+// in it.
+message IssueReleaseRef {
+  string version = 1;
+  string git_commit = 2;
+  // The commit range the release deployed, "<from>..<to>", when recorded.
+  string commit_range = 3;
+  google.protobuf.Timestamp promoted_at = 4;
+}
+
+message ListIssueEventsRequest {
+  // The issue whose events are listed. Required: this is the parent, not a filter.
+  string issue_id = 1 [(buf.validate.field).required = true];
+  // Default: from the issue's first to its last event. Max 7 days.
+  IssueTimeRange time_range = 2;
+  // Rows per page. Default 50, max 100.
+  int32 page_size = 3 [
+    (buf.validate.field).int32.gte = 0,
+    (buf.validate.field).int32.lte = 100
+  ];
+  string page_token = 4 [(buf.validate.field).string.max_len = 512];
+}
+
+message ListIssueEventsResponse {
+  // Newest first.
+  repeated IssueEvent events = 1;
+  string next_page_token = 2;
+}
+
+// IssueStatusChange is what a caller may set. The other IssueStatus values are
+// reached by the worker (new, regressed), never by a request.
+enum IssueStatusChange {
+  ISSUE_STATUS_CHANGE_UNSPECIFIED = 0;
+  ISSUE_STATUS_CHANGE_RESOLVED = 1;
+  ISSUE_STATUS_CHANGE_IGNORED = 2;
+  ISSUE_STATUS_CHANGE_UNRESOLVED = 3;
+}
+
+enum IssueResolveKind {
+  ISSUE_RESOLVE_KIND_UNSPECIFIED = 0;
+  // Resolved as of now.
+  ISSUE_RESOLVE_KIND_NOW = 1;
+  // Resolved against the next release promoted into the environment.
+  ISSUE_RESOLVE_KIND_NEXT_RELEASE = 2;
+  // Resolved in a named version.
+  ISSUE_RESOLVE_KIND_VERSION = 3;
+}
+
+// IssueResolveIn says when a resolve takes effect, and so which events reopen
+// the issue.
+message IssueResolveIn {
+  IssueResolveKind kind = 1 [(buf.validate.field).enum.defined_only = true];
+  // Required when kind is VERSION.
+  string version = 2 [(buf.validate.field).string.max_len = 256];
+}
+
+message UpdateIssueStatusRequest {
+  string issue_id = 1 [(buf.validate.field).string.min_len = 1];
+  // The environment the issue is in. Checked against the issue's own.
+  string env_id = 2 [(buf.validate.field).string.min_len = 1];
+  IssueStatusChange status = 3 [(buf.validate.field).enum = {
+    defined_only: true
+    not_in: [0]
+  }];
+  // With RESOLVED: when the resolve takes effect. Unset = now.
+  optional IssueResolveIn resolve_in = 4;
+  // With IGNORED: when the issue is un-ignored. Unset = until unignored.
+  optional google.protobuf.Timestamp ignored_until = 5;
+  // The Issue.version the caller read. Non-zero and stale = Aborted. Zero = do
+  // not check.
+  int32 expected_version = 6 [(buf.validate.field).int32.gte = 0];
+}
+
+message UpdateIssueStatusResponse {
+  Issue issue = 1;
+}
