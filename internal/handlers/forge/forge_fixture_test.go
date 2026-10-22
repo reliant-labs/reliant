@@ -22,7 +22,7 @@ const (
 // reaches a daemon.
 func newOwnedProjectService(t *testing.T) *forge.Service {
 	t.Helper()
-	store := &forge.StubRepo{
+	store := &forge.MockRepository{
 		GetProjectWithUserCheckFunc: func(_ context.Context, id, userID string) (*db.Project, error) {
 			if id == ownProjectID && userID == "test-user" {
 				return &db.Project{ID: id, UserID: userID, Name: "proj", Path: "/work"}, nil

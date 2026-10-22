@@ -60,7 +60,7 @@ type fixture struct {
 // (GetProjectScenariosJSON) is not on the StubRepo, so a row that reaches a
 // project scenario is answered Internal, as any repository that cannot read
 // it is.
-func newScenarioRepo(f *fixture) *scenario.StubRepo {
+func newScenarioRepo(f *fixture) *scenario.MockRepository {
 	scenarios := map[string]*db.WorkflowScenario{
 		ownScenarioID: {
 			ID: ownScenarioID, UserID: "test-user", Name: "Own scenario", Events: fixtureScenario,
@@ -72,7 +72,7 @@ func newScenarioRepo(f *fixture) *scenario.StubRepo {
 		},
 	}
 	draft := &db.WorkflowDraft{ID: ownWorkflowDraft, UserID: "test-user", Slug: ownWorkflowSlug, Definition: fixtureWorkflow}
-	return &scenario.StubRepo{
+	return &scenario.MockRepository{
 		GetProjectWithUserCheckFunc: func(_ context.Context, id, userID string) (*db.Project, error) {
 			if id == ownProjectID && userID == "test-user" {
 				return &db.Project{ID: id, UserID: userID, Path: "/home/test/project"}, nil

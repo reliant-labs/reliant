@@ -14,8 +14,8 @@ import (
 // emptyRunRepo is a repository holding no run, session or project, answering
 // each lookup as the store does for a missing row: a run or a session is
 // NotFound, and the caller has no projects.
-func emptyRunRepo() *run.StubRepo {
-	return &run.StubRepo{
+func emptyRunRepo() *run.MockRepository {
+	return &run.MockRepository{
 		GetWorkflowFunc: func(_ context.Context, id string) (*db.Workflow, error) {
 			return nil, fmt.Errorf("%w: %s", svcerr.NotFound("workflow"), id)
 		},

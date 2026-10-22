@@ -26,7 +26,7 @@ const (
 // newTaskRepo returns a StubRepo answering the fixture's chat, thread, plan
 // and task lookups and accepting refetch notifications. Rows program the
 // writes they reach.
-func newTaskRepo() *task.StubRepo {
+func newTaskRepo() *task.MockRepository {
 	chats := map[string]*db.Chat{
 		ownChatID:    {ID: ownChatID, UserID: "test-user"},
 		"chat-other": {ID: "chat-other", UserID: "someone-else"},
@@ -43,7 +43,7 @@ func newTaskRepo() *task.StubRepo {
 		ownTaskID:   {ID: ownTaskID, PlanID: ownPlanID, Title: "Own task", Position: 2},
 		otherTaskID: {ID: otherTaskID, PlanID: otherPlanID, Title: "Other task"},
 	}
-	return &task.StubRepo{
+	return &task.MockRepository{
 		GetChatFunc: func(_ context.Context, id string) (*db.Chat, error) {
 			if c, ok := chats[id]; ok {
 				return c, nil

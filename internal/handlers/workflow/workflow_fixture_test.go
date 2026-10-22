@@ -24,12 +24,12 @@ func callerDraft(t *testing.T, slug string) *db.WorkflowDraft {
 // draftsRepo is a store holding these drafts of the harness caller, in a
 // project p-1 the caller owns. A slug it does not hold is absent (nil, nil),
 // as the repository answers; any other project is not found.
-func draftsRepo(drafts ...*db.WorkflowDraft) *workflow.StubRepo {
+func draftsRepo(drafts ...*db.WorkflowDraft) *workflow.MockRepository {
 	bySlug := map[string]*db.WorkflowDraft{}
 	for _, d := range drafts {
 		bySlug[d.Slug] = d
 	}
-	return &workflow.StubRepo{
+	return &workflow.MockRepository{
 		GetProjectWithUserCheckFunc: func(_ context.Context, id, userID string) (*db.Project, error) {
 			if id == "p-1" && userID == "test-user" {
 				return &db.Project{ID: id, UserID: userID, Name: "proj"}, nil

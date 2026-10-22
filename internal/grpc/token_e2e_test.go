@@ -301,8 +301,10 @@ func serveTokenService(t *testing.T, authority tokenauthority.Authority, jwtPubP
 	})
 	require.NoError(t, err)
 	mux := http.NewServeMux()
+	// svcerr.Interceptor innermost, as serverkit.NewChain installs it in
+	// production: it gives the handler's svcerr errors their Connect code.
 	path, handler := reliantv1connect.NewTokenServiceHandler(tokenService,
-		connect.WithInterceptors(authInterceptor))
+		connect.WithInterceptors(authInterceptor, svcerr.Interceptor()))
 	mux.Handle(path, handler)
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)

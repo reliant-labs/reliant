@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/emptypb"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/grpc/interceptors"
 )
@@ -147,7 +148,7 @@ func admits(t *testing.T, domains []string, email string) bool {
 		func(context.Context, connect.AnyRequest) (connect.AnyResponse, error) { return nil, nil })
 	_, err := call(ctx, connect.NewRequest(&emptypb.Empty{}))
 	if err != nil {
-		require.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err), "unexpected whitelist error: %v", err)
+		require.Equal(t, connect.CodePermissionDenied, svcerr.Code(err), "unexpected whitelist error: %v", err)
 		return false
 	}
 	return true

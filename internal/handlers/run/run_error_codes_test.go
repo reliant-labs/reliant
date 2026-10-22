@@ -45,7 +45,7 @@ func TestRunRPCs_RepositoryFailureCodes(t *testing.T) {
 	for _, tc := range readFailures {
 		t.Run("GetRun: "+tc.name, func(t *testing.T) {
 			t.Parallel()
-			svc := run.NewTestRun(t, run.WithRunDeps(run.Deps{Repo: &run.StubRepo{
+			svc := run.NewTestRun(t, run.WithRunDeps(run.Deps{Repo: &run.MockRepository{
 				GetWorkflowFunc: func(context.Context, string) (*db.Workflow, error) { return nil, tc.err },
 			}}))
 			_, err := svc.GetRun(run.AuthedContext(t), connect.NewRequest(&pb.GetRunRequest{RunId: "run-1"}))
@@ -53,7 +53,7 @@ func TestRunRPCs_RepositoryFailureCodes(t *testing.T) {
 		})
 		t.Run("ListRuns: "+tc.name, func(t *testing.T) {
 			t.Parallel()
-			svc := run.NewTestRun(t, run.WithRunDeps(run.Deps{Repo: &run.StubRepo{
+			svc := run.NewTestRun(t, run.WithRunDeps(run.Deps{Repo: &run.MockRepository{
 				ListRunsFunc: func(context.Context, db.RunListFilters) ([]*db.RunListItem, bool, error) { return nil, false, tc.err },
 			}}))
 			_, err := svc.ListRuns(run.AuthedContext(t), connect.NewRequest(&pb.ListRunsRequest{}))
@@ -67,7 +67,7 @@ func TestRunRPCs_RepositoryFailureCodes(t *testing.T) {
 func TestGetRun_ForeignRunIsNotFound(t *testing.T) {
 	t.Parallel()
 
-	svc := run.NewTestRun(t, run.WithRunDeps(run.Deps{Repo: &run.StubRepo{
+	svc := run.NewTestRun(t, run.WithRunDeps(run.Deps{Repo: &run.MockRepository{
 		GetWorkflowFunc: func(_ context.Context, id string) (*db.Workflow, error) {
 			return &db.Workflow{ID: id, ChatID: "chat-1"}, nil
 		},
@@ -87,7 +87,7 @@ func TestRunService_ErrorsOverTheWire(t *testing.T) {
 	t.Parallel()
 
 	repoErr := errors.New("dsn=postgres://u:secret@h")
-	_, client := run.NewTestRunServer(t, run.WithRunDeps(run.Deps{Repo: &run.StubRepo{
+	_, client := run.NewTestRunServer(t, run.WithRunDeps(run.Deps{Repo: &run.MockRepository{
 		GetWorkflowFunc: func(_ context.Context, id string) (*db.Workflow, error) {
 			switch id {
 			case "missing":

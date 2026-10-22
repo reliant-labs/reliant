@@ -27,7 +27,7 @@ const (
 // newPlanRepo returns a StubRepo answering the fixture's chat, thread and
 // plan lookups and accepting refetch notifications. Rows program the writes
 // they reach.
-func newPlanRepo() *plan.StubRepo {
+func newPlanRepo() *plan.MockRepository {
 	chats := map[string]*db.Chat{
 		ownChatID:   {ID: ownChatID, UserID: "test-user"},
 		otherChatID: {ID: otherChatID, UserID: "someone-else"},
@@ -40,7 +40,7 @@ func newPlanRepo() *plan.StubRepo {
 		ownPlanID:   {ID: ownPlanID, ThreadID: ownThreadID, Title: "Own plan"},
 		otherPlanID: {ID: otherPlanID, ThreadID: otherThreadID, Title: "Other plan"},
 	}
-	return &plan.StubRepo{
+	return &plan.MockRepository{
 		GetChatFunc: func(_ context.Context, id string) (*db.Chat, error) {
 			if c, ok := chats[id]; ok {
 				return c, nil

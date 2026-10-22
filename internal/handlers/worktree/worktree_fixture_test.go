@@ -23,7 +23,7 @@ const (
 // project p-1, which holds the worktree w-1 and its main checkout w-main.
 // w-other is in another user's project. Every other worktree or project is
 // not found, as GetWorktree and GetProjectWithUserCheck answer.
-func ownedWorktreeRepo(t *testing.T) *worktree.StubRepo {
+func ownedWorktreeRepo(t *testing.T) *worktree.MockRepository {
 	t.Helper()
 	active := int32(reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE)
 	worktrees := map[string]db.Worktree{
@@ -40,7 +40,7 @@ func ownedWorktreeRepo(t *testing.T) *worktree.StubRepo {
 			BaseBranch: "main", Path: "/elsewhere", Status: active,
 		},
 	}
-	return &worktree.StubRepo{
+	return &worktree.MockRepository{
 		GetWorktreeFunc: func(_ context.Context, id string) (*db.Worktree, error) {
 			if w, ok := worktrees[id]; ok {
 				return &w, nil

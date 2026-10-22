@@ -30,7 +30,7 @@
 
 name: reliant
 module_path: github.com/reliant-labs/reliant
-forge_version: v0.1.47-0.20261022115939-1be0d294d2af
+forge_version: v0.1.47-0.20261022144359-12051ac8bdd8
 harness: reliant
 config:
     # Every process setting is typed config (proto/reliant/config/v1, read through
@@ -57,6 +57,12 @@ lint:
         # serverkit.OpenDB); the test-only provisioning pools carry reasons.
         # contract-uninstrumented is done: every construction outside
         # compose.go calls the package's generated NewInstrumented.
+        # P7a (research/forge-migration/11-svcerr-plan.md §4 "Z"): every
+        # handler error goes through svcerr, so a per-service Connect-code
+        # mapping helper or a hand-built connect.NewError in internal/handlers
+        # fails the build. Both ship at warn; reliant has no findings left.
+        forgeconv-no-handler-error-mapping: error
+        forgeconv-handler-connect-error: error
     tracing:
         # internal/logging's ctx-less helpers write through slog without the
         # request's context, so their lines carry no trace_id. Listing them

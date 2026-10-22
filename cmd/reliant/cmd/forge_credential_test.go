@@ -16,9 +16,11 @@ import (
 	"testing"
 	"time"
 
+	"connectrpc.com/connect"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/reliant-labs/forge/pkg/cloudcred"
 	"github.com/reliant-labs/forge/pkg/credentials"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/spf13/cobra"
 
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
@@ -91,7 +93,10 @@ func serveReliantAPI(t *testing.T, controlPlane string) *reliantAPI {
 		t.Fatal(err)
 	}
 	mux := http.NewServeMux()
-	path, handler := reliantv1connect.NewTokenServiceHandler(tokenService)
+	// svcerr.Interceptor ends every production chain (serverkit.NewChain): it
+	// is what gives the handler's svcerr errors their Connect code on the wire.
+	path, handler := reliantv1connect.NewTokenServiceHandler(tokenService,
+		connect.WithInterceptors(svcerr.Interceptor()))
 	mux.Handle(path, handler)
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)

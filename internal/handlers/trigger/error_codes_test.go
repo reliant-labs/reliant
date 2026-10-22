@@ -34,7 +34,7 @@ func TestTriggerStoreErrorCodes(t *testing.T) {
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			repo := &StubRepo{GetTriggerFunc: func(context.Context, string) (*core.Trigger, error) { return nil, tc.err }}
+			repo := &MockRepository{GetTriggerFunc: func(context.Context, string) (*core.Trigger, error) { return nil, tc.err }}
 			svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: repo}), WithPlaceholderDeps())
 			_, err := svc.GetTrigger(AuthedContext(t), connect.NewRequest(&reliantv1.GetTriggerRequest{Id: "t-1"}))
 			require.Error(t, err)
@@ -54,7 +54,7 @@ func TestTriggerStoreErrorCodes(t *testing.T) {
 func TestTriggerErrorsOnTheWire(t *testing.T) {
 	t.Parallel()
 
-	repo := &StubRepo{GetTriggerFunc: func(_ context.Context, id string) (*core.Trigger, error) {
+	repo := &MockRepository{GetTriggerFunc: func(_ context.Context, id string) (*core.Trigger, error) {
 		switch id {
 		case "theirs":
 			return &core.Trigger{ID: id, UserID: "someone-else"}, nil

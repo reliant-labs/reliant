@@ -21,7 +21,7 @@ from main, with reliant `replace`d onto it:
 
 | Step | Result |
 |---|---|
-| `git mv cmd/reliant/commands cmd/reliant/cmd`, `package cmd`, fix `main.go` + `tools/docgen/cli` | `go build ./cmd/... ./tools/docgen/...` passes. The only other references are comments: `release.yml:476`, `workflowref/one_rule_test.go:33-34` (file paths in a table, which **are** load-bearing), `daemonruntime/cmd_forge.go:50`, `runenv_test.go:90`, `tokenauthority/authority_test.go:52`, `pkg/config/build_defaults_test.go:62`, `proto/config/v1/cli_config.proto:38`. |
+| `git mv cmd/reliant/commands cmd/reliant/cmd`, `package cmd`, fix `main.go` + `tools/docgen/cli` | `go build ./cmd/... ./tools/docgen/...` passes. The only other references are comments: `release.yml:476`, `workflowref/one_rule_test.go:33-34` (file paths in a table, which **are** load-bearing), `daemonruntime/cmd_forge.go:50`, `runenv_test.go:90`, `tokenauthority/authority_test.go:52`, `pkg/config/build_defaults_test.go:62`, `proto/reliant/config/v1/cli_config.proto:38`. |
 | `forge generate` on the moved tree, no roots | Config gen now detects the primary binary, so it **scaffolds `cmd/reliant/cmd/serve.go`** (the graph `runRoot` template), plus `metrics.go`, `internal/metrics/metrics.go`, `internal/app/{providers,auth,login_broker}.go`. It also changes `pkg/config/config_gen.go` to emit `type Config = configv1.ReliantConfig`, which collides with the hand-written `pkg/config/config.go` (`type Config struct{}`). Once `serve.go` exists, `stepInternalAppComposition` runs, and **generate fails: 104 `Deps` fields with no provider** across all 33 handler components. |
 | Same, plus `internal/app/roots.go` declaring only `//forge:root gateway command=server,gateway` | **Still 104 missing providers**, including `Account.Deps.SQL`, `Chat.Deps.Temporal` and so on, none of which the gateway reaches. Resolution covers every discovered node, not a root's closure (§3 F3). |
 | The scaffolded `serve.go`'s `serverkitConfig` | Reads `cfg.Port`, `cfg.OtlpEndpoint`, `cfg.PprofAddr`, `cfg.Environment`, `cfg.PreStopDelay` and `cfg.ShutdownTimeout` off `*config.Config` = `ReliantConfig`, which has none of them (it has `log`, `runtime`, `storage_reaper`). `ConfigFields` is the union over **every** config message. It doesn't compile (§3 F1). |
@@ -242,14 +242,14 @@ Your order (a)→(b)→(c)→(d)→(e) holds with **three changes**:
 3. Forge fixes F1–F5 land before R3 (§3).
 
 ### R1: shared server blocks into a `server` subtree config *(can start now)*
-- **What:** `proto/config/v1/server_config.proto` gets
+- **What:** `proto/reliant/config/v1/server_config.proto` gets
   `message ServerProcessConfig { option (forge.v1.binary_config) = {binary: "reliant", subtrees: [{path: ["server"]}]}; DatabaseConfig database = …; NatsConfig nats; TemporalConfig temporal; ControlPlaneConfig control_plane; ServerTLSConfig tls; ObservabilityConfig observability; SentryConfig sentry; AnalyticsConfig analytics; LLMConfig llm; PreviewConfig preview; IntegrationsConfig integrations; string data_dir; string streaming_driver; }`.
   Delete those fields from `ApiServerConfig`, `WorkerConfig` and `GatewayConfig` (pre-launch, no
   compat), and **reserve their tags**. Role-specific fields stay where they are: ports and their
   per-role defaults (`HEALTH_PORT` 8081/8081/8080, which control-plane pins via
   `lib/env.k:402`), `bind_address`, `pprof_*`, `drain` (the worker's budget is allowed to
   differ), and the api's auth/CORS/upload/etc.
-- **Where:** `proto/config/v1/{server,api_server,worker,gateway}_config.proto`, `pkg/config`
+- **Where:** `proto/reliant/config/v1/{server,api_server,worker,gateway}_config.proto`, `pkg/config`
   (generated), `cmd/reliant/commands/server.go` (the loaders read
   `config.LoadServerProcessConfig`), and the `*_config_test.go` files in `cmd/reliant/commands`.
 - **Invariant:** every env var name, flag name and default is unchanged. Flags become persistent
@@ -409,7 +409,7 @@ Your order (a)→(b)→(c)→(d)→(e) holds with **three changes**:
   as fields — the api's daemon router, the update feed, streaming hub, Temporal client,
   the debug server — and last `Runtime`, `Settings` and `APISettings`, built first).
   `PlanAPI().Stop()` is pinned by `TestAPIStopsTakingCallsFirst`: today's eleven nodes
-  verbatim (forge's names: `api_listener` … `payload_gc`, `git_hub_access_loop` for
+  verbatim (forge's names: `api_listener` … `payload_gc`, `github_access_loop` for
   `github-access`), then api_daemon_router, chat_update_hub, user_update_hub,
   streaming_hub, nats_conn, temporal_client, api_debug_server, db_repo, probe_listener —
   today's deferred closes but for the streaming hub now closing before NATS (its first

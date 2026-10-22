@@ -18,7 +18,7 @@ import (
 func TestListProjectDaemons_Generated(t *testing.T) {
 	t.Parallel()
 
-	store := &project.StubRepo{
+	store := &project.MockRepository{
 		ListProjectsFunc: func(_ context.Context, f db.ProjectFilters) ([]*db.Project, error) {
 			if f.UserID != "test-user" {
 				return nil, nil

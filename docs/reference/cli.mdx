@@ -57,6 +57,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge cloud`](#reliant-forge-cloud) | Talk to the hosted control plane an environment declares |
 | [`reliant forge cloud identity`](#reliant-forge-cloud-identity) | Inspect managed identity and administer its users |
 | [`reliant forge cloud identity delete`](#reliant-forge-cloud-identity-delete) | Delete a user's account (org admin; asks first) |
+| [`reliant forge cloud identity export`](#reliant-forge-cloud-identity-export) | Export the identity's users now and print a short-lived download URL (identity:manage) |
 | [`reliant forge cloud identity invite`](#reliant-forge-cloud-identity-invite) | Create an account (or grant roles) and issue a password-set code (org admin) |
 | [`reliant forge cloud identity lock`](#reliant-forge-cloud-identity-lock) | Block a user from signing in (org admin) |
 | [`reliant forge cloud identity reset`](#reliant-forge-cloud-identity-reset) | Issue a user a one-time password-set code (org admin) |
@@ -65,7 +66,6 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge cloud identity status`](#reliant-forge-cloud-identity-status) | Show managed-identity state, issuer and delivery metadata |
 | [`reliant forge cloud identity unlock`](#reliant-forge-cloud-identity-unlock) | Let a locked user sign in again (org admin) |
 | [`reliant forge cloud identity users`](#reliant-forge-cloud-identity-users) | List one page of users and declared roles (no credentials) |
-| [`reliant forge cloud releases`](#reliant-forge-cloud-releases) | List releases from the hosted control plane |
 | [`reliant forge cloud status`](#reliant-forge-cloud-status) | Show the endpoint and credential source for an environment |
 | [`reliant forge cloud token`](#reliant-forge-cloud-token) | Mint, list and revoke ORG automation tokens (the CI deploy credential) |
 | [`reliant forge cloud token create`](#reliant-forge-cloud-token-create) | Mint an org automation token; its secret is printed ONCE |
@@ -148,6 +148,10 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge env new`](#reliant-forge-env-new) | Scaffold a new deploy environment from an existing one |
 | [`reliant forge env options`](#reliant-forge-env-options) | List the render options an environment's KCL declares |
 | [`reliant forge env ps`](#reliant-forge-env-ps) | List every forge stack running on this machine, across all projects |
+| [`reliant forge env releases`](#reliant-forge-env-releases) | What was released to an environment, when, and what changed |
+| [`reliant forge env releases at`](#reliant-forge-env-releases-at) | Which release was live at a moment, and the releases either side |
+| [`reliant forge env releases list`](#reliant-forge-env-releases-list) | The release timeline of an environment, newest first |
+| [`reliant forge env releases show`](#reliant-forge-env-releases-show) | One release in full: commits and PRs, what changed, migrations, gates, health |
 | [`reliant forge env render`](#reliant-forge-env-render) | Print the Kubernetes objects deploy/kcl/`<env>`/ renders, with the cluster each lands on |
 | [`reliant forge env secrets`](#reliant-forge-env-secrets) | Project the env's secret_provider into the cluster |
 | [`reliant forge env secrets adopt`](#reliant-forge-env-secrets-adopt) | Hand a verified, store-backed Secret to ESO (strip the stale last-applied annotation) |
@@ -163,6 +167,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge fix composition-graph`](#reliant-forge-fix-composition-graph) | Move a project off Infra / NewComponents / ServeSpec onto the composition graph |
 | [`reliant forge fix config-proto-package`](#reliant-forge-fix-config-proto-package) | Move the config protos to proto/`<project>`/config/v1, package `<project>`.config.v1 (no shared config.v1 since v0.1.47) |
 | [`reliant forge fix connect-errors`](#reliant-forge-fix-connect-errors) | Rewrite fixed-message connect.NewError calls to pkg/svcerr, wire-identically, and list the rest |
+| [`reliant forge fix harness-mocks`](#reliant-forge-fix-harness-mocks) | Rename the harness's Stub`<Field>` doubles to the forge mocks that replace them (one double per interface since v0.1.47) |
 | [`reliant forge fix narrow-deps`](#reliant-forge-fix-narrow-deps) | Declare the interfaces a component's Deps actually use, and retype its fields to them |
 | [`reliant forge fix operatorkit`](#reliant-forge-fix-operatorkit) | Rename lifecyclekit.Run / Controller / Options to operatorkit (moved in v0.1.46) |
 | [`reliant forge fix tx-isolation`](#reliant-forge-fix-tx-isolation) | Spell out every pkg/orm transaction's isolation level and attempt budget (no default since v0.1.47) |
@@ -190,6 +195,11 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge obs dashboards`](#reliant-forge-obs-dashboards) | Work with the dashboards a release carries |
 | [`reliant forge obs dashboards check`](#reliant-forge-obs-dashboards-check) | Validate the dashboards a release bundle would carry |
 | [`reliant forge obs endpoints`](#reliant-forge-obs-endpoints) | The slowest or most failing endpoints |
+| [`reliant forge obs issue`](#reliant-forge-obs-issue) | Everything needed to fix one issue; resolve, ignore and unresolve triage it |
+| [`reliant forge obs issue ignore`](#reliant-forge-obs-issue-ignore) | Silence an issue, until a time or until unignored |
+| [`reliant forge obs issue resolve`](#reliant-forge-obs-issue-resolve) | Mark an issue resolved, now or in a release |
+| [`reliant forge obs issue unresolve`](#reliant-forge-obs-issue-unresolve) | Reopen a resolved or ignored issue |
+| [`reliant forge obs issues`](#reliant-forge-obs-issues) | Grouped errors: what is failing, how often, since which release |
 | [`reliant forge obs logs`](#reliant-forge-obs-logs) | Search and tail logs |
 | [`reliant forge obs metrics`](#reliant-forge-obs-metrics) | List and query metrics; print the declared schema |
 | [`reliant forge obs metrics declared`](#reliant-forge-obs-metrics-declared) | Print the metrics a service declares: name, type, unit, attributes, stability |
@@ -1480,7 +1490,6 @@ reliant forge cloud
 | Command | Description |
 |---------|-------------|
 | [`identity`](#reliant-forge-cloud-identity) | Inspect managed identity and administer its users |
-| [`releases`](#reliant-forge-cloud-releases) | List releases from the hosted control plane |
 | [`status`](#reliant-forge-cloud-status) | Show the endpoint and credential source for an environment |
 | [`token`](#reliant-forge-cloud-token) | Mint, list and revoke ORG automation tokens (the CI deploy credential) |
 
@@ -1493,8 +1502,8 @@ Inspect managed identity and administer its users
 Manage the identity an environment declares in KCL, using its control plane.
 
 Reads (status, users) need identity:read; every verb that changes a user
-(invite, set-roles, reset, lock, unlock, delete, revoke-sessions) needs
-identity:manage and an org admin. Under Reliant, or after forge login, nothing
+(invite, set-roles, reset, lock, unlock, delete, revoke-sessions) and export
+need identity:manage and an org admin. Under Reliant, or after forge login, nothing
 extra is needed: when the control plane answers that the credential lacks one of
 those scopes, forge trades it for the scope on demand (an hour, and only while
 the person behind the session holds the grant), as deploy does for deploy:read.
@@ -1523,6 +1532,7 @@ reliant forge cloud identity
 | Command | Description |
 |---------|-------------|
 | [`delete`](#reliant-forge-cloud-identity-delete) | Delete a user's account (org admin; asks first) |
+| [`export`](#reliant-forge-cloud-identity-export) | Export the identity's users now and print a short-lived download URL (identity:manage) |
 | [`invite`](#reliant-forge-cloud-identity-invite) | Create an account (or grant roles) and issue a password-set code (org admin) |
 | [`lock`](#reliant-forge-cloud-identity-lock) | Block a user from signing in (org admin) |
 | [`reset`](#reliant-forge-cloud-identity-reset) | Issue a user a one-time password-set code (org admin) |
@@ -1554,6 +1564,35 @@ reliant forge cloud identity delete <env> --user <id|email> [flags]
 | `--token` | `string` | - | Credential to use, ahead of the env var, stored login and session helper |
 | `--user` | `string` | - | The user, by user id or exact email address (required) |
 | `--yes`, `-y` | `bool` | - | Delete without asking |
+
+---
+
+#### reliant forge cloud identity export
+
+Export the identity's users now and print a short-lived download URL (identity:manage)
+
+Ask the control plane to export the environment's identity instance — every
+user, password hashes included, in Zitadel's import format — and print a signed
+download URL valid for minutes. Requests within the same 15 minutes share one
+export. For a withdrawn identity the URL is for the export written when it was
+withdrawn.
+
+The URL is a credential: anyone holding it can download every user's password
+hash until it expires. It is printed once and never logged; do not paste it
+into a ticket or a chat. Needs identity:manage and, for a person, an org admin
+holding the identity:manage grant. Refused where export is not enabled for the
+control plane, or the instance is not ready.
+
+```
+reliant forge cloud identity export <env> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--json` | `bool` | - | Emit machine-readable JSON (never credentials) |
+| `--token` | `string` | - | Credential to use, ahead of the env var, stored login and session helper |
 
 ---
 
@@ -1731,33 +1770,6 @@ reliant forge cloud identity users <env> [flags]
 | `--page-token` | `string` | - | Continuation from the preceding response |
 | `--query` | `string` | - | Case-insensitive email substring (max 200 characters) |
 | `--token` | `string` | - | Credential to use, ahead of the env var, stored login and session helper |
-
----
-
-#### reliant forge cloud releases
-
-List releases from the hosted control plane
-
-List the releases the hosted control plane holds for your organization.
-
-The endpoint comes from `<env>`'s forge.ControlPlane declaration; the
-credential from --token, then the declared env var, then the credentials file entry for
-that endpoint (`forge login`).
-
-Scope is always the caller's own organization — the request carries no
-organization field, so there is nothing to widen.
-
-```
-reliant forge cloud releases <env> [flags]
-```
-
-**Flags:**
-
-| Flag | Type | Default | Description |
-|------|------|---------|-------------|
-| `--json` | `bool` | - | Emit the raw response as JSON |
-| `--limit` | `int` | `20` | Maximum releases to return |
-| `--token` | `string` | - | Credential to use, ahead of the env var and the credentials file |
 
 ---
 
@@ -3765,6 +3777,7 @@ reliant forge env
 | [`new`](#reliant-forge-env-new) | Scaffold a new deploy environment from an existing one |
 | [`options`](#reliant-forge-env-options) | List the render options an environment's KCL declares |
 | [`ps`](#reliant-forge-env-ps) | List every forge stack running on this machine, across all projects |
+| [`releases`](#reliant-forge-env-releases) | What was released to an environment, when, and what changed |
 | [`render`](#reliant-forge-env-render) | Print the Kubernetes objects deploy/kcl/`<env>`/ renders, with the cluster each lands on |
 | [`secrets`](#reliant-forge-env-secrets) | Project the env's secret_provider into the cluster |
 | [`shape`](#reliant-forge-env-shape) | Print what an environment DECLARES — kind, workloads, secrets, domains, and one hash per object |
@@ -4800,6 +4813,402 @@ reliant forge env ps [flags]
 
 ---
 
+#### reliant forge env releases
+
+What was released to an environment, when, and what changed
+
+The release timeline of an environment: promotions (a move to an OLDER release
+is a rollback and is marked BEHIND), failed and timed-out deploys, gate results,
+and who did it. Local environments read this machine's ledger; an environment that
+declares forge.ControlPlane reads its control plane (credential scopes deploy:read
+and obs:read).
+
+  list `<env>`             the timeline, newest first
+  show `<env>` `<ref>`       one release in full: commits and PRs, what changed, gates
+  at   `<env>` `<when>`      which release was live at a timestamp or trace id
+
+Every verb takes --json for one machine-readable document (--fields projects it).
+
+```
+reliant forge env releases
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`at`](#reliant-forge-env-releases-at) | Which release was live at a moment, and the releases either side |
+| [`list`](#reliant-forge-env-releases-list) | The release timeline of an environment, newest first |
+| [`show`](#reliant-forge-env-releases-show) | One release in full: commits and PRs, what changed, migrations, gates, health |
+
+---
+
+#### reliant forge env releases at
+
+Which release was live at a moment, and the releases either side
+
+Answer "which release was live then": the promotion in force at a timestamp, the
+one before it and the one after. A timestamp is RFC 3339 or a date; a duration
+means that long ago ("90m", "2d"); "now" is now. A 16- or 32-digit hex string is
+a trace id: its first span's start time is used (control-plane environments only).
+
+A promotion made exactly at the time is the live one. A time before the first
+promotion on record says so (before_history) rather than naming a release, and a
+history the source did not fully read says that instead (history_incomplete).
+unsettled means the release's rollout had not finished at that moment, so the
+environment may still have been serving the one before it.
+
+Exit 0 the question was answered (including "nothing was live yet"), 2 it could
+not be asked.
+
+JSON schema forge.env.releases.at/v1. --fields takes dotted paths of:
+  at
+  backend
+  before_history
+  env
+  history_incomplete
+  ledger
+  live
+  live.actor
+  live.at
+  live.bundle_id
+  live.commit_range
+  live.commit_range.from_commit
+  live.commit_range.from_release
+  live.commit_range.reverts
+  live.commit_range.to_commit
+  live.commit_range.to_release
+  live.commit_range.total
+  live.commit_range.truncated
+  live.direction
+  live.env
+  live.from_env
+  live.gate_verdict
+  live.gates
+  live.gates.name
+  live.gates.phase
+  live.gates.status
+  live.gates.summary
+  live.gates.url
+  live.health
+  live.health.detail
+  live.health.verdict
+  live.kind
+  live.live
+  live.note
+  live.previous_bundle_id
+  live.previous_version
+  live.promotion_id
+  live.rollout
+  live.rollout.cluster
+  live.rollout.duration_s
+  live.rollout.finished_at
+  live.rollout.reason
+  live.rollout.status
+  live.run_url
+  live.superseded_in_flight
+  live.targets
+  live.version
+  live.via
+  next
+  next.actor
+  next.at
+  next.bundle_id
+  next.commit_range
+  next.commit_range.from_commit
+  next.commit_range.from_release
+  next.commit_range.reverts
+  next.commit_range.to_commit
+  next.commit_range.to_release
+  next.commit_range.total
+  next.commit_range.truncated
+  next.direction
+  next.env
+  next.from_env
+  next.gate_verdict
+  next.gates
+  next.gates.name
+  next.gates.phase
+  next.gates.status
+  next.gates.summary
+  next.gates.url
+  next.health
+  next.health.detail
+  next.health.verdict
+  next.kind
+  next.live
+  next.note
+  next.previous_bundle_id
+  next.previous_version
+  next.promotion_id
+  next.rollout
+  next.rollout.cluster
+  next.rollout.duration_s
+  next.rollout.finished_at
+  next.rollout.reason
+  next.rollout.status
+  next.run_url
+  next.superseded_in_flight
+  next.targets
+  next.version
+  next.via
+  previous
+  previous.actor
+  previous.at
+  previous.bundle_id
+  previous.commit_range
+  previous.commit_range.from_commit
+  previous.commit_range.from_release
+  previous.commit_range.reverts
+  previous.commit_range.to_commit
+  previous.commit_range.to_release
+  previous.commit_range.total
+  previous.commit_range.truncated
+  previous.direction
+  previous.env
+  previous.from_env
+  previous.gate_verdict
+  previous.gates
+  previous.gates.name
+  previous.gates.phase
+  previous.gates.status
+  previous.gates.summary
+  previous.gates.url
+  previous.health
+  previous.health.detail
+  previous.health.verdict
+  previous.kind
+  previous.live
+  previous.note
+  previous.previous_bundle_id
+  previous.previous_version
+  previous.promotion_id
+  previous.rollout
+  previous.rollout.cluster
+  previous.rollout.duration_s
+  previous.rollout.finished_at
+  previous.rollout.reason
+  previous.rollout.status
+  previous.run_url
+  previous.superseded_in_flight
+  previous.targets
+  previous.version
+  previous.via
+  query
+  resolved_from
+  suggested
+  unsettled
+  warnings
+Always kept: schema, ok, exit_code, error, truncated, omitted, next_page_token.
+
+```
+reliant forge env releases at <env> <timestamp|trace-id> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
+| `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
+
+---
+
+#### reliant forge env releases list
+
+The release timeline of an environment, newest first
+
+List an environment's timeline: promotions (BEHIND marks a rollback), failed and
+timed-out deploys, with version, time, who/via, commit range, rollout duration,
+gate verdicts and a health verdict when one exists.
+
+--since bounds the window (default 7d): a duration (7d, 36h) or a time
+(RFC 3339 or a date). --limit caps the rows; a truncated list says so.
+
+Exit 0 the timeline was read (an empty one is a read), 2 it could not be.
+
+JSON schema forge.env.releases.list/v1. --fields takes dotted paths of:
+  backend
+  entries
+  entries.actor
+  entries.at
+  entries.bundle_id
+  entries.commit_range
+  entries.commit_range.from_commit
+  entries.commit_range.from_release
+  entries.commit_range.reverts
+  entries.commit_range.to_commit
+  entries.commit_range.to_release
+  entries.commit_range.total
+  entries.commit_range.truncated
+  entries.direction
+  entries.env
+  entries.from_env
+  entries.gate_verdict
+  entries.gates
+  entries.gates.name
+  entries.gates.phase
+  entries.gates.status
+  entries.gates.summary
+  entries.gates.url
+  entries.health
+  entries.health.detail
+  entries.health.verdict
+  entries.kind
+  entries.live
+  entries.note
+  entries.previous_bundle_id
+  entries.previous_version
+  entries.promotion_id
+  entries.rollout
+  entries.rollout.cluster
+  entries.rollout.duration_s
+  entries.rollout.finished_at
+  entries.rollout.reason
+  entries.rollout.status
+  entries.run_url
+  entries.superseded_in_flight
+  entries.targets
+  entries.version
+  entries.via
+  env
+  ledger
+  since
+  suggested
+  warnings
+Always kept: schema, ok, exit_code, error, truncated, omitted, next_page_token.
+
+```
+reliant forge env releases list <env> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
+| `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
+| `--limit` | `int` | `20` | most items to return |
+| `--since` | `string` | - | window start: a duration ago (7d, 36h) or a time (default 7d) |
+
+---
+
+#### reliant forge env releases show
+
+One release in full: commits and PRs, what changed, migrations, gates, health
+
+Show one promotion of an environment. The reference is a promotion id, or a
+release version (the newest promotion of it).
+
+  commits      git log of the recorded commit range (PR numbers from squash
+               subjects "(#123)"); a BEHIND move lists what it takes away.
+               Needs the commits in this checkout: otherwise commits_note says so.
+  changes      artifacts whose digest moved, and rendered objects added, modified
+               or removed in THIS environment, against the release it replaced
+               (control plane: DeployService.CompareReleases; local: the two
+               recorded bundles).
+  migrations   migration files the range touched (db/migrations).
+  gates        the checks recorded before and after the environment moved.
+
+Exit 0 shown, 1 no such release in this environment, 2 the ledger could not be read.
+
+JSON schema forge.env.releases.show/v1. --fields takes dotted paths of:
+  backend
+  changes
+  changes.artifacts
+  changes.artifacts.change
+  changes.artifacts.from
+  changes.artifacts.name
+  changes.artifacts.to
+  changes.objects
+  changes.objects.change
+  changes.objects.object
+  changes.objects.summary
+  changes.objects.workload
+  changes.summaries_missing
+  changes.unchanged_artifacts
+  changes.unchanged_objects
+  changes_note
+  commits
+  commits.author
+  commits.pr
+  commits.sha
+  commits.subject
+  commits.time
+  commits_note
+  entry
+  entry.actor
+  entry.at
+  entry.bundle_id
+  entry.commit_range
+  entry.commit_range.from_commit
+  entry.commit_range.from_release
+  entry.commit_range.reverts
+  entry.commit_range.to_commit
+  entry.commit_range.to_release
+  entry.commit_range.total
+  entry.commit_range.truncated
+  entry.direction
+  entry.env
+  entry.from_env
+  entry.gate_verdict
+  entry.gates
+  entry.gates.name
+  entry.gates.phase
+  entry.gates.status
+  entry.gates.summary
+  entry.gates.url
+  entry.health
+  entry.health.detail
+  entry.health.verdict
+  entry.kind
+  entry.live
+  entry.note
+  entry.previous_bundle_id
+  entry.previous_version
+  entry.promotion_id
+  entry.rollout
+  entry.rollout.cluster
+  entry.rollout.duration_s
+  entry.rollout.finished_at
+  entry.rollout.reason
+  entry.rollout.status
+  entry.run_url
+  entry.superseded_in_flight
+  entry.targets
+  entry.version
+  entry.via
+  env
+  failed_deploys
+  failed_deploys.at
+  failed_deploys.rollout
+  failed_deploys.rollout.cluster
+  failed_deploys.rollout.duration_s
+  failed_deploys.rollout.reason
+  failed_deploys.rollout.status
+  ledger
+  migrations
+  migrations.path
+  migrations.status
+  pull_requests
+  suggested
+  warnings
+Always kept: schema, ok, exit_code, error, truncated, omitted, next_page_token.
+
+```
+reliant forge env releases show <env> <version|promotion-id> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
+| `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
+| `--limit` | `int` | `50` | most items to return |
+
+---
+
 #### reliant forge env render
 
 Print the Kubernetes objects deploy/kcl/`<env>`/ renders, with the cluster each lands on
@@ -5161,6 +5570,12 @@ WHAT ONE ENV'S REPORT CARRIES:
     missing / untagged / unreachable. A hosted env is read through its
     control plane's observer, because forge cannot read a hosted cluster;
   * the ROLLOUT PHASE per workload, as the control plane computes it;
+  * IDENTITY — a hosted env that declares forge.ManagedIdentity gets one line,
+    "identity: ready / provisioning / failed: `<reason>`", as its control plane
+    reports it. It never changes the exit code here; --wait (and env deploy)
+    waits on it: a release whose rollout succeeded is WAITING ON IDENTITY until
+    the identity is ready (1 if it failed, the timed-out code if it was still
+    provisioning at the deadline);
   * RUNTIME HEALTH — every host service and frontend with its URL, log file
     and whether a listener is accepting right now, plus the compose infra,
     the app's /healthz + /readyz, pprof and the telemetry backends;
@@ -5471,6 +5886,7 @@ reliant forge fix
 | [`composition-graph`](#reliant-forge-fix-composition-graph) | Move a project off Infra / NewComponents / ServeSpec onto the composition graph |
 | [`config-proto-package`](#reliant-forge-fix-config-proto-package) | Move the config protos to proto/`<project>`/config/v1, package `<project>`.config.v1 (no shared config.v1 since v0.1.47) |
 | [`connect-errors`](#reliant-forge-fix-connect-errors) | Rewrite fixed-message connect.NewError calls to pkg/svcerr, wire-identically, and list the rest |
+| [`harness-mocks`](#reliant-forge-fix-harness-mocks) | Rename the harness's Stub`<Field>` doubles to the forge mocks that replace them (one double per interface since v0.1.47) |
 | [`narrow-deps`](#reliant-forge-fix-narrow-deps) | Declare the interfaces a component's Deps actually use, and retype its fields to them |
 | [`operatorkit`](#reliant-forge-fix-operatorkit) | Rename lifecyclekit.Run / Controller / Options to operatorkit (moved in v0.1.46) |
 | [`tx-isolation`](#reliant-forge-fix-tx-isolation) | Spell out every pkg/orm transaction's isolation level and attempt budget (no default since v0.1.47) |
@@ -5597,11 +6013,13 @@ spelling reproduces exactly:
 A bare svcerr kind is written only in a handler package, where the expression is
 an error and nothing reads a *connect.Error in process (connect.CodeOf, errors.As
 into one, an As-style helper such as testify's require.ErrorAs handed a
-**connect.Error) in the package, its tests, or the code of a package importing it;
-elsewhere (interceptors, clients, a
-*connect.Error-typed result, a package such a reader can see) the same value is
-kept a *connect.Error with svcerr.ToConnect(…), and the report names the reader;
-once that reader reads svcerr.Code, a re-run drops the wrappers.
+**connect.Error) in the package, its tests, the code of a package importing it,
+or the code of a package calling it through an interface one of its types
+implements. A read of a Connect client's error (off the wire) is not one.
+Elsewhere (interceptors, clients, a *connect.Error-typed result, a package such a
+reader can see) the same value is kept a *connect.Error with svcerr.ToConnect(…),
+and the report names every reader and how it reaches the package, on every run;
+once they read svcerr.Code, a re-run drops the wrappers.
 In the test files of every package that got a bare kind, and of every package
 importing one, connect.CodeOf(x) becomes svcerr.Code(x) — the code the
 interceptor sends, which a handler test calling a *Service method directly needs
@@ -5622,7 +6040,13 @@ change what clients read:
 
 Generated files, vendor/ and testdata/ are left alone, as is every
 connect.NewError in a test (a fixture). Re-running it changes nothing.
---dry-run prints each rewrite as file:line: old → new, and the worklist.
+--dry-run prints each rewrite as file:line: old → new, and the worklist; after a
+real run every file:line is the rewritten file's.
+
+--scope `<path>` (repeatable) rewrites, and reports on, only files under the paths
+named, for one lane of a shared checkout; readers anywhere in the module still
+keep a package wrapped. A test outside the scope that would have switched to
+svcerr.Code is listed, not rewritten.
 
 The rest of the v0.1.47 story is the migration skill: `forge skill load migrations/v0.1.47`.
 
@@ -5636,6 +6060,52 @@ reliant forge fix connect-errors [flags]
 |------|------|---------|-------------|
 | `--allow-dirty` | `bool` | - | Run over uncommitted changes |
 | `--dry-run` | `bool` | - | List what would be rewritten; change nothing |
+| `--scope` | `stringSlice` | `[]` | Rewrite only files under `PATH` (repeatable or comma-separated, project-relative), as forge lint --scope lints one slice of a shared checkout. What decides a rewrite is still read from the whole project; only the writes, and the report, are bounded |
+
+---
+
+#### reliant forge fix harness-mocks
+
+Rename the harness's Stub`<Field>` doubles to the forge mocks that replace them (one double per interface since v0.1.47)
+
+Point your handler tests at the forge mock the test harness now installs.
+
+forge v0.1.47 stops synthesizing a Stub`<Field>` in helpers_gen_test.go for a Deps
+field whose interface forge already mocks in a mock_gen.go — the declaring
+package's (contract.go or a forge:deps deps.go), or the handler's own. The
+harness installs that mock instead:
+
+  Deps.Pause runs.PauseController   StubPause → runs.MockPauseController
+  Deps.Narrow Narrow (deps.go)      StubNarrow → MockNarrow
+  Deps.Estimates db.EstimateStore   StubEstimates → MockEstimateStore
+                                    (the handler's Deps-discovered mock)
+
+Both doubles have the same fields (`<Method>`Func, an embedded
+contractkit.Recorder), so this renames the type in every test file of the
+handler, qualifying it the way the file already reaches the package, and adds
+the declaring package's import where a file lacks it. A test struct that embeds
+a stub has its embedded field renamed with it (StubPause: → MockPauseController:,
+w.StubPause → w.MockPauseController). Stub`<Field>` stays for
+an interface no mock_gen.go has (a third-party or standard-library one).
+
+One behaviour moves with the name: an unset method returns
+contractkit.MockNotSet ("MockPauseController.PauseFunc not set") instead of
+testkit.StubNotConfigured ("StubPause.PauseFunc not set: forge test stub not
+configured ..."). Both are a non-nil error from every error-returning method;
+a test that asserts on the old text is listed for you, not rewritten.
+
+The rest of the v0.1.47 story is the migration skill: `forge skill load migrations/v0.1.47`.
+
+```
+reliant forge fix harness-mocks [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--dry-run` | `bool` | - | List what would be rewritten; change nothing |
+| `--scope` | `stringSlice` | `[]` | Rewrite only files under `PATH` (repeatable or comma-separated, project-relative), as forge lint --scope lints one slice of a shared checkout. What decides a rewrite is still read from the whole project; only the writes, and the report, are bounded |
 
 ---
 
@@ -5692,6 +6162,7 @@ reliant forge fix operatorkit [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--dry-run` | `bool` | - | List what would be rewritten; change nothing |
+| `--scope` | `stringSlice` | `[]` | Rewrite only files under `PATH` (repeatable or comma-separated, project-relative), as forge lint --scope lints one slice of a shared checkout. What decides a rewrite is still read from the whole project; only the writes, and the report, are bounded |
 
 ---
 
@@ -5739,6 +6210,7 @@ reliant forge fix tx-isolation [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--dry-run` | `bool` | - | List what would be rewritten; change nothing |
+| `--scope` | `stringSlice` | `[]` | Rewrite only files under `PATH` (repeatable or comma-separated, project-relative), as forge lint --scope lints one slice of a shared checkout. What decides a rewrite is still read from the whole project; only the writes, and the report, are bounded |
 
 ---
 
@@ -6633,6 +7105,8 @@ reliant forge obs
 | [`alerts`](#reliant-forge-obs-alerts) | Alert rules declared for an environment |
 | [`dashboards`](#reliant-forge-obs-dashboards) | Work with the dashboards a release carries |
 | [`endpoints`](#reliant-forge-obs-endpoints) | The slowest or most failing endpoints |
+| [`issue`](#reliant-forge-obs-issue) | Everything needed to fix one issue; resolve, ignore and unresolve triage it |
+| [`issues`](#reliant-forge-obs-issues) | Grouped errors: what is failing, how often, since which release |
 | [`logs`](#reliant-forge-obs-logs) | Search and tail logs |
 | [`metrics`](#reliant-forge-obs-metrics) | List and query metrics; print the declared schema |
 | [`profile`](#reliant-forge-obs-profile) | Export an aggregated continuous profile as pprof, speedscope or collapsed stacks |
@@ -6839,6 +7313,511 @@ reliant forge obs endpoints [env] [flags]
 | `--sort` | `string` | `requests` | requests | p95 | errors | rate |
 | `--to` | `string` | - | range end, RFC 3339 (default now) |
 | `--top` | `int` | `10` | most endpoints to return |
+
+---
+
+#### reliant forge obs issue
+
+Everything needed to fix one issue; resolve, ignore and unresolve triage it
+
+Show one error issue: the issue, its latest event and call site, its events per
+version, the issues that fire in the same traces, the release it first appeared
+in, and the suspect commits: the commits of that release's range (or, with no
+range known, the last 20) that touched the files the error was raised from,
+read from this checkout with git. [env] defaults to dev.
+
+  cli forge obs issue ISS-7f3a prod
+  cli forge obs issue sfp1-0123456789abcdef dev --events 10
+  cli forge obs issue resolve ISS-7f3a prod --in next
+  cli forge obs issue ignore ISS-7f3a prod --until 72h
+  cli forge obs issue unresolve ISS-7f3a prod
+
+Triage needs a hosted env: a local issue is a query over logs and has no state.
+
+JSON schema forge.obs.issue/v1. --fields takes dotted paths of:
+  by_version
+  by_version.affected
+  by_version.events
+  by_version.first_seen
+  by_version.last_seen
+  by_version.version
+  co_occurring_issue_ids
+  events
+  events.attributes.*
+  events.message
+  events.span_id
+  events.time
+  events.trace_id
+  events.version
+  first_release
+  first_release.commit_range
+  first_release.git_commit
+  first_release.promoted_at
+  first_release.version
+  frames
+  frames.file
+  frames.function
+  frames.in_app
+  frames.line
+  issue
+  issue.affected
+  issue.culprit
+  issue.events
+  issue.exception_type
+  issue.first_seen
+  issue.first_version
+  issue.id
+  issue.ignored_until
+  issue.last_seen
+  issue.last_version
+  issue.latest_trace_id
+  issue.platform
+  issue.regressed_at
+  issue.resolved_at
+  issue.resolved_version
+  issue.service
+  issue.status
+  issue.title
+  latest_event
+  latest_event.attributes.*
+  latest_event.message
+  latest_event.session_id
+  latest_event.span_id
+  latest_event.time
+  latest_event.trace_id
+  latest_event.url_path
+  latest_event.version
+  query_mode
+  scope
+  scope.backend
+  scope.env
+  scope.env_id
+  scope.from
+  scope.services
+  scope.to
+  statements
+  statements.params.*
+  statements.purpose
+  statements.sql
+  suggested
+  suspect_commits
+  suspect_commits.author
+  suspect_commits.files
+  suspect_commits.pr
+  suspect_commits.sha
+  suspect_commits.subject
+  suspect_commits.time
+  suspect_note
+Always kept: schema, ok, exit_code, error, truncated, omitted, next_page_token.
+
+```
+reliant forge obs issue <id> [env] [flags]
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`ignore`](#reliant-forge-obs-issue-ignore) | Silence an issue, until a time or until unignored |
+| [`resolve`](#reliant-forge-obs-issue-resolve) | Mark an issue resolved, now or in a release |
+| [`unresolve`](#reliant-forge-obs-issue-unresolve) | Reopen a resolved or ignored issue |
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
+| `--events` | `int` | `5` | newest events to include (0 = none) |
+| `--explain` | `bool` | - | print the compiled SQL and its parameters instead of running it (a starting point for obs query --sql) |
+| `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
+| `--filter` | `stringArray` | `[]` | attribute predicate key=value or key!=value over the allowlisted keys (repeatable) |
+| `--from` | `string` | - | range start, RFC 3339 |
+| `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
+| `--print-sql` | `bool` | - | alias of --explain |
+| `--service` | `stringArray` | `[]` | only this service.name (repeatable) |
+| `--since` | `duration` | `72h0m0s` | how far back to read (ignored with --from) |
+| `--to` | `string` | - | range end, RFC 3339 (default now) |
+
+---
+
+#### reliant forge obs issue ignore
+
+Silence an issue, until a time or until unignored
+
+Silence an issue, until a time or until unignored. A hosted env only: a local issue carries no state, so this exits 2.
+
+The write sends the row version it read, so a change made since is refused
+("re-read and retry", exit 1) instead of overwriting it.
+
+JSON schema forge.obs.issue/v1. --fields takes dotted paths of:
+  by_version
+  by_version.affected
+  by_version.events
+  by_version.first_seen
+  by_version.last_seen
+  by_version.version
+  co_occurring_issue_ids
+  events
+  events.attributes.*
+  events.message
+  events.span_id
+  events.time
+  events.trace_id
+  events.version
+  first_release
+  first_release.commit_range
+  first_release.git_commit
+  first_release.promoted_at
+  first_release.version
+  frames
+  frames.file
+  frames.function
+  frames.in_app
+  frames.line
+  issue
+  issue.affected
+  issue.culprit
+  issue.events
+  issue.exception_type
+  issue.first_seen
+  issue.first_version
+  issue.id
+  issue.ignored_until
+  issue.last_seen
+  issue.last_version
+  issue.latest_trace_id
+  issue.platform
+  issue.regressed_at
+  issue.resolved_at
+  issue.resolved_version
+  issue.service
+  issue.status
+  issue.title
+  latest_event
+  latest_event.attributes.*
+  latest_event.message
+  latest_event.session_id
+  latest_event.span_id
+  latest_event.time
+  latest_event.trace_id
+  latest_event.url_path
+  latest_event.version
+  query_mode
+  scope
+  scope.backend
+  scope.env
+  scope.env_id
+  scope.from
+  scope.services
+  scope.to
+  statements
+  statements.params.*
+  statements.purpose
+  statements.sql
+  suggested
+  suspect_commits
+  suspect_commits.author
+  suspect_commits.files
+  suspect_commits.pr
+  suspect_commits.sha
+  suspect_commits.subject
+  suspect_commits.time
+  suspect_note
+Always kept: schema, ok, exit_code, error, truncated, omitted, next_page_token.
+
+```
+reliant forge obs issue ignore <id> [env] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
+| `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
+| `--json` | `bool` | - | print one JSON document on stdout |
+| `--until` | `string` | - | un-ignore at this time: an RFC 3339 time or a duration from now such as 72h; default until unignored |
+
+---
+
+#### reliant forge obs issue resolve
+
+Mark an issue resolved, now or in a release
+
+Mark an issue resolved, now or in a release. A hosted env only: a local issue carries no state, so this exits 2.
+
+The write sends the row version it read, so a change made since is refused
+("re-read and retry", exit 1) instead of overwriting it.
+
+JSON schema forge.obs.issue/v1. --fields takes dotted paths of:
+  by_version
+  by_version.affected
+  by_version.events
+  by_version.first_seen
+  by_version.last_seen
+  by_version.version
+  co_occurring_issue_ids
+  events
+  events.attributes.*
+  events.message
+  events.span_id
+  events.time
+  events.trace_id
+  events.version
+  first_release
+  first_release.commit_range
+  first_release.git_commit
+  first_release.promoted_at
+  first_release.version
+  frames
+  frames.file
+  frames.function
+  frames.in_app
+  frames.line
+  issue
+  issue.affected
+  issue.culprit
+  issue.events
+  issue.exception_type
+  issue.first_seen
+  issue.first_version
+  issue.id
+  issue.ignored_until
+  issue.last_seen
+  issue.last_version
+  issue.latest_trace_id
+  issue.platform
+  issue.regressed_at
+  issue.resolved_at
+  issue.resolved_version
+  issue.service
+  issue.status
+  issue.title
+  latest_event
+  latest_event.attributes.*
+  latest_event.message
+  latest_event.session_id
+  latest_event.span_id
+  latest_event.time
+  latest_event.trace_id
+  latest_event.url_path
+  latest_event.version
+  query_mode
+  scope
+  scope.backend
+  scope.env
+  scope.env_id
+  scope.from
+  scope.services
+  scope.to
+  statements
+  statements.params.*
+  statements.purpose
+  statements.sql
+  suggested
+  suspect_commits
+  suspect_commits.author
+  suspect_commits.files
+  suspect_commits.pr
+  suspect_commits.sha
+  suspect_commits.subject
+  suspect_commits.time
+  suspect_note
+Always kept: schema, ok, exit_code, error, truncated, omitted, next_page_token.
+
+```
+reliant forge obs issue resolve <id> [env] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
+| `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
+| `--in` | `string` | - | when the resolve takes effect: "next" (the next release promoted to the env) or a version; default now |
+| `--json` | `bool` | - | print one JSON document on stdout |
+
+---
+
+#### reliant forge obs issue unresolve
+
+Reopen a resolved or ignored issue
+
+Reopen a resolved or ignored issue. A hosted env only: a local issue carries no state, so this exits 2.
+
+The write sends the row version it read, so a change made since is refused
+("re-read and retry", exit 1) instead of overwriting it.
+
+JSON schema forge.obs.issue/v1. --fields takes dotted paths of:
+  by_version
+  by_version.affected
+  by_version.events
+  by_version.first_seen
+  by_version.last_seen
+  by_version.version
+  co_occurring_issue_ids
+  events
+  events.attributes.*
+  events.message
+  events.span_id
+  events.time
+  events.trace_id
+  events.version
+  first_release
+  first_release.commit_range
+  first_release.git_commit
+  first_release.promoted_at
+  first_release.version
+  frames
+  frames.file
+  frames.function
+  frames.in_app
+  frames.line
+  issue
+  issue.affected
+  issue.culprit
+  issue.events
+  issue.exception_type
+  issue.first_seen
+  issue.first_version
+  issue.id
+  issue.ignored_until
+  issue.last_seen
+  issue.last_version
+  issue.latest_trace_id
+  issue.platform
+  issue.regressed_at
+  issue.resolved_at
+  issue.resolved_version
+  issue.service
+  issue.status
+  issue.title
+  latest_event
+  latest_event.attributes.*
+  latest_event.message
+  latest_event.session_id
+  latest_event.span_id
+  latest_event.time
+  latest_event.trace_id
+  latest_event.url_path
+  latest_event.version
+  query_mode
+  scope
+  scope.backend
+  scope.env
+  scope.env_id
+  scope.from
+  scope.services
+  scope.to
+  statements
+  statements.params.*
+  statements.purpose
+  statements.sql
+  suggested
+  suspect_commits
+  suspect_commits.author
+  suspect_commits.files
+  suspect_commits.pr
+  suspect_commits.sha
+  suspect_commits.subject
+  suspect_commits.time
+  suspect_note
+Always kept: schema, ok, exit_code, error, truncated, omitted, next_page_token.
+
+```
+reliant forge obs issue unresolve <id> [env] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
+| `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
+| `--json` | `bool` | - | print one JSON document on stdout |
+
+---
+
+#### reliant forge obs issues
+
+Grouped errors: what is failing, how often, since which release
+
+List the env's error issues: ERROR logs grouped by fingerprint (sfp1), with how
+often each fired, how many traces it touched and when. [env] defaults to dev.
+
+On a hosted env the control plane keeps the issues, so they have a status
+(new, unresolved, resolved, regressed, ignored) that survives log retention, and
+--since-release / --since-deploy ask "what did this release open". On a local
+env they are grouped at query time over the local ClickStack: no state, every
+issue is unresolved, and the counts are those of the range.
+
+  cli forge obs issues prod                          # the open ones, last 24h
+  cli forge obs issues prod --status regressed
+  cli forge obs issues prod --since-release v1.4.0   # first seen in that release
+  cli forge obs issues dev --service api --sort events
+
+JSON schema forge.obs.issues/v1. --fields takes dotted paths of:
+  issues
+  issues.affected
+  issues.culprit
+  issues.events
+  issues.exception_type
+  issues.first_seen
+  issues.first_version
+  issues.id
+  issues.ignored_until
+  issues.last_seen
+  issues.last_version
+  issues.latest_trace_id
+  issues.platform
+  issues.regressed_at
+  issues.resolved_at
+  issues.resolved_version
+  issues.service
+  issues.status
+  issues.title
+  query_mode
+  scope
+  scope.backend
+  scope.env
+  scope.env_id
+  scope.from
+  scope.services
+  scope.to
+  sort
+  statements
+  statements.params.*
+  statements.purpose
+  statements.sql
+  suggested
+Always kept: schema, ok, exit_code, error, truncated, omitted, next_page_token.
+
+```
+reliant forge obs issues [env] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
+| `--explain` | `bool` | - | print the compiled SQL and its parameters instead of running it (a starting point for obs query --sql) |
+| `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
+| `--filter` | `stringArray` | `[]` | attribute predicate key=value or key!=value over the allowlisted keys (repeatable) |
+| `--from` | `string` | - | range start, RFC 3339 |
+| `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
+| `--limit` | `int` | `25` | most items to return |
+| `--page-token` | `string` | - | resume from a next_page_token |
+| `--platform` | `string` | - | server | browser |
+| `--print-sql` | `bool` | - | alias of --explain |
+| `--service` | `stringArray` | `[]` | only this service.name (repeatable) |
+| `--since` | `duration` | `24h0m0s` | how far back to read (ignored with --from) |
+| `--since-deploy` | `string` | - | only issues first seen at or after this promotion id (hosted env) |
+| `--since-release` | `string` | - | only issues first seen in this release version (hosted env) |
+| `--sort` | `string` | `last` | last | first | events |
+| `--status` | `stringArray` | `[]` | only issues in this state: new, unresolved, resolved, regressed, ignored (repeatable; default the open ones) |
+| `--to` | `string` | - | range end, RFC 3339 (default now) |
 
 ---
 
