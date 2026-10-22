@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -73,6 +74,6 @@ func TestCreateProject_StillRejectsNonAbsolutePaths(t *testing.T) {
 			Path: path,
 		}))
 		require.Error(t, err, "path %q must still be refused", path)
-		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err), "path %q", path)
+		assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err), "path %q", path)
 	}
 }

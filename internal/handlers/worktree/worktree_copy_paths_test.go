@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -140,7 +141,7 @@ func TestCreateWorktreeRejectsInvalidCopyPath(t *testing.T) {
 			ProjectId: projectID, Name: "bad", Branch: "bad", CopyFiles: []string{bad},
 		}))
 		require.Error(t, err, "copy path %q", bad)
-		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err), "copy path %q", bad)
+		assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err), "copy path %q", bad)
 	}
 
 	router.mu.Lock()

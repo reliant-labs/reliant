@@ -14,6 +14,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -318,8 +319,6 @@ func TestRevertFiles_ReturnsFailedPreconditionWhenAllRequestedFilesFail(t *testi
 	}))
 	require.Error(t, err)
 
-	connectErr := new(connect.Error)
-	require.ErrorAs(t, err, &connectErr)
-	assert.Equal(t, connect.CodeFailedPrecondition, connectErr.Code())
-	assert.Contains(t, connectErr.Message(), "file not in changed state")
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
+	assert.Contains(t, svcerr.ToConnect(err).Message(), "file not in changed state")
 }

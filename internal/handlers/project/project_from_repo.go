@@ -60,16 +60,16 @@ func (s *Service) CreateProjectFromRepo(
 	cloneURL := gitremote.StripCredentials(strings.TrimSpace(req.Msg.GetCloneUrl()))
 	daemonID := strings.TrimSpace(req.Msg.GetDaemonId())
 	if cloneURL == "" {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("clone_url is required"))
+		return nil, svcerr.InvalidArgument("clone_url is required")
 	}
 	if daemonID == "" {
 		// Not defaulted here on purpose: with several machines the target is
 		// the user's choice, and silently picking one puts their checkout
 		// somewhere they did not ask for. The client defaults it visibly.
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("daemon_id is required"))
+		return nil, svcerr.InvalidArgument("daemon_id is required")
 	}
 	if s.deps.ControlPlane == nil {
-		return nil, svcerr.ToConnect(svcerr.FailedPrecondition("cloning from GitHub requires a Reliant Cloud account"))
+		return nil, svcerr.FailedPrecondition("cloning from GitHub requires a Reliant Cloud account")
 	}
 
 	name := strings.TrimSpace(req.Msg.GetName())
@@ -77,7 +77,7 @@ func (s *Service) CreateProjectFromRepo(
 		name = repoNameFromCloneURL(cloneURL)
 	}
 	if name == "" {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument(fmt.Sprintf("could not derive a project name from %q — pass name explicitly", cloneURL)))
+		return nil, svcerr.InvalidArgument(fmt.Sprintf("could not derive a project name from %q — pass name explicitly", cloneURL))
 	}
 	branch := strings.TrimSpace(req.Msg.GetBranch())
 	path := strings.TrimSpace(req.Msg.GetPath())
@@ -87,7 +87,7 @@ func (s *Service) CreateProjectFromRepo(
 	if !ospath.IsAbs(path) {
 		// ospath, not filepath: the path names a directory on the user's
 		// DAEMON, which may be Windows while this server is Linux.
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument(fmt.Sprintf("project path must be absolute, got: %q", path)))
+		return nil, svcerr.InvalidArgument(fmt.Sprintf("project path must be absolute, got: %q", path))
 	}
 
 	// The project's id is settled BEFORE the clone is dispatched, because the
@@ -148,14 +148,10 @@ func (s *Service) CreateProjectFromRepo(
 		if err := s.deps.Repo.UpsertQueuedProjectDaemon(
 			ctx, project.ID, daemonID, clonedPath, branchPtr, requestID,
 		); err != nil {
-			logging.ErrorContext(ctx, "CreateProjectFromRepo: failed to record queued install",
-				"error", err, "project_id", project.ID, "daemon_id", daemonID)
-			return nil, svcerr.ToConnect(svcerr.Internal("failed to record project installation"))
+			return nil, svcerr.WrapOr(err, svcerr.Internal("failed to record project installation"))
 		}
 	} else if err := s.deps.Repo.UpsertProjectDaemon(ctx, project.ID, daemonID, clonedPath, branchPtr); err != nil {
-		logging.ErrorContext(ctx, "CreateProjectFromRepo: failed to record install",
-			"error", err, "project_id", project.ID, "daemon_id", daemonID)
-		return nil, svcerr.ToConnect(svcerr.Internal("failed to record project installation"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to record project installation"))
 	}
 
 	pd := &core.ProjectDaemon{
@@ -225,9 +221,7 @@ func (s *Service) createProjectForRepo(
 		project.DefaultBranch = &branch
 	}
 	if err := s.deps.Repo.CreateProject(ctx, project); err != nil {
-		logging.ErrorContext(ctx, "CreateProjectFromRepo: failed to create project",
-			"error", err, "name", name, "path", path)
-		return nil, svcerr.ToConnect(svcerr.Internal("failed to create project"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to create project"))
 	}
 	return project, nil
 }

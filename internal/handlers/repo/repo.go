@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"connectrpc.com/connect"
@@ -15,6 +14,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/daemonerr"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/gitremote"
@@ -46,11 +46,16 @@ func (s *Service) sendDaemonCommand(ctx context.Context, userID, commandType str
 func (s *Service) authorizeRepo(ctx context.Context, repoID, userID string) (*core.Repo, *db.Project, error) {
 	repo, err := s.deps.Repo.GetRepo(ctx, repoID)
 	if err != nil {
-		return nil, nil, svcerr.NotFound("repo")
+		return nil, nil, svcerr.WrapOr(err, svcerr.Internal("failed to get repo"))
 	}
 	project, err := s.deps.Repo.GetProjectWithUserCheck(ctx, repo.ProjectID, userID)
 	if err != nil {
-		return nil, nil, svcerr.NotFound("repo")
+		// Someone else's project: the repo is not found, so the answer never
+		// reveals that it exists.
+		if svcerr.IsNotFound(err) {
+			return nil, nil, svcerr.NotFound("repo")
+		}
+		return nil, nil, svcerr.WrapOr(err, svcerr.Internal("failed to get project"))
 	}
 	return repo, project, nil
 }
@@ -59,10 +64,8 @@ func (s *Service) authorizeRepo(ctx context.Context, repoID, userID string) (*co
 func (s *Service) authorizeProject(ctx context.Context, projectID, userID string) (*db.Project, error) {
 	project, err := s.deps.Repo.GetProjectWithUserCheck(ctx, projectID, userID)
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "access denied") {
-			return nil, svcerr.NotFound("project")
-		}
-		return nil, svcerr.Internal("database error")
+		// Missing and someone else's are the store's one NotFound.
+		return nil, svcerr.WrapOr(err, svcerr.Internal("database error"))
 	}
 	return project, nil
 }
@@ -110,8 +113,7 @@ func (s *Service) DiscoverRepos(
 		"max_depth": req.Msg.MaxDepth,
 	}
 	if err := s.sendDaemonCommand(ctx, userID, "repo.discover", payload, &daemonResp); err != nil {
-		logging.ErrorContext(ctx, "Failed to discover repos via daemon", "error", err, "projectID", project.ID)
-		return nil, svcerr.Unavailable("daemon unreachable; cannot scan filesystem")
+		return nil, daemonerr.Error("scan the project for repos", err)
 	}
 
 	now := time.Now().UTC().Format(time.RFC3339)
@@ -144,8 +146,7 @@ func (s *Service) ListRepos(
 
 	repos, err := s.deps.Repo.ListReposByProject(ctx, req.Msg.ProjectId)
 	if err != nil {
-		logging.ErrorContext(ctx, "Failed to list repos", "error", err, "projectID", req.Msg.ProjectId)
-		return nil, svcerr.Internal("failed to list repos")
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list repos"))
 	}
 
 	out := make([]*reliantv1.Repo, len(repos))
@@ -189,7 +190,7 @@ func (s *Service) AddRepo(
 		"path":      repoPath,
 		"max_depth": 1,
 	}, &daemonResp); err != nil {
-		return nil, svcerr.Unavailable("daemon unreachable; cannot validate path")
+		return nil, daemonerr.Error("validate the repo path", err)
 	}
 	var remoteURL *string
 	foundGit := false
@@ -234,8 +235,7 @@ func (s *Service) AddRepo(
 		UpdatedAt:    now,
 	}
 	if err := s.deps.Repo.CreateRepo(ctx, record); err != nil {
-		logging.ErrorContext(ctx, "Failed to persist repo", "error", err, "projectID", project.ID)
-		return nil, svcerr.Internal("failed to add repo")
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to add repo"))
 	}
 
 	// Flip is_git_repo true if it wasn't already — adding the first repo to
@@ -269,8 +269,7 @@ func (s *Service) RemoveRepo(
 	}
 
 	if err := s.deps.Repo.DeleteRepo(ctx, repo.ID); err != nil {
-		logging.ErrorContext(ctx, "Failed to delete repo", "error", err, "repoID", repo.ID)
-		return nil, svcerr.Internal("failed to delete repo")
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to delete repo"))
 	}
 
 	// NOTE: removing a repo association deliberately does NOT touch
@@ -314,8 +313,7 @@ func (s *Service) GetRepoGitInfo(
 		Behind         int32    `json:"behind"`
 	}
 	if err := s.sendDaemonCommand(ctx, userID, "project.git_info", map[string]string{"path": repoPath}, &gitInfo); err != nil {
-		logging.ErrorContext(ctx, "Failed to get git info via daemon", "error", err, "repoID", repo.ID)
-		return nil, svcerr.Internal("failed to get git info")
+		return nil, daemonerr.Error("get git info", err)
 	}
 
 	return connect.NewResponse(&reliantv1.GetRepoGitInfoResponse{

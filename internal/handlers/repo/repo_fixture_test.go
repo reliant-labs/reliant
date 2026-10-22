@@ -2,8 +2,9 @@ package repo_test
 
 import (
 	"context"
-	"errors"
 	"testing"
+
+	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -27,13 +28,13 @@ func ownedProjectRepo(t *testing.T) *repo.StubRepo {
 			if id == "p-1" && userID == "test-user" {
 				return &db.Project{ID: id, UserID: userID, Name: "proj", Path: "/work", IsGitRepo: true}, nil
 			}
-			return nil, errors.New("project not found")
+			return nil, core.ErrProjectNotFound
 		},
 		GetRepoFunc: func(_ context.Context, id string) (*core.Repo, error) {
 			if id == "r-1" {
 				return &core.Repo{ID: id, ProjectID: "p-1", Name: "svc", RelativePath: "svc"}, nil
 			}
-			return nil, errors.New("repo not found")
+			return nil, svcerr.NotFound("repo")
 		},
 	}
 }

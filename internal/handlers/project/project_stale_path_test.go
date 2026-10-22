@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -102,7 +103,7 @@ func TestCreateProject_RefusesStaleProjectRowWhoseDirectoryIsGone(t *testing.T) 
 		Path: projectPath,
 	}))
 	require.Error(t, err, "resolving a project whose directory is gone must not succeed")
-	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err),
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err),
 		"a stale registry row is a precondition failure, not AlreadyExists")
 	assert.Contains(t, err.Error(), projectPath, "the refusal must name the missing directory")
 	assert.Contains(t, err.Error(), projectID, "the refusal must name the project row to act on")
@@ -128,7 +129,7 @@ func TestCreateProject_AcceptsExistingProjectWhoseDirectoryExists(t *testing.T) 
 		Path: projectPath,
 	}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeAlreadyExists, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeAlreadyExists, svcerr.Code(err))
 }
 
 // TestCreateProject_UnreachableDaemonDoesNotRefuse guards the boundary of the
@@ -152,7 +153,7 @@ func TestCreateProject_UnreachableDaemonDoesNotRefuse(t *testing.T) {
 		Path: projectPath,
 	}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeAlreadyExists, connect.CodeOf(err),
+	assert.Equal(t, connect.CodeAlreadyExists, svcerr.Code(err),
 		"an unreachable daemon must fall through to the normal found answer")
 	if strings.Contains(err.Error(), "does not exist") {
 		t.Errorf("error = %q, must not claim the directory is missing when the daemon never answered", err)

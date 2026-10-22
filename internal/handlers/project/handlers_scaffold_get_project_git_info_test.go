@@ -30,7 +30,7 @@ func TestGetProjectGitInfo_Generated(t *testing.T) {
 			Name:    "without a daemon there is no git to read",
 			Req:     connect.NewRequest(&pb.GetProjectGitInfoRequest{ProjectId: "p-1"}),
 			Ctx:     project.AuthedContext(t),
-			WantErr: connect.CodeInternal,
+			WantErr: connect.CodeUnavailable, // a daemon command that could not run (daemonerr), not a server fault
 		},
 	}, unrouted.GetProjectGitInfo)
 

@@ -3,10 +3,19 @@ package worktree
 
 // This file contains WorktreeService git operations routed through daemon commands.
 // These were extracted from worktree.go to route all filesystem/exec operations through the daemon.
+//
+// Each returns the error its rpc returns. A command that did not complete is
+// classified by daemonerr (the machine's state picks the code, the daemon's own
+// words are kept, the transport's withheld). A command the daemon ran and
+// git refused is reported in git's words, which come from the user's own
+// machine and say what to fix.
 
 import (
 	"context"
-	"fmt"
+
+	"github.com/reliant-labs/forge/pkg/svcerr"
+
+	"github.com/reliant-labs/reliant/internal/daemonerr"
 )
 
 // commitViaDaemon commits staged changes via daemon. daemonID is the
@@ -21,10 +30,10 @@ func (s *Service) commitViaDaemon(ctx context.Context, userID, daemonID, worktre
 		"worktree_path": worktreePath,
 		"message":       message,
 	}, &resp); err != nil {
-		return "", fmt.Errorf("daemon commit: %w", err)
+		return "", daemonerr.Error("commit", err)
 	}
 	if !resp.Success {
-		return resp.Output, fmt.Errorf("%s", resp.Error)
+		return resp.Output, svcerr.Internal("failed to commit: " + resp.Error)
 	}
 	return resp.Output, nil
 }
@@ -42,10 +51,10 @@ func (s *Service) pushViaDaemon(ctx context.Context, userID, daemonID, worktreeP
 	if err := s.sendWorktreeDaemonCommand(ctx, userID, daemonID, "worktree.push", map[string]string{
 		"worktree_path": worktreePath,
 	}, &resp); err != nil {
-		return "", fmt.Errorf("daemon push: %w", err)
+		return "", daemonerr.Error("push", err)
 	}
 	if !resp.Success {
-		return resp.Output, fmt.Errorf("%s", resp.Error)
+		return resp.Output, svcerr.Internal("failed to push: " + resp.Error)
 	}
 	return resp.Output, nil
 }
@@ -61,10 +70,10 @@ func (s *Service) pullViaDaemon(ctx context.Context, userID, daemonID, worktreeP
 	if err := s.sendWorktreeDaemonCommand(ctx, userID, daemonID, "worktree.pull", map[string]string{
 		"worktree_path": worktreePath,
 	}, &resp); err != nil {
-		return "", fmt.Errorf("daemon pull: %w", err)
+		return "", daemonerr.Error("pull", err)
 	}
 	if !resp.Success {
-		return resp.Output, fmt.Errorf("%s", resp.Error)
+		return resp.Output, svcerr.Internal("failed to pull: " + resp.Error)
 	}
 	return resp.Output, nil
 }

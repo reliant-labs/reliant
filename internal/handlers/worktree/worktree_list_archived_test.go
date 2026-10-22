@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	worktree "github.com/reliant-labs/reliant/internal/handlers/worktree"
@@ -89,12 +90,12 @@ func TestListArchivedWorktrees_RejectsForeignProjectAndBadToken(t *testing.T) {
 
 	_, err := svc.ListArchivedWorktrees(worktree.AuthedContext(t), connect.NewRequest(&reliantv1.ListArchivedWorktreesRequest{ProjectId: "p-2"}))
 	require.Error(t, err)
-	assert.NotEqual(t, connect.Code(0), connect.CodeOf(err))
+	assert.NotEqual(t, connect.Code(0), svcerr.Code(err))
 
 	bad := "not-a-token!"
 	_, err = svc.ListArchivedWorktrees(worktree.AuthedContext(t), connect.NewRequest(&reliantv1.ListArchivedWorktreesRequest{ProjectId: ownProjectID, PageToken: &bad}))
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 
 	_, err = svc.ListArchivedWorktrees(worktree.AuthedContext(t), connect.NewRequest(&reliantv1.ListArchivedWorktreesRequest{}))
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 }

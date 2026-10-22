@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -262,7 +263,7 @@ func TestCreateWorktree_RejectsAnotherUsersChat(t *testing.T) {
 
 	_, err := f.createWorktree(t, &reliantv1.CreateWorktreeRequest{ChatId: &foreignChatID})
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
 	assert.Empty(t, f.router.daemonsFor("worktree.create"), "nothing may be created for a rejected request")
 }
 
