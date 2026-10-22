@@ -11,7 +11,7 @@ import (
 )
 
 // bindCLIConfig makes each end-user command group a CLIConfig subtree
-// (proto/config/v1/cli_config.proto): its flags (--server, --gateway) are
+// (proto/reliant/config/v1/cli_config.proto): its flags (--server, --gateway) are
 // persistent on the group, and every command in it configures this machine's
 // Reliant state from the loaded config before it runs. The groups must match
 // the message's `subtrees`; LoadCLIConfig refuses a command outside them.

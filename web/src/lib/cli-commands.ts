@@ -4,7 +4,7 @@
  *
  * In production the `reliant` CLI binary is built with the right server,
  * gateway, admin, and auth defaults compiled in (the proto defaults in
- * proto/config/v1, and the release's pkg/config.BuildDefaults stamp), so we
+ * proto/reliant/config/v1, and the release's pkg/config.BuildDefaults stamp), so we
  * return a bare command. In non-prod — local dev,
  * OSS self-hosted — the user needs explicit env-var overrides so the daemon
  * dials the same hosts the web frontend is using.

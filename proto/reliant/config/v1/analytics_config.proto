@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package reliant.config.v1;
+
+import "forge/v1/forge.proto";
+
+option go_package = "github.com/reliant-labs/reliant/gen/reliant/config/v1;configv1";
+
+// AnalyticsConfig governs the product events the API server and the worker
+// record. Each event is one structured log record (dev-docs/product-events.md),
+// so it ships wherever the process's logs ship; there is no vendor key. A
+// user's analytics opt-out is honoured per event regardless. The rules every
+// config here follows are in config.proto's header.
+message AnalyticsConfig {
+  // Statsig (2), the Supabase event sink (3, 4) and the device-id cache (5)
+  // are gone.
+  reserved 2, 3, 4, 5;
+  reserved "statsig_key", "supabase_url", "supabase_anon_key", "app_data_dir";
+
+  // A kill switch for every product event.
+  bool disabled = 1 [(forge.v1.config) = {
+    env_var: "RELIANT_ANALYTICS_DISABLED"
+    description: "Record no product analytics events"
+  }];
+}

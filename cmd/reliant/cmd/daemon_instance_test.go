@@ -9,7 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	configv1 "github.com/reliant-labs/reliant/gen/config/v1"
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 

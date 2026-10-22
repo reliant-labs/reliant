@@ -15,7 +15,7 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/observe/dbtrace"
 
-	configv1 "github.com/reliant-labs/reliant/gen/config/v1"
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	"github.com/reliant-labs/reliant/internal/app"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/pkg/config"
@@ -204,7 +204,7 @@ records it without checking that the schema is the one it builds.`,
 	}
 	migrateCmd.AddCommand(forceCmd)
 
-	// DATABASE_URL, DATABASE_DIRECT_URL, --db-driver: proto/config/v1
+	// DATABASE_URL, DATABASE_DIRECT_URL, --db-driver: proto/reliant/config/v1
 	// DatabaseConfig, the one the server roles load, persistent here so every
 	// migrate command inherits the flag.
 	config.RegisterDatabaseConfigFlags(migrateCmd)

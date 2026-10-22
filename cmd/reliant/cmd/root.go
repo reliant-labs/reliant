@@ -92,7 +92,7 @@ Reliant server components.`,
 	// their values are read.
 	root.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose output")
 	enableVersionFlag(root)
-	// The root config's leaves (proto/config/v1 ReliantConfig) are persistent
+	// The root config's leaves (proto/reliant/config/v1 ReliantConfig) are persistent
 	// flags as well. A process that reads them loads the config in its own
 	// RunE, so a command that reads none of them never fails on one.
 	config.RegisterReliantConfigFlags(root)
@@ -130,7 +130,7 @@ func Execute() {
 	}
 }
 
-// loadRootConfig loads the reliant binary's root config (proto/config/v1
+// loadRootConfig loads the reliant binary's root config (proto/reliant/config/v1
 // ReliantConfig) for the process cmd runs. Every process that reads it — the
 // servers and the daemon — calls this first thing in its RunE, before it
 // builds anything from the config.

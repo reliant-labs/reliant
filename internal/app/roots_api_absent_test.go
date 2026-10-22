@@ -9,7 +9,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/graphkit"
 	"github.com/stretchr/testify/require"
 
-	configv1 "github.com/reliant-labs/reliant/gen/config/v1"
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	"github.com/reliant-labs/reliant/internal/store/storetest"
 	"github.com/reliant-labs/reliant/pkg/config"
 )

@@ -1,0 +1,73 @@
+syntax = "proto3";
+
+package reliant.config.v1;
+
+import "buf/validate/validate.proto";
+import "forge/v1/forge.proto";
+import "google/protobuf/duration.proto";
+
+option go_package = "github.com/reliant-labs/reliant/gen/reliant/config/v1;configv1";
+
+// WorkerConfig is the `reliant server worker` process's own config. It loads
+// alongside the root ReliantConfig and the `server` subtree configs,
+// ServerProcessConfig and DatabaseConfig (config.proto, whose header has the
+// rules every config here follows).
+message WorkerConfig {
+  option (forge.v1.binary_config) = {
+    binary: "reliant"
+    command: ["server", "worker"]
+  };
+
+  // The blocks every server role shares moved to ServerProcessConfig and
+  // DatabaseConfig.
+  reserved 1, 10, 11, 12, 13, 16, 17, 40, 50, 51, 60, 70, 90;
+  reserved "control_plane", "database", "nats", "temporal", "drain", "data_dir", "streaming_driver",
+    "integrations", "observability", "sentry", "analytics", "llm", "preview";
+
+  int32 health_port = 14 [
+    (forge.v1.config) = {
+      env_var: "HEALTH_PORT"
+      flag: "health-port"
+      default_value: "8081"
+      description: "Health check endpoint port"
+    },
+    (buf.validate.field).int32 = {gte: 1, lte: 65535}
+  ];
+  int32 pprof_port = 15 [
+    (forge.v1.config) = {
+      env_var: "PPROF_PORT"
+      flag: "pprof-port"
+      default_value: "6060"
+      description: "pprof debug server port (binds 127.0.0.1 only)"
+    },
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE,
+    (buf.validate.field).int32 = {gte: 1, lte: 65535}
+  ];
+
+  // The rollout drain budget, read as ApiServerConfig's is (its comment has
+  // the rules). Each role declares its own, so one role's may differ.
+  google.protobuf.Duration pre_stop_delay = 18 [(forge.v1.config) = {
+    env_var: "PRE_STOP_DELAY"
+    default_value: "5s"
+    description: "How long to keep serving after readiness flips at shutdown (negative: no pause)"
+  }];
+  google.protobuf.Duration shutdown_timeout = 19 [(forge.v1.config) = {
+    env_var: "SHUTDOWN_TIMEOUT"
+    default_value: "30s"
+    description: "Budget for graceful shutdown after the pre-stop pause"
+  }];
+
+  // The probe paths on HEALTH_PORT, read as GatewayConfig's are (its comment
+  // has the rules): /health and /ready are what control-plane probes
+  // (RELIANT_PROBES), /healthz and /readyz forge's.
+  string liveness_paths = 20 [(forge.v1.config) = {
+    env_var: "LIVENESS_PATHS"
+    default_value: "/health,/healthz"
+    description: "Liveness probe paths on the health port (comma-separated)"
+  }];
+  string readiness_paths = 21 [(forge.v1.config) = {
+    env_var: "READINESS_PATHS"
+    default_value: "/ready,/readyz"
+    description: "Readiness probe paths on the health port (comma-separated)"
+  }];
+}

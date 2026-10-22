@@ -8,7 +8,7 @@ import (
 
 	"google.golang.org/protobuf/types/known/durationpb"
 
-	configv1 "github.com/reliant-labs/reliant/gen/config/v1"
+	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/controlplane"
@@ -22,11 +22,11 @@ import (
 	"github.com/reliant-labs/reliant/internal/telemetry"
 )
 
-// The server configs (proto/config/v1 ServerProcessConfig, DatabaseConfig and
+// The server configs (proto/reliant/config/v1 ServerProcessConfig, DatabaseConfig and
 // each role's command config) in the shapes the packages they configure
 // take. The providers read them. A value no process can run with is refused
 // by the config protos' buf.validate rules as the config loads, before the
-// process does anything (proto/config/v1/config.proto), so none is checked
+// process does anything (proto/reliant/config/v1/config.proto), so none is checked
 // here.
 
 // ControlPlaneEndpoint is the shared ControlPlaneConfig in the shape the

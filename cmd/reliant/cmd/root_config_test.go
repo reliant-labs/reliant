@@ -18,7 +18,7 @@ import (
 )
 
 // rootConfigProcesses are the commands that load the root config
-// (proto/config/v1 ReliantConfig) and build their logger from it.
+// (proto/reliant/config/v1 ReliantConfig) and build their logger from it.
 var rootConfigProcesses = [][]string{
 	{"server", "api"},
 	{"server", "worker"},

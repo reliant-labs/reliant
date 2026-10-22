@@ -84,7 +84,7 @@ func TestGatewayDefaultIsExplicitNotDerived(t *testing.T) {
 // If this fails: do NOT edit the proto to match. Fix the value in
 // control-plane deploy/kcl/lib/env.k (reliant_endpoints), regenerate with
 // `node .github/scripts/sync-release-config.mjs --env prod`, and then update
-// the default_value in proto/config/v1 (cli_config.proto,
+// the default_value in proto/reliant/config/v1 (cli_config.proto,
 // api_server_config.proto) to match the regenerated file.
 func TestProtoDefaultsMatchGeneratedReleaseConfig(t *testing.T) {
 	raw, err := os.ReadFile(filepath.Join("..", "..", "electron", "release.config.json"))

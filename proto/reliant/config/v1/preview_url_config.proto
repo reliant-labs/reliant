@@ -1,0 +1,27 @@
+syntax = "proto3";
+
+package reliant.config.v1;
+
+import "forge/v1/forge.proto";
+
+option go_package = "github.com/reliant-labs/reliant/gen/reliant/config/v1;configv1";
+
+// PreviewURLConfig is `reliant preview-url`'s config: the command an agent runs
+// inside a workspace pod to print a port's shareable URL. The rules every
+// config here follows are in config.proto's header.
+message PreviewURLConfig {
+  option (forge.v1.binary_config) = {
+    binary: "reliant"
+    command: ["preview-url"]
+  };
+
+  // The fully resolved preview URL for this daemon with a literal "{port}"
+  // placeholder, which the control-plane workspace operator injects into the
+  // daemon container (built from the proxy's own URL builder, so it cannot
+  // drift from what the gateway serves). Unset — a daemon on the user's own
+  // machine — the URL is the loopback.
+  string url_template = 1 [(forge.v1.config) = {
+    env_var: "RELIANT_PREVIEW_URL_TEMPLATE"
+    description: "Preview URL template with a {port} placeholder (set on workspace pods)"
+  }];
+}

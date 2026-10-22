@@ -20,7 +20,7 @@ import (
 // The api-server is the process that migrates the schema (migrate=apply), so a
 // setting it cannot serve with must stop it before it touches the database:
 // the config's buf.validate rules refuse the value as `server api` loads its
-// config (proto/config/v1/api_server_config.proto), before runRoot binds the
+// config (proto/reliant/config/v1/api_server_config.proto), before runRoot binds the
 // health port or applies a migration. Checked in the constructor that reads
 // it, the same value would fail the process only after it had migrated.
 //

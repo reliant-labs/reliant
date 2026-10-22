@@ -33,7 +33,7 @@ module_path: github.com/reliant-labs/reliant
 forge_version: v0.1.47-0.20261022115939-1be0d294d2af
 harness: reliant
 config:
-    # Every process setting is typed config (proto/config/v1, read through
+    # Every process setting is typed config (proto/reliant/config/v1, read through
     # pkg/config). A direct environment read outside pkg/config fails lint;
     # one that is not configuration takes a scoped //nolint:forbidigo.
     enforce_typed_access: error

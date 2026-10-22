@@ -11,7 +11,7 @@
 // everything else correctly believed it was prod.
 //
 // The tier is CONFIGURED, not read from the environment here: the root config
-// (proto/config/v1 RuntimeConfig.environment — RELIANT_ENV, else NODE_ENV) is
+// (proto/reliant/config/v1 RuntimeConfig.environment — RELIANT_ENV, else NODE_ENV) is
 // loaded by each process's entrypoint, which hands the value to Configure
 // before anything asks. Held here, set once at boot, rather than threaded to
 // every caller, because the callers sit below the entrypoints in unrelated

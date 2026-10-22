@@ -588,7 +588,7 @@ After registering, run 'reliant daemon start' to connect.`,
 		},
 	}
 
-	// --account / RELIANT_INSTANCE_ACCOUNT: proto/config/v1 DaemonRegisterConfig.
+	// --account / RELIANT_INSTANCE_ACCOUNT: proto/reliant/config/v1 DaemonRegisterConfig.
 	config.RegisterDaemonRegisterConfigFlags(cmd)
 
 	return cmd
@@ -975,7 +975,7 @@ To switch back to an account whose token is already stored:
 
 	// --port, --grpc-url, --tls-*, --server-mode, --listen-port,
 	// --non-interactive, the instance flags (--data-dir, --account,
-	// --workspace) and the pod-only env settings: proto/config/v1 DaemonConfig.
+	// --workspace) and the pod-only env settings: proto/reliant/config/v1 DaemonConfig.
 	config.RegisterDaemonConfigFlags(cmd)
 
 	cmd.Flags().BoolVar(&useToken, "token", false, "Read a PAT from stdin and use it as the daemon credential")
@@ -1156,7 +1156,7 @@ stream is not established.`,
 		},
 	}
 
-	// --data-dir, --account, --workspace: proto/config/v1 DaemonStatusConfig.
+	// --data-dir, --account, --workspace: proto/reliant/config/v1 DaemonStatusConfig.
 	config.RegisterDaemonStatusConfigFlags(cmd)
 
 	return cmd
@@ -1371,7 +1371,7 @@ Settings → Machines in the Reliant app.`,
 	}
 
 	cmd.Flags().BoolVar(&force, "force", false, "Force kill (SIGKILL) instead of graceful shutdown")
-	// --data-dir, --account, --workspace: proto/config/v1 DaemonStopConfig.
+	// --data-dir, --account, --workspace: proto/reliant/config/v1 DaemonStopConfig.
 	config.RegisterDaemonStopConfigFlags(cmd)
 
 	return cmd
@@ -1444,7 +1444,7 @@ func newDaemonLogsCmd() *cobra.Command {
 
 	cmd.Flags().BoolVarP(&follow, "follow", "f", true, "Follow log output")
 	cmd.Flags().IntVarP(&lines, "lines", "n", 50, "Number of lines to show")
-	// --data-dir, --account, --workspace: proto/config/v1 DaemonLogsConfig.
+	// --data-dir, --account, --workspace: proto/reliant/config/v1 DaemonLogsConfig.
 	config.RegisterDaemonLogsConfigFlags(cmd)
 
 	return cmd

@@ -1,0 +1,44 @@
+syntax = "proto3";
+
+package reliant.config.v1;
+
+import "buf/validate/validate.proto";
+import "forge/v1/forge.proto";
+
+option go_package = "github.com/reliant-labs/reliant/gen/reliant/config/v1;configv1";
+
+// PreviewConfig is how the API server and the worker build a remote daemon's
+// preview URLs: the same PROXY_HOST / WORKSPACE_* settings control-plane's
+// workspace proxy is configured with, so the URL a tool reports is the one
+// the proxy serves (internal/llm/tools/preview_url.go). Unset, the URL
+// follows the environment tier's defaults. The rules every config here
+// follows are in config.proto's header.
+message PreviewConfig {
+  // Path-based routing through this proxy host (local k3d, no wildcard DNS);
+  // wins over everything below.
+  string proxy_host = 1 [(forge.v1.config) = {
+    env_var: "PROXY_HOST"
+    description: "Workspace proxy host for path-based preview URLs"
+  }];
+
+  // Subdomain routing under this domain: <scheme>://<port>-<daemon>.<domain>.
+  string workspace_base_domain = 2 [(forge.v1.config) = {
+    env_var: "WORKSPACE_BASE_DOMAIN"
+    description: "Base domain of subdomain-routed preview URLs"
+  }];
+  string workspace_url_scheme = 3 [(forge.v1.config) = {
+    env_var: "WORKSPACE_URL_SCHEME"
+    default_value: "https"
+    allowed_values: ["http", "https"]
+    description: "Scheme of subdomain-routed preview URLs"
+  }];
+  // The proxy's port when it is not the scheme's default (dev's host-mapped
+  // HTTP gateway). Unset: none.
+  int32 workspace_url_port = 4 [
+    (forge.v1.config) = {
+      env_var: "WORKSPACE_URL_PORT"
+      description: "Port of subdomain-routed preview URLs, when not the scheme's default"
+    },
+    (buf.validate.field).int32 = {gte: 0, lte: 65535}
+  ];
+}

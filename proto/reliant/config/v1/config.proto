@@ -1,0 +1,157 @@
+syntax = "proto3";
+
+package reliant.config.v1;
+
+import "forge/v1/forge.proto";
+
+option go_package = "github.com/reliant-labs/reliant/gen/reliant/config/v1;configv1";
+
+// Typed process configuration for the reliant binary (P4 in
+// research/forge-migration/PLAN.md; the census and the target layout are
+// research/forge-migration/03-config-census.md).
+//
+// ONE BINARY, SEVERAL PROCESSES. cmd/reliant runs every reliant process as a
+// cobra subcommand: `reliant server api|worker|gateway`, `reliant daemon ...`,
+// and the end-user CLI. So config is bound per (binary, command):
+//
+//   ReliantConfig        binary root: every process loads it, and its flags
+//                        are persistent on `reliant`, so every subcommand
+//                        accepts them.
+//   <Group>Config        a SUBTREE config (`subtrees: [{path: ["server"]}]`):
+//                        loaded by every command at or below each path, its
+//                        flags persistent there. ServerProcessConfig is what
+//                        every server role shares; DatabaseConfig is the
+//                        server roles' and `db migrate`'s; CLIConfig is the
+//                        end-user commands'.
+//   <Role>Config         one per process (`command: ["server", "api"]`, ...),
+//                        added as each role's reads move here.
+//
+// A process loads the root config, every subtree config over its command
+// path, and the one config for its own command path. forge refuses two
+// configs one process loads that declare the same env var or flag, so a block
+// several processes read is declared once, on the config they all load — the
+// root config, or a subtree config over them — never onto each of them.
+//
+// ENV NAMES ARE THE CONTRACT. control-plane sets these variables on reliant
+// processes by name, in KCL and in Go (the workspace operator), so every
+// env_var here keeps the exact spelling the code read before it moved
+// (census §0). Field names and tags are bookkeeping for a Go struct; nothing
+// marshals a config message to a wire or to storage.
+//
+// A name that is not the primary one is an env_var_aliases entry: read after
+// env_var, in order, the first one set winning — what a hand-written fallback
+// chain did. `deprecated: true` marks a name kept only until its setters move
+// (one stderr line at load); a permanent alias (NODE_ENV) is silent.
+//
+// SAME BEHAVIOUR AS THE READ IT REPLACED. A field moves here only when forge's
+// loader gives exactly what the raw read gave. In particular:
+//   - a variable set to "" is unset, as it was for every reader that tested
+//     os.Getenv(...) != "";
+//   - a field whose reader tolerated an unrecognised value (warned and carried
+//     on) gets no allowed_values: forge would refuse to start instead. Parsing
+//     stays with the reader.
+// Readers whose legacy semantics forge's loader cannot reproduce keep their
+// raw reads: a bool that only the exact string "true" (or "false") switched,
+// and a number whose malformed value fell back to the default.
+//
+// A VALUE IS REFUSED AT LOAD. What a process cannot run with — a port outside
+// 1-65535, a duration that is not positive, a mode missing the credential it
+// needs — is a buf.validate rule on the field or the message, which forge's
+// loader checks as the config loads: in the command's RunE, before the
+// process binds a port, dials a broker or applies a migration (and in
+// config.Root.Validate over a rendered environment). Never a check in the
+// provider that reads the setting first: that runs while the root is built,
+// after the api-server has migrated. Presence is (forge.v1.config).required;
+// a rule on a field that may be unset takes ignore: IGNORE_IF_ZERO_VALUE.
+
+// ReliantConfig is the reliant binary's root config: the surface every
+// reliant process reads.
+message ReliantConfig {
+  option (forge.v1.binary_config) = {binary: "reliant"};
+
+  LogConfig log = 1;
+  RuntimeConfig runtime = 2;
+  StorageReaperConfig storage_reaper = 3;
+}
+
+// RuntimeConfig is where the process is running. The entrypoint hands it to
+// internal/runenv once at boot; every tier decision asks runenv.
+message RuntimeConfig {
+  // The environment tier, as the operator spelled it: dev, development,
+  // local or e2e is dev; test or testing is test; ANYTHING else, unset
+  // included, is prod (internal/runenv.Parse fails closed). NODE_ENV is read
+  // when RELIANT_ENV is unset: it is Node's convention, which the desktop app
+  // and every dev shell already export, so it is a permanent name, not one
+  // being retired.
+  string environment = 1 [(forge.v1.config) = {
+    env_var: "RELIANT_ENV"
+    env_var_aliases: [{name: "NODE_ENV"}]
+    description: "Environment tier: dev, test or prod (unset or unrecognised is prod)"
+  }];
+}
+
+// LogConfig is how a process's logger is built. Both fields carry the value
+// exactly as the operator spelled it; internal/logging parses it (any case,
+// surrounding space ignored) and warns, once its logger exists, about a value
+// that names nothing.
+message LogConfig {
+  // Unset: INFO. Servers never log DEBUG in prod; the daemon honours an
+  // explicit level everywhere (logging.GetLogLevel, logging.DaemonLogLevel).
+  string level = 1 [(forge.v1.config) = {
+    env_var: "RELIANT_LOG_LEVEL"
+    flag: "log-level"
+    description: "Log level: debug, info, warn or error (default info)"
+  }];
+
+  // Unset: text, or JSON for a hosted daemon.
+  string format = 2 [(forge.v1.config) = {
+    env_var: "LOG_FORMAT"
+    flag: "log-format"
+    description: "Log line format: text or json (default text; json for a hosted daemon)"
+  }];
+}
+
+// StorageReaperConfig is how the daemon schedules forge's storage reaper
+// (`forge storage auto-gc`) on its own machine. A daemon has no systemd timer
+// or cron to run `forge storage install`'s schedule, and the pass that
+// `forge env up` starts in the background is rate-limited to once a day and
+// only fires after an `up`; the Go build cache grows far faster than that
+// (internal/diskwatch/reaper.go has the design). The reaper's own budgets
+// (go_cache_gib, build_cache_gib, ...) live in forge's storage policy, not
+// here: this block only decides WHEN the daemon runs it.
+message StorageReaperConfig {
+  // auto runs it on managed daemons (workspace pods and cloud machines, where
+  // agents' builds fill the shared disk) and leaves a person's own machine
+  // alone; on forces it everywhere; off never runs it on a schedule. A
+  // confirmed "clear caches" from the UI runs it in every mode.
+  string mode = 1 [(forge.v1.config) = {
+    env_var: "RELIANT_STORAGE_REAPER"
+    default_value: "auto"
+    allowed_values: ["auto", "on", "off"]
+    description: "Run forge's storage reaper on a schedule: auto (managed daemons only), on, or off"
+  }];
+
+  // How often the budget pass runs regardless of disk pressure. A Go duration;
+  // below 5m is raised to 5m, and an unparsable value is ignored with a warning.
+  string interval = 2 [(forge.v1.config) = {
+    env_var: "RELIANT_STORAGE_REAPER_INTERVAL"
+    default_value: "1h"
+    description: "Interval of the scheduled storage reaper pass (Go duration, minimum 5m)"
+  }];
+
+  // How soon the reaper may run again while a watched volume is under disk
+  // pressure. A Go duration; below 1m is raised to 1m.
+  string pressure_interval = 3 [(forge.v1.config) = {
+    env_var: "RELIANT_STORAGE_REAPER_PRESSURE_INTERVAL"
+    default_value: "10m"
+    description: "Minimum gap between storage reaper passes while a volume is under pressure (Go duration, minimum 1m)"
+  }];
+
+  // Forge's machine storage policy, the file `forge storage` reads. FORGE_STORAGE_POLICY
+  // is forge's own variable, so the daemon and the passes it starts agree on the
+  // file. Unset: forge's default, <user config dir>/forge/storage.json.
+  string policy_path = 4 [(forge.v1.config) = {
+    env_var: "FORGE_STORAGE_POLICY"
+    description: "Forge machine storage policy file (default: <user config dir>/forge/storage.json)"
+  }];
+}

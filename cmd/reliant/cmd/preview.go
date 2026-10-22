@@ -128,7 +128,7 @@ the deliverable shape a handoff node can post.`,
 	cmd.Flags().StringVar(&runCommand, "run", "", "The command that runs it (included in --json output)")
 	cmd.Flags().BoolVar(&requireListening, "require-listening", false, "Fail if nothing is listening on the port")
 
-	// RELIANT_PREVIEW_URL_TEMPLATE: proto/config/v1 PreviewURLConfig.
+	// RELIANT_PREVIEW_URL_TEMPLATE: proto/reliant/config/v1 PreviewURLConfig.
 	config.RegisterPreviewURLConfigFlags(cmd)
 
 	return cmd

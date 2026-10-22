@@ -31,7 +31,7 @@ const (
 
 // Host is what the platform declares about where this daemon runs. The
 // workspace operator stamps it on the pods it creates, through `reliant daemon
-// start`'s config (DaemonConfig, proto/config/v1/daemon_config.proto); a
+// start`'s config (DaemonConfig, proto/reliant/config/v1/daemon_config.proto); a
 // daemon on a user's machine — or the in-process runtime `reliant open`
 // starts — leaves it zero.
 type Host struct {

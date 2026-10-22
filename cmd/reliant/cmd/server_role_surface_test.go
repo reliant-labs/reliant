@@ -27,7 +27,7 @@ var updateServerRoleSurface = flag.Bool("update-server-role-surface", false,
 	"rewrite testdata/server_roles/*.golden from the current tree")
 
 // The server roles' configuration surface, pinned as golden files so a
-// reshape of proto/config/v1 that moves fields between messages must leave
+// reshape of proto/reliant/config/v1 that moves fields between messages must leave
 // what each process reads — and what it does with it — byte for byte the same.
 //
 //   - <role>.surface.golden is the role's env and flag census: every variable

@@ -1,0 +1,139 @@
+syntax = "proto3";
+
+package reliant.config.v1;
+
+import "reliant/config/v1/analytics_config.proto";
+import "reliant/config/v1/control_plane_config.proto";
+import "reliant/config/v1/integrations_config.proto";
+import "reliant/config/v1/llm_config.proto";
+import "reliant/config/v1/observability_config.proto";
+import "reliant/config/v1/preview_config.proto";
+import "buf/validate/validate.proto";
+import "forge/v1/forge.proto";
+
+option go_package = "github.com/reliant-labs/reliant/gen/reliant/config/v1;configv1";
+
+// ServerProcessConfig is what every server role (`reliant server
+// api|worker|gateway`) reads the same way: the infrastructure it connects to
+// and the outside world it reports to. It is a SUBTREE config over `server`,
+// so all three roles load ONE declaration of it, and a component they share
+// (the repo, the NATS connection, the control-plane endpoint) has one
+// constructor reading one config in every role, rather than each role's copy
+// of the same block. Its flags are persistent on `server`.
+//
+// A role's own knobs stay on its command config (api_server_config.proto,
+// worker_config.proto, gateway_config.proto): its ports, including
+// HEALTH_PORT, whose default differs per role; its bind address and pprof
+// listener; and its drain budget, which may differ per role. The database a
+// role connects to is DatabaseConfig (db_config.proto), a subtree config of
+// its own because `reliant db migrate` loads it too. The rules every config
+// here follows are in config.proto's header.
+message ServerProcessConfig {
+  option (forge.v1.binary_config) = {
+    binary: "reliant"
+    subtrees: [{path: ["server"]}]
+  };
+
+  ControlPlaneConfig control_plane = 1;
+  NatsConfig nats = 2;
+  TemporalConfig temporal = 3;
+  ServerTLSConfig tls = 4;
+
+  string data_dir = 5 [(forge.v1.config) = {
+    env_var: "DATA_DIR"
+    flag: "data-dir"
+    default_value: "./data"
+    description: "Data directory for logs and certs"
+  }];
+
+  // How live deltas fan out across replicas. nats is the only driver; the
+  // knob remains because deployments set it.
+  string streaming_driver = 6 [(forge.v1.config) = {
+    env_var: "STREAMING_DRIVER"
+    flag: "streaming-driver"
+    default_value: "nats"
+    allowed_values: ["nats"]
+    description: "Streaming driver (nats)"
+  }];
+
+  IntegrationsConfig integrations = 7;
+  ObservabilityConfig observability = 8;
+  SentryConfig sentry = 9;
+  AnalyticsConfig analytics = 10;
+  LLMConfig llm = 11;
+  PreviewConfig preview = 12;
+}
+
+// NatsConfig is the NATS server a server role connects to: daemon routing,
+// and the streaming hub's transport.
+message NatsConfig {
+  // A secret: deployments embed credentials in it (nats://user:pass@host).
+  string url = 1 [(forge.v1.config) = {
+    env_var: "NATS_URL"
+    sensitive: true
+    required: true
+    description: "NATS server URL"
+  }];
+
+  // Credentials for a NATS server that takes them out of band. Used only
+  // when both are set.
+  string user = 2 [(forge.v1.config) = {
+    env_var: "NATS_USER"
+    description: "NATS user name (used with NATS_PASSWORD)"
+  }];
+  string password = 3 [(forge.v1.config) = {
+    env_var: "NATS_PASSWORD"
+    sensitive: true
+    optional: true
+    description: "NATS password (used with NATS_USER)"
+  }];
+}
+
+// TemporalConfig is the Temporal frontend the API server and worker use.
+message TemporalConfig {
+  string host = 1 [(forge.v1.config) = {
+    env_var: "TEMPORAL_HOST"
+    flag: "temporal-host"
+    default_value: "localhost"
+    description: "Temporal server host"
+  }];
+  int32 port = 2 [
+    (forge.v1.config) = {
+      env_var: "TEMPORAL_PORT"
+      flag: "temporal-port"
+      default_value: "7233"
+      description: "Temporal server port"
+    },
+    (buf.validate.field).int32 = {gte: 1, lte: 65535}
+  ];
+  string namespace = 3 [(forge.v1.config) = {
+    env_var: "TEMPORAL_NAMESPACE"
+    flag: "temporal-namespace"
+    default_value: "reliant"
+    description: "Temporal namespace"
+  }];
+}
+
+// ServerTLSConfig is how a server role that terminates TLS itself (the API
+// server, the daemon gateway) serves it: on its own listeners, never on the
+// plaintext health port. It keeps its own names rather than forge's
+// tls_cert_path / tls_key_path, which forge's serve policy applies to the
+// probe address — reliant's HEALTH_PORT, which must stay plaintext for the
+// kubelet and the load balancer's HTTP health checks.
+message ServerTLSConfig {
+  string cert_file = 1 [(forge.v1.config) = {
+    env_var: "TLS_CERT_FILE"
+    flag: "tls-cert"
+    description: "TLS certificate file path"
+  }];
+  string key_file = 2 [(forge.v1.config) = {
+    env_var: "TLS_KEY_FILE"
+    flag: "tls-key"
+    description: "TLS key file path"
+  }];
+  bool disable = 3 [(forge.v1.config) = {
+    env_var: "DISABLE_TLS"
+    flag: "disable-tls"
+    description: "Disable TLS (use plaintext HTTP)"
+  }];
+}

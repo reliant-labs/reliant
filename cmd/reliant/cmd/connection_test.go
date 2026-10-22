@@ -63,7 +63,7 @@ func TestResolveServerPrecedence(t *testing.T) {
 	t.Run("no flag, no env: the build's default", func(t *testing.T) {
 		// The default is the HOSTED endpoint: a binary built from this repo
 		// targets the hosted platform so `go install` works with no flags;
-		// loopback is what you opt INTO. See proto/config/v1/cli_config.proto.
+		// loopback is what you opt INTO. See proto/reliant/config/v1/cli_config.proto.
 		isolateCLI(t)
 		conn, err := resolveWithArgs(t)
 		if err != nil {

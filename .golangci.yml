@@ -94,7 +94,7 @@ linters:
       # Typed-config guardrail (forge.yaml: config.enforce_typed_access: error).
       # GATING: forbidigo is in `linters.enable` above, so a direct
       # environment read fails `golangci-lint run` and `forge lint`. Every
-      # process setting is declared in proto/config/v1 and read through
+      # process setting is declared in proto/reliant/config/v1 and read through
       # pkg/config (exempt above, as the generated loader). A read that is not
       # configuration — an ambient OS variable, an environment passed through
       # to a child, a forge-owned FORGE_* knob — takes a scoped
@@ -103,7 +103,7 @@ linters:
         - pattern: 'os\.Getenv'
           msg: &typed-config >-
             Read configuration from the typed config (pkg/config) instead:
-            declare the setting in proto/config/v1/*.proto with a
+            declare the setting in proto/reliant/config/v1/*.proto with a
             (forge.v1.config) annotation and run `forge generate`. A read
             that is not configuration (an ambient OS variable such as HOME)
             takes //nolint:forbidigo with the reason.

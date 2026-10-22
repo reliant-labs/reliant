@@ -31,7 +31,7 @@ import (
 //	server:  --server > RELIANT_SERVER_URL > the build's default
 //	token:   RELIANT_TOKEN > the shared credentials file entry for that server
 //
-// All three are CLIConfig (proto/config/v1/cli_config.proto), a subtree config
+// All three are CLIConfig (proto/reliant/config/v1/cli_config.proto), a subtree config
 // every end-user command loads; the build's default is the proto default, or
 // what a release stamped into pkg/config.BuildDefaults.
 //
