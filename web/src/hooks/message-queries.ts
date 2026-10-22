@@ -6,6 +6,7 @@ import {
 } from "@tanstack/react-query";
 import { api, type Message } from "../api/client";
 import { queryClient } from "../lib/query-client";
+import { isLocalOnlyMessageId } from "../lib/pendingSends";
 import { chatKeys, seedChatDetail } from "./chat-queries";
 
 // ── Query key factory ───────────────────────────────────────────────────────
@@ -410,16 +411,12 @@ async function seedChatMessages(
     messageKeys.list(chatId)
   );
   if (!current) return fetched;
-  if (current.messages.some((m) => !isOptimisticMessageId(m.id))) {
+  if (current.messages.some((m) => !isLocalOnlyMessageId(m.id))) {
     return current;
   }
   return current.messages.length === 0
     ? fetched
     : { ...fetched, messages: [...fetched.messages, ...current.messages] };
-}
-
-function isOptimisticMessageId(id: string): boolean {
-  return id.startsWith("optimistic-");
 }
 
 /**

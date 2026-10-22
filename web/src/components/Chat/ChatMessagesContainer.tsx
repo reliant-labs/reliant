@@ -9,6 +9,8 @@ interface ChatMessagesContainerProps {
    * because a compact host passes it.
    */
   chatId?: string;
+  /** The timeline is being replaced (catch-up overlay up). */
+  busy?: boolean;
 }
 
 /**
@@ -19,6 +21,7 @@ interface ChatMessagesContainerProps {
 export const ChatMessagesContainer = ({
   children,
   className,
+  busy = false,
 }: ChatMessagesContainerProps) => (
   <div
     className={cn(
@@ -29,6 +32,7 @@ export const ChatMessagesContainer = ({
       zIndex: 0,
     }}
     data-testid="chat-messages"
+    aria-busy={busy || undefined}
   >
     {children}
   </div>

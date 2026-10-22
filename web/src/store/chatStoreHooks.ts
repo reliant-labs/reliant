@@ -194,8 +194,9 @@ export function useRunOutputs(chatId: string): RunOutputUpdate[] {
 }
 
 /**
- * Whether a chat is showing cached content whose sync for the current stream
- * subscription (a snapshot, or a replay catching up) has not arrived yet.
+ * Whether a chat's initial sync for the current stream subscription (a
+ * snapshot, or a replay catching up) has not ended with chat_caught_up yet.
+ * The timeline turns this into its overlay via lib/timelineCatchUp.
  */
 export function useIsChatSyncing(chatId: string | null | undefined): boolean {
   return useChatStore((state) => !!chatId && state.chatSyncPendingId === chatId);

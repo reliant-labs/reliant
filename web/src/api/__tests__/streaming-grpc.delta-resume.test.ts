@@ -402,6 +402,32 @@ describe("chat sync pending signal", () => {
     expect(onChatSyncPending).not.toHaveBeenCalled();
   });
 
+  it("is not re-opened by live streaming after chat_caught_up", () => {
+    // The timeline's catch-up overlay rides on this signal: live tokens and
+    // tool events must never bring it back.
+    const { service, internals, onChatSyncPending } = makeService({ c1: 500n });
+    viewing(internals, "c2", 90n);
+    service.subscribeToChatDetails("c1");
+    internals.handleEvent(caughtUp(500n));
+    onChatSyncPending.mockClear();
+
+    internals.handleEvent(chatUpdates([501, 502], 502n));
+    internals.handleEvent(chatUpdates([503], 503n));
+
+    expect(onChatSyncPending).not.toHaveBeenCalled();
+  });
+
+  it("is not re-opened by a reconnect of a caught-up chat (network blip)", () => {
+    const { service, internals, onChatSyncPending } = makeService();
+    viewing(internals, "c1", 500n);
+    // The connection drops; the rendered chat re-asserts its subscription.
+    internals.isConnected_ = false;
+
+    service.subscribeToChatDetails("c1");
+
+    expect(onChatSyncPending).not.toHaveBeenCalled();
+  });
+
   it("closes when the chat is unsubscribed", () => {
     const { service, internals, onChatSyncPending } = makeService({ c1: 500n });
     viewing(internals, "c2", 90n);

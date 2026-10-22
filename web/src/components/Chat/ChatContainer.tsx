@@ -37,6 +37,7 @@ import { toast } from "../../lib/toast-manager";
 import { isDaemonConnectingError } from "../../lib/daemon-errors";
 import { sendWithDaemonWait } from "../../lib/daemon-retry";
 import { newClientMessageId } from "../../lib/pendingSends";
+import { isTimelineCatchingUp } from "../../lib/timelineCatchUp";
 
 // Stable empty references
 const EMPTY_ARRAY: never[] = [];
@@ -94,6 +95,11 @@ export function ChatContainer({ tabId, isFocused = true, hideChatTitle }: ChatCo
   const isChatBusy = useIsChatRunning(chatId);
   const { data: pendingApprovals = [] } = usePendingApprovals(chatId);
   const isChatSyncing = useIsChatSyncing(chatId);
+  const timelineCatchingUp = isTimelineCatchingUp({
+    syncPending: isChatSyncing,
+    messages,
+    connectionStatus,
+  });
 
   // Self-healing subscription invariant: this component renders the active
   // chat, so it's the natural place to assert "the rendered chat is the
@@ -326,7 +332,7 @@ export function ChatContainer({ tabId, isFocused = true, hideChatTitle }: ChatCo
       onLoadOlderMessages={handleLoadOlderMessages}
       isLoadingOlderMessages={isLoadingOlderMessages}
       hasOlderMessages={hasOlderMessages}
-      isChatSyncing={isChatSyncing}
+      isTimelineCatchingUp={timelineCatchingUp}
       hideChatTitle={hideChatTitle}
     />
   );
