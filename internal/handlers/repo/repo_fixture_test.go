@@ -21,9 +21,9 @@ func (f daemonFunc) SendDaemonCommand(_ context.Context, _, commandType string, 
 // ownedProjectRepo is a store where the harness caller (test-user) owns
 // project p-1 at /work, which holds repo r-1 at svc/. Every other project or
 // repo is not found, as GetProjectWithUserCheck and GetRepo answer.
-func ownedProjectRepo(t *testing.T) *repo.StubRepo {
+func ownedProjectRepo(t *testing.T) *repo.MockRepository {
 	t.Helper()
-	return &repo.StubRepo{
+	return &repo.MockRepository{
 		GetProjectWithUserCheckFunc: func(_ context.Context, id, userID string) (*db.Project, error) {
 			if id == "p-1" && userID == "test-user" {
 				return &db.Project{ID: id, UserID: userID, Name: "proj", Path: "/work", IsGitRepo: true}, nil

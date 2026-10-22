@@ -37,7 +37,7 @@ func requireClientReads(t *testing.T, err error, want connect.Code) {
 	require.NotContains(t, svcerr.ToConnect(err).Message(), "secret")
 }
 
-func newChatService(t *testing.T, repo *chat.StubRepo) *chat.Service {
+func newChatService(t *testing.T, repo *chat.MockRepository) *chat.Service {
 	t.Helper()
 	return chat.NewTestChat(t, chat.WithChatDeps(chat.Deps{Repo: repo}))
 }
@@ -55,12 +55,12 @@ func TestChatOwnershipRead_RepositoryFailureCodes(t *testing.T) {
 
 	for _, tc := range readFailures {
 		byID := func(t *testing.T) *chat.Service {
-			return newChatService(t, &chat.StubRepo{
+			return newChatService(t, &chat.MockRepository{
 				GetChatFunc: func(context.Context, string) (*db.Chat, error) { return nil, tc.err },
 			})
 		}
 		byOwner := func(t *testing.T) *chat.Service {
-			return newChatService(t, &chat.StubRepo{
+			return newChatService(t, &chat.MockRepository{
 				GetChatWithUserCheckFunc: func(context.Context, string, string) (*db.Chat, error) { return nil, tc.err },
 			})
 		}
@@ -113,7 +113,7 @@ func TestChatRepositoryCalls_FailureCodes(t *testing.T) {
 
 		t.Run("ListChats: "+tc.name, func(t *testing.T) {
 			t.Parallel()
-			svc := newChatService(t, &chat.StubRepo{
+			svc := newChatService(t, &chat.MockRepository{
 				ListChatsFunc: func(context.Context, db.ChatFilters) ([]*db.Chat, error) { return nil, tc.err },
 			})
 			_, err := svc.ListChats(ctx, connect.NewRequest(&pb.ListChatsRequest{ProjectId: "project-1"}))
@@ -121,7 +121,7 @@ func TestChatRepositoryCalls_FailureCodes(t *testing.T) {
 		})
 		t.Run("GetWorkflowExecutions list: "+tc.name, func(t *testing.T) {
 			t.Parallel()
-			svc := newChatService(t, &chat.StubRepo{
+			svc := newChatService(t, &chat.MockRepository{
 				GetChatFunc:             ownedChat,
 				ListWorkflowsByChatFunc: func(context.Context, string) ([]*db.Workflow, error) { return nil, tc.err },
 			})
@@ -130,7 +130,7 @@ func TestChatRepositoryCalls_FailureCodes(t *testing.T) {
 		})
 		t.Run("UpdateChatState write: "+tc.name, func(t *testing.T) {
 			t.Parallel()
-			svc := newChatService(t, &chat.StubRepo{
+			svc := newChatService(t, &chat.MockRepository{
 				GetChatFunc: ownedChat,
 				UpdateChatStateFunc: func(context.Context, string, db.ChatState, string) error {
 					return tc.err
@@ -143,7 +143,7 @@ func TestChatRepositoryCalls_FailureCodes(t *testing.T) {
 		})
 		t.Run("BranchChat: "+tc.name, func(t *testing.T) {
 			t.Parallel()
-			svc := newChatService(t, &chat.StubRepo{
+			svc := newChatService(t, &chat.MockRepository{
 				GetMessageFunc: func(context.Context, string) (*db.Message, error) { return nil, tc.err },
 			})
 			_, err := svc.BranchChat(ctx, connect.NewRequest(&pb.BranchChatRequest{MessageId: "message-1"}))
@@ -157,7 +157,7 @@ func TestChatRepositoryCalls_FailureCodes(t *testing.T) {
 func TestChatOwnership_ForeignChatIsNotFound(t *testing.T) {
 	t.Parallel()
 
-	svc := newChatService(t, &chat.StubRepo{
+	svc := newChatService(t, &chat.MockRepository{
 		GetChatFunc: func(_ context.Context, id string) (*db.Chat, error) {
 			return &db.Chat{ID: id, UserID: "someone-else"}, nil
 		},
@@ -172,7 +172,7 @@ func TestChatOwnership_ForeignChatIsNotFound(t *testing.T) {
 func TestChatOpaqueFailure_ReadsTheSummary(t *testing.T) {
 	t.Parallel()
 
-	svc := newChatService(t, &chat.StubRepo{
+	svc := newChatService(t, &chat.MockRepository{
 		GetChatFunc: func(context.Context, string) (*db.Chat, error) {
 			return nil, errors.New("dsn=postgres://u:secret@h")
 		},

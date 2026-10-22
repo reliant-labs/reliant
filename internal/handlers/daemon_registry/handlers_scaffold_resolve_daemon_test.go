@@ -24,7 +24,7 @@ func TestResolveDaemon_Generated(t *testing.T) {
 	// The caller has no daemons. The harness's auto-stub refuses an
 	// unprogrammed call, so the one listing this rpc makes is programmed.
 	svc := daemon_registry.NewTestDaemonRegistry(t, daemon_registry.WithDaemonRegistryDeps(daemon_registry.Deps{
-		Repo: &daemon_registry.StubRepo{
+		Repo: &daemon_registry.MockRepository{
 			ListDaemonsByUserIDFunc: func(context.Context, string) ([]*db.Daemon, error) { return nil, nil },
 			ListFreshDaemonAttachmentsForUserFunc: func(context.Context, string, time.Duration) ([]*db.DaemonAttachment, error) {
 				return nil, nil

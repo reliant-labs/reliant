@@ -22,7 +22,7 @@ func TestListApprovalsByChat_Generated(t *testing.T) {
 	t.Parallel()
 
 	// chat-1 belongs to another user; no other chat exists.
-	svc := approval.NewTestApproval(t, approval.WithApprovalDeps(approval.Deps{Repo: &approval.StubRepo{
+	svc := approval.NewTestApproval(t, approval.WithApprovalDeps(approval.Deps{Repo: &approval.MockRepository{
 		GetChatFunc: func(_ context.Context, id string) (*db.Chat, error) {
 			if id == "chat-1" {
 				return &db.Chat{ID: id, UserID: "someone-else"}, nil

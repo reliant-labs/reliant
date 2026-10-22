@@ -32,7 +32,7 @@ func TestDaemonRegistry_StoreFailuresOnTheWire(t *testing.T) {
 		{"opaque", errors.New("dial tcp: dsn=postgres://u:secret@h"), connect.CodeInternal},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			repo := &daemon_registry.StubRepo{
+			repo := &daemon_registry.MockRepository{
 				GetDaemonFunc:           func(context.Context, string) (*db.Daemon, error) { return nil, tc.err },
 				ListDaemonsByUserIDFunc: func(context.Context, string) ([]*db.Daemon, error) { return nil, tc.err },
 			}

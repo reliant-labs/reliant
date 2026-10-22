@@ -21,7 +21,7 @@ func TestLastRunPerWorkflow_Generated(t *testing.T) {
 
 	// The caller has no runs. The harness's auto-stub refuses an
 	// unprogrammed call, so the one query this rpc makes is programmed.
-	svc := run.NewTestRun(t, run.WithRunDeps(run.Deps{Repo: &run.StubRepo{
+	svc := run.NewTestRun(t, run.WithRunDeps(run.Deps{Repo: &run.MockRepository{
 		LastRunPerWorkflowFunc: func(context.Context, db.RunListFilters) ([]*db.RunListItem, error) {
 			return nil, nil
 		},

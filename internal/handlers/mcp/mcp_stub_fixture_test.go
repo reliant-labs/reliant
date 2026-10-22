@@ -20,9 +20,9 @@ func (f daemonFunc) SendDaemonCommand(_ context.Context, _, commandType string, 
 // ownedProjectRepo is a store where the harness caller (test-user) owns
 // project p-1 at /work, whose stored project-scope MCP configuration is
 // mcpConfigs. Every other project is not found.
-func ownedProjectRepo(t *testing.T, mcpConfigs string) *mcp.StubRepo {
+func ownedProjectRepo(t *testing.T, mcpConfigs string) *mcp.MockRepository {
 	t.Helper()
-	return &mcp.StubRepo{
+	return &mcp.MockRepository{
 		GetProjectWithUserCheckFunc: func(_ context.Context, id, userID string) (*db.Project, error) {
 			if id == "p-1" && userID == "test-user" {
 				return &db.Project{ID: id, UserID: userID, Name: "proj", Path: "/work"}, nil

@@ -38,7 +38,7 @@ var storeFailures = []struct {
 func TestSettings_StoreFailuresOnTheWire(t *testing.T) {
 	for _, tc := range storeFailures {
 		t.Run(tc.name, func(t *testing.T) {
-			repo := &StubRepo{
+			repo := &MockRepository{
 				ListSettingsFunc: func(context.Context, string, *string) ([]*db.Setting, error) { return nil, tc.err },
 				GetSettingFunc:   func(context.Context, string, *string, string) (*db.Setting, error) { return nil, tc.err },
 			}

@@ -36,7 +36,7 @@ func requireCode(t *testing.T, err error, code connect.Code) {
 // to look either up is no longer "not found": it is the failure it is.
 func TestWorktreeOwnership_ErrorClasses(t *testing.T) {
 	t.Parallel()
-	get := func(t *testing.T, store *worktree.StubRepo, id string) error {
+	get := func(t *testing.T, store *worktree.MockRepository, id string) error {
 		svc := worktree.NewTestWorktree(t, worktree.WithWorktreeDeps(worktree.Deps{Repo: store}))
 		_, err := svc.GetWorktree(worktree.AuthedContext(t), connect.NewRequest(&reliantv1.GetWorktreeRequest{WorktreeId: id}))
 		return err

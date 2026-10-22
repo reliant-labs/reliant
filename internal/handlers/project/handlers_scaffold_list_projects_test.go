@@ -19,7 +19,7 @@ func TestListProjects_Generated(t *testing.T) {
 	t.Parallel()
 
 	var filters db.ProjectFilters
-	store := &project.StubRepo{
+	store := &project.MockRepository{
 		ListProjectsFunc: func(_ context.Context, f db.ProjectFilters) ([]*db.Project, error) {
 			filters = f
 			return []*db.Project{ownedProject()}, nil
@@ -53,7 +53,7 @@ func TestListProjects_Generated(t *testing.T) {
 		},
 	}, svc.ListProjects)
 
-	failing := newService(t, &project.StubRepo{
+	failing := newService(t, &project.MockRepository{
 		ListProjectsFunc: func(context.Context, db.ProjectFilters) ([]*db.Project, error) {
 			return nil, errors.New("connection reset")
 		},

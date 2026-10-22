@@ -34,7 +34,7 @@ func TestInboxStoreErrorCodes(t *testing.T) {
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			repo := &StubRepo{ListInboxPendingFunc: func(context.Context, string) ([]*core.InboxPending, error) { return nil, tc.err }}
+			repo := &MockRepository{ListInboxPendingFunc: func(context.Context, string) ([]*core.InboxPending, error) { return nil, tc.err }}
 			svc := NewTestInbox(t, WithInboxDeps(Deps{Repo: repo}), WithPlaceholderDeps())
 			_, err := svc.ListInbox(AuthedContext(t), connect.NewRequest(&reliantv1.ListInboxRequest{}))
 			require.Error(t, err)
@@ -52,7 +52,7 @@ func TestInboxStoreErrorCodes(t *testing.T) {
 func TestInboxErrorsOnTheWire(t *testing.T) {
 	t.Parallel()
 
-	repo := &StubRepo{ListInboxPendingFunc: func(context.Context, string) ([]*core.InboxPending, error) {
+	repo := &MockRepository{ListInboxPendingFunc: func(context.Context, string) ([]*core.InboxPending, error) {
 		return nil, errors.New("dsn=postgres://u:secret@h")
 	}}
 	_, client := NewTestInboxServer(t, WithInboxDeps(Deps{Repo: repo}), WithPlaceholderDeps())

@@ -59,7 +59,7 @@ func TestListProjects_StoreErrorClasses(t *testing.T) {
 	for _, tc := range storeFailures(svcerr.NotFound("project")) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			svc := newService(t, &project.StubRepo{
+			svc := newService(t, &project.MockRepository{
 				ListProjectsFunc: func(context.Context, db.ProjectFilters) ([]*db.Project, error) { return nil, tc.err },
 			}, nil)
 			_, err := svc.ListProjects(project.AuthedContext(t), connect.NewRequest(&pb.ListProjectsRequest{}))
@@ -79,7 +79,7 @@ func TestProjectOwnership_StoreErrorClasses(t *testing.T) {
 	for _, tc := range storeFailures(core.ErrProjectNotFound) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			svc := newService(t, &project.StubRepo{
+			svc := newService(t, &project.MockRepository{
 				GetProjectWithUserCheckFunc: func(context.Context, string, string) (*db.Project, error) { return nil, tc.err },
 			}, nil)
 			_, err := svc.GetProjectMetadata(project.AuthedContext(t), connect.NewRequest(&pb.GetProjectMetadataRequest{ProjectId: "p-1"}))
@@ -112,7 +112,7 @@ func TestRemoveProjectFromDaemon_OnlyAMissNotAnOutageIsSuccess(t *testing.T) {
 	for _, tc := range storeFailures(core.ErrProjectNotFound) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			svc := newService(t, &project.StubRepo{
+			svc := newService(t, &project.MockRepository{
 				GetProjectWithUserCheckFunc: func(context.Context, string, string) (*db.Project, error) { return nil, tc.err },
 			}, nil)
 			_, err := svc.RemoveProjectFromDaemon(project.AuthedContext(t),
@@ -159,7 +159,7 @@ func TestProjectDaemonCommand_KeepsDaemonTextWithholdsTransportText(t *testing.T
 			t.Parallel()
 			store := ownedProjectRepo(t)
 			store.GetProjectFunc = func(context.Context, string) (*db.Project, error) { return gitProject, nil }
-			router := &project.StubRouter{
+			router := &project.MockRouter{
 				SendDaemonCommandFunc: func(context.Context, string, string, []byte, int32) ([]byte, error) { return nil, tc.err },
 			}
 			_, err := newService(t, store, router).GetProjectGitInfo(project.AuthedContext(t),
@@ -181,7 +181,7 @@ func TestProjectDaemonCommand_KeepsDaemonTextWithholdsTransportText(t *testing.T
 // and ListProjects' deadline is a deadline on the wire, not internal.
 func TestProjectService_OnTheWire(t *testing.T) {
 	t.Parallel()
-	store := &project.StubRepo{
+	store := &project.MockRepository{
 		GetProjectByPathAndUserFunc: func(context.Context, string, string) (*db.Project, error) {
 			return ownedProject(), nil
 		},
@@ -189,7 +189,7 @@ func TestProjectService_OnTheWire(t *testing.T) {
 			return nil, fmt.Errorf("list projects: %w", context.DeadlineExceeded)
 		},
 	}
-	router := &project.StubRouter{
+	router := &project.MockRouter{
 		SendDaemonCommandFunc: func(_ context.Context, _, commandType string, _ []byte, _ int32) ([]byte, error) {
 			if commandType != "fs.stat" {
 				return nil, fmt.Errorf("unexpected command %s", commandType)
