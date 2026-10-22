@@ -16,6 +16,9 @@
  *   none          the environment declares no identity. Says how to declare one.
  *   refused       its declaration was refused on the reconciler's last sweep;
  *                 the server's reason is the remedy.
+ *   pending       it declares one and the reconciler has not created it yet.
+ *   no shape      the control plane holds no deployed shape for it, so it
+ *                 cannot tell whether it declares one.
  *   denied        not a member of the org.
  *   error         anything else, with the server's words and a retry.
  *
@@ -45,6 +48,7 @@ import { Button } from "@/components/ui/Button";
 import { useIdentityMutation, useIdentityOrg, useIdentityStatus } from "@/hooks/identity-queries";
 import type {
   IdentityDeliveryState,
+  IdentityEnvironmentRef,
   IdentityExportURL,
   IdentityState,
   IdentityStatus,
@@ -149,6 +153,23 @@ function DeployedIdentity({
         </Frame>
       );
     }
+    if (s.notEnabledReason === "pending") {
+      return (
+        <Frame icon={<Fingerprint className="h-4 w-4" />} title={`Creating ${envName}'s sign-in service`} testId="identity-pending">
+          <p>
+            {envName} declares a managed identity and Reliant hasn&apos;t created it yet; it does on its next pass, usually within
+            a minute. Its issuer, users and roles show here once it exists.
+          </p>
+        </Frame>
+      );
+    }
+    if (s.notEnabledReason === "no-shape") {
+      return (
+        <Frame icon={<Fingerprint className="h-4 w-4" />} title={`Reliant can't tell yet whether ${envName} declares an identity`} testId="identity-no-shape">
+          <p>{s.notEnabledMessage || "It has no deployed shape yet. Deploy it, and its identity (if it declares one) shows here."}</p>
+        </Frame>
+      );
+    }
     return (
       <Frame
         icon={<Fingerprint className="h-4 w-4" />}
@@ -228,7 +249,16 @@ function StatusPanel({
   status: IdentityStatus;
   envNameById: (id: string) => string | undefined;
 }) {
-  const name = (id: string) => envNameById(id) ?? id;
+  // The control plane names the owner and sharers (they can be in another
+  // project); an older server sends ids only, which this project may know.
+  const named = new Map(
+    [s.ownerEnvironment, ...s.sharerEnvironments].filter((e): e is IdentityEnvironmentRef => !!e).map((e) => [e.id, e])
+  );
+  const name = (id: string) => named.get(id)?.name || envNameById(id) || id;
+  const describe = (id: string) => {
+    const e = named.get(id);
+    return e?.project ? `${e.project} / ${name(id)} (${id})` : id;
+  };
   const sharesAnother = !!s.ownerEnvironmentId && s.ownerEnvironmentId !== envId;
   return (
     <Panel
@@ -275,7 +305,11 @@ function StatusPanel({
               <dd className="text-foreground" data-testid="identity-sharing">
                 {sharesAnother ? (
                   <>
-                    Uses the identity of <span className="font-mono">{name(s.ownerEnvironmentId)}</span>, which owns it.
+                    Uses the identity of{" "}
+                    <span className="font-mono" title={describe(s.ownerEnvironmentId)}>
+                      {name(s.ownerEnvironmentId)}
+                    </span>
+                    , which owns it.
                   </>
                 ) : (
                   <>
@@ -283,7 +317,9 @@ function StatusPanel({
                     {s.sharerEnvironmentIds.map((id, i) => (
                       <span key={id}>
                         {i > 0 && ", "}
-                        <span className="font-mono">{name(id)}</span>
+                        <span className="font-mono" title={describe(id)}>
+                          {name(id)}
+                        </span>
                       </span>
                     ))}
                     .
@@ -368,6 +404,11 @@ function StatusPanel({
                       {d.cluster} · {d.namespace}/{d.name}
                     </span>
                     <span className="text-xs text-muted-foreground">{d.kind}</span>
+                    {d.lastWrittenAtMs && (
+                      <span className="text-xs text-muted-foreground" title="When the delivered values last changed">
+                        written {formatAgo(d.lastWrittenAtMs)}
+                      </span>
+                    )}
                     {d.lastVerifiedAtMs && (
                       <span className="text-xs text-muted-foreground">verified {formatAgo(d.lastVerifiedAtMs)}</span>
                     )}
@@ -395,8 +436,13 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 // ── Export ───────────────────────────────────────────────────────────────────
 
 function ExportPanel({ orgId, envId, status: s }: { orgId: string; envId: string; status: IdentityStatus }) {
+  // The only copy of a signed URL: component state, dropped on unmount. The
+  // mutations keep no result in the cache (secret), since the URL is a
+  // bearer credential for every user's password hash.
   const [link, setLink] = useState<IdentityExportURL | null>(null);
-  const fetchLink = useIdentityMutation(orgId, envId, (api, o, e, _: void) => api.getExportURL(o, e));
+  const fetchLink = useIdentityMutation(orgId, envId, (api, o, e, _: void) => api.getExportURL(o, e), { secret: true });
+  const exportNow = useIdentityMutation(orgId, envId, (api, o, e, _: void) => api.requestExport(o, e), { secret: true });
+  const serving = s.state === "ready" || s.state === "degraded";
 
   let body: ReactNode;
   if (!s.exportEnabled) {
@@ -405,6 +451,36 @@ function ExportPanel({ orgId, envId, status: s }: { orgId: string; envId: string
         Export isn&apos;t enabled for this deployment yet. When it is, an environment&apos;s users and roles can be downloaded
         here, and an export is written automatically before a withdrawn identity is deleted.
       </p>
+    );
+  } else if (serving) {
+    body = !s.callerCanManage ? (
+      <p data-testid="identity-export-admin-only">An organization admin can export this environment&apos;s users.</p>
+    ) : (
+      <div className="space-y-2" data-testid="identity-export-on-demand">
+        <p>
+          Exports every user of this sign-in service — password hashes included, in a form Zitadel can import — and gives you
+          a download link that works for a few minutes for whoever holds it. Exporting again within 15 minutes returns the
+          same export.
+        </p>
+        {link ? (
+          <ExportLink link={link} />
+        ) : (
+          <Button
+            variant="outline"
+            size="sm"
+            leftIcon={<Download className="h-3.5 w-3.5" />}
+            loading={exportNow.isPending}
+            onClick={() => exportNow.mutate(undefined, { onSuccess: setLink })}
+          >
+            Export users
+          </Button>
+        )}
+        {exportNow.error && (
+          <p role="alert" className="text-destructive-ink">
+            {identityErrorMessage(exportNow.error) || "Couldn't export this identity."}
+          </p>
+        )}
+      </div>
     );
   } else if (!s.exportUrlAvailable) {
     body = (
@@ -420,12 +496,7 @@ function ExportPanel({ orgId, envId, status: s }: { orgId: string; envId: string
       <div className="space-y-2" data-testid="identity-export-ready">
         <p>An export of this identity is ready. Its download link is short-lived and works for whoever holds it.</p>
         {link ? (
-          <p className="text-foreground">
-            <a href={link.url} className="text-primary underline-offset-2 hover:underline" rel="noreferrer" target="_blank">
-              Download the export
-            </a>
-            {link.expiresAtMs && <span className="text-muted-foreground"> — expires {formatIn(link.expiresAtMs)}</span>}
-          </p>
+          <ExportLink link={link} />
         ) : (
           <Button
             variant="outline"
@@ -449,6 +520,17 @@ function ExportPanel({ orgId, envId, status: s }: { orgId: string; envId: string
     <Panel title="Export" description="A copy of this environment's users and roles." testId="identity-export">
       <div className="text-xs text-muted-foreground">{body}</div>
     </Panel>
+  );
+}
+
+function ExportLink({ link }: { link: IdentityExportURL }) {
+  return (
+    <p className="text-foreground" data-testid="identity-export-link">
+      <a href={link.url} className="text-primary underline-offset-2 hover:underline" rel="noreferrer" target="_blank">
+        Download the export
+      </a>
+      {link.expiresAtMs && <span className="text-muted-foreground"> — expires {formatIn(link.expiresAtMs)}</span>}
+    </p>
   );
 }
 

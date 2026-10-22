@@ -39,6 +39,34 @@ enum IdentityState {
   IDENTITY_STATE_DELETED = 10;
 }
 
+// IdentityNotEnabledReason is why an environment has no identity instance
+// (GetIdentityStatus with has_instance false).
+enum IdentityNotEnabledReason {
+  IDENTITY_NOT_ENABLED_REASON_UNSPECIFIED = 0;
+  // The environment's deployed KCL declares no forge.ManagedIdentity.
+  IDENTITY_NOT_ENABLED_REASON_NOT_DECLARED = 1;
+  // The environment declares one and the control plane refused it; the
+  // response's refused field says why.
+  IDENTITY_NOT_ENABLED_REASON_REFUSED = 2;
+  // The environment declares one and the identity reconciler has not created
+  // its instance yet; it does on its next sweep.
+  IDENTITY_NOT_ENABLED_REASON_PENDING = 3;
+  // The control plane holds no readable deployed shape for the environment
+  // (it was never deployed, or its shape cannot be read), so whether it
+  // declares one is unknown.
+  IDENTITY_NOT_ENABLED_REASON_NO_SHAPE = 4;
+}
+
+// IdentityEnvironment names an environment of the caller's org: the owner of
+// an identity instance, or one that shares it.
+message IdentityEnvironment {
+  string id = 1;
+  // Empty when the environment is no longer live.
+  string name = 2;
+  // The environment's project; empty for a project-less environment.
+  string project = 3;
+}
+
 // IdentityDeliveryState uses telemetrydelivery's vocabulary.
 enum IdentityDeliveryState {
   IDENTITY_DELIVERY_STATE_UNSPECIFIED = 0;
@@ -104,6 +132,10 @@ message IdentityDelivery {
   IdentityDeliveryState state = 5;
   string last_error = 6;
   google.protobuf.Timestamp last_verified_at = 7;
+  // When the outputs were last WRITTEN to the destination (first delivery or
+  // a change such as a rotated token). last_verified_at moves on every pass
+  // that finds them current; this moves only when the content does.
+  google.protobuf.Timestamp last_written_at = 8;
 }
 
 // IdentityRole is a role the environment's identity declares. A declared role
@@ -124,4 +156,8 @@ message IdentityUser {
   // Project roles the user holds, declared and console-managed alike.
   repeated string roles = 5;
   google.protobuf.Timestamp created_at = 6;
+  // The user's most recent successful sign-in check (a password, passkey or
+  // external identity provider) as the instance recorded it. Unset for a user
+  // who has never signed in.
+  google.protobuf.Timestamp last_sign_in_at = 7;
 }

@@ -96,15 +96,19 @@ type IdentityServiceClient interface {
 	// RevokeSessions ends the user's sign-in sessions. Access tokens already
 	// issued stay valid until they expire.
 	RevokeSessions(context.Context, *connect.Request[v1.RevokeIdentitySessionsRequest]) (*connect.Response[v1.RevokeIdentitySessionsResponse], error)
-	// RequestExport returns a signed, short-lived download URL for the
-	// environment's identity export. Exports are written when an environment's
-	// identity is withdrawn, so on a live instance with no export this is
-	// Unimplemented until on-demand export lands. FailedPrecondition where export
-	// is not enabled for this deployment.
+	// RequestExport exports the environment's identity instance now (every
+	// user, password hashes included) and returns a signed, short-lived
+	// download URL for it. Requests within the same 15 minutes share one
+	// export. A withdrawn instance is not exported again: the URL is for the
+	// export written at withdrawal. Needs identity:manage (a person: org admin
+	// AND the identity:manage grant), because the export is a credential.
+	// FailedPrecondition where export is not enabled for this deployment, or
+	// the instance is not ready.
 	RequestExport(context.Context, *connect.Request[v1.RequestIdentityExportRequest]) (*connect.Response[v1.RequestIdentityExportResponse], error)
 	// GetExportURL returns a fresh signed URL for the export that already exists
 	// (the one written when the identity was withdrawn). NotFound when there is
-	// none; FailedPrecondition where export is not enabled.
+	// none; FailedPrecondition where export is not enabled. Needs
+	// identity:manage, as RequestExport does.
 	GetExportURL(context.Context, *connect.Request[v1.GetIdentityExportURLRequest]) (*connect.Response[v1.GetIdentityExportURLResponse], error)
 }
 
@@ -286,15 +290,19 @@ type IdentityServiceHandler interface {
 	// RevokeSessions ends the user's sign-in sessions. Access tokens already
 	// issued stay valid until they expire.
 	RevokeSessions(context.Context, *connect.Request[v1.RevokeIdentitySessionsRequest]) (*connect.Response[v1.RevokeIdentitySessionsResponse], error)
-	// RequestExport returns a signed, short-lived download URL for the
-	// environment's identity export. Exports are written when an environment's
-	// identity is withdrawn, so on a live instance with no export this is
-	// Unimplemented until on-demand export lands. FailedPrecondition where export
-	// is not enabled for this deployment.
+	// RequestExport exports the environment's identity instance now (every
+	// user, password hashes included) and returns a signed, short-lived
+	// download URL for it. Requests within the same 15 minutes share one
+	// export. A withdrawn instance is not exported again: the URL is for the
+	// export written at withdrawal. Needs identity:manage (a person: org admin
+	// AND the identity:manage grant), because the export is a credential.
+	// FailedPrecondition where export is not enabled for this deployment, or
+	// the instance is not ready.
 	RequestExport(context.Context, *connect.Request[v1.RequestIdentityExportRequest]) (*connect.Response[v1.RequestIdentityExportResponse], error)
 	// GetExportURL returns a fresh signed URL for the export that already exists
 	// (the one written when the identity was withdrawn). NotFound when there is
-	// none; FailedPrecondition where export is not enabled.
+	// none; FailedPrecondition where export is not enabled. Needs
+	// identity:manage, as RequestExport does.
 	GetExportURL(context.Context, *connect.Request[v1.GetIdentityExportURLRequest]) (*connect.Response[v1.GetIdentityExportURLResponse], error)
 }
 

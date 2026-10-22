@@ -55,13 +55,19 @@ function status(overrides: Partial<IdentityStatus> = {}): IdentityStatus {
     callerCanManage: true,
     exportEnabled: false,
     mailDelivery: "none",
+    notEnabledReason: "unknown",
+    notEnabledMessage: "",
+    ownerEnvironment: null,
+    sharerEnvironments: [],
     ...overrides,
   };
 }
 
 const USERS: IdentityUsersPage = {
-  users: [{ userId: "u-alice", email: "alice@acme.test", displayName: "", state: "active", roles: [], createdAtMs: NOW }],
+  users: [{ userId: "u-alice", email: "alice@acme.test", displayName: "", state: "active", roles: [], createdAtMs: NOW, lastSignInAtMs: null }],
   nextPageToken: "",
+  totalSize: null,
+  reportsSignIns: false,
   roles: [{ key: "writer", displayName: "Writer", group: "", declared: false }],
 };
 
@@ -84,6 +90,7 @@ function fakeApi(overrides: Partial<IdentityApi> = {}): IdentityApi {
     deleteUser: vi.fn(async () => {}),
     revokeSessions: vi.fn(async () => 0),
     getExportURL: vi.fn(async () => ({ url: "", expiresAtMs: null })),
+    requestExport: vi.fn(async () => ({ url: "https://signed.example/on-demand", expiresAtMs: NOW + 600_000 })),
     ...overrides,
   };
 }

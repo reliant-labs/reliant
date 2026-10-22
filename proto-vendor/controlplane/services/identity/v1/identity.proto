@@ -28,9 +28,10 @@ option go_package = "github.com/reliant-labs/control-plane/gen/services/identity
 // admin or above. A machine credential: it must act for THAT org and carry the
 // scope explicitly, identity:read for the reads and identity:manage for the
 // rest (deploy's callerOrgID model); a Reliant agent's forge elevates to them
-// on demand, clipped to its person's grants. Asking for a password-set code
-// back (return_code) needs identity:manage either way: a person must also be
-// an org admin and hold the identity:manage grant. Every mutation is audited,
+// on demand, clipped to its person's grants. Anything that hands a credential
+// back — a password-set code (return_code) or an export (RequestExport,
+// GetExportURL) — needs identity:manage either way: a person must also be an
+// org admin and hold the identity:manage grant. Every mutation is audited,
 // a machine caller by its token id and acting user.
 //
 // MAIL. GetIdentityStatus reports mail_delivery. With none, InviteUser and
@@ -192,11 +193,14 @@ service IdentityService {
     };
   }
 
-  // RequestExport returns a signed, short-lived download URL for the
-  // environment's identity export. Exports are written when an environment's
-  // identity is withdrawn, so on a live instance with no export this is
-  // Unimplemented until on-demand export lands. FailedPrecondition where export
-  // is not enabled for this deployment.
+  // RequestExport exports the environment's identity instance now (every
+  // user, password hashes included) and returns a signed, short-lived
+  // download URL for it. Requests within the same 15 minutes share one
+  // export. A withdrawn instance is not exported again: the URL is for the
+  // export written at withdrawal. Needs identity:manage (a person: org admin
+  // AND the identity:manage grant), because the export is a credential.
+  // FailedPrecondition where export is not enabled for this deployment, or
+  // the instance is not ready.
   rpc RequestExport(RequestIdentityExportRequest) returns (RequestIdentityExportResponse) {
     option (forge.v1.method) = {
       auth_required: true
@@ -214,7 +218,8 @@ service IdentityService {
 
   // GetExportURL returns a fresh signed URL for the export that already exists
   // (the one written when the identity was withdrawn). NotFound when there is
-  // none; FailedPrecondition where export is not enabled.
+  // none; FailedPrecondition where export is not enabled. Needs
+  // identity:manage, as RequestExport does.
   rpc GetExportURL(GetIdentityExportURLRequest) returns (GetIdentityExportURLResponse) {
     option (forge.v1.method) = {
       auth_required: true
@@ -269,6 +274,14 @@ message GetIdentityStatusResponse {
   // Whether the instance can send mail. NONE means InviteUser and
   // SendPasswordReset need return_code.
   IdentityMailDelivery mail_delivery = 20;
+  // Why there is no instance, when has_instance is false.
+  IdentityNotEnabledReason not_enabled_reason = 21;
+  // The same, as one sentence a console or CLI can show as it stands.
+  string not_enabled_message = 22;
+  // owner_environment_id with its name, and sharer_environment_ids likewise,
+  // in the same order. Set by admin-server, never by the reconciler.
+  IdentityEnvironment owner_environment = 23;
+  repeated IdentityEnvironment sharer_environments = 24;
 }
 
 message ListIdentityUsersRequest {
@@ -290,6 +303,9 @@ message ListIdentityUsersResponse {
   // The roles the environment declares, so a console can show which are
   // read-only.
   repeated IdentityRole roles = 3;
+  // How many users match the request's filters across every page, as the
+  // instance counts them.
+  int32 total_size = 4;
 }
 
 message InviteIdentityUserRequest {
@@ -419,7 +435,8 @@ message RequestIdentityExportRequest {
 }
 
 message RequestIdentityExportResponse {
-  // A signed, short-lived download URL for the freshly written export.
+  // A signed, short-lived download URL for the export. It is a bearer
+  // credential for every user's password hash: never log or share it.
   string export_url = 1;
   google.protobuf.Timestamp expires_at = 2;
 }

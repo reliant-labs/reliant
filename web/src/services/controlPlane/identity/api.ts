@@ -31,8 +31,10 @@ import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import {
   IdentityDeliveryState as WireDeliveryState,
   IdentityMailDelivery as WireMailDelivery,
+  IdentityNotEnabledReason as WireNotEnabledReason,
   IdentityState as WireState,
   IdentityUserState as WireUserState,
+  type IdentityEnvironment as WireEnvironment,
   type IdentityPasswordCode as WirePasswordCode,
   type IdentityUser as WireUser,
 } from "@/gen/controlplane/controlplane/v1/identity_pb";
@@ -85,6 +87,22 @@ export interface IdentityDelivery {
   state: IdentityDeliveryState;
   lastError: string;
   lastVerifiedAtMs: number | null;
+  /** When the outputs last CHANGED at the destination (verification alone does not move it). */
+  lastWrittenAtMs: number | null;
+}
+
+/**
+ * Why an environment has no instance. `unknown`: a server that predates the
+ * field, which says only `refused`.
+ */
+export type IdentityNotEnabledReason = "not-declared" | "refused" | "pending" | "no-shape" | "unknown";
+
+/** An environment of the caller's org, named by the control plane. */
+export interface IdentityEnvironmentRef {
+  id: string;
+  /** "" when the environment is no longer live. */
+  name: string;
+  project: string;
 }
 
 export interface IdentityStatus {
@@ -117,6 +135,12 @@ export interface IdentityStatus {
    * that predates the field, so the console claims neither.
    */
   mailDelivery: IdentityMailDelivery;
+  /** Why there is no instance, when `hasInstance` is false, and the server's sentence for it. */
+  notEnabledReason: IdentityNotEnabledReason;
+  notEnabledMessage: string;
+  /** ownerEnvironmentId / sharerEnvironmentIds with names; null / [] from a server that predates them. */
+  ownerEnvironment: IdentityEnvironmentRef | null;
+  sharerEnvironments: IdentityEnvironmentRef[];
 }
 
 export type IdentityMailDelivery = "none" | "smtp" | "unknown";
@@ -149,12 +173,22 @@ export interface IdentityUser {
   /** Declared and console-managed alike. */
   roles: string[];
   createdAtMs: number | null;
+  /** The newest successful sign-in the instance recorded; null for never (see `reportsSignIns`). */
+  lastSignInAtMs: number | null;
 }
 
 export interface IdentityUsersPage {
   users: IdentityUser[];
   nextPageToken: string;
   roles: IdentityRole[];
+  /** How many users match the filter across every page; null from a server that does not count. */
+  totalSize: number | null;
+  /**
+   * Whether this server reports sign-ins at all, so a null `lastSignInAtMs`
+   * means "never" rather than "not reported". A server that does always
+   * counts, and a page with users has a count of at least one.
+   */
+  reportsSignIns: boolean;
 }
 
 export interface IdentityUserFilter {
@@ -204,6 +238,17 @@ const USER_STATE: Record<number, IdentityUserState> = {
   [WireUserState.DISABLED]: "disabled",
 };
 
+const NOT_ENABLED: Record<number, IdentityNotEnabledReason> = {
+  [WireNotEnabledReason.NOT_DECLARED]: "not-declared",
+  [WireNotEnabledReason.REFUSED]: "refused",
+  [WireNotEnabledReason.PENDING]: "pending",
+  [WireNotEnabledReason.NO_SHAPE]: "no-shape",
+};
+
+function mapEnvironment(e: WireEnvironment): IdentityEnvironmentRef {
+  return { id: e.id, name: e.name, project: e.project };
+}
+
 const USER_STATE_TO_WIRE: Record<Exclude<IdentityUserState, "unknown">, WireUserState> = {
   invited: WireUserState.INVITED,
   active: WireUserState.ACTIVE,
@@ -219,6 +264,7 @@ function mapUser(u: WireUser): IdentityUser {
     state: USER_STATE[u.state] ?? "unknown",
     roles: [...u.roles],
     createdAtMs: msOf(u.createdAt),
+    lastSignInAtMs: msOf(u.lastSignInAt),
   };
 }
 
@@ -247,6 +293,7 @@ export async function getIdentityStatus(orgId: string, environmentId: string): P
       state: DELIVERY_STATE[d.state] ?? "unknown",
       lastError: d.lastError,
       lastVerifiedAtMs: msOf(d.lastVerifiedAt),
+      lastWrittenAtMs: msOf(d.lastWrittenAt),
     })),
     ownerEnvironmentId: r.ownerEnvironmentId,
     sharerEnvironmentIds: [...r.sharerEnvironmentIds],
@@ -260,6 +307,10 @@ export async function getIdentityStatus(orgId: string, environmentId: string): P
     callerCanManage: r.callerCanManage,
     exportEnabled: r.exportEnabled,
     mailDelivery: MAIL_DELIVERY[r.mailDelivery] ?? "unknown",
+    notEnabledReason: NOT_ENABLED[r.notEnabledReason] ?? (r.refused ? "refused" : "unknown"),
+    notEnabledMessage: r.notEnabledMessage,
+    ownerEnvironment: r.ownerEnvironment ? mapEnvironment(r.ownerEnvironment) : null,
+    sharerEnvironments: r.sharerEnvironments.map(mapEnvironment),
   };
 }
 
@@ -284,6 +335,8 @@ export async function listIdentityUsers(
     users: r.users.map(mapUser),
     nextPageToken: r.nextPageToken,
     roles: r.roles.map((role) => ({ key: role.key, displayName: role.displayName, group: role.group, declared: role.declared })),
+    totalSize: r.totalSize > 0 ? r.totalSize : null,
+    reportsSignIns: r.totalSize > 0,
   };
 }
 
@@ -354,6 +407,17 @@ export async function deleteIdentityUser(orgId: string, environmentId: string, u
 export async function revokeIdentitySessions(orgId: string, environmentId: string, userId: string): Promise<number> {
   const r = await client().revokeSessions({ orgId, environmentId, userId });
   return r.sessionsRevoked;
+}
+
+/**
+ * Exports the instance now — every user, password hashes included — and signs
+ * a download of it (requests within the same 15 minutes share one export).
+ * Needs the identity:manage permission. The URL is a bearer credential for
+ * every password hash: never log, toast or cache it.
+ */
+export async function requestIdentityExport(orgId: string, environmentId: string): Promise<IdentityExportURL> {
+  const r = await client().requestExport({ orgId, environmentId });
+  return { url: r.exportUrl, expiresAtMs: msOf(r.expiresAt) };
 }
 
 /** A fresh signed URL for the export that already exists. The URL is a bearer credential: never log it. */

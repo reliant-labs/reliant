@@ -15,7 +15,41 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file controlplane/v1/identity.proto.
  */
 export const file_controlplane_v1_identity: GenFile = /*@__PURE__*/
-  fileDesc("Ch5jb250cm9scGxhbmUvdjEvaWRlbnRpdHkucHJvdG8SD2NvbnRyb2xwbGFuZS52MSJnChRJZGVudGl0eVBhc3N3b3JkQ29kZRIMCgRjb2RlGAEgASgJEi4KCmV4cGlyZXNfYXQYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhEKCXJlc2V0X3VybBgDIAEoCSJlCgtJZGVudGl0eUFwcBIMCgRuYW1lGAEgASgJEhEKCWNsaWVudF9pZBgCIAEoCRI1ChFicm9rZXJfZXhwaXJlc19hdBgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAi0wEKEElkZW50aXR5RGVsaXZlcnkSDAoEa2luZBgBIAEoCRIPCgdjbHVzdGVyGAIgASgJEhEKCW5hbWVzcGFjZRgDIAEoCRIMCgRuYW1lGAQgASgJEjUKBXN0YXRlGAUgASgOMiYuY29udHJvbHBsYW5lLnYxLklkZW50aXR5RGVsaXZlcnlTdGF0ZRISCgpsYXN0X2Vycm9yGAYgASgJEjQKEGxhc3RfdmVyaWZpZWRfYXQYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIlIKDElkZW50aXR5Um9sZRILCgNrZXkYASABKAkSFAoMZGlzcGxheV9uYW1lGAIgASgJEg0KBWdyb3VwGAMgASgJEhAKCGRlY2xhcmVkGAQgASgIIrYBCgxJZGVudGl0eVVzZXISDwoHdXNlcl9pZBgBIAEoCRINCgVlbWFpbBgCIAEoCRIUCgxkaXNwbGF5X25hbWUYAyABKAkSMQoFc3RhdGUYBCABKA4yIi5jb250cm9scGxhbmUudjEuSWRlbnRpdHlVc2VyU3RhdGUSDQoFcm9sZXMYBSADKAkSLgoKY3JlYXRlZF9hdBgGIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAqzQIKDUlkZW50aXR5U3RhdGUSHgoaSURFTlRJVFlfU1RBVEVfVU5TUEVDSUZJRUQQABIaChZJREVOVElUWV9TVEFURV9QRU5ESU5HEAESGwoXSURFTlRJVFlfU1RBVEVfQ1JFQVRJTkcQAhIfChtJREVOVElUWV9TVEFURV9QUk9WSVNJT05JTkcQAxIYChRJREVOVElUWV9TVEFURV9SRUFEWRAEEhsKF0lERU5USVRZX1NUQVRFX0RFR1JBREVEEAUSGgoWSURFTlRJVFlfU1RBVEVfRkFJTElORxAGEhwKGElERU5USVRZX1NUQVRFX1dJVEhEUkFXThAHEhgKFElERU5USVRZX1NUQVRFX0dSQUNFEAgSGwoXSURFTlRJVFlfU1RBVEVfREVMRVRJTkcQCRIaChZJREVOVElUWV9TVEFURV9ERUxFVEVEEAoqowIKFUlkZW50aXR5RGVsaXZlcnlTdGF0ZRInCiNJREVOVElUWV9ERUxJVkVSWV9TVEFURV9VTlNQRUNJRklFRBAAEiUKIUlERU5USVRZX0RFTElWRVJZX1NUQVRFX0RFTElWRVJFRBABEiMKH0lERU5USVRZX0RFTElWRVJZX1NUQVRFX1BFTkRJTkcQAhIjCh9JREVOVElUWV9ERUxJVkVSWV9TVEFURV9GQUlMSU5HEAMSIwofSURFTlRJVFlfREVMSVZFUllfU1RBVEVfVU5CT1VORBAEEiUKIUlERU5USVRZX0RFTElWRVJZX1NUQVRFX1dJVEhEUkFXThAFEiQKIElERU5USVRZX0RFTElWRVJZX1NUQVRFX0RJU0FCTEVEEAYqgAEKFElkZW50aXR5TWFpbERlbGl2ZXJ5EiYKIklERU5USVRZX01BSUxfREVMSVZFUllfVU5TUEVDSUZJRUQQABIfChtJREVOVElUWV9NQUlMX0RFTElWRVJZX05PTkUQARIfChtJREVOVElUWV9NQUlMX0RFTElWRVJZX1NNVFAQAiq7AQoRSWRlbnRpdHlVc2VyU3RhdGUSIwofSURFTlRJVFlfVVNFUl9TVEFURV9VTlNQRUNJRklFRBAAEh8KG0lERU5USVRZX1VTRVJfU1RBVEVfSU5WSVRFRBABEh4KGklERU5USVRZX1VTRVJfU1RBVEVfQUNUSVZFEAISHgoaSURFTlRJVFlfVVNFUl9TVEFURV9MT0NLRUQQAxIgChxJREVOVElUWV9VU0VSX1NUQVRFX0RJU0FCTEVEEARC0gEKE2NvbS5jb250cm9scGxhbmUudjFCDUlkZW50aXR5UHJvdG9QAVpPZ2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vY29udHJvbHBsYW5lL2NvbnRyb2xwbGFuZS92MTtjb250cm9scGxhbmV2MaICA0NYWKoCD0NvbnRyb2xwbGFuZS5WMcoCD0NvbnRyb2xwbGFuZVxWMeICG0NvbnRyb2xwbGFuZVxWMVxHUEJNZXRhZGF0YeoCEENvbnRyb2xwbGFuZTo6VjFiBnByb3RvMw", [file_google_protobuf_timestamp]);
+  fileDesc("Ch5jb250cm9scGxhbmUvdjEvaWRlbnRpdHkucHJvdG8SD2NvbnRyb2xwbGFuZS52MSJAChNJZGVudGl0eUVudmlyb25tZW50EgoKAmlkGAEgASgJEgwKBG5hbWUYAiABKAkSDwoHcHJvamVjdBgDIAEoCSJnChRJZGVudGl0eVBhc3N3b3JkQ29kZRIMCgRjb2RlGAEgASgJEi4KCmV4cGlyZXNfYXQYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhEKCXJlc2V0X3VybBgDIAEoCSJlCgtJZGVudGl0eUFwcBIMCgRuYW1lGAEgASgJEhEKCWNsaWVudF9pZBgCIAEoCRI1ChFicm9rZXJfZXhwaXJlc19hdBgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiiAIKEElkZW50aXR5RGVsaXZlcnkSDAoEa2luZBgBIAEoCRIPCgdjbHVzdGVyGAIgASgJEhEKCW5hbWVzcGFjZRgDIAEoCRIMCgRuYW1lGAQgASgJEjUKBXN0YXRlGAUgASgOMiYuY29udHJvbHBsYW5lLnYxLklkZW50aXR5RGVsaXZlcnlTdGF0ZRISCgpsYXN0X2Vycm9yGAYgASgJEjQKEGxhc3RfdmVyaWZpZWRfYXQYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjMKD2xhc3Rfd3JpdHRlbl9hdBgIIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiUgoMSWRlbnRpdHlSb2xlEgsKA2tleRgBIAEoCRIUCgxkaXNwbGF5X25hbWUYAiABKAkSDQoFZ3JvdXAYAyABKAkSEAoIZGVjbGFyZWQYBCABKAgi6wEKDElkZW50aXR5VXNlchIPCgd1c2VyX2lkGAEgASgJEg0KBWVtYWlsGAIgASgJEhQKDGRpc3BsYXlfbmFtZRgDIAEoCRIxCgVzdGF0ZRgEIAEoDjIiLmNvbnRyb2xwbGFuZS52MS5JZGVudGl0eVVzZXJTdGF0ZRINCgVyb2xlcxgFIAMoCRIuCgpjcmVhdGVkX2F0GAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIzCg9sYXN0X3NpZ25faW5fYXQYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wKs0CCg1JZGVudGl0eVN0YXRlEh4KGklERU5USVRZX1NUQVRFX1VOU1BFQ0lGSUVEEAASGgoWSURFTlRJVFlfU1RBVEVfUEVORElORxABEhsKF0lERU5USVRZX1NUQVRFX0NSRUFUSU5HEAISHwobSURFTlRJVFlfU1RBVEVfUFJPVklTSU9OSU5HEAMSGAoUSURFTlRJVFlfU1RBVEVfUkVBRFkQBBIbChdJREVOVElUWV9TVEFURV9ERUdSQURFRBAFEhoKFklERU5USVRZX1NUQVRFX0ZBSUxJTkcQBhIcChhJREVOVElUWV9TVEFURV9XSVRIRFJBV04QBxIYChRJREVOVElUWV9TVEFURV9HUkFDRRAIEhsKF0lERU5USVRZX1NUQVRFX0RFTEVUSU5HEAkSGgoWSURFTlRJVFlfU1RBVEVfREVMRVRFRBAKKvEBChhJZGVudGl0eU5vdEVuYWJsZWRSZWFzb24SKwonSURFTlRJVFlfTk9UX0VOQUJMRURfUkVBU09OX1VOU1BFQ0lGSUVEEAASLAooSURFTlRJVFlfTk9UX0VOQUJMRURfUkVBU09OX05PVF9ERUNMQVJFRBABEicKI0lERU5USVRZX05PVF9FTkFCTEVEX1JFQVNPTl9SRUZVU0VEEAISJwojSURFTlRJVFlfTk9UX0VOQUJMRURfUkVBU09OX1BFTkRJTkcQAxIoCiRJREVOVElUWV9OT1RfRU5BQkxFRF9SRUFTT05fTk9fU0hBUEUQBCqjAgoVSWRlbnRpdHlEZWxpdmVyeVN0YXRlEicKI0lERU5USVRZX0RFTElWRVJZX1NUQVRFX1VOU1BFQ0lGSUVEEAASJQohSURFTlRJVFlfREVMSVZFUllfU1RBVEVfREVMSVZFUkVEEAESIwofSURFTlRJVFlfREVMSVZFUllfU1RBVEVfUEVORElORxACEiMKH0lERU5USVRZX0RFTElWRVJZX1NUQVRFX0ZBSUxJTkcQAxIjCh9JREVOVElUWV9ERUxJVkVSWV9TVEFURV9VTkJPVU5EEAQSJQohSURFTlRJVFlfREVMSVZFUllfU1RBVEVfV0lUSERSQVdOEAUSJAogSURFTlRJVFlfREVMSVZFUllfU1RBVEVfRElTQUJMRUQQBiqAAQoUSWRlbnRpdHlNYWlsRGVsaXZlcnkSJgoiSURFTlRJVFlfTUFJTF9ERUxJVkVSWV9VTlNQRUNJRklFRBAAEh8KG0lERU5USVRZX01BSUxfREVMSVZFUllfTk9ORRABEh8KG0lERU5USVRZX01BSUxfREVMSVZFUllfU01UUBACKrsBChFJZGVudGl0eVVzZXJTdGF0ZRIjCh9JREVOVElUWV9VU0VSX1NUQVRFX1VOU1BFQ0lGSUVEEAASHwobSURFTlRJVFlfVVNFUl9TVEFURV9JTlZJVEVEEAESHgoaSURFTlRJVFlfVVNFUl9TVEFURV9BQ1RJVkUQAhIeChpJREVOVElUWV9VU0VSX1NUQVRFX0xPQ0tFRBADEiAKHElERU5USVRZX1VTRVJfU1RBVEVfRElTQUJMRUQQBELSAQoTY29tLmNvbnRyb2xwbGFuZS52MUINSWRlbnRpdHlQcm90b1ABWk9naXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9jb250cm9scGxhbmUvY29udHJvbHBsYW5lL3YxO2NvbnRyb2xwbGFuZXYxogIDQ1hYqgIPQ29udHJvbHBsYW5lLlYxygIPQ29udHJvbHBsYW5lXFYx4gIbQ29udHJvbHBsYW5lXFYxXEdQQk1ldGFkYXRh6gIQQ29udHJvbHBsYW5lOjpWMWIGcHJvdG8z", [file_google_protobuf_timestamp]);
+
+/**
+ * IdentityEnvironment names an environment of the caller's org: the owner of
+ * an identity instance, or one that shares it.
+ *
+ * @generated from message controlplane.v1.IdentityEnvironment
+ */
+export type IdentityEnvironment = Message<"controlplane.v1.IdentityEnvironment"> & {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id: string;
+
+  /**
+   * Empty when the environment is no longer live.
+   *
+   * @generated from field: string name = 2;
+   */
+  name: string;
+
+  /**
+   * The environment's project; empty for a project-less environment.
+   *
+   * @generated from field: string project = 3;
+   */
+  project: string;
+};
+
+/**
+ * Describes the message controlplane.v1.IdentityEnvironment.
+ * Use `create(IdentityEnvironmentSchema)` to create a new message.
+ */
+export const IdentityEnvironmentSchema: GenMessage<IdentityEnvironment> = /*@__PURE__*/
+  messageDesc(file_controlplane_v1_identity, 0);
 
 /**
  * IdentityPasswordCode is a one-time code that sets a user's password, handed
@@ -53,7 +87,7 @@ export type IdentityPasswordCode = Message<"controlplane.v1.IdentityPasswordCode
  * Use `create(IdentityPasswordCodeSchema)` to create a new message.
  */
 export const IdentityPasswordCodeSchema: GenMessage<IdentityPasswordCode> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_identity, 0);
+  messageDesc(file_controlplane_v1_identity, 1);
 
 /**
  * IdentityApp is one registered application. A client id is not a secret.
@@ -85,7 +119,7 @@ export type IdentityApp = Message<"controlplane.v1.IdentityApp"> & {
  * Use `create(IdentityAppSchema)` to create a new message.
  */
 export const IdentityAppSchema: GenMessage<IdentityApp> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_identity, 1);
+  messageDesc(file_controlplane_v1_identity, 2);
 
 /**
  * IdentityDelivery is one destination the instance's outputs are delivered to.
@@ -127,6 +161,15 @@ export type IdentityDelivery = Message<"controlplane.v1.IdentityDelivery"> & {
    * @generated from field: google.protobuf.Timestamp last_verified_at = 7;
    */
   lastVerifiedAt?: Timestamp | undefined;
+
+  /**
+   * When the outputs were last WRITTEN to the destination (first delivery or
+   * a change such as a rotated token). last_verified_at moves on every pass
+   * that finds them current; this moves only when the content does.
+   *
+   * @generated from field: google.protobuf.Timestamp last_written_at = 8;
+   */
+  lastWrittenAt?: Timestamp | undefined;
 };
 
 /**
@@ -134,7 +177,7 @@ export type IdentityDelivery = Message<"controlplane.v1.IdentityDelivery"> & {
  * Use `create(IdentityDeliverySchema)` to create a new message.
  */
 export const IdentityDeliverySchema: GenMessage<IdentityDelivery> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_identity, 2);
+  messageDesc(file_controlplane_v1_identity, 3);
 
 /**
  * IdentityRole is a role the environment's identity declares. A declared role
@@ -170,7 +213,7 @@ export type IdentityRole = Message<"controlplane.v1.IdentityRole"> & {
  * Use `create(IdentityRoleSchema)` to create a new message.
  */
 export const IdentityRoleSchema: GenMessage<IdentityRole> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_identity, 3);
+  messageDesc(file_controlplane_v1_identity, 4);
 
 /**
  * @generated from message controlplane.v1.IdentityUser
@@ -207,6 +250,15 @@ export type IdentityUser = Message<"controlplane.v1.IdentityUser"> & {
    * @generated from field: google.protobuf.Timestamp created_at = 6;
    */
   createdAt?: Timestamp | undefined;
+
+  /**
+   * The user's most recent successful sign-in check (a password, passkey or
+   * external identity provider) as the instance recorded it. Unset for a user
+   * who has never signed in.
+   *
+   * @generated from field: google.protobuf.Timestamp last_sign_in_at = 7;
+   */
+  lastSignInAt?: Timestamp | undefined;
 };
 
 /**
@@ -214,7 +266,7 @@ export type IdentityUser = Message<"controlplane.v1.IdentityUser"> & {
  * Use `create(IdentityUserSchema)` to create a new message.
  */
 export const IdentityUserSchema: GenMessage<IdentityUser> = /*@__PURE__*/
-  messageDesc(file_controlplane_v1_identity, 4);
+  messageDesc(file_controlplane_v1_identity, 5);
 
 /**
  * IdentityState is where an environment's identity instance stands in the
@@ -289,6 +341,57 @@ export const IdentityStateSchema: GenEnum<IdentityState> = /*@__PURE__*/
   enumDesc(file_controlplane_v1_identity, 0);
 
 /**
+ * IdentityNotEnabledReason is why an environment has no identity instance
+ * (GetIdentityStatus with has_instance false).
+ *
+ * @generated from enum controlplane.v1.IdentityNotEnabledReason
+ */
+export enum IdentityNotEnabledReason {
+  /**
+   * @generated from enum value: IDENTITY_NOT_ENABLED_REASON_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * The environment's deployed KCL declares no forge.ManagedIdentity.
+   *
+   * @generated from enum value: IDENTITY_NOT_ENABLED_REASON_NOT_DECLARED = 1;
+   */
+  NOT_DECLARED = 1,
+
+  /**
+   * The environment declares one and the control plane refused it; the
+   * response's refused field says why.
+   *
+   * @generated from enum value: IDENTITY_NOT_ENABLED_REASON_REFUSED = 2;
+   */
+  REFUSED = 2,
+
+  /**
+   * The environment declares one and the identity reconciler has not created
+   * its instance yet; it does on its next sweep.
+   *
+   * @generated from enum value: IDENTITY_NOT_ENABLED_REASON_PENDING = 3;
+   */
+  PENDING = 3,
+
+  /**
+   * The control plane holds no readable deployed shape for the environment
+   * (it was never deployed, or its shape cannot be read), so whether it
+   * declares one is unknown.
+   *
+   * @generated from enum value: IDENTITY_NOT_ENABLED_REASON_NO_SHAPE = 4;
+   */
+  NO_SHAPE = 4,
+}
+
+/**
+ * Describes the enum controlplane.v1.IdentityNotEnabledReason.
+ */
+export const IdentityNotEnabledReasonSchema: GenEnum<IdentityNotEnabledReason> = /*@__PURE__*/
+  enumDesc(file_controlplane_v1_identity, 1);
+
+/**
  * IdentityDeliveryState uses telemetrydelivery's vocabulary.
  *
  * @generated from enum controlplane.v1.IdentityDeliveryState
@@ -334,7 +437,7 @@ export enum IdentityDeliveryState {
  * Describes the enum controlplane.v1.IdentityDeliveryState.
  */
 export const IdentityDeliveryStateSchema: GenEnum<IdentityDeliveryState> = /*@__PURE__*/
-  enumDesc(file_controlplane_v1_identity, 1);
+  enumDesc(file_controlplane_v1_identity, 2);
 
 /**
  * IdentityMailDelivery is whether an environment's identity instance can send
@@ -370,7 +473,7 @@ export enum IdentityMailDelivery {
  * Describes the enum controlplane.v1.IdentityMailDelivery.
  */
 export const IdentityMailDeliverySchema: GenEnum<IdentityMailDelivery> = /*@__PURE__*/
-  enumDesc(file_controlplane_v1_identity, 2);
+  enumDesc(file_controlplane_v1_identity, 3);
 
 /**
  * @generated from enum controlplane.v1.IdentityUserState
@@ -408,5 +511,5 @@ export enum IdentityUserState {
  * Describes the enum controlplane.v1.IdentityUserState.
  */
 export const IdentityUserStateSchema: GenEnum<IdentityUserState> = /*@__PURE__*/
-  enumDesc(file_controlplane_v1_identity, 3);
+  enumDesc(file_controlplane_v1_identity, 4);
 
