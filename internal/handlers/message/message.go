@@ -21,14 +21,13 @@ func (s *Service) GetMessage(
 ) (*connect.Response[reliantv1.GetMessageResponse], error) {
 	messageID := req.Msg.MessageId
 	if messageID == "" {
-		return nil, svcerr.ToConnect(svcerr.InvalidArgument("message_id is required"))
+		return nil, svcerr.InvalidArgument("message_id is required")
 	}
 
 	// Get message from database
 	msg, err := s.deps.Repo.GetMessage(ctx, messageID)
 	if err != nil {
-		logging.ErrorContext(ctx, "Failed to get message", "error", err, "messageID", messageID)
-		return nil, svcerr.ToConnect(svcerr.NotFound("message"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get message"))
 	}
 
 	// Ownership is transitive through the chat: a message id alone is not an
@@ -37,18 +36,20 @@ func (s *Service) GetMessage(
 	// cross-tenant existence oracle.
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok || userID == "" {
-		return nil, svcerr.ToConnect(svcerr.Unauthenticated("user ID not found in context"))
+		return nil, svcerr.Unauthenticated("user ID not found in context")
 	}
 	chat, err := s.deps.Repo.GetChat(ctx, msg.ChatID)
-	if err != nil || chat == nil || chat.UserID != userID {
-		return nil, svcerr.ToConnect(svcerr.NotFound("message"))
+	if err != nil {
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get message"))
+	}
+	if chat == nil || chat.UserID != userID {
+		return nil, svcerr.NotFound("message")
 	}
 
 	// Get content blocks for this message
 	blocks, err := s.deps.Repo.ListContentBlocks(ctx, msg.ID)
 	if err != nil {
-		logging.ErrorContext(ctx, "Failed to list content blocks", "error", err, "messageID", msg.ID)
-		return nil, svcerr.ToConnect(svcerr.Internal("failed to load message content"))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to load message content"))
 	}
 
 	// Collect attachment IDs from image and file_reference blocks and fetch attachments

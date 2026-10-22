@@ -27,24 +27,27 @@ func (s *Service) getChatIDForPlan(ctx context.Context, plan *db.Plan) (string, 
 
 // taskBelongsToUser checks if a task belongs to a user via the plan's thread and chat
 func (s *Service) taskBelongsToUser(ctx context.Context, taskID string, userID string) error {
+	if taskID == "" {
+		return svcerr.InvalidArgument("task_id is required")
+	}
 	task, err := s.deps.Repo.GetTask(ctx, taskID)
 	if err != nil {
-		return svcerr.NotFound("task")
+		return svcerr.WrapOr(err, svcerr.Internal("failed to get task"))
 	}
 
 	plan, err := s.deps.Repo.GetPlan(ctx, task.PlanID)
 	if err != nil {
-		return svcerr.NotFound("plan")
+		return svcerr.WrapOr(err, svcerr.Internal("failed to get plan"))
 	}
 
 	chatID, err := s.getChatIDForPlan(ctx, plan)
 	if err != nil {
-		return svcerr.NotFound("chat")
+		return svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
 
 	chat, err := s.deps.Repo.GetChat(ctx, chatID)
 	if err != nil {
-		return svcerr.NotFound("chat")
+		return svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
 
 	if chat.UserID != userID {
@@ -61,30 +64,30 @@ func (s *Service) CreateTask(
 ) (*connect.Response[reliantv1.CreateTaskResponse], error) {
 	userID := auth.MustGetUserID(ctx)
 
+	if req.Msg.PlanId == "" {
+		return nil, svcerr.InvalidArgument("plan_id is required")
+	}
+
 	// Verify user owns the plan
 	plan, err := s.deps.Repo.GetPlan(ctx, req.Msg.PlanId)
 	if err != nil {
-		return nil, svcerr.NotFound("plan")
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get plan"))
 	}
 
 	chatID, err := s.getChatIDForPlan(ctx, plan)
 	if err != nil {
-		return nil, svcerr.NotFound("chat")
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
 
 	chat, err := s.deps.Repo.GetChat(ctx, chatID)
 	if err != nil {
-		return nil, svcerr.NotFound("chat")
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
 
 	if chat.UserID != userID {
 		return nil, svcerr.PermissionDenied("access denied")
 	}
 
-	// Validate
-	if req.Msg.PlanId == "" {
-		return nil, svcerr.InvalidArgument("plan_id is required")
-	}
 	if req.Msg.Title == "" {
 		return nil, svcerr.InvalidArgument("title is required")
 	}
@@ -108,8 +111,7 @@ func (s *Service) CreateTask(
 	}
 
 	if err := s.deps.Repo.CreateTask(ctx, task); err != nil {
-		logging.ErrorContext(ctx, "Failed to create task", "error", err)
-		return nil, svcerr.Internal("failed to create task")
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to create task"))
 	}
 
 	if err := s.deps.Repo.EmitChatRefetch(ctx, chatID, db.RefetchPlanTasks); err != nil {
@@ -150,7 +152,7 @@ func (s *Service) GetTask(
 
 	task, err := s.deps.Repo.GetTask(ctx, req.Msg.TaskId)
 	if err != nil {
-		return nil, svcerr.NotFound("task")
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get task"))
 	}
 
 	resp := &reliantv1.GetTaskResponse{
@@ -181,24 +183,24 @@ func (s *Service) ListTasks(
 ) (*connect.Response[reliantv1.ListTasksResponse], error) {
 	userID := auth.MustGetUserID(ctx)
 
-	if req.Msg.PlanId == nil {
+	if req.Msg.GetPlanId() == "" {
 		return nil, svcerr.InvalidArgument("plan_id is required")
 	}
 
 	// Verify user owns the plan
 	plan, err := s.deps.Repo.GetPlan(ctx, *req.Msg.PlanId)
 	if err != nil {
-		return nil, svcerr.NotFound("plan")
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get plan"))
 	}
 
 	chatID, err := s.getChatIDForPlan(ctx, plan)
 	if err != nil {
-		return nil, svcerr.NotFound("chat")
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
 
 	chat, err := s.deps.Repo.GetChat(ctx, chatID)
 	if err != nil {
-		return nil, svcerr.NotFound("chat")
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
 	}
 
 	if chat.UserID != userID {
@@ -207,8 +209,7 @@ func (s *Service) ListTasks(
 
 	tasks, err := s.deps.Repo.ListTasksByPlan(ctx, *req.Msg.PlanId)
 	if err != nil {
-		logging.ErrorContext(ctx, "Failed to list tasks", "error", err)
-		return nil, svcerr.Internal("failed to list tasks")
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list tasks"))
 	}
 
 	protoTasks := make([]*reliantv1.Task, len(tasks))
@@ -249,7 +250,7 @@ func (s *Service) UpdateTask(
 
 	task, err := s.deps.Repo.GetTask(ctx, req.Msg.TaskId)
 	if err != nil {
-		return nil, svcerr.NotFound("task")
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get task"))
 	}
 
 	// Update fields
@@ -267,8 +268,7 @@ func (s *Service) UpdateTask(
 	}
 
 	if err := s.deps.Repo.UpdateTask(ctx, task); err != nil {
-		logging.ErrorContext(ctx, "Failed to update task", "error", err)
-		return nil, svcerr.Internal("failed to update task")
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to update task"))
 	}
 
 	// Get chatID from the plan's thread for refetch emission
@@ -323,8 +323,7 @@ func (s *Service) DeleteTask(
 	}
 
 	if err := s.deps.Repo.DeleteTask(ctx, req.Msg.TaskId); err != nil {
-		logging.ErrorContext(ctx, "Failed to delete task", "error", err)
-		return nil, svcerr.Internal("failed to delete task")
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to delete task"))
 	}
 
 	if deleteChatID != "" {

@@ -2,7 +2,6 @@ package question
 
 import (
 	"context"
-	"fmt"
 
 	"connectrpc.com/connect"
 
@@ -33,13 +32,16 @@ func (s *Service) ListAsyncQuestions(
 	}
 
 	chat, err := s.deps.Repo.GetChat(ctx, req.Msg.ChatId)
-	if err != nil || chat == nil || chat.UserID != userID {
+	if err != nil {
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to get chat"))
+	}
+	if chat == nil || chat.UserID != userID {
 		return nil, svcerr.NotFound("chat")
 	}
 
 	questions, err := s.deps.Repo.ListAsyncQuestionsByChat(ctx, req.Msg.ChatId)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("list async questions: %w", err))
+		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list async questions"))
 	}
 
 	resp := &pb.ListAsyncQuestionsResponse{Questions: make([]*pb.QuestionInfo, 0, len(questions))}

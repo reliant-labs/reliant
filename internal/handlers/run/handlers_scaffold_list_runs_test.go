@@ -17,8 +17,8 @@ import (
 func TestListRuns_Generated(t *testing.T) {
 	t.Parallel()
 
-	// The generated harness stubs Repo, so no run or session exists.
-	svc := run.NewTestRun(t)
+	// No run or session exists (emptyRunRepo).
+	svc := run.NewTestRun(t, run.WithRunDeps(run.Deps{Repo: emptyRunRepo()}))
 	parent, session, badToken := "run-1", "chat-1", "not-a-token!!"
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.ListRunsRequest, pb.ListRunsResponse]{

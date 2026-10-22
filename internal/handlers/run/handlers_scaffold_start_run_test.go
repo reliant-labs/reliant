@@ -17,8 +17,8 @@ import (
 func TestStartRun_Generated(t *testing.T) {
 	t.Parallel()
 
-	// The generated harness stubs Repo, so no session or project exists.
-	svc := run.NewTestRun(t)
+	// No session or project exists (emptyRunRepo).
+	svc := run.NewTestRun(t, run.WithRunDeps(run.Deps{Repo: emptyRunRepo()}))
 
 	tdd.RunRPCCases(t, []tdd.RPCCase[pb.StartRunRequest, pb.StartRunResponse]{
 		{

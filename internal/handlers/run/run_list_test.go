@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -161,13 +162,13 @@ func TestListRuns_RejectsBadInput(t *testing.T) {
 	bad := "not-a-token!!"
 	_, err := f.svc.ListRuns(f.ctx, connect.NewRequest(&reliantv1.ListRunsRequest{PageToken: &bad}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 
 	_, err = f.svc.ListRuns(f.ctx, connect.NewRequest(&reliantv1.ListRunsRequest{
 		DisplayStates: []reliantv1.RunDisplayState{reliantv1.RunDisplayState_RUN_DISPLAY_STATE_UNSPECIFIED},
 	}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 }
 
 func TestListRuns_LimitIsCapped(t *testing.T) {

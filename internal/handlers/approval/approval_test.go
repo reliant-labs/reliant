@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/client"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -221,9 +222,7 @@ func TestApprovalService_Approve_AlreadyProcessed(t *testing.T) {
 	}))
 
 	require.Error(t, err)
-	connectErr := new(connect.Error)
-	require.ErrorAs(t, err, &connectErr)
-	assert.Equal(t, connect.CodeFailedPrecondition, connectErr.Code())
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
 }
 
 // TestApprovalService_Deny_AlreadyProcessed returns FailedPrecondition for
@@ -239,9 +238,7 @@ func TestApprovalService_Deny_AlreadyProcessed(t *testing.T) {
 	}))
 
 	require.Error(t, err)
-	connectErr := new(connect.Error)
-	require.ErrorAs(t, err, &connectErr)
-	assert.Equal(t, connect.CodeFailedPrecondition, connectErr.Code())
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
 }
 
 // TestApprovalService_Approve_NotFound returns NotFound for unknown approval IDs.
@@ -253,9 +250,7 @@ func TestApprovalService_Approve_NotFound(t *testing.T) {
 	}))
 
 	require.Error(t, err)
-	connectErr := new(connect.Error)
-	require.ErrorAs(t, err, &connectErr)
-	assert.Equal(t, connect.CodeNotFound, connectErr.Code())
+	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
 }
 
 // TestApprovalService_Approve_MissingRequestID returns InvalidArgument when request_id is empty.
@@ -267,9 +262,7 @@ func TestApprovalService_Approve_MissingRequestID(t *testing.T) {
 	}))
 
 	require.Error(t, err)
-	connectErr := new(connect.Error)
-	require.ErrorAs(t, err, &connectErr)
-	assert.Equal(t, connect.CodeInvalidArgument, connectErr.Code())
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 }
 
 // createRetiredToolApproval creates a pending approval as the removed

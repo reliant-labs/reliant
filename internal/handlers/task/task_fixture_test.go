@@ -2,16 +2,18 @@ package task_test
 
 import (
 	"context"
-	"database/sql"
+	"fmt"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	task "github.com/reliant-labs/reliant/internal/handlers/task"
 )
 
 // The task handlers authorize a task through its plan, the plan's thread and
 // that thread's chat. The fixture holds one task the caller ("test-user",
 // AuthedContext's default principal) owns and one another user owns; any
-// other ID is missing.
+// other ID is missing, answered with the not-found the store reports.
 const (
 	ownChatID   = "chat-own"
 	ownPlanID   = "plan-own"
@@ -46,26 +48,26 @@ func newTaskRepo() *task.StubRepo {
 			if c, ok := chats[id]; ok {
 				return c, nil
 			}
-			return nil, sql.ErrNoRows
+			return nil, fmt.Errorf("%w: %s", core.ErrChatNotFound, id)
 		},
 		GetThreadFunc: func(_ context.Context, id string) (*db.Thread, error) {
 			if th, ok := threads[id]; ok {
 				return th, nil
 			}
-			return nil, sql.ErrNoRows
+			return nil, fmt.Errorf("%w: %s", svcerr.NotFound("thread"), id)
 		},
 		GetPlanFunc: func(_ context.Context, id string) (*db.Plan, error) {
 			if p, ok := plans[id]; ok {
 				return p, nil
 			}
-			return nil, sql.ErrNoRows
+			return nil, fmt.Errorf("%w: %s", svcerr.NotFound("plan"), id)
 		},
 		GetTaskFunc: func(_ context.Context, id string) (*db.Task, error) {
 			if tk, ok := tasks[id]; ok {
 				cp := *tk
 				return &cp, nil
 			}
-			return nil, sql.ErrNoRows
+			return nil, fmt.Errorf("%w: %s", svcerr.NotFound("task"), id)
 		},
 		EmitChatRefetchFunc: func(context.Context, string, db.RefetchType) error { return nil },
 	}

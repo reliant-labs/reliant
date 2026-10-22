@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/db"
 	message "github.com/reliant-labs/reliant/internal/handlers/message"
 )
@@ -20,7 +21,7 @@ type foreignMessageRepo struct{ message.Repository }
 
 func (foreignMessageRepo) GetMessage(_ context.Context, id string) (*db.Message, error) {
 	if id != foreignMessageID {
-		return nil, fmt.Errorf("message not found: %s", id)
+		return nil, fmt.Errorf("%w: %s", svcerr.NotFound("message"), id)
 	}
 	return &db.Message{ID: id, ChatID: "chat-foreign"}, nil
 }

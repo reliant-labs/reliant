@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/require"
 
@@ -42,7 +43,7 @@ func TestStreamUserUpdates_Generated(t *testing.T) {
 			streaming.WithStreamingDeps(streaming.Deps{Repo: foreignChatRepo{}}),
 			streaming.WithoutPrincipal())
 		err := open(t, client, &pb.StreamUserUpdatesRequest{})
-		require.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
+		require.Equal(t, connect.CodeUnauthenticated, svcerr.Code(err))
 	})
 
 	t.Run("another user's chat is not found", func(t *testing.T) {
@@ -52,7 +53,7 @@ func TestStreamUserUpdates_Generated(t *testing.T) {
 			streaming.WithPrincipal(testkit.WithUserID("test-user")))
 		chatID := "chat-of-someone-else"
 		err := open(t, client, &pb.StreamUserUpdatesRequest{SubscribeChatId: &chatID})
-		require.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+		require.Equal(t, connect.CodeNotFound, svcerr.Code(err))
 	})
 }
 
