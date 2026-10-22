@@ -61,7 +61,7 @@ func TestBackgroundProxy_MachineStatesKeepTheirCode(t *testing.T) {
 			svc := NewTestBackground(t, WithBackgroundDeps(Deps{Router: &failingCommandRouter{err: state.err}}))
 			_, err := svc.ListProcesses(AuthedContext(t), connect.NewRequest(&reliantv1.ListBackgroundProcessesRequest{}))
 			require.Error(t, err)
-			assert.Equal(t, state.wantCode, connect.CodeOf(err))
+			assert.Equal(t, state.wantCode, svcerr.Code(err))
 			assert.False(t, errclass.IsServerError(err))
 		})
 	}

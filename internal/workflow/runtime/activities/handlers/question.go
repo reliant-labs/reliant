@@ -71,11 +71,11 @@ type QuestionResolveOutput struct {
 // QuestionCreateActivity creates a question record in the DB and returns immediately.
 // The workflow then waits on a signal channel for resolution — no polling needed.
 type QuestionCreateActivity struct {
-	repo db.Repository
+	repo QuestionCreateStore
 }
 
 // NewQuestionCreateActivity creates a new QuestionCreateActivity
-func NewQuestionCreateActivity(repo db.Repository) *QuestionCreateActivity {
+func NewQuestionCreateActivity(repo QuestionCreateStore) *QuestionCreateActivity {
 	return &QuestionCreateActivity{repo: repo}
 }
 
@@ -278,11 +278,11 @@ func (a *QuestionCreateActivity) Execute(ctx context.Context, input QuestionCrea
 // when it stops waiting on a question without an answer: the signal timer
 // expired, or (ask_user) the asking thread was messaged or interrupted.
 type QuestionResolveActivity struct {
-	repo db.Repository
+	repo QuestionResolveStore
 }
 
 // NewQuestionResolveActivity creates a new QuestionResolveActivity
-func NewQuestionResolveActivity(repo db.Repository) *QuestionResolveActivity {
+func NewQuestionResolveActivity(repo QuestionResolveStore) *QuestionResolveActivity {
 	return &QuestionResolveActivity{repo: repo}
 }
 

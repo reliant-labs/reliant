@@ -21,7 +21,7 @@ import (
 type IdempotencyTestHelper struct {
 	t       *testing.T
 	env     *testsuite.TestActivityEnvironment
-	repo    db.Repository
+	repo    *db.Repo
 	sqlDB   *sql.DB
 	cleanup func()
 }
@@ -82,7 +82,7 @@ func (h *IdempotencyTestHelper) ExecuteActivityWithAttempt(activity interface{},
 }
 
 // Repo returns the repository for database verification
-func (h *IdempotencyTestHelper) Repo() db.Repository {
+func (h *IdempotencyTestHelper) Repo() *db.Repo {
 	return h.repo
 }
 
@@ -90,7 +90,7 @@ func (h *IdempotencyTestHelper) Repo() db.Repository {
 // database. Fixtures set Ordinal by hand (often reusing the same ordinal
 // across threads of one chat), so seq cannot simply mirror it without
 // violating UNIQUE(chat_id, seq).
-func createMessageWithSeq(ctx context.Context, t *testing.T, repo db.Repository, msg *db.Message) error {
+func createMessageWithSeq(ctx context.Context, t *testing.T, repo *db.Repo, msg *db.Message) error {
 	t.Helper()
 	seq, err := repo.GetNextSeq(ctx, msg.ChatID, msg.ThreadID)
 	if err != nil {

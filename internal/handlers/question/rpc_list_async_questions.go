@@ -6,6 +6,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 )
@@ -25,15 +26,15 @@ func (s *Service) ListAsyncQuestions(
 ) (*connect.Response[pb.ListAsyncQuestionsResponse], error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok || userID == "" {
-		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("user ID not found in context"))
+		return nil, svcerr.Unauthenticated("user ID not found in context")
 	}
 	if req.Msg.ChatId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("chat_id is required"))
+		return nil, svcerr.InvalidArgument("chat_id is required")
 	}
 
 	chat, err := s.deps.Repo.GetChat(ctx, req.Msg.ChatId)
 	if err != nil || chat == nil || chat.UserID != userID {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
+		return nil, svcerr.NotFound("chat")
 	}
 
 	questions, err := s.deps.Repo.ListAsyncQuestionsByChat(ctx, req.Msg.ChatId)

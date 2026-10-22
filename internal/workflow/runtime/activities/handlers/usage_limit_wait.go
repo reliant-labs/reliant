@@ -7,8 +7,6 @@ import (
 	"time"
 
 	"go.temporal.io/sdk/activity"
-
-	"github.com/reliant-labs/reliant/internal/db"
 )
 
 // UsageLimitWaitInput is the input for the UsageLimitWait activity.
@@ -49,11 +47,11 @@ type UsageLimitWaitOutput struct {
 // the park cannot tell a run that is waiting from one that is wedged, which is
 // the whole reason provider_backoff exists. See db.ProviderBackoff.
 type UsageLimitWaitActivity struct {
-	repo db.Repository
+	repo UsageLimitWaitStore
 }
 
 // NewUsageLimitWaitActivity creates a new UsageLimitWaitActivity.
-func NewUsageLimitWaitActivity(repo db.Repository) *UsageLimitWaitActivity {
+func NewUsageLimitWaitActivity(repo UsageLimitWaitStore) *UsageLimitWaitActivity {
 	return &UsageLimitWaitActivity{repo: repo}
 }
 

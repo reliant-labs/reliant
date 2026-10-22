@@ -9,10 +9,8 @@ package daemonchoice
 
 import (
 	"context"
-	"errors"
 
-	"connectrpc.com/connect"
-
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -35,13 +33,13 @@ type Reader interface {
 func Validate(ctx context.Context, repo Reader, userID, projectID, daemonID string) error {
 	daemon, err := repo.GetDaemon(ctx, daemonID)
 	if err != nil || daemon == nil || daemon.UserID != userID {
-		return connect.NewError(connect.CodeNotFound, errors.New("daemon not found"))
+		return svcerr.ToConnect(svcerr.NotFound("daemon"))
 	}
 
 	installs, err := repo.ListProjectDaemonsForProject(ctx, projectID)
 	if err != nil {
 		logging.ErrorContext(ctx, "daemon choice database error", "op", "list project daemons", "error", err)
-		return connect.NewError(connect.CodeInternal, errors.New("database error"))
+		return svcerr.ToConnect(svcerr.Internal("database error"))
 	}
 	if len(installs) == 0 {
 		return nil
@@ -51,5 +49,5 @@ func Validate(ctx context.Context, repo Reader, userID, projectID, daemonID stri
 			return nil
 		}
 	}
-	return connect.NewError(connect.CodeFailedPrecondition, errors.New("project is not installed on that daemon"))
+	return svcerr.ToConnect(svcerr.FailedPrecondition("project is not installed on that daemon"))
 }

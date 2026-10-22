@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
@@ -152,7 +151,7 @@ func notUsable(ref, why string, active []*core.Worktree) string {
 		"Create one with the worktree tool first, or omit the worktree parameter.", ref, why, list)
 }
 
-func describeBinding(ctx context.Context, repo db.Repository, worktreeID string) string {
+func describeBinding(ctx context.Context, repo BindingDescriber, worktreeID string) string {
 	if worktreeID == "" {
 		return "this chat's own workspace"
 	}

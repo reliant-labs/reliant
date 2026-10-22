@@ -61,11 +61,11 @@ type WorkflowErrorOutput struct {
 
 // WorkflowErrorActivity writes workflow-level errors to chat_updates for UI notifications
 type WorkflowErrorActivity struct {
-	repo db.Repository
+	repo WorkflowErrorWriter
 }
 
 // NewWorkflowErrorActivity creates a new WorkflowErrorActivity
-func NewWorkflowErrorActivity(repo db.Repository) *WorkflowErrorActivity {
+func NewWorkflowErrorActivity(repo WorkflowErrorWriter) *WorkflowErrorActivity {
 	return &WorkflowErrorActivity{
 		repo: repo,
 	}
@@ -100,7 +100,7 @@ func (a *WorkflowErrorActivity) Execute(ctx context.Context, input WorkflowError
 // Duplicating the payload in that caller instead would mean the two error
 // shapes drift the first time a field is added, and the UI would silently
 // render one of them wrong.
-func WriteWorkflowError(ctx context.Context, repo db.Repository, input WorkflowErrorInput) (string, error) {
+func WriteWorkflowError(ctx context.Context, repo WorkflowErrorWriter, input WorkflowErrorInput) (string, error) {
 	// An explicit id means this error REPLACES an existing row rather than
 	// adding one — see WorkflowErrorInput.ErrorID. Absent it, the error is its
 	// own event and gets its own id.

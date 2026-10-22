@@ -22,7 +22,7 @@ func newDrainTestActivity(h *IdempotencyTestHelper) *DrainAgentMessagesActivity 
 	return NewDrainAgentMessagesActivity(h.Repo(), threads.NewService(h.Repo()))
 }
 
-func enqueueDrainTestMessage(t *testing.T, repo db.Repository, chatID, fromThreadID, toThreadID, body string, createdAt time.Time) {
+func enqueueDrainTestMessage(t *testing.T, repo *db.Repo, chatID, fromThreadID, toThreadID, body string, createdAt time.Time) {
 	t.Helper()
 	require.NoError(t, repo.EnqueueAgentMessage(context.Background(), &db.AgentMessage{
 		ID:           uuid.New().String(),

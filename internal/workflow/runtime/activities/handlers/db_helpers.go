@@ -69,7 +69,7 @@ const InterruptedToolResultContent = "Tool execution was interrupted — outcome
 // Returns:
 //   - messages: Converted messages in chronological order, ready for LLM
 //   - error: Any error that occurred
-func LoadMessagesForLLM(ctx context.Context, repo db.Repository, chatID string, thread string, explicitContextSeq *int) ([]message.Message, error) {
+func LoadMessagesForLLM(ctx context.Context, repo LLMHistoryStore, chatID string, thread string, explicitContextSeq *int) ([]message.Message, error) {
 	if thread == "" {
 		return nil, fmt.Errorf("thread ID cannot be empty")
 	}
@@ -90,7 +90,7 @@ func LoadMessagesForLLM(ctx context.Context, repo db.Repository, chatID string, 
 // guarantees the tool-pairing invariant holds on the result.
 //
 // Use this function when you already have DB messages loaded.
-func ConvertAndRepairMessages(ctx context.Context, dbMessages []*db.Message, repo db.Repository) ([]message.Message, error) {
+func ConvertAndRepairMessages(ctx context.Context, dbMessages []*db.Message, repo MessageRepairStore) ([]message.Message, error) {
 	return convertAndRepairMessages(ctx, dbMessages, repo, "", "")
 }
 
@@ -122,7 +122,7 @@ func ConvertAndRepairMessages(ctx context.Context, dbMessages []*db.Message, rep
 // inherited data, they are a bug in this package. Returning an error surfaces it
 // at the activity boundary (retried and reported) instead of shipping a request
 // the provider will reject with a far less actionable message.
-func convertAndRepairMessages(ctx context.Context, dbMessages []*db.Message, repo db.Repository, chatID, thread string) ([]message.Message, error) {
+func convertAndRepairMessages(ctx context.Context, dbMessages []*db.Message, repo MessageRepairStore, chatID, thread string) ([]message.Message, error) {
 	msgs, err := messageconv.DbMessagesToMessages(ctx, dbMessages, repo)
 	if err != nil {
 		return nil, fmt.Errorf("failed to convert messages: %w", err)
@@ -286,7 +286,7 @@ func isBlocklessAssistant(m *message.Message) bool {
 // with no durable row is left alone — repair's placeholder is the right answer
 // for a tool that genuinely never reported. So is a result whose call record
 // does not point at this assistant message: that result is another call's.
-func recoverPersistedToolResults(ctx context.Context, repo db.Repository, msgs []message.Message) []message.Message {
+func recoverPersistedToolResults(ctx context.Context, repo ToolResultRecoveryStore, msgs []message.Message) []message.Message {
 	if len(msgs) == 0 || repo == nil {
 		return msgs
 	}

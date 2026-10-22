@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
@@ -49,11 +48,11 @@ type EnqueueAgentMessageOutput struct {
 // the parent's mailbox is drained by its own next CallLLM, never written into
 // directly.
 type EnqueueAgentMessageActivity struct {
-	repo db.Repository
+	repo EnqueueAgentMessageStore
 }
 
 // NewEnqueueAgentMessageActivity creates a new EnqueueAgentMessageActivity.
-func NewEnqueueAgentMessageActivity(repo db.Repository) *EnqueueAgentMessageActivity {
+func NewEnqueueAgentMessageActivity(repo EnqueueAgentMessageStore) *EnqueueAgentMessageActivity {
 	return &EnqueueAgentMessageActivity{repo: repo}
 }
 

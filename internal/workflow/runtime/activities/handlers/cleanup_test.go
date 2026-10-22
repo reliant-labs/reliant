@@ -14,20 +14,20 @@ import (
 )
 
 // setupTestRepo creates an in-memory test database
-func setupTestRepo(t *testing.T) db.Repository {
+func setupTestRepo(t *testing.T) *db.Repo {
 	repo := db.NewTestRepo(t)
 	return repo
 }
 
 // createTestChat creates a test project and chat
-func createTestChat(t *testing.T, repo db.Repository) string {
+func createTestChat(t *testing.T, repo *db.Repo) string {
 	chatID, _ := createTestChatWithContextWindow(t, repo)
 	return chatID
 }
 
 // createTestChatWithContextWindow creates a test project, chat, thread, and context window
 // Returns the chatID and contextWindowID for use in message creation
-func createTestChatWithContextWindow(t *testing.T, repo db.Repository) (string, string) {
+func createTestChatWithContextWindow(t *testing.T, repo *db.Repo) (string, string) {
 	ctx := context.Background()
 	projectID := uuid.New().String()
 	chatID := uuid.New().String()

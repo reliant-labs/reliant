@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
@@ -67,7 +68,7 @@ func TestBackgroundProxy_DaemonTimeoutIsDeadlineExceeded(t *testing.T) {
 
 	_, err := svc.ListProcesses(AuthedContext(t), connect.NewRequest(&reliantv1.ListBackgroundProcessesRequest{}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeDeadlineExceeded, connect.CodeOf(err), "error: %v", err)
+	assert.Equal(t, connect.CodeDeadlineExceeded, svcerr.Code(err), "error: %v", err)
 }
 
 // The mutating commands keep the longer budget: killing a process group can

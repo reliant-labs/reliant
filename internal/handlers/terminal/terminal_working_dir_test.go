@@ -22,6 +22,7 @@ import (
 	"golang.org/x/net/http2"
 	"golang.org/x/net/http2/h2c"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -211,7 +212,7 @@ func TestStreamTerminal_MissingWorkingDirIsFailedPrecondition(t *testing.T) {
 	_, err := openStreamTerminalAt(t, router, projectWorkingDir)
 
 	require.Error(t, err)
-	require.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err),
+	require.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err),
 		"a directory that does not exist is the caller's precondition, not a server fault")
 	require.Contains(t, err.Error(), projectWorkingDir)
 }

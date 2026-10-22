@@ -12,7 +12,7 @@ import (
 )
 
 // createTestWorkflowRow inserts a root workflow row for checkpoint tests.
-func createTestWorkflowRow(t *testing.T, repo db.Repository, chatID string) string {
+func createTestWorkflowRow(t *testing.T, repo *db.Repo, chatID string) string {
 	t.Helper()
 	ctx := context.Background()
 	workflowID := uuid.New().String()

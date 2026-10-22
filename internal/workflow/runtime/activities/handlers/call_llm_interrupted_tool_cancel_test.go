@@ -149,7 +149,7 @@ func TestInterruptedStream_RespectsAnAlreadyTerminalRow(t *testing.T) {
 // upsertCompletedToolCall seeds a call that finished normally.
 func upsertCompletedToolCall(
 	ctx context.Context,
-	repo db.Repository,
+	repo *db.Repo,
 	chatID, callID string,
 	at time.Time,
 ) error {

@@ -335,7 +335,7 @@ type grantsExecutor struct {
 	ran    []string
 }
 
-func newGrantsExecutor(repo db.Repository) *grantsExecutor {
+func newGrantsExecutor(repo *db.Repo) *grantsExecutor {
 	server := toolexec.NewRemoteExecutor(nil)
 	server.SetServerExecutor(toolexec.NewLocalToolExecutor(tools.NewToolsFactory(&tools.ToolsOptions{Repo: repo})))
 	return &grantsExecutor{server: server}

@@ -8,6 +8,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	settings "github.com/reliant-labs/reliant/internal/handlers/settings"
@@ -42,6 +43,6 @@ func TestListSettings_Generated(t *testing.T) {
 		svc := newSettingsService(t, repo)
 
 		_, err := svc.ListSettings(settings.AuthedContext(t), connect.NewRequest(&pb.ListSettingsRequest{}))
-		require.Equal(t, connect.CodeInternal, connect.CodeOf(err))
+		require.Equal(t, connect.CodeInternal, svcerr.Code(err))
 	})
 }

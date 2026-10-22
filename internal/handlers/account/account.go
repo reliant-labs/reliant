@@ -4,11 +4,11 @@ package account
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strings"
 
 	"connectrpc.com/connect"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/accountpurge"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -47,13 +47,11 @@ var retainedElsewhere = []string{
 // mirrors TokenService.CreateToken, for the same reason.
 func (s *Service) callerIdentity(ctx context.Context, authHeader string) (userID, email string, err error) {
 	if _, isMachine := auth.MachineTokenFromContext(ctx); isMachine || auth.IsAccessTokenFormat(auth.BearerToken(authHeader)) {
-		return "", "", connect.NewError(connect.CodeUnauthenticated,
-			fmt.Errorf("account deletion requires an interactive session"))
+		return "", "", svcerr.ToConnect(svcerr.Unauthenticated("account deletion requires an interactive session"))
 	}
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok || userID == "" {
-		return "", "", connect.NewError(connect.CodeUnauthenticated,
-			fmt.Errorf("no authenticated user"))
+		return "", "", svcerr.ToConnect(svcerr.Unauthenticated("no authenticated user"))
 	}
 	email, _ = auth.GetUserEmailFromContext(ctx)
 	return userID, email, nil
@@ -72,8 +70,7 @@ func (s *Service) PreviewAccountDeletion(
 	counts, err := accountpurge.Preview(ctx, s.deps.SQL, userID)
 	if err != nil {
 		logging.ErrorContext(ctx, "[AccountService] preview failed", "user_id", userID, "error", err)
-		return nil, connect.NewError(connect.CodeInternal,
-			fmt.Errorf("could not read account contents"))
+		return nil, svcerr.ToConnect(svcerr.Internal("could not read account contents"))
 	}
 
 	// The wallet quote comes from the control plane, which owns the wallet.
@@ -87,8 +84,7 @@ func (s *Service) PreviewAccountDeletion(
 			auth.BearerToken(req.Header().Get("Authorization")))
 		if cpErr != nil {
 			logging.ErrorContext(ctx, "[AccountService] control-plane wallet quote failed", "user_id", userID, "error", cpErr)
-			return nil, connect.NewError(connect.CodeUnavailable,
-				fmt.Errorf("could not load your wallet balance; please try again"))
+			return nil, svcerr.ToConnect(svcerr.Unavailable("could not load your wallet balance; please try again"))
 		}
 		wallet = walletQuoteToProto(quote)
 	}
@@ -126,8 +122,7 @@ func (s *Service) DeleteAccount(
 		got := strings.ToLower(strings.TrimSpace(req.Msg.GetConfirmEmail()))
 		want := strings.ToLower(strings.TrimSpace(email))
 		if got != want {
-			return nil, connect.NewError(connect.CodeInvalidArgument,
-				fmt.Errorf("confirmation does not match your email address"))
+			return nil, svcerr.ToConnect(svcerr.InvalidArgument("confirmation does not match your email address"))
 		}
 	}
 
@@ -153,11 +148,9 @@ func (s *Service) DeleteAccount(
 				// A refund's outcome could not be confirmed with the payment
 				// provider. Nothing irreversible happened and retrying replays
 				// the same refund rather than issuing another.
-				return nil, connect.NewError(connect.CodeUnavailable,
-					fmt.Errorf("we could not confirm your refund with our payment provider; nothing was deleted, please try again in a minute"))
+				return nil, svcerr.ToConnect(svcerr.Unavailable("we could not confirm your refund with our payment provider; nothing was deleted, please try again in a minute"))
 			}
-			return nil, connect.NewError(connect.CodeInternal,
-				fmt.Errorf("could not delete your platform account; nothing was deleted"))
+			return nil, svcerr.ToConnect(svcerr.Internal("could not delete your platform account; nothing was deleted"))
 		}
 		if len(result.Blockers) > 0 {
 			// FailedPrecondition with the blocker's own sentence: the user
@@ -177,8 +170,7 @@ func (s *Service) DeleteAccount(
 		logging.ErrorContext(ctx, "[AccountService] purge failed", "user_id", userID, "error", err)
 		// The purge is transactional: a failure changed nothing, so the client
 		// can safely retry.
-		return nil, connect.NewError(connect.CodeInternal,
-			fmt.Errorf("account deletion failed; nothing was deleted"))
+		return nil, svcerr.ToConnect(svcerr.Internal("account deletion failed; nothing was deleted"))
 	}
 
 	logging.WarnContext(ctx, "[AccountService] account deleted", "user_id", userID, "rows", deleted,

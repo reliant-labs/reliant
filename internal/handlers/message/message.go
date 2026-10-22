@@ -3,10 +3,10 @@ package message
 
 import (
 	"context"
-	"fmt"
 
 	"connectrpc.com/connect"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -21,14 +21,14 @@ func (s *Service) GetMessage(
 ) (*connect.Response[reliantv1.GetMessageResponse], error) {
 	messageID := req.Msg.MessageId
 	if messageID == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("message_id is required"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("message_id is required"))
 	}
 
 	// Get message from database
 	msg, err := s.deps.Repo.GetMessage(ctx, messageID)
 	if err != nil {
 		logging.ErrorContext(ctx, "Failed to get message", "error", err, "messageID", messageID)
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("message not found"))
+		return nil, svcerr.ToConnect(svcerr.NotFound("message"))
 	}
 
 	// Ownership is transitive through the chat: a message id alone is not an
@@ -37,18 +37,18 @@ func (s *Service) GetMessage(
 	// cross-tenant existence oracle.
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok || userID == "" {
-		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("user ID not found in context"))
+		return nil, svcerr.ToConnect(svcerr.Unauthenticated("user ID not found in context"))
 	}
 	chat, err := s.deps.Repo.GetChat(ctx, msg.ChatID)
 	if err != nil || chat == nil || chat.UserID != userID {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("message not found"))
+		return nil, svcerr.ToConnect(svcerr.NotFound("message"))
 	}
 
 	// Get content blocks for this message
 	blocks, err := s.deps.Repo.ListContentBlocks(ctx, msg.ID)
 	if err != nil {
 		logging.ErrorContext(ctx, "Failed to list content blocks", "error", err, "messageID", msg.ID)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to load message content"))
+		return nil, svcerr.ToConnect(svcerr.Internal("failed to load message content"))
 	}
 
 	// Collect attachment IDs from image and file_reference blocks and fetch attachments

@@ -13,6 +13,7 @@ import (
 	"connectrpc.com/connect"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/reliant-labs/forge/pkg/serverkit"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/require"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -204,7 +205,7 @@ func TestDaemonListenerDrainEndsAStreamThatDidNotMoveWithUnavailable(t *testing.
 		_, err = stream.Receive()
 	}
 	require.False(t, errors.Is(err, io.EOF), "the stream must end with a status, not a clean end")
-	require.Equal(t, connect.CodeUnavailable, connect.CodeOf(err), "Unavailable puts the daemon on its reconnect path")
+	require.Equal(t, connect.CodeUnavailable, svcerr.Code(err), "Unavailable puts the daemon on its reconnect path")
 	require.Equal(t, "true", stream.ResponseTrailer().Get(serverkit.DrainedTrailer))
 
 	r := <-stopped

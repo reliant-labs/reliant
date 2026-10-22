@@ -19,7 +19,7 @@ import (
 // =============================================================================
 
 // setupTestRepoWithCleanup creates an in-memory repository for testing with cleanup
-func setupTestRepoWithCleanup(t *testing.T) (db.Repository, func()) {
+func setupTestRepoWithCleanup(t *testing.T) (*db.Repo, func()) {
 	t.Helper()
 
 	repo := db.NewTestRepo(t)
@@ -36,7 +36,7 @@ func setupTestRepoWithCleanup(t *testing.T) (db.Repository, func()) {
 }
 
 // createTestChatForConversation creates a test chat
-func createTestChatForConversation(t *testing.T, repo db.Repository) string {
+func createTestChatForConversation(t *testing.T, repo *db.Repo) string {
 	t.Helper()
 	ctx := context.Background()
 	chatID := uuid.New().String()
@@ -61,7 +61,7 @@ func createTestChatForConversation(t *testing.T, repo db.Repository) string {
 // here to the message it names -- callers pass ordinals because fixtures
 // already track ordinals for message identity, and the resolution mirrors
 // 20260803010000_fork_points_reference_messages.sql's backfill.
-func createThreadWithContextWindow(t *testing.T, repo db.Repository, chatID string, parentThreadID *string, forkAtOrdinal *int64, forkAtContextWindowID *string, sequence int) (string, string) {
+func createThreadWithContextWindow(t *testing.T, repo *db.Repo, chatID string, parentThreadID *string, forkAtOrdinal *int64, forkAtContextWindowID *string, sequence int) (string, string) {
 	t.Helper()
 	ctx := context.Background()
 
@@ -105,7 +105,7 @@ func createThreadWithContextWindow(t *testing.T, repo db.Repository, chatID stri
 }
 
 // createMessageWithParts creates a message with text content using the new model
-func createMessageWithParts(t *testing.T, repo db.Repository, chatID, threadID, contextWindowID string, ordinal int64, role reliantv1.MessageRole, text string) *db.Message {
+func createMessageWithParts(t *testing.T, repo *db.Repo, chatID, threadID, contextWindowID string, ordinal int64, role reliantv1.MessageRole, text string) *db.Message {
 	t.Helper()
 	ctx := context.Background()
 
@@ -144,7 +144,7 @@ func createMessageWithParts(t *testing.T, repo db.Repository, chatID, threadID, 
 }
 
 // createMessageWithToolCall creates an assistant message with a tool call
-func createMessageWithToolCall(t *testing.T, repo db.Repository, chatID, threadID, contextWindowID string, ordinal int64, toolCallID, toolName, toolInput string) *db.Message {
+func createMessageWithToolCall(t *testing.T, repo *db.Repo, chatID, threadID, contextWindowID string, ordinal int64, toolCallID, toolName, toolInput string) *db.Message {
 	t.Helper()
 	ctx := context.Background()
 
@@ -185,7 +185,7 @@ func createMessageWithToolCall(t *testing.T, repo db.Repository, chatID, threadI
 }
 
 // createMessageWithToolResult creates a tool message with a result
-func createMessageWithToolResult(t *testing.T, repo db.Repository, chatID, threadID, contextWindowID string, ordinal int64, toolCallID, content string) *db.Message {
+func createMessageWithToolResult(t *testing.T, repo *db.Repo, chatID, threadID, contextWindowID string, ordinal int64, toolCallID, content string) *db.Message {
 	t.Helper()
 	ctx := context.Background()
 
@@ -231,7 +231,7 @@ func createMessageWithToolResult(t *testing.T, repo db.Repository, chatID, threa
 func TestLoadMessagesForLLM_TableDriven(t *testing.T) {
 	tests := []struct {
 		name                 string
-		setup                func(t *testing.T, repo db.Repository) (chatID, thread string, explicitContextSeq *int)
+		setup                func(t *testing.T, repo *db.Repo) (chatID, thread string, explicitContextSeq *int)
 		expectedMsgCount     int
 		expectedFirstMsgRole string // Role of first message
 		expectedLastMsgRole  string // Role of last message
@@ -240,7 +240,7 @@ func TestLoadMessagesForLLM_TableDriven(t *testing.T) {
 	}{
 		{
 			name: "non-forked thread loads local messages only",
-			setup: func(t *testing.T, repo db.Repository) (string, string, *int) {
+			setup: func(t *testing.T, repo *db.Repo) (string, string, *int) {
 				chatID := createTestChatForConversation(t, repo)
 				threadID, contextWindowID := createThreadWithContextWindow(t, repo, chatID, nil, nil, nil, 0)
 				createMessageWithParts(t, repo, chatID, threadID, contextWindowID, 1, reliantv1.MessageRole_MESSAGE_ROLE_USER, "Hello")
@@ -254,7 +254,7 @@ func TestLoadMessagesForLLM_TableDriven(t *testing.T) {
 		},
 		{
 			name: "forked thread includes parent messages up to fork point",
-			setup: func(t *testing.T, repo db.Repository) (string, string, *int) {
+			setup: func(t *testing.T, repo *db.Repo) (string, string, *int) {
 				chatID := createTestChatForConversation(t, repo)
 
 				// Parent thread with messages
@@ -278,7 +278,7 @@ func TestLoadMessagesForLLM_TableDriven(t *testing.T) {
 		},
 		{
 			name: "fork chain (A→B→C) resolves correctly",
-			setup: func(t *testing.T, repo db.Repository) (string, string, *int) {
+			setup: func(t *testing.T, repo *db.Repo) (string, string, *int) {
 				chatID := createTestChatForConversation(t, repo)
 
 				// Thread A: messages 1, 2
@@ -304,7 +304,7 @@ func TestLoadMessagesForLLM_TableDriven(t *testing.T) {
 		},
 		{
 			name: "latest context sequence is used when explicit not provided",
-			setup: func(t *testing.T, repo db.Repository) (string, string, *int) {
+			setup: func(t *testing.T, repo *db.Repo) (string, string, *int) {
 				chatID := createTestChatForConversation(t, repo)
 				threadID, _ := createThreadWithContextWindow(t, repo, chatID, nil, nil, nil, 0)
 
@@ -331,7 +331,7 @@ func TestLoadMessagesForLLM_TableDriven(t *testing.T) {
 		},
 		{
 			name: "empty thread returns empty slice",
-			setup: func(t *testing.T, repo db.Repository) (string, string, *int) {
+			setup: func(t *testing.T, repo *db.Repo) (string, string, *int) {
 				chatID := createTestChatForConversation(t, repo)
 				threadID, _ := createThreadWithContextWindow(t, repo, chatID, nil, nil, nil, 0)
 				return chatID, threadID, nil
@@ -340,7 +340,7 @@ func TestLoadMessagesForLLM_TableDriven(t *testing.T) {
 		},
 		{
 			name: "fork with no parent messages works",
-			setup: func(t *testing.T, repo db.Repository) (string, string, *int) {
+			setup: func(t *testing.T, repo *db.Repo) (string, string, *int) {
 				chatID := createTestChatForConversation(t, repo)
 
 				// Parent thread with no messages
@@ -398,13 +398,13 @@ func TestLoadMessagesForLLM_TableDriven(t *testing.T) {
 func TestLoadMessagesForLLM_OrphanedToolCallRepair(t *testing.T) {
 	tests := []struct {
 		name             string
-		setup            func(t *testing.T, repo db.Repository) (chatID, thread string)
+		setup            func(t *testing.T, repo *db.Repo) (chatID, thread string)
 		expectedMsgCount int
 		validateRepair   func(t *testing.T, messages []message.Message) // Validate repair was applied
 	}{
 		{
 			name: "repairs orphaned tool call with synthetic result",
-			setup: func(t *testing.T, repo db.Repository) (string, string) {
+			setup: func(t *testing.T, repo *db.Repo) (string, string) {
 				chatID := createTestChatForConversation(t, repo)
 				threadID, contextWindowID := createThreadWithContextWindow(t, repo, chatID, nil, nil, nil, 0)
 
@@ -420,7 +420,7 @@ func TestLoadMessagesForLLM_OrphanedToolCallRepair(t *testing.T) {
 		},
 		{
 			name: "no repair needed when tool result exists",
-			setup: func(t *testing.T, repo db.Repository) (string, string) {
+			setup: func(t *testing.T, repo *db.Repo) (string, string) {
 				chatID := createTestChatForConversation(t, repo)
 				threadID, contextWindowID := createThreadWithContextWindow(t, repo, chatID, nil, nil, nil, 0)
 
@@ -439,7 +439,7 @@ func TestLoadMessagesForLLM_OrphanedToolCallRepair(t *testing.T) {
 		},
 		{
 			name: "repairs multiple orphaned tool calls",
-			setup: func(t *testing.T, repo db.Repository) (string, string) {
+			setup: func(t *testing.T, repo *db.Repo) (string, string) {
 				chatID := createTestChatForConversation(t, repo)
 				threadID, contextWindowID := createThreadWithContextWindow(t, repo, chatID, nil, nil, nil, 0)
 

@@ -186,11 +186,11 @@ func (s *Service) sendToMachine(ctx context.Context, userID string, target machi
 func (s *Service) worktreeBelongsToUser(ctx context.Context, worktreeID string, userID string) error {
 	worktree, err := s.deps.Repo.GetWorktree(ctx, worktreeID)
 	if err != nil || worktree == nil {
-		return connect.NewError(connect.CodeNotFound, fmt.Errorf("worktree not found"))
+		return svcerr.ToConnect(svcerr.NotFound("worktree"))
 	}
 
 	if _, err := s.deps.Repo.GetProjectWithUserCheck(ctx, worktree.ProjectID, userID); err != nil {
-		return connect.NewError(connect.CodeNotFound, fmt.Errorf("worktree not found"))
+		return svcerr.ToConnect(svcerr.NotFound("worktree"))
 	}
 
 	return nil
@@ -199,7 +199,7 @@ func (s *Service) worktreeBelongsToUser(ctx context.Context, worktreeID string, 
 // projectBelongsToUser checks if a project belongs to a user
 func (s *Service) projectBelongsToUser(ctx context.Context, projectID string, userID string) error {
 	if _, err := s.deps.Repo.GetProjectWithUserCheck(ctx, projectID, userID); err != nil {
-		return connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found"))
+		return svcerr.ToConnect(svcerr.NotFound("project"))
 	}
 
 	return nil
@@ -259,7 +259,7 @@ func worktreeToProto(w *db.Worktree) *reliantv1.Worktree {
 func (s *Service) listProjectRepos(ctx context.Context, project *db.Project) ([]*core.Repo, error) {
 	repos, err := s.deps.Repo.ListReposByProject(ctx, project.ID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list repos for project"))
+		return nil, svcerr.ToConnect(svcerr.Internal("failed to list repos for project"))
 	}
 	if len(repos) == 0 && s.deps.Router != nil {
 		// The registry trails the filesystem when a repo was created outside
@@ -268,8 +268,7 @@ func (s *Service) listProjectRepos(ctx context.Context, project *db.Project) ([]
 		repos = repopkg.AdoptFromDaemon(ctx, s.deps.Repo, s.deps.Router, project)
 	}
 	if len(repos) == 0 {
-		return nil, connect.NewError(connect.CodeFailedPrecondition,
-			fmt.Errorf("project has no git repos; initialize one or add a nested repo before creating worktrees"))
+		return nil, svcerr.ToConnect(svcerr.FailedPrecondition("project has no git repos; initialize one or add a nested repo before creating worktrees"))
 	}
 	return repos, nil
 }
@@ -292,13 +291,12 @@ func (s *Service) listProjectRepos(ctx context.Context, project *db.Project) ([]
 func (s *Service) resolveRepoPath(ctx context.Context, worktree *db.Worktree, repoID string) (string, *core.Repo, error) {
 	repos, err := s.deps.Repo.ListReposByProject(ctx, worktree.ProjectID)
 	if err != nil {
-		return "", nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list repos for project"))
+		return "", nil, svcerr.ToConnect(svcerr.Internal("failed to list repos for project"))
 	}
 
 	if repoID == "" {
 		if len(repos) > 1 {
-			return "", nil, connect.NewError(connect.CodeInvalidArgument,
-				fmt.Errorf("repo_id required in multi-repo projects"))
+			return "", nil, svcerr.ToConnect(svcerr.InvalidArgument("repo_id required in multi-repo projects"))
 		}
 		// 0 repos: fall through to worktree path (e.g. project initialized
 		// before nested-repo migration). 1 repo: prefer the registered repo's
@@ -316,7 +314,7 @@ func (s *Service) resolveRepoPath(ctx context.Context, worktree *db.Worktree, re
 			return filepath.Join(worktree.Path, r.RelativePath), r, nil
 		}
 	}
-	return "", nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("repo not in project"))
+	return "", nil, svcerr.ToConnect(svcerr.WithMessage(svcerr.ErrNotFound, "repo not in project"))
 }
 
 // resolveRepoBaseBranch picks the right base branch for a per-repo write
@@ -344,7 +342,7 @@ func (s *Service) resolveRepoBaseBranch(worktree *db.Worktree, repo *core.Repo) 
 // validateWorktreeForGitOps validates that a worktree is suitable for git operations
 func (s *Service) validateWorktreeForGitOps(ctx context.Context, userID string, worktree *db.Worktree) error {
 	if worktree.DeletedAt != nil {
-		return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("worktree is archived; unarchive it before performing git operations"))
+		return svcerr.ToConnect(svcerr.FailedPrecondition("worktree is archived; unarchive it before performing git operations"))
 	}
 
 	var resp struct {
@@ -356,9 +354,9 @@ func (s *Service) validateWorktreeForGitOps(ctx context.Context, userID string, 
 	}
 	if !resp.Exists {
 		if resp.Error == "not_found" {
-			return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("worktree directory does not exist: %s; the worktree may need to be recreated", worktree.Path))
+			return svcerr.ToConnect(svcerr.FailedPrecondition(fmt.Sprintf("worktree directory does not exist: %s; the worktree may need to be recreated", worktree.Path)))
 		}
-		return connect.NewError(connect.CodeInternal, fmt.Errorf("cannot access worktree directory: %s", resp.Error))
+		return svcerr.ToConnect(svcerr.Internal(fmt.Sprintf("cannot access worktree directory: %s", resp.Error)))
 	}
 
 	return nil
@@ -404,13 +402,13 @@ func (s *Service) CreateWorktree(
 	userID := auth.MustGetUserID(ctx)
 
 	if req.Msg.Name == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("name is required"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("name is required"))
 	}
 	if req.Msg.Branch == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("branch is required"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("branch is required"))
 	}
 	if req.Msg.ProjectId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("project_id is required"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("project_id is required"))
 	}
 	// copy_files are exact paths relative to the workspace root. Rejected
 	// HERE, synchronously, so a typo or an escaping path is an error the
@@ -427,7 +425,7 @@ func (s *Service) CreateWorktree(
 	project, err := s.deps.Repo.GetProject(ctx, req.Msg.ProjectId)
 	if err != nil {
 		logging.ErrorContext(ctx, "Failed to get project", "error", err, "projectID", req.Msg.ProjectId)
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found"))
+		return nil, svcerr.ToConnect(svcerr.NotFound("project"))
 	}
 
 	repos, err := s.listProjectRepos(ctx, project)
@@ -446,7 +444,7 @@ func (s *Service) CreateWorktree(
 	var sourceWorkspace string
 	if req.Msg.SourceWorktreeId != nil && *req.Msg.SourceWorktreeId != "" {
 		if err := s.worktreeBelongsToUser(ctx, *req.Msg.SourceWorktreeId, userID); err != nil {
-			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("source worktree not found"))
+			return nil, svcerr.ToConnect(svcerr.NotFound("source worktree"))
 		}
 		sourceWorktree, err = s.deps.Repo.GetWorktree(ctx, *req.Msg.SourceWorktreeId)
 		if err != nil {
@@ -487,7 +485,7 @@ func (s *Service) CreateWorktree(
 		existing, err := s.deps.Repo.GetWorktreeByIdempotencyKey(ctx, project.ID, *req.Msg.IdempotencyKey)
 		if err != nil {
 			logging.ErrorContext(ctx, "Failed to check worktree idempotency key", "error", err)
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to create worktree"))
+			return nil, svcerr.ToConnect(svcerr.Internal("failed to create worktree"))
 		}
 		if existing != nil {
 			return connect.NewResponse(&reliantv1.CreateWorktreeResponse{
@@ -556,7 +554,7 @@ func insertWorktreeError(err error, name string) error {
 	var branchHeld *workspacecreate.BranchHeldError
 	switch {
 	case errors.Is(err, core.ErrWorktreeNameTaken):
-		return connect.NewError(connect.CodeAlreadyExists, fmt.Errorf("worktree with name '%s' already exists in this project; archive or rename it, or choose another name", name))
+		return svcerr.ToConnect(svcerr.AlreadyExists(fmt.Sprintf("worktree with name '%s' already exists in this project; archive or rename it, or choose another name", name)))
 	case errors.As(err, &branchHeld):
 		return connect.NewError(connect.CodeFailedPrecondition, branchHeld)
 	case svcerr.IsUserError(err):
@@ -564,7 +562,7 @@ func insertWorktreeError(err error, name string) error {
 		return svcerr.Wrap(err)
 	}
 	logging.Error("Failed to create worktree row", "error", err)
-	return connect.NewError(connect.CodeInternal, fmt.Errorf("failed to create worktree"))
+	return svcerr.ToConnect(svcerr.Internal("failed to create worktree"))
 }
 
 // worktreeCreateBudget bounds the detached creation goroutine. Generous
@@ -617,7 +615,7 @@ func (s *Service) ListWorktrees(
 	userID := auth.MustGetUserID(ctx)
 
 	if req.Msg.ProjectId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("project_id is required"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("project_id is required"))
 	}
 
 	// Check project permission
@@ -632,7 +630,7 @@ func (s *Service) ListWorktrees(
 	}
 	offset, err := decodeWorktreePageToken(req.Msg.GetPageToken())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid page_token"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("invalid page_token"))
 	}
 	filters := db.WorktreeFilters{
 		ProjectID: &projectID,
@@ -649,7 +647,7 @@ func (s *Service) ListWorktrees(
 	worktrees, err := s.deps.Repo.ListWorktrees(ctx, filters)
 	if err != nil {
 		logging.ErrorContext(ctx, "Failed to list worktrees", "error", err)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list worktrees"))
+		return nil, svcerr.ToConnect(svcerr.Internal("failed to list worktrees"))
 	}
 
 	nextPageToken := ""
@@ -663,7 +661,7 @@ func (s *Service) ListWorktrees(
 	if len(worktrees) == 0 && offset == 0 {
 		project, err := s.deps.Repo.GetProjectWithUserCheck(ctx, req.Msg.ProjectId, userID)
 		if err != nil {
-			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found"))
+			return nil, svcerr.ToConnect(svcerr.NotFound("project"))
 		}
 
 		defaultBranch := "main"
@@ -691,7 +689,7 @@ func (s *Service) ListWorktrees(
 			// Re-fetch in case another request created it concurrently.
 			worktrees, err = s.deps.Repo.ListWorktrees(ctx, filters)
 			if err != nil || len(worktrees) == 0 {
-				return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to ensure main worktree"))
+				return nil, svcerr.ToConnect(svcerr.Internal("failed to ensure main worktree"))
 			}
 		} else {
 			worktrees = []*db.Worktree{mainWorktree}
@@ -719,7 +717,7 @@ func (s *Service) ListArchivedWorktrees(
 	userID := auth.MustGetUserID(ctx)
 
 	if req.Msg.ProjectId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("project_id is required"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("project_id is required"))
 	}
 	if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userID); err != nil {
 		return nil, err
@@ -731,7 +729,7 @@ func (s *Service) ListArchivedWorktrees(
 	}
 	offset, err := decodeWorktreePageToken(req.Msg.GetPageToken())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid page_token"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("invalid page_token"))
 	}
 
 	projectID := req.Msg.ProjectId
@@ -744,7 +742,7 @@ func (s *Service) ListArchivedWorktrees(
 	})
 	if err != nil {
 		logging.ErrorContext(ctx, "Failed to list archived worktrees", "error", err)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list archived worktrees"))
+		return nil, svcerr.ToConnect(svcerr.Internal("failed to list archived worktrees"))
 	}
 
 	nextPageToken := ""
@@ -795,7 +793,7 @@ func (s *Service) GetWorktree(
 	userID := auth.MustGetUserID(ctx)
 
 	if req.Msg.WorktreeId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("worktree_id is required"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("worktree_id is required"))
 	}
 
 	if err := s.worktreeBelongsToUser(ctx, req.Msg.WorktreeId, userID); err != nil {
@@ -805,7 +803,7 @@ func (s *Service) GetWorktree(
 	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
 	if err != nil {
 		logging.ErrorContext(ctx, "Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("worktree not found"))
+		return nil, svcerr.ToConnect(svcerr.NotFound("worktree"))
 	}
 
 	return connect.NewResponse(&reliantv1.GetWorktreeResponse{
@@ -821,7 +819,7 @@ func (s *Service) UpdateWorktree(
 	userID := auth.MustGetUserID(ctx)
 
 	if req.Msg.WorktreeId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("worktree_id is required"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("worktree_id is required"))
 	}
 
 	if err := s.worktreeBelongsToUser(ctx, req.Msg.WorktreeId, userID); err != nil {
@@ -831,7 +829,7 @@ func (s *Service) UpdateWorktree(
 	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
 	if err != nil {
 		logging.ErrorContext(ctx, "Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("worktree not found"))
+		return nil, svcerr.ToConnect(svcerr.NotFound("worktree"))
 	}
 
 	if req.Msg.Name != nil {
@@ -849,7 +847,7 @@ func (s *Service) UpdateWorktree(
 
 	if err := s.deps.Repo.UpdateWorktree(ctx, worktree); err != nil {
 		logging.ErrorContext(ctx, "Failed to update worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to update worktree"))
+		return nil, svcerr.ToConnect(svcerr.Internal("failed to update worktree"))
 	}
 
 	return connect.NewResponse(&reliantv1.UpdateWorktreeResponse{
@@ -865,7 +863,7 @@ func (s *Service) DeleteWorktree(
 	userID := auth.MustGetUserID(ctx)
 
 	if req.Msg.WorktreeId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("worktree_id is required"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("worktree_id is required"))
 	}
 
 	if err := s.worktreeBelongsToUser(ctx, req.Msg.WorktreeId, userID); err != nil {
@@ -875,12 +873,12 @@ func (s *Service) DeleteWorktree(
 	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
 	if err != nil {
 		logging.ErrorContext(ctx, "Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("worktree not found"))
+		return nil, svcerr.ToConnect(svcerr.NotFound("worktree"))
 	}
 
 	// Prevent deletion of main worktree
 	if worktree.IsMain {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("cannot delete the main project worktree"))
+		return nil, svcerr.ToConnect(svcerr.FailedPrecondition("cannot delete the main project worktree"))
 	}
 
 	project, err := s.deps.Repo.GetProject(ctx, worktree.ProjectID)
@@ -915,7 +913,7 @@ func (s *Service) DeleteWorktree(
 				if meta != nil && meta.HeldReason != "" {
 					reason = "its directory is still on disk (" + meta.HeldReason + "): clean it up from your Inbox first"
 				}
-				return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("cannot delete this workspace permanently: %s", reason))
+				return nil, svcerr.ToConnect(svcerr.FailedPrecondition(fmt.Sprintf("cannot delete this workspace permanently: %s", reason)))
 			}
 		}
 		deletedBranch := false
@@ -924,7 +922,7 @@ func (s *Service) DeleteWorktree(
 		}
 		if err := s.deps.Repo.DeleteWorktree(ctx, req.Msg.WorktreeId); err != nil {
 			logging.ErrorContext(ctx, "Failed to permanently delete worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to permanently delete worktree"))
+			return nil, svcerr.ToConnect(svcerr.Internal("failed to permanently delete worktree"))
 		}
 
 		return connect.NewResponse(&reliantv1.DeleteWorktreeResponse{
@@ -939,7 +937,7 @@ func (s *Service) DeleteWorktree(
 	// Archive the worktree
 	if err := s.deps.Repo.ArchiveWorktree(ctx, req.Msg.WorktreeId); err != nil {
 		logging.ErrorContext(ctx, "Failed to archive worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to archive worktree"))
+		return nil, svcerr.ToConnect(svcerr.Internal("failed to archive worktree"))
 	}
 
 	// Archive associated chats
@@ -962,7 +960,7 @@ func (s *Service) ArchiveWorktree(
 	userID := auth.MustGetUserID(ctx)
 
 	if req.Msg.WorktreeId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("worktree_id is required"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("worktree_id is required"))
 	}
 
 	if err := s.worktreeBelongsToUser(ctx, req.Msg.WorktreeId, userID); err != nil {
@@ -972,15 +970,15 @@ func (s *Service) ArchiveWorktree(
 	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
 	if err != nil {
 		logging.ErrorContext(ctx, "Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("worktree not found"))
+		return nil, svcerr.ToConnect(svcerr.NotFound("worktree"))
 	}
 
 	if worktree.IsMain {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("cannot archive the main project worktree"))
+		return nil, svcerr.ToConnect(svcerr.FailedPrecondition("cannot archive the main project worktree"))
 	}
 
 	if worktree.DeletedAt != nil {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("worktree is already archived; use delete to permanently remove"))
+		return nil, svcerr.ToConnect(svcerr.FailedPrecondition("worktree is already archived; use delete to permanently remove"))
 	}
 
 	project, err := s.deps.Repo.GetProject(ctx, worktree.ProjectID)
@@ -996,7 +994,7 @@ func (s *Service) ArchiveWorktree(
 	// Archive the worktree
 	if err := s.deps.Repo.ArchiveWorktree(ctx, req.Msg.WorktreeId); err != nil {
 		logging.ErrorContext(ctx, "Failed to archive worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to archive worktree"))
+		return nil, svcerr.ToConnect(svcerr.Internal("failed to archive worktree"))
 	}
 
 	// Archive associated chats
@@ -1018,7 +1016,7 @@ func (s *Service) UnarchiveWorktree(
 	userID := auth.MustGetUserID(ctx)
 
 	if req.Msg.WorktreeId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("worktree_id is required"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("worktree_id is required"))
 	}
 
 	if err := s.worktreeBelongsToUser(ctx, req.Msg.WorktreeId, userID); err != nil {
@@ -1028,25 +1026,25 @@ func (s *Service) UnarchiveWorktree(
 	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
 	if err != nil {
 		logging.ErrorContext(ctx, "Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("worktree not found"))
+		return nil, svcerr.ToConnect(svcerr.NotFound("worktree"))
 	}
 
 	if worktree.DeletedAt == nil {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("worktree is not archived"))
+		return nil, svcerr.ToConnect(svcerr.FailedPrecondition("worktree is not archived"))
 	}
 
 	// A directory that is already gone cannot be unarchived into a working
 	// workspace: the user restores it with RecreateWorktree, which rebuilds it.
 	if worktree.CleanupMetadata != nil && worktree.CleanupMetadata.DirectoryDeleted {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("this workspace's files were removed; restore it with recreate"))
+		return nil, svcerr.ToConnect(svcerr.FailedPrecondition("this workspace's files were removed; restore it with recreate"))
 	}
 
 	// Refuse a name collision before the machine is touched: re-locking the
 	// checkouts for a row that then cannot be restored would leave them locked
 	// as live under an archived row.
 	if holder, err := s.deps.Repo.GetLiveWorktreeByName(ctx, worktree.ProjectID, worktree.Name); err == nil && holder != nil {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
-			"cannot unarchive '%s': another worktree in this project now uses that name; archive or rename the other one first", worktree.Name))
+		return nil, svcerr.ToConnect(svcerr.FailedPrecondition(fmt.Sprintf(
+			"cannot unarchive '%s': another worktree in this project now uses that name; archive or rename the other one first", worktree.Name)))
 	}
 
 	// Take the archive fence off the directory FIRST, and retire it: the machine
@@ -1058,16 +1056,16 @@ func (s *Service) UnarchiveWorktree(
 		return nil, connect.NewError(connect.CodeUnavailable, err)
 	}
 	if !proceed {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("this workspace's files were removed; restore it with recreate"))
+		return nil, svcerr.ToConnect(svcerr.FailedPrecondition("this workspace's files were removed; restore it with recreate"))
 	}
 
 	if err := s.deps.Repo.UnarchiveWorktree(ctx, req.Msg.WorktreeId); err != nil {
 		if errors.Is(err, core.ErrWorktreeNameTaken) {
-			return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
-				"cannot unarchive '%s': another worktree in this project now uses that name; archive or rename the other one first", worktree.Name))
+			return nil, svcerr.ToConnect(svcerr.FailedPrecondition(fmt.Sprintf(
+				"cannot unarchive '%s': another worktree in this project now uses that name; archive or rename the other one first", worktree.Name)))
 		}
 		logging.ErrorContext(ctx, "Failed to unarchive worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to unarchive worktree"))
+		return nil, svcerr.ToConnect(svcerr.Internal("failed to unarchive worktree"))
 	}
 
 	// Unarchive associated chats
@@ -1190,17 +1188,17 @@ func (s *Service) ImportWorktree(
 	userID := auth.MustGetUserID(ctx)
 
 	if req.Msg.Path == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("path is required"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("path is required"))
 	}
 	if req.Msg.ProjectId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("project_id is required"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("project_id is required"))
 	}
 	if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userID); err != nil {
 		return nil, err
 	}
 	project, err := s.deps.Repo.GetProject(ctx, req.Msg.ProjectId)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found"))
+		return nil, svcerr.ToConnect(svcerr.NotFound("project"))
 	}
 	repos, err := s.listProjectRepos(ctx, project)
 	if err != nil {
@@ -1214,17 +1212,16 @@ func (s *Service) ImportWorktree(
 	switch {
 	case req.Msg.RepoId != "":
 		if repo = byID[req.Msg.RepoId]; repo == nil {
-			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("repo not in project"))
+			return nil, svcerr.ToConnect(svcerr.WithMessage(svcerr.ErrNotFound, "repo not in project"))
 		}
 	case len(repos) == 1:
 		repo = repos[0]
 	default:
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("repo_id is required in multi-repo projects"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("repo_id is required in multi-repo projects"))
 	}
 	moves := importMoves(byID)
 	if moves && !req.Msg.ConfirmMove {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("importing this worktree moves its directory into a new workspace; confirm the move (confirm_move) to continue"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("importing this worktree moves its directory into a new workspace; confirm the move (confirm_move) to continue"))
 	}
 
 	placement, err := s.placeNewWorktree(ctx, userID, project.ID, req.Msg.ChatId, nil, "import")
@@ -1258,12 +1255,10 @@ func (s *Service) ImportWorktree(
 		}
 	}
 	if entry == nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("%s is not an untracked linked worktree of repo '%s'; refresh the list and try again", req.Msg.Path, repo.Name))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument(fmt.Sprintf("%s is not an untracked linked worktree of repo '%s'; refresh the list and try again", req.Msg.Path, repo.Name)))
 	}
 	if entry.Branch == "" {
-		return nil, connect.NewError(connect.CodeFailedPrecondition,
-			fmt.Errorf("%s has a detached HEAD, so there is no branch to adopt; create one in it first (git switch -c <branch>) and try again", entry.Path))
+		return nil, svcerr.ToConnect(svcerr.FailedPrecondition(fmt.Sprintf("%s has a detached HEAD, so there is no branch to adopt; create one in it first (git switch -c <branch>) and try again", entry.Path)))
 	}
 
 	name := entry.Name
@@ -1334,7 +1329,7 @@ func (s *Service) ImportWorktree(
 		if moveErr != nil {
 			return nil, importWorktreeError("move the worktree", moveErr, "adopt_move failed")
 		}
-		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("could not move %s: %s", entry.Path, moved.Error))
+		return nil, svcerr.ToConnect(svcerr.FailedPrecondition(fmt.Sprintf("could not move %s: %s", entry.Path, moved.Error)))
 	}
 
 	createReq.Existing = map[string]workspacecreate.ExistingCheckout{
@@ -1380,7 +1375,7 @@ func importWorktreeError(doing string, err error, logMsg string) error {
 	if logMsg != "" {
 		logging.Error(logMsg, "error", err)
 	}
-	return connect.NewError(connect.CodeInternal, fmt.Errorf("failed to %s", doing))
+	return svcerr.ToConnect(svcerr.Internal(fmt.Sprintf("failed to %s", doing)))
 }
 
 // workspaceMoveTimeoutMs bounds adopt_move: a rename on one filesystem, but
@@ -1418,7 +1413,7 @@ func (s *Service) trackedWorktreePaths(ctx context.Context, projectID string) ([
 	})
 	if err != nil {
 		logging.ErrorContext(ctx, "Failed to list worktrees", "error", err)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list worktrees"))
+		return nil, svcerr.ToConnect(svcerr.Internal("failed to list worktrees"))
 	}
 	paths := make([]string, 0, len(tracked))
 	for _, wt := range tracked {
@@ -1445,7 +1440,7 @@ type discoveredEntry struct {
 func (s *Service) projectRepoRefs(ctx context.Context, project *db.Project) ([]discoverRepoRef, map[string]*core.Repo, error) {
 	repos, err := s.deps.Repo.ListReposByProject(ctx, project.ID)
 	if err != nil {
-		return nil, nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list repos for project"))
+		return nil, nil, svcerr.ToConnect(svcerr.Internal("failed to list repos for project"))
 	}
 	refs := make([]discoverRepoRef, 0, len(repos))
 	byID := make(map[string]*core.Repo, len(repos))
@@ -1474,7 +1469,7 @@ func (s *Service) DiscoverWorktrees(
 	userID := auth.MustGetUserID(ctx)
 
 	if req.Msg.ProjectId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("project_id is required"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("project_id is required"))
 	}
 	if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userID); err != nil {
 		return nil, err
@@ -1482,7 +1477,7 @@ func (s *Service) DiscoverWorktrees(
 	project, err := s.deps.Repo.GetProject(ctx, req.Msg.ProjectId)
 	if err != nil {
 		logging.ErrorContext(ctx, "Failed to get project", "error", err, "projectID", req.Msg.ProjectId)
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found"))
+		return nil, svcerr.ToConnect(svcerr.NotFound("project"))
 	}
 	refs, byID, err := s.projectRepoRefs(ctx, project)
 	if err != nil {
@@ -1515,10 +1510,10 @@ func (s *Service) DiscoverWorktrees(
 			return nil, err
 		}
 		if req.Msg.Background && daemonerr.Unreachable(err) {
-			return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("your machine is not connected"))
+			return nil, svcerr.ToConnect(svcerr.Unavailable("your machine is not connected"))
 		}
 		logging.WarnContext(ctx, "Failed to discover worktrees via daemon", "error", err)
-		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("failed to list git worktrees"))
+		return nil, svcerr.ToConnect(svcerr.FailedPrecondition("failed to list git worktrees"))
 	}
 
 	// Importing moves the checkout when the workspace layout cannot hold it
@@ -1555,14 +1550,14 @@ func (s *Service) PruneWorktrees(
 	userID := auth.MustGetUserID(ctx)
 
 	if req.Msg.ProjectId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("project_id is required"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("project_id is required"))
 	}
 	if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userID); err != nil {
 		return nil, err
 	}
 	project, err := s.deps.Repo.GetProject(ctx, req.Msg.ProjectId)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found"))
+		return nil, svcerr.ToConnect(svcerr.NotFound("project"))
 	}
 	refs, byID, err := s.projectRepoRefs(ctx, project)
 	if err != nil {
@@ -1581,13 +1576,13 @@ func (s *Service) PruneWorktrees(
 			return nil, err
 		}
 		logging.WarnContext(ctx, "Failed to prune worktrees via daemon", "error", err)
-		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("failed to prune git worktrees"))
+		return nil, svcerr.ToConnect(svcerr.FailedPrecondition("failed to prune git worktrees"))
 	}
 	for _, msg := range resp.Errors {
 		logging.WarnContext(ctx, "worktree prune error", "projectID", project.ID, "error", msg)
 	}
 	if len(resp.Pruned) == 0 && len(resp.Errors) > 0 {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("git error: %s", resp.Errors[0]))
+		return nil, svcerr.ToConnect(svcerr.FailedPrecondition(fmt.Sprintf("git error: %s", resp.Errors[0])))
 	}
 	out := &reliantv1.PruneWorktreesResponse{}
 	for _, e := range resp.Pruned {
@@ -1607,7 +1602,7 @@ func (s *Service) RecreateWorktree(
 	userID := auth.MustGetUserID(ctx)
 
 	if req.Msg.WorktreeId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("worktree_id is required"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("worktree_id is required"))
 	}
 
 	// Check permission
@@ -1618,14 +1613,14 @@ func (s *Service) RecreateWorktree(
 	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
 	if err != nil {
 		logging.ErrorContext(ctx, "Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("worktree not found"))
+		return nil, svcerr.ToConnect(svcerr.NotFound("worktree"))
 	}
 
 	// Get project for git operations
 	project, err := s.deps.Repo.GetProject(ctx, worktree.ProjectID)
 	if err != nil {
 		logging.ErrorContext(ctx, "Failed to get project", "error", err, "projectID", worktree.ProjectID)
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found"))
+		return nil, svcerr.ToConnect(svcerr.NotFound("project"))
 	}
 
 	if worktree.DeletedAt == nil {
@@ -1635,8 +1630,8 @@ func (s *Service) RecreateWorktree(
 	// Restoring an archived worktree unarchives the row, so refuse before
 	// touching the machine when its name has been taken since.
 	if holder, err := s.deps.Repo.GetLiveWorktreeByName(ctx, worktree.ProjectID, worktree.Name); err == nil && holder != nil {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
-			"cannot recreate '%s': another worktree in this project now uses that name; archive or rename the other one first", worktree.Name))
+		return nil, svcerr.ToConnect(svcerr.FailedPrecondition(fmt.Sprintf(
+			"cannot recreate '%s': another worktree in this project now uses that name; archive or rename the other one first", worktree.Name)))
 	}
 
 	// Recreate EVERY repo of the workspace. A multi-repo project's root is not a
@@ -1644,7 +1639,7 @@ func (s *Service) RecreateWorktree(
 	// repo, each in its own repository, under <workspace>/<relative path>.
 	repos, err := s.deps.Repo.ListReposByProject(ctx, worktree.ProjectID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list repos for project"))
+		return nil, svcerr.ToConnect(svcerr.Internal("failed to list repos for project"))
 	}
 	type recreateRepo struct {
 		RepoPath string `json:"repo_path"`
@@ -1686,16 +1681,16 @@ func (s *Service) RecreateWorktree(
 		"repos":         recreateRepos,
 	}, &recreateResp); err != nil {
 		logging.ErrorContext(ctx, "Failed to recreate worktree via daemon", "error", err)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to recreate worktree"))
+		return nil, svcerr.ToConnect(svcerr.Internal("failed to recreate worktree"))
 	}
 	if !recreateResp.Success {
 		if !recreateResp.BranchExists {
-			return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("branch '%s' no longer exists; cannot recreate worktree", worktree.Branch))
+			return nil, svcerr.ToConnect(svcerr.FailedPrecondition(fmt.Sprintf("branch '%s' no longer exists; cannot recreate worktree", worktree.Branch)))
 		}
 		if recreateResp.PathExists {
-			return nil, connect.NewError(connect.CodeAlreadyExists, fmt.Errorf("worktree directory '%s' already exists", worktree.Path))
+			return nil, svcerr.ToConnect(svcerr.AlreadyExists(fmt.Sprintf("worktree directory '%s' already exists", worktree.Path)))
 		}
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to recreate worktree: %s", recreateResp.Error))
+		return nil, svcerr.ToConnect(svcerr.Internal(fmt.Sprintf("failed to recreate worktree: %s", recreateResp.Error)))
 	}
 
 	// The directory is back, so it is no longer "removed" or "held". The saved
@@ -1725,7 +1720,7 @@ func (s *Service) RecreateWorktree(
 	// Unarchive the worktree
 	if err := s.deps.Repo.UnarchiveWorktree(ctx, req.Msg.WorktreeId); err != nil {
 		logging.ErrorContext(ctx, "Failed to unarchive worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to unarchive worktree"))
+		return nil, svcerr.ToConnect(svcerr.Internal("failed to unarchive worktree"))
 	}
 
 	// Unarchive all chats associated with this worktree
@@ -1760,14 +1755,14 @@ func (s *Service) RecreateWorktree(
 // to main checkout", which is UpdateChat).
 func (s *Service) repairActiveWorktree(ctx context.Context, userID string, worktree *db.Worktree, project *db.Project) (*connect.Response[reliantv1.RecreateWorktreeResponse], error) {
 	if worktree.IsMain {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("the project's main checkout is not a workspace reliant can recreate"))
+		return nil, svcerr.ToConnect(svcerr.FailedPrecondition("the project's main checkout is not a workspace reliant can recreate"))
 	}
 	if worktree.Path == "" {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("this workspace was never created on disk; create a new one instead"))
+		return nil, svcerr.ToConnect(svcerr.FailedPrecondition("this workspace was never created on disk; create a new one instead"))
 	}
 	repos, err := s.deps.Repo.ListReposByProject(ctx, worktree.ProjectID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list repos for project"))
+		return nil, svcerr.ToConnect(svcerr.Internal("failed to list repos for project"))
 	}
 	ensureReq := toolexec.WorkspaceEnsureRequest{
 		Path:         worktree.Path,
@@ -1793,7 +1788,7 @@ func (s *Service) repairActiveWorktree(ctx context.Context, userID string, workt
 	case toolexec.WorkspaceRepaired:
 		out.Message = fmt.Sprintf("Workspace recreated from branch %s. Uncommitted changes that were in it are gone.", worktree.Branch)
 	default:
-		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("could not recreate the workspace: %s", resp.Detail))
+		return nil, svcerr.ToConnect(svcerr.FailedPrecondition(fmt.Sprintf("could not recreate the workspace: %s", resp.Detail)))
 	}
 	s.emitWorktreeChanged(ctx, userID, project.ID, worktree.ID)
 	return connect.NewResponse(out), nil
@@ -1811,7 +1806,7 @@ func (s *Service) GetWorktreeChanges(
 	userID := auth.MustGetUserID(ctx)
 
 	if req.Msg.WorktreeId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("worktree_id is required"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("worktree_id is required"))
 	}
 
 	if err := s.worktreeBelongsToUser(ctx, req.Msg.WorktreeId, userID); err != nil {
@@ -1821,7 +1816,7 @@ func (s *Service) GetWorktreeChanges(
 	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
 	if err != nil {
 		logging.ErrorContext(ctx, "Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("worktree not found"))
+		return nil, svcerr.ToConnect(svcerr.NotFound("worktree"))
 	}
 
 	// Validate worktree is suitable for git operations
@@ -1903,7 +1898,7 @@ func (s *Service) GetWorktreeGitStatus(
 	userID := auth.MustGetUserID(ctx)
 
 	if req.Msg.WorktreeId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("worktree_id is required"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("worktree_id is required"))
 	}
 
 	if err := s.worktreeBelongsToUser(ctx, req.Msg.WorktreeId, userID); err != nil {
@@ -1913,7 +1908,7 @@ func (s *Service) GetWorktreeGitStatus(
 	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
 	if err != nil {
 		logging.ErrorContext(ctx, "Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("worktree not found"))
+		return nil, svcerr.ToConnect(svcerr.NotFound("worktree"))
 	}
 
 	// Validate worktree is suitable for git operations
@@ -1966,7 +1961,7 @@ func (s *Service) GetWorktreeCommits(
 	userID := auth.MustGetUserID(ctx)
 
 	if req.Msg.WorktreeId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("worktree_id is required"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("worktree_id is required"))
 	}
 
 	if err := s.worktreeBelongsToUser(ctx, req.Msg.WorktreeId, userID); err != nil {
@@ -1976,7 +1971,7 @@ func (s *Service) GetWorktreeCommits(
 	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
 	if err != nil {
 		logging.ErrorContext(ctx, "Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("worktree not found"))
+		return nil, svcerr.ToConnect(svcerr.NotFound("worktree"))
 	}
 
 	// Validate worktree is suitable for git operations
@@ -2073,7 +2068,7 @@ func (s *Service) StageFiles(
 	userID := auth.MustGetUserID(ctx)
 
 	if req.Msg.WorktreeId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("worktree_id is required"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("worktree_id is required"))
 	}
 
 	if err := s.worktreeBelongsToUser(ctx, req.Msg.WorktreeId, userID); err != nil {
@@ -2083,7 +2078,7 @@ func (s *Service) StageFiles(
 	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
 	if err != nil {
 		logging.ErrorContext(ctx, "Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("worktree not found"))
+		return nil, svcerr.ToConnect(svcerr.NotFound("worktree"))
 	}
 
 	if err := s.validateWorktreeForGitOps(ctx, userID, worktree); err != nil {
@@ -2111,7 +2106,7 @@ func (s *Service) StageFiles(
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to stage files: %w", err))
 	}
 	if !stageResp.Success {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to stage files: %s", stageResp.Error))
+		return nil, svcerr.ToConnect(svcerr.Internal(fmt.Sprintf("failed to stage files: %s", stageResp.Error)))
 	}
 
 	return connect.NewResponse(&reliantv1.StageFilesResponse{
@@ -2128,7 +2123,7 @@ func (s *Service) UnstageFiles(
 	userID := auth.MustGetUserID(ctx)
 
 	if req.Msg.WorktreeId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("worktree_id is required"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("worktree_id is required"))
 	}
 
 	if err := s.worktreeBelongsToUser(ctx, req.Msg.WorktreeId, userID); err != nil {
@@ -2138,7 +2133,7 @@ func (s *Service) UnstageFiles(
 	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
 	if err != nil {
 		logging.ErrorContext(ctx, "Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("worktree not found"))
+		return nil, svcerr.ToConnect(svcerr.NotFound("worktree"))
 	}
 
 	if err := s.validateWorktreeForGitOps(ctx, userID, worktree); err != nil {
@@ -2166,7 +2161,7 @@ func (s *Service) UnstageFiles(
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to unstage files: %w", err))
 	}
 	if !unstageResp.Success {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to unstage files: %s", unstageResp.Error))
+		return nil, svcerr.ToConnect(svcerr.Internal(fmt.Sprintf("failed to unstage files: %s", unstageResp.Error)))
 	}
 
 	return connect.NewResponse(&reliantv1.UnstageFilesResponse{
@@ -2183,11 +2178,11 @@ func (s *Service) CommitWorktree(
 	userID := auth.MustGetUserID(ctx)
 
 	if req.Msg.WorktreeId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("worktree_id is required"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("worktree_id is required"))
 	}
 
 	if req.Msg.Message == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("commit message is required"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("commit message is required"))
 	}
 
 	if err := s.worktreeBelongsToUser(ctx, req.Msg.WorktreeId, userID); err != nil {
@@ -2197,7 +2192,7 @@ func (s *Service) CommitWorktree(
 	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
 	if err != nil {
 		logging.ErrorContext(ctx, "Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("worktree not found"))
+		return nil, svcerr.ToConnect(svcerr.NotFound("worktree"))
 	}
 
 	if err := s.validateWorktreeForGitOps(ctx, userID, worktree); err != nil {
@@ -2214,7 +2209,7 @@ func (s *Service) CommitWorktree(
 	if err != nil {
 		errStr := err.Error()
 		if strings.Contains(errStr, "nothing to commit") || strings.Contains(errStr, "nothing added to commit") {
-			return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("no staged changes to commit; stage files first"))
+			return nil, svcerr.ToConnect(svcerr.FailedPrecondition("no staged changes to commit; stage files first"))
 		}
 		logging.ErrorContext(ctx, "Failed to commit changes", "error", err, "path", repoPath)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to commit: %w", err))
@@ -2234,7 +2229,7 @@ func (s *Service) PushWorktree(
 	userID := auth.MustGetUserID(ctx)
 
 	if req.Msg.WorktreeId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("worktree_id is required"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("worktree_id is required"))
 	}
 
 	if err := s.worktreeBelongsToUser(ctx, req.Msg.WorktreeId, userID); err != nil {
@@ -2244,7 +2239,7 @@ func (s *Service) PushWorktree(
 	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
 	if err != nil {
 		logging.ErrorContext(ctx, "Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("worktree not found"))
+		return nil, svcerr.ToConnect(svcerr.NotFound("worktree"))
 	}
 
 	if err := s.validateWorktreeForGitOps(ctx, userID, worktree); err != nil {
@@ -2279,7 +2274,7 @@ func (s *Service) PullWorktree(
 	userID := auth.MustGetUserID(ctx)
 
 	if req.Msg.WorktreeId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("worktree_id is required"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("worktree_id is required"))
 	}
 
 	if err := s.worktreeBelongsToUser(ctx, req.Msg.WorktreeId, userID); err != nil {
@@ -2289,7 +2284,7 @@ func (s *Service) PullWorktree(
 	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
 	if err != nil {
 		logging.ErrorContext(ctx, "Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("worktree not found"))
+		return nil, svcerr.ToConnect(svcerr.NotFound("worktree"))
 	}
 
 	if err := s.validateWorktreeForGitOps(ctx, userID, worktree); err != nil {
@@ -2322,7 +2317,7 @@ func (s *Service) GetWorktreePR(
 	userID := auth.MustGetUserID(ctx)
 
 	if req.Msg.WorktreeId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("worktree_id is required"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("worktree_id is required"))
 	}
 
 	if err := s.worktreeBelongsToUser(ctx, req.Msg.WorktreeId, userID); err != nil {
@@ -2332,7 +2327,7 @@ func (s *Service) GetWorktreePR(
 	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
 	if err != nil {
 		logging.ErrorContext(ctx, "Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("worktree not found"))
+		return nil, svcerr.ToConnect(svcerr.NotFound("worktree"))
 	}
 
 	if err := s.validateWorktreeForGitOps(ctx, userID, worktree); err != nil {
@@ -2391,11 +2386,11 @@ func (s *Service) CreateWorktreePR(
 	userID := auth.MustGetUserID(ctx)
 
 	if req.Msg.WorktreeId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("worktree_id is required"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("worktree_id is required"))
 	}
 
 	if req.Msg.Title == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("PR title is required"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("PR title is required"))
 	}
 
 	if err := s.worktreeBelongsToUser(ctx, req.Msg.WorktreeId, userID); err != nil {
@@ -2405,7 +2400,7 @@ func (s *Service) CreateWorktreePR(
 	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
 	if err != nil {
 		logging.ErrorContext(ctx, "Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("worktree not found"))
+		return nil, svcerr.ToConnect(svcerr.NotFound("worktree"))
 	}
 
 	if err := s.validateWorktreeForGitOps(ctx, userID, worktree); err != nil {
@@ -2483,11 +2478,11 @@ func (s *Service) RevertFiles(
 	userID := auth.MustGetUserID(ctx)
 
 	if req.Msg.WorktreeId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("worktree_id is required"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("worktree_id is required"))
 	}
 
 	if len(req.Msg.Files) == 0 {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("at least one file is required"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("at least one file is required"))
 	}
 
 	if err := s.worktreeBelongsToUser(ctx, req.Msg.WorktreeId, userID); err != nil {
@@ -2497,7 +2492,7 @@ func (s *Service) RevertFiles(
 	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
 	if err != nil {
 		logging.ErrorContext(ctx, "Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("worktree not found"))
+		return nil, svcerr.ToConnect(svcerr.NotFound("worktree"))
 	}
 
 	if err := s.validateWorktreeForGitOps(ctx, userID, worktree); err != nil {
@@ -2542,7 +2537,7 @@ func (s *Service) RevertFiles(
 	}
 
 	if len(revertedFiles) == 0 && len(errors) > 0 {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("failed to revert requested files: %s", strings.Join(errors, "; ")))
+		return nil, svcerr.ToConnect(svcerr.FailedPrecondition(fmt.Sprintf("failed to revert requested files: %s", strings.Join(errors, "; "))))
 	}
 
 	message := fmt.Sprintf("Reverted %d file(s)", len(revertedFiles))
@@ -2570,7 +2565,7 @@ func (s *Service) ListWorktreeRepoStatuses(
 	userID := auth.MustGetUserID(ctx)
 
 	if req.Msg.WorktreeId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("worktree_id is required"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("worktree_id is required"))
 	}
 
 	if err := s.worktreeBelongsToUser(ctx, req.Msg.WorktreeId, userID); err != nil {
@@ -2580,7 +2575,7 @@ func (s *Service) ListWorktreeRepoStatuses(
 	worktree, err := s.deps.Repo.GetWorktree(ctx, req.Msg.WorktreeId)
 	if err != nil {
 		logging.ErrorContext(ctx, "Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("worktree not found"))
+		return nil, svcerr.ToConnect(svcerr.NotFound("worktree"))
 	}
 
 	if err := s.validateWorktreeForGitOps(ctx, userID, worktree); err != nil {
@@ -2589,7 +2584,7 @@ func (s *Service) ListWorktreeRepoStatuses(
 
 	repos, err := s.deps.Repo.ListReposByProject(ctx, worktree.ProjectID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list repos for project"))
+		return nil, svcerr.ToConnect(svcerr.Internal("failed to list repos for project"))
 	}
 
 	// 0-repo project: empty response. The UI treats this as "nothing to show

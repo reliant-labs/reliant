@@ -11,6 +11,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -279,7 +280,7 @@ func (s *Service) RevokeConnector(
 
 	id := strings.TrimSpace(req.Msg.GetId())
 	if id == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("connector id is required"))
+		return nil, svcerr.InvalidArgument("connector id is required")
 	}
 
 	// Scoped by user in the store, so a guessed id cannot revoke someone

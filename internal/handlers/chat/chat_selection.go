@@ -11,6 +11,7 @@ import (
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/structpb"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/chatselection"
@@ -235,7 +236,7 @@ func validatePolicy(p chatselection.ProviderPolicy) error {
 // versionConflictError is the refusal for an edit made against a selection that
 // has since changed: ABORTED, so the client refetches and decides again.
 func versionConflictError() error {
-	return connect.NewError(connect.CodeAborted, errors.New("the chat's selection changed since it was read; reload and try again"))
+	return svcerr.ToConnect(svcerr.Aborted("the chat's selection changed since it was read; reload and try again"))
 }
 
 // UpdateChatProviderPolicy stores what the chat does when its provider is
@@ -248,11 +249,11 @@ func (s *Service) UpdateChatProviderPolicy(
 ) (*connect.Response[reliantv1.UpdateChatProviderPolicyResponse], error) {
 	userID := auth.MustGetUserID(ctx)
 	if req.Msg.ChatId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("chat_id is required"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("chat_id is required"))
 	}
 	chat, err := s.getChatForUser(ctx, req.Msg.ChatId, userID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
+		return nil, svcerr.ToConnect(svcerr.NotFound("chat"))
 	}
 	policy := policyFromProto(req.Msg.ProviderPolicy)
 	if err := validatePolicy(policy); err != nil {
@@ -269,7 +270,7 @@ func (s *Service) UpdateChatProviderPolicy(
 			return nil, versionConflictError()
 		}
 		logging.ErrorContext(ctx, "Failed to store the chat's provider policy", "error", err, "chatID", chat.ID)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to update provider policy"))
+		return nil, svcerr.ToConnect(svcerr.Internal("failed to update provider policy"))
 	}
 	if sel != nil && (before == nil || before.Version != sel.Version) {
 		s.announceSelection(ctx, userID, chat, sel)

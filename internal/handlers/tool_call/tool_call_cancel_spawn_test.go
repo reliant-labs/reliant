@@ -10,6 +10,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -129,7 +130,7 @@ func TestCancelToolCall_SignalFails_DoesNotClaimCancelled(t *testing.T) {
 		ToolCallId: toolCallID,
 	}))
 	require.Error(t, err)
-	require.Equal(t, connect.CodeUnavailable, connect.CodeOf(err))
+	require.Equal(t, connect.CodeUnavailable, svcerr.Code(err))
 
 	wf, wfErr := repo.GetWorkflow(ctx, childThreadID)
 	require.NoError(t, wfErr)

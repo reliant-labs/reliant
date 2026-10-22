@@ -22,20 +22,16 @@ import (
 // written at 20:30:32.786 ("Agent a6825dec… is STILL RUNNING after 5.6s") but
 // whose TOOL message never was. The parent then had no idea its spawn was alive.
 
-// toolResultRepo is a db.Repository that only implements
-// GetToolCallResultForMessage. Embedding the interface means every other
-// method panics if called, which is the point: this test asserts recovery
-// consults exactly one thing. Results here are recorded for whichever message
-// asks; tool_call_id_isolation_test.go covers the message scoping itself.
-type toolResultRepo struct {
-	db.Repository
-	results map[string]*db.ToolCallResult
-	calls   int
-}
-
-func (r *toolResultRepo) GetToolCallResultForMessage(_ context.Context, toolCallID, _ string) (*db.ToolCallResult, error) {
-	r.calls++
-	return r.results[toolCallID], nil
+// newToolResultRepo answers GetToolCallResultForMessage from results and
+// nothing else: recovery's role is that one method, and the mock records each
+// lookup. Results here are recorded for whichever message asks;
+// tool_call_id_isolation_test.go covers the message scoping itself.
+func newToolResultRepo(results map[string]*db.ToolCallResult) *MockToolResultRecoveryStore {
+	return &MockToolResultRecoveryStore{
+		GetToolCallResultForMessageFunc: func(_ context.Context, toolCallID, _ string) (*db.ToolCallResult, error) {
+			return results[toolCallID], nil
+		},
+	}
 }
 
 func assistantWithToolCall(id, callID, name string) message.Message {
@@ -52,9 +48,9 @@ func TestRecoverPersistedToolResults(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("recovers a durable result missing from history", func(t *testing.T) {
-		repo := &toolResultRepo{results: map[string]*db.ToolCallResult{
+		repo := newToolResultRepo(map[string]*db.ToolCallResult{
 			"tc1": {ToolCallID: "tc1", Content: "Agent is STILL RUNNING after 5.6s"},
-		}}
+		})
 		msgs := []message.Message{
 			userWithText("u1", "check on it"),
 			assistantWithToolCall("a1", "tc1", "spawn_status"),
@@ -85,9 +81,9 @@ func TestRecoverPersistedToolResults(t *testing.T) {
 	// The recovered result must sit IMMEDIATELY after its assistant message, or
 	// the tool-pairing invariant fails and CallLLM refuses to build a request.
 	t.Run("places the result directly after its assistant message", func(t *testing.T) {
-		repo := &toolResultRepo{results: map[string]*db.ToolCallResult{
+		repo := newToolResultRepo(map[string]*db.ToolCallResult{
 			"tc1": {ToolCallID: "tc1", Content: "done"},
-		}}
+		})
 		msgs := []message.Message{
 			assistantWithToolCall("a1", "tc1", "bash"),
 			userWithText("u2", "later message"),
@@ -107,9 +103,9 @@ func TestRecoverPersistedToolResults(t *testing.T) {
 	// A call that ALREADY has a result in history must not be looked up or
 	// duplicated — duplicates break tool pairing just as badly as omissions.
 	t.Run("leaves already-answered tool calls alone", func(t *testing.T) {
-		repo := &toolResultRepo{results: map[string]*db.ToolCallResult{
+		repo := newToolResultRepo(map[string]*db.ToolCallResult{
 			"tc1": {ToolCallID: "tc1", Content: "durable"},
-		}}
+		})
 		msgs := []message.Message{
 			assistantWithToolCall("a1", "tc1", "bash"),
 			{ID: "t1", Role: message.Tool, Parts: []message.ContentPart{
@@ -122,8 +118,8 @@ func TestRecoverPersistedToolResults(t *testing.T) {
 		if len(out) != 2 {
 			t.Fatalf("nothing should be appended, got %d messages", len(out))
 		}
-		if repo.calls != 0 {
-			t.Fatalf("an answered tool call must not be looked up, got %d lookups", repo.calls)
+		if repo.CallCount("GetToolCallResultForMessage") != 0 {
+			t.Fatalf("an answered tool call must not be looked up, got %d lookups", repo.CallCount("GetToolCallResultForMessage"))
 		}
 	})
 
@@ -131,7 +127,7 @@ func TestRecoverPersistedToolResults(t *testing.T) {
 	// unknown" placeholder is the correct answer for a tool that never
 	// reported. Recovery must not invent anything.
 	t.Run("does not fabricate a result when none is persisted", func(t *testing.T) {
-		repo := &toolResultRepo{results: map[string]*db.ToolCallResult{}}
+		repo := newToolResultRepo(map[string]*db.ToolCallResult{})
 		msgs := []message.Message{assistantWithToolCall("a1", "tc1", "bash")}
 
 		out := recoverPersistedToolResults(ctx, repo, msgs)
@@ -144,9 +140,9 @@ func TestRecoverPersistedToolResults(t *testing.T) {
 	// An empty durable result is not a result — treating "" as recovered would
 	// hand the model a blank tool answer instead of the honest placeholder.
 	t.Run("ignores an empty durable result", func(t *testing.T) {
-		repo := &toolResultRepo{results: map[string]*db.ToolCallResult{
+		repo := newToolResultRepo(map[string]*db.ToolCallResult{
 			"tc1": {ToolCallID: "tc1", Content: ""},
-		}}
+		})
 		msgs := []message.Message{assistantWithToolCall("a1", "tc1", "bash")}
 
 		out := recoverPersistedToolResults(ctx, repo, msgs)
@@ -157,9 +153,9 @@ func TestRecoverPersistedToolResults(t *testing.T) {
 	})
 
 	t.Run("preserves the error flag of a durable failure", func(t *testing.T) {
-		repo := &toolResultRepo{results: map[string]*db.ToolCallResult{
+		repo := newToolResultRepo(map[string]*db.ToolCallResult{
 			"tc1": {ToolCallID: "tc1", Content: "command failed", IsError: true},
-		}}
+		})
 		msgs := []message.Message{assistantWithToolCall("a1", "tc1", "bash")}
 
 		out := recoverPersistedToolResults(ctx, repo, msgs)
@@ -176,7 +172,7 @@ func TestRecoverPersistedToolResults(t *testing.T) {
 		}); len(out) != 1 {
 			t.Fatal("a nil repo must be a no-op")
 		}
-		if out := recoverPersistedToolResults(ctx, &toolResultRepo{}, nil); len(out) != 0 {
+		if out := recoverPersistedToolResults(ctx, newToolResultRepo(nil), nil); len(out) != 0 {
 			t.Fatal("empty history must be a no-op")
 		}
 	})
@@ -186,9 +182,9 @@ func TestRecoverPersistedToolResults(t *testing.T) {
 // state CallLLM accepts, i.e. not ending on an assistant message with an
 // unanswered tool call.
 func TestRecoverPersistedToolResults_UnwedgesHistoryTail(t *testing.T) {
-	repo := &toolResultRepo{results: map[string]*db.ToolCallResult{
+	repo := newToolResultRepo(map[string]*db.ToolCallResult{
 		"toolu_013mq": {ToolCallID: "toolu_013mq", Content: "Agent is STILL RUNNING after 5.6s"},
-	}}
+	})
 	msgs := []message.Message{
 		userWithText("u1", "check the spawn"),
 		assistantWithToolCall("a1", "toolu_013mq", "spawn_status"),

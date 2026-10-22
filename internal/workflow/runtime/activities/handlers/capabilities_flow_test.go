@@ -71,7 +71,7 @@ func throughHistory(t *testing.T, caps *reliantv1.ToolCapabilities) *reliantv1.T
 
 // serverToolExecutor runs server-placed tools in-process, as the worker does,
 // so load_tool really runs.
-func serverToolExecutor(repo db.Repository) toolexec.ToolExecutor {
+func serverToolExecutor(repo *db.Repo) toolexec.ToolExecutor {
 	executor := toolexec.NewRemoteExecutor(nil)
 	executor.SetServerExecutor(toolexec.NewLocalToolExecutor(tools.NewToolsFactory(&tools.ToolsOptions{Repo: repo})))
 	return executor

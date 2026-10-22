@@ -380,9 +380,9 @@ func (s *Service) sweepStaleConnections() {
 }
 
 // errDaemonStreamSilent ends a stream the stale-connection sweeper reaped.
-var errDaemonStreamSilent = connect.NewError(connect.CodeUnavailable, fmt.Errorf(
+var errDaemonStreamSilent = svcerr.ToConnect(svcerr.Unavailable(fmt.Sprintf(
 	"daemon-gateway has read nothing from this stream for over %s; closing it so the daemon redials",
-	staleConnectionThreshold))
+	staleConnectionThreshold)))
 
 // AddConnectionListener registers a listener that will be notified when
 // daemon connections are established or torn down. Safe to call before Start.
@@ -722,9 +722,8 @@ func (s *Service) PublishDaemonListChanged(ctx context.Context, userID, daemonID
 //
 // CodeAborted ("concurrency conflict") is the daemon's cue to stop rather than
 // redial — see isFatalError in internal/toolexec/daemonruntime.
-var errDaemonSuperseded = connect.NewError(connect.CodeAborted, fmt.Errorf(
-	"daemon identity claimed by another daemon process on the same gateway; "+
-		"this process is superseded and must not reconnect (only one daemon may hold a daemon id)"))
+var errDaemonSuperseded = svcerr.ToConnect(svcerr.Aborted("daemon identity claimed by another daemon process on the same gateway; " +
+	"this process is superseded and must not reconnect (only one daemon may hold a daemon id)"))
 
 func (c *daemonConnection) closeDone() { c.closeWith(nil) }
 
@@ -793,7 +792,7 @@ func (c *daemonConnection) closedReason() error {
 func daemonRegistrationUserID(ctx context.Context, reg *reliantv1.DaemonRegister) (string, error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok || strings.TrimSpace(userID) == "" {
-		return "", connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("PAT authentication required — no user identity in context"))
+		return "", svcerr.ToConnect(svcerr.Unauthenticated("PAT authentication required — no user identity in context"))
 	}
 	return userID, nil
 }
@@ -880,8 +879,7 @@ func validateAssertedDaemonID(id string) error {
 	if id == "" || assertedDaemonIDPattern.MatchString(id) {
 		return nil
 	}
-	return connect.NewError(connect.CodeInvalidArgument,
-		fmt.Errorf("daemon_id must match [A-Za-z0-9-]{1,64}"))
+	return svcerr.ToConnect(svcerr.InvalidArgument("daemon_id must match [A-Za-z0-9-]{1,64}"))
 }
 
 func truncateForLog(s string) string {
@@ -927,7 +925,7 @@ func (s *Service) WhoAmI(
 ) (*connect.Response[reliantv1.WhoAmIResponse], error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok || strings.TrimSpace(userID) == "" {
-		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("a daemon credential is required"))
+		return nil, svcerr.ToConnect(svcerr.Unauthenticated("a daemon credential is required"))
 	}
 	return connect.NewResponse(&reliantv1.WhoAmIResponse{UserId: userID}), nil
 }
@@ -963,7 +961,7 @@ func (s *Service) ConnectDaemon(
 	// racing, a parked Receive.
 	if !serverkit.CanAbortReceive(ctx) {
 		logging.ErrorContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" ConnectDaemon is served without an abortable request body; serve it through a serverkit listener")
-		return connect.NewError(connect.CodeInternal, errors.New("daemon stream handler is misconfigured"))
+		return svcerr.ToConnect(svcerr.Internal("daemon stream handler is misconfigured"))
 	}
 
 	// Wait for registration message
@@ -1756,7 +1754,7 @@ func (c *daemonConnection) routeInboundReply(msg *reliantv1.DaemonMessage) bool 
 // to report tool execution results when the bidirectional stream was unavailable.
 // This path has been removed in favour of the bidi stream.
 func (s *Service) ReportToolResult(ctx context.Context, req *connect.Request[reliantv1.ReportToolResultRequest]) (*connect.Response[reliantv1.ReportToolResultResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, fmt.Errorf("ReportToolResult is no longer supported; use the bidi stream"))
+	return nil, svcerr.ToConnect(svcerr.Unimplemented("ReportToolResult is no longer supported; use the bidi stream"))
 }
 
 func (s *Service) handleProjectDiscovery(ctx context.Context, conn *daemonConnection, discovery *reliantv1.ProjectDiscovery) error {

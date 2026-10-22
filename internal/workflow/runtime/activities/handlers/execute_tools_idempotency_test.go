@@ -104,7 +104,7 @@ func (m *mockToolExecutor) Reset() {
 func createTestToolCallBlock(
 	ctx context.Context,
 	t *testing.T,
-	repo db.Repository,
+	repo *db.Repo,
 	messageID string,
 	toolCallID string,
 	toolName string,
@@ -130,7 +130,7 @@ func createTestToolCallBlock(
 func createTestMessage(
 	ctx context.Context,
 	t *testing.T,
-	repo db.Repository,
+	repo *db.Repo,
 	chatID string,
 	threadID string,
 	contextWindowID string,

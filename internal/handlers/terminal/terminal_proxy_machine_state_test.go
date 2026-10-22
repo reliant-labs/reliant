@@ -59,11 +59,11 @@ func TestTerminalProxy_MachineStatesKeepTheirCode(t *testing.T) {
 			svc := NewTestTerminal(t, WithTerminalDeps(Deps{Router: &failingCommandRouter{err: state.err}}))
 			_, err := svc.ListSessions(AuthedContext(t), connect.NewRequest(&reliantv1.ListTerminalSessionsRequest{}))
 			require.Error(t, err)
-			assert.Equal(t, state.wantCode, connect.CodeOf(err))
+			assert.Equal(t, state.wantCode, svcerr.Code(err))
 
 			_, err = svc.CloseSession(AuthedContext(t), connect.NewRequest(&reliantv1.CloseTerminalSessionRequest{SessionId: "s1"}))
 			require.Error(t, err)
-			assert.Equal(t, state.wantCode, connect.CodeOf(err))
+			assert.Equal(t, state.wantCode, svcerr.Code(err))
 		})
 	}
 }

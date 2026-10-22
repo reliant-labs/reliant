@@ -9,6 +9,7 @@ import (
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/llm/tools/shell"
@@ -75,13 +76,11 @@ func (s *Service) RunCommand(
 	req *connect.Request[reliantv1.RunPackageCommandRequest],
 ) (*connect.Response[reliantv1.RunPackageCommandResponse], error) {
 	if req.Msg.CommandName == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("command_name is required"))
+		return nil, svcerr.InvalidArgument("command_name is required")
 	}
 
 	if req.Msg.PackageType == reliantv1.PackageType_PACKAGE_TYPE_UNSPECIFIED {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("package_type is required"))
+		return nil, svcerr.InvalidArgument("package_type is required")
 	}
 
 	// Determine working directory and worktree ID
@@ -101,8 +100,7 @@ func (s *Service) RunCommand(
 	} else if req.Msg.Path != nil && *req.Msg.Path != "" {
 		rootDir = *req.Msg.Path
 	} else {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("worktree_id or path is required"))
+		return nil, svcerr.InvalidArgument("worktree_id or path is required")
 	}
 
 	// Use explicit working_dir if provided (for subdirectory commands)
@@ -115,8 +113,7 @@ func (s *Service) RunCommand(
 
 	packageType, ok := pkgmgrPackageTypeFromProto(req.Msg.PackageType)
 	if !ok {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("package_type %q is not supported", req.Msg.PackageType.String()))
+		return nil, svcerr.InvalidArgument(fmt.Sprintf("package_type %q is not supported", req.Msg.PackageType.String()))
 	}
 
 	// Run the command
@@ -261,8 +258,7 @@ func (s *Service) GetCommandFavorites(
 
 	projectID := req.Msg.ProjectId
 	if projectID == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("project_id is required"))
+		return nil, svcerr.InvalidArgument("project_id is required")
 	}
 
 	// Verify project exists and belongs to user
@@ -296,14 +292,12 @@ func (s *Service) SetCommandFavorite(
 
 	projectID := req.Msg.ProjectId
 	if projectID == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("project_id is required"))
+		return nil, svcerr.InvalidArgument("project_id is required")
 	}
 
 	commandKey := req.Msg.CommandKey
 	if commandKey == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("command_key is required"))
+		return nil, svcerr.InvalidArgument("command_key is required")
 	}
 
 	// Verify project exists and belongs to user

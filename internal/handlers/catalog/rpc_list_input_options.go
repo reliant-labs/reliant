@@ -4,11 +4,11 @@ package catalog
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/structpb"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/connectionrpc"
@@ -29,14 +29,14 @@ import (
 // own action with its own audit.
 func (s *Service) ListInputOptions(ctx context.Context, req *connect.Request[reliantv1.ListInputOptionsRequest]) (*connect.Response[reliantv1.ListInputOptionsResponse], error) {
 	if _, machine := auth.MachineTokenFromContext(ctx); machine {
-		return nil, connect.NewError(connect.CodePermissionDenied, errors.New("listing input options requires an interactive session"))
+		return nil, svcerr.ToConnect(svcerr.PermissionDenied("listing input options requires an interactive session"))
 	}
 	userID, err := connectionrpc.Caller(ctx)
 	if err != nil {
 		return nil, err
 	}
 	if s.deps.InputOptions == nil {
-		return nil, connect.NewError(connect.CodeUnimplemented, errors.New("input options are not configured"))
+		return nil, svcerr.ToConnect(svcerr.Unimplemented("input options are not configured"))
 	}
 	msg := req.Msg
 	scope := make(map[string]any, len(msg.GetScope()))
@@ -131,5 +131,5 @@ func (s *Service) inputOptionsError(ctx context.Context, err error) error {
 		return connect.NewError(connect.CodeDeadlineExceeded, err)
 	}
 	logging.ErrorContext(ctx, "list input options failed", "error", err)
-	return connect.NewError(connect.CodeInternal, fmt.Errorf("listing input options failed"))
+	return svcerr.ToConnect(svcerr.Internal("listing input options failed"))
 }

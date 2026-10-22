@@ -10,6 +10,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -22,16 +23,16 @@ func (s *Service) ResolveQuestion(
 	req *connect.Request[reliantv1.ResolveQuestionRequest],
 ) (*connect.Response[reliantv1.ResolveQuestionResponse], error) {
 	if req.Msg.QuestionId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("question_id is required"))
+		return nil, svcerr.InvalidArgument("question_id is required")
 	}
 	if req.Msg.Action == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("action is required"))
+		return nil, svcerr.InvalidArgument("action is required")
 	}
 
 	// Look up the question
 	question, err := s.deps.Repo.GetQuestionByID(ctx, req.Msg.QuestionId)
 	if err != nil || question == nil {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("question not found"))
+		return nil, svcerr.NotFound("question")
 	}
 
 	// Ownership is transitive through the chat: resolving a question signals
@@ -40,15 +41,15 @@ func (s *Service) ResolveQuestion(
 	// existence oracle.
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok || userID == "" {
-		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("user ID not found in context"))
+		return nil, svcerr.Unauthenticated("user ID not found in context")
 	}
 	chat, err := s.deps.Repo.GetChat(ctx, question.ChatID)
 	if err != nil || chat == nil || chat.UserID != userID {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("question not found"))
+		return nil, svcerr.NotFound("question")
 	}
 
 	if question.Status != db.QuestionStatusPending {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("question already resolved"))
+		return nil, svcerr.FailedPrecondition("question already resolved")
 	}
 
 	// Nothing waits on an async question: its answer is a message to the
@@ -65,7 +66,7 @@ func (s *Service) ResolveQuestion(
 
 	if err := s.deps.Repo.ResolveQuestion(ctx, question.ID, responseData); err != nil {
 		logging.ErrorContext(ctx, "Failed to resolve question", "error", err, "questionID", question.ID)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to resolve question"))
+		return nil, svcerr.Internal("failed to resolve question")
 	}
 
 	// Emit question update (resolved)
@@ -135,11 +136,11 @@ func (s *Service) ListPendingQuestions(
 	} else {
 		chatID := req.Msg.GetChatId()
 		if chatID == "" {
-			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("chat_id, when set, must not be empty"))
+			return nil, svcerr.InvalidArgument("chat_id, when set, must not be empty")
 		}
 		chat, getErr := s.deps.Repo.GetChat(ctx, chatID)
 		if getErr != nil || chat == nil || chat.UserID != userID {
-			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
+			return nil, svcerr.NotFound("chat")
 		}
 		questions, err = s.deps.Repo.ListAnswerablePendingQuestionsByChat(ctx, chatID)
 	}

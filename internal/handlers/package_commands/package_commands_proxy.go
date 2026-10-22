@@ -7,6 +7,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/daemoncmd"
 	"github.com/reliant-labs/reliant/internal/pkgmgr"
@@ -87,7 +88,7 @@ func (s *Service) resolveWorkingDir(
 	case path != "":
 		return path, nil
 	default:
-		return "", connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("worktree_id or path is required"))
+		return "", svcerr.InvalidArgument("worktree_id or path is required")
 	}
 }
 

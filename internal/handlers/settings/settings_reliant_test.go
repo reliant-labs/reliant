@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"connectrpc.com/connect"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/controlplane"
@@ -113,7 +114,7 @@ func TestSettingsService_SyncReliantProvider_MissingJWTUnauthenticated(t *testin
 
 	_, err := svc.SyncReliantProvider(ctx, connect.NewRequest(&reliantv1.SyncReliantProviderRequest{}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeUnauthenticated, svcerr.Code(err))
 	assert.Equal(t, 0, fake.issueCallCount)
 }
 
@@ -129,5 +130,5 @@ func TestSettingsService_SyncReliantProvider_ControlPlaneErrorPropagates(t *test
 
 	_, err := svc.SyncReliantProvider(newSettingsServiceTestContext(), connect.NewRequest(&reliantv1.SyncReliantProviderRequest{}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInternal, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeInternal, svcerr.Code(err))
 }

@@ -9,6 +9,7 @@ import (
 
 	"connectrpc.com/connect"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -27,7 +28,7 @@ func scopeForKind(kind reliantv1.TokenKind) (fat.Scope, error) {
 	case reliantv1.TokenKind_TOKEN_KIND_API:
 		return fat.ScopeReliantAPI, nil
 	default:
-		return "", connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("kind is required (DAEMON or API)"))
+		return "", svcerr.ToConnect(svcerr.InvalidArgument("kind is required (DAEMON or API)"))
 	}
 }
 
@@ -89,7 +90,7 @@ func (s *Service) widenDaemonCredential(ctx context.Context, userID, tokenID str
 func callerUser(ctx context.Context) (string, bool, error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok || userID == "" {
-		return "", false, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("unauthenticated"))
+		return "", false, svcerr.ToConnect(svcerr.Unauthenticated("unauthenticated"))
 	}
 	_, isMachine := auth.MachineTokenFromContext(ctx)
 	return userID, isMachine, nil
@@ -126,12 +127,12 @@ func tokenInfoProto(t tokenauthority.TokenInfo) *reliantv1.TokenInfo {
 func authorityError(op string, err error) error {
 	switch {
 	case tokenauthority.IsNotFound(err):
-		return connect.NewError(connect.CodeNotFound, fmt.Errorf("token not found"))
+		return svcerr.ToConnect(svcerr.NotFound("token"))
 	case tokenauthority.IsInvalidGrant(err):
 		return connect.NewError(connect.CodeInvalidArgument, err)
 	}
 	logging.Error("token authority failed", "op", op, "error", tokenauthority.Describe(err))
-	return connect.NewError(connect.CodeUnavailable, fmt.Errorf("token service unavailable"))
+	return svcerr.ToConnect(svcerr.Unavailable("token service unavailable"))
 }
 
 // CreateToken mints a token acting as the caller. Interactive session only: a
@@ -144,8 +145,7 @@ func (s *Service) CreateToken(
 		return nil, err
 	}
 	if isMachine {
-		return nil, connect.NewError(connect.CodePermissionDenied,
-			fmt.Errorf("token management requires an interactive session; a token cannot mint a token"))
+		return nil, svcerr.ToConnect(svcerr.PermissionDenied("token management requires an interactive session; a token cannot mint a token"))
 	}
 	scope, err := scopeForKind(req.Msg.GetKind())
 	if err != nil {
@@ -153,11 +153,10 @@ func (s *Service) CreateToken(
 	}
 	name := strings.TrimSpace(req.Msg.GetName())
 	if name == "" || len(name) > maxTokenNameLen {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("name is required (at most %d characters)", maxTokenNameLen))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument(fmt.Sprintf("name is required (at most %d characters)", maxTokenNameLen)))
 	}
 	if req.Msg.GetTtlSeconds() < 0 {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("ttl_seconds must not be negative"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("ttl_seconds must not be negative"))
 	}
 	var expiresAt *time.Time
 	if ttl := req.Msg.GetTtlSeconds(); ttl > 0 {
@@ -237,7 +236,7 @@ func (s *Service) RevokeToken(
 	}
 	id := strings.TrimSpace(req.Msg.GetId())
 	if id == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("token id is required"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("token id is required"))
 	}
 	if err := s.deps.Authority.RevokeForUser(ctx, userID, id); err != nil {
 		return nil, authorityError("revoke", err)
@@ -266,19 +265,18 @@ func (s *Service) UpdateToken(
 		return nil, err
 	}
 	if isMachine {
-		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf(
-			"a machine credential cannot edit a credential; sign in to change a token's permissions"))
+		return nil, svcerr.ToConnect(svcerr.PermissionDenied("a machine credential cannot edit a credential; sign in to change a token's permissions"))
 	}
 	id := strings.TrimSpace(req.Msg.GetId())
 	if id == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("token id is required"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("token id is required"))
 	}
 
 	var name *string
 	if req.Msg.Name != nil {
 		trimmed := strings.TrimSpace(req.Msg.GetName())
 		if trimmed == "" {
-			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("name cannot be blank"))
+			return nil, svcerr.ToConnect(svcerr.InvalidArgument("name cannot be blank"))
 		}
 		name = &trimmed
 	}
@@ -294,8 +292,7 @@ func (s *Service) UpdateToken(
 		}
 	}
 	if name == nil && scopes == nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
-			"nothing to update: set name, or set scopes with the permissions to grant"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("nothing to update: set name, or set scopes with the permissions to grant"))
 	}
 
 	info, err := s.deps.Authority.UpdateForUser(ctx, userID, id, name, scopes)

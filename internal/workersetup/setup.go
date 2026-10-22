@@ -50,7 +50,7 @@ const maxHeartbeatThrottleInterval = 2 * time.Second
 type Config struct {
 	// Required dependencies
 	TemporalClient client.Client
-	Database       db.Repository
+	Database       *db.Repo
 	StreamingHub   streaming.StreamingHub
 	ToolsFactory   *tools.ToolsFactory
 	ToolExecutor   toolexec.ToolExecutor
@@ -279,7 +279,7 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	// resolution run start uses.
 	declarations := triggers.LaunchWorkflows{Repo: cfg.Database}
 	if cfg.TriggerPollers != nil {
-		if repo, ok := cfg.Database.(*db.Repo); ok {
+		if repo := cfg.Database; repo != nil {
 			poller := triggers.NewTriggerPoller(
 				triggerPollRepo{Repo: repo, connections: repo.Connections()},
 				cfg.TriggerPollers,

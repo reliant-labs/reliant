@@ -8,6 +8,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	settings "github.com/reliant-labs/reliant/internal/handlers/settings"
@@ -39,6 +40,6 @@ func TestSavePrompts_Generated(t *testing.T) {
 		repo.CreateSettingFunc = func(context.Context, *db.Setting) error { return errors.New("db down") }
 		svc := newSettingsService(t, repo)
 		_, err := svc.SavePrompts(settings.AuthedContext(t), connect.NewRequest(&pb.SavePromptsRequest{}))
-		require.Equal(t, connect.CodeInternal, connect.CodeOf(err))
+		require.Equal(t, connect.CodeInternal, svcerr.Code(err))
 	})
 }

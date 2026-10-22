@@ -5,13 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"sort"
 	"time"
 
 	"connectrpc.com/connect"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -133,10 +133,10 @@ func (s *Service) StreamUserUpdates(
 		// Verify user owns the chat before subscribing
 		chat, err := s.deps.Repo.GetChat(ctx, subscribeChatID)
 		if err != nil {
-			return connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
+			return svcerr.ToConnect(svcerr.NotFound("chat"))
 		}
 		if chat.UserID != userID {
-			return connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
+			return svcerr.ToConnect(svcerr.NotFound("chat"))
 		}
 
 		logging.DebugContext(ctx, LOG_PREFIX_STREAM_USER+" Subscribing to chat detail events",

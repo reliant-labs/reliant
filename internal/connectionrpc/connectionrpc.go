@@ -9,10 +9,8 @@ package connectionrpc
 
 import (
 	"context"
-	"fmt"
 
-	"connectrpc.com/connect"
-
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/connections"
@@ -24,7 +22,7 @@ import (
 func Caller(ctx context.Context) (string, error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok || userID == "" {
-		return "", connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("user ID not found in context"))
+		return "", svcerr.ToConnect(svcerr.Unauthenticated("user ID not found in context"))
 	}
 	return userID, nil
 }

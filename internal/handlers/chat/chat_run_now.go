@@ -3,7 +3,6 @@ package chat
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -11,6 +10,7 @@ import (
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -45,10 +45,10 @@ func (s *Service) RunNow(
 	userID := auth.MustGetUserID(ctx)
 	msg := req.Msg
 	if strings.TrimSpace(msg.GetProjectId()) == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("project_id is required"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("project_id is required"))
 	}
 	if strings.TrimSpace(msg.GetWorkflow()) == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("workflow is required"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("workflow is required"))
 	}
 
 	message := strings.TrimSpace(msg.GetMessage())

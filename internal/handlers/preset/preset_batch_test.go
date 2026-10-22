@@ -8,6 +8,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 )
 
@@ -159,8 +160,8 @@ func TestPresetService_GetDefaultPresetsBatch_RequiresProjectID(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected an error when project_id is missing")
 	}
-	if connect.CodeOf(err) != connect.CodeInvalidArgument {
-		t.Errorf("expected InvalidArgument, got %v", connect.CodeOf(err))
+	if svcerr.Code(err) != connect.CodeInvalidArgument {
+		t.Errorf("expected InvalidArgument, got %v", svcerr.Code(err))
 	}
 }
 
@@ -209,7 +210,7 @@ func TestPresetService_SetDefaultPreset_RoundTrip(t *testing.T) {
 	}
 
 	err := set(createTestContext("someone-else"), "", "general")
-	if connect.CodeOf(err) != connect.CodeNotFound {
+	if svcerr.Code(err) != connect.CodeNotFound {
 		t.Fatalf("another user's project: got %v, want NotFound", err)
 	}
 }
