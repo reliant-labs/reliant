@@ -1,6 +1,7 @@
 package temporal
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 
@@ -71,13 +72,103 @@ func NewFlexibleDataConverter(opts ...DataConverterOption) converter.DataConvert
 		opt(&o)
 	}
 	codec := claimcheck.NewCodec(o.payloadStore)
-	// Decoding an activity result runs on the workflow-task goroutine, and with
-	// a store that can mean a DB read; pause the deadlock detector around it so
-	// a slow fetch is not reported as a workflow deadlock. Nil-safe outside
-	// workflow context.
-	return workflow.DataConverterWithoutDeadlockDetection(
+	return newWorkflowDeadlockPausingConverter(
 		converter.NewCodecDataConverter(newBaseDataConverter(), codec),
 	)
+}
+
+// workflowDeadlockPausingConverter pauses Temporal's workflow deadlock detector
+// around conversions that run ON the workflow goroutine, and only those.
+//
+// Decoding an activity result runs on the workflow-task goroutine, and with a
+// claim-check store that can mean a DB read; pausing the detector around it
+// keeps a slow fetch from being reported as a workflow deadlock. That is what
+// workflow.DataConverterWithoutDeadlockDetection is for, and it is what
+// `paused` delegates to.
+//
+// It cannot be used alone. Temporal's wrapper keeps its workflow context when
+// re-bound to an activity context, and the SDK does exactly that for a local
+// activity: the converter is bound to the workflow context when the activity
+// is scheduled, then re-bound with WithContext on the local-activity goroutine,
+// which encodes the result with it. That goroutine would then pause and resume
+// the WORKFLOW's deadlock detector while the workflow dispatcher may be running
+// a coroutine on another goroutine. The detector's locks are not ordered for
+// that (sdk v1.50.0 internal/workflow_deadlock.go: deadlockTicker.end takes the
+// ticker lock then the detector lock; deadlockDetector.resume takes them in
+// the other order), so the two goroutines can block each other forever,
+// wedging the workflow task. A converter bound to an activity context is never
+// on the workflow goroutine, so WithContext drops the pausing wrapper — the
+// same rule the SDK's own transferAwareDataConverter follows when it clears its
+// workflow context in WithContext.
+type workflowDeadlockPausingConverter struct {
+	paused converter.DataConverter // base, wrapped by DataConverterWithoutDeadlockDetection
+	base   converter.DataConverter // what an activity-bound copy uses
+}
+
+var (
+	_ converter.ContextAware                          = (*workflowDeadlockPausingConverter)(nil)
+	_ converter.DataConverterWithSerializationContext = (*workflowDeadlockPausingConverter)(nil)
+)
+
+func newWorkflowDeadlockPausingConverter(base converter.DataConverter) *workflowDeadlockPausingConverter {
+	return &workflowDeadlockPausingConverter{
+		paused: workflow.DataConverterWithoutDeadlockDetection(base),
+		base:   base,
+	}
+}
+
+func (c *workflowDeadlockPausingConverter) ToPayload(value any) (*commonpb.Payload, error) {
+	return c.paused.ToPayload(value)
+}
+
+func (c *workflowDeadlockPausingConverter) FromPayload(payload *commonpb.Payload, valuePtr any) error {
+	return c.paused.FromPayload(payload, valuePtr)
+}
+
+func (c *workflowDeadlockPausingConverter) ToPayloads(values ...any) (*commonpb.Payloads, error) {
+	return c.paused.ToPayloads(values...)
+}
+
+func (c *workflowDeadlockPausingConverter) FromPayloads(payloads *commonpb.Payloads, valuePtrs ...any) error {
+	return c.paused.FromPayloads(payloads, valuePtrs...)
+}
+
+func (c *workflowDeadlockPausingConverter) ToString(payload *commonpb.Payload) string {
+	return c.paused.ToString(payload)
+}
+
+func (c *workflowDeadlockPausingConverter) ToStrings(payloads *commonpb.Payloads) []string {
+	return c.paused.ToStrings(payloads)
+}
+
+func (c *workflowDeadlockPausingConverter) WithWorkflowContext(ctx converter.WorkflowContext) converter.DataConverter {
+	return &workflowDeadlockPausingConverter{
+		paused: withWorkflowContext(c.paused, ctx),
+		base:   withWorkflowContext(c.base, ctx),
+	}
+}
+
+// WithContext binds an activity context, so the result runs off the workflow
+// goroutine and must not touch the workflow's deadlock detector.
+func (c *workflowDeadlockPausingConverter) WithContext(ctx context.Context) converter.DataConverter {
+	if ca, ok := c.base.(converter.ContextAware); ok {
+		return ca.WithContext(ctx)
+	}
+	return c.base
+}
+
+func (c *workflowDeadlockPausingConverter) WithSerializationContext(sc converter.SerializationContext) converter.DataConverter {
+	return &workflowDeadlockPausingConverter{
+		paused: converter.WithDataConverterSerializationContext(c.paused, sc),
+		base:   converter.WithDataConverterSerializationContext(c.base, sc),
+	}
+}
+
+func withWorkflowContext(dc converter.DataConverter, ctx converter.WorkflowContext) converter.DataConverter {
+	if ca, ok := dc.(converter.ContextAware); ok {
+		return ca.WithWorkflowContext(ctx)
+	}
+	return dc
 }
 
 func newBaseDataConverter() converter.DataConverter {
