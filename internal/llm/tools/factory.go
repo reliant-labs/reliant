@@ -101,6 +101,10 @@ type ToolsOptions struct {
 	// machine the run's tools execute on. Optional: nil means the worktree
 	// tool reports that creating and deleting worktrees is unavailable here.
 	RunMachine RunMachine
+	// WorktreeSettler gives the worktree tool's delete the immediate settle
+	// attempt the UI's archive makes. Optional: nil leaves the directory to
+	// the periodic sweep.
+	WorktreeSettler WorktreeSettler
 	// MachineObserver lets wait_for_machine see whether the run's machine is
 	// connected. Wired where tools reach the machine over the network (the
 	// worker); its presence is what makes a run's machine REMOTE, and so what
@@ -508,7 +512,7 @@ func (f *ToolsFactory) WaitForMachine() Tool {
 
 // Worktree tools
 func (f *ToolsFactory) Worktree() Tool {
-	return NewWorktreeTool(f.store(), f.opts.RunMachine)
+	return NewWorktreeTool(f.store(), f.opts.RunMachine, f.opts.WorktreeSettler)
 }
 
 // Skill tools

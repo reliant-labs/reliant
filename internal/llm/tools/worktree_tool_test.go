@@ -87,6 +87,7 @@ func (m *fakeRunMachine) to(commandType string) []sentWorktreeCommand {
 type worktreeToolFixture struct {
 	repo    *db.Repo
 	machine *fakeRunMachine
+	settler *fakeSettler
 	project *db.Project
 	chatID  string
 	repos   []*core.Repo
@@ -94,6 +95,15 @@ type worktreeToolFixture struct {
 }
 
 const worktreeToolHome = "/home/machine-b"
+
+// fakeSettler records the candidates handed to Settle.
+type fakeSettler struct {
+	settled chan *core.ReclaimCandidate
+}
+
+func (s *fakeSettler) Settle(_ context.Context, _ string, cand *core.ReclaimCandidate) {
+	s.settled <- cand
+}
 
 func newWorktreeToolFixture(t *testing.T, repos ...*core.Repo) *worktreeToolFixture {
 	t.Helper()
@@ -116,6 +126,7 @@ func newWorktreeToolFixture(t *testing.T, repos ...*core.Repo) *worktreeToolFixt
 	return &worktreeToolFixture{
 		repo:    repo,
 		machine: &fakeRunMachine{runDaemon: "daemon-b", home: worktreeToolHome},
+		settler: &fakeSettler{settled: make(chan *core.ReclaimCandidate, 4)},
 		project: project,
 		chatID:  chatID,
 		repos:   repos,
@@ -125,7 +136,7 @@ func newWorktreeToolFixture(t *testing.T, repos ...*core.Repo) *worktreeToolFixt
 
 func (f *worktreeToolFixture) call(t *testing.T, params WorktreeParams) ToolResponse {
 	t.Helper()
-	return callRunTool(t, NewWorktreeTool(f.repo, f.machine), f.rc, WorktreeToolName, params)
+	return callRunTool(t, NewWorktreeTool(f.repo, f.machine, f.settler), f.rc, WorktreeToolName, params)
 }
 
 func (f *worktreeToolFixture) row(t *testing.T, name string) *db.Worktree {
@@ -441,6 +452,36 @@ func TestWorktreeTool_Delete_ArchivesAndLeavesTheDirectoryToReclaim(t *testing.T
 	assert.Contains(t, resp.Content, "pushed or already merged")
 }
 
+// Delete asks for one immediate settle of the archived row, as the UI's archive
+// does, on the machine's project path, and not for a refused delete.
+func TestWorktreeTool_Delete_AsksForAnImmediateSettle(t *testing.T) {
+	f := newWorktreeToolFixture(t)
+	wt := f.register(t, "feature", 1)
+
+	resp := f.call(t, WorktreeParams{Action: "delete", Name: "feature"})
+	require.False(t, resp.IsError, resp.Content)
+
+	select {
+	case cand := <-f.settler.settled:
+		assert.Equal(t, wt.ID, cand.Worktree.ID)
+		assert.NotNil(t, cand.Worktree.DeletedAt, "it settles the row as archived, so the daemon is given its fence")
+		assert.Equal(t, runTestUser, cand.OwnerUserID)
+		assert.Equal(t, f.project.Path, cand.ProjectPath)
+	case <-time.After(30 * time.Second):
+		t.Fatal("delete never asked for a settle")
+	}
+
+	own := f.register(t, "own", 1)
+	f.rc.Worktree = &rctx.WorktreeInfo{ID: own.ID, Path: own.Path}
+	defer func() { f.rc.Worktree = nil }()
+	require.True(t, f.call(t, WorktreeParams{Action: "delete", Name: "own"}).IsError)
+	select {
+	case cand := <-f.settler.settled:
+		t.Fatalf("a refused delete must not settle anything: %s", cand.Worktree.ID)
+	case <-time.After(200 * time.Millisecond):
+	}
+}
+
 func TestWorktreeTool_Delete_Refusals(t *testing.T) {
 	f := newWorktreeToolFixture(t)
 
@@ -494,7 +535,7 @@ func TestWorktreeTool_RefusesANameThatIsAPath(t *testing.T) {
 func TestWorktreeTool_WithoutAMachine_DoesNothingLocally(t *testing.T) {
 	f := newWorktreeToolFixture(t)
 
-	resp := callRunTool(t, NewWorktreeTool(f.repo, nil), f.rc, WorktreeToolName, WorktreeParams{Action: "create", Name: "feature-auth"})
+	resp := callRunTool(t, NewWorktreeTool(f.repo, nil, nil), f.rc, WorktreeToolName, WorktreeParams{Action: "create", Name: "feature-auth"})
 	require.True(t, resp.IsError)
 	assert.Contains(t, resp.Content, "no machine can be reached")
 	assert.Nil(t, f.row(t, "feature-auth"))
