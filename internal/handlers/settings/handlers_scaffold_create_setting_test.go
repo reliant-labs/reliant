@@ -8,6 +8,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/forge/pkg/tdd"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -52,5 +53,5 @@ func TestCreateSetting_Generated(t *testing.T) {
 	}, svc.CreateSetting)
 
 	_, err := failingSvc.CreateSetting(settings.AuthedContext(t), connect.NewRequest(&pb.CreateSettingRequest{Key: "theme", Value: "dark"}))
-	require.Equal(t, connect.CodeInternal, connect.CodeOf(err), "a failed write is internal")
+	require.Equal(t, connect.CodeInternal, svcerr.Code(err), "a failed write is internal")
 }

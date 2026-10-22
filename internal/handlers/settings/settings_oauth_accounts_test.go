@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -155,9 +156,9 @@ func TestCompleteClaudeOAuth_ReconnectTargetsAreScopedToTheCaller(t *testing.T) 
 
 	_, err = svc.CompleteClaudeOAuth(isolationContext("intruder"), oauthRequestClaude(owner.Msg.Account.Id))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
 	_, err = svc.CompleteClaudeOAuth(isolationContext("intruder"), oauthRequestClaude("no-such-account"))
-	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
 	assert.Empty(t, accountsOfProvider(t, isolationContext("intruder"), repo, "intruder", "claude"))
 }
 

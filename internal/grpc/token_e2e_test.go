@@ -25,6 +25,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/golang-jwt/jwt/v5"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/require"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -390,7 +391,7 @@ func TestDaemonCredential_HostedEndToEnd(t *testing.T) {
 
 	// A daemon credential is not an API credential: the API refuses it.
 	_, err = tokens(daemonToken).ListTokens(context.Background(), connect.NewRequest(&reliantv1.ListTokensRequest{}))
-	require.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err), "daemon:connect must not authenticate the API: %v", err)
+	require.Equal(t, connect.CodeUnauthenticated, svcerr.Code(err), "daemon:connect must not authenticate the API: %v", err)
 
 	// 3. The user revokes it through the same facade.
 	_, err = tokens(session).RevokeToken(context.Background(), connect.NewRequest(&reliantv1.RevokeTokenRequest{
@@ -401,7 +402,7 @@ func TestDaemonCredential_HostedEndToEnd(t *testing.T) {
 	// 4. The very next connect is refused — no cache window at the gateway.
 	_, err = connectDaemon(t, gatewayURL, daemonToken)
 	require.Error(t, err, "a revoked daemon credential must not connect")
-	require.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err), "revocation is a credential rejection: %v", err)
+	require.Equal(t, connect.CodeUnauthenticated, svcerr.Code(err), "revocation is a credential rejection: %v", err)
 }
 
 // TestDaemonCredential_HostedRefusesWhenControlPlaneIsDown pins "never fall
@@ -421,7 +422,7 @@ func TestDaemonCredential_HostedRefusesWhenControlPlaneIsDown(t *testing.T) {
 	minted, err := fat.Mint()
 	require.NoError(t, err)
 	_, err = connectDaemon(t, serveGateway(t, authority), minted.Plaintext)
-	require.Equal(t, connect.CodeUnavailable, connect.CodeOf(err), "an unreachable control-plane must refuse loudly: %v", err)
+	require.Equal(t, connect.CodeUnavailable, svcerr.Code(err), "an unreachable control-plane must refuse loudly: %v", err)
 }
 
 // TestDaemonCredential_SelfHostedEndToEnd is the self-hosted twin: no
@@ -469,7 +470,7 @@ func TestDaemonCredential_SelfHostedEndToEnd(t *testing.T) {
 	}))
 	require.NoError(t, err)
 	_, err = connectDaemon(t, gatewayURL, daemonToken)
-	require.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err), "revoked: %v", err)
+	require.Equal(t, connect.CodeUnauthenticated, svcerr.Code(err), "revoked: %v", err)
 }
 
 type bearerTransport string

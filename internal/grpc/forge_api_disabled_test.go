@@ -9,6 +9,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 )
@@ -65,7 +66,7 @@ func TestDisabledForgeAPIAnswersFailedPrecondition(t *testing.T) {
 		// An anonymous caller learns nothing about how this deployment is
 		// configured: it is refused for its missing credential first.
 		_, err := forge.GetTopology(context.Background(), connect.NewRequest(&reliantv1.GetForgeTopologyRequest{}))
-		require.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err), "got %v", err)
+		require.Equal(t, connect.CodeUnauthenticated, svcerr.Code(err), "got %v", err)
 	})
 }
 
@@ -85,6 +86,6 @@ func TestEnabledForgeAPIReachesItsHandlers(t *testing.T) {
 	_, baseURL := startTestServer(t, testForge(t))
 
 	_, err := forgeClient(baseURL).GetTopology(context.Background(), authed(&reliantv1.GetForgeTopologyRequest{}))
-	require.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err),
+	require.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err),
 		"the handler's own answer to an empty project_id; got %v", err)
 }

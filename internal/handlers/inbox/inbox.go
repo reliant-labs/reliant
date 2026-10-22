@@ -14,6 +14,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -65,13 +66,13 @@ func (s *Service) ListInbox(
 ) (*connect.Response[reliantv1.ListInboxResponse], error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok || userID == "" {
-		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("user ID not found in context"))
+		return nil, svcerr.ToConnect(svcerr.Unauthenticated("user ID not found in context"))
 	}
 	limit := defaultInboxLimit
 	if req.Msg.Limit != nil {
 		limit = int(*req.Msg.Limit)
 		if limit < 0 {
-			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("limit must not be negative"))
+			return nil, svcerr.ToConnect(svcerr.InvalidArgument("limit must not be negative"))
 		}
 	}
 
@@ -80,12 +81,12 @@ func (s *Service) ListInbox(
 	pending, err := s.deps.Repo.ListInboxPending(ctx, userID)
 	if err != nil {
 		logging.ErrorContext(ctx, "Failed to list inbox", "error", err)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list inbox"))
+		return nil, svcerr.ToConnect(svcerr.Internal("failed to list inbox"))
 	}
 	failing, err := s.failingAutomations(ctx, userID)
 	if err != nil {
 		logging.ErrorContext(ctx, "Failed to compute failing automations for inbox", "error", err)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list inbox"))
+		return nil, svcerr.ToConnect(svcerr.Internal("failed to list inbox"))
 	}
 
 	items := make([]*reliantv1.InboxItem, 0, len(pending)+len(failing))
@@ -109,7 +110,7 @@ func (s *Service) ListInbox(
 	items, err = s.dropDismissed(ctx, userID, items)
 	if err != nil {
 		logging.ErrorContext(ctx, "Failed to filter dismissed inbox items", "error", err)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list inbox"))
+		return nil, svcerr.ToConnect(svcerr.Internal("failed to list inbox"))
 	}
 
 	resp := &reliantv1.ListInboxResponse{}
@@ -174,14 +175,14 @@ func (s *Service) DismissInboxItem(
 ) (*connect.Response[reliantv1.DismissInboxItemResponse], error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok || userID == "" {
-		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("user ID not found in context"))
+		return nil, svcerr.ToConnect(svcerr.Unauthenticated("user ID not found in context"))
 	}
 	if err := validateInboxItemIDs(req.Msg.ItemIds); err != nil {
 		return nil, err
 	}
 	if err := s.deps.Repo.DismissInboxItems(ctx, userID, impliedDismissals(req.Msg.ItemIds), time.Now().UTC()); err != nil {
 		logging.ErrorContext(ctx, "Failed to dismiss inbox items", "error", err, "count", len(req.Msg.ItemIds))
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to dismiss inbox item"))
+		return nil, svcerr.ToConnect(svcerr.Internal("failed to dismiss inbox item"))
 	}
 	return connect.NewResponse(&reliantv1.DismissInboxItemResponse{}), nil
 }
@@ -193,28 +194,28 @@ func (s *Service) RestoreInboxItem(
 ) (*connect.Response[reliantv1.RestoreInboxItemResponse], error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok || userID == "" {
-		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("user ID not found in context"))
+		return nil, svcerr.ToConnect(svcerr.Unauthenticated("user ID not found in context"))
 	}
 	if err := validateInboxItemIDs(req.Msg.ItemIds); err != nil {
 		return nil, err
 	}
 	if err := s.deps.Repo.RestoreInboxItems(ctx, userID, impliedDismissals(req.Msg.ItemIds)); err != nil {
 		logging.ErrorContext(ctx, "Failed to restore inbox items", "error", err, "count", len(req.Msg.ItemIds))
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to restore inbox item"))
+		return nil, svcerr.ToConnect(svcerr.Internal("failed to restore inbox item"))
 	}
 	return connect.NewResponse(&reliantv1.RestoreInboxItemResponse{}), nil
 }
 
 func validateInboxItemIDs(itemIDs []string) error {
 	if len(itemIDs) == 0 {
-		return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("item_ids is required"))
+		return svcerr.ToConnect(svcerr.InvalidArgument("item_ids is required"))
 	}
 	if len(itemIDs) > maxInboxDismissBatch {
-		return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("at most %d item ids per call", maxInboxDismissBatch))
+		return svcerr.ToConnect(svcerr.InvalidArgument(fmt.Sprintf("at most %d item ids per call", maxInboxDismissBatch)))
 	}
 	for _, id := range itemIDs {
 		if !isInboxItemID(id) {
-			return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("not an inbox item id: %q", id))
+			return svcerr.ToConnect(svcerr.InvalidArgument(fmt.Sprintf("not an inbox item id: %q", id)))
 		}
 	}
 	return nil
@@ -620,32 +621,32 @@ func (s *Service) CleanupStorage(
 ) (*connect.Response[reliantv1.CleanupStorageResponse], error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok || userID == "" {
-		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("user ID not found in context"))
+		return nil, svcerr.ToConnect(svcerr.Unauthenticated("user ID not found in context"))
 	}
 	if req.Msg.DaemonId == "" || len(req.Msg.WorktreeIds) == 0 {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("daemon_id and worktree_ids are required"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("daemon_id and worktree_ids are required"))
 	}
 	if len(req.Msg.WorktreeIds) > maxInboxDismissBatch {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("at most %d worktrees per call", maxInboxDismissBatch))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument(fmt.Sprintf("at most %d worktrees per call", maxInboxDismissBatch)))
 	}
 	if s.deps.Sweeper == nil {
-		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("storage cleanup is not available"))
+		return nil, svcerr.ToConnect(svcerr.Unavailable("storage cleanup is not available"))
 	}
 	// The machine must be the caller's: Cleanup only ever acts on worktrees of
 	// projects the caller owns, but naming a stranger's daemon is rejected
 	// outright rather than quietly doing nothing.
 	daemon, err := s.deps.Repo.GetDaemon(ctx, req.Msg.DaemonId)
 	if err != nil || daemon == nil || daemon.UserID != userID {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("machine not found"))
+		return nil, svcerr.ToConnect(svcerr.NotFound("machine"))
 	}
 
 	accepted, skipped, err := s.deps.Sweeper.StartCleanup(ctx, s.deps.Repo, userID, req.Msg.DaemonId, req.Msg.WorktreeIds)
 	if errors.Is(err, worktreesweep.ErrOffline) {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("that machine is offline; reconnect it and try again"))
+		return nil, svcerr.ToConnect(svcerr.FailedPrecondition("that machine is offline; reconnect it and try again"))
 	}
 	if err != nil {
 		logging.ErrorContext(ctx, "Storage cleanup failed to start", "error", err, "daemonID", req.Msg.DaemonId)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("storage cleanup failed"))
+		return nil, svcerr.ToConnect(svcerr.Internal("storage cleanup failed"))
 	}
 
 	s.storageCache.Delete(userID)

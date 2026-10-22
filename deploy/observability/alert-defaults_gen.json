@@ -78,6 +78,36 @@
       ]
     },
     {
+      "id": "new-issue",
+      "alert": "NewIssue",
+      "title": "A new issue appeared",
+      "severity": "warning",
+      "for": "0s",
+      "interval": "1m",
+      "signal": "platform",
+      "params": []
+    },
+    {
+      "id": "issue-regressed",
+      "alert": "IssueRegressed",
+      "title": "A resolved issue came back in a later release",
+      "severity": "warning",
+      "for": "0s",
+      "interval": "1m",
+      "signal": "platform",
+      "params": []
+    },
+    {
+      "id": "issue-spike",
+      "alert": "IssueSpike",
+      "title": "An issue's error rate is spiking against its previous day",
+      "severity": "warning",
+      "for": "0s",
+      "interval": "5m",
+      "signal": "platform",
+      "params": []
+    },
+    {
       "id": "crash-loop",
       "alert": "WorkloadCrashLooping",
       "title": "A container keeps restarting",

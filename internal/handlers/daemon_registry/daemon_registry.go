@@ -12,6 +12,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -102,7 +103,7 @@ func (s *Service) GetDaemon(
 		return nil, connect.NewError(connect.CodeUnauthenticated, nil)
 	}
 	if req.Msg.GetDaemonId() == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("daemon_id is required"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("daemon_id is required"))
 	}
 
 	daemon, err := s.deps.Repo.GetDaemon(ctx, req.Msg.GetDaemonId())
@@ -110,7 +111,7 @@ func (s *Service) GetDaemon(
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("daemon not found: %w", err))
 	}
 	if daemon.UserID != userID {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("daemon not found"))
+		return nil, svcerr.ToConnect(svcerr.NotFound("daemon"))
 	}
 
 	attached, err := s.attachedDaemonSet(ctx, userID)
@@ -145,7 +146,7 @@ func (s *Service) ClearMachineCaches(
 ) (*connect.Response[reliantv1.ClearMachineCachesResponse], error) {
 	daemonID := req.Msg.GetDaemonId()
 	if len(req.Msg.GetKinds()) == 0 {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("kinds is required"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("kinds is required"))
 	}
 	userID, router, err := s.ownedOnlineDaemon(ctx, daemonID)
 	if err != nil {
@@ -205,21 +206,21 @@ func (s *Service) ownedOnlineDaemon(ctx context.Context, daemonID string) (userI
 		return "", nil, connect.NewError(connect.CodeUnauthenticated, nil)
 	}
 	if daemonID == "" {
-		return "", nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("daemon_id is required"))
+		return "", nil, svcerr.ToConnect(svcerr.InvalidArgument("daemon_id is required"))
 	}
 	daemon, err := s.deps.Repo.GetDaemon(ctx, daemonID)
 	if err != nil || daemon == nil || daemon.UserID != userID {
-		return "", nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("daemon not found"))
+		return "", nil, svcerr.ToConnect(svcerr.NotFound("daemon"))
 	}
 	attached, err := s.attachedDaemonSet(ctx, userID)
 	if err != nil {
 		return "", nil, err
 	}
 	if attached[daemon.ID] == nil {
-		return "", nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("daemon %s is offline", daemonID))
+		return "", nil, svcerr.ToConnect(svcerr.Unavailable(fmt.Sprintf("daemon %s is offline", daemonID)))
 	}
 	if s.deps.Router == nil {
-		return "", nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("no daemon router configured"))
+		return "", nil, svcerr.ToConnect(svcerr.Unavailable("no daemon router configured"))
 	}
 	return userID, s.deps.Router, nil
 }
@@ -334,7 +335,7 @@ func (s *Service) ResumeDaemon(
 	}
 
 	if req.Msg.DaemonId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("daemon_id is required"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("daemon_id is required"))
 	}
 
 	// Verify ownership.
@@ -343,7 +344,7 @@ func (s *Service) ResumeDaemon(
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("daemon not found: %w", err))
 	}
 	if daemon.UserID != userID {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("daemon not found"))
+		return nil, svcerr.ToConnect(svcerr.NotFound("daemon"))
 	}
 
 	// If the daemon currently has a fresh attachment row, it's already routable.

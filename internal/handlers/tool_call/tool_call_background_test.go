@@ -9,6 +9,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -98,7 +99,7 @@ func TestConvertToBackground_DaemonUnreachable_DoesNotClaimSuccess(t *testing.T)
 		ToolCallId: toolCallID,
 	}))
 	require.Error(t, err)
-	require.Equal(t, connect.CodeUnavailable, connect.CodeOf(err))
+	require.Equal(t, connect.CodeUnavailable, svcerr.Code(err))
 
 	// And the row must not claim BACKGROUNDED for a command that never was.
 	calls, listErr := repo.ListToolCallsByIDs(ctx, []string{toolCallID})

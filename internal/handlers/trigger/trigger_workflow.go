@@ -12,6 +12,7 @@ import (
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/structpb"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -52,10 +53,10 @@ func (s *Service) EnableWorkflow(
 	userID := auth.MustGetUserID(ctx)
 	msg := req.Msg
 	if strings.TrimSpace(msg.Workflow) == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("workflow is required"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("workflow is required"))
 	}
 	if msg.ProjectId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("project_id is required"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("project_id is required"))
 	}
 
 	wf, err := launch.ResolveRunWorkflow(ctx, s.deps.Repo, userID, msg.Workflow, msg.ProjectId)
@@ -69,8 +70,7 @@ func (s *Service) EnableWorkflow(
 	}
 	declared := wf.GetTriggers()
 	if len(declared) == 0 {
-		return nil, connect.NewError(connect.CodeFailedPrecondition,
-			fmt.Errorf("workflow %q declares no triggers, so there is nothing to enable", msg.Workflow))
+		return nil, svcerr.ToConnect(svcerr.FailedPrecondition(fmt.Sprintf("workflow %q declares no triggers, so there is nothing to enable", msg.Workflow)))
 	}
 
 	mine, err := s.deps.Repo.ListTriggers(ctx, core.TriggerFilters{UserID: userID, ProjectID: &msg.ProjectId})
@@ -92,9 +92,8 @@ func (s *Service) EnableWorkflow(
 	}
 	for name := range overrides {
 		if triggers.FindDeclaredTrigger(wf, name) == nil {
-			return nil, connect.NewError(connect.CodeInvalidArgument,
-				fmt.Errorf("override names %q, which workflow %q does not declare (it declares: %s)",
-					name, msg.Workflow, strings.Join(triggers.DeclaredTriggerNames(wf), ", ")))
+			return nil, svcerr.ToConnect(svcerr.InvalidArgument(fmt.Sprintf("override names %q, which workflow %q does not declare (it declares: %s)",
+				name, msg.Workflow, strings.Join(triggers.DeclaredTriggerNames(wf), ", "))))
 		}
 	}
 
@@ -134,8 +133,7 @@ func (s *Service) EnableWorkflow(
 			if taken[def.Name] {
 				// Only a name the caller chose for this trigger can still
 				// collide: the default prefix was picked to be free.
-				err = connect.NewError(connect.CodeAlreadyExists,
-					fmt.Errorf("you already have an automation named %q in this project; pick another name", def.Name))
+				err = svcerr.ToConnect(svcerr.AlreadyExists(fmt.Sprintf("you already have an automation named %q in this project; pick another name", def.Name)))
 			} else {
 				var row *core.Trigger
 				if row, err = s.triggerFromDefinition(ctx, userID, def, nil); err == nil {
@@ -214,8 +212,7 @@ func (s *Service) existingActivationStep(
 		def.ConnectionId = &id
 	}
 	if def.Name != existing.Name && taken[def.Name] {
-		return nil, connect.NewError(connect.CodeAlreadyExists,
-			fmt.Errorf("you already have an automation named %q in this project; pick another name", def.Name))
+		return nil, svcerr.ToConnect(svcerr.AlreadyExists(fmt.Sprintf("you already have an automation named %q in this project; pick another name", def.Name)))
 	}
 	row, err := s.triggerFromDefinition(ctx, userID, def, existing)
 	if err != nil {
@@ -533,7 +530,7 @@ func (s *Service) DisableWorkflow(
 ) (*connect.Response[reliantv1.DisableWorkflowResponse], error) {
 	userID := auth.MustGetUserID(ctx)
 	if strings.TrimSpace(req.Msg.Workflow) == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("workflow is required"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("workflow is required"))
 	}
 	mine, err := s.deps.Repo.ListTriggers(ctx, core.TriggerFilters{UserID: userID, ProjectID: req.Msg.ProjectId})
 	if err != nil {

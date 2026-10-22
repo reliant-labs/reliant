@@ -9,6 +9,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -45,7 +46,7 @@ func parseClientMessageID(raw string) (string, error) {
 	}
 	id, err := uuid.Parse(raw)
 	if err != nil {
-		return "", connect.NewError(connect.CodeInvalidArgument, errors.New("client_message_id must be a UUID"))
+		return "", svcerr.ToConnect(svcerr.InvalidArgument("client_message_id must be a UUID"))
 	}
 	return id.String(), nil
 }
@@ -59,8 +60,7 @@ func canonicalClientMessageID(raw string) string {
 
 // errClientMessageReused answers an id that already names a different message.
 func errClientMessageReused() error {
-	return connect.NewError(connect.CodeAlreadyExists,
-		errors.New("client_message_id was already used for a different message; use a new id for a new message"))
+	return svcerr.ToConnect(svcerr.AlreadyExists("client_message_id was already used for a different message; use a new id for a new message"))
 }
 
 // asConnectError keeps a handler-grade error as it is and files anything else

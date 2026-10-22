@@ -13,6 +13,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/daemonchoice"
@@ -73,7 +74,7 @@ func (s *Service) CreateTrigger(
 
 	def := req.Msg.Trigger
 	if def == nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("trigger is required"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("trigger is required"))
 	}
 
 	trigger, err := s.triggerFromDefinition(ctx, userID, def, nil)
@@ -81,8 +82,7 @@ func (s *Service) CreateTrigger(
 		return nil, err
 	}
 	if trigger.Kind == core.TriggerKindSchedule && s.deps.Syncer == nil {
-		return nil, connect.NewError(connect.CodeUnavailable,
-			errors.New("the schedule backend is unavailable; cannot create a trigger that would never fire"))
+		return nil, svcerr.ToConnect(svcerr.Unavailable("the schedule backend is unavailable; cannot create a trigger that would never fire"))
 	}
 	trigger.ID = uuid.NewString()
 	// nil enabled means true: a create that omits the field wants a working
@@ -227,7 +227,7 @@ func (s *Service) UpdateTrigger(
 
 	def := req.Msg.Trigger
 	if def == nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("trigger is required"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("trigger is required"))
 	}
 
 	updated, err := s.triggerFromDefinition(ctx, existing.UserID, def, existing)
@@ -235,7 +235,7 @@ func (s *Service) UpdateTrigger(
 		return nil, err
 	}
 	if updated.Kind == core.TriggerKindSchedule && s.deps.Syncer == nil {
-		return nil, connect.NewError(connect.CodeUnavailable, errors.New("the schedule backend is unavailable"))
+		return nil, svcerr.ToConnect(svcerr.Unavailable("the schedule backend is unavailable"))
 	}
 	updated.ID = existing.ID
 	updated.CreatedAt = existing.CreatedAt
@@ -329,7 +329,7 @@ func (s *Service) SetTriggerEnabled(
 		return nil, err
 	}
 	if trigger.Kind == core.TriggerKindSchedule && s.deps.Syncer == nil {
-		return nil, connect.NewError(connect.CodeUnavailable, errors.New("the schedule backend is unavailable"))
+		return nil, svcerr.ToConnect(svcerr.Unavailable("the schedule backend is unavailable"))
 	}
 	if req.Msg.Enabled {
 		// Turning an activation back on is not a way around setup: its params
@@ -403,7 +403,7 @@ func (s *Service) FireTrigger(
 		return connect.NewResponse(&reliantv1.FireTriggerResponse{FireWorkflowId: fireID}), nil
 	}
 	if s.deps.Fires == nil {
-		return nil, connect.NewError(connect.CodeUnavailable, errors.New("the schedule backend is unavailable"))
+		return nil, svcerr.ToConnect(svcerr.Unavailable("the schedule backend is unavailable"))
 	}
 
 	fireID, err := s.deps.Fires.StartManualFire(ctx, trigger.ID)
@@ -427,11 +427,11 @@ func (s *Service) GetLaunchEvent(
 ) (*connect.Response[reliantv1.GetLaunchEventResponse], error) {
 	userID := auth.MustGetUserID(ctx)
 	if req.Msg.ChatId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("chat_id is required"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("chat_id is required"))
 	}
 	chat, err := s.deps.Repo.GetChat(ctx, req.Msg.ChatId)
 	if err != nil || chat == nil || chat.UserID != userID {
-		return nil, connect.NewError(connect.CodeNotFound, errors.New("chat not found"))
+		return nil, svcerr.ToConnect(svcerr.NotFound("chat"))
 	}
 	ev, err := s.deps.Repo.GetTriggerEventByChatID(ctx, chat.ID)
 	if err != nil {
@@ -445,7 +445,7 @@ func (s *Service) GetLaunchEvent(
 	}
 	out, err := triggers.EventToProto(ev)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, errors.New("render launch event"))
+		return nil, svcerr.ToConnect(svcerr.Internal("render launch event"))
 	}
 	return connect.NewResponse(&reliantv1.GetLaunchEventResponse{Event: out}), nil
 }
@@ -478,14 +478,14 @@ func (s *Service) ListTriggerEvents(
 	for _, o := range req.Msg.Outcomes {
 		outcome, ok := triggerOutcomeFromProto(o)
 		if !ok {
-			return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("outcomes: unspecified outcome"))
+			return nil, svcerr.ToConnect(svcerr.InvalidArgument("outcomes: unspecified outcome"))
 		}
 		filters.Outcomes = append(filters.Outcomes, outcome)
 	}
 	if req.Msg.PageToken != nil && *req.Msg.PageToken != "" {
 		cursor, err := decodeTriggerEventCursor(*req.Msg.PageToken)
 		if err != nil {
-			return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("invalid page_token"))
+			return nil, svcerr.ToConnect(svcerr.InvalidArgument("invalid page_token"))
 		}
 		filters.After = cursor
 	}
@@ -554,19 +554,19 @@ func triggerOutcomeFromProto(o reliantv1.TriggerEventOutcome) (core.TriggerEvent
 // triggers for nothing.
 func (s *Service) ownedTrigger(ctx context.Context, id string) (*core.Trigger, error) {
 	if id == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("id is required"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("id is required"))
 	}
 	userID := auth.MustGetUserID(ctx)
 
 	trigger, err := s.deps.Repo.GetTrigger(ctx, id)
 	if err != nil {
 		if errors.Is(err, core.ErrTriggerNotFound) {
-			return nil, connect.NewError(connect.CodeNotFound, errors.New("trigger not found"))
+			return nil, svcerr.ToConnect(svcerr.NotFound("trigger"))
 		}
 		return nil, triggerDBError("get trigger", err)
 	}
 	if trigger.UserID != userID {
-		return nil, connect.NewError(connect.CodeNotFound, errors.New("trigger not found"))
+		return nil, svcerr.ToConnect(svcerr.NotFound("trigger"))
 	}
 	return trigger, nil
 }
@@ -580,17 +580,17 @@ func (s *Service) triggerFromDefinition(
 	existing *core.Trigger,
 ) (*core.Trigger, error) {
 	if def.Name == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("name is required"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("name is required"))
 	}
 	// A trigger with no prompt would launch a run with nothing to do, and the
 	// agent would have no way to ask what was wanted — nobody is watching.
 	// An activation may leave it empty when its declaration has a prompt
 	// template; that is checked once the declaration is read.
 	if def.Message == "" && def.GetWorkflowTrigger() == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("message is required"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("message is required"))
 	}
 	if def.ProjectId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("project_id is required"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("project_id is required"))
 	}
 
 	// The machine is an explicit choice: a daemon, or no_machine. An empty
@@ -598,15 +598,13 @@ func (s *Service) triggerFromDefinition(
 	// omits the field cannot silently create a run with no machine.
 	switch {
 	case def.NoMachine && def.DaemonId != "":
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			errors.New("no_machine and daemon_id are mutually exclusive: runs either have a machine or they do not"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("no_machine and daemon_id are mutually exclusive: runs either have a machine or they do not"))
 	case !def.NoMachine && def.DaemonId == "":
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			errors.New("daemon_id is required: a trigger must name the daemon its runs execute on, or set no_machine"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("daemon_id is required: a trigger must name the daemon its runs execute on, or set no_machine"))
 	}
 
 	if _, err := s.deps.Repo.GetProjectWithUserCheck(ctx, def.ProjectId, userID); err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, errors.New("project not found"))
+		return nil, svcerr.ToConnect(svcerr.NotFound("project"))
 	}
 
 	if def.NoMachine {
@@ -620,14 +618,13 @@ func (s *Service) triggerFromDefinition(
 	if def.WorktreeId != nil && *def.WorktreeId != "" {
 		worktree, err := s.deps.Repo.GetWorktree(ctx, *def.WorktreeId)
 		if err != nil || worktree == nil {
-			return nil, connect.NewError(connect.CodeNotFound, errors.New("worktree not found"))
+			return nil, svcerr.ToConnect(svcerr.NotFound("worktree"))
 		}
 		// The worktree has to belong to the project the runs execute in;
 		// otherwise the trigger would launch runs against a checkout of a
 		// different project.
 		if worktree.ProjectID != def.ProjectId {
-			return nil, connect.NewError(connect.CodeInvalidArgument,
-				errors.New("worktree does not belong to the project"))
+			return nil, svcerr.ToConnect(svcerr.InvalidArgument("worktree does not belong to the project"))
 		}
 	}
 
@@ -662,16 +659,14 @@ func (s *Service) triggerFromDefinition(
 	if existing != nil {
 		wasActivation := existing.WorkflowTrigger != nil
 		if wasActivation != (decl != nil) {
-			return nil, connect.NewError(connect.CodeInvalidArgument, errors.New(
-				"a trigger cannot change between activating a workflow's declared trigger and writing its source inline; delete it and create the other"))
+			return nil, svcerr.ToConnect(svcerr.InvalidArgument("a trigger cannot change between activating a workflow's declared trigger and writing its source inline; delete it and create the other"))
 		}
 		if existing.Kind != src.Kind {
-			return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("a trigger's kind is not updatable"))
+			return nil, svcerr.ToConnect(svcerr.InvalidArgument("a trigger's kind is not updatable"))
 		}
 	}
 	if src.Kind == core.TriggerKindSchedule && strings.TrimSpace(def.Filter) != "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			errors.New("filter: a schedule fires on time, not on an event, so there is nothing to filter"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("filter: a schedule fires on time, not on an event, so there is nothing to filter"))
 	}
 
 	identity, err := s.actingIdentityFor(def, existing)
@@ -734,9 +729,8 @@ func (s *Service) actingIdentityFor(def *reliantv1.TriggerDefinition, existing *
 		return core.ActingIdentityOwner, nil
 	}
 	if identity == core.ActingIdentityApp && s.deps.ControlPlane == nil {
-		return "", connect.NewError(connect.CodeFailedPrecondition, errors.New(
-			"acting_identity: app needs a Reliant deployment with a control plane, which holds the GitHub App; "+
-				"this deployment has none, so its automations act as their owner"))
+		return "", svcerr.ToConnect(svcerr.FailedPrecondition("acting_identity: app needs a Reliant deployment with a control plane, which holds the GitHub App; " +
+			"this deployment has none, so its automations act as their owner"))
 	}
 	return identity, nil
 }
@@ -746,12 +740,10 @@ func (s *Service) actingIdentityFor(def *reliantv1.TriggerDefinition, existing *
 // then validated and stored like an inline one.
 func (s *Service) resolveActivation(ctx context.Context, userID string, def *reliantv1.TriggerDefinition, name string) (*triggers.Declaration, error) {
 	if strings.TrimSpace(def.Workflow) == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			errors.New("workflow is required: a declared trigger is activated from the workflow that declares it"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("workflow is required: a declared trigger is activated from the workflow that declares it"))
 	}
 	if strings.TrimSpace(def.Filter) != "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			errors.New("filter: an activation's filter is its declaration's; edit the workflow's triggers: block to change it"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("filter: an activation's filter is its declaration's; edit the workflow's triggers: block to change it"))
 	}
 	wf, err := launch.ResolveRunWorkflow(ctx, s.deps.Repo, userID, def.Workflow, def.ProjectId)
 	if err != nil {
@@ -774,8 +766,8 @@ func (s *Service) resolveActivation(ctx context.Context, userID string, def *rel
 	// The activation's message overrides the declaration's prompt template;
 	// with neither, a run would start with nothing to do.
 	if strings.TrimSpace(def.Message) == "" && strings.TrimSpace(declared.GetPrompt()) == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
-			"message is required: the declared trigger %q has no prompt, so the activation must write one", name))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument(fmt.Sprintf(
+			"message is required: the declared trigger %q has no prompt, so the activation must write one", name)))
 	}
 	// Activation has no previous kind to hold the declaration to.
 	decl, err := triggers.DeclarationIn(wf, &core.Trigger{Workflow: def.Workflow, WorkflowTrigger: &name})
@@ -791,8 +783,8 @@ func (s *Service) resolveActivation(ctx context.Context, userID string, def *rel
 	// setting that does nothing.
 	for input := range decl.Inputs {
 		if _, ok := def.Params[input]; ok {
-			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
-				"params.%s: the declared trigger %q sets this input from each event; remove it from params", input, name))
+			return nil, svcerr.ToConnect(svcerr.InvalidArgument(fmt.Sprintf(
+				"params.%s: the declared trigger %q sets this input from each event; remove it from params", input, name)))
 		}
 	}
 	// Params are what filters, inputs and prompts read as activation.params,
@@ -800,8 +792,8 @@ func (s *Service) resolveActivation(ctx context.Context, userID string, def *rel
 	// required input nobody supplied would fail every run it launched. Every
 	// write of an activation passes through here, so none can store either.
 	if issues := validation.ValidateActivationParams(wf.GetInputs(), decl.Inputs, triggers.ParamsFromProto(def.Params)); len(issues) > 0 {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
-			"params: %s", joinIssues(issues)))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument(fmt.Sprintf(
+			"params: %s", joinIssues(issues))))
 	}
 	return decl, nil
 }
@@ -844,9 +836,9 @@ func (s *Service) validateNoMachineWorkflow(ctx context.Context, userID string, 
 	if req.None() {
 		return nil
 	}
-	return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
+	return svcerr.ToConnect(svcerr.FailedPrecondition(fmt.Sprintf(
 		"this workflow needs a machine: %s. Pick a machine for this automation, or give it only tools "+
-			"that run without one (for example tools: [\"tag:web\"])", req.Summary()))
+			"that run without one (for example tools: [\"tag:web\"])", req.Summary())))
 }
 
 // render builds the wire trigger, resolving the read-only projections.
@@ -919,8 +911,8 @@ func (s *Service) requireSetupComplete(ctx context.Context, t *core.Trigger) err
 	if len(issues) == 0 {
 		return nil
 	}
-	return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
-		"%s. Finish setting up %q before turning it on or running it", triggers.SetupDetail(issues), t.Name))
+	return svcerr.ToConnect(svcerr.FailedPrecondition(fmt.Sprintf(
+		"%s. Finish setting up %q before turning it on or running it", triggers.SetupDetail(issues), t.Name)))
 }
 
 // joinIssues is issues as one sentence list: "repos is required; team ...".
@@ -973,7 +965,7 @@ func (s *Service) renderFirings(ctx context.Context, t *core.Trigger, firings []
 
 func triggerDBError(op string, err error) error {
 	logging.Error("trigger database error", "op", op, "error", err)
-	return connect.NewError(connect.CodeInternal, errors.New("database error"))
+	return svcerr.ToConnect(svcerr.Internal("database error"))
 }
 
 // triggerSyncError maps a schedule-backend failure. A config the backend

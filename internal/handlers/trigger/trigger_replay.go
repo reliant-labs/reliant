@@ -11,6 +11,7 @@ import (
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/structpb"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -37,7 +38,7 @@ func (s *Service) ListReplayEvents(
 	userID := auth.MustGetUserID(ctx)
 	msg := req.Msg
 	if strings.TrimSpace(msg.GetWorkflow()) == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("workflow is required"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("workflow is required"))
 	}
 	limit := int(msg.GetLimit())
 	switch {
@@ -94,10 +95,10 @@ func (s *Service) PreviewReplay(
 	userID := auth.MustGetUserID(ctx)
 	msg := req.Msg
 	if strings.TrimSpace(msg.GetWorkflow()) == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("workflow is required"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("workflow is required"))
 	}
 	if msg.GetReplay() == nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("replay is required"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("replay is required"))
 	}
 	replay, err := triggers.ReplayFromProto(msg.GetReplay(), msg.GetSender())
 	if err != nil {

@@ -3,10 +3,10 @@ package grpc
 
 import (
 	"context"
-	"errors"
 
 	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/mountkit"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 )
 
 // forgeAPIDisabledReason is the X-Reliant-Reason a forgeAPIDisabled refusal
@@ -36,8 +36,7 @@ func ForgeAPIDisabled() mountkit.Option {
 type forgeAPIDisabled struct{}
 
 func (forgeAPIDisabled) refusal() error {
-	err := connect.NewError(connect.CodeFailedPrecondition,
-		errors.New("the forge API is disabled in this deployment (RELIANT_DISABLE_FORGE_API)"))
+	err := svcerr.ToConnect(svcerr.FailedPrecondition("the forge API is disabled in this deployment (RELIANT_DISABLE_FORGE_API)"))
 	err.Meta().Set("X-Reliant-Reason", forgeAPIDisabledReason)
 	return err
 }

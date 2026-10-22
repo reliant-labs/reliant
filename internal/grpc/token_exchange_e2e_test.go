@@ -13,6 +13,7 @@ import (
 
 	"connectrpc.com/connect"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/require"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -87,7 +88,7 @@ func TestForgeCredential_HostedEndToEnd(t *testing.T) {
 	_, err = tokens(daemonToken).ExchangeToken(ctx, connect.NewRequest(&reliantv1.ExchangeTokenRequest{
 		Audience: "https://evil.example.com",
 	}))
-	require.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err), "wrong audience: %v", err)
+	require.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err), "wrong audience: %v", err)
 	after, err := cp.store.ListForUser(ctx, userID, "")
 	require.NoError(t, err)
 	require.Len(t, after, len(before), "a refused audience must not mint")
@@ -116,19 +117,19 @@ func TestForgeCredential_HostedEndToEnd(t *testing.T) {
 
 	// 4. It carries no session authority: not an API credential, not a daemon.
 	_, err = tokens(forgeToken).ListTokens(ctx, connect.NewRequest(&reliantv1.ListTokensRequest{}))
-	require.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err), "an exchanged token must not call reliant's API: %v", err)
+	require.Equal(t, connect.CodeUnauthenticated, svcerr.Code(err), "an exchanged token must not call reliant's API: %v", err)
 	_, err = connectDaemon(t, gatewayURL, forgeToken)
-	require.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err), "an exchanged token must not connect a daemon: %v", err)
+	require.Equal(t, connect.CodeUnauthenticated, svcerr.Code(err), "an exchanged token must not connect a daemon: %v", err)
 	// …and it cannot be exchanged again: it is not a session.
 	_, err = tokens(forgeToken).ExchangeToken(ctx, connect.NewRequest(&reliantv1.ExchangeTokenRequest{Audience: controlPlane}))
-	require.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err), "re-exchange: %v", err)
+	require.Equal(t, connect.CodePermissionDenied, svcerr.Code(err), "re-exchange: %v", err)
 
 	// 5. Revoking the parent is honoured on the very next exchange — the
 	//    handler introspects uncached.
 	_, err = tokens(session).RevokeToken(ctx, connect.NewRequest(&reliantv1.RevokeTokenRequest{Id: created.Msg.GetInfo().GetId()}))
 	require.NoError(t, err)
 	_, err = tokens(daemonToken).ExchangeToken(ctx, connect.NewRequest(&reliantv1.ExchangeTokenRequest{Audience: controlPlane}))
-	require.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err), "a revoked parent: %v", err)
+	require.Equal(t, connect.CodeUnauthenticated, svcerr.Code(err), "a revoked parent: %v", err)
 	require.Contains(t, err.Error(), "sign in to Reliant again")
 }
 
@@ -163,7 +164,7 @@ func TestForgeCredential_NeverEscalates(t *testing.T) {
 			_, err = tokens(created.Msg.GetToken()).ExchangeToken(ctx, connect.NewRequest(&reliantv1.ExchangeTokenRequest{
 				Audience: controlPlane,
 			}))
-			require.Equal(t, connect.CodePermissionDenied, connect.CodeOf(err), "escalation: %v", err)
+			require.Equal(t, connect.CodePermissionDenied, svcerr.Code(err), "escalation: %v", err)
 			require.Contains(t, err.Error(), "reliant auth login")
 			after, err := authority.ListForUser(ctx, userID, "")
 			require.NoError(t, err)
@@ -173,6 +174,6 @@ func TestForgeCredential_NeverEscalates(t *testing.T) {
 
 	// A human session has no credential to attenuate.
 	_, err := tokens(session).ExchangeToken(ctx, connect.NewRequest(&reliantv1.ExchangeTokenRequest{Audience: controlPlane}))
-	require.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err), "a session JWT: %v", err)
+	require.Equal(t, connect.CodeUnauthenticated, svcerr.Code(err), "a session JWT: %v", err)
 	require.True(t, strings.Contains(err.Error(), "rlat_"), "the refusal names what it needs: %v", err)
 }

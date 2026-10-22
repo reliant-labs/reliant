@@ -184,6 +184,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge observe`](#reliant-forge-observe) | Read back what the local observability stack collected |
 | [`reliant forge observe alerts`](#reliant-forge-observe-alerts) | Alert rules declared for an environment |
 | [`reliant forge observe alerts check`](#reliant-forge-observe-alerts-check) | Evaluate the env's alert rules against the local ClickStack and print what would fire |
+| [`reliant forge observe alerts run`](#reliant-forge-observe-alerts-run) | Evaluate the env's alert rules continuously and deliver what fires through the local Alertmanager |
 | [`reliant forge observe dashboards`](#reliant-forge-observe-dashboards) | Work with the dashboards a release carries |
 | [`reliant forge observe dashboards check`](#reliant-forge-observe-dashboards-check) | Validate the dashboards a release bundle would carry |
 | [`reliant forge observe metrics`](#reliant-forge-observe-metrics) | Print the metrics a service declares: name, type, unit, attributes, stability |
@@ -5466,7 +5467,8 @@ spelling reproduces exactly:
 
 A bare svcerr kind is written only in a handler package, where the expression is
 an error and nothing reads a *connect.Error in process (connect.CodeOf, errors.As
-into one) in the package, its tests, or the code of a package importing it;
+into one, an As-style helper such as testify's require.ErrorAs handed a
+**connect.Error) in the package, its tests, or the code of a package importing it;
 elsewhere (interceptors, clients, a
 *connect.Error-typed result, a package such a reader can see) the same value is
 kept a *connect.Error with svcerr.ToConnect(…), and the report names the reader;
@@ -6303,6 +6305,8 @@ Examples:
                                  # Both WARN instead ("pending: implement X")
                                  # while the service still holds forge's own
                                  # unwired rpc stubs
+  forge lint --secrets           # FAIL on a platform-secrets defect, with
+                                 # file:line and its escape
   forge lint --guarded-fields    # Flag a scaffolded edit page whose
                                  # update_mask still writes a column a
                                  # custom rpc guards (forge:guards) — the
@@ -6330,12 +6334,9 @@ Examples:
                                  # nowhere
   forge lint --vendored-protos   # Fail when proto/forge/v1/forge.proto has
                                  # drifted from this forge binary's copy
-                                 # (forge's upgrade path does not track it)
   forge lint --config-reach      # Flag config fields no binary or frontend
-                                 # loads (per-binary configs can strand a
-                                 # whole message)
-  forge lint --optional-deps-guard  # Flag unguarded derefs of a
-                                 # // forge:optional-dep field (nil at runtime)
+                                 # loads
+  forge lint --optional-deps-guard  # Flag unguarded derefs of an optional dep
   forge lint --frontend-stores   # Flag Zustand stores holding server data that
                                  # belongs in a generated React Query hook
   forge lint --json              # Machine-readable findings for sub-agents / CI
@@ -6397,6 +6398,7 @@ reliant forge lint [paths...] [flags]
 | `--quiet`, `-q` | `bool` | - | Print only what failed: a one-line summary per failing linter, its error findings, and the verdict as the LAST line (a clean run is one line). With --fix, fixes are applied silently; combines with the targeted flags and --scope |
 | `--read-only-fields` | `bool` | - | Flag a forge:read-only field whose column nothing populates — no non-generated Go file assigns it, no meaningful DEFAULT, not GENERATED — so every row ships as the type's zero with no error anywhere. FAILS the build, except while the service still holds forge-scaffolded unwired rpc stubs (then a warning naming them) |
 | `--scope` | `stringSlice` | `[]` | Report only findings in files under `PATH` (repeatable or comma-separated, project-relative). Go linters run on PATH's packages only; file-anchored linters report only findings under PATH; whole-project linters (frontend lint, graph, component-drift, config-reach) cannot be scoped, are skipped, and are named in the verdict. With --fix, only files under PATH are rewritten |
+| `--secrets` | `bool` | - | Judge the platform secrets model per env, with file:line: no ClusterSecretStore/ClusterExternalSecret/PushSecret, ExternalSecret policy (Orphan or Merge, Retain, namespaced store, explicit keys), every Secret a workload reads is produced by exactly one declaration that lists the key, an immutable store name is pinned at 1, an out_of_band_reason that explains, no reasonless OpenBao wildcard read, and (warning) an OpenBao escrowed inside its own cluster. FAILS the build on an error; every message names its escape |
 | `--show-suppressed` | `bool` | - | List every suppression the project declares, with file:line, what it covers and the stated reason: forge.yaml lint.rules (off/warn) and contracts.exclude, //forge:exclude-contract markers, forge:lint-disable* and nolint directives, and the migration and optional-dep pragmas. Read-only: runs no linter and exits 0; combines with --json and --scope |
 | `--skip-frontends` | `bool` | - | Skip the whole frontend lane (eslint/stylelint + TypeScript typecheck + static-export) for a backend-only gate that needs no Node toolchain |
 | `--slow-tests` | `bool` | - | Fail on a Go test that does slow work without being marked slow — execs go/forge/kcl/node/npm/git/docker/…, drives containers, or dials an external host, with no testkit.Slow(t, why) or testing.Short() guard on its path — so it runs in the blocking -short tier, and a file its child process reads is invisible to the test cache |
@@ -6519,6 +6521,7 @@ reliant forge observe alerts
 | Command | Description |
 |---------|-------------|
 | [`check`](#reliant-forge-observe-alerts-check) | Evaluate the env's alert rules against the local ClickStack and print what would fire |
+| [`run`](#reliant-forge-observe-alerts-run) | Evaluate the env's alert rules continuously and deliver what fires through the local Alertmanager |
 
 ---
 
@@ -6557,6 +6560,44 @@ reliant forge observe alerts check [flags]
 | `--max-rows` | `int` | `200` | a rule returning more rows than this is reported as an error |
 | `--rule` | `string` | - | evaluate only this alert name |
 | `--sql` | `bool` | - | print each rule's expr instead of running it |
+| `--timeout` | `duration` | `20s` | per-rule query timeout |
+
+---
+
+#### reliant forge observe alerts run
+
+Evaluate the env's alert rules continuously and deliver what fires through the local Alertmanager
+
+The local alerting loop's evaluator, which `forge env up` runs as the `alerts` host
+workload (deploy/kcl/dev/main.k). It
+
+  * evaluates the rules `forge env up` rendered into .forge/observability/alert-rules.json
+    (the env's forge.AlertRule entries plus the generated defaults, exactly what
+    `forge env shape` records) on their intervals, `for` applied, against the
+    local ClickStack;
+  * posts every firing and resolved alert to the local Alertmanager
+    (--alertmanager), labelled reliant_org_id="local" and reliant_env_id=`<env>`,
+    which routes it with the control plane's own configuration renderer;
+  * receives the in-app receiver's deliveries on --listen and prints one line
+    per alert, so .forge/logs/`<env>`/alerts.log is the local in-app inbox.
+
+The rules file is re-read when it changes, so a re-run of `forge env up` updates
+the rules without a restart.
+
+  cli forge observe alerts run --env dev --alertmanager http://127.0.0.1:9093 --listen 0.0.0.0:9095
+
+```
+reliant forge observe alerts run [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--alertmanager` | `string` | - | the local Alertmanager's base URL (required) |
+| `--env` | `string` | `dev` | environment whose rules to evaluate |
+| `--listen` | `string` | - | address of the in-app sink the local Alertmanager delivers to, host:port (required). It must be reachable from the Alertmanager container, so not 127.0.0.1 |
+| `--max-rows` | `int` | `200` | a rule returning more rows than this fails its evaluation |
 | `--timeout` | `duration` | `20s` | per-rule query timeout |
 
 ---

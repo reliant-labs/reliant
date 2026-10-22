@@ -3,7 +3,6 @@ package connector
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -11,6 +10,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/connectorgrant"
@@ -35,8 +35,7 @@ func (s *Service) AuthorizeClient(
 
 	clientID := strings.TrimSpace(req.Msg.GetClientId())
 	if clientID == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			errors.New("client id is required"))
+		return nil, svcerr.InvalidArgument("client id is required")
 	}
 
 	grant, credential, err := s.grantForConsent(ctx, userID, req.Msg)
@@ -78,19 +77,17 @@ func (s *Service) grantForConsent(
 
 	switch {
 	case existingID != "" && newConnector != nil:
-		return nil, "", connect.NewError(connect.CodeInvalidArgument,
-			errors.New("specify either an existing connector or a new one, not both"))
+		return nil, "", svcerr.InvalidArgument("specify either an existing connector or a new one, not both")
 
 	case existingID != "":
 		// Scoped by user, so a guessed id cannot bind a client to someone
 		// else's connector.
 		grant, err := s.deps.Grants.GetGrant(ctx, userID, existingID)
 		if err != nil {
-			return nil, "", connect.NewError(connect.CodeNotFound, errors.New("connector not found"))
+			return nil, "", svcerr.NotFound("connector")
 		}
 		if err := grant.IsLive(time.Now()); err != nil {
-			return nil, "", connect.NewError(connect.CodeFailedPrecondition,
-				errors.New("that connector has been revoked or has expired"))
+			return nil, "", svcerr.FailedPrecondition("that connector has been revoked or has expired")
 		}
 		return grant, "", nil
 
@@ -106,8 +103,7 @@ func (s *Service) grantForConsent(
 		return grant, raw, nil
 
 	default:
-		return nil, "", connect.NewError(connect.CodeInvalidArgument,
-			errors.New("choose an existing connector or describe a new one"))
+		return nil, "", svcerr.InvalidArgument("choose an existing connector or describe a new one")
 	}
 }
 
@@ -165,7 +161,7 @@ func (s *Service) RevokeClientAuthorization(
 
 	clientID := strings.TrimSpace(req.Msg.GetClientId())
 	if clientID == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("client id is required"))
+		return nil, svcerr.InvalidArgument("client id is required")
 	}
 
 	revoked, err := s.deps.Grants.DeleteBinding(ctx, userID, clientID)

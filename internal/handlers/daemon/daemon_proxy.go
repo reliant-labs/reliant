@@ -4,11 +4,11 @@ package daemon
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 
 	"connectrpc.com/connect"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/daemonerr"
@@ -20,7 +20,7 @@ import (
 // errNoRouter answers every rpc of a service composed without a daemon
 // router: this server has no way to reach a daemon.
 func errNoRouter() *connect.Error {
-	return connect.NewError(connect.CodeUnavailable, errors.New("no daemon router: this server cannot reach a daemon"))
+	return svcerr.ToConnect(svcerr.Unavailable("no daemon router: this server cannot reach a daemon"))
 }
 
 // StartOAuthFlow proxies the OAuth flow to the daemon which starts a localhost
@@ -31,7 +31,7 @@ func (s *Service) StartOAuthFlow(
 ) (*connect.Response[reliantv1.StartOAuthFlowResponse], error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok {
-		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("user ID not found in context"))
+		return nil, svcerr.Unauthenticated("user ID not found in context")
 	}
 
 	payload, err := json.Marshal(map[string]any{
@@ -105,7 +105,7 @@ func (s *Service) OpenOAuthHelper(
 ) (*connect.Response[reliantv1.OpenOAuthHelperResponse], error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok {
-		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("user ID not found in context"))
+		return nil, svcerr.Unauthenticated("user ID not found in context")
 	}
 
 	payload, err := json.Marshal(map[string]any{
@@ -146,7 +146,7 @@ func (s *Service) CloseOAuthHelper(
 ) (*connect.Response[reliantv1.CloseOAuthHelperResponse], error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok {
-		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("user ID not found in context"))
+		return nil, svcerr.Unauthenticated("user ID not found in context")
 	}
 
 	if s.deps.Router == nil {

@@ -10,6 +10,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/orm"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -25,11 +26,11 @@ import (
 func (s *Service) chatBelongsToUser(ctx context.Context, chatID string) error {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok || userID == "" {
-		return connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("user ID not found in context"))
+		return svcerr.ToConnect(svcerr.Unauthenticated("user ID not found in context"))
 	}
 	chat, err := s.deps.Repo.GetChat(ctx, chatID)
 	if err != nil || chat == nil || chat.UserID != userID {
-		return connect.NewError(connect.CodeNotFound, fmt.Errorf("approval not found"))
+		return svcerr.ToConnect(svcerr.NotFound("approval"))
 	}
 	return nil
 }
@@ -93,7 +94,7 @@ func (s *Service) ListApprovalsByChat(
 	req *connect.Request[reliantv1.ListApprovalsByChatRequest],
 ) (*connect.Response[reliantv1.ListApprovalsByChatResponse], error) {
 	if req.Msg.ChatId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("chat_id is required"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("chat_id is required"))
 	}
 
 	if err := s.chatBelongsToUser(ctx, req.Msg.ChatId); err != nil {
@@ -103,7 +104,7 @@ func (s *Service) ListApprovalsByChat(
 	approvals, err := s.deps.Repo.ListPendingApprovalsByChat(ctx, req.Msg.ChatId)
 	if err != nil {
 		logging.ErrorContext(ctx, "Failed to list approvals", "error", err, "chatID", req.Msg.ChatId)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list approvals"))
+		return nil, svcerr.ToConnect(svcerr.Internal("failed to list approvals"))
 	}
 
 	protoApprovals := make([]*reliantv1.Approval, len(approvals))
@@ -123,13 +124,13 @@ func (s *Service) Approve(
 	req *connect.Request[reliantv1.ApproveRequest],
 ) (*connect.Response[reliantv1.ApproveResponse], error) {
 	if req.Msg.RequestId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("request_id is required"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("request_id is required"))
 	}
 
 	// Get the approval
 	approval, err := s.deps.Repo.GetApproval(ctx, req.Msg.RequestId)
 	if err != nil || approval == nil {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("approval not found"))
+		return nil, svcerr.ToConnect(svcerr.NotFound("approval"))
 	}
 
 	if err := s.chatBelongsToUser(ctx, approval.ChatID); err != nil {
@@ -137,7 +138,7 @@ func (s *Service) Approve(
 	}
 
 	if approval.Status != int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_PENDING) {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("approval already processed"))
+		return nil, svcerr.ToConnect(svcerr.FailedPrecondition("approval already processed"))
 	}
 
 	// Get action_taken from request
@@ -184,7 +185,7 @@ func (s *Service) Approve(
 
 	if err != nil {
 		logging.ErrorContext(ctx, "Failed to approve request", "error", err, "requestID", req.Msg.RequestId)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to approve"))
+		return nil, svcerr.ToConnect(svcerr.Internal("failed to approve"))
 	}
 
 	// Signal the workflow
@@ -209,14 +210,14 @@ func (s *Service) Deny(
 	req *connect.Request[reliantv1.DenyRequest],
 ) (*connect.Response[reliantv1.DenyResponse], error) {
 	if req.Msg.RequestId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("request_id is required"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("request_id is required"))
 	}
 
 	// Get the approval
 	approval, err := s.deps.Repo.GetApproval(ctx, req.Msg.RequestId)
 	if err != nil || approval == nil {
 		logging.ErrorContext(ctx, "Failed to get approval", "error", err, "requestID", req.Msg.RequestId)
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("approval not found"))
+		return nil, svcerr.ToConnect(svcerr.NotFound("approval"))
 	}
 
 	if err := s.chatBelongsToUser(ctx, approval.ChatID); err != nil {
@@ -224,7 +225,7 @@ func (s *Service) Deny(
 	}
 
 	if approval.Status != int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_PENDING) {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("approval already processed"))
+		return nil, svcerr.ToConnect(svcerr.FailedPrecondition("approval already processed"))
 	}
 
 	// Use default denial reason if not provided.
@@ -279,7 +280,7 @@ func (s *Service) Deny(
 
 	if err != nil {
 		logging.ErrorContext(ctx, "Failed to deny request", "error", err, "approvalID", approval.ID)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to deny"))
+		return nil, svcerr.ToConnect(svcerr.Internal("failed to deny"))
 	}
 
 	// Create denial message with tool_results marked as denied — unless the
@@ -316,7 +317,7 @@ func (s *Service) BatchApprove(
 	req *connect.Request[reliantv1.BatchApproveRequest],
 ) (*connect.Response[reliantv1.BatchApproveResponse], error) {
 	if len(req.Msg.RequestIds) == 0 {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("request_ids cannot be empty"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("request_ids cannot be empty"))
 	}
 
 	// Get action_taken from request
@@ -330,7 +331,7 @@ func (s *Service) BatchApprove(
 	for _, requestID := range req.Msg.RequestIds {
 		approval, err := s.deps.Repo.GetApproval(ctx, requestID)
 		if err != nil || approval == nil {
-			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("approval not found: %s", requestID))
+			return nil, svcerr.ToConnect(svcerr.WithMessage(svcerr.ErrNotFound, fmt.Sprintf("approval not found: %s", requestID)))
 		}
 
 		// Validate all approvals belong to the same chat, and that the chat is
@@ -342,11 +343,11 @@ func (s *Service) BatchApprove(
 				return nil, err
 			}
 		} else if chatID != approval.ChatID {
-			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("all approvals must belong to the same chat"))
+			return nil, svcerr.ToConnect(svcerr.InvalidArgument("all approvals must belong to the same chat"))
 		}
 
 		if approval.Status != int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_PENDING) {
-			return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("approval %s is not pending", requestID))
+			return nil, svcerr.ToConnect(svcerr.FailedPrecondition(fmt.Sprintf("approval %s is not pending", requestID)))
 		}
 
 		// Dual-write: Update approval status AND create chat_update atomically
@@ -387,7 +388,7 @@ func (s *Service) BatchApprove(
 
 		if err != nil {
 			logging.ErrorContext(ctx, "Failed to update approval in batch", "requestID", requestID, "error", err)
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to approve"))
+			return nil, svcerr.ToConnect(svcerr.Internal("failed to approve"))
 		}
 
 		// Signal workflow
@@ -414,7 +415,7 @@ func (s *Service) BatchDeny(
 	req *connect.Request[reliantv1.BatchDenyRequest],
 ) (*connect.Response[reliantv1.BatchDenyResponse], error) {
 	if len(req.Msg.RequestIds) == 0 {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("request_ids cannot be empty"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("request_ids cannot be empty"))
 	}
 
 	// Use default denial reason if not provided.
@@ -437,7 +438,7 @@ func (s *Service) BatchDeny(
 		approval, err := s.deps.Repo.GetApproval(ctx, requestID)
 		if err != nil || approval == nil {
 			logging.ErrorContext(ctx, "Approval not found in batch", "requestID", requestID)
-			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("approval not found: %s", requestID))
+			return nil, svcerr.ToConnect(svcerr.WithMessage(svcerr.ErrNotFound, fmt.Sprintf("approval not found: %s", requestID)))
 		}
 		deniedStepApproval = deniedStepApproval || !answeredByItsRun(approval)
 
@@ -450,11 +451,11 @@ func (s *Service) BatchDeny(
 				return nil, err
 			}
 		} else if chatID != approval.ChatID {
-			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("all approvals must belong to the same chat"))
+			return nil, svcerr.ToConnect(svcerr.InvalidArgument("all approvals must belong to the same chat"))
 		}
 
 		if approval.Status != int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_PENDING) {
-			return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("approval %s is not pending", requestID))
+			return nil, svcerr.ToConnect(svcerr.FailedPrecondition(fmt.Sprintf("approval %s is not pending", requestID)))
 		}
 
 		// Dual-write: Update approval status AND create chat_update atomically
@@ -496,7 +497,7 @@ func (s *Service) BatchDeny(
 
 		if err != nil {
 			logging.ErrorContext(ctx, "Failed to update approval in batch", "requestID", requestID, "error", err)
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to deny"))
+			return nil, svcerr.ToConnect(svcerr.Internal("failed to deny"))
 		}
 
 		// Signal denial to the workflow

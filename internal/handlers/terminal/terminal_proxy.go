@@ -13,6 +13,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/serverkit"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -155,7 +156,7 @@ func (s *Service) CloseSession(
 	}
 
 	if req.Msg.SessionId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("session_id is required"))
+		return nil, svcerr.InvalidArgument("session_id is required")
 	}
 
 	cmdReq := map[string]any{
@@ -222,7 +223,7 @@ func (s *Service) StreamTerminal(
 
 	createReq := firstMsg.GetCreate()
 	if createReq == nil {
-		return connect.NewError(connect.CodeInvalidArgument, errors.New("first message must be a Create request"))
+		return svcerr.InvalidArgument("first message must be a Create request")
 	}
 
 	// Create the terminal session via DaemonCommand.

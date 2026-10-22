@@ -9,6 +9,7 @@ import (
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/structpb"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/connectionrpc"
 	"github.com/reliant-labs/reliant/internal/connections"
@@ -43,10 +44,10 @@ func (s *Service) SearchCatalog(ctx context.Context, req *connect.Request[relian
 		return nil, err
 	}
 	if s.deps.Search == nil {
-		return nil, connect.NewError(connect.CodeUnimplemented, errors.New("integration catalog search is not configured"))
+		return nil, svcerr.ToConnect(svcerr.Unimplemented("integration catalog search is not configured"))
 	}
 	if req.Msg.GetPageSize() < 0 {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("page_size must not be negative"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("page_size must not be negative"))
 	}
 	q := catalogindex.Query{
 		Text: req.Msg.GetQuery(), Category: req.Msg.GetCategory(), Integration: req.Msg.GetIntegration(),
@@ -55,7 +56,7 @@ func (s *Service) SearchCatalog(ctx context.Context, req *connect.Request[relian
 	for _, k := range req.Msg.GetKinds() {
 		kind, ok := catalogKindFromProto(k)
 		if !ok {
-			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("kinds: %s is not a catalog entry kind", k))
+			return nil, svcerr.ToConnect(svcerr.InvalidArgument(fmt.Sprintf("kinds: %s is not a catalog entry kind", k)))
 		}
 		q.Kinds = append(q.Kinds, kind)
 	}
@@ -84,10 +85,10 @@ func (s *Service) GetCatalogEntry(ctx context.Context, req *connect.Request[reli
 		return nil, err
 	}
 	if s.deps.Search == nil {
-		return nil, connect.NewError(connect.CodeUnimplemented, errors.New("integration catalog search is not configured"))
+		return nil, svcerr.ToConnect(svcerr.Unimplemented("integration catalog search is not configured"))
 	}
 	if req.Msg.GetRef() == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("ref is required"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("ref is required"))
 	}
 	e, connected, err := s.deps.Search.Get(ctx, userID, req.Msg.GetRef())
 	if err != nil {
@@ -95,7 +96,7 @@ func (s *Service) GetCatalogEntry(ctx context.Context, req *connect.Request[reli
 	}
 	entry, err := CatalogEntryToProto(e, connected)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, errors.New("catalog entry schema could not be encoded"))
+		return nil, svcerr.ToConnect(svcerr.Internal("catalog entry schema could not be encoded"))
 	}
 	var methods *connections.Integration
 	if s.deps.IntegrationMethods != nil {
@@ -113,10 +114,10 @@ func (s *Service) ListCatalogIntegrations(ctx context.Context, req *connect.Requ
 		return nil, err
 	}
 	if s.deps.Search == nil {
-		return nil, connect.NewError(connect.CodeUnimplemented, errors.New("integration catalog search is not configured"))
+		return nil, svcerr.ToConnect(svcerr.Unimplemented("integration catalog search is not configured"))
 	}
 	if req.Msg.GetPageSize() < 0 {
-		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("page_size must not be negative"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("page_size must not be negative"))
 	}
 	q := catalogindex.IntegrationQuery{
 		Category: req.Msg.GetCategory(), PageSize: int(req.Msg.GetPageSize()), PageToken: req.Msg.GetPageToken(),
@@ -124,7 +125,7 @@ func (s *Service) ListCatalogIntegrations(ctx context.Context, req *connect.Requ
 	for _, k := range req.Msg.GetKinds() {
 		kind, ok := catalogKindFromProto(k)
 		if !ok {
-			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("kinds: %s is not a catalog entry kind", k))
+			return nil, svcerr.ToConnect(svcerr.InvalidArgument(fmt.Sprintf("kinds: %s is not a catalog entry kind", k)))
 		}
 		q.Kinds = append(q.Kinds, kind)
 	}
@@ -160,7 +161,7 @@ func catalogSearchError(err error) error {
 	case errors.Is(err, context.DeadlineExceeded):
 		return connect.NewError(connect.CodeDeadlineExceeded, err)
 	}
-	return connect.NewError(connect.CodeInternal, errors.New("catalog search failed"))
+	return svcerr.ToConnect(svcerr.Internal("catalog search failed"))
 }
 
 func catalogKindFromProto(k reliantv1.CatalogEntryKind) (catalogindex.Kind, bool) {

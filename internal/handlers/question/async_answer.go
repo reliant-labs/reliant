@@ -11,6 +11,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/askuser"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -84,7 +85,7 @@ func (s *Service) resolveAsyncQuestion(
 		// Delivered but still pending: an answer sent again finds the
 		// message already queued and resolves it then.
 		logging.ErrorContext(ctx, "Delivered an async answer but failed to resolve its question", "error", err, "questionID", question.ID)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to resolve question"))
+		return nil, svcerr.Internal("failed to resolve question")
 	}
 
 	toolCallID := ""

@@ -7,6 +7,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -62,11 +63,11 @@ func (s *Service) RetryUsageLimitWait(
 ) (*connect.Response[reliantv1.RetryUsageLimitWaitResponse], error) {
 	userID := auth.MustGetUserID(ctx)
 	if req.Msg.ChatId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("chat_id is required"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("chat_id is required"))
 	}
 	chat, err := s.getChatForUser(ctx, req.Msg.ChatId, userID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
+		return nil, svcerr.ToConnect(svcerr.NotFound("chat"))
 	}
 	if !isWaitingOnUsageLimit(chat) {
 		return connect.NewResponse(&reliantv1.RetryUsageLimitWaitResponse{Woken: false}), nil
@@ -82,7 +83,7 @@ func (s *Service) RetryUsageLimitWait(
 	if err := s.deps.Temporal.SignalWorkflow(ctx, *chat.WorkflowID, "", v2.UsageLimitRetrySignalName, signal); err != nil {
 		logging.WarnContext(ctx, "Could not wake a run waiting on a usage limit",
 			"error", err, "chatID", chat.ID, "workflowID", *chat.WorkflowID)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to wake the run"))
+		return nil, svcerr.ToConnect(svcerr.Internal("failed to wake the run"))
 	}
 	logging.InfoContext(ctx, "Woke a run waiting on a usage limit", "chatID", chat.ID, "workflowID", *chat.WorkflowID)
 	return connect.NewResponse(&reliantv1.RetryUsageLimitWaitResponse{Woken: true}), nil

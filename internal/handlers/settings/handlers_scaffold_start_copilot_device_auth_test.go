@@ -7,6 +7,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	settings "github.com/reliant-labs/reliant/internal/handlers/settings"
 )
@@ -22,6 +23,6 @@ func TestStartCopilotDeviceAuth_Generated(t *testing.T) {
 	cancel()
 
 	_, err := svc.StartCopilotDeviceAuth(ctx, connect.NewRequest(&pb.StartCopilotDeviceAuthRequest{}))
-	require.Equal(t, connect.CodeInternal, connect.CodeOf(err))
+	require.Equal(t, connect.CodeInternal, svcerr.Code(err))
 	require.ErrorContains(t, err, "failed to start GitHub Copilot login")
 }

@@ -4,7 +4,6 @@ package token
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -62,7 +61,7 @@ func (s *Service) GetGitToken(
 			"your "+provider+" connection expired; reconnect it in Reliant")
 	case err != nil:
 		slog.ErrorContext(ctx, "git token unavailable", "user_id", userID, "provider", provider, "outcome", "unavailable")
-		return nil, connect.NewError(connect.CodeUnavailable, errors.New("git token service unavailable; retry"))
+		return nil, svcerr.ToConnect(svcerr.Unavailable("git token service unavailable; retry"))
 	}
 
 	resp := &reliantv1.GetGitTokenResponse{}
@@ -71,7 +70,7 @@ func (s *Service) GetGitToken(
 		return nil
 	}); err != nil || resp.AccessToken == "" {
 		slog.ErrorContext(ctx, "git token empty", "user_id", userID, "provider", provider, "outcome", "unavailable")
-		return nil, connect.NewError(connect.CodeUnavailable, errors.New("git token service unavailable; retry"))
+		return nil, svcerr.ToConnect(svcerr.Unavailable("git token service unavailable; retry"))
 	}
 	if tok.ExpiresAt != nil {
 		resp.ExpiresAt = tok.ExpiresAt.UTC().Format(time.RFC3339)
@@ -92,25 +91,21 @@ func (s *Service) daemonCredential(ctx context.Context, header http.Header) (*fa
 	bearer, ok := strings.CutPrefix(header.Get("Authorization"), "Bearer ")
 	bearer = strings.TrimSpace(bearer)
 	if !ok || !auth.IsAccessTokenFormat(bearer) {
-		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf(
-			"GetGitToken needs a Reliant daemon access token (rlat_) as its bearer"))
+		return nil, svcerr.ToConnect(svcerr.Unauthenticated("GetGitToken needs a Reliant daemon access token (rlat_) as its bearer"))
 	}
 	subject, err := s.deps.Authority.Introspect(ctx, bearer)
 	if errors.Is(err, tokenauthority.ErrInactive) {
-		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf(
-			"this Reliant credential is no longer valid; sign in to Reliant again"))
+		return nil, svcerr.ToConnect(svcerr.Unauthenticated("this Reliant credential is no longer valid; sign in to Reliant again"))
 	}
 	if err != nil {
 		slog.ErrorContext(ctx, "token authority failed", "op", "git-token-introspect", "error", tokenauthority.Describe(err))
-		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("token service unavailable"))
+		return nil, svcerr.ToConnect(svcerr.Unavailable("token service unavailable"))
 	}
 	if strings.TrimSpace(subject.ActingUserID) == "" {
-		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf(
-			"an organization token acts as no one, so it has no git account"))
+		return nil, svcerr.ToConnect(svcerr.PermissionDenied("an organization token acts as no one, so it has no git account"))
 	}
 	if !subject.Scopes.Has(fat.ScopeDaemonConnect) {
-		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf(
-			"only a daemon credential can fetch a git token"))
+		return nil, svcerr.ToConnect(svcerr.PermissionDenied("only a daemon credential can fetch a git token"))
 	}
 	return subject, nil
 }

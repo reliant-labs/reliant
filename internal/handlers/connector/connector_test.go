@@ -8,6 +8,7 @@ import (
 
 	"connectrpc.com/connect"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/require"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -154,7 +155,7 @@ func TestCreateConnectorRequiresAuth(t *testing.T) {
 
 	_, err := svc.CreateConnector(context.Background(), connect.NewRequest(validCreateRequest()))
 	require.Error(t, err)
-	require.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
+	require.Equal(t, connect.CodeUnauthenticated, svcerr.Code(err))
 }
 
 func TestCreateConnectorValidation(t *testing.T) {
@@ -238,7 +239,7 @@ func TestCreateConnectorValidation(t *testing.T) {
 
 			_, err := svc.CreateConnector(connectorCtx("user-1"), connect.NewRequest(req))
 			require.Error(t, err, tc.reason)
-			require.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+			require.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 			require.Empty(t, store.created, "an invalid request must not persist a grant")
 		})
 	}
@@ -333,7 +334,7 @@ func TestRevokeConnectorRequiresID(t *testing.T) {
 	_, err := svc.RevokeConnector(connectorCtx("user-1"),
 		connect.NewRequest(&reliantv1.RevokeConnectorRequest{}))
 	require.Error(t, err)
-	require.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	require.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 }
 
 func TestListConnectorsExcludesCredentials(t *testing.T) {
@@ -404,7 +405,7 @@ func TestAuthorizeClientUnknownConnectorIsNotFound(t *testing.T) {
 	_, err := svc.AuthorizeClient(connectorCtx("user-1"), connect.NewRequest(&reliantv1.AuthorizeClientRequest{
 		ClientId: "chatgpt", ConnectorId: ptr.Of("someone-elses"),
 	}))
-	require.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+	require.Equal(t, connect.CodeNotFound, svcerr.Code(err))
 	require.Empty(t, store.bindings, "nothing is bound to an unknown connector")
 }
 

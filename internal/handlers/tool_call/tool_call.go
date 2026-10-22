@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -24,26 +25,26 @@ func (s *Service) CancelToolCall(
 ) (*connect.Response[reliantv1.CancelToolCallResponse], error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok {
-		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("not authenticated"))
+		return nil, svcerr.Unauthenticated("not authenticated")
 	}
 
 	toolCallID := req.Msg.ToolCallId
 	if toolCallID == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("tool_call_id is required"))
+		return nil, svcerr.InvalidArgument("tool_call_id is required")
 	}
 
 	// Find the content block by tool_call_id
 	block, err := s.deps.Repo.GetContentBlockByToolCallID(ctx, toolCallID)
 	if err != nil {
 		logging.ErrorContext(ctx, "[CancelToolCall] Failed to find tool call", "error", err, "toolCallID", toolCallID)
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("tool call not found: %s", toolCallID))
+		return nil, svcerr.WithMessage(svcerr.ErrNotFound, fmt.Sprintf("tool call not found: %s", toolCallID))
 	}
 
 	// Get the message to find the chat ID
 	msg, err := s.deps.Repo.GetMessage(ctx, block.MessageID)
 	if err != nil {
 		logging.ErrorContext(ctx, "[CancelToolCall] Failed to find message for tool call", "error", err, "messageID", block.MessageID)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to find message for tool call"))
+		return nil, svcerr.Internal("failed to find message for tool call")
 	}
 
 	chatID := msg.ChatID
@@ -51,10 +52,10 @@ func (s *Service) CancelToolCall(
 	// Get the chat and verify ownership
 	chat, err := s.deps.Repo.GetChat(ctx, chatID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
+		return nil, svcerr.NotFound("chat")
 	}
 	if chat.UserID != userID {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
+		return nil, svcerr.NotFound("chat")
 	}
 
 	// Ask the daemon to stop this one execution.
@@ -217,26 +218,26 @@ func (s *Service) ConvertToBackground(
 ) (*connect.Response[reliantv1.ConvertToBackgroundResponse], error) {
 	userID, ok := auth.GetUserIDFromContext(ctx)
 	if !ok {
-		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("not authenticated"))
+		return nil, svcerr.Unauthenticated("not authenticated")
 	}
 
 	toolCallID := req.Msg.ToolCallId
 	if toolCallID == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("tool_call_id is required"))
+		return nil, svcerr.InvalidArgument("tool_call_id is required")
 	}
 
 	// Find the content block by tool_call_id
 	block, err := s.deps.Repo.GetContentBlockByToolCallID(ctx, toolCallID)
 	if err != nil {
 		logging.ErrorContext(ctx, "[ConvertToBackground] Failed to find tool call", "error", err, "toolCallID", toolCallID)
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("tool call not found: %s", toolCallID))
+		return nil, svcerr.WithMessage(svcerr.ErrNotFound, fmt.Sprintf("tool call not found: %s", toolCallID))
 	}
 
 	// Get the message to find the chat ID
 	msg, err := s.deps.Repo.GetMessage(ctx, block.MessageID)
 	if err != nil {
 		logging.ErrorContext(ctx, "[ConvertToBackground] Failed to find message for tool call", "error", err, "messageID", block.MessageID)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to find message for tool call"))
+		return nil, svcerr.Internal("failed to find message for tool call")
 	}
 
 	chatID := msg.ChatID
@@ -244,10 +245,10 @@ func (s *Service) ConvertToBackground(
 	// Get the chat and verify ownership
 	chat, err := s.deps.Repo.GetChat(ctx, chatID)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
+		return nil, svcerr.NotFound("chat")
 	}
 	if chat.UserID != userID {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
+		return nil, svcerr.NotFound("chat")
 	}
 
 	// First, check if there's already a background process for this tool call
@@ -286,8 +287,7 @@ func (s *Service) ConvertToBackground(
 	shell.GetBackgroundSignal().SetBackgrounded(toolCallID)
 
 	if s.deps.Router == nil {
-		return nil, connect.NewError(connect.CodeUnavailable,
-			fmt.Errorf("cannot background: no daemon router configured"))
+		return nil, svcerr.Unavailable("cannot background: no daemon router configured")
 	}
 	// Addressed by tool call id: that is the only id the UI can name, and the
 	// daemon registers each execution under it (see runtime.go).

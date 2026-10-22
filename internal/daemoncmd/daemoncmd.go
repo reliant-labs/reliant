@@ -8,6 +8,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/daemonerr"
 )
@@ -27,7 +28,7 @@ func New(deps Deps) Service {
 func UserID(ctx context.Context) (string, error) {
 	uid, ok := auth.GetUserIDFromContext(ctx)
 	if !ok {
-		return "", connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("user ID not found in context"))
+		return "", svcerr.ToConnect(svcerr.Unauthenticated("user ID not found in context"))
 	}
 	return uid, nil
 }

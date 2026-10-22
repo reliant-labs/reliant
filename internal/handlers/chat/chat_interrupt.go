@@ -4,10 +4,10 @@ package chat
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	"connectrpc.com/connect"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -55,6 +55,6 @@ func interruptThreadError(err error) error {
 		return connect.NewError(connect.CodeUnavailable, err)
 	default:
 		logging.Error("Failed to interrupt thread", "error", err)
-		return connect.NewError(connect.CodeInternal, fmt.Errorf("failed to interrupt thread"))
+		return svcerr.ToConnect(svcerr.Internal("failed to interrupt thread"))
 	}
 }

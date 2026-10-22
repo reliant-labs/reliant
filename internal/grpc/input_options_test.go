@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/integrations/inputoptions"
@@ -35,7 +36,7 @@ func TestListInputOptionsIsMountedBehindAuth(t *testing.T) {
 	typ := "github.repository"
 
 	_, err := client.ListInputOptions(context.Background(), connect.NewRequest(&reliantv1.ListInputOptionsRequest{Type: &typ}))
-	require.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err), "got %v", err)
+	require.Equal(t, connect.CodeUnauthenticated, svcerr.Code(err), "got %v", err)
 	assert.Empty(t, opts.users, "an anonymous caller never reaches the option service")
 
 	resp, err := client.ListInputOptions(context.Background(), authed(&reliantv1.ListInputOptionsRequest{Type: &typ}))
@@ -54,6 +55,6 @@ func TestListInputOptionsWithoutAnOptionSourceIsUnimplemented(t *testing.T) {
 	client := reliantv1connect.NewCatalogServiceClient(h2cClient(), baseURL)
 	typ := "github.repository"
 	_, err := client.ListInputOptions(context.Background(), authed(&reliantv1.ListInputOptionsRequest{Type: &typ}))
-	require.Equal(t, connect.CodeUnimplemented, connect.CodeOf(err), "got %v", err)
+	require.Equal(t, connect.CodeUnimplemented, svcerr.Code(err), "got %v", err)
 	require.Contains(t, err.Error(), "not configured")
 }

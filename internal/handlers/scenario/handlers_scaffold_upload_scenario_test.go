@@ -8,6 +8,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/forge/pkg/tdd"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -84,6 +85,6 @@ func TestUploadScenario_Generated(t *testing.T) {
 	t.Run("without a daemon router the upload is unavailable", func(t *testing.T) {
 		svc := scenario.NewTestScenario(t, scenario.WithScenarioDeps(scenario.Deps{Repo: newScenarioRepo(&fixture{})}))
 		_, err := svc.UploadScenario(scenario.AuthedContext(t), upload(func(*pb.UploadScenarioRequest) {}))
-		require.Equal(t, connect.CodeUnavailable, connect.CodeOf(err))
+		require.Equal(t, connect.CodeUnavailable, svcerr.Code(err))
 	})
 }

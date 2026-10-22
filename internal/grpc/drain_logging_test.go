@@ -35,7 +35,7 @@ func TestDrainingStreamIsAnExpectedOutcomeNotAFailure(t *testing.T) {
 	require.NoError(t, err)
 	for stream.Receive() {
 	}
-	require.Equal(t, connect.CodeUnavailable, connect.CodeOf(stream.Err()),
+	require.Equal(t, connect.CodeUnavailable, svcerr.Code(stream.Err()),
 		"the client still receives Unavailable: that is its reconnect signal")
 	require.NoError(t, stream.Close())
 

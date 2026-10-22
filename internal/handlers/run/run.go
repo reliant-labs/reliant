@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -24,20 +25,20 @@ import (
 // PermissionDenied, matching ChatService — existence is not disclosed.
 func (s *Service) runOwnedBy(ctx context.Context, userID, runID string) (*core.Workflow, *core.Chat, error) {
 	if runID == "" {
-		return nil, nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("run_id is required"))
+		return nil, nil, svcerr.ToConnect(svcerr.InvalidArgument("run_id is required"))
 	}
 
 	run, err := s.deps.Repo.GetWorkflow(ctx, runID)
 	if err != nil || run == nil {
-		return nil, nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("run not found"))
+		return nil, nil, svcerr.ToConnect(svcerr.NotFound("run"))
 	}
 
 	chat, err := s.deps.Repo.GetChat(ctx, run.ChatID)
 	if err != nil || chat == nil {
-		return nil, nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("run not found"))
+		return nil, nil, svcerr.ToConnect(svcerr.NotFound("run"))
 	}
 	if chat.UserID != userID {
-		return nil, nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("run not found"))
+		return nil, nil, svcerr.ToConnect(svcerr.NotFound("run"))
 	}
 
 	return run, chat, nil
@@ -97,7 +98,7 @@ func (s *Service) StartRun(
 	userID := auth.MustGetUserID(ctx)
 
 	if req.Msg.Workflow == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("workflow is required"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("workflow is required"))
 	}
 
 	if req.Msg.SessionId != "" {
@@ -114,7 +115,7 @@ func (s *Service) startInSession(
 ) (*connect.Response[reliantv1.StartRunResponse], error) {
 	chat, err := s.deps.Repo.GetChat(ctx, msg.SessionId)
 	if err != nil || chat == nil || chat.UserID != userID {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("session not found"))
+		return nil, svcerr.ToConnect(svcerr.NotFound("session"))
 	}
 
 	// A session that has never started (a branch) is started, not continued:
@@ -190,7 +191,7 @@ func (s *Service) startWithNewSession(
 
 	run, err := s.deps.Repo.GetWorkflow(ctx, resp.Msg.WorkflowId)
 	if err != nil || run == nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("run was started but could not be read back"))
+		return nil, svcerr.ToConnect(svcerr.Internal("run was started but could not be read back"))
 	}
 	return connect.NewResponse(&reliantv1.StartRunResponse{Run: runToProto(run)}), nil
 }
@@ -205,8 +206,7 @@ func (s *Service) startWithNewSession(
 func (s *Service) defaultProjectID(ctx context.Context, userID string) (string, error) {
 	projects, err := s.deps.Repo.ListProjects(ctx, db.ProjectFilters{UserID: userID, Limit: 1})
 	if err != nil || len(projects) == 0 {
-		return "", connect.NewError(connect.CodeFailedPrecondition,
-			fmt.Errorf("no project available to host the run; supply session_id or create a project first"))
+		return "", svcerr.ToConnect(svcerr.FailedPrecondition("no project available to host the run; supply session_id or create a project first"))
 	}
 	return projects[0].ID, nil
 }
@@ -218,11 +218,11 @@ func (s *Service) respondWithSessionRun(
 ) (*connect.Response[reliantv1.StartRunResponse], error) {
 	chat, err := s.deps.Repo.GetChat(ctx, sessionID)
 	if err != nil || chat == nil || chat.WorkflowID == nil || *chat.WorkflowID == "" {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("run was started but could not be read back"))
+		return nil, svcerr.ToConnect(svcerr.Internal("run was started but could not be read back"))
 	}
 	run, err := s.deps.Repo.GetWorkflow(ctx, *chat.WorkflowID)
 	if err != nil || run == nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("run was started but could not be read back"))
+		return nil, svcerr.ToConnect(svcerr.Internal("run was started but could not be read back"))
 	}
 	return connect.NewResponse(&reliantv1.StartRunResponse{Run: runToProto(run)}), nil
 }
@@ -247,7 +247,7 @@ func (s *Service) SignalRun(
 	}
 
 	if len(req.Msg.Messages) == 0 {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("messages is required"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("messages is required"))
 	}
 
 	// Deliverable means executing, or paused and about to resume. Live() also
@@ -314,18 +314,18 @@ func (s *Service) ListRuns(
 		}
 		children, err := s.deps.Repo.ListChildWorkflows(ctx, req.Msg.GetParentId())
 		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list runs"))
+			return nil, svcerr.ToConnect(svcerr.Internal("failed to list runs"))
 		}
 		return connect.NewResponse(filterRunsToProto(children, req.Msg)), nil
 
 	case req.Msg.GetSessionId() != "":
 		chat, err := s.deps.Repo.GetChat(ctx, req.Msg.GetSessionId())
 		if err != nil || chat == nil || chat.UserID != userID {
-			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("session not found"))
+			return nil, svcerr.ToConnect(svcerr.NotFound("session"))
 		}
 		runs, err := s.deps.Repo.ListRootWorkflows(ctx, req.Msg.GetSessionId())
 		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list runs"))
+			return nil, svcerr.ToConnect(svcerr.Internal("failed to list runs"))
 		}
 		return connect.NewResponse(filterRunsToProto(runs, req.Msg)), nil
 
@@ -365,7 +365,7 @@ func (s *Service) listAllRuns(
 	}
 	for _, st := range req.DisplayStates {
 		if st == reliantv1.RunDisplayState_RUN_DISPLAY_STATE_UNSPECIFIED {
-			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("display_states must not contain UNSPECIFIED"))
+			return nil, svcerr.ToConnect(svcerr.InvalidArgument("display_states must not contain UNSPECIFIED"))
 		}
 		filters.DisplayStates = append(filters.DisplayStates, db.RunDisplayState(st))
 	}
@@ -380,14 +380,14 @@ func (s *Service) listAllRuns(
 	if req.PageToken != nil && *req.PageToken != "" {
 		cursor, err := decodeRunCursor(*req.PageToken)
 		if err != nil {
-			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid page_token"))
+			return nil, svcerr.ToConnect(svcerr.InvalidArgument("invalid page_token"))
 		}
 		filters.After = cursor
 	}
 
 	items, hasMore, err := s.deps.Repo.ListRuns(ctx, filters)
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list runs"))
+		return nil, svcerr.ToConnect(svcerr.Internal("failed to list runs"))
 	}
 
 	resp := &reliantv1.ListRunsResponse{Runs: make([]*reliantv1.Run, 0, len(items))}
@@ -414,7 +414,7 @@ func (s *Service) LastRunPerWorkflow(
 		Workflows: req.Msg.Workflow,
 	})
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list runs"))
+		return nil, svcerr.ToConnect(svcerr.Internal("failed to list runs"))
 	}
 	resp := &reliantv1.LastRunPerWorkflowResponse{Runs: make([]*reliantv1.Run, 0, len(items))}
 	for _, item := range items {

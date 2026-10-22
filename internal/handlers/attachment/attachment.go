@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/attachment"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -67,24 +68,22 @@ func (s *Service) UploadAttachment(
 
 	// Validate required fields
 	if filename == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("filename is required"))
+		return nil, svcerr.InvalidArgument("filename is required")
 	}
 
 	if len(content) == 0 {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("file content is required"))
+		return nil, svcerr.InvalidArgument("file content is required")
 	}
 
 	// Validate file type - UploadAttachment accepts images and text files
 	attachmentType := attachment.GetAttachmentType(filename)
 	if attachmentType == attachment.TypeUnsupported {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("unsupported file type: %s. Supported: images (jpg, png, gif, webp) and text files (md, txt, json, code files)", filepath.Ext(filename)))
+		return nil, svcerr.InvalidArgument(fmt.Sprintf("unsupported file type: %s. Supported: images (jpg, png, gif, webp) and text files (md, txt, json, code files)", filepath.Ext(filename)))
 	}
 
 	// Check file size
 	if int64(len(content)) > s.deps.MaxFileSize {
-		return nil, connect.NewError(connect.CodeResourceExhausted,
-			fmt.Errorf("file too large: maximum size is %d bytes", s.deps.MaxFileSize))
+		return nil, svcerr.ResourceExhausted(fmt.Sprintf("file too large: maximum size is %d bytes", s.deps.MaxFileSize))
 	}
 
 	// Default MIME type
@@ -118,7 +117,7 @@ func (s *Service) UploadAttachment(
 
 	if err := s.deps.Repo.CreateAttachment(ctx, dbAttachment); err != nil {
 		logging.ErrorContext(ctx, "Failed to save attachment to database", "error", err, "attachmentID", attachmentID)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to save attachment"))
+		return nil, svcerr.Internal("failed to save attachment")
 	}
 
 	logging.DebugContext(ctx, "File uploaded successfully via gRPC",
@@ -157,17 +156,17 @@ func (s *Service) GetAttachment(
 	attachmentID := req.Msg.AttachmentId
 
 	if attachmentID == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("attachment_id is required"))
+		return nil, svcerr.InvalidArgument("attachment_id is required")
 	}
 
 	dbAttachment, err := s.deps.Repo.GetAttachment(ctx, attachmentID)
 	if err != nil || dbAttachment == nil {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("attachment not found"))
+		return nil, svcerr.NotFound("attachment")
 	}
 
 	// Verify ownership
 	if dbAttachment.UserID != userID {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("attachment not found"))
+		return nil, svcerr.NotFound("attachment")
 	}
 
 	attachmentInfo := dbAttachmentToProto(dbAttachment)
@@ -187,21 +186,21 @@ func (s *Service) DeleteAttachment(
 	attachmentID := req.Msg.AttachmentId
 
 	if attachmentID == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("attachment_id is required"))
+		return nil, svcerr.InvalidArgument("attachment_id is required")
 	}
 
 	// Verify the attachment exists and belongs to this user
 	dbAttachment, err := s.deps.Repo.GetAttachment(ctx, attachmentID)
 	if err != nil || dbAttachment == nil {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("attachment not found"))
+		return nil, svcerr.NotFound("attachment")
 	}
 	if dbAttachment.UserID != userID {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("attachment not found"))
+		return nil, svcerr.NotFound("attachment")
 	}
 
 	if err := s.deps.Repo.DeleteAttachment(ctx, attachmentID); err != nil {
 		logging.ErrorContext(ctx, "Failed to delete attachment from database", "error", err, "attachmentID", attachmentID)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to delete attachment"))
+		return nil, svcerr.Internal("failed to delete attachment")
 	}
 
 	logging.DebugContext(ctx, "Attachment deleted via gRPC", "attachmentID", attachmentID, "userID", userID)
@@ -226,11 +225,11 @@ func (s *Service) CreateFileReference(
 
 	// Validate required fields
 	if filePath == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("file_path is required"))
+		return nil, svcerr.InvalidArgument("file_path is required")
 	}
 
 	if len(content) == 0 {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("content is required: daemon must read the file and send its bytes"))
+		return nil, svcerr.InvalidArgument("content is required: daemon must read the file and send its bytes")
 	}
 
 	// Use filename from request, or extract from path
@@ -242,17 +241,14 @@ func (s *Service) CreateFileReference(
 	attachmentType := attachment.GetAttachmentType(filename)
 	if attachmentType != attachment.TypeFileReference {
 		if attachmentType == attachment.TypeImage {
-			return nil, connect.NewError(connect.CodeInvalidArgument,
-				fmt.Errorf("use UploadAttachment for image files, not CreateFileReference"))
+			return nil, svcerr.InvalidArgument("use UploadAttachment for image files, not CreateFileReference")
 		}
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("unsupported file type: %s", filepath.Ext(filename)))
+		return nil, svcerr.InvalidArgument(fmt.Sprintf("unsupported file type: %s", filepath.Ext(filename)))
 	}
 
 	// Check file size
 	if int64(len(content)) > s.deps.MaxFileSize {
-		return nil, connect.NewError(connect.CodeResourceExhausted,
-			fmt.Errorf("file too large: %d bytes exceeds maximum of %d bytes", len(content), s.deps.MaxFileSize))
+		return nil, svcerr.ResourceExhausted(fmt.Sprintf("file too large: %d bytes exceeds maximum of %d bytes", len(content), s.deps.MaxFileSize))
 	}
 
 	// Get MIME type
@@ -281,7 +277,7 @@ func (s *Service) CreateFileReference(
 
 	if err := s.deps.Repo.CreateAttachment(ctx, dbAttachment); err != nil {
 		logging.ErrorContext(ctx, "Failed to save file reference to database", "error", err, "attachmentID", attachmentID)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to create file reference"))
+		return nil, svcerr.Internal("failed to create file reference")
 	}
 
 	logging.DebugContext(ctx, "File reference created via gRPC",

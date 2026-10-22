@@ -18,6 +18,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/getsentry/sentry-go"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/telemetry"
 	"github.com/reliant-labs/reliant/internal/toolexec"
@@ -218,7 +219,7 @@ func (a failingAPI) call(t *testing.T, procedure, requestID string) connect.Code
 	req.Header().Set("X-Request-Id", requestID)
 	_, err := client.CallUnary(context.Background(), req)
 	require.Error(t, err)
-	return connect.CodeOf(err)
+	return svcerr.Code(err)
 }
 
 // daemonFault is a daemon command that reached the machine and failed there:
@@ -273,7 +274,7 @@ func TestFailedStreamIsOneSentryEvent(t *testing.T) {
 	require.NoError(t, err)
 	for stream.Receive() {
 	}
-	require.Equal(t, connect.CodeInternal, connect.CodeOf(stream.Err()))
+	require.Equal(t, connect.CodeInternal, svcerr.Code(stream.Err()))
 	require.NoError(t, stream.Close())
 
 	events := recorder.awaitExactly(t, 1)

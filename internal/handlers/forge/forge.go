@@ -11,6 +11,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/daemoncmd"
@@ -281,14 +282,14 @@ func (s *Service) forgeProjectPath(ctx context.Context, projectID, userID string
 // owns it.
 func (s *Service) forgeProject(ctx context.Context, projectID, userID string) (*db.Project, error) {
 	if strings.TrimSpace(projectID) == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("project_id is required"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("project_id is required"))
 	}
 	project, err := s.deps.Repo.GetProjectWithUserCheck(ctx, projectID, userID)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "access denied") {
-			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found"))
+			return nil, svcerr.ToConnect(svcerr.NotFound("project"))
 		}
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("database error"))
+		return nil, svcerr.ToConnect(svcerr.Internal("database error"))
 	}
 	return project, nil
 }
@@ -333,7 +334,7 @@ func (s *Service) rememberForgeProjectName(ctx context.Context, project *db.Proj
 func forgeEnvArg(env string) (string, error) {
 	trimmed := strings.TrimSpace(env)
 	if trimmed == "" {
-		return "", connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("env is required"))
+		return "", svcerr.ToConnect(svcerr.InvalidArgument("env is required"))
 	}
 	return trimmed, nil
 }
@@ -430,8 +431,7 @@ func remapForgeDispatchError(commandType string, err error) error {
 	}
 	switch {
 	case strings.Contains(text, forgeErrProjectDirNotExistMarker):
-		return connect.NewError(connect.CodeNotFound,
-			fmt.Errorf("forge project path not found on the daemon: %s", commandType))
+		return svcerr.ToConnect(svcerr.WithMessage(svcerr.ErrNotFound, fmt.Sprintf("forge project path not found on the daemon: %s", commandType)))
 	case strings.Contains(text, forgeErrCommandTimedOutMarker):
 		// The daemon answered: forge ran out of this command's budget. Not
 		// an outage (Unavailable reads as "daemon offline") and not a
@@ -786,7 +786,7 @@ type forgePromoteReply struct {
 func forgeReleaseArg(release string) (string, error) {
 	trimmed := strings.TrimSpace(release)
 	if trimmed == "" {
-		return "", connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("release is required"))
+		return "", svcerr.ToConnect(svcerr.InvalidArgument("release is required"))
 	}
 	return trimmed, nil
 }
@@ -883,14 +883,12 @@ func (s *Service) ApplyPromote(
 	expected := strings.TrimSpace(req.Msg.ExpectedCurrentRelease)
 	switch {
 	case req.Msg.ExpectUnbound && expected != "":
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("expect_unbound and expected_current_release %q are contradictory: assert either "+
-				"that the environment was unbound or which release it was bound to", expected))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument(fmt.Sprintf("expect_unbound and expected_current_release %q are contradictory: assert either "+
+			"that the environment was unbound or which release it was bound to", expected)))
 	case !req.Msg.ExpectUnbound && expected == "":
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("expected_current_release is required (or set expect_unbound for a first promote): "+
-				"promoting overwrites %q's binding irrecoverably, so the request must state the release it "+
-				"expects to replace", env))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument(fmt.Sprintf("expected_current_release is required (or set expect_unbound for a first promote): "+
+			"promoting overwrites %q's binding irrecoverably, so the request must state the release it "+
+			"expects to replace", env)))
 	}
 
 	path, err := s.forgeProjectPath(ctx, req.Msg.ProjectId, userID)
@@ -935,8 +933,7 @@ func (s *Service) ApplyPromote(
 			Detail:                 reply.Refused.Detail,
 		}
 
-		connectErr := connect.NewError(connect.CodeFailedPrecondition,
-			fmt.Errorf("promote refused, nothing was written: %s", reply.Refused.Detail))
+		connectErr := svcerr.ToConnect(svcerr.FailedPrecondition(fmt.Sprintf("promote refused, nothing was written: %s", reply.Refused.Detail)))
 		// The structured detail is what makes this recoverable without a blind
 		// retry. If it cannot be attached the error still stands — failing
 		// closed is the property that must not depend on the detail encoding.
@@ -1157,8 +1154,7 @@ func forgeDeployRefusedError(refused *forgeDeployRefusalReply) *connect.Error {
 		RunningHandle:           refused.RunningHandle,
 	}
 
-	connectErr := connect.NewError(connect.CodeFailedPrecondition,
-		fmt.Errorf("deploy refused, nothing was applied: %s", refused.Detail))
+	connectErr := svcerr.ToConnect(svcerr.FailedPrecondition(fmt.Sprintf("deploy refused, nothing was applied: %s", refused.Detail)))
 	// The structured detail is what makes this recoverable without a blind
 	// retry against a cluster. If it cannot be attached the error still
 	// stands — failing closed must not depend on the detail encoding.
@@ -1321,11 +1317,10 @@ func (s *Service) StartDeploy(
 	// operator never saw is the accident this whole path is built around.
 	expectedContext := strings.TrimSpace(req.Msg.ExpectedDeclaredContext)
 	if expectedContext == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("expected_declared_context is required: deploying to %q applies manifests to a "+
-				"live cluster, and forge applies to the context the environment DECLARES — which can "+
-				"change between a preview and this confirmation — so the request must state the "+
-				"cluster the operator saw named", env))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument(fmt.Sprintf("expected_declared_context is required: deploying to %q applies manifests to a "+
+			"live cluster, and forge applies to the context the environment DECLARES — which can "+
+			"change between a preview and this confirmation — so the request must state the "+
+			"cluster the operator saw named", env)))
 	}
 
 	// And the release claim, in the same three-way shape promote uses: an unset
@@ -1333,15 +1328,13 @@ func (s *Service) StartDeploy(
 	expectedRelease := strings.TrimSpace(req.Msg.ExpectedCurrentRelease)
 	switch {
 	case req.Msg.ExpectUnbound && expectedRelease != "":
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("expect_unbound and expected_current_release %q are contradictory: assert "+
-				"either that the environment had no release binding or which release it was bound to",
-				expectedRelease))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument(fmt.Sprintf("expect_unbound and expected_current_release %q are contradictory: assert "+
+			"either that the environment had no release binding or which release it was bound to",
+			expectedRelease)))
 	case !req.Msg.ExpectUnbound && expectedRelease == "":
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("expected_current_release is required (or set expect_unbound for an "+
-				"environment with no binding): the token states the binding the operator "+
-				"reviewed for %q, so the request must name it", env))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument(fmt.Sprintf("expected_current_release is required (or set expect_unbound for an "+
+			"environment with no binding): the token states the binding the operator "+
+			"reviewed for %q, so the request must name it", env)))
 	}
 
 	// THE CONTENT CLAIM, which is what the target token above could never
@@ -1350,24 +1343,21 @@ func (s *Service) StartDeploy(
 	// runs rather than the change set a human read.
 	approveDigest := strings.TrimSpace(req.Msg.ApproveDigest)
 	if approveDigest == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("approve_digest is required: deploying %q ships a change set, and the "+
-				"request must name the one a human reviewed. Compute it with StartDeployPlan "+
-				"and send that plan's digest", env))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument(fmt.Sprintf("approve_digest is required: deploying %q ships a change set, and the "+
+			"request must name the one a human reviewed. Compute it with StartDeployPlan "+
+			"and send that plan's digest", env)))
 	}
 	releaseVersion := strings.TrimSpace(req.Msg.ReleaseVersion)
 	if releaseVersion == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("release_version is required: it is the release the plan was computed "+
-				"for, and deploying it by name is what ships those artifacts. Without it the "+
-				"deploy would build and cut a second release, whose plan the approved digest "+
-				"could not match"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("release_version is required: it is the release the plan was computed " +
+			"for, and deploying it by name is what ships those artifacts. Without it the " +
+			"deploy would build and cut a second release, whose plan the approved digest " +
+			"could not match"))
 	}
 	for _, code := range req.Msg.AcknowledgedFindings {
 		if strings.TrimSpace(code) == "" {
-			return nil, connect.NewError(connect.CodeInvalidArgument,
-				fmt.Errorf("acknowledged_findings must not contain an empty value: each entry "+
-					"names one destructive change from the approved plan"))
+			return nil, svcerr.ToConnect(svcerr.InvalidArgument("acknowledged_findings must not contain an empty value: each entry " +
+				"names one destructive change from the approved plan"))
 		}
 	}
 
@@ -1465,7 +1455,7 @@ func (s *Service) GetDeployStatus(
 	}
 	handle := strings.TrimSpace(req.Msg.Handle)
 	if handle == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("handle is required"))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument("handle is required"))
 	}
 	// The project is resolved even though the daemon keys jobs by handle alone:
 	// it is what enforces that the caller owns the project whose daemon is being

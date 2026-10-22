@@ -7,6 +7,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	settings "github.com/reliant-labs/reliant/internal/handlers/settings"
 )
@@ -52,7 +53,7 @@ func TestNeverImplementedRPCsAnswerUnimplemented(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			err := call(ctx)
-			require.Equal(t, connect.CodeUnimplemented, connect.CodeOf(err))
+			require.Equal(t, connect.CodeUnimplemented, svcerr.Code(err))
 			require.ErrorContains(t, err, "reliant.v1.SettingsService."+name+" is not implemented")
 		})
 	}

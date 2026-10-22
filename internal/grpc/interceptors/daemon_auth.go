@@ -9,6 +9,7 @@ import (
 
 	"connectrpc.com/connect"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/auth"
 )
 
@@ -41,22 +42,21 @@ func NewDaemonAuthInterceptor(tokens auth.AccessTokenIntrospector) (*DaemonAuthI
 func (i *DaemonAuthInterceptor) authenticate(ctx context.Context, header func(string) string) (context.Context, error) {
 	authHeader := strings.TrimSpace(header("Authorization"))
 	if authHeader == "" {
-		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("missing authorization token"))
+		return nil, svcerr.ToConnect(svcerr.Unauthenticated("missing authorization token"))
 	}
 	rawToken := strings.TrimPrefix(authHeader, "Bearer ")
 	if rawToken == authHeader {
-		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("invalid authorization header format"))
+		return nil, svcerr.ToConnect(svcerr.Unauthenticated("invalid authorization header format"))
 	}
 	rawToken = strings.TrimSpace(rawToken)
 	if !auth.IsAccessTokenFormat(rawToken) {
-		return nil, connect.NewError(connect.CodeUnauthenticated,
-			fmt.Errorf("daemon credential must be an rlat_ access token; re-register the daemon"))
+		return nil, svcerr.ToConnect(svcerr.Unauthenticated("daemon credential must be an rlat_ access token; re-register the daemon"))
 	}
 
 	p, err := i.tokens.Introspect(ctx, rawToken)
 	if err != nil {
 		if errors.Is(err, auth.ErrAccessTokenInactive) {
-			return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("invalid daemon auth token"))
+			return nil, svcerr.ToConnect(svcerr.Unauthenticated("invalid daemon auth token"))
 		}
 		// The authority is unreachable: our outage, not the daemon's bad
 		// credential. Unavailable makes the daemon retry instead of
@@ -64,10 +64,10 @@ func (i *DaemonAuthInterceptor) authenticate(ctx context.Context, header func(st
 		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("daemon credential verification unavailable: %w", err))
 	}
 	if !p.Scopes.Permits(fat.ScopeDaemonConnect) || p.ActingUserID == "" {
-		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("token does not grant daemon:connect"))
+		return nil, svcerr.ToConnect(svcerr.Unauthenticated("token does not grant daemon:connect"))
 	}
 	if p.Resource != nil && p.Resource.Kind != fat.ResourceDaemon {
-		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("token is bound to a non-daemon resource"))
+		return nil, svcerr.ToConnect(svcerr.Unauthenticated("token is bound to a non-daemon resource"))
 	}
 
 	ctx = context.WithValue(ctx, auth.UserIDContextKey, p.ActingUserID)

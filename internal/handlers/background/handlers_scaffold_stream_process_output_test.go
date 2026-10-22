@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 
 	background "github.com/reliant-labs/reliant/internal/handlers/background"
@@ -44,7 +45,7 @@ func TestStreamProcessOutput_Generated(t *testing.T) {
 			require.NoError(t, err)
 			defer stream.Close()
 			assert.False(t, stream.Receive(), "no event before the request is accepted")
-			assert.Equal(t, tc.want, connect.CodeOf(stream.Err()))
+			assert.Equal(t, tc.want, svcerr.Code(stream.Err()))
 		})
 	}
 }

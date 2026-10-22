@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/workflow/threadwake"
@@ -222,7 +223,7 @@ func TestResolveAsyncQuestion_FailedDeliveryKeepsTheQuestionPending(t *testing.T
 	err := f.answer(t, "q-refused", sqliteAnswer)
 
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeFailedPrecondition, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(err))
 	assert.Equal(t, db.QuestionStatusPending, f.status(t, "q-refused").Status, "still answerable")
 
 	// Answered again once the chat can take it: delivered and resolved.
@@ -267,7 +268,7 @@ func TestListAsyncQuestions(t *testing.T) {
 	assert.Equal(t, "q-blocking", pending.Msg.Questions[0].QuestionId)
 
 	_, err = f.svc.ListAsyncQuestions(AuthedContext(t), connect.NewRequest(&reliantv1.ListAsyncQuestionsRequest{ChatId: uuid.NewString()}))
-	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err), "not the caller's chat")
+	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err), "not the caller's chat")
 }
 
 func TestFormatAsyncAnswer(t *testing.T) {

@@ -8,6 +8,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/connectionrpc"
 	"github.com/reliant-labs/reliant/internal/connections"
@@ -33,7 +34,7 @@ func connectionError(err error) error {
 		if errors.Is(err, context.DeadlineExceeded) {
 			return connect.NewError(connect.CodeDeadlineExceeded, err)
 		}
-		return connect.NewError(connect.CodeInternal, errors.New("connection service error"))
+		return svcerr.ToConnect(svcerr.Internal("connection service error"))
 	}
 	msg := errors.New(e.Message)
 	switch e.Code {
@@ -48,7 +49,7 @@ func connectionError(err error) error {
 	case connections.CodeUnavailable:
 		return connect.NewError(connect.CodeUnavailable, msg)
 	default:
-		return connect.NewError(connect.CodeInternal, errors.New("connection service error"))
+		return svcerr.ToConnect(svcerr.Internal("connection service error"))
 	}
 }
 
