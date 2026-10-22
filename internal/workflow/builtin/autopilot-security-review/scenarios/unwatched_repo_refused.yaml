@@ -1,0 +1,10 @@
+name: unwatched_repo_refused
+description: A run for a repository that is not in `repos` (a Run now naming another repo) refuses before reading anything.
+inputs:
+  repos: [reliant-labs/reliant]
+  repo: evil/repo
+  pr_number: 1
+expect:
+  outcome: completed
+  completed: [check, invalid]
+  not_reached: [me, pr, issue, reviews, dir, review, post]

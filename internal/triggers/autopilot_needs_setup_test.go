@@ -28,6 +28,7 @@ var autopilotRepoScoped = map[string][]string{
 	"builtin://autopilot-pr-review":        {"pr-opened", "re-review-label", "re-review-comment"},
 	"builtin://autopilot-review-responder": {"review-submitted", "review-comment", "pr-comment"},
 	"builtin://autopilot-issue-worker":     {"ready-label", "mention"},
+	"builtin://autopilot-security-review":  {"pr-updated", "label-added", "review-comment"},
 }
 
 // legacyActivation is a row as the old pack's Enable wrote it.
