@@ -161,6 +161,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge env up`](#reliant-forge-env-up) | Bring the whole dev loop up on this machine: build + deploy + host + frontend |
 | [`reliant forge fix`](#reliant-forge-fix) | Rewrite your code to what a lint asks for (codemods, run on request) |
 | [`reliant forge fix composition-graph`](#reliant-forge-fix-composition-graph) | Move a project off Infra / NewComponents / ServeSpec onto the composition graph |
+| [`reliant forge fix config-proto-package`](#reliant-forge-fix-config-proto-package) | Move the config protos to proto/<project>/config/v1, package <project>.config.v1 (no shared config.v1 since v0.1.47) |
 | [`reliant forge fix connect-errors`](#reliant-forge-fix-connect-errors) | Rewrite fixed-message connect.NewError calls to pkg/svcerr, wire-identically, and list the rest |
 | [`reliant forge fix narrow-deps`](#reliant-forge-fix-narrow-deps) | Declare the interfaces a component's Deps actually use, and retype its fields to them |
 | [`reliant forge fix operatorkit`](#reliant-forge-fix-operatorkit) | Rename lifecyclekit.Run / Controller / Options to operatorkit (moved in v0.1.46) |
@@ -182,14 +183,22 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge lint`](#reliant-forge-lint) | Run linters on the project (report-only: writes nothing unless --fix) |
 | [`reliant forge login`](#reliant-forge-login) | Authenticate to the control plane(s) this project declares |
 | [`reliant forge logout`](#reliant-forge-logout) | Forget the stored credential for this project's control plane(s) |
-| [`reliant forge observe`](#reliant-forge-observe) | Read back what the local observability stack collected |
-| [`reliant forge observe alerts`](#reliant-forge-observe-alerts) | Alert rules declared for an environment |
-| [`reliant forge observe alerts check`](#reliant-forge-observe-alerts-check) | Evaluate the env's alert rules against the local ClickStack and print what would fire |
-| [`reliant forge observe alerts run`](#reliant-forge-observe-alerts-run) | Evaluate the env's alert rules continuously and deliver what fires through the local Alertmanager |
-| [`reliant forge observe dashboards`](#reliant-forge-observe-dashboards) | Work with the dashboards a release carries |
-| [`reliant forge observe dashboards check`](#reliant-forge-observe-dashboards-check) | Validate the dashboards a release bundle would carry |
-| [`reliant forge observe metrics`](#reliant-forge-observe-metrics) | Print the metrics a service declares: name, type, unit, attributes, stability |
-| [`reliant forge observe profile`](#reliant-forge-observe-profile) | Export an aggregated continuous profile as pprof, speedscope or collapsed stacks |
+| [`reliant forge obs`](#reliant-forge-obs) | Ask what happened: logs, traces, endpoints, metrics, SQL, profiles and alerts |
+| [`reliant forge obs alerts`](#reliant-forge-obs-alerts) | Alert rules declared for an environment |
+| [`reliant forge obs alerts check`](#reliant-forge-obs-alerts-check) | Evaluate the env's alert rules against the local ClickStack and print what would fire |
+| [`reliant forge obs alerts run`](#reliant-forge-obs-alerts-run) | Evaluate the env's alert rules continuously and deliver what fires through the local Alertmanager |
+| [`reliant forge obs dashboards`](#reliant-forge-obs-dashboards) | Work with the dashboards a release carries |
+| [`reliant forge obs dashboards check`](#reliant-forge-obs-dashboards-check) | Validate the dashboards a release bundle would carry |
+| [`reliant forge obs endpoints`](#reliant-forge-obs-endpoints) | The slowest or most failing endpoints |
+| [`reliant forge obs logs`](#reliant-forge-obs-logs) | Search and tail logs |
+| [`reliant forge obs metrics`](#reliant-forge-obs-metrics) | List and query metrics; print the declared schema |
+| [`reliant forge obs metrics declared`](#reliant-forge-obs-metrics-declared) | Print the metrics a service declares: name, type, unit, attributes, stability |
+| [`reliant forge obs metrics list`](#reliant-forge-obs-metrics-list) | The metrics collected in a window |
+| [`reliant forge obs metrics query`](#reliant-forge-obs-metrics-query) | One metric as time series |
+| [`reliant forge obs profile`](#reliant-forge-obs-profile) | Export an aggregated continuous profile as pprof, speedscope or collapsed stacks |
+| [`reliant forge obs query`](#reliant-forge-obs-query) | Anything else: raw SQL or a dashboard panel, with the scope bound |
+| [`reliant forge obs trace`](#reliant-forge-obs-trace) | One trace as a tree, with its errors and logs |
+| [`reliant forge obs traces`](#reliant-forge-obs-traces) | Find traces: the slowest, the failing, by route |
 | [`reliant forge package`](#reliant-forge-package) | Manage internal packages |
 | [`reliant forge package new`](#reliant-forge-package-new) | Create a new internal package with contract interface |
 | [`reliant forge project`](#reliant-forge-project) | Create, evolve, and inspect the project as a whole |
@@ -895,7 +904,7 @@ reliant forge
 | [`lint`](#reliant-forge-lint) | Run linters on the project (report-only: writes nothing unless --fix) |
 | [`login`](#reliant-forge-login) | Authenticate to the control plane(s) this project declares |
 | [`logout`](#reliant-forge-logout) | Forget the stored credential for this project's control plane(s) |
-| [`observe`](#reliant-forge-observe) | Read back what the local observability stack collected |
+| [`obs`](#reliant-forge-obs) | Ask what happened: logs, traces, endpoints, metrics, SQL, profiles and alerts |
 | [`package`](#reliant-forge-package) | Manage internal packages |
 | [`project`](#reliant-forge-project) | Create, evolve, and inspect the project as a whole |
 | [`registry`](#reliant-forge-registry) | Log in to and read refs from the registries an env's workloads declare |
@@ -2775,14 +2784,19 @@ statement, under row and size caps. Writes, nextval() and a second statement
 are refused: by a lexical guard first (so the message is readable), and by
 Postgres itself regardless.
 
-The connection is the workload's resolved DATABASE_URL (`--workload`, default
-"api"): the same value `cli forge env exec` gives the process. OnHost and OnCompose
-workloads are supported; hosted and cluster databases are not reachable from
-forge yet (exit 2).
+The connection follows the workload (`--workload`, default "api"):
+  OnHost / OnCompose  its resolved DATABASE_URL, the same value
+                      `cli forge env exec` gives the process
+  OnCluster           a port-forward with your kube context to the env's
+                      ManagedDatabase (`--database` when it has several), as
+                      the read-only forge_ro role; scratch envs only
+                      (lifecycle local or ephemeral)
+Hosted databases, and the databases of real cluster envs, are not reachable
+from forge yet (exit 2).
 
-An env declared scratch (lifecycle local or ephemeral) or with no cluster at
-all is open. Any other env is a real one: pass --confirm-env <env> and a
---reason.
+The env's data_access policy (forge.DataAccess) decides who may query:
+open (the default of a local or ephemeral env), audited (the default of any
+other env: pass --confirm-env <env> and a --reason) or deny.
 
 Output: a table, or --format json|csv. --json is --format json; the document
 carries ok, exit_code and error like every other forge --json verb, plus
@@ -2807,13 +2821,14 @@ reliant forge db query <env> ["<sql>" | -f FILE] [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--confirm-env` | `string` | - | Required on a real env: the env name again |
+| `--database` | `string` | - | ManagedDatabase to query, when a cluster env declares several |
 | `--file`, `-f` | `string` | - | Read the statement from FILE (- for stdin) |
 | `--format` | `string` | `table` | Output format: table, json or csv |
 | `--json` | `bool` | - | Same as --format json |
 | `--max-rows` | `int` | `200` | Row cap (at most 10000) |
 | `--reason` | `string` | - | Required on a real env: why you are reading it (at most 500 characters) |
 | `--timeout` | `duration` | `5s` | Statement timeout (at most 30s) |
-| `--workload` | `string` | `api` | Workload whose DATABASE_URL to query |
+| `--workload` | `string` | `api` | Workload whose database to query |
 
 ---
 
@@ -5454,6 +5469,7 @@ reliant forge fix
 | Command | Description |
 |---------|-------------|
 | [`composition-graph`](#reliant-forge-fix-composition-graph) | Move a project off Infra / NewComponents / ServeSpec onto the composition graph |
+| [`config-proto-package`](#reliant-forge-fix-config-proto-package) | Move the config protos to proto/<project>/config/v1, package <project>.config.v1 (no shared config.v1 since v0.1.47) |
 | [`connect-errors`](#reliant-forge-fix-connect-errors) | Rewrite fixed-message connect.NewError calls to pkg/svcerr, wire-identically, and list the rest |
 | [`narrow-deps`](#reliant-forge-fix-narrow-deps) | Declare the interfaces a component's Deps actually use, and retype its fields to them |
 | [`operatorkit`](#reliant-forge-fix-operatorkit) | Rename lifecyclekit.Run / Controller / Options to operatorkit (moved in v0.1.46) |
@@ -5495,6 +5511,60 @@ The rest of the v0.1.47 story is the migration skill: `forge skill load migratio
 
 ```
 reliant forge fix composition-graph [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--allow-dirty` | `bool` | - | Run over uncommitted changes |
+| `--dry-run` | `bool` | - | List what would be rewritten; change nothing |
+
+---
+
+#### reliant forge fix config-proto-package
+
+Move the config protos to proto/<project>/config/v1, package <project>.config.v1 (no shared config.v1 since v0.1.47)
+
+Move the project's config protos off the proto package every forge project shared.
+
+Every forge project declared package config.v1 at proto/config/v1/config.proto,
+so two projects' generated config packages could not be linked into one binary:
+protobuf registers each file by path and each message by full name, process-wide,
+and Go's runtime panics at init on the second ("file config/v1/config.proto is
+already registered"). forge v0.1.47 derives both from the project's name
+(forge.yaml name: "control-plane" is control_plane):
+
+  proto/config/v1/<file>.proto        → proto/<project>/config/v1/<file>.proto
+  package config.v1;                  → package <project>.config.v1;
+  go_package "<mod>/gen/config/v1;…"  → "<mod>/gen/<project>/config/v1;configv1"
+
+and rewrites what points at them:
+
+  import "config/v1/<file>.proto"     in every other proto under proto/
+  config.v1.<Message> references      in every proto (fully qualified type names)
+  "<mod>/gen/config/v1" Go imports    in the project's own Go files
+  proto/config/v1, gen/config/v1      as paths in the project's own protos, Go,
+                                      TS/JS, KCL, YAML, shell and Make files
+                                      (TS imports of the generated _pb modules too)
+
+Generated and forge-owned files (gen/, *_gen.go, a forge:hash marker) are not
+touched: forge generate rewrites them.
+
+and deletes the stale generated output under gen/config/v1 (and each frontend's
+src/gen/config/v1) that the next forge generate would otherwise leave beside
+the new package.
+
+Nothing a config DECLARES changes: fields, annotations, env var names, flags
+and the generated KCL schemas are the same, and the Go package keeps its name
+(configv1). Run forge generate afterwards to regenerate pkg/config, gen/ and
+the descriptor. Remaining mentions of the old layout (docs, an import of another
+project's gen/config/v1) are listed for you; nothing else is decided for you.
+
+The rest of the v0.1.47 story is the migration skill: `forge skill load migrations/v0.1.47`.
+
+```
+reliant forge fix config-proto-package [flags]
 ```
 
 **Flags:**
@@ -5893,7 +5963,7 @@ What it writes, in order:
   - gen/: Go + Connect stubs (buf generate) and gen/forge_descriptor.json,
     the services, rpcs and config messages extracted from the protos
   - each frontend's TypeScript stubs, hooks, CRUD pages, nav and mocks
-  - pkg/config/ from proto/config/, the typed config loader
+  - pkg/config/ from proto/<project>/config/v1/, the typed config loader
   - internal/handlers/<svc>/: a stub for every rpc no handler implements yet,
     and the CRUD wiring of every entity (an entity is a table in the APPLIED
     schema that a service's CRUD rpcs name; the schema comes from running
@@ -6434,7 +6504,7 @@ reliant forge lint [paths...] [flags]
 | `--closed-sets` | `bool` | - | Fail when a CHECK declared forge:closed-set <set> does not list exactly that Go set, and print the migration that fixes it |
 | `--column-markers` | `bool` | - | Fail on a COMMENT ON TABLE/VIEW/COLUMN/CONSTRAINT carrying a forge: marker that object does not read |
 | `--computed-fields` | `bool` | - | Flag a forge:computed field that no non-generated Go file assigns — nothing populates it, so the insert takes the column default. FAILS the build, except while the service still holds forge-scaffolded unwired rpc stubs (then a warning naming them) |
-| `--config-deps` | `bool` | - | Flag scalar Deps fields — scalars are configuration; declare a <Component>Config block in proto/config and take it as a typed field (warnings only) |
+| `--config-deps` | `bool` | - | Flag scalar Deps fields — scalars are configuration; declare a <Component>Config block in proto/<project>/config/v1 and take it as a typed field (warnings only) |
 | `--config-reach` | `bool` | - | Flag config fields that no binary and no frontend loads — with per-binary configs, an unbound config message generates but is never loaded (warnings only) |
 | `--contract` | `bool` | - | Run contract interface enforcement linter |
 | `--conventions` | `bool` | - | Run forge convention rules on proto files |
@@ -6548,43 +6618,48 @@ reliant forge logout [--endpoint URL] [flags]
 
 ---
 
-### reliant forge observe
+### reliant forge obs
 
-Read back what the local observability stack collected
+Ask what happened: logs, traces, endpoints, metrics, SQL, profiles and alerts
 
 ```
-reliant forge observe
+reliant forge obs
 ```
 
 **Subcommands:**
 
 | Command | Description |
 |---------|-------------|
-| [`alerts`](#reliant-forge-observe-alerts) | Alert rules declared for an environment |
-| [`dashboards`](#reliant-forge-observe-dashboards) | Work with the dashboards a release carries |
-| [`metrics`](#reliant-forge-observe-metrics) | Print the metrics a service declares: name, type, unit, attributes, stability |
-| [`profile`](#reliant-forge-observe-profile) | Export an aggregated continuous profile as pprof, speedscope or collapsed stacks |
+| [`alerts`](#reliant-forge-obs-alerts) | Alert rules declared for an environment |
+| [`dashboards`](#reliant-forge-obs-dashboards) | Work with the dashboards a release carries |
+| [`endpoints`](#reliant-forge-obs-endpoints) | The slowest or most failing endpoints |
+| [`logs`](#reliant-forge-obs-logs) | Search and tail logs |
+| [`metrics`](#reliant-forge-obs-metrics) | List and query metrics; print the declared schema |
+| [`profile`](#reliant-forge-obs-profile) | Export an aggregated continuous profile as pprof, speedscope or collapsed stacks |
+| [`query`](#reliant-forge-obs-query) | Anything else: raw SQL or a dashboard panel, with the scope bound |
+| [`trace`](#reliant-forge-obs-trace) | One trace as a tree, with its errors and logs |
+| [`traces`](#reliant-forge-obs-traces) | Find traces: the slowest, the failing, by route |
 
 ---
 
-#### reliant forge observe alerts
+#### reliant forge obs alerts
 
 Alert rules declared for an environment
 
 ```
-reliant forge observe alerts
+reliant forge obs alerts
 ```
 
 **Subcommands:**
 
 | Command | Description |
 |---------|-------------|
-| [`check`](#reliant-forge-observe-alerts-check) | Evaluate the env's alert rules against the local ClickStack and print what would fire |
-| [`run`](#reliant-forge-observe-alerts-run) | Evaluate the env's alert rules continuously and deliver what fires through the local Alertmanager |
+| [`check`](#reliant-forge-obs-alerts-check) | Evaluate the env's alert rules against the local ClickStack and print what would fire |
+| [`run`](#reliant-forge-obs-alerts-run) | Evaluate the env's alert rules continuously and deliver what fires through the local Alertmanager |
 
 ---
 
-#### reliant forge observe alerts check
+#### reliant forge obs alerts check
 
 Evaluate the env's alert rules against the local ClickStack and print what would fire
 
@@ -6600,14 +6675,14 @@ fires in production only once it has kept returning for its `for`.
 Each expr runs read-only with a timeout and a row cap (--timeout, --max-rows);
 a rule that errors is reported and does not stop the others.
 
-  cli forge observe alerts check               # the dev env
-  cli forge observe alerts check --env staging
-  cli forge observe alerts check --rule ServiceErrorRateHigh --sql
+  cli forge obs alerts check               # the dev env
+  cli forge obs alerts check --env staging
+  cli forge obs alerts check --rule ServiceErrorRateHigh --sql
 
 Needs the local ClickStack running (`forge env up`).
 
 ```
-reliant forge observe alerts check [flags]
+reliant forge obs alerts check [flags]
 ```
 
 **Flags:**
@@ -6623,7 +6698,7 @@ reliant forge observe alerts check [flags]
 
 ---
 
-#### reliant forge observe alerts run
+#### reliant forge obs alerts run
 
 Evaluate the env's alert rules continuously and deliver what fires through the local Alertmanager
 
@@ -6643,10 +6718,10 @@ workload (deploy/kcl/dev/main.k). It
 The rules file is re-read when it changes, so a re-run of `forge env up` updates
 the rules without a restart.
 
-  cli forge observe alerts run --env dev --alertmanager http://127.0.0.1:9093 --listen 0.0.0.0:9095
+  cli forge obs alerts run --env dev --alertmanager http://127.0.0.1:9093 --listen 0.0.0.0:9095
 
 ```
-reliant forge observe alerts run [flags]
+reliant forge obs alerts run [flags]
 ```
 
 **Flags:**
@@ -6661,23 +6736,23 @@ reliant forge observe alerts run [flags]
 
 ---
 
-#### reliant forge observe dashboards
+#### reliant forge obs dashboards
 
 Work with the dashboards a release carries
 
 ```
-reliant forge observe dashboards
+reliant forge obs dashboards
 ```
 
 **Subcommands:**
 
 | Command | Description |
 |---------|-------------|
-| [`check`](#reliant-forge-observe-dashboards-check) | Validate the dashboards a release bundle would carry |
+| [`check`](#reliant-forge-obs-dashboards-check) | Validate the dashboards a release bundle would carry |
 
 ---
 
-#### reliant forge observe dashboards check
+#### reliant forge obs dashboards check
 
 Validate the dashboards a release bundle would carry
 
@@ -6694,7 +6769,7 @@ HyperDX-format file (with "tiles") is for the local HyperDX only and is not ship
 Errors carry the file, line and column of the offending value.
 
 ```
-reliant forge observe dashboards check [flags]
+reliant forge obs dashboards check [flags]
 ```
 
 **Flags:**
@@ -6705,7 +6780,161 @@ reliant forge observe dashboards check [flags]
 
 ---
 
-#### reliant forge observe metrics
+#### reliant forge obs endpoints
+
+The slowest or most failing endpoints
+
+Rank the env's server endpoints (server spans by service and span name) by
+traffic, p95 latency, error ratio or rate: request count, errors, p50/p95/p99.
+[env] defaults to dev. Counts are weighted for tail sampling.
+
+  cli forge obs endpoints dev --sort p95 --top 5
+  cli forge obs endpoints dev --sort errors --service api --since 6h
+
+The table is the busiest 200 endpoints; --sort re-ranks within them.
+
+JSON schema forge.obs.endpoints/v1. --fields takes dotted paths of:
+  endpoints
+  endpoints.error_ratio
+  endpoints.errors
+  endpoints.name
+  endpoints.p50_ms
+  endpoints.p95_ms
+  endpoints.p99_ms
+  endpoints.rate_per_second
+  endpoints.requests
+  endpoints.service
+  query_mode
+  scope
+  scope.backend
+  scope.env
+  scope.from
+  scope.services
+  scope.to
+  sort
+  statements
+  statements.params.*
+  statements.purpose
+  statements.sql
+  suggested
+Always kept: schema, ok, exit_code, error, truncated, omitted, next_page_token.
+
+
+```
+reliant forge obs endpoints [env] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
+| `--explain` | `bool` | - | print the compiled SQL and its parameters instead of running it (a starting point for obs query --sql) |
+| `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
+| `--filter` | `stringArray` | `[]` | attribute predicate key=value or key!=value over the allowlisted keys (repeatable) |
+| `--from` | `string` | - | range start, RFC 3339 |
+| `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
+| `--print-sql` | `bool` | - | alias of --explain |
+| `--service` | `stringArray` | `[]` | only this service.name (repeatable) |
+| `--since` | `duration` | `1h0m0s` | how far back to read (ignored with --from) |
+| `--sort` | `string` | `requests` | requests | p95 | errors | rate |
+| `--to` | `string` | - | range end, RFC 3339 (default now) |
+| `--top` | `int` | `10` | most endpoints to return |
+
+---
+
+#### reliant forge obs logs
+
+Search and tail logs
+
+Search the env's logs. [env] defaults to dev. The optional query is the log query
+language (the same one the control plane serves):
+
+  service:api severity:error "connection refused"     words AND together
+  body:timeout OR body:deadline                        OR / NOT / -term / (groups)
+  trace_id:0af7651916cd43dd8448eb211c80319c            one trace
+  attr.http.route:/v1/jobs  res.k8s.pod.name:api-0     log / resource attributes
+
+  cli forge obs logs dev 'service:api' --severity error --since 1h
+  cli forge obs logs dev --trace 0af7651916cd43dd8448eb211c80319c
+  cli forge obs logs dev 'body:panic' --follow          # tail, polling every --interval (2s)
+  cli forge obs logs dev 'service:api' --explain        # the compiled SQL
+
+Newest first; --oldest reverses. --follow polls forward from now and, with
+--json, writes NDJSON: one log record per line, ending with an envelope line.
+
+JSON schema forge.obs.logs/v1. --fields takes dotted paths of:
+  logs
+  logs.attributes.*
+  logs.body
+  logs.service
+  logs.severity
+  logs.span_id
+  logs.time
+  logs.trace_id
+  query
+  query_mode
+  scope
+  scope.backend
+  scope.env
+  scope.from
+  scope.services
+  scope.to
+  statements
+  statements.params.*
+  statements.purpose
+  statements.sql
+  suggested
+Always kept: schema, ok, exit_code, error, truncated, omitted, next_page_token.
+
+
+```
+reliant forge obs logs [env] [query] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
+| `--explain` | `bool` | - | print the compiled SQL and its parameters instead of running it (a starting point for obs query --sql) |
+| `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
+| `--filter` | `stringArray` | `[]` | attribute predicate key=value or key!=value over the allowlisted keys (repeatable) |
+| `--follow` | `bool` | - | keep polling for new logs (NDJSON with --json); stop with ^C |
+| `--from` | `string` | - | range start, RFC 3339 |
+| `--interval` | `duration` | `2s` | with --follow, how often to poll |
+| `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
+| `--limit` | `int` | `100` | most items to return |
+| `--oldest` | `bool` | - | oldest first |
+| `--page-token` | `string` | - | resume from a next_page_token |
+| `--print-sql` | `bool` | - | alias of --explain |
+| `--service` | `stringArray` | `[]` | only this service.name (repeatable) |
+| `--severity` | `stringArray` | `[]` | only these severities: trace, debug, info, warn, error, fatal (repeatable) |
+| `--since` | `duration` | `15m0s` | how far back to read (ignored with --from) |
+| `--to` | `string` | - | range end, RFC 3339 (default now) |
+| `--trace` | `string` | - | only the logs of this trace id |
+
+---
+
+#### reliant forge obs metrics
+
+List and query metrics; print the declared schema
+
+```
+reliant forge obs metrics
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`declared`](#reliant-forge-obs-metrics-declared) | Print the metrics a service declares: name, type, unit, attributes, stability |
+| [`list`](#reliant-forge-obs-metrics-list) | The metrics collected in a window |
+| [`query`](#reliant-forge-obs-metrics-query) | One metric as time series |
+
+---
+
+#### reliant forge obs metrics declared
 
 Print the metrics a service declares: name, type, unit, attributes, stability
 
@@ -6715,23 +6944,23 @@ Every metric a forge service emits is declared in a typed registry, so the full
 list — with each one's type, UCUM unit, attribute keys and stability — can be
 read without running a query. The schema comes from one of two places:
 
-  forge observe metrics                          # the project's built binary (bin/<name>)
-  forge observe metrics --binary ./bin/api       # a specific binary: runs 'metrics schema --json'
-  forge observe metrics --url http://localhost:6060   # a running service's pprof listener
+  forge obs metrics declared                          # the project's built binary (bin/<name>)
+  forge obs metrics declared --binary ./bin/api       # a specific binary: runs 'metrics schema --json'
+  forge obs metrics declared --url http://localhost:6060   # a running service's pprof listener
 
 The same document is served by 'GET /debug/metrics/schema', printed by
 '<bin> metrics schema --json', and written by 'forge build' to
 bin/observability/metrics-schema.json, which a release carries as
 observability/metrics-schema.json.
 
-  forge observe metrics --dashboard > deploy/observability/dashboards/<name>-custom-metrics.json
+  forge obs metrics declared --dashboard > deploy/observability/dashboards/<name>-custom-metrics.json
 
 prints the HyperDX "Custom metrics" dashboard drawn from the schema (counters as
 a rate, histograms as p50/p95/p99, gauges as the last value, grouped by their
 enumerated attributes). It writes nothing itself: commit the file to own it.
 
 ```
-reliant forge observe metrics [flags]
+reliant forge obs metrics declared [flags]
 ```
 
 **Flags:**
@@ -6746,7 +6975,128 @@ reliant forge observe metrics [flags]
 
 ---
 
-#### reliant forge observe profile
+#### reliant forge obs metrics list
+
+The metrics collected in a window
+
+List the metric names the env's telemetry carries in the window, with type and
+unit. [env] defaults to dev.
+
+  cli forge obs metrics list dev --contains rpc
+  cli forge obs metrics list dev --service api --json --fields metrics.name
+
+JSON schema forge.obs.metrics_list/v1. --fields takes dotted paths of:
+  metrics
+  metrics.description
+  metrics.name
+  metrics.type
+  metrics.unit
+  query_mode
+  scope
+  scope.backend
+  scope.env
+  scope.from
+  scope.services
+  scope.to
+  statements
+  statements.params.*
+  statements.purpose
+  statements.sql
+  suggested
+Always kept: schema, ok, exit_code, error, truncated, omitted, next_page_token.
+
+
+```
+reliant forge obs metrics list [env] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
+| `--contains` | `string` | - | only metrics whose name contains this (case-insensitive) |
+| `--explain` | `bool` | - | print the compiled SQL and its parameters instead of running it (a starting point for obs query --sql) |
+| `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
+| `--filter` | `stringArray` | `[]` | attribute predicate key=value or key!=value over the allowlisted keys (repeatable) |
+| `--from` | `string` | - | range start, RFC 3339 |
+| `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
+| `--limit` | `int` | `200` | most items to return |
+| `--print-sql` | `bool` | - | alias of --explain |
+| `--service` | `stringArray` | `[]` | only this service.name (repeatable) |
+| `--since` | `duration` | `1h0m0s` | how far back to read (ignored with --from) |
+| `--to` | `string` | - | range end, RFC 3339 (default now) |
+
+---
+
+#### reliant forge obs metrics query
+
+One metric as time series
+
+Read one metric as time series. The metric's type picks the table; --agg picks
+the aggregation (default: avg for gauges, rate for sums, avg for histograms).
+
+  cli forge obs metrics query dev rpc.server.duration --agg p95 --group-by rpc.method
+  cli forge obs metrics query dev rpc.server.calls --agg rate --group-by service.name --since 6h
+  cli forge obs metrics query dev process.runtime.go.mem.heap_alloc --explain
+
+--agg is one of avg, sum, min, max, count, increase, rate, p50, p95, p99. --group-by takes the allowlisted
+attribute keys (`forge obs query --help` lists them), the metric's own
+attributes, or metric.attr.<key> / resource.attr.<key>. Percentiles apply to
+histograms only.
+
+JSON schema forge.obs.metrics_query/v1. --fields takes dotted paths of:
+  agg
+  metric
+  query_mode
+  scope
+  scope.backend
+  scope.env
+  scope.from
+  scope.services
+  scope.to
+  series
+  series.labels.*
+  series.points
+  series.points.time
+  series.points.value
+  statements
+  statements.params.*
+  statements.purpose
+  statements.sql
+  step_seconds
+  suggested
+  type
+  unit
+Always kept: schema, ok, exit_code, error, truncated, omitted, next_page_token.
+
+
+```
+reliant forge obs metrics query [env] <metric> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--agg` | `string` | - | aggregation: avg, sum, min, max, count, increase, rate, p50, p95, p99 |
+| `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
+| `--explain` | `bool` | - | print the compiled SQL and its parameters instead of running it (a starting point for obs query --sql) |
+| `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
+| `--filter` | `stringArray` | `[]` | attribute predicate key=value or key!=value over the allowlisted keys (repeatable) |
+| `--from` | `string` | - | range start, RFC 3339 |
+| `--group-by` | `stringArray` | `[]` | split by this attribute key (repeatable, at most 3) |
+| `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
+| `--limit` | `int` | `50` | most series to return |
+| `--print-sql` | `bool` | - | alias of --explain |
+| `--service` | `stringArray` | `[]` | only this service.name (repeatable) |
+| `--since` | `duration` | `1h0m0s` | how far back to read (ignored with --from) |
+| `--step` | `duration` | `0s` | bucket width (default: about 120 points per series) |
+| `--to` | `string` | - | range end, RFC 3339 (default now) |
+
+---
+
+#### reliant forge obs profile
 
 Export an aggregated continuous profile as pprof, speedscope or collapsed stacks
 
@@ -6757,14 +7107,14 @@ Apps push a 10s CPU profile plus heap and goroutine snapshots about once a
 minute (pkg/observe, on by default whenever an OTLP endpoint is set). They land
 in ClickHouse; HyperDX cannot draw flamegraphs, so this exports them:
 
-  forge observe profile --service api --since 30m -o api.pb.gz
+  forge obs profile --service api --since 30m -o api.pb.gz
   go tool pprof -http=: api.pb.gz                  # flamegraph, top, source
 
-  forge observe profile --service api --format speedscope -o api.speedscope.json
+  forge obs profile --service api --format speedscope -o api.speedscope.json
   #   open api.speedscope.json at https://www.speedscope.app
 
-  forge observe profile --trace 0af7651916cd43dd8448eb211c80319c   # CPU burned inside one trace
-  forge observe profile --service api --format folded | flamegraph.pl > api.svg
+  forge obs profile --trace 0af7651916cd43dd8448eb211c80319c   # CPU burned inside one trace
+  forge obs profile --service api --format folded | flamegraph.pl > api.svg
 
 Sample types: cpu (nanoseconds) and inuse_space / inuse_objects (live heap) by
 default; alloc_space / alloc_objects and goroutine only from a workload whose
@@ -6775,7 +7125,7 @@ you can run it yourself against the ClickStack ClickHouse.
 Needs the local ClickStack running (`forge env up`).
 
 ```
-reliant forge observe profile [flags]
+reliant forge obs profile [flags]
 ```
 
 **Flags:**
@@ -6794,6 +7144,259 @@ reliant forge observe profile [flags]
 | `--to` | `string` | - | range end, RFC 3339 (default now) |
 | `--trace` | `string` | - | export only samples linked to this trace id (raw tier, last 72h) |
 | `--type` | `string` | `cpu` | sample type: cpu, alloc_space, inuse_space, alloc_objects, inuse_objects, goroutine |
+
+---
+
+#### reliant forge obs query
+
+Anything else: raw SQL or a dashboard panel, with the scope bound
+
+Run one read-only SELECT (--sql) or one dashboard panel (--panel FILE) against the
+env's telemetry. [env] defaults to dev. This is the escape hatch beside the
+structured verbs: when logs / traces / endpoints / metrics cannot say it, say it
+in SQL, with the scope already bound.
+
+The statement may use these parameters; forge binds them from the flags, and no
+value is ever spliced into the SQL:
+
+  {from:DateTime64(9)} {to:DateTime64(9)}   the range (--since / --from / --to)
+  {step:UInt32}                              a bucket width in seconds (--step)
+  {services:Array(String)}                   the --service values; [] = all
+  {envs:Array(String)}  {env_ids:Array(String)}   the env being read
+
+  cli forge obs query dev --sql "SELECT toStartOfMinute(Timestamp) AS t, count() AS n
+      FROM otel_logs WHERE Timestamp >= {from:DateTime64(9)} AND Timestamp < {to:DateTime64(9)}
+      AND (empty({services:Array(String)}) OR has({services:Array(String)}, ServiceName))
+      GROUP BY t ORDER BY t"
+  cli forge obs query dev --sql-file slow.sql --param threshold=500
+  cli forge obs query dev --panel p95-by-route.json
+
+Start from a structured verb's SQL instead of a blank page:
+  cli forge obs endpoints dev --explain          # prints the compiled statement and its parameters
+
+The statement runs through the same guard as an alert rule (one SELECT; no
+writes, DDL, SETTINGS, FORMAT, system tables or table functions), read-only,
+with a 30s timeout and a row cap (--limit). A refused statement exits 1 with
+the reason.
+
+--panel FILE is one dashboard panel as JSON (the panels[] element of a
+dashboards/*.json; kinds line, number, table, bar, heatmap, sql) flattened to a
+table. Panels over the hosted platform's own tables (issues, sessions, funnel)
+need the control plane.
+
+Raw SQL is counted: the JSON document says "query_mode": "raw", and with
+FORGE_OBS_DEBUG=1 the statement's shape (literals removed) is logged to stderr.
+
+JSON schema forge.obs.query/v1. --fields takes dotted paths of:
+  columns
+  columns.name
+  columns.type
+  query_mode
+  rows
+  scope
+  scope.backend
+  scope.env
+  scope.from
+  scope.services
+  scope.to
+  statements
+  statements.params.*
+  statements.purpose
+  statements.sql
+  suggested
+Always kept: schema, ok, exit_code, error, truncated, omitted, next_page_token.
+
+
+```
+reliant forge obs query [env] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
+| `--explain` | `bool` | - | print the compiled SQL and its parameters instead of running it (a starting point for obs query --sql) |
+| `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
+| `--filter` | `stringArray` | `[]` | attribute predicate key=value or key!=value over the allowlisted keys (repeatable) |
+| `--from` | `string` | - | range start, RFC 3339 |
+| `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
+| `--limit` | `int` | `200` | most items to return |
+| `--panel` | `string` | - | a dashboard panel JSON file |
+| `--param` | `stringArray` | `[]` | bind your own {name:Type} parameter, name=value (repeatable) |
+| `--print-sql` | `bool` | - | alias of --explain |
+| `--service` | `stringArray` | `[]` | only this service.name (repeatable) |
+| `--since` | `duration` | `1h0m0s` | how far back to read (ignored with --from) |
+| `--sql` | `string` | - | one read-only SELECT, with the scope parameters above |
+| `--sql-file` | `string` | - | read the statement from this file (- for stdin) |
+| `--step` | `duration` | `0s` | the {step} parameter / a panel's bucket width (default: about 120 points) |
+| `--to` | `string` | - | range end, RFC 3339 (default now) |
+
+---
+
+#### reliant forge obs trace
+
+One trace as a tree, with its errors and logs
+
+Show one trace: its span tree, the failing spans with their exception, and the
+logs that carry its id. [env] defaults to dev.
+
+The tree is capped for an agent's context: depth 8, 100 rendered spans, runs of
+identical siblings collapsed ("×37 SELECT jobs … p50 2ms p95 9ms"); failing
+spans, their ancestors and the critical path (the child that ends last at each
+level, marked *) are always expanded. --full lifts the caps.
+
+  cli forge obs trace 0af7651916cd43dd8448eb211c80319c dev
+  cli forge obs trace 0af7651916cd43dd8448eb211c80319c dev --full --json
+
+JSON schema forge.obs.trace/v1. --fields takes dotted paths of:
+  capped
+  duration_ms
+  errors
+  errors.exception
+  errors.message
+  errors.name
+  errors.service
+  errors.span_id
+  logs
+  logs.body
+  logs.service
+  logs.severity
+  logs.span_id
+  logs.time
+  logs_truncated
+  orphans
+  query_mode
+  scope
+  scope.backend
+  scope.env
+  scope.from
+  scope.to
+  spans_shown
+  spans_total
+  start
+  statements
+  statements.params.*
+  statements.purpose
+  statements.sql
+  suggested
+  trace_id
+  tree
+  tree.attributes.*
+  tree.children
+  tree.count
+  tree.critical
+  tree.duration_ms
+  tree.error
+  tree.hidden
+  tree.kind
+  tree.max_ms
+  tree.min_ms
+  tree.name
+  tree.offset_ms
+  tree.p50_ms
+  tree.p95_ms
+  tree.service
+  tree.span_id
+  tree.status
+Always kept: schema, ok, exit_code, error, truncated, omitted, next_page_token.
+
+
+```
+reliant forge obs trace <trace-id> [env] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
+| `--explain` | `bool` | - | print the compiled SQL and its parameters instead of running it (a starting point for obs query --sql) |
+| `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
+| `--filter` | `stringArray` | `[]` | attribute predicate key=value or key!=value over the allowlisted keys (repeatable) |
+| `--from` | `string` | - | range start, RFC 3339 |
+| `--full` | `bool` | - | lift the depth, span and collapse caps |
+| `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
+| `--logs` | `int` | `20` | most correlated log lines to include (0 = none) |
+| `--print-sql` | `bool` | - | alias of --explain |
+| `--service` | `stringArray` | `[]` | only this service.name (repeatable) |
+| `--since` | `duration` | `72h0m0s` | how far back to read (ignored with --from) |
+| `--to` | `string` | - | range end, RFC 3339 (default now) |
+
+---
+
+#### reliant forge obs traces
+
+Find traces: the slowest, the failing, by route
+
+List the env's traces, newest first, with a rate / errors / duration summary over
+every trace the filters match. [env] defaults to dev.
+
+  cli forge obs traces dev --errors                      # traces with an error span
+  cli forge obs traces dev --slow --min-duration 500ms   # slowest first
+  cli forge obs traces dev --route /v1/jobs --service api
+  cli forge obs traces dev --errors --explain            # the compiled SQL
+
+--slow orders by duration within the newest 500 matching traces (the compiler
+pages newest-first only); sorted_from says how many were sorted.
+
+JSON schema forge.obs.traces/v1. --fields takes dotted paths of:
+  query_mode
+  scope
+  scope.backend
+  scope.env
+  scope.from
+  scope.services
+  scope.to
+  sorted_from
+  statements
+  statements.params.*
+  statements.purpose
+  statements.sql
+  suggested
+  summary
+  summary.error_traces
+  summary.p50_ms
+  summary.p95_ms
+  summary.p99_ms
+  summary.traces
+  traces
+  traces.duration_ms
+  traces.errors
+  traces.root_duration_ms
+  traces.root_name
+  traces.root_service
+  traces.services
+  traces.spans
+  traces.start
+  traces.trace_id
+Always kept: schema, ok, exit_code, error, truncated, omitted, next_page_token.
+
+
+```
+reliant forge obs traces [env] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
+| `--errors` | `bool` | - | only traces with an error span |
+| `--explain` | `bool` | - | print the compiled SQL and its parameters instead of running it (a starting point for obs query --sql) |
+| `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
+| `--filter` | `stringArray` | `[]` | attribute predicate key=value or key!=value over the allowlisted keys (repeatable) |
+| `--from` | `string` | - | range start, RFC 3339 |
+| `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
+| `--limit` | `int` | `50` | most items to return |
+| `--min-duration` | `duration` | `0s` | only traces at least this long, e.g. 500ms |
+| `--page-token` | `string` | - | resume from a next_page_token |
+| `--print-sql` | `bool` | - | alias of --explain |
+| `--route` | `string` | - | only traces whose root span name contains this |
+| `--service` | `stringArray` | `[]` | only this service.name (repeatable) |
+| `--since` | `duration` | `1h0m0s` | how far back to read (ignored with --from) |
+| `--slow` | `bool` | - | slowest first |
+| `--to` | `string` | - | range end, RFC 3339 (default now) |
 
 ---
 
@@ -8455,7 +9058,7 @@ Bringing the environment up registers the new frontend with the dev IdP;
 nothing else to run.
 
 The scaffold ends with a 'forge generate' run, because the frontend's
-config proto (proto/config/v1/<name>_config.proto) is a generate input: the
+config proto (proto/<project>/config/v1/<name>_config.proto) is a generate input: the
 run re-extracts gen/forge_descriptor.json and writes the frontend's typed
 config, so the next 'forge lint' is green. --no-generate skips it, for a
 round that stages several scaffolds and generates once.
@@ -8743,7 +9346,7 @@ There is no per-service port: every service in a binary mounts onto the
 SAME Connect mux, and the process listens once on the AppConfig 'port'
 field (env var PORT, default 8080). Change it per environment in
 deploy/kcl/<env>/config.k, or change the default in
-proto/config/v1/config.proto.
+proto/<project>/config/v1/config.proto.
 
 Flags:
   --resume   Re-run a partial scaffold. Skips every output file that
