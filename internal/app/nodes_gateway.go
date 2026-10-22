@@ -17,6 +17,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemonevents"
 	"github.com/reliant-labs/reliant/internal/daemonquery"
 	"github.com/reliant-labs/reliant/internal/daemonstate"
+	"github.com/reliant-labs/reliant/internal/db"
 	grpcserver "github.com/reliant-labs/reliant/internal/grpc"
 	"github.com/reliant-labs/reliant/internal/handlers/tools_daemon"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -148,7 +149,7 @@ type StateDerivation struct{ d *daemonstate.Derivation }
 // StateDerivationDeps is what it consumes and writes.
 type StateDerivationDeps struct {
 	NATS        *NATSConn
-	Repo        *DBRepo
+	DB          *db.Repo
 	ToolsDaemon *tools_daemon.Service
 }
 
@@ -157,7 +158,7 @@ type StateDerivationDeps struct {
 // ListDaemons reports, so it tells the owner's web clients to refetch rather
 // than leaving them to poll for it.
 func NewStateDerivation(d StateDerivationDeps) (*StateDerivation, error) {
-	derivation := daemonstate.NewDerivation(d.NATS.Conn, d.Repo.Repo)
+	derivation := daemonstate.NewDerivation(d.NATS.Conn, d.DB)
 	derivation.NotifyLifecycleApplied(d.ToolsDaemon.PublishDaemonListChanged)
 	return &StateDerivation{d: derivation}, nil
 }
@@ -387,12 +388,12 @@ type FlowHealth struct{ Handler http.Handler }
 
 // FlowHealthDeps is the registry and the connection map it asserts over.
 type FlowHealthDeps struct {
-	Repo        *DBRepo
+	DB          *db.Repo
 	ToolsDaemon *tools_daemon.Service
 }
 
 // NewFlowHealth builds the handler; its compose method serves it on the probe
 // surface.
 func NewFlowHealth(d FlowHealthDeps) (*FlowHealth, error) {
-	return &FlowHealth{Handler: servergateway.FlowHealthHandler(d.Repo.Repo, d.ToolsDaemon)}, nil
+	return &FlowHealth{Handler: servergateway.FlowHealthHandler(d.DB, d.ToolsDaemon)}, nil
 }

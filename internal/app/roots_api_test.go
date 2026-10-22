@@ -91,7 +91,7 @@ func TestAPIReadiness(t *testing.T) {
 // database they read.
 func TestAPIInstallsProcessStateFirst(t *testing.T) {
 	names := PlanAPI().Names()
-	require.Equal(t, []string{"probe_listener", "api_settings", "integration_settings", "process_settings", "db_repo", "process_runtime"}, names[:6])
+	require.Equal(t, []string{"probe_listener", "api_settings", "integration_settings", "process_settings", "db_repo", "database", "process_runtime"}, names[:7])
 }
 
 // The api root reaches only the api's variants: never the worker's router —

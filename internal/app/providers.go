@@ -58,8 +58,10 @@ import (
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
-// DBRepo is reliant's database: the Repository over the serving pool (and the
-// session pool, when DATABASE_DIRECT_URL names one).
+// DBRepo is the database's LIFECYCLE: it opens the Repository over the
+// serving pool (and the session pool, when DATABASE_DIRECT_URL names one),
+// gates /readyz on it, and closes it after every node that reads it. Nothing
+// but Database reads it: every consumer takes the Repository itself.
 type DBRepo struct{ Repo *db.Repo }
 
 // DBRepoDeps is the database config and the data directory.
@@ -104,6 +106,17 @@ func (r *DBRepo) Close(context.Context) error {
 	logging.Info("Closing database")
 	return r.Repo.Close()
 }
+
+// DatabaseDeps is the lifecycle node that owns the pools.
+type DatabaseDeps struct{ Pool *DBRepo }
+
+// NewDatabase is the database's VALUE: the persistence API every consumer's
+// role interface is filled with. It is the only node producing *db.Repo, so
+// forge fills a persistence field it resolves by type with g.Database(), and
+// TestPersistenceRolesAreTheDatabase holds every hand-written one to that.
+// Reaching it reaches DBRepo, so whatever reads the database still stops
+// before the pools close.
+func NewDatabase(d DatabaseDeps) (*db.Repo, error) { return d.Pool.Repo, nil }
 
 // NATSConn is the process's NATS connection.
 type NATSConn struct{ Conn *nats.Conn }
@@ -192,7 +205,7 @@ func (h *UserUpdateHub) Close(context.Context) error { return h.NATSUpdateHub.Cl
 // control plane, when one is configured, else reliant's own store.
 type TokenAuthorityDeps struct {
 	ControlPlane *configv1.ControlPlaneConfig
-	Repo         *DBRepo
+	DB           *db.Repo
 }
 
 // NewTokenAuthority is the ONE machine-credential authority (`rlat_`):
@@ -200,7 +213,7 @@ type TokenAuthorityDeps struct {
 // self-hosted (tokenauthority). Uncached here: a revoked credential is
 // refused on its next check.
 func NewTokenAuthority(d TokenAuthorityDeps) (tokenauthority.Authority, error) {
-	authority, mode, err := tokenauthority.New(tokenauthority.DepsFor(ControlPlaneEndpoint(d.ControlPlane), d.Repo.Repo.ORM()))
+	authority, mode, err := tokenauthority.New(tokenauthority.DepsFor(ControlPlaneEndpoint(d.ControlPlane), d.DB.ORM()))
 	if err != nil {
 		return nil, fmt.Errorf("token authority: %w", err)
 	}
@@ -362,7 +375,7 @@ type ProcessRuntime struct {
 // config-only globals (drivers.Configure before the key provider).
 type ProcessRuntimeDeps struct {
 	Settings      *ProcessSettings
-	Repo          *DBRepo
+	DB            *db.Repo
 	ControlPlane  *configv1.ControlPlaneConfig
 	Analytics     *configv1.AnalyticsConfig
 	Sentry        *configv1.SentryConfig
@@ -373,7 +386,7 @@ type ProcessRuntimeDeps struct {
 func NewProcessRuntime(d ProcessRuntimeDeps) (*ProcessRuntime, error) {
 	sentry := SentrySettings(d.Sentry, d.Observability)
 	cp := ControlPlaneEndpoint(d.ControlPlane)
-	repo := d.Repo.Repo
+	repo := d.DB
 	// LLM drivers resolve per-user keys from the database.
 	drivers.InitializeAPIKeyProvider(repo)
 	healer := drivers.InstallReliantKeyHealer(repo, cp.URL, cp.InternalServiceSecret)
@@ -386,7 +399,7 @@ func NewProcessRuntime(d ProcessRuntimeDeps) (*ProcessRuntime, error) {
 
 // PayloadStoreDeps is the database the claim-checked payloads live in.
 type PayloadStoreDeps struct {
-	Repo *DBRepo
+	DB *db.Repo
 }
 
 // NewPayloadStore is where large Temporal payloads are claim-checked: the
@@ -394,7 +407,7 @@ type PayloadStoreDeps struct {
 // process's Temporal client must use the same store, or histories become
 // unreadable across them.
 func NewPayloadStore(d PayloadStoreDeps) (*claimcheck.PostgresStore, error) {
-	return claimcheck.NewPostgresStore(d.Repo.Repo.ORM()), nil
+	return claimcheck.NewPostgresStore(d.DB.ORM()), nil
 }
 
 // TemporalClient is the process's client of the external Temporal server.
@@ -511,14 +524,14 @@ type RepoUpdateFeed struct{}
 
 // RepoUpdateFeedDeps is the repository and the hubs it publishes on.
 type RepoUpdateFeedDeps struct {
-	Repo  *DBRepo
+	DB    *db.Repo
 	Users *UserUpdateHub
 	Chats *ChatUpdateHub
 }
 
 // NewRepoUpdateFeed wires the repository's update notifiers to the hubs.
 func NewRepoUpdateFeed(d RepoUpdateFeedDeps) (*RepoUpdateFeed, error) {
-	d.Repo.Repo.SetUpdateNotifiers(
+	d.DB.SetUpdateNotifiers(
 		func(update *db.UserUpdate) {
 			d.Users.Publish(context.Background(), streaming.UpdateEvent[db.UserUpdate]{
 				Key: update.UserID, SequenceNumber: update.SequenceNumber, Payload: *update,
@@ -537,7 +550,7 @@ func NewRepoUpdateFeed(d RepoUpdateFeedDeps) (*RepoUpdateFeed, error) {
 // VaultDeps is what boots the credential vault.
 type VaultDeps struct {
 	Ctx          context.Context
-	Repo         *DBRepo
+	DB           *db.Repo
 	ControlPlane *configv1.ControlPlaneConfig
 	DataDir      string
 	Integrations *IntegrationSettings
@@ -546,18 +559,18 @@ type VaultDeps struct {
 // NewVault boots the credential vault: its key is required when hosted and
 // generated when self-hosted. A missing or malformed key fails startup.
 func NewVault(d VaultDeps) (vault.Service, error) {
-	return db.BootVault(d.Ctx, d.Repo.Repo, ControlPlaneEndpoint(d.ControlPlane).Hosted(), d.DataDir, d.Integrations.VaultKey)
+	return db.BootVault(d.Ctx, d.DB, ControlPlaneEndpoint(d.ControlPlane).Hosted(), d.DataDir, d.Integrations.VaultKey)
 }
 
 // PauseServiceDeps is what pauses and resumes runs.
 type PauseServiceDeps struct {
 	Temporal *TemporalClient
-	Repo     *DBRepo
+	DB       *db.Repo
 }
 
 // NewPauseService pauses and resumes runs through their workflows.
 func NewPauseService(d PauseServiceDeps) (*v2workflow.PauseService, error) {
-	return v2workflow.NewPauseService(d.Temporal.Client, d.Repo.Repo), nil
+	return v2workflow.NewPauseService(d.Temporal.Client, d.DB), nil
 }
 
 // TriggerPollersDeps is which integrations this deployment serves.

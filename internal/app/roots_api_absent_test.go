@@ -22,11 +22,11 @@ func TestAPIAbsentLoopsBuildNothing(t *testing.T) {
 	require.NoError(t, err)
 	require.Nil(t, sweep, "no healer, no sweep")
 
-	access, err := NewGitHubAccess(GitHubAccessDeps{Repo: &DBRepo{}, Integrations: &IntegrationSettings{}})
+	access, err := NewGitHubAccess(GitHubAccessDeps{Integrations: &IntegrationSettings{}})
 	require.NoError(t, err)
 	require.Nil(t, access, "no webhook secret, no refresher")
 
-	senders, err := NewTriggerSenders(TriggerSendersDeps{Repo: &DBRepo{}, Integrations: &IntegrationSettings{}})
+	senders, err := NewTriggerSenders(TriggerSendersDeps{Integrations: &IntegrationSettings{}})
 	require.NoError(t, err)
 	require.Nil(t, senders, "no webhook secret, nobody to look up")
 
@@ -34,7 +34,7 @@ func TestAPIAbsentLoopsBuildNothing(t *testing.T) {
 	require.NoError(t, err)
 	require.Nil(t, loop, "no refresher, no loop")
 
-	alerting, err := NewTriggerAlerting(TriggerAlertingDeps{Repo: &DBRepo{}, Integrations: &IntegrationSettings{}})
+	alerting, err := NewTriggerAlerting(TriggerAlertingDeps{Integrations: &IntegrationSettings{}})
 	require.NoError(t, err)
 	require.Nil(t, alerting, "no control plane, plain webhooks")
 }
@@ -80,7 +80,7 @@ func TestAPIOmitsAbsentLoops(t *testing.T) {
 				g.ReliantKeySweep()
 				g.GitHubAccessLoop()
 			}))
-			t.Cleanup(func() { _ = g.DBRepo().Repo.Close() })
+			t.Cleanup(func() { _ = g.Database().Close() })
 
 			var supervised []string
 			for _, n := range g.b.Nodes() {
