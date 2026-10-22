@@ -162,6 +162,18 @@ func shellTransportTiming(wallMs, commandMs int64) *BashTiming {
 // the name is the same everywhere (see ShellToolName).
 type shellTool struct {
 	platform ShellPlatform
+	// now reads the clock that brackets a call for its metadata and for
+	// shellTransportTiming. Nil (always, in production) means time.Now; a
+	// test sets it so the wall clock it compares against the daemon's is one
+	// it controls, not the machine's scheduler.
+	now func() time.Time
+}
+
+func (s *shellTool) clock() time.Time {
+	if s.now != nil {
+		return s.now()
+	}
+	return time.Now()
 }
 
 const (
@@ -404,7 +416,7 @@ func (s *shellTool) Execute(rctx *rctx.ToolContext, params ShellParams) (ToolRes
 		return NewTextErrorResponse("refused: the project working directory resolved to /, which is not a project. " +
 			"This is a misconfigured project or worktree path; no command was run."), nil
 	}
-	startTime := time.Now()
+	startTime := s.clock()
 
 	// Best-effort detection: if command ends with & (not in quotes), treat as background
 	if !params.RunInBackground && shouldRunInBackground(params.Command) {
@@ -443,7 +455,7 @@ func (s *shellTool) Execute(rctx *rctx.ToolContext, params ShellParams) (ToolRes
 
 		metadata := ShellResponseMetadata{
 			StartTime: startTime.UnixMilli(),
-			EndTime:   time.Now().UnixMilli(),
+			EndTime:   s.clock().UnixMilli(),
 			ProcessID: processID,
 		}
 
@@ -472,7 +484,7 @@ func (s *shellTool) Execute(rctx *rctx.ToolContext, params ShellParams) (ToolRes
 	if result.Backgrounded {
 		metadata := ShellResponseMetadata{
 			StartTime: startTime.UnixMilli(),
-			EndTime:   time.Now().UnixMilli(),
+			EndTime:   s.clock().UnixMilli(),
 			ProcessID: result.ProcessID,
 		}
 		bgOutput := BashBackgroundOutput{
@@ -527,7 +539,7 @@ func (s *shellTool) Execute(rctx *rctx.ToolContext, params ShellParams) (ToolRes
 
 	wasTruncated := len(stdout) < originalStdoutSize || len(stderr) < originalStderrSize
 
-	endTime := time.Now()
+	endTime := s.clock()
 	metadata := ShellResponseMetadata{
 		StartTime:         startTime.UnixMilli(),
 		EndTime:           endTime.UnixMilli(),

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -18,6 +19,8 @@ import (
 	"github.com/nats-io/nats.go/jetstream"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/reliant-labs/reliant/internal/memtemp"
 )
 
 // These tests run drainPendingCommands against a real 3-node embedded NATS
@@ -28,6 +31,10 @@ import (
 
 type natsTestCluster struct {
 	servers []*server.Server
+	// routesPerPeer is how many route connections a member holds to each
+	// peer once the mesh is complete: one per pool slot plus one per pinned
+	// account. NewServer fills both defaults into the options it is given.
+	routesPerPeer int
 }
 
 func freeLocalPort(t *testing.T) int {
@@ -79,41 +86,90 @@ func (*fatalRecorder) Errorf(string, ...any)  {}
 func (*fatalRecorder) Debugf(string, ...any)  {}
 func (*fatalRecorder) Tracef(string, ...any)  {}
 
+// clusterAttempts is how many fresh clusters startNATSCluster boots before
+// giving up. A fresh attempt gets fresh route ports and fresh store dirs.
+const clusterAttempts = 3
+
+// maxFormationWait caps one attempt's wait for the cluster to form. On an
+// idle machine it forms in under a second; the cap exists only so a wedged
+// attempt is abandoned and retried while the test binary still has time left.
+const maxFormationWait = 90 * time.Second
+
+// errClusterStalled: the members started but the cluster did not finish
+// forming within the attempt's budget. Retried on a fresh cluster.
+var errClusterStalled = errors.New("cluster did not finish forming")
+
 func startNATSCluster(t *testing.T, n int) *natsTestCluster {
 	t.Helper()
-	// A taken route port is retried on fresh ports; it is the machine being
-	// busy, not the cluster misbehaving. Any other startup failure is not.
-	const attempts = 3
-	var c *natsTestCluster
-	var routesPerPeer int
+	// A taken route port and a stalled formation are retried on a fresh
+	// cluster: both are the machine being busy, not the cluster misbehaving.
+	// Any other fatal startup error (an unwritable store dir, a bad option)
+	// would fail every attempt identically, so it fails at once.
 	for attempt := 1; ; attempt++ {
-		var err error
-		c, routesPerPeer, err = bootNATSCluster(t, n)
+		budget := attemptBudget(t, clusterAttempts-attempt+1)
+		c, err := bootNATSCluster(t, n, budget)
 		if err == nil {
-			break
+			return c
 		}
-		if !errors.Is(err, errRoutePortTaken) || attempt == attempts {
-			t.Fatalf("NATS cluster did not start (attempt %d of %d): %v", attempt, attempts, err)
+		retryable := errors.Is(err, errRoutePortTaken) || errors.Is(err, errClusterStalled)
+		if !retryable || attempt == clusterAttempts {
+			t.Fatalf("NATS cluster did not start (attempt %d of %d): %v", attempt, clusterAttempts, err)
 		}
-		t.Logf("NATS cluster attempt %d: %v; retrying on fresh route ports", attempt, err)
+		t.Logf("NATS cluster attempt %d of %d: %v; retrying on a fresh cluster", attempt, clusterAttempts, err)
 	}
-	waitClusterFormed(t, c, n, routesPerPeer)
-	return c
 }
 
-// bootNATSCluster starts n members routed to each other and waits until each
-// is listening. A member that reports a fatal error fails it at once rather
-// than at the readiness timeout, with every member it started shut down.
+// formationBudget is how long one attempt may wait for the cluster to form:
+// an even share of what the test binary's -timeout leaves, minus room for the
+// test body and cleanup, capped at maxFormationWait. Waiting on the cluster's
+// own signals for as long as the binary can afford, rather than a fixed few
+// seconds, is what keeps a starved machine from failing a healthy cluster.
+func formationBudget(t *testing.T, attemptsLeft int) time.Duration {
+	t.Helper()
+	budget := maxFormationWait
+	if deadline, ok := t.Deadline(); ok {
+		const reserve = 30 * time.Second
+		if share := (time.Until(deadline) - reserve) / time.Duration(attemptsLeft); share < budget {
+			budget = share
+		}
+	}
+	return max(budget, 10*time.Second)
+}
+
+// storeRoot is where one attempt's members keep their JetStream state: a
+// tmpfs when the machine has one with room (internal/memtemp), else the
+// test's temp dir.
 //
-// routesPerPeer is how many route connections a member holds to each peer once
-// the mesh is complete: one per pool slot plus one per pinned account.
-// NewServer fills both defaults into the options it is given.
-func bootNATSCluster(t *testing.T, n int) (_ *natsTestCluster, routesPerPeer int, _ error) {
+// Startup, and every raft term, vote and peer change after it, writes with
+// O_SYNC, and a member listens for clients and routes only once its JetStream
+// layer is up. On a disk shared with other builds that is the whole cost of
+// forming the cluster: 64 concurrent O_DIRECT|O_SYNC writers on a shared
+// dev machine's disk took member readiness from ~60ms to ~4s and formation from
+// <1s to 22-51s, and a busier disk is how "cluster member n0 not ready after
+// 20s" happened. Durability across a power cut is not what these tests are
+// about, so the state lives in memory, where an fsync costs nothing.
+func storeRoot(t *testing.T) string {
+	t.Helper()
+	return memtemp.Dir(t)
+}
+
+// attemptBudget picks each attempt's budget. A variable so a test can make an
+// attempt stall.
+var attemptBudget = formationBudget
+
+// bootNATSCluster starts n members routed to each other and waits, for at
+// most budget, until the cluster has formed (see formation). A member that
+// reports a fatal error fails it at once rather than at the budget, and every
+// member it started is shut down whenever it fails.
+func bootNATSCluster(t *testing.T, n int, budget time.Duration) (*natsTestCluster, error) {
 	t.Helper()
 	routePorts := make([]int, n)
 	for i := range routePorts {
 		routePorts[i] = routePort(t)
 	}
+	// Before the shutdown cleanup is registered, so it is removed after
+	// every member has stopped writing to it.
+	root := storeRoot(t)
 	c := &natsTestCluster{}
 	shutdown := func() {
 		for _, s := range c.servers {
@@ -135,7 +191,7 @@ func bootNATSCluster(t *testing.T, n int) (_ *natsTestCluster, routesPerPeer int
 			Port:       -1,
 			HTTPPort:   -1,
 			JetStream:  true,
-			StoreDir:   t.TempDir(),
+			StoreDir:   filepath.Join(root, fmt.Sprintf("n%d", i)),
 			NoLog:      true,
 			NoSigs:     true,
 		}
@@ -147,71 +203,74 @@ func bootNATSCluster(t *testing.T, n int) (_ *natsTestCluster, routesPerPeer int
 		require.NoError(t, err)
 		recorders[i] = &fatalRecorder{}
 		srv.SetLogger(recorders[i], false, false)
-		routesPerPeer = max(opts.Cluster.PoolSize, 1) + len(opts.Cluster.PinnedAccounts)
+		c.routesPerPeer = max(opts.Cluster.PoolSize, 1) + len(opts.Cluster.PinnedAccounts)
 		go srv.Start()
 		c.servers = append(c.servers, srv)
 	}
-	deadline := time.Now().Add(20 * time.Second)
-	for _, s := range c.servers {
-		// 50ms, not less: ReadyForConnections sleeps between checks only
-		// when given more than 25ms, and spins otherwise.
-		for !s.ReadyForConnections(50 * time.Millisecond) {
-			for i, rec := range recorders {
-				msg := rec.fatal()
-				if msg == "" {
-					continue
-				}
-				shutdown()
-				if strings.Contains(msg, "Error listening on router port") {
-					return nil, 0, fmt.Errorf("%w: %s: %s", errRoutePortTaken, c.servers[i].Name(), msg)
-				}
-				return nil, 0, fmt.Errorf("%s: %s", c.servers[i].Name(), msg)
+
+	start := time.Now()
+	nextReport := start.Add(10 * time.Second)
+	for {
+		for i, rec := range recorders {
+			msg := rec.fatal()
+			if msg == "" {
+				continue
 			}
-			if time.Now().After(deadline) {
-				shutdown()
-				return nil, 0, fmt.Errorf("cluster member %s not ready after 20s", s.Name())
+			shutdown()
+			if strings.Contains(msg, "Error listening on router port") {
+				return nil, fmt.Errorf("%w: %s: %s", errRoutePortTaken, c.servers[i].Name(), msg)
 			}
+			return nil, fmt.Errorf("%s: %s", c.servers[i].Name(), msg)
 		}
+		formed, state := c.formation()
+		if formed {
+			return c, nil
+		}
+		now := time.Now()
+		if now.Sub(start) > budget {
+			shutdown()
+			return nil, fmt.Errorf("%w after %s: %s", errClusterStalled, budget, state)
+		}
+		if now.After(nextReport) {
+			t.Logf("NATS cluster still forming after %s: %s", now.Sub(start).Round(time.Second), state)
+			nextReport = now.Add(10 * time.Second)
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
-	return c, routesPerPeer, nil
 }
 
-func waitClusterFormed(t *testing.T, c *natsTestCluster, n, routesPerPeer int) {
-	t.Helper()
-	// Wait for the COMPLETE route mesh, not just a JetStream meta leader.
-	//
-	// The members start together, so some of their first route dials are
-	// refused and the races between explicit and implicit routes end in
-	// duplicate routes being closed. That can leave one pool slot between two
-	// members empty until the 1s reconnect fills it. JetStream rides the
-	// system account's pinned route, so the cluster elects leaders and
-	// reports healthy, but the $G interest that slot carries does not cross:
-	// a stream leader's subscription never reaches the member the test
-	// publishes through ("nats: no response from stream"), and an advisory
-	// the test subscribed to is dropped by a member that never heard of the
-	// subscription. Captured in a protocol trace: n0's RS+ for the advisory
-	// reached n2 only 0.7s later, over the reconnected route, after n2 had
-	// already published the consumer-created advisory to nobody.
-	// nats-server's own tests wait for exactly this (checkClusterFormed).
-	wantRoutes := (n - 1) * routesPerPeer
-	require.Eventually(t, func() bool {
-		for _, s := range c.servers {
-			if s.NumRoutes() != wantRoutes {
-				return false
-			}
-		}
-		return true
-	}, 20*time.Second, 50*time.Millisecond, "route mesh never completed: want %d routes per member", wantRoutes)
-	require.Eventually(t, func() bool {
-		leader := false
-		for _, s := range c.servers {
-			if !s.JetStreamIsCurrent() {
-				return false
-			}
-			leader = leader || s.JetStreamIsLeader()
-		}
-		return leader
-	}, 60*time.Second, 200*time.Millisecond, "JetStream meta layer never formed")
+// formation reports whether the cluster has formed, and each member's state
+// for the failure message when it has not. Formed means, on every member:
+// listening for clients and routes, the COMPLETE route mesh, and a current
+// JetStream meta layer with a leader somewhere.
+//
+// The complete route mesh, not just a JetStream meta leader: the members
+// start together, so some of their first route dials are refused and the
+// races between explicit and implicit routes end in duplicate routes being
+// closed. That can leave one pool slot between two members empty until the
+// 1s reconnect fills it. JetStream rides the system account's pinned route,
+// so the cluster elects leaders and reports healthy, but the $G interest that
+// slot carries does not cross: a stream leader's subscription never reaches
+// the member the test publishes through ("nats: no response from stream"),
+// and an advisory the test subscribed to is dropped by a member that never
+// heard of the subscription. Captured in a protocol trace: n0's RS+ for the
+// advisory reached n2 only 0.7s later, over the reconnected route, after n2
+// had already published the consumer-created advisory to nobody.
+// nats-server's own tests wait for exactly this (checkClusterFormed).
+func (c *natsTestCluster) formation() (bool, string) {
+	wantRoutes := (len(c.servers) - 1) * c.routesPerPeer
+	formed, leader := true, false
+	states := make([]string, 0, len(c.servers))
+	for _, s := range c.servers {
+		listening := s.Addr() != nil && s.ClusterAddr() != nil
+		routes := s.NumRoutes()
+		current, isLeader := s.JetStreamIsCurrent(), s.JetStreamIsLeader()
+		leader = leader || isLeader
+		formed = formed && listening && routes == wantRoutes && current
+		states = append(states, fmt.Sprintf("%s{listening=%t routes=%d/%d js-current=%t js-leader=%t}",
+			s.Name(), listening, routes, wantRoutes, current, isLeader))
+	}
+	return formed && leader, strings.Join(states, " ")
 }
 
 func joinCSV(s []string) string {
@@ -273,7 +332,7 @@ func (c *natsTestCluster) waitInterest(t *testing.T, subject string) {
 			}
 		}
 		return true
-	}, 10*time.Second, 20*time.Millisecond, "interest in %s never reached every member", subject)
+	}, formationBudget(t, 1), 20*time.Millisecond, "interest in %s never reached every member", subject)
 }
 
 func (c *natsTestCluster) waitHealthy(t *testing.T) {
@@ -285,7 +344,7 @@ func (c *natsTestCluster) waitHealthy(t *testing.T) {
 			}
 		}
 		return true
-	}, 60*time.Second, 200*time.Millisecond, "cluster never became healthy")
+	}, formationBudget(t, 1), 200*time.Millisecond, "cluster never became healthy")
 }
 
 // pendingStreamConfig mirrors control-plane's pendingCommandsStreamConfig at R3.
@@ -327,7 +386,7 @@ func newPendingClusterEnv(t *testing.T) *pendingClusterEnv {
 		defer cancel()
 		stream, err = js.CreateOrUpdateStream(ctx, pendingStreamConfig())
 		return err == nil
-	}, 60*time.Second, 250*time.Millisecond, "create R3 stream: %v", err)
+	}, formationBudget(t, 1), 250*time.Millisecond, "create R3 stream: %v", err)
 	require.Equal(t, 3, stream.CachedInfo().Config.Replicas)
 
 	env := &pendingClusterEnv{cluster: c, nc: nc, js: js, stream: stream}
@@ -544,4 +603,30 @@ func TestStartNATSCluster_RecoversWhenARoutePortIsTaken(t *testing.T) {
 	require.Len(t, c.servers, 3)
 	assert.Less(t, time.Since(start), 15*time.Second,
 		"a lost route port must be detected when the bind fails, not after the readiness timeout")
+}
+
+// A member that is slow to start — the reported failure was "cluster member n0
+// not ready after 20s" on a machine whose heavy slots were all full — is not a
+// broken cluster. An attempt that runs out of budget must be abandoned and
+// retried on a fresh cluster, not fail the test on attempt 1 of 3.
+func TestStartNATSCluster_RetriesAStalledFormation(t *testing.T) {
+	if testing.Short() {
+		t.Skip("-short: boots a 3-node NATS cluster; runs in the full lane")
+	}
+	var attempts atomic.Int32
+	prev := attemptBudget
+	attemptBudget = func(t *testing.T, attemptsLeft int) time.Duration {
+		if attempts.Add(1) == 1 {
+			// No cluster forms in a microsecond: this attempt stalls.
+			return time.Microsecond
+		}
+		return prev(t, attemptsLeft)
+	}
+	t.Cleanup(func() { attemptBudget = prev })
+
+	c := startNATSCluster(t, 3)
+	require.Len(t, c.servers, 3)
+	assert.Equal(t, int32(2), attempts.Load(), "the stalled attempt is retried once, on a fresh cluster")
+	formed, state := c.formation()
+	assert.True(t, formed, "the retried cluster is fully formed: %s", state)
 }

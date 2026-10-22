@@ -133,11 +133,11 @@ func TestWorkflowDraftWrite_RolledBackEmitsNothing(t *testing.T) {
 	require.Len(t, draftUpdates(t, repo, userID), 1)
 	dup := newDraftForTest(userID)
 	dup.Slug = draft.Slug
-	start := time.Now()
+	retries := RecordRetryBackoffs(repo)
 	err = repo.CreateWorkflowDraft(ctx, dup)
 	require.ErrorIs(t, err, ErrWorkflowSlugTaken)
 	require.Contains(t, err.Error(), draft.Slug)
-	require.Less(t, time.Since(start), 700*time.Millisecond, "a unique violation must not walk the retry ladder")
+	require.Zero(t, retries.Len(), "a unique violation must not walk the retry ladder")
 	require.Len(t, draftUpdates(t, repo, userID), 1)
 }
 

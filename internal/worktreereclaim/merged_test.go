@@ -51,6 +51,7 @@ func (f *fixture) pruned(w Worktree) {
 
 func TestMerged_SquashMergedBranchWithItsRemoteBranchDeletedIsReaped(t *testing.T) {
 	t.Parallel()
+	heavyUnderShort(t, "a squash merge, a deleted remote branch and a full reclaim (~66 git processes)")
 	f := newFixture(t)
 	f.idle()
 	w := f.worktree("sq", "feat/sq")
@@ -78,6 +79,7 @@ func TestMerged_SquashMergedBranchWithItsRemoteBranchDeletedIsReaped(t *testing.
 
 func TestMerged_RebaseMergedBranchIsReaped(t *testing.T) {
 	t.Parallel()
+	heavyUnderShort(t, "~59 git processes")
 	f := newFixture(t)
 	f.idle()
 	w := f.worktree("rb", "feat/rb")
@@ -106,6 +108,7 @@ func TestMerged_RebaseMergedBranchIsReaped(t *testing.T) {
 
 func TestMerged_AnUnpushedLocalCommitIsStillHeld(t *testing.T) {
 	t.Parallel()
+	heavyUnderShort(t, "a merge, an unpushed commit, and two verdicts (~71 git processes)")
 	f := newFixture(t)
 	f.idle()
 	w := f.worktree("lc", "feat/lc")
@@ -197,6 +200,7 @@ func TestMerged_ALockedByTheUserWorktreeIsNotReaped(t *testing.T) {
 // fetched the merge); a different head does not.
 func TestMerged_AMergedPullRequestForExactlyThisHeadFreesTheWorktree(t *testing.T) {
 	t.Parallel()
+	heavyUnderShort(t, "a merged pull request's head through a verdict and a full reclaim (~62 git processes)")
 	f := newFixture(t)
 	f.idle()
 	w := f.worktree("pr", "feat/pr")
@@ -230,6 +234,7 @@ func TestMerged_AMergedPullRequestForExactlyThisHeadFreesTheWorktree(t *testing.
 // have happened since this clone last fetched.
 func TestMerged_TheBaseIsFetchedBeforeConcludingItIsUnmerged(t *testing.T) {
 	t.Parallel()
+	heavyUnderShort(t, "a merge on the origin, a fetch and a full reclaim (~64 git processes)")
 	f := newFixture(t)
 	f.idle()
 	w := f.worktree("ft", "feat/ft")
@@ -255,6 +260,7 @@ func TestMerged_TheBaseIsFetchedBeforeConcludingItIsUnmerged(t *testing.T) {
 // must not match.
 func TestMerged_ADifferentChangeOnMainDoesNotCountAsMerged(t *testing.T) {
 	t.Parallel()
+	heavyUnderShort(t, "~35 git processes")
 	f := newFixture(t)
 	f.idle()
 	w := f.worktree("df", "feat/df")
