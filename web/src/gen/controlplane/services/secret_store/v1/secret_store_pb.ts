@@ -20,7 +20,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file services/secret_store/v1/secret_store.proto.
  */
 export const file_services_secret_store_v1_secret_store: GenFile = /*@__PURE__*/
-  fileDesc("CitzZXJ2aWNlcy9zZWNyZXRfc3RvcmUvdjEvc2VjcmV0X3N0b3JlLnByb3RvEg9jb250cm9scGxhbmUudjEijAIKDVNlY3JldFN1bW1hcnkSDAoEbmFtZRgBIAEoCRIXCg9jdXJyZW50X3ZlcnNpb24YAiABKA0SFgoOb2xkZXN0X3ZlcnNpb24YAyABKA0SFAoMbWF4X3ZlcnNpb25zGAQgASgNEjAKDGNyZWF0ZWRfdGltZRgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASMAoMdXBkYXRlZF90aW1lGAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIfChdjdXJyZW50X3ZlcnNpb25fZGVsZXRlZBgHIAEoCBIhChljdXJyZW50X3ZlcnNpb25fZGVzdHJveWVkGAggASgIIpgBCg1TZWNyZXRWZXJzaW9uEg8KB3ZlcnNpb24YASABKA0SMAoMY3JlYXRlZF90aW1lGAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIxCg1kZWxldGlvbl90aW1lGAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIRCglkZXN0cm95ZWQYBCABKAgiLAoSTGlzdFNlY3JldHNSZXF1ZXN0EhYKDmVudmlyb25tZW50X2lkGAEgASgJIkYKE0xpc3RTZWNyZXRzUmVzcG9uc2USLwoHc2VjcmV0cxgBIAMoCzIeLmNvbnRyb2xwbGFuZS52MS5TZWNyZXRTdW1tYXJ5IkAKGEdldFNlY3JldFZlcnNpb25zUmVxdWVzdBIWCg5lbnZpcm9ubWVudF9pZBgBIAEoCRIMCgRuYW1lGAMgASgJIn4KGUdldFNlY3JldFZlcnNpb25zUmVzcG9uc2USLwoHc3VtbWFyeRgBIAEoCzIeLmNvbnRyb2xwbGFuZS52MS5TZWNyZXRTdW1tYXJ5EjAKCHZlcnNpb25zGAIgAygLMh4uY29udHJvbHBsYW5lLnYxLlNlY3JldFZlcnNpb24iaAoQU2V0U2VjcmV0UmVxdWVzdBIWCg5lbnZpcm9ubWVudF9pZBgBIAEoCRIMCgRuYW1lGAMgASgJEhQKDHNlY3JldF92YWx1ZRgEIAEoCRIQCgNjYXMYBSABKA1IAIgBAUIGCgRfY2FzIlYKEVNldFNlY3JldFJlc3BvbnNlEg8KB3ZlcnNpb24YASABKA0SMAoMY3JlYXRlZF90aW1lGAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCJNChNEZWxldGVTZWNyZXRSZXF1ZXN0EhYKDmVudmlyb25tZW50X2lkGAEgASgJEgwKBG5hbWUYAyABKAkSEAoIdmVyc2lvbnMYBCADKA0iFgoURGVsZXRlU2VjcmV0UmVzcG9uc2UiTwoVVW5kZWxldGVTZWNyZXRSZXF1ZXN0EhYKDmVudmlyb25tZW50X2lkGAEgASgJEgwKBG5hbWUYAyABKAkSEAoIdmVyc2lvbnMYBCADKA0iGAoWVW5kZWxldGVTZWNyZXRSZXNwb25zZSJOChREZXN0cm95U2VjcmV0UmVxdWVzdBIWCg5lbnZpcm9ubWVudF9pZBgBIAEoCRIMCgRuYW1lGAMgASgJEhAKCHZlcnNpb25zGAQgAygNIhcKFURlc3Ryb3lTZWNyZXRSZXNwb25zZTLTBgoSU2VjcmV0U3RvcmVTZXJ2aWNlEmAKC0xpc3RTZWNyZXRzEiMuY29udHJvbHBsYW5lLnYxLkxpc3RTZWNyZXRzUmVxdWVzdBokLmNvbnRyb2xwbGFuZS52MS5MaXN0U2VjcmV0c1Jlc3BvbnNlIgaiuxgCCAEScgoRR2V0U2VjcmV0VmVyc2lvbnMSKS5jb250cm9scGxhbmUudjEuR2V0U2VjcmV0VmVyc2lvbnNSZXF1ZXN0GiouY29udHJvbHBsYW5lLnYxLkdldFNlY3JldFZlcnNpb25zUmVzcG9uc2UiBqK7GAIIARKZAQoJU2V0U2VjcmV0EiEuY29udHJvbHBsYW5lLnYxLlNldFNlY3JldFJlcXVlc3QaIi5jb250cm9scGxhbmUudjEuU2V0U2VjcmV0UmVzcG9uc2UiRaK7GEEIATo9CgNzZXQSFAoGc2VjcmV0EgRuYW1lGgRuYW1lGg5lbnZpcm9ubWVudF9pZCoQcmVzcG9uc2UudmVyc2lvbhKTAQoMRGVsZXRlU2VjcmV0EiQuY29udHJvbHBsYW5lLnYxLkRlbGV0ZVNlY3JldFJlcXVlc3QaJS5jb250cm9scGxhbmUudjEuRGVsZXRlU2VjcmV0UmVzcG9uc2UiNqK7GDIIATouCgZkZWxldGUSFAoGc2VjcmV0EgRuYW1lGgRuYW1lGg5lbnZpcm9ubWVudF9pZBKaAQoOVW5kZWxldGVTZWNyZXQSJi5jb250cm9scGxhbmUudjEuVW5kZWxldGVTZWNyZXRSZXF1ZXN0GicuY29udHJvbHBsYW5lLnYxLlVuZGVsZXRlU2VjcmV0UmVzcG9uc2UiN6K7GDMIATovCgdyZXN0b3JlEhQKBnNlY3JldBIEbmFtZRoEbmFtZRoOZW52aXJvbm1lbnRfaWQSlwEKDURlc3Ryb3lTZWNyZXQSJS5jb250cm9scGxhbmUudjEuRGVzdHJveVNlY3JldFJlcXVlc3QaJi5jb250cm9scGxhbmUudjEuRGVzdHJveVNlY3JldFJlc3BvbnNlIjeiuxgzCAE6LwoHZGVzdHJveRIUCgZzZWNyZXQSBG5hbWUaBG5hbWUaDmVudmlyb25tZW50X2lkQt4BChNjb20uY29udHJvbHBsYW5lLnYxQhBTZWNyZXRTdG9yZVByb3RvUAFaWGdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL2NvbnRyb2xwbGFuZS9zZXJ2aWNlcy9zZWNyZXRfc3RvcmUvdjE7Y29udHJvbHBsYW5ldjGiAgNDWFiqAg9Db250cm9scGxhbmUuVjHKAg9Db250cm9scGxhbmVcVjHiAhtDb250cm9scGxhbmVcVjFcR1BCTWV0YWRhdGHqAhBDb250cm9scGxhbmU6OlYxYgZwcm90bzM", [file_forge_v1_forge, file_google_protobuf_timestamp]);
+  fileDesc("CitzZXJ2aWNlcy9zZWNyZXRfc3RvcmUvdjEvc2VjcmV0X3N0b3JlLnByb3RvEg9jb250cm9scGxhbmUudjEijAIKDVNlY3JldFN1bW1hcnkSDAoEbmFtZRgBIAEoCRIXCg9jdXJyZW50X3ZlcnNpb24YAiABKA0SFgoOb2xkZXN0X3ZlcnNpb24YAyABKA0SFAoMbWF4X3ZlcnNpb25zGAQgASgNEjAKDGNyZWF0ZWRfdGltZRgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASMAoMdXBkYXRlZF90aW1lGAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIfChdjdXJyZW50X3ZlcnNpb25fZGVsZXRlZBgHIAEoCBIhChljdXJyZW50X3ZlcnNpb25fZGVzdHJveWVkGAggASgIIpgBCg1TZWNyZXRWZXJzaW9uEg8KB3ZlcnNpb24YASABKA0SMAoMY3JlYXRlZF90aW1lGAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIxCg1kZWxldGlvbl90aW1lGAMgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIRCglkZXN0cm95ZWQYBCABKAgiLAoSTGlzdFNlY3JldHNSZXF1ZXN0EhYKDmVudmlyb25tZW50X2lkGAEgASgJIpIBChNMaXN0U2VjcmV0c1Jlc3BvbnNlEi8KB3NlY3JldHMYASADKAsyHi5jb250cm9scGxhbmUudjEuU2VjcmV0U3VtbWFyeRIRCglwcm90ZWN0ZWQYAiABKAgSNwoTc3RlcF91cF92YWxpZF91bnRpbBgDIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiQAoYR2V0U2VjcmV0VmVyc2lvbnNSZXF1ZXN0EhYKDmVudmlyb25tZW50X2lkGAEgASgJEgwKBG5hbWUYAyABKAkifgoZR2V0U2VjcmV0VmVyc2lvbnNSZXNwb25zZRIvCgdzdW1tYXJ5GAEgASgLMh4uY29udHJvbHBsYW5lLnYxLlNlY3JldFN1bW1hcnkSMAoIdmVyc2lvbnMYAiADKAsyHi5jb250cm9scGxhbmUudjEuU2VjcmV0VmVyc2lvbiJoChBTZXRTZWNyZXRSZXF1ZXN0EhYKDmVudmlyb25tZW50X2lkGAEgASgJEgwKBG5hbWUYAyABKAkSFAoMc2VjcmV0X3ZhbHVlGAQgASgJEhAKA2NhcxgFIAEoDUgAiAEBQgYKBF9jYXMiLAoSQmVnaW5TdGVwVXBSZXF1ZXN0EhYKDmVudmlyb25tZW50X2lkGAEgASgJIlYKE0JlZ2luU3RlcFVwUmVzcG9uc2USDwoHc2VudF90bxgBIAEoCRIuCgpleHBpcmVzX2F0GAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCI9ChVDb21wbGV0ZVN0ZXBVcFJlcXVlc3QSFgoOZW52aXJvbm1lbnRfaWQYASABKAkSDAoEY29kZRgCIAEoCSJJChZDb21wbGV0ZVN0ZXBVcFJlc3BvbnNlEi8KC3ZhbGlkX3VudGlsGAEgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCJWChFTZXRTZWNyZXRSZXNwb25zZRIPCgd2ZXJzaW9uGAEgASgNEjAKDGNyZWF0ZWRfdGltZRgCIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiTQoTRGVsZXRlU2VjcmV0UmVxdWVzdBIWCg5lbnZpcm9ubWVudF9pZBgBIAEoCRIMCgRuYW1lGAMgASgJEhAKCHZlcnNpb25zGAQgAygNIhYKFERlbGV0ZVNlY3JldFJlc3BvbnNlIk8KFVVuZGVsZXRlU2VjcmV0UmVxdWVzdBIWCg5lbnZpcm9ubWVudF9pZBgBIAEoCRIMCgRuYW1lGAMgASgJEhAKCHZlcnNpb25zGAQgAygNIhgKFlVuZGVsZXRlU2VjcmV0UmVzcG9uc2UiTgoURGVzdHJveVNlY3JldFJlcXVlc3QSFgoOZW52aXJvbm1lbnRfaWQYASABKAkSDAoEbmFtZRgDIAEoCRIQCgh2ZXJzaW9ucxgEIAMoDSIXChVEZXN0cm95U2VjcmV0UmVzcG9uc2UyyQkKElNlY3JldFN0b3JlU2VydmljZRJgCgtMaXN0U2VjcmV0cxIjLmNvbnRyb2xwbGFuZS52MS5MaXN0U2VjcmV0c1JlcXVlc3QaJC5jb250cm9scGxhbmUudjEuTGlzdFNlY3JldHNSZXNwb25zZSIGorsYAggBEnIKEUdldFNlY3JldFZlcnNpb25zEikuY29udHJvbHBsYW5lLnYxLkdldFNlY3JldFZlcnNpb25zUmVxdWVzdBoqLmNvbnRyb2xwbGFuZS52MS5HZXRTZWNyZXRWZXJzaW9uc1Jlc3BvbnNlIgaiuxgCCAESmQEKCVNldFNlY3JldBIhLmNvbnRyb2xwbGFuZS52MS5TZXRTZWNyZXRSZXF1ZXN0GiIuY29udHJvbHBsYW5lLnYxLlNldFNlY3JldFJlc3BvbnNlIkWiuxhBCAE6PQoDc2V0EhQKBnNlY3JldBIEbmFtZRoEbmFtZRoOZW52aXJvbm1lbnRfaWQqEHJlc3BvbnNlLnZlcnNpb24SkwEKDERlbGV0ZVNlY3JldBIkLmNvbnRyb2xwbGFuZS52MS5EZWxldGVTZWNyZXRSZXF1ZXN0GiUuY29udHJvbHBsYW5lLnYxLkRlbGV0ZVNlY3JldFJlc3BvbnNlIjaiuxgyCAE6LgoGZGVsZXRlEhQKBnNlY3JldBIEbmFtZRoEbmFtZRoOZW52aXJvbm1lbnRfaWQSmgEKDlVuZGVsZXRlU2VjcmV0EiYuY29udHJvbHBsYW5lLnYxLlVuZGVsZXRlU2VjcmV0UmVxdWVzdBonLmNvbnRyb2xwbGFuZS52MS5VbmRlbGV0ZVNlY3JldFJlc3BvbnNlIjeiuxgzCAE6LwoHcmVzdG9yZRIUCgZzZWNyZXQSBG5hbWUaBG5hbWUaDmVudmlyb25tZW50X2lkEpcBCg1EZXN0cm95U2VjcmV0EiUuY29udHJvbHBsYW5lLnYxLkRlc3Ryb3lTZWNyZXRSZXF1ZXN0GiYuY29udHJvbHBsYW5lLnYxLkRlc3Ryb3lTZWNyZXRSZXNwb25zZSI3orsYMwgBOi8KB2Rlc3Ryb3kSFAoGc2VjcmV0EgRuYW1lGgRuYW1lGg5lbnZpcm9ubWVudF9pZBK9AQoLQmVnaW5TdGVwVXASIy5jb250cm9scGxhbmUudjEuQmVnaW5TdGVwVXBSZXF1ZXN0GiQuY29udHJvbHBsYW5lLnYxLkJlZ2luU3RlcFVwUmVzcG9uc2UiY6K7GF8IATpbOllpc3N1ZXMgYSBvbmUtdGltZSBjb2RlIHRvIHRoZSBjYWxsZXIncyBvd24gYWRkcmVzczsgbm90aGluZyBjaGFuZ2VzIHVudGlsIGl0IGlzIGNvbXBsZXRlZBKzAQoOQ29tcGxldGVTdGVwVXASJi5jb250cm9scGxhbmUudjEuQ29tcGxldGVTdGVwVXBSZXF1ZXN0GicuY29udHJvbHBsYW5lLnYxLkNvbXBsZXRlU3RlcFVwUmVzcG9uc2UiUKK7GEwIATpICgdzdGVwX3VwEi0KC2Vudmlyb25tZW50Eg5lbnZpcm9ubWVudF9pZBoOZW52aXJvbm1lbnRfaWQaDmVudmlyb25tZW50X2lkQt4BChNjb20uY29udHJvbHBsYW5lLnYxQhBTZWNyZXRTdG9yZVByb3RvUAFaWGdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL2NvbnRyb2xwbGFuZS9zZXJ2aWNlcy9zZWNyZXRfc3RvcmUvdjE7Y29udHJvbHBsYW5ldjGiAgNDWFiqAg9Db250cm9scGxhbmUuVjHKAg9Db250cm9scGxhbmVcVjHiAhtDb250cm9scGxhbmVcVjFcR1BCTWV0YWRhdGHqAhBDb250cm9scGxhbmU6OlYxYgZwcm90bzM", [file_forge_v1_forge, file_google_protobuf_timestamp]);
 
 /**
  * SecretSummary is one secret's list-view metadata. It answers "does this
@@ -161,6 +161,23 @@ export type ListSecretsResponse = Message<"controlplane.v1.ListSecretsResponse">
    * @generated from field: repeated controlplane.v1.SecretSummary secrets = 1;
    */
   secrets: SecretSummary[];
+
+  /**
+   * protected reports that mutations in this environment need a fresh step-up
+   * (BeginStepUp / CompleteStepUp) on top of org admin. Reading is never gated.
+   *
+   * @generated from field: bool protected = 2;
+   */
+  protected: boolean;
+
+  /**
+   * step_up_valid_until is when the caller's current step-up grant for this
+   * environment ends. Unset when the caller holds none (or the environment is
+   * not protected), so a client knows to prompt before it writes.
+   *
+   * @generated from field: google.protobuf.Timestamp step_up_valid_until = 3;
+   */
+  stepUpValidUntil?: Timestamp | undefined;
 };
 
 /**
@@ -261,6 +278,93 @@ export const SetSecretRequestSchema: GenMessage<SetSecretRequest> = /*@__PURE__*
   messageDesc(file_services_secret_store_v1_secret_store, 6);
 
 /**
+ * @generated from message controlplane.v1.BeginStepUpRequest
+ */
+export type BeginStepUpRequest = Message<"controlplane.v1.BeginStepUpRequest"> & {
+  /**
+   * @generated from field: string environment_id = 1;
+   */
+  environmentId: string;
+};
+
+/**
+ * Describes the message controlplane.v1.BeginStepUpRequest.
+ * Use `create(BeginStepUpRequestSchema)` to create a new message.
+ */
+export const BeginStepUpRequestSchema: GenMessage<BeginStepUpRequest> = /*@__PURE__*/
+  messageDesc(file_services_secret_store_v1_secret_store, 7);
+
+/**
+ * @generated from message controlplane.v1.BeginStepUpResponse
+ */
+export type BeginStepUpResponse = Message<"controlplane.v1.BeginStepUpResponse"> & {
+  /**
+   * sent_to is the destination with its local part masked (j***@example.com),
+   * enough for the user to know which inbox to open and no more.
+   *
+   * @generated from field: string sent_to = 1;
+   */
+  sentTo: string;
+
+  /**
+   * expires_at is when the code stops being redeemable.
+   *
+   * @generated from field: google.protobuf.Timestamp expires_at = 2;
+   */
+  expiresAt?: Timestamp | undefined;
+};
+
+/**
+ * Describes the message controlplane.v1.BeginStepUpResponse.
+ * Use `create(BeginStepUpResponseSchema)` to create a new message.
+ */
+export const BeginStepUpResponseSchema: GenMessage<BeginStepUpResponse> = /*@__PURE__*/
+  messageDesc(file_services_secret_store_v1_secret_store, 8);
+
+/**
+ * @generated from message controlplane.v1.CompleteStepUpRequest
+ */
+export type CompleteStepUpRequest = Message<"controlplane.v1.CompleteStepUpRequest"> & {
+  /**
+   * @generated from field: string environment_id = 1;
+   */
+  environmentId: string;
+
+  /**
+   * code is the one-time code from the email. Inbound only.
+   *
+   * @generated from field: string code = 2;
+   */
+  code: string;
+};
+
+/**
+ * Describes the message controlplane.v1.CompleteStepUpRequest.
+ * Use `create(CompleteStepUpRequestSchema)` to create a new message.
+ */
+export const CompleteStepUpRequestSchema: GenMessage<CompleteStepUpRequest> = /*@__PURE__*/
+  messageDesc(file_services_secret_store_v1_secret_store, 9);
+
+/**
+ * @generated from message controlplane.v1.CompleteStepUpResponse
+ */
+export type CompleteStepUpResponse = Message<"controlplane.v1.CompleteStepUpResponse"> & {
+  /**
+   * valid_until is when the grant ends.
+   *
+   * @generated from field: google.protobuf.Timestamp valid_until = 1;
+   */
+  validUntil?: Timestamp | undefined;
+};
+
+/**
+ * Describes the message controlplane.v1.CompleteStepUpResponse.
+ * Use `create(CompleteStepUpResponseSchema)` to create a new message.
+ */
+export const CompleteStepUpResponseSchema: GenMessage<CompleteStepUpResponse> = /*@__PURE__*/
+  messageDesc(file_services_secret_store_v1_secret_store, 10);
+
+/**
  * @generated from message controlplane.v1.SetSecretResponse
  */
 export type SetSecretResponse = Message<"controlplane.v1.SetSecretResponse"> & {
@@ -282,7 +386,7 @@ export type SetSecretResponse = Message<"controlplane.v1.SetSecretResponse"> & {
  * Use `create(SetSecretResponseSchema)` to create a new message.
  */
 export const SetSecretResponseSchema: GenMessage<SetSecretResponse> = /*@__PURE__*/
-  messageDesc(file_services_secret_store_v1_secret_store, 7);
+  messageDesc(file_services_secret_store_v1_secret_store, 11);
 
 /**
  * @generated from message controlplane.v1.DeleteSecretRequest
@@ -312,7 +416,7 @@ export type DeleteSecretRequest = Message<"controlplane.v1.DeleteSecretRequest">
  * Use `create(DeleteSecretRequestSchema)` to create a new message.
  */
 export const DeleteSecretRequestSchema: GenMessage<DeleteSecretRequest> = /*@__PURE__*/
-  messageDesc(file_services_secret_store_v1_secret_store, 8);
+  messageDesc(file_services_secret_store_v1_secret_store, 12);
 
 /**
  * @generated from message controlplane.v1.DeleteSecretResponse
@@ -325,7 +429,7 @@ export type DeleteSecretResponse = Message<"controlplane.v1.DeleteSecretResponse
  * Use `create(DeleteSecretResponseSchema)` to create a new message.
  */
 export const DeleteSecretResponseSchema: GenMessage<DeleteSecretResponse> = /*@__PURE__*/
-  messageDesc(file_services_secret_store_v1_secret_store, 9);
+  messageDesc(file_services_secret_store_v1_secret_store, 13);
 
 /**
  * @generated from message controlplane.v1.UndeleteSecretRequest
@@ -356,7 +460,7 @@ export type UndeleteSecretRequest = Message<"controlplane.v1.UndeleteSecretReque
  * Use `create(UndeleteSecretRequestSchema)` to create a new message.
  */
 export const UndeleteSecretRequestSchema: GenMessage<UndeleteSecretRequest> = /*@__PURE__*/
-  messageDesc(file_services_secret_store_v1_secret_store, 10);
+  messageDesc(file_services_secret_store_v1_secret_store, 14);
 
 /**
  * @generated from message controlplane.v1.UndeleteSecretResponse
@@ -369,7 +473,7 @@ export type UndeleteSecretResponse = Message<"controlplane.v1.UndeleteSecretResp
  * Use `create(UndeleteSecretResponseSchema)` to create a new message.
  */
 export const UndeleteSecretResponseSchema: GenMessage<UndeleteSecretResponse> = /*@__PURE__*/
-  messageDesc(file_services_secret_store_v1_secret_store, 11);
+  messageDesc(file_services_secret_store_v1_secret_store, 15);
 
 /**
  * @generated from message controlplane.v1.DestroySecretRequest
@@ -399,7 +503,7 @@ export type DestroySecretRequest = Message<"controlplane.v1.DestroySecretRequest
  * Use `create(DestroySecretRequestSchema)` to create a new message.
  */
 export const DestroySecretRequestSchema: GenMessage<DestroySecretRequest> = /*@__PURE__*/
-  messageDesc(file_services_secret_store_v1_secret_store, 12);
+  messageDesc(file_services_secret_store_v1_secret_store, 16);
 
 /**
  * @generated from message controlplane.v1.DestroySecretResponse
@@ -412,7 +516,7 @@ export type DestroySecretResponse = Message<"controlplane.v1.DestroySecretRespon
  * Use `create(DestroySecretResponseSchema)` to create a new message.
  */
 export const DestroySecretResponseSchema: GenMessage<DestroySecretResponse> = /*@__PURE__*/
-  messageDesc(file_services_secret_store_v1_secret_store, 13);
+  messageDesc(file_services_secret_store_v1_secret_store, 17);
 
 /**
  * === SecretStoreService ===
@@ -524,6 +628,32 @@ export const SecretStoreService: GenService<{
     methodKind: "unary";
     input: typeof DestroySecretRequestSchema;
     output: typeof DestroySecretResponseSchema;
+  },
+  /**
+   * BeginStepUp starts a step-up re-authentication for ONE environment: the
+   * server emails a one-time code to the caller's verified account address.
+   * Nothing changes until CompleteStepUp. Required before any secret MUTATION
+   * in a `protected` environment (ListSecretsResponse.protected); a caller who
+   * skips it is refused with reason `step_up_required`.
+   *
+   * @generated from rpc controlplane.v1.SecretStoreService.BeginStepUp
+   */
+  beginStepUp: {
+    methodKind: "unary";
+    input: typeof BeginStepUpRequestSchema;
+    output: typeof BeginStepUpResponseSchema;
+  },
+  /**
+   * CompleteStepUp redeems the code. On success the caller may mutate this
+   * environment's secrets until `valid_until`; the grant belongs to the
+   * caller, to this environment, and to nothing else.
+   *
+   * @generated from rpc controlplane.v1.SecretStoreService.CompleteStepUp
+   */
+  completeStepUp: {
+    methodKind: "unary";
+    input: typeof CompleteStepUpRequestSchema;
+    output: typeof CompleteStepUpResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_services_secret_store_v1_secret_store, 0);

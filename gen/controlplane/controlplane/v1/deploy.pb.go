@@ -1213,7 +1213,14 @@ type DeployEnvironment struct {
 	// on. Non-empty means the CURRENT promotion was accepted and recorded and is
 	// held (see DeployHold) — "waiting on billing". Empty means nothing is
 	// queued.
-	Holds         []*DeployHold `protobuf:"bytes,23,rep,name=holds,proto3" json:"holds,omitempty"`
+	Holds []*DeployHold `protobuf:"bytes,23,rep,name=holds,proto3" json:"holds,omitempty"`
+	// PROTECTED: changing this environment's secrets needs org admin AND a fresh
+	// step-up re-authentication (SecretStoreService.BeginStepUp / CompleteStepUp),
+	// and so does turning this flag off. Set through DeployEnvironmentSpec.
+	//
+	// This is the secrets half of protection only. The source-of-truth half
+	// (`protection`, `main_ref`: tags 18 and 19, reserved above) stays deferred to #516.
+	Protected     bool `protobuf:"varint,24,opt,name=protected,proto3" json:"protected,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1381,6 +1388,13 @@ func (x *DeployEnvironment) GetHolds() []*DeployHold {
 	return nil
 }
 
+func (x *DeployEnvironment) GetProtected() bool {
+	if x != nil {
+		return x.Protected
+	}
+	return false
+}
+
 // DeployEnvironmentSpec is THE WRITABLE HALF of an environment — the whole of
 // what a client may set, and nothing else.
 //
@@ -1461,7 +1475,11 @@ type DeployEnvironmentSpec struct {
 	// without one. Absent leaves the stored value untouched. An environment
 	// that never declared it is treated as forge-applied: the hub becomes an
 	// applier only when the render says so.
-	HubConverged  *bool `protobuf:"varint,15,opt,name=hub_converged,json=hubConverged,proto3,oneof" json:"hub_converged,omitempty"`
+	HubConverged *bool `protobuf:"varint,15,opt,name=hub_converged,json=hubConverged,proto3,oneof" json:"hub_converged,omitempty"`
+	// Sets DeployEnvironment.protected. Absent leaves the stored value, so a
+	// read-modify-write client that predates the field cannot clear it. Turning
+	// protection OFF needs a fresh step-up; turning it on does not.
+	Protected     *bool `protobuf:"varint,16,opt,name=protected,proto3,oneof" json:"protected,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1583,6 +1601,13 @@ func (x *DeployEnvironmentSpec) GetClusterBindings() []*ClusterBinding {
 func (x *DeployEnvironmentSpec) GetHubConverged() bool {
 	if x != nil && x.HubConverged != nil {
 		return *x.HubConverged
+	}
+	return false
+}
+
+func (x *DeployEnvironmentSpec) GetProtected() bool {
+	if x != nil && x.Protected != nil {
+		return *x.Protected
 	}
 	return false
 }
@@ -6507,7 +6532,7 @@ const file_controlplane_v1_deploy_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
-	"updated_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\xd4\a\n" +
+	"updated_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\xf2\a\n" +
 	"\x11DeployEnvironment\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12:\n" +
@@ -6534,7 +6559,8 @@ const file_controlplane_v1_deploy_proto_rawDesc = "" +
 	"declaredBy\x12;\n" +
 	"\vdeclared_at\x18\x16 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"declaredAt\x121\n" +
-	"\x05holds\x18\x17 \x03(\v2\x1b.controlplane.v1.DeployHoldR\x05holdsJ\x04\b\x12\x10\x13J\x04\b\x13\x10\x14\"\xd6\x05\n" +
+	"\x05holds\x18\x17 \x03(\v2\x1b.controlplane.v1.DeployHoldR\x05holds\x12\x1c\n" +
+	"\tprotected\x18\x18 \x01(\bR\tprotectedJ\x04\b\x12\x10\x13J\x04\b\x13\x10\x14\"\x87\x06\n" +
 	"\x15DeployEnvironmentSpec\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12:\n" +
 	"\x04kind\x18\x02 \x01(\x0e2&.controlplane.v1.DeployEnvironmentKindR\x04kind\x12*\n" +
@@ -6551,8 +6577,11 @@ const file_controlplane_v1_deploy_proto_rawDesc = "" +
 	"\vdeclared_by\x18\r \x01(\v2'.controlplane.v1.DeploySourceProvenanceR\n" +
 	"declaredBy\x12J\n" +
 	"\x10cluster_bindings\x18\x0e \x03(\v2\x1f.controlplane.v1.ClusterBindingR\x0fclusterBindings\x12(\n" +
-	"\rhub_converged\x18\x0f \x01(\bH\x00R\fhubConverged\x88\x01\x01B\x10\n" +
-	"\x0e_hub_convergedJ\x04\b\n" +
+	"\rhub_converged\x18\x0f \x01(\bH\x00R\fhubConverged\x88\x01\x01\x12!\n" +
+	"\tprotected\x18\x10 \x01(\bH\x01R\tprotected\x88\x01\x01B\x10\n" +
+	"\x0e_hub_convergedB\f\n" +
+	"\n" +
+	"_protectedJ\x04\b\n" +
 	"\x10\vJ\x04\b\v\x10\f\"I\n" +
 	"\x0eClusterBinding\x12\x18\n" +
 	"\acluster\x18\x01 \x01(\tR\acluster\x12\x1d\n" +
