@@ -19,6 +19,7 @@ import { useTimelineVirtualizer } from "./useTimelineVirtualizer";
 import { GitBranch, ArrowRightLeft, Plus, ArrowUp, Route, Loader2 } from "lucide-react";
 import { Tooltip } from "../../ui/Tooltip";
 import { ChatMessage, type ChatTimelineVariant } from "../ChatMessage";
+import { isAsyncAskUserInput } from "../askUserUtils";
 import { CompactionMessage, isCompactionMessage } from "../CompactionMessage";
 import { WorkflowErrorMessage } from "../WorkflowErrorMessage";
 import { WorkflowInfoMessage } from "../WorkflowInfoMessage";
@@ -805,12 +806,13 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
       ) {
         if (!msg.contentBlocks?.length) continue;
         // Check if any block has actual visible content.
-        // ask_user tool calls are filtered out by ChatMessage (they render
-        // via QuestionPrompt instead), so they don't count as visible.
+        // Blocking ask_user tool calls are filtered out by ChatMessage (they
+        // render via the composer's QuestionPrompt), so they don't count as
+        // visible; an async one renders as its own card, so it does.
         const hasVisibleContent = msg.contentBlocks.some(
           (b) => {
             if (!b.content && !b.toolName && !b.toolCallId && !b.input) return false;
-            if (b.toolName === "ask_user") return false;
+            if (b.toolName === "ask_user") return isAsyncAskUserInput(b.input);
             return true;
           }
         );

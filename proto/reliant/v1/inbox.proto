@@ -88,11 +88,12 @@ message ListInboxResponse {
   repeated InboxItem items = 1;
 
   // Approvals + questions + waiting-for-machine: the items that block a live
-  // run. The nav badge shows this as a number. Counted over the full inbox,
-  // independent of limit.
+  // run (an async question does not). The nav badge shows this as a number.
+  // Counted over the full inbox, independent of limit.
   int32 blocking_count = 2;
 
-  // True when any failure item exists (the badge shows a dot, not a count).
+  // True when any item that blocks nothing exists — a failure, an async
+  // question, ... (the badge shows a dot, not a count).
   bool has_informational = 3;
 
   // True when limit cut the list short.
@@ -168,6 +169,10 @@ message InboxQuestion {
   string prompt = 3;
   // The raw question metadata (JSON), so the client can render the full form.
   optional string metadata = 4;
+  // Asked without waiting (ask_user async: true): the agent kept working, so
+  // the item waits on the user without blocking a run. Not counted in
+  // blocking_count.
+  bool async = 5;
 }
 
 message InboxWaitingForMachine {

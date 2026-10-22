@@ -221,10 +221,11 @@ type ListInboxResponse struct {
 	// first), then item_id. Group by run_id client-side.
 	Items []*InboxItem `protobuf:"bytes,1,rep,name=items,proto3" json:"items,omitempty"`
 	// Approvals + questions + waiting-for-machine: the items that block a live
-	// run. The nav badge shows this as a number. Counted over the full inbox,
-	// independent of limit.
+	// run (an async question does not). The nav badge shows this as a number.
+	// Counted over the full inbox, independent of limit.
 	BlockingCount int32 `protobuf:"varint,2,opt,name=blocking_count,json=blockingCount,proto3" json:"blocking_count,omitempty"`
-	// True when any failure item exists (the badge shows a dot, not a count).
+	// True when any item that blocks nothing exists — a failure, an async
+	// question, ... (the badge shows a dot, not a count).
 	HasInformational bool `protobuf:"varint,3,opt,name=has_informational,json=hasInformational,proto3" json:"has_informational,omitempty"`
 	// True when limit cut the list short.
 	Truncated bool `protobuf:"varint,4,opt,name=truncated,proto3" json:"truncated,omitempty"`
@@ -652,7 +653,11 @@ type InboxQuestion struct {
 	// The first question's text, when the metadata carries one.
 	Prompt string `protobuf:"bytes,3,opt,name=prompt,proto3" json:"prompt,omitempty"`
 	// The raw question metadata (JSON), so the client can render the full form.
-	Metadata      *string `protobuf:"bytes,4,opt,name=metadata,proto3,oneof" json:"metadata,omitempty"`
+	Metadata *string `protobuf:"bytes,4,opt,name=metadata,proto3,oneof" json:"metadata,omitempty"`
+	// Asked without waiting (ask_user async: true): the agent kept working, so
+	// the item waits on the user without blocking a run. Not counted in
+	// blocking_count.
+	Async         bool `protobuf:"varint,5,opt,name=async,proto3" json:"async,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -713,6 +718,13 @@ func (x *InboxQuestion) GetMetadata() string {
 		return *x.Metadata
 	}
 	return ""
+}
+
+func (x *InboxQuestion) GetAsync() bool {
+	if x != nil {
+		return x.Async
+	}
+	return false
 }
 
 type InboxWaitingForMachine struct {
@@ -1572,13 +1584,14 @@ const file_reliant_v1_inbox_proto_rawDesc = "" +
 	"\vapproval_id\x18\x01 \x01(\tR\n" +
 	"approvalId\x12=\n" +
 	"\rapproval_type\x18\x02 \x01(\x0e2\x18.reliant.v1.ApprovalTypeR\fapprovalType\x12\x14\n" +
-	"\x05title\x18\x03 \x01(\tR\x05titleJ\x04\b\x04\x10\x05J\x04\b\x05\x10\x06J\x04\b\x06\x10\aR\ttool_nameR\ftool_call_idR\x10argument_summary\"\x93\x01\n" +
+	"\x05title\x18\x03 \x01(\tR\x05titleJ\x04\b\x04\x10\x05J\x04\b\x05\x10\x06J\x04\b\x06\x10\aR\ttool_nameR\ftool_call_idR\x10argument_summary\"\xa9\x01\n" +
 	"\rInboxQuestion\x12\x1f\n" +
 	"\vquestion_id\x18\x01 \x01(\tR\n" +
 	"questionId\x12\x1b\n" +
 	"\tthread_id\x18\x02 \x01(\tR\bthreadId\x12\x16\n" +
 	"\x06prompt\x18\x03 \x01(\tR\x06prompt\x12\x1f\n" +
-	"\bmetadata\x18\x04 \x01(\tH\x00R\bmetadata\x88\x01\x01B\v\n" +
+	"\bmetadata\x18\x04 \x01(\tH\x00R\bmetadata\x88\x01\x01\x12\x14\n" +
+	"\x05async\x18\x05 \x01(\bR\x05asyncB\v\n" +
 	"\t_metadata\"V\n" +
 	"\x16InboxWaitingForMachine\x12\x1b\n" +
 	"\tdaemon_id\x18\x01 \x01(\tR\bdaemonId\x12\x1f\n" +

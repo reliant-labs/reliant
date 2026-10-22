@@ -403,7 +403,7 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
       }
       // The Inbox (and its nav badge) spans every chat, so it is marked stale
       // too. Only observed queries refetch.
-      if (inboxInvalidatingUpdate(update.update_type)) {
+      if (inboxInvalidatingUpdate(update.update_type, update.data)) {
         queryClient.invalidateQueries({ queryKey: inboxKeys.all });
       }
 

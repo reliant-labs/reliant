@@ -266,6 +266,95 @@ func (x *ListPendingQuestionsResponse) GetQuestions() []*QuestionInfo {
 	return nil
 }
 
+type ListAsyncQuestionsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ChatId        string                 `protobuf:"bytes,1,opt,name=chat_id,json=chatId,proto3" json:"chat_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListAsyncQuestionsRequest) Reset() {
+	*x = ListAsyncQuestionsRequest{}
+	mi := &file_reliant_v1_question_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListAsyncQuestionsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListAsyncQuestionsRequest) ProtoMessage() {}
+
+func (x *ListAsyncQuestionsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_question_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListAsyncQuestionsRequest.ProtoReflect.Descriptor instead.
+func (*ListAsyncQuestionsRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_question_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *ListAsyncQuestionsRequest) GetChatId() string {
+	if x != nil {
+		return x.ChatId
+	}
+	return ""
+}
+
+type ListAsyncQuestionsResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Oldest first, pending and resolved alike.
+	Questions     []*QuestionInfo `protobuf:"bytes,1,rep,name=questions,proto3" json:"questions,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListAsyncQuestionsResponse) Reset() {
+	*x = ListAsyncQuestionsResponse{}
+	mi := &file_reliant_v1_question_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListAsyncQuestionsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListAsyncQuestionsResponse) ProtoMessage() {}
+
+func (x *ListAsyncQuestionsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_question_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListAsyncQuestionsResponse.ProtoReflect.Descriptor instead.
+func (*ListAsyncQuestionsResponse) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_question_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *ListAsyncQuestionsResponse) GetQuestions() []*QuestionInfo {
+	if x != nil {
+		return x.Questions
+	}
+	return nil
+}
+
 type QuestionInfo struct {
 	state      protoimpl.MessageState `protogen:"open.v1"`
 	QuestionId string                 `protobuf:"bytes,1,opt,name=question_id,json=questionId,proto3" json:"question_id,omitempty"`
@@ -278,14 +367,22 @@ type QuestionInfo struct {
 	// Thread that raised the question. The questions row has always carried it;
 	// omitting it here made every RPC consumer chat-scoped, so a supervision view
 	// over several spawned threads could not say WHICH one is waiting.
-	ThreadId      string `protobuf:"bytes,8,opt,name=thread_id,json=threadId,proto3" json:"thread_id,omitempty"`
+	ThreadId string `protobuf:"bytes,8,opt,name=thread_id,json=threadId,proto3" json:"thread_id,omitempty"`
+	// The question was asked without waiting (ask_user async: true): its thread
+	// carried on, and an answer reaches it later as a message from the user. It
+	// is never a gate on the chat.
+	Async bool `protobuf:"varint,9,opt,name=async,proto3" json:"async,omitempty"`
+	// The ask_user tool call that raised the question, when one did.
+	ToolCallId string `protobuf:"bytes,10,opt,name=tool_call_id,json=toolCallId,proto3" json:"tool_call_id,omitempty"`
+	// The answer, once resolved.
+	ResponseData  *string `protobuf:"bytes,11,opt,name=response_data,json=responseData,proto3,oneof" json:"response_data,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *QuestionInfo) Reset() {
 	*x = QuestionInfo{}
-	mi := &file_reliant_v1_question_proto_msgTypes[4]
+	mi := &file_reliant_v1_question_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -297,7 +394,7 @@ func (x *QuestionInfo) String() string {
 func (*QuestionInfo) ProtoMessage() {}
 
 func (x *QuestionInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_question_proto_msgTypes[4]
+	mi := &file_reliant_v1_question_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -310,7 +407,7 @@ func (x *QuestionInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use QuestionInfo.ProtoReflect.Descriptor instead.
 func (*QuestionInfo) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_question_proto_rawDescGZIP(), []int{4}
+	return file_reliant_v1_question_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *QuestionInfo) GetQuestionId() string {
@@ -369,6 +466,27 @@ func (x *QuestionInfo) GetThreadId() string {
 	return ""
 }
 
+func (x *QuestionInfo) GetAsync() bool {
+	if x != nil {
+		return x.Async
+	}
+	return false
+}
+
+func (x *QuestionInfo) GetToolCallId() string {
+	if x != nil {
+		return x.ToolCallId
+	}
+	return ""
+}
+
+func (x *QuestionInfo) GetResponseData() string {
+	if x != nil && x.ResponseData != nil {
+		return *x.ResponseData
+	}
+	return ""
+}
+
 var File_reliant_v1_question_proto protoreflect.FileDescriptor
 
 const file_reliant_v1_question_proto_rawDesc = "" +
@@ -386,7 +504,11 @@ const file_reliant_v1_question_proto_rawDesc = "" +
 	"\x1bListPendingQuestionsRequest\x12\x17\n" +
 	"\achat_id\x18\x01 \x01(\tR\x06chatId\"V\n" +
 	"\x1cListPendingQuestionsResponse\x126\n" +
-	"\tquestions\x18\x01 \x03(\v2\x18.reliant.v1.QuestionInfoR\tquestions\"\x84\x02\n" +
+	"\tquestions\x18\x01 \x03(\v2\x18.reliant.v1.QuestionInfoR\tquestions\"4\n" +
+	"\x19ListAsyncQuestionsRequest\x12\x17\n" +
+	"\achat_id\x18\x01 \x01(\tR\x06chatId\"T\n" +
+	"\x1aListAsyncQuestionsResponse\x126\n" +
+	"\tquestions\x18\x01 \x03(\v2\x18.reliant.v1.QuestionInfoR\tquestions\"\xf8\x02\n" +
 	"\fQuestionInfo\x12\x1f\n" +
 	"\vquestion_id\x18\x01 \x01(\tR\n" +
 	"questionId\x12\x17\n" +
@@ -398,15 +520,22 @@ const file_reliant_v1_question_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\x06 \x01(\tR\tcreatedAt\x12\x1f\n" +
 	"\bmetadata\x18\a \x01(\tH\x00R\bmetadata\x88\x01\x01\x12\x1b\n" +
-	"\tthread_id\x18\b \x01(\tR\bthreadIdB\v\n" +
-	"\t_metadata*l\n" +
+	"\tthread_id\x18\b \x01(\tR\bthreadId\x12\x14\n" +
+	"\x05async\x18\t \x01(\bR\x05async\x12 \n" +
+	"\ftool_call_id\x18\n" +
+	" \x01(\tR\n" +
+	"toolCallId\x12(\n" +
+	"\rresponse_data\x18\v \x01(\tH\x01R\fresponseData\x88\x01\x01B\v\n" +
+	"\t_metadataB\x10\n" +
+	"\x0e_response_data*l\n" +
 	"\x0eQuestionStatus\x12\x1f\n" +
 	"\x1bQUESTION_STATUS_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17QUESTION_STATUS_PENDING\x10\x01\x12\x1c\n" +
-	"\x18QUESTION_STATUS_RESOLVED\x10\x022\xdc\x01\n" +
+	"\x18QUESTION_STATUS_RESOLVED\x10\x022\xc3\x02\n" +
 	"\x0fQuestionService\x12\\\n" +
 	"\x0fResolveQuestion\x12\".reliant.v1.ResolveQuestionRequest\x1a#.reliant.v1.ResolveQuestionResponse\"\x00\x12k\n" +
-	"\x14ListPendingQuestions\x12'.reliant.v1.ListPendingQuestionsRequest\x1a(.reliant.v1.ListPendingQuestionsResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
+	"\x14ListPendingQuestions\x12'.reliant.v1.ListPendingQuestionsRequest\x1a(.reliant.v1.ListPendingQuestionsResponse\"\x00\x12e\n" +
+	"\x12ListAsyncQuestions\x12%.reliant.v1.ListAsyncQuestionsRequest\x1a&.reliant.v1.ListAsyncQuestionsResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_question_proto_rawDescOnce sync.Once
@@ -421,26 +550,31 @@ func file_reliant_v1_question_proto_rawDescGZIP() []byte {
 }
 
 var file_reliant_v1_question_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_reliant_v1_question_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_reliant_v1_question_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
 var file_reliant_v1_question_proto_goTypes = []any{
 	(QuestionStatus)(0),                  // 0: reliant.v1.QuestionStatus
 	(*ResolveQuestionRequest)(nil),       // 1: reliant.v1.ResolveQuestionRequest
 	(*ResolveQuestionResponse)(nil),      // 2: reliant.v1.ResolveQuestionResponse
 	(*ListPendingQuestionsRequest)(nil),  // 3: reliant.v1.ListPendingQuestionsRequest
 	(*ListPendingQuestionsResponse)(nil), // 4: reliant.v1.ListPendingQuestionsResponse
-	(*QuestionInfo)(nil),                 // 5: reliant.v1.QuestionInfo
+	(*ListAsyncQuestionsRequest)(nil),    // 5: reliant.v1.ListAsyncQuestionsRequest
+	(*ListAsyncQuestionsResponse)(nil),   // 6: reliant.v1.ListAsyncQuestionsResponse
+	(*QuestionInfo)(nil),                 // 7: reliant.v1.QuestionInfo
 }
 var file_reliant_v1_question_proto_depIdxs = []int32{
-	5, // 0: reliant.v1.ListPendingQuestionsResponse.questions:type_name -> reliant.v1.QuestionInfo
-	1, // 1: reliant.v1.QuestionService.ResolveQuestion:input_type -> reliant.v1.ResolveQuestionRequest
-	3, // 2: reliant.v1.QuestionService.ListPendingQuestions:input_type -> reliant.v1.ListPendingQuestionsRequest
-	2, // 3: reliant.v1.QuestionService.ResolveQuestion:output_type -> reliant.v1.ResolveQuestionResponse
-	4, // 4: reliant.v1.QuestionService.ListPendingQuestions:output_type -> reliant.v1.ListPendingQuestionsResponse
-	3, // [3:5] is the sub-list for method output_type
-	1, // [1:3] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+	7, // 0: reliant.v1.ListPendingQuestionsResponse.questions:type_name -> reliant.v1.QuestionInfo
+	7, // 1: reliant.v1.ListAsyncQuestionsResponse.questions:type_name -> reliant.v1.QuestionInfo
+	1, // 2: reliant.v1.QuestionService.ResolveQuestion:input_type -> reliant.v1.ResolveQuestionRequest
+	3, // 3: reliant.v1.QuestionService.ListPendingQuestions:input_type -> reliant.v1.ListPendingQuestionsRequest
+	5, // 4: reliant.v1.QuestionService.ListAsyncQuestions:input_type -> reliant.v1.ListAsyncQuestionsRequest
+	2, // 5: reliant.v1.QuestionService.ResolveQuestion:output_type -> reliant.v1.ResolveQuestionResponse
+	4, // 6: reliant.v1.QuestionService.ListPendingQuestions:output_type -> reliant.v1.ListPendingQuestionsResponse
+	6, // 7: reliant.v1.QuestionService.ListAsyncQuestions:output_type -> reliant.v1.ListAsyncQuestionsResponse
+	5, // [5:8] is the sub-list for method output_type
+	2, // [2:5] is the sub-list for method input_type
+	2, // [2:2] is the sub-list for extension type_name
+	2, // [2:2] is the sub-list for extension extendee
+	0, // [0:2] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_question_proto_init() }
@@ -449,14 +583,14 @@ func file_reliant_v1_question_proto_init() {
 		return
 	}
 	file_reliant_v1_question_proto_msgTypes[0].OneofWrappers = []any{}
-	file_reliant_v1_question_proto_msgTypes[4].OneofWrappers = []any{}
+	file_reliant_v1_question_proto_msgTypes[6].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_v1_question_proto_rawDesc), len(file_reliant_v1_question_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   5,
+			NumMessages:   7,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

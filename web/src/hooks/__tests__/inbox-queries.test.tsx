@@ -156,4 +156,11 @@ describe("inboxInvalidatingUpdate", () => {
   ])("update %s → %s", (type, expected) => {
     expect(inboxInvalidatingUpdate(type)).toBe(expected);
   });
+
+  it("an inbox refetch (an async question asked or answered) invalidates; other refetches do not", () => {
+    expect(inboxInvalidatingUpdate(UserUpdateType.REFETCH, { type: "inbox" })).toBe(true);
+    expect(inboxInvalidatingUpdate(UserUpdateType.REFETCH, JSON.stringify({ type: "inbox" }))).toBe(true);
+    expect(inboxInvalidatingUpdate(UserUpdateType.REFETCH, { type: "daemons" })).toBe(false);
+    expect(inboxInvalidatingUpdate(UserUpdateType.REFETCH)).toBe(false);
+  });
 });

@@ -4612,6 +4612,20 @@ func executeAskUserInline(
 
 	temporalWorkflowID := workflow.GetInfo(ctx).WorkflowExecution.ID
 
+	// Async: post the question and return at once (askUserAsync). The input
+	// is read first, so a history without an async call never reaches the
+	// GetVersion, and one recorded before the option existed replays as
+	// DefaultVersion: the blocking path it took.
+	if askUserInputAsync(toolInput) &&
+		workflow.GetVersion(ctx, askUserAsyncVersionID(toolCallID), workflow.DefaultVersion, askUserAsyncVersion) == askUserAsyncVersion {
+		metaObj["async"] = true
+		asyncMeta, _ := json.Marshal(metaObj)
+		return askUserAsync(ctx, toolCallID, askUserQuestionInput{
+			chatID: chatID, workflowID: workflowID, temporalWorkflowID: temporalWorkflowID, threadID: threadID,
+			stepID: stepID, loopNodeID: loopNodeID, loopIteration: loopIteration, metadata: string(asyncMeta),
+		}, logger)
+	}
+
 	// STEP 1: Call QuestionCreate activity
 	createCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: 30 * time.Second,

@@ -34,6 +34,11 @@ import (
 // the row still pending. A stopped sub-agent resumed by a message is the same
 // shape. The operator terminate, which starts the chat fresh, voids every
 // pending question explicitly (runs.Service.voidPendingQuestions).
+//
+// An async question (ask_user async: true) is none of this: no wait is behind
+// it, so a thread's end leaves it pending. It is an item in the user's inbox,
+// and its answer is delivered to the thread as a message, which resumes or
+// restarts what it must (research/ASYNC_ASK_USER.md).
 
 // threadEndClosesQuestions reports whether a thread reaching status has
 // finished for good, so its pending questions can never be answered.

@@ -549,6 +549,9 @@
     "internal/handlers/question/handlers_scaffold_get_pending_question_test.go": {
       "scaffolded_at": "2026-10-13T07:28:55Z"
     },
+    "internal/handlers/question/handlers_scaffold_list_async_questions_test.go": {
+      "scaffolded_at": "2026-10-22T02:07:50Z"
+    },
     "internal/handlers/question/handlers_scaffold_resolve_question_test.go": {
       "scaffolded_at": "2026-10-13T07:28:55Z"
     },

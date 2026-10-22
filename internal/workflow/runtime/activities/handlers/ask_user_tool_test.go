@@ -54,4 +54,15 @@ func TestAskUserTool_SchemaProperties(t *testing.T) {
 	questionsMap, ok := questionsRaw.(map[string]interface{})
 	assert.True(t, ok)
 	assert.Equal(t, "array", questionsMap["type"])
+
+	// async: post without waiting (research/ASYNC_ASK_USER.md). Optional,
+	// default false — blocking stays the default.
+	asyncRaw, hasAsync := props["async"]
+	require.True(t, hasAsync, "Schema should have the 'async' option")
+	asyncMap, ok := asyncRaw.(map[string]interface{})
+	require.True(t, ok)
+	assert.Equal(t, "boolean", asyncMap["type"])
+	assert.Equal(t, false, asyncMap["default"])
+	assert.NotContains(t, required, "async")
+	assert.Contains(t, tool.Description(), "async: true")
 }

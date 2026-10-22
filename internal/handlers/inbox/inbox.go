@@ -137,12 +137,9 @@ func (s *Service) ListInbox(
 	})
 
 	for _, it := range items {
-		switch it.Kind {
-		case reliantv1.InboxItemKind_INBOX_ITEM_KIND_APPROVAL,
-			reliantv1.InboxItemKind_INBOX_ITEM_KIND_QUESTION,
-			reliantv1.InboxItemKind_INBOX_ITEM_KIND_WAITING_FOR_MACHINE:
+		if inboxItemBlocks(it) {
 			resp.BlockingCount++
-		default:
+		} else {
 			resp.HasInformational = true
 		}
 	}
@@ -152,6 +149,21 @@ func (s *Service) ListInbox(
 	}
 	resp.Items = items
 	return connect.NewResponse(resp), nil
+}
+
+// inboxItemBlocks reports whether an item blocks a live run: an approval, a
+// question a thread is parked on, a run waiting for its machine. An async
+// question waits on the user but blocks nothing — its agent kept working.
+func inboxItemBlocks(it *reliantv1.InboxItem) bool {
+	switch it.Kind {
+	case reliantv1.InboxItemKind_INBOX_ITEM_KIND_APPROVAL,
+		reliantv1.InboxItemKind_INBOX_ITEM_KIND_WAITING_FOR_MACHINE:
+		return true
+	case reliantv1.InboxItemKind_INBOX_ITEM_KIND_QUESTION:
+		return !it.GetQuestion().GetAsync()
+	default:
+		return false
+	}
 }
 
 // DismissInboxItem hides items from the caller's inbox. Hiding an approval or
@@ -398,7 +410,7 @@ func inboxItemFromPending(p *core.InboxPending) *reliantv1.InboxItem {
 	case core.InboxPendingQuestion:
 		item.Kind = reliantv1.InboxItemKind_INBOX_ITEM_KIND_QUESTION
 		item.ItemId = inboxQuestionPrefix + p.ItemKey
-		q := &reliantv1.InboxQuestion{QuestionId: p.ItemKey, ThreadId: p.Text1, Prompt: firstQuestionPrompt(p.Text2)}
+		q := &reliantv1.InboxQuestion{QuestionId: p.ItemKey, ThreadId: p.Text1, Prompt: firstQuestionPrompt(p.Text2), Async: p.Int1 == 1}
 		if p.Text2 != "" {
 			meta := p.Text2
 			q.Metadata = &meta

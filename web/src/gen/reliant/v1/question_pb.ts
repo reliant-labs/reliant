@@ -13,7 +13,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/v1/question.proto.
  */
 export const file_reliant_v1_question: GenFile = /*@__PURE__*/
-  fileDesc("ChlyZWxpYW50L3YxL3F1ZXN0aW9uLnByb3RvEgpyZWxpYW50LnYxImsKFlJlc29sdmVRdWVzdGlvblJlcXVlc3QSEwoLcXVlc3Rpb25faWQYASABKAkSDgoGYWN0aW9uGAIgASgJEhoKDXJlc3BvbnNlX2RhdGEYAyABKAlIAIgBAUIQCg5fcmVzcG9uc2VfZGF0YSIqChdSZXNvbHZlUXVlc3Rpb25SZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIIi4KG0xpc3RQZW5kaW5nUXVlc3Rpb25zUmVxdWVzdBIPCgdjaGF0X2lkGAEgASgJIksKHExpc3RQZW5kaW5nUXVlc3Rpb25zUmVzcG9uc2USKwoJcXVlc3Rpb25zGAEgAygLMhgucmVsaWFudC52MS5RdWVzdGlvbkluZm8itQEKDFF1ZXN0aW9uSW5mbxITCgtxdWVzdGlvbl9pZBgBIAEoCRIPCgdjaGF0X2lkGAIgASgJEhMKC3dvcmtmbG93X2lkGAMgASgJEg8KB3N0ZXBfaWQYBCABKAkSDgoGc3RhdHVzGAUgASgJEhIKCmNyZWF0ZWRfYXQYBiABKAkSFQoIbWV0YWRhdGEYByABKAlIAIgBARIRCgl0aHJlYWRfaWQYCCABKAlCCwoJX21ldGFkYXRhKmwKDlF1ZXN0aW9uU3RhdHVzEh8KG1FVRVNUSU9OX1NUQVRVU19VTlNQRUNJRklFRBAAEhsKF1FVRVNUSU9OX1NUQVRVU19QRU5ESU5HEAESHAoYUVVFU1RJT05fU1RBVFVTX1JFU09MVkVEEAIy3AEKD1F1ZXN0aW9uU2VydmljZRJcCg9SZXNvbHZlUXVlc3Rpb24SIi5yZWxpYW50LnYxLlJlc29sdmVRdWVzdGlvblJlcXVlc3QaIy5yZWxpYW50LnYxLlJlc29sdmVRdWVzdGlvblJlc3BvbnNlIgASawoUTGlzdFBlbmRpbmdRdWVzdGlvbnMSJy5yZWxpYW50LnYxLkxpc3RQZW5kaW5nUXVlc3Rpb25zUmVxdWVzdBooLnJlbGlhbnQudjEuTGlzdFBlbmRpbmdRdWVzdGlvbnNSZXNwb25zZSIAQjpaOGdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL3JlbGlhbnQvdjE7cmVsaWFudHYxYgZwcm90bzM");
+  fileDesc("ChlyZWxpYW50L3YxL3F1ZXN0aW9uLnByb3RvEgpyZWxpYW50LnYxImsKFlJlc29sdmVRdWVzdGlvblJlcXVlc3QSEwoLcXVlc3Rpb25faWQYASABKAkSDgoGYWN0aW9uGAIgASgJEhoKDXJlc3BvbnNlX2RhdGEYAyABKAlIAIgBAUIQCg5fcmVzcG9uc2VfZGF0YSIqChdSZXNvbHZlUXVlc3Rpb25SZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIIi4KG0xpc3RQZW5kaW5nUXVlc3Rpb25zUmVxdWVzdBIPCgdjaGF0X2lkGAEgASgJIksKHExpc3RQZW5kaW5nUXVlc3Rpb25zUmVzcG9uc2USKwoJcXVlc3Rpb25zGAEgAygLMhgucmVsaWFudC52MS5RdWVzdGlvbkluZm8iLAoZTGlzdEFzeW5jUXVlc3Rpb25zUmVxdWVzdBIPCgdjaGF0X2lkGAEgASgJIkkKGkxpc3RBc3luY1F1ZXN0aW9uc1Jlc3BvbnNlEisKCXF1ZXN0aW9ucxgBIAMoCzIYLnJlbGlhbnQudjEuUXVlc3Rpb25JbmZvIogCCgxRdWVzdGlvbkluZm8SEwoLcXVlc3Rpb25faWQYASABKAkSDwoHY2hhdF9pZBgCIAEoCRITCgt3b3JrZmxvd19pZBgDIAEoCRIPCgdzdGVwX2lkGAQgASgJEg4KBnN0YXR1cxgFIAEoCRISCgpjcmVhdGVkX2F0GAYgASgJEhUKCG1ldGFkYXRhGAcgASgJSACIAQESEQoJdGhyZWFkX2lkGAggASgJEg0KBWFzeW5jGAkgASgIEhQKDHRvb2xfY2FsbF9pZBgKIAEoCRIaCg1yZXNwb25zZV9kYXRhGAsgASgJSAGIAQFCCwoJX21ldGFkYXRhQhAKDl9yZXNwb25zZV9kYXRhKmwKDlF1ZXN0aW9uU3RhdHVzEh8KG1FVRVNUSU9OX1NUQVRVU19VTlNQRUNJRklFRBAAEhsKF1FVRVNUSU9OX1NUQVRVU19QRU5ESU5HEAESHAoYUVVFU1RJT05fU1RBVFVTX1JFU09MVkVEEAIywwIKD1F1ZXN0aW9uU2VydmljZRJcCg9SZXNvbHZlUXVlc3Rpb24SIi5yZWxpYW50LnYxLlJlc29sdmVRdWVzdGlvblJlcXVlc3QaIy5yZWxpYW50LnYxLlJlc29sdmVRdWVzdGlvblJlc3BvbnNlIgASawoUTGlzdFBlbmRpbmdRdWVzdGlvbnMSJy5yZWxpYW50LnYxLkxpc3RQZW5kaW5nUXVlc3Rpb25zUmVxdWVzdBooLnJlbGlhbnQudjEuTGlzdFBlbmRpbmdRdWVzdGlvbnNSZXNwb25zZSIAEmUKEkxpc3RBc3luY1F1ZXN0aW9ucxIlLnJlbGlhbnQudjEuTGlzdEFzeW5jUXVlc3Rpb25zUmVxdWVzdBomLnJlbGlhbnQudjEuTGlzdEFzeW5jUXVlc3Rpb25zUmVzcG9uc2UiAEI6WjhnaXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9yZWxpYW50L3YxO3JlbGlhbnR2MWIGcHJvdG8z");
 
 /**
  * @generated from message reliant.v1.ResolveQuestionRequest
@@ -100,6 +100,42 @@ export const ListPendingQuestionsResponseSchema: GenMessage<ListPendingQuestions
   messageDesc(file_reliant_v1_question, 3);
 
 /**
+ * @generated from message reliant.v1.ListAsyncQuestionsRequest
+ */
+export type ListAsyncQuestionsRequest = Message<"reliant.v1.ListAsyncQuestionsRequest"> & {
+  /**
+   * @generated from field: string chat_id = 1;
+   */
+  chatId: string;
+};
+
+/**
+ * Describes the message reliant.v1.ListAsyncQuestionsRequest.
+ * Use `create(ListAsyncQuestionsRequestSchema)` to create a new message.
+ */
+export const ListAsyncQuestionsRequestSchema: GenMessage<ListAsyncQuestionsRequest> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_question, 4);
+
+/**
+ * @generated from message reliant.v1.ListAsyncQuestionsResponse
+ */
+export type ListAsyncQuestionsResponse = Message<"reliant.v1.ListAsyncQuestionsResponse"> & {
+  /**
+   * Oldest first, pending and resolved alike.
+   *
+   * @generated from field: repeated reliant.v1.QuestionInfo questions = 1;
+   */
+  questions: QuestionInfo[];
+};
+
+/**
+ * Describes the message reliant.v1.ListAsyncQuestionsResponse.
+ * Use `create(ListAsyncQuestionsResponseSchema)` to create a new message.
+ */
+export const ListAsyncQuestionsResponseSchema: GenMessage<ListAsyncQuestionsResponse> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_question, 5);
+
+/**
  * @generated from message reliant.v1.QuestionInfo
  */
 export type QuestionInfo = Message<"reliant.v1.QuestionInfo"> & {
@@ -146,6 +182,29 @@ export type QuestionInfo = Message<"reliant.v1.QuestionInfo"> & {
    * @generated from field: string thread_id = 8;
    */
   threadId: string;
+
+  /**
+   * The question was asked without waiting (ask_user async: true): its thread
+   * carried on, and an answer reaches it later as a message from the user. It
+   * is never a gate on the chat.
+   *
+   * @generated from field: bool async = 9;
+   */
+  async: boolean;
+
+  /**
+   * The ask_user tool call that raised the question, when one did.
+   *
+   * @generated from field: string tool_call_id = 10;
+   */
+  toolCallId: string;
+
+  /**
+   * The answer, once resolved.
+   *
+   * @generated from field: optional string response_data = 11;
+   */
+  responseData?: string | undefined;
 };
 
 /**
@@ -153,7 +212,7 @@ export type QuestionInfo = Message<"reliant.v1.QuestionInfo"> & {
  * Use `create(QuestionInfoSchema)` to create a new message.
  */
 export const QuestionInfoSchema: GenMessage<QuestionInfo> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_question, 4);
+  messageDesc(file_reliant_v1_question, 6);
 
 /**
  * QuestionStatus tracks the lifecycle of a question
@@ -209,6 +268,20 @@ export const QuestionService: GenService<{
     methodKind: "unary";
     input: typeof ListPendingQuestionsRequestSchema;
     output: typeof ListPendingQuestionsResponseSchema;
+  },
+  /**
+   * ListAsyncQuestions lists every async question in a chat (ask_user with
+   * async: true), answered or not, oldest first. An async question never
+   * blocks its thread, so ListPendingQuestions leaves it out; this is what the
+   * chat timeline renders it from. Answer one with ResolveQuestion, like any
+   * other question: the answer is delivered to the asking thread as a message.
+   *
+   * @generated from rpc reliant.v1.QuestionService.ListAsyncQuestions
+   */
+  listAsyncQuestions: {
+    methodKind: "unary";
+    input: typeof ListAsyncQuestionsRequestSchema;
+    output: typeof ListAsyncQuestionsResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_reliant_v1_question, 0);

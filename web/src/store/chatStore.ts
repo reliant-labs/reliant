@@ -121,8 +121,7 @@ import { QUEUED_SENDER_KIND_HUMAN } from "../api/chat-grpc";
 import {
   approvalKeys,
   upsertApprovalInCache,
-  upsertPendingQuestionInCache,
-  removePendingQuestionFromCache,
+  applyQuestionUpdate,
   resolvePendingQuestion,
 } from "../hooks/approval-queries";
 import {
@@ -3453,22 +3452,10 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         // Question updates patch the chat's pending-question list (server
         // data), read via usePendingQuestions. A "pending" event adds that
         // question; "resolved" removes THAT question only — other threads'
-        // questions are still waiting on the user.
+        // questions are still waiting on the user. An async question (asked
+        // without waiting) patches the timeline's async list instead.
         for (const qu of questionUpdates) {
-          if (qu.status === "pending") {
-            upsertPendingQuestionInCache(chatId, {
-              question_id: qu.question_id,
-              chat_id: qu.chat_id,
-              workflow_id: qu.workflow_id,
-              thread_id: qu.thread_id ?? "",
-              step_id: qu.step_id,
-              status: qu.status,
-              created_at: "",
-              metadata: qu.metadata,
-            });
-          } else if (qu.status === "resolved") {
-            removePendingQuestionFromCache(chatId, qu.question_id);
-          }
+          applyQuestionUpdate(chatId, qu);
         }
 
         // Thread updates live in threadActivityStore (not chatStore). Merge

@@ -15,6 +15,16 @@ export interface QuestionInfo {
   status: string;
   created_at: string;
   metadata?: string;
+  /**
+   * Asked without waiting (ask_user async: true): the thread carried on, and
+   * an answer reaches it later as a message from the user. Never the chat's
+   * or a thread's pending gate — it renders as a card in the timeline.
+   */
+  async?: boolean;
+  /** The ask_user tool call that raised it, when one did. */
+  tool_call_id?: string;
+  /** The answer (ResolveQuestion response_data), once resolved. */
+  response_data?: string;
 }
 
 function fromProto(q: QuestionInfoPb): QuestionInfo {
@@ -27,6 +37,9 @@ function fromProto(q: QuestionInfoPb): QuestionInfo {
     status: q.status,
     created_at: q.createdAt,
     metadata: q.metadata ?? undefined,
+    async: q.async,
+    tool_call_id: q.toolCallId || undefined,
+    response_data: q.responseData ?? undefined,
   };
 }
 
@@ -45,6 +58,16 @@ export const questionGrpc = {
   async listPendingQuestions(chatId: string): Promise<QuestionInfo[]> {
     const client = grpcClient.question();
     const response = await client.listPendingQuestions({ chatId });
+    return response.questions.map(fromProto);
+  },
+
+  /**
+   * Every async question in a chat (asked without waiting), pending and
+   * resolved, oldest first: what the timeline's question cards render from.
+   */
+  async listAsyncQuestions(chatId: string): Promise<QuestionInfo[]> {
+    const client = grpcClient.question();
+    const response = await client.listAsyncQuestions({ chatId });
     return response.questions.map(fromProto);
   },
 };

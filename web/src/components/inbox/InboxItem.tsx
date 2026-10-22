@@ -301,8 +301,24 @@ function rowDetail(item: InboxItemData): { node: ReactNode; title: string } | nu
       const title = payload.value.title;
       return title ? { node: title, title } : null;
     }
-    case "question":
-      return payload.value.prompt ? { node: payload.value.prompt, title: payload.value.prompt } : null;
+    case "question": {
+      const prompt = payload.value.prompt;
+      // An async question (ask_user async: true): the agent kept working,
+      // so it waits on the user without blocking a run.
+      if (payload.value.async) {
+        const title = prompt ? `${prompt} (not blocking: the agent kept working)` : "Not blocking: the agent kept working";
+        return {
+          node: (
+            <>
+              <span className="text-muted-foreground">Not blocking · </span>
+              {prompt}
+            </>
+          ),
+          title,
+        };
+      }
+      return prompt ? { node: prompt, title: prompt } : null;
+    }
     case "waitingForMachine": {
       const text = `${machineName(payload.value.daemonName, payload.value.daemonId)} is asleep`;
       return { node: text, title: text };

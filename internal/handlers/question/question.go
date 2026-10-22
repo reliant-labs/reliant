@@ -51,6 +51,12 @@ func (s *Service) ResolveQuestion(
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("question already resolved"))
 	}
 
+	// Nothing waits on an async question: its answer is a message to the
+	// thread that asked.
+	if question.Async {
+		return s.resolveAsyncQuestion(ctx, chat, question, req.Msg.GetResponseData())
+	}
+
 	// Resolve the question in the database
 	var responseData *string
 	if req.Msg.ResponseData != nil && *req.Msg.ResponseData != "" {
@@ -158,6 +164,13 @@ func questionToProto(q *db.Question) *reliantv1.QuestionInfo {
 	}
 	if q.Metadata != nil {
 		info.Metadata = q.Metadata
+	}
+	info.Async = q.Async
+	if q.ToolCallID != nil {
+		info.ToolCallId = *q.ToolCallID
+	}
+	if q.ResponseData != nil {
+		info.ResponseData = q.ResponseData
 	}
 	return info
 }

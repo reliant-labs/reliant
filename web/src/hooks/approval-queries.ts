@@ -4,6 +4,7 @@ import type { ToolApprovalRequest } from "../api/approval-grpc";
 import { ApprovalStatus } from "../api/approval-grpc";
 import { questionGrpc, type QuestionInfo } from "../api/question-grpc";
 import { queryClient } from "../lib/query-client";
+import type { QuestionUpdate } from "../types/streaming";
 
 // --- Query key factories ---
 
@@ -19,6 +20,9 @@ export const questionKeys = {
   /** Every pending question in a chat, across all its threads, oldest first. */
   pendingList: (chatId: string) =>
     [...questionKeys.all, "pending-list", chatId] as const,
+  /** Every async question in a chat (asked without waiting), oldest first. */
+  asyncList: (chatId: string) =>
+    [...questionKeys.all, "async-list", chatId] as const,
 };
 
 // --- Real-time cache patching ---
@@ -122,6 +126,89 @@ export function removePendingQuestionFromCache(
 }
 
 /**
+ * Patch a chat's async-question list, but only once it has been fetched: a
+ * list that was never seeded is filled by its first fetch, and a partial
+ * seed from one event would hide the rest of the chat's questions.
+ */
+function patchAsyncQuestionsCache(
+  chatId: string,
+  updater: (prev: QuestionInfo[]) => QuestionInfo[],
+): void {
+  const key = questionKeys.asyncList(chatId);
+  const prev = queryClient.getQueryData<QuestionInfo[]>(key);
+  if (!prev) return;
+  queryClient.setQueryData<QuestionInfo[]>(key, updater(prev));
+}
+
+/** Add an async question from a stream event, or merge into the cached one. */
+export function upsertAsyncQuestionInCache(chatId: string, question: QuestionInfo): void {
+  patchAsyncQuestionsCache(chatId, (prev) => {
+    const idx = prev.findIndex((q) => q.question_id === question.question_id);
+    if (idx >= 0) {
+      const next = [...prev];
+      next[idx] = { ...prev[idx], ...question, created_at: prev[idx].created_at || question.created_at };
+      return next;
+    }
+    return [...prev, question];
+  });
+}
+
+/** Mark a cached async question answered (it stays listed: its card shows the answer). */
+function markAsyncQuestionResolvedInCache(chatId: string, questionId: string, responseData?: string): void {
+  patchAsyncQuestionsCache(chatId, (prev) =>
+    prev.some((q) => q.question_id === questionId)
+      ? prev.map((q) =>
+          q.question_id === questionId
+            ? { ...q, status: "resolved", response_data: responseData ?? q.response_data }
+            : q,
+        )
+      : prev,
+  );
+}
+
+/**
+ * Apply one question event from the chat stream. A blocking question goes to
+ * the pending list (the composer and the background-work pill read it); an
+ * async one goes only to the async list (the timeline's cards read it) — it
+ * has no thread parked on it, so it must never take over the composer.
+ */
+export function applyQuestionUpdate(chatId: string, qu: QuestionUpdate): void {
+  if (qu.async) {
+    if (qu.status === "pending") {
+      upsertAsyncQuestionInCache(chatId, {
+        question_id: qu.question_id,
+        chat_id: qu.chat_id,
+        workflow_id: qu.workflow_id,
+        thread_id: qu.thread_id ?? "",
+        step_id: qu.step_id,
+        status: qu.status,
+        created_at: "",
+        metadata: qu.metadata,
+        async: true,
+        tool_call_id: qu.tool_call_id,
+      });
+    } else if (qu.status === "resolved") {
+      markAsyncQuestionResolvedInCache(chatId, qu.question_id);
+    }
+    return;
+  }
+  if (qu.status === "pending") {
+    upsertPendingQuestionInCache(chatId, {
+      question_id: qu.question_id,
+      chat_id: qu.chat_id,
+      workflow_id: qu.workflow_id,
+      thread_id: qu.thread_id ?? "",
+      step_id: qu.step_id,
+      status: qu.status,
+      created_at: "",
+      metadata: qu.metadata,
+    });
+  } else if (qu.status === "resolved") {
+    removePendingQuestionFromCache(chatId, qu.question_id);
+  }
+}
+
+/**
  * Answer a pending ask_user question by id, then drop it from that chat's
  * pending list. Store-free, so the chat composer (through
  * chatStore.resolveQuestion) and the Inbox, which holds questions from many
@@ -143,8 +230,10 @@ export async function resolvePendingQuestion(
   responseData?: string,
 ): Promise<void> {
   await questionGrpc.resolveQuestion(questionId, action, responseData);
-  // Optimistically drop it; the stream's "resolved" event does the same.
+  // Optimistically drop it; the stream's "resolved" event does the same. An
+  // async question stays in its list, answered, for its timeline card.
   removePendingQuestionFromCache(chatId, questionId);
+  markAsyncQuestionResolvedInCache(chatId, questionId, responseData);
 }
 
 /**
@@ -215,6 +304,20 @@ export function usePendingQuestions(chatId?: string) {
   return useQuery<QuestionInfo[]>({
     queryKey: questionKeys.pendingList(chatId!),
     queryFn: () => questionGrpc.listPendingQuestions(chatId!),
+    enabled: !!chatId,
+    ...streamMaintained,
+  });
+}
+
+/**
+ * Every async question in a chat (ask_user async: true), pending and
+ * answered, oldest first. The timeline renders each on its ask_user tool call
+ * (match by tool_call_id). Never the composer's: nothing waits on one.
+ */
+export function useAsyncQuestions(chatId?: string) {
+  return useQuery<QuestionInfo[]>({
+    queryKey: questionKeys.asyncList(chatId!),
+    queryFn: () => questionGrpc.listAsyncQuestions(chatId!),
     enabled: !!chatId,
     ...streamMaintained,
   });

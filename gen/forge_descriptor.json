@@ -19140,6 +19140,10 @@
             "name": "metadata",
             "kind": "string",
             "optional": true
+          },
+          {
+            "name": "async",
+            "kind": "bool"
           }
         ],
         "reliant.v1.InboxRunFinished": [],
@@ -26570,11 +26574,42 @@
           "Activity": {
             "Mutating": false
           }
+        },
+        {
+          "Name": "ListAsyncQuestions",
+          "InputType": "ListAsyncQuestionsRequest",
+          "OutputType": "ListAsyncQuestionsResponse",
+          "ClientStreaming": false,
+          "ServerStreaming": false,
+          "AuthRequired": true,
+          "Errors": null,
+          "InputTypeFQ": "reliant.v1.ListAsyncQuestionsRequest",
+          "OutputTypeFQ": "reliant.v1.ListAsyncQuestionsResponse",
+          "InputProtoFile": "reliant/v1/question.proto",
+          "OutputProtoFile": "reliant/v1/question.proto",
+          "Activity": {
+            "Mutating": false
+          }
         }
       ],
       "ProtoFile": "reliant/v1/question.proto",
       "ModulePath": "",
       "Messages": {
+        "ListAsyncQuestionsRequest": [
+          {
+            "Name": "chat_id",
+            "ProtoType": "string",
+            "IsOptional": false
+          }
+        ],
+        "ListAsyncQuestionsResponse": [
+          {
+            "Name": "questions",
+            "ProtoType": "[]message",
+            "IsOptional": false,
+            "MessageType": "reliant.v1.QuestionInfo"
+          }
+        ],
         "ListPendingQuestionsRequest": [
           {
             "Name": "chat_id",
@@ -26617,6 +26652,20 @@
       },
       "Audience": "user",
       "Schemas": {
+        "reliant.v1.ListAsyncQuestionsRequest": [
+          {
+            "name": "chat_id",
+            "kind": "string"
+          }
+        ],
+        "reliant.v1.ListAsyncQuestionsResponse": [
+          {
+            "name": "questions",
+            "kind": "message",
+            "type_name": "reliant.v1.QuestionInfo",
+            "repeated": true
+          }
+        ],
         "reliant.v1.ListPendingQuestionsRequest": [
           {
             "name": "chat_id",
@@ -26664,6 +26713,19 @@
           {
             "name": "thread_id",
             "kind": "string"
+          },
+          {
+            "name": "async",
+            "kind": "bool"
+          },
+          {
+            "name": "tool_call_id",
+            "kind": "string"
+          },
+          {
+            "name": "response_data",
+            "kind": "string",
+            "optional": true
           }
         ],
         "reliant.v1.ResolveQuestionRequest": [
@@ -26689,6 +26751,8 @@
         ]
       },
       "SchemaFiles": {
+        "reliant.v1.ListAsyncQuestionsRequest": "reliant/v1/question.proto",
+        "reliant.v1.ListAsyncQuestionsResponse": "reliant/v1/question.proto",
         "reliant.v1.ListPendingQuestionsRequest": "reliant/v1/question.proto",
         "reliant.v1.ListPendingQuestionsResponse": "reliant/v1/question.proto",
         "reliant.v1.QuestionInfo": "reliant/v1/question.proto",
@@ -39614,7 +39678,7 @@
     "reliant/v1/daemon_registry.proto": "3907ab3737af202ca408a7449f4b08d66be5137e99316f2fc226e991f1dbc699",
     "reliant/v1/filesystem.proto": "140d121cbc7cebc799860129abf98389a867d0b128fbe36b0d6c000bf9b92a6d",
     "reliant/v1/forge.proto": "a065ade3885e8671952b6908f2986727eb1b4b478304dfe7772bc62be4078a00",
-    "reliant/v1/inbox.proto": "27964969ffaeafe7621bb6739018d03d83b67dc6e60e19be1b264c06227b34ea",
+    "reliant/v1/inbox.proto": "2c38664a164d9116a533bb5d40d0b556f2a25ef6eaa0162da3090bcbcd8631ef",
     "reliant/v1/integration.proto": "767cea1a652eb5c4ff2101c1f220e5e915566dd8ebda98567b4edfb26e420e0a",
     "reliant/v1/mcp.proto": "d27eec630292113ac64b4b2e3468e72516d1f5c211dbfe536c2730e43ed2efd1",
     "reliant/v1/message.proto": "bd01e3101e743d989c4facc477eedf924055f89a83a2c1d84aaa027ca1e7bfb8",
@@ -39624,7 +39688,7 @@
     "reliant/v1/preset.proto": "27acb3ba272869868343c82279adc59b24a15bdc22f500ea36e5aa73a709dae8",
     "reliant/v1/project.proto": "9cd193101501187b898646fa617f711dd1bbbd93fe63879871bac58c38226929",
     "reliant/v1/provider_account.proto": "50649efde02dd84bad1d334053b066859d0e8627b88b202e98447d6654f375e4",
-    "reliant/v1/question.proto": "566fff038348ec73c999cdad6a26291dcf82e42713de20dbb99b0d7f124d99c3",
+    "reliant/v1/question.proto": "50cb09eb51220266d3489f6dc71f40105cffd6b5bd2e0176bcb57a18fac9e86f",
     "reliant/v1/repo.proto": "5ea880bc3bb10123c803298ab7fe6c6a3c57dde359b2f5b339e774ab880864a0",
     "reliant/v1/run.proto": "b0304388de799c989705f8ce41e8ec8ed725f2ecdae83c8be02ae284e461ca37",
     "reliant/v1/scenario.proto": "5be8a10f590bf6a518a4963e7ea5e9a2f847fa5d8f55a50ea07ee55e940e0a1b",

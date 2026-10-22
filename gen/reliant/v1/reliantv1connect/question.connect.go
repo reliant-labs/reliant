@@ -41,6 +41,9 @@ const (
 	// QuestionServiceListPendingQuestionsProcedure is the fully-qualified name of the QuestionService's
 	// ListPendingQuestions RPC.
 	QuestionServiceListPendingQuestionsProcedure = "/reliant.v1.QuestionService/ListPendingQuestions"
+	// QuestionServiceListAsyncQuestionsProcedure is the fully-qualified name of the QuestionService's
+	// ListAsyncQuestions RPC.
+	QuestionServiceListAsyncQuestionsProcedure = "/reliant.v1.QuestionService/ListAsyncQuestions"
 )
 
 // QuestionServiceClient is a client for the reliant.v1.QuestionService service.
@@ -52,6 +55,12 @@ type QuestionServiceClient interface {
 	// agents can have one question pending per thread, so a client must pick
 	// the one for the thread it is showing rather than "the chat's question".
 	ListPendingQuestions(context.Context, *connect.Request[v1.ListPendingQuestionsRequest]) (*connect.Response[v1.ListPendingQuestionsResponse], error)
+	// ListAsyncQuestions lists every async question in a chat (ask_user with
+	// async: true), answered or not, oldest first. An async question never
+	// blocks its thread, so ListPendingQuestions leaves it out; this is what the
+	// chat timeline renders it from. Answer one with ResolveQuestion, like any
+	// other question: the answer is delivered to the asking thread as a message.
+	ListAsyncQuestions(context.Context, *connect.Request[v1.ListAsyncQuestionsRequest]) (*connect.Response[v1.ListAsyncQuestionsResponse], error)
 }
 
 // NewQuestionServiceClient constructs a client for the reliant.v1.QuestionService service. By
@@ -77,6 +86,12 @@ func NewQuestionServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(questionServiceMethods.ByName("ListPendingQuestions")),
 			connect.WithClientOptions(opts...),
 		),
+		listAsyncQuestions: connect.NewClient[v1.ListAsyncQuestionsRequest, v1.ListAsyncQuestionsResponse](
+			httpClient,
+			baseURL+QuestionServiceListAsyncQuestionsProcedure,
+			connect.WithSchema(questionServiceMethods.ByName("ListAsyncQuestions")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -84,6 +99,7 @@ func NewQuestionServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 type questionServiceClient struct {
 	resolveQuestion      *connect.Client[v1.ResolveQuestionRequest, v1.ResolveQuestionResponse]
 	listPendingQuestions *connect.Client[v1.ListPendingQuestionsRequest, v1.ListPendingQuestionsResponse]
+	listAsyncQuestions   *connect.Client[v1.ListAsyncQuestionsRequest, v1.ListAsyncQuestionsResponse]
 }
 
 // ResolveQuestion calls reliant.v1.QuestionService.ResolveQuestion.
@@ -96,6 +112,11 @@ func (c *questionServiceClient) ListPendingQuestions(ctx context.Context, req *c
 	return c.listPendingQuestions.CallUnary(ctx, req)
 }
 
+// ListAsyncQuestions calls reliant.v1.QuestionService.ListAsyncQuestions.
+func (c *questionServiceClient) ListAsyncQuestions(ctx context.Context, req *connect.Request[v1.ListAsyncQuestionsRequest]) (*connect.Response[v1.ListAsyncQuestionsResponse], error) {
+	return c.listAsyncQuestions.CallUnary(ctx, req)
+}
+
 // QuestionServiceHandler is an implementation of the reliant.v1.QuestionService service.
 type QuestionServiceHandler interface {
 	// ResolveQuestion resolves a pending question with the user's answer
@@ -105,6 +126,12 @@ type QuestionServiceHandler interface {
 	// agents can have one question pending per thread, so a client must pick
 	// the one for the thread it is showing rather than "the chat's question".
 	ListPendingQuestions(context.Context, *connect.Request[v1.ListPendingQuestionsRequest]) (*connect.Response[v1.ListPendingQuestionsResponse], error)
+	// ListAsyncQuestions lists every async question in a chat (ask_user with
+	// async: true), answered or not, oldest first. An async question never
+	// blocks its thread, so ListPendingQuestions leaves it out; this is what the
+	// chat timeline renders it from. Answer one with ResolveQuestion, like any
+	// other question: the answer is delivered to the asking thread as a message.
+	ListAsyncQuestions(context.Context, *connect.Request[v1.ListAsyncQuestionsRequest]) (*connect.Response[v1.ListAsyncQuestionsResponse], error)
 }
 
 // NewQuestionServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -126,12 +153,20 @@ func NewQuestionServiceHandler(svc QuestionServiceHandler, opts ...connect.Handl
 		connect.WithSchema(questionServiceMethods.ByName("ListPendingQuestions")),
 		connect.WithHandlerOptions(opts...),
 	)
+	questionServiceListAsyncQuestionsHandler := connect.NewUnaryHandler(
+		QuestionServiceListAsyncQuestionsProcedure,
+		svc.ListAsyncQuestions,
+		connect.WithSchema(questionServiceMethods.ByName("ListAsyncQuestions")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/reliant.v1.QuestionService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case QuestionServiceResolveQuestionProcedure:
 			questionServiceResolveQuestionHandler.ServeHTTP(w, r)
 		case QuestionServiceListPendingQuestionsProcedure:
 			questionServiceListPendingQuestionsHandler.ServeHTTP(w, r)
+		case QuestionServiceListAsyncQuestionsProcedure:
+			questionServiceListAsyncQuestionsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -147,4 +182,8 @@ func (UnimplementedQuestionServiceHandler) ResolveQuestion(context.Context, *con
 
 func (UnimplementedQuestionServiceHandler) ListPendingQuestions(context.Context, *connect.Request[v1.ListPendingQuestionsRequest]) (*connect.Response[v1.ListPendingQuestionsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.QuestionService.ListPendingQuestions is not implemented"))
+}
+
+func (UnimplementedQuestionServiceHandler) ListAsyncQuestions(context.Context, *connect.Request[v1.ListAsyncQuestionsRequest]) (*connect.Response[v1.ListAsyncQuestionsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.QuestionService.ListAsyncQuestions is not implemented"))
 }

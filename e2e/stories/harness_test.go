@@ -293,10 +293,11 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 	})
 	require.NoError(t, err, "chat service")
 	questionSvc, err := question.New(question.Deps{
-		Logger:  slog.Default(),
-		Config:  &typedconfig.Config{},
-		Repo:    s.Repo,
-		Signals: pause,
+		Logger:   slog.Default(),
+		Config:   &typedconfig.Config{},
+		Repo:     s.Repo,
+		Signals:  pause,
+		Messages: chatSvc,
 	})
 	require.NoError(t, err, "question service")
 	approvalSvc, err := approval.New(approval.Deps{

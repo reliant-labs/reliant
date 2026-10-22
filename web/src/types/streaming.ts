@@ -259,6 +259,14 @@ export interface QuestionUpdate {
   step_id: string;
   status: "pending" | "resolved";
   metadata?: string;
+  /**
+   * Asked without waiting (ask_user async: true). Not a gate: it goes to the
+   * timeline's async-question cache, never to the pending list the composer
+   * and the background-work pill read.
+   */
+  async?: boolean;
+  /** The ask_user tool call that raised it. */
+  tool_call_id?: string;
 }
 
 // ============================================================================

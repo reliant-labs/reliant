@@ -18,6 +18,10 @@ const (
 	// RefetchAgentMailbox is chat-scoped: a thread in the chat gained a queued
 	// agent message, so the pending-queue strip should re-read its mailbox.
 	RefetchAgentMailbox RefetchType = "agent_mailbox"
+	// RefetchInbox is user-scoped: the inbox gained or lost an item that no
+	// chat activity change announces — an async question, which is no gate,
+	// so the chat's activity does not move when one is asked or answered.
+	RefetchInbox RefetchType = "inbox"
 )
 
 // RefetchData is the JSON payload for refetch events.

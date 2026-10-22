@@ -77,9 +77,23 @@ export const inboxKeys = {
 /**
  * Whether a user update can change what the Inbox holds. Exported so the
  * global updates store asks this module rather than keeping its own list.
+ * An async question (ask_user async: true) moves no chat activity, so its
+ * coming and going is announced as a refetch of type "inbox".
  */
-export function inboxInvalidatingUpdate(type: UserUpdateType): boolean {
+export function inboxInvalidatingUpdate(type: UserUpdateType, data?: unknown): boolean {
+  if (type === UserUpdateType.REFETCH) {
+    const payload = typeof data === "string" ? safeParse(data) : data;
+    return (payload as { type?: unknown } | null)?.type === "inbox";
+  }
   return type === UserUpdateType.CHAT_ACTIVITY_CHANGED || type === UserUpdateType.CHAT_STATE_CHANGE;
+}
+
+function safeParse(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
 }
 
 export interface InboxCounts {

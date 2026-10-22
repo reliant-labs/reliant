@@ -19,6 +19,8 @@ import { ToolExecutionGroup } from "./ToolExecutionGroup";
 import { ToolExecutionCollapsibleGroup } from "./ToolExecutionCollapsibleGroup";
 import { isReadOnlyTool, isRequestMachineTool } from "../../lib/toolFormatters";
 import { RequestMachineCard, requestMachineReason } from "./tool-renderers/RequestMachineToolRenderer";
+import { AsyncQuestionCard } from "./AsyncQuestionCard";
+import { isAsyncAskUserInput } from "./askUserUtils";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import { ErrorMessage } from "./ErrorMessage";
 import { MessageAttachments } from "./MessageAttachments";
@@ -524,8 +526,10 @@ function ChatMessageComponent({
       },
     );
 
-    // Filter out ask_user tool calls — they render via the QuestionPrompt UI, not as tool cards
-    return result.filter((exec) => exec.call.name !== "ask_user");
+    // Filter out blocking ask_user tool calls — they render via the composer's
+    // QuestionPrompt, not as tool cards. An async one stays: it renders as its
+    // own answerable card (AsyncQuestionCard), below.
+    return result.filter((exec) => exec.call.name !== "ask_user" || isAsyncAskUserInput(exec.call.input));
   }, [parsed.toolExecutions, chatId, toolCallStates, getApprovalStatus]);
 
   // Index the enhanced executions by their tool-call id so each ordered
@@ -1098,13 +1102,26 @@ function ChatMessageComponent({
                     reason={requestMachineReason(exec.call.input)}
                   />
                 ));
+                // An async ask_user is a question to the user too, answered
+                // on its own card whatever the tool rows show.
+                const asyncQuestionCards = allRunExecutions
+                  .filter((exec) => exec.call.name === "ask_user")
+                  .map((exec) => (
+                    <AsyncQuestionCard
+                      key={`${message.id}-seg-${segIdx}-async-question-${exec.call.id}`}
+                      chatId={chatId || undefined}
+                      toolCallId={exec.call.id}
+                      input={exec.call.input}
+                    />
+                  ));
+                const userCards = [...machineRequestCards, ...asyncQuestionCards];
                 if (hideToolExecutions) {
-                  return machineRequestCards.length > 0 ? (
-                    <Fragment key={`${message.id}-seg-${segIdx}`}>{machineRequestCards}</Fragment>
+                  return userCards.length > 0 ? (
+                    <Fragment key={`${message.id}-seg-${segIdx}`}>{userCards}</Fragment>
                   ) : null;
                 }
                 const runExecutions = allRunExecutions.filter(
-                  (exec) => !isRequestMachineTool(exec.call.name),
+                  (exec) => !isRequestMachineTool(exec.call.name) && exec.call.name !== "ask_user",
                 );
                 // Images the tools in this run generated. Rendered AFTER the
                 // tool card and OUTSIDE it: the card explains how the image was
@@ -1124,7 +1141,7 @@ function ChatMessageComponent({
                 return (
                   <Fragment key={`${message.id}-seg-${segIdx}`}>
                     {renderToolRun(runExecutions, `${message.id}-seg-${segIdx}`)}
-                    {machineRequestCards}
+                    {userCards}
                     {runImages.length > 0 && (
                       <MessageGeneratedImages attachments={runImages} />
                     )}

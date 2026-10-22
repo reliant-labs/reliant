@@ -74,12 +74,14 @@ import (
 // same holds for the run that ASKED it (pending_input_gates names it): a
 // sub-agent that completed or was cancelled leaves a question nobody can
 // answer, while its root run goes on. A failed (2) or paused (3) run is
-// resumable and keeps its items.
+// resumable and keeps its items. An async question (asked without waiting)
+// is the exception: no wait is behind it, its answer is delivered as a
+// message, so it is listed whatever its runs did.
 //
 // Generic payload columns (a_text, b_text, a_int) carry the kind-specific bits:
 //
 //	approval:        a_text title, a_int approval_type
-//	question:        a_text thread_id, b_text metadata JSON
+//	question:        a_text thread_id, b_text metadata JSON, a_int 1 when async
 //	launch failed:   a_text newest outcome_detail, b_text event kind, a_int failures in the episode
 //	waiting machine: a_text daemon_id, b_text daemon name; item_key is the chat
 //	                 id and the block's start, so a later block is a new item
@@ -134,18 +136,22 @@ SELECT * FROM (
         q.created_at,
         q.thread_id,
         COALESCE(q.metadata, ''),
-        0
+        q.async::integer
     FROM questions q
     JOIN chats_with_activity c ON c.id = q.chat_id
     JOIN projects p ON p.id = c.project_id AND p.user_id = c.user_id
     LEFT JOIN triggers t ON t.id = c.trigger_id
     WHERE q.status = 1
-      AND NOT EXISTS (
-          SELECT 1 FROM pending_input_gates g
-          WHERE g.kind = 'question' AND g.id = q.id AND g.run_state = 3 AND g.run_stop_reason IN (1, 4))
       AND c.user_id = $1::text
       AND c.state IS DISTINCT FROM 3
-      AND NOT (c.root_workflow_state = 3 AND c.root_workflow_stop_reason IN (1, 4))
+      -- An async question waits on the user whatever its run did: its answer
+      -- is delivered as a message, which resumes or restarts the run. A
+      -- blocking one is answerable only while its runs are.
+      AND (q.async OR (
+          NOT EXISTS (
+              SELECT 1 FROM pending_input_gates g
+              WHERE g.kind = 'question' AND g.id = q.id AND g.run_state = 3 AND g.run_stop_reason IN (1, 4))
+          AND NOT (c.root_workflow_state = 3 AND c.root_workflow_stop_reason IN (1, 4))))
 
     UNION ALL
 

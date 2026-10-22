@@ -10,12 +10,16 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
-// A question is only ever answerable while the thread that asked it is
-// waiting on it: the wait lives in that thread's run. Once the thread ends, a
+// A blocking question is only ever answerable while the thread that asked it
+// is waiting on it: the wait lives in that thread's run. Once the thread ends, a
 // pending row is a gate nothing is behind — the UI keeps offering it, the
 // chat reads as awaiting input, and an answer is signalled into a channel no
 // one reads. These close such rows in bulk, each guarded by status = pending,
 // so an answer that got there first is never overwritten.
+//
+// An async question (asked without waiting) is left alone: no wait is behind
+// it to end, its answer is delivered as a message whatever state the thread
+// is in, and it is an item in the user's inbox until answered.
 
 // ClosedQuestion is a question one of these statements resolved: what a
 // caller needs to announce it.
@@ -40,6 +44,7 @@ RETURNING q.id, q.chat_id, q.workflow_id, q.thread_id, q.step_id`
 // any of the given threads.
 const closePendingQuestionsForThreadsSQL = closeQuestionsSet + `
 WHERE q.status = ?2::int
+  AND NOT q.async
   AND q.thread_id IN (?3)` + closeQuestionsReturning
 
 // closePendingQuestionsInWorkflowSubtreeSQL closes the pending questions of
@@ -54,6 +59,7 @@ WITH RECURSIVE subtree AS (
     SELECT c.id FROM workflows c JOIN subtree s ON c.parent_id = s.id
 )` + closeQuestionsSet + `
 WHERE q.status = ?2::int
+  AND NOT q.async
   AND (q.workflow_id IN (SELECT id FROM subtree)
        OR q.thread_id IN (SELECT t.id FROM threads t JOIN subtree s ON t.workflow_id = s.id))` + closeQuestionsReturning
 

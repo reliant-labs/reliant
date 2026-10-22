@@ -1133,10 +1133,11 @@ func (g *Graph) newProviderAccount() (*provider_account.Service, error) {
 // newQuestion constructs the question handler (internal/handlers/question).
 func (g *Graph) newQuestion() (*question.Service, error) {
 	return question.New(question.Deps{
-		Logger:  g.Log,
-		Config:  g.Cfg,
-		Repo:    g.DBRepo().Repo,
-		Signals: g.PauseService(),
+		Logger:   g.Log,
+		Config:   g.Cfg,
+		Repo:     g.DBRepo().Repo,
+		Signals:  g.PauseService(),
+		Messages: g.Chat(),
 	})
 }
 

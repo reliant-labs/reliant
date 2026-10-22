@@ -526,9 +526,13 @@ type Repository interface {
 	// Question methods
 	CreateQuestion(ctx context.Context, question *Question) error
 	GetQuestionByID(ctx context.Context, id string) (*Question, error)
-	// ListPendingQuestionsByChat returns every pending question in a chat,
-	// oldest first, each with the thread that asked it.
+	// ListPendingQuestionsByChat returns every pending blocking question in
+	// a chat, oldest first, each with the thread that asked it. Async
+	// questions are not gates and are not listed.
 	ListPendingQuestionsByChat(ctx context.Context, chatID string) ([]*Question, error)
+	// ListAsyncQuestionsByChat returns every async question in a chat
+	// (asked without waiting), pending and resolved, oldest first.
+	ListAsyncQuestionsByChat(ctx context.Context, chatID string) ([]*Question, error)
 	// ListAnswerablePendingQuestionsByChat is ListPendingQuestionsByChat
 	// without questions whose asking run completed or was cancelled: what
 	// the UI shows and lets the user answer.
