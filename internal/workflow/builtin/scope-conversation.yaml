@@ -117,7 +117,8 @@ nodes:
           ## Your Job: Have a Conversation
 
           Use the `ask_user` tool to ask focused questions to understand what they
-          want to build. Call `ask_user` for each question and wait for the response.
+          want to build. Call `ask_user` with `blocking: true` for each question and
+          wait for the response: the plan is built from their answers.
 
           Below are suggested question areas — use your judgement on which to ask based on
           what the user has already provided. Skip any that are already answered or irrelevant:
