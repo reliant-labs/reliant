@@ -110,6 +110,20 @@ describe("AsyncQuestionCard", () => {
     expect(screen.queryByRole("button", { name: /submit/i })).toBeNull();
   });
 
+  it("shows a question its agent withdrew, with the reason and no form", async () => {
+    listAsyncQuestionsMock.mockResolvedValue([
+      asyncQuestion({ status: "resolved", withdrawn_reason: "Went with Postgres; the schema is migrated" }),
+    ]);
+    renderCard();
+
+    expect(await screen.findByText("Question withdrawn")).toBeInTheDocument();
+    expect(screen.getByTestId("async-question-status")).toHaveTextContent(
+      "Withdrawn: Went with Postgres; the schema is migrated",
+    );
+    expect(screen.getByTestId("async-question-withdrawn")).toHaveTextContent("Which database?");
+    expect(screen.queryByRole("button", { name: /submit/i })).toBeNull();
+  });
+
   it("shows what is asked before the question row arrives", async () => {
     listAsyncQuestionsMock.mockResolvedValue([]);
     renderCard();

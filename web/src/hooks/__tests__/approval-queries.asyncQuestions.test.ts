@@ -45,6 +45,15 @@ describe("applyQuestionUpdate", () => {
     expect(pendingList() ?? []).toEqual([]);
   });
 
+  it("records why a withdrawn async question was withdrawn", () => {
+    queryClient.setQueryData<QuestionInfo[]>(questionKeys.asyncList("c1"), []);
+    applyQuestionUpdate("c1", event("qw", "pending", true));
+
+    applyQuestionUpdate("c1", { ...event("qw", "resolved", true), withdrawn_reason: "moot now" });
+
+    expect(asyncList()?.map((q) => [q.question_id, q.status, q.withdrawn_reason])).toEqual([["qw", "resolved", "moot now"]]);
+  });
+
   it("does not seed an async list that was never fetched", () => {
     applyQuestionUpdate("c1", event("qa", "pending", true));
     expect(asyncList()).toBeUndefined();

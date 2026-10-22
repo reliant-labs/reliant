@@ -153,13 +153,26 @@ export function upsertAsyncQuestionInCache(chatId: string, question: QuestionInf
   });
 }
 
-/** Mark a cached async question answered (it stays listed: its card shows the answer). */
-function markAsyncQuestionResolvedInCache(chatId: string, questionId: string, responseData?: string): void {
+/**
+ * Mark a cached async question resolved — answered, or withdrawn by its agent
+ * (it stays listed: its card shows the answer or the reason).
+ */
+function markAsyncQuestionResolvedInCache(
+  chatId: string,
+  questionId: string,
+  responseData?: string,
+  withdrawnReason?: string,
+): void {
   patchAsyncQuestionsCache(chatId, (prev) =>
     prev.some((q) => q.question_id === questionId)
       ? prev.map((q) =>
           q.question_id === questionId
-            ? { ...q, status: "resolved", response_data: responseData ?? q.response_data }
+            ? {
+                ...q,
+                status: "resolved",
+                response_data: responseData ?? q.response_data,
+                withdrawn_reason: withdrawnReason ?? q.withdrawn_reason,
+              }
             : q,
         )
       : prev,
@@ -188,7 +201,7 @@ export function applyQuestionUpdate(chatId: string, qu: QuestionUpdate): void {
         tool_call_id: qu.tool_call_id,
       });
     } else if (qu.status === "resolved") {
-      markAsyncQuestionResolvedInCache(chatId, qu.question_id);
+      markAsyncQuestionResolvedInCache(chatId, qu.question_id, undefined, qu.withdrawn_reason);
     }
     return;
   }

@@ -215,6 +215,9 @@ type QuestionUpdate struct {
 	// ToolCallID is the ask_user tool call that raised the question, when
 	// one did: the timeline card it belongs to.
 	ToolCallID string `json:"tool_call_id,omitempty"`
+	// WithdrawnReason is set on the "resolved" update of a question its
+	// agent withdrew: the timeline card shows it instead of an answer.
+	WithdrawnReason string `json:"withdrawn_reason,omitempty"`
 }
 
 func (u QuestionUpdate) Type() UpdateType { return UpdateTypeQuestion }

@@ -14,7 +14,7 @@
  */
 
 import { memo, useMemo, useState } from "react";
-import { CheckCircle2, MessageCircleQuestion } from "lucide-react";
+import { CheckCircle2, MessageCircleQuestion, Undo2 } from "lucide-react";
 import { toast } from "sonner";
 import { answerQuestion, useAsyncQuestions } from "@/hooks/approval-queries";
 import { CardInset } from "../forge-ui/card";
@@ -40,7 +40,9 @@ function AsyncQuestionCardComponent({ chatId, toolCallId, input }: AsyncQuestion
   if (!items) return null;
 
   const resolved = question?.status === "resolved";
-  const answers = resolved ? askUserAnswerLines(question?.response_data) : [];
+  // Withdrawn by the agent (withdraw_question): moot, not answered.
+  const withdrawnReason = resolved ? question?.withdrawn_reason : undefined;
+  const answers = resolved && !withdrawnReason ? askUserAnswerLines(question?.response_data) : [];
 
   const onSubmit = async (answer: { answers: QuestionAnswer[] }) => {
     if (!chatId || !question) return;
@@ -57,24 +59,36 @@ function AsyncQuestionCardComponent({ chatId, toolCallId, input }: AsyncQuestion
   return (
     <div data-testid="async-question-card" className="my-1.5 rounded-lg border border-border bg-card px-3 py-2.5">
       <div className="flex items-start gap-2.5">
-        {resolved ? (
+        {withdrawnReason ? (
+          <Undo2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-muted-foreground" aria-hidden="true" />
+        ) : resolved ? (
           <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-success-ink" aria-hidden="true" />
         ) : (
           <MessageCircleQuestion className="mt-0.5 h-4 w-4 flex-shrink-0 text-muted-foreground" aria-hidden="true" />
         )}
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium text-foreground">
-            {resolved ? "Question answered" : "Question for you · not blocking"}
+            {withdrawnReason ? "Question withdrawn" : resolved ? "Question answered" : "Question for you · not blocking"}
           </p>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            {resolved
-              ? "Your answer was sent to the agent as a message."
-              : "The agent kept working on its best guess. Answer any time — it gets your answer as a message."}
+          <p className="mt-0.5 text-xs text-muted-foreground" data-testid="async-question-status">
+            {withdrawnReason
+              ? `Withdrawn: ${withdrawnReason}`
+              : resolved
+                ? "Your answer was sent to the agent as a message."
+                : "The agent kept working on its best guess. Answer any time — it gets your answer as a message."}
           </p>
         </div>
       </div>
 
-      {resolved ? (
+      {withdrawnReason ? (
+        <ul className="mt-2 space-y-1" data-testid="async-question-withdrawn">
+          {items.map((item, i) => (
+            <li key={i} className="text-sm text-muted-foreground line-through">
+              {item.question}
+            </li>
+          ))}
+        </ul>
+      ) : resolved ? (
         <ul className="mt-2 space-y-1.5" data-testid="async-question-answers">
           {(answers.length > 0 ? answers : [{ question: "", answer: "No answer given." }]).map((line, i) => (
             <li key={i} className="text-sm">

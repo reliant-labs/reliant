@@ -375,9 +375,12 @@ type QuestionInfo struct {
 	// The ask_user tool call that raised the question, when one did.
 	ToolCallId string `protobuf:"bytes,10,opt,name=tool_call_id,json=toolCallId,proto3" json:"tool_call_id,omitempty"`
 	// The answer, once resolved.
-	ResponseData  *string `protobuf:"bytes,11,opt,name=response_data,json=responseData,proto3,oneof" json:"response_data,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	ResponseData *string `protobuf:"bytes,11,opt,name=response_data,json=responseData,proto3,oneof" json:"response_data,omitempty"`
+	// Set when the agent withdrew the question (withdraw_question) instead of
+	// the user answering it: why it no longer needs an answer.
+	WithdrawnReason *string `protobuf:"bytes,12,opt,name=withdrawn_reason,json=withdrawnReason,proto3,oneof" json:"withdrawn_reason,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *QuestionInfo) Reset() {
@@ -487,6 +490,13 @@ func (x *QuestionInfo) GetResponseData() string {
 	return ""
 }
 
+func (x *QuestionInfo) GetWithdrawnReason() string {
+	if x != nil && x.WithdrawnReason != nil {
+		return *x.WithdrawnReason
+	}
+	return ""
+}
+
 var File_reliant_v1_question_proto protoreflect.FileDescriptor
 
 const file_reliant_v1_question_proto_rawDesc = "" +
@@ -508,7 +518,7 @@ const file_reliant_v1_question_proto_rawDesc = "" +
 	"\x19ListAsyncQuestionsRequest\x12\x17\n" +
 	"\achat_id\x18\x01 \x01(\tR\x06chatId\"T\n" +
 	"\x1aListAsyncQuestionsResponse\x126\n" +
-	"\tquestions\x18\x01 \x03(\v2\x18.reliant.v1.QuestionInfoR\tquestions\"\xf8\x02\n" +
+	"\tquestions\x18\x01 \x03(\v2\x18.reliant.v1.QuestionInfoR\tquestions\"\xbd\x03\n" +
 	"\fQuestionInfo\x12\x1f\n" +
 	"\vquestion_id\x18\x01 \x01(\tR\n" +
 	"questionId\x12\x17\n" +
@@ -525,9 +535,11 @@ const file_reliant_v1_question_proto_rawDesc = "" +
 	"\ftool_call_id\x18\n" +
 	" \x01(\tR\n" +
 	"toolCallId\x12(\n" +
-	"\rresponse_data\x18\v \x01(\tH\x01R\fresponseData\x88\x01\x01B\v\n" +
+	"\rresponse_data\x18\v \x01(\tH\x01R\fresponseData\x88\x01\x01\x12.\n" +
+	"\x10withdrawn_reason\x18\f \x01(\tH\x02R\x0fwithdrawnReason\x88\x01\x01B\v\n" +
 	"\t_metadataB\x10\n" +
-	"\x0e_response_data*l\n" +
+	"\x0e_response_dataB\x13\n" +
+	"\x11_withdrawn_reason*l\n" +
 	"\x0eQuestionStatus\x12\x1f\n" +
 	"\x1bQUESTION_STATUS_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17QUESTION_STATUS_PENDING\x10\x01\x12\x1c\n" +

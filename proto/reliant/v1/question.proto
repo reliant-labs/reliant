@@ -76,4 +76,7 @@ message QuestionInfo {
   string tool_call_id = 10;
   // The answer, once resolved.
   optional string response_data = 11;
+  // Set when the agent withdrew the question (withdraw_question) instead of
+  // the user answering it: why it no longer needs an answer.
+  optional string withdrawn_reason = 12;
 }

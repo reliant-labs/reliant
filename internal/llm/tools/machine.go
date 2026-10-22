@@ -89,6 +89,7 @@ var serverSafeTools = map[string]struct{}{
 	ToolSpawnStatus: {}, ToolSpawnSend: {}, ToolSpawnStop: {},
 	ToolStartRun: {}, ToolListRuns: {}, ToolGetRun: {}, ToolControlRun: {}, ToolSendToRun: {},
 	ToolSkill: {}, ToolLoadTool: {}, ToolAskUser: {},
+	ToolListPendingQuestions: {}, ToolWithdrawQuestion: {},
 	ToolCreateWorkflow: {}, ToolEditWorkflow: {}, ToolWriteWorkflow: {},
 	ToolGetSchema: {}, ToolGetCELReference: {}, ToolCELEval: {}, ToolListWorkflows: {}, ToolGetWorkflow: {},
 	ToolGetWorkflowSuggestions: {}, ToolListPresets: {}, ToolGetPreset: {},

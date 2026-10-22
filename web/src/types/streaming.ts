@@ -267,6 +267,8 @@ export interface QuestionUpdate {
   async?: boolean;
   /** The ask_user tool call that raised it. */
   tool_call_id?: string;
+  /** On a "resolved" event: the agent withdrew it, and why. */
+  withdrawn_reason?: string;
 }
 
 // ============================================================================

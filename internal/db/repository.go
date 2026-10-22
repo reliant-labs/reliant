@@ -533,6 +533,12 @@ type Repository interface {
 	// ListAsyncQuestionsByChat returns every async question in a chat
 	// (asked without waiting), pending and resolved, oldest first.
 	ListAsyncQuestionsByChat(ctx context.Context, chatID string) ([]*Question, error)
+	// ListPendingQuestionsInThreadSubtree returns the pending questions asked
+	// on threadID or any thread below it, oldest first.
+	ListPendingQuestionsInThreadSubtree(ctx context.Context, chatID, threadID string) ([]SubtreeQuestion, error)
+	// WithdrawAsyncQuestion withdraws a pending async question asked on
+	// threadID or below it, and announces it.
+	WithdrawAsyncQuestion(ctx context.Context, chatID, threadID, questionID, reason string) (WithdrawOutcome, error)
 	// ListAnswerablePendingQuestionsByChat is ListPendingQuestionsByChat
 	// without questions whose asking run completed or was cancelled: what
 	// the UI shows and lets the user answer.

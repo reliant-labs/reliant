@@ -573,6 +573,10 @@ var generatedToolParams = map[string]ToolParams{
 		},
 		Unbindable: map[string]string{},
 	},
+	"list_pending_questions": {
+		Bindable:   map[string]struct{}{},
+		Unbindable: map[string]string{},
+	},
 	"list_presets": {
 		Bindable:   map[string]struct{}{},
 		Unbindable: map[string]string{},
@@ -1031,6 +1035,13 @@ var generatedToolParams = map[string]ToolParams{
 		Bindable: map[string]struct{}{
 			"count": {},
 			"query": {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"withdraw_question": {
+		Bindable: map[string]struct{}{
+			"question_id": {},
+			"reason":      {},
 		},
 		Unbindable: map[string]string{},
 	},

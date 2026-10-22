@@ -79,3 +79,36 @@ return — no timer, no signal wait.
   semantics and survives everything. Rejected.
 - **Client calls ResolveQuestion then SendAgentMessage** — two writes, not
   atomic, and the inbox would need the same logic. Rejected for one RPC.
+
+## Seeing and withdrawing pending questions
+
+An agent that keeps going needs to see what it is still waiting on, and to
+retract a question its default has made moot, or the user's inbox fills with
+stale ones. Two tools, handed to any agent that can ask or that has
+sub-agents (`capabilities.go`, structural tools):
+
+- `list_pending_questions` — no parameters. Lists the pending questions,
+  async and blocking, of the caller's thread and every sub-agent below it,
+  recursively, never a sibling's. Each entry: question_id, agent_id and the
+  sub-agent's title (spawn_status's names), async or blocking, the questions
+  with their options, created_at and how long it has waited.
+- `withdraw_question(question_id, reason)` — a separate tool, like
+  spawn_status/spawn_send/spawn_stop. Async questions only, within the same
+  subtree. Withdrawing resolves the row with `questions.withdrawn_reason`
+  (no answer), so it leaves the inbox and the timeline card shows
+  "Withdrawn: <reason>". A blocking question is refused: its agent is parked
+  on it, and only the user's answer or that agent ending closes it. A
+  question outside the subtree, or already answered, gets one "not found"
+  answer, so nothing leaks about a sibling's questions.
+
+The subtree is walked over `threads.parent_thread_id`
+(`store.threadSubtreeCTE`), not the `workflows.parent_id` walk the terminal
+cascade uses: a thread is the agent, a workflows row is one run of it (a
+resumed sub-agent gets a new row on the same thread), and questions name
+their thread.
+
+Not included: "async questions answered since the thread last drained its
+mailbox". The answer message already names its question_id
+("Answer to the question you asked without waiting (ask_user, question_id:
+…)"), which connects an answer to its question without a per-thread drain
+watermark to maintain.

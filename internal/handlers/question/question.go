@@ -172,6 +172,9 @@ func questionToProto(q *db.Question) *reliantv1.QuestionInfo {
 	if q.ResponseData != nil {
 		info.ResponseData = q.ResponseData
 	}
+	if q.WithdrawnReason != nil {
+		info.WithdrawnReason = q.WithdrawnReason
+	}
 	return info
 }
 
