@@ -86,7 +86,6 @@
 1.1	github.com/reliant-labs/reliant/internal/workspacecreate
 1.0	github.com/reliant-labs/reliant/internal/integrations/catalog
 1.0	github.com/reliant-labs/reliant/internal/workflow/celeval
-1.0	github.com/reliant-labs/reliant/internal/serverapi
 0.9	github.com/reliant-labs/reliant/internal/videojobs
 0.9	github.com/reliant-labs/reliant/internal/architecture
 0.8	github.com/reliant-labs/reliant/internal/configadapter
@@ -97,7 +96,6 @@
 0.6	github.com/reliant-labs/reliant/internal/integrations/catalogindex
 0.6	github.com/reliant-labs/reliant/internal/integrations/gmail
 0.6	github.com/reliant-labs/reliant/internal/diskwatch
-0.6	github.com/reliant-labs/reliant/internal/serverworker
 0.6	github.com/reliant-labs/reliant/internal/workflow/builtin/presets
 0.6	github.com/reliant-labs/reliant/internal/integrations/webhook
 0.6	github.com/reliant-labs/reliant/internal/mcp

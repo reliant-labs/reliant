@@ -14,7 +14,11 @@
 // request (one implementation per auth placement). `forge generate` writes a
 // mock of each into mock_gen.go.
 //
-//forge:not-a-component: built by reliant's hand-wired server (internal/serverapi, internal/serverworker), not forge's composition root — until P3c (research/forge-migration/PLAN.md)
+// Built by hand, by internal/app's NewAPIConnections and worker connection
+// providers (providers_api.go, providers_worker.go): never a node compose.go
+// constructs from Deps.
+//
+//forge:provided
 package connections
 
 import (

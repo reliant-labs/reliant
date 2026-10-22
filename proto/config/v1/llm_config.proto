@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package config.v1;
 
+import "buf/validate/validate.proto";
 import "forge/v1/forge.proto";
 import "google/protobuf/duration.proto";
 
@@ -31,26 +32,38 @@ message LLMConfig {
 
   // The stream guards (internal/llm transport.go, stream_stall.go). Each is
   // positive; the defaults are argued from measured streams there.
-  google.protobuf.Duration stream_idle_timeout = 4 [(forge.v1.config) = {
-    env_var: "RELIANT_LLM_STREAM_IDLE_TIMEOUT"
-    default_value: "90s"
-    description: "Cut a stream that sends no bytes for this long"
-  }];
-  google.protobuf.Duration stream_content_stall_timeout = 5 [(forge.v1.config) = {
-    env_var: "RELIANT_LLM_STREAM_CONTENT_STALL_TIMEOUT"
-    default_value: "5m"
-    description: "Cut a stream that sends only keepalives before any content for this long"
-  }];
-  google.protobuf.Duration stream_progress_timeout = 6 [(forge.v1.config) = {
-    env_var: "RELIANT_LLM_STREAM_PROGRESS_TIMEOUT"
-    default_value: "10m"
-    description: "Cut a stream that produces no driver event for this long"
-  }];
+  google.protobuf.Duration stream_idle_timeout = 4 [
+    (forge.v1.config) = {
+      env_var: "RELIANT_LLM_STREAM_IDLE_TIMEOUT"
+      default_value: "90s"
+      description: "Cut a stream that sends no bytes for this long"
+    },
+    (buf.validate.field).duration.gt = {}
+  ];
+  google.protobuf.Duration stream_content_stall_timeout = 5 [
+    (forge.v1.config) = {
+      env_var: "RELIANT_LLM_STREAM_CONTENT_STALL_TIMEOUT"
+      default_value: "5m"
+      description: "Cut a stream that sends only keepalives before any content for this long"
+    },
+    (buf.validate.field).duration.gt = {}
+  ];
+  google.protobuf.Duration stream_progress_timeout = 6 [
+    (forge.v1.config) = {
+      env_var: "RELIANT_LLM_STREAM_PROGRESS_TIMEOUT"
+      default_value: "10m"
+      description: "Cut a stream that produces no driver event for this long"
+    },
+    (buf.validate.field).duration.gt = {}
+  ];
   // Unset: derived per request from its output budget.
-  google.protobuf.Duration stream_mid_block_stall_timeout = 7 [(forge.v1.config) = {
-    env_var: "RELIANT_LLM_STREAM_MID_BLOCK_STALL_TIMEOUT"
-    description: "Pin how long a content block may stay open on keepalives (default: derived from the output budget)"
-  }];
+  google.protobuf.Duration stream_mid_block_stall_timeout = 7 [
+    (forge.v1.config) = {
+      env_var: "RELIANT_LLM_STREAM_MID_BLOCK_STALL_TIMEOUT"
+      description: "Pin how long a content block may stay open on keepalives (default: derived from the output budget)"
+    },
+    (buf.validate.field).duration.gt = {}
+  ];
 
   bool debug_openai_responses_input = 8 [(forge.v1.config) = {
     env_var: "RELIANT_DEBUG_OPENAI_RESPONSES_INPUT"

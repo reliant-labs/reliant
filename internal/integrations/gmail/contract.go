@@ -14,7 +14,7 @@
 // users.messages.get) at the manifest's base_url, as the trigger's connection,
 // through the guarded runner's HTTP client.
 //
-//forge:not-a-component: built by reliant's hand-wired server (internal/integrations/webhook's poller registry, wired from internal/serverapi), not forge's composition root — until P3c (research/forge-migration/PLAN.md)
+//forge:not-a-component: built by internal/integrations/webhook's poller registry, one client per connection — never a node of the composition graph
 package gmail
 
 import (

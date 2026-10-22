@@ -16,12 +16,11 @@ import (
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
-// Deps holds dependencies for the model_endpoint service.
-// internal/grpc/server.go constructs it today; forge's composition root takes
-// over in P3c (research/forge-migration/PLAN.md). The rpc methods on *Service
+// Deps holds dependencies for the model_endpoint service. The composition
+// graph constructs it (internal/app/compose.go). The rpc methods on *Service
 // are where this service's logic lives; see the forge `api` / `services`
-// skill. Service is the thin Connect layer over modelendpoints.Manager,
-// which New builds from these.
+// skill. Service is the thin Connect layer over modelendpoints.Manager, which
+// New builds from these.
 type Deps struct {
 	Logger *slog.Logger
 	Config *config.Config

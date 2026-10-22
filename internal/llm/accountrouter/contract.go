@@ -19,7 +19,7 @@
 // Persisting limits and benching accounts is the account-limits recorder's job
 // (a later package), not this one's.
 //
-//forge:not-a-component: built by reliant's hand-wired server and worker once the router is wired into call_llm (research/provider-load-balancing/DESIGN.md P3.4); no composition root builds it yet
+//forge:not-a-component: built by internal/workersetup's account routing (account_routing.go) — never a node of the composition graph
 package accountrouter
 
 import (

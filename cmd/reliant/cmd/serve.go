@@ -214,9 +214,6 @@ func serverkitConfig(cfg *config.Config, configs rootConfigs) (serverkit.Config,
 		skCfg.DBConnectTimeout = c.GetDbConnectTimeout().AsDuration()
 	}
 	if c := configs.GatewayConfig; c != nil {
-		if err := app.CheckPorts(app.Port{Name: "HEALTH_PORT (--health-port)", Port: c.GetHealthPort()}); err != nil {
-			return serverkit.Config{}, err
-		}
 		skCfg.Addr = fmt.Sprintf("%s:%d", c.GetBindAddress(), c.GetHealthPort())
 		skCfg.PprofAddr = c.GetPprofAddr()
 		skCfg.Probes.Live = serverkit.ProbePathList(c.GetLivenessPaths())
@@ -227,9 +224,6 @@ func serverkitConfig(cfg *config.Config, configs rootConfigs) (serverkit.Config,
 		skCfg.ShutdownTimeout = c.GetShutdownTimeout().AsDuration()
 	}
 	if c := configs.ApiServerConfig; c != nil {
-		if err := app.CheckPorts(app.Port{Name: "HEALTH_PORT (--health-port)", Port: c.GetHealthPort()}); err != nil {
-			return serverkit.Config{}, err
-		}
 		skCfg.Addr = fmt.Sprintf("%s:%d", c.GetBindAddress(), c.GetHealthPort())
 		skCfg.Probes.Live = serverkit.ProbePathList(c.GetLivenessPaths())
 		skCfg.Probes.Ready = serverkit.ProbePathList(c.GetReadinessPaths())
@@ -241,9 +235,6 @@ func serverkitConfig(cfg *config.Config, configs rootConfigs) (serverkit.Config,
 		skCfg.ShutdownTimeout = c.GetShutdownTimeout().AsDuration()
 	}
 	if c := configs.WorkerConfig; c != nil {
-		if err := app.CheckPorts(app.Port{Name: "HEALTH_PORT (--health-port)", Port: c.GetHealthPort()}); err != nil {
-			return serverkit.Config{}, err
-		}
 		skCfg.Addr = fmt.Sprintf(":%d", c.GetHealthPort())
 		skCfg.Probes.Live = serverkit.ProbePathList(c.GetLivenessPaths())
 		skCfg.Probes.Ready = serverkit.ProbePathList(c.GetReadinessPaths())

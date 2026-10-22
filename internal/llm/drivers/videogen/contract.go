@@ -15,7 +15,7 @@
 // narrower VideoGenerator they declare themselves. `forge generate` writes
 // MockClient into mock_gen.go.
 //
-//forge:not-a-component: built by internal/llm/drivers, one client per resolved video model, not forge's composition root — until P3c (research/forge-migration/PLAN.md)
+//forge:not-a-component: built by internal/llm/drivers, one client per resolved video model — never a node of the composition graph
 package videogen
 
 import "context"

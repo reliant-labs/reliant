@@ -52,7 +52,7 @@ type EventIntake interface {
 // IntegrationAccess keeps one user's access snapshot for an access-gated
 // integration fresh (GitHub: which repositories, in which App installations,
 // the user's own token can see). Satisfied by *ghaccess.Refresher via an
-// adapter in serverapi.
+// adapter in internal/app (providers_api.go).
 type IntegrationAccess interface {
 	// Refresh re-reads userID's access now.
 	Refresh(ctx context.Context, userID string) error

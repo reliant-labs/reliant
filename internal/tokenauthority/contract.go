@@ -27,7 +27,10 @@
 // hashed connector credentials in connector_grants) are gone. The only token
 // shape anything here accepts is forge/pkg/accesstoken's.
 //
-//forge:not-a-component: built by reliant's hand-wired server (internal/grpc, internal/servergateway), not forge's composition root — until P3c (research/forge-migration/PLAN.md)
+// Built by hand, by internal/app's NewTokenAuthority provider (providers.go):
+// never a node compose.go constructs from Deps.
+//
+//forge:provided
 package tokenauthority
 
 import (

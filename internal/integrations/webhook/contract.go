@@ -19,7 +19,10 @@
 // See Provider. Every payload is untrusted: bodies are size-capped and
 // secret-bearing headers never reach the stored event.
 //
-//forge:not-a-component: built by reliant's hand-wired server (internal/serverapi), not forge's composition root — until P3c (research/forge-migration/PLAN.md)
+// Built by hand, by internal/app's NewTriggerInbound provider
+// (providers_api.go): never a node compose.go constructs from Deps.
+//
+//forge:provided
 package webhook
 
 import (

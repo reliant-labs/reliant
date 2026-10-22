@@ -7,6 +7,7 @@
 package configv1
 
 import (
+	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	_ "github.com/reliant-labs/forge/pkg/forgepb"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -143,12 +144,12 @@ var File_config_v1_gateway_config_proto protoreflect.FileDescriptor
 
 const file_config_v1_gateway_config_proto_rawDesc = "" +
 	"\n" +
-	"\x1econfig/v1/gateway_config.proto\x12\tconfig.v1\x1a\x14forge/v1/forge.proto\x1a\x1egoogle/protobuf/duration.proto\"\xc4\t\n" +
-	"\rGatewayConfig\x12s\n" +
-	"\vdaemon_port\x18\x0e \x01(\x05BR\x82\xce\x18N\n" +
+	"\x1econfig/v1/gateway_config.proto\x12\tconfig.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x1egoogle/protobuf/duration.proto\"\xda\t\n" +
+	"\rGatewayConfig\x12~\n" +
+	"\vdaemon_port\x18\x0e \x01(\x05B]\xbaH\b\x1a\x06\x18\xff\xff\x03(\x01\x82\xce\x18N\n" +
 	"\x11TOOLS_DAEMON_PORT\x12\vdaemon-port\x1a\x049190*&Daemon bidi-streaming gRPC listen portR\n" +
-	"daemonPort\x12j\n" +
-	"\vhealth_port\x18\x0f \x01(\x05BI\x82\xce\x18E\n" +
+	"daemonPort\x12u\n" +
+	"\vhealth_port\x18\x0f \x01(\x05BT\xbaH\b\x1a\x06\x18\xff\xff\x03(\x01\x82\xce\x18E\n" +
 	"\vHEALTH_PORT\x12\vhealth-port\x1a\x048080*#Health/readiness HTTP endpoint portR\n" +
 	"healthPort\x12h\n" +
 	"\fbind_address\x18\x10 \x01(\tBE\x82\xce\x18A\n" +

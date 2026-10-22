@@ -4,7 +4,7 @@
 // on a worker (NewWorker) and runs it as a supervised component (Worker), for
 // the temporal-worker and the test harnesses alike.
 //
-//forge:exclude-contract: Temporal worker composition (workflow/activity registration over injected collaborators) shared by reliant's hand-wired server mains; it wires services rather than being one, and becomes a supervised forge worker in P3c (research/forge-migration/PLAN.md)
+//forge:exclude-contract: Temporal worker composition (workflow/activity registration over injected collaborators), built as the worker root's TemporalWorker node (internal/app) and by the test harnesses; it wires services rather than being one
 package workersetup
 
 import (

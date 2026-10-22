@@ -284,8 +284,8 @@ func (s *sessionSigner) sign(t *testing.T, userID string) string {
 }
 
 // serveTokenService mounts reliant's TokenService behind the REAL API auth
-// interceptor, with the authority's introspector wired exactly as NewAPI
-// wires it (cached) and the same public procedures (ExchangeToken and
+// interceptor, with the authority's introspector wired exactly as the api
+// root's user chain wires it (cached, NewUserChain) and the same public procedures (ExchangeToken and
 // GetGitToken among them).
 func serveTokenService(t *testing.T, authority tokenauthority.Authority, jwtPubPEM string, cp token.TokenControlPlane) string {
 	t.Helper()

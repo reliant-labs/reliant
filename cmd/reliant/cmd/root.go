@@ -120,14 +120,14 @@ Reliant server components.`,
 	return root
 }
 
-// Execute runs the root command.
-func Execute() error {
+// Execute runs the root command, and exits the process with status 1 when it
+// fails, having printed the error to stderr.
+func Execute() {
 	root := NewRootCmd()
 	if err := root.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
-		return err
+		os.Exit(1)
 	}
-	return nil
 }
 
 // loadRootConfig loads the reliant binary's root config (proto/config/v1

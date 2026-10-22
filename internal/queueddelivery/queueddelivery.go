@@ -35,7 +35,10 @@
 // Run is a NATS JetStream consumer: it creates or updates the durable consumer
 // on DAEMON_EVENTS and consumes its connect events.
 //
-//forge:not-a-component: built by reliant's hand-wired server (internal/serverapi), not forge's composition root — until P3c (research/forge-migration/PLAN.md)
+// Built by hand, by internal/app's NewQueuedDeliverer provider
+// (providers_api.go): never a node compose.go constructs from Deps.
+//
+//forge:provided
 package queueddelivery
 
 import (

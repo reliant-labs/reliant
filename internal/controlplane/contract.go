@@ -17,7 +17,11 @@
 // generate` writes a mock of Service into mock_gen.go; adapter tests stand up
 // an httptest server.
 //
-//forge:not-a-component: built by reliant's hand-wired servers (internal/grpc, internal/serverapi, internal/serverworker, internal/mcpserver), not forge's composition root — until P3c (research/forge-migration/PLAN.md)
+// Built by hand, by internal/app's providers (providers_api.go,
+// providers_worker.go) and internal/mcpserver: never a node compose.go
+// constructs from Deps.
+//
+//forge:provided
 package controlplane
 
 import (

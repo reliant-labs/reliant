@@ -85,7 +85,7 @@ func TestAPIReadiness(t *testing.T) {
 }
 
 // The process-wide state is installed before anything could read it: the
-// api-server's own config, validated, and the config-only settings before
+// api-server's own config and the config-only settings before
 // every other node, the database-backed globals (the LLM key provider and
 // Reliant-key healer, analytics, the error reporter) right after the
 // database they read.

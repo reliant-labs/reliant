@@ -7,6 +7,7 @@
 package configv1
 
 import (
+	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	_ "github.com/reliant-labs/forge/pkg/forgepb"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -321,7 +322,7 @@ var File_config_v1_api_server_config_proto protoreflect.FileDescriptor
 
 const file_config_v1_api_server_config_proto_rawDesc = "" +
 	"\n" +
-	"!config/v1/api_server_config.proto\x12\tconfig.v1\x1a\x14forge/v1/forge.proto\x1a\x1egoogle/protobuf/duration.proto\"\x89\x1c\n" +
+	"!config/v1/api_server_config.proto\x12\tconfig.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x1egoogle/protobuf/duration.proto\"\xb8\x1d\n" +
 	"\x0fApiServerConfig\x12s\n" +
 	"\x0ejwt_public_key\x18\x01 \x01(\tBM\x82\xce\x18I\n" +
 	"\x0eJWT_PUBLIC_KEY\x12\x0ejwt-public-key*'JWT public key PEM for token validationR\fjwtPublicKey\x12~\n" +
@@ -332,14 +333,14 @@ const file_config_v1_api_server_config_proto_rawDesc = "" +
 	"\x15allowed_email_domains\x18\x04 \x03(\tB_\x82\xce\x18[\n" +
 	"\x15ALLOWED_EMAIL_DOMAINS*BComma-separated email domains allowed to sign in (none allows all)R\x13allowedEmailDomains\x12\x9f\x01\n" +
 	"\x11disable_forge_api\x18\x06 \x01(\bBs\x82\xce\x18o\n" +
-	"\x19RELIANT_DISABLE_FORGE_API*RTurn the forge RPC surface off at this server (its rpcs answer FailedPrecondition)R\x0fdisableForgeApi\x12Z\n" +
-	"\tgrpc_port\x18\x0f \x01(\x05B=\x82\xce\x189\n" +
-	"\tGRPC_PORT\x12\tgrpc-port\x1a\x049090*\x1bgRPC/ConnectRPC listen portR\bgrpcPort\x12j\n" +
-	"\vhealth_port\x18\x10 \x01(\x05BI\x82\xce\x18E\n" +
+	"\x19RELIANT_DISABLE_FORGE_API*RTurn the forge RPC surface off at this server (its rpcs answer FailedPrecondition)R\x0fdisableForgeApi\x12e\n" +
+	"\tgrpc_port\x18\x0f \x01(\x05BH\xbaH\b\x1a\x06\x18\xff\xff\x03(\x01\x82\xce\x189\n" +
+	"\tGRPC_PORT\x12\tgrpc-port\x1a\x049090*\x1bgRPC/ConnectRPC listen portR\bgrpcPort\x12u\n" +
+	"\vhealth_port\x18\x10 \x01(\x05BT\xbaH\b\x1a\x06\x18\xff\xff\x03(\x01\x82\xce\x18E\n" +
 	"\vHEALTH_PORT\x12\vhealth-port\x1a\x048081*#Health/readiness HTTP endpoint portR\n" +
-	"healthPort\x12Z\n" +
+	"healthPort\x12h\n" +
 	"\n" +
-	"pprof_port\x18\x11 \x01(\x05B;\x82\xce\x187\n" +
+	"pprof_port\x18\x11 \x01(\x05BI\xbaH\v\xd8\x01\x01\x1a\x06\x18\xff\xff\x03(\x01\x82\xce\x187\n" +
 	"\n" +
 	"PPROF_PORT\x12\n" +
 	"pprof-port\x1a\x046060*\x17pprof debug server portR\tpprofPort\x12h\n" +
@@ -357,16 +358,16 @@ const file_config_v1_api_server_config_proto_rawDesc = "" +
 	"\x14authorization_server\x18! \x01(\tBh\x82\xce\x18d\n" +
 	"\x1cRELIANT_AUTHORIZATION_SERVER*DPublic URL of the control plane that issues this deployment's tokensR\x13authorizationServer\x12\x8e\x01\n" +
 	"\x11mcp_oauth_issuers\x18\" \x03(\tBb\x82\xce\x18^\n" +
-	"\x11MCP_OAUTH_ISSUERS*IComma-separated OAuth issuers whose tokens the connector endpoint acceptsR\x0fmcpOauthIssuers\x12n\n" +
-	"\x0fmax_upload_size\x18# \x01(\x03BF\x82\xce\x18B\n" +
+	"\x11MCP_OAUTH_ISSUERS*IComma-separated OAuth issuers whose tokens the connector endpoint acceptsR\x0fmcpOauthIssuers\x12u\n" +
+	"\x0fmax_upload_size\x18# \x01(\x03BM\xbaH\x04\"\x02 \x00\x82\xce\x18B\n" +
 	"\x0fMAX_UPLOAD_SIZE\x1a\b10485760*%Largest attachment accepted, in bytesR\rmaxUploadSize\x12\x9d\x01\n" +
 	"\x15worktree_auto_archive\x18$ \x01(\tBi\x82\xce\x18e\n" +
 	"\x1dRELIANT_WORKTREE_AUTO_ARCHIVE\x1a\adry-run*)Worktree auto-archive: dry-run, on or offJ\adry-runJ\x02onJ\x03offR\x13worktreeAutoArchive\x12\x8e\x01\n" +
 	"\x11auth_provider_url\x18% \x01(\tBb\x82\xce\x18^\n" +
 	"\x10RELIANT_AUTH_URL\x1a\x1bhttps://dash.reliantlabs.io*-OAuth provider origin for the desktop sign-inR\x0fauthProviderUrl\x12\xb5\x01\n" +
 	"\x11auth_provider_key\x18& \x01(\tB\x88\x01\x82\xce\x18\x83\x01\n" +
-	"\x10RELIANT_AUTH_KEY\x1a.sb_publishable_KKiB3B0EdEv7nguwKfEE5A_iY9rVXod*?OAuth provider publishable (public) key for the desktop sign-inR\x0fauthProviderKey\x12\xb5\x01\n" +
-	"\x17payload_blob_gc_horizon\x18P \x01(\v2\x19.google.protobuf.DurationBc\x82\xce\x18_\n" +
+	"\x10RELIANT_AUTH_KEY\x1a.sb_publishable_KKiB3B0EdEv7nguwKfEE5A_iY9rVXod*?OAuth provider publishable (public) key for the desktop sign-inR\x0fauthProviderKey\x12\xbd\x01\n" +
+	"\x17payload_blob_gc_horizon\x18P \x01(\v2\x19.google.protobuf.DurationBk\xbaH\x05\xaa\x01\x02*\x00\x82\xce\x18_\n" +
 	"\x1fRELIANT_PAYLOAD_BLOB_GC_HORIZON\x1a\x04720h*6How long an unreferenced Temporal payload blob is keptR\x14payloadBlobGcHorizon\x12\xaa\x01\n" +
 	"\x0epre_stop_delay\x18\x16 \x01(\v2\x19.google.protobuf.DurationBi\x82\xce\x18e\n" +
 	"\x0ePRE_STOP_DELAY\x1a\x025s*OHow long to keep serving after readiness flips at shutdown (negative: no pause)R\fpreStopDelay\x12\x98\x01\n" +
@@ -375,7 +376,8 @@ const file_config_v1_api_server_config_proto_rawDesc = "" +
 	"\x0eliveness_paths\x18\x18 \x01(\tBa\x82\xce\x18]\n" +
 	"\x0eLIVENESS_PATHS\x1a\x10/health,/healthz*9Liveness probe paths on the health port (comma-separated)R\rlivenessPaths\x12\x8a\x01\n" +
 	"\x0freadiness_paths\x18\x19 \x01(\tBa\x82\xce\x18]\n" +
-	"\x0fREADINESS_PATHS\x1a\x0e/ready,/readyz*:Readiness probe paths on the health port (comma-separated)R\x0ereadinessPaths:\x1a\xca\xc1\x18\x16\n" +
+	"\x0fREADINESS_PATHS\x1a\x0e/ready,/readyz*:Readiness probe paths on the health port (comma-separated)R\x0ereadinessPaths:\x95\x01\xbaHx\x1av\n" +
+	"\x15auth_api_key_required\x12&AUTH_MODE=apikey requires AUTH_API_KEY\x1a5this.auth_mode != 'apikey' || this.auth_api_key != ''\xca\xc1\x18\x16\n" +
 	"\areliant\x12\x06server\x12\x03apiJ\x04\b\x05\x10\x06J\x04\b\n" +
 	"\x10\vJ\x04\b\v\x10\fJ\x04\b\f\x10\rJ\x04\b\r\x10\x0eJ\x04\b\x0e\x10\x0fJ\x04\b\x13\x10\x14J\x04\b\x14\x10\x15J\x04\b(\x10)J\x04\b2\x103J\x04\b3\x104J\x04\b<\x10=J\x04\bF\x10GJ\x04\bZ\x10[R\rcontrol_planeR\bdatabaseR\x04natsR\btemporalR\x03tlsR\x05drainR\bdata_dirR\x10streaming_driverR\fintegrationsR\robservabilityR\x06sentryR\tanalyticsR\x03llmR\apreviewB8Z6github.com/reliant-labs/reliant/gen/config/v1;configv1b\x06proto3"
 

@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package config.v1;
 
+import "buf/validate/validate.proto";
 import "forge/v1/forge.proto";
 import "google/protobuf/duration.proto";
 
@@ -24,18 +25,24 @@ message GatewayConfig {
 
   // The port daemons dial: the gateway's bidi-streaming gRPC listener. A
   // local daemon reads the same variable to find it (DaemonConfig).
-  int32 daemon_port = 14 [(forge.v1.config) = {
-    env_var: "TOOLS_DAEMON_PORT"
-    flag: "daemon-port"
-    default_value: "9190"
-    description: "Daemon bidi-streaming gRPC listen port"
-  }];
-  int32 health_port = 15 [(forge.v1.config) = {
-    env_var: "HEALTH_PORT"
-    flag: "health-port"
-    default_value: "8080"
-    description: "Health/readiness HTTP endpoint port"
-  }];
+  int32 daemon_port = 14 [
+    (forge.v1.config) = {
+      env_var: "TOOLS_DAEMON_PORT"
+      flag: "daemon-port"
+      default_value: "9190"
+      description: "Daemon bidi-streaming gRPC listen port"
+    },
+    (buf.validate.field).int32 = {gte: 1, lte: 65535}
+  ];
+  int32 health_port = 15 [
+    (forge.v1.config) = {
+      env_var: "HEALTH_PORT"
+      flag: "health-port"
+      default_value: "8080"
+      description: "Health/readiness HTTP endpoint port"
+    },
+    (buf.validate.field).int32 = {gte: 1, lte: 65535}
+  ];
   string bind_address = 16 [(forge.v1.config) = {
     env_var: "BIND_ADDRESS"
     flag: "bind-address"

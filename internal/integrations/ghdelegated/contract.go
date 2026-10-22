@@ -17,7 +17,7 @@
 // connection. Self-hosted registers nothing, and the manifest's oauth2 method
 // (RELIANT_OAUTH_GITHUB_CLIENT_ID/SECRET) or a pasted token is used instead.
 //
-//forge:not-a-component: built by reliant's hand-wired worker (internal/serverworker), not forge's composition root — until P3c (research/forge-migration/PLAN.md)
+//forge:not-a-component: built by internal/integrations/credwire, which the worker root's providers call — never a node of the composition graph
 package ghdelegated
 
 import (

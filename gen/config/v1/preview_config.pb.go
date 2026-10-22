@@ -7,6 +7,7 @@
 package configv1
 
 import (
+	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	_ "github.com/reliant-labs/forge/pkg/forgepb"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -105,7 +106,7 @@ var File_config_v1_preview_config_proto protoreflect.FileDescriptor
 
 const file_config_v1_preview_config_proto_rawDesc = "" +
 	"\n" +
-	"\x1econfig/v1/preview_config.proto\x12\tconfig.v1\x1a\x14forge/v1/forge.proto\"\x8c\x04\n" +
+	"\x1econfig/v1/preview_config.proto\x12\tconfig.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\"\x97\x04\n" +
 	"\rPreviewConfig\x12a\n" +
 	"\n" +
 	"proxy_host\x18\x01 \x01(\tBB\x82\xce\x18>\n" +
@@ -114,8 +115,8 @@ const file_config_v1_preview_config_proto_rawDesc = "" +
 	"\x15workspace_base_domain\x18\x02 \x01(\tBI\x82\xce\x18E\n" +
 	"\x15WORKSPACE_BASE_DOMAIN*,Base domain of subdomain-routed preview URLsR\x13workspaceBaseDomain\x12\x89\x01\n" +
 	"\x14workspace_url_scheme\x18\x03 \x01(\tBW\x82\xce\x18S\n" +
-	"\x14WORKSPACE_URL_SCHEME\x1a\x05https*'Scheme of subdomain-routed preview URLsJ\x04httpJ\x05httpsR\x12workspaceUrlScheme\x12\x8c\x01\n" +
-	"\x12workspace_url_port\x18\x04 \x01(\x05B^\x82\xce\x18Z\n" +
+	"\x14WORKSPACE_URL_SCHEME\x1a\x05https*'Scheme of subdomain-routed preview URLsJ\x04httpJ\x05httpsR\x12workspaceUrlScheme\x12\x97\x01\n" +
+	"\x12workspace_url_port\x18\x04 \x01(\x05Bi\xbaH\b\x1a\x06\x18\xff\xff\x03(\x00\x82\xce\x18Z\n" +
 	"\x12WORKSPACE_URL_PORT*DPort of subdomain-routed preview URLs, when not the scheme's defaultR\x10workspaceUrlPortB8Z6github.com/reliant-labs/reliant/gen/config/v1;configv1b\x06proto3"
 
 var (

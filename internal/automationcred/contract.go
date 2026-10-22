@@ -7,7 +7,10 @@
 // signed in, stored in api_keys under a reserved per-daemon provider name. It
 // is read only through BearerFor, only for an exact daemon id.
 //
-//forge:not-a-component: built by reliant's hand-wired worker (internal/serverworker), not forge's composition root — until P3c (research/forge-migration/PLAN.md)
+// Built by hand, by internal/app's NewWorkerDaemonRouter provider
+// (providers_worker.go): never a node compose.go constructs from Deps.
+//
+//forge:provided
 package automationcred
 
 import "context"

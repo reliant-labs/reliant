@@ -37555,7 +37555,7 @@
         "api"
       ],
       "ProtoFile": "config/v1/api_server_config.proto",
-      "Line": 15
+      "Line": 16
     },
     {
       "Name": "CLIConfig",
@@ -37826,7 +37826,7 @@
       ],
       "Binary": "reliant",
       "ProtoFile": "config/v1/config.proto",
-      "Line": 60
+      "Line": 70
     },
     {
       "Name": "RuntimeConfig",
@@ -37852,7 +37852,7 @@
         }
       ],
       "ProtoFile": "config/v1/config.proto",
-      "Line": 69
+      "Line": 79
     },
     {
       "Name": "LogConfig",
@@ -37887,7 +37887,7 @@
         }
       ],
       "ProtoFile": "config/v1/config.proto",
-      "Line": 87
+      "Line": 97
     },
     {
       "Name": "StorageReaperConfig",
@@ -37955,7 +37955,7 @@
         }
       ],
       "ProtoFile": "config/v1/config.proto",
-      "Line": 112
+      "Line": 122
     },
     {
       "Name": "ControlPlaneConfig",
@@ -38583,7 +38583,7 @@
         ]
       ],
       "ProtoFile": "config/v1/db_config.proto",
-      "Line": 23
+      "Line": 24
     },
     {
       "Name": "GatewayConfig",
@@ -38707,7 +38707,7 @@
         "gateway"
       ],
       "ProtoFile": "config/v1/gateway_config.proto",
-      "Line": 15
+      "Line": 16
     },
     {
       "Name": "IntegrationsConfig",
@@ -38864,7 +38864,7 @@
         }
       ],
       "ProtoFile": "config/v1/integrations_config.proto",
-      "Line": 16
+      "Line": 17
     },
     {
       "Name": "LLMConfig",
@@ -38997,7 +38997,7 @@
         }
       ],
       "ProtoFile": "config/v1/llm_config.proto",
-      "Line": 14
+      "Line": 15
     },
     {
       "Name": "ObservabilityConfig",
@@ -39065,7 +39065,7 @@
         }
       ],
       "ProtoFile": "config/v1/observability_config.proto",
-      "Line": 14
+      "Line": 15
     },
     {
       "Name": "SentryConfig",
@@ -39115,7 +39115,7 @@
         }
       ],
       "ProtoFile": "config/v1/observability_config.proto",
-      "Line": 48
+      "Line": 49
     },
     {
       "Name": "PreviewConfig",
@@ -39182,7 +39182,7 @@
         }
       ],
       "ProtoFile": "config/v1/preview_config.proto",
-      "Line": 15
+      "Line": 16
     },
     {
       "Name": "PreviewURLConfig",
@@ -39401,7 +39401,7 @@
         ]
       ],
       "ProtoFile": "config/v1/server_config.proto",
-      "Line": 31
+      "Line": 32
     },
     {
       "Name": "NatsConfig",
@@ -39451,7 +39451,7 @@
         }
       ],
       "ProtoFile": "config/v1/server_config.proto",
-      "Line": 68
+      "Line": 69
     },
     {
       "Name": "TemporalConfig",
@@ -39500,7 +39500,7 @@
         }
       ],
       "ProtoFile": "config/v1/server_config.proto",
-      "Line": 92
+      "Line": 93
     },
     {
       "Name": "ServerTLSConfig",
@@ -39549,7 +39549,7 @@
         }
       ],
       "ProtoFile": "config/v1/server_config.proto",
-      "Line": 119
+      "Line": 123
     },
     {
       "Name": "WorkerConfig",
@@ -39645,25 +39645,25 @@
         "worker"
       ],
       "ProtoFile": "config/v1/worker_config.proto",
-      "Line": 15
+      "Line": 16
     }
   ],
   "sources": {
     "config/v1/analytics_config.proto": "2093382e19e6c0a59f28913b76fae435017337a229b93f167599e3198207fc94",
-    "config/v1/api_server_config.proto": "b42c317661471efc240cf0ecb2c02bafc9ef93130f20e9290d150215e077b322",
+    "config/v1/api_server_config.proto": "924d9f2e89617352544605bdf8dec0b761fbf79f2ad075370dcbc73b4f326922",
     "config/v1/cli_config.proto": "5acd17311a1d616f1f6e54ee6d9c30a9ddf6c78474fd0308e80f2db99d71a55e",
-    "config/v1/config.proto": "470b5ebfc2dba63d9364338197ba52766a00f2bd2e43f63529c5f977351decdd",
+    "config/v1/config.proto": "d50430828cabad0cdba973f97a56179cdb205621d91d8ed83d399b06b8e93eab",
     "config/v1/control_plane_config.proto": "baedb9e18f40a3711bad8e7c0572ff37257dddff3f3ff46d7e4e4f57b0c1454a",
     "config/v1/daemon_config.proto": "f50c66d5ee9c77735c670ce26b18216923002fee9f455a5db8ee013a4e0cb545",
-    "config/v1/db_config.proto": "566e7ebb67f0eaac98cccfac4a9baf948f319c1a928ea8cf0b7f837d214d1bd0",
-    "config/v1/gateway_config.proto": "c91125b938b40acad4037a936119ff1208d8fadc3ff59c0cf26cf0ed4aa3084f",
-    "config/v1/integrations_config.proto": "3f051e70d4f454b353726dfc7a381921afe61fa021acb318ccf0ce592670faac",
-    "config/v1/llm_config.proto": "4c697b1803e3b0f06470ac2538193be961dbf71d5be61c8712ab97d7488e257d",
-    "config/v1/observability_config.proto": "d5e01af322359c3358ebcd3bc16bf03fbf4be4bad2b03b52e75a9d320193001b",
-    "config/v1/preview_config.proto": "a8620fb35910b249c3b1bc0767fb615bdf699624526d7a237c62cb490fb9c425",
+    "config/v1/db_config.proto": "5944419ff23ade7f41cd0d234db488357e292a767c3369873eb5cb7ee4846397",
+    "config/v1/gateway_config.proto": "dea95075d3e881660c6d7717ea6a107cd4058cb2cb7740e9177dab87b685a30b",
+    "config/v1/integrations_config.proto": "602ce070bbdbd5f6256f9b8730d6a99dbeefab8c42712b647fa132f45906f1ab",
+    "config/v1/llm_config.proto": "da3e797da30225fd2ec00baf970eb18d7270a1493a7eee4a658c8e22bb77e768",
+    "config/v1/observability_config.proto": "94c7cf40200191c317a121e6d76652cb5a82e684fd8fea55636c451273cdb78c",
+    "config/v1/preview_config.proto": "0b42d99751a2acb19e96018df92f5e41564e870a61debbe906995afb4eca8fcf",
     "config/v1/preview_url_config.proto": "fa0cc5f673ae266457eaa39150abaf020bfdda8d7395f54c47fef893a8653d4d",
-    "config/v1/server_config.proto": "ccf8db8ce398db64bf8f74386ad35612bf7fb9419ee55ade9e8acf86dbd46235",
-    "config/v1/worker_config.proto": "996b513dffbdddd6fde8289e20d7f8524a0a94f09305341294e83ccf19884b09",
+    "config/v1/server_config.proto": "e72c2f5bf5c19fa7ddef0948ed7d741cb4f4652798c36e3b1e5d2bf021f5efa3",
+    "config/v1/worker_config.proto": "a4b8f1b97261d446cd837edfa51555380d8952f5934469fae38db71f283f8e3e",
     "reliant/v1/account.proto": "d7e5ce0de4321d271532eb749a53e2001e692bdf208a4b7b71d4816673eebf35",
     "reliant/v1/annotations.proto": "378abb26b00cc86e8b14aef65e3e78467130da6a7787cd66b9a7d59ade949b57",
     "reliant/v1/approval.proto": "4ebbca862a2a5f88bb7f603d52d09933c296cbdc89e55d2abd1f58b76ecad6ce",

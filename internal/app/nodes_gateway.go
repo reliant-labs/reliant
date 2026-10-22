@@ -72,9 +72,6 @@ type DaemonListenerDeps struct {
 // BIND_ADDRESS): the daemon-audience routes through the daemon chain. Its
 // drain is the daemon hand-over (grpcserver.NewDaemonListener).
 func NewDaemonListener(d DaemonListenerDeps) (*grpcserver.DaemonListener, error) {
-	if err := CheckPorts(Port{"TOOLS_DAEMON_PORT (--daemon-port)", d.Gateway.GetDaemonPort()}); err != nil {
-		return nil, err
-	}
 	return grpcserver.NewDaemonListener(grpcserver.DaemonListenerDeps{
 		Port:        int(d.Gateway.GetDaemonPort()),
 		BindAddress: d.Gateway.GetBindAddress(),

@@ -9,7 +9,12 @@
 //
 // See research/TRIGGERS.md, "Schedules on Temporal".
 //
-//forge:not-a-component: its components (Syncer, Firer, EventFirer, Intake, TriggerPoller, Reconciler, Redriver, Backend) are built by reliant's hand-wired server and worker (internal/serverapi, internal/serverworker, internal/workersetup), not forge's composition root — until P3c (research/forge-migration/PLAN.md)
+// Built by hand, by internal/app's api and worker providers
+// (NewScheduleSyncer, NewTriggerInbound, …; providers_api.go,
+// providers_worker.go), internal/workersetup and the trigger and inbox
+// handlers: never a node compose.go constructs from Deps.
+//
+//forge:provided
 package triggers
 
 import (

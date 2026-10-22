@@ -85,31 +85,14 @@ func loadServerWorkerConfig(cmd *cobra.Command, opts *workerOptions) error {
 	if err != nil {
 		return err
 	}
-	// The providers' checks, in the order the worker root builds them
-	// (internal/app/roots_worker.go).
-	in, err := app.Integrations(process.GetIntegrations())
-	if err != nil {
-		return err
-	}
-	if opts.LLM, err = app.LLMSettings(process.GetLlm()); err != nil {
-		return err
-	}
-	if opts.Preview, err = app.PreviewSettings(process.GetPreview()); err != nil {
-		return err
-	}
-	if opts.DatabasePool, err = app.DatabasePool(database); err != nil {
-		return err
-	}
-	if opts.Sentry, err = app.SentrySettings(process.GetSentry(), process.GetObservability()); err != nil {
-		return err
-	}
-	if err := app.CheckPprofPort(worker.GetPprofPort()); err != nil {
-		return err
-	}
+	// What the worker root's providers read (internal/app/roots_worker.go);
+	// a value they cannot use was refused by the loads above.
+	in := app.Integrations(process.GetIntegrations())
+	opts.LLM = app.LLMSettings(process.GetLlm())
+	opts.Preview = app.PreviewSettings(process.GetPreview())
+	opts.DatabasePool = app.DatabasePool(database)
+	opts.Sentry = app.SentrySettings(process.GetSentry(), process.GetObservability())
 	opts.TemporalHost, opts.TemporalPort, opts.TemporalNamespace = app.TemporalEndpoint(process.GetTemporal())
-	if err := app.CheckPorts(app.Port{Name: "TEMPORAL_PORT (--temporal-port)", Port: int32(opts.TemporalPort)}); err != nil {
-		return err
-	}
 	opts.DatabaseDriver, opts.DatabaseURL, opts.DatabaseDirectURL = app.DatabaseURLs(database)
 	opts.DataDir = process.GetDataDir()
 	opts.NATS = app.NATSEndpoint(process.GetNats())

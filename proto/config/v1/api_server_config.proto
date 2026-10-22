@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package config.v1;
 
+import "buf/validate/validate.proto";
 import "forge/v1/forge.proto";
 import "google/protobuf/duration.proto";
 
@@ -15,6 +16,11 @@ message ApiServerConfig {
   option (forge.v1.binary_config) = {
     binary: "reliant"
     command: ["server", "api"]
+  };
+  option (buf.validate.message).cel = {
+    id: "auth_api_key_required"
+    message: "AUTH_MODE=apikey requires AUTH_API_KEY"
+    expression: "this.auth_mode != 'apikey' || this.auth_api_key != ''"
   };
 
   // The blocks every server role shares moved to ServerProcessConfig and
@@ -65,27 +71,37 @@ message ApiServerConfig {
     description: "Turn the forge RPC surface off at this server (its rpcs answer FailedPrecondition)"
   }];
 
-  int32 grpc_port = 15 [(forge.v1.config) = {
-    env_var: "GRPC_PORT"
-    flag: "grpc-port"
-    default_value: "9090"
-    description: "gRPC/ConnectRPC listen port"
-  }];
+  int32 grpc_port = 15 [
+    (forge.v1.config) = {
+      env_var: "GRPC_PORT"
+      flag: "grpc-port"
+      default_value: "9090"
+      description: "gRPC/ConnectRPC listen port"
+    },
+    (buf.validate.field).int32 = {gte: 1, lte: 65535}
+  ];
   // The probe listener (/health, /ready). Not forge's `port`, which names
   // the port a process serves its API on: reliant's API is GRPC_PORT, and
   // HEALTH_PORT's default differs per role. The serve policy maps it.
-  int32 health_port = 16 [(forge.v1.config) = {
-    env_var: "HEALTH_PORT"
-    flag: "health-port"
-    default_value: "8081"
-    description: "Health/readiness HTTP endpoint port"
-  }];
-  int32 pprof_port = 17 [(forge.v1.config) = {
-    env_var: "PPROF_PORT"
-    flag: "pprof-port"
-    default_value: "6060"
-    description: "pprof debug server port"
-  }];
+  int32 health_port = 16 [
+    (forge.v1.config) = {
+      env_var: "HEALTH_PORT"
+      flag: "health-port"
+      default_value: "8081"
+      description: "Health/readiness HTTP endpoint port"
+    },
+    (buf.validate.field).int32 = {gte: 1, lte: 65535}
+  ];
+  int32 pprof_port = 17 [
+    (forge.v1.config) = {
+      env_var: "PPROF_PORT"
+      flag: "pprof-port"
+      default_value: "6060"
+      description: "pprof debug server port"
+    },
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE,
+    (buf.validate.field).int32 = {gte: 1, lte: 65535}
+  ];
   string bind_address = 18 [(forge.v1.config) = {
     env_var: "BIND_ADDRESS"
     flag: "bind-address"
@@ -146,11 +162,14 @@ message ApiServerConfig {
   }];
 
   // The largest attachment accepted, in bytes.
-  int64 max_upload_size = 35 [(forge.v1.config) = {
-    env_var: "MAX_UPLOAD_SIZE"
-    default_value: "10485760"
-    description: "Largest attachment accepted, in bytes"
-  }];
+  int64 max_upload_size = 35 [
+    (forge.v1.config) = {
+      env_var: "MAX_UPLOAD_SIZE"
+      default_value: "10485760"
+      description: "Largest attachment accepted, in bytes"
+    },
+    (buf.validate.field).int64.gt = 0
+  ];
 
   // What the worktree sweep does with active worktrees its daemon reports
   // finished (clean, merged or pushed, idle over 24h, not in use): dry-run
@@ -181,11 +200,14 @@ message ApiServerConfig {
   // How long an unreferenced Temporal payload blob is kept before the API
   // server's hourly GC deletes it. It must exceed the longest workflow run
   // plus the namespace's history retention (internal/temporal/claimcheck).
-  google.protobuf.Duration payload_blob_gc_horizon = 80 [(forge.v1.config) = {
-    env_var: "RELIANT_PAYLOAD_BLOB_GC_HORIZON"
-    default_value: "720h"
-    description: "How long an unreferenced Temporal payload blob is kept"
-  }];
+  google.protobuf.Duration payload_blob_gc_horizon = 80 [
+    (forge.v1.config) = {
+      env_var: "RELIANT_PAYLOAD_BLOB_GC_HORIZON"
+      default_value: "720h"
+      description: "How long an unreferenced Temporal payload blob is kept"
+    },
+    (buf.validate.field).duration.gt = {}
+  ];
 
   // The rollout drain budget. control-plane sets both on every server
   // workload, and forge derives the pod's terminationGracePeriodSeconds from

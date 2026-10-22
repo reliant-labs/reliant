@@ -7,6 +7,7 @@
 package configv1
 
 import (
+	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	_ "github.com/reliant-labs/forge/pkg/forgepb"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -169,7 +170,7 @@ var File_config_v1_integrations_config_proto protoreflect.FileDescriptor
 
 const file_config_v1_integrations_config_proto_rawDesc = "" +
 	"\n" +
-	"#config/v1/integrations_config.proto\x12\tconfig.v1\x1a\x14forge/v1/forge.proto\"\xb8\f\n" +
+	"#config/v1/integrations_config.proto\x12\tconfig.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\"\xbf\f\n" +
 	"\x12IntegrationsConfig\x12a\n" +
 	"\n" +
 	"public_url\x18\x01 \x01(\tBB\x82\xce\x18>\n" +
@@ -182,8 +183,8 @@ const file_config_v1_integrations_config_proto_rawDesc = "" +
 	"\x15github_webhook_secret\x18\x04 \x01(\tBj\x82\xce\x18f\n" +
 	"\x1dRELIANT_GITHUB_WEBHOOK_SECRET*AGitHub App webhook secret (unset: GitHub events are not received)0\x01P\x01R\x13githubWebhookSecret\x12V\n" +
 	"\x0fgithub_app_slug\x18\x05 \x01(\tB.\x82\xce\x18*\n" +
-	"\x17RELIANT_GITHUB_APP_SLUG*\x0fGitHub App slugR\rgithubAppSlug\x12\x8f\x01\n" +
-	"\x12github_bot_user_id\x18\x06 \x01(\x03Bb\x82\xce\x18^\n" +
+	"\x17RELIANT_GITHUB_APP_SLUG*\x0fGitHub App slugR\rgithubAppSlug\x12\x96\x01\n" +
+	"\x12github_bot_user_id\x18\x06 \x01(\x03Bi\xbaH\x04\"\x02(\x00\x82\xce\x18^\n" +
 	"\x1aRELIANT_GITHUB_BOT_USER_ID*@GitHub App bot's numeric user id (default: the production App's)R\x0fgithubBotUserId\x12}\n" +
 	"\x10github_bot_login\x18\a \x01(\tBS\x82\xce\x18O\n" +
 	"\x18RELIANT_GITHUB_BOT_LOGIN*3GitHub App bot's login, used when no user id is setR\x0egithubBotLogin\x12\x8c\x01\n" +

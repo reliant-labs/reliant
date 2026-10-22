@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package config.v1;
 
+import "buf/validate/validate.proto";
 import "forge/v1/forge.proto";
 import "google/protobuf/duration.proto";
 
@@ -59,30 +60,42 @@ message DatabaseConfig {
 
   // The connection pool's size. Dev caps both low: its Postgres is shared by
   // every parallel stack on the machine.
-  int32 db_max_open_conns = 4 [(forge.v1.config) = {
-    env_var: "RELIANT_DB_MAX_OPEN_CONNS"
-    default_value: "25"
-    description: "Most open database connections"
-  }];
-  int32 db_max_idle_conns = 5 [(forge.v1.config) = {
-    env_var: "RELIANT_DB_MAX_IDLE_CONNS"
-    default_value: "10"
-    description: "Most idle database connections kept open"
-  }];
+  int32 db_max_open_conns = 4 [
+    (forge.v1.config) = {
+      env_var: "RELIANT_DB_MAX_OPEN_CONNS"
+      default_value: "25"
+      description: "Most open database connections"
+    },
+    (buf.validate.field).int32.gte = 1
+  ];
+  int32 db_max_idle_conns = 5 [
+    (forge.v1.config) = {
+      env_var: "RELIANT_DB_MAX_IDLE_CONNS"
+      default_value: "10"
+      description: "Most idle database connections kept open"
+    },
+    (buf.validate.field).int32.gte = 1
+  ];
 
   // How long the startup ping keeps retrying a database that is not up yet.
   // It must stay inside the deployment's startup probe window. Unset:
   // forge serverkit's default.
-  google.protobuf.Duration db_connect_timeout = 6 [(forge.v1.config) = {
-    env_var: "DB_CONNECT_TIMEOUT"
-    description: "How long the startup ping retries a database that is not up yet"
-  }];
+  google.protobuf.Duration db_connect_timeout = 6 [
+    (forge.v1.config) = {
+      env_var: "DB_CONNECT_TIMEOUT"
+      description: "How long the startup ping retries a database that is not up yet"
+    },
+    (buf.validate.field).duration.gt = {}
+  ];
 
   // How long a process that waits for the schema (the worker, the gateway)
   // waits for the API server or `reliant db migrate up` to apply it.
-  int32 db_schema_wait_seconds = 7 [(forge.v1.config) = {
-    env_var: "RELIANT_DB_SCHEMA_WAIT_SECONDS"
-    default_value: "300"
-    description: "Seconds to wait for the schema to be migrated"
-  }];
+  int32 db_schema_wait_seconds = 7 [
+    (forge.v1.config) = {
+      env_var: "RELIANT_DB_SCHEMA_WAIT_SECONDS"
+      default_value: "300"
+      description: "Seconds to wait for the schema to be migrated"
+    },
+    (buf.validate.field).int32.gte = 1
+  ];
 }

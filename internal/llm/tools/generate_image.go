@@ -40,11 +40,11 @@ type ImageGenerator interface {
 // pre-built generator because model selection depends on the calling user's
 // credentials and tag preferences, which are only known per request.
 //
-// The implementation lives at the composition root (internal/serverapi,
-// internal/app's worker root), where drivers.ResolveImageGenerator is already in
-// scope. A nil resolver is valid and means image generation is not available
-// in this process — the daemon runtime builds a factory with no model registry
-// at all, and every other tool must keep working there.
+// The implementation lives at the composition root (internal/app's api and
+// worker providers), where drivers.ResolveImageGenerator is already in scope.
+// A nil resolver is valid and means image generation is not available in this
+// process — the daemon runtime builds a factory with no model registry at all,
+// and every other tool must keep working there.
 type ImageGeneratorResolver func(ctx context.Context, userID string, selector models.ModelSelector) (ImageGenerator, error)
 
 // ImageGenTag is the base tag for image-generation models.

@@ -27,7 +27,7 @@
 // consumes (CommandSender, AttachmentReader, BindingStore,
 // CredentialIntrospector, OAuthTokenValidator) stay beside their consumers.
 //
-//forge:not-a-component: built by reliant's hand-wired server (internal/grpc), not forge's composition root — until P3c (research/forge-migration/PLAN.md)
+//forge:not-a-component: built by internal/grpc's MCP route wiring (connectorMCPRoutes), which the api root's listener mounts — never a node of the composition graph
 package mcpserver
 
 import (

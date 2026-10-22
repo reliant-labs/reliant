@@ -9,7 +9,11 @@
 // (and the hosts it allows), through netguard's dialer, authenticated by the
 // Credential its source resolves.
 //
-//forge:not-a-component: built where it is used (the workflow action activity, the agent's integration tools, the integration pollers) by reliant's hand-wired server and worker, not forge's composition root — until P3c (research/forge-migration/PLAN.md)
+// Built by hand, by where it is used: internal/app's NewInputOptions provider,
+// the workflow action activity, the agent's integration tools and the
+// integration pollers: never a node compose.go constructs from Deps.
+//
+//forge:provided
 package httpaction
 
 import (

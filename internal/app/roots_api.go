@@ -29,8 +29,8 @@ import (
 // the readiness paths say "draining" from the first moment of the stop.
 //
 // The last fields are the process-wide state, so they are built FIRST:
-// APISettings (the api-server's own config, validated) and Settings (config
-// only) before any other node, Runtime (the database-backed globals) right
+// APISettings (the api-server's own config) and Settings (config only)
+// before any other node, Runtime (the database-backed globals) right
 // after the database.
 //
 // The api-server is the ONE process that applies migrations (migrate=apply):

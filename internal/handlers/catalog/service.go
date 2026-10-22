@@ -20,10 +20,9 @@ import (
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
-// Deps holds dependencies for the catalog service. internal/grpc/server.go
-// constructs it today; forge's composition root takes over in P3c
-// (research/forge-migration/PLAN.md). The rpc methods on *Service are where
-// this service's logic lives; see the forge `api` / `services` skill.
+// Deps holds dependencies for the catalog service. The composition graph
+// constructs it (internal/app/compose.go). The rpc methods on *Service are
+// where this service's logic lives; see the forge `api` / `services` skill.
 type Deps struct {
 	Logger *slog.Logger
 	Config *config.Config
