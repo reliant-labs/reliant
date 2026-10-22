@@ -67,7 +67,7 @@ type WorkerDaemonRouter struct{ *toolexec.NATSDaemonRouter }
 // daemon records come from, and the control plane that wakes machines.
 type WorkerDaemonRouterDeps struct {
 	NATS         *NATSConn
-	Repo         *DBRepo
+	DB           *db.Repo
 	ControlPlane *configv1.ControlPlaneConfig
 }
 
@@ -77,7 +77,7 @@ type WorkerDaemonRouterDeps struct {
 //
 //forge:root-only worker
 func NewWorkerDaemonRouter(d WorkerDaemonRouterDeps) (*WorkerDaemonRouter, error) {
-	repo := d.Repo.Repo
+	repo := d.DB
 	opts := []toolexec.NATSRouterOption{toolexec.WithDatabase(repo)}
 	if cp := ControlPlaneEndpoint(d.ControlPlane); cp.Hosted() {
 		cpDeps := controlplane.Deps{BaseURL: cp.URL}
@@ -112,7 +112,7 @@ type WorkerIntegrationCredentials struct{ Source httpaction.CredentialSource }
 // WorkerIntegrationCredentialsDeps is where saved connections and their
 // secrets live, and the control plane delegated credentials come from.
 type WorkerIntegrationCredentialsDeps struct {
-	Repo         *DBRepo
+	DB           *db.Repo
 	Vault        vault.Service
 	Integrations *IntegrationSettings
 	ControlPlane *configv1.ControlPlaneConfig
@@ -123,7 +123,7 @@ type WorkerIntegrationCredentialsDeps struct {
 //
 //forge:root-only worker
 func NewWorkerIntegrationCredentials(d WorkerIntegrationCredentialsDeps) (*WorkerIntegrationCredentials, error) {
-	resolver, err := newWorkerConnectionResolver(d.Repo.Repo, d.Vault, d.Integrations.Webhooks.OAuthClients)
+	resolver, err := newWorkerConnectionResolver(d.DB, d.Vault, d.Integrations.Webhooks.OAuthClients)
 	if err != nil {
 		return nil, err
 	}
@@ -187,7 +187,7 @@ type WorkerCatalogSearch struct{ *catalogindex.Service }
 // WorkerCatalogSearchDeps is the connections it reports on and the
 // credential source that decides what "connected" means here.
 type WorkerCatalogSearchDeps struct {
-	Repo        *DBRepo
+	DB          *db.Repo
 	Credentials *WorkerIntegrationCredentials
 }
 
@@ -195,7 +195,7 @@ type WorkerCatalogSearchDeps struct {
 //
 //forge:root-only worker
 func NewWorkerCatalogSearch(d WorkerCatalogSearchDeps) (*WorkerCatalogSearch, error) {
-	svc, err := newWorkerCatalogSearch(d.Repo.Repo.Connections(), d.Credentials.Source)
+	svc, err := newWorkerCatalogSearch(d.DB.Connections(), d.Credentials.Source)
 	if err != nil {
 		return nil, err
 	}
@@ -225,19 +225,19 @@ func newWorkerCatalogSearch(conns catalogindex.ConnectionLister, creds httpactio
 
 // WriteLedgerDeps is where integration writes are recorded.
 type WriteLedgerDeps struct {
-	Repo *DBRepo
+	DB *db.Repo
 }
 
 // NewWriteLedger records every mutating integration call, from the action
 // node or an agent tool, before it is made, so the event it causes can be
 // attributed.
 func NewWriteLedger(d WriteLedgerDeps) (writeledger.Service, error) {
-	return writeledger.NewInstrumented(writeledger.Deps{Store: d.Repo.Repo.IntegrationWrites(), Runs: d.Repo.Repo}), nil
+	return writeledger.NewInstrumented(writeledger.Deps{Store: d.DB.IntegrationWrites(), Runs: d.DB}), nil
 }
 
 // StoredConfigProviderDeps is where project configs are stored.
 type StoredConfigProviderDeps struct {
-	Repo *DBRepo
+	DB *db.Repo
 }
 
 // NewStoredConfigProvider is the project-config provider CallLLM resolves on
@@ -245,13 +245,13 @@ type StoredConfigProviderDeps struct {
 // checks the record's version, so a daemon push is seen immediately on every
 // worker replica.
 func NewStoredConfigProvider(d StoredConfigProviderDeps) (*reliantconfig.StoredConfigProvider, error) {
-	repo := d.Repo.Repo
+	repo := d.DB
 	return reliantconfig.NewCachedStoredConfigProvider(configadapter.NewRepoConfigStore(repo), repo, reliantconfig.DefaultParsedConfigCacheBytes), nil
 }
 
 // RunLifecycleDeps is what runs are recorded in and driven through.
 type RunLifecycleDeps struct {
-	Repo     *DBRepo
+	DB       *db.Repo
 	Temporal *TemporalClient
 	Pause    *v2workflow.PauseService
 }
@@ -259,12 +259,12 @@ type RunLifecycleDeps struct {
 // NewRunLifecycle is the run service: it records runs and drives their
 // workflows.
 func NewRunLifecycle(d RunLifecycleDeps) (*runs.Service, error) {
-	return runs.NewService(d.Repo.Repo, d.Temporal.Client, d.Pause), nil
+	return runs.NewService(d.DB, d.Temporal.Client, d.Pause), nil
 }
 
 // RunLauncherDeps is what a launch creates and starts.
 type RunLauncherDeps struct {
-	Repo     *DBRepo
+	DB       *db.Repo
 	Temporal *TemporalClient
 	Runs     *runs.Service
 }
@@ -272,7 +272,7 @@ type RunLauncherDeps struct {
 // NewRunLauncher launches runs on the shared task queue: the launcher the
 // run tools and scheduled trigger fires launch through.
 func NewRunLauncher(d RunLauncherDeps) (*launch.Launcher, error) {
-	return launch.NewLauncher(d.Repo.Repo, threads.NewService(d.Repo.Repo), d.Temporal.Client, d.Runs, v2workflow.SharedTaskQueue), nil
+	return launch.NewLauncher(d.DB, threads.NewService(d.DB), d.Temporal.Client, d.Runs, v2workflow.SharedTaskQueue), nil
 }
 
 // WorkerChat is the chat service as the run tools reach it on the worker.
@@ -282,7 +282,7 @@ type WorkerChat struct{ *chat.Service }
 type WorkerChatDeps struct {
 	Logger   *slog.Logger
 	Config   *config.Config
-	Repo     *DBRepo
+	DB       *db.Repo
 	Temporal *TemporalClient
 	Pause    *v2workflow.PauseService
 	Router   *WorkerDaemonRouter
@@ -296,7 +296,7 @@ func NewWorkerChat(d WorkerChatDeps) (*WorkerChat, error) {
 	svc, err := chat.New(chat.Deps{
 		Logger:    d.Logger,
 		Config:    d.Config,
-		Repo:      d.Repo.Repo,
+		Repo:      d.DB,
 		Temporal:  d.Temporal.Client,
 		Pause:     d.Pause,
 		TaskQueue: v2workflow.SharedTaskQueue,
@@ -315,7 +315,7 @@ type WorkerRun struct{ *run.Service }
 type WorkerRunDeps struct {
 	Logger *slog.Logger
 	Config *config.Config
-	Repo   *DBRepo
+	DB     *db.Repo
 	Chats  *WorkerChat
 }
 
@@ -327,7 +327,7 @@ func NewWorkerRun(d WorkerRunDeps) (*WorkerRun, error) {
 	svc, err := run.New(run.Deps{
 		Logger: d.Logger,
 		Config: d.Config,
-		Repo:   d.Repo.Repo,
+		Repo:   d.DB,
 		Chats:  d.Chats.Service,
 	})
 	if err != nil {
@@ -360,7 +360,7 @@ type WorkerTrigger struct{ *trigger.Service }
 type WorkerTriggerDeps struct {
 	Logger       *slog.Logger
 	Config       *config.Config
-	Repo         *DBRepo
+	DB           *db.Repo
 	Temporal     *TemporalClient
 	Vault        vault.Service
 	Pollers      *webhook.Registry
@@ -373,7 +373,7 @@ type WorkerTriggerDeps struct {
 //
 //forge:root-only worker
 func NewWorkerTrigger(d WorkerTriggerDeps) (*WorkerTrigger, error) {
-	repo, temporalClient := d.Repo.Repo, d.Temporal.Client
+	repo, temporalClient := d.DB, d.Temporal.Client
 	syncer, fires := trigger.TemporalBackend(temporalClient, repo, v2workflow.SharedTaskQueue, d.Pollers.IsPolled)
 	svc, err := trigger.New(trigger.Deps{
 		Logger:    d.Logger,
@@ -401,7 +401,7 @@ type WorkerToolsFactory struct{ *tools.ToolsFactory }
 // WorkerToolsFactoryDeps is everything a tool executing on the worker
 // reaches.
 type WorkerToolsFactoryDeps struct {
-	Repo          *DBRepo
+	DB            *db.Repo
 	ControlPlane  *configv1.ControlPlaneConfig
 	Temporal      *TemporalClient
 	AgentRuns     *agentruns.Runs
@@ -416,7 +416,7 @@ type WorkerToolsFactoryDeps struct {
 //
 //forge:root-only worker
 func NewWorkerToolsFactory(d WorkerToolsFactoryDeps) (*WorkerToolsFactory, error) {
-	repo, temporalClient := d.Repo.Repo, d.Temporal.Client
+	repo, temporalClient := d.DB, d.Temporal.Client
 	runMachine := toolexec.NewRunMachine(d.Router)
 	return &WorkerToolsFactory{tools.NewToolsFactory(&tools.ToolsOptions{
 		Repo:            repo,
@@ -508,14 +508,14 @@ type AccountRecorder struct{ Recorder *accountlimits.Recorder }
 
 // AccountRecorderDeps is where account state is kept.
 type AccountRecorderDeps struct {
-	Repo *DBRepo
+	DB *db.Repo
 }
 
 // NewAccountRecorder builds the recorder.
 //
 //forge:root-only worker
 func NewAccountRecorder(d AccountRecorderDeps) (*AccountRecorder, error) {
-	return &AccountRecorder{Recorder: accountlimits.NewRecorder(d.Repo.Repo, nil)}, nil
+	return &AccountRecorder{Recorder: accountlimits.NewRecorder(d.DB, nil)}, nil
 }
 
 // Close flushes the rate-limit state the activities recorded, after every
@@ -528,7 +528,7 @@ func (a *AccountRecorder) Close(context.Context) error {
 // TemporalWorkerDeps is everything the worker's workflows and activities
 // reach.
 type TemporalWorkerDeps struct {
-	Repo           *DBRepo
+	DB             *db.Repo
 	Temporal       *TemporalClient
 	Streaming      *StreamingHub
 	Tools          *WorkerToolsFactory
@@ -554,7 +554,7 @@ func NewTemporalWorker(d TemporalWorkerDeps) (*workersetup.Worker, error) {
 	worker, _, err := workersetup.NewWorker(&workersetup.Config{
 		AccountLimits:          d.Recorder.Recorder,
 		TemporalClient:         d.Temporal.Client,
-		Database:               d.Repo.Repo,
+		Database:               d.DB,
 		StreamingHub:           d.Streaming.Hub,
 		ToolsFactory:           d.Tools.ToolsFactory,
 		ToolExecutor:           d.Executor,
@@ -576,7 +576,7 @@ func NewTemporalWorker(d TemporalWorkerDeps) (*workersetup.Worker, error) {
 
 // WorkflowEventRelayDeps is the outbox and the workflows it dispatches to.
 type WorkflowEventRelayDeps struct {
-	Repo     *DBRepo
+	DB       *db.Repo
 	Temporal *TemporalClient
 }
 
@@ -586,12 +586,12 @@ type WorkflowEventRelayDeps struct {
 //
 //forge:root-only worker
 func NewWorkflowEventRelay(d WorkflowEventRelayDeps) (*workflowevent.Relay, error) {
-	return workflowevent.NewRelay(d.Repo.Repo, d.Temporal.Client, v2workflow.SharedTaskQueue), nil
+	return workflowevent.NewRelay(d.DB, d.Temporal.Client, v2workflow.SharedTaskQueue), nil
 }
 
 // AccountUsagePollerDeps is where the polled accounts are kept.
 type AccountUsagePollerDeps struct {
-	Repo *DBRepo
+	DB *db.Repo
 }
 
 // NewAccountUsagePoller polls the providers' usage APIs for accounts the
@@ -603,7 +603,7 @@ type AccountUsagePollerDeps struct {
 //
 //forge:root-only worker
 func NewAccountUsagePoller(d AccountUsagePollerDeps) (*accountlimits.Poller, error) {
-	repo := d.Repo.Repo
+	repo := d.DB
 	return &accountlimits.Poller{
 		Store: repo,
 		Fetcher: &accountlimits.Fetcher{
@@ -623,14 +623,14 @@ type WriteLedgerPrune struct {
 // WriteLedgerPruneDeps is the ledger and the rows it prunes.
 type WriteLedgerPruneDeps struct {
 	Ledger writeledger.Service
-	Repo   *DBRepo
+	DB     *db.Repo
 }
 
 // NewWriteLedgerPrune builds the prune loop.
 //
 //forge:root-only worker
 func NewWriteLedgerPrune(d WriteLedgerPruneDeps) (*WriteLedgerPrune, error) {
-	return &WriteLedgerPrune{ledger: d.Ledger, writes: d.Repo.Repo.IntegrationWrites()}, nil
+	return &WriteLedgerPrune{ledger: d.Ledger, writes: d.DB.IntegrationWrites()}, nil
 }
 
 // Run prunes until ctx ends.

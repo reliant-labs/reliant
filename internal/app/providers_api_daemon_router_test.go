@@ -22,11 +22,14 @@ import (
 
 // recordedRegistry is the slice of reliant's own daemon registry the router
 // reads: the user's daemon rows and which of them hold a fresh attachment.
+// The rest of toolexec.DaemonRecords is never called on these paths.
 type recordedRegistry struct {
-	db.Repository
+	toolexec.DaemonRecords
 	daemons  []*db.Daemon
 	attached []string
 }
+
+var _ toolexec.DaemonRecords = (*recordedRegistry)(nil)
 
 func (r *recordedRegistry) ListDaemonsByUserID(_ context.Context, userID string) ([]*db.Daemon, error) {
 	var out []*db.Daemon
