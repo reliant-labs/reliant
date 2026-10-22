@@ -55,9 +55,9 @@ func (r *Repo) ListQuestionsByChat(ctx context.Context, chatID string) ([]*Quest
 // have one question parked per thread, and only the thread id says which
 // agent a question belongs to.
 //
-// GetPendingQuestionByChatID (newest from ANY thread, LIMIT 1) cannot stand in
-// for this: in prod a spawn's question disappeared behind a sibling's newer
-// one, and the user's reply went to the spawn's mailbox, which a thread parked
+// A newest-from-any-thread lookup (LIMIT 1) cannot stand in for this, which
+// is why that accessor is gone: in prod a spawn's question disappeared behind
+// a sibling's newer one, and the user's reply went to the spawn's mailbox, which a thread parked
 // on a question never drains.
 func (r *Repo) ListPendingQuestionsByChat(ctx context.Context, chatID string) ([]*Question, error) {
 	if chatID == "" {
@@ -85,8 +85,8 @@ func (r *Repo) ListAnswerablePendingQuestionsByChat(ctx context.Context, chatID 
 // chat, keyed by the question's thread id — which is exactly a workflow row's
 // `thread` column, so the result joins straight onto workflow rows.
 //
-// It exists because GetPendingQuestionByChatID cannot answer "which thread is
-// waiting?". That query selects thread_id and workflow_id and then throws the
+// It exists because a newest-pending-per-chat lookup cannot answer "which
+// thread is waiting?". Such a query selects thread_id and workflow_id and then throws the
 // scoping away with `WHERE chat_id = ? ... ORDER BY created_at DESC LIMIT 1`,
 // so in a chat with several spawned threads it hands back the newest question
 // from ANY thread. A caller that reports per thread — `reliant-dev workflow ps` —
@@ -95,7 +95,7 @@ func (r *Repo) ListAnswerablePendingQuestionsByChat(ctx context.Context, chatID 
 // rather than asking every caller to avoid it.
 //
 // Chat-wide questions ("is this chat awaiting input at all?", which is what the
-// reconciler asks) are still GetPendingQuestionByChatID's job.
+// reconciler asks) are ListPendingQuestionsByChat's.
 //
 // Read-only: one SELECT per chat, no mutation.
 func (r *Repo) PendingQuestionsByThread(ctx context.Context, chatID string) (map[string]*Question, error) {

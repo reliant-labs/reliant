@@ -1827,11 +1827,11 @@ func (r *Reconciler) observeProgress(ctx context.Context, wf *db.Workflow, state
 // waiting for signal.resume), but log it as an ERROR so the violation is
 // visible instead of silently masking the watchdog.
 func (r *Reconciler) awaitingUserInput(ctx context.Context, wf *db.Workflow) (bool, error) {
-	question, err := r.repo.GetPendingQuestionByChatID(ctx, wf.ChatID)
+	questions, err := r.repo.ListPendingQuestionsByChat(ctx, wf.ChatID)
 	if err != nil {
 		return false, fmt.Errorf("checking pending question: %w", err)
 	}
-	if question != nil {
+	if len(questions) > 0 {
 		return true, nil
 	}
 	approvals, err := r.repo.ListPendingApprovalsByChat(ctx, wf.ChatID)

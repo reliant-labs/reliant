@@ -183,7 +183,7 @@ type mockRepo struct {
 	// Progress-watchdog exclusion state
 	pendingQuestions map[string]*db.Question   // chatID -> pending question
 	pendingApprovals map[string][]*db.Approval // chatID -> pending approvals
-	questionErr      error                     // forced error for GetPendingQuestionByChatID
+	questionErr      error                     // forced error for ListPendingQuestionsByChat
 	workflowsByChat  map[string][]*db.Workflow // chatID -> all workflow rows (paused-row exclusion)
 
 	// Orphaned-descendant reap: rows the repair claims to have repaired, a
@@ -345,13 +345,16 @@ func (m *mockRepo) ListWorkflowsByChat(_ context.Context, chatID string) ([]*db.
 	return m.workflowsByChat[chatID], nil
 }
 
-func (m *mockRepo) GetPendingQuestionByChatID(_ context.Context, chatID string) (*db.Question, error) {
+func (m *mockRepo) ListPendingQuestionsByChat(_ context.Context, chatID string) ([]*db.Question, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.questionErr != nil {
 		return nil, m.questionErr
 	}
-	return m.pendingQuestions[chatID], nil
+	if q := m.pendingQuestions[chatID]; q != nil {
+		return []*db.Question{q}, nil
+	}
+	return nil, nil
 }
 
 func (m *mockRepo) ListPendingApprovalsByChat(_ context.Context, chatID string) ([]*db.Approval, error) {

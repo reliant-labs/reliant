@@ -526,11 +526,6 @@ type Repository interface {
 	// Question methods
 	CreateQuestion(ctx context.Context, question *Question) error
 	GetQuestionByID(ctx context.Context, id string) (*Question, error)
-	// GetPendingQuestionByChatID returns the chat's NEWEST pending question
-	// from any thread: a chat-wide "is anything waiting on the user?" check.
-	// It cannot say which thread asked, so anything shown to or answered by a
-	// user reads ListPendingQuestionsByChat instead.
-	GetPendingQuestionByChatID(ctx context.Context, chatID string) (*Question, error)
 	// ListPendingQuestionsByChat returns every pending question in a chat,
 	// oldest first, each with the thread that asked it.
 	ListPendingQuestionsByChat(ctx context.Context, chatID string) ([]*Question, error)

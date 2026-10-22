@@ -65,17 +65,6 @@ func TestQuestionQueries(t *testing.T) {
 		t.Fatalf("GetQuestion(missing) = %v, %v; want (nil, nil)", got, err)
 	}
 
-	// The chat's newest pending question, from any thread.
-	got, err := store.GetPendingQuestionByChatID(ctx, env.ORM, "q-chat")
-	if err != nil || got == nil || got.ID != "q-3" {
-		t.Fatalf("GetPendingQuestionByChatID = %+v, %v; want q-3", got, err)
-	}
-	twin, err := env.Repo.GetPendingQuestionByChatID(ctx, "q-chat")
-	if err != nil {
-		t.Fatalf("Repo.GetPendingQuestionByChatID: %v", err)
-	}
-	requireSameQuestion(t, "GetPendingQuestionByChatID", got, twin)
-
 	byStep, err := store.ListQuestionsByWorkflowStepIteration(ctx, env.ORM, "wf-q", "ask", 2)
 	if err != nil {
 		t.Fatalf("ListQuestionsByWorkflowStepIteration: %v", err)
@@ -97,17 +86,10 @@ func TestQuestionQueries(t *testing.T) {
 	if err := store.ResolveQuestion(ctx, env.ORM, "q-none", nil, resolvedAt); err != nil {
 		t.Fatalf("ResolveQuestion(missing) = %v, want a no-op", err)
 	}
-	twin, err = env.Repo.GetQuestionByID(ctx, "q-3")
+	twin, err := env.Repo.GetQuestionByID(ctx, "q-3")
 	if err != nil || twin.Status != core.QuestionStatusResolved || *twin.ResponseData != `{"answer":"yes"}` || !twin.ResolvedAt.Equal(resolvedAt) {
 		t.Fatalf("Repo.GetQuestionByID after resolve = %+v, %v", twin, err)
 	}
-	if got, err := store.GetPendingQuestionByChatID(ctx, env.ORM, "q-chat"); err != nil || got == nil || got.ID != "q-2" {
-		t.Fatalf("GetPendingQuestionByChatID after resolve = %+v, %v; want q-2", got, err)
-	}
-	if got, err := store.GetPendingQuestionByChatID(ctx, env.ORM, "chat-none"); got != nil || err != nil {
-		t.Fatalf("GetPendingQuestionByChatID(no questions) = %v, %v; want (nil, nil)", got, err)
-	}
-
 	history, err := store.ListQuestionsByChat(ctx, env.ORM, "q-chat")
 	if err != nil {
 		t.Fatalf("ListQuestionsByChat: %v", err)

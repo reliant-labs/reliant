@@ -3868,13 +3868,6 @@ func (r *Repo) GetQuestionByID(ctx context.Context, id string) (*Question, error
 	return store.GetQuestion(ctx, r.ORM(), id)
 }
 
-func (r *Repo) GetPendingQuestionByChatID(ctx context.Context, chatID string) (*Question, error) {
-	if chatID == "" {
-		return nil, fmt.Errorf("chat ID cannot be empty")
-	}
-	return store.GetPendingQuestionByChatID(ctx, r.ORM(), chatID)
-}
-
 func (r *Repo) GetQuestionsByWorkflowStepIteration(ctx context.Context, workflowID, stepID string, iteration int) ([]*Question, error) {
 	return store.ListQuestionsByWorkflowStepIteration(ctx, r.ORM(), workflowID, stepID, iteration)
 }

@@ -1011,15 +1011,24 @@ func (s *Service) SendMessage(
 				// message as the (marked) question answer via reset-and-replay so it
 				// resumes PRECISELY (the rebuilt run re-parks on the same question
 				// channel and receives it) instead of coarse-restarting the loop.
+				//
+				// Only the question of the thread the message is FOR: in a chat
+				// with several agents each can be parked on its own question,
+				// and a message to the main thread is no answer to a spawn's.
+				// A run whose question is on another thread takes the plain
+				// reset-and-replay below, which re-parks that thread on its
+				// still-pending question for the user to answer there.
+				targetThread := existingWorkflow.Thread
+				if req.Msg.TargetThread != nil && *req.Msg.TargetThread != "" {
+					targetThread = *req.Msg.TargetThread
+				}
 				var pendingQuestion *db.Question
 				if inspection.Recoverable {
-					pendingQuestion, _ = s.deps.Repo.GetPendingQuestionByChatID(ctx, req.Msg.ChatId)
+					if byThread, err := s.deps.Repo.PendingQuestionsByThread(ctx, req.Msg.ChatId); err == nil {
+						pendingQuestion = byThread[targetThread]
+					}
 				}
 				if pendingQuestion != nil && pendingQuestion.TemporalWorkflowID != "" && hasUserContent {
-					targetThread := existingWorkflow.Thread
-					if req.Msg.TargetThread != nil && *req.Msg.TargetThread != "" {
-						targetThread = *req.Msg.TargetThread
-					}
 					resp, resumed, presavedID := s.resumeFailedQuestionWorkflow(ctx, req, chat, existingWorkflow, pendingQuestion, targetThread, userID, userContent, systemMessages, inputUpdate)
 					if resumed {
 						s.postModelFallbackNotices(ctx, req.Msg.ChatId, workflowID, targetThread, modelNotices)

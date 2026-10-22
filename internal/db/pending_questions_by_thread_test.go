@@ -27,11 +27,10 @@ func insertPendingQuestionTest(t *testing.T, repo *Repo, id, chatID, threadID, s
 	}
 }
 
-// TestPendingQuestionsByThread_MultiThreadChat pins the fix for the smear:
-// GetPendingQuestionByChatID selects thread_id and then discards it with
-// `ORDER BY created_at DESC LIMIT 1`, so a chat with several spawned threads
-// reports the newest question from ANY thread. PendingQuestionsByThread keeps
-// the scoping the row already carries.
+// TestPendingQuestionsByThread_MultiThreadChat pins the fix for the smear: the
+// removed newest-pending-per-chat accessor (ORDER BY created_at DESC LIMIT 1)
+// reported the newest question from ANY thread of a chat with several spawned
+// threads. PendingQuestionsByThread keeps the scoping the row already carries.
 func TestPendingQuestionsByThread_MultiThreadChat(t *testing.T) {
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
@@ -67,17 +66,6 @@ func TestPendingQuestionsByThread_MultiThreadChat(t *testing.T) {
 	if _, leaked := byThread["thread-z"]; leaked {
 		t.Error("a question from another chat leaked into the result")
 	}
-
-	// The old accessor is the smear, demonstrated: it returns ONE question for
-	// the whole chat, so a per-thread caller built on it stamps thread-b's gate
-	// onto thread-a and onto every ungated sibling.
-	single, err := repo.GetPendingQuestionByChatID(ctx, chatID)
-	if err != nil {
-		t.Fatalf("GetPendingQuestionByChatID: %v", err)
-	}
-	if single == nil || single.ThreadID != "thread-b" {
-		t.Fatalf("expected the chat-scoped accessor to return thread-b's newest question, got %+v", single)
-	}
 }
 
 // TestPendingQuestionsByThread_NewestPerThread pins that a thread which raised
@@ -107,7 +95,7 @@ func TestPendingQuestionsByThread_NewestPerThread(t *testing.T) {
 // TestListPendingQuestionsByChat_EveryThread pins what the UI reads: every
 // pending question in the chat, oldest first, each with its thread — including
 // an older question from one thread that a sibling's newer question used to
-// hide (GetPendingQuestionByChatID's LIMIT 1), and both of a thread's pending
+// hide (a newest-per-chat LIMIT 1), and both of a thread's pending
 // rows rather than only its newest.
 func TestListPendingQuestionsByChat_EveryThread(t *testing.T) {
 	repo, cleanup := SetupTestDB(t)

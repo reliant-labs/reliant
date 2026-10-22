@@ -72,23 +72,6 @@ func GetQuestion(ctx context.Context, db orm.Context, id string) (*core.Question
 	return questionFromRow(row), nil
 }
 
-// GetPendingQuestionByChatID returns the chat's newest pending question from
-// any of its threads, or nil when none is pending.
-func GetPendingQuestionByChatID(ctx context.Context, db orm.Context, chatID string) (*core.Question, error) {
-	rows, err := ListQuestion(ctx, db,
-		orm.WhereEq(QuestionFieldChatID, chatID),
-		orm.WhereEq(QuestionFieldStatus, core.QuestionStatusPending),
-		orm.WithOrderBy(QuestionFieldCreatedAt, orm.Desc),
-		orm.WithLimit(1))
-	if err != nil {
-		return nil, fmt.Errorf("failed to get pending question: %w", err)
-	}
-	if len(rows) == 0 {
-		return nil, nil
-	}
-	return questionFromRow(rows[0]), nil
-}
-
 // ListQuestionsByWorkflowStepIteration returns the questions one step raised
 // in one loop iteration of a workflow. A step raises a handful at most, well
 // under the generated List's default cap.
