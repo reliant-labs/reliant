@@ -6,8 +6,7 @@ import (
 	"errors"
 	"fmt"
 
-	"connectrpc.com/connect"
-
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -59,15 +58,13 @@ func alertingError(err error) error {
 	var refused *controlplane.AutopilotError
 	switch {
 	case errors.As(err, &refused) && refused.Reason == controlplane.ReasonAutopilotNoOrg:
-		return connect.NewError(connect.CodeFailedPrecondition, errors.New(
-			"on-call receives your organization's alerts, and your account belongs to no organization yet"))
+		return svcerr.ToConnect(svcerr.FailedPrecondition("on-call receives your organization's alerts, and your account belongs to no organization yet"))
 	case errors.Is(err, controlplane.ErrAutopilotUnsupported):
-		return connect.NewError(connect.CodeUnavailable, errors.New(
-			"this deployment's control plane cannot deliver alerts to automations yet"))
+		return svcerr.ToConnect(svcerr.Unavailable("this deployment's control plane cannot deliver alerts to automations yet"))
 	case errors.As(err, &refused):
-		return connect.NewError(connect.CodeUnavailable, fmt.Errorf("could not connect your organization's alerts: %s", refused.Message))
+		return svcerr.ToConnect(svcerr.Unavailable(fmt.Sprintf("could not connect your organization's alerts: %s", refused.Message)))
 	default:
-		return connect.NewError(connect.CodeUnavailable, errors.New("could not connect your organization's alerts right now; try again"))
+		return svcerr.ToConnect(svcerr.Unavailable("could not connect your organization's alerts right now; try again"))
 	}
 }
 

@@ -4,13 +4,13 @@ package background
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"time"
 
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/daemonerr"
@@ -121,7 +121,7 @@ func (s *Service) GetProcessOutput(
 	}
 
 	if req.Msg.ProcessId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("process_id is required"))
+		return nil, svcerr.InvalidArgument("process_id is required")
 	}
 
 	cmdReq := map[string]any{
@@ -154,7 +154,7 @@ func (s *Service) KillProcess(
 	}
 
 	if req.Msg.ProcessId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("process_id is required"))
+		return nil, svcerr.InvalidArgument("process_id is required")
 	}
 
 	cmdReq := map[string]any{
@@ -184,7 +184,7 @@ func (s *Service) StreamProcessOutput(
 	}
 
 	if req.Msg.ProcessId == "" {
-		return connect.NewError(connect.CodeInvalidArgument, errors.New("process_id is required"))
+		return svcerr.InvalidArgument("process_id is required")
 	}
 
 	outputCh, unsub, err := s.deps.Router.SubscribeProcessOutput(ctx, userID, req.Msg.ProcessId, req.Msg.NewOnly)

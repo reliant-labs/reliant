@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"connectrpc.com/connect"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/logging"
 )
@@ -54,8 +55,7 @@ func (i *DomainWhitelistInterceptor) checkDomain(ctx context.Context) error {
 		logging.WarnContext(ctx, "[Domain Whitelist] Rejected email domain",
 			"domain", domain,
 		)
-		return connect.NewError(connect.CodePermissionDenied,
-			fmt.Errorf("email domain %q is not allowed in this environment", domain))
+		return svcerr.ToConnect(svcerr.PermissionDenied(fmt.Sprintf("email domain %q is not allowed in this environment", domain)))
 	}
 
 	return nil

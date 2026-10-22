@@ -8,6 +8,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -60,20 +61,20 @@ func TestListPendingQuestionsRejectsUnknownChat(t *testing.T) {
 		// prefix, and it was pasted into `workflow questions`.
 		_, err := get(ctx, chatID[:8])
 		require.Error(t, err, "a short id must not be answered as if it were a chat with no gate")
-		assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+		assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
 	})
 
 	t.Run("unknown id is not found", func(t *testing.T) {
 		_, err := get(ctx, uuid.NewString())
 		require.Error(t, err)
-		assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+		assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
 	})
 
 	t.Run("another user's chat is not found", func(t *testing.T) {
 		otherCtx := AuthedContext(t, testkit.WithUserID("other-user"))
 		_, err := get(otherCtx, chatID)
 		require.Error(t, err)
-		assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+		assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
 	})
 
 	t.Run("real chat with no gate answers empty", func(t *testing.T) {
@@ -197,5 +198,5 @@ func TestListPendingQuestionsChatIDIsAFilter(t *testing.T) {
 	empty := ""
 	_, err := svc.ListPendingQuestions(ctx, connect.NewRequest(&reliantv1.ListPendingQuestionsRequest{ChatId: &empty}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err), "an empty string is not 'unset'")
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err), "an empty string is not 'unset'")
 }

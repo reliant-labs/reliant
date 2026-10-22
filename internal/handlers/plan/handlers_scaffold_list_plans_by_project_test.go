@@ -6,6 +6,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	plan "github.com/reliant-labs/reliant/internal/handlers/plan"
 )
@@ -17,6 +18,6 @@ func TestListPlansByProject_AnswersUnimplemented(t *testing.T) {
 
 	svc := plan.NewTestPlan(t)
 	_, err := svc.ListPlansByProject(plan.AuthedContext(t), connect.NewRequest(&pb.ListPlansByProjectRequest{ProjectId: "project-1"}))
-	require.Equal(t, connect.CodeUnimplemented, connect.CodeOf(err))
+	require.Equal(t, connect.CodeUnimplemented, svcerr.Code(err))
 	require.ErrorContains(t, err, "reliant.v1.PlanService.ListPlansByProject is not implemented")
 }

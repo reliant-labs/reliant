@@ -12,6 +12,7 @@ import (
 	"connectrpc.com/connect"
 	"go.temporal.io/sdk/client"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/version"
@@ -122,7 +123,7 @@ func (s *Service) StartOAuthSignIn(
 ) (*connect.Response[reliantv1.StartOAuthSignInResponse], error) {
 	provider := req.Msg.Provider
 	if provider == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("provider is required"))
+		return nil, svcerr.InvalidArgument("provider is required")
 	}
 
 	result, err := auth.LoginWithOAuthProvider(ctx, s.deps.OAuthProvider, provider)
@@ -148,7 +149,7 @@ func (s *Service) DevAuthLoad(
 	ctx context.Context,
 	req *connect.Request[reliantv1.DevAuthLoadRequest],
 ) (*connect.Response[reliantv1.DevAuthLoadResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, fmt.Errorf("DevAuthLoad is not supported"))
+	return nil, svcerr.Unimplemented("DevAuthLoad is not supported")
 }
 
 // DevAuthSave saves the global auth session (development only)
@@ -156,7 +157,7 @@ func (s *Service) DevAuthSave(
 	ctx context.Context,
 	req *connect.Request[reliantv1.DevAuthSaveRequest],
 ) (*connect.Response[reliantv1.DevAuthSaveResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, fmt.Errorf("DevAuthSave is not supported"))
+	return nil, svcerr.Unimplemented("DevAuthSave is not supported")
 }
 
 // DevAuthClear clears the global auth session (development only)
@@ -164,5 +165,5 @@ func (s *Service) DevAuthClear(
 	ctx context.Context,
 	req *connect.Request[reliantv1.DevAuthClearRequest],
 ) (*connect.Response[reliantv1.DevAuthClearResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, fmt.Errorf("DevAuthClear is not supported"))
+	return nil, svcerr.Unimplemented("DevAuthClear is not supported")
 }

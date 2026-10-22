@@ -10,6 +10,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -63,7 +64,7 @@ type IntegrationAccess interface {
 
 // inboundUnavailable reports a kind this deployment cannot serve.
 func inboundUnavailable(what string) error {
-	return connect.NewError(connect.CodeUnavailable, fmt.Errorf("%s triggers are not available on this server", what))
+	return svcerr.ToConnect(svcerr.Unavailable(fmt.Sprintf("%s triggers are not available on this server", what)))
 }
 
 // applyInboundDefinition fills the kind-specific fields of an inbound
@@ -91,16 +92,14 @@ func (s *Service) applyInboundDefinition(ctx context.Context, userID string, def
 		}
 		hasSecret := existing != nil && existing.Kind == core.TriggerKindWebhook && s.storedSecret(ctx, existing.ID)
 		if src.HMAC && def.WebhookHmacSecret == nil && !hasSecret {
-			return connect.NewError(connect.CodeInvalidArgument,
-				errors.New("webhook_hmac_secret is required to verify signatures"))
+			return svcerr.ToConnect(svcerr.InvalidArgument("webhook_hmac_secret is required to verify signatures"))
 		}
 	case core.TriggerKindIntegration:
 		if s.deps.Intake == nil || s.deps.Catalog == nil {
 			return inboundUnavailable("integration")
 		}
 		if !s.deps.Catalog.HasInboundSource(src.Integration) {
-			return connect.NewError(connect.CodeInvalidArgument,
-				fmt.Errorf("integration %q does not deliver events on this server", src.Integration))
+			return svcerr.ToConnect(svcerr.InvalidArgument(fmt.Sprintf("integration %q does not deliver events on this server", src.Integration)))
 		}
 		if _, gated := s.deps.Access[src.Integration]; gated {
 			// Access-gated: events route by the owner's own access, so a
@@ -145,17 +144,15 @@ func (s *Service) resolveTriggerConnection(ctx context.Context, userID, integrat
 	}
 	if err != nil || conn == nil || conn.UserID != userID {
 		if requested == nil || *requested == "" {
-			return "", connect.NewError(connect.CodeFailedPrecondition,
-				fmt.Errorf("connect %s first: an integration trigger listens through one of your connections", integration))
+			return "", svcerr.ToConnect(svcerr.FailedPrecondition(fmt.Sprintf("connect %s first: an integration trigger listens through one of your connections", integration)))
 		}
-		return "", connect.NewError(connect.CodeNotFound, errors.New("connection not found"))
+		return "", svcerr.ToConnect(svcerr.NotFound("connection"))
 	}
 	if conn.IntegrationID != integration {
-		return "", connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("connection %q is for %s, not %s", conn.Name, conn.IntegrationID, integration))
+		return "", svcerr.ToConnect(svcerr.InvalidArgument(fmt.Sprintf("connection %q is for %s, not %s", conn.Name, conn.IntegrationID, integration)))
 	}
 	if conn.Status == core.ConnectionStatusRevoked {
-		return "", connect.NewError(connect.CodeNotFound, errors.New("connection not found"))
+		return "", svcerr.ToConnect(svcerr.NotFound("connection"))
 	}
 	return conn.ID, nil
 }
@@ -205,8 +202,7 @@ func (s *Service) refreshTriggerAccess(ctx context.Context, trigger *core.Trigge
 				fmt.Errorf("%s triggers need access to your %s repositories: %w", cfg.Integration, cfg.Integration, err))
 		}
 		logging.WarnContext(ctx, "refreshing integration access failed", "integration", cfg.Integration, "user_id", trigger.UserID, "error", err)
-		return connect.NewError(connect.CodeUnavailable,
-			fmt.Errorf("could not read your %s access right now; try again", cfg.Integration))
+		return svcerr.ToConnect(svcerr.Unavailable(fmt.Sprintf("could not read your %s access right now; try again", cfg.Integration)))
 	}
 	return nil
 }
@@ -240,7 +236,7 @@ func (s *Service) writeWebhookCredentials(ctx context.Context, trigger *core.Tri
 		}
 	case def.WebhookHmacSecret != nil:
 		if *def.WebhookHmacSecret == "" {
-			return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("webhook_hmac_secret must not be empty"))
+			return nil, svcerr.ToConnect(svcerr.InvalidArgument("webhook_hmac_secret must not be empty"))
 		}
 		// applyInboundDefinition already refused a signed webhook without
 		// a sealer; this keeps the dereference safe on its own.
@@ -283,7 +279,7 @@ func (s *Service) RotateWebhookToken(
 		return nil, err
 	}
 	if trigger.Kind != core.TriggerKindWebhook {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("only a webhook trigger has a token"))
+		return nil, svcerr.ToConnect(svcerr.FailedPrecondition("only a webhook trigger has a token"))
 	}
 	if s.managed(trigger) {
 		// The new token goes to the sender, not to the caller. A paused

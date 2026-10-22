@@ -7,6 +7,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/orm"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -133,7 +134,7 @@ func TestDeleteWorkflow_IsAllOrNothing(t *testing.T) {
 	_, err := deleteFlow(t, store, r, "pr-review")
 
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInternal, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeInternal, svcerr.Code(err))
 	assert.Empty(t, store.deleted, "the automation deletion rolled back with the workflow's")
 	assert.Empty(t, r.retired, "nothing is retired for a delete that did not happen")
 }

@@ -20,6 +20,7 @@ import (
 	"golang.org/x/net/http2/h2c"
 
 	"github.com/reliant-labs/forge/pkg/serverkit"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -291,7 +292,7 @@ func TestCloseSession_OtherDaemonFailureIsStillAnError(t *testing.T) {
 	_, err := svc.CloseSession(ctx, connect.NewRequest(&reliantv1.CloseTerminalSessionRequest{SessionId: "s1"}))
 
 	require.Error(t, err)
-	require.Equal(t, connect.CodeInternal, connect.CodeOf(err))
+	require.Equal(t, connect.CodeInternal, svcerr.Code(err))
 }
 
 type closeFailsRouter struct {

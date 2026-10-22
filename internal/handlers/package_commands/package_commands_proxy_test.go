@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/pkgmgr"
@@ -116,7 +117,7 @@ func TestPackageCommandsProxy_ListCommands_DispatchFailure_IsLoud(t *testing.T) 
 	}))
 	require.Error(t, err)
 	assert.Nil(t, resp)
-	assert.Equal(t, connect.CodeUnavailable, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeUnavailable, svcerr.Code(err))
 }
 
 // A missing working dir on the daemon maps to NotFound (via the sentinel), which
@@ -132,7 +133,7 @@ func TestPackageCommandsProxy_ListCommands_MissingDir_IsNotFound(t *testing.T) {
 	}))
 	require.Error(t, err)
 	assert.Nil(t, resp)
-	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeNotFound, svcerr.Code(err))
 }
 
 // A malformed daemon reply is a loud Internal error, not a silent empty result.
@@ -145,7 +146,7 @@ func TestPackageCommandsProxy_ListCommands_MalformedReply_IsLoud(t *testing.T) {
 	}))
 	require.Error(t, err)
 	assert.Nil(t, resp)
-	assert.Equal(t, connect.CodeInternal, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeInternal, svcerr.Code(err))
 }
 
 // Neither worktree_id nor path is an InvalidArgument, and nothing is forwarded.
@@ -155,7 +156,7 @@ func TestPackageCommandsProxy_ListCommands_NoTargetIsInvalidArgument(t *testing.
 
 	_, err := svc.ListCommands(authedCtx(), connect.NewRequest(&reliantv1.ListPackageCommandsRequest{}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
 	assert.Empty(t, router.lastCommandType, "no daemon command should be forwarded")
 }
 
@@ -168,5 +169,5 @@ func TestPackageCommandsProxy_ListCommands_RequiresAuth(t *testing.T) {
 		Path: ptr.Of("/daemon/workspace/proj"),
 	}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeUnauthenticated, svcerr.Code(err))
 }

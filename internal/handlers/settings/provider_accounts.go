@@ -8,9 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"connectrpc.com/connect"
-
 	"github.com/reliant-labs/forge/pkg/observe"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -65,7 +64,7 @@ func (s *Service) connectAccount(ctx context.Context, in signIn) (signInResult, 
 	if in.targetID != "" {
 		accounts, err := repo.ListProviderAccounts(ctx, in.userID)
 		if err != nil {
-			return signInResult{}, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to read accounts"))
+			return signInResult{}, svcerr.Internal("failed to read accounts")
 		}
 		for i := range accounts {
 			if accounts[i].ID == in.targetID {
@@ -74,7 +73,7 @@ func (s *Service) connectAccount(ctx context.Context, in signIn) (signInResult, 
 		}
 		if target == nil || target.Provider != in.provider {
 			// Another user's account, or one of another provider: NotFound, never a hint it exists.
-			return signInResult{}, connect.NewError(connect.CodeNotFound, fmt.Errorf("provider account not found"))
+			return signInResult{}, svcerr.NotFound("provider account")
 		}
 		if core.IsPlaceholderIdentityKey(target.IdentityKey) {
 			// A placeholder cannot be compared with a real identity; this sign-in is what teaches it.
@@ -85,7 +84,7 @@ func (s *Service) connectAccount(ctx context.Context, in signIn) (signInResult, 
 	acct, created, err := repo.UpsertProviderAccount(ctx, in.upsert)
 	if err != nil {
 		logging.ErrorContext(ctx, "Failed to persist provider account", "provider", in.provider, "error", err)
-		return signInResult{}, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to save %s credentials", providerName(in.provider)))
+		return signInResult{}, svcerr.Internal(fmt.Sprintf("failed to save %s credentials", providerName(in.provider)))
 	}
 	if created && in.label != "" && acct.Label == "" && acct.Email == "" {
 		if acct, err = repo.PatchProviderAccount(ctx, in.userID, acct.ID, core.AccountPatch{Label: &in.label}); err != nil {

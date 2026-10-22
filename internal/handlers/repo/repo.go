@@ -12,6 +12,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -45,11 +46,11 @@ func (s *Service) sendDaemonCommand(ctx context.Context, userID, commandType str
 func (s *Service) authorizeRepo(ctx context.Context, repoID, userID string) (*core.Repo, *db.Project, error) {
 	repo, err := s.deps.Repo.GetRepo(ctx, repoID)
 	if err != nil {
-		return nil, nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("repo not found"))
+		return nil, nil, svcerr.NotFound("repo")
 	}
 	project, err := s.deps.Repo.GetProjectWithUserCheck(ctx, repo.ProjectID, userID)
 	if err != nil {
-		return nil, nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("repo not found"))
+		return nil, nil, svcerr.NotFound("repo")
 	}
 	return repo, project, nil
 }
@@ -59,9 +60,9 @@ func (s *Service) authorizeProject(ctx context.Context, projectID, userID string
 	project, err := s.deps.Repo.GetProjectWithUserCheck(ctx, projectID, userID)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "access denied") {
-			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found"))
+			return nil, svcerr.NotFound("project")
 		}
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("database error"))
+		return nil, svcerr.Internal("database error")
 	}
 	return project, nil
 }
@@ -110,7 +111,7 @@ func (s *Service) DiscoverRepos(
 	}
 	if err := s.sendDaemonCommand(ctx, userID, "repo.discover", payload, &daemonResp); err != nil {
 		logging.ErrorContext(ctx, "Failed to discover repos via daemon", "error", err, "projectID", project.ID)
-		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("daemon unreachable; cannot scan filesystem"))
+		return nil, svcerr.Unavailable("daemon unreachable; cannot scan filesystem")
 	}
 
 	now := time.Now().UTC().Format(time.RFC3339)
@@ -144,7 +145,7 @@ func (s *Service) ListRepos(
 	repos, err := s.deps.Repo.ListReposByProject(ctx, req.Msg.ProjectId)
 	if err != nil {
 		logging.ErrorContext(ctx, "Failed to list repos", "error", err, "projectID", req.Msg.ProjectId)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list repos"))
+		return nil, svcerr.Internal("failed to list repos")
 	}
 
 	out := make([]*reliantv1.Repo, len(repos))
@@ -188,7 +189,7 @@ func (s *Service) AddRepo(
 		"path":      repoPath,
 		"max_depth": 1,
 	}, &daemonResp); err != nil {
-		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("daemon unreachable; cannot validate path"))
+		return nil, svcerr.Unavailable("daemon unreachable; cannot validate path")
 	}
 	var remoteURL *string
 	foundGit := false
@@ -203,14 +204,12 @@ func (s *Service) AddRepo(
 		}
 	}
 	if !foundGit {
-		return nil, connect.NewError(connect.CodeFailedPrecondition,
-			fmt.Errorf("path %q is not a git repository", relPath))
+		return nil, svcerr.FailedPrecondition(fmt.Sprintf("path %q is not a git repository", relPath))
 	}
 
 	// Reject duplicates.
 	if existing, err := s.deps.Repo.GetRepoByProjectAndPath(ctx, project.ID, relPath); err == nil && existing != nil {
-		return nil, connect.NewError(connect.CodeAlreadyExists,
-			fmt.Errorf("repo at %q already registered for this project", relPath))
+		return nil, svcerr.AlreadyExists(fmt.Sprintf("repo at %q already registered for this project", relPath))
 	}
 
 	name := ""
@@ -236,7 +235,7 @@ func (s *Service) AddRepo(
 	}
 	if err := s.deps.Repo.CreateRepo(ctx, record); err != nil {
 		logging.ErrorContext(ctx, "Failed to persist repo", "error", err, "projectID", project.ID)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to add repo"))
+		return nil, svcerr.Internal("failed to add repo")
 	}
 
 	// Flip is_git_repo true if it wasn't already — adding the first repo to
@@ -271,7 +270,7 @@ func (s *Service) RemoveRepo(
 
 	if err := s.deps.Repo.DeleteRepo(ctx, repo.ID); err != nil {
 		logging.ErrorContext(ctx, "Failed to delete repo", "error", err, "repoID", repo.ID)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to delete repo"))
+		return nil, svcerr.Internal("failed to delete repo")
 	}
 
 	// NOTE: removing a repo association deliberately does NOT touch
@@ -316,7 +315,7 @@ func (s *Service) GetRepoGitInfo(
 	}
 	if err := s.sendDaemonCommand(ctx, userID, "project.git_info", map[string]string{"path": repoPath}, &gitInfo); err != nil {
 		logging.ErrorContext(ctx, "Failed to get git info via daemon", "error", err, "repoID", repo.ID)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to get git info"))
+		return nil, svcerr.Internal("failed to get git info")
 	}
 
 	return connect.NewResponse(&reliantv1.GetRepoGitInfoResponse{

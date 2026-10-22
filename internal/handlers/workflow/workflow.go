@@ -14,6 +14,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/orm"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"google.golang.org/protobuf/proto"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -45,12 +46,12 @@ func (s *Service) ownedProject(ctx context.Context, projectID string, userID str
 	project, err := s.deps.Repo.GetProjectWithUserCheck(ctx, projectID, userID)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "access denied") {
-			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found"))
+			return nil, svcerr.NotFound("project")
 		}
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("database error"))
+		return nil, svcerr.Internal("database error")
 	}
 	if project == nil {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found"))
+		return nil, svcerr.NotFound("project")
 	}
 	return project, nil
 }
@@ -69,7 +70,7 @@ func (s *Service) ListWorkflows(
 	req *connect.Request[reliantv1.ListWorkflowsRequest],
 ) (*connect.Response[reliantv1.ListWorkflowsResponse], error) {
 	if req.Msg.ProjectId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("project_id is required"))
+		return nil, svcerr.InvalidArgument("project_id is required")
 	}
 
 	userID := auth.MustGetUserID(ctx)
@@ -411,22 +412,22 @@ func (s *Service) SaveWorkflow(
 	req *connect.Request[reliantv1.SaveWorkflowRequest],
 ) (*connect.Response[reliantv1.SaveWorkflowResponse], error) {
 	if req.Msg.ProjectId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("project_id is required"))
+		return nil, svcerr.InvalidArgument("project_id is required")
 	}
 
 	protoWf := req.Msg.Workflow
 	if protoWf == nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("workflow is required"))
+		return nil, svcerr.InvalidArgument("workflow is required")
 	}
 
 	if protoWf.Name == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("workflow name is required"))
+		return nil, svcerr.InvalidArgument("workflow name is required")
 	}
 
 	// Generate slug from name
 	slug := generateSlug(protoWf.Name)
 	if slug == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("workflow name must contain alphanumeric characters"))
+		return nil, svcerr.InvalidArgument("workflow name must contain alphanumeric characters")
 	}
 
 	// Get user ID from auth context
@@ -460,8 +461,7 @@ func (s *Service) SaveWorkflow(
 					return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to check slug conflict: %w", err))
 				}
 				if conflicting != nil && conflicting.ID != draft.ID {
-					return nil, connect.NewError(connect.CodeAlreadyExists,
-						fmt.Errorf("workflow name '%s' conflicts with an existing workflow; please choose a different name", protoWf.Name))
+					return nil, svcerr.AlreadyExists(fmt.Sprintf("workflow name '%s' conflicts with an existing workflow; please choose a different name", protoWf.Name))
 				}
 			}
 		}
@@ -478,8 +478,7 @@ func (s *Service) SaveWorkflow(
 			// Two different names can produce the same slug (e.g., "My Workflow" and "my_workflow" both → "my-workflow")
 			// If names don't match, this is a slug collision - reject to prevent accidentally overwriting
 			if !strings.EqualFold(draft.Name, protoWf.Name) {
-				return nil, connect.NewError(connect.CodeAlreadyExists,
-					fmt.Errorf("workflow name '%s' conflicts with existing workflow '%s' (same URL-friendly name); please choose a different name", protoWf.Name, draft.Name))
+				return nil, svcerr.AlreadyExists(fmt.Sprintf("workflow name '%s' conflicts with existing workflow '%s' (same URL-friendly name); please choose a different name", protoWf.Name, draft.Name))
 			}
 			existingUserWorkflow = draft
 			isUpdate = true
@@ -491,8 +490,7 @@ func (s *Service) SaveWorkflow(
 		// Check against builtin workflows
 		builtinFilename := slug + ".yaml"
 		if _, err := builtin.BuiltinWorkflowsFS.ReadFile(builtinFilename); err == nil {
-			return nil, connect.NewError(connect.CodeAlreadyExists,
-				fmt.Errorf("workflow name '%s' conflicts with a built-in workflow; please choose a different name", protoWf.Name))
+			return nil, svcerr.AlreadyExists(fmt.Sprintf("workflow name '%s' conflicts with a built-in workflow; please choose a different name", protoWf.Name))
 		}
 
 		// Check against project workflows - project not found is ok, just skip check
@@ -501,8 +499,7 @@ func (s *Service) SaveWorkflow(
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to load project workflow: %w", err))
 		}
 		if projectWf != nil {
-			return nil, connect.NewError(connect.CodeAlreadyExists,
-				fmt.Errorf("workflow name '%s' conflicts with a project workflow; please choose a different name", protoWf.Name))
+			return nil, svcerr.AlreadyExists(fmt.Sprintf("workflow name '%s' conflicts with a project workflow; please choose a different name", protoWf.Name))
 		}
 
 		// Check for duplicate names among user's workflows
@@ -512,8 +509,7 @@ func (s *Service) SaveWorkflow(
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to check existing workflow name: %w", err))
 		}
 		if existingByName != nil {
-			return nil, connect.NewError(connect.CodeAlreadyExists,
-				fmt.Errorf("a workflow with name '%s' already exists; please choose a different name", protoWf.Name))
+			return nil, svcerr.AlreadyExists(fmt.Sprintf("a workflow with name '%s' already exists; please choose a different name", protoWf.Name))
 		}
 	}
 
@@ -558,7 +554,7 @@ func (s *Service) SaveWorkflow(
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to get project: %w", err))
 		}
 		if project == nil || project.Path == "" {
-			return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("project not found or has no path"))
+			return nil, svcerr.FailedPrecondition("project not found or has no path")
 		}
 
 		workflowsDir := filepath.Join(project.Path, ".reliant", "workflows")
@@ -573,13 +569,12 @@ func (s *Service) SaveWorkflow(
 
 		// Security check: ensure source path is within the workflows directory
 		if !strings.HasPrefix(absSourcePath, absWorkflowsDir+string(filepath.Separator)) {
-			return nil, connect.NewError(connect.CodePermissionDenied,
-				fmt.Errorf("source path must be within project's .reliant/workflows directory"))
+			return nil, svcerr.PermissionDenied("source path must be within project's .reliant/workflows directory")
 		}
 
 		// Write the YAML to the file via daemon
 		if s.deps.Router == nil {
-			return nil, connect.NewError(connect.CodeUnavailable, errors.New("no daemon router: this server cannot write to the project's machine"))
+			return nil, svcerr.Unavailable("no daemon router: this server cannot write to the project's machine")
 		}
 		userID := auth.MustGetUserID(ctx)
 		writePayload, _ := json.Marshal(map[string]interface{}{
@@ -621,7 +616,7 @@ func (s *Service) SaveWorkflow(
 	// OCC: Check for conflicts if expected_version is provided
 	if existing != nil && req.Msg.ExpectedVersion != nil {
 		if existing.Version != *req.Msg.ExpectedVersion {
-			return nil, connect.NewError(connect.CodeAborted, fmt.Errorf(
+			return nil, svcerr.Aborted(fmt.Sprintf(
 				"workflow was modified since you last loaded it (expected version: %d, current version: %d) - please reload and retry",
 				*req.Msg.ExpectedVersion,
 				existing.Version,
@@ -719,10 +714,10 @@ func (s *Service) SetWorkflowVisibility(
 	req *connect.Request[reliantv1.SetWorkflowVisibilityRequest],
 ) (*connect.Response[reliantv1.SetWorkflowVisibilityResponse], error) {
 	if req.Msg.ProjectId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("project_id is required"))
+		return nil, svcerr.InvalidArgument("project_id is required")
 	}
 	if req.Msg.Slug == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("slug is required"))
+		return nil, svcerr.InvalidArgument("slug is required")
 	}
 
 	userID := auth.MustGetUserID(ctx)
@@ -733,7 +728,7 @@ func (s *Service) SetWorkflowVisibility(
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to get workflow: %w", err))
 	}
 	if draft == nil {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("workflow not found"))
+		return nil, svcerr.NotFound("workflow")
 	}
 
 	// Update hidden status
@@ -760,10 +755,10 @@ func (s *Service) CopyWorkflow(
 	req *connect.Request[reliantv1.CopyWorkflowRequest],
 ) (*connect.Response[reliantv1.CopyWorkflowResponse], error) {
 	if req.Msg.ProjectId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("project_id is required"))
+		return nil, svcerr.InvalidArgument("project_id is required")
 	}
 	if req.Msg.SourceSlug == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("source_slug is required"))
+		return nil, svcerr.InvalidArgument("source_slug is required")
 	}
 
 	// Load the source workflow (checks builtin, project, and user workflows)
@@ -780,7 +775,7 @@ func (s *Service) CopyWorkflow(
 
 	sourceWf := getResp.Msg.Workflow
 	if sourceWf == nil {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("source workflow not found"))
+		return nil, svcerr.NotFound("source workflow")
 	}
 
 	// Generate new name with unique suffix
@@ -835,7 +830,7 @@ func (s *Service) CreateWorkflowDraft(
 	req *connect.Request[reliantv1.CreateWorkflowDraftRequest],
 ) (*connect.Response[reliantv1.CreateWorkflowDraftResponse], error) {
 	if req.Msg.ProjectId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("project_id is required"))
+		return nil, svcerr.InvalidArgument("project_id is required")
 	}
 
 	userID := auth.MustGetUserID(ctx)
@@ -882,7 +877,7 @@ func (s *Service) CreateWorkflowDraft(
 			return nil, connect.NewError(connect.CodeAlreadyExists, err)
 		}
 		logging.ErrorContext(ctx, "Failed to create workflow draft", "error", err, "userID", userID)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to create workflow draft"))
+		return nil, svcerr.Internal("failed to create workflow draft")
 	}
 
 	logging.InfoContext(ctx, "Created workflow draft", "draftID", draftID, "name", name, "slug", slug, "userID", userID)
@@ -978,11 +973,11 @@ func newWorkflowDefinition(name, title, template string) ([]byte, error) {
 	if template != "" {
 		builtinName, ok := strings.CutPrefix(template, "builtin://")
 		if !ok || builtinName == "" {
-			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("template must be a builtin:// ref, got %q", template))
+			return nil, svcerr.InvalidArgument(fmt.Sprintf("template must be a builtin:// ref, got %q", template))
 		}
 		data, err := builtin.BuiltinWorkflowsFS.ReadFile(builtinName + ".yaml")
 		if err != nil {
-			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("unknown template %q", template))
+			return nil, svcerr.InvalidArgument(fmt.Sprintf("unknown template %q", template))
 		}
 		parsed, err := wfyaml.ParseWorkflow(data)
 		if err != nil {
@@ -1010,10 +1005,10 @@ func (s *Service) SetWorkflowStatus(
 	req *connect.Request[reliantv1.SetWorkflowStatusRequest],
 ) (*connect.Response[reliantv1.SetWorkflowStatusResponse], error) {
 	if req.Msg.ProjectId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("project_id is required"))
+		return nil, svcerr.InvalidArgument("project_id is required")
 	}
 	if req.Msg.DraftId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("draft_id is required"))
+		return nil, svcerr.InvalidArgument("draft_id is required")
 	}
 	var target db.WorkflowDraftStatus
 	switch req.Msg.Status {
@@ -1022,7 +1017,7 @@ func (s *Service) SetWorkflowStatus(
 	case reliantv1.WorkflowDraftStatus_WORKFLOW_DRAFT_STATUS_DRAFT:
 		target = db.WorkflowDraftStatusDraft
 	default:
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("status must be DRAFT or COMPLETE"))
+		return nil, svcerr.InvalidArgument("status must be DRAFT or COMPLETE")
 	}
 
 	userID := auth.MustGetUserID(ctx)
@@ -1032,10 +1027,10 @@ func (s *Service) SetWorkflowStatus(
 
 	draft, err := s.deps.Repo.GetWorkflowDraft(ctx, req.Msg.DraftId)
 	if err != nil || draft == nil || draft.UserID != userID {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("workflow not found"))
+		return nil, svcerr.NotFound("workflow")
 	}
 	if req.Msg.ExpectedVersion != nil && draft.Version != *req.Msg.ExpectedVersion {
-		return nil, connect.NewError(connect.CodeAborted, fmt.Errorf(
+		return nil, svcerr.Aborted(fmt.Sprintf(
 			"workflow was modified since you last loaded it (expected version: %d, current version: %d) - please reload and retry",
 			*req.Msg.ExpectedVersion, draft.Version))
 	}
@@ -1090,10 +1085,10 @@ func (s *Service) GetWorkflow(
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to load draft: %w", err))
 		}
 		if draft == nil {
-			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("workflow not found"))
+			return nil, svcerr.NotFound("workflow")
 		}
 		if draft.UserID != userID {
-			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("workflow not found"))
+			return nil, svcerr.NotFound("workflow")
 		}
 
 		protoWf, err := parseDraftDefinitionV2([]byte(draft.Definition))
@@ -1114,7 +1109,7 @@ func (s *Service) GetWorkflow(
 
 	workflowName := req.Msg.Name
 	if workflowName == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("workflow name or draft_id is required"))
+		return nil, svcerr.InvalidArgument("workflow name or draft_id is required")
 	}
 
 	// Handle builtin:// protocol - these are still embedded
@@ -1123,7 +1118,7 @@ func (s *Service) GetWorkflow(
 		filename := builtinName + ".yaml"
 		data, err := builtin.BuiltinWorkflowsFS.ReadFile(filename)
 		if err != nil {
-			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("builtin workflow not found: %s", workflowName))
+			return nil, svcerr.WithMessage(svcerr.ErrNotFound, fmt.Sprintf("builtin workflow not found: %s", workflowName))
 		}
 		protoWf, err := parseWorkflowYAML(data)
 		if err != nil {
@@ -1172,7 +1167,7 @@ func (s *Service) GetWorkflow(
 		if resolveErr != nil && !errors.Is(resolveErr, workflowref.ErrNotFound) {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to resolve workflow: %w", resolveErr))
 		}
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("workflow not found: %s", workflowName))
+		return nil, svcerr.WithMessage(svcerr.ErrNotFound, fmt.Sprintf("workflow not found: %s", workflowName))
 	}
 
 	// Parse the stored definition (preserve unknown node keys like model, messages in args)
@@ -1209,12 +1204,12 @@ func (s *Service) DeleteWorkflow(
 	req *connect.Request[reliantv1.DeleteWorkflowRequest],
 ) (*connect.Response[reliantv1.DeleteWorkflowResponse], error) {
 	if req.Msg.ProjectId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("project_id is required"))
+		return nil, svcerr.InvalidArgument("project_id is required")
 	}
 
 	name := req.Msg.Name
 	if name == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("workflow name is required"))
+		return nil, svcerr.InvalidArgument("workflow name is required")
 	}
 
 	// Get user ID and generate slug
@@ -1227,7 +1222,7 @@ func (s *Service) DeleteWorkflow(
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to check workflow: %w", err))
 	}
 	if existing == nil {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("workflow not found: %s", name))
+		return nil, svcerr.WithMessage(svcerr.ErrNotFound, fmt.Sprintf("workflow not found: %s", name))
 	}
 
 	// The workflow and every automation that runs it go in one transaction:
@@ -1310,11 +1305,11 @@ func (s *Service) ImportWorkflow(
 	req *connect.Request[reliantv1.ImportWorkflowRequest],
 ) (*connect.Response[reliantv1.ImportWorkflowResponse], error) {
 	if req.Msg.ProjectId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("project_id is required"))
+		return nil, svcerr.InvalidArgument("project_id is required")
 	}
 
 	if len(req.Msg.YamlContent) == 0 {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("yaml_content is required"))
+		return nil, svcerr.InvalidArgument("yaml_content is required")
 	}
 
 	// Parse the YAML into RPC proto
@@ -1324,13 +1319,13 @@ func (s *Service) ImportWorkflow(
 	}
 
 	if protoWf.Name == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("workflow name is required"))
+		return nil, svcerr.InvalidArgument("workflow name is required")
 	}
 
 	// Generate slug and get user ID
 	slug := generateSlug(protoWf.Name)
 	if slug == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("workflow name must contain alphanumeric characters"))
+		return nil, svcerr.InvalidArgument("workflow name must contain alphanumeric characters")
 	}
 
 	userID := auth.MustGetUserID(ctx)
@@ -1435,11 +1430,11 @@ func (s *Service) ExportWorkflow(
 	req *connect.Request[reliantv1.ExportWorkflowRequest],
 ) (*connect.Response[reliantv1.ExportWorkflowResponse], error) {
 	if req.Msg.ProjectId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("project_id is required"))
+		return nil, svcerr.InvalidArgument("project_id is required")
 	}
 
 	if req.Msg.Slug == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("slug is required"))
+		return nil, svcerr.InvalidArgument("slug is required")
 	}
 
 	// Handle builtin:// protocol
@@ -1448,7 +1443,7 @@ func (s *Service) ExportWorkflow(
 		filename := builtinName + ".yaml"
 		data, err := builtin.BuiltinWorkflowsFS.ReadFile(filename)
 		if err != nil {
-			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("builtin workflow not found: %s", req.Msg.Slug))
+			return nil, svcerr.WithMessage(svcerr.ErrNotFound, fmt.Sprintf("builtin workflow not found: %s", req.Msg.Slug))
 		}
 		protoWf, err := parseWorkflowYAML(data)
 		if err != nil {
@@ -1470,7 +1465,7 @@ func (s *Service) ExportWorkflow(
 	}
 
 	if draft == nil {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("workflow not found: %s", req.Msg.Slug))
+		return nil, svcerr.WithMessage(svcerr.ErrNotFound, fmt.Sprintf("workflow not found: %s", req.Msg.Slug))
 	}
 
 	// Parse the stored definition into RPC proto
@@ -1510,7 +1505,7 @@ func (s *Service) ValidateWorkflow(
 ) (*connect.Response[reliantv1.ValidateWorkflowResponse], error) {
 	protoWf := req.Msg.Workflow
 	if protoWf == nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("workflow is required"))
+		return nil, svcerr.InvalidArgument("workflow is required")
 	}
 
 	userID := auth.MustGetUserID(ctx)

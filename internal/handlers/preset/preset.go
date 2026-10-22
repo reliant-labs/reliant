@@ -16,6 +16,7 @@ import (
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/structpb"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	cfg "github.com/reliant-labs/reliant/internal/config"
@@ -34,9 +35,9 @@ func (s *Service) projectBelongsToUser(ctx context.Context, projectID string, us
 	_, err := s.deps.Repo.GetProjectWithUserCheck(ctx, projectID, userID)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "access denied") {
-			return connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found"))
+			return svcerr.NotFound("project")
 		}
-		return connect.NewError(connect.CodeInternal, fmt.Errorf("database error"))
+		return svcerr.Internal("database error")
 	}
 	return nil
 }
@@ -48,7 +49,7 @@ func (s *Service) ListPresets(
 	req *connect.Request[reliantv1.ListPresetsRequest],
 ) (*connect.Response[reliantv1.ListPresetsResponse], error) {
 	if req.Msg.ProjectId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("project_id is required"))
+		return nil, svcerr.InvalidArgument("project_id is required")
 	}
 
 	userID := auth.MustGetUserID(ctx)
@@ -138,10 +139,10 @@ func (s *Service) GetPreset(
 	req *connect.Request[reliantv1.GetPresetRequest],
 ) (*connect.Response[reliantv1.GetPresetResponse], error) {
 	if req.Msg.ProjectId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("project_id is required"))
+		return nil, svcerr.InvalidArgument("project_id is required")
 	}
 	if req.Msg.Name == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("preset name is required"))
+		return nil, svcerr.InvalidArgument("preset name is required")
 	}
 
 	userID := auth.MustGetUserID(ctx)
@@ -186,10 +187,10 @@ func (s *Service) ListPresetsForWorkflow(
 	req *connect.Request[reliantv1.ListPresetsForWorkflowRequest],
 ) (*connect.Response[reliantv1.ListPresetsForWorkflowResponse], error) {
 	if req.Msg.ProjectId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("project_id is required"))
+		return nil, svcerr.InvalidArgument("project_id is required")
 	}
 	if req.Msg.WorkflowName == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("workflow_name is required"))
+		return nil, svcerr.InvalidArgument("workflow_name is required")
 	}
 
 	userID := auth.MustGetUserID(ctx)
@@ -462,10 +463,10 @@ func (s *Service) CreatePreset(
 	req *connect.Request[reliantv1.CreatePresetRequest],
 ) (*connect.Response[reliantv1.CreatePresetResponse], error) {
 	if req.Msg.Name == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("preset name is required"))
+		return nil, svcerr.InvalidArgument("preset name is required")
 	}
 	if req.Msg.Tag == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("preset tag is required"))
+		return nil, svcerr.InvalidArgument("preset tag is required")
 	}
 
 	userID := auth.MustGetUserID(ctx)
@@ -657,7 +658,7 @@ func (s *Service) UpdatePreset(
 	req *connect.Request[reliantv1.UpdatePresetRequest],
 ) (*connect.Response[reliantv1.UpdatePresetResponse], error) {
 	if req.Msg.Name == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("preset name/slug is required"))
+		return nil, svcerr.InvalidArgument("preset name/slug is required")
 	}
 
 	userID := auth.MustGetUserID(ctx)
@@ -747,7 +748,7 @@ func (s *Service) DeletePreset(
 	req *connect.Request[reliantv1.DeletePresetRequest],
 ) (*connect.Response[reliantv1.DeletePresetResponse], error) {
 	if req.Msg.Name == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("preset name/slug is required"))
+		return nil, svcerr.InvalidArgument("preset name/slug is required")
 	}
 
 	userID := auth.MustGetUserID(ctx)
@@ -818,10 +819,10 @@ func (s *Service) SetDefaultPreset(
 	req *connect.Request[reliantv1.SetDefaultPresetRequest],
 ) (*connect.Response[reliantv1.SetDefaultPresetResponse], error) {
 	if req.Msg.ProjectId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("project_id is required"))
+		return nil, svcerr.InvalidArgument("project_id is required")
 	}
 	if req.Msg.WorkflowName == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("workflow_name is required"))
+		return nil, svcerr.InvalidArgument("workflow_name is required")
 	}
 
 	userIDStr := auth.MustGetUserID(ctx)
@@ -890,10 +891,10 @@ func (s *Service) GetDefaultPreset(
 	req *connect.Request[reliantv1.GetDefaultPresetRequest],
 ) (*connect.Response[reliantv1.GetDefaultPresetResponse], error) {
 	if req.Msg.ProjectId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("project_id is required"))
+		return nil, svcerr.InvalidArgument("project_id is required")
 	}
 	if req.Msg.WorkflowName == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("workflow_name is required"))
+		return nil, svcerr.InvalidArgument("workflow_name is required")
 	}
 
 	userIDStr := auth.MustGetUserID(ctx)
@@ -983,7 +984,7 @@ func (s *Service) GetDefaultPresetsBatch(
 	req *connect.Request[reliantv1.GetDefaultPresetsBatchRequest],
 ) (*connect.Response[reliantv1.GetDefaultPresetsBatchResponse], error) {
 	if req.Msg.ProjectId == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("project_id is required"))
+		return nil, svcerr.InvalidArgument("project_id is required")
 	}
 
 	userIDStr := auth.MustGetUserID(ctx)

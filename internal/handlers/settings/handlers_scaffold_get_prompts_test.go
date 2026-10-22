@@ -6,6 +6,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	settings "github.com/reliant-labs/reliant/internal/handlers/settings"
 )
@@ -36,6 +37,6 @@ func TestGetPrompts_Generated(t *testing.T) {
 
 	t.Run("unparseable stored prompts are internal", func(t *testing.T) {
 		_, err := get(t, memorySettings{"global.prompts": {Key: "global.prompts", Value: "not json"}})
-		require.Equal(t, connect.CodeInternal, connect.CodeOf(err))
+		require.Equal(t, connect.CodeInternal, svcerr.Code(err))
 	})
 }

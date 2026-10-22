@@ -7,6 +7,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -29,15 +30,15 @@ func (s *Service) placeNewWorktree(ctx context.Context, userID, projectID string
 	if chatID != nil && *chatID != "" {
 		chat, err := s.deps.Repo.GetChat(ctx, *chatID)
 		if err != nil || chat == nil || chat.UserID != userID {
-			return machinewake.Target{}, connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
+			return machinewake.Target{}, svcerr.ToConnect(svcerr.NotFound("chat"))
 		}
 		if chat.ProjectID != projectID {
-			return machinewake.Target{}, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("chat belongs to a different project"))
+			return machinewake.Target{}, svcerr.ToConnect(svcerr.InvalidArgument("chat belongs to a different project"))
 		}
 		daemonID, err := daemonplacement.ChatDaemonID(ctx, s.deps.Repo, chat)
 		if err != nil {
 			logging.ErrorContext(ctx, "Failed to resolve the chat's machine for worktree "+verb, "error", err, "chatID", chat.ID)
-			return machinewake.Target{}, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to resolve the chat's machine"))
+			return machinewake.Target{}, svcerr.ToConnect(svcerr.Internal("failed to resolve the chat's machine"))
 		}
 		if daemonID != "" {
 			return machinewake.Target{DaemonID: daemonID, NoMachine: chat.NoMachine}, nil
@@ -50,7 +51,7 @@ func (s *Service) placeNewWorktree(ctx context.Context, userID, projectID string
 	}
 
 	if s.deps.Router == nil {
-		return machinewake.Target{}, connect.NewError(connect.CodeUnavailable, fmt.Errorf("no daemon available to %s worktree: no daemon router", verb))
+		return machinewake.Target{}, svcerr.ToConnect(svcerr.Unavailable(fmt.Sprintf("no daemon available to %s worktree: no daemon router", verb)))
 	}
 	daemonID, err := s.deps.Router.ResolveDaemonID(ctx, userID)
 	if err != nil {

@@ -8,6 +8,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/checkoutstate"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -101,8 +102,7 @@ func (s *Service) checkoutMissingError(
 		detail.State, detail.InstallError = checkoutstate.On(rows, detail.DaemonId)
 	}
 
-	cerr := connect.NewError(connect.CodeNotFound,
-		fmt.Errorf("project directory %s does not exist on this machine", scope.basePath))
+	cerr := svcerr.ToConnect(svcerr.WithMessage(svcerr.ErrNotFound, fmt.Sprintf("project directory %s does not exist on this machine", scope.basePath)))
 	if d, derr := connect.NewErrorDetail(detail); derr == nil {
 		cerr.AddDetail(d)
 	}

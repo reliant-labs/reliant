@@ -18,6 +18,7 @@ import (
 	"golang.org/x/net/http2"
 	"google.golang.org/protobuf/types/known/emptypb"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/accesstokenclient"
@@ -175,7 +176,7 @@ func TestAPIServicesAnswerBehindAuth(t *testing.T) {
 		t.Run(strings.TrimPrefix(procedure, "/reliant.v1."), func(t *testing.T) {
 			call := connect.NewClient[emptypb.Empty, emptypb.Empty](h2c(), baseURL+procedure)
 			_, err := call.CallUnary(context.Background(), connect.NewRequest(&emptypb.Empty{}))
-			require.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err), "got %v", err)
+			require.Equal(t, connect.CodeUnauthenticated, svcerr.Code(err), "got %v", err)
 		})
 	}
 }
@@ -203,5 +204,5 @@ func TestAPIMountOptions(t *testing.T) {
 	require.Equal(t, "forge_api_disabled", connectErr.Meta().Get("X-Reliant-Reason"))
 
 	_, err = client.GetTopology(context.Background(), connect.NewRequest(&reliantv1.GetForgeTopologyRequest{}))
-	require.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err), "an anonymous caller is refused for its credential first")
+	require.Equal(t, connect.CodeUnauthenticated, svcerr.Code(err), "an anonymous caller is refused for its credential first")
 }

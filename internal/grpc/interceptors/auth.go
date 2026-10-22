@@ -18,6 +18,7 @@ import (
 
 	"connectrpc.com/connect"
 	fat "github.com/reliant-labs/forge/pkg/accesstoken"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -173,16 +174,14 @@ func (i *AuthInterceptor) authenticateRequest(ctx context.Context, procedure str
 	if authHeader == "" {
 		logging.DebugContext(ctx, "[gRPC Auth] Missing authorization token",
 			"procedure", procedure)
-		return nil, nil, connect.NewError(connect.CodeUnauthenticated,
-			fmt.Errorf("missing authorization token"))
+		return nil, nil, svcerr.ToConnect(svcerr.Unauthenticated("missing authorization token"))
 	}
 
 	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
 	if tokenString == authHeader {
 		logging.DebugContext(ctx, "[gRPC Auth] Invalid authorization header format",
 			"procedure", procedure)
-		return nil, nil, connect.NewError(connect.CodeUnauthenticated,
-			fmt.Errorf("invalid authorization header format"))
+		return nil, nil, svcerr.ToConnect(svcerr.Unauthenticated("invalid authorization header format"))
 	}
 
 	// Shape dispatch: `rlat_` bearers are access tokens (resolved by the token
@@ -197,8 +196,7 @@ func (i *AuthInterceptor) authenticateRequest(ctx context.Context, procedure str
 		if i.accessTokens == nil {
 			logging.WarnContext(ctx, "[gRPC Auth] access token presented but access-token auth is not enabled",
 				"procedure", procedure)
-			return nil, nil, connect.NewError(connect.CodeUnauthenticated,
-				fmt.Errorf("invalid or expired token"))
+			return nil, nil, svcerr.ToConnect(svcerr.Unauthenticated("invalid or expired token"))
 		}
 		claims, principal, err = auth.ClaimsForAPIToken(ctx, i.accessTokens, tokenString)
 	} else {
@@ -221,8 +219,7 @@ func (i *AuthInterceptor) authenticateRequest(ctx context.Context, procedure str
 		logging.DebugContext(ctx, "[gRPC Auth] Invalid token",
 			"error", err,
 			"procedure", procedure)
-		return nil, nil, connect.NewError(connect.CodeUnauthenticated,
-			fmt.Errorf("invalid or expired token"))
+		return nil, nil, svcerr.ToConnect(svcerr.Unauthenticated("invalid or expired token"))
 	}
 
 	// Add claims to context

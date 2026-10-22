@@ -3,12 +3,12 @@ package trigger
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 
 	"connectrpc.com/connect"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -47,13 +47,11 @@ func (s *Service) ResolveTriggerSenders(
 	userID := auth.MustGetUserID(ctx)
 	integration := strings.TrimSpace(req.Msg.Integration)
 	if integration != "github" {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("looking people up is only available for GitHub, not %q", integration))
+		return nil, svcerr.ToConnect(svcerr.InvalidArgument(fmt.Sprintf("looking people up is only available for GitHub, not %q", integration)))
 	}
 	dir := s.deps.Senders[integration]
 	if dir == nil {
-		return nil, connect.NewError(connect.CodeUnavailable,
-			errors.New("GitHub triggers are not set up on this server, so GitHub people cannot be looked up"))
+		return nil, svcerr.ToConnect(svcerr.Unavailable("GitHub triggers are not set up on this server, so GitHub people cannot be looked up"))
 	}
 	found, err := dir.Resolve(ctx, userID, req.Msg.Handles, req.Msg.SenderIds)
 	switch {
@@ -63,11 +61,10 @@ func (s *Service) ResolveTriggerSenders(
 	case dir.IsPermanent(err):
 		// The caller's own problem to fix, and the only message they need:
 		// the cause can name internals.
-		return nil, connect.NewError(connect.CodeFailedPrecondition,
-			errors.New("connect GitHub (or reconnect it) in Settings to look people up by their GitHub login"))
+		return nil, svcerr.ToConnect(svcerr.FailedPrecondition("connect GitHub (or reconnect it) in Settings to look people up by their GitHub login"))
 	default:
 		logging.WarnContext(ctx, "looking GitHub people up failed", "user_id", userID, "error", err)
-		return nil, connect.NewError(connect.CodeUnavailable, errors.New("GitHub could not be reached to look people up; try again"))
+		return nil, svcerr.ToConnect(svcerr.Unavailable("GitHub could not be reached to look people up; try again"))
 	}
 	out := make([]*reliantv1.ResolvedTriggerSender, 0, len(found))
 	for _, f := range found {
