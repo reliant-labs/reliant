@@ -65,7 +65,7 @@ type ExecuteRunStepOutput struct {
 // ExecuteRunStepActivity implements TypedActivity[ExecuteRunStepInput, ExecuteRunStepOutput]
 // This activity executes shell commands via the daemon's shell tool.
 type ExecuteRunStepActivity struct {
-	repo         db.Repository
+	repo         ExecuteRunStepStore
 	toolExecutor toolexec.ToolExecutor
 	runExecutor  RunExecutor // optional override for testing
 }
@@ -73,7 +73,7 @@ type ExecuteRunStepActivity struct {
 // NewExecuteRunStepActivity creates a new ExecuteRunStepActivity.
 // toolExecutor routes commands through the daemon. runExecutor is an optional
 // testing override; if non-nil it is used instead of toolExecutor.
-func NewExecuteRunStepActivity(repo db.Repository, toolExecutor toolexec.ToolExecutor, runExecutor RunExecutor) *ExecuteRunStepActivity {
+func NewExecuteRunStepActivity(repo ExecuteRunStepStore, toolExecutor toolexec.ToolExecutor, runExecutor RunExecutor) *ExecuteRunStepActivity {
 	return &ExecuteRunStepActivity{
 		repo:         repo,
 		toolExecutor: toolExecutor,

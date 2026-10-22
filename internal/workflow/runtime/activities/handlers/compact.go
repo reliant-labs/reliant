@@ -59,7 +59,7 @@ type GenerateTitleOutput struct {
 // 3. Create summary message with role=system in new context_sequence
 // 4. Return success - workflow continues with updated context
 type CompactActivity struct {
-	repo           db.Repository
+	repo           CompactStore
 	threads        *threads.Service
 	driverResolver drivers.DriverResolver
 	// skips reports windows the activity declined to compact (see
@@ -79,7 +79,7 @@ func (a *CompactActivity) WithAccountRouting(r *AccountRouting) *CompactActivity
 }
 
 // NewCompactActivity creates a new CompactActivity
-func NewCompactActivity(repo db.Repository, resolver drivers.DriverResolver) *CompactActivity {
+func NewCompactActivity(repo CompactStore, resolver drivers.DriverResolver) *CompactActivity {
 	return &CompactActivity{
 		repo:           repo,
 		threads:        threads.NewService(repo),
@@ -224,12 +224,12 @@ func (a *CompactActivity) saveCompactionMessage(ctx context.Context, chatID, thr
 // GenerateTitleActivity implements TypedActivity[GenerateTitleInput, GenerateTitleOutput]
 // Generates a title for a chat based on its first message
 type GenerateTitleActivity struct {
-	repo           db.Repository
+	repo           GenerateTitleStore
 	driverResolver drivers.DriverResolver
 }
 
 // NewGenerateTitleActivity creates a new GenerateTitleActivity
-func NewGenerateTitleActivity(repo db.Repository, resolver drivers.DriverResolver) *GenerateTitleActivity {
+func NewGenerateTitleActivity(repo GenerateTitleStore, resolver drivers.DriverResolver) *GenerateTitleActivity {
 	return &GenerateTitleActivity{
 		repo:           repo,
 		driverResolver: resolver,

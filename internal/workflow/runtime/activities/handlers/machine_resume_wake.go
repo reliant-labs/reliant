@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/automationcred"
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/toolexec"
@@ -60,7 +59,7 @@ type MachineResumeWakeOutput struct {
 // here never fails the run — the step runs and reports whatever the machine
 // is doing, exactly as before.
 type MachineResumeWakeActivity struct {
-	repo         db.Repository
+	repo         MachineResumeWakeStore
 	toolExecutor toolexec.ToolExecutor
 	// pollInterval is how often a slice re-checks the machine; zero means
 	// preflightPollInterval. Tests shrink it.
@@ -68,7 +67,7 @@ type MachineResumeWakeActivity struct {
 }
 
 // NewMachineResumeWakeActivity creates a MachineResumeWakeActivity.
-func NewMachineResumeWakeActivity(repo db.Repository, toolExecutor toolexec.ToolExecutor) *MachineResumeWakeActivity {
+func NewMachineResumeWakeActivity(repo MachineResumeWakeStore, toolExecutor toolexec.ToolExecutor) *MachineResumeWakeActivity {
 	return &MachineResumeWakeActivity{repo: repo, toolExecutor: toolExecutor}
 }
 

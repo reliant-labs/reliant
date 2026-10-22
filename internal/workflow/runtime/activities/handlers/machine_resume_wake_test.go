@@ -59,7 +59,7 @@ func newResumeWakeFixture(t *testing.T, router toolexec.DaemonRouter) (*MachineR
 		CreatedAt: time.Now(), UpdatedAt: time.Now()}))
 	require.NoError(t, base.CreateChat(ctx, &db.Chat{ID: chatID, UserID: "u1", Title: "t", ProjectID: projectID,
 		State: db.ChatStateIdle, CreatedAt: time.Now(), UpdatedAt: time.Now()}))
-	repo := &markerRepo{Repository: base}
+	repo := &markerRepo{Repo: base}
 	a := NewMachineResumeWakeActivity(repo, toolexec.NewRemoteExecutor(router))
 	a.pollInterval = 5 * time.Millisecond
 	return a, repo, chatID

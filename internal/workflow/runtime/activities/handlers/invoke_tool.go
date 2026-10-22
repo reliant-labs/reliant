@@ -10,7 +10,6 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	cfgpkg "github.com/reliant-labs/reliant/internal/config"
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
@@ -43,7 +42,7 @@ type InvokeToolActivity struct {
 }
 
 // NewInvokeToolActivity creates a new InvokeToolActivity.
-func NewInvokeToolActivity(repo db.Repository, toolExecutor toolexec.ToolExecutor) *InvokeToolActivity {
+func NewInvokeToolActivity(repo ExecuteToolsStore, toolExecutor toolexec.ToolExecutor) *InvokeToolActivity {
 	return &InvokeToolActivity{
 		executeTools: NewExecuteToolsActivity(repo, toolExecutor),
 	}

@@ -62,12 +62,12 @@ const DefaultCompactionThreshold = models.UnknownModelCompactionFloor
 // This is a thin wrapper around threads.Service.SaveMessage that handles
 // Temporal-specific concerns (activity info, idempotency key construction).
 type SaveMessageActivity struct {
-	repo    db.Repository
+	repo    SaveMessageStore
 	threads *threads.Service
 }
 
 // NewSaveMessageActivity creates a new SaveMessageActivity
-func NewSaveMessageActivity(repo db.Repository) *SaveMessageActivity {
+func NewSaveMessageActivity(repo SaveMessageStore) *SaveMessageActivity {
 	return &SaveMessageActivity{
 		repo:    repo,
 		threads: threads.NewService(repo),

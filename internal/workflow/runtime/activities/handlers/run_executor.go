@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm/tools/names"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
@@ -161,7 +160,7 @@ func (e *RemoteRunExecutor) ExecuteCommand(
 }
 
 // resolveRunExecutorContext loads the IDs needed for remote execution from the DB.
-func resolveRunExecutorContext(ctx context.Context, repo db.Repository, chatID string) (RunExecutorContext, error) {
+func resolveRunExecutorContext(ctx context.Context, repo RunExecutorContextStore, chatID string) (RunExecutorContext, error) {
 	chat, err := repo.GetChat(ctx, chatID)
 	if err != nil {
 		return RunExecutorContext{}, fmt.Errorf("failed to get chat: %w", err)

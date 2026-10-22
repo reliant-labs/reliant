@@ -12,21 +12,25 @@ import (
 )
 
 // idCapturingRepo records the entity id each chat_update is written under —
-// the field both dedup paths collapse on.
+// the field both dedup paths collapse on — and its decoded payload.
 type idCapturingRepo struct {
-	db.Repository
+	MockWorkflowErrorWriter
 	entityIDs []string
 	payloads  []map[string]interface{}
 }
 
-func (r *idCapturingRepo) CreateChatUpdate(_ context.Context, _ string, _ db.UpdateType, entityID string, data string) error {
-	r.entityIDs = append(r.entityIDs, entityID)
-	var payload map[string]interface{}
-	if err := json.Unmarshal([]byte(data), &payload); err != nil {
-		return err
+func newIDCapturingRepo() *idCapturingRepo {
+	r := &idCapturingRepo{}
+	r.CreateChatUpdateFunc = func(_ context.Context, _ string, _ db.UpdateType, entityID string, data string) error {
+		r.entityIDs = append(r.entityIDs, entityID)
+		var payload map[string]interface{}
+		if err := json.Unmarshal([]byte(data), &payload); err != nil {
+			return err
+		}
+		r.payloads = append(r.payloads, payload)
+		return nil
 	}
-	r.payloads = append(r.payloads, payload)
-	return nil
+	return r
 }
 
 // An explicit ErrorID must be the id the row is written under, in BOTH the
@@ -35,7 +39,7 @@ func (r *idCapturingRepo) CreateChatUpdate(_ context.Context, _ string, _ db.Upd
 // only one of them would collapse in one place and duplicate in the other.
 func TestWriteWorkflowErrorUsesExplicitID(t *testing.T) {
 	t.Parallel()
-	repo := &idCapturingRepo{}
+	repo := newIDCapturingRepo()
 
 	const explicit = "activity-error-wf-1-11114"
 	got, err := WriteWorkflowError(context.Background(), repo, WorkflowErrorInput{
@@ -60,7 +64,7 @@ func TestWriteWorkflowErrorUsesExplicitID(t *testing.T) {
 // uuid. Breaking this would silently stop reporting workflow deaths.
 func TestWriteWorkflowErrorMintsIDWhenUnset(t *testing.T) {
 	t.Parallel()
-	repo := &idCapturingRepo{}
+	repo := newIDCapturingRepo()
 
 	first, err := WriteWorkflowError(context.Background(), repo, WorkflowErrorInput{
 		ChatID:       "chat-1",

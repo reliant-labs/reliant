@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
 	"go.temporal.io/sdk/activity"
 )
@@ -24,11 +23,11 @@ type ValidateThreadOwnershipOutput struct {
 
 // ValidateThreadOwnershipActivity validates that a thread belongs to the expected chat
 type ValidateThreadOwnershipActivity struct {
-	repo db.Repository
+	repo ValidateThreadOwnershipStore
 }
 
 // NewValidateThreadOwnershipActivity creates a new ValidateThreadOwnershipActivity
-func NewValidateThreadOwnershipActivity(repo db.Repository) *ValidateThreadOwnershipActivity {
+func NewValidateThreadOwnershipActivity(repo ValidateThreadOwnershipStore) *ValidateThreadOwnershipActivity {
 	return &ValidateThreadOwnershipActivity{repo: repo}
 }
 

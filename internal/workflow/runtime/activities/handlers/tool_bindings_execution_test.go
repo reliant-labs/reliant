@@ -109,7 +109,7 @@ func (r *daemonRunningRouter) received(toolCallID string) (string, bool) {
 
 // workerExecutor is the worker's executor as the worker root wires it (internal/app NewRemoteExecutor): daemon
 // tools go to the router, server tools run in-process on the worker's factory.
-func workerExecutor(router toolexec.DaemonRouter, repo db.Repository) toolexec.ToolExecutor {
+func workerExecutor(router toolexec.DaemonRouter, repo *db.Repo) toolexec.ToolExecutor {
 	executor := toolexec.NewRemoteExecutor(router)
 	executor.SetServerExecutor(toolexec.NewLocalToolExecutor(tools.NewToolsFactory(&tools.ToolsOptions{Repo: repo})))
 	return executor
@@ -151,7 +151,7 @@ func (e *pinnedEndpoint) served() []*http.Request {
 	return append([]*http.Request(nil), e.requests...)
 }
 
-func requireFailedRow(t *testing.T, repo db.Repository, toolCallID string) {
+func requireFailedRow(t *testing.T, repo *db.Repo, toolCallID string) {
 	t.Helper()
 	row, err := repo.GetToolCall(context.Background(), toolCallID)
 	require.NoError(t, err)

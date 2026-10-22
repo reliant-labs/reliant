@@ -18,7 +18,7 @@ import (
 // that is where an owner can be forgotten: a store test that sets OwnerUserID
 // itself passes whether or not any real write site does.
 
-func requireOwner(t *testing.T, repo db.Repository, runID, want string) {
+func requireOwner(t *testing.T, repo *db.Repo, runID, want string) {
 	t.Helper()
 	run, err := repo.GetWorkflow(context.Background(), runID)
 	require.NoError(t, err)

@@ -12,15 +12,17 @@ import (
 	"github.com/reliant-labs/reliant/internal/toolbindings"
 )
 
-// settingsOnlyRepo is a db.Repository that implements only the settings read
-// the binding resolver performs. Embedding the interface means any other
+// settingsOnlyRepo is a CallLLMStore that implements only the settings read
+// the binding resolver performs. Embedding the (nil) role means any other
 // method panics, which is the assertion: resolving bindings must not reach for
-// anything else, and no database is required to prove it.
+// anything else, and no database is required to prove it. A generated mock
+// would answer such a call with an error the resolver swallows, so it could
+// not make this assertion.
 //
 // This is not the postgres harness on purpose. A package that reports "ok"
 // having t.Skip'd every case is indistinguishable from one that passed.
 type settingsOnlyRepo struct {
-	db.Repository
+	CallLLMStore
 	rows []*db.Setting
 	err  error
 	// asked records the pattern the resolver queried with.

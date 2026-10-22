@@ -2,7 +2,6 @@
 package tools
 
 import (
-	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -40,16 +39,6 @@ Withdrawing closes the question: it leaves the user's inbox and its card in the 
 Only async questions can be withdrawn, and only those in your own thread or a sub-agent's below you. A blocking question cannot be: its agent is waiting on the user's answer, and only the user (or that agent finishing) can close it. Find question ids with list_pending_questions.`
 )
 
-// pendingQuestionLister is list_pending_questions' store.
-type pendingQuestionLister interface {
-	ListPendingQuestionsInThreadSubtree(ctx context.Context, chatID, threadID string) ([]db.SubtreeQuestion, error)
-}
-
-// questionWithdrawer is withdraw_question's store.
-type questionWithdrawer interface {
-	WithdrawAsyncQuestion(ctx context.Context, chatID, threadID, questionID, reason string) (db.WithdrawOutcome, error)
-}
-
 // ListPendingQuestionsParams has no fields: the scope is the caller's
 // subtree, by construction.
 type ListPendingQuestionsParams struct{}
@@ -80,11 +69,11 @@ type ListPendingQuestionsResponseMetadata struct {
 }
 
 type listPendingQuestionsTool struct {
-	repo pendingQuestionLister
+	repo listPendingQuestionsStore
 }
 
 // NewListPendingQuestionsTool returns list_pending_questions.
-func NewListPendingQuestionsTool(repo pendingQuestionLister) Tool {
+func NewListPendingQuestionsTool(repo listPendingQuestionsStore) Tool {
 	return NewToolWrapper[ListPendingQuestionsParams, ToolResponse](&listPendingQuestionsTool{repo: repo})
 }
 
@@ -185,11 +174,11 @@ type WithdrawQuestionParams struct {
 }
 
 type withdrawQuestionTool struct {
-	repo questionWithdrawer
+	repo withdrawQuestionStore
 }
 
 // NewWithdrawQuestionTool returns withdraw_question.
-func NewWithdrawQuestionTool(repo questionWithdrawer) Tool {
+func NewWithdrawQuestionTool(repo withdrawQuestionStore) Tool {
 	return NewToolWrapper[WithdrawQuestionParams, ToolResponse](&withdrawQuestionTool{repo: repo})
 }
 

@@ -36,11 +36,11 @@ type WorkflowCheckpointOutput struct {
 // lifecycle activity (like WorkflowStatus): pure bookkeeping that must not
 // flip the workflow's running state.
 type WorkflowCheckpointActivity struct {
-	repo db.Repository
+	repo WorkflowCheckpointStore
 }
 
 // NewWorkflowCheckpointActivity creates a new WorkflowCheckpointActivity.
-func NewWorkflowCheckpointActivity(repo db.Repository) *WorkflowCheckpointActivity {
+func NewWorkflowCheckpointActivity(repo WorkflowCheckpointStore) *WorkflowCheckpointActivity {
 	return &WorkflowCheckpointActivity{repo: repo}
 }
 

@@ -8,7 +8,6 @@ import (
 	"time"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
 )
 
@@ -40,7 +39,7 @@ const transitionChatMessage = "Project ready — continuing in interactive chat.
 //
 // Returns the transition target ref when the chat was switched ("" when it was
 // not).
-func TransitionChatOnCompletion(ctx context.Context, repo db.Repository, chatID, completedWorkflowName string) (string, error) {
+func TransitionChatOnCompletion(ctx context.Context, repo ChatTransitioner, chatID, completedWorkflowName string) (string, error) {
 	if repo == nil || chatID == "" || completedWorkflowName == "" {
 		return "", nil
 	}
@@ -81,7 +80,7 @@ func TransitionChatOnCompletion(ctx context.Context, repo db.Repository, chatID,
 // `transition_to` field. Any load/parse failure is a logged no-op ("") —
 // transition is best-effort relative to completion and must never wedge the
 // status write.
-func loadTransitionTarget(ctx context.Context, repo db.Repository, chatID, completedWorkflowName string) string {
+func loadTransitionTarget(ctx context.Context, repo LoadWorkflowStore, chatID, completedWorkflowName string) string {
 	loader := NewLoadWorkflowActivity(repo)
 
 	// Builtins resolve from the embedded FS and need no chat/project context;
@@ -114,7 +113,7 @@ func loadTransitionTarget(ctx context.Context, repo db.Repository, chatID, compl
 // the frontend streams, and callers already emit a workflow-executions refetch on
 // completion. Failures are logged, never surfaced — the authoritative state
 // switch already committed in TransitionChatOnCompletion.
-func EmitTransitionMessage(ctx context.Context, repo db.Repository, chatID, thread, workflowID, target string) {
+func EmitTransitionMessage(ctx context.Context, repo TransitionMessageWriter, chatID, thread, workflowID, target string) {
 	if repo == nil || chatID == "" || thread == "" {
 		return
 	}

@@ -82,7 +82,7 @@ func (r *placementRecordingRouter) daemonsFor(commandType string) []string {
 }
 
 type activityPlacementFixture struct {
-	repo      db.Repository
+	repo      *db.Repo
 	router    *placementRecordingRouter
 	projectID string
 	userID    string

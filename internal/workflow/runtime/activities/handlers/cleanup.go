@@ -43,11 +43,11 @@ type CleanupOutput struct {
 // - Cleaning up any pending tool execution requests
 // - Notifying the UI of the cancelled state
 type CleanupActivity struct {
-	repo db.Repository
+	repo CleanupStore
 }
 
 // NewCleanupActivity creates a new CleanupActivity
-func NewCleanupActivity(repo db.Repository) *CleanupActivity {
+func NewCleanupActivity(repo CleanupStore) *CleanupActivity {
 	return &CleanupActivity{
 		repo: repo,
 	}

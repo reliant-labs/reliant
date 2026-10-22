@@ -50,7 +50,7 @@ func findResultFor(msgs []message.Message, toolCallID string) (message.ToolResul
 
 // createToolCallBlockOnMessage attaches an extra tool_call block to an existing
 // assistant message, for modelling a multi-tool batch in one turn.
-func createToolCallBlockOnMessage(t *testing.T, repo db.Repository, messageID, toolCallID, toolName, toolInput string, position int) {
+func createToolCallBlockOnMessage(t *testing.T, repo *db.Repo, messageID, toolCallID, toolName, toolInput string, position int) {
 	t.Helper()
 	require.NoError(t, repo.CreateContentBlock(context.Background(), &db.MessageContentBlock{
 		ID:         uuid.New().String(),
@@ -67,7 +67,7 @@ func createToolCallBlockOnMessage(t *testing.T, repo db.Repository, messageID, t
 
 // createToolResultBlockOnMessage attaches an extra tool_result block to an
 // existing tool message, for a partially-answered batch.
-func createToolResultBlockOnMessage(t *testing.T, repo db.Repository, messageID, toolCallID, content string, isError bool, position int) {
+func createToolResultBlockOnMessage(t *testing.T, repo *db.Repo, messageID, toolCallID, content string, isError bool, position int) {
 	t.Helper()
 	require.NoError(t, repo.CreateContentBlock(context.Background(), &db.MessageContentBlock{
 		ID:         uuid.New().String(),

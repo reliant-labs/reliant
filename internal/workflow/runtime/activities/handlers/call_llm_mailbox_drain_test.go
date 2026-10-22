@@ -31,7 +31,7 @@ import (
 
 // queueHumanMessage puts a human message in a thread's mailbox, exactly as
 // SendAgentMessage does.
-func queueHumanMessage(t *testing.T, repo db.Repository, chatID, thread, body string) string {
+func queueHumanMessage(t *testing.T, repo *db.Repo, chatID, thread, body string) string {
 	t.Helper()
 	id := uuid.New().String()
 	require.NoError(t, repo.EnqueueAgentMessage(context.Background(), &db.AgentMessage{
@@ -49,7 +49,7 @@ func queueHumanMessage(t *testing.T, repo db.Repository, chatID, thread, body st
 
 // threadBodies returns the message bodies on a thread, oldest first. Text lives
 // in content blocks, not on the message row.
-func threadBodies(t *testing.T, repo db.Repository, chatID, thread string) []string {
+func threadBodies(t *testing.T, repo *db.Repo, chatID, thread string) []string {
 	t.Helper()
 	msgs, err := repo.ListMessages(context.Background(), chatID, db.MessageListOptions{})
 	require.NoError(t, err)

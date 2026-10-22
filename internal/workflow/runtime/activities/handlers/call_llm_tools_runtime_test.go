@@ -638,7 +638,7 @@ func TestCallLLMActivity_SpawnManagementToolsOfferedOnceThreadHasSpawned(t *test
 // seedSpawnedChild records that parentThread spawned a sub-agent that started:
 // the child's thread and workflow, and the backgrounded spawn tool_calls row
 // that names it — the durable state spawnHistory reads.
-func seedSpawnedChild(t *testing.T, repo db.Repository, chatID, parentThread string) {
+func seedSpawnedChild(t *testing.T, repo *db.Repo, chatID, parentThread string) {
 	t.Helper()
 	ctx := context.Background()
 	now := time.Now()
@@ -663,7 +663,7 @@ func seedSpawnedChild(t *testing.T, repo db.Repository, chatID, parentThread str
 // whose root thread forks source's root at its latest message — and returns
 // the branch. Spawns source issued before that message are the branch's
 // inherited sub-agents.
-func branchAtLatestMessage(t *testing.T, repo db.Repository, source *db.Chat, branchID string) *db.Chat {
+func branchAtLatestMessage(t *testing.T, repo *db.Repo, source *db.Chat, branchID string) *db.Chat {
 	t.Helper()
 	ctx := context.Background()
 	forkPoint, err := repo.GetLatestMessageInThread(ctx, source.ID)

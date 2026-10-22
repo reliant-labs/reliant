@@ -143,8 +143,7 @@ func TestExecuteTools_GitWorktreeAddRunsWithASuggestion(t *testing.T) {
 	chat := h.CreateTestChat(ctx, "chat-"+uuid.NewString(), project.ID, userID)
 	h.CreateTestUserMessage(ctx, chat.ID, chat.ID)
 
-	repo, ok := h.Repo().(*db.Repo)
-	require.True(t, ok, "the helper's repository is %T", h.Repo())
+	repo := h.Repo()
 	provider := cfgpkg.NewCachedStoredConfigProvider(configadapter.NewRepoConfigStore(repo), repo, cfgpkg.DefaultParsedConfigCacheBytes)
 	executor := &shellOutputExecutor{echo: "Preparing worktree (new branch 'x')\n"}
 	activity := NewExecuteToolsActivity(h.Repo(), executor).WithConfigProvider(provider)

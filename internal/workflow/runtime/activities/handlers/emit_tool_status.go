@@ -45,10 +45,10 @@ type EmitToolCallStatusOutput struct {
 // Used by spawn inline workflows to report per-tool-call status independently
 // of the regular ExecuteTools activity batch.
 type EmitToolCallStatusActivity struct {
-	repo db.Repository
+	repo EmitToolCallStatusStore
 }
 
-func NewEmitToolCallStatusActivity(repo db.Repository) *EmitToolCallStatusActivity {
+func NewEmitToolCallStatusActivity(repo EmitToolCallStatusStore) *EmitToolCallStatusActivity {
 	return &EmitToolCallStatusActivity{repo: repo}
 }
 

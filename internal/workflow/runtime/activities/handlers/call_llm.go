@@ -122,7 +122,7 @@ type streamingToolCall struct {
 // CallLLMActivity implements the call_llm activity.
 // This activity streams LLM response by content blocks and is separate from message saving
 type CallLLMActivity struct {
-	repo           db.Repository
+	repo           CallLLMStore
 	hub            streaming.StreamingHub
 	toolsFactory   *tools.ToolsFactory
 	configProvider cfgpkg.ConfigProvider
@@ -186,7 +186,7 @@ func (a *CallLLMActivity) localModelSpec(preferDaemonID string, noMachine bool) 
 
 // NewCallLLMActivity creates a new CallLLMActivity.
 // The optional variadic arguments accept a cfgpkg.ConfigProvider and/or a drivers.DriverResolver.
-func NewCallLLMActivity(repo db.Repository, hub streaming.StreamingHub, toolsFactory *tools.ToolsFactory, cfgProvider cfgpkg.ConfigProvider, resolver drivers.DriverResolver, mcpBinder toolexec.MCPContextBinder) *CallLLMActivity {
+func NewCallLLMActivity(repo CallLLMStore, hub streaming.StreamingHub, toolsFactory *tools.ToolsFactory, cfgProvider cfgpkg.ConfigProvider, resolver drivers.DriverResolver, mcpBinder toolexec.MCPContextBinder) *CallLLMActivity {
 	return &CallLLMActivity{
 		repo:           repo,
 		hub:            hub,
