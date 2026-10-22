@@ -41,6 +41,7 @@ import (
 	"fmt"
 
 	"github.com/reliant-labs/forge/pkg/orm"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/gitremote"
@@ -72,7 +73,7 @@ func InsertProject(ctx context.Context, db orm.Context, p *core.Project) error {
 func GetProject(ctx context.Context, db orm.Context, id string) (*core.Project, error) {
 	row, err := GetProjectByID(ctx, db, id)
 	if errors.Is(err, orm.ErrNoRows) {
-		return nil, fmt.Errorf("project not found: %s", id)
+		return nil, fmt.Errorf("%w: %s", svcerr.NotFound("project"), id)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to get project: %w", err)
@@ -88,7 +89,7 @@ func GetProjectByPath(ctx context.Context, db orm.Context, path string) (*core.P
 		return nil, fmt.Errorf("failed to get project by path: %w", err)
 	}
 	if p == nil {
-		return nil, fmt.Errorf("project not found: %s", path)
+		return nil, fmt.Errorf("%w: %s", svcerr.NotFound("project"), path)
 	}
 	return p, nil
 }
@@ -101,7 +102,7 @@ func GetProjectByPathAndUser(ctx context.Context, db orm.Context, path, userID s
 		return nil, fmt.Errorf("failed to get project by path and user: %w", err)
 	}
 	if p == nil {
-		return nil, fmt.Errorf("project not found: %s", path)
+		return nil, fmt.Errorf("%w: %s", svcerr.NotFound("project"), path)
 	}
 	return p, nil
 }
@@ -117,7 +118,7 @@ func GetProjectByRemoteURLAndUser(ctx context.Context, db orm.Context, remoteURL
 		return nil, fmt.Errorf("failed to get project by remote_url and user: %w", err)
 	}
 	if p == nil {
-		return nil, fmt.Errorf("project not found for remote_url: %s", remoteURL)
+		return nil, fmt.Errorf("%w for remote_url: %s", svcerr.NotFound("project"), remoteURL)
 	}
 	return p, nil
 }

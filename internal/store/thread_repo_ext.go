@@ -48,17 +48,15 @@ import (
 )
 
 // The threads queries (P5b L1b). A by-key miss is reported as a wrapped
-// sql.ErrNoRows, the answer the original queries gave: internal/threads tells a
-// missing thread or context window from a failed read with
-// errors.Is(err, sql.ErrNoRows).
+// missing(entity): svcerr.NotFound for a handler, and still
+// errors.Is(err, sql.ErrNoRows), the answer the original queries gave:
+// internal/threads tells a missing thread or context window from a failed read
+// with it.
 
-// noRows wraps a by-key miss (every generated miss is errors.Is
-// sql.ErrNoRows) as a bare sql.ErrNoRows under what.
-func noRows(what string, err error) error {
-	if errors.Is(err, sql.ErrNoRows) {
-		return fmt.Errorf("%s: %w", what, sql.ErrNoRows)
-	}
-	return fmt.Errorf("%s: %w", what, err)
+// noRows wraps err under what, classifying a by-key miss (every generated
+// miss, and a raw Scan's sql.ErrNoRows) as missing(entity).
+func noRows(what, entity string, err error) error {
+	return fmt.Errorf("%s: %w", what, classifyMissing(err, entity))
 }
 
 // InsertThread stores a new thread and returns it as stored. An unset origin
@@ -76,7 +74,7 @@ func InsertThread(ctx context.Context, db orm.Context, t *core.Thread) (*core.Th
 func GetThread(ctx context.Context, db orm.Context, id string) (*core.Thread, error) {
 	row, err := GetThreadByID(ctx, db, id)
 	if err != nil {
-		return nil, noRows("failed to get thread", err)
+		return nil, noRows("failed to get thread", "thread", err)
 	}
 	return threadFromRow(row), nil
 }
@@ -87,7 +85,7 @@ func GetThreadByWorkflow(ctx context.Context, db orm.Context, workflowID string)
 	row := new(Thread)
 	err := db.Bun().NewSelect().Model(row).Where("workflow_id = ?", workflowID).Limit(1).Scan(ctx)
 	if err != nil {
-		return nil, noRows("failed to get thread by workflow", err)
+		return nil, noRows("failed to get thread by workflow", "thread", err)
 	}
 	return threadFromRow(row), nil
 }
@@ -103,7 +101,7 @@ func GetRootThread(ctx context.Context, db orm.Context, chatID string) (*core.Th
 		Limit(1).
 		Scan(ctx)
 	if err != nil {
-		return nil, noRows("failed to get root thread", err)
+		return nil, noRows("failed to get root thread", "thread", err)
 	}
 	return threadFromRow(row), nil
 }
@@ -121,7 +119,7 @@ FROM threads t
 LEFT JOIN threads pt ON t.parent_thread_id = pt.id
 WHERE t.id = ?0`, id).Scan(ctx, &row)
 	if err != nil {
-		return nil, nil, noRows("failed to get thread with parent", err)
+		return nil, nil, noRows("failed to get thread with parent", "thread", err)
 	}
 	return threadFromRow(&row.Thread), row.ParentChatID, nil
 }
@@ -174,7 +172,7 @@ func CountThreadsInConversation(ctx context.Context, db orm.Context, chatID stri
 // miss is a wrapped sql.ErrNoRows.
 func updateThread(ctx context.Context, db orm.Context, row *Thread, what string, fields ...string) (*core.Thread, error) {
 	if err := UpdateThreadMasked(ctx, db, row, fields); err != nil {
-		return nil, noRows(what, err)
+		return nil, noRows(what, "thread", err)
 	}
 	return threadFromRow(row), nil
 }

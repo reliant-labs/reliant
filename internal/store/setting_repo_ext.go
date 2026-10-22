@@ -41,6 +41,7 @@ import (
 	"fmt"
 
 	"github.com/reliant-labs/forge/pkg/orm"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
@@ -98,7 +99,7 @@ func GetSetting(ctx context.Context, db orm.Context, userID string, projectID *s
 		return nil, fmt.Errorf("failed to get setting: %w", err)
 	}
 	if len(rows) == 0 {
-		return nil, fmt.Errorf("setting not found: %s", key)
+		return nil, fmt.Errorf("%w: %s", svcerr.NotFound("setting"), key)
 	}
 	return settingToCore(rows[0]), nil
 }

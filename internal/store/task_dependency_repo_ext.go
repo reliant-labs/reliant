@@ -72,7 +72,7 @@ func InsertTaskDependency(ctx context.Context, db orm.Context, d *core.TaskDepen
 func GetTaskDependency(ctx context.Context, db orm.Context, id string) (*core.TaskDependency, error) {
 	row, err := GetTaskDependencyByID(ctx, db, id)
 	if errors.Is(err, svcerr.ErrNotFound) {
-		return nil, fmt.Errorf("task dependency not found: %s", id)
+		return nil, fmt.Errorf("%w: %s", svcerr.NotFound("task dependency"), id)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to get task dependency: %w", err)

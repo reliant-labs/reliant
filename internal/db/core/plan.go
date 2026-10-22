@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"fmt"
 	"time"
+
+	"github.com/reliant-labs/forge/pkg/svcerr"
 )
 
 // ErrPlanNotFound reports that a thread has no plan yet.
@@ -15,7 +17,10 @@ import (
 // path, so an agent that had simply not created a plan was told
 // "Failed to find plan: no plans found for thread <uuid>" — which names no
 // remedy, and was observed being retried eight times in a row.
-var ErrPlanNotFound = fmt.Errorf("plan not found: %w", sql.ErrNoRows)
+//
+// It is also a svcerr NotFound, so a handler's svcerr.Wrap answers
+// CodeNotFound "plan not found"; its text is unchanged.
+var ErrPlanNotFound = fmt.Errorf("%w: %w", svcerr.NotFound("plan"), sql.ErrNoRows)
 
 // Plan represents a high-level project plan.
 type Plan struct {

@@ -58,8 +58,8 @@ type ConnectorClientBindingExtra struct {
 // client acts through.
 
 // GetLiveConnectorClientBinding returns the connector a client was authorized
-// to use, or orm.ErrNoRows. Only a live grant resolves: a binding to a
-// revoked or expired connector is absent.
+// to use; a miss is svcerr.NotFound (and orm.ErrNoRows). Only a live grant
+// resolves: a binding to a revoked or expired connector is absent.
 func GetLiveConnectorClientBinding(ctx context.Context, db orm.Context, userID, clientID string) (*ConnectorClientBinding, error) {
 	var row ConnectorClientBinding
 	err := db.Bun().NewSelect().Model(&row).
@@ -70,7 +70,7 @@ func GetLiveConnectorClientBinding(ctx context.Context, db orm.Context, userID, 
 		Where("(g.expires_at IS NULL OR g.expires_at > now())").
 		Scan(ctx)
 	if err != nil {
-		return nil, err
+		return nil, classifyMissing(err, "connector client binding")
 	}
 	return &row, nil
 }

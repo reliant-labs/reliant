@@ -3,8 +3,9 @@ package core
 
 import (
 	"context"
-	"errors"
 	"time"
+
+	"github.com/reliant-labs/forge/pkg/svcerr"
 )
 
 // A RunEvent is one transition of a run that another run may react to: the
@@ -29,7 +30,7 @@ const (
 )
 
 // ErrRunEventNotFound is returned when a run event lookup misses.
-var ErrRunEventNotFound = errors.New("run event not found")
+var ErrRunEventNotFound = svcerr.NotFound("run event")
 
 // RunEvent is one outbox row.
 type RunEvent struct {

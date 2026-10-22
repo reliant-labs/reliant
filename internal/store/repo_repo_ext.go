@@ -41,6 +41,7 @@ import (
 	"fmt"
 
 	"github.com/reliant-labs/forge/pkg/orm"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/gitremote"
@@ -77,7 +78,7 @@ func InsertRepo(ctx context.Context, db orm.Context, r *core.Repo) error {
 func GetRepo(ctx context.Context, db orm.Context, id string) (*core.Repo, error) {
 	row, err := GetRepoByID(ctx, db, id)
 	if errors.Is(err, orm.ErrNoRows) {
-		return nil, fmt.Errorf("repo not found: %s", id)
+		return nil, fmt.Errorf("%w: %s", svcerr.NotFound("repo"), id)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to get repo: %w", err)
@@ -96,7 +97,7 @@ func GetRepoByProjectAndPath(ctx context.Context, db orm.Context, projectID, rel
 		return nil, fmt.Errorf("failed to get repo by project+path: %w", err)
 	}
 	if len(rows) == 0 {
-		return nil, fmt.Errorf("repo not found: project=%s path=%s", projectID, relativePath)
+		return nil, fmt.Errorf("%w: project=%s path=%s", svcerr.NotFound("repo"), projectID, relativePath)
 	}
 	return repoToCore(rows[0]), nil
 }

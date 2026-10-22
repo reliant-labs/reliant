@@ -2,16 +2,19 @@ package core
 
 import (
 	"encoding/json"
-	"errors"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 )
 
 // ErrChatNotFound is returned by chat reads when no row matches. Anything else
 // a chat read returns is a store failure, which callers must not mistake for
 // absence: "not found" is final, a database error is worth retrying.
-var ErrChatNotFound = errors.New("chat not found")
+//
+// It is a svcerr NotFound, so a handler's svcerr.Wrap answers CodeNotFound
+// "chat not found" — and errors.Is(err, ErrChatNotFound) still holds.
+var ErrChatNotFound = svcerr.NotFound("chat")
 
 // ChatState represents the notification/lifecycle state of a chat.
 type ChatState = reliantv1.ChatState

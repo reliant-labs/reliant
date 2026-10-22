@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/observe/natsotel"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 
 	"connectrpc.com/connect"
 	"github.com/nats-io/nats.go"
@@ -428,7 +429,7 @@ func routableDaemonID(userID string, selector *DaemonSelector, rec daemonRecord,
 		case recordSuspended:
 			logMachineState("suspended", userID, "[DaemonRouter] daemon is suspended; not waking it from tool-time resolution",
 				append([]any{"user_id", userID, "daemon_id", rec.id}, selectorLogFields(selector)...)...)
-			return "", fmt.Errorf("the machine for this request is suspended and will wake when you next message it: %w", ErrDaemonSuspended)
+			return "", machineState("the machine for this request is suspended and will wake when you next message it", ErrDaemonSuspended)
 		}
 		// recordStarting falls through to the "still starting" error below.
 	}
@@ -460,17 +461,17 @@ func routableDaemonID(userID string, selector *DaemonSelector, rec daemonRecord,
 		logMachineState("starting", userID, "[DaemonRouter] daemon record exists but is not routable yet",
 			append([]any{"user_id", userID}, selectorLogFields(selector)...)...)
 		if selector != nil {
-			return "", fmt.Errorf("the machine for this request is still starting: %w", ErrDaemonPending)
+			return "", machineState("the machine for this request is still starting", ErrDaemonPending)
 		}
-		return "", fmt.Errorf("your machine is still starting: %w", ErrDaemonPending)
+		return "", machineState("your machine is still starting", ErrDaemonPending)
 	}
 
 	logMachineState("none", userID, "[DaemonRouter] no daemon could be resolved",
 		append([]any{"user_id", userID}, selectorLogFields(selector)...)...)
 	if selector != nil {
-		return "", fmt.Errorf("%w: the machine this request asked for is not connected", ErrNoDaemon)
+		return "", noMachine("the machine this request asked for is not connected")
 	}
-	return "", fmt.Errorf("%w: no machine is connected to your account yet", ErrNoDaemon)
+	return "", noMachine("no machine is connected to your account yet")
 }
 
 // machineStateLogWindow is how often the router writes one user's
@@ -659,7 +660,7 @@ func (r *NATSDaemonRouter) resume(ctx context.Context, userID string, selector *
 		return false, err
 	}
 	if err := r.resumer.ResumeDaemon(ctx, token, daemonID); err != nil {
-		if connect.CodeOf(err) == connect.CodeFailedPrecondition {
+		if svcerr.Code(err) == connect.CodeFailedPrecondition {
 			logging.InfoContext(ctx, "[DaemonRouter] control plane does not hold the daemon as suspended; treating it as awake",
 				"user_id", userID, "daemon_id", daemonID, "error", err)
 			return false, nil
@@ -1191,7 +1192,7 @@ func (r *NATSDaemonRouter) sendDaemonCommandData(ctx context.Context, userID, da
 			// said nothing.
 			return nil, fmt.Errorf("daemon command %q failed: %s", commandType, resp.ErrorMessage)
 		}
-		return nil, fmt.Errorf("daemon command %q failed: %w", commandType, daemonReportedFailure(resp.ErrorMessage))
+		return nil, DaemonReportedFailure(commandType, resp.ErrorMessage)
 	}
 	return resp.Payload, nil
 }
@@ -1206,6 +1207,26 @@ type daemonReportedFailure string
 
 func (e daemonReportedFailure) Error() string        { return string(e) }
 func (e daemonReportedFailure) Is(target error) bool { return target == errDaemonReportedFailure }
+
+// DaemonReportedFailure is the error the router returns for a daemon command
+// its daemon answered with failure text, for a stand-in router (a test fake)
+// that must fail the way the real one does.
+func DaemonReportedFailure(commandType, text string) error {
+	return fmt.Errorf("daemon command %q failed: %w", commandType, daemonReportedFailure(text))
+}
+
+// DaemonReportedText returns the failure a daemon command's own daemon
+// answered with — the daemon's words, from the user's own machine (a git
+// rejection, a missing path) — and whether err carries one. A failure of the
+// round trip itself (NATS, the gateway, resolution) has none: that text names
+// our plumbing, not anything the user can act on.
+func DaemonReportedText(err error) (string, bool) {
+	var reported daemonReportedFailure
+	if errors.As(err, &reported) {
+		return string(reported), true
+	}
+	return "", false
+}
 
 func (r *NATSDaemonRouter) SendToolRequestSync(ctx context.Context, userID string, request *ToolExecutionRequest) (*ToolExecutionResponse, error) {
 	return r.sendToolRequestSync(ctx, userID, request, nil, "tools.request.sync", "resolving daemon for sync request")

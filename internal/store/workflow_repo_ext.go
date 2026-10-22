@@ -63,7 +63,7 @@ func LoadWorkflow(ctx context.Context, db orm.Context, id string) (*core.Workflo
 	row, err := GetWorkflowByID(ctx, db, id)
 	if err != nil {
 		if svcerr.IsNotFound(err) {
-			return nil, fmt.Errorf("workflow not found: %s", id)
+			return nil, fmt.Errorf("%w: %s", svcerr.NotFound("workflow"), id)
 		}
 		return nil, err
 	}
@@ -215,12 +215,12 @@ func setWorkflowStatus(q *bun.UpdateQuery, status core.WorkflowStatus) *bun.Upda
 }
 
 // UpdateWorkflowStatus moves a workflow to status. A missing workflow is
-// sql.ErrNoRows.
+// svcerr.NotFound (and sql.ErrNoRows).
 func UpdateWorkflowStatus(ctx context.Context, db orm.Context, id string, status core.WorkflowStatus) error {
 	res, err := setWorkflowStatus(db.Bun().NewUpdate().Model((*Workflow)(nil)), status).
 		Where("id = ?", id).
 		Exec(ctx)
-	return requireOneRow(res, err)
+	return requireOneRow(res, err, "workflow")
 }
 
 // CompareAndSwapWorkflowStatus moves a workflow to newStatus only while it is
@@ -244,7 +244,7 @@ func CompareAndSwapWorkflowStatus(ctx context.Context, db orm.Context, id string
 // terminal node it reached; "" clears it. Written once at completion and
 // never reconciled from Temporal, unlike status: a graph that routes to its
 // `failed` node is a COMPLETED Temporal execution, so the verdict has nowhere
-// else to live. A missing workflow is sql.ErrNoRows.
+// else to live. A missing workflow is svcerr.NotFound (and sql.ErrNoRows).
 func SetWorkflowOutcome(ctx context.Context, db orm.Context, id, outcome string) error {
 	var stored *string
 	if outcome != "" {
@@ -254,7 +254,7 @@ func SetWorkflowOutcome(ctx context.Context, db orm.Context, id, outcome string)
 		Set("outcome = ?", stored).
 		Where("id = ?", id).
 		Exec(ctx)
-	return requireOneRow(res, err)
+	return requireOneRow(res, err, "workflow")
 }
 
 // RenamePendingWorkflow renames a workflow that has not started yet.
@@ -264,9 +264,9 @@ func RenamePendingWorkflow(ctx context.Context, db orm.Context, id, workflowName
 		Where("id = ?", id).
 		Where("state = ?", core.WorkflowStatePending).
 		Exec(ctx)
-	if err := requireOneRow(res, err); err != nil {
+	if err := requireOneRow(res, err, "workflow"); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return fmt.Errorf("cannot update workflow name: workflow not found or status is not pending")
+			return svcerr.FailedPrecondition("cannot update workflow name: workflow not found or status is not pending")
 		}
 		return err
 	}
@@ -497,9 +497,10 @@ func workflowToCore(row *Workflow) *core.Workflow {
 	return w
 }
 
-// requireOneRow turns an UPDATE that matched no row into sql.ErrNoRows, the
-// answer the :one queries these replace gave.
-func requireOneRow(res sql.Result, err error) error {
+// requireOneRow turns an UPDATE that matched no row into missing(entity):
+// svcerr.NotFound, and errors.Is(err, sql.ErrNoRows), the answer the :one
+// queries these replace gave.
+func requireOneRow(res sql.Result, err error, entity string) error {
 	if err != nil {
 		return err
 	}
@@ -508,7 +509,7 @@ func requireOneRow(res sql.Result, err error) error {
 		return err
 	}
 	if n == 0 {
-		return sql.ErrNoRows
+		return missing(entity)
 	}
 	return nil
 }

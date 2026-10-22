@@ -7,9 +7,10 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"strings"
 	"time"
+
+	"github.com/reliant-labs/forge/pkg/svcerr"
 )
 
 // AuthKind is how an account authenticates to its provider.
@@ -33,9 +34,9 @@ func (k AuthKind) Valid() bool {
 
 var (
 	// ErrProviderAccountNotFound covers a missing account and one owned by another user.
-	ErrProviderAccountNotFound = errors.New("provider account not found")
+	ErrProviderAccountNotFound = svcerr.NotFound("provider account")
 	// ErrInvalidAccountOrder: a reorder that is not a permutation of the user's accounts for the provider.
-	ErrInvalidAccountOrder = errors.New("account order must list each of the provider's accounts exactly once")
+	ErrInvalidAccountOrder = svcerr.InvalidArgument("account order must list each of the provider's accounts exactly once")
 )
 
 // ProviderAccount is one connected LLM credential. It carries no secrets.

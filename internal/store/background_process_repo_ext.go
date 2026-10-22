@@ -42,6 +42,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/orm"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/uptrace/bun"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -58,7 +59,7 @@ func InsertBackgroundProcess(ctx context.Context, db orm.Context, p *core.Backgr
 func GetBackgroundProcess(ctx context.Context, db orm.Context, id string) (*core.BackgroundProcess, error) {
 	row, err := GetBackgroundProcessByID(ctx, db, id)
 	if errors.Is(err, orm.ErrNoRows) {
-		return nil, errors.New("process not found")
+		return nil, svcerr.NotFound("process")
 	}
 	if err != nil {
 		return nil, err

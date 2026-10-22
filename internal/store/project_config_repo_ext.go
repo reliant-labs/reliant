@@ -48,8 +48,9 @@ import (
 )
 
 // A project has at most one config record (project_configs.project_id is
-// UNIQUE). Every read below returns sql.ErrNoRows, unwrapped, when the
-// project has none.
+// UNIQUE). Every read below returns missing("project config") when the
+// project has none: svcerr.NotFound, and errors.Is(err, sql.ErrNoRows) for
+// the callers that treat no record as an empty one.
 //
 // The whole row is the wrong read for anything that needs one part of it. It
 // carries every skill body and repo memory the daemon indexed, recursively
@@ -124,7 +125,7 @@ func GetProjectConfigRecord(ctx context.Context, db orm.Context, projectID strin
 		return nil, fmt.Errorf("failed to load project config record for project %s: %w", projectID, err)
 	}
 	if len(rows) == 0 {
-		return nil, sql.ErrNoRows
+		return nil, missing("project config")
 	}
 	row := rows[0]
 	return &core.ProjectConfigRecord{
@@ -162,7 +163,7 @@ func GetProjectConfigPushedAt(ctx context.Context, db orm.Context, projectID str
 		Limit(1).
 		Scan(ctx, &pushedAt)
 	if errors.Is(err, sql.ErrNoRows) {
-		return time.Time{}, sql.ErrNoRows
+		return time.Time{}, missing("project config")
 	}
 	if err != nil {
 		return time.Time{}, fmt.Errorf("failed to load config pushed_at for project %s: %w", projectID, err)
@@ -196,7 +197,7 @@ func GetProjectConfigVersion(ctx context.Context, db orm.Context, projectID stri
 		Limit(1).
 		Scan(ctx, &updatedAt, &xmin)
 	if errors.Is(err, sql.ErrNoRows) {
-		return "", sql.ErrNoRows
+		return "", missing("project config")
 	}
 	if err != nil {
 		return "", fmt.Errorf("failed to load config version for project %s: %w", projectID, err)
@@ -234,7 +235,7 @@ func projectConfigColumn(ctx context.Context, db orm.Context, projectID, column 
 		Limit(1).
 		Scan(ctx, &value)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil, sql.ErrNoRows
+		return nil, missing("project config")
 	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to load %s for project %s: %w", column, projectID, err)

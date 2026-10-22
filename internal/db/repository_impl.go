@@ -14,6 +14,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/reliant-labs/forge/pkg/orm"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/models"
@@ -467,7 +468,7 @@ func (r *Repo) GetMessage(ctx context.Context, id string) (*Message, error) {
 		return nil, fmt.Errorf("failed to get message: %w", err)
 	}
 	if msg == nil {
-		return nil, fmt.Errorf("message not found: %s", id)
+		return nil, fmt.Errorf("%w: %s", svcerr.NotFound("message"), id)
 	}
 	return msg, nil
 }
@@ -729,7 +730,7 @@ func (r *Repo) GetContentBlock(ctx context.Context, id string) (*MessageContentB
 		return nil, fmt.Errorf("failed to get content block: %w", err)
 	}
 	if block == nil {
-		return nil, fmt.Errorf("content block not found: %s", id)
+		return nil, fmt.Errorf("%w: %s", svcerr.NotFound("content block"), id)
 	}
 	return block, nil
 }
@@ -745,7 +746,7 @@ func (r *Repo) GetContentBlockByToolCallID(ctx context.Context, toolCallID strin
 		return nil, fmt.Errorf("failed to get content block by tool_call_id: %w", err)
 	}
 	if block == nil {
-		return nil, fmt.Errorf("tool call not found: %s", toolCallID)
+		return nil, fmt.Errorf("%w: %s", svcerr.NotFound("tool call"), toolCallID)
 	}
 	return block, nil
 }
@@ -1091,7 +1092,7 @@ func (r *Repo) DeleteProjectDaemon(ctx context.Context, projectID, daemonID stri
 // ErrDaemonOwnedByAnotherUser is returned when a daemon write names an id whose
 // row (or attachment) already belongs to a different user. Ownership is
 // immutable once the row exists.
-var ErrDaemonOwnedByAnotherUser = errors.New("daemon is owned by another user")
+var ErrDaemonOwnedByAnotherUser = svcerr.PermissionDenied("daemon is owned by another user")
 
 func (r *Repo) UpsertDaemon(ctx context.Context, daemon *Daemon) error {
 	if daemon == nil {
@@ -1126,7 +1127,7 @@ func (r *Repo) GetDaemon(ctx context.Context, id string) (*Daemon, error) {
 		return nil, fmt.Errorf("daemon ID cannot be empty")
 	}
 	d, err := store.GetDaemon(ctx, r.ORM(), id)
-	if err != nil && err != sql.ErrNoRows {
+	if err != nil && !svcerr.IsNotFound(err) {
 		return nil, fmt.Errorf("failed to get daemon %s: %w", id, err)
 	}
 	return d, err
@@ -1822,7 +1823,7 @@ func (r *Repo) GetStringOrDefault(ctx context.Context, userID string, projectID 
 	setting, err := r.GetSetting(ctx, userID, projectID, key)
 	if err != nil {
 		// If setting not found, return default
-		if err == sql.ErrNoRows || strings.Contains(err.Error(), "not found") {
+		if svcerr.IsNotFound(err) {
 			return defaultVal, nil
 		}
 		return "", err
@@ -1834,7 +1835,7 @@ func (r *Repo) GetBoolOrDefault(ctx context.Context, userID string, projectID *s
 	setting, err := r.GetSetting(ctx, userID, projectID, key)
 	if err != nil {
 		// If setting not found, return default
-		if err == sql.ErrNoRows || strings.Contains(err.Error(), "not found") {
+		if svcerr.IsNotFound(err) {
 			return defaultVal, nil
 		}
 		return false, err
@@ -1850,7 +1851,7 @@ func (r *Repo) GetIntOrDefault(ctx context.Context, userID string, projectID *st
 	setting, err := r.GetSetting(ctx, userID, projectID, key)
 	if err != nil {
 		// If setting not found, return default
-		if err == sql.ErrNoRows || strings.Contains(err.Error(), "not found") {
+		if svcerr.IsNotFound(err) {
 			return defaultVal, nil
 		}
 		return 0, err
@@ -1866,7 +1867,7 @@ func (r *Repo) GetFloatOrDefault(ctx context.Context, userID string, projectID *
 	setting, err := r.GetSetting(ctx, userID, projectID, key)
 	if err != nil {
 		// If setting not found, return default
-		if err == sql.ErrNoRows || strings.Contains(err.Error(), "not found") {
+		if svcerr.IsNotFound(err) {
 			return defaultVal, nil
 		}
 		return 0, err
@@ -1898,7 +1899,7 @@ func (r *Repo) upsertSetting(ctx context.Context, userID string, projectID *stri
 	setting, err := r.GetSetting(ctx, userID, projectID, key)
 	if err != nil {
 		// If not found, create new setting
-		if err == sql.ErrNoRows || strings.Contains(err.Error(), "not found") {
+		if svcerr.IsNotFound(err) {
 			newSetting := &Setting{
 				ID:        generateID(),
 				UserID:    userID,
@@ -3490,7 +3491,7 @@ func (r *Repo) DeleteContextWindowsByThread(ctx context.Context, threadID string
 
 // ErrWorkflowSlugTaken reports that the owner already has a workflow with the
 // slug. It is deliberately not retryable: the conflict is permanent, not a race.
-var ErrWorkflowSlugTaken = errors.New("workflow slug already taken")
+var ErrWorkflowSlugTaken = svcerr.AlreadyExists("workflow slug already taken")
 
 // runWorkflowDraftTx: each draft write is one single-row write plus the
 // user_updates insert, which allocates from the per-user counter row and so
@@ -3584,8 +3585,8 @@ func (r *Repo) publishWorkflowDraftUpdatedByID(ctx context.Context, id string) e
 func (r *Repo) GetWorkflowDraft(ctx context.Context, id string) (*WorkflowDraft, error) {
 	row, err := store.LoadWorkflowDraft(ctx, r.ORM(), id)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("workflow draft not found: %s", id)
+		if svcerr.IsNotFound(err) {
+			return nil, fmt.Errorf("%w: %s", svcerr.NotFound("workflow draft"), id)
 		}
 		return nil, err
 	}

@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
 )
@@ -76,7 +77,7 @@ func (r *Repo) GetToolCall(ctx context.Context, id string) (*ToolCall, error) {
 		return nil, fmt.Errorf("failed to get tool call: %w", err)
 	}
 	if call == nil {
-		return nil, fmt.Errorf("tool call not found: %s", id)
+		return nil, fmt.Errorf("%w: %s", svcerr.NotFound("tool call"), id)
 	}
 	return call, nil
 }
