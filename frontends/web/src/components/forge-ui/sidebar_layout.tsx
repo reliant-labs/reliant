@@ -208,6 +208,10 @@ function Chevron({ open }: { open: boolean }) {
  * or following a link. Rows grow to 44px on a coarse pointer, and the page
  * gutter tightens to 16px.
  *
+ * (Reliant: the narrow-screen behaviour is ahead of forge's library copy,
+ * forge/pkg/components/components/layouts/sidebar_layout.tsx, until it is
+ * upstreamed. A re-install of forge-ui must carry it over, not drop it.)
+ *
  * Hover and selection are an ink wash (`bg-ink/5`, `bg-ink/8`), so they read
  * as "pressed" in light and dark alike whatever the palette maps surfaces to.
  */

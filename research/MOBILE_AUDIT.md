@@ -11,12 +11,12 @@ No `forge env up` stack was running on this machine (no
 port), so every number here comes from **the real web app in a `vite` dev
 server, driven by Playwright against mocked RPCs**:
 
-- `web/e2e/mobileMocks.ts` — a signed-in, onboarded user (API-key login, the
+- `frontends/web/e2e/mobileMocks.ts` — a signed-in, onboarded user (API-key login, the
   path `onboarding.spec.ts` uses), one forge-enabled project, three chats, a
   chat timeline with a shell call and a file read, and an inbox holding an
   approval, an async `ask_user` question, a machine-asleep item and a failing
   automation. Every other Connect RPC answers `{}`.
-- `web/e2e/mobile-audit.spec.ts` — opens each surface COLD (`page.goto`, as a
+- `frontends/web/e2e/mobile-audit.spec.ts` — opens each surface COLD (`page.goto`, as a
   notification or another app would) at **390×844, touch, coarse pointer**
   (the two signals `lib/mobileRedirect.ts` keys on), waits 4s, records where
   the page ended up, and measures it: document `scrollWidth`, elements whose
@@ -34,7 +34,7 @@ documented opt-out), to measure what reusing it on mobile starts from.
 
 ## The one mechanism behind most of the gaps
 
-`RootShell` (`web/src/routes.tsx`) sends a phone on ANY path outside `/m/*`
+`RootShell` (`frontends/web/src/routes.tsx`) sends a phone on ANY path outside `/m/*`
 (and a short preserved list: `/auth`, `/oauth`, `/onboarding`, …) to
 **`/m/chats`** — `shouldRedirectToMobile` in `lib/mobileRedirect.ts`. The
 target is always the chat list, whatever was asked for. So on a phone:
