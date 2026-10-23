@@ -155,6 +155,7 @@ describe("the URL round trip", () => {
       [
         "alerts", "cmpWindow", "compare", "envs", "errors", "f", "groupBy",
         "live", "minDuration", "profileType", "q", "range", "rule", "service", "severity", "span", "trace", "view",
+        "issue", "istatus", "platform", "isort",
       ].sort()
     );
   });
@@ -163,10 +164,18 @@ describe("the URL round trip", () => {
     const { parsed } = throughTheUrl({ view: "overview", compare: "env-prod~1760000000000~promo-031", cmpWindow: "1h" });
     expect(parsed).toMatchObject({ view: "overview", compare: "env-prod~1760000000000~promo-031", cmpWindow: "1h" });
     expect(throughTheUrl({ cmpWindow: "2y" }).parsed.cmpWindow).toBeUndefined();
+    // 24h is past the server's 6-hour maximum: dropped, so the server's default applies.
+    expect(throughTheUrl({ cmpWindow: "24h" }).parsed.cmpWindow).toBeUndefined();
     // Delivery is no view any more (its figures are the Releases page's), and
     // neither are Dashboards (console pages of their own): an old link opens the overview.
     expect(throughTheUrl({ view: "delivery" }).parsed.view).toBeUndefined();
     expect(throughTheUrl({ view: "dashboards" }).parsed.view).toBeUndefined();
+  });
+
+  it("carries the Errors view's issue and filters, and drops a platform or sort it does not know", () => {
+    const { parsed } = throughTheUrl({ view: "errors", issue: "iss-1", istatus: "resolved,ignored", platform: "browser", isort: "events" });
+    expect(parsed).toMatchObject({ view: "errors", issue: "iss-1", istatus: "resolved,ignored", platform: "browser", isort: "events" });
+    expect(throughTheUrl({ platform: "mobile", isort: "random" }).parsed).toMatchObject({ platform: undefined, isort: undefined });
   });
 
   it("carries the alerts tab and an open rule, and drops a tab it does not know", () => {

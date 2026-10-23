@@ -40,9 +40,10 @@ import type {
   RolloutPhase,
   WorkloadRollout,
 } from "@/services/forge/releases";
+import { DEFAULT_HEALTH_WINDOW, type HealthWindow } from "@/services/controlPlane/observability/deliveryTypes";
 import { cn } from "@/lib/utils";
 
-import { DEFAULT_COMPARE_WINDOW, type CompareWindow } from "../Observability/deliveryScope";
+import { consolePath, withSearch } from "../Console/paths";
 import { ReleaseComparison } from "../Observability/ReleaseComparison";
 import { Ago, Facts, INK_BUTTON, Note, Panel } from "./releaseParts";
 import { shortVersion, type ReleaseEnv } from "./releaseModel";
@@ -687,7 +688,7 @@ export function ArtifactsTab({ release, env, promotion }: { release: ReleaseReco
 
 export function HealthTab({ project, env, promotion }: { project: string; env: ReleaseEnv | null; promotion: ReleasePromotion | null }) {
   const org = useObservabilityOrg();
-  const [width, setWidth] = useState<CompareWindow>(DEFAULT_COMPARE_WINDOW);
+  const [width, setWidth] = useState<HealthWindow>(DEFAULT_HEALTH_WINDOW);
   const scope = useMemo(() => (org.orgId ? { orgId: org.orgId, projectId: project, envIds: env ? [env.id] : [], filters: [] } : null), [org.orgId, project, env]);
   if (!env || !promotion?.createdAt) {
     return <Note testId="release-health-none">Health compares telemetry before and after a promotion, and this release has not been promoted to a long-lived environment.</Note>;
@@ -700,10 +701,12 @@ export function HealthTab({ project, env, promotion }: { project: string; env: R
         scope={scope}
         subject={env.name}
         target={{ envId: env.id, promotedAtMs: Date.parse(promotion.createdAt), promotionId: promotion.id }}
+        envName={env.name}
         width={width}
         navigate={(next) => {
-          if ("cmpWindow" in next) setWidth((next.cmpWindow as CompareWindow | undefined) ?? DEFAULT_COMPARE_WINDOW);
+          if ("cmpWindow" in next) setWidth(next.cmpWindow ?? DEFAULT_HEALTH_WINDOW);
         }}
+        issueHref={(issue) => withSearch(consolePath(project, { kind: "obs-view", view: "errors" }), { env: env.name, issue })}
       />
     </div>
   );

@@ -2,8 +2,8 @@
 
 /**
  * The pure rules of the delivery views: which environments a delivery request
- * covers, the before/after windows of a release comparison, and how a change
- * between them reads.
+ * covers, how a release comparison is linked, and how a change between its two
+ * sides reads.
  *
  * ── THE SCOPE FOLLOWS THE READER ─────────────────────────────────────────────
  *
@@ -16,8 +16,8 @@
  * whole releases into environments, and is not sent.
  */
 
-import type { DeliveryScope, Promotion } from "@/services/controlPlane/observability/deliveryTypes";
-import type { AttributeFilter, ObsScope, TimeWindow } from "@/services/controlPlane/observability/types";
+import { DEFAULT_HEALTH_WINDOW, HEALTH_WINDOWS, type DeliveryScope, type HealthWindow, type Promotion } from "@/services/controlPlane/observability/deliveryTypes";
+import type { AttributeFilter, ObsScope } from "@/services/controlPlane/observability/types";
 
 import type { ObsEnvironment } from "./obsPlace";
 
@@ -55,28 +55,19 @@ export function deliveryScopeOf(scope: ObsScope, environments: readonly ObsEnvir
 }
 
 // ── Release comparison ───────────────────────────────────────────────────────
+//
+// The windows themselves are the server's (GetReleaseHealth): it cuts each side
+// at the neighbouring promotions and at now, so the console only names the
+// width it asks for and renders what comes back.
 
-/** The widths a comparison offers on each side of a promotion. */
-export const COMPARE_WINDOWS = ["15m", "30m", "1h", "6h", "24h"] as const;
-export type CompareWindow = (typeof COMPARE_WINDOWS)[number];
-export const DEFAULT_COMPARE_WINDOW: CompareWindow = "30m";
-
-export const COMPARE_WINDOW_MS: Record<CompareWindow, number> = {
-  "15m": 15 * 60_000,
-  "30m": 30 * 60_000,
-  "1h": 60 * 60_000,
-  "6h": 6 * 60 * 60_000,
-  "24h": 24 * 60 * 60_000,
-};
-
-export function compareWindowOf(param: string | undefined): CompareWindow {
-  return (COMPARE_WINDOWS as readonly string[]).includes(param ?? "") ? (param as CompareWindow) : DEFAULT_COMPARE_WINDOW;
+export function healthWindowOf(param: string | undefined): HealthWindow {
+  return (HEALTH_WINDOWS as readonly string[]).includes(param ?? "") ? (param as HealthWindow) : DEFAULT_HEALTH_WINDOW;
 }
 
 /**
- * The URL's `compare`: one promotion, written so it can be found again by
- * asking the ledger for that environment around that moment —
- * `<envId>~<promotedAtMs>~<promotionId>`.
+ * The URL's `compare`: one promotion — `<envId>~<promotedAtMs>~<promotionId>`.
+ * The id is what the server is asked about; the environment scopes the ask;
+ * the moment lets a link say when without a round trip.
  */
 export interface CompareRef {
   envId: string;
@@ -97,61 +88,6 @@ export function parseCompareParam(param: string | undefined): CompareRef | null 
   const envId = parts.join("~");
   if (!envId || !promotionId || !Number.isFinite(at) || at <= 0) return null;
   return { envId, promotedAtMs: at, promotionId };
-}
-
-/** Why the windows are shorter than asked. */
-export type ComparisonClamp = "now" | "next" | "previous" | null;
-
-export interface ComparisonWindows {
-  before: TimeWindow;
-  after: TimeWindow;
-  /** Both sides have this length, so rates and percentiles compare like for like. */
-  lengthMs: number;
-  /** What shortened them, if anything: too little time since, or a neighbouring promotion. */
-  clampedBy: ComparisonClamp;
-  /** Less than a minute on a side: nothing worth comparing yet. */
-  tooShort: boolean;
-}
-
-/** Under this, a side holds too little traffic to say anything. */
-export const MIN_COMPARE_MS = 60_000;
-
-/**
- * Equal windows either side of a promotion at `atMs`. Each side stops short of
- * anything that would mix another release into it: the present (the after
- * side cannot reach the future), the next promotion into the same environment
- * (after it, a third release is running) and the previous one (before it, a
- * release older than the one replaced was).
- */
-export function comparisonWindows(
-  atMs: number,
-  widthMs: number,
-  nowMs: number,
-  neighbours: { previousMs?: number | null; nextMs?: number | null } = {}
-): ComparisonWindows {
-  const limits: [number, ComparisonClamp][] = [
-    [widthMs, null],
-    [nowMs - atMs, "now"],
-    ...(neighbours.nextMs != null ? ([[neighbours.nextMs - atMs, "next"]] as [number, ComparisonClamp][]) : []),
-    ...(neighbours.previousMs != null ? ([[atMs - neighbours.previousMs, "previous"]] as [number, ComparisonClamp][]) : []),
-  ];
-  const [length, clampedBy] = limits.reduce((shortest, candidate) => (candidate[0] < shortest[0] ? candidate : shortest));
-  const lengthMs = Math.max(0, length);
-  return {
-    before: { startMs: atMs - lengthMs, endMs: atMs },
-    after: { startMs: atMs, endMs: atMs + lengthMs },
-    lengthMs,
-    clampedBy: lengthMs < widthMs ? clampedBy : null,
-    tooShort: lengthMs < MIN_COMPARE_MS,
-  };
-}
-
-/** The promotions into the same environment just before and just after `target`. */
-export function neighboursOf(target: Pick<Promotion, "envId" | "promotedAtMs" | "promotionId">, promotions: readonly Promotion[]) {
-  const same = promotions.filter((p) => p.envId === target.envId && p.promotionId !== target.promotionId);
-  const previous = same.filter((p) => p.promotedAtMs < target.promotedAtMs).at(-1) ?? null;
-  const next = same.find((p) => p.promotedAtMs > target.promotedAtMs) ?? null;
-  return { previous, next };
 }
 
 /** How a figure moved, for colouring: which way, and whether that way is worse. */

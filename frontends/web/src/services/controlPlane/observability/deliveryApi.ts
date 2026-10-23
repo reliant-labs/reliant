@@ -11,13 +11,34 @@
  */
 
 import { create } from "@bufbuild/protobuf";
-import { TimestampSchema, type Duration, type Timestamp } from "@bufbuild/protobuf/wkt";
+import { DurationSchema, TimestampSchema, type Duration, type Timestamp } from "@bufbuild/protobuf/wkt";
 
 import { DeliveryInsightsService, type ReleaseMarker as WirePromotion } from "@/gen/controlplane/services/delivery_insights/v1/delivery_insights_pb";
+import {
+  ObservabilityService,
+  ReleaseFindingCode as WireFindingCode,
+  ReleaseVerdict as WireVerdict,
+  type GetReleaseHealthResponse,
+  type ServiceWindowStats as WireWindowStats,
+  type TimeRange as WireTimeRange,
+} from "@/gen/controlplane/services/observability/v1/observability_pb";
 
 import { getControlPlaneClient } from "../client";
 import { msOf } from "./api";
-import { RELEASES_LIMIT, type DeliveryScope, type DoraMetrics, type Promotion, type PromotionList, type TimeToRestore } from "./deliveryTypes";
+import {
+  RELEASES_LIMIT,
+  type DeliveryScope,
+  type DoraMetrics,
+  type Promotion,
+  type PromotionList,
+  type ReleaseFindingCode,
+  type ReleaseHealth,
+  type ReleaseHealthRequest,
+  type ReleaseVerdict,
+  type ServiceWindowStats,
+  type TimeToRestore,
+} from "./deliveryTypes";
+import { countOf, mapIssue } from "./issuesApi";
 import type { TimeWindow } from "./types";
 
 function client() {
@@ -122,4 +143,82 @@ export async function getDoraMetrics(req: DeliveryScope & { window?: TimeWindow;
     // Unset is "no figure", not zero incidents: only a present message is mapped.
     alertTimeToRestore: res.alertTimeToRestore ? restore(res.alertTimeToRestore) : null,
   };
+}
+
+// ── Release health ───────────────────────────────────────────────────────────
+
+const VERDICT_OF: Record<WireVerdict, ReleaseVerdict> = {
+  [WireVerdict.UNSPECIFIED]: "unknown",
+  [WireVerdict.PASS]: "pass",
+  [WireVerdict.FAIL]: "fail",
+  [WireVerdict.INCONCLUSIVE]: "inconclusive",
+};
+
+const FINDING_CODE_OF: Record<WireFindingCode, ReleaseFindingCode | null> = {
+  [WireFindingCode.UNSPECIFIED]: null,
+  [WireFindingCode.ERROR_RATE]: "error_rate",
+  [WireFindingCode.LATENCY]: "latency",
+  [WireFindingCode.NEW_ISSUE]: "new_issue",
+  [WireFindingCode.REGRESSED_ISSUE]: "regressed_issue",
+  [WireFindingCode.ALERT_FIRING]: "alert_firing",
+  [WireFindingCode.WORKLOAD_RESTARTS]: "workload_restarts",
+};
+
+function windowOf(r: WireTimeRange | undefined): TimeWindow | null {
+  return r?.start && r.end ? { startMs: msOf(r.start), endMs: msOf(r.end) } : null;
+}
+
+function statsOf(s: WireWindowStats | undefined): ServiceWindowStats | null {
+  if (!s) return null;
+  return { requests: countOf(s.requests), errorRate: s.errorRate, p50Ms: s.p50Ms, p95Ms: s.p95Ms, p99Ms: s.p99Ms };
+}
+
+function duration(ms: number): Duration {
+  const seconds = Math.floor(ms / 1000);
+  return create(DurationSchema, { seconds: BigInt(seconds), nanos: Math.round((ms - seconds * 1000) * 1e6) });
+}
+
+export function mapReleaseHealth(res: GetReleaseHealthResponse): ReleaseHealth {
+  const p = res.promotion;
+  return {
+    promotion: p
+      ? { promotionId: p.id, version: p.releaseVersion, gitCommit: p.gitCommit, promotedAtMs: msOf(p.promotedAt), previousVersion: p.previousReleaseVersion }
+      : null,
+    before: windowOf(res.before),
+    after: windowOf(res.after),
+    afterComplete: res.afterComplete,
+    services: res.services.map((s) => ({ service: s.service, before: statsOf(s.before), after: statsOf(s.after), versionShare: s.versionShare })),
+    newIssues: res.newIssues.map(mapIssue),
+    regressedIssues: res.regressedIssues.map(mapIssue),
+    firingAlerts: res.firingAlerts.map((a) => ({ rule: a.rule, fingerprint: a.fingerprint, firingAtMs: msOf(a.firingAt), labels: { ...a.labels } })),
+    workloadFindings: res.workloadFindings.map((w) => ({ workload: w.workload, restarts: countOf(w.restarts), lastTerminatedReason: w.lastTerminatedReason })),
+    verdict: VERDICT_OF[res.verdict] ?? "unknown",
+    findings: res.findings.map((f) => ({
+      code: FINDING_CODE_OF[f.code] ?? null,
+      service: f.service,
+      value: f.value,
+      threshold: f.threshold,
+      policy: f.policy,
+      message: f.message,
+    })),
+    thresholds: res.thresholds.map((t) => ({ name: t.name, value: t.value, source: t.source })),
+    notEvaluated: [...res.notEvaluated],
+  };
+}
+
+/**
+ * The server's verdict on one promotion into one environment (the current one
+ * when `promotionId` is absent). The scope must name exactly one environment;
+ * the windows come from the promotion, so no time range is sent.
+ */
+export async function getReleaseHealth(req: ReleaseHealthRequest): Promise<ReleaseHealth> {
+  const now = Date.now();
+  const res = await getControlPlaneClient(ObservabilityService).getReleaseHealth({
+    // time_range is required on every QueryScope and ignored here (the
+    // promotion decides the windows): the last minute satisfies the validator.
+    scope: { ...wireDeliveryScope(req, { startMs: now - 60_000, endMs: now }), services: [], filters: [] },
+    subject: req.promotionId ? { case: "promotionId", value: req.promotionId } : { case: undefined },
+    window: req.windowMs ? duration(req.windowMs) : undefined,
+  });
+  return mapReleaseHealth(res);
 }

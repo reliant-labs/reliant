@@ -17,8 +17,19 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { useObservabilityApi, type ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
+import type { ActivityList } from "@/services/controlPlane/observability/activityApi";
 import type { DeliveryScope } from "@/services/controlPlane/observability/deliveryTypes";
-import { alertingRetry, obsRetry } from "@/services/controlPlane/observability/errors";
+import { alertingRetry, issuesRetry, obsRetry, releaseHealthRetry } from "@/services/controlPlane/observability/errors";
+import type {
+  Issue,
+  IssueEventList,
+  IssueList,
+  IssuePlatform,
+  IssueScope,
+  IssueSort,
+  IssueStatus,
+  UpdateIssueStatusRequest,
+} from "@/services/controlPlane/observability/issuesTypes";
 import type {
   ObsScope,
   ListTracesResult,
@@ -475,6 +486,157 @@ export function useDoraMetrics(scope: DeliveryScope | null, days: number, failur
     },
     enabled: !!scope,
     staleTime: 60_000,
+    retry: obsRetry,
+  });
+}
+
+/**
+ * The server's verdict on one promotion (GetReleaseHealth). Under the delivery
+ * keys, so the panel's Refresh re-reads it with the ledger. The verdict of a
+ * promotion whose after window is still open changes as traffic arrives, so
+ * it is re-read every minute until the server says the window is complete.
+ */
+export function useReleaseHealth(scope: DeliveryScope | null, promotionId: string, windowMs: number) {
+  const api = useObservabilityApi();
+  return useQuery({
+    queryKey: [...deliveryKeys.all(scope), "health", promotionId, windowMs] as const,
+    queryFn: () => api.getReleaseHealth({ ...(scope as DeliveryScope), promotionId, windowMs }),
+    enabled: !!scope && !!promotionId,
+    staleTime: 30_000,
+    refetchInterval: (query) => (query.state.data && !query.state.data.afterComplete ? 60_000 : false),
+    retry: releaseHealthRetry,
+  });
+}
+
+// ── Issues (IssuesService) ────────────────────────────────────────────────────
+
+export interface IssueFilters {
+  range: RangePreset;
+  /** Empty: the open ones (the server's default). */
+  statuses: IssueStatus[];
+  platform?: IssuePlatform;
+  service?: string;
+  sort: IssueSort;
+  text: string;
+}
+
+export const ISSUE_PAGE_SIZE = 50;
+
+/**
+ * One root for every issue read, so a triage (which can move an issue between
+ * lists, change its detail and add to its history) re-reads all of them, and
+ * the panel's Refresh does too.
+ */
+export const issueKeys = {
+  root: () => ["observability", "issues"] as const,
+  list: (scope: IssueScope | null, filters: IssueFilters) =>
+    [...issueKeys.root(), "list", scope?.orgId ?? "", scope?.projectId ?? "", scope?.envIds ?? [], filters] as const,
+  detail: (issueId: string, range: RangePreset) => [...issueKeys.root(), "detail", issueId, range] as const,
+  events: (issueId: string) => [...issueKeys.root(), "events", issueId] as const,
+};
+
+/** The scope's issues, a page at a time; later pages reuse the first page's window (the token is only valid with the same request). */
+export function useIssues(scope: IssueScope | null, filters: IssueFilters) {
+  const api = useObservabilityApi();
+  return useInfiniteQuery({
+    queryKey: issueKeys.list(scope, filters),
+    queryFn: async ({ pageParam }): Promise<IssueList & { window: TimeWindow }> => {
+      const window = pageParam?.window ?? resolveWindow(filters.range);
+      const result = await api.listIssues({
+        ...(scope as IssueScope),
+        services: filters.service ? [filters.service] : [],
+        window,
+        statuses: filters.statuses,
+        platform: filters.platform,
+        sort: filters.sort,
+        text: filters.text,
+        pageSize: ISSUE_PAGE_SIZE,
+        pageToken: pageParam?.cursor,
+      });
+      return { ...result, window };
+    },
+    initialPageParam: null as PageParam | null,
+    getNextPageParam: (last) => (last.nextPageToken ? { cursor: last.nextPageToken, window: last.window } : undefined),
+    enabled: !!scope,
+    staleTime: 30_000,
+    retry: issuesRetry,
+  });
+}
+
+/** One issue with its latest event, frames, versions and first release; counts over `range`. */
+export function useIssue(issueId: string | undefined, range: RangePreset) {
+  const api = useObservabilityApi();
+  return useQuery({
+    queryKey: issueKeys.detail(issueId ?? "", range),
+    queryFn: () => api.getIssue({ issueId: issueId as string, window: resolveWindow(range) }),
+    enabled: !!issueId,
+    staleTime: 30_000,
+    retry: issuesRetry,
+  });
+}
+
+export const ISSUE_EVENTS_PAGE_SIZE = 20;
+
+/** One issue's events, newest first. */
+export function useIssueEvents(issueId: string | undefined) {
+  const api = useObservabilityApi();
+  return useInfiniteQuery({
+    queryKey: issueKeys.events(issueId ?? ""),
+    queryFn: ({ pageParam }): Promise<IssueEventList> =>
+      api.listIssueEvents({ issueId: issueId as string, pageSize: ISSUE_EVENTS_PAGE_SIZE, pageToken: pageParam ?? undefined }),
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) => last.nextPageToken || undefined,
+    enabled: !!issueId,
+    staleTime: 30_000,
+    retry: issuesRetry,
+  });
+}
+
+/**
+ * A triage. It never retries and never re-sends: a stale version comes back
+ * as an error (conflict) for the view to show, and every issue read is
+ * re-fetched either way — on success to show the new state everywhere, on a
+ * conflict to show the change the reader had not seen.
+ */
+export function useUpdateIssueStatus() {
+  const api = useObservabilityApi();
+  const queryClient = useQueryClient();
+  return useMutation<Issue, unknown, UpdateIssueStatusRequest>({
+    mutationFn: (req) => api.updateIssueStatus(req),
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: issueKeys.root() });
+      void queryClient.invalidateQueries({ queryKey: activityKeys.root() });
+    },
+  });
+}
+
+// ── Activity (ActivityService) ────────────────────────────────────────────────
+
+export const activityKeys = {
+  root: () => ["observability", "activity"] as const,
+  feed: (scope: DeliveryScope | null, target: { kind?: string; id?: string }) =>
+    [...activityKeys.root(), scope?.orgId ?? "", scope?.projectId ?? "", scope?.envIds ?? [], target.kind ?? "", target.id ?? ""] as const,
+};
+
+export const ACTIVITY_PAGE_SIZE = 50;
+
+/** The scope's activity, newest first; narrowed to one object for its History. */
+export function useActivity(scope: DeliveryScope | null, target: { kind?: string; id?: string } = {}, options: { enabled?: boolean } = {}) {
+  const api = useObservabilityApi();
+  return useInfiniteQuery({
+    queryKey: activityKeys.feed(scope, target),
+    queryFn: ({ pageParam }): Promise<ActivityList> =>
+      api.listActivity({
+        ...(scope as DeliveryScope),
+        targetKind: target.kind,
+        targetId: target.id,
+        pageSize: ACTIVITY_PAGE_SIZE,
+        pageToken: pageParam ?? undefined,
+      }),
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) => last.nextPageToken || undefined,
+    enabled: !!scope && (options.enabled ?? true),
+    staleTime: 30_000,
     retry: obsRetry,
   });
 }

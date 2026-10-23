@@ -1,14 +1,15 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * The Observability area: Overview · Logs · Traces · Profiles
+ * The Observability area: Overview · Errors · Logs · Traces · Profiles
  * over one time window for one SCOPE, Alerts (what fires, the rules
- * each environment declares, silences and receivers), Delivery (releases and
- * DORA, from the release ledger) and Usage (the org's allowance).
+ * each environment declares, silences and receivers) and Usage (the org's
+ * allowance). Errors is the issue inbox (IssuesService), browser and server.
  *
  * Every time-series chart carries the release markers of its scope (one
  * ListReleases per scope and window, through ObsChartMarkersProvider), and any
- * promotion opens a before/after comparison over the current view.
+ * promotion opens a before/after comparison over the current view — the
+ * server's release-health verdict (GetReleaseHealth).
  *
  * ── ENVIRONMENT IS A FILTER, NOT A PLACE (owner decision 1) ─────────────────
  *
@@ -40,7 +41,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { RefreshCw } from "lucide-react";
 
 import { Button } from "@/components/ui/Button";
-import { deliveryKeys, obsKeys, useObservabilityOrg, useServiceOverview } from "@/hooks/observability-queries";
+import { activityKeys, deliveryKeys, issueKeys, obsKeys, useObservabilityOrg, useServiceOverview } from "@/hooks/observability-queries";
 import type { Promotion } from "@/services/controlPlane/observability/deliveryTypes";
 import type { ObsScope } from "@/services/controlPlane/observability/types";
 import { obsErrorKind } from "@/services/controlPlane/observability/errors";
@@ -50,12 +51,16 @@ import { cn } from "@/lib/utils";
 import { AlertNotifications } from "./AlertNotifications";
 import { AlertsView } from "./AlertsView";
 import { ObsChartMarkersProvider } from "./charts/UPlotChart";
-import { compareParam, compareWindowOf, parseCompareParam } from "./deliveryScope";
+import { compareParam, healthWindowOf, parseCompareParam } from "./deliveryScope";
+import { ErrorsView } from "./Errors/ErrorsView";
 import { LogsView } from "./LogsView";
 import { filterParam, filterTokensOf, groupByOf, groupByParam, scopeFiltersOf } from "./obsFilters";
 import {
   alertsTabOf,
   GROUPABLE_VIEWS,
+  issuePlatformOf,
+  issueSortOf,
+  issueStatusesOf,
   OBS_VIEW_LABELS,
   OBS_VIEWS,
   severitiesOf,
@@ -144,6 +149,10 @@ export default function ObservabilityPanel({ place, search, navigate, chrome = "
       rule: undefined,
       compare: undefined,
       cmpWindow: undefined,
+      issue: undefined,
+      istatus: undefined,
+      platform: undefined,
+      isort: undefined,
     });
   };
   const envName = (id: string) => placeEnvironments(place).find((env) => env.id === id)?.name;
@@ -215,6 +224,8 @@ export default function ObservabilityPanel({ place, search, navigate, chrome = "
             onClick={() => {
               void queryClient.invalidateQueries({ queryKey: obsKeys.all(scope) });
               void queryClient.invalidateQueries({ queryKey: deliveryKeys.root() });
+              void queryClient.invalidateQueries({ queryKey: issueKeys.root() });
+              void queryClient.invalidateQueries({ queryKey: activityKeys.root() });
             }}
             leftIcon={<RefreshCw className="h-3.5 w-3.5" />}
             data-testid="obs-refresh"
@@ -240,7 +251,7 @@ export default function ObservabilityPanel({ place, search, navigate, chrome = "
           groupBy={groupBy}
           onGroupByChange={(keys) => navigate({ groupBy: groupByParam(keys) }, { replace: true })}
           groupable={groupable}
-          filterable={view !== "alerts"}
+          filterable={view !== "alerts" && view !== "errors"}
         />
       )}
 
@@ -287,12 +298,26 @@ export default function ObservabilityPanel({ place, search, navigate, chrome = "
             scope={scope}
             subject={subject}
             target={comparing}
-            width={compareWindowOf(search.cmpWindow)}
+            envName={envName(comparing.envId)}
+            width={healthWindowOf(search.cmpWindow)}
             back={{ label: OBS_VIEW_LABELS[view], onBack: closeCompare }}
             navigate={navigate}
           />
         ) : notSetUp ? (
           <ObsNotSetUp subject={subject} />
+        ) : view === "errors" ? (
+          <ErrorsView
+            scope={scope}
+            subject={subject}
+            range={range}
+            text={search.q ?? ""}
+            service={search.service}
+            statuses={issueStatusesOf(search.istatus)}
+            platform={issuePlatformOf(search.platform)}
+            sort={issueSortOf(search.isort)}
+            issueId={search.issue}
+            navigate={navigate}
+          />
         ) : view === "overview" ? (
           <OverviewView scope={scope} subject={subject} range={range} service={search.service} groupBy={groupBy} navigate={navigate} />
         ) : view === "logs" ? (
