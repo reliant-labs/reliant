@@ -245,21 +245,22 @@ func TruncateOutput(toolName string, output string, addWarning bool) string {
 		if keepSize > 2000 {
 			headSize := keepSize * 3 / 4
 			tailSize := keepSize / 4
-			omittedBytes := len(output) - headSize - tailSize
-			truncated = output[:headSize] +
+			head, tail := headBytes(output, headSize), tailBytes(output, tailSize)
+			omittedBytes := len(output) - len(head) - len(tail)
+			truncated = head +
 				fmt.Sprintf("\n\n... [%d bytes omitted - use offset parameter to read middle section] ...\n\n", omittedBytes) +
-				output[len(output)-tailSize:]
+				tail
 		} else {
-			truncated = output[:keepSize]
+			truncated = headBytes(output, keepSize)
 		}
 
 	case "fetch":
 		// For web content, try to keep the beginning
-		truncated = output[:keepSize] + "\n\n... [CONTENT TRUNCATED] ..."
+		truncated = headBytes(output, keepSize) + "\n\n... [CONTENT TRUNCATED] ..."
 
 	default:
 		// Generic truncation
-		truncated = output[:keepSize] + "\n\n... [OUTPUT TRUNCATED] ..."
+		truncated = headBytes(output, keepSize) + "\n\n... [OUTPUT TRUNCATED] ..."
 	}
 
 	if addWarning {

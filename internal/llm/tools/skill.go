@@ -272,7 +272,7 @@ func (t *skillTool) listSkills(filterPath string) (ToolResponse, error) {
 	for _, def := range matches {
 		desc := def.Description
 		if len(desc) > 120 {
-			desc = desc[:117] + "..."
+			desc = headBytes(desc, 117) + "..."
 		}
 		fmt.Fprintf(&sb, "- %s: %s", def.SkillPath, desc)
 		if hasChildren(t.skills, def.SkillPath) {
@@ -566,7 +566,7 @@ func (t *skillTool) searchSkills(query string) (ToolResponse, error) {
 	for _, r := range results {
 		desc := r.def.Description
 		if len(desc) > 120 {
-			desc = desc[:117] + "..."
+			desc = headBytes(desc, 117) + "..."
 		}
 		fmt.Fprintf(&sb, "- %s: %s\n", r.def.SkillPath, desc)
 	}
@@ -618,7 +618,7 @@ func truncateDescription(desc string, maxLen int) string {
 	if len(desc) <= maxLen {
 		return desc
 	}
-	return desc[:maxLen-3] + "..."
+	return headBytes(desc, maxLen-3) + "..."
 }
 
 // SkillsAnnouncement returns a brief summary of top-level skills for system
@@ -655,7 +655,7 @@ func SkillsAnnouncement(skills []config.StoredSkill) string {
 	for _, def := range tops {
 		desc := def.Description
 		if len(desc) > 80 {
-			desc = desc[:77] + "..."
+			desc = headBytes(desc, 77) + "..."
 		}
 		fmt.Fprintf(&sb, "- %s: %s", def.SkillPath, desc)
 		if hasChildren(skills, def.SkillPath) {

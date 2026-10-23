@@ -634,6 +634,10 @@ func TestScopeRequiredAndValidated(t *testing.T) {
 
 	_, err = f.svc.List(ctx, inputoptions.ListRequest{UserID: "alice", Type: "acme.tag", Scope: map[string]any{"team": 7}})
 	require.ErrorIs(t, err, inputoptions.ErrBadScope)
+	// A bad scope is the caller's error: InvalidArgument on the wire, and a
+	// user error to the logger (WARN, never an ERROR or a Sentry event).
+	assert.Equal(t, connect.CodeInvalidArgument, svcerr.Code(err))
+	assert.Equal(t, svcerr.ClassUser, svcerr.Classify(err))
 
 	res, err := f.svc.List(ctx, inputoptions.ListRequest{UserID: "alice", Type: "acme.tag", Scope: map[string]any{"team": "core", "extra": "ignored"}})
 	require.NoError(t, err)

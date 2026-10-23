@@ -730,7 +730,7 @@ func truncateDetail(s string) string {
 	if len(s) <= codeContextDetailWidth {
 		return s
 	}
-	return s[:codeContextDetailWidth] + "..."
+	return headBytes(s, codeContextDetailWidth) + "..."
 }
 
 // relativizePath shortens absolute paths to repo-relative form. Absolute paths

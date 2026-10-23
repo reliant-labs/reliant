@@ -208,6 +208,18 @@ func TestToolCallResults_AcrossLayers(t *testing.T) {
 		t.Fatalf("after rewrite: %+v", got)
 	}
 
+	// Tool output that is not valid UTF-8 — a byte cut inside "…" with "..."
+	// after it, as a truncation did in prod — is stored with the bad bytes
+	// replaced, not refused by Postgres (SQLSTATE 22021).
+	broken := result("tr-b", &m1, 6, nil)
+	broken.Content = "line \xe2\x80..."
+	if err := store.UpsertToolCallResult(ctx, o, f.chat, broken); err != nil {
+		t.Fatalf("upsert invalid UTF-8 result: %v", err)
+	}
+	if got, _ := f.env.Repo.GetToolCallResult(ctx, "tr-b"); got == nil || got.Content != "line \uFFFD..." {
+		t.Fatalf("after invalid UTF-8 write: %+v", got)
+	}
+
 	// The writer must prove the call is its chat's.
 	for _, tc := range []struct{ chat, id string }{{"chat-other", "tr-b"}, {f.chat, "tr-none"}} {
 		if err := store.UpsertToolCallResult(ctx, o, tc.chat, result(tc.id, nil, 9, nil)); !errors.Is(err, core.ErrToolCallIDInAnotherChat) {

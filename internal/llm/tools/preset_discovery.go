@@ -109,7 +109,7 @@ func (t *listPresetsTool) Execute(rctx *rctx.ToolContext, args ListPresetsParams
 		// Truncate long descriptions
 		desc := p.description
 		if len(desc) > 50 {
-			desc = desc[:47] + "..."
+			desc = headBytes(desc, 47) + "..."
 		}
 		tag := p.tag
 		if tag == "" {

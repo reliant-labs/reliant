@@ -2666,7 +2666,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 						// describe the same failure twice.
 						var panicErr *WorkflowPanicError
 						if !errors.As(running.Error, &panicErr) {
-							logger.Error("[Workflow Runtime] Inline workflow execution failed",
+							logFailure(logger, running.Error, "[Workflow Runtime] Inline workflow execution failed",
 								"stepID", running.StepID,
 								"error", running.Error,
 							)
@@ -5324,7 +5324,7 @@ func handleWorkflowCompletion(ctx workflow.Context, workflowID, chatID, workflow
 
 	// Check if the workflow returned an error
 	if retErr != nil {
-		logger.Error("[Workflow Runtime] Failed with error", "workflowID", workflowID, "error", retErr)
+		logFailure(logger, retErr, "[Workflow Runtime] Failed with error", "workflowID", workflowID, "error", retErr)
 		// Delta identity: finalize any outstanding message ids (aborted).
 		finalizeOutstandingStreams(ctx, streamReasonAborted)
 		terminalDrainDetachedSpawns(cleanupCtx, chatID, childTracker)

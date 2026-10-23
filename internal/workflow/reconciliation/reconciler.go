@@ -1191,7 +1191,7 @@ func (r *Reconciler) reconcileWorkflow(ctx context.Context, wf *db.Workflow, pol
 	// with ZERO pending work in Temporal — the shape of a silent wedge from an
 	// UNKNOWN cause (every enumerated detector above requires a pending task
 	// to look at). Track HistoryLength across passes; a frozen history across
-	// the detection thresholds is reported (ERROR + metric, no action), and
+	// the detection thresholds is reported (WARN + metric, no action), and
 	// only after the confirmation thresholds (double detection) is the
 	// workflow terminated, marked failed (checkpoint preserved — SendMessage
 	// resumes at position), and the user told how to continue.
@@ -1202,7 +1202,15 @@ func (r *Reconciler) reconcileWorkflow(ctx context.Context, wf *db.Workflow, pol
 			// Report only. The cause is unknown — it could still be a wait
 			// class this reconciler doesn't know about — so give it a full
 			// confirmation window before doing anything destructive.
-			logging.ErrorContext(ctx, "[Reconciler] Progress stall detected: running workflow has no pending work and no history growth",
+			//
+			// WARN, not ERROR: nothing is lost yet and nobody has to act. In
+			// prod (106 detections, 2026-10-19..23) every one was a run parked
+			// on a wait this watchdog does not model — a whole fleet at
+			// 00:05-00:18 on 10-23 while the Claude accounts were rate-limited
+			// (usage-limit timers), and long-lived chats whose spawned agents
+			// sat idle for days — and each resumed on its own or on the next
+			// message. The confirmed stage below is where a stall is acted on.
+			logging.WarnContext(ctx, "[Reconciler] Progress stall detected: running workflow has no pending work and no history growth",
 				"workflowID", wf.ID,
 				"chatID", wf.ChatID,
 				"historyLength", temporalState.HistoryLength,
@@ -1720,7 +1728,7 @@ const (
 	// legitimate user-input wait — nothing to do this pass.
 	progressStageNone progressStage = iota
 	// progressStageDetected: the detection thresholds were just crossed —
-	// report (ERROR + metric) but take no action. Returned exactly once per
+	// report (WARN + metric) but take no action. Returned exactly once per
 	// streak.
 	progressStageDetected
 	// progressStageConfirmed: the confirmation thresholds (double detection)
@@ -1804,7 +1812,7 @@ func (r *Reconciler) observeProgress(ctx context.Context, wf *db.Workflow, state
 		return progressStageConfirmed, passes, elapsed
 	}
 
-	// Mark the detection as reported so the ERROR/metric fire once per streak.
+	// Mark the detection as reported so the WARN/metric fire once per streak.
 	r.progressMu.Lock()
 	if cur := r.progressObservations[wf.ID]; cur != nil {
 		cur.detected = true
