@@ -1,10 +1,5 @@
 import { create } from "zustand";
-import {
-  api,
-  type Chat,
-  type Message,
-  type ToolApprovalRequest,
-} from "../api/client";
+import { api, type Chat, type Message } from "../api/client";
 import type { ContentBlock } from "../types/chat";
 import {
   MessageRole,
@@ -12,7 +7,7 @@ import {
   StreamingState,
   ChatState,
 } from "../gen/reliant/v1/chat_pb";
-import { ApprovalStatus, ApprovalType } from "../gen/reliant/v1/approval_pb";
+import { ApprovalStatus, ApprovalType, type Approval } from "../gen/reliant/v1/approval_pb";
 import type { ToolResultsByCallId } from "../lib/messageProcessor";
 import {
   foldToolResultImages,
@@ -90,7 +85,6 @@ import { useProjectStore } from "./projectStore";
 import { useActivityStore, ChatActivity, isBusyActivity } from "./activityStore";
 import { useThreadActivityStore } from "./threadActivityStore";
 import { useChatNavigationStore } from "./chatNavigationStore";
-import { useTasksStore } from "./tasksStore";
 import { useWorkspaceStateStore } from "./workspaceStateStore";
 import { useWorktreeStore } from "./worktreeStore";
 import { useChatParamsStore } from "./chatParamsStore";
@@ -118,12 +112,10 @@ import { isDaemonConnectingError } from "../lib/daemon-errors";
 import { sendWithDaemonWait } from "../lib/daemon-retry";
 import { sendOnExistingChat } from "../lib/chatSendRouting";
 import { QUEUED_SENDER_KIND_HUMAN } from "../api/chat-grpc";
-import {
-  approvalKeys,
-  upsertApprovalInCache,
-  applyQuestionUpdate,
-  resolvePendingQuestion,
-} from "../hooks/approval-queries";
+import { approvalsFromCache, upsertApprovalInCache, type ApprovalFields } from "../hooks/approval-queries";
+import { approvalServiceKeys } from "../hooks/approval-service-hooks_gen";
+import { applyQuestionUpdate, resolvePendingQuestion } from "../hooks/question-queries";
+import { invalidatePlanTasks } from "../hooks/task-queries";
 import {
   chatKeys,
   seedChatDetail,
@@ -191,12 +183,12 @@ function toApprovalStatus(
  * update actually has: a status-only update (approved, denied) is merged over
  * the cached approval and must not blank its title.
  */
-function approvalFields(update: ToolApprovalUpdate): Partial<ToolApprovalRequest> {
-  const fields: Partial<ToolApprovalRequest> = {};
+function approvalFields(update: ToolApprovalUpdate): ApprovalFields {
+  const fields: ApprovalFields = {};
   if (update.title) fields.title = update.title;
   // ApprovalCreate sends the name; Approve/Deny echo the row's enum value.
   const kind: unknown = update.approval_type;
-  if (kind === "workflow_step" || kind === ApprovalType.WORKFLOW_STEP) fields.approval_type = ApprovalType.WORKFLOW_STEP;
+  if (kind === "workflow_step" || kind === ApprovalType.WORKFLOW_STEP) fields.approvalType = ApprovalType.WORKFLOW_STEP;
   return fields;
 }
 
@@ -713,10 +705,6 @@ function getAttachmentsFromStore(attachmentIds: string[]): Attachment[] {
   return allAttachments;
 }
 
-// Track which task-related tool call IDs have already been processed
-// to prevent duplicate API calls when messages are reprocessed (cross-matching, streaming updates)
-const processedTaskToolCallIds = new Set<string>();
-
 // How many older messages loadOlderMessages fetches per scroll-back page.
 // Smaller than the 200-message initial snapshot bound: paging happens while the
 // user is actively scrolling, so a smaller page keeps each round-trip cheap.
@@ -819,7 +807,7 @@ export interface ToolCallState {
   childWorkflowId?: string;
   error?: string;
   // Unified approval state
-  approval?: ToolApprovalRequest;
+  approval?: Approval;
   needsApproval?: boolean;
   // Tool call data from messages (for UI rendering)
   toolCall?: {
@@ -1062,7 +1050,7 @@ interface ChatStoreState {
           | "completed"
           | "denied"
           | "failed";
-        approval?: ToolApprovalRequest;
+        approval?: Approval;
         needsApproval?: boolean;
       }
     | undefined;
@@ -1609,25 +1597,11 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       tabSwitchProfiler.mark("subscribeToChatDetails-end");
     }
 
-    // Load plan and tasks for this chat (fire-and-forget, cached)
-    void (async () => {
-      try {
-        const { useTasksStore } = await import("./tasksStore");
-        const { loadPlanAndTasks } = useTasksStore.getState();
-        await loadPlanAndTasks(chat.id);
-      } catch (error) {
-        logger.error("[ChatStore] Failed to load plan/tasks:", error);
-        Sentry.captureMessage('Failed to load plan and tasks', {
-          level: 'warning',
-          tags: { component: 'chat', operation: 'load_plan_tasks' },
-        });
-      }
-    })();
-
-    // Pending approvals and the pending question are server data owned by the
-    // React Query cache: useApprovals / usePendingApprovals / usePendingQuestions
-    // fetch them on mount and the chat stream patches the cache live (see
-    // approval-queries.ts). No store-side prefetch needed here.
+    // The plan and its tasks, pending approvals and pending questions are
+    // server data owned by the React Query cache: their hooks fetch them on
+    // mount and the chat stream patches or invalidates the cache live (see
+    // task-queries.ts, approval-queries.ts, question-queries.ts). No
+    // store-side prefetch needed here.
 
     if (tabSwitchProfiler.isEnabled()) {
       tabSwitchProfiler.mark("selectChat-end");
@@ -2012,9 +1986,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       // This is critical - without this, each ChatMessage parses JSON on every render
       // which causes 800ms+ delays when switching to chats with many messages
       const approvals =
-        queryClient.getQueryData<ToolApprovalRequest[]>(
-          approvalKeys.list(chatId),
-        ) ?? [];
+        approvalsFromCache(chatId);
       // Build the normalized tool-result index from the loaded TOOL messages,
       // merged over anything already known for this chat, so processMessage can
       // resolve call→result the same way the live stream path does. (Loaded
@@ -2155,9 +2127,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       // inserted rows render from cached parses instead of parsing during the
       // scroll that requested them.
       const approvals =
-        queryClient.getQueryData<ToolApprovalRequest[]>(
-          approvalKeys.list(chatId),
-        ) ?? [];
+        approvalsFromCache(chatId);
       for (const message of older) {
         getProcessedMessage(message, pageToolResults, approvals);
       }
@@ -2407,6 +2377,9 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
             const refetchType = (u as unknown as { type: string }).type as RefetchType;
             if (refetchType) {
               triggerRefetch(refetchType, chatId);
+              // The plan and its tasks are on the generated hooks: the
+              // signal marks their reads stale directly.
+              if (refetchType === "plan_tasks") invalidatePlanTasks();
             }
           }
         }
@@ -3351,7 +3324,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
 
         // ---- External writes (post-commit) ----
         // Everything below writes to stores OTHER than this one (RQ caches,
-        // threadActivityStore, tasksStore). They run after the Zustand commit
+        // threadActivityStore). They run after the Zustand commit
         // but in the same synchronous task, so React batches all of it into
         // one render — same observable ordering as before.
 
@@ -3404,19 +3377,17 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         // client-side select, so one list upsert updates both. The patch IS
         // the sync; no invalidate/refetch round-trip.
         allApprovals.forEach((approvalUpdate) => {
-          const approval: ToolApprovalRequest = {
+          upsertApprovalInCache(chatId, {
             id: approvalUpdate.id,
-            chat_id: approvalUpdate.chat_id,
-            content_block_id:
-              approvalUpdate.content_block_id || approvalUpdate.entity_id,
+            chatId: approvalUpdate.chat_id,
+            entityId: approvalUpdate.content_block_id || approvalUpdate.entity_id,
             status: toApprovalStatus(approvalUpdate.status),
-            denial_reason: approvalUpdate.denial_reason,
-            created_at: approvalUpdate.created_at,
-            responded_at: approvalUpdate.responded_at,
-            action_taken: approvalUpdate.action_taken, // Which action was clicked
+            denialReason: approvalUpdate.denial_reason,
+            createdAt: approvalUpdate.created_at,
+            resolvedAt: approvalUpdate.responded_at,
+            actionTaken: approvalUpdate.action_taken, // Which action was clicked
             ...approvalFields(approvalUpdate),
-          };
-          upsertApprovalInCache(chatId, approval);
+          });
         });
 
         // Question updates patch the chat's pending-question list (server
@@ -3442,8 +3413,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         }
 
         // Pre-parse message content so the render layer reads from the
-        // reference-keyed processMessage memo without reparsing, and drive
-        // the real-time task side effects (tasksStore writes). Rendering
+        // reference-keyed processMessage memo without reparsing. Rendering
         // invalidation is handled by the memo itself (keyed on message /
         // tool-result index / approvals references), so there is no
         // store-side parsed cache to keep in sync.
@@ -3452,52 +3422,9 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         // (including this batch's upserts above) to embed approval status
         // into processed tool calls.
         const approvalsForProcessing =
-          queryClient.getQueryData<ToolApprovalRequest[]>(
-            approvalKeys.list(chatId),
-          ) ?? [];
+          approvalsFromCache(chatId);
         messagesToProcess.forEach((message) => {
-          const processed = getProcessedMessage(
-            message,
-            updatedToolResults,
-            approvalsForProcessing,
-          );
-
-          // Process task-related tool calls in real-time as messages arrive
-          // This ensures tasks appear immediately in the sidebar without needing ChatMessage to render
-          // Only process each tool result once (messages may be reprocessed on cross-matching)
-          if (
-            processed.toolExecutions &&
-            processed.toolExecutions.length > 0
-          ) {
-            const tasksStore = useTasksStore.getState();
-            processed.toolExecutions.forEach((exec) => {
-              const toolCallId = exec.call?.id;
-              if (!toolCallId) return;
-              const toolName = exec.call?.name?.toLowerCase?.();
-              const content = exec.result?.content;
-              if (!content || typeof content !== "string") return;
-
-              // Skip if we've already processed this tool result
-              if (processedTaskToolCallIds.has(toolCallId)) return;
-
-              if (toolName === "update_task") {
-                processedTaskToolCallIds.add(toolCallId);
-                tasksStore.processUpdateTaskContent(chatId, content);
-              } else if (toolName === "add_task") {
-                processedTaskToolCallIds.add(toolCallId);
-                tasksStore.processAddTaskContent(chatId, content);
-              } else if (toolName === "create_subtask") {
-                processedTaskToolCallIds.add(toolCallId);
-                tasksStore.processCreateSubtaskContent(chatId, content);
-              } else if (toolName === "list_tasks") {
-                processedTaskToolCallIds.add(toolCallId);
-                tasksStore.processListTasksContent(chatId, content);
-              } else if (toolName === "create_plan") {
-                processedTaskToolCallIds.add(toolCallId);
-                tasksStore.processCreatePlanContent(chatId, content);
-              }
-            });
-          }
+          getProcessedMessage(message, updatedToolResults, approvalsForProcessing);
         });
 
         // CRITICAL FIX: Clear streaming buffers when complete messages arrive
@@ -3759,7 +3686,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     // Clear thread activity in the dedicated store
     useThreadActivityStore.getState().clearThreads(chatId);
     // Approvals are server data in the RQ cache; reconcile from the server.
-    queryClient.invalidateQueries({ queryKey: approvalKeys.list(chatId) });
+    queryClient.invalidateQueries({ queryKey: approvalServiceKeys.all });
 
     // Mark any incomplete messages as finished in the RQ message cache.
     patchMessagesCache(chatId, (msgs) =>
@@ -4178,8 +4105,6 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     // Clear thread activity store
     useThreadActivityStore.getState().clearAll();
 
-    // Clear module-scoped set that tracks processed task tool calls
-    processedTaskToolCallIds.clear();
     olderMessagesInFlight.clear();
     chatStreamCursors.clear();
     sendPayloads.clear();

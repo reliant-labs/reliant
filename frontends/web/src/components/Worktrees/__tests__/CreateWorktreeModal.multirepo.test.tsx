@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
+import type { ReactElement } from "react";
+import { mockTransport, renderWithTransport } from "@/lib/test-utils";
 import userEvent from "@testing-library/user-event";
 
 const createWorktreeMock = vi.hoisted(() => vi.fn());
@@ -21,9 +23,13 @@ vi.mock("../../../store/projectStore", () => ({
     }),
 }));
 
-vi.mock("../../../api/repo-grpc", () => ({
-  repoGrpc: { list: listReposMock },
-}));
+
+// RepoService answers through the real transport seam, so the component's
+// generated useListRepos hook is what is under test.
+const render = (ui: ReactElement) =>
+  renderWithTransport(ui, {
+    transport: mockTransport({ "RepoService.ListRepos": (req) => listReposMock(req) }),
+  });
 
 vi.mock("../../../hooks/useBranches", () => ({
   useBranches: () => ({
@@ -41,8 +47,8 @@ describe("CreateWorktreeModal in a multi-repo project", () => {
     vi.clearAllMocks();
     listReposMock.mockResolvedValue({
       repos: [
-        { id: "repo-a", name: "api", relative_path: "api" },
-        { id: "repo-b", name: "web", relative_path: "web" },
+        { id: "repo-a", name: "api", relativePath: "api" },
+        { id: "repo-b", name: "web", relativePath: "web" },
       ],
     });
     createWorktreeMock.mockResolvedValue({ id: "wt-new", name: "feature-x" });

@@ -40,8 +40,7 @@
 import { memo, useId, useMemo, useState } from "react";
 import { CheckCircle2, ChevronDown, ChevronRight, MessageCircleQuestion, Undo2 } from "lucide-react";
 import { toast } from "sonner";
-import { answerQuestion, useAsyncQuestions } from "@/hooks/approval-queries";
-import type { QuestionInfo } from "@/api/question-grpc";
+import { answerQuestion, useAsyncQuestions, type QuestionInfo } from "@/hooks/question-queries";
 import { CardInset } from "../forge-ui/card";
 import { cn } from "@/lib/utils";
 import { QuestionPrompt, type QuestionAnswer } from "./QuestionPrompt";
@@ -98,8 +97,9 @@ const HEADINGS: Record<Exclude<AskUserCardMode, "async">, { title: string; statu
 };
 
 function AskUserCardComponent({ chatId, toolCallId, input, finished = false }: AskUserCardProps) {
-  const { data: asyncQuestions } = useAsyncQuestions(chatId);
-  const question = asyncQuestions?.find((q) => q.tool_call_id === toolCallId);
+  const { data: asyncList } = useAsyncQuestions(chatId);
+  const asyncQuestions = asyncList?.questions;
+  const question = asyncQuestions?.find((q) => q.toolCallId === toolCallId);
   // The input as the model wrote it, else the row's metadata, which the
   // server has already normalized.
   const items = useMemo(
@@ -113,8 +113,8 @@ function AskUserCardComponent({ chatId, toolCallId, input, finished = false }: A
   const mode = askUserCardMode({ question, input, finished, listed: asyncQuestions !== undefined });
   const resolved = mode === "async" && question?.status === "resolved";
   // Withdrawn by the agent (withdraw_question): moot, not answered.
-  const withdrawnReason = resolved ? question?.withdrawn_reason : undefined;
-  const answers = resolved && !withdrawnReason ? askUserAnswerLines(question?.response_data) : [];
+  const withdrawnReason = resolved ? question?.withdrawnReason : undefined;
+  const answers = resolved && !withdrawnReason ? askUserAnswerLines(question?.responseData) : [];
   // A settled card starts collapsed; the user can open it and close it again.
   const [expanded, setExpanded] = useState(false);
   const bodyId = useId();
@@ -122,7 +122,7 @@ function AskUserCardComponent({ chatId, toolCallId, input, finished = false }: A
   const onSubmit = async (answer: { answers: QuestionAnswer[] }) => {
     if (!chatId || !question) return;
     try {
-      await answerQuestion(chatId, question.question_id, answer);
+      await answerQuestion(chatId, question.questionId, answer);
     } catch (error) {
       toast.error("Could not send your answer", {
         description: error instanceof Error ? error.message : String(error),

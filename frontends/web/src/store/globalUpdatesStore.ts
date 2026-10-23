@@ -34,7 +34,7 @@ import { useGlobalDataStore } from "./globalDataStore";
 import { chatKeys, patchChatCaches, removeChatFromListCache, getChatFromCache, resolveChat, setChatSelection, markChatSelectionsUnmaintained } from "../hooks/chat-queries";
 import { isNewerSelection, selectionFromPayload, type SelectionPayload } from "../lib/chatSelection";
 import { setMessagesMetaInCache } from "../hooks/message-queries";
-import { approvalKeys } from "../hooks/approval-queries";
+import { approvalServiceKeys } from "../hooks/approval-service-hooks_gen";
 import { runKeys, runsInvalidatingUpdate } from "../hooks/run-queries";
 import { inboxInvalidatingUpdate, inboxKeys } from "../hooks/inbox-queries";
 import { showWorkflowCompletionNotification, showWorkflowFailedNotification, showApprovalRequiredNotification, getNotificationPermission } from "../lib/notifications";
@@ -1105,7 +1105,7 @@ function handleChatActivityChanged(update: UserUpdate) {
     // Approvals are server data in the React Query cache. On IDLE we don't hold
     // the resolved approval objects, so reconcile from the server (a genuine
     // "something changed, refetch" nudge — the one case invalidate is correct).
-    queryClient.invalidateQueries({ queryKey: approvalKeys.list(chat_id) });
+    queryClient.invalidateQueries({ queryKey: approvalServiceKeys.all });
 
     // IDLE is the authoritative "nothing is streaming" signal. Streaming
     // deltas race message finalization on a separate server channel, so a

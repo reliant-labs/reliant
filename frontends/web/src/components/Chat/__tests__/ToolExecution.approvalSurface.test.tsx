@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { SurfaceProvider } from "../../../lib/surfaceContext";
 import { ToolExecution } from "../ToolExecution";
 import { ApprovalStatus } from "../../../gen/reliant/v1/approval_pb";
-import type { ToolApprovalRequest } from "../../../api/client";
+import type { Approval } from "../../../gen/reliant/v1/approval_pb";
 
 // This is the approval UI that actually ships: ChatContainer -> ChatPresenter
 // -> InterleavedTimeline -> ChatMessage -> ToolExecution, shared by desktop
@@ -30,13 +30,14 @@ vi.mock("../../../hooks/useWorkflowExecutions", () => ({
   useWorkflowExecutions: () => ({ allWorkflows: [] }),
 }));
 
-const pendingApproval: ToolApprovalRequest = {
+const pendingApproval: Approval = {
+  $typeName: "reliant.v1.Approval",
   id: "approval-1",
-  chat_id: "chat-1",
-  content_block_id: "block-1",
+  chatId: "chat-1",
+  entityId: "block-1",
   description: "Edit src/index.ts",
   status: ApprovalStatus.PENDING,
-  created_at: new Date().toISOString(),
+  createdAt: new Date().toISOString(),
 };
 
 function renderApproval(surface: "desktop" | "mobile" | "embed") {

@@ -29,8 +29,8 @@ vi.mock("../../../hooks/chat-queries", async () => {
   const actual = await vi.importActual<typeof import("../../../hooks/chat-queries")>("../../../hooks/chat-queries");
   return { ...actual, useChat: () => ({ data: undefined, isLoading: false }), getChatFromCache: () => undefined };
 });
-vi.mock("../../../hooks/approval-queries", () => ({
-  usePendingQuestions: () => ({ data: [], isLoading: false }),
+vi.mock("../../../hooks/question-queries", () => ({
+  usePendingQuestions: () => ({ data: { questions: [] }, isLoading: false }),
 }));
 const NO_PRESETS = { presets: [] as never[], loading: false };
 const NO_MODELS = { models: [] as never[] };

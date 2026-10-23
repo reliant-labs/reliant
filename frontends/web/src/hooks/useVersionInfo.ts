@@ -1,8 +1,33 @@
 import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { requestKey } from "@reliantlabs/forge-web-runtime/service-hooks";
 
-import { systemGrpc } from "../api/system-grpc";
+import { SystemService, VersionRequestSchema } from "@/gen/reliant/v1/system_pb";
+import { systemServiceKeys } from "@/hooks/system-service-hooks_gen";
+import { connectClient } from "@/lib/connect";
 import { appBuild } from "../lib/appBuild";
 import { formatVersion } from "../lib/releaseIdentity";
+
+const systemClient = connectClient(SystemService);
+
+/**
+ * The server's Version RPC, as a query.
+ *
+ * forge generates no query hook for it: it classifies a read by its rpc's
+ * NAME (Get/List/Search…), and `Version` is not a read verb, so
+ * system-service-hooks_gen.ts offers only `useVersion` as a MUTATION. Until
+ * forge also reads a NO_SIDE_EFFECTS idempotency level, this key is built
+ * exactly the way the generated factory would build it —
+ * `[service, method, protojson(req)]` under `systemServiceKeys.all` — so an
+ * invalidation of the service reaches it, and the day forge emits
+ * `systemServiceKeys.version` this becomes `useVersion({})` with the same
+ * cache entry.
+ */
+const versionQueryKey = [
+  ...systemServiceKeys.all,
+  "version",
+  requestKey(VersionRequestSchema, {}),
+] as const;
 
 /**
  * Everything the About screens say about which build the user is running.
@@ -31,25 +56,11 @@ export function useVersionInfo(): VersionInfo {
   const build = appBuild();
   const baked = formatVersion(build?.version, build?.commit);
   const [desktopVersion, setDesktopVersion] = useState<string | null>(null);
-  const [server, setServer] = useState<ServerVersion>({ state: "loading" });
-
-  useEffect(() => {
-    let cancelled = false;
-    systemGrpc
-      .version()
-      .then((data) => {
-        if (cancelled) return;
-        const version = formatVersion(data.version, data.commit);
-        setServer(version ? { state: "known", version } : { state: "unknown" });
-      })
-      .catch((error) => {
-        console.error("Failed to fetch server version:", error);
-        if (!cancelled) setServer({ state: "unreachable" });
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const versionQuery = useQuery({
+    queryKey: versionQueryKey,
+    queryFn: () => systemClient.version({}),
+  });
+  const server = serverVersionFrom(versionQuery);
 
   // The packaged desktop app also knows its own version from Electron. The
   // baked identity is the same build's, so it wins; this only covers a bundle
@@ -73,6 +84,17 @@ export function useVersionInfo(): VersionInfo {
     server,
     release: build?.release || null,
   };
+}
+
+function serverVersionFrom(query: {
+  data?: { version: string; commit: string };
+  isError: boolean;
+}): ServerVersion {
+  if (query.data) {
+    const version = formatVersion(query.data.version, query.data.commit);
+    return version ? { state: "known", version } : { state: "unknown" };
+  }
+  return query.isError ? { state: "unreachable" } : { state: "loading" };
 }
 
 /** One-line text for the server's version, for the About screens. */

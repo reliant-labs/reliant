@@ -38,7 +38,8 @@ import type { WorkflowExecution } from "./ExecutionSidebar/types";
 import { InterleavedTimeline } from "./thread-views";
 import { WorkflowViewerPanel } from "../workflow/WorkflowViewerPanel";
 
-import type { Message, ToolApprovalRequest } from "../../api/client";
+import type { Message } from "../../api/client";
+import type { Approval } from "../../gen/reliant/v1/approval_pb";
 import type {
   ErrorUpdate,
   InfoUpdate,
@@ -55,7 +56,7 @@ import { useChat } from "../../hooks/chat-queries";
 import { useQueuedAgentMessages } from "../../hooks/queued-agent-messages";
 import { isUnadoptedAutomation } from "../../lib/sidebarChatList";
 import { unansweredMessage } from "../../lib/awaitingReply";
-import { usePendingQuestions } from "../../hooks/approval-queries";
+import { usePendingQuestions } from "../../hooks/question-queries";
 import { questionForThread } from "../../lib/pendingQuestions";
 import { chatMachineNotice, resolveChatMachine } from "../../lib/chatMachineNotice";
 import { useWakingMachines } from "../../lib/machineWake";
@@ -66,7 +67,7 @@ import { TakeOverRunBar, useAdoptOnSend } from "./TakeOverRunBar";
 interface ChatPresenterProps {
   // Message data
   messages: Message[];
-  approvals: ToolApprovalRequest[];
+  approvals: Approval[];
   errorEvents: ErrorUpdate[];
   infoEvents: InfoUpdate[];
   runOutputs: RunOutputUpdate[];
@@ -74,7 +75,7 @@ interface ChatPresenterProps {
   // Chat state
   chatId: string | null;
   isChatBusy: boolean;
-  pendingApprovals: ToolApprovalRequest[];
+  pendingApprovals: Approval[];
   connectionStatus: string;
 
   // Chat metadata
@@ -193,7 +194,7 @@ export const ChatPresenter = memo(function ChatPresenter({
   // background-work pill instead.
   const { data: pendingQuestions } = usePendingQuestions(chatId || undefined);
   const hasPendingQuestion = !!questionForThread(
-    pendingQuestions,
+    pendingQuestions?.questions,
     chatId || undefined,
     selectedThreadId,
     chatForQueue?.workflowId,

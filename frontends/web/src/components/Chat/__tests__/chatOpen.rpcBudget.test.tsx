@@ -40,10 +40,11 @@ vi.mock("../WorkflowSelector", () => ({ WorkflowSelector: () => null }));
 
 import { api } from "../../../api/client";
 import { chatGrpc } from "../../../api/chat-grpc";
-import { questionGrpc } from "../../../api/question-grpc";
 import { workflowGrpc } from "../../../api/workflow-grpc";
 import { presetGrpc } from "../../../api/preset-grpc";
+import { setTransport } from "../../../lib/connect";
 import { queryClient } from "../../../lib/query-client";
+import { mockTransport } from "../../../lib/test-utils";
 import { useProjectStore } from "../../../store/projectStore";
 import {
   markChatSelectionsUnmaintained,
@@ -51,11 +52,8 @@ import {
   useChat,
 } from "../../../hooks/chat-queries";
 import { useMessages } from "../../../hooks/message-queries";
-import {
-  useApprovals,
-  usePendingApprovals,
-  usePendingQuestions,
-} from "../../../hooks/approval-queries";
+import { useApprovals, usePendingApprovals } from "../../../hooks/approval-queries";
+import { usePendingQuestions } from "../../../hooks/question-queries";
 import { useWorkflowExecutions } from "../../../hooks/useWorkflowExecutions";
 import { ChatInput } from "../ChatInput";
 
@@ -68,6 +66,15 @@ let counters: Counter[] = [];
 
 function spyRpcs() {
   const chat = (id: string) => ({ id, projectId: PROJECT_ID, title: id });
+  // Services on their generated hooks are counted where they reach the wire.
+  const listPendingQuestions = vi.fn(() => ({ questions: [] }));
+  const listApprovalsByChat = vi.fn(() => ({ approvals: [] }));
+  setTransport(
+    mockTransport({
+      "QuestionService.ListPendingQuestions": listPendingQuestions,
+      "ApprovalService.ListApprovalsByChat": listApprovalsByChat,
+    }),
+  );
   counters = [
     { name: "GetChat", spy: vi.spyOn(api.chatsV2, "get").mockImplementation(async (id: string) => chat(id) as never) },
     {
@@ -79,8 +86,8 @@ function spyRpcs() {
         oldestSeq: 0,
       } as never),
     },
-    { name: "ListApprovalsByChat", spy: vi.spyOn(api.approvals, "listByChat").mockResolvedValue([] as never) },
-    { name: "ListPendingQuestions", spy: vi.spyOn(questionGrpc, "listPendingQuestions").mockResolvedValue([] as never) },
+    { name: "ListApprovalsByChat", spy: listApprovalsByChat },
+    { name: "ListPendingQuestions", spy: listPendingQuestions },
     {
       name: "GetWorkflowExecutions",
       spy: vi.spyOn(chatGrpc, "getWorkflowExecutions").mockResolvedValue({ all: [], latest: null } as never),
