@@ -1999,6 +1999,29 @@ namespace/name pairs, only as type Opaque, for the delivery identities only.
 --delivery-subject (user:`<name>` or serviceaccount:`<ns>`/`<name>`) binds a second,
 dedicated delivery identity alongside the binding's identity.
 
+SECRET-STORE ISSUER — connect also tells the control plane which service-account
+issuer the cluster's pods are signed by, so the secret store can verify the
+projected token an External Secrets Operator logs in with, against the cluster's
+OWN keys (no stored credential, no call back into the cluster). forge reads the
+issuer and key set from the API server through --context:
+
+  --issuer auto      (default) discover on GKE, upload elsewhere; if the issuer
+                     cannot be read or the control plane refuses it, the cluster
+                     still connects for deploys and forge says what is missing
+  --issuer discover  the store fetches `<issuer>`/.well-known/openid-configuration
+                     itself; the issuer must be reachable from the internet
+  --issuer upload    forge sends /openid/v1/jwks: for a cluster the store cannot
+                     reach (private, k3d). PUBLIC keys only; a set holding a
+                     private or symmetric key is never sent. A snapshot: re-run
+                     connect after a signing-key rotation to refresh it
+  --issuer skip      leave the registration as it is
+  --issuer withdraw  remove it; the store stops trusting the cluster
+
+The binding's grant gains 'get' on /openid/v1/jwks. The store's id for the
+cluster (its auth mount is jwt-`<id>`) is assigned by the control plane, is global
+across organizations, and is printed and kept in
+.forge/state/cluster-issuer-`<name>`.json; use it as the connected cluster name.
+
 ```
 reliant forge cluster connect <name> [flags]
 ```
@@ -2015,6 +2038,7 @@ reliant forge cluster connect <name> [flags]
 | `--delivery-subject` | `string` | - | Also bind the delivery grant to this dedicated identity: user:`<name>` or serviceaccount:`<namespace>`/`<name>` |
 | `--dry-run` | `bool` | - | Print the RBAC diff against the cluster and what would be sent; contact no control plane and change nothing |
 | `--env` | `string` | - | Environment whose binding this is, and whose control plane to talk to (required) |
+| `--issuer` | `string` | `auto` | Register the cluster's service-account issuer with the secret store: auto, discover, upload, skip or withdraw |
 | `--live-from` | `string` | - | With --dry-run: diff against this kubectl capture instead of reading the cluster |
 | `--token` | `string` | - | Credential to use, ahead of the env var and the credentials file |
 

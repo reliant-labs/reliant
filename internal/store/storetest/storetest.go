@@ -80,11 +80,10 @@ func New(tb testing.TB) *Env {
 	if testing.Short() && !requireTestDB() {
 		tb.Skip("DB-backed test; skipped under -short. Run without -short, or set REQUIRE_TEST_DB=1 to include it")
 	}
-	base := serverDSN(tb)
+	// Called for its effect: it resolves the server and points pgtest at it.
+	_ = serverDSN(tb)
 
-	clone, cleanup, err := pgtest.NewFromTemplate(templateKey(tb), func(build *sql.DB) error {
-		return buildTemplate(build, base)
-	})
+	clone, dsn, cleanup, err := pgtest.NewFromTemplate(templateKey(tb), buildTemplate)
 	if err != nil {
 		tb.Fatalf("storetest: template database: %v", err)
 	}
@@ -95,32 +94,16 @@ func New(tb testing.TB) *Env {
 		tb.Fatalf("storetest: repo: %v", err)
 	}
 	enableSealing(tb, repo)
-	var name string
-	if err := clone.QueryRow(`SELECT current_database()`).Scan(&name); err != nil {
-		tb.Fatalf("storetest: database name: %v", err)
-	}
-	dsn, err := withDatabase(base, name)
-	if err != nil {
-		tb.Fatalf("storetest: %v", err)
-	}
 	return &Env{ORM: repo.ORM(), Repo: repo, SQL: clone, DSN: dsn}
 }
 
 // buildTemplate migrates the empty template database through db.Migrate —
 // the path a server boots on — and seeds the shared project.
-func buildTemplate(build *sql.DB, base string) error {
-	var name string
-	if err := build.QueryRow(`SELECT current_database()`).Scan(&name); err != nil {
-		return fmt.Errorf("template name: %w", err)
-	}
-	dsn, err := withDatabase(base, name)
-	if err != nil {
-		return err
-	}
+func buildTemplate(build *sql.DB, dsn string) error {
 	if _, err := db.Migrate(context.Background(), dsn); err != nil {
 		return fmt.Errorf("migrate template: %w", err)
 	}
-	_, err = build.Exec(`INSERT INTO projects (id, user_id, name, path, created_at, updated_at, last_active)
+	_, err := build.Exec(`INSERT INTO projects (id, user_id, name, path, created_at, updated_at, last_active)
 		VALUES ($1, $2, 'Test Project', '/tmp/reliant-test-seed-project', NOW(), NOW(), NOW())`, SeedProjectID, SeedUserID)
 	if err != nil {
 		return fmt.Errorf("seed template: %w", err)
