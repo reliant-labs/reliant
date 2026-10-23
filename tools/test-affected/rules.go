@@ -237,7 +237,7 @@ var rules = []rule{
 		patterns: []string{"db/migrations/**"},
 		noGraph:  true,
 		dbFan:    true,
-		note:     "reaches only DB-backed tests (needs DATABASE_URL to run them)",
+		note:     "reaches only DB-backed tests",
 	},
 	{
 		id:       "web-source",

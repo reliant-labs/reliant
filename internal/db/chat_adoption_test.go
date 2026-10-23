@@ -16,6 +16,8 @@ import (
 // list_in_sidebar is the one definition of "the sidebar lists this chat".
 // WORKFLOW_UI.md §6 and §14.1 decisions 4 and 5.
 func TestListInSidebarTruthTable(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -71,6 +73,8 @@ func TestListInSidebarTruthTable(t *testing.T) {
 }
 
 func TestListChatsSidebarOnlyReadsTheViewColumn(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -115,6 +119,8 @@ func TestListChatsSidebarOnlyReadsTheViewColumn(t *testing.T) {
 }
 
 func TestSetChatAdopted_OwnerScopedAndIdempotent(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -162,6 +168,8 @@ func TestSetChatAdopted_OwnerScopedAndIdempotent(t *testing.T) {
 }
 
 func TestSetChatAdopted_EmitsActivityChangedSoSidebarRefetches(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	createActivityTestChat(t, repo, "adopt-emit")

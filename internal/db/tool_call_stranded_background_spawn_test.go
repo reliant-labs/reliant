@@ -23,6 +23,8 @@ import (
 // never match one, no matter how long the child has been finished with
 // nothing delivered to the parent's mailbox.
 func TestListStrandedSpawnToolCalls_MissesTerminalBackgroundedSpawn(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 

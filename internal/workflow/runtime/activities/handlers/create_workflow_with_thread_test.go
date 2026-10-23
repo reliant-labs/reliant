@@ -16,6 +16,8 @@ import (
 )
 
 func TestCreateWorkflowWithThread_NewThread(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	repo := db.NewTestRepo(t)
 	defer repo.Close()
@@ -95,6 +97,8 @@ func TestCreateWorkflowWithThread_NewThread(t *testing.T) {
 }
 
 func TestCreateWorkflowWithThread_ForkedThread(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	repo := db.NewTestRepo(t)
 	defer repo.Close()
@@ -175,6 +179,8 @@ func TestCreateWorkflowWithThread_ForkedThread(t *testing.T) {
 }
 
 func TestCreateWorkflowWithThread_ChildWorkflow(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	repo := db.NewTestRepo(t)
 	defer repo.Close()
@@ -265,6 +271,8 @@ func TestCreateWorkflowWithThread_ChildWorkflow(t *testing.T) {
 }
 
 func TestCreateWorkflowWithThread_MissingWorkflowID(t *testing.T) {
+	t.Parallel()
+
 	repo := db.NewTestRepo(t)
 	defer repo.Close()
 
@@ -287,6 +295,8 @@ func TestCreateWorkflowWithThread_MissingWorkflowID(t *testing.T) {
 }
 
 func TestCreateWorkflowWithThread_MissingWorkflowName(t *testing.T) {
+	t.Parallel()
+
 	repo := db.NewTestRepo(t)
 	defer repo.Close()
 
@@ -309,6 +319,8 @@ func TestCreateWorkflowWithThread_MissingWorkflowName(t *testing.T) {
 }
 
 func TestCreateWorkflowWithThread_MissingChatID(t *testing.T) {
+	t.Parallel()
+
 	repo := db.NewTestRepo(t)
 	defer repo.Close()
 
@@ -342,6 +354,8 @@ func TestCreateWorkflowWithThread_MissingChatID(t *testing.T) {
 // either, so InterleavedTimeline could not classify the thread and dropped its
 // messages until the next execution-tree refetch landed.
 func TestCreateWorkflowWithThread_AnnouncesSpawnThreadAtCreation(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	repo := db.NewTestRepo(t)
 	defer repo.Close()
@@ -439,6 +453,8 @@ func TestCreateWorkflowWithThread_AnnouncesSpawnThreadAtCreation(t *testing.T) {
 // the root workflow has its own announcement path. Announcing it here would be
 // noise in every chat's update log.
 func TestCreateWorkflowWithThread_DoesNotAnnounceRootThread(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	repo := db.NewTestRepo(t)
 	defer repo.Close()
@@ -485,6 +501,8 @@ func TestCreateWorkflowWithThread_DoesNotAnnounceRootThread(t *testing.T) {
 }
 
 func TestCreateWorkflowWithThread_DefaultThreadID(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	repo := db.NewTestRepo(t)
 	defer repo.Close()

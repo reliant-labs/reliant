@@ -19,11 +19,7 @@ import (
 // block the USER saw nothing but an id in a wall of tool-result text. These
 // tests pin the block that closes that gap.
 //
-// They drive buildToolContentBlocks through a fake repository rather than the
-// package's Postgres harness. That harness t.Skip()s when DATABASE_URL is
-// unset, and a skipped test that reports "ok" is indistinguishable from a
-// passing one — every assertion below would silently vanish on a machine with
-// no database, which is exactly the machine this was written on.
+// They drive buildToolContentBlocks through a fake repository.
 //
 // The builder RETURNS blocks rather than writing them — every block for a
 // message now goes in through one atomic statement so concurrent writers cannot
@@ -68,6 +64,8 @@ func (r *fakeBlockRepo) withImage(id string) *fakeBlockRepo {
 // id — byte-for-byte the representation the user-upload path produces, so the
 // existing renderer and /api/attachments/{id} serving work unchanged.
 func TestToolResultAttachments_MaterializeImageBlocks(t *testing.T) {
+	t.Parallel()
+
 	repo := newFakeBlockRepo().withImage("att-image-1")
 	svc := NewService(repo)
 	timestamp := time.Now().UTC()
@@ -105,6 +103,8 @@ func TestToolResultAttachments_MaterializeImageBlocks(t *testing.T) {
 // renderer sorts blocks by index. An image that sorts before the result it
 // came from, or two blocks sharing an index, reorders the transcript.
 func TestToolResultAttachments_PositionsInterleaveWithResults(t *testing.T) {
+	t.Parallel()
+
 	repo := newFakeBlockRepo().withImage("att-a").withImage("att-b")
 	svc := NewService(repo)
 
@@ -142,6 +142,8 @@ func TestToolResultAttachments_PositionsInterleaveWithResults(t *testing.T) {
 // A tool result with no attachments must produce exactly the blocks it always
 // did. This is the regression guard for every existing tool.
 func TestToolResultAttachments_NoAttachmentsIsUnchanged(t *testing.T) {
+	t.Parallel()
+
 	repo := newFakeBlockRepo()
 	svc := NewService(repo)
 
@@ -159,6 +161,8 @@ func TestToolResultAttachments_NoAttachmentsIsUnchanged(t *testing.T) {
 // and the turn may have cost real money — discarding it over a thumbnail is
 // the worse outcome. The tool_result block must still land.
 func TestToolResultAttachments_UnusableAttachmentIsSkippedNotFatal(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		name  string
 		setup func(*fakeBlockRepo)
@@ -207,6 +211,8 @@ func TestToolResultAttachments_UnusableAttachmentIsSkippedNotFatal(t *testing.T)
 // A generated video rides in an IMAGE-typed block (the UI splits by MIME), and
 // must not be skipped the way a non-image attachment is.
 func TestToolResultAttachments_VideoBecomesABlock(t *testing.T) {
+	t.Parallel()
+
 	repo := newFakeBlockRepo()
 	repo.attachments["att-video-1"] = &db.Attachment{
 		ID: "att-video-1", Filename: "generated-abc123.mp4", MimeType: "video/mp4",

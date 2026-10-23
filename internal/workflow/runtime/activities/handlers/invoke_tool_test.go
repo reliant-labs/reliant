@@ -14,6 +14,8 @@ import (
 // by WithResponseMetadata, and this is the read that turns it back into
 // something a graph edge can walk as nodes.<id>.data.<field>.
 func TestStructuredToolDataParsesTypedOutput(t *testing.T) {
+	t.Parallel()
+
 	// Exactly what generate_image publishes through WithResponseMetadata.
 	metadata := `{"attachment_id":"att_abc123","filename":"hero.png","mime_type":"image/png","size":20481,"model":"gpt-image-1","saved_to":"/w/assets/hero.png","revised_prompt":"a wide landscape"}`
 
@@ -33,6 +35,8 @@ func TestStructuredToolDataParsesTypedOutput(t *testing.T) {
 // contributes no structured data — and that is NOT an error, because content
 // is still returned and the node still succeeds.
 func TestStructuredToolDataDegradesGracefully(t *testing.T) {
+	t.Parallel()
+
 	for name, metadata := range map[string]string{
 		"empty":            "",
 		"whitespace":       "   ",
@@ -52,6 +56,8 @@ func TestStructuredToolDataDegradesGracefully(t *testing.T) {
 // through that encoding is what makes an invoked tool indistinguishable from a
 // called one everywhere downstream.
 func TestToolInputFromParams(t *testing.T) {
+	t.Parallel()
+
 	t.Run("empty params produce an empty object, not null", func(t *testing.T) {
 		input, err := toolInputFromParams(nil)
 		require.NoError(t, err)
@@ -79,6 +85,8 @@ func TestToolInputFromParams(t *testing.T) {
 // random id per attempt would let an interrupted-then-resumed workflow
 // generate the same image twice.
 func TestInvokeToolCallIDIsPositional(t *testing.T) {
+	t.Parallel()
+
 	first := invokeToolCallID("wf-1", "hero", "", 0)
 	second := invokeToolCallID("wf-1", "hero", "", 0)
 	assert.Equal(t, first, second, "the same node in the same run must produce the same tool_call_id")

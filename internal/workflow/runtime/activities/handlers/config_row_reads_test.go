@@ -37,6 +37,8 @@ func (r *fullConfigRowReads) GetProjectConfigRecord(ctx context.Context, project
 // The worker's preset paths read only the presets column — and a project
 // preset, which lives in that column, is still found by each of them.
 func TestWorkerPresetPathsReadOnlyThePresetsColumn(t *testing.T) {
+	t.Parallel()
+
 	repo := db.NewTestRepo(t)
 	ctx := context.Background()
 

@@ -71,6 +71,8 @@ func TestCancelArchivedChatWorkflow_RealFailureIsStillAnError(t *testing.T) {
 
 // A chat that never started has no run, and nothing is asked of Temporal.
 func TestCancelArchivedChatWorkflow_NoRunNoCall(t *testing.T) {
+	t.Parallel()
+
 	temporal := &cancelTestTemporalClient{err: errors.New("must not be called")}
 	svc := &Service{deps: Deps{Temporal: temporal}}
 

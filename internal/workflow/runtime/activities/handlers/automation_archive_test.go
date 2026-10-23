@@ -37,6 +37,8 @@ func (f *streakFixture) archiveState(chatID, status, outcome string, launchRun b
 }
 
 func TestWorkflowStatus_ArchivesSucceededAutomationRuns(t *testing.T) {
+	t.Parallel()
+
 	for _, kind := range storedTriggerKinds {
 		t.Run(string(kind), func(t *testing.T) {
 			f := newStreakFixtureOfKind(t, kind, false)
@@ -63,6 +65,8 @@ func TestWorkflowStatus_ArchivesSucceededAutomationRuns(t *testing.T) {
 }
 
 func TestWorkflowStatus_KeepsAutomationRunsThatNeedAPerson(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		name    string
 		status  string
@@ -89,6 +93,8 @@ func TestWorkflowStatus_KeepsAutomationRunsThatNeedAPerson(t *testing.T) {
 }
 
 func TestWorkflowStatus_ArchiveLeavesPeoplesChatsAlone(t *testing.T) {
+	t.Parallel()
+
 	t.Run("chats and builder tests a person started", func(t *testing.T) {
 		for _, kind := range []core.TriggerEventKind{core.TriggerEventKindChatStart, core.TriggerEventKindBuilderTest, core.TriggerEventKindAgentStartRun} {
 			f := newStreakFixture(t, false)
@@ -127,6 +133,8 @@ func TestWorkflowStatus_ArchiveLeavesPeoplesChatsAlone(t *testing.T) {
 // An automation that asked to be told its run finished keeps the run where the
 // notification points: that flag is the activation's way to keep its runs.
 func TestWorkflowStatus_NotifyOnCompleteKeepsTheRun(t *testing.T) {
+	t.Parallel()
+
 	f := newStreakFixture(t, true)
 	chatID := f.launch(core.TriggerEventKindSchedule, db.Active())
 	assert.NotEqual(t, db.ChatStateArchived, f.archiveState(chatID, "completed", "", true))
@@ -134,6 +142,8 @@ func TestWorkflowStatus_NotifyOnCompleteKeepsTheRun(t *testing.T) {
 
 // A run whose automation was deleted is still an automation's run.
 func TestWorkflowStatus_ArchivesRunOfDeletedAutomation(t *testing.T) {
+	t.Parallel()
+
 	f := newStreakFixture(t, false)
 	chatID := f.launch(core.TriggerEventKindSchedule, db.Active())
 	// The launch event outlives the trigger: trigger_id is SET NULL on delete.

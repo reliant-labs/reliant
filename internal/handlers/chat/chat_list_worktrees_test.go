@@ -43,6 +43,8 @@ func seedListChatsChat(t *testing.T, ctx context.Context, repo *db.Repo, project
 // project's full worktree list: ListChats carries each chat's workspace and the
 // main workspace itself.
 func TestListChats_CarriesEachChatsWorktreeSummary(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
@@ -115,6 +117,8 @@ func TestListChats_CarriesEachChatsWorktreeSummary(t *testing.T) {
 }
 
 func TestListChats_NoWorktreesYieldsNoSummaries(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
@@ -132,6 +136,8 @@ func TestListChats_NoWorktreesYieldsNoSummaries(t *testing.T) {
 }
 
 func TestListChats_DoesNotLeakAnotherUsersMainWorktree(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	owner := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")

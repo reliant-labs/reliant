@@ -35,6 +35,8 @@ import (
 // activity, and the wrapper's decides whether that failure becomes a retry. If
 // they disagree, a turn fails without ever being retried.
 func TestHeartbeatKilledStream(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name         string
 		cause        error
@@ -103,6 +105,8 @@ func TestHeartbeatKilledStream(t *testing.T) {
 // user interrupt — skipped that guard entirely and handed the loop an empty
 // turn it read as "the model is done".
 func TestCallLLM_HeartbeatCancelledStreamFailsForRetry(t *testing.T) {
+	t.Parallel()
+
 	driver := &cancellingMockLLMDriver{ready: make(chan struct{})}
 	resolver := drivers.DriverResolver(func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
 		return driver, nil
@@ -145,6 +149,8 @@ func TestCallLLM_HeartbeatCancelledStreamFailsForRetry(t *testing.T) {
 // success, and let the loop take one more mailbox-draining turn. This is the
 // boundary that stops the fix above from retrying against the user's intent.
 func TestCallLLM_RealInterruptStillSucceeds(t *testing.T) {
+	t.Parallel()
+
 	driver := &cancellingMockLLMDriver{ready: make(chan struct{})}
 	resolver := drivers.DriverResolver(func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
 		return driver, nil

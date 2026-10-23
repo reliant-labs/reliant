@@ -16,6 +16,8 @@ import (
 )
 
 func TestChatService_CreateChat_EarlyWorkflowTreeValidationFailure(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -87,6 +89,8 @@ nodes:
 }
 
 func TestChatService_ValidateWorkflowInputs_RejectsMissingRequiredWorkflowParams(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -126,6 +130,8 @@ nodes:
 }
 
 func TestChatService_CreateChat_EarlyWorkflowTreeValidationSuccess(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -179,6 +185,8 @@ nodes:
 }
 
 func TestChatService_CreateChat_WorkflowNameSpawnUsesCanonicalReference(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 

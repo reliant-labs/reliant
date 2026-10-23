@@ -35,6 +35,8 @@ import (
 // the same tool call the same way. A difference here is a user-visible
 // inconsistency -- the screen changes when you reload it.
 func TestChatSnapshot_MatchesListMessagesEnrichment(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 

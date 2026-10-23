@@ -29,6 +29,8 @@ func preloadTestCatalog() []cfgpkg.StoredSkill {
 }
 
 func TestLoadSkillForInjection_ExactFoldAndBody(t *testing.T) {
+	t.Parallel()
+
 	skills := preloadTestCatalog()
 
 	// Exact match returns the resolved skill and its body.
@@ -62,6 +64,8 @@ func TestLoadSkillForInjection_ExactFoldAndBody(t *testing.T) {
 // by mistake."). This pins the shape: no assistant turn, no tool_call, no
 // tool_result — one user turn that says the harness did it.
 func TestBuildSeededSkillMessages_NeverAttributedToTheModel(t *testing.T) {
+	t.Parallel()
+
 	cfg := &cfgpkg.Config{Skills: preloadTestCatalog()}
 
 	msgs, injected, oversized, _ := buildSeededSkillMessages(cfg, []string{"forge/getting-started", "forge/db"})
@@ -100,6 +104,8 @@ func TestBuildSeededSkillMessages_NeverAttributedToTheModel(t *testing.T) {
 }
 
 func TestBuildSeededSkillMessages_SkipsEmptyUnknownAndDedupes(t *testing.T) {
+	t.Parallel()
+
 	cfg := &cfgpkg.Config{Skills: preloadTestCatalog()}
 
 	// An empty body and an unknown path both fail to resolve, so neither is
@@ -145,6 +151,8 @@ func TestBuildSeededSkillMessages_SkipsEmptyUnknownAndDedupes(t *testing.T) {
 // entirely — so the same skill reached the model as two different documents, and
 // the preloaded copy carried the full file into the cached prefix of every turn.
 func TestBuildSeededSkillMessages_OversizeSkillIsCappedAndMarked(t *testing.T) {
+	t.Parallel()
+
 	body := "SKILL HEAD\n" + strings.Repeat("guidance line that fills the budget\n", 800) + "SKILL TAIL\n"
 	require.Greater(t, len(body), tools.MaxSkillBodySize, "fixture must exceed the budget to exercise the cap")
 
@@ -181,6 +189,8 @@ func TestBuildSeededSkillMessages_OversizeSkillIsCappedAndMarked(t *testing.T) {
 }
 
 func TestInsertSeededMessagesAfterFirstUserTurn(t *testing.T) {
+	t.Parallel()
+
 	seed := []message.Message{
 		{Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: "seed"}}},
 	}
@@ -231,6 +241,8 @@ func TestInsertSeededMessagesAfterFirstUserTurn(t *testing.T) {
 // to the agent reads differently to the model than a system note, and that
 // reasoning (see preloadedSkillsPreamble) never depended on the driver bug.
 func TestSeededSkillTurnSurvivesTheOpenAICompatibleDriver(t *testing.T) {
+	t.Parallel()
+
 	cfg := &cfgpkg.Config{Skills: preloadTestCatalog()}
 	msgs, injected, _, _ := buildSeededSkillMessages(cfg, []string{"forge/db"})
 	require.Equal(t, []string{"db"}, injected)
@@ -257,6 +269,8 @@ func TestSeededSkillTurnSurvivesTheOpenAICompatibleDriver(t *testing.T) {
 // surface and authored the migrations ran without `db` or `forge/proto`.
 // Nothing failed and nothing said so.
 func TestBuildSeededSkillMessages_ReportsUnresolvedPaths(t *testing.T) {
+	t.Parallel()
+
 	cfg := &cfgpkg.Config{Skills: preloadTestCatalog()}
 
 	_, injected, _, missing := buildSeededSkillMessages(cfg, []string{"forge/db", "forge/nope", "forge/also-nope"})
@@ -295,6 +309,8 @@ func TestBuildSeededSkillMessages_ReportsUnresolvedPaths(t *testing.T) {
 // existence, so the run proceeds — but the model must be told, in the seed it
 // actually reads, rather than in a log line nobody sees.
 func TestBuildSeededSkillMessages_TellsTheModelWhatItDidNotGet(t *testing.T) {
+	t.Parallel()
+
 	cfg := &cfgpkg.Config{Skills: preloadTestCatalog()}
 
 	msgs, injected, _, missing := buildSeededSkillMessages(cfg, []string{"forge/db", "forge/nope"})
@@ -351,6 +367,8 @@ func TestBuildSeededSkillMessages_TellsTheModelWhatItDidNotGet(t *testing.T) {
 // one is the original bug: a turn silently runs on none of the guidance that
 // was declared for it.
 func TestPreloadSkillMissError_FailsOnlyTheTransientCause(t *testing.T) {
+	t.Parallel()
+
 	requested := []string{"forge/db", "forge/proto"}
 
 	// No daemon push yet: transient, so error and let Temporal retry into a

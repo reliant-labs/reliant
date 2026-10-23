@@ -30,6 +30,8 @@ func seedLifecycleDaemon(t *testing.T, repo *Repo, id, userID string) {
 // concept disagreeing is the exact defect this whole change set exists to
 // remove.
 func TestApplyDaemonLifecycle_StoresAndRoundTrips(t *testing.T) {
+	t.Parallel()
+
 	repo, rawDB, cleanup := SetupTestDBWithRawDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -102,6 +104,8 @@ func TestApplyDaemonLifecycle_StoresAndRoundTrips(t *testing.T) {
 // still provisioning until its next transition, which for a healthy machine may
 // be hours away.
 func TestApplyDaemonLifecycle_RejectsStaleEvents(t *testing.T) {
+	t.Parallel()
+
 	repo, rawDB, cleanup := SetupTestDBWithRawDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -157,6 +161,8 @@ func TestApplyDaemonLifecycle_RejectsStaleEvents(t *testing.T) {
 // Without these the ordinary provisioning→ready transition would erase the OOM
 // history the UI renders.
 func TestApplyDaemonLifecycle_PreservesSizeAndOOMOnPhaseChange(t *testing.T) {
+	t.Parallel()
+
 	repo, rawDB, cleanup := SetupTestDBWithRawDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -208,6 +214,8 @@ func TestApplyDaemonLifecycle_PreservesSizeAndOOMOnPhaseChange(t *testing.T) {
 // does not own — and it would be a row with no hostname, platform or project
 // paths, which every reader treats as a real daemon.
 func TestApplyDaemonLifecycle_UnregisteredDaemonIsNoOp(t *testing.T) {
+	t.Parallel()
+
 	repo, _, cleanup := SetupTestDBWithRawDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -233,6 +241,8 @@ func TestApplyDaemonLifecycle_UnregisteredDaemonIsNoOp(t *testing.T) {
 // would make every subsequent event look newer and silently defeat the
 // out-of-order protection above.
 func TestApplyDaemonLifecycle_RejectsIncompleteUpdates(t *testing.T) {
+	t.Parallel()
+
 	repo, _, cleanup := SetupTestDBWithRawDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -252,6 +262,8 @@ func TestApplyDaemonLifecycle_RejectsIncompleteUpdates(t *testing.T) {
 // A NULL mirror must accept a lifecycle event whatever its timestamp: the
 // ordering guard protects a phase that exists, and there is none to protect.
 func TestApplyDaemonLifecycle_WritesWhenPhaseNullRegardlessOfTimestamp(t *testing.T) {
+	t.Parallel()
+
 	repo, rawDB, cleanup := SetupTestDBWithRawDB(t)
 	defer cleanup()
 	ctx := context.Background()

@@ -6,6 +6,8 @@ import (
 )
 
 func TestParseDatabaseDriver(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name    string
 		input   string
@@ -38,6 +40,8 @@ func TestParseDatabaseDriver(t *testing.T) {
 }
 
 func TestConnectGivesUpAfterConnectTimeoutOnAnUnreachableDatabase(t *testing.T) {
+	t.Parallel()
+
 	if testing.Short() {
 		t.Skip("-short: waits out a 1s connect budget; runs in the full lane")
 	}

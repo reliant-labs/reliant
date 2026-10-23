@@ -37,6 +37,8 @@ func setupEmitStatusFixture(t *testing.T) (*IdempotencyTestHelper, string) {
 // and child_workflow_id are both durable. The child workflow id is what makes
 // a spawn's completion a join instead of string matching.
 func TestEmitToolCallStatus_SpawnLifecycleIsDurable(t *testing.T) {
+	t.Parallel()
+
 	h, chatID := setupEmitStatusFixture(t)
 	defer h.Cleanup()
 	ctx := context.Background()
@@ -94,6 +96,8 @@ func TestEmitToolCallStatus_SpawnLifecycleIsDurable(t *testing.T) {
 // "Starting…" for the whole run, while a reload (which reads the row) shows the
 // child transcript.
 func TestEmitToolCallStatus_LiveEventCarriesChildWorkflowID(t *testing.T) {
+	t.Parallel()
+
 	h, chatID := setupEmitStatusFixture(t)
 	defer h.Cleanup()
 	ctx := context.Background()
@@ -132,6 +136,8 @@ func TestEmitToolCallStatus_LiveEventCarriesChildWorkflowID(t *testing.T) {
 }
 
 func TestEmitToolCallStatus_SpawnFailureIsDurable(t *testing.T) {
+	t.Parallel()
+
 	h, chatID := setupEmitStatusFixture(t)
 	defer h.Cleanup()
 	ctx := context.Background()
@@ -156,6 +162,8 @@ func TestEmitToolCallStatus_SpawnFailureIsDurable(t *testing.T) {
 // This activity is retried like any other, so the same status arriving twice
 // must be a no-op on the row rather than a duplicate.
 func TestEmitToolCallStatus_RetryIsIdempotent(t *testing.T) {
+	t.Parallel()
+
 	h, chatID := setupEmitStatusFixture(t)
 	defer h.Cleanup()
 	ctx := context.Background()
@@ -180,6 +188,8 @@ func TestEmitToolCallStatus_RetryIsIdempotent(t *testing.T) {
 // An unrecognized status string writes nothing rather than storing status 0,
 // which no reader can interpret.
 func TestEmitToolCallStatus_UnknownStatusWritesNothing(t *testing.T) {
+	t.Parallel()
+
 	h, chatID := setupEmitStatusFixture(t)
 	defer h.Cleanup()
 	ctx := context.Background()
@@ -200,6 +210,8 @@ func TestEmitToolCallStatus_UnknownStatusWritesNothing(t *testing.T) {
 // The event emission and the durable write are complements, not alternatives:
 // persistence must not disturb the chat_updates stream the live UI consumes.
 func TestEmitToolCallStatus_StillEmitsChatUpdate(t *testing.T) {
+	t.Parallel()
+
 	h, chatID := setupEmitStatusFixture(t)
 	defer h.Cleanup()
 	ctx := context.Background()
@@ -220,6 +232,8 @@ func TestEmitToolCallStatus_StillEmitsChatUpdate(t *testing.T) {
 }
 
 func TestToolCallStatusFromString(t *testing.T) {
+	t.Parallel()
+
 	cases := map[string]core.ToolCallStatus{
 		"pending":      core.ToolCallStatusPending,
 		"executing":    core.ToolCallStatusExecuting,

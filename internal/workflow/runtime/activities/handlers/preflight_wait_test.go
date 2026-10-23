@@ -31,6 +31,9 @@ type waitFakeRouter struct {
 	onlineIDs sync.Map
 	wokenMu   sync.Mutex
 	woken     []*toolexec.DaemonSelector
+	// onWake, when set, runs on every EnsureAwake: a daemon that comes up
+	// because it was woken, whenever the activity gets round to waking it.
+	onWake func()
 }
 
 func (r *waitFakeRouter) IsDaemonOnline(_ context.Context, _ string, sel *toolexec.DaemonSelector) (bool, error) {
@@ -46,6 +49,9 @@ func (r *waitFakeRouter) EnsureAwake(_ context.Context, _ string, sel *toolexec.
 	r.wokenMu.Lock()
 	r.woken = append(r.woken, sel)
 	r.wokenMu.Unlock()
+	if r.onWake != nil {
+		r.onWake()
+	}
 	return "d1", r.wakeErr
 }
 
@@ -134,6 +140,8 @@ func runPreflight(t *testing.T, a *PreflightDaemonCheckActivity, in PreflightDae
 }
 
 func TestPreflightWait_OnlineIsReadyWithoutMarker(t *testing.T) {
+	t.Parallel()
+
 	router := &waitFakeRouter{}
 	router.online.Store(true)
 	a, repo, chatID := newWaitFixture(t, false, router)
@@ -146,12 +154,19 @@ func TestPreflightWait_OnlineIsReadyWithoutMarker(t *testing.T) {
 }
 
 func TestPreflightWait_BecomesOnlineDuringSlice(t *testing.T) {
+	t.Parallel()
+
 	router := &waitFakeRouter{wakeErr: toolexec.ErrDaemonPending}
+	// Online a little after the wake, so mid-slice: timed from the wake
+	// rather than from the test's start, which a loaded machine can let pass
+	// before the activity has even checked once.
+	router.onWake = func() {
+		go func() {
+			time.Sleep(60 * time.Millisecond)
+			router.online.Store(true)
+		}()
+	}
 	a, repo, chatID := newWaitFixture(t, false, router)
-	go func() {
-		time.Sleep(60 * time.Millisecond)
-		router.online.Store(true)
-	}()
 	out, err := runPreflight(t, a, PreflightDaemonCheckInput{ChatID: chatID, WaitSeconds: 5})
 	require.NoError(t, err)
 	assert.True(t, out.DaemonAvailable)
@@ -161,6 +176,8 @@ func TestPreflightWait_BecomesOnlineDuringSlice(t *testing.T) {
 }
 
 func TestPreflightWait_SliceEndReportsWaiting(t *testing.T) {
+	t.Parallel()
+
 	if testing.Short() {
 		t.Skip("-short: waits a full one-second slice; runs in task test")
 	}
@@ -174,6 +191,8 @@ func TestPreflightWait_SliceEndReportsWaiting(t *testing.T) {
 }
 
 func TestPreflightWait_FinalSliceFailsAndClearsMarker(t *testing.T) {
+	t.Parallel()
+
 	if testing.Short() {
 		t.Skip("-short: waits a full one-second slice; runs in task test")
 	}
@@ -189,11 +208,15 @@ func TestPreflightWait_FinalSliceFailsAndClearsMarker(t *testing.T) {
 
 // The 6-hour cap reads as hours, not as 360 minutes.
 func TestPreflightWait_FinalSliceNamesAnHoursBudgetInHours(t *testing.T) {
+	t.Parallel()
+
 	assert.Equal(t, "within 6 hours", waitBudgetPhrase(6*60*60))
 	assert.Equal(t, "within 10 minutes", waitBudgetPhrase(600))
 }
 
 func TestPreflightWait_HardWakeErrorFailsWithCause(t *testing.T) {
+	t.Parallel()
+
 	router := &waitFakeRouter{wakeErr: errors.New("no daemon registered for this account")}
 	a, repo, chatID := newWaitFixture(t, false, router)
 	_, err := runPreflight(t, a, PreflightDaemonCheckInput{ChatID: chatID, WaitSeconds: 5})
@@ -210,6 +233,8 @@ func TestPreflightWait_HardWakeErrorFailsWithCause(t *testing.T) {
 // naming the control plane's reason, and the message stays queued for the
 // machine instead of being dropped with the run.
 func TestPreflightWait_FailedMachineEndsTheWaitAndQueuesTheMessage(t *testing.T) {
+	t.Parallel()
+
 	router := &machineStateRouter{waitFakeRouter: &waitFakeRouter{}}
 	router.set(toolexec.MachineState{DaemonID: "d1", Exists: true, Failed: true, StatusMessage: "tools-daemon exited with code 1."})
 	a, repo, chatID := newWaitFixture(t, false, router)
@@ -226,16 +251,22 @@ func TestPreflightWait_FailedMachineEndsTheWaitAndQueuesTheMessage(t *testing.T)
 // A machine that fails (or is removed) while the run waits ends the wait at
 // the slice's end rather than after the whole budget.
 func TestPreflightWait_MachineRemovedDuringTheSliceEndsTheWait(t *testing.T) {
+	t.Parallel()
+
 	if testing.Short() {
 		t.Skip("-short: waits a full one-second slice; runs in task test")
 	}
 	router := &machineStateRouter{waitFakeRouter: &waitFakeRouter{wakeErr: toolexec.ErrDaemonPending}}
 	router.set(toolexec.MachineState{DaemonID: "d1", Exists: true})
+	// Removed a little after the wake, so mid-slice (timed from the wake, not
+	// from the test's start; see TestPreflightWait_BecomesOnlineDuringSlice).
+	router.onWake = func() {
+		go func() {
+			time.Sleep(100 * time.Millisecond)
+			router.set(toolexec.MachineState{})
+		}()
+	}
 	a, repo, chatID := newWaitFixture(t, false, router)
-	go func() {
-		time.Sleep(100 * time.Millisecond)
-		router.set(toolexec.MachineState{})
-	}()
 
 	_, err := runPreflight(t, a, PreflightDaemonCheckInput{ChatID: chatID, WaitSeconds: 1})
 
@@ -248,6 +279,8 @@ func TestPreflightWait_MachineRemovedDuringTheSliceEndsTheWait(t *testing.T) {
 // The run that finds the machine up is the one that reads the queued message:
 // it clears the marker an earlier run left.
 func TestPreflightWait_ReadyMachineClearsTheQueuedMarker(t *testing.T) {
+	t.Parallel()
+
 	router := &waitFakeRouter{}
 	router.online.Store(true)
 	a, repo, chatID := newWaitFixture(t, false, router)
@@ -264,6 +297,8 @@ func TestPreflightWait_ReadyMachineClearsTheQueuedMarker(t *testing.T) {
 }
 
 func TestPreflightWait_NoMachineNeverWakes(t *testing.T) {
+	t.Parallel()
+
 	router := &waitFakeRouter{}
 	a, repo, chatID := newWaitFixture(t, true, router)
 	out, err := runPreflight(t, a, PreflightDaemonCheckInput{ChatID: chatID, WaitSeconds: 5})
@@ -275,6 +310,8 @@ func TestPreflightWait_NoMachineNeverWakes(t *testing.T) {
 }
 
 func TestPreflightWait_ZeroSecondsIsSingleCheck(t *testing.T) {
+	t.Parallel()
+
 	router := &waitFakeRouter{wakeErr: toolexec.ErrDaemonPending}
 	a, _, chatID := newWaitFixture(t, false, router)
 	out, err := runPreflight(t, a, PreflightDaemonCheckInput{ChatID: chatID})
@@ -288,6 +325,8 @@ func TestPreflightWait_ZeroSecondsIsSingleCheck(t *testing.T) {
 // Daemon A being online must not satisfy a run pinned to suspended daemon B:
 // B is woken with its own selector and the check reports Waiting, not ready.
 func TestPreflightWait_PinnedDaemonOfflineWhileAnotherIsOnline(t *testing.T) {
+	t.Parallel()
+
 	router := &waitFakeRouter{wakeErr: toolexec.ErrDaemonPending}
 	router.online.Store(true)
 	router.onlineIDs.Store("daemon-a", true)

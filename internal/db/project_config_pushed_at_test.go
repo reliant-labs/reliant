@@ -13,6 +13,8 @@ import (
 // GetProjectConfigRecord does (sql.ErrNoRows, unwrapped), so the daemon sync's
 // "nothing stored yet — apply" and the scenario RPCs' NotFound keep working.
 func TestProjectConfigPushedAtAndScenariosColumn(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()

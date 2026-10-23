@@ -5,9 +5,11 @@ import (
 	"context"
 	"database/sql"
 	"database/sql/driver"
+	"fmt"
 	"io"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/reliant-labs/reliant/internal/db"
@@ -72,7 +74,15 @@ func (r *oneTrueRow) Next(dest []driver.Value) error {
 var (
 	recorder     = &recordingDriver{seen: map[string][]string{}}
 	registerOnce sync.Once
+	recorderRuns atomic.Uint64
 )
+
+// recorderKey names one test RUN's pools in the process-wide recorder. Keyed
+// by t.Name() alone, a second run of the same test (-count=N) would read the
+// statements its earlier runs recorded.
+func recorderKey(t *testing.T, pool string) string {
+	return fmt.Sprintf("%s#%d/%s", t.Name(), recorderRuns.Add(1), pool)
+}
 
 func openRecording(t *testing.T, dsn string) *sql.DB {
 	t.Helper()
@@ -110,8 +120,11 @@ func countContaining(statements []string, needle string) int {
 // won. With a session pool configured (DatabaseConfig.DirectURL), the lock AND
 // its release must both go there, and nothing about it may touch the main pool.
 func TestTryAdvisoryLockTakesItsSessionFromTheSessionPool(t *testing.T) {
-	pooled := openRecording(t, t.Name()+"/pooled")
-	session := openRecording(t, t.Name()+"/session")
+	t.Parallel()
+
+	pooledKey, sessionKey := recorderKey(t, "pooled"), recorderKey(t, "session")
+	pooled := openRecording(t, pooledKey)
+	session := openRecording(t, sessionKey)
 
 	repo := newRecordingRepo(t, pooled).WithSessionPool(session)
 	t.Cleanup(func() { _ = repo.Close() })
@@ -125,8 +138,8 @@ func TestTryAdvisoryLockTakesItsSessionFromTheSessionPool(t *testing.T) {
 	}
 	release()
 
-	sessionStatements := recorder.statements(t.Name() + "/session")
-	pooledStatements := recorder.statements(t.Name() + "/pooled")
+	sessionStatements := recorder.statements(sessionKey)
+	pooledStatements := recorder.statements(pooledKey)
 	if got := countContaining(sessionStatements, "pg_try_advisory_lock"); got != 1 {
 		t.Errorf("pg_try_advisory_lock on the session pool: got %d, want 1 (session pool saw %q, main pool saw %q)",
 			got, sessionStatements, pooledStatements)
@@ -143,7 +156,10 @@ func TestTryAdvisoryLockTakesItsSessionFromTheSessionPool(t *testing.T) {
 // Without a session pool the main pool is the session pool: every deployment
 // that does not run a transaction pooler keeps behaving exactly as before.
 func TestTryAdvisoryLockUsesTheMainPoolWhenNoSessionPoolIsConfigured(t *testing.T) {
-	pooled := openRecording(t, t.Name()+"/pooled")
+	t.Parallel()
+
+	pooledKey := recorderKey(t, "pooled")
+	pooled := openRecording(t, pooledKey)
 
 	repo := newRecordingRepo(t, pooled)
 	t.Cleanup(func() { _ = repo.Close() })
@@ -154,7 +170,7 @@ func TestTryAdvisoryLockUsesTheMainPoolWhenNoSessionPoolIsConfigured(t *testing.
 	}
 	release()
 
-	statements := recorder.statements(t.Name() + "/pooled")
+	statements := recorder.statements(pooledKey)
 	if countContaining(statements, "pg_try_advisory_lock") != 1 || countContaining(statements, "pg_advisory_unlock") != 1 {
 		t.Errorf("main pool statements = %q, want one lock and one unlock", statements)
 	}

@@ -161,6 +161,8 @@ func countOf(bodies []string, body string) int {
 // for it, and the thread revived BEFORE that run starts, so the reconciler's
 // sweep cannot mark the queued row undelivered in between.
 func TestSendMessage_RunThatClosesBeforeItsWakeGetsARunStarted(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	ctx, fx := setupAbsorbFixture(t, repo, "test-user", db.Active())
@@ -204,6 +206,8 @@ func TestSendMessage_RunThatClosesBeforeItsWakeGetsARunStarted(t *testing.T) {
 // message (the run gives a late wake a turn), so no second run is started over
 // it.
 func TestSendMessage_RunThatTakesItsWakeGetsNoSecondRun(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	ctx, fx := setupAbsorbFixture(t, repo, "test-user", db.Active())
@@ -219,6 +223,8 @@ func TestSendMessage_RunThatTakesItsWakeGetsNoSecondRun(t *testing.T) {
 // not a closed run: starting a run then would terminate the live one
 // (TERMINATE_EXISTING). It is rung once more instead.
 func TestSendMessage_TransientWakeFailureOnAnOpenRunRetriesTheWake(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	ctx, fx := setupAbsorbFixture(t, repo, "test-user", db.Active())
@@ -237,6 +243,8 @@ func TestSendMessage_TransientWakeFailureOnAnOpenRunRetriesTheWake(t *testing.T)
 // the thread revived FIRST, so the sweep never sees a terminal thread with
 // mail in it while that run is on its way.
 func TestSendAgentMessage_RunThatClosesBeforeItsWakeGetsARunStarted(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	ctx, fx := setupAbsorbFixture(t, repo, "test-user", db.Active())
@@ -290,6 +298,8 @@ func TestSendAgentMessage_RunThatClosesBeforeItsWakeGetsARunStarted(t *testing.T
 // gives one: a run started to answer it, the run the ended one would have
 // continued as.
 func TestSendAgentMessage_EndedMainRunGetsARunStarted(t *testing.T) {
+	t.Parallel()
+
 	for _, tc := range []struct {
 		name         string
 		runStatus    db.WorkflowStatus
@@ -363,6 +373,8 @@ func TestSendAgentMessage_EndedMainRunGetsARunStarted(t *testing.T) {
 // (TERMINATE_EXISTING), so the row is queued and the doorbell rung, as for a
 // live run.
 func TestSendAgentMessage_CompletedMainRunStillFinishingTakesTheWake(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	ctx, fx := setupAbsorbFixture(t, repo, "test-user", db.Completed())
@@ -388,6 +400,8 @@ func TestSendAgentMessage_CompletedMainRunStillFinishingTakesTheWake(t *testing.
 // entry would bypass that, so the queue still refuses and the composer keeps
 // the text for a normal send.
 func TestSendAgentMessage_FailedMainRunIsStillRefused(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	ctx, fx := setupAbsorbFixture(t, repo, "test-user", db.Failed())
@@ -411,6 +425,8 @@ func TestSendAgentMessage_FailedMainRunIsStillRefused(t *testing.T) {
 // the receipt must not promise one: the row is withdrawn and the user told to
 // send it as a message (the composer keeps the text on a refusal).
 func TestSendAgentMessage_RunThatClosesWithNoReadableInputsIsRefusedHonestly(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	ctx, fx := setupAbsorbFixture(t, repo, "test-user", db.Active())

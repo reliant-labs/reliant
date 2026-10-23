@@ -16,6 +16,8 @@ import (
 // builder.test is a trigger-event kind of its own (WORKFLOW_UI.md §13 G6). The
 // kind CHECK must admit it.
 func TestTriggerEvent_BuilderTestKindIsAccepted(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -39,6 +41,8 @@ func TestTriggerEvent_BuilderTestKindIsAccepted(t *testing.T) {
 // A builder test run is never in the sidebar, adopted or not awaiting input
 // notwithstanding: it is scratch work, and it is in the Runs "Tests" view.
 func TestBuilderTestRunIsNotListedInSidebar(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -73,6 +77,8 @@ func TestBuilderTestRunIsNotListedInSidebar(t *testing.T) {
 // With no launch kind named, the Runs list leaves builder tests out; naming
 // builder.test brings back exactly them.
 func TestListRuns_BuilderTestsExcludedByDefaultAndIncludedWhenFiltered(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()

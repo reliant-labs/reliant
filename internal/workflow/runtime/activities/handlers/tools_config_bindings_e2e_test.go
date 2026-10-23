@@ -50,6 +50,8 @@ func resolveNodeToolBindings(t *testing.T, source []byte, inputs map[string]inte
 // The core regression. Before the fix this resolved to zero bindings: the
 // YAML parsed, validation accepted it, and the resolver dropped it silently.
 func TestWorkflowToolBindingsReachTheTool(t *testing.T) {
+	t.Parallel()
+
 	source := []byte(`
 name: image-workflow
 entry: [generate]
@@ -79,6 +81,8 @@ nodes:
 // the whole access-control claim the binding system makes, so it is asserted
 // against the real tool's real schema rather than a stub's.
 func TestBoundParameterIsHiddenFromTheModel(t *testing.T) {
+	t.Parallel()
+
 	source := []byte(`
 name: image-workflow
 entry: [generate]
@@ -120,6 +124,8 @@ nodes:
 // rather than a second dropped channel: the preset's value still lands on the
 // tool, through CEL and the workflow scope.
 func TestPresetValueReachesToolThroughInputs(t *testing.T) {
+	t.Parallel()
+
 	source := []byte(`
 name: image-workflow
 entry: [generate]
@@ -150,6 +156,8 @@ nodes:
 // A structured value — the shape this feature was designed around — must
 // survive as a nested object, not be flattened or stringified.
 func TestStructuredBindingSurvives(t *testing.T) {
+	t.Parallel()
+
 	source := []byte(`
 name: image-workflow
 entry: [generate]
@@ -180,6 +188,8 @@ nodes:
 // Zero configuration is the invariant the whole binding design rests on: a
 // workflow with no tools block must leave every tool on its own defaults.
 func TestNoToolsBlockLeavesToolsUnbound(t *testing.T) {
+	t.Parallel()
+
 	source := []byte(`
 name: plain-workflow
 entry: [generate]

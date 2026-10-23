@@ -16,6 +16,8 @@ import (
 // TestApprovalResolveActivity_Timeout creates a pending approval, then resolves it
 // with status "timeout" and verifies the DB record is updated to denied.
 func TestApprovalResolveActivity_Timeout(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 

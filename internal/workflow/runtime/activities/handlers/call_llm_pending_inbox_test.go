@@ -46,6 +46,8 @@ import (
 // report false — otherwise the loop re-enters on a thread with nothing to
 // deliver, which is the wedge.
 func TestPendingInbox_EmptyMailboxReportsFalse(t *testing.T) {
+	t.Parallel()
+
 	f := setupDurableStatusFixture(t)
 	defer f.h.Cleanup()
 
@@ -66,6 +68,8 @@ func TestPendingInbox_EmptyMailboxReportsFalse(t *testing.T) {
 // exactly this: one row at status=2. If that counted as pending, the loop would
 // re-enter on a message the model has already seen.
 func TestPendingInbox_DeliveredRowIsNotPending(t *testing.T) {
+	t.Parallel()
+
 	f := setupDurableStatusFixture(t)
 	defer f.h.Cleanup()
 	ctx := context.Background()
@@ -98,6 +102,8 @@ func TestPendingInbox_DeliveredRowIsNotPending(t *testing.T) {
 // true. The fix must not buy wedge-immunity by stranding messages — that is the
 // regression the pending_inbox term was introduced to prevent.
 func TestPendingInbox_RealQueuedMessageReportsTrue(t *testing.T) {
+	t.Parallel()
+
 	f := setupDurableStatusFixture(t)
 	defer f.h.Cleanup()
 
@@ -128,6 +134,8 @@ func TestPendingInbox_RealQueuedMessageReportsTrue(t *testing.T) {
 // the looping: with a live queued message and a dead context, the answer must
 // still be true.
 func TestPendingInbox_SurvivesCancelledContext(t *testing.T) {
+	t.Parallel()
+
 	f := setupDurableStatusFixture(t)
 	defer f.h.Cleanup()
 
@@ -162,6 +170,8 @@ func TestPendingInbox_SurvivesCancelledContext(t *testing.T) {
 // treating an assistant tail as a completed turn and yielding, which is what
 // the guard now does.
 func TestRecovery_TextOnlyAssistantTailIsNotBlockless(t *testing.T) {
+	t.Parallel()
+
 	msgs := []message.Message{
 		userWithText("u1", "go ahead"),
 		assistantWithText("a1", "While that runs, let me review my full diff and check lint/typecheck."),
@@ -230,6 +240,8 @@ func saveTextOnlyAssistantMessage(t *testing.T, h *IdempotencyTestHelper, chatID
 // on every term and it exits, yielding to the user. The user's next message
 // becomes the new tail and the thread is live again.
 func TestRecovery_AssistantTailYieldsInsteadOfWedging(t *testing.T) {
+	t.Parallel()
+
 	resolver := mockLLMDriverResolver()
 
 	h := NewIdempotencyTestHelper(t)
@@ -290,6 +302,8 @@ func TestRecovery_AssistantTailYieldsInsteadOfWedging(t *testing.T) {
 // This test pins the healthy case: an idle thread's history is untouched by the
 // repair pass, so it neither gains a turn nor loses its last message.
 func TestScoping_HealthyIdleTextOnlyTailIsUntouched(t *testing.T) {
+	t.Parallel()
+
 	tail := "Done — the migration is applied and the tests pass."
 	msgs := []message.Message{
 		userWithText("u1", "apply the migration"),
@@ -312,6 +326,8 @@ func TestScoping_HealthyIdleTextOnlyTailIsUntouched(t *testing.T) {
 // loop stays exited. Nothing about this fix pushes such a thread into an extra
 // turn — the flag is the only lever that could, and it reads false.
 func TestScoping_IdleThreadWithEmptyMailboxEarnsNoExtraTurn(t *testing.T) {
+	t.Parallel()
+
 	f := setupDurableStatusFixture(t)
 	defer f.h.Cleanup()
 

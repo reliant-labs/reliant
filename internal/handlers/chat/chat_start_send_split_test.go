@@ -29,6 +29,8 @@ import (
 // StartChat. SendMessage refuses rather than quietly starting it, and starts
 // nothing.
 func TestSendMessage_PendingChatIsRejected(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -70,6 +72,8 @@ func TestSendMessage_PendingChatIsRejected(t *testing.T) {
 // same pair, so a chat whose fields were left unset looked neither pending nor
 // paused, whatever its run was doing.
 func TestChatProto_CarriesRootWorkflowState(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		name       string
 		status     db.WorkflowStatus

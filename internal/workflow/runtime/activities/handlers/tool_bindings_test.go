@@ -78,6 +78,8 @@ func effectiveBinding(t *testing.T, tool tools.Tool, param string) any {
 // server-run tool never sees them; this asserts tool bindings do not repeat
 // that.
 func TestCallLLMActivity_ResolveToolBindingScopes_ReadsGlobalSettingsServerSide(t *testing.T) {
+	t.Parallel()
+
 	repo := &settingsOnlyRepo{rows: []*db.Setting{{
 		Key:   toolbindings.GlobalSettingKey("generate_image"),
 		Value: `{"model":{"literal":{"tags":["image-gen"],"providers":["codex"]}}}`,
@@ -107,6 +109,8 @@ func TestCallLLMActivity_ResolveToolBindingScopes_ReadsGlobalSettingsServerSide(
 // settings read that fails must degrade to tool defaults, not take the turn
 // down. Losing a preference is recoverable; losing the LLM call is not.
 func TestCallLLMActivity_ResolveToolBindingScopes_SettingsFailureIsNotFatal(t *testing.T) {
+	t.Parallel()
+
 	repo := &settingsOnlyRepo{err: fmt.Errorf("settings unavailable")}
 	activityUnderTest := &CallLLMActivity{repo: repo}
 
@@ -132,6 +136,8 @@ func TestCallLLMActivity_ResolveToolBindingScopes_SettingsFailureIsNotFatal(t *t
 // of what a user configures in Settings: a stored provider preference replaces
 // the tool's shipped default, and the parameter stays invisible to the model.
 func TestApplyToolBindings_GlobalPreferenceReachesTheTool(t *testing.T) {
+	t.Parallel()
+
 	repo := &settingsOnlyRepo{rows: []*db.Setting{{
 		Key:   toolbindings.GlobalSettingKey("generate_image"),
 		Value: `{"model":{"literal":"gpt-image-2"}}`,
@@ -164,6 +170,8 @@ func TestApplyToolBindings_GlobalPreferenceReachesTheTool(t *testing.T) {
 // invariant at the wiring layer: a tool nobody has configured comes back
 // exactly as it went in.
 func TestApplyToolBindings_UnconfiguredToolIsUntouched(t *testing.T) {
+	t.Parallel()
+
 	tool := newBindableStub("some_tool", nil)
 	bound := applyToolBindings(context.Background(), []tools.Tool{tool}, toolbindings.Scopes{})
 

@@ -17,6 +17,8 @@ import (
 )
 
 func TestSetChatDaemon_SetAndClear(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -83,6 +85,8 @@ func TestSetChatDaemon_SetAndClear(t *testing.T) {
 }
 
 func TestSetChatDaemon_ChatNotFound(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -101,6 +105,8 @@ func TestSetChatDaemon_ChatNotFound(t *testing.T) {
 }
 
 func TestSetChatDaemon_MissingChatID(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -119,6 +125,8 @@ func TestSetChatDaemon_MissingChatID(t *testing.T) {
 }
 
 func TestSetChatDaemon_WrongOwner(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -164,6 +172,8 @@ func TestSetChatDaemon_WrongOwner(t *testing.T) {
 }
 
 func TestInjectSessionDaemonID(t *testing.T) {
+	t.Parallel()
+
 	daemonID := "test-daemon-123"
 
 	t.Run("injects when set", func(t *testing.T) {

@@ -18,6 +18,8 @@ import (
 // false, the fallback would quietly re-run the failing LLM path, and a chat
 // would be left untitled. This test crosses that seam for real.
 func TestGenerateTitleInput_FallbackFlagSurvivesPayloadConversion(t *testing.T) {
+	t.Parallel()
+
 	dc := converter.GetDefaultDataConverter()
 
 	workflowInput := map[string]interface{}{
@@ -40,6 +42,8 @@ func TestGenerateTitleInput_FallbackFlagSurvivesPayloadConversion(t *testing.T) 
 
 // The normal path omits the key entirely, which must mean "call the LLM".
 func TestGenerateTitleInput_DefaultsToLLMPath(t *testing.T) {
+	t.Parallel()
+
 	dc := converter.GetDefaultDataConverter()
 
 	payload, err := dc.ToPayload(map[string]interface{}{

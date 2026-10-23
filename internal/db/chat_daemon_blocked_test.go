@@ -27,6 +27,8 @@ func activityOf(t *testing.T, repo *Repo, chatID string) int {
 
 // AWAITING_INPUT beats WAITING_FOR_DAEMON, which beats RUNNING.
 func TestActivityPrecedence_WaitingForDaemon(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -43,6 +45,8 @@ func TestActivityPrecedence_WaitingForDaemon(t *testing.T) {
 }
 
 func TestWaitingForDaemon_ClearsOnSuccessAndNeedsALiveRun(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -62,6 +66,8 @@ func TestWaitingForDaemon_ClearsOnSuccessAndNeedsALiveRun(t *testing.T) {
 }
 
 func TestSetChatDaemonBlocked_EmitsOnlyOnTransition(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -86,6 +92,8 @@ func TestSetChatDaemonBlocked_EmitsOnlyOnTransition(t *testing.T) {
 }
 
 func TestListRuns_ReportsWaitingForMachine(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()

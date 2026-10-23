@@ -131,6 +131,8 @@ func (f *integrationFixture) canLoad(name string) bool {
 // loses them, and "load anything" stays exactly that — the resolver filters
 // per name, so nothing has to be expanded into a list.
 func TestUnusableIntegrationsAreWithheldByTheResolver(t *testing.T) {
+	t.Parallel()
+
 	resolve := func(access tools.ToolAccess, usable map[string]bool) *tools.Capabilities {
 		return tools.ResolveCapabilities(tools.CapabilityInputs{Access: access, Permission: tools.PermissionMutating,
 			MCPTools: []string{"mcp__srv__probe"}, UsableIntegrations: usable})
@@ -166,6 +168,8 @@ func TestUnusableIntegrationsAreWithheldByTheResolver(t *testing.T) {
 // was withheld from every agent because the registry was built owner-blind,
 // so GitHub only ever worked as a workflow action node.
 func TestCallLLM_OffersAConnectedIntegrationToItsOwner(t *testing.T) {
+	t.Parallel()
+
 	conns := &ownerConnections{usable: map[string]bool{"github": true}}
 	f := setupIntegrationFixture(t, false, conns)
 
@@ -181,6 +185,8 @@ func TestCallLLM_OffersAConnectedIntegrationToItsOwner(t *testing.T) {
 // Without a connection the same declaration offers no GitHub tool and leaves
 // none loadable, while an integration that needs no connection is unaffected.
 func TestCallLLM_WithholdsAnIntegrationTheOwnerHasNotConnected(t *testing.T) {
+	t.Parallel()
+
 	f := setupIntegrationFixture(t, false, &ownerConnections{usable: map[string]bool{}})
 
 	offered := f.offeredTools(t, []string{"tag:integration"}, []string{"*"})
@@ -196,6 +202,8 @@ func TestCallLLM_WithholdsAnIntegrationTheOwnerHasNotConnected(t *testing.T) {
 // tag:integration keeps its meaning: every integration tool the owner can
 // use, and nothing else.
 func TestCallLLM_TagIntegrationExpandsToTheOwnersUsableIntegrations(t *testing.T) {
+	t.Parallel()
+
 	f := setupIntegrationFixture(t, false, &ownerConnections{usable: map[string]bool{"github": true}})
 
 	offered := f.offeredTools(t, []string{"tag:integration"}, nil)
@@ -211,6 +219,8 @@ func TestCallLLM_TagIntegrationExpandsToTheOwnersUsableIntegrations(t *testing.T
 // nothing that needs a connection: the source answers with an error and no
 // integration, and the menu fails closed.
 func TestCallLLM_WithholdsConnectionToolsWhenTheOwnerIsUnknown(t *testing.T) {
+	t.Parallel()
+
 	conns := &ownerConnections{usable: map[string]bool{}, err: errors.New("run has no owner")}
 	f := setupIntegrationFixture(t, false, conns)
 
@@ -225,6 +235,8 @@ func TestCallLLM_WithholdsConnectionToolsWhenTheOwnerIsUnknown(t *testing.T) {
 // A process with no credential source at all (the daemon runtime, a test)
 // offers nothing that needs a connection, exactly as before.
 func TestCallLLM_WithholdsConnectionToolsWithoutACredentialSource(t *testing.T) {
+	t.Parallel()
+
 	f := setupIntegrationFixture(t, false, nil)
 
 	offered := f.offeredTools(t, []string{"tag:integration"}, nil)
@@ -238,6 +250,8 @@ func TestCallLLM_WithholdsConnectionToolsWithoutACredentialSource(t *testing.T) 
 // A node that cannot reach any integration tool never asks: availability is
 // a database (and, for GitHub, a control-plane) round trip.
 func TestCallLLM_DoesNotAskAboutIntegrationsANodeCannotReach(t *testing.T) {
+	t.Parallel()
+
 	conns := &ownerConnections{usable: map[string]bool{"github": true}}
 	f := setupIntegrationFixture(t, false, conns)
 
@@ -249,6 +263,8 @@ func TestCallLLM_DoesNotAskAboutIntegrationsANodeCannotReach(t *testing.T) {
 // The GitHub read tools are exactly what a no-machine run may use, so an
 // owner with GitHub gets them there too.
 func TestCallLLM_NoMachineRunIsOfferedTheOwnersGitHubTools(t *testing.T) {
+	t.Parallel()
+
 	f := setupIntegrationFixture(t, true, &ownerConnections{usable: map[string]bool{"github": true}})
 
 	offered := f.offeredTools(t, []string{"github__issue_get"}, []string{"*"})

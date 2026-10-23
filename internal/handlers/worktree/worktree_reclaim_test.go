@@ -69,6 +69,11 @@ type reclaimEnv struct {
 
 func newReclaimEnv(t *testing.T) *reclaimEnv {
 	t.Helper()
+	if testing.Short() {
+		// Real git worktrees driven through the daemon's reclaim handlers end
+		// to end: 8-65s a test on a loaded machine, and serial (t.Setenv).
+		t.Skip("-short: drives real git worktrees through the reclaim handlers (seconds each, serial); runs in task test")
+	}
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not on PATH")
 	}

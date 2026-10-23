@@ -67,6 +67,8 @@ nodes:
 `
 
 func TestPresetSuppliesToolParamsThroughWholeMap(t *testing.T) {
+	t.Parallel()
+
 	inputs := presetInputs(t, `
 name: landscape-images
 tag: agent
@@ -91,6 +93,8 @@ params:
 
 // The payoff: a parameter a preset fixed is not offered to the model.
 func TestPresetBoundParameterIsHiddenFromTheModel(t *testing.T) {
+	t.Parallel()
+
 	inputs := presetInputs(t, `
 name: landscape-images
 tag: agent
@@ -124,6 +128,8 @@ params:
 // invariant, and it is the case that would break every existing agent if the
 // sentinel leaked through unresolved.
 func TestUnfilledToolParamsBindNothing(t *testing.T) {
+	t.Parallel()
+
 	scopes := resolveWithInputs(t, []byte(wholeMapWorkflow), map[string]interface{}{
 		"tool_params": map[string]interface{}{},
 	})
@@ -140,6 +146,8 @@ func TestUnfilledToolParamsBindNothing(t *testing.T) {
 // The per-tool form: the workflow names the tool but lets the preset supply
 // that tool's whole parameter object.
 func TestPresetSuppliesOneToolsParams(t *testing.T) {
+	t.Parallel()
+
 	source := []byte(`
 name: image-workflow
 entry: [generate]
@@ -173,6 +181,8 @@ params:
 
 // Two presets, same workflow, different bindings — the point of presets.
 func TestDifferentPresetsProduceDifferentBindings(t *testing.T) {
+	t.Parallel()
+
 	for _, tc := range []struct {
 		name       string
 		presetYAML string

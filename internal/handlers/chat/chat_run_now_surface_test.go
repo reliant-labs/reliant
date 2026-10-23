@@ -19,6 +19,8 @@ import (
 // slips past both. This pins that nothing an agent runs through can reach the
 // RPC or the launch kind.
 func TestRunNowIsNotReachableFromAnAgent(t *testing.T) {
+	t.Parallel()
+
 	root := repoRoot(t)
 	reach := regexp.MustCompile(`\bRunNow\b|TriggerEventKindManualRun|"manual\.run"`)
 
@@ -47,6 +49,8 @@ func TestRunNowIsNotReachableFromAnAgent(t *testing.T) {
 // Only RunNow launches manual.run. The launch kind is the server's decision, so
 // no other handler may pass it to the launcher.
 func TestOnlyRunNowLaunchesManualRun(t *testing.T) {
+	t.Parallel()
+
 	root := repoRoot(t)
 	launches := regexp.MustCompile(`TriggerEventKindManualRun`)
 	walkGo(t, filepath.Join(root, "internal/handlers"), func(path, src string) {

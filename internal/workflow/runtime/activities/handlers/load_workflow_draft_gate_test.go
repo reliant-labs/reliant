@@ -19,6 +19,8 @@ import (
 // gate. A draft referenced by slug fails with an actionable "is a draft"
 // message, not a bare "not found" for a workflow the user can see in their list.
 func TestLoadWorkflowActivity_RefusesDraftBySlug(t *testing.T) {
+	t.Parallel()
+
 	repo := db.NewTestRepo(t)
 	defer repo.Close()
 	ctx := context.Background()
@@ -91,6 +93,8 @@ nodes:
 // pass: the same draft still refuses for an ordinary chat, and a draft `ref:`
 // child of the test run's root still refuses.
 func TestLoadWorkflowActivity_BuilderTestRootMayBeADraft(t *testing.T) {
+	t.Parallel()
+
 	repo := db.NewTestRepo(t)
 	defer repo.Close()
 	ctx := context.Background()

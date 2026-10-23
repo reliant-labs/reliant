@@ -44,6 +44,8 @@ func userWithText(id, text string) message.Message {
 }
 
 func TestDropBlocklessAssistantMessages(t *testing.T) {
+	t.Parallel()
+
 	t.Run("drops a blockless assistant message", func(t *testing.T) {
 		msgs := []message.Message{
 			userWithText("u1", "hello"),
@@ -185,6 +187,8 @@ func TestDropBlocklessAssistantMessages(t *testing.T) {
 // blockless assistant row must, after filtering, end on something CallLLM will
 // accept (user or tool).
 func TestDropBlocklessAssistant_UnwedgesHistoryTail(t *testing.T) {
+	t.Parallel()
+
 	msgs := []message.Message{
 		userWithText("u1", "do the thing"),
 		assistantWithText("a1", "working on it"),

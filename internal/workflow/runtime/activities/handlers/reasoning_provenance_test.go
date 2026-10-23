@@ -23,6 +23,8 @@ func assistantFrom(account string) message.Message {
 }
 
 func TestStripForeignReasoningCodex(t *testing.T) {
+	t.Parallel()
+
 	user := message.Message{ID: "u", Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: "hi"}}}
 	history := []message.Message{user, assistantFrom("acct-a"), assistantFrom("acct-b"), assistantFrom("")}
 
@@ -41,11 +43,15 @@ func TestStripForeignReasoningCodex(t *testing.T) {
 }
 
 func TestStripForeignReasoningOpenAIAlsoOrgBound(t *testing.T) {
+	t.Parallel()
+
 	got := stripForeignReasoning([]message.Message{assistantFrom("a")}, "openai", "b")
 	assert.Len(t, got[0].Parts, 2)
 }
 
 func TestStripForeignReasoningLeavesAnthropicAlone(t *testing.T) {
+	t.Parallel()
+
 	history := []message.Message{assistantFrom("acct-a")}
 	for _, driver := range []string{"claude", "anthropic"} {
 		got := stripForeignReasoning(history, models.DriverID(driver), "acct-b")
@@ -54,6 +60,8 @@ func TestStripForeignReasoningLeavesAnthropicAlone(t *testing.T) {
 }
 
 func TestStripForeignReasoningNeverMutatesHistory(t *testing.T) {
+	t.Parallel()
+
 	history := []message.Message{assistantFrom("acct-a")}
 	before := len(history[0].Parts)
 
@@ -65,6 +73,8 @@ func TestStripForeignReasoningNeverMutatesHistory(t *testing.T) {
 }
 
 func TestStripForeignReasoningNoTargetAccountIsNoop(t *testing.T) {
+	t.Parallel()
+
 	history := []message.Message{assistantFrom("acct-a")}
 	assert.Equal(t, history, stripForeignReasoning(history, "codex", ""))
 	assert.Nil(t, stripForeignReasoning(nil, "codex", "b"))

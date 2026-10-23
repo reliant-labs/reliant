@@ -34,6 +34,8 @@ import (
 // ============================================================================
 
 func TestSaveUserMessage(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 
@@ -101,6 +103,8 @@ func TestSaveUserMessage(t *testing.T) {
 }
 
 func TestSaveAssistantMessageWithText(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 
@@ -161,6 +165,8 @@ func TestSaveAssistantMessageWithText(t *testing.T) {
 }
 
 func TestSaveAssistantMessageWithToolCalls(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 
@@ -245,6 +251,8 @@ func TestSaveAssistantMessageWithToolCalls(t *testing.T) {
 }
 
 func TestSaveAssistantMessageWithTextAndToolCalls(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 
@@ -319,6 +327,8 @@ func TestSaveAssistantMessageWithTextAndToolCalls(t *testing.T) {
 }
 
 func TestSaveToolMessage(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 
@@ -401,6 +411,8 @@ func TestSaveToolMessage(t *testing.T) {
 }
 
 func TestSaveMessageIdempotency(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 
@@ -470,6 +482,8 @@ func TestSaveMessageIdempotency(t *testing.T) {
 }
 
 func TestSaveMessagePassesThroughToolCalls(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 
@@ -548,6 +562,8 @@ func TestSaveMessagePassesThroughToolCalls(t *testing.T) {
 }
 
 func TestSaveAssistantMessageWithTokens(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 
@@ -650,6 +666,8 @@ func TestSaveAssistantMessageWithTokens(t *testing.T) {
 }
 
 func TestSaveMessageValidation(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 
@@ -777,6 +795,8 @@ func TestSaveMessageValidation(t *testing.T) {
 }
 
 func TestSaveMessageOrdinalSequencing(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 
@@ -881,6 +901,8 @@ func TestSaveMessageOrdinalSequencing(t *testing.T) {
 }
 
 func TestSaveMessageTransactionAtomicity(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 
@@ -956,6 +978,8 @@ func buildInjectFileInput(chatID, thread, role, content string, injectFiles []*r
 }
 
 func TestSaveMessageWithInjectImageFile(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 
@@ -1013,6 +1037,8 @@ func TestSaveMessageWithInjectImageFile(t *testing.T) {
 }
 
 func TestSaveMessageWithInjectDocumentFile(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 
@@ -1068,6 +1094,8 @@ func TestSaveMessageWithInjectDocumentFile(t *testing.T) {
 }
 
 func TestSaveMessageWithInjectFilesAndText(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 
@@ -1124,6 +1152,8 @@ func TestSaveMessageWithInjectFilesAndText(t *testing.T) {
 }
 
 func TestSaveMessageWithInjectFileMixed(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 

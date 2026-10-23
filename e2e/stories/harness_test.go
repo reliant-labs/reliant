@@ -72,12 +72,11 @@ var (
 )
 
 // requireStack returns the shared stack, initializing it on first use.
-// Skips the test when DATABASE_URL is unset (same convention as internal/db).
 func requireStack(t *testing.T) *Stack {
 	t.Helper()
 
 	if temporalDev.hostPort == "" {
-		t.Skip("DATABASE_URL not set, skipping e2e story")
+		t.Fatal("no Temporal dev server: TestMain starts it before any story runs")
 	}
 
 	stackOnce.Do(func() {

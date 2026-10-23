@@ -98,6 +98,8 @@ func (f pausedFixture) systemNotes(t *testing.T) int {
 // A chat the breaker paused is resumed when its machine is back, and the agent
 // is told. However many deliverers race for it, it resumes once.
 func TestResumePausedForMachine_ResumesOnceAndTellsTheAgent(t *testing.T) {
+	t.Parallel()
+
 	f := newPausedFixture(t)
 	f.markBreakerPause(t)
 
@@ -127,6 +129,8 @@ func TestResumePausedForMachine_ResumesOnceAndTellsTheAgent(t *testing.T) {
 
 // A chat the user paused carries no mark: a machine connecting leaves it alone.
 func TestResumePausedForMachine_UserPausedChatStaysPaused(t *testing.T) {
+	t.Parallel()
+
 	f := newPausedFixture(t)
 
 	ok, err := f.svc.ResumePausedForMachine(f.ctx, f.chatID)
@@ -143,6 +147,8 @@ func TestResumePausedForMachine_UserPausedChatStaysPaused(t *testing.T) {
 // The user retried before the machine came back: the run is no longer paused,
 // so a stale mark is dropped and nothing is resumed.
 func TestResumePausedForMachine_AlreadyResumedByTheUserDropsTheMark(t *testing.T) {
+	t.Parallel()
+
 	f := newPausedFixture(t)
 	f.markBreakerPause(t)
 	require.NoError(t, f.repo.UpdateWorkflowStatus(f.ctx, f.chatID, db.Active()))
@@ -158,6 +164,8 @@ func TestResumePausedForMachine_AlreadyResumedByTheUserDropsTheMark(t *testing.T
 // A resume that fails leaves the chat marked, so the next connect or the sweep
 // tries again rather than stranding it.
 func TestResumePausedForMachine_FailedResumeKeepsTheMark(t *testing.T) {
+	t.Parallel()
+
 	f := newPausedFixture(t)
 	f.markBreakerPause(t)
 	f.pause.resumeErr = errors.New("temporal unavailable")

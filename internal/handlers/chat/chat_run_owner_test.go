@@ -43,6 +43,8 @@ func requireRunOwner(t *testing.T, repo *db.Repo, runID, want string) {
 }
 
 func TestChatService_CreateChat_RootRunCarriesOwner(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -78,6 +80,8 @@ func TestChatService_CreateChat_RootRunCarriesOwner(t *testing.T) {
 }
 
 func TestChatService_BranchChat_RootRunCarriesOwner(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 

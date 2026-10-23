@@ -146,6 +146,8 @@ func (f *nestedAgentFixture) turn(t *testing.T) []string {
 // all of them, whether or not its run has a machine, on the thread layout a
 // nested workflow node produces.
 func TestAgentNodeIsOfferedItsIntegrationToolsAndResponseTool(t *testing.T) {
+	t.Parallel()
+
 	for name, noMachine := range map[string]bool{"no machine": true, "machine attached": false} {
 		t.Run(name, func(t *testing.T) {
 			f := newNestedAgentFixture(t, noMachine)

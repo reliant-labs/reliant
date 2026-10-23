@@ -67,6 +67,8 @@ type roundTripFunc func(*http.Request) (*http.Response, error)
 func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 
 func TestResolveLLMCallLocalModelThroughRelayTransport(t *testing.T) {
+	t.Parallel()
+
 	var gotBody string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		raw, _ := io.ReadAll(r.Body)
@@ -122,6 +124,8 @@ func TestResolveLLMCallLocalModelThroughRelayTransport(t *testing.T) {
 }
 
 func TestResolveLLMCallLocalPinnedProviderAndOfflineError(t *testing.T) {
+	t.Parallel()
+
 	var calls []relayCall
 	server := httptest.NewServer(http.NotFoundHandler())
 	defer server.Close()
@@ -151,6 +155,8 @@ func TestResolveLLMCallLocalPinnedProviderAndOfflineError(t *testing.T) {
 }
 
 func TestResolveLLMCallLocalUnreachableWithoutRelay(t *testing.T) {
+	t.Parallel()
+
 	_, err := resolveLLMCall(context.Background(), nil, llmCallSpec{
 		UserID:   "u1",
 		Selector: models.ModelSelector{ID: "qwen3:latest@local"},
@@ -160,6 +166,8 @@ func TestResolveLLMCallLocalUnreachableWithoutRelay(t *testing.T) {
 }
 
 func TestResolveLLMCallThinkingLevelReconciledForLocal(t *testing.T) {
+	t.Parallel()
+
 	var calls []relayCall
 	server := httptest.NewServer(http.NotFoundHandler())
 	defer server.Close()
@@ -180,6 +188,8 @@ func TestResolveLLMCallThinkingLevelReconciledForLocal(t *testing.T) {
 
 // A tag selector must never land on a local model, even when the user has one.
 func TestTagSelectorNeverResolvesToLocalModel(t *testing.T) {
+	t.Parallel()
+
 	spec := llmCallSpec{UserID: "u", Selector: models.ModelSelector{Tags: []string{"local"}}}
 	_, err := resolveLLMCall(context.Background(), nil, spec)
 	if err == nil {

@@ -107,6 +107,8 @@ func TestResolveLLMCall_RunProviderBeatsTagPreferenceModel(t *testing.T) {
 }
 
 func TestWithRunProviders(t *testing.T) {
+	t.Parallel()
+
 	tier := models.ModelSelector{Tags: []string{"fast"}}
 	got, applied := withRunProviders(tier, []string{"codex"})
 	assert.True(t, applied)

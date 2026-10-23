@@ -26,6 +26,8 @@ import (
 // =============================================================================
 
 func TestExecuteRunStepInput_LoopContextFields(t *testing.T) {
+	t.Parallel()
+
 	t.Run("struct has loop context fields", func(t *testing.T) {
 		// Create input with loop context
 		input := ExecuteRunStepInput{
@@ -137,6 +139,8 @@ func TestExecuteRunStepInput_LoopContextFields(t *testing.T) {
 }
 
 func TestSaveMessageInput_LoopContextFields(t *testing.T) {
+	t.Parallel()
+
 	t.Run("struct has loop context fields", func(t *testing.T) {
 		input := SaveMessageInput{
 			ChatID:        "test-chat",
@@ -185,6 +189,8 @@ func TestSaveMessageInput_LoopContextFields(t *testing.T) {
 }
 
 func TestCallLLMActivityInput_LoopContextFields(t *testing.T) {
+	t.Parallel()
+
 	t.Run("struct has loop context fields in Runtime", func(t *testing.T) {
 		// Loop context is in RuntimeContext
 		input := ActivityInput{
@@ -264,6 +270,8 @@ func TestCallLLMActivityInput_LoopContextFields(t *testing.T) {
 }
 
 func TestExecuteToolsInput_LoopContextFields(t *testing.T) {
+	t.Parallel()
+
 	t.Run("struct has loop context fields", func(t *testing.T) {
 		input := ExecuteToolsInput{
 			ChatID:        "test-chat",
@@ -316,6 +324,8 @@ func TestExecuteToolsInput_LoopContextFields(t *testing.T) {
 // silently drop the loop_node_id and loop_iteration fields.
 
 func TestTemporalDeserializationRegression(t *testing.T) {
+	t.Parallel()
+
 	t.Run("ExecuteRunStep: JSON with loop context deserializes correctly", func(t *testing.T) {
 		// This is what Temporal would receive as JSON from the workflow
 		temporalJSON := `{

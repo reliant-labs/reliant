@@ -140,6 +140,8 @@ func newResponseToolSchema(t *testing.T) *structpb.Struct {
 }
 
 func TestCallLLM_ResponseTool_PopulatesResponseData(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 
@@ -197,6 +199,8 @@ func TestCallLLM_ResponseTool_PopulatesResponseData(t *testing.T) {
 }
 
 func TestCallLLM_ResponseTool_NoResponseToolConfigured(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 
@@ -237,6 +241,8 @@ func TestCallLLM_ResponseTool_NoResponseToolConfigured(t *testing.T) {
 }
 
 func TestCallLLM_ResponseTool_TextAndToolCall(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 

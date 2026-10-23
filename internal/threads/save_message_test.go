@@ -16,6 +16,8 @@ import (
 // =============================================================================
 
 func TestSaveMessage_Validation(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()
@@ -94,6 +96,8 @@ func TestSaveMessage_Validation(t *testing.T) {
 }
 
 func TestSaveMessage_UserMessage(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()
@@ -195,6 +199,8 @@ func TestSaveMessage_UserMessage(t *testing.T) {
 }
 
 func TestSaveMessage_AssistantMessage(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()
@@ -339,6 +345,8 @@ func TestSaveMessage_AssistantMessage(t *testing.T) {
 }
 
 func TestSaveMessage_ToolMessage(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()
@@ -409,6 +417,8 @@ func TestSaveMessage_ToolMessage(t *testing.T) {
 }
 
 func TestSaveMessage_SystemMessage(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()
@@ -437,6 +447,8 @@ func TestSaveMessage_SystemMessage(t *testing.T) {
 }
 
 func TestSaveMessage_Idempotency(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()
@@ -520,6 +532,8 @@ func TestSaveMessage_Idempotency(t *testing.T) {
 }
 
 func TestSaveMessage_ChatUpdate(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()
@@ -677,6 +691,8 @@ func TestSaveMessage_ChatUpdate(t *testing.T) {
 }
 
 func TestSaveMessage_TokenTracking(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()
@@ -719,6 +735,8 @@ func TestSaveMessage_TokenTracking(t *testing.T) {
 }
 
 func TestSaveMessage_FileReference(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()
@@ -766,6 +784,8 @@ func TestSaveMessage_FileReference(t *testing.T) {
 }
 
 func TestSaveMessage_PersistsCost(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()
@@ -798,6 +818,8 @@ func TestSaveMessage_PersistsCost(t *testing.T) {
 }
 
 func TestSaveMessage_MessageCount(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()
@@ -839,6 +861,8 @@ func TestSaveMessage_MessageCount(t *testing.T) {
 // TestSaveMessage_RequiresExistingThread tests that SaveMessage fails when
 // the thread doesn't exist (threads must be created explicitly before saving messages).
 func TestSaveMessage_RequiresExistingThread(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()

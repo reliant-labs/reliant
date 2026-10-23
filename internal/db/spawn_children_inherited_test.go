@@ -100,6 +100,8 @@ func inheritedIDs(children []*InheritedSpawnChild) map[string]string {
 // cut off at each fork point, and the original keeps spawning after both
 // branches without any of that leaking down.
 func TestListInheritedSpawnChildren_FollowsBranchChainUpToEachForkPoint(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	f := &inheritanceFixture{t: t, repo: repo, ctx: context.Background(), now: time.Now()}
@@ -161,6 +163,8 @@ func TestListInheritedSpawnChildren_FollowsBranchChainUpToEachForkPoint(t *testi
 // whose parent is the spawner — but in the SAME chat. It is a child, not a
 // branch, and must not mistake its siblings for agents of its own.
 func TestListInheritedSpawnChildren_SameChatForkIsNotABranch(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	f := &inheritanceFixture{t: t, repo: repo, ctx: context.Background(), now: time.Now()}

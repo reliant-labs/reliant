@@ -19,6 +19,8 @@ import (
 // specs/interrupt-pause-spec.md, item E.
 
 func TestCancelChatToolCalls_CancelsInFlightCallsOnAllThreads(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -47,6 +49,8 @@ func TestCancelChatToolCalls_CancelsInFlightCallsOnAllThreads(t *testing.T) {
 }
 
 func TestCancelChatToolCalls_LeavesOtherChatsAlone(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -72,6 +76,8 @@ func TestCancelChatToolCalls_LeavesOtherChatsAlone(t *testing.T) {
 }
 
 func TestCancelChatToolCalls_DaemonDeliveryFailureIsNonFatal(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -96,6 +102,8 @@ func TestCancelChatToolCalls_DaemonDeliveryFailureIsNonFatal(t *testing.T) {
 }
 
 func TestCancelChatToolCalls_NothingInFlightSucceeds(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -115,6 +123,8 @@ func TestCancelChatToolCalls_NothingInFlightSucceeds(t *testing.T) {
 }
 
 func TestCancelChatToolCalls_RejectsWrongOwner(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -129,6 +139,8 @@ func TestCancelChatToolCalls_RejectsWrongOwner(t *testing.T) {
 }
 
 func TestCancelChatToolCalls_RequiresChatAndUser(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 

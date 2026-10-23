@@ -56,6 +56,8 @@ func (f pausedForMachineFixture) marked(t *testing.T) bool {
 // The breaker's pause marks the chat, and the row it lists reads paused: the
 // pair queueddelivery resumes on a machine connect.
 func TestWorkflowStatus_BreakerPauseMarksChatPausedForMachine(t *testing.T) {
+	t.Parallel()
+
 	f := newPausedForMachineFixture(t)
 
 	f.report(t, "paused", func(in *WorkflowStatusInput) { in.PausedForMachine = true })
@@ -69,6 +71,8 @@ func TestWorkflowStatus_BreakerPauseMarksChatPausedForMachine(t *testing.T) {
 // Any resume clears the mark — whatever resumed it — so a user who retried
 // before the machine came back is not resumed a second time.
 func TestWorkflowStatus_ResumeClearsPausedForMachine(t *testing.T) {
+	t.Parallel()
+
 	f := newPausedForMachineFixture(t)
 	f.report(t, "paused", func(in *WorkflowStatusInput) { in.PausedForMachine = true })
 	require.True(t, f.marked(t))
@@ -81,6 +85,8 @@ func TestWorkflowStatus_ResumeClearsPausedForMachine(t *testing.T) {
 // A pause that is not the breaker's (the user's, a rate limit) carries no mark
 // and clears a stale one: it must not be undone by a machine connecting.
 func TestWorkflowStatus_OtherPauseIsNotPausedForMachine(t *testing.T) {
+	t.Parallel()
+
 	f := newPausedForMachineFixture(t)
 	f.report(t, "paused", func(in *WorkflowStatusInput) { in.PausedForMachine = true })
 	require.True(t, f.marked(t))
@@ -93,6 +99,8 @@ func TestWorkflowStatus_OtherPauseIsNotPausedForMachine(t *testing.T) {
 // A nested workflow's report says nothing about the root run: it neither
 // sets nor clears the chat's mark.
 func TestWorkflowStatus_ChildReportDoesNotClearPausedForMachine(t *testing.T) {
+	t.Parallel()
+
 	f := newPausedForMachineFixture(t)
 	f.report(t, "paused", func(in *WorkflowStatusInput) { in.PausedForMachine = true })
 	childID := uuid.NewString()

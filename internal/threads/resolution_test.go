@@ -10,6 +10,8 @@ import (
 // TestResolution_SimpleCW tests resolution from a simple context window with no parent.
 // This is the base case - a root thread with no inheritance.
 func TestResolution_SimpleCW(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()
@@ -44,6 +46,8 @@ func TestResolution_SimpleCW(t *testing.T) {
 // CW1 -> CW2 (with compaction summary)
 // Resolution should only return messages from CW2, not traverse to CW1.
 func TestResolution_CompactionChain(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()
@@ -102,6 +106,8 @@ func TestResolution_CompactionChain(t *testing.T) {
 // CWA (parent) -> CWB (child, forked at ordinal 2)
 // Resolution from CWB should inherit filtered messages from CWA.
 func TestResolution_BranchChain(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()
@@ -148,6 +154,8 @@ func TestResolution_BranchChain(t *testing.T) {
 // TestResolution_NestedBranches tests a multi-level fork chain: A → B → C
 // Each level should correctly inherit and filter messages.
 func TestResolution_NestedBranches(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()
@@ -205,6 +213,8 @@ func TestResolution_NestedBranches(t *testing.T) {
 // CWA (seq=0) -> CWA' (seq=1, compacted) -> CWB (forked from CWA')
 // CWB should inherit the compaction summary from CWA' but NOT traverse to CWA.
 func TestResolution_BranchAfterCompaction(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()
@@ -258,6 +268,8 @@ func TestResolution_BranchAfterCompaction(t *testing.T) {
 // CWA (parent) -> CWB (forked) -> CWB' (compacted)
 // Resolution from CWB' should stop at compaction, not traverse to CWA.
 func TestResolution_BranchThenCompact(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()
@@ -311,6 +323,8 @@ func TestResolution_BranchThenCompact(t *testing.T) {
 // CWA -> CWA' (compact) -> CWB (fork) -> CWB' (compact)
 // Resolution from CWB' should only return messages from CWB' (stops at first compaction).
 func TestResolution_MultipleCompactionsInChain(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()
@@ -363,6 +377,8 @@ func TestResolution_MultipleCompactionsInChain(t *testing.T) {
 
 // TestResolution_EmptyContextWindow tests resolving from an empty context window.
 func TestResolution_EmptyContextWindow(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()
@@ -385,6 +401,8 @@ func TestResolution_EmptyContextWindow(t *testing.T) {
 // TestResolution_EmptyForkFromNonEmpty tests resolving from an empty forked CW
 // that has a parent with messages.
 func TestResolution_EmptyForkFromNonEmpty(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()
@@ -418,6 +436,8 @@ func TestResolution_EmptyForkFromNonEmpty(t *testing.T) {
 
 // TestResolution_MaxOrdinalFilter tests that MaxOrdinal correctly filters messages.
 func TestResolution_MaxOrdinalFilter(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()

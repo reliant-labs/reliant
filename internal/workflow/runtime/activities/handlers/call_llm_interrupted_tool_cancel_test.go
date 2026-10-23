@@ -31,6 +31,8 @@ import (
 // These tests pin the server half: the interrupt is what knows which calls
 // died, so the interrupt is what has to say so.
 func TestInterruptedStream_CancelsItsInFlightToolCalls(t *testing.T) {
+	t.Parallel()
+
 	f := setupDurableStatusFixture(t)
 	repo := f.h.Repo()
 	ctx := context.Background()
@@ -71,6 +73,8 @@ func TestInterruptedStream_CancelsItsInFlightToolCalls(t *testing.T) {
 // A tool that genuinely finished must keep its real outcome. Cancelling a
 // sibling must never repaint it.
 func TestInterruptedStream_DoesNotCancelCallsThatCompleted(t *testing.T) {
+	t.Parallel()
+
 	f := setupDurableStatusFixture(t)
 	repo := f.h.Repo()
 	ctx := context.Background()
@@ -119,6 +123,8 @@ func TestInterruptedStream_DoesNotCancelCallsThatCompleted(t *testing.T) {
 // The terminal-status guard is the safety net for the race that actually
 // happens: a tool completes microseconds before the interrupt unwinds.
 func TestInterruptedStream_RespectsAnAlreadyTerminalRow(t *testing.T) {
+	t.Parallel()
+
 	f := setupDurableStatusFixture(t)
 	repo := f.h.Repo()
 	ctx := context.Background()

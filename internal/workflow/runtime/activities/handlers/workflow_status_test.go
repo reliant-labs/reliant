@@ -27,6 +27,8 @@ import (
 // ============================================================================
 
 func TestWorkflowStatus_RootWorkflowUpdatesThread(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 
@@ -74,6 +76,8 @@ func TestWorkflowStatus_RootWorkflowUpdatesThread(t *testing.T) {
 }
 
 func TestWorkflowStatus_ChildWorkflowUpdatesExistingWorkflow(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 
@@ -148,6 +152,8 @@ func TestWorkflowStatus_ChildWorkflowUpdatesExistingWorkflow(t *testing.T) {
 }
 
 func TestWorkflowStatus_ChildWorkflowCreatedOnMissing(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 
@@ -207,6 +213,8 @@ func TestWorkflowStatus_ChildWorkflowCreatedOnMissing(t *testing.T) {
 }
 
 func TestWorkflowStatus_CompletedUpdatesStatus(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 
@@ -259,6 +267,8 @@ func TestWorkflowStatus_CompletedUpdatesStatus(t *testing.T) {
 // TestWorkflowStatus_ChildWorkflowAlreadyRunningNoOp tests that when a child workflow
 // is already running, WorkflowStatus doesn't try to update it again.
 func TestWorkflowStatus_ChildWorkflowAlreadyRunningNoOp(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 
@@ -336,6 +346,8 @@ func TestWorkflowStatus_ChildWorkflowAlreadyRunningNoOp(t *testing.T) {
 // retry budget, the workflow self-pauses and emits status="paused" so the UI
 // can reflect the paused state and SendMessage routes through resume.
 func TestWorkflowStatus_PausedUpdatesStatus(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 
@@ -386,6 +398,8 @@ func TestWorkflowStatus_PausedUpdatesStatus(t *testing.T) {
 // TestWorkflowStatus_PausedThenRestarted verifies the full pause→resume lifecycle:
 // workflow goes from running→paused→running.
 func TestWorkflowStatus_PausedThenRestarted(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 
@@ -447,6 +461,8 @@ func TestWorkflowStatus_PausedThenRestarted(t *testing.T) {
 }
 
 func TestWorkflowStatus_NestedSelfPausePropagatesChatWide(t *testing.T) {
+	t.Parallel()
+
 	// A self-pause (retry exhaustion, daemon-offline breaker) parks the ENTIRE
 	// Temporal execution, but the notifying executor may be a nested spawn
 	// whose workflow_id is not the root row. The "paused" write must land
@@ -568,6 +584,8 @@ func TestWorkflowStatus_NestedSelfPausePropagatesChatWide(t *testing.T) {
 // with "This agent has already finished (status: completed)". Measured on the
 // live DB at the time of the fix: 3 chats in exactly this state.
 func TestWorkflowStatus_StartedRevivesTerminalThread(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 
@@ -618,6 +636,8 @@ func TestWorkflowStatus_StartedRevivesTerminalThread(t *testing.T) {
 // re-notified run whose workflow never left RUNNING while the thread was
 // stamped terminal by a racing completion.
 func TestWorkflowStatus_StartedRevivesThreadWhenWorkflowAlreadyRunning(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 
@@ -659,6 +679,8 @@ func TestWorkflowStatus_StartedRevivesThreadWhenWorkflowAlreadyRunning(t *testin
 // that would be unrecoverable: only "started" means a run is beginning. A
 // completion notification must never resurrect the thread it is closing.
 func TestWorkflowStatus_TerminalStatusDoesNotReviveThread(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 

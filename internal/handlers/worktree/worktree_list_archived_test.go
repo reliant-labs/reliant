@@ -16,6 +16,8 @@ import (
 )
 
 func TestListWorktrees_NeverAsksForArchivedRows(t *testing.T) {
+	t.Parallel()
+
 	repo := ownedWorktreeRepo(t)
 	var got db.WorktreeFilters
 	repo.ListWorktreesFunc = func(_ context.Context, f db.WorktreeFilters) ([]*db.Worktree, error) {
@@ -32,6 +34,8 @@ func TestListWorktrees_NeverAsksForArchivedRows(t *testing.T) {
 }
 
 func TestListWorktrees_MainOnlyAsksForMain(t *testing.T) {
+	t.Parallel()
+
 	repo := ownedWorktreeRepo(t)
 	var got db.WorktreeFilters
 	repo.ListWorktreesFunc = func(_ context.Context, f db.WorktreeFilters) ([]*db.Worktree, error) {
@@ -48,6 +52,8 @@ func TestListWorktrees_MainOnlyAsksForMain(t *testing.T) {
 }
 
 func TestListArchivedWorktrees_PagesAndAsksOnlyForArchived(t *testing.T) {
+	t.Parallel()
+
 	repo := ownedWorktreeRepo(t)
 	all := make([]*db.Worktree, 130)
 	for i := range all {
@@ -86,6 +92,8 @@ func TestListArchivedWorktrees_PagesAndAsksOnlyForArchived(t *testing.T) {
 }
 
 func TestListArchivedWorktrees_RejectsForeignProjectAndBadToken(t *testing.T) {
+	t.Parallel()
+
 	svc := newOwnedWorktreeService(t)
 
 	_, err := svc.ListArchivedWorktrees(worktree.AuthedContext(t), connect.NewRequest(&reliantv1.ListArchivedWorktreesRequest{ProjectId: "p-2"}))

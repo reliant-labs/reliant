@@ -19,6 +19,8 @@ import (
 // with a parent_id and `workflow ps` filters on status alone. Forty such rows
 // were still being reported as live runs an hour after the cancel.
 func TestReapOrphanedWorkflowDescendants(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 

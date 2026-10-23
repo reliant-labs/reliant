@@ -18,6 +18,8 @@ import (
 // hand the ref to the slugger with its scheme still on ("project://x" became
 // the slug "projectx"), so no project:// ref resolved in a real run at all.
 func TestLoadWorkflowActivity_ProjectRefResolvesByName(t *testing.T) {
+	t.Parallel()
+
 	repo := db.NewTestRepo(t)
 	defer repo.Close()
 

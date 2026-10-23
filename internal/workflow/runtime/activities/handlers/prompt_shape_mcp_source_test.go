@@ -10,6 +10,8 @@ import (
 )
 
 func TestPromptShape_LogFieldsNameTheMCPToolsSource(t *testing.T) {
+	t.Parallel()
+
 	shape := shapeOf([]string{"s"}, baseHistory())
 	shape.mcpToolsSource = tools.MCPToolsStale
 	out := kv(shape.logFields(shapeDiff{}))

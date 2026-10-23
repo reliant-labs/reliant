@@ -19,6 +19,8 @@ import (
 )
 
 func TestInterruptThread_TranslatesServiceResult(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -38,6 +40,8 @@ func TestInterruptThread_TranslatesServiceResult(t *testing.T) {
 // svcerr kind names: the handler maps nothing. A read failure that is not a
 // store miss is the server's, and its text stays in the log.
 func TestInterruptThread_ErrorCodes(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 

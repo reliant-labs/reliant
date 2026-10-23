@@ -22,6 +22,8 @@ import (
 // those had already written their tool_result content block, proving the tool
 // itself finished and only the bookkeeping was lost.
 func TestTerminalStatusSurvivesCancelledContext(t *testing.T) {
+	t.Parallel()
+
 	f := setupDurableStatusFixture(t)
 	repo := f.h.Repo()
 	base := context.Background()
@@ -62,6 +64,8 @@ func TestTerminalStatusSurvivesCancelledContext(t *testing.T) {
 // will report a real outcome later, so it must not be force-written past a
 // cancellation that is genuinely ending the work.
 func TestIsTerminalExcludesBackgrounded(t *testing.T) {
+	t.Parallel()
+
 	for status, want := range map[core.ToolCallStatus]bool{
 		core.ToolCallStatusCompleted:    true,
 		core.ToolCallStatusFailed:       true,

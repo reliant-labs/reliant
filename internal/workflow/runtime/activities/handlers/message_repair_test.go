@@ -11,6 +11,8 @@ import (
 // TestRepairMessageHistory_NoOrphanedToolCalls verifies that messages
 // without orphaned tool_calls are returned unchanged (results consolidated)
 func TestRepairMessageHistory_NoOrphanedToolCalls(t *testing.T) {
+	t.Parallel()
+
 	msgs := []message.Message{
 		{
 			ID:   "msg-1",
@@ -53,6 +55,8 @@ func TestRepairMessageHistory_NoOrphanedToolCalls(t *testing.T) {
 // TestRepairMessageHistory_WithOrphanedToolCalls verifies that orphaned
 // tool_calls get synthetic tool_results injected
 func TestRepairMessageHistory_WithOrphanedToolCalls(t *testing.T) {
+	t.Parallel()
+
 	msgs := []message.Message{
 		{
 			ID:   "msg-1",
@@ -103,6 +107,8 @@ func TestRepairMessageHistory_WithOrphanedToolCalls(t *testing.T) {
 // TestRepairMessageHistory_PartialResults verifies that only missing
 // tool_results are added (some tools may have completed)
 func TestRepairMessageHistory_PartialResults(t *testing.T) {
+	t.Parallel()
+
 	msgs := []message.Message{
 		{
 			ID:   "msg-1",
@@ -168,6 +174,8 @@ func TestRepairMessageHistory_PartialResults(t *testing.T) {
 // TestRepairMessageHistory_MultipleAssistantMessages verifies repair
 // works correctly with multiple assistant messages with tool calls
 func TestRepairMessageHistory_MultipleAssistantMessages(t *testing.T) {
+	t.Parallel()
+
 	msgs := []message.Message{
 		{
 			ID:   "msg-1",
@@ -223,6 +231,8 @@ func TestRepairMessageHistory_MultipleAssistantMessages(t *testing.T) {
 // assistant message, not at the end of the conversation.
 // This is the scenario that caused the 400 Bad Request error from Anthropic API.
 func TestRepairMessageHistory_UserInterruptMidToolExecution(t *testing.T) {
+	t.Parallel()
+
 	// This simulates:
 	// 1. User says "continue"
 	// 2. Assistant calls tool tc-1 (bash)
@@ -307,6 +317,8 @@ func TestRepairMessageHistory_UserInterruptMidToolExecution(t *testing.T) {
 // where parent messages include an assistant with tool_call but no tool_result,
 // and the branched chat has additional messages after.
 func TestRepairMessageHistory_BranchedChatScenario(t *testing.T) {
+	t.Parallel()
+
 	// Simulates branched chat scenario:
 	// Parent: user(0) -> assistant(1) with tool_call
 	// Branch at ordinal 1
@@ -373,6 +385,8 @@ func TestRepairMessageHistory_BranchedChatScenario(t *testing.T) {
 // This is the root cause of the Anthropic 400 error:
 // "unexpected tool_use_id found in tool_result blocks"
 func TestRepairMessageHistory_OrphanedToolResultNoAssistantMessage(t *testing.T) {
+	t.Parallel()
+
 	msgs := []message.Message{
 		{
 			ID:   "msg-user-1",
@@ -412,6 +426,8 @@ func TestRepairMessageHistory_OrphanedToolResultNoAssistantMessage(t *testing.T)
 // when a tool message contains both orphaned and valid results, only the
 // orphaned ones are dropped.
 func TestRepairMessageHistory_MixedOrphanedAndValidToolResults(t *testing.T) {
+	t.Parallel()
+
 	msgs := []message.Message{
 		{
 			ID:   "msg-user-1",
@@ -454,6 +470,8 @@ func TestRepairMessageHistory_MixedOrphanedAndValidToolResults(t *testing.T) {
 
 // TestRepairMessageHistory_EmptyMessages verifies empty message list is handled
 func TestRepairMessageHistory_EmptyMessages(t *testing.T) {
+	t.Parallel()
+
 	msgs := []message.Message{}
 	result := repairMessageHistory(msgs)
 	require.Len(t, result, 0)
@@ -461,6 +479,8 @@ func TestRepairMessageHistory_EmptyMessages(t *testing.T) {
 
 // TestRepairMessageHistory_NoToolCalls verifies messages without tool calls are unchanged
 func TestRepairMessageHistory_NoToolCalls(t *testing.T) {
+	t.Parallel()
+
 	msgs := []message.Message{
 		{
 			ID:   "msg-1",
@@ -490,6 +510,8 @@ func TestRepairMessageHistory_NoToolCalls(t *testing.T) {
 // must synthesize stub tool_results that tell the model the outcome is UNKNOWN
 // (not merely "cancelled") so it verifies side effects before re-running.
 func TestRepairMessageHistory_ResumeAfterKilledRun(t *testing.T) {
+	t.Parallel()
+
 	msgs := []message.Message{
 		{
 			ID:   "msg-1",

@@ -37,6 +37,8 @@ func allowLegacyRows(t *testing.T, raw *sql.DB) {
 }
 
 func TestSetAutomationTokenWritesSealedColumn(t *testing.T) {
+	t.Parallel()
+
 	repo, raw := sealedRepo(t)
 	ctx := context.Background()
 	require.NoError(t, repo.SetAutomationToken(ctx, "u1", "anthropic", "sk-plain"))
@@ -51,6 +53,8 @@ func TestSetAutomationTokenWritesSealedColumn(t *testing.T) {
 }
 
 func TestGetAutomationTokenIgnoresPlaintextColumn(t *testing.T) {
+	t.Parallel()
+
 	repo, raw := sealedRepo(t)
 	ctx := context.Background()
 	require.NoError(t, repo.SetAutomationToken(ctx, "u1", "anthropic", "sk-real"))
@@ -63,6 +67,8 @@ func TestGetAutomationTokenIgnoresPlaintextColumn(t *testing.T) {
 }
 
 func TestSealedAPIKeyDoesNotOpenWhenTransplanted(t *testing.T) {
+	t.Parallel()
+
 	repo, raw := sealedRepo(t)
 	ctx := context.Background()
 	require.NoError(t, repo.SetAutomationToken(ctx, "u1", "anthropic", "sk-u1"))
@@ -76,6 +82,8 @@ func TestSealedAPIKeyDoesNotOpenWhenTransplanted(t *testing.T) {
 }
 
 func TestBackfillSealsLegacyRowsAndIsIdempotent(t *testing.T) {
+	t.Parallel()
+
 	repo, raw := sealedRepo(t)
 	ctx := context.Background()
 	allowLegacyRows(t, raw)
@@ -115,6 +123,8 @@ func TestBackfillSealsLegacyRowsAndIsIdempotent(t *testing.T) {
 }
 
 func TestUnsealedRowDoesNotFallBackToPlaintext(t *testing.T) {
+	t.Parallel()
+
 	repo, raw := sealedRepo(t)
 	ctx := context.Background()
 	allowLegacyRows(t, raw)
@@ -126,6 +136,8 @@ func TestUnsealedRowDoesNotFallBackToPlaintext(t *testing.T) {
 }
 
 func TestClearedSealedColumnErrorsInsteadOfFallingBack(t *testing.T) {
+	t.Parallel()
+
 	repo, raw := sealedRepo(t)
 	ctx := context.Background()
 	require.NoError(t, repo.SetAutomationToken(ctx, "u1", "anthropic", "sk-real"))
@@ -143,6 +155,8 @@ func TestClearedSealedColumnErrorsInsteadOfFallingBack(t *testing.T) {
 }
 
 func TestSetAutomationTokenRequiresVault(t *testing.T) {
+	t.Parallel()
+
 	_, raw, cleanup := SetupTestDBWithRawDB(t)
 	defer cleanup()
 	bare, err := NewRepoWithDriver(raw, DriverPostgres)
@@ -172,6 +186,8 @@ type CredentialSealerForTest interface {
 }
 
 func TestBootRefusesWhenUnsealedRowRemainsAfterBackfill(t *testing.T) {
+	t.Parallel()
+
 	repo, raw, cleanup := SetupTestDBWithRawDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -199,6 +215,8 @@ func TestBootRefusesWhenUnsealedRowRemainsAfterBackfill(t *testing.T) {
 }
 
 func TestAutomationCredResolverEndToEndOverSealedStore(t *testing.T) {
+	t.Parallel()
+
 	repo, raw := sealedRepo(t)
 	ctx := context.Background()
 	const user, daemon = "u1", "daemon-1"

@@ -113,6 +113,8 @@ func (f *discoverFixture) discover(t *testing.T) *reliantv1.DiscoverWorktreesRes
 }
 
 func TestDiscoverWorktrees_SendsRepoPathsAndExcludesTrackedRows(t *testing.T) {
+	t.Parallel()
+
 	f := newDiscoverTestFixture(t, "a", "b")
 	f.addRow(t, "/ws/live", false)
 	f.addRow(t, "/ws/archived", true)
@@ -146,6 +148,8 @@ func TestDiscoverWorktrees_SendsRepoPathsAndExcludesTrackedRows(t *testing.T) {
 }
 
 func TestDiscoverWorktrees_MovesOnImport(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		name  string
 		rels  []string
@@ -177,6 +181,8 @@ func TestDiscoverWorktrees_MovesOnImport(t *testing.T) {
 }
 
 func TestDiscoverWorktrees_SplitsStale(t *testing.T) {
+	t.Parallel()
+
 	f := newDiscoverTestFixture(t, "a", "b")
 	f.router.entries = []map[string]any{
 		{"repo_id": f.repoIDs[0], "path": "/live", "name": "live"},
@@ -193,6 +199,8 @@ func TestDiscoverWorktrees_SplitsStale(t *testing.T) {
 }
 
 func TestDiscoverWorktrees_RejectsAnotherUsersProject(t *testing.T) {
+	t.Parallel()
+
 	f := newDiscoverTestFixture(t, "")
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, uuid.NewString())
 	_, err := f.svc.DiscoverWorktrees(ctx, connect.NewRequest(&reliantv1.DiscoverWorktreesRequest{ProjectId: f.projectID}))
@@ -201,6 +209,8 @@ func TestDiscoverWorktrees_RejectsAnotherUsersProject(t *testing.T) {
 }
 
 func TestPruneWorktrees_SendsReposAndReturnsPruned(t *testing.T) {
+	t.Parallel()
+
 	f := newDiscoverTestFixture(t, "a", "b")
 	f.router.pruned = []map[string]any{
 		{"repo_id": f.repoIDs[1], "path": "/gone", "prunable": true, "prunable_reason": "missing"},
@@ -253,6 +263,8 @@ func TestDiscoverWorktrees_BackgroundNeverWakesAnAsleepMachine(t *testing.T) {
 // ---- import ----
 
 func TestImportWorktree_MultiRepoNeedsConfirmMove(t *testing.T) {
+	t.Parallel()
+
 	f := newDiscoverTestFixture(t, "a", "b")
 	_, err := f.svc.ImportWorktree(f.ctx, connect.NewRequest(&reliantv1.ImportWorktreeRequest{
 		ProjectId: f.projectID, RepoId: f.repoIDs[0], Path: "/x/wt",
@@ -264,6 +276,8 @@ func TestImportWorktree_MultiRepoNeedsConfirmMove(t *testing.T) {
 }
 
 func TestImportWorktree_RefusesPathsTheDaemonDoesNotReport(t *testing.T) {
+	t.Parallel()
+
 	f := newDiscoverTestFixture(t, "")
 	f.router.entries = []map[string]any{{"repo_id": f.repoIDs[0], "path": "/x/real", "branch": "b"}}
 	_, err := f.svc.ImportWorktree(f.ctx, connect.NewRequest(&reliantv1.ImportWorktreeRequest{
@@ -276,6 +290,8 @@ func TestImportWorktree_RefusesPathsTheDaemonDoesNotReport(t *testing.T) {
 }
 
 func TestImportWorktree_DetachedHeadIsRefused(t *testing.T) {
+	t.Parallel()
+
 	f := newDiscoverTestFixture(t, "")
 	f.router.entries = []map[string]any{{"repo_id": f.repoIDs[0], "path": "/x/det", "head": "abc", "detached": true}}
 	_, err := f.svc.ImportWorktree(f.ctx, connect.NewRequest(&reliantv1.ImportWorktreeRequest{
@@ -287,6 +303,8 @@ func TestImportWorktree_DetachedHeadIsRefused(t *testing.T) {
 }
 
 func TestImportWorktree_SingleRepoRegistersInPlace(t *testing.T) {
+	t.Parallel()
+
 	f := newDiscoverTestFixture(t, "")
 	f.router.entries = []map[string]any{{"repo_id": f.repoIDs[0], "path": "/x/wt", "name": "wt", "branch": "feat/y"}}
 	resp, err := f.svc.ImportWorktree(f.ctx, connect.NewRequest(&reliantv1.ImportWorktreeRequest{

@@ -35,6 +35,8 @@ func TestEnqueueAgentMessageInput_ActivityThreadIsTheReportingSpawn(t *testing.T
 // must write a queued row addressed to the parent thread, which the parent's
 // own drain (at its next step boundary) then delivers.
 func TestEnqueueAgentMessage_Completion(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 	ctx := context.Background()
@@ -80,6 +82,8 @@ func TestEnqueueAgentMessage_Completion(t *testing.T) {
 // TestEnqueueAgentMessage_RequiresToThreadID pins the fail-fast validation:
 // no silent orphaned row addressed to nothing.
 func TestEnqueueAgentMessage_RequiresToThreadID(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 
@@ -159,6 +163,8 @@ func (f *spawnReportFixture) rowsFor(t *testing.T, toolCallID string) []*core.Ag
 // A real report arriving after the reconciler synthesized a placeholder must
 // replace it, not die on the unique index (incident 2026-10-04).
 func TestEnqueueAgentMessage_RealReportSupersedesQueuedPlaceholder(t *testing.T) {
+	t.Parallel()
+
 	f := newSpawnReportFixture(t)
 	f.seedPlaceholder(t, "toolu_sup")
 
@@ -176,6 +182,8 @@ func TestEnqueueAgentMessage_RealReportSupersedesQueuedPlaceholder(t *testing.T)
 // A placeholder the parent already consumed is still superseded, and re-queued
 // so the parent receives the actual outcome.
 func TestEnqueueAgentMessage_RealReportSupersedesDeliveredPlaceholder(t *testing.T) {
+	t.Parallel()
+
 	f := newSpawnReportFixture(t)
 	placeholder := f.seedPlaceholder(t, "toolu_del")
 	moved, err := f.h.Repo().MarkAgentMessagesDelivered(context.Background(), []string{placeholder.ID}, time.Now().UTC(), "")
@@ -200,6 +208,8 @@ func TestEnqueueAgentMessage_RealReportSupersedesDeliveredPlaceholder(t *testing
 // drain would deliver the placeholder text and mark the real report delivered
 // without the parent ever seeing it.
 func TestEnqueueAgentMessage_SupersedeDefeatsAStaleDrainClaim(t *testing.T) {
+	t.Parallel()
+
 	f := newSpawnReportFixture(t)
 	ctx := context.Background()
 	f.seedPlaceholder(t, "toolu_race")
@@ -224,6 +234,8 @@ func TestEnqueueAgentMessage_SupersedeDefeatsAStaleDrainClaim(t *testing.T) {
 // A second real report (activity retry after a lost commit response) is an
 // idempotent no-op and leaves the first report untouched.
 func TestEnqueueAgentMessage_AlreadyReportedIsIdempotent(t *testing.T) {
+	t.Parallel()
+
 	f := newSpawnReportFixture(t)
 	_, err := f.report(t, core.AgentMessageKindCompletion, "toolu_idem", "first")
 	require.NoError(t, err)
@@ -238,6 +250,8 @@ func TestEnqueueAgentMessage_AlreadyReportedIsIdempotent(t *testing.T) {
 
 // Non-terminal kinds keep the plain insert path.
 func TestEnqueueAgentMessage_NonTerminalKindsUnaffected(t *testing.T) {
+	t.Parallel()
+
 	f := newSpawnReportFixture(t)
 	_, err := f.report(t, core.AgentMessageKindMessage, "", "hello")
 	require.NoError(t, err)

@@ -46,6 +46,8 @@ func priorities(t *testing.T, repo *Repo, user, provider string) []string {
 }
 
 func TestUpsertProviderAccountDedupesByIdentityAndAppendsPriority(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -95,6 +97,8 @@ func TestUpsertProviderAccountDedupesByIdentityAndAppendsPriority(t *testing.T) 
 }
 
 func TestUpsertProviderAccountKeepsRefreshTokenWhenReconsentOmitsIt(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -113,6 +117,8 @@ func TestUpsertProviderAccountKeepsRefreshTokenWhenReconsentOmitsIt(t *testing.T
 }
 
 func TestUpsertProviderAccountValidation(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -138,6 +144,8 @@ func TestUpsertProviderAccountValidation(t *testing.T) {
 }
 
 func TestAccountSecretsAreSealedAndBoundToTheRow(t *testing.T) {
+	t.Parallel()
+
 	repo, raw, cleanup := SetupTestDBWithRawDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -166,6 +174,8 @@ func TestAccountSecretsAreSealedAndBoundToTheRow(t *testing.T) {
 }
 
 func TestListProviderAccountsWithSecretsSkipsUnopenableRow(t *testing.T) {
+	t.Parallel()
+
 	repo, raw, cleanup := SetupTestDBWithRawDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -186,6 +196,8 @@ func TestListProviderAccountsWithSecretsSkipsUnopenableRow(t *testing.T) {
 }
 
 func TestAccountsAreScopedToTheirUser(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -207,6 +219,8 @@ func TestAccountsAreScopedToTheirUser(t *testing.T) {
 }
 
 func TestReorderProviderAccounts(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -239,6 +253,8 @@ func TestReorderProviderAccounts(t *testing.T) {
 }
 
 func TestDeleteProviderAccountDensifiesAndCascades(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -267,6 +283,8 @@ func TestDeleteProviderAccountDensifiesAndCascades(t *testing.T) {
 }
 
 func TestCompareAndSwapAccountTokensExactlyOneWinner(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -343,6 +361,8 @@ func TestCompareAndSwapAccountTokensExactlyOneWinner(t *testing.T) {
 }
 
 func TestPatchProviderAccount(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -384,6 +404,8 @@ func TestPatchProviderAccount(t *testing.T) {
 }
 
 func TestManagedAccountIdentityAndAPIKeyAccount(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -406,6 +428,8 @@ func TestManagedAccountIdentityAndAPIKeyAccount(t *testing.T) {
 }
 
 func TestLimitSnapshotIsMonotonicAndBenchUsesGreatest(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -480,6 +504,8 @@ func TestLimitSnapshotIsMonotonicAndBenchUsesGreatest(t *testing.T) {
 }
 
 func TestBenchBeforeAnySnapshotCreatesLimitState(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -501,6 +527,8 @@ func TestBenchBeforeAnySnapshotCreatesLimitState(t *testing.T) {
 }
 
 func TestAccountStatusPrecedence(t *testing.T) {
+	t.Parallel()
+
 	now := time.Now()
 	future := now.Add(time.Hour)
 	limited := &core.LimitState{LimitedUntil: &future}
@@ -514,6 +542,8 @@ func TestAccountStatusPrecedence(t *testing.T) {
 }
 
 func TestLeaseUsagePollsConcurrentLeasersGetDisjointSets(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -577,6 +607,8 @@ func TestLeaseUsagePollsConcurrentLeasersGetDisjointSets(t *testing.T) {
 }
 
 func TestScheduleUsagePoll(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -609,6 +641,8 @@ func TestScheduleUsagePoll(t *testing.T) {
 }
 
 func TestThreadAssignmentCompareAndSet(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -692,6 +726,8 @@ func TestThreadAssignmentCompareAndSet(t *testing.T) {
 }
 
 func TestRecentAssignmentCounts(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -723,6 +759,8 @@ func TestRecentAssignmentCounts(t *testing.T) {
 }
 
 func TestMessagesProviderAccountIDColumn(t *testing.T) {
+	t.Parallel()
+
 	_, raw, cleanup := SetupTestDBWithRawDB(t)
 	defer cleanup()
 	var typ, nullable string
@@ -738,6 +776,8 @@ func TestMessagesProviderAccountIDColumn(t *testing.T) {
 }
 
 func TestMergeOnIdentityRewrite(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -825,6 +865,8 @@ func TestMergeOnIdentityRewrite(t *testing.T) {
 // S9: an account with a distinct identity must never be deleted by an identity merge, whatever
 // the relative ages of the rows, and what the user set on it (pause, bench, poll schedule) stays.
 func TestIdentityMergeNeverDeletesTheAccountWithADistinctIdentity(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	t.Run("its pause, label, bench and poll schedule survive a merge with a newer placeholder", func(t *testing.T) {
@@ -913,6 +955,8 @@ func TestIdentityMergeNeverDeletesTheAccountWithADistinctIdentity(t *testing.T) 
 }
 
 func TestDisplayLabel(t *testing.T) {
+	t.Parallel()
+
 	assert.Equal(t, "work", core.ProviderAccount{Label: "work", Email: "a@b.c"}.DisplayLabel())
 	assert.Equal(t, "a@b.c", core.ProviderAccount{Email: "a@b.c"}.DisplayLabel())
 	assert.Equal(t, "Openai key …1234", core.ProviderAccount{Provider: "openai", KeyHint: "1234"}.DisplayLabel())
@@ -920,6 +964,8 @@ func TestDisplayLabel(t *testing.T) {
 }
 
 func TestGetAccountLimitsAndLastTraffic(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()

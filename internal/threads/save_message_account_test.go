@@ -16,6 +16,8 @@ import (
 // (messageconv) hands it back as message.Message.ProviderAccountID — the value
 // stripForeignReasoning compares against the account a request is going to.
 func TestSaveMessage_ProviderAccountRoundTrip(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()

@@ -64,6 +64,8 @@ func (e *triggerTestEnv) seedReplayEvent(t *testing.T, triggerID string, at time
 // and does NOT apply its filter: issue 7 is below the filter's threshold of
 // 1000, which is exactly the event someone wants to replay.
 func TestPreviewReplay_MapsInputsAndPromptWithoutTheFilter(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	env.saveWorkflow(t, "triage", replayDeclaringYAML)
 
@@ -83,6 +85,8 @@ func TestPreviewReplay_MapsInputsAndPromptWithoutTheFilter(t *testing.T) {
 // The edited payload is what is mapped; an event kind a trigger never receives
 // is refused; a trigger the workflow does not declare is refused.
 func TestPreviewReplay_RefusesWhatItCannotMap(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	env.saveWorkflow(t, "triage", replayDeclaringYAML)
 
@@ -113,6 +117,8 @@ func TestPreviewReplay_RefusesWhatItCannotMap(t *testing.T) {
 
 // A workflow the caller does not own does not resolve for them.
 func TestPreviewReplay_ResolvesTheWorkflowForTheCaller(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	env.saveWorkflow(t, "triage", replayDeclaringYAML)
 
@@ -128,6 +134,8 @@ func TestPreviewReplay_ResolvesTheWorkflowForTheCaller(t *testing.T) {
 // workflow's triggers, newest first, labelled with the trigger they arrived
 // through, and reads nobody else's.
 func TestListReplayEvents_ListsTheCallersActivationsEventsNewestFirst(t *testing.T) {
+	t.Parallel()
+
 	env, _ := setupInboundTriggerTest(t)
 	env.saveWorkflow(t, "triage", replayDeclaringYAML)
 	conn := env.createConnection(t, env.userID, "test", "acct-1", core.ConnectionStatusActive)
@@ -170,6 +178,8 @@ func TestListReplayEvents_ListsTheCallersActivationsEventsNewestFirst(t *testing
 }
 
 func TestListReplayEvents_LimitsAndHandlesNoActivations(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	env.saveWorkflow(t, "triage", replayDeclaringYAML)
 

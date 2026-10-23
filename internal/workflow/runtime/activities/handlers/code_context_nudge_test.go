@@ -40,6 +40,8 @@ const (
 // wherever it differs from "want", so the table is also the before/after
 // record of what this rule changed.
 func TestSymbolFromShellCommand(t *testing.T) {
+	t.Parallel()
+
 	for _, tc := range []struct {
 		name    string
 		command string
@@ -198,6 +200,8 @@ func TestNudge_NamesTheSymbolAndStaysOneNote(t *testing.T) {
 // would still be there on reload — the transcript must stay a faithful record
 // of what actually ran.
 func TestNudge_DoesNotEnterDurableContent(t *testing.T) {
+	t.Parallel()
+
 	src, err := os.ReadFile("execute_tools.go")
 	require.NoError(t, err)
 	body := string(src)

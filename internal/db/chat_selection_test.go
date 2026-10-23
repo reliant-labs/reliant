@@ -28,6 +28,8 @@ func selectionTestChat(t *testing.T, repo *Repo, id string) {
 }
 
 func TestChatSelection_RoundTripAndCascade(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -67,6 +69,8 @@ func TestChatSelection_RoundTripAndCascade(t *testing.T) {
 }
 
 func TestChatSelection_StaleVersionIsRefusedAndWritesNothing(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -88,6 +92,8 @@ func TestChatSelection_StaleVersionIsRefusedAndWritesNothing(t *testing.T) {
 }
 
 func TestChatSelection_ConcurrentEditsOfDifferentKeysBothLand(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -115,6 +121,8 @@ func TestChatSelection_ConcurrentEditsOfDifferentKeysBothLand(t *testing.T) {
 }
 
 func TestChatSelection_CopyForABranch(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()

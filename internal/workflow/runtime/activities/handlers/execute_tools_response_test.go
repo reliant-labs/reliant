@@ -11,6 +11,8 @@ import (
 
 // TestExecuteResponseToolInline tests the executeResponseToolInline helper function
 func TestExecuteResponseToolInline(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name               string
 		toolCallID         string
@@ -102,6 +104,8 @@ func TestExecuteResponseToolInline(t *testing.T) {
 // TestExecuteResponseToolInlineMetadataExtraction tests that response tool
 // metadata is properly structured for CEL access
 func TestExecuteResponseToolInlineMetadataExtraction(t *testing.T) {
+	t.Parallel()
+
 	// Simulate what the LLM would send as input to filtered_results
 	llmInput := `{
 		"results": [

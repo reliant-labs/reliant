@@ -8,6 +8,8 @@ import (
 )
 
 func TestProbeAssistantTurnReplaysReasoningAndToolSignatures(t *testing.T) {
+	t.Parallel()
+
 	r := ProbeResult{
 		Thinking:  "hmm",
 		Signature: "sig-1",
@@ -35,6 +37,8 @@ func TestProbeAssistantTurnReplaysReasoningAndToolSignatures(t *testing.T) {
 }
 
 func TestProbeResultErrPrefersResolve(t *testing.T) {
+	t.Parallel()
+
 	if (ProbeResult{}).Err() != nil {
 		t.Fatal("empty result must have no error")
 	}

@@ -56,6 +56,8 @@ func loopStep(stepID, activity, loopNode string, iteration int64, at time.Time, 
 }
 
 func TestGetWorkflowExecutions_BasicViewReturnsOnlyTimelineSteps(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -98,6 +100,8 @@ func TestGetWorkflowExecutions_BasicViewReturnsOnlyTimelineSteps(t *testing.T) {
 }
 
 func TestGetWorkflowExecutions_BasicViewSiblingIsLoopScoped(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -123,6 +127,8 @@ func TestGetWorkflowExecutions_BasicViewSiblingIsLoopScoped(t *testing.T) {
 }
 
 func TestGetWorkflowExecutions_FullViewReturnsInternalSteps(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -147,6 +153,8 @@ func TestGetWorkflowExecutions_FullViewReturnsInternalSteps(t *testing.T) {
 // GetContextWindowBySequence, once per workflow. Thread identity now arrives in
 // one ListThreadsByConversation and fork-ness in one ListForkedThreadIDs.
 func TestGetWorkflowExecutions_ThreadTreeHasNoPerWorkflowQueries(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 

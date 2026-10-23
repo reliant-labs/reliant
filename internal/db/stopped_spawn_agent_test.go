@@ -17,6 +17,8 @@ import (
 // Stopped means its thread and its latest spawn run both failed; one that
 // completed, was cancelled, or has been resumed since is not.
 func TestGetStoppedSpawnAgent(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()

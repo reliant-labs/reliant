@@ -31,6 +31,8 @@ func requireOwner(t *testing.T, repo *db.Repo, runID, want string) {
 // it names would say otherwise, which proves the parent is consulted first
 // rather than the chat.
 func TestCreateWorkflowWithThread_SpawnedRunTakesParentOwner(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 	ctx := context.Background()
@@ -72,6 +74,8 @@ func TestCreateWorkflowWithThread_SpawnedRunTakesParentOwner(t *testing.T) {
 
 // A run created by the activity with no parent takes its chat's user.
 func TestCreateWorkflowWithThread_RootRunTakesChatOwner(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 	ctx := context.Background()
@@ -100,6 +104,8 @@ func TestCreateWorkflowWithThread_RootRunTakesChatOwner(t *testing.T) {
 // creates a child row when its status write races ahead of the parent's
 // CreateWorkflowWithThread. Both rows must carry an owner.
 func TestWorkflowStatus_CreatedRunsCarryAnOwner(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 	ctx := context.Background()

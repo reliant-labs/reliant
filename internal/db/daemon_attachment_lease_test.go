@@ -56,6 +56,8 @@ func seedLeaseDaemon(t *testing.T, repo *Repo, daemonID, userID string) {
 // serving terminal commands for six hours while every chat read it as
 // DISCONNECTED (prod, 2026-10-11).
 func TestRenewDaemonAttachmentRecreatesAReapedLease(t *testing.T) {
+	t.Parallel()
+
 	repo, rawDB, cleanup := SetupTestDBWithRawDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -109,6 +111,8 @@ func TestRenewDaemonAttachmentRecreatesAReapedLease(t *testing.T) {
 // telemetry belongs to the registered session, and a late renewal (say, from a
 // connection a reconnect already superseded) must not regress it.
 func TestRenewDaemonAttachmentOnlyAdvancesTheLease(t *testing.T) {
+	t.Parallel()
+
 	repo, rawDB, cleanup := SetupTestDBWithRawDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -164,6 +168,8 @@ func TestRenewDaemonAttachmentOnlyAdvancesTheLease(t *testing.T) {
 // the control plane has deleted, and never touches another user's lease: the
 // stream's heartbeat is not authority over the registry.
 func TestRenewDaemonAttachmentDoesNotCreateAForeignOrRemovedLease(t *testing.T) {
+	t.Parallel()
+
 	repo, rawDB, cleanup := SetupTestDBWithRawDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -207,6 +213,8 @@ func TestRenewDaemonAttachmentDoesNotCreateAForeignOrRemovedLease(t *testing.T) 
 // after the daemon already re-attached elsewhere. Deleting by daemon id alone
 // removed the live session's lease.
 func TestReleaseDaemonAttachmentKeepsANewerSessionsLease(t *testing.T) {
+	t.Parallel()
+
 	repo, rawDB, cleanup := SetupTestDBWithRawDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -259,6 +267,8 @@ func TestReleaseDaemonAttachmentKeepsANewerSessionsLease(t *testing.T) {
 // earlier, so a tool call could not tell a daemon about to redial from a
 // laptop closed last week.
 func TestReleaseDaemonAttachmentRecordsWhenTheDaemonWasLastSeen(t *testing.T) {
+	t.Parallel()
+
 	repo, _, cleanup := SetupTestDBWithRawDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -336,6 +346,8 @@ func TestReleaseDaemonAttachmentRecordsWhenTheDaemonWasLastSeen(t *testing.T) {
 // session whose connect upsert failed renewed the old session's row in place,
 // and the old replica's teardown deleted it out from under the live stream.
 func TestRenewDaemonAttachmentAdoptsTheNewerSession(t *testing.T) {
+	t.Parallel()
+
 	repo, rawDB, cleanup := SetupTestDBWithRawDB(t)
 	defer cleanup()
 	ctx := context.Background()

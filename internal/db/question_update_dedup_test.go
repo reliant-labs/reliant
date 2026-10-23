@@ -23,6 +23,8 @@ import (
 // Tool calls already solved exactly this problem by deduping on the id embedded
 // in the entity_id rather than the whole entity_id; questions were left out.
 func TestGetLatestNonMessageUpdatesPerEntity_CollapsesQuestionToLatestStatus(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
@@ -61,6 +63,8 @@ func TestGetLatestNonMessageUpdatesPerEntity_CollapsesQuestionToLatestStatus(t *
 // dedup key is per question id, not per chat. Without this, the fix above would
 // hide a genuinely pending question behind an older resolved one.
 func TestGetLatestNonMessageUpdatesPerEntity_KeepsDistinctQuestionsSeparate(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 

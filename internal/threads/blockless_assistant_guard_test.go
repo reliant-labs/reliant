@@ -18,6 +18,8 @@ import (
 // without editing the database, while rejecting costs only a turn that had no
 // content to lose.
 func TestValidateSaveMessageOpts_AssistantContent(t *testing.T) {
+	t.Parallel()
+
 	const assistant = int32(reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT)
 
 	tests := []struct {

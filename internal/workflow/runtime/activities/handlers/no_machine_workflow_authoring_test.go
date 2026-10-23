@@ -34,6 +34,8 @@ var workflowAuthoringTools = []string{
 // The launch half (validateNoMachine lets builtin://agent start with no
 // machine) is TestLaunchNoMachineRecordsItOnTheChat in internal/launch.
 func TestNoMachineChat_AgentCanLoadTheWorkflowAuthoringTools(t *testing.T) {
+	t.Parallel()
+
 	f := setupNoMachineFixture(t, true)
 	// builtin/agent.yaml's call_llm in auto mode: preloaded inputs.tools
 	// (default tag:coding:default), loadable "*", permission mutating.

@@ -22,6 +22,8 @@ import (
 // forever (4,213 of 4,224 backgrounded rows on the dev database had a NULL
 // background_process_id, and none had a way to name their daemon).
 func TestDurableStatus_BackgroundedToolRecordsWhereItRuns(t *testing.T) {
+	t.Parallel()
+
 	f := setupDurableStatusFixture(t)
 	defer f.h.Cleanup()
 	ctx := context.Background()
@@ -81,6 +83,8 @@ func executeSingleToolAsRetry(t *testing.T, f *durableStatusFixture, executor *m
 // interrupted result block. The UI renders such a row as a running tool with a
 // live Cancel button.
 func TestExecuteTools_ActivityRetryClosesTheRow(t *testing.T) {
+	t.Parallel()
+
 	f := setupDurableStatusFixture(t)
 	defer f.h.Cleanup()
 	ctx := context.Background()
@@ -126,6 +130,8 @@ func TestExecuteTools_ActivityRetryClosesTheRow(t *testing.T) {
 // row from the process's real outcome. Writing FAILED here would report a live
 // dev server as dead.
 func TestExecuteTools_ActivityRetryLeavesABackgroundedRowAlone(t *testing.T) {
+	t.Parallel()
+
 	f := setupDurableStatusFixture(t)
 	defer f.h.Cleanup()
 	ctx := context.Background()

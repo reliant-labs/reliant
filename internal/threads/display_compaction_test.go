@@ -18,6 +18,8 @@ import (
 // turns but the entire inherited parent history — one real chat displayed 19
 // messages instead of ~1,755.
 func TestDisplayCrossesCompactionIntoInheritedHistory(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()
@@ -96,6 +98,8 @@ func TestDisplayCrossesCompactionIntoInheritedHistory(t *testing.T) {
 // reported chat the transcript bottomed out at the newest compaction summary
 // with ~2,200 older messages unreachable, no matter how far the user scrolled.
 func TestDisplayCrossingCompactionKeepsParentWindowMessages(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()
@@ -174,6 +178,8 @@ func TestDisplayCrossingCompactionKeepsParentWindowMessages(t *testing.T) {
 // message transcript, because every one of the three compactions in its
 // ancestry was excluded from the count but present in the transcript.
 func TestCountDisplayMessagesMatchesDisplayLoad(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()
@@ -224,6 +230,8 @@ func TestCountDisplayMessagesMatchesDisplayLoad(t *testing.T) {
 // two counts diverge in production: the fork inherits across the boundary, so
 // its transcript is far longer than the LLM context that stops at the summary.
 func TestCountDisplayMessagesForkAcrossCompaction(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()

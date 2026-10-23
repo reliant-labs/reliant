@@ -25,6 +25,8 @@ import (
 // reading back a value through the same code path that wrote it.
 
 func TestGetMessage_PopulatesDurableToolCallStatus(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 
@@ -61,6 +63,8 @@ func TestGetMessage_PopulatesDurableToolCallStatus(t *testing.T) {
 }
 
 func TestListMessages_PopulatesDurableToolCallStatus(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 

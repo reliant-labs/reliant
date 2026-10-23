@@ -105,6 +105,8 @@ func callLLMInputEmpty(chatID, threadID string) ActivityInput {
 }
 
 func TestCallLLMActivity_Idempotency(t *testing.T) {
+	t.Parallel()
+
 	// Setup mock LLM driver
 	resolver := mockLLMDriverResolver()
 
@@ -259,6 +261,8 @@ func TestCallLLMActivity_Idempotency(t *testing.T) {
 }
 
 func TestCallLLMActivity_CleansUpIncompleteBlocks(t *testing.T) {
+	t.Parallel()
+
 	t.Skip("Skipping: Temporal test framework doesn't properly simulate activity retry behavior")
 
 	// Setup mock LLM driver
@@ -388,6 +392,8 @@ func TestCallLLMActivity_CleansUpIncompleteBlocks(t *testing.T) {
 }
 
 func TestCallLLMActivity_NoOrphanedRecords(t *testing.T) {
+	t.Parallel()
+
 	// Setup mock LLM driver
 	resolver := mockLLMDriverResolver()
 
@@ -485,6 +491,8 @@ func TestCallLLMActivity_NoOrphanedRecords(t *testing.T) {
 }
 
 func TestCallLLMActivity_ActivityIDTracking(t *testing.T) {
+	t.Parallel()
+
 	// Setup mock LLM driver
 	resolver := mockLLMDriverResolver()
 
@@ -572,6 +580,8 @@ func TestCallLLMActivity_ActivityIDTracking(t *testing.T) {
 }
 
 func TestCallLLMActivity_ThreadHandling(t *testing.T) {
+	t.Parallel()
+
 	// Setup mock LLM driver
 	resolver := mockLLMDriverResolver()
 
@@ -656,6 +666,8 @@ func TestCallLLMActivity_ThreadHandling(t *testing.T) {
 }
 
 func TestCallLLMActivity_ThinkingLevel(t *testing.T) {
+	t.Parallel()
+
 	// Setup mock LLM driver
 	resolver := mockLLMDriverResolver()
 

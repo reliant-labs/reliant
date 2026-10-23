@@ -14,10 +14,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/rctx"
 )
 
-// fakeSettings is an in-memory SettingsReader. Deliberately NOT the postgres
-// harness: internal/handlers-style tests t.Skip when DATABASE_URL is
-// unset, and a package that reports "ok" having run zero assertions is worse
-// than a package that fails.
+// fakeSettings is an in-memory SettingsReader.
 type fakeSettings struct {
 	rows map[string][]*db.Setting // userID -> rows
 	err  error

@@ -16,6 +16,8 @@ import (
 // reap is an echo of the root dying, not the child finishing — and must NOT
 // return a spawn that has already reported back.
 func TestListLiveBackgroundSpawns(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()

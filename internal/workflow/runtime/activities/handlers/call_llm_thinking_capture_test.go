@@ -49,6 +49,8 @@ func completeEventState(t *testing.T, resp *llm.DriverResponse) *streamProcessin
 // nowhere else — no thinking_delta was ever streamed — which is exactly the
 // shape that wedged the chat.
 func TestHandleComplete_TakesThinkingFromAuthoritativeResponse(t *testing.T) {
+	t.Parallel()
+
 	state := completeEventState(t, &llm.DriverResponse{
 		Thinking:          "reasoning the provider accumulated but never streamed",
 		ThinkingSignature: "sig-1456",
@@ -68,6 +70,8 @@ func TestHandleComplete_TakesThinkingFromAuthoritativeResponse(t *testing.T) {
 // text is the same text, and overriding with it is a no-op rather than a
 // duplication.
 func TestHandleComplete_StreamedThinkingIsNotDuplicated(t *testing.T) {
+	t.Parallel()
+
 	activity := &CallLLMActivity{}
 	state := &streamProcessingState{
 		blockStates:   NewBlockStreamState(),
@@ -89,6 +93,8 @@ func TestHandleComplete_StreamedThinkingIsNotDuplicated(t *testing.T) {
 // A turn that genuinely produced no thinking keeps producing none. This is the
 // case that would break if the override were unconditional.
 func TestHandleComplete_NoThinkingStaysEmpty(t *testing.T) {
+	t.Parallel()
+
 	state := completeEventState(t, &llm.DriverResponse{
 		Content:      "just an answer",
 		FinishReason: message.FinishReasonEndTurn,
@@ -102,6 +108,8 @@ func TestHandleComplete_NoThinkingStaysEmpty(t *testing.T) {
 // sealed payload into thinkingParts would put ciphertext on screen and into the
 // transcript as if the model had said it.
 func TestHandleComplete_CapturesRedactedThinkingWithoutRenderingIt(t *testing.T) {
+	t.Parallel()
+
 	state := completeEventState(t, &llm.DriverResponse{
 		RedactedThinking: "EncryptedOpaquePayload==",
 		FinishReason:     message.FinishReasonEndTurn,
@@ -117,6 +125,8 @@ func TestHandleComplete_CapturesRedactedThinkingWithoutRenderingIt(t *testing.T)
 // It is recoverable work, and reporting it as an empty response is what put the
 // user in a resend loop that could not converge.
 func TestContentFreeTurnExplanation_SignedAndRedactedTurnsAreNotEmpty(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name          string
 		thinking      string

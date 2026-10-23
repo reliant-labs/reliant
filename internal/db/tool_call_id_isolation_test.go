@@ -39,6 +39,8 @@ func spawnReport(chatID, from, to, body string) *AgentMessage {
 // used to leave a row that claimed to be A's while carrying B's thread, input
 // and status — which A's transcript then rendered as its own.
 func TestToolCallIDIsolation_UpsertDoesNotOverwriteAnotherChatsCall(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -72,6 +74,8 @@ func TestToolCallIDIsolation_UpsertDoesNotOverwriteAnotherChatsCall(t *testing.T
 // the existing row and inherits its fields. Inheriting from ANOTHER chat's row
 // is how chat B's call used to acquire chat A's thread and message.
 func TestToolCallIDIsolation_StatusWriteDoesNotMergeIntoAnotherChatsCall(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -102,6 +106,8 @@ func TestToolCallIDIsolation_StatusWriteDoesNotMergeIntoAnotherChatsCall(t *test
 // call holds satisfied the foreign key against A's call and replaced A's
 // result; the writer must now prove it is the call's chat.
 func TestToolCallIDIsolation_ResultWriteDoesNotReplaceAnotherChatsResult(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -133,6 +139,8 @@ func TestToolCallIDIsolation_ResultWriteDoesNotReplaceAnotherChatsResult(t *test
 // then believe A's spawn had reported and never write A a placeholder, leaving
 // A's parent waiting on a result that is never coming.
 func TestToolCallIDIsolation_StrandedSpawnSweepSeesOnlyItsOwnChatsReport(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -164,6 +172,8 @@ func TestToolCallIDIsolation_StrandedSpawnSweepSeesOnlyItsOwnChatsReport(t *test
 // that has not reported. Another chat's report under the same id must not
 // make this chat's live spawn look finished.
 func TestToolCallIDIsolation_LiveSpawnIsNotHiddenByAnotherChatsReport(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -191,6 +201,8 @@ func TestToolCallIDIsolation_LiveSpawnIsNotHiddenByAnotherChatsReport(t *testing
 // chat B already holds a report under the same id. DO NOTHING against a
 // chat-blind slot used to make this a silent no-op.
 func TestToolCallIDIsolation_PlaceholderLandsDespiteAnotherChatsReport(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -217,6 +229,8 @@ func TestToolCallIDIsolation_PlaceholderLandsDespiteAnotherChatsReport(t *testin
 // spawn whose id another spawn of the same chat already reported under has
 // nowhere to go, and says so instead of reporting "already reported".
 func TestToolCallIDIsolation_PlaceholderForADifferentSpawnInTheSameChatFailsLoudly(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()

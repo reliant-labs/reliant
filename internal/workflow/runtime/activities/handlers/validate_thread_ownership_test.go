@@ -14,6 +14,8 @@ import (
 )
 
 func TestValidateThreadOwnership_ValidOwnership(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	repo := db.NewTestRepo(t)
 	defer repo.Close()
@@ -73,6 +75,8 @@ func TestValidateThreadOwnership_ValidOwnership(t *testing.T) {
 }
 
 func TestValidateThreadOwnership_InvalidOwnership(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	repo := db.NewTestRepo(t)
 	defer repo.Close()
@@ -146,6 +150,8 @@ func TestValidateThreadOwnership_InvalidOwnership(t *testing.T) {
 }
 
 func TestValidateThreadOwnership_ThreadNotFound(t *testing.T) {
+	t.Parallel()
+
 	repo := db.NewTestRepo(t)
 	defer repo.Close()
 
@@ -170,6 +176,8 @@ func TestValidateThreadOwnership_ThreadNotFound(t *testing.T) {
 }
 
 func TestValidateThreadOwnership_SubAgentThread(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	repo := db.NewTestRepo(t)
 	defer repo.Close()

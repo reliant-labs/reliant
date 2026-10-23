@@ -172,6 +172,8 @@ func (d *stallingDriver) StreamResponse(context.Context, []string, []message.Mes
 // transport's diagnosis once, and none of the old "LLM streaming error"
 // wrapping around it.
 func TestCallLLM_StalledStreamFailsWithOneCleanSentence(t *testing.T) {
+	t.Parallel()
+
 	driver := &stallingDriver{stall: &llm.StreamStallError{Phase: llm.StallMidBlock, Timeout: 30 * time.Minute}}
 	resolver := drivers.DriverResolver(func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
 		return driver, nil

@@ -114,6 +114,8 @@ func (f *fetchResultFixture) fetch(t *testing.T) FetchThreadResultOutput {
 // finished and merely had nothing to say, so the parent moved on from work
 // that was never completed.
 func TestFetchThreadResult_ToolCallOnlyTailIsAnError(t *testing.T) {
+	t.Parallel()
+
 	f := setupFetchResultFixture(t)
 	defer f.h.Cleanup()
 
@@ -134,6 +136,8 @@ func TestFetchThreadResult_ToolCallOnlyTailIsAnError(t *testing.T) {
 // The healthy path must stay untouched: a real closing report is returned
 // verbatim, as a success.
 func TestFetchThreadResult_ClosingTextIsReturnedVerbatim(t *testing.T) {
+	t.Parallel()
+
 	f := setupFetchResultFixture(t)
 	defer f.h.Cleanup()
 
@@ -150,6 +154,8 @@ func TestFetchThreadResult_ClosingTextIsReturnedVerbatim(t *testing.T) {
 // has still said something, so it reports normally. This is the boundary that
 // keeps the new error from swallowing legitimate reports.
 func TestFetchThreadResult_TextWithTrailingToolCallIsNotAnError(t *testing.T) {
+	t.Parallel()
+
 	f := setupFetchResultFixture(t)
 	defer f.h.Cleanup()
 
@@ -164,6 +170,8 @@ func TestFetchThreadResult_TextWithTrailingToolCallIsNotAnError(t *testing.T) {
 // A thread with no assistant message at all was already an error; that must
 // not regress, and it must stay distinguishable from the case above.
 func TestFetchThreadResult_NoAssistantMessageIsAnError(t *testing.T) {
+	t.Parallel()
+
 	f := setupFetchResultFixture(t)
 	defer f.h.Cleanup()
 

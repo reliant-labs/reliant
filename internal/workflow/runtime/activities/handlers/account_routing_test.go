@@ -425,6 +425,8 @@ func TestRouting_FailuresDegradeToTheDefaultBehaviour(t *testing.T) {
 }
 
 func TestRouting_ObserverIsInstalledUnderTheServingAccount(t *testing.T) {
+	t.Parallel()
+
 	env := newRoutingEnv(t)
 	acct := &routedAccount{Config: claudeAccount("b", "bob@acme.com", 1)}
 	ctx := env.routing.observe(context.Background(), "u1", acct)
@@ -440,6 +442,8 @@ func TestRouting_ObserverIsInstalledUnderTheServingAccount(t *testing.T) {
 }
 
 func TestFailureSurvivesTheTemporalBoundary(t *testing.T) {
+	t.Parallel()
+
 	// classifyError (workflow/runtime) carries Facts as details; here we only pin
 	// that the typed failure keeps the marker text the workflow parses.
 	reset := time.Now().Add(time.Hour).UTC().Truncate(time.Second)

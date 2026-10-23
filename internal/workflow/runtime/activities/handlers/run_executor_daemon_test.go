@@ -19,6 +19,8 @@ import (
 // that daemon — this is what routes a branch chat's tool execution to the
 // machine that actually holds its checkout on disk.
 func TestResolveRunExecutorContext_PinsWorktreeDaemon(t *testing.T) {
+	t.Parallel()
+
 	repo := setupTestRepo(t)
 	ctx := context.Background()
 	now := time.Now().UTC()
@@ -56,6 +58,8 @@ func TestResolveRunExecutorContext_PinsWorktreeDaemon(t *testing.T) {
 // TestResolveRunExecutorContext_NoWorktreeNoDaemonSelector verifies a plain chat
 // (no worktree) resolves no selector, leaving default daemon resolution intact.
 func TestResolveRunExecutorContext_NoWorktreeNoDaemonSelector(t *testing.T) {
+	t.Parallel()
+
 	repo := setupTestRepo(t)
 	ctx := context.Background()
 	now := time.Now().UTC()
@@ -85,6 +89,8 @@ func TestResolveRunExecutorContext_NoWorktreeNoDaemonSelector(t *testing.T) {
 // row with no recorded daemon leaves the selector nil (falls back to default
 // resolution) rather than pinning an empty daemon id.
 func TestResolveRunExecutorContext_WorktreeWithoutDaemon(t *testing.T) {
+	t.Parallel()
+
 	repo := setupTestRepo(t)
 	ctx := context.Background()
 	now := time.Now().UTC()

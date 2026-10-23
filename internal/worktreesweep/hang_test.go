@@ -38,6 +38,8 @@ func (s *timeoutSender) SendDaemonCommandToDaemon(_ context.Context, _, _, _ str
 }
 
 func TestSweep_ATimedOutBatchIsNotSplitAndResent(t *testing.T) {
+	t.Parallel()
+
 	store := newFakeStore("d")
 	for _, id := range []string{"a", "b", "c", "d"} {
 		store.add(id, true, nil)
@@ -56,6 +58,8 @@ func TestSweep_ATimedOutBatchIsNotSplitAndResent(t *testing.T) {
 }
 
 func TestSweep_RowsStillInFlightAreNotSentAgain(t *testing.T) {
+	t.Parallel()
+
 	store := newFakeStore("d")
 	store.add("a", true, nil)
 	store.add("b", true, nil)
@@ -83,6 +87,8 @@ func TestSweep_RowsStillInFlightAreNotSentAgain(t *testing.T) {
 }
 
 func TestSettle_ATimedOutRowStaysLeasedUntilTheHoldPasses(t *testing.T) {
+	t.Parallel()
+
 	store := newFakeStore("d")
 	store.add("w", true, nil)
 	timeouts := &timeoutSender{}
@@ -103,6 +109,8 @@ func TestSettle_ATimedOutRowStaysLeasedUntilTheHoldPasses(t *testing.T) {
 }
 
 func TestSweep_AFailedRequestReleasesItsLease(t *testing.T) {
+	t.Parallel()
+
 	store := newFakeStore("d")
 	store.add("w", true, nil)
 	sender := &scriptSender{failWith: map[string]bool{"w": true}, answer: locked}
@@ -112,6 +120,8 @@ func TestSweep_AFailedRequestReleasesItsLease(t *testing.T) {
 }
 
 func TestApply_InconclusiveProbeBacksOffBrieflyAndIsNotLocked(t *testing.T) {
+	t.Parallel()
+
 	store := newFakeStore("d")
 	wt := store.add("w", false, nil)
 	sender := &scriptSender{answer: func(w worktreereclaim.Worktree) worktreereclaim.Result {

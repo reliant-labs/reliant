@@ -33,6 +33,8 @@ func pausedIDs(t *testing.T, repo *Repo, userID string) []string {
 // The list holds only chats the breaker marked whose root run still reads
 // paused, scoped to a user when one is given.
 func TestListChatsPausedForMachine(t *testing.T) {
+	t.Parallel()
+
 	repo, raw, cleanup := setupTestRepo(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -65,6 +67,8 @@ func TestListChatsPausedForMachine(t *testing.T) {
 // Clearing the mark is a claim: of two callers that race exactly one sees the
 // change, which is what makes a double connect resume once.
 func TestSetChatPausedForMachine_ClearIsAClaim(t *testing.T) {
+	t.Parallel()
+
 	repo, raw, cleanup := setupTestRepo(t)
 	defer cleanup()
 	ctx := context.Background()

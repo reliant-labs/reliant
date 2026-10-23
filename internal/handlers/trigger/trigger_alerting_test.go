@@ -74,6 +74,8 @@ func (e *triggerTestEnv) enableOncall(t *testing.T) *reliantv1.EnableWorkflowRes
 
 // One click: Enable provisions the receiver and returns no token to show.
 func TestEnableAlertingWorkflowProvisionsAndShowsNoToken(t *testing.T) {
+	t.Parallel()
+
 	env, fa := setupAlertingTest(t)
 	resp := env.enableOncall(t)
 	require.True(t, resp.Enabled, "%v", resp.Results)
@@ -86,6 +88,8 @@ func TestEnableAlertingWorkflowProvisionsAndShowsNoToken(t *testing.T) {
 
 // The control plane refusing (no org) refuses the enable and leaves nothing.
 func TestEnableAlertingWorkflowIsRefusedWhenAlertsCannotBeConnected(t *testing.T) {
+	t.Parallel()
+
 	env, fa := setupAlertingTest(t)
 	// What triggers.Alerting.Provision returns for an org-less owner.
 	fa.err = svcerr.WithCause(svcerr.FailedPrecondition("on-call receives your organization's alerts, and your account belongs to no organization yet"),
@@ -98,6 +102,8 @@ func TestEnableAlertingWorkflowIsRefusedWhenAlertsCannotBeConnected(t *testing.T
 }
 
 func TestPauseResumeDeleteFollowTheReceiver(t *testing.T) {
+	t.Parallel()
+
 	env, fa := setupAlertingTest(t)
 	id := env.enableOncall(t).Results[0].Activation.GetId()
 
@@ -127,6 +133,8 @@ func TestPauseResumeDeleteFollowTheReceiver(t *testing.T) {
 
 // Rotating a managed webhook re-provisions; the new token is not returned.
 func TestRotateManagedWebhookReprovisionsWithoutShowingTheToken(t *testing.T) {
+	t.Parallel()
+
 	env, fa := setupAlertingTest(t)
 	id := env.enableOncall(t).Results[0].Activation.GetId()
 	before, err := env.repo.GetTriggerWebhookCredentials(context.Background(), id)
@@ -152,6 +160,8 @@ func TestRotateManagedWebhookReprovisionsWithoutShowingTheToken(t *testing.T) {
 // Without a control plane (no Alerting dep) the same declaration is a plain
 // webhook: the token is shown once, as for any webhook.
 func TestAlertingWebhookIsAPlainWebhookWithoutAControlPlane(t *testing.T) {
+	t.Parallel()
+
 	env, _ := setupInboundTriggerTest(t)
 	env.saveWorkflow(t, "oncall", alertTriageYAML)
 	resp := env.enableOncall(t)
@@ -163,6 +173,8 @@ func TestAlertingWebhookIsAPlainWebhookWithoutAControlPlane(t *testing.T) {
 // An ad hoc webhook trigger cannot name a source: only declared triggers are
 // reconciled against the control plane.
 func TestAdHocWebhookCannotNameASource(t *testing.T) {
+	t.Parallel()
+
 	env, _ := setupAlertingTest(t)
 	_, err := env.svc.CreateTrigger(env.ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{
 		Trigger: webhookDefinition(env, func(d *reliantv1.TriggerDefinition) {

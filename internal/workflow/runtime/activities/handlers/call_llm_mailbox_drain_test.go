@@ -72,6 +72,8 @@ func threadBodies(t *testing.T, repo *db.Repo, chatID, thread string) []string {
 // The core of the move: a message sitting in the mailbox is delivered into the
 // thread's history by the same call that is about to read that history.
 func TestCallLLMDrain_DeliversQueuedMessageBeforeHistoryRead(t *testing.T) {
+	t.Parallel()
+
 	f := setupDurableStatusFixture(t)
 	defer f.h.Cleanup()
 	ctx := context.Background()
@@ -108,6 +110,8 @@ func TestCallLLMDrain_DeliversQueuedMessageBeforeHistoryRead(t *testing.T) {
 // regardless of graph shape. This test asserts the property that fixes it:
 // delivery needs nothing but a thread and a call.
 func TestCallLLMDrain_DeliversForWorkflowsWithNoLoopNode(t *testing.T) {
+	t.Parallel()
+
 	f := setupDurableStatusFixture(t)
 	defer f.h.Cleanup()
 	ctx := context.Background()
@@ -134,6 +138,8 @@ func TestCallLLMDrain_DeliversForWorkflowsWithNoLoopNode(t *testing.T) {
 // meaning for conversation turns, and the mailbox is the only thing preserving
 // it while the agent is busy.
 func TestCallLLMDrain_PreservesQueueOrder(t *testing.T) {
+	t.Parallel()
+
 	f := setupDurableStatusFixture(t)
 	defer f.h.Cleanup()
 
@@ -173,6 +179,8 @@ func TestCallLLMDrain_PreservesQueueOrder(t *testing.T) {
 // output.pending_inbox AFTER streaming, and both agent loops OR it into their
 // while-condition, so the loop takes one more turn and that turn delivers.
 func TestCallLLMDrain_ReportsMessagesQueuedDuringTheTurn(t *testing.T) {
+	t.Parallel()
+
 	f := setupDurableStatusFixture(t)
 	defer f.h.Cleanup()
 
@@ -219,6 +227,8 @@ func TestCallLLMDrain_ReportsMessagesQueuedDuringTheTurn(t *testing.T) {
 // loop turning -- that would spin the root agent on work addressed to someone
 // else.
 func TestCallLLMDrain_PendingInboxIsScopedToThread(t *testing.T) {
+	t.Parallel()
+
 	f := setupDurableStatusFixture(t)
 	defer f.h.Cleanup()
 
@@ -243,6 +253,8 @@ func TestCallLLMDrain_PendingInboxIsScopedToThread(t *testing.T) {
 // An empty mailbox is the hot path -- it runs before every single LLM call.
 // It must be a no-op, not an error and not a write.
 func TestCallLLMDrain_EmptyMailboxIsANoOp(t *testing.T) {
+	t.Parallel()
+
 	f := setupDurableStatusFixture(t)
 	defer f.h.Cleanup()
 

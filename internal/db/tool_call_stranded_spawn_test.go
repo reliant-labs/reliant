@@ -45,6 +45,8 @@ func insertTestSpawnToolCall(t *testing.T, repo *Repo, id, chatID, threadID stri
 // data: a child failed at 22:16:54 and its parent's spawn call was still
 // executing 49 hours later.
 func TestListStrandedSpawnToolCalls(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 

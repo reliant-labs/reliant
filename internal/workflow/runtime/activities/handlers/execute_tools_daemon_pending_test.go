@@ -32,6 +32,8 @@ const (
 // machine; the next call that reaches a daemon clears it. The error here is
 // wrapped, exactly as the router returns it.
 func TestExecuteTools_DaemonPendingSetsAndSuccessClears(t *testing.T) {
+	t.Parallel()
+
 	f := setupDurableStatusFixture(t)
 	defer f.h.Cleanup()
 	ctx := context.Background()
@@ -62,6 +64,8 @@ func TestExecuteTools_DaemonPendingSetsAndSuccessClears(t *testing.T) {
 // The typed error can also arrive as the executor's error return rather than
 // inside a result; errors.Is must see through the wrapping.
 func TestExecuteTools_DaemonPendingFromWrappedExecutorError(t *testing.T) {
+	t.Parallel()
+
 	f := setupDurableStatusFixture(t)
 	defer f.h.Cleanup()
 	f.h.CreateTestWorkflow(context.Background(), f.chatID, f.chatID)
@@ -78,6 +82,8 @@ func TestExecuteTools_DaemonPendingFromWrappedExecutorError(t *testing.T) {
 // silently in RUNNING; the daemon coming back clears it, and a wait that ends
 // without the daemon leaves it for the next call that reaches one.
 func TestExecuteTools_ReconnectWaitShowsWaitingForDaemon(t *testing.T) {
+	t.Parallel()
+
 	f := setupDurableStatusFixture(t)
 	defer f.h.Cleanup()
 	ctx := context.Background()
@@ -100,6 +106,8 @@ func TestExecuteTools_ReconnectWaitShowsWaitingForDaemon(t *testing.T) {
 
 // A failure that is not "machine pending" must not touch the state.
 func TestExecuteTools_OtherFailuresDoNotMarkDaemonPending(t *testing.T) {
+	t.Parallel()
+
 	f := setupDurableStatusFixture(t)
 	defer f.h.Cleanup()
 	f.h.CreateTestWorkflow(context.Background(), f.chatID, f.chatID)

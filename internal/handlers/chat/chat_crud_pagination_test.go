@@ -43,6 +43,8 @@ func equalSeqs(a, b []int64) bool {
 // client kept asking for older pages forever and never rendered a real start of
 // history — which presented as a chat that would not load its earlier messages.
 func TestPaginateBySeq_ScrollbackReachesTheBeginningAndStops(t *testing.T) {
+	t.Parallel()
+
 	// A ten-message chat, seq 0..9, walked backwards three at a time.
 	all := msgsWithSeqs(0, 1, 2, 3, 4, 5, 6, 7, 8, 9)
 
@@ -86,6 +88,8 @@ func TestPaginateBySeq_ScrollbackReachesTheBeginningAndStops(t *testing.T) {
 // A page that already covers the whole chat has nothing before it, even though
 // no cursor was supplied.
 func TestPaginateBySeq_WholeChatFitsInOnePage(t *testing.T) {
+	t.Parallel()
+
 	all := msgsWithSeqs(0, 1, 2)
 
 	page, meta := paginateBySeq(all, 0, 10, "")
@@ -107,6 +111,8 @@ func TestPaginateBySeq_WholeChatFitsInOnePage(t *testing.T) {
 // Note seq 0 is reserved as "cursor unset" on the wire, so this uses a chat
 // whose numbering starts at 1 to exercise a real before-the-beginning cursor.
 func TestPaginateBySeq_CursorAtBeginningReturnsEmptyAndTerminal(t *testing.T) {
+	t.Parallel()
+
 	all := msgsWithSeqs(1, 2, 3)
 
 	page, meta := paginateBySeq(all, all[0].Seq, 10, "")
@@ -122,6 +128,8 @@ func TestPaginateBySeq_CursorAtBeginningReturnsEmptyAndTerminal(t *testing.T) {
 // any history that begins mid-stream) must still terminate at ITS oldest
 // message, not at an assumed seq 0.
 func TestPaginateBySeq_NonZeroStartingSeqStillTerminates(t *testing.T) {
+	t.Parallel()
+
 	all := msgsWithSeqs(100, 101, 102, 103)
 
 	page, meta := paginateBySeq(all, 0, 2, "")
@@ -142,6 +150,8 @@ func TestPaginateBySeq_NonZeroStartingSeqStillTerminates(t *testing.T) {
 }
 
 func TestPaginateBySeq_EmptyChat(t *testing.T) {
+	t.Parallel()
+
 	page, meta := paginateBySeq(nil, 0, 10, "")
 	if len(page) != 0 || meta.HasMore || meta.OldestSeq != 0 {
 		t.Fatalf("empty chat = (%d msgs, hasMore=%v, oldest=%d), want (0, false, 0)",
@@ -156,6 +166,8 @@ func TestPaginateBySeq_EmptyChat(t *testing.T) {
 // 781 on the main thread, so a 200-row page moved the visible conversation by
 // about 27 messages and scroll-back appeared frozen.
 func TestPaginateBySeq_PageIsCountedInMainThreadMessages(t *testing.T) {
+	t.Parallel()
+
 	const mainThread = "main"
 	var all []*db.Message
 	seq := int64(0)

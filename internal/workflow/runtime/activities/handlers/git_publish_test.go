@@ -156,6 +156,8 @@ func (f *publishFixture) run(t *testing.T, node *reliantv1.Node) (*reliantv1.Git
 }
 
 func TestGitPublishActivity_PushesAndRecordsTheIntentBeforeThePush(t *testing.T) {
+	t.Parallel()
+
 	f := newPublishActivityFixture(t)
 	out, err := f.run(t, publishNode("autopilot/issue-12", 0, "autopilot/*"))
 	require.NoError(t, err)
@@ -187,6 +189,8 @@ func TestGitPublishActivity_PushesAndRecordsTheIntentBeforeThePush(t *testing.T)
 
 // Policy refusals send nothing to the machine and fetch no credential.
 func TestGitPublishActivity_PolicyRefusalsTouchNothing(t *testing.T) {
+	t.Parallel()
+
 	for name, node := range map[string]*reliantv1.Node{
 		"the default branch":  publishNode("trunk", 0),
 		"main":                publishNode("main", 0),
@@ -211,6 +215,8 @@ func TestGitPublishActivity_PolicyRefusalsTouchNothing(t *testing.T) {
 }
 
 func TestGitPublishActivity_PullRequestHeadInThisRepoIsAllowed(t *testing.T) {
+	t.Parallel()
+
 	f := newPublishActivityFixture(t)
 	out, err := f.run(t, publishNode("", 7, "autopilot/*"))
 	require.NoError(t, err)
@@ -222,6 +228,8 @@ func TestGitPublishActivity_PullRequestHeadInThisRepoIsAllowed(t *testing.T) {
 
 // Nothing to commit: no push, no credential, no ledger row, no error.
 func TestGitPublishActivity_NothingToPublishIsNotAnError(t *testing.T) {
+	t.Parallel()
+
 	f := newPublishActivityFixture(t)
 	f.router.prepare = gitpublish.PrepareResponse{Commits: 0, HeadSHA: "abc1234def"}
 	out, err := f.run(t, publishNode("autopilot/issue-12", 0))
@@ -238,6 +246,8 @@ func TestGitPublishActivity_NothingToPublishIsNotAnError(t *testing.T) {
 // A ledger that cannot record the intent stops the push: an unattributable
 // write is how two workflows loop.
 func TestGitPublishActivity_NoIntentNoPush(t *testing.T) {
+	t.Parallel()
+
 	f := newPublishActivityFixture(t)
 	f.ledger.beginErr = errors.New("ledger down")
 	out, err := f.run(t, publishNode("autopilot/issue-12", 0))
@@ -248,6 +258,8 @@ func TestGitPublishActivity_NoIntentNoPush(t *testing.T) {
 }
 
 func TestGitPublishActivity_RemoteRefusalIsReported(t *testing.T) {
+	t.Parallel()
+
 	f := newPublishActivityFixture(t)
 	f.router.push = gitpublish.PushResponse{Refusal: "the remote branch has commits this checkout does not (non-fast-forward): the push was refused, not forced", NonFastForward: true}
 	out, err := f.run(t, publishNode("autopilot/issue-12", 0))
@@ -260,6 +272,8 @@ func TestGitPublishActivity_RemoteRefusalIsReported(t *testing.T) {
 // The machine going away mid-push is an error the step may retry; the token is
 // not in what comes back.
 func TestGitPublishActivity_TransportFailureIsAnErrorWithoutTheToken(t *testing.T) {
+	t.Parallel()
+
 	f := newPublishActivityFixture(t)
 	f.router.pushErr = errors.New("daemon disconnected")
 	_, err := f.run(t, publishNode("autopilot/issue-12", 0))
@@ -269,6 +283,8 @@ func TestGitPublishActivity_TransportFailureIsAnErrorWithoutTheToken(t *testing.
 
 // A credential the run cannot get is a refusal, with nothing pushed.
 func TestGitPublishActivity_NoCredentialIsARefusal(t *testing.T) {
+	t.Parallel()
+
 	f := newPublishActivityFixture(t)
 	f.tok.err = &httpaction.CredentialError{Code: httpaction.CodeFailedPrecondition, Message: "GitHub is not connected"}
 	out, err := f.run(t, publishNode("autopilot/issue-12", 0))
@@ -281,6 +297,8 @@ func TestGitPublishActivity_NoCredentialIsARefusal(t *testing.T) {
 // The acting identity the token source reports is what the ledger records: the
 // seam an installation-token identity plugs into.
 func TestGitPublishActivity_LedgerRecordsTheTokenSourcesIdentity(t *testing.T) {
+	t.Parallel()
+
 	f := newPublishActivityFixture(t)
 	f.tok.actor = core.IntegrationActorApp
 	_, err := f.run(t, publishNode("autopilot/issue-12", 0))
@@ -290,6 +308,8 @@ func TestGitPublishActivity_LedgerRecordsTheTokenSourcesIdentity(t *testing.T) {
 }
 
 func TestGitPublishActivity_NoMachineRunIsRefusedAtTheNode(t *testing.T) {
+	t.Parallel()
+
 	f := newPublishActivityFixture(t)
 	now := time.Now().UTC()
 	nm := &db.Chat{ID: uuid.NewString(), ProjectID: f.projectID, UserID: f.userID, NoMachine: true, CreatedAt: now, UpdatedAt: now, LastActive: now}
@@ -355,6 +375,8 @@ func (f *publishFixture) runAs(t *testing.T, identity string, src httpaction.Cre
 // An app run pushes with the bot's installation token for exactly this
 // repository, and the ledger says the bot made the push.
 func TestGitPublishActivity_AppIdentityPushesWithTheBotToken(t *testing.T) {
+	t.Parallel()
+
 	f := newPublishActivityFixture(t)
 	src := &pushCredSource{}
 	out, err := f.runAs(t, httpaction.IdentityApp, src)
@@ -379,6 +401,8 @@ func TestGitPublishActivity_AppIdentityPushesWithTheBotToken(t *testing.T) {
 // owner credential is requested, no push command is sent, no ledger row is
 // written, and the node does not crash.
 func TestGitPublishActivity_AppIdentityFailsClosed(t *testing.T) {
+	t.Parallel()
+
 	for name, err := range map[string]error{
 		"no app key":        &httpaction.CredentialError{Code: httpaction.CodeFailedPrecondition, Message: "the control plane has no GitHub App key"},
 		"app not installed": &httpaction.CredentialError{Code: httpaction.CodeFailedPrecondition, Message: "the Reliant GitHub App is not installed on acme/app"},
@@ -402,6 +426,8 @@ func TestGitPublishActivity_AppIdentityFailsClosed(t *testing.T) {
 
 // An unrecognised identity is refused rather than read as the owner.
 func TestGitPublishActivity_UnknownIdentityFailsClosed(t *testing.T) {
+	t.Parallel()
+
 	f := newPublishActivityFixture(t)
 	src := &pushCredSource{}
 	out, err := f.runAs(t, "admin", src)
@@ -413,6 +439,8 @@ func TestGitPublishActivity_UnknownIdentityFailsClosed(t *testing.T) {
 
 // An owner run is untouched: the owner's token, recorded as the owner's.
 func TestGitPublishActivity_OwnerIdentityStillPushesAsTheOwner(t *testing.T) {
+	t.Parallel()
+
 	f := newPublishActivityFixture(t)
 	src := &pushCredSource{}
 	out, err := f.runAs(t, "", src)

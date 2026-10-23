@@ -262,6 +262,8 @@ func (e *testEnv) verifyMessages(msgs []*db.Message, expectedOrdinals []int64, e
 
 // TestBranchingScenarios tests various message resolution scenarios with branching
 func TestBranchingScenarios(t *testing.T) {
+	t.Parallel()
+
 	t.Run("simple_branch_inherits_parent_messages", func(t *testing.T) {
 		env := newTestEnv(t)
 

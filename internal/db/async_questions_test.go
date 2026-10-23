@@ -53,6 +53,8 @@ func questionIDs(qs []*Question) []string {
 }
 
 func TestAsyncQuestion_IsNoGateOfTheChat(t *testing.T) {
+	t.Parallel()
+
 	c := newLiveGateChat(t, "chat-async-no-gate")
 	c.spawn("sa-1", Active())
 	c.askAsync("q-async", "sa-1", "sa-1")
@@ -89,6 +91,8 @@ func TestAsyncQuestion_IsNoGateOfTheChat(t *testing.T) {
 }
 
 func TestAsyncQuestion_ListedByListAsyncQuestionsByChat(t *testing.T) {
+	t.Parallel()
+
 	c := newLiveGateChat(t, "chat-async-list")
 	c.spawn("sa-1", Active())
 	c.ask("q-blocking", "sa-1", "sa-1")
@@ -114,6 +118,8 @@ func TestAsyncQuestion_ListedByListAsyncQuestionsByChat(t *testing.T) {
 // delivered as a message, which reaches a finished thread too. A blocking
 // question in the same state is dropped, as before.
 func TestAsyncQuestion_StaysInTheInboxAfterItsRunsEnd(t *testing.T) {
+	t.Parallel()
+
 	c := newLiveGateChat(t, "chat-async-inbox")
 	c.spawn("sa-done", Active())
 	c.askAsync("q-async", "sa-done", "sa-done")
@@ -134,6 +140,8 @@ func TestAsyncQuestion_StaysInTheInboxAfterItsRunsEnd(t *testing.T) {
 // A thread that finishes closes its blocking questions (question_close.go)
 // and leaves its async ones pending: no wait is behind them to end.
 func TestAsyncQuestion_ThreadEndDoesNotCloseIt(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()

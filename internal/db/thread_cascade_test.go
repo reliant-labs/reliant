@@ -31,6 +31,8 @@ func insertTestThreadForWorkflow(t *testing.T, repo *Repo, id, chatID, workflowI
 // threads stranded at status=2 under an already-terminal workflow (see
 // dev-docs/incidents/2026-08-12-spawn-history-cap.md).
 func TestCascadeTerminalStatusToThreadSubtree_CascadesRecursively(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -90,6 +92,8 @@ func TestCascadeTerminalStatusToThreadSubtree_CascadesRecursively(t *testing.T) 
 // under a cancelled/failed run must record what actually happened, not be
 // laundered into "completed".
 func TestCascadeTerminalStatusToThreadSubtree_TerminationIsNotCompletion(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -135,6 +139,8 @@ func TestCascadeTerminalStatusToThreadSubtree_TerminationIsNotCompletion(t *test
 // a thread whose workflow_id does not match the cascaded subtree is never
 // rewritten.
 func TestCascadeTerminalStatusToThreadSubtree_FailClosed(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()

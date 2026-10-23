@@ -36,6 +36,8 @@ func seedChatForRun(t *testing.T, repo *Repo, ctx context.Context, userID string
 // path at all, because a column that silently dropped its value would make that
 // flip look correct while quietly losing identity.
 func TestWorkflowOwnerUserID_RoundTrips(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -68,6 +70,8 @@ func TestWorkflowOwnerUserID_RoundTrips(t *testing.T) {
 // chat while both sources exist, so an unknown owner costs nothing today — and
 // rejecting it would make the migration unable to run against real data.
 func TestWorkflowOwnerUserID_NilIsAllowed(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()

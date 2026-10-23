@@ -27,6 +27,8 @@ func assertCountMatchesLoad(t *testing.T, ctx context.Context, h *testHelper, th
 }
 
 func TestCountCurrentMessages_SimpleThread(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()
@@ -40,6 +42,8 @@ func TestCountCurrentMessages_SimpleThread(t *testing.T) {
 }
 
 func TestCountCurrentMessages_ForkedThread(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()
@@ -56,6 +60,8 @@ func TestCountCurrentMessages_ForkedThread(t *testing.T) {
 }
 
 func TestCountCurrentMessages_NestedForks(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()
@@ -75,6 +81,8 @@ func TestCountCurrentMessages_NestedForks(t *testing.T) {
 }
 
 func TestCountCurrentMessages_Compaction(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()
@@ -91,6 +99,8 @@ func TestCountCurrentMessages_Compaction(t *testing.T) {
 }
 
 func TestCountCurrentMessages_ForkAfterCompaction(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()
@@ -109,6 +119,8 @@ func TestCountCurrentMessages_ForkAfterCompaction(t *testing.T) {
 }
 
 func TestCountCurrentMessages_MultipleCompactionsInChain(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()
@@ -131,6 +143,8 @@ func TestCountCurrentMessages_MultipleCompactionsInChain(t *testing.T) {
 }
 
 func TestCountCurrentMessages_EmptyThread(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()
@@ -148,6 +162,8 @@ func TestCountCurrentMessages_EmptyThread(t *testing.T) {
 }
 
 func TestCountCurrentMessages_ForkFromEmptyParent(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()
@@ -166,6 +182,8 @@ func TestCountCurrentMessages_ForkFromEmptyParent(t *testing.T) {
 // the direct parent CW must be excluded but the grandparent's contribution
 // must still be summed.
 func TestCountCurrentMessages_ForkFromEmptyIntermediateThread(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()
@@ -190,6 +208,8 @@ func TestCountCurrentMessages_ForkFromEmptyIntermediateThread(t *testing.T) {
 // bounded fast path (unforked thread) returns byte-identical results to
 // slicing the full resolution, across several cursors and limits.
 func TestLoadRecentMessagesBefore_FastPath_MatchesSlowPath(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()
@@ -256,6 +276,8 @@ func TestLoadRecentMessagesBefore_FastPath_MatchesSlowPath(t *testing.T) {
 // proves a forked thread still resolves via the fork-safe slow path and
 // returns the same result as slicing LoadCurrentMessages directly.
 func TestLoadRecentMessagesBefore_ForkedThread_UsesSlowPathAndIsUnaffected(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()
@@ -303,6 +325,8 @@ func TestLoadRecentMessagesBefore_ForkedThread_UsesSlowPathAndIsUnaffected(t *te
 // TestLoadMessagesInSeqRange_FastPath verifies the SQL-bounded range read
 // (unforked thread) matches filtering the full resolution in Go.
 func TestLoadMessagesInSeqRange_FastPath(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()
@@ -350,6 +374,8 @@ func TestLoadMessagesInSeqRange_FastPath(t *testing.T) {
 // thread's range read still goes through the fork-safe LoadCurrentMessages
 // resolution and returns the same result as filtering it directly.
 func TestLoadMessagesInSeqRange_ForkedThread_UsesSlowPath(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()

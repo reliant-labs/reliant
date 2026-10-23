@@ -164,6 +164,8 @@ func requireFailedRow(t *testing.T, repo *db.Repo, toolCallID string) {
 // bound value must cross the wire with the call, and the daemon must accept
 // it — whatever version of the daemon it is, so nothing new is asked of it.
 func TestBoundParameters_TakeEffectOnTheDaemonPath(t *testing.T) {
+	t.Parallel()
+
 	f := setupNoMachineFixture(t, false)
 	cfg := toolsConfig(tools.PermissionMutating, []string{tools.ShellToolName}, nil, nil)
 	cfg.Tools = map[string]*structpb.Struct{tools.ShellToolName: structOf(t, map[string]any{"timeout": 30000})}
@@ -284,6 +286,8 @@ func TestGlobalBoundParameters_AreReadAtExecutionNotCarriedInHistory(t *testing.
 
 // A tool nobody bound runs exactly as the model called it.
 func TestUnboundTool_RunsWithTheModelsInputUnchanged(t *testing.T) {
+	t.Parallel()
+
 	f := setupNoMachineFixture(t, false)
 	cfg := toolsConfig(tools.PermissionMutating, []string{tools.ShellToolName}, nil, nil)
 	recorded := throughHistory(t, f.turn(t, cfg, nil).GetCapabilities())

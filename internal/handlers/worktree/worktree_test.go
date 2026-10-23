@@ -148,6 +148,8 @@ func awaitWorktreeStatus(t *testing.T, repo Repository, worktreeID string, want 
 }
 
 func TestCreateWorktreeUsesExtendedDaemonTimeout(t *testing.T) {
+	t.Parallel()
+
 	repo := db.NewTestRepo(t)
 
 	router := &recordingWorktreeDaemonRouter{}
@@ -197,6 +199,8 @@ func TestCreateWorktreeUsesExtendedDaemonTimeout(t *testing.T) {
 // daemon that created it (router.ResolveDaemonID), so tool execution for a
 // worktree-bound chat can later route back to the machine holding the checkout.
 func TestCreateWorktreePersistsOwningDaemon(t *testing.T) {
+	t.Parallel()
+
 	repo := db.NewTestRepo(t)
 
 	router := &recordingWorktreeDaemonRouter{}
@@ -285,6 +289,8 @@ func setupTestWorktreeServiceForRevert(t *testing.T) (*Service, string, string) 
 }
 
 func TestRevertFiles_DeletesNestedUntrackedFile(t *testing.T) {
+	t.Parallel()
+
 	svc, userID, worktreeID := setupTestWorktreeServiceForRevert(t)
 
 	nestedRelPath := filepath.Join("tmp-untracked", "nested", "file.txt")
@@ -310,6 +316,8 @@ func TestRevertFiles_DeletesNestedUntrackedFile(t *testing.T) {
 }
 
 func TestRevertFiles_ReturnsFailedPreconditionWhenAllRequestedFilesFail(t *testing.T) {
+	t.Parallel()
+
 	svc, userID, worktreeID := setupTestWorktreeServiceForRevert(t)
 
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, userID)

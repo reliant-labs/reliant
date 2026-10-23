@@ -26,6 +26,8 @@ import (
 // extracts tool calls from the DriverResponse into streamProcessingState.
 
 func TestHandleComplete_ExtractsToolCalls(t *testing.T) {
+	t.Parallel()
+
 	activity := &CallLLMActivity{}
 
 	t.Run("extracts single tool call from response", func(t *testing.T) {
@@ -219,6 +221,8 @@ func TestHandleComplete_ExtractsToolCalls(t *testing.T) {
 // structured tool calls that survive JSON serialization.
 
 func TestCallLLMOutput_ToolCallsSurviveSerialization(t *testing.T) {
+	t.Parallel()
+
 	// Build output the same way streamLLMResponse does (lines 563-576)
 	toolCalls := []*reliantv1.ToolCallMsg{
 		{
@@ -289,6 +293,8 @@ func TestCallLLMOutput_ToolCallsSurviveSerialization(t *testing.T) {
 }
 
 func TestCallLLMOutput_ToolCallsNotEmbeddedInText(t *testing.T) {
+	t.Parallel()
+
 	// Regression test: when tool calls are properly extracted, they should NOT
 	// appear as XML/text in the response_text field.
 
@@ -322,6 +328,8 @@ func TestCallLLMOutput_ToolCallsNotEmbeddedInText(t *testing.T) {
 // Tests that trimBashWorkspaceCD correctly trims redundant cd prefixes.
 
 func TestTrimBashWorkspaceCD(t *testing.T) {
+	t.Parallel()
+
 	t.Run("trims workspace cd prefix", func(t *testing.T) {
 		input := `{"command":"cd /workspace/project && ls -la"}`
 		result := trimBashWorkspaceCD(input, "/workspace/project")

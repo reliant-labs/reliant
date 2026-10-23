@@ -20,7 +20,7 @@ import (
 // not a layer underneath them, so the same benchmark measures the path before
 // and after the L1a port onto the forge ORM.
 //
-//	DATABASE_URL=… go test ./internal/store/ -run '^$' -bench P1 -benchmem
+//	go test ./internal/store/ -run '^$' -bench P1 -benchmem
 
 // seedBenchChat writes a chat, its root thread and the thread's first
 // context window, and returns the context window's id.

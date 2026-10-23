@@ -77,6 +77,8 @@ func saveTurn(t *testing.T, svc *threads.Service, chatID, thread, callID string,
 // minutes. The guard must decline that compaction: no summarization call, no
 // new context window, one report however many turns ask.
 func TestCompact_SkipsCompactionThatCannotShrinkTheContext(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 	ctx := context.Background()
@@ -115,6 +117,8 @@ func TestCompact_SkipsCompactionThatCannotShrinkTheContext(t *testing.T) {
 // A compaction the user asked for (the internal "compact" workflow behind
 // CompactChat sets force) is not a loop: it runs even when it frees little.
 func TestCompact_ForceCompactsEvenWhenItCannotShrinkTheContext(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 	ctx := context.Background()
@@ -142,6 +146,8 @@ func TestCompact_ForceCompactsEvenWhenItCannotShrinkTheContext(t *testing.T) {
 // The guard must not stand in the way of a thread whose history is what fills
 // the window — the case compaction exists for.
 func TestCompact_CompactsWhenHistoryIsReclaimable(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 	ctx := context.Background()
@@ -171,6 +177,8 @@ func TestCompact_CompactsWhenHistoryIsReclaimable(t *testing.T) {
 }
 
 func TestCompactionSkipNotices_ReportOncePerWindow(t *testing.T) {
+	t.Parallel()
+
 	captured := &capturedSkips{}
 	notices := captured.notices()
 	reclaim := message.CompactionReclaim{Current: 250_000, Floor: 245_918, Reclaimable: 4_200}
@@ -183,6 +191,8 @@ func TestCompactionSkipNotices_ReportOncePerWindow(t *testing.T) {
 }
 
 func TestNewCompactionSkip_NamesTheWindowAndModel(t *testing.T) {
+	t.Parallel()
+
 	skip := newCompactionSkip("chat", "thread", []message.Message{
 		{Role: message.System, ContextSequence: 4},
 		{Role: message.Assistant, ContextSequence: 4, TokenCount: 245_918, Model: "gpt-5.6-terra"},

@@ -169,6 +169,8 @@ func (e *triggerTestEnv) create(t *testing.T, def *reliantv1.TriggerDefinition) 
 }
 
 func TestCreateTriggerStoresAndSyncs(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 
 	fire := time.Date(2026, 1, 2, 9, 0, 0, 0, time.UTC)
@@ -202,6 +204,8 @@ func TestCreateTriggerStoresAndSyncs(t *testing.T) {
 }
 
 func TestCreateTriggerRespectsExplicitDisabled(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	disabled := false
 	got := env.create(t, env.definition(func(d *reliantv1.TriggerDefinition) { d.Enabled = &disabled }))
@@ -211,6 +215,8 @@ func TestCreateTriggerRespectsExplicitDisabled(t *testing.T) {
 // A create whose schedule cannot be made is rolled back. Reporting success
 // would leave a trigger the owner cannot distinguish from a working one.
 func TestCreateTriggerRollsBackWhenSyncFails(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	env.backend.syncErr = errors.New("temporal unreachable")
 
@@ -228,6 +234,8 @@ func TestCreateTriggerRollsBackWhenSyncFails(t *testing.T) {
 // rollback removes the schedule as well as the row; otherwise it would keep
 // firing for a trigger that no longer exists until the next SyncAll.
 func TestCreateTriggerRollbackAlsoDeletesTheHalfCreatedSchedule(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	env.backend.syncErr = errors.New("temporal unreachable")
 
@@ -244,6 +252,8 @@ func TestCreateTriggerRollbackAlsoDeletesTheHalfCreatedSchedule(t *testing.T) {
 // concurrent write that lands between this call's commit and its Sync cannot
 // leave Temporal on the older definition.
 func TestSetTriggerEnabledSyncsFromTheStoredRow(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	created := env.create(t, env.definition(nil))
 
@@ -259,6 +269,8 @@ func TestSetTriggerEnabledSyncsFromTheStoredRow(t *testing.T) {
 }
 
 func TestCreateTriggerValidates(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 
 	tests := []struct {
@@ -299,6 +311,8 @@ func TestCreateTriggerValidates(t *testing.T) {
 }
 
 func TestCreateTriggerRejectsAnotherUsersProject(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 
 	otherCtx := context.WithValue(context.Background(), auth.UserIDContextKey, uuid.NewString())
@@ -311,6 +325,8 @@ func TestCreateTriggerRejectsAnotherUsersProject(t *testing.T) {
 // Without a schedule backend there is nothing to make a trigger fire, so a
 // create must fail rather than store one that silently never runs.
 func TestCreateTriggerWithoutABackendIsUnavailable(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	svc := NewTestTrigger(t, WithTriggerDeps(Deps{Repo: env.repo}))
 
@@ -327,6 +343,8 @@ func TestCreateTriggerWithoutABackendIsUnavailable(t *testing.T) {
 // or deleting a stored schedule trigger skips the backend rather than
 // panicking on it.
 func TestServiceWithoutTemporal(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	syncer, fires := TemporalBackend(nil, env.repo, "", nil)
 	require.Nil(t, syncer, "TemporalBackend without a client must return a nil interface")
@@ -368,6 +386,8 @@ func TestServiceWithoutTemporal(t *testing.T) {
 }
 
 func TestGetTriggerHidesOtherUsersTriggers(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	created := env.create(t, env.definition(nil))
 
@@ -381,6 +401,8 @@ func TestGetTriggerHidesOtherUsersTriggers(t *testing.T) {
 }
 
 func TestListTriggersIsScopedToTheCaller(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	env.create(t, env.definition(nil))
 	env.create(t, env.definition(func(d *reliantv1.TriggerDefinition) { d.Name = "second" }))
@@ -396,6 +418,8 @@ func TestListTriggersIsScopedToTheCaller(t *testing.T) {
 }
 
 func TestUpdateTriggerReplacesAndReconverges(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	created := env.create(t, env.definition(nil))
 
@@ -422,6 +446,8 @@ func TestUpdateTriggerReplacesAndReconverges(t *testing.T) {
 
 // An update that does not mention enabled must not resume a paused trigger.
 func TestUpdateTriggerLeavesEnabledAloneWhenUnset(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	created := env.create(t, env.definition(nil))
 
@@ -439,6 +465,8 @@ func TestUpdateTriggerLeavesEnabledAloneWhenUnset(t *testing.T) {
 }
 
 func TestUpdateTriggerAppliesExplicitEnabled(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	created := env.create(t, env.definition(nil))
 
@@ -452,6 +480,8 @@ func TestUpdateTriggerAppliesExplicitEnabled(t *testing.T) {
 }
 
 func TestSetTriggerEnabledPersistsAndReconverges(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	created := env.create(t, env.definition(nil))
 
@@ -475,6 +505,8 @@ func TestSetTriggerEnabledPersistsAndReconverges(t *testing.T) {
 // The schedule is dropped BEFORE the row. A schedule outliving its row keeps
 // firing for a trigger nobody can see or stop.
 func TestDeleteTriggerRemovesTheScheduleFirst(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	created := env.create(t, env.definition(nil))
 
@@ -491,6 +523,8 @@ func TestDeleteTriggerRemovesTheScheduleFirst(t *testing.T) {
 }
 
 func TestDeleteTriggerKeepsTheRowWhenTheScheduleCannotBeRemoved(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	created := env.create(t, env.definition(nil))
 	env.backend.deleteErr = errors.New("temporal unreachable")
@@ -507,6 +541,8 @@ func TestDeleteTriggerKeepsTheRowWhenTheScheduleCannotBeRemoved(t *testing.T) {
 }
 
 func TestFireTriggerStartsAManualFire(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	created := env.create(t, env.definition(nil))
 
@@ -522,6 +558,8 @@ func TestFireTriggerStartsAManualFire(t *testing.T) {
 }
 
 func TestFireTriggerHidesOtherUsersTriggers(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	created := env.create(t, env.definition(nil))
 
@@ -537,6 +575,8 @@ func TestFireTriggerHidesOtherUsersTriggers(t *testing.T) {
 }
 
 func TestListTriggerEventsReturnsFiringsNewestFirst(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	created := env.create(t, env.definition(nil))
 
@@ -571,6 +611,8 @@ func TestListTriggerEventsReturnsFiringsNewestFirst(t *testing.T) {
 }
 
 func TestListTriggerEventsHidesOtherUsersTriggers(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	created := env.create(t, env.definition(nil))
 
@@ -584,6 +626,8 @@ func TestListTriggerEventsHidesOtherUsersTriggers(t *testing.T) {
 // A limit of zero is "the server default", not "no rows", and an unbounded
 // request is capped rather than honored.
 func TestListTriggerEventsBoundsTheLimit(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	created := env.create(t, env.definition(nil))
 
@@ -615,6 +659,8 @@ func TestListTriggerEventsBoundsTheLimit(t *testing.T) {
 // The handler's rendered trigger must round-trip through the same parser the
 // syncer uses, or the API would accept configs the backend then rejects.
 func TestRenderedScheduleRoundTripsThroughTheParser(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	every := "45m"
 	created := env.create(t, env.definition(func(d *reliantv1.TriggerDefinition) {
@@ -635,6 +681,8 @@ func TestRenderedScheduleRoundTripsThroughTheParser(t *testing.T) {
 }
 
 func TestLastEventIsProjectedOntoTheTrigger(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	created := env.create(t, env.definition(nil))
 
@@ -662,6 +710,8 @@ func TestLastEventIsProjectedOntoTheTrigger(t *testing.T) {
 }
 
 func TestCreateTriggerPersistsAndRoundTripsTheDaemon(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 
 	created := env.create(t, env.definition(nil))
@@ -679,6 +729,8 @@ func TestCreateTriggerPersistsAndRoundTripsTheDaemon(t *testing.T) {
 // Another user's daemon and a nonexistent one must be indistinguishable, or
 // the error becomes a way to probe which daemon ids exist.
 func TestCreateTriggerRejectsUnownedOrMissingDaemons(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	foreign := uuid.NewString()
 	require.NoError(t, env.repo.UpsertDaemon(context.Background(), &db.Daemon{ID: foreign, UserID: uuid.NewString()}))
@@ -697,6 +749,8 @@ func TestCreateTriggerRejectsUnownedOrMissingDaemons(t *testing.T) {
 }
 
 func TestCreateTriggerRequiresTheProjectInstalledOnTheDaemon(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	ctx := context.Background()
 
@@ -723,6 +777,8 @@ func TestCreateTriggerRequiresTheProjectInstalledOnTheDaemon(t *testing.T) {
 }
 
 func TestUpdateTriggerReplacesAndValidatesTheDaemon(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	created := env.create(t, env.definition(nil))
 

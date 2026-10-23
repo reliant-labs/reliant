@@ -22,6 +22,8 @@ import (
 // (ref/spawn/router resolution at run time is ActivityLoadWorkflow; see
 // load_workflow_draft_gate_test.go.)
 func TestDraftWorkflowIsNeverRunnable(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")

@@ -100,6 +100,8 @@ func countAgentMessageRows(t *testing.T, rawDB *sql.DB, ctx context.Context, thr
 }
 
 func TestSendAgentMessage_QueuesForRunningThread(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -126,6 +128,8 @@ func TestSendAgentMessage_QueuesForRunningThread(t *testing.T) {
 }
 
 func TestSendAgentMessage_UsesClientMessageID(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -162,6 +166,8 @@ func TestSendAgentMessage_UsesClientMessageID(t *testing.T) {
 // spawn has no Temporal execution of its own, so one execution drives every
 // thread in the chat and the payload is what selects the gate to wake.
 func TestSendAgentMessage_RingsMailboxDoorbell(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -194,6 +200,8 @@ func TestSendAgentMessage_RingsMailboxDoorbell(t *testing.T) {
 // late delivery — the old behavior — not a lost message. Reporting failure
 // for a message that IS queued would be strictly worse.
 func TestSendAgentMessage_SignalFailureStillQueues(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -225,6 +233,8 @@ func TestSendAgentMessage_SignalFailureStillQueues(t *testing.T) {
 // even for chats idle for weeks), and it is why the pre-existing terminal
 // check does not catch this.
 func TestSendAgentMessage_RefusesIdleThread(t *testing.T) {
+	t.Parallel()
+
 	repo, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
 	t.Cleanup(cleanup)
 
@@ -263,6 +273,8 @@ func TestSendAgentMessage_RefusesIdleThread(t *testing.T) {
 // them would destroy a message that would in fact have been delivered --
 // strictly worse than the late delivery this fix exists to prevent.
 func TestSendAgentMessage_AcceptsAboutToRunThread(t *testing.T) {
+	t.Parallel()
+
 	for _, tc := range []struct {
 		name   string
 		status db.WorkflowStatus
@@ -308,6 +320,8 @@ func TestSendAgentMessage_AcceptsAboutToRunThread(t *testing.T) {
 // ReviveThread (called by WorkflowStatusActivity's "started" arm) is what
 // closes that gap, so queueing must succeed after it runs.
 func TestSendAgentMessage_AcceptsThreadRevivedByNewTurn(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -357,6 +371,8 @@ func TestSendAgentMessage_AcceptsThreadRevivedByNewTurn(t *testing.T) {
 }
 
 func TestSendAgentMessage_RejectsCrossChatThread(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -381,6 +397,8 @@ func TestSendAgentMessage_RejectsCrossChatThread(t *testing.T) {
 }
 
 func TestSendAgentMessage_RejectsTerminalThread(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -404,6 +422,8 @@ func TestSendAgentMessage_RejectsTerminalThread(t *testing.T) {
 }
 
 func TestSendAgentMessage_WrongOwner(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -423,6 +443,8 @@ func TestSendAgentMessage_WrongOwner(t *testing.T) {
 }
 
 func TestListQueuedAgentMessages_ReturnsQueuedInSendOrderExcludingDelivered(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -464,6 +486,8 @@ func TestListQueuedAgentMessages_ReturnsQueuedInSendOrderExcludingDelivered(t *t
 }
 
 func TestListQueuedAgentMessages_RejectsCrossChatThread(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -481,6 +505,8 @@ func TestListQueuedAgentMessages_RejectsCrossChatThread(t *testing.T) {
 }
 
 func TestListQueuedAgentMessages_WrongOwner(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -498,6 +524,8 @@ func TestListQueuedAgentMessages_WrongOwner(t *testing.T) {
 }
 
 func TestCancelQueuedAgentMessage_RemovesQueuedMessage(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -525,6 +553,8 @@ func TestCancelQueuedAgentMessage_RemovesQueuedMessage(t *testing.T) {
 }
 
 func TestCancelQueuedAgentMessage_AlreadyDeliveredReturnsFailureAndKeepsRow(t *testing.T) {
+	t.Parallel()
+
 	repo, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
 	t.Cleanup(cleanup)
 
@@ -563,6 +593,8 @@ func TestCancelQueuedAgentMessage_AlreadyDeliveredReturnsFailureAndKeepsRow(t *t
 }
 
 func TestCancelQueuedAgentMessage_RejectsWrongOwnerAndCrossChat(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -606,6 +638,8 @@ func TestCancelQueuedAgentMessage_RejectsWrongOwnerAndCrossChat(t *testing.T) {
 }
 
 func TestSendAgentMessage_MissingFields(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 

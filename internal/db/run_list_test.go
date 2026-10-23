@@ -102,6 +102,8 @@ func listRunIDs(items []*RunListItem) []string {
 }
 
 func TestListRuns_ScopedToUser(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	seedListRun(t, repo, listRunSeed{id: "mine", status: Active()})
@@ -116,6 +118,8 @@ func TestListRuns_ScopedToUser(t *testing.T) {
 }
 
 func TestListRuns_RootRunsOnlyAndArchivedHidden(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -138,6 +142,8 @@ func TestListRuns_RootRunsOnlyAndArchivedHidden(t *testing.T) {
 }
 
 func TestListRuns_Filters(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -191,6 +197,8 @@ func TestListRuns_Filters(t *testing.T) {
 }
 
 func TestListRuns_KeysetPaginationWithTiedCreatedAt(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -230,6 +238,8 @@ func TestListRuns_KeysetPaginationWithTiedCreatedAt(t *testing.T) {
 }
 
 func TestListRuns_HasMoreOnlyWhenMoreRowsFollow(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -247,6 +257,8 @@ func TestListRuns_HasMoreOnlyWhenMoreRowsFollow(t *testing.T) {
 }
 
 func TestListRuns_DisplayStates(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -283,6 +295,8 @@ func TestListRuns_DisplayStates(t *testing.T) {
 }
 
 func TestListRuns_CarriesChatAndTriggerColumns(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -321,6 +335,8 @@ func TestListRuns_CarriesChatAndTriggerColumns(t *testing.T) {
 }
 
 func TestLastRunPerWorkflow(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()

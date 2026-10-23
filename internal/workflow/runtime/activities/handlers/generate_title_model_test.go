@@ -42,6 +42,8 @@ func resolveTitleModel(t *testing.T, providers ...string) *models.ResolvedModel 
 // These call the PRODUCTION selector rather than restating it, so a change
 // back to a named model fails them instead of quietly passing.
 func TestTitleModel_SelectsByTagNotAHardcodedModel(t *testing.T) {
+	t.Parallel()
+
 	selector := titleModelSelector()
 	assert.Empty(t, selector.ID,
 		"titling must not name a model: a user without that model's provider cannot title at all")
@@ -68,6 +70,8 @@ func TestTitleModel_SelectsByTagNotAHardcodedModel(t *testing.T) {
 // scoring alone cannot guarantee this, because image models carry latency tags
 // too.
 func TestTitleModel_NeverResolvesToAnImageModel(t *testing.T) {
+	t.Parallel()
+
 	for _, provider := range titleProviders {
 		t.Run(provider, func(t *testing.T) {
 			resolved := resolveTitleModel(t, provider)
@@ -82,6 +86,8 @@ func TestTitleModel_NeverResolvesToAnImageModel(t *testing.T) {
 // The bug this fixes: a user with no Anthropic credentials must still get a
 // real model rather than falling back to the truncated first message.
 func TestTitleModel_ResolvesForEachProviderAlone(t *testing.T) {
+	t.Parallel()
+
 	for _, provider := range titleProviders {
 		t.Run(provider, func(t *testing.T) {
 			resolved := resolveTitleModel(t, provider)
@@ -96,6 +102,8 @@ func TestTitleModel_ResolvesForEachProviderAlone(t *testing.T) {
 // models.yaml puts claude-4.5-haiku first among fast models, so an Anthropic
 // user keeps the exact model titling used before this change.
 func TestTitleModel_AnthropicUserStillGetsHaiku(t *testing.T) {
+	t.Parallel()
+
 	assert.Equal(t, string(models.Claude45Haiku), resolveTitleModel(t, "anthropic").Definition.ID)
 }
 
@@ -109,6 +117,8 @@ func TestTitleModel_AnthropicUserStillGetsHaiku(t *testing.T) {
 // coverage. The last two rows are the gap that started it — neither provider
 // could title at all.
 func TestTitleModel_PinsTheModelPerProvider(t *testing.T) {
+	t.Parallel()
+
 	for _, tt := range []struct {
 		name      string
 		providers []string
@@ -129,6 +139,8 @@ func TestTitleModel_PinsTheModelPerProvider(t *testing.T) {
 // must be able to call a tool at all. A fast model that cannot use tools could
 // never emit set_title.
 func TestTitleModel_SupportsTools(t *testing.T) {
+	t.Parallel()
+
 	for _, provider := range titleProviders {
 		t.Run(provider, func(t *testing.T) {
 			resolved := resolveTitleModel(t, provider)
@@ -142,6 +154,8 @@ func TestTitleModel_SupportsTools(t *testing.T) {
 // No configured providers means no title model. The activity must surface that
 // as an error rather than silently picking something the user cannot call.
 func TestTitleModel_NoProvidersIsAnError(t *testing.T) {
+	t.Parallel()
+
 	_, err := models.MustGetRegistry().ResolveWithFallback(
 		titleModelSelector(), titleModelFallbackSelector(), nil)
 	require.Error(t, err)

@@ -58,6 +58,8 @@ func (h *captureHub) captured() []streaming.StreamingDelta {
 // carries that id plus a strictly increasing stream_seq, the stream opens with
 // a message_start delta, and the activity output echoes id + last seq.
 func TestCallLLM_DeltaIdentity(t *testing.T) {
+	t.Parallel()
+
 	resolver := mockLLMDriverResolver()
 
 	h := NewIdempotencyTestHelper(t)
@@ -104,6 +106,8 @@ func TestCallLLM_DeltaIdentity(t *testing.T) {
 // without a pre-allocated id (legacy histories, replay DefaultVersion) deltas
 // stay id-less and no message_start is synthesized.
 func TestCallLLM_DeltaIdentity_NoPreallocatedID(t *testing.T) {
+	t.Parallel()
+
 	resolver := mockLLMDriverResolver()
 
 	h := NewIdempotencyTestHelper(t)
@@ -135,6 +139,8 @@ func TestCallLLM_DeltaIdentity_NoPreallocatedID(t *testing.T) {
 // the ctx-cancelled gate AND still get identity-stamped, while other delta
 // types are dropped once the context is cancelled.
 func TestWriteStreamingDelta_CancelledGate(t *testing.T) {
+	t.Parallel()
+
 	hub := &captureHub{}
 	a := &CallLLMActivity{hub: hub}
 
@@ -164,6 +170,8 @@ func TestWriteStreamingDelta_CancelledGate(t *testing.T) {
 // TestWriteStreamingDelta_NilState pins that non-message deltas (emitted with
 // a nil state, e.g. mcp_warning before streaming starts) stay id-less.
 func TestWriteStreamingDelta_NilState(t *testing.T) {
+	t.Parallel()
+
 	hub := &captureHub{}
 	a := &CallLLMActivity{hub: hub}
 
@@ -216,6 +224,8 @@ func (m *cancellingMockLLMDriver) ValidateKey(context.Context) error { return ni
 // follows an interrupt converges on this same row instead of adding a second
 // assistant message for one turn.
 func TestCallLLM_CancelledStreamPersistsPartialTurn(t *testing.T) {
+	t.Parallel()
+
 	driver := &cancellingMockLLMDriver{ready: make(chan struct{})}
 	resolver := drivers.DriverResolver(func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
 		return driver, nil
@@ -292,6 +302,8 @@ func TestCallLLM_CancelledStreamPersistsPartialTurn(t *testing.T) {
 // `outputs.stop_reason` and takes another turn instead of declaring the agent
 // done.
 func TestCallLLM_CancelledStreamReportsInterrupted(t *testing.T) {
+	t.Parallel()
+
 	driver := &cancellingMockLLMDriver{ready: make(chan struct{})}
 	resolver := drivers.DriverResolver(func(context.Context, string, models.Preferences, ...llm.DriverOption) (llm.Driver, error) {
 		return driver, nil
@@ -336,6 +348,8 @@ func TestCallLLM_CancelledStreamReportsInterrupted(t *testing.T) {
 // this is the property that keeps the term from becoming a wedge the way
 // pending_inbox once did.
 func TestCallLLM_CompletedStreamDoesNotReportInterrupted(t *testing.T) {
+	t.Parallel()
+
 	resolver := mockLLMDriverResolver()
 
 	h := NewIdempotencyTestHelper(t)

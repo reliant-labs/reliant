@@ -75,6 +75,8 @@ func setTitleCall(args string) *llm.DriverResponse {
 // The core contract: the request must offer set_title and pin tool_choice to
 // it. Without the pin the model is free to narrate, which is the original bug.
 func TestGenerateTitle_PinsToolChoiceToSetTitle(t *testing.T) {
+	t.Parallel()
+
 	d := &titleDriver{resp: setTitleCall(`{"title":"Debugging Workflows"}`)}
 	var opts llm.DriverOptions
 	a := &GenerateTitleActivity{driverResolver: titleResolver(d, &opts)}
@@ -92,6 +94,8 @@ func TestGenerateTitle_PinsToolChoiceToSetTitle(t *testing.T) {
 // A tool_use block wrapping the title costs more than the bare string the old
 // 25-token cap was sized for; too tight a budget truncates the arguments JSON.
 func TestGenerateTitle_BudgetsTokensForToolCall(t *testing.T) {
+	t.Parallel()
+
 	d := &titleDriver{resp: setTitleCall(`{"title":"Debugging Workflows"}`)}
 	var opts llm.DriverOptions
 	a := &GenerateTitleActivity{driverResolver: titleResolver(d, &opts)}
@@ -104,6 +108,8 @@ func TestGenerateTitle_BudgetsTokensForToolCall(t *testing.T) {
 
 // The first message must reach the model as data, not as a live request.
 func TestGenerateTitle_WrapsFirstMessageAsData(t *testing.T) {
+	t.Parallel()
+
 	d := &titleDriver{resp: setTitleCall(`{"title":"Auth Bug"}`)}
 	var opts llm.DriverOptions
 	a := &GenerateTitleActivity{driverResolver: titleResolver(d, &opts)}
@@ -122,6 +128,8 @@ func TestGenerateTitle_WrapsFirstMessageAsData(t *testing.T) {
 // Anything other than a usable set_title call must error, so the caller falls
 // back to the truncated first message rather than persisting a prose reply.
 func TestGenerateTitle_RejectsNonToolResponses(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
 		resp *llm.DriverResponse
@@ -165,6 +173,8 @@ func TestGenerateTitle_RejectsNonToolResponses(t *testing.T) {
 // Claude Code presents tools under an mcp__ prefix. If the driver ever leaves
 // it on the response, the title must still be extracted.
 func TestGenerateTitle_AcceptsMCPPrefixedToolName(t *testing.T) {
+	t.Parallel()
+
 	d := &titleDriver{resp: &llm.DriverResponse{
 		ToolCalls: []message.ToolCall{{
 			ID:    "t1",
@@ -181,6 +191,8 @@ func TestGenerateTitle_AcceptsMCPPrefixedToolName(t *testing.T) {
 }
 
 func TestGenerateTitle_CleansUpModelOutput(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
 		got  string
@@ -225,6 +237,8 @@ func (d *streamOnlyTitleDriver) SendMessages(context.Context, []string, []messag
 }
 
 func TestGenerateTitle_StreamsRatherThanSendMessages(t *testing.T) {
+	t.Parallel()
+
 	d := &streamOnlyTitleDriver{
 		titleDriver: titleDriver{resp: setTitleCall(`{"title":"Debugging Workflows"}`)},
 	}
@@ -280,6 +294,8 @@ func splitForStreaming(s string) []string {
 }
 
 func TestGenerateTitle_ReadsArgumentsStreamedAsDeltas(t *testing.T) {
+	t.Parallel()
+
 	d := &anthropicShapedTitleDriver{
 		titleDriver: titleDriver{resp: setTitleCall(`{"title":"Debugging Workflows"}`)},
 	}
@@ -300,6 +316,8 @@ func TestGenerateTitle_ReadsArgumentsStreamedAsDeltas(t *testing.T) {
 // The 60-char clamp counts runes: a byte slice would cut a multi-byte
 // character in half and persist invalid UTF-8.
 func TestTruncateRunes_DoesNotSplitMultiByteCharacters(t *testing.T) {
+	t.Parallel()
+
 	long := strings.Repeat("é", 80)
 	got := truncateRunes(long, 60)
 

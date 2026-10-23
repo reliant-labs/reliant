@@ -34,12 +34,8 @@ type LaneFull struct {
 type GoPlan struct {
 	LaneFull
 	// Packages are the packages to test, as ./relative paths.
-	Packages []string `json:"packages"`
-	// DBOnly is the subset of Packages selected only because a migration
-	// changed: their DB-backed tests are skipped under -short, so the runner
-	// runs them (REQUIRE_TEST_DB=1) when DATABASE_URL is set and says so when not.
-	DBOnly []string          `json:"db_only"`
-	Why    map[string]string `json:"why,omitempty"`
+	Packages []string          `json:"packages"`
+	Why      map[string]string `json:"why,omitempty"`
 }
 
 // WebPlan is the vitest lane: `vitest run <Tests...>`.
@@ -432,7 +428,6 @@ func (c *classifier) selectGo() {
 	gp := &c.pl.Go
 	gp.Why = map[string]string{}
 	sel := map[string]string{}
-	dbOnly := map[string]bool{}
 	for _, p := range sortedKeys(g.TestDeps) {
 		if c.testOnly.has(p) {
 			sel[p] = c.testOnly.why(p)
@@ -440,7 +435,6 @@ func (c *classifier) selectGo() {
 			sel[p] = r
 		} else if c.dbSel.has(p) {
 			sel[p] = c.dbSel.why(p)
-			dbOnly[p] = true
 		}
 	}
 	for _, p := range sortedKeys(sel) {
@@ -450,9 +444,6 @@ func (c *classifier) selectGo() {
 		}
 		gp.Packages = append(gp.Packages, rp)
 		gp.Why[rp] = sel[p]
-		if dbOnly[p] {
-			gp.DBOnly = append(gp.DBOnly, rp)
-		}
 	}
 	gp.LaneFull = laneFull(c.full[laneGo])
 }

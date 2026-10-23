@@ -61,6 +61,8 @@ func seedWaitingRun(t *testing.T, repo *db.Repo, ctx context.Context) (chatID st
 // button is drawn from the chat's activity, which may have moved on by the time
 // the click lands.
 func TestRetryUsageLimitWait_SignalsOnlyAWaitingRun(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
@@ -92,6 +94,8 @@ func TestRetryUsageLimitWait_SignalsOnlyAWaitingRun(t *testing.T) {
 // handler itself must release the marker, or the chat keeps reading "waiting"
 // for a run that is gone.
 func TestTerminateChat_ReleasesTheUsageLimitWait(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
@@ -123,6 +127,8 @@ func TestTerminateChat_ReleasesTheUsageLimitWait(t *testing.T) {
 // one the person can actually use, or the next turn would only fail; and a
 // plain click sends no model at all.
 func TestRetryUsageLimitWait_UseModel(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")

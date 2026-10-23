@@ -21,6 +21,8 @@ import (
 // visible even though chat_send.go writes it hidden.
 
 func TestSaveMessageToThread_UpdateCarriesDisplayStyle(t *testing.T) {
+	t.Parallel()
+
 	repo, rawDB, cleanup := setupTestRepo(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -45,6 +47,8 @@ func TestSaveMessageToThread_UpdateCarriesDisplayStyle(t *testing.T) {
 }
 
 func TestEnrichMessageUpdate_CarriesDisplayStyle(t *testing.T) {
+	t.Parallel()
+
 	repo, _, cleanup := setupTestRepo(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -77,6 +81,8 @@ func TestEnrichMessageUpdate_CarriesDisplayStyle(t *testing.T) {
 // A visible style must still round-trip — the fix must not blanket-stamp every
 // update as hidden.
 func TestSaveMessageToThread_UpdateCarriesVisibleDisplayStyle(t *testing.T) {
+	t.Parallel()
+
 	repo, rawDB, cleanup := setupTestRepo(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -104,6 +110,8 @@ func TestSaveMessageToThread_UpdateCarriesVisibleDisplayStyle(t *testing.T) {
 // A message with no display style must not gain one — omitted stays omitted so
 // the client renders it as an ordinary message.
 func TestSaveMessageToThread_UpdateOmitsAbsentDisplayStyle(t *testing.T) {
+	t.Parallel()
+
 	repo, rawDB, cleanup := setupTestRepo(t)
 	defer cleanup()
 	ctx := context.Background()

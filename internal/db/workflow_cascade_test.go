@@ -24,6 +24,8 @@ func insertTestWorkflowWithParent(t *testing.T, repo *Repo, id, chatID string, p
 }
 
 func TestCascadeTerminalStatusToDescendants_CascadesRecursively(t *testing.T) {
+	t.Parallel()
+
 	// A spawn's own spawns (grandchildren and deeper) must complete with it.
 	// A one-level cascade leaves them running/paused forever: the chat stays
 	// permanently "active" in chats_with_activity, and stale paused rows stay
@@ -86,6 +88,8 @@ func TestCascadeTerminalStatusToDescendants_CascadesRecursively(t *testing.T) {
 // CHAT_WORKFLOW_STATUS already carries the distinction (3=completed,
 // 5=cancelled, 4=failed) — the cascade just has to write what happened.
 func TestCascadeTerminalStatusToDescendants_TerminationIsNotCompletion(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 

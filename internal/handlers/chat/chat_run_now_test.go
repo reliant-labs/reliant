@@ -95,6 +95,8 @@ func (f *builderTestFixture) runNow(req *reliantv1.RunNowRequest) (*connect.Resp
 // Run now records a manual.run launch, attended and deduped on the chat id, and
 // lists in the sidebar like the chat the person is about to open.
 func TestRunNow_RecordsManualRunKind(t *testing.T) {
+	t.Parallel()
+
 	f := newBuilderTestFixture(t)
 	f.saveWorkflow(t, "test-user", "triage", runNowDeclaringYAML)
 
@@ -121,6 +123,8 @@ func TestRunNow_RecordsManualRunKind(t *testing.T) {
 // Pressing Run now is how an automation-only workflow is run by hand; the same
 // workflow is still refused as a chat start.
 func TestRunNow_RunsAnAutomationOnlyWorkflow(t *testing.T) {
+	t.Parallel()
+
 	f := newBuilderTestFixture(t)
 	f.saveWorkflow(t, "test-user", "nightly-digest", runNowAutomationOnlyYAML)
 
@@ -136,6 +140,8 @@ func TestRunNow_RunsAnAutomationOnlyWorkflow(t *testing.T) {
 // A run with no message starts from a stated default rather than failing the
 // launcher's "a user message is required".
 func TestRunNow_NoMessageStartsFromTheDefault(t *testing.T) {
+	t.Parallel()
+
 	f := newBuilderTestFixture(t)
 	f.saveWorkflow(t, "test-user", "nightly-digest", runNowAutomationOnlyYAML)
 
@@ -147,6 +153,8 @@ func TestRunNow_NoMessageStartsFromTheDefault(t *testing.T) {
 // A replay seeds the run with the event as the labelled block a real fire uses,
 // and the launch event names the event it replayed.
 func TestRunNow_ReplayRecordsAndSeedsTheEvent(t *testing.T) {
+	t.Parallel()
+
 	f := newBuilderTestFixture(t)
 	f.saveWorkflow(t, "test-user", "triage", runNowDeclaringYAML)
 	payload, err := structpb.NewStruct(map[string]any{"data": map[string]any{"issue": map[string]any{"number": 7}}})
@@ -180,6 +188,8 @@ func TestRunNow_ReplayRecordsAndSeedsTheEvent(t *testing.T) {
 
 // A replay of a kind a trigger never receives is refused, not recorded.
 func TestRunNow_ReplayOfANonTriggerKindIsRefused(t *testing.T) {
+	t.Parallel()
+
 	f := newBuilderTestFixture(t)
 	f.saveWorkflow(t, "test-user", "triage", runNowDeclaringYAML)
 
@@ -195,6 +205,8 @@ func TestRunNow_ReplayOfANonTriggerKindIsRefused(t *testing.T) {
 
 // Another user's workflow does not resolve for the caller: owner-only.
 func TestRunNow_IsOwnerOnly(t *testing.T) {
+	t.Parallel()
+
 	f := newBuilderTestFixture(t)
 	f.saveWorkflow(t, "someone-else", "theirs", runNowAutomationOnlyYAML)
 
@@ -209,6 +221,8 @@ func TestRunNow_IsOwnerOnly(t *testing.T) {
 }
 
 func TestRunNow_RequiresProjectAndWorkflow(t *testing.T) {
+	t.Parallel()
+
 	f := newBuilderTestFixture(t)
 	_, err := f.service.RunNow(f.ctx, connect.NewRequest(&reliantv1.RunNowRequest{Workflow: "x"}))
 	require.Error(t, err)
@@ -221,6 +235,8 @@ func TestRunNow_RequiresProjectAndWorkflow(t *testing.T) {
 // manual.run is not a launch kind StartChat can be asked for: the request has no
 // field for it, and no flag a client can set produces it.
 func TestStartChat_CannotClaimManualRun(t *testing.T) {
+	t.Parallel()
+
 	f := newBuilderTestFixture(t)
 	f.saveWorkflow(t, "test-user", "triage", runNowDeclaringYAML)
 
@@ -236,6 +252,8 @@ func TestStartChat_CannotClaimManualRun(t *testing.T) {
 
 // RunNow reads the caller from auth, not from the request.
 func TestRunNow_UsesTheAuthenticatedUser(t *testing.T) {
+	t.Parallel()
+
 	f := newBuilderTestFixture(t)
 	f.saveWorkflow(t, "test-user", "nightly-digest", runNowAutomationOnlyYAML)
 
@@ -265,6 +283,8 @@ nodes:
 // Run now launches with the form's inputs, so a required input the person left
 // empty, or a list outside its bounds, is refused before a run exists.
 func TestRunNow_EnforcesRequiredAndItemBounds(t *testing.T) {
+	t.Parallel()
+
 	f := newBuilderTestFixture(t)
 	f.saveWorkflow(t, "test-user", "review", runNowRequiredYAML)
 	repos := func(items ...any) map[string]*structpb.Value {

@@ -43,6 +43,8 @@ func seedChatForUpdates(t *testing.T, repo *Repo, ctx context.Context) string {
 }
 
 func TestGetLatestNonMessageUpdatesPerEntity_NotEvictedByMessageVolume(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
@@ -89,6 +91,8 @@ func TestGetLatestNonMessageUpdatesPerEntity_NotEvictedByMessageVolume(t *testin
 // The per-tool-call "latest status wins" intent now lives in the snapshot-level
 // tests in internal/handlers/chat (tool_call_status_read_test.go).
 func TestGetLatestNonMessageUpdatesPerEntity_ExcludesToolCalls(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
@@ -112,6 +116,8 @@ func TestGetLatestNonMessageUpdatesPerEntity_ExcludesToolCalls(t *testing.T) {
 }
 
 func TestGetLatestNonMessageUpdatesPerEntity_ThreadAnnouncementSurvivesWorkflowStatus(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
@@ -172,6 +178,8 @@ func TestGetLatestNonMessageUpdatesPerEntity_ThreadAnnouncementSurvivesWorkflowS
 }
 
 func TestGetLatestNonMessageUpdatesPerEntity_CollapsesThreadToLatestStatus(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
@@ -225,6 +233,8 @@ func TestGetLatestNonMessageUpdatesPerEntity_CollapsesThreadToLatestStatus(t *te
 }
 
 func TestGetLatestNonMessageUpdatesPerEntity_ExcludesStreamFinalized(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
@@ -251,6 +261,8 @@ func TestGetLatestNonMessageUpdatesPerEntity_ExcludesStreamFinalized(t *testing.
 // snapshot has no strip to retire rows from — the mailbox hook re-reads
 // ListQueuedAgentMessages on mount — so a historical id tombstones nothing.
 func TestGetLatestNonMessageUpdatesPerEntity_ExcludesAgentMessagesDrained(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
@@ -277,6 +289,8 @@ func TestGetLatestNonMessageUpdatesPerEntity_ExcludesAgentMessagesDrained(t *tes
 // skip-scan would let the newest evict the other (measured: 198 workflow_status
 // rows lost on a real chat), so both must survive side by side.
 func TestGetLatestNonMessageUpdatesPerEntity_WorkflowStatusSurvivesThreadOnSameWorkflowID(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 

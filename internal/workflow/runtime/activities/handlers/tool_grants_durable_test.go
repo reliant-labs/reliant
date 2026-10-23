@@ -23,6 +23,8 @@ import (
 // the retry reports the grant to the workflow. Before, the replayed result had
 // no metadata, the retry reported no grant, and the thread lost the tool.
 func TestExecuteTools_LoadToolGrantIsRecordedAndSurvivesARetry(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	f := setupNoMachineFixture(t, false)
 	cfg := toolsConfig(tools.PermissionMutating, []string{tools.ToolView}, []string{"*"}, nil)

@@ -8,6 +8,8 @@ import (
 )
 
 func TestProjectMCPConfigsColumnRead(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()

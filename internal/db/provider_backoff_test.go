@@ -14,6 +14,8 @@ import (
 // while the wait is open, and that the time lost survives the wait so post-hoc
 // forensics can still answer where a finished run's time went.
 func TestProviderBackoff_RecordClearAndAccumulate(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -106,6 +108,8 @@ func TestProviderBackoff_RecordClearAndAccumulate(t *testing.T) {
 // whose ROOT thread is parked reads WAITING_FOR_USAGE_LIMIT (7), carrying the
 // reset time and provider the footer shows.
 func TestUsageLimitWait_MarkerDrivesChatActivity(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -194,6 +198,8 @@ func TestUsageLimitWait_MarkerDrivesChatActivity(t *testing.T) {
 // work, so the chat must not read as waiting. And a stop releases every thread's
 // marker at once (a terminated run runs no code to release its own).
 func TestUsageLimitWait_SubAgentDoesNotParkTheChatAndStopReleasesAll(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -246,6 +252,8 @@ func TestUsageLimitWait_SubAgentDoesNotParkTheChatAndStopReleasesAll(t *testing.
 // the chat stuck on WAITING_FOR_USAGE_LIMIT: the activity only counts a marker
 // while the root workflow is live.
 func TestUsageLimitWait_DeadRunDoesNotLeaveChatWaiting(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()

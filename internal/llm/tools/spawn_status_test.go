@@ -385,8 +385,8 @@ func TestSpawnStatus_Wait_ClampsTimeoutAboveCeiling(t *testing.T) {
 	// Stated against the shared constant, not a literal. toolexec's ceiling is
 	// derived from MaxBlockingToolWait with headroom, so pinning a number here
 	// only re-encodes a value that moves — this assertion said 240s and went
-	// stale (silently, because it skips without DATABASE_URL) when the budget
-	// was raised for long-running agents.
+	// stale (silently, while DB-backed tests skipped without a configured
+	// database) when the budget was raised for long-running agents.
 	require.Equal(t, MaxBlockingToolWait, spawnStatusMaxTimeout,
 		"spawn_status must use the shared blocking-tool budget, or the executor ceiling derived from it no longer leaves headroom")
 

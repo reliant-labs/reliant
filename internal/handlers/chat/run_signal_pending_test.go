@@ -23,6 +23,8 @@ import (
 // signal to it cannot be delivered. It must say so (delivered=false) rather than
 // surface SendMessage's FailedPrecondition.
 func TestSignalRunOnPendingRunIsNotDelivered(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 

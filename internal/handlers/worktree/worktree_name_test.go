@@ -23,6 +23,8 @@ func createNamed(ctx context.Context, svc *Service, projectID, name, branch stri
 }
 
 func TestCreateWorktree_NameRule(t *testing.T) {
+	t.Parallel()
+
 	repo := db.NewTestRepo(t)
 	svc := newWorktreeService(t, repo, &blockingWorktreeDaemonRouter{})
 	userID := uuid.New().String()
@@ -53,6 +55,8 @@ func TestCreateWorktree_NameRule(t *testing.T) {
 }
 
 func TestUnarchiveWorktree_RefusesWhenTheNameIsTaken(t *testing.T) {
+	t.Parallel()
+
 	repo := db.NewTestRepo(t)
 	svc := newWorktreeService(t, repo, &blockingWorktreeDaemonRouter{})
 	userID := uuid.New().String()

@@ -48,6 +48,8 @@ func daemonExists(t *testing.T, repo *Repo, id string) bool {
 // event must produce a row both daemon readers return with its name — the
 // Machines page reads ListDaemonsByUserID, detail reads GetDaemon.
 func TestUpsertDaemonIdentity_CreatesNamedRowReadByBothReaders(t *testing.T) {
+	t.Parallel()
+
 	repo, _ := registryTestRepo(t)
 	ctx := context.Background()
 	created := time.Date(2026, 10, 7, 14, 41, 36, 0, time.UTC)
@@ -86,6 +88,8 @@ func TestUpsertDaemonIdentity_CreatesNamedRowReadByBothReaders(t *testing.T) {
 // (hostname ws-ws-…, no name) and the control plane supplies the name. The
 // daemon's own fields must survive, and the owner must never be rewritten.
 func TestUpsertDaemonIdentity_NamesARowTheGatewayRegistered(t *testing.T) {
+	t.Parallel()
+
 	repo, _ := registryTestRepo(t)
 	ctx := context.Background()
 	hostname := "ws-ws-2aab1465"
@@ -118,6 +122,8 @@ func TestUpsertDaemonIdentity_NamesARowTheGatewayRegistered(t *testing.T) {
 // TestRemoveDaemon_DeletesRowAndLease is the ghost: the row and its lease go,
 // the owner is reported back, and removal is idempotent.
 func TestRemoveDaemon_DeletesRowAndLease(t *testing.T) {
+	t.Parallel()
+
 	repo, rawDB := registryTestRepo(t)
 	ctx := context.Background()
 	if _, err := repo.UpsertDaemonIdentity(ctx, DaemonIdentity{DaemonID: "cda8a89b", UserID: "u-owner", Name: "default", DaemonType: "managed"}); err != nil {
@@ -246,6 +252,8 @@ func assertKept(t *testing.T, rawDB *sql.DB, daemonID string) {
 // resolution for the chat, the sweep's adoption for the worktree, the
 // daemon's connect-time reconcile for the install.
 func TestRemoveDaemon_ReleasesWhatWasBoundToIt(t *testing.T) {
+	t.Parallel()
+
 	repo, rawDB := registryTestRepo(t)
 	ctx := context.Background()
 	for _, id := range []string{"gone-1", "kept-1"} {
@@ -271,6 +279,8 @@ func TestRemoveDaemon_ReleasesWhatWasBoundToIt(t *testing.T) {
 // TestApplyDaemonRegistrySnapshot_ReleasesWhatWasBoundToARemovedRow: the
 // reconcile path removes rows too, and must release them the same way.
 func TestApplyDaemonRegistrySnapshot_ReleasesWhatWasBoundToARemovedRow(t *testing.T) {
+	t.Parallel()
+
 	repo, rawDB := registryTestRepo(t)
 	ctx := context.Background()
 	old := time.Now().UTC().Add(-24 * time.Hour)
@@ -305,6 +315,8 @@ func TestApplyDaemonRegistrySnapshot_ReleasesWhatWasBoundToARemovedRow(t *testin
 // a connected-but-unlisted daemon, a just-registered one, and another owner's
 // machine must all be left alone.
 func TestApplyDaemonRegistrySnapshot_ReconcilesOneOwner(t *testing.T) {
+	t.Parallel()
+
 	repo, rawDB := registryTestRepo(t)
 	ctx := context.Background()
 	now := time.Now().UTC()
@@ -401,6 +413,8 @@ func TestApplyDaemonRegistrySnapshot_ReconcilesOneOwner(t *testing.T) {
 // select every row, not none — an empty or NULL array binding that matched
 // nothing would leave all of their ghosts listed forever.
 func TestApplyDaemonRegistrySnapshot_EmptySetRemovesEveryGhost(t *testing.T) {
+	t.Parallel()
+
 	repo, _ := registryTestRepo(t)
 	ctx := context.Background()
 	longAgo := time.Now().UTC().Add(-30 * 24 * time.Hour)

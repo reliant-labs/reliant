@@ -51,6 +51,8 @@ func chatWithRootWorkflow(t *testing.T, repo *Repo, chatID, workflowID string, s
 }
 
 func TestChatReadsCarryRootWorkflowStatus(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -150,6 +152,8 @@ func TestChatReadsCarryRootWorkflowStatus(t *testing.T) {
 // A chat whose root run has completed while a spawn is still active is
 // completed, and the web must not offer to resume it.
 func TestChatRootStatusIgnoresNonRootWorkflows(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()

@@ -176,6 +176,8 @@ func saveStep(stepID, messageID string) *db.StepExecution {
 // timing assertion on a loop this cheap in tests would pass while the loop was
 // still there.
 func TestGetWorkflowExecutions_OneStepQueryRegardlessOfWorkflowCount(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -228,6 +230,8 @@ func TestGetWorkflowExecutions_OneStepQueryRegardlessOfWorkflowCount(t *testing.
 // shape: the saved message id arrives as its own field, and the megabytes of
 // internal-activity output that used to carry it do not.
 func TestGetWorkflowExecutions_SavedMessageIdWithoutOutputJson(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 

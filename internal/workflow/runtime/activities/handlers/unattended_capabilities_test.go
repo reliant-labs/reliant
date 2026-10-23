@@ -57,6 +57,8 @@ var (
 // A webhook-fired run is not offered edit_workflow, cannot load it, and is
 // refused when it calls it anyway; the same for a mutating integration action.
 func TestUnattendedRun_IsNotOfferedLoadedOrRunAuthoringTools(t *testing.T) {
+	t.Parallel()
+
 	f := setupNoMachineFixture(t, false)
 
 	recorded := throughHistory(t, f.turnAs(t, taggedAgentConfig(), RuntimeContext{Unattended: true}).GetCapabilities())
@@ -97,6 +99,8 @@ func TestUnattendedRun_IsNotOfferedLoadedOrRunAuthoringTools(t *testing.T) {
 // A person's turn in that same chat is attended: the same declaration offers
 // the tools, and they run.
 func TestPersonsTurnInAnAutomationsChat_IsOfferedAuthoringTools(t *testing.T) {
+	t.Parallel()
+
 	f := setupNoMachineFixture(t, false)
 
 	recorded := throughHistory(t, f.turnAs(t, taggedAgentConfig(), RuntimeContext{}).GetCapabilities())
@@ -115,6 +119,8 @@ func TestPersonsTurnInAnAutomationsChat_IsOfferedAuthoringTools(t *testing.T) {
 // A step that names the tool keeps it when nobody is attending: its author
 // decided the step does that work. Its tagged neighbours stay withheld.
 func TestUnattendedRun_ExplicitlyDeclaredToolStillRuns(t *testing.T) {
+	t.Parallel()
+
 	f := setupNoMachineFixture(t, false)
 	cfg := toolsConfig(tools.PermissionMutating,
 		[]string{tools.ToolView, tools.ToolEditWorkflow, "http__request", "tag:workflow"}, nil, nil)
@@ -136,6 +142,8 @@ func TestUnattendedRun_ExplicitlyDeclaredToolStillRuns(t *testing.T) {
 // propagated (runtime.TestUnattendedRunsSubAgentInheritsItsCallLLM), and is
 // withheld exactly as its parent is.
 func TestUnattendedSubAgent_IsWithheldAuthoringTools(t *testing.T) {
+	t.Parallel()
+
 	f := setupNoMachineFixture(t, false)
 
 	recorded := throughHistory(t, f.turnAs(t, taggedAgentConfig(),

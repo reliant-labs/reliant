@@ -8,6 +8,8 @@ import (
 )
 
 func TestCreateUserUpdate_AssignsSequenceAndID(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
@@ -49,6 +51,8 @@ func TestCreateUserUpdate_AssignsSequenceAndID(t *testing.T) {
 }
 
 func TestCreateUserUpdate_ConcurrentWritesProduceUniqueSequences(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 

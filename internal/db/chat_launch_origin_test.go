@@ -35,6 +35,8 @@ func recordLaunchEvent(t *testing.T, repo *Repo, chatID string, kind core.Trigge
 }
 
 func TestChatReadsCarryLaunchOrigin(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -84,6 +86,8 @@ func TestChatReadsCarryLaunchOrigin(t *testing.T) {
 }
 
 func TestChatLaunchOriginUsesEarliestEventAndSurvivesTriggerDeletion(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -113,6 +117,8 @@ func TestChatLaunchOriginUsesEarliestEventAndSurvivesTriggerDeletion(t *testing.
 }
 
 func TestListChatsExcludeAutomations(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()

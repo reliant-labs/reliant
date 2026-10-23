@@ -229,6 +229,8 @@ func createMessageWithToolResult(t *testing.T, repo *db.Repo, chatID, threadID, 
 // =============================================================================
 
 func TestLoadMessagesForLLM_TableDriven(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name                 string
 		setup                func(t *testing.T, repo *db.Repo) (chatID, thread string, explicitContextSeq *int)
@@ -396,6 +398,8 @@ func TestLoadMessagesForLLM_TableDriven(t *testing.T) {
 // =============================================================================
 
 func TestLoadMessagesForLLM_OrphanedToolCallRepair(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name             string
 		setup            func(t *testing.T, repo *db.Repo) (chatID, thread string)
@@ -487,6 +491,8 @@ func TestLoadMessagesForLLM_OrphanedToolCallRepair(t *testing.T) {
 // =============================================================================
 
 func TestLoadMessagesForLLM_MessageOrdering(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestRepoWithCleanup(t)
 	defer cleanup()
 	ctx := context.Background()

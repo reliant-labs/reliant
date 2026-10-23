@@ -31,6 +31,8 @@ import (
 // real high-water mark. This test is the contract for that, and it is what
 // lets those three call sites keep working unmodified.
 func TestSeqCounter_HealsAfterDirectMessageInsert(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()

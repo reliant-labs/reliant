@@ -19,6 +19,8 @@ import (
 // the person attending did not approve (runtime/action_approval_legacy.go) —
 // and it must keep being honoured until that run is gone.
 func TestExecuteTools_RefusesCallTheWorkflowRefused(t *testing.T) {
+	t.Parallel()
+
 	const slackPost = "slack__message_post"
 	h, chatID := newValidationChat(t)
 	mockExecutor := newMockToolExecutor()

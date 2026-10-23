@@ -20,6 +20,8 @@ import (
 // builds — and checks the actual JSON output, so it catches both a missing
 // struct field and a broken/renamed json tag, unlike a source grep.
 func TestChatUpdatePayloadIncludesSeq(t *testing.T) {
+	t.Parallel()
+
 	update := db.MessageUpdateData{
 		UpdateType: "message",
 		ID:         "msg-1",
@@ -46,6 +48,8 @@ func TestChatUpdatePayloadIncludesSeq(t *testing.T) {
 // marshalling as a number, not a string, or BigInt conversion on the client
 // silently yields 0.
 func TestSeqMarshalsAsNumber(t *testing.T) {
+	t.Parallel()
+
 	payload := map[string]interface{}{"seq": int64(4211)}
 	raw, err := json.Marshal(payload)
 	if err != nil {

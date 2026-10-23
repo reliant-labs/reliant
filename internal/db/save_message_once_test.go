@@ -33,6 +33,8 @@ func countBlocksOfMessage(t *testing.T, repo *Repo, ctx context.Context, id stri
 }
 
 func TestSaveMessageToThreadOnce_SecondCallWritesNothing(t *testing.T) {
+	t.Parallel()
+
 	repo, _, cleanup := setupTestRepo(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -63,6 +65,8 @@ func TestSaveMessageToThreadOnce_SecondCallWritesNothing(t *testing.T) {
 }
 
 func TestSaveMessageToThreadOnce_ConcurrentCallsCreateOneRow(t *testing.T) {
+	t.Parallel()
+
 	repo, _, cleanup := setupTestRepo(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -104,6 +108,8 @@ func TestSaveMessageToThreadOnce_ConcurrentCallsCreateOneRow(t *testing.T) {
 // conflict is the only unique violation the Once path absorbs, and the
 // seq/ordinal allocation conflicts between distinct sends still retry.
 func TestSaveMessageToThreadOnce_DistinctMessagesAllLand(t *testing.T) {
+	t.Parallel()
+
 	repo, _, cleanup := setupTestRepo(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -136,6 +142,8 @@ func TestSaveMessageToThreadOnce_DistinctMessagesAllLand(t *testing.T) {
 }
 
 func TestSaveMessageToThreadOnce_RequiresAnID(t *testing.T) {
+	t.Parallel()
+
 	repo, _, cleanup := setupTestRepo(t)
 	defer cleanup()
 	_, _, err := repo.SaveMessageToThreadOnce(context.Background(), "c", "c", int32(reliantv1.MessageRole_MESSAGE_ROLE_USER), "x", nil, nil, nil, "")
@@ -143,6 +151,8 @@ func TestSaveMessageToThreadOnce_RequiresAnID(t *testing.T) {
 }
 
 func TestEnqueueAgentMessageOnce_TakenIDInsertsNothing(t *testing.T) {
+	t.Parallel()
+
 	repo, _, cleanup := setupTestRepo(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -176,6 +186,8 @@ func TestEnqueueAgentMessageOnce_TakenIDInsertsNothing(t *testing.T) {
 }
 
 func TestEnqueueAgentMessageOnce_ConcurrentCallsInsertOneRow(t *testing.T) {
+	t.Parallel()
+
 	repo, _, cleanup := setupTestRepo(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -217,6 +229,8 @@ func TestEnqueueAgentMessageOnce_ConcurrentCallsInsertOneRow(t *testing.T) {
 }
 
 func TestDeleteUndeliveredAgentMessage_OnlyTouchesUndeliveredRows(t *testing.T) {
+	t.Parallel()
+
 	repo, _, cleanup := setupTestRepo(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -250,6 +264,8 @@ func TestDeleteUndeliveredAgentMessage_OnlyTouchesUndeliveredRows(t *testing.T) 
 }
 
 func TestIsLatestTurnInThread(t *testing.T) {
+	t.Parallel()
+
 	repo, _, cleanup := setupTestRepo(t)
 	defer cleanup()
 	ctx := context.Background()

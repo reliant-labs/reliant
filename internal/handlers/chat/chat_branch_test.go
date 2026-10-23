@@ -26,6 +26,8 @@ import (
 //  5. Expected: new branch gets worktree W2 (Chat B's worktree)
 //  6. Bug (before fix): new branch got worktree W1 (M1's original chat's worktree)
 func TestBranchChat_InheritedMessage_UsesRequestingChatWorktree(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -181,6 +183,8 @@ func TestBranchChat_InheritedMessage_UsesRequestingChatWorktree(t *testing.T) {
 // TestBranchChat_SameChat_UsesSourceWorktree verifies that branching from a
 // message in the same chat (not inherited) still uses that chat's worktree.
 func TestBranchChat_SameChat_UsesSourceWorktree(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -279,6 +283,8 @@ func TestBranchChat_SameChat_UsesSourceWorktree(t *testing.T) {
 // tool execution to the machine holding the branch checkout (the fix for
 // "chatting with a branch chat didn't work").
 func TestBranchChat_PinsActiveDaemonFromWorktree(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -371,6 +377,8 @@ func TestBranchChat_PinsActiveDaemonFromWorktree(t *testing.T) {
 // its source chat runs on. Left unpinned, it fell to the user's default
 // machine, which silently moved the conversation.
 func TestBranchChat_InheritsSourceMachineOnUnownedWorktree(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -437,6 +445,8 @@ func TestBranchChat_InheritsSourceMachineOnUnownedWorktree(t *testing.T) {
 // mistaken flip of that comparison to Seq would hide here rather than in a
 // single-thread test.
 func TestBranchChat_MultiThreadChat_ToolCallAdjustment_OrdinalSeqDiverge(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 

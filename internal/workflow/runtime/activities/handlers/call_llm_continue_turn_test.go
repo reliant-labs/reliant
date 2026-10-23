@@ -74,6 +74,8 @@ func withContinueTurn(input ActivityInput) ActivityInput {
 // its next step (chat b43b41fe: "I'll inspect the local dev auth setup…", then
 // nothing).
 func TestCallLLM_ContinueTurnCallsProviderOnAssistantTail(t *testing.T) {
+	t.Parallel()
+
 	driver := &countingDriver{text: "Checked: the dev IdP issues reliant:api tokens.", finishReason: message.FinishReasonEndTurn}
 
 	h := NewIdempotencyTestHelper(t)
@@ -103,6 +105,8 @@ func TestCallLLM_ContinueTurnCallsProviderOnAssistantTail(t *testing.T) {
 // that shape still recovers on the user's next message. continue_turn is an
 // explicit opt-out for one turn, never a weakening of the default.
 func TestCallLLM_AssistantTailStillYieldsWithoutContinueTurn(t *testing.T) {
+	t.Parallel()
+
 	driver := &countingDriver{text: "should never be produced", finishReason: message.FinishReasonEndTurn}
 
 	h := NewIdempotencyTestHelper(t)
@@ -130,6 +134,8 @@ func TestCallLLM_AssistantTailStillYieldsWithoutContinueTurn(t *testing.T) {
 // request on the next turn; it must read as "error" so the loop yields instead
 // of spinning.
 func TestCallLLM_PausedTurnStopReason(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		name string
 		text string

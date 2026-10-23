@@ -38,6 +38,8 @@ func stopSubAgent(t *testing.T, repo *db.Repo, ctx context.Context, fx sendAgent
 }
 
 func TestSendAgentMessage_ResumesSubAgentThatStoppedOnAFailure(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -72,6 +74,8 @@ func TestSendAgentMessage_ResumesSubAgentThatStoppedOnAFailure(t *testing.T) {
 
 // A sub-agent the user stopped is finished: today's refusal stands.
 func TestSendAgentMessage_SubAgentStoppedByTheUserStaysFinished(t *testing.T) {
+	t.Parallel()
+
 	repo, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
 	t.Cleanup(cleanup)
 
@@ -110,6 +114,8 @@ func stoppedSpawnRun(t *testing.T, repo *db.Repo, ctx context.Context, fx sendAg
 // anything else, and its root waits on the agent's report before taking a
 // turn. (It used to be refused: "this chat's run has since ended".)
 func TestSendAgentMessage_StoppedSubAgentOfAnEndedRunStartsARunThatResumesIt(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -163,6 +169,8 @@ func TestSendAgentMessage_StoppedSubAgentOfAnEndedRunStartsARunThatResumesIt(t *
 // parent, which is not running: it is resumed second. The user is told which
 // agent to message first, and nothing is queued.
 func TestSendAgentMessage_StoppedSubAgentOfAStoppedParentSaysToResumeTheParentFirst(t *testing.T) {
+	t.Parallel()
+
 	repo, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
 	t.Cleanup(cleanup)
 
@@ -193,6 +201,8 @@ func TestSendAgentMessage_StoppedSubAgentOfAStoppedParentSaysToResumeTheParentFi
 // over the way a live agent's can — the row is withdrawn and the user told,
 // rather than left queued behind a receipt nothing will honour.
 func TestSendAgentMessage_StoppedSubAgentThatCannotBeWokenIsNotLeftQueued(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -216,6 +226,8 @@ func TestSendAgentMessage_StoppedSubAgentThatCannotBeWokenIsNotLeftQueued(t *tes
 // provider is how a user gets past a usage limit before resuming it. A
 // finished agent has no next run for params to apply to.
 func TestThreadAcceptsParamUpdate_StoppedSubAgentDoesAFinishedOneDoesNot(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 

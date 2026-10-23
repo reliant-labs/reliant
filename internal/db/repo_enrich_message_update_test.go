@@ -13,6 +13,8 @@ import (
 )
 
 func TestEnrichMessageUpdate_IncludesFileReferenceAttachments(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -108,6 +110,8 @@ func TestEnrichMessageUpdate_IncludesFileReferenceAttachments(t *testing.T) {
 }
 
 func TestEnrichMessageUpdate_UsesCanonicalToolCallInputField(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()

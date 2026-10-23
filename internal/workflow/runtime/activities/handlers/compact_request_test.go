@@ -84,6 +84,8 @@ func toolBearingConversation() []message.Message {
 }
 
 func TestCompactThreadUpdate_CarriesPersistedThreadMetadata(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 
@@ -125,6 +127,8 @@ func TestCompactThreadUpdate_CarriesPersistedThreadMetadata(t *testing.T) {
 }
 
 func TestGenerateCompactionSummary_UsesStandardRequestEnvelope(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
 		// model the injected resolver probes back

@@ -18,6 +18,8 @@ import (
 // read paths did — so the UI was wrong while you watched it and right the
 // moment you reloaded.
 func TestContentBlockPayloads_SpawnCarriesChildWorkflowID(t *testing.T) {
+	t.Parallel()
+
 	now := time.Now().UTC()
 	childThreadID := "child-thread-id"
 
@@ -51,6 +53,8 @@ func TestContentBlockPayloads_SpawnCarriesChildWorkflowID(t *testing.T) {
 // consumer, which is the ambiguity that produces a wrong render rather than
 // an honest empty one.
 func TestContentBlockPayloads_NonSpawnHasNoChild(t *testing.T) {
+	t.Parallel()
+
 	blocks := []*MessageContentBlock{{
 		ID: "block-1", MessageID: "msg-1", Position: 0,
 		BlockType:  reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TOOL_CALL,
@@ -70,6 +74,8 @@ func TestContentBlockPayloads_NonSpawnHasNoChild(t *testing.T) {
 // consumer that fetched thread "" would ask a real question with a nonsense
 // argument.
 func TestContentBlockPayloads_EmptyChildIsAbsent(t *testing.T) {
+	t.Parallel()
+
 	blocks := []*MessageContentBlock{{
 		ID: "block-1", MessageID: "msg-1", Position: 0,
 		BlockType:  reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TOOL_CALL,
@@ -88,6 +94,8 @@ func TestContentBlockPayloads_EmptyChildIsAbsent(t *testing.T) {
 // The base wire shape every consumer already depends on must be unchanged by
 // the consolidation — four call sites used to build this by hand.
 func TestContentBlockPayloads_PreservesBaseWireShape(t *testing.T) {
+	t.Parallel()
+
 	blocks := []*MessageContentBlock{{
 		ID: "block-1", MessageID: "msg-1", Position: 3,
 		BlockType: reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TEXT,
@@ -118,6 +126,8 @@ func TestContentBlockPayloads_PreservesBaseWireShape(t *testing.T) {
 // AttachmentIDsFromBlocks replaced an inline loop in each writer; it must pick
 // exactly the attachment-bearing block types, in order.
 func TestAttachmentIDsFromBlocks(t *testing.T) {
+	t.Parallel()
+
 	blocks := []*MessageContentBlock{
 		{BlockType: reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_TEXT, Content: ptr.Of("not-an-attachment")},
 		{BlockType: reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_IMAGE, Content: ptr.Of("att-1")},

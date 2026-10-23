@@ -26,6 +26,8 @@ import (
 // same spy repository, so its one fill per config version is counted too:
 // three skill calls make one whole-row read in all, not three.
 func TestSkillToolReadsSkillsThroughTheConfigProvider(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	t.Cleanup(h.Cleanup)
 	ctx := context.Background()

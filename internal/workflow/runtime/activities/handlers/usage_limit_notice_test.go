@@ -14,6 +14,8 @@ import (
 // The words of the three transcript notices are product copy. Pinned so a
 // rewording is a decision, not an accident.
 func TestAccountMoveNotice(t *testing.T) {
+	t.Parallel()
+
 	a := models.AccountConfig{DriverConfig: models.DriverConfig{DriverID: "claude", AccountID: "a", AccountLabel: "alice@acme.com"}}
 	b := models.AccountConfig{DriverConfig: models.DriverConfig{DriverID: "claude", AccountID: "b", AccountLabel: "bob@acme.com"}}
 	reset := time.Date(2026, 10, 19, 15, 40, 0, 0, time.UTC)
@@ -52,6 +54,8 @@ func TestNoticeClockIsAZoneIndependentToken(t *testing.T) {
 }
 
 func TestProviderSwitchNotice_UnknownResetSaysCheckingAgain(t *testing.T) {
+	t.Parallel()
+
 	probe := time.Date(2026, 10, 19, 15, 40, 0, 0, time.UTC)
 	got := providerSwitchNotice("claude", "gpt-5.6-sol@codex", probe, true)
 	assert.Equal(t,
@@ -61,6 +65,8 @@ func TestProviderSwitchNotice_UnknownResetSaysCheckingAgain(t *testing.T) {
 }
 
 func TestProviderSwitchAndReturnNotices(t *testing.T) {
+	t.Parallel()
+
 	until := time.Date(2026, 10, 19, 15, 40, 0, 0, time.UTC)
 
 	assert.Equal(t,

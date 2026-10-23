@@ -76,6 +76,8 @@ func (e *triggerTestEnv) activation(name string, mutate func(*reliantv1.TriggerD
 }
 
 func TestActivateDeclaredSchedule(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	env.saveWorkflow(t, "triage", declaringWorkflowYAML)
 
@@ -96,6 +98,8 @@ func TestActivateDeclaredSchedule(t *testing.T) {
 }
 
 func TestActivateDeclaredWebhookAndIntegration(t *testing.T) {
+	t.Parallel()
+
 	env, _ := setupInboundTriggerTest(t)
 	env.saveWorkflow(t, "triage", declaringWorkflowYAML)
 
@@ -115,6 +119,8 @@ func TestActivateDeclaredWebhookAndIntegration(t *testing.T) {
 }
 
 func TestActivateDeclaredTriggerRejects(t *testing.T) {
+	t.Parallel()
+
 	env, _ := setupInboundTriggerTest(t)
 	env.saveWorkflow(t, "triage", declaringWorkflowYAML)
 
@@ -171,6 +177,8 @@ func TestActivateDeclaredTriggerRejects(t *testing.T) {
 
 // An activation's params may set inputs the declaration does not map.
 func TestActivationParamsForUnmappedInputs(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	env.saveWorkflow(t, "triage", declaringWorkflowYAML)
 	got := env.create(t, env.activation("nightly", func(d *reliantv1.TriggerDefinition) {
@@ -184,6 +192,8 @@ func TestActivationParamsForUnmappedInputs(t *testing.T) {
 // refused when the activation is written rather than matching nothing on
 // every event.
 func TestActivationParamsAreCheckedAgainstTheWorkflowsInputs(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	env.saveWorkflow(t, "triage", declaringWorkflowYAML)
 
@@ -209,6 +219,8 @@ func TestActivationParamsAreCheckedAgainstTheWorkflowsInputs(t *testing.T) {
 // renaming the declaration leaves the activation BROKEN — reported, not
 // dropped, and not fired.
 func TestActivationHealthReportsABrokenDeclaration(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	env.saveWorkflow(t, "triage", declaringWorkflowYAML)
 	got := env.create(t, env.activation("nightly", nil))
@@ -256,6 +268,8 @@ nodes:
 // An activation's kind is its identity: it cannot become another kind, nor
 // an ad hoc trigger, by update.
 func TestUpdateActivationKeepsItsDeclaration(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	env.saveWorkflow(t, "triage", declaringWorkflowYAML)
 	got := env.create(t, env.activation("nightly", nil))

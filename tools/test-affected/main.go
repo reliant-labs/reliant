@@ -102,7 +102,7 @@ func main() {
 		os.Exit(1)
 	}
 	if cmd == "run" {
-		r := &runner{root: mustAbs(*root), out: os.Stdout, errOut: os.Stderr, dry: *dry, goP: *gotestP, dbURL: os.Getenv("DATABASE_URL"),
+		r := &runner{root: mustAbs(*root), out: os.Stdout, errOut: os.Stderr, dry: *dry, goP: *gotestP,
 			slot: strings.Fields(os.Getenv("TEST_AFFECTED_SLOT"))}
 		os.Exit(r.run(ctx, pl, enabled))
 	}
@@ -411,9 +411,6 @@ func printTable(w io.Writer, pl *Plan, enabled map[lane]bool) error {
 			}
 		}
 	}
-	if len(pl.Go.DBOnly) > 0 && enabled[laneGo] && !pl.Go.Full {
-		p.f("\nDB-only (selected by a migration; need DATABASE_URL): %s\n", strings.Join(pl.Go.DBOnly, " "))
-	}
 	return p.err
 }
 
@@ -425,7 +422,6 @@ type runner struct {
 	errOut io.Writer
 	dry    bool
 	goP    int
-	dbURL  string
 	// slot prefixes a FULL lane's command (Taskfile.yml passes
 	// TEST_AFFECTED_SLOT='forge slot run --class heavy --'): a whole-module
 	// run is as heavy as any gate check, and outside a host slot it only steals
@@ -471,7 +467,9 @@ func (r *runner) steps(pl *Plan, enabled map[lane]bool) []step {
 }
 
 func (r *runner) goSteps(pl *Plan) []step {
-	base := []string{"go", "test", "-buildvcs=false", "-short", "-timeout", "60s"}
+	// -timeout is per package binary and matches task test:short's (5m): the
+	// DB-backed packages run under -short too (sized in Taskfile.yml).
+	base := []string{"go", "test", "-buildvcs=false", "-short", "-timeout", "5m"}
 	if r.goP > 0 {
 		base = append(base, "-p", fmt.Sprint(r.goP))
 	}
@@ -481,27 +479,7 @@ func (r *runner) goSteps(pl *Plan) []step {
 	case len(pl.Go.Packages) == 0:
 		return nil
 	}
-	dbOnly := setOf(pl.Go.DBOnly)
-	var plain, dbPkgs []string
-	for _, p := range pl.Go.Packages {
-		if dbOnly[p] {
-			dbPkgs = append(dbPkgs, p)
-		} else {
-			plain = append(plain, p)
-		}
-	}
-	var out []step
-	if len(plain) > 0 {
-		out = append(out, step{name: "go", dir: r.root, argv: append(append([]string{}, base...), plain...)})
-	}
-	if len(dbPkgs) > 0 && r.dbURL != "" {
-		out = append(out, step{
-			name: "go (DB-backed, a migration changed)", dir: r.root,
-			env:  []string{"REQUIRE_TEST_DB=1"},
-			argv: append(append([]string{}, base...), dbPkgs...),
-		})
-	}
-	return out
+	return []step{{name: "go", dir: r.root, argv: append(append([]string{}, base...), pl.Go.Packages...)}}
 }
 
 func (r *runner) webSteps(pl *Plan) []step {
@@ -515,19 +493,10 @@ func (r *runner) webSteps(pl *Plan) []step {
 	return []step{{name: "web", dir: web, argv: append([]string{"npx", "vitest", "run"}, pl.Web.Tests...)}}
 }
 
-func setOf(l []string) map[string]bool {
-	out := map[string]bool{}
-	for _, s := range l {
-		out[s] = true
-	}
-	return out
-}
-
 func (r *runner) run(ctx context.Context, pl *Plan, enabled map[lane]bool) int {
 	steps := r.steps(pl, enabled)
 	if len(steps) == 0 {
 		fmt.Fprintln(r.out, "\ntest-affected: nothing to run.")
-		r.noteSkippedDB(pl)
 		return 0
 	}
 	fmt.Fprintln(r.out)
@@ -550,18 +519,10 @@ func (r *runner) run(ctx context.Context, pl *Plan, enabled map[lane]bool) int {
 		}
 		fmt.Fprintf(r.out, "<== %s: %s (%s)\n", s.name, status, time.Since(start).Round(time.Second))
 	}
-	r.noteSkippedDB(pl)
 	if failed > 0 {
 		return 1
 	}
 	return 0
-}
-
-func (r *runner) noteSkippedDB(pl *Plan) {
-	if len(pl.Go.DBOnly) > 0 && r.dbURL == "" && !pl.Go.Full {
-		fmt.Fprintf(r.out, "note: a migration changed and %d package(s) have DB-backed tests it reaches; set DATABASE_URL to a database of your own to run them: %s\n",
-			len(pl.Go.DBOnly), strings.Join(pl.Go.DBOnly, " "))
-	}
 }
 
 func summarize(argv []string) string {

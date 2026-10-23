@@ -91,6 +91,8 @@ func callLLMWithRetries(ctx workflow.Context, input ActivityInput) (*reliantv1.C
 // which invalidates the provider's prompt cache exactly when the turn is
 // already being re-paid.
 func TestCallLLM_RetryAfterDroppedConnection_SendsIdenticalPrompts(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 

@@ -85,6 +85,8 @@ func (r *reapingRepo) reapedIn(chatID string) []db.ReapedThread {
 // then executed behind a thread reading completed — the state ReviveThread
 // exists to prevent — while the reap paged as a missed cascade.
 func TestWorkflowStatus_StartedNeverExposesARevivedThreadUnderATerminalWorkflow(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 
@@ -133,6 +135,8 @@ func TestWorkflowStatus_StartedNeverExposesARevivedThreadUnderATerminalWorkflow(
 // terminal workflow over running threads and reaped them as a missed cascade
 // — an ERROR that paged for a run whose cascade was one statement away.
 func TestWorkflowStatus_TerminalArmsCascadeInTheStatusCommit(t *testing.T) {
+	t.Parallel()
+
 	for _, tc := range []struct {
 		status     string
 		wantThread db.ThreadStatus

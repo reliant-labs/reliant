@@ -78,6 +78,8 @@ func buildPlainCallLLMInput(chatID string) ActivityInput {
 // swallowed that refusal, the loop exited, and the workflow reported
 // "Completed successfully" — with nothing on screen either way.
 func TestCallLLM_RefusalWithNoContent_ReportsAnError(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 

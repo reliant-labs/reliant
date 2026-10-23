@@ -12,6 +12,8 @@ import (
 // mint the assistant message id before streaming and must persist under it.
 
 func TestSaveMessageToThreadWithID(t *testing.T) {
+	t.Parallel()
+
 	repo, _, cleanup := setupTestRepo(t)
 	defer cleanup()
 	ctx := context.Background()

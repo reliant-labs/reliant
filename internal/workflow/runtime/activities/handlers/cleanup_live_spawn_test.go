@@ -81,6 +81,8 @@ func seedSpawnToolCall(
 // fabricated failure, one genuine success — and the tool-pairing validator had
 // to repair the history in memory on every load afterwards.
 func TestCleanup_DoesNotRepairRunningSpawn(t *testing.T) {
+	t.Parallel()
+
 	repo := setupTestRepo(t)
 	ctx := context.Background()
 	chatID, cwID := createTestChatWithContextWindow(t, repo)
@@ -104,6 +106,8 @@ func TestCleanup_DoesNotRepairRunningSpawn(t *testing.T) {
 // broken conversation for another: an unanswered tool_use deadlocks the
 // provider.
 func TestCleanup_RepairsSpawnWhoseChildWorkflowEnded(t *testing.T) {
+	t.Parallel()
+
 	repo := setupTestRepo(t)
 	ctx := context.Background()
 	chatID, cwID := createTestChatWithContextWindow(t, repo)
@@ -127,6 +131,8 @@ func TestCleanup_RepairsSpawnWhoseChildWorkflowEnded(t *testing.T) {
 // live. Treating PAUSED as terminal would fabricate failures for every tool
 // call in a paused chat.
 func TestCleanup_DoesNotRepairPausedSpawn(t *testing.T) {
+	t.Parallel()
+
 	repo := setupTestRepo(t)
 	ctx := context.Background()
 	chatID, cwID := createTestChatWithContextWindow(t, repo)
@@ -146,6 +152,8 @@ func TestCleanup_DoesNotRepairPausedSpawn(t *testing.T) {
 // A call whose durable row records a terminal status but which never produced a
 // result block is an orphan — the outcome is known to be over.
 func TestCleanup_RepairsTerminalCallWithNoResult(t *testing.T) {
+	t.Parallel()
+
 	repo := setupTestRepo(t)
 	ctx := context.Background()
 	chatID, cwID := createTestChatWithContextWindow(t, repo)
@@ -166,6 +174,8 @@ func TestCleanup_RepairsTerminalCallWithNoResult(t *testing.T) {
 // window is much smaller for an in-process tool, but "no result yet" means the
 // same thing whatever the tool is, and a crash mid-bash produces exactly this.
 func TestCleanup_DoesNotRepairExecutingRegularTool(t *testing.T) {
+	t.Parallel()
+
 	repo := setupTestRepo(t)
 	ctx := context.Background()
 	chatID, cwID := createTestChatWithContextWindow(t, repo)
@@ -203,6 +213,8 @@ func TestCleanup_DoesNotRepairExecutingRegularTool(t *testing.T) {
 // claims it is running, so the missing result is the only evidence there is.
 // This is the pre-tool_calls-table history, and it must still be repairable.
 func TestCleanup_RepairsCallWithNoDurableRow(t *testing.T) {
+	t.Parallel()
+
 	repo := setupTestRepo(t)
 	ctx := context.Background()
 	chatID, cwID := createTestChatWithContextWindow(t, repo)

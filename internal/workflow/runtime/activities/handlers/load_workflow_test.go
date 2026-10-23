@@ -15,6 +15,8 @@ import (
 
 // TestLoadBuiltinWorkflow tests that builtin:// prefix loads from embedded FS
 func TestLoadBuiltinWorkflow(t *testing.T) {
+	t.Parallel()
+
 	t.Run("loads builtin agent workflow", func(t *testing.T) {
 		wf, err := loadBuiltinWorkflow("agent")
 		require.NoError(t, err)
@@ -30,6 +32,8 @@ func TestLoadBuiltinWorkflow(t *testing.T) {
 
 // TestLoadBuiltinWorkflowWithRaw tests raw YAML is returned alongside parsed workflow
 func TestLoadBuiltinWorkflowWithRaw(t *testing.T) {
+	t.Parallel()
+
 	t.Run("returns raw YAML and parsed workflow", func(t *testing.T) {
 		yamlData, templated, err := loadBuiltinWorkflowWithRaw("agent")
 		require.NoError(t, err)
@@ -46,6 +50,8 @@ func TestLoadBuiltinWorkflowWithRaw(t *testing.T) {
 }
 
 func TestLoadWorkflowActivity_LoadsProjectWorkflowFromStoredConfig(t *testing.T) {
+	t.Parallel()
+
 	repo := db.NewTestRepo(t)
 	defer repo.Close()
 
@@ -114,6 +120,8 @@ nodes:
 }
 
 func TestLoadWorkflowActivity_LoadsProjectWorkflowByName(t *testing.T) {
+	t.Parallel()
+
 	repo := db.NewTestRepo(t)
 	defer repo.Close()
 

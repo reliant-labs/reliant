@@ -11,6 +11,8 @@ import (
 )
 
 func TestCallLLMMessageInput(t *testing.T) {
+	t.Parallel()
+
 	t.Run("supports tool_calls for assistant messages", func(t *testing.T) {
 		// This tests that CallLLMMessageInput can represent an assistant message with tool calls
 		msg := &reliantv1.CallLLMMessageInput{
@@ -66,6 +68,8 @@ func TestCallLLMMessageInput(t *testing.T) {
 }
 
 func TestBuildInjectedMessages(t *testing.T) {
+	t.Parallel()
+
 	t.Run("builds message with text content", func(t *testing.T) {
 		input := &reliantv1.CallLLMMessageInput{
 			Role:    "user",

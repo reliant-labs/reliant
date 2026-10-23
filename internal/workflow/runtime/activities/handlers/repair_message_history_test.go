@@ -21,6 +21,8 @@ import (
 // =============================================================================
 
 func TestRepairMessageHistory_PreservesLastUserMessage(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name             string
 		messages         []message.Message
@@ -176,6 +178,8 @@ func TestRepairMessageHistory_PreservesLastUserMessage(t *testing.T) {
 // The repair function must insert a synthetic tool result BETWEEN the assistant
 // and user messages, NOT after the user message.
 func TestRepairMessageHistory_OrphanedToolCallBeforeUserMessage(t *testing.T) {
+	t.Parallel()
+
 	msgs := []message.Message{
 		{ID: "1", Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: "do something"}}},
 		{ID: "2", Role: message.Assistant, Parts: []message.ContentPart{
@@ -216,6 +220,8 @@ func TestRepairMessageHistory_OrphanedToolCallBeforeUserMessage(t *testing.T) {
 // TestRepairMessageHistory_DoesNotDropUserMessages verifies that the repair
 // function never drops user messages, even in complex repair scenarios.
 func TestRepairMessageHistory_DoesNotDropUserMessages(t *testing.T) {
+	t.Parallel()
+
 	msgs := []message.Message{
 		{ID: "u1", Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: "first"}}},
 		{ID: "a1", Role: message.Assistant, Parts: []message.ContentPart{
@@ -254,6 +260,8 @@ func TestRepairMessageHistory_DoesNotDropUserMessages(t *testing.T) {
 // that orphaned tool results (whose assistant message was lost) are dropped,
 // but this doesn't affect user messages.
 func TestRepairMessageHistory_OrphanedToolResultsDroppedButUserPreserved(t *testing.T) {
+	t.Parallel()
+
 	msgs := []message.Message{
 		// Orphaned tool result - no assistant message with matching tool call
 		{ID: "t1", Role: message.Tool, Parts: []message.ContentPart{
@@ -284,6 +292,8 @@ func TestRepairMessageHistory_OrphanedToolResultsDroppedButUserPreserved(t *test
 // the tool result is missing (maybe workflow was interrupted), and the user
 // sends a new message. After repair, the conversation must still end with user.
 func TestRepairMessageHistory_ToolCallThenImmediateUserWithoutResult(t *testing.T) {
+	t.Parallel()
+
 	// This is the exact scenario from the bug report
 	msgs := []message.Message{
 		{ID: "u1", Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: "help me"}}},

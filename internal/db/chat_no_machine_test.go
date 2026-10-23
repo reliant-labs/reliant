@@ -15,6 +15,8 @@ import (
 // pin left no_machine true, so a chat the user had connected kept running with
 // no machine and was refused every tool the machine could have run.
 func TestUpdateChatActiveDaemon_PinningEndsNoMachineAndClearingNeverRestoresIt(t *testing.T) {
+	t.Parallel()
+
 	repo, raw, cleanup := SetupTestDBWithRawDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -41,6 +43,8 @@ func TestUpdateChatActiveDaemon_PinningEndsNoMachineAndClearingNeverRestoresIt(t
 // Clearing the daemon of a chat that never had one leaves it as it was: the
 // query only ever turns no_machine off.
 func TestUpdateChatActiveDaemon_ClearingLeavesNoMachineAlone(t *testing.T) {
+	t.Parallel()
+
 	repo, raw, cleanup := SetupTestDBWithRawDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -58,6 +62,8 @@ func TestUpdateChatActiveDaemon_ClearingLeavesNoMachineAlone(t *testing.T) {
 // A chat with no machine that pins a daemon is a contradiction the schema
 // refuses, whatever path writes it.
 func TestChats_NoMachineWithAnActiveDaemonIsRefused(t *testing.T) {
+	t.Parallel()
+
 	repo, raw, cleanup := SetupTestDBWithRawDB(t)
 	defer cleanup()
 	ctx := context.Background()

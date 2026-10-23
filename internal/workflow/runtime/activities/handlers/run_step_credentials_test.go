@@ -30,6 +30,8 @@ func shellInputOf(t *testing.T, r *toolexec.ToolRequest) map[string]any {
 
 // A run node's credentials reach the shell tool the daemon executes.
 func TestRemoteRunExecutor_CarriesCredentials(t *testing.T) {
+	t.Parallel()
+
 	for _, tc := range []struct {
 		credentials string
 		wantKey     bool
@@ -50,6 +52,8 @@ func TestRemoteRunExecutor_CarriesCredentials(t *testing.T) {
 }
 
 func TestRunStep_UnknownCredentialsFailsTheStepWithoutRunningTheCommand(t *testing.T) {
+	t.Parallel()
+
 	repo := setupTestRepo(t)
 	chatID := createTestChat(t, repo)
 	mock := &mockRunExecutor{responses: []mockRunResponse{{exitCode: 0}}}

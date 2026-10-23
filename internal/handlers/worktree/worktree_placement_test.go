@@ -201,6 +201,8 @@ func assertPlacedOn(t *testing.T, router *placementRouter, wt *db.Worktree, daem
 // fix it landed on the default machine, and the branch chat's tools followed it
 // there.
 func TestCreateWorktree_PlacesOnChatMachine(t *testing.T) {
+	t.Parallel()
+
 	f := newPlacementFixture(t)
 	chatID := f.chat(t, f.userID, "daemon-b", "")
 
@@ -214,6 +216,8 @@ func TestCreateWorktree_PlacesOnChatMachine(t *testing.T) {
 // runs in an owned worktree: its tools route to that worktree's machine, so a
 // workspace created from it belongs there too.
 func TestCreateWorktree_PlacesOnChatWorktreeOwner(t *testing.T) {
+	t.Parallel()
+
 	f := newPlacementFixture(t)
 	owned := f.worktree(t, "daemon-b")
 	chatID := f.chat(t, f.userID, "", owned.ID)
@@ -228,6 +232,8 @@ func TestCreateWorktree_PlacesOnChatWorktreeOwner(t *testing.T) {
 // FROM another workspace with no chat named: its files are copied from the
 // source, which exists only on the source's machine.
 func TestCreateWorktree_PlacesOnSourceWorktreeOwner(t *testing.T) {
+	t.Parallel()
+
 	f := newPlacementFixture(t)
 	source := f.worktree(t, "daemon-b")
 
@@ -246,6 +252,8 @@ func TestCreateWorktree_PlacesOnSourceWorktreeOwner(t *testing.T) {
 // chat and no source workspace there is nothing to follow, so the user's
 // default machine is used, as before.
 func TestCreateWorktree_NoChatContextUsesDefaultMachine(t *testing.T) {
+	t.Parallel()
+
 	f := newPlacementFixture(t)
 
 	wt, err := f.createWorktree(t, &reliantv1.CreateWorktreeRequest{})
@@ -258,6 +266,8 @@ func TestCreateWorktree_NoChatContextUsesDefaultMachine(t *testing.T) {
 // machine a checkout lands on, so it must not accept a chat the caller does not
 // own.
 func TestCreateWorktree_RejectsAnotherUsersChat(t *testing.T) {
+	t.Parallel()
+
 	f := newPlacementFixture(t)
 	foreignChatID := f.chat(t, uuid.NewString(), "daemon-b", "")
 
@@ -270,6 +280,8 @@ func TestCreateWorktree_RejectsAnotherUsersChat(t *testing.T) {
 // TestImportWorktree_PlacesOnChatMachine: an import names a directory on a
 // machine; with a chat named, that is the chat's machine.
 func TestImportWorktree_PlacesOnChatMachine(t *testing.T) {
+	t.Parallel()
+
 	f := newPlacementFixture(t)
 	chatID := f.chat(t, f.userID, "daemon-b", "")
 	path := filepath.Join(t.TempDir(), "hand-made")
@@ -296,6 +308,8 @@ func TestImportWorktree_PlacesOnChatMachine(t *testing.T) {
 // placing it correctly only moves the failure from the chat's tools to the
 // workspace panel ("worktree directory does not exist" on the default).
 func TestWorktreeGitOps_RouteToOwningDaemon(t *testing.T) {
+	t.Parallel()
+
 	f := newPlacementFixture(t)
 	owned := f.worktree(t, "daemon-b")
 
@@ -312,6 +326,8 @@ func TestWorktreeGitOps_RouteToOwningDaemon(t *testing.T) {
 // from before ownership was recorded) name no machine and keep default
 // resolution.
 func TestWorktreeGitOps_UnownedWorktreeUsesDefault(t *testing.T) {
+	t.Parallel()
+
 	f := newPlacementFixture(t)
 	unowned := f.worktree(t, "")
 

@@ -24,6 +24,8 @@ import (
 // fixture would not catch the sqlc IN-clause defect (matches only the first
 // id), so this fixture has several messages.
 func TestListMessages_BatchedContentBlocks_MatchesPerMessageAssembly(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 

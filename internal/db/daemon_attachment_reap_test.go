@@ -19,6 +19,8 @@ import (
 // earlier) alongside one live daemon — and those two orphans had pinned
 // /flow-health at 503 for the entire environment ever since.
 func TestDeleteStaleDaemonAttachments(t *testing.T) {
+	t.Parallel()
+
 	repo, rawDB, cleanup := SetupTestDBWithRawDB(t)
 	defer cleanup()
 	ctx := context.Background()

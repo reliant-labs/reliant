@@ -42,6 +42,8 @@ func newValidationChat(t *testing.T) (*IdempotencyTestHelper, string) {
 }
 
 func TestExecuteToolsActivity_CapabilityEnforcement(t *testing.T) {
+	t.Parallel()
+
 	// A tool outside the preloaded bundle that load_tool granted on an earlier
 	// turn is OFFERED on this one, so it runs. This is the case the old
 	// declared-set check got wrong — it refused generate_image after
@@ -164,6 +166,8 @@ func TestExecuteToolsActivity_CapabilityEnforcement(t *testing.T) {
 // A refusal is recorded FAILED with its reason, like every other refusal, so a
 // reload shows a refused call rather than one stuck "executing".
 func TestExecuteTools_RefusesToolNotOfferedThisTurn(t *testing.T) {
+	t.Parallel()
+
 	h, chatID := newValidationChat(t)
 	mockExecutor := newMockToolExecutor()
 	activity := NewExecuteToolsActivity(h.Repo(), mockExecutor)
@@ -198,6 +202,8 @@ func TestExecuteTools_RefusesToolNotOfferedThisTurn(t *testing.T) {
 // A spawn reaches the activity only when the workflow declined to dispatch it
 // (runtime.withCapabilitiesApplied). It is never executed here.
 func TestExecuteToolsActivity_SpawnRoutedHereIsRefused(t *testing.T) {
+	t.Parallel()
+
 	spawnCaps := (&tools.Capabilities{
 		Offered:      []string{tools.ToolSpawn},
 		Permission:   tools.PermissionMutating,

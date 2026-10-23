@@ -26,6 +26,8 @@ import (
 // on, a short user turn at the end. Only trimLargeToolResults can reclaim that,
 // and only if it still sees ToolResult parts.
 func TestPrepareHistoryForLLM_TrimsToolResultsOnToolLessRequest(t *testing.T) {
+	t.Parallel()
+
 	// A single tool result far larger than any plausible context window.
 	hugeResult := strings.Repeat("x", 4_000_000) // ~1M tokens at 4 chars/token
 

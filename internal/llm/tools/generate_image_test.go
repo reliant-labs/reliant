@@ -121,10 +121,6 @@ func (d *recordingDaemon) WriteBinaryFile(ctx context.Context, path string, cont
 // their roles so a method none of these tests should reach (GetChat) need not
 // be spelled out; calling it is a bug and panics loudly rather than passing
 // silently.
-//
-// A fake rather than the package's Postgres harness because that harness
-// t.Skip()s when DATABASE_URL is unset, which would make every assertion below
-// vanish on a machine with no database instead of failing.
 type fakeAttachmentRepo struct {
 	generateVideoStore
 	stored map[string]*db.Attachment

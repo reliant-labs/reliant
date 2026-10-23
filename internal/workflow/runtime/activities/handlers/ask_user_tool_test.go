@@ -11,6 +11,8 @@ import (
 )
 
 func TestAskUserTool_Name(t *testing.T) {
+	t.Parallel()
+
 	factory := &tools.ToolsFactory{}
 	tool := factory.AskUser()
 
@@ -19,6 +21,8 @@ func TestAskUserTool_Name(t *testing.T) {
 }
 
 func TestAskUserTool_HasDescription(t *testing.T) {
+	t.Parallel()
+
 	factory := &tools.ToolsFactory{}
 	tool := factory.AskUser()
 
@@ -27,6 +31,8 @@ func TestAskUserTool_HasDescription(t *testing.T) {
 }
 
 func TestAskUserTool_SchemaProperties(t *testing.T) {
+	t.Parallel()
+
 	factory := &tools.ToolsFactory{}
 	tool := factory.AskUser()
 

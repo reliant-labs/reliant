@@ -20,6 +20,8 @@ import (
 // one from the other, so a list that exposed only the thread id left it
 // guessing.
 func TestListSpawnChildren_CarriesWorkflowIDDistinctFromThreadForResumedSpawn(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()

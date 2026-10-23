@@ -63,6 +63,8 @@ func (f *spawnWorktreeFixture) spawn(t *testing.T, worktree, threadID string) Cr
 }
 
 func TestSpawnWorktree_BindsThreadByNameAndByID(t *testing.T) {
+	t.Parallel()
+
 	f := newSpawnWorktreeFixture(t)
 	wtID := f.worktree(t, "feature-x", "daemon-b")
 
@@ -77,6 +79,8 @@ func TestSpawnWorktree_BindsThreadByNameAndByID(t *testing.T) {
 }
 
 func TestSpawnWorktree_OmittedLeavesThreadUnbound(t *testing.T) {
+	t.Parallel()
+
 	f := newSpawnWorktreeFixture(t)
 	f.worktree(t, "feature-x", "daemon-b")
 	out := f.spawn(t, "", "")
@@ -87,6 +91,8 @@ func TestSpawnWorktree_OmittedLeavesThreadUnbound(t *testing.T) {
 }
 
 func TestSpawnWorktree_Refusals(t *testing.T) {
+	t.Parallel()
+
 	f := newSpawnWorktreeFixture(t)
 	ctx := context.Background()
 	f.worktree(t, "good", "daemon-b")
@@ -131,6 +137,8 @@ func TestSpawnWorktree_Refusals(t *testing.T) {
 }
 
 func TestSpawnWorktree_ResumeMustMatchBinding(t *testing.T) {
+	t.Parallel()
+
 	f := newSpawnWorktreeFixture(t)
 	f.worktree(t, "a", "daemon-b")
 	f.worktree(t, "b", "daemon-b")
@@ -165,6 +173,8 @@ func mustWorktree(t *testing.T, f *spawnWorktreeFixture, id string) *core.Worktr
 }
 
 func TestEffectiveWorktreeID_ThreadBeatsChat(t *testing.T) {
+	t.Parallel()
+
 	f := newSpawnWorktreeFixture(t)
 	ctx := context.Background()
 	chatWT := f.worktree(t, "chat-wt", "daemon-a")
@@ -195,6 +205,8 @@ func TestEffectiveWorktreeID_ThreadBeatsChat(t *testing.T) {
 }
 
 func TestLoadWorktreeInfo_ThreadBoundRoutesToWorktreeOwner(t *testing.T) {
+	t.Parallel()
+
 	f := newSpawnWorktreeFixture(t)
 	ctx := context.Background()
 	wtID := f.worktree(t, "feature-x", "daemon-b")
@@ -241,6 +253,8 @@ func (c *capturingExecutor) ExecuteTool(ctx context.Context, req *toolexec.ToolR
 // and the parent may carry an explicit daemon selector. A child spawned with a
 // worktree must still run in THAT checkout on THAT owner.
 func TestSpawnWorktree_ChildToolsRunInWorktreeDespiteInheritedOverrides(t *testing.T) {
+	t.Parallel()
+
 	f := newSpawnWorktreeFixture(t)
 	wtID := f.worktree(t, "feature-x", "daemon-b")
 	spawned := f.spawn(t, "feature-x", "")
@@ -282,6 +296,8 @@ func TestSpawnWorktree_ChildToolsRunInWorktreeDespiteInheritedOverrides(t *testi
 // back so the spawn can make it the child's working directory; a resumed
 // thread that was bound reports it too, and an unbound one reports none.
 func TestSpawnWorktree_ActivityReturnsWorktreePath(t *testing.T) {
+	t.Parallel()
+
 	f := newSpawnWorktreeFixture(t)
 	wtID := f.worktree(t, "feature-x", "daemon-b")
 	wt := mustWorktree(t, f, wtID)
@@ -294,6 +310,8 @@ func TestSpawnWorktree_ActivityReturnsWorktreePath(t *testing.T) {
 }
 
 func TestThreadBoundExplicit(t *testing.T) {
+	t.Parallel()
+
 	sel := &types.DaemonSelector{ID: "x"}
 	assert.Nil(t, threadBoundExplicit(true, "owner", sel), "system-prompt/MCP routing follows the thread's worktree owner")
 	assert.Equal(t, sel, threadBoundExplicit(false, "owner", sel))
@@ -303,6 +321,8 @@ func TestThreadBoundExplicit(t *testing.T) {
 // The prompt's "Your working directory" line takes the worktree path
 // streamLLMResponse resolves for the thread, never the inherited project path.
 func TestSystemPromptWorkingDirectory_IsTheThreadWorktree(t *testing.T) {
+	t.Parallel()
+
 	activity := &CallLLMActivity{}
 	prompts := activity.getSystemPrompts(nil, "/main/checkout", "/wt/feature-x", nil, nil, nil, true)
 	joined := strings.Join(prompts, "\n")
@@ -313,6 +333,8 @@ func TestSystemPromptWorkingDirectory_IsTheThreadWorktree(t *testing.T) {
 // The "create a worktree with the worktree tool" line is emitted only when the
 // step can reach that tool, so it never points at a tool load_tool refuses.
 func TestSystemPrompt_WorktreeLineFollowsReachability(t *testing.T) {
+	t.Parallel()
+
 	activity := &CallLLMActivity{}
 	const line = "create a worktree with the worktree tool"
 	// The line steers; it does not forbid, and the user's own memory wins.
@@ -330,6 +352,8 @@ func TestSystemPrompt_WorktreeLineFollowsReachability(t *testing.T) {
 // A spawn by that name binds the live row, and with only archived rows left
 // it is refused as archived.
 func TestSpawnWorktree_ResolvesTheLiveRowOfAReusedName(t *testing.T) {
+	t.Parallel()
+
 	f := newSpawnWorktreeFixture(t)
 	ctx := context.Background()
 
@@ -356,6 +380,8 @@ func TestSpawnWorktree_ResolvesTheLiveRowOfAReusedName(t *testing.T) {
 // main checkout (it would write to the wrong branch); the sub-agent is told
 // its workspace is gone instead.
 func TestEnsureBatchWorkspace_ThreadBoundWorktree(t *testing.T) {
+	t.Parallel()
+
 	f := newSpawnWorktreeFixture(t)
 	ctx := context.Background()
 	wtID := f.worktree(t, "feature-x", "daemon-b")
