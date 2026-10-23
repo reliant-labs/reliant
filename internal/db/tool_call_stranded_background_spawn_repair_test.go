@@ -47,6 +47,8 @@ func seedBackgroundSpawnToolCall(
 // landing must be found -- and only that case, not a live or already-
 // reported one.
 func TestListStrandedBackgroundSpawnToolCalls_FindsUnreportedTerminalChild(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -80,6 +82,8 @@ func TestListStrandedBackgroundSpawnToolCalls_FindsUnreportedTerminalChild(t *te
 // fabricating a completion for a live spawn writes a lie into the parent's
 // mailbox that no later pass can distinguish from a real one.
 func TestListStrandedBackgroundSpawnToolCalls_FailClosed(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -149,6 +153,8 @@ func TestListStrandedBackgroundSpawnToolCalls_FailClosed(t *testing.T) {
 // call reporting inserted=false rather than erroring -- the everyday
 // "someone already reported this" outcome under concurrency, not a failure.
 func TestEnqueueAgentMessageIfAbsent_IdempotentUnderUniqueConstraint(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()

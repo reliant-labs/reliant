@@ -15,6 +15,8 @@ import (
 // by the call's thread and confined to the chat; a result rewritten without a
 // grant (an error replacing it) no longer grants anything.
 func TestListToolGrants(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()

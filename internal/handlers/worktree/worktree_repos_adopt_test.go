@@ -58,6 +58,8 @@ func newAdoptTestProject(t *testing.T, repo *db.Repo) *db.Project {
 // exists on disk (e.g. manual `git init` in the workspace terminal) but has no
 // registry row is adopted at the gate instead of failing the precondition.
 func TestListProjectReposAdoptsUnregisteredRepos(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -91,6 +93,8 @@ func TestListProjectReposAdoptsUnregisteredRepos(t *testing.T) {
 // TestListProjectReposStillFailsWhenNothingOnDisk pins that the precondition
 // error survives when the daemon confirms there is genuinely no repo.
 func TestListProjectReposStillFailsWhenNothingOnDisk(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()

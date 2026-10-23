@@ -130,6 +130,8 @@ func requestToolNames(req []tools.Tool) []string {
 // daemon cannot list its MCP servers must carry the tools array of the turn
 // before it, byte for byte; only a successful listing may change it.
 func TestCallLLM_ToolsArrayIsStableAcrossAnUnreachableDaemon(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 

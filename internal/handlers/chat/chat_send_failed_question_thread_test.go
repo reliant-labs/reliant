@@ -63,6 +63,8 @@ func setupFailedRunWithQuestion(t *testing.T, threadOf func(fx absorbFixture) st
 }
 
 func TestSendMessage_FailedRunAnswersTheTargetThreadsQuestion(t *testing.T) {
+	t.Parallel()
+
 	repo, ctx, fx, service, pause, questionID := setupFailedRunWithQuestion(t, func(fx absorbFixture) string { return fx.rootThreadID })
 
 	_, err := service.SendMessage(ctx, sendMessageRequest(t, fx.chatID, "go with the minimal one"))
@@ -76,6 +78,8 @@ func TestSendMessage_FailedRunAnswersTheTargetThreadsQuestion(t *testing.T) {
 }
 
 func TestSendMessage_FailedRunLeavesAnotherThreadsQuestionToItsThread(t *testing.T) {
+	t.Parallel()
+
 	repo, ctx, fx, service, pause, questionID := setupFailedRunWithQuestion(t, func(absorbFixture) string { return "spawn-thread-" + uuid.NewString() })
 
 	_, err := service.SendMessage(ctx, sendMessageRequest(t, fx.chatID, "carry on"))

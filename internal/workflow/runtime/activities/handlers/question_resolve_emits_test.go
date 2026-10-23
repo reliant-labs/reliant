@@ -25,6 +25,8 @@ import (
 //
 // The resolve must announce itself.
 func TestQuestionResolveActivity_EmitsResolvedUpdate(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 
@@ -93,6 +95,8 @@ func TestQuestionResolveActivity_EmitsResolvedUpdate(t *testing.T) {
 // answer reached the row first, that answer is kept and handed back, not
 // overwritten with an empty resolution.
 func TestQuestionResolveActivity_KeepsAnAnswerThatGotThereFirst(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 

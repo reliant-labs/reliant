@@ -42,6 +42,8 @@ func messageIDAtOrdinal(t *testing.T, ctx context.Context, repo *Repo, cwID stri
 
 // TestGetThreadTokenCount_EmptyThread tests that an empty thread returns 0 tokens.
 func TestGetThreadTokenCount_EmptyThread(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
@@ -86,6 +88,8 @@ func TestGetThreadTokenCount_EmptyThread(t *testing.T) {
 
 // TestGetThreadTokenCount_SingleMessage tests token count from a single message.
 func TestGetThreadTokenCount_SingleMessage(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
@@ -147,6 +151,8 @@ func TestGetThreadTokenCount_SingleMessage(t *testing.T) {
 // TestGetThreadTokenCount_MultipleMessages tests that we get tokens from the latest message.
 // Token counts are cumulative (each LLM response reports total context it saw).
 func TestGetThreadTokenCount_MultipleMessages(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
@@ -252,6 +258,8 @@ func TestGetThreadTokenCount_MultipleMessages(t *testing.T) {
 
 // TestGetThreadTokenCount_MaxOrdinal tests that maxOrdinal parameter works correctly.
 func TestGetThreadTokenCount_MaxOrdinal(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
@@ -334,6 +342,8 @@ func TestGetThreadTokenCount_MaxOrdinal(t *testing.T) {
 
 // TestGetThreadTokenCount_ForkInheritance tests that forked threads inherit tokens from parent.
 func TestGetThreadTokenCount_ForkInheritance(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
@@ -417,6 +427,8 @@ func TestGetThreadTokenCount_ForkInheritance(t *testing.T) {
 
 // TestGetThreadTokenCount_ForkChainABC tests A→B→C fork chain inheritance.
 func TestGetThreadTokenCount_ForkChainABC(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
@@ -552,6 +564,8 @@ func TestGetThreadTokenCount_ForkChainABC(t *testing.T) {
 // TestGetThreadTokenCount_ForkAtUserMessage tests fork at user message (no token data).
 // Should find prior assistant message with tokens.
 func TestGetThreadTokenCount_ForkAtUserMessage(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
@@ -677,6 +691,8 @@ func TestGetThreadTokenCount_ForkAtUserMessage(t *testing.T) {
 
 // TestGetThreadTokenCount_SelfReferentialForkGuard tests that self-referential forks don't cause infinite loops.
 func TestGetThreadTokenCount_SelfReferentialForkGuard(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
@@ -746,6 +762,8 @@ func TestGetThreadTokenCount_SelfReferentialForkGuard(t *testing.T) {
 
 // TestGetThreadTokenCount_PostCompaction tests token counting after compaction.
 func TestGetThreadTokenCount_PostCompaction(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
@@ -837,6 +855,8 @@ func TestGetThreadTokenCount_PostCompaction(t *testing.T) {
 
 // TestGetThreadTokenCount_ForkFromPostCompactedParent tests forking from a parent that has compacted.
 func TestGetThreadTokenCount_ForkFromPostCompactedParent(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
@@ -952,6 +972,8 @@ func TestGetThreadTokenCount_ForkFromPostCompactedParent(t *testing.T) {
 
 // TestGetThreadTokenCount_CrossConversationFork tests token inheritance across different conversations.
 func TestGetThreadTokenCount_CrossConversationFork(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
@@ -1049,6 +1071,8 @@ func TestGetThreadTokenCount_CrossConversationFork(t *testing.T) {
 
 // TestGetThreadTokenCount_EmptyThreadID tests that empty thread ID returns error.
 func TestGetThreadTokenCount_EmptyThreadID(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
@@ -1060,6 +1084,8 @@ func TestGetThreadTokenCount_EmptyThreadID(t *testing.T) {
 
 // TestGetThreadTokenCount_NonExistentThread tests handling of non-existent thread.
 func TestGetThreadTokenCount_NonExistentThread(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
@@ -1072,6 +1098,8 @@ func TestGetThreadTokenCount_NonExistentThread(t *testing.T) {
 
 // TestGetThreadTokenCount_OnlyUserMessages tests thread with only user messages (no token data).
 func TestGetThreadTokenCount_OnlyUserMessages(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
@@ -1131,6 +1159,8 @@ func TestGetThreadTokenCount_OnlyUserMessages(t *testing.T) {
 
 // TestGetThreadTokenCount_ZeroTokenValues tests messages with explicit zero token values.
 func TestGetThreadTokenCount_ZeroTokenValues(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()

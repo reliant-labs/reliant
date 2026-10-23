@@ -12,6 +12,8 @@ import (
 )
 
 func TestFailStepActivity(t *testing.T) {
+	t.Parallel()
+
 	t.Run("always fails with provided error message", func(t *testing.T) {
 		activity := NewFailStepActivity()
 		ctx := context.Background()
@@ -78,6 +80,8 @@ func TestFailStepActivity(t *testing.T) {
 // under that node. Temporal decodes the input into FailStepInput before the
 // wrapper reads it, so a key the type has no field for never arrives.
 func TestFailStepInput_KeepsTheNodeLocation(t *testing.T) {
+	t.Parallel()
+
 	sent := map[string]interface{}{
 		"chat_id":        "chat-1",
 		"workflow_id":    "wf-1",

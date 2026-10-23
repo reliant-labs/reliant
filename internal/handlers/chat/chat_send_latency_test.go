@@ -37,6 +37,8 @@ func (c *slowQueryTemporalClient) QueryWorkflow(
 // so the send must not wait on it: the message is queued, the params signalled
 // and the thread woken regardless.
 func TestSendMessage_DoesNotWaitOnASlowParamsQuery(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -88,6 +90,8 @@ func TestSendMessage_DoesNotWaitOnASlowParamsQuery(t *testing.T) {
 // SendMessage p50 was 1.7s, StartChat 2.3s. A spy used to count that read;
 // now Repository simply does not declare it, so no send can make it.
 func TestSendMessage_DoesNotReadTheWholeProjectConfigRow(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		name     string
 		status   db.WorkflowStatus

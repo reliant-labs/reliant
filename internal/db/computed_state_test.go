@@ -11,6 +11,8 @@ import (
 )
 
 func TestComputeStreamingState_NoBlocks(t *testing.T) {
+	t.Parallel()
+
 	// Empty message - should be streaming (incomplete)
 	blocks := []MessageContentBlock{}
 
@@ -24,6 +26,8 @@ func TestComputeStreamingState_NoBlocks(t *testing.T) {
 }
 
 func TestComputeStreamingState_ValidTextBlock(t *testing.T) {
+	t.Parallel()
+
 	now := time.Now()
 	content := "Hello, world!"
 
@@ -50,6 +54,8 @@ func TestComputeStreamingState_ValidTextBlock(t *testing.T) {
 }
 
 func TestComputeStreamingState_EmptyTextBlock(t *testing.T) {
+	t.Parallel()
+
 	now := time.Now()
 	emptyContent := ""
 
@@ -73,6 +79,8 @@ func TestComputeStreamingState_EmptyTextBlock(t *testing.T) {
 }
 
 func TestComputeStreamingState_NilContentTextBlock(t *testing.T) {
+	t.Parallel()
+
 	now := time.Now()
 
 	blocks := []MessageContentBlock{
@@ -95,6 +103,8 @@ func TestComputeStreamingState_NilContentTextBlock(t *testing.T) {
 }
 
 func TestComputeStreamingState_ValidToolCallWithResult(t *testing.T) {
+	t.Parallel()
+
 	now := time.Now()
 	later := now.Add(1 * time.Second)
 
@@ -137,6 +147,8 @@ func TestComputeStreamingState_ValidToolCallWithResult(t *testing.T) {
 }
 
 func TestComputeStreamingState_OrphanedToolCall(t *testing.T) {
+	t.Parallel()
+
 	now := time.Now()
 
 	toolCallID := "call_abc123"
@@ -170,6 +182,8 @@ func TestComputeStreamingState_OrphanedToolCall(t *testing.T) {
 }
 
 func TestComputeStreamingState_MultipleToolCalls(t *testing.T) {
+	t.Parallel()
+
 	now := time.Now()
 
 	toolCallID1 := "call_abc123"
@@ -221,6 +235,8 @@ func TestComputeStreamingState_MultipleToolCalls(t *testing.T) {
 }
 
 func TestComputeStreamingState_MixedValidBlocks(t *testing.T) {
+	t.Parallel()
+
 	now := time.Now()
 
 	textContent := "Here is the file:"
@@ -278,6 +294,8 @@ func TestComputeStreamingState_MixedValidBlocks(t *testing.T) {
 }
 
 func TestComputeStreamingState_ToolCallMissingToolCallID(t *testing.T) {
+	t.Parallel()
+
 	now := time.Now()
 
 	toolName := "read_file"
@@ -305,6 +323,8 @@ func TestComputeStreamingState_ToolCallMissingToolCallID(t *testing.T) {
 }
 
 func TestComputeStreamingState_ToolResultMissingContent(t *testing.T) {
+	t.Parallel()
+
 	now := time.Now()
 
 	toolCallID := "call_abc123"
@@ -342,6 +362,8 @@ func TestComputeStreamingState_ToolResultMissingContent(t *testing.T) {
 }
 
 func TestComputeStreamingState_ProductionBrokenCase(t *testing.T) {
+	t.Parallel()
+
 	// This reproduces the exact broken state found in production:
 	// Chat 1102724f-fe26-4efa-a934-63cd25301760 had assistant messages with 0 content blocks
 
@@ -358,6 +380,8 @@ func TestComputeStreamingState_ProductionBrokenCase(t *testing.T) {
 }
 
 func TestComputeStreamingState_BranchedChatCase(t *testing.T) {
+	t.Parallel()
+
 	// This reproduces the branched chat issue:
 	// Chat 5483f9f0-6781-447c-b7f4-eb61f6d0b371 had orphaned tool calls after branching
 	// Note: Tool results are now stored in separate TOOL role messages,
@@ -395,6 +419,8 @@ func TestComputeStreamingState_BranchedChatCase(t *testing.T) {
 // ============================================================================
 
 func TestComputeStreamingState_LargeNumberOfBlocks(t *testing.T) {
+	t.Parallel()
+
 	// Test with 150 blocks to ensure performance and correctness at scale
 	now := time.Now()
 	blocks := make([]MessageContentBlock, 150)
@@ -423,6 +449,8 @@ func TestComputeStreamingState_LargeNumberOfBlocks(t *testing.T) {
 }
 
 func TestComputeStreamingState_BlocksWithSameTimestamps(t *testing.T) {
+	t.Parallel()
+
 	// All blocks created at the exact same time
 	now := time.Now()
 	content1 := "First"
@@ -459,6 +487,8 @@ func TestComputeStreamingState_BlocksWithSameTimestamps(t *testing.T) {
 }
 
 func TestComputeStreamingState_FutureTimestamps(t *testing.T) {
+	t.Parallel()
+
 	// Blocks with future timestamps (shouldn't happen but should be handled)
 	future := time.Now().Add(24 * time.Hour)
 	content := "Future content"
@@ -483,6 +513,8 @@ func TestComputeStreamingState_FutureTimestamps(t *testing.T) {
 }
 
 func TestComputeStreamingState_BlocksOutOfOrder(t *testing.T) {
+	t.Parallel()
+
 	// Blocks created in non-sequential order (position != chronological)
 	now := time.Now()
 	content1 := "First"
@@ -526,6 +558,8 @@ func TestComputeStreamingState_BlocksOutOfOrder(t *testing.T) {
 }
 
 func TestComputeStreamingState_MultipleToolCallsSameTool(t *testing.T) {
+	t.Parallel()
+
 	// Multiple calls to the same tool should work fine
 	now := time.Now()
 
@@ -586,6 +620,8 @@ func TestComputeStreamingState_MultipleToolCallsSameTool(t *testing.T) {
 }
 
 func TestComputeStreamingState_OrphanedToolResult(t *testing.T) {
+	t.Parallel()
+
 	// Tool result without matching tool_call (should not cause issues)
 	now := time.Now()
 
@@ -614,6 +650,8 @@ func TestComputeStreamingState_OrphanedToolResult(t *testing.T) {
 }
 
 func TestComputeStreamingState_MixedValidInvalid(t *testing.T) {
+	t.Parallel()
+
 	// Mix of valid and invalid blocks - one invalid makes whole message streaming
 	now := time.Now()
 
@@ -672,6 +710,8 @@ func TestComputeStreamingState_MixedValidInvalid(t *testing.T) {
 }
 
 func TestComputeStreamingState_EmptyToolCallID(t *testing.T) {
+	t.Parallel()
+
 	// Empty string tool_call_id (not nil, but empty) should be invalid
 	now := time.Now()
 
@@ -701,6 +741,8 @@ func TestComputeStreamingState_EmptyToolCallID(t *testing.T) {
 }
 
 func TestComputeStreamingState_EmptyToolResultID(t *testing.T) {
+	t.Parallel()
+
 	// Empty string tool_call_id for tool_result
 	now := time.Now()
 
@@ -728,6 +770,8 @@ func TestComputeStreamingState_EmptyToolResultID(t *testing.T) {
 }
 
 func TestComputeStreamingState_VeryLongContent(t *testing.T) {
+	t.Parallel()
+
 	// Test with very long content (simulating large file reads)
 	now := time.Now()
 
@@ -757,6 +801,8 @@ func TestComputeStreamingState_VeryLongContent(t *testing.T) {
 }
 
 func TestComputeStreamingState_UnicodeContent(t *testing.T) {
+	t.Parallel()
+
 	// Test with various unicode characters
 	now := time.Now()
 
@@ -781,6 +827,8 @@ func TestComputeStreamingState_UnicodeContent(t *testing.T) {
 }
 
 func TestComputeStreamingState_SpecialCharactersInContent(t *testing.T) {
+	t.Parallel()
+
 	// Test with special characters, newlines, tabs, etc.
 	now := time.Now()
 
@@ -809,6 +857,8 @@ func TestComputeStreamingState_SpecialCharactersInContent(t *testing.T) {
 // ============================================================================
 
 func TestComputeStreamingState_Property_AllValidBlocksComplete(t *testing.T) {
+	t.Parallel()
+
 	// Property: Any message with all valid blocks should be "complete"
 
 	testCases := []struct {
@@ -857,6 +907,8 @@ func TestComputeStreamingState_Property_AllValidBlocksComplete(t *testing.T) {
 }
 
 func TestComputeStreamingState_Property_AnyInvalidBlockStreaming(t *testing.T) {
+	t.Parallel()
+
 	// Property: Any message with at least one invalid block should be "streaming"
 	// Note: Tool calls without results are now considered VALID because
 	// tool results are stored in separate TOOL role messages.
@@ -909,6 +961,8 @@ func TestComputeStreamingState_Property_AnyInvalidBlockStreaming(t *testing.T) {
 }
 
 func TestComputeStreamingState_Property_StartedBeforeCompleted(t *testing.T) {
+	t.Parallel()
+
 	// Property: StartedAt should always be <= CompletedAt (if both exist)
 
 	testCases := []struct {
@@ -949,6 +1003,8 @@ func TestComputeStreamingState_Property_StartedBeforeCompleted(t *testing.T) {
 }
 
 func TestComputeStreamingState_Property_AddingValidBlocksKeepsComplete(t *testing.T) {
+	t.Parallel()
+
 	// Property: Adding more valid blocks to a complete message keeps it complete
 
 	now := time.Now()

@@ -14,6 +14,8 @@ import (
 // =============================================================================
 
 func TestCreateThread(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()
@@ -74,6 +76,8 @@ func TestCreateThread(t *testing.T) {
 }
 
 func TestForkThread(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()
@@ -154,6 +158,8 @@ func TestForkThread(t *testing.T) {
 }
 
 func TestResolveMessages(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()
@@ -308,6 +314,8 @@ func TestResolveMessages(t *testing.T) {
 }
 
 func TestCompact(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()
@@ -368,6 +376,8 @@ func TestCompact(t *testing.T) {
 }
 
 func TestGetThreadTokenCount(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()
@@ -405,6 +415,8 @@ func TestGetThreadTokenCount(t *testing.T) {
 }
 
 func TestContextUsage(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()
@@ -426,6 +438,8 @@ func TestContextUsage(t *testing.T) {
 }
 
 func TestWalkForkChain(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()
@@ -456,6 +470,8 @@ func TestWalkForkChain(t *testing.T) {
 }
 
 func TestCreateWorkflowWithThread(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()
@@ -726,6 +742,8 @@ func TestCreateWorkflowWithThread(t *testing.T) {
 // =============================================================================
 
 func TestContextWindowLineage_ForkThread(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()
@@ -815,6 +833,8 @@ func TestContextWindowLineage_ForkThread(t *testing.T) {
 }
 
 func TestContextWindowLineage_Compact(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()
@@ -902,6 +922,8 @@ func TestContextWindowLineage_Compact(t *testing.T) {
 }
 
 func TestContextWindowLineage_EndToEndResolution(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()

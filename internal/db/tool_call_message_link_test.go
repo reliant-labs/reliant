@@ -60,6 +60,8 @@ func seedToolCallBlock(t *testing.T, repo *Repo, ctx context.Context, toolCallID
 //
 // The link is recoverable because the block is written BEFORE the call row.
 func TestUpsertToolCallStatus_ResolvesMessageIDFromBlock(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -97,6 +99,8 @@ func TestUpsertToolCallStatus_ResolvesMessageIDFromBlock(t *testing.T) {
 // A caller that DOES know the message must win: resolution fills gaps, it
 // never overrides what a writer asserted.
 func TestUpsertToolCallStatus_DoesNotOverrideProvidedMessageID(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -121,6 +125,8 @@ func TestUpsertToolCallStatus_DoesNotOverrideProvidedMessageID(t *testing.T) {
 // existed) must not fail the write. Status bookkeeping is best-effort and must
 // never break the tool call it describes.
 func TestUpsertToolCallStatus_NoBlockIsNotAnError(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -148,6 +154,8 @@ func TestUpsertToolCallStatus_NoBlockIsNotAnError(t *testing.T) {
 // the "join on both" half. Even a row whose message link is missing must be
 // reachable by the id its block carries.
 func TestListToolCallsByIDs_FindsRowWithoutMessageLink(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -181,6 +189,8 @@ func TestListToolCallsByIDs_FindsRowWithoutMessageLink(t *testing.T) {
 }
 
 func TestListToolCallsByIDs_EmptyInput(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 

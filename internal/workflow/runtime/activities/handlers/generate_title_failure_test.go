@@ -81,6 +81,8 @@ func seedTitleChat(t *testing.T, repo *db.Repo) string {
 // silent success carrying the user's own text. This is the exact shape of the
 // brotli decode failure that hid in production.
 func TestGenerateTitle_LLMFailureReturnsErrorInsteadOfSilentFallback(t *testing.T) {
+	t.Parallel()
+
 	repo := setupTestRepo(t)
 	chatID := seedTitleChat(t, repo)
 
@@ -108,6 +110,8 @@ func TestGenerateTitle_LLMFailureReturnsErrorInsteadOfSilentFallback(t *testing.
 
 // The fallback still exists, but only when the caller asks for it explicitly.
 func TestGenerateTitle_UseFallbackWritesTruncatedFirstMessage(t *testing.T) {
+	t.Parallel()
+
 	repo := setupTestRepo(t)
 	chatID := seedTitleChat(t, repo)
 
@@ -134,6 +138,8 @@ func TestGenerateTitle_UseFallbackWritesTruncatedFirstMessage(t *testing.T) {
 // title: the activity returns early when a title is set, so an empty one would
 // leave the chat permanently untitled.
 func TestGenerateTitle_EmptyGeneratedTitleIsAnError(t *testing.T) {
+	t.Parallel()
+
 	repo := setupTestRepo(t)
 	chatID := seedTitleChat(t, repo)
 
@@ -156,6 +162,8 @@ func TestGenerateTitle_EmptyGeneratedTitleIsAnError(t *testing.T) {
 // An already-titled chat short-circuits before any LLM call, so a retry or a
 // duplicate workflow never overwrites a good title.
 func TestGenerateTitle_AlreadyTitledChatSkipsLLM(t *testing.T) {
+	t.Parallel()
+
 	repo := setupTestRepo(t)
 	ctx := context.Background()
 	chatID := seedTitleChat(t, repo)

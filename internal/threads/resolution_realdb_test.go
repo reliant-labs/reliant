@@ -120,6 +120,8 @@ func (tc *testContext) createMessage(chatID, threadID, cwID string, ordinal int6
 
 // TestRealDB_SimpleCW tests resolution from a simple context window with no parent.
 func TestRealDB_SimpleCW(t *testing.T) {
+	t.Parallel()
+
 	tc := setupTest(t)
 	defer tc.cleanup()
 
@@ -146,6 +148,8 @@ func TestRealDB_SimpleCW(t *testing.T) {
 // TestRealDB_BranchChain tests a fork/branch relationship.
 // CWA (parent) -> CWB (child, forked at ordinal 2)
 func TestRealDB_BranchChain(t *testing.T) {
+	t.Parallel()
+
 	tc := setupTest(t)
 	defer tc.cleanup()
 
@@ -185,6 +189,8 @@ func TestRealDB_BranchChain(t *testing.T) {
 // TestRealDB_NestedBranches tests a multi-level fork chain: A → B → C
 // This is the critical "branch of branch" scenario.
 func TestRealDB_NestedBranches(t *testing.T) {
+	t.Parallel()
+
 	tc := setupTest(t)
 	defer tc.cleanup()
 
@@ -240,6 +246,8 @@ func TestRealDB_NestedBranches(t *testing.T) {
 
 // TestRealDB_CompactionStopsTraversal tests that compaction summary stops parent traversal.
 func TestRealDB_CompactionStopsTraversal(t *testing.T) {
+	t.Parallel()
+
 	tc := setupTest(t)
 	defer tc.cleanup()
 
@@ -274,6 +282,8 @@ func TestRealDB_CompactionStopsTraversal(t *testing.T) {
 
 // TestRealDB_BranchFromCompactedCW tests branching from a CW that has a compaction summary.
 func TestRealDB_BranchFromCompactedCW(t *testing.T) {
+	t.Parallel()
+
 	tc := setupTest(t)
 	defer tc.cleanup()
 

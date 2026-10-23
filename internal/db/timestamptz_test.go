@@ -20,6 +20,8 @@ import (
 // The column list is derived from the catalog rather than written down, because
 // a written list only ever covers the columns someone remembered.
 func TestNoNaiveTimestampColumns(t *testing.T) {
+	t.Parallel()
+
 	_, rawDB, cleanup := SetupTestDBWithRawDB(t)
 	defer cleanup()
 
@@ -67,6 +69,8 @@ func TestNoNaiveTimestampColumns(t *testing.T) {
 // does NOT remember to call .UTC() stores the same instant as one that does.
 // That is what makes the bug unrepresentable instead of merely absent today.
 func TestLocalTimeRoundTripsAsTheSameInstant(t *testing.T) {
+	t.Parallel()
+
 	repo, _, cleanup := SetupTestDBWithRawDB(t)
 	defer cleanup()
 	ctx := context.Background()

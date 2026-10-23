@@ -36,6 +36,8 @@ func runOnce(t *testing.T, result *toolexec.ToolResult) (stdout, stderr string, 
 // gate, burned one of five attempts, and told the agent to redo work that had
 // already passed. Two full attempts went that way on 2026-07-27.
 func TestTransportFailureIsNotReportedAsACommandFailure(t *testing.T) {
+	t.Parallel()
+
 	for name, result := range map[string]*toolexec.ToolResult{
 		// The gateway's connection died while the request was in flight.
 		"round trip lost": {
@@ -70,6 +72,8 @@ func TestTransportFailureIsNotReportedAsACommandFailure(t *testing.T) {
 // The discriminator must not over-fire: an error the TOOL reported about this
 // specific command is a real verdict and must still surface as a failed step.
 func TestToolReportedErrorIsStillACommandFailure(t *testing.T) {
+	t.Parallel()
+
 	_, stderr, exitCode, err := runOnce(t, &toolexec.ToolResult{
 		IsError:   true,
 		ErrorCode: "EXECUTION_ERROR",
@@ -83,6 +87,8 @@ func TestToolReportedErrorIsStillACommandFailure(t *testing.T) {
 
 // And a command that genuinely ran and exited non-zero keeps its own exit code.
 func TestRealNonZeroExitIsPreserved(t *testing.T) {
+	t.Parallel()
+
 	stdout, stderr, exitCode, err := runOnce(t, &toolexec.ToolResult{
 		Success: true,
 		Content: `{"stdout":"FAIL ./internal/handlers","stderr":"1 test failed","exit_code":2}`,

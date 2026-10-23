@@ -13,6 +13,8 @@ import (
 )
 
 func TestGitHubRepoFromRemote(t *testing.T) {
+	t.Parallel()
+
 	for remote, want := range map[string]string{
 		"https://github.com/acme/widgets.git":                       "acme/widgets",
 		"https://github.com/acme/widgets":                           "acme/widgets",
@@ -47,6 +49,8 @@ func TestGitHubRepoFromRemote(t *testing.T) {
 // The project's own remote comes first; nested repos follow with where they
 // sit, and a remote listed twice (the root repo's row) appears once.
 func TestProjectGitHubRepos(t *testing.T) {
+	t.Parallel()
+
 	root := "git@github.com:acme/platform.git"
 	forge := "https://github.com/acme/forge.git"
 	local := "/srv/git/scratch"
@@ -61,6 +65,8 @@ func TestProjectGitHubRepos(t *testing.T) {
 }
 
 func TestNoMachineRepoNote(t *testing.T) {
+	t.Parallel()
+
 	assert.Empty(t, noMachineRepoNote(nil, true, true), "a project with no GitHub remote adds nothing")
 
 	one := noMachineRepoNote([]githubRepo{{Owner: "acme", Name: "widgets"}}, true, true)
@@ -98,6 +104,8 @@ func (f *integrationFixture) systemPrompt() string { return strings.Join(f.drive
 // A no-machine chat in a project on GitHub is told where the code is and how
 // to read it — when the owner can read GitHub.
 func TestCallLLM_NoMachineNoteNamesTheProjectRepositoryAndHowToReadIt(t *testing.T) {
+	t.Parallel()
+
 	f := setupIntegrationFixture(t, true, &ownerConnections{usable: map[string]bool{"github": true}})
 	f.setProjectRemote(t, "git@github.com:acme/widgets.git")
 
@@ -113,6 +121,8 @@ func TestCallLLM_NoMachineNoteNamesTheProjectRepositoryAndHowToReadIt(t *testing
 // Without GitHub the note still says where the code is, and does not name
 // tools the run cannot use.
 func TestCallLLM_NoMachineNoteWithoutGitHubSaysTheCodeCannotBeRead(t *testing.T) {
+	t.Parallel()
+
 	f := setupIntegrationFixture(t, true, &ownerConnections{usable: map[string]bool{}})
 	f.setProjectRemote(t, "https://github.com/acme/widgets.git")
 
@@ -126,6 +136,8 @@ func TestCallLLM_NoMachineNoteWithoutGitHubSaysTheCodeCannotBeRead(t *testing.T)
 
 // A chat on a machine has the checkout; it gets no repository note.
 func TestCallLLM_ChatOnAMachineGetsNoRepositoryNote(t *testing.T) {
+	t.Parallel()
+
 	f := setupIntegrationFixture(t, false, &ownerConnections{usable: map[string]bool{"github": true}})
 	f.setProjectRemote(t, "git@github.com:acme/widgets.git")
 

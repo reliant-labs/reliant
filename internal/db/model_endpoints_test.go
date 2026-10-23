@@ -12,6 +12,8 @@ import (
 func sp(s string) *string { return &s }
 
 func TestModelEndpointCRUDAndUserIsolation(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()

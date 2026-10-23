@@ -47,6 +47,8 @@ func routedIDs(t *testing.T, repo *Repo, integration, account, resource string, 
 }
 
 func TestAccessRoutingReachesOnlyOwnersWhoCanSeeTheResource(t *testing.T) {
+	t.Parallel()
+
 	repo := NewTestRepo(t)
 	ctx := context.Background()
 	now := time.Now().UTC()
@@ -84,6 +86,8 @@ func TestAccessRoutingReachesOnlyOwnersWhoCanSeeTheResource(t *testing.T) {
 }
 
 func TestReplaceIntegrationAccessDropsWhatTheRefreshNoLongerSees(t *testing.T) {
+	t.Parallel()
+
 	repo := NewTestRepo(t)
 	ctx := context.Background()
 	tr := accessTrigger(t, repo, "alice", "github", true, nil)
@@ -108,6 +112,8 @@ func TestReplaceIntegrationAccessDropsWhatTheRefreshNoLongerSees(t *testing.T) {
 // is its owner's and active. One with no connection (a delegated authority)
 // routes on its owner's access alone.
 func TestAccessRoutingHonoursANamedConnection(t *testing.T) {
+	t.Parallel()
+
 	repo := NewTestRepo(t)
 	ctx := context.Background()
 	now := time.Now().UTC()
@@ -132,6 +138,8 @@ func TestAccessRoutingHonoursANamedConnection(t *testing.T) {
 }
 
 func TestRevokeIntegrationAccess(t *testing.T) {
+	t.Parallel()
+
 	repo := NewTestRepo(t)
 	ctx := context.Background()
 	now := time.Now().UTC()
@@ -171,6 +179,8 @@ func TestRevokeIntegrationAccess(t *testing.T) {
 }
 
 func TestIntegrationAccessRefreshLease(t *testing.T) {
+	t.Parallel()
+
 	repo := NewTestRepo(t)
 	ctx := context.Background()
 	now := time.Now().UTC()
@@ -211,6 +221,8 @@ func TestIntegrationAccessRefreshLease(t *testing.T) {
 // Two refreshes of one user can finish out of order. The one that started
 // earlier must not roll back what the later one recorded.
 func TestReplaceIntegrationAccessIsMonotonic(t *testing.T) {
+	t.Parallel()
+
 	repo := NewTestRepo(t)
 	ctx := context.Background()
 	tr := accessTrigger(t, repo, "alice", "github", true, nil)

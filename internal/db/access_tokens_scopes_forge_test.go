@@ -18,6 +18,8 @@ import (
 // had lagged before (no daemon:resume, cluster:manage, domain:*), so a mint of
 // a newer scope failed the constraint.
 func TestAccessTokensScopesCheckMatchesForge(t *testing.T) {
+	t.Parallel()
+
 	_, raw, cleanup := SetupTestDBWithRawDB(t)
 	defer cleanup()
 

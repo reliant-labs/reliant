@@ -11,6 +11,8 @@ import (
 )
 
 func TestIsRetryableError(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		err      error
@@ -74,6 +76,8 @@ func TestIsRetryableError(t *testing.T) {
 }
 
 func TestIsRetryableErrorSQLState(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		err      error
@@ -131,6 +135,8 @@ func TestIsRetryableErrorSQLState(t *testing.T) {
 }
 
 func TestCalculateBackoff(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name          string
 		attempt       int
@@ -177,6 +183,8 @@ func TestCalculateBackoff(t *testing.T) {
 }
 
 func TestCalculateBackoffMonotonicity(t *testing.T) {
+	t.Parallel()
+
 	// Test that backoff generally increases with attempts (allowing for jitter)
 	prevMin := int64(0)
 
@@ -200,6 +208,8 @@ func TestCalculateBackoffMonotonicity(t *testing.T) {
 }
 
 func TestCalculateBackoffMaxDelay(t *testing.T) {
+	t.Parallel()
+
 	// Test that backoff never exceeds a reasonable maximum
 	for attempt := 0; attempt < 20; attempt++ {
 		delay := calculateBackoff(attempt)
@@ -212,6 +222,8 @@ func TestCalculateBackoffMaxDelay(t *testing.T) {
 }
 
 func TestCalculateBackoffJitter(t *testing.T) {
+	t.Parallel()
+
 	// Test that jitter is actually applied (delays should vary)
 	delays := make(map[time.Duration]bool)
 
@@ -227,6 +239,8 @@ func TestCalculateBackoffJitter(t *testing.T) {
 }
 
 func TestRetryLogicConstants(t *testing.T) {
+	t.Parallel()
+
 	// Verify that retry constants are sensible
 	if maxRetries < 1 {
 		t.Error("maxRetries should be at least 1")
@@ -255,6 +269,8 @@ func TestRetryLogicConstants(t *testing.T) {
 }
 
 func TestRetryErrorMessages(t *testing.T) {
+	t.Parallel()
+
 	// Test that various Postgres error message formats are recognized as retryable
 	retryableErrors := []string{
 		"could not serialize access due to concurrent update",
@@ -273,6 +289,8 @@ func TestRetryErrorMessages(t *testing.T) {
 }
 
 func TestNonRetryableErrors(t *testing.T) {
+	t.Parallel()
+
 	// Test that common non-retryable errors are correctly identified
 	nonRetryableErrors := []string{
 		"no such table: users",
@@ -292,6 +310,8 @@ func TestNonRetryableErrors(t *testing.T) {
 }
 
 func TestRetryableConstraintErrors(t *testing.T) {
+	t.Parallel()
+
 	// Constraint violations are retryable because during parallel operations
 	// another transaction may have succeeded, and we should retry to find the record
 	retryableErrors := []string{

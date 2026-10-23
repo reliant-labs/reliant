@@ -378,6 +378,8 @@ func branchTestContext(t *testing.T, repo *db.Repo) (context.Context, string) {
 // F4: a branch starts on the chat it was branched from — its selection and its
 // presets. Both the in-place and the to-workspace paths are the one BranchChat.
 func TestBranchChat_CopiesTheSelectionAndPresets(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	ctx, projectID := branchTestContext(t, repo)

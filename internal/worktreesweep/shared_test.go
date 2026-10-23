@@ -36,6 +36,8 @@ func (e *env) liveProject(t *testing.T, dir string, rels ...string) *db.Worktree
 // every worktree on the machine. That must not keep archived worktrees: it
 // kept every one of them forever.
 func TestSweep_ALiveRowAtAParentPathDoesNotShieldArchivedWorktrees(t *testing.T) {
+	t.Parallel()
+
 	e := newEnv(t)
 	wt, path := e.worktree(t, "under-home", true)
 	e.liveProject(t, filepath.Dir(e.root), ".")
@@ -50,6 +52,8 @@ func TestSweep_ALiveRowAtAParentPathDoesNotShieldArchivedWorktrees(t *testing.T)
 // A live row still keeps its OWN checkout: here the archived row's directory is
 // the checkout another project's live row has for its repo "x".
 func TestSweep_ALiveRowStillShieldsItsOwnCheckout(t *testing.T) {
+	t.Parallel()
+
 	e := newEnv(t)
 	wt, path := e.worktree(t, "x", true)
 	e.liveProject(t, filepath.Dir(path), "x")
@@ -74,6 +78,8 @@ func TestSweep_ALiveRowStillShieldsItsOwnCheckout(t *testing.T) {
 // A live row inside an archived directory keeps it: removing the archived
 // directory would remove the live one.
 func TestSweep_ALiveRowInsideAnArchivedDirectoryShieldsIt(t *testing.T) {
+	t.Parallel()
+
 	e := newEnv(t)
 	wt, path := e.worktree(t, "outer", true)
 	inner := filepath.Join(path, "nested")
@@ -88,6 +94,8 @@ func TestSweep_ALiveRowInsideAnArchivedDirectoryShieldsIt(t *testing.T) {
 }
 
 func TestSharedWithLive(t *testing.T) {
+	t.Parallel()
+
 	arch := &core.Worktree{ID: "arch", Path: "/home/u/.reliant/worktrees/proj/wt-1"}
 	mk := func(path string, complete bool, rels ...string) occupied {
 		o := occupied{id: "live", path: path, dirs: []string{path}, complete: complete}
@@ -126,6 +134,8 @@ func TestSharedWithLive(t *testing.T) {
 }
 
 func TestOccupiedBy_ListsEachLiveRowsCheckouts(t *testing.T) {
+	t.Parallel()
+
 	repos := map[string][]*core.Repo{"p1": {{RelativePath: "."}, {RelativePath: "forge"}}}
 	got := occupiedBy([]core.WorktreePath{{ID: "a", Path: "/w/a/", ProjectID: "p1"}, {ID: "b", Path: "/w/b", ProjectID: "gone"}},
 		func(id string) ([]*core.Repo, bool) { r, ok := repos[id]; return r, ok })

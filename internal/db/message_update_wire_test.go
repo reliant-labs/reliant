@@ -10,6 +10,8 @@ import (
 // once already when `ordinal` became `seq` and one writer was missed. Pin the
 // wire contract so a rename breaks here instead of in a user's transcript.
 func TestMessageUpdateWireShape(t *testing.T) {
+	t.Parallel()
+
 	cs := 0
 	atts := []map[string]interface{}{}
 	got, err := MessageUpdateData{

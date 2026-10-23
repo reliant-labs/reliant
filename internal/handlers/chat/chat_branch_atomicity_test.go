@@ -91,6 +91,8 @@ func setupBranchAtomicitySource(t *testing.T, repo *db.Repo, ctx context.Context
 // forked workflow/thread. Before the transaction wrapper this test fails —
 // verified by reverting the wrapper, confirming failure, and restoring it.
 func TestBranchChat_AtomicOnMidTransactionFailure(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -146,6 +148,8 @@ func TestBranchChat_AtomicOnMidTransactionFailure(t *testing.T) {
 // disabled, branching must succeed and leave a consistent branch chat +
 // forked workflow/thread + chat_created update behind.
 func TestBranchChat_SucceedsWithoutInjectedFailure(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 

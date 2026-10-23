@@ -8,6 +8,8 @@ import (
 )
 
 func TestNotRemovableMessage_NamesTheHeldReasonAndPath(t *testing.T) {
+	t.Parallel()
+
 	m := &core.CleanupMetadata{HeldReason: "quarantined", HeldDetail: "1 checkout(s) are parked at /r/.reclaim/x/root-1"}
 	got := notRemovableMessage(m)
 	if !strings.Contains(got, "quarantined") || !strings.Contains(got, "/r/.reclaim/x/root-1") {

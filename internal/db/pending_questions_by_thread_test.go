@@ -32,6 +32,8 @@ func insertPendingQuestionTest(t *testing.T, repo *Repo, id, chatID, threadID, s
 // reported the newest question from ANY thread of a chat with several spawned
 // threads. PendingQuestionsByThread keeps the scoping the row already carries.
 func TestPendingQuestionsByThread_MultiThreadChat(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -71,6 +73,8 @@ func TestPendingQuestionsByThread_MultiThreadChat(t *testing.T) {
 // TestPendingQuestionsByThread_NewestPerThread pins that a thread which raised
 // several pending questions reports its newest one.
 func TestPendingQuestionsByThread_NewestPerThread(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -98,6 +102,8 @@ func TestPendingQuestionsByThread_NewestPerThread(t *testing.T) {
 // hide (a newest-per-chat LIMIT 1), and both of a thread's pending
 // rows rather than only its newest.
 func TestListPendingQuestionsByChat_EveryThread(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -137,6 +143,8 @@ func TestListPendingQuestionsByChat_EveryThread(t *testing.T) {
 
 // TestPendingQuestionsByThread_Empty covers a chat with nothing pending.
 func TestPendingQuestionsByThread_Empty(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 
@@ -153,6 +161,8 @@ func TestPendingQuestionsByThread_Empty(t *testing.T) {
 // are the only durable evidence a spawned thread is still working (step
 // executions and position checkpoints exist for the root run only).
 func TestLastThreadActivityByChat(t *testing.T) {
+	t.Parallel()
+
 	repo, rawDB, cleanup := SetupTestDBWithRawDB(t)
 	defer cleanup()
 	ctx := context.Background()

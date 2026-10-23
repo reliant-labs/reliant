@@ -38,6 +38,8 @@ func terraOnCodex(t *testing.T) *models.ModelDefinition {
 // /codex/models also reports (context_window) and the catalog used to carry.
 // Prod accepted 698,604-token terra prompts, so 272k was never the limit.
 func TestPromptCeiling_TerraOnCodexIs872k(t *testing.T) {
+	t.Parallel()
+
 	def := terraOnCodex(t)
 	require.EqualValues(t, codexAdvertisedLimit, promptCeiling(def, "codex", def.ToModel()))
 }
@@ -46,6 +48,8 @@ func TestPromptCeiling_TerraOnCodexIs872k(t *testing.T) {
 // unpinned chat and a 1M pin compact at 85% of the 872k ceiling. Before, both
 // resolved to 231,200 (85% of 272k).
 func TestResolveCompactionThreshold_TerraOnCodexResolvesAgainst872k(t *testing.T) {
+	t.Parallel()
+
 	def := terraOnCodex(t)
 	ceiling := promptCeiling(def, "codex", def.ToModel())
 	const want = 741_200 // 0.85 × 872,000
@@ -83,6 +87,8 @@ func toolResultContent(msgs []message.Message) string {
 // — before, the 272k window put the backstop at 258,400 and this was shredded —
 // and an 850k one is trimmed.
 func TestTrimBackstop_TerraOnCodexEngagesAt95PercentOf872k(t *testing.T) {
+	t.Parallel()
+
 	def := terraOnCodex(t)
 	ceiling := promptCeiling(def, "codex", def.ToModel())
 
@@ -108,6 +114,8 @@ func TestTrimBackstop_TerraOnCodexEngagesAt95PercentOf872k(t *testing.T) {
 // Before, the count was above the 272k window, was discarded as unreliable, and
 // the ~140k character estimate trimmed nothing.
 func TestTokenCount_698kOnTerraCodexIsTrusted(t *testing.T) {
+	t.Parallel()
+
 	def := terraOnCodex(t)
 	ceiling := promptCeiling(def, "codex", def.ToModel())
 

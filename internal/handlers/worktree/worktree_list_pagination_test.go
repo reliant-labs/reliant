@@ -56,6 +56,8 @@ func listAllWorktrees(t *testing.T, svc *worktree.Service, limit int32) (ids []s
 }
 
 func TestListWorktrees_PagesThroughMoreThanOnePage(t *testing.T) {
+	t.Parallel()
+
 	svc := worktree.NewTestWorktree(t, worktree.WithWorktreeDeps(worktree.Deps{Repo: pagedWorktreeRepo(t, 250)}))
 
 	ids, pages := listAllWorktrees(t, svc, 0)
@@ -69,6 +71,8 @@ func TestListWorktrees_PagesThroughMoreThanOnePage(t *testing.T) {
 }
 
 func TestListWorktrees_ExactPageBoundaryHasNoTrailingToken(t *testing.T) {
+	t.Parallel()
+
 	svc := worktree.NewTestWorktree(t, worktree.WithWorktreeDeps(worktree.Deps{Repo: pagedWorktreeRepo(t, 100)}))
 
 	resp, err := svc.ListWorktrees(worktree.AuthedContext(t), connect.NewRequest(&reliantv1.ListWorktreesRequest{ProjectId: ownProjectID}))
@@ -78,6 +82,8 @@ func TestListWorktrees_ExactPageBoundaryHasNoTrailingToken(t *testing.T) {
 }
 
 func TestListWorktrees_RejectsMalformedPageToken(t *testing.T) {
+	t.Parallel()
+
 	svc := worktree.NewTestWorktree(t, worktree.WithWorktreeDeps(worktree.Deps{Repo: pagedWorktreeRepo(t, 5)}))
 
 	bad := "not-a-token!"

@@ -80,6 +80,8 @@ func runResumeWake(t *testing.T, a *MachineResumeWakeActivity, in MachineResumeW
 // door (never the attended EnsureAwake), shows the chat waiting for it, and
 // returns once it attaches.
 func TestMachineResumeWake_WakesTheSleepingMachineAndWaitsForIt(t *testing.T) {
+	t.Parallel()
+
 	router := newRunWakeRouter()
 	a, repo, chatID := newResumeWakeFixture(t, router)
 
@@ -96,6 +98,8 @@ func TestMachineResumeWake_WakesTheSleepingMachineAndWaitsForIt(t *testing.T) {
 // A batch of tools that never touch the machine (web search, fetch) wakes
 // nothing, and does not even read the chat.
 func TestMachineResumeWake_ServerOnlyBatchWakesNothing(t *testing.T) {
+	t.Parallel()
+
 	router := newRunWakeRouter()
 	a := NewMachineResumeWakeActivity(nil, toolexec.NewRemoteExecutor(router))
 
@@ -110,6 +114,8 @@ func TestMachineResumeWake_ServerOnlyBatchWakesNothing(t *testing.T) {
 // A refused wake (a failed machine, a funding gate) never fails the run: the
 // step runs and reports the machine's state, as it always did.
 func TestMachineResumeWake_ARefusedWakeLetsTheStepRun(t *testing.T) {
+	t.Parallel()
+
 	router := newRunWakeRouter()
 	router.runWakeErr = errors.New("compute is not funded")
 	a, repo, chatID := newResumeWakeFixture(t, router)
@@ -125,6 +131,8 @@ func TestMachineResumeWake_ARefusedWakeLetsTheStepRun(t *testing.T) {
 // the workflow's next slice — except on the final one, which clears it
 // because the step runs now.
 func TestMachineResumeWake_SliceEndsWhileTheMachineIsStillComingUp(t *testing.T) {
+	t.Parallel()
+
 	for _, final := range []bool{false, true} {
 		router := newRunWakeRouter()
 		router.attachAfter = 1 << 30
@@ -145,6 +153,8 @@ func TestMachineResumeWake_SliceEndsWhileTheMachineIsStillComingUp(t *testing.T)
 // way any resuming run does — its session token may be hours old — while a
 // freshly started run keeps the attended wake.
 func TestPreflight_ARunResumeWakesThroughTheRunDoor(t *testing.T) {
+	t.Parallel()
+
 	for _, runResume := range []bool{true, false} {
 		router := newRunWakeRouter()
 		router.online.Store(false)

@@ -173,6 +173,8 @@ func assertActivityPlacedOn(t *testing.T, router *placementRecordingRouter, wt *
 // Before the fix every command went to the user's default machine and the row
 // recorded no owner at all.
 func TestCreateWorktreeActivity_PlacesOnRunDaemon(t *testing.T) {
+	t.Parallel()
+
 	f := newActivityPlacementFixture(t)
 	chatID := f.chat(t, "")
 
@@ -185,6 +187,8 @@ func TestCreateWorktreeActivity_PlacesOnRunDaemon(t *testing.T) {
 // daemon, a chat inside an owned worktree runs its tools on that worktree's
 // machine (toolDaemonSelector), so that is where the new worktree goes.
 func TestCreateWorktreeActivity_PlacesOnChatWorktreeOwner(t *testing.T) {
+	t.Parallel()
+
 	f := newActivityPlacementFixture(t)
 	chatID := f.chat(t, f.worktree(t, "feature", "daemon-b"))
 
@@ -197,6 +201,8 @@ func TestCreateWorktreeActivity_PlacesOnChatWorktreeOwner(t *testing.T) {
 // follow, the default machine is resolved ONCE, every checkout lands there, and
 // the row records it.
 func TestCreateWorktreeActivity_NoDaemonContextRecordsDefault(t *testing.T) {
+	t.Parallel()
+
 	f := newActivityPlacementFixture(t)
 	chatID := f.chat(t, "")
 
@@ -209,6 +215,8 @@ func TestCreateWorktreeActivity_NoDaemonContextRecordsDefault(t *testing.T) {
 // only on its owner, so tearing it down anywhere else deletes nothing and
 // strands it there.
 func TestDeleteWorktreeActivity_RoutesToOwningDaemon(t *testing.T) {
+	t.Parallel()
+
 	f := newActivityPlacementFixture(t)
 	f.worktree(t, "doomed", "daemon-b")
 	chatID := f.chat(t, "")

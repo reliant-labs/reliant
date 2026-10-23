@@ -65,6 +65,8 @@ func (m *signedThinkingDriver) StreamResponse(ctx context.Context, prompts []str
 // persistable and the NEXT request carries the thinking block back. That is what
 // makes a resend able to converge instead of reproducing itself.
 func TestCallLLM_SignedThinkingTurn_IsKeptNotReportedAsEmpty(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 
@@ -116,6 +118,8 @@ func TestCallLLM_SignedThinkingTurn_IsKeptNotReportedAsEmpty(t *testing.T) {
 // The same for sealed reasoning: opaque, but real work that must be kept and
 // replayed rather than reported as nothing.
 func TestCallLLM_RedactedThinkingTurn_IsKeptNotReportedAsEmpty(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 

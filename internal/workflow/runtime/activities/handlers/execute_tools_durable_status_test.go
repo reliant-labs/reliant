@@ -65,6 +65,8 @@ func (f *durableStatusFixture) executeTool(t *testing.T, toolCallID, toolName, t
 // row. The pair is what a reload needs: the status alone can't render the tool
 // card's output.
 func TestDurableStatus_CompletedToolPersistsCallAndResult(t *testing.T) {
+	t.Parallel()
+
 	f := setupDurableStatusFixture(t)
 	defer f.h.Cleanup()
 	ctx := context.Background()
@@ -102,6 +104,8 @@ func TestDurableStatus_CompletedToolPersistsCallAndResult(t *testing.T) {
 // A tool whose executor returned an error records FAILED plus the error text,
 // so a reload can say why rather than showing a call stuck at "executing".
 func TestDurableStatus_FailedToolRecordsError(t *testing.T) {
+	t.Parallel()
+
 	f := setupDurableStatusFixture(t)
 	defer f.h.Cleanup()
 	ctx := context.Background()
@@ -134,6 +138,8 @@ func TestDurableStatus_FailedToolRecordsError(t *testing.T) {
 // tool ran and returned an error result", and the chat_updates event stream
 // reports both of these as plain "completed".
 func TestDurableStatus_ToolReportedErrorIsFailed(t *testing.T) {
+	t.Parallel()
+
 	f := setupDurableStatusFixture(t)
 	defer f.h.Cleanup()
 	ctx := context.Background()
@@ -161,6 +167,8 @@ func TestDurableStatus_ToolReportedErrorIsFailed(t *testing.T) {
 // A backgrounded tool is still running somewhere, so it gets BACKGROUNDED and
 // NO result row — it hasn't produced one yet.
 func TestDurableStatus_BackgroundedToolHasNoResultYet(t *testing.T) {
+	t.Parallel()
+
 	f := setupDurableStatusFixture(t)
 	defer f.h.Cleanup()
 	ctx := context.Background()
@@ -189,6 +197,8 @@ func TestDurableStatus_BackgroundedToolHasNoResultYet(t *testing.T) {
 // rather than duplicating it or corrupting the status — that is why every
 // write here is an upsert keyed on the tool call id.
 func TestDurableStatus_ActivityRetryDoesNotDuplicateRows(t *testing.T) {
+	t.Parallel()
+
 	f := setupDurableStatusFixture(t)
 	defer f.h.Cleanup()
 	ctx := context.Background()
@@ -220,6 +230,8 @@ func TestDurableStatus_ActivityRetryDoesNotDuplicateRows(t *testing.T) {
 
 // Two tools in one activity invocation each get their own row.
 func TestDurableStatus_ParallelToolsEachGetARow(t *testing.T) {
+	t.Parallel()
+
 	f := setupDurableStatusFixture(t)
 	defer f.h.Cleanup()
 	ctx := context.Background()
@@ -259,6 +271,8 @@ func TestDurableStatus_ParallelToolsEachGetARow(t *testing.T) {
 // Tool input that isn't valid JSON is stored as NULL rather than failing the
 // call: input is a best-effort record, and the column is jsonb.
 func TestDurableStatus_UnparseableInputStoredAsNull(t *testing.T) {
+	t.Parallel()
+
 	f := setupDurableStatusFixture(t)
 	defer f.h.Cleanup()
 	ctx := context.Background()
@@ -322,6 +336,8 @@ func (f *durableStatusFixture) handleResultWithCancelledCtx(
 // The rule these two cases pin: a finished execution is reported on its own
 // merits; cancellation only decides the outcome of a call that has none.
 func TestDurableStatus_CancelledContextDoesNotDiscardCompletedSibling(t *testing.T) {
+	t.Parallel()
+
 	f := setupDurableStatusFixture(t)
 	defer f.h.Cleanup()
 
@@ -357,6 +373,8 @@ func TestDurableStatus_CancelledContextDoesNotDiscardCompletedSibling(t *testing
 // The other half of the rule: a call that was still in flight when the context
 // died has no outcome of its own, so cancellation is the honest answer.
 func TestDurableStatus_CancelledContextStillCancelsUnfinishedTool(t *testing.T) {
+	t.Parallel()
+
 	f := setupDurableStatusFixture(t)
 	defer f.h.Cleanup()
 

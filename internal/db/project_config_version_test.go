@@ -12,6 +12,8 @@ import (
 // including one that writes identical content, and one from a writer whose
 // clock stamped the same updated_at — and must stay put when nothing wrote.
 func TestProjectConfigVersion(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()

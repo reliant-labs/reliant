@@ -68,6 +68,8 @@ func (r orderRecordingDaemonRouter) SendToolExecutionCancel(ctx context.Context,
 // interrupt must differ only in scope, so both must push the daemon cancel
 // before freeing the workflow to move on.
 func TestPauseChat_CancelsToolsBeforeSignalingWorkflow(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 

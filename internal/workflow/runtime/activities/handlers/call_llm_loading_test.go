@@ -18,6 +18,8 @@ import (
 
 // TestLoadMessages_EmptyThread tests loading messages from an empty thread
 func TestLoadMessages_EmptyThread(t *testing.T) {
+	t.Parallel()
+
 	msgs := []message.Message{}
 	result := repairMessageHistory(msgs)
 	require.Len(t, result, 0)
@@ -25,6 +27,8 @@ func TestLoadMessages_EmptyThread(t *testing.T) {
 
 // TestLoadMessages_OnlySystemMessages tests loading with only system messages
 func TestLoadMessages_OnlySystemMessages(t *testing.T) {
+	t.Parallel()
+
 	msgs := []message.Message{
 		{ID: "1", Role: message.System, Parts: []message.ContentPart{message.TextContent{Text: "You are a helpful assistant"}}},
 	}
@@ -36,6 +40,8 @@ func TestLoadMessages_OnlySystemMessages(t *testing.T) {
 
 // TestLoadMessages_AlternatingRoles tests proper user/assistant alternation
 func TestLoadMessages_AlternatingRoles(t *testing.T) {
+	t.Parallel()
+
 	msgs := []message.Message{
 		{ID: "1", Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: "Hello"}}},
 		{ID: "2", Role: message.Assistant, Parts: []message.ContentPart{message.TextContent{Text: "Hi there"}}},
@@ -53,6 +59,8 @@ func TestLoadMessages_AlternatingRoles(t *testing.T) {
 
 // TestLoadMessages_MultipleToolCallsPerMessage tests messages with many tool calls
 func TestLoadMessages_MultipleToolCallsPerMessage(t *testing.T) {
+	t.Parallel()
+
 	msgs := []message.Message{
 		{ID: "1", Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: "Do multiple things"}}},
 		{ID: "2", Role: message.Assistant, Parts: []message.ContentPart{
@@ -81,6 +89,8 @@ func TestLoadMessages_MultipleToolCallsPerMessage(t *testing.T) {
 
 // TestLoadMessages_LargeToolResults tests handling of large tool results
 func TestLoadMessages_LargeToolResults(t *testing.T) {
+	t.Parallel()
+
 	// Create a large result string (10KB)
 	largeContent := make([]byte, 10*1024)
 	for i := range largeContent {
@@ -108,6 +118,8 @@ func TestLoadMessages_LargeToolResults(t *testing.T) {
 
 // TestLoadMessages_ErrorToolResults tests handling of error tool results
 func TestLoadMessages_ErrorToolResults(t *testing.T) {
+	t.Parallel()
+
 	msgs := []message.Message{
 		{ID: "1", Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: "Run command"}}},
 		{ID: "2", Role: message.Assistant, Parts: []message.ContentPart{
@@ -129,6 +141,8 @@ func TestLoadMessages_ErrorToolResults(t *testing.T) {
 
 // TestLoadMessages_MixedTextAndToolCalls tests assistant messages with both text and tools
 func TestLoadMessages_MixedTextAndToolCalls(t *testing.T) {
+	t.Parallel()
+
 	msgs := []message.Message{
 		{ID: "1", Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: "Help me"}}},
 		{ID: "2", Role: message.Assistant, Parts: []message.ContentPart{
@@ -156,6 +170,8 @@ func TestLoadMessages_MixedTextAndToolCalls(t *testing.T) {
 
 // TestLoadMessages_ReasoningContent tests extended thinking preservation
 func TestLoadMessages_ReasoningContent(t *testing.T) {
+	t.Parallel()
+
 	msgs := []message.Message{
 		{ID: "1", Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: "Think about this"}}},
 		{ID: "2", Role: message.Assistant, Parts: []message.ContentPart{
@@ -176,6 +192,8 @@ func TestLoadMessages_ReasoningContent(t *testing.T) {
 
 // TestLoadMessages_ContextSequenceFiltering tests that only current context is used
 func TestLoadMessages_ContextSequenceFiltering(t *testing.T) {
+	t.Parallel()
+
 	// This is a conceptual test - in practice, the DB layer handles filtering
 	// Here we verify the message structure is maintained correctly
 
@@ -193,6 +211,8 @@ func TestLoadMessages_ContextSequenceFiltering(t *testing.T) {
 
 // TestLoadMessages_AgentRole tests the 'agent' role handling
 func TestLoadMessages_AgentRole(t *testing.T) {
+	t.Parallel()
+
 	msgs := []message.Message{
 		{ID: "1", Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: "Hello"}}},
 		{ID: "2", Role: message.Agent, Parts: []message.ContentPart{message.TextContent{Text: "System notification"}}},
@@ -206,6 +226,8 @@ func TestLoadMessages_AgentRole(t *testing.T) {
 
 // TestLoadMessages_FinishContent tests finish markers
 func TestLoadMessages_FinishContent(t *testing.T) {
+	t.Parallel()
+
 	msgs := []message.Message{
 		{ID: "1", Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: "Hello"}}},
 		{ID: "2", Role: message.Assistant, Parts: []message.ContentPart{
@@ -223,6 +245,8 @@ func TestLoadMessages_FinishContent(t *testing.T) {
 
 // TestLoadMessages_ConsecutiveAssistantMessages tests back-to-back assistant messages
 func TestLoadMessages_ConsecutiveAssistantMessages(t *testing.T) {
+	t.Parallel()
+
 	// This can happen in some edge cases or with streaming
 	msgs := []message.Message{
 		{ID: "1", Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: "Hello"}}},
@@ -237,6 +261,8 @@ func TestLoadMessages_ConsecutiveAssistantMessages(t *testing.T) {
 
 // TestLoadMessages_ConsecutiveUserMessages tests back-to-back user messages
 func TestLoadMessages_ConsecutiveUserMessages(t *testing.T) {
+	t.Parallel()
+
 	msgs := []message.Message{
 		{ID: "1", Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: "First question"}}},
 		{ID: "2", Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: "Follow up"}}},
@@ -249,6 +275,8 @@ func TestLoadMessages_ConsecutiveUserMessages(t *testing.T) {
 
 // TestLoadMessages_ImageContent tests image handling
 func TestLoadMessages_ImageContent(t *testing.T) {
+	t.Parallel()
+
 	msgs := []message.Message{
 		{ID: "1", Role: message.User, Parts: []message.ContentPart{
 			message.TextContent{Text: "What's in this image?"},
@@ -273,6 +301,8 @@ func TestLoadMessages_ImageContent(t *testing.T) {
 // ============================================================================
 
 func TestLoadMessages_RoleSequences(t *testing.T) {
+	t.Parallel()
+
 	testCases := []struct {
 		name     string
 		roles    []message.MessageRole
@@ -361,6 +391,8 @@ func TestLoadMessages_RoleSequences(t *testing.T) {
 
 // TestLoadMessages_InheritedWithOrphanedToolCalls tests repair of inherited orphans
 func TestLoadMessages_InheritedWithOrphanedToolCalls(t *testing.T) {
+	t.Parallel()
+
 	// Simulates messages inherited from parent chat where parent had orphaned tool call
 	msgs := []message.Message{
 		// Inherited from parent
@@ -389,6 +421,8 @@ func TestLoadMessages_InheritedWithOrphanedToolCalls(t *testing.T) {
 
 // TestLoadMessages_InheritedWithExistingRepair tests that already-repaired messages aren't double-repaired
 func TestLoadMessages_InheritedWithExistingRepair(t *testing.T) {
+	t.Parallel()
+
 	// Parent already had repair message
 	msgs := []message.Message{
 		{ID: "parent-1", Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: "do"}}},

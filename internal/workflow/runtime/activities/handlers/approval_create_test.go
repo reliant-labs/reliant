@@ -16,6 +16,8 @@ import (
 // TestApprovalCreateActivity_Basic creates an approval and verifies the output
 // contains the approval_id and already_resolved=false.
 func TestApprovalCreateActivity_Basic(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 
@@ -50,6 +52,8 @@ func TestApprovalCreateActivity_Basic(t *testing.T) {
 // TestApprovalCreateActivity_MarksChatUnread verifies that when a new approval is created,
 // the chat is marked as unread so the UI shows a notification badge.
 func TestApprovalCreateActivity_MarksChatUnread(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 
@@ -89,6 +93,8 @@ func TestApprovalCreateActivity_MarksChatUnread(t *testing.T) {
 // TestApprovalCreateActivity_EmitsApprovalUpdate verifies that creating an approval emits
 // a chat_update with type "approval" and status "pending".
 func TestApprovalCreateActivity_EmitsApprovalUpdate(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 
@@ -132,6 +138,8 @@ func TestApprovalCreateActivity_EmitsApprovalUpdate(t *testing.T) {
 // pre-existing pending approval for the same entity ID returns the existing approval
 // rather than creating a duplicate.
 func TestApprovalCreateActivity_Idempotency(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 
@@ -190,6 +198,8 @@ func TestApprovalCreateActivity_Idempotency(t *testing.T) {
 // gated, which requires the approval to name its own thread rather than the
 // chat as a whole.
 func TestApprovalCreateActivity_ThreadIDAttribution(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 
@@ -241,6 +251,8 @@ func TestApprovalCreateActivity_ThreadIDAttribution(t *testing.T) {
 // "not applicable"), the persisted approval leaves thread_id NULL rather than
 // guessing at an attribution.
 func TestApprovalCreateActivity_ThreadIDOmittedIsNull(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 
@@ -278,6 +290,8 @@ func TestApprovalCreateActivity_ThreadIDOmittedIsNull(t *testing.T) {
 // approval is already resolved (approved/denied), ApprovalCreate returns
 // AlreadyResolved=true with the correct status and action_taken.
 func TestApprovalCreateActivity_IdempotencyAlreadyResolved(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 

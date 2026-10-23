@@ -33,6 +33,8 @@ import (
 // row and a matching result must short-circuit on the SECOND dispatch rather
 // than running the executor again.
 func TestTerminalIdempotency_CompletedRowIsNotReExecuted(t *testing.T) {
+	t.Parallel()
+
 	f := setupDurableStatusFixture(t)
 	defer f.h.Cleanup()
 	ctx := context.Background()
@@ -70,6 +72,8 @@ func TestTerminalIdempotency_CompletedRowIsNotReExecuted(t *testing.T) {
 // of chat b7cd65c6: a call cancelled while pending (never dispatched) must
 // still block re-execution on the next dispatch of the same id.
 func TestTerminalIdempotency_CancelledRowIsNotReExecuted(t *testing.T) {
+	t.Parallel()
+
 	f := setupDurableStatusFixture(t)
 	defer f.h.Cleanup()
 	ctx := context.Background()
@@ -115,6 +119,8 @@ func TestTerminalIdempotency_CancelledRowIsNotReExecuted(t *testing.T) {
 // falling back to the same InterruptedToolResultContent stub every other
 // dangling-tool-call repair path uses.
 func TestTerminalIdempotency_TerminalRowWithNoResultFallsBackToStub(t *testing.T) {
+	t.Parallel()
+
 	f := setupDurableStatusFixture(t)
 	defer f.h.Cleanup()
 	ctx := context.Background()
@@ -149,6 +155,8 @@ func TestTerminalIdempotency_TerminalRowWithNoResultFallsBackToStub(t *testing.T
 // must execute normally. Guards against an overly broad check that treats a
 // missing row as terminal.
 func TestTerminalIdempotency_NoPriorRowStillExecutes(t *testing.T) {
+	t.Parallel()
+
 	f := setupDurableStatusFixture(t)
 	defer f.h.Cleanup()
 
@@ -170,6 +178,8 @@ func TestTerminalIdempotency_NoPriorRowStillExecutes(t *testing.T) {
 // every ordinary Temporal activity retry would return a stale "still running"
 // answer instead of actually running the tool.
 func TestTerminalIdempotency_PendingRowStillExecutes(t *testing.T) {
+	t.Parallel()
+
 	f := setupDurableStatusFixture(t)
 	defer f.h.Cleanup()
 	ctx := context.Background()
@@ -198,6 +208,8 @@ func TestTerminalIdempotency_PendingRowStillExecutes(t *testing.T) {
 }
 
 func TestTerminalIdempotency_ExecutingRowStillExecutes(t *testing.T) {
+	t.Parallel()
+
 	f := setupDurableStatusFixture(t)
 	defer f.h.Cleanup()
 	ctx := context.Background()
@@ -231,6 +243,8 @@ func TestTerminalIdempotency_ExecutingRowStillExecutes(t *testing.T) {
 // is still running and owes a real outcome later. Treating it as settled here
 // would abandon a live background process instead of letting it report in.
 func TestTerminalIdempotency_BackgroundedRowStillExecutes(t *testing.T) {
+	t.Parallel()
+
 	f := setupDurableStatusFixture(t)
 	defer f.h.Cleanup()
 	ctx := context.Background()
@@ -275,6 +289,8 @@ func TestTerminalIdempotency_BackgroundedRowStillExecutes(t *testing.T) {
 // The SDK's TestActivityEnvironment cannot set Attempt, so this asserts the
 // guard's decision directly rather than through the harness.
 func TestExecuteTools_ActivityRetryDoesNotReExecute(t *testing.T) {
+	t.Parallel()
+
 	// Attempt 1 is a first delivery: the tool must run.
 	assert.False(t, isActivityRetry(1),
 		"attempt 1 is the first delivery, not a retry — the tool must execute")
@@ -294,6 +310,8 @@ func TestExecuteTools_ActivityRetryDoesNotReExecute(t *testing.T) {
 // carrying an error result: the loop advances, and the model is told the tool
 // was interrupted so it can decide whether to try again itself.
 func TestExecuteTools_ActivityRetryResultIsAnErrorNotAFailure(t *testing.T) {
+	t.Parallel()
+
 	activityInstance := &ExecuteToolsActivity{}
 	result := activityInstance.buildToolResult("toolu_retry", "bash", InterruptedToolResultContent, "", true, nil, nil)
 
@@ -314,6 +332,8 @@ func TestExecuteTools_ActivityRetryResultIsAnErrorNotAFailure(t *testing.T) {
 // tool whose result was an error. Deriving both from one value is what keeps
 // them from drifting again.
 func TestToolStatusEvent_MatchesTheDurableStatus(t *testing.T) {
+	t.Parallel()
+
 	cases := map[core.ToolCallStatus]string{
 		core.ToolCallStatusCompleted:    "completed",
 		core.ToolCallStatusFailed:       "failed",
@@ -331,6 +351,8 @@ func TestToolStatusEvent_MatchesTheDurableStatus(t *testing.T) {
 // ran and returned an error result", so a green "completed" here is the exact
 // lie that produced the green-then-orange flip.
 func TestToolStatusEvent_ErrorResultIsNotAnnouncedAsCompleted(t *testing.T) {
+	t.Parallel()
+
 	assert.NotEqual(t, "completed", toolStatusEvent(core.ToolCallStatusFailed),
 		"a tool whose result was an error must not be announced as completed")
 	assert.NotEqual(t, "completed", toolStatusEvent(core.ToolCallStatusCancelled),

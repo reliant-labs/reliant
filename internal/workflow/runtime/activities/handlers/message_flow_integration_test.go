@@ -70,6 +70,8 @@ import (
 
 // TestMessageFlowIntegration tests the complete message flow end-to-end
 func TestMessageFlowIntegration(t *testing.T) {
+	t.Parallel()
+
 	// ========================================================================
 	// SETUP: Initialize test environment
 	// ========================================================================
@@ -585,6 +587,8 @@ func TestMessageFlowIntegration(t *testing.T) {
 // ============================================================================
 
 func TestMessageFlowIntegration_ErrorHandling(t *testing.T) {
+	t.Parallel()
+
 	// Setup (similar to main test)
 	ctx := context.Background()
 
@@ -762,6 +766,8 @@ func TestMessageFlowIntegration_ErrorHandling(t *testing.T) {
 // ============================================================================
 
 func TestMessageFlow_DataTypeCompatibility(t *testing.T) {
+	t.Parallel()
+
 	t.Run("CallLLMOutput serializes correctly", func(t *testing.T) {
 		output := CallLLMOutput{
 			ResponseText: "Test response",

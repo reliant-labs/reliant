@@ -160,6 +160,8 @@ func newFirstTurnSendFixture(t *testing.T) (*Service, *codePresenceHangingRouter
 // A started chat that already has a turn is past the point the guidance is
 // about, so its next run does not probe.
 func TestSendMessageLaterTurnDoesNotProbe(t *testing.T) {
+	t.Parallel()
+
 	svc, router, temporal, repo, ctx, fx := newFirstTurnSendFixture(t)
 	_, err := repo.SaveMessageToThread(ctx, fx.chatID, fx.rootThreadID,
 		int32(reliantv1.MessageRole_MESSAGE_ROLE_USER), "an earlier turn", nil, nil, nil)
@@ -176,6 +178,8 @@ func TestSendMessageLaterTurnDoesNotProbe(t *testing.T) {
 // first turn. SendMessage gets there through the same in-run probe as
 // StartChat, and does not wait on the daemon either.
 func TestSendMessageFirstTurnDoesNotWaitOnTheGreenfieldProbe(t *testing.T) {
+	t.Parallel()
+
 	svc, router, temporal, _, ctx, fx := newFirstTurnSendFixture(t)
 
 	done := make(chan error, 1)

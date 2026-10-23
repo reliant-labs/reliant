@@ -31,6 +31,8 @@ func worktreeIDs(ws []*Worktree) []string {
 // The active list never carries archived rows, the archived list carries only
 // them, and main_only finds the main workspace without paging the rest.
 func TestListWorktrees_ActiveArchivedAndMainAreSeparateQueries(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -86,6 +88,8 @@ func TestListWorktrees_ActiveArchivedAndMainAreSeparateQueries(t *testing.T) {
 }
 
 func TestListWorktreesByIDs_ReturnsArchivedAndSkipsUnknown(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()

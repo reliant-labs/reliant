@@ -11,6 +11,8 @@ import (
 // telemetry lifecycle on the attachment record: update, fresh-list exposure,
 // reset on re-attachment, and graceful no-op when the row doesn't exist.
 func TestDaemonAttachmentMemoryTelemetry(t *testing.T) {
+	t.Parallel()
+
 	repo, rawDB, cleanup := SetupTestDBWithRawDB(t)
 	defer cleanup()
 	ctx := context.Background()

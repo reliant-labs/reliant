@@ -28,6 +28,8 @@ func createTestWorkflowRow(t *testing.T, repo *db.Repo, chatID string) string {
 }
 
 func TestWorkflowCheckpointActivity_UpsertAndRead(t *testing.T) {
+	t.Parallel()
+
 	repo := setupTestRepo(t)
 	ctx := context.Background()
 	chatID := createTestChat(t, repo)
@@ -68,6 +70,8 @@ func TestWorkflowCheckpointActivity_UpsertAndRead(t *testing.T) {
 }
 
 func TestWorkflowCheckpoint_MissingReturnsNil(t *testing.T) {
+	t.Parallel()
+
 	repo := setupTestRepo(t)
 	cp, err := repo.GetWorkflowCheckpoint(context.Background(), "no-such-workflow")
 	require.NoError(t, err)
@@ -79,6 +83,8 @@ func TestWorkflowCheckpoint_MissingReturnsNil(t *testing.T) {
 //   - cancelled  -> checkpoint deleted (user cancel starts fresh)
 //   - failed     -> checkpoint KEPT (next run resumes at position)
 func TestWorkflowStatus_CheckpointLifecycle(t *testing.T) {
+	t.Parallel()
+
 	repo := setupTestRepo(t)
 	ctx := context.Background()
 

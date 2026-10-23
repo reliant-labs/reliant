@@ -50,6 +50,8 @@ func shellCallContext(command string) *toolExecutionContext {
 }
 
 func TestWorktreeAddSuggestion_SuggestsTheWorktreeTool(t *testing.T) {
+	t.Parallel()
+
 	a := (&ExecuteToolsActivity{}).WithConfigProvider(memoryConfigProvider{cfg: &cfgpkg.Config{}})
 	caps := tools.LegacyCapabilities(false)
 
@@ -70,6 +72,8 @@ func TestWorktreeAddSuggestion_SuggestsTheWorktreeTool(t *testing.T) {
 // a checkout made there — relative paths resolved from the repo the command
 // ran in — gets no suggestion. A checkout anywhere else still does.
 func TestWorktreeAddSuggestion_MemoryRootIsRespected(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 	caps := tools.LegacyCapabilities(false)
 	for name, cfg := range map[string]*cfgpkg.Config{
@@ -95,6 +99,8 @@ func TestWorktreeAddSuggestion_MemoryRootIsRespected(t *testing.T) {
 // The suggestion names the worktree tool, so it is made only when load_tool
 // would grant that tool this step.
 func TestWorktreeAddSuggestion_OnlyWhenTheWorktreeToolIsReachable(t *testing.T) {
+	t.Parallel()
+
 	a := (&ExecuteToolsActivity{}).WithConfigProvider(memoryConfigProvider{cfg: &cfgpkg.Config{}})
 	call := shellCallContext("git worktree add ../reliant-x -b x")
 
@@ -134,6 +140,8 @@ func (e *shellOutputExecutor) Close() error { return nil }
 // and carries the suggestion inside its shell envelope — unless the project's
 // memory names the root the checkout was made in.
 func TestExecuteTools_GitWorktreeAddRunsWithASuggestion(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	t.Cleanup(h.Cleanup)
 	ctx := context.Background()

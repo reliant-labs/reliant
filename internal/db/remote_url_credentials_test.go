@@ -36,6 +36,8 @@ func newRemoteProject(id, user, path string, remote *string) *core.Project {
 // The store is the one place every writer passes through, so a token in a
 // remote never reaches the column — whichever caller handed it over.
 func TestStoreNeverPersistsRemoteCredentials(t *testing.T) {
+	t.Parallel()
+
 	repo, raw, cleanup := SetupTestDBWithRawDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -92,6 +94,8 @@ const stripRemoteCredentialsMigration = "migrations/20261019172550_strip_remote_
 // userinfo, a collision with a clean sibling under projects_user_remote_url_uniq,
 // and values that must not change.
 func TestStripRemoteURLCredentialsMigration(t *testing.T) {
+	t.Parallel()
+
 	_, raw, cleanup := SetupTestDBWithRawDB(t)
 	defer cleanup()
 	sqlText, err := forgedb.MigrationsFS.ReadFile(stripRemoteCredentialsMigration)

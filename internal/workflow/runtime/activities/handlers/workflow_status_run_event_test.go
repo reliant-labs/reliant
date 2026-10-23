@@ -89,6 +89,8 @@ func (f *runEventFixture) events(t *testing.T) []*core.RunEvent {
 }
 
 func TestWorkflowStatus_RootCompletionEmitsOneFinishedRunEvent(t *testing.T) {
+	t.Parallel()
+
 	f := newRunEventFixture(t, true)
 	f.finish(t, "completed", "", "")
 	// The activity is retried by Temporal on any failure after commit; the
@@ -106,6 +108,8 @@ func TestWorkflowStatus_RootCompletionEmitsOneFinishedRunEvent(t *testing.T) {
 }
 
 func TestWorkflowStatus_DeclaredFailureAndFailedStatusEmitFailed(t *testing.T) {
+	t.Parallel()
+
 	f := newRunEventFixture(t, true)
 	f.finish(t, "completed", model.OutcomeFailure, "")
 	evs := f.events(t)
@@ -121,6 +125,8 @@ func TestWorkflowStatus_DeclaredFailureAndFailedStatusEmitFailed(t *testing.T) {
 }
 
 func TestWorkflowStatus_NoRunEventWithoutAWorkflowEventTrigger(t *testing.T) {
+	t.Parallel()
+
 	f := newRunEventFixture(t, false)
 	f.finish(t, "completed", "", "")
 	assert.Empty(t, f.events(t), "owners with no workflow_event trigger pay nothing")
@@ -130,6 +136,8 @@ func TestWorkflowStatus_NoRunEventWithoutAWorkflowEventTrigger(t *testing.T) {
 // second pending item does not block it again: firing per item would turn one
 // stuck run into a burst of triggered runs.
 func TestApprovalAndQuestionCreate_EmitBlockedOnceForTheFirstPendingItem(t *testing.T) {
+	t.Parallel()
+
 	f := newRunEventFixture(t, true)
 
 	var approvalOut ApprovalCreateOutput
@@ -153,6 +161,8 @@ func TestApprovalAndQuestionCreate_EmitBlockedOnceForTheFirstPendingItem(t *test
 }
 
 func TestQuestionCreate_EmitsBlockedWithTheQuestionText(t *testing.T) {
+	t.Parallel()
+
 	f := newRunEventFixture(t, true)
 	metadata := `{"type":"ask_user","questions":[{"question":"Which region?","options":[]}]}`
 	var out QuestionCreateOutput
@@ -168,6 +178,8 @@ func TestQuestionCreate_EmitsBlockedWithTheQuestionText(t *testing.T) {
 }
 
 func TestWorkflowStatus_ChildAndCancelledEmitNoRunEvent(t *testing.T) {
+	t.Parallel()
+
 	f := newRunEventFixture(t, true)
 	input := WorkflowStatusInput{
 		ChatID: f.chatID, WorkflowID: uuid.NewString(), ParentWorkflowID: f.chatID,

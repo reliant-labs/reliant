@@ -109,6 +109,8 @@ func branchNote(t *testing.T, repo *db.Repo, ctx context.Context, sourceChatID, 
 // must be told it is a branch: of which chat, from which point, and that the
 // original may still be running alongside it.
 func TestBranchChat_HiddenNote_StatesBranchFacts(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
@@ -127,6 +129,8 @@ func TestBranchChat_HiddenNote_StatesBranchFacts(t *testing.T) {
 // a resumed agent (one thread, several spawn rows), a branch of a branch whose
 // agents belong to more than one chat, and an untitled source.
 func TestBranchContextNote_Edges(t *testing.T) {
+	t.Parallel()
+
 	forkPoint := &db.Message{CreatedAt: branchNoteForkTime}
 	source := &db.Chat{ID: "src", Title: "Roofing"}
 	thread := func(id string) *string { return &id }
@@ -167,6 +171,8 @@ func TestBranchContextNote_Edges(t *testing.T) {
 // holds "you will be notified" spawn handles that will never notify the branch.
 // The note must say so — and say what to do instead.
 func TestBranchChat_HiddenNote_ExplainsInheritedSubAgents(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")

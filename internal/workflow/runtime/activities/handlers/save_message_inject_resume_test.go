@@ -133,6 +133,8 @@ func (f *injectFixture) seedCount(t *testing.T) int {
 // message. The key is derived from the graph position, so the resumed run
 // recognizes the seed it already wrote.
 func TestInject_SameFrameAcrossRuns_WritesOneMessage(t *testing.T) {
+	t.Parallel()
+
 	f := newInjectFixture(t)
 
 	// The stable key the production path supplies. Identical in both runs
@@ -155,6 +157,8 @@ func TestInject_SameFrameAcrossRuns_WritesOneMessage(t *testing.T) {
 // If this test ever reports 1, the RunID has stopped varying across runs and
 // this whole fix is unnecessary — read that as a signal, not a pass.
 func TestInject_RunScopedKey_DuplicatesAcrossRuns(t *testing.T) {
+	t.Parallel()
+
 	f := newInjectFixture(t)
 
 	f.runInjectRunScoped(t, "wf-root", "run-aaa") // original run
@@ -170,6 +174,8 @@ func TestInject_RunScopedKey_DuplicatesAcrossRuns(t *testing.T) {
 // what to do simply stalls — a worse failure than the duplicate, because
 // nothing in the transcript shows what went wrong.
 func TestInject_DifferentFrames_EachInject(t *testing.T) {
+	t.Parallel()
+
 	f := newInjectFixture(t)
 
 	// Four iterations of a retry loop: "Attempt 1 of 4" .. "Attempt 4 of 4".
@@ -193,6 +199,8 @@ func TestInject_DifferentFrames_EachInject(t *testing.T) {
 // belongs to the run that produced it. This pins that the fix did not widen
 // beyond the inject path.
 func TestInject_NonInjectCallersKeepRunScopedKey(t *testing.T) {
+	t.Parallel()
+
 	f := newInjectFixture(t)
 
 	input := (&SaveMessageInput{

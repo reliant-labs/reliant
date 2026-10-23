@@ -87,6 +87,8 @@ func createToolResultBlockOnMessage(t *testing.T, repo *db.Repo, messageID, tool
 // after the assistant message with its tool_call is persisted but before any
 // result is written. This is the single most common orphan source.
 func TestToolPairing_WorkflowCancelledMidToolExecution(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestRepoWithCleanup(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -113,6 +115,8 @@ func TestToolPairing_WorkflowCancelledMidToolExecution(t *testing.T) {
 // then read again (a resumed run, or the user simply reopening the chat). The
 // read path must not deadlock the resumed conversation.
 func TestToolPairing_PauseDuringToolExecution(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestRepoWithCleanup(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -141,6 +145,8 @@ func TestToolPairing_PauseDuringToolExecution(t *testing.T) {
 // persisting the assistant message and persisting the results, so CleanupActivity
 // never runs. Nothing at rest fixes this; the boundary must.
 func TestToolPairing_CrashBetweenAssistantAndResults(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestRepoWithCleanup(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -168,6 +174,8 @@ func TestToolPairing_CrashBetweenAssistantAndResults(t *testing.T) {
 // some calls got results. The successful results must survive untouched while
 // the unanswered ones are filled in.
 func TestToolPairing_PartialBatchSomeToolsSucceeded(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestRepoWithCleanup(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -209,6 +217,8 @@ func TestToolPairing_PartialBatchSomeToolsSucceeded(t *testing.T) {
 // inherits the tool_call but NOT the tool message that answered it. Those parent
 // rows belong to another conversation and must not be rewritten to fix the child.
 func TestToolPairing_ForkBetweenCallAndResult(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestRepoWithCleanup(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -248,6 +258,8 @@ func TestToolPairing_ForkBetweenCallAndResult(t *testing.T) {
 // TestToolPairing_ForkAtResultKeepsRealResult: forking AFTER the result must
 // inherit the genuine output, never a synthetic stand-in.
 func TestToolPairing_ForkAtResultKeepsRealResult(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestRepoWithCleanup(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -283,6 +295,8 @@ func TestToolPairing_ForkAtResultKeepsRealResult(t *testing.T) {
 // the alternative, leaving the call unanswered until the background work lands,
 // would block the turn on something explicitly made non-blocking.
 func TestToolPairing_BackgroundedTool(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestRepoWithCleanup(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -311,6 +325,8 @@ func TestToolPairing_BackgroundedTool(t *testing.T) {
 // tool_result whose tool_use is absent is rejected by providers just as a
 // dangling call is, so it must be dropped rather than forwarded.
 func TestToolPairing_OrphanedResultWithNoCall(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestRepoWithCleanup(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -334,6 +350,8 @@ func TestToolPairing_OrphanedResultWithNoCall(t *testing.T) {
 // that already satisfies the invariant must pass through untouched. Without this,
 // the tests above could be satisfied by a repair pass that rewrites everything.
 func TestToolPairing_HealthyConversationIsUnchanged(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestRepoWithCleanup(t)
 	defer cleanup()
 	ctx := context.Background()

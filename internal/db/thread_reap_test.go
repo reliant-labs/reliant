@@ -18,6 +18,8 @@ import (
 // the live DB: 288 rows in exactly this state -- 174 whose workflow had
 // completed, 64 cancelled, 50 failed.
 func TestReapOrphanedThreads(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()

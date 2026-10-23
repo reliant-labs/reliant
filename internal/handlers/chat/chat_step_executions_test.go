@@ -35,6 +35,8 @@ func recordedStep(stepID, activity, nodePath string, at time.Time) *db.StepExecu
 // record — inputs, output (even for CallLLM, whose output the lean tree
 // withholds), error and attempt — for that node and what ran inside it.
 func TestListStepExecutions_ReturnsTheNodesFullRecord(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -93,6 +95,8 @@ func TestListStepExecutions_ReturnsTheNodesFullRecord(t *testing.T) {
 }
 
 func TestListStepExecutions_OtherUsersChatIsNotFound(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 

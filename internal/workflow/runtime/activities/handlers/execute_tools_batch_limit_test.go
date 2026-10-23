@@ -12,6 +12,8 @@ import (
 )
 
 func TestExecuteToolsActivity_CapsAggregateToolResultBatch(t *testing.T) {
+	t.Parallel()
+
 	f := setupDurableStatusFixture(t)
 	defer f.h.Cleanup()
 

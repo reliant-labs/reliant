@@ -52,6 +52,8 @@ func (s staticCred) Credential(context.Context, httpaction.CredentialRequest) (h
 // function, with the node's `with` as validated params and the resolved
 // connection, and returns the same ActionOutput a declarative action does.
 func TestActionNodeDispatchesGoExecutor(t *testing.T) {
+	t.Parallel()
+
 	m, err := manifest.Parse([]byte(signManifest), manifest.TrustCurated)
 	require.NoError(t, err)
 	reg := httpaction.NewExecutorRegistry()

@@ -20,6 +20,8 @@ import (
 // TextContent is indistinguishable, from the provider's point of view, from
 // not having stored it at all.
 func TestSaveMessage_PhaseRoundTrip(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()

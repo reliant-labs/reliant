@@ -57,6 +57,8 @@ func createChatWithMessages(t *testing.T, repo *db.Repo, n int) (ctx context.Con
 // first message for a chat whose history exceeds one page, and that Total
 // and HasMore stay correct across every page.
 func TestListMessages_ScrollbackReachesTheBeginning(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 
@@ -107,6 +109,8 @@ func TestListMessages_ScrollbackReachesTheBeginning(t *testing.T) {
 // thread's window, and Total accounts for sibling messages outside the
 // current page.
 func TestListMessages_Bounded_MainThreadWithSiblings(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
 

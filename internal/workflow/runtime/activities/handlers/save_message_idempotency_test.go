@@ -41,6 +41,8 @@ import (
 // ============================================================================
 
 func TestSaveMessageActivity_Idempotency_UserMessage(t *testing.T) {
+	t.Parallel()
+
 	t.Skip("Skipping: Temporal test framework doesn't properly simulate activity retry behavior - see comment header")
 
 	h := NewIdempotencyTestHelper(t)
@@ -135,6 +137,8 @@ func TestSaveMessageActivity_Idempotency_UserMessage(t *testing.T) {
 }
 
 func TestSaveMessageActivity_Idempotency_ToolMessage(t *testing.T) {
+	t.Parallel()
+
 	t.Skip("Skipping: Temporal test framework doesn't properly simulate activity retry behavior - see comment header")
 
 	h := NewIdempotencyTestHelper(t)
@@ -242,6 +246,8 @@ func TestSaveMessageActivity_Idempotency_ToolMessage(t *testing.T) {
 }
 
 func TestSaveMessageActivity_CleansUpOnRetry(t *testing.T) {
+	t.Parallel()
+
 	t.Skip("Skipping: Temporal test framework doesn't properly simulate activity retry behavior - see comment header")
 
 	h := NewIdempotencyTestHelper(t)
@@ -341,6 +347,8 @@ func TestSaveMessageActivity_CleansUpOnRetry(t *testing.T) {
 }
 
 func TestSaveMessageActivity_MultipleToolResults(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 
@@ -436,6 +444,8 @@ func TestSaveMessageActivity_MultipleToolResults(t *testing.T) {
 }
 
 func TestSaveMessageActivity_ValidationErrors(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 
@@ -551,6 +561,8 @@ func TestSaveMessageActivity_ValidationErrors(t *testing.T) {
 }
 
 func TestSaveMessageActivity_OrdinalIncrement(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 
@@ -661,6 +673,8 @@ func TestSaveMessageActivity_OrdinalIncrement(t *testing.T) {
 }
 
 func TestSaveMessageActivity_TransactionRollback(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 

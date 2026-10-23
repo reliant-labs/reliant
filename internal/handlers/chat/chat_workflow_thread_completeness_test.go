@@ -94,6 +94,8 @@ func collectThreads(root *reliantv1.WorkflowExecution) map[string]*reliantv1.Wor
 }
 
 func TestGetWorkflowExecutions_IncludesInlineForkThreadWithoutWorkflowRow(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -153,6 +155,8 @@ func TestGetWorkflowExecutions_IncludesInlineForkThreadWithoutWorkflowRow(t *tes
 }
 
 func TestGetWorkflowExecutions_PreservesSpawnAndNodeOriginDistinction(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 

@@ -14,6 +14,8 @@ import (
 // under the same identity.
 
 func TestSaveMessage_FixedMessageID(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()

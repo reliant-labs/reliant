@@ -32,6 +32,8 @@ func snapMsg(id string, seq int64, thread string) *db.Message {
 // render collapsed inside their tool call rather than in the transcript, so the
 // chat appeared empty.
 func TestSnapshotWindow_SpawnHeavyChatStillShowsTranscript(t *testing.T) {
+	t.Parallel()
+
 	const mainThread = "main"
 	var messages []*db.Message
 
@@ -65,6 +67,8 @@ func TestSnapshotWindow_SpawnHeavyChatStillShowsTranscript(t *testing.T) {
 
 // A chat with no spawn threads must be unaffected — same bound, same result.
 func TestSnapshotWindow_SingleThreadChatUnchanged(t *testing.T) {
+	t.Parallel()
+
 	const mainThread = "main"
 	var messages []*db.Message
 	for seq := int64(0); seq < 500; seq++ {
@@ -82,6 +86,8 @@ func TestSnapshotWindow_SingleThreadChatUnchanged(t *testing.T) {
 
 // A chat shorter than the limit is returned whole.
 func TestSnapshotWindow_ShortChatReturnedWhole(t *testing.T) {
+	t.Parallel()
+
 	const mainThread = "main"
 	messages := []*db.Message{
 		snapMsg("a", 0, mainThread),
@@ -98,6 +104,8 @@ func TestSnapshotWindow_ShortChatReturnedWhole(t *testing.T) {
 // Without an identifiable main thread the chat-wide bound is the only option,
 // and must still apply.
 func TestSnapshotWindow_NoMainThreadFallsBackToChatWideBound(t *testing.T) {
+	t.Parallel()
+
 	var messages []*db.Message
 	for seq := int64(0); seq < 500; seq++ {
 		messages = append(messages, snapMsg("m", seq, "some-thread"))

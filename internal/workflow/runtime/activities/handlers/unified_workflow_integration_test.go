@@ -105,6 +105,8 @@ func (m *MockToolExecutor) Close() error {
 // ============================================================================
 
 func TestUnifiedWorkflow_SaveUserMessage_CallLLM(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 
@@ -206,6 +208,8 @@ func TestUnifiedWorkflow_SaveUserMessage_CallLLM(t *testing.T) {
 // ============================================================================
 
 func TestUnifiedWorkflow_ExecuteTools_SaveToolResults(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 
@@ -431,6 +435,8 @@ func TestUnifiedWorkflow_ExecuteTools_SaveToolResults(t *testing.T) {
 // ============================================================================
 
 func TestUnifiedWorkflow_EndToEnd(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 
@@ -633,6 +639,8 @@ func TestUnifiedWorkflow_EndToEnd(t *testing.T) {
 // ============================================================================
 
 func TestUnifiedWorkflow_DataFlowThroughOutputs(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 

@@ -24,6 +24,8 @@ func (m *mockLocalExecutor) ExecuteTool(ctx context.Context, req *toolexec.ToolR
 func (m *mockLocalExecutor) Close() error { return nil }
 
 func TestPreflightDaemonCheck_NonRemoteExecutor(t *testing.T) {
+	t.Parallel()
+
 	// When the tool executor is NOT a RemoteExecutor,
 	// the activity should return DaemonAvailable: true immediately.
 	ctx := context.Background()
@@ -68,6 +70,8 @@ func TestPreflightDaemonCheck_NonRemoteExecutor(t *testing.T) {
 }
 
 func TestPreflightDaemonCheck_ChatNotFound(t *testing.T) {
+	t.Parallel()
+
 	repo := db.NewTestRepo(t)
 	defer repo.Close()
 

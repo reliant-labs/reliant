@@ -30,6 +30,8 @@ import (
 // and the chat stopped dead at 23:27:31 with no message and no error.
 
 func TestContentFreeTurn_RefusalIsExplained(t *testing.T) {
+	t.Parallel()
+
 	text, ok := contentFreeTurnExplanation(false, "", "", "", "", 0, message.FinishReasonRefusal)
 
 	require.True(t, ok, "a refusal with no content must be reported — without it the chat dies silently")
@@ -38,6 +40,8 @@ func TestContentFreeTurn_RefusalIsExplained(t *testing.T) {
 }
 
 func TestContentFreeTurn_UnknownReasonIsStillExplained(t *testing.T) {
+	t.Parallel()
+
 	// The reason is informational. Whatever it is, an empty turn must not be
 	// handed back empty — that is the shape SaveMessage cannot persist.
 	for _, reason := range []message.FinishReason{
@@ -53,6 +57,8 @@ func TestContentFreeTurn_UnknownReasonIsStillExplained(t *testing.T) {
 }
 
 func TestContentFreeTurn_LeavesRealTurnsAlone(t *testing.T) {
+	t.Parallel()
+
 	t.Run("text", func(t *testing.T) {
 		_, ok := contentFreeTurnExplanation(false, "here you go", "", "", "", 0, message.FinishReasonEndTurn)
 		assert.False(t, ok)
@@ -80,6 +86,8 @@ func TestContentFreeTurn_LeavesRealTurnsAlone(t *testing.T) {
 }
 
 func TestContentFreeTurn_InterruptIsNotReported(t *testing.T) {
+	t.Parallel()
+
 	// A stream the user cancelled before it produced anything is a turn they
 	// chose not to have. persistInterruptedTurn already declines to write a row
 	// for it; reporting it would flag the user's own cancel as a failure.
@@ -88,6 +96,8 @@ func TestContentFreeTurn_InterruptIsNotReported(t *testing.T) {
 }
 
 func TestHandleComplete_CapturesFinishReason(t *testing.T) {
+	t.Parallel()
+
 	// The substitution can only name the cause if the reason survives the
 	// stream. Nothing else read FinishReason, so nothing was keeping it alive.
 	activity := &CallLLMActivity{}
@@ -109,6 +119,8 @@ func TestHandleComplete_CapturesFinishReason(t *testing.T) {
 // actually land in chat_updates, in the shape the frontend reads. A correct
 // decision that writes nothing is the same silent stop it was before.
 func TestReportContentFreeTurn_WritesTheErrorToTheChat(t *testing.T) {
+	t.Parallel()
+
 	repo := setupTestRepo(t)
 	chatID := createTestChat(t, repo)
 
@@ -162,6 +174,8 @@ func TestReportContentFreeTurn_WritesTheErrorToTheChat(t *testing.T) {
 // recovery: say it paused, and do not claim it ended or that the cause is
 // unknown.
 func TestContentFreeTurn_PauseTurnIsNotDescribedAsEmptyOrUnknown(t *testing.T) {
+	t.Parallel()
+
 	text, ok := contentFreeTurnExplanation(false, "", "", "", "", 0, message.FinishReasonPauseTurn)
 	require.True(t, ok, "a paused turn with no content still reaches the user with nothing to show")
 

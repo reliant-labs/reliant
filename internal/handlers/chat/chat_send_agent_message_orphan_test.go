@@ -45,6 +45,8 @@ func agentMessageStatusOf(t *testing.T, rawDB *sql.DB, ctx context.Context, thre
 // Reproduces the live-DB shape exactly: thread 5753b25c had two human
 // messages queued at 00:06:31 and 00:06:51 and completed at 00:06:56.
 func TestSendAgentMessage_ThreadExitsBeforeNextBoundary(t *testing.T) {
+	t.Parallel()
+
 	repo, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
 	t.Cleanup(cleanup)
 
@@ -114,6 +116,8 @@ func TestSendAgentMessage_ThreadExitsBeforeNextBoundary(t *testing.T) {
 // message that arrived while it was reporting its failure, which is exactly
 // the one that resumes it.
 func TestThreadStatus_ResolvesMailboxOnEveryTerminalPath(t *testing.T) {
+	t.Parallel()
+
 	for _, verb := range []string{"completed", "failed", "cancelled"} {
 		t.Run(verb, func(t *testing.T) {
 			repo, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
@@ -158,6 +162,8 @@ func TestThreadStatus_ResolvesMailboxOnEveryTerminalPath(t *testing.T) {
 // waiting for the next boundary -- resolving them there would destroy
 // messages that were about to be delivered.
 func TestThreadStatus_LeavesQueueAloneWhileThreadRuns(t *testing.T) {
+	t.Parallel()
+
 	repo, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
 	t.Cleanup(cleanup)
 

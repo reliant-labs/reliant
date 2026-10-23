@@ -139,6 +139,8 @@ func (f *fsRoutingFixture) assertBrowsedOn(t *testing.T, daemonID string) {
 // run on B, so the tree and the preview must come from B. Before the fix every
 // request went to the default machine.
 func TestFileSystemProxy_ChatOnMachineB_ReadsFromB(t *testing.T) {
+	t.Parallel()
+
 	f := newFSRoutingFixture(t)
 	chatID := f.chat(t, f.userID, "daemon-b", "")
 
@@ -149,6 +151,8 @@ func TestFileSystemProxy_ChatOnMachineB_ReadsFromB(t *testing.T) {
 // The web app names the workspace it shows, and for the main checkout that is
 // the main worktree row, which no machine owns. The chat still decides.
 func TestFileSystemProxy_ChatOnMachineB_MainWorktreeRow_ReadsFromB(t *testing.T) {
+	t.Parallel()
+
 	f := newFSRoutingFixture(t)
 	main := f.worktree(t, "")
 	chatID := f.chat(t, f.userID, "daemon-b", "")
@@ -159,6 +163,8 @@ func TestFileSystemProxy_ChatOnMachineB_MainWorktreeRow_ReadsFromB(t *testing.T)
 
 // A chat with no pin, bound to a worktree machine B owns, runs its tools on B.
 func TestFileSystemProxy_ChatInOwnedWorktree_ReadsFromOwner(t *testing.T) {
+	t.Parallel()
+
 	f := newFSRoutingFixture(t)
 	wt := f.worktree(t, "daemon-b")
 	chatID := f.chat(t, f.userID, "", wt.ID)
@@ -169,6 +175,8 @@ func TestFileSystemProxy_ChatInOwnedWorktree_ReadsFromOwner(t *testing.T) {
 
 // The chat's pin beats its worktree's owner, as it does for the chat's tools.
 func TestFileSystemProxy_ChatPinBeatsItsWorktreeOwner(t *testing.T) {
+	t.Parallel()
+
 	f := newFSRoutingFixture(t)
 	wt := f.worktree(t, "daemon-b")
 	chatID := f.chat(t, f.userID, "daemon-c", wt.ID)
@@ -180,6 +188,8 @@ func TestFileSystemProxy_ChatPinBeatsItsWorktreeOwner(t *testing.T) {
 // Without a chat, an owned worktree is read from its owner: no other machine
 // has the checkout.
 func TestFileSystemProxy_OwnedWorktreeWithoutChat_ReadsFromOwner(t *testing.T) {
+	t.Parallel()
+
 	f := newFSRoutingFixture(t)
 	wt := f.worktree(t, "daemon-b")
 
@@ -190,6 +200,8 @@ func TestFileSystemProxy_OwnedWorktreeWithoutChat_ReadsFromOwner(t *testing.T) {
 // A request that names an owned worktree other than the chat's own is about
 // that worktree, so it goes to the worktree's owner, not the chat's machine.
 func TestFileSystemProxy_OtherOwnedWorktree_ReadsFromItsOwner(t *testing.T) {
+	t.Parallel()
+
 	f := newFSRoutingFixture(t)
 	other := f.worktree(t, "daemon-b")
 	chatID := f.chat(t, f.userID, "daemon-c", "")
@@ -200,6 +212,8 @@ func TestFileSystemProxy_OtherOwnedWorktree_ReadsFromItsOwner(t *testing.T) {
 
 // Nothing names a machine: default resolution, as before.
 func TestFileSystemProxy_NoMachineNamed_UsesDefault(t *testing.T) {
+	t.Parallel()
+
 	f := newFSRoutingFixture(t)
 	main := f.worktree(t, "")
 	chatID := f.chat(t, f.userID, "", "")
@@ -211,6 +225,8 @@ func TestFileSystemProxy_NoMachineNamed_UsesDefault(t *testing.T) {
 // Writes follow the same rule as reads: a save must land on the disk the tree
 // was read from.
 func TestFileSystemProxy_ChatOnMachineB_WritesToB(t *testing.T) {
+	t.Parallel()
+
 	f := newFSRoutingFixture(t)
 	chatID := f.chat(t, f.userID, "daemon-b", "")
 
@@ -230,6 +246,8 @@ func TestFileSystemProxy_ChatOnMachineB_WritesToB(t *testing.T) {
 // A chat that names a machine is a routing input now, so another user's chat
 // must not steer a request. It is refused before anything is sent.
 func TestFileSystemProxy_RefusesAnotherUsersChat(t *testing.T) {
+	t.Parallel()
+
 	f := newFSRoutingFixture(t)
 	chatID := f.chat(t, uuid.NewString(), "daemon-b", "")
 
@@ -242,6 +260,8 @@ func TestFileSystemProxy_RefusesAnotherUsersChat(t *testing.T) {
 // A chat the UI still names after deleting it degrades to the routing a
 // request without a chat gets, rather than failing the tree.
 func TestFileSystemProxy_DeletedChat_FallsBackToDefault(t *testing.T) {
+	t.Parallel()
+
 	f := newFSRoutingFixture(t)
 	gone := uuid.NewString()
 
@@ -252,6 +272,8 @@ func TestFileSystemProxy_DeletedChat_FallsBackToDefault(t *testing.T) {
 // A chat from another project is stale UI context (a project switch racing
 // the tree): it neither routes the request nor scopes it to its worktree.
 func TestFileSystemProxy_ChatFromAnotherProject_IsIgnored(t *testing.T) {
+	t.Parallel()
+
 	f := newFSRoutingFixture(t)
 	now := time.Now().UTC()
 	otherProject := uuid.NewString()

@@ -140,6 +140,8 @@ func (f *noMachineFixture) offeredTools(t *testing.T, preloaded, loadable []stri
 // before, a daemon-less run was offered all of them, failed each call with "no
 // daemon connected", and the breaker paused it after three.
 func TestCallLLM_NoMachineRunIsOfferedOnlyToolsThatRunWithoutAMachine(t *testing.T) {
+	t.Parallel()
+
 	preloaded := []string{"tag:coding:default", "tag:mcp"}
 
 	ordinary := setupNoMachineFixture(t, false)
@@ -176,6 +178,8 @@ func TestCallLLM_NoMachineRunIsOfferedOnlyToolsThatRunWithoutAMachine(t *testing
 // any tools, and never reaches a run on a machine — not by naming it, not by a
 // glob, not through load_tool's reach or its advertised list.
 func TestCallLLM_RequestMachineIsOfferedOnlyToARunWithNoMachine(t *testing.T) {
+	t.Parallel()
+
 	f := setupNoMachineFixture(t, true)
 	assert.Contains(t, f.offeredTools(t, []string{"tag:coding:default"}, nil), tools.ToolRequestMachine)
 	// A node whose only tools need a machine is exactly the one that may need
@@ -198,6 +202,8 @@ func TestCallLLM_RequestMachineIsOfferedOnlyToARunWithNoMachine(t *testing.T) {
 // the task needs the user's computer: both point at request_machine when the
 // turn was offered it, and neither names it when it was not.
 func TestNoMachineNotes_NameRequestMachineOnlyWhenOffered(t *testing.T) {
+	t.Parallel()
+
 	repos := []githubRepo{{Owner: "acme", Name: "widgets"}}
 	offered := &tools.Capabilities{Permission: tools.PermissionMutating, NoMachine: true,
 		Offered: []string{tools.ToolRequestMachine}}
@@ -222,6 +228,8 @@ func TestNoMachineNotes_NameRequestMachineOnlyWhenOffered(t *testing.T) {
 // connected, is told both that it has no machine and that the code cannot be
 // read from here, and both notes send it to request_machine.
 func TestCallLLM_NoMachineNotesComposeAroundRequestMachine(t *testing.T) {
+	t.Parallel()
+
 	f := setupIntegrationFixture(t, true, &ownerConnections{usable: map[string]bool{}})
 	f.setProjectRemote(t, "https://github.com/acme/widgets.git")
 
@@ -237,6 +245,8 @@ func TestCallLLM_NoMachineNotesComposeAroundRequestMachine(t *testing.T) {
 
 // A node given no tools at all (a title or a summary call) is not handed one.
 func TestCallLLM_NoMachineNodeWithNoToolsIsHandedNone(t *testing.T) {
+	t.Parallel()
+
 	f := setupNoMachineFixture(t, true)
 	assert.Empty(t, f.offeredTools(t, []string{}, nil))
 }
@@ -245,6 +255,8 @@ func TestCallLLM_NoMachineNodeWithNoToolsIsHandedNone(t *testing.T) {
 // the running workflow's next turn: call_llm re-reads the chat row every turn,
 // so the same chat is offered the machine tools and no longer request_machine.
 func TestCallLLM_ConnectingAMachineGivesTheNextTurnTheFullToolSet(t *testing.T) {
+	t.Parallel()
+
 	f := setupNoMachineFixture(t, true)
 	preloaded := []string{"tag:coding:default"}
 
@@ -270,6 +282,8 @@ func TestCallLLM_ConnectingAMachineGivesTheNextTurnTheFullToolSet(t *testing.T) 
 // without one (a batch from before the set existed, where the chat row alone
 // refuses them).
 func TestExecuteTools_NoMachineRunRefusesMachineToolsWithoutTrippingTheBreaker(t *testing.T) {
+	t.Parallel()
+
 	f := setupNoMachineFixture(t, true)
 	f.offeredTools(t, []string{"tag:coding:default"}, []string{"*"})
 	require.NotNil(t, f.caps)
@@ -316,6 +330,8 @@ func TestExecuteTools_NoMachineRunRefusesMachineToolsWithoutTrippingTheBreaker(t
 // marked as having no machine, so the transport layers below refuse to reach a
 // daemon for it.
 func TestExecuteTools_NoMachineRunStillRunsServerToolsOnAMarkedContext(t *testing.T) {
+	t.Parallel()
+
 	f := setupNoMachineFixture(t, true)
 	executor := &contextRecordingExecutor{}
 	activity := NewExecuteToolsActivity(f.h.Repo(), executor)

@@ -47,6 +47,8 @@ func resolveSenders(env *triggerTestEnv, integration string, handles, ids []stri
 // "Only from" resolves a login to the id it stores, and an id to the login it
 // shows, asking as the caller.
 func TestResolveTriggerSendersAsksAsTheCaller(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	dir := &fakeSenders{found: []ResolvedSender{
 		{Query: "@octocat", ID: "583231", DisplayName: "octocat"},
@@ -65,6 +67,8 @@ func TestResolveTriggerSendersAsksAsTheCaller(t *testing.T) {
 }
 
 func TestResolveTriggerSendersErrors(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 
 	_, err := resolveSenders(env, "slack", []string{"U123"}, nil)
@@ -93,6 +97,8 @@ func TestResolveTriggerSendersErrors(t *testing.T) {
 
 // A firing carries trigger.sender, so a list of them can name who sent each.
 func TestListTriggerEventsCarriesTheSender(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	created := env.create(t, env.definition(nil))
 	sender := &core.TriggerSender{Kind: core.TriggerSenderKindGitHub, ID: "583231", DisplayName: "octocat", Verified: true}

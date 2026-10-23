@@ -118,21 +118,12 @@ vars:
   BUF: 'env GOWORK=off GOFLAGS=-trimpath go run github.com/bufbuild/buf/cmd/buf@{{.BUF_VERSION}}'
 
   # ── Which Postgres the Go tests use ────────────────────────────────────
-  # DB-backed tests read DATABASE_URL and nothing else. With it unset they
-  # skip, or fail under REQUIRE_TEST_DB=1 (resolveTestDSN in
-  # internal/db/testutil.go); they never pick a server on their own. The
-  # convenient default lives HERE instead, where choosing it is visible: every
-  # task that runs Go tests sets DATABASE_URL to TEST_DATABASE_URL.
-  #
-  # A DATABASE_URL you set always wins (Task never overrides your
-  # environment). Only when it is unset do these tasks use this repo's
-  # compose Postgres (`task postgres:up`). On a shared machine that server is
-  # everyone's — point DATABASE_URL at a database of your own. And never at
-  # the control-plane dev stack's Postgres (5434): it is a different server
-  # whose `reliant` database holds real data. (P8 L3 replaces all of this
-  # with forge pgtest's embedded server.)
-  COMPOSE_DATABASE_URL: postgres://postgres:postgres@localhost:5433/reliant?sslmode=disable
-  TEST_DATABASE_URL: '{{.DATABASE_URL | default .COMPOSE_DATABASE_URL}}'
+  # No task configures one. DB-backed tests take a database of their own from
+  # forge pgtest (internal/db/testutil.go): an embedded Postgres of the major
+  # forge.yaml declares, booted on a free port on first use and shared by
+  # every test process on the machine. FORGE_TEST_POSTGRES_URL (a maintenance
+  # DSN, database "postgres", on that major) points a run at a server of your
+  # own instead. DATABASE_URL is never read by a test.
 
   # Docs generator paths.
   REFERENCE_DIR: generated/docs-source/reference
@@ -255,10 +246,8 @@ tasks:
     #   task test:affected -- -dry-run      any other tools/test-affected flag
     #
     # TEST_BASE=<rev> moves the diff base, TEST_FULL=1 runs everything. A
-    # migration also runs the DB-backed packages it reaches, but only when YOU
-    # set DATABASE_URL (the compose default is not set here: it is a server
-    # shared by everyone on this machine). A FULL lane waits for a host heavy
-    # slot; a scoped one does not. Design and the rule table:
+    # migration also runs the DB-backed packages it reaches. A FULL lane waits
+    # for a host heavy slot; a scoped one does not. Design and the rule table:
     # dev-docs/testing-affected.md.
     desc: "Run ONLY the tests and codegen checks your diff can reach, and say why (LANES=go,web,electron,forge-generate,docs-generate)"
     cmds:
@@ -276,7 +265,8 @@ tasks:
     # `task test` is on purpose:
     #
     #   -short        slow paths sit behind `if testing.Short() { t.Skip() }`;
-    #                 the full lane still runs them. DB-backed tests skip.
+    #                 the full lane still runs them. DB-backed tests run:
+    #                 each gets its own copy of a migrated template.
     #   no -count=1   Go's test cache keys on the test binary, its flags, and
     #                 the files and env vars the test reads, so a cached pass
     #                 is a real pass for any test that builds its own state.
@@ -287,16 +277,19 @@ tasks:
     #                 -short, or this tier can report a stale pass.
     #   no -race      the race detector rebuilds every package under its own
     #                 cache key and slows tests 2-10x; `task test` keeps it on.
-    #   -timeout 60s  a test that needs longer under -short wants a
+    #   -timeout 5m   per package BINARY, not per test. The DB-backed
+    #                 packages run in this tier too (D-P8-3), and their tests
+    #                 are t.Parallel() (each owns its database), so the
+    #                 slowest package takes ~50s on an idle machine and ~130s
+    #                 at load 100; 5m is about twice the worst seen. A single
+    #                 test that needs seconds under -short still wants a
     #                 testing.Short() gate, not a bigger budget.
     #   no stop       nothing here stops another agent's environment.
     #
     # Go only — web and electron run in `task test` / `task test:web`.
     desc: "Inner-loop Go tests: -short, cached, no race. Scope it: task test:short -- ./internal/foo/..."
-    env:
-      DATABASE_URL: '{{.TEST_DATABASE_URL}}'
     cmds:
-      - go test -short -timeout 60s {{if .CLI_ARGS}}{{.CLI_ARGS}}{{else}}./...{{end}}
+      - go test -short -timeout 5m {{if .CLI_ARGS}}{{.CLI_ARGS}}{{else}}./...{{end}}
 
   test:
     # Everything after `--` REPLACES the default `./...`, so it takes both
@@ -316,8 +309,6 @@ tasks:
     # Unlike `make test` this never runs `make stop`, which stopped other
     # agents' environments.
     desc: Run Go unit tests (-race -count=1) and the web and electron tests (excludes integration + e2e)
-    env:
-      DATABASE_URL: '{{.TEST_DATABASE_URL}}'
     cmds:
       - '{{.SLOT}} go test {{.GOTESTRACE}} -count=1 -timeout 300s {{if .CLI_ARGS}}{{.CLI_ARGS}}{{else}}./...{{end}}'
       - task: test:web
@@ -327,21 +318,15 @@ tasks:
 
   test:integration:
     desc: Run integration tests (-tags=integration)
-    env:
-      DATABASE_URL: '{{.TEST_DATABASE_URL}}'
     cmds:
       - '{{.SLOT}} go test {{.GOTESTRACE}} -tags=integration -count=1 -timeout=10m {{if .CLI_ARGS}}{{.CLI_ARGS}}{{else}}./...{{end}}'
 
   test:e2e:
-    # e2e/stories: real Postgres + an ephemeral Temporal dev server (the test
-    # starts it) + a scripted LLM. With DATABASE_URL set that database is used
-    # and nothing is started; only when it is unset does this bring up the
-    # compose Postgres. `--` args replace the default package.
+    # e2e/stories: real Postgres (pgtest's, as every DB-backed test) + an
+    # ephemeral Temporal dev server (the test starts it) + a scripted LLM.
+    # `--` args replace the default package.
     desc: Run the hermetic story e2e tests (-tags e2e, ./e2e/stories/)
-    env:
-      DATABASE_URL: '{{.TEST_DATABASE_URL}}'
     cmds:
-      - task: postgres:up-for-tests
       - go test -tags e2e -count=1 -timeout=10m -v {{if .CLI_ARGS}}{{.CLI_ARGS}}{{else}}./e2e/stories/{{end}}
 
   test:all:
@@ -352,8 +337,6 @@ tasks:
 
   coverage:
     desc: Run Go unit tests with coverage and emit coverage.html
-    env:
-      DATABASE_URL: '{{.TEST_DATABASE_URL}}'
     cmds:
       - '{{.SLOT}} go test -race -coverprofile=coverage.out -covermode=atomic ./...'
       - go tool cover -html=coverage.out -o coverage.html
@@ -365,16 +348,10 @@ tasks:
 
   replay-fixtures:
     # See internal/workflow/runtime/replaytest/fixtures/README.md: regenerating
-    # accepts a replay break for in-flight runs. With DATABASE_URL set the
-    # generator uses that database and nothing is started; only when it is
-    # unset does this bring up the repo's compose Postgres — a shared server
-    # that an isolated run (an agent, a second worktree) must not start or
-    # write to.
+    # accepts a replay break for in-flight runs. The generator's database is
+    # pgtest's, as every DB-backed test's.
     desc: Regenerate the Temporal replay-compatibility history fixtures, then verify they replay
-    env:
-      DATABASE_URL: '{{.TEST_DATABASE_URL}}'
     cmds:
-      - task: postgres:up-for-tests
       - go test -tags replayfixtures -count=1 -timeout=10m -v ./internal/workflow/runtime/replaytest/
       - go test -count=1 -timeout=5m -v -run TestReplayFixtures ./internal/workflow/runtime/replaytest/
       - cmd: echo "Replay fixtures regenerated and verified — commit fixtures/*.json with your change"
@@ -425,25 +402,16 @@ tasks:
       - npm test --silent
 
   postgres:up:
-    # The 5433 compose server TEST_DATABASE_URL defaults to. Deleted with it
-    # (P8 L3/L5) once the tests boot forge pgtest's embedded server.
-    desc: Start this repo's compose Postgres on localhost:5433 (the shared test default)
+    # The docker-compose dev Postgres (scripts/dev.sh's stack). No test uses
+    # it; it goes with docker-compose.yml (P8 L5).
+    desc: Start this repo's compose dev Postgres on localhost:5433 (scripts/dev.sh's stack; tests do not use it)
     cmds:
       - docker compose up -d postgres
-      - cmd: echo "Postgres on localhost:5433. The test tasks pass it when DATABASE_URL is unset; for a bare go test, DATABASE_URL='{{.COMPOSE_DATABASE_URL}}'"
-        silent: true
 
   postgres:down:
-    desc: Stop this repo's compose Postgres
+    desc: Stop this repo's compose dev Postgres
     cmds:
       - docker compose stop postgres
-
-  postgres:up-for-tests:
-    # Only when the compose Postgres is the one the tests will use: a caller
-    # who chose their own DATABASE_URL gets nothing started.
-    internal: true
-    cmds:
-      - '{{if .DATABASE_URL}}echo "Using your DATABASE_URL; not starting docker compose"{{else}}docker compose up -d postgres{{end}}'
 
   # ── The gate ──────────────────────────────────────────────────────────
 

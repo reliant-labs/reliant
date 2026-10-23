@@ -144,6 +144,8 @@ func (f *streakFixture) report(chatID, status string, launchRun bool) (bool, str
 // Every kind of automation pages once per failure streak, not only a schedule:
 // a webhook that fails on each delivery is the same 24-pages-a-day problem.
 func TestWorkflowStatus_AutomationFailureNotifiesOncePerStreak(t *testing.T) {
+	t.Parallel()
+
 	for _, kind := range storedTriggerKinds {
 		t.Run(string(kind), func(t *testing.T) {
 			f := newStreakFixtureOfKind(t, kind, false)
@@ -174,6 +176,8 @@ func TestWorkflowStatus_AutomationFailureNotifiesOncePerStreak(t *testing.T) {
 }
 
 func TestWorkflowStatus_StreakIsPerAutomation(t *testing.T) {
+	t.Parallel()
+
 	f := newStreakFixture(t, false)
 	other := newStreakFixtureOn(t, f, "other")
 
@@ -198,6 +202,8 @@ func newStreakFixtureOn(t *testing.T, base *streakFixture, name string) *streakF
 }
 
 func TestWorkflowStatus_AgentStartedFailureAlwaysNotifies(t *testing.T) {
+	t.Parallel()
+
 	f := newStreakFixture(t, false)
 	for i := 0; i < 3; i++ {
 		chatID := f.launch(core.TriggerEventKindAgentStartRun, db.Active())
@@ -208,6 +214,8 @@ func TestWorkflowStatus_AgentStartedFailureAlwaysNotifies(t *testing.T) {
 }
 
 func TestWorkflowStatus_InteractiveFailureAlwaysNotifiesAfterScheduleFailures(t *testing.T) {
+	t.Parallel()
+
 	f := newStreakFixture(t, false)
 	f.finish(f.launch(core.TriggerEventKindSchedule, db.Active()), "failed")
 	for i := 0; i < 2; i++ {
@@ -220,6 +228,8 @@ func TestWorkflowStatus_InteractiveFailureAlwaysNotifiesAfterScheduleFailures(t 
 // "Notify me when it finishes" is offered on every automation, and honoured on
 // every one: a webhook's or provider event's run is no less worth hearing about.
 func TestWorkflowStatus_NotifyOnCompleteOptIn(t *testing.T) {
+	t.Parallel()
+
 	for _, kind := range storedTriggerKinds {
 		for _, tc := range []struct {
 			name       string
@@ -253,6 +263,8 @@ func (f *streakFixture) adopt(chatID string) {
 // whatever the trigger's policy says: the reply's finish notifies the way a
 // chat's does, and its failure always notifies — the streak is the trigger's.
 func TestWorkflowStatus_APersonsReplyInAnAutomationsChatIsAttended(t *testing.T) {
+	t.Parallel()
+
 	for _, kind := range []core.TriggerKind{core.TriggerKindSchedule, core.TriggerKindWebhook} {
 		t.Run(string(kind), func(t *testing.T) {
 			f := newStreakFixtureOfKind(t, kind, false) // opted out of completions
@@ -279,6 +291,8 @@ func TestWorkflowStatus_APersonsReplyInAnAutomationsChatIsAttended(t *testing.T)
 // The runs a trigger fires still follow its policy, and a person's turns in its
 // chats can neither end its failure streak nor start one.
 func TestWorkflowStatus_APersonsReplyNeitherEndsNorJoinsTheTriggersStreak(t *testing.T) {
+	t.Parallel()
+
 	for _, kind := range []core.TriggerKind{core.TriggerKindSchedule, core.TriggerKindWebhook} {
 		t.Run(string(kind)+"/a successful reply does not end the streak", func(t *testing.T) {
 			f := newStreakFixtureOfKind(t, kind, false)
@@ -309,6 +323,8 @@ func TestWorkflowStatus_APersonsReplyNeitherEndsNorJoinsTheTriggersStreak(t *tes
 // The agent that started a run gets its result, so its finish is silent; a
 // person who then replies in that run is waiting on their own turn.
 func TestWorkflowStatus_APersonsReplyInAnAgentsRunNotifies(t *testing.T) {
+	t.Parallel()
+
 	f := newStreakFixture(t, false)
 	chatID := f.launch(core.TriggerEventKindAgentStartRun, db.Active())
 	unread, _ := f.finish(chatID, "completed")
@@ -325,6 +341,8 @@ func TestWorkflowStatus_APersonsReplyInAnAgentsRunNotifies(t *testing.T) {
 // policy — here opted OUT of completions, with a failure streak already
 // running — speaks only for runs nobody is behind.
 func TestWorkflowStatus_AttendedRunIgnoresTheTriggersPolicy(t *testing.T) {
+	t.Parallel()
+
 	for _, tc := range []struct {
 		kind           core.TriggerEventKind
 		wantCompletion bool
@@ -355,6 +373,8 @@ func TestWorkflowStatus_AttendedRunIgnoresTheTriggersPolicy(t *testing.T) {
 // "failed" — a reviewer that never posted its review was recorded as
 // completed, and the automation read green while doing nothing.
 func TestWorkflowStatus_FailureOutcomeRecordsTheFiringAsFailed(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		name, status, outcome, want string
 	}{

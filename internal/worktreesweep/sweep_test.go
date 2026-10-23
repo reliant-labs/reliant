@@ -125,6 +125,8 @@ func (e *env) get(t *testing.T, id string) *db.Worktree {
 func exists(p string) bool { _, err := os.Stat(p); return err == nil }
 
 func TestSweep_RemovesCleanArchivedAndRecordsIt(t *testing.T) {
+	t.Parallel()
+
 	e := newEnv(t)
 	wt, path := e.worktree(t, "clean", true)
 	require.NoError(t, e.sweeper.Sweep(e.ctx))
@@ -137,6 +139,8 @@ func TestSweep_RemovesCleanArchivedAndRecordsIt(t *testing.T) {
 }
 
 func TestSweep_HoldsDirtyAndRecordsReasonAndSize(t *testing.T) {
+	t.Parallel()
+
 	e := newEnv(t)
 	wt, path := e.worktree(t, "dirty", true)
 	require.NoError(t, os.WriteFile(filepath.Join(path, "wip.txt"), []byte("not committed\n"), 0o644))
@@ -150,6 +154,8 @@ func TestSweep_HoldsDirtyAndRecordsReasonAndSize(t *testing.T) {
 }
 
 func TestSweep_LocksActiveWorktreesAndNeverRemovesThem(t *testing.T) {
+	t.Parallel()
+
 	e := newEnv(t)
 	wt, path := e.worktree(t, "live", false)
 	git(t, e.project.Path, "worktree", "unlock", path)
@@ -163,6 +169,8 @@ func TestSweep_LocksActiveWorktreesAndNeverRemovesThem(t *testing.T) {
 }
 
 func TestSweep_AdoptsUnattributedRows(t *testing.T) {
+	t.Parallel()
+
 	e := newEnv(t)
 	wt, path := e.worktree(t, "legacy", true)
 	_, err := e.repo.DB.ExecContext(e.ctx, `UPDATE worktrees SET daemon_id = NULL WHERE id = $1`, wt.ID)
@@ -175,6 +183,8 @@ func TestSweep_AdoptsUnattributedRows(t *testing.T) {
 }
 
 func TestSweep_SkipsOfflineDaemon(t *testing.T) {
+	t.Parallel()
+
 	e := newEnv(t)
 	_, path := e.worktree(t, "offline", true)
 	_, err := e.repo.DB.ExecContext(e.ctx, `DELETE FROM daemon_attachment WHERE daemon_id = $1`, e.daemon)
@@ -185,6 +195,8 @@ func TestSweep_SkipsOfflineDaemon(t *testing.T) {
 }
 
 func TestSettle_RemovesImmediately(t *testing.T) {
+	t.Parallel()
+
 	e := newEnv(t)
 	wt, path := e.worktree(t, "now", true)
 	e.sweeper.Settle(e.ctx, e.userID, &core.ReclaimCandidate{Worktree: e.get(t, wt.ID), OwnerUserID: e.userID, ProjectPath: e.project.Path})
@@ -192,6 +204,8 @@ func TestSettle_RemovesImmediately(t *testing.T) {
 }
 
 func TestStorageView_ShowsHeldAndLowDiskPerMachine(t *testing.T) {
+	t.Parallel()
+
 	e := newEnv(t)
 	_, path := e.worktree(t, "held", true)
 	require.NoError(t, os.WriteFile(filepath.Join(path, "wip.txt"), []byte("x"), 0o644))
@@ -217,6 +231,8 @@ func TestStorageView_ShowsHeldAndLowDiskPerMachine(t *testing.T) {
 }
 
 func TestStorageView_HealthyDiskWithNothingHeldHasNoItem(t *testing.T) {
+	t.Parallel()
+
 	e := newEnv(t)
 	e.worktree(t, "fine", true)
 	require.NoError(t, e.sweeper.Sweep(e.ctx))
@@ -226,6 +242,8 @@ func TestStorageView_HealthyDiskWithNothingHeldHasNoItem(t *testing.T) {
 }
 
 func TestCleanup_SnapshotsThenRemovesOnlyWhatWasConfirmed(t *testing.T) {
+	t.Parallel()
+
 	e := newEnv(t)
 	wtA, pathA := e.worktree(t, "a", true)
 	wtB, pathB := e.worktree(t, "b", true)
@@ -258,6 +276,8 @@ func TestCleanup_SnapshotsThenRemovesOnlyWhatWasConfirmed(t *testing.T) {
 }
 
 func TestCleanup_OfflineMachineIsRefused(t *testing.T) {
+	t.Parallel()
+
 	e := newEnv(t)
 	wt, path := e.worktree(t, "off", true)
 	require.NoError(t, os.WriteFile(filepath.Join(path, "wip.txt"), []byte("x"), 0o644))
@@ -270,6 +290,8 @@ func TestCleanup_OfflineMachineIsRefused(t *testing.T) {
 }
 
 func TestCleanup_NeverActsOnAnotherUsersWorktree(t *testing.T) {
+	t.Parallel()
+
 	e := newEnv(t)
 	wt, path := e.worktree(t, "mine", true)
 	require.NoError(t, os.WriteFile(filepath.Join(path, "wip.txt"), []byte("x"), 0o644))
@@ -284,6 +306,8 @@ func TestCleanup_NeverActsOnAnotherUsersWorktree(t *testing.T) {
 }
 
 func TestSweep_RecordsRegenerableFilesShedFromAHeldWorktree(t *testing.T) {
+	t.Parallel()
+
 	e := newEnv(t)
 	wt, path := e.worktree(t, "shed", true)
 	// An untracked .gitignore is both the reason it is held (dirty) and what
@@ -303,6 +327,8 @@ func TestSweep_RecordsRegenerableFilesShedFromAHeldWorktree(t *testing.T) {
 }
 
 func TestSweep_SavesUnpushedCommitsThenRemovesAndRecordsTheRefs(t *testing.T) {
+	t.Parallel()
+
 	e := newEnv(t)
 	wt, path := e.worktree(t, "unpushed", false)
 	git(t, path, "checkout", "-q", "--detach")

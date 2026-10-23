@@ -25,6 +25,8 @@ import (
 // caller may come away with the rows, and the loser must come away with none --
 // its signal to write nothing at all.
 func TestMarkAgentMessagesDelivered_ConcurrentClaimHasOneWinner(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -73,6 +75,8 @@ func TestMarkAgentMessagesDelivered_ConcurrentClaimHasOneWinner(t *testing.T) {
 // guarantee without the concurrency, and it is what makes the drain safe to
 // retry: Temporal can re-run the activity, and the re-run must not re-deliver.
 func TestMarkAgentMessagesDelivered_AlreadyDeliveredClaimsNothing(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	t.Cleanup(cleanup)
 

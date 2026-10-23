@@ -39,6 +39,8 @@ func groupInput(inputs map[string]*reliantv1.Input) *reliantv1.Input {
 }
 
 func TestBuildWorkflowInputs_EmptyToolsOverridesPreset(t *testing.T) {
+	t.Parallel()
+
 	service := &Service{}
 	projectPath := t.TempDir()
 
@@ -75,6 +77,8 @@ func TestBuildWorkflowInputs_EmptyToolsOverridesPreset(t *testing.T) {
 }
 
 func TestBuildWorkflowInputs_EmptySpawnPresetsOverridesPreset(t *testing.T) {
+	t.Parallel()
+
 	service := &Service{}
 	projectPath := t.TempDir()
 
@@ -111,6 +115,8 @@ func TestBuildWorkflowInputs_EmptySpawnPresetsOverridesPreset(t *testing.T) {
 }
 
 func TestBuildWorkflowInputs_NonEmptyToolsStillOverridePreset(t *testing.T) {
+	t.Parallel()
+
 	service := &Service{}
 	projectPath := t.TempDir()
 
@@ -138,6 +144,8 @@ func TestBuildWorkflowInputs_NonEmptyToolsStillOverridePreset(t *testing.T) {
 }
 
 func TestBuildWorkflowInputs_WorkflowBuilderPresetUsesProviderNeutralFlagshipModel(t *testing.T) {
+	t.Parallel()
+
 	service := &Service{}
 	projectPath := t.TempDir()
 
@@ -166,6 +174,8 @@ func TestBuildWorkflowInputs_WorkflowBuilderPresetUsesProviderNeutralFlagshipMod
 }
 
 func TestValidateWorkflowInputs_WorkflowBuilderModelThinkingShape(t *testing.T) {
+	t.Parallel()
+
 	service := &Service{}
 	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "user-1")
 
@@ -193,6 +203,8 @@ func TestValidateWorkflowInputs_WorkflowBuilderModelThinkingShape(t *testing.T) 
 }
 
 func TestBuildStateUpdateForActiveWorkflow_AppliesSelectedPresetAndEmptyToolOverride(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -242,6 +254,8 @@ func TestBuildStateUpdateForActiveWorkflow_AppliesSelectedPresetAndEmptyToolOver
 }
 
 func TestBuildStateUpdateForActiveWorkflow_UsesNewPresetSelection(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -286,6 +300,8 @@ func TestBuildStateUpdateForActiveWorkflow_UsesNewPresetSelection(t *testing.T) 
 }
 
 func TestBuildStateUpdateForActiveWorkflow_AcceptsThinkingInModelSelector(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -339,6 +355,8 @@ func TestBuildStateUpdateForActiveWorkflow_AcceptsThinkingInModelSelector(t *tes
 }
 
 func TestBuildWorkflowInputs_LoadsUserPresetToolsFromDatabase(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -391,6 +409,8 @@ func TestBuildWorkflowInputs_LoadsUserPresetToolsFromDatabase(t *testing.T) {
 }
 
 func TestNormalizeLegacyModelSelectorString(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name          string
 		raw           string
@@ -447,6 +467,8 @@ func TestNormalizeLegacyModelSelectorString(t *testing.T) {
 }
 
 func TestNormalizeModelInputs_ConvertsLegacyModelProviderString(t *testing.T) {
+	t.Parallel()
+
 	inputs := map[string]interface{}{
 		"agent": map[string]interface{}{
 			"model": "gpt-5.4-mini@codex",
@@ -469,6 +491,8 @@ func TestNormalizeModelInputs_ConvertsLegacyModelProviderString(t *testing.T) {
 }
 
 func TestBuildWorkflowInputs_EmptyNestedListsOverridePresetGroupValues(t *testing.T) {
+	t.Parallel()
+
 	service := &Service{}
 	projectPath := t.TempDir()
 
@@ -495,6 +519,8 @@ func TestBuildWorkflowInputs_EmptyNestedListsOverridePresetGroupValues(t *testin
 }
 
 func TestValidateWorkflowParamStructure_AcceptsNestedKeys(t *testing.T) {
+	t.Parallel()
+
 	agentValue, err := structpb.NewValue(map[string]interface{}{
 		"model": map[string]interface{}{"id": "gpt-4o"},
 		"mode":  "planning",
@@ -508,6 +534,8 @@ func TestValidateWorkflowParamStructure_AcceptsNestedKeys(t *testing.T) {
 }
 
 func TestValidateWorkflowParamStructure_RejectsDottedKeys(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		params   map[string]*structpb.Value
@@ -542,6 +570,8 @@ func TestValidateWorkflowParamStructure_RejectsDottedKeys(t *testing.T) {
 }
 
 func TestBuildStateUpdateForActiveWorkflow_AcceptsNestedWorkflowParams(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -592,6 +622,8 @@ func TestBuildStateUpdateForActiveWorkflow_AcceptsNestedWorkflowParams(t *testin
 }
 
 func TestBuildWorkflowInputs_NormalizesBuiltinNestedLegacyModelSelector(t *testing.T) {
+	t.Parallel()
+
 	service := &Service{}
 	projectPath := t.TempDir()
 
@@ -616,6 +648,8 @@ func TestBuildWorkflowInputs_NormalizesBuiltinNestedLegacyModelSelector(t *testi
 // and workflow.branch, set only for a chat in a reliant-created worktree. A
 // client cannot supply any of them.
 func TestBuildWorkflowInputs_InjectsTheChatCheckout(t *testing.T) {
+	t.Parallel()
+
 	service := &Service{}
 	projectPath := t.TempDir()
 	spoof := map[string]*structpb.Value{

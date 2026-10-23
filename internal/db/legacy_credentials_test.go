@@ -160,6 +160,8 @@ func (f *legacyFixture) seedEverything(user string) (exp time.Time, idToken stri
 }
 
 func TestMigrateLegacyCredentialsCopiesEveryTable(t *testing.T) {
+	t.Parallel()
+
 	f := newLegacyFixture(t)
 	ctx := context.Background()
 	const user = "legacy-user"
@@ -226,6 +228,8 @@ func TestMigrateLegacyCredentialsCopiesEveryTable(t *testing.T) {
 // The copy runs once. Anything the user does afterwards stands: a deleted account is not brought
 // back from its legacy row, and a legacy row written later is not imported.
 func TestMigrateLegacyCredentialsRunsExactlyOnce(t *testing.T) {
+	t.Parallel()
+
 	f := newLegacyFixture(t)
 	ctx := context.Background()
 	const user = "once-user"
@@ -252,6 +256,8 @@ func TestMigrateLegacyCredentialsRunsExactlyOnce(t *testing.T) {
 }
 
 func TestMigrateLegacyCredentialsConcurrentBootsImportOnce(t *testing.T) {
+	t.Parallel()
+
 	f := newLegacyFixture(t)
 	ctx := context.Background()
 	const user = "race-user"
@@ -282,6 +288,8 @@ func TestMigrateLegacyCredentialsConcurrentBootsImportOnce(t *testing.T) {
 // A credential that does not open (a rotated vault key, corrupt ciphertext) is skipped and
 // counted; it never blocks the others, and the copy still completes.
 func TestMigrateLegacyCredentialsSkipsUnopenableRowWithoutBlockingOthers(t *testing.T) {
+	t.Parallel()
+
 	f := newLegacyFixture(t)
 	ctx := context.Background()
 	f.exec(`INSERT INTO api_keys (id, user_id, provider, api_key, api_key_sealed) VALUES ('broken','u1','openai','','\x0102'::bytea)`)
@@ -305,6 +313,8 @@ func TestMigrateLegacyCredentialsSkipsUnopenableRowWithoutBlockingOthers(t *test
 // A Claude row with no account uuid cannot be identified yet: it is copied under a placeholder
 // the first refresh rewrites, and an API-key row for an OAuth provider (a marker) never is.
 func TestMigrateLegacyCredentialsClaudeWithoutAccountUUIDGetsAPlaceholder(t *testing.T) {
+	t.Parallel()
+
 	f := newLegacyFixture(t)
 	f.claude("p-user", "a", "r", "", "", time.Now().Add(time.Hour))
 
@@ -320,6 +330,8 @@ func TestMigrateLegacyCredentialsClaudeWithoutAccountUUIDGetsAPlaceholder(t *tes
 // vault key. Every credential must exist as an account AND open, and a second boot must change
 // nothing. No user loses a working connection.
 func TestUpgradeBootCopiesLegacyCredentialsAndTheyOpen(t *testing.T) {
+	t.Parallel()
+
 	repo, raw, cleanup := SetupTestDBWithRawDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -365,6 +377,8 @@ func TestUpgradeBootCopiesLegacyCredentialsAndTheyOpen(t *testing.T) {
 // release served traffic while the old rows were still unread) is never overwritten by, or
 // duplicated beside, the legacy row for the same upstream account.
 func TestMigrateLegacyCredentialsNeverOverwritesAnAccountTheNewCodeWrote(t *testing.T) {
+	t.Parallel()
+
 	f := newLegacyFixture(t)
 	ctx := context.Background()
 	const user = "rolling-user"
@@ -386,6 +400,8 @@ func TestMigrateLegacyCredentialsNeverOverwritesAnAccountTheNewCodeWrote(t *test
 }
 
 func TestCodexIdentityFromJWT(t *testing.T) {
+	t.Parallel()
+
 	id, ok := core.CodexIdentityFromJWT(codexIDToken(t, "A", "U", "me@x.io", "pro"), "")
 	require.True(t, ok)
 	assert.Equal(t, core.CodexIdentityKey("A", "U"), id.IdentityKey)
@@ -404,6 +420,8 @@ func TestCodexIdentityFromJWT(t *testing.T) {
 }
 
 func TestNormalizePlan(t *testing.T) {
+	t.Parallel()
+
 	for _, c := range []struct{ provider, raw, want string }{
 		{"claude", "default_claude_max_20x", "max_20x"},
 		{"claude", "default_claude_max_5x", "max_5x"},

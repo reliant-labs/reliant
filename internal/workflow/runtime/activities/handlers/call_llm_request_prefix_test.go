@@ -74,6 +74,8 @@ func requestTexts(msgs []message.Message) []string {
 // actually receives: nothing the user or the thread did not write, and every
 // earlier request a strict prefix of the next.
 func TestCallLLM_RequestHasNoTransientTailAndGrowsAsAPrefix(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 

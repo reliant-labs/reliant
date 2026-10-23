@@ -17,6 +17,8 @@ import (
 
 // TestCompaction_SummaryMessageFirst tests that compaction summary is first message in new context
 func TestCompaction_SummaryMessageFirst(t *testing.T) {
+	t.Parallel()
+
 	// After compaction, the first message should be the summary (system role)
 	msgs := []message.Message{
 		{ID: "summary", Role: message.System, Parts: []message.ContentPart{
@@ -37,6 +39,8 @@ func TestCompaction_SummaryMessageFirst(t *testing.T) {
 
 // TestCompaction_ToolCallInProgress tests compaction when tool call was in progress
 func TestCompaction_ToolCallInProgress(t *testing.T) {
+	t.Parallel()
+
 	// Scenario: Compaction triggered while tool was executing
 	// Previous context had: user -> assistant (with tool_call) -> [interrupted]
 	// New context starts with summary
@@ -63,6 +67,8 @@ func TestCompaction_ToolCallInProgress(t *testing.T) {
 
 // TestCompaction_ImmediatelyAfterToolResult tests compaction right after tool completed
 func TestCompaction_ImmediatelyAfterToolResult(t *testing.T) {
+	t.Parallel()
+
 	// Pre-compaction: user -> assistant (tool_call) -> tool (result)
 	// Compaction happens, new context starts
 
@@ -84,6 +90,8 @@ func TestCompaction_ImmediatelyAfterToolResult(t *testing.T) {
 
 // TestCompaction_MultipleRoundsAfter tests continued tool usage after compaction
 func TestCompaction_MultipleRoundsAfter(t *testing.T) {
+	t.Parallel()
+
 	msgs := []message.Message{
 		// Summary
 		{ID: "summary", Role: message.System, Parts: []message.ContentPart{
@@ -115,6 +123,8 @@ func TestCompaction_MultipleRoundsAfter(t *testing.T) {
 
 // TestCompaction_LongSummary tests handling of very long compaction summaries
 func TestCompaction_LongSummary(t *testing.T) {
+	t.Parallel()
+
 	// Create a long summary (100KB)
 	longSummary := make([]byte, 100*1024)
 	for i := range longSummary {
@@ -141,6 +151,8 @@ func TestCompaction_LongSummary(t *testing.T) {
 
 // TestCompaction_StructuredSummary tests summary with analysis/summary tags
 func TestCompaction_StructuredSummary(t *testing.T) {
+	t.Parallel()
+
 	summaryWithTags := `<analysis>
 The user was working on implementing a feature...
 </analysis>
@@ -169,6 +181,8 @@ The user was working on implementing a feature...
 
 // TestForkCompaction_ForkFromPreCompaction tests forking from before compaction happened
 func TestForkCompaction_ForkFromPreCompaction(t *testing.T) {
+	t.Parallel()
+
 	// Scenario: Parent has messages in context 0, then compacted to context 1
 	// Child forked from context 0 (before compaction)
 
@@ -197,6 +211,8 @@ func TestForkCompaction_ForkFromPreCompaction(t *testing.T) {
 
 // TestForkCompaction_ForkFromPostCompaction tests forking after parent compacted
 func TestForkCompaction_ForkFromPostCompaction(t *testing.T) {
+	t.Parallel()
+
 	// Scenario: Parent compacted, child forks from post-compaction state
 
 	msgs := []message.Message{
@@ -223,6 +239,8 @@ func TestForkCompaction_ForkFromPostCompaction(t *testing.T) {
 
 // TestForkCompaction_ParentCompactedAfterFork tests parent compacting after child forked
 func TestForkCompaction_ParentCompactedAfterFork(t *testing.T) {
+	t.Parallel()
+
 	// Child should still see original parent messages, not parent's new summary
 	// (This is determined by DB layer, but messages should still be valid)
 
@@ -246,6 +264,8 @@ func TestForkCompaction_ParentCompactedAfterFork(t *testing.T) {
 
 // TestForkCompaction_ChildCompactsSeparately tests child thread compacting independently
 func TestForkCompaction_ChildCompactsSeparately(t *testing.T) {
+	t.Parallel()
+
 	// After fork, child can have its own compaction cycle
 
 	msgs := []message.Message{
@@ -275,6 +295,8 @@ func TestForkCompaction_ChildCompactsSeparately(t *testing.T) {
 
 // TestCompaction_PreserveThinkingSignature tests that thinking signatures survive compaction boundary
 func TestCompaction_PreserveThinkingSignature(t *testing.T) {
+	t.Parallel()
+
 	// Post-compaction, assistant may need to reference previous thinking
 
 	msgs := []message.Message{
@@ -304,6 +326,8 @@ func TestCompaction_PreserveThinkingSignature(t *testing.T) {
 
 // TestCompaction_OrphanedToolCallWithThinking tests repair when assistant had thinking + tool call
 func TestCompaction_OrphanedToolCallWithThinking(t *testing.T) {
+	t.Parallel()
+
 	msgs := []message.Message{
 		{ID: "summary", Role: message.System, Parts: []message.ContentPart{
 			message.TextContent{Text: "Summary..."},
@@ -337,6 +361,8 @@ func TestCompaction_OrphanedToolCallWithThinking(t *testing.T) {
 // ============================================================================
 
 func TestCompaction_TableDriven(t *testing.T) {
+	t.Parallel()
+
 	testCases := []struct {
 		name          string
 		messages      []message.Message
@@ -434,6 +460,8 @@ func TestCompaction_TableDriven(t *testing.T) {
 // text so a tool-less request (e.g. the compaction summarization call) carries no
 // tool-call content (which providers reject when no tools= param is present).
 func TestFlattenToolContentToText(t *testing.T) {
+	t.Parallel()
+
 	msgs := []message.Message{
 		{Role: message.User, Parts: []message.ContentPart{
 			message.TextContent{Text: "read the file"},

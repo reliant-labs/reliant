@@ -17,6 +17,8 @@ import (
 // it — before the migration that widened it, this insert is rejected by the
 // database.
 func TestTriggerEvent_AgentStartRunKindIsAccepted(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -52,6 +54,8 @@ func TestTriggerEvent_AgentStartRunKindIsAccepted(t *testing.T) {
 }
 
 func TestGetTriggerEventByChat_FindsTheLaunchingEventOfThatKind(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -78,6 +82,8 @@ func TestGetTriggerEventByChat_FindsTheLaunchingEventOfThatKind(t *testing.T) {
 }
 
 func TestCountLiveLaunchedRuns_CountsOnlyLiveRunsOfThatKindAndUser(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -124,6 +130,8 @@ func TestCountLiveLaunchedRuns_CountsOnlyLiveRunsOfThatKindAndUser(t *testing.T)
 // the project predicate used to compare against NULL, which matches nothing, so
 // listing a user's chats across projects returned an empty list.
 func TestListChats_NilProjectMeansEveryProject(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()

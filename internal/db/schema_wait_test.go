@@ -3,8 +3,6 @@ package db
 
 import (
 	"database/sql"
-	"net/url"
-	"os"
 	"slices"
 	"strings"
 	"testing"
@@ -19,6 +17,8 @@ import (
 // newest embedded migration.
 
 func TestPendingVersions(t *testing.T) {
+	t.Parallel()
+
 	want := []int64{10, 20, 30}
 	for _, tc := range []struct {
 		name  string
@@ -42,6 +42,8 @@ func TestPendingVersions(t *testing.T) {
 }
 
 func TestPendingMigrations_FullyMigratedDBHasNone(t *testing.T) {
+	t.Parallel()
+
 	_, rawDB, cleanup := SetupTestDBWithRawDB(t)
 	defer cleanup()
 
@@ -55,6 +57,8 @@ func TestPendingMigrations_FullyMigratedDBHasNone(t *testing.T) {
 }
 
 func TestWaitForSchema_ReturnsImmediatelyWhenCurrent(t *testing.T) {
+	t.Parallel()
+
 	_, rawDB, cleanup := SetupTestDBWithRawDB(t)
 	defer cleanup()
 
@@ -73,6 +77,8 @@ func TestWaitForSchema_ReturnsImmediatelyWhenCurrent(t *testing.T) {
 // from to_regclass, putting the connection in the same state as a database
 // nobody has migrated — without needing to create and drop one.
 func TestWaitForSchema_TimesOutWhenNoMigratorRuns(t *testing.T) {
+	t.Parallel()
+
 	_, rawDB, cleanup := SetupTestDBWithRawDB(t)
 	defer cleanup()
 
@@ -125,22 +131,9 @@ func singleConnCopy(t *testing.T, db *sql.DB) *sql.DB {
 func dsnForOpenDB(t *testing.T, db *sql.DB) string {
 	t.Helper()
 
-	var name string
-	if err := db.QueryRow(`SELECT current_database()`).Scan(&name); err != nil {
+	dsn, err := testDSNOf(db)
+	if err != nil {
 		t.Fatalf("resolve current database: %v", err)
 	}
-
-	base := strings.TrimSpace(os.Getenv("DATABASE_URL"))
-	if base == "" {
-		// SetupTestDB hands out a database only when DATABASE_URL is set, so
-		// this is unreachable — and guessing a server here would open a pool
-		// on one nobody chose.
-		t.Fatal("DATABASE_URL is unset, yet a test database is open")
-	}
-	u, err := url.Parse(base)
-	if err != nil {
-		t.Fatalf("parse DATABASE_URL: %v", err)
-	}
-	u.Path = "/" + name
-	return u.String()
+	return dsn
 }

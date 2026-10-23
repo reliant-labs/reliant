@@ -71,6 +71,8 @@ func (p *staticConfigProvider) GetProjectConfig(ctx context.Context, ref config.
 }
 
 func TestCallLLMActivity_ToolParametersReachMockDriver(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 
@@ -187,6 +189,8 @@ func TestCallLLMActivity_ToolParametersReachMockDriver(t *testing.T) {
 }
 
 func TestCallLLMActivity_CreateChatStylePayloadToolFilterCELEvaluation(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 
@@ -249,6 +253,8 @@ func TestCallLLMActivity_CreateChatStylePayloadToolFilterCELEvaluation(t *testin
 }
 
 func TestCallLLMActivity_ResolvedToolFilterContainsNoTemplates(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 
@@ -330,6 +336,8 @@ func (p *recordingProjectResolver) ResolveProjectConfig(ctx context.Context, pro
 }
 
 func TestCallLLMActivity_UsesWorkingDirForMCPEnumerationScope(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 
@@ -405,6 +413,8 @@ func TestCallLLMActivity_UsesWorkingDirForMCPEnumerationScope(t *testing.T) {
 // configured to spawn children. A plain root agent has neither, and handing it a
 // mailbox tool it can never use costs schema on every single request.
 func TestCallLLMActivity_SpawnToolsOfferedOnlyWhenReachable(t *testing.T) {
+	t.Parallel()
+
 	// spawn_stop rides the same grant but on the STRICTLY TIGHTER condition:
 	// it refuses anything that is not the caller's own direct child, so an
 	// agent that cannot spawn has nothing it could ever legally name. The
@@ -527,6 +537,8 @@ func TestCallLLMActivity_SpawnToolsOfferedOnlyWhenReachable(t *testing.T) {
 // Before the first spawn, spawn_status stays off the request: it costs schema
 // on every turn of an agent that may never fan out.
 func TestCallLLMActivity_SpawnManagementToolsOfferedOnceThreadHasSpawned(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name          string
 		spawnEntries  []string

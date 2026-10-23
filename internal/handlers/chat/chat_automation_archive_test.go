@@ -42,6 +42,8 @@ func sidebarChatIDs(t *testing.T, ctx context.Context, service *Service, project
 }
 
 func TestListArchivedChats_LeavesOutAutomationRuns(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	service := &Service{deps: Deps{Repo: repo}}
@@ -66,6 +68,8 @@ func TestListArchivedChats_LeavesOutAutomationRuns(t *testing.T) {
 }
 
 func TestAdoptChat_UnarchivesAnArchivedAutomationRun(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	service := &Service{deps: Deps{Repo: repo}}

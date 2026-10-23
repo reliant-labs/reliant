@@ -59,6 +59,8 @@ func (m *mockRunExecutor) ExecuteCommand(
 }
 
 func TestRunStep_LogFile_WritesOutput(t *testing.T) {
+	t.Parallel()
+
 	repo := setupTestRepo(t)
 	chatID := createTestChat(t, repo)
 
@@ -109,6 +111,8 @@ func TestRunStep_LogFile_WritesOutput(t *testing.T) {
 }
 
 func TestRunStep_LogFile_Empty_NoFileWrite(t *testing.T) {
+	t.Parallel()
+
 	repo := setupTestRepo(t)
 	chatID := createTestChat(t, repo)
 
@@ -144,6 +148,8 @@ func TestRunStep_LogFile_Empty_NoFileWrite(t *testing.T) {
 }
 
 func TestRunStep_LogFile_ExitCodePreserved(t *testing.T) {
+	t.Parallel()
+
 	repo := setupTestRepo(t)
 	chatID := createTestChat(t, repo)
 
@@ -180,6 +186,8 @@ func TestRunStep_LogFile_ExitCodePreserved(t *testing.T) {
 }
 
 func TestRunStep_LogFile_RelativePath(t *testing.T) {
+	t.Parallel()
+
 	repo := setupTestRepo(t)
 	chatID := createTestChat(t, repo)
 
@@ -216,6 +224,8 @@ func TestRunStep_LogFile_RelativePath(t *testing.T) {
 }
 
 func TestRunStep_LogFile_WriteFailure_GracefulDegradation(t *testing.T) {
+	t.Parallel()
+
 	repo := setupTestRepo(t)
 	chatID := createTestChat(t, repo)
 
@@ -256,6 +266,8 @@ func TestRunStep_LogFile_WriteFailure_GracefulDegradation(t *testing.T) {
 }
 
 func TestShellQuote(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		input    string
 		expected string

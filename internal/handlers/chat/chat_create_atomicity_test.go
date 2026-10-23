@@ -74,6 +74,8 @@ func (r *failAfterUserUpdateRepo) CreateUserUpdate(ctx context.Context, update *
 // verification procedure (revert the wrapper, confirm this test fails,
 // restore it).
 func TestChatService_CreateChat_AtomicOnMidTransactionFailure(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -152,6 +154,8 @@ func TestChatService_CreateChat_AtomicOnMidTransactionFailure(t *testing.T) {
 // injected failure disabled, chat creation must succeed and leave a
 // consistent chat + workflow + thread + chat_created update behind.
 func TestChatService_CreateChat_SucceedsWithoutInjectedFailure(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 

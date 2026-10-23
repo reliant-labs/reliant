@@ -20,6 +20,8 @@ import (
 // and the timeline draws its "handoff" divider on exactly that signal. A
 // "continue" typed into a spawn produced a spurious "Agent handoff" marker.
 func TestSaveMessageToThread_UsesThreadsOwnWorkflow(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -64,6 +66,8 @@ func TestSaveMessageToThread_UsesThreadsOwnWorkflow(t *testing.T) {
 // A message on the main thread keeps the caller's workflow — the common path
 // must be unchanged.
 func TestSaveMessageToThread_MainThreadKeepsCallerWorkflow(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -95,6 +99,8 @@ func TestSaveMessageToThread_MainThreadKeepsCallerWorkflow(t *testing.T) {
 // A thread with no workflow row yet keeps the caller's value rather than
 // losing the attribution entirely.
 func TestSaveMessageToThread_NoWorkflowRowKeepsCallerValue(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()

@@ -114,6 +114,8 @@ func bashCall(command string) message.ToolCall {
 // asked to put the workspace back before the batch, the call runs, and the
 // model is told — once — that it is in a recreated checkout.
 func TestExecuteTools_MissingWorktreeIsRecoveredBeforeTheCallRuns(t *testing.T) {
+	t.Parallel()
+
 	f := setupWorkspaceRecoveryFixture(t)
 	defer f.h.Cleanup()
 
@@ -164,6 +166,8 @@ func TestExecuteTools_MissingWorktreeIsRecoveredBeforeTheCallRuns(t *testing.T) 
 // fell back to — and the model is told where it is, what was lost, and how to
 // get its branch back.
 func TestExecuteTools_UnrecoverableWorktreeRunsInTheFallbackWithANote(t *testing.T) {
+	t.Parallel()
+
 	f := setupWorkspaceRecoveryFixture(t)
 	defer f.h.Cleanup()
 
@@ -204,6 +208,8 @@ func TestExecuteTools_UnrecoverableWorktreeRunsInTheFallbackWithANote(t *testing
 // A batch that never touches the machine does not ask it anything: ensure
 // would cost a round trip, and could reach a machine nothing else needs.
 func TestExecuteTools_ServerOnlyBatchDoesNotEnsure(t *testing.T) {
+	t.Parallel()
+
 	f := setupWorkspaceRecoveryFixture(t)
 	defer f.h.Cleanup()
 
@@ -216,6 +222,8 @@ func TestExecuteTools_ServerOnlyBatchDoesNotEnsure(t *testing.T) {
 // not cost the batch anything: it runs exactly as it did before recovery
 // existed.
 func TestExecuteTools_EnsureFailureLeavesTheBatchAsItWas(t *testing.T) {
+	t.Parallel()
+
 	f := setupWorkspaceRecoveryFixture(t)
 	defer f.h.Cleanup()
 	require.NoError(t, os.MkdirAll(f.workspace, 0o755))
@@ -233,6 +241,8 @@ func TestExecuteTools_EnsureFailureLeavesTheBatchAsItWas(t *testing.T) {
 // Not even a panic in the transport may cost the batch: the check is a
 // pre-flight it can run without.
 func TestExecuteTools_PanickingEnsureLeavesTheBatchAsItWas(t *testing.T) {
+	t.Parallel()
+
 	f := setupWorkspaceRecoveryFixture(t)
 	defer f.h.Cleanup()
 	require.NoError(t, os.MkdirAll(f.workspace, 0o755))

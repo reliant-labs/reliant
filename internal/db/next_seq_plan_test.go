@@ -14,6 +14,8 @@ import (
 // history, so it renders at the top of the transcript and reads as "my message
 // never arrived".
 func TestGetNextSeqByChatSpansForkChain(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 

@@ -126,6 +126,8 @@ func countUserMessages(t *testing.T, ctx context.Context, repo *db.Repo, chatID,
 // the client's Retry sent it again and the server saved a second copy and took
 // a second turn.
 func TestSendMessage_RepeatedWithTheSameIDSavesOnceAndStartsOneRun(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -156,6 +158,8 @@ func TestSendMessage_RepeatedWithTheSameIDSavesOnceAndStartsOneRun(t *testing.T)
 // started the run, and the run is still open and has not answered. The repeat
 // has the message and the run; it must start neither again.
 func TestSendMessage_RepeatAfterTheRunStartedStartsNothing(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -179,6 +183,8 @@ func TestSendMessage_RepeatAfterTheRunStartedStartsNothing(t *testing.T) {
 
 // A message the agent already answered: the repeat is a pure replay.
 func TestSendMessage_RepeatOfAnAnsweredMessageIsAReplay(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -205,6 +211,8 @@ func TestSendMessage_RepeatOfAnAnsweredMessageIsAReplay(t *testing.T) {
 // A message queued to a running thread has a mailbox row, not a transcript row.
 // The repeat must find it there.
 func TestSendMessage_RepeatOfAQueuedMessageQueuesOnce(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -230,6 +238,8 @@ func TestSendMessage_RepeatOfAQueuedMessageQueuesOnce(t *testing.T) {
 
 // The mailbox row was drained into history before the repeat arrived.
 func TestSendMessage_RepeatOfADrainedQueuedMessageDoesNotRequeueIt(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -260,6 +270,8 @@ func TestSendMessage_RepeatOfADrainedQueuedMessageDoesNotRequeueIt(t *testing.T)
 
 // Same id, different text: the id names a message, and this is another one.
 func TestSendMessage_SameIDDifferentContentIsRefused(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		name   string
 		status db.WorkflowStatus
@@ -298,6 +310,8 @@ func TestSendMessage_SameIDDifferentContentIsRefused(t *testing.T) {
 
 // Different attachments are a different message too.
 func TestSendMessage_SameIDDifferentAttachmentsIsRefused(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -318,6 +332,8 @@ func TestSendMessage_SameIDDifferentAttachmentsIsRefused(t *testing.T) {
 // An id is scoped to its owner. Another user's message under the same id must
 // not be readable (the refusal discloses nothing about it) or collide.
 func TestSendMessage_AnotherUsersIDIsRefusedWithoutDisclosure(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -348,6 +364,8 @@ func TestSendMessage_AnotherUsersIDIsRefusedWithoutDisclosure(t *testing.T) {
 
 // A message that is not a UUID is refused rather than quietly replaced.
 func TestSendMessage_RefusesAnIDThatIsNotAUUID(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -364,6 +382,8 @@ func TestSendMessage_RefusesAnIDThatIsNotAUUID(t *testing.T) {
 // Two attempts of one send in flight at once: exactly one message, exactly one
 // run, and neither fails.
 func TestSendMessage_ConcurrentDuplicatesSaveOnce(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -402,6 +422,8 @@ func TestSendMessage_ConcurrentDuplicatesSaveOnce(t *testing.T) {
 
 // The same race for a message queued to a running thread.
 func TestSendMessage_ConcurrentQueuedDuplicatesQueueOnce(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -436,6 +458,8 @@ func TestSendMessage_ConcurrentQueuedDuplicatesQueueOnce(t *testing.T) {
 // part of the send. A repeat that finds the message already saved must not
 // leave a second copy of them.
 func TestSendMessage_RepeatDoesNotDuplicateTheSendsSystemNotes(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -468,6 +492,8 @@ func TestSendMessage_RepeatDoesNotDuplicateTheSendsSystemNotes(t *testing.T) {
 
 // A send that names no id keeps today's behaviour: every call is a new message.
 func TestSendMessage_WithoutAnIDEveryCallIsANewMessage(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -486,6 +512,8 @@ func TestSendMessage_WithoutAnIDEveryCallIsANewMessage(t *testing.T) {
 // A queued message whose thread ended before reading it is not a message the
 // agent has. Retrying it is a fresh send, and it must be able to take the id.
 func TestSendMessage_RepeatOfAnUndeliveredMessageSendsItAgain(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -693,6 +721,8 @@ func TestSendMessage_RepeatOfAFirstMessageStartChatSavedIsAReplay(t *testing.T) 
 // ---- SendAgentMessage ----
 
 func TestSendAgentMessage_RepeatedWithTheSameIDQueuesOnce(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 

@@ -143,35 +143,18 @@ against the current code.
 
 ### Which Postgres it uses
 
-The generator needs a Postgres it can migrate and write to; `DATABASE_URL`
-decides which:
+The generator's database is internal/db's test database (`db.SetupTestDB`):
+a fresh copy of the migrated schema on forge pgtest's server, an embedded
+Postgres of the major `forge.yaml` declares, booted on demand and shared by
+every test process on the machine. Nothing needs starting, and nothing shared
+is written to. Set `FORGE_TEST_POSTGRES_URL` (a maintenance DSN, database
+`postgres`) to use a server of your own instead; it must run the declared
+major. `DATABASE_URL` is never read.
 
-- **`DATABASE_URL` set** — that database is used as-is and nothing is started.
-  This is the mode for anyone who must not touch shared infrastructure (an
-  agent, a second worktree): point it at an isolated database you created.
-
-  ```
-  DATABASE_URL='postgres://postgres:postgres@localhost:55434/reliant_mine?sslmode=disable' \
-    make replay-fixtures
-  ```
-
-  `make replay-fixtures DATABASE_URL=...` is equivalent.
-- **`DATABASE_URL` unset (or empty)** — `docker compose up -d postgres` brings
-  up this repo's compose Postgres, published on `localhost:5433`, and the
-  generator uses its `reliant` database. That server is shared by every
-  `scripts/dev.sh` stack on the machine, so prefer the first mode whenever you
-  have a database of your own.
-
-That choice is the Makefile's, and it is the same for every Make target that
-runs Go tests (see "Which Postgres the Go tests use" in the `Makefile`). The
-generator itself never picks a server: run by hand without `DATABASE_URL`, it
-exits with an error instead.
-
-The two steps are also fine to run by hand, which is all the target does. Only
-the first needs a database; the replay check is hermetic:
+The two steps are also fine to run by hand, which is all the task does:
 
 ```
-DATABASE_URL=... go test -tags replayfixtures -count=1 -timeout=10m -v ./internal/workflow/runtime/replaytest/
+go test -tags replayfixtures -count=1 -timeout=10m -v ./internal/workflow/runtime/replaytest/
 go test -count=1 -timeout=5m -v -run TestReplayFixtures ./internal/workflow/runtime/replaytest/
 ```
 

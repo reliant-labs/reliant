@@ -46,6 +46,8 @@ func resolveCompactionModelWith(t *testing.T, availableProviders []string, prefe
 }
 
 func TestResolveCompactionModel_PrefersAgentModel(t *testing.T) {
+	t.Parallel()
+
 	providers := []string{"anthropic"}
 
 	// The exact failing shape: a large-window agent model must summarize itself
@@ -76,6 +78,8 @@ func TestResolveCompactionModel_PrefersAgentModel(t *testing.T) {
 }
 
 func TestResolveCompactionModel_FallsBackToTierList(t *testing.T) {
+	t.Parallel()
+
 	providers := []string{"anthropic"}
 
 	// No model declared on the node (older workflows) => tier list.

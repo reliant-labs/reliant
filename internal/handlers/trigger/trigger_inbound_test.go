@@ -87,6 +87,8 @@ func (e *triggerTestEnv) createConnection(t *testing.T, userID, integration, acc
 }
 
 func TestCreateWebhookTriggerReturnsItsTokenOnceAndStoresOnlyAHash(t *testing.T) {
+	t.Parallel()
+
 	env, _ := setupInboundTriggerTest(t)
 
 	resp, err := env.svc.CreateTrigger(env.ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{Trigger: webhookDefinition(env, nil)}))
@@ -112,6 +114,8 @@ func TestCreateWebhookTriggerReturnsItsTokenOnceAndStoresOnlyAHash(t *testing.T)
 }
 
 func TestRotateWebhookTokenInvalidatesTheOldOne(t *testing.T) {
+	t.Parallel()
+
 	env, _ := setupInboundTriggerTest(t)
 	resp, err := env.svc.CreateTrigger(env.ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{Trigger: webhookDefinition(env, nil)}))
 	require.NoError(t, err)
@@ -134,6 +138,8 @@ func TestRotateWebhookTokenInvalidatesTheOldOne(t *testing.T) {
 }
 
 func TestRotateWebhookTokenRejectsANonWebhookTrigger(t *testing.T) {
+	t.Parallel()
+
 	env, _ := setupInboundTriggerTest(t)
 	created := env.create(t, env.definition(nil))
 	_, err := env.svc.RotateWebhookToken(env.ctx, connect.NewRequest(&reliantv1.RotateWebhookTokenRequest{Id: created.GetId()}))
@@ -141,6 +147,8 @@ func TestRotateWebhookTokenRejectsANonWebhookTrigger(t *testing.T) {
 }
 
 func TestWebhookHmacSecretIsSealedForTheOwnerAndRequired(t *testing.T) {
+	t.Parallel()
+
 	env, _ := setupInboundTriggerTest(t)
 	hmacSource := &reliantv1.TriggerDefinition_Webhook{Webhook: &reliantv1.WebhookSource{
 		Hmac: &reliantv1.WebhookHmac{Header: "X-Hub-Signature-256", Prefix: "sha256="},
@@ -176,6 +184,8 @@ func TestWebhookHmacSecretIsSealedForTheOwnerAndRequired(t *testing.T) {
 }
 
 func TestTriggerFilterIsValidatedOnWrite(t *testing.T) {
+	t.Parallel()
+
 	env, _ := setupInboundTriggerTest(t)
 
 	_, err := env.svc.CreateTrigger(env.ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{
@@ -197,6 +207,8 @@ func TestTriggerFilterIsValidatedOnWrite(t *testing.T) {
 }
 
 func TestCreateIntegrationTriggerBindsTheCallersConnection(t *testing.T) {
+	t.Parallel()
+
 	env, _ := setupInboundTriggerTest(t)
 	mine := env.createConnection(t, env.userID, "test", "acct-1", core.ConnectionStatusActive)
 	theirs := env.createConnection(t, uuid.NewString(), "test", "acct-1", core.ConnectionStatusActive)
@@ -230,6 +242,8 @@ func TestCreateIntegrationTriggerBindsTheCallersConnection(t *testing.T) {
 }
 
 func TestCreateIntegrationTriggerRequiresAnInboundIntegration(t *testing.T) {
+	t.Parallel()
+
 	env, _ := setupInboundTriggerTest(t)
 	_, err := env.svc.CreateTrigger(env.ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{
 		Trigger: env.definition(func(d *reliantv1.TriggerDefinition) {
@@ -244,6 +258,8 @@ func TestCreateIntegrationTriggerRequiresAnInboundIntegration(t *testing.T) {
 }
 
 func TestTriggerKindIsNotUpdatable(t *testing.T) {
+	t.Parallel()
+
 	env, _ := setupInboundTriggerTest(t)
 	created := env.create(t, env.definition(nil))
 	_, err := env.svc.UpdateTrigger(env.ctx, connect.NewRequest(&reliantv1.UpdateTriggerRequest{
@@ -256,6 +272,8 @@ func TestTriggerKindIsNotUpdatable(t *testing.T) {
 // says what the workflow does declare (builtin://agent declares none).
 // Activating real declarations is trigger_activation_test.go.
 func TestWorkflowTriggerReferenceToAnUndeclaredTrigger(t *testing.T) {
+	t.Parallel()
+
 	env, _ := setupInboundTriggerTest(t)
 	_, err := env.svc.CreateTrigger(env.ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{
 		Trigger: env.definition(func(d *reliantv1.TriggerDefinition) {
@@ -267,6 +285,8 @@ func TestWorkflowTriggerReferenceToAnUndeclaredTrigger(t *testing.T) {
 }
 
 func TestFireInboundTriggerGoesThroughIntake(t *testing.T) {
+	t.Parallel()
+
 	env, intake := setupInboundTriggerTest(t)
 	created := env.create(t, webhookDefinition(env, nil))
 
@@ -295,6 +315,8 @@ func (texterCatalog) UserConfiguredURL(integration string) bool { return integra
 // them the URL to paste into the provider's console; one whose app-level
 // webhook the operator registers does not.
 func TestIntegrationTriggerShowsTheWebhookURLTheUserMustConfigure(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	env.configure(t, func(d *Deps) {
 		d.PublicURL = "https://api.example.com/"

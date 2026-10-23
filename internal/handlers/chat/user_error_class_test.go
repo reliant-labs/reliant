@@ -14,6 +14,8 @@ import (
 // UpdateWorkflowParams racing a run that just finished used to answer
 // Internal and log ERROR: 11 of that RPC's 12 prod ERRORs in five days.
 func TestStaleWorkflowSignalErrorIsAPrecondition(t *testing.T) {
+	t.Parallel()
+
 	stale := staleWorkflowSignalError(serviceerror.NewNotFound("workflow execution already completed"))
 	assert.Equal(t, connect.CodeFailedPrecondition, svcerr.Code(stale))
 	assert.Equal(t, svcerr.ClassUser, svcerr.Classify(stale))

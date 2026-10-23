@@ -29,6 +29,8 @@ import (
 // their teeth and the harness itself is no longer exercising contention: fix
 // the harness, do not delete this.
 func TestLegacyAllocatorBaseline_StillConflicts(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()

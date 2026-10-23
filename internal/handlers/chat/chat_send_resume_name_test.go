@@ -16,6 +16,8 @@ import (
 // restart must prefer chat.WorkflowName so it does not re-run the finished
 // pipeline (e.g. forge-one-shot) on an already-built project.
 func TestActiveWorkflowNameForResume(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		chat     *db.Chat

@@ -97,6 +97,8 @@ func threadWakeSignals(signals []signaltest.Signal) []signaltest.Signal {
 // spawn has no Temporal execution of its own, so one execution drives every
 // thread and the payload is what selects which gate wakes.
 func TestSendMessage_RunningWorkflowWakesTargetThread(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -138,6 +140,8 @@ func TestSendMessage_RunningWorkflowWakesTargetThread(t *testing.T) {
 // looks at the pause epoch. That is precisely what happened on chat 7da3935c —
 // the resume woke the spawn's loop and left the root thread parked.
 func TestSendMessage_PausedWorkflowWakesTargetThreadOnResume(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -176,6 +180,8 @@ func TestSendMessage_PausedWorkflowWakesTargetThreadOnResume(t *testing.T) {
 // This is the boundary of the fix: the wake belongs only on the paths where a
 // run is already live and may be parked.
 func TestSendMessage_NewRunDoesNotWake(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -204,6 +210,8 @@ func TestSendMessage_NewRunDoesNotWake(t *testing.T) {
 // signal that cannot be delivered costs a late pickup, never lost input.
 // Failing the RPC would report failure for a message that IS saved.
 func TestSendMessage_WakeFailureStillSavesMessage(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 

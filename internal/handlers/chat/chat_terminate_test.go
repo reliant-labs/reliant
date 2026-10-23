@@ -63,6 +63,8 @@ func (c *terminateTestTemporalClient) TerminateWorkflow(
 // launders the termination into success, making killed units indistinguishable
 // from finished work in every later count.
 func TestTerminateChat_DrainsTheWholeSubtree(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 

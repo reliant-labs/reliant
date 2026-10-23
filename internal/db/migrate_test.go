@@ -6,14 +6,13 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"net/url"
-	"os"
 	"strings"
 	"sync"
 	"testing"
 
 	"github.com/reliant-labs/forge/pkg/migratekit"
 	"github.com/reliant-labs/forge/pkg/migratekit/compat"
+	"github.com/reliant-labs/forge/pkg/pgtest"
 	"github.com/stretchr/testify/require"
 
 	forgedb "github.com/reliant-labs/reliant/db"
@@ -38,30 +37,15 @@ func migrationState(t *testing.T, db *sql.DB) migratekit.State {
 	return state
 }
 
-// testDSN is the DSN of the named database on the test server.
-func testDSN(t *testing.T, name string) string {
-	t.Helper()
-	u, err := url.Parse(resolveTestDSN(t))
-	require.NoError(t, err)
-	u.Path = "/" + name
-	return u.String()
-}
-
 // newEmptyTestDB creates an EMPTY database (no migrations, no seed) owned by
 // this test and returns its DSN. Per-test databases normally copy the migrated
 // template; these tests need to watch the migrator build one.
 func newEmptyTestDB(t *testing.T) string {
 	t.Helper()
-	// Opens the process-wide admin pool the CREATE/DROP DDL goes through.
-	if err := ensureTemplateDB(resolveTestDSN(t)); err != nil {
-		t.Fatalf("prepare test template database: %v", err)
-	}
-	name := fmt.Sprintf("%st%d_%d", testDBPrefix, os.Getpid(), testDBSeq.Add(1))
-	if _, err := adminDB.Exec(fmt.Sprintf(`CREATE DATABASE %s`, quoteIdent(name))); err != nil {
-		t.Fatalf("create test database: %v", err)
-	}
-	t.Cleanup(func() { dropTestDB(name) })
-	return testDSN(t, name)
+	dsn, cleanup, err := pgtest.NewURL()
+	require.NoError(t, err, "create an empty test database")
+	t.Cleanup(cleanup)
+	return dsn
 }
 
 // newMigratedTestDB is newEmptyTestDB, migrated.
@@ -132,6 +116,8 @@ func requireCurrent(t *testing.T, db *sql.DB) {
 
 // A fresh database runs the baseline, and everything after it.
 func TestMigrate_FreshDatabaseAppliesEveryMigration(t *testing.T) {
+	t.Parallel()
+
 	dsn := newEmptyTestDB(t)
 
 	res, err := migrate(dsn)
@@ -153,6 +139,8 @@ func TestMigrate_FreshDatabaseAppliesEveryMigration(t *testing.T) {
 // A migrated database is left alone: the next boot applies nothing and runs
 // no DDL.
 func TestMigrate_CurrentDatabaseIsANoOp(t *testing.T) {
+	t.Parallel()
+
 	dsn, db := newMigratedTestDB(t)
 	fp := schemaFingerprint(t, db)
 
@@ -168,6 +156,8 @@ func TestMigrate_CurrentDatabaseIsANoOp(t *testing.T) {
 // That leftover table is never read: a run over such a database is a no-op,
 // and leaves the table exactly as it was.
 func TestMigrate_AdoptedDatabaseIsANoOp(t *testing.T) {
+	t.Parallel()
+
 	dsn, db := newMigratedTestDB(t)
 	_, err := db.Exec(`CREATE TABLE goose_db_version (id serial PRIMARY KEY, version_id bigint NOT NULL, is_applied boolean NOT NULL, tstamp timestamp DEFAULT now());
 		INSERT INTO goose_db_version (version_id, is_applied) VALUES (0, true), (20261014142537, true), (20990101000000, true)`)
@@ -197,6 +187,8 @@ func TestMigrate_AdoptedDatabaseIsANoOp(t *testing.T) {
 // that upgrades the first kind, rather than left dirty by a baseline that fails
 // on its first CREATE TABLE.
 func TestMigrate_RefusesReliantTablesWithoutARecord(t *testing.T) {
+	t.Parallel()
+
 	dsn, db := newMigratedTestDB(t)
 	_, err := db.Exec(`DROP TABLE IF EXISTS schema_migrations, schema_migrations_applied, schema_migrations_compat`)
 	require.NoError(t, err)
@@ -220,6 +212,8 @@ func TestMigrate_RefusesReliantTablesWithoutARecord(t *testing.T) {
 // api-server — take turns and all succeed: exactly one builds, and the rest
 // find nothing to do.
 func TestMigrate_ConcurrentRunsTakeTurns(t *testing.T) {
+	t.Parallel()
+
 	const runners = 4
 	dsn := newEmptyTestDB(t)
 	var (
@@ -249,6 +243,8 @@ func TestMigrate_ConcurrentRunsTakeTurns(t *testing.T) {
 // PlanMigration is what `reliant db migrate status` prints. Its verdict for
 // each state must be what Migrate then does.
 func TestPlanMigration_Verdicts(t *testing.T) {
+	t.Parallel()
+
 	verdict := func(t *testing.T, db *sql.DB) (string, bool) {
 		t.Helper()
 		// The command runs it in a READ ONLY transaction; so does this.

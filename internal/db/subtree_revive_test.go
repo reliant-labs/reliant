@@ -51,6 +51,8 @@ func insertTerminalThread(t *testing.T, repo *Repo, id, chatID, workflowID strin
 // this test is the table of both: a descendant that was live at T comes back,
 // one that had already finished by T stays finished.
 func TestReviveSubtreeLiveAt(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -187,6 +189,8 @@ func TestReviveSubtreeLiveAt(t *testing.T) {
 // same kill, and the root re-parks by replay rather than re-running its
 // "started" activity — so nothing else brings it back.
 func TestReviveSubtreeLiveAt_RootThreadOnly(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -231,6 +235,8 @@ func TestReviveSubtreeLiveAt_RootThreadOnly(t *testing.T) {
 // direction that cannot be undone. An active descendant is already correct,
 // and re-writing its bookkeeping would clear a live row's state for nothing.
 func TestReviveSubtreeLiveAt_LeavesLiveRowsAlone(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -259,6 +265,8 @@ func TestReviveSubtreeLiveAt_LeavesLiveRowsAlone(t *testing.T) {
 // TestReviveSubtreeLiveAt_UnknownRoot is the no-op contract for the best-effort
 // caller: a resume must not fail because the root has no rows to repair.
 func TestReviveSubtreeLiveAt_UnknownRoot(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 

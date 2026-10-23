@@ -58,6 +58,8 @@ func (c *questionTreeChat) listFrom(thread string) []string {
 }
 
 func TestPendingQuestionsInThreadSubtree_Scoping(t *testing.T) {
+	t.Parallel()
+
 	c := newQuestionTreeChat(t)
 
 	assert.ElementsMatch(t, []string{"q-root", "q-a", "q-a1", "q-b"}, c.listFrom(c.chatID), "the root sees the whole chat")
@@ -81,6 +83,8 @@ func TestPendingQuestionsInThreadSubtree_Scoping(t *testing.T) {
 }
 
 func TestWithdrawAsyncQuestion(t *testing.T) {
+	t.Parallel()
+
 	c := newQuestionTreeChat(t)
 	ctx := context.Background()
 

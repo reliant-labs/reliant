@@ -72,6 +72,8 @@ func setupChatWithWorkflowAndThread(t *testing.T, repo *db.Repo) (chatID, workfl
 // a user message saved via SaveMessageToThread (the gRPC path) is visible in
 // LoadMessagesForLLM (the CallLLM path).
 func TestUserMessageRoundTrip_BasicSaveAndLoad(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestRepoWithCleanup(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -96,6 +98,8 @@ func TestUserMessageRoundTrip_BasicSaveAndLoad(t *testing.T) {
 // ending with the user message. This is the exact scenario that triggers the
 // "must end with a user message" error when it fails.
 func TestUserMessageRoundTrip_ConversationEndsWithUser(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestRepoWithCleanup(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -134,6 +138,8 @@ func TestUserMessageRoundTrip_ConversationEndsWithUser(t *testing.T) {
 // (user→assistant-with-tool-call→tool-result→assistant→user), the conversation
 // ends with the user message.
 func TestUserMessageRoundTrip_WithToolCalls(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestRepoWithCleanup(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -193,6 +199,8 @@ func TestUserMessageRoundTrip_WithToolCalls(t *testing.T) {
 // advanced the context sequence, a new user message saved via SaveMessageToThread
 // is still visible in LoadMessagesForLLM.
 func TestUserMessageRoundTrip_AfterCompaction(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestRepoWithCleanup(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -271,6 +279,8 @@ func TestUserMessageRoundTrip_AfterCompaction(t *testing.T) {
 // messages are saved before the user message (as SendMessage does), the
 // conversation still correctly ends with the user message.
 func TestUserMessageRoundTrip_SystemMessageBeforeUser(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestRepoWithCleanup(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -307,6 +317,8 @@ func TestUserMessageRoundTrip_SystemMessageBeforeUser(t *testing.T) {
 // to a forked thread is visible via LoadMessagesForLLM on that thread.
 // This tests the branch/fork scenario where SendMessage targets a forked thread.
 func TestUserMessageRoundTrip_ForkedThread(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestRepoWithCleanup(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -366,6 +378,8 @@ func TestUserMessageRoundTrip_ForkedThread(t *testing.T) {
 // message visible. Ghost recovery reuses the existing thread, so the user message
 // saved before workflow restart should be at the right context window.
 func TestUserMessageRoundTrip_GhostRecoveryInheritThread(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestRepoWithCleanup(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -402,6 +416,8 @@ func TestUserMessageRoundTrip_GhostRecoveryInheritThread(t *testing.T) {
 // workflow is resumed with a new user message, the message is visible to CallLLM.
 // This simulates the paused workflow path in SendMessage.
 func TestUserMessageRoundTrip_ResumedPausedWorkflow(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestRepoWithCleanup(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -436,6 +452,8 @@ func TestUserMessageRoundTrip_ResumedPausedWorkflow(t *testing.T) {
 // TestUserMessageRoundTrip_RunningWorkflowInterrupt verifies that when a user
 // sends a message to a running workflow, it's visible to the next CallLLM.
 func TestUserMessageRoundTrip_RunningWorkflowInterrupt(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestRepoWithCleanup(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -499,6 +517,8 @@ func TestUserMessageRoundTrip_RunningWorkflowInterrupt(t *testing.T) {
 // This is important for threads that were created by CreateWorkflowWithThread
 // but haven't had messages saved via the threads.Service path yet.
 func TestUserMessageRoundTrip_SaveMessageToThread_CreatesContextWindow(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestRepoWithCleanup(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -534,6 +554,8 @@ func TestUserMessageRoundTrip_SaveMessageToThread_CreatesContextWindow(t *testin
 // threads.Service.CreateThread. If these don't match, messages saved by one
 // path won't be visible to the other.
 func TestUserMessageRoundTrip_ContextWindowIDConsistency(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestRepoWithCleanup(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -568,6 +590,8 @@ func TestUserMessageRoundTrip_ContextWindowIDConsistency(t *testing.T) {
 // has multiple context windows (e.g., from compaction), SaveMessageToThread
 // saves to the latest one, and LoadMessagesForLLM loads from the latest one.
 func TestUserMessageRoundTrip_MultipleContextWindows(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestRepoWithCleanup(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -630,6 +654,8 @@ func TestUserMessageRoundTrip_MultipleContextWindows(t *testing.T) {
 // a message is saved to a child thread (not the root thread) and the
 // next CallLLM on that thread sees it.
 func TestUserMessageRoundTrip_SubThreadReply(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestRepoWithCleanup(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -684,6 +710,8 @@ func TestUserMessageRoundTrip_SubThreadReply(t *testing.T) {
 // TestUserMessageRoundTrip_EmptyContentWithAttachment verifies that a message
 // with empty content but saved as user role still shows up correctly.
 func TestUserMessageRoundTrip_EmptyContentWithAttachment(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestRepoWithCleanup(t)
 	defer cleanup()
 	ctx := context.Background()

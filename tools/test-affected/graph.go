@@ -248,8 +248,9 @@ func (ix *indexer) index(list []listPkg) {
 // ── what a package's tests read ─────────────────────────────────────────────
 
 // dbHelpers are the identifiers that make a test DB-backed: the helpers in
-// internal/db/testutil.go and the environment variable they read.
-var dbHelpers = []string{"SetupTestDB", "NewTestRepo", "resolveTestDSN", "DATABASE_URL", "SetupTestDBWithRawDB"}
+// internal/db/testutil.go (SetupTestDB also prefixes SetupTestDBWithRawDB)
+// and internal/store/storetest.
+var dbHelpers = []string{"SetupTestDB", "NewTestRepo", "NewTestDatabase", "storetest.New(", "cloneTestTemplate"}
 
 // scanSources finds, per package: the tracked repo paths its Go sources name as
 // string literals (alone, or joined as consecutive arguments of one call, the

@@ -72,6 +72,8 @@ func (r *copyPathsRecordingRouter) SendDaemonCommand(ctx context.Context, userID
 // against that repo's own directory, which is how `reliant/.env` used to
 // silently match nothing.
 func TestCreateWorktreeCopiesPathsOnceFromProjectRoot(t *testing.T) {
+	t.Parallel()
+
 	repo := db.NewTestRepo(t)
 	router := &copyPathsRecordingRouter{home: t.TempDir()}
 	svc := newWorktreeService(t, repo, router)
@@ -107,6 +109,8 @@ func TestCreateWorktreeCopiesPathsOnceFromProjectRoot(t *testing.T) {
 }
 
 func TestCreateWorktreeWithoutCopyFilesSendsNoCopy(t *testing.T) {
+	t.Parallel()
+
 	repo := db.NewTestRepo(t)
 	router := &copyPathsRecordingRouter{home: t.TempDir()}
 	svc := newWorktreeService(t, repo, router)
@@ -128,6 +132,8 @@ func TestCreateWorktreeWithoutCopyFilesSendsNoCopy(t *testing.T) {
 // An invalid entry is rejected synchronously — before a row exists — so the
 // caller sees the mistake instead of a workspace missing its .env.
 func TestCreateWorktreeRejectsInvalidCopyPath(t *testing.T) {
+	t.Parallel()
+
 	repo := db.NewTestRepo(t)
 	router := &copyPathsRecordingRouter{home: t.TempDir()}
 	svc := newWorktreeService(t, repo, router)

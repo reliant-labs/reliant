@@ -15,6 +15,8 @@ import (
 // marker so the resumed LLM knows its tool-call "answer" is a post-failure
 // resume, not a direct answer. This is a fixed content contract.
 func TestMarkResumeAnswer_ExactMarker(t *testing.T) {
+	t.Parallel()
+
 	assert.Equal(t,
 		"<system> workflow was canceled or failed. user resumed with message</system>: please continue",
 		markResumeAnswer("please continue"))
@@ -24,6 +26,8 @@ func TestMarkResumeAnswer_ExactMarker(t *testing.T) {
 // so the workflow's parseQuestionResponse reads it as feedback and the marker
 // reaches the LLM.
 func TestQuestionResumeResponseData_CarriesMarkerAsFreetext(t *testing.T) {
+	t.Parallel()
+
 	marked := markResumeAnswer("do the thing")
 	data, err := questionResumeResponseData(marked)
 	require.NoError(t, err)
@@ -62,6 +66,8 @@ func TestQuestionResumeResponseData_CarriesMarkerAsFreetext(t *testing.T) {
 // an integration test that mocked Temporal and Postgres could pass while the
 // two calls sat in the wrong order.
 func TestResumeSignalsBeforeMarkingRunning(t *testing.T) {
+	t.Parallel()
+
 	src, err := os.ReadFile("chat_send.go")
 	require.NoError(t, err)
 
@@ -121,6 +127,8 @@ func resumePausedRunSource(t *testing.T) string {
 // active while nothing is executing — the message is saved, the UI shows work
 // in progress, and the run is still parked.
 func TestFailedResumeIsReportedNotSwallowed(t *testing.T) {
+	t.Parallel()
+
 	shared := resumePausedRunSource(t)
 	at := strings.Index(shared, "s.runs.Resume(")
 	require.Positive(t, at, "resume call not found")

@@ -12,6 +12,8 @@ import (
 var llmToolNamePattern = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
 
 func TestValidateResponseToolData(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name      string
 		jsonStr   string
@@ -163,6 +165,8 @@ func TestValidateResponseToolData(t *testing.T) {
 }
 
 func TestExecuteResponseToolInline_WithValidation(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name       string
 		toolName   string
@@ -279,6 +283,8 @@ func TestExecuteResponseToolInline_WithValidation(t *testing.T) {
 // conform to the pattern required by LLM APIs. This is a regression test for
 // the __response__: prefix bug where colons leaked into tool names.
 func TestResponseToolName_MatchesLLMAPIPattern(t *testing.T) {
+	t.Parallel()
+
 	validNames := []string{
 		"submit_verdict",
 		"plan_review",
@@ -310,6 +316,8 @@ func TestResponseToolName_MatchesLLMAPIPattern(t *testing.T) {
 // executeResponseToolInline does not modify or prefix the tool name.
 // Regression test for the __response__: prefix bug.
 func TestExecuteResponseToolInline_PreservesValidToolName(t *testing.T) {
+	t.Parallel()
+
 	toolNames := []string{"submit_verdict", "plan_review", "code-review"}
 	for _, name := range toolNames {
 		result := executeResponseToolInline("test-id", name, `{"key": "value"}`, nil)
@@ -340,6 +348,8 @@ func findSubstring(s, substr string) bool {
 // {"defects": "2", "risks": "0"}; validation rejected the quoted integers
 // three times in a row and the run failed.
 func TestExecuteResponseToolInline_StringifiedScalars(t *testing.T) {
+	t.Parallel()
+
 	schema := map[string]interface{}{
 		"type":     "object",
 		"required": []interface{}{"verdict", "defects", "risks"},

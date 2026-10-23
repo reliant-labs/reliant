@@ -64,6 +64,8 @@ func newInvariantTestProject(t *testing.T, ctx context.Context, repo *db.Repo, w
 }
 
 func TestResolveChatWorktreeID_DefaultsToMainWorktree(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -87,6 +89,8 @@ func TestResolveChatWorktreeID_DefaultsToMainWorktree(t *testing.T) {
 }
 
 func TestResolveChatWorktreeID_KeepsValidRequestedWorktree(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -121,6 +125,8 @@ func TestResolveChatWorktreeID_KeepsValidRequestedWorktree(t *testing.T) {
 }
 
 func TestResolveChatWorktreeID_RejectsUnknownWorktree(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -143,6 +149,8 @@ func TestResolveChatWorktreeID_RejectsUnknownWorktree(t *testing.T) {
 }
 
 func TestResolveChatWorktreeID_RejectsForeignProjectWorktree(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -165,6 +173,8 @@ func TestResolveChatWorktreeID_RejectsForeignProjectWorktree(t *testing.T) {
 }
 
 func TestResolveChatWorktreeID_RejectsProjectWithoutMainWorktree(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -187,6 +197,8 @@ func TestResolveChatWorktreeID_RejectsProjectWithoutMainWorktree(t *testing.T) {
 // test for the CLI path: `reliant workflow run` sends no worktree_id, and the
 // chat it creates must still land with one.
 func TestChatService_CreateChat_PersistsMainWorktreeWhenOmitted(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 

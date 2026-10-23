@@ -12,8 +12,7 @@ package grpc
 //
 // Run:
 //
-//	DATABASE_URL=postgres://postgres:postgres@127.0.0.1:<port>/reliant?sslmode=disable \
-//	  go test -tags localmodel_e2e -run ModelEndpointE2E -v ./internal/grpc -count=1
+//	go test -tags localmodel_e2e -run ModelEndpointE2E -v ./internal/grpc -count=1
 
 import (
 	"context"

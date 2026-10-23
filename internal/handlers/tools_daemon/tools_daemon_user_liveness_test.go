@@ -15,7 +15,7 @@ import (
 // removeConnection path, and stay isolated per user.
 //
 // Deliberately hermetic: nothing in this path touches the database, so the
-// service is built with a nil repo and the test runs without DATABASE_URL.
+// service is built with a nil repo and the test opens no database.
 func TestConnectedDaemonCountForUser(t *testing.T) {
 	svc := newTestService(nil)
 	defer svc.Close()

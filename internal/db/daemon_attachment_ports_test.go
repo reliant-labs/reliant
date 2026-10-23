@@ -13,6 +13,8 @@ import (
 // exposure, clearing, reset on re-attachment, and graceful no-op when the
 // row doesn't exist. Mirrors TestDaemonAttachmentMemoryTelemetry.
 func TestDaemonAttachmentDetectedPorts(t *testing.T) {
+	t.Parallel()
+
 	repo, rawDB, cleanup := SetupTestDBWithRawDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -93,6 +95,8 @@ func TestDaemonAttachmentDetectedPorts(t *testing.T) {
 // TestIsDaemonIDAttached: the per-daemon lease check sees only its own daemon,
 // and only while the lease is fresh.
 func TestIsDaemonIDAttached(t *testing.T) {
+	t.Parallel()
+
 	repo, rawDB, cleanup := SetupTestDBWithRawDB(t)
 	defer cleanup()
 	ctx := context.Background()

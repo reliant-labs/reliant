@@ -62,6 +62,8 @@ func (e *triggerTestEnv) listEvents(t *testing.T, req *reliantv1.ListTriggerEven
 }
 
 func TestListTriggerEventsPagesWithTiedOccurredAt(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	trig := env.create(t, env.definition(nil))
 	tied := time.Date(2026, 1, 2, 9, 0, 0, 0, time.UTC)
@@ -99,6 +101,8 @@ func TestListTriggerEventsPagesWithTiedOccurredAt(t *testing.T) {
 }
 
 func TestListTriggerEventsFiltersByOutcomeAndCarriesRun(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	trig := env.create(t, env.definition(nil))
 	base := time.Date(2026, 1, 2, 9, 0, 0, 0, time.UTC)
@@ -131,6 +135,8 @@ func TestListTriggerEventsFiltersByOutcomeAndCarriesRun(t *testing.T) {
 }
 
 func TestListTriggersCarriesNamesHealthAndLastRun(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	host := "build-box"
 	require.NoError(t, env.repo.UpsertDaemon(context.Background(), &db.Daemon{ID: env.daemonID, UserID: env.userID, Hostname: &host}))
@@ -183,6 +189,8 @@ func TestListTriggersCarriesNamesHealthAndLastRun(t *testing.T) {
 }
 
 func TestListTriggersUsesConstantQueries(t *testing.T) {
+	t.Parallel()
+
 	// ListTriggers must not do per-trigger work against the database.
 	env := setupTriggerTest(t)
 	for i := 0; i < 6; i++ {
@@ -214,6 +222,8 @@ func (c *triggerQueryCounter) RecentTriggerFirings(ctx context.Context, userID s
 }
 
 func TestTriggerFeedHidesOtherUsersData(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	trig := env.create(t, env.definition(nil))
 	env.seedFiring(t, trig.Id, time.Now().UTC(), core.TriggerEventSkipped, nil)
@@ -262,6 +272,8 @@ func (e *triggerTestEnv) launchEvent(t *testing.T, ctx context.Context, chatID s
 }
 
 func TestGetLaunchEventForScheduleChatCarriesSlotManualFlagAndStart(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	trig := env.create(t, env.definition(nil))
 	chatID := env.seedLaunchedChat(t, core.TriggerEventKindSchedule, &trig.Id, map[string]any{
@@ -292,6 +304,8 @@ func TestGetLaunchEventForScheduleChatCarriesSlotManualFlagAndStart(t *testing.T
 }
 
 func TestGetLaunchEventForAgentChatCarriesParentChatID(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	chatID := env.seedLaunchedChat(t, core.TriggerEventKindAgentStartRun, nil, map[string]any{"parent_chat_id": "parent-chat-1"})
 
@@ -303,6 +317,8 @@ func TestGetLaunchEventForAgentChatCarriesParentChatID(t *testing.T) {
 }
 
 func TestGetLaunchEventForChatWithoutOneIsEmpty(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	chatID := env.seedLaunchedChat(t, "", nil, nil)
 
@@ -312,6 +328,8 @@ func TestGetLaunchEventForChatWithoutOneIsEmpty(t *testing.T) {
 }
 
 func TestGetLaunchEventIsOwnerOnly(t *testing.T) {
+	t.Parallel()
+
 	env := setupTriggerTest(t)
 	chatID := env.seedLaunchedChat(t, core.TriggerEventKindAgentStartRun, nil, map[string]any{"parent_chat_id": "p"})
 

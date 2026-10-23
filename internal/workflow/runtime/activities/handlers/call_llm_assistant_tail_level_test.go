@@ -50,6 +50,8 @@ func assistantTail(parts ...message.ContentPart) message.Message {
 // already delivered, and paged as an upstream bug: the gate re-enters on
 // counters, so on its turns finding nothing new is the expected answer.
 func TestAssistantTailYield_SpeculativeTurnIsNotAFault(t *testing.T) {
+	t.Parallel()
+
 	logger := &recordingYieldLogger{}
 
 	logAssistantTailYield(logger, true, "chat", "thread", assistantTail(message.TextContent{Text: "done"}), 255)
@@ -66,6 +68,8 @@ func TestAssistantTailYield_SpeculativeTurnIsNotAFault(t *testing.T) {
 // speculative split (#713), two on chat 9fbaace8 again — a real fault, so it
 // is not downgraded.
 func TestAssistantTailYield_PromisedTurnIsStillAFault(t *testing.T) {
+	t.Parallel()
+
 	logger := &recordingYieldLogger{}
 
 	logAssistantTailYield(logger, false, "chat", "thread", assistantTail(message.TextContent{Text: "done"}), 255)
@@ -83,6 +87,8 @@ func TestAssistantTailYield_PromisedTurnIsStillAFault(t *testing.T) {
 // Sentry tag, and a spawned thread runs inline in its parent's execution, so
 // WorkflowID does not name it either.
 func TestAssistantTailYield_FaultCarriesThreadAndTailShape(t *testing.T) {
+	t.Parallel()
+
 	for name, tc := range map[string]struct {
 		tail      message.Message
 		toolCalls int

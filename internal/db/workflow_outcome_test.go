@@ -11,6 +11,8 @@ import (
 // returns it. Without persistence, status/analyze would have to re-derive the
 // verdict from a mutable workflow definition.
 func TestSetWorkflowOutcomeRoundTrips(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()

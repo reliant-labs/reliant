@@ -26,6 +26,8 @@ func forgeStartHereEntry() cfgpkg.StoredSkill {
 }
 
 func TestWithForgeStartHere(t *testing.T) {
+	t.Parallel()
+
 	generalAgent := cfgpkg.StoredSkill{Name: "general-agent", SkillPath: "general-agent", Scope: "builtin", Body: "GA"}
 	forgeProject := []cfgpkg.StoredSkill{generalAgent, forgeStartHereEntry()}
 
@@ -104,6 +106,8 @@ func TestWithForgeStartHere(t *testing.T) {
 // name, so a node that preloaded `forge` (forge-one-shot does) silently lost
 // the start-here as a "duplicate".
 func TestBuildSeededSkillMessages_SameNameDifferentSkillsBothArrive(t *testing.T) {
+	t.Parallel()
+
 	cfg := &cfgpkg.Config{Skills: []cfgpkg.StoredSkill{
 		{Name: "forge", SkillPath: "forge", Scope: string(skillscore.ScopeForge), Body: "# Forge skills\nMAP BODY\n"},
 		forgeStartHereEntry(),

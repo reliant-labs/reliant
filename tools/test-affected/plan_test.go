@@ -188,9 +188,6 @@ func TestMigrationReachesOnlyDBBackedTests(t *testing.T) {
 	if got, want := goPkgs(pl), []string{"./internal/db"}; !slices.Equal(got, want) {
 		t.Fatalf("a migration selects %v, want %v", got, want)
 	}
-	if !slices.Equal(pl.Go.DBOnly, []string{"./internal/db"}) {
-		t.Fatalf("db-only = %v: the runner needs it to run under REQUIRE_TEST_DB", pl.Go.DBOnly)
-	}
 	if pl.Go.Full {
 		t.Fatalf("a migration must not force the full run: %v", pl.Go.Reasons)
 	}
@@ -524,42 +521,38 @@ func TestEveryRuleIdIsUnique(t *testing.T) {
 	}
 }
 
-func TestRunnerStepsUseExplicitFilesAndScopeDBTests(t *testing.T) {
+// DB-backed tests run under -short (each gets its own copy of a migrated
+// template on pgtest's server), so a package a migration selects runs in the
+// one go step with every other, with no database configuration in its env.
+func TestRunnerStepsUseExplicitFilesAndRunDBTestsInline(t *testing.T) {
 	pl := classify("internal/leaf/leaf.go", "db/migrations/20261101000000_x.up.sql", "frontends/web/src/lib/leaf.ts")
-	r := &runner{root: "/repo", dbURL: ""}
+	r := &runner{root: "/repo"}
 	steps := r.steps(pl, laneSet("go,web,electron"))
 	var names []string
 	for _, s := range steps {
 		names = append(names, s.name)
 	}
-	if !slices.Contains(names, "go") || !slices.Contains(names, "web") {
-		t.Fatalf("steps = %v", names)
+	if !slices.Equal(names, []string{"go", "web"}) {
+		t.Fatalf("steps = %v, want [go web]", names)
 	}
 	for _, s := range steps {
 		joined := strings.Join(s.argv, " ")
 		switch s.name {
 		case "go":
-			if strings.Contains(joined, "./internal/db") {
-				t.Errorf("a DB-only package must not run in the plain step (its tests skip under -short): %s", joined)
+			if !slices.Contains(s.argv, "./internal/db") || !slices.Contains(s.argv, "./internal/leaf") {
+				t.Errorf("the go step must run the migration's DB package beside the code change's: %s", joined)
 			}
 			if !strings.Contains(joined, "-short") || strings.Contains(joined, "./...") {
 				t.Errorf("go step = %s", joined)
+			}
+			if len(s.env) != 0 {
+				t.Errorf("the go step needs no environment of its own; got %v", s.env)
 			}
 		case "web":
 			if !strings.HasPrefix(joined, "npx vitest run ") || !strings.Contains(joined, " src/lib/__tests__/leaf.test.ts") {
 				t.Errorf("web step must hand vitest explicit files: %s", joined)
 			}
 		}
-	}
-	r.dbURL = "postgres://x"
-	var db *step
-	for _, s := range r.steps(pl, laneSet("go")) {
-		if strings.Contains(s.name, "DB-backed") {
-			db = &s
-		}
-	}
-	if db == nil || !slices.Contains(db.env, "REQUIRE_TEST_DB=1") || !slices.Contains(db.argv, "./internal/db") {
-		t.Fatalf("with DATABASE_URL set the DB packages run under REQUIRE_TEST_DB=1: %+v", db)
 	}
 }
 

@@ -16,6 +16,8 @@ import (
 )
 
 func TestChatService_CreateChat_RejectsDottedWorkflowParams(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -53,6 +55,8 @@ func TestChatService_CreateChat_RejectsDottedWorkflowParams(t *testing.T) {
 }
 
 func TestChatService_SendMessage_RejectsDottedWorkflowParamsForActiveWorkflowUpdate(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -102,6 +106,8 @@ func TestChatService_SendMessage_RejectsDottedWorkflowParamsForActiveWorkflowUpd
 }
 
 func TestChatService_UpdateWorkflowParams_RejectsDottedKeysForActiveWorkflowUpdate(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 

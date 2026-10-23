@@ -26,6 +26,8 @@ func injectedChars(msgs []message.Message) int {
 // threshold. Distinct clones (not linked worktrees, which #648 collapses) still
 // reach the same shape, so the injection itself must be bounded.
 func TestFormatRepoMemoryMessages_BoundedByTheModelWindow(t *testing.T) {
+	t.Parallel()
+
 	memories := map[string]string{}
 	for i := 0; i < 30; i++ {
 		repo := fmt.Sprintf("reliant-feature-%02d", i)
@@ -54,6 +56,8 @@ func TestFormatRepoMemoryMessages_BoundedByTheModelWindow(t *testing.T) {
 // The bound must not bite a real multi-repo project: reliant-labs' three repos
 // carry ~64KB of memory after #648.
 func TestFormatRepoMemoryMessages_RealMultiRepoProjectFits(t *testing.T) {
+	t.Parallel()
+
 	msgs, omitted := formatRepoMemoryMessages(map[string]string{
 		"control-plane": strings.Repeat("c", 30_000),
 		"forge":         strings.Repeat("f", 20_000),
@@ -66,6 +70,8 @@ func TestFormatRepoMemoryMessages_RealMultiRepoProjectFits(t *testing.T) {
 // A memory too large for what is left is skipped, and smaller ones after it in
 // sort order are still admitted.
 func TestFormatRepoMemoryMessages_SkipsWhatDoesNotFit(t *testing.T) {
+	t.Parallel()
+
 	msgs, omitted := formatRepoMemoryMessages(map[string]string{
 		"a-huge": strings.Repeat("h", 5_000),
 		"b":      "b memory",
@@ -79,6 +85,8 @@ func TestFormatRepoMemoryMessages_SkipsWhatDoesNotFit(t *testing.T) {
 }
 
 func TestRepoMemoryBudgetChars(t *testing.T) {
+	t.Parallel()
+
 	assert.Equal(t, 108_800, repoMemoryBudgetChars(272_000))
 	assert.Equal(t, 80_000, repoMemoryBudgetChars(0), "unknown window assumes 200k")
 }

@@ -17,7 +17,7 @@ It is the first thing to run before pushing. It does not replace the full lane
 
 | Lane | Command it runs | Selected by |
 |---|---|---|
-| Go | `go test -short -timeout 60s <pkgs>` (cached, no `-race`) | the changed package, **plus every package whose test binary imports it** |
+| Go | `go test -short -timeout 5m <pkgs>` (cached, no `-race`) | the changed package, **plus every package whose test binary imports it** |
 | web | `npx vitest run <files>` in `frontends/web/` | every vitest file that imports a changed module, transitively |
 | electron | `npm test` in `electron/` | any change under `electron/`, or a changed file an electron test names |
 | forge-generate | `make forge-generate-check`, first: forge.yaml's pinned `forge generate`, failing (and naming each file) if it changed anything | a change to something forge reads or writes: `proto/**`, `db/**`, a `contract.go` or `doc.go`, `internal/handlers/**`, `*_gen.go`, `gen/**`, `deploy/**`, `forge.yaml`, `go.mod`/`go.sum`, `buf.yaml`/`buf.gen.yaml` (`forgeInputs` in `rules.go`) |
@@ -79,7 +79,7 @@ rule claims and no Go package owns runs **everything** (fail-safe).
 | a Go file behind a build tag (`e2e`, `live`, ...) | nothing: `go test -short` does not build it |
 | a file a package `go:embed`s | its package + reverse dependencies, like code |
 | a file a Go test names in a path literal (`deploy/...`, `config/...`) | only the packages that name it |
-| `db/migrations/**`, `internal/db/migrations/**` | the packages with DB-backed tests. Their tests skip under `-short`, so they run only when **you** set `DATABASE_URL` (then under `REQUIRE_TEST_DB=1`); otherwise the plan says so |
+| `db/migrations/**`, `internal/db/migrations/**` | the packages with DB-backed tests (the migrations reach them through `go:embed`, which the import graph does not see). They run in the same `-short` step as everything else: each test copies a migrated template on forge pgtest's server, which needs no configuration |
 | `proto/**/*.proto`, `proto-vendor/**/*.proto` | its generated Go package and the vitest files importing its `_pb.ts` |
 | `frontends/web/src/**` module | the vitest files importing it (import graph below) |
 | `frontends/web/src/**/*.test.ts(x)` | that test only |
@@ -158,7 +158,6 @@ cannot see).
 - A web test that reads a file through a variable path. The marker scan
   (`readFileSync`, `readdirSync`, `process.cwd()`, `__dirname`) selects any test
   that reads files and names the changed file as a literal.
-- `-short` hides DB-backed tests. That is today's inner-loop behavior too.
 
 ## CI tiers: which tests run where
 
@@ -196,8 +195,13 @@ waits for. Nothing a PR skips is deleted; it runs on the next push to main.
   passed; a lane the change skipped is fine) and its summary shows each job's
   queue wait and run time.
 
-- **DB-backed tests run in both tiers.** CI sets `REQUIRE_TEST_DB=1`, which
-  overrides their short-mode skip (`internal/db/testutil.go`).
+- **DB-backed tests run in both tiers**, `-short` included, and never skip.
+  Each test gets its own copy of a template database on forge pgtest's server
+  (`internal/db/testutil.go`): an embedded Postgres of the major `forge.yaml`
+  declares (`database.postgres_version`), shared by every test process on the
+  machine, or `FORGE_TEST_POSTGRES_URL`'s server, which must run that major.
+  Tests never read `DATABASE_URL`, and `REQUIRE_TEST_DB` no longer means
+  anything: a server that cannot boot fails the test.
 - **A short-gated test runs only on main and nightly.** Gating is for tests that
   are inherently slow: a NATS cluster (`*_Cluster_*`), a real subprocess or a
   daemon that must outlive a kill. A test that is slow because it waits out a
@@ -233,10 +237,11 @@ waits for. Nothing a PR skips is deleted; it runs on the next push to main.
   PR's `go test` fetches a module only when go.sum moved. Refresh the weights when a shard
   runs much longer than the others: `gh run view <run-id> --log | go run
   ./tools/test-affected weights > tools/test-affected/go-test-weights.tsv`.
-- **The short tier's test Postgres runs without durability** (fsync,
-  synchronous_commit and full_page_writes off): per-test template databases
-  made the DB-backed packages fsync-bound (internal/db 166s -> 54s). It also
-  passes `-vet=off`: vet, like golangci-lint, runs on main.
+- **The test Postgres runs without durability** (fsync, synchronous_commit
+  and full_page_writes off; pgtest's embedded server is configured that way):
+  per-test template databases made the DB-backed packages fsync-bound
+  (internal/db 166s -> 54s). The short tier also passes `-vet=off`: vet, like
+  golangci-lint, runs on main.
 - **Other jobs**: `Lint (forge)` (at the pinned forge; blocks). On a PR:
   `go build ./...` (every package compiles) and forge's fast gating lanes over
   the whole project (`forge lint --no-fix --contract --migration-safety

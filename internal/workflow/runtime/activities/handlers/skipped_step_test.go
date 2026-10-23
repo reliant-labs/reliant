@@ -17,6 +17,8 @@ import (
 // internal/workflow/runtime/step_execution_row_test.go, which cannot import
 // this package without an import cycle.
 func TestSkippedStepActivityStampsSkipped(t *testing.T) {
+	t.Parallel()
+
 	output, err := NewSkippedStepActivity().Execute(context.Background(), SkippedStepInput{
 		WorkflowID: "wf-1",
 		StepID:     "review",

@@ -19,6 +19,8 @@ import (
 // one (question/async_answer.go). Once no blocking question is pending, the
 // mailbox of a terminal thread is swept as before.
 func TestMailboxOfAThreadParkedOnABlockingQuestionIsNotSwept(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()

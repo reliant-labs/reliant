@@ -102,6 +102,8 @@ func (e *needsSetupEnv) seedUnfinished(t *testing.T, enabled bool) *core.Trigger
 // ---- create ----------------------------------------------------------------
 
 func TestCreateActivationRefusesAMissingRequiredParam(t *testing.T) {
+	t.Parallel()
+
 	env := setupNeedsSetup(t)
 
 	_, err := env.svc.CreateTrigger(env.ctx, connect.NewRequest(&reliantv1.CreateTriggerRequest{Trigger: env.activationDef(nil)}))
@@ -113,6 +115,8 @@ func TestCreateActivationRefusesAMissingRequiredParam(t *testing.T) {
 }
 
 func TestCreateActivationEnforcesItemBounds(t *testing.T) {
+	t.Parallel()
+
 	env := setupNeedsSetup(t)
 	for name, tc := range map[string]struct {
 		repos []any
@@ -134,6 +138,8 @@ func TestCreateActivationEnforcesItemBounds(t *testing.T) {
 }
 
 func TestCreateActivationAcceptsACompleteSetup(t *testing.T) {
+	t.Parallel()
+
 	env := setupNeedsSetup(t)
 	created := env.create(t, env.activationDef(func(d *reliantv1.TriggerDefinition) { d.Params = setupReposParam("acme/web") }))
 	assert.NotEqual(t, reliantv1.TriggerHealthStatus_TRIGGER_HEALTH_STATUS_NEEDS_SETUP, created.GetHealth().GetStatus())
@@ -142,6 +148,8 @@ func TestCreateActivationAcceptsACompleteSetup(t *testing.T) {
 // ---- update ----------------------------------------------------------------
 
 func TestUpdateActivationCannotClearARequiredParam(t *testing.T) {
+	t.Parallel()
+
 	env := setupNeedsSetup(t)
 	created := env.create(t, env.activationDef(func(d *reliantv1.TriggerDefinition) { d.Params = setupReposParam("acme/web") }))
 
@@ -158,6 +166,8 @@ func TestUpdateActivationCannotClearARequiredParam(t *testing.T) {
 // ---- enable: new -----------------------------------------------------------
 
 func TestEnableWorkflowRefusesANewActivationWithoutTheRequiredParam(t *testing.T) {
+	t.Parallel()
+
 	env := setupNeedsSetup(t)
 
 	resp := env.enable(t, env.enableReq(nil))
@@ -174,6 +184,8 @@ func TestEnableWorkflowRefusesANewActivationWithoutTheRequiredParam(t *testing.T
 // ---- enable: existing / update --------------------------------------------
 
 func TestEnableWorkflowRevalidatesAnExistingActivationAgainstRequiredParams(t *testing.T) {
+	t.Parallel()
+
 	env := setupNeedsSetup(t)
 	seeded := env.seedUnfinished(t, true)
 
@@ -195,6 +207,8 @@ func TestEnableWorkflowRevalidatesAnExistingActivationAgainstRequiredParams(t *t
 // ---- enable: resume --------------------------------------------------------
 
 func TestEnableWorkflowResumeValidatesParams(t *testing.T) {
+	t.Parallel()
+
 	env := setupNeedsSetup(t)
 	env.seedUnfinished(t, false) // paused, and never finished
 
@@ -211,6 +225,8 @@ func TestEnableWorkflowResumeValidatesParams(t *testing.T) {
 }
 
 func TestSetTriggerEnabledDoesNotResumeAnUnfinishedActivation(t *testing.T) {
+	t.Parallel()
+
 	env := setupNeedsSetup(t)
 	row := env.seedUnfinished(t, false)
 
@@ -228,6 +244,8 @@ func TestSetTriggerEnabledDoesNotResumeAnUnfinishedActivation(t *testing.T) {
 // ---- run now ---------------------------------------------------------------
 
 func TestRunNowOfAnUnfinishedActivationSaysWhatToFinish(t *testing.T) {
+	t.Parallel()
+
 	env := setupNeedsSetup(t)
 	row := env.seedUnfinished(t, true)
 
@@ -240,6 +258,8 @@ func TestRunNowOfAnUnfinishedActivationSaysWhatToFinish(t *testing.T) {
 }
 
 func TestRunNowOfACompleteActivationStillFires(t *testing.T) {
+	t.Parallel()
+
 	env := setupNeedsSetup(t)
 	created := env.create(t, env.activationDef(func(d *reliantv1.TriggerDefinition) { d.Params = setupReposParam("acme/web") }))
 	_, err := env.svc.FireTrigger(env.ctx, connect.NewRequest(&reliantv1.FireTriggerRequest{Id: created.GetId()}))
@@ -249,6 +269,8 @@ func TestRunNowOfACompleteActivationStillFires(t *testing.T) {
 // ---- health ----------------------------------------------------------------
 
 func TestHealthIsNeedsSetupForAnActivationMissingARequiredParam(t *testing.T) {
+	t.Parallel()
+
 	env := setupNeedsSetup(t)
 	row := env.seedUnfinished(t, true)
 
@@ -271,6 +293,8 @@ func TestHealthIsNeedsSetupForAnActivationMissingARequiredParam(t *testing.T) {
 // A workflow edit that adds a required input needs no data migration: the
 // activation is NEEDS_SETUP the next time anyone reads it.
 func TestHealthTurnsNeedsSetupWhenTheWorkflowGrowsARequiredInput(t *testing.T) {
+	t.Parallel()
+
 	env := setupNeedsSetup(t)
 	env.saveWorkflow(t, "triage", `name: triage
 inputs:
@@ -296,6 +320,8 @@ nodes:
 }
 
 func TestHealthBrokenOutranksNeedsSetup(t *testing.T) {
+	t.Parallel()
+
 	env := setupNeedsSetup(t)
 	row := env.seedUnfinished(t, true)
 	// The workflow stops declaring the trigger: nothing can be set up.
@@ -338,6 +364,8 @@ func (e *needsSetupEnv) withOptions(t *testing.T, o OptionsChecker) {
 }
 
 func TestEnableFailsOnADefinitelyUnreachableValue(t *testing.T) {
+	t.Parallel()
+
 	env := setupNeedsSetup(t)
 	opts := &fakeOptions{unreachable: []string{"acme/gone"}}
 	env.withOptions(t, opts)
@@ -363,6 +391,8 @@ func TestEnableFailsOnADefinitelyUnreachableValue(t *testing.T) {
 }
 
 func TestEnableWarnsButProceedsOnAnUpstreamError(t *testing.T) {
+	t.Parallel()
+
 	env := setupNeedsSetup(t)
 	env.withOptions(t, &fakeOptions{err: errors.New("github is down")})
 
@@ -377,6 +407,8 @@ func TestEnableWarnsButProceedsOnAnUpstreamError(t *testing.T) {
 // "The bot cannot write" is the checker's finding, not a refusal: review-only
 // use is legitimate, so it reaches the person as a warning.
 func TestEnableWarnsWhenTheBotCannotWrite(t *testing.T) {
+	t.Parallel()
+
 	env := setupNeedsSetup(t)
 	env.withOptions(t, &fakeOptions{warnings: []string{"The Reliant bot cannot write to acme/web; reviews will be skipped."}})
 
@@ -387,6 +419,8 @@ func TestEnableWarnsWhenTheBotCannotWrite(t *testing.T) {
 }
 
 func TestEnableChecksReachabilityOfAResumedAndAnUpdatedActivationToo(t *testing.T) {
+	t.Parallel()
+
 	env := setupNeedsSetup(t)
 	opts := &fakeOptions{}
 	env.withOptions(t, opts)
@@ -406,6 +440,8 @@ func TestEnableChecksReachabilityOfAResumedAndAnUpdatedActivationToo(t *testing.
 }
 
 func TestEnableWithoutAnOptionsCheckerChecksShapesOnly(t *testing.T) {
+	t.Parallel()
+
 	env := setupNeedsSetup(t)
 	resp := env.enable(t, env.enableReq(setupReposParam("acme/web")))
 	require.True(t, resp.Enabled)
@@ -443,6 +479,8 @@ func gatedDeclaration(t *testing.T, name string) *reliantv1.WorkflowTrigger {
 // enable and then skip every event if the owner has no GitHub identity. The
 // enable says so, for the trigger that needs it and only that one.
 func TestEnableWarnsWhenAnOwnerGatedFilterHasNoOwnerIdentity(t *testing.T) {
+	t.Parallel()
+
 	env, _ := setupInboundTriggerTest(t)
 	env.saveWorkflow(t, "responder", ownerGatedYAML)
 	conn := env.createConnection(t, env.userID, "test", "acct-1", core.ConnectionStatusActive)
@@ -463,6 +501,8 @@ func TestEnableWarnsWhenAnOwnerGatedFilterHasNoOwnerIdentity(t *testing.T) {
 // connection (every hosted GitHub one) has nothing to warn about; unlinked, it
 // does. The identity is read when asked, not stored on the activation.
 func TestOwnerIdentityWarningFollowsTheLinkedIdentity(t *testing.T) {
+	t.Parallel()
+
 	env, _ := setupInboundTriggerTest(t)
 	row := &core.Trigger{ID: "t1", UserID: env.userID}
 	gated, plain := gatedDeclaration(t, "on-comment"), gatedDeclaration(t, "on-open")

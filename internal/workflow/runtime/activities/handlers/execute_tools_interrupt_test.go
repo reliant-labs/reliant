@@ -127,6 +127,8 @@ func (m *blockingToolExecutor) Block(toolCallID string) (release func(), started
 // returns success. TestInterrupt_ContextCancellationDoesNotClaimCompletedSiblings
 // still covers the "shared activity context died" half of sibling-safety.
 func TestInterrupt_CancelOneToolLeavesSiblingResultIntact(t *testing.T) {
+	t.Parallel()
+
 	t.Skip("gap: selective single-tool cancellation with sibling output intact " +
 		"has no surviving in-process or cross-process mechanism now that " +
 		"shell.CancelSignal (dead cross-process code) is removed; see comment above")
@@ -145,6 +147,8 @@ func TestInterrupt_CancelOneToolLeavesSiblingResultIntact(t *testing.T) {
 // This is the case the guard `(execResult == nil || !execResult.Success)`
 // exists for. Removing that guard must fail this test.
 func TestInterrupt_ContextCancellationDoesNotClaimCompletedSiblings(t *testing.T) {
+	t.Parallel()
+
 	f := setupDurableStatusFixture(t)
 	defer f.h.Cleanup()
 	ctx := context.Background()
@@ -249,6 +253,8 @@ func runSiblingProbe(
 // the database, so it works across the API-server/worker split that defeated
 // the old signal.
 func TestInterrupt_CancelWhilePendingNeverDispatches(t *testing.T) {
+	t.Parallel()
+
 	f := setupDurableStatusFixture(t)
 	defer f.h.Cleanup()
 	ctx := context.Background()
@@ -305,6 +311,8 @@ func TestInterrupt_CancelWhilePendingNeverDispatches(t *testing.T) {
 // finished. Low severity: the call already produced its real, correct
 // result by the time this would fire.
 func TestInterrupt_CancelAfterCompletionDoesNotDiscardRealOutput(t *testing.T) {
+	t.Parallel()
+
 	t.Skip("gap: post-completion cancel marking is gone along with " +
 		"shell.CancelSignal (dead cross-process code); a tool that finishes " +
 		"now always reports its real completed result, see comment above")

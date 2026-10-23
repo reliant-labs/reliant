@@ -153,6 +153,8 @@ func locked(w worktreereclaim.Worktree) worktreereclaim.Result {
 }
 
 func TestSweep_OneSlowWorktreeDoesNotStarveTheBatchBehindIt(t *testing.T) {
+	t.Parallel()
+
 	store := newFakeStore("d")
 	for _, id := range []string{"a", "b", "c", "slow", "e", "f", "g", "h"} {
 		store.add(id, false, nil)
@@ -174,6 +176,8 @@ func TestSweep_OneSlowWorktreeDoesNotStarveTheBatchBehindIt(t *testing.T) {
 }
 
 func TestSweep_RepeatedFailureBecomesAVisibleHold(t *testing.T) {
+	t.Parallel()
+
 	store := newFakeStore("d")
 	store.add("stuck", true, nil)
 	sender := &scriptSender{failWith: map[string]bool{"stuck": true}, answer: locked}
@@ -191,6 +195,8 @@ func TestSweep_RepeatedFailureBecomesAVisibleHold(t *testing.T) {
 }
 
 func TestSweep_AFailedWorktreeBacksOffInsteadOfStayingDue(t *testing.T) {
+	t.Parallel()
+
 	store := newFakeStore("d")
 	store.add("slow", true, nil)
 	sender := &scriptSender{failWith: map[string]bool{"slow": true}, answer: locked}
@@ -212,6 +218,8 @@ func TestSweep_AFailedWorktreeBacksOffInsteadOfStayingDue(t *testing.T) {
 }
 
 func TestSweep_TransientOutcomesAreRecordedNotDropped(t *testing.T) {
+	t.Parallel()
+
 	for _, reason := range []worktreereclaim.HeldReason{worktreereclaim.ReasonRecentlyActive, worktreereclaim.ReasonStale} {
 		t.Run(string(reason), func(t *testing.T) {
 			store := newFakeStore("d")
@@ -235,6 +243,8 @@ func TestSweep_TransientOutcomesAreRecordedNotDropped(t *testing.T) {
 }
 
 func TestSweep_DaemonErrorIsRecordedAsAHold(t *testing.T) {
+	t.Parallel()
+
 	store := newFakeStore("d")
 	store.add("w", true, nil)
 	sender := &scriptSender{answer: func(w worktreereclaim.Worktree) worktreereclaim.Result {
@@ -248,6 +258,8 @@ func TestSweep_DaemonErrorIsRecordedAsAHold(t *testing.T) {
 }
 
 func TestSweep_LeastRecentlyCheckedFirst_ArchivedBeforeLive(t *testing.T) {
+	t.Parallel()
+
 	store := newFakeStore("d")
 	old := time.Now().Add(-48 * time.Hour).UTC()
 	recent := time.Now().Add(-time.Hour).UTC()
@@ -267,6 +279,8 @@ func TestSweep_LeastRecentlyCheckedFirst_ArchivedBeforeLive(t *testing.T) {
 }
 
 func TestSweep_ABatchThatFailsEverywhereStopsAskingThatDaemon(t *testing.T) {
+	t.Parallel()
+
 	store := newFakeStore("d")
 	fail := map[string]bool{}
 	for i := 0; i < 40; i++ {
@@ -298,6 +312,8 @@ func autoEnv(t *testing.T, mode AutoArchiveMode, chats []*core.Chat) (*fakeStore
 }
 
 func TestAutoArchive_OnArchivesAFinishedWorktree(t *testing.T) {
+	t.Parallel()
+
 	store, sender, s := autoEnv(t, AutoArchiveOn, nil)
 	require.NoError(t, s.Sweep(context.Background()))
 	assert.Equal(t, []string{"done"}, store.archived)
@@ -305,6 +321,8 @@ func TestAutoArchive_OnArchivesAFinishedWorktree(t *testing.T) {
 }
 
 func TestAutoArchive_DryRunReportsAndArchivesNothing(t *testing.T) {
+	t.Parallel()
+
 	store, _, s := autoEnv(t, AutoArchiveDryRun, nil)
 	require.NoError(t, s.Sweep(context.Background()))
 	assert.Empty(t, store.archived)
@@ -313,6 +331,8 @@ func TestAutoArchive_DryRunReportsAndArchivesNothing(t *testing.T) {
 }
 
 func TestAutoArchive_OffNeverProbes(t *testing.T) {
+	t.Parallel()
+
 	store := newFakeStore("d")
 	store.add("done", false, nil)
 	sender := &scriptSender{probed: map[string]bool{}, answer: locked}
@@ -323,6 +343,8 @@ func TestAutoArchive_OffNeverProbes(t *testing.T) {
 }
 
 func TestAutoArchive_ALiveChatKeepsTheWorktree(t *testing.T) {
+	t.Parallel()
+
 	id := "done"
 	store, _, s := autoEnv(t, AutoArchiveOn, []*core.Chat{{ID: "c", WorktreeID: &id}})
 	require.NoError(t, s.Sweep(context.Background()))
@@ -330,6 +352,8 @@ func TestAutoArchive_ALiveChatKeepsTheWorktree(t *testing.T) {
 }
 
 func TestAutoArchive_AnUnsureChatListKeepsTheWorktree(t *testing.T) {
+	t.Parallel()
+
 	chats := make([]*core.Chat, liveChatScan)
 	for i := range chats {
 		other := "other"
@@ -341,6 +365,8 @@ func TestAutoArchive_AnUnsureChatListKeepsTheWorktree(t *testing.T) {
 }
 
 func TestAutoArchive_NeverArchivesTheMainCheckout(t *testing.T) {
+	t.Parallel()
+
 	store, _, s := autoEnv(t, AutoArchiveOn, nil)
 	store.rows["done"].Worktree.IsMain = true
 	require.NoError(t, s.Sweep(context.Background()))
@@ -348,6 +374,8 @@ func TestAutoArchive_NeverArchivesTheMainCheckout(t *testing.T) {
 }
 
 func TestAutoArchive_KeepEverythingUserIsNeverProbed(t *testing.T) {
+	t.Parallel()
+
 	store, sender, s := autoEnv(t, AutoArchiveOn, nil)
 	s.WithKeepFiles(keepAll{})
 	require.NoError(t, s.Sweep(context.Background()))
@@ -356,6 +384,8 @@ func TestAutoArchive_KeepEverythingUserIsNeverProbed(t *testing.T) {
 }
 
 func TestParseAutoArchiveMode_DefaultNeverArchives(t *testing.T) {
+	t.Parallel()
+
 	store, _, s := autoEnv(t, ParseAutoArchiveMode(""), nil)
 	require.NoError(t, s.Sweep(context.Background()))
 	assert.Empty(t, store.archived, "an unset switch must only report candidates")
@@ -363,6 +393,8 @@ func TestParseAutoArchiveMode_DefaultNeverArchives(t *testing.T) {
 }
 
 func TestParseAutoArchiveMode(t *testing.T) {
+	t.Parallel()
+
 	for in, want := range map[string]AutoArchiveMode{
 		"": AutoArchiveDryRun, "on": AutoArchiveOn, " ON ": AutoArchiveOn, "dry-run": AutoArchiveDryRun,
 		"off": AutoArchiveOff, "false": AutoArchiveOff, "onn": AutoArchiveOff, "0": AutoArchiveOff,

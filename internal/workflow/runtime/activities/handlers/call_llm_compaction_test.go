@@ -16,6 +16,8 @@ func celIntExpr(e string) *reliantv1.CelInt {
 }
 
 func TestExplicitCompactionThreshold(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name      string
 		arg       *reliantv1.CelInt
@@ -49,6 +51,8 @@ func TestExplicitCompactionThreshold(t *testing.T) {
 // per-model explicit override honored if one is declared); otherwise the global
 // default when the window is unknown.
 func TestEffectiveCompactionThresholdPrecedence(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name string
 		arg  *reliantv1.CelInt
@@ -123,6 +127,8 @@ func selectorWithThreshold(ct int32) *reliantv1.CelModelSelector {
 // the model runs out of room. It is capped at the derived threshold for the
 // model's real window. A pin below that is honored as before.
 func TestResolveCompactionThreshold_PinnedNeverExceedsTheWindow(t *testing.T) {
+	t.Parallel()
+
 	terra := &models.ModelDefinition{Capabilities: models.ModelCapabilities{MaxContextWindow: 272_000}}
 	const terraCeiling = 231_200 // 0.85 × 272k
 

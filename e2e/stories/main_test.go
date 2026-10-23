@@ -5,7 +5,8 @@
 // Package stories contains story-based end-to-end tests that exercise the
 // full Reliant backend hermetically:
 //
-//	real Postgres (DATABASE_URL, same conventions as internal/db tests)
+//	real Postgres (internal/db's test database: forge pgtest's embedded
+//	  server, or FORGE_TEST_POSTGRES_URL)
 //	real Temporal (ephemeral dev server owned by TestMain)
 //	real worker (workersetup.NewWorker — production registration path)
 //	real Connect service handlers (chat.Service etc., called in-process)
@@ -15,11 +16,7 @@
 //
 // Run with:
 //
-//	DATABASE_URL=postgres://postgres:postgres@localhost:5433/reliant?sslmode=disable \
-//	  go test -tags e2e ./e2e/stories/ -v
-//
-// (`make test-e2e` runs the suite against your DATABASE_URL, or, when it is
-// unset, brings up the compose Postgres and uses that.)
+//	go test -tags e2e ./e2e/stories/ -v     # or: task test:e2e
 //
 // Each story is independent and parallel-safe: it creates its own user,
 // project, chat, and Temporal worker on a unique task queue. The Postgres
@@ -37,7 +34,6 @@ import (
 	"net"
 	"os"
 	"os/exec"
-	"strings"
 	"testing"
 	"time"
 
@@ -75,23 +71,11 @@ func setupQuietLogging() {
 func TestMain(m *testing.M) {
 	setupQuietLogging()
 
-	// The stories are DB-backed the same way internal/db tests are: they skip
-	// when DATABASE_URL is not set. In that case don't pay for a Temporal dev
-	// server either — every story checks requireStack(t) and skips.
-	if os.Getenv("DATABASE_URL") == "" {
-		// REQUIRE_TEST_DB=1 (CI) turns the skip into a failure, the same
-		// contract internal/db's SetupTestDB honours. Without it the CI job
-		// reported green for months while running 1 of 11 stories — the other
-		// ten skipped, which is how three of them stopped compiling and three
-		// more collided on shared tool-call ids with nobody noticing.
-		if v := os.Getenv("REQUIRE_TEST_DB"); v != "" && v != "0" && !strings.EqualFold(v, "false") {
-			fmt.Fprintln(os.Stderr, "e2e/stories: REQUIRE_TEST_DB is set but DATABASE_URL is not — refusing to skip every story")
-			os.Exit(1)
-		}
-		fmt.Fprintln(os.Stderr, "e2e/stories: DATABASE_URL not set — all stories will be skipped (run `make postgres-up` and set DATABASE_URL)")
-		os.Exit(m.Run())
-	}
-
+	// The stories always run: their database is internal/db's test database,
+	// which needs no configuration. (They used to skip without DATABASE_URL,
+	// and CI reported green for months while running 1 of 11 stories — which
+	// is how three of them stopped compiling and three more collided on shared
+	// tool-call ids with nobody noticing.)
 	if err := startTemporalDevServer(); err != nil {
 		fmt.Fprintf(os.Stderr, "e2e/stories: failed to start Temporal dev server: %v\n", err)
 		os.Exit(1)

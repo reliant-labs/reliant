@@ -149,6 +149,8 @@ func newBranchTestProject(t *testing.T, repo *db.Repo, ctx context.Context) stri
 // context-window chain rather than copying them), and it collides with the real
 // result when the sub-agent finishes.
 func TestBranchChat_LiveSpawn_DoesNotRepairSourceThread(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -190,6 +192,8 @@ func TestBranchChat_LiveSpawn_DoesNotRepairSourceThread(t *testing.T) {
 // thread and will deliver its result there. Nothing will ever resolve it here, so
 // the branch must not present it as in-flight work of its own.
 func TestBranchChat_LiveSpawn_BranchDoesNotShowSpawnAsRunning(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -227,6 +231,8 @@ func TestBranchChat_LiveSpawn_BranchDoesNotShowSpawnAsRunning(t *testing.T) {
 // genuinely running and must still read that way. The branch-aware
 // reinterpretation must not leak into the source conversation.
 func TestBranchChat_LiveSpawn_SourceStillShowsSpawnRunning(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -267,6 +273,8 @@ func TestBranchChat_LiveSpawn_SourceStillShowsSpawnRunning(t *testing.T) {
 // an assistant message with an unpaired tool_use block is an invalid LLM request.
 // This is the case the repair path exists for, and it must keep working.
 func TestBranchChat_DeadToolCall_StillRepaired(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 

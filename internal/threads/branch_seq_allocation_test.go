@@ -16,6 +16,8 @@ import (
 //
 // The allocated seq must clear everything the branch actually shows.
 func TestBranchSeqAllocationClearsInheritedHistory(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()

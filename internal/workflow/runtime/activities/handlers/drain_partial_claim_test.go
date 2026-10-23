@@ -29,6 +29,8 @@ import (
 // permanently, with no error raised anywhere. That is why the drain returns an
 // error (errDrainBatchTaken) rather than nil on this path: RunTx commits on nil.
 func TestMarkAgentMessagesDelivered_PartialBatchReportsOnlyWhatItTook(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 	ctx := context.Background()
@@ -70,6 +72,8 @@ func TestMarkAgentMessagesDelivered_PartialBatchReportsOnlyWhatItTook(t *testing
 // A drain whose batch was taken before it claimed delivers nothing, does not
 // error, and leaves nothing stranded.
 func TestDrainAgentMessages_BatchTakenDeliversNothingAndStrandsNothing(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 	ctx := context.Background()

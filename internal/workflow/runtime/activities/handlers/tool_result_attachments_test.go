@@ -13,6 +13,8 @@ import (
 // that already feeds response_data — rather than adding a second channel
 // through every executor between the tool and here.
 func TestAttachmentIDsFromMetadata(t *testing.T) {
+	t.Parallel()
+
 	cases := []struct {
 		name     string
 		metadata string
@@ -71,6 +73,8 @@ func TestAttachmentIDsFromMetadata(t *testing.T) {
 // they are dropped somewhere between the activity that produces them and the
 // SaveMessage that renders them.
 func TestToolResultAttachmentIDsSurviveProtoRoundTrip(t *testing.T) {
+	t.Parallel()
+
 	original := []ToolResult{{
 		ToolCallID:    "toolu_1",
 		Name:          "generate_image",

@@ -56,6 +56,8 @@ func validateMessageIntegrity(t *testing.T, msgs []message.Message) {
 
 // TestRepairIntegrity_SingleOrphanedToolCall verifies single orphaned tool call gets repaired
 func TestRepairIntegrity_SingleOrphanedToolCall(t *testing.T) {
+	t.Parallel()
+
 	msgs := []message.Message{
 		{ID: "1", Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: "do something"}}},
 		{ID: "2", Role: message.Assistant, Parts: []message.ContentPart{
@@ -70,6 +72,8 @@ func TestRepairIntegrity_SingleOrphanedToolCall(t *testing.T) {
 
 // TestRepairIntegrity_MultipleOrphanedToolCalls verifies multiple orphaned tool calls in one message
 func TestRepairIntegrity_MultipleOrphanedToolCalls(t *testing.T) {
+	t.Parallel()
+
 	msgs := []message.Message{
 		{ID: "1", Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: "do multiple things"}}},
 		{ID: "2", Role: message.Assistant, Parts: []message.ContentPart{
@@ -91,6 +95,8 @@ func TestRepairIntegrity_MultipleOrphanedToolCalls(t *testing.T) {
 
 // TestRepairIntegrity_PartialToolResults verifies partial results get completed
 func TestRepairIntegrity_PartialToolResults(t *testing.T) {
+	t.Parallel()
+
 	msgs := []message.Message{
 		{ID: "1", Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: "do things"}}},
 		{ID: "2", Role: message.Assistant, Parts: []message.ContentPart{
@@ -124,6 +130,8 @@ func TestRepairIntegrity_PartialToolResults(t *testing.T) {
 
 // TestRepairIntegrity_MultipleAssistantMessagesWithToolCalls tests back-to-back assistant+tool sequences
 func TestRepairIntegrity_MultipleAssistantMessagesWithToolCalls(t *testing.T) {
+	t.Parallel()
+
 	msgs := []message.Message{
 		{ID: "1", Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: "start"}}},
 		{ID: "2", Role: message.Assistant, Parts: []message.ContentPart{
@@ -144,6 +152,8 @@ func TestRepairIntegrity_MultipleAssistantMessagesWithToolCalls(t *testing.T) {
 
 // TestRepairIntegrity_UserInterruptMidExecution tests the critical user interrupt scenario
 func TestRepairIntegrity_UserInterruptMidExecution(t *testing.T) {
+	t.Parallel()
+
 	msgs := []message.Message{
 		{ID: "1", Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: "run tests"}}},
 		{ID: "2", Role: message.Assistant, Parts: []message.ContentPart{
@@ -175,6 +185,8 @@ func TestRepairIntegrity_UserInterruptMidExecution(t *testing.T) {
 
 // TestRepairIntegrity_NestedToolCallSequences tests complex multi-round tool usage
 func TestRepairIntegrity_NestedToolCallSequences(t *testing.T) {
+	t.Parallel()
+
 	msgs := []message.Message{
 		{ID: "1", Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: "help me fix the bug"}}},
 		// First round: read files
@@ -215,6 +227,8 @@ func TestRepairIntegrity_NestedToolCallSequences(t *testing.T) {
 
 // TestRepairIntegrity_EmptyConversation tests empty message list
 func TestRepairIntegrity_EmptyConversation(t *testing.T) {
+	t.Parallel()
+
 	msgs := []message.Message{}
 	result := repairMessageHistory(msgs)
 	validateMessageIntegrity(t, result)
@@ -223,6 +237,8 @@ func TestRepairIntegrity_EmptyConversation(t *testing.T) {
 
 // TestRepairIntegrity_NoToolCalls tests conversation without tool calls
 func TestRepairIntegrity_NoToolCalls(t *testing.T) {
+	t.Parallel()
+
 	msgs := []message.Message{
 		{ID: "1", Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: "hello"}}},
 		{ID: "2", Role: message.Assistant, Parts: []message.ContentPart{message.TextContent{Text: "hi there!"}}},
@@ -237,6 +253,8 @@ func TestRepairIntegrity_NoToolCalls(t *testing.T) {
 
 // TestRepairIntegrity_SystemMessages tests that system messages don't interfere
 func TestRepairIntegrity_SystemMessages(t *testing.T) {
+	t.Parallel()
+
 	msgs := []message.Message{
 		{ID: "1", Role: message.System, Parts: []message.ContentPart{message.TextContent{Text: "You are a helpful assistant"}}},
 		{ID: "2", Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: "help"}}},
@@ -256,6 +274,8 @@ func TestRepairIntegrity_SystemMessages(t *testing.T) {
 
 // TestRepairIntegrity_BranchedChatInheritedOrphans tests orphans from inherited parent messages
 func TestRepairIntegrity_BranchedChatInheritedOrphans(t *testing.T) {
+	t.Parallel()
+
 	// Simulates: Parent has assistant+tool_call, then user branches before tool completes
 	msgs := []message.Message{
 		// Inherited from parent
@@ -282,6 +302,8 @@ func TestRepairIntegrity_BranchedChatInheritedOrphans(t *testing.T) {
 
 // TestRepairIntegrity_MismatchedToolResultOrder tests tool results in wrong order
 func TestRepairIntegrity_MismatchedToolResultOrder(t *testing.T) {
+	t.Parallel()
+
 	msgs := []message.Message{
 		{ID: "1", Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: "do things"}}},
 		{ID: "2", Role: message.Assistant, Parts: []message.ContentPart{
@@ -306,6 +328,8 @@ func TestRepairIntegrity_MismatchedToolResultOrder(t *testing.T) {
 
 // TestRepairIntegrity_DuplicateToolResults tests handling of duplicate tool results
 func TestRepairIntegrity_DuplicateToolResults(t *testing.T) {
+	t.Parallel()
+
 	msgs := []message.Message{
 		{ID: "1", Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: "do"}}},
 		{ID: "2", Role: message.Assistant, Parts: []message.ContentPart{
@@ -326,6 +350,8 @@ func TestRepairIntegrity_DuplicateToolResults(t *testing.T) {
 
 // TestRepairIntegrity_AssistantWithTextAndToolCalls tests mixed content
 func TestRepairIntegrity_AssistantWithTextAndToolCalls(t *testing.T) {
+	t.Parallel()
+
 	msgs := []message.Message{
 		{ID: "1", Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: "fix the bug"}}},
 		{ID: "2", Role: message.Assistant, Parts: []message.ContentPart{
@@ -346,6 +372,8 @@ func TestRepairIntegrity_AssistantWithTextAndToolCalls(t *testing.T) {
 
 // TestRepairIntegrity_ThinkingContent tests that thinking/reasoning content doesn't interfere
 func TestRepairIntegrity_ThinkingContent(t *testing.T) {
+	t.Parallel()
+
 	msgs := []message.Message{
 		{ID: "1", Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: "solve problem"}}},
 		{ID: "2", Role: message.Assistant, Parts: []message.ContentPart{
@@ -368,6 +396,8 @@ func TestRepairIntegrity_ThinkingContent(t *testing.T) {
 
 // TestRepairIntegrity_LongToolCallChain tests many sequential tool uses
 func TestRepairIntegrity_LongToolCallChain(t *testing.T) {
+	t.Parallel()
+
 	msgs := []message.Message{
 		{ID: "1", Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: "help me refactor"}}},
 	}
@@ -415,6 +445,8 @@ func TestRepairIntegrity_LongToolCallChain(t *testing.T) {
 // ============================================================================
 
 func TestRepairIntegrity_TableDriven(t *testing.T) {
+	t.Parallel()
+
 	testCases := []struct {
 		name     string
 		messages []message.Message

@@ -45,6 +45,8 @@ func executeDirect(t *testing.T, a *ActionActivity, connection string) (*reliant
 // The activity must hand a connection failure to the graph as a typed,
 // non-retried error output rather than failing (and retrying) the activity.
 func TestActionNodeReportsMissingConnectionAsFailedPrecondition(t *testing.T) {
+	t.Parallel()
+
 	a := NewActionActivityWith(catalog.MustBuiltin(), httpaction.NewRunner(netguard.New()),
 		failingSource{&httpaction.CredentialError{Code: httpaction.CodeFailedPrecondition, Message: "no such connection"}})
 	out, err := executeDirect(t, a, "conn_missing")
@@ -56,6 +58,8 @@ func TestActionNodeReportsMissingConnectionAsFailedPrecondition(t *testing.T) {
 }
 
 func TestActionNodeWithoutConnectionSourceRefusesInsteadOfRunningUnauthenticated(t *testing.T) {
+	t.Parallel()
+
 	a := NewActionActivityWith(catalog.MustBuiltin(), httpaction.NewRunner(netguard.New()), nil)
 	out, err := executeDirect(t, a, "conn_x")
 	require.NoError(t, err)
@@ -78,6 +82,8 @@ func (r *recordingSource) Credential(_ context.Context, req httpaction.Credentia
 // must pass ITS OWN run, never the chat, thread or any other id on the context.
 // Every sibling id is set to something distinct so a swap is caught.
 func TestActionNodeResolvesForItsOwnRun(t *testing.T) {
+	t.Parallel()
+
 	src := &recordingSource{}
 	a := NewActionActivityWith(catalog.MustBuiltin(), httpaction.NewRunner(netguard.New()), src)
 	node := &reliantv1.Node{Id: "fetch", Type: "action", Args: &reliantv1.Node_Action{Action: &reliantv1.ActionArgs{
@@ -106,6 +112,8 @@ func TestActionNodeResolvesForItsOwnRun(t *testing.T) {
 
 // The node carries only the connection reference.
 func TestActionNodeInputCarriesOnlyTheReference(t *testing.T) {
+	t.Parallel()
+
 	node := &reliantv1.Node{Args: &reliantv1.Node_Action{Action: &reliantv1.ActionArgs{
 		Connection: &reliantv1.CelString{Value: &reliantv1.CelString_Literal{Literal: "conn_abc"}},
 	}}}
@@ -120,6 +128,8 @@ func TestActionNodeInputCarriesOnlyTheReference(t *testing.T) {
 // call site hands it to the credential source, with the call's own action and
 // whether it writes, which is what a source scopes a bot token by.
 func TestActionNodeCarriesTheRunsActingIdentity(t *testing.T) {
+	t.Parallel()
+
 	run := func(identity, automation string) httpaction.CredentialRequest {
 		t.Helper()
 		src := &recordingSource{}
@@ -158,6 +168,8 @@ func TestActionNodeCarriesTheRunsActingIdentity(t *testing.T) {
 
 // The node's `with:` cannot choose the identity either: it is only ever a param.
 func TestActionNodeWithCannotChooseTheIdentity(t *testing.T) {
+	t.Parallel()
+
 	src := &recordingSource{}
 	a := NewActionActivityWith(catalog.MustBuiltin(), httpaction.NewRunner(netguard.New()), src)
 	node := &reliantv1.Node{Id: "comment", Type: "action", Args: &reliantv1.Node_Action{Action: &reliantv1.ActionArgs{

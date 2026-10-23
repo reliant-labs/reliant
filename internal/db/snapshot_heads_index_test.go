@@ -37,6 +37,8 @@ import (
 //
 // This test forces the generic plan, which is the one that bit.
 func TestSnapshotHeadsQueryUsesPartialIndexUnderGenericPlan(t *testing.T) {
+	t.Parallel()
+
 	_, raw, cleanup := SetupTestDBWithRawDB(t)
 	defer cleanup()
 
@@ -123,6 +125,8 @@ func probeUsesIndex(plan, index string) bool {
 // or an index predicate edited, the query would silently read the wrong set of
 // rows or lose the index. Pin them all together.
 func TestSnapshotHeadsQueryMatchesPartialIndex(t *testing.T) {
+	t.Parallel()
+
 	// The types the index (and the skip scan) excludes.
 	indexExcluded := []reliantv1.ChatUpdateType{
 		reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_MESSAGE,

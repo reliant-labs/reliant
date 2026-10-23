@@ -19,6 +19,8 @@ import (
 // The pkey is the real uniqueness constraint on a pre-allocated id, so the save
 // path has to reconcile against the id as well as the activity id.
 func TestSaveMessage_FixedID_SecondWriterDifferentActivityID(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()

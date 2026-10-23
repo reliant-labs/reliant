@@ -25,6 +25,8 @@ import (
 // This test pins both directions in one pass: the mailbox is invisible while
 // the thread is stranded, and the reap is what makes it visible.
 func TestReapOrphanedThreads_UnblocksOrphanedMailboxSweep(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()

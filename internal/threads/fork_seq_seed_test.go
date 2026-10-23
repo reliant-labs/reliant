@@ -25,6 +25,8 @@ import (
 // time. SeedSeqCounterForFork does that walk once per fork instead of once per
 // message.
 func TestForkedThread_SeqContinuesAboveInheritedHistory(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()

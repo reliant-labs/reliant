@@ -89,6 +89,8 @@ func newTestToolCall(f toolCallFixture, id string) *ToolCall {
 }
 
 func TestUpsertAndGetToolCall(t *testing.T) {
+	t.Parallel()
+
 	repo, _, cleanup := setupTestRepo(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -114,6 +116,8 @@ func TestUpsertAndGetToolCall(t *testing.T) {
 // re-sending the same call must converge on one row rather than fail on the
 // primary key -- that is the whole reason these are upserts.
 func TestUpsertToolCallIsIdempotent(t *testing.T) {
+	t.Parallel()
+
 	repo, _, cleanup := setupTestRepo(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -144,6 +148,8 @@ func TestUpsertToolCallIsIdempotent(t *testing.T) {
 // completion time. The repository rejects it earlier with a named error, but
 // both layers must hold.
 func TestUpsertToolCallRejectsCompletedWithoutCompletedAt(t *testing.T) {
+	t.Parallel()
+
 	repo, _, cleanup := setupTestRepo(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -159,6 +165,8 @@ func TestUpsertToolCallRejectsCompletedWithoutCompletedAt(t *testing.T) {
 }
 
 func TestUpsertToolCallResultIsIdempotent(t *testing.T) {
+	t.Parallel()
+
 	repo, _, cleanup := setupTestRepo(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -195,6 +203,8 @@ func TestUpsertToolCallResultIsIdempotent(t *testing.T) {
 // the LLM a tool_use block without a matching tool_result) relies on repair
 // code noticing after the fact.
 func TestToolCallResultRequiresExistingCall(t *testing.T) {
+	t.Parallel()
+
 	repo, _, cleanup := setupTestRepo(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -215,6 +225,8 @@ func TestToolCallResultRequiresExistingCall(t *testing.T) {
 // Deleting the call must take its result with it; a result that outlives its
 // call is the orphan case in the other direction.
 func TestDeletingToolCallCascadesToResult(t *testing.T) {
+	t.Parallel()
+
 	repo, db, cleanup := setupTestRepo(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -247,6 +259,8 @@ func TestDeletingToolCallCascadesToResult(t *testing.T) {
 // id), so these stores hand-build the IN clause. This test is what catches a
 // regression back to the generated version.
 func TestListToolCallsByMessageIDsMatchesEveryID(t *testing.T) {
+	t.Parallel()
+
 	repo, _, cleanup := setupTestRepo(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -281,6 +295,8 @@ func TestListToolCallsByMessageIDsMatchesEveryID(t *testing.T) {
 }
 
 func TestListToolCallsByMessageIDsEmptyInput(t *testing.T) {
+	t.Parallel()
+
 	repo, _, cleanup := setupTestRepo(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -295,6 +311,8 @@ func TestListToolCallsByMessageIDsEmptyInput(t *testing.T) {
 }
 
 func TestListToolCallsByChatOrdersByRequestedAt(t *testing.T) {
+	t.Parallel()
+
 	repo, _, cleanup := setupTestRepo(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -320,6 +338,8 @@ func TestListToolCallsByChatOrdersByRequestedAt(t *testing.T) {
 // Input is nullable because tool arguments have not finished arriving while
 // the assistant message is still streaming.
 func TestToolCallWithNullInput(t *testing.T) {
+	t.Parallel()
+
 	repo, _, cleanup := setupTestRepo(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -336,6 +356,8 @@ func TestToolCallWithNullInput(t *testing.T) {
 }
 
 func TestGetToolCallNotFound(t *testing.T) {
+	t.Parallel()
+
 	repo, _, cleanup := setupTestRepo(t)
 	defer cleanup()
 	ctx := context.Background()

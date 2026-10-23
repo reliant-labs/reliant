@@ -45,6 +45,8 @@ func assistantWithToolCall(id, callID, name string) message.Message {
 }
 
 func TestRecoverPersistedToolResults(t *testing.T) {
+	t.Parallel()
+
 	ctx := context.Background()
 
 	t.Run("recovers a durable result missing from history", func(t *testing.T) {
@@ -182,6 +184,8 @@ func TestRecoverPersistedToolResults(t *testing.T) {
 // state CallLLM accepts, i.e. not ending on an assistant message with an
 // unanswered tool call.
 func TestRecoverPersistedToolResults_UnwedgesHistoryTail(t *testing.T) {
+	t.Parallel()
+
 	repo := newToolResultRepo(map[string]*db.ToolCallResult{
 		"toolu_013mq": {ToolCallID: "toolu_013mq", Content: "Agent is STILL RUNNING after 5.6s"},
 	})

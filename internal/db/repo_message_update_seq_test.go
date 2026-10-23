@@ -12,6 +12,8 @@ import (
 // transcript instead of the bottom, which presents as "my message never showed
 // up" even though it was delivered.
 func TestEnrichMessageUpdate_CarriesSeq(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()

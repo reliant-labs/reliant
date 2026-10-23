@@ -32,6 +32,8 @@ func shapeOf(system []string, history []message.Message) promptShape {
 
 // History that only grew is the healthy case: nothing diverges.
 func TestDiffPromptShape_GrownHistoryHasNoDivergence(t *testing.T) {
+	t.Parallel()
+
 	prev := shapeOf([]string{"sys"}, baseHistory())
 	grown := append(baseHistory(), textMsg(message.User, "next"))
 	d := diffPromptShape(prev, shapeOf([]string{"sys"}, grown))
@@ -47,6 +49,8 @@ func TestDiffPromptShape_GrownHistoryHasNoDivergence(t *testing.T) {
 // A changed project memory sits at the front of history. The diff must point at
 // index 0 and name it, not merely say "history changed".
 func TestDiffPromptShape_MemoryBlockChangeIsNamed(t *testing.T) {
+	t.Parallel()
+
 	prev := shapeOf([]string{"sys"}, baseHistory())
 	h := baseHistory()
 	h[0] = textMsg(message.System, "# User defined rules, memories, and context\n\nglobal CHANGED")
@@ -58,6 +62,8 @@ func TestDiffPromptShape_MemoryBlockChangeIsNamed(t *testing.T) {
 }
 
 func TestDiffPromptShape_RepoMemoryChangeIsNamed(t *testing.T) {
+	t.Parallel()
+
 	prev := shapeOf([]string{"sys"}, baseHistory())
 	h := baseHistory()
 	h[1] = textMsg(message.System, "<system-memory repo=forge>\nforge notes v2\n</system-memory>")
@@ -71,6 +77,8 @@ func TestDiffPromptShape_RepoMemoryChangeIsNamed(t *testing.T) {
 // Editing a message deep in the conversation (compaction, a rewritten tool
 // result) diverges late: the shared prefix is long, which is the cheap kind.
 func TestDiffPromptShape_LateEditKeepsLongSharedPrefix(t *testing.T) {
+	t.Parallel()
+
 	prev := shapeOf([]string{"sys"}, baseHistory())
 	h := baseHistory()
 	h[3] = textMsg(message.Assistant, "hi, rewritten")
@@ -82,6 +90,8 @@ func TestDiffPromptShape_LateEditKeepsLongSharedPrefix(t *testing.T) {
 }
 
 func TestDiffPromptShape_SystemAndModelChanges(t *testing.T) {
+	t.Parallel()
+
 	prev := shapeOf([]string{"a", "b"}, baseHistory())
 	cur := computePromptShape("claude-sonnet", []string{"a", "B"}, baseHistory(), nil)
 	d := diffPromptShape(prev, cur)
@@ -95,6 +105,8 @@ func TestDiffPromptShape_SystemAndModelChanges(t *testing.T) {
 }
 
 func TestDiffPromptShape_SystemPromptAppearingIsAChange(t *testing.T) {
+	t.Parallel()
+
 	prev := shapeOf([]string{"a"}, baseHistory())
 	d := diffPromptShape(prev, shapeOf([]string{"a", "extra"}, baseHistory()))
 	if fmt.Sprint(d.SystemChanged) != "[1]" {
@@ -126,6 +138,8 @@ func schemaWith(prop string) *jsonschema.Schema {
 }
 
 func TestHashTools_OrderDescriptionAndSchemaMatter(t *testing.T) {
+	t.Parallel()
+
 	shell := fakeShapeTool{name: "shell", desc: "runs commands", schema: schemaWith("command")}
 	view := fakeShapeTool{name: "view", desc: "reads files", schema: schemaWith("path")}
 
@@ -150,6 +164,8 @@ func TestHashTools_OrderDescriptionAndSchemaMatter(t *testing.T) {
 }
 
 func TestDiffPromptShape_ToolSetChangeIsFlagged(t *testing.T) {
+	t.Parallel()
+
 	a := fakeShapeTool{name: "shell", desc: "x", schema: schemaWith("c")}
 	b := fakeShapeTool{name: "find_replace", desc: "y", schema: schemaWith("p")}
 	prev := computePromptShape("m", []string{"s"}, baseHistory(), []tools.Tool{a})
@@ -164,6 +180,8 @@ func TestDiffPromptShape_ToolSetChangeIsFlagged(t *testing.T) {
 }
 
 func TestMessageHash_CoversToolCallsAndResults(t *testing.T) {
+	t.Parallel()
+
 	call := func(input string) message.Message {
 		return message.Message{Role: message.Assistant, Parts: []message.ContentPart{
 			message.ToolCall{ID: "t1", Name: "shell", Input: input},
@@ -185,6 +203,8 @@ func TestMessageHash_CoversToolCallsAndResults(t *testing.T) {
 func msgPtr(m message.Message) *message.Message { return &m }
 
 func TestPromptShapeTracker_FirstSightIsUnknownThenDiffs(t *testing.T) {
+	t.Parallel()
+
 	tr := newPromptShapeTracker(4)
 	first := tr.observe("chat|thread", shapeOf([]string{"s"}, baseHistory()))
 	if first.Known {
@@ -197,6 +217,8 @@ func TestPromptShapeTracker_FirstSightIsUnknownThenDiffs(t *testing.T) {
 }
 
 func TestPromptShapeTracker_IsBoundedAndPerThread(t *testing.T) {
+	t.Parallel()
+
 	tr := newPromptShapeTracker(2)
 	tr.observe("a", shapeOf(nil, baseHistory()))
 	tr.observe("b", shapeOf(nil, baseHistory()))
@@ -228,6 +250,8 @@ func kv(fields []any) string {
 }
 
 func TestPromptShape_LogFieldsHoldNoContent(t *testing.T) {
+	t.Parallel()
+
 	secret := "SUPER-SECRET-FILE-CONTENTS"
 	h := append(baseHistory(), textMsg(message.User, secret))
 	shape := computePromptShape("m", []string{"system " + secret}, h, nil)
@@ -245,6 +269,8 @@ func TestPromptShape_LogFieldsHoldNoContent(t *testing.T) {
 }
 
 func TestPromptShape_UnknownDiffOmitsComparisonFields(t *testing.T) {
+	t.Parallel()
+
 	shape := shapeOf([]string{"s"}, baseHistory())
 	out := kv(shape.logFields(shapeDiff{}))
 	if strings.Contains(out, "divergedAt") || !strings.Contains(out, "shapeKnown=false") {

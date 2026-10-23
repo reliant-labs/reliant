@@ -68,6 +68,8 @@ func enqueueTestAgentMessage(t *testing.T, repo *Repo, ctx context.Context, id, 
 // invariant the spec calls load-bearing: messages must be delivered in the
 // order they were sent, not the order rows happen to be inserted.
 func TestListQueuedAgentMessagesForThread_OrderedByCreatedAt(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -94,6 +96,8 @@ func TestListQueuedAgentMessagesForThread_OrderedByCreatedAt(t *testing.T) {
 // the drain path: marking a batch delivered must stop it from appearing in
 // the queued list and must populate delivered_at + delivered_message_id.
 func TestMarkAgentMessagesDelivered_RemovesFromQueueAndRecordsDelivery(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -126,6 +130,8 @@ func TestMarkAgentMessagesDelivered_RemovesFromQueueAndRecordsDelivery(t *testin
 // without a delivered_at, the same contradiction tool_calls' analogous
 // constraint refuses to store.
 func TestAgentMessages_DeliveredHasTimeConstraint(t *testing.T) {
+	t.Parallel()
+
 	repo, rawDB, cleanup := SetupTestDBWithRawDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -145,6 +151,8 @@ func TestAgentMessages_DeliveredHasTimeConstraint(t *testing.T) {
 // TestCountQueuedAgentMessagesForThread_OnlyCountsQueued asserts the count
 // reflects status=1 rows only -- delivered history must not inflate it.
 func TestCountQueuedAgentMessagesForThread_OnlyCountsQueued(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -196,6 +204,8 @@ func agentMailboxRefetches(t *testing.T, repo *Repo, ctx context.Context, chatID
 // queue strip re-reads the mailbox on the event instead of polling it every
 // few seconds. Enqueue paths that wrote nothing stay silent.
 func TestEnqueueAgentMessage_AnnouncesMailboxChange(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	t.Cleanup(cleanup)
 	ctx := context.Background()

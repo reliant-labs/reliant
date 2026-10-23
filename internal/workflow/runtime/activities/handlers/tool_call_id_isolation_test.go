@@ -109,6 +109,8 @@ func executorAnswering(toolCallID, content string) *mockToolExecutor {
 // result" check matched the id alone — and running it must not overwrite what
 // chat A recorded.
 func TestRepro_ToolCallWithAReusedIDIsNotAnsweredFromAnotherChat(t *testing.T) {
+	t.Parallel()
+
 	c := newIsolationChats(t)
 	ctx := context.Background()
 	chatA, chatB := c.chat(t), c.chat(t)
@@ -136,6 +138,8 @@ func TestRepro_ToolCallWithAReusedIDIsNotAnsweredFromAnotherChat(t *testing.T) {
 // then landed on chat A's record: A's running call read as finished, with B's
 // input and B's output.
 func TestRepro_ToolCallWithAReusedIDDoesNotOverwriteAnotherChatsRunningCall(t *testing.T) {
+	t.Parallel()
+
 	c := newIsolationChats(t)
 	ctx := context.Background()
 	chatA, chatB := c.chat(t), c.chat(t)
@@ -163,6 +167,8 @@ func TestRepro_ToolCallWithAReusedIDDoesNotOverwriteAnotherChatsRunningCall(t *t
 // The prior-result check is scoped to the thread as well as the chat: a spawned
 // thread reusing its parent's id is a different call, not a re-dispatch.
 func TestToolCallIDIsolation_PriorResultFromAnotherThreadIsNotReused(t *testing.T) {
+	t.Parallel()
+
 	c := newIsolationChats(t)
 	chatA := c.chat(t)
 	child := uuid.New().String()
@@ -180,6 +186,8 @@ func TestToolCallIDIsolation_PriorResultFromAnotherThreadIsNotReused(t *testing.
 // A re-dispatch in the SAME chat and thread is what the check exists for, and
 // must still be answered from the record rather than run twice.
 func TestToolCallIDIsolation_RedispatchInTheSameThreadIsStillNotReExecuted(t *testing.T) {
+	t.Parallel()
+
 	c := newIsolationChats(t)
 	chatA := c.chat(t)
 
@@ -206,6 +214,8 @@ func (c *isolationChats) spawnReportFor(t *testing.T, chatID, child, parent, too
 // must receive it. The report slot was keyed by tool_call_id alone, so B's
 // report found A's in it and was dropped as "already reported" with no error.
 func TestRepro_SpawnReportWithAReusedToolCallIDReachesItsParent(t *testing.T) {
+	t.Parallel()
+
 	c := newIsolationChats(t)
 	ctx := context.Background()
 	chatA, chatB := c.chat(t), c.chat(t)
@@ -232,6 +242,8 @@ func TestRepro_SpawnReportWithAReusedToolCallIDReachesItsParent(t *testing.T) {
 // the loss visible — rather than be swallowed as an idempotent retry. A real
 // retry (the same child reporting again) stays a no-op.
 func TestToolCallIDIsolation_SecondSpawnReusingAnIDInOneChatFailsLoudly(t *testing.T) {
+	t.Parallel()
+
 	c := newIsolationChats(t)
 	ctx := context.Background()
 	chatA := c.chat(t)
@@ -258,6 +270,8 @@ func TestToolCallIDIsolation_SecondSpawnReusingAnIDInOneChatFailsLoudly(t *testi
 // result recorded for THIS call — the one the assistant message carries — or
 // it hands the model another chat's output as if this call had produced it.
 func TestToolCallIDIsolation_HistoryRecoveryUsesOnlyThisCallsResult(t *testing.T) {
+	t.Parallel()
+
 	c := newIsolationChats(t)
 	ctx := context.Background()
 	chatA, chatB := c.chat(t), c.chat(t)
@@ -320,6 +334,8 @@ func streamedToolCall(t *testing.T, driver *local.LocalClient, history []message
 // what a re-dispatch looks like to execute_tools: turn 2 was answered with turn
 // 1's recorded output and never ran. The driver mints the ids, so it cannot.
 func TestRepro_ConsecutiveResponsesReusingCallZeroEachRun(t *testing.T) {
+	t.Parallel()
+
 	c := newIsolationChats(t)
 	chatA := c.chat(t)
 	driver := local.NewClient(llm.DriverOptions{

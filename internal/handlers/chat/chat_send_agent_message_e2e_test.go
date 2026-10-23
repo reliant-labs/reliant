@@ -25,6 +25,8 @@ import (
 // loop iteration, without needing a live Temporal workflow to actually be
 // mid-turn.
 func TestSendAgentMessage_EndToEndDelivery(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 

@@ -13,6 +13,8 @@ import (
 // The Repository's own sentinels are svcerr kinds with their text and
 // identity unchanged, like internal/db/core's.
 func TestRepositorySentinelsAreClassified(t *testing.T) {
+	t.Parallel()
+
 	for _, tc := range []struct {
 		err  error
 		code connect.Code

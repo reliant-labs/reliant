@@ -19,6 +19,8 @@ import (
 // A machine whose disk guard starts acting has its kept workspaces re-checked
 // at the next pass, whatever their back-off — once per episode, not every pass.
 func TestSweep_DiskGuardEpisodeRechecksHeldRowsOnce(t *testing.T) {
+	t.Parallel()
+
 	e := newEnv(t)
 	_, path := e.worktree(t, "held", true)
 	require.NoError(t, os.WriteFile(filepath.Join(path, "wip.txt"), []byte("x"), 0o644))
@@ -51,6 +53,8 @@ func TestSweep_DiskGuardEpisodeRechecksHeldRowsOnce(t *testing.T) {
 // The same property without a database: a held row, backed off, is asked
 // about again once its machine's guard episode begins, and only once.
 func TestSweep_DiskGuardEpisodeRechecksHeldRowsOnce_Fake(t *testing.T) {
+	t.Parallel()
+
 	store := newFakeStore("d")
 	store.add("w", true, nil)
 	sender := &scriptSender{answer: func(w worktreereclaim.Worktree) worktreereclaim.Result {

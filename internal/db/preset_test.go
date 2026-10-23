@@ -20,6 +20,8 @@ func setupPresetTestRepo(t *testing.T) (*Repo, func()) {
 }
 
 func TestPresetCRUD(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupPresetTestRepo(t)
 	defer cleanup()
 
@@ -322,6 +324,8 @@ func TestPresetCRUD(t *testing.T) {
 }
 
 func TestPresetProjectScope(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupPresetTestRepo(t)
 	defer cleanup()
 

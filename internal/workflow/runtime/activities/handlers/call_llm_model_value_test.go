@@ -16,6 +16,8 @@ func f64(v float64) *float64 { return &v }
 func i32(v int32) *int32     { return &v }
 
 func TestExplicitSamplingOverrides_ModelValue(t *testing.T) {
+	t.Parallel()
+
 	args := modelValueArgs(&reliantv1.ModelSelector{
 		Tags: []string{"flagship"}, ThinkingLevel: "low", Temperature: f64(0),
 	})
@@ -29,6 +31,8 @@ func TestExplicitSamplingOverrides_ModelValue(t *testing.T) {
 }
 
 func TestExplicitSamplingOverrides_UnsetModelValueLeavesDefaults(t *testing.T) {
+	t.Parallel()
+
 	temp, level := explicitSamplingOverrides(modelValueArgs(&reliantv1.ModelSelector{Tags: []string{"flagship"}}))
 	if temp != nil || level != "" {
 		t.Errorf("got temp=%v level=%q, want nil/empty", temp, level)
@@ -36,6 +40,8 @@ func TestExplicitSamplingOverrides_UnsetModelValueLeavesDefaults(t *testing.T) {
 }
 
 func TestExplicitSamplingOverrides_NodeArgPinWins(t *testing.T) {
+	t.Parallel()
+
 	args := modelValueArgs(&reliantv1.ModelSelector{ThinkingLevel: "low", Temperature: f64(0.9)})
 	args.ThinkingLevel = &reliantv1.CelString{Value: &reliantv1.CelString_Literal{Literal: "high"}}
 	args.Temperature = &reliantv1.CelDouble{Value: &reliantv1.CelDouble_Literal{Literal: 0}}
@@ -49,6 +55,8 @@ func TestExplicitSamplingOverrides_NodeArgPinWins(t *testing.T) {
 }
 
 func TestCompactionThreshold_ModelValueAndArgPrecedence(t *testing.T) {
+	t.Parallel()
+
 	args := modelValueArgs(&reliantv1.ModelSelector{CompactionThreshold: i32(42000)})
 	if got := explicitCompactionThresholdArg(args); got != 42000 || !compactionThresholdIsSet(args) {
 		t.Errorf("model value threshold = %d (set=%v), want 42000", got, compactionThresholdIsSet(args))

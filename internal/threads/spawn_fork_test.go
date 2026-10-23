@@ -23,6 +23,8 @@ import (
 // ============================================================================
 
 func TestSpawnFork_E2E_ChildInheritsParentMessages(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()
@@ -130,6 +132,8 @@ func TestSpawnFork_E2E_ChildInheritsParentMessages(t *testing.T) {
 // ============================================================================
 
 func TestCreateWorkflowWithThread_ForkFromThread_SetsForkMetadata(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()
@@ -220,6 +224,8 @@ func TestCreateWorkflowWithThread_ForkFromThread_SetsForkMetadata(t *testing.T) 
 // ============================================================================
 
 func TestLoadCurrentMessages_ForkedThread_ReturnsParentMessages(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()
@@ -277,6 +283,8 @@ func TestLoadCurrentMessages_ForkedThread_ReturnsParentMessages(t *testing.T) {
 // ============================================================================
 
 func TestResolveMessagesFromCW_FollowsParentChain(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()
@@ -331,6 +339,8 @@ func TestResolveMessagesFromCW_FollowsParentChain(t *testing.T) {
 // ============================================================================
 
 func TestForkFromThread_OrdinalZero_IncludesAllMessages(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()
@@ -377,6 +387,8 @@ func TestForkFromThread_OrdinalZero_IncludesAllMessages(t *testing.T) {
 // ============================================================================
 
 func TestSpawnFork_EmptyParent_NoMessages(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()
@@ -430,6 +442,8 @@ func TestSpawnFork_EmptyParent_NoMessages(t *testing.T) {
 // ============================================================================
 
 func TestSpawnFork_ForkFromMessage_IncludesMessagesUpToPoint(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()
@@ -490,6 +504,8 @@ func TestSpawnFork_ForkFromMessage_IncludesMessagesUpToPoint(t *testing.T) {
 // ============================================================================
 
 func TestSpawnFork_NestedForks_InheritThroughChain(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()
@@ -548,6 +564,8 @@ func TestSpawnFork_NestedForks_InheritThroughChain(t *testing.T) {
 // ============================================================================
 
 func TestSpawnFork_TokenCount_InheritedWithOrdinalZero(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()
@@ -621,6 +639,8 @@ func TestSpawnFork_TokenCount_InheritedWithOrdinalZero(t *testing.T) {
 // ============================================================================
 
 func TestSpawnFork_MultiThreadChat_OrdinalSeqDiverge(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()

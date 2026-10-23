@@ -34,6 +34,8 @@ func repoFromCtx(t *testing.T, ctx context.Context) *Repo {
 }
 
 func TestRunTx_AppliesRequestedIsolationAndMode(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
@@ -75,6 +77,8 @@ func TestRunTx_AppliesRequestedIsolationAndMode(t *testing.T) {
 // RunTxReadOnly is sugar and must actually be read-only — the whole point is
 // that it drops out of the serialization graph.
 func TestRunTxReadOnly_IsReadOnly(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
@@ -95,6 +99,8 @@ func TestRunTxReadOnly_IsReadOnly(t *testing.T) {
 // ReadOnly safe to apply broadly: mislabelling a path that writes produces an
 // immediate, obvious error rather than silent data loss.
 func TestRunTxReadOnly_RejectsWrites(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
@@ -123,6 +129,8 @@ func TestRunTxReadOnly_RejectsWrites(t *testing.T) {
 // Compared against a read-write transaction running the same query, so the test
 // measures the MODE rather than the query.
 func TestReadOnlyTransactionTakesNoPredicateLocks(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
@@ -144,8 +152,20 @@ func TestReadOnlyTransactionTakesNoPredicateLocks(t *testing.T) {
 				"SELECT count(*) FROM messages WHERE chat_id = $1", chatID).Scan(&n); err != nil {
 				return err
 			}
-			return repo.DB.DB(ctx).QueryRowContext(ctx,
-				"SELECT count(*) FROM pg_locks WHERE mode = 'SIReadLock' AND pid = pg_backend_pid()",
+			// THIS transaction's locks, by its virtual transaction id (every
+			// transaction holds an ExclusiveLock on its own). Postgres keeps
+			// a committed serializable transaction's SIRead locks while any
+			// serializable transaction on the server overlaps it, still
+			// listed under its backend's pid, so a count by pid also sees
+			// the seed writes' leftovers whenever other tests run
+			// serializable work at the same time.
+			return repo.DB.DB(ctx).QueryRowContext(ctx, `
+				SELECT count(*) FROM pg_locks
+				 WHERE mode = 'SIReadLock'
+				   AND virtualtransaction = (
+				       SELECT virtualtransaction FROM pg_locks
+				        WHERE locktype = 'virtualxid' AND mode = 'ExclusiveLock'
+				          AND pid = pg_backend_pid())`,
 			).Scan(&locks)
 		})
 		if err != nil {

@@ -208,6 +208,8 @@ func (f continueFixture) continueConcurrently(t *testing.T, n int) int {
 // machine is back — by resuming the run that ended, exactly as the user's own
 // next send would — and only once, however many deliverers race for it.
 func TestContinueQueued_MessageQueuedForTheMachineIsDeliveredOnce(t *testing.T) {
+	t.Parallel()
+
 	f := newContinueFixture(t, true)
 	f.queueForMachine(t)
 	require.Equal(t, reliantv1.ChatActivity_CHAT_ACTIVITY_QUEUED_FOR_MACHINE, f.activity(t))
@@ -230,6 +232,8 @@ func TestContinueQueued_MessageQueuedForTheMachineIsDeliveredOnce(t *testing.T) 
 // the message is delivered by a fresh run at the checkpoint — with the ended
 // run's own inputs, so the model the user chose survives — once.
 func TestContinueQueued_WedgedRunsUnansweredMessageStartsOneRunAtTheCheckpoint(t *testing.T) {
+	t.Parallel()
+
 	f := newContinueFixture(t, false)
 	now := time.Now().UTC()
 	_, err := f.repo.UpdateThreadStatus(f.ctx, f.threadID, db.ThreadStatusFailed, &now)
@@ -263,6 +267,8 @@ func TestContinueQueued_WedgedRunsUnansweredMessageStartsOneRunAtTheCheckpoint(t
 // A message queued in the mailbox (sent while the run was live, never drained)
 // is just as owed as one in history.
 func TestContinueQueued_QueuedMailboxRowIsOwed(t *testing.T) {
+	t.Parallel()
+
 	f := newContinueFixture(t, false)
 	_, err := f.repo.SaveMessageToThread(f.ctx, f.chatID, f.threadID, int32(reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT),
 		"done", &f.threadID, nil, nil)
@@ -281,6 +287,8 @@ func TestContinueQueued_QueuedMailboxRowIsOwed(t *testing.T) {
 
 // A run that ended after answering, with nothing queued, is owed nothing.
 func TestContinueQueued_NothingOwedStartsNothing(t *testing.T) {
+	t.Parallel()
+
 	f := newContinueFixture(t, false)
 	_, err := f.repo.SaveMessageToThread(f.ctx, f.chatID, f.threadID, int32(reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT),
 		"all fixed", &f.threadID, nil, nil)
@@ -300,6 +308,8 @@ func TestContinueQueued_NothingOwedStartsNothing(t *testing.T) {
 // A run the user stopped is not resumed behind their back; the stale marker
 // goes.
 func TestContinueQueued_StoppedRunIsNotResumed(t *testing.T) {
+	t.Parallel()
+
 	f := newContinueFixture(t, true)
 	f.queueForMachine(t)
 	require.NoError(t, f.repo.UpdateWorkflowStatus(f.ctx, f.chatID, db.Cancelled()))
@@ -316,6 +326,8 @@ func TestContinueQueued_StoppedRunIsNotResumed(t *testing.T) {
 // leaves must not answer the same message later: its queued message is dropped
 // and a run still waiting for the machine is told to stop.
 func TestAbandonMachineWait_DropsTheQueueAndEndsTheWait(t *testing.T) {
+	t.Parallel()
+
 	f := newContinueFixture(t, true)
 	f.queueForMachine(t)
 	require.NoError(t, f.repo.UpdateWorkflowStatus(f.ctx, f.chatID, db.Active()))
@@ -335,6 +347,8 @@ func TestAbandonMachineWait_DropsTheQueueAndEndsTheWait(t *testing.T) {
 // A run doing anything other than waiting for its machine is not stopped by
 // branching away from it.
 func TestAbandonMachineWait_LeavesARunThatIsNotWaiting(t *testing.T) {
+	t.Parallel()
+
 	f := newContinueFixture(t, true)
 	require.NoError(t, f.repo.UpdateWorkflowStatus(f.ctx, f.chatID, db.Active()))
 	chat, err := f.repo.GetChat(f.ctx, f.chatID)
@@ -350,6 +364,8 @@ func TestAbandonMachineWait_LeavesARunThatIsNotWaiting(t *testing.T) {
 // the run), and the run is asked to check the machine now — the send just
 // woke it — instead of at its next recheck, which can be minutes away.
 func TestSendMessage_WhileTheRunWaitsForItsMachine_KeepsTheWaitAndNudgesIt(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	ctx, fx := setupAbsorbFixture(t, repo, "test-user", db.Active())
@@ -380,6 +396,8 @@ func (onlineMachines) IsDaemonOnline(context.Context, string, *toolexec.DaemonSe
 // machine connected. The connect starts the run that delivers the message —
 // no resend — and a second connect (or the sweep) delivers nothing more.
 func TestMachineConnected_DeliversTheMessageQueuedForAFailedMachineOnce(t *testing.T) {
+	t.Parallel()
+
 	f := newContinueFixture(t, true)
 	f.queueForMachine(t)
 	delivery := queueddelivery.New(queueddelivery.Deps{Store: f.repo, Machines: onlineMachines{}, Deliverer: f.svc, Signaler: f.temporal})

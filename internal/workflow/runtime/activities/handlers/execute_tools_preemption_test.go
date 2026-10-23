@@ -110,6 +110,8 @@ func waitCall() message.ToolCall {
 // saying why it came early. The message itself is left queued: delivering it
 // is the next turn's job, not preemption's.
 func TestPreemption_AMessageEndsAWaitEarly(t *testing.T) {
+	t.Parallel()
+
 	f := setupDurableStatusFixture(t)
 	defer f.h.Cleanup()
 	ctx := context.Background()
@@ -149,6 +151,8 @@ func TestPreemption_AMessageEndsAWaitEarly(t *testing.T) {
 // one that never answered — still reports a SUCCESSFUL stopped-early result.
 // The call did what it promised; an error would tell the agent its wait failed.
 func TestPreemption_ALostAnswerIsStillAStoppedEarlyResult(t *testing.T) {
+	t.Parallel()
+
 	f := setupDurableStatusFixture(t)
 	defer f.h.Cleanup()
 
@@ -176,6 +180,8 @@ func TestPreemption_ALostAnswerIsStillAStoppedEarlyResult(t *testing.T) {
 // batch, so a sibling left waiting would hold the message just as long. This
 // also covers mail already queued when the batch starts.
 func TestPreemption_OneMessageEndsEveryWaitInTheBatch(t *testing.T) {
+	t.Parallel()
+
 	f := setupDurableStatusFixture(t)
 	defer f.h.Cleanup()
 
@@ -196,6 +202,8 @@ func TestPreemption_OneMessageEndsEveryWaitInTheBatch(t *testing.T) {
 // Only preemptable tools are armed. Preempting anything else would cut short
 // work that has effects — a `shell` command stopped halfway.
 func TestPreemption_OnlyPreemptableToolsAreArmed(t *testing.T) {
+	t.Parallel()
+
 	f := setupDurableStatusFixture(t)
 	defer f.h.Cleanup()
 
@@ -214,6 +222,8 @@ func TestPreemption_OnlyPreemptableToolsAreArmed(t *testing.T) {
 // waits and LLM turns for as long as it stayed. Already spent, it lets the
 // wait run.
 func TestPreemption_AMessagePreemptsOnlyOnce(t *testing.T) {
+	t.Parallel()
+
 	f := setupDurableStatusFixture(t)
 	defer f.h.Cleanup()
 	ctx := context.Background()
@@ -232,6 +242,8 @@ func TestPreemption_AMessagePreemptsOnlyOnce(t *testing.T) {
 }
 
 func TestPreemptedOutcome(t *testing.T) {
+	t.Parallel()
+
 	t.Run("keeps a clean answer and says why it came early", func(t *testing.T) {
 		got := preemptedOutcome(&toolexec.ToolResult{Success: true, Content: "still running", Metadata: `{"process_id":"p1"}`}, nil)
 		assert.True(t, got.Success)

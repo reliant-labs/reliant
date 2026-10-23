@@ -13,6 +13,8 @@ import (
 // Deleting a project deletes its chats and worktrees (FK ON DELETE CASCADE),
 // so no surface can list a chat whose project is gone.
 func TestDeleteProjectLeavesNoOrphanedChatsOrWorktrees(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -54,6 +56,8 @@ func TestDeleteProjectLeavesNoOrphanedChatsOrWorktrees(t *testing.T) {
 // Inserting a chat for a project that does not exist is now rejected, so the
 // orphan state cannot be re-created.
 func TestCreateChatRejectsMissingProject(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	now := time.Now()

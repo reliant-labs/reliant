@@ -19,6 +19,8 @@ func storedIdentity(t *testing.T, repo *Repo, id string) core.ActingIdentity {
 }
 
 func TestTriggerActingIdentityRoundTrip(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -53,6 +55,8 @@ func TestTriggerActingIdentityRoundTrip(t *testing.T) {
 // field) is stored and read as the owner: the zero value never reaches the
 // NOT NULL column as an empty string the CHECK would reject.
 func TestTriggerActingIdentityEmptyIsTheOwner(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	trigger := newTestTrigger("trg-default", "test-user", "test-project", "default")
@@ -67,6 +71,8 @@ func TestTriggerActingIdentityEmptyIsTheOwner(t *testing.T) {
 // Every row that existed before the column acts as its owner: the migration's
 // DEFAULT is what makes the previous release's activations keep working.
 func TestTriggerActingIdentityPreMigrationRowIsTheOwner(t *testing.T) {
+	t.Parallel()
+
 	repo, raw, cleanup := SetupTestDBWithRawDB(t)
 	defer cleanup()
 	if _, err := raw.Exec(`INSERT INTO triggers (id, user_id, project_id, name, kind, workflow, daemon_id)
@@ -80,6 +86,8 @@ func TestTriggerActingIdentityPreMigrationRowIsTheOwner(t *testing.T) {
 
 // The CHECK is the last line of defence: nothing but owner|app is storable.
 func TestTriggerActingIdentityRejectsJunk(t *testing.T) {
+	t.Parallel()
+
 	_, raw, cleanup := SetupTestDBWithRawDB(t)
 	defer cleanup()
 	for _, bad := range []string{"admin", "", "App", "owner,app"} {
@@ -92,6 +100,8 @@ func TestTriggerActingIdentityRejectsJunk(t *testing.T) {
 }
 
 func TestActingIdentityValidAndDefault(t *testing.T) {
+	t.Parallel()
+
 	for id, want := range map[core.ActingIdentity]bool{core.ActingIdentityOwner: true, core.ActingIdentityApp: true, "": false, "admin": false} {
 		if id.Valid() != want {
 			t.Errorf("%q.Valid() = %v, want %v", id, id.Valid(), want)

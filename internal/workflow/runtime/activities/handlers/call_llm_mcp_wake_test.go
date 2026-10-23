@@ -93,11 +93,15 @@ func runCallLLMWithFilter(t *testing.T, preloaded []string, rtxSelector *activit
 }
 
 func TestCallLLM_NodeWithoutMCPToolsSendsNoDaemonCommands(t *testing.T) {
+	t.Parallel()
+
 	binder := runCallLLMWithFilter(t, []string{"view", "tag:file"}, nil)
 	require.Empty(t, binder.commands, "a node that cannot reach mcp__ tools must not touch the daemon")
 }
 
 func TestCallLLM_NodeReachingMCPToolsEnsuresServersOnRunDaemon(t *testing.T) {
+	t.Parallel()
+
 	binder := runCallLLMWithFilter(t, []string{"mcp__chrome-devtools__new_page"},
 		&activitytypes.DaemonSelector{ID: "daemon-B"})
 	require.Contains(t, binder.commands, "mcp.ensure_loaded")

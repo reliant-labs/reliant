@@ -18,6 +18,8 @@ import (
 // was launched with), and a person's continuation must not inherit it, exactly
 // as it does not inherit the launch marker.
 func TestContinueQueued_APersonsRunNeverInheritsTheBotIdentity(t *testing.T) {
+	t.Parallel()
+
 	f := newContinueFixture(t, false)
 	f.temporal.lastInputs[v2.InputKeyActingIdentity] = "app"
 	f.temporal.lastInputs[v2.InputKeyAutomation] = "pr-review"
@@ -41,6 +43,8 @@ func setupQueued(t *testing.T, f continueFixture) error {
 
 // The same rule for a person's message to a finished automation chat.
 func TestSendMessage_RestartOfAnAutomationChatDropsTheBotIdentity(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	ctx, fx := setupAbsorbFixture(t, repo, "test-user", db.Completed())

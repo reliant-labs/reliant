@@ -126,6 +126,8 @@ func assertRecentDisplayIsTailOfDisplay(t *testing.T, svc *Service, threadID str
 }
 
 func TestLoadRecentDisplayMessages_EqualsTailAcrossForksAndCompactions(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 
@@ -162,6 +164,8 @@ func TestLoadRecentDisplayMessages_EqualsTailAcrossForksAndCompactions(t *testin
 // A fork of a thread with no messages has no fork message, and the full walk
 // then includes nothing from the parent's own window.
 func TestLoadRecentDisplayMessages_EqualsTailForForkOfEmptyThread(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 
@@ -186,6 +190,8 @@ func TestLoadRecentDisplayMessages_EqualsTailForForkOfEmptyThread(t *testing.T) 
 // reads that window alone, and a deeper one reads only as far as it needs.
 // Neither touches the unbounded per-window read the full walk uses.
 func TestLoadRecentDisplayMessages_ReadsOnlyTheWindowsItNeeds(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()

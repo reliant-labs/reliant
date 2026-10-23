@@ -11,6 +11,8 @@ import (
 // point — and must not couple unrelated chats, or one slow pause would stall
 // every send in the system.
 func TestLockChatRunControl_SerializesOneChatOnly(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	t.Cleanup(cleanup)
 	ctx := context.Background()
@@ -59,6 +61,8 @@ func TestLockChatRunControl_SerializesOneChatOnly(t *testing.T) {
 // A request that goes away while waiting must stop waiting, not hold a pooled
 // connection until the holder finishes.
 func TestLockChatRunControl_CancelledWaitGivesUp(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	t.Cleanup(cleanup)
 

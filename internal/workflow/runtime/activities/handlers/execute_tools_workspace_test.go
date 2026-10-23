@@ -18,6 +18,8 @@ const (
 // Fallback to the main checkout: the model is told it is no longer on its
 // branch, in a checkout other chats share, and how the branch comes back.
 func TestWorkspaceNoticeText_FallbackToMainCheckout(t *testing.T) {
+	t.Parallel()
+
 	text := workspaceNoticeText(&toolexec.WorkspaceNotice{
 		Kind: toolexec.NoticeFallback, WorkspacePath: noticeWorkspace, RunningIn: noticeProject,
 		Branch: "fix/errors", Reason: "branch 'fix/errors' no longer exists in " + noticeProject + "/reliant",
@@ -35,6 +37,8 @@ func TestWorkspaceNoticeText_FallbackToMainCheckout(t *testing.T) {
 // The prod incident: the project is gone too, and the call ran in $HOME. Do
 // not send the model to a repository that does not exist.
 func TestWorkspaceNoticeText_FallbackWhenTheProjectIsGoneToo(t *testing.T) {
+	t.Parallel()
+
 	text := workspaceNoticeText(&toolexec.WorkspaceNotice{
 		Kind: toolexec.NoticeFallback, WorkspacePath: noticeWorkspace, RunningIn: "/home/workspace",
 		Branch: "fix/errors", Reason: "the project's repository " + noticeProject + "/forge is missing on this machine",
@@ -48,6 +52,8 @@ func TestWorkspaceNoticeText_FallbackWhenTheProjectIsGoneToo(t *testing.T) {
 // A chat on the main checkout whose project directory is gone: there is no
 // branch to talk about, and "missing too" would be wrong.
 func TestWorkspaceNoticeText_MainCheckoutChatFallsBackToHome(t *testing.T) {
+	t.Parallel()
+
 	text := workspaceNoticeText(&toolexec.WorkspaceNotice{
 		Kind: toolexec.NoticeFallback, WorkspacePath: noticeProject, RunningIn: "/home/workspace",
 		Reason: "it is not a worktree reliant created, and only those are recreated",
@@ -60,6 +66,8 @@ func TestWorkspaceNoticeText_MainCheckoutChatFallsBackToHome(t *testing.T) {
 }
 
 func TestWorkspaceNoticeText_RepairedNamesTheBranchAndWhatWasLost(t *testing.T) {
+	t.Parallel()
+
 	text := workspaceNoticeText(&toolexec.WorkspaceNotice{
 		Kind: toolexec.NoticeRepaired, WorkspacePath: noticeWorkspace, RunningIn: noticeWorkspace,
 		Branch: "fix/errors", Checkouts: []string{"control-plane", "forge", "reliant"},
@@ -70,6 +78,8 @@ func TestWorkspaceNoticeText_RepairedNamesTheBranchAndWhatWasLost(t *testing.T) 
 }
 
 func TestWorkspaceNoticeText_NothingToSay(t *testing.T) {
+	t.Parallel()
+
 	assert.Empty(t, workspaceNoticeText(nil, &db.Project{Path: noticeProject}))
 	assert.Empty(t, workspaceNoticeText(&toolexec.WorkspaceNotice{Kind: "something-new"}, nil))
 }

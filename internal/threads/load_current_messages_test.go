@@ -10,6 +10,8 @@ import (
 // TestLoadCurrentMessages_SimpleThread tests that a non-forked thread
 // returns all its messages in order.
 func TestLoadCurrentMessages_SimpleThread(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()
@@ -40,6 +42,8 @@ func TestLoadCurrentMessages_SimpleThread(t *testing.T) {
 // TestLoadCurrentMessages_ForkedThread tests that forked threads inherit
 // parent messages up to the fork point.
 func TestLoadCurrentMessages_ForkedThread(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()
@@ -76,6 +80,8 @@ func TestLoadCurrentMessages_ForkedThread(t *testing.T) {
 
 // TestLoadCurrentMessages_NestedForks tests A → B → C fork chain.
 func TestLoadCurrentMessages_NestedForks(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()
@@ -119,6 +125,8 @@ func TestLoadCurrentMessages_NestedForks(t *testing.T) {
 // TestLoadCurrentMessages_ThreadWithCompaction tests that compaction boundaries
 // are respected - messages before compaction are not included, only the summary.
 func TestLoadCurrentMessages_ThreadWithCompaction(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()
@@ -180,6 +188,8 @@ func TestLoadCurrentMessages_ThreadWithCompaction(t *testing.T) {
 //
 // THE FIX: Use CompactionSummaryMessageID != nil instead.
 func TestLoadCurrentMessages_ForkAfterCompaction(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()
@@ -242,6 +252,8 @@ func TestLoadCurrentMessages_ForkAfterCompaction(t *testing.T) {
 // from a parent BEFORE the parent compacts, and then load messages from the
 // forked child, we correctly inherit messages from the pre-compaction state.
 func TestLoadCurrentMessages_ForkBeforeCompactionInParent(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()
@@ -285,6 +297,8 @@ func TestLoadCurrentMessages_ForkBeforeCompactionInParent(t *testing.T) {
 // TestLoadCurrentMessages_MultipleCompactionsInChain tests a fork chain where
 // each thread has been compacted.
 func TestLoadCurrentMessages_MultipleCompactionsInChain(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()
@@ -332,6 +346,8 @@ func TestLoadCurrentMessages_MultipleCompactionsInChain(t *testing.T) {
 // TestLoadCurrentMessages_EmptyThread tests that an empty thread returns an
 // empty slice, not an error.
 func TestLoadCurrentMessages_EmptyThread(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()
@@ -354,6 +370,8 @@ func TestLoadCurrentMessages_EmptyThread(t *testing.T) {
 // TestLoadCurrentMessages_ThreadWithSystemMessages tests that system messages
 // (like compaction summaries) are included in the message list.
 func TestLoadCurrentMessages_ThreadWithSystemMessages(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()
@@ -387,6 +405,8 @@ func TestLoadCurrentMessages_ThreadWithSystemMessages(t *testing.T) {
 // TestLoadCurrentMessages_ThreadWithToolMessages tests that tool messages
 // are included in the message list.
 func TestLoadCurrentMessages_ThreadWithToolMessages(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()
@@ -420,6 +440,8 @@ func TestLoadCurrentMessages_ThreadWithToolMessages(t *testing.T) {
 // TestLoadCurrentMessages_InvalidThreadID tests that an invalid thread ID
 // returns an error.
 func TestLoadCurrentMessages_InvalidThreadID(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()
@@ -435,6 +457,8 @@ func TestLoadCurrentMessages_InvalidThreadID(t *testing.T) {
 // TestLoadCurrentMessages_NonExistentContextWindow tests behavior when a thread
 // references a context window that doesn't exist.
 func TestLoadCurrentMessages_NonExistentContextWindow(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 
@@ -447,6 +471,8 @@ func TestLoadCurrentMessages_NonExistentContextWindow(t *testing.T) {
 // TestLoadCurrentMessages_ForkFromEmptyParent tests forking from a parent
 // that has no messages.
 func TestLoadCurrentMessages_ForkFromEmptyParent(t *testing.T) {
+	t.Parallel()
+
 	h := newTestHelper(t)
 	defer h.Close()
 	ctx := context.Background()

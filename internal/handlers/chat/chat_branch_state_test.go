@@ -20,6 +20,8 @@ import (
 // workflow_state on the chat it was handed. A branch is always pending, so the
 // BranchChat response itself must say so, not only a later GetChat.
 func TestBranchChatResponseCarriesPendingWorkflowState(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 

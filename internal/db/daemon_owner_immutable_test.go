@@ -12,6 +12,8 @@ import (
 // Ownership of a daemon row is immutable: a second user upserting the same id
 // gets the sentinel and the row is untouched.
 func TestUpsertDaemonNeverChangesOwner(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -46,6 +48,8 @@ func TestUpsertDaemonNeverChangesOwner(t *testing.T) {
 
 // A foreign user cannot take over another user's attachment lease either.
 func TestUpsertDaemonAttachmentRefusesForeignOwner(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()

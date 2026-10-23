@@ -124,6 +124,8 @@ func advisoryLockWaiter(t *testing.T, sqlDB *sql.DB) <-chan struct{} {
 // SendMessage routed on a status a pause that started BEFORE it had already
 // made stale. The send must observe any pause the server received first.
 func TestSendMessage_RacingAnInFlightPauseResumesTheRun(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 

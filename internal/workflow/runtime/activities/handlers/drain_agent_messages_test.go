@@ -40,6 +40,8 @@ func enqueueDrainTestMessage(t *testing.T, repo *db.Repo, chatID, fromThreadID, 
 // nothing queued gets a zero-value, no-message result and, critically, no
 // message is written to its history.
 func TestDrainAgentMessages_EmptyQueue(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 	ctx := context.Background()
@@ -75,6 +77,8 @@ func TestDrainAgentMessages_EmptyQueue(t *testing.T) {
 // proto_converters.go and InterleavedTimeline.tsx — hide the framing while
 // the bodies stay visible.
 func TestDrainAgentMessages_DeliversEnvelopeThenOrderedBodies(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 	ctx := context.Background()
@@ -168,6 +172,8 @@ func TestDrainAgentMessages_DeliversEnvelopeThenOrderedBodies(t *testing.T) {
 // the HIDDEN envelope, which the transcript never renders and which therefore
 // cannot tell a client which visible entry replaced a given row.
 func TestDrainAgentMessages_AnnouncesDrainedRowIDs(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 	ctx := context.Background()
@@ -224,6 +230,8 @@ func TestDrainAgentMessages_AnnouncesDrainedRowIDs(t *testing.T) {
 // empty-queue path is the hot path, running at every loop-step boundary, and
 // an announcement there would be a write per boundary announcing nothing.
 func TestDrainAgentMessages_NoAnnouncementWithoutADrain(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 	ctx := context.Background()
@@ -258,6 +266,8 @@ func TestDrainAgentMessages_NoAnnouncementWithoutADrain(t *testing.T) {
 // This is also why delivered_message_id records the ENVELOPE's id rather than
 // a body's: the envelope is the one message every drain writes.
 func TestDrainAgentMessages_CompletionNoticeStillDelivers(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 	ctx := context.Background()
@@ -322,6 +332,8 @@ func TestDrainAgentMessages_CompletionNoticeStillDelivers(t *testing.T) {
 // Asserted against the observable end state rather than by injecting a
 // mid-transaction failure, which the repository interface gives no seam for.
 func TestDrainAgentMessages_LeavesNoPartialDelivery(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 	ctx := context.Background()
@@ -377,6 +389,8 @@ func indexOf(s, substr string) int {
 // bare INSERT into `messages` at arbitrary points would happily wedge this
 // exact sequence.
 func TestDrainAgentMessages_OrderingInvariant(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 	ctx := context.Background()
@@ -491,6 +505,8 @@ func TestDrainAgentMessages_OrderingInvariant(t *testing.T) {
 // saved, so the ordering test above is actually asserting something real and
 // not passing by accident.
 func TestDrainAgentMessages_BeforeToolResults_WouldBreakInvariant(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 	ctx := context.Background()
@@ -583,6 +599,8 @@ func containsSubstr(s, substr string) bool {
 // body, HIDDEN from the UI but still reaching the LLM, and a short SYSTEM
 // role, INFO-styled notification the human actually sees.
 func TestDrainAgentMessages_CompletionHiddenBodyPlusVisibleNotification(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 	ctx := context.Background()
@@ -683,6 +701,8 @@ func TestDrainAgentMessages_CompletionHiddenBodyPlusVisibleNotification(t *testi
 // TestDrainAgentMessages_CancelledAndFailedNotificationText pins the exact
 // wording for the other two terminal kinds.
 func TestDrainAgentMessages_CancelledAndFailedNotificationText(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name     string
 		kind     core.AgentMessageKind
@@ -743,6 +763,8 @@ func TestDrainAgentMessages_CancelledAndFailedNotificationText(t *testing.T) {
 // unaffected by the completion-notification change above — one ordinary
 // visible user message, exactly as before.
 func TestDrainAgentMessages_HumanMessageStillPlainVisible(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 	ctx := context.Background()

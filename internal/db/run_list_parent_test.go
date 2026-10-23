@@ -20,6 +20,8 @@ func agentRun(id, parent, user string) listRunSeed {
 }
 
 func TestListRuns_ParentChatFilterReturnsExactlyTheUsersChildren(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -51,6 +53,8 @@ func TestListRuns_ParentChatFilterReturnsExactlyTheUsersChildren(t *testing.T) {
 }
 
 func TestListRuns_ParentChatIDAndTitleArePopulated(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()

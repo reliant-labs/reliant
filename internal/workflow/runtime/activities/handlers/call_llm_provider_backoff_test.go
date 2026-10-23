@@ -17,6 +17,8 @@ import (
 // still invisible while it waits — the retry ladder runs inside a single
 // Temporal activity attempt, so nothing else it touches changes.
 func TestProcessStreamEvent_RetryWaitWritesAndClearsTheBackoffMarker(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 	ctx := context.Background()

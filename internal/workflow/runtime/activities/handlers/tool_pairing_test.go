@@ -30,6 +30,8 @@ func toolWithResults(id string, results ...message.ToolResult) message.Message {
 }
 
 func TestValidateToolPairing(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name       string
 		msgs       []message.Message
@@ -129,6 +131,8 @@ func TestValidateToolPairing(t *testing.T) {
 // unrepresentable at rest (tool_call_results.tool_call_id is a PRIMARY KEY), but
 // which can still be constructed in memory — so the validator must catch it.
 func TestValidateToolPairing_DuplicateResult(t *testing.T) {
+	t.Parallel()
+
 	msgs := []message.Message{
 		asstWithCalls("a1", message.ToolCall{ID: "tc_1", Name: "bash"}),
 		toolWithResults("t1", message.ToolResult{ToolCallID: "tc_1", Name: "bash", Content: "first"}),
@@ -150,6 +154,8 @@ func TestValidateToolPairing_DuplicateResult(t *testing.T) {
 // TestSummarizeViolations_Caps keeps a pathological history from producing an
 // unbounded log line or error string.
 func TestSummarizeViolations_Caps(t *testing.T) {
+	t.Parallel()
+
 	var many []ToolPairingViolation
 	for i := 0; i < 50; i++ {
 		many = append(many, ToolPairingViolation{Kind: ViolationMissingResult, ToolCallID: "tc"})

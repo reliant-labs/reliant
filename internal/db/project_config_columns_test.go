@@ -12,6 +12,8 @@ import (
 // way (sql.ErrNoRows, unwrapped), so callers that switched from
 // GetProjectConfigRecord keep their "nothing synced yet" handling.
 func TestProjectConfigColumnReads(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()

@@ -159,6 +159,8 @@ func createTestMessage(
 // ============================================================================
 
 func TestExecuteToolsActivity_Idempotency(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 
@@ -234,6 +236,8 @@ func TestExecuteToolsActivity_Idempotency(t *testing.T) {
 }
 
 func TestExecuteToolsActivity_NoReExecutionOnRetry(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 
@@ -296,6 +300,8 @@ func TestExecuteToolsActivity_NoReExecutionOnRetry(t *testing.T) {
 }
 
 func TestExecuteToolsActivity_MultipleToolCalls(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 
@@ -366,6 +372,8 @@ func TestExecuteToolsActivity_MultipleToolCalls(t *testing.T) {
 }
 
 func TestExecuteToolsActivity_ToolExecutionFailure(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 
@@ -454,6 +462,8 @@ func TestExecuteToolsActivity_ToolExecutionFailure(t *testing.T) {
 }
 
 func TestExecuteToolsActivity_MissingToolCallBlock(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 
@@ -504,6 +514,8 @@ func TestExecuteToolsActivity_MissingToolCallBlock(t *testing.T) {
 }
 
 func TestExecuteToolsActivity_InvalidBlockType(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 
@@ -572,6 +584,8 @@ func TestExecuteToolsActivity_InvalidBlockType(t *testing.T) {
 }
 
 func TestExecuteToolsActivity_IncompleteToolCallBlock(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 
@@ -641,6 +655,8 @@ func TestExecuteToolsActivity_IncompleteToolCallBlock(t *testing.T) {
 }
 
 func TestExecuteToolsActivity_ExecutorError(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 
@@ -702,6 +718,8 @@ func TestExecuteToolsActivity_ExecutorError(t *testing.T) {
 }
 
 func TestExecuteToolsActivity_EmptyToolCalls(t *testing.T) {
+	t.Parallel()
+
 	h := NewIdempotencyTestHelper(t)
 	defer h.Cleanup()
 

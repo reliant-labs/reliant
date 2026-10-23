@@ -51,6 +51,8 @@ func createTestChat(t *testing.T, repo *Repo) string {
 }
 
 func TestPlanCRUD(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -244,6 +246,8 @@ func TestPlanCRUD(t *testing.T) {
 }
 
 func TestTaskCRUD(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -501,6 +505,8 @@ func TestTaskCRUD(t *testing.T) {
 }
 
 func TestTaskDependencies(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -794,6 +800,8 @@ func TestTaskDependencies(t *testing.T) {
 }
 
 func TestReadyTaskComputation(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -1096,6 +1104,8 @@ func TestReadyTaskComputation(t *testing.T) {
 }
 
 func TestGetTaskByPosition(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -1129,6 +1139,8 @@ func TestGetTaskByPosition(t *testing.T) {
 }
 
 func TestTaskStats(t *testing.T) {
+	t.Parallel()
+
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()

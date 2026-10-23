@@ -35,6 +35,8 @@ func captureDriverOptionsResolver(captured *capturedDriverOptions) drivers.Drive
 }
 
 func TestCallLLMActivity_ReconcilesThinkingLevelForInjectedResolvers(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name                string
 		modelID             string

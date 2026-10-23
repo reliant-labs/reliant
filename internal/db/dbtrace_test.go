@@ -30,7 +30,11 @@ func TestQueriesUnderASpanAreTraced(t *testing.T) {
 		t.Fatal("the test harness pool is not traced; it must open the way the served pool does")
 	}
 
-	session, err := openSessionPool(resolveTestDSN(t))
+	dsn, err := testDSNOf(rawDB)
+	if err != nil {
+		t.Fatal(err)
+	}
+	session, err := openSessionPool(dsn)
 	if err != nil {
 		t.Fatalf("openSessionPool: %v", err)
 	}

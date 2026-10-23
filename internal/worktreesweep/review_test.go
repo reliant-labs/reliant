@@ -24,6 +24,8 @@ import (
 // S1: the user restores the workspace between the daemon claiming it and the
 // removal request. The server re-reads the row and must not send the removal.
 func TestSweep_UnarchiveBetweenPhasesNeverRemoves(t *testing.T) {
+	t.Parallel()
+
 	e := newEnv(t)
 	wt, path := e.worktree(t, "race", true)
 	var phases atomic.Int32
@@ -49,6 +51,8 @@ func (f senderFunc) SendDaemonCommandToDaemon(ctx context.Context, u, d, cmd str
 // S1: the same race, with the unarchive landing AFTER phase two was built: the
 // daemon refuses because the unarchive re-locked the checkout as active.
 func TestSweep_RelockedAsActiveRefusesAStaleRemoval(t *testing.T) {
+	t.Parallel()
+
 	e := newEnv(t)
 	wt, path := e.worktree(t, "relock", true)
 	cands, err := e.repo.ListWorktreesForReclaim(e.ctx)
@@ -75,6 +79,8 @@ func TestSweep_RelockedAsActiveRefusesAStaleRemoval(t *testing.T) {
 // S2: another live row at the same path keeps the archived row: it is never
 // sent to the daemon, and the reason is recorded.
 func TestSweep_SharedPathWithALiveRowIsNeverRemoved(t *testing.T) {
+	t.Parallel()
+
 	e := newEnv(t)
 	arch, path := e.worktree(t, "shared", true)
 	now := time.Now().UTC()
@@ -94,6 +100,8 @@ func TestSweep_SharedPathWithALiveRowIsNeverRemoved(t *testing.T) {
 
 // S7: Keep everything removes nothing automatically, yet still reports holds.
 func TestSweep_KeepEverythingNeverRemovesButStillHolds(t *testing.T) {
+	t.Parallel()
+
 	e := newEnv(t)
 	e.sweeper.WithKeepFiles(keepAll{})
 	clean, cleanPath := e.worktree(t, "keepclean", true)
@@ -111,6 +119,8 @@ func (keepAll) KeepFiles(context.Context, string) bool { return true }
 
 // S8: only the replica holding the advisory lock sweeps.
 func TestSweepAsLeader_OnlyOneReplicaSweeps(t *testing.T) {
+	t.Parallel()
+
 	e := newEnv(t)
 	_, path := e.worktree(t, "leader", true)
 	release, ok, err := e.repo.TryAdvisoryLock(e.ctx, sweepLockKey)
@@ -126,6 +136,8 @@ func TestSweepAsLeader_OnlyOneReplicaSweeps(t *testing.T) {
 
 // S8: a held row is not re-checked every pass.
 func TestSweep_HeldRowsBackOff(t *testing.T) {
+	t.Parallel()
+
 	e := newEnv(t)
 	_, path := e.worktree(t, "backoff", true)
 	require.NoError(t, os.WriteFile(filepath.Join(path, "wip.txt"), []byte("x"), 0o644))
@@ -144,6 +156,8 @@ func TestSweep_HeldRowsBackOff(t *testing.T) {
 
 // S8: a live row already locked is not re-sent every pass.
 func TestSweep_LockedLiveRowsAreNotResentEveryPass(t *testing.T) {
+	t.Parallel()
+
 	e := newEnv(t)
 	e.worktree(t, "live1", false)
 	require.NoError(t, e.sweeper.Sweep(e.ctx))
@@ -155,6 +169,8 @@ func TestSweep_LockedLiveRowsAreNotResentEveryPass(t *testing.T) {
 // S4: permanent delete settles first; a held directory refuses the delete.
 // (Exercised through SettleBlocking, which the service calls.)
 func TestSettleBlocking_ReportsHeldAndRemovedForPermanentDelete(t *testing.T) {
+	t.Parallel()
+
 	e := newEnv(t)
 	dirty, dirtyPath := e.worktree(t, "pd-dirty", true)
 	require.NoError(t, os.WriteFile(filepath.Join(dirtyPath, "wip.txt"), []byte("x"), 0o644))
@@ -172,6 +188,8 @@ func TestSettleBlocking_ReportsHeldAndRemovedForPermanentDelete(t *testing.T) {
 
 // S10: a missing root is "foreign" and the row is NOT marked deleted.
 func TestSweep_MissingRootDoesNotMarkRowsDeleted(t *testing.T) {
+	t.Parallel()
+
 	e := newEnv(t)
 	wt, path := e.worktree(t, "unmounted", true)
 	require.NoError(t, os.Rename(e.root, e.root+".away"))
@@ -186,6 +204,8 @@ func TestSweep_MissingRootDoesNotMarkRowsDeleted(t *testing.T) {
 // the 2026-10-10/11 incidents had its home volume at 21% and its build-cache
 // and docker volume at 100%; the item used to measure only the former.
 func TestStorageView_DiskAlertIsTheVolumeUnderPressure(t *testing.T) {
+	t.Parallel()
+
 	e := newEnv(t)
 	const gib = 1 << 30
 	store := func(rep *reliantv1.DiskReport) {
@@ -237,6 +257,8 @@ func itoa(n int64) string { return strconv.FormatInt(n, 10) }
 // B2/B1 through the server: data and outside files are listed but not removable,
 // and the confirmed clean-up skips them rather than failing.
 func TestCleanup_DataAndNestedWorktreesAreListedButNeverRemoved(t *testing.T) {
+	t.Parallel()
+
 	e := newEnv(t)
 	require.NoError(t, os.WriteFile(filepath.Join(e.project.Path, ".gitignore"), []byte("data/\n"), 0o644))
 	git(t, e.project.Path, "add", ".gitignore")
@@ -262,6 +284,11 @@ func TestCleanup_DataAndNestedWorktreesAreListedButNeverRemoved(t *testing.T) {
 
 // S6: StartCleanup returns immediately, runs detached, and records refs.
 func TestStartCleanup_RunsDetachedAndRecordsSnapshotRefs(t *testing.T) {
+	t.Parallel()
+
+	if testing.Short() {
+		t.Skip("-short: waits up to 20s on a detached clean-up (a real git snapshot, then removal; ~6s idle); runs in task test")
+	}
 	e := newEnv(t)
 	wt, path := e.worktree(t, "async", true)
 	require.NoError(t, os.WriteFile(filepath.Join(path, "wip.txt"), []byte("precious"), 0o644))
@@ -283,6 +310,8 @@ func TestStartCleanup_RunsDetachedAndRecordsSnapshotRefs(t *testing.T) {
 // R-S6: kept worktrees are HELD: visible in the Inbox, removable by Clean up,
 // and backed off like any other hold.
 func TestSweep_KeptWorktreesAreHeldVisibleAndBackedOff(t *testing.T) {
+	t.Parallel()
+
 	e := newEnv(t)
 	e.sweeper.WithKeepFiles(keepAll{})
 	wt, path := e.worktree(t, "keptheld", true)
@@ -305,6 +334,8 @@ func TestSweep_KeptWorktreesAreHeldVisibleAndBackedOff(t *testing.T) {
 
 // R-S6: the confirmed Clean up removes a kept worktree (nothing to save).
 func TestCleanup_RemovesAKeptWorktree(t *testing.T) {
+	t.Parallel()
+
 	e := newEnv(t)
 	e.sweeper.WithKeepFiles(keepAll{})
 	wt, path := e.worktree(t, "keptclean", true)
@@ -317,6 +348,11 @@ func TestCleanup_RemovesAKeptWorktree(t *testing.T) {
 
 // R-S7: a clean-up flag left by a process that died expires on its own.
 func TestCleaning_ExpiresWhenItsOwnerDies(t *testing.T) {
+	t.Parallel()
+
+	if testing.Short() {
+		t.Skip("-short: waits up to 20s on a detached clean-up (a real git snapshot, then removal; ~6s idle); runs in task test")
+	}
 	e := newEnv(t)
 	wt, path := e.worktree(t, "orphancleaning", true)
 	require.NoError(t, os.WriteFile(filepath.Join(path, "wip.txt"), []byte("x"), 0o644))
@@ -346,6 +382,8 @@ func TestCleaning_ExpiresWhenItsOwnerDies(t *testing.T) {
 
 // R-S7: a live clean-up is recorded with its owner and a future deadline.
 func TestCleaning_RecordsOwnerAndDeadline(t *testing.T) {
+	t.Parallel()
+
 	e := newEnv(t)
 	var m core.CleanupMetadata
 	e.sweeper.markCleaning(&m)
@@ -358,6 +396,8 @@ func TestCleaning_RecordsOwnerAndDeadline(t *testing.T) {
 
 // NIT: concurrent merges never lose each other's updates.
 func TestMergeMeta_ConcurrentWritersDoNotLoseUpdates(t *testing.T) {
+	t.Parallel()
+
 	e := newEnv(t)
 	wt, _ := e.worktree(t, "race", true)
 	const n = 20
@@ -376,6 +416,8 @@ func TestMergeMeta_ConcurrentWritersDoNotLoseUpdates(t *testing.T) {
 
 // NIT: the live-path check is scoped to the user whose directory it is.
 func TestListLiveWorktreePathsForUser_IsScopedToTheUser(t *testing.T) {
+	t.Parallel()
+
 	e := newEnv(t)
 	_, path := e.worktree(t, "mine", false)
 	other := newEnv(t)
@@ -404,6 +446,8 @@ func TestListLiveWorktreePathsForUser_IsScopedToTheUser(t *testing.T) {
 // R-S2: a restore that cannot reach the machine records the fence to retire; the
 // sweep then delivers it and clears it.
 func TestSweep_DeliversAPendingFenceRetirement(t *testing.T) {
+	t.Parallel()
+
 	e := newEnv(t)
 	wt, path := e.worktree(t, "pending", true)
 	archived := e.get(t, wt.ID)
