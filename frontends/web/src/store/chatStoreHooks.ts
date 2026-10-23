@@ -18,7 +18,7 @@
 import { useMemo } from "react";
 import { useChatStore } from "./chatStore";
 import { useChat as useChatQuery } from "../hooks/chat-queries";
-import { useMessages } from "../hooks/message-queries";
+import { useIsThreadHistoryPending, useMessages } from "../hooks/message-queries";
 import type {
   Chat,
   Message,
@@ -200,6 +200,32 @@ export function useRunOutputs(chatId: string): RunOutputUpdate[] {
  */
 export function useIsChatSyncing(chatId: string | null | undefined): boolean {
   return useChatStore((state) => !!chatId && state.chatSyncPendingId === chatId);
+}
+
+/** What the timeline in view is still waiting on; see useTimelineSync. */
+export interface TimelineSyncState {
+  /** chat_caught_up has not arrived for the chat's stream subscription. */
+  chatSyncPending: boolean;
+  /** The viewed side thread's own history read has not answered yet. */
+  threadHistoryPending: boolean;
+}
+
+/**
+ * Sync state of the timeline in view, keyed by the viewed (chat, thread).
+ * `sideThreadId` is the side (spawn) thread being viewed, or undefined for
+ * the chat's main thread, which reads the chat-wide list and so is caught up
+ * when the chat is. Turned into the catch-up overlay by lib/timelineCatchUp.
+ */
+export function useTimelineSync(
+  chatId: string | null | undefined,
+  sideThreadId: string | undefined,
+): TimelineSyncState {
+  const chatSyncPending = useIsChatSyncing(chatId);
+  const threadHistoryPending = useIsThreadHistoryPending(
+    chatId ?? undefined,
+    sideThreadId,
+  );
+  return { chatSyncPending, threadHistoryPending };
 }
 
 /**

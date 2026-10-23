@@ -20,7 +20,9 @@ import { useDelayedVisibility } from "../../hooks/useDelayedVisibility";
 import {
   CATCH_UP_MIN_VISIBLE_MS,
   CATCH_UP_SHOW_DELAY_MS,
+  isTimelineCatchingUp,
 } from "../../lib/timelineCatchUp";
+import { useTimelineSync } from "../../store/chatStoreHooks";
 import { PermissionsPanelWrapper } from "./PermissionsPanelWrapper";
 import { PermissionsPanel } from "./PermissionsPanel";
 import { ChatHeader } from "./ChatHeader";
@@ -108,14 +110,6 @@ interface ChatPresenterProps {
   isLoadingOlderMessages?: boolean;
   hasOlderMessages?: boolean;
 
-  /**
-   * The timeline has not caught up to the stream yet: what is on screen is
-   * the chat's cached state (or nothing) and the snapshot or replay is still
-   * outstanding. Never true for a caught-up chat, streaming or not; see
-   * lib/timelineCatchUp.
-   */
-  isTimelineCatchingUp?: boolean;
-
   /** The host shows the chat's title itself; see ChatHeader.hideTitle. */
   hideChatTitle?: boolean;
 }
@@ -143,7 +137,6 @@ export const ChatPresenter = memo(function ChatPresenter({
   onLoadOlderMessages,
   isLoadingOlderMessages,
   hasOlderMessages,
-  isTimelineCatchingUp = false,
   hideChatTitle,
 }: ChatPresenterProps) {
   const chatInputRef = useRef<HTMLTextAreaElement>(null);
@@ -484,22 +477,6 @@ export const ChatPresenter = memo(function ChatPresenter({
     resumeFollowRef.current?.();
   }, []);
 
-  // Catch-up overlay: delayed so a cached, instant switch shows nothing, and
-  // held briefly once up so it never flickers.
-  const catchUpOverlayVisible = useDelayedVisibility(isTimelineCatchingUp, {
-    showDelayMs: CATCH_UP_SHOW_DELAY_MS,
-    minVisibleMs: CATCH_UP_MIN_VISIBLE_MS,
-  });
-  // The reader could not scroll while the overlay was up, so where they are
-  // meant to be when it lifts is the end of the caught-up transcript.
-  const catchUpOverlayWasVisibleRef = useRef(false);
-  useEffect(() => {
-    if (catchUpOverlayWasVisibleRef.current && !catchUpOverlayVisible) {
-      scrollToBottom();
-    }
-    catchUpOverlayWasVisibleRef.current = catchUpOverlayVisible;
-  }, [catchUpOverlayVisible, scrollToBottom]);
-
   // Thinking indicator element, rendered as the timeline's footer
   const hasThinkingFooter =
     (isChatBusy || waitingOnMachine) && pendingApprovals.length === 0 && !hasPendingQuestion;
@@ -643,6 +620,30 @@ export const ChatPresenter = memo(function ChatPresenter({
       (message: Message) => message.role !== MessageRole.TOOL
     );
   }, [selectedThreadMessages, messages]);
+
+  // Catch-up overlay, for the timeline in view: the chat's (main thread) or
+  // the selected side thread's (lib/timelineCatchUp). Delayed so a cached,
+  // instant switch shows nothing, and held briefly once up so it never
+  // flickers.
+  const timelineSync = useTimelineSync(chatId, selectedSideThreadId);
+  const timelineCatchingUp = isTimelineCatchingUp({
+    ...timelineSync,
+    messages: timelineMessages,
+    connectionStatus,
+  });
+  const catchUpOverlayVisible = useDelayedVisibility(timelineCatchingUp, {
+    showDelayMs: CATCH_UP_SHOW_DELAY_MS,
+    minVisibleMs: CATCH_UP_MIN_VISIBLE_MS,
+  });
+  // The reader could not scroll while the overlay was up, so where they are
+  // meant to be when it lifts is the end of the caught-up transcript.
+  const catchUpOverlayWasVisibleRef = useRef(false);
+  useEffect(() => {
+    if (catchUpOverlayWasVisibleRef.current && !catchUpOverlayVisible) {
+      scrollToBottom();
+    }
+    catchUpOverlayWasVisibleRef.current = catchUpOverlayVisible;
+  }, [catchUpOverlayVisible, scrollToBottom]);
 
   // Render the timeline
   const renderTimeline = () => (

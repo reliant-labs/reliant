@@ -497,6 +497,25 @@ export function useThreadMessages(
   return query;
 }
 
+/**
+ * Whether a side thread's whole-thread history (the read the thread view
+ * renders) has not answered yet. This is the per-thread half of "the
+ * timeline in view is caught up": a side thread has no stream subscription
+ * or snapshot of its own — the chat's subscription carries its live
+ * messages, fanned out to this cache — so once the chat has caught up, the
+ * thread is current exactly when this read has landed (with anything that
+ * streamed during it merged in). A thread already cached is never pending;
+ * live updates only upsert into the cache, so they cannot make it pending
+ * again. A failed read is not pending either: there is nothing to wait for.
+ */
+export function useIsThreadHistoryPending(
+  chatId?: string,
+  threadId?: string
+): boolean {
+  const { status } = useThreadMessages(chatId, threadId);
+  return !!chatId && !!threadId && status === "pending";
+}
+
 // ── Mutation hooks ──────────────────────────────────────────────────────────
 
 export function useBranchChat() {
