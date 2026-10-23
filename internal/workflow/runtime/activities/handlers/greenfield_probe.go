@@ -355,8 +355,8 @@ func BuildGreenfieldGuidance(configFiles []string) string {
 	b.WriteString("no backend: `reliant forge env up dev` runs it locally with no database or cluster, and it is ")
 	b.WriteString("hosted on Reliant's static hosting (bucket, CDN and hostname handled) with the same ")
 	b.WriteString("environments, releases and custom domains, a component library and the `frontend/design` ")
-	b.WriteString("skill, browser console logs in .forge/logs, and room to add an API to the same project when it ")
-	b.WriteString("needs a waitlist or a checkout. For a PWA, forge builds, hosts and ships it; the service worker ")
+	b.WriteString("skill, browser console logs in .forge/logs, and room to add an API when it needs a waitlist or a ")
+	b.WriteString("checkout (its own forge project beside the site, reached by URL). For a PWA, forge builds, hosts and ships it; the service worker ")
 	b.WriteString("and manifest are yours to write. Run `reliant forge skill load deploy/static-site` for that ")
 	b.WriteString("path instead of the service sequence.\n\n")
 

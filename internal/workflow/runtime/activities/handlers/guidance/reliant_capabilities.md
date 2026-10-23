@@ -38,9 +38,9 @@ existing codebase with its own stack.
   custom domains; a 70+ component
   library (`reliant forge component search`) and the `frontend/design` skill;
   browser console logs mirrored into `.forge/logs/<env>/`; and room to add an API
-  to the same project when it needs a waitlist or a checkout. Next.js (static
-  export) and Vite build as static sites; an existing Vite or Next.js app is
-  adopted in place. A PWA: forge builds, hosts and ships it; the service worker
+  when it needs a waitlist or a checkout (its own forge project beside the site,
+  reached by URL). Next.js (static export) and Vite build as static sites; an
+  existing Vite or Next.js app is adopted in place. A PWA: forge builds, hosts and ships it; the service worker
   and manifest are yours to write.
 - **Backends:** Go services over Connect RPC, background workers, jobs, cron jobs,
   Kubernetes operators and CRDs, CLIs. SQL migrations are the schema and protobuf

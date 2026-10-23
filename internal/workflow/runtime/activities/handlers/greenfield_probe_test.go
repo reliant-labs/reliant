@@ -389,8 +389,8 @@ func TestGreenfieldGuidanceDoesNotPromiseRemovedDeployTargets(t *testing.T) {
 }
 
 // Static sites are a forge case, not an exclusion. A landing page or marketing
-// site gets hosted static hosting, envs and promotion from the same project that
-// later grows its API. Without saying so, the model treats "no backend" as "not
+// site gets hosted static hosting, envs and promotion, and an API beside it
+// when it needs one. Without saying so, the model treats "no backend" as "not
 // forge" and hands the user a page with no deploy story.
 func TestGreenfieldGuidanceOffersForgeForStaticSites(t *testing.T) {
 	t.Parallel()
