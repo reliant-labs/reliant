@@ -376,7 +376,8 @@ func BuildGreenfieldGuidance(configFiles []string) string {
 
 	b.WriteString("Publishing defaults to Reliant hosting: a new forge project's staging and prod are ")
 	b.WriteString("already bound to it, and `reliant forge env deploy <env>` ships it. A static site alone ")
-	b.WriteString("has a free tier; hosted services and the managed database need billing, and without it ")
+	b.WriteString("has a free tier (one site per org, and each environment's site counts — prod alone is free, ")
+	b.WriteString("staging too needs billing); hosted services and the managed database need billing, and without it ")
 	b.WriteString("the deploy is queued (exit 7) and goes live once the user sets billing up — hand them ")
 	b.WriteString("the link it prints. Reliant hosting runs services, workers and jobs; a cron-kind ")
 	b.WriteString("workload or an operator needs a cluster they operate (a worker that runs its own ")

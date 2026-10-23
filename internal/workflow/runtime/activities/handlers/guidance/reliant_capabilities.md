@@ -34,7 +34,8 @@ existing codebase with its own stack.
   with no backend is a full forge project, not a lesser case. It gets dev, staging
   and prod environments; `reliant forge env up dev` locally with no database or
   cluster; releases built once and promoted by digest; Reliant static hosting with
-  a CDN (one static site per org is free) and custom domains; a 70+ component
+  a CDN (one static site per org is free; each environment's site counts) and
+  custom domains; a 70+ component
   library (`reliant forge component search`) and the `frontend/design` skill;
   browser console logs mirrored into `.forge/logs/<env>/`; and room to add an API
   to the same project when it needs a waitlist or a checkout. Next.js (static
