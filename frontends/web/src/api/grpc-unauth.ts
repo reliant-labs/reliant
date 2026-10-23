@@ -1,20 +1,19 @@
 /**
- * Unauthenticated gRPC transport for DevAuth calls.
+ * The pre-session sign-in calls: the dev-mode session file (DevAuth*) and the
+ * Electron-local OAuth sign-in.
  *
- * This is separated from grpc-client.ts to avoid circular dependencies with
- * Supabase:
- *   supabase.ts → devAuth (this file) for session storage,
- *   grpc-client.ts → supabase for the auth interceptor.
+ * They run BEFORE a session exists, so they take the unauthenticated route:
+ * no bearer token, no 401 recovery (a 401 here means "not signed in yet", and
+ * recovering from it would loop). That routing is not decided here —
+ * `routeFor` in src/lib/connect.ts sends these four procedures to the
+ * "reliant-unauth" transport whoever calls them, which still runs the rest of
+ * the shared chain (deadline, tracing, error reporting, upgrade modal).
  *
- * The interceptor chain comes from `buildInterceptors({ withAuth: false })`
- * in `./transport`. That call site dynamic-imports Supabase only inside the
- * auth interceptor body — and that interceptor isn't included when
- * `withAuth: false` — so this file doesn't pull Supabase into its dependency
- * graph at module load time. The cycle stays broken.
+ * Kept apart from grpc-client.ts for the import graph: supabase.ts imports
+ * this module for its session storage, so it must not pull in the wrappers
+ * (and through them the stores) that grpc-client's importers bring.
  */
 
-import { createClient } from "@connectrpc/connect";
-import { createConnectTransport } from "@connectrpc/connect-web";
 import { create } from "@bufbuild/protobuf";
 import {
   DevAuthLoadRequestSchema,
@@ -23,86 +22,7 @@ import {
   StartOAuthSignInRequestSchema,
   SystemService,
 } from "../gen/reliant/v1/system_pb";
-import {
-  buildLocalhostUrl,
-  isPackagedRendererOrigin,
-  isSameOriginTransport,
-} from "../lib/protocol";
-import { buildInterceptors } from "./transport";
-
-// Minimal local logger. Avoids depending on `@/lib/logger` to keep the
-// pre-auth bootstrap path's import graph small. The interceptor chain
-// supplied by buildInterceptors already covers per-RPC request/error
-// logging; this is only for the transport-creation event.
-const log = {
-  info: (...args: unknown[]) => console.log('[gRPC-Unauth]', ...args),
-};
-
-// Get gRPC base URL - simplified version without Electron config dependencies
-const getGRPCBaseURL = (): string | null => {
-  // Same-origin (Vite-proxy) path — mirrors grpc-client.ts::getGRPCBaseURL so
-  // the pre-auth DevAuth/OAuth bootstrap is CORS-free too. http(s)-served
-  // renderer (web-dev AND electron-dev) ⇒ document origin ⇒ Vite proxies
-  // `/reliant.v1.*` to reliant-api. file:// (packaged) falls through.
-  if (isSameOriginTransport()) {
-    return window.location.origin;
-  }
-
-  // Check if running in Electron with config available
-  if (
-    typeof window !== "undefined" &&
-    window.RELIANT_CONFIG?.isElectron
-  ) {
-    if (window.RELIANT_CONFIG?.grpcUrl) {
-      return window.RELIANT_CONFIG.grpcUrl;
-    }
-  }
-
-  // Packaged desktop app whose config has not been injected yet: not ready.
-  if (isPackagedRendererOrigin()) {
-    return null;
-  }
-
-  // Fallback for development/browser - protocol based on VITE_DISABLE_TLS
-  const grpcPort = import.meta.env.VITE_GRPC_PORT || "9090";
-  const fallbackUrl =
-    import.meta.env.VITE_GRPC_URL ||
-    import.meta.env.VITE_API_URL ||
-    buildLocalhostUrl(grpcPort);
-  return fallbackUrl;
-};
-
-// Lazy-initialized transport
-let _transport: ReturnType<typeof createConnectTransport> | null = null;
-let _currentBaseURL: string | null = null;
-
-const getTransport = () => {
-  const currentBaseURL = getGRPCBaseURL();
-
-  if (currentBaseURL === null) {
-    throw new Error("gRPC client not ready - waiting for backend configuration");
-  }
-
-  // Recreate transport if URL changed
-  if (!_transport || _currentBaseURL !== currentBaseURL) {
-    _currentBaseURL = currentBaseURL;
-    log.info('Creating DevAuth transport', currentBaseURL);
-    // interceptors via buildInterceptors — see api/transport.ts
-    //
-    // withAuth: false skips the bearer-token + 401-auto-signout interceptors
-    // (DevAuth runs *before* a session exists; a 401 here is a normal
-    // "not logged in yet" signal, not a stale token). Timeout / tracing /
-    // error logging / upgrade-modal still apply so the chain matches the
-    // other transports below the auth layer.
-    _transport = createConnectTransport({
-      baseUrl: currentBaseURL,
-      interceptors: buildInterceptors({ withAuth: false }),
-      useBinaryFormat: false,
-    });
-  }
-
-  return _transport;
-};
+import { connectClient } from "../lib/connect";
 
 /**
  * DevAuth gRPC methods - used by supabase storage adapter
@@ -116,7 +36,7 @@ export const devAuthGrpc = {
     email: string
     providerToken: string
   }> {
-    const client = createClient(SystemService, getTransport());
+    const client = connectClient(SystemService);
     const response = await client.startOAuthSignIn(
       create(StartOAuthSignInRequestSchema, { provider })
     );
@@ -133,7 +53,7 @@ export const devAuthGrpc = {
    * Load auth session from file (development only)
    */
   async load(): Promise<{ success: boolean; sessionJson?: string }> {
-    const client = createClient(SystemService, getTransport());
+    const client = connectClient(SystemService);
     const response = await client.devAuthLoad(create(DevAuthLoadRequestSchema));
     return {
       success: response.success,
@@ -145,7 +65,7 @@ export const devAuthGrpc = {
    * Save auth session to file (development only)
    */
   async save(sessionJson: string): Promise<{ success: boolean }> {
-    const client = createClient(SystemService, getTransport());
+    const client = connectClient(SystemService);
     const response = await client.devAuthSave(
       create(DevAuthSaveRequestSchema, { sessionJson })
     );
@@ -158,7 +78,7 @@ export const devAuthGrpc = {
    * Clear auth session file (development only)
    */
   async clear(): Promise<{ success: boolean }> {
-    const client = createClient(SystemService, getTransport());
+    const client = connectClient(SystemService);
     const response = await client.devAuthClear(create(DevAuthClearRequestSchema));
     return {
       success: response.success,

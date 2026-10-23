@@ -93,9 +93,14 @@ describe("a request its owner aborted (ELECTRON-8X, ELECTRON-74)", () => {
       controller.abort(timeout);
       return req.signal.reason;
     });
-    await expect(
-      call("reliant.v1.PackageCommandsService", "ListProcesses", controller.signal),
-    ).rejects.toBe(timeout);
+    // The chain's outermost stage normalizes it into the runtime's typed
+    // error: still a ConnectError with the same code, wrapping the original.
+    const error = await call("reliant.v1.PackageCommandsService", "ListProcesses", controller.signal).catch(
+      (e: unknown) => e,
+    );
+    expect(error).toBeInstanceOf(ConnectError);
+    expect((error as ConnectError).code).toBe(Code.DeadlineExceeded);
+    expect((error as ConnectError).cause).toBe(timeout);
     expect(sentry.captureException).not.toHaveBeenCalled();
   });
 

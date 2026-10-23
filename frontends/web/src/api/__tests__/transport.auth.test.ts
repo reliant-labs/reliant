@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { Interceptor } from '@connectrpc/connect'
 
 const mocks = vi.hoisted(() => ({
-  createConnectTransport: vi.fn((options) => options),
   getSession: vi.fn(),
   logger: {
     info: vi.fn(),
@@ -9,10 +9,6 @@ const mocks = vi.hoisted(() => ({
     error: vi.fn(),
     debug: vi.fn(),
   },
-}))
-
-vi.mock('@connectrpc/connect-web', () => ({
-  createConnectTransport: mocks.createConnectTransport,
 }))
 
 vi.mock('@/lib/supabase', () => ({
@@ -39,20 +35,40 @@ vi.mock('@/lib/logger', () => ({
   logger: mocks.logger,
 }))
 
-function buildRequest() {
-  return {
+type Next = Parameters<Interceptor>[0]
+
+/**
+ * Run one request through the authed reliant-api chain — the one
+ * src/lib/connect.ts gives every reliant.v1 route — and return the headers
+ * that reached the wire.
+ */
+async function headersOnTheWire(): Promise<Headers> {
+  const { buildInterceptors } = await import('../transport')
+  let sent: Headers | undefined
+  const wire = (async (req: { header: Headers }) => {
+    sent = new Headers(req.header)
+    return { stream: false, header: new Headers(), trailer: new Headers(), message: {} }
+  }) as unknown as Next
+  const run = buildInterceptors({ withAuth: true }).reduceRight<Next>(
+    (next, interceptor) => interceptor(next),
+    wire,
+  )
+  await run({
+    stream: false,
     method: { name: 'GetProviderStatuses' },
     service: { typeName: 'reliant.v1.SettingsService' },
     header: new Headers(),
     signal: new AbortController().signal,
-  }
+    message: {},
+  } as unknown as Parameters<Next>[0])
+  if (!sent) throw new Error('the chain never reached the wire')
+  return sent
 }
 
-describe('grpc-client auth interceptor', () => {
+describe('the reliant-api chain\'s auth stages', () => {
   beforeEach(() => {
     vi.resetModules()
     vi.clearAllMocks()
-    mocks.createConnectTransport.mockImplementation((options) => options)
     mocks.getSession.mockResolvedValue({ data: { session: null } })
     // jsdom in this vitest setup doesn't expose a real Storage on globalThis;
     // the auth interceptor reads localStorage first, so stub a minimal shim.
@@ -69,16 +85,9 @@ describe('grpc-client auth interceptor', () => {
       data: { session: { access_token: 'token-123' } },
     })
 
-    const { getTransport } = await import('../grpc-client')
-    const transport = getTransport() as { interceptors: Array<(next: (req: unknown) => Promise<unknown>) => (req: unknown) => Promise<unknown>> }
-    const authInterceptor = transport.interceptors[1]
-    const req = buildRequest()
-    const next = vi.fn(async (passedReq) => passedReq)
+    const sent = await headersOnTheWire()
 
-    await authInterceptor(next)(req)
-
-    expect(req.header.get('Authorization')).toBe('Bearer token-123')
-    expect(next).toHaveBeenCalledTimes(1)
+    expect(sent.get('Authorization')).toBe('Bearer token-123')
     // The happy path logs nothing: a per-RPC line here was the single largest
     // producer of dev log volume. Attach-failure is still logged (below), and
     // a 401 records whether a token was attached (unauthInterceptor).
@@ -91,16 +100,9 @@ describe('grpc-client auth interceptor', () => {
   it('warns and continues when no Supabase session exists', async () => {
     mocks.getSession.mockResolvedValue({ data: { session: null } })
 
-    const { getTransport } = await import('../grpc-client')
-    const transport = getTransport() as { interceptors: Array<(next: (req: unknown) => Promise<unknown>) => (req: unknown) => Promise<unknown>> }
-    const authInterceptor = transport.interceptors[1]
-    const req = buildRequest()
-    const next = vi.fn(async (passedReq) => passedReq)
+    const sent = await headersOnTheWire()
 
-    await authInterceptor(next)(req)
-
-    expect(req.header.get('Authorization')).toBeNull()
-    expect(next).toHaveBeenCalledTimes(1)
+    expect(sent.get('Authorization')).toBeNull()
     // The interceptor now resolves a token through the pluggable
     // AuthTokenProvider (see api/authProvider.ts) rather than reading the
     // Supabase session inline, so it can no longer distinguish "no session"

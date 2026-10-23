@@ -1,6 +1,21 @@
-import { createClient } from "@connectrpc/connect";
-import type { Client } from "@connectrpc/connect";
-import { createConnectTransport } from "@connectrpc/connect-web";
+/**
+ * reliant.v1 service clients for the hand-written `api/*-grpc.ts` wrappers.
+ *
+ * Every client here is `connectClient(<Service>)` from `src/lib/connect.ts`,
+ * the same seam forge's generated hooks call, so a wrapper and a hook for the
+ * same service reach the same backend through the same interceptor chain.
+ * Which backend that is — reliant's api-server for every service below,
+ * StreamingService on the binary wire format — is decided there, by
+ * `routeFor`, not here. This module is a set of names kept for the wrappers
+ * that import them; the per-service hook waves (R4) delete it piece by piece.
+ *
+ * ForgeService, DaemonRegistryService and TokenService are reliant.v1 and are
+ * served by RELIANT's api-server (ForgeService proxies onto the user's daemon;
+ * the registry and the token authority are reliant's). None of them may route
+ * at control-plane's admin-server — see the header of src/lib/connect.ts and
+ * `lib/__tests__/connect.routing.test.ts`.
+ */
+import type { Client, Transport } from "@connectrpc/connect";
 import { SystemService } from "../gen/reliant/v1/system_pb";
 import { PlanService } from "../gen/reliant/v1/plan_pb";
 import { TaskService } from "../gen/reliant/v1/task_pb";
@@ -33,671 +48,134 @@ import { TriggerService } from "../gen/reliant/v1/trigger_pb";
 import { RunService } from "../gen/reliant/v1/run_pb";
 import { InboxService } from "../gen/reliant/v1/inbox_pb";
 import { ConnectionService } from "../gen/reliant/v1/connection_pb";
-import { logger } from "../lib/logger";
-import {
-  buildLocalhostUrl,
-  isPackagedRendererOrigin,
-  isSameOriginTransport,
-} from "../lib/protocol";
-import {
-  buildInterceptors,
-  setCurrentBaseURL,
-  setDaemonLastSeen as _setDaemonLastSeenInTransport,
-} from "./transport";
+import { connectClient, isApiReady, reliantApiBaseUrl, transport } from "../lib/connect";
+import { setDaemonLastSeen as _setDaemonLastSeenInTransport } from "./transport";
 
-// Re-export setDaemonLastSeen for backwards compatibility — globalUpdatesStore
-// imports it from this module today.
+// globalUpdatesStore imports it from this module.
 export const setDaemonLastSeen = _setDaemonLastSeenInTransport;
 
-// Detect if running in Electron and get gRPC URL
-// Returns null if config not yet available (Electron loading)
-const getGRPCBaseURL = (): string | null => {
-  // Same-origin (Vite-proxy) path — see isSameOriginTransport. Whenever the
-  // renderer is served over http(s) (web-dev AND electron-dev), reliant.v1.*
-  // RPCs go to the document origin and Vite's `/reliant.v1.*` proxy forwards
-  // them to reliant-api. This is first-party ⇒ ZERO CORS, and it short-circuits
-  // BEFORE RELIANT_CONFIG.grpcUrl / the absolute VITE_* fallbacks below so
-  // electron-dev never dials a cross-origin backend port. Packaged Electron
-  // (file://) falls through to the daemon URL.
-  if (isSameOriginTransport()) {
-    return window.location.origin;
-  }
+/** The reliant api-server's base URL, or null before it is known. */
+export const getGRPCBaseURLPublic = (): string | null => reliantApiBaseUrl();
+
+/** True once the reliant api-server's URL is known (packaged Electron learns it late). */
+export const isGrpcReady = (): boolean => isApiReady();
+
+/**
+ * The app's routed transport, for code that builds its own client with
+ * `createClient(Service, getTransport())`. Same transport connectClient uses:
+ * the route is picked per call from the service's name.
+ */
+export const getTransport = (): Transport => transport;
+
+/** StreamingService's binary route is chosen by connect.ts's routeFor. */
+export const getStreamingTransport = (): Transport => transport;
+
+export const createSystemClient = (): Client<typeof SystemService> => connectClient(SystemService);
+export const createPlanClient = (): Client<typeof PlanService> => connectClient(PlanService);
+export const createTaskClient = (): Client<typeof TaskService> => connectClient(TaskService);
+export const createCatalogClient = (): Client<typeof CatalogService> => connectClient(CatalogService);
+export const createProjectClient = (): Client<typeof ProjectService> => connectClient(ProjectService);
+export const createWorktreeClient = (): Client<typeof WorktreeService> => connectClient(WorktreeService);
+export const createRepoClient = (): Client<typeof RepoService> => connectClient(RepoService);
+export const createApprovalClient = (): Client<typeof ApprovalService> => connectClient(ApprovalService);
+export const createChatClient = (): Client<typeof ChatService> => connectClient(ChatService);
+export const createMessageClient = (): Client<typeof MessageService> => connectClient(MessageService);
+export const createSettingsClient = (): Client<typeof SettingsService> => connectClient(SettingsService);
+export const createMCPClient = (): Client<typeof MCPService> => connectClient(MCPService);
+export const createWorkflowClient = (): Client<typeof WorkflowService> => connectClient(WorkflowService);
+export const createFileSystemClient = (): Client<typeof FileSystemService> =>
+  connectClient(FileSystemService);
+export const createDaemonFileSystemClient = createFileSystemClient;
+export const createBackgroundClient = (): Client<typeof BackgroundService> =>
+  connectClient(BackgroundService);
+export const createPackageCommandsClient = (): Client<typeof PackageCommandsService> =>
+  connectClient(PackageCommandsService);
+export const createStreamingClient = (): Client<typeof StreamingService> =>
+  connectClient(StreamingService);
+export const createTerminalClient = (): Client<typeof TerminalService> => connectClient(TerminalService);
+export const createAttachmentClient = (): Client<typeof AttachmentService> =>
+  connectClient(AttachmentService);
+export const createToolCallClient = (): Client<typeof ToolCallService> => connectClient(ToolCallService);
+export const createPresetClient = (): Client<typeof PresetService> => connectClient(PresetService);
+export const createScenarioClient = (): Client<typeof ScenarioService> => connectClient(ScenarioService);
+export const createAccountClient = (): Client<typeof AccountService> => connectClient(AccountService);
+export const createForgeClient = (): Client<typeof ForgeService> => connectClient(ForgeService);
+export const createDaemonRegistryClient = (): Client<typeof DaemonRegistryService> =>
+  connectClient(DaemonRegistryService);
+export const createTokenClient = (): Client<typeof TokenService> => connectClient(TokenService);
+export const createQuestionClient = (): Client<typeof QuestionService> => connectClient(QuestionService);
+export const createConnectorClient = (): Client<typeof ConnectorService> =>
+  connectClient(ConnectorService);
+export const createTriggerClient = (): Client<typeof TriggerService> => connectClient(TriggerService);
+export const createConnectionClient = (): Client<typeof ConnectionService> =>
+  connectClient(ConnectionService);
+export const createRunClient = (): Client<typeof RunService> => connectClient(RunService);
+export const createInboxClient = (): Client<typeof InboxService> => connectClient(InboxService);
+
+// connectClient memoizes per service, so the "get" and "create" spellings
+// return the same client.
+export const getSystemClient = createSystemClient;
+export const getPlanClient = createPlanClient;
+export const getTaskClient = createTaskClient;
+export const getCatalogClient = createCatalogClient;
+export const getProjectClient = createProjectClient;
+export const getWorktreeClient = createWorktreeClient;
+export const getRepoClient = createRepoClient;
+export const getApprovalClient = createApprovalClient;
+export const getChatClient = createChatClient;
+export const getMessageClient = createMessageClient;
+export const getSettingsClient = createSettingsClient;
+export const getMCPClient = createMCPClient;
+export const getWorkflowClient = createWorkflowClient;
+export const getFileSystemClient = createFileSystemClient;
+export const getDaemonFileSystemClient = createDaemonFileSystemClient;
+export const getBackgroundClient = createBackgroundClient;
+export const getPackageCommandsClient = createPackageCommandsClient;
+export const getStreamingClient = createStreamingClient;
+export const getTerminalClient = createTerminalClient;
+export const getAttachmentClient = createAttachmentClient;
+export const getToolCallClient = createToolCallClient;
+export const getPresetClient = createPresetClient;
+export const getScenarioClient = createScenarioClient;
+export const getDaemonRegistryClient = createDaemonRegistryClient;
+export const getTokenClient = createTokenClient;
+export const getConnectorClient = createConnectorClient;
+export const getQuestionClient = createQuestionClient;
+export const getTriggerClient = createTriggerClient;
+export const getRunClient = createRunClient;
+export const getInboxClient = createInboxClient;
+export const getConnectionClient = createConnectionClient;
 
-  // Check if running in Electron with config available
-  if (
-    typeof window !== "undefined" &&
-    window.RELIANT_CONFIG?.isElectron
-  ) {
-    if (window.RELIANT_CONFIG?.grpcUrl) {
-      return window.RELIANT_CONFIG.grpcUrl;
-    }
-  }
-
-  // Packaged desktop app whose config has not been injected yet: return null to
-  // indicate not-ready rather than falling through to the browser defaults
-  // below, which would dial a localhost port nothing is listening on.
-  if (isPackagedRendererOrigin()) {
-    logger.warn(
-      "[gRPC Client] Electron detected but backend config not yet available"
-    );
-    return null;
-  }
-
-  // Use port from env, protocol based on VITE_DISABLE_TLS
-  const grpcPort = import.meta.env.VITE_GRPC_PORT || "9090";
-  const fallbackUrl =
-    import.meta.env.VITE_GRPC_URL ||
-    import.meta.env.VITE_API_URL ||
-    buildLocalhostUrl(grpcPort);
-  logger.info("[gRPC Client] Using direct gRPC connection:", {
-    fallbackUrl,
-    grpcPort,
-  });
-  return fallbackUrl;
-};
-
-// Create the Connect transport
-let _transport: ReturnType<typeof createConnectTransport> | null = null;
-let _streamingTransport: ReturnType<typeof createConnectTransport> | null = null;
-let _streamingTransportURL: string | null = null;
-let _currentBaseURL: string | null = null;
-
-// Clear all cached clients (called when transport changes)
-const clearClientCache = () => {
-  _streamingTransport = null;
-  _streamingTransportURL = null;
-  _systemClient = null;
-  _planClient = null;
-  _taskClient = null;
-  _catalogClient = null;
-  _projectClient = null;
-  _repoClient = null;
-  _worktreeClient = null;
-  _approvalClient = null;
-  _chatClient = null;
-  _messageClient = null;
-  _settingsClient = null;
-  _mcpClient = null;
-  _workflowClient = null;
-  _filesystemClient = null;
-  _backgroundClient = null;
-  _packageCommandsClient = null;
-  _streamingClient = null;
-  _terminalClient = null;
-  _attachmentClient = null;
-  _toolCallClient = null;
-  _presetClient = null;
-  _scenarioClient = null;
-  _daemonRegistryClient = null;
-  _questionClient = null;
-  _connectorClient = null;
-  _triggerClient = null;
-  _runClient = null;
-  _inboxClient = null;
-  _connectionClient = null;
-};
-
-export const getGRPCBaseURLPublic = (): string | null => getGRPCBaseURL();
-
-// The control-plane admin-server transport, for controlplane.v1 clients that
-// opt into it. When VITE_CONTROL_PLANE_API_URL is unset (or the renderer is
-// same-origin) it is null and callers fall through to the regular reliant
-// api-server transport.
-let _controlPlaneTransport: ReturnType<typeof createConnectTransport> | null = null;
-export const getControlPlaneTransport = () => {
-  // Same-origin (Vite-proxy) path — see isSameOriginTransport. When the
-  // renderer is served over http(s) (web-dev AND electron-dev), return null so
-  // callers fall through to the same-origin getTransport().
-  // Their RPCs are `reliant.v1.*` paths, so the Vite `/reliant.v1.*` proxy
-  // forwards them to reliant-api (which serves DaemonRegistryService against the
-  // shared dev DB) — first-party, ZERO CORS, no absolute admin-server port.
-  // Only packaged Electron (file://) needs the absolute control-plane URL to
-  // reach the hosted admin-server for cloud-managed daemons.
-  if (isSameOriginTransport()) return null;
-
-  const cpURL = import.meta.env.VITE_CONTROL_PLANE_API_URL;
-  if (!cpURL) return null;
-  if (!_controlPlaneTransport) {
-    // interceptors via buildInterceptors — see api/transport.ts
-    _controlPlaneTransport = createConnectTransport({
-      baseUrl: cpURL,
-      interceptors: buildInterceptors({ withAuth: true, backend: "control-plane" }),
-      useBinaryFormat: false,
-    });
-  }
-  return _controlPlaneTransport;
-};
-
-export const getTransport = () => {
-  const currentBaseURL = getGRPCBaseURL();
-
-  // If base URL is not available yet (Electron loading), throw error
-  if (currentBaseURL === null) {
-    logger.error("[gRPC Client] gRPC client not ready - no backend URL available");
-    throw new Error("gRPC client not ready - waiting for backend configuration");
-  }
-
-  // Recreate transport if URL changed
-  if (!_transport || _currentBaseURL !== currentBaseURL) {
-    logger.info("[gRPC Client] Creating transport", { 
-      baseUrl: currentBaseURL,
-      previousUrl: _currentBaseURL,
-      isElectron: typeof window !== "undefined" && window.RELIANT_CONFIG?.isElectron,
-      hasGrpcUrl: typeof window !== "undefined" && !!window.RELIANT_CONFIG?.grpcUrl,
-      grpcUrl: typeof window !== "undefined" && window.RELIANT_CONFIG?.grpcUrl,
-    });
-    
-    // Clear cached clients since they hold the old transport
-    if (_currentBaseURL !== null) {
-      logger.info("[gRPC Client] URL changed, clearing client cache");
-      clearClientCache();
-    }
-    
-    _currentBaseURL = currentBaseURL;
-    // Mirror the URL into transport.ts so errorInterceptor can include it
-    // in Sentry/log context.
-    setCurrentBaseURL(currentBaseURL);
-    // interceptors via buildInterceptors — see api/transport.ts
-    _transport = createConnectTransport({
-      baseUrl: currentBaseURL,
-      interceptors: buildInterceptors({ withAuth: true }),
-      // Use JSON for easier debugging during migration
-      // Can switch to binary later for performance
-      useBinaryFormat: false,
-    });
-  }
-
-  return _transport;
-};
-
-// StreamUserUpdates carries snapshots and heartbeats. Keep that one hot path
-// binary while unary RPCs remain JSON for readable network inspection.
-export const getStreamingTransport = () => {
-  const currentBaseURL = getGRPCBaseURL();
-  if (currentBaseURL === null) {
-    throw new Error("gRPC client not ready - waiting for backend configuration");
-  }
-
-  if (!_streamingTransport || _streamingTransportURL !== currentBaseURL) {
-    _streamingTransportURL = currentBaseURL;
-    _streamingTransport = createConnectTransport({
-      baseUrl: currentBaseURL,
-      interceptors: buildInterceptors({ withAuth: true }),
-      useBinaryFormat: true,
-    });
-  }
-
-  return _streamingTransport;
-};
-
-// Check if gRPC client is ready (config available)
-export const isGrpcReady = (): boolean => {
-  return getGRPCBaseURL() !== null;
-};
-
-// Create typed clients for each service
-export const createSystemClient = (): Client<typeof SystemService> => {
-  return createClient(SystemService, getTransport());
-};
-
-// Create typed clients for Plans and Tasks
-export const createPlanClient = (): Client<typeof PlanService> => {
-  return createClient(PlanService, getTransport());
-};
-
-export const createTaskClient = (): Client<typeof TaskService> => {
-  return createClient(TaskService, getTransport());
-};
-
-export const createCatalogClient = (): Client<typeof CatalogService> => {
-  return createClient(CatalogService, getTransport());
-};
-
-
-export const createProjectClient = (): Client<typeof ProjectService> => {
-  return createClient(ProjectService, getTransport());
-};
-
-export const createWorktreeClient = (): Client<typeof WorktreeService> => {
-  return createClient(WorktreeService, getTransport());
-};
-
-export const createRepoClient = (): Client<typeof RepoService> => {
-  return createClient(RepoService, getTransport());
-};
-
-export const createApprovalClient = (): Client<typeof ApprovalService> => {
-  return createClient(ApprovalService, getTransport());
-};
-
-export const createChatClient = (): Client<typeof ChatService> => {
-  return createClient(ChatService, getTransport());
-};
-
-export const createMessageClient = (): Client<typeof MessageService> => {
-  return createClient(MessageService, getTransport());
-};
-
-export const createSettingsClient = (): Client<typeof SettingsService> => {
-  return createClient(SettingsService, getTransport());
-};
-
-export const createMCPClient = (): Client<typeof MCPService> => {
-  return createClient(MCPService, getTransport());
-};
-
-export const createWorkflowClient = (): Client<typeof WorkflowService> => {
-  return createClient(WorkflowService, getTransport());
-};
-
-export const createFileSystemClient = (): Client<typeof FileSystemService> => {
-  return createClient(FileSystemService, getTransport());
-};
-
-export const createDaemonFileSystemClient = (): Client<typeof FileSystemService> => {
-  return createClient(FileSystemService, getTransport());
-};
-
-export const createBackgroundClient = (): Client<typeof BackgroundService> => {
-  return createClient(BackgroundService, getTransport());
-};
-
-export const createPackageCommandsClient = (): Client<typeof PackageCommandsService> => {
-  return createClient(PackageCommandsService, getTransport());
-};
-
-export const createStreamingClient = (): Client<typeof StreamingService> => {
-  return createClient(StreamingService, getStreamingTransport());
-};
-
-export const createTerminalClient = (): Client<typeof TerminalService> => {
-  return createClient(TerminalService, getTransport());
-};
-
-export const createAttachmentClient = (): Client<typeof AttachmentService> => {
-  return createClient(AttachmentService, getTransport());
-};
-
-export const createToolCallClient = (): Client<typeof ToolCallService> => {
-  return createClient(ToolCallService, getTransport());
-};
-
-export const createPresetClient = (): Client<typeof PresetService> => {
-  return createClient(PresetService, getTransport());
-};
-
-export const createScenarioClient = (): Client<typeof ScenarioService> => {
-  return createClient(ScenarioService, getTransport());
-};
-
-export const createAccountClient = (): Client<typeof AccountService> => {
-  return createClient(AccountService, getTransport());
-};
-
-// ForgeService is served by RELIANT's api-server, which proxies each RPC onto
-// the user's daemon — the release ledger, deploy/kcl/<env>/ and the kubectl
-// context exist only on the daemon's disk. So it uses the regular transport,
-// never getControlPlaneTransport().
-export const createForgeClient = (): Client<typeof ForgeService> => {
-  return createClient(ForgeService, getTransport());
-};
-
-// DaemonRegistryService is served by RELIANT's api-server, never by
-// admin-server — even though admin-server answers the same path.
-//
-// THIS IS NOT A PREFERENCE, IT IS A CORRECTNESS REQUIREMENT. Both hosts
-// respond to `/reliant.v1.DaemonRegistryService/*` with HTTP 200, from
-// DIFFERENT DATABASES:
-//
-//   api.reliantapi.com    -> {"daemons":[{... "status":"DAEMON_STATUS_ACTIVE"}]}
-//   admin.reliantapi.com  -> {}
-//
-// control-plane's adapter (internal/daemonregistry/adapter.go) TRANSLATES
-// these RPCs into `controlplane.v1.DaemonService/*`, which reads
-// `controlplane.daemons` — a table that exists only in control-plane's own
-// database and never receives a self-hosted daemon's registration. A daemon
-// started by the desktop app registers into RELIANT's `daemons` +
-// `daemon_attachment` tables, so admin-server's answer is structurally always
-// empty for it. GetDaemon/ResolveDaemon/ResumeDaemon 404 there for the same
-// reason.
-//
-// This only ever manifested in a packaged build. In dev the renderer is
-// same-origin, getControlPlaneTransport() returns null, and the Vite proxy
-// sends `/reliant.v1.*` to reliant-api — the correct backend by accident. So
-// the bug was invisible until prod, where it read as "you have no daemon" and
-// sent a user who HAD a working daemon into onboarding's compute step.
-export const createDaemonRegistryClient = (): Client<typeof DaemonRegistryService> => {
-  return createClient(DaemonRegistryService, getTransport());
-};
-
-// TokenService is reliant's ONE machine-credential surface (`rlat_` access
-// tokens). It is served ONLY by reliant's api-server, which fronts the
-// deployment's token authority (control-plane when hosted, its own store when
-// self-hosted). admin-server neither serves nor forwards `reliant.v1.*` token
-// RPCs any more, so routing this at the control-plane transport would 404 in
-// a packaged build — the same wrong-host trap as the registry above.
-export const createTokenClient = (): Client<typeof TokenService> => {
-  return createClient(TokenService, getTransport());
-};
-
-export const createQuestionClient = (): Client<typeof QuestionService> => {
-  return createClient(QuestionService, getTransport());
-};
-
-// ConnectorService manages grants for third-party MCP clients. Unlike the
-// daemon registry/token RPCs it is served by the reliant API (that is where
-// the daemon router and the /mcp endpoint live), so it uses the normal
-// transport rather than the control-plane one.
-export const createConnectorClient = (): Client<typeof ConnectorService> => {
-  return createClient(ConnectorService, getTransport());
-};
-
-// TriggerService (automations) is served by reliant's api-server: the triggers
-// table and the Temporal schedules it converges live there.
-export const createTriggerClient = (): Client<typeof TriggerService> => {
-  return createClient(TriggerService, getTransport());
-};
-
-// ConnectionService (saved logins to integrations) is served by reliant's
-// api-server, like TriggerService.
-export const createConnectionClient = (): Client<typeof ConnectionService> => {
-  return createClient(ConnectionService, getTransport());
-};
-
-// RunService (the engine's run API, and the cross-cutting run list) is served
-// by reliant's api-server, like TriggerService.
-export const createRunClient = (): Client<typeof RunService> => {
-  return createClient(RunService, getTransport());
-};
-
-// InboxService (everything waiting on the user, across chats) is served by
-// reliant's api-server, like RunService.
-export const createInboxClient = (): Client<typeof InboxService> => {
-  return createClient(InboxService, getTransport());
-};
-
-// Singleton instances (lazy-initialized)
-let _systemClient: Client<typeof SystemService> | null = null;
-let _planClient: Client<typeof PlanService> | null = null;
-let _taskClient: Client<typeof TaskService> | null = null;
-let _catalogClient: Client<typeof CatalogService> | null = null;
-let _projectClient: Client<typeof ProjectService> | null = null;
-let _repoClient: Client<typeof RepoService> | null = null;
-let _worktreeClient: Client<typeof WorktreeService> | null = null;
-let _approvalClient: Client<typeof ApprovalService> | null = null;
-let _chatClient: Client<typeof ChatService> | null = null;
-let _messageClient: Client<typeof MessageService> | null = null;
-let _settingsClient: Client<typeof SettingsService> | null = null;
-let _mcpClient: Client<typeof MCPService> | null = null;
-let _workflowClient: Client<typeof WorkflowService> | null = null;
-let _filesystemClient: Client<typeof FileSystemService> | null = null;
-let _backgroundClient: Client<typeof BackgroundService> | null = null;
-let _packageCommandsClient: Client<typeof PackageCommandsService> | null = null;
-let _streamingClient: Client<typeof StreamingService> | null = null;
-let _terminalClient: Client<typeof TerminalService> | null = null;
-let _attachmentClient: Client<typeof AttachmentService> | null = null;
-let _toolCallClient: Client<typeof ToolCallService> | null = null;
-let _presetClient: Client<typeof PresetService> | null = null;
-let _scenarioClient: Client<typeof ScenarioService> | null = null;
-let _daemonRegistryClient: Client<typeof DaemonRegistryService> | null = null;
-let _tokenClient: Client<typeof TokenService> | null = null;
-let _questionClient: Client<typeof QuestionService> | null = null;
-let _connectorClient: Client<typeof ConnectorService> | null = null;
-let _triggerClient: Client<typeof TriggerService> | null = null;
-let _runClient: Client<typeof RunService> | null = null;
-let _inboxClient: Client<typeof InboxService> | null = null;
-let _connectionClient: Client<typeof ConnectionService> | null = null;
-
-export const getSystemClient = (): Client<typeof SystemService> => {
-  if (!_systemClient) {
-    _systemClient = createSystemClient();
-  }
-  return _systemClient;
-};
-
-export const getPlanClient = (): Client<typeof PlanService> => {
-  if (!_planClient) {
-    _planClient = createPlanClient();
-  }
-  return _planClient;
-};
-
-export const getTaskClient = (): Client<typeof TaskService> => {
-  if (!_taskClient) {
-    _taskClient = createTaskClient();
-  }
-  return _taskClient;
-};
-
-export const getCatalogClient = (): Client<typeof CatalogService> => {
-  if (!_catalogClient) {
-    _catalogClient = createCatalogClient();
-  }
-  return _catalogClient;
-};
-
-
-export const getProjectClient = (): Client<typeof ProjectService> => {
-  if (!_projectClient) {
-    _projectClient = createProjectClient();
-  }
-  return _projectClient;
-};
-
-export const getWorktreeClient = (): Client<typeof WorktreeService> => {
-  if (!_worktreeClient) {
-    _worktreeClient = createWorktreeClient();
-  }
-  return _worktreeClient;
-};
-
-export const getRepoClient = (): Client<typeof RepoService> => {
-  if (!_repoClient) {
-    _repoClient = createRepoClient();
-  }
-  return _repoClient;
-};
-
-export const getApprovalClient = (): Client<typeof ApprovalService> => {
-  if (!_approvalClient) {
-    _approvalClient = createApprovalClient();
-  }
-  return _approvalClient;
-};
-
-
-export const getChatClient = (): Client<typeof ChatService> => {
-  if (!_chatClient) {
-    _chatClient = createChatClient();
-  }
-  return _chatClient;
-};
-
-export const getMessageClient = (): Client<typeof MessageService> => {
-  if (!_messageClient) {
-    _messageClient = createMessageClient();
-  }
-  return _messageClient;
-};
-
-export const getSettingsClient = (): Client<typeof SettingsService> => {
-  if (!_settingsClient) {
-    _settingsClient = createSettingsClient();
-  }
-  return _settingsClient;
-};
-
-export const getMCPClient = (): Client<typeof MCPService> => {
-  if (!_mcpClient) {
-    _mcpClient = createMCPClient();
-  }
-  return _mcpClient;
-};
-
-export const getWorkflowClient = (): Client<typeof WorkflowService> => {
-  if (!_workflowClient) {
-    _workflowClient = createWorkflowClient();
-  }
-  return _workflowClient;
-};
-
-export const getFileSystemClient = (): Client<typeof FileSystemService> => {
-  if (!_filesystemClient) {
-    _filesystemClient = createFileSystemClient();
-  }
-  return _filesystemClient;
-};
-
-export const getDaemonFileSystemClient = (): Client<typeof FileSystemService> => {
-  if (!_filesystemClient) {
-    _filesystemClient = createDaemonFileSystemClient();
-  }
-  return _filesystemClient;
-};
-
-export const getBackgroundClient = (): Client<typeof BackgroundService> => {
-  if (!_backgroundClient) {
-    _backgroundClient = createBackgroundClient();
-  }
-  return _backgroundClient;
-};
-
-export const getPackageCommandsClient = (): Client<typeof PackageCommandsService> => {
-  if (!_packageCommandsClient) {
-    _packageCommandsClient = createPackageCommandsClient();
-  }
-  return _packageCommandsClient;
-};
-
-export const getStreamingClient = (): Client<typeof StreamingService> => {
-  if (!_streamingClient) {
-    _streamingClient = createStreamingClient();
-  }
-  return _streamingClient;
-};
-
-export const getTerminalClient = (): Client<typeof TerminalService> => {
-  if (!_terminalClient) {
-    _terminalClient = createTerminalClient();
-  }
-  return _terminalClient;
-};
-
-export const getAttachmentClient = (): Client<typeof AttachmentService> => {
-  if (!_attachmentClient) {
-    _attachmentClient = createAttachmentClient();
-  }
-  return _attachmentClient;
-};
-
-export const getToolCallClient = (): Client<typeof ToolCallService> => {
-  if (!_toolCallClient) {
-    _toolCallClient = createToolCallClient();
-  }
-  return _toolCallClient;
-};
-
-export const getPresetClient = (): Client<typeof PresetService> => {
-  if (!_presetClient) {
-    _presetClient = createPresetClient();
-  }
-  return _presetClient;
-};
-
-export const getScenarioClient = (): Client<typeof ScenarioService> => {
-  if (!_scenarioClient) {
-    _scenarioClient = createScenarioClient();
-  }
-  return _scenarioClient;
-};
-
-export const getDaemonRegistryClient = (): Client<typeof DaemonRegistryService> => {
-  if (!_daemonRegistryClient) {
-    _daemonRegistryClient = createDaemonRegistryClient();
-  }
-  return _daemonRegistryClient;
-};
-
-export const getTokenClient = (): Client<typeof TokenService> => {
-  if (!_tokenClient) {
-    _tokenClient = createTokenClient();
-  }
-  return _tokenClient;
-};
-
-export const getConnectorClient = (): Client<typeof ConnectorService> => {
-  if (!_connectorClient) {
-    _connectorClient = createConnectorClient();
-  }
-  return _connectorClient;
-};
-
-export const getQuestionClient = (): Client<typeof QuestionService> => {
-  if (!_questionClient) {
-    _questionClient = createQuestionClient();
-  }
-  return _questionClient;
-};
-
-export const getTriggerClient = (): Client<typeof TriggerService> => {
-  if (!_triggerClient) {
-    _triggerClient = createTriggerClient();
-  }
-  return _triggerClient;
-};
-
-export const getRunClient = (): Client<typeof RunService> => {
-  if (!_runClient) {
-    _runClient = createRunClient();
-  }
-  return _runClient;
-};
-
-export const getInboxClient = (): Client<typeof InboxService> => {
-  if (!_inboxClient) {
-    _inboxClient = createInboxClient();
-  }
-  return _inboxClient;
-};
-
-export const getConnectionClient = (): Client<typeof ConnectionService> => {
-  if (!_connectionClient) {
-    _connectionClient = createConnectionClient();
-  }
-  return _connectionClient;
-};
-
-// Export for convenience
 export const grpcClient = {
-  system: () => getSystemClient(),
-  plan: () => getPlanClient(),
-  task: () => getTaskClient(),
-  catalog: () => getCatalogClient(),
-  project: () => getProjectClient(),
-  repo: () => getRepoClient(),
-  worktree: () => getWorktreeClient(),
-  approval: () => getApprovalClient(),
-  chat: () => getChatClient(),
-  message: () => getMessageClient(),
-  settings: () => getSettingsClient(),
-  mcp: () => getMCPClient(),
-  workflow: () => getWorkflowClient(),
-  filesystem: () => getFileSystemClient(),
-  daemonFilesystem: () => getDaemonFileSystemClient(),
-  background: () => getBackgroundClient(),
-  packageCommands: () => getPackageCommandsClient(),
-  streaming: () => getStreamingClient(),
-  terminal: () => getTerminalClient(),
-  attachment: () => getAttachmentClient(),
-  toolCall: () => getToolCallClient(),
-  preset: () => getPresetClient(),
-  scenario: () => getScenarioClient(),
-  daemonRegistry: () => getDaemonRegistryClient(),
-  token: () => getTokenClient(),
-  question: () => getQuestionClient(),
-  connector: () => getConnectorClient(),
-  trigger: () => getTriggerClient(),
-  run: () => getRunClient(),
-  inbox: () => getInboxClient(),
-  connection: () => getConnectionClient(),
+  system: getSystemClient,
+  plan: getPlanClient,
+  task: getTaskClient,
+  catalog: getCatalogClient,
+  project: getProjectClient,
+  repo: getRepoClient,
+  worktree: getWorktreeClient,
+  approval: getApprovalClient,
+  chat: getChatClient,
+  message: getMessageClient,
+  settings: getSettingsClient,
+  mcp: getMCPClient,
+  workflow: getWorkflowClient,
+  filesystem: getFileSystemClient,
+  daemonFilesystem: getDaemonFileSystemClient,
+  background: getBackgroundClient,
+  packageCommands: getPackageCommandsClient,
+  streaming: getStreamingClient,
+  terminal: getTerminalClient,
+  attachment: getAttachmentClient,
+  toolCall: getToolCallClient,
+  preset: getPresetClient,
+  scenario: getScenarioClient,
+  daemonRegistry: getDaemonRegistryClient,
+  token: getTokenClient,
+  question: getQuestionClient,
+  connector: getConnectorClient,
+  trigger: getTriggerClient,
+  run: getRunClient,
+  inbox: getInboxClient,
+  connection: getConnectionClient,
 };
