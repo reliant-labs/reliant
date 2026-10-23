@@ -2831,17 +2831,23 @@ The connection follows the workload (`--workload`, default "api"):
                       ManagedDatabase (`--database` when it has several), as
                       the read-only forge_ro role; scratch envs only
                       (lifecycle local or ephemeral)
-Hosted databases, and the databases of real cluster envs, are not reachable
-from forge yet (exit 2).
+  OnHosted            the control plane runs it inside the platform
+                      (AppDatabaseService.QueryDatabase), as forge_ro, and
+                      records it in the audit log and the activity feed
+The databases of real (not scratch) cluster envs are not reachable from forge
+yet (exit 2).
 
 The env's data_access policy (forge.DataAccess) decides who may query:
 open (the default of a local or ephemeral env), audited (the default of any
-other env: pass --confirm-env <env> and a --reason) or deny.
+other env: pass --confirm-env <env> and a --reason) or deny. A hosted env is
+judged by the control plane from the policy its deployed release recorded, and
+an audited one is open to people only (and to a db:query grant).
 
 Output: a table, or --format json|csv. --json is --format json; the document
 carries ok, exit_code and error like every other forge --json verb, plus
 schema "forge.db.query/v1", scope, columns[{name,pg_type}], rows, row_count,
-truncated, truncated_by, cells_truncated, duration_ms and bytes.
+truncated, truncated_by, cells_truncated, duration_ms and bytes; a hosted
+query adds audit{id, sql_sha256, replica}.
 
 Exit codes: 0 rows returned; 1 the statement or the request is wrong (refused
 by the guard or the read-only transaction, a SQL error, a permission error, a
@@ -11123,7 +11129,9 @@ List available skills (forge-shipped, project, and user-global).
 The default view is GROUPED and fits on one screen: the start-here skills
 first, then one row per skill group with its sub-skills collapsed into a
 '+N' count. Every collapsed sub-skill is still loadable by its exact path
-('forge skill load db/seeding'). Pass --all for the exhaustive flat table.
+('forge skill load db/seeding'). Pass --all for the exhaustive flat table, or a
+group name ('forge skill list observability') for that group's parent and every
+sub-skill, each with its full path and description.
 
 'forge skill search <keyword>' is usually faster than reading either view —
 it scores paths, descriptions and BODIES, so it finds skills whose title
@@ -11136,7 +11144,7 @@ them, or use 'forge project upgrade list' to see the migrations that actually
 apply to this project's pinned forge_version.
 
 ```
-reliant forge skill list [flags]
+reliant forge skill list [group] [flags]
 ```
 
 **Flags:**

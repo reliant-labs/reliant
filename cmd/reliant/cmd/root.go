@@ -26,6 +26,8 @@ import (
 
 	"github.com/spf13/cobra"
 
+	forgecli "github.com/reliant-labs/forge/cli"
+
 	"github.com/reliant-labs/reliant/internal/diskwatch"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/runenv"
@@ -120,13 +122,15 @@ Reliant server components.`,
 	return root
 }
 
-// Execute runs the root command, and exits the process with status 1 when it
-// fails, having printed the error to stderr.
+// Execute runs the root command, and exits the process with the failure's
+// status when it fails, having printed the error to stderr. The status is
+// forge's own resolution (forgecli.ExitCode): `reliant forge …` verbs print the
+// same number as their --json document's exit_code, and any other error is 1.
 func Execute() {
 	root := NewRootCmd()
 	if err := root.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		os.Exit(forgecli.ExitCode(err))
 	}
 }
 
