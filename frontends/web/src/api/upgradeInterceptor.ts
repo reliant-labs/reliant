@@ -4,12 +4,13 @@
  * `services/controlPlane/client.ts`).
  *
  * Background: control-plane signals two kinds of "UI should intervene"
- * conditions via response headers on Connect errors:
+ * conditions via the reason on Connect errors (lib/errorReasons.ts):
  *
- *   1. Quota exhausted (Code.ResourceExhausted, x-reliant-reason set)
- *      -> opens UpgradeRequiredModal with the reason + optional upgrade URL.
- *   2. Billing email missing (Code.InvalidArgument,
- *      x-reliant-reason=billing_email_missing)
+ *   1. Quota exhausted (Code.ResourceExhausted with a reason)
+ *      -> opens UpgradeRequiredModal with the reason; its CTA routes to
+ *      billing by reason.
+ *   2. Billing email missing (Code.InvalidArgument, reason
+ *      billing_email_missing)
  *      -> opens BillingEmailRequiredModal so the user can call
  *      BillingService.UpdateBillingEmail and retry.
  *
@@ -33,14 +34,8 @@
 
 import { ConnectError, Code } from "@connectrpc/connect";
 import type { Interceptor } from "@connectrpc/connect";
+import { ENTITLEMENT_REASONS, errorReason, hasErrorReason } from "../lib/errorReasons";
 import { logger } from "../lib/logger";
-
-const RELIANT_REASON_HEADER = "x-reliant-reason";
-const RELIANT_UPGRADE_URL_HEADER = "x-reliant-upgrade-url";
-
-// Stable contract with control-plane; mirrors
-// internal/service/svcbilling/connecterr.go.
-const BILLING_EMAIL_MISSING_REASON = "billing_email_missing";
 
 let _backendModalInFlight = false;
 
@@ -51,11 +46,9 @@ export const upgradeInterceptor: Interceptor = (next) => async (req) => {
     if (!(error instanceof ConnectError)) {
       throw error;
     }
-    const reason = error.metadata.get(RELIANT_REASON_HEADER) ?? "";
-
     if (
       error.code === Code.InvalidArgument &&
-      reason === BILLING_EMAIL_MISSING_REASON
+      hasErrorReason(error, "billing_email_missing")
     ) {
       if (!_backendModalInFlight) {
         openModalOnce("billing-email-required", {
@@ -65,13 +58,11 @@ export const upgradeInterceptor: Interceptor = (next) => async (req) => {
       throw error;
     }
 
-    if (error.code === Code.ResourceExhausted && reason) {
+    if (error.code === Code.ResourceExhausted && hasErrorReason(error, ENTITLEMENT_REASONS)) {
       if (!_backendModalInFlight) {
-        const upgradeUrl = error.metadata.get(RELIANT_UPGRADE_URL_HEADER) ?? "";
         openModalOnce("upgrade-required", {
-          reason,
+          reason: errorReason(error) ?? "",
           message: error.rawMessage || error.message,
-          upgradeUrl,
         });
       }
       throw error;

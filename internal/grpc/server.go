@@ -218,17 +218,21 @@ var corsAllowedHeaders = []string{
 // fails when a header it reads is missing here.
 var corsExposedHeaders = []string{
 	"Link", "Content-Range", "Accept-Ranges", "Content-Length",
-	// The billing/quota reason and upgrade link on a Connect error. The web
-	// client's upgradeInterceptor (frontends/web/src/api/upgradeInterceptor.ts) reads
-	// them on errors from every transport to open the upgrade and
-	// billing-email modals instead of a raw error toast.
-	"X-Reliant-Reason", "X-Reliant-Upgrade-Url",
 	// forge's svcerr.ReasonHeader: the stable reason on a Connect error that
-	// the web client branches on (a protected environment's step_up_required,
-	// services/forge/secretStore.ts). The control plane exposes it through
-	// forge's DefaultCORSExposeHeaders; any reliant RPC that returns one must
-	// be readable the same way.
+	// the web client branches on instead of the message text — every reader
+	// goes through frontends/web/src/lib/errorReasons.ts. The control plane
+	// exposes it through forge's DefaultCORSExposeHeaders; a reliant RPC that
+	// returns one must be readable the same way, or a cross-origin browser
+	// (the hosted SPA, Electron's app://) reads every reason as absent.
 	"X-Forge-Error-Reason",
+	// The scopes a scope_missing refusal names (errorReasons.ts errorScopes),
+	// so the deploy panel says which grant to ask for without parsing prose.
+	"X-Forge-Error-Scopes",
+	// The pre-svcerr reason header (forge_api_disabled here; the billing and
+	// daemon-gate reasons on the control plane). Read as a fallback until
+	// both servers send X-Forge-Error-Reason (P9 R3, expand/contract), then
+	// deleted with the web's fallback.
+	"X-Reliant-Reason",
 }
 
 // newCORSHandler builds the CORS middleware that wraps the entire mux. An

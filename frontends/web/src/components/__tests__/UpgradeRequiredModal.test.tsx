@@ -60,7 +60,7 @@ function renderModal(reason: string, message = "") {
     <UpgradeRequiredModal
       isOpen
       onClose={() => {}}
-      data={{ reason, message, upgradeUrl: "" }}
+      data={{ reason, message }}
     />,
   );
 }

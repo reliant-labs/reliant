@@ -20,16 +20,20 @@
  * daemon WAS reached and did answer, so it sent people to debug connectivity
  * over a permissions problem.
  *
- * ── WHY MATCH ON THE MESSAGE ──────────────────────────────────────────
+ * ── READ BY REASON ─────────────────────────────────────────────────────
  *
- * There is no structured field to read. forge surfaces
- * internal/cloud.ErrNoCredential's text, whose wording is deliberately stable
- * and actionable, and control-plane's permission refusals arrive as Connect
- * errors whose code is already flattened into the message by the time the plan
- * call rejects. Matching is therefore the honest option, and it is written to
- * FAIL OPEN: anything unrecognised stays a transport error, so a real
- * unreachable daemon is never relabelled as a permissions problem.
+ * The plan call's error names which with a reason (lib/errorReasons.ts):
+ * `scope_missing`, with the scopes in `x-forge-error-scopes`, or
+ * `no_control_plane_credential`. Until the servers send them (R3s-rel /
+ * R3s-cp) the old message markers answer instead — forge's
+ * internal/cloud.ErrNoCredential text, and control-plane's permission refusal
+ * flattened into the message — and that fallback lives in errorReasons, not
+ * here. Either way it FAILS OPEN: anything unrecognised stays a transport
+ * error, so a real unreachable daemon is never relabelled as a permissions
+ * problem.
  */
+
+import { errorScopes, hasErrorReason } from "@/lib/errorReasons";
 
 /** How a pre-plan failure should be presented. */
 export type DeployAuthzBlock =
@@ -51,44 +55,19 @@ export type DeployAuthzBlock =
 export function classifyDeployAuthzError(
   error: Error | null | undefined
 ): DeployAuthzBlock | null {
-  const message = (error?.message ?? "").toLowerCase();
-  if (message === "") return null;
+  if (!error) return null;
 
   // PERMISSION IS CHECKED FIRST. A permission refusal can mention a
   // credential in passing, but a missing credential can never name a
   // permission — so the more specific test has to run first or the two
   // collapse back into one.
-  if (
-    message.includes("permission_denied") ||
-    message.includes("permission denied") ||
-    message.includes("permissions do not include")
-  ) {
-    return { kind: "permission-denied", permission: extractPermission(error?.message ?? "") };
+  if (hasErrorReason(error, "scope_missing")) {
+    return { kind: "permission-denied", permission: errorScopes(error).join(", ") };
   }
 
-  if (
-    message.includes("no control-plane credential") ||
-    message.includes("forge login") ||
-    message.includes("unauthenticated")
-  ) {
+  if (hasErrorReason(error, "no_control_plane_credential")) {
     return { kind: "not-authorized" };
   }
 
   return null;
-}
-
-/**
- * extractPermission pulls the scope out of a refusal.
- *
- * Scopes are `family:verb` from a closed vocabulary
- * (forge/pkg/accesstoken.AllScopes), which is distinctive enough to find
- * without parsing the sentence around it. An empty string when none is named —
- * the panel then asks for "the permission this deploy needs", which is still
- * more use than a generic failure.
- */
-function extractPermission(message: string): string {
-  const match = message.match(
-    /\b(deploy|secret|domain|cluster|token|llm|proxy|mcp|daemon|reliant):[a-z]+\b/
-  );
-  return match ? match[0] : "";
 }

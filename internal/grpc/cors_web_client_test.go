@@ -98,8 +98,8 @@ func TestCORSExposesEveryHeaderTheWebClientReads(t *testing.T) {
 	webSrc := webSourceDir(t)
 
 	read := scanWebHeaderNames(t, webSrc, responseHeaderGetRe, nil)
-	if _, ok := read["x-reliant-reason"]; !ok {
-		t.Fatalf("scanner found no x-reliant-reason read in frontends/web/src (found %v); the extraction regex is broken", sortedKeys(read))
+	if _, ok := read["x-forge-error-reason"]; !ok {
+		t.Fatalf("scanner found no x-forge-error-reason read in frontends/web/src (found %v); the extraction regex is broken", sortedKeys(read))
 	}
 
 	handler := newCORSHandler([]string{webClientTestOrigin})(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))

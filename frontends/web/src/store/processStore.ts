@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { hasErrorReason } from "../lib/errorReasons";
 import { logger } from "../lib/logger";
 import {
   backgroundGrpc,
@@ -157,8 +158,7 @@ export const useProcessStore = create<ProcessState>((set, get) => ({
       const errorMessage = error instanceof Error ? error.message : "Failed to kill process";
 
       // If process was already stopped, just refetch to sync state (not a real error)
-      const isAlreadyStopped = errorMessage.toLowerCase().includes("not running") ||
-                               errorMessage.toLowerCase().includes("already stopped");
+      const isAlreadyStopped = hasErrorReason(error, "process_not_running");
 
       if (isAlreadyStopped) {
         logger.info("[ProcessStore] Process was already stopped", { processId });

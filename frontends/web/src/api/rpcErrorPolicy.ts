@@ -18,9 +18,10 @@
  *
  *  - MACHINE WAIT (ELECTRON-AV, 162 events/day from one user). A file, process
  *    or terminal read made while the user's machine is still starting, waking
- *    or suspended fails as Unavailable carrying the "no daemon connected"
- *    marker. That is a state the UI renders and retries (useDaemonWait), not a
- *    failure; the file tree reported it on every 2s retry.
+ *    or suspended fails as Unavailable carrying a daemon-connecting reason
+ *    (lib/errorReasons.ts DAEMON_CONNECTING_REASONS). That is a state the UI
+ *    renders and retries (useDaemonWait), not a failure; the file tree
+ *    reported it on every 2s retry.
  *
  *  - DEADLINE (2026-10-10, the "[gRPC] Request error" page). The server ran
  *    out of time — most often a daemon command a busy machine did not answer
@@ -35,7 +36,7 @@
  *    "HTTP 404". That is an app older than the server (desktop 1.7.16 calling
  *    the retired ChatService/CreateChat) — the fix is an update prompt.
  *
- * Classification is by code AND marker, never by message alone, so a real
+ * Classification is by code AND reason, never by message alone, so a real
  * Unavailable (server down) or a real Unimplemented sent by a handler still
  * reports.
  */
@@ -43,6 +44,7 @@
 import { Code, ConnectError } from "@connectrpc/connect";
 import { isDaemonConnectingError } from "../lib/daemon-errors";
 import { ACCOUNT_REQUIRED_REASON } from "../lib/accountRequired";
+import { hasErrorReason } from "../lib/errorReasons";
 
 export type RpcFailureKind =
   /** The request was cancelled; the error is a consequence of that. */
@@ -112,7 +114,7 @@ export function classifyRpcFailure(error: unknown, ctx: RpcFailureContext): RpcF
   if (!(error instanceof ConnectError)) return "report";
   // By reason, whatever the code: it is a state the UI renders (the identity
   // modal), and must not depend on the server's choice of status code.
-  if (error.metadata.get("x-reliant-reason") === ACCOUNT_REQUIRED_REASON) {
+  if (hasErrorReason(error, ACCOUNT_REQUIRED_REASON)) {
     return "account-required";
   }
   if (EXPECTED_CODES.has(error.code)) return "expected";

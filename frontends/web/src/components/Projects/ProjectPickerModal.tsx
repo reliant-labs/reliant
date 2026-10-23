@@ -114,9 +114,9 @@ export function ProjectPickerModal({
       });
     } catch (err) {
       // If project already exists at this path, find and open it
-      const isAlreadyExists =
-        (err instanceof ConnectError && err.code === Code.AlreadyExists) ||
-        (err instanceof Error && (err.message.includes("already exists") || err.message.includes("409")));
+      // The server classifies a duplicate path as AlreadyExists; the code is
+      // the signal, not the message.
+      const isAlreadyExists = err instanceof ConnectError && err.code === Code.AlreadyExists;
       if (isAlreadyExists) {
         const { projects, loadProjects } = useProjectStore.getState();
         let existing = projects.find((p) => p.path === formData.path);

@@ -13,6 +13,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import { Code, ConnectError } from "@connectrpc/connect";
+import { hasErrorReason } from "@/lib/errorReasons";
 import { Github, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
@@ -27,13 +28,7 @@ export function isMissingGitCredentialError(error: unknown): boolean {
   if (error instanceof ConnectError && error.code === Code.FailedPrecondition) {
     return true;
   }
-  if (error instanceof Error && error.message.includes("no git credential found")) {
-    return true;
-  }
-  if (typeof error === "string" && error.includes("no git credential found")) {
-    return true;
-  }
-  return false;
+  return hasErrorReason(error, "git_credential_not_connected");
 }
 
 function formatUpdated(updatedAt: string): string {

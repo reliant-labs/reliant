@@ -29,6 +29,7 @@ import {
   MONACO_FONT_FAMILY,
 } from "../../lib/monacoTheme";
 import { getRelativePath } from "../../lib/fileUtils";
+import { Code, ConnectError } from "@connectrpc/connect";
 import { isDaemonConnectingError } from "../../lib/daemon-errors";
 import { sendWithDaemonWait } from "../../lib/daemon-retry";
 import { DaemonWaitState } from "../DaemonWaitState";
@@ -136,15 +137,17 @@ export function FileViewerTab({ file, worktreeId, isActive, viewerId, embedded =
       return "Failed to load file";
     }
 
-    const errorMessage = err.message.toLowerCase();
-    if (errorMessage.includes("404") || errorMessage.includes("not found")) {
-      return "File not found. It may have been deleted or moved.";
-    }
-    if (errorMessage.includes("403") || errorMessage.includes("forbidden")) {
-      return "Access denied. You don't have permission to view this file.";
-    }
-    if (errorMessage.includes("415") || errorMessage.includes("unsupported media type")) {
-      return `Cannot preview ${file.name}. This file type is not supported for inline viewing.`;
+    // By Connect code, never by the message: the server's text is display
+    // copy. FailedPrecondition is the binary-file refusal (isBinaryFileError).
+    if (err instanceof ConnectError) {
+      switch (err.code) {
+        case Code.NotFound:
+          return "File not found. It may have been deleted or moved.";
+        case Code.PermissionDenied:
+          return "Access denied. You don't have permission to view this file.";
+        case Code.FailedPrecondition:
+          return `Cannot preview ${file.name}. This file type is not supported for inline viewing.`;
+      }
     }
 
     return err.message;

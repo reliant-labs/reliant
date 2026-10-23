@@ -22,6 +22,8 @@
 
 import { Code, ConnectError } from "@connectrpc/connect";
 
+import { hasErrorReason } from "@/lib/errorReasons";
+
 export type ObsErrorKind = "not-set-up" | "denied" | "invalid" | "over-quota" | "too-broad" | "unavailable";
 
 export function obsErrorKind(error: unknown): ObsErrorKind {
@@ -74,7 +76,7 @@ export type AlertingErrorKind = ObsErrorKind | "not-configured" | "in-use";
 
 export function alertingErrorKind(error: unknown): AlertingErrorKind {
   if (error instanceof ConnectError) {
-    if (error.code === Code.Unavailable && /not configured/i.test(error.rawMessage || error.message)) return "not-configured";
+    if (hasErrorReason(error, "observability_not_configured")) return "not-configured";
     if (error.code === Code.FailedPrecondition) return "in-use";
   }
   return obsErrorKind(error);
@@ -104,9 +106,9 @@ export function alertingRetry(failureCount: number, error: unknown): boolean {
 export type DeliveryErrorKind = ObsErrorKind | "not-member" | "env-unavailable";
 
 export function deliveryErrorKind(error: unknown): DeliveryErrorKind {
+  if (hasErrorReason(error, "not_org_member")) return "not-member";
   if (error instanceof ConnectError && error.code === Code.PermissionDenied) {
     const message = error.rawMessage || error.message;
-    if (/not a member/i.test(message)) return "not-member";
     if (/environments? .*not available/i.test(message)) return "env-unavailable";
   }
   return obsErrorKind(error);
