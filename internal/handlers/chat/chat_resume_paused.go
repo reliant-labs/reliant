@@ -70,6 +70,9 @@ func (s *Service) resumePausedRun(
 	if err != nil || outcome.Kind != runs.OutcomeResumed {
 		return outcome, err
 	}
+	// A message that resumes the chat resumes all of it: every sub-agent a
+	// provider stopped goes on too, without a message of its own.
+	s.wakeChatBestEffort(ctx, chat, "", "a message resumed the chat")
 
 	// Told only now: the run that has the moved models is awake. A fresh run
 	// (the caller's recovery) makes and announces its own.

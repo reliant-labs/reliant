@@ -174,3 +174,40 @@ func ListChatProviderBackoff(ctx context.Context, db orm.Context, chatID string)
 // bind or scan.
 type ProviderBackoffExtra struct {
 }
+
+// listCapacityWakeTargetsSQL: the root workflow ids of userID's chats whose run
+// is live and may have a thread blocked on a provider — a thread parked on a
+// usage-limit wait, a root paused (by itself on a provider failure, or by the
+// user; the run tells the two apart), or a sub-agent run stopped on a failure.
+// A capacity wake sent to one of these finds whatever is blocked; sent to a run
+// with nothing blocked it is a no-op, so the filter only keeps the fan-out to
+// the chats it can matter to.
+const listCapacityWakeTargetsSQL = `
+SELECT c.workflow_id
+FROM chats c
+JOIN workflows w ON w.id = c.workflow_id
+WHERE c.user_id = ?0
+  AND (w.state = 2 OR (w.state = 3 AND w.stop_reason = 3))
+  AND (
+        (w.state = 3 AND w.stop_reason = 3)
+     OR EXISTS (
+            SELECT 1 FROM provider_backoff b
+            WHERE b.chat_id = c.id
+              AND b.waiting_since IS NOT NULL
+              AND b.reason IN ('` + core.ReasonUsageLimit + `', '` + core.ReasonUsageLimitProbe + `'))
+     OR EXISTS (
+            SELECT 1 FROM workflows s
+            WHERE s.chat_id = c.id AND s.id <> c.workflow_id
+              AND s.state = 3 AND s.stop_reason = 2)
+  )
+ORDER BY c.workflow_id`
+
+// ListCapacityWakeTargets returns the root workflow ids of userID's chats a
+// capacity wake can matter to (listCapacityWakeTargetsSQL).
+func ListCapacityWakeTargets(ctx context.Context, db orm.Context, userID string) ([]string, error) {
+	var ids []string
+	if err := db.Bun().NewRaw(listCapacityWakeTargetsSQL, userID).Scan(ctx, &ids); err != nil {
+		return nil, err
+	}
+	return ids, nil
+}

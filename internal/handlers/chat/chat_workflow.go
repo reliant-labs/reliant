@@ -127,8 +127,22 @@ func (s *Service) UpdateWorkflowParams(
 			}
 		}
 		s.postModelFallbackNotices(ctx, req.Msg.ChatId, workflowID, workflowID, news)
+		modelChanged := false
+		if newModel, ok := stateUpdate["model"]; ok {
+			modelChanged = s.checkParamsActuallyChanged(ctx, workflowID, map[string]interface{}{"model": newModel})
+		}
 		if err := s.signalParamUpdate(ctx, workflowID, stateUpdate); err != nil {
 			return nil, err
+		}
+		if modelChanged {
+			// Switching the chat's model is a way out of a provider's limit,
+			// for the whole chat: every thread blocked on a provider retries
+			// now, on the new model where it follows the chat's. A thread
+			// pinned to its own model on the provider it is waiting on may
+			// continue on the switched-to one until that provider resets —
+			// switching providers is the user opting the chat in
+			// (CapacityWakeSignal.UseModel).
+			s.wakeChatBestEffort(ctx, chat, s.launcher().ResolvedModelAtDriver(ctx, userID, stateUpdate["model"]), "the chat's model changed")
 		}
 	}
 

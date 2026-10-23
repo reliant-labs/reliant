@@ -109,6 +109,9 @@ func (s *Service) connectAccount(ctx context.Context, in signIn) (signInResult, 
 	if err := repo.EmitUserRefetch(ctx, in.userID, db.RefetchConfigHealth, db.RefetchOpts{}); err != nil {
 		logging.WarnContext(ctx, "Failed to emit config_health refetch after provider sign-in", "provider", in.provider, "error", err)
 	}
+	// A sign-in adds capacity (a new account) or restores it (a re-auth):
+	// chats blocked on a provider go on now rather than at their resets.
+	s.wakeChats(ctx, in.userID, "a "+in.provider+" sign-in")
 
 	limits, _ := repo.ListAccountLimits(ctx, in.userID)
 	var l *core.LimitState
@@ -240,4 +243,12 @@ func FetchGitHubUser(ctx context.Context, accessToken string) (GitHubUser, error
 		return id, fmt.Errorf("github user: %w", err)
 	}
 	return id, nil
+}
+
+// wakeChats tells the user's chats blocked on a provider there is capacity
+// again.
+func (s *Service) wakeChats(ctx context.Context, userID, why string) {
+	if s.deps.ChatWaker != nil {
+		s.deps.ChatWaker.WakeUserChats(ctx, userID, why)
+	}
 }

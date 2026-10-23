@@ -24,11 +24,13 @@ import (
 type usageLimitTemporalClient struct {
 	terminateTestTemporalClient
 
-	signals []string
+	signals  []string
+	payloads []interface{}
 }
 
-func (c *usageLimitTemporalClient) SignalWorkflow(_ context.Context, workflowID, _, name string, _ interface{}) error {
+func (c *usageLimitTemporalClient) SignalWorkflow(_ context.Context, workflowID, _, name string, arg interface{}) error {
 	c.signals = append(c.signals, workflowID+":"+name)
+	c.payloads = append(c.payloads, arg)
 	return nil
 }
 
@@ -57,10 +59,10 @@ func seedWaitingRun(t *testing.T, repo *db.Repo, ctx context.Context) (chatID st
 	return chatID
 }
 
-// "Retry now" signals the waiting run, and only a run that is waiting: the
-// button is drawn from the chat's activity, which may have moved on by the time
-// the click lands.
-func TestRetryUsageLimitWait_SignalsOnlyAWaitingRun(t *testing.T) {
+// "Retry now" sends the chat's live run a capacity wake — whichever of its
+// threads is waiting, the root's or a sub-agent's, which the chat's activity
+// does not show — and a chat whose run has ended is left alone.
+func TestRetryUsageLimitWait_SignalsOnlyALiveRun(t *testing.T) {
 	t.Parallel()
 
 	repo, cleanup := db.SetupTestDB(t)
@@ -74,14 +76,23 @@ func TestRetryUsageLimitWait_SignalsOnlyAWaitingRun(t *testing.T) {
 	resp, err := svc.RetryUsageLimitWait(ctx, connect.NewRequest(&reliantv1.RetryUsageLimitWaitRequest{ChatId: chatID}))
 	require.NoError(t, err)
 	assert.True(t, resp.Msg.Woken)
-	assert.Equal(t, []string{chatID + ":" + v2.UsageLimitRetrySignalName}, temporal.signals)
+	assert.Equal(t, []string{chatID + ":" + v2.CapacityWakeSignalName}, temporal.signals)
 
-	// The wait is over (the run retried and succeeded): a late click is a no-op.
-	require.NoError(t, repo.ClearUsageLimitWait(ctx, chatID, "", time.Now()))
+	// Only a sub-agent waits now: the chat no longer reads as waiting, and the
+	// run is still woken — the agent's wait is what the click is for.
+	require.NoError(t, repo.ClearUsageLimitWait(ctx, chatID, chatID, time.Now()))
+	require.NoError(t, repo.RecordUsageLimitWait(ctx, chatID, chatID+"-agent", "Anthropic", false, time.Now().Add(time.Hour), time.Now()))
 	resp, err = svc.RetryUsageLimitWait(ctx, connect.NewRequest(&reliantv1.RetryUsageLimitWaitRequest{ChatId: chatID}))
 	require.NoError(t, err)
-	assert.False(t, resp.Msg.Woken, "a run that is not waiting is left alone")
-	assert.Len(t, temporal.signals, 1)
+	assert.True(t, resp.Msg.Woken, "a sub-agent's wait is woken from the chat")
+	assert.Len(t, temporal.signals, 2)
+
+	// The run is over: a late click is a no-op.
+	require.NoError(t, repo.UpdateWorkflowStatus(ctx, chatID, db.Completed()))
+	resp, err = svc.RetryUsageLimitWait(ctx, connect.NewRequest(&reliantv1.RetryUsageLimitWaitRequest{ChatId: chatID}))
+	require.NoError(t, err)
+	assert.False(t, resp.Msg.Woken, "a run that has ended is left alone")
+	assert.Len(t, temporal.signals, 2)
 
 	// Someone else's chat is not found, not woken.
 	other := context.WithValue(context.Background(), auth.UserIDContextKey, "someone-else")
@@ -141,7 +152,7 @@ func TestRetryUsageLimitWait_UseModel(t *testing.T) {
 		_, err := svc.RetryUsageLimitWait(ctx, connect.NewRequest(&reliantv1.RetryUsageLimitWaitRequest{ChatId: chatID}))
 		require.NoError(t, err)
 		require.Len(t, temporal.payloads, 1)
-		assert.Equal(t, v2.UsageLimitRetrySignal{}, temporal.payloads[0])
+		assert.Equal(t, v2.CapacityWakeSignal{}, temporal.payloads[0])
 	})
 
 	t.Run("a model that names no provider is refused", func(t *testing.T) {
@@ -183,7 +194,7 @@ func TestUpdateChatProviderPolicy_WakesAWaitingRun(t *testing.T) {
 	retries := func() int {
 		n := 0
 		for _, sig := range temporal.signals {
-			if sig.Name == v2.UsageLimitRetrySignalName {
+			if sig.Name == v2.CapacityWakeSignalName {
 				n++
 			}
 		}
@@ -196,8 +207,8 @@ func TestUpdateChatProviderPolicy_WakesAWaitingRun(t *testing.T) {
 	setPolicy(t, ctx, service, fx.chatID, reliantv1.ProviderPolicy_ON_LIMIT_FALLBACK, codexOnlyModel)
 	assert.Equal(t, 1, retries(), "opting in wakes the parked run to re-decide")
 
-	require.NoError(t, repo.ClearUsageLimitWait(ctx, fx.chatID, "", time.Now()))
+	require.NoError(t, repo.UpdateWorkflowStatus(ctx, fx.rootThreadID, db.Completed()))
 	setPolicy(t, ctx, service, fx.chatID, reliantv1.ProviderPolicy_ON_LIMIT_WAIT, "")
 	setPolicy(t, ctx, service, fx.chatID, reliantv1.ProviderPolicy_ON_LIMIT_FALLBACK, codexOnlyModel)
-	assert.Equal(t, 1, retries(), "a run that is not waiting is not woken")
+	assert.Equal(t, 1, retries(), "a run that has ended is not woken")
 }

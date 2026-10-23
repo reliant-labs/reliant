@@ -200,7 +200,7 @@ func (s *UsageLimitWaitSuite) TestRetryNow_WakesTheTimerImmediately() {
 		return nil, nil
 	}
 	env.RegisterDelayedCallback(func() {
-		env.SignalWorkflow(UsageLimitRetrySignalName, nil)
+		env.SignalWorkflow(CapacityWakeSignalName, nil)
 	}, 10*time.Minute)
 
 	env.ExecuteWorkflow(DynamicWorkflow, input)
@@ -235,7 +235,7 @@ func (s *UsageLimitWaitSuite) TestRetryNow_SignalWhileNotWaitingIsDropped() {
 	}
 	// Delivered at t=0, before the first wait exists: it sits in the channel.
 	env.RegisterDelayedCallback(func() {
-		env.SignalWorkflow(UsageLimitRetrySignalName, nil)
+		env.SignalWorkflow(CapacityWakeSignalName, nil)
 	}, 0)
 
 	env.ExecuteWorkflow(DynamicWorkflow, input)

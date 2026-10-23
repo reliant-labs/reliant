@@ -4,6 +4,7 @@ package handlers
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -145,6 +146,16 @@ func providerSwitchNotice(provider, model string, until time.Time, probing bool)
 }
 
 // providerReturnNotice is the chat coming back to its own provider.
+// servedBy reports whether a turn served by driver is on provider, which a
+// stay records as the driver id or, from an unrouted failure, its display
+// name. Unknown either way counts as served by it.
+func servedBy(provider, driver string) bool {
+	if provider == "" || driver == "" {
+		return true
+	}
+	return strings.EqualFold(provider, driver) || provider == models.ProviderDisplayName(driver)
+}
+
 func providerReturnNotice(provider, model string) string {
 	return fmt.Sprintf("%s's limit has reset. Back on **%s**.", noticeProviderName(provider), noticeModelName(model))
 }
@@ -204,6 +215,11 @@ func (a *CallLLMActivity) announceRouting(ctx context.Context, chat *db.Chat, th
 func (a *CallLLMActivity) announceReturn(ctx context.Context, chat *db.Chat, thread string, rtx types.RuntimeContext, resolved *resolvedLLMCall) {
 	ret := rtx.FallbackReturn
 	if ret == nil || rtx.FallbackModel != "" {
+		return
+	}
+	// A turn served by another provider than the one the stay left is not a
+	// return to it: the chat was switched off that provider meanwhile.
+	if !servedBy(ret.Provider, resolved.ProviderDriver) {
 		return
 	}
 	own := resolved.ProviderDriver

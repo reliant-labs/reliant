@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 
 	"github.com/reliant-labs/reliant/internal/chatmarkers"
+	"github.com/reliant-labs/reliant/internal/workflow/capacitywake"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 )
 
@@ -42,21 +43,21 @@ const usageLimitFailoverChangeID = "usage-limit-failover"
 // behaviour.
 const usageLimitStayChangeID = "usage-limit-stay"
 
-// UsageLimitRetrySignalName is the signal behind "Retry now": it wakes every
-// thread parked on a usage limit, so each retries its step at once instead of at
-// the reset. A signal sent to a run that is not waiting is dropped on the next
-// wait (see usageLimitWaiter.wait).
-const UsageLimitRetrySignalName = "signal.usage_limit.retry"
+// CapacityWakeSignalName is the chat-wide capacity wake: there may be capacity
+// again (an account was added, re-authed, un-paused or read as no longer
+// limited, the chat's model or provider changed, the user pressed Resume or
+// "Retry now"), so every thread blocked on a provider retries now. It wakes
+// every thread parked on a usage limit. In a run that recorded
+// capacityWakeChangeID it also releases a self-pause armed on a provider
+// failure and resumes every sub-agent that stopped on one (capacity_wake.go).
+// A wake that finds nothing blocked is a no-op.
+//
+// Aliased from the capacitywake leaf package, as ThreadWakeSignalName is from
+// threadwake, so senders that cannot import this package use the same name.
+const CapacityWakeSignalName = capacitywake.SignalName
 
-// UsageLimitRetrySignal is the payload of UsageLimitRetrySignalName. A zero
-// value is a plain "Retry now".
-type UsageLimitRetrySignal struct {
-	// UseModel answers the wait with a cross-provider fallback instead of a
-	// retry on the same provider: "<model>@<driver>". The run continues on it
-	// until the wait's own end (the original provider's earliest reset). It
-	// does not change the chat's policy.
-	UseModel string `json:"use_model,omitempty"`
-}
+// CapacityWakeSignal is the payload of CapacityWakeSignalName.
+type CapacityWakeSignal = capacitywake.Signal
 
 const (
 	// usageLimitMargin is added to a provider's stated reset before retrying:
@@ -300,6 +301,10 @@ type usageLimitWaiter struct {
 	// keepStays is the usage-limit-stay version of this run: a lease outlives
 	// the first turn after its end until that turn is not refused.
 	keepStays bool
+	// capacityWake is the capacity-wake version of this run
+	// (capacityWakeChangeID): it listens from the start and a wake also
+	// resumes the run's other blocked threads (listenFromStart).
+	capacityWake bool
 }
 
 func newUsageLimitWaiter(pauser *pauseCoordinator, tracker *ChildWorkflowTracker, chatID, workflowID, workflowName string) *usageLimitWaiter {
@@ -314,26 +319,44 @@ func newUsageLimitWaiter(pauser *pauseCoordinator, tracker *ChildWorkflowTracker
 	}
 }
 
-// startListening begins counting "Retry now" signals. It starts on the first
-// wait, behind the version gate, so a run that never meets a usage limit has
-// exactly the coroutines it had before. Signals that arrived earlier are
-// dropped: they were aimed at a wait that was not there.
+// startListening begins counting capacity wakes for a run recorded before
+// capacityWakeChangeID. It starts on the first wait, behind the version gate,
+// so such a run that never meets a usage limit has exactly the coroutines it
+// had before. Signals that arrived earlier are dropped: they were aimed at a
+// wait that was not there. A run that records the gate listens from its start
+// instead (listenFromStart), and this is a no-op.
 func (w *usageLimitWaiter) startListening() {
 	if w.listening {
 		return
 	}
 	w.listening = true
-	ch := workflow.GetSignalChannel(w.pauser.root, UsageLimitRetrySignalName)
+	ch := workflow.GetSignalChannel(w.pauser.root, CapacityWakeSignalName)
 	for ch.ReceiveAsync(nil) {
 	}
+	w.listen(ch, nil)
+}
+
+// listenFromStart listens for capacity wakes from the run's start, and on each
+// one, after advancing the waits' epoch, calls onWake: the run's other blocked
+// threads go on too (wakeBlockedThreads). Called once, at run start, by a run
+// that recorded capacityWakeChangeID.
+func (w *usageLimitWaiter) listenFromStart(onWake func(workflow.Context, CapacityWakeSignal)) {
+	w.listening, w.capacityWake = true, true
+	w.listen(workflow.GetSignalChannel(w.pauser.root, CapacityWakeSignalName), onWake)
+}
+
+func (w *usageLimitWaiter) listen(ch workflow.ReceiveChannel, onWake func(workflow.Context, CapacityWakeSignal)) {
 	workflow.Go(w.pauser.root, func(gCtx workflow.Context) {
 		for {
-			var sig UsageLimitRetrySignal
+			var sig CapacityWakeSignal
 			if !ch.Receive(gCtx, &sig) {
 				return
 			}
 			w.retryEpoch++
 			w.useModel, w.useModelEpoch = sig.UseModel, w.retryEpoch
+			if onWake != nil {
+				onWake(gCtx, sig)
+			}
 		}
 	})
 }
@@ -454,8 +477,12 @@ func (w *usageLimitWaiter) wait(ctx workflow.Context, req usageLimitWaitRequest,
 			"workflowID", w.workflowID, "thread", req.Thread, "stepID", req.StepID)
 	}
 	// "Use <model> now" answers the wait with a stay on that model until the
-	// wait's own end instead of a retry on the same provider.
-	if failover && w.useModel != "" && w.useModelEpoch > startEpoch && decision.Until.After(workflow.Now(ctx)) {
+	// wait's own end instead of a retry on the same provider. A capacity wake
+	// carries one when the user switched the chat to another provider; it is a
+	// way out only for a thread that waits on a different provider than the
+	// model's, so a thread already on that provider just retries.
+	alreadyOnIt := w.capacityWake && sameProvider(w.useModel, facts.Provider)
+	if failover && w.useModel != "" && w.useModelEpoch > startEpoch && decision.Until.After(workflow.Now(ctx)) && !alreadyOnIt {
 		w.startLease(ctx, req.Thread, limit, facts, w.useModel, decision.Until, decision.Probing)
 	}
 	// A message that cut the wait short is read by the step retried below (its

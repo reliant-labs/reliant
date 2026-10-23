@@ -1129,6 +1129,7 @@ func (s *Service) SyncReliantProvider(ctx context.Context, req *connect.Request[
 	if err := s.deps.Repo.EmitUserRefetch(ctx, userID, db.RefetchConfigHealth, db.RefetchOpts{}); err != nil {
 		logging.WarnContext(ctx, "Failed to emit config_health refetch after SyncReliantProvider", "error", err)
 	}
+	s.wakeChats(ctx, userID, "the Reliant provider key was synced")
 
 	created := !key.Rotated
 	rotated := key.Rotated

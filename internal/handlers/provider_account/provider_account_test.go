@@ -375,3 +375,43 @@ func seedChat(t *testing.T, repo *db.Repo, user string) (chatID, rootThreadID st
 	require.NoError(t, err)
 	return chatID, th.ID
 }
+
+// wakes records the users whose blocked chats an account change woke.
+type wakes struct{ users []string }
+
+func (w *wakes) WakeUserChats(_ context.Context, userID, _ string) int {
+	w.users = append(w.users, userID)
+	return 1
+}
+
+// An account that adds capacity — a new key, an un-paused account — wakes the
+// user's chats blocked on a provider, so each goes on as a whole without a
+// message to every thread. Taking capacity away (a pause) wakes nothing.
+func TestAccountThatAddsCapacityWakesTheUsersBlockedChats(t *testing.T) {
+	repo, cleanup := db.SetupTestDB(t)
+	t.Cleanup(cleanup)
+	w := &wakes{}
+	svc := provider_account.NewTestProviderAccount(t, provider_account.WithProviderAccountDeps(provider_account.Deps{
+		Store:       repo,
+		ValidateKey: func(context.Context, models.Family, string) (bool, string) { return true, "ok" },
+		ChatWaker:   w,
+	}))
+	const user = "u-capacity"
+
+	added, err := svc.AddProviderAPIKey(as(user), connect.NewRequest(&pb.AddProviderAPIKeyRequest{Provider: "anthropic", ApiKey: "sk-ant-new-1234"}))
+	require.NoError(t, err)
+	assert.Equal(t, []string{user}, w.users, "a new key wakes the user's blocked chats")
+
+	id := added.Msg.Account.Id
+	_, err = svc.UpdateProviderAccount(as(user), connect.NewRequest(&pb.UpdateProviderAccountRequest{AccountId: id, Paused: ptr(true)}))
+	require.NoError(t, err)
+	assert.Len(t, w.users, 1, "pausing an account adds no capacity, so nothing is woken")
+
+	_, err = svc.UpdateProviderAccount(as(user), connect.NewRequest(&pb.UpdateProviderAccountRequest{AccountId: id, Paused: ptr(false)}))
+	require.NoError(t, err)
+	assert.Equal(t, []string{user, user}, w.users, "un-pausing it does")
+
+	_, err = svc.UpdateProviderAccount(as(user), connect.NewRequest(&pb.UpdateProviderAccountRequest{AccountId: id, Label: ptr("work")}))
+	require.NoError(t, err)
+	assert.Len(t, w.users, 2, "a rename changes no capacity")
+}

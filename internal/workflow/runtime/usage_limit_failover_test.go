@@ -252,7 +252,7 @@ func (s *UsageLimitFailoverSuite) TestUseModelNow_TurnsTheWaitIntoALease() {
 		return nil, nil
 	}
 	env.RegisterDelayedCallback(func() {
-		env.SignalWorkflow(UsageLimitRetrySignalName, UsageLimitRetrySignal{UseModel: "gpt-5.6-sol@codex"})
+		env.SignalWorkflow(CapacityWakeSignalName, CapacityWakeSignal{UseModel: "gpt-5.6-sol@codex"})
 	}, 10*time.Minute)
 	env.ExecuteWorkflow(DynamicWorkflow, input)
 
@@ -282,7 +282,7 @@ func (s *UsageLimitFailoverSuite) TestPlainRetryNow_StartsNoLease() {
 		}
 		return nil, nil
 	}
-	env.RegisterDelayedCallback(func() { env.SignalWorkflow(UsageLimitRetrySignalName, nil) }, 10*time.Minute)
+	env.RegisterDelayedCallback(func() { env.SignalWorkflow(CapacityWakeSignalName, nil) }, 10*time.Minute)
 	env.ExecuteWorkflow(DynamicWorkflow, input)
 
 	s.Require().True(env.IsWorkflowCompleted())

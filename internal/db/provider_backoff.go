@@ -57,6 +57,22 @@ func (r *Repo) ClearProviderBackoff(ctx context.Context, threadID string, now ti
 	return nil
 }
 
+// ListCapacityWakeTargets returns the root workflow ids of userID's chats whose
+// live run may have a thread blocked on a provider: one parked on a usage
+// limit, a paused root, or a stopped sub-agent. These are the runs a capacity
+// wake is sent to when the user's providers gain capacity (an account added,
+// re-authed or un-paused). Read-only: one SELECT.
+func (r *Repo) ListCapacityWakeTargets(ctx context.Context, userID string) ([]string, error) {
+	if userID == "" {
+		return nil, fmt.Errorf("user ID cannot be empty")
+	}
+	ids, err := store.ListCapacityWakeTargets(ctx, r.ORM(), userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list chats to wake: %w", err)
+	}
+	return ids, nil
+}
+
 // ProviderBackoffByChat returns every thread of a chat that has a provider
 // backoff row, keyed by thread id. Read-only: one SELECT.
 func (r *Repo) ProviderBackoffByChat(ctx context.Context, chatID string) (map[string]ProviderBackoff, error) {
