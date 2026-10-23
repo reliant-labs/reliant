@@ -242,7 +242,7 @@ export function ConsoleShell({
      * resolves to reliant's primary action colour; outside it, to reliant's
      * muted hover tint (src/index.css).
      */
-    <div className="forge-ui h-screen w-full" data-testid="forge-shell">
+    <div className="forge-ui h-dvh w-full" data-testid="forge-shell">
       <SidebarLayout
         navLabel={`${nav.project} console`}
         brand={brand}

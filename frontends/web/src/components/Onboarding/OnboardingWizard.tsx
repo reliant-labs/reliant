@@ -28,6 +28,7 @@ import { useTourStore } from "../../store/tourStore";
 import { useWorkspaceStateStore } from "../../store/workspaceStateStore";
 import { trackEvent } from "../../lib/analytics";
 import { useSurface } from "../../lib/surfaceContext";
+import { isPhoneViewport } from "../../lib/mobileRedirect";
 
 import {
   ONBOARDING_STEPS,
@@ -428,7 +429,9 @@ export function OnboardingWizard() {
   // step would fall back to its "Open <page> to continue" prompt pointing at
   // pages mobile does not have. The tour stays a desktop feature; mobile users
   // still get the *setup* flow at /onboarding, which is a different system.
-  if (surface !== "desktop") return null;
+  // A phone on a desktop-surface route (the Apps console, which has no /m/*
+  // twin) is the same case: the floating checklist would sit over the page.
+  if (surface !== "desktop" || isPhoneViewport()) return null;
 
   // Signed out — neither the tour nor the checklist belongs on screen.
   if (!user) return null;

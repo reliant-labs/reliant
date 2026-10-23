@@ -7,7 +7,7 @@
  */
 
 import { useState } from "react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import {
@@ -25,7 +25,13 @@ vi.mock("../../../store/projectStore", () => ({
     selector({ currentProject: { id: "p1", name: "reliant" } }),
 }));
 
+let forgeEnabled = true;
+vi.mock("../../../lib/forgeFeature", () => ({
+  isForgeUIEnabled: () => forgeEnabled,
+}));
+
 const { MobileNavDrawer } = await import("../MobileNavDrawer");
+const { useMobileDrawerStore, EMPTY_INBOX_BADGE } = await import("../../../store/mobileDrawerStore");
 
 function Screen({ path }: { path: string }) {
   return (
@@ -46,7 +52,7 @@ function buildTree(onClose: () => void, isOpenGetter: () => boolean) {
     ),
   });
 
-  const paths = ["/m/chats", "/m/new", "/m/daemons", "/m/github", "/m/account"];
+  const paths = ["/m/chats", "/m/new", "/m/daemons", "/m/github", "/m/account", "/m/inbox"];
 
   return rootRoute.addChildren(
     paths.map((path) =>
@@ -72,6 +78,55 @@ describe("MobileNavDrawer", () => {
   it("renders nothing when closed", () => {
     renderAt("/m/chats", false, vi.fn());
     expect(screen.queryByRole("dialog", { name: "Navigation" })).not.toBeInTheDocument();
+  });
+
+  beforeEach(() => {
+    forgeEnabled = true;
+    useMobileDrawerStore.setState({ inboxBadge: EMPTY_INBOX_BADGE });
+  });
+
+  it("reaches the Inbox, Apps and Observability — the surfaces a phone could not open", async () => {
+    renderAt("/m/chats", true, vi.fn());
+    await screen.findByRole("dialog", { name: "Navigation" });
+    expect(screen.getByRole("link", { name: /^Inbox/ })).toHaveAttribute("href", "/m/inbox");
+    // The forge console itself, which collapses its own nav at phone width.
+    expect(screen.getByRole("link", { name: /^Apps/ })).toHaveAttribute("href", "/forge");
+    expect(screen.getByRole("link", { name: /^Observability/ })).toHaveAttribute("href", "/forge/observability");
+  });
+
+  it("hides Apps and Observability when the forge UI is off, as the desktop sidebar does", async () => {
+    forgeEnabled = false;
+    renderAt("/m/chats", true, vi.fn());
+    await screen.findByRole("dialog", { name: "Navigation" });
+    expect(screen.queryByRole("link", { name: /^Apps/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /^Observability/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /^Inbox/ })).toBeInTheDocument();
+  });
+
+  it("shows the Inbox's blocking count on its row", async () => {
+    useMobileDrawerStore.setState({
+      inboxBadge: { count: 3, informational: false, degraded: false, announcement: "3 items need you" },
+    });
+    renderAt("/m/chats", true, vi.fn());
+    await screen.findByRole("dialog", { name: "Navigation" });
+    expect(screen.getByTestId("drawer-inbox-count")).toHaveTextContent("3");
+    expect(screen.getByRole("link", { name: /Inbox.*3 items need you/ })).toBeInTheDocument();
+  });
+
+  it("shows a dot, not a count, for automation problems alone", async () => {
+    useMobileDrawerStore.setState({
+      inboxBadge: { count: 0, informational: true, degraded: false, announcement: "Automation problems" },
+    });
+    renderAt("/m/chats", true, vi.fn());
+    await screen.findByRole("dialog", { name: "Navigation" });
+    expect(screen.queryByTestId("drawer-inbox-count")).not.toBeInTheDocument();
+    expect(screen.getByTestId("drawer-inbox-dot")).toBeInTheDocument();
+  });
+
+  it("marks the Inbox current on /m/inbox", async () => {
+    renderAt("/m/inbox", true, vi.fn());
+    await screen.findByRole("dialog", { name: "Navigation" });
+    expect(screen.getByRole("link", { name: /^Inbox/ })).toHaveAttribute("aria-current", "page");
   });
 
   it("renders all seven destinations plus the project switcher when open", async () => {

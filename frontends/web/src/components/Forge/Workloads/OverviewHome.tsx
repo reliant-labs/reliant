@@ -27,7 +27,7 @@
  * on fixtures.
  */
 
-import { useMemo, type ReactNode } from "react";
+import { useMemo, type CSSProperties, type ReactNode } from "react";
 import { ArrowRight, Boxes, Search } from "lucide-react";
 
 import EmptyState from "@/components/forge-ui/empty_state";
@@ -77,6 +77,7 @@ import {
 } from "./workloadModel";
 import { exitPhrase, jobFailurePhrase } from "./plainHealth";
 import { Chip, ChipMenu, HealthStatus, SkeletonRows, UsageMeter, WorkloadRelease } from "./workloadParts";
+import { StackedTable } from "@/components/Forge/StackedTable";
 
 export interface OverviewSearch {
   q?: string;
@@ -218,7 +219,7 @@ export function OverviewHome({ project, env, envs, envsLoading, search, onSearch
         <div className="pt-1">{rangeControl}</div>
       </div>
 
-      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
         <div className="min-w-0 space-y-4">
           <EnvStrip envs={envs} env={env} workloads={workloads} jobs={allJobs} loading={loading} failed={!!listed.error} onSelectEnv={onSelectEnv} />
           {unrecorded ? (
@@ -373,8 +374,10 @@ function EnvStrip({
   const previewSelected = previews.some((candidate) => candidate.name === env);
   return (
     <div
-      className="grid overflow-hidden rounded-lg border border-border bg-surface"
-      style={{ gridTemplateColumns: `repeat(${count}, minmax(0, 1fr))` }}
+      // One row of cells on a desktop; two to a row on a phone, where five
+      // environments in one row left each ~70px and clipped its status.
+      className="grid grid-cols-2 overflow-hidden rounded-lg border border-border bg-surface md:grid-cols-[repeat(var(--env-cells),minmax(0,1fr))] max-md:[&>*]:border-b max-md:[&>*]:border-border"
+      style={{ "--env-cells": count } as CSSProperties}
       data-testid="overview-env-strip"
     >
       {cells.map((cell, index) => (
@@ -709,7 +712,7 @@ function ServicesTable({
   const columns = showEnv ? 8 : 7;
   return (
     <div className="overflow-x-auto">
-      <table className="min-w-full border-collapse" aria-label="Services" data-testid="overview-services-table">
+      <StackedTable className="min-w-full border-collapse" aria-label="Services" data-testid="overview-services-table">
         <thead>
           <tr className="border-b border-border">
             <th scope="col" className={TH}>
@@ -802,7 +805,7 @@ function ServicesTable({
             })
           )}
         </tbody>
-      </table>
+      </StackedTable>
     </div>
   );
 }
@@ -837,7 +840,7 @@ function JobsTable({ rows, loading, showEnv, hrefs, empty }: { rows: JobRow[]; l
   const columns = showEnv ? 6 : 5;
   return (
     <div className="overflow-x-auto">
-      <table className="min-w-full border-collapse" aria-label="Jobs" data-testid="overview-jobs-table">
+      <StackedTable className="min-w-full border-collapse" aria-label="Jobs" data-testid="overview-jobs-table">
         <thead>
           <tr className="border-b border-border">
             <th scope="col" className={TH}>
@@ -926,7 +929,7 @@ function JobsTable({ rows, loading, showEnv, hrefs, empty }: { rows: JobRow[]; l
             })
           )}
         </tbody>
-      </table>
+      </StackedTable>
     </div>
   );
 }

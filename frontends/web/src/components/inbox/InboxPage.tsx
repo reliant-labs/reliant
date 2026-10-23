@@ -14,6 +14,10 @@
  *
  * Every row can be dismissed, and so can a whole section. The rows leave at
  * once and a toast offers Undo, which restores them on the server.
+ *
+ * The same view is the phone's Inbox (`/m/inbox`, Mobile/MobileInboxScreen):
+ * `titled={false}` drops the page title the mobile screen header already
+ * shows, and the controls grow to touch size on a coarse pointer.
  */
 
 import { useMemo } from "react";
@@ -78,7 +82,10 @@ export function sectionInboxItems(items: InboxItemData[]): InboxSection[] {
     .map(([kind, sectionItems]) => ({ kind, title: SECTION_TITLE[kind] ?? "Other", items: sectionItems }));
 }
 
-export function InboxView() {
+/** A finger-sized target on a touch screen; explicit px because rem renders at 87.5% here. */
+const TOUCH_TARGET = "[@media(pointer:coarse)]:min-h-[44px]";
+
+export function InboxView({ titled = true }: { titled?: boolean } = {}) {
   const scope = useInboxScopeStore((state) => state.scope);
   const setScope = useInboxScopeStore((state) => state.setScope);
   const currentProject = useProjectStore((state) => state.currentProject);
@@ -104,12 +111,11 @@ export function InboxView() {
     });
   };
 
-  const header = (
-    <PageHeader
-      title="Inbox"
-      subtitle={scoped ? `Waiting on you in ${currentProject?.name ?? "this project"}.` : "Waiting on you, across every project."}
-      className="mb-0"
-    />
+  const subtitle = scoped ? `Waiting on you in ${currentProject?.name ?? "this project"}.` : "Waiting on you, across every project.";
+  const header = titled ? (
+    <PageHeader title="Inbox" subtitle={subtitle} className="mb-0" />
+  ) : (
+    <p className="text-sm text-muted-foreground">{subtitle}</p>
   );
 
   const toolbar = currentProject ? (
@@ -173,7 +179,10 @@ export function InboxView() {
               <button
                 type="button"
                 onClick={() => setScope("all")}
-                className="font-medium text-foreground underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                className={cn(
+                  "font-medium text-foreground underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
+                  TOUCH_TARGET,
+                )}
               >
                 {inbox.data?.otherProjectsCount} more in other projects
               </button>
@@ -213,6 +222,7 @@ function ScopeToggle({
       title={title}
       className={cn(
         "h-7 max-w-48 truncate rounded px-2.5 text-xs font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
+        "[@media(pointer:coarse)]:h-[44px] [@media(pointer:coarse)]:px-3.5 [@media(pointer:coarse)]:text-sm",
         scope === value ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
       )}
     >
@@ -250,7 +260,10 @@ function SectionCard({
           <button
             type="button"
             onClick={onDismissAll}
-            className="rounded px-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+            className={cn(
+              "rounded px-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
+              TOUCH_TARGET,
+            )}
           >
             Dismiss all
           </button>

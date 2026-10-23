@@ -115,7 +115,7 @@ export function ProfilesView({
             : `No ${type.label.toLowerCase()} samples from ${service} in this window. Services built with forge send profiles once they run a release with the profiler enabled.`}
         </p>
       ) : (
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(18rem,1fr)]">
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(18rem,1fr)]">
           <Card padding="none" className="overflow-hidden">
             <SpeedscopeFrame
               profile={flamegraph.data.speedscopeJson}

@@ -41,6 +41,7 @@ import { formatAgo, formatTimestamp } from "./format";
 import { placeEnvironments, type ObsEnvironment, type ObsPlace } from "./obsPlace";
 import { ALERTS_TABS, type AlertsTab, type ObsNavigate } from "./obsSearch";
 import { ObsError, ObsLoadingRows } from "./ObsStates";
+import { StackedTable } from "@/components/Forge/StackedTable";
 
 export const ALERTS_TAB_LABELS: Record<AlertsTab, string> = {
   firing: "Firing",
@@ -478,7 +479,7 @@ function HistoryTab({
   return (
     <Card padding="none" data-testid="obs-alert-history">
       <div className="max-h-[32rem] overflow-auto">
-        <table className="w-full text-sm">
+        <StackedTable className="w-full text-sm">
           <caption className="sr-only">Alert state changes, newest first</caption>
           <thead className="sticky top-0 bg-card">
             <tr className="border-b border-border text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -506,7 +507,7 @@ function HistoryTab({
               </tr>
             ))}
           </tbody>
-        </table>
+        </StackedTable>
       </div>
     </Card>
   );
@@ -544,7 +545,7 @@ function RulesTab({
     );
   }
   return (
-    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
+    <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
       <div className="space-y-2">
         {off.length > 0 && (
           <p className="rounded-lg border border-border/60 bg-background px-3 py-2 text-xs text-muted-foreground" data-testid="obs-rules-observability-off">

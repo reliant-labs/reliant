@@ -21,6 +21,7 @@
 
 import { useState } from "react";
 import {
+  Activity,
   Bell,
   ChevronRight,
   CircleDollarSign,
@@ -45,6 +46,7 @@ import { MobilePrivacyScreen } from "./MobilePrivacyScreen";
 import { MobileAppearanceScreen } from "./MobileAppearanceScreen";
 import { MobileWorkspacePreferencesScreen } from "./MobileWorkspacePreferencesScreen";
 import { MobileAboutScreen } from "./MobileAboutScreen";
+import { MobileDiagnosticsScreen } from "./MobileDiagnosticsScreen";
 import { MobileMenuButton } from "./MobileMenuButton";
 import {
   MOBILE_ROW,
@@ -63,7 +65,8 @@ type SectionId =
   | "privacy"
   | "appearance"
   | "workspace"
-  | "about";
+  | "about"
+  | "diagnostics";
 
 /**
  * Which card group a section renders in.
@@ -204,6 +207,14 @@ export function MobileSettingsScreen() {
       group: "app",
       capability: "settingsAbout",
     },
+    {
+      id: "diagnostics",
+      label: "Diagnostics",
+      description: "Connection, recent errors, copy for a bug report",
+      icon: Activity,
+      group: "app",
+      capability: "settingsDiagnostics",
+    },
   ];
 
   const visible = sections.filter(
@@ -231,6 +242,8 @@ export function MobileSettingsScreen() {
         return <MobileWorkspacePreferencesScreen onBack={onBack} />;
       case "about":
         return <MobileAboutScreen onBack={onBack} />;
+      case "diagnostics":
+        return <MobileDiagnosticsScreen onBack={onBack} />;
     }
   }
 

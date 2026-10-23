@@ -37,6 +37,7 @@ import {
 } from "@/services/forge/live";
 
 import { HealthChip } from "../EnvBadges";
+import { StackedTable } from "@/components/Forge/StackedTable";
 
 export interface EnvironmentRow {
   env: LiveEnv;
@@ -57,7 +58,7 @@ const CELL = "px-3 py-2.5 align-middle";
 export function EnvironmentTable({ rows, onOpen }: EnvironmentTableProps) {
   return (
     <div className="overflow-x-auto rounded-lg border border-border bg-card" data-testid="forge-env-table">
-      <table className="w-full border-collapse text-sm">
+      <StackedTable className="w-full border-collapse text-sm">
         <caption className="sr-only">
           Every environment in this project: where it runs, its release, where that release came
           from, its health, and when it last moved.
@@ -169,7 +170,7 @@ export function EnvironmentTable({ rows, onOpen }: EnvironmentTableProps) {
             </tr>
           ))}
         </tbody>
-      </table>
+      </StackedTable>
     </div>
   );
 }

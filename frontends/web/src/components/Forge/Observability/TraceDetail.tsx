@@ -127,7 +127,7 @@ export function TraceDetail({
         </div>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(20rem,1fr)]">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(20rem,1fr)]">
         <Card padding="md">
           <TraceWaterfall
             spans={spans}
