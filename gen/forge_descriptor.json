@@ -39689,6 +39689,34 @@
           "Sensitive": false,
           "Category": "",
           "ProtoFile": "reliant/config/v1/worker_config.proto"
+        },
+        {
+          "Name": "max_concurrent_workflow_tasks",
+          "GoName": "MaxConcurrentWorkflowTasks",
+          "GoType": "int32",
+          "ProtoType": "int32",
+          "EnvVar": "RELIANT_WORKER_MAX_CONCURRENT_WORKFLOW_TASKS",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "Workflow tasks (replays included) run at once; 0 derives max(2, GOMAXPROCS-1)",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "reliant/config/v1/worker_config.proto"
+        },
+        {
+          "Name": "workflow_task_pollers",
+          "GoName": "WorkflowTaskPollers",
+          "GoType": "int32",
+          "ProtoType": "int32",
+          "EnvVar": "RELIANT_WORKER_WORKFLOW_TASK_POLLERS",
+          "Flag": "",
+          "DefaultValue": "5",
+          "Required": false,
+          "Description": "Workflow-task pollers",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "reliant/config/v1/worker_config.proto"
         }
       ],
       "Binary": "reliant",
@@ -39716,7 +39744,7 @@
     "reliant/config/v1/preview_config.proto": "ffbf20088c49cac7e5cd913d17d2f2d30e992df459998d706e6b96f0f5a2ab73",
     "reliant/config/v1/preview_url_config.proto": "e9ff64e47a61c04e8f2a63311bfd4e41acb28ef0811581d527b88fbff20e3306",
     "reliant/config/v1/server_config.proto": "35d746867279548a913e21f7be321451dab6225abccdf1319ed48f70a0966010",
-    "reliant/config/v1/worker_config.proto": "994167399278969352fe99528dd5b1a68f01828b3e345cc15cf8dd3439547aa6",
+    "reliant/config/v1/worker_config.proto": "1466bed22e0651d180f417fd3035dcbebfc4a7be567483c2d8da247fed8eebeb",
     "reliant/v1/account.proto": "d7e5ce0de4321d271532eb749a53e2001e692bdf208a4b7b71d4816673eebf35",
     "reliant/v1/annotations.proto": "378abb26b00cc86e8b14aef65e3e78467130da6a7787cd66b9a7d59ade949b57",
     "reliant/v1/approval.proto": "4ebbca862a2a5f88bb7f603d52d09933c296cbdc89e55d2abd1f58b76ecad6ce",

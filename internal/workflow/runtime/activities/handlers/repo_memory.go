@@ -65,7 +65,9 @@ func formatRepoMemoryMessages(repoMemories map[string]string, budgetChars int) (
 	omittedSizes := map[string]int{}
 	remaining := budgetChars
 	for _, repo := range keys {
-		content := strings.TrimSpace(repoMemories[repo])
+		// A nested repo's reliant.md may have been scaffolded as a project
+		// root once, with the routing guide the system prompt now carries.
+		content := strings.TrimSpace(withoutScaffoldedCapabilities(repoMemories[repo]))
 		if content == "" {
 			continue
 		}

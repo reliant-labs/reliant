@@ -38,9 +38,17 @@ const (
 	MaxSkillBodySize = MaxOutputSize
 
 	// ForgeStartHereSkillPath is the catalog path of forge's start-here skill:
-	// the body `reliant forge skill load forge` prints. Not "forge" — in
-	// reliant's catalog that path is the synthesized map of forge's sub-skills.
+	// the body `reliant forge skill load forge` prints. Not "forge" — in a
+	// forge project's catalog that path is the synthesized map of forge's
+	// sub-skills.
 	ForgeStartHereSkillPath = "forge/forge"
+
+	// ForgePreAdoptionSkillPath is where the start-here is served in a
+	// project with no forge.yaml: the namespace map has no children to map
+	// there, so the catalog's single `forge` entry carries the start-here
+	// body itself (internal/skills/catalog/forge.go). Inside a forge project
+	// this path is the map, which is far below either budget.
+	ForgePreAdoptionSkillPath = "forge"
 
 	// ForgeStartHereSkillBodySize is a TEMPORARY delivery allowance for forge's
 	// start-here skill alone — the one skill the harness preloads into every
@@ -64,10 +72,12 @@ const (
 
 // skillDeliveryBudget is the delivered-size ceiling for one load of the skill
 // at path: MaxSkillBodySize for every skill except forge's start-here (see
-// ForgeStartHereSkillBodySize). renderSkillDelivery applies it on both delivery
-// paths, so a preloaded skill and a hand-loaded one stay byte-identical.
+// ForgeStartHereSkillBodySize), at either path it is served by. renderSkillDelivery
+// applies it on both delivery paths, so a preloaded skill and a hand-loaded one
+// stay byte-identical.
 func skillDeliveryBudget(path string) int {
-	if strings.EqualFold(strings.TrimSpace(path), ForgeStartHereSkillPath) {
+	p := strings.TrimSpace(path)
+	if strings.EqualFold(p, ForgeStartHereSkillPath) || strings.EqualFold(p, ForgePreAdoptionSkillPath) {
 		return ForgeStartHereSkillBodySize
 	}
 	return MaxSkillBodySize
@@ -245,21 +255,22 @@ func TruncateOutput(toolName string, output string, addWarning bool) string {
 		if keepSize > 2000 {
 			headSize := keepSize * 3 / 4
 			tailSize := keepSize / 4
-			omittedBytes := len(output) - headSize - tailSize
-			truncated = output[:headSize] +
+			head, tail := headBytes(output, headSize), tailBytes(output, tailSize)
+			omittedBytes := len(output) - len(head) - len(tail)
+			truncated = head +
 				fmt.Sprintf("\n\n... [%d bytes omitted - use offset parameter to read middle section] ...\n\n", omittedBytes) +
-				output[len(output)-tailSize:]
+				tail
 		} else {
-			truncated = output[:keepSize]
+			truncated = headBytes(output, keepSize)
 		}
 
 	case "fetch":
 		// For web content, try to keep the beginning
-		truncated = output[:keepSize] + "\n\n... [CONTENT TRUNCATED] ..."
+		truncated = headBytes(output, keepSize) + "\n\n... [CONTENT TRUNCATED] ..."
 
 	default:
 		// Generic truncation
-		truncated = output[:keepSize] + "\n\n... [OUTPUT TRUNCATED] ..."
+		truncated = headBytes(output, keepSize) + "\n\n... [OUTPUT TRUNCATED] ..."
 	}
 
 	if addWarning {

@@ -208,7 +208,7 @@ func (t *listWorkflowsTool) Execute(ctx *rctx.ToolContext, args ListWorkflowsPar
 	for _, wf := range workflows {
 		desc := wf.description
 		if len(desc) > 200 {
-			desc = desc[:197] + "..."
+			desc = headBytes(desc, 197) + "..."
 		}
 		valid := "✓"
 		if !wf.isValid {

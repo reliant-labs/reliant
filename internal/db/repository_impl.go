@@ -2921,8 +2921,18 @@ func (r *Repo) RecentTriggerFirings(ctx context.Context, userID string, triggerI
 	return store.RecentTriggerFirings(ctx, r.ORM(), userID, triggerIDs, perTrigger)
 }
 
+// RecentTriggerOutcomes is RecentTriggerFirings without the events' bodies
+// (payload, sender, origin), for health that is judged but never shown.
+func (r *Repo) RecentTriggerOutcomes(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error) {
+	if userID == "" {
+		return nil, fmt.Errorf("user ID cannot be empty")
+	}
+	return store.RecentTriggerOutcomes(ctx, r.ORM(), userID, triggerIDs, perTrigger)
+}
+
 // FiringsSinceLastSuccess returns each trigger's firings since its newest
 // success, newest first, capped at perTrigger: the current failure episode.
+// The events carry no body (payload, sender, origin): an episode is counted.
 func (r *Repo) FiringsSinceLastSuccess(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error) {
 	if userID == "" {
 		return nil, fmt.Errorf("user ID cannot be empty")

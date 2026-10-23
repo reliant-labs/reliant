@@ -129,11 +129,13 @@ func TestSendAgentMessage_StoppedSubAgentOfAnEndedRunStartsARunThatResumesIt(t *
 	chat.WorkflowName = &workflowName
 	require.NoError(t, repo.UpdateChat(ctx, chat))
 
-	// The completed run's inputs, which its successor continues with.
+	// The completed run's inputs as the chat's selection records them: its
+	// successor continues with them. The closed run itself refuses a query.
 	temporal := &closingRunTemporalClient{closed: true, lastInputs: map[string]interface{}{
 		"model":              map[string]interface{}{"id": "mock"},
 		v2.InputKeyLaunchRun: true,
 	}}
+	seedSelection(t, ctx, repo, fx.chatID, "test-user", workflowName, map[string]any{"model": map[string]any{"id": "mock"}})
 	resp, err := lateMessageService(repo, temporal).SendAgentMessage(ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
 		ChatId: fx.chatID, ThreadId: fx.childThreadID, Message: "the limit has reset; carry on",
 	}))
@@ -161,7 +163,7 @@ func TestSendAgentMessage_StoppedSubAgentOfAnEndedRunStartsARunThatResumesIt(t *
 	assert.Equal(t, fx.childThreadID, resumed.ChildWorkflowID)
 	assert.Equal(t, fx.rootThreadID, resumed.ParentThread)
 	assert.Equal(t, "general", resumed.Preset)
-	assert.Equal(t, map[string]interface{}{"id": "mock"}, run.input.Inputs["model"], "it runs on the completed run's own inputs")
+	assert.Equal(t, map[string]interface{}{"id": "mock"}, run.input.Inputs["model"], "it runs on what the completed run was running on")
 	assert.NotContains(t, run.input.Inputs, v2.InputKeyLaunchRun, "it answers a person, not whatever launched the chat")
 }
 

@@ -48,7 +48,10 @@ func TestCancelArchivedChatWorkflow_RunAlreadyGoneIsSuccess(t *testing.T) {
 
 			svc.cancelArchivedChatWorkflow(context.Background(), archivedChat())
 
-			require.Equal(t, []string{"wf-1/run-1"}, temporal.canceled, "the archived chat's run is the one cancelled")
+			// The workflow's CURRENT run (empty run id), not the chat row's:
+			// after a continue-as-new that one is closed, and cancelling it
+			// would leave the live run going.
+			require.Equal(t, []string{"wf-1/"}, temporal.canceled, "the archived chat's current run is the one cancelled")
 			require.Empty(t, logRecords(logs, "Failed to cancel workflow for archived chat"),
 				"a run that is already gone is not a failure to cancel")
 		})

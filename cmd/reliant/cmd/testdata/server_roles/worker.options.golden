@@ -89,6 +89,8 @@
       WorkspaceURLScheme: "http"
       WorkspaceURLPort: 8443
     }
+    WorkflowTaskSlots: 7
+    WorkflowTaskPollers: 3
   }
   {
     github: [

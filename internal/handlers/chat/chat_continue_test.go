@@ -13,7 +13,6 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
-	"go.temporal.io/sdk/converter"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -53,13 +52,14 @@ func (c *endedRunTemporalClient) DescribeWorkflowExecution(_ context.Context, wo
 	}, nil
 }
 
-func (c *endedRunTemporalClient) QueryWorkflow(_ context.Context, _, _, query string, _ ...interface{}) (converter.EncodedValue, error) {
+func (c *endedRunTemporalClient) QueryWorkflowWithOptions(_ context.Context, req *client.QueryWorkflowWithOptionsRequest) (*client.QueryWorkflowWithOptionsResponse, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if query == "get_workflow_inputs" && c.lastInputs != nil {
-		return jsonEncodedValue{v: c.lastInputs}, nil
+	closed := c.status != enums.WORKFLOW_EXECUTION_STATUS_RUNNING
+	if req.QueryType == "get_workflow_inputs" && c.lastInputs != nil {
+		return fakeQueryResponse(req, closed, jsonEncodedValue{v: c.lastInputs}, nil)
 	}
-	return nil, serviceerror.NewQueryFailed("history no longer replays")
+	return fakeQueryResponse(req, closed, nil, serviceerror.NewQueryFailed("history no longer replays"))
 }
 
 func (c *endedRunTemporalClient) ExecuteWorkflow(_ context.Context, options client.StartWorkflowOptions, _ interface{}, args ...interface{}) (client.WorkflowRun, error) {
@@ -159,6 +159,9 @@ func newContinueFixture(t *testing.T, replays bool) continueFixture {
 			v2.InputKeyLaunchRun: true,
 		},
 	}
+	// The selection is the durable record of what the run ran on; the ended
+	// run itself is never queried (it would be replayed to answer).
+	seedSelection(t, ctx, repo, fx.chatID, "test-user", "builtin://agent", map[string]any{"model": map[string]any{"id": "claude-opus"}})
 	pause := &resetPause{repo: repo, replays: replays}
 	svc := &Service{deps: Deps{Repo: repo, Temporal: temporal}, runs: runs.NewService(repo, temporal, pause)}
 	return continueFixture{ctx: ctx, repo: repo, chatID: fx.chatID, threadID: fx.rootThreadID,
@@ -254,7 +257,7 @@ func TestContinueQueued_WedgedRunsUnansweredMessageStartsOneRunAtTheCheckpoint(t
 	assert.Equal(t, f.chatID, run.options.ID)
 	assert.Equal(t, f.threadID, run.input.ExecContext.Thread)
 	assert.NotNil(t, run.input.Resume, "it resumes at the checkpoint, not at graph entry")
-	assert.Equal(t, map[string]interface{}{"id": "claude-opus"}, run.input.Inputs["model"], "the ended run's own inputs")
+	assert.Equal(t, map[string]interface{}{"id": "claude-opus"}, run.input.Inputs["model"], "what the ended run was running on (the chat's selection)")
 	assert.NotContains(t, run.input.Inputs, v2.InputKeyLaunchRun)
 	assert.Equal(t, db.ThreadStatusRunning, threadStatusAtStart,
 		"the thread is revived before the run starts, so the mailbox sweep cannot take its queued rows")

@@ -41,8 +41,22 @@ type WorkerConfig struct {
 	// (RELIANT_PROBES), /healthz and /readyz forge's.
 	LivenessPaths  string `protobuf:"bytes,20,opt,name=liveness_paths,json=livenessPaths,proto3" json:"liveness_paths,omitempty"`
 	ReadinessPaths string `protobuf:"bytes,21,opt,name=readiness_paths,json=readinessPaths,proto3" json:"readiness_paths,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// How many workflow tasks this worker runs at once: fresh ones, the full
+	// history replays a sticky-cache miss forces, and the replays a query on a
+	// closed run forces. A replay is CPU-bound on one goroutine, so this is
+	// roughly how many cores workflow code may take. Activities have their own
+	// slots and are not counted here, which is the point of the cap: replays
+	// queue instead of starving activities' DB calls past their deadlines. 0
+	// derives it from the CPU budget (workersetup.WorkflowTaskSlots); 1 is
+	// refused, because the Temporal SDK refuses it.
+	MaxConcurrentWorkflowTasks int32 `protobuf:"varint,22,opt,name=max_concurrent_workflow_tasks,json=maxConcurrentWorkflowTasks,proto3" json:"max_concurrent_workflow_tasks,omitempty"`
+	// How many goroutines long-poll Temporal for workflow tasks. The SDK runs
+	// no more pollers than there are free workflow-task slots, so a value above
+	// max_concurrent_workflow_tasks buys nothing. 1 is refused: the SDK splits
+	// pollers between the sticky and the shared queue and needs two.
+	WorkflowTaskPollers int32 `protobuf:"varint,23,opt,name=workflow_task_pollers,json=workflowTaskPollers,proto3" json:"workflow_task_pollers,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *WorkerConfig) Reset() {
@@ -117,11 +131,25 @@ func (x *WorkerConfig) GetReadinessPaths() string {
 	return ""
 }
 
+func (x *WorkerConfig) GetMaxConcurrentWorkflowTasks() int32 {
+	if x != nil {
+		return x.MaxConcurrentWorkflowTasks
+	}
+	return 0
+}
+
+func (x *WorkerConfig) GetWorkflowTaskPollers() int32 {
+	if x != nil {
+		return x.WorkflowTaskPollers
+	}
+	return 0
+}
+
 var File_reliant_config_v1_worker_config_proto protoreflect.FileDescriptor
 
 const file_reliant_config_v1_worker_config_proto_rawDesc = "" +
 	"\n" +
-	"%reliant/config/v1/worker_config.proto\x12\x11reliant.config.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x1egoogle/protobuf/duration.proto\"\xd4\b\n" +
+	"%reliant/config/v1/worker_config.proto\x12\x11reliant.config.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x1egoogle/protobuf/duration.proto\"\xa7\v\n" +
 	"\fWorkerConfig\x12l\n" +
 	"\vhealth_port\x18\x0e \x01(\x05BK\xbaH\b\x1a\x06\x18\xff\xff\x03(\x01\x82\xce\x18<\n" +
 	"\vHEALTH_PORT\x12\vhealth-port\x1a\x048081*\x1aHealth check endpoint portR\n" +
@@ -138,7 +166,11 @@ const file_reliant_config_v1_worker_config_proto_rawDesc = "" +
 	"\x0eliveness_paths\x18\x14 \x01(\tBa\x82\xce\x18]\n" +
 	"\x0eLIVENESS_PATHS\x1a\x10/health,/healthz*9Liveness probe paths on the health port (comma-separated)R\rlivenessPaths\x12\x8a\x01\n" +
 	"\x0freadiness_paths\x18\x15 \x01(\tBa\x82\xce\x18]\n" +
-	"\x0fREADINESS_PATHS\x1a\x0e/ready,/readyz*:Readiness probe paths on the health port (comma-separated)R\x0ereadinessPaths:\x1d\xca\xc1\x18\x19\n" +
+	"\x0fREADINESS_PATHS\x1a\x0e/ready,/readyz*:Readiness probe paths on the health port (comma-separated)R\x0ereadinessPaths\x12\xcf\x01\n" +
+	"\x1dmax_concurrent_workflow_tasks\x18\x16 \x01(\x05B\x8b\x01\xbaH\a\xd8\x01\x01\x1a\x02(\x02\x82\xce\x18}\n" +
+	",RELIANT_WORKER_MAX_CONCURRENT_WORKFLOW_TASKS*MWorkflow tasks (replays included) run at once; 0 derives max(2, GOMAXPROCS-1)R\x1amaxConcurrentWorkflowTasks\x12\x7f\n" +
+	"\x15workflow_task_pollers\x18\x17 \x01(\x05BK\xbaH\x04\x1a\x02(\x02\x82\xce\x18@\n" +
+	"$RELIANT_WORKER_WORKFLOW_TASK_POLLERS\x1a\x015*\x15Workflow-task pollersR\x13workflowTaskPollers:\x1d\xca\xc1\x18\x19\n" +
 	"\areliant\x12\x06server\x12\x06workerJ\x04\b\x01\x10\x02J\x04\b\n" +
 	"\x10\vJ\x04\b\v\x10\fJ\x04\b\f\x10\rJ\x04\b\r\x10\x0eJ\x04\b\x10\x10\x11J\x04\b\x11\x10\x12J\x04\b(\x10)J\x04\b2\x103J\x04\b3\x104J\x04\b<\x10=J\x04\bF\x10GJ\x04\bZ\x10[R\rcontrol_planeR\bdatabaseR\x04natsR\btemporalR\x05drainR\bdata_dirR\x10streaming_driverR\fintegrationsR\robservabilityR\x06sentryR\tanalyticsR\x03llmR\apreviewB@Z>github.com/reliant-labs/reliant/gen/reliant/config/v1;configv1b\x06proto3"
 

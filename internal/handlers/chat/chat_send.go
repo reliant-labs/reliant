@@ -864,17 +864,13 @@ func (s *Service) SendMessage(
 				// above, after the send-time model policy (#685) has moved any
 				// model no connected provider can serve.
 				if len(stateUpdate) > 0 {
-					runID := ""
-					if chat.RunID != nil {
-						runID = *chat.RunID
-					}
 					modelMoves := s.fallBackFromUnservableModels(ctx, userID, req.Msg.ChatId, chat.ProjectID, existingWorkflow.WorkflowName, workflowID, targetThread, stateUpdate, func(input string) bool {
-						return s.checkParamsActuallyChanged(ctx, workflowID, runID, map[string]interface{}{input: stateUpdate[input]})
+						return s.checkParamsActuallyChanged(ctx, workflowID, map[string]interface{}{input: stateUpdate[input]})
 					})
 					_, _ = s.recordSelection(ctx, userID, chat, existingWorkflow.WorkflowName, req.Msg.WorkflowParams, stateUpdate, modelMoves, 0)
 
 					// Only add "params changed" message if params actually changed from current workflow state
-					if s.checkParamsActuallyChanged(ctx, workflowID, runID, stateUpdate) {
+					if s.checkParamsActuallyChanged(ctx, workflowID, stateUpdate) {
 						hiddenStyle := int32(reliantv1.DisplayStyle_DISPLAY_STYLE_HIDDEN)
 						_, err := s.deps.Repo.SaveMessageToThread(ctx, req.Msg.ChatId, targetThread, int32(reliantv1.MessageRole_MESSAGE_ROLE_SYSTEM), "Some of your params have changed, which may include mode, tools, temperature, or something else. Please continue as planned.", &workflowID, nil, &hiddenStyle)
 						if err != nil {
@@ -883,7 +879,9 @@ func (s *Service) SendMessage(
 						}
 					}
 
-					if err := s.deps.Temporal.SignalWorkflow(ctx, workflowID, runID, "update_workflow_state", stateUpdate); err != nil {
+					// The current run (empty run id), not the chat row's: that
+					// one is stale after a continue-as-new.
+					if err := s.deps.Temporal.SignalWorkflow(ctx, workflowID, "", "update_workflow_state", stateUpdate); err != nil {
 						logging.WarnContext(ctx, "Failed to signal workflow with param updates", "error", err, "workflowID", workflowID)
 					}
 				}
@@ -983,7 +981,11 @@ func (s *Service) SendMessage(
 				var inputUpdate map[string]interface{}
 				var modelNotices, modelMoves []launch.ModelSubstitution
 				if inspection.Recoverable {
-					recorded := s.runInputsForSend(ctx, workflowID, "")
+					// The failed run is closed, so it is never queried for its
+					// inputs (Temporal would replay its whole history to
+					// answer — rtemporal.QueryOpenRun). What it was running on
+					// is rebuilt from the chat's presets and stored selection.
+					recorded := s.inputsAfterClosedRun(ctx, chat, activeWorkflowNameForResume(chat, existingWorkflow))
 					inputUpdate, modelNotices, modelMoves = s.resumeInputUpdate(ctx, userID, req.Msg.ChatId, chat.ProjectID, existingWorkflow.WorkflowName, workflowID,
 						s.underSelection(ctx, chat.ID, activeWorkflowNameForResume(chat, existingWorkflow), stateUpdate), recorded)
 					inputUpdate = s.withProviderPolicy(ctx, userID, chat, recorded, inputUpdate)
@@ -1629,16 +1631,16 @@ func (s *Service) notifyThreadWake(ctx context.Context, chat *db.Chat, threadID 
 //
 // It is the run the closed one would have continued as had the doorbell
 // arrived a moment sooner (late_wake.go): the same workflow at graph entry on
-// the same thread, with the closed run's own inputs — read back with its
-// get_workflow_inputs query, which Temporal answers for a closed workflow too.
-// The queue carries no params of its own to build fresh inputs from.
+// the same thread, with the inputs the closed run was running on
+// (inputsAfterClosedRun: presets plus the chat's stored selection). The queue
+// carries no params of its own to build fresh inputs from.
 //
 // Ordering is what keeps the reconciler off the row. The closed run left the
 // thread terminal, and a terminal thread with queued mail is exactly what
 // resolveOrphanedAgentMessages marks undelivered; so the thread is revived
 // BEFORE the run starts, and the sweep never sees the row as orphaned.
 //
-// If the inputs cannot be read, the row is withdrawn and the user told to send
+// If the run cannot be started, the row is withdrawn and the user told to send
 // it as a message — the composer keeps the text on a refusal — rather than
 // promised a delivery nothing will make.
 func (s *Service) startRunForQueuedRow(ctx context.Context, chat *db.Chat, threadID, messageID string) (*connect.Response[reliantv1.SendAgentMessageResponse], error) {
@@ -1658,19 +1660,10 @@ func (s *Service) startRunForQueuedRow(ctx context.Context, chat *db.Chat, threa
 	if chat.WorkflowName == nil || *chat.WorkflowName == "" {
 		return refuse(fmt.Errorf("chat has no workflow"))
 	}
-	encoded, err := s.deps.Temporal.QueryWorkflow(ctx, workflowID, "", "get_workflow_inputs")
-	if err != nil {
-		return refuse(err)
-	}
-	var inputs map[string]interface{}
-	if err := encoded.Get(&inputs); err != nil {
-		return refuse(err)
-	}
+	inputs := s.inputsAfterClosedRun(ctx, chat, *chat.WorkflowName)
 	// This run answers a person, not whatever launched the chat.
 	delete(inputs, v2.InputKeyLaunchRun)
 	v2.DropActingIdentity(inputs)
-	inputs = s.overSelection(ctx, chat.ID, *chat.WorkflowName, inputs)
-	s.refreshProviderPolicy(ctx, chat, inputs)
 	launch.InjectSessionDaemonID(inputs, chat)
 
 	if _, err := s.deps.Repo.ReviveThread(ctx, threadID); err != nil {

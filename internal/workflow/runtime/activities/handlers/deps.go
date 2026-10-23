@@ -392,6 +392,7 @@ type WorkflowStatusStore interface {
 	UpdateChatState(ctx context.Context, chatID string, state db.ChatState, reason string) error
 	UpdateChatUnread(ctx context.Context, chatID string, unread bool, reason string) error
 	SetChatPausedForMachine(ctx context.Context, chatID string, paused bool) (bool, error)
+	SetChatRunID(ctx context.Context, chatID, workflowID, runID string) (bool, error)
 	CreateChatUpdate(ctx context.Context, chatID string, updateType reliantv1.ChatUpdateType, entityID string, data string) error
 	EmitChatRefetch(ctx context.Context, chatID string, refetchType db.RefetchType) error
 	FiringsSinceLastSuccess(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error)

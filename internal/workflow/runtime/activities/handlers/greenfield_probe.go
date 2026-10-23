@@ -35,21 +35,25 @@ import (
 // says that forge is where any state-holding code lives, with the workflow's
 // agent calling it.
 //
-// The second is forge, which is not SaaS-only. It hosts anything deployed or
-// kept running: backends, workers, jobs, cron jobs, operators, CLIs, web and
-// mobile apps, and static sites, with production practices from the first
-// commit. The criteria cover an app (services, a database, frontends) and a
-// static site (a landing page or marketing site, one static frontend on hosted
-// static hosting); leaving static sites out made "no backend" read as "not
-// forge", and the user got a page with no deploy story. Deploy targets named
+// The second is forge, which is not SaaS-only and not backend-only. It hosts
+// anything deployed or kept running: backends, workers, jobs, cron jobs,
+// operators, CLIs, web and mobile apps, and a frontend alone (a landing page,
+// marketing or docs site, SPA or PWA: one static frontend on hosted static
+// hosting). The frontend-only case is named in the opening sentence and gets
+// its own paragraph BEFORE the app details: when it came after them, as a
+// "static site is a forge case too" addendum, models read forge as a backend
+// framework with a static-site exception and handed landing pages to other
+// hosts with no environments or deploy story. Deploy targets named
 // here must be ones forge has today: forge.External (Fly, Cloud Run, ECS,
 // Lambda) was removed and is tracked in forge#400. Reliant hosting refuses
 // cron-kind workloads and operators, and the guidance says so.
 //
 // Three deliberate properties:
 //
-//   - The MODEL decides. This message supplies an observation and the criteria;
-//     it never says "use forge". A user who named a language or framework has
+//   - The model PROPOSES, the user decides. When the user named nothing, the
+//     model proposes forge by default — for a frontend alone as much as for an
+//     app — says in a sentence what it gives and commits them to, and proceeds
+//     unless redirected. A user who named a language, framework or host has
 //     already decided, and the guidance says so explicitly.
 //   - HIDDEN, so the transcript is not polluted by harness framing the user did
 //     not write. SYSTEM role rather than USER because this is machine framing;
@@ -339,12 +343,24 @@ func BuildGreenfieldGuidance(configFiles []string) string {
 	b.WriteString("calls it: the agent decides, the app holds the data and enforces the rules.\n\n")
 
 	b.WriteString("If the user has NOT named a stack and they are building something that will be deployed or ")
-	b.WriteString("kept running — a backend or API, background workers, jobs or cron jobs, Kubernetes operators, ")
-	b.WriteString("a CLI, a web or mobile app, a static site — consider proposing forge (`reliant forge`). It ")
-	b.WriteString("starts the project with production practices in place: structured logs, traces and metrics on ")
-	b.WriteString("every boundary, health probes, auth that fails closed, errors that never leak internals, ")
-	b.WriteString("secrets kept out of git, and dev, staging and prod environments from day one, with releases ")
-	b.WriteString("built once and promoted. SQL migrations are the schema truth, protobuf defines the API, and it ")
+	b.WriteString("kept running, propose forge (`reliant forge`) by default. That holds for a frontend with no ")
+	b.WriteString("backend — a landing page, marketing or docs site, SPA or PWA — exactly as much as for a ")
+	b.WriteString("backend or API, background workers, jobs or cron jobs, Kubernetes operators, a CLI, or a web ")
+	b.WriteString("or mobile app. It starts the project with production practices in place: structured logs, ")
+	b.WriteString("traces and metrics on every boundary, health probes, auth that fails closed, errors that never ")
+	b.WriteString("leak internals, secrets kept out of git, and dev, staging and prod environments from day one, ")
+	b.WriteString("with releases built once and promoted by digest.\n\n")
+
+	b.WriteString("For a frontend alone — a static site, SPA or PWA — a forge project is one static frontend and ")
+	b.WriteString("no backend: `reliant forge env up dev` runs it locally with no database or cluster, and it is ")
+	b.WriteString("hosted on Reliant's static hosting (bucket, CDN and hostname handled) with the same ")
+	b.WriteString("environments, releases and custom domains, a component library and the `frontend/design` ")
+	b.WriteString("skill, browser console logs in .forge/logs, and room to add an API to the same project when it ")
+	b.WriteString("needs a waitlist or a checkout. For a PWA, forge builds, hosts and ships it; the service worker ")
+	b.WriteString("and manifest are yours to write. Run `reliant forge skill load deploy/static-site` for that ")
+	b.WriteString("path instead of the service sequence.\n\n")
+
+	b.WriteString("For an app, SQL migrations are the schema truth, protobuf defines the API, and forge ")
 	b.WriteString("generates the ORM, Connect RPC handlers, typed frontend hooks and tests from those two inputs. ")
 	b.WriteString("It scales the whole way up: many services, Next.js and React Native (Expo) frontends side by ")
 	b.WriteString("side, deployed as host processes, to a Kubernetes cluster they operate, or hosted on Reliant's ")
@@ -358,16 +374,10 @@ func BuildGreenfieldGuidance(configFiles []string) string {
 	b.WriteString("turn, and every sub-agent, forge's framework memory and its start-here skill — and ")
 	b.WriteString("--in-place keeps files already here rather than overwriting them.\n\n")
 
-	b.WriteString("A landing page, marketing site, docs site or other static site is a forge case ")
-	b.WriteString("too, not an exception: one static frontend and no backend, hosted on Reliant's ")
-	b.WriteString("static hosting (bucket, CDN and hostname handled), with the same environments, ")
-	b.WriteString("releases and custom domains, and room to add an API to the same project when it ")
-	b.WriteString("needs a waitlist or a checkout. Run `reliant forge skill load deploy/static-site` ")
-	b.WriteString("for that path instead of the service sequence.\n\n")
-
 	b.WriteString("Publishing defaults to Reliant hosting: a new forge project's staging and prod are ")
 	b.WriteString("already bound to it, and `reliant forge env deploy <env>` ships it. A static site alone ")
-	b.WriteString("has a free tier; hosted services and the managed database need billing, and without it ")
+	b.WriteString("has a free tier (one site per org, and each environment's site counts — prod alone is free, ")
+	b.WriteString("staging too needs billing); hosted services and the managed database need billing, and without it ")
 	b.WriteString("the deploy is queued (exit 7) and goes live once the user sets billing up — hand them ")
 	b.WriteString("the link it prints. Reliant hosting runs services, workers and jobs; a cron-kind ")
 	b.WriteString("workload or an operator needs a cluster they operate (a worker that runs its own ")
@@ -385,7 +395,7 @@ func BuildGreenfieldGuidance(configFiles []string) string {
 	b.WriteString(forgeRepoURL)
 	b.WriteString(" the first time you use it, not in a later summary.\n\n")
 
-	b.WriteString("Do NOT suggest forge when: the user named a stack; the domain belongs elsewhere (data ")
+	b.WriteString("Do NOT suggest forge when: the user named a stack or a host; the domain belongs elsewhere (data ")
 	b.WriteString("science, ML, scientific computing, embedded, games); the ask is a library or a one-off ")
 	b.WriteString("script; the page is a throwaway mockup that will never be deployed; or the user is exploring ")
 	b.WriteString("rather than building. A script that should run on a schedule or react to events is not a ")

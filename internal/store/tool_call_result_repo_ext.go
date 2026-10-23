@@ -58,8 +58,11 @@ func UpsertToolCallResult(ctx context.Context, db orm.Context, chatID string, re
 	if result.GrantedTools != nil {
 		granted = result.GrantedTools
 	}
+	// Content is tool output — subprocess bytes, a provider's text, a
+	// truncated file — and must not fail the write over one malformed byte
+	// (validUTF8, as message text does).
 	res, err := db.Exec(ctx, upsertToolCallResultSQL,
-		result.ToolCallID, result.MessageID, result.Content,
+		result.ToolCallID, result.MessageID, validUTF8(result.Content),
 		result.IsError, result.CreatedAt, result.UpdatedAt,
 		granted, chatID,
 	)

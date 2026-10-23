@@ -48,6 +48,8 @@ RELIANT_STORAGE_REAPER_INTERVAL kind=string flag="" default="1h" required=false 
 RELIANT_STORAGE_REAPER_PRESSURE_INTERVAL kind=string flag="" default="10m" required=false optional=false sensitive=false allowed=[] aliases=[]
 RELIANT_TEST_INTEGRATION_SECRET kind=string flag="" default="" required=false optional=true sensitive=true allowed=[] aliases=[]
 RELIANT_VAULT_KEY kind=string flag="" default="" required=false optional=true sensitive=true allowed=[] aliases=[]
+RELIANT_WORKER_MAX_CONCURRENT_WORKFLOW_TASKS kind=int32 flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
+RELIANT_WORKER_WORKFLOW_TASK_POLLERS kind=int32 flag="" default="5" required=false optional=false sensitive=false allowed=[] aliases=[]
 SENTRY_DSN kind=string flag="" default="" required=false optional=true sensitive=true allowed=[] aliases=[]
 SENTRY_ENABLED kind=bool flag="" default="true" required=false optional=false sensitive=false allowed=[] aliases=[]
 SENTRY_ENVIRONMENT kind=string flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[ENVIRONMENT(deprecated=false values=map[])]

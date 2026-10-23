@@ -300,8 +300,8 @@ func TestGreenfieldGuidanceNamesStackDeclaringConfig(t *testing.T) {
 	assert.Contains(t, content, ".vscode/settings.json")
 }
 
-// The message must leave the decision with the model and be explicit about the
-// cases where forge is the wrong answer. Without the negative space this
+// The message proposes rather than imposes, and is explicit about the cases
+// where forge is the wrong answer. Without the negative space this
 // becomes a standing preference that fires on every empty directory, which is
 // the failure mode that makes a suggestion feel like an ad.
 func TestGreenfieldGuidanceContent(t *testing.T) {
@@ -400,14 +400,14 @@ func TestGreenfieldGuidanceOffersForgeForStaticSites(t *testing.T) {
 	positive, negative, found := strings.Cut(content, "Do NOT suggest forge when")
 	require.True(t, found)
 
-	for _, want := range []string{"landing page", "marketing", "static"} {
+	for _, want := range []string{"landing page", "marketing", "static", "SPA", "PWA"} {
 		assert.Contains(t, positive, want,
 			"the guidance must name %q as a case forge serves", want)
 	}
 	assert.Contains(t, positive, "deploy/static-site",
 		"the model needs the skill to load for the static path, not the service sequence")
 
-	for _, excluded := range []string{"landing", "static", "marketing"} {
+	for _, excluded := range []string{"landing", "static", "marketing", "SPA", "PWA"} {
 		assert.NotContains(t, negative, excluded,
 			"%q must not be listed as a reason to steer away from forge", excluded)
 	}
@@ -530,4 +530,45 @@ func TestGreenfieldGuidanceStatesWhatHostingRefuses(t *testing.T) {
 	assert.Contains(t, content, "Reliant hosting runs services, workers and jobs")
 	assert.Contains(t, content, "a cron-kind workload or an operator needs a cluster they operate")
 	assert.Contains(t, content, "a worker that runs its own schedule is fine hosted")
+}
+
+// "Consider proposing forge", with static sites in a later paragraph phrased as
+// "a forge case too, not an exception", still read as: forge is a backend
+// framework that tolerates static sites. Models then handed landing pages to
+// other hosts with no environments and no deploy story. Frontend-only work is a
+// reason to use forge in its own right: named in the opening sentence, given its
+// own paragraph ahead of the app details, and proposed by default.
+func TestGreenfieldGuidanceProposesForgeByDefaultForFrontendOnly(t *testing.T) {
+	content := BuildGreenfieldGuidance(nil)
+
+	_, forgeSection, found := strings.Cut(content, "If the user has NOT named a stack")
+	require.True(t, found)
+	opening, _, found := strings.Cut(forgeSection, "\n\n")
+	require.True(t, found)
+
+	assert.Contains(t, opening, "propose forge (`reliant forge`) by default")
+	assert.NotContains(t, content, "consider proposing forge", "proposing forge is the default, not an option")
+	for _, want := range []string{"a frontend with no backend", "landing page", "SPA", "PWA"} {
+		assert.Contains(t, opening, want, "the opening forge sentence must name %q", want)
+	}
+
+	// The frontend-only paragraph precedes the app internals, and is not
+	// phrased as an exception to them.
+	frontend := strings.Index(content, "For a frontend alone")
+	app := strings.Index(content, "SQL migrations are the schema truth")
+	require.GreaterOrEqual(t, frontend, 0)
+	require.GreaterOrEqual(t, app, 0)
+	assert.Less(t, frontend, app, "the frontend-only path comes before the app details")
+	assert.NotContains(t, content, "exception")
+	assert.NotContains(t, content, "a forge case too")
+
+	// What a frontend alone concretely gets, and honesty about PWAs.
+	for _, want := range []string{
+		"`reliant forge env up dev`", "static hosting", "custom domains",
+		"`frontend/design`", ".forge/logs", "room to add an API",
+		"the service worker and manifest are yours to write",
+		"A static site alone has a free tier",
+	} {
+		assert.Contains(t, content, want)
+	}
 }

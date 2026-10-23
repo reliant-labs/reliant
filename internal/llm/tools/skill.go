@@ -270,11 +270,7 @@ func (t *skillTool) listSkills(filterPath string) (ToolResponse, error) {
 	}
 
 	for _, def := range matches {
-		desc := def.Description
-		if len(desc) > 120 {
-			desc = desc[:117] + "..."
-		}
-		fmt.Fprintf(&sb, "- %s: %s", def.SkillPath, desc)
+		fmt.Fprintf(&sb, "- %s: %s", def.SkillPath, truncateDescription(def.Description, SkillDescriptionBudget))
 		if hasChildren(t.skills, def.SkillPath) {
 			sb.WriteString(" (has sub-skills)")
 		}
@@ -416,7 +412,7 @@ func (t *skillTool) subSkillsSection(children []config.StoredSkill) string {
 	var sb strings.Builder
 	sb.WriteString("\n\n---\nSub-skills available (use skill tool with action=list or action=load):\n")
 	for _, child := range children {
-		fmt.Fprintf(&sb, "- %s: %s", child.SkillPath, truncateDescription(child.Description, 80))
+		fmt.Fprintf(&sb, "- %s: %s", child.SkillPath, truncateDescription(child.Description, SkillDescriptionBudget))
 		if hasChildren(t.skills, child.SkillPath) {
 			sb.WriteString(" (has sub-skills)")
 		}
@@ -433,7 +429,7 @@ func relatedSkillsSection(siblings []config.StoredSkill) string {
 	var sb strings.Builder
 	sb.WriteString("\n---\nRelated skills available (use skill tool to load):\n")
 	for _, s := range siblings {
-		fmt.Fprintf(&sb, "- %s: %s\n", s.SkillPath, truncateDescription(s.Description, 80))
+		fmt.Fprintf(&sb, "- %s: %s\n", s.SkillPath, truncateDescription(s.Description, SkillDescriptionBudget))
 	}
 	return sb.String()
 }
@@ -564,11 +560,7 @@ func (t *skillTool) searchSkills(query string) (ToolResponse, error) {
 	fmt.Fprintf(&sb, "Skills matching \"%s\":\n\n", query)
 
 	for _, r := range results {
-		desc := r.def.Description
-		if len(desc) > 120 {
-			desc = desc[:117] + "..."
-		}
-		fmt.Fprintf(&sb, "- %s: %s\n", r.def.SkillPath, desc)
+		fmt.Fprintf(&sb, "- %s: %s\n", r.def.SkillPath, truncateDescription(r.def.Description, SkillDescriptionBudget))
 	}
 
 	sb.WriteString("\nUse skill tool with action='load' and path='<skill-path>' to load a skill's instructions.")
@@ -614,11 +606,44 @@ func findSiblingSkills(skills []config.StoredSkill, skill config.StoredSkill) []
 	return siblings
 }
 
+// SkillDescriptionBudget is the most characters of a skill's description any
+// listing shows the model: the per-turn announcement, list, search, and the
+// sub-skill / related-skill navigation appended to a load.
+//
+// The announcement is the model's map of what exists, and a description is
+// the only thing on that map saying what a skill is FOR. At the old 77-byte
+// cut, the purpose rarely survived: `db: Database work — SQL migrations are
+// the single schema source of truth; forge...` reads as "forge is a backend
+// tool", which is how agents concluded forge had nothing for a static site.
+// Measured on the default catalog of a non-forge project (26 top-level
+// skills, 4.4KB of descriptions in full): 150 keeps 17 descriptions whole and
+// cuts the other 9 at a word boundary after their purpose; the announcement
+// grows from 2.5KB to 4.1KB, about +400 tokens, in a cached prompt prefix.
+// Printing every description whole would cost another ~1KB for the long tail
+// of second sentences.
+const SkillDescriptionBudget = 150
+
+// truncateDescription fits desc into maxLen characters (runes, not bytes —
+// a byte cut can split a multi-byte rune such as "—" and emit invalid UTF-8).
+// Whitespace runs collapse to one space so a multi-line YAML description
+// stays on its list line. An over-long description is cut at the last word
+// boundary, never mid-word, with trailing punctuation dropped before the
+// ellipsis.
 func truncateDescription(desc string, maxLen int) string {
-	if len(desc) <= maxLen {
+	desc = strings.Join(strings.Fields(desc), " ")
+	runes := []rune(desc)
+	if len(runes) <= maxLen {
 		return desc
 	}
-	return desc[:maxLen-3] + "..."
+	const ellipsis = "..."
+	cut := string(runes[:maxLen-len(ellipsis)])
+	// Cut at the last space unless that would discard more than half the
+	// budget (one enormous word): a mid-word cut beats an empty description.
+	if i := strings.LastIndex(cut, " "); i > len(cut)/2 {
+		cut = cut[:i]
+	}
+	cut = strings.TrimRight(cut, " ,;:—–-(")
+	return cut + ellipsis
 }
 
 // SkillsAnnouncement returns a brief summary of top-level skills for system
@@ -653,11 +678,7 @@ func SkillsAnnouncement(skills []config.StoredSkill) string {
 	var sb strings.Builder
 	sb.WriteString("\n\n<system-reminder>\nAvailable skills (use the skill tool to load):\n")
 	for _, def := range tops {
-		desc := def.Description
-		if len(desc) > 80 {
-			desc = desc[:77] + "..."
-		}
-		fmt.Fprintf(&sb, "- %s: %s", def.SkillPath, desc)
+		fmt.Fprintf(&sb, "- %s: %s", def.SkillPath, truncateDescription(def.Description, SkillDescriptionBudget))
 		if hasChildren(skills, def.SkillPath) {
 			sb.WriteString(" (has sub-skills)")
 		}

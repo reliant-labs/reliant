@@ -2633,6 +2633,12 @@ func (a *CallLLMActivity) getSystemPrompts(
 		bb.WriteString("\nOmit `repo` to inherit the chat's bound worktree.")
 	}
 
+	// What Reliant can do: the live routing guide (reliant_capabilities.go).
+	// Static bytes, so it rides the cached prefix; it goes before the skills
+	// announcement, which changes whenever a skill does.
+	bb.WriteString("\n\n")
+	bb.WriteString(strings.TrimSpace(reliantCapabilities))
+
 	// Append skill announcement if any skills are available. Skills are
 	// synced from the daemon via project config — this is pure in-memory.
 	if projectCfg != nil {
@@ -3155,8 +3161,10 @@ func formatStoredMemories(projectCfg *cfgpkg.Config) string {
 	if strings.TrimSpace(projectCfg.GlobalMemoryMD) != "" {
 		memories = append(memories, "## Global Context\n\n"+projectCfg.GlobalMemoryMD)
 	}
-	if strings.TrimSpace(projectCfg.ProjectMemoryMD) != "" {
-		memories = append(memories, "## Project Context\n\n"+projectCfg.ProjectMemoryMD)
+	// A reliant.md scaffolded before the routing guide moved into the system
+	// prompt still carries a copy of it; the live one is the only one sent.
+	if projectMemory := withoutScaffoldedCapabilities(projectCfg.ProjectMemoryMD); strings.TrimSpace(projectMemory) != "" {
+		memories = append(memories, "## Project Context\n\n"+projectMemory)
 	}
 
 	// Runtime capability heads-up for cloud daemons: tell the model up front

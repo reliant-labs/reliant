@@ -6,21 +6,11 @@ import (
 	"testing"
 )
 
-func TestDefaultProjectReliantMD_PinsRoutingFacts(t *testing.T) {
+func TestDefaultProjectReliantMD_Shape(t *testing.T) {
 	for _, want := range []string{
 		"# Project Instructions",
 		"## Guidelines",
 		"## Key Context",
-		"## What Reliant can do",
-		"`workflow-builder` skill",
-		"`.reliant/workflows/`",
-		"`triggers:` block",
-		"`http/request@1`",
-		"even when it sounds like \"just a script\"",
-		"`mcp__reliant-docs__search_reliant`",
-		"reliant forge skill load forge",
-		"https://github.com/reliant-labs/forge",
-		"cron-kind workloads and operators need",
 		"## Code navigation",
 		"`code_context(symbol: \"X\")`",
 		"Load the `code-search` skill for the details.",
@@ -33,5 +23,12 @@ func TestDefaultProjectReliantMD_PinsRoutingFacts(t *testing.T) {
 	}
 	if strings.Contains(defaultProjectReliantMD, "Build and test Reliant workflows") {
 		t.Error("scaffolded reliant.md still describes workflow-builder as a feature name, not a trigger")
+	}
+	// The routing guide is rendered live by the harness on every turn; a copy
+	// written to disk once goes stale, and the harness drops any copy it finds.
+	for _, stale := range []string{"## What Reliant can do", "### forge", "https://github.com/reliant-labs/forge"} {
+		if strings.Contains(defaultProjectReliantMD, stale) {
+			t.Errorf("scaffolded reliant.md must not carry the routing guide (found %q); it lives in the harness", stale)
+		}
 	}
 }

@@ -134,9 +134,25 @@ func EdgeConditionCELEnvConfig() CELEnvConfig {
 // CEL ENVIRONMENT FACTORY
 // =============================================================================
 
-// NewEnv creates a CEL environment with the specified configuration.
+// NewEnv returns the CEL environment for the specified configuration, built
+// once per distinct configuration and shared (see cache.go): an environment is
+// immutable, so callers may compile against it concurrently and Extend it.
 // Uses native Go types for compile-time field validation.
 func NewEnv(config CELEnvConfig) (*cel.Env, error) {
+	key := config.cacheKey()
+	if env, ok := envCache.get(key); ok {
+		return env, nil
+	}
+	env, err := buildEnv(config)
+	if err != nil {
+		return nil, err
+	}
+	envCache.add(key, env)
+	return env, nil
+}
+
+// buildEnv constructs the environment NewEnv caches.
+func buildEnv(config CELEnvConfig) (*cel.Env, error) {
 	var opts []cel.EnvOption
 
 	if config.IncludeStdLib {

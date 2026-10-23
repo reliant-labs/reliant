@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/google/cel-go/cel"
 	wfcel "github.com/reliant-labs/reliant/internal/workflow/cel"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 )
@@ -114,18 +113,16 @@ func (b *CELContextBuilder) Build() map[string]interface{} {
 	return b.resolutionContext().Activation()
 }
 
-// env builds the CEL environment declaring exactly the scope's namespaces.
-func (b *CELContextBuilder) env() (*cel.Env, map[string]interface{}, error) {
+// scope is the CEL environment config declaring exactly the scope's
+// namespaces, and the activation that fills them. The environment and every
+// expression compiled against it come from wfcel's caches (wfcel.Compile).
+func (b *CELContextBuilder) scope() (wfcel.CELEnvConfig, map[string]interface{}) {
 	rc := b.resolutionContext()
-	env, err := wfcel.NewEnv(wfcel.CELEnvConfig{
+	return wfcel.CELEnvConfig{
 		Namespaces:             rc.Namespaces(),
 		IncludeStdLib:          true,
 		IncludeCustomFunctions: true,
-	})
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create CEL environment: %w", err)
-	}
-	return env, rc.Activation(), nil
+	}, rc.Activation()
 }
 
 // ============================================================================
@@ -139,10 +136,7 @@ func (b *CELContextBuilder) env() (*cel.Env, map[string]interface{}, error) {
 // - Strings without {{}} are returned as-is (literals).
 // Implements wfcel.CELEvaluator.
 func (b *CELContextBuilder) EvalString(expr string) (interface{}, error) {
-	env, evalCtx, err := b.env()
-	if err != nil {
-		return nil, err
-	}
+	config, evalCtx := b.scope()
 
 	// Find all {{...}} template expressions. A {{ that does not close is an
 	// error: it must never be sent on as literal text.
@@ -158,7 +152,7 @@ func (b *CELContextBuilder) EvalString(expr string) (interface{}, error) {
 
 	// Pure expression (entire string is {{expr}} with optional whitespace)
 	if len(matches) == 1 && isPureExpressionWithWhitespace(expr, matches[0]) {
-		result, err := b.evalSingleCEL(matches[0].Expr, env, evalCtx)
+		result, err := b.evalSingleCEL(matches[0].Expr, config, evalCtx)
 		if err != nil {
 			return nil, err
 		}
@@ -170,7 +164,7 @@ func (b *CELContextBuilder) EvalString(expr string) (interface{}, error) {
 	lastEnd := 0
 	for _, match := range matches {
 		result.WriteString(expr[lastEnd:match.Start])
-		value, err := b.evalSingleCEL(match.Expr, env, evalCtx)
+		value, err := b.evalSingleCEL(match.Expr, config, evalCtx)
 		if err != nil {
 			return nil, err
 		}
@@ -186,26 +180,20 @@ func (b *CELContextBuilder) EvalString(expr string) (interface{}, error) {
 }
 
 // evalSingleCEL evaluates a single CEL expression and returns the native Go value.
-func (b *CELContextBuilder) evalSingleCEL(expr string, env *cel.Env, evalCtx map[string]interface{}) (interface{}, error) {
+func (b *CELContextBuilder) evalSingleCEL(expr string, config wfcel.CELEnvConfig, evalCtx map[string]interface{}) (interface{}, error) {
 	expr = strings.TrimSpace(expr)
 	if expr == "" {
 		return nil, nil
 	}
 
-	ast, issues := env.Compile(expr)
-	if issues != nil && issues.Err() != nil {
-		return nil, fmt.Errorf("CEL compilation error: %w", issues.Err())
-	}
-
-	prg, err := env.Program(ast, wfcel.ProgramOptions()...)
+	compiled, err := compileCEL(config, expr)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create CEL program: %w", err)
-	}
-
-	if err := wfcel.CheckWorkflowPathReference(env, ast, evalCtx); err != nil {
 		return nil, err
 	}
-	out, _, err := prg.Eval(evalCtx)
+	if err := wfcel.CheckWorkflowPathReference(compiled.Env, compiled.AST, evalCtx); err != nil {
+		return nil, err
+	}
+	out, _, err := compiled.Program.Eval(evalCtx)
 	if err != nil {
 		return nil, fmt.Errorf("CEL evaluation error: %w", wfcel.ExplainEvalError(err))
 	}
@@ -218,25 +206,15 @@ func (b *CELContextBuilder) evalSingleCEL(expr string, env *cel.Env, evalCtx map
 // EvalBool evaluates a direct CEL expression (no {{ }}) as a boolean.
 // Implements wfcel.CELEvaluator.
 func (b *CELContextBuilder) EvalBool(expr string) (bool, error) {
-	env, evalCtx, err := b.env()
+	config, evalCtx := b.scope()
+	compiled, err := compileCEL(config, expr)
 	if err != nil {
 		return false, err
 	}
-
-	ast, issues := env.Compile(expr)
-	if issues != nil && issues.Err() != nil {
-		return false, fmt.Errorf("CEL compilation error: %w", issues.Err())
-	}
-
-	prg, err := env.Program(ast, wfcel.ProgramOptions()...)
-	if err != nil {
-		return false, fmt.Errorf("failed to create CEL program: %w", err)
-	}
-
-	if err := wfcel.CheckWorkflowPathReference(env, ast, evalCtx); err != nil {
+	if err := wfcel.CheckWorkflowPathReference(compiled.Env, compiled.AST, evalCtx); err != nil {
 		return false, err
 	}
-	out, _, err := prg.Eval(evalCtx)
+	out, _, err := compiled.Program.Eval(evalCtx)
 	if err != nil {
 		return false, fmt.Errorf("CEL evaluation error: %w", wfcel.ExplainEvalError(err))
 	}
@@ -246,6 +224,18 @@ func (b *CELContextBuilder) EvalBool(expr string) (bool, error) {
 		return false, fmt.Errorf("CEL expression %q did not evaluate to bool, got %T", expr, out.Value())
 	}
 	return boolVal, nil
+}
+
+// compileCEL is wfcel.Compile with the builder's error wording.
+func compileCEL(config wfcel.CELEnvConfig, expr string) (*wfcel.CompiledExpr, error) {
+	compiled, issues, err := wfcel.Compile(config, expr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create CEL program: %w", err)
+	}
+	if issues != nil {
+		return nil, fmt.Errorf("CEL compilation error: %w", issues.Err())
+	}
+	return compiled, nil
 }
 
 // Ensure CELContextBuilder implements wfcel.CELEvaluator at compile time.

@@ -121,16 +121,17 @@ func (s *Service) resumeInputUpdate(ctx context.Context, userID, chatID, project
 
 // runInputsTimeout bounds the get_workflow_inputs query a send makes on the
 // run it is about to resume. A parked run answers from its worker's cache; a
-// closed one is replayed first. Past this the send goes on without them.
+// closed one is refused (rtemporal.QueryOpenRun). Past this the send goes on
+// without them.
 const runInputsTimeout = 10 * time.Second
 
 // runInputsForSend is the run's current inputs, for resumeInputUpdate, or nil
 // when Temporal cannot say in time — then only what the send carries is
 // checked against the user's providers.
-func (s *Service) runInputsForSend(ctx context.Context, workflowID, runID string) map[string]interface{} {
+func (s *Service) runInputsForSend(ctx context.Context, workflowID string) map[string]interface{} {
 	queryCtx, cancel := context.WithTimeout(ctx, runInputsTimeout)
 	defer cancel()
-	inputs, err := s.queryRunInputs(queryCtx, workflowID, runID)
+	inputs, err := s.queryRunInputs(queryCtx, workflowID)
 	if err != nil {
 		logging.InfoContext(ctx, "Could not read the run's inputs; checking only the send's own params against the user's providers",
 			"workflowID", workflowID, "error", err)

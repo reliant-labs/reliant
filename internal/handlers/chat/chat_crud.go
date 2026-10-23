@@ -544,11 +544,10 @@ func (s *Service) cancelArchivedChatWorkflow(ctx context.Context, chat *db.Chat)
 	if workflowID == "" {
 		return
 	}
-	runID := ""
-	if chat.RunID != nil {
-		runID = *chat.RunID
-	}
-	err := s.deps.Temporal.CancelWorkflow(ctx, workflowID, runID)
+	// The current run (empty run id): the chat row's run id is stale after a
+	// continue-as-new, and cancelling that closed run would leave the live
+	// one going.
+	err := s.deps.Temporal.CancelWorkflow(ctx, workflowID, "")
 	var notFound *serviceerror.NotFound
 	if err == nil || errors.As(err, &notFound) {
 		return

@@ -19,6 +19,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/logging"
+	rtemporal "github.com/reliant-labs/reliant/internal/temporal"
 	"github.com/reliant-labs/reliant/internal/workflow"
 )
 
@@ -47,12 +48,7 @@ func (s *Service) UpdateWorkflowParams(
 	// with synthetic DB IDs that Temporal doesn't know about.
 	// Thread-scoped updates use the __thread key in the signal payload.
 	workflowID := chat.MainThreadID()
-	runID := ""
-	if workflowID != "" {
-		if chat.RunID != nil {
-			runID = *chat.RunID
-		}
-	} else {
+	if workflowID == "" {
 		return nil, svcerr.FailedPrecondition("no active workflow for chat")
 	}
 
@@ -95,7 +91,7 @@ func (s *Service) UpdateWorkflowParams(
 		// are signalled and remembered by the run, never stored as the
 		// selection (which would hand the sub-agent's model to the next root run).
 		stateUpdate["__thread"] = *req.Msg.ThreadId
-		if err := s.signalParamUpdate(ctx, workflowID, runID, stateUpdate); err != nil {
+		if err := s.signalParamUpdate(ctx, workflowID, stateUpdate); err != nil {
 			return nil, err
 		}
 		return connect.NewResponse(&reliantv1.UpdateWorkflowParamsResponse{
@@ -126,12 +122,12 @@ func (s *Service) UpdateWorkflowParams(
 		// A move is news only when it changes what the run already uses.
 		news := make([]launch.ModelSubstitution, 0, len(moves))
 		for _, sub := range moves {
-			if s.checkParamsActuallyChanged(ctx, workflowID, runID, map[string]interface{}{topLevelInput(sub.Input): stateUpdate[topLevelInput(sub.Input)]}) {
+			if s.checkParamsActuallyChanged(ctx, workflowID, map[string]interface{}{topLevelInput(sub.Input): stateUpdate[topLevelInput(sub.Input)]}) {
 				news = append(news, sub)
 			}
 		}
 		s.postModelFallbackNotices(ctx, req.Msg.ChatId, workflowID, workflowID, news)
-		if err := s.signalParamUpdate(ctx, workflowID, runID, stateUpdate); err != nil {
+		if err := s.signalParamUpdate(ctx, workflowID, stateUpdate); err != nil {
 			return nil, err
 		}
 	}
@@ -160,10 +156,12 @@ func (s *Service) rootRunIsLive(ctx context.Context, workflowID string) bool {
 	return wf.Status == db.Active() || wf.Status == db.Paused()
 }
 
-// signalParamUpdate delivers an input update to the chat's run. Thread-scoped
-// updates ride in the payload under __thread.
-func (s *Service) signalParamUpdate(ctx context.Context, workflowID, runID string, update map[string]interface{}) error {
-	err := s.deps.Temporal.SignalWorkflow(ctx, workflowID, runID, "update_workflow_state", update)
+// signalParamUpdate delivers an input update to the chat's CURRENT run (empty
+// run id): the run id on the chat row names whichever run was current when it
+// was written, and a continue-as-new closes that one. Thread-scoped updates
+// ride in the payload under __thread.
+func (s *Service) signalParamUpdate(ctx context.Context, workflowID string, update map[string]interface{}) error {
+	err := s.deps.Temporal.SignalWorkflow(ctx, workflowID, "", "update_workflow_state", update)
 	if err == nil {
 		return nil
 	}
@@ -416,18 +414,13 @@ func (s *Service) GetThreadWorkflowInputs(
 	// Child workflows are inline goroutines with synthetic DB IDs that Temporal doesn't know.
 	// All queries must target the root workflow (the only real Temporal workflow).
 	rootWorkflowID := chat.MainThreadID()
-	rootRunID := ""
-	if rootWorkflowID != "" {
-		if chat.RunID != nil {
-			rootRunID = *chat.RunID
-		}
-	}
 
-	// Try to query Temporal for thread-specific inputs (only works for running workflows)
+	// Query Temporal for thread-specific inputs. Only the root's current run
+	// can answer, and only while it is open (rtemporal.QueryOpenRun).
 	inputsMap := make(map[string]*structpb.Value)
 	if (isRunning || resumable) && rootWorkflowID != "" {
 		// Use get_thread_inputs query which returns the thread's subInputs map
-		queryResp, err := s.deps.Temporal.QueryWorkflow(ctx, rootWorkflowID, rootRunID, "get_thread_inputs", req.Msg.ThreadId)
+		queryResp, err := rtemporal.QueryOpenRun(ctx, s.deps.Temporal, rootWorkflowID, "get_thread_inputs", req.Msg.ThreadId)
 		if err == nil {
 			var currentInputs map[string]interface{}
 			if err := queryResp.Get(&currentInputs); err == nil {

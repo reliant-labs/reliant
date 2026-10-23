@@ -575,10 +575,10 @@ func truncateOutputWithLimit(content string, limit int) string {
 	}
 
 	halfLength := limit / 2
-	start := content[:halfLength]
-	end := content[len(content)-halfLength:]
+	start := headBytes(content, halfLength)
+	end := tailBytes(content, halfLength)
 
-	truncatedLinesCount := countShellLines(content[halfLength : len(content)-halfLength])
+	truncatedLinesCount := countShellLines(content[len(start) : len(content)-len(end)])
 	return fmt.Sprintf("%s\n\n... [%d lines truncated] ...\n\n%s", start, truncatedLinesCount, end)
 }
 

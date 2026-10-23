@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	forgecli "github.com/reliant-labs/forge/cli"
 	skillscore "github.com/reliant-labs/reliant/internal/skills/core"
 	"github.com/stretchr/testify/require"
 )
@@ -57,11 +58,12 @@ func TestParseForgeSyntheticPath_RejectsForeign(t *testing.T) {
 }
 
 // TestDiscoverForgeSkills_NoForgeYaml verifies the dual-stream contract:
-// without forge.yaml, framework skills (and the synthesized "forge"
-// parent) are NOT surfaced, but general/both forge skills still are —
-// they apply to any project. Reliant pulls them in unconditionally so
-// methodology like testing-methodology / code-review keeps working
-// outside forge projects, where it used to live as a reliant builtin.
+// without forge.yaml, framework skills are NOT surfaced under "forge/", but
+// general/both forge skills still are — they apply to any project. Reliant
+// pulls them in unconditionally so methodology like testing-methodology /
+// code-review keeps working outside forge projects, where it used to live as
+// a reliant builtin. The one forge entry is the childless pre-adoption
+// `forge` (see TestDiscoverForgeSkills_PreAdoptionEntry).
 func TestDiscoverForgeSkills_NoForgeYaml(t *testing.T) {
 	isolateHome(t)
 	dir := t.TempDir()
@@ -69,10 +71,11 @@ func TestDiscoverForgeSkills_NoForgeYaml(t *testing.T) {
 	require.NotEmpty(t, defs, "general forge skills should surface even without forge.yaml")
 
 	for _, d := range defs {
-		require.NotEqual(t, forgeNamespace, d.SkillPath,
-			"forge framework parent must NOT surface without forge.yaml, got %q", d.SkillPath)
 		require.False(t, strings.HasPrefix(d.SkillPath, forgeNamespace+"/"),
 			"forge/* framework sub-skills must NOT surface without forge.yaml, got %q", d.SkillPath)
+		if d.SkillPath == forgeNamespace {
+			require.False(t, d.HasChildren, "the pre-adoption forge entry has no addressable children")
+		}
 	}
 
 	// At least one well-known general skill should be present so the
@@ -298,23 +301,128 @@ func TestDiscoverAll_IncludesForgeSubSkills(t *testing.T) {
 }
 
 // TestDiscover_SkipsForgeFrameworkWhenNoForgeYaml verifies the new
-// dual-stream contract at the Discover() level: without forge.yaml,
-// the framework parent and any "forge/*" sub-skills must not appear,
-// but ScopeForge general skills DO surface (at their bare path) so
-// methodology applies in non-forge projects too.
+// dual-stream contract at the Discover() level: without forge.yaml, no
+// "forge/*" sub-skill appears and the only `forge` entry is the childless
+// pre-adoption one, while ScopeForge general skills DO surface (at their bare
+// path) so methodology applies in non-forge projects too.
 func TestDiscover_SkipsForgeFrameworkWhenNoForgeYaml(t *testing.T) {
 	isolateHome(t)
 	dir := t.TempDir()
 	snap := Discover(DiscoverInput{ProjectPath: dir})
+	forgeEntries := 0
 	for _, d := range snap.Definitions {
 		if d.Scope != skillscore.ScopeForge {
 			continue
 		}
-		require.NotEqual(t, forgeNamespace, d.SkillPath,
-			"forge framework parent must NOT surface without forge.yaml")
 		require.False(t, strings.HasPrefix(d.SkillPath, forgeNamespace+"/"),
 			"forge/* framework sub-skills must NOT surface without forge.yaml, got %q", d.SkillPath)
+		if d.SkillPath == forgeNamespace {
+			forgeEntries++
+			require.False(t, d.HasChildren)
+			require.Equal(t, forgePreAdoptionDescription, d.Description)
+		}
 	}
+	require.Equal(t, 1, forgeEntries, "exactly one pre-adoption forge entry")
+}
+
+// Before adoption the catalog has one `forge` entry whose description says
+// what forge is for — frontend-only work included — inside the part every
+// listing shows, and whose body is forge's start-here skill as the CLI prints
+// it, headed by how to reach the skills it names.
+func TestDiscoverForgeSkills_PreAdoptionEntry(t *testing.T) {
+	isolateHome(t)
+	dir := t.TempDir()
+
+	defs := discoverForgeSkills(dir, "", true)
+	var entries []Definition
+	for _, d := range defs {
+		if d.SkillPath == forgeNamespace {
+			entries = append(entries, d)
+		}
+	}
+	require.Len(t, entries, 1, "one `forge` entry: no emit:both skill may share its path")
+	entry := entries[0]
+
+	require.False(t, entry.HasChildren, "nothing is addressable under forge/ before adoption")
+	require.Equal(t, skillscore.ScopeForge, entry.Scope)
+	head := entry.Description
+	if len(head) > 100 {
+		head = head[:100]
+	}
+	for _, kind := range []string{"static sites", "SPAs", "landing pages"} {
+		require.Contains(t, head, kind, "the frontend-only kinds must lead the description")
+	}
+	require.LessOrEqual(t, len([]rune(entry.Description)), 150, "the description must fit the listing budget whole")
+
+	require.True(t, strings.HasPrefix(entry.Body, forgePreAdoptionPreamble), "body leads with the pre-adoption preamble")
+	startHere, err := forgecli.RenderSkill(dir, forgeStartHerePath, forgecli.RenderSkillOptions{Audience: "forge"})
+	require.NoError(t, err)
+	require.Equal(t, forgePreAdoptionPreamble+string(startHere), entry.Body,
+		"the rest of the body is the start-here, rendered as `reliant forge skill load forge` prints it")
+	require.Contains(t, entry.Body, "Forge — start here")
+
+	// Lazy load goes through the same renderer.
+	lazy := discoverForgeSkills(dir, "", false)
+	for _, d := range lazy {
+		if d.SkillPath != forgeNamespace {
+			continue
+		}
+		require.Empty(t, d.Body)
+		full, err := LoadFullDefinition(d)
+		require.NoError(t, err)
+		require.Equal(t, entry.Body, full.Body)
+	}
+}
+
+// In a forge project the `forge` entry is the namespace map, described by
+// what forge is for and pointing at the start-here under it.
+func TestDiscoverForgeSkills_ParentDescriptionSaysWhatForgeIsFor(t *testing.T) {
+	isolateHome(t)
+	dir := t.TempDir()
+	ensureForgeYaml(t, dir)
+
+	defs := discoverForgeSkills(dir, "", false)
+	var parent *Definition
+	for i := range defs {
+		if defs[i].SkillPath == forgeNamespace {
+			require.Nil(t, parent, "one `forge` entry in a forge project")
+			parent = &defs[i]
+		}
+	}
+	require.NotNil(t, parent)
+	require.True(t, parent.HasChildren)
+	require.Equal(t, forgeParentDescription, parent.Description)
+	require.True(t, strings.HasPrefix(parent.Description, forgePurpose))
+	require.Contains(t, parent.Description, "forge/forge")
+	require.LessOrEqual(t, len([]rune(parent.Description)), 150)
+	require.NotContains(t, parent.Body, forgePreAdoptionPreamble)
+}
+
+// The start-here keeps its plain path and body in a forge project: the
+// pre-adoption preamble is only for a project without forge.yaml.
+func TestLoadFullDefinition_StartHereInForgeProjectHasNoPreamble(t *testing.T) {
+	isolateHome(t)
+	dir := t.TempDir()
+	ensureForgeYaml(t, dir)
+
+	for _, d := range discoverForgeSkills(dir, "", true) {
+		if d.SkillPath == forgeNamespace+"/"+forgeStartHerePath {
+			require.Contains(t, d.Body, "Forge — start here")
+			require.False(t, strings.HasPrefix(d.Body, forgePreAdoptionPreamble))
+			return
+		}
+	}
+	t.Fatal("forge/forge not surfaced in a forge project")
+}
+
+// Workflow validation's forge view is unaffected: it is the forge-project
+// view, which has no pre-adoption entry, and its paths are exactly the emit
+// partition's.
+func TestForgeFrameworkSkillPaths_UnaffectedByPreAdoptionEntry(t *testing.T) {
+	isolateHome(t)
+	paths := ForgeFrameworkSkillPaths()
+	require.Contains(t, paths, forgeNamespace+"/"+forgeStartHerePath)
+	require.NotContains(t, paths, forgeNamespace, "the synthetic entries are not framework skill paths")
 }
 
 func TestForgeSkillsForInput_PrefixesNestedRepoSources(t *testing.T) {

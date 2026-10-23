@@ -56,6 +56,9 @@ type workerOptions struct {
 	Analytics         analytics.Settings
 	LLM               drivers.Settings
 	Preview           tools.PreviewSettings
+	// As NewTemporalWorker hands them to workersetup (0: its default).
+	WorkflowTaskSlots   int
+	WorkflowTaskPollers int
 }
 
 // loadServerWorkerConfig loads the worker's configs as its command does — the
@@ -101,6 +104,8 @@ func loadServerWorkerConfig(cmd *cobra.Command, opts *workerOptions) error {
 	opts.LivenessPaths, opts.ReadinessPaths = server.Probes.Live, server.Probes.Ready
 	opts.PreStopDelay, opts.ShutdownTimeout = server.PreStopDelay, server.ShutdownTimeout
 	opts.PprofPort = int(worker.GetPprofPort())
+	opts.WorkflowTaskSlots = int(worker.GetMaxConcurrentWorkflowTasks())
+	opts.WorkflowTaskPollers = int(worker.GetWorkflowTaskPollers())
 	opts.ControlPlane = app.ControlPlaneEndpoint(process.GetControlPlane())
 	opts.Log = logSettings(base)
 	opts.PublicURL, opts.VaultKey, opts.Webhooks = in.PublicURL, in.VaultKey, in.Webhooks

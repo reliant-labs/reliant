@@ -420,7 +420,7 @@ func truncateLongLines(content string) string {
 	lines, terminated := splitLines(content)
 	for i, line := range lines {
 		if len(line) > MaxLineLength {
-			lines[i] = line[:MaxLineLength] + "..."
+			lines[i] = headBytes(line, MaxLineLength) + "..."
 		}
 	}
 	return joinLines(lines, terminated)

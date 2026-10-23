@@ -4,7 +4,6 @@ package chat
 import (
 	"context"
 	"fmt"
-	"time"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -256,20 +255,15 @@ func (s *Service) dropQueuedMessage(ctx context.Context, chatID, why string) {
 	}
 }
 
-// closedRunInputsTimeout bounds the get_workflow_inputs query on a closed run,
-// which Temporal answers by replaying its history on a worker.
-const closedRunInputsTimeout = 30 * time.Second
-
 // restartAtCheckpoint starts a fresh run for a chat whose root run is closed,
 // entering at its last checkpoint (ResumeInputFromDurableState) on the root
 // thread — SendMessage's coarse resume, without a new message. It returns the
 // new run's id.
 //
-// The inputs are the closed run's own, read back with its get_workflow_inputs
-// query (as startRunForQueuedRow does): no request carries params here, and
-// rebuilding them from the chat's presets would quietly swap the model the user
-// chose for the default. Only when that history cannot be replayed (a wedged
-// run, past retention) are they rebuilt from the presets.
+// The inputs are built the way SendMessage builds a closed chat's next run
+// (inputsAfterClosedRun): presets plus the chat's stored selection, which is
+// what every send and param edit recorded. They are not read back from the
+// closed run — Temporal would replay its whole history to answer.
 func (s *Service) restartAtCheckpoint(ctx context.Context, chat *db.Chat, root *db.Workflow) (string, error) {
 	workflowID := root.ID
 	workflowName := activeWorkflowNameForResume(chat, root)
@@ -277,21 +271,7 @@ func (s *Service) restartAtCheckpoint(ctx context.Context, chat *db.Chat, root *
 		return "", fmt.Errorf("chat %s has no workflow", chat.ID)
 	}
 
-	inputs := s.closedRunInputs(ctx, workflowID)
-	if inputs == nil {
-		presets := make(map[string]string, len(chat.SelectedPresets))
-		for group, name := range chat.SelectedPresets {
-			if name != "" {
-				presets[group] = name
-			}
-		}
-		inputs = s.launcher().BuildChatWorkflowInputs(ctx, chat.UserID, chat, workflowName, presets, nil)
-	} else {
-		// The closed run's own inputs say what it ran on; the chat's selection
-		// says what it is set to now, which may be a later pick.
-		inputs = s.overSelection(ctx, chat.ID, workflowName, inputs)
-		s.refreshProviderPolicy(ctx, chat, inputs)
-	}
+	inputs := s.inputsAfterClosedRun(ctx, chat, workflowName)
 	// This run answers a person, not whatever launched the chat.
 	delete(inputs, v2.InputKeyLaunchRun)
 	v2.DropActingIdentity(inputs)
@@ -336,24 +316,25 @@ func (s *Service) restartAtCheckpoint(ctx context.Context, chat *db.Chat, root *
 	return run.GetRunID(), nil
 }
 
-// closedRunInputs reads a closed run's inputs back with its
-// get_workflow_inputs query; nil when Temporal cannot answer.
-func (s *Service) closedRunInputs(ctx context.Context, workflowID string) map[string]interface{} {
-	queryCtx, cancel := context.WithTimeout(ctx, closedRunInputsTimeout)
-	defer cancel()
-	encoded, err := s.deps.Temporal.QueryWorkflow(queryCtx, workflowID, "", "get_workflow_inputs")
-	if err != nil {
-		logging.InfoContext(ctx, "[ContinueQueued] Could not read the closed run's inputs; rebuilding them from the chat's presets",
-			"workflowID", workflowID, "error", err)
-		return nil
+// inputsAfterClosedRun builds the inputs for a run that follows a closed one
+// without a request to carry params: the chat's presets, with its stored
+// selection over them (launch.Launcher.BuildChatWorkflowInputs) — the same
+// inputs SendMessage gives a closed chat's next run. The selection is the
+// durable record of what each send and param edit gave the run
+// (recordSelection), so it is what the closed run was running on.
+//
+// They are deliberately NOT read back from the closed run with a query.
+// Temporal answers a query on a closed run by replaying its entire history on
+// a worker, and on 2026-10-23 those replays (up to 37k events each, 13-17
+// minutes of two cores) starved the worker pool (rtemporal.QueryOpenRun).
+func (s *Service) inputsAfterClosedRun(ctx context.Context, chat *db.Chat, workflowName string) map[string]interface{} {
+	presets := make(map[string]string, len(chat.SelectedPresets))
+	for group, name := range chat.SelectedPresets {
+		if name != "" {
+			presets[group] = name
+		}
 	}
-	var inputs map[string]interface{}
-	if err := encoded.Get(&inputs); err != nil || inputs == nil {
-		logging.InfoContext(ctx, "[ContinueQueued] Could not decode the closed run's inputs; rebuilding them from the chat's presets",
-			"workflowID", workflowID, "error", err)
-		return nil
-	}
-	return inputs
+	return s.launcher().BuildChatWorkflowInputs(ctx, chat.UserID, chat, workflowName, presets, nil)
 }
 
 // nudgeMachineWait asks the chat's run, if it is parked waiting for its

@@ -456,8 +456,22 @@ func (r *Repo) RunTxReadOnly(ctx context.Context, f func(ctx context.Context) er
 	return r.RunTx(ctx, orm.Serializable.WithReadOnly(), f)
 }
 
+// attemptFailure is the error one attemptTransaction ended with: BEGIN's, or
+// the transaction's own when it did not commit. nil when it committed.
+func attemptFailure(beginErr error, result *txResult) error {
+	if beginErr != nil {
+		return beginErr
+	}
+	if result.committed {
+		return nil
+	}
+	return result.err
+}
+
 // runTxWithRetries runs the transaction up to opts.MaxAttempts times, while
-// it fails with an error isRetryableError accepts.
+// it fails with an error isRetryableError accepts. When the caller's context
+// has ended it stops at once and logs nothing above DEBUG: the failure is the
+// cancellation, and the caller reports it.
 func (r *Repo) runTxWithRetries(ctx context.Context, opts orm.TxOptions, f func(ctx context.Context) error, metrics *txMetrics) error {
 	// Each attempt is one forge transaction; this loop owns the retries.
 	attemptOpts := opts.WithMaxAttempts(1)
@@ -466,6 +480,22 @@ func (r *Repo) runTxWithRetries(ctx context.Context, opts orm.TxOptions, f func(
 
 	for attempt := 0; attempt <= retries; attempt++ {
 		result, err := r.attemptTransaction(ctx, attemptOpts, f, metrics)
+		if failure := attemptFailure(err, result); failure != nil && ctx.Err() != nil {
+			// The caller's context ended — an activity's start-to-close
+			// timeout, a request's deadline, a cancel — so BEGIN, or a
+			// statement inside, failed for that reason and not for anything
+			// the database did. Retrying is pointless and an ERROR here
+			// pins the failure on the DB: during the 2026-10-23 worker CPU
+			// stall every starved activity logged "Failed to begin
+			// transaction" while Postgres was idle. The caller reports it,
+			// once, with what it was doing (the activity wrapper: one WARN).
+			logging.DebugContext(ctx, "Transaction abandoned: the caller's context ended",
+				"error", failure,
+				"ctxErr", ctx.Err(),
+				"attempts", attempt+1,
+				"duration", time.Since(metrics.txStartTime))
+			return failure
+		}
 		if err != nil {
 			// Begin transaction failed
 			if isRetryableError(err) && attempt < retries {
@@ -1273,6 +1303,14 @@ func (r *Repo) SetChatQueuedForMachine(ctx context.Context, chatID string, queue
 // every user's.
 func (r *Repo) ListChatsQueuedForMachine(ctx context.Context, userID string, limit int) ([]QueuedForMachineChat, error) {
 	return store.ListChatsQueuedForMachine(ctx, r.ORM(), userID, limit)
+}
+
+// SetChatRunID records runID as the run currently executing the chat's root
+// workflow (workflowID), and reports whether it changed. Each root run calls it
+// as it starts, so a continue-as-new successor or a reset replaces the closed
+// run's id rather than leaving the chat naming it.
+func (r *Repo) SetChatRunID(ctx context.Context, chatID, workflowID, runID string) (bool, error) {
+	return store.SetChatRunID(ctx, r.ORM(), chatID, workflowID, runID)
 }
 
 // SetChatPausedForMachine records (or clears) that the daemon-offline breaker

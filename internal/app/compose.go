@@ -536,6 +536,10 @@ func (g *Graph) newTemporalWorker() (*workersetup.Worker, error) {
 		ControlPlane:   g.ServerProcessConfig.GetControlPlane(),
 		Recorder:       g.AccountRecorder(),
 		DB:             g.Database(),
+		// Read here, not in workersetup, so the worker root's config reach
+		// names them (pkg/config Roots).
+		WorkflowTaskSlots:   g.WorkerConfig.GetMaxConcurrentWorkflowTasks(),
+		WorkflowTaskPollers: g.WorkerConfig.GetWorkflowTaskPollers(),
 	})
 }
 

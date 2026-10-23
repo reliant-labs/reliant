@@ -17,6 +17,37 @@ import (
 // reliant's catalog; "api/handlers" becomes "forge/api/handlers".
 const forgeNamespace = "forge"
 
+// forgeStartHerePath is forge's own path for its start-here skill — what
+// `reliant forge skill load forge` prints. In a forge project reliant surfaces
+// it at "forge/forge"; before adoption, at "forge" (see forgePreAdoption).
+const forgeStartHerePath = "forge"
+
+// forgePurpose front-loads what forge is FOR. The `forge` entry's description
+// is the only thing the per-turn skill announcement says about forge, and it
+// must say so inside the first ~80 characters: when the entry read "Forge
+// skills surfaced from this project's sibling forge module", the only forge
+// signal left was the emit:both skills (db, adapter, service-layer, proto-*),
+// and agents concluded forge is a backend framework with nothing for a static
+// site. Every claim here is one forge ships: a static export or Vite SPA on
+// hosted static hosting, Expo, and services with an API.
+const forgePurpose = "Build & ship anything deployed — static sites, SPAs, landing pages, web/mobile apps, APIs; no backend required."
+
+// forgeParentDescription describes the synthesized namespace map in a forge
+// project, pointing at the start-here skill under it.
+const forgeParentDescription = forgePurpose + " Start: forge/forge"
+
+// forgePreAdoptionDescription describes the single `forge` entry in a project
+// with no forge.yaml, whose body IS the start-here skill.
+const forgePreAdoptionDescription = forgePurpose + " Hosting, envs, releases."
+
+// forgePreAdoptionPreamble heads the start-here body when it is served before
+// adoption. The body names other forge skills to load, and none of them is in
+// the skill tool until forge.yaml exists — but the CLI serves every one of
+// them in any directory, so the preamble says to use it.
+const forgePreAdoptionPreamble = "> This project has no forge.yaml yet, so forge's other skills are not in the skill tool. " +
+	"Read any skill this one names with `reliant forge skill load <name>` in the shell — it works in any directory. " +
+	"Once forge.yaml exists they appear in the skill tool under `forge/`.\n\n"
+
 // forgeSyntheticScheme + forgePathSeparator together form a Definition.Path
 // scheme for forge skills. We never read this path from disk; instead
 // LoadFullDefinition recognizes the scheme and routes the body fetch back to
@@ -128,6 +159,10 @@ const projectSkillScope = "project"
 //     prefix, alongside a synthesized "forge" parent skill that doubles
 //     as a navigational map of the framework children.
 //
+//   - Without forge.yaml, a single childless "forge" entry stands in for the
+//     namespace, carrying forge's start-here skill (forgePreAdoption), so
+//     the catalog says forge exists and what it is for before adoption.
+//
 // Returns nil when forge enumeration fails or returns zero skills —
 // integration is best-effort and silent.
 //
@@ -168,10 +203,15 @@ func discoverForgeSkillsFiltered(baseDir, source string, loadFullDefinitions, ha
 
 	// Forge framework parent — only in forge projects. Its body lists
 	// only the framework children that will actually appear under it.
+	if !hasForgeYAML && !projectOnly {
+		if def, ok := forgePreAdoption(baseDir, source, skills); ok {
+			defs = append(defs, def)
+		}
+	}
 	if hasForgeYAML && !projectOnly {
 		defs = append(defs, Definition{
 			Name:        forgeNamespace,
-			Description: "Forge skills surfaced from this project's sibling forge module. Use the skill tool to load a specific sub-skill (e.g. forge/db, forge/proto, forge/api/handlers).",
+			Description: forgeParentDescription,
 			Body:        forgeParentBody(filterForgeAudience(skills)),
 			Path:        forgeSyntheticPath(baseDir, ""),
 			Scope:       skillscore.ScopeForge,
@@ -215,6 +255,39 @@ func discoverForgeSkillsFiltered(baseDir, source string, loadFullDefinitions, ha
 	}
 
 	return defs
+}
+
+// forgePreAdoption returns the single `forge` entry a project without
+// forge.yaml surfaces, so an agent there knows forge exists and what it covers
+// before anyone adopts it. Its body is forge's start-here skill (rendered
+// lazily by loadForgeDefinition, the renderer every forge skill goes through).
+//
+// It is one entry, not the namespace: forge's framework skills stay unsurfaced
+// until forge.yaml exists (forgeAddressablePath), so nothing is addressable
+// under "forge/" and HasChildren is false — the announcement must not promise
+// sub-skills a list call would not find. "forge" collides with no emit:both
+// skill (those keep their bare paths, none of which is "forge"), and it is the
+// path the namespace map takes after adoption, so a reference to `forge`
+// resolves in either kind of project.
+//
+// ok is false when forge's listing has no start-here skill.
+func forgePreAdoption(baseDir, source string, skills []forgecli.Skill) (Definition, bool) {
+	for _, s := range skills {
+		if s.Path != forgeStartHerePath {
+			continue
+		}
+		return Definition{
+			Name:        forgeNamespace,
+			Description: forgePreAdoptionDescription,
+			Path:        forgeSyntheticPath(baseDir, forgeStartHerePath),
+			Scope:       skillscore.ScopeForge,
+			Format:      skillscore.SkillFormatClaudeMarkdown,
+			SkillDir:    forgeSyntheticPath(baseDir, forgeStartHerePath),
+			SkillPath:   forgeNamespace,
+			Source:      source,
+		}, true
+	}
+	return Definition{}, false
 }
 
 // forgeAddressablePath is THE emit partition: the single decision about which
@@ -368,11 +441,19 @@ func loadForgeDefinition(def Definition) (Definition, error) {
 	if _, err := os.Stat(filepath.Join(baseDir, "forge.yaml")); err == nil {
 		audience = "forge"
 	}
+	// The start-here is forge content through and through; it has no general
+	// audience to strip it down for. Loaded without forge.yaml it is the
+	// pre-adoption entry (forgePreAdoption): the full body, headed by how to
+	// reach the skills it names.
+	preamble := ""
+	if forgePath == forgeStartHerePath && audience == "general" {
+		audience, preamble = "forge", forgePreAdoptionPreamble
+	}
 	body, err := forgecli.RenderSkill(baseDir, forgePath, forgecli.RenderSkillOptions{Audience: audience})
 	if err != nil {
 		return def, fmt.Errorf("load forge skill %q from %s: %w", forgePath, baseDir, err)
 	}
 	out := def
-	out.Body = string(body)
+	out.Body = preamble + string(body)
 	return out, nil
 }

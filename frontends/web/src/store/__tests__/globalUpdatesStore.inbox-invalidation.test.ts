@@ -28,7 +28,8 @@ vi.mock("../../lib/notifications", async (importOriginal) => {
 
 import { queryClient } from "../../lib/query-client";
 import { inboxKeys } from "../../hooks/inbox-queries";
-import { useGlobalUpdatesStore } from "../globalUpdatesStore";
+import { QueryObserver } from "@tanstack/react-query";
+import { STREAM_REFETCH_INTERVAL_MS, resetStreamInvalidation, useGlobalUpdatesStore } from "../globalUpdatesStore";
 
 function buildUpdate(update_type: UserUpdateType, data: Record<string, unknown>): UserUpdate {
   return {
@@ -48,19 +49,50 @@ function buildUpdate(update_type: UserUpdateType, data: Record<string, unknown>)
 beforeEach(() => {
   queryClient.clear();
   queryClient.setQueryData(inboxKeys.list(), { items: [] });
-  queryClient.setQueryData(inboxKeys.counts(), { blockingCount: 0, hasInformational: false });
+  queryClient.setQueryData(inboxKeys.list("p1"), { items: [] });
 });
 
-afterEach(() => queryClient.clear());
+afterEach(() => {
+  resetStreamInvalidation();
+  queryClient.clear();
+});
 
 describe("globalUpdatesStore → Inbox", () => {
   it.each([
     [UserUpdateType.CHAT_ACTIVITY_CHANGED, { chat_id: "c-automation", activity: 2 }],
     [UserUpdateType.CHAT_STATE_CHANGE, { state: 1, previous_state: 1, reason: "workflow_failed" }],
-  ] as const)("update %s marks the inbox list and the badge stale", (type, data) => {
+  ] as const)("update %s marks every scope's inbox (list and badge) stale", (type, data) => {
     useGlobalUpdatesStore.getState().handleUpdate([buildUpdate(type, data)]);
     expect(queryClient.getQueryState(inboxKeys.list())?.isInvalidated).toBe(true);
-    expect(queryClient.getQueryState(inboxKeys.counts())?.isInvalidated).toBe(true);
+    expect(queryClient.getQueryState(inboxKeys.list("p1"))?.isInvalidated).toBe(true);
+  });
+
+  it("a reconnect replay of many activity changes refetches the observed inbox once", async () => {
+    vi.useFakeTimers();
+    try {
+      const listInbox = vi.fn().mockResolvedValue({ items: [] });
+      const observer = new QueryObserver(queryClient, {
+        queryKey: inboxKeys.list(),
+        queryFn: listInbox,
+        staleTime: Infinity,
+      });
+      const unsubscribe = observer.subscribe(() => {});
+      await vi.advanceTimersByTimeAsync(0);
+      const before = listInbox.mock.calls.length;
+
+      const replay = Array.from({ length: 40 }, (_, i) => ({
+        ...buildUpdate(UserUpdateType.CHAT_ACTIVITY_CHANGED, { chat_id: "c-automation", activity: i % 2 }),
+        id: `u-${i}`,
+        sequence_number: i + 1,
+      }));
+      useGlobalUpdatesStore.getState().handleUpdate(replay);
+      await vi.advanceTimersByTimeAsync(STREAM_REFETCH_INTERVAL_MS * 3);
+
+      expect(listInbox.mock.calls.length - before).toBe(1);
+      unsubscribe();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("a title change leaves the inbox alone", () => {

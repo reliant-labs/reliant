@@ -414,6 +414,7 @@ func (a *WorkflowStatusActivity) trackWorkflow(ctx context.Context, input Workfl
 		//
 		// The revival is unconditional on the arm, including when the row was
 		// already running: that is the case where the run is furthest along.
+		a.recordRootRunID(ctx, input)
 		if err := a.markWorkflowStarted(ctx, input); err != nil {
 			return err
 		}
@@ -720,6 +721,33 @@ func (a *WorkflowStatusActivity) emitTerminal(ctx context.Context, input Workflo
 		return fmt.Errorf("record run event: %w", err)
 	}
 	return nil
+}
+
+// recordRootRunID keeps chats.run_id naming the run that is executing the
+// chat's root workflow. A root run's "started" status is sent by every
+// execution as it begins — a fresh start, a reset, and every continue-as-new
+// successor — so recording it here is the one place that sees each of them.
+// Before this only the API's launch paths wrote it (runs.RecordRun), and a
+// continue-as-new left the chat naming the closed run: queries aimed at it made
+// a worker replay that run's whole ~37k-event history (2026-10-23).
+//
+// A "started" that follows a pause resume is the same run, and a sub-agent's
+// is not the root's; neither records anything. Best-effort: the run is already
+// executing, and nothing that reaches Temporal reads the stored id any more
+// (every call targets the current run), so a missed write costs only a stale
+// display value until the next run starts.
+func (a *WorkflowStatusActivity) recordRootRunID(ctx context.Context, input WorkflowStatusInput) {
+	if input.ParentWorkflowID != "" || input.ChatID == "" || input.Resumed {
+		return
+	}
+	runID := temporalRunID(ctx)
+	if runID == "" {
+		return
+	}
+	if _, err := a.repo.SetChatRunID(ctx, input.ChatID, input.WorkflowID, runID); err != nil {
+		logging.WarnContext(ctx, "[WorkflowStatus] Failed to record the chat's current run id",
+			"chatID", input.ChatID, "workflowID", input.WorkflowID, "runID", runID, "error", err)
+	}
 }
 
 // temporalRunID is the Temporal run id of the workflow execution this activity

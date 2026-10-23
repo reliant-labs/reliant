@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/cel-go/cel"
@@ -218,6 +219,15 @@ func expandJoinCondition(condition string) string {
 	}
 }
 
+// joinEnv is the environment join conditions compile against, built once: an
+// environment is immutable and costly to build (see wfcel's cache.go).
+var joinEnv = sync.OnceValues(func() (*cel.Env, error) {
+	return cel.NewEnv(
+		cel.StdLib(),
+		cel.Variable("sources", cel.ListType(cel.MapType(cel.StringType, cel.DynType))),
+	)
+})
+
 // EvaluateJoinCondition evaluates a join condition against join sources.
 // Only "all" and "any" are supported:
 //   - "all" (or empty): All sources must complete
@@ -227,11 +237,7 @@ func expandJoinCondition(condition string) string {
 func EvaluateJoinCondition(condition string, sources []map[string]interface{}) (bool, error) {
 	expanded := expandJoinCondition(condition)
 
-	// Create CEL environment with sources variable
-	env, err := cel.NewEnv(
-		cel.StdLib(),
-		cel.Variable("sources", cel.ListType(cel.MapType(cel.StringType, cel.DynType))),
-	)
+	env, err := joinEnv()
 	if err != nil {
 		return false, fmt.Errorf("failed to create CEL environment: %w", err)
 	}

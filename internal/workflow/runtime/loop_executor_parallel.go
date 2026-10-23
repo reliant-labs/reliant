@@ -115,7 +115,7 @@ func (e *InlineLoopExecutor) ExecuteParallel() (*reliantv1.LoopOutput, error) {
 
 		if result.Error != nil {
 			failed++
-			e.logger.Error("[InlineLoop] Parallel iteration failed",
+			logFailure(e.logger, result.Error, "[InlineLoop] Parallel iteration failed",
 				"loopID", e.loopID,
 				"key", result.Key,
 				"index", result.Index,

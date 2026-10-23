@@ -27,6 +27,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
+
 	"github.com/reliant-labs/reliant/internal/llm/models"
 )
 
@@ -167,6 +169,11 @@ func (e *ErrAllLimited) Error() string {
 	}
 	return fmt.Sprintf("%s is rate-limited on all accounts until %s", name, e.EarliestReset.UTC().Format(time.RFC3339))
 }
+
+// ErrorClass implements svcerr.Classed: every account being rate-limited is the
+// state of the user's subscriptions — the system working correctly — not a
+// server fault. The caller parks the run until EarliestReset.
+func (e *ErrAllLimited) ErrorClass() svcerr.Class { return svcerr.ClassUser }
 
 // LimitWindow is one usage window of an account.
 type LimitWindow struct {

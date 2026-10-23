@@ -6,12 +6,14 @@
  * way — the current project, or every project — so the badge never counts
  * what the list is not showing.
  *
- * Neither polls. Approvals, questions and waiting-for-machine changes arrive
- * as `chat_activity_changed`, and a run stopping arrives as
+ * Both are one query per scope: the badge selects the counts from the list.
+ * It does not poll. Approvals, questions and waiting-for-machine changes
+ * arrive as `chat_activity_changed`, and a run stopping arrives as
  * `chat_state_change`; the global updates store asks `inboxInvalidatingUpdate`
- * and marks both queries stale. The automation failure kinds emit NO user
- * update of their own, so both queries also refetch whenever the window
- * regains focus, even while fresh.
+ * and marks the query stale (refetching at most once per
+ * STREAM_REFETCH_INTERVAL_MS). The automation failure kinds emit NO user
+ * update of their own, so it also refetches whenever the window regains
+ * focus, even while fresh.
  */
 
 import { create } from "@bufbuild/protobuf";
@@ -71,7 +73,6 @@ export const inboxKeys = {
   all: ["inbox"] as const,
   lists: () => [...inboxKeys.all, "list"] as const,
   list: (projectId?: string) => [...inboxKeys.lists(), projectId ?? "*"] as const,
-  counts: (projectId?: string) => [...inboxKeys.all, "counts", projectId ?? "*"] as const,
 };
 
 /**
@@ -105,25 +106,32 @@ export interface InboxCounts {
 
 // ── Query hooks ─────────────────────────────────────────────────────────────
 
-/** The Inbox's items in the server's priority order (default limit, 100). */
-export function useInbox(projectId?: string) {
-  return useQuery({
+/** The one Inbox read: items (default limit, 100) and the counts. */
+function inboxListQuery(projectId?: string) {
+  return {
     queryKey: inboxKeys.list(projectId),
     queryFn: () => grpcClient.inbox().listInbox(create(ListInboxRequestSchema, { projectId })),
-    refetchOnWindowFocus: "always",
-  });
+    refetchOnWindowFocus: "always" as const,
+  };
 }
 
-/** The nav badge's counts: `limit: 0` asks the server for no items at all. */
+/** The Inbox's items in the server's priority order (default limit, 100). */
+export function useInbox(projectId?: string) {
+  return useQuery(inboxListQuery(projectId));
+}
+
+function countsOf(response: ListInboxResponse): InboxCounts {
+  return { blockingCount: response.blockingCount, hasInformational: response.hasInformational };
+}
+
+/**
+ * The nav badge's counts, read from the SAME query as the list. The server
+ * counts every item before it truncates the list, so the list response's
+ * counts are the badge's; a separate `limit: 0` read doubled every Inbox
+ * refetch for a few KB of items saved.
+ */
 export function useInboxCounts(projectId?: string) {
-  return useQuery({
-    queryKey: inboxKeys.counts(projectId),
-    queryFn: async (): Promise<InboxCounts> => {
-      const response = await grpcClient.inbox().listInbox(create(ListInboxRequestSchema, { limit: 0, projectId }));
-      return { blockingCount: response.blockingCount, hasInformational: response.hasInformational };
-    },
-    refetchOnWindowFocus: "always",
-  });
+  return useQuery({ ...inboxListQuery(projectId), select: countsOf });
 }
 
 // ── Cache helpers ───────────────────────────────────────────────────────────
