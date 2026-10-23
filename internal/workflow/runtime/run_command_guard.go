@@ -41,21 +41,18 @@ func requireRunCommandValues(node *reliantv1.Node, builder *CELContextBuilder) e
 	if len(matches) == 0 {
 		return nil
 	}
-	env, activation, err := builder.env()
-	if err != nil {
-		return err
-	}
+	config, activation := builder.scope()
 	for _, match := range matches {
 		expr := match.Expr
-		checked, issues := env.Compile(expr)
-		if issues != nil && issues.Err() != nil {
-			// Resolution already ran and would have reported this.
-			return fmt.Errorf("CEL compilation error: %w", issues.Err())
+		// Resolution already ran and would have reported a compile error.
+		compiled, err := compileCEL(config, strings.TrimSpace(expr))
+		if err != nil {
+			return err
 		}
-		if !isPlainValueReference(checked.NativeRep().Expr()) {
+		if !isPlainValueReference(compiled.AST.NativeRep().Expr()) {
 			continue
 		}
-		value, err := builder.evalSingleCEL(expr, env, activation)
+		value, err := builder.evalSingleCEL(expr, config, activation)
 		if err != nil {
 			return fmt.Errorf("run node %q: {{%s}}: %w", node.GetId(), expr, err)
 		}

@@ -165,13 +165,11 @@ func evaluateRawTyped(expr string, ctx CELEvalContext) (interface{}, string, err
 		IncludeCustomFunctions: true,
 	}
 
-	env, err := NewEnv(config)
+	compiled, issues, err := Compile(config, expr)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to create CEL environment: %w", err)
+		return nil, "", fmt.Errorf("failed to create CEL program: %w", err)
 	}
-
-	ast, issues := env.Compile(expr)
-	if issues != nil && issues.Err() != nil {
+	if issues != nil {
 		evalErr := &EvalError{Phase: PhaseCompile, Expr: expr, Err: issues.Err()}
 		for _, issue := range issues.Errors() {
 			if strings.Contains(issue.Message, "Syntax error") {
@@ -186,16 +184,11 @@ func evaluateRawTyped(expr string, ctx CELEvalContext) (interface{}, string, err
 		return nil, "", evalErr
 	}
 
-	prg, err := env.Program(ast, ProgramOptions()...)
-	if err != nil {
-		return nil, "", fmt.Errorf("failed to create CEL program: %w", err)
-	}
-
 	activation := ctx.Activation()
-	if err := CheckWorkflowPathReference(env, ast, activation); err != nil {
+	if err := CheckWorkflowPathReference(compiled.Env, compiled.AST, activation); err != nil {
 		return nil, "", err
 	}
-	out, _, err := prg.Eval(activation)
+	out, _, err := compiled.Program.Eval(activation)
 	if err != nil {
 		return nil, "", &EvalError{Phase: PhaseEval, Expr: expr, Err: ExplainEvalError(err)}
 	}
