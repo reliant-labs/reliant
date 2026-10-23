@@ -102,6 +102,8 @@ export interface TelemetryConfigInput {
   prerelease: boolean;
   /** This bundle's baked build version (appBuild().version). */
   buildVersion: string;
+  /** True in the Electron renderer (window.electronAPI is present). */
+  desktop?: boolean;
   replayRate: number;
   extraApiOrigins?: Array<string | undefined>;
 }
@@ -123,9 +125,10 @@ export function buildTelemetryConfig(
       env.VITE_GATEWAY_URL,
       ...(input.extraApiOrigins ?? []),
     ],
-    // FOLLOW-UP: once web depends on forge web-runtime >= 0.7, pass
-    // `appClient: desktop ? "electron" : "web"` here and drop the app.client
-    // global attribute stamped in start(); the runtime then stamps it itself.
+    // The product-event contract's client tag (dev-docs/product-events.md).
+    // Named here rather than left to the runtime's detection so it follows
+    // the same electronAPI test as the rest of the app.
+    appClient: input.desktop ? "electron" : "web",
     consoleCapture: false,
     advancedNetworkCapture: false,
     replay: env.VITE_OTEL_REPLAY === "true",
@@ -153,9 +156,8 @@ function findClient(mod: unknown): GlobalAttributeClient | null {
   return isClient(cur) ? cur : null;
 }
 
-// The pinned runtime exposes no resource-attribute hook for these two, so they
-// ride as global span attributes. app.client is the product-event contract's
-// client tag (docs: dev-docs/product-events.md).
+// The runtime has no hook for the build, so it rides as a global span
+// attribute beside the app.client the runtime stamps.
 async function stampClientAttributes(
   attributes: Record<string, string>,
 ): Promise<void> {
@@ -203,6 +205,7 @@ async function start(): Promise<boolean> {
     env,
     prerelease,
     buildVersion,
+    desktop,
     replayRate: replaySampleRate({
       prerelease,
       policy: env.VITE_OTEL_REPLAY_SAMPLE_POLICY,
@@ -226,10 +229,7 @@ async function start(): Promise<boolean> {
   });
 
   try {
-    await stampClientAttributes({
-      "app.client": desktop ? "electron" : "web",
-      "reliant.build": buildVersion,
-    });
+    await stampClientAttributes({ "reliant.build": buildVersion });
   } catch (e) {
     console.debug("[telemetry] client attributes not set:", e);
   }
