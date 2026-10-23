@@ -498,3 +498,79 @@ type testsuiteHolder struct{ temporaltest.WorkflowTestSuite }
 func (h *testsuiteHolder) env() *testsuite.TestWorkflowEnvironment {
 	return h.NewTestWorkflowEnvironment()
 }
+
+// ── Deploy of the 10k threshold onto a long multi-spawn chat ──────────────────
+
+// The shape of adcee226 when the lowered threshold deploys: a chat already at
+// 15k events (past the new 10k soft threshold, short of the legacy 40k) whose
+// root has two background spawns mid-loop. Driven through the REAL gate
+// (lowerContinueAsNewChangeID, no pressure override): the handoff is
+// requested, both spawns park at their own boundaries, the root hands off
+// carrying both, and the successor relaunches each on its own thread and tool
+// call, finishes them, and delivers exactly one completion apiece.
+func TestContinueAsNew_MultiSpawnChatPastLoweredThresholdHandsOff(t *testing.T) {
+	t.Parallel()
+	const chatID = "chat-can-10k-multi"
+	childA, childB := canChildThread("tc-a"), canChildThread("tc-b")
+	parent := "thread-" + chatID
+
+	// History is short until both spawns are two iterations in, then jumps to
+	// 15k: the deploy lands on a run that is already mid-spawn.
+	var length atomic.Int64
+	length.Store(500)
+	historySizeOverrides.Store(chatID, func() (int, int) { return int(length.Load()), oneMB })
+	t.Cleanup(func() { historySizeOverrides.Delete(chatID) })
+
+	var suite1 temporaltest.WorkflowTestSuite
+	env1 := suite1.NewTestWorkflowEnvironment()
+	e1 := newCANSpawnEnv(t, env1)
+	e1.onLLM = func(thread string, n int) {
+		if (thread == childA || thread == childB) && n == 2 {
+			length.Store(15000)
+		}
+	}
+	e1.scripts[parent] = append([]scriptedToolCallsResponse{
+		{toolCalls: []map[string]interface{}{spawnToolCall("tc-a", "research A"), spawnToolCall("tc-b", "research B")}},
+	}, repeatTurns("p", 10)...)
+	e1.scripts[childA] = repeatTurns("a", 10)
+	e1.scripts[childB] = repeatTurns("b", 10)
+
+	env1.ExecuteWorkflow(DynamicWorkflow, spawnE2EWorkflowInput(chatID))
+	carried := carriedInput(t, env1)
+
+	require.NotNil(t, carried.Resume)
+	require.Len(t, carried.Resume.Spawns, 2, "both live spawns must cross the boundary")
+	byThread := map[string]SpawnHandoff{}
+	for _, h := range carried.Resume.Spawns {
+		byThread[h.ChildThread] = h
+		require.Equal(t, parent, h.ParentThread)
+	}
+	require.Equal(t, "tc-a", byThread[childA].ToolCallID)
+	require.Equal(t, "tc-b", byThread[childB].ToolCallID)
+	require.Less(t, e1.llmCalls[childA], 10, "spawn A parked mid-script, not run to completion")
+	require.Less(t, e1.llmCalls[childB], 10, "spawn B parked mid-script, not run to completion")
+	for _, tc := range []string{"tc-a", "tc-b"} {
+		require.Zero(t, e1.enqueuedFor(tc), "a parked spawn reports nothing in the predecessor")
+		require.NotContains(t, e1.toolStatusesFor(tc), "completed")
+		require.NotContains(t, e1.toolStatusesFor(tc), "failed")
+	}
+
+	// Successor: fresh history; each relaunched spawn runs out a short script.
+	length.Store(50)
+	var suite2 temporaltest.WorkflowTestSuite
+	env2 := suite2.NewTestWorkflowEnvironment()
+	e2 := newCANSpawnEnv(t, env2)
+	e2.scripts[childA] = repeatTurns("ra", 1)
+	e2.scripts[childB] = repeatTurns("rb", 2)
+
+	env2.ExecuteWorkflow(DynamicWorkflow, carried)
+	require.True(t, env2.IsWorkflowCompleted())
+	require.NoError(t, env2.GetWorkflowError())
+	for thread, tc := range map[string]string{childA: "tc-a", childB: "tc-b"} {
+		require.NotContains(t, e2.createdRows, thread, "the relaunch reuses the existing thread")
+		require.Equal(t, byThread[thread].LoopIteration, e2.llmIterations[thread][0],
+			"%s resumes at the iteration it parked at", tc)
+		require.Equal(t, 1, e2.enqueuedFor(tc), "the parent receives exactly one completion for %s", tc)
+		require.Contains(t, e2.toolStatusesFor(tc), "completed", "%s ends completed, not stranded at backgrounded", tc)
+	}
+}

@@ -344,6 +344,9 @@ type ChildWorkflowTracker struct {
 	// threshold while handoffCapable. Every spawn loop parks at its next
 	// iteration boundary; the top-level loop hands off once all have.
 	handoffRequested bool
+	// loweredCAN is this run's answer to lowerContinueAsNewChangeID, once it
+	// is yes (continue_as_new.go).
+	loweredCAN bool
 	// handoffHard is set past the hard threshold: stop waiting for spawns to
 	// park and carry them from their last recorded boundary.
 	handoffHard bool

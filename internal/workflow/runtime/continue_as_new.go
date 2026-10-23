@@ -3,6 +3,7 @@ package runtime
 
 import (
 	"errors"
+	"fmt"
 	"sync"
 
 	"go.temporal.io/sdk/workflow"
@@ -23,25 +24,48 @@ import (
 // threshold is therefore not safe on payload-heavy runs, which are exactly the
 // long agent conversations this exists for.
 //
-// The thresholds are deliberately high. Every handoff costs the user something
-// real — in-memory node outputs are dropped and conversation state is rebuilt
-// from thread history — so continuing rarely is a feature, not a compromise.
-// What bounds how high they can go is that the check is SKIPPED whenever the
-// boundary is not quiescent (see readyToContinueAsNew): a run with a
-// background spawn in flight keeps going until the spawn lands, and the
-// headroom left after the threshold is what makes that wait safe. A turn costs
-// a median of 37 events and a maximum of 64, measured over 73 turns of real
-// history, so headroom is priced in worst-case turns.
+// A handoff costs the user something real — in-memory node outputs are dropped
+// and conversation state is rebuilt from thread history — but a LONG history
+// costs more. Every worker that picks the run up without it in its sticky
+// cache replays the whole history, and so does a query aimed at the run: on
+// 2026-10-23 replays of ~37k-event runs held two worker cores for 13-17
+// minutes each and starved every activity on the pod
+// (projects/reliant-labs/research/prod-deadline-sentry-2026-10-23.md). Replay
+// cost is linear in history length, so the soft threshold is what bounds it:
+// 10,000 events / 10 MB caps the worst replay at a quarter of what 40k allowed,
+// and still hands off only every ~270 turns at the median 37 events a turn.
 //
-// 40,000 events leaves 11,200 events — about 175 worst-case turns — before the
-// count cap. 40 MB leaves 10 MB, which is 8,600 worst-case turns at the
-// heaviest density observed. Both are far more than any quiescence wait should
-// ever need, while cutting handoffs to roughly a third as often as a 13k-event
-// threshold would.
+// The check is SKIPPED whenever the boundary is not quiescent (see
+// readyToContinueAsNew): a run with a background spawn in flight keeps going
+// until the spawn parks, and the room between this threshold and the hard one
+// below — 38,000 events, about 590 worst-case (64-event) turns — is what makes
+// that wait safe.
 const (
-	continueAsNewEventThreshold = 40000
-	continueAsNewSizeThreshold  = 40 * 1024 * 1024
+	continueAsNewEventThreshold = 10000
+	continueAsNewSizeThreshold  = 10 * 1024 * 1024
 )
+
+// The soft thresholds every run recorded before lowerContinueAsNewChangeID
+// used. A replayed history that never asked that question must keep them: it
+// took no handoff at its boundaries between the two thresholds, and a
+// handoff there now (a CONTINUE_AS_NEW command, spawns parking) would not
+// match it.
+const (
+	legacyContinueAsNewEventThreshold = 40000
+	legacyContinueAsNewSizeThreshold  = 40 * 1024 * 1024
+)
+
+// lowerContinueAsNewChangeID gates the 10k/10 MB threshold
+// (workflow.GetVersion). It is asked only at a boundary that is past the new
+// threshold and short of the legacy one, and the change id carries that
+// boundary's history length (replay-stable: it is the WorkflowTaskStarted
+// event id). So a history recorded before the change finds no marker at any
+// of its boundaries and keeps the legacy threshold, while a run that is
+// already in that band when this code deploys — a long multi-spawn chat at
+// 15k events — records the marker at its FIRST live boundary and hands off
+// there, rather than carrying on to 40k. Once a run answers 1 the answer is
+// kept (ChildWorkflowTracker.loweredCAN), so a run records one marker.
+const lowerContinueAsNewChangeID = "continue-as-new-at-10k"
 
 // The hard thresholds bound how long a requested handoff may wait for live
 // spawns to reach their iteration boundaries. Past either one the handoff
@@ -105,7 +129,7 @@ const (
 // history cap, where every message the user sends does nothing.
 func readyToContinueAsNew(ctx workflow.Context, childTracker *ChildWorkflowTracker, pauseArmed bool) bool {
 	if childTracker == nil {
-		return !pauseArmed && currentHistoryPressure(ctx, "") >= historyPressureSoft
+		return !pauseArmed && currentHistoryPressure(ctx, "", nil) >= historyPressureSoft
 	}
 	childTracker.refreshHandoffRequest(ctx)
 	if !childTracker.handoffRequested {
@@ -139,7 +163,7 @@ func (t *ChildWorkflowTracker) refreshHandoffRequest(ctx workflow.Context) {
 	if t == nil || t.handoffCapable == 0 || t.handoffHard {
 		return
 	}
-	switch currentHistoryPressure(ctx, t.chatID) {
+	switch currentHistoryPressure(ctx, t.chatID, &t.loweredCAN) {
 	case historyPressureHard:
 		t.handoffRequested = true
 		t.handoffHard = true
@@ -183,22 +207,61 @@ const (
 // are properties of the harness, not something a test can set, so a test
 // forces a threshold crossing by registering a func for its chat ID. Keyed by
 // chat so parallel tests cannot see each other's override.
-func currentHistoryPressure(ctx workflow.Context, chatID string) historyPressure {
+//
+// lowered is the run's answer to lowerContinueAsNewChangeID, kept once it is
+// yes; nil asks afresh every time.
+func currentHistoryPressure(ctx workflow.Context, chatID string, lowered *bool) historyPressure {
 	if override, ok := historyPressureOverrides.Load(chatID); ok {
 		return override.(func() historyPressure)()
 	}
 	info := workflow.GetInfo(ctx)
-	return historyPressureFor(info.GetCurrentHistoryLength(), info.GetCurrentHistorySize())
+	length, size := info.GetCurrentHistoryLength(), info.GetCurrentHistorySize()
+	if override, ok := historySizeOverrides.Load(chatID); ok {
+		length, size = override.(func() (int, int))()
+	}
+	return historyPressureFor(length, size, lowerContinueAsNew(ctx, lowered, length, size))
+}
+
+// historySizeOverrides is the lower test seam: it replaces only the history
+// length and size a run reads, so a test drives the real thresholds and the
+// lowerContinueAsNewChangeID gate. Keyed by chat like historyPressureOverrides.
+var historySizeOverrides sync.Map // chatID -> func() (length, size int)
+
+// lowerContinueAsNew reports whether this run hands off at the lowered soft
+// threshold (see lowerContinueAsNewChangeID). Only a boundary in the band
+// between the two thresholds asks: below it both answer "no", past the legacy
+// one both answer "yes", and asking there would record a marker for nothing.
+func lowerContinueAsNew(ctx workflow.Context, lowered *bool, historyLength, historySizeBytes int) bool {
+	if lowered != nil && *lowered {
+		return true
+	}
+	if !historyNeedsContinueAsNew(historyLength, historySizeBytes) ||
+		legacyHistoryNeedsContinueAsNew(historyLength, historySizeBytes) {
+		return false
+	}
+	changeID := fmt.Sprintf("%s/%d", lowerContinueAsNewChangeID, historyLength)
+	if workflow.GetVersion(ctx, changeID, workflow.DefaultVersion, 1) == workflow.DefaultVersion {
+		return false
+	}
+	if lowered != nil {
+		*lowered = true
+	}
+	return true
 }
 
 var historyPressureOverrides sync.Map // chatID -> func() historyPressure
 
-// historyPressureFor grades a history length/size pair.
-func historyPressureFor(historyLength, historySizeBytes int) historyPressure {
+// historyPressureFor grades a history length/size pair, against the lowered
+// soft threshold when lowered is set and the legacy one otherwise.
+func historyPressureFor(historyLength, historySizeBytes int, lowered bool) historyPressure {
+	soft := legacyHistoryNeedsContinueAsNew
+	if lowered {
+		soft = historyNeedsContinueAsNew
+	}
 	switch {
 	case historyLength >= continueAsNewHardEventThreshold || historySizeBytes >= continueAsNewHardSizeThreshold:
 		return historyPressureHard
-	case historyNeedsContinueAsNew(historyLength, historySizeBytes):
+	case soft(historyLength, historySizeBytes):
 		return historyPressureSoft
 	default:
 		return historyPressureNone
@@ -213,6 +276,13 @@ func historyPressureFor(historyLength, historySizeBytes int) historyPressure {
 func historyNeedsContinueAsNew(historyLength, historySizeBytes int) bool {
 	return historyLength >= continueAsNewEventThreshold ||
 		historySizeBytes >= continueAsNewSizeThreshold
+}
+
+// legacyHistoryNeedsContinueAsNew is historyNeedsContinueAsNew at the
+// thresholds runs used before lowerContinueAsNewChangeID.
+func legacyHistoryNeedsContinueAsNew(historyLength, historySizeBytes int) bool {
+	return historyLength >= legacyContinueAsNewEventThreshold ||
+		historySizeBytes >= legacyContinueAsNewSizeThreshold
 }
 
 // isContinueAsNew reports whether err is (or wraps) the SDK's ContinueAsNew

@@ -78,6 +78,14 @@ that shape.
 Retire a set only together with its gate, once no run older than the gate's
 deploy can still be open.
 
+One gate is pinned outside these sets: `lowerContinueAsNewChangeID`
+(`runtime/continue_as_new.go`, the 40k → 10k soft continue-as-new threshold).
+Its old shape only differs past 10,000 events, too large to check in, so
+`TestLoweredCANThreshold_VersionGate` and
+`TestLoweredCANThreshold_InFlightRunRollsOverOnDeploy`
+(`runtime/continue_as_new_version_test.go`) record it on a dev server in the
+test, replay it through the current code, and fail when the gate is removed.
+
 ## When `TestReplayFixtures` fails
 
 Your change made `DynamicWorkflow` (or code it calls **inside the workflow

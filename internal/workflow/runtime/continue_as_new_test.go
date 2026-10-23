@@ -29,10 +29,10 @@ func TestHistoryNeedsContinueAsNew(t *testing.T) {
 		want      bool
 	}{
 		{"fresh run", 12, 8 * 1024, false},
-		{"busy but well short on both axes", continueAsNewEventThreshold - 1000, 10 * oneMB, false},
-		{"one event short", continueAsNewEventThreshold - 1, 10 * oneMB, false},
-		{"exactly at count threshold", continueAsNewEventThreshold, 10 * oneMB, true},
-		{"past count threshold", continueAsNewEventThreshold + 5000, 10 * oneMB, true},
+		{"busy but well short on both axes", continueAsNewEventThreshold - 1000, 2 * oneMB, false},
+		{"one event short", continueAsNewEventThreshold - 1, 2 * oneMB, false},
+		{"exactly at count threshold", continueAsNewEventThreshold, 2 * oneMB, true},
+		{"past count threshold", continueAsNewEventThreshold + 5000, 2 * oneMB, true},
 
 		// The size axis binds independently. A payload-heavy run reaches
 		// Temporal's 50 MB limit at ~45k events (measured 1,157 bytes/event),
@@ -40,7 +40,7 @@ func TestHistoryNeedsContinueAsNew(t *testing.T) {
 		// exactly the runs this exists for die.
 		{"one byte short on size", 100, continueAsNewSizeThreshold - 1, false},
 		{"exactly at size threshold", 100, continueAsNewSizeThreshold, true},
-		{"heavy payloads trip size long before count", 20000, 44 * oneMB, true},
+		{"heavy payloads trip size long before count", 5000, 11 * oneMB, true},
 	}
 
 	for _, tc := range tests {
@@ -89,6 +89,23 @@ func TestThresholdsStayBelowTemporalLimits(t *testing.T) {
 		"count threshold must be below limit.historyCount.error")
 	require.Less(t, continueAsNewSizeThreshold, 50*oneMB,
 		"size threshold must be below limit.historySize.error")
+}
+
+// historyPressureFor grades against the lowered soft threshold only for a run
+// that answered lowerContinueAsNewChangeID; a run recorded before it keeps the
+// legacy one, and the hard threshold is the same for both.
+func TestHistoryPressureForLoweredAndLegacy(t *testing.T) {
+	t.Parallel()
+	mid := continueAsNewEventThreshold + 5000 // between the two soft thresholds
+	require.Equal(t, historyPressureSoft, historyPressureFor(mid, oneMB, true))
+	require.Equal(t, historyPressureNone, historyPressureFor(mid, oneMB, false))
+	require.Equal(t, historyPressureSoft, historyPressureFor(legacyContinueAsNewEventThreshold, oneMB, false))
+	require.Equal(t, historyPressureSoft, historyPressureFor(100, legacyContinueAsNewSizeThreshold, false))
+	for _, lowered := range []bool{true, false} {
+		require.Equal(t, historyPressureNone, historyPressureFor(continueAsNewEventThreshold-1, oneMB, lowered))
+		require.Equal(t, historyPressureHard, historyPressureFor(continueAsNewHardEventThreshold, oneMB, lowered))
+		require.Equal(t, historyPressureHard, historyPressureFor(100, continueAsNewHardSizeThreshold, lowered))
+	}
 }
 
 // The server raises GetContinueAsNewSuggested() at 4,096 events / 4 MB by
