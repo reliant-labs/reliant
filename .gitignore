@@ -359,3 +359,10 @@ frontends/web/data
 !.forge/scaffolded.json
 !.forge/disowned.json
 !.forge/hashes.json
+
+# deploy/kcl/<env>/main.k's FileSecrets store (`forge env up dev` generates
+# secrets/dev.yaml: AUTH_API_KEY, RELIANT_VAULT_KEY). Never committed.
+secrets/
+# ...whose env lives in deploy/kcl/dev/, which the bare `dev/` above would
+# otherwise swallow.
+!deploy/kcl/dev/

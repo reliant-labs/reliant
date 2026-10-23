@@ -198,6 +198,18 @@ export default defineConfig({
         changeOrigin: true,
         ws: false,
       },
+      // The API port's JSON /health is how the app learns the server's auth
+      // mode (src/hooks/useAuthMode.ts fetches `${origin}/health`). Under the
+      // same-origin transport that is Vite's origin, which without this entry
+      // answers with index.html: the JSON parse fails, the app assumes
+      // supabase, and an AUTH_MODE=apikey server (a self-hosted or standalone
+      // dev stack) shows a Supabase sign-in it can never complete. Exact
+      // path only: /healthz-style SPA routes stay Vite's.
+      "^/health$": {
+        target: process.env.VITE_API_URL || "http://127.0.0.1:3090",
+        changeOrigin: true,
+        ws: false,
+      },
       // Interactive terminal is a RAW WebSocket (not a Connect RPC), served by
       // reliant-api at /api/v2/terminal/ws (internal/grpc/server.go). It needs
       // its own entry with ws:true so Vite upgrades + forwards the connection;
