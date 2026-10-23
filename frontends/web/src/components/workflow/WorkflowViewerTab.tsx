@@ -11,7 +11,7 @@ import { useWorkflowExecutions } from '../../hooks/useWorkflowExecutions'
 import { transformWorkflowExecution } from '../Chat/ExecutionSidebar'
 import { Loader2, ChevronLeft } from 'lucide-react'
 import { runStatus } from '../../lib/runStatus'
-import { RunStatusBadge, RunStatusDot } from '../ui/RunStatusIndicator'
+import { RunStatusBadge, RunStatusDot } from '../runs/RunStatusIndicator'
 import { getCachedWorkflowDisplayName } from '../../lib/workflowDisplayName'
 
 interface WorkflowViewerTabProps {

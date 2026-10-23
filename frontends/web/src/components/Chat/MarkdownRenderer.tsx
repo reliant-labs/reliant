@@ -4,7 +4,7 @@ import rehypeHighlight from 'rehype-highlight';
 import { cn } from '../../lib/utils';
 import type { Components } from 'react-markdown';
 import { useState, useMemo, useCallback } from 'react';
-import { ImagePreviewModal } from '../ui/ImagePreviewModal';
+import { ImagePreviewModal } from './ImagePreviewModal';
 import { isFilePath } from '../../lib/filePath';
 import { isHttpUrl } from '../../lib/url';
 import { FileLink } from './FileLink';

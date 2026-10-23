@@ -2,7 +2,8 @@ import { AlertCircle, Pause, Play, RefreshCw, Settings, SlidersHorizontal, Trash
 import { useEffect, useRef, useState } from "react";
 import { ConfigScope } from "../../api/mcp-grpc";
 import { cn } from "../../lib/utils";
-import { Badge } from "../ui/Badge";
+import Badge from "../forge-ui/badge";
+import Tag from "../forge-ui/tag";
 import { Button } from "../ui/Button";
 import { MCPAvatar } from "./mcpAvatar";
 
@@ -65,11 +66,11 @@ export function MCPServerListItem({
 
   const title = displayName || name;
   const statusText = !enabled ? "Inactive" : connected ? "Active" : "Disconnected";
-  const statusVariant: "warning" | "success" | "destructive" = !enabled
+  const statusVariant: "warning" | "success" | "error" = !enabled
     ? "warning"
     : connected
       ? "success"
-      : "destructive";
+      : "error";
   const scopeLabel = SCOPE_LABELS[scope] ?? "Project";
 
   useEffect(() => {
@@ -120,12 +121,8 @@ export function MCPServerListItem({
           <div className="min-w-0">
             <div className="flex min-w-0 items-center gap-1.5 overflow-hidden whitespace-nowrap">
               <span className="min-w-0 truncate font-medium text-sm">{title}</span>
-              <Badge variant={statusVariant} size="sm" className="shrink-0 whitespace-nowrap">
-                {statusText}
-              </Badge>
-              <Badge variant="outline" size="sm" className="shrink-0 max-w-[8rem] whitespace-nowrap truncate">
-                {scopeLabel}
-              </Badge>
+              <Badge variant={statusVariant} label={statusText} />
+              <Tag className="shrink-0 max-w-[8rem] truncate">{scopeLabel}</Tag>
             </div>
 
             <div className="mt-1 flex min-h-5 items-center gap-2 overflow-hidden text-xs text-muted-foreground">
@@ -143,14 +140,10 @@ export function MCPServerListItem({
                 {loadingAction === "tools" ? "Loading tools…" : `${toolCount} tools`}
               </button>
               {resourcesEnabled && (
-                <Badge variant="outline" size="sm" className="shrink-0 whitespace-nowrap">
-                  Resources
-                </Badge>
+                <Tag className="shrink-0">Resources</Tag>
               )}
               {promptsEnabled && (
-                <Badge variant="outline" size="sm" className="shrink-0 whitespace-nowrap">
-                  Prompts
-                </Badge>
+                <Tag className="shrink-0">Prompts</Tag>
               )}
             </div>
 

@@ -1,6 +1,6 @@
 import { forwardRef, type MouseEvent, type ReactNode } from "react";
 import { Loader2 } from "lucide-react";
-import { FileIcon } from "../../ui/FileIcon";
+import { FileIcon } from "../../FileBrowser/FileIcon";
 import { cn } from "../../../lib/utils";
 import { STATUS_LETTER_META, lineCountsOf, splitPath, statusLetterOf } from "./fileStatus";
 import type { FileChange } from "./types";

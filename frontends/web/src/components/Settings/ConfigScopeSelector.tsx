@@ -3,7 +3,7 @@
 import { Globe, FolderGit, FolderLock, HelpCircle } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { ConfigScope } from "../../gen/reliant/v1/common_pb";
-import { Tooltip } from "./Tooltip";
+import { Tooltip } from "../ui/Tooltip";
 
 export interface ConfigScopeSelectorProps {
   /** Currently selected scope */

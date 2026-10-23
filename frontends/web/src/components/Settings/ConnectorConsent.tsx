@@ -19,7 +19,7 @@ import { RepoSelector } from "../Projects/RepoSelector";
 import type { GitRepo } from "../../services/controlPlane/git";
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
-import { Badge } from "../ui/Badge";
+import Badge from "../forge-ui/badge";
 import { cn } from "../../lib/utils";
 import { useAccountGate } from "@/hooks/useAccountGate";
 import { machineDisplayName } from "@/lib/machineName";
@@ -585,7 +585,7 @@ export function ConnectorConsent({
                 <span className="flex items-center gap-2">
                   <span className="font-medium">{c.name}</span>
                   {c.execMode !== ConnectorExecMode.DENY && (
-                    <Badge variant="warning">Shell</Badge>
+                    <Badge variant="warning" label="Shell" />
                   )}
                 </span>
                 <span className="block text-xs text-muted-foreground font-mono truncate">
@@ -827,7 +827,7 @@ export function ConnectorConsent({
                   <span className="min-w-0">
                     <span className="flex items-center gap-1.5">
                       <span className="text-sm font-mono">{t.name}</span>
-                      {t.mutating && <Badge variant="warning">writes</Badge>}
+                      {t.mutating && <Badge variant="warning" label="writes" />}
                     </span>
                     <span className="block text-xs text-muted-foreground line-clamp-2">
                       {t.description}

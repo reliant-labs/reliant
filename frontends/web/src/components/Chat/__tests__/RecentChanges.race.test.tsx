@@ -43,7 +43,7 @@ vi.mock("../../../../src/store/refetchStore", async () => {
   return actual;
 });
 
-vi.mock("../../ui/FileIcon", () => ({
+vi.mock("../../FileBrowser/FileIcon", () => ({
   FileIcon: () => <div data-testid="file-icon" />,
 }));
 

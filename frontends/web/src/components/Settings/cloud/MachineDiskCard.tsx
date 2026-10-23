@@ -21,7 +21,7 @@ import { DaemonStatus, type DaemonInfo } from "@/gen/reliant/v1/daemon_registry_
 import type { DiskVolume } from "@/gen/reliant/v1/tools_daemon_pb";
 import { formatBytes } from "@/lib/formatBytes";
 import { consumerGroups, diskNotice, usedBytes, usedFraction, volumesFullestFirst } from "@/lib/machineDisk";
-import { Progress } from "@/components/ui/Progress";
+import ProgressBar from "@/components/forge-ui/progress_bar";
 import { FreeDiskSpaceDialog } from "@/components/MachineDisk/FreeDiskSpaceDialog";
 import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from "./ui";
 
@@ -124,7 +124,14 @@ function VolumeRow({
           {formatBytes(v.freeBytes)} free
         </span>
       </div>
-      <Progress value={pct} size="sm" variant={v.pressure ? "warning" : "primary"} />
+      {/* .forge-ui: the fill is forge's `accent` (index.css). */}
+      <ProgressBar
+        value={pct}
+        size="sm"
+        variant={v.pressure ? "warning" : "default"}
+        ariaLabel={`${v.label} disk usage`}
+        className="forge-ui"
+      />
       <p className="truncate font-mono text-xs text-muted-foreground" title={v.paths.join("\n")}>
         {v.paths.slice(0, 4).join(", ")}
         {v.paths.length > 4 ? `, +${v.paths.length - 4} more` : ""}

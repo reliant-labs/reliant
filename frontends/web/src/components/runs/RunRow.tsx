@@ -18,7 +18,7 @@ import { formatAbsoluteTime, formatRelativeTime } from "@/lib/relativeTime";
 import { cn } from "@/lib/utils";
 import { getWorkflowDisplayName } from "../workflow/useWorkflowInputs";
 import { daemonLabel } from "../Automations/daemonChoices";
-import { RunStatusDot } from "../ui/RunStatusIndicator";
+import { RunStatusDot } from "./RunStatusIndicator";
 import { formatDuration } from "./runSections";
 import { LaunchKindIcon } from "./LaunchKindIcon";
 

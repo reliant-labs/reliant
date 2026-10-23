@@ -18,11 +18,10 @@
  * treatments against each other, because an honest attribute over an identical
  * appearance is the same bug wearing a disguise.
  *
- * The badge is a `Badge` from components/ui carrying the disposition's VARIANT,
- * with the vocabulary's fill / border-style / ring / opacity classes layered on
- * top. The variant alone cannot express those axes — Badge has no dashed or
- * ringed variant — and they are the axes that survive greyscale, so both halves
- * are needed. See checkVocabulary.ts.
+ * The badge is a DispositionChip: the vocabulary's fill / border-style / ring /
+ * opacity / hue on one chip, the same one the legend uses. Those are the axes
+ * that survive greyscale, and no library badge has the dashed, unfilled half.
+ * See checkVocabulary.ts and DispositionChip.tsx.
  *
  * WHY SOME ROWS ARE TALLER THAN ONE LINE. `undetermined` and `not-applicable`
  * print an explanatory sentence under the detail, and that is deliberate: those
@@ -37,8 +36,6 @@
  * guess a status is how a UI starts disagreeing with the tool it is reporting.
  */
 
-import { cn } from "@/lib/utils";
-import { Badge } from "@/components/ui";
 import {
   checkStatusExplanation,
   checkStatusLabel,
@@ -47,11 +44,8 @@ import {
   type ForgeCheckResult,
 } from "@/services/forge/status";
 
-import {
-  DISPOSITION_BADGE_VARIANT,
-  DISPOSITION_STYLES,
-  iconForCheckStatus,
-} from "./checkVocabulary";
+import { iconForCheckStatus } from "./checkVocabulary";
+import { DispositionChip } from "./DispositionChip";
 
 export interface CheckRowProps {
   check: ForgeCheckResult & { name: string };
@@ -59,7 +53,6 @@ export interface CheckRowProps {
 
 export function CheckRow({ check }: CheckRowProps) {
   const disposition = dispositionOf(check.status);
-  const style = DISPOSITION_STYLES[disposition];
   const Icon = iconForCheckStatus(check.status);
   const label = checkStatusLabel(check.status);
   const duration = formatCheckDuration(check.duration_ms);
@@ -74,24 +67,15 @@ export function CheckRow({ check }: CheckRowProps) {
       className="border-b border-border/60 last:border-b-0"
     >
       <td className="whitespace-nowrap px-4 py-2 align-top">
-        <Badge
-          // The badge carries the whole visual verdict: fill, border style,
+        <DispositionChip
+          // The chip carries the whole visual verdict: fill, border style,
           // icon and hue. data-* above is its semantic twin.
           data-disposition-badge={disposition}
-          variant={DISPOSITION_BADGE_VARIANT[disposition]}
-          size="sm"
-          className={cn(
-            // The label is prose ("Could not measure"), not an identifier, so
-            // it is not monospaced, and the pill is squared off to match the
-            // rest of the table.
-            "gap-1.5 rounded-md font-sans hover:scale-100",
-            style.container,
-            style.foreground
-          )}
+          disposition={disposition}
         >
           <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
           <span>{label}</span>
-        </Badge>
+        </DispositionChip>
       </td>
 
       <td className="px-4 py-2 align-top text-sm text-foreground">{check.name}</td>

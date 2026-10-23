@@ -37,8 +37,8 @@ import { NoMachineState } from "../NoMachineState";
 import { isNoMachineError } from "../../lib/daemon-errors";
 import { useDaemonWait } from "../../hooks/useDaemonWait";
 import { AddToChatPopup } from "./AddToChatPopup";
-import { ImagePreviewModal } from "../ui/ImagePreviewModal";
-import { FileIcon } from "../ui/FileIcon";
+import { ImagePreviewModal } from "../Chat/ImagePreviewModal";
+import { FileIcon } from "./FileIcon";
 import { toast } from "sonner";
 
 interface FileViewerTabProps {

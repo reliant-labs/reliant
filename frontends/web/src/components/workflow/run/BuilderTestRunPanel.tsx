@@ -24,7 +24,7 @@ import { chatGrpc, MessageRole } from "@/api/chat-grpc";
 import { useChat } from "@/hooks/chat-queries";
 import { isLiveRunStatus, runStatus } from "@/lib/runStatus";
 import { cn } from "@/lib/utils";
-import { RunStatusBadge } from "../../ui/RunStatusIndicator";
+import { RunStatusBadge } from "../../runs/RunStatusIndicator";
 import { Button } from "../../ui/Button";
 import { ConfigurationPanel } from "../ConfigurationPanel";
 import { RunFormError } from "./RunFormError";

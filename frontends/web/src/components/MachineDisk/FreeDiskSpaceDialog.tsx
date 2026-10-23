@@ -32,7 +32,7 @@ import {
 } from "@/lib/machineDisk";
 import { Button } from "../ui/Button";
 import { Modal } from "../ui/Modal";
-import { Progress } from "../ui/Progress";
+import ProgressBar from "../forge-ui/progress_bar";
 import { CardInset } from "../forge-ui/card";
 
 export interface FreeDiskSpaceDialogProps {
@@ -89,7 +89,14 @@ export function FreeDiskSpaceDialog({ isOpen, onClose, daemonId, machineLabel, v
       <div className="flex flex-col gap-4" data-testid="free-disk-space-dialog">
         <div className="flex flex-col gap-1.5">
           <p className="text-sm text-foreground">{volumeUsage(volume)}</p>
-          <Progress value={pct} variant={volume.pressure ? "warning" : "primary"} size="sm" />
+          {/* .forge-ui: the fill is forge's `accent` (index.css). */}
+          <ProgressBar
+            value={pct}
+            variant={volume.pressure ? "warning" : "default"}
+            size="sm"
+            ariaLabel="Disk usage"
+            className="forge-ui"
+          />
           {volume.paths.length > 0 && (
             <p className="truncate font-mono text-xs text-muted-foreground" title={volume.paths.join("\n")}>
               {volume.paths.slice(0, 3).join(", ")}

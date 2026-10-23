@@ -3,8 +3,8 @@ import { toast } from "sonner";
 import { Modal } from "../ui/Modal";
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
-import { Card } from "../ui/Card";
-import { ConfigScopeSelector, getScopeLabel } from "../ui/ConfigScopeSelector";
+import Card from "../forge-ui/card";
+import { ConfigScopeSelector, getScopeLabel } from "./ConfigScopeSelector";
 import type { MCPServerConfig, RecommendedServer } from "../../api/mcp-grpc";
 import { ConfigScope } from "../../api/mcp-grpc";
 
@@ -224,7 +224,7 @@ export function MCPSetupWizard({
       title={`${mode === "install" ? "Install" : "Edit"} ${server.displayName}`}
     >
       <div className="space-y-4">
-        <Card size="sm" className="space-y-2" hover={false}>
+        <Card padding="sm" className="space-y-2">
           <p className="text-sm text-muted-foreground">{server.description}</p>
           {server.setupInstructions && (
             <p className="text-xs text-muted-foreground whitespace-pre-line">
@@ -234,7 +234,7 @@ export function MCPSetupWizard({
         </Card>
 
         {mode === "install" && (
-          <Card size="sm" className="space-y-3" hover={false}>
+          <Card padding="sm" className="space-y-3">
             <ConfigScopeSelector
               value={scope}
               onChange={setScope}
@@ -248,7 +248,7 @@ export function MCPSetupWizard({
         )}
 
         {mode === "install" && resolvedTransport === "http" && (
-          <Card size="sm" className="space-y-3" hover={false}>
+          <Card padding="sm" className="space-y-3">
             <div className="space-y-1">
               <p className="text-sm font-medium text-foreground">
                 Authentication preset
@@ -316,7 +316,7 @@ export function MCPSetupWizard({
           </Card>
         )}
 
-        <Card size="sm" className="space-y-4" hover={false}>
+        <Card padding="sm" className="space-y-4">
           {server.configFields && server.configFields.length > 0 ? (
             server.configFields.map((field) => (
               <Input

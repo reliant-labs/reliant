@@ -70,7 +70,7 @@ import {
 } from "../../store/chatListPreferencesStore";
 import { sortChats, compareChatGroups } from "../../lib/chatListOrder";
 import { Dropdown } from "../ui/Dropdown";
-import { RunStatusDot } from "../ui/RunStatusIndicator";
+import { RunStatusDot } from "../runs/RunStatusIndicator";
 import { chatListIndicators, launchKindDisplay } from "../../lib/runStatus";
 import {
   useActivityStore,

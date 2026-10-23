@@ -10,13 +10,13 @@ Use the standard Tailwind + CSS variable token path for UI styling:
 - Prefer semantic Tailwind classes such as `bg-background`, `text-foreground`, `text-muted-foreground`, `border-border`, `bg-primary`, `text-primary-foreground`, `text-destructive`, and component variants over inline token styles.
 - Use `cn()` for conditional classes; do not mutate DOM styles in hover/focus handlers when Tailwind state variants can express the state.
 - Theme palettes are controlled by `data-color-scheme`; light/dark mode is controlled by the `.dark` class. Do not add new `data-theme` selectors.
-- Keep new shared styling in component primitives under `frontends/web/src/components/ui/` or token variables in CSS, not deep ad-hoc selector chains.
+- Reach for forge's component library first: installed components live in `frontends/web/src/components/forge-ui/` (`forge component install <name>` writes there, per the `"forge"` block in `frontends/web/package.json`), are kept verbatim, and render inside a `.forge-ui` ancestor — outside it forge's `accent` paints as reliant's muted tint (see the ACCENT COLLISION note in `frontends/web/src/index.css`). Reliant-only primitives stay in `frontends/web/src/components/ui/`; domain components belong in their feature directory, not `ui/`. Keep new shared styling there or in token variables in CSS, not deep ad-hoc selector chains.
 - For workflow config panel styles, add explicit `cpv2-*` ownership classes at the rendered component boundary instead of overriding shared primitives or targeting nested generated markup.
 - Inline styles are acceptable for runtime geometry, Electron drag regions (`WebkitAppRegion`), dynamic SVG/data colors, and third-party APIs that require style objects.
 - Avoid broad `!important`, magic negative margins, incidental parent selectors, hardcoded brand colors, and arbitrary CSS values unless the exception is documented near the use.
 - `!important` is acceptable only for browser quirks or generated third-party DOM such as WebKit autofill, Monaco, XTerm, and ReactFlow; keep selectors scoped and prefer component props/classes first.
 - Run `npm run lint:css` from `frontends/web/` when changing stylesheets; keep the Stylelint config focused on correctness/hygiene rather than formatting churn.
-- When changing tokens or color-scheme CSS, run the color-scheme contract test and a web build path when practical.
+- When changing tokens or color-scheme CSS, run the color-scheme contract test (`src/components/Settings/__tests__/colorSchemeTokenContract.test.ts`, which resolves every forge token in all ten schemes, light and dark) and the screenshot pass `e2e/color-schemes.spec.ts` against a dev server (`BASE_URL=<your vite> npx playwright test e2e/color-schemes.spec.ts`; `--update-snapshots` when a pixel change is intended, then review the image diff).
 
 ## Elevation: `bg-background` recesses, `bg-muted` does not
 
@@ -32,7 +32,7 @@ Never nest a card inside a card, and **never reach for `bg-muted` to build
 structure** — it is interaction state (hover, selected, disabled) only.
 
 The reason is not taste. `--muted` moves in OPPOSITE directions between light
-and dark across all seven schemes in `frontends/web/src/themes/professional-themes.css`:
+and dark across all ten schemes in `frontends/web/src/themes/professional-themes.css`:
 in dark it is *lighter* than `--card` (pure-black: background 0%, card 10%,
 muted 15%), in light it is *darker* (background 98%, card 100%, muted 94–96%).
 So the same class recesses on one theme and lifts on the other, and a

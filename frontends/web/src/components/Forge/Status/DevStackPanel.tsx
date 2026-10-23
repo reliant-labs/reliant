@@ -25,16 +25,17 @@
  * Read-only by construction: it never offers to re-run a check or restart a
  * service. It reports.
  *
- * SURFACES. Each table is a `Card` (`bg-card` + `border-border`) on the page's
- * `bg-background`; anything inset inside a card (the evidence block in
- * CheckRow) is `bg-background` + `border-border/60`. Cards are never nested,
- * and `bg-muted` is never used for structure — `--muted` inverts direction
- * between light and dark across the seven schemes in
+ * SURFACES. Each table is a forge `Card` (`bg-surface` = `--card`, `border-border`)
+ * on the page's `bg-background`; anything inset inside a card (the evidence
+ * block in CheckRow) is `bg-background` + `border-border/60`. Cards are never
+ * nested, and `bg-muted` is never used for structure — `--muted` inverts
+ * direction between light and dark across the ten schemes in
  * themes/professional-themes.css.
  */
 
 import { cn } from "@/lib/utils";
-import { Card } from "@/components/ui";
+import AlertBanner from "@/components/forge-ui/alert_banner";
+import Card from "@/components/forge-ui/card";
 import type { ForgeOutcome } from "@/services/forge/topology";
 import {
   checksOf,
@@ -110,10 +111,8 @@ export function DevStackPanel({
     return (
       <Card
         data-testid="forge-status-loading"
-        variant="outlined"
-        size="lg"
-        hover={false}
-        className="border border-dashed border-border text-center text-sm text-muted-foreground"
+        padding="lg"
+        className="border-dashed text-center text-sm text-ink-muted"
       >
         Running runtime checks for <span className="font-mono">{env}</span>…
       </Card>
@@ -122,15 +121,11 @@ export function DevStackPanel({
 
   if (error && !outcome) {
     return (
-      <Card
+      <AlertBanner
         data-testid="forge-status-error"
-        variant="outlined"
-        size="lg"
-        hover={false}
-        className="border border-destructive/40 bg-destructive/10 text-center text-sm text-destructive-ink"
-      >
-        Could not reach your daemon to run forge&apos;s runtime checks: {error.message}
-      </Card>
+        variant="error"
+        message={<>Could not reach your daemon to run forge&apos;s runtime checks: {error.message}</>}
+      />
     );
   }
 
@@ -186,10 +181,8 @@ export function DevStackPanel({
       {checks.length === 0 ? (
         <Card
           data-testid="forge-status-no-checks"
-          variant="outlined"
-          size="lg"
-          hover={false}
-          className="border border-dashed border-border text-center text-sm text-muted-foreground"
+          padding="lg"
+          className="border-dashed text-center text-sm text-ink-muted"
         >
           Forge returned no runtime checks for <span className="font-mono">{reportEnv}</span>.
           Nothing here has been measured — this is not a statement that the environment is healthy.
@@ -198,14 +191,7 @@ export function DevStackPanel({
         <div className="space-y-3">
           <DispositionLegend report={report} />
 
-          <Card
-            variant="default"
-            size="sm"
-            hover={false}
-            // `elevation-1` IS the card surface (--surface-raised maps to
-            // --card); a second bg-* class here would just race it.
-            className="overflow-hidden border-border p-0"
-          >
+          <Card padding="none" className="overflow-hidden">
             <table className="w-full border-collapse text-left">
               <thead>
                 <tr className="border-b border-border">
@@ -265,12 +251,7 @@ function ServiceSummary({
     <section className="space-y-2" data-testid="forge-status-services">
       <h3 className="text-sm font-semibold text-foreground">Host services</h3>
 
-      <Card
-        variant="default"
-        size="sm"
-        hover={false}
-        className="overflow-hidden border-border p-0"
-      >
+      <Card padding="none" className="overflow-hidden">
         <table className="w-full border-collapse text-left">
           <thead>
             <tr className="border-b border-border">

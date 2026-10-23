@@ -8,10 +8,14 @@
  *
  * The form's primary button stays enabled: a disabled button can't be
  * focused and doesn't say why. Pressing it is what shows this.
+ *
+ * Built on forge's AlertBanner (error variant): the banner is the alert, and
+ * it is named by its own title, so focusing it announces the title once.
  */
 
 import { useEffect, useId, useRef } from "react";
-import { AlertTriangle } from "lucide-react";
+
+import AlertBanner from "../forge-ui/alert_banner";
 
 export interface ErrorSummaryItem {
   /** The DOM id of the field to focus. Unset for a problem no field owns. */
@@ -44,41 +48,41 @@ export function ErrorSummary({ title, items, autoFocus = true, focusKey, childre
   }, [autoFocus, focusKey]);
 
   return (
-    <div
+    <AlertBanner
       ref={ref}
-      role="alert"
+      variant="error"
       tabIndex={-1}
       aria-labelledby={titleId}
-      className="rounded-md border border-danger-border bg-danger-surface px-3 py-3 text-sm text-danger-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
       data-testid="error-summary"
-    >
-      <p id={titleId} className="flex items-start gap-2 font-medium">
-        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-        {title}
-      </p>
-      {items.length > 0 && (
-        <ul className="mt-2 space-y-1 pl-6">
-          {items.map((item, index) => (
-            <li key={`${item.fieldId ?? "form"}-${index}`} className="list-disc">
-              {item.fieldId ? (
-                <a
-                  href={`#${item.fieldId}`}
-                  className="underline underline-offset-2 hover:no-underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
-                  onClick={(event) => {
-                    event.preventDefault();
-                    focusField(item.fieldId!);
-                  }}
-                >
-                  {item.message}
-                </a>
-              ) : (
-                item.message
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
-      {children}
-    </div>
+      className="focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+      title={<span id={titleId}>{title}</span>}
+      message={
+        <>
+          {items.length > 0 && (
+            <ul className="space-y-1 pl-5">
+              {items.map((item, index) => (
+                <li key={`${item.fieldId ?? "form"}-${index}`} className="list-disc">
+                  {item.fieldId ? (
+                    <a
+                      href={`#${item.fieldId}`}
+                      className="underline underline-offset-2 hover:no-underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                      onClick={(event) => {
+                        event.preventDefault();
+                        focusField(item.fieldId!);
+                      }}
+                    >
+                      {item.message}
+                    </a>
+                  ) : (
+                    item.message
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+          {children}
+        </>
+      }
+    />
   );
 }

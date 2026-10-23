@@ -20,7 +20,7 @@ import { useState } from "react";
 import { ImageOff } from "lucide-react";
 import type { Attachment } from "../../types/chat";
 import { cn } from "../../lib/utils";
-import { ImagePreviewModal } from "../ui/ImagePreviewModal";
+import { ImagePreviewModal } from "./ImagePreviewModal";
 import { isImageMimeType, useAttachmentBlobUrls } from "./useAttachmentBlobUrls";
 
 interface MessageGeneratedImagesProps {

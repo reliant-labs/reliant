@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Button } from "../../components/ui/Button";
 import { Input } from "../../components/ui/Input";
-import { Card } from "../../components/ui/Card";
+import Card from "../forge-ui/card";
 import { FileText, FolderOpen, RefreshCw, AlertCircle, CheckCircle } from "lucide-react";
 import { isForgeUIEnabled, setForgeUIEnabled } from "../../lib/forgeFeature";
 import { SettingsPageHeader } from "./SettingsPageHeader";
@@ -137,7 +137,7 @@ export function DeveloperSettings() {
       />
 
       {/* Backend Status */}
-      <Card>
+      <Card padding="none">
         <div className="p-4">
           <h3 className="text-sm font-semibold mb-3">Backend Status</h3>
           <div className="space-y-2">
@@ -188,7 +188,7 @@ export function DeveloperSettings() {
           The gate lives in lib/forgeFeature so the route guard, the sidebar
           entry and this toggle cannot disagree — see that file for why it is a
           synchronous localStorage read rather than a server setting. */}
-      <Card>
+      <Card padding="none">
         <div className="p-4">
           <h3 className="text-sm font-semibold mb-2">Experimental Features</h3>
           <p className="text-xs text-muted-foreground mb-4">
@@ -223,7 +223,7 @@ export function DeveloperSettings() {
       </Card>
 
       {/* Mock Driver Configuration */}
-      <Card>
+      <Card padding="none">
         <div className="p-4">
           <h3 className="text-sm font-semibold mb-2">Mock Driver Configuration</h3>
           <p className="text-xs text-muted-foreground mb-4">

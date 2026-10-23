@@ -14,7 +14,7 @@ import {
   FolderPlus,
   Trash2,
 } from "lucide-react";
-import { FileIcon } from "../ui/FileIcon";
+import { FileIcon } from "./FileIcon";
 import { ContextMenu } from "../ui/ContextMenu";
 import type { ContextMenuItem } from "../ui/ContextMenu";
 import type { FileNode } from "./index";
