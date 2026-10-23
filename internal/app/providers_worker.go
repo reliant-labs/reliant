@@ -447,8 +447,10 @@ func NewWorkerToolsFactory(d WorkerToolsFactoryDeps) (*WorkerToolsFactory, error
 		RunStarter:   d.AgentRuns,
 		RunLifecycle: d.AgentRuns,
 		RunMessenger: d.AgentRuns,
-		// list_triggers executes here too.
-		TriggerLister: triggertools.New(d.Triggers.Service),
+		// Trigger tools execute here through the owner-authorized service.
+		TriggerLister:      triggertools.New(d.Triggers.Service),
+		TriggerFirer:       triggertools.New(d.Triggers.Service),
+		TriggerEventLister: triggertools.New(d.Triggers.Service),
 		// http__request executes here, inside the ExecuteTools activity, and
 		// resolves its `connection` for the run's owner through the same
 		// source the action node uses: saved connections, plus GitHub tokens
