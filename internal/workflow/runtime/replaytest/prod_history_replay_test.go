@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	_ "github.com/jackc/pgx/v5/stdlib" // registers the "pgx" driver
+	"github.com/reliant-labs/forge/pkg/orm"
 	"go.temporal.io/sdk/interceptor"
 	"go.temporal.io/sdk/worker"
 	sdkworkflow "go.temporal.io/sdk/workflow"
@@ -77,7 +78,11 @@ func TestReplayRecordedHistory(t *testing.T) {
 			t.Fatalf("open payload store: %v", err)
 		}
 		t.Cleanup(func() { _ = sqlDB.Close() })
-		converterOpts = append(converterOpts, rtemporal.WithPayloadStore(readOnlyStore{claimcheck.NewPostgresStore(sqlDB)}))
+		payloadORM, err := orm.NewClientWithDB(sqlDB, "postgres")
+		if err != nil {
+			t.Fatalf("payload store orm client: %v", err)
+		}
+		converterOpts = append(converterOpts, rtemporal.WithPayloadStore(readOnlyStore{claimcheck.NewPostgresStore(payloadORM)}))
 	}
 
 	for _, history := range histories {
