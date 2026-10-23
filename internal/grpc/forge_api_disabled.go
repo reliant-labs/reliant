@@ -7,14 +7,17 @@ import (
 	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/mountkit"
 	"github.com/reliant-labs/forge/pkg/svcerr"
+
+	"github.com/reliant-labs/reliant/internal/errreason"
 )
 
-// forgeAPIDisabledReason is the X-Reliant-Reason a forgeAPIDisabled refusal
-// carries. The web app reads it (isForgeAPIDisabled, frontends/web/src/api/forge-grpc.ts)
-// to say "turned off on this server" rather than blame the user's daemon:
-// FailedPrecondition alone is also what a forge rpc answers when forge ran and
-// failed, so the code cannot tell the two apart.
-const forgeAPIDisabledReason = "forge_api_disabled"
+// forgeAPIDisabledReason is the reason a forgeAPIDisabled refusal carries, in
+// x-forge-error-reason and (until R3w2 drops it) the legacy X-Reliant-Reason.
+// The web app reads it (isForgeAPIDisabled) to say "turned off on this server"
+// rather than blame the user's daemon: FailedPrecondition alone is also what a
+// forge rpc answers when forge ran and failed, so the code cannot tell the two
+// apart.
+const forgeAPIDisabledReason = errreason.ForgeAPIDisabled
 
 // ForgeAPIDisabled is ForgeService's mount option when the operator turned
 // the forge API off (ApiServerConfig.disable_forge_api,
@@ -36,7 +39,9 @@ func ForgeAPIDisabled() mountkit.Option {
 type forgeAPIDisabled struct{}
 
 func (forgeAPIDisabled) refusal() error {
-	err := svcerr.ToConnect(svcerr.FailedPrecondition("the forge API is disabled in this deployment (RELIANT_DISABLE_FORGE_API)"))
+	err := svcerr.ToConnect(svcerr.WithReason(
+		svcerr.FailedPrecondition("the forge API is disabled in this deployment (RELIANT_DISABLE_FORGE_API)"),
+		forgeAPIDisabledReason))
 	err.Meta().Set("X-Reliant-Reason", forgeAPIDisabledReason)
 	return err
 }

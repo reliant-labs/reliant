@@ -9,6 +9,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemonerr"
 	"github.com/reliant-labs/reliant/internal/daemonplacement"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/errreason"
 	"github.com/reliant-labs/reliant/internal/machinewake"
 )
 
@@ -52,7 +53,8 @@ func (s *Service) placeNewWorktree(ctx context.Context, userID, projectID string
 	}
 
 	if s.deps.Router == nil {
-		return machinewake.Target{}, svcerr.Unavailable(fmt.Sprintf("no daemon available to %s worktree: no daemon router", verb))
+		return machinewake.Target{}, svcerr.WithReason(
+			svcerr.Unavailable(fmt.Sprintf("no daemon available to %s worktree: no daemon router", verb)), errreason.NoDaemon)
 	}
 	daemonID, err := s.deps.Router.ResolveDaemonID(ctx, userID)
 	if err != nil {
@@ -66,7 +68,7 @@ func (s *Service) placeNewWorktree(ctx context.Context, userID, projectID string
 		if serr, ok := daemonerr.MachineState(doing, err); ok {
 			return machinewake.Target{}, serr
 		}
-		return machinewake.Target{}, svcerr.WithCause(svcerr.Unavailable(doing), err)
+		return machinewake.Target{}, svcerr.WithReason(svcerr.WithCause(svcerr.Unavailable(doing), err), errreason.NoDaemon)
 	}
 	return machinewake.Target{DaemonID: daemonID, NoMachine: noMachine}, nil
 }

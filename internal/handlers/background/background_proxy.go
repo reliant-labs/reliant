@@ -4,6 +4,7 @@ package background
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"time"
 
 	"connectrpc.com/connect"
@@ -13,6 +14,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/daemonerr"
+	"github.com/reliant-labs/reliant/internal/errreason"
 	"github.com/reliant-labs/reliant/internal/processproto"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
@@ -75,6 +77,25 @@ func daemonFailure(doing string, err error) error {
 		msg += ": " + text
 	}
 	return svcerr.WithCause(svcerr.Internal(msg), err)
+}
+
+// processNotRunningMarker is the phrase the daemon's BackgroundManager.KillProcess
+// writes for a process that already exited ("process <id> is not running
+// (status: …)"). Daemon-command errors cross NATS as text, so the text is the
+// wire contract between the two (as in daemonerr's markers).
+const processNotRunningMarker = "is not running"
+
+// processNotRunning reclassifies a kill of a process that had already exited:
+// not a server fault (it answered Internal) but FailedPrecondition with the
+// process_not_running reason, which the web treats as "already stopped" and
+// refreshes. The message is unchanged — older clients match on it.
+func processNotRunning(err error) error {
+	text, ok := toolexec.DaemonReportedText(err)
+	if !ok || !strings.Contains(text, processNotRunningMarker) {
+		return err
+	}
+	return svcerr.WithReason(svcerr.WithCause(svcerr.FailedPrecondition(svcerr.ToConnect(err).Message()), err),
+		errreason.ProcessNotRunning)
 }
 
 // ListProcesses returns all background processes.
@@ -178,7 +199,7 @@ func (s *Service) KillProcess(
 
 	var cmdResp struct{}
 	if err := s.sendCommand(ctx, userID, "exec.bg_kill", cmdReq, &cmdResp, 30000); err != nil {
-		return nil, err
+		return nil, processNotRunning(err)
 	}
 
 	return connect.NewResponse(&reliantv1.KillProcessResponse{

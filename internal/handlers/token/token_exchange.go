@@ -18,6 +18,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/errreason"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
 )
@@ -116,7 +117,9 @@ func (s *Service) ExchangeToken(
 	}
 	userID := subject.ActingUserID
 	if strings.TrimSpace(s.deps.ControlPlane.Issuer) == "" {
-		return nil, svcerr.FailedPrecondition("this server has no control plane, so it issues no control-plane credentials")
+		return nil, svcerr.WithReason(
+			svcerr.FailedPrecondition("this server has no control plane, so it issues no control-plane credentials"),
+			errreason.NoControlPlaneCredential)
 	}
 	audience := strings.TrimSpace(req.Msg.GetAudience())
 	if !sameControlPlane(audience, s.deps.ControlPlane.Issuer) {
@@ -140,11 +143,15 @@ func (s *Service) ExchangeToken(
 		}
 	}
 	if len(granted) == 0 {
-		return nil, svcerr.PermissionDenied(fmt.Sprintf(
+		// scope_missing with the scopes in structure (fat.ScopesHeader), so the
+		// deploy panel and forge's credential helper can name the grant
+		// without parsing this sentence, which stays as it was.
+		return nil, svcerr.WithMetadata(svcerr.WithReason(svcerr.PermissionDenied(fmt.Sprintf(
 			"this Reliant credential cannot authorize %s: it holds %s. "+
 				"Sign in again with `reliant auth login` (it asks for deploy, secret and domain permission), "+
 				"or grant this credential those permissions in Reliant → Settings → Access Tokens",
-			fat.JoinScopes(requested), describeScopes(subject.Scopes)))
+			fat.JoinScopes(requested), describeScopes(subject.Scopes))), fat.ReasonScopeMissing),
+			fat.ScopesHeader, fat.ScopesHeaderValue(requested))
 	}
 
 	expiresAt := time.Now().Add(exchangeTTL)

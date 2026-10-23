@@ -30,6 +30,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 
+	"github.com/reliant-labs/reliant/internal/errreason"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
@@ -101,6 +102,26 @@ func machineCode(err error) (connect.Code, bool) {
 	}
 }
 
+// machineReason is the reason (svcerr.ReasonHeader) a machine-state failure
+// carries to the client: the router's own (toolexec stamps each state it
+// reports — daemon_starting, daemon_suspended, daemon_not_connected,
+// no_daemon), else, for an unreachable machine reported only in text, the
+// generic daemon_not_connected. A timeout has none: it is not a state the web
+// waits on.
+//
+// Read off the wire form because the reason must survive what MachineState
+// does to err — it becomes the cause, and a cause's reason is not the
+// client's (forge svcerr) — so it is re-stamped on the result explicitly.
+func machineReason(code connect.Code, err error) string {
+	if reason := svcerr.ToConnect(err).Meta().Get(svcerr.ReasonHeader); reason != "" {
+		return reason
+	}
+	if code == connect.CodeUnavailable {
+		return errreason.DaemonNotConnected
+	}
+	return ""
+}
+
 // MachineState returns a daemon-command failure that the machine's state
 // explains — rather than the command itself — as the svcerr kind that state
 // calls for, its message prefixed with what the handler was doing (doing may be
@@ -145,7 +166,7 @@ func MachineState(doing string, err error) (error, bool) {
 	default:
 		kind = svcerr.DeadlineExceeded(msg)
 	}
-	return svcerr.WithCause(kind, err), true
+	return svcerr.WithReason(svcerr.WithCause(kind, err), machineReason(code, err)), true
 }
 
 // Error converts a daemon-command failure into the svcerr kind its class calls
@@ -227,10 +248,15 @@ func MachineStateConnectError(doing string, err error) (*connect.Error, bool) {
 	if !ok {
 		return nil, false
 	}
+	reason := machineReason(code, err)
 	if doing != "" {
 		err = fmt.Errorf("%s: %w", doing, err)
 	}
-	return connect.NewError(code, err), true
+	cerr := connect.NewError(code, err)
+	if reason != "" {
+		cerr.Meta().Set(svcerr.ReasonHeader, reason)
+	}
+	return cerr, true
 }
 
 // OutdatedConnectError maps a version-skew failure onto FailedPrecondition

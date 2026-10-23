@@ -44,8 +44,12 @@ func requireForgeAPIDisabled(t *testing.T, err error) {
 	require.True(t, errors.As(err, &connectErr), "want a Connect error, got %v", err)
 	require.Equal(t, connect.CodeFailedPrecondition, connectErr.Code(), "got %v", err)
 	require.Contains(t, connectErr.Message(), "the forge API is disabled in this deployment")
-	require.Equal(t, forgeAPIDisabledReason, connectErr.Meta().Get("X-Reliant-Reason"),
+	require.Equal(t, "the forge API is disabled in this deployment (RELIANT_DISABLE_FORGE_API)", connectErr.Message(),
+		"byte-identical: clients from before the reason match on it")
+	require.Equal(t, "forge_api_disabled", connectErr.Meta().Get(svcerr.ReasonHeader),
 		"the reason is how the web tells this apart from forge failing")
+	require.Equal(t, forgeAPIDisabledReason, connectErr.Meta().Get("X-Reliant-Reason"),
+		"the legacy header stays until R3w2")
 }
 
 func TestDisabledForgeAPIAnswersFailedPrecondition(t *testing.T) {

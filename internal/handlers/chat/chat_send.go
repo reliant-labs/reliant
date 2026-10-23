@@ -20,6 +20,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/errreason"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/runs"
@@ -676,7 +677,7 @@ func (s *Service) SendMessage(
 				// Never started (a branch awaiting its first send). The first
 				// send is StartChat's, which records the launch exactly once;
 				// letting SendMessage start it would bypass that.
-				return nil, svcerr.FailedPrecondition("chat has not started; call StartChat")
+				return nil, svcerr.WithReason(svcerr.FailedPrecondition("chat has not started; call StartChat"), errreason.ChatNotStarted)
 
 			case db.Paused():
 				// Refuse bad params before anything is written; see
@@ -1122,7 +1123,7 @@ func (s *Service) SendMessage(
 	// StartChat's.
 	workflowID := chat.MainThreadID()
 	if workflowID == "" {
-		return nil, svcerr.FailedPrecondition("chat has not started; call StartChat")
+		return nil, svcerr.WithReason(svcerr.FailedPrecondition("chat has not started; call StartChat"), errreason.ChatNotStarted)
 	}
 
 	// A started chat's workflow is fixed. Switching is only possible while a

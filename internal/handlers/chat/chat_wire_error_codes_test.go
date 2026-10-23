@@ -14,6 +14,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/errreason"
 	"github.com/reliant-labs/reliant/pkg/middleware"
 )
 
@@ -34,6 +35,7 @@ func TestChatService_ErrorsOverTheWire(t *testing.T) {
 		_, err := client.SendMessage(ctx, sendMessageRequest(t, fx.chatID, "first message of a branch"))
 		require.Equal(t, connect.CodeFailedPrecondition, wireCode(t, err))
 		require.Equal(t, "chat has not started; call StartChat", wireMessage(t, err))
+		require.Equal(t, errreason.ChatNotStarted, wireReason(t, err), "the web routes the send on the reason (13-p9 §7.1 #3)")
 	})
 
 	t.Run("a chat that does not exist is the store's NotFound", func(t *testing.T) {
@@ -70,6 +72,13 @@ func wireCode(t *testing.T, err error) connect.Code {
 	t.Helper()
 	require.IsType(t, &connect.Error{}, err)
 	return svcerr.Code(err)
+}
+
+func wireReason(t *testing.T, err error) string {
+	t.Helper()
+	var ce *connect.Error
+	require.ErrorAs(t, err, &ce)
+	return ce.Meta().Get(svcerr.ReasonHeader)
 }
 
 func wireMessage(t *testing.T, err error) string {

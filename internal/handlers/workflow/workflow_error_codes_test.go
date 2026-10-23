@@ -13,7 +13,9 @@ import (
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/errreason"
 	workflow "github.com/reliant-labs/reliant/internal/handlers/workflow"
+	"github.com/reliant-labs/reliant/internal/wirecheck"
 )
 
 // readFailures is what a repository call can fail with, and the code the
@@ -103,4 +105,27 @@ func requireClientReads(t *testing.T, err error, want connect.Code) {
 	require.Error(t, err)
 	require.Equal(t, want, svcerr.Code(err), "err = %v", err)
 	require.NotContains(t, svcerr.ToConnect(err).Message(), "secret")
+}
+
+// A status change that raced a newer revision is Aborted with stale_revision
+// (13-p9 §7.1 #4), the reason the builder reloads on; the sentence is the one
+// it has always been, for clients from before the reason.
+func TestSetWorkflowStatus_StaleRevisionOnTheWire(t *testing.T) {
+	t.Parallel()
+
+	repo := draftsRepo()
+	repo.GetWorkflowDraftFunc = func(_ context.Context, id string) (*db.WorkflowDraft, error) {
+		return &db.WorkflowDraft{ID: id, UserID: "test-user", Slug: "flow", Version: 4}, nil
+	}
+	svc := workflow.NewTestWorkflow(t, workflow.WithWorkflowDeps(workflow.Deps{Repo: repo}))
+	stale := int64(3)
+	_, err := svc.SetWorkflowStatus(workflow.AuthedContext(t), connect.NewRequest(&pb.SetWorkflowStatusRequest{
+		ProjectId: "p-1", DraftId: "wf-flow", Status: pb.WorkflowDraftStatus_WORKFLOW_DRAFT_STATUS_DRAFT,
+		ExpectedVersion: &stale,
+	}))
+	wirecheck.Assert(t, err, wirecheck.Want{
+		Code:    connect.CodeAborted,
+		Message: "workflow was modified since you last loaded it (expected version: 3, current version: 4) - please reload and retry",
+		Reason:  errreason.StaleRevision,
+	})
 }

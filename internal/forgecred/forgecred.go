@@ -9,8 +9,10 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/reliant-labs/forge/pkg/cloudcred"
 	"github.com/reliant-labs/forge/pkg/credentials"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 )
 
 // reuseWhileRemaining is how much life a cached token must have left to be
@@ -41,6 +43,11 @@ type attempt struct {
 	session Session
 	code    connect.Code
 	reason  string
+	// why and scopes are the server's structured refusal: its
+	// x-forge-error-reason and the scopes a scope_missing names
+	// (accesstoken.ScopesHeader). Empty when it sent none.
+	why    string
+	scopes []string
 }
 
 func (h *helper) Mint(ctx context.Context, req cloudcred.Request) (cloudcred.Token, error) {
@@ -73,7 +80,8 @@ func (h *helper) Mint(ctx context.Context, req cloudcred.Request) (cloudcred.Tok
 	for _, s := range sessions {
 		got, err := h.deps.Exchanger.Exchange(ctx, s.Server, s.Token, endpoint, req.Scopes)
 		if err != nil {
-			attempts = append(attempts, attempt{session: s, code: connect.CodeOf(err), reason: reasonOf(err)})
+			why, scopes := structuredRefusal(err)
+			attempts = append(attempts, attempt{session: s, code: connect.CodeOf(err), reason: reasonOf(err), why: why, scopes: scopes})
 			if ctx.Err() != nil {
 				break
 			}
@@ -135,6 +143,16 @@ func reasonOf(err error) string {
 	return err.Error()
 }
 
+// structuredRefusal is the exchange's reason and scopes, read off the Connect
+// error's metadata.
+func structuredRefusal(err error) (string, []string) {
+	var ce *connect.Error
+	if !errors.As(err, &ce) {
+		return "", nil
+	}
+	return strings.TrimSpace(ce.Meta().Get(svcerr.ReasonHeader)), fat.ParseScopesHeader(ce.Meta().Get(fat.ScopesHeader))
+}
+
 // refusal turns every candidate's failure into one answer for forge.
 //
 // The code is the most actionable thing that happened: a session that EXISTS
@@ -167,7 +185,42 @@ func refusal(endpoint string, attempts []attempt) error {
 	for _, a := range attempts {
 		fmt.Fprintf(&b, "\n  - %s: %s", describe(a.session), a.reason)
 	}
-	return &cloudcred.HelperError{Code: code, Message: b.String()}
+	out := &cloudcred.HelperError{Code: code, Message: b.String()}
+	// A denial over missing scopes says so in structure (reason + scopes), so
+	// forge's --json document reports error_reason scope_missing and the
+	// deploy panel names the grant. Only when every denied session said it:
+	// one that was refused for another reason makes "ask for a grant" a guess.
+	if code == cloudcred.CodeDenied {
+		out.Reason, out.Scopes = deniedForScopes(attempts)
+	}
+	return out
+}
+
+// deniedForScopes is scope_missing and the union of the scopes named, when
+// every denied attempt was refused for missing scopes; else nothing.
+func deniedForScopes(attempts []attempt) (string, []string) {
+	var scopes []string
+	seen := map[string]bool{}
+	denied := 0
+	for _, a := range attempts {
+		if classify(a.code) != cloudcred.CodeDenied {
+			continue
+		}
+		denied++
+		if a.why != fat.ReasonScopeMissing {
+			return "", nil
+		}
+		for _, sc := range a.scopes {
+			if !seen[sc] {
+				seen[sc] = true
+				scopes = append(scopes, sc)
+			}
+		}
+	}
+	if denied == 0 {
+		return "", nil
+	}
+	return fat.ReasonScopeMissing, scopes
 }
 
 // classify maps one exchange failure onto the protocol's codes.

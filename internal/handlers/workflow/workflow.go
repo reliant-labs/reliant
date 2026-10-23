@@ -23,6 +23,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemonerr"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/errreason"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -614,11 +615,11 @@ func (s *Service) SaveWorkflow(
 	// OCC: Check for conflicts if expected_version is provided
 	if existing != nil && req.Msg.ExpectedVersion != nil {
 		if existing.Version != *req.Msg.ExpectedVersion {
-			return nil, svcerr.Aborted(fmt.Sprintf(
+			return nil, svcerr.WithReason(svcerr.Aborted(fmt.Sprintf(
 				"workflow was modified since you last loaded it (expected version: %d, current version: %d) - please reload and retry",
 				*req.Msg.ExpectedVersion,
 				existing.Version,
-			))
+			)), errreason.StaleRevision)
 		}
 	}
 
@@ -1026,9 +1027,9 @@ func (s *Service) SetWorkflowStatus(
 		return nil, svcerr.NotFound("workflow")
 	}
 	if req.Msg.ExpectedVersion != nil && draft.Version != *req.Msg.ExpectedVersion {
-		return nil, svcerr.Aborted(fmt.Sprintf(
+		return nil, svcerr.WithReason(svcerr.Aborted(fmt.Sprintf(
 			"workflow was modified since you last loaded it (expected version: %d, current version: %d) - please reload and retry",
-			*req.Msg.ExpectedVersion, draft.Version))
+			*req.Msg.ExpectedVersion, draft.Version)), errreason.StaleRevision)
 	}
 
 	check := s.validateWorkflowDefinition(ctx, userID, []byte(draft.Definition))

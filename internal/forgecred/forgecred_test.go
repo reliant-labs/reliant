@@ -11,7 +11,9 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	fat "github.com/reliant-labs/forge/pkg/accesstoken"
 	"github.com/reliant-labs/forge/pkg/cloudcred"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 )
 
 // fakeExchanger answers per server and counts calls.
@@ -167,5 +169,54 @@ func TestForgetServer(t *testing.T) {
 	}
 	if _, err := h.Mint(context.Background(), req); err != nil || ex.minted != 2 {
 		t.Fatalf("after ForgetServer the next request must mint again (minted=%d, %v)", ex.minted, err)
+	}
+}
+
+func scopeRefusal(scopes string) error {
+	ce := connect.NewError(connect.CodePermissionDenied, errors.New("this Reliant credential cannot authorize deploy:write"))
+	ce.Meta().Set(svcerr.ReasonHeader, fat.ReasonScopeMissing)
+	ce.Meta().Set(fat.ScopesHeader, scopes)
+	return ce
+}
+
+// A denial the server explained as scope_missing reaches forge in structure —
+// HelperError.Reason and .Scopes, which forge reports as error_reason /
+// error_scopes — so the deploy panel can name the grant. The message is the
+// same one forge has always printed.
+func TestMint_DenialCarriesTheServersScopeMissing(t *testing.T) {
+	clock := time.Date(2030, 1, 1, 12, 0, 0, 0, time.UTC)
+	sessions := []Session{
+		{Server: "https://api.a.com", Token: "rlat_a_AAAA", Kind: "daemon"},
+		{Server: "https://api.b.com", Token: "rlat_b_BBBB", Kind: "cli"},
+		{Server: "https://api.other.com", Token: "rlat_o_OOOO", Kind: "cli"},
+	}
+	ex := &fakeExchanger{ttl: time.Hour, refuse: map[string]error{
+		"https://api.a.com":     scopeRefusal("deploy:write"),
+		"https://api.b.com":     scopeRefusal("deploy:write,secret:read"),
+		"https://api.other.com": connect.NewError(connect.CodeFailedPrecondition, errors.New("not this control plane")),
+	}}
+	h := newTestHelper(t, sessions, ex, &clock)
+	_, err := h.Mint(context.Background(), req)
+	var he *cloudcred.HelperError
+	if !errors.As(err, &he) || he.Code != cloudcred.CodeDenied {
+		t.Fatalf("err = %v, want a denial", err)
+	}
+	if he.Reason != fat.ReasonScopeMissing || strings.Join(he.Scopes, ",") != "deploy:write,secret:read" {
+		t.Fatalf("reason=%q scopes=%v, want scope_missing with the union of the scopes", he.Reason, he.Scopes)
+	}
+	want := "you are signed in to Reliant, but no session on this machine can authorize https://admin.example.com:" +
+		"\n  - Reliant session (daemon at https://api.a.com): this Reliant credential cannot authorize deploy:write" +
+		"\n  - Reliant session (CLI login at https://api.b.com): this Reliant credential cannot authorize deploy:write" +
+		"\n  - Reliant session (CLI login at https://api.other.com): not this control plane"
+	if he.Message != want {
+		t.Errorf("message changed:\n got %q\nwant %q", he.Message, want)
+	}
+
+	// One denial for another reason makes "ask for a grant" a guess: no reason.
+	ex.refuse["https://api.b.com"] = connect.NewError(connect.CodeUnauthenticated, errors.New("session expired"))
+	clock = clock.Add(2 * time.Hour)
+	_, err = h.Mint(context.Background(), req)
+	if !errors.As(err, &he) || he.Reason != "" || he.Scopes != nil {
+		t.Fatalf("err = %+v, want a denial with no structured reason", he)
 	}
 }

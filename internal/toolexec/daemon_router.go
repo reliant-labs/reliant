@@ -7,6 +7,7 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/errreason"
 )
 
 // ErrDaemonPending means a daemon record exists for this user (it was
@@ -35,7 +36,10 @@ import (
 // Its kind is Unavailable — retryable, what the web's daemon-wait machinery
 // expects — so a handler's bare svcerr.Wrap answers CodeUnavailable with the
 // marker in the message, never Internal "internal server error".
-var ErrDaemonPending = svcerr.WithClass(svcerr.Unavailable("no daemon connected: daemon record exists but has not registered yet (still starting)"), svcerr.ClassUser)
+//
+// Its reason is errreason.DaemonStarting (x-forge-error-reason), which the web
+// routes on; the marker text stays for clients from before the reason.
+var ErrDaemonPending = svcerr.WithReason(svcerr.WithClass(svcerr.Unavailable("no daemon connected: daemon record exists but has not registered yet (still starting)"), svcerr.ClassUser), errreason.DaemonStarting)
 
 // IsDaemonPending reports whether err indicates a daemon exists for the user
 // but has not connected yet (still provisioning) — as opposed to no daemon
@@ -64,7 +68,9 @@ func IsDaemonPending(err error) bool {
 //
 // It is ErrDaemonPending under its own message (svcerr.WithMessage), so the
 // text a client reads through svcerr is this one, not the pending sentinel's.
-var ErrDaemonSuspended = svcerr.WithMessage(ErrDaemonPending, "no daemon connected: the machine is asleep (suspended)")
+// Its reason, errreason.DaemonSuspended, is the nearest on its chain, so it
+// wins over the pending sentinel's.
+var ErrDaemonSuspended = svcerr.WithReason(svcerr.WithMessage(ErrDaemonPending, "no daemon connected: the machine is asleep (suspended)"), errreason.DaemonSuspended)
 
 // IsDaemonSuspended reports whether err says the machine is suspended, as
 // opposed to still starting. Both are IsDaemonPending.
@@ -80,13 +86,15 @@ func IsDaemonSuspended(err error) bool {
 // that went offline. A USER error (svcerr.ClassUser), like ErrDaemonPending,
 // of kind FailedPrecondition: waiting cannot produce a machine the user has not
 // connected.
-var ErrNoDaemon = svcerr.WithClass(svcerr.FailedPrecondition("no daemon available"), svcerr.ClassUser)
+// Its reason is errreason.NoDaemon.
+var ErrNoDaemon = svcerr.WithReason(svcerr.WithClass(svcerr.FailedPrecondition("no daemon available"), svcerr.ClassUser), errreason.NoDaemon)
 
 // errDaemonNotConnected is the cause daemonRequestError reports when NATS had
 // no responder for the daemon's subject: the daemon is not connected. A USER
 // error — the machine is closed or restarting — whose text carries
 // daemonoffline.ErrorSubstring, the marker every surface keys on.
-var errDaemonNotConnected = svcerr.WithClass(svcerr.Unavailable("no daemon connected for user"), svcerr.ClassUser)
+// Its reason is errreason.DaemonNotConnected.
+var errDaemonNotConnected = svcerr.WithReason(svcerr.WithClass(svcerr.Unavailable("no daemon connected for user"), svcerr.ClassUser), errreason.DaemonNotConnected)
 
 // machineState puts sentence, the router's account of a machine state, in
 // front of state's own text as the message a client reads through svcerr —

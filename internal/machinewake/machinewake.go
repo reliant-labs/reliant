@@ -12,6 +12,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/daemonerr"
+	"github.com/reliant-labs/reliant/internal/errreason"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/nomachine"
 	"github.com/reliant-labs/reliant/internal/toolexec"
@@ -66,7 +67,9 @@ func (w waker) AfterFailure(ctx context.Context, userID string, target Target, e
 	if !woke {
 		return err
 	}
-	return &wakingError{daemonID: daemonID, cause: err}
+	// errreason.DaemonWaking is the nearest reason on the chain, so it is
+	// what a client reads however a handler wraps this.
+	return svcerr.WithReason(&wakingError{daemonID: daemonID, cause: err}, errreason.DaemonWaking)
 }
 
 // wake resumes the target machine when the request is allowed to, reporting
@@ -158,6 +161,7 @@ func (e *wakingError) ErrorClass() svcerr.Class { return svcerr.ClassUser }
 // error; the class is carried onto the fresh error, which drops the chain.
 func (e *wakingError) connectError() *connect.Error {
 	cerr := connect.NewError(connect.CodeUnavailable, svcerr.WithClass(errors.New(e.Error()), svcerr.ClassUser))
+	cerr.Meta().Set(svcerr.ReasonHeader, errreason.DaemonWaking)
 	if detail, err := connect.NewErrorDetail(&reliantv1.DaemonWaking{DaemonId: e.daemonID}); err == nil {
 		cerr.AddDetail(detail)
 	}

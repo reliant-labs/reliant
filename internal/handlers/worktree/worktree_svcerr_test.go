@@ -16,8 +16,10 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/errreason"
 	worktree "github.com/reliant-labs/reliant/internal/handlers/worktree"
 	"github.com/reliant-labs/reliant/internal/toolexec"
+	"github.com/reliant-labs/reliant/internal/wirecheck"
 )
 
 // errOpaqueSecret is a store failure nobody on this side of the wire wrote: its
@@ -115,6 +117,7 @@ func TestPushWorktree_DaemonFailureClasses(t *testing.T) {
 		code     connect.Code
 		contains string
 		withheld string
+		reason   string // the machine state's x-forge-error-reason (13-p9 §7.1 #1-2)
 	}{
 		"the daemon's git rejection": {
 			send: toolexec.DaemonReportedFailure("worktree.push", "! [rejected] feature -> feature (fetch first)"),
@@ -130,11 +133,11 @@ func TestPushWorktree_DaemonFailureClasses(t *testing.T) {
 		},
 		"the machine is starting": {
 			send: fmt.Errorf("resolve: %w", toolexec.ErrDaemonPending),
-			code: connect.CodeUnavailable, contains: "no daemon connected",
+			code: connect.CodeUnavailable, contains: "no daemon connected", reason: errreason.DaemonStarting,
 		},
 		"no machine at all": {
 			send: toolexec.ErrNoDaemon,
-			code: connect.CodeFailedPrecondition, contains: "no daemon available",
+			code: connect.CodeFailedPrecondition, contains: "no daemon available", reason: errreason.NoDaemon,
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
@@ -165,6 +168,7 @@ func TestPushWorktree_DaemonFailureClasses(t *testing.T) {
 			assert.Equal(t, tc.code, svcerr.Code(err), "err = %v", err)
 			msg := svcerr.ToConnect(err).Message()
 			assert.Contains(t, msg, tc.contains)
+			assert.Equal(t, tc.reason, wirecheck.RoundTrip(t, err).Meta().Get(svcerr.ReasonHeader))
 			if tc.withheld != "" {
 				assert.NotContains(t, msg, tc.withheld)
 			}
