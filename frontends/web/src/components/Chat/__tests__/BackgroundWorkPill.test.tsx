@@ -30,7 +30,7 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { renderWithQuery } from "../../../test/renderWithQuery";
 import type { ActiveThreadUpdate } from "../../../types/streaming";
 import type { WorkflowExecutionData } from "../../../types/chat";
-import type { QuestionInfo } from "../../../api/question-grpc";
+import type { QuestionInfo } from "../../../gen/reliant/v1/question_pb";
 
 const CHAT_ID = "chat-abc";
 const WORKTREE_ID = "wt-1";
@@ -40,7 +40,7 @@ const { usePendingQuestionsMock, useWorkflowExecutionsMock } = vi.hoisted(() => 
   useWorkflowExecutionsMock: vi.fn(),
 }));
 
-vi.mock("../../../hooks/approval-queries", () => ({
+vi.mock("../../../hooks/question-queries", () => ({
   usePendingQuestions: usePendingQuestionsMock,
 }));
 
@@ -95,13 +95,16 @@ function workflow(overrides: Partial<WorkflowExecutionData> = {}): WorkflowExecu
 
 function question(overrides: Partial<QuestionInfo> = {}): QuestionInfo {
   return {
-    question_id: "q1",
-    chat_id: CHAT_ID,
-    workflow_id: "wf-1",
-    thread_id: "thread-1",
-    step_id: "s1",
+    $typeName: "reliant.v1.QuestionInfo",
+    questionId: "q1",
+    chatId: CHAT_ID,
+    workflowId: "wf-1",
+    threadId: "thread-1",
+    stepId: "s1",
     status: "pending",
-    created_at: "",
+    createdAt: "",
+    async: false,
+    toolCallId: "",
     ...overrides,
   };
 }
@@ -125,7 +128,7 @@ function renderPill(props: Partial<React.ComponentProps<typeof BackgroundWorkPil
 beforeEach(() => {
   vi.restoreAllMocks();
   localStorage.removeItem(DISMISSED_FAILED_AGENTS_KEY);
-  usePendingQuestionsMock.mockReturnValue({ data: [] });
+  usePendingQuestionsMock.mockReturnValue({ data: { questions: [] } });
   useWorkflowExecutionsMock.mockReturnValue({ allWorkflows: [] });
   useThreadActivityStore.getState().clearAll();
   useProcessStore.getState().reset();
@@ -286,7 +289,7 @@ describe("BackgroundWorkPill", () => {
     ]);
     // The question names the thread that asked it; only that spawn is gated.
     usePendingQuestionsMock.mockReturnValue({
-      data: [question({ question_id: "q1", workflow_id: "wf-b", thread_id: "thread-b" })],
+      data: { questions: [question({ questionId: "q1", workflowId: "wf-b", threadId: "thread-b" })] },
     });
 
     renderPill();
@@ -304,10 +307,12 @@ describe("BackgroundWorkPill", () => {
       thread({ thread: "thread-b", workflow_id: "wf-b", thread_title: "implementer" }),
     ]);
     usePendingQuestionsMock.mockReturnValue({
-      data: [
-        question({ question_id: "qA", workflow_id: "wf-a", thread_id: "thread-a" }),
-        question({ question_id: "qB", workflow_id: "wf-b", thread_id: "thread-b" }),
-      ],
+      data: {
+        questions: [
+          question({ questionId: "qA", workflowId: "wf-a", threadId: "thread-a" }),
+          question({ questionId: "qB", workflowId: "wf-b", threadId: "thread-b" }),
+        ],
+      },
     });
     const onSelectThread = vi.fn();
 
@@ -322,7 +327,7 @@ describe("BackgroundWorkPill", () => {
 
   it("surfaces the main thread's question while a spawn is in view, and navigates back to it", () => {
     usePendingQuestionsMock.mockReturnValue({
-      data: [question({ question_id: "q-main", thread_id: CHAT_ID })],
+      data: { questions: [question({ questionId: "q-main", threadId: CHAT_ID })] },
     });
     const onSelectThread = vi.fn();
 
@@ -337,7 +342,7 @@ describe("BackgroundWorkPill", () => {
 
   it("does not repeat the question of the thread in view: the composer shows it", () => {
     usePendingQuestionsMock.mockReturnValue({
-      data: [question({ question_id: "q-main", thread_id: CHAT_ID })],
+      data: { questions: [question({ questionId: "q-main", threadId: CHAT_ID })] },
     });
 
     renderPill({ selectedThreadId: null });
@@ -357,7 +362,7 @@ describe("BackgroundWorkPill", () => {
       ],
     });
     usePendingQuestionsMock.mockReturnValue({
-      data: [question({ question_id: "q-r", thread_id: "thread-review", workflow_id: "wf-r" })],
+      data: { questions: [question({ questionId: "q-r", threadId: "thread-review", workflowId: "wf-r" })] },
     });
     const onSelectThread = vi.fn();
 

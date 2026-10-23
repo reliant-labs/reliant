@@ -9,7 +9,7 @@ import { InitializeGitModal } from "../Git/InitializeGitModal";
 import { Button } from "../ui/Button";
 import { cn } from "../../lib/utils";
 import { WorktreeStatus } from "../../gen/reliant/v1/worktree_pb";
-import { repoGrpc, type Repo } from "../../api/repo-grpc";
+import { useListRepos } from "../../hooks/repo-service-hooks_gen";
 import { logger } from "../../lib/logger";
 import { copyPathError, DEFAULT_COPY_PATHS, parseCopyPathsInput } from "../../lib/worktreeCopyPaths";
 import {
@@ -52,8 +52,15 @@ export function CreateWorktreeModal({
   // Discovered nested repos. The new worktree always spans ALL of them;
   // there's no per-repo selection. We still load the list so we can show
   // per-repo base-branch overrides when there are 2+ repos.
-  const [repos, setRepos] = useState<Repo[]>([]);
-  const [reposLoaded, setReposLoaded] = useState(false);
+  // A failed list is non-fatal: it falls back to the single-repo path.
+  const reposQuery = useListRepos({ projectId }, { enabled: isOpen && !!projectId });
+  const repos = useMemo(() => reposQuery.data?.repos ?? [], [reposQuery.data]);
+  const reposLoaded = reposQuery.isSuccess || reposQuery.isError;
+  useEffect(() => {
+    if (reposQuery.error) {
+      logger.warn("[CreateWorktreeModal] Failed to list repos", { err: reposQuery.error });
+    }
+  }, [reposQuery.error]);
 
   const isMultiRepo = repos.length > 1;
 
@@ -118,29 +125,6 @@ export function CreateWorktreeModal({
   const [error, setError] = useState<string | null>(null);
   const [normalizedName, setNormalizedName] = useState<string | null>(null);
   const [normalizedBranch, setNormalizedBranch] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!isOpen || !projectId) return;
-    let cancelled = false;
-    setReposLoaded(false);
-    repoGrpc
-      .list(projectId)
-      .then(({ repos: loaded }) => {
-        if (cancelled) return;
-        setRepos(loaded);
-        setReposLoaded(true);
-      })
-      .catch((err) => {
-        // Non-fatal: fall back to single-repo path if RepoService is unavailable.
-        if (cancelled) return;
-        logger.warn("[CreateWorktreeModal] Failed to list repos", { err });
-        setRepos([]);
-        setReposLoaded(true);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [isOpen, projectId]);
 
   // Shared with the mobile create sheet so both surfaces derive the same
   // branch from the same typed name.
@@ -460,8 +444,8 @@ export function CreateWorktreeModal({
                         <div key={r.id} className="flex items-center gap-3 p-3">
                           <div className="w-1/3 min-w-0">
                             <div className="text-sm font-medium text-foreground truncate">{r.name}</div>
-                            {r.relative_path && (
-                              <div className="text-xs text-muted-foreground font-mono truncate">{r.relative_path}</div>
+                            {r.relativePath && (
+                              <div className="text-xs text-muted-foreground font-mono truncate">{r.relativePath}</div>
                             )}
                           </div>
                           <input
@@ -534,7 +518,7 @@ export function CreateWorktreeModal({
                         setFormData((prev) => ({ ...prev, copy_files: files }));
                       }}
                       className="w-full pl-10 pr-4 py-3 elevation-0 border border-border/60 rounded-lg text-sm font-mono placeholder:text-muted-foreground/60 placeholder:font-normal placeholder:italic focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-all"
-                      placeholder={isMultiRepo ? `.env, ${repos[0]?.relative_path || "repo"}/.env, ${repos[0]?.relative_path || "repo"}/node_modules` : ".env, .env.local, node_modules"}
+                      placeholder={isMultiRepo ? `.env, ${repos[0]?.relativePath || "repo"}/.env, ${repos[0]?.relativePath || "repo"}/node_modules` : ".env, .env.local, node_modules"}
                     />
                   </div>
                   <p className="text-xs text-muted-foreground">

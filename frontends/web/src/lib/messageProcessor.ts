@@ -12,7 +12,7 @@
 
 import { ContentBlockType, ToolCallStatus } from "../gen/reliant/v1/chat_pb";
 import type { Attachment, Message } from "../types/chat";
-import type { ToolApprovalRequest } from "../api/client";
+import type { Approval } from "../gen/reliant/v1/approval_pb";
 
 export interface ToolCallData {
   id: string;
@@ -51,7 +51,7 @@ export interface ToolResultData {
 export interface ToolExecution {
   call: ToolCallData;
   result?: ToolResultData;
-  approval?: ToolApprovalRequest;
+  approval?: Approval;
 }
 
 /**
@@ -185,7 +185,7 @@ export interface ProcessedMessage {
  */
 export function processMessage(
   message: Message,
-  approvals: ToolApprovalRequest[] = [],
+  approvals: Approval[] = [],
   resultsByCallId: ToolResultsByCallId = {},
 ): ProcessedMessage {
   const blocks = message.contentBlocks;
@@ -202,7 +202,7 @@ export function processMessage(
 
   const toolCallsById = new Map<string, ToolCallData>();
   const toolResultsById = new Map<string, ToolResultData>();
-  const approvalsById = new Map<string, ToolApprovalRequest>();
+  const approvalsById = new Map<string, Approval>();
   const toolCallOrder: string[] = [];
   let text = "";
   let isStreaming = false;
@@ -339,7 +339,7 @@ export function processMessage(
     const result = toolResultsById.get(id);
     const approval =
       approvalsById.get(id) ||
-      approvals.find((a) => a.content_block_id === call.content_block_id);
+      approvals.find((a) => a.entityId === call.content_block_id);
 
     const execution: ToolExecution = { call, result, approval };
     executionById.set(id, execution);
@@ -401,7 +401,7 @@ export function processMessage(
  */
 interface ProcessedMemoEntry {
   resultsByCallId: ToolResultsByCallId;
-  approvals: ToolApprovalRequest[];
+  approvals: Approval[];
   processed: ProcessedMessage;
 }
 const processedMemo = new WeakMap<Message, ProcessedMemoEntry>();
@@ -409,7 +409,7 @@ const processedMemo = new WeakMap<Message, ProcessedMemoEntry>();
 export function getProcessedMessage(
   message: Message,
   resultsByCallId: ToolResultsByCallId = {},
-  approvals: ToolApprovalRequest[] = [],
+  approvals: Approval[] = [],
 ): ProcessedMessage {
   const cached = processedMemo.get(message);
   if (

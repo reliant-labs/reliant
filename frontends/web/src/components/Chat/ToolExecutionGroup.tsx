@@ -2,7 +2,6 @@ import { useMemo, useState, memo, useEffect } from "react";
 import { ChevronDown, ChevronRight, ListTree, CheckCircle2, AlertCircle, Loader2, XCircle } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { ToolExecution, durableStatusToDisplayStatus, workflowLifecycleToDisplayStatus, type ToolResultData } from "./ToolExecution";
-import type { ToolApprovalRequest } from "../../api/client";
 import { shouldToolBeCollapsed, TOOL_COLLAPSE_SETTINGS_EVENT } from "../Settings/ToolCallSettings";
 import { useSurface } from "../../lib/surfaceContext";
 import { formatToolParams, type ToolInput, isSpawnTool } from "../../lib/toolFormatters";
@@ -21,7 +20,7 @@ function truncate(text: string, max: number): string {
   const oneLine = text.replace(/\s+/g, " ").trim();
   return oneLine.length > max ? `${oneLine.slice(0, max - 1)}…` : oneLine;
 }
-import { ApprovalStatus } from "../../gen/reliant/v1/approval_pb";
+import { ApprovalStatus, type Approval } from "../../gen/reliant/v1/approval_pb";
 
 // Mirrors the subset of lib/messageProcessor's ToolCallData this group reads.
 // `input` is OPTIONAL there (undefined while the call is still streaming), and
@@ -41,7 +40,7 @@ interface ToolExecutionGroupProps {
   executions: Array<{
     call: ToolCallData;
     result?: ToolResultData;
-    approval?: ToolApprovalRequest;
+    approval?: Approval;
     status?: "pending" | "preparing" | "requested" | "writing_input" | "executing" | "cancelling" | "cancelled" | "completed" | "backgrounded" | "denied" | "failed";
     onCancel?: (id: string) => void;
     onConvertToBackground?: (id: string) => void;

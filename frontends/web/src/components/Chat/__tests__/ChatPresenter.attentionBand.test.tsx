@@ -56,11 +56,11 @@ vi.mock("../../../hooks/chat-queries", async () => {
 const { pendingQuestions } = vi.hoisted(() => ({
   pendingQuestions: { current: [] as unknown[] },
 }));
-vi.mock("../../../hooks/approval-queries", async () => {
+vi.mock("../../../hooks/question-queries", async () => {
   const actual = await vi.importActual<
-    typeof import("../../../hooks/approval-queries")
-  >("../../../hooks/approval-queries");
-  return { ...actual, usePendingQuestions: () => ({ data: pendingQuestions.current }) };
+    typeof import("../../../hooks/question-queries")
+  >("../../../hooks/question-queries");
+  return { ...actual, usePendingQuestions: () => ({ data: { questions: pendingQuestions.current } }) };
 });
 
 // While the agent works, ChatPresenter reads the machine registry to say
@@ -245,7 +245,7 @@ describe("the interrupt affordance tracks work in flight, not chat busy-ness", (
   it("withholds interrupt while a question waits on the user, but still shows the queue", async () => {
     // A question on the thread in view (the main thread).
     pendingQuestions.current = [
-      { question_id: "q1", chat_id: CHAT_ID, workflow_id: "", thread_id: CHAT_ID, step_id: "ask", status: "pending", created_at: "" },
+      { questionId: "q1", chatId: CHAT_ID, workflowId: "", threadId: CHAT_ID, stepId: "ask", status: "pending", createdAt: "" },
     ];
     renderWithQuery(
       <SurfaceProvider surface="desktop">

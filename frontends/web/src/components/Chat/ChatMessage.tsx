@@ -32,7 +32,8 @@ import { MessageActionsSheet, type MessageActionsSheetAction } from "./MessageAc
 import { CodeContextPill } from "./CodeContextPill";
 import { FailedSendStatus } from "./FailedSendStatus";
 import { clientIdOfFailedSend } from "../../lib/pendingSends";
-import type { Message, ToolApprovalRequest } from "../../api/client";
+import type { Message } from "../../api/client";
+import type { Approval } from "../../gen/reliant/v1/approval_pb";
 import { useChatStore } from "../../store/chatStore"; // For getState() only
 import {
   useActiveChatId,
@@ -77,7 +78,7 @@ const COLLAPSED_FADE_MASK = "linear-gradient(to bottom, #000 60%, transparent 10
 
 interface ChatMessageProps {
   message: Message;
-  approvals?: ToolApprovalRequest[];
+  approvals?: Approval[];
   hideToolExecutions?: boolean;
   isLatestMessage?: boolean;
   isStreaming?: boolean;
@@ -101,7 +102,7 @@ interface ParsedContent {
   toolExecutions?: Array<{
     call: ToolCallData;
     result?: LocalToolResultData;
-    approval?: ToolApprovalRequest;
+    approval?: Approval;
   }>;
   // Ordered text/tool timeline — the canonical render order. Empty for older
   // pre-processed store entries that predate segments (handled at render).
@@ -151,7 +152,7 @@ function renderTextWithContextPills(
 interface EnhancedToolExecution {
   call: ToolCallData;
   result?: ToolResultData;
-  approval?: ToolApprovalRequest;
+  approval?: Approval;
   status?:
     | "pending" // Queued but not started
     | "preparing" // LLM is writing the tool request
@@ -272,10 +273,10 @@ function ChatMessageComponent({
 
   // OPTIMIZED: Memoize approvals by content_block_id to avoid re-filtering on every render
   const approvalsByContentBlockId = useMemo(() => {
-    const map = new Map<string, ToolApprovalRequest>();
+    const map = new Map<string, Approval>();
     for (const approval of approvals) {
-      if (approval.content_block_id) {
-        map.set(approval.content_block_id, approval);
+      if (approval.entityId) {
+        map.set(approval.entityId, approval);
       }
     }
     return map;
@@ -284,7 +285,7 @@ function ChatMessageComponent({
   // Helper to find approval - matches by content_block_id (unique identifier for each content block)
   // This handles both: 1) approvals embedded by backend, 2) approvals that arrive via WebSocket after message
   const getApprovalStatus = useCallback(
-    (contentBlockId: string): ToolApprovalRequest | undefined => {
+    (contentBlockId: string): Approval | undefined => {
       return approvalsByContentBlockId.get(contentBlockId);
     },
     [approvalsByContentBlockId],

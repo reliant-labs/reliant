@@ -1,6 +1,5 @@
 import { getCatalogClient } from "./grpc-client";
 import { projectGrpc } from "./project-grpc";
-import { approvalGrpc } from "./approval-grpc";
 import { chatGrpc } from "./chat-grpc";
 import type { Chat, Message } from "../types/chat";
 import { ChatState, MessageRole } from "../types/chat";
@@ -20,9 +19,6 @@ import type {
 // Re-export types for consumers
 export type { Chat, Message, ContentBlock, Attachment } from "../types/chat";
 export { ChatState } from "../types/chat";
-
-// Re-export approval types from canonical source
-export type { ToolApprovalRequest } from "./approval-grpc";
 
 export const api = {
   workflows: {
@@ -466,36 +462,6 @@ export const api = {
         oldestSeq: result.oldest_seq,
       };
     },
-  },
-
-  health: async () => {
-    const { systemGrpc } = await import("./system-grpc");
-    return systemGrpc.health();
-  },
-
-  approvals: {
-    listByChat: async (chatId: string) =>
-      approvalGrpc.listByChat(chatId),
-
-    approve: async (requestId: string, actionTaken?: string) =>
-      approvalGrpc.approve(requestId, actionTaken),
-
-    deny: async (
-      requestId: string,
-      denialReason?: string,
-      actionTaken?: string
-    ) => approvalGrpc.deny(requestId, denialReason, actionTaken),
-
-    batchApprove: async (
-      requestIds: string[],
-      actionTaken?: string
-    ) => approvalGrpc.batchApprove(requestIds, actionTaken),
-
-    batchDeny: async (
-      requestIds: string[],
-      denialReason?: string,
-      actionTaken?: string
-    ) => approvalGrpc.batchDeny(requestIds, denialReason, actionTaken),
   },
 
   toolCalls: {

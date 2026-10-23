@@ -12,18 +12,28 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const { resolveQuestion } = vi.hoisted(() => ({
   resolveQuestion: vi.fn(async (..._args: unknown[]) => ({})),
 }));
-vi.mock("../../../api/question-grpc", () => ({
-  questionGrpc: { resolveQuestion, listPendingQuestions: vi.fn(async () => []) },
-}));
 
 import { askUserQuestionItems } from "../askUserUtils";
-import { answerQuestion, questionKeys } from "../../../hooks/approval-queries";
+import { answerQuestion } from "../../../hooks/question-queries";
+import { questionServiceKeys } from "../../../hooks/question-service-hooks_gen";
+import { setTransport } from "../../../lib/connect";
 import { queryClient } from "../../../lib/query-client";
+import { mockTransport } from "../../../lib/test-utils";
 import { useChatStore } from "../../../store/chatStore";
+
+const pendingKey = (chatId: string) => questionServiceKeys.listPendingQuestions({ chatId });
 
 beforeEach(() => {
   resolveQuestion.mockClear();
   queryClient.clear();
+  setTransport(
+    mockTransport({
+      "QuestionService.ResolveQuestion": (req) => {
+        const { questionId, action, responseData } = req as { questionId: string; action: string; responseData?: string };
+        return resolveQuestion(questionId, action, responseData);
+      },
+    }),
+  );
 });
 
 describe("askUserQuestionItems", () => {
@@ -49,26 +59,28 @@ describe("askUserQuestionItems", () => {
 
 describe("answerQuestion", () => {
   it("replies with the answers JSON and drops only that question from the chat's pending list", async () => {
-    queryClient.setQueryData(questionKeys.pendingList("chat-1"), [
-      { question_id: "q-1", thread_id: "chat-1" },
-      { question_id: "q-other", thread_id: "spawn-a" },
-    ]);
+    queryClient.setQueryData(pendingKey("chat-1"), {
+      questions: [
+        { questionId: "q-1", threadId: "chat-1" },
+        { questionId: "q-other", threadId: "spawn-a" },
+      ],
+    });
     const answers = { answers: [{ question: "Ship it?", selected: ["Yes"] }] };
 
     await answerQuestion("chat-1", "q-1", answers);
 
     expect(resolveQuestion).toHaveBeenCalledWith("q-1", "reply", JSON.stringify(answers));
-    expect(queryClient.getQueryData(questionKeys.pendingList("chat-1"))).toEqual([
-      { question_id: "q-other", thread_id: "spawn-a" },
-    ]);
+    expect(queryClient.getQueryData(pendingKey("chat-1"))).toMatchObject({
+      questions: [{ questionId: "q-other", threadId: "spawn-a" }],
+    });
   });
 });
 
 describe("chatStore.resolveQuestion (the chat composer's path)", () => {
   it("still resolves the question and drops it from the pending list", async () => {
-    queryClient.setQueryData(questionKeys.pendingList("chat-2"), [{ question_id: "q-2" }]);
+    queryClient.setQueryData(pendingKey("chat-2"), { questions: [{ questionId: "q-2" }] });
     await useChatStore.getState().resolveQuestion("chat-2", "q-2", "reply", '{"answers":[]}');
     expect(resolveQuestion).toHaveBeenCalledWith("q-2", "reply", '{"answers":[]}');
-    expect(queryClient.getQueryData(questionKeys.pendingList("chat-2"))).toEqual([]);
+    expect(queryClient.getQueryData(pendingKey("chat-2"))).toMatchObject({ questions: [] });
   });
 });

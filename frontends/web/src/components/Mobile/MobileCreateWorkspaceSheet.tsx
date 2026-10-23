@@ -30,7 +30,7 @@ import { GitBranchPlus, Loader2, X } from "lucide-react";
 import { useWorktreeStore, type Worktree } from "../../store/worktreeStore";
 import { useProjectStore } from "../../store/projectStore";
 import { useBranches, type GitBranch } from "../../hooks/useBranches";
-import { repoGrpc, type Repo } from "../../api/repo-grpc";
+import { useListRepos } from "../../hooks/repo-service-hooks_gen";
 import { WorktreeStatus } from "../../gen/reliant/v1/worktree_pb";
 import { DEFAULT_COPY_PATHS } from "../../lib/worktreeCopyPaths";
 import { defaultBaseBranch, normalizeWorkspaceName } from "../../lib/workspaceNaming";
@@ -122,23 +122,15 @@ export function MobileCreateWorkspaceSheet({
   // decides whether one base-branch picker makes sense: in a multi-repo
   // project there is no single branch list to pick from (the branches RPC
   // rejects a request without a repo id), so each repo uses its own default.
-  const [repos, setRepos] = useState<Repo[] | null>(null);
+  // null until the list settles; a failed list is treated as a single-repo
+  // project, the same fallback as desktop.
+  const reposQuery = useListRepos({ projectId });
+  const repos = reposQuery.data?.repos ?? (reposQuery.isError ? [] : null);
   useEffect(() => {
-    let cancelled = false;
-    repoGrpc
-      .list(projectId)
-      .then(({ repos: loaded }) => {
-        if (!cancelled) setRepos(loaded);
-      })
-      .catch((err) => {
-        // Same fallback as desktop: treat it as a single-repo project.
-        logger.warn("[MobileCreateWorkspaceSheet] Failed to list repos", { err });
-        if (!cancelled) setRepos([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [projectId]);
+    if (reposQuery.error) {
+      logger.warn("[MobileCreateWorkspaceSheet] Failed to list repos", { err: reposQuery.error });
+    }
+  }, [reposQuery.error]);
 
   const isMultiRepo = (repos?.length ?? 0) > 1;
   const branchRepoId = repos?.length === 1 ? repos[0].id : undefined;

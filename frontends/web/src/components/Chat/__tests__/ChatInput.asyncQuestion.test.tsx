@@ -11,6 +11,8 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
 import { queryClient } from "../../../lib/query-client";
 
 const CHAT_ID = "chat-async";
@@ -27,14 +29,14 @@ vi.mock("../../../api/chat-grpc", () => ({
   chatGrpc: { sendAgentMessage: sendAgentMessageMock },
   QUEUED_SENDER_KIND_HUMAN: 5,
 }));
-vi.mock("../../../api/question-grpc", () => ({
-  questionGrpc: {
+setTransport(
+  mockTransport({
     // The server leaves async questions out of the pending list.
-    listPendingQuestions: vi.fn().mockResolvedValue([]),
-    listAsyncQuestions: vi.fn().mockResolvedValue([]),
-    resolveQuestion: vi.fn().mockResolvedValue({ success: true }),
-  },
-}));
+    "QuestionService.ListPendingQuestions": { response: { questions: [] } },
+    "QuestionService.ListAsyncQuestions": { response: { questions: [] } },
+    "QuestionService.ResolveQuestion": { response: {} },
+  }),
+);
 vi.mock("../../../lib/toast-manager", () => ({
   toast: { error: vi.fn(), info: vi.fn(), success: vi.fn(), warning: vi.fn() },
 }));
@@ -71,7 +73,7 @@ vi.mock("../settings", () => ({ ChatSettingsPopover: () => null }));
 vi.mock("../WorkflowSelector", () => ({ WorkflowSelector: () => null }));
 
 import { ChatInput } from "../ChatInput";
-import { applyQuestionUpdate } from "../../../hooks/approval-queries";
+import { applyQuestionUpdate } from "../../../hooks/question-queries";
 
 function questionEvent(id: string, prompt: string, async: boolean) {
   return {

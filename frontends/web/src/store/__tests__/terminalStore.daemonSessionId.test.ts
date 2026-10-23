@@ -16,13 +16,11 @@
  */
 import { describe, expect, it, vi, beforeEach } from "vitest";
 
-const closeSession = vi.fn(() => Promise.resolve({ success: true, message: "" }));
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
 
-vi.mock("../../api/terminal-grpc", () => ({
-  terminalApi: {
-    closeSession: (id: string) => closeSession(id),
-  },
-}));
+// Records the session id each CloseSession put on the wire.
+const closeSession = vi.fn((_sessionId: string) => Promise.resolve({ success: true, message: "" }));
 
 vi.mock("../../lib/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), debug: vi.fn(), error: vi.fn() },
@@ -34,7 +32,15 @@ vi.mock("../workspaceStateStore", () => ({
 
 import { useTerminalStore } from "../terminalStore";
 
+/** Let the fire-and-forget close reach the transport. */
+const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+
 function reset() {
+  setTransport(
+    mockTransport({
+      "TerminalService.CloseSession": (req) => closeSession((req as { sessionId: string }).sessionId),
+    }),
+  );
   useTerminalStore.setState({
     sessions: [],
     activeSessionId: null,
@@ -46,25 +52,27 @@ function reset() {
 describe("terminal close uses the daemon session id", () => {
   beforeEach(reset);
 
-  it("sends the daemon id, never the local id", () => {
+  it("sends the daemon id, never the local id", async () => {
     const localId = useTerminalStore.getState().createSession("/home/workspace");
     const daemonId = "83328599-641e-4a39-aec5-9a5822ff72fa";
 
     useTerminalStore.getState().setDaemonSessionId(localId, daemonId);
     useTerminalStore.getState().killSession(localId);
+    await settle();
 
     expect(closeSession).toHaveBeenCalledWith(daemonId);
     // The precise regression: the local id must never reach the wire.
     expect(closeSession).not.toHaveBeenCalledWith(localId);
   });
 
-  it("does not call the server when no daemon session was ever created", () => {
+  it("does not call the server when no daemon session was ever created", async () => {
     // "init" never arrived — the socket failed, or the daemon was offline. No
     // PTY exists, so there is nothing to close. Calling CloseSession here with
     // the local id is exactly what generated the prod error noise.
     const localId = useTerminalStore.getState().createSession("/home/workspace");
 
     useTerminalStore.getState().killSession(localId);
+    await settle();
 
     expect(closeSession).not.toHaveBeenCalled();
   });

@@ -53,8 +53,8 @@ vi.mock("../../../hooks/chat-queries", async () => {
   };
 });
 
-vi.mock("../../../hooks/approval-queries", () => ({
-  usePendingQuestions: () => ({ data: [], isLoading: false }),
+vi.mock("../../../hooks/question-queries", () => ({
+  usePendingQuestions: () => ({ data: { questions: [] }, isLoading: false }),
 }));
 
 const NO_PRESETS = { presets: [] as never[], loading: false };
