@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   MOBILE_MAX_WIDTH,
+  mobilePathFor,
   shouldRedirectToMobile,
   type MobileRedirectEnv,
 } from '../mobileRedirect'
@@ -96,5 +97,36 @@ describe('shouldRedirectToMobile', () => {
     // under test, which does redirect.
     expect(shouldRedirectToMobile(phone({ pathname: '/auth' }))).toBe(false)
     expect(shouldRedirectToMobile(phone({ pathname: '/' }))).toBe(true)
+  })
+
+  it('leaves the Apps console on a phone', () => {
+    // The console's chrome collapses to an off-canvas nav at phone width, and
+    // it has no /m/* twin: redirecting it made Apps and Observability
+    // unreachable from a phone.
+    for (const pathname of ['/forge', '/forge/observability', '/forge/p/my-app/observability/logs']) {
+      expect(shouldRedirectToMobile(phone({ pathname })), pathname).toBe(false)
+    }
+    // A prefix match, not a substring one.
+    expect(shouldRedirectToMobile(phone({ pathname: '/forgery' }))).toBe(true)
+  })
+})
+
+describe('mobilePathFor', () => {
+  it('sends a desktop link to its mobile twin, not always the chat list', () => {
+    expect(mobilePathFor('/inbox')).toBe('/m/inbox')
+    expect(mobilePathFor('/inbox/')).toBe('/m/inbox')
+    // A run is a chat.
+    expect(mobilePathFor('/workflows/runs/chat_123')).toBe('/m/chats/chat_123')
+    expect(mobilePathFor('/workflows')).toBe('/m/workflows')
+    expect(mobilePathFor('/workflows/library/builtin%3A%2F%2Fagent')).toBe('/m/workflows')
+    expect(mobilePathFor('/settings')).toBe('/m/settings')
+    expect(mobilePathFor('/settings/ai')).toBe('/m/settings')
+    expect(mobilePathFor('/settings/environments/m_1')).toBe('/m/daemons')
+  })
+
+  it('lands everything without a twin on the chat list', () => {
+    for (const pathname of ['/', '/project/abc', '/workflows/runs', '/workflows/automations/t1', '/workflow/new']) {
+      expect(mobilePathFor(pathname), pathname).toBe('/m/chats')
+    }
   })
 })

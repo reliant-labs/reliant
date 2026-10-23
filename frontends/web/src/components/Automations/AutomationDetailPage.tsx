@@ -49,7 +49,7 @@ import { useIntegrationEventNaming } from "@/hooks/connection-queries";
 import { formatAbsoluteTime, formatRelativeTime } from "@/lib/relativeTime";
 import { AutomationFormDialog } from "./AutomationFormDialog";
 import { OutcomeBadge } from "./OutcomeBadge";
-import { RunStatusBadge } from "../ui/RunStatusIndicator";
+import { RunStatusBadge } from "../runs/RunStatusIndicator";
 import { useLaunchedRunStatus } from "./useLaunchedRunStatus";
 import { automationMachineLabel, daemonStatusLabel } from "./daemonChoices";
 import { AutomationStateNotice } from "./AutomationStateNotice";

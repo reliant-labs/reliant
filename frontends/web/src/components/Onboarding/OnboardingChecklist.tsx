@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { cn } from "../../lib/utils";
-import { Progress } from "../ui/Progress";
+import ProgressBar from "../forge-ui/progress_bar";
 import { useOnboardingChecklistStore } from "../../store/onboardingChecklistStore";
 import { useTourStore } from "../../store/tourStore";
 import { useApiKeySetupStore } from "../../store/apiKeySetupStore";
@@ -291,11 +291,15 @@ export function OnboardingChecklist() {
             </button>
           </div>
         </div>
-        <Progress
+        {/* .forge-ui on the bar itself: its fill is forge's `accent`, which is
+            the action color only inside that scope (index.css). An explicit
+            variant, because the default turns the bar red past 80%. */}
+        <ProgressBar
           value={percentage}
-          variant="primary"
+          variant="default"
           size="sm"
-          className="mb-1.5"
+          ariaLabel="Setup progress"
+          className="forge-ui mb-1.5"
         />
         <p className="text-xs text-muted-foreground">
           {completed} of {total} completed

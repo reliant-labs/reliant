@@ -79,7 +79,7 @@ function listOf(chats: Array<ReturnType<typeof chat>>, mainWorktree: Workspace |
 
 vi.mock("../../../store/mobileDrawerStore", () => ({
   useMobileDrawerStore: (selector: (s: unknown) => unknown) =>
-    selector({ isOpen: false, open: vi.fn(), close: vi.fn() }),
+    selector({ isOpen: false, open: vi.fn(), close: vi.fn(), inboxBadge: { count: 0, informational: false, degraded: false, announcement: "" } }),
 }));
 
 // The sheet has its own tests; here it only needs to report a creation.

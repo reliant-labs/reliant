@@ -247,7 +247,7 @@ export function ReleaseDetail({
       />
 
       {/* The rail is 340px, PROPOSAL §3.4 and the mockup; its text is text-xs (the mockup's .8125rem). */}
-      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div className="min-w-0 space-y-4" role="tabpanel" aria-label={TAB_LABELS[tab]}>
           {envBound && (
             <EnvPicker envs={promotedIn} value={target?.env.name ?? null} onChange={(name) => onSearch({ in: name })} />
@@ -352,7 +352,7 @@ function DetailSkeleton({ crumbs, version }: { crumbs: { label: string; href?: s
       <PageHeader breadcrumbs={crumbs} title={version} meta={<span className="inline-flex h-4 w-72 animate-pulse rounded bg-ink/5 motion-reduce:animate-none" />} className="mb-0" />
       <div className="h-8 border-b border-border" />
       {/* The rail is 340px, PROPOSAL §3.4 and the mockup; its text is text-xs (the mockup's .8125rem). */}
-      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="grid grid-cols-[minmax(0,1fr)] items-start gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
         <div className="space-y-4">
           {[0, 1].map((i) => (
             <Card key={i} className="space-y-3">

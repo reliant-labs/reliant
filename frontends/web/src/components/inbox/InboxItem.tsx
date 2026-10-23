@@ -16,6 +16,13 @@
  * "Wake <machine>". The row never reads the open chat's store, because the
  * Inbox holds items from every chat at once.
  *
+ * On the mobile surface (`/m/inbox`) the same rows render with touch-sized
+ * controls (the `pointer: coarse` variants below), and every link to a run
+ * opens it as the chat it is (`/m/chats/$chatId`): the desktop Runs area does
+ * not exist on a phone. Destinations that are desktop-only (editing an
+ * automation, a workflow's setup) say so instead of linking somewhere a phone
+ * would be redirected away from.
+ *
  * When an action loses the race to another surface — approved in the chat
  * view, or on another device — the server says so with FAILED_PRECONDITION
  * or NOT_FOUND. That is not an error: the row shows "Already handled" for two
@@ -42,6 +49,7 @@ import { isQuotaResumeError, resumeErrorMessage } from "@/lib/daemon-resume";
 import { formatAbsoluteTime, formatRelativeTime } from "@/lib/relativeTime";
 import { relativeTime as compactAge } from "../Mobile/relativeTime";
 import { cn } from "@/lib/utils";
+import { useSurface } from "@/lib/surfaceContext";
 import { CardInset } from "../forge-ui/card";
 import { ApprovalActions } from "../Chat/ApprovalActions";
 import { QuestionPrompt, type QuestionAnswer } from "../Chat/QuestionPrompt";
@@ -178,6 +186,8 @@ export function InboxItem({ item, showProject, onDismiss }: InboxItemProps) {
               title="Dismiss"
               className={cn(
                 "inline-flex h-6 w-6 items-center justify-center rounded text-muted-foreground transition",
+                // A finger needs 44px; explicit px because rem renders at 87.5% here.
+                "[@media(pointer:coarse)]:h-[44px] [@media(pointer:coarse)]:w-[44px]",
                 "hover:bg-muted hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
                 // Hidden until the row is hovered or anything in it has focus;
                 // always shown where there is no hover (touch).
@@ -191,7 +201,7 @@ export function InboxItem({ item, showProject, onDismiss }: InboxItemProps) {
         </div>
       </div>
       {expanded && !handled && (
-        <div className="mt-2 pl-7">
+        <div className="mt-2 pl-7 max-sm:pl-0">
           <Expansion item={item} onRaceOrError={onRaceOrError} />
         </div>
       )}
@@ -232,7 +242,43 @@ export function subjectName(item: InboxItemData): string {
 }
 
 const subjectClass =
-  "min-w-0 max-w-[60%] shrink-0 truncate text-sm font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 rounded-sm";
+  "min-w-0 max-w-[60%] shrink-0 truncate text-sm font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 rounded-sm [@media(pointer:coarse)]:py-3";
+
+/**
+ * A link to a run. On the mobile surface a run opens as the chat it is: the
+ * desktop Runs area is not on a phone, and a link into it is redirected to
+ * the chat list, losing the run.
+ */
+function RunLink({
+  chatId,
+  className,
+  title,
+  children,
+}: {
+  chatId: string;
+  className: string;
+  title?: string;
+  children: ReactNode;
+}) {
+  const mobile = useSurface() === "mobile";
+  if (mobile) {
+    return (
+      <Link to="/m/chats/$chatId" params={{ chatId }} className={className} title={title}>
+        {children}
+      </Link>
+    );
+  }
+  return (
+    <Link to="/workflows/runs/$runId" params={{ runId: chatId }} className={className} title={title}>
+      {children}
+    </Link>
+  );
+}
+
+/** Where a phone cannot follow (automation editing, workflow setup): say so rather than link. */
+function OnDesktopNote({ children }: { children: ReactNode }) {
+  return <span className="shrink-0 text-xs text-muted-foreground">{children}</span>;
+}
 
 /**
  * The name links to what the item is about: the run for anything that has one,
@@ -242,9 +288,9 @@ function SubjectLink({ item }: { item: InboxItemData }) {
   const name = subjectName(item);
   if (item.chatId) {
     return (
-      <Link to="/workflows/runs/$runId" params={{ runId: item.chatId }} className={subjectClass} title={name}>
+      <RunLink chatId={item.chatId} className={subjectClass} title={name}>
         {name}
-      </Link>
+      </RunLink>
     );
   }
   if (item.triggerId) return <AutomationSubjectLink triggerId={item.triggerId} name={name} />;
@@ -258,6 +304,9 @@ function SubjectLink({ item }: { item: InboxItemData }) {
  */
 function AutomationSubjectLink({ triggerId, name }: { triggerId: string; name: string }) {
   const trigger = useTriggerById(triggerId);
+  // Automations are configured on desktop only; on a phone the name is a label.
+  const mobile = useSurface() === "mobile";
+  if (mobile) return <span className={subjectClass} title={name}>{name}</span>;
   if (trigger?.workflowTrigger) {
     return (
       <a href={automationHref(trigger)} className={subjectClass} title={name}>
@@ -276,6 +325,8 @@ function AutomationSubjectLink({ triggerId, name }: { triggerId: string; name: s
 function LaunchFailedAction({ triggerId }: { triggerId: string }) {
   const trigger = useTriggerById(triggerId);
   const [open, setOpen] = useState(false);
+  const mobile = useSurface() === "mobile";
+  if (mobile) return <OnDesktopNote>Fix on desktop</OnDesktopNote>;
   if (trigger?.workflowTrigger) {
     return (
       <>
@@ -383,7 +434,7 @@ function hasExpansion(item: InboxItemData): boolean {
 }
 
 const actionButtonClass =
-  "inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-border px-2.5 text-xs font-medium text-foreground transition-colors hover:bg-muted/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:opacity-60";
+  "inline-flex h-7 shrink-0 items-center gap-1 rounded-md border border-border px-2.5 text-xs font-medium text-foreground transition-colors hover:bg-muted/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:opacity-60 [@media(pointer:coarse)]:h-[44px] [@media(pointer:coarse)]:px-3.5 [@media(pointer:coarse)]:text-sm";
 
 interface InlineActionProps {
   item: InboxItemData;
@@ -394,6 +445,7 @@ interface InlineActionProps {
 
 function InlineAction({ item, expanded, onToggle, onRaceOrError }: InlineActionProps) {
   const { payload } = item;
+  const mobile = useSurface() === "mobile";
   switch (payload.case) {
     case "approval":
       return <ApprovalRowAction approvalId={payload.value.approvalId} itemId={item.itemId} onFailure={onRaceOrError} />;
@@ -409,9 +461,9 @@ function InlineAction({ item, expanded, onToggle, onRaceOrError }: InlineActionP
       // Not an ask_user form (e.g. a workflow step question): its own UI in
       // the run answers it.
       return item.chatId ? (
-        <Link to="/workflows/runs/$runId" params={{ runId: item.chatId }} className={actionButtonClass}>
+        <RunLink chatId={item.chatId} className={actionButtonClass}>
           Open
-        </Link>
+        </RunLink>
       ) : null;
     case "waitingForMachine":
       return <WakeMachineAction daemonId={payload.value.daemonId} daemonName={payload.value.daemonName} />;
@@ -422,6 +474,8 @@ function InlineAction({ item, expanded, onToggle, onRaceOrError }: InlineActionP
     case "automationNeedsSetup":
       // The workflow page's automation is where "Finish setup" renders; the
       // item carries everything the link needs, so it needs no list lookup.
+      // That page is desktop-only.
+      if (mobile) return <OnDesktopNote>Finish on desktop</OnDesktopNote>;
       return (
         <a href={workflowPageHref(item.workflowName, item.projectId, { automation: true })} className={actionButtonClass}>
           Finish setup
@@ -433,9 +487,9 @@ function InlineAction({ item, expanded, onToggle, onRaceOrError }: InlineActionP
       );
     case "runFinished":
       return item.chatId ? (
-        <Link to="/workflows/runs/$runId" params={{ runId: item.chatId }} className={actionButtonClass}>
+        <RunLink chatId={item.chatId} className={actionButtonClass}>
           Open
-        </Link>
+        </RunLink>
       ) : null;
     default:
       return null;
@@ -592,9 +646,9 @@ function FailingAutomationAction({ triggerId, lastRunChatId }: { triggerId: stri
   return (
     <span className="flex shrink-0 items-center gap-1.5">
       {lastRunChatId && (
-        <Link to="/workflows/runs/$runId" params={{ runId: lastRunChatId }} className={actionButtonClass}>
+        <RunLink chatId={lastRunChatId} className={actionButtonClass}>
           Open last run
-        </Link>
+        </RunLink>
       )}
       <button
         type="button"

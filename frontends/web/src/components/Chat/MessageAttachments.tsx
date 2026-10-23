@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { Attachment } from "../../api/client";
-import { FileIcon } from "../ui/FileIcon";
-import { ImagePreviewModal } from "../ui/ImagePreviewModal";
+import { FileIcon } from "../FileBrowser/FileIcon";
+import { ImagePreviewModal } from "./ImagePreviewModal";
 import { isImageMimeType, useAttachmentBlobUrls } from "./useAttachmentBlobUrls";
 
 interface MessageAttachmentsProps {

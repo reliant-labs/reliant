@@ -123,6 +123,12 @@ export interface SurfaceCapabilities {
   /** Version display only — no update-check UI. */
   settingsAbout: boolean;
   /**
+   * App/server version, update-stream state and the device's recent client
+   * errors, with a "Copy diagnostics" button (MobileDiagnosticsScreen). For a
+   * device with no devtools; desktop has devtools and the dev log mirror.
+   */
+  settingsDiagnostics: boolean;
+  /**
    * GitHub connection status/connect/disconnect, plus repo browsing and
    * clone-to-daemon. Gated separately from `gitManagement` (git
    * status/diff/commit/push on an existing worktree) — this is credential
@@ -171,6 +177,9 @@ const DESKTOP: SurfaceCapabilities = {
   settingsAppearance: true,
   settingsWorkspace: true,
   settingsAbout: true,
+  // Desktop is everything (surface.test pins it). It has devtools, and in dev
+  // the browser-log mirror, so no desktop screen needs to render this.
+  settingsDiagnostics: true,
   settingsGitHub: true,
   searchChats: true,
   searchFiles: true,
@@ -244,6 +253,8 @@ const MOBILE: SurfaceCapabilities = {
   settingsAppearance: true,
   settingsWorkspace: true,
   settingsAbout: true,
+  // A phone has no devtools: this is the only place it can show what failed.
+  settingsDiagnostics: true,
   // Connection management + clone are both server-side (daemon-targeted),
   // not filesystem-bound, so nothing about being on a phone rules this out.
   settingsGitHub: true,
@@ -294,6 +305,7 @@ const EMBED: SurfaceCapabilities = {
   settingsAppearance: false,
   settingsWorkspace: false,
   settingsAbout: false,
+  settingsDiagnostics: false,
   settingsGitHub: false,
   searchChats: false,
   searchFiles: false,

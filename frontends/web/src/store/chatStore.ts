@@ -1178,14 +1178,9 @@ function withdrawFromQueueStrip(chatId: string, thread: string, rowId: string): 
 }
 
 // Shared by startChat and startExistingChat: home the chat the server returned,
-// flip activity to RUNNING and track the send. The optimistic first message is
+// flip activity to RUNNING. The optimistic first message is
 // each caller's job, because the two must write it at different times.
-function applyFirstSend(
-  chat: Chat,
-  projectId: string,
-  firstMessage: string,
-  attachmentIds: string[] | undefined,
-): void {
+function applyFirstSend(chat: Chat, projectId: string): void {
   const chatId = chat.id;
 
   // Home the new chat into the React Query caches immediately so both
@@ -1201,13 +1196,6 @@ function applyFirstSend(
   // Optimistically mark as RUNNING so the thinking indicator shows immediately
   // The backend will confirm via CHAT_ACTIVITY_CHANGED event shortly
   useActivityStore.getState().setActivity(chatId, ChatActivity.RUNNING);
-
-  trackEvent("message_sent", {
-    chatId,
-    contentLength: firstMessage.length,
-    hasAttachments: (attachmentIds?.length ?? 0) > 0,
-    isFirstInChat: true,
-  });
 }
 
 export const useChatStore = create<ChatStoreState>((set, get) => ({
@@ -1355,7 +1343,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     });
     endAttempt(attemptKey);
 
-    applyFirstSend(chat, projectId, firstMessage, attachmentIds);
+    applyFirstSend(chat, projectId);
     // Safe to seed after the request: a brand-new chat has no id until
     // StartChat returns, so nothing is subscribed to it yet and no echo can
     // beat this write. It replaces the empty list initChatState seeded.
@@ -1430,7 +1418,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     }
     sendPayloads.delete(clientMessageId);
 
-    applyFirstSend(chat, chat.projectId, firstMessage, attachmentIds);
+    applyFirstSend(chat, chat.projectId);
     return chat;
   },
 
@@ -1865,17 +1853,6 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       }
 
       logger.debug("Message sent successfully", { chatId: chatId.slice(0, 8) });
-
-      const existingMessages = getMessagesFromCache(chatId);
-      const isFirstInChat = existingMessages.filter(
-        (m) => m.role === MessageRole.USER && !m.id.startsWith("optimistic-"),
-      ).length === 0;
-      trackEvent("message_sent", {
-        chatId,
-        contentLength: content.length,
-        hasAttachments: (attachmentIds?.length ?? 0) > 0,
-        isFirstInChat,
-      });
 
       // Note: Optimistic user message will be replaced when the real message arrives via WebSocket
       // The hasRealUserMessage check in the WebSocket handler handles this automatically

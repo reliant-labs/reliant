@@ -5,8 +5,7 @@ package auth
 // The token value itself is used as the user ID, allowing tests to control user identity.
 func NewTestMiddleware() *Middleware {
 	return &Middleware{
-		validator:        &testJWTValidator{},
-		firstSeenTracker: newFirstSeenTracker(),
+		validator: &testJWTValidator{},
 	}
 }
 

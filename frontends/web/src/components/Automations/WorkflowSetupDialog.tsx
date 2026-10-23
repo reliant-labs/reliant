@@ -67,7 +67,7 @@ import { useWorkflowPresets } from "@/store/globalDataStore";
 import { cn } from "@/lib/utils";
 import { CardInset } from "../forge-ui/card";
 import { Button } from "../ui/Button";
-import { ErrorSummary, focusField, type ErrorSummaryItem } from "../ui/ErrorSummary";
+import { ErrorSummary, focusField, type ErrorSummaryItem } from "./ErrorSummary";
 import { Modal } from "../ui/Modal";
 import { Toggle } from "../ui/Toggle";
 import { ProtoFieldRenderer } from "../workflow/ProtoFieldRenderer";

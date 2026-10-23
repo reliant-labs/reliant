@@ -18,7 +18,7 @@ import { MobileWorkflowNodeSheet } from "./MobileWorkflowNodeSheet";
 import { getWorkflowDisplayName } from "../workflow/useWorkflowInputs";
 import { MobileScreenHeader } from "./MobileChrome";
 import type { RunStatusDisplay } from "../../lib/runStatus";
-import { RunStatusBadge } from "../ui/RunStatusIndicator";
+import { RunStatusBadge } from "../runs/RunStatusIndicator";
 
 interface MobileWorkflowScreenProps {
   workflow: Workflow;

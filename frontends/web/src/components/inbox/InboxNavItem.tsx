@@ -32,7 +32,23 @@ interface InboxNavItemProps {
   onOpen?: () => void;
 }
 
-export function InboxNavItem({ onOpen }: InboxNavItemProps) {
+/** What the Inbox badge shows: the blocking count, the failures dot, and whether the read failed. */
+export interface InboxBadgeState {
+  /** Items blocking a live run (a solid number), or what the client knows when degraded. */
+  count: number;
+  /** Automation failures, which add a dot rather than a count. */
+  informational: boolean;
+  /** The counts read failed; `count` is the client's partial view. */
+  degraded: boolean;
+  /** Screen-reader text for the badge, or "" when there is nothing to say. */
+  announcement: string;
+}
+
+/**
+ * The badge rule above, shared by every Inbox entry point: the desktop
+ * sidebar row, the mobile drawer row and the mobile menu button.
+ */
+export function useInboxBadge(): InboxBadgeState {
   const counts = useInboxCounts(useInboxProjectId());
   const activities = useActivityStore((state) => state.activities);
   const knownAwaiting = useMemo(() => {
@@ -47,6 +63,12 @@ export function InboxNavItem({ onOpen }: InboxNavItemProps) {
 
   const announcement =
     count > 0 ? `${count} ${count === 1 ? "item needs" : "items need"} you` : informational ? "Automation problems" : "";
+
+  return { count, informational, degraded, announcement };
+}
+
+export function InboxNavItem({ onOpen }: InboxNavItemProps) {
+  const { count, informational, degraded, announcement } = useInboxBadge();
 
   return (
     <button

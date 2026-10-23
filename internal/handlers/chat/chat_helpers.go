@@ -227,6 +227,31 @@ func seedMessagesFromInput(messages []*reliantv1.InputMessage) []launch.SeedMess
 	return seeds
 }
 
+// trackStartedChatMessage records the user message a chat start carries as a
+// message_sent: StartChat is the only way a chat's first message reaches the
+// server, and the web no longer reports it. The seed carries no stored message
+// id, so the client's named id (or, failing that, the chat's) identifies it.
+func (s *Service) trackStartedChatMessage(ctx context.Context, userID string, chat *db.Chat, clientMessageID string, msg *reliantv1.StartChatRequest) {
+	if chat == nil {
+		return
+	}
+	var content string
+	for _, m := range msg.GetMessages() {
+		if m.GetRole() == reliantv1.MessageRole_MESSAGE_ROLE_USER {
+			content = m.GetContent()
+			break
+		}
+	}
+	if content == "" {
+		return
+	}
+	messageID := clientMessageID
+	if messageID == "" {
+		messageID = chat.ID
+	}
+	go s.trackMessageSent(context.WithoutCancel(ctx), userID, chat, messageID, chat.MainThreadID(), content, len(msg.GetAttachments()))
+}
+
 func (s *Service) trackMessageSent(ctx context.Context, userID string, chat *db.Chat, messageID, threadID, userContent string, attachmentCount int) {
 	if chat == nil || messageID == "" {
 		return

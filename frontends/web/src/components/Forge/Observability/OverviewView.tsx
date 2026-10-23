@@ -30,6 +30,7 @@ import { formatCount, formatDuration, formatPercent, formatRate } from "./format
 import { groupLabel } from "./obsFilters";
 import type { ObsNavigate } from "./obsSearch";
 import { ObsError, ObsLoadingRows, ObsNoData, OperatorBadge } from "./ObsStates";
+import { StackedTable } from "@/components/Forge/StackedTable";
 
 /** An error rate at or above this reads as a problem, and is drawn in the destructive tone. */
 export const ERROR_RATE_ALERT = 0.05;
@@ -74,7 +75,7 @@ export function OverviewView({
 
   return (
     <Card padding="none" data-testid="obs-overview">
-      <table className="w-full text-sm">
+      <StackedTable className="w-full text-sm">
         <caption className="sr-only">
           Services in {subject}: request rate, error rate and 95th-percentile latency over the selected window
         </caption>
@@ -112,7 +113,7 @@ export function OverviewView({
             />
           ))}
         </tbody>
-      </table>
+      </StackedTable>
     </Card>
   );
 }
@@ -269,7 +270,7 @@ function ServiceDetail({ rows, groupBy, navigate }: { rows: ServiceHealth[]; gro
           </Button>
         </div>
       </div>
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-3">
         <Card padding="md">
           <CardHeader
             title="Requests"

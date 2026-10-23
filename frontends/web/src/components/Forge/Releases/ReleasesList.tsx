@@ -61,6 +61,7 @@ import {
   type StatusFilter,
 } from "./releaseModel";
 import { useReleaseData } from "./useReleaseData";
+import { StackedTable } from "@/components/Forge/StackedTable";
 
 export interface ReleasesSearch {
   q?: string;
@@ -657,7 +658,7 @@ function ReleaseTable({
   return (
     <Card padding="none" className="overflow-hidden">
       <div className="overflow-x-auto">
-        <table className="min-w-full border-collapse" aria-label="Releases" data-testid="releases-table">
+        <StackedTable className="min-w-full border-collapse" aria-label="Releases" data-testid="releases-table">
           <thead>
             <tr className="border-b border-border">
               <th scope="col" className={TH}>
@@ -769,7 +770,7 @@ function ReleaseTable({
               })
             )}
           </tbody>
-        </table>
+        </StackedTable>
       </div>
       <div className="border-t border-border px-4 py-2.5 text-xs text-ink-muted" data-testid="releases-footer">
         {footer}

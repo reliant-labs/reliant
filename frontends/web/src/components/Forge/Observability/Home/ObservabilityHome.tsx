@@ -42,6 +42,7 @@ import type { ObsSearch } from "../obsSearch";
 import { ObsError, ObsNotSetUp } from "../ObsStates";
 import { HealthStrip } from "./HealthStrip";
 import { byAttention, serviceRows, type ServiceRow } from "./homeModel";
+import { StackedTable } from "@/components/Forge/StackedTable";
 
 export interface ObservabilityHomeHrefs {
   logs: (search?: ObsSearch) => string;
@@ -275,7 +276,7 @@ function ServicesTable({
     );
   }
   return (
-    <table className="mt-2 w-full text-sm">
+    <StackedTable className="mt-2 w-full text-sm">
       <caption className="sr-only">Services, sorted by what needs attention</caption>
       <thead>
         <tr className="border-b border-border text-left text-xs text-ink-muted">
@@ -353,7 +354,7 @@ function ServicesTable({
           );
         })}
       </tbody>
-    </table>
+    </StackedTable>
   );
 }
 

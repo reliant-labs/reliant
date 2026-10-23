@@ -48,6 +48,9 @@
  * workflow view opened directly by URL subscribed before the chats loaded,
  * was deferred, and never connected at all.
  *
+ * The shell also reads the Inbox counts once (`MobileInboxBadgeSync`) for the
+ * badge every screen's menu button and the drawer's Inbox row show.
+ *
  * ## 5. Navigation feedback
  *
  * `MobileNavigationFeedback` warms every screen's lazy chunk and shows a
@@ -62,6 +65,7 @@ import { Loader2 } from "lucide-react";
 import { MobileLayout } from "./MobileLayout";
 import { MobileNavDrawer } from "./MobileNavDrawer";
 import { MobileNavigationFeedback } from "./MobileNavigationFeedback";
+import { MobileInboxBadgeSync } from "./MobileInboxBadgeSync";
 import { useCurrentUser } from "@/hooks/useOnboardingQueries";
 import { useUpdateStreamConnection } from "@/hooks/useUpdateStreamConnection";
 import { useProjectStore } from "../../store/projectStore";
@@ -146,6 +150,7 @@ export function MobileShell() {
         <Outlet />
       </div>
       <MobileNavDrawer isOpen={isDrawerOpen} onClose={closeDrawer} />
+      <MobileInboxBadgeSync />
       <MobileNavigationFeedback />
     </MobileLayout>
   );

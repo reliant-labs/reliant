@@ -25,7 +25,7 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { GitRepo } from "@/services/controlPlane/git";
 
 const WIDGETS: GitRepo = {
@@ -204,6 +204,15 @@ async function openCreateModal(user: ReturnType<typeof userEvent.setup>) {
   await user.click(openButtons[0]);
   return screen.findByRole("dialog");
 }
+
+// machines.tsx loads RepoSelector with React.lazy. Its first import makes
+// vitest transform that module tree on demand, which on a loaded host takes
+// longer than findByRole's 1s — so the FIRST test to open the picker failed
+// intermittently ("Unable to find role=button acme/widgets") with nothing
+// wrong. Import it once up front; lazy() then resolves from the module cache.
+beforeAll(async () => {
+  await import("@/components/Projects/RepoSelector");
+});
 
 beforeEach(() => {
   vi.clearAllMocks();

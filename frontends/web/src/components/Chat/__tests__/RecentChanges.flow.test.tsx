@@ -46,7 +46,7 @@ vi.mock("../../../../src/store/viewerStore", () => ({
     selector({ openDiffViewer: vi.fn() }),
 }));
 
-vi.mock("../../ui/FileIcon", () => ({
+vi.mock("../../FileBrowser/FileIcon", () => ({
   FileIcon: () => <div data-testid="file-icon" />,
 }));
 

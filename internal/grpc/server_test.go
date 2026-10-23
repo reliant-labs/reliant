@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
-	"connectrpc.com/otelconnect"
 	"github.com/reliant-labs/forge/pkg/serverkit"
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/stretchr/testify/require"
@@ -63,7 +62,7 @@ func TestUserChainOrder(t *testing.T) {
 
 	got := chain.Interceptors()
 	require.Len(t, got, 14)
-	require.IsType(t, &otelconnect.Interceptor{}, got[0], "the trace span opens outermost")
+	require.IsType(t, interceptors.RequestScope(nil), got[0], "the trace span opens outermost, inside a request scope")
 	require.IsType(t, serverkit.Deadline{}, got[8], "the deadline wraps authentication")
 	require.IsType(t, &interceptors.DomainWhitelistInterceptor{}, got[10], "the domain whitelist reads the user auth stashed")
 	require.Equal(t, reflect.TypeOf(serverkit.StreamDrainInterceptor()), reflect.TypeOf(got[12]),

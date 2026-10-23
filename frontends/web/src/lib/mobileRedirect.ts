@@ -60,6 +60,12 @@ export function shouldRedirectToMobile(env: MobileRedirectEnv): boolean {
   // someone else's flow and carry state in the URL that a redirect would drop;
   // /onboarding is the shared setup flow which already reflows and is a
   // prerequisite for the mobile surface having anything to show.
+  //
+  // /forge is the Apps console (environments, releases, observability). It
+  // has no `/m/*` twin on purpose: its chrome collapses to an off-canvas nav
+  // below `md` (forge-ui/sidebar_layout.tsx), so the one console serves both,
+  // and redirecting it would make Apps and Observability unreachable from a
+  // phone — which is what this list used to do.
   const PRESERVED = [
     "/auth",
     "/oauth",
@@ -69,12 +75,36 @@ export function shouldRedirectToMobile(env: MobileRedirectEnv): boolean {
     "/verify-email",
     "/upgrade",
     "/design-sandbox",
+    "/forge",
   ];
   if (PRESERVED.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {
     return false;
   }
 
   return width <= MOBILE_MAX_WIDTH && coarsePointer;
+}
+
+/**
+ * Where a redirected desktop path lands on the mobile surface.
+ *
+ * A redirect that always went to the chat list threw away what the link was
+ * about: an Inbox notification, a run link a teammate pasted, a "go to
+ * settings" prompt all became the chat list. Each desktop path with a mobile
+ * twin maps to it; everything else still lands on the chat list, the mobile
+ * home. A run IS a chat, so a run link opens that chat.
+ */
+export function mobilePathFor(pathname: string): string {
+  const path = pathname.replace(/\/+$/, "") || "/";
+  if (path === "/inbox" || path.startsWith("/inbox/")) return "/m/inbox";
+
+  const run = /^\/workflows\/runs\/([^/]+)/.exec(path);
+  if (run) return `/m/chats/${run[1]}`;
+  if (path === "/workflows" || path.startsWith("/workflows/library")) return "/m/workflows";
+
+  if (path.startsWith("/settings/environments")) return "/m/daemons";
+  if (path === "/settings" || path.startsWith("/settings/")) return "/m/settings";
+
+  return "/m/chats";
 }
 
 /** Reads the opt-out from the URL, persisting it so it survives navigation. */
@@ -99,6 +129,18 @@ export function clearDesktopOptOut(): void {
   } catch {
     // Nothing to clear if storage is unavailable.
   }
+}
+
+/**
+ * Whether this device is phone-shaped — narrow AND touch, the same two
+ * signals the redirect uses. For desktop-surface routes a phone can still be
+ * on (the Apps console), to keep desktop-only overlays off them.
+ */
+export function isPhoneViewport(): boolean {
+  if (typeof window === "undefined") return false;
+  const coarsePointer =
+    window.matchMedia?.("(pointer: coarse), (hover: none)").matches ?? false;
+  return window.innerWidth <= MOBILE_MAX_WIDTH && coarsePointer;
 }
 
 /**

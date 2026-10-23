@@ -80,7 +80,7 @@ vi.mock("./AddToChatPopup", () => ({
   AddToChatPopup: () => null,
 }));
 
-vi.mock("../ui/ImagePreviewModal", () => ({
+vi.mock("../Chat/ImagePreviewModal", () => ({
   ImagePreviewModal: ({ isOpen }: { isOpen: boolean }) =>
     isOpen ? <div data-testid="image-preview-modal" /> : null,
 }));

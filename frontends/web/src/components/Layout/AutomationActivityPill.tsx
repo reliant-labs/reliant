@@ -19,7 +19,7 @@ import { summarizeLiveAutomations, useLiveRuns } from "@/hooks/run-queries";
 import { cn } from "@/lib/utils";
 import { runStatusFromDisplayState } from "@/lib/runStatus";
 import { RunDisplayState } from "@/gen/reliant/v1/run_pb";
-import { RunStatusDot } from "../ui/RunStatusIndicator";
+import { RunStatusDot } from "../runs/RunStatusIndicator";
 
 interface AutomationActivityPillProps {
   /** Chats the sidebar already lists; their runs are not counted again. */

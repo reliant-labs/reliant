@@ -70,6 +70,7 @@ type Config = {
   advancedNetworkCapture?: boolean;
   replay?: boolean;
   replaySampleRate?: number;
+  appClient?: string;
 };
 
 function lastConfig(): Config {
@@ -200,22 +201,21 @@ describe("initTelemetry: the options it passes", () => {
     expect(lastConfig()).toMatchObject({ environment: "prerelease", replaySampleRate: 1 });
   });
 
-  it("stamps reliant.client=web and reliant.build on a browser", async () => {
+  it("names app.client=web on a browser and stamps only reliant.build itself", async () => {
     await initTelemetry();
+    expect(lastConfig().appClient).toBe("web");
+    // The runtime stamps app.client from appClient; the app adds the build.
     expect(runtime.setGlobalAttributes).toHaveBeenCalledWith({
-      "reliant.client": "web",
       "reliant.build": "1.8.1",
     });
   });
 
-  it("stamps reliant.client=desktop in the Electron renderer", async () => {
+  it("names app.client=electron in the Electron renderer", async () => {
     (window as { electronAPI?: unknown }).electronAPI = {
       getVersion: async () => "1.8.1",
     };
     await initTelemetry();
-    expect(runtime.setGlobalAttributes).toHaveBeenCalledWith(
-      expect.objectContaining({ "reliant.client": "desktop" }),
-    );
+    expect(lastConfig().appClient).toBe("electron");
   });
 });
 

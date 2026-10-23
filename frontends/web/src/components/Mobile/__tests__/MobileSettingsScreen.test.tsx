@@ -54,6 +54,9 @@ vi.mock("../MobileWorkspacePreferencesScreen", () => ({
 vi.mock("../MobileAboutScreen", () => ({
   MobileAboutScreen: () => <div>about-section</div>,
 }));
+vi.mock("../MobileDiagnosticsScreen", () => ({
+  MobileDiagnosticsScreen: () => <div>diagnostics-section</div>,
+}));
 
 const { MobileSettingsScreen } = await import("../MobileSettingsScreen");
 
@@ -81,6 +84,14 @@ describe("MobileSettingsScreen", () => {
     expect(screen.getByText("Appearance")).toBeInTheDocument();
     expect(screen.getByText("Workspace preferences")).toBeInTheDocument();
     expect(screen.getByText("About")).toBeInTheDocument();
+    expect(screen.getByText("Diagnostics")).toBeInTheDocument();
+  });
+
+  it("opens Diagnostics, the phone's way to see what went wrong", async () => {
+    const user = userEvent.setup();
+    renderMobile();
+    await user.click(screen.getByText("Diagnostics"));
+    expect(screen.getByText("diagnostics-section")).toBeInTheDocument();
   });
 
   it("hides Billing when there is no control-plane backend", () => {

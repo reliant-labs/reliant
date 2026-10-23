@@ -65,6 +65,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Get the current config
   getConfig: () => reliantConfig,
   getVersion: () => ipcRenderer.invoke('get-version'),
+  getInstallInfo: () => ipcRenderer.invoke('install:get-info'),
+  markFirstLaunchReported: () => ipcRenderer.invoke('install:mark-first-launch-reported'),
+  setTelemetryUser: (userId) => ipcRenderer.invoke('telemetry:set-user', userId),
   getBackendPort: () => ipcRenderer.invoke('get-backend-port'),
   getWebPort: () => ipcRenderer.invoke('get-web-port'),
   getBackendStatus: () => ipcRenderer.invoke('get-backend-status'),

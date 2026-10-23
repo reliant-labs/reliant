@@ -7,6 +7,7 @@ import { Button } from './ui/Button';
 import { isDev } from '../lib/constants';
 import { sentryEnabled } from '../lib/telemetrySinks';
 import { reportErrorToTelemetry } from '../lib/telemetry';
+import { recordClientError } from '../lib/clientDiagnostics';
 import { StaleBuildError } from '../lib/lazyRoute';
 import { cn } from '../lib/utils';
 
@@ -200,6 +201,9 @@ export function ErrorFallbackUI(props: {
  * error its SDK already recorded, so ClickStack counts it once.
  */
 export function reportCaughtError(error: unknown, componentStack?: string | null) {
+  // The device's own record (Settings → Diagnostics) is local, so it is kept
+  // whether or not crash reporting is on.
+  recordClientError('boundary', error);
   // Only report if user has crash reporting enabled
   const { crashReportingEnabled } = getPrivacySettings();
   if (!crashReportingEnabled) return;

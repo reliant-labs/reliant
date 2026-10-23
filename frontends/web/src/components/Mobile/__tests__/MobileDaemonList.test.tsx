@@ -32,8 +32,8 @@ vi.mock("@/hooks/useOnboardingQueries", () => ({
 }));
 
 vi.mock("../../../store/mobileDrawerStore", () => ({
-  useMobileDrawerStore: (selector: (state: { open: () => void }) => unknown) =>
-    selector({ open: vi.fn() }),
+  useMobileDrawerStore: (selector: (state: { open: () => void; inboxBadge: unknown }) => unknown) =>
+    selector({ open: vi.fn(), inboxBadge: { count: 0, informational: false, degraded: false, announcement: "" } }),
 }));
 
 vi.mock('@/hooks/useCloudBillingQueries', () => ({ useComputeUsage: () => ({ data: { includedSmallDaemonSeconds: 576000n } }), usePlans: () => ({ data: { daemonPricing: { sizes: [{ size: 'small', multiplier: 1, hourlyPriceCents: '13', storageGib: 120 }], storageCentsPerGibMonth: '25', placeholder: false } } }) }));

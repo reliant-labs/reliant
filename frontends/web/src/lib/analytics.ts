@@ -40,6 +40,15 @@ function isEnabled(): boolean {
 }
 
 /**
+ * Whether trackEvent would reach ClickStack right now. A caller that must know
+ * an event went out (to record that it has) asks this first; trackEvent itself
+ * returns nothing.
+ */
+export function clickstackDeliveryActive(): boolean {
+  return isEnabled() && clickstackEnabled();
+}
+
+/**
  * Funnel-defining events, which are emitted to Sentry as explicit messages in
  * addition to breadcrumbs so an alert rule has something to match.
  *

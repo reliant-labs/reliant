@@ -25,10 +25,6 @@ func (r *NoopReporter) CaptureMessage(message string) string {
 	return ""
 }
 
-func (r *NoopReporter) SetUser(userID string, email string) {
-	// No-op
-}
-
 func (r *NoopReporter) SetTag(key string, value string) {
 	// No-op
 }

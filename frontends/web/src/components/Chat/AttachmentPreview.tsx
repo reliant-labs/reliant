@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Tooltip } from "../ui/Tooltip";
 import { X } from 'lucide-react';
-import { FileIcon } from '../ui/FileIcon';
-import { ImagePreviewModal } from '../ui/ImagePreviewModal';
+import { FileIcon } from '../FileBrowser/FileIcon';
+import { ImagePreviewModal } from './ImagePreviewModal';
 import { useAttachmentStore } from '../../store/attachmentStore';
 
 interface Attachment {

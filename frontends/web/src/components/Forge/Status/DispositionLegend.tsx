@@ -12,9 +12,8 @@
  * projection the list does), so the header can never claim a tally the list below
  * it contradicts.
  *
- * Each entry is the same `Badge` the rows use, with the same variant and the
- * same vocabulary classes layered over it, so the legend looks like the thing it
- * explains. In particular the undetermined entry keeps its full-opacity ringed
+ * Each entry is the same DispositionChip the rows use, so the legend looks like
+ * the thing it explains. In particular the undetermined entry keeps its full-opacity ringed
  * treatment here too.
  *
  * The count is NOT monospaced. It is a quantity, not an identifier, and the
@@ -23,21 +22,14 @@
  * is the only thing the mono font was actually buying.
  */
 
-import { cn } from "@/lib/utils";
-import { Badge } from "@/components/ui";
 import {
   dispositionTally,
   type CheckDisposition,
   type ForgeEnvStatusReport,
 } from "@/services/forge/status";
 
-import {
-  DISPOSITION_BADGE_VARIANT,
-  DISPOSITION_BLURBS,
-  DISPOSITION_LABELS,
-  DISPOSITION_STYLES,
-  ICON_BY_STATUS,
-} from "./checkVocabulary";
+import { DISPOSITION_BLURBS, DISPOSITION_LABELS, ICON_BY_STATUS } from "./checkVocabulary";
+import { DispositionChip } from "./DispositionChip";
 
 /** The order the legend reads in: worst-first, then the two unmeasured ones. */
 const ORDER: Array<{ disposition: CheckDisposition; status: string }> = [
@@ -54,25 +46,18 @@ export function DispositionLegend({ report }: { report: ForgeEnvStatusReport }) 
   return (
     <div data-testid="forge-status-legend" className="flex flex-wrap items-center gap-2">
       {ORDER.map(({ disposition, status }) => {
-        const style = DISPOSITION_STYLES[disposition];
         const Icon = ICON_BY_STATUS[status];
         return (
-          <Badge
+          <DispositionChip
             key={disposition}
             data-legend-disposition={disposition}
             title={DISPOSITION_BLURBS[disposition]}
-            variant={DISPOSITION_BADGE_VARIANT[disposition]}
-            size="sm"
-            className={cn(
-              "gap-1.5 rounded-md font-sans hover:scale-100",
-              style.container,
-              style.foreground
-            )}
+            disposition={disposition}
           >
             <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
             <span>{DISPOSITION_LABELS[disposition]}</span>
             <span className="tabular-nums">{tally[disposition]}</span>
-          </Badge>
+          </DispositionChip>
         );
       })}
     </div>

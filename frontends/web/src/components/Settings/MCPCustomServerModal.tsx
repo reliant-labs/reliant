@@ -4,7 +4,7 @@ import { Modal } from "../ui/Modal";
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
 import { Textarea } from "../ui/Textarea";
-import { ConfigScopeSelector } from "../ui/ConfigScopeSelector";
+import { ConfigScopeSelector } from "./ConfigScopeSelector";
 import { ConfigScope } from "../../api/mcp-grpc";
 import { toast } from "sonner";
 

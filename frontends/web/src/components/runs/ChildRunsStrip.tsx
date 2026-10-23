@@ -16,7 +16,7 @@ import { Bot } from "lucide-react";
 import { useChildRuns } from "@/hooks/run-queries";
 import { runStatusFromDisplayState } from "@/lib/runStatus";
 import { useCapability } from "@/lib/surfaceContext";
-import { RunStatusDot } from "../ui/RunStatusIndicator";
+import { RunStatusDot } from "./RunStatusIndicator";
 
 export function ChildRunsStrip({ chatId }: { chatId: string }) {
   // No Runs area on this surface (the /m header): nothing to link to, so do

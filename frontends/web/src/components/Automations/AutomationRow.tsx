@@ -22,7 +22,7 @@ import { toast } from "sonner";
 import Status from "../forge-ui/status";
 import { Toggle } from "../ui/Toggle";
 import { Tooltip } from "../ui/Tooltip";
-import { RunStatusBadge } from "../ui/RunStatusIndicator";
+import { RunStatusBadge } from "../runs/RunStatusIndicator";
 import { sourceKindLabel, triggerErrorMessage, type Trigger, type TriggerSource } from "@/api/trigger-grpc";
 import { useSetTriggerEnabled } from "@/hooks/trigger-queries";
 import { automationHealth, type AutomationHealthDisplay } from "@/lib/automationHealth";

@@ -164,7 +164,15 @@ describe("unversioned production build", () => {
 
 // scripts/release-identity.sh itself, against real git repositories shaped
 // like the clones that build releases.
-describe("release-identity.sh", () => {
+//
+// Its own budget: vite.config.ts's timeout (5s × the host's load factor) is
+// sized for in-process tests, but each test here is SUBPROCESS-bound — the
+// shallow-clone case alone is a `git clone` plus four runs of a script that
+// itself runs ~5 git commands, ~25 process spawns. On a shared host at load
+// 2x the core count a spawn costs 0.3–0.6s, so that case measured 16s against
+// a 15s budget and failed with every assertion correct. 60s covers the worst
+// case seen with room to spare and still catches a genuine hang.
+describe("release-identity.sh", { timeout: 60_000 }, () => {
   let root: string;
   let repo: string;
   let releaseSha: string;

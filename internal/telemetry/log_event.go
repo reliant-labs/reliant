@@ -54,6 +54,10 @@ type LogEvent struct {
 	// may leave the process; BeforeSend scrubs them again.
 	Tags  map[string]string
 	Extra map[string]any
+	// UserID is the user whose request logged the record, or "". It is
+	// carried per event, never as process state: a server answers many users
+	// at once.
+	UserID string
 }
 
 // LogEventReporter is a reporter that can deliver a forwarded log record.
@@ -122,6 +126,9 @@ func logEventToSentry(record LogEvent) *sentry.Event {
 	event.Level = sentry.LevelError
 	event.Logger = LogEventLogger
 	event.Message = record.Message
+	if record.UserID != "" {
+		event.User = sentry.User{ID: record.UserID}
+	}
 
 	callSite := ""
 	if len(record.Frames) > 0 {

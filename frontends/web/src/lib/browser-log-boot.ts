@@ -21,6 +21,7 @@
  */
 import { installDevLogging } from "./browser-log-forward";
 import { installUpdateDepthStack } from "./updateDepthStack";
+import { installClientDiagnostics } from "./clientDiagnostics";
 
 // The literal `dev: true` inside the `if` is deliberate (forge's convention):
 // the bundler folds the condition and drops the whole call from a production
@@ -31,3 +32,8 @@ if (import.meta.env.DEV) {
   // then part of what gets forwarded to the dev log, not only the console.
   installUpdateDepthStack();
 }
+
+// Every build, not only dev: the in-app Diagnostics view (Settings →
+// Diagnostics on mobile) is for production phones, which have no devtools.
+// After the dev mirror, so in dev it wraps the mirror and both see each call.
+installClientDiagnostics();

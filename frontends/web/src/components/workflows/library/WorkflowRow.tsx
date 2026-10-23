@@ -26,7 +26,7 @@ import { AlertTriangle, Play } from "lucide-react";
 import type { RunSummary } from "@/api/run-grpc";
 import { formatRelativeTime } from "@/lib/relativeTime";
 import { runStatusFromDisplayState } from "@/lib/runStatus";
-import { RunStatusDot } from "../../ui/RunStatusIndicator";
+import { RunStatusDot } from "../../runs/RunStatusIndicator";
 import { Tooltip } from "../../ui/Tooltip";
 import { DraftStatusBadge } from "../../workflow/DraftStatusBadge";
 import { stripWorkflowRefPrefix, workflowDisplayName } from "../../../lib/workflowDisplayName";

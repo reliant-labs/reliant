@@ -23,9 +23,22 @@ export interface NotificationData {
   message: string;
 }
 
+export interface InstallInfo {
+  installId: string;
+  installedAt: string;
+  /** True until the install's app_first_launch event has been delivered. */
+  firstLaunchPending: boolean;
+  platform: string;
+  arch: string;
+  version: string;
+}
+
 export interface ElectronAPI {
   getConfig: () => ReliantConfig | null;
   getVersion: () => Promise<string>;
+  getInstallInfo: () => Promise<InstallInfo>;
+  markFirstLaunchReported: () => Promise<void>;
+  setTelemetryUser: (userId: string | null) => Promise<void>;
   getBackendPort: () => Promise<number>;
   getWebPort: () => Promise<number>;
   getBackendStatus: () => Promise<BackendStatus>;

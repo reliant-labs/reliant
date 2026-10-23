@@ -40,7 +40,6 @@ export { Terminal } from "./Terminal/Terminal";
 
 // UI components
 export { Modal } from "./ui/Modal";
-export { ErrorAlert } from "./ui/ErrorAlert";
 
 // Error Boundaries
 export { SentryErrorBoundary } from "./ErrorBoundary";

@@ -15,9 +15,6 @@ type ErrorReporter interface {
 	// CaptureMessage captures a message
 	CaptureMessage(message string) string
 
-	// SetUser sets the user context for error reports
-	SetUser(userID string, email string)
-
 	// SetTag sets a tag for error reports
 	SetTag(key string, value string)
 

@@ -17,8 +17,11 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link, useRouterState } from "@tanstack/react-router";
 import {
+  Activity,
+  Boxes,
   FolderOpen,
   Github,
+  Inbox,
   MessageSquarePlus,
   Search,
   Server,
@@ -28,7 +31,9 @@ import {
   X,
 } from "lucide-react";
 import { useProjectStore } from "../../store/projectStore";
+import { isForgeUIEnabled } from "../../lib/forgeFeature";
 import { cn } from "../../lib/utils";
+import { useMobileDrawerStore } from "../../store/mobileDrawerStore";
 
 interface MobileNavDrawerProps {
   isOpen: boolean;
@@ -39,17 +44,67 @@ interface NavItem {
   to: string;
   label: string;
   icon: typeof MessageSquarePlus;
+  /** The Inbox row carries the Inbox badge. */
+  inboxBadge?: boolean;
 }
 
-const NAV_ITEMS: NavItem[] = [
-  { to: "/m/new", label: "New chat", icon: MessageSquarePlus },
-  { to: "/m/search", label: "Search", icon: Search },
-  { to: "/m/workflows", label: "Workflows", icon: Workflow },
-  { to: "/m/daemons", label: "Machines", icon: Server },
-  { to: "/m/github", label: "GitHub", icon: Github },
-  { to: "/m/settings", label: "Settings", icon: Settings },
-  { to: "/m/account", label: "Account", icon: User },
-];
+/**
+ * The drawer's destinations, in the desktop sidebar's order (Layout/Sidebar):
+ * New chat, then Apps and Observability (the running side of a project), then
+ * the Inbox, then the rest.
+ *
+ * Apps and Observability open the forge console itself, outside `/m/*`: its
+ * chrome collapses to an off-canvas nav at phone width, so there is one
+ * console rather than a second mobile copy of it. They are gated on the same
+ * flag as the desktop entries and the routes (`isForgeUIEnabled`), read per
+ * render because the Developer setting can change it within a session.
+ */
+function navItems(): NavItem[] {
+  const forge = isForgeUIEnabled();
+  return [
+    { to: "/m/new", label: "New chat", icon: MessageSquarePlus },
+    ...(forge
+      ? [
+          { to: "/forge", label: "Apps", icon: Boxes },
+          { to: "/forge/observability", label: "Observability", icon: Activity },
+        ]
+      : []),
+    { to: "/m/inbox", label: "Inbox", icon: Inbox, inboxBadge: true },
+    { to: "/m/search", label: "Search", icon: Search },
+    { to: "/m/workflows", label: "Workflows", icon: Workflow },
+    { to: "/m/daemons", label: "Machines", icon: Server },
+    { to: "/m/github", label: "GitHub", icon: Github },
+    { to: "/m/settings", label: "Settings", icon: Settings },
+    { to: "/m/account", label: "Account", icon: User },
+  ];
+}
+
+/** The Inbox row's trailing badge: the blocking count, else a dot for automation problems. */
+function InboxBadge() {
+  const { count, informational, degraded, announcement } = useMobileDrawerStore((s) => s.inboxBadge);
+  return (
+    <>
+      {count > 0 && (
+        <span
+          data-testid="drawer-inbox-count"
+          aria-hidden="true"
+          className="ml-auto inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-xs font-semibold tabular-nums text-primary-foreground"
+        >
+          {count}
+        </span>
+      )}
+      {count === 0 && informational && (
+        <span data-testid="drawer-inbox-dot" aria-hidden="true" className="ml-auto h-2 w-2 rounded-full bg-destructive" />
+      )}
+      {announcement && (
+        <span className="sr-only">
+          , {announcement}
+          {degraded ? " (may be incomplete)" : ""}
+        </span>
+      )}
+    </>
+  );
+}
 
 // Elements a focus trap should cycle between. Scoped to the drawer panel, not
 // the whole document — the scrim and everything behind it must stay
@@ -206,7 +261,7 @@ export function MobileNavDrawer({ isOpen, onClose }: MobileNavDrawerProps) {
           className="flex-1 space-y-0.5 overflow-y-auto overscroll-contain px-3 py-2 pb-6"
           aria-label="Main"
         >
-          {NAV_ITEMS.map(({ to, label, icon: Icon }) => {
+          {navItems().map(({ to, label, icon: Icon, inboxBadge }) => {
             const active = pathname === to || pathname.startsWith(`${to}/`);
             return (
               <Link
@@ -226,6 +281,7 @@ export function MobileNavDrawer({ isOpen, onClose }: MobileNavDrawerProps) {
               >
                 <Icon className="h-4 w-4 shrink-0" />
                 {label}
+                {inboxBadge && <InboxBadge />}
               </Link>
             );
           })}

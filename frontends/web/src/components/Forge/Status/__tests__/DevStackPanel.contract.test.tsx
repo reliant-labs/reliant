@@ -382,8 +382,10 @@ describe("the non-report outcomes", () => {
     );
     const panel = screen.getByTestId("forge-status-error");
     expect(panel.textContent).toContain("daemon not connected");
-    // The ONLY case that gets the destructive treatment.
-    expect(panel.className).toMatch(/destructive/);
+    // The ONLY case that gets the danger treatment (forge's alert_banner
+    // error variant; `danger` is forge's name for reliant's destructive).
+    expect(panel.className).toMatch(/danger|destructive/);
+    expect(panel).toHaveAttribute("role", "alert");
   });
 
   it("shows a loading state before the first response", () => {
