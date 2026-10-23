@@ -114,7 +114,37 @@ need to reuse.
 9. **Popovers wider than a phone** (low): `ChatSettingsPopover` is a fixed
    `w-[360px]` anchored `left-0`.
 
-## What this pass fixes (see the PR)
+## What this pass fixed
 
-1–6. Results after the fix are in the PR body and re-measured with the same
-script (`MOBILE_SHOTS=/tmp/mobile-after`).
+Re-measured with the same script after the change (`MOBILE_SHOTS=/tmp/mobile-after`):
+
+| Surface | Before | After |
+|---|---|---|
+| Inbox | unreachable (`/inbox` → `/m/chats`; no entry, no badge) | `/m/inbox` (`Mobile/MobileInboxScreen` = the desktop `InboxView` in the mobile chrome); drawer row with the count; a dot on every screen's menu button; `/inbox` links land there. 16 targets, **0 under 44px**, 0 overflow. Approve/deny, wake, dismiss + Undo, and answering questions (async included) are the desktop code path |
+| Apps / Observability | unreachable | drawer rows to `/forge` and `/forge/observability` (same `isForgeUIEnabled` gate as desktop); `/forge*` exempt from the phone redirect |
+| Console chrome at 390px | 225px fixed sidebar, 378 overflowing elements (workloads), 97 (observability) | off-canvas nav drawer below `md` (`forge-ui/sidebar_layout.tsx`), 16px gutter, native-select env scope, two-up env strip, single-column page grids; **6** and **3** overflowing elements left, all inside clipped table headers or chart internals; no sideways page scroll |
+| Console tables | 20 hand-written `<table>`s overflowing | the list tables (services, jobs, pods, releases, environments, alerts, observability overview + home, dashboards) stack into cards below `md` (`Forge/StackedTable`, `lib/stackedTable.ts`), each line labelled by its column header |
+| Deep links | all → `/m/chats` | `/inbox` → `/m/inbox`, `/workflows/runs/$id` → `/m/chats/$id`, `/workflows`, `/workflows/library/*` → `/m/workflows`, `/settings/environments/*` → `/m/daemons`, `/settings/*` → `/m/settings` (`mobilePathFor`) |
+| Diagnostics | none | Settings → Diagnostics, also at `/m/diagnostics`: app/server/release version, network, update-stream status, last sequence, subscribed chat, machine heartbeat, the device's last 50 client errors (uncaught, rejections, `console.error`, error boundaries; `lib/clientDiagnostics.ts`, local only), "Copy diagnostics" |
+| Safe areas | `env(safe-area-inset-*)` resolved to 0 (no `viewport-fit=cover`) | `viewport-fit=cover`; console drawer, top bar and page pad for the insets |
+| Onboarding checklist | floated over the console on a phone | hidden on phone viewports |
+
+## Left, ranked
+
+1. **Timeline tap targets** — message actions and tool-card toggles are ~24px
+   (11 of 13 targets on the chat screen). Deferred because the async-question
+   work is changing `ChatMessage`/`AsyncQuestionCard`; do it once that lands.
+2. **The remaining console tables** — workload detail's events, logs/traces
+   virtualized grids, release comparison, DNS records, dashboard panel tables
+   still scroll inside their cards at phone width. `StackedTable` is a drop-in
+   for each.
+3. **Observability views built for a pointer** — the trace waterfall, the
+   profile flamegraph and the log row expansion work but are cramped; they
+   want a phone layout of their own, not a reflow.
+4. **Upstream the responsive `SidebarLayout` to forge**
+   (`forge/pkg/components/components/layouts/sidebar_layout.tsx`); reliant's
+   copy is now ahead, and a forge-ui re-install must carry it over.
+5. **Runs / Automations areas** — `runsArea: false` stands; runs open as
+   chats. Automations are desktop-only, and the Inbox says "on desktop" for
+   their fixes rather than linking away.
+6. **`ChatSettingsPopover`** is a fixed 360px popover.
