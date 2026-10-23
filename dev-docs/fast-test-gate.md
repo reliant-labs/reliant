@@ -1,0 +1,146 @@
+# Fast pre-merge tests (Reliant)
+
+Measured 2026-10-23 against fresh `origin/main` **2ddaace4bc0e**, in
+`~/src/rl-agent-worktrees/reliant-fast-test-gate`. Scope: **tests**, not the
+whole CI/check/build/release pipeline. Target: less than five minutes elapsed
+for the selected pre-merge tests, retaining the full suite on main.
+
+## Current entrypoints and coverage
+
+The former Makefile / `web/` layout is obsolete on current main. Use:
+
+- `task test:affected`: Go package/reverse-dependency/file-reader selection,
+  importing Vitest files, Electron, and applicable generation checks.
+- `task test:affected:plan`: the same selection without execution.
+- `task test:short -- ./internal/example/...`: cached Go inner loop, no race;
+  DB tests **do run** on current main, each owning a migrated test database.
+- `task test` / main/nightly/dispatch: full Go tests (no `-short`), web and
+  Electron; integration and e2e retain their existing separate lanes. This
+  change does not remove tests, alter selection, or gate any new test body.
+
+`tools/test-affected` already drives PR CI's affected Go selection and adaptive
+LPT sharding (at most **six** runners, target weight 240, heavy packages first).
+`.github/workflows/pr-ci.yml` already shards affected Vitest files at 150 per
+runner, capped at **four**. Main/nightly/dispatch select everything and the Go
+full tier omits `-short`; `TestCITestTierReachedGoTest` pins the runtime flag.
+New/changed Go tests also retain CI's three-repeat flake check. Do not add more
+shards blindly: installation, cache restore, compilation and linking can be
+the critical path rather than test bodies. No workflow change was needed here.
+
+## Scheduling improvement
+
+The local affected runner previously executed every step serially. It now runs
+independent Go and web steps concurrently, bounded to **two** by default:
+
+```sh
+task test:affected -- -jobs 1    # preserve serial scheduling on a busy host
+task test:affected -- -jobs 2    # default
+```
+
+Lockfile validation and both generator checks remain serial prerequisites.
+Failure stops before any tests can certify stale generated inputs. Independent
+test failures do not cancel other test coverage; the final exit is nonzero.
+Output remains live through synchronized stdout/stderr, including slot waits;
+logs are not buffered indefinitely. Existing full-lane heavy-slot admission is
+preserved.
+
+**Electron remains exclusive**, after Go/web: existing release-contract tests
+temporarily rewrite endpoint caches and, if reachable, sibling control-plane
+KCL. Letting repository readers overlap those mutations would introduce races.
+A fully parallel three-lane runner was rejected for that reason; blindly
+raising worker counts was rejected on this shared host. Fixing those fixtures
+into isolated projects is separate work, not a reason to suppress assertions.
+For mixed Go/web changes the scheduling bound improves from G+W+E to
+max(G,W)+E (before resource contention); a Go-only change gets no artificial
+speedup claim.
+
+## Exact measurements
+
+Wall times from `/usr/bin/time -p`, macOS arm64, Node v25.9.0, shared Go cache.
+Other agents were active: load average rose from about 9 to 45–54. CI uses a
+different OS/Node and cache/install costs, so these are **local measurements,
+not a promise of GitHub end-to-end latency**. Long commands ran in background.
+
+| Command / scope | Wall seconds | Result |
+|---|---:|---|
+| `go test -buildvcs=false -short ./tools/test-affected` before runner fix on fresh main | 0.61 | PASS (package 0.297s) |
+| New overlap / generation-barrier regression tests, before fix | — | FAIL: independent lanes did not overlap; stale-input tests continued |
+| `task test:affected` initial selected gate | **263.79** | PASS, seven Go packages; Go step 254.721s |
+| `task test:affected` repeat | **32.35** | PASS, seven Go packages; Go step 14.064s, several cached |
+| Actual broad Go CI shard 1/6, current matrix, `RELIANT_TEST_TIER=short GOFLAGS='-buildvcs=false -ldflags=-w' go test -short -vet=off -timeout=10m $pkgs` | **90.72** | PASS: 57 package entries including activities/handlers, grpc, skills/catalog |
+| `task test:short -- ./tools/test-affected` | 3.30 | PASS |
+| `node --test .github/scripts/gate-health-lib.test.mjs` | 0.14 | PASS: nine tests, including missing/red full shards |
+| `go test -buildvcs=false -short ./tools/test-affected` after final fixtures | 8.36 | PASS (7.328s on loaded host) |
+| `go test -buildvcs=false -race -count=3 ./tools/test-affected` | 16.27 | PASS (14.406s) |
+| `frontends/web`: `npm ci --ignore-scripts --no-audit --no-fund` | 54.05 | PASS |
+| `frontends/web`: `CI=true VITEST_MAX_WORKERS=2 ./node_modules/.bin/vitest run --shard=1/4` | **86.89** | PASS: 218 files / 1,932 tests |
+| `electron`: `npm ci --no-audit --no-fund` | 32.70 | PASS, runtime installed |
+| `CONTROL_PLANE_DIR=/nonexistent-control-plane npm --prefix electron test --silent` | **6.70** | PASS: 373 tests (public/fallback configuration) |
+
+The broad Go CI shard was generated by `go list ./... | grep -vx
+'github.com/reliant-labs/reliant/e2e' | go run ./tools/test-affected shard`,
+then `.include[0].packages` via jq. That matches CI's package selection and
+short-tier flags; it does not replay GitHub's cache download or runner queue.
+
+The real affected gate selected architecture, chat handlers, LLM drivers,
+Temporal test helpers, workflow, workflowref, and selector tests. Fresh-run
+package times: chat **153.487s**, drivers **102.617s**, architecture 1.293s,
+Temporal helpers 5.845s, workflow 5.636s, workflowref 1.384s, selector 0.915s.
+Compilation/linking plus chat DB work are the measured Go critical path.
+Vitest reported 82.67s internally: transform 18.87s, setup 5.89s, import 59.89s,
+tests 34.42s, environment 41.29s (worker-summed phases, not additive wall time).
+Frontend setup/import is significant; it must stay in the latency assessment.
+
+The 32.35s repeat is **not** a 231s concurrency improvement: this change selected
+only Go, and Go's legitimate test cache explains most of the difference. The
+channel-controlled regression test proves Go/web overlap and the concurrency
+bound without sleeps or timing-performance assertions. The same suite pins
+all prerequisite barriers, failure aggregation, Electron exclusivity, serial
+mode, and dry-run non-execution, including under the race detector.
+
+## Real GitHub test-lane evidence
+
+Read-only `gh run view 40024007400 --json event,headSha,jobs` inspected the
+successful PR run created 2026-10-23 21:04:08Z, head
+`114bac58cd9d1b437fa96174d0a62274ea947908`. Its existing adaptive selection
+used five Go shards:
+
+| Go short shard | Test step seconds | Whole shard job seconds |
+|---|---:|---:|
+| 1/5 | 80 | 183 |
+| 2/5 | 99 | 199 |
+| 3/5 | 87 | 166 |
+| 4/5 | 130 | 184 |
+| 5/5 | 89 | 168 |
+
+Every shard passed and was below five minutes **including its own setup**.
+Web and Electron were unselected on that PR, not evidence of passing tests;
+those lanes were measured locally above. Start-time spread / queue time and
+other CI checks mean the overall workflow took longer than five minutes. That
+is distinct from test execution and is not hidden by these numbers.
+
+Full coverage preservation was checked in `pr-ci.yml` (non-PR events select all
+packages/files, `full` gets no `-short`) and `gate-health.yml` plus
+`.github/scripts/gate-health-lib.test.mjs` (missing, failed, cancelled, or
+incomplete full-shard sets do not read as green). Existing release workflows
+and tag guards were not weakened. The tag guard enforces main ancestry; it is
+**not** itself proof of a green full test suite, and this change does not add a
+new release policy.
+
+## Limits and follow-up
+
+- Seven-package affected Go tests passed below 300s; one current full web shard
+  passed below 90s. All four shards plus cold GitHub setup were **not** measured
+  here; no claim that every possible broad/pin-change PR is below five minutes.
+- No newly slow test was hidden behind `testing.Short()`: none of the measured
+  packages demonstrated an intrinsically slow test requiring a new gate.
+- Electron tests require a normal `npm ci` (including Electron's install hook).
+  An initial missing-dependency run failed in 3.88s; `--ignore-scripts` installed
+  packages in 2.75s but still failed in 4.61s because Electron had no runtime.
+  Those runs were not counted as passing tests.
+- Test timing excludes unrelated lint/build/codegen/provisioning checks except
+  any prerequisites actually selected by `task test:affected`. The goal is not
+  to make the whole CI pipeline finish in five minutes.
+- Shared-checkout preliminary measurements were discarded after discovering
+  remote main had already changed the layout and shard strategy. They must not
+  be used to size current CI.
