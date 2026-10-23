@@ -254,13 +254,49 @@ func (s *TokenSource) refresh(ctx context.Context, conn *core.Connection, seenGe
 	v, err, _ := s.flight.Do(key, func() (any, error) {
 		// The shared call must not die with the first caller's context, or one
 		// cancelled caller fails every waiter.
-		return s.refreshLocked(context.WithoutCancel(ctx), conn, seenGeneration)
+		ctx := context.WithoutCancel(ctx)
+		if r, ok, err := s.alreadyReplaced(ctx, conn, seenGeneration); err != nil || ok {
+			return r, err
+		}
+		return s.refreshLocked(ctx, conn, seenGeneration)
 	})
 	if err != nil {
 		return vault.Secret{}, 0, err
 	}
 	r := v.(refreshed)
 	return r.tok, r.gen, nil
+}
+
+// alreadyReplaced re-reads the access token, without the row lock, before a
+// refresh takes it. A caller's read of seenGeneration can be stale by the time
+// it reaches the single-flight: a flight keyed on that generation may have
+// refreshed, committed and ended in between (the caller was descheduled after
+// its read), so it starts a new flight. If the token was replaced and the
+// replacement is not expiring, that is the answer, and no refresh transaction
+// is opened. The locked generation check in refreshLocked still decides when
+// this read races a refresh in another process.
+func (s *TokenSource) alreadyReplaced(ctx context.Context, conn *core.Connection, seenGeneration int64) (refreshed, bool, error) {
+	secrets, err := s.store.GetSecrets(ctx, conn.UserID, conn.ID)
+	if err != nil {
+		return refreshed{}, false, mapStoreErr(err)
+	}
+	access, ok := secrets[core.SecretFieldAccessToken]
+	if !ok || access.Generation == seenGeneration {
+		return refreshed{}, false, nil
+	}
+	fresh, err := s.store.GetConnection(ctx, conn.UserID, conn.ID)
+	if err != nil {
+		return refreshed{}, false, mapStoreErr(err)
+	}
+	if fresh.Status != core.ConnectionStatusActive || s.expiring(fresh.AccessExpiresAt) {
+		return refreshed{}, false, nil
+	}
+	tok, err := s.open(ctx, fresh, access)
+	if err != nil {
+		return refreshed{}, false, err
+	}
+	s.store2cache(fresh.ID, access.Generation, tok, fresh.AccessExpiresAt)
+	return refreshed{tok: tok, gen: access.Generation}, true, nil
 }
 
 func (s *TokenSource) refreshLocked(ctx context.Context, conn *core.Connection, seenGeneration int64) (refreshed, error) {

@@ -237,3 +237,54 @@ func TestRefresh_SingleFlightCollapsesDatabaseTransactions(t *testing.T) {
 	require.Equal(t, 1, int(e.gh.refreshCalls.Load()))
 	require.Equal(t, 1, int(counting.locks.Load()), "20 concurrent callers must share one refresh transaction")
 }
+
+type lateCallerKey struct{}
+
+// lateReaderStore holds back the caller whose context carries lateCallerKey
+// right after its first GetSecrets: it has read the generation the refresh is
+// about to replace, and resumes only once that refresh has returned.
+type lateReaderStore struct {
+	countingStore
+	read      chan struct{} // closed when the late caller has read
+	refreshed chan struct{} // closed by the test once the other caller's refresh returned
+	lateReads atomic.Int32
+}
+
+func (l *lateReaderStore) GetSecrets(ctx context.Context, userID, id string) (map[string]core.ConnectionSecret, error) {
+	secrets, err := l.countingStore.GetSecrets(ctx, userID, id)
+	if ctx.Value(lateCallerKey{}) != nil && l.lateReads.Add(1) == 1 {
+		close(l.read)
+		<-l.refreshed
+	}
+	return secrets, err
+}
+
+// The interleaving a loaded machine produces at random, forced: a caller reads
+// the expiring generation, is descheduled while another caller's refresh runs
+// and commits, and reaches the single-flight after that flight has ended. It
+// must take the refreshed token, not open a second refresh transaction.
+func TestRefresh_CallerThatReadTheReplacedGenerationOpensNoSecondTransaction(t *testing.T) {
+	e := newEnv(t)
+	conn := e.connect("alice", "a")
+	e.expireAccessToken(conn.ID)
+	store := &lateReaderStore{
+		countingStore: countingStore{ConnectionStore: e.store},
+		read:          make(chan struct{}),
+		refreshed:     make(chan struct{}),
+	}
+	src := connections.NewTokenSource(store, e.vault, e.providers, redirectingDoer{target: e.gh.srv})
+
+	lateErr := make(chan error, 1)
+	go func() {
+		_, err := src.Token(context.WithValue(context.Background(), lateCallerKey{}, true), "alice", conn.ID)
+		lateErr <- err
+	}()
+	<-store.read
+
+	_, err := src.Token(context.Background(), "alice", conn.ID)
+	require.NoError(t, err)
+	close(store.refreshed)
+	require.NoError(t, <-lateErr)
+	require.Equal(t, 1, int(e.gh.refreshCalls.Load()))
+	require.Equal(t, 1, int(store.locks.Load()), "a caller that read the replaced generation must not open a second refresh transaction")
+}
