@@ -4,6 +4,46 @@
 @config "../tailwind.config.js";
 
 /*
+ * Touch sizing. A finger needs a 44×44px target (WCAG 2.5.5, Apple HIG); a
+ * mouse does not, and the desktop chrome is deliberately dense. So touch
+ * sizes apply on a coarse pointer only, never by viewport width: a narrow
+ * desktop window keeps its density, a tablet gets the big targets.
+ *
+ *   touch:<utility>  any utility, on a coarse pointer (`touch:text-base`)
+ *   touch-target     at least 44×44px on a coarse pointer. Explicit px, not
+ *                    rem: the root font size is a user setting, and at its
+ *                    smallest step `h-11` measures under 44px.
+ *
+ * `touch-target` only sets the minimum box; pair it with `inline-flex
+ * items-center justify-center` on an icon button so the icon stays centred.
+ */
+@custom-variant touch (@media (pointer: coarse));
+
+@layer utilities {
+  @media (pointer: coarse) {
+    .touch-target {
+      min-width: 44px;
+      min-height: 44px;
+    }
+  }
+}
+
+/*
+ * iOS Safari zooms the page into any text field whose font is under 16px when
+ * it is focused, and does not zoom back out. The app's dense fields are 12-14px
+ * (composer settings, the ask_user answer box, filters), so on touch every
+ * text field is at least 16px. Unlayered on purpose: it must outrank the
+ * fields' own `text-xs`/`text-sm` utilities, which live in a layer.
+ */
+@media (pointer: coarse) {
+  input:not([type="checkbox"], [type="radio"], [type="range"], [type="color"], [type="file"]),
+  select,
+  textarea {
+    font-size: max(16px, 1em);
+  }
+}
+
+/*
  * ═══════════════════════════════════════════════════════════════════════
  * FORGE COMPONENT-LIBRARY TOKEN BRIDGE
  * ═══════════════════════════════════════════════════════════════════════
@@ -1641,9 +1681,16 @@
 /*
  * Stacked tables (lib/stackedTable.ts). Below `md`, a `<table>` carrying
  * `.stack-narrow` reads as a list of cards: the header row is visually
- * hidden (still read by screen readers), each body row is a block, its first
- * cell is the row's title, and every other cell is a line led by its column's
- * name, copied from the header into `data-label`.
+ * hidden (still read by screen readers), each body row is a card, its title
+ * cell leads it, and every other cell is a line led by its column's name,
+ * copied from the header into `data-label`.
+ *
+ * The title is the cell marked `data-stack-title`, else the row's first cell.
+ * labelStackedTable leaves the title unlabelled, so "no data-label" is what
+ * this CSS keys on. A row is a flex column so a title that is not first
+ * (a trace's root operation, after its start time) can still lead.
+ *
+ * Body cells may be `<th scope="row">` as well as `<td>`: both stack.
  *
  * Plain CSS rather than utilities on every cell: a table has one `<thead>` and
  * many cells, and the labels come from the header at runtime. Unlayered, so
@@ -1652,11 +1699,13 @@
  */
 @media (width < 48rem) {
   table.stack-narrow,
-  table.stack-narrow > tbody,
-  table.stack-narrow > tbody > tr,
-  table.stack-narrow > tbody > tr > td {
+  table.stack-narrow > tbody {
     display: block;
     width: 100%;
+  }
+
+  table.stack-narrow > colgroup {
+    display: none;
   }
 
   table.stack-narrow > thead {
@@ -1669,6 +1718,9 @@
   }
 
   table.stack-narrow > tbody > tr {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
     padding: 0.625rem 1rem;
     border-bottom: 1px solid var(--color-border);
   }
@@ -1677,7 +1729,15 @@
     border-bottom: 0;
   }
 
-  table.stack-narrow > tbody > tr > td {
+  /* A virtualizer's spacer row: its height is the scroll math, so no padding. */
+  table.stack-narrow > tbody > tr[aria-hidden="true"] {
+    padding: 0;
+    border: 0;
+  }
+
+  table.stack-narrow > tbody > tr > :is(td, th) {
+    display: block;
+    width: 100%;
     max-width: none;
     height: auto;
     padding: 0.125rem 0;
@@ -1687,27 +1747,36 @@
     overflow-wrap: anywhere;
   }
 
-  table.stack-narrow > tbody > tr > td:first-child {
+  table.stack-narrow > tbody > tr[aria-hidden="true"] > :is(td, th) {
+    padding: 0;
+  }
+
+  table.stack-narrow > tbody > tr > :is(td, th):not([data-label]) {
     padding-bottom: 0.25rem;
     font-weight: 500;
   }
 
-  table.stack-narrow > tbody > tr > td[data-label]:not(:first-child) {
+  table.stack-narrow > tbody > tr > [data-stack-title] {
+    order: -1;
+  }
+
+  table.stack-narrow > tbody > tr > :is(td, th)[data-label] {
     display: flex;
     gap: 0.75rem;
     align-items: baseline;
     justify-content: space-between;
   }
 
-  table.stack-narrow > tbody > tr > td[data-label]:not(:first-child)::before {
+  table.stack-narrow > tbody > tr > :is(td, th)[data-label]::before {
     flex-shrink: 0;
     font-size: 0.75rem;
+    font-weight: 400;
     color: var(--color-ink-muted);
     content: attr(data-label);
   }
 
   /* A cell with nothing in it (an empty metric) is not worth a line. */
-  table.stack-narrow > tbody > tr > td:empty {
+  table.stack-narrow > tbody > tr > :is(td, th):empty {
     display: none;
   }
 }

@@ -58,8 +58,16 @@ const columns = column.columns([
   column.accessor("body", { header: "Message" }),
 ]);
 
-/** One CSS grid shared by the header and every row, so the columns line up without a <table>. */
-const ROW_GRID = "grid grid-cols-[1rem_8.5rem_4rem_9rem_minmax(0,1fr)] items-baseline gap-x-3";
+/**
+ * One CSS grid shared by the header and every row, so the columns line up
+ * without a <table>. On a phone the four fixed columns alone are wider than
+ * the screen, so a record is two lines there: its time, level and service,
+ * then the message across the full width (`LOG_BODY` moves it).
+ */
+const ROW_GRID =
+  "grid grid-cols-[1rem_auto_auto_minmax(0,1fr)] items-baseline gap-x-3 md:grid-cols-[1rem_8.5rem_4rem_9rem_minmax(0,1fr)]";
+/** The message cell: its own full-width line on a phone, under the chevron's column. */
+const LOG_BODY = "max-md:col-start-2 max-md:col-end-[-1]";
 
 const EMPTY: LogRecord[] = [];
 
@@ -323,7 +331,7 @@ export function ServiceSelect({
         id={id}
         value={value ?? ""}
         onChange={(event) => onChange(event.target.value || undefined)}
-        className="h-8 rounded-md border border-border bg-background px-2 text-sm text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        className="h-8 rounded-md border border-border bg-background px-2 text-sm text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring touch:h-[44px]"
         data-testid={id}
       >
         {includeAll && <option value="">All services</option>}
@@ -404,7 +412,7 @@ function LogList({
     <Card padding="none" className="overflow-hidden">
       <div
         aria-hidden="true"
-        className={cn(ROW_GRID, "border-b border-border px-3 py-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground")}
+        className={cn(ROW_GRID, "border-b border-border px-3 py-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground max-md:hidden")}
       >
         <span />
         {table.getHeaderGroups()[0]?.headers.map((header) => (
@@ -449,6 +457,7 @@ function LogList({
                   className={cn(
                     ROW_GRID,
                     "w-full px-3 py-1 text-left font-mono text-xs hover:bg-muted/50 focus:outline-none focus-visible:bg-muted/50 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+                    "touch:min-h-[44px] max-md:gap-y-0.5 max-md:py-2",
                     open && "bg-muted/40"
                   )}
                   data-testid="obs-log-row"
@@ -462,7 +471,7 @@ function LogList({
                       key={cell.id}
                       className={cn(
                         "min-w-0",
-                        cell.column.id === "body" ? "truncate text-foreground" : "truncate text-muted-foreground"
+                        cell.column.id === "body" ? cn("truncate text-foreground", LOG_BODY) : "truncate text-muted-foreground"
                       )}
                     >
                       <table.FlexRender cell={cell} />
@@ -470,7 +479,7 @@ function LogList({
                   ))}
                 </button>
                 {open && (
-                  <div id={detailsId} className="space-y-3 border-t border-border/50 bg-background px-9 py-3" data-testid="obs-log-details">
+                  <div id={detailsId} className="space-y-3 border-t border-border/50 bg-background px-9 py-3 max-md:px-3" data-testid="obs-log-details">
                     <pre className="whitespace-pre-wrap break-words font-mono text-xs text-foreground">{record.body}</pre>
                     {record.traceId && (
                       <div className="flex flex-wrap gap-2">

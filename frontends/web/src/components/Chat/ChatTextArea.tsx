@@ -335,8 +335,10 @@ export const ChatTextArea = forwardRef<HTMLTextAreaElement, ChatTextAreaProps>(
           placeholder={placeholder || defaultPlaceholder}
           // text-base, not text-sm: this is the app's primary input, and it was
           // rendering a step below body text. It scales with the Appearance
-          // font-size preference like everything else.
-          className="chat-composer w-full resize-none border-0 bg-transparent px-0 py-0 text-base chat-input outline-none disabled:cursor-not-allowed disabled:opacity-50"
+          // font-size preference like everything else. On touch the one-line
+          // box is padded to 44px: a tap just above or below the text line
+          // otherwise misses the field (the auto-resize counts the padding).
+          className="chat-composer w-full resize-none border-0 bg-transparent px-0 py-0 text-base chat-input outline-none disabled:cursor-not-allowed disabled:opacity-50 touch:min-h-[44px] touch:py-2.5"
           style={{
             color: "var(--chat-input-text)",
             maxHeight: 200,

@@ -301,7 +301,8 @@ export function ModelSettingsPage({
       <div className="flex items-center gap-2 px-3 py-2.5 border-b border-border/50">
         <button
           onClick={onBack}
-          className="w-6 h-6 flex items-center justify-center rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors"
+          aria-label="Back"
+          className="touch-target w-6 h-6 flex items-center justify-center rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors"
         >
           <ChevronLeft className="w-3.5 h-3.5" />
         </button>
@@ -314,13 +315,15 @@ export function ModelSettingsPage({
             navigate({ to: '/settings/$section', params: { section: 'general' } });
           }}
           title="Model preferences"
-          className="w-6 h-6 flex items-center justify-center rounded text-muted-foreground hover:text-foreground transition-colors"
+          aria-label="Model preferences"
+          className="touch-target w-6 h-6 flex items-center justify-center rounded text-muted-foreground hover:text-foreground transition-colors"
         >
           <Settings2 className="w-3.5 h-3.5" />
         </button>
         <button
           onClick={onClose}
-          className="w-6 h-6 flex items-center justify-center rounded text-muted-foreground hover:text-foreground transition-colors"
+          aria-label="Close settings"
+          className="touch-target w-6 h-6 flex items-center justify-center rounded text-muted-foreground hover:text-foreground transition-colors"
         >
           <X className="w-3.5 h-3.5" />
         </button>

@@ -129,7 +129,45 @@ Re-measured with the same script after the change (`MOBILE_SHOTS=/tmp/mobile-aft
 | Safe areas | `env(safe-area-inset-*)` resolved to 0 (no `viewport-fit=cover`) | `viewport-fit=cover`; console drawer, top bar and page pad for the insets |
 | Onboarding checklist | floated over the console on a phone | hidden on phone viewports |
 
+## Second pass (feat/mobile-parity-pass-2)
+
+Measured the same way (`e2e/mobile-audit.spec.ts`, plus a per-control probe of
+the chat screen), against mocks that now include an async `ask_user` call and
+its question row, so the timeline's question card is measured too.
+
+| Surface | Before | After |
+|---|---|---|
+| Chat timeline + composer | 11 of 13 targets under 44px: message menu 26px, jump-to-message 26px, tool-row toggles 35px, Open file 26px, attach/send/stop 26-30px, the composer pill selectors 24px (the workflow one unlabelled) | **0 of 15** under 44px on a coarse pointer, via a `touch:` variant and a `touch-target` utility (`index.css`); every text field is at least 16px on touch, so iOS no longer zooms into it; the icon-only selectors have names |
+| `ask_user` card (`AskUserCard` → `QuestionPrompt`) | answer form in a nested 40vh scroller; Submit 35px; answer box 14px (iOS zooms) | inline forms take their natural height; options 73px, answer box 45px at 17px, Submit 44px. **Answered or withdrawn cards collapse to one 44px line** (question → answer, or "Withdrawn: reason"), expandable by click or keyboard (`aria-expanded`), on desktop and mobile |
+| Chat settings popover | fixed 360px anchored to a button partway across a 390px composer, overflowing the right edge | below `md` a full-width bottom sheet over a scrim, `max-h-[85dvh]` scrolling inside itself, clear of the home indicator; named dialog, labelled 44px header controls |
+| Remaining console tables | workload events/images, logs and traces grids, release comparison, DNS records, dashboard panel tables, alerts/errors/secrets/dev stack tables scrolled inside their cards | all stack into labelled cards (`StackedTable`), now including `<th scope=row>` cells, an explicit title cell (`data-stack-title`: a trace card leads with its root operation, not its start time) and virtualizer spacer rows; the virtualized traces list measures stacked rows |
+| Logs | five fixed columns, 31px rows | two lines per record (time, level, service; then the message full width), 44px rows on touch |
+| Trace waterfall | 12rem name column beside the timeline, leaving the bars ~140px; 28px rows; 12px collapse chevrons | below `md` each span is two lines — name, then its bar across the full width — in 52px rows; chevrons and depth controls are 44px on touch |
+| Profiles | the flamegraph iframe (pan-and-zoom) first, the heaviest-functions table under it | on a phone the heaviest functions lead, the iframe is 50dvh, and an "Open the flamegraph full screen" link opens speedscope in its own tab |
+| Console sidebar | reliant's copy ahead of forge's | upstreamed to forge's component library (forge#1230), with focus moving into and back out of the drawer and closing on navigation |
+| `observability.spec.ts` | "native dashboards" failed on main | fixed at its root: the assertion predated #1150, where the Observability home moved from a client verdict (3+ restarts = crash-looping) to the server's. The fixture's prod `api` is Degraded (it still serves); its staging `worker` is the crash-looping one. The test now asserts both |
+
+New Playwright coverage: `e2e/mobile.spec.ts` (every timeline and composer
+control is 44px, the ask_user card answered and collapsed on a phone) and
+`e2e/mobile-console.spec.ts` (traces, waterfall, logs, profiles, dashboards and
+workloads fit 390px, stack, and keep 44px targets).
+
 ## Left, ranked
+
+1. **Console breadcrumbs and in-page text links** stay text-sized (about 20px
+   tall). They meet WCAG 2.5.8's 24px spacing minimum, not 44px; making every
+   inline link a 44px box would break the line it sits in.
+2. **The workflow builder, Runs and Automations** stay desktop-only, by the
+   recorded decision (`runsArea: false`, `workflowAuthoring: false`).
+3. **Desktop settings** (`/settings/*`) still overflow at 390px, but a phone
+   never reaches them: they redirect to `/m/settings`.
+4. **The composer's settings popover is only reachable from a chat whose
+   workflow declares inputs**, so the mocks here could not open it; its sheet
+   layout is pinned by vitest (`ChatSettingsPopover.mobile.test.tsx`), not by
+   a screenshot.
+
+## Superseded: pass 1's list
+
 
 1. **Timeline tap targets** — message actions and tool-card toggles are ~24px
    (11 of 13 targets on the chat screen). Deferred because the async-question

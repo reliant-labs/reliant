@@ -113,6 +113,8 @@ export const ScrollToBottomButton = memo(function ScrollToBottomButton({
           expanded
             ? "h-8 px-3.5 gap-1.5"
             : "h-8 w-8 gap-0",
+          // A finger's target, however compact it reads at rest.
+          "touch:h-[44px] touch:min-w-[44px]",
         )}
       >
         <ArrowDown className="w-3.5 h-3.5 flex-shrink-0" />

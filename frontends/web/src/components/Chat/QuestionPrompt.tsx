@@ -23,9 +23,17 @@ export interface QuestionAnswer {
 export interface QuestionPromptProps {
   questions: QuestionItem[];
   onSubmit: (answers: { answers: QuestionAnswer[] }) => void;
+  /**
+   * Rendered inside a page that already scrolls (the transcript's
+   * AskUserCard, an Inbox row) rather than above the composer. The form then
+   * takes its natural height: a 40vh scroller nested in a scrolling page traps
+   * a finger's scroll on a phone, and hides the Submit button below the fold
+   * of the inner box.
+   */
+  inline?: boolean;
 }
 
-export function QuestionPrompt({ questions, onSubmit }: QuestionPromptProps) {
+export function QuestionPrompt({ questions, onSubmit, inline = false }: QuestionPromptProps) {
   const totalSteps = questions.length;
   const isMultiStep = totalSteps > 1;
 
@@ -138,7 +146,7 @@ export function QuestionPrompt({ questions, onSubmit }: QuestionPromptProps) {
   }, [currentStep]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div className="px-2 py-3 max-h-[40vh] overflow-y-auto overscroll-contain">
+    <div className={cn("px-2 py-3", !inline && "max-h-[40vh] overflow-y-auto overscroll-contain")}>
       {/* Step indicator (multi-question only) */}
       {isMultiStep && (
         <div className="flex items-center gap-1.5 mb-2">
@@ -180,6 +188,7 @@ export function QuestionPrompt({ questions, onSubmit }: QuestionPromptProps) {
                   onClick={() => toggleOption(option.label)}
                   className={cn(
                     "group flex items-start gap-2.5 w-full text-left rounded-lg px-3 py-2",
+                    "touch:min-h-[44px] touch:py-2.5",
                     "border transition-all duration-150 cursor-pointer",
                     "focus:outline-none focus:ring-2 focus:ring-primary/40 focus:ring-offset-1 focus:ring-offset-background",
                     isSelected
@@ -245,6 +254,7 @@ export function QuestionPrompt({ questions, onSubmit }: QuestionPromptProps) {
             rows={1}
             className={cn(
               "w-full rounded-md border bg-background px-3 py-2 text-sm",
+              "touch:min-h-[44px]",
               "placeholder:text-muted-foreground/50",
               "focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/50",
               "resize-none transition-colors",
@@ -263,7 +273,8 @@ export function QuestionPrompt({ questions, onSubmit }: QuestionPromptProps) {
                   onClick={handleBack}
                   className={cn(
                     "text-xs text-muted-foreground hover:text-foreground",
-                    "transition-colors cursor-pointer"
+                    "transition-colors cursor-pointer",
+                    "touch-target inline-flex items-center touch:px-2 touch:text-sm"
                   )}
                 >
                   &larr; Back
@@ -276,6 +287,7 @@ export function QuestionPrompt({ questions, onSubmit }: QuestionPromptProps) {
               disabled={!canAdvance}
               className={cn(
                 "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium",
+                "touch:min-h-[44px] touch:px-5 touch:text-sm",
                 "transition-all duration-150",
                 "focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-1 focus:ring-offset-background",
                 canAdvance

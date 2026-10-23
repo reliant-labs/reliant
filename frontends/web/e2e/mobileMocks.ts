@@ -44,6 +44,16 @@ export const CHATS = [
 
 const LONG_LINE = 'FAIL src/auth/login.test.ts > login > retries on a 503 from the identity provider '.repeat(3);
 
+const ASK_USER_QUESTIONS = [
+  {
+    question: 'Should the retry fix cover the signup flow too?',
+    options: [
+      { label: 'Yes, both flows', description: 'Same client, same bug.' },
+      { label: 'Login only', description: 'Keep this change small.' },
+    ],
+  },
+];
+
 /** A user turn, then an assistant turn with a shell call and a file read: the timeline's commonest tool cards. */
 export const MESSAGES = [
   {
@@ -84,7 +94,33 @@ export const MESSAGES = [
         toolCallStatus: 3,
         matchedResult: { toolCallId: 'tc_2', type: 'tool_result', content: 'export const RETRIES = 3;\n'.repeat(12) },
       },
+      {
+        // An async ask_user (the default): the timeline renders AskUserCard
+        // from it and its question row (ASYNC_QUESTIONS), answerable inline.
+        id: 'b5',
+        index: 3,
+        type: 2,
+        toolName: 'ask_user',
+        toolCallId: 'tc_ask',
+        input: JSON.stringify({ questions: ASK_USER_QUESTIONS }),
+        toolCallStatus: 3,
+        matchedResult: { toolCallId: 'tc_ask', type: 'tool_result', content: 'Question posted; carrying on.' },
+      },
     ],
+  },
+];
+
+/** The ask_user call's question row: pending, async, keyed by its tool call id. */
+export const ASYNC_QUESTIONS = [
+  {
+    questionId: 'q_timeline',
+    chatId: 'chat_a',
+    status: 'pending',
+    createdAt: minutesAgo(19),
+    metadata: JSON.stringify({ type: 'ask_user', questions: ASK_USER_QUESTIONS }),
+    threadId: 'chat_a',
+    async: true,
+    toolCallId: 'tc_ask',
   },
 ];
 
@@ -177,6 +213,8 @@ const emptyStream = (route: Route) =>
 export async function mockMobileBackend(page: Page, options: MobileMockOptions = {}): Promise<MobileMock> {
   const mock: MobileMock = { answered: [] };
   let inbox = [...(options.inbox ?? INBOX_ITEMS)];
+  // The timeline's question rows; answering one resolves it, as the server does.
+  let asyncQuestions: Record<string, unknown>[] = ASYNC_QUESTIONS.map((q) => ({ ...q }));
 
   await page.route('**/reliant.v1.**', (route) => json(route, {}));
   await page.route('**/controlplane.v1.**', (route) => json(route, {}));
@@ -210,9 +248,17 @@ export async function mockMobileBackend(page: Page, options: MobileMockOptions =
     inbox = inbox.filter((item) => !itemIds.includes((item as { itemId: string }).itemId));
     return json(route, {});
   });
+  await page.route('**/reliant.v1.QuestionService/ListAsyncQuestions', (route) => {
+    const { chatId } = route.request().postDataJSON() as { chatId?: string };
+    return json(route, { questions: chatId === 'chat_a' ? asyncQuestions : [] });
+  });
   await page.route('**/reliant.v1.QuestionService/ResolveQuestion', async (route) => {
-    mock.answered.push(route.request().postDataJSON() as Record<string, unknown>);
+    const body = route.request().postDataJSON() as { questionId?: string; responseData?: string };
+    mock.answered.push(body as Record<string, unknown>);
     inbox = inbox.filter((item) => (item as { kind: number }).kind !== 2);
+    asyncQuestions = asyncQuestions.map((q) =>
+      q.questionId === body.questionId ? { ...q, status: 'resolved', responseData: body.responseData } : q,
+    );
     return json(route, {});
   });
 

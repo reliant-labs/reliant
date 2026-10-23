@@ -762,7 +762,9 @@ function ToolExecutionComponent({
     "flex items-center justify-between",
     isExpanded ? "bg-muted/50" : "bg-muted/20",
     density === "card" ? "px-3 py-2" : density === "minimal" ? "px-2 py-0.5" : "px-2 py-1",
-    isExpandable && "cursor-pointer hover:bg-muted/50"
+    isExpandable && "cursor-pointer hover:bg-muted/50",
+    // The whole row is the expand toggle: a finger needs the row 44px tall.
+    "touch:min-h-[44px]"
   );
   const contentClassName = cn(
     "border-t border-border/30 overflow-hidden overflow-y-auto bg-muted/15 py-1",
@@ -905,7 +907,7 @@ function ToolExecutionComponent({
               <Tooltip content="Open file" placement="bottom" delay={300} wrapperClassName="inline-flex">
 <button
                 onClick={openPrimaryFile}
-                className="rounded px-1.5 py-0.5 text-xs font-medium text-primary transition-colors hover:bg-primary/10"
+                className="touch-target inline-flex items-center justify-center rounded px-1.5 py-0.5 text-xs font-medium text-primary transition-colors hover:bg-primary/10"
                 aria-label="Open file"
                 type="button"
               >
@@ -917,7 +919,7 @@ function ToolExecutionComponent({
               <Tooltip content="Open full thread view" placement="bottom" delay={300} wrapperClassName="inline-flex">
 <button
                 onClick={(e) => { e.stopPropagation(); onSelectThread(spawnThreadId); }}
-                className="p-0.5 hover:bg-muted rounded transition-colors" aria-label="Open full thread view"
+                className="touch-target inline-flex items-center justify-center p-0.5 hover:bg-muted rounded transition-colors" aria-label="Open full thread view"
               >
                 <Maximize2 className="w-3.5 h-3.5 text-muted-foreground" />
               </button>
@@ -927,7 +929,7 @@ function ToolExecutionComponent({
               <Tooltip content="Push to background" placement="bottom" delay={300} wrapperClassName="inline-flex">
 <button
                 onClick={(e) => { e.stopPropagation(); onConvertToBackground(toolCall.id); }}
-                className="p-0.5 hover:bg-muted rounded transition-colors" aria-label="Push tool execution to background"
+                className="touch-target inline-flex items-center justify-center p-0.5 hover:bg-muted rounded transition-colors" aria-label="Push tool execution to background"
               >
                 <Play className="w-3.5 h-3.5 text-info" />
               </button>
@@ -937,7 +939,7 @@ function ToolExecutionComponent({
               <Tooltip content="Cancel" placement="bottom" delay={300} wrapperClassName="inline-flex">
 <button
                 onClick={(e) => { e.stopPropagation(); onCancel(toolCall.id); }}
-                className="p-0.5 hover:bg-muted rounded transition-colors" aria-label="Cancel tool execution"
+                className="touch-target inline-flex items-center justify-center p-0.5 hover:bg-muted rounded transition-colors" aria-label="Cancel tool execution"
                 disabled={isCancelling}
               >
                 <Square className={cn("w-3.5 h-3.5", isCancelling ? "text-warning-ink animate-pulse" : "text-destructive")} />

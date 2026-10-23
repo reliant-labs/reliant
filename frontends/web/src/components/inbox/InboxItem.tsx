@@ -582,7 +582,7 @@ function QuestionAnswerForm({
 
   return (
     <CardInset padding="none">
-      <QuestionPrompt key={attempt} questions={questions} onSubmit={(answers) => void onSubmit(answers)} />
+      <QuestionPrompt key={attempt} inline questions={questions} onSubmit={(answers) => void onSubmit(answers)} />
     </CardInset>
   );
 }

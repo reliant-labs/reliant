@@ -5,8 +5,9 @@
  * tables, which is right on a desktop and unreadable at 390px: eight columns
  * either squeeze to a few characters each or scroll sideways inside a card.
  * Below `md` a table carrying `STACKED_TABLE_CLASS` instead lays each row out
- * as a block — its first cell as the row's title, every other cell as a
- * "Label · value" line (index.css, "Stacked tables").
+ * as a card — its title cell leading (the one marked `data-stack-title`, else
+ * the first), every other cell as a "Label · value" line (index.css,
+ * "Stacked tables").
  *
  * The label is the column's header text, so the table's own `<thead>` stays
  * the one place a column is named: `useStackedTableLabels` copies each
@@ -41,12 +42,16 @@ export function labelStackedTable(table: HTMLTableElement): void {
   if (labels.length === 0) return;
   for (const body of Array.from(table.tBodies)) {
     for (const row of Array.from(body.rows)) {
+      const cells = Array.from(row.cells);
+      // The row's title leads its card and needs no label: the cell marked
+      // `data-stack-title`, else the first.
+      const title = cells.find((cell) => cell.hasAttribute("data-stack-title")) ?? cells[0];
       let column = 0;
-      for (const cell of Array.from(row.cells)) {
+      for (const cell of cells) {
         const label = labels[column] ?? "";
         // A cell spanning columns (an empty state, a detail line) has no
         // single column to name.
-        const next = cell.colSpan > 1 ? "" : label;
+        const next = cell === title || cell.colSpan > 1 ? "" : label;
         if (next) {
           if (cell.getAttribute("data-label") !== next) cell.setAttribute("data-label", next);
         } else if (cell.hasAttribute("data-label")) {

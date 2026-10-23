@@ -222,13 +222,26 @@ export function ChatSettingsPopover({
 
   if (!isOpen) return null;
 
+  // Above `md` it is a 360px popover anchored to its trigger. On a phone a
+  // 360px box anchored to a button partway across a 390px composer ran off
+  // the right edge, so there it is a bottom sheet over a scrim instead: full
+  // width, clear of the home indicator, scrolling within itself. The scrim
+  // closes it (the outside-click handler below treats the scrim, which sits
+  // inside the trigger's wrapper, as inside).
   return (
+    <>
+      <div aria-hidden="true" onClick={onClose} className="fixed inset-0 z-[99] hidden bg-black/40 max-md:block" />
       <div
         ref={popoverRef}
+        role="dialog"
+        aria-label="Chat settings"
         style={{
           animation: "chatSettingsPopoverIn 0.12s ease-out",
         }}
-        className="absolute bottom-[calc(100%+8px)] left-0 z-[100] w-[360px] bg-popover border border-border rounded-xl shadow-xl overflow-hidden"
+        className={cn(
+          "absolute bottom-[calc(100%+8px)] left-0 z-[100] w-[360px] bg-popover border border-border rounded-xl shadow-xl overflow-hidden",
+          "max-md:fixed max-md:inset-x-0 max-md:bottom-0 max-md:w-auto max-md:max-h-[85dvh] max-md:overflow-y-auto max-md:overscroll-contain max-md:rounded-b-none max-md:border-x-0 max-md:border-b-0 max-md:pb-[env(safe-area-inset-bottom)]",
+        )}
       >
         {/* Main page */}
         {currentPage === "main" && (
@@ -240,7 +253,8 @@ export function ChatSettingsPopover({
               </h3>
               <button
                 onClick={onClose}
-                className="w-6 h-6 flex items-center justify-center rounded text-muted-foreground hover:text-foreground transition-colors"
+                aria-label="Close settings"
+                className="touch-target w-6 h-6 flex items-center justify-center rounded text-muted-foreground hover:text-foreground transition-colors"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -250,7 +264,7 @@ export function ChatSettingsPopover({
             {modelKey && (
               <button
                 onClick={() => setCurrentPage("model")}
-                className="w-full flex items-center justify-between px-4 py-2.5 text-sm text-foreground hover:bg-muted/50 transition-colors text-left"
+                className="w-full flex items-center justify-between px-4 py-2.5 text-sm text-foreground hover:bg-muted/50 transition-colors touch:min-h-[48px] text-left"
               >
                 <div className="flex items-center gap-2.5">
                   <Box className="w-4 h-4 text-muted-foreground shrink-0" />
@@ -276,7 +290,7 @@ export function ChatSettingsPopover({
             {presets && presets.length > 0 && (
               <button
                 onClick={() => setCurrentPage("preset")}
-                className="w-full flex items-center justify-between px-4 py-2.5 text-sm text-foreground hover:bg-muted/50 transition-colors text-left"
+                className="w-full flex items-center justify-between px-4 py-2.5 text-sm text-foreground hover:bg-muted/50 transition-colors touch:min-h-[48px] text-left"
               >
                 <div className="flex items-center gap-2.5">
                   <LayoutGrid className="w-4 h-4 text-muted-foreground shrink-0" />
@@ -330,7 +344,7 @@ export function ChatSettingsPopover({
                 )}
                 <button
                   onClick={() => setCurrentPage("params")}
-                  className="w-full flex items-center justify-between px-4 py-2.5 text-sm text-foreground hover:bg-muted/50 transition-colors text-left"
+                  className="w-full flex items-center justify-between px-4 py-2.5 text-sm text-foreground hover:bg-muted/50 transition-colors touch:min-h-[48px] text-left"
                 >
                   <div className="flex items-center gap-2.5">
                     <Settings2 className="w-4 h-4 text-muted-foreground shrink-0" />
@@ -385,5 +399,6 @@ export function ChatSettingsPopover({
           />
         )}
       </div>
+    </>
   );
 }

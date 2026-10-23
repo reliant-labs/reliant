@@ -166,8 +166,9 @@ export function UnifiedPillSelector({
                 }
               }}
               disabled={!canSelectWorktree}
+              aria-label="Workspace"
               className={cn(
-                "flex items-center gap-1.5 rounded transition-colors text-2xs font-medium h-6",
+                "flex items-center gap-1.5 rounded transition-colors text-2xs font-medium h-6 touch:h-[44px] touch:min-w-[44px] touch:justify-center touch:px-3",
                 canSelectWorktree
                   ? "cursor-pointer hover:bg-[var(--chat-button-hover)]"
                   : "cursor-default opacity-60",

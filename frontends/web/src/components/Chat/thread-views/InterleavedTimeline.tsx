@@ -1376,7 +1376,10 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
                     // The overlay no longer receives hover, so the button
                     // reveals on its own hover and on keyboard focus rather
                     // than on hovering the header.
-                    "opacity-40 hover:opacity-100 focus-visible:opacity-100"
+                    "opacity-40 hover:opacity-100 focus-visible:opacity-100",
+                    // No hover on touch: the dimmed rest state would be the
+                    // only state, so it stays legible, and 44px to hit.
+                    "touch:h-[44px] touch:w-[44px] touch:opacity-90"
                   )}
                   aria-label="Jump to message"
                 >

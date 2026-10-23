@@ -67,7 +67,7 @@ export function ProfilesView({
           id="obs-profile-type"
           value={type.id}
           onChange={(event) => navigate({ profileType: event.target.value }, { replace: true })}
-          className="h-8 rounded-md border border-border bg-background px-2 text-sm text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="h-8 rounded-md border border-border bg-background px-2 text-sm text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring touch:h-[44px]"
           data-testid="obs-profile-type"
         >
           {types.map((candidate) => (
@@ -81,7 +81,7 @@ export function ProfilesView({
             Only samples from trace <span className="font-mono text-foreground">{shortId(traceId)}</span>
             <button
               type="button"
-              className="rounded-sm text-foreground underline underline-offset-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="touch-target inline-flex items-center rounded-sm text-foreground underline underline-offset-2 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               onClick={() => navigate({ trace: undefined, span: undefined }, { replace: true })}
             >
               Whole service
@@ -115,7 +115,9 @@ export function ProfilesView({
             : `No ${type.label.toLowerCase()} samples from ${service} in this window. Services built with forge send profiles once they run a release with the profiler enabled.`}
         </p>
       ) : (
-        <div className="grid grid-cols-[minmax(0,1fr)] gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(18rem,1fr)]">
+        // On a phone the heaviest functions lead: a ranked list reads at 390px,
+        // where a pan-and-zoom flamegraph is the second thing to reach for.
+        <div className="grid grid-cols-[minmax(0,1fr)] gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(18rem,1fr)] max-md:[&>[data-testid=obs-top-functions]]:order-first">
           <Card padding="none" className="overflow-hidden">
             <SpeedscopeFrame
               profile={flamegraph.data.speedscopeJson}
@@ -145,15 +147,30 @@ export function SpeedscopeFrame({ profile, title }: { profile: string; title: st
   if (!url) return null;
   const src = `${import.meta.env.BASE_URL}speedscope/index.html#profileURL=${encodeURIComponent(url)}&title=${encodeURIComponent(title)}`;
   return (
+    <>
     <iframe
       key={url}
       src={src}
       title={`Flamegraph: ${title}`}
       loading="lazy"
       referrerPolicy="no-referrer"
-      className="block h-[60vh] min-h-[24rem] w-full border-0 bg-background"
+      className="block h-[60vh] min-h-[24rem] w-full border-0 bg-background max-md:h-[50dvh] max-md:min-h-[18rem]"
       data-testid="obs-speedscope"
     />
+    {/* Inside a card on a phone the flamegraph has a few hundred pixels and
+        competes with the page's own scroll. Its own tab gives it the whole
+        screen and the browser's pinch-zoom. The blob stays readable there:
+        same origin, and this page (which owns it) is still open. */}
+    <a
+      href={src}
+      target="_blank"
+      rel="noopener"
+      className="hidden min-h-[44px] items-center justify-center border-t border-border text-sm font-medium text-foreground max-md:flex"
+      data-testid="obs-speedscope-fullscreen"
+    >
+      Open the flamegraph full screen
+    </a>
+    </>
   );
 }
 

@@ -28,14 +28,22 @@
  * Rendered inline in the transcript (ChatMessage), outside the tool rows and
  * even when tool rows are hidden, like RequestMachineCard: it is a question to
  * the user, not a record of work.
+ *
+ * Once settled — answered, or withdrawn by its agent — the card collapses to
+ * one line: the question, then the answer (or "Withdrawn: <reason>"). A
+ * settled question is history, and a transcript full of full-height answered
+ * cards buries the conversation around them. The line is a button (44px,
+ * aria-expanded) that opens the full card, whose header closes it again. An
+ * unanswered card is always full: it is waiting on the user.
  */
 
-import { memo, useMemo, useState } from "react";
-import { CheckCircle2, MessageCircleQuestion, Undo2 } from "lucide-react";
+import { memo, useId, useMemo, useState } from "react";
+import { CheckCircle2, ChevronDown, ChevronRight, MessageCircleQuestion, Undo2 } from "lucide-react";
 import { toast } from "sonner";
 import { answerQuestion, useAsyncQuestions } from "@/hooks/approval-queries";
 import type { QuestionInfo } from "@/api/question-grpc";
 import { CardInset } from "../forge-ui/card";
+import { cn } from "@/lib/utils";
 import { QuestionPrompt, type QuestionAnswer } from "./QuestionPrompt";
 import {
   askUserAnswerLines,
@@ -107,6 +115,9 @@ function AskUserCardComponent({ chatId, toolCallId, input, finished = false }: A
   // Withdrawn by the agent (withdraw_question): moot, not answered.
   const withdrawnReason = resolved ? question?.withdrawn_reason : undefined;
   const answers = resolved && !withdrawnReason ? askUserAnswerLines(question?.response_data) : [];
+  // A settled card starts collapsed; the user can open it and close it again.
+  const [expanded, setExpanded] = useState(false);
+  const bodyId = useId();
 
   const onSubmit = async (answer: { answers: QuestionAnswer[] }) => {
     if (!chatId || !question) return;
@@ -147,50 +158,173 @@ function AskUserCardComponent({ chatId, toolCallId, input, finished = false }: A
     </ul>
   );
 
+  const icon = withdrawnReason ? (
+    <Undo2
+      className="mt-0.5 h-4 w-4 flex-shrink-0 text-muted-foreground"
+      aria-hidden="true"
+    />
+  ) : resolved ? (
+    <CheckCircle2
+      className="mt-0.5 h-4 w-4 flex-shrink-0 text-success-ink"
+      aria-hidden="true"
+    />
+  ) : (
+    <MessageCircleQuestion
+      className="mt-0.5 h-4 w-4 flex-shrink-0 text-muted-foreground"
+      aria-hidden="true"
+    />
+  );
+
+  if (resolved && !expanded) {
+    const asked = settledQuestionText(items);
+    const outcome = withdrawnReason
+      ? `Withdrawn: ${withdrawnReason}`
+      : answers.length > 0
+        ? answers.map((line) => line.answer).join(" · ")
+        : "No answer given.";
+    return (
+      <div
+        data-testid="ask-user-card"
+        data-mode={mode}
+        data-collapsed="true"
+        className="my-1.5 rounded-lg border border-border bg-card"
+      >
+        <button
+          type="button"
+          aria-expanded={false}
+          onClick={() => setExpanded(true)}
+          data-testid="ask-user-summary"
+          className={cn(
+            "flex min-h-[44px] w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm",
+            "transition-colors hover:bg-muted/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
+          )}
+        >
+          <span className="flex-shrink-0 [&>svg]:mt-0">{icon}</span>
+          <span className="sr-only">
+            {withdrawnReason ? "Question withdrawn: " : "Question answered: "}
+          </span>
+          <span className="min-w-0 flex-1 truncate">
+            <span
+              className={cn(
+                "text-muted-foreground",
+                withdrawnReason && "line-through",
+              )}
+            >
+              {asked}
+            </span>
+            <span
+              aria-hidden="true"
+              className="px-1.5 text-muted-foreground/60"
+            >
+              →
+            </span>
+            <span className="sr-only">, </span>
+            <span
+              className={
+                withdrawnReason ? "text-muted-foreground" : "text-foreground"
+              }
+            >
+              {outcome}
+            </span>
+          </span>
+          <ChevronRight
+            className="h-4 w-4 flex-shrink-0 text-muted-foreground"
+            aria-hidden="true"
+          />
+        </button>
+      </div>
+    );
+  }
+
+  const header = (
+    <>
+      {icon}
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium text-foreground">{heading.title}</p>
+        <p
+          className="mt-0.5 text-xs text-muted-foreground"
+          data-testid="ask-user-status"
+        >
+          {heading.status}
+        </p>
+      </div>
+    </>
+  );
+
   return (
     <div
       data-testid="ask-user-card"
       data-mode={mode}
+      data-collapsed={resolved ? "false" : undefined}
       className="my-1.5 rounded-lg border border-border bg-card px-3 py-2.5"
     >
-      <div className="flex items-start gap-2.5">
-        {withdrawnReason ? (
-          <Undo2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-muted-foreground" aria-hidden="true" />
-        ) : resolved ? (
-          <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0 text-success-ink" aria-hidden="true" />
-        ) : (
-          <MessageCircleQuestion className="mt-0.5 h-4 w-4 flex-shrink-0 text-muted-foreground" aria-hidden="true" />
-        )}
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium text-foreground">{heading.title}</p>
-          <p className="mt-0.5 text-xs text-muted-foreground" data-testid="ask-user-status">
-            {heading.status}
-          </p>
-        </div>
-      </div>
-
-      {withdrawnReason ? (
-        questionList("ask-user-withdrawn", "text-sm text-muted-foreground line-through")
-      ) : resolved ? (
-        <ul className="mt-2 space-y-1.5" data-testid="ask-user-answers">
-          {(answers.length > 0 ? answers : [{ question: "", answer: "No answer given." }]).map((line, i) => (
-            <li key={i} className="text-sm">
-              {line.question && <span className="text-muted-foreground">{line.question} </span>}
-              <span className="text-foreground">{line.answer}</span>
-            </li>
-          ))}
-        </ul>
-      ) : mode === "async" && items ? (
-        <CardInset padding="none" className="mt-2">
-          <QuestionPrompt key={attempt} questions={items} onSubmit={(a) => void onSubmit(a)} />
-        </CardInset>
+      {resolved ? (
+        // The open settled card: its header closes it again.
+        <button
+          type="button"
+          aria-expanded={true}
+          aria-controls={bodyId}
+          onClick={() => setExpanded(false)}
+          className="-mx-1 flex min-h-[44px] w-[calc(100%+0.5rem)] items-start gap-2.5 rounded-md px-1 text-left hover:bg-muted/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+        >
+          {header}
+          <ChevronDown
+            className="mt-0.5 h-4 w-4 flex-shrink-0 text-muted-foreground"
+            aria-hidden="true"
+          />
+        </button>
       ) : (
-        // No form here: the row has not arrived (posting), the composer holds
-        // it (waiting), or nothing is left to answer (asked).
-        questionList("ask-user-questions", "text-sm text-foreground")
+        <div className="flex items-start gap-2.5">{header}</div>
       )}
+
+      <div id={bodyId}>
+        {withdrawnReason ? (
+          questionList(
+            "ask-user-withdrawn",
+            "text-sm text-muted-foreground line-through",
+          )
+        ) : resolved ? (
+          <ul className="mt-2 space-y-1.5" data-testid="ask-user-answers">
+            {(answers.length > 0
+              ? answers
+              : [{ question: "", answer: "No answer given." }]
+            ).map((line, i) => (
+              <li key={i} className="text-sm">
+                {line.question && (
+                  <span className="text-muted-foreground">
+                    {line.question}{" "}
+                  </span>
+                )}
+                <span className="text-foreground">{line.answer}</span>
+              </li>
+            ))}
+          </ul>
+        ) : mode === "async" && items ? (
+          <CardInset padding="none" className="mt-2">
+            <QuestionPrompt
+              key={attempt}
+              inline
+              questions={items}
+              onSubmit={(a) => void onSubmit(a)}
+            />
+          </CardInset>
+        ) : (
+          // No form here: the row has not arrived (posting), the composer holds
+          // it (waiting), or nothing is left to answer (asked).
+          questionList("ask-user-questions", "text-sm text-foreground")
+        )}
+      </div>
     </div>
   );
+}
+
+/** The collapsed line's question: the first one, and how many more there are. */
+export function settledQuestionText(
+  items: ReturnType<typeof askUserQuestionItems>,
+): string {
+  if (!items || items.length === 0) return "Question";
+  const first = items[0]!.question;
+  return items.length > 1 ? `${first} (+${items.length - 1} more)` : first;
 }
 
 export const AskUserCard = memo(AskUserCardComponent);

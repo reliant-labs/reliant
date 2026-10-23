@@ -49,6 +49,7 @@ import { StatusBadge } from "./Errors/IssueBits";
 import { formatAgo, formatBytes, formatCores, formatCount, formatDuration, formatPercent, formatRate, formatWhen } from "./format";
 import type { ObsNavigate } from "./obsSearch";
 import { ObsError, ObsLoadingRows } from "./ObsStates";
+import { StackedTable } from "@/components/Forge/StackedTable";
 
 const WORKLOAD = "resource.attr.k8s.workload.name";
 
@@ -456,7 +457,7 @@ function ServiceTable({ services, before, after, version }: { services: ServiceH
   const rows = [...services].sort((a, b) => (b.after?.requests ?? b.before?.requests ?? 0) - (a.after?.requests ?? a.before?.requests ?? 0) || a.service.localeCompare(b.service));
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-sm">
+      <StackedTable className="w-full text-sm">
         <caption className="sr-only">Each service before and after the promotion</caption>
         <thead>
           <tr className="border-b border-border text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -492,7 +493,7 @@ function ServiceTable({ services, before, after, version }: { services: ServiceH
             </tr>
           ))}
         </tbody>
-      </table>
+      </StackedTable>
     </div>
   );
 }
@@ -592,7 +593,7 @@ function ResourceRows({ before, after }: { before: PanelResult | undefined; afte
   }
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-sm">
+      <StackedTable className="w-full text-sm">
         <caption className="sr-only">Each workload&apos;s resource use before and after the promotion</caption>
         <thead>
           <tr className="border-b border-border text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -616,7 +617,7 @@ function ResourceRows({ before, after }: { before: PanelResult | undefined; afte
             </tr>
           ))}
         </tbody>
-      </table>
+      </StackedTable>
     </div>
   );
 }

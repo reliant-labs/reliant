@@ -77,6 +77,7 @@ import { formatCountdown } from "@/services/forge/stepUp";
 import { SecretVersionHistory } from "./SecretVersionHistory";
 import { useNow } from "./useStepUpGate";
 import type { ManagedSecretVersion } from "@/services/forge/secretStore";
+import { StackedTable } from "@/components/Forge/StackedTable";
 
 export interface ManagedSecretsViewProps {
   env: string;
@@ -444,7 +445,7 @@ function SecretList({
 }) {
   return (
     <div className="overflow-hidden rounded-lg border border-border bg-card">
-      <table className="w-full border-collapse text-sm">
+      <StackedTable className="w-full border-collapse text-sm">
         <caption className="sr-only">
           Secrets in this environment, by state and version. No values are shown or fetched.
         </caption>
@@ -496,7 +497,7 @@ function SecretList({
             </tr>
           ))}
         </tbody>
-      </table>
+      </StackedTable>
     </div>
   );
 }

@@ -39,6 +39,7 @@ import { attributeLabel } from "../attributes";
 import { UPlotChart, type ChartBand } from "../charts/UPlotChart";
 import { formatAgo, formatCount, formatDuration, formatPercent, formatValue } from "../format";
 import { groupLabel } from "../obsFilters";
+import { StackedTable } from "@/components/Forge/StackedTable";
 
 /** The way out of a panel into the explorers: what a series or row is, as a filter. */
 export interface DrillTarget {
@@ -418,7 +419,7 @@ function PanelTable({
   const rows = compact ? result.rows.slice(0, 3) : result.rows;
   return (
     <div className={cn(!compact && "max-h-80 overflow-auto")}>
-      <table className="w-full text-xs" data-testid="obs-panel-table">
+      <StackedTable className="w-full text-xs" data-testid="obs-panel-table">
         <caption className="sr-only">{panel.title}</caption>
         <thead>
           <tr className="border-b border-border text-left text-ink-muted">
@@ -474,7 +475,7 @@ function PanelTable({
             </tr>
           ))}
         </tbody>
-      </table>
+      </StackedTable>
     </div>
   );
 }
@@ -553,7 +554,7 @@ function IssuesList({ data, traceHref, compact }: { data: PanelResult; traceHref
   const issues = compact ? data.issues.slice(0, 3) : data.issues;
   return (
     <div className={cn(!compact && "max-h-96 overflow-auto")}>
-      <table className="w-full text-xs" data-testid="obs-panel-issues">
+      <StackedTable className="w-full text-xs" data-testid="obs-panel-issues">
         <thead>
           <tr className="border-b border-border text-left text-ink-muted">
             <th scope="col" className="h-8 pr-3 font-medium">
@@ -620,7 +621,7 @@ function IssuesList({ data, traceHref, compact }: { data: PanelResult; traceHref
             </tr>
           ))}
         </tbody>
-      </table>
+      </StackedTable>
     </div>
   );
 }
@@ -630,7 +631,7 @@ function SessionsList({ data, compact }: { data: PanelResult; compact: boolean }
   const sessions = compact ? data.sessions.slice(0, 3) : data.sessions;
   return (
     <div className={cn(!compact && "max-h-96 overflow-auto")}>
-      <table className="w-full text-xs" data-testid="obs-panel-sessions">
+      <StackedTable className="w-full text-xs" data-testid="obs-panel-sessions">
         <thead>
           <tr className="border-b border-border text-left text-ink-muted">
             <th scope="col" className="h-8 pr-3 font-medium">
@@ -696,7 +697,7 @@ function SessionsList({ data, compact }: { data: PanelResult; compact: boolean }
             </tr>
           ))}
         </tbody>
-      </table>
+      </StackedTable>
     </div>
   );
 }

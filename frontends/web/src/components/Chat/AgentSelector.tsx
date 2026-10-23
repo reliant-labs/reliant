@@ -77,10 +77,12 @@ export function AgentSelector({
       {/* Selector Button */}
       <Tooltip content={getTooltipContent()} placement="top">
         <button
+          // Compact mode is icon-only, so the label must come from here.
+          aria-label={getTooltipContent()}
           onClick={() => canInteract && setIsOpen(!isOpen)}
           disabled={!canInteract}
           className={cn(
-            "flex items-center gap-1.5 rounded transition-colors text-2xs font-medium h-6",
+            "flex items-center gap-1.5 rounded transition-colors text-2xs font-medium h-6 touch:h-[44px] touch:min-w-[44px] touch:justify-center touch:px-3",
             canInteract
               ? "cursor-pointer hover:bg-[var(--chat-button-hover)]"
               : "cursor-default opacity-60",

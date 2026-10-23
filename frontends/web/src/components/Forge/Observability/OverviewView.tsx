@@ -309,7 +309,7 @@ function ServiceDetail({ rows, groupBy, navigate }: { rows: ServiceHealth[]; gro
         <Card padding="md">
           <CardHeader title="Latency" description="Server spans, over the window" />
           {compared ? (
-            <table className="w-full text-xs" data-testid="obs-service-latency">
+            <StackedTable className="w-full text-xs" data-testid="obs-service-latency">
               <caption className="sr-only">Latency of {health.name} per group</caption>
               <thead>
                 <tr className="text-left text-muted-foreground">
@@ -333,7 +333,7 @@ function ServiceDetail({ rows, groupBy, navigate }: { rows: ServiceHealth[]; gro
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </StackedTable>
           ) : (
             <dl className="grid grid-cols-3 gap-2" data-testid="obs-service-latency">
               {[

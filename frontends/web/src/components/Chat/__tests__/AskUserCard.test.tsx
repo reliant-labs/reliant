@@ -91,8 +91,10 @@ describe("AskUserCard", () => {
       answers: [{ question: "Which database?", selected: ["SQLite"] }],
     });
 
-    expect(await screen.findByText("Question answered")).toBeInTheDocument();
-    expect(screen.getByTestId("ask-user-answers")).toHaveTextContent("SQLite");
+    // Answered: the card settles to its one line, question then answer.
+    const summary = await screen.findByTestId("ask-user-summary");
+    expect(summary).toHaveTextContent("Which database?");
+    expect(summary).toHaveTextContent("SQLite");
     expect(screen.queryByRole("button", { name: /submit/i })).toBeNull();
   });
 
@@ -103,8 +105,10 @@ describe("AskUserCard", () => {
         response_data: JSON.stringify({ answers: [{ question: "Which database?", selected: ["Postgres (Recommended)"] }] }),
       }),
     ]);
+    const user = userEvent.setup();
     renderCard();
 
+    await user.click(await screen.findByTestId("ask-user-summary"));
     expect(await screen.findByText("Question answered")).toBeInTheDocument();
     expect(screen.getByTestId("ask-user-answers")).toHaveTextContent("Postgres (Recommended)");
     expect(screen.queryByRole("button", { name: /submit/i })).toBeNull();
@@ -114,8 +118,10 @@ describe("AskUserCard", () => {
     listAsyncQuestionsMock.mockResolvedValue([
       asyncQuestion({ status: "resolved", withdrawn_reason: "Went with Postgres; the schema is migrated" }),
     ]);
+    const user = userEvent.setup();
     renderCard();
 
+    await user.click(await screen.findByTestId("ask-user-summary"));
     expect(await screen.findByText("Question withdrawn")).toBeInTheDocument();
     expect(screen.getByTestId("ask-user-status")).toHaveTextContent(
       "Withdrawn: Went with Postgres; the schema is migrated",
@@ -220,6 +226,95 @@ describe("AskUserCard", () => {
     await waitFor(() => expect(resolveQuestionMock).toHaveBeenCalledTimes(1));
     expect(await screen.findByText("Question for you · not blocking")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /submit/i })).toBeInTheDocument();
+  });
+});
+
+describe("AskUserCard once settled", () => {
+  const answered = () =>
+    asyncQuestion({
+      status: "resolved",
+      response_data: JSON.stringify({ answers: [{ question: "Which database?", selected: ["SQLite"] }] }),
+    });
+
+  it("collapses an answered question to one line: the question, then the answer", async () => {
+    listAsyncQuestionsMock.mockResolvedValue([answered()]);
+    renderCard();
+
+    const summary = await screen.findByTestId("ask-user-summary");
+    expect(screen.getByTestId("ask-user-card")).toHaveAttribute("data-collapsed", "true");
+    expect(summary).toHaveAttribute("aria-expanded", "false");
+    expect(summary).toHaveAccessibleName(/^Question answered: Which database\?.*SQLite$/);
+    expect(summary).toHaveClass("min-h-[44px]");
+    // Collapsed means collapsed: no title, status line, or answer list.
+    expect(screen.queryByText("Question answered")).toBeNull();
+    expect(screen.queryByTestId("ask-user-answers")).toBeNull();
+  });
+
+  it("expands to the full card on click, and collapses again from its header", async () => {
+    listAsyncQuestionsMock.mockResolvedValue([answered()]);
+    const user = userEvent.setup();
+    renderCard();
+
+    await user.click(await screen.findByTestId("ask-user-summary"));
+    expect(screen.getByTestId("ask-user-card")).toHaveAttribute("data-collapsed", "false");
+    expect(screen.getByTestId("ask-user-answers")).toHaveTextContent("SQLite");
+    const header = screen.getByRole("button", { name: /Question answered/, expanded: true });
+    expect(header).toHaveAttribute("aria-controls");
+    expect(document.getElementById(header.getAttribute("aria-controls")!)).toContainElement(
+      screen.getByTestId("ask-user-answers"),
+    );
+
+    await user.click(header);
+    expect(screen.getByTestId("ask-user-summary")).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByTestId("ask-user-answers")).toBeNull();
+  });
+
+  it("expands from the keyboard", async () => {
+    listAsyncQuestionsMock.mockResolvedValue([answered()]);
+    const user = userEvent.setup();
+    renderCard();
+
+    await screen.findByTestId("ask-user-summary");
+    await user.tab();
+    expect(screen.getByTestId("ask-user-summary")).toHaveFocus();
+    await user.keyboard("{Enter}");
+    expect(screen.getByTestId("ask-user-answers")).toBeInTheDocument();
+    await user.keyboard(" ");
+    expect(screen.queryByTestId("ask-user-answers")).toBeNull();
+  });
+
+  it("collapses a withdrawn question to the question and the reason", async () => {
+    listAsyncQuestionsMock.mockResolvedValue([
+      asyncQuestion({ status: "resolved", withdrawn_reason: "Went with Postgres" }),
+    ]);
+    renderCard();
+
+    const summary = await screen.findByTestId("ask-user-summary");
+    expect(summary).toHaveAccessibleName(/^Question withdrawn: Which database\?.*Withdrawn: Went with Postgres$/);
+    expect(summary).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByTestId("ask-user-withdrawn")).toBeNull();
+  });
+
+  it("says when an answered question carried no answer", async () => {
+    listAsyncQuestionsMock.mockResolvedValue([asyncQuestion({ status: "resolved" })]);
+    renderCard();
+    expect(await screen.findByTestId("ask-user-summary")).toHaveTextContent("No answer given.");
+  });
+
+  it("names the extra questions of a multi-question card on its one line", async () => {
+    listAsyncQuestionsMock.mockResolvedValue([answered()]);
+    renderCard(false, { questions: [...input.questions, { question: "Which region?", options: [] }] });
+    expect(await screen.findByTestId("ask-user-summary")).toHaveTextContent("Which database? (+1 more)");
+  });
+
+  it("keeps an unanswered question full, with no collapse control", async () => {
+    listAsyncQuestionsMock.mockResolvedValue([asyncQuestion()]);
+    renderCard();
+
+    expect(await screen.findByText("Question for you · not blocking")).toBeInTheDocument();
+    expect(screen.queryByTestId("ask-user-summary")).toBeNull();
+    expect(screen.queryByRole("button", { expanded: true })).toBeNull();
+    expect(screen.getByTestId("ask-user-card")).not.toHaveAttribute("data-collapsed");
   });
 });
 

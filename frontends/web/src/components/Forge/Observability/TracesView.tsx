@@ -44,6 +44,8 @@ import type { ObsNavigate } from "./obsSearch";
 import { ObsError, ObsLoadingRows, ObsNoData, OperatorBadge } from "./ObsStates";
 import { TraceDetail } from "./TraceDetail";
 import { useRovingFocus } from "./useRovingFocus";
+import { StackedTable } from "@/components/Forge/StackedTable";
+import { useNarrowViewport } from "@/hooks/useNarrowViewport";
 
 const features = tableFeatures({
   rowSortingFeature,
@@ -54,6 +56,12 @@ const column = createColumnHelper<typeof features, TraceSummary>();
 
 const EMPTY: TraceSummary[] = [];
 const ROW_HEIGHT = 36;
+/**
+ * A phone's stacked trace card (root operation, then labelled lines for the
+ * start, duration, spans and status). Only the virtualizer's first guess:
+ * each card is measured once rendered.
+ */
+const STACKED_ROW_ESTIMATE = 176;
 
 export const MIN_DURATIONS = ["100ms", "500ms", "1s", "5s"] as const;
 const MIN_DURATION_MS: Record<string, number> = { "100ms": 100, "500ms": 500, "1s": 1000, "5s": 5000 };
@@ -192,7 +200,7 @@ function RedGroups({ groups, groupBy, onNarrow }: { groups: TraceRedGroup[]; gro
   const sorted = [...groups].sort((a, b) => b.red.errorRate - a.red.errorRate || b.red.traceCount - a.red.traceCount);
   return (
     <Card padding="none" data-testid="obs-trace-red-groups">
-      <table className="w-full text-sm">
+      <StackedTable className="w-full text-sm">
         <caption className="sr-only">Rate, errors and latency of the matching traces per {groupBy.map(attributeLabel).join(" and ")}</caption>
         <thead>
           <tr className="border-b border-border text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -232,7 +240,7 @@ function RedGroups({ groups, groupBy, onNarrow }: { groups: TraceRedGroup[]; gro
             );
           })}
         </tbody>
-      </table>
+      </StackedTable>
     </Card>
   );
 }
@@ -452,10 +460,13 @@ function TraceTable({
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const requestFocus = useRovingFocus(scrollRef, "data-trace-index");
+  // On a phone the five columns do not fit, so each trace is a stacked card
+  // (StackedTable) whose height depends on its content: measure, don't assume.
+  const narrow = useNarrowViewport();
   const virtualizer = useVirtualizer({
     count: rows.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => ROW_HEIGHT,
+    estimateSize: () => (narrow ? STACKED_ROW_ESTIMATE : ROW_HEIGHT),
     getItemKey: (index) => rows[index]?.id ?? index,
     overscan: 10,
   });
@@ -488,8 +499,12 @@ function TraceTable({
 
   return (
     <Card padding="none" className="overflow-hidden">
-      <div ref={scrollRef} className="max-h-[60vh] overflow-auto" onKeyDown={onKeyDown}>
-        <table className="w-full table-fixed text-sm" data-testid="obs-trace-table">
+      {/* The scroller sizes to its content up to 60vh. On a phone the stacked
+          table's header is off screen, so with no rows yet it would measure
+          0px, the virtualizer would render no rows into it, and it would stay
+          0px: the floor breaks that loop (as LogList's does). */}
+      <div ref={scrollRef} className="max-h-[60vh] overflow-auto max-md:min-h-[12rem]" onKeyDown={onKeyDown}>
+        <StackedTable className="w-full table-fixed text-sm" data-testid="obs-trace-table">
           <caption className="sr-only">Traces from {subject}. Activate a root operation to open its waterfall.</caption>
           <colgroup>
             <col className="w-36" />
@@ -539,19 +554,21 @@ function TraceTable({
                 <tr
                   key={row.id}
                   className="border-b border-border/50 hover:bg-muted/50"
-                  style={{ height: ROW_HEIGHT }}
+                  style={narrow ? undefined : { height: ROW_HEIGHT }}
+                  data-index={item.index}
+                  ref={narrow ? virtualizer.measureElement : undefined}
                   data-testid="obs-trace-row"
                 >
                   {row.getAllCells().map((cell) =>
                     cell.column.id === "rootOperation" ? (
-                      <th key={cell.id} scope="row" className="px-3 py-1 text-left font-normal">
+                      <th key={cell.id} scope="row" data-stack-title className="px-3 py-1 text-left font-normal">
                         <button
                           type="button"
                           data-trace-index={item.index}
                           tabIndex={item.index === activeIndex ? 0 : -1}
                           onFocus={() => setActive(item.index)}
                           onClick={() => onOpen(trace.traceId)}
-                          className="flex w-full min-w-0 rounded-sm text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          className="flex w-full min-w-0 rounded-sm text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-ring touch:min-h-[44px] touch:items-center"
                           aria-label={`Open trace ${trace.rootService} ${trace.rootOperation}, ${formatDuration(trace.rootDurationMs)}${trace.errorCount ? `, ${trace.errorCount} errors` : ""}`}
                         >
                           <table.FlexRender cell={cell} />
@@ -572,7 +589,7 @@ function TraceTable({
               </tr>
             )}
           </tbody>
-        </table>
+        </StackedTable>
       </div>
       {hasMore && (
         <div className="border-t border-border px-3 py-2">

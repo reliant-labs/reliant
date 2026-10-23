@@ -30,7 +30,7 @@ export function ChatButton({
           compact
             ? "p-1 h-6 w-6"
             : "p-1 h-6 w-6 gap-1"
-        } ${className}`}
+        } touch:h-[44px] touch:w-[44px] ${className}`}
         data-testid={testId}
       >
         {children}

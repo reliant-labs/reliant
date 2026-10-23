@@ -31,11 +31,11 @@ export function PresetSettingsPage({
     <div>
       {/* Header */}
       <div className="flex items-center gap-2 px-3 py-2.5 border-b border-border">
-        <button onClick={onBack} className="p-1 rounded hover:bg-accent transition-colors">
+        <button onClick={onBack} aria-label="Back" className="touch-target inline-flex items-center justify-center p-1 rounded hover:bg-accent transition-colors">
           <ChevronLeft className="w-4 h-4 text-muted-foreground" />
         </button>
         <h3 className="text-sm font-semibold flex-1">Preset</h3>
-        <button onClick={onClose} className="p-1 rounded hover:bg-accent transition-colors">
+        <button onClick={onClose} aria-label="Close settings" className="touch-target inline-flex items-center justify-center p-1 rounded hover:bg-accent transition-colors">
           <X className="w-3.5 h-3.5 text-muted-foreground" />
         </button>
       </div>

@@ -43,6 +43,7 @@ import { IssueDetail } from "./IssueDetail";
 import { IssuesNotConfigured } from "./IssueStates";
 import { StatusBadge, Trend } from "./IssueBits";
 import { affectedNoun, PLATFORM_LABEL, SORT_LABEL, STATUS_LABEL } from "./issueModel";
+import { StackedTable } from "@/components/Forge/StackedTable";
 
 export interface ErrorsViewProps {
   scope: ObsScope;
@@ -259,7 +260,7 @@ function IssueTable({
   return (
     <Card padding="none" data-testid="obs-errors-list">
       <div className="overflow-x-auto">
-        <table className="w-full text-sm">
+        <StackedTable className="w-full text-sm">
           <caption className="sr-only">Issues in scope</caption>
           <thead>
             <tr className="border-b border-border text-left text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -311,7 +312,7 @@ function IssueTable({
               </tr>
             ))}
           </tbody>
-        </table>
+        </StackedTable>
       </div>
       {hasMore && (
         <div className="border-t border-border/60 px-4 py-2">

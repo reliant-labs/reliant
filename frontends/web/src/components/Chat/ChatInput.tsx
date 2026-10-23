@@ -1936,7 +1936,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                             <Tooltip content="Model settings" placement="top" delay={300} wrapperClassName="inline-flex">
 <button
                               className={cn(
-                                "flex items-center gap-1 rounded-full transition-colors text-2xs font-medium h-6 px-2.5",
+                                "flex items-center gap-1 rounded-full transition-colors text-2xs font-medium h-6 px-2.5 touch:h-[44px] touch:px-3.5 touch:text-xs",
                                 settingsPage === 'model'
                                   ? "bg-primary/20 text-primary hover:bg-primary/30"
                                   : "bg-[var(--chat-button-bg)] text-[var(--chat-button-text)] hover:bg-[var(--chat-button-hover)]"
@@ -1973,7 +1973,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                               }
                               disabled={disabled || !isMessagingAllowed}
                               className={cn(
-                                "relative flex items-center justify-center rounded-full transition-colors h-6 w-6",
+                                "relative flex items-center justify-center rounded-full transition-colors h-6 w-6 touch:h-[44px] touch:w-[44px]",
                                 !disabled
                                   ? "cursor-pointer hover:bg-[var(--chat-button-hover)]"
                                   : "cursor-default opacity-60",

@@ -32,6 +32,7 @@ import { AlertTriangle, Check, CircleDashed, Copy } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import type { DnsRecordCheck, DomainDnsRecord } from "@/services/forge/domains";
+import { StackedTable } from "@/components/Forge/StackedTable";
 
 function CopyButton({ value, label }: { value: string; label: string }) {
   const [copied, setCopied] = useState(false);
@@ -143,7 +144,7 @@ export function DnsRecordsTable({ records }: { records: DomainDnsRecord[] }) {
 
   return (
     <div className="overflow-hidden rounded-lg border border-border/60 bg-background">
-      <table className="w-full text-left text-xs" data-testid="dns-records-table">
+      <StackedTable className="w-full text-left text-xs" data-testid="dns-records-table">
         <caption className="sr-only">DNS records to publish for this domain</caption>
         <thead>
           <tr className="border-b border-border/60 text-2xs uppercase tracking-wide text-muted-foreground">
@@ -206,7 +207,7 @@ export function DnsRecordsTable({ records }: { records: DomainDnsRecord[] }) {
             );
           })}
         </tbody>
-      </table>
+      </StackedTable>
     </div>
   );
 }

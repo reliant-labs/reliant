@@ -90,8 +90,21 @@ test.describe('observability console', () => {
     const present = await devHarnessPresent(page, '/forge-dashboards-preview', home);
     test.skip(!present, 'the fixture harness is a dev-build-only route');
     await expect(page.getByTestId('observability-strip')).toContainText('Requests');
-    await expect(page.getByTestId('observability-services')).toContainText('Crash-looping');
+    // The services card shows the SERVER's verdict per workload (since #1150;
+    // this once asserted a verdict the client derived from restart counts).
+    // The fixture's prod `api` restarted three times on OOM but still serves,
+    // so it is Degraded, with the plain reason; its staging `worker` is the
+    // one crash-looping.
+    const services = page.getByTestId('observability-services');
+    await expect(services).toContainText('Degraded');
+    await expect(services).toContainText('It ran out of memory');
+    await expect(services).not.toContainText('Crash-looping');
     await shot(page, 'observability-home');
+
+    await page.goto('/forge-dashboards-preview?env=staging');
+    await expect(page.getByTestId('observability-services')).toContainText('Crash-looping');
+    await page.goto('/forge-dashboards-preview');
+    await expect(page.getByTestId('observability-home')).toBeVisible();
 
     await page.getByRole('link', { name: 'Your dashboards' }).click();
     await expect(page.getByTestId('dashboards-starred')).toContainText('Checkout latency');

@@ -100,7 +100,7 @@ export function ParamsSettingsPage({
     return (
       <div>
         <div className="flex items-center gap-2 border-b border-border/50 px-3 py-2.5">
-          <button onClick={onBack} className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
+          <button onClick={onBack} aria-label="Back" className="touch-target inline-flex items-center justify-center rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
             <ChevronLeft className="h-4 w-4" />
           </button>
           <div className="flex min-w-0 flex-1 items-center gap-2">
@@ -109,7 +109,7 @@ export function ParamsSettingsPage({
             </div>
             <h3 className="text-sm font-semibold">Settings</h3>
           </div>
-          <button onClick={onClose} className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
+          <button onClick={onClose} aria-label="Close settings" className="touch-target inline-flex items-center justify-center rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
             <X className="h-3.5 w-3.5" />
           </button>
         </div>
@@ -124,7 +124,7 @@ export function ParamsSettingsPage({
     <div>
       {/* Header */}
       <div className="flex items-center gap-2 border-b border-border/50 px-3 py-2.5">
-        <button onClick={onBack} className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
+        <button onClick={onBack} aria-label="Back" className="touch-target inline-flex items-center justify-center rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
           <ChevronLeft className="h-4 w-4" />
         </button>
         <div className="flex min-w-0 flex-1 items-center gap-2">
@@ -138,7 +138,7 @@ export function ParamsSettingsPage({
             </p>
           </div>
         </div>
-        <button onClick={onClose} className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
+        <button onClick={onClose} aria-label="Close settings" className="touch-target inline-flex items-center justify-center rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground">
           <X className="h-3.5 w-3.5" />
         </button>
       </div>

@@ -395,7 +395,7 @@ export function ChatHeader({
 <Tooltip content="Chat options" placement="bottom" delay={300} wrapperClassName="inline-flex">
                   <button 
                     onClick={() => setIsMenuOpen(!isMenuOpen)}
-                    className="p-1 hover:bg-accent rounded transition-colors"
+                    className="touch-target inline-flex items-center justify-center p-1 hover:bg-accent rounded transition-colors"
                     aria-label="More options"
                   >
                     <MoreHorizontal className="h-4 w-4 text-muted-foreground" />

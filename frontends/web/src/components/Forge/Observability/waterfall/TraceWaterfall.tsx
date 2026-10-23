@@ -45,6 +45,7 @@ import { ChevronDown, ChevronRight, ChevronsDown, ChevronsRight } from "lucide-r
 import { Button } from "@/components/ui/Button";
 import type { Span } from "@/services/controlPlane/observability/types";
 import { cn } from "@/lib/utils";
+import { useNarrowViewport } from "@/hooks/useNarrowViewport";
 
 import { formatDuration } from "../format";
 import {
@@ -60,7 +61,17 @@ import {
 import { useRovingFocus } from "../useRovingFocus";
 
 const ROW_HEIGHT = 28;
+/**
+ * A phone has no room for the name column beside the timeline (12rem of a
+ * 390px screen left the bars ~140px), so each span is two lines there: its
+ * name, then its bar across the full width. 52px also makes the row a
+ * comfortable tap target.
+ */
+const NARROW_ROW_HEIGHT = 52;
 const INDENT_REM = 0.875;
+/** Name column beside the timeline, or the name above it on a phone. */
+const COLUMNS_WIDE = "grid-cols-[minmax(12rem,2fr)_3fr]";
+const COLUMNS_NARROW = "grid-cols-1 grid-rows-[1.75rem_1fr]";
 
 /**
  * Service colours, as theme tokens. Red (`--destructive`) is NOT here: it
@@ -100,12 +111,16 @@ export function TraceWaterfall({
   const [active, setActive] = useState(-1);
   const activeIndex = Math.max(0, Math.min(active >= 0 ? active : Math.max(selectedIndex, 0), flat.length - 1));
 
+  const narrow = useNarrowViewport();
+  const rowHeight = narrow ? NARROW_ROW_HEIGHT : ROW_HEIGHT;
+  const columns = narrow ? COLUMNS_NARROW : COLUMNS_WIDE;
+
   const scrollRef = useRef<HTMLDivElement>(null);
   const requestFocus = useRovingFocus(scrollRef, "data-span-index");
   const virtualizer = useVirtualizer({
     count: flat.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => ROW_HEIGHT,
+    estimateSize: () => rowHeight,
     getItemKey: (index) => flat[index]?.node.id ?? index,
     overscan: 20,
   });
@@ -186,7 +201,7 @@ export function TraceWaterfall({
           {truncated && <span> — the server returned the first spans only; the trace is longer than shown.</span>}
         </p>
         {hasCollapsible && (
-          <div className="flex gap-1" role="group" aria-label="Expand and collapse spans">
+          <div className="flex flex-wrap gap-1 [&>button]:touch:min-h-[44px]" role="group" aria-label="Expand and collapse spans">
             <Button variant="ghost" size="xs" onClick={() => setCollapsed(new Set())} leftIcon={<ChevronsDown className="h-3 w-3" />}>
               Expand all
             </Button>
@@ -218,8 +233,8 @@ export function TraceWaterfall({
 
       <div className="overflow-hidden rounded-md border border-border/60 bg-background">
         {/* The time ruler. Decorative: every bar's row says its own offset and duration. */}
-        <div aria-hidden="true" className="grid grid-cols-[minmax(12rem,2fr)_3fr] border-b border-border/60 text-2xs text-muted-foreground">
-          <div className="px-3 py-1">Span</div>
+        <div aria-hidden="true" className={cn("grid border-b border-border/60 text-2xs text-muted-foreground", narrow ? "grid-cols-1 px-3" : COLUMNS_WIDE)}>
+          {!narrow && <div className="px-3 py-1">Span</div>}
           <div className="relative h-6">
             {ticks.map((tick) => (
               <span
@@ -264,10 +279,12 @@ export function TraceWaterfall({
                   }}
                   onFocus={() => setActive(item.index)}
                   className={cn(
-                    "absolute left-0 top-0 grid w-full cursor-pointer grid-cols-[minmax(12rem,2fr)_3fr] items-center text-xs hover:bg-muted/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+                    "absolute left-0 top-0 grid w-full cursor-pointer items-center text-xs hover:bg-muted/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+                    columns,
+                    narrow && "border-b border-border/40",
                     isSelected && "bg-muted/60"
                   )}
-                  style={{ height: ROW_HEIGHT, transform: `translateY(${item.start}px)` }}
+                  style={{ height: rowHeight, transform: `translateY(${item.start}px)` }}
                 >
                   <div className="flex min-w-0 items-center gap-1 pr-2" style={{ paddingLeft: `${0.5 + level * INDENT_REM}rem` }}>
                     {hasChildren ? (
@@ -277,7 +294,7 @@ export function TraceWaterfall({
                         aria-label={isOpen ? "Collapse" : "Expand"}
                         title="Alt-click to toggle the whole subtree"
                         onClick={(event) => toggle(node.id, event)}
-                        className="shrink-0 rounded-sm text-muted-foreground hover:text-foreground"
+                        className="shrink-0 rounded-sm text-muted-foreground hover:text-foreground touch-target touch:-my-2 touch:-ml-3 inline-flex items-center justify-center"
                       >
                         {isOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
                       </button>
@@ -291,7 +308,7 @@ export function TraceWaterfall({
                       <span className="shrink-0 text-muted-foreground">({node.children.length})</span>
                     )}
                   </div>
-                  <div className="relative h-full" aria-hidden="true">
+                  <div className={cn("relative h-full", narrow && "mx-3")} aria-hidden="true">
                     <div
                       className="absolute top-1/2 h-3 -translate-y-1/2 rounded-sm"
                       style={{ left: `${left}%`, width: `${width}%`, backgroundColor: color, opacity: isSelected ? 1 : 0.85 }}

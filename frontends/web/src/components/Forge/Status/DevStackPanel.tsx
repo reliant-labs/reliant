@@ -53,6 +53,7 @@ import {
 } from "../ForgeStates";
 import { CheckRow } from "./CheckRow";
 import { DispositionLegend } from "./DispositionLegend";
+import { StackedTable } from "@/components/Forge/StackedTable";
 
 export interface DevStackPanelProps {
   outcome: ForgeOutcome<ForgeEnvStatusReport> | undefined;
@@ -192,7 +193,7 @@ export function DevStackPanel({
           <DispositionLegend report={report} />
 
           <Card padding="none" className="overflow-hidden">
-            <table className="w-full border-collapse text-left">
+            <StackedTable className="w-full border-collapse text-left">
               <thead>
                 <tr className="border-b border-border">
                   <th scope="col" className={TH}>
@@ -216,7 +217,7 @@ export function DevStackPanel({
                   <CheckRow key={check.name} check={check} />
                 ))}
               </tbody>
-            </table>
+            </StackedTable>
           </Card>
         </div>
       )}
@@ -252,7 +253,7 @@ function ServiceSummary({
       <h3 className="text-sm font-semibold text-foreground">Host services</h3>
 
       <Card padding="none" className="overflow-hidden">
-        <table className="w-full border-collapse text-left">
+        <StackedTable className="w-full border-collapse text-left">
           <thead>
             <tr className="border-b border-border">
               <th scope="col" className={TH}>
@@ -344,7 +345,7 @@ function ServiceSummary({
               );
             })}
           </tbody>
-        </table>
+        </StackedTable>
       </Card>
     </section>
   );

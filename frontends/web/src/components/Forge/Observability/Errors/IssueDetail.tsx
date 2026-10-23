@@ -29,6 +29,7 @@ import { StatusBadge, Trend } from "./IssueBits";
 import { affectedNoun, frameText, PLATFORM_LABEL } from "./issueModel";
 import { IssueNotFound, IssuesNotConfigured } from "./IssueStates";
 import { IssueTriage } from "./IssueTriage";
+import { StackedTable } from "@/components/Forge/StackedTable";
 
 export function IssueDetail({
   issueId,
@@ -283,7 +284,7 @@ function Frames({ frames }: { frames: IssueFrame[] }) {
 function Versions({ detail }: { detail: IssueDetailModel }) {
   if (detail.byVersion.length === 0) return <p className="px-4 py-3 text-xs text-muted-foreground">No events in the window.</p>;
   return (
-    <table className="w-full text-xs">
+    <StackedTable className="w-full text-xs">
       <caption className="sr-only">Events and affected per version</caption>
       <thead>
         <tr className="border-b border-border text-left font-medium uppercase tracking-wide text-muted-foreground">
@@ -301,7 +302,7 @@ function Versions({ detail }: { detail: IssueDetailModel }) {
           </tr>
         ))}
       </tbody>
-    </table>
+    </StackedTable>
   );
 }
 

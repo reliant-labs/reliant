@@ -61,6 +61,7 @@ import { cn } from "@/lib/utils";
 import { formatAgo, formatIn } from "../Observability/format";
 import { Panel } from "./EnvTabPanels";
 import { IdentityUsers } from "./IdentityUsers";
+import { StackedTable } from "@/components/Forge/StackedTable";
 
 export interface IdentityTabProps {
   envName: string;
@@ -362,7 +363,7 @@ function StatusPanel({
           {s.apps.length === 0 ? (
             <p className="text-xs text-muted-foreground">No applications are registered yet.</p>
           ) : (
-            <table className="w-full text-left text-sm" data-testid="identity-apps">
+            <StackedTable className="w-full text-left text-sm" data-testid="identity-apps">
               <thead>
                 <tr className="text-xs text-muted-foreground">
                   <th className="pb-1.5 pr-4 font-normal">Name</th>
@@ -387,7 +388,7 @@ function StatusPanel({
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </StackedTable>
           )}
         </Section>
 

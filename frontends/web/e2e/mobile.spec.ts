@@ -99,6 +99,52 @@ test.describe('mobile surface', () => {
     expect(errors).toEqual([]);
   });
 
+  test('every control in the chat timeline and composer is a 44px target', async ({ page }) => {
+    await mockMobileBackend(page);
+    await page.goto('/m/chats/chat_a');
+    await expect(page.getByTestId('ask-user-card')).toBeVisible(LOADED);
+    const small = await page.evaluate(() =>
+      Array.from(document.querySelectorAll('button, a[href], [role="button"], [role="radio"], textarea, select'))
+        .filter((el) => {
+          const r = el.getBoundingClientRect();
+          const s = getComputedStyle(el);
+          return r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && s.pointerEvents !== 'none' && Number(s.opacity) > 0;
+        })
+        .filter((el) => {
+          const r = el.getBoundingClientRect();
+          return r.width < 44 || r.height < 44;
+        })
+        .map((el) => el.getAttribute('aria-label') || (el as HTMLElement).innerText.trim().slice(0, 30) || el.tagName),
+    );
+    expect(small).toEqual([]);
+    // No text field small enough for iOS to zoom the page into it.
+    const fieldFont = await page.getByPlaceholder('Or type your own answer...').evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+    expect(fieldFont).toBeGreaterThanOrEqual(16);
+    await noSidewaysScroll(page);
+  });
+
+  test('an async question is answered in the timeline, then collapses to one line', async ({ page }) => {
+    const mock = await mockMobileBackend(page);
+    await page.goto('/m/chats/chat_a');
+    const card = page.getByTestId('ask-user-card');
+    await expect(card).toBeVisible(LOADED);
+    await card.getByRole('radio', { name: /Login only/ }).click();
+    const submit = card.getByRole('button', { name: /Submit/ });
+    expect((await submit.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    await submit.click();
+    await expect.poll(() => mock.answered.length).toBe(1);
+    expect(mock.answered[0]).toMatchObject({ questionId: 'q_timeline', action: 'reply' });
+
+    const summary = card.getByTestId('ask-user-summary');
+    await expect(summary).toBeVisible(LOADED);
+    await expect(summary).toHaveAttribute('aria-expanded', 'false');
+    await expect(summary).toContainText('Should the retry fix cover the signup flow too?');
+    await expect(summary).toContainText('Login only');
+    expect((await summary.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+    await summary.click();
+    await expect(card.getByTestId('ask-user-answers')).toContainText('Login only');
+  });
+
   test('Diagnostics shows the stream state and copies a report', async ({ page, context }) => {
     await context.grantPermissions(['clipboard-read', 'clipboard-write']);
     await mockMobileBackend(page);
