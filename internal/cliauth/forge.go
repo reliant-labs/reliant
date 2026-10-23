@@ -32,7 +32,7 @@ import (
 // The control plane clips every mint to current org grants, and exchange also
 // intersects the parent's scopes. Session and resource-specialized capabilities
 // never reach forge. Keep this explicit: a new registry entry is not implicitly
-// safe to delegate. In particular, obs:write awaits the Forge registry pin.
+// safe to delegate.
 func ForgeScopes() []string {
 	return []string{
 		string(fat.ScopeDeployRead), string(fat.ScopeDeployWrite),
@@ -41,7 +41,7 @@ func ForgeScopes() []string {
 		string(fat.ScopeSecretRead), string(fat.ScopeSecretWrite),
 		string(fat.ScopeDomainRead), string(fat.ScopeDomainWrite),
 		string(fat.ScopeIdentityRead), string(fat.ScopeIdentityManage),
-		string(fat.ScopeObsRead), string(fat.ScopeObsTriage),
+		string(fat.ScopeObsRead), string(fat.ScopeObsTriage), string(fat.ScopeObsWrite),
 		string(fat.ScopeDBQuery),
 	}
 }

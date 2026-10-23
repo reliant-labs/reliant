@@ -20,14 +20,14 @@ Third-party connectors that run commands on your daemon do **not** receive the h
 
 ## Defaults and explicit restrictions
 
-A new daemon credential requests the user's control-plane capabilities by default: deployment, cluster administration, token read/write, secrets, domains, managed identity, observability read/triage, and database query. The control plane clips that ceiling to your current organization grants. This is an explicit, closed scope list, not a wildcard or an authorization bypass; resource bindings and service-level checks still apply.
+A new daemon credential requests the user's control-plane capabilities by default: deployment, cluster administration, token read/write, secrets, domains, managed identity, observability read/write/triage, and database query. The control plane clips that ceiling to your current organization grants. This is an explicit, closed scope list, not a wildcard or an authorization bypass; resource bindings and service-level checks still apply.
 
 Restrictions are opt-in: edit a credential's permissions in **Settings → Access Tokens**. Each helper exchange intersects the request with that credential's stored scopes, then the control plane clips the mint to your current grants. Refreshing the helper credential does not restore the default ceiling or widen a restricted parent. A daemon-bound child keeps the same binding and dies when that daemon is torn down; it cannot outlive an expiring parent. An already exchanged credential may remain usable until its expiry after its parent is narrowed or revoked (at most an hour).
 
 The helper never receives session authority (`reliant:api`, `daemon:connect`), LLM invocation, connector, port-proxy, or daemon-resume capabilities. Write-implies-read authorization is not a delegation rule: requesting a read scope absent from the parent does not manufacture it from a write scope.
 
 <Note>
-The scope expansion requires matching control-plane and Forge versions. In particular, daemon-bound cluster and token administration require Forge's expanded daemon-binding allowlist. Observability write support also requires the Forge registry update. Updating the scope list never removes a daemon binding to make a mint succeed.
+Daemon-bound cluster, token administration, and observability write capabilities retain the daemon lifecycle binding. Observability write is not an environment-bound grant. Updating the scope list never removes a daemon binding to make a mint succeed, nor broadens an existing explicitly narrowed credential.
 </Note>
 
 **forge asks you to sign in on a machine:** forge prints the helper's own reason. "Not signed in to Reliant" means the machine has no session: sign in to the app or run `reliant auth login`. "Cannot authorize" means the session lacks the requested permissions. If you intentionally restricted it, change those permissions rather than signing in again to replace it with a default credential.

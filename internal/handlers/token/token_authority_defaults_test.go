@@ -18,7 +18,7 @@ func TestExchangeToken_AllUserOrgCapabilities(t *testing.T) {
 	want := fat.SetOf(fat.ScopeDeployRead, fat.ScopeDeployWrite, fat.ScopeClusterManage,
 		fat.ScopeTokenRead, fat.ScopeTokenWrite, fat.ScopeSecretRead, fat.ScopeSecretWrite,
 		fat.ScopeDomainRead, fat.ScopeDomainWrite, fat.ScopeIdentityRead, fat.ScopeIdentityManage,
-		fat.ScopeObsRead, fat.ScopeObsTriage, fat.ScopeDBQuery)
+		fat.ScopeObsRead, fat.ScopeObsTriage, fat.ScopeObsWrite, fat.ScopeDBQuery)
 	if got := fat.SetOf(exchangeableScopes...); !reflect.DeepEqual(got, want) {
 		t.Fatalf("exchangeable = %s, want %s", got, want)
 	}
@@ -97,7 +97,7 @@ func TestExchangeToken_RefreshPreservesOptInRestrictions(t *testing.T) {
 func TestExchangeToken_WriteDoesNotDelegateAnUnheldReadScope(t *testing.T) {
 	authority := tokenauthority.NewMemory()
 	svc := newTokenService(t, authority, TokenControlPlane{Issuer: testControlPlane})
-	for _, pair := range [][2]fat.Scope{{fat.ScopeDeployWrite, fat.ScopeDeployRead}, {fat.ScopeTokenWrite, fat.ScopeTokenRead}, {fat.ScopeIdentityManage, fat.ScopeIdentityRead}, {fat.ScopeObsTriage, fat.ScopeObsRead}} {
+	for _, pair := range [][2]fat.Scope{{fat.ScopeDeployWrite, fat.ScopeDeployRead}, {fat.ScopeTokenWrite, fat.ScopeTokenRead}, {fat.ScopeIdentityManage, fat.ScopeIdentityRead}, {fat.ScopeObsTriage, fat.ScopeObsRead}, {fat.ScopeObsWrite, fat.ScopeObsRead}} {
 		bearer := mintSession(t, authority, "user-1", tokenauthority.MintRequest{Scopes: []fat.Scope{fat.ScopeDaemonConnect, pair[0]}})
 		_, err := svc.ExchangeToken(context.Background(), exchangeReq(bearer, &reliantv1.ExchangeTokenRequest{Audience: testControlPlane, Scopes: []string{string(pair[1])}}))
 		if svcerr.Code(err) != connect.CodePermissionDenied {

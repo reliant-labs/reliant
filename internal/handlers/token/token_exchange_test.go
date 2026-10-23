@@ -43,7 +43,8 @@ var fullDaemon = []fat.Scope{
 	fat.ScopeDeployRead, fat.ScopeDeployWrite, fat.ScopeSecretRead, fat.ScopeSecretWrite,
 	fat.ScopeDomainRead, fat.ScopeDomainWrite,
 	fat.ScopeIdentityRead, fat.ScopeIdentityManage,
-	fat.ScopeObsRead, fat.ScopeObsTriage, fat.ScopeDBQuery,
+	fat.ScopeObsRead, fat.ScopeObsTriage, fat.ScopeObsWrite, fat.ScopeDBQuery,
+	fat.ScopeClusterManage, fat.ScopeTokenRead, fat.ScopeTokenWrite,
 }
 
 func TestExchangeToken_InheritsBindingAndNarrows(t *testing.T) {
@@ -181,8 +182,8 @@ func TestExchangeToken_ScopeRequests(t *testing.T) {
 		want   []string
 	}{
 		// Non-exchangeable asks are dropped, not granted and not fatal.
-		{scopes: []string{"secret:read", "token:write", "daemon:connect"}, want: []string{"secret:read"}},
-		{scopes: []string{"token:write"}, code: connect.CodePermissionDenied},
+		{scopes: []string{"secret:read", "token:write", "daemon:connect"}, want: []string{"token:write", "secret:read"}},
+		{scopes: []string{"token:write"}, want: []string{"token:write"}},
 		{scopes: []string{"daemon:connect", "reliant:api", "llm:invoke", "mcp:connector", "proxy:port", "daemon:resume"}, code: connect.CodeInvalidArgument},
 		{scopes: []string{"deploy:wrIte"}, code: connect.CodeInvalidArgument},
 	} {

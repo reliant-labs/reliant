@@ -71,9 +71,9 @@ const exchangeTTL = time.Hour
 
 // exchangeableScopes shares the explicit CLI/daemon ceiling. A helper can act
 // with the user's org capabilities, never with session or specialized-resource
-// authority. Resource validation remains authoritative: the pinned Forge still
-// refuses cluster/token scopes on daemon-bound credentials until its shared
-// daemon-binding allowlist is expanded. Never drop that binding to get a mint.
+// authority. Resource validation remains authoritative: user-org capabilities
+// may ride a daemon-bound credential, preserving its lifecycle. Never drop
+// that binding to get a mint.
 var exchangeableScopes = func() []fat.Scope {
 	var scopes []fat.Scope
 	for _, scope := range cliauth.ForgeScopes() {
