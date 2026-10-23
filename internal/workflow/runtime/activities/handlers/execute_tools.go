@@ -4,6 +4,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -1209,8 +1210,14 @@ func (a *ExecuteToolsActivity) emitToolStatus(ctx context.Context, chatID, toolC
 
 	// Create chat_update (best-effort, don't fail on error)
 	if err := a.repo.EmitToolCallUpdate(ctx, chatID, update); err != nil {
-		// Log error but continue - status updates are best-effort
-		activity.GetLogger(ctx).Error("[TOOL_STATUS] Failed to create tool status update",
+		// Log error but continue - status updates are best-effort. A write
+		// that ran out of context is the activity being cancelled or starved,
+		// which its wrapper reports: WARN, not a DB fault.
+		logFn := activity.GetLogger(ctx).Error
+		if ctx.Err() != nil || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+			logFn = activity.GetLogger(ctx).Warn
+		}
+		logFn("[TOOL_STATUS] Failed to create tool status update",
 			"error", err,
 			"tool_call_id", toolCallID,
 			"status", status)

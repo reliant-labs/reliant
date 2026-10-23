@@ -74,6 +74,51 @@ func TestRunTx_RetriesUntilSuccess(t *testing.T) {
 	}
 }
 
+// A transaction whose caller's context has ended is a cancellation, not a
+// database failure: RunTx stops at once instead of spending its retry budget
+// (each attempt would fail the same way), and returns the context's error so
+// the caller can tell what happened. In prod (2026-10-23) every starved
+// activity logged "Failed to begin transaction" at ERROR while Postgres idled.
+func TestRunTx_StopsWhenTheCallersContextEnds(t *testing.T) {
+	repo, cleanup := setupTestDB(t)
+	defer cleanup()
+	backoffs := recordRetryBackoff(repo)
+
+	t.Run("already expired: BEGIN fails, nothing runs", func(t *testing.T) {
+		ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(-time.Second))
+		defer cancel()
+		ran := false
+		err := repo.RunTx(ctx, orm.Serializable, func(context.Context) error { ran = true; return nil })
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("RunTx on an expired context = %v, want context.DeadlineExceeded", err)
+		}
+		if ran {
+			t.Fatal("the transaction body ran on an expired context")
+		}
+	})
+
+	t.Run("ends mid-transaction: one attempt, no retries", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		attempts := 0
+		err := repo.RunTx(ctx, orm.Serializable, func(context.Context) error {
+			attempts++
+			cancel()
+			// A retryable error, so only the ended context stops the ladder.
+			return serializationFailure()
+		})
+		if err == nil {
+			t.Fatal("RunTx must fail")
+		}
+		if attempts != 1 {
+			t.Fatalf("a transaction whose context ended was attempted %d times, want 1", attempts)
+		}
+	})
+	if len(*backoffs) != 0 {
+		t.Fatalf("RunTx backed off %d times for a context that had ended", len(*backoffs))
+	}
+}
+
 // The retry budget must be bounded and must match orm.Serializable's — the
 // same maxRetries+1 attempts RunTx ran before it took a level. An unbounded
 // retry loop under contention is worse than failing: it holds a connection and
