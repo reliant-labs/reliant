@@ -546,6 +546,11 @@ type TemporalWorkerDeps struct {
 	Pollers        *webhook.Registry
 	ControlPlane   *configv1.ControlPlaneConfig
 	Recorder       *AccountRecorder
+	// WorkflowTaskSlots and WorkflowTaskPollers are WorkerConfig's
+	// RELIANT_WORKER_MAX_CONCURRENT_WORKFLOW_TASKS and
+	// RELIANT_WORKER_WORKFLOW_TASK_POLLERS (0: workersetup's default).
+	WorkflowTaskSlots   int32
+	WorkflowTaskPollers int32
 }
 
 // NewTemporalWorker is the Temporal worker on the shared task queue
@@ -572,6 +577,8 @@ func NewTemporalWorker(d TemporalWorkerDeps) (*workersetup.Worker, error) {
 		TriggerPollers:         d.Pollers,
 		TriggerCredentials:     triggerCredentials(creds),
 		ControlPlaneURL:        ControlPlaneEndpoint(d.ControlPlane).URL,
+		WorkflowTaskSlots:      int(d.WorkflowTaskSlots),
+		WorkflowTaskPollers:    int(d.WorkflowTaskPollers),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create worker: %w", err)

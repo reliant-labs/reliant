@@ -70,4 +70,33 @@ message WorkerConfig {
     default_value: "/ready,/readyz"
     description: "Readiness probe paths on the health port (comma-separated)"
   }];
+
+  // How many workflow tasks this worker runs at once: fresh ones, the full
+  // history replays a sticky-cache miss forces, and the replays a query on a
+  // closed run forces. A replay is CPU-bound on one goroutine, so this is
+  // roughly how many cores workflow code may take. Activities have their own
+  // slots and are not counted here, which is the point of the cap: replays
+  // queue instead of starving activities' DB calls past their deadlines. 0
+  // derives it from the CPU budget (workersetup.WorkflowTaskSlots); 1 is
+  // refused, because the Temporal SDK refuses it.
+  int32 max_concurrent_workflow_tasks = 22 [
+    (forge.v1.config) = {
+      env_var: "RELIANT_WORKER_MAX_CONCURRENT_WORKFLOW_TASKS"
+      description: "Workflow tasks (replays included) run at once; 0 derives max(2, GOMAXPROCS-1)"
+    },
+    (buf.validate.field).ignore = IGNORE_IF_ZERO_VALUE,
+    (buf.validate.field).int32 = {gte: 2}
+  ];
+  // How many goroutines long-poll Temporal for workflow tasks. The SDK runs
+  // no more pollers than there are free workflow-task slots, so a value above
+  // max_concurrent_workflow_tasks buys nothing. 1 is refused: the SDK splits
+  // pollers between the sticky and the shared queue and needs two.
+  int32 workflow_task_pollers = 23 [
+    (forge.v1.config) = {
+      env_var: "RELIANT_WORKER_WORKFLOW_TASK_POLLERS"
+      default_value: "5"
+      description: "Workflow-task pollers"
+    },
+    (buf.validate.field).int32 = {gte: 2}
+  ];
 }

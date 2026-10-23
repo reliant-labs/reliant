@@ -44,3 +44,61 @@ func TestMaxHeartbeatThrottleInterval(t *testing.T) {
 			budget, minRPCTimeout)
 	}
 }
+
+// The workflow-task cap is what keeps a burst of history replays from taking
+// every core the activities in the same process need (prod, 2026-10-23). The
+// derivation must leave a core free above the floor, and a configured value
+// must win.
+func TestWorkflowTaskSlots(t *testing.T) {
+	for _, tc := range []struct {
+		name                   string
+		configured, gomaxprocs int
+		want                   int
+	}{
+		{"derived: a 3-core pod leaves activities a core", 0, 3, 2},
+		{"derived: a 4-core node", 0, 4, 3},
+		{"derived: the SDK's floor of 2 at 2 cores", 0, 2, 2},
+		{"derived: the floor holds below 2 cores", 0, 1, 2},
+		{"configured wins over the derivation", 6, 3, 6},
+		{"configured may sit at the floor on a big node", 2, 16, 2},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := WorkflowTaskSlots(tc.configured, tc.gomaxprocs); got != tc.want {
+				t.Errorf("WorkflowTaskSlots(%d, %d) = %d, want %d", tc.configured, tc.gomaxprocs, got, tc.want)
+			}
+		})
+	}
+}
+
+// workerOptions carries the config into the SDK's fields, and leaves the
+// activity side uncapped: the cap is workflow-task-only by design.
+func TestWorkerOptionsWorkflowTaskLimits(t *testing.T) {
+	t.Run("defaults", func(t *testing.T) {
+		opts := workerOptions(&Config{}, nil, 3)
+		if opts.MaxConcurrentWorkflowTaskExecutionSize != 2 {
+			t.Errorf("MaxConcurrentWorkflowTaskExecutionSize = %d, want 2 (max(2, GOMAXPROCS-1) at 3)", opts.MaxConcurrentWorkflowTaskExecutionSize)
+		}
+		if opts.MaxConcurrentWorkflowTaskPollers != defaultWorkflowTaskPollers {
+			t.Errorf("MaxConcurrentWorkflowTaskPollers = %d, want %d", opts.MaxConcurrentWorkflowTaskPollers, defaultWorkflowTaskPollers)
+		}
+	})
+	t.Run("configured", func(t *testing.T) {
+		opts := workerOptions(&Config{WorkflowTaskSlots: 4, WorkflowTaskPollers: 3}, nil, 3)
+		if opts.MaxConcurrentWorkflowTaskExecutionSize != 4 {
+			t.Errorf("MaxConcurrentWorkflowTaskExecutionSize = %d, want 4", opts.MaxConcurrentWorkflowTaskExecutionSize)
+		}
+		if opts.MaxConcurrentWorkflowTaskPollers != 3 {
+			t.Errorf("MaxConcurrentWorkflowTaskPollers = %d, want 3", opts.MaxConcurrentWorkflowTaskPollers)
+		}
+	})
+	t.Run("activities keep their own budget", func(t *testing.T) {
+		opts := workerOptions(&Config{}, nil, 3)
+		if opts.MaxConcurrentActivityExecutionSize != 0 || opts.MaxConcurrentLocalActivityExecutionSize != 0 {
+			t.Errorf("activity slots = %d, local activity slots = %d; want 0 (the SDK's 1000) for both",
+				opts.MaxConcurrentActivityExecutionSize, opts.MaxConcurrentLocalActivityExecutionSize)
+		}
+		if opts.Tuner != nil {
+			t.Error("Tuner is set; it is mutually exclusive with the fixed workflow-task cap")
+		}
+	})
+}

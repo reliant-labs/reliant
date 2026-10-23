@@ -356,6 +356,46 @@ func TestServerRoleDatabasePool(t *testing.T) {
 	}
 }
 
+// The worker's workflow-task limits reach what NewTemporalWorker hands
+// workersetup (unset: 0, its CPU-derived cap, and 5 pollers), and the value
+// the Temporal SDK would panic on, 1, stops the worker at load instead.
+func TestServerWorkerWorkflowTaskLimits(t *testing.T) {
+	isolateServerRoleEnv(t)
+	names := []string{"RELIANT_WORKER_MAX_CONCURRENT_WORKFLOW_TASKS", "RELIANT_WORKER_WORKFLOW_TASK_POLLERS"}
+	for _, name := range names {
+		t.Setenv(name, "")
+		require.NoError(t, os.Unsetenv(name))
+	}
+	load := func(t *testing.T) (workerOptions, error) {
+		var opts workerOptions
+		err := loadServerWorkerConfig(findServerCmd(t, "worker"), &opts)
+		return opts, err
+	}
+
+	opts, err := load(t)
+	require.NoError(t, err)
+	assert.Equal(t, 0, opts.WorkflowTaskSlots)
+	assert.Equal(t, 5, opts.WorkflowTaskPollers)
+
+	t.Setenv(names[0], "2")
+	t.Setenv(names[1], "4")
+	opts, err = load(t)
+	require.NoError(t, err)
+	assert.Equal(t, 2, opts.WorkflowTaskSlots)
+	assert.Equal(t, 4, opts.WorkflowTaskPollers)
+
+	for _, name := range names {
+		for _, value := range []string{"1", "-3"} {
+			t.Run(name+"="+value, func(t *testing.T) {
+				t.Setenv(name, value)
+				_, err := load(t)
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), name)
+			})
+		}
+	}
+}
+
 // The migrate commands load the servers' own DatabaseConfig, and run on the
 // direct (session) URL when one is set.
 func TestDBMigrateReadsTheServersDatabase(t *testing.T) {

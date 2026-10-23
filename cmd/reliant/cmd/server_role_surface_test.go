@@ -152,6 +152,10 @@ var serverRoleSurfaceEnv = map[string]string{
 	"RELIANT_PAYLOAD_BLOB_GC_HORIZON":   "99h",
 	"RELIANT_WORKTREE_AUTO_ARCHIVE":     "on",
 
+	// worker only
+	"RELIANT_WORKER_MAX_CONCURRENT_WORKFLOW_TASKS": "7",
+	"RELIANT_WORKER_WORKFLOW_TASK_POLLERS":         "3",
+
 	// integrations
 	"PUBLIC_URL":                         " https://public.surface.test ",
 	"RELIANT_VAULT_KEY":                  "v1:c3VyZmFjZS12YXVsdC1rZXktMzItYnl0ZXMtbG9uZyE=",
