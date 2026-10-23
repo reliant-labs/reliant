@@ -42,9 +42,10 @@ func TestForgeCredential_HostedEndToEnd(t *testing.T) {
 		userID       = "user-e2e-forge"
 		controlPlane = "https://admin.example.com"
 	)
-	// The member holds deploy and secret authority, but no domain grant.
+	// The member holds the whole deploy family, but no db:query grant.
 	cp := &fakeControlPlane{t: t, secret: secret, store: tokenauthority.NewMemory(), grants: map[string]fat.Set{
-		userID: fat.SetOf(fat.ScopeDeployRead, fat.ScopeDeployWrite, fat.ScopeSecretRead, fat.ScopeSecretWrite),
+		userID: fat.SetOf(fat.ScopeDeployRead, fat.ScopeDeployWrite, fat.ScopeSecretRead, fat.ScopeSecretWrite,
+			fat.ScopeDomainRead, fat.ScopeDomainWrite),
 	}}
 	cpSrv := httptest.NewServer(cp)
 	t.Cleanup(cpSrv.Close)
@@ -75,7 +76,9 @@ func TestForgeCredential_HostedEndToEnd(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, parent.Scopes.Has(fat.ScopeDaemonConnect))
 	require.True(t, parent.Scopes.Has(fat.ScopeDeployWrite), "the daemon credential carries its user's deploy authority: %s", parent.Scopes)
-	require.False(t, parent.Scopes.Has(fat.ScopeDomainWrite), "a grant the member lacks must be clipped: %s", parent.Scopes)
+	for _, derived := range []fat.Scope{fat.ScopeObsRead, fat.ScopeObsTriage, fat.ScopeDBQuery} {
+		require.False(t, parent.Scopes.Has(derived), "a long-lived daemon credential never carries %s: %s", derived, parent.Scopes)
+	}
 	require.False(t, parent.Scopes.Has(fat.ScopeReliantAPI), "a daemon credential stays a daemon's, not an API credential")
 	require.Equal(t, reliantv1.TokenKind_TOKEN_KIND_DAEMON, created.Msg.GetInfo().GetKind())
 	msg, err := connectDaemon(t, gatewayURL, daemonToken)
@@ -102,13 +105,13 @@ func TestForgeCredential_HostedEndToEnd(t *testing.T) {
 	forgeToken := exchanged.Msg.GetToken()
 	require.True(t, fat.HasFormat(forgeToken))
 	require.NotEqual(t, daemonToken, forgeToken)
-	require.ElementsMatch(t, []string{"deploy:read", "deploy:write", "secret:read", "secret:write"}, exchanged.Msg.GetScopes(),
-		"granted = requested ∩ held: the domain scopes the daemon credential lacks are not granted")
+	require.ElementsMatch(t, []string{"deploy:read", "deploy:write", "secret:read", "secret:write", "domain:read", "domain:write"}, exchanged.Msg.GetScopes())
 	child, err := cp.store.Introspect(ctx, forgeToken)
 	require.NoError(t, err)
 	require.Equal(t, userID, child.ActingUserID)
 	require.Equal(t, parent.OrgID, child.OrgID)
-	require.Equal(t, fat.SetOf(fat.ScopeDeployRead, fat.ScopeDeployWrite, fat.ScopeSecretRead, fat.ScopeSecretWrite), child.Scopes)
+	require.Equal(t, fat.SetOf(fat.ScopeDeployRead, fat.ScopeDeployWrite, fat.ScopeSecretRead, fat.ScopeSecretWrite,
+		fat.ScopeDomainRead, fat.ScopeDomainWrite), child.Scopes)
 	require.NotNil(t, child.ExpiresAt)
 	require.WithinDuration(t, time.Now().Add(time.Hour), *child.ExpiresAt, time.Minute, "an exchanged token lives an hour")
 	expiresAt, err := time.Parse(time.RFC3339, exchanged.Msg.GetExpiresAt())
@@ -176,4 +179,58 @@ func TestForgeCredential_NeverEscalates(t *testing.T) {
 	_, err := tokens(session).ExchangeToken(ctx, connect.NewRequest(&reliantv1.ExchangeTokenRequest{Audience: controlPlane}))
 	require.Equal(t, connect.CodeUnauthenticated, svcerr.Code(err), "a session JWT: %v", err)
 	require.True(t, strings.Contains(err.Error(), "rlat_"), "the refusal names what it needs: %v", err)
+}
+
+// TestForgeCredential_DerivedScopesEndToEnd: obs:read reaches a member's daemon
+// credential through the exchange although the credential never held it, and
+// db:query only with the org grant — clipped by control-plane's UpdateForUser,
+// which this fake models.
+func TestForgeCredential_DerivedScopesEndToEnd(t *testing.T) {
+	const (
+		secret       = "e2e-internal-service-secret"
+		controlPlane = "https://admin.example.com"
+	)
+	cp := &fakeControlPlane{t: t, secret: secret, store: tokenauthority.NewMemory(), grants: map[string]fat.Set{
+		"with-grant":    fat.SetOf(fat.ScopeDeployRead, fat.ScopeDeployWrite, fat.ScopeDBQuery),
+		"without-grant": fat.SetOf(fat.ScopeDeployRead, fat.ScopeDeployWrite),
+	}}
+	cpSrv := httptest.NewServer(cp)
+	t.Cleanup(cpSrv.Close)
+	authority, mode, err := tokenauthority.New(tokenauthority.DepsFor(controlplane.Endpoint{URL: cpSrv.URL, InternalServiceSecret: secret}, nil))
+	require.NoError(t, err)
+	signer := newSessionSigner(t)
+	apiURL := serveTokenService(t, authority, signer.pubPEM, token.TokenControlPlane{
+		Issuer: controlPlane, ClipsGrants: mode == tokenauthority.ModeControlPlane,
+	})
+	tokens := func(bearer string) reliantv1connect.TokenServiceClient {
+		return reliantv1connect.NewTokenServiceClient(&http.Client{Transport: bearerTransport(bearer)}, apiURL)
+	}
+	ctx := context.Background()
+
+	for user, want := range map[string][]string{
+		"with-grant":    {"obs:read", "db:query"},
+		"without-grant": {"obs:read"},
+	} {
+		created, err := tokens(signer.sign(t, user)).CreateToken(ctx, connect.NewRequest(&reliantv1.CreateTokenRequest{
+			Name: "laptop", Kind: reliantv1.TokenKind_TOKEN_KIND_DAEMON,
+		}))
+		require.NoError(t, err)
+		exchanged, err := tokens(created.Msg.GetToken()).ExchangeToken(ctx, connect.NewRequest(&reliantv1.ExchangeTokenRequest{
+			Audience: controlPlane, Scopes: []string{"obs:read", "db:query"},
+		}))
+		require.NoError(t, err, user)
+		require.ElementsMatch(t, want, exchanged.Msg.GetScopes(), user)
+		child, err := cp.store.Introspect(ctx, exchanged.Msg.GetToken())
+		require.NoError(t, err)
+		require.Equal(t, fat.SetOf(scopesOf(want)...), child.Scopes, user)
+		require.Equal(t, user, child.ActingUserID)
+	}
+}
+
+func scopesOf(raw []string) []fat.Scope {
+	out := make([]fat.Scope, len(raw))
+	for i, s := range raw {
+		out[i] = fat.Scope(s)
+	}
+	return out
 }

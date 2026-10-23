@@ -51,15 +51,21 @@ func kindForScopes(scopes []string) reliantv1.TokenKind {
 }
 
 // daemonCeiling is the authority a DAEMON credential is given where the
-// control plane can clip it: daemon:connect, plus the control-plane authority
-// ExchangeToken may derive for forge. It matches what `reliant daemon
-// register` asks for and the control-plane half of what control-plane
-// provisions for a managed daemon (requestedDaemonScopes), so the app's daemon
-// is not the one machine where a deploy needs a second login. Not reliant:api:
-// a daemon's credential stays a daemon's, not an API credential.
+// control plane can clip it: daemon:connect, plus the deploy, secret and domain
+// authority forge needs. It matches what `reliant daemon register` asks for and
+// the control-plane half of what control-plane provisions for a managed daemon
+// (requestedDaemonScopes), so the app's daemon is not the one machine where a
+// deploy needs a second login. Not reliant:api: a daemon's credential stays a
+// daemon's, not an API credential.
+//
+// deployScopes ONLY. obs:read, obs:triage and db:query are derived per exchange
+// (ExchangeToken), never stored on a long-lived credential that lives on a
+// remote machine: control-plane refuses an UpdateForUser naming an org
+// permission the user lacks, so adding db:query here would also cost every
+// member without that grant the deploy authority this widen exists to give.
 func daemonCeiling() fat.Set {
 	set := fat.SetOf(fat.ScopeDaemonConnect)
-	for _, s := range exchangeableScopes {
+	for _, s := range deployScopes {
 		set[s] = struct{}{}
 	}
 	return set
@@ -68,12 +74,14 @@ func daemonCeiling() fat.Set {
 // widenDaemonCredential gives a just-minted daemon credential the user's own
 // control-plane authority, clipped by the control plane to their org grants.
 //
-// TWO STEPS, NARROW FIRST, ON PURPOSE. MintForUser does not clip, so minting
-// the ceiling directly would hand a member without a deploy grant a token that
-// has one. UpdateForUser does clip (control-plane's access_token_internal), so
-// mint narrow, then widen through the clip. A failed widen leaves a working,
-// narrower daemon credential and is logged, never surfaced: the daemon still
-// connects, and ExchangeToken will say what it lacks.
+// TWO STEPS, NARROW FIRST, ON PURPOSE. This must work against a control plane
+// that predates MintForUser clipping, where minting the ceiling directly would
+// hand a member without a deploy grant a token that has one. UpdateForUser
+// checks the user's grants (control-plane's access_token_internal) and REFUSES
+// the whole set if any permission is missing, so mint narrow, then widen. A
+// refused or failed widen leaves a working, narrower daemon credential and is
+// logged, never surfaced: the daemon still connects, and ExchangeToken will
+// say what it lacks.
 func (s *Service) widenDaemonCredential(ctx context.Context, userID, tokenID string) []string {
 	if !s.deps.ControlPlane.ClipsGrants {
 		return nil

@@ -58,6 +58,23 @@ commit.
   hosting runs services, workers and jobs; cron-kind workloads and operators need
   a cluster the user runs (a worker with its own schedule runs hosted).
 
+**After every `reliant forge env deploy <env>`, prove it is good:**
+`reliant forge obs check <env> --wait --json`, then branch on its exit code
+(`exit_code` in the document):
+
+- **0:** done.
+- **1:** the release regressed. Run the document's `suggested[]` commands
+  (`reliant forge obs issue <id>`, …), fix, redeploy, check again.
+- **2:** the check could not prove the release good. Report "not proven good",
+  never "passed".
+- **8:** not enough data yet. Check again later.
+
+`reliant forge obs status <env>` answers "what is wrong now". For rows, use
+`reliant forge db query <env> … --confirm-env <env> --reason "<why>"`; it needs
+the organization's `db:query` grant.
+The flags, output documents and exit codes are in `reliant forge skill load observability/query`;
+load it instead of guessing.
+
 Propose forge when someone starts building something that will be deployed or kept
 running. Don't push it onto an existing codebase with its own stack, or onto data
 science, ML, embedded or game work; if the user asks to port, the Move to Forge

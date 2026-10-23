@@ -82,12 +82,19 @@ type reliantAPI struct {
 
 func serveReliantAPI(t *testing.T, controlPlane string) *reliantAPI {
 	t.Helper()
+	return serveReliantAPIClipping(t, controlPlane, false)
+}
+
+// serveReliantAPIClipping is serveReliantAPI for a hosted server, whose
+// control-plane clips grants (the only deployment that issues derived scopes).
+func serveReliantAPIClipping(t *testing.T, controlPlane string, clips bool) *reliantAPI {
+	t.Helper()
 	authority := tokenauthority.NewMemory()
 	tokenService, err := token.New(token.Deps{
 		Logger:       slog.New(slog.DiscardHandler),
 		Config:       &config.Config{},
 		Authority:    authority,
-		ControlPlane: token.TokenControlPlane{Issuer: controlPlane},
+		ControlPlane: token.TokenControlPlane{Issuer: controlPlane, ClipsGrants: clips},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -312,6 +319,39 @@ func TestForgeCredential_ExecInterop(t *testing.T) {
 	}
 	if !strings.Contains(tok.Source, "CLI login") {
 		t.Errorf("source = %q", tok.Source)
+	}
+}
+
+// TestForgeCredential_ExecInterop_ObsScopesPassThrough: a verb that needs
+// obs:read asks the helper for exactly that, and gets exactly that — not the
+// deploy set, and not a cached deploy token.
+func TestForgeCredential_ExecInterop_ObsScopesPassThrough(t *testing.T) {
+	isolateForgeCredHome(t)
+	api := serveReliantAPIClipping(t, testControlPlane, true)
+	// A deploy-only session: obs:read is derived, not inherited.
+	loginFor(t, api.url, api.mintSession(t, "user-cli", fat.ScopeReliantAPI, fat.ScopeDeployRead, fat.ScopeDeployWrite))
+	t.Setenv(envServerURL, api.url)
+
+	argv := []string{os.Args[0], "-test.run=^TestReliantAsHelperProcess$", "--", reliantHelperMarker, "auth", "forge-credential"}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	ask := func(scopes ...string) cloudcred.Token {
+		t.Helper()
+		tok, err := cloudcred.Exec(ctx, argv, cloudcred.Request{Endpoint: testControlPlane, Scopes: scopes})
+		if err != nil {
+			t.Fatalf("scopes %v: %v", scopes, err)
+		}
+		return tok
+	}
+	obs := ask("obs:read")
+	if strings.Join(obs.Scopes, ",") != "obs:read" {
+		t.Fatalf("scopes = %v, want exactly obs:read", obs.Scopes)
+	}
+	if p, err := api.authority.Introspect(ctx, obs.Token); err != nil || !p.Scopes.Has(fat.ScopeObsRead) || p.Scopes.Has(fat.ScopeDeployWrite) {
+		t.Fatalf("exchanged token = %+v, %v", p, err)
+	}
+	if dep := ask("deploy:write"); dep.Token == obs.Token || strings.Join(dep.Scopes, ",") != "deploy:write" {
+		t.Fatalf("a request for deploy:write was answered with the obs token (%v)", dep.Scopes)
 	}
 }
 

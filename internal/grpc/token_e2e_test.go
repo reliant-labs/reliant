@@ -14,6 +14,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -141,13 +142,22 @@ func (cp *fakeControlPlane) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		for _, s := range in.Scopes {
 			scopes = append(scopes, fat.Scope(s))
 		}
+		// control-plane's MintForUser CLIPS org scopes to the user's grants
+		// and reports what it minted; nothing left is permission_denied.
+		if clipped, kept := cp.clipMint(in.UserID, scopes); len(kept) == 0 {
+			writeConnectError(w, http.StatusForbidden, "permission_denied",
+				"your organization permissions do not include "+fat.JoinScopes(clipped))
+			return
+		} else {
+			scopes = kept
+		}
 		m, merr := cp.store.MintForUser(ctx, tokenauthority.MintRequest{UserID: in.UserID, Name: in.Name, Scopes: scopes,
 			Resource: in.Resource.resource(), Ephemeral: in.Ephemeral, ExpiresAt: in.ExpiresAt, Rotate: in.Rotate})
 		if merr != nil {
 			writeConnectError(w, http.StatusBadRequest, "invalid_argument", merr.Error())
 			return
 		}
-		out = map[string]any{"tokenId": m.TokenID, "secret": m.Plaintext, "displayPrefix": m.DisplayPrefix,
+		out = map[string]any{"tokenId": m.TokenID, "secret": m.Plaintext, "displayPrefix": m.DisplayPrefix, "scopes": fat.SetOf(scopes...).Strings(),
 			"expiresAt": m.ExpiresAt, "rotated": m.Rotated}
 	case "ListForUser":
 		var in struct {
@@ -181,7 +191,14 @@ func (cp *fakeControlPlane) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				writeConnectError(w, http.StatusBadRequest, "invalid_argument", serr.Error())
 				return
 			}
-			scopes = cp.clipToGrants(in.UserID, set)
+			// control-plane's UpdateForUser REFUSES the whole request when
+			// any org scope in it is not held. It does not clip.
+			if missing := cp.missingGrants(in.UserID, set); len(missing) > 0 {
+				writeConnectError(w, http.StatusForbidden, "permission_denied",
+					"your organization permissions do not include "+fat.JoinScopes(missing))
+				return
+			}
+			scopes = set
 		}
 		info, uerr := cp.store.UpdateForUser(ctx, in.UserID, in.TokenID, in.Name, scopes)
 		if uerr != nil {
@@ -216,26 +233,42 @@ func (cp *fakeControlPlane) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(out)
 }
 
-// clipToGrants is control-plane's UpdateForUser rule: an org-administration
-// scope survives only if the user holds it as a grant; session scopes pass.
-// A nil grants map grants everything (no clipping configured).
-func (cp *fakeControlPlane) clipToGrants(userID string, requested fat.Set) fat.Set {
+// orgScopes mirrors control-plane's orggrants.OrgScopes: the permissions that
+// need a per-member grant. Session scopes and obs:read/obs:triage (implied for
+// every member) are not among them.
+var orgScopes = []fat.Scope{
+	fat.ScopeDeployRead, fat.ScopeDeployWrite, fat.ScopeSecretRead, fat.ScopeSecretWrite,
+	fat.ScopeDomainRead, fat.ScopeDomainWrite, fat.ScopeClusterManage, fat.ScopeTokenRead,
+	fat.ScopeTokenWrite, fat.ScopeIdentityRead, fat.ScopeIdentityManage, fat.ScopeDBQuery,
+}
+
+// missingGrants lists the org scopes in requested that userID does not hold. A
+// nil grants map means no grant checking is configured (nothing is missing).
+func (cp *fakeControlPlane) missingGrants(userID string, requested fat.Set) []fat.Scope {
 	if cp.grants == nil {
-		return requested
+		return nil
 	}
-	held := cp.grants[userID]
-	out := fat.Set{}
-	for s := range requested {
-		switch s {
-		case fat.ScopeDaemonConnect, fat.ScopeReliantAPI, fat.ScopeLLMInvoke:
-			out[s] = struct{}{}
-		default:
-			if held.Has(s) {
-				out[s] = struct{}{}
-			}
+	var missing []fat.Scope
+	for _, s := range orgScopes {
+		if requested.Has(s) && !cp.grants[userID].Has(s) {
+			missing = append(missing, s)
 		}
 	}
-	return out
+	return missing
+}
+
+// clipMint is control-plane's MintForUser rule: org scopes the user does not
+// hold are dropped. It returns what was dropped and what is kept.
+func (cp *fakeControlPlane) clipMint(userID string, requested []fat.Scope) (clipped, kept []fat.Scope) {
+	missing := cp.missingGrants(userID, fat.SetOf(requested...))
+	for _, s := range requested {
+		if slices.Contains(missing, s) {
+			clipped = append(clipped, s)
+		} else {
+			kept = append(kept, s)
+		}
+	}
+	return clipped, kept
 }
 
 // authorized verifies the internal-service bearer the way control-plane's

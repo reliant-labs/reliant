@@ -69,5 +69,15 @@ func IsInvalidGrant(err error) bool {
 	return errors.As(err, &rpc) && (rpc.Code == "invalid_argument" || rpc.Code == "permission_denied")
 }
 
+// IsPermissionDenied reports whether err is the authority refusing a scope the
+// acting user's organization permissions do not include.
+func IsPermissionDenied(err error) bool {
+	if errors.Is(err, fat.ErrEscalation) {
+		return true
+	}
+	var rpc *accesstokenclient.RPCError
+	return errors.As(err, &rpc) && rpc.Code == "permission_denied"
+}
+
 // Describe renders an Authority error for a log line without leaking a token.
 func Describe(err error) string { return fmt.Sprint(err) }
