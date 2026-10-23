@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/enums/v1"
-	"go.temporal.io/sdk/converter"
+	"go.temporal.io/sdk/client"
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/runs"
@@ -18,14 +18,14 @@ import (
 )
 
 // slowQueryTemporalClient is a run whose worker is too busy to answer a query:
-// QueryWorkflow returns only when its context ends.
+// QueryWorkflowWithOptions returns only when its context ends.
 type slowQueryTemporalClient struct {
 	wakeTestTemporalClient
 }
 
-func (c *slowQueryTemporalClient) QueryWorkflow(
-	ctx context.Context, _, _, _ string, _ ...interface{},
-) (converter.EncodedValue, error) {
+func (c *slowQueryTemporalClient) QueryWorkflowWithOptions(
+	ctx context.Context, _ *client.QueryWorkflowWithOptionsRequest,
+) (*client.QueryWorkflowWithOptionsResponse, error) {
 	<-ctx.Done()
 	return nil, ctx.Err()
 }

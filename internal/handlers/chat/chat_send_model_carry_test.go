@@ -14,7 +14,6 @@ import (
 	"go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/sdk/client"
-	"go.temporal.io/sdk/converter"
 	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
@@ -52,13 +51,14 @@ type carryTemporalClient struct {
 	runInputs map[string]interface{}
 }
 
-func (c *carryTemporalClient) QueryWorkflow(
-	_ context.Context, _, _, queryType string, _ ...interface{},
-) (converter.EncodedValue, error) {
-	if queryType != "get_workflow_inputs" || c.runInputs == nil {
-		return nil, errors.New("query not answered")
+func (c *carryTemporalClient) QueryWorkflowWithOptions(
+	_ context.Context, req *client.QueryWorkflowWithOptionsRequest,
+) (*client.QueryWorkflowWithOptionsResponse, error) {
+	closed := c.status != enums.WORKFLOW_EXECUTION_STATUS_RUNNING
+	if req.QueryType != "get_workflow_inputs" || c.runInputs == nil {
+		return fakeQueryResponse(req, closed, nil, errors.New("query not answered"))
 	}
-	return encodedInputs{c.runInputs}, nil
+	return fakeQueryResponse(req, closed, encodedInputs{c.runInputs}, nil)
 }
 
 func (c *carryTemporalClient) GetWorkflowHistory(
@@ -91,6 +91,11 @@ func carryFixture(t *testing.T, dbStatus db.WorkflowStatus, temporalStatus enums
 	t.Cleanup(cleanup)
 	ctx, fx := setupAbsorbFixture(t, repo, "test-user", dbStatus)
 	connectOnlyAnthropic(t, ctx, repo, "test-user")
+	if temporalStatus != enums.WORKFLOW_EXECUTION_STATUS_RUNNING {
+		// A closed (failed) run is never queried: what it was running on is
+		// rebuilt from the chat's selection, which records the model it holds.
+		seedSelection(t, ctx, repo, fx.chatID, "test-user", "builtin://agent", map[string]any{"model": map[string]any{"id": model}, "mode": "auto"})
+	}
 	temporal := &carryTemporalClient{
 		wakeTestTemporalClient: wakeTestTemporalClient{
 			absorbTestTemporalClient: absorbTestTemporalClient{exists: true, status: temporalStatus},

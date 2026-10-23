@@ -224,6 +224,27 @@ func SetChatQueuedForMachine(ctx context.Context, db orm.Context, chatID string,
 	return n > 0, err
 }
 
+// setChatRunIDSQL records the Temporal run currently executing a chat's root
+// workflow. It only touches the chat whose root workflow it is, and only when
+// the id changes, so the write a run makes at every start is free when nothing
+// moved.
+const setChatRunIDSQL = `
+UPDATE chats SET run_id = ?0, updated_at = NOW()
+WHERE id = ?1
+  AND (workflow_id IS NULL OR workflow_id = ?2)
+  AND run_id IS DISTINCT FROM ?0`
+
+// SetChatRunID records runID as the chat's current run of workflowID and
+// reports whether the stored value changed.
+func SetChatRunID(ctx context.Context, db orm.Context, chatID, workflowID, runID string) (bool, error) {
+	res, err := db.Bun().NewRaw(setChatRunIDSQL, runID, chatID, workflowID).Exec(ctx)
+	if err != nil {
+		return false, fmt.Errorf("failed to record chat run id: %w", err)
+	}
+	n, err := res.RowsAffected()
+	return n > 0, err
+}
+
 // setChatPausedForMachineSQL sets or clears the paused-for-machine marker: the
 // chat's run was paused by the daemon-offline breaker (not by the user). Like
 // the queued marker, clearing is a claim: of two resumers that race exactly

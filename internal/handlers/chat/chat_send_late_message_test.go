@@ -4,6 +4,7 @@ package chat
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -15,7 +16,6 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
-	"go.temporal.io/sdk/converter"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -41,11 +41,13 @@ type closingRunTemporalClient struct {
 	wakeErr     error
 	closed      bool
 	wakes       int
-	// lastInputs is what the run's get_workflow_inputs query answers, open or
-	// closed (Temporal answers both); onStart runs as a run is started.
+	// lastInputs is what the run's get_workflow_inputs query answers while it
+	// is open (a closed run refuses it); onStart runs as a run is started.
 	lastInputs map[string]interface{}
 	onStart    func()
 	started    []startedRun
+	// startErr fails every ExecuteWorkflow.
+	startErr error
 }
 
 type startedRun struct {
@@ -105,6 +107,9 @@ func (c *closingRunTemporalClient) ExecuteWorkflow(
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if c.startErr != nil {
+		return nil, c.startErr
+	}
 	run := startedRun{options: options}
 	if len(args) == 1 {
 		run.input, _ = args[0].(v2.WorkflowInput)
@@ -113,13 +118,13 @@ func (c *closingRunTemporalClient) ExecuteWorkflow(
 	return &fakeWorkflowRun{id: options.ID, runID: "run-new"}, nil
 }
 
-func (c *closingRunTemporalClient) QueryWorkflow(_ context.Context, _, _, query string, _ ...interface{}) (converter.EncodedValue, error) {
+func (c *closingRunTemporalClient) QueryWorkflowWithOptions(_ context.Context, req *client.QueryWorkflowWithOptionsRequest) (*client.QueryWorkflowWithOptionsResponse, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if query == "get_workflow_inputs" && c.lastInputs != nil {
-		return jsonEncodedValue{v: c.lastInputs}, nil
+	if req.QueryType == "get_workflow_inputs" && c.lastInputs != nil {
+		return fakeQueryResponse(req, c.closed, jsonEncodedValue{v: c.lastInputs}, nil)
 	}
-	return nil, assertNotFound{}
+	return fakeQueryResponse(req, c.closed, nil, assertNotFound{})
 }
 
 func (c *closingRunTemporalClient) runsStarted() []startedRun {
@@ -261,6 +266,9 @@ func TestSendAgentMessage_RunThatClosesBeforeItsWakeGetsARunStarted(t *testing.T
 			v2.InputKeyLaunchRun: true,
 		},
 	}
+	// What the chat was running on, as its selection records it: the closed
+	// run is never asked (it would be replayed to answer).
+	seedSelection(t, ctx, repo, fx.chatID, "test-user", "builtin://agent", map[string]any{"model": map[string]any{"id": "mock"}})
 	temporal.onStart = func() {
 		thread, err := repo.GetThread(ctx, fx.rootThreadID)
 		require.NoError(t, err)
@@ -278,7 +286,7 @@ func TestSendAgentMessage_RunThatClosesBeforeItsWakeGetsARunStarted(t *testing.T
 	started := temporal.runsStarted()
 	require.Len(t, started, 1, "STRANDED: the row was left queued for a run that had closed, and no run started")
 	assert.Equal(t, fx.rootThreadID, started[0].input.ExecContext.Thread)
-	assert.Equal(t, map[string]interface{}{"id": "mock"}, started[0].input.Inputs["model"], "the closed run's own inputs")
+	assert.Equal(t, map[string]interface{}{"id": "mock"}, started[0].input.Inputs["model"], "the inputs the closed run was running on (the chat's selection)")
 	assert.NotContains(t, started[0].input.Inputs, v2.InputKeyLaunchRun, "a run a person's message started is not the launch run")
 	assert.Equal(t, db.ThreadStatusRunning, threadStatusAtStart,
 		"the thread must be revived before the run starts, or the sweep can mark the row undelivered in between")
@@ -331,6 +339,7 @@ func TestSendAgentMessage_EndedMainRunGetsARunStarted(t *testing.T) {
 					v2.InputKeyLaunchRun: true,
 				},
 			}
+			seedSelection(t, ctx, repo, fx.chatID, "test-user", "builtin://agent", map[string]any{"model": map[string]any{"id": "mock"}})
 			temporal.onStart = func() {
 				thread, err := repo.GetThread(ctx, fx.rootThreadID)
 				require.NoError(t, err)
@@ -351,7 +360,7 @@ func TestSendAgentMessage_EndedMainRunGetsARunStarted(t *testing.T) {
 			assert.Equal(t, fx.chatID, started[0].options.ID, "the chat's own workflow ID")
 			assert.Equal(t, fx.rootThreadID, started[0].input.ExecContext.Thread)
 			assert.Nil(t, started[0].input.Resume, "a fresh run at graph entry")
-			assert.Equal(t, map[string]interface{}{"id": "mock"}, started[0].input.Inputs["model"], "the ended run's own inputs")
+			assert.Equal(t, map[string]interface{}{"id": "mock"}, started[0].input.Inputs["model"], "the inputs the ended run was running on (the chat's selection)")
 			assert.NotContains(t, started[0].input.Inputs, v2.InputKeyLaunchRun, "a run a person's message started is not the launch run")
 			assert.Equal(t, db.ThreadStatusRunning, threadStatusAtStart,
 				"the thread must be revived before the run starts, or the sweep can mark the row undelivered in between")
@@ -421,16 +430,16 @@ func TestSendAgentMessage_FailedMainRunIsStillRefused(t *testing.T) {
 	assert.Empty(t, queued, "nothing is left queued behind a refusal")
 }
 
-// If the closed run's inputs cannot be read, there is no run to start, and
-// the receipt must not promise one: the row is withdrawn and the user told to
-// send it as a message (the composer keeps the text on a refusal).
-func TestSendAgentMessage_RunThatClosesWithNoReadableInputsIsRefusedHonestly(t *testing.T) {
+// If no run can be started for the message, the receipt must not promise
+// one: the row is withdrawn and the user told to send it as a message (the
+// composer keeps the text on a refusal).
+func TestSendAgentMessage_RunThatClosesAndCannotBeRestartedIsRefusedHonestly(t *testing.T) {
 	t.Parallel()
 
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 	ctx, fx := setupAbsorbFixture(t, repo, "test-user", db.Active())
-	temporal := &closingRunTemporalClient{closeOnWake: true}
+	temporal := &closingRunTemporalClient{closeOnWake: true, startErr: errors.New("temporal unavailable")}
 
 	resp, err := lateMessageService(repo, temporal).SendAgentMessage(ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
 		ChatId: fx.chatID, ThreadId: fx.rootThreadID, Message: "queued as it finished",

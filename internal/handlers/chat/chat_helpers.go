@@ -15,6 +15,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/runstateproto"
+	rtemporal "github.com/reliant-labs/reliant/internal/temporal"
 )
 
 // activeWorkflowNameForResume returns the workflow name to (re)start for an
@@ -74,10 +75,10 @@ const paramsChangeQueryTimeout = 500 * time.Millisecond
 // params reach the run through update_workflow_state either way. So a query
 // that cannot answer in paramsChangeQueryTimeout is treated like one that
 // failed: assume changed, and never hold the user's send for it.
-func (s *Service) checkParamsActuallyChanged(ctx context.Context, workflowID, runID string, incomingParams map[string]interface{}) bool {
+func (s *Service) checkParamsActuallyChanged(ctx context.Context, workflowID string, incomingParams map[string]interface{}) bool {
 	queryCtx, cancel := context.WithTimeout(ctx, paramsChangeQueryTimeout)
 	defer cancel()
-	currentInputs, err := s.queryRunInputs(queryCtx, workflowID, runID)
+	currentInputs, err := s.queryRunInputs(queryCtx, workflowID)
 	if err != nil {
 		// If query fails (e.g., workflow not running yet) or the worker is too
 		// busy to answer in time, assume params changed to be safe
@@ -88,11 +89,13 @@ func (s *Service) checkParamsActuallyChanged(ctx context.Context, workflowID, ru
 	return inputsDiffer(currentInputs, incomingParams)
 }
 
-// queryRunInputs reads a run's current inputs with its get_workflow_inputs
-// query. Temporal answers it for a closed run too, by replaying the history
-// on a worker.
-func (s *Service) queryRunInputs(ctx context.Context, workflowID, runID string) (map[string]interface{}, error) {
-	queryResp, err := s.deps.Temporal.QueryWorkflow(ctx, workflowID, runID, "get_workflow_inputs")
+// queryRunInputs reads the current inputs of workflowID's current run with its
+// get_workflow_inputs query. A closed run is refused (rtemporal.ErrRunNotOpen),
+// never replayed: see rtemporal.QueryOpenRun. The run the chat row names is
+// not consulted — it goes stale at every continue-as-new, and the current run
+// is the one update_workflow_state reaches anyway.
+func (s *Service) queryRunInputs(ctx context.Context, workflowID string) (map[string]interface{}, error) {
+	queryResp, err := rtemporal.QueryOpenRun(ctx, s.deps.Temporal, workflowID, "get_workflow_inputs")
 	if err != nil {
 		return nil, err
 	}

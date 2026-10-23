@@ -8,7 +8,7 @@ import (
 	"connectrpc.com/connect"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/sdk/converter"
+	"go.temporal.io/sdk/client"
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/runs"
@@ -47,9 +47,9 @@ func (c *wakeTestTemporalClient) ResetWorkflowExecution(
 // params actually changed. Returning an error is the honest answer for a fake
 // with no workflow behind it, and the caller treats that as "cannot tell" —
 // which keeps this test focused on the doorbell rather than on param diffing.
-func (c *wakeTestTemporalClient) QueryWorkflow(
-	_ context.Context, _, _, _ string, _ ...interface{},
-) (converter.EncodedValue, error) {
+func (c *wakeTestTemporalClient) QueryWorkflowWithOptions(
+	_ context.Context, _ *client.QueryWorkflowWithOptionsRequest,
+) (*client.QueryWorkflowWithOptionsResponse, error) {
 	return nil, assertNotFound{}
 }
 

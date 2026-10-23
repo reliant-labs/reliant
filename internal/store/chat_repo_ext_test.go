@@ -526,3 +526,42 @@ func TestChatRootStatusMapsFromTheView(t *testing.T) {
 		requireSameChat(t, "GetChat("+id+")", got, twin)
 	}
 }
+
+// SetChatRunID records the run executing the chat's root workflow, reports a
+// change only when the id moves, and never writes a chat whose root workflow
+// is a different one.
+func TestSetChatRunID(t *testing.T) {
+	env := storetest.New(t)
+	ctx := context.Background()
+	at := time.Now().UTC().Truncate(time.Microsecond).Add(-time.Hour)
+	chat := convChat("r-1", at)
+	chat.WorkflowID = convStr("r-1")
+	chat.RunID = convStr("run-closed-by-continue-as-new")
+	if err := store.InsertChat(ctx, env.ORM, chat); err != nil {
+		t.Fatalf("InsertChat: %v", err)
+	}
+	runID := func() string {
+		t.Helper()
+		got, err := env.Repo.GetChat(ctx, "r-1")
+		if err != nil || got.RunID == nil {
+			t.Fatalf("GetChat = %+v, %v", got, err)
+		}
+		return *got.RunID
+	}
+
+	if changed, err := store.SetChatRunID(ctx, env.ORM, "r-1", "r-1", "run-successor"); err != nil || !changed {
+		t.Fatalf("SetChatRunID = %v, %v; want changed", changed, err)
+	}
+	if got := runID(); got != "run-successor" {
+		t.Fatalf("run_id = %q, want run-successor", got)
+	}
+	if changed, err := store.SetChatRunID(ctx, env.ORM, "r-1", "r-1", "run-successor"); err != nil || changed {
+		t.Fatalf("SetChatRunID(same) = %v, %v; want unchanged", changed, err)
+	}
+	if changed, err := store.SetChatRunID(ctx, env.ORM, "r-1", "some-other-workflow", "run-other"); err != nil || changed {
+		t.Fatalf("SetChatRunID(other workflow) = %v, %v; want no write", changed, err)
+	}
+	if got := runID(); got != "run-successor" {
+		t.Fatalf("run_id = %q after another workflow's write, want run-successor", got)
+	}
+}

@@ -1305,6 +1305,14 @@ func (r *Repo) ListChatsQueuedForMachine(ctx context.Context, userID string, lim
 	return store.ListChatsQueuedForMachine(ctx, r.ORM(), userID, limit)
 }
 
+// SetChatRunID records runID as the run currently executing the chat's root
+// workflow (workflowID), and reports whether it changed. Each root run calls it
+// as it starts, so a continue-as-new successor or a reset replaces the closed
+// run's id rather than leaving the chat naming it.
+func (r *Repo) SetChatRunID(ctx context.Context, chatID, workflowID, runID string) (bool, error) {
+	return store.SetChatRunID(ctx, r.ORM(), chatID, workflowID, runID)
+}
+
 // SetChatPausedForMachine records (or clears) that the daemon-offline breaker
 // paused the chat's run (as opposed to the user), and reports whether the
 // stored value changed — clearing it is how a resumer claims the chat.

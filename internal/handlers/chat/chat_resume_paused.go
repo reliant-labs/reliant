@@ -48,12 +48,8 @@ func (s *Service) resumePausedRun(
 	sent map[string]*structpb.Value,
 ) (runs.ResumeOutcome, error) {
 	workflowID := chat.MainThreadID()
-	runID := ""
-	if chat.RunID != nil {
-		runID = *chat.RunID
-	}
 
-	runInputs := s.runInputsForSend(ctx, workflowID, runID)
+	runInputs := s.runInputsForSend(ctx, workflowID)
 	inputUpdate, modelNotices, modelMoves := s.resumeInputUpdate(ctx, userID, chat.ID, chat.ProjectID, workflowName, workflowID,
 		s.underSelection(ctx, chat.ID, workflowName, stateUpdate), runInputs)
 	inputUpdate = s.withProviderPolicy(ctx, userID, chat, runInputs, inputUpdate)

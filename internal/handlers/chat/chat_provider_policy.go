@@ -21,15 +21,11 @@ func (s *Service) signalProviderPolicy(ctx context.Context, userID string, chat 
 	if workflowID == "" || !s.rootRunIsLive(ctx, workflowID) {
 		return
 	}
-	runID := ""
-	if chat.RunID != nil {
-		runID = *chat.RunID
-	}
-	update := s.providerPolicyUpdate(ctx, userID, chat, s.runInputsForSend(ctx, workflowID, runID), nil)
+	update := s.providerPolicyUpdate(ctx, userID, chat, s.runInputsForSend(ctx, workflowID), nil)
 	if len(update) == 0 {
 		return
 	}
-	if err := s.signalParamUpdate(ctx, workflowID, runID, update); err != nil {
+	if err := s.signalParamUpdate(ctx, workflowID, update); err != nil {
 		logging.WarnContext(ctx, "Could not signal the chat's provider policy to its live run", "chatID", chat.ID, "error", err)
 	}
 }
