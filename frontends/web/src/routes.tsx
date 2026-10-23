@@ -28,6 +28,7 @@ import { AuthGuard } from './components/AuthGuard'
 import { ModalLayer } from './components/Modals/ModalLayer'
 import { AnonSignInNudge } from './components/AnonSignInNudge'
 import { Toaster } from './lib/toast'
+import { NewBuildPrompt } from './components/NewBuildPrompt'
 import { ContextualTipsLayer, OnboardingWizard } from './components/Onboarding'
 import { GitHubSyncStatus } from './components/Layout/GitHubSyncBanner'
 import { QueuedDeployWatch } from './components/Forge/QueuedDeployWatch'
@@ -263,6 +264,7 @@ function RootShell() {
       <ModalLayer />
       <AnonSignInNudge />
       <Toaster />
+      <NewBuildPrompt />
       <ContextualTipsLayer />
       <GitHubSyncStatus />
       <OnboardingWizard />
