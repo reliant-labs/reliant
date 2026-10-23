@@ -1,8 +1,7 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * The Inbox data layer: the badge reads counts only (limit 0), the list reads
- * items, both refetch on focus (failure kinds emit no user update), dismissing
+ * The Inbox data layer: the badge selects its counts from the list query, both refetch on focus (failure kinds emit no user update), dismissing
  * takes the row out at once, and the user updates that change what is waiting
  * mark both stale.
  */
@@ -61,24 +60,28 @@ beforeEach(() => {
 });
 
 describe("useInboxCounts", () => {
-  it("asks for counts only, and exposes the blocking count and the informational dot", async () => {
+  it("reads the counts from the list query, so the badge and the list are one request", async () => {
     listInbox.mockResolvedValue(
-      create(ListInboxResponseSchema, { blockingCount: 3, hasInformational: true }),
+      create(ListInboxResponseSchema, { items: [failing], blockingCount: 3, hasInformational: true }),
     );
-    const { result } = renderHook(() => useInboxCounts(), { wrapper: wrapperFor(newClient()) });
-    await waitFor(() => expect(result.current.data).toEqual({ blockingCount: 3, hasInformational: true }));
-    expect(listInbox.mock.calls[0]![0]).toMatchObject({ limit: 0 });
+    const queryClient = newClient();
+    const wrapper = wrapperFor(queryClient);
+    const { result } = renderHook(() => ({ counts: useInboxCounts(), list: useInbox() }), { wrapper });
+    await waitFor(() => expect(result.current.counts.data).toEqual({ blockingCount: 3, hasInformational: true }));
+    expect(result.current.list.data?.items).toHaveLength(1);
+    expect(listInbox).toHaveBeenCalledTimes(1);
+    expect(listInbox.mock.calls[0]![0].limit).toBeUndefined();
     expect(listInbox.mock.calls[0]![0].projectId).toBeUndefined();
   });
 
-  it("scopes the counts to a project, under its own cache key", async () => {
+  it("scopes the counts to a project, under the project's list key", async () => {
     listInbox.mockResolvedValue(create(ListInboxResponseSchema, { blockingCount: 1 }));
     const queryClient = newClient();
     const { result } = renderHook(() => useInboxCounts("proj-1"), { wrapper: wrapperFor(queryClient) });
     await waitFor(() => expect(result.current.data?.blockingCount).toBe(1));
-    expect(listInbox.mock.calls[0]![0]).toMatchObject({ limit: 0, projectId: "proj-1" });
-    expect(queryClient.getQueryData(inboxKeys.counts("proj-1"))).toBeDefined();
-    expect(queryClient.getQueryData(inboxKeys.counts())).toBeUndefined();
+    expect(listInbox.mock.calls[0]![0]).toMatchObject({ projectId: "proj-1" });
+    expect(queryClient.getQueryData(inboxKeys.list("proj-1"))).toBeDefined();
+    expect(queryClient.getQueryData(inboxKeys.list())).toBeUndefined();
   });
 });
 

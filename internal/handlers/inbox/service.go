@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"connectrpc.com/connect"
+	"golang.org/x/sync/singleflight"
 
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
@@ -51,6 +52,8 @@ type Service struct {
 	deps Deps
 	// storageCache holds each user's storage view for storageViewTTL.
 	storageCache sync.Map
+	// inboxReads shares one user's concurrent ListInbox reads (sharedRead).
+	inboxReads singleflight.Group
 }
 
 // New creates a new inbox service instance with the supplied Deps.

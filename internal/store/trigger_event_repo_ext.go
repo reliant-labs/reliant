@@ -41,6 +41,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
+	"strings"
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/crud"
@@ -371,10 +373,39 @@ func ListTriggerEventsPage(ctx context.Context, db orm.Context, f core.TriggerEv
 	return events, hasMore, nil
 }
 
+// triggerEventBodyColumns are the trigger_events columns that hold what a
+// firing DELIVERED — the event body, who sent it, where it came from — rather
+// than what became of it. A webhook or provider-event body runs to tens of KB.
+var triggerEventBodyColumns = map[string]bool{"payload": true, "sender": true, "origin": true}
+
+// triggerOutcomeColumns is columnsOf[TriggerEvent] with the body columns read
+// as NULL, for the reads that only judge outcomes (health, failure streaks).
+// Selecting and decoding the bodies there was most of ListInbox's time in
+// prod: one user's 250-firing episode was 1.8 MB of JSON, transferred and
+// unmarshalled into maps on every read (2026-10-23). The columns are still
+// named, so the row shape — and every prepared statement — is unchanged.
+func triggerOutcomeColumns(alias string) string {
+	var b strings.Builder
+	for i, f := range modelTables.Get(reflect.TypeFor[TriggerEvent]()).Fields {
+		if i > 0 {
+			b.WriteString(", ")
+		}
+		name := string(f.SQLName)
+		if triggerEventBodyColumns[name] {
+			b.WriteString("NULL::jsonb AS " + name)
+			continue
+		}
+		b.WriteString(alias + "." + name)
+	}
+	return b.String()
+}
+
 // recentTriggerFiringsSQL is the newest ?2 firings of each named trigger, with
-// their runs, in ONE query. This is what health and last_event are computed
-// from, so listing N triggers costs one extra query rather than N.
-var recentTriggerFiringsSQL = `WITH ranked AS (
+// their runs, in ONE query, selecting cols as the event's columns. This is
+// what health and last_event are computed from, so listing N triggers costs
+// one extra query rather than N.
+func recentTriggerFiringsSQL(cols string) string {
+	return `WITH ranked AS (
 	SELECT
 		e.id,
 		row_number() OVER (PARTITION BY e.trigger_id ORDER BY e.occurred_at DESC, e.id DESC) AS rn
@@ -382,7 +413,7 @@ var recentTriggerFiringsSQL = `WITH ranked AS (
 	WHERE e.user_id = ?0::text
 		AND e.trigger_id = ANY(?1::text[])
 )
-SELECT ` + columnsOf[TriggerEvent]("e") + `,
+SELECT ` + cols + `,
 	` + triggerFiringRunColumns + `
 FROM ranked r
 JOIN trigger_events e ON e.id = r.id
@@ -390,12 +421,25 @@ LEFT JOIN chats_with_activity c ON c.id = e.chat_id AND c.user_id = e.user_id
 LEFT JOIN workflows rw ON rw.id = c.workflow_id
 WHERE r.rn <= ?2::integer
 ORDER BY e.trigger_id, e.occurred_at DESC, e.id DESC`
+}
+
+var (
+	recentTriggerFiringsFullSQL     = recentTriggerFiringsSQL(columnsOf[TriggerEvent]("e"))
+	recentTriggerFiringsOutcomesSQL = recentTriggerFiringsSQL(triggerOutcomeColumns("e"))
+)
 
 // RecentTriggerFirings returns each named trigger's newest perTrigger firings
 // (newest first, with their runs), keyed by trigger id. A trigger with no
 // firings has no entry; triggers belonging to other users never appear.
 func RecentTriggerFirings(ctx context.Context, db orm.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error) {
-	return triggerFiringsByTrigger(ctx, db, "list recent trigger firings", recentTriggerFiringsSQL, userID, triggerIDs, perTrigger)
+	return triggerFiringsByTrigger(ctx, db, "list recent trigger firings", recentTriggerFiringsFullSQL, userID, triggerIDs, perTrigger)
+}
+
+// RecentTriggerOutcomes is RecentTriggerFirings without the events' bodies:
+// Payload is empty and Sender and Origin are nil. It is for a reader that
+// judges health and never shows an event (the Inbox).
+func RecentTriggerOutcomes(ctx context.Context, db orm.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error) {
+	return triggerFiringsByTrigger(ctx, db, "list recent trigger outcomes", recentTriggerFiringsOutcomesSQL, userID, triggerIDs, perTrigger)
 }
 
 // firingsSinceLastSuccessSQL is every firing of each named trigger after its
@@ -427,7 +471,7 @@ var firingsSinceLastSuccessSQL = `WITH last_success AS (
 		AND e.trigger_id = ANY(?1::text[])
 		AND (s.id IS NULL OR (e.occurred_at, e.id) > (s.occurred_at, s.id))
 )
-SELECT ` + columnsOf[TriggerEvent]("e") + `,
+SELECT ` + triggerOutcomeColumns("e") + `,
 	` + triggerFiringRunColumns + `
 FROM ranked r
 JOIN trigger_events e ON e.id = r.id
@@ -438,7 +482,9 @@ ORDER BY e.trigger_id, e.occurred_at DESC, e.id DESC`
 
 // FiringsSinceLastSuccess returns, per named trigger, every firing after its
 // newest success (newest first, with their runs, at most perTrigger), keyed by
-// trigger id.
+// trigger id. An episode is counted, never shown, and runs to hundreds of
+// firings, so the events carry no body: Payload is empty, Sender and Origin
+// nil (triggerOutcomeColumns).
 func FiringsSinceLastSuccess(ctx context.Context, db orm.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error) {
 	return triggerFiringsByTrigger(ctx, db, "list firings since last success", firingsSinceLastSuccessSQL, userID, triggerIDs, perTrigger)
 }

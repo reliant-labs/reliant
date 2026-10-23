@@ -13,6 +13,8 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"golang.org/x/sync/errgroup"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -56,7 +58,8 @@ const maxInboxDismissBatch = 500
 // ListInbox returns everything waiting on the caller, optionally within one
 // project. Pending rows come from one UNION ALL query; automation health reuses
 // triggers.ComputeHealth over one batched firings query, so the cost does not
-// grow with the number of triggers.
+// grow with the number of triggers. The reads are independent and run
+// together (readInbox); only the dismissal check waits for all of them.
 //
 // Scoping is applied after dismissal so the scoped response can also say how
 // many items wait in the caller's other projects (one read, not two).
@@ -78,32 +81,21 @@ func (s *Service) ListInbox(
 
 	projectID := strings.TrimSpace(req.Msg.GetProjectId())
 
-	pending, err := s.deps.Repo.ListInboxPending(ctx, userID)
+	read, err := s.sharedRead(ctx, userID)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list inbox"))
 	}
-	failing, err := s.failingAutomations(ctx, userID)
-	if err != nil {
-		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to list inbox"))
-	}
-
-	items := make([]*reliantv1.InboxItem, 0, len(pending)+len(failing))
-	for _, p := range pending {
+	items := make([]*reliantv1.InboxItem, 0, len(read.pending)+len(read.failing)+len(read.storage)+len(read.needsSetup))
+	for _, p := range read.pending {
 		items = append(items, inboxItemFromPending(p))
 	}
-	items = append(items, failing...)
-	storage, err := s.storageItems(ctx, userID)
-	if err != nil {
-		// Disk state is advisory; a failure here must not blank the whole inbox.
-		logging.WarnContext(ctx, "Failed to compute storage inbox items", "error", err)
+	// The read may be shared with concurrent calls (sharedRead): this
+	// response gets its own copies.
+	for _, shared := range [][]*reliantv1.InboxItem{read.failing, read.storage, read.needsSetup} {
+		for _, it := range shared {
+			items = append(items, proto.CloneOf(it))
+		}
 	}
-	items = append(items, storage...)
-	needsSetup, err := s.needsSetupAutomations(ctx, userID)
-	if err != nil {
-		// Advisory like storage: the badge and the other sections still work.
-		logging.WarnContext(ctx, "Failed to compute needs-setup automations for inbox", "error", err)
-	}
-	items = append(items, needsSetup...)
 
 	items, err = s.dropDismissed(ctx, userID, items)
 	if err != nil {
@@ -147,6 +139,124 @@ func (s *Service) ListInbox(
 	}
 	resp.Items = items
 	return connect.NewResponse(resp), nil
+}
+
+// inboxReadConcurrency bounds how many of ONE ListInbox's reads hold a pool
+// connection at a time. Running the independent reads together cuts a request
+// to its longest chain (the triggers, then their firings) instead of the sum
+// of about nine round trips, but a burst of requests multiplies whatever one
+// request holds: at 05:22 on 2026-10-23 one client's ~360 ListInbox calls a
+// minute held all 25 of the api-server's connections. Three keeps one request
+// from taking more than a slice of the pool.
+const inboxReadConcurrency = 3
+
+// inboxReads is what readInbox gathers: everything ListInbox lists, before
+// dismissals and scoping.
+type inboxReads struct {
+	pending    []*core.InboxPending
+	failing    []*reliantv1.InboxItem
+	storage    []*reliantv1.InboxItem
+	needsSetup []*reliantv1.InboxItem
+}
+
+// inboxReadTimeout bounds a shared read (sharedRead), which runs detached
+// from any one caller's cancellation.
+const inboxReadTimeout = 15 * time.Second
+
+// sharedRead is readInbox, shared by every ListInbox of the same user that
+// arrives while one is in flight: the reads are the same whatever the scope
+// or limit (those are applied after), so N concurrent calls — a list and its
+// badge, several tabs, a reconnect replay — cost one set of queries and one
+// slice of the pool, not N. The read runs on a context detached from the
+// first caller's cancellation (so one caller giving up does not fail the
+// others) with its own deadline. Callers only read the result.
+func (s *Service) sharedRead(ctx context.Context, userID string) (*inboxReads, error) {
+	v, err, _ := s.inboxReads.Do(userID, func() (any, error) {
+		rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), inboxReadTimeout)
+		defer cancel()
+		return s.readInbox(rctx, userID)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return v.(*inboxReads), nil
+}
+
+// readLimiter hands out inboxReadConcurrency tokens, one per read holding a
+// connection. A section that holds a token never asks for a second one, so the
+// readers cannot deadlock on each other.
+type readLimiter chan struct{}
+
+func (l readLimiter) do(ctx context.Context, read func() error) error {
+	select {
+	case l <- struct{}{}:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+	defer func() { <-l }()
+	return read()
+}
+
+// readInbox runs ListInbox's reads concurrently, at most inboxReadConcurrency
+// at once. The pending rows and automation health are the inbox: either one
+// failing fails the read. Storage and needs-setup are advisory and only warn.
+func (s *Service) readInbox(ctx context.Context, userID string) (*inboxReads, error) {
+	lim := make(readLimiter, inboxReadConcurrency)
+	var out inboxReads
+	g, gctx := errgroup.WithContext(ctx)
+	// advisory logs an advisory read's failure, unless the read only failed
+	// because a required one already had and cancelled it.
+	advisory := func(msg string, err error) {
+		if err != nil && gctx.Err() == nil {
+			logging.WarnContext(ctx, msg, "error", err)
+		}
+	}
+
+	g.Go(func() error {
+		return lim.do(gctx, func() (err error) {
+			out.pending, err = s.deps.Repo.ListInboxPending(gctx, userID)
+			return err
+		})
+	})
+	g.Go(func() error {
+		// Both automation sections start from the caller's triggers; read
+		// them once.
+		var stored []*core.Trigger
+		if err := lim.do(gctx, func() (err error) {
+			stored, err = s.deps.Repo.ListTriggers(gctx, core.TriggerFilters{UserID: userID})
+			return err
+		}); err != nil {
+			return err
+		}
+		tg, tctx := errgroup.WithContext(gctx)
+		tg.Go(func() (err error) {
+			out.failing, err = s.failingAutomations(tctx, lim, userID, stored)
+			return err
+		})
+		tg.Go(func() error {
+			needsSetup, err := s.needsSetupAutomations(tctx, lim, stored)
+			// Advisory like storage: the badge and the other sections still work.
+			advisory("Failed to compute needs-setup automations for inbox", err)
+			out.needsSetup = needsSetup
+			return nil
+		})
+		return tg.Wait()
+	})
+	g.Go(func() error {
+		err := lim.do(gctx, func() (err error) {
+			out.storage, err = s.storageItems(gctx, userID)
+			return err
+		})
+		// Disk state is advisory; a failure here must not blank the whole inbox.
+		advisory("Failed to compute storage inbox items", err)
+		return nil
+	})
+	// The group's FIRST error is the cause; reads that failed after it only
+	// saw the cancellation it triggered.
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+	return &out, nil
 }
 
 // inboxItemBlocks reports whether an item blocks a live run: an approval, a
@@ -226,33 +336,46 @@ func isInboxItemID(itemID string) bool {
 }
 
 // failingAutomations returns one item per enabled trigger whose health is
-// FAILING, using the same ComputeHealth as Trigger.health.
-func (s *Service) failingAutomations(ctx context.Context, userID string) ([]*reliantv1.InboxItem, error) {
-	stored, err := s.deps.Repo.ListTriggers(ctx, core.TriggerFilters{UserID: userID})
-	if err != nil {
-		return nil, err
-	}
+// FAILING, using the same ComputeHealth as Trigger.health. Its three reads are
+// independent and run together, each holding one of lim's tokens.
+func (s *Service) failingAutomations(ctx context.Context, lim readLimiter, userID string, stored []*core.Trigger) ([]*reliantv1.InboxItem, error) {
 	ids := make([]string, 0, len(stored))
 	for _, t := range stored {
 		if t.Enabled {
 			ids = append(ids, t.ID)
 		}
 	}
-	recent, err := s.deps.Repo.RecentTriggerFirings(ctx, userID, ids, triggers.HealthWindow)
-	if err != nil {
-		return nil, err
+	if len(ids) == 0 {
+		return nil, nil
 	}
-
+	var (
+		recent, episodes map[string][]*core.TriggerEventWithRun
+		regs             map[string]*core.TriggerRegistration
+	)
+	g, gctx := errgroup.WithContext(ctx)
+	g.Go(func() error {
+		return lim.do(gctx, func() (err error) {
+			recent, err = s.deps.Repo.RecentTriggerOutcomes(gctx, userID, ids, triggers.HealthWindow)
+			return err
+		})
+	})
 	// The episode is read separately from the health window: a streak longer
 	// than the window must still be one item with an honest count.
-	episodes, err := s.deps.Repo.FiringsSinceLastSuccess(ctx, userID, ids, triggers.EpisodeFirings)
-	if err != nil {
-		return nil, err
-	}
+	g.Go(func() error {
+		return lim.do(gctx, func() (err error) {
+			episodes, err = s.deps.Repo.FiringsSinceLastSuccess(gctx, userID, ids, triggers.EpisodeFirings)
+			return err
+		})
+	})
 	// A polled source that cannot authenticate never fires, so it has no
 	// failed firing to show; its source state is what says it is failing.
-	regs, err := s.deps.Repo.ListTriggerRegistrations(ctx, userID, ids)
-	if err != nil {
+	g.Go(func() error {
+		return lim.do(gctx, func() (err error) {
+			regs, err = s.deps.Repo.ListTriggerRegistrations(gctx, userID, ids)
+			return err
+		})
+	})
+	if err := g.Wait(); err != nil {
 		return nil, err
 	}
 	now := time.Now()
@@ -320,11 +443,19 @@ func (s *Service) failingAutomations(ctx context.Context, userID string) ([]*rel
 // the moment setup is finished, because it is recomputed on every read. A
 // paused automation is the person's choice and not nagged about; an automation
 // whose declaration is broken is BROKEN, not a setup matter.
-func (s *Service) needsSetupAutomations(ctx context.Context, userID string) ([]*reliantv1.InboxItem, error) {
-	stored, err := s.deps.Repo.ListTriggers(ctx, core.TriggerFilters{UserID: userID})
-	if err != nil {
-		return nil, err
-	}
+//
+// Resolving a declaration may read the workflow store, one workflow after
+// another, so the whole loop holds one of lim's tokens.
+func (s *Service) needsSetupAutomations(ctx context.Context, lim readLimiter, stored []*core.Trigger) ([]*reliantv1.InboxItem, error) {
+	var out []*reliantv1.InboxItem
+	err := lim.do(ctx, func() error {
+		out = s.needsSetupItems(ctx, stored)
+		return nil
+	})
+	return out, err
+}
+
+func (s *Service) needsSetupItems(ctx context.Context, stored []*core.Trigger) []*reliantv1.InboxItem {
 	workflows := triggers.NewCachedWorkflows(triggers.LaunchWorkflows{Repo: s.deps.Repo})
 	var out []*reliantv1.InboxItem
 	for _, t := range stored {
@@ -359,7 +490,7 @@ func (s *Service) needsSetupAutomations(ctx context.Context, userID string) ([]*
 			Payload:      &reliantv1.InboxItem_AutomationNeedsSetup{AutomationNeedsSetup: &reliantv1.InboxAutomationNeedsSetup{Issues: wire}},
 		})
 	}
-	return out, nil
+	return out
 }
 
 func (s *Service) dropDismissed(ctx context.Context, userID string, items []*reliantv1.InboxItem) ([]*reliantv1.InboxItem, error) {

@@ -40,7 +40,9 @@ describe("InboxNavItem", () => {
     renderItem(<InboxNavItem onOpen={vi.fn()} />);
     expect(await screen.findByTestId("inbox-badge-count")).toHaveTextContent("4");
     expect(screen.getByTestId("inbox-badge-dot")).toBeInTheDocument();
-    expect(listInbox.mock.calls[0]![0]).toMatchObject({ limit: 0 });
+    // The badge shares the Inbox list's read (its counts come from the same
+    // response), so it asks for the list, not a separate counts-only read.
+    expect(listInbox.mock.calls[0]![0].limit).toBeUndefined();
   });
 
   it("a count without failures has no dot; failures alone are a dot without a number", async () => {

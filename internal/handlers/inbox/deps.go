@@ -28,7 +28,9 @@ type Repository interface {
 	RestoreInboxItems(ctx context.Context, userID string, itemIDs []string) error
 
 	ListTriggers(ctx context.Context, f core.TriggerFilters) ([]*core.Trigger, error)
-	RecentTriggerFirings(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error)
+	// RecentTriggerOutcomes, not RecentTriggerFirings: the Inbox judges
+	// health and never shows an event, so it does not read their bodies.
+	RecentTriggerOutcomes(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error)
 	FiringsSinceLastSuccess(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error)
 	ListTriggerRegistrations(ctx context.Context, userID string, triggerIDs []string) (map[string]*core.TriggerRegistration, error)
 

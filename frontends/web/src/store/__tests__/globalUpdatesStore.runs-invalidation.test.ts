@@ -27,7 +27,7 @@ vi.mock("../../lib/notifications", async (importOriginal) => {
 
 import { queryClient } from "../../lib/query-client";
 import { runKeys } from "../../hooks/run-queries";
-import { useGlobalUpdatesStore } from "../globalUpdatesStore";
+import { resetStreamInvalidation, useGlobalUpdatesStore } from "../globalUpdatesStore";
 
 function buildUpdate(update_type: UserUpdateType, data: Record<string, unknown>): UserUpdate {
   return {
@@ -51,7 +51,10 @@ beforeEach(() => {
   queryClient.setQueryData(listKey, { pages: [], pageParams: [] });
 });
 
-afterEach(() => queryClient.clear());
+afterEach(() => {
+  resetStreamInvalidation();
+  queryClient.clear();
+});
 
 describe("globalUpdatesStore → Runs list", () => {
   it.each([

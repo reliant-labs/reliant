@@ -40,6 +40,7 @@ import { inboxInvalidatingUpdate, inboxKeys } from "../hooks/inbox-queries";
 import { showWorkflowCompletionNotification, showWorkflowFailedNotification, showApprovalRequiredNotification, getNotificationPermission } from "../lib/notifications";
 import { getNotificationSoundOptions, useNotificationStore } from "./notificationStore";
 import { triggerRefetch, type RefetchType } from "./refetchStore";
+import { createCoalescedInvalidator } from "../lib/coalescedInvalidation";
 import { setDaemonLastSeen } from "../api/grpc-client";
 import { toast } from "../lib/toast-manager";
 import { publishDraftUpdate } from "./workflowDraftUpdates";
@@ -102,6 +103,23 @@ export function noteDaemonHeartbeat(daemonId: string): void {
 export function resetDaemonHeartbeatWatchdogs(): void {
   for (const timer of heartbeatSilenceTimers.values()) clearTimeout(timer);
   heartbeatSilenceTimers.clear();
+}
+
+/**
+ * The least time between two stream-driven refetches of one list (the Inbox,
+ * the Runs list). The Inbox and the Runs list span every chat, so every chat's
+ * activity change marks them stale; refetching on each one sent hundreds of
+ * ListInbox/ListRuns calls a minute from one client (2026-10-23). The first
+ * change still refetches at once; the rest wait for this and for the previous
+ * refetch to settle, and the last one is always fetched.
+ */
+export const STREAM_REFETCH_INTERVAL_MS = 2_000;
+
+const streamInvalidation = createCoalescedInvalidator(queryClient, STREAM_REFETCH_INTERVAL_MS);
+
+/** Drop pending stream-driven refetches. Exported for tests. */
+export function resetStreamInvalidation(): void {
+  streamInvalidation.reset();
 }
 
 // Timestamp when the app started - only notify for events after this
@@ -398,13 +416,15 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
       // The Runs list holds chats the sidebar's cache patches never reach
       // (automation and agent-started runs), so a change to any run marks it
       // stale. Only observed lists refetch; an unopened Runs page costs nothing.
+      // Coalesced: a busy run or a reconnect replay is one refetch, not one per
+      // update (streamInvalidation).
       if (runsInvalidatingUpdate(update.update_type)) {
-        queryClient.invalidateQueries({ queryKey: runKeys.lists() });
+        streamInvalidation.invalidate(runKeys.lists());
       }
       // The Inbox (and its nav badge) spans every chat, so it is marked stale
-      // too. Only observed queries refetch.
+      // too. Only observed queries refetch, coalesced the same way.
       if (inboxInvalidatingUpdate(update.update_type, update.data)) {
-        queryClient.invalidateQueries({ queryKey: inboxKeys.all });
+        streamInvalidation.invalidate(inboxKeys.all);
       }
 
       // Route updates to appropriate stores
