@@ -1,0 +1,106 @@
+{
+  "schema": "forge.obs.check/v1",
+  "ok": false,
+  "exit_code": 1,
+  "error": "release v2 failed its health check: api: error rate 0.1% -\u003e 5.0%",
+  "scope": {
+    "env": "prod",
+    "backend": "cloud",
+    "env_id": "env-prod",
+    "from": "2026-10-22T11:25:00Z",
+    "to": "2026-10-22T11:55:00Z"
+  },
+  "query_mode": "structured",
+  "verdict": "FAIL",
+  "subject": {
+    "promotion_id": "promo-7",
+    "release": "v2",
+    "git_commit": "abc123",
+    "promoted_at": "2026-10-22T11:40:00Z",
+    "previous_release": "v1"
+  },
+  "windows": {
+    "before": {
+      "from": "2026-10-22T11:25:00Z",
+      "to": "2026-10-22T11:40:00Z"
+    },
+    "after": {
+      "from": "2026-10-22T11:40:00Z",
+      "to": "2026-10-22T11:55:00Z"
+    },
+    "after_complete": true
+  },
+  "services": [
+    {
+      "service": "api",
+      "before": {
+        "requests": 900,
+        "error_rate": 0.001,
+        "p50_ms": 0,
+        "p95_ms": 100,
+        "p99_ms": 0
+      },
+      "after": {
+        "requests": 1000,
+        "error_rate": 0.05,
+        "p50_ms": 0,
+        "p95_ms": 110,
+        "p99_ms": 0
+      },
+      "version_share": 1
+    }
+  ],
+  "findings": [
+    {
+      "code": "error_rate",
+      "service": "api",
+      "value": 0.049,
+      "threshold": 0.01,
+      "policy": "fail",
+      "message": "api: error rate 0.1% -\u003e 5.0%"
+    },
+    {
+      "code": "latency",
+      "service": "api",
+      "value": 2,
+      "threshold": 1.5,
+      "policy": "warn",
+      "message": "api: p95 doubled"
+    }
+  ],
+  "new_issues": [
+    {
+      "id": "ISS-7f3a",
+      "service": "api",
+      "title": "boom",
+      "events": 12,
+      "first_seen_at": "2026-10-22T11:41:00Z",
+      "first_version": "v2"
+    }
+  ],
+  "regressed_issues": [
+    {
+      "id": "ISS-1",
+      "title": "old",
+      "events": 2,
+      "regressed_at": "2026-10-22T11:42:00Z"
+    }
+  ],
+  "thresholds": [
+    {
+      "name": "min_requests",
+      "value": "50",
+      "source": "default"
+    },
+    {
+      "name": "fail_on",
+      "value": "error_rate,new_issue",
+      "source": "release_shape"
+    }
+  ],
+  "suggested": [
+    "forge obs issue ISS-7f3a prod",
+    "forge obs issue ISS-1 prod",
+    "forge obs endpoints prod --sort errors"
+  ]
+}

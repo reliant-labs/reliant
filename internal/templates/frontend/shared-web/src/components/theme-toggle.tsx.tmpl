@@ -1,0 +1,100 @@
+{{if eq .Platform "nextjs"}}"use client";
+
+{{end}}// yours: scaffolded once, never touched again — forge will not overwrite this file
+//
+// ThemeToggle — the light/dark control, mounted in the app shell.
+//
+// Three explicit options rather than a two-way switch, because "system" is a
+// real choice and not the absence of one: it is the only setting that keeps
+// following the OS after the user has expressed a preference. A binary
+// toggle would silently pin the app the first time it was touched.
+//
+// This is a radiogroup, not three buttons. The distinction is what a screen
+// reader announces: a radiogroup says "Theme, light, 1 of 3", which is the
+// actual semantic — one selection out of a set — whereas three buttons
+// announce three unrelated actions and never report which one is active.
+// Arrow-key navigation comes with the role, and roving tabindex keeps the
+// group a single tab stop.
+
+import { Monitor, Moon, Sun } from "lucide-react";
+import { useRef } from "react";
+
+import { useTheme } from "@/lib/theme/use-theme";
+
+import type { ThemePreference } from "@/lib/theme/use-theme";
+
+const OPTIONS: { value: ThemePreference; label: string; Icon: typeof Sun }[] = [
+  { value: "light", label: "Light", Icon: Sun },
+  { value: "dark", label: "Dark", Icon: Moon },
+  { value: "system", label: "System", Icon: Monitor },
+];
+
+export function ThemeToggle({ className = "" }: { className?: string }) {
+  const { theme, setTheme } = useTheme();
+  const groupRef = useRef<HTMLDivElement>(null);
+
+  // Arrow keys move the selection, which is what a radiogroup promises.
+  // Selection follows focus here (rather than requiring a separate Space)
+  // because applying a theme is instant and reversible — the standard
+  // affordance for a preview-able choice.
+  //
+  // The handler is bound to each RADIO, not to the group wrapper. Binding it
+  // to the wrapper would put an interactive role on an element that is not
+  // focusable (jsx-a11y/interactive-supports-focus fails the build), and
+  // giving the wrapper a tabIndex to satisfy that would add a second tab
+  // stop in front of the one the roving tabindex already provides. The
+  // radios are focusable by nature, so the events reach them directly.
+  const onKeyDown = (event: React.KeyboardEvent) => {
+    const forward = event.key === "ArrowRight" || event.key === "ArrowDown";
+    const back = event.key === "ArrowLeft" || event.key === "ArrowUp";
+    if (!forward && !back) return;
+    event.preventDefault();
+    const index = OPTIONS.findIndex((o) => o.value === theme);
+    const next =
+      (index + (forward ? 1 : -1) + OPTIONS.length) % OPTIONS.length;
+    const option = OPTIONS[next];
+    // `next` is a modulo of OPTIONS.length so this cannot miss, but
+    // noUncheckedIndexedAccess types every index read as possibly
+    // undefined and the Next.js tsconfig turns it on.
+    if (!option) return;
+    setTheme(option.value);
+    // Move real focus with the selection, or the next arrow key is handled
+    // by whichever button the browser still considers focused.
+    groupRef.current?.querySelectorAll("button")[next]?.focus();
+  };
+
+  return (
+    <div
+      ref={groupRef}
+      role="radiogroup"
+      aria-label="Color theme"
+      className={`inline-flex items-center gap-0.5 rounded-md border border-border bg-surface p-0.5 ${className}`}
+    >
+      {OPTIONS.map(({ value, label, Icon }) => {
+        const selected = theme === value;
+        return (
+          <button
+            key={value}
+            type="button"
+            role="radio"
+            aria-checked={selected}
+            aria-label={label}
+            title={label}
+            // Roving tabindex: the group is ONE tab stop, and arrow keys
+            // move within it.
+            tabIndex={selected ? 0 : -1}
+            onClick={() => setTheme(value)}
+            onKeyDown={onKeyDown}
+            className={`rounded p-1.5 transition-colors ${
+              selected
+                ? "bg-accent-surface text-accent-ink"
+                : "text-ink-subtle hover:bg-surface-muted hover:text-ink"
+            }`}
+          >
+            <Icon aria-hidden className="h-4 w-4" strokeWidth={1.5} />
+          </button>
+        );
+      })}
+    </div>
+  );
+}

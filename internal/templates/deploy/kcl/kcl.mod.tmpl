@@ -1,0 +1,14 @@
+[package]
+name = "{{.ProjectName}}-deploy"
+edition = "v0.11.0"
+version = "0.0.1"
+
+# `import forge` — the typed schemas this package's env main.k files use
+# (Service / Operator / Frontend / CronJob, plus the polymorphic deploy
+# union) — is NOT declared here. forge supplies that module from the binary
+# that is rendering, so it always matches the forge you run: for a project
+# pinned to a released forge, the release CI installs IS the module. No
+# network, no git tag, no project-local copy.
+#
+# Declare only your own additional KCL packages below.
+[dependencies]

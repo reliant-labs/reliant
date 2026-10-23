@@ -1,0 +1,77 @@
+// yours: scaffolded once, never touched again — forge will not overwrite this file
+//
+// THE PLACE YOUR METRICS ARE DECLARED.
+//
+// Every instrument is declared before it exists: a name, a type, a UCUM unit,
+// a description, the attribute keys it may carry (with the closed set of values
+// where there is one) and how stable it is. The registry returns the standard
+// OpenTelemetry instrument, so recording is the usual Add/Record call, and it
+// holds the declaration against every measurement — an attribute you did not
+// declare panics under ENVIRONMENT=development and is dropped (and counted on
+// forge.metrics.rejected_attributes) everywhere else, so one stray user id can
+// never become a time series per user.
+//
+// The declarations are also the schema:
+//
+//	{{.Name}} metrics schema --json      # this binary
+//	forge obs metrics declared                # a built binary or a running service
+//	GET /debug/metrics/schema            # a running service (the pprof listener)
+//
+// `forge build` writes it to bin/observability/metrics-schema.json, which the
+// release carries as observability/metrics-schema.json. A "Custom metrics"
+// dashboard (counters as a rate, histograms as p50/p95/p99, gauges as the last
+// value) is drawn from it by `forge obs metrics declared --dashboard`.
+//
+// HOW TO ADD ONE: copy recordsCreated below, give it a name, and record it
+// from the code that does the thing. Keep the instrument unexported and expose
+// a function that names what happened — callers should not be able to attach an
+// attribute the declaration does not list.
+//
+// HOW TO CHOOSE
+//
+//	Int64Counter          a count that only goes up (orders created, emails sent)
+//	Int64UpDownCounter    a count that goes up and down (jobs in flight)
+//	Float64Histogram      a distribution (latency in "s", sizes in "By")
+//	Int64Gauge            the latest value of something (queue depth)
+//
+// Attributes are for dimensions you group or filter by and whose values are a
+// small, known set. Never a user id, an order id, an email or a URL.
+package metrics
+
+import (
+	"context"
+
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
+
+	"github.com/reliant-labs/forge/pkg/observe/metrics"
+)
+
+// recordsCreated is the example: how many records a Create rpc has stored, per
+// entity and outcome. The scaffolded CRUD Create handlers call RecordCreated.
+// Rename it, retire it or keep it.
+var recordsCreated = metrics.Default().Int64Counter(metrics.Spec{
+	Name:        "records_created",
+	Unit:        "{record}",
+	Description: "Records created through a Create rpc, by entity and outcome.",
+	Attributes: []metrics.Attribute{
+		// entity is bounded by the number of entities in the schema, which is
+		// why it lists no values; outcome is a closed set.
+		{Key: "entity"},
+		{Key: "outcome", Values: []string{"ok", "failed"}},
+	},
+	Stability: metrics.Experimental,
+	Since:     "v0.1.0",
+})
+
+// RecordCreated counts one Create call for entity. A nil err is an "ok".
+func RecordCreated(ctx context.Context, entity string, err error) {
+	outcome := "ok"
+	if err != nil {
+		outcome = "failed"
+	}
+	recordsCreated.Add(ctx, 1, metric.WithAttributes(
+		attribute.String("entity", entity),
+		attribute.String("outcome", outcome),
+	))
+}

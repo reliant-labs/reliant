@@ -1,0 +1,509 @@
+{
+  "output": {
+    "applier": null,
+    "cluster_target": {
+      "cluster": "gke_acme_prod",
+      "connected_cluster": "acme-prod",
+      "domain": null,
+      "image_pull_secrets": [],
+      "namespace": "acme-prod",
+      "platform": "amd64"
+    },
+    "clusters": [],
+    "config_maps": [],
+    "connected_clusters": null,
+    "control_plane": {
+      "endpoint": "https://admin.reliantapi.com",
+      "registry_host": "registry.reliantapi.com",
+      "token_env": "FORGE_CONTROL_PLANE_TOKEN",
+      "type": "control_plane"
+    },
+    "control_plane_secrets": [
+      {
+        "cluster": "gke_acme_prod",
+        "connected_cluster": "acme-prod",
+        "keys": [
+          "AUDIENCE",
+          "ISSUER",
+          "PROD_API_BROKER_TOKEN",
+          "PROD_API_CLIENT_ID",
+          "PROD_API_LOGIN_URI",
+          "PROD_API_REDIRECT_URI",
+          "SCOPES"
+        ],
+        "kind": "identity",
+        "name": "forge-identity-identity",
+        "namespace": "acme-prod",
+        "reason": "managed identity 'identity' outputs (issuer, audience, applications)",
+        "required": true,
+        "type": "control_plane_secret"
+      },
+      {
+        "cluster": "gke_acme_prod",
+        "connected_cluster": "acme-prod",
+        "keys": [
+          "jwks.json"
+        ],
+        "kind": "identity_jwks",
+        "name": "forge-identity-identity-jwks",
+        "namespace": "acme-prod",
+        "reason": "managed identity 'identity' signing-key snapshot (the fallback when the issuer is unreachable at boot)",
+        "required": null,
+        "type": "control_plane_secret"
+      }
+    ],
+    "databases": [],
+    "env": "prod",
+    "external_secrets_operators": [],
+    "frontends": [],
+    "gateways": [],
+    "grpc_routes": [],
+    "helm_charts": [],
+    "http_routes": [],
+    "identity": {
+      "applications": [
+        {
+          "kind": "native_broker",
+          "login_uri": null,
+          "logout_uris": null,
+          "name": "prod:api",
+          "redirect_uris": null,
+          "workload": "api"
+        }
+      ],
+      "consumers": [
+        {
+          "application": "prod:api",
+          "deliver_only": null,
+          "fields": null,
+          "omit": null,
+          "workload": "api"
+        }
+      ],
+      "deliveries": [
+        {
+          "cluster": "gke_acme_prod",
+          "connected_cluster": "acme-prod",
+          "kind": "identity",
+          "name": "forge-identity-identity",
+          "namespace": "acme-prod"
+        },
+        {
+          "cluster": "gke_acme_prod",
+          "connected_cluster": "acme-prod",
+          "kind": "identity_jwks",
+          "name": "forge-identity-identity-jwks",
+          "namespace": "acme-prod"
+        }
+      ],
+      "domain": null,
+      "login": {
+        "mode": "native"
+      },
+      "machine_users": [],
+      "managed_secrets": null,
+      "name": "identity",
+      "project_name": null,
+      "public": null,
+      "roles": [
+        {
+          "display_name": null,
+          "group": null,
+          "key": "admin",
+          "members": null,
+          "members_from": "console"
+        },
+        {
+          "display_name": null,
+          "group": null,
+          "key": "member",
+          "members": null,
+          "members_from": "console"
+        }
+      ],
+      "runtime": "hosted",
+      "seed_users": [],
+      "share_with": null,
+      "smtp": null
+    },
+    "image_tag": "stable",
+    "infra": [],
+    "kubeconfig_secrets": [],
+    "lifecycle": null,
+    "manifests": [
+      {
+        "apiVersion": "v1",
+        "kind": "Namespace",
+        "metadata": {
+          "labels": {
+            "app.kubernetes.io/managed-by": "forge",
+            "forge.dev/cluster": "gke_acme_prod",
+            "forge.dev/env": "prod",
+            "pod-security.kubernetes.io/audit": "restricted",
+            "pod-security.kubernetes.io/enforce": "restricted",
+            "pod-security.kubernetes.io/warn": "restricted"
+          },
+          "name": "acme-prod"
+        }
+      },
+      {
+        "apiVersion": "forge.dev/v1alpha1",
+        "kind": "Workload",
+        "metadata": {
+          "labels": {
+            "app.kubernetes.io/managed-by": "forge",
+            "app.kubernetes.io/name": "api",
+            "app.kubernetes.io/part-of": "acme",
+            "forge.dev/cluster": "gke_acme_prod",
+            "forge.dev/env": "prod"
+          },
+          "name": "api",
+          "namespace": "acme-prod"
+        },
+        "spec": {
+          "env": [
+            {
+              "name": "OTEL_SERVICE_NAME",
+              "value": "api"
+            },
+            {
+              "name": "OTEL_RESOURCE_ATTRIBUTES",
+              "value": "deployment.environment.name=prod,service.namespace=acme"
+            },
+            {
+              "name": "JWT_AUDIENCE",
+              "secretRef": {
+                "key": "AUDIENCE",
+                "name": "forge-identity-identity"
+              }
+            },
+            {
+              "name": "JWT_ISSUER",
+              "secretRef": {
+                "key": "ISSUER",
+                "name": "forge-identity-identity"
+              }
+            },
+            {
+              "name": "JWT_ROLES_CLAIM",
+              "value": "auto"
+            },
+            {
+              "name": "OIDC_SCOPES",
+              "secretRef": {
+                "key": "SCOPES",
+                "name": "forge-identity-identity"
+              }
+            },
+            {
+              "name": "OIDC_CLIENT_ID",
+              "secretRef": {
+                "key": "PROD_API_CLIENT_ID",
+                "name": "forge-identity-identity"
+              }
+            },
+            {
+              "name": "OIDC_REDIRECT_URI",
+              "secretRef": {
+                "key": "PROD_API_REDIRECT_URI",
+                "name": "forge-identity-identity"
+              }
+            },
+            {
+              "name": "IDP_BASE",
+              "secretRef": {
+                "key": "ISSUER",
+                "name": "forge-identity-identity"
+              }
+            },
+            {
+              "name": "IDP_LOGIN_URI",
+              "secretRef": {
+                "key": "PROD_API_LOGIN_URI",
+                "name": "forge-identity-identity"
+              }
+            },
+            {
+              "name": "JWT_JWKS_SNAPSHOT_FILE",
+              "value": "/var/run/secrets/forge/identity-jwks/jwks.json"
+            },
+            {
+              "name": "IDP_BROKER_TOKEN_FILE",
+              "value": "/var/run/secrets/forge/identity/broker_token"
+            }
+          ],
+          "image": "ghcr.io/acme/api:stable",
+          "kind": "service",
+          "ports": [
+            {
+              "expose": true,
+              "name": "http",
+              "port": 8080,
+              "protocol": "tcp"
+            }
+          ],
+          "replicas": 1,
+          "resources": {
+            "cpuRequestMillicores": 250,
+            "memoryRequestBytes": 1073741824
+          },
+          "volumes": [
+            {
+              "mountPath": "/var/run/secrets/forge/identity",
+              "name": "forge-identity",
+              "readOnly": true,
+              "source": {
+                "secret": {
+                  "items": [
+                    {
+                      "key": "PROD_API_BROKER_TOKEN",
+                      "path": "broker_token"
+                    }
+                  ],
+                  "name": "forge-identity-identity"
+                }
+              }
+            },
+            {
+              "mountPath": "/var/run/secrets/forge/identity-jwks",
+              "name": "forge-identity-jwks",
+              "readOnly": true,
+              "source": {
+                "secret": {
+                  "items": [
+                    {
+                      "key": "jwks.json",
+                      "path": "jwks.json"
+                    }
+                  ],
+                  "name": "forge-identity-identity-jwks",
+                  "optional": true
+                }
+              }
+            }
+          ]
+        }
+      },
+      {
+        "apiVersion": "forge.dev/v1alpha1",
+        "kind": "Workload",
+        "metadata": {
+          "labels": {
+            "app.kubernetes.io/managed-by": "forge",
+            "app.kubernetes.io/name": "worker",
+            "app.kubernetes.io/part-of": "acme",
+            "forge.dev/cluster": "gke_acme_prod",
+            "forge.dev/env": "prod"
+          },
+          "name": "worker",
+          "namespace": "acme-prod"
+        },
+        "spec": {
+          "env": [
+            {
+              "name": "OTEL_SERVICE_NAME",
+              "value": "worker"
+            },
+            {
+              "name": "OTEL_RESOURCE_ATTRIBUTES",
+              "value": "deployment.environment.name=prod,service.namespace=acme"
+            }
+          ],
+          "image": "ghcr.io/acme/api:stable",
+          "kind": "worker",
+          "replicas": 1,
+          "resources": {
+            "cpuRequestMillicores": 250,
+            "memoryRequestBytes": 1073741824
+          }
+        }
+      }
+    ],
+    "network_policy": null,
+    "overrides": {},
+    "project": "acme",
+    "release_manifest_consumers": [],
+    "rendered_secrets": [],
+    "required_dns": [],
+    "required_secrets": [],
+    "runtime_classes": [],
+    "workloads": [
+      {
+        "build": null,
+        "build_image": null,
+        "image": "",
+        "kind": "service",
+        "name": "api",
+        "release_inputs": {},
+        "runtime": {
+          "cluster": "gke_acme_prod",
+          "connected_cluster": "acme-prod",
+          "domain": null,
+          "image_pull_secrets": [],
+          "namespace": "acme-prod",
+          "platform": "amd64",
+          "type": "cluster"
+        },
+        "spec": {
+          "env": [
+            {
+              "name": "OTEL_SERVICE_NAME",
+              "value": "api"
+            },
+            {
+              "name": "OTEL_RESOURCE_ATTRIBUTES",
+              "value": "deployment.environment.name=prod,service.namespace=acme"
+            },
+            {
+              "name": "JWT_AUDIENCE",
+              "secretRef": {
+                "key": "AUDIENCE",
+                "name": "forge-identity-identity"
+              }
+            },
+            {
+              "name": "JWT_ISSUER",
+              "secretRef": {
+                "key": "ISSUER",
+                "name": "forge-identity-identity"
+              }
+            },
+            {
+              "name": "JWT_ROLES_CLAIM",
+              "value": "auto"
+            },
+            {
+              "name": "OIDC_SCOPES",
+              "secretRef": {
+                "key": "SCOPES",
+                "name": "forge-identity-identity"
+              }
+            },
+            {
+              "name": "OIDC_CLIENT_ID",
+              "secretRef": {
+                "key": "PROD_API_CLIENT_ID",
+                "name": "forge-identity-identity"
+              }
+            },
+            {
+              "name": "OIDC_REDIRECT_URI",
+              "secretRef": {
+                "key": "PROD_API_REDIRECT_URI",
+                "name": "forge-identity-identity"
+              }
+            },
+            {
+              "name": "IDP_BASE",
+              "secretRef": {
+                "key": "ISSUER",
+                "name": "forge-identity-identity"
+              }
+            },
+            {
+              "name": "IDP_LOGIN_URI",
+              "secretRef": {
+                "key": "PROD_API_LOGIN_URI",
+                "name": "forge-identity-identity"
+              }
+            },
+            {
+              "name": "JWT_JWKS_SNAPSHOT_FILE",
+              "value": "/var/run/secrets/forge/identity-jwks/jwks.json"
+            },
+            {
+              "name": "IDP_BROKER_TOKEN_FILE",
+              "value": "/var/run/secrets/forge/identity/broker_token"
+            }
+          ],
+          "image": "ghcr.io/acme/api:stable",
+          "kind": "service",
+          "ports": [
+            {
+              "expose": true,
+              "name": "http",
+              "port": 8080,
+              "protocol": "tcp"
+            }
+          ],
+          "replicas": 1,
+          "resources": {
+            "cpuRequestMillicores": 250,
+            "memoryRequestBytes": 1073741824
+          },
+          "volumes": [
+            {
+              "mountPath": "/var/run/secrets/forge/identity",
+              "name": "forge-identity",
+              "readOnly": true,
+              "source": {
+                "secret": {
+                  "items": [
+                    {
+                      "key": "PROD_API_BROKER_TOKEN",
+                      "path": "broker_token"
+                    }
+                  ],
+                  "name": "forge-identity-identity"
+                }
+              }
+            },
+            {
+              "mountPath": "/var/run/secrets/forge/identity-jwks",
+              "name": "forge-identity-jwks",
+              "readOnly": true,
+              "source": {
+                "secret": {
+                  "items": [
+                    {
+                      "key": "jwks.json",
+                      "path": "jwks.json"
+                    }
+                  ],
+                  "name": "forge-identity-identity-jwks",
+                  "optional": true
+                }
+              }
+            }
+          ]
+        }
+      },
+      {
+        "build": null,
+        "build_image": null,
+        "image": "",
+        "kind": "worker",
+        "name": "worker",
+        "release_inputs": {},
+        "runtime": {
+          "cluster": "gke_acme_prod",
+          "connected_cluster": "acme-prod",
+          "domain": null,
+          "image_pull_secrets": [],
+          "namespace": "acme-prod",
+          "platform": "amd64",
+          "type": "cluster"
+        },
+        "spec": {
+          "env": [
+            {
+              "name": "OTEL_SERVICE_NAME",
+              "value": "worker"
+            },
+            {
+              "name": "OTEL_RESOURCE_ATTRIBUTES",
+              "value": "deployment.environment.name=prod,service.namespace=acme"
+            }
+          ],
+          "image": "ghcr.io/acme/api:stable",
+          "kind": "worker",
+          "replicas": 1,
+          "resources": {
+            "cpuRequestMillicores": 250,
+            "memoryRequestBytes": 1073741824
+          }
+        }
+      }
+    ]
+  }
+}

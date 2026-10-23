@@ -1,0 +1,57 @@
+
+# ---------------------------------------------------------------------------
+# ROOTS — one per root of the composition graph (the //forge:root structs in
+# internal/app, or the default `server`): the args that run it and the config
+# it REACHES, read off its closure by forge generate. Bind a workload to one:
+#
+#     api = fw.Workload {
+#         name = "api"
+#         build = forge.GoBuild {cmd = "./cmd/<bin>", output_name = "<bin>"}
+#     } | config_gen.root_of("server")
+#
+# and project its env with `config_gen.workloadEnvMap(cfg, w)`: exactly the
+# values its root reaches and, of the credentials, those it reaches and
+# requires, plus any `config_secrets` opts into (each must be reached).
+# ---------------------------------------------------------------------------
+schema Root:
+    """One root of the composition graph, as a process."""
+    args: [str]
+    env: [str] = []
+    secrets: [str] = []
+    required_secrets: [str] = []
+
+ROOTS: {str: Root} = {
+{{- range .Roots}}
+    {{.Name}} = Root {
+        args = {{.Args}}
+        env = {{.Env}}
+        secrets = {{.Secrets}}
+        required_secrets = {{.Required}}
+    }
+{{- end}}
+}
+
+# root_of is what a workload merges in to run a root: its name and the args
+# that run it. An unknown root fails the render.
+root_of = lambda name: str -> {str:} {
+    assert name in ROOTS, "root_of: no root named \"${name}\" — the roots are ${sorted([_k for _k in ROOTS])} (//forge:root structs in internal/app; forge generate refreshes this list)"
+    {root = name, args = ROOTS[name].args}
+}
+
+# rootEnvMap is the config env of a workload bound to a root (w.root).
+rootEnvMap = lambda c: {{.ConfigType}}, w: any -> {str: str | forge.SecretRef} {
+    assert w.root in ROOTS, "workload '${w.name}': root \"${w.root}\" is not a root of this binary — the roots are ${sorted([_k for _k in ROOTS])}"
+    _r = ROOTS[w.root]
+    assert not w.args or w.args == _r.args, "workload '${w.name}': args ${w.args} do not run root \"${w.root}\", which runs as ${_r.args} — bind it with config_gen.root_of(\"${w.root}\")"
+    _opted = w.config_secrets or []
+    assert all _n in _opted { _n in _r.secrets }, \
+        "workload '${w.name}': config_secrets names ${[_n for _n in _opted if _n not in _r.secrets]}, which root \"${w.root}\" does not reach (it reaches ${_r.secrets}): a credential reaches only the workloads whose root reads it"
+    _all = {{.EnvMap}}(c, {{if .Argv}}_r.args, {{end}}_r.required_secrets + [_n for _n in _opted if _n not in _r.required_secrets])
+    {_k: _v for _k, _v in _all if _k in _r.env or _k in _r.secrets}
+}
+
+# workloadEnvMap is a workload's config env: rootEnvMap for a workload bound
+# to a root, {{.EnvMap}} (its config_secrets) for any other.
+workloadEnvMap = lambda c: {{.ConfigType}}, w: any -> {str: str | forge.SecretRef} {
+    rootEnvMap(c, w) if w.root else {{.EnvMap}}(c, {{if .Argv}}(w.command or []) + (w.args or []), {{end}}w.config_secrets or [])
+}

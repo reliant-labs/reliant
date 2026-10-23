@@ -1,0 +1,105 @@
+"use client";
+
+// yours: scaffolded once, never touched again — forge will not overwrite this file
+//
+// AppShell — the product's chrome, and the decision about when NOT to draw it.
+//
+// ── Why this is a component and not just markup in the layout ─────────
+//
+// The root layout is a SERVER component (it sets <html>, loads fonts, and
+// must stay server-rendered), so it cannot read the current pathname. But
+// the chrome is not wanted on every route: a sign-in screen framed by the
+// application's own sidebar makes two false promises at once — that the
+// visitor is inside the app, and that those nav links lead somewhere they
+// can go. They are signed out. They cannot.
+//
+// Next.js nests layouts, so a nested `auth/layout.tsx` cannot REMOVE what a
+// parent already drew. Something has to make the choice on the client, with
+// the pathname in hand. This component is that thing.
+//
+// ── The rule ─────────────────────────────────────────────────────────
+//
+// Routes under /auth render bare — full viewport, no nav, no header, no
+// content column. Everything else gets the shell.
+//
+// The auth screens each set their own `min-h-screen` and background, which
+// is exactly the shape a page needs when nothing above it contributes
+// chrome.
+//
+// ── Yours to change ──────────────────────────────────────────────────
+//
+// Add a path to `bareRoutes` for any other full-bleed page — a marketing
+// landing page, an onboarding wizard, a 404 you want unframed. The match is
+// prefix-based, so "/auth" covers "/auth/sign-in/login" too.
+
+import { usePathname } from "next/navigation";
+
+import { AppHeader } from "@/components/app_header";
+import { MobileNav } from "@/components/mobile_nav";
+import { Nav } from "@/components/nav";
+
+/**
+ * Route prefixes that render WITHOUT the app chrome.
+ *
+ * `/auth` covers the sign-in screen, the credential form the issuer
+ * redirects into, and the OAuth callback — none of which a signed-out
+ * visitor should see wrapped in navigation they cannot use.
+ */
+const bareRoutes = ["/auth"];
+
+function isBare(pathname: string): boolean {
+  return bareRoutes.some(
+    (p) => pathname === p || pathname.startsWith(`${p}/`),
+  );
+}
+
+export function AppShell({
+  children,
+  banner,
+}: {
+  children: React.ReactNode;
+  /**
+   * Optional chrome rendered above the shell — the mock-mode banner, which
+   * the root layout defines inline. Passed in rather than imported so this
+   * component does not depend on where the layout chooses to keep it.
+   */
+  banner?: React.ReactNode;
+}) {
+  const pathname = usePathname() ?? "";
+
+  // Bare: the page owns the whole viewport and paints its own background.
+  if (isBare(pathname)) {
+    return <>{children}</>;
+  }
+
+  return (
+    // Chrome vs canvas. The sidebar sits on `bg-surface` (the chrome) and the
+    // content area on `bg-surface-muted` (the canvas), so the two read as
+    // distinct planes and the cards on the canvas — which are themselves
+    // `bg-surface` — separate from their background. Putting both on the same
+    // color is what makes a scaffold look like an unstyled wireframe.
+    <div className="flex h-screen flex-col overflow-hidden bg-surface text-ink">
+      {banner}
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        <Nav />
+        <MobileNav />
+        {/*
+          The header is a SIBLING of the scroll container, not inside it:
+          identity has to stay put while the page scrolls, and the session
+          control is the one thing a user must always be able to reach.
+        */}
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+          <AppHeader />
+          <main className="flex-1 overflow-y-auto bg-surface-muted">
+            {/*
+              A max width on the content column. Full-bleed text on a 27"
+              monitor is unreadable, and a scaffold that never sets one
+              teaches every page added later to skip it too.
+            */}
+            <div className="mx-auto max-w-7xl p-6 lg:p-8">{children}</div>
+          </main>
+        </div>
+      </div>
+    </div>
+  );
+}

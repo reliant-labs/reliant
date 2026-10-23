@@ -1,0 +1,173 @@
+---
+name: conflict-resolver
+description: Resolve git merge and rebase conflicts by understanding both branches' intent, classifying conflict types, and making intelligent merge decisions
+compatibility: reliant
+metadata:
+  category: git
+  owner: reliant
+---
+# Git Conflict Resolution
+
+Resolve conflicts while preserving the intent of BOTH branches. Work autonomously when confident, ask targeted questions when human judgment is needed.
+
+**CRITICAL**: Always use non-interactive git commands. Set `GIT_EDITOR=true` for rebase/merge continue.
+
+## Phase 0: Safety First
+
+Always create a backup before touching conflicts:
+```bash
+BACKUP="backup-$(date +%Y%m%d-%H%M%S)-$(git rev-parse --short HEAD)"
+git branch "$BACKUP"
+```
+
+## Phase 1: Discovery & Classification
+
+**Get the full picture:**
+```bash
+git status
+git diff --name-only --diff-filter=U  # List conflicted files
+```
+
+**Classify each conflict:**
+
+| Type | Examples | Resolution |
+|------|----------|------------|
+| **Trivial** | Whitespace, import ordering, comments | Auto-resolve |
+| **Additive** | Both added new functions/tests | Include both |
+| **Semantic** | Both modified same logic | Analyze intent |
+| **Structural** | Rename vs modify, delete vs modify | Ask user |
+| **Special** | Lock files, generated code, binaries | Regenerate or choose |
+
+## Phase 2: Intent Discovery
+
+Before resolving, understand what each branch intended:
+```bash
+MERGE_BASE=$(git merge-base HEAD MERGE_HEAD 2>/dev/null || git merge-base HEAD REBASE_HEAD)
+git log --oneline $MERGE_BASE..HEAD           # Current branch changes
+git log --oneline $MERGE_BASE..MERGE_HEAD     # Incoming changes
+git diff $MERGE_BASE..HEAD -- "conflicted-file"
+git diff $MERGE_BASE..MERGE_HEAD -- "conflicted-file"
+```
+
+Look for related changes in tests, configs, and dependent files.
+
+## Phase 3: Resolution Strategies
+
+**Trivial & Additive**: Resolve directly
+- Import conflicts: Include both imports
+- Both added functions: Include both
+- Whitespace: Use project's style (check .editorconfig, prettier)
+
+**Lock Files**: NEVER manually merge - regenerate:
+- `package-lock.json`: `rm package-lock.json && npm install`
+- `yarn.lock`: `rm yarn.lock && yarn install`
+- `go.sum`: `go mod tidy`
+- `Cargo.lock`: `cargo update`
+
+**Generated Files**: Regenerate from source, don't merge.
+
+**Semantic Conflicts**: Combine both intents when possible:
+```javascript
+// Branch A added validation, Branch B added caching
+// Resolution: Include both
+function process(data) {
+  validate(data);           // From branch A
+  return transform(cache(data));  // From branch B
+}
+```
+
+**Binary Files**: Cannot auto-merge - ask user to choose:
+- `git checkout --ours <file>` (keep current)
+- `git checkout --theirs <file>` (keep incoming)
+
+**When uncertain**: Ask with clear options:
+```
+CONFLICT REQUIRES INPUT:
+
+File: src/auth/login.ts
+Both branches modified authentication:
+- Current: Added OAuth support
+- Incoming: Added 2FA support
+
+Options:
+A) Keep OAuth, adapt 2FA to work with it
+B) Keep 2FA, adapt OAuth to work with it
+C) Refactor to support both approaches
+
+Which approach?
+```
+
+## Phase 4: Verification
+
+After resolving each file:
+```bash
+git add <resolved-file>
+
+# Check for leftover markers
+grep -r "<<<<<<" . --include="*.ts" --include="*.js" --include="*.go"
+
+# Run tests
+npm test  # or go test ./... or pytest
+```
+
+If tests fail, analyze and adjust resolution.
+
+## Phase 5: Continue Git Process
+
+```bash
+# Verify all resolved
+git diff --name-only --diff-filter=U | wc -l  # Should be 0
+
+# Continue rebase/merge
+GIT_EDITOR=true git rebase --continue
+# or
+GIT_EDITOR=true git merge --continue
+```
+
+If more conflicts appear, loop back to Phase 1.
+
+## Phase 6: Multi-Commit Progress
+
+For rebases with many commits, track progress:
+```
+REBASE PROGRESS: 7/12 commits
+
+Resolved: package-lock.json (regenerated)
+Resolved: src/utils.ts (additive - included both)
+Analyzing: src/auth/login.ts (semantic conflict)
+```
+
+Maintain consistency across commits (same patterns, same decisions).
+
+## Special Cases
+
+- **Database Migrations**: Check timestamps, renumber if needed
+- **API Contracts**: May need refactoring to support both changes
+- **Test Conflicts**: Usually safe to include both tests
+- **Config Files**: Merge non-overlapping changes, ask about overlapping
+
+## Anti-Patterns
+
+**DON'T:**
+- Accept one side blindly without understanding intent
+- Skip tests after resolution
+- Manually merge lock files
+- Leave TODO comments instead of resolving
+- Make unrelated changes during resolution
+
+**DO:**
+- Create backups first
+- Understand both branches' intent
+- Test after every resolution
+- Ask when uncertain
+- Preserve functionality from both sides
+
+## Success Criteria
+
+1. All conflicts resolved (no unmerged paths)
+2. All tests pass
+3. Build succeeds
+4. No merge markers remain (`<<<<<<<`, `=======`, `>>>>>>>`)
+5. Both branches' intent preserved
+6. Git process completed (rebase/merge finished)
+7. Backup available for recovery

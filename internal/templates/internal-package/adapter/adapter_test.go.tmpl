@@ -1,0 +1,68 @@
+// yours: scaffolded once, never touched again — forge will not overwrite this file
+// Adapter tests; canonical pattern in `forge skill load testing/patterns`.
+package {{.Name}}
+
+import (
+	"context"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+
+	"{{.Module}}/pkg/config"
+)
+
+// TestHealthCheck_OK exercises the adapter against an httptest stub.
+// The pattern: spin up an httptest.Server that returns whatever the
+// downstream would, point the adapter's base URL at it, and assert the adapter
+// translates the response correctly.
+func TestHealthCheck_OK(t *testing.T) {
+	t.Parallel()
+
+	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/health" {
+			http.NotFound(w, r)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer stub.Close()
+
+	svc, err := New(Deps{
+		Logger:     slog.Default(),
+		HTTPClient: stub.Client(),
+		Cfg:        &config.{{.ConfigBlock}}{BaseUrl: stub.URL},
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	if err := svc.HealthCheck(context.Background()); err != nil {
+		t.Fatalf("HealthCheck: %v", err)
+	}
+}
+
+// TestHealthCheck_Down asserts a 5xx downstream response is mapped to
+// an error — the caller must see the failure rather than silently treat
+// the dependency as healthy.
+func TestHealthCheck_Down(t *testing.T) {
+	t.Parallel()
+
+	stub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer stub.Close()
+
+	svc, err := New(Deps{
+		Logger:     slog.Default(),
+		HTTPClient: stub.Client(),
+		Cfg:        &config.{{.ConfigBlock}}{BaseUrl: stub.URL},
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	if err := svc.HealthCheck(context.Background()); err == nil {
+		t.Fatal("HealthCheck should error when downstream is unhealthy")
+	}
+}

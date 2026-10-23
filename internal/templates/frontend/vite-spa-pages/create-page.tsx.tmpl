@@ -1,0 +1,218 @@
+// yours: scaffolded once, never touched again — forge will not overwrite this file
+//
+// This route is OWNED and DISPOSABLE. forge scaffolds a full CRUD route for
+// EVERY entity, but a purpose-built frontend uses only a fraction — if this
+// entity isn't part of THIS frontend's product surface, delete the route
+// instead of leaving it wired into navigation.
+// Create page emitted by `forge scaffold page`. See `forge skill load frontend/pages` for canonical patterns.
+{{- /* Import ORDER is derived, not authored: the page writer sorts the
+       imports this render actually emitted into the groups the scaffold's
+       eslint import/order rule expects (templates.CanonicalTSImportOrder).
+       List a new import wherever it reads best. */}}
+{{- if .HasCreateBytesFields}}
+import { base64Decode } from "@bufbuild/protobuf/wire";
+{{- end}}
+{{- if .HasDateCreateFields}}
+import { timestampFromDate } from "@bufbuild/protobuf/wkt";
+{{- end}}
+import { zodResolver } from "@hookform/resolvers/zod";
+import { userMessage } from "@reliantlabs/forge-web-runtime";
+import { Link, useNavigate } from "@tanstack/react-router";
+import { {{if .HasCreateFK}}Controller, {{end}}useForm } from "react-hook-form";
+import { z } from "zod";
+
+{{if .HasCreateFK}}import { EntityPicker } from "@/components/entity-picker";
+{{end -}}
+import AlertBanner from "@/components/ui/alert_banner";
+import PageHeader from "@/components/ui/page_header";
+{{- range .CreateEnumImports}}
+import { {{joinStrings .Types ", "}} } from "{{.Path}}";
+{{- end}}
+{{- range .CreateHookImports}}
+import { {{joinStrings .Symbols ", "}} } from "{{.Module}}";
+{{- end}}
+
+const schema = z.object({
+  {{- range .CreateFields}}
+  {{- /* One expression per field, derived beside the TypeScript projection
+         it has to agree with (codegen.attachZodExpr): the zod value's type
+         is what the submit handler below converts FROM, so the two cannot
+         be authored independently. A 64-bit integer validates as digit
+         TEXT, not as a number — an <input type="number"> is a double and
+         cannot hold every int64. `bytes` validates as base64, the
+         encoding the field already has on the wire.
+
+         A field is required only where a rule says so (protovalidate
+         `required`, `min_len >= 1`, or a non-optional reference); an empty
+         input for a proto3 `optional` field validates as unset, so the
+         request omits it instead of sending the zero. */}}
+  {{.Name}}: {{.ZodExpr}},
+  {{- end}}
+{{- if not .CreateFields}}}){{else}}
+}){{end}};
+
+type FormValues = z.infer<typeof schema>;
+
+export default function Create{{.EntityName}}Page() {
+  const navigate = useNavigate();
+
+  const mutation = use{{.CreateRPC}}({
+{{- if and .EmitsDetailPage .CreateEntityFieldCamel}}
+    // Land on the record just created — its detail page is where the next
+    // step (editing it, adding a related row) starts.
+    onSuccess: ({ {{.CreateEntityFieldCamel}}: created }) => void navigate({ to: created ? `/{{.EntitySlug}}/${created.{{.PkFieldCamel}}}` : "/{{.EntitySlug}}" }),
+{{- else}}
+    onSuccess: () => void navigate({ to: "/{{.EntitySlug}}" }),
+{{- end}}
+    // The error renders inline below — opt out of the app-wide error
+    // toast so the failure isn't announced twice.
+    meta: { silenceErrorToast: true },
+  });
+
+  const { {{if .HasCreateFK}}control, {{end}}{{if .HasCreateRegistered}}register, {{end}}handleSubmit, formState: { errors } } = useForm<FormValues>({
+    resolver: zodResolver(schema),
+  });
+
+  function onSubmit(values: FormValues) {
+    // Typed end-to-end: every form value that is not already the wire type
+    // is converted BEFORE mutate() — date strings to proto Timestamps,
+    // 64-bit ints to bigints, base64 text to bytes, comma-separated text
+    // to arrays — so the request matches the schema instead of being cast
+    // into shape.
+    mutation.mutate({
+      ...values,
+      {{- range .CreateFields}}
+      {{- if .SubmitExpr}}
+      {{- if .SubmitNote}}
+      // {{.SubmitNote}}
+      {{- end}}
+      {{.Name}}: {{.SubmitExpr}},
+      {{- end}}
+      {{- end}}
+    });
+  }
+
+  return (
+    <div className="mx-auto max-w-xl px-4 py-8">
+      <PageHeader
+        title="Create {{.EntityName | humanize}}"
+        breadcrumbs={[
+          { label: "{{.EntityNamePlural | humanize}}", href: "/{{.EntitySlug}}" },
+          { label: "Create" },
+        ]}
+      />
+
+      {mutation.error && (
+        <div className="mb-6">
+          <AlertBanner variant="error" message={userMessage(mutation.error)} dismissible onDismiss={() => mutation.reset()} />
+        </div>
+      )}
+
+      <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 rounded-lg border border-border bg-surface p-6 shadow-sm">
+        {{- range .CreateFields}}
+        {{- if .FK}}
+        {{- template "fkPickerField" .}}
+        {{- else if eq .Type "checkbox"}}
+        <div className="flex items-center gap-3">
+          <input
+            type="checkbox"
+            id="{{.Name}}"
+            {...register("{{.Name}}")}
+            className="h-4 w-4 rounded border-border text-accent focus:ring-accent"
+          />
+          <label htmlFor="{{.Name}}" className="text-sm font-medium text-ink">
+            {{.Label}}
+          </label>
+        </div>
+        {{- else if eq .Type "base64"}}
+        <div>
+          <label htmlFor="{{.Name}}" className="mb-1 block text-sm font-medium text-ink">
+            {{.Label}} (base64){{if .Required}} *{{end}}
+          </label>
+          {{- /* A `bytes` column is opaque by declaration, so the scaffold
+                 edits it in the encoding it already has on the wire. If
+                 this column holds an upload, swap this for
+                 <input type="file"> and read the File into a Uint8Array —
+                 the submit handler's base64Decode goes with it. */}}
+          <textarea
+            id="{{.Name}}"
+            {...register("{{.Name}}")}
+            rows={4}
+            className={`block w-full rounded-lg border px-3 py-2 text-sm shadow-sm focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent ${errors.{{.Name}} ? "border-danger-border" : "border-border"}`}
+          />
+          {errors.{{.Name}} && <p className="mt-1 text-sm text-danger">{errors.{{.Name}}.message}</p>}
+        </div>
+        {{- else if eq .Type "date"}}
+        <div>
+          <label htmlFor="{{.Name}}" className="mb-1 block text-sm font-medium text-ink">
+            {{.Label}}{{if .Required}} *{{end}}
+          </label>
+          <input
+            type="datetime-local"
+            id="{{.Name}}"
+            {...register("{{.Name}}")}
+            className={`block w-full rounded-lg border px-3 py-2 text-sm shadow-sm focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent ${errors.{{.Name}} ? "border-danger-border" : "border-border"}`}
+          />
+          {errors.{{.Name}} && <p className="mt-1 text-sm text-danger">{errors.{{.Name}}.message}</p>}
+        </div>
+        {{- else if eq .Type "select"}}
+        <div>
+          <label htmlFor="{{.Name}}" className="mb-1 block text-sm font-medium text-ink">
+            {{.Label}}{{if .Required}} *{{end}}
+          </label>
+          {{- /* The options are the enum's REAL members: the proto zero
+                 (UNSPECIFIED) is how the wire says "unset", the born CHECK
+                 does not admit it, so it is never a choice. A NOT NULL enum
+                 starts on its column DEFAULT — the first real member, and
+                 what Create stores when the field is omitted. An `optional`
+                 enum starts on None, which submits as unset (NULL). */}}
+          <select
+            id="{{.Name}}"
+            defaultValue={{if .EmptyIsUnset}}""{{else}}{ {{.EnumDefaultRef}} }{{end}}
+            {...register("{{.Name}}")}
+            className={`block w-full rounded-lg border bg-surface px-3 py-2 text-sm text-ink shadow-sm focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent ${errors.{{.Name}} ? "border-danger-border" : "border-border"}`}
+          >
+            {{- if .EmptyIsUnset}}
+            <option value="">None</option>
+            {{- end}}
+            {{- range .EnumValues}}
+            <option value={ {{.Ref}} }>{{.Label}}</option>
+            {{- end}}
+          </select>
+          {errors.{{.Name}} && <p className="mt-1 text-sm text-danger">{errors.{{.Name}}.message}</p>}
+        </div>
+        {{- else}}
+        <div>
+          <label htmlFor="{{.Name}}" className="mb-1 block text-sm font-medium text-ink">
+            {{.Label}}{{if .Required}} *{{end}}
+          </label>
+          <input
+            type="{{.Type}}"
+            id="{{.Name}}"
+            {...register("{{.Name}}")}
+            className={`block w-full rounded-lg border px-3 py-2 text-sm shadow-sm focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent ${errors.{{.Name}} ? "border-danger-border" : "border-border"}`}
+          />
+          {errors.{{.Name}} && <p className="mt-1 text-sm text-danger">{errors.{{.Name}}.message}</p>}
+        </div>
+        {{- end}}
+        {{- end}}
+
+        <div className="flex items-center justify-end gap-3 border-t border-border pt-6">
+          <Link
+            to="/{{.EntitySlug}}"
+            className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-ink hover:bg-surface-muted"
+          >
+            Cancel
+          </Link>
+          <button
+            type="submit"
+            disabled={mutation.isPending}
+            className="rounded-lg bg-accent px-4 py-2 text-sm font-medium text-on-accent hover:bg-accent-hover focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 disabled:opacity-50"
+          >
+            {mutation.isPending ? "Creating..." : "Create {{.EntityName | humanize}}"}
+          </button>
+        </div>
+      </form>
+    </div>
+  );
+}

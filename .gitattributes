@@ -1,0 +1,3 @@
+# Templates are embedded with go:embed and goldens are compared byte-for-byte,
+# so a CRLF checkout on Windows would break the template/golden tests.
+* text=auto eol=lf

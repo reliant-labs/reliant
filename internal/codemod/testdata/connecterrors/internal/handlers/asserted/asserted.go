@@ -1,0 +1,16 @@
+// Package asserted is a handler package whose TEST reads a *connect.Error
+// with errors.As (reliant's catalog tests do): a bare kind would fail that
+// helper, and it is not mechanical to change, so this package's rewrites stay
+// *connect.Error.
+package asserted
+
+import (
+	"errors"
+
+	"connectrpc.com/connect"
+)
+
+// Refuse is what the rpc returns for a machine credential.
+func Refuse() error {
+	return connect.NewError(connect.CodePermissionDenied, errors.New("requires an interactive session"))
+}

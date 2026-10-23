@@ -1,0 +1,32 @@
+name: Cache embedded postgres
+description: >-
+  Restores and saves the embedded-postgres archive pkg/pgtest downloads, so a
+  job that boots it does not fetch it from Maven Central.
+
+# WHY A SHARED ACTION rather than a step copied into each workflow.
+#
+# pkg/pgtest downloads the postgres binary from repo1.maven.org on a cold
+# cache (pkg/pgtest/fetch.go). Maven Central rate-limits: with several PRs in
+# CI at once it answered HTTP 429 to all four retries, and every test that
+# needed postgres failed — tierguard in `Test (guards)`, the whole fixture
+# corpus — for a reason that had nothing to do with the change under test.
+# Only the e2e suite cached the archive; the other jobs that boot postgres
+# fetched it on every run.
+#
+# The archive lands in <os.UserCacheDir()>/forge/embedded-postgres, which is
+# ~/.cache/forge/embedded-postgres on a Linux runner, %LocalAppData% on
+# Windows and ~/Library/Caches on macOS — so the path follows runner.os. (The
+# Windows job fetched on every run until it used this action, and a Maven
+# Central 404 for a published 18.3.0 archive turned main red.) Its file name carries
+# the postgres version, so a restore from an older key is still a hit for an
+# unchanged version, and a version bump (a go.sum change: the version is
+# embedded-postgres's default) fetches once and saves under the new key.
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/cache@v6
+      with:
+        path: ${{ runner.os == 'Windows' && '~/AppData/Local/forge/embedded-postgres' || runner.os == 'macOS' && '~/Library/Caches/forge/embedded-postgres' || '~/.cache/forge/embedded-postgres' }}
+        key: embedded-postgres-${{ runner.os }}-${{ hashFiles('go.sum') }}
+        restore-keys: embedded-postgres-${{ runner.os }}-

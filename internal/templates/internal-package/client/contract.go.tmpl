@@ -1,0 +1,16 @@
+// yours: scaffolded once, never touched again — forge will not overwrite this file
+// External-client contract; canonical pattern in `forge skill load contracts`.
+package {{.Name}}
+
+import "context"
+
+// Service defines the interface for the {{.Name}} client.
+// All methods should accept a context for cancellation and tracing.
+type Service interface {
+	// HealthCheck verifies connectivity to the external service.
+	HealthCheck(ctx context.Context) error
+
+	// TODO: Add your client methods here. For example:
+	// GetResource(ctx context.Context, id string) (*Resource, error)
+	// CreateResource(ctx context.Context, input CreateResourceInput) (*Resource, error)
+}

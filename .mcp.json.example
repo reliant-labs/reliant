@@ -1,0 +1,24 @@
+{
+  "_description": "Additional MCP servers you may want to enable for this Forge project. To use one, copy its entry into the mcpServers object in .mcp.json (remove the leading underscore in the key name if present). This file is not loaded by Claude Code or Reliant — it is documentation only.",
+  "_description_url": "https://modelcontextprotocol.io/",
+  "mcpServers": {
+    "postgres": {
+      "_comment": "Read-only SQL inspection against the dev database. Requires the @modelcontextprotocol/server-postgres package. DSN matches the default docker-compose postgres; adjust if yours differs.",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-postgres",
+        "postgresql://postgres:postgres@localhost:5432/forge"
+      ]
+    },
+    "grafana": {
+      "_comment": "LLM-driven observability — lets agents query Prometheus, Loki, Tempo, and dashboards directly via the Grafana MCP server (https://github.com/grafana/mcp-grafana). Requires uv (https://docs.astral.sh/uv). The default URL matches the docker-compose Grafana; set GRAFANA_SERVICE_ACCOUNT_TOKEN if auth is required.",
+      "command": "uvx",
+      "args": ["mcp-grafana"],
+      "env": {
+        "GRAFANA_URL": "http://localhost:3000",
+        "GRAFANA_SERVICE_ACCOUNT_TOKEN": ""
+      }
+    }
+  }
+}

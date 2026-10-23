@@ -1,0 +1,9 @@
+{
+  "schema": "forge.obs.logs/v1",
+  "ok": false,
+  "exit_code": 2,
+  "error": "telemetry is off for staging: its observability is not declared",
+  "suggested": [
+    "forge skill load observability"
+  ]
+}

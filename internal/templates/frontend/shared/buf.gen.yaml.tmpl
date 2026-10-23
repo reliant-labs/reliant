@@ -1,0 +1,30 @@
+version: v2
+# Default: local TypeScript plugin from the frontend's node_modules. This
+# avoids the BSR (buf.build) for anonymous users — no `buf registry login`
+# required and no rate-limit pain. The plugin is `@bufbuild/protoc-gen-es`,
+# pinned in frontends/{{.FrontendName}}/package.json. Run `npm install` in
+# the frontend dir before `forge generate` (forge project new does this for you).
+#
+# Path is relative to where `buf generate` runs — forge invokes buf from the
+# project root with --template, so the path must traverse from project root
+# down into the frontend's node_modules.
+#
+# To opt back into BSR-hosted plugins, replace `local:` with
+#   `remote: buf.build/bufbuild/es`
+# (or use `forge project new --buf-plugins=remote` at scaffold time).
+plugins:
+  - local: ./frontends/{{.FrontendName}}/node_modules/.bin/protoc-gen-es
+    out: frontends/{{.FrontendName}}/src/gen
+    # include_imports is a plugin-level field in buf.gen.yaml v2 (same
+    # level as `out:` / `opt:`), not an `opt:` entry — protoc-gen-es rejects
+    # unknown options. This ensures transitive proto imports (e.g.
+    # forge/v1/forge.proto referenced by service_pb.ts) are emitted
+    # alongside first-party stubs, otherwise tsc fails with missing
+    # modules.
+    include_imports: true
+    # import_extension=.js produces ESM-compatible relative imports that
+    # TypeScript resolves correctly with `moduleResolution: bundler` — the
+    # setting every forge frontend tsconfig ships.
+    opt:
+      - target=ts
+      - import_extension=.js

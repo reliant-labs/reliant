@@ -1,0 +1,36 @@
+// yours: scaffolded once, never touched again — forge will not overwrite this file
+// Scenario: {{ .Name }}
+{{- if .Description }}
+//
+// {{ .Description }}
+{{- end }}
+//
+// Edit this file to add typed RPC handler overrides. Anything not listed
+// in `handlers` falls through to the base fixture transport.
+//
+// To activate this scenario, append `?scenario={{ .Name }}` to the URL.
+//
+// Reference: the handler-override contract in `../scenario-types_gen.ts`.
+
+import { defineScenario } from "../scenario-types_gen";
+
+// TODO: import the proto schemas you want to override and add typed handlers, e.g.
+//
+//   import { create } from "@bufbuild/protobuf";
+//   import { GetThingResponseSchema } from "@/gen/.../thing_pb";
+//
+//   handlers: {
+//     "myproject.v1.ThingService/GetThing": (req) =>
+//       create(GetThingResponseSchema, { id: "thing-1", name: "Sample" }),
+//   },
+
+export default defineScenario({
+  name: "{{ .Name }}",
+{{- if .Description }}
+  description: "{{ .Description }}",
+{{- end }}
+  // In hybrid mode (VITE_MOCK_API=hybrid), unmatched RPCs hit the real backend.
+  // Set to false to fall back to deterministic fixtures instead.
+  passthrough: true,
+  handlers: {},
+});

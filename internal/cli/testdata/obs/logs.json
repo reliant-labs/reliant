@@ -1,0 +1,38 @@
+{
+  "schema": "forge.obs.logs/v1",
+  "ok": true,
+  "exit_code": 0,
+  "scope": {
+    "env": "dev",
+    "backend": "local",
+    "from": "2026-10-22T11:45:00Z",
+    "to": "2026-10-22T12:00:00Z"
+  },
+  "query": "service:api",
+  "query_mode": "structured",
+  "logs": [
+    {
+      "time": "2026-10-22T11:59:50Z",
+      "severity": "ERROR",
+      "service": "api",
+      "body": "connection refused",
+      "trace_id": "0af7651916cd43dd8448eb211c80319c",
+      "attributes": {
+        "http.route": "/v1/jobs"
+      }
+    },
+    {
+      "time": "2026-10-22T11:59:40Z",
+      "severity": "ERROR",
+      "service": "worker",
+      "body": "retrying",
+      "attributes": {
+        "http.route": "/v1/jobs"
+      }
+    }
+  ],
+  "truncated": false,
+  "suggested": [
+    "forge obs trace 0af7651916cd43dd8448eb211c80319c dev"
+  ]
+}

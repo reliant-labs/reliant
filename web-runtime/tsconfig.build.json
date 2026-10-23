@@ -1,0 +1,19 @@
+{
+  "// what this config is for": "The PUBLISHED artifact. tsconfig.json typechecks the sources in place; this one emits dist/ — the .js and .d.ts every consumer actually resolves. See README, 'What this package publishes'.",
+
+  "// module note": "nodenext, NOT the bundler mode tsconfig.json uses for editing. This is the emit that ships, so it is checked against the strictest resolver a consumer can have — real Node ESM. That is what FORCES every relative import to carry its .js extension: the package is \"type\": \"module\", Node does not guess extensions, and bundler mode would happily let an unloadable package out the door because webpack/Vite/Metro do guess.",
+
+  "// sourceMap note": "inlineSources embeds the TypeScript in the .map, so a consumer debugging a crash inside <Resource> gets real source WITHOUT this package shipping src/. There is deliberately no declarationMap: it would need src/ on disk to be followable, and src/ is exactly what stopped being published — the .d.ts IS the contract, and is the right place for a consumer's editor to land.",
+
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": "dist",
+    "declaration": true,
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "sourceMap": true,
+    "inlineSources": true
+  },
+  "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"]
+}

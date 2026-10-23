@@ -1,0 +1,52 @@
+# Local profiles collector (docker-compose.yml's `otel-profiles` service).
+#
+# WHY A SECOND COLLECTOR. Profiles are the OpenTelemetry signal that is still
+# `v1development`. The collector inside the `clickstack` container is ClickStack's
+# own build (contrib v0.155): it receives profiles but cannot WRITE them. This
+# one is stock contrib v0.162.0 with the `service.profilesSupport` feature gate
+# on, writing to the same ClickHouse the rest of ClickStack uses. Nothing else
+# changes: traces, metrics and logs keep the one collector they had.
+#
+# HOW PROFILES GET HERE. Apps push them. pkg/observe captures a 10s CPU profile
+# plus heap and goroutine snapshots about once a minute and POSTs OTLP profiles
+# to OTEL_EXPORTER_OTLP_PROFILES_ENDPOINT, which `forge env up` points at this
+# collector (127.0.0.1:${CLICKSTACK_PROFILES_OTLP_PORT}). The collector never
+# scrapes anything. Turn profiling off per process with OTEL_PROFILES_EXPORTER=none.
+#
+# THE TABLES. The exporter writes one row per sample into default.otel_profiles.
+# profiles-schema.sql (next to this file) creates that table with a 72h TTL and
+# two materialized views that keep deduplicated stacks and per-minute totals for
+# 30 days. This file therefore sets create_schema: false; the DDL is yours.
+#
+# YOURS. forge scaffolds this file once and never rewrites it. When you bump the
+# image in docker-compose.yml, bump pkg/observe's profiles converter with it:
+# the profiles wire format changes between releases.
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+      grpc:
+        endpoint: 0.0.0.0:4317
+
+exporters:
+  clickhouse:
+    endpoint: tcp://clickstack:9000
+    database: default
+    username: ${env:CLICKHOUSE_USER}
+    password: ${env:CLICKHOUSE_PASSWORD}
+    create_schema: false
+    # Batch inside the exporter: the standalone batch processor has no profiles support.
+    sending_queue:
+      batch:
+        min_size: 2000
+        flush_timeout: 5s
+
+service:
+  pipelines:
+    profiles:
+      receivers: [otlp]
+      exporters: [clickhouse]
+  telemetry:
+    logs:
+      level: warn

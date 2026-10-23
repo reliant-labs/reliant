@@ -1,0 +1,25 @@
+# This frontend's image builds with THIS directory as its context (CI's
+# docker-build job and `forge build` both pass frontends/<name>), and a build
+# context reads only the .dockerignore at its own root — the project's does
+# not apply here.
+
+# A host install must never be copied over the image's `npm ci`: it holds
+# native binaries (Next's SWC, esbuild) built for the developer's OS.
+node_modules/
+
+# Build output: the image produces its own.
+.next/
+.next-prod/
+out/
+coverage/
+*.tsbuildinfo
+next-env.d.ts
+
+# Runtime config is rendered per environment and gitignored; an image must
+# not bake whichever copy happened to be on disk.
+public/config.js
+.env*
+!.env.example
+
+*.log
+.DS_Store

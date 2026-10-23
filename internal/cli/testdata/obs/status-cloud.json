@@ -1,0 +1,143 @@
+{
+  "schema": "forge.obs.status/v1",
+  "ok": true,
+  "exit_code": 0,
+  "scope": {
+    "env": "prod",
+    "backend": "cloud",
+    "env_id": "env-prod",
+    "from": "2026-10-22T11:00:00Z",
+    "to": "2026-10-22T12:00:00Z"
+  },
+  "query_mode": "structured",
+  "services": [
+    {
+      "service": "worker",
+      "requests": 0,
+      "rate_per_second": 0,
+      "errors": 0,
+      "error_rate": 0,
+      "p50_ms": 0,
+      "p95_ms": 0,
+      "p99_ms": 0,
+      "error_logs": 2
+    },
+    {
+      "service": "api",
+      "requests": 3600,
+      "rate_per_second": 1,
+      "errors": 36,
+      "error_rate": 0.01,
+      "p50_ms": 12,
+      "p95_ms": 80,
+      "p99_ms": 200,
+      "error_logs": 40
+    }
+  ],
+  "issues": [
+    {
+      "id": "ISS-7f3a",
+      "platform": "server",
+      "service": "api",
+      "title": "boom",
+      "culprit": "internal/store/db.go in store.Exec",
+      "status": "regressed",
+      "first_seen": "2026-10-20T10:00:00Z",
+      "last_seen": "2026-10-22T11:00:00Z",
+      "first_version": "v1.3.0",
+      "last_version": "v1.4.0",
+      "events": 42,
+      "affected": 9,
+      "regressed_at": "2026-10-22T09:00:00Z"
+    }
+  ],
+  "alerts": [
+    {
+      "rule": "HighErrorRate",
+      "state": "firing",
+      "fingerprint": "f1",
+      "labels": {
+        "service": "api"
+      },
+      "summary": "api error rate above 1%",
+      "active_at": "2026-10-22T11:40:00Z",
+      "firing_at": "2026-10-22T11:45:00Z",
+      "value": 0.02
+    },
+    {
+      "rule": "SlowP95",
+      "state": "pending",
+      "active_at": "2026-10-22T11:58:00Z",
+      "value": 900
+    }
+  ],
+  "telemetry": {
+    "last_log_at": "2026-10-22T11:59:00Z",
+    "last_span_at": "2026-10-22T11:59:30Z",
+    "lookback": "24h0m0s",
+    "deliveries_enabled": true,
+    "deliveries": [
+      {
+        "cluster": "gke-prod",
+        "namespace": "shop",
+        "name": "reliant-telemetry",
+        "state": "failing",
+        "expires_at": "2026-10-23T12:00:00Z",
+        "last_error": "forbidden",
+        "consecutive_failures": 3
+      }
+    ]
+  },
+  "current_release": {
+    "version": "v2",
+    "promotion_id": "p2",
+    "promoted_at": "2026-10-22T11:30:00Z",
+    "direction": "unknown",
+    "actor": "ci",
+    "via": "ci",
+    "unsettled": true
+  },
+  "changes": [
+    {
+      "kind": "activity",
+      "at": "2026-10-22T11:50:00Z",
+      "summary": "rotate secret db-pass",
+      "verb": "rotate",
+      "target": "secret db-pass",
+      "actor": "alice",
+      "via": "cli"
+    },
+    {
+      "kind": "failed_deploy",
+      "at": "2026-10-22T11:35:00Z",
+      "summary": "deploy of v2 failed ImagePullBackOff",
+      "version": "v2",
+      "promotion_id": "p2",
+      "actor": "ci",
+      "via": "ci"
+    },
+    {
+      "kind": "promotion",
+      "at": "2026-10-22T11:30:00Z",
+      "summary": "promoted v2",
+      "version": "v2",
+      "promotion_id": "p2",
+      "direction": "unknown",
+      "actor": "ci",
+      "via": "ci"
+    },
+    {
+      "kind": "promotion",
+      "at": "2026-10-22T10:30:00Z",
+      "summary": "promoted v1",
+      "version": "v1",
+      "promotion_id": "p1",
+      "direction": "initial"
+    }
+  ],
+  "suggested": [
+    "forge obs issue ISS-7f3a prod",
+    "forge obs endpoints prod --service api --sort errors",
+    "forge obs check prod --promotion p2"
+  ]
+}

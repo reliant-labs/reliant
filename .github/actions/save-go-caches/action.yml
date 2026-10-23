@@ -1,0 +1,53 @@
+name: Save the Go caches
+description: >-
+  The other half of restore-go-caches: trims the Go build cache to what this
+  job used and saves it under the key restore-go-caches computed, and saves
+  the module cache when its exact (go.sum) key was not already stored. Run
+  it last, under a main-only condition.
+
+# Main only (ci.yml's "Build-cache note"): an entry a pull request saves is
+# visible to that pull request alone and costs everyone else budget.
+
+inputs:
+  build-key:
+    description: restore-go-caches' build-key output.
+    required: true
+  mod-key:
+    description: restore-go-caches' mod-key output.
+    required: true
+  mod-hit:
+    description: restore-go-caches' mod-hit output.
+    required: false
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - uses: ./.github/actions/trim-go-build-cache
+    - name: Save the Go build cache
+      uses: actions/cache/save@v6
+      with:
+        path: ~/.cache/go-build
+        key: ${{ inputs.build-key }}
+    # Keyed on go.sum alone: an exact hit means this entry already exists, and
+    # a save would only fail on the duplicate key.
+    #
+    # Without the .zip archives (restore-go-caches says why they are not
+    # needed). Deleted rather than excluded by a `!` path pattern: the path
+    # list is part of the entry's identity, so restore and save must spell it
+    # identically, and the job is about to end, so nothing here needs them.
+    - name: Drop the module archives
+      if: ${{ inputs.mod-hit != 'true' }}
+      shell: bash
+      run: |
+        dir="$(go env GOMODCACHE)/cache/download"
+        if [ -d "$dir" ]; then
+          find "$dir" -name '*.zip' -type f -delete
+          echo "module cache without archives: $(du -sh "$(go env GOMODCACHE)" | cut -f1)"
+        fi
+    - name: Save the Go module cache
+      if: ${{ inputs.mod-hit != 'true' }}
+      uses: actions/cache/save@v6
+      with:
+        path: ~/go/pkg/mod
+        key: ${{ inputs.mod-key }}

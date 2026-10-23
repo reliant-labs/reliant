@@ -1,0 +1,719 @@
+{
+  "output": {
+    "applier": null,
+    "cluster_target": {
+      "cluster": "k3d-acme",
+      "connected_cluster": null,
+      "domain": null,
+      "image_pull_secrets": [],
+      "namespace": "acme-dev",
+      "platform": null
+    },
+    "clusters": [],
+    "config_maps": [],
+    "connected_clusters": null,
+    "control_plane_secrets": [],
+    "databases": [
+      {
+        "cluster": "k3d-acme",
+        "name": "db",
+        "namespace": "acme-dev",
+        "runtime": "cluster",
+        "spec": {
+          "deletionPolicy": "retain",
+          "engine": "postgres",
+          "instances": 1,
+          "storageGiB": 10
+        }
+      }
+    ],
+    "env": "dev",
+    "external_secrets_operators": [],
+    "frontends": [],
+    "gateways": [],
+    "grpc_routes": [],
+    "helm_charts": [],
+    "http_routes": [],
+    "image_tag": "latest",
+    "infra": [],
+    "kubeconfig_secrets": [],
+    "lifecycle": null,
+    "manifests": [
+      {
+        "apiVersion": "v1",
+        "kind": "Namespace",
+        "metadata": {
+          "labels": {
+            "app.kubernetes.io/managed-by": "forge",
+            "forge.dev/cluster": "k3d-acme",
+            "forge.dev/env": "dev",
+            "pod-security.kubernetes.io/audit": "restricted",
+            "pod-security.kubernetes.io/enforce": "restricted",
+            "pod-security.kubernetes.io/warn": "restricted"
+          },
+          "name": "acme-dev"
+        }
+      },
+      {
+        "apiVersion": "forge.dev/v1alpha1",
+        "kind": "Workload",
+        "metadata": {
+          "labels": {
+            "app.kubernetes.io/managed-by": "forge",
+            "app.kubernetes.io/name": "api",
+            "app.kubernetes.io/part-of": "acme",
+            "forge.dev/cluster": "k3d-acme",
+            "forge.dev/env": "dev"
+          },
+          "name": "api",
+          "namespace": "acme-dev"
+        },
+        "spec": {
+          "args": [
+            "api"
+          ],
+          "env": [
+            {
+              "name": "LOG_LEVEL",
+              "value": "info"
+            },
+            {
+              "name": "API_KEY",
+              "secretRef": {
+                "key": "api_key",
+                "name": "acme-secrets",
+                "optional": true
+              }
+            },
+            {
+              "fieldRef": {
+                "fieldPath": "metadata.name"
+              },
+              "name": "POD_NAME"
+            },
+            {
+              "name": "OTEL_SERVICE_NAME",
+              "value": "api"
+            },
+            {
+              "name": "OTEL_RESOURCE_ATTRIBUTES",
+              "value": "deployment.environment.name=dev,service.namespace=acme"
+            },
+            {
+              "name": "GOMEMLIMIT",
+              "value": "921MiB"
+            }
+          ],
+          "image": "localhost:5050/acme:latest",
+          "kind": "service",
+          "ports": [
+            {
+              "expose": true,
+              "name": "http",
+              "port": 8080,
+              "protocol": "tcp"
+            }
+          ],
+          "probes": {
+            "failureThreshold": 3,
+            "initialDelaySeconds": 0,
+            "livenessPath": "/healthz",
+            "periodSeconds": 5,
+            "port": 8080,
+            "readinessPath": "/readyz",
+            "startupPath": "/readyz",
+            "timeoutSeconds": 3
+          },
+          "replicas": 2,
+          "resources": {
+            "cpuRequestMillicores": 250,
+            "memoryRequestBytes": 1073741824
+          }
+        }
+      },
+      {
+        "apiVersion": "forge.dev/v1alpha1",
+        "kind": "Workload",
+        "metadata": {
+          "labels": {
+            "app.kubernetes.io/managed-by": "forge",
+            "app.kubernetes.io/name": "migrate",
+            "app.kubernetes.io/part-of": "acme",
+            "forge.dev/cluster": "k3d-acme",
+            "forge.dev/env": "dev"
+          },
+          "name": "migrate",
+          "namespace": "acme-dev"
+        },
+        "spec": {
+          "args": [
+            "db",
+            "migrate",
+            "up"
+          ],
+          "before": [
+            "*"
+          ],
+          "env": [
+            {
+              "name": "OTEL_SERVICE_NAME",
+              "value": "migrate"
+            },
+            {
+              "name": "OTEL_RESOURCE_ATTRIBUTES",
+              "value": "deployment.environment.name=dev,service.namespace=acme"
+            },
+            {
+              "name": "GOMEMLIMIT",
+              "value": "921MiB"
+            }
+          ],
+          "image": "localhost:5050/acme:latest",
+          "kind": "job",
+          "replicas": 1,
+          "resources": {
+            "cpuRequestMillicores": 250,
+            "memoryRequestBytes": 1073741824
+          }
+        }
+      },
+      {
+        "apiVersion": "forge.dev/v1alpha1",
+        "kind": "Workload",
+        "metadata": {
+          "labels": {
+            "app.kubernetes.io/managed-by": "forge",
+            "app.kubernetes.io/name": "nightly",
+            "app.kubernetes.io/part-of": "acme",
+            "forge.dev/cluster": "k3d-acme",
+            "forge.dev/env": "dev"
+          },
+          "name": "nightly",
+          "namespace": "acme-dev"
+        },
+        "spec": {
+          "args": [
+            "sweep"
+          ],
+          "env": [
+            {
+              "name": "OTEL_SERVICE_NAME",
+              "value": "nightly"
+            },
+            {
+              "name": "OTEL_RESOURCE_ATTRIBUTES",
+              "value": "deployment.environment.name=dev,service.namespace=acme"
+            },
+            {
+              "name": "GOMEMLIMIT",
+              "value": "921MiB"
+            }
+          ],
+          "image": "localhost:5050/acme:latest",
+          "kind": "cron",
+          "namespacedRBAC": [
+            {
+              "apiGroups": [
+                ""
+              ],
+              "resources": [
+                "configmaps"
+              ],
+              "verbs": [
+                "list",
+                "delete"
+              ]
+            }
+          ],
+          "replicas": 1,
+          "resources": {
+            "cpuRequestMillicores": 250,
+            "memoryRequestBytes": 1073741824
+          },
+          "schedule": "@daily"
+        }
+      },
+      {
+        "apiVersion": "forge.dev/v1alpha1",
+        "kind": "Workload",
+        "metadata": {
+          "labels": {
+            "app.kubernetes.io/managed-by": "forge",
+            "app.kubernetes.io/name": "nats",
+            "app.kubernetes.io/part-of": "acme",
+            "forge.dev/cluster": "k3d-acme",
+            "forge.dev/env": "dev"
+          },
+          "name": "nats",
+          "namespace": "acme-dev"
+        },
+        "spec": {
+          "env": [
+            {
+              "name": "OTEL_SERVICE_NAME",
+              "value": "nats"
+            },
+            {
+              "name": "OTEL_RESOURCE_ATTRIBUTES",
+              "value": "deployment.environment.name=dev,service.namespace=acme"
+            }
+          ],
+          "image": "docker.io/library/nats:2.10",
+          "kind": "service",
+          "ports": [
+            {
+              "name": "client",
+              "port": 4222,
+              "protocol": "tcp"
+            }
+          ],
+          "replicas": 1,
+          "resources": {
+            "cpuRequestMillicores": 250,
+            "memoryRequestBytes": 1073741824
+          }
+        }
+      },
+      {
+        "apiVersion": "forge.dev/v1alpha1",
+        "kind": "Workload",
+        "metadata": {
+          "labels": {
+            "app.kubernetes.io/managed-by": "forge",
+            "app.kubernetes.io/name": "workspace",
+            "app.kubernetes.io/part-of": "acme",
+            "forge.dev/cluster": "k3d-acme",
+            "forge.dev/env": "dev"
+          },
+          "name": "workspace",
+          "namespace": "acme-dev"
+        },
+        "spec": {
+          "args": [
+            "workspace-controller"
+          ],
+          "clusterRBAC": [
+            {
+              "apiGroups": [
+                "acme.dev"
+              ],
+              "resources": [
+                "workspaces"
+              ],
+              "verbs": [
+                "get",
+                "list",
+                "watch"
+              ]
+            }
+          ],
+          "crds": [
+            "Workspace"
+          ],
+          "env": [
+            {
+              "name": "OTEL_SERVICE_NAME",
+              "value": "workspace"
+            },
+            {
+              "name": "OTEL_RESOURCE_ATTRIBUTES",
+              "value": "deployment.environment.name=dev,service.namespace=acme"
+            },
+            {
+              "name": "GOMEMLIMIT",
+              "value": "921MiB"
+            }
+          ],
+          "image": "localhost:5050/acme:latest",
+          "kind": "operator",
+          "leaderElection": true,
+          "replicas": 1,
+          "resources": {
+            "cpuRequestMillicores": 250,
+            "memoryRequestBytes": 1073741824
+          }
+        }
+      },
+      {
+        "apiVersion": "forge.dev/v1alpha1",
+        "kind": "ManagedDatabase",
+        "metadata": {
+          "labels": {
+            "app.kubernetes.io/managed-by": "forge",
+            "app.kubernetes.io/name": "db",
+            "app.kubernetes.io/part-of": "acme",
+            "forge.dev/cluster": "k3d-acme",
+            "forge.dev/env": "dev"
+          },
+          "name": "db",
+          "namespace": "acme-dev"
+        },
+        "spec": {
+          "deletionPolicy": "retain",
+          "engine": "postgres",
+          "instances": 1,
+          "storageGiB": 10
+        }
+      }
+    ],
+    "network_policy": {
+      "egress_ports": [
+        443,
+        5432
+      ],
+      "ingress_namespace": "",
+      "telemetry_namespace": ""
+    },
+    "overrides": {},
+    "project": "acme",
+    "release_manifest_consumers": [],
+    "rendered_secrets": [],
+    "required_dns": [],
+    "required_secrets": [],
+    "runtime_classes": [],
+    "secret_provider": {
+      "path": "secrets/dev.yaml",
+      "type": "file"
+    },
+    "workloads": [
+      {
+        "build": {
+          "cmd": "./cmd/acme",
+          "env": {},
+          "flags": [],
+          "goarch": null,
+          "goos": null,
+          "inputs_file": null,
+          "ldflags": [],
+          "output_name": "acme",
+          "tags": [],
+          "type": "go",
+          "unit": null
+        },
+        "build_image": "localhost:5050/acme",
+        "image": "localhost:5050/acme",
+        "kind": "service",
+        "name": "api",
+        "release_inputs": {},
+        "runtime": {
+          "cluster": "k3d-acme",
+          "connected_cluster": null,
+          "domain": null,
+          "image_pull_secrets": [],
+          "namespace": "acme-dev",
+          "platform": null,
+          "type": "cluster"
+        },
+        "spec": {
+          "args": [
+            "api"
+          ],
+          "env": [
+            {
+              "name": "LOG_LEVEL",
+              "value": "info"
+            },
+            {
+              "name": "API_KEY",
+              "secretRef": {
+                "key": "api_key",
+                "name": "acme-secrets",
+                "optional": true
+              }
+            },
+            {
+              "fieldRef": {
+                "fieldPath": "metadata.name"
+              },
+              "name": "POD_NAME"
+            },
+            {
+              "name": "OTEL_SERVICE_NAME",
+              "value": "api"
+            },
+            {
+              "name": "OTEL_RESOURCE_ATTRIBUTES",
+              "value": "deployment.environment.name=dev,service.namespace=acme"
+            },
+            {
+              "name": "GOMEMLIMIT",
+              "value": "921MiB"
+            }
+          ],
+          "image": "localhost:5050/acme:latest",
+          "kind": "service",
+          "ports": [
+            {
+              "expose": true,
+              "name": "http",
+              "port": 8080,
+              "protocol": "tcp"
+            }
+          ],
+          "probes": {
+            "failureThreshold": 3,
+            "initialDelaySeconds": 0,
+            "livenessPath": "/healthz",
+            "periodSeconds": 5,
+            "port": 8080,
+            "readinessPath": "/readyz",
+            "startupPath": "/readyz",
+            "timeoutSeconds": 3
+          },
+          "replicas": 2,
+          "resources": {
+            "cpuRequestMillicores": 250,
+            "memoryRequestBytes": 1073741824
+          }
+        }
+      },
+      {
+        "build": {
+          "cmd": "./cmd/acme",
+          "env": {},
+          "flags": [],
+          "goarch": null,
+          "goos": null,
+          "inputs_file": null,
+          "ldflags": [],
+          "output_name": "acme",
+          "tags": [],
+          "type": "go",
+          "unit": null
+        },
+        "build_image": "localhost:5050/acme",
+        "image": "localhost:5050/acme",
+        "kind": "job",
+        "name": "migrate",
+        "release_inputs": {},
+        "runtime": {
+          "cluster": "k3d-acme",
+          "connected_cluster": null,
+          "domain": null,
+          "image_pull_secrets": [],
+          "namespace": "acme-dev",
+          "platform": null,
+          "type": "cluster"
+        },
+        "spec": {
+          "args": [
+            "db",
+            "migrate",
+            "up"
+          ],
+          "before": [
+            "*"
+          ],
+          "env": [
+            {
+              "name": "OTEL_SERVICE_NAME",
+              "value": "migrate"
+            },
+            {
+              "name": "OTEL_RESOURCE_ATTRIBUTES",
+              "value": "deployment.environment.name=dev,service.namespace=acme"
+            },
+            {
+              "name": "GOMEMLIMIT",
+              "value": "921MiB"
+            }
+          ],
+          "image": "localhost:5050/acme:latest",
+          "kind": "job",
+          "replicas": 1,
+          "resources": {
+            "cpuRequestMillicores": 250,
+            "memoryRequestBytes": 1073741824
+          }
+        }
+      },
+      {
+        "build": {
+          "cmd": "./cmd/acme",
+          "env": {},
+          "flags": [],
+          "goarch": null,
+          "goos": null,
+          "inputs_file": null,
+          "ldflags": [],
+          "output_name": "acme",
+          "tags": [],
+          "type": "go",
+          "unit": null
+        },
+        "build_image": "localhost:5050/acme",
+        "image": "localhost:5050/acme",
+        "kind": "cron",
+        "name": "nightly",
+        "release_inputs": {},
+        "runtime": {
+          "cluster": "k3d-acme",
+          "connected_cluster": null,
+          "domain": null,
+          "image_pull_secrets": [],
+          "namespace": "acme-dev",
+          "platform": null,
+          "type": "cluster"
+        },
+        "spec": {
+          "args": [
+            "sweep"
+          ],
+          "env": [
+            {
+              "name": "OTEL_SERVICE_NAME",
+              "value": "nightly"
+            },
+            {
+              "name": "OTEL_RESOURCE_ATTRIBUTES",
+              "value": "deployment.environment.name=dev,service.namespace=acme"
+            },
+            {
+              "name": "GOMEMLIMIT",
+              "value": "921MiB"
+            }
+          ],
+          "image": "localhost:5050/acme:latest",
+          "kind": "cron",
+          "namespacedRBAC": [
+            {
+              "apiGroups": [
+                ""
+              ],
+              "resources": [
+                "configmaps"
+              ],
+              "verbs": [
+                "list",
+                "delete"
+              ]
+            }
+          ],
+          "replicas": 1,
+          "resources": {
+            "cpuRequestMillicores": 250,
+            "memoryRequestBytes": 1073741824
+          },
+          "schedule": "@daily"
+        }
+      },
+      {
+        "build": null,
+        "build_image": null,
+        "image": "",
+        "kind": "service",
+        "name": "nats",
+        "release_inputs": {},
+        "runtime": {
+          "cluster": "k3d-acme",
+          "connected_cluster": null,
+          "domain": null,
+          "image_pull_secrets": [],
+          "namespace": "acme-dev",
+          "platform": null,
+          "type": "cluster"
+        },
+        "spec": {
+          "env": [
+            {
+              "name": "OTEL_SERVICE_NAME",
+              "value": "nats"
+            },
+            {
+              "name": "OTEL_RESOURCE_ATTRIBUTES",
+              "value": "deployment.environment.name=dev,service.namespace=acme"
+            }
+          ],
+          "image": "docker.io/library/nats:2.10",
+          "kind": "service",
+          "ports": [
+            {
+              "name": "client",
+              "port": 4222,
+              "protocol": "tcp"
+            }
+          ],
+          "replicas": 1,
+          "resources": {
+            "cpuRequestMillicores": 250,
+            "memoryRequestBytes": 1073741824
+          }
+        }
+      },
+      {
+        "build": {
+          "cmd": "./cmd/acme",
+          "env": {},
+          "flags": [],
+          "goarch": null,
+          "goos": null,
+          "inputs_file": null,
+          "ldflags": [],
+          "output_name": "acme",
+          "tags": [],
+          "type": "go",
+          "unit": null
+        },
+        "build_image": "localhost:5050/acme",
+        "image": "localhost:5050/acme",
+        "kind": "operator",
+        "name": "workspace",
+        "release_inputs": {},
+        "runtime": {
+          "cluster": "k3d-acme",
+          "connected_cluster": null,
+          "domain": null,
+          "image_pull_secrets": [],
+          "namespace": "acme-dev",
+          "platform": null,
+          "type": "cluster"
+        },
+        "spec": {
+          "args": [
+            "workspace-controller"
+          ],
+          "clusterRBAC": [
+            {
+              "apiGroups": [
+                "acme.dev"
+              ],
+              "resources": [
+                "workspaces"
+              ],
+              "verbs": [
+                "get",
+                "list",
+                "watch"
+              ]
+            }
+          ],
+          "crds": [
+            "Workspace"
+          ],
+          "env": [
+            {
+              "name": "OTEL_SERVICE_NAME",
+              "value": "workspace"
+            },
+            {
+              "name": "OTEL_RESOURCE_ATTRIBUTES",
+              "value": "deployment.environment.name=dev,service.namespace=acme"
+            },
+            {
+              "name": "GOMEMLIMIT",
+              "value": "921MiB"
+            }
+          ],
+          "image": "localhost:5050/acme:latest",
+          "kind": "operator",
+          "leaderElection": true,
+          "replicas": 1,
+          "resources": {
+            "cpuRequestMillicores": 250,
+            "memoryRequestBytes": 1073741824
+          }
+        }
+      }
+    ]
+  }
+}

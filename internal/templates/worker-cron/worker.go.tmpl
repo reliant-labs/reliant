@@ -1,0 +1,119 @@
+//go:build ignore
+
+package {{.Package}}
+
+// MIGRATION (v0.x → v0.x+1): Run now takes a context.Context.
+//
+// Before:
+//   func (w *Worker) Run()
+// After:
+//   func (w *Worker) Run(ctx context.Context)
+//
+// Each tick gets a context derived from baseCtx (set in Start, cancelled
+// in Stop), so long-running Run bodies can observe graceful shutdown via
+// ctx.Done() instead of running to completion after Stop fires. If you've
+// already polished the Run body, add a `ctx context.Context` parameter and
+// pass it through to any context-aware downstream call.
+
+import (
+	"context"
+	"log/slog"
+
+	"github.com/robfig/cron/v3"
+	"go.opentelemetry.io/otel"
+{{- if .HasConfig}}
+
+	"{{.Module}}/pkg/config"
+{{- end}}
+)
+
+// tracer is the OTel tracer for this worker, named after the package so
+// spans group cleanly in the trace UI.
+var tracer = otel.Tracer("internal/workers/{{.Name}}")
+
+// Schedule is the cron expression that controls how often Run executes.
+const Schedule = "{{.Schedule}}"
+
+// Deps contains the dependencies for the {{.Name}} cron worker.
+type Deps struct {
+	Logger *slog.Logger
+{{- if .HasConfig}}
+	Config *config.Config
+{{- end}}
+}
+
+// Worker implements a cron-scheduled background worker for {{.Name}}.
+type Worker struct {
+	deps Deps
+	cron *cron.Cron
+
+	// baseCtx is set in Start, cancelled in Stop; each tick derives its ctx
+	// from it so Run observes graceful shutdown.
+	baseCtx    context.Context
+	baseCancel context.CancelFunc
+}
+
+// New creates a new {{.Name}} cron worker.
+func New(deps Deps) *Worker {
+	return &Worker{deps: deps}
+}
+
+// Name returns the worker's identifier.
+func (w *Worker) Name() string { return "{{.Name | kebabCase}}" }
+
+// Start sets up the cron scheduler and blocks until ctx is cancelled.
+func (w *Worker) Start(ctx context.Context) error {
+	w.deps.Logger.InfoContext(ctx, "cron worker started", "worker", w.Name(), "schedule", Schedule)
+
+	// baseCancel lets Stop() signal in-flight Run invocations even if the
+	// caller's parent ctx is still live.
+	w.baseCtx, w.baseCancel = context.WithCancel(ctx)
+
+	w.cron = cron.New()
+	if _, err := w.cron.AddFunc(Schedule, func() {
+		// Wrap with context.WithTimeout(w.baseCtx, ...) for a per-tick deadline.
+		w.Run(w.baseCtx)
+	}); err != nil {
+		w.baseCancel()
+		return err
+	}
+	w.cron.Start()
+
+	<-ctx.Done()
+	return nil
+}
+
+// Stop gracefully shuts down the cron scheduler, waiting for any running job to finish.
+func (w *Worker) Stop(ctx context.Context) error {
+	w.deps.Logger.InfoContext(ctx, "cron worker stopping", "worker", w.Name())
+	if w.baseCancel != nil {
+		// Signal in-flight Run before waiting on cron.Stop()'s wait group.
+		w.baseCancel()
+	}
+	if w.cron != nil {
+		stopCtx := w.cron.Stop()
+		select {
+		case <-stopCtx.Done():
+		case <-ctx.Done():
+		}
+	}
+	return nil
+}
+
+// Run is invoked on the cron schedule. Implement your logic here. Plumb
+// ctx through every context-aware call so shutdown is observed. See the
+// forge `workers` skill.
+func (w *Worker) Run(ctx context.Context) {
+	// LIFO defer: span.End() runs after recover, so the span records the
+	// panicked state. robfig/cron doesn't restart on panic, so recovering
+	// here keeps the schedule alive across bad ticks.
+	ctx, span := tracer.Start(ctx, "cron.{{.Name}}.tick")
+	defer func() {
+		if r := recover(); r != nil {
+			w.deps.Logger.ErrorContext(ctx, "cron job panicked", "worker", w.Name(), "panic", r)
+		}
+		span.End()
+	}()
+
+	w.deps.Logger.InfoContext(ctx, "cron job executing", "worker", w.Name(), "schedule", Schedule)
+}

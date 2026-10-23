@@ -1,0 +1,289 @@
+package planted
+
+import (
+	"os"
+	"os/exec"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"testing"
+)
+
+// ── vacuous-loop: WANT ───────────────────────────────────────────────────────
+
+// TestVacuousDiscovery is the reliant TestProjectWorkflows_* shape: a checkout
+// leaves the directory present but EMPTY, the loop runs zero times, and the
+// test reports green having asserted nothing.
+func TestVacuousDiscovery(t *testing.T) {
+	entries, err := os.ReadDir("fixtures")
+	if err != nil {
+		t.Fatalf("ReadDir: %v", err)
+	}
+	for _, e := range entries {
+		t.Run(e.Name(), func(t *testing.T) {
+			b, rerr := os.ReadFile(filepath.Join("fixtures", e.Name(), "want.json"))
+			if rerr != nil {
+				t.Fatalf("read golden: %v", rerr)
+			}
+			if len(b) == 0 {
+				t.Error("golden is empty")
+			}
+		})
+	}
+}
+
+// TestVacuousGlob is the same shape through filepath.Glob.
+func TestVacuousGlob(t *testing.T) {
+	files, _ := filepath.Glob("testdata/*.golden")
+	for _, f := range files {
+		b, err := os.ReadFile(f)
+		if err != nil {
+			t.Fatalf("read %s: %v", f, err)
+		}
+		if len(b) == 0 {
+			t.Errorf("%s is empty", f)
+		}
+	}
+}
+
+// ── vacuous-loop: must NOT fire ──────────────────────────────────────────────
+
+// TestGuardedByLen proves the set was non-empty before trusting the loop.
+func TestGuardedByLen(t *testing.T) {
+	entries, err := os.ReadDir("fixtures")
+	if err != nil {
+		t.Fatalf("ReadDir: %v", err)
+	}
+	if len(entries) == 0 {
+		t.Fatal("no fixtures discovered — the corpus is missing, which is a failure, not a pass")
+	}
+	for _, e := range entries {
+		if e.Name() == "" {
+			t.Errorf("empty name")
+		}
+	}
+}
+
+// TestGuardedByWitness proves it with a flag the loop sets, transitively
+// through a second loop — the shape add_entity_from_proto_test really uses.
+func TestGuardedByWitness(t *testing.T) {
+	entries, _ := os.ReadDir("db/migrations")
+	seen := map[string]bool{}
+	for _, e := range entries {
+		seen[e.Name()] = true
+	}
+	found := false
+	for name := range seen {
+		if name == "001_create_users.up.sql" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("migration not born")
+	}
+}
+
+// TestGuardedByCounter proves it with a COUNTER the loop bumps and the test
+// compares after it. Same proof as TestGuardedByWitness, spelled the way a
+// test that filters the discovered set has to spell it: `found := false` says
+// "at least one", `checked != 3` says "exactly the three I expect", and only
+// the second one can catch a scaffold that stopped emitting one of them.
+//
+// The bump is `checked++`, an IncDecStmt — not an AssignStmt. A closure that
+// walked only assignments never saw the counter become a witness and flagged
+// this shape, which is how scaffold_test_split_test.go came up red.
+func TestGuardedByCounter(t *testing.T) {
+	entries, _ := os.ReadDir("internal/handlers/admin")
+	checked := 0
+	for _, e := range entries {
+		if !strings.HasSuffix(e.Name(), "_test.go") {
+			continue
+		}
+		checked++
+		if e.Name() == "" {
+			t.Errorf("empty name")
+		}
+	}
+	if checked != 3 {
+		t.Fatalf("checked %d scaffold tests, want 3", checked)
+	}
+}
+
+// TestAssertsEmptiness ranges to prove the set is EMPTY. Vacuity is the pass
+// condition here, so demanding a non-empty proof would be backwards.
+func TestAssertsEmptiness(t *testing.T) {
+	if entries, err := os.ReadDir("proto/services"); err == nil {
+		for _, e := range entries {
+			if e.IsDir() {
+				t.Fatalf("zero-service scaffold grew a service dir %s", e.Name())
+			}
+		}
+	}
+}
+
+// ── dead-skip: WANT ──────────────────────────────────────────────────────────
+
+// TestSkipOnRepoFixture skips when a file tracked in this repository is
+// missing. It can never fire on a checkout — until someone renames the file,
+// at which point the test evaporates instead of failing.
+func TestSkipOnRepoFixture(t *testing.T) {
+	kclRoot, _ := filepath.Abs("../../kcl")
+	if _, err := os.Stat(filepath.Join(kclRoot, "schema.k")); err != nil {
+		t.Skipf("forge kcl module not found at %s: %v", kclRoot, err)
+	}
+	t.Log("render")
+}
+
+// TestPermanentlySkipped can never run.
+func TestPermanentlySkipped(t *testing.T) {
+	t.Skip("fixture wires via a retired path; re-author against the new one")
+	t.Log("unreachable")
+}
+
+// ── dead-skip: must NOT fire ─────────────────────────────────────────────────
+
+// TestSkipOnMissingToolchain is legitimate: no checkout can supply kcl.
+func TestSkipOnMissingToolchain(t *testing.T) {
+	if !toolAvailable("kcl") {
+		t.Skip("kcl not on PATH")
+	}
+}
+
+// TestSkipOnShort is legitimate.
+func TestSkipOnShort(t *testing.T) {
+	if testing.Short() {
+		t.Skip("boots real postgres; skipped under -short")
+	}
+}
+
+// TestSkipOnPlatform is legitimate.
+func TestSkipOnPlatform(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("unix-only signal model")
+	}
+}
+
+// TestSkipOnSiblingCheckout is legitimate: the path is derived from the
+// environment, so it is genuinely outside this repository.
+func TestSkipOnSiblingCheckout(t *testing.T) {
+	dir := os.Getenv("CPFORGE_PROJECT_DIR")
+	if dir == "" {
+		dir = filepath.Join(os.Getenv("HOME"), "src/reliant-labs/cp-forge")
+	}
+	if _, err := os.Stat(dir + "/deploy/kcl/dev"); err != nil {
+		t.Skipf("cp-forge not present: %v", err)
+	}
+}
+
+// TestSkipOnMissingHome is legitimate: a container may have no HOME.
+func TestSkipOnMissingHome(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil || home == "" {
+		t.Skip("no home dir")
+	}
+}
+
+// ── silent-capability: WANT ──────────────────────────────────────────────────
+
+// TestCapabilityGuardedLint is the exact shape forge shipped five times: the
+// only lint gate the test has, wrapped in "if the tool happens to be here".
+// On a box without it the assertion does not weaken, it VANISHES, and the
+// function still reports PASS. The t.Log else-branch is what makes it look
+// deliberate.
+func TestCapabilityGuardedLint(t *testing.T) {
+	dir := t.TempDir()
+	runCmd(t, dir, "go", "build", "./...")
+	if toolAvailable("golangci-lint") {
+		runCmd(t, dir, "golangci-lint", "run", "./...")
+	} else {
+		t.Log("golangci-lint not available, skipping lint check")
+	}
+}
+
+// TestCapabilityBailsMidTest is the same defect wearing the other hat: a bare
+// return that drops npm install + build + test + typecheck — the most expensive
+// and most load-bearing half of the test — and reports PASS.
+func TestCapabilityBailsMidTest(t *testing.T) {
+	dir := t.TempDir()
+	if !toolAvailable("node") || !toolAvailable("npm") {
+		t.Log("node/npm not available — skipping npm build gate (content assertions still ran)")
+		return
+	}
+	runCmd(t, dir, "npm", "install")
+	runCmd(t, dir, "npm", "run", "build")
+}
+
+// TestLookPathGuardedWork writes the probe inline instead of through a helper.
+// The rule must see through the two-line spelling, or renaming the helper is
+// all it takes to go blind.
+func TestLookPathGuardedWork(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := exec.LookPath("kcl"); err == nil {
+		runCmd(t, dir, "kcl", "run", "main.k")
+	}
+}
+
+// ── silent-capability: must NOT fire ─────────────────────────────────────────
+
+// TestProbeThenSkip is honest: the machine's gap is reported, so a reader of
+// the run knows the gate did not happen. (TestSkipOnMissingToolchain above is
+// the same shape and is named separately by the dead-skip fixtures.)
+func TestProbeThenSkip(t *testing.T) {
+	dir := t.TempDir()
+	if !toolAvailable("kcl") {
+		t.Skipf("kcl not on PATH — the render gate cannot run")
+	}
+	runCmd(t, dir, "kcl", "run", "main.k")
+}
+
+// TestProbeThenFail is honest the other way: this repository's CI provisions
+// kcl, so its absence is a broken job, not a property of the machine.
+func TestProbeThenFail(t *testing.T) {
+	dir := t.TempDir()
+	if !toolAvailable("kcl") {
+		t.Fatalf("kcl not on PATH — CI must provision it")
+	}
+	runCmd(t, dir, "kcl", "run", "main.k")
+}
+
+// TestProbeIsBookkeeping collects what is missing on the way to ONE decision.
+// Both outcomes verify exactly as much (nothing); flagging this would flag
+// every helper that builds a list before judging it, and a rule that flags
+// requireTool itself is a rule nobody keeps.
+func TestProbeIsBookkeeping(t *testing.T) {
+	var missing []string
+	for _, name := range []string{"node", "npm"} {
+		if _, err := exec.LookPath(name); err != nil {
+			missing = append(missing, name)
+		}
+	}
+	if len(missing) > 0 {
+		t.Fatalf("missing: %s", strings.Join(missing, ", "))
+	}
+}
+
+// TestProbeChoosesBetweenTwoRealPaths is a genuine either/or: both branches
+// verify the same claim, one through each package manager. Nothing is lost by
+// taking either, which is the one honest use of a capability boolean.
+func TestProbeChoosesBetweenTwoRealPaths(t *testing.T) {
+	dir := t.TempDir()
+	if toolAvailable("pnpm") {
+		runCmd(t, dir, "pnpm", "install")
+	} else {
+		runCmd(t, dir, "npm", "install")
+	}
+}
+
+// TestNonProbeConditional asserts a bad substring is absent. The body is
+// nothing but a failure, the condition is not a tool probe, and this is the
+// single most common shape in the repository — flagging it would end the rule.
+func TestNonProbeConditional(t *testing.T) {
+	content := "package main"
+	if strings.Contains(content, "TODO: implement") {
+		t.Errorf("scaffold shipped a placeholder: %s", content)
+	}
+}
+
+func toolAvailable(string) bool { return false }
+
+func runCmd(*testing.T, string, string, ...string) {}

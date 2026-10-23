@@ -1,0 +1,68 @@
+// yours: scaffolded once, never touched again — forge will not overwrite this file
+// Event-bus implementation; canonical pattern in `forge skill load service-layer`.
+package {{.Name}}
+
+import (
+	"context"
+	"log/slog"
+	"sync"
+{{- if .HasConfig}}
+
+	"{{.Module}}/pkg/config"
+{{- end}}
+)
+
+// Deps contains the dependencies for the event bus.
+type Deps struct {
+	Logger *slog.Logger
+{{- if .HasConfig}}
+	Config *config.Config
+{{- end}}
+}
+
+// inMemoryBus is a simple in-memory implementation suitable for development and testing.
+// Replace with NATS, Kafka, Redis Streams, etc. for production use.
+type inMemoryBus struct {
+	deps     Deps
+	mu       sync.RWMutex
+	handlers map[string][]func(ctx context.Context, event Event) error
+}
+
+// New creates a new in-memory event bus. Replace this constructor
+// to return your production implementation (NATS, Kafka, etc.).
+//
+// The two-result `(Service, error)` shape lets New surface dep-validation
+// or one-time-init failures (missing required deps, bad config, etc.).
+// Scaffolds ship with a no-error path; polish the body when you grow
+// dep validation or eager initialization.
+func New(deps Deps) (Service, error) {
+	return &inMemoryBus{
+		deps:     deps,
+		handlers: make(map[string][]func(ctx context.Context, event Event) error),
+	}, nil
+}
+
+func (b *inMemoryBus) Publish(ctx context.Context, topic string, event Event) error {
+	b.deps.Logger.DebugContext(ctx, "publishing event", "topic", topic, "type", event.Type, "id", event.ID)
+
+	b.mu.RLock()
+	handlers := b.handlers[topic]
+	b.mu.RUnlock()
+
+	for _, h := range handlers {
+		if err := h(ctx, event); err != nil {
+			b.deps.Logger.ErrorContext(ctx, "handler failed", "topic", topic, "type", event.Type, "error", err)
+			return err
+		}
+	}
+	return nil
+}
+
+func (b *inMemoryBus) Subscribe(ctx context.Context, topic string, handler func(ctx context.Context, event Event) error) error {
+	b.deps.Logger.DebugContext(ctx, "subscribing to topic", "topic", topic)
+
+	b.mu.Lock()
+	b.handlers[topic] = append(b.handlers[topic], handler)
+	b.mu.Unlock()
+	return nil
+}

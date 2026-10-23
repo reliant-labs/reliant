@@ -1,0 +1,39 @@
+{
+  "schema": "forge.obs.issues/v1",
+  "ok": true,
+  "exit_code": 0,
+  "scope": {
+    "env": "prod",
+    "backend": "cloud",
+    "env_id": "env-prod",
+    "from": "2026-10-21T12:00:00Z",
+    "to": "2026-10-22T12:00:00Z",
+    "services": [
+      "api"
+    ]
+  },
+  "query_mode": "structured",
+  "sort": "events",
+  "issues": [
+    {
+      "id": "ISS-7f3a",
+      "platform": "server",
+      "service": "api",
+      "title": "boom",
+      "culprit": "internal/store/db.go in store.Exec",
+      "status": "regressed",
+      "first_seen": "2026-10-20T10:00:00Z",
+      "last_seen": "2026-10-22T11:00:00Z",
+      "first_version": "v1.3.0",
+      "last_version": "v1.4.0",
+      "events": 42,
+      "affected": 9,
+      "regressed_at": "2026-10-22T09:00:00Z"
+    }
+  ],
+  "truncated": true,
+  "next_page_token": "tok2",
+  "suggested": [
+    "forge obs issue ISS-7f3a prod"
+  ]
+}

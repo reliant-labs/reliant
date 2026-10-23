@@ -1,0 +1,106 @@
+{
+  "name": "@reliantlabs/forge-web-runtime",
+  "version": "0.9.0",
+  "description": "The forge frontend runtime: Connect interceptor stack, session, error boundary, toast queue, <Resource> container, W3C trace propagation and the HyperDX browser SDK wiring (errors, console, network, traces; replay off by default). The web twin of forge/pkg.",
+  "license": "Apache-2.0",
+  "//repository note": "REQUIRED for `npm publish --provenance`, not decoration. npm cross-checks this against the repository in the signed provenance statement and rejects the publish with a 422 if they disagree — an absent field reads as \"\" and fails that comparison. `directory` names the subdirectory this package lives in, so the provenance points at the real source. Omitting this is what made the first 0.3.1 publish fail AFTER the tarball had been signed and written to the sigstore transparency log.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/reliant-labs/forge.git",
+    "directory": "web-runtime"
+  },
+  "homepage": "https://github.com/reliant-labs/forge/tree/main/web-runtime#readme",
+  "bugs": {
+    "url": "https://github.com/reliant-labs/forge/issues"
+  },
+  "//publishConfig note": "A SCOPED package defaults to restricted. Restricted breaks `npm install` for anyone outside the org — including every machine that scaffolds a project with a released forge, which resolves this package from the registry by semver range. Declaring access here means a publish cannot accidentally ship private by omitting --access public.",
+  "publishConfig": {
+    "access": "public"
+  },
+  "// overrides note": "The recorder still pins vulnerable fflate 0.7.4 (GHSA-px8p-9vwx-vf98); use the patched 0.7 line only in that subtree. npm applies overrides only at the install root, not from published dependencies, so the Next.js and Vite scaffold manifests carry the same override. Remove when HyperDX updates the recorder's pin.",
+  "overrides": {
+    "@hyperdx/otel-web-session-recorder": {
+      "fflate": "^0.7.5"
+    }
+  },
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "interceptors",
+    "README.md",
+    "NOTICE"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./interceptors": {
+      "types": "./dist/interceptors.d.ts",
+      "default": "./dist/interceptors.js"
+    },
+    "./mock-transport": {
+      "types": "./dist/mock-transport.d.ts",
+      "default": "./dist/mock-transport.js"
+    },
+    "./service-hooks": {
+      "types": "./dist/service-hooks.d.ts",
+      "default": "./dist/service-hooks.js"
+    },
+    "./telemetry": {
+      "types": "./dist/telemetry.d.ts",
+      "default": "./dist/telemetry.js"
+    },
+    "./vite": {
+      "types": "./dist/vite.d.ts",
+      "default": "./dist/vite.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.react18.json --noEmit",
+    "build": "node scripts/build.mjs",
+    "dev": "tsc -p tsconfig.build.json --watch --preserveWatchOutput",
+    "prepare": "node scripts/build.mjs",
+    "pretest": "node scripts/build.mjs",
+    "test": "vitest run"
+  },
+  "// peerDependencies note": "@opentelemetry/api is REQUIRED (trace.ts propagates traceparent on every RPC — always on, no collector). @hyperdx/browser is OPTIONAL and exact-pinned: it is imported only (and lazily) by the './telemetry' subpath, which the Next.js and Vite scaffolds reach. It carries the whole OpenTelemetry web SDK and the rrweb recorder as its own dependencies, so a frontend that never imports './telemetry' (React Native) installs none of it and is not told it is missing a package it will never resolve.",
+  "peerDependencies": {
+    "@bufbuild/protobuf": "^2.5.0",
+    "@connectrpc/connect": "^2.0.0",
+    "@hyperdx/browser": "0.26.0",
+    "@opentelemetry/api": "^1.9.0",
+    "@tanstack/react-query": "^5.59.0",
+    "react": "^18.3.0 || ^19.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@tanstack/react-query": {
+      "optional": true
+    },
+    "@hyperdx/browser": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@bufbuild/protobuf": "^2.5.0",
+    "@connectrpc/connect": "^2.0.0",
+    "@hyperdx/browser": "0.26.0",
+    "@opentelemetry/api": "^1.9.0",
+    "@tanstack/react-query": "^5.59.0",
+    "@types/node": "^22.14.0",
+    "@types/react": "^19.1.0",
+    "@types/react-18": "npm:@types/react@~18.3.0",
+    "@types/react-dom": "^19.3.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.3.0",
+    "typescript": "^5.8.0",
+    "vitest": "^4.1.11"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

@@ -1,0 +1,96 @@
+# {{.Name}}
+
+A Cobra-based CLI built with [Forge](https://github.com/reliant-labs/forge).
+
+## Quick start
+
+```bash
+# Install dependencies
+task deps
+
+# Build the binary into ./bin/{{.Name}}
+task build
+
+# Run from source
+go run ./cmd/{{.Name}} version
+
+# Or install onto $PATH
+task install
+{{.Name}} version
+```
+
+## Adding a subcommand
+
+Each subcommand lives in its own file under `cmd/{{.Name}}/`. The pattern
+mirrors `version.go`:
+
+```go
+// cmd/{{.Name}}/hello.go
+package main
+
+import (
+	"fmt"
+
+	"github.com/spf13/cobra"
+)
+
+var helloCmd = &cobra.Command{
+	Use:   "hello [name]",
+	Short: "Print a greeting",
+	Args:  cobra.MaximumNArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		name := "world"
+		if len(args) > 0 {
+			name = args[0]
+		}
+		fmt.Printf("hello, %s\n", name)
+	},
+}
+
+func init() {
+	rootCmd.AddCommand(helloCmd)
+}
+```
+
+For larger commands, factor logic into `internal/<package>/` and call it
+from the cobra `Run` function. `forge scaffold package <name>` scaffolds an
+internal package with a contract interface and tests.
+
+## Task commands
+
+| Command | Description |
+|---|---|
+| `task build` | Build the CLI binary into `./bin/{{.Name}}` |
+| `task install` | Install the CLI into `$GOBIN` |
+| `task test` | Run `go test ./...` |
+| `task lint` | Run `golangci-lint` |
+| `task fmt` | Run `goimports -w` and `go mod tidy` |
+| `task vet` | Run `go vet ./...` |
+| `task clean` | Remove `./bin` and coverage outputs |
+
+Run `task --list` (or just `task`) for the full set.
+
+## Project structure
+
+```
+{{.Name}}/
+├── cmd/{{.Name}}/    # Cobra root + subcommands (each in its own file)
+├── internal/         # Application packages (forge scaffold package <name>)
+├── pkg/config/       # Configuration types (extend as needed)
+├── .reliant/         # Forge conventions, skills, project metadata
+├── forge.yaml        # Forge project manifest (kind: cli)
+├── go.mod
+├── README.md
+└── Taskfile.yml
+```
+
+## Build flags
+
+Stamp the binary's version, commit, and date at build time so
+`{{.Name}} version` reports a real release rather than `dev`:
+
+```bash
+go build -trimpath -buildvcs=true \
+  -ldflags="-X main.version=v1.0.0 -X main.commit=$(git rev-parse HEAD) -X main.date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+  -o bin/{{.Name}} ./cmd/{{.Name}}
+```

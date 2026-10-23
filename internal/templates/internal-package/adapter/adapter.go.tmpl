@@ -1,0 +1,93 @@
+// yours: scaffolded once, never touched again — forge will not overwrite this file
+// Adapter implementation; canonical pattern in `forge skill load architecture`.
+package {{.Name}}
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"net/http"
+
+	"github.com/reliant-labs/forge/pkg/observe"
+
+	"{{.Module}}/pkg/config"
+)
+
+// Deps holds the {{.Name}} adapter's dependencies. Keep this list shallow:
+// adapters depend on a logger, an HTTP/client transport, and config.
+// Domain services do NOT belong here — adapters are leaf nodes.
+type Deps struct {
+	Logger *slog.Logger
+
+	// HTTPClient is injected so tests can swap in an httptest-backed
+	// transport. Production wiring passes `infra.DefaultClient()` (see
+	// internal/app/providers.go) — a fresh client over the SHARED
+	// instrumented base transport, so every outbound call gets OTel
+	// client spans + trace propagation + a sane timeout for free. The
+	// composition site (internal/app/compose.go) wires it automatically;
+	// layer a retrying transport on top here if the downstream needs it.
+	HTTPClient *http.Client
+
+	// Cfg is this adapter's configuration: message {{.ConfigBlock}} in
+	// proto/<project>/config/v1/config.proto, composed on AppConfig. The composition
+	// site fills it from the loaded config by type, so base_url arrives
+	// from {{.ConfigEnvVar}}, a --config file or deploy/kcl/<env>/config.k.
+	// Add settings (API keys with `sensitive: true`, account IDs) as more
+	// leaves on that message, not as fields here: a scalar Deps field is
+	// configuration with no type to wire it by.
+	Cfg *config.{{.ConfigBlock}}
+}
+
+// service is the concrete {{.Name}} adapter. The type is unexported —
+// callers depend on Service from contract.go.
+type service struct {
+	deps Deps
+}
+
+// New constructs a {{.Name}} adapter. internal/app/compose.go wires this
+// from the Infra you declare in internal/app/providers.go.
+//
+// The two-result `(Service, error)` shape lets New surface dep-validation
+// or one-time-init failures (missing required deps, bad config, etc.).
+// Scaffolds ship with a no-error path; polish the body when you grow
+// dep validation or eager initialization.
+//
+// forge:constructor
+//
+// The marker above opts this adapter into the generated observability
+// decorator (routed through the owned observe_chain.go seam). Adapters do I/O,
+// so keep it. To opt out, replace it with `// forge:no-observe` on this line;
+// `// forge:no-observe` on a single Service method skips just that method.
+func New(deps Deps) (Service, error) {
+	if deps.HTTPClient == nil {
+		// Always supply a defaulted client so a minimal wiring (just a
+		// logger + base URL) still works in dev/tests — and it is the same
+		// traced client production wiring passes: a client span per
+		// request, trace-context propagation and X-Request-Id forwarding.
+		deps.HTTPClient = observe.NewHTTPClient(observe.HTTPClientOptions{})
+	}
+	return &service{deps: deps}, nil
+}
+
+// HealthCheck issues a simple GET against the downstream's health
+// endpoint. Replace the path / response interpretation with whatever
+// the actual {{.Name}} downstream exposes.
+func (s *service) HealthCheck(ctx context.Context) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, s.deps.Cfg.GetBaseUrl()+"/health", nil)
+	if err != nil {
+		return fmt.Errorf("{{.Name}}: build health request: %w", err)
+	}
+	resp, err := s.deps.HTTPClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("{{.Name}}: health request: %w", err)
+	}
+	// The assignment to _ is deliberate: Close returns an error that a
+	// deferred call cannot propagate, and errcheck reports the bare
+	// `defer resp.Body.Close()` form. Discarding it explicitly says "read
+	// path, nothing left to fail" rather than hiding the return.
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode >= 500 {
+		return fmt.Errorf("{{.Name}}: downstream unhealthy (status %d)", resp.StatusCode)
+	}
+	return nil
+}

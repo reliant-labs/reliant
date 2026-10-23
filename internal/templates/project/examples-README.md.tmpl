@@ -1,0 +1,26 @@
+# Examples
+
+Drop-in, runnable examples that demonstrate how to call `{{.Name}}` from
+client code. This directory is intentionally *not* wired into the main
+build so examples can import whatever they need without polluting the
+production module graph.
+
+## Layout
+
+```
+examples/
+├── README.md        # this file
+└── <name>/          # one subdirectory per example
+    ├── main.go      # runnable entrypoint (`go run ./examples/<name>`)
+    └── README.md    # what this example shows, and how to run it
+```
+
+## Conventions
+
+- Each example is a **self-contained package** under `examples/<name>/`.
+- Examples may assume the dev stack is up (`task dev-up`) — document any
+  extra setup at the top of the example's README.
+- Keep examples small. If an example starts sprawling, turn it into a
+  real integration test under `e2e/` or a dedicated tool under `cmd/`.
+- Examples are not covered by `task test` — they're compiled by `go build
+  ./...` so breakage is still caught in CI, but they have no assertions.

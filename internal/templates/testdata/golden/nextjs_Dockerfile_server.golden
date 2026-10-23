@@ -1,0 +1,67 @@
+# syntax=docker/dockerfile:1
+
+# --- Build ---
+FROM node:22-alpine AS builder
+
+# The frontend builds at the SAME project-relative path it has in the
+# repository (frontends/web), not at /app. Every relative path the committed
+# config carries then means in the image what it means on a developer machine
+# and in CI's `npm run build`. Built from /app, tsconfig's
+# "../../node_modules/…" peer pins pointed at /node_modules, which webpack
+# re-rooted onto /app/node_modules — a pin that resolves where it resolves
+# nowhere else, and the environment-specific failure mode that hid a bundle
+# split behind "it only breaks in Docker".
+WORKDIR /src/frontends/web
+
+# `npm ci`, not `npm install`: the image installs exactly what the lockfile
+# says, and fails rather than silently re-resolving a range. The build
+# context is this directory, so ./.dockerignore (not the project root's)
+# keeps a host node_modules — native binaries built for the developer's OS —
+# out of the image.
+COPY package.json package-lock.json ./
+RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund
+
+COPY . .
+
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV NODE_ENV=production
+
+RUN npm run build
+
+# --- Run ---
+FROM node:22-alpine AS runner
+WORKDIR /app
+
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV NODE_ENV=production
+ENV PORT=3000
+ENV HOSTNAME=0.0.0.0
+
+# The runner only ever executes `node`. npm, npx and corepack ship in the base
+# image with their own dependency trees, which is where every HIGH CVE a scan
+# of node:22-alpine reports lives; nothing here uses them, so they go.
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack \
+  /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack
+
+# The upstream `node` image ships a built-in non-root `node` user
+# (uid=1000). Running the server as root adds no value and makes a
+# container escape materially more dangerous; we drop privileges before
+# CMD and own the copied assets so the process can still read them.
+#
+# `output: server` sets no `output` at all, so the build is a full .next-prod
+# for `next start` — not a standalone tree. The runtime needs the production
+# dependencies (next among them) and the config next.config.ts reads.
+COPY --from=builder --chown=node:node /src/frontends/web/package.json ./
+COPY --from=builder --chown=node:node /src/frontends/web/next.config.ts ./
+COPY --from=builder --chown=node:node /src/frontends/web/node_modules ./node_modules
+COPY --from=builder --chown=node:node /src/frontends/web/.next-prod ./.next-prod
+COPY --from=builder --chown=node:node /src/frontends/web/public ./public
+
+USER node
+
+EXPOSE 3000
+
+HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=3 \
+  CMD wget -qO- http://127.0.0.1:3000/ >/dev/null || exit 1
+
+CMD ["node", "node_modules/next/dist/bin/next", "start"]

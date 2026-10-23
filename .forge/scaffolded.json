@@ -1,0 +1,34 @@
+{
+  "files": {
+    ".github/dependabot.yml": {
+      "scaffolded_at": "2026-08-07T04:00:00Z"
+    },
+    ".github/workflows/ci.yml": {
+      "scaffolded_at": "2026-08-07T04:00:00Z"
+    },
+    "internal/codegen/contract_test.go": {
+      "scaffolded_at": "2026-08-07T04:00:00Z"
+    },
+    "internal/debug/contract_test.go": {
+      "scaffolded_at": "2026-08-07T04:00:00Z"
+    },
+    "internal/docs/contract_test.go": {
+      "scaffolded_at": "2026-08-07T04:00:00Z"
+    },
+    "internal/doctor/contract_test.go": {
+      "scaffolded_at": "2026-08-07T04:00:00Z"
+    },
+    "internal/generator/contract/contract_test.go": {
+      "scaffolded_at": "2026-08-07T04:00:00Z"
+    },
+    "internal/generator/contract_test.go": {
+      "scaffolded_at": "2026-08-07T04:00:00Z"
+    },
+    "internal/templates/contract_test.go": {
+      "scaffolded_at": "2026-08-07T04:00:00Z"
+    }
+  },
+  "absent_reported": [
+    "internal/docs/contract_test.go"
+  ]
+}

@@ -1,0 +1,51 @@
+"use client";
+
+// yours: scaffolded once, never touched again — forge will not overwrite this file
+//
+// The "choose a new password" screen: /auth/reset?userID=…&code=…&orgID=…
+//
+// That query shape is what the reset link the identity provider emails
+// carries, so a link from it lands here. The values are read in the browser
+// (useSearchParams), which is what keeps this page a STATIC route: a static
+// export cannot know a code at build time, and a dynamic segment would not
+// build.
+//
+// All the behaviour lives in @/components/reset-password-form.
+
+import { useSearchParams } from "next/navigation";
+import { Suspense } from "react";
+
+import { ResetPasswordForm } from "@/components/reset-password-form";
+import { joinBasePath } from "@/lib/basepath_gen";
+
+function Reset() {
+  const params = useSearchParams();
+  return (
+    <ResetPasswordForm
+      userID={params?.get("userID") ?? null}
+      code={params?.get("code") ?? null}
+      signInHref={joinBasePath("/auth/sign-in")}
+      forgotHref={joinBasePath("/auth/forgot")}
+      // A full navigation, as the sign-in screen does: every provider
+      // re-initialises with the new session in place. If the follow-up
+      // sign-in failed the password is still set, so go to sign in.
+      onDone={(signedIn) =>
+        window.location.assign(joinBasePath(signedIn ? "/" : "/auth/sign-in"))
+      }
+    />
+  );
+}
+
+// useSearchParams bails out of prerendering, and Next requires the opt-in to
+// be explicit. Scoping the boundary here keeps the bailout to this component.
+export default function ResetPasswordPage() {
+  return (
+    <main className="flex min-h-screen flex-col items-center justify-center bg-surface-muted p-6">
+      <div className="w-full max-w-sm">
+        <Suspense fallback={null}>
+          <Reset />
+        </Suspense>
+      </div>
+    </main>
+  );
+}

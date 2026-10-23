@@ -1,0 +1,20 @@
+# Pinned versions for the forge-vendored Envoy Gateway local-dev install.
+# `forge cluster up` / `forge env up <env>` install Envoy Gateway into
+# the local k3d cluster from these pins so EVERY forge env (local k3d AND
+# cloud) runs the SAME single Gateway API controller — Envoy Gateway,
+# controllerName gateway.envoyproxy.io/gatewayclass-controller, GatewayClass
+# `eg`. Envoy serves HTTPRoute AND GRPCRoute natively, so one controller
+# covers every route shape.
+#
+# envoy_gateway pins the gateway-helm chart version (the cloud envs install
+# the same chart/version: `helm upgrade --install eg
+# oci://docker.io/envoyproxy/gateway-helm --version <envoy_gateway> -n
+# envoy-gateway-system`). Refresh in lockstep with the cloud install.
+#
+# gateway_api pins the standard-channel Gateway API CRDs. The gateway-helm
+# chart bundles the CRDs it needs, but forge applies the pinned standard
+# channel explicitly first (server-side) so the CRD surface matches the
+# cloud install and so `kubectl wait` on Established gates the GatewayClass
+# apply deterministically.
+envoy_gateway=v1.9.2
+gateway_api=v1.6.2

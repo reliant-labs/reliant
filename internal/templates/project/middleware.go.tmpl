@@ -1,0 +1,244 @@
+//go:build ignore
+
+// Package middleware is YOUR authentication policy surface — forge
+// scaffolded it once and will not rewrite it.
+//
+// Authentication is a MIDDLEWARE: it validates the request's credential — a
+// bearer token or an API key — and puts *Claims on the context. It runs
+// FAIL-CLOSED — a request with no credential, or an invalid one, is rejected
+// before any handler runs, unless the RPC it names declared
+// `auth_required: false` in the proto.
+//
+// That is authentication and nothing more. Deciding what a caller may DO,
+// and WHICH ROWS they may see, is HANDLER LOGIC you write — call GetUser
+// below to resolve the caller and add the checks and query filters your
+// product needs. No annotation can express those.
+//
+// The middleware MECHANISMS (auth interceptor modes + refusal-to-start,
+// CORS, security headers, request-id, rate limiting, idempotency, the HTTP
+// stack, recovery/logging) live in the forge libraries —
+// github.com/reliant-labs/forge/pkg/{authn,middleware,observe} — versioned
+// with forge so they keep receiving fixes. That includes the claims stash
+// and GetUser, which this file re-exports as one-line delegations: they
+// were identical in every project, so they are library code wearing your
+// package's name.
+//
+// This file wires the POLICY: the three things projects actually customize.
+//
+//  1. Credential validator — passed EXPLICITLY into NewAuthInterceptor via
+//     AuthDeps.Validate (no package-global slot). The OWNED composition
+//     root internal/app/auth.go builds it — SetupAuth for bearer tokens,
+//     APIKeyValidator for API keys — and the generated cmd serve.go
+//     threads it in.
+//  2. Identity enricher — enrichClaims (hydrate roles/org/flags onto
+//     validated claims before handlers see them).
+//  3. Credential channel — credentialFrom (a Bearer header, else the
+//     APIKeyHeader, else the native sign-in session cookie).
+//
+// The allow-list is NOT a hook here: which RPCs are callable without
+// credentials is declared per-rpc in the proto (auth_required: false) and
+// projected into procedures_gen.go. See the note above UnauthenticatedProcedures.
+package middleware
+
+import (
+	"context"
+	"net/http"
+	"strings"
+
+	"connectrpc.com/connect"
+
+	"github.com/reliant-labs/forge/pkg/authn"
+)
+
+// ─── Claims: the library's stash, re-exported ───────────────────────
+//
+// The type, the context key, the accessors and GetUser are MECHANISM and
+// live in forge/pkg/authn. They are re-exported here as aliases and
+// one-line delegations so generated handlers and your own code keep
+// spelling middleware.Claims / middleware.GetUser: the names are stable,
+// the implementation is versioned with forge.
+//
+// These are not hooks. Change authentication POLICY below (the validator
+// and enrichClaims), not here.
+
+// Claims is the canonical claims type used throughout the application.
+//
+// To extend Claims with project-specific fields, hydrate the existing
+// fields via enrichClaims below.
+type Claims = authn.Claims
+
+// ClaimsFromContext retrieves user claims from the context. Returns
+// nil, false if no claims are present (e.g. unauthenticated request).
+func ClaimsFromContext(ctx context.Context) (*Claims, bool) { return authn.ClaimsFromContext(ctx) }
+
+// ContextWithClaims returns a new context with the given claims attached.
+func ContextWithClaims(ctx context.Context, claims *Claims) context.Context {
+	return authn.ContextWithClaims(ctx, claims)
+}
+
+// GetUser extracts the authenticated user's claims from the context.
+// Returns a connect CodeUnauthenticated error if no claims are present.
+// Use this in handlers to get the current user before enforcing your own
+// access-control rules — forge generates no access control.
+func GetUser(ctx context.Context) (*Claims, error) { return authn.GetUser(ctx) }
+
+// ─── The unauthenticated allow-list is DECLARED IN THE PROTO ─────────
+//
+// Which RPCs a caller may reach with no credentials is
+// `(forge.v1.method).auth_required = false` on the rpc, and nothing else.
+// forge projects those declarations into UnauthenticatedProcedures
+// (procedures_gen.go, regenerated every run) and the interceptor reads it.
+//
+// This file used to carry a second, hand-written copy of that set. Two
+// declaration surfaces for one fact can disagree, and only one of them was
+// load-bearing: an RPC could declare auth_required: true, appear as
+// authenticated in `forge project graph`, and still
+// serve anonymous callers because the map said so and the annotation said
+// nothing to the runtime. Publishing an endpoint is now one edit, in the file
+// that declares the endpoint.
+//
+// ─── Policy hook 1: the credential validator (explicit, no global) ────
+
+// AuthDeps carries the EXPLICIT authentication policy into the
+// interceptor. The composition root builds an AuthDeps once and threads it
+// into NewAuthInterceptor, so there is no process-wide mutable slot the
+// per-request hot path reads.
+type AuthDeps struct {
+	// ExternalAuth reports that another interceptor in the chain owns auth
+	// (a pack, or a header-carried provider). The interceptor then becomes
+	// a pure passthrough so the external interceptor is the source of truth.
+	ExternalAuth bool
+
+	// AnonymousOK makes authentication NON-GATING: a request with NO
+	// Authorization header proceeds claim-less, and every handler is then
+	// responsible for demanding a principal itself.
+	//
+	// The generated serve wiring sets it FALSE — a request must present a
+	// valid token unless the RPC it names declared auth_required: false. The
+	// non-gating posture is what let one measured app serve seventeen of its
+	// twenty CRUD RPCs to anonymous callers while every one of those RPCs
+	// declared auth_required: true, because "handlers enforce it themselves"
+	// is a rule nothing checks and every handler has to remember.
+	//
+	// Set it true only if some other interceptor in the chain establishes
+	// identity, or if this service genuinely authenticates nothing.
+	AnonymousOK bool
+
+	// Validate checks the raw credential credentialFrom read — a bearer
+	// token or an API key — and returns the claims of the principal it
+	// proves. It receives the request's context, because checking an API
+	// key is a read of this app's database. The generated cmd serve.go
+	// passes (*auth.Authenticator).Authenticate from app.SetupAuth.
+	//
+	// Non-nil switches the interceptor into validate mode; nil leaves
+	// ExternalAuth as the only remaining signal and otherwise refuses to
+	// start (a production server with no auth provider is a bug).
+	Validate func(ctx context.Context, credential string) (*Claims, error)
+}
+
+// ─── Policy hook 2: identity enrichment ──────────────────────────────
+//
+// enrichClaims runs after token validation and before the claims are
+// stashed on the context. Hydrate identity here — roles from the user
+// table, org membership, feature flags. Returning an error rejects the
+// request (CodeUnauthenticated unless you return a *connect.Error).
+//
+// The default is the identity function.
+func enrichClaims(_ context.Context, claims *Claims) (*Claims, error) {
+	return claims, nil
+}
+
+// ─── Policy hook 3: where the credential is read from ────────────────
+
+// SessionCookieName is the cookie native sign-in keeps the session in.
+// internal/app/login_broker.go SETS it (HttpOnly, on /auth/login) and this
+// file READS it, so it is declared once, here, and the broker names it.
+const SessionCookieName = "{{.Name}}_session"
+
+// APIKeyHeader is the request header an API key is read from — "X-API-Key",
+// the same default forge/pkg/auth's APIKeyConfig uses. Rename it here to
+// take keys on another header. A browser client sending it cross-origin also
+// needs it in cors_allow_headers; an API key rarely belongs in a browser.
+//
+// A key is checked as a key by its "fk_" shape, not by this header, so a
+// client that can only send "Authorization: Bearer fk_…" works too. Whether
+// keys are accepted at all is internal/app/auth.go's APIKeyValidator.
+const APIKeyHeader = "X-API-Key"
+
+// credentialFrom reads the ONE credential a request presents, from the
+// first of these channels whose header is present (even when empty):
+//
+//  1. "Authorization: Bearer <token>" — another service, a CLI, a test.
+//     A JWT, or an API key from a client that only knows bearer tokens;
+//  2. the APIKeyHeader — "X-API-Key: fk_…";
+//  3. the native sign-in session cookie the browser carries.
+//
+// Only that credential is validated. There is no fallback: a request whose
+// Bearer token is invalid is rejected even if it also carries a valid API
+// key, so a second credential can never rescue a bad first one and "who is
+// this request?" has exactly one answer. An explicit header beats the
+// ambient cookie.
+//
+// The cookie is the browser's ONLY channel. It is HttpOnly, so no script can
+// read it (which is what stops an XSS from stealing it) and therefore no
+// client code CAN attach an Authorization header. Reading the header alone
+// made every RPC 401 with "missing Authorization header" right after a
+// successful sign-in, with a valid credential on every request.
+//
+// It is not a CSRF opening: the cookie is SameSite=Lax, so a cross-site page
+// cannot make the browser send it on a fetch, and a Connect call needs a
+// Content-Type an HTML form cannot produce.
+//
+// Return "" for "no credential presented"; it is treated exactly like a
+// missing Authorization header. This changes only WHERE the credential is
+// read — it still goes through the same validator, so a channel cannot
+// weaken authentication. Point it somewhere else if your session lives
+// elsewhere.
+func credentialFrom(h http.Header) string {
+	// Select by presence, not validity: even an empty or malformed higher
+	// priority header must not fall through to another principal.
+	if len(h.Values("Authorization")) != 0 {
+		bearer, ok := strings.CutPrefix(h.Get("Authorization"), "Bearer ")
+		if !ok {
+			return ""
+		}
+		return strings.TrimSpace(bearer)
+	}
+	if len(h.Values(APIKeyHeader)) != 0 {
+		return strings.TrimSpace(h.Get(APIKeyHeader))
+	}
+	cookie, err := (&http.Request{Header: h}).Cookie(SessionCookieName)
+	if err != nil {
+		return ""
+	}
+	return cookie.Value
+}
+
+// ─── Interceptor construction ────────────────────────────────────────
+
+// NewAuthInterceptor resolves this file's policy into the forge authn
+// interceptor from an EXPLICIT AuthDeps (no package globals).
+//
+// Mode resolution (see forge/pkg/authn for details): a server with NO
+// validator (deps.Validate == nil) and NO external auth REFUSES TO START —
+// cmd serve.go returns the error before the listener binds. A production
+// server with no auth provider is always a bug; refusing to start is safer
+// than silently accepting (or silently rejecting) every request.
+//
+// Running without authentication is a decision you make HERE, in code, by
+// setting ExternalAuth (or by handing back a validator that accepts what you
+// intend). There is no environment variable that does it: an opt-out
+// settable from any shell cannot be reviewed, does not appear in this
+// project's config, and makes "this server authenticates" impossible to
+// prove from the source.
+func NewAuthInterceptor(deps AuthDeps) (connect.Interceptor, error) {
+	return authn.NewInterceptor(authn.Policy{
+		ValidatorConfigured: deps.Validate != nil,
+		ExternalAuth:        deps.ExternalAuth,
+		AnonymousOK:         deps.AnonymousOK,
+		ValidateContext:     deps.Validate,
+		Unauthenticated:     UnauthenticatedProcedures,
+		Enrich:              enrichClaims,
+		ExtractToken:        credentialFrom,
+	})
+}

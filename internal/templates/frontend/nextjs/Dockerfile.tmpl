@@ -1,0 +1,148 @@
+# syntax=docker/dockerfile:1
+{{- /*
+  The frontend image, rendered per `frontends[].output` in forge.yaml — the
+  same field next.config.ts branches on, so the image copies exactly what the
+  build writes:
+
+    standalone — .next-prod/standalone/server.js, run by node.
+    static     — out/, served as plain files by an unprivileged nginx. There
+                 is no standalone server in an export, so the standalone
+                 runner fails here with `COPY .next-prod/standalone: not found`.
+    server     — .next-prod + node_modules, run by `next start`. Also has no
+                 standalone tree.
+
+  CI's docker-build job builds an image for EVERY frontend, so every mode must
+  produce one that builds.
+*/}}
+
+# --- Build ---
+FROM node:22-alpine AS builder
+
+# The frontend builds at the SAME project-relative path it has in the
+# repository ({{.RepoPath}}), not at /app. Every relative path the committed
+# config carries then means in the image what it means on a developer machine
+# and in CI's `npm run build`. Built from /app, tsconfig's
+# "../../node_modules/…" peer pins pointed at /node_modules, which webpack
+# re-rooted onto /app/node_modules — a pin that resolves where it resolves
+# nowhere else, and the environment-specific failure mode that hid a bundle
+# split behind "it only breaks in Docker".
+WORKDIR /src/{{.RepoPath}}
+
+# `npm ci`, not `npm install`: the image installs exactly what the lockfile
+# says, and fails rather than silently re-resolving a range. The build
+# context is this directory, so ./.dockerignore (not the project root's)
+# keeps a host node_modules — native binaries built for the developer's OS —
+# out of the image.
+COPY package.json package-lock.json ./
+RUN --mount=type=cache,target=/root/.npm npm ci --no-audit --no-fund
+
+COPY . .
+
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV NODE_ENV=production
+
+RUN npm run build
+{{- if eq .Output "static"}}
+
+# --- Serve the static export ---
+# `output: static` builds `output: "export"`: the whole site is plain files in
+# out/, and nothing runs at request time. nginx serves them. The unprivileged
+# image runs as uid 101 and listens on 8080; it carries no Node and no npm,
+# whose bundled dependencies are where node:22-alpine's HIGH CVEs live.
+FROM nginxinc/nginx-unprivileged:1.30-alpine AS runner
+
+# Exported pages are <route>.html (trailingSlash is off), so a request for
+# /settings has to find settings.html; unknown paths get the exported 404.
+{{- if .BasePath}}
+# The export's URLs all carry base_path "{{.BasePath}}", so it is mounted
+# there — the same place the StaticSite deploy puts it.
+{{- end}}
+RUN printf '%s\n' \
+  'server {' \
+  '    listen 8080;' \
+  '    server_name _;' \
+  '    root /usr/share/nginx/html;' \
+  '    location / {' \
+  '        try_files $uri $uri.html $uri/ =404;' \
+  '    }' \
+  '    error_page 404 {{.BasePath}}/404.html;' \
+  '}' > /etc/nginx/conf.d/default.conf
+
+# public/config.js is not in the image (see ./.dockerignore): each environment
+# renders its own runtime config beside the bundle. Mount one at
+# /usr/share/nginx/html{{.BasePath}}/config.js to point the site at a real API.
+COPY --from=builder /src/{{.RepoPath}}/out /usr/share/nginx/html{{.BasePath}}
+
+EXPOSE 8080
+
+HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 \
+  CMD wget -qO- http://127.0.0.1:8080{{.BasePath}}/ >/dev/null || exit 1
+{{- else}}
+
+# --- Run ---
+FROM node:22-alpine AS runner
+WORKDIR /app
+
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV NODE_ENV=production
+ENV PORT=3000
+ENV HOSTNAME=0.0.0.0
+
+# The runner only ever executes `node`. npm, npx and corepack ship in the base
+# image with their own dependency trees, which is where every HIGH CVE a scan
+# of node:22-alpine reports lives; nothing here uses them, so they go.
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack \
+  /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack
+
+# The upstream `node` image ships a built-in non-root `node` user
+# (uid=1000). Running the server as root adds no value and makes a
+# container escape materially more dangerous; we drop privileges before
+# CMD and own the copied assets so the process can still read them.
+{{- if eq .Output "server"}}
+#
+# `output: server` sets no `output` at all, so the build is a full .next-prod
+# for `next start` — not a standalone tree. The runtime needs the production
+# dependencies (next among them) and the config next.config.ts reads.
+COPY --from=builder --chown=node:node /src/{{.RepoPath}}/package.json ./
+COPY --from=builder --chown=node:node /src/{{.RepoPath}}/next.config.ts ./
+COPY --from=builder --chown=node:node /src/{{.RepoPath}}/node_modules ./node_modules
+COPY --from=builder --chown=node:node /src/{{.RepoPath}}/.next-prod ./.next-prod
+COPY --from=builder --chown=node:node /src/{{.RepoPath}}/public ./public
+
+USER node
+
+EXPOSE 3000
+
+HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=3 \
+  CMD wget -qO- http://127.0.0.1:3000{{.BasePath}}/ >/dev/null || exit 1
+
+CMD ["node", "node_modules/next/dist/bin/next", "start"]
+{{- else}}
+#
+# next.config.ts sets `output: "standalone"`, which emits a minimal Node
+# server at <distDir>/standalone/server.js plus pruned node_modules; the
+# static assets and public/ must be copied alongside it. Production builds
+# use distDir ".next-prod" (next.config.ts fences them off from the dev
+# server's .next).
+#
+# server.js sits directly under standalone/ because the build context is the
+# FRONTEND directory alone: nothing above /src/{{.RepoPath}} is an npm
+# workspace root, so next.config.ts's outputFileTracingRoot walk finds none
+# and roots at the frontend. On a HOST build that root is the project's
+# workspace root instead (see next.config.ts), so server.js lands under
+# standalone/frontends/<name>/ — nothing consumes the host-built tree. Do not
+# "fix" that difference by re-pinning the tracing root to the frontend.
+COPY --from=builder --chown=node:node /src/{{.RepoPath}}/.next-prod/standalone ./
+COPY --from=builder --chown=node:node /src/{{.RepoPath}}/.next-prod/static ./.next-prod/static
+COPY --from=builder --chown=node:node /src/{{.RepoPath}}/public ./public
+
+USER node
+
+EXPOSE 3000
+
+HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 \
+  CMD wget -qO- http://127.0.0.1:3000{{.BasePath}}/ >/dev/null || exit 1
+
+CMD ["node", "server.js"]
+{{- end}}
+{{- end}}

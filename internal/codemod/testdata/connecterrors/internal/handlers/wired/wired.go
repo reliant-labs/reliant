@@ -1,0 +1,41 @@
+// Package wired is a handler package whose code reads *connect.Errors — but
+// only ones a Connect client returned, which came off the wire and stay
+// *connect.Error whatever a handler returns (reliant's
+// cmd/reliant/cmd/daemon_instance.go reading the token service's error). Those
+// are not in-process readers, so wired gets bare kinds.
+package wired
+
+import (
+	"context"
+	"errors"
+	"fmt"
+
+	"connectrpc.com/connect"
+	"google.golang.org/protobuf/types/known/emptypb"
+
+	"example.com/cescratch/internal/wireclient/pingv1connect"
+)
+
+// Busy is the handler error.
+func Busy() error {
+	return connect.NewError(connect.CodeResourceExhausted, errors.New("too many requests"))
+}
+
+// Retryable reads a *connect.Client's error.
+func Retryable(ctx context.Context, c *connect.Client[emptypb.Empty, emptypb.Empty]) bool {
+	_, err := c.CallUnary(ctx, connect.NewRequest(&emptypb.Empty{}))
+	return connect.CodeOf(err) == connect.CodeUnavailable
+}
+
+// Down reads a generated client's error, through a helper that wraps it.
+func Down(ctx context.Context, c pingv1connect.PingServiceClient) bool {
+	var ce *connect.Error
+	return errors.As(ping(ctx, c), &ce) && ce.Code() == connect.CodeUnavailable
+}
+
+func ping(ctx context.Context, c pingv1connect.PingServiceClient) error {
+	if _, err := c.Ping(ctx, connect.NewRequest(&emptypb.Empty{})); err != nil {
+		return fmt.Errorf("ping: %w", err)
+	}
+	return nil
+}

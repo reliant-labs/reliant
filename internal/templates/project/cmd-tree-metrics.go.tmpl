@@ -1,0 +1,74 @@
+// yours: scaffolded once, never touched again — forge will not overwrite this file
+//
+// `{{.Name}} metrics schema` — print every metric this binary can emit.
+//
+// The schema is the declared metrics registry (github.com/reliant-labs/forge/
+// pkg/observe/metrics) rendered as JSON (`--json`, the forge.metrics/v1
+// document) or as a table. It is the same document the running service serves
+// at GET /debug/metrics/schema on the pprof listener and that `forge obs
+// metrics declared` and the release bundle's observability/metrics-schema.json carry,
+// so what you read here is what `forge obs metrics declared --dashboard` draws.
+//
+// WHAT IT LISTS is whatever the binary links in. A metric is declared by the
+// package-level var that creates its instrument, so a package nothing imports
+// contributes nothing. internal/metrics is imported below for exactly that
+// reason: it is where metrics are declared, so it must be linked even before
+// any handler records one. A package of your own that declares metrics is
+// listed as soon as the binary imports it — usually by the code that records
+// them.
+package cmd
+
+import (
+	"fmt"
+
+	"github.com/spf13/cobra"
+
+	"github.com/reliant-labs/forge/pkg/observe/metrics"
+
+	// Linked for its side effect: internal/metrics declares this binary's
+	// instruments as package-level vars, and a package nothing imports adds
+	// nothing to the registry this command prints.
+	_ "{{.Module}}/internal/metrics"
+)
+
+func init() { registerCommand(newMetricsCmd) }
+
+// newMetricsCmd builds the `metrics` command tree.
+func newMetricsCmd(deps Deps) *cobra.Command {
+	_ = deps
+	cmd := &cobra.Command{
+		Use:   "metrics",
+		Short: "Inspect the metrics this binary emits",
+	}
+	cmd.AddCommand(newMetricsSchemaCmd())
+	return cmd
+}
+
+func newMetricsSchemaCmd() *cobra.Command {
+	var asJSON bool
+	cmd := &cobra.Command{
+		Use:   "schema",
+		Args:  cobra.NoArgs,
+		Short: "Print every declared metric: name, type, unit, attributes, stability",
+		Long: `Print the declared metrics registry of this binary: forge's built-in RPC,
+database and Go runtime metrics plus every metric declared in your code.
+
+  {{.Name}} metrics schema            # table
+  {{.Name}} metrics schema --json     # forge.metrics/v1, for tools
+
+Nothing is started and no configuration is read; the output depends only on the
+binary.`,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			schema := metrics.Default().Schema(ServiceName, version)
+			if asJSON {
+				return schema.WriteJSON(cmd.OutOrStdout())
+			}
+			if err := schema.WriteTable(cmd.OutOrStdout()); err != nil {
+				return fmt.Errorf("write schema: %w", err)
+			}
+			return nil
+		},
+	}
+	cmd.Flags().BoolVar(&asJSON, "json", false, "print the forge.metrics/v1 JSON document")
+	return cmd
+}

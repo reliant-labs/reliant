@@ -1,0 +1,97 @@
+# Local collector pipelines for the ClickStack container (docker-compose.yml's
+# `clickstack` service). Merged OVER ClickStack's own collector config, so
+# everything here ADDS to the stock OTLP pipelines for traces and metrics;
+# nothing needs repeating.
+#
+# YOURS. forge scaffolds this file once and never rewrites it.
+#
+# LOGS. `forge env up` tees every host process's output into
+# .forge/logs/<env>/<service>.log. This pipeline tails those files and is the
+# ONE local log path: the runtime does not also export logs over OTLP, so
+# nothing arrives twice. The runtime writes one JSON object per line, with
+# trace_id and span_id on any record logged inside a span, so a log line and
+# its trace join in HyperDX.
+#
+#   service.name  = the file name, which `forge env up` takes from the
+#                   workload name: the same value OTEL_SERVICE_NAME carries
+#                   for that workload's traces and metrics.
+#   deployment.environment.name = the directory, i.e. the forge env.
+#
+# A line that is not JSON (air's rebuild chatter, a panic) is kept as plain text
+# under the same service.
+#
+# FRONTENDS ARE NOT TAILED. A scaffolded frontend mirrors the browser's console
+# into .forge/logs/<env>/frontend_<name>.log (`[browser:<level>]` lines), and
+# the HyperDX browser SDK captures the same console itself and ships it over
+# OTLP with the session and trace it belongs to. Tailing the file too would
+# store every console line twice, under two service names. The SDK is the one
+# browser path, in dev and in production alike, so the frontend_*.log files are
+# excluded here. They stay on disk, and stay what `forge skill load debug`
+# points at; they are only not shipped.
+receivers:
+  filelog/forge:
+    include:
+      - /var/log/forge/*/*.log
+    exclude:
+      # forge rotates a long stream aside as <stream>.<YYYY-MM-DD>T….log; the
+      # live file at the original path is the one to follow.
+      - /var/log/forge/*/*.[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T*.log
+      # The browser console mirror: shipped by the HyperDX SDK instead.
+      - /var/log/forge/*/frontend_*.log
+    # Files that already exist when the collector starts are history from an
+    # earlier `forge env up`, which truncates them. A file created afterwards
+    # is read from its first byte whatever this says.
+    start_at: end
+    include_file_path: true
+    include_file_name: false
+    operators:
+      - type: regex_parser
+        regex: '^/var/log/forge/(?P<env>[^/]+)/(?P<service>[^/]+)\.log$'
+        parse_from: attributes["log.file.path"]
+      - type: move
+        from: attributes.service
+        to: resource["service.name"]
+      - type: move
+        from: attributes.env
+        to: resource["deployment.environment.name"]
+      - type: remove
+        field: attributes["log.file.path"]
+      - type: json_parser
+        if: 'body matches "^\\s*\\{"'
+        parse_from: body
+        on_error: send_quiet
+        timestamp:
+          parse_from: attributes.time
+          layout_type: gotime
+          layout: '2006-01-02T15:04:05.999999999Z07:00'
+        severity:
+          parse_from: attributes.level
+      - type: trace_parser
+        if: 'attributes.trace_id != nil'
+        trace_id:
+          parse_from: attributes.trace_id
+        span_id:
+          parse_from: attributes.span_id
+      - type: remove
+        if: 'attributes.trace_id != nil'
+        field: attributes.trace_id
+      - type: remove
+        if: 'attributes.span_id != nil'
+        field: attributes.span_id
+      - type: remove
+        if: 'attributes.time != nil'
+        field: attributes.time
+      - type: remove
+        if: 'attributes.level != nil'
+        field: attributes.level
+      - type: move
+        if: 'attributes.msg != nil'
+        from: attributes.msg
+        to: body
+
+service:
+  pipelines:
+    logs/forge:
+      receivers: [filelog/forge]
+      processors: [memory_limiter, transform, batch]
+      exporters: [clickhouse]

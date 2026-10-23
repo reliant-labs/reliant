@@ -1,0 +1,173 @@
+//go:build ignore
+
+package {{.OperatorPackage}}
+
+import (
+	"context"
+{{- if eq .Shape "state-machine" }}
+	"fmt"
+{{- end }}
+{{- if ne .Shape "config" }}
+	"time"
+{{- end }}
+
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	"github.com/reliant-labs/forge/pkg/controller"
+
+	{{.APIPackage}} "{{.Module}}/api/{{.Version}}"
+)
+
+// {{.FinalizerConst}} is the finalizer that ensures cleanup before a
+// {{.TypeName}} is removed. It's prefixed with the API group so it
+// doesn't collide with finalizers from other operators.
+const {{.FinalizerConst}} = "{{.Group}}/{{.LowerName}}-cleanup"
+
+// {{.ControllerType}} reconciles {{.TypeName}} objects.
+//
+// It embeds controller.Reconciler[T] which provides the fetch /
+// NotFound / finalizer / dispatch lifecycle. The user owns
+// ReconcileSpec (and FinalizeSpec when finalization needs cleanup).
+//
+// Inject your dependencies as additional fields on this struct (a
+// database handle, an event publisher, an external client, etc.) and
+// wire them in cmd/{{.OperatorName}}/main.go.
+type {{.ControllerType}} struct {
+	controller.Reconciler[*{{.APIPackage}}.{{.TypeName}}]
+	// Add your dependencies here.
+}
+
+// New{{.ControllerType}} constructs a {{.ControllerType}} with the
+// canonical finalizer set. main.go is expected to populate the
+// remaining fields (deps) before calling SetupWithManager.
+func New{{.ControllerType}}() *{{.ControllerType}} {
+	return &{{.ControllerType}}{
+		Reconciler: controller.Reconciler[*{{.APIPackage}}.{{.TypeName}}]{
+			Finalizer: {{.FinalizerConst}},
+		},
+	}
+}
+
+// Reconcile is the controller-runtime entry point. It delegates the
+// shared lifecycle to the embedded Reconciler and dispatches the
+// domain logic to ReconcileSpec / FinalizeSpec.
+//
+// +kubebuilder:rbac:groups={{.Group}},resources={{.PluralLower}},verbs=get;list;watch;create;update;patch;delete
+// +kubebuilder:rbac:groups={{.Group}},resources={{.PluralLower}}/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups={{.Group}},resources={{.PluralLower}}/finalizers,verbs=update
+func (r *{{.ControllerType}}) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	return r.Run(
+		ctx,
+		req,
+		&{{.APIPackage}}.{{.TypeName}}{},
+		r.ReconcileSpec,
+		r.FinalizeSpec,
+	)
+}
+
+// SetupWithManager registers this reconciler with the manager.
+func (r *{{.ControllerType}}) SetupWithManager(mgr ctrl.Manager) error {
+	return r.Reconciler.SetupWithManager(mgr,
+		&{{.APIPackage}}.{{.TypeName}}{},
+		reconcile.Func(r.Reconcile),
+		controller.SetupOptions{
+			SkipDeletion: true,
+		},
+	)
+}
+
+{{- if eq .Shape "state-machine" }}
+
+// ReconcileSpec implements the per-state reconcile loop. For
+// state-machine-shaped CRDs the recommended pattern is to switch on
+// Spec.State and delegate to phase-specific handlers.
+func (r *{{.ControllerType}}) ReconcileSpec(ctx context.Context, obj *{{.APIPackage}}.{{.TypeName}}) (controller.Result, error) {
+	switch obj.Spec.State {
+	case {{.APIPackage}}.{{.TypeName}}StateRunning, "":
+		return r.reconcileRunning(ctx, obj)
+	case {{.APIPackage}}.{{.TypeName}}StateSuspended:
+		return r.reconcileSuspended(ctx, obj)
+	case {{.APIPackage}}.{{.TypeName}}StateDeleting:
+		return r.reconcileDeleting(ctx, obj)
+	default:
+		return controller.Done(), fmt.Errorf("unknown state %q", obj.Spec.State)
+	}
+}
+
+// reconcileRunning ensures the desired Running state is realized.
+func (r *{{.ControllerType}}) reconcileRunning(ctx context.Context, obj *{{.APIPackage}}.{{.TypeName}}) (controller.Result, error) {
+	// TODO: implement the desired-state reconcile.
+	obj.Status.Phase = {{.APIPackage}}.{{.TypeName}}PhaseReady
+	obj.Status.ObservedGeneration = obj.Generation
+	// controller.UpdateStatus, not r.Client.Status().Update: obj came from
+	// the informer cache, which can trail this reconciler's own previous
+	// status write, and a plain Update would then conflict.
+	if err := controller.UpdateStatus(ctx, r.Client, obj); err != nil {
+		return controller.Done(), fmt.Errorf("update status: %w", err)
+	}
+	return controller.Requeue(30 * time.Second), nil
+}
+
+// reconcileSuspended drains active sub-resources but preserves
+// persistent state (e.g., PVCs) so the object can be resumed.
+func (r *{{.ControllerType}}) reconcileSuspended(ctx context.Context, obj *{{.APIPackage}}.{{.TypeName}}) (controller.Result, error) {
+	// TODO: implement suspend.
+	obj.Status.Phase = "Suspended"
+	if err := controller.UpdateStatus(ctx, r.Client, obj); err != nil {
+		return controller.Done(), fmt.Errorf("update status: %w", err)
+	}
+	return controller.Done(), nil
+}
+
+// reconcileDeleting tears down all sub-resources and the CR itself.
+func (r *{{.ControllerType}}) reconcileDeleting(ctx context.Context, obj *{{.APIPackage}}.{{.TypeName}}) (controller.Result, error) {
+	// TODO: implement deletion.
+	if err := r.Client.Delete(ctx, obj); err != nil {
+		return controller.Done(), fmt.Errorf("delete CR: %w", err)
+	}
+	return controller.Done(), nil
+}
+{{- else if eq .Shape "config" }}
+
+// ReconcileSpec is the declarative reconcile path. config-shaped CRDs
+// have no observable state — the spec describes a desired configuration
+// (e.g. a feature flag, a routing rule, a quota) and the reconciler's
+// job is to project it into whichever runtime store it's responsible for.
+func (r *{{.ControllerType}}) ReconcileSpec(ctx context.Context, obj *{{.APIPackage}}.{{.TypeName}}) (controller.Result, error) {
+	// TODO: project obj.Spec into the runtime store.
+	_ = obj
+	return controller.Done(), nil
+}
+{{- else if eq .Shape "composite" }}
+
+// ReconcileSpec drives the composite-resource lifecycle. composite-
+// shaped CRDs own a set of sub-resources whose lifetime is coupled to
+// the parent CR. The recommended pattern is one ensure* helper per
+// sub-resource, returning early on failure.
+func (r *{{.ControllerType}}) ReconcileSpec(ctx context.Context, obj *{{.APIPackage}}.{{.TypeName}}) (controller.Result, error) {
+	// TODO: ensure each owned sub-resource:
+	//   if err := r.ensureChildA(ctx, obj); err != nil { return controller.Done(), err }
+	//   if err := r.ensureChildB(ctx, obj); err != nil { return controller.Done(), err }
+	_ = obj
+	return controller.Requeue(time.Minute), nil
+}
+{{- else }}
+
+// ReconcileSpec is the user's domain logic. Replace this with the
+// reconcile body appropriate for your CRD.
+func (r *{{.ControllerType}}) ReconcileSpec(ctx context.Context, obj *{{.APIPackage}}.{{.TypeName}}) (controller.Result, error) {
+	_ = obj
+	return controller.Done(), nil
+}
+{{- end }}
+
+// FinalizeSpec runs when the object is being deleted, before the
+// finalizer is removed. Use this to clean up any resources that
+// outlive the parent CR (cross-namespace pods, external systems,
+// rows in another database, etc.).
+func (r *{{.ControllerType}}) FinalizeSpec(ctx context.Context, obj *{{.APIPackage}}.{{.TypeName}}) error {
+	// TODO: implement cleanup.
+	_ = obj
+	return nil
+}

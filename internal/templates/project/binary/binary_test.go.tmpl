@@ -1,0 +1,74 @@
+// yours: scaffolded once, never touched again — forge will not overwrite this file
+// Binary test scaffold; canonical pattern in `forge skill load binaries`.
+package {{.Package}}
+
+import (
+	"context"
+	"log/slog"
+	"testing"
+	"time"
+
+	"{{.Module}}/pkg/config"
+)
+
+// TestRunnerStartStop covers the canonical "binary blocks until ctx
+// cancellation, then exits cleanly" lifecycle that every long-running
+// binary scaffold inherits. When you replace Run's body with real
+// logic, extend this test (or add a sibling table-driven test) to
+// exercise the new behavior — but keep the lifecycle case so
+// regressions in shutdown are caught early.
+func TestRunnerStartStop(t *testing.T) {
+	r, err := New(Deps{
+		Logger: slog.Default(),
+		Config: &config.Config{},
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	done := make(chan error, 1)
+	go func() {
+		done <- r.Run(ctx)
+	}()
+
+	// Give the runtime a moment to enter Run before cancelling so the
+	// test exercises the ctx.Done() branch rather than the (rare)
+	// case where cancel races construction.
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("Run returned error after ctx cancel: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Run did not return within timeout after ctx cancel")
+	}
+}
+
+// TestNewValidatesDeps covers the validateDeps gate so a regression
+// that drops a required field from validateDeps is caught. The bare-
+// Deps trio (Logger, Config) is the contract today; add cases here as
+// you grow Deps with required fields.
+func TestNewValidatesDeps(t *testing.T) {
+	cases := []struct {
+		name    string
+		deps    Deps
+		wantErr bool
+	}{
+		{name: "all-present", deps: Deps{Logger: slog.Default(), Config: &config.Config{}}, wantErr: false},
+		{name: "missing-logger", deps: Deps{Config: &config.Config{}}, wantErr: true},
+		{name: "missing-config", deps: Deps{Logger: slog.Default()}, wantErr: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := New(tc.deps)
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("New: wantErr=%v, got err=%v", tc.wantErr, err)
+			}
+		})
+	}
+}

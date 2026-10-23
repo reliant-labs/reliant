@@ -1,0 +1,22 @@
+
+// Echo implements the Echo RPC.
+// FORGE_SCAFFOLD: implement business logic; remove this marker when done.
+// forge:gen unwired-stub symbol=api.Echo
+func (s *Service) Echo(
+	ctx context.Context,
+	req *connect.Request[pb.EchoRequest],
+) (*connect.Response[pb.EchoResponse], error) {
+	return nil, svcerr.Wrap(svcerr.ScaffoldStub("Echo"))
+}
+
+// Tail implements the Tail server streaming RPC.
+// FORGE_SCAFFOLD: implement business logic; remove this marker when done.
+// forge:gen unwired-stub symbol=api.Tail
+func (s *Service) Tail(
+	ctx context.Context,
+	req *connect.Request[pb.TailRequest],
+	stream *connect.ServerStream[pb.TailResponse],
+) error {
+	return svcerr.Wrap(svcerr.ScaffoldStub("Tail"))
+}
+

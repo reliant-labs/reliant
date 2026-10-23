@@ -1,0 +1,43 @@
+// yours: scaffolded once, never touched again — forge will not overwrite this file
+//
+// The layout for every /auth route — and what it deliberately does NOT do.
+//
+// ── Why this file exists ──────────────────────────────────────────────
+//
+// The root layout wraps the whole app in its chrome: the sidebar nav, the
+// mobile nav, the header with the session control, the max-width content
+// column. That is right for the product and wrong for every page under
+// /auth, because a sign-in screen framed by the application's own
+// navigation makes two false promises at once — that the visitor is inside
+// the app, and that those nav links lead somewhere they can go. They are
+// signed out. They cannot.
+//
+// It also looked broken in the obvious way: a sign-in card floating in the
+// content column of a shell whose sidebar advertises a Dashboard the
+// visitor has no session for.
+//
+// Next.js nests layouts by default, so a segment that wants LESS chrome
+// than its parent has to say so. This file is that statement: it renders
+// its children and nothing else, so the auth screens own the full viewport
+// and paint their own background.
+//
+// ── What this means for the screens ───────────────────────────────────
+//
+// Each auth screen is responsible for its own full-page framing — they
+// already use `min-h-screen` and set a background, which is exactly the
+// shape a page gets when nothing above it contributes chrome.
+//
+// ── Yours to change ───────────────────────────────────────────────────
+//
+// If your product WANTS branding on the sign-in page — a logo, a marketing
+// panel beside the form, a footer with support links — this is where it
+// goes. Everything added here applies to sign-in, the credential form and
+// the OAuth callback alike, and to nothing else.
+
+export default function AuthLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return <>{children}</>;
+}

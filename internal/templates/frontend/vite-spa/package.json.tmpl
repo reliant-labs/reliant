@@ -1,0 +1,71 @@
+{
+  "name": "{{.FrontendName}}",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "// vite range note": "vite, vitest, @vitejs/plugin-react and @tailwindcss/vite must resolve ONE vite. vite.config.ts takes defineConfig from vitest's copy and its plugins from theirs, and two copies of vite are two copies of its TYPES: `tsc --noEmit` fails vite.config.ts with TS2769 ('Plugin<any> is not assignable to PluginOption', or \"Property 'rolldownVersion' is missing\" across vite 7 and 8). So the range names the one major every one of them accepts, and it matches the Next.js scaffold's, so a project with both kinds hoists a single vite. Pinning an older major alone never kept a newer one out; it only guaranteed a SECOND copy beside it, whenever anything else in the tree resolved the newer one (a Next.js frontend did with vite 7; forge's dev bridge does with vite 8, through web-runtime's vitest). Bump vite, vitest and @vitejs/plugin-react together; `npm ls vite` should list one version. This note sits at the TOP LEVEL because npm rejects a comment key inside devDependencies with EINVALIDPACKAGENAME.",
+  "// vitest range note": "vitest is ^5 on purpose, and internal/templates/frontend_vitest_pin_test.go pins the major so the next bump is a decision rather than a drift. 3.x pulls tinypool (GHSA-5gmw-xhrv-c9v3 and GHSA-85c8-ppgw-ccpr, critical) and a vulnerable @vitest/mocker (GHSA-82fw-gwwq-j7x9), which failed a fresh project's own vuln-npm gate. 4.x carries neither, but npm 10 (the npm Node 22 ships) crashes resolving its peer set with \"Cannot read properties of null (reading 'edgesOut')\", so `npm install` never finishes. 5.x installs and audits clean. Same pin as the Next.js scaffold.",
+  "// overrides note": "fflate is pinned to its patched 0.7 release (GHSA-px8p-9vwx-vf98) under @hyperdx/otel-web-session-recorder ONLY. The recorder pins fflate 0.7.4 exactly, even in its latest release, and it ships in the production bundle through @hyperdx/browser. 0.7.5 is a patch release on the same line. The override is scoped to that subtree so it can never force 0.7.x on another package that asks for a newer fflate. Drop it once a @hyperdx/browser release resolves fflate >= 0.7.5 on its own. npm honours overrides only in the ROOT package.json of an install, which this file is.",
+  "overrides": {
+    "@hyperdx/otel-web-session-recorder": {
+      "fflate": "^0.7.5"
+    }
+  },
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@bufbuild/protobuf": "^2.5.0",
+    "@connectrpc/connect": "^2.0.0",
+    "@connectrpc/connect-web": "^2.0.0",
+    "@hookform/resolvers": "^3.9.0",
+    "@hyperdx/browser": "0.26.0",
+    "@opentelemetry/api": "^1.9.0",
+    "@reliantlabs/forge-web-runtime": "^0.9.0",
+    "@tanstack/react-query": "^5.59.0",
+    "@tanstack/react-router": "^1.84.0",
+{{- if .Workspaces}}
+    "{{.APIPackage}}": "workspace:*",
+    "{{.HooksPackage}}": "workspace:*",
+    "{{.UIWebPackage}}": "workspace:*",
+{{- end}}
+    "lucide-react": "^1.17.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-hook-form": "^7.53.0",
+    "zod": "^3.23.0",
+    "zustand": "^5.0.0"
+  },
+  "devDependencies": {
+    "@bufbuild/protoc-gen-es": "^2.5.0",
+    "@eslint/js": "^9.25.0",
+    "@tailwindcss/vite": "^4.1.0",
+    "@tanstack/router-devtools": "^1.84.0",
+    "@testing-library/dom": "^10.4.0",
+    "@testing-library/react": "^16.3.0",
+    "@types/node": "^22.14.0",
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@vitejs/plugin-react": "^6.0.0",
+    "eslint": "^9.25.0",
+    "eslint-plugin-jsx-a11y": "^6.10.0",
+    "eslint-plugin-react-hooks": "^5.0.0",
+    "eslint-plugin-react-refresh": "^0.4.16",
+    "jsdom": "^26.0.0",
+    "prettier": "3.5.3",
+    "tailwindcss": "^4.1.0",
+    "typescript": "^5.8.0",
+    "typescript-eslint": "^8.30.0",
+    "vite": "^8.0.0",
+    "vitest": "^5.0.4"
+  }
+}

@@ -1,0 +1,48 @@
+//go:build e2e
+// +build e2e
+
+package {{.ServicePackage}}_test
+
+import (
+	"fmt"
+{{- if .Methods}}
+	"net/http"
+	"testing"
+{{- end}}
+
+	"github.com/reliant-labs/forge/pkg/pgtest"
+
+	pb "{{.Module}}/gen/services/{{.ServicePackage}}/v1"
+{{- if .Methods}}
+	"{{.Module}}/gen/services/{{.ServicePackage}}/v1/{{.ServicePackage}}v1connect"
+{{- end}}
+)
+
+// freePort finds an available TCP port on loopback for the service binary
+// this harness is about to spawn. pgtest.ReserveLoopbackPort is the shared
+// implementation — the same one that picks a port for ephemeral postgres.
+func freePort() int {
+	port, err := pgtest.ReserveLoopbackPort()
+	if err != nil {
+		panic(fmt.Sprintf("failed to find free port: %v", err))
+	}
+	return port
+}
+{{- if .Methods}}
+
+// newClient creates a Connect RPC client for the {{.ServiceName}} service.
+//
+// Connect error assertions in tests should use tdd.AssertConnectError
+// from github.com/reliant-labs/forge/pkg/tdd; the in-package helper was
+// removed in favor of the shared library.
+func newClient(t *testing.T, baseURL string) {{.ServicePackage}}v1connect.{{.ConnectServiceGoName}}Client {
+	t.Helper()
+	return {{.ServicePackage}}v1connect.New{{.ConnectServiceGoName}}Client(
+		http.DefaultClient,
+		baseURL,
+	)
+}
+{{- end}}
+
+// Ensure the generated protobuf package import remains referenced.
+var _ = pb.File_services_{{.ServicePackage}}_v1_{{.ServicePackage}}_proto

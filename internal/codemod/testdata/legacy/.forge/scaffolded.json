@@ -1,0 +1,103 @@
+{
+  "files": {
+    ".github/actions/forge-deploy/action.yml": {
+      "scaffolded_at": "2026-10-20T23:07:15Z"
+    },
+    ".github/dependabot.yml": {
+      "scaffolded_at": "2026-10-20T23:07:15Z"
+    },
+    ".github/pull_request_template.md": {
+      "scaffolded_at": "2026-10-20T23:07:15Z"
+    },
+    ".github/workflows/build-images.yml": {
+      "scaffolded_at": "2026-10-20T23:07:15Z"
+    },
+    ".github/workflows/ci.yml": {
+      "scaffolded_at": "2026-10-20T23:07:15Z"
+    },
+    ".github/workflows/e2e.yml": {
+      "scaffolded_at": "2026-10-20T23:07:15Z"
+    },
+    ".github/workflows/proto-breaking.yml": {
+      "scaffolded_at": "2026-10-20T23:07:15Z"
+    },
+    ".github/workflows/release.yml": {
+      "scaffolded_at": "2026-10-20T23:07:15Z"
+    },
+    "cmd/app/cmd/commands.go": {
+      "scaffolded_at": "2026-10-20T23:07:14Z"
+    },
+    "cmd/app/cmd/db.go": {
+      "scaffolded_at": "2026-10-20T23:07:21Z"
+    },
+    "cmd/app/cmd/metrics.go": {
+      "scaffolded_at": "2026-10-20T23:07:21Z"
+    },
+    "cmd/app/cmd/operators/register.go": {
+      "scaffolded_at": "2026-10-20T23:07:25Z"
+    },
+    "cmd/app/cmd/serve.go": {
+      "scaffolded_at": "2026-10-20T23:07:21Z"
+    },
+    "cmd/app/cmd/server.go": {
+      "scaffolded_at": "2026-10-20T23:07:21Z"
+    },
+    "cmd/app/cmd/services/tasks.go": {
+      "scaffolded_at": "2026-10-20T23:07:25Z"
+    },
+    "cmd/app/cmd/version.go": {
+      "scaffolded_at": "2026-10-20T23:07:21Z"
+    },
+    "cmd/app/cmd/workers/register.go": {
+      "scaffolded_at": "2026-10-20T23:07:25Z"
+    },
+    "cmd/app/cmd/workers/ticker.go": {
+      "scaffolded_at": "2026-10-20T23:08:44Z"
+    },
+    "cmd/app/main.go": {
+      "scaffolded_at": "2026-10-20T23:07:25Z"
+    },
+    "db/seeds/custom/README.md": {
+      "scaffolded_at": "2026-10-20T23:07:15Z"
+    },
+    "db/seeds/custom/example.sql": {
+      "scaffolded_at": "2026-10-20T23:07:15Z"
+    },
+    "db/seeds/vocab.yaml": {
+      "scaffolded_at": "2026-10-20T23:07:15Z"
+    },
+    "deploy/kcl/dev/config.k": {
+      "scaffolded_at": "2026-10-20T23:07:25Z"
+    },
+    "deploy/kcl/prod/config.k": {
+      "scaffolded_at": "2026-10-20T23:07:25Z"
+    },
+    "deploy/kcl/staging/config.k": {
+      "scaffolded_at": "2026-10-20T23:07:25Z"
+    },
+    "internal/app/auth.go": {
+      "scaffolded_at": "2026-10-20T23:07:21Z"
+    },
+    "internal/app/compose.go": {
+      "scaffolded_at": "2026-10-20T23:07:21Z"
+    },
+    "internal/app/lifecycle.go": {
+      "scaffolded_at": "2026-10-20T23:07:21Z"
+    },
+    "internal/app/login_broker.go": {
+      "scaffolded_at": "2026-10-20T23:07:21Z"
+    },
+    "internal/app/providers.go": {
+      "scaffolded_at": "2026-10-20T23:07:21Z"
+    },
+    "internal/db/task_repo_ext.go": {
+      "scaffolded_at": "2026-10-20T23:08:00Z"
+    },
+    "internal/handlers/tasks/handlers_crud_test.go": {
+      "scaffolded_at": "2026-10-20T23:08:00Z"
+    },
+    "internal/metrics/metrics.go": {
+      "scaffolded_at": "2026-10-20T23:07:21Z"
+    }
+  }
+}

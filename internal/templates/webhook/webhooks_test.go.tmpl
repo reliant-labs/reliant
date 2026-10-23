@@ -1,0 +1,119 @@
+//go:build ignore
+
+package {{.ServicePackage}}
+
+import (
+	"context"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+{{- if .ConfigImport}}
+
+	{{with .ConfigImportAlias}}{{.}} {{end}}"{{.ConfigImport}}"
+{{- end}}
+)
+
+func TestWebhook{{.Name | pascalCase}}RejectsNonPOST(t *testing.T) {
+	svc, err := New(Deps{
+		Logger: slog.Default(),
+{{- if .ConfigImport}}
+		Config: &config.Config{},
+{{- end}}
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/webhooks/{{.Name | kebabCase}}", nil)
+	w := httptest.NewRecorder()
+	svc.handleWebhook{{.Name | pascalCase}}(w, req)
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("got status %d, want %d", w.Code, http.StatusMethodNotAllowed)
+	}
+}
+
+func TestWebhook{{.Name | pascalCase}}RejectsMissingEventID(t *testing.T) {
+	svc, err := New(Deps{
+		Logger: slog.Default(),
+{{- if .ConfigImport}}
+		Config: &config.Config{},
+{{- end}}
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	body := strings.NewReader(`{"type":"test"}`)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/webhooks/{{.Name | kebabCase}}", body)
+	w := httptest.NewRecorder()
+	svc.handleWebhook{{.Name | pascalCase}}(w, req)
+	// Signature verification runs before event ID extraction, so expect 401.
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("got status %d, want %d", w.Code, http.StatusUnauthorized)
+	}
+}
+
+func TestWebhook{{.Name | pascalCase}}DeduplicatesEvents(t *testing.T) {
+	svc, err := New(Deps{
+		Logger: slog.Default(),
+{{- if .ConfigImport}}
+		Config: &config.Config{},
+{{- end}}
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	// Mark an event as processed.
+	_ = svc.mark{{.Name | pascalCase}}WebhookProcessed(context.Background(), "evt-123")
+
+	body := strings.NewReader(`{"type":"test"}`)
+	req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/webhooks/{{.Name | kebabCase}}", body)
+	req.Header.Set("X-Event-ID", "evt-123")
+	w := httptest.NewRecorder()
+	svc.handleWebhook{{.Name | pascalCase}}(w, req)
+	// Signature verification runs first, so this will be 401 until verification is implemented.
+	// Once you implement verify{{.Name | pascalCase}}Signature, duplicate events return 200.
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("got status %d, want %d for duplicate event", w.Code, http.StatusUnauthorized)
+	}
+}
+
+// TestWebhook{{.Name | pascalCase}}IdempotencyRoundTrip exercises the
+// deduplication seam directly, so it stays meaningful before (and after)
+// verify{{.Name | pascalCase}}Signature is implemented. It is also the test to
+// keep pointed at the methods when you swap them for shared storage.
+func TestWebhook{{.Name | pascalCase}}IdempotencyRoundTrip(t *testing.T) {
+	svc, err := New(Deps{
+		Logger: slog.Default(),
+{{- if .ConfigImport}}
+		Config: &config.Config{},
+{{- end}}
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	ctx := context.Background()
+
+	seen, err := svc.is{{.Name | pascalCase}}WebhookProcessed(ctx, "evt-roundtrip")
+	if err != nil {
+		t.Fatalf("is{{.Name | pascalCase}}WebhookProcessed: %v", err)
+	}
+	if seen {
+		t.Fatal("unprocessed event reported as processed")
+	}
+
+	if err := svc.mark{{.Name | pascalCase}}WebhookProcessed(ctx, "evt-roundtrip"); err != nil {
+		t.Fatalf("mark{{.Name | pascalCase}}WebhookProcessed: %v", err)
+	}
+
+	seen, err = svc.is{{.Name | pascalCase}}WebhookProcessed(ctx, "evt-roundtrip")
+	if err != nil {
+		t.Fatalf("is{{.Name | pascalCase}}WebhookProcessed: %v", err)
+	}
+	if !seen {
+		t.Fatal("processed event reported as unprocessed — redeliveries would be applied twice")
+	}
+}

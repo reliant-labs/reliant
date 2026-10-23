@@ -1,0 +1,270 @@
+// yours: scaffolded once, never touched again — forge will not overwrite this file
+//
+// Drives the real generated stack (handlers → pkg/crud → internal/db →
+// database) against the project's own migrations, asserting real CRUD
+// semantics. Extend it as your entities grow. See the forge `testing` skill.
+package {{.Package}}_test
+
+import (
+	"context"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+	"testing"
+
+	"connectrpc.com/connect"
+	"github.com/reliant-labs/forge/pkg/orm"
+	"github.com/reliant-labs/forge/pkg/testkit"
+{{- if .NeedsFieldMask}}
+	"google.golang.org/protobuf/types/known/fieldmaskpb"
+{{- end}}
+
+	pb "{{.Module}}/gen/{{.ProtoPackage}}/v1"
+	{{/* The test factory NewTest<X> is declared in this package's OWN
+	     helpers_gen_test.go (package {{.Package}}, a _test.go file). Go
+	     compiles a package's in-package _test.go files INTO the package
+	     under test, and this external {{.Package}}_test package imports
+	     that augmented package — so the helper is visible here through an
+	     ordinary import, while never reaching the production binary. */ -}}
+	{{.Package}} "{{.Module}}/internal/handlers/{{.ServiceImportPath}}"
+	"{{.Module}}/pkg/middleware"
+)
+
+// findMigrationsDir walks up from the test's working directory (the package
+// dir, at internal/handlers/<svc>/) to the repo root — the nearest ancestor
+// containing db/migrations — and returns that db/migrations path. A hardcoded
+// relative depth is fragile: this file lives THREE levels under the repo root,
+// but a differently-nested package would need another count. Walking up finds
+// it regardless of depth.
+func findMigrationsDir(t *testing.T) string {
+	t.Helper()
+	dir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	for {
+		cand := filepath.Join(dir, "db", "migrations")
+		if info, statErr := os.Stat(cand); statErr == nil && info.IsDir() {
+			return cand
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			t.Fatalf("could not locate db/migrations walking up from %s", dir)
+		}
+		dir = parent
+	}
+}
+
+// crudTestDB builds a real-postgres database with the project's own
+// migrations applied (db/migrations/*.up.sql, in order) — the schema the
+// generated CRUD code runs against in production.
+func crudTestDB(t *testing.T) orm.Context {
+	t.Helper()
+	db := testkit.NewPostgresDB(t)
+	migDir := findMigrationsDir(t)
+	entries, err := os.ReadDir(migDir)
+	if err != nil {
+		t.Fatalf("read migrations dir: %v", err)
+	}
+	var ups []string
+	for _, e := range entries {
+		if strings.HasSuffix(e.Name(), ".up.sql") {
+			ups = append(ups, e.Name())
+		}
+	}
+	sort.Strings(ups)
+	for _, name := range ups {
+		sql, rerr := os.ReadFile(filepath.Join(migDir, name))
+		if rerr != nil {
+			t.Fatalf("read migration %s: %v", name, rerr)
+		}
+		if _, xerr := db.Exec(context.Background(), string(sql)); xerr != nil {
+			t.Fatalf("apply migration %s: %v", name, xerr)
+		}
+	}
+	return db
+}
+
+// crudTestCtx returns a context with authenticated test claims attached —
+// what the auth middleware would have produced for a real request.
+func crudTestCtx() context.Context {
+	return middleware.ContextWithClaims(context.Background(),
+		&middleware.Claims{UserID: "test-user", Email: "test@example.com"})
+}
+
+// assertCleanError asserts a client-facing error: the expected code, and
+// no leaked SQL/driver internals in the message.
+func assertCleanError(t *testing.T, label string, err error, want connect.Code) {
+	t.Helper()
+	if err == nil {
+		t.Fatalf("%s: expected %v error, got nil", label, want)
+	}
+	if got := connect.CodeOf(err); got != want {
+		t.Errorf("%s: code = %v, want %v (err: %v)", label, got, want, err)
+	}
+	for _, leak := range []string{"sql:", "SELECT", "no rows in result set", "no such column"} {
+		if strings.Contains(err.Error(), leak) {
+			t.Errorf("%s: client-visible error leaks driver/SQL text (%q): %v", label, leak, err)
+		}
+	}
+}
+{{range .Entities}}
+{{- if and .HasCreate .HasGet (eq .PkGoType "string")}}
+
+// TestCRUD_{{.EntityName}}_Lifecycle exercises the full executed CRUD
+// path for {{.EntityName}} end to end.
+func TestCRUD_{{.EntityName}}_Lifecycle(t *testing.T) {
+	db := crudTestDB(t)
+	svc := {{$.Package}}.NewTest{{$.TestHelperName}}(t, {{$.Package}}.WithDB(db){{if $.UnfilledDeps}}, {{$.Package}}.WithPlaceholderDeps(){{end}})
+	ctx := crudTestCtx()
+
+	// Two creates must produce two rows with distinct, non-empty IDs.
+	//
+	// The requests come from New{{.CreateMethod.InputType}}, which forge
+	// REGENERATES from the applied schema on every `forge generate`
+	// (factories_gen_test.go, beside this file): it seeds the foreign-key
+	// parents the request references and fills every field with a value the
+	// current constraints accept. A migration you edit later — a GENERATED
+	// column, a one-way status CHECK — flows into it instead of breaking this
+	// file. Variants 0 and 1 are distinct rows; override any field you assert
+	// on (`req.Name = "..."`) after the call.
+	first, err := svc.{{.CreateMethod.MethodName}}(ctx, connect.NewRequest({{$.Package}}.New{{.CreateMethod.InputType}}(t, db, 0)))
+	if err != nil {
+		t.Fatalf("create #1: %v", err)
+	}
+	second, err := svc.{{.CreateMethod.MethodName}}(ctx, connect.NewRequest({{$.Package}}.New{{.CreateMethod.InputType}}(t, db, 1)))
+	if err != nil {
+		t.Fatalf("create #2: %v", err)
+	}
+	id1 := first.Msg.Get{{.CreateMethod.ResponseField}}().Get{{.PkField}}()
+	id2 := second.Msg.Get{{.CreateMethod.ResponseField}}().Get{{.PkField}}()
+	if id1 == "" || id2 == "" {
+		t.Fatalf("create returned empty id(s): %q, %q", id1, id2)
+	}
+	if id1 == id2 {
+		t.Fatalf("two creates returned the same id %q — create must be an insert, never an upsert", id1)
+	}
+{{- if .HasTimestamps}}
+	if first.Msg.Get{{.CreateMethod.ResponseField}}().GetCreatedAt() == nil {
+		t.Errorf("created_at not set on create (timestamps: true)")
+	}
+{{- end}}
+
+	// Get returns the created row.
+	got, err := svc.{{.GetMethod.MethodName}}(ctx, connect.NewRequest(&pb.{{.GetMethod.InputType}}{ {{.PkField}}: id1}))
+	if err != nil {
+		t.Fatalf("get: %v", err)
+	}
+	if got.Msg.Get{{.GetMethod.ResponseField}}().Get{{.PkField}}() != id1 {
+		t.Errorf("get returned id %q, want %q", got.Msg.Get{{.GetMethod.ResponseField}}().Get{{.PkField}}(), id1)
+	}
+{{- if .HasList}}
+
+	// List sees both rows.
+	listed, err := svc.{{.ListMethod.MethodName}}(ctx, connect.NewRequest(&pb.{{.ListMethod.InputType}}{
+{{- if .ListMethod.HasPagination}}
+		PageSize: 10,
+{{- end}}
+	}))
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if n := len(listed.Msg.Get{{.ListMethod.ResponseField}}()); n != 2 {
+		t.Errorf("list returned %d rows, want 2", n)
+	}
+{{- end}}
+{{- if and .HasUpdate (ne .MutableStringField "")}}
+
+	// Update actually mutates: a re-read observes the change.
+	row := got.Msg.Get{{.GetMethod.ResponseField}}()
+	row.{{.MutableStringField}} = "lifecycle-updated"
+	if _, err := svc.{{.UpdateMethod.MethodName}}(ctx, connect.NewRequest(&pb.{{.UpdateMethod.InputType}}{ {{.UpdateEntityField}}: row})); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	reread, err := svc.{{.GetMethod.MethodName}}(ctx, connect.NewRequest(&pb.{{.GetMethod.InputType}}{ {{.PkField}}: id1}))
+	if err != nil {
+		t.Fatalf("get after update: %v", err)
+	}
+	if v := reread.Msg.Get{{.GetMethod.ResponseField}}().Get{{.MutableStringField}}(); v != "lifecycle-updated" {
+		t.Errorf("update did not mutate: {{.MutableStringField}} = %q, want %q", v, "lifecycle-updated")
+	}
+{{- if .UpdateMethod.UpdateMaskField}}
+
+	// AIP-134 masked update: the mask names ONLY {{.MutableStringFieldPath}},
+	// so that field changes and nothing else does. The unmasked update
+	// above is the documented full-object replace; this is the partial
+	// path. See https://google.aip.dev/134.
+	maskedRow := reread.Msg.Get{{.GetMethod.ResponseField}}()
+{{- if ne .SecondStringField ""}}
+	// keptUnmaskedValue uses a fixed, field-independent local name on
+	// purpose: deriving it from the field name would produce identifiers
+	// ending in an initialism (…Id, …Api) and trip revive's var-naming rule
+	// on this owned scaffold.
+	keptUnmaskedValue := maskedRow.Get{{.SecondStringField}}()
+	// Clobber value the mask does NOT name — it must not persist.
+	maskedRow.{{.SecondStringField}} = "MUST-NOT-PERSIST"
+{{- end}}
+	maskedRow.{{.MutableStringField}} = "masked-updated"
+	if _, err := svc.{{.UpdateMethod.MethodName}}(ctx, connect.NewRequest(&pb.{{.UpdateMethod.InputType}}{
+		{{.UpdateEntityField}}: maskedRow,
+		{{.UpdateMethod.UpdateMaskField}}: &fieldmaskpb.FieldMask{Paths: []string{"{{.MutableStringFieldPath}}"}},
+	})); err != nil {
+		t.Fatalf("masked update: %v", err)
+	}
+	afterMasked, err := svc.{{.GetMethod.MethodName}}(ctx, connect.NewRequest(&pb.{{.GetMethod.InputType}}{ {{.PkField}}: id1}))
+	if err != nil {
+		t.Fatalf("get after masked update: %v", err)
+	}
+	if v := afterMasked.Msg.Get{{.GetMethod.ResponseField}}().Get{{.MutableStringField}}(); v != "masked-updated" {
+		t.Errorf("masked update did not write the masked field: {{.MutableStringFieldPath}} = %q, want %q", v, "masked-updated")
+	}
+{{- if ne .SecondStringField ""}}
+	if v := afterMasked.Msg.Get{{.GetMethod.ResponseField}}().Get{{.SecondStringField}}(); v != keptUnmaskedValue {
+		t.Errorf("masked update CLOBBERED an unmasked field: {{.SecondStringFieldPath}} = %q, want %q — update_mask must restrict the write", v, keptUnmaskedValue)
+	}
+{{- end}}
+
+	// An unknown mask path is the caller's mistake: clean InvalidArgument.
+	_, err = svc.{{.UpdateMethod.MethodName}}(ctx, connect.NewRequest(&pb.{{.UpdateMethod.InputType}}{
+		{{.UpdateEntityField}}: maskedRow,
+		{{.UpdateMethod.UpdateMaskField}}: &fieldmaskpb.FieldMask{Paths: []string{"this_field_does_not_exist"}},
+	}))
+	assertCleanError(t, "masked update with unknown path", err, connect.CodeInvalidArgument)
+{{- end}}
+
+	// Update of an id that does not exist is a NotFound, not a 200 echoing
+	// back a row the database does not have. Update writes straight through
+	// — there is no read before it — so the row count is the only evidence
+	// that anything was written.
+	ghost := reread.Msg.Get{{.GetMethod.ResponseField}}()
+	ghost.{{.PkField}} = "never-existed"
+	_, err = svc.{{.UpdateMethod.MethodName}}(ctx, connect.NewRequest(&pb.{{.UpdateMethod.InputType}}{ {{.UpdateEntityField}}: ghost}))
+	assertCleanError(t, "update missing", err, connect.CodeNotFound)
+{{- end}}
+{{- if .HasDelete}}
+
+	// Delete, then a get of the deleted id maps to a clean NotFound.
+	if _, err := svc.{{.DeleteMethod.MethodName}}(ctx, connect.NewRequest(&pb.{{.DeleteMethod.InputType}}{ {{.PkField}}: id1})); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	_, err = svc.{{.GetMethod.MethodName}}(ctx, connect.NewRequest(&pb.{{.GetMethod.InputType}}{ {{.PkField}}: id1}))
+	assertCleanError(t, "get after delete", err, connect.CodeNotFound)
+
+	// Get and Delete must AGREE about what "this row does not exist" means.
+	// Deleting the same id twice, and deleting an id that never existed,
+	// both answer exactly what Get answers for those ids. Delete used to
+	// return 200 with an empty body for both, which a client could not
+	// tell apart from a delete that did something.
+	_, err = svc.{{.DeleteMethod.MethodName}}(ctx, connect.NewRequest(&pb.{{.DeleteMethod.InputType}}{ {{.PkField}}: id1}))
+	assertCleanError(t, "delete twice", err, connect.CodeNotFound)
+	_, err = svc.{{.DeleteMethod.MethodName}}(ctx, connect.NewRequest(&pb.{{.DeleteMethod.InputType}}{ {{.PkField}}: "never-existed"}))
+	assertCleanError(t, "delete missing", err, connect.CodeNotFound)
+{{- end}}
+
+	// A never-existed id maps to a clean NotFound too.
+	_, err = svc.{{.GetMethod.MethodName}}(ctx, connect.NewRequest(&pb.{{.GetMethod.InputType}}{ {{.PkField}}: "never-existed"}))
+	assertCleanError(t, "get missing", err, connect.CodeNotFound)
+}
+{{- end}}
+{{end}}

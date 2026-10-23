@@ -1,0 +1,17 @@
+SHAPE BeginDetached{ReadCommitted} isolation="read committed" read_only=off deferrable=off attempts=1
+SHAPE BeginDetached{} isolation="serializable" read_only=off deferrable=off attempts=1
+SHAPE BeginTx(nil) isolation="read committed" read_only=off deferrable=off attempts=1
+SHAPE BeginTx{RepeatableRead,ReadOnly} isolation="repeatable read" read_only=on deferrable=off attempts=1
+SHAPE Context.RunTx isolation="serializable" read_only=off deferrable=off attempts=7
+SHAPE Repo.RunTx isolation="serializable" read_only=off deferrable=off attempts=7
+SHAPE RunTransaction isolation="read committed" read_only=off deferrable=off attempts=1
+SHAPE RunTransactionWithOptions(nil) isolation="read committed" read_only=off deferrable=off attempts=1
+SHAPE RunTransactionWithOptions{Serializable} isolation="serializable" read_only=off deferrable=off attempts=1
+SHAPE RunTx isolation="serializable" read_only=off deferrable=off attempts=7
+SHAPE RunTxReadOnly isolation="serializable" read_only=on deferrable=on attempts=7
+SHAPE RunTxWithOptions(var) isolation="serializable" read_only=off deferrable=off attempts=7
+SHAPE RunTxWithOptions{ReadCommitted,1} isolation="read committed" read_only=off deferrable=off attempts=1
+SHAPE RunTxWithOptions{ReadCommitted} isolation="read committed" read_only=off deferrable=off attempts=7
+SHAPE RunTxWithOptions{ReadOnly} isolation="serializable" read_only=on deferrable=on attempts=7
+SHAPE RunTxWithOptions{RepeatableRead,3} isolation="repeatable read" read_only=off deferrable=off attempts=3
+SHAPE RunTxWithOptions{} isolation="serializable" read_only=off deferrable=off attempts=7

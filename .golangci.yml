@@ -1,0 +1,267 @@
+# Forge's OWN lint configuration. The config shipped to generated projects
+# is internal/templates/project/golangci.yml.tmpl — the two are deliberately
+# not identical (forge is a CLI/code generator; the template's consumers are
+# servers).
+#
+# The rule for what belongs here: a linter earns its place by finding BUGS.
+# A rule that fires hundreds of times on idiomatic code is not finding bugs,
+# it is teaching everyone to skim past lint output. Every enable/disable
+# below records what its rule buys.
+#
+# Adjust thresholds for your project:
+#   Stricter (CRUD APIs):    funlen 60, gocognit 15
+#   Looser (operators/billing): funlen 100, gocognit 30
+# Suppress complexity per-function with an explanatory //nolint, never with a
+# path glob — a glob silently swallows every future finding under that path.
+
+version: "2"
+
+run:
+  # A HANG GUARD, NOT A PERFORMANCE BUDGET. 5m was tight enough to fail
+  # healthy runs: with a COLD Go build cache (a fresh worktree, a fresh CI
+  # runner, a per-task GOCACHE), golangci-lint type-checks the whole module
+  # from scratch, and on a loaded machine that alone crossed 5m. The run
+  # then printed "0 issues" and exited 4 on "Timeout exceeded", so `forge
+  # lint` reported a red gate over code with no findings. Measured on a
+  # shared 16-core box at load ~15: warm cache 79s, cold cache over 5m. 20m
+  # still catches a wedged run; the CI job's own timeout is the outer bound.
+  # (golangci starts this clock AFTER taking the serial lock below, so time
+  # spent queued behind another run does not count against it.)
+  timeout: 20m
+  # golangci-lint takes an exclusive OS file lock on $TMPDIR/golangci-lint.lock
+  # for the whole of a run. That is ONE path shared by every golangci-lint on
+  # the machine — not per-project, and not in the cache directory, so pointing
+  # GOLANGCI_LINT_CACHE elsewhere does nothing. By default it waits five
+  # seconds for the lock and then exits 3 with "parallel golangci-lint is
+  # running".
+  #
+  # Five seconds is no patience at all against a lint that takes tens of
+  # seconds, so ordinary things turn into spurious lint failures: an editor's
+  # golangci-lint LSP firing on save, a CI matrix linting two services at
+  # once, several agents sharing this checkout (which is how `forge lint`
+  # kept failing here with exit 3).
+  #
+  # allow-serial-runners KEEPS the lock and drops only the five-second
+  # deadline: concurrent invocations queue and run one at a time. The lock
+  # exists because golangci-lint is memory-hungry and two full runs at once
+  # can OOM a small machine, which is why allow-parallel-runners (drop the
+  # serialization entirely) is deliberately NOT what this sets.
+  allow-serial-runners: true
+
+issues:
+  # Report EVERY finding. golangci-lint defaults to max-issues-per-linter:50
+  # and max-same-issues:3, which silently truncates: this repo reported 134
+  # issues capped and 223 uncapped. A gate that hides 40% of what it found
+  # cannot be trusted to be green for the reason you think it is.
+  max-issues-per-linter: 0
+  max-same-issues: 0
+
+linters:
+  enable:
+    - govet
+    - errcheck
+    - staticcheck
+    - unused
+    - ineffassign
+    - gocritic
+    - revive
+    - misspell
+    # noctx is NOT enabled here, and IS enabled in the shipped template.
+    # It fired 40 times in this repo and was wrong 40 times: 22 in tests
+    # (nothing cancels a test) and 18 on exec.Command spawning buf/protoc/
+    # go/npm from a CLI that has no request lifecycle to cancel against.
+    # Satisfying it would mean threading a context nobody holds through the
+    # generate pipeline — ceremony, not a fix. Generated projects are
+    # servers, where an un-cancellable call inside a handler IS a bug, so
+    # the template keeps it. If forge ever grows an HTTP client or a
+    # long-running daemon, re-enable it here with the context threaded.
+    # cyclop dropped: cyclomatic complexity duplicates gocognit (cognitive
+    # complexity), which is the better readability signal. gocognit is the
+    # single complexity gate; nestif/funlen cover the orthogonal smells.
+    - funlen
+    - gocognit
+    - nestif
+    - interfacebloat
+  settings:
+    errcheck:
+      # forge is a CLI whose job is printing. golangci-lint's errcheck
+      # already excludes fmt.Print* by default; the Fprint* family writing
+      # to stdout/stderr is the same non-finding, and it was 51 of this
+      # repo's 56 errcheck hits. A failed write to a terminal is not
+      # actionable and there is nowhere to report it.
+      # Deliberately NOT excluded: (*os.File).Close and friends — a Close
+      # error on a written file is real data loss, and those five sites are
+      # handled explicitly at the call site instead.
+      exclude-functions:
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+    staticcheck:
+      checks:
+        - all
+        # ST1000/ST1003/ST1016/ST1020-22 are golangci-lint's own defaults.
+        - -ST1000
+        - -ST1003
+        - -ST1016
+        - -ST1020
+        - -ST1021
+        - -ST1022
+        # QF* is staticcheck's "quickfix" category: gopls refactor
+        # suggestions, not bug reports. All 15 hits here were QF1001 (De
+        # Morgan's law), QF1002 (tagged switch) and QF1012 (Fprintf vs
+        # WriteString+Sprintf) — rewrites with identical behavior. SA*
+        # (bugs), S* (simplifications) and the remaining ST* stay on.
+        - -QF1001
+        - -QF1002
+        - -QF1003
+        - -QF1006
+        - -QF1007
+        - -QF1008
+        - -QF1009
+        - -QF1010
+        - -QF1011
+        - -QF1012
+    govet:
+      enable-all: true
+      disable:
+        - fieldalignment
+        # `shadow` flags idiomatic `if err := f(); err != nil` patterns in
+        # nested scopes. Go style allows this; enabling it produces ~50
+        # findings that are not bugs.
+        - shadow
+    revive:
+      rules:
+        - name: blank-imports
+        - name: context-as-argument
+        - name: dot-imports
+        - name: error-return
+        - name: error-strings
+        - name: exported
+        - name: increment-decrement
+        - name: var-naming
+        - name: unexported-return
+        - name: argument-limit
+          arguments: [8]
+        - name: function-result-limit
+          arguments: [4]
+        - name: max-public-structs
+          # internal/config/config.go declares one type per config knob; the
+          # forge convention is a flat, documented config surface rather than
+          # nested structs, so the count climbs with feature coverage.
+          arguments: [40]
+        - name: max-control-nesting
+          arguments: [5]
+    funlen:
+      lines: 150
+      statements: 80
+    gocognit:
+      min-complexity: 80
+    nestif:
+      min-complexity: 8
+    interfacebloat:
+      max: 12
+    forbidigo:
+      # The typed-config guardrail: steer code toward the injected typed
+      # config object instead of reading the environment directly. Matches
+      # what forge's own project template ships (golangci.yml.tmpl). Runs
+      # ADVISORY only (forbidigo is intentionally absent from linters.enable
+      # above), so it never gates — it's a signal, not a wall. Without this
+      # block, forbidigo falls back to its built-in default (forbid
+      # fmt.Print*), which is wrong for a CLI whose job is to print.
+      forbid:
+        - pattern: 'os\.Getenv'
+        - pattern: 'os\.LookupEnv'
+        - pattern: 'os\.Environ'
+    gocritic:
+      # The `style` tag is deliberately off. Its 48 findings here were
+      # octalLiteral (0644 vs 0o644, 33×), regexpSimplify ([^\w] vs \W, 7×),
+      # builtinShadow (a param named `new`, 5×), importShadow (2×) and
+      # nestingReduce (1×) — not one of them a bug, and rewriting them buys
+      # nothing. `diagnostic` (weakCond, appendAssign, badCall, filepathJoin —
+      # all of which DID find real defects here) and `performance` stay on.
+      enabled-tags:
+        - diagnostic
+        - performance
+      disabled-checks:
+        # Performance-tag checks that fire on deliberate choices: value-receiver
+        # ranges over 128–304-byte config structs that are not hot-path.
+        - hugeParam
+        - rangeValCopy
+        # Diagnostic-tag checks that are style in disguise: the CLI favors
+        # if/else for short two-arm branches and switch-with-one-case for
+        # forward-compat.
+        - ifElseChain
+        - singleCaseSwitch
+  exclusions:
+    # EVERY entry here is an ANCHORED regex, held by two guards in
+    # internal/templates/golangci_exclusion_anchoring_test.go: one rejects a
+    # bare word, the other measures the fraction of the repo the exclusions
+    # actually remove. A bare word like `gen` reads as one directory and
+    # behaves as a substring match: it silently exempted 311 of this repo's
+    # 1177 Go files (26.4%) — all of internal/codegen/ and internal/generator/
+    # — and the gate reported green over code no linter had ever read.
+    paths:
+      # The generated proto package at the repo root.
+      - "(^|/)gen/"
+      # Generated, forge-owned files (mock_gen.go, wire_gen.go,
+      # tracing_gen.go, ...). Never lint or hand-edit generated code —
+      # forge regenerates it and edits would be lost / trip the stomp guard.
+      - ".*_gen\\.go$"
+      - ".*node_modules.*"
+      - ".*frontends.*"
+      - ".*\\.pb\\.go$"
+      - ".*\\.connect\\.go$"
+      # pkg/ is linted by pkg/.golangci.yml, in its own CI job
+      # (.github/workflows/library-lint.yml, `working-directory: pkg`).
+      # That config is NOT a relaxed copy of this one — it is `default: none`
+      # with only forbidigo enabled, a single narrow gate: a LIBRARY must not
+      # read the environment, because a library changes behaviour only through
+      # the arguments its caller passed.
+      #
+      # This entry exists because pkg/ stopped being a separate Go module.
+      # Before that, `golangci-lint run` from the repo root simply could not
+      # see it; now ./... reaches it and the full CLI linter set fires on 118
+      # findings that were never in scope. Linting it under THIS config would
+      # not be catching a regression, it would be applying the wrong rules to
+      # library code for the first time.
+      #
+      # TestGolangciExclusionsLeaveMostOfTheRepoLinted discounts pkg/ for the
+      # same reason, and asserts pkg/.golangci.yml still exists so that
+      # accounting cannot quietly become a lie.
+      #
+      # THIS ENTRY IS MEANT TO SHRINK. forge is the product we dogfood, and
+      # the standard to converge on is the one forge SHIPS:
+      # internal/templates/project/golangci.yml.tmpl, what every generated
+      # project is held to from birth. pkg/ has the strongest claim of all —
+      # it compiles INTO those projects — and it currently answers to one
+      # linter where its own consumers answer to the full set.
+      #
+      # The backlog is measured, not guessed: `golangci-lint run` with this
+      # entry removed reported 118 findings in pkg/ (errcheck 15, revive 44,
+      # staticcheck 26, unused 13, funlen 5, govet 6, gocritic 3, nestif 4,
+      # interfacebloat 1, goimports 1). None are regressions — they are what
+      # a fifth of the repo accumulated while no linter could reach it, since
+      # pkg/ was a separate module and `./...` from the root never saw it.
+      #
+      # So: pay it down by category, narrowing this exclusion as each clears,
+      # rather than deleting the entry and taking 118 failures at once.
+      - "(^|/)pkg/"
+    rules:
+      # Scoped to the RULE and the reason, never to a path glob alone.
+      - path: _test\.go
+        linters:
+          # A test builds its own fixtures inline and fails on the assertion,
+          # not on a helper's error return; length and branching are the
+          # table, not logic.
+          - errcheck
+          - gocritic
+          - funlen
+          - gocognit
+
+formatters:
+  enable:
+    - goimports
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/reliant-labs/forge

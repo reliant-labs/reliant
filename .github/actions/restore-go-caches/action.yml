@@ -1,0 +1,70 @@
+name: Restore the Go caches
+description: >-
+  Restores the module cache (go-mod, one entry per go.sum) and one scope of
+  the Go build cache (go-build-<scope>, laddered), and records
+  GOCACHE_RESTORED_AT for trim-go-build-cache. Restore only: a job that
+  should save on main follows its work with save-go-caches.
+
+# WHY ONE ACTION. A pull-request job's wall time is mostly setup, and these
+# restores were spelled out per job with small differences that mattered: a
+# scope that fell back to another's key, a job that also let setup-go restore
+# a second ~1 GB copy of the same directories. Use with setup-go's
+# `cache: false`, so this is the job's whole cache.
+#
+# THE MODULE CACHE is its own entry, keyed on go.sum alone, so it is saved
+# once per dependency change rather than once per commit per scope. It holds
+# the extracted module trees and their metadata, NOT the .zip archives
+# (~420 MB of already-compressed bytes for forge): the go command builds from
+# the extracted directory and checks it against the .ziphash beside it, and
+# never reopens the zip (save-go-caches deletes them before saving). A
+# module the restored cache lacks (a go.sum change
+# since main last saved) is downloaded on first use as usual. `go mod
+# download` would re-fetch every zip; use `go list -deps ./...` to warm what
+# a step needs.
+#
+# THE BUILD CACHE ladder, most to least specific:
+#   go-build-<scope>-<os>-<go.sum hash>-<sha>  exact commit (a re-run)
+#   go-build-<scope>-<os>-<go.sum hash>-       same deps, newer main
+#   go-build-<scope>-<os>-                     any deps (the Dependabot case)
+# GOCACHE is content-addressed, so an older entry costs misses, never a wrong
+# object (ci.yml's "Build-cache note").
+
+inputs:
+  scope:
+    description: The build-cache scope (the `<scope>` in go-build-<scope>-…).
+    required: true
+
+outputs:
+  build-key:
+    description: The build cache's primary key, for save-go-caches.
+    value: ${{ steps.build.outputs.cache-primary-key }}
+  mod-key:
+    description: The module cache's primary key, for save-go-caches.
+    value: ${{ steps.mod.outputs.cache-primary-key }}
+  mod-hit:
+    description: '"true" when the module cache restored its exact key.'
+    value: ${{ steps.mod.outputs.cache-hit }}
+
+runs:
+  using: composite
+  steps:
+    - name: Note when the Go build cache was restored
+      shell: bash
+      run: echo "GOCACHE_RESTORED_AT=$(date +%s)" >> "$GITHUB_ENV"
+    - name: Restore the Go module cache
+      id: mod
+      uses: actions/cache/restore@v6
+      with:
+        path: ~/go/pkg/mod
+        key: go-mod-${{ runner.os }}-${{ hashFiles('go.sum') }}
+        restore-keys: |
+          go-mod-${{ runner.os }}-
+    - name: Restore the Go build cache (${{ inputs.scope }})
+      id: build
+      uses: actions/cache/restore@v6
+      with:
+        path: ~/.cache/go-build
+        key: go-build-${{ inputs.scope }}-${{ runner.os }}-${{ hashFiles('go.sum') }}-${{ github.sha }}
+        restore-keys: |
+          go-build-${{ inputs.scope }}-${{ runner.os }}-${{ hashFiles('go.sum') }}-
+          go-build-${{ inputs.scope }}-${{ runner.os }}-

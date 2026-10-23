@@ -1,0 +1,93 @@
+{{/*
+Shared page-template partials, parsed into every CRUD page template (both the
+Next.js `pages/` set and the Vite `vite-spa-pages/` set) by loadPageTemplate.
+They render framework-neutral JSX — no next/link, no router — so one
+definition serves both trees.
+
+  fkPickerField  — a foreign-key form control. Dot is a codegen.PageField
+                   whose .FK is non-nil.
+  fkNameValue    — a foreign-key detail-row value. Dot is a
+                   codegen.EntityPageField whose .FK is non-nil.
+*/}}
+
+{{- define "fkPickerField"}}
+        <div>
+          <label htmlFor="{{.Name}}" className="mb-1 block text-sm font-medium text-ink">
+            {{.Label}}{{if .Required}} *{{end}}
+          </label>
+          {{- /* A foreign key is a REFERENCE, never a UUID anyone types.
+                 <EntityPicker> browses {{.FK.EntityName}} through its GENERATED list
+                 hook — paged and filtered server-side, so it works against a
+                 million rows — and hands back the id. Point optionLabel (and
+                 optionHint) at whichever column reads best to your users. */}}
+          <Controller
+            control={control}
+            name="{{.Name}}"
+            render={({ field }) => (
+              <EntityPicker
+                id="{{.Name}}"
+                value={field.value}
+                onChange={(picked) => field.onChange(picked ?? "")}
+                useList={ {{.FK.ListHook}} }
+{{- if .FK.SearchFilterField}}
+                buildRequest={(search) => ({ {{if .FK.HasPageSize}}pageSize: 20, {{end}}{{.FK.SearchFilterField}}: search || undefined })}
+{{- else}}
+                {{- /* List{{.FK.EntityName}} declares no free-text filter, so there is
+                       nowhere to put the search text — the box is turned off
+                       rather than shipped doing nothing. Add a search filter to
+                       the List request and re-scaffold to switch it on. */}}
+                buildRequest={() => ({ {{if .FK.HasPageSize}}pageSize: 20{{end}} })}
+                searchable={false}
+{{- end}}
+                itemsOf={(res) => res.{{.FK.ItemsField}}}
+{{- if .FK.NextTokenField}}
+                hasMoreOf={(res) => Boolean(res.{{.FK.NextTokenField}})}
+{{- end}}
+                optionValue={(item) => item.{{.FK.PkFieldCamel}}}
+{{- if .FK.LabelField}}
+                optionLabel={(item) => String(item.{{.FK.LabelField}})}
+{{- else}}
+                {{- /* {{.FK.EntityName}} has no name/title-shaped column, so options fall
+                       back to the id. Retarget optionLabel at the column your
+                       users recognise. */}}
+                optionLabel={(item) => String(item.{{.FK.PkFieldCamel}})}
+{{- end}}
+{{- if .FK.ResolveSelectedLabel}}
+                {{- /* The value came from the server, so the closed picker has no
+                       row to read a name from — <EntityName> resolves it. */}}
+                selectedLabel={
+                  <EntityName
+                    id={field.value}
+                    useGet={ {{.FK.GetHook}} }
+                    buildRequest={(value) => ({ {{.FK.PkFieldCamel}}: value })}
+                    nameOf={(res) => res.{{.FK.GetEntityField}}?.{{if .FK.LabelField}}{{.FK.LabelField}}{{else}}{{.FK.PkFieldCamel}}{{end}}}
+                  />
+                }
+{{- end}}
+                placeholder="Select a {{.FK.EntityLower}}"
+                invalid={Boolean(errors.{{.Name}})}
+              />
+            )}
+          />
+          {errors.{{.Name}} && <p className="mt-1 text-sm text-danger">{errors.{{.Name}}.message}</p>}
+        </div>
+{{- end}}
+
+{{- define "fkNameValue"}}
+          {{- /* A foreign key resolved to a name. ONE lookup for this row —
+                 React Query caches by key — instead of printing the raw id. */}}
+          value: (
+            <EntityName
+              id={item.{{.Name}}}
+              useGet={ {{.FK.GetHook}} }
+              buildRequest={(value) => ({ {{.FK.PkFieldCamel}}: value })}
+{{- if .FK.LabelField}}
+              nameOf={(res) => res.{{.FK.GetEntityField}}?.{{.FK.LabelField}}}
+{{- else}}
+              {{- /* {{.FK.EntityName}} has no name/title-shaped column; the id is the
+                     only label available. Retarget nameOf when you add one. */}}
+              nameOf={(res) => res.{{.FK.GetEntityField}}?.{{.FK.PkFieldCamel}}}
+{{- end}}
+            />
+          ),
+{{- end}}

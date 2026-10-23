@@ -1,0 +1,53 @@
+// yours: scaffolded once, never touched again — forge will not overwrite this file
+// Service implementation; canonical pattern in `forge skill load service-layer`.
+package {{.Name}}
+
+import (
+	"log/slog"
+{{- if .HasConfig}}
+
+	"{{.Module}}/pkg/config"
+{{- end}}
+)
+
+// Deps holds dependencies for the {{.Name}} package.
+//
+// Every field you add must be an INTERFACE, not a concrete type — a
+// dep interface declared in contract.go, or another internal package's
+// Service. `Store *db.PostgresRepository` compiles and then forces
+// every test of this package to open a real database;
+// `Store Store` takes the mock forge already generated. This is
+// lint-enforced (forgeconv-deps-are-interfaces). {{if .HasConfig}}Logger and Config are
+// the carve-outs: one shared singleton each{{else}}Logger is the
+// carve-out: one shared singleton{{end}}, supplied by the
+// composition, not worth an interface.
+type Deps struct {
+	Logger *slog.Logger
+{{- if .HasConfig}}
+	Config *config.Config
+{{- end}}
+	// Add your dependencies here.
+}
+
+type service struct {
+	deps Deps
+}
+
+// New creates a new {{.Name}} service instance.
+// Returns the Service interface — callers interact only through the contract.
+//
+// The two-result `(Service, error)` shape lets New surface dep-validation
+// or one-time-init failures (missing required deps, bad config, etc.).
+// Scaffolds ship with a no-error path; polish the body when you grow
+// dep validation or eager initialization.
+//
+// forge:constructor
+//
+// The marker above opts this package into the generated observability
+// decorator (span / metrics / structured logging / panic-recovery on every
+// Service method, routed through the owned observe_chain.go seam). Remove it
+// and add `// forge:no-observe` on this line to opt the package out; add
+// `// forge:no-observe` on a single Service method to skip just that method.
+func New(deps Deps) (Service, error) {
+	return &service{deps: deps}, nil
+}

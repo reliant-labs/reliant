@@ -1,0 +1,90 @@
+{
+  "schema": "forge.obs.issue/v1",
+  "ok": true,
+  "exit_code": 0,
+  "scope": {
+    "env": "dev",
+    "backend": "local",
+    "from": "2026-10-19T12:00:00Z",
+    "to": "2026-10-22T12:00:00Z"
+  },
+  "query_mode": "structured",
+  "issue": {
+    "id": "sfp1-0123456789abcdef",
+    "platform": "server",
+    "service": "api",
+    "title": "*pgconn.PgError: duplicate key \u003cstr\u003e",
+    "culprit": "internal/store/db.go in store.(*DB).Exec",
+    "exception_type": "*pgconn.PgError",
+    "status": "unresolved",
+    "first_seen": "2026-10-22T10:00:00Z",
+    "last_seen": "2026-10-22T11:30:00Z",
+    "first_version": "v1.3.0",
+    "last_version": "v1.4.0",
+    "events": 7,
+    "affected": 3,
+    "latest_trace_id": "0af7651916cd43dd8448eb211c80319c"
+  },
+  "latest_event": {
+    "time": "2026-10-22T11:30:00Z",
+    "trace_id": "0af7651916cd43dd8448eb211c80319c",
+    "span_id": "b7ad6b7169203331",
+    "version": "v1.4.0",
+    "message": "insert failed",
+    "attributes": {
+      "code.file.path": "internal/store/db.go",
+      "code.function.name": "store.(*DB).Exec",
+      "code.line.number": "88"
+    }
+  },
+  "events": [
+    {
+      "time": "2026-10-22T11:30:00Z",
+      "trace_id": "0af7651916cd43dd8448eb211c80319c",
+      "span_id": "b7ad6b7169203331",
+      "version": "v1.4.0",
+      "message": "insert failed",
+      "attributes": {
+        "code.file.path": "internal/store/db.go",
+        "code.function.name": "store.(*DB).Exec",
+        "code.line.number": "88"
+      }
+    }
+  ],
+  "frames": [
+    {
+      "function": "store.(*DB).Exec",
+      "file": "internal/store/db.go",
+      "line": 88,
+      "in_app": true
+    }
+  ],
+  "by_version": [
+    {
+      "version": "v1.4.0",
+      "events": 5,
+      "affected": 2,
+      "first_seen": "2026-10-22T10:30:00Z",
+      "last_seen": "2026-10-22T11:30:00Z"
+    }
+  ],
+  "co_occurring_issue_ids": [
+    "sfp1-bbbbbbbbbbbbbbbb"
+  ],
+  "suspect_commits": [
+    {
+      "sha": "abc1234def5678abc1234def5678abc1234def56",
+      "subject": "retry on conflict (#12)",
+      "author": "Ada",
+      "time": "2026-10-21T09:00:00Z",
+      "files": [
+        "internal/store/db.go"
+      ],
+      "pr": 12
+    }
+  ],
+  "suggested": [
+    "forge obs trace 0af7651916cd43dd8448eb211c80319c dev",
+    "forge obs logs dev --trace 0af7651916cd43dd8448eb211c80319c"
+  ]
+}

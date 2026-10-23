@@ -1,0 +1,28 @@
+{
+  "expo": {
+    "name": "{{.FrontendName}}",
+    "slug": "{{.FrontendName}}",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "{{.FrontendName}}",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.{{.ProjectName}}.{{.FrontendName}}"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#ffffff"
+      },
+      "package": "com.{{.ProjectName}}.{{.FrontendName}}"
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static"
+    },
+    "plugins": [
+      "expo-router"
+    ]
+  }
+}

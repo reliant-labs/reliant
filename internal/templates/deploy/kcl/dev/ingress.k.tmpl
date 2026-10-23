@@ -1,0 +1,43 @@
+"""
+Dev-environment ingress overrides for {{.ProjectName}}.
+
+The base topology lives in `deploy/kcl/ingress.k`. This file re-
+exports the lists for the env's main.k to wire into the Bundle. In
+dev we typically leave the base unchanged — listener ports are
+exposed on the host via the k3d port-mapping fragment that forge
+generates.
+
+To override per-env (e.g. add a `path_prefix` for multi-worktree
+routing), use KCL's `|` merge:
+
+    DEV_PUBLIC = base.PUBLIC | {
+        listeners = [l | {path_prefix = "/{{.ProjectName}}-dev"}
+                     for l in base.PUBLIC.listeners]
+    }
+    GATEWAYS = [DEV_PUBLIC]
+
+Opt-in dev TLS via mkcert (host-installed CA → browser-trusted certs).
+Requires `mkcert` on PATH and `mkcert -install` run once per machine.
+`forge cluster up` detects mkcert-mode gateways and provisions the
+named Secret in the dev namespace.
+
+# import forge
+#
+# DEV_PUBLIC = base.PUBLIC | {
+#     host = "{{.ProjectName}}.localhost"
+#     tls = forge.GatewayTLS {
+#         mode = "mkcert"
+#         secret_name = "{{.ProjectName}}-dev-tls"
+#     }
+#     listeners = [
+#         forge.GatewayListener {name = "http", port = 18443, protocol = "HTTPS"}
+#     ]
+# }
+# GATEWAYS = [DEV_PUBLIC]
+"""
+
+import ..ingress as base
+
+GATEWAYS = base.GATEWAYS
+HTTP_ROUTES = base.HTTP_ROUTES
+GRPC_ROUTES = base.GRPC_ROUTES

@@ -1,0 +1,150 @@
+# syntax=docker/dockerfile:1
+
+# Build stage.
+#
+# We pin to `golang:{{.DockerBuilderGoVersion}}-alpine` as the base because Docker Hub's `golang:*-alpine`
+# tags can lag the latest stable Go release by days to weeks. The `go` directive
+# in `go.mod` (currently `go {{.GoVersion}}`) combined with Go's default
+# `GOTOOLCHAIN=auto` means the in-image toolchain will auto-download and use
+# a newer Go toolchain at build time if `go.mod` requires one. This keeps the
+# builder base stable while the effective compiler tracks `go.mod`.
+FROM golang:{{.DockerBuilderGoVersion}}-alpine AS builder
+
+# Let Go's toolchain manager fetch a newer toolchain when go.mod requires it.
+# (This is the default on Go 1.21+, but we set it explicitly for clarity and
+# so the image works even with GOTOOLCHAIN pre-set in a user's environment.)
+ENV GOTOOLCHAIN=auto
+
+RUN apk add --no-cache git
+
+# Build version stamping. `forge build --docker` passes these as
+# --build-arg from its unified version resolver (the host binary build
+# embeds the identical values). We no longer run `git describe` inside
+# the container: .dockerignore excludes .git, so the in-build describe
+# always failed and every image embedded main.version=dev.
+ARG FORGE_VERSION=dev
+ARG FORGE_COMMIT=none
+ARG FORGE_DATE=unknown
+
+WORKDIR /app
+
+# The image builds from the COMMITTED module graph, never a go.work.
+#
+# go.work is gitignored, and on a contributor's machine it can `use` an
+# absolute host path (a local forge checkout, a sibling repo). Copying it in
+# made the image depend on the builder's disk: a clean CI checkout failed on
+# the COPY because the file does not exist, and a dev machine failed on `go
+# mod download` because the host path does not exist inside the container.
+# go.mod already resolves gen/ through its `replace … => ./gen`, so workspace
+# mode buys the image nothing. GOWORK=off makes that true for every RUN below.
+ENV GOWORK=off
+
+COPY go.mod go.sum ./
+COPY gen/go.mod gen/go.sum ./gen/
+
+RUN go mod download
+
+# Copy source
+COPY . .
+
+# Build with optimizations.
+#
+# ONE image, EVERY binary. Each `cmd/<bin>/` entrypoint (the primary
+# server plus any `forge scaffold binary` siblings — proxy / ctl / worker-style
+# processes) builds into /app/bin/<bin>. The production stage's ENTRYPOINT
+# is the primary binary, and a workload's `args` (deploy/kcl/workloads.k)
+# pick its subcommand. Building them all into a single image keeps one
+# build + one push + one registry tag for the whole project.
+{{- range .Binaries }}
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=cache,target=/go/pkg \
+    CGO_ENABLED=0 go build -trimpath -buildvcs=true -ldflags="-s -w -X main.version=${FORGE_VERSION} -X main.commit=${FORGE_COMMIT} -X main.date=${FORGE_DATE}{{if $.VersionVar}} -X {{$.VersionVar}}=${FORGE_VERSION}{{end}}" -o /app/bin/{{.Dir}} ./cmd/{{.Dir}}
+{{- end }}
+
+# ── Debug builder (only used by the `debug` stage) ──
+# Split out so the default production build doesn't pay the debug-build
+# + delve-install cost. Running these unconditionally in the shared
+# builder also broke production builds on arm64 hosts, where the dlv
+# install hit "illegal instruction" under the auto-fetched toolchain —
+# even when nothing needed the debug image. (Adopted from the cp-forge
+# Dockerfile fork; see its FRICTION.md "Dockerfile debug-builder split".)
+FROM builder AS debug-builder
+
+# Debug build — full symbols, no inlining.
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=cache,target=/go/pkg \
+    CGO_ENABLED=0 go build -trimpath -buildvcs=true -gcflags="all=-N -l" -o /app/bin/{{.Name}}-debug ./cmd/{{.Name}}
+
+# Install Delve
+RUN --mount=type=cache,target=/root/.cache/go-build \
+    --mount=type=cache,target=/go/pkg \
+    go install github.com/go-delve/delve/cmd/dlv@latest
+
+# ── Dev stage (hot-reload with Air) ──
+FROM golang:{{.DockerBuilderGoVersion}}-alpine AS dev
+
+RUN apk add --no-cache git
+RUN go install github.com/air-verse/air@latest
+
+WORKDIR /app
+
+# Source is volume-mounted at /app by docker-compose.
+# Air watches for changes and rebuilds inside the container.
+
+EXPOSE 8080 6060
+
+CMD ["air", "-c", ".air.toml"]
+
+# ── Debug stage (use with: docker build --target debug) ──
+FROM alpine:3.21 AS debug
+
+RUN apk --no-cache add ca-certificates
+
+WORKDIR /app
+
+COPY --from=debug-builder /app/bin/{{.Name}}-debug ./{{.Name}}
+COPY --from=debug-builder /go/bin/dlv /usr/local/bin/dlv
+
+EXPOSE 8080 2345
+
+# Delve headless server — runs the app immediately (--continue) so
+# /healthz responds and compose healthchecks pass; otherwise an
+# app-debug service sits "unhealthy" and `up --wait` style dev loops
+# hang. Debuggers can still attach later via :2345 because
+# --accept-multiclient stays connected after continue. To debug from
+# boot (pause until attach), drop --continue locally.
+#
+# The same ENTRYPOINT/CMD split as production: a workload's `args` replace
+# CMD and reach the program after `--`, so one debug image debugs any
+# subcommand.
+ENTRYPOINT ["dlv", "exec", "--headless", "--listen=:2345", "--api-version=2", "--accept-multiclient", "--continue", "/app/{{.Name}}", "--"]
+CMD ["server"]
+
+# ── Production stage (default) ──
+FROM alpine:3.21 AS production
+
+RUN apk --no-cache add ca-certificates
+
+WORKDIR /app
+
+# Copy EVERY built binary into the image. A secondary binary runs by
+# naming it as the workload's `command` (["/app/<bin>"]).
+{{- range .Binaries }}
+COPY --from=builder /app/bin/{{.Dir}} ./{{.Dir}}
+{{- end }}
+
+USER 65532:65532
+
+EXPOSE 8080
+
+HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 \
+  CMD wget -qO- http://localhost:8080/healthz || exit 1
+
+# ENTRYPOINT is the binary; CMD is its DEFAULT subcommand. A workload's
+# `args` in deploy/kcl/workloads.k replace CMD — `["item"]` runs one
+# service, `["db", "migrate", "up"]` the migration job — so the same args
+# select the subcommand here that `go run ./cmd/{{.Name}} <args>` runs on the
+# host. `docker run <image>` with no args runs `server`: every service,
+# worker and operator in one process.
+ENTRYPOINT ["/app/{{.Name}}"]
+CMD ["server"]
