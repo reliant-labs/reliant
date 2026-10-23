@@ -9,6 +9,9 @@ import { mockMobileBackend, PHONE } from './mobileMocks';
 // backend, no session. research/MOBILE_AUDIT.md has the audit this pins.
 
 test.use(PHONE);
+// A cold dev server compiles each lazy screen on first request; the first
+// assertion on a screen waits for that, not for the app.
+const LOADED = { timeout: 20_000 };
 
 function collectErrors(page: Page): string[] {
   const errors: string[] = [];
@@ -32,7 +35,7 @@ test.describe('mobile surface', () => {
 
     // Three blocking items in the mocks: the hamburger says so before it is opened.
     const menu = page.getByRole('button', { name: /Open menu, 3 items need you/ });
-    await expect(menu).toBeVisible();
+    await expect(menu).toBeVisible(LOADED);
     await menu.click();
 
     const drawer = page.getByRole('dialog', { name: 'Navigation' });
@@ -42,21 +45,21 @@ test.describe('mobile surface', () => {
     await expect(drawer.getByRole('link', { name: /^Observability/ })).toHaveAttribute('href', '/forge/observability');
 
     await drawer.getByRole('link', { name: /^Inbox/ }).click();
-    await expect(page).toHaveURL(/\/m\/inbox$/);
-    await expect(page.getByRole('heading', { level: 1, name: 'Inbox' })).toBeVisible();
+    await expect(page).toHaveURL(/\/m\/inbox$/, LOADED);
+    await expect(page.getByRole('heading', { level: 1, name: 'Inbox' })).toBeVisible(LOADED);
     expect(errors).toEqual([]);
   });
 
   test('a desktop Inbox link lands on the mobile Inbox, not the chat list', async ({ page }) => {
     await mockMobileBackend(page);
     await page.goto('/inbox');
-    await expect(page).toHaveURL(/\/m\/inbox$/);
+    await expect(page).toHaveURL(/\/m\/inbox$/, LOADED);
   });
 
   test('a run link opens the run as its chat', async ({ page }) => {
     await mockMobileBackend(page);
     await page.goto('/workflows/runs/chat_a');
-    await expect(page).toHaveURL(/\/m\/chats\/chat_a$/);
+    await expect(page).toHaveURL(/\/m\/chats\/chat_a$/, LOADED);
   });
 
   test('the Apps console stays on a phone instead of bouncing to the chat list', async ({ page }) => {
@@ -78,7 +81,7 @@ test.describe('mobile surface', () => {
 
     const approval = page.getByTestId('inbox-item-approval:ap_1');
     const approve = approval.getByRole('button', { name: 'Approve' });
-    await expect(approve).toBeVisible();
+    await expect(approve).toBeVisible(LOADED);
     const box = await approve.boundingBox();
     expect(box!.height).toBeGreaterThanOrEqual(44);
     await approve.click();
@@ -101,7 +104,7 @@ test.describe('mobile surface', () => {
     await mockMobileBackend(page);
     await page.goto('/m/diagnostics');
     const screen = page.getByTestId('mobile-diagnostics');
-    await expect(screen.getByText('Update stream')).toBeVisible();
+    await expect(screen.getByText('Update stream')).toBeVisible(LOADED);
     // The mocked stream fails, and the failure is recorded on the device.
     await expect(screen.getByTestId('diagnostics-error').first()).toBeVisible();
     await screen.getByRole('button', { name: 'Copy diagnostics' }).click();

@@ -72,7 +72,7 @@ export function EnvScopeControl({ value, long, previews, onChange, pinnedEnv }: 
       onChange={(event) => choose(event.target.value)}
       data-testid="env-scope-select"
       className={cn(
-        "hidden h-11 max-w-36 shrink-0 truncate rounded-md border border-border bg-surface px-2 text-sm text-ink max-md:block",
+        "hidden h-[44px] max-w-36 shrink-0 truncate rounded-md border border-border bg-surface px-2 text-sm text-ink max-md:block",
         pinnedEnv && "opacity-60"
       )}
     >

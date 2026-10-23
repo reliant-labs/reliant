@@ -266,7 +266,7 @@ export default function SidebarLayout({
   }
 
   const rowBase =
-    "relative flex items-center rounded-lg text-sm text-ink transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent [@media(pointer:coarse)]:min-h-11";
+    "relative flex items-center rounded-lg text-sm text-ink transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent [@media(pointer:coarse)]:min-h-[44px]";
 
   function renderChild(item: SidebarNavItem, i: number) {
     return (
@@ -482,7 +482,7 @@ export default function SidebarLayout({
               aria-label="Open navigation"
               aria-controls="sidebar-layout-nav"
               aria-expanded={drawerShown}
-              className="hidden h-11 w-11 shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-ink/5 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent max-md:flex"
+              className="hidden h-[44px] w-[44px] shrink-0 items-center justify-center rounded-md text-ink-muted hover:bg-ink/5 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent max-md:flex"
             >
               <svg aria-hidden="true" className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.75}>
                 <path strokeLinecap="round" d="M4 7h16M4 12h16M4 17h16" />
