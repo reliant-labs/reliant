@@ -1392,7 +1392,7 @@ jobs:
 
       - name: Install deps
         working-directory: frontends/web
-        run: npm ci || npm install
+        run: npm ci
 
       - name: Lint
         working-directory: frontends/web
@@ -1466,7 +1466,7 @@ jobs:
 
       - name: Install deps
         working-directory: frontends/web
-        run: npm ci || npm install
+        run: npm ci
 
       - name: Unit tests (shard ${{ matrix.shard }}/${{ matrix.shard_total }})
         working-directory: frontends/web
@@ -1517,7 +1517,7 @@ jobs:
 
       - name: Install deps
         working-directory: frontends/web
-        run: npm ci || npm install
+        run: npm ci
 
       # Restored everywhere, saved on main only (see the backend job).
       - name: Restore Playwright browsers
@@ -1590,11 +1590,11 @@ jobs:
 
       - name: Install web deps
         working-directory: frontends/web
-        run: npm ci || npm install
+        run: npm ci
 
       - name: Install electron deps
         working-directory: electron
-        run: npm ci || npm install
+        run: npm ci
 
       # dist:pr routes through electron/scripts/with-release-config.mjs like
       # every other build target, so the PR build exercises the same config

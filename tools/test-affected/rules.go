@@ -188,7 +188,7 @@ var rules = []rule{
 	{
 		id: "web-config",
 		patterns: []string{
-			"frontends/web/package.json", "frontends/web/package-lock.json", "frontends/web/pnpm-lock.yaml", "frontends/web/.nvmrc",
+			"frontends/web/package.json", "frontends/web/package-lock.json", "frontends/web/.nvmrc",
 			"frontends/web/vite.config.ts", "frontends/web/tsconfig*.json", "frontends/web/tailwind.config.js", "frontends/web/postcss.config.js",
 			"frontends/web/src/test/setup.ts",
 		},

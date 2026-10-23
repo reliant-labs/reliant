@@ -9,6 +9,7 @@ import (
 	"sort"
 
 	"github.com/reliant-labs/reliant/internal/llm/drivererrors"
+	"github.com/reliant-labs/reliant/internal/llm/drivers/local"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/logging"
 )
@@ -118,6 +119,16 @@ func ValidateModelSelector(ctx context.Context, userID string, selector interfac
 
 	// Skip validation for mock models (used in tests) - they don't require API keys
 	if isTestModel(ms.ID) {
+		return nil
+	}
+
+	// A local model (a daemon's detected server, or a configured endpoint) is
+	// served by no API-key provider, so the registry below cannot resolve it
+	// and a user whose only models are local would be told to add an API key.
+	// The run resolves it against the daemon inventory or the endpoint
+	// (llm_request.go) and fails with the explained local.UnavailableError
+	// when it cannot.
+	if local.IsSelector(ms) {
 		return nil
 	}
 

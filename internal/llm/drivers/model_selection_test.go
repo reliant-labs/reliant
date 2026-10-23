@@ -125,6 +125,25 @@ func TestValidateModelSelector_EmptySelector(t *testing.T) {
 	assert.NoError(t, err, "Empty map should be valid")
 }
 
+// A user with no API key whose model is local — a configured endpoint or a
+// daemon's detected server — can start a chat: the run resolves that model,
+// not the API-key registry. Before, StartChat refused it with "no API keys
+// configured", so a self-hosted stack running only a local model could not
+// chat at all.
+func TestValidateModelSelector_LocalModelNeedsNoAPIKey(t *testing.T) {
+	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "user-with-no-keys")
+
+	for name, sel := range map[string]models.ModelSelector{
+		"configured endpoint": {ID: "qwen3@local", Providers: []string{"endpoint:ep-1"}},
+		"daemon local model":  {ID: "qwen3:latest@local", Providers: []string{"local:d1"}},
+		"bare @local id":      {ID: "qwen3:latest@local"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			assert.NoError(t, ValidateModelSelector(ctx, "user-with-no-keys", sel))
+		})
+	}
+}
+
 func TestValidateModelSelector_NoAPIKeysConfigured(t *testing.T) {
 	// This test verifies behavior when GetAvailableDrivers returns empty
 	// In practice, this requires mocking, but we can test the error message logic
