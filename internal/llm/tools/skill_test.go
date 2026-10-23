@@ -3,11 +3,15 @@ package tools
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/reliant-labs/reliant/internal/config"
+	"github.com/reliant-labs/reliant/internal/skills/catalog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -730,4 +734,147 @@ func TestSkillsAnnouncement_DedupesSamePath(t *testing.T) {
 	require.Equal(t, 1, strings.Count(got, "- adapter:"))
 	require.Equal(t, 1, strings.Count(got, "- zeta:"))
 	require.Less(t, strings.Index(got, "- adapter:"), strings.Index(got, "- zeta:"))
+}
+
+// -----------------------------------------------------------------------------
+// description truncation
+// -----------------------------------------------------------------------------
+
+func TestTruncateDescription_CutsAtWordBoundary(t *testing.T) {
+	t.Parallel()
+	desc := "Database work — SQL migrations are the single schema source of truth; forge projects the ORM, CRUD wiring and frontend pages from the applied schema, never from proto."
+	got := truncateDescription(desc, SkillDescriptionBudget)
+
+	require.LessOrEqual(t, len([]rune(got)), SkillDescriptionBudget)
+	require.True(t, strings.HasSuffix(got, "..."), "a cut description says so: %q", got)
+	kept := strings.TrimSuffix(got, "...")
+	require.True(t, strings.HasPrefix(desc, kept), "the kept text is a prefix of the original")
+	next := desc[len(kept):]
+	require.True(t, next[0] == ' ' || strings.HasPrefix(next, ","),
+		"cut must land on a word boundary, got %q then %q", kept, next)
+	require.Contains(t, got, "single schema source of truth", "the budget keeps the purpose, not 77 bytes of it")
+}
+
+func TestTruncateDescription_ShortAndMultiByte(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, "Go idioms", truncateDescription("Go   idioms\n", SkillDescriptionBudget), "whitespace collapses; short text is whole")
+
+	// Rune-counted: a long run of multi-byte runes is never split mid-rune.
+	long := strings.Repeat("— ", 200)
+	got := truncateDescription(long, SkillDescriptionBudget)
+	require.True(t, utf8.ValidString(got))
+	require.LessOrEqual(t, utf8.RuneCountInString(got), SkillDescriptionBudget)
+
+	// One enormous word still yields text rather than an empty description.
+	word := strings.Repeat("x", 400)
+	got = truncateDescription(word, SkillDescriptionBudget)
+	require.Equal(t, SkillDescriptionBudget, len(got))
+	require.True(t, strings.HasSuffix(got, "..."))
+}
+
+// Every listing the model reads applies the same budget and boundary rule, and
+// "(has sub-skills)" survives the cut.
+func TestSkillListings_ShareDescriptionBudget(t *testing.T) {
+	t.Parallel()
+	long := "Build & ship anything deployed — static sites, SPAs, landing pages, web/mobile apps, APIs; no backend required. " +
+		"Envs, hosting, releases, custom domains, telemetry and a component library."
+	want := truncateDescription(long, SkillDescriptionBudget)
+	require.NotEqual(t, long, want, "fixture must exceed the budget")
+
+	skills := []config.StoredSkill{
+		{SkillPath: "kit", Name: "kit", Description: long, Body: "# kit"},
+		{SkillPath: "kit/sub", Name: "sub", Description: long, Body: "# sub"},
+		{SkillPath: "kit/other", Name: "other", Description: long, Body: "# other"},
+	}
+	tool := &skillTool{skills: skills}
+
+	ann := SkillsAnnouncement(skills)
+	require.Contains(t, ann, "- kit: "+want+" (has sub-skills)\n")
+
+	list, err := tool.listSkills("")
+	require.NoError(t, err)
+	require.Contains(t, list.Content, "- kit: "+want+" (has sub-skills)")
+
+	search, err := tool.searchSkills("static")
+	require.NoError(t, err)
+	require.Contains(t, search.Content, "- kit/sub: "+want+"\n")
+
+	loaded, err := tool.loadSkill("kit")
+	require.NoError(t, err)
+	require.Contains(t, loaded.Content, "- kit/sub: "+want+"\n")
+
+	loaded, err = tool.loadSkill("kit/sub")
+	require.NoError(t, err)
+	require.Contains(t, loaded.Content, "- kit/other: "+want+"\n")
+}
+
+// A non-forge project's announcement names forge, with a description that
+// says it covers frontend-only work, and does not promise sub-skills it does
+// not have. Built from the real catalog, so the copy is what an agent sees.
+func TestSkillsAnnouncement_NonForgeProjectSurfacesForge(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	skills := storedSkillsFor(t, t.TempDir())
+	ann := SkillsAnnouncement(skills)
+
+	var line string
+	for _, l := range strings.Split(ann, "\n") {
+		if strings.HasPrefix(l, "- forge: ") {
+			line = l
+		}
+	}
+	require.NotEmpty(t, line, "the announcement must name forge in a non-forge project:\n%s", ann)
+	for _, kind := range []string{"static sites", "SPAs", "landing pages", "no backend required"} {
+		require.Contains(t, line, kind)
+	}
+	require.NotContains(t, line, "...", "the forge description fits the budget whole")
+	require.NotContains(t, line, "(has sub-skills)", "nothing is addressable under forge/ before adoption")
+
+	_, body, ok := LoadSkillForInjection(skills, "forge")
+	require.True(t, ok)
+	require.Contains(t, body, "Forge — start here", "loading forge pre-adoption returns the start-here")
+	delivered, truncated := DeliverSkillContent("forge", body)
+	require.False(t, truncated, "the pre-adoption start-here arrives whole")
+	require.Contains(t, delivered, "## Rules")
+}
+
+// In a forge project the forge entry is the namespace map, described by what
+// forge is for.
+func TestSkillsAnnouncement_ForgeProjectParentDescription(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "forge.yaml"), []byte("name: x\n"), 0o644))
+	ann := SkillsAnnouncement(storedSkillsFor(t, dir))
+
+	require.Contains(t, ann, "- forge: Build & ship anything deployed — static sites, SPAs, landing pages")
+	require.Contains(t, ann, "Start: forge/forge (has sub-skills)\n")
+	require.NotContains(t, ann, "sibling forge module")
+}
+
+// storedSkillsFor runs the real catalog discovery for dir and projects it the
+// way the daemon does (flattenSkills), with bodies loaded.
+func storedSkillsFor(t *testing.T, dir string) []config.StoredSkill {
+	t.Helper()
+	snap := catalog.DiscoverAll(catalog.DiscoverInput{ProjectPath: dir, LoadFullDefinitions: true, ExcludeGlobalRoots: true})
+	out := make([]config.StoredSkill, 0, len(snap.Definitions))
+	for _, d := range snap.Definitions {
+		out = append(out, config.StoredSkill{
+			SkillPath:   d.SkillPath,
+			Name:        d.Name,
+			Description: d.Description,
+			Scope:       string(d.Scope),
+			Body:        d.Body,
+			HasChildren: d.HasChildren,
+			Source:      d.Source,
+		})
+	}
+	return out
+}
+
+// The start-here's delivery allowance follows it to the path it is served at
+// before adoption, so it arrives whole there exactly when it does at forge/forge.
+func TestSkillDeliveryBudget_CoversPreAdoptionStartHere(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, ForgeStartHereSkillBodySize, skillDeliveryBudget(ForgeStartHereSkillPath))
+	require.Equal(t, ForgeStartHereSkillBodySize, skillDeliveryBudget(" Forge "))
+	require.Equal(t, MaxSkillBodySize, skillDeliveryBudget("forge/db"))
 }
