@@ -96,6 +96,18 @@ rule claims and no Go package owns runs **everything** (fail-safe).
 | a deleted web module | **web: full** (its importers can no longer be found) |
 | anything else | **everything: full** |
 
+**npm lockfiles.** Every lane tests against the `node_modules` already on disk,
+so none of them notices a lockfile `npm ci` would reject. When a diff changes a
+`package.json` or `package-lock.json` of an npm project (`npmProjects` in
+`tools/test-affected/plan.go`: the root, `frontends/web`, `electron`,
+`tools/protoc-gen-es`), the runner first runs
+`npm ci --dry-run --ignore-scripts` there (~10s; it validates the lockfile
+against the manifest and touches nothing), provided a lane that installs from
+that project is enabled. #1343 shipped a lockfile every fresh install rejected
+("Missing: zone.js from lock file") with every local test green. PR CI installs
+with plain `npm ci` for the same reason: an `npm ci || npm install` fallback
+repaired the drift on the runner and hid it.
+
 ## How the selection works, and where it errs
 
 **Go.** `go list -test -json ./...` gives each package's test-binary

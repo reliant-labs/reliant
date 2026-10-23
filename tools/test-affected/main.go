@@ -35,6 +35,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 )
@@ -411,6 +412,11 @@ func printTable(w io.Writer, pl *Plan, enabled map[lane]bool) error {
 			}
 		}
 	}
+	for _, lc := range pl.Lockfiles {
+		if slices.ContainsFunc(lc.Lanes, func(l lane) bool { return enabled[l] }) {
+			p.f("\n[npm-lockfile] %s: npm ci --dry-run (%s)\n", lc.Dir, lc.Why)
+		}
+	}
 	return p.err
 }
 
@@ -442,8 +448,21 @@ type step struct {
 	argv []string
 }
 
+// lockfileArgv proves a project's lockfile still installs without touching
+// its node_modules: `npm ci` validates package.json against the lockfile
+// before it reifies anything, and --dry-run stops it there (~10s, offline for
+// a lockfile in sync).
+var lockfileArgv = []string{"npm", "ci", "--dry-run", "--ignore-scripts", "--no-audit", "--no-fund", "--loglevel=error"}
+
 func (r *runner) steps(pl *Plan, enabled map[lane]bool) []step {
 	var out []step
+	// First: the cheapest step, and every test after it would otherwise pass
+	// against a node_modules a fresh install can no longer produce.
+	for _, lc := range pl.Lockfiles {
+		if slices.ContainsFunc(lc.Lanes, func(l lane) bool { return enabled[l] }) {
+			out = append(out, step{name: "npm lockfile in sync (" + lc.Dir + ")", dir: filepath.Join(r.root, lc.Dir), argv: lockfileArgv})
+		}
+	}
 	// First, so the tests below run against what generate leaves behind. It
 	// writes what it regenerates into the tree, naming every file it changed.
 	if enabled[laneForgeGen] && pl.ForgeGen.Full {

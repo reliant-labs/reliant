@@ -73,6 +73,50 @@ type Plan struct {
 	Electron ElectronPlan `json:"electron"`
 	ForgeGen ForgeGenPlan `json:"forge_generate"`
 	DocGen   DocGenPlan   `json:"docs_generate"`
+	// Lockfiles are the npm projects whose manifest or lockfile changed: the
+	// runner checks each still installs with `npm ci` before any test runs.
+	Lockfiles []LockfileCheck `json:"npm_lockfiles,omitempty"`
+}
+
+// LockfileCheck is one npm project whose package.json or package-lock.json
+// changed. The lanes' tests run against whatever node_modules is already on
+// disk, so without this nothing in the affected tier notices a lockfile that
+// `npm ci` rejects: reliant #1343 bumped forge-web-runtime in package.json,
+// hand-edited the lockfile, and every fresh install of main failed with
+// "Missing: zone.js from lock file" while every local test stayed green.
+type LockfileCheck struct {
+	Dir   string `json:"dir"`
+	Lanes []lane `json:"lanes"`
+	Why   string `json:"why"`
+}
+
+// npmProjects are the repo's npm projects (a directory with a committed
+// package-lock.json), and the lanes whose tooling installs from each.
+// TestNPMProjectsNameEveryLockfile holds this to the tree.
+var npmProjects = map[string][]lane{
+	".":                   {laneWeb, laneElectron},
+	"frontends/web":       {laneWeb},
+	"electron":            {laneElectron},
+	"tools/protoc-gen-es": {laneForgeGen},
+}
+
+func (c *classifier) noteLockfile(ch Change) {
+	base := path.Base(ch.Path)
+	if base != "package.json" && base != "package-lock.json" {
+		return
+	}
+	dir := path.Dir(ch.Path)
+	lanes, ok := npmProjects[dir]
+	if !ok {
+		return
+	}
+	for i := range c.pl.Lockfiles {
+		if c.pl.Lockfiles[i].Dir == dir {
+			c.pl.Lockfiles[i].Why += ", " + base
+			return
+		}
+	}
+	c.pl.Lockfiles = append(c.pl.Lockfiles, LockfileCheck{Dir: dir, Lanes: lanes, Why: "changed: " + base})
 }
 
 type reasons struct {
@@ -142,6 +186,7 @@ func Classify(changes []Change, g *Graph) *Plan {
 	}
 	for _, ch := range changes {
 		c.attribute(ch)
+		c.noteLockfile(ch)
 	}
 	c.selectGo()
 	c.selectWeb()

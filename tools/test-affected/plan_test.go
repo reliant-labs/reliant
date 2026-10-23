@@ -2,6 +2,7 @@
 package main
 
 import (
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -563,8 +564,75 @@ func TestRunnerFullLanesRunEverything(t *testing.T) {
 	for _, s := range steps {
 		got = append(got, strings.Join(s.argv, " "))
 	}
-	if len(got) != 2 || !strings.HasSuffix(got[0], "./...") || got[1] != "npx vitest run" {
+	if len(got) != 3 || !strings.HasPrefix(got[0], "npm ci --dry-run") ||
+		!strings.HasSuffix(got[1], "./...") || got[2] != "npx vitest run" {
 		t.Fatalf("full lanes = %v", got)
+	}
+}
+
+// A changed manifest or lockfile proves `npm ci` still accepts it, before any
+// test runs against the node_modules already on disk (reliant #1343 shipped a
+// lockfile every fresh install rejected, with every local test green).
+func TestLockfileChangeChecksTheInstallFirst(t *testing.T) {
+	r := &runner{root: "/repo"}
+	for _, tc := range []struct {
+		path, lanes, dir string
+	}{
+		{"frontends/web/package.json", "web", "/repo/frontends/web"},
+		{"frontends/web/package-lock.json", "web", "/repo/frontends/web"},
+		{"electron/package-lock.json", "electron", "/repo/electron"},
+		{"package-lock.json", "electron", "/repo"},
+		{"tools/protoc-gen-es/package.json", "forge-generate", "/repo/tools/protoc-gen-es"},
+	} {
+		steps := r.steps(classify(tc.path), laneSet(tc.lanes))
+		if len(steps) == 0 || strings.Join(steps[0].argv, " ") != strings.Join(lockfileArgv, " ") || steps[0].dir != tc.dir {
+			t.Errorf("%s: the first step must be the lockfile check in %s: %+v", tc.path, tc.dir, steps)
+		}
+	}
+	// The check belongs to the lanes that install from that project.
+	for _, s := range r.steps(classify("frontends/web/package-lock.json"), laneSet("go,electron")) {
+		if strings.HasPrefix(s.name, "npm lockfile") {
+			t.Errorf("-lanes without web must not check the web lockfile: %+v", s)
+		}
+	}
+	// Both files of one project are one check.
+	pl := classify("frontends/web/package.json", "frontends/web/package-lock.json")
+	if len(pl.Lockfiles) != 1 || pl.Lockfiles[0].Why != "changed: package.json, package-lock.json" {
+		t.Errorf("one project, one check: %+v", pl.Lockfiles)
+	}
+	// A package.json that is not an npm project (a fixture, a vendored package) is not one.
+	if pl := classify("frontends/web/src/test/fixtures/package.json"); len(pl.Lockfiles) != 0 {
+		t.Errorf("not an npm project: %+v", pl.Lockfiles)
+	}
+}
+
+// npmProjects must name every committed lockfile, or a project's drift goes
+// unchecked; and every entry must still be a project. Globbing (rather than
+// `git ls-files`) keeps the test cache-sound: the test process reads the
+// directories itself.
+func TestNPMProjectsNameEveryLockfile(t *testing.T) {
+	found := map[string]bool{}
+	for _, pat := range []string{"package-lock.json", "*/package-lock.json", "*/*/package-lock.json"} {
+		ms, err := filepath.Glob(filepath.Join(repoRoot, pat))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, m := range ms {
+			rel, _ := filepath.Rel(repoRoot, filepath.Dir(m))
+			if !strings.Contains(rel, "node_modules") {
+				found[filepath.ToSlash(rel)] = true
+			}
+		}
+	}
+	for dir := range found {
+		if _, ok := npmProjects[dir]; !ok {
+			t.Errorf("%s/package-lock.json is in no npmProjects entry: add it with the lanes that install from it", dir)
+		}
+	}
+	for dir := range npmProjects {
+		if !found[dir] {
+			t.Errorf("npmProjects names %s, which has no package-lock.json", dir)
+		}
 	}
 }
 
@@ -573,6 +641,9 @@ func TestRunnerFullLanesRunEverything(t *testing.T) {
 func TestRunnerRunsOnlyFullLanesInAHeavySlot(t *testing.T) {
 	r := &runner{root: "/repo", slot: []string{"forge", "slot", "run", "--class", "heavy", "--"}}
 	for _, s := range r.steps(classify("go.mod", "frontends/web/package.json"), laneSet("go,web")) {
+		if strings.HasPrefix(s.name, "npm lockfile") {
+			continue // a ~10s check, not a lane
+		}
 		if joined := strings.Join(s.argv, " "); !strings.HasPrefix(joined, "forge slot run --class heavy -- ") {
 			t.Errorf("full step %q runs outside a heavy slot: %s", s.name, joined)
 		}
