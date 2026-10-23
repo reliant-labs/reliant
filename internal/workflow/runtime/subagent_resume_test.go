@@ -16,7 +16,7 @@ func TestStoppedSubAgentAndItsParamsCrossAContinueAsNew(t *testing.T) {
 		ToolCallID: "tc1", ParentThread: "root", ChildThread: "agent",
 		handoff: SpawnHandoff{ToolCallID: "tc1", ParentThread: "root", ChildThread: "agent", Preset: "implementer"},
 	})
-	tracker.recordStoppedSpawn("tc1")
+	tracker.recordStoppedSpawn("tc1", false)
 	tracker.completeDetachedSpawn("tc1", "root")
 	tracker.recordThreadInputOverride("agent", map[string]interface{}{"model": "gpt-5@openai"})
 
@@ -40,7 +40,7 @@ func TestStoppedSubAgentAndItsParamsCrossAContinueAsNew(t *testing.T) {
 // spawn that completes is never recorded, and recording needs the live entry.
 func TestOnlyALiveSpawnCanBeRecordedStopped(t *testing.T) {
 	tracker := &ChildWorkflowTracker{}
-	tracker.recordStoppedSpawn("never-registered")
+	tracker.recordStoppedSpawn("never-registered", false)
 	require.Nil(t, tracker.stoppedSpawnFor(""))
 	require.Empty(t, tracker.stoppedSpawnHandoffs())
 }

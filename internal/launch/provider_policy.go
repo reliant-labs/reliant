@@ -165,10 +165,36 @@ func (l *Launcher) primaryDriver(ctx context.Context, userID string, inputs map[
 // resolvedDriver is the driver a model selector value resolves to over the
 // providers available, "" when it resolves to none.
 func resolvedDriver(selector interface{}, available models.AvailableDrivers) string {
+	resolved := resolveSelector(selector, available)
+	if resolved == nil {
+		return ""
+	}
+	return resolved.Provider.Driver
+}
+
+// ResolvedModelAtDriver is the "<model>@<driver>" a model selector value
+// resolves to over the user's connected providers right now, "" when it
+// resolves to none (or the providers cannot be read).
+func (l *Launcher) ResolvedModelAtDriver(ctx context.Context, userID string, selector interface{}) string {
+	if selector == nil {
+		return ""
+	}
+	available, err := drivers.LookupAvailableDrivers(ctx, userID)
+	if err != nil {
+		return ""
+	}
+	resolved := resolveSelector(selector, available)
+	if resolved == nil || resolved.Definition.ID == "" || resolved.Provider.Driver == "" {
+		return ""
+	}
+	return string(resolved.Definition.ID) + "@" + resolved.Provider.Driver
+}
+
+func resolveSelector(selector interface{}, available models.AvailableDrivers) *models.ResolvedModel {
 	var ms models.ModelSelector
 	data, err := json.Marshal(selector)
 	if err != nil || json.Unmarshal(data, &ms) != nil {
-		return ""
+		return nil
 	}
 	var providers []string
 	for id, cfg := range available.Drivers {
@@ -177,8 +203,8 @@ func resolvedDriver(selector interface{}, available models.AvailableDrivers) str
 		}
 	}
 	resolved, err := models.MustGetRegistry().WithAvailability(available.Availability).Resolve(ms, providers)
-	if err != nil || resolved == nil {
-		return ""
+	if err != nil {
+		return nil
 	}
-	return resolved.Provider.Driver
+	return resolved
 }

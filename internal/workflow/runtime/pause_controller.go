@@ -126,6 +126,16 @@ func (pc *PauseController) DoRequestPause() {
 	}
 }
 
+// DoRequestPauseFor is DoRequestPause for a step that exhausted its retries on
+// err, recording the cause so a capacity wake can tell a pause it may release
+// (a provider-capacity failure) from one it must not (capacity_wake.go).
+func (pc *PauseController) DoRequestPauseFor(err error) {
+	pc.DoRequestPause()
+	if pc != nil && pc.UsageLimit != nil && pc.UsageLimit.pauser != nil {
+		pc.UsageLimit.pauser.noteSelfPauseCause(err)
+	}
+}
+
 // ObserveRepeatedToolErrors feeds a completed step to the repeated-tool-error
 // breaker, if one is wired, and returns the error that ends the agent when the
 // same failure has repeated too often. Nil-safe on both the receiver and the

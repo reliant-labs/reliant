@@ -43,6 +43,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/videojobs"
 	"github.com/reliant-labs/reliant/internal/workersetup"
 	v2workflow "github.com/reliant-labs/reliant/internal/workflow"
+	"github.com/reliant-labs/reliant/internal/workflow/capacitywake"
 	scenariorunner "github.com/reliant-labs/reliant/internal/workflow/scenario/runner"
 	"github.com/reliant-labs/reliant/internal/worktreesweep"
 	"github.com/reliant-labs/reliant/pkg/config"
@@ -601,9 +602,12 @@ func NewWorkflowEventRelay(d WorkflowEventRelayDeps) (*workflowevent.Relay, erro
 	return workflowevent.NewRelay(d.DB, d.Temporal.Client, v2workflow.SharedTaskQueue), nil
 }
 
-// AccountUsagePollerDeps is where the polled accounts are kept.
+// AccountUsagePollerDeps is where the polled accounts are kept, and the
+// Temporal client that wakes a user's blocked chats when a poll finds an
+// account serves again.
 type AccountUsagePollerDeps struct {
-	DB *db.Repo
+	DB       *db.Repo
+	Temporal *TemporalClient
 }
 
 // NewAccountUsagePoller polls the providers' usage APIs for accounts the
@@ -621,6 +625,11 @@ func NewAccountUsagePoller(d AccountUsagePollerDeps) (*accountlimits.Poller, err
 		Fetcher: &accountlimits.Fetcher{
 			Store:  repo,
 			Tokens: drivers.RefreshingTokens{Store: repo},
+			// A poll that lifts a bench wakes the user's blocked chats, so their
+			// threads re-route onto the account now rather than at a reset.
+			OnCapacity: func(ctx context.Context, userID, _ string) {
+				capacitywake.WakeUser(ctx, repo, d.Temporal.Client, userID, "a usage poll found a limited account serving again")
+			},
 		},
 	}, nil
 }

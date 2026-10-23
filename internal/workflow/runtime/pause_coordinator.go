@@ -107,6 +107,10 @@ type pauseCoordinator struct {
 	// and any user pause clears it: if someone pauses a run that had already
 	// self-paused, it is now stopped because they said so.
 	selfPaused bool
+	// capacityPause marks a self-pause armed because a step failed on a
+	// provider-capacity error (providerCapacityError): one a capacity wake
+	// may release (releaseCapacityPause). Meaningful only with selfPaused.
+	capacityPause bool
 	// selfResumes counts consecutive rungs climbed on selfPauseBackoff;
 	// lastSelfResume is when the last rung fired, so a stretch quieter than
 	// selfPauseLadderReset starts the ladder over.
@@ -223,6 +227,7 @@ func newPauseCoordinator(ctx workflow.Context, workflowID string, opts pauseOpti
 func (pc *pauseCoordinator) broadcastResume() {
 	pc.requested = false
 	pc.selfPaused = false
+	pc.capacityPause = false
 	pc.activityCtx, pc.cancelAll = newCancelScope(pc.root)
 	pc.epoch++
 }
@@ -333,6 +338,26 @@ func (pc *pauseCoordinator) RequestPause() {
 func (pc *pauseCoordinator) Arm() {
 	pc.requested = true
 	pc.selfPaused = true
+}
+
+// noteSelfPauseCause records why the self-pause just armed was armed: err is
+// the failure that exhausted the step. Called right after RequestPause/Arm at a
+// retry-exhaustion site. A pause armed on a provider-capacity failure is one a
+// capacity wake may release; any other stays for a resume.
+func (pc *pauseCoordinator) noteSelfPauseCause(err error) {
+	pc.capacityPause = pc.selfPaused && providerCapacityError(err)
+}
+
+// releaseCapacityPause ends a self-pause armed on a provider-capacity failure,
+// as a resume would, and reports whether it did. A user's pause, and a
+// self-pause armed for anything else (the daemon-offline breaker, a failure
+// capacity cannot fix), are left alone.
+func (pc *pauseCoordinator) releaseCapacityPause() bool {
+	if !pc.requested || !pc.selfPaused || !pc.capacityPause {
+		return false
+	}
+	pc.broadcastResume()
+	return true
 }
 
 // CheckPause checks for a pending pause and blocks until resume if paused.

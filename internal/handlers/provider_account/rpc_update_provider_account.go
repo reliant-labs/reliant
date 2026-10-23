@@ -42,6 +42,9 @@ func (s *Service) UpdateProviderAccount(
 	}
 	if patch.Paused != nil {
 		s.afterChange(ctx, userID, acct.Provider)
+		if !*patch.Paused {
+			s.wakeChats(ctx, userID, "a "+acct.Provider+" account was un-paused")
+		}
 	}
 	limits, err := s.deps.Store.ListAccountLimits(ctx, userID)
 	if err != nil {

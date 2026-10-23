@@ -164,6 +164,10 @@ type SpawnHandoff struct {
 	// Resumes counts the times a message has resumed this spawn after it
 	// stopped; it numbers the fresh report slots.
 	Resumes int `json:"resumes,omitempty"`
+	// CapacityStop marks a stopped sub-agent whose failure was one capacity
+	// can fix (providerCapacityError): a chat-wide capacity wake resumes it
+	// (capacity_wake.go). Carried across a continue-as-new with the record.
+	CapacityStop bool `json:"capacity_stop,omitempty"`
 }
 
 // ChatContext provides chat-level data for CEL evaluation (chat.id)
@@ -1307,6 +1311,15 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	checkPause := pauser.CheckPause
 	requestPause := pauser.RequestPause
 	usageLimitWaiter := newUsageLimitWaiter(pauser, childTracker, input.ChatID, workflowID, input.WorkflowName)
+	// A capacity wake (an account added, the provider switched, Resume) goes
+	// on with every thread the provider blocked, not only those in a
+	// usage-limit wait (capacity_wake.go). Histories recorded before it
+	// listen only from their first usage-limit wait.
+	if workflow.GetVersion(ctx, capacityWakeChangeID, workflow.DefaultVersion, 1) != workflow.DefaultVersion {
+		usageLimitWaiter.listenFromStart(func(wakeCtx workflow.Context, sig CapacityWakeSignal) {
+			wakeBlockedThreads(wakeCtx, pauser, childTracker, workflowID, sig.AllStopped)
+		})
+	}
 
 	// STEP 8.54: Machine wake on resume (machine_resume_wake.go). A run that
 	// needs its machine wakes it before the first machine step after a hold,
@@ -2479,7 +2492,10 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 					notifyWorkflowStatus(ctx, input.ChatID, workflowID, input.WorkflowName, "paused", parentWorkflowID, thread, nil)
 
 					// Signal-based pause: arm the pause directly and block until resume.
+					// A pause on a provider-capacity failure is also released by a
+					// capacity wake (capacity_wake.go).
 					pauser.Arm()
+					pauser.noteSelfPauseCause(stepEvent.Error)
 					checkPause(ctx)
 					// Yield to scheduler after pause/resume to prevent deadlock detection during replay.
 					_ = workflow.Sleep(ctx, 0)
@@ -3352,6 +3368,9 @@ type spawnInlineResult struct {
 	// runSpawnInlineChild did NOT notify; the caller notifies it after the
 	// mailbox report is written. Empty when nothing is owed.
 	terminalStatus string
+	// capacityStop is set on a failure capacity can fix (see
+	// SpawnHandoff.CapacityStop).
+	capacityStop bool
 }
 
 // toToolResult converts to the map format expected by the tool result pipeline.
@@ -3834,6 +3853,7 @@ func runSpawnInlineChild(
 			Content:        spawnFailureReport(prep.threadTitle, config.childThread, execErr),
 			IsError:        true,
 			terminalStatus: deferredStatus(deferTerminalStatus, "failed"),
+			capacityStop:   providerCapacityError(execErr),
 		}
 	}
 
@@ -4077,7 +4097,7 @@ func runDetachedSpawnChild(
 	// a parent woken by that count already finds the agent resumable.
 	stopped := result.IsError && !result.Cancelled
 	if stopped {
-		childTracker.recordStoppedSpawn(config.toolCallID)
+		childTracker.recordStoppedSpawn(config.toolCallID, result.capacityStop)
 	} else {
 		childTracker.forgetLastThreadInputs(config.childThread)
 	}

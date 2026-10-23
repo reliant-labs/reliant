@@ -46,3 +46,9 @@ type Repository interface {
 
 	drivers.AccountLister
 }
+
+// ChatWaker wakes every chat of a user whose run may have a thread blocked on
+// a provider; *chat.Service satisfies it.
+type ChatWaker interface {
+	WakeUserChats(ctx context.Context, userID, why string) int
+}

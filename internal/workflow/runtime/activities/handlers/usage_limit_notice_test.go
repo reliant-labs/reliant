@@ -43,12 +43,16 @@ func TestAccountMoveNotice(t *testing.T) {
 // The worker does not know the reader's time zone, so a notice carries the
 // instant as an RFC 3339 UTC token for the web to render locally, whatever
 // zone the worker runs in.
+//
+// The instant is handed in each zone rather than by setting time.Local: that
+// global is read by every goroutine in the test binary (an idle HTTP
+// connection's deadline timer among them), and writing it raced them under
+// -race.
 func TestNoticeClockIsAZoneIndependentToken(t *testing.T) {
-	orig := time.Local
-	t.Cleanup(func() { time.Local = orig })
+	t.Parallel()
+
 	at := time.Date(2026, 10, 19, 15, 40, 0, 0, time.UTC)
 	for _, zone := range []*time.Location{time.UTC, time.FixedZone("EST", -5*3600), time.FixedZone("JST", 9*3600)} {
-		time.Local = zone
 		assert.Equal(t, "<time:2026-10-19T15:40:00Z>", noticeClock(at.In(zone)))
 	}
 }

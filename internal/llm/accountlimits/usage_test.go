@@ -301,20 +301,73 @@ func TestExhaustedUsageWindowBenchesTheAccount(t *testing.T) {
 	assert.True(t, l.UsageAPINextAt.Equal(l.LimitedUntil.Add(30*time.Second)), "confirm 30s after the reset")
 }
 
-func TestUsageReadingDoesNotLiftABenchTheProviderAnnounced(t *testing.T) {
-	fx := newFixture(t, "claude")
+// benchFixture is a fixture whose account a1 the provider benched on window
+// until 3h from now, with a refresh reading of body.
+func benchFixture(t *testing.T, provider, window string, body func(now time.Time) string) (*fixture, time.Time, *[]string) {
+	t.Helper()
+	fx := newFixture(t, provider)
 	until := fx.clock.Now().Add(3 * time.Hour)
-	fx.store.limits["a1"].LimitedUntil, fx.store.limits["a1"].LimitedWindow = &until, "seven_day"
+	fx.store.limits["a1"].LimitedUntil, fx.store.limits["a1"].LimitedWindow = &until, window
 	fx.store.limits["a1"].UsageAPINextAt = nil
 	fx.store.limits["a1"].LastTrafficAt = fx.clock.Now().Add(-time.Hour)
-	// A bench in force makes a leased poll defer, so refresh on demand: it reads regardless.
-	fx.doer.reply = func(*http.Request) (*http.Response, error) { return resp(200, claudeBody(10, 20, fx.clock.Now())) }
+	fx.doer.reply = func(*http.Request) (*http.Response, error) { return resp(200, body(fx.clock.Now())) }
+	var woken []string
+	fx.f.OnCapacity = func(_ context.Context, userID, accountID string) { woken = append(woken, userID+"/"+accountID) }
+	return fx, until, &woken
+}
 
-	_, err := fx.f.RefreshUsage(context.Background(), "u1", "a1")
-	require.NoError(t, err)
-	l := fx.store.limit("a1")
-	require.NotNil(t, l.LimitedUntil, "an 'allowed' reading cannot see a model-scoped refusal; the provider's own bench stands")
-	assert.True(t, l.LimitedUntil.Equal(until))
+// The owner's report: an account hit its limit, the user raised the quota,
+// and a refresh showed it with room. The bench the provider announced stood
+// until its reset anyway, so the router kept routing around an account
+// Settings showed as fine. A reading that shows the benched window with
+// capacity now lifts it, and the user's blocked chats are woken.
+func TestUsageReadingThatShowsTheBenchedWindowWithRoomLiftsTheBench(t *testing.T) {
+	for name, tc := range map[string]struct {
+		provider, window string
+		body             func(time.Time) string
+	}{
+		"claude, 7-day":            {"claude", "seven_day", func(n time.Time) string { return claudeBody(10, 20, n) }},
+		"claude, 5-hour":           {"claude", "five_hour", func(n time.Time) string { return claudeBody(10, 20, n) }},
+		"codex, matched by length": {"codex", "five_hour", func(n time.Time) string { return codexBody(5, 30, n) }},
+		"spent credit, no window":  {"claude", "", func(n time.Time) string { return claudeBody(10, 20, n) }},
+	} {
+		t.Run(name, func(t *testing.T) {
+			fx, _, woken := benchFixture(t, tc.provider, tc.window, tc.body)
+
+			res, err := fx.f.RefreshUsage(context.Background(), "u1", "a1")
+			require.NoError(t, err)
+			l := fx.store.limit("a1")
+			assert.Nil(t, l.LimitedUntil, "the reading shows the window that refused with room: the account serves again")
+			require.NotNil(t, res.Limits)
+			assert.Nil(t, res.Limits.LimitedUntil, "and Settings is answered with the state the router reads")
+			assert.Equal(t, []string{"u1/a1"}, *woken, "the user's blocked chats are woken")
+		})
+	}
+}
+
+// A reading cannot lift a bench on a window it does not show. A model-scoped
+// refusal (Opus' weekly cap) is invisible to a usage reading that reports only
+// the account-wide windows, so the provider's own bench stands and nothing is
+// woken. A window still spent keeps it too.
+func TestUsageReadingKeepsABenchItCannotSee(t *testing.T) {
+	for name, tc := range map[string]struct {
+		window string
+		body   func(time.Time) string
+	}{
+		"model-scoped, not reported":  {"seven_day_opus", func(n time.Time) string { return claudeBody(10, 20, n) }},
+		"the benched window is spent": {"seven_day", func(n time.Time) string { return claudeBody(10, 100, n) }},
+	} {
+		t.Run(name, func(t *testing.T) {
+			fx, until, woken := benchFixture(t, "claude", tc.window, tc.body)
+
+			_, err := fx.f.RefreshUsage(context.Background(), "u1", "a1")
+			require.NoError(t, err)
+			l := fx.store.limit("a1")
+			require.NotNil(t, l.LimitedUntil, "the bench stands")
+			assert.False(t, l.LimitedUntil.Before(until))
+			assert.Empty(t, *woken, "nothing is woken for an account still limited")
+		})
+	}
 }
 
 func TestOnDemandRefreshIsThrottledAt60Seconds(t *testing.T) {

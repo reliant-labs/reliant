@@ -47,6 +47,24 @@ type Deps struct {
 	// store leaves it nil and the rpc answers Unavailable.
 	// forge:optional-dep
 	UsageRefresher accountlimits.Refresher
+	// ChatWaker sends a capacity wake to the user's chats blocked on a
+	// provider once an account is added or un-paused, so each goes on as a
+	// whole (chat.Service.WakeUserChats). Nil leaves them to their own resets.
+	// forge:optional-dep
+	ChatWaker ChatWaker
+}
+
+// ChatWaker wakes every chat of a user whose run may have a thread blocked on
+// a provider; *chat.Service satisfies it.
+type ChatWaker interface {
+	WakeUserChats(ctx context.Context, userID, why string) int
+}
+
+// wakeChats tells the user's blocked chats there is capacity again.
+func (s *Service) wakeChats(ctx context.Context, userID, why string) {
+	if s.deps.ChatWaker != nil {
+		s.deps.ChatWaker.WakeUserChats(ctx, userID, why)
+	}
 }
 
 // validateDeps returns an error if any required Deps field is nil. The

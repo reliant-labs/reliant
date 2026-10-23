@@ -30,26 +30,22 @@ func (s *Service) signalProviderPolicy(ctx context.Context, userID string, chat 
 	}
 }
 
-// wakeUsageLimitWait re-decides a run that is parked on a usage limit after the
-// chat's policy changed. A parked run only wakes on Retry now, a message, a
-// pause or a cancel; the policy update is none of them, so a person who turns
-// cross-provider fallback on while waiting would stay parked until the reset.
-// It sends the same signal as Retry now, after the policy update, so the step
-// is retried against the new policy: if the limit still holds, the step is
-// refused again and the run continues on the fallback, or parks on the reset
-// as before at the price of one refused request.
+// wakeUsageLimitWait re-decides every thread of the chat that is blocked on a
+// provider after the chat's policy changed. A parked thread wakes on a
+// capacity wake, a message, a pause or a cancel; the policy update is none of
+// them, so a person who turns cross-provider fallback on while waiting would
+// stay parked until the reset. The wake goes after the policy update, so each
+// step is retried against the new policy: if the limit still holds, the step
+// is refused again and the thread continues on the fallback, or parks on the
+// reset as before at the price of one refused request.
 //
 // Only a policy that allows a fallback can change the answer, so any other
-// leaves the wait alone. Best-effort, like signalProviderPolicy.
+// leaves the waits alone. Best-effort, like signalProviderPolicy.
 func (s *Service) wakeUsageLimitWait(ctx context.Context, chat *db.Chat, allowsFallback bool) {
-	if !allowsFallback || !isWaitingOnUsageLimit(chat) {
+	if !allowsFallback || !s.runCanBeWoken(ctx, chat) {
 		return
 	}
-	if err := s.deps.Temporal.SignalWorkflow(ctx, *chat.WorkflowID, "", v2.UsageLimitRetrySignalName, v2.UsageLimitRetrySignal{}); err != nil {
-		logging.WarnContext(ctx, "Could not wake a run waiting on a usage limit after a policy change", "chatID", chat.ID, "error", err)
-		return
-	}
-	logging.InfoContext(ctx, "Woke a run waiting on a usage limit to apply a policy change", "chatID", chat.ID, "workflowID", *chat.WorkflowID)
+	s.wakeChatBestEffort(ctx, chat, "", "provider policy allows a fallback")
 }
 
 // providerPolicyUpdate is the input update that brings a run holding runInputs

@@ -99,8 +99,12 @@ func TestUpdateChatProviderPolicy_SignalsTheLiveRun(t *testing.T) {
 
 	setPolicy(t, ctx, service, fx.chatID, reliantv1.ProviderPolicy_ON_LIMIT_FALLBACK, codexOnlyModel)
 
-	require.NotEmpty(t, temporal.signals, "the live run must hear about the policy")
-	last := temporal.signals[len(temporal.signals)-1]
+	// The policy, then a capacity wake so every thread blocked on a provider
+	// re-decides under it: a live run's blocked threads are not visible from
+	// the chat, and a wake that finds none is a no-op.
+	require.Len(t, temporal.signals, 2, "the live run must hear about the policy, then be woken")
+	assert.Equal(t, v2.CapacityWakeSignalName, temporal.signals[1].Name)
+	last := temporal.signals[0]
 	assert.Equal(t, workflow.SignalUpdateWorkflowState, last.Name)
 	update, ok := last.Arg.(map[string]interface{})
 	require.True(t, ok)

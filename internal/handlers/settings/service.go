@@ -59,6 +59,12 @@ type Deps struct {
 	// unlabelled, and signing in again replaces it instead of adding another.
 	// forge:optional-dep
 	GitHubIdentity func(ctx context.Context, accessToken string) (GitHubUser, error)
+	// ChatWaker sends a capacity wake to the user's chats blocked on a
+	// provider once a sign-in adds or re-auths an account, or the Reliant key
+	// is synced, so each goes on as a whole (chat.Service.WakeUserChats). Nil
+	// leaves them to their own resets.
+	// forge:optional-dep
+	ChatWaker ChatWaker
 }
 
 // validateDeps returns an error if any required Deps field is nil. The

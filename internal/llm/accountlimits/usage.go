@@ -63,6 +63,12 @@ type Fetcher struct {
 	// providerusage.UsageAPIEnabled, the switch for an endpoint that turned out
 	// not to take our credential.
 	Enabled func(provider string) bool
+	// OnCapacity is called when a usage reading lifts an account's bench: the
+	// account was limited and now serves. It can be the user's refresh in
+	// Settings or a background poll. The caller sends the user's blocked chats
+	// a capacity wake (capacitywake.WakeUser), so their waiting and stopped
+	// threads re-route at once. Optional.
+	OnCapacity func(ctx context.Context, userID, accountID string)
 }
 
 func (f *Fetcher) now() time.Time {
@@ -216,6 +222,9 @@ func (f *Fetcher) recordSuccess(ctx context.Context, res Result, cur *core.Limit
 	}
 
 	until := f.reconcileBench(ctx, res.Account, cur, st, now)
+	if wasBenched(cur, now) && until.IsZero() && f.OnCapacity != nil {
+		f.OnCapacity(ctx, res.Account.UserID, res.Account.ID)
+	}
 
 	next := nextAfterPoll(cur, until, now)
 	f.schedule(ctx, res.Account.ID, next, 0, "")
@@ -225,10 +234,19 @@ func (f *Fetcher) recordSuccess(ctx context.Context, res Result, cur *core.Limit
 }
 
 // reconcileBench makes the bench agree with a usage reading and returns the
-// bench in force (zero when none). An exhausted window benches the account. A
-// reading that says "allowed" does not lift a bench the provider announced with
-// a reset time (the store lifts it for any newer allowed snapshot, which is right
-// for a response and wrong for a poll that cannot see a model-scoped refusal).
+// bench in force (zero when none). An exhausted window benches the account.
+//
+// A reading that says "allowed" lifts a bench the provider announced with a
+// reset time only when it shows the benched window itself with capacity
+// (readingClearsBench). The store lifts the bench for any newer allowed
+// snapshot, which is right for a response. For a poll it is right only when
+// the reading covers the window that refused: a poll that does not report a
+// model-scoped window cannot see that refusal, so it keeps the bench.
+//
+// Before this, an allowed reading never lifted such a bench. An account whose
+// limit the user raised (more credit, a higher quota) stayed benched until its
+// stated reset, while Settings showed it with room. The only way out was to
+// disconnect and reconnect it.
 func (f *Fetcher) reconcileBench(ctx context.Context, acct core.ProviderAccount, cur *core.LimitState, st core.LimitState, now time.Time) time.Time {
 	if ex := exhausted(st.Windows, st.RepresentativeWindow, st.Status, now); ex.Exhausted {
 		eff, err := bench(ctx, f.Store, now, acct.UserID, acct.ID, ex.Until, ex.Window)
@@ -239,6 +257,12 @@ func (f *Fetcher) reconcileBench(ctx context.Context, acct core.ProviderAccount,
 		return eff
 	}
 	if cur != nil && cur.LimitedUntil != nil && cur.LimitedUntil.After(now) && cur.LimitedProbes == 0 {
+		if readingClearsBench(st, cur.LimitedWindow) {
+			// The store's allowed upsert has already lifted it.
+			logging.InfoContext(ctx, "usage reading shows the benched window with capacity; account serves again",
+				"account_id", acct.ID, "provider", acct.Provider, "window", cur.LimitedWindow, "was_limited_until", *cur.LimitedUntil)
+			return time.Time{}
+		}
 		if err := f.Store.BenchAccount(ctx, acct.UserID, acct.ID, *cur.LimitedUntil, cur.LimitedWindow, false); err != nil {
 			logging.WarnContext(ctx, "restoring account bench after usage reading failed", "account_id", acct.ID, "error", err)
 			return time.Time{}
@@ -404,4 +428,80 @@ func sanitize(s string) string {
 		s = s[:200]
 	}
 	return s
+}
+
+// wasBenched reports whether the account was benched at now before a reading.
+func wasBenched(cur *core.LimitState, now time.Time) bool {
+	return cur != nil && cur.LimitedUntil != nil && cur.LimitedUntil.After(now)
+}
+
+// readingClearsBench reports whether an "allowed" usage reading shows the
+// window an account was benched on with capacity, so the bench can be lifted
+// before its stated reset. benchWindow is the stored bench's window, in
+// CanonicalWindow form ("five_hour", "seven_day_opus"), and empty when the
+// refusal named none.
+//
+//   - Benched on no particular window (spent credit, an unnamed limit): the
+//     reading must report at least one account-wide window. Since the reading
+//     is allowed, none of them is spent.
+//   - Benched on a window: the reading must report that window with capacity.
+//     It is matched by name ("5h" is "five_hour", "7d.opus" is
+//     "seven_day_opus"), or, for an account-wide bench, by length (Codex reports
+//     "primary"/"secondary"; its refusals name "five_hour"/"seven_day").
+//
+// A reading that does not report the benched window says nothing about it, so
+// the bench stands.
+func readingClearsBench(st core.LimitState, benchWindow string) bool {
+	if st.Status != string(ratelimit.StatusAllowed) {
+		return false
+	}
+	for _, w := range st.Windows {
+		matches := false
+		switch {
+		case benchWindow == "":
+			matches = !isScoped(w.Name)
+		case windowCanonicalName(w.Name) == benchWindow:
+			matches = true
+		case !isScoped(w.Name) && !isScoped(benchWindow) && lengthWindowName(w.LengthS) == benchWindow:
+			matches = true
+		}
+		if !matches {
+			continue
+		}
+		if used, ok := windowUsed(w); ok && used < 1 {
+			return true
+		}
+	}
+	return false
+}
+
+// windowCanonicalName is a reading's window name in the vocabulary a bench is
+// stored in. "5h" becomes "five_hour", and a model-scoped "7d.opus" becomes
+// "seven_day_opus".
+func windowCanonicalName(name string) string {
+	head, tail, scoped := strings.Cut(name, ".")
+	if !scoped {
+		return CanonicalWindow(name)
+	}
+	return CanonicalWindow(head) + "_" + tail
+}
+
+// lengthWindowName names a window by its length, the way a refusal names it
+// when the provider reports only minutes ("five_hour", "seven_day",
+// "3_hour"). It returns "" for an unknown length.
+func lengthWindowName(lengthS int64) string {
+	m := lengthS / 60
+	switch {
+	case m == 300:
+		return "five_hour"
+	case m == 10080:
+		return "seven_day"
+	case m > 0 && m%1440 == 0:
+		return fmt.Sprintf("%d_day", m/1440)
+	case m > 0 && m%60 == 0:
+		return fmt.Sprintf("%d_hour", m/60)
+	case m > 0:
+		return fmt.Sprintf("%d_minute", m)
+	}
+	return ""
 }

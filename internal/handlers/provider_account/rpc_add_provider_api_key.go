@@ -57,6 +57,7 @@ func (s *Service) AddProviderAPIKey(
 		}
 	}
 	s.afterChange(ctx, userID, provider)
+	s.wakeChats(ctx, userID, "a "+provider+" API key was added")
 
 	total := 0
 	if all, err := s.deps.Store.ListProviderAccounts(ctx, userID); err == nil {

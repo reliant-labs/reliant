@@ -3,6 +3,7 @@ package chat
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -264,10 +265,17 @@ func TestUpdateWorkflowParams_LiveRunPinIsMovedAndTheSelectionHoldsTheMove(t *te
 	})))
 	require.NoError(t, err)
 
-	require.Len(t, temporal.signals, 1)
+	// The update, then a capacity wake: switching the chat's model is a way
+	// out of a provider's limit for every thread blocked on one, and the wake
+	// names the provider the chat moved to.
+	require.Len(t, temporal.signals, 2)
+	assert.Equal(t, "update_workflow_state", temporal.signals[0].Name)
 	update := temporal.signals[0].Arg.(map[string]interface{})
 	signalled := modelID(t, update["model"])
 	assert.True(t, assertAnthropic(signalled), "the live run must not be pinned to a provider that cannot serve it, got %q", signalled)
+	assert.Equal(t, v2.CapacityWakeSignalName, temporal.signals[1].Name)
+	wake := temporal.signals[1].Arg.(v2.CapacityWakeSignal)
+	assert.True(t, strings.HasSuffix(wake.UseModel, "@anthropic"), "the wake carries the model the chat moved to, got %q", wake.UseModel)
 
 	sel, err := chatselection.New(repo).Get(ctx, fx.chatID)
 	require.NoError(t, err)
