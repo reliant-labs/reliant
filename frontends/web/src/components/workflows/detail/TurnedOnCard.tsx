@@ -37,7 +37,7 @@ import { cn } from "@/lib/utils";
 import { useProjectStore } from "@/store/projectStore";
 import Card, { CardInset } from "../../forge-ui/card";
 import { Button } from "../../ui/Button";
-import { Toggle } from "../../ui/Toggle";
+import ToggleSwitch from "../../forge-ui/toggle_switch";
 import { AutomationCta } from "../../Automations/AutomationCta";
 import { HealthIndicator, AutomationRow } from "../../Automations/AutomationRow";
 import { automationMachineLabel } from "../../Automations/daemonChoices";
@@ -265,7 +265,7 @@ function UnitRow({
               Settings
             </Button>
           )}
-          <Toggle checked={on} onChange={onToggle} disabled={disable.isPending || setEnabled.isPending} srLabel={`On in ${project}`} />
+          <ToggleSwitch checked={on} onChange={onToggle} disabled={disable.isPending || setEnabled.isPending} ariaLabel={`On in ${project}`} size="lg" className="forge-ui" />
         </div>
       </div>
       {expanded && (

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Button } from "../../components/ui/Button";
-import { Input } from "../../components/ui/Input";
+import Input from "../../components/forge-ui/input";
 import Card from "../forge-ui/card";
 import { FileText, FolderOpen, RefreshCw, AlertCircle, CheckCircle } from "lucide-react";
 import { isForgeUIEnabled, setForgeUIEnabled } from "../../lib/forgeFeature";
@@ -305,6 +305,7 @@ export function DeveloperSettings() {
                         saveConfig(newConfig);
                       }}
                       placeholder="Enter scenario name"
+                      className="forge-ui"
                     />
                     <p className="text-xs text-muted-foreground">
                       Define custom scenarios for the mock static driver

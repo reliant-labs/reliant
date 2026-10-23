@@ -1,4 +1,4 @@
-import { Modal } from "../ui/Modal";
+import Modal from "../forge-ui/modal";
 import { Button } from "../ui/Button";
 import { Download, CheckCircle2, AlertCircle } from "lucide-react";
 
@@ -262,7 +262,7 @@ export function UpdateModal({
 
   return (
     <Modal
-      isOpen={isOpen}
+      open={isOpen}
       onClose={onClose}
       size="md"
       hideCloseButton={updateStatus.type === 'download-progress'}

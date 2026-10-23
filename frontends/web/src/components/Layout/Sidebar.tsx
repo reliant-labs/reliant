@@ -31,7 +31,6 @@ import {
   SortDesc,
   Bell,
   GitBranch,
-  Check,
   MessageSquare,
   FolderOpen,
   Search,
@@ -69,7 +68,7 @@ import {
   type ChatSortOption,
 } from "../../store/chatListPreferencesStore";
 import { sortChats, compareChatGroups } from "../../lib/chatListOrder";
-import { Dropdown } from "../ui/Dropdown";
+import DropdownMenu from "../forge-ui/dropdown_menu";
 import { RunStatusDot } from "../runs/RunStatusIndicator";
 import { chatListIndicators, launchKindDisplay } from "../../lib/runStatus";
 import {
@@ -785,8 +784,6 @@ function SidebarComponent({
   const setViewMode = useChatListPreferencesStore((state) => state.setViewMode);
 
   // UI State
-  const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
-  const [isViewMenuOpen, setIsViewMenuOpen] = useState(false);
   const [chatListTab, setChatListTab] = useState<"active" | "archived">("active");
 
   const [expandedWorktreeGroups, setExpandedWorktreeGroups] = useState<
@@ -1633,11 +1630,12 @@ function SidebarComponent({
             </div>
           </div>
 
-          <Dropdown
-            isOpen={isSortMenuOpen}
-            onOpenChange={setIsSortMenuOpen}
+          <DropdownMenu
             align="right"
-            trigger={
+            density="compact"
+            label="Sort chats"
+            menuClassName="min-w-[190px]"
+            trigger={(props) => (
               <Tooltip
                 content={`Sort: ${currentSortOption.label}`}
                 placement="bottom"
@@ -1646,7 +1644,7 @@ function SidebarComponent({
               >
                 <button
                   type="button"
-                  onClick={() => setIsSortMenuOpen(!isSortMenuOpen)}
+                  {...props}
                   className={cn(
                     CHAT_HEADER_ACTION_BUTTON_CLASS,
                     "h-6 w-6 text-muted-foreground hover:bg-muted/60 hover:text-foreground"
@@ -1656,76 +1654,45 @@ function SidebarComponent({
                   {currentSortOption.icon}
                 </button>
               </Tooltip>
-            }
-            contentClassName="min-w-[190px]"
-          >
-            <div className="py-1">
-              <div className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wider text-muted-foreground">
-                List
-              </div>
-              <button
-                onClick={() => {
-                  setChatListTab("active");
-                  setIsSortMenuOpen(false);
-                }}
-                className={cn(
-                  "flex w-full items-center justify-between gap-2 rounded-sm px-3 py-2 text-xs transition-colors hover:bg-muted/50",
-                  chatListTab === "active" ? "text-foreground" : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                <div className="flex items-center gap-2">
-                  <MessageSquare className="h-3.5 w-3.5" />
-                  <span>Active chats</span>
-                </div>
-                {chatListTab === "active" && <Check className="h-3.5 w-3.5 text-primary" />}
-              </button>
-              <button
-                onClick={() => {
-                  setChatListTab("archived");
-                  setIsSortMenuOpen(false);
-                }}
-                className={cn(
-                  "flex w-full items-center justify-between gap-2 rounded-sm px-3 py-2 text-xs transition-colors hover:bg-muted/50",
-                  chatListTab === "archived" ? "text-foreground" : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                <div className="flex items-center gap-2">
-                  <Archive className="h-3.5 w-3.5" />
-                  <span>Archived chats</span>
-                </div>
-                {chatListTab === "archived" && <Check className="h-3.5 w-3.5 text-primary" />}
-              </button>
-              <div className="my-1 h-px bg-border/60" />
-              <div className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Sort by
-              </div>
-              {SORT_OPTIONS.map((option) => (
-                <button
-                  key={option.value}
-                  onClick={() => {
-                    setSortOrder(option.value);
-                    setIsSortMenuOpen(false);
-                  }}
-                  className={cn(
-                    "flex w-full items-center justify-between gap-2 rounded-sm px-3 py-2 text-xs transition-colors hover:bg-muted/50",
-                    sortOrder === option.value ? "text-foreground" : "text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="flex h-3.5 w-3.5 items-center justify-center">{option.icon}</span>
-                    <span>{option.label}</span>
-                  </div>
-                  {sortOrder === option.value && <Check className="h-3.5 w-3.5 text-primary" />}
-                </button>
-              ))}
-            </div>
-          </Dropdown>
+            )}
+            groups={[
+              {
+                label: "List",
+                selection: "single",
+                items: [
+                  {
+                    label: "Active chats",
+                    icon: <MessageSquare className="h-3.5 w-3.5" />,
+                    checked: chatListTab === "active",
+                    onClick: () => setChatListTab("active"),
+                  },
+                  {
+                    label: "Archived chats",
+                    icon: <Archive className="h-3.5 w-3.5" />,
+                    checked: chatListTab === "archived",
+                    onClick: () => setChatListTab("archived"),
+                  },
+                ],
+              },
+              {
+                label: "Sort by",
+                selection: "single",
+                items: SORT_OPTIONS.map((option) => ({
+                  label: option.label,
+                  icon: option.icon,
+                  checked: sortOrder === option.value,
+                  onClick: () => setSortOrder(option.value),
+                })),
+              },
+            ]}
+          />
 
-          <Dropdown
-            isOpen={isViewMenuOpen}
-            onOpenChange={setIsViewMenuOpen}
+          <DropdownMenu
             align="right"
-            trigger={
+            density="compact"
+            label="View options"
+            menuClassName="min-w-[220px]"
+            trigger={(props) => (
               <Tooltip
                 content="View options"
                 placement="bottom"
@@ -1734,7 +1701,7 @@ function SidebarComponent({
               >
                 <button
                   type="button"
-                  onClick={() => setIsViewMenuOpen(!isViewMenuOpen)}
+                  {...props}
                   className={cn(
                     CHAT_HEADER_ACTION_BUTTON_CLASS,
                     "h-6 w-6 text-muted-foreground hover:bg-muted/60 hover:text-foreground"
@@ -1748,47 +1715,28 @@ function SidebarComponent({
                   )}
                 </button>
               </Tooltip>
-            }
-            contentClassName="min-w-[220px]"
-          >
-            <div className="py-1">
-              <div className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wider text-muted-foreground">
-                View
-              </div>
-              <button
-                onClick={() => {
-                  setViewMode("grouped");
-                  setIsViewMenuOpen(false);
-                }}
-                className={cn(
-                  "flex w-full items-center justify-between gap-2 rounded-sm px-3 py-2 text-xs transition-colors hover:bg-muted/50",
-                  viewMode === "grouped" ? "text-foreground" : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                <div className="flex items-center gap-2">
-                  <LayoutGrid className="h-3.5 w-3.5" />
-                  <span>Grouped by workspace</span>
-                </div>
-                {viewMode === "grouped" && <Check className="h-3.5 w-3.5 text-primary" />}
-              </button>
-              <button
-                onClick={() => {
-                  setViewMode("flat");
-                  setIsViewMenuOpen(false);
-                }}
-                className={cn(
-                  "flex w-full items-center justify-between gap-2 rounded-sm px-3 py-2 text-xs transition-colors hover:bg-muted/50",
-                  viewMode === "flat" ? "text-foreground" : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                <div className="flex items-center gap-2">
-                  <LayoutList className="h-3.5 w-3.5" />
-                  <span>Flat list</span>
-                </div>
-                {viewMode === "flat" && <Check className="h-3.5 w-3.5 text-primary" />}
-              </button>
-            </div>
-          </Dropdown>
+            )}
+            groups={[
+              {
+                label: "View",
+                selection: "single",
+                items: [
+                  {
+                    label: "Grouped by workspace",
+                    icon: <LayoutGrid className="h-3.5 w-3.5" />,
+                    checked: viewMode === "grouped",
+                    onClick: () => setViewMode("grouped"),
+                  },
+                  {
+                    label: "Flat list",
+                    icon: <LayoutList className="h-3.5 w-3.5" />,
+                    checked: viewMode === "flat",
+                    onClick: () => setViewMode("flat"),
+                  },
+                ],
+              },
+            ]}
+          />
 
         </div>
       </div>

@@ -96,15 +96,16 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("why the modal's own Escape listeners never fired", () => {
-  // This is the diagnosis, pinned as a test so the claim above is not just a
-  // comment. It asserts the MECHANISM, independent of ImagePreviewModal, so it
-  // keeps documenting the constraint even if the modal is rewritten.
-  it("the dispatcher's stopImmediatePropagation kills later document-capture listeners", () => {
+describe("how the dispatcher shares Escape with an open overlay", () => {
+  // The mechanism, pinned independent of ImagePreviewModal. dismissModal used
+  // to CLAIM Escape (stopImmediatePropagation at document capture), which
+  // killed every overlay's own document listeners — the preview's capture
+  // listener, and the shared dialogs' bubble listeners — so in the workspace
+  // only the overlays ModernApp owns ever closed. dismissModal is now
+  // `passthrough`: it shadows stopStreaming and lets the event go on.
+  it("runs dismissModal, not stopStreaming, and leaves the overlay's listeners live", () => {
     const dispatcher = mountGlobalDispatcher();
 
-    // A modal that opens AFTER the dispatcher — the real mount order, since the
-    // dispatcher is registered when ModernApp mounts.
     const overlay = document.createElement("div");
     overlay.setAttribute("data-modal-open", "true");
     document.body.appendChild(overlay);
@@ -121,13 +122,9 @@ describe("why the modal's own Escape listeners never fired", () => {
 
     pressEscape();
 
-    // The dispatcher claimed Escape via the `modal` context...
     expect(dispatcher.fired).toEqual(["onDismissModal"]);
-    // ...and neither of the modal's two paths ever ran. Capture is dead because
-    // stopImmediatePropagation() halts remaining listeners on the same node;
-    // bubble (React's onKeyDown) is dead because propagation stopped entirely.
-    expect(modalCaptureListener).not.toHaveBeenCalled();
-    expect(modalBubbleListener).not.toHaveBeenCalled();
+    expect(modalCaptureListener).toHaveBeenCalledTimes(1);
+    expect(modalBubbleListener).toHaveBeenCalledTimes(1);
   });
 });
 

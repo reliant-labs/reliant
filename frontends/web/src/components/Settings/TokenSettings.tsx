@@ -12,7 +12,7 @@ import {
 } from "../../gen/reliant/v1/token_pb";
 import type { TokenInfo } from "../../gen/reliant/v1/token_pb";
 import { Button } from "../ui/Button";
-import { Input } from "../ui/Input";
+import Input from "../forge-ui/input";
 import { SettingsPageHeader } from "./SettingsPageHeader";
 
 // The permissions a daemon credential can carry. Mirrors the org-administration
@@ -221,7 +221,7 @@ export function TokenSettings() {
             <Input
               value={newTokenRaw}
               readOnly
-              className="font-mono text-sm"
+              className="forge-ui font-mono text-sm"
             />
             <Button
               variant="outline"
@@ -255,6 +255,7 @@ export function TokenSettings() {
               onChange={(e) => setNewTokenName(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleCreate()}
               autoFocus
+              className="forge-ui"
             />
             <Button
               variant="primary"
@@ -314,7 +315,7 @@ export function TokenSettings() {
                       <Input
                         value={draftName}
                         onChange={(e) => setDraftName(e.target.value)}
-                        className="text-sm"
+                        className="forge-ui text-sm"
                         autoFocus
                       />
                     ) : (

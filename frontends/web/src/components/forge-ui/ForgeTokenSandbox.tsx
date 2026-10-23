@@ -28,6 +28,9 @@
  *   ?view=overlays the components that cover the viewport (sidebar_layout,
  *                  modal, confirmation_dialog), each pinned inside its own
  *                  box so all three fit one screenshot
+ *   s2-sites,      the R5 S2 primitives (Toggle, Input/Textarea, Dropdown,
+ *   ?view=s2-menus Modal) as their call sites render them — S2Sandbox.tsx
+ *   ?view=s2-modal
  *
  * A change to anything here moves those baselines, so it shows up in review
  * as a picture rather than as a diff nobody can read.
@@ -62,6 +65,7 @@ import StatGrid from "./stat_grid";
 import Status from "./status";
 import Tabs from "./tabs";
 import Tag from "./tag";
+import { S2Menus, S2Modal, S2Sites } from "./S2Sandbox";
 
 const SCHEMES = COLOR_SCHEMES;
 
@@ -404,7 +408,7 @@ function Overlays() {
         </SidebarLayout>
       </div>
       <div className={box} style={pin}>
-        <Modal open onClose={noop} title="Rename environment" description="Names are unique per project." footer={<Tag>footer</Tag>}>
+        <Modal open portal={false} onClose={noop} title="Rename environment" description="Names are unique per project." footer={<Tag>footer</Tag>}>
           <p className="text-sm text-ink">Modal body.</p>
         </Modal>
       </div>
@@ -473,17 +477,20 @@ export default function ForgeTokenSandbox() {
 
       {/* Everything forge renders lives under .forge-ui. */}
       <div className="forge-ui" data-testid="forge-scope">
-        {view === "overlays" ? <Overlays /> : <ForgeLibrary />}
+        {view === "overlays" ? <Overlays /> : view?.startsWith("s2-") ? null : <ForgeLibrary />}
       </div>
 
-      {/* The S1 sites sit OUTSIDE the scope, as they do in the app: a site
-          that needs forge's accent wraps itself in .forge-ui, and this is
-          where a missing wrap would show. */}
-      {view !== "overlays" && (
-        <div className="mt-12">
+      {/* The S1 and S2 sites sit OUTSIDE the scope, as they do in the app: a
+          site that needs forge's accent wraps itself in .forge-ui, and this
+          is where a missing wrap would show. */}
+      {view === undefined && (
+        <div className="mt-12 space-y-12">
           <S1Sites />
+          <S2Sites />
         </div>
       )}
+      {view === "s2-menus" && <S2Menus />}
+      {view === "s2-modal" && <S2Modal />}
     </div>
   );
 }

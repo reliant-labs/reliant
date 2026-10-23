@@ -16,7 +16,7 @@
 
 import { useCallback } from "react";
 
-import { Modal } from "@/components/ui/Modal";
+import Modal from "@/components/forge-ui/modal";
 import { useApplyForgePromote, useForgePromotePlan } from "@/hooks/forge-queries";
 import type { ForgePromotePlan } from "@/services/forge/promote";
 
@@ -83,7 +83,7 @@ export function PromoteDialog({
 
   return (
     <Modal
-      isOpen={isOpen}
+      open={isOpen}
       onClose={handleClose}
       size="lg"
       title={title ?? `Promote ${env} to ${release}`}

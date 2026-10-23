@@ -20,7 +20,7 @@ import { AlertOctagon, CalendarClock, CircleHelp, Plug, Webhook, Workflow } from
 import { toast } from "sonner";
 
 import Status from "../forge-ui/status";
-import { Toggle } from "../ui/Toggle";
+import ToggleSwitch from "../forge-ui/toggle_switch";
 import { Tooltip } from "../ui/Tooltip";
 import { RunStatusBadge } from "../runs/RunStatusIndicator";
 import { sourceKindLabel, triggerErrorMessage, type Trigger, type TriggerSource } from "@/api/trigger-grpc";
@@ -133,12 +133,14 @@ export function AutomationRow({ trigger }: { trigger: Trigger }) {
       </div>
 
       <div className="flex items-center justify-end">
-        <Toggle
+        <ToggleSwitch
           checked={trigger.enabled}
           onChange={onToggle}
           disabled={setEnabled.isPending}
           // A switch's name is stable; aria-checked carries on/off.
-          srLabel={`${trigger.name} enabled`}
+          ariaLabel={`${trigger.name} enabled`}
+          size="lg"
+          className="forge-ui"
         />
       </div>
     </li>

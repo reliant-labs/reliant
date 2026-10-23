@@ -11,7 +11,7 @@ import {
   ArrowUp,
   X,
 } from "lucide-react";
-import { Modal } from "../ui/Modal";
+import Modal from "../forge-ui/modal";
 import {
   listDirectory,
   createDirectory,
@@ -157,7 +157,7 @@ export function DirectoryPicker({
 
   return (
     <Modal
-      isOpen={isOpen}
+      open={isOpen}
       onClose={onClose}
       title="Choose a folder"
       size="lg"

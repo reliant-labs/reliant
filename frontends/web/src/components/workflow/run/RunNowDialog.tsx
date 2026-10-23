@@ -34,7 +34,7 @@ import { NO_MACHINE, noMachineBlockerFor } from "@/components/Automations/daemon
 import { loadRunContext } from "@/components/runs/loadRunContext";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useWorkflowLibrary } from "@/hooks/workflow-library-queries";
-import { Modal } from "../../ui/Modal";
+import Modal from "../../forge-ui/modal";
 import { Button } from "../../ui/Button";
 import { SetupSection } from "../../Automations/setup/SetupSection";
 import { cn } from "@/lib/utils";
@@ -247,7 +247,7 @@ function RunNowDialogBody({ onClose, projectId, workflowRef }: RunNowDialogProps
 
   return (
     <Modal
-      isOpen
+      open
       onClose={starting ? () => undefined : onClose}
       title={title}
       size="lg"

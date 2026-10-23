@@ -8,7 +8,7 @@
 
 import { useState, useEffect } from 'react'
 import { toast } from 'sonner'
-import { Modal } from '../../ui/Modal'
+import Modal from '../../forge-ui/modal'
 import { Button } from '../../ui/Button'
 import type { Preset } from '../../../store/globalDataStore'
 import { presetGrpc } from '../../../api/preset-grpc'
@@ -129,7 +129,7 @@ export function PresetConfigModal({
 
   return (
     <Modal
-      isOpen={true}
+      open={true}
       onClose={onClose}
       title={`Default Presets: ${displayName}`}
       size="md"

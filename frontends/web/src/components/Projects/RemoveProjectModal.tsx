@@ -1,4 +1,4 @@
-import { Modal } from "../ui/Modal";
+import Modal from "../forge-ui/modal";
 import { Button } from "../ui/Button";
 import { collapseHomePath } from "../../lib/pathUtils";
 import type { Project } from "../../store/projectStore";
@@ -28,7 +28,7 @@ export function RemoveProjectModal({
   if (!project) return null;
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={`Remove ${project.name}?`} size="sm">
+    <Modal open={isOpen} onClose={onClose} title={`Remove ${project.name}?`} size="sm">
       <div className="flex flex-col gap-4">
         <p className="text-sm leading-relaxed text-muted-foreground text-pretty">
           {/* Accurate to the schema: project_configs, plans and triggers

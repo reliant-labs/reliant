@@ -32,8 +32,8 @@ vi.mock("@/hooks/useGoToBilling", () => ({
 
 // The Modal primitive portals and manages focus; neither matters here, and
 // rendering children inline keeps the assertions about copy rather than chrome.
-vi.mock("../ui/Modal", () => ({
-  Modal: ({
+vi.mock("../forge-ui/modal", () => ({
+  default: ({
     title,
     children,
   }: {

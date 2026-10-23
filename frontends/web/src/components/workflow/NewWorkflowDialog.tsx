@@ -16,7 +16,7 @@ import { toast } from "sonner";
 import { useCreateWorkflowDraft } from "@/hooks/workflow-library-queries";
 import { cn } from "@/lib/utils";
 import { Button } from "../ui/Button";
-import { Modal } from "../ui/Modal";
+import Modal from "../forge-ui/modal";
 
 /** A start the dialog offers. `template` is the server's CreateWorkflowDraft template. */
 export interface NewWorkflowStart {
@@ -74,7 +74,7 @@ export function NewWorkflowDialog({ open, projectId, onClose, onCreated }: NewWo
   };
 
   return (
-    <Modal isOpen={open} onClose={onClose} title="New workflow" size="md">
+    <Modal open={open} onClose={onClose} title="New workflow" size="md">
       <form
         className="space-y-5"
         onSubmit={(event) => {

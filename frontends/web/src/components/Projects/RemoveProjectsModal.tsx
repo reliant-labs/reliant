@@ -1,6 +1,6 @@
 import { AlertCircle, Loader2 } from "lucide-react";
 
-import { Modal } from "../ui/Modal";
+import Modal from "../forge-ui/modal";
 import type { Project } from "../../store/projectStore";
 
 interface RemoveProjectsModalProps {
@@ -37,7 +37,7 @@ export function RemoveProjectsModal({
 
   return (
     <Modal
-      isOpen
+      open
       onClose={onCancel}
       title={count === 1 ? "Remove project" : `Remove ${count} projects`}
       size="md"

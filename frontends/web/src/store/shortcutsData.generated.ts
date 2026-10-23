@@ -623,7 +623,8 @@ export const defaultShortcuts: Record<string, Omit<ShortcutDefinition, 'currentB
     defaultWebBinding: 'Escape',
     context: 'modal',
     handler: 'onDismissModal',
-    allowInInput: true
+    allowInInput: true,
+    passthrough: true
   },
   dismissSlashMenu: {
     id: 'dismissSlashMenu',

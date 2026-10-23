@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { AlertCircle, GitBranch, FolderOpen, Link, Loader2, CheckCircle2, Github } from "lucide-react";
-import { Modal } from "../ui/Modal";
+import { focusChatInput } from "../../hooks/useFocusManager";
+import Modal from "../forge-ui/modal";
 import { Button } from "../ui/Button";
 import { gitService } from "../../services/controlPlane/git";
 import type { GitAccount } from "../../services/controlPlane/git";
@@ -137,7 +138,8 @@ export function AddRepoModal({ isOpen, onClose, daemonId }: AddRepoModalProps) {
 
   return (
     <Modal
-      isOpen={isOpen}
+      open={isOpen}
+      fallbackFocus={focusChatInput}
       onClose={handleClose}
       title="Clone a repository"
       size="lg"

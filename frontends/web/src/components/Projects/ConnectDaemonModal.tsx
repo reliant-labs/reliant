@@ -43,7 +43,7 @@ import {
   ListDaemonsRequestSchema,
 } from "@/gen/reliant/v1/daemon_registry_pb";
 import { ArrowLeft, Check, Cloud, Loader2, Monitor } from "lucide-react";
-import { Modal } from "../ui/Modal";
+import Modal from "../forge-ui/modal";
 import { SelfHostedDaemonConnect } from "./SelfHostedDaemonConnect";
 import { RedeemCouponForm } from "../RedeemCouponForm";
 import { useAccountGate } from "@/hooks/useAccountGate";
@@ -164,7 +164,7 @@ export function ConnectDaemonModal({
       "Redeem a coupon code or choose a plan to start a cloud machine.");
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Connect a daemon" size="lg">
+    <Modal open={isOpen} onClose={onClose} title="Connect a daemon" size="lg">
       {accountGate.modal}
       {mode === null && (
         <div className="space-y-3">

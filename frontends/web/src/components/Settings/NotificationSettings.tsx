@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { Volume2, VolumeX, AlertTriangle, CheckCircle, XCircle, AppWindow, MessageSquare, BellRing } from "lucide-react";
-import { Toggle } from "../ui/Toggle";
+import ToggleSwitch from "../forge-ui/toggle_switch";
 import { useNotificationStore, getNotificationSoundOptions } from "../../store/notificationStore";
 import { showTestNotification } from "../../lib/notifications";
 import { SettingsPageHeader } from "./SettingsPageHeader";
@@ -148,11 +148,13 @@ export function NotificationSettings() {
               Show OS notifications when workflows complete or need approval.
             </p>
           </div>
-          <Toggle
+          <ToggleSwitch
             checked={notificationsEnabled}
             onChange={handleEnableNotifications}
-            label={`${notificationsEnabled ? "Disable" : "Enable"} notifications`}
+            ariaLabel={`${notificationsEnabled ? "Disable" : "Enable"} notifications`}
             disabled={!isSupported}
+            size="lg"
+            className="forge-ui"
           />
         </div>
 
@@ -187,11 +189,13 @@ export function NotificationSettings() {
                   Notify when Reliant window is not focused (you're in another app)
                 </p>
               </div>
-              <Toggle
+              <ToggleSwitch
                 checked={notifyWhenUnfocused}
                 onChange={setNotifyWhenUnfocused}
-                label="Notify when unfocused"
+                ariaLabel="Notify when unfocused"
                 disabled={notifyAlways}
+                size="lg"
+                className="forge-ui"
               />
             </div>
 
@@ -206,11 +210,13 @@ export function NotificationSettings() {
                   Notify when a background chat completes while you're in another chat
                 </p>
               </div>
-              <Toggle
+              <ToggleSwitch
                 checked={notifyWhenDifferentChat}
                 onChange={setNotifyWhenDifferentChat}
-                label="Notify when in different chat"
+                ariaLabel="Notify when in different chat"
                 disabled={notifyAlways}
+                size="lg"
+                className="forge-ui"
               />
             </div>
 
@@ -225,10 +231,12 @@ export function NotificationSettings() {
                   Always show notifications, even when viewing the active chat
                 </p>
               </div>
-              <Toggle
+              <ToggleSwitch
                 checked={notifyAlways}
                 onChange={setNotifyAlways}
-                label="Always notify"
+                ariaLabel="Always notify"
+                size="lg"
+                className="forge-ui"
               />
             </div>
           </div>
@@ -250,10 +258,12 @@ export function NotificationSettings() {
               Play the system notification sound when notifications appear.
             </p>
           </div>
-          <Toggle
+          <ToggleSwitch
             checked={soundEnabled}
             onChange={setSoundEnabled}
-            label={`${soundEnabled ? "Disable" : "Enable"} sound`}
+            ariaLabel={`${soundEnabled ? "Disable" : "Enable"} sound`}
+            size="lg"
+            className="forge-ui"
           />
         </div>
 

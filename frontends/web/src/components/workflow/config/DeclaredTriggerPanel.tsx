@@ -29,7 +29,7 @@ import { AlertTriangle, Plus, Webhook, Zap } from "lucide-react";
 
 import { ConfigurationPanel } from "../ConfigurationPanel";
 import { ConfigPanelTabBar } from "./ConfigPanelTabBar";
-import { Toggle } from "../../ui/Toggle";
+import ToggleSwitch from "../../forge-ui/toggle_switch";
 import { useSetTriggerEnabled } from "../../../hooks/trigger-queries";
 import { CELInput } from "../CELInput";
 import { OnlyFromControl } from "./OnlyFromControl";
@@ -621,11 +621,12 @@ function ActivationsSection({ trigger, activations, canActivate, unsaved, onActi
                   <HealthIndicator health={automationHealth(activation)} />
                 </span>
               </button>
-              <Toggle
+              <ToggleSwitch
                 checked={activation.enabled}
                 onChange={(enabled) => setEnabled.mutate({ id: activation.id, enabled })}
-                srLabel={`${activation.name} enabled`}
-                className="h-5 w-9 flex-shrink-0 scale-90"
+                ariaLabel={`${activation.name} enabled`}
+                size="md"
+                className="forge-ui flex-shrink-0"
               />
             </li>
           ))}

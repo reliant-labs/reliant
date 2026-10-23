@@ -20,7 +20,7 @@
 import { memo, useEffect, useId, useMemo, useRef, useState, type FormEvent } from "react";
 import { ChevronRight } from "lucide-react";
 
-import { Modal } from "../ui/Modal";
+import Modal from "../forge-ui/modal";
 import { Button } from "../ui/Button";
 import { useProjectStore } from "@/store/projectStore";
 import { getWorkflowDisplayName, normalizeWorkflowRef } from "../workflow/useWorkflowInputs";
@@ -511,7 +511,7 @@ function AutomationFormBody({
 
   return (
     <Modal
-      isOpen
+      open
       onClose={requestClose}
       title={isEdit ? "Edit automation" : "New automation"}
       size="lg"

@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, type ReactNode } from "react";
 import { FileText, Cloud, FolderGit2, AlertCircle, GitCommitHorizontal, ChevronDown, ChevronRight } from "lucide-react";
-import { Modal } from "../ui/Modal";
+import { focusChatInput } from "../../hooks/useFocusManager";
+import Modal from "../forge-ui/modal";
 import { SearchableDropdown, type DropdownOption } from "../ui/SearchableDropdown";
 import { useWorktreeStore } from "../../store/worktreeStore";
 import { useProjectStore } from "../../store/projectStore";
@@ -295,7 +296,8 @@ export function CreateWorktreeModal({
     return (
       <>
         <Modal
-          isOpen={isOpen && !showInitGitModal}
+          open={isOpen && !showInitGitModal}
+          fallbackFocus={focusChatInput}
           onClose={onClose}
           title="Git repository required"
           size="md"
@@ -349,7 +351,8 @@ export function CreateWorktreeModal({
   return (
     <>
     <Modal
-      isOpen={isOpen}
+      open={isOpen}
+      fallbackFocus={focusChatInput}
       onClose={onClose}
       title={title}
       size="lg"

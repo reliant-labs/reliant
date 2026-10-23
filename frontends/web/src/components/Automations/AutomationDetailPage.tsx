@@ -26,7 +26,7 @@ import { toast } from "sonner";
 import Card, { CardHeader, CardInset } from "../forge-ui/card";
 import ConfirmationDialog from "../forge-ui/confirmation_dialog";
 import { Button } from "../ui/Button";
-import { Toggle } from "../ui/Toggle";
+import ToggleSwitch from "../forge-ui/toggle_switch";
 import { useProjectStore } from "@/store/projectStore";
 import { useDaemonStatus } from "@/hooks/useDaemonStatus";
 import { getWorkflowDisplayName } from "../workflow/useWorkflowInputs";
@@ -275,11 +275,13 @@ export function AutomationDetail({ triggerId }: { triggerId: string }) {
           actions={
             <div className="flex items-center gap-3 text-sm text-foreground">
               <span aria-hidden="true">{trigger.enabled ? "Enabled" : "Paused"}</span>
-              <Toggle
+              <ToggleSwitch
                 checked={trigger.enabled}
                 onChange={onToggle}
                 disabled={setEnabled.isPending}
-                srLabel="Automation enabled"
+                ariaLabel="Automation enabled"
+                size="lg"
+                className="forge-ui"
               />
             </div>
           }
