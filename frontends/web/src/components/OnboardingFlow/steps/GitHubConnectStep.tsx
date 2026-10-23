@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { Code, ConnectError } from "@connectrpc/connect";
+import { hasErrorReason } from "@/lib/errorReasons";
 import { Github, Lock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useProjectStore } from "@/store/projectStore";
@@ -32,13 +33,7 @@ function isMissingGitCredentialError(error: unknown): boolean {
   if (error instanceof ConnectError && error.code === Code.FailedPrecondition) {
     return true;
   }
-  if (error instanceof Error && error.message.includes("no git credential found")) {
-    return true;
-  }
-  if (typeof error === "string" && error.includes("no git credential found")) {
-    return true;
-  }
-  return false;
+  return hasErrorReason(error, "git_credential_not_connected");
 }
 
 function findProjectByPath(projects: Project[], path: string): Project | undefined {

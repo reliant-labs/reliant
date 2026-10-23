@@ -89,12 +89,10 @@ interface ProjectPickerProps {
 // headers, which cost nothing extra.)
 const LIST_CONTROLS_MIN_PROJECTS = 5;
 
+// The server classifies a duplicate path as AlreadyExists; the code is the
+// signal, not the message.
 function isAlreadyExistsError(error: unknown): boolean {
-  return (
-    (error instanceof ConnectError && error.code === Code.AlreadyExists) ||
-    (error instanceof Error &&
-      (error.message.includes("already exists") || error.message.includes("409")))
-  );
+  return error instanceof ConnectError && error.code === Code.AlreadyExists;
 }
 
 function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {

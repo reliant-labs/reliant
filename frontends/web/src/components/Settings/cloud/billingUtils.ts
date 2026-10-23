@@ -10,6 +10,7 @@
  */
 
 import { ConnectError, Code } from "@connectrpc/connect";
+import { ENTITLEMENT_REASONS, hasErrorReason } from "@/lib/errorReasons";
 import type { Plan } from "@/gen/controlplane/controlplane/v1/shared_pb";
 
 export type WalletBalanceState = "healthy" | "low" | "empty";
@@ -536,11 +537,10 @@ export function normalizeInvoiceStatus(status: string): InvoiceStatus {
 // inline error banner underneath the modal.
 export function isBackendModalError(err: unknown): boolean {
   if (!(err instanceof ConnectError)) return false;
-  const reason = err.metadata.get("x-reliant-reason") ?? "";
-  if (err.code === Code.InvalidArgument && reason === "billing_email_missing") {
+  if (err.code === Code.InvalidArgument && hasErrorReason(err, "billing_email_missing")) {
     return true;
   }
-  if (err.code === Code.ResourceExhausted && reason) return true;
+  if (err.code === Code.ResourceExhausted && hasErrorReason(err, ENTITLEMENT_REASONS)) return true;
   return false;
 }
 

@@ -18,13 +18,14 @@ import {
   ComputeIneligibleReason,
 } from '@/services/controlPlane/billing';
 import { isAlreadyResumedError } from '@/lib/daemon-resume';
+import { ENTITLEMENT_REASONS, hasErrorReason } from '@/lib/errorReasons';
 import { gitService } from '@/services/controlPlane/git';
 import { onboardingService } from '@/services/controlPlane/onboarding';
 import type { OnboardingUser } from '@/services/controlPlane/onboarding';
 
 /**
  * Returns true when `err` is a ResourceExhausted Connect error that already
- * carries the `x-reliant-reason` metadata header — i.e. the global
+ * carries an entitlement reason (lib/errorReasons ENTITLEMENT_REASONS) — i.e. the global
  * `upgradeInterceptor` already routed it into the UpgradeRequiredModal.
  * Daemon-mutation hooks consult this so callers don't double-surface the
  * failure as an inline error banner / toast.
@@ -37,7 +38,7 @@ export function isReasonedQuotaError(err: unknown): boolean {
   return (
     err instanceof ConnectError &&
     err.code === Code.ResourceExhausted &&
-    !!err.metadata.get('x-reliant-reason')
+    hasErrorReason(err, ENTITLEMENT_REASONS)
   );
 }
 
@@ -53,13 +54,13 @@ export function isReasonedQuotaError(err: unknown): boolean {
  * refused "Start cloud daemon" advance onboarding anyway, dropping the user
  * into the app with no machine.
  *
- * Keyed on the `x-reliant-reason` header rather than the status code or the
- * message text: the server sets that header on every deliberate denial
+ * Keyed on the entitlement reason rather than the status code or the
+ * message text: the server sets one on every deliberate denial
  * (`daemonDenied`), so it stays accurate when codes are re-tuned, and unlike
  * substring matching on prose it cannot be broken by rewording an error.
  */
 export function isEntitlementDenial(err: unknown): boolean {
-  return err instanceof ConnectError && !!err.metadata.get('x-reliant-reason');
+  return hasErrorReason(err, ENTITLEMENT_REASONS);
 }
 
 /**
@@ -190,7 +191,7 @@ export function useDaemonList(options?: { refetchInterval?: number | false; enab
  *     and the resume pill see the new row without a page refresh; then
  *     calls the caller's `onSuccess` (if any).
  *   - On error: if it's a reasoned quota error (ResourceExhausted +
- *     `x-reliant-reason`), the global `upgradeInterceptor` has already
+ *     an entitlement reason), the global `upgradeInterceptor` has already
  *     opened the UpgradeRequiredModal — the hook SWALLOWS the error so the
  *     caller doesn't render a duplicate toast/banner under the modal. Any
  *     other error falls through to the caller's `onError`.

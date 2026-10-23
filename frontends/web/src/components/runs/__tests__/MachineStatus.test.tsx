@@ -10,6 +10,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { Code, ConnectError } from "@connectrpc/connect";
 
 import { DaemonStatus } from "@/gen/reliant/v1/daemon_registry_pb";
 import { ChatActivity } from "@/gen/reliant/v1/chat_pb";
@@ -98,7 +99,9 @@ describe("MachineStatus copy by daemon state", () => {
 
   it("quota exhausted: a refused wake shows the shared copy and Billing", async () => {
     mocks.daemons = [daemon(DaemonStatus.SUSPENDED)];
-    mocks.resumeDaemon.mockRejectedValue(new Error("[resource_exhausted] compute limit"));
+    mocks.resumeDaemon.mockRejectedValue(
+      new ConnectError("compute budget exhausted", Code.ResourceExhausted, new Headers({ "x-forge-error-reason": "compute_budget_exhausted" })),
+    );
     render(<MachineStatus daemonId="d-1" />);
     await userEvent.click(screen.getByRole("button", { name: "Wake it" }));
     expect(await screen.findByText(/used the compute included with your account/)).toBeInTheDocument();

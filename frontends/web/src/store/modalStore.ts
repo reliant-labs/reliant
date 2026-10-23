@@ -24,17 +24,14 @@ export interface AppOutOfDateData {
 }
 
 export interface UpgradeRequiredData {
-  // Machine-readable reason (X-Reliant-Reason header). The modal uses this
-  // to pick which copy to show; unrecognized values fall back to a generic
-  // "quota exceeded" message. See control-plane/internal/enforcement for
-  // the canonical list.
+  // Machine-readable reason (lib/errorReasons.ts ENTITLEMENT_REASONS). The
+  // modal uses it to pick its copy and its CTA, which always routes to
+  // billing; unrecognized values fall back to a generic "quota exceeded"
+  // message.
   reason: string;
   // Human-readable message from the backend (Connect error message). Shown
   // verbatim under the title as the explanation.
   message: string;
-  // Optional upgrade-page URL from X-Reliant-Upgrade-URL. Empty when the
-  // backend doesn't offer one; the CTA button is hidden in that case.
-  upgradeUrl: string;
 }
 
 export interface BillingEmailRequiredData {

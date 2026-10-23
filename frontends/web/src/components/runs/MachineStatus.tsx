@@ -28,7 +28,7 @@ import { DaemonStatus } from "@/gen/reliant/v1/daemon_registry_pb";
 import { useDaemonList, useResumeDaemon } from "@/hooks/useOnboardingQueries";
 import { useGoToBilling } from "@/hooks/useGoToBilling";
 import { useTriggers } from "@/hooks/trigger-queries";
-import { isQuotaResumeError, formatResumeError } from "@/lib/daemon-resume";
+import { isQuotaResumeError, resumeErrorMessage } from "@/lib/daemon-resume";
 import { cn } from "@/lib/utils";
 import { useActivityStore } from "@/store/activityStore";
 import Status from "../forge-ui/status";
@@ -65,10 +65,11 @@ interface MachineStatusProps {
 export function MachineStatus({ daemonId, automation, className }: MachineStatusProps) {
   const daemons = useDaemonList();
   const goToBilling = useGoToBilling();
-  // The raw refusal decides whether Billing is the fix; the copy is shared.
-  const [resumeError, setResumeError] = useState("");
+  // The refusal itself, not its message: its reason decides whether Billing is
+  // the fix (lib/daemon-resume); the copy is shared.
+  const [resumeError, setResumeError] = useState<unknown>(null);
   const resume = useResumeDaemon({
-    onError: (err) => setResumeError(err instanceof Error ? err.message : "Failed to resume environment"),
+    onError: (err) => setResumeError(err ?? new Error("Failed to resume environment")),
   });
 
   // Until the registry answers, "not in the list" would read as deleted.
@@ -137,9 +138,9 @@ export function MachineStatus({ daemonId, automation, className }: MachineStatus
     >
       <div className="min-w-0 space-y-1">
         {body}
-        {resumeError && (
+        {resumeError != null && (
           <p className="text-sm text-destructive-ink" role="alert">
-            {formatResumeError(resumeError)}
+            {resumeErrorMessage(resumeError)}
           </p>
         )}
       </div>
@@ -149,7 +150,7 @@ export function MachineStatus({ daemonId, automation, className }: MachineStatus
             type="button"
             disabled={waking}
             onClick={() => {
-              setResumeError("");
+              setResumeError(null);
               resume.mutate(daemonId);
             }}
             className="inline-flex h-8 items-center rounded-md border border-border px-3 text-sm font-medium text-foreground transition-colors hover:bg-muted/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40 disabled:opacity-60"
@@ -157,7 +158,7 @@ export function MachineStatus({ daemonId, automation, className }: MachineStatus
             {waking ? "Waking…" : "Wake it"}
           </button>
         )}
-        {resumeError && isQuotaResumeError(resumeError) && (
+        {resumeError != null && isQuotaResumeError(resumeError) && (
           <button
             type="button"
             onClick={goToBilling}

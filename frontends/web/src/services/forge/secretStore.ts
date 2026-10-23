@@ -52,6 +52,7 @@ import {
   SecretAuthorKind,
   SecretStoreService,
 } from "@/gen/controlplane/services/secret_store/v1/secret_store_pb";
+import { hasErrorReason } from "@/lib/errorReasons";
 import { getControlPlaneClient } from "@/services/controlPlane/client";
 import { CONTROL_PLANE_API_URL } from "@/services/controlPlane/config";
 import type { SendFailure, VerifyFailure } from "./stepUp";
@@ -474,10 +475,8 @@ export async function listSecrets(environmentId: string): Promise<ManagedSecretL
  * branch on this, never on the message text (control-plane
  * internal/handlers/secret_store/errors.go, ReasonStepUpRequired).
  */
-export const STEP_UP_REQUIRED_REASON = "step_up_required";
+export const STEP_UP_REQUIRED_REASON = "step_up_required" as const;
 
-/** forge's svcerr.ReasonHeader: the Connect error metadata key a reason rides under. */
-const ERROR_REASON_HEADER = "x-forge-error-reason";
 
 /**
  * True when a write was refused because this protected environment needs a
@@ -490,7 +489,7 @@ export function isStepUpRequired(err: unknown): boolean {
   return (
     err instanceof ConnectError &&
     err.code === Code.FailedPrecondition &&
-    err.metadata.get(ERROR_REASON_HEADER) === STEP_UP_REQUIRED_REASON
+    hasErrorReason(err, STEP_UP_REQUIRED_REASON)
   );
 }
 

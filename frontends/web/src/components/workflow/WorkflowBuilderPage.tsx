@@ -33,6 +33,7 @@ import {
 } from "../../store/globalDataStore";
 import { useProjectStore } from "../../store/projectStore";
 import { trackEvent } from "../../lib/analytics";
+import { hasErrorReason } from "../../lib/errorReasons";
 
 interface WorkflowBuilderPageProps {
   selectedWorkflow?: Workflow | null;
@@ -528,8 +529,8 @@ export function WorkflowBuilderPage({
       let isConflict = false;
       if (err instanceof Error) {
         errorMessage = err.message || errorMessage;
-        // Check for OCC conflict (CodeAborted from backend)
-        isConflict = errorMessage.includes("workflow was modified since");
+        // A save that raced a newer revision (the AI assistant's edit).
+        isConflict = hasErrorReason(err, "stale_revision");
       }
 
       if (isConflict) {

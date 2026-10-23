@@ -19,7 +19,7 @@
  *     guest sees, and `capacity_gib` above it is space a restart unlocks.
  */
 
-import { ConnectError } from "@connectrpc/connect";
+import { hasErrorReason } from "@/lib/errorReasons";
 
 import { DaemonDiskState } from "@/gen/controlplane/controlplane/v1/shared_pb";
 import { centsDecimalToDollars, type DaemonPricingLike } from "@/components/Billing/daemonUsage";
@@ -36,11 +36,11 @@ export const DISK_GROW_STEP_GIB = 10;
 export const DISK_CEILING_GIB = 1024;
 
 /**
- * The reason GrowDaemonDisk attaches (header X-Reliant-Reason) when the target
+ * The reason GrowDaemonDisk attaches when the target
  * exceeds the plan's limit, or the plan offers no growth at all
  * (control-plane svcdaemon ReasonDaemonStorageDenied).
  */
-export const DAEMON_STORAGE_DENIED_REASON = "daemon_storage_denied";
+export const DAEMON_STORAGE_DENIED_REASON = "daemon_storage_denied" as const;
 
 export interface DiskGrowRange {
   /** The smallest size the disk can grow to: the next whole step. */
@@ -118,5 +118,5 @@ export function diskGrowStatus(disk: DiskLike | undefined, running: boolean): Di
 
 /** Whether `err` is GrowDaemonDisk refusing a size the plan does not allow. */
 export function isStorageDenied(err: unknown): boolean {
-  return err instanceof ConnectError && err.metadata.get("x-reliant-reason") === DAEMON_STORAGE_DENIED_REASON;
+  return hasErrorReason(err, DAEMON_STORAGE_DENIED_REASON);
 }

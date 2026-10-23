@@ -8,24 +8,20 @@
  * action, so they must not each invent their own copy for the same refusal.
  */
 
-import { Code, ConnectError } from "@connectrpc/connect";
-
-function normalize(error: string): string {
-  return error.toLowerCase();
-}
+import { ENTITLEMENT_REASONS, hasErrorReason } from "./errorReasons";
 
 /**
- * True when a resume was refused because the account's compute entitlement is
- * spent. The fix is a plan or a coupon, so callers offer Billing.
+ * True when a resume was refused because the account's compute is spent
+ * (`compute_budget_exhausted`). The fix is a plan or a coupon, so callers
+ * offer Billing.
  *
- * The literal-string arm is kept alongside the code because the server's
- * message is not guaranteed to survive as a typed error through every
- * transport; it matches on the entitlement wording rather than "free tier",
- * which nothing emits any more.
+ * Takes the error itself, not its message: the reason rides the metadata,
+ * which a message string has lost. control-plane has always sent this
+ * reason (svcdaemon daemonDenied), so the old "resource_exhausted" /
+ * "compute limit" wording match is gone rather than kept as a fallback.
  */
-export function isQuotaResumeError(error: string): boolean {
-  const normalized = normalize(error);
-  return normalized.includes("resource_exhausted") || normalized.includes("compute limit");
+export function isQuotaResumeError(error: unknown): boolean {
+  return hasErrorReason(error, "compute_budget_exhausted");
 }
 
 /**
@@ -33,39 +29,33 @@ export function isQuotaResumeError(error: string): boolean {
  * quota refusal means the account's compute is spent — the old copy ("Free
  * tier compute limit reached") named a tier that does not exist.
  */
-export function formatResumeError(error: string): string {
+export function formatResumeError(error: unknown): string {
   if (isQuotaResumeError(error)) {
     return "You've used the compute included with your account. Upgrade or redeem a coupon to resume this environment.";
   }
-  return error;
+  if (error instanceof Error) return error.message;
+  return typeof error === "string" ? error : "Failed to resume environment";
 }
 
-/** The message carried by whatever a failed resume threw. */
+/** The message to show for whatever a failed resume threw. */
 export function resumeErrorMessage(error: unknown): string {
-  return formatResumeError(error instanceof Error ? error.message : "Failed to resume environment");
+  return formatResumeError(error instanceof Error ? error : "Failed to resume environment");
 }
 
 /**
  * Whether a refused resume is a plan/billing problem, so the pill may offer
- * "Upgrade plan". Keyed on the server's `x-reliant-reason` header (set on every
- * deliberate entitlement denial) or the quota wording — never on the status
- * code alone: FailedPrecondition is also what "daemon is not suspended" and
- * other non-billing refusals use.
+ * "Upgrade plan": an entitlement reason (ENTITLEMENT_REASONS), never the
+ * status code alone — FailedPrecondition is also what "daemon is not
+ * suspended" and other non-billing refusals use.
  */
 export function resumeErrorNeedsUpgrade(error: unknown): boolean {
-  if (error instanceof ConnectError && error.metadata.get("x-reliant-reason")) return true;
-  return isQuotaResumeError(error instanceof Error ? error.message : "");
+  return hasErrorReason(error, ENTITLEMENT_REASONS) || isQuotaResumeError(error);
 }
 
 /**
- * A resume refused with "not suspended" means the machine is already up or
- * coming up — the outcome the caller wanted, not a failure.
+ * A resume refused with `daemon_not_suspended` means the machine is already
+ * up or coming up — the outcome the caller wanted, not a failure.
  */
 export function isAlreadyResumedError(error: unknown): boolean {
-  return (
-    error instanceof ConnectError &&
-    error.code === Code.FailedPrecondition &&
-    !error.metadata.get("x-reliant-reason") &&
-    normalize(error.rawMessage).includes("not suspended")
-  );
+  return hasErrorReason(error, "daemon_not_suspended");
 }

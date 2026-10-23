@@ -14,7 +14,7 @@ export interface UpgradeRequiredModalProps {
   data: UpgradeRequiredData;
 }
 
-// Canonical reason codes, arriving either as the X-Reliant-Reason header on a
+// Canonical reason codes, arriving either as the reason on a
 // ResourceExhausted Connect error (see api/upgradeInterceptor.ts) or from the
 // chat-error marker path in store/chatStore.ts. Unknown reasons fall through to
 // the generic copy below.

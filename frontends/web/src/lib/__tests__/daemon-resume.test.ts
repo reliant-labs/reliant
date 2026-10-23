@@ -13,12 +13,22 @@ import { formatResumeError, isQuotaResumeError } from "../daemon-resume";
 import { isDaemonPendingError } from "../daemon-errors";
 
 describe("formatResumeError", () => {
-  it("names the spent entitlement for a quota refusal, in either wire form", () => {
-    const copy =
-      "You've used the compute included with your account. Upgrade or redeem a coupon to resume this environment.";
-    expect(formatResumeError("[resource_exhausted] nope")).toBe(copy);
-    expect(formatResumeError("compute limit reached")).toBe(copy);
-    expect(isQuotaResumeError("[resource_exhausted] nope")).toBe(true);
+  const copy =
+    "You've used the compute included with your account. Upgrade or redeem a coupon to resume this environment.";
+  const quota = (header: string) =>
+    new ConnectError("compute budget exhausted", Code.ResourceExhausted, new Headers({ [header]: "compute_budget_exhausted" }));
+
+  it("names the spent entitlement for a quota refusal, under either reason header", () => {
+    for (const header of ["x-forge-error-reason", "x-reliant-reason"]) {
+      expect(formatResumeError(quota(header))).toBe(copy);
+      expect(isQuotaResumeError(quota(header))).toBe(true);
+    }
+  });
+
+  it("keys on the reason, not the wording: a reasonless ResourceExhausted is passed through", () => {
+    const unreasoned = new ConnectError("compute limit reached", Code.ResourceExhausted);
+    expect(isQuotaResumeError(unreasoned)).toBe(false);
+    expect(formatResumeError(unreasoned)).toBe("[resource_exhausted] compute limit reached");
   });
 
   it("passes any other message through unchanged", () => {

@@ -1,5 +1,5 @@
-import { Code, ConnectError } from "@connectrpc/connect";
 import type { WorkflowState } from "../gen/reliant/v1/chat_pb";
+import { hasErrorReason } from "./errorReasons";
 import { chatNeedsStart } from "./workflowLifecycle";
 
 export interface ExistingChatSendOptions {
@@ -28,16 +28,9 @@ export interface ExistingChatSendActions {
 }
 
 // The server's refusal of SendMessage on a chat that has not started
-// (internal/grpc/services/chat_send.go). It carries no typed detail, so the
-// message is matched, but only together with the FailedPrecondition code.
-const NOT_STARTED_MESSAGE = "chat has not started";
-
+// (internal/handlers/chat/chat_send.go), reason `chat_not_started`.
 function isNotStartedError(error: unknown): boolean {
-  const connectError = ConnectError.from(error);
-  return (
-    connectError.code === Code.FailedPrecondition &&
-    connectError.rawMessage.includes(NOT_STARTED_MESSAGE)
-  );
+  return hasErrorReason(error, "chat_not_started");
 }
 
 /**

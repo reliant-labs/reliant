@@ -548,10 +548,11 @@ export function WakeMachineAction({
   label?: string;
 }) {
   const goToBilling = useGoToBilling();
-  // The raw message decides whether Billing is the fix; the copy is shared.
-  const [error, setError] = useState("");
+  // The error itself, not its message: its reason decides whether Billing is
+  // the fix (lib/daemon-resume); the copy is shared.
+  const [error, setError] = useState<unknown>(null);
   const resume = useResumeDaemon({
-    onError: (err) => setError(err instanceof Error ? err.message : "Failed to resume environment"),
+    onError: (err) => setError(err ?? new Error("Failed to resume environment")),
   });
   const busy = resume.isPending && resume.variables === daemonId;
   const name = machineName(daemonName, daemonId);
@@ -560,9 +561,9 @@ export function WakeMachineAction({
 
   return (
     <span className="flex shrink-0 items-center gap-2">
-      {error && (
-        <span className="max-w-64 truncate text-xs text-destructive-ink" role="alert" title={resumeErrorMessage(new Error(error))}>
-          {resumeErrorMessage(new Error(error))}
+      {error != null && (
+        <span className="max-w-64 truncate text-xs text-destructive-ink" role="alert" title={resumeErrorMessage(error)}>
+          {resumeErrorMessage(error)}
           {isQuotaResumeError(error) ? (
             <button type="button" onClick={goToBilling} className="ml-1.5 font-medium underline-offset-2 hover:underline">
               Billing
@@ -574,7 +575,7 @@ export function WakeMachineAction({
         type="button"
         disabled={busy}
         onClick={() => {
-          setError("");
+          setError(null);
           resume.mutate(daemonId);
         }}
         className={actionButtonClass}

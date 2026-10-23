@@ -162,7 +162,9 @@ describe("InboxPage item kinds", () => {
 
   it("a refused wake shows the shared resume copy", async () => {
     respond([waitingItem()]);
-    mocks.resumeDaemon.mockRejectedValue(new Error("[resource_exhausted] compute limit"));
+    mocks.resumeDaemon.mockRejectedValue(
+      new ConnectError("compute budget exhausted", Code.ResourceExhausted, new Headers({ "x-forge-error-reason": "compute_budget_exhausted" })),
+    );
     renderInboxAt(<InboxPage />);
     const row = await screen.findByTestId("inbox-item-waiting_for_machine:chat-1@1");
     await userEvent.click(within(row).getByRole("button", { name: "Wake MacBook" }));
