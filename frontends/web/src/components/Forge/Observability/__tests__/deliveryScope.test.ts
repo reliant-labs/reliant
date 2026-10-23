@@ -2,8 +2,8 @@
 
 /**
  * The delivery views' pure rules: which environments a ledger request covers
- * (the scope on screen → DeliveryScope), the before/after windows of a release
- * comparison, how a change reads, and the DORA formatting.
+ * (the scope on screen → DeliveryScope), how a comparison is linked, how a
+ * change reads, and the DORA formatting.
  */
 
 import { describe, expect, it, vi } from "vitest";
@@ -14,12 +14,11 @@ import type { ObsScope } from "@/services/controlPlane/observability/types";
 import {
   changeText,
   compareParam,
-  comparisonWindows,
   deliveryScopeOf,
   formatPerDay,
   formatSpan,
+  healthWindowOf,
   movement,
-  neighboursOf,
   parseCompareParam,
 } from "../deliveryScope";
 import { visibleMarkers } from "../charts/UPlotChart";
@@ -113,38 +112,11 @@ describe("a comparison is a link", () => {
   });
 });
 
-describe("comparison windows", () => {
-  const at = Date.UTC(2026, 9, 14, 12);
-  const min = 60_000;
-
-  it("puts equal windows either side of the promotion", () => {
-    const w = comparisonWindows(at, 30 * min, at + 5 * 60 * min);
-    expect(w).toMatchObject({ before: { startMs: at - 30 * min, endMs: at }, after: { startMs: at, endMs: at + 30 * min }, lengthMs: 30 * min, clampedBy: null, tooShort: false });
-  });
-
-  it("stops at the present, and keeps both sides as long as the after side", () => {
-    const w = comparisonWindows(at, 60 * min, at + 40 * min);
-    expect(w).toMatchObject({ lengthMs: 40 * min, clampedBy: "now", before: { startMs: at - 40 * min } });
-  });
-
-  it("stops short of the next and the previous promotion into the environment", () => {
-    expect(comparisonWindows(at, 6 * 60 * min, at + 48 * 60 * min, { nextMs: at + 3 * 60 * min })).toMatchObject({ lengthMs: 3 * 60 * min, clampedBy: "next" });
-    expect(comparisonWindows(at, 6 * 60 * min, at + 48 * 60 * min, { previousMs: at - 2 * 60 * min })).toMatchObject({ lengthMs: 2 * 60 * min, clampedBy: "previous" });
-  });
-
-  it("says there is nothing to compare under a minute", () => {
-    expect(comparisonWindows(at, 30 * min, at + 20_000)).toMatchObject({ tooShort: true, clampedBy: "now" });
-  });
-
-  it("finds the neighbours in the same environment only", () => {
-    const list = [
-      promotion({ promotionId: "a", promotedAtMs: at - 5 * min }),
-      promotion({ promotionId: "x", envId: "env-dev", promotedAtMs: at - min }),
-      promotion({ promotionId: "self", promotedAtMs: at }),
-      promotion({ promotionId: "b", promotedAtMs: at + 7 * min }),
-    ];
-    const { previous, next } = neighboursOf({ envId: "env-prod", promotedAtMs: at, promotionId: "self" }, list);
-    expect([previous?.promotionId, next?.promotionId]).toEqual(["a", "b"]);
+describe("the health window", () => {
+  it("takes the server's widths and falls back to its 15-minute default", () => {
+    expect(healthWindowOf("1h")).toBe("1h");
+    expect(healthWindowOf("24h")).toBe("15m");
+    expect(healthWindowOf(undefined)).toBe("15m");
   });
 });
 

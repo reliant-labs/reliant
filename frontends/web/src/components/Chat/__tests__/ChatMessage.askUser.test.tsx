@@ -1,7 +1,8 @@
 /**
- * An async ask_user (the default: no blocking: true) renders in the transcript as its own
- * answerable card, outside the tool rows; a blocking one renders nowhere in
- * the transcript — the composer answers it (research/ASYNC_ASK_USER.md).
+ * Every ask_user call renders in the transcript as its own card, outside the
+ * tool rows, and never as nothing. An async one (the default: no blocking:
+ * true) is answerable there; a blocking one shows its question while the
+ * composer holds the form (research/ASYNC_ASK_USER.md).
  */
 
 import { render, screen, waitFor } from "@testing-library/react";
@@ -46,6 +47,10 @@ vi.mock("../../../api/question-grpc", () => ({
       {
         question_id: "q-1", chat_id: "chat-1", workflow_id: "chat-1", thread_id: "chat-1", step_id: "execute_tools",
         status: "pending", created_at: "", async: true, tool_call_id: "call-async",
+      },
+      {
+        question_id: "q-prod", chat_id: "chat-1", workflow_id: "chat-1", thread_id: "chat-1", step_id: "execute_tools",
+        status: "pending", created_at: "", async: true, tool_call_id: "toolu_015apcEoACxzEnwZDGZw4LBo",
       },
     ]),
     resolveQuestion: vi.fn(),
@@ -93,24 +98,43 @@ describe("ask_user in the transcript", () => {
   it("renders an async question as an answerable card, outside the tool rows", async () => {
     renderMessage(assistantAsking("call-async", { questions }));
 
-    const card = await screen.findByTestId("async-question-card");
+    const card = await screen.findByTestId("ask-user-card");
     expect(card).toHaveTextContent("Question for you · not blocking");
     expect(await screen.findByRole("button", { name: /submit/i })).toBeInTheDocument();
     expect(card.closest(".tool-executions-container")).toBeNull();
   });
 
-  it("leaves a blocking question out of the transcript", () => {
+  it("shows a blocking question's text, with the form left to the composer", async () => {
     renderMessage(assistantAsking("call-blocking", { blocking: true, questions }));
 
-    expect(screen.queryByTestId("async-question-card")).toBeNull();
-    expect(screen.queryByText("Which database?")).toBeNull();
+    const card = await screen.findByTestId("ask-user-card");
+    expect(card).toHaveTextContent("Which database?");
+    expect(screen.queryByRole("button", { name: /submit/i })).toBeNull();
   });
 
   // Recorded before async became the default: no flag, yet it blocked, so it
-  // finished with no async question row.
-  it("shows no card for a finished call without an async question", async () => {
+  // finished with no async question row. It still shows what was asked.
+  it("shows the question of a finished call without an async question", async () => {
     renderMessage(assistantAsking("call-old-blocking", { questions }));
 
-    await waitFor(() => expect(screen.queryByTestId("async-question-card")).toBeNull());
+    await waitFor(() => expect(screen.getByTestId("ask-user-card")).toHaveAttribute("data-mode", "asked"));
+    expect(screen.getByTestId("ask-user-card")).toHaveTextContent("Which database?");
+  });
+
+  // The exact prod shape (chat 641e33c9, 2026-10-22): `questions` is a
+  // JSON-encoded string, there is no blocking flag, and the result is in a
+  // separate tool message, so the call block carries none.
+  it("renders the prod ask_user: string-encoded questions, async row found by tool call id", async () => {
+    const id = "toolu_015apcEoACxzEnwZDGZw4LBo";
+    const message = assistantAsking(id, { questions: JSON.stringify(questions) });
+    const block = message.contentBlocks![1] as unknown as Record<string, unknown>;
+    delete block.matchedResult;
+    message.contentBlocks = [message.contentBlocks![1]];
+    renderMessage(message);
+
+    const card = await screen.findByTestId("ask-user-card");
+    expect(card).toHaveTextContent("Which database?");
+    await waitFor(() => expect(card).toHaveAttribute("data-mode", "async"));
+    expect(await screen.findByRole("button", { name: /submit/i })).toBeInTheDocument();
   });
 });

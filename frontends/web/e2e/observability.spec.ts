@@ -198,12 +198,30 @@ test.describe('observability console', () => {
     await strip.locator('li').first().getByRole('button', { name: 'Compare before / after' }).click();
     await expect(page.getByTestId('obs-compare')).toHaveAttribute('data-state', 'ready');
     await expect(page.getByTestId('obs-compare-header')).toContainText('Before and after v1.8.3 in prod');
+    await expect(page.getByTestId('obs-compare-verdict')).toHaveAttribute('data-verdict', 'fail');
     await expect(page.getByTestId('obs-compare-p95-api')).toHaveAttribute('data-movement', 'up-bad');
     await shot(page, 'release-compare');
     await page.getByTestId('obs-compare-back').click();
     await expect(page.getByTestId('obs-overview')).toBeVisible();
 
     // (DORA is the console's Releases page now — /forge-releases-preview, covered by its component tests.)
+    expect(errors).toEqual([]);
+  });
+
+  test('errors: the issue inbox, one issue, and a triage', async ({ page }) => {
+    const errors: string[] = [];
+    page.on('pageerror', (error) => errors.push(error.message));
+
+    await openHarness(page, '?view=errors');
+    await expect(page.getByTestId('obs-errors-list')).toBeVisible();
+    await expect(page.getByTestId('obs-issue-iss-checkout-total')).toHaveAttribute('data-status', 'regressed');
+    await shot(page, 'errors');
+    await page.getByTestId('obs-issue-open-iss-worker-conns').click();
+    await expect(page.getByTestId('obs-issue')).toHaveAttribute('data-state', 'ready');
+    await shot(page, 'issue');
+    await page.getByTestId('obs-issue-resolve').click();
+    await expect(page.getByTestId('obs-issue')).toHaveAttribute('data-status', 'resolved');
+    await expect(page.getByTestId('obs-issue-history-feed')).toContainText('Ada Lovelace resolved');
     expect(errors).toEqual([]);
   });
 

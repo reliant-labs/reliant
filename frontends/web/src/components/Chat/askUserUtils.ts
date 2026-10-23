@@ -121,12 +121,11 @@ function askUserInputObject(input: unknown): Record<string, unknown> | null {
 }
 
 /**
- * Whether an ask_user call asks without waiting — the default: only input
- * blocking: true waits. An async call renders as a question card in the
- * timeline; a blocking one renders in the composer instead. A quoted "true"
- * counts, as it does on the server. A call recorded before async became the
- * default also reads as async here; its card hides itself, having no async
- * question row (AsyncQuestionCard).
+ * Whether an ask_user call's input asks without waiting — the default: only
+ * input blocking: true waits. A quoted "true" counts, as it does on the
+ * server. Only a hint: the call's async question row, when there is one, is
+ * the authority (AskUserCard). A call recorded before async became the
+ * default also reads as async here, and has no such row.
  */
 export function isAsyncAskUserInput(input: unknown): boolean {
   const obj = askUserInputObject(input);
@@ -134,13 +133,24 @@ export function isAsyncAskUserInput(input: unknown): boolean {
   return !(flag === true || (typeof flag === "string" && flag.trim().toLowerCase() === "true"));
 }
 
-/** An ask_user call's questions as QuestionPrompt's items, from its tool input. */
+/**
+ * An ask_user call's questions as QuestionPrompt's items, from its tool input.
+ * Models write `questions` in more shapes than the schema's array: as a
+ * JSON-encoded string of it (handled by askUserQuestionItems), as one question
+ * object, or as the bare question text; and some write a single `question`.
+ * Each still yields the question, so the user always sees what was asked.
+ */
 export function askUserQuestionItemsFromInput(
   input: unknown,
 ): Array<{ question: string; options: AskUserQuestionOption[]; allowMultiple: boolean }> | null {
   const obj = askUserInputObject(input);
   if (!obj) return null;
-  return askUserQuestionItems(JSON.stringify({ type: "ask_user", questions: obj.questions }));
+  const raw = obj.questions;
+  const single = typeof raw === "object" && raw !== null && !Array.isArray(raw) ? [raw] : raw;
+  const items = askUserQuestionItems(JSON.stringify({ type: "ask_user", questions: single }));
+  if (items) return items;
+  const text = [raw, obj.question].find((v): v is string => typeof v === "string" && v.trim() !== "");
+  return text ? [{ question: text.trim(), options: [], allowMultiple: false }] : null;
 }
 
 /**

@@ -18,6 +18,7 @@ import forgeSpecRaw from "./forge-dashboard-spec.json?raw";
 import { createAlertingFixture, type AlertingFixtureOptions } from "./fixtureAlerting";
 import { createDashboardFixture, type DashboardFixtureOptions } from "./fixtureDashboards";
 import { createDeliveryFixture, versionAt, type DeliveryFixtureOptions } from "./fixtureDelivery";
+import { createIssuesFixture, type IssuesFixtureOptions } from "./fixtureIssues";
 
 import type { ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import type {
@@ -404,47 +405,26 @@ export function fixtureSpeedscope(): string {
 }
 
 /**
- * The release comparison's tables (ReleaseComparison COMPARE_PANELS): each
- * side's version is the one the fixture ledger says was running then, and
- * v1.8.3 is a mild regression — slower and more errors on `api`, more memory —
- * so a comparison of the newest prod release has something to find.
+ * The release comparison's resources table (ReleaseComparison RESOURCES_PANEL):
+ * each side's version is the one the fixture ledger says was running then, and
+ * v1.8.3 uses a little more of everything on `api`, so a comparison of the
+ * newest prod release has something to show. (Requests, errors and latency come
+ * from the release-health fixture, not from panels.)
  */
 export function fixtureComparePanel(panel: Panel, window: TimeWindow, envIds: string[], ledger: Parameters<typeof versionAt>[0]): PanelResult {
   const side = panel.id.endsWith("-after") ? "after" : "before";
   const envId = envIds[0] ?? "env-prod";
-  const seconds = (window.endMs - window.startMs) / 1000;
   const running = versionAt(ledger, envId, side === "after" ? window.startMs + 1 : window.endMs - 1) ?? "v1.8.2";
-  const replaced = versionAt(ledger, envId, window.startMs - 1);
   const regress = side === "after" && running === "v1.8.3";
-  const base = { kind: "table", unit: panel.unit ?? "", stepSeconds: 0, truncated: false, series: [] as PanelResult["series"], ...NO_BROWSER_ROWS };
   const columns = panel.series.map((s) => s.label);
-  const service = (name: string, rate: number, errorShare: number, p95: number) => {
-    const requests = Math.round(rate * seconds);
-    const values: Record<string, number> = { requests, errors: Math.round(requests * errorShare), p95 };
-    return { group: { "service.name": name }, values: columns.map((c) => values[c] ?? null) };
-  };
-  if (panel.id.startsWith("compare-red")) {
-    return {
-      ...base,
-      columns,
-      rows: [service("api", regress ? 12.1 : 11.5, regress ? 0.016 : 0.004, regress ? 171 : 118), service("worker", 3.2, 0.002, side === "after" ? 236 : 240)],
-    };
-  }
-  if (panel.id.startsWith("compare-versions")) {
-    const rows = ["api", "worker"].flatMap((name) => {
-      const total = Math.round((name === "api" ? 11.5 : 3.2) * seconds);
-      // During a rollout the old pods still serve a little of the after side.
-      const tail = side === "after" && replaced && replaced !== running ? Math.round(total * 0.03) : 0;
-      return [
-        { group: { "service.name": name, "resource.attr.service.version": running }, values: [total - tail] },
-        ...(tail ? [{ group: { "service.name": name, "resource.attr.service.version": replaced! }, values: [tail] }] : []),
-      ];
-    });
-    return { ...base, columns, rows };
-  }
   const workload = (name: string, cpu: number, memory: number) => ({ group: { "resource.attr.k8s.workload.name": name }, values: [cpu, memory] });
   return {
-    ...base,
+    kind: "table",
+    unit: panel.unit ?? "",
+    stepSeconds: 0,
+    truncated: false,
+    series: [],
+    ...NO_BROWSER_ROWS,
     columns,
     rows: [workload("api", regress ? 0.24 : 0.21, regress ? 216 * 2 ** 20 : 182 * 2 ** 20), workload("worker", 0.08, 96 * 2 ** 20)],
   };
@@ -837,7 +817,7 @@ export function fixtureWorkloadDetail(scope: Pick<ObsScope, "envIds">, workload:
   return { series, events, imageChanges, versionChanges, stepSeconds: Math.round((window.endMs - window.startMs) / 1000 / 40), truncated: false, workloads: rows };
 }
 
-export interface FixtureOptions extends AlertingFixtureOptions, DeliveryFixtureOptions, DashboardFixtureOptions {
+export interface FixtureOptions extends AlertingFixtureOptions, DeliveryFixtureOptions, DashboardFixtureOptions, IssuesFixtureOptions {
   /** Overrides on the usage fixture, to put the page in a given state. */
   usage?: Partial<ObservabilityUsage>;
   /** Every call fails with this (FailedPrecondition is the "not set up" org). */
@@ -939,6 +919,7 @@ export function createFixtureApi(options: FixtureOptions = {}): ObservabilityApi
     ...createAlertingFixture(options, call),
     listReleases: delivery.listReleases,
     getDoraMetrics: delivery.getDoraMetrics,
+    ...createIssuesFixture(options, call, delivery.ledger),
     listAttributeValues: (req) =>
       call("ListAttributeValues", req, () => {
         const values: AttributeValueCount[] = valuesOf(req.key, req)

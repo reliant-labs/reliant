@@ -94,10 +94,16 @@ replay with TMPRL1100 if the default is unversioned). The async path is
 QuestionCreate (same activity) and return — no timer, no signal wait
 (`fixtures/ask_user_async_by_default.json`).
 
-The web client classifies a tool call from its input (`isAsyncAskUserInput`:
-async unless `blocking: true`). A call recorded before the flip reads as async
-there too; its `AsyncQuestionCard` renders nothing once the call has a result
-and no async question row matches it.
+The web client renders every ask_user call as an `AskUserCard`, and never as
+nothing. The call's async question row (matched by tool call id) is the
+authority: with one, the card is answerable in the timeline. Without one, the
+input decides (`isAsyncAskUserInput`: async unless `blocking: true`) and the
+card shows the question text: posting (async, row not yet arrived), waiting
+(blocking and running; the composer holds the form) or asked (finished with no
+async row, e.g. a call recorded before the flip). Classifying from the input
+alone once hid questions entirely: a tab still running the pre-flip bundle read
+an unflagged async call as blocking and dropped it from the transcript, and the
+server never put it in the composer either.
 
 ## Alternatives considered
 

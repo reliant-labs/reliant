@@ -111,3 +111,63 @@ export function deliveryErrorKind(error: unknown): DeliveryErrorKind {
   }
   return obsErrorKind(error);
 }
+
+/** An older control plane without the rpc, or one that has it but runs without the reader behind it. */
+function notOnThisServer(error: unknown): boolean {
+  if (!(error instanceof ConnectError)) return false;
+  if (error.code === Code.Unimplemented) return true;
+  return error.code === Code.Unavailable && /not configured/i.test(error.rawMessage || error.message);
+}
+
+/**
+ * What an IssuesService failure means. Issues add three answers:
+ *
+ *   not-configured  Unimplemented (a control plane from before issues) or
+ *                   Unavailable "issues are not configured on this server".
+ *                   Explained in place, never retried.
+ *   conflict        Aborted on a triage: the issue changed since it was read
+ *                   (expected_version is stale). The view refetches and shows
+ *                   what changed; it never re-sends over the other change.
+ *   not-found       NotFound: no such issue, or one in an org the caller is
+ *                   not in (the server does not tell the two apart).
+ *
+ * Everything else reads as obsErrorKind does.
+ */
+export type IssuesErrorKind = ObsErrorKind | "not-configured" | "conflict" | "not-found";
+
+export function issuesErrorKind(error: unknown): IssuesErrorKind {
+  if (notOnThisServer(error)) return "not-configured";
+  if (error instanceof ConnectError) {
+    if (error.code === Code.Aborted) return "conflict";
+    if (error.code === Code.NotFound) return "not-found";
+  }
+  return obsErrorKind(error);
+}
+
+export function issuesRetry(failureCount: number, error: unknown): boolean {
+  if (issuesErrorKind(error) !== "unavailable") return false;
+  return failureCount < 1;
+}
+
+/**
+ * What a GetReleaseHealth failure means:
+ *
+ *   not-available  Unimplemented (an older control plane) or Unavailable
+ *                  "release health is not configured on this server": an
+ *                  inline note, not an error page.
+ *   not-found      NotFound: the environment never had that promotion.
+ *
+ * Everything else reads as obsErrorKind does.
+ */
+export type ReleaseHealthErrorKind = ObsErrorKind | "not-available" | "not-found";
+
+export function releaseHealthErrorKind(error: unknown): ReleaseHealthErrorKind {
+  if (notOnThisServer(error)) return "not-available";
+  if (error instanceof ConnectError && error.code === Code.NotFound) return "not-found";
+  return obsErrorKind(error);
+}
+
+export function releaseHealthRetry(failureCount: number, error: unknown): boolean {
+  if (releaseHealthErrorKind(error) !== "unavailable") return false;
+  return failureCount < 1;
+}

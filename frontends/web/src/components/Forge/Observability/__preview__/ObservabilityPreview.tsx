@@ -68,6 +68,16 @@ const CASES: { id: string; label: string; options: FixtureOptions }[] = [
   { id: "delivery-not-member", label: "releases: not a member", options: { delivery: "not-member" } },
   { id: "delivery-env-denied", label: "releases: env from another org", options: { delivery: "env-denied" } },
   { id: "delivery-truncated", label: "releases: truncated (limit 5)", options: { releaseLimit: 5 } },
+  // Errors (view=errors, &issue=<id> for one): the issue inbox's states.
+  { id: "issues-empty", label: "errors: no issues", options: { issues: "empty" } },
+  { id: "issues-not-configured", label: "errors: older control plane (Unimplemented)", options: { issues: "not-configured" } },
+  { id: "issues-conflict", label: "errors: first triage loses a race (Aborted)", options: { issueConflict: true } },
+  // Release health (a comparison open: &compare=<envId>~<ms>~<promotionId>, or Compare from the release strip).
+  // The "data" case judges prod's v1.8.3 a FAIL; these force the other answers.
+  { id: "health-pass", label: "release health: PASS", options: { health: "pass" } },
+  { id: "health-inconclusive", label: "release health: INCONCLUSIVE (window open)", options: { health: "inconclusive" } },
+  { id: "health-not-evaluated", label: "release health: PASS, alerts and issues not checked", options: { health: "not-evaluated" } },
+  { id: "health-unimplemented", label: "release health: older control plane (Unimplemented)", options: { health: "unimplemented" } },
 ];
 
 const LIST_KEYS = new Set(["envs", "f", "groupBy"]);

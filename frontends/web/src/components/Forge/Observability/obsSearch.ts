@@ -9,11 +9,11 @@
  * refresh must not throw the reader back to the overview.
  */
 
+import type { HealthWindow } from "@/services/controlPlane/observability/deliveryTypes";
+import { ISSUE_PLATFORMS, ISSUE_SORTS, ISSUE_STATUSES, type IssuePlatform, type IssueSort, type IssueStatus } from "@/services/controlPlane/observability/issuesTypes";
 import type { Severity } from "@/services/controlPlane/observability/types";
 import { SEVERITIES } from "@/services/controlPlane/observability/types";
 import type { RangePreset } from "@/services/controlPlane/observability/window";
-
-import type { CompareWindow } from "./deliveryScope";
 
 /**
  * The views, in tab order. A view is one entry in this list (the route schema
@@ -22,12 +22,13 @@ import type { CompareWindow } from "./deliveryScope";
  * Dashboards are not one either: native dashboards are console pages of their
  * own (Observability › Dashboards, decision DB).
  */
-export const OBS_VIEWS = ["overview", "alerts", "logs", "traces", "profiles", "usage"] as const;
+export const OBS_VIEWS = ["overview", "alerts", "errors", "logs", "traces", "profiles", "usage"] as const;
 export type ObsView = (typeof OBS_VIEWS)[number];
 
 export const OBS_VIEW_LABELS: Record<ObsView, string> = {
   overview: "Overview",
   alerts: "Alerts",
+  errors: "Errors",
   logs: "Logs",
   traces: "Traces",
   profiles: "Profiles",
@@ -50,6 +51,25 @@ export function severitiesOf(param: string | undefined): Severity[] {
 
 export function severityParam(severities: Severity[]): string | undefined {
   return severities.length ? severities.join(",") : undefined;
+}
+
+/** `istatus=resolved,ignored` ⇄ ["resolved", "ignored"]. Empty: the open ones. Unknown names are dropped. */
+export function issueStatusesOf(param: string | undefined): IssueStatus[] {
+  if (!param) return [];
+  const wanted = new Set(param.split(",").map((part) => part.trim()));
+  return ISSUE_STATUSES.filter((status) => wanted.has(status));
+}
+
+export function issueStatusParam(statuses: readonly IssueStatus[]): string | undefined {
+  return statuses.length ? ISSUE_STATUSES.filter((s) => statuses.includes(s)).join(",") : undefined;
+}
+
+export function issuePlatformOf(param: string | undefined): IssuePlatform | undefined {
+  return (ISSUE_PLATFORMS as readonly string[]).includes(param ?? "") ? (param as IssuePlatform) : undefined;
+}
+
+export function issueSortOf(param: string | undefined): IssueSort {
+  return (ISSUE_SORTS as readonly string[]).includes(param ?? "") ? (param as IssueSort) : "last";
 }
 
 /** The URL keys this area owns. */
@@ -86,8 +106,16 @@ export interface ObsSearch {
    * `<envId>~<promotedAtMs>~<promotionId>` (deliveryScope.ts compareParam).
    */
   compare?: string;
-  /** The comparison's window on each side. Absent: 30m. */
-  cmpWindow?: CompareWindow;
+  /** The comparison's window on each side. Absent: the server's default, 15m. */
+  cmpWindow?: HealthWindow;
+  /** Errors: the issue open in detail. */
+  issue?: string;
+  /** Errors: the statuses listed, comma-separated (issueStatusesOf). Absent: the open ones. */
+  istatus?: string;
+  /** Errors: only browser or only server issues. Absent: both. */
+  platform?: IssuePlatform;
+  /** Errors: the order. Absent: most recently seen first. */
+  isort?: IssueSort;
 }
 
 export const ALERTS_TABS = ["firing", "history", "silences", "rules", "receivers"] as const;
@@ -117,6 +145,10 @@ export const OBS_SEARCH_KEYS = [
   "rule",
   "compare",
   "cmpWindow",
+  "issue",
+  "istatus",
+  "platform",
+  "isort",
 ] as const satisfies readonly (keyof ObsSearch)[];
 
 /**

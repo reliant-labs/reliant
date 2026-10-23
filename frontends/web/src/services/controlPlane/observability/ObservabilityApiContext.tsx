@@ -14,10 +14,12 @@
 import { createContext, useContext, type ReactNode } from "react";
 
 import { getWalletOverview } from "../reliantAI";
+import * as activity from "./activityApi";
 import * as alerting from "./alertingApi";
 import * as rpc from "./api";
 import * as dashboards from "./dashboardsApi";
 import * as delivery from "./deliveryApi";
+import * as issues from "./issuesApi";
 
 export interface ObservabilityApi {
   /** The caller's current organization — what every request is scoped by. Null while it is still being provisioned. */
@@ -48,6 +50,15 @@ export interface ObservabilityApi {
   // Delivery (DeliveryInsightsService, contract K5): the release ledger and DORA.
   listReleases: typeof delivery.listReleases;
   getDoraMetrics: typeof delivery.getDoraMetrics;
+  // Release health (ObservabilityService.GetReleaseHealth): the server's verdict on one promotion.
+  getReleaseHealth: typeof delivery.getReleaseHealth;
+  // Issues (IssuesService): the error inbox, browser and server; triage needs obs:triage.
+  listIssues: typeof issues.listIssues;
+  getIssue: typeof issues.getIssue;
+  listIssueEvents: typeof issues.listIssueEvents;
+  updateIssueStatus: typeof issues.updateIssueStatus;
+  // Activity (ActivityService): who changed what — an issue's history, the project feed.
+  listActivity: typeof activity.listActivity;
   // Native dashboards (DashboardService, decision DB): reads need membership,
   // authoring the admin role.
   listDashboards: typeof dashboards.listDashboards;
@@ -90,6 +101,12 @@ export const controlPlaneObservabilityApi: ObservabilityApi = {
   markNotificationsRead: alerting.markNotificationsRead,
   listReleases: delivery.listReleases,
   getDoraMetrics: delivery.getDoraMetrics,
+  getReleaseHealth: delivery.getReleaseHealth,
+  listIssues: issues.listIssues,
+  getIssue: issues.getIssue,
+  listIssueEvents: issues.listIssueEvents,
+  updateIssueStatus: issues.updateIssueStatus,
+  listActivity: activity.listActivity,
   listDashboards: dashboards.listDashboards,
   listDashboardTemplates: dashboards.listDashboardTemplates,
   getDashboard: dashboards.getDashboard,

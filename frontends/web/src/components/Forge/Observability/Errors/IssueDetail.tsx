@@ -1,0 +1,338 @@
+// Copyright (c) 2025 Reliant Labs
+
+/**
+ * One issue: what it is (title, culprit, where), how much (events and affected
+ * over the window, per version), since when (first release), the latest
+ * occurrence with its stack and a way into its trace, the issues that tend to
+ * fire with it, its recent events, its triage, and its history.
+ */
+
+import { useMemo, type ReactNode } from "react";
+import { ArrowLeft, ExternalLink, GitCommitHorizontal } from "lucide-react";
+
+import Card from "@/components/forge-ui/card";
+import { Button } from "@/components/ui/Button";
+import { useIssue, useIssueEvents } from "@/hooks/observability-queries";
+import { issuesErrorKind } from "@/services/controlPlane/observability/errors";
+import type { IssueDetail as IssueDetailModel, IssueEvent, IssueFrame } from "@/services/controlPlane/observability/issuesTypes";
+import type { ObsScope } from "@/services/controlPlane/observability/types";
+import { RANGE_LABELS, type RangePreset } from "@/services/controlPlane/observability/window";
+import { cn } from "@/lib/utils";
+
+import { ActivityFeed } from "../../Activity/ActivityFeed";
+import { AttributeTable } from "../AttributeTable";
+import { shortCommit } from "../deliveryScope";
+import { formatAgo, formatCount, formatTimestamp, formatWhen } from "../format";
+import type { ObsNavigate } from "../obsSearch";
+import { ObsError, ObsLoadingRows } from "../ObsStates";
+import { StatusBadge, Trend } from "./IssueBits";
+import { affectedNoun, frameText, PLATFORM_LABEL } from "./issueModel";
+import { IssueNotFound, IssuesNotConfigured } from "./IssueStates";
+import { IssueTriage } from "./IssueTriage";
+
+export function IssueDetail({
+  issueId,
+  scope,
+  subject,
+  range,
+  navigate,
+  onBack,
+}: {
+  issueId: string;
+  scope: ObsScope;
+  subject: string;
+  range: RangePreset;
+  navigate: ObsNavigate;
+  onBack: () => void;
+}) {
+  const detail = useIssue(issueId, range);
+  const back = (
+    <Button variant="ghost" size="sm" leftIcon={<ArrowLeft className="h-3.5 w-3.5" />} onClick={onBack} data-testid="obs-issue-back">
+      Back to errors
+    </Button>
+  );
+  if (detail.isLoading) {
+    return (
+      <div className="space-y-3" data-testid="obs-issue" data-state="loading">
+        {back}
+        <ObsLoadingRows rows={5} testId="obs-issue-loading" />
+      </div>
+    );
+  }
+  if (detail.error || !detail.data) {
+    const kind = issuesErrorKind(detail.error);
+    return (
+      <div className="space-y-3" data-testid="obs-issue" data-state="error">
+        {back}
+        {kind === "not-found" ? (
+          <IssueNotFound onBack={onBack} />
+        ) : kind === "not-configured" ? (
+          <IssuesNotConfigured />
+        ) : (
+          <ObsError error={detail.error} subject={subject} onRetry={() => void detail.refetch()} retrying={detail.isFetching} />
+        )}
+      </div>
+    );
+  }
+  const openTrace = (traceId: string, spanId?: string) =>
+    navigate({ view: "traces", trace: traceId, span: spanId || undefined, issue: undefined, istatus: undefined, platform: undefined, isort: undefined, q: undefined });
+  return <IssueBody detail={detail.data} scope={scope} subject={subject} range={range} back={back} openTrace={openTrace} openIssue={(id) => navigate({ issue: id })} />;
+}
+
+function IssueBody({
+  detail,
+  scope,
+  subject,
+  range,
+  back,
+  openTrace,
+  openIssue,
+}: {
+  detail: IssueDetailModel;
+  scope: ObsScope;
+  subject: string;
+  range: RangePreset;
+  back: ReactNode;
+  openTrace: (traceId: string, spanId?: string) => void;
+  openIssue: (id: string) => void;
+}) {
+  const { issue } = detail;
+  const now = Date.now();
+  const historyScope = useMemo(() => ({ orgId: scope.orgId, projectId: scope.projectId, envIds: issue.envId ? [issue.envId] : [] }), [scope.orgId, scope.projectId, issue.envId]);
+  return (
+    <div className="space-y-4" data-testid="obs-issue" data-state="ready" data-status={issue.status ?? ""}>
+      {back}
+      <header className="space-y-1.5" data-testid="obs-issue-header">
+        <div className="flex flex-wrap items-center gap-2">
+          <StatusBadge status={issue.status} />
+          <h3 className="min-w-0 break-words text-base font-semibold text-foreground">{issue.title || issue.exceptionType || issue.fingerprint}</h3>
+        </div>
+        {issue.culprit && <p className="break-all font-mono text-xs text-muted-foreground" data-testid="obs-issue-culprit">{issue.culprit}</p>}
+        <p className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+          <span className="font-mono text-foreground">{issue.service || "(unnamed)"}</span>
+          {issue.platform && <span>{PLATFORM_LABEL[issue.platform]}</span>}
+          {issue.envName && <span>in {issue.envName}</span>}
+          {issue.lastSeenMs > 0 && <span title={formatWhen(issue.lastSeenMs, now)}>last seen {formatAgo(issue.lastSeenMs, now)}</span>}
+          {issue.firstSeenMs > 0 && <span title={formatWhen(issue.firstSeenMs, now)}>first seen {formatAgo(issue.firstSeenMs, now)}</span>}
+          {issue.status === "resolved" && issue.resolvedVersion && <span>resolved in {issue.resolvedVersion}</span>}
+          {issue.status === "ignored" && <span>{issue.ignoredUntilMs ? `ignored until ${formatWhen(issue.ignoredUntilMs, now)}` : "ignored until unignored"}</span>}
+          {issue.mergedInto && (
+            <button type="button" className="underline underline-offset-2 hover:text-foreground" onClick={() => openIssue(issue.mergedInto)}>
+              merged into another issue
+            </button>
+          )}
+        </p>
+      </header>
+
+      <IssueTriage issue={issue} />
+
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+        <div className="min-w-0 space-y-4">
+          <Card padding="none" data-testid="obs-issue-latest">
+            <Section title="Latest event" note={detail.latestEvent ? formatTimestamp(detail.latestEvent.timeMs, now) : undefined} />
+            {detail.latestEvent ? (
+              <LatestEvent event={detail.latestEvent} onTrace={openTrace} />
+            ) : (
+              <p className="px-4 py-4 text-sm text-muted-foreground">The newest event has aged out of retention; the counts still stand.</p>
+            )}
+          </Card>
+          <Card padding="none" data-testid="obs-issue-frames">
+            <Section
+              title="Stack"
+              note={issue.symbolicated ? "Innermost frame first." : "Innermost frame first. This browser stack could not be mapped back to source, so it shows bundle locations."}
+            />
+            <Frames frames={detail.frames} />
+          </Card>
+          <Card padding="none" data-testid="obs-issue-events">
+            <Section title="Recent events" note="Newest first." />
+            <RecentEvents issueId={issue.id} onTrace={openTrace} />
+          </Card>
+        </div>
+        <div className="min-w-0 space-y-4">
+          <Card padding="none" data-testid="obs-issue-counts">
+            <Section title={RANGE_LABELS[range]} />
+            <div className="space-y-3 px-4 py-3">
+              <p className="flex flex-wrap items-baseline gap-x-4 text-sm">
+                <span>
+                  <span className="text-lg font-semibold tabular-nums text-foreground">{formatCount(issue.events)}</span>{" "}
+                  <span className="text-muted-foreground">events</span>
+                </span>
+                <span>
+                  <span className="text-lg font-semibold tabular-nums text-foreground">{formatCount(issue.affected)}</span>{" "}
+                  <span className="text-muted-foreground">{affectedNoun(issue.platform, issue.affected)}</span>
+                </span>
+              </p>
+              <Trend points={issue.trend} label={`${formatCount(issue.events)} events, by hour`} />
+            </div>
+          </Card>
+          <Card padding="none" data-testid="obs-issue-release">
+            <Section title="First release" />
+            {detail.firstRelease ? (
+              <div className="space-y-1 px-4 py-3 text-xs text-muted-foreground">
+                <p className="font-mono text-sm text-foreground">{detail.firstRelease.version}</p>
+                {detail.firstRelease.gitCommit && (
+                  <p className="inline-flex items-center gap-1 font-mono" title={detail.firstRelease.gitCommit}>
+                    <GitCommitHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
+                    {shortCommit(detail.firstRelease.gitCommit)}
+                    {detail.firstRelease.commitRange && <span> ({detail.firstRelease.commitRange})</span>}
+                  </p>
+                )}
+                {detail.firstRelease.promotedAtMs > 0 && <p>promoted {formatWhen(detail.firstRelease.promotedAtMs, now)}</p>}
+              </div>
+            ) : (
+              <p className="px-4 py-3 text-xs text-muted-foreground">
+                First seen in <span className="font-mono text-foreground">{issue.firstVersion || "an unstamped build"}</span>, which isn&apos;t a release the ledger knows.
+              </p>
+            )}
+          </Card>
+          <Card padding="none" data-testid="obs-issue-versions">
+            <Section title="By version" note="Newest version first." />
+            <Versions detail={detail} />
+          </Card>
+          <Card padding="none" data-testid="obs-issue-related">
+            <Section title="Fires with" note="Issues seen in the same traces or sessions." />
+            {detail.coOccurringIssueIds.length === 0 ? (
+              <p className="px-4 py-3 text-xs text-muted-foreground">Nothing else tends to fire alongside it.</p>
+            ) : (
+              <ul className="space-y-1 px-4 py-3">
+                {detail.coOccurringIssueIds.map((id) => (
+                  <li key={id}>
+                    <button
+                      type="button"
+                      onClick={() => openIssue(id)}
+                      className="font-mono text-xs text-foreground underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      data-testid={`obs-issue-related-${id}`}
+                    >
+                      {id}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
+          <Card padding="none" data-testid="obs-issue-history">
+            <Section title="History" note="Who triaged it, and when it opened or regressed." />
+            <ActivityFeed scope={historyScope} target={{ kind: "issue", id: issue.id }} subject={subject} empty="No triage yet." testId="obs-issue-history-feed" />
+          </Card>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Section({ title, note }: { title: string; note?: string }) {
+  return (
+    <div className="border-b border-border/60 px-4 py-3">
+      <h4 className="text-sm font-medium text-foreground">{title}</h4>
+      {note && <p className="text-xs text-muted-foreground">{note}</p>}
+    </div>
+  );
+}
+
+function TraceLink({ event, onTrace }: { event: IssueEvent; onTrace: (traceId: string, spanId?: string) => void }) {
+  if (!event.traceId) return null;
+  return (
+    <button
+      type="button"
+      onClick={() => onTrace(event.traceId, event.spanId)}
+      className="inline-flex items-center gap-1 text-xs text-foreground underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      data-testid={`obs-issue-trace-${event.traceId}`}
+    >
+      <ExternalLink className="h-3 w-3" aria-hidden="true" />
+      Open trace <span className="font-mono">{event.traceId.slice(0, 12)}</span>
+    </button>
+  );
+}
+
+function LatestEvent({ event, onTrace }: { event: IssueEvent; onTrace: (traceId: string, spanId?: string) => void }) {
+  return (
+    <div className="space-y-3 px-4 py-3">
+      <p className="whitespace-pre-wrap break-words font-mono text-xs text-foreground" data-testid="obs-issue-latest-message">
+        {event.message || "(no message)"}
+      </p>
+      <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+        {event.serviceVersion && <span className="font-mono">{event.serviceVersion}</span>}
+        {event.urlPath && <span className="font-mono">{event.urlPath}</span>}
+        {event.sessionId && <span>session <span className="font-mono">{event.sessionId.slice(0, 12)}</span></span>}
+        <TraceLink event={event} onTrace={onTrace} />
+      </p>
+      <AttributeTable title="Attributes" attributes={event.attributes} />
+    </div>
+  );
+}
+
+function Frames({ frames }: { frames: IssueFrame[] }) {
+  if (frames.length === 0) return <p className="px-4 py-3 text-xs text-muted-foreground">No stack was recorded for the latest event.</p>;
+  return (
+    <ol className="divide-y divide-border/40 font-mono text-xs">
+      {frames.map((frame, index) => (
+        <li
+          key={`${index}-${frame.file}-${frame.line}`}
+          className={cn("px-4 py-1.5", frame.inApp ? "text-foreground" : "text-muted-foreground")}
+          data-testid="obs-issue-frame"
+          data-in-app={frame.inApp}
+        >
+          {frameText(frame)}
+          {!frame.inApp && <span className="ml-2 font-sans text-2xs uppercase tracking-wide">library</span>}
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+function Versions({ detail }: { detail: IssueDetailModel }) {
+  if (detail.byVersion.length === 0) return <p className="px-4 py-3 text-xs text-muted-foreground">No events in the window.</p>;
+  return (
+    <table className="w-full text-xs">
+      <caption className="sr-only">Events and affected per version</caption>
+      <thead>
+        <tr className="border-b border-border text-left font-medium uppercase tracking-wide text-muted-foreground">
+          <th scope="col" className="px-4 py-1.5 font-medium">Version</th>
+          <th scope="col" className="px-4 py-1.5 text-right font-medium">Events</th>
+          <th scope="col" className="px-4 py-1.5 text-right font-medium">Affected</th>
+        </tr>
+      </thead>
+      <tbody>
+        {detail.byVersion.map((v) => (
+          <tr key={v.version} className="border-b border-border/50 last:border-b-0" data-testid={`obs-issue-version-${v.version}`}>
+            <th scope="row" className="px-4 py-1.5 text-left font-mono font-normal text-foreground">{v.version || "(unstamped)"}</th>
+            <td className="px-4 py-1.5 text-right tabular-nums">{formatCount(v.events)}</td>
+            <td className="px-4 py-1.5 text-right tabular-nums">{formatCount(v.affected)}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+function RecentEvents({ issueId, onTrace }: { issueId: string; onTrace: (traceId: string, spanId?: string) => void }) {
+  const events = useIssueEvents(issueId);
+  const rows = events.data?.pages.flatMap((page) => page.events) ?? [];
+  if (events.isLoading) return <ObsLoadingRows rows={3} testId="obs-issue-events-loading" />;
+  if (events.error && !events.data) return <p className="px-4 py-3 text-xs text-destructive">The events didn&apos;t load.</p>;
+  if (rows.length === 0) return <p className="px-4 py-3 text-xs text-muted-foreground">No events retained.</p>;
+  const now = Date.now();
+  return (
+    <div>
+      <ol className="divide-y divide-border/40">
+        {rows.map((event, index) => (
+          <li key={`${event.timeMs}-${event.traceId}-${index}`} className="space-y-0.5 px-4 py-2 text-xs" data-testid="obs-issue-event">
+            <p className="flex flex-wrap items-center gap-x-3 text-muted-foreground">
+              <span className="tabular-nums">{formatTimestamp(event.timeMs, now)}</span>
+              {event.serviceVersion && <span className="font-mono">{event.serviceVersion}</span>}
+              <TraceLink event={event} onTrace={onTrace} />
+            </p>
+            {event.message && <p className="truncate font-mono text-foreground">{event.message}</p>}
+          </li>
+        ))}
+      </ol>
+      {events.hasNextPage && (
+        <div className="border-t border-border/60 px-4 py-2">
+          <Button variant="ghost" size="sm" onClick={() => void events.fetchNextPage()} loading={events.isFetchingNextPage} data-testid="obs-issue-events-more">
+            Show older events
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}

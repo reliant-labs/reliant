@@ -8,15 +8,17 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { create } from "@bufbuild/protobuf";
+import { create, fromJson } from "@bufbuild/protobuf";
+
+import { GetReleaseHealthResponseSchema } from "@/gen/controlplane/services/observability/v1/observability_pb";
 import { DurationSchema, TimestampSchema } from "@bufbuild/protobuf/wkt";
 import { Code, ConnectError } from "@connectrpc/connect";
 
 import { msOf } from "../api";
-import { durationMs, getDoraMetrics, listReleases } from "../deliveryApi";
+import { durationMs, getDoraMetrics, getReleaseHealth, listReleases, mapReleaseHealth } from "../deliveryApi";
 import { deliveryErrorKind } from "../errors";
 
-const client = { listReleases: vi.fn(), getDoraMetrics: vi.fn() };
+const client = { listReleases: vi.fn(), getDoraMetrics: vi.fn(), getReleaseHealth: vi.fn() };
 vi.mock("../../client", () => ({ getControlPlaneClient: () => client }));
 
 const T = Date.UTC(2026, 9, 14, 12);
@@ -144,5 +146,71 @@ describe("the ledger's two refusals", () => {
     expect(deliveryErrorKind(new ConnectError("one or more environments are not available to this organization", Code.PermissionDenied))).toBe("env-unavailable");
     expect(deliveryErrorKind(new ConnectError("delivery insights are not available to machine credentials", Code.PermissionDenied))).toBe("denied");
     expect(deliveryErrorKind(new ConnectError("boom", Code.Unavailable))).toBe("unavailable");
+  });
+});
+
+describe("GetReleaseHealth", () => {
+  it("asks about one promotion in one environment with the width as a duration, and no window of its own", async () => {
+    client.getReleaseHealth.mockResolvedValue(fromJson(GetReleaseHealthResponseSchema, {}));
+    await getReleaseHealth({ orgId: "org-1", projectId: "shop", envIds: ["env-prod"], promotionId: "promo-9", windowMs: 30 * 60_000 });
+    const req = client.getReleaseHealth.mock.calls[0][0];
+    expect(req.scope).toMatchObject({ orgId: "org-1", projectId: "shop", envIds: ["env-prod"] });
+    // QueryScope.time_range is required by the validator and ignored by the rpc: a token minute.
+    expect(msOf(req.scope.timeRange.end) - msOf(req.scope.timeRange.start)).toBe(60_000);
+    expect(req.subject).toEqual({ case: "promotionId", value: "promo-9" });
+    expect(durationMs(req.window)).toBe(30 * 60_000);
+  });
+
+  it("leaves the subject and the width to the server when unset (the current promotion, 15 minutes)", async () => {
+    client.getReleaseHealth.mockResolvedValue(fromJson(GetReleaseHealthResponseSchema, {}));
+    await getReleaseHealth({ orgId: "org-1", envIds: ["env-prod"] });
+    const req = client.getReleaseHealth.mock.calls[0][0];
+    expect(req.subject).toEqual({ case: undefined });
+    expect(req.window).toBeUndefined();
+  });
+
+  it("maps protojson — int64 strings, enum names, not_evaluated — into the model", () => {
+    const h = mapReleaseHealth(
+      fromJson(GetReleaseHealthResponseSchema, {
+        promotion: { id: "promo-9", releaseVersion: "v1.8.3", gitCommit: "abc", promotedAt: new Date(T).toISOString(), previousReleaseVersion: "v1.8.2" },
+        before: { start: new Date(T - 900_000).toISOString(), end: new Date(T).toISOString() },
+        after: { start: new Date(T).toISOString(), end: new Date(T + 600_000).toISOString() },
+        afterComplete: false,
+        services: [{ service: "api", before: { requests: "10350", errorRate: 0.004, p50Ms: 41, p95Ms: 118, p99Ms: 240 }, after: { requests: "10890", errorRate: 0.016, p95Ms: 171 }, versionShare: 0.97 }],
+        newIssues: [{ id: "iss-1", status: "ISSUE_STATUS_NEW", events: "38" }],
+        regressedIssues: [{ id: "iss-2", status: "ISSUE_STATUS_REGRESSED" }],
+        firingAlerts: [{ rule: "HighErrorRate", fingerprint: "f", firingAt: new Date(T + 60_000).toISOString(), labels: { service: "api" } }],
+        workloadFindings: [{ workload: "api", restarts: "2", lastTerminatedReason: "OOMKilled" }],
+        verdict: "RELEASE_VERDICT_INCONCLUSIVE",
+        findings: [{ code: "RELEASE_FINDING_CODE_LATENCY", service: "api", value: 1.45, threshold: 1.25, policy: "warn", message: "slower" }],
+        thresholds: [{ name: "max_p95_ratio", value: "1.25", source: "default" }],
+        notEvaluated: ["alert_firing", "new_issue", "some_future_code"],
+      })
+    );
+    expect(h.promotion).toEqual({ promotionId: "promo-9", version: "v1.8.3", gitCommit: "abc", promotedAtMs: T, previousVersion: "v1.8.2" });
+    expect(h.before).toEqual({ startMs: T - 900_000, endMs: T });
+    expect(h.after).toEqual({ startMs: T, endMs: T + 600_000 });
+    expect(h.afterComplete).toBe(false);
+    expect(h.services[0]).toEqual({
+      service: "api",
+      before: { requests: 10350, errorRate: 0.004, p50Ms: 41, p95Ms: 118, p99Ms: 240 },
+      after: { requests: 10890, errorRate: 0.016, p50Ms: 0, p95Ms: 171, p99Ms: 0 },
+      versionShare: 0.97,
+    });
+    expect(h.newIssues[0]).toMatchObject({ id: "iss-1", status: "new", events: 38 });
+    expect(h.regressedIssues[0]).toMatchObject({ id: "iss-2", status: "regressed" });
+    expect(h.firingAlerts).toEqual([{ rule: "HighErrorRate", fingerprint: "f", firingAtMs: T + 60_000, labels: { service: "api" } }]);
+    expect(h.workloadFindings).toEqual([{ workload: "api", restarts: 2, lastTerminatedReason: "OOMKilled" }]);
+    expect(h.verdict).toBe("inconclusive");
+    expect(h.findings).toEqual([{ code: "latency", service: "api", value: 1.45, threshold: 1.25, policy: "warn", message: "slower" }]);
+    expect(h.thresholds).toEqual([{ name: "max_p95_ratio", value: "1.25", source: "default" }]);
+    // Kept raw, unknown codes included: a newer server's code is still something the PASS does not cover.
+    expect(h.notEvaluated).toEqual(["alert_firing", "new_issue", "some_future_code"]);
+  });
+
+  it("keeps an unset promotion, window and stats as null, and an unspecified verdict as unknown", () => {
+    const h = mapReleaseHealth(fromJson(GetReleaseHealthResponseSchema, { services: [{ service: "worker" }] }));
+    expect(h).toMatchObject({ promotion: null, before: null, after: null, verdict: "unknown", notEvaluated: [] });
+    expect(h.services[0]).toMatchObject({ before: null, after: null });
   });
 });

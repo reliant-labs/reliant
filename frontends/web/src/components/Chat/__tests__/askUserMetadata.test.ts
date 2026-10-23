@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { isAsyncAskUserInput, parseAskUserMetadata } from "../askUserUtils";
+import { askUserQuestionItemsFromInput, isAsyncAskUserInput, parseAskUserMetadata } from "../askUserUtils";
 
 describe("parseAskUserMetadata", () => {
   it("returns null for null/undefined/empty metadata", () => {
@@ -275,5 +275,31 @@ describe("isAsyncAskUserInput", () => {
   it("reads the flag inside the tool-meta envelope", () => {
     const inner = JSON.stringify({ blocking: true, questions: [] });
     expect(isAsyncAskUserInput({ __reliant_tool_meta__: {}, input: inner })).toBe(false);
+  });
+});
+
+describe("askUserQuestionItemsFromInput", () => {
+  const q = { question: "Which database?", options: [{ label: "Postgres", description: "" }] };
+  const want = [{ question: "Which database?", options: q.options, allowMultiple: false }];
+
+  it("reads every shape a model writes questions in", () => {
+    expect(askUserQuestionItemsFromInput({ questions: [q] })).toEqual(want);
+    // Prod, 2026-10-22: a JSON-encoded string, inside a JSON-string input.
+    expect(askUserQuestionItemsFromInput(JSON.stringify({ questions: JSON.stringify([q]) }))).toEqual(want);
+    expect(askUserQuestionItemsFromInput({ questions: q })).toEqual(want);
+    expect(askUserQuestionItemsFromInput({ __reliant_tool_meta__: {}, input: JSON.stringify({ questions: [q] }) })).toEqual(want);
+  });
+
+  it("falls back to the bare question text", () => {
+    const text = [{ question: "Which database?", options: [], allowMultiple: false }];
+    expect(askUserQuestionItemsFromInput({ questions: " Which database? " })).toEqual(text);
+    expect(askUserQuestionItemsFromInput({ question: "Which database?" })).toEqual(text);
+  });
+
+  it("is null only when there is no question text at all", () => {
+    expect(askUserQuestionItemsFromInput(undefined)).toBeNull();
+    expect(askUserQuestionItemsFromInput("not json")).toBeNull();
+    expect(askUserQuestionItemsFromInput({ questions: 42 })).toBeNull();
+    expect(askUserQuestionItemsFromInput({ questions: "  " })).toBeNull();
   });
 });

@@ -19,8 +19,7 @@ import { ToolExecutionGroup } from "./ToolExecutionGroup";
 import { ToolExecutionCollapsibleGroup } from "./ToolExecutionCollapsibleGroup";
 import { isReadOnlyTool, isRequestMachineTool } from "../../lib/toolFormatters";
 import { RequestMachineCard, requestMachineReason } from "./tool-renderers/RequestMachineToolRenderer";
-import { AsyncQuestionCard } from "./AsyncQuestionCard";
-import { isAsyncAskUserInput } from "./askUserUtils";
+import { AskUserCard } from "./AskUserCard";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import { ErrorMessage } from "./ErrorMessage";
 import { MessageAttachments } from "./MessageAttachments";
@@ -526,10 +525,9 @@ function ChatMessageComponent({
       },
     );
 
-    // Filter out blocking ask_user tool calls — they render via the composer's
-    // QuestionPrompt, not as tool cards. An async one stays: it renders as its
-    // own answerable card (AsyncQuestionCard), below.
-    return result.filter((exec) => exec.call.name !== "ask_user" || isAsyncAskUserInput(exec.call.input));
+    // Every ask_user call stays, blocking or not: it renders as its own card
+    // (AskUserCard), below, and never as nothing.
+    return result;
   }, [parsed.toolExecutions, chatId, toolCallStates, getApprovalStatus]);
 
   // Index the enhanced executions by their tool-call id so each ordered
@@ -568,11 +566,19 @@ function ChatMessageComponent({
 
   const hasAttachments = Boolean(message.attachments?.length);
 
-  // Hide messages that have no useful content at all
-  // When hideToolExecutions is true, treat tool executions as if they don't exist
+  // Hide messages that have no useful content at all.
+  // When hideToolExecutions is true, treat tool executions as if they don't
+  // exist — except the questions to the user (ask_user, request_machine),
+  // whose cards render whatever the tool rows show.
+  const hasUserCards = Boolean(
+    enhancedToolExecutions?.some(
+      (exec) => exec.call.name === "ask_user" || isRequestMachineTool(exec.call.name),
+    ),
+  );
   const hasVisibleContent =
     parsed.text ||
     hasAttachments ||
+    hasUserCards ||
     (!hideToolExecutions &&
       enhancedToolExecutions &&
       enhancedToolExecutions.length > 0);
@@ -1102,20 +1108,20 @@ function ChatMessageComponent({
                     reason={requestMachineReason(exec.call.input)}
                   />
                 ));
-                // An async ask_user is a question to the user too, answered
-                // on its own card whatever the tool rows show.
-                const asyncQuestionCards = allRunExecutions
+                // An ask_user is a question to the user too, shown on its own
+                // card whatever the tool rows show.
+                const askUserCards = allRunExecutions
                   .filter((exec) => exec.call.name === "ask_user")
                   .map((exec) => (
-                    <AsyncQuestionCard
-                      key={`${message.id}-seg-${segIdx}-async-question-${exec.call.id}`}
+                    <AskUserCard
+                      key={`${message.id}-seg-${segIdx}-ask-user-${exec.call.id}`}
                       chatId={chatId || undefined}
                       toolCallId={exec.call.id}
                       input={exec.call.input}
                       finished={exec.result !== undefined}
                     />
                   ));
-                const userCards = [...machineRequestCards, ...asyncQuestionCards];
+                const userCards = [...machineRequestCards, ...askUserCards];
                 if (hideToolExecutions) {
                   return userCards.length > 0 ? (
                     <Fragment key={`${message.id}-seg-${segIdx}`}>{userCards}</Fragment>

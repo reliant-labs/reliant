@@ -70,8 +70,8 @@ describe("release markers follow the scope", () => {
   });
 });
 
-describe("before and after a promotion", () => {
-  it("opens from a marker, compares RED, versions and resources over equal windows, and goes back", async () => {
+describe("before and after a promotion (GetReleaseHealth)", () => {
+  it("opens from a marker, asks the server for the promotion, renders its FAIL verdict and findings, and goes back", async () => {
     const user = userEvent.setup();
     const onCall = vi.fn();
     const harness = renderPanel(createFixtureApi({ onCall }), { view: "overview" }, ENV_PLACE);
@@ -82,49 +82,81 @@ describe("before and after a promotion", () => {
 
     const compare = await screen.findByTestId("obs-compare");
     await waitFor(() => expect(compare).toHaveAttribute("data-state", "ready"));
+    expect(compare).toHaveAttribute("data-verdict", "fail");
     expect(screen.getByTestId("obs-compare-header")).toHaveTextContent("Before and after v1.8.3 in prod");
-    expect(screen.getByTestId("obs-compare-header")).toHaveTextContent("by Ada Lovelace");
     expect(screen.getByTestId("obs-compare-replaced")).toHaveTextContent("replaced v1.8.2");
-    expect(screen.getByTestId("obs-compare-windows")).toHaveAttribute("data-clamped", "none");
-    // No range picker: the windows are the comparison's own.
+    // No range picker: the windows are the server's.
     expect(screen.queryByTestId("obs-range")).not.toBeInTheDocument();
 
-    await waitFor(() => expect(screen.getByTestId("obs-compare-p95-api")).toHaveAttribute("data-movement", "up-bad"));
+    // One request: the promotion's environment and id, the default 15-minute width. No client window maths.
+    const [req] = callsOf(onCall, "GetReleaseHealth") as unknown as { envIds: string[]; promotionId: string; windowMs: number }[];
+    expect(req.envIds).toEqual(["env-prod"]);
+    expect(req.promotionId).toBe(harness.current().compare!.split("~").pop());
+    expect(req.windowMs).toBe(15 * 60_000);
+
+    expect(screen.getByTestId("obs-compare-verdict-title")).toHaveTextContent("This release made things worse");
+    const findings = screen.getAllByTestId("obs-compare-finding");
+    expect(findings.map((f) => f.getAttribute("data-code"))).toEqual(["error_rate", "new_issue", "regressed_issue", "alert_firing", "latency", "workload_restarts"]);
+    expect(findings[0]).toHaveTextContent("1.2% vs 0.5%");
+    expect(screen.getByTestId("obs-compare-p95-api")).toHaveAttribute("data-movement", "up-bad");
     expect(screen.getByTestId("obs-compare-p95-api")).toHaveTextContent("+45%");
-    expect(screen.getByTestId("obs-compare-errors-api")).toHaveAttribute("data-movement", "up-bad");
-    expect(screen.getByTestId("obs-compare-versions-after-api")).toHaveTextContent(/v1\.8\.3\s*97%/);
-    expect(screen.getByTestId("obs-compare-memory-api")).toHaveAttribute("data-movement", "up-bad");
-    expect(screen.getByTestId("obs-compare-workload-worker")).toBeInTheDocument();
+    expect(screen.getByTestId("obs-compare-share-api")).toHaveTextContent("97");
+    expect(screen.getByTestId("obs-compare-issue-iss-orders-deadline")).toHaveAttribute("data-kind", "new");
+    expect(screen.getByTestId("obs-compare-issue-iss-checkout-total")).toHaveAttribute("data-kind", "regressed");
+    expect(screen.getByTestId("obs-compare-alert-HighErrorRate")).toBeInTheDocument();
+    expect(screen.getByTestId("obs-compare-restarts-api")).toHaveTextContent("OOMKilled");
+    expect(screen.getByTestId("obs-compare-threshold-max_error_rate_increase")).toHaveTextContent("declared in the release shape");
+    expect(screen.queryByTestId("obs-compare-not-evaluated")).not.toBeInTheDocument();
 
-    // Every compare query: the promotion's environment, two 30-minute windows meeting at the promotion.
-    const panels = onCall.mock.calls.filter(([rpc, req]) => rpc === "QueryPanel" && String(req.panel.id).startsWith("compare-"));
-    expect(panels).toHaveLength(6);
-    const before = panels.find(([, req]) => req.panel.id === "compare-red-before")![1];
-    const after = panels.find(([, req]) => req.panel.id === "compare-red-after")![1];
-    expect(before.envIds).toEqual(["env-prod"]);
-    expect(before.window.endMs).toBe(after.window.startMs);
-    expect(after.window.endMs - after.window.startMs).toBe(30 * 60_000);
-    expect(before.window.endMs - before.window.startMs).toBe(30 * 60_000);
+    // Resources are still a panel query, over the server's own windows.
+    await waitFor(() => expect(screen.getByTestId("obs-compare-memory-api")).toHaveAttribute("data-movement", "up-bad"));
+    const panels = onCall.mock.calls.filter(([rpc, r]) => rpc === "QueryPanel" && String(r.panel.id).startsWith("compare-"));
+    expect(panels.map(([, r]) => r.panel.id).sort()).toEqual(["compare-resources-after", "compare-resources-before"]);
 
-    // An hour is longer than the release has run: both sides shrink to what has passed.
     await user.click(screen.getByTestId("obs-compare-window-1h"));
     expect(harness.current().cmpWindow).toBe("1h");
-    await waitFor(() => expect(screen.getByTestId("obs-compare-windows")).toHaveAttribute("data-clamped", "now"));
-    expect(screen.getByTestId("obs-compare-clamped")).toHaveTextContent("Only 40m has passed since the promotion");
+    await waitFor(() => expect(callsOf(onCall, "GetReleaseHealth").at(-1)).toMatchObject({ windowMs: 3_600_000 }));
 
     await user.click(screen.getByTestId("obs-compare-back"));
     expect(harness.current().compare).toBeUndefined();
     expect(await screen.findByTestId("obs-overview")).toBeInTheDocument();
   });
 
-  it("finds a rollback from its link, and stops the before side at the release it undid", async () => {
-    const rollback = fixtureLedger(Date.now()).find((p) => p.kind === "rollback")!;
-    renderPanel(createFixtureApi(), { view: "overview", compare: compareParam(rollback), cmpWindow: "6h" }, PROJECT_PLACE);
-    const header = await screen.findByTestId("obs-compare-header");
-    expect(header).toHaveTextContent("Before and after the rollback to v1.8.0 in prod");
-    expect(screen.getByTestId("obs-compare-replaced")).toHaveTextContent("replaced v1.8.1");
-    expect(screen.getByTestId("obs-compare-windows")).toHaveAttribute("data-clamped", "previous");
-    expect(screen.getByTestId("obs-compare-clamped")).toHaveTextContent("v1.8.1 had been promoted only 3h earlier");
+  it("links an issue the release opened into Errors", async () => {
+    const user = userEvent.setup();
+    const promo = fixtureLedger(Date.now()).filter((p) => p.envId === "env-prod").at(-1)!;
+    const harness = renderPanel(createFixtureApi(), { view: "overview", compare: compareParam(promo) }, ENV_PLACE);
+    await user.click(await screen.findByTestId("obs-compare-issue-open-iss-orders-deadline"));
+    expect(harness.current()).toMatchObject({ view: "errors", issue: "iss-orders-deadline" });
+    expect(harness.current().compare).toBeUndefined();
+    expect(await screen.findByTestId("obs-issue")).toBeInTheDocument();
+  });
+
+  it.each([
+    ["pass", "No regression found"],
+    ["inconclusive", "Not proven either way"],
+  ] as const)("renders a %s verdict", async (health, title) => {
+    const promo = fixtureLedger(Date.now()).filter((p) => p.envId === "env-prod").at(-1)!;
+    renderPanel(createFixtureApi({ health }), { view: "overview", compare: compareParam(promo) }, ENV_PLACE);
+    expect(await screen.findByTestId("obs-compare-verdict-title")).toHaveTextContent(title);
+    expect(screen.getByTestId("obs-compare-verdict")).toHaveAttribute("data-verdict", health);
+    if (health === "inconclusive") expect(screen.getByTestId("obs-compare-open")).toBeInTheDocument();
+  });
+
+  it("says what a PASS does not cover (not_evaluated)", async () => {
+    const promo = fixtureLedger(Date.now()).filter((p) => p.envId === "env-prod").at(-1)!;
+    renderPanel(createFixtureApi({ health: "not-evaluated" }), { view: "overview", compare: compareParam(promo) }, ENV_PLACE);
+    const note = await screen.findByTestId("obs-compare-not-evaluated");
+    expect(note).toHaveTextContent("Not checked: Firing alerts, New issues, Regressed issues");
+    expect(note).toHaveTextContent("the pass doesn't cover them");
+    expect(screen.getByTestId("obs-compare-issues-empty")).toHaveTextContent("Not checked");
+  });
+
+  it("explains an older control plane inline, not as an error page", async () => {
+    const promo = fixtureLedger(Date.now()).filter((p) => p.envId === "env-prod").at(-1)!;
+    renderPanel(createFixtureApi({ health: "unimplemented" }), { view: "overview", compare: compareParam(promo) }, ENV_PLACE);
+    expect(await screen.findByTestId("obs-compare-unavailable")).toHaveTextContent("Release health isn't available on this control plane");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
   it("says so when the promotion is not in the ledger", async () => {
@@ -132,4 +164,3 @@ describe("before and after a promotion", () => {
     expect(await screen.findByTestId("obs-compare-not-found")).toBeInTheDocument();
   });
 });
-

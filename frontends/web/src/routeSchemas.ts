@@ -14,11 +14,12 @@
 import { z } from "zod";
 import { ONBOARDING_STEP_IDS } from "./components/Onboarding/constants";
 import type { LaunchPlan } from "./components/OnboardingFlow/types";
-import { COMPARE_WINDOWS } from "./components/Forge/Observability/deliveryScope";
 import { COMPARE_MODES, REFRESH_INTERVALS } from "./components/Forge/Observability/Dashboards/dashboardModel";
 import { RELEASE_TABS, STATUS_FILTERS } from "./components/Forge/Releases/releaseModel";
 import { OVERVIEW_KIND_FILTERS, OVERVIEW_STATUS_FILTERS, WORKLOAD_TABS } from "./components/Forge/Workloads/workloadModel";
 import { ALERTS_TABS, OBS_VIEWS, type ObsSearch } from "./components/Forge/Observability/obsSearch";
+import { HEALTH_WINDOWS } from "./services/controlPlane/observability/deliveryTypes";
+import { ISSUE_PLATFORMS, ISSUE_SORTS } from "./services/controlPlane/observability/issuesTypes";
 import { RANGE_PRESETS } from "./services/controlPlane/observability/window";
 
 // The guided tour's "active step" lives in the URL as `?tour=<step-id>` —
@@ -527,7 +528,11 @@ export const obsSearchShape = {
   alerts: z.enum(ALERTS_TABS).optional().catch(undefined),
   rule: z.string().optional().catch(undefined),
   compare: z.string().optional().catch(undefined),
-  cmpWindow: z.enum(COMPARE_WINDOWS).optional().catch(undefined),
+  cmpWindow: z.enum(HEALTH_WINDOWS).optional().catch(undefined),
+  issue: z.string().optional().catch(undefined),
+  istatus: z.string().optional().catch(undefined),
+  platform: z.enum(ISSUE_PLATFORMS).optional().catch(undefined),
+  isort: z.enum(ISSUE_SORTS).optional().catch(undefined),
 };
 
 /** Every ObsSearch key has a schema entry and vice versa (the launchPlan drift guard, for the same reason). */
