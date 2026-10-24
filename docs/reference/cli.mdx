@@ -4789,7 +4789,7 @@ env is created with --bind `<name>`=`<binder>`. A frontend binds the same way
                           Restricted profile)
   --bind api=cluster      run api on the env's cluster
   --bind web=hosted       serve the web frontend from the control plane's
-                          static hosting (it owns the bucket and the CDN)
+                          static hosting (it owns the bucket)
   --bind web=bucket       publish the web frontend to your own bucket
 
 Examples:
@@ -8076,6 +8076,11 @@ Grouped errors: what is failing, how often, since which release
 List the env's error issues: ERROR logs grouped by fingerprint (sfp1), with how
 often each fired, how many traces it touched and when. [env] defaults to dev.
 
+--source `<name>` lists the issues of an issue source instead: records of any
+level that carry issue.source=`<name>` (observe.IssueSource), such as the reports
+agents file (--source llm_bug_report). They are grouped the same way, never
+count as errors, and are listed only when asked for.
+
 On a hosted env the control plane keeps the issues, so they have a status
 (new, unresolved, resolved, regressed, ignored) that survives log retention, and
 --since-release / --since-deploy ask "what did this release open". On a local
@@ -8086,6 +8091,7 @@ issue is unresolved, and the counts are those of the range.
   cli forge obs issues prod --status regressed
   cli forge obs issues prod --since-release v1.4.0   # first seen in that release
   cli forge obs issues dev --service api --sort events
+  cli forge obs issues prod --source llm_bug_report  # agent-filed bug reports
 
 JSON schema forge.obs.issues/v1. --fields takes dotted paths of:
   issues
@@ -8105,6 +8111,7 @@ JSON schema forge.obs.issues/v1. --fields takes dotted paths of:
   issues.resolved_at
   issues.resolved_version
   issues.service
+  issues.source
   issues.status
   issues.title
   query_mode
@@ -8146,6 +8153,7 @@ reliant forge obs issues [env] [flags]
 | `--since-deploy` | `string` | - | only issues first seen at or after this promotion id (hosted env) |
 | `--since-release` | `string` | - | only issues first seen in this release version (hosted env) |
 | `--sort` | `string` | `last` | last | first | events |
+| `--source` | `string` | - | list the issues of this issue source (issue.source) instead of errors, e.g. llm_bug_report |
 | `--status` | `stringArray` | `[]` | only issues in this state: new, unresolved, resolved, regressed, ignored (repeatable; default the open ones) |
 | `--to` | `string` | - | range end, RFC 3339 (default now) |
 
