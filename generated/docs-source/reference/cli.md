@@ -39,6 +39,9 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant db migrate force`](#reliant-db-migrate-force) | Clear a dirty migration state by recording a version without running SQL |
 | [`reliant db migrate status`](#reliant-db-migrate-status) | Preview what `db migrate up` would do, changing nothing |
 | [`reliant db migrate up`](#reliant-db-migrate-up) | Apply every pending migration |
+| [`reliant db vault`](#reliant-db-vault) | Rotate the credential vault's key-encryption key |
+| [`reliant db vault rewrap`](#reliant-db-vault-rewrap) | Re-wrap every data key under the keyring's primary KEK |
+| [`reliant db vault verify`](#reliant-db-vault-verify) | Prove every data key is wrapped under the primary KEK and opens |
 | [`reliant forge`](#reliant-forge) | Build, run and ship static sites, SPAs, web/mobile apps and APIs, LLM-first |
 | [`reliant forge api`](#reliant-forge-api) | Inspect and exercise Connect RPC endpoints over plain HTTP+JSON |
 | [`reliant forge api curl`](#reliant-forge-api-curl) | Print a copy-pasteable curl command for a Connect RPC method |
@@ -788,6 +791,7 @@ reliant db
 | Command | Description |
 |---------|-------------|
 | [`migrate`](#reliant-db-migrate) | Manage database migrations |
+| [`vault`](#reliant-db-vault) | Rotate the credential vault's key-encryption key |
 
 ---
 
@@ -872,6 +876,79 @@ nothing applied. `db migrate status` previews what `up` will do.
 
 ```
 reliant db migrate up
+```
+
+---
+
+### reliant db vault
+
+Rotate the credential vault's key-encryption key
+
+Rotate the key-encryption key (KEK) in RELIANT_VAULT_KEY.
+
+The KEK wraps one data key per user; the data keys seal the credentials. A
+rotation re-wraps the data keys and leaves every sealed value as it is:
+
+  1. Set RELIANT_VAULT_KEY to "<new-id>:<new>,<old-id>:<old>" on every server
+     and roll them, so the new KEK is primary and the old one still unwraps.
+  2. `reliant db vault rewrap` moves every data key onto the new KEK.
+  3. `reliant db vault verify` proves none still needs the old KEK.
+  4. Set RELIANT_VAULT_KEY to "<new-id>:<new>", roll the servers, and run
+     `verify` again under it. Only then destroy the old key.
+
+```
+reliant db vault
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`rewrap`](#reliant-db-vault-rewrap) | Re-wrap every data key under the keyring's primary KEK |
+| [`verify`](#reliant-db-vault-verify) | Prove every data key is wrapped under the primary KEK and opens |
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--db-driver` | `string` | `postgres` | Database driver (postgres) [env: DATABASE_DRIVER] |
+
+---
+
+#### reliant db vault rewrap
+
+Re-wrap every data key under the keyring's primary KEK
+
+Re-wrap every stored data key under RELIANT_VAULT_KEY's primary (first)
+KEK, in one transaction. The keyring must still hold every KEK a data key is
+wrapped under; a key that does not open fails the run and nothing is written.
+Keys already on the primary are skipped, so a rerun is a no-op.
+
+--dry-run opens every data key and reports what would move, writing nothing.
+
+```
+reliant db vault rewrap [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--dry-run` | `bool` | - | Open every data key and report what would move; write nothing |
+
+---
+
+#### reliant db vault verify
+
+Prove every data key is wrapped under the primary KEK and opens
+
+Read every stored data key in one READ ONLY transaction and check it is
+wrapped under RELIANT_VAULT_KEY's primary KEK and opens under it. Exits
+non-zero, naming the first offending key id, otherwise. When it passes, every
+other KEK in the keyring can be dropped.
+
+```
+reliant db vault verify
 ```
 
 ---
