@@ -32229,12 +32229,13 @@
           "ServerStreaming": false,
           "AuthRequired": false,
           "Errors": null,
+          "NoSideEffects": true,
           "InputTypeFQ": "reliant.v1.HealthRequest",
           "OutputTypeFQ": "reliant.v1.HealthResponse",
           "InputProtoFile": "reliant/v1/system.proto",
           "OutputProtoFile": "reliant/v1/system.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": false
           }
         },
         {
@@ -32245,12 +32246,13 @@
           "ServerStreaming": false,
           "AuthRequired": false,
           "Errors": null,
+          "NoSideEffects": true,
           "InputTypeFQ": "reliant.v1.ReadyRequest",
           "OutputTypeFQ": "reliant.v1.ReadyResponse",
           "InputProtoFile": "reliant/v1/system.proto",
           "OutputProtoFile": "reliant/v1/system.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": false
           }
         },
         {
@@ -32261,12 +32263,13 @@
           "ServerStreaming": false,
           "AuthRequired": false,
           "Errors": null,
+          "NoSideEffects": true,
           "InputTypeFQ": "reliant.v1.InfoRequest",
           "OutputTypeFQ": "reliant.v1.InfoResponse",
           "InputProtoFile": "reliant/v1/system.proto",
           "OutputProtoFile": "reliant/v1/system.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": false
           }
         },
         {
@@ -32277,12 +32280,13 @@
           "ServerStreaming": false,
           "AuthRequired": false,
           "Errors": null,
+          "NoSideEffects": true,
           "InputTypeFQ": "reliant.v1.VersionRequest",
           "OutputTypeFQ": "reliant.v1.VersionResponse",
           "InputProtoFile": "reliant/v1/system.proto",
           "OutputProtoFile": "reliant/v1/system.proto",
           "Activity": {
-            "Mutating": true
+            "Mutating": false
           }
         },
         {
@@ -39951,7 +39955,7 @@
     "reliant/v1/scenario.proto": "5be8a10f590bf6a518a4963e7ea5e9a2f847fa5d8f55a50ea07ee55e940e0a1b",
     "reliant/v1/settings.proto": "8e3021e862f33d2c381f0a96d89124d946eeea71563d5d9cb3218e5b805645c4",
     "reliant/v1/streaming.proto": "d2cd468dc58d6482db006c4c49c80c11302cc79f02f375461fd3c850d60cd3fa",
-    "reliant/v1/system.proto": "3d29b58d13060c34785bf626914244519786b34cf50e1871607c01f1b40e9599",
+    "reliant/v1/system.proto": "7a9eb1bc4d6a322cbb907ec1843f74815c9a10d01b3d2ee305aa945b4c48d666",
     "reliant/v1/task.proto": "9f4ad68ce4b0959f5f0028e98402bb86695b3a2c61cba037c478586d1c0aef5a",
     "reliant/v1/terminal.proto": "877157ed3b8127ca00b1e49597143a8fdf73d100ebf7867118541c95c809a43f",
     "reliant/v1/token.proto": "df7f634505ef8d0da2882feb4fe31865d541b2593df0c069159f2b6440e5f63e",

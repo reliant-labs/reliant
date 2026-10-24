@@ -11,24 +11,32 @@ option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 //
 // Every rpc here is reachable without credentials (auth_required: false):
 // probes and the sign-in flow run before a caller can hold a token.
+//
+// Health, Ready, Info and Version only read, and say so with
+// NO_SIDE_EFFECTS: forge then generates useQuery hooks for them (their names
+// are nouns, not read verbs), and Connect clients may retry them.
 service SystemService {
   // Health returns the health status of the service
   rpc Health(HealthRequest) returns (HealthResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: false};
   }
 
   // Ready returns the readiness status of the service
   rpc Ready(ReadyRequest) returns (ReadyResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: false};
   }
 
   // Info returns general API information including version, build info, and worktree
   rpc Info(InfoRequest) returns (InfoResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: false};
   }
 
   // Version returns detailed version information
   rpc Version(VersionRequest) returns (VersionResponse) {
+    option idempotency_level = NO_SIDE_EFFECTS;
     option (forge.v1.method) = {auth_required: false};
   }
 

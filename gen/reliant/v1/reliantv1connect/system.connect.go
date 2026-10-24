@@ -95,24 +95,28 @@ func NewSystemServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			httpClient,
 			baseURL+SystemServiceHealthProcedure,
 			connect.WithSchema(systemServiceMethods.ByName("Health")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		ready: connect.NewClient[v1.ReadyRequest, v1.ReadyResponse](
 			httpClient,
 			baseURL+SystemServiceReadyProcedure,
 			connect.WithSchema(systemServiceMethods.ByName("Ready")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		info: connect.NewClient[v1.InfoRequest, v1.InfoResponse](
 			httpClient,
 			baseURL+SystemServiceInfoProcedure,
 			connect.WithSchema(systemServiceMethods.ByName("Info")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		version: connect.NewClient[v1.VersionRequest, v1.VersionResponse](
 			httpClient,
 			baseURL+SystemServiceVersionProcedure,
 			connect.WithSchema(systemServiceMethods.ByName("Version")),
+			connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 			connect.WithClientOptions(opts...),
 		),
 		startOAuthSignIn: connect.NewClient[v1.StartOAuthSignInRequest, v1.StartOAuthSignInResponse](
@@ -228,24 +232,28 @@ func NewSystemServiceHandler(svc SystemServiceHandler, opts ...connect.HandlerOp
 		SystemServiceHealthProcedure,
 		svc.Health,
 		connect.WithSchema(systemServiceMethods.ByName("Health")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	systemServiceReadyHandler := connect.NewUnaryHandler(
 		SystemServiceReadyProcedure,
 		svc.Ready,
 		connect.WithSchema(systemServiceMethods.ByName("Ready")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	systemServiceInfoHandler := connect.NewUnaryHandler(
 		SystemServiceInfoProcedure,
 		svc.Info,
 		connect.WithSchema(systemServiceMethods.ByName("Info")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	systemServiceVersionHandler := connect.NewUnaryHandler(
 		SystemServiceVersionProcedure,
 		svc.Version,
 		connect.WithSchema(systemServiceMethods.ByName("Version")),
+		connect.WithIdempotency(connect.IdempotencyNoSideEffects),
 		connect.WithHandlerOptions(opts...),
 	)
 	systemServiceStartOAuthSignInHandler := connect.NewUnaryHandler(
