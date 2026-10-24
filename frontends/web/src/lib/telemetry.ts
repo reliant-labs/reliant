@@ -30,6 +30,7 @@ import { appBuild } from "./appBuild";
 import { isDev } from "./constants";
 import { reportFirstLaunch } from "./appFirstLaunch";
 import { clickstackEnabled } from "./telemetrySinks";
+import { SERVICE_NAME } from "./otel_gen";
 
 const PRERELEASE_REGEX = /-rc\.|rc[0-9]+|-beta\.|beta[0-9]+|-alpha\.|alpha[0-9]+/i;
 
@@ -114,7 +115,11 @@ export function buildTelemetryConfig(
 ): BrowserTelemetryConfig {
   const { env } = input;
   return {
-    serviceName: "reliant-web",
+    // forge's derivation for this frontend ("<project>-<frontend>"), the
+    // service.name the generated dashboards and alert defaults filter on
+    // (deploy/observability/). A literal here drifted from it once, and every
+    // web alert matched nothing.
+    serviceName: SERVICE_NAME,
     serviceVersion: env.VITE_APP_VERSION || input.buildVersion,
     environment: input.prerelease ? "prerelease" : "prod",
     endpoint: env.VITE_OTEL_ENDPOINT,
