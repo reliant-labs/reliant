@@ -29,39 +29,43 @@ It holds **one** host heavy slot for the whole run (`forge slot run`), and every
 phase nests inside that slot. It prints one row per phase:
 
 ```
-### merge-gate: PASSED
+### merge-gate: PASSED          (#1427's own merge, load ~50 on 32 CPUs)
 
 | phase | result | seconds | started +s |
 |---|---|---|---|
-| heavy slot (queue) | - | 41 | - |
-| plan | PASS | 14 | 0 |
-| generate | PASS | 70 | 14 |
-| conventions | PASS | 11 | 84 |
-| docs | PASS | 58 | 95 |
-| build | PASS | 48 | 153 |
-| test | PASS | 96 | 153 |
-| lint | PASS | 61 | 153 |
-
-wall: 249s in the slot, after 41s queued for it; diff base 8dec9aeb
+| heavy slot (queue) | - | 86 | - |
+| plan | PASS | 28 | 1 |
+| npm-tools-protoc-gen-es | PASS | 10 | 32 |
+| generate | PASS | 352 | 49 |
+| docs | PASS | 136 | 58 |
+| build | PASS | 132 | 58 |
+| test | PASS | 261 | 58 |
+| lint | PASS | 271 | 156 |
 ```
 
 The first row is the time spent **queued** for a slot. That cost comes from the
 host, not from the gate: other agents' builds hold the slots. The five-minute
 target is measured on the `wall:` line, which starts once the slot is held.
 
-The phases run in this order:
+The phases:
 
 1. **plan**: `tools/test-affected plan -json`, which decides everything below.
 2. **generate** runs only if the plan's forge-generate lane is selected. It runs
    `task generate:forge`, the same command `task generate:check` runs, followed
-   by `forge lint --conventions`. Your branch must arrive with its generated
+   by `forge lint --conventions`. When every reason is Go code that a
+   `forge.yaml` generate hook's generator compiles, and nothing forge itself
+   reads changed (the plan's `hooks_only`), it runs only those hooks' commands.
+   That covers most Go-only PRs, because `toolconfiggen` compiles half the
+   module. It is the same check in seconds instead of the 170-350s a whole
+   forge generate takes on this host. What it does not do is forge's
+   `go mod tidy`; the release gate runs the whole generate. Your branch must arrive with its generated
    output committed. In the merge queue's `--amend` mode, a regenerate that
    changes only generated paths is folded into the squash. That happens when
    merging main left a generated file a step behind. A regenerate that changes
    any other file fails the gate.
 3. **docs** runs only if the plan's docs-generate lane is selected. It runs
    `task generate:docs` under the same no-op rule.
-4. **build**, **test**, **lint** and **migsafety** then run at the same time:
+4. **build**, **test**, **lint** and **migsafety** run alongside them:
    - **build** is `go build ./...`.
    - **test** is `tools/test-affected run -lanes go,web,electron`.
    - **lint** is `forge lint --scope <every changed directory>`, or unscoped
@@ -70,8 +74,12 @@ The phases run in this order:
    - **migsafety** is `forge lint --migration-safety`, and runs only when a
      migration changed.
 
-generate and docs come first because they can change the tree that the later
-phases judge.
+generate and docs run in scratch checkouts of HEAD, at the same time as the
+other phases. A regenerate that changes only generated paths (`--amend`) is
+copied back and amended after every phase has finished. If that regenerated
+code, build and test run again on the amended tree. A dirty tree (a local run
+with uncommitted edits) runs the generators in place, first, because a scratch
+checkout of HEAD would not see your edits.
 
 ### What the merge gate does not catch
 

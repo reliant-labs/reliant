@@ -135,9 +135,24 @@ root=$(pwd)
 # gen_forge <checkout>: task generate:forge, exactly as `task generate:check`
 # runs it (the pinned forge, FORGE_BIN when set; the pinned protoc-gen-es;
 # go.mod's toolchain), then the proto-convention lane it pairs with.
+#
+# When the plan says hooks_only (every reason is Go that a forge.yaml generate
+# hook's generator compiles, and nothing forge itself reads changed), only
+# those hooks can write anything different: run just their commands, under
+# the same toolchain pin, instead of the whole forge generate (seconds, not
+# minutes). The release gate still runs the whole one.
 gen_forge() {
-  local wt=$1 b
+  local wt=$1 b h tc
   b=$(cd "$wt" && snapshot)
+  if [ "$hooks_only" = true ]; then
+    tc=$(sed -n 's/^toolchain //p' go.mod); [ -n "$tc" ] || tc="go$(sed -n 's/^go //p' go.mod)"
+    for h in $hooks; do
+      echo "==> generate hook $h: $(jq -r --arg h "$h" '.forge_generate.hook_commands[$h] | join(" ")' "$L/plan.json")"
+      (cd "$wt" && jq -r --arg h "$h" '.forge_generate.hook_commands[$h][]' "$L/plan.json" | tr '\n' '\0' | xargs -0 env GOWORK=off GOTOOLCHAIN="$tc") || return 1
+    done
+    judge generate "$b" "$wt"
+    return
+  fi
   (cd "$wt" && task generate:forge) || return 1
   judge generate "$b" "$wt" || return 1
   (cd "$wt" && "${forge[@]}" lint --no-fix --conventions) || { echo "forge lint --conventions failed"; return 1; }
@@ -155,14 +170,15 @@ sed -n '/^{/,$p' "$L/plan.log" >"$L/plan.json"
 j() { jq -r "$1" "$L/plan.json"; }
 gofull=$(j .go.full) ngo=$(j '.go.packages|length') webfull=$(j .web.full) nweb=$(j '.web.tests|length')
 elec=$(j .electron.full) fgen=$(j .forge_generate.full) dgen=$(j .docs_generate.full)
-[ "$regen" = 1 ] && fgen=true
-notes+=("plan: go $([ "$gofull" = true ] && echo FULL || echo "$ngo package(s)"); web $([ "$webfull" = true ] && echo FULL || echo "$nweb file(s)"); electron $elec; forge-generate $fgen; docs-generate $dgen")
+hooks_only=$(j '.forge_generate.hooks_only // false') hooks=$(j '(.forge_generate.hooks // []) | join(" ")')
+[ "$regen" = 1 ] && { fgen=true; hooks_only=false; }
+notes+=("plan: go $([ "$gofull" = true ] && echo FULL || echo "$ngo package(s)"); web $([ "$webfull" = true ] && echo FULL || echo "$nweb file(s)"); electron $elec; forge-generate $fgen$([ "$hooks_only" = true ] && echo " (hooks only: $hooks)"); docs-generate $dgen")
 
 # ── npm installs a selected lane needs ────────────────────────────────────
 need=()
 if [ "$webfull" = true ] || [ "$nweb" -gt 0 ]; then need+=(. frontends/web); fi
 if [ "$elec" = true ]; then need+=(. electron); fi
-if [ "$fgen" = true ]; then need+=(tools/protoc-gen-es); fi
+if [ "$fgen" = true ] && [ "$hooks_only" != true ]; then need+=(tools/protoc-gen-es); fi
 for d in $(printf '%s\n' "${need[@]}" | sort -u); do
   [ -f "$d/package-lock.json" ] || continue
   [ "$d/node_modules/.package-lock.json" -nt "$d/package-lock.json" ] && continue
@@ -201,7 +217,9 @@ if [ "$fail" = 0 ]; then
     notes+=("lint: unscoped (a pin moved)")
     phase lint "${forge[@]}" lint --quiet --no-fix --skip-frontends & pids+=($!)
   else
-    scope=$(echo "$files" | grep / | xargs -r -n1 dirname | sort -u | while read -r d; do [ -d "$d" ] && echo "$d"; done | paste -sd, -)
+    # One awk, not a dirname per file: forking hundreds of processes on a
+    # loaded host delayed lint's start by over a minute.
+    scope=$(echo "$files" | awk -F/ 'NF > 1 { NF--; print }' OFS=/ | sort -u | while read -r d; do [ -d "$d" ] && echo "$d"; done | paste -sd, -)
     if [ -n "$scope" ]; then
       notes+=("lint: --scope over $(echo "$scope" | tr ',' '\n' | wc -l | tr -d ' ') changed dir(s)")
       phase lint "${forge[@]}" lint --quiet --no-fix --skip-frontends --scope "$scope" & pids+=($!)

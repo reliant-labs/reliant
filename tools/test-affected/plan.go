@@ -53,8 +53,18 @@ type ElectronPlan struct {
 
 // ForgeGenPlan is the forge-generate lane (all or nothing): the pinned
 // `forge generate` must leave the tree as it found it.
+//
+// HooksOnly says every reason is Go code that a forge.yaml generate hook's
+// generator compiles, and nothing forge itself reads: then only Hooks (their
+// forge.yaml names) can write anything different, and running just those
+// hooks' commands is the same check as the whole `forge generate`, in seconds
+// instead of minutes. HookCommands is each hook's forge.yaml command (filled
+// in by plan, which reads forge.yaml; Classify stays a pure function).
 type ForgeGenPlan struct {
 	LaneFull
+	HooksOnly    bool                `json:"hooks_only,omitempty"`
+	Hooks        []string            `json:"hooks,omitempty"`
+	HookCommands map[string][]string `json:"hook_commands,omitempty"`
 }
 
 // DocGenPlan is the docs-generate lane (all or nothing): every docs
@@ -167,6 +177,12 @@ type classifier struct {
 	// hookGenDeps is the same for forge.yaml's generate hooks
 	// (forgeHookGenerators).
 	hookGenDeps map[string]string
+	// hookGens maps a package to EVERY hook generator that compiles it;
+	// hooks and hookWhy collect the hooks the diff reaches and the reasons
+	// that were only that (ForgeGenPlan.HooksOnly).
+	hookGens map[string][]string
+	hooks    map[string]bool
+	hookWhy  map[string]bool
 
 	web       *reasons // web test file (relative to frontends/web/) -> why
 	webTouch  bool     // a non-test web module changed
@@ -183,6 +199,8 @@ func Classify(changes []Change, g *Graph) *Plan {
 		web:         newReasons(),
 		docGenDeps:  generatorDeps(g, func(dir string) bool { return strings.HasPrefix(dir+"/", docGenDir) }),
 		hookGenDeps: generatorDeps(g, func(dir string) bool { return slices.Contains(forgeHookGenerators, dir) }),
+		hookGens:    generatorSets(g, func(dir string) bool { return slices.Contains(forgeHookGenerators, dir) }),
+		hooks:       map[string]bool{}, hookWhy: map[string]bool{},
 	}
 	for _, ch := range changes {
 		c.attribute(ch)
@@ -192,6 +210,15 @@ func Classify(changes []Change, g *Graph) *Plan {
 	c.selectWeb()
 	c.selectElectron()
 	c.pl.ForgeGen.LaneFull = laneFull(c.full[laneForgeGen])
+	if c.pl.ForgeGen.Full {
+		only := true
+		for _, r := range c.pl.ForgeGen.Reasons {
+			only = only && c.hookWhy[r]
+		}
+		if only && len(c.hooks) > 0 {
+			c.pl.ForgeGen.HooksOnly, c.pl.ForgeGen.Hooks = true, sortedKeys(c.hooks)
+		}
+	}
 	c.pl.DocGen.LaneFull = laneFull(c.full[laneDocGen])
 	return c.pl
 }
@@ -224,9 +251,12 @@ func (c *classifier) attribute(ch Change) {
 		}
 	}
 	c.attributeToReaders(ch)
-	if why, ok := c.forgeGenInput(ch); ok {
+	if why, hook, ok := c.forgeGenInput(ch); ok {
 		rep.Rules = append(rep.Rules, "forge-input")
 		c.full[laneForgeGen] = append(c.full[laneForgeGen], ch.Path+": "+why)
+		if hook {
+			c.hookWhy[ch.Path+": "+why] = true
+		}
 	}
 	if why, ok := c.docGenInput(ch); ok {
 		rep.Rules = append(rep.Rules, "docgen-input")
@@ -280,6 +310,25 @@ func generatorDeps(g *Graph, isGen func(dir string) bool) map[string]string {
 	return deps
 }
 
+// generatorSets is generatorDeps keeping EVERY generator that compiles a
+// package, not only the first.
+func generatorSets(g *Graph, isGen func(dir string) bool) map[string][]string {
+	sets := map[string][]string{}
+	for _, dir := range sortedKeys(g.DirPkg) {
+		if !isGen(dir) {
+			continue
+		}
+		gen := g.DirPkg[dir]
+		sets[gen] = append(sets[gen], dir)
+		for _, p := range sortedKeys(g.BuildDeps[gen]) {
+			if !slices.Contains(sets[p], dir) {
+				sets[p] = append(sets[p], dir)
+			}
+		}
+	}
+	return sets
+}
+
 // docGenInput reports whether a docs generator reads or writes the file, and
 // why: a path in docGenPaths, built code (or an embedded file) of a package a
 // generator compiles, or a .proto whose generated package one compiles.
@@ -291,40 +340,55 @@ func (c *classifier) docGenInput(ch Change) (string, bool) {
 }
 
 // forgeGenInput is docGenInput for the forge-generate lane: a path in
-// forgeInputs, or code a forge.yaml generate hook's generator compiles.
-func (c *classifier) forgeGenInput(ch Change) (string, bool) {
+// forgeInputs, or code a forge.yaml generate hook's generator compiles (hook
+// is true then, and every such hook is recorded in c.hooks).
+func (c *classifier) forgeGenInput(ch Change) (why string, hook, ok bool) {
 	if isForgeInput(ch.Path) {
-		return "forge generate reads or writes it", true
+		return "forge generate reads or writes it", false, true
 	}
-	return c.compiledBy(ch, c.hookGenDeps, "the forge.yaml generate hook ")
+	why, ok = c.compiledBy(ch, c.hookGenDeps, "the forge.yaml generate hook ")
+	if !ok {
+		return "", false, false
+	}
+	pkg, _ := c.compiledPkg(ch)
+	for _, gen := range c.hookGens[pkg] {
+		c.hooks[forgeHookOf[gen]] = true
+	}
+	return why, true, true
 }
 
 // compiledBy reports whether ch is built code (or an embedded file) of a
 // package in deps, or a .proto whose generated package is, naming the
 // generator that compiles it.
 func (c *classifier) compiledBy(ch Change, deps map[string]string, label string) (string, bool) {
-	compiled := func(pkg string) (string, bool) {
-		gen, ok := deps[pkg]
-		if !ok {
-			return "", false
-		}
-		return fmt.Sprintf("%s%s compiles %s", label, gen, rel(c.g.Module, pkg)), true
+	pkg, ok := c.compiledPkg(ch)
+	if !ok {
+		return "", false
 	}
+	gen, ok := deps[pkg]
+	if !ok {
+		return "", false
+	}
+	return fmt.Sprintf("%s%s compiles %s", label, gen, rel(c.g.Module, pkg)), true
+}
+
+// compiledPkg is the package whose BUILT code ch is: a code (or embedded)
+// file's package, a .proto's generated package, or the owner of a deleted Go
+// file's directory. A test or build-tagged file is in no generator's build.
+func (c *classifier) compiledPkg(ch Change) (string, bool) {
 	if fi, ok := c.g.Files[ch.Path]; ok {
 		if fi.Kind != KindCode {
-			return "", false // a test or a build-tagged file is not in a generator's build
+			return "", false
 		}
-		return compiled(fi.Pkg)
+		return fi.Pkg, true
 	}
 	if pkg, ok := protoToGen(c.g, ch.Path); ok {
-		return compiled(pkg)
+		return pkg, true
 	}
 	// A Go file the graph no longer lists (deleted or renamed) was code of the
 	// package owning its directory.
 	if strings.HasSuffix(ch.Path, ".go") && !strings.HasSuffix(ch.Path, "_test.go") {
-		if pkg, ok := ownerByDir(c.g, ch.Path); ok {
-			return compiled(pkg)
-		}
+		return ownerByDir(c.g, ch.Path)
 	}
 	return "", false
 }

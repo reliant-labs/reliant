@@ -70,6 +70,16 @@ var forgeHookGenerators = []string{
 	"tools/integrationgen",
 }
 
+// forgeHookOf names the forge.yaml hook that runs each generator
+// (ForgeGenPlan.Hooks). TestForgeHookGeneratorsMatchForgeYAML holds it to
+// forge.yaml too.
+var forgeHookOf = map[string]string{
+	"internal/workflow/yaml/cmd/yamlbindingsgen":          "yaml-bindings",
+	"internal/llm/tools/cmd/toolconfiggen":                "tool-catalog",
+	"internal/integrations/manifest/schema/cmd/schemagen": "manifest-schema",
+	"tools/integrationgen":                                "integrations",
+}
+
 func isForgeInput(p string) bool {
 	for _, pat := range forgeInputs {
 		if matchGlob(pat, p) {

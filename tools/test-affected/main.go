@@ -37,6 +37,8 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"gopkg.in/yaml.v3"
 )
 
 func main() {
@@ -185,7 +187,49 @@ func plan(ctx context.Context, root, baseFlag string, forceFull bool, whatIf []s
 	g.ElectronText = electronTexts(root)
 	pl := Classify(changes, g)
 	pl.Base, pl.Head = base, head
+	if pl.ForgeGen.HooksOnly {
+		cmds, err := hookCommands(root, pl.ForgeGen.Hooks)
+		if err != nil {
+			// Without the commands nobody can run hooks alone: the whole
+			// forge generate it is, as before.
+			pl.ForgeGen.HooksOnly, pl.ForgeGen.Hooks = false, nil
+		} else {
+			pl.ForgeGen.HookCommands = cmds
+		}
+	}
 	return pl, nil
+}
+
+// hookCommands reads each named hook's command from forge.yaml's
+// generate.hooks.
+func hookCommands(root string, names []string) (map[string][]string, error) {
+	b, err := os.ReadFile(filepath.Join(root, "forge.yaml"))
+	if err != nil {
+		return nil, err
+	}
+	var cfg struct {
+		Generate struct {
+			Hooks []struct {
+				Name    string   `yaml:"name"`
+				Command []string `yaml:"command"`
+			} `yaml:"hooks"`
+		} `yaml:"generate"`
+	}
+	if err := yaml.Unmarshal(b, &cfg); err != nil {
+		return nil, err
+	}
+	out := map[string][]string{}
+	for _, h := range cfg.Generate.Hooks {
+		if slices.Contains(names, h.Name) && len(h.Command) > 0 {
+			out[h.Name] = h.Command
+		}
+	}
+	for _, n := range names {
+		if _, ok := out[n]; !ok {
+			return nil, fmt.Errorf("forge.yaml has no generate hook %q", n)
+		}
+	}
+	return out, nil
 }
 
 func failSafe(base, head, why string) *Plan {
