@@ -4,6 +4,8 @@ package daemon
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -50,15 +52,27 @@ func simulateMachineSleep(t *testing.T) (sleep func(d time.Duration)) {
 // stopped within moments.
 func TestRunCommand_TimeoutHoldsAcrossMachineSleep(t *testing.T) {
 	sleep := simulateMachineSleep(t)
+	// The machine sleeps once the command is running, so after its deadline
+	// was armed. A fixed 300ms delay raced the start on a loaded host: when
+	// RunCommand had not reached StartExecDeadline by then, the deadline was
+	// read off the already-skewed clock, nothing slept past it, and the
+	// command ran its whole 20s.
+	dir := t.TempDir()
+	started := filepath.Join(dir, "started")
 	go func() {
-		time.Sleep(300 * time.Millisecond)
+		for {
+			if _, err := os.Stat(started); err == nil {
+				break
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
 		sleep(time.Hour)
 	}()
 
 	start := time.Now()
 	res, err := NewLocalClient().RunCommand(context.Background(), &RunCommandRequest{
-		Command:    "sleep 30; echo finished",
-		WorkingDir: t.TempDir(),
+		Command:    "touch started; sleep 30; echo finished",
+		WorkingDir: dir,
 		TimeoutMs:  20_000,
 	})
 	elapsed := time.Since(start)
