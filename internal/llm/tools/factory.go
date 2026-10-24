@@ -26,6 +26,11 @@ type ToolsOptions struct {
 	// tools (netguard.ForDeployment): a hosted deployment's shared worker must
 	// not reach its own network; a self-hosted one is the user's machine.
 	ControlPlaneURL string
+	// WebToolsPolicy, when set, is the web tools' dial policy outright, instead
+	// of one derived from ControlPlaneURL. The daemon sets it: it is not a
+	// deployment of the control plane, and what its fetch may reach is a
+	// decision about the machine it runs on, not about a hosted worker.
+	WebToolsPolicy *netguard.Policy
 	// Repo is the database the tools read and write. The factory is
 	// composition: it hands Repo to each tool as the role that tool declares
 	// (deps.go), through store(). Optional: nil means every database-backed
@@ -373,6 +378,9 @@ func (f *ToolsFactory) WebSearch() Tool {
 // netPolicy is the dial policy for tools that reach the network from this
 // process: hosted deployments may not dial their own network.
 func (f *ToolsFactory) netPolicy() netguard.Policy {
+	if f.opts.WebToolsPolicy != nil {
+		return *f.opts.WebToolsPolicy
+	}
 	return netguard.ForDeployment(f.opts.ControlPlaneURL)
 }
 
@@ -767,12 +775,13 @@ Usage notes:
 }
 
 // ListAvailableToolsForPlacement returns tool names that can run at the given location.
-// Tools with PlacementAny are included for all locations.
+// Tools with PlacementAny or PlacementPreferDaemon are included for all
+// locations (Placement.RunsAt).
 func (f *ToolsFactory) ListAvailableToolsForPlacement(location Placement) []string {
 	registry := GetToolRegistry()
 	var names []string
 	for _, def := range registry {
-		if def.Placement == location || def.Placement == PlacementAny || location == "" {
+		if location == "" || def.Placement.RunsAt(location) {
 			names = append(names, def.Name)
 		}
 	}
