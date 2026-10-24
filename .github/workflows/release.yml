@@ -433,8 +433,9 @@ jobs:
           else
             IDENTITY="$(bash scripts/release-identity.sh --commit "$COMMIT")"
           fi
-          echo "Stamping version=${IDENTITY} commit=${COMMIT}"
-          LDFLAGS="-s -w -X github.com/reliant-labs/reliant/internal/build.BuildType=production -X github.com/reliant-labs/reliant/internal/version.Version=${IDENTITY} -X github.com/reliant-labs/reliant/internal/version.Commit=${COMMIT}"
+          COMMIT_TIME="$(bash scripts/release-identity.sh --commit-time --commit "$COMMIT")"
+          echo "Stamping version=${IDENTITY} commit=${COMMIT} commit_time=${COMMIT_TIME}"
+          LDFLAGS="-s -w -X github.com/reliant-labs/reliant/internal/build.BuildType=production -X github.com/reliant-labs/reliant/internal/version.Version=${IDENTITY} -X github.com/reliant-labs/reliant/internal/version.Commit=${COMMIT} -X github.com/reliant-labs/reliant/internal/version.CommitTime=${COMMIT_TIME}"
 
           # Build-time defaults: the release's hosted endpoints, stamped into
           # pkg/config.BuildDefaults (forge's build-defaults layer, between the

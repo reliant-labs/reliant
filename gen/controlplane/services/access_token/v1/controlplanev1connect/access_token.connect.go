@@ -69,6 +69,9 @@ const (
 	// AccessTokenServiceUpdateMyTokenProcedure is the fully-qualified name of the AccessTokenService's
 	// UpdateMyToken RPC.
 	AccessTokenServiceUpdateMyTokenProcedure = "/controlplane.v1.AccessTokenService/UpdateMyToken"
+	// AccessTokenServiceResetDaemonScopePolicyProcedure is the fully-qualified name of the
+	// AccessTokenService's ResetDaemonScopePolicy RPC.
+	AccessTokenServiceResetDaemonScopePolicyProcedure = "/controlplane.v1.AccessTokenService/ResetDaemonScopePolicy"
 	// AccessTokenServiceExchangeTokenProcedure is the fully-qualified name of the AccessTokenService's
 	// ExchangeToken RPC.
 	AccessTokenServiceExchangeTokenProcedure = "/controlplane.v1.AccessTokenService/ExchangeToken"
@@ -104,21 +107,24 @@ type AccessTokenServiceClient interface {
 	// checked against the caller's org permissions exactly as a mint is, so
 	// editing is never a way to widen past what the user holds. Rotation is
 	// deliberately not an operation here — it is mint-new plus revoke-old.
+	// For a daemon-bound token a scope edit ONLY NARROWS, atomically persisting
+	// a per-daemon ceiling that also clips existing helpers and future renewals.
+	// Label-only edits and revocation leave that ceiling alone. To restore full
+	// authority explicitly ResetDaemonScopePolicy, then reissue via user login.
 	UpdateMyToken(context.Context, *connect.Request[v1.UpdateMyTokenRequest]) (*connect.Response[v1.UpdateMyTokenResponse], error)
-	// ExchangeToken is the ON-DEMAND ELEVATION a machine credential acting as a
-	// person uses to do what that person's role allows — without the credential
-	// itself being permanently widened. forge calls it when a command is refused
-	// for a missing scope (domain:read, cluster:manage), so a signed-in user
-	// never runs a second login.
-	//
-	// Caller: a machine credential that ACTS AS A USER and holds deploy:write
-	// (a `forge login` token, or one Reliant's credential helper minted). The
-	// granted scopes are the requested ones that are exchangeable AND that the
-	// acting user holds in the credential's org AT THIS MOMENT — so a demoted
-	// user's old token elevates to nothing. The result lives at most an hour and
-	// never outlives the caller, acts as the same user in the same org, and
-	// inherits the caller's binding: cluster:manage cannot ride a daemon binding,
-	// so a managed daemon's credential can never obtain it.
+	// ResetDaemonScopePolicy explicitly restores full user-granted defaults for
+	// FUTURE credentials of one owned daemon. User session only. Existing token
+	// scope sets are never widened: reissue through authenticated login afterwards.
+	// Renewal, label edits and token revocation never reset this durable policy.
+	ResetDaemonScopePolicy(context.Context, *connect.Request[v1.ResetDaemonScopePolicyRequest]) (*connect.Response[v1.ResetDaemonScopePolicyResponse], error)
+	// ExchangeToken attenuates a machine credential acting as a person to a
+	// short-lived helper. It NEVER widens: requested scopes must be explicitly
+	// held by the caller (not merely implied by write), exchangeable, and still
+	// held by the acting user in the credential's own org. A narrowed credential
+	// must be reissued through authenticated user login to regain permissions.
+	// Caller must hold deploy:write. The result lives at most an hour, never
+	// outlives the caller, and inherits its user, org and resource binding.
+	// All org capabilities may ride a daemon binding, including cluster:manage.
 	ExchangeToken(context.Context, *connect.Request[v1.ExchangeTokenRequest]) (*connect.Response[v1.ExchangeTokenResponse], error)
 	// ListOrgMemberGrants lists every member of the caller's org with the
 	// permissions they hold. Caller: a human session holding token:read.
@@ -184,6 +190,12 @@ func NewAccessTokenServiceClient(httpClient connect.HTTPClient, baseURL string, 
 			connect.WithSchema(accessTokenServiceMethods.ByName("UpdateMyToken")),
 			connect.WithClientOptions(opts...),
 		),
+		resetDaemonScopePolicy: connect.NewClient[v1.ResetDaemonScopePolicyRequest, v1.ResetDaemonScopePolicyResponse](
+			httpClient,
+			baseURL+AccessTokenServiceResetDaemonScopePolicyProcedure,
+			connect.WithSchema(accessTokenServiceMethods.ByName("ResetDaemonScopePolicy")),
+			connect.WithClientOptions(opts...),
+		),
 		exchangeToken: connect.NewClient[v1.ExchangeTokenRequest, v1.ExchangeTokenResponse](
 			httpClient,
 			baseURL+AccessTokenServiceExchangeTokenProcedure,
@@ -207,16 +219,17 @@ func NewAccessTokenServiceClient(httpClient connect.HTTPClient, baseURL string, 
 
 // accessTokenServiceClient implements AccessTokenServiceClient.
 type accessTokenServiceClient struct {
-	createToken           *connect.Client[v1.CreateTokenRequest, v1.CreateTokenResponse]
-	listTokens            *connect.Client[v1.ListTokensRequest, v1.ListTokensResponse]
-	revokeToken           *connect.Client[v1.RevokeTokenRequest, v1.RevokeTokenResponse]
-	createMyToken         *connect.Client[v1.CreateMyTokenRequest, v1.CreateMyTokenResponse]
-	listMyTokens          *connect.Client[v1.ListMyTokensRequest, v1.ListMyTokensResponse]
-	revokeMyToken         *connect.Client[v1.RevokeMyTokenRequest, v1.RevokeMyTokenResponse]
-	updateMyToken         *connect.Client[v1.UpdateMyTokenRequest, v1.UpdateMyTokenResponse]
-	exchangeToken         *connect.Client[v1.ExchangeTokenRequest, v1.ExchangeTokenResponse]
-	listOrgMemberGrants   *connect.Client[v1.ListOrgMemberGrantsRequest, v1.ListOrgMemberGrantsResponse]
-	updateOrgMemberGrants *connect.Client[v1.UpdateOrgMemberGrantsRequest, v1.UpdateOrgMemberGrantsResponse]
+	createToken            *connect.Client[v1.CreateTokenRequest, v1.CreateTokenResponse]
+	listTokens             *connect.Client[v1.ListTokensRequest, v1.ListTokensResponse]
+	revokeToken            *connect.Client[v1.RevokeTokenRequest, v1.RevokeTokenResponse]
+	createMyToken          *connect.Client[v1.CreateMyTokenRequest, v1.CreateMyTokenResponse]
+	listMyTokens           *connect.Client[v1.ListMyTokensRequest, v1.ListMyTokensResponse]
+	revokeMyToken          *connect.Client[v1.RevokeMyTokenRequest, v1.RevokeMyTokenResponse]
+	updateMyToken          *connect.Client[v1.UpdateMyTokenRequest, v1.UpdateMyTokenResponse]
+	resetDaemonScopePolicy *connect.Client[v1.ResetDaemonScopePolicyRequest, v1.ResetDaemonScopePolicyResponse]
+	exchangeToken          *connect.Client[v1.ExchangeTokenRequest, v1.ExchangeTokenResponse]
+	listOrgMemberGrants    *connect.Client[v1.ListOrgMemberGrantsRequest, v1.ListOrgMemberGrantsResponse]
+	updateOrgMemberGrants  *connect.Client[v1.UpdateOrgMemberGrantsRequest, v1.UpdateOrgMemberGrantsResponse]
 }
 
 // CreateToken calls controlplane.v1.AccessTokenService.CreateToken.
@@ -252,6 +265,11 @@ func (c *accessTokenServiceClient) RevokeMyToken(ctx context.Context, req *conne
 // UpdateMyToken calls controlplane.v1.AccessTokenService.UpdateMyToken.
 func (c *accessTokenServiceClient) UpdateMyToken(ctx context.Context, req *connect.Request[v1.UpdateMyTokenRequest]) (*connect.Response[v1.UpdateMyTokenResponse], error) {
 	return c.updateMyToken.CallUnary(ctx, req)
+}
+
+// ResetDaemonScopePolicy calls controlplane.v1.AccessTokenService.ResetDaemonScopePolicy.
+func (c *accessTokenServiceClient) ResetDaemonScopePolicy(ctx context.Context, req *connect.Request[v1.ResetDaemonScopePolicyRequest]) (*connect.Response[v1.ResetDaemonScopePolicyResponse], error) {
+	return c.resetDaemonScopePolicy.CallUnary(ctx, req)
 }
 
 // ExchangeToken calls controlplane.v1.AccessTokenService.ExchangeToken.
@@ -293,21 +311,24 @@ type AccessTokenServiceHandler interface {
 	// checked against the caller's org permissions exactly as a mint is, so
 	// editing is never a way to widen past what the user holds. Rotation is
 	// deliberately not an operation here — it is mint-new plus revoke-old.
+	// For a daemon-bound token a scope edit ONLY NARROWS, atomically persisting
+	// a per-daemon ceiling that also clips existing helpers and future renewals.
+	// Label-only edits and revocation leave that ceiling alone. To restore full
+	// authority explicitly ResetDaemonScopePolicy, then reissue via user login.
 	UpdateMyToken(context.Context, *connect.Request[v1.UpdateMyTokenRequest]) (*connect.Response[v1.UpdateMyTokenResponse], error)
-	// ExchangeToken is the ON-DEMAND ELEVATION a machine credential acting as a
-	// person uses to do what that person's role allows — without the credential
-	// itself being permanently widened. forge calls it when a command is refused
-	// for a missing scope (domain:read, cluster:manage), so a signed-in user
-	// never runs a second login.
-	//
-	// Caller: a machine credential that ACTS AS A USER and holds deploy:write
-	// (a `forge login` token, or one Reliant's credential helper minted). The
-	// granted scopes are the requested ones that are exchangeable AND that the
-	// acting user holds in the credential's org AT THIS MOMENT — so a demoted
-	// user's old token elevates to nothing. The result lives at most an hour and
-	// never outlives the caller, acts as the same user in the same org, and
-	// inherits the caller's binding: cluster:manage cannot ride a daemon binding,
-	// so a managed daemon's credential can never obtain it.
+	// ResetDaemonScopePolicy explicitly restores full user-granted defaults for
+	// FUTURE credentials of one owned daemon. User session only. Existing token
+	// scope sets are never widened: reissue through authenticated login afterwards.
+	// Renewal, label edits and token revocation never reset this durable policy.
+	ResetDaemonScopePolicy(context.Context, *connect.Request[v1.ResetDaemonScopePolicyRequest]) (*connect.Response[v1.ResetDaemonScopePolicyResponse], error)
+	// ExchangeToken attenuates a machine credential acting as a person to a
+	// short-lived helper. It NEVER widens: requested scopes must be explicitly
+	// held by the caller (not merely implied by write), exchangeable, and still
+	// held by the acting user in the credential's own org. A narrowed credential
+	// must be reissued through authenticated user login to regain permissions.
+	// Caller must hold deploy:write. The result lives at most an hour, never
+	// outlives the caller, and inherits its user, org and resource binding.
+	// All org capabilities may ride a daemon binding, including cluster:manage.
 	ExchangeToken(context.Context, *connect.Request[v1.ExchangeTokenRequest]) (*connect.Response[v1.ExchangeTokenResponse], error)
 	// ListOrgMemberGrants lists every member of the caller's org with the
 	// permissions they hold. Caller: a human session holding token:read.
@@ -369,6 +390,12 @@ func NewAccessTokenServiceHandler(svc AccessTokenServiceHandler, opts ...connect
 		connect.WithSchema(accessTokenServiceMethods.ByName("UpdateMyToken")),
 		connect.WithHandlerOptions(opts...),
 	)
+	accessTokenServiceResetDaemonScopePolicyHandler := connect.NewUnaryHandler(
+		AccessTokenServiceResetDaemonScopePolicyProcedure,
+		svc.ResetDaemonScopePolicy,
+		connect.WithSchema(accessTokenServiceMethods.ByName("ResetDaemonScopePolicy")),
+		connect.WithHandlerOptions(opts...),
+	)
 	accessTokenServiceExchangeTokenHandler := connect.NewUnaryHandler(
 		AccessTokenServiceExchangeTokenProcedure,
 		svc.ExchangeToken,
@@ -403,6 +430,8 @@ func NewAccessTokenServiceHandler(svc AccessTokenServiceHandler, opts ...connect
 			accessTokenServiceRevokeMyTokenHandler.ServeHTTP(w, r)
 		case AccessTokenServiceUpdateMyTokenProcedure:
 			accessTokenServiceUpdateMyTokenHandler.ServeHTTP(w, r)
+		case AccessTokenServiceResetDaemonScopePolicyProcedure:
+			accessTokenServiceResetDaemonScopePolicyHandler.ServeHTTP(w, r)
 		case AccessTokenServiceExchangeTokenProcedure:
 			accessTokenServiceExchangeTokenHandler.ServeHTTP(w, r)
 		case AccessTokenServiceListOrgMemberGrantsProcedure:
@@ -444,6 +473,10 @@ func (UnimplementedAccessTokenServiceHandler) RevokeMyToken(context.Context, *co
 
 func (UnimplementedAccessTokenServiceHandler) UpdateMyToken(context.Context, *connect.Request[v1.UpdateMyTokenRequest]) (*connect.Response[v1.UpdateMyTokenResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.AccessTokenService.UpdateMyToken is not implemented"))
+}
+
+func (UnimplementedAccessTokenServiceHandler) ResetDaemonScopePolicy(context.Context, *connect.Request[v1.ResetDaemonScopePolicyRequest]) (*connect.Response[v1.ResetDaemonScopePolicyResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.AccessTokenService.ResetDaemonScopePolicy is not implemented"))
 }
 
 func (UnimplementedAccessTokenServiceHandler) ExchangeToken(context.Context, *connect.Request[v1.ExchangeTokenRequest]) (*connect.Response[v1.ExchangeTokenResponse], error) {
