@@ -188,6 +188,66 @@
       "params": []
     },
     {
+      "id": "uptime-check-failing",
+      "alert": "UptimeCheckFailing",
+      "title": "An uptime check failed several probes in a row (warning), then many (critical)",
+      "severity": "warning",
+      "for": "0s",
+      "interval": "1m",
+      "signal": "metrics",
+      "requires": "metrics",
+      "alert_names": [
+        "UptimeCheckDown"
+      ],
+      "params": [
+        {
+          "name": "failures",
+          "default": 3,
+          "doc": "consecutive failed probes that raise UptimeCheckFailing (warning)"
+        },
+        {
+          "name": "critical_failures",
+          "default": 10,
+          "doc": "consecutive failed probes that raise UptimeCheckDown (critical) instead"
+        },
+        {
+          "name": "window_minutes",
+          "default": 30,
+          "doc": "minutes of probes considered; keep it above failures times the check's interval"
+        }
+      ]
+    },
+    {
+      "id": "certificate-expiring",
+      "alert": "CertificateExpiring",
+      "title": "A probed certificate expires within 14 days (warning) or 3 days (critical)",
+      "severity": "warning",
+      "for": "10m",
+      "interval": "5m",
+      "signal": "metrics",
+      "requires": "metrics",
+      "alert_names": [
+        "CertificateExpiringSoon"
+      ],
+      "params": [
+        {
+          "name": "warn_days",
+          "default": 14,
+          "doc": "days to expiry at or below which CertificateExpiring (warning) fires"
+        },
+        {
+          "name": "critical_days",
+          "default": 3,
+          "doc": "days to expiry at or below which CertificateExpiringSoon (critical) fires instead, an expired certificate included"
+        },
+        {
+          "name": "window_minutes",
+          "default": 30,
+          "doc": "minutes of probes considered"
+        }
+      ]
+    },
+    {
       "id": "crash-loop",
       "alert": "WorkloadCrashLooping",
       "title": "A container keeps restarting",
