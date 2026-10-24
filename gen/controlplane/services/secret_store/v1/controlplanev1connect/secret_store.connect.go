@@ -39,6 +39,12 @@ const (
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
+	// SecretStoreServiceGrantHostedHTTPUseProcedure is the fully-qualified name of the
+	// SecretStoreService's GrantHostedHTTPUse RPC.
+	SecretStoreServiceGrantHostedHTTPUseProcedure = "/controlplane.v1.SecretStoreService/GrantHostedHTTPUse"
+	// SecretStoreServiceRevokeHostedHTTPUseProcedure is the fully-qualified name of the
+	// SecretStoreService's RevokeHostedHTTPUse RPC.
+	SecretStoreServiceRevokeHostedHTTPUseProcedure = "/controlplane.v1.SecretStoreService/RevokeHostedHTTPUse"
 	// SecretStoreServiceListSecretsProcedure is the fully-qualified name of the SecretStoreService's
 	// ListSecrets RPC.
 	SecretStoreServiceListSecretsProcedure = "/controlplane.v1.SecretStoreService/ListSecrets"
@@ -67,6 +73,11 @@ const (
 
 // SecretStoreServiceClient is a client for the controlplane.v1.SecretStoreService service.
 type SecretStoreServiceClient interface {
+	// GrantHostedHTTPUse authorizes fixed workflow nodes to use one secret at one destination.
+	// Human environment owner/admin only; protected environments require step-up.
+	GrantHostedHTTPUse(context.Context, *connect.Request[v1.GrantHostedHTTPUseRequest]) (*connect.Response[v1.GrantHostedHTTPUseResponse], error)
+	// RevokeHostedHTTPUse stops future uses. Does not return a credential.
+	RevokeHostedHTTPUse(context.Context, *connect.Request[v1.RevokeHostedHTTPUseRequest]) (*connect.Response[v1.RevokeHostedHTTPUseResponse], error)
 	// ListSecrets returns METADATA ONLY for every secret in one deploy
 	// environment: name, presence, current version, timestamps, and the
 	// deleted/destroyed state of the current version. Never a value.
@@ -111,6 +122,18 @@ func NewSecretStoreServiceClient(httpClient connect.HTTPClient, baseURL string, 
 	baseURL = strings.TrimRight(baseURL, "/")
 	secretStoreServiceMethods := v1.File_services_secret_store_v1_secret_store_proto.Services().ByName("SecretStoreService").Methods()
 	return &secretStoreServiceClient{
+		grantHostedHTTPUse: connect.NewClient[v1.GrantHostedHTTPUseRequest, v1.GrantHostedHTTPUseResponse](
+			httpClient,
+			baseURL+SecretStoreServiceGrantHostedHTTPUseProcedure,
+			connect.WithSchema(secretStoreServiceMethods.ByName("GrantHostedHTTPUse")),
+			connect.WithClientOptions(opts...),
+		),
+		revokeHostedHTTPUse: connect.NewClient[v1.RevokeHostedHTTPUseRequest, v1.RevokeHostedHTTPUseResponse](
+			httpClient,
+			baseURL+SecretStoreServiceRevokeHostedHTTPUseProcedure,
+			connect.WithSchema(secretStoreServiceMethods.ByName("RevokeHostedHTTPUse")),
+			connect.WithClientOptions(opts...),
+		),
 		listSecrets: connect.NewClient[v1.ListSecretsRequest, v1.ListSecretsResponse](
 			httpClient,
 			baseURL+SecretStoreServiceListSecretsProcedure,
@@ -164,14 +187,26 @@ func NewSecretStoreServiceClient(httpClient connect.HTTPClient, baseURL string, 
 
 // secretStoreServiceClient implements SecretStoreServiceClient.
 type secretStoreServiceClient struct {
-	listSecrets       *connect.Client[v1.ListSecretsRequest, v1.ListSecretsResponse]
-	getSecretVersions *connect.Client[v1.GetSecretVersionsRequest, v1.GetSecretVersionsResponse]
-	setSecret         *connect.Client[v1.SetSecretRequest, v1.SetSecretResponse]
-	deleteSecret      *connect.Client[v1.DeleteSecretRequest, v1.DeleteSecretResponse]
-	undeleteSecret    *connect.Client[v1.UndeleteSecretRequest, v1.UndeleteSecretResponse]
-	destroySecret     *connect.Client[v1.DestroySecretRequest, v1.DestroySecretResponse]
-	beginStepUp       *connect.Client[v1.BeginStepUpRequest, v1.BeginStepUpResponse]
-	completeStepUp    *connect.Client[v1.CompleteStepUpRequest, v1.CompleteStepUpResponse]
+	grantHostedHTTPUse  *connect.Client[v1.GrantHostedHTTPUseRequest, v1.GrantHostedHTTPUseResponse]
+	revokeHostedHTTPUse *connect.Client[v1.RevokeHostedHTTPUseRequest, v1.RevokeHostedHTTPUseResponse]
+	listSecrets         *connect.Client[v1.ListSecretsRequest, v1.ListSecretsResponse]
+	getSecretVersions   *connect.Client[v1.GetSecretVersionsRequest, v1.GetSecretVersionsResponse]
+	setSecret           *connect.Client[v1.SetSecretRequest, v1.SetSecretResponse]
+	deleteSecret        *connect.Client[v1.DeleteSecretRequest, v1.DeleteSecretResponse]
+	undeleteSecret      *connect.Client[v1.UndeleteSecretRequest, v1.UndeleteSecretResponse]
+	destroySecret       *connect.Client[v1.DestroySecretRequest, v1.DestroySecretResponse]
+	beginStepUp         *connect.Client[v1.BeginStepUpRequest, v1.BeginStepUpResponse]
+	completeStepUp      *connect.Client[v1.CompleteStepUpRequest, v1.CompleteStepUpResponse]
+}
+
+// GrantHostedHTTPUse calls controlplane.v1.SecretStoreService.GrantHostedHTTPUse.
+func (c *secretStoreServiceClient) GrantHostedHTTPUse(ctx context.Context, req *connect.Request[v1.GrantHostedHTTPUseRequest]) (*connect.Response[v1.GrantHostedHTTPUseResponse], error) {
+	return c.grantHostedHTTPUse.CallUnary(ctx, req)
+}
+
+// RevokeHostedHTTPUse calls controlplane.v1.SecretStoreService.RevokeHostedHTTPUse.
+func (c *secretStoreServiceClient) RevokeHostedHTTPUse(ctx context.Context, req *connect.Request[v1.RevokeHostedHTTPUseRequest]) (*connect.Response[v1.RevokeHostedHTTPUseResponse], error) {
+	return c.revokeHostedHTTPUse.CallUnary(ctx, req)
 }
 
 // ListSecrets calls controlplane.v1.SecretStoreService.ListSecrets.
@@ -216,6 +251,11 @@ func (c *secretStoreServiceClient) CompleteStepUp(ctx context.Context, req *conn
 
 // SecretStoreServiceHandler is an implementation of the controlplane.v1.SecretStoreService service.
 type SecretStoreServiceHandler interface {
+	// GrantHostedHTTPUse authorizes fixed workflow nodes to use one secret at one destination.
+	// Human environment owner/admin only; protected environments require step-up.
+	GrantHostedHTTPUse(context.Context, *connect.Request[v1.GrantHostedHTTPUseRequest]) (*connect.Response[v1.GrantHostedHTTPUseResponse], error)
+	// RevokeHostedHTTPUse stops future uses. Does not return a credential.
+	RevokeHostedHTTPUse(context.Context, *connect.Request[v1.RevokeHostedHTTPUseRequest]) (*connect.Response[v1.RevokeHostedHTTPUseResponse], error)
 	// ListSecrets returns METADATA ONLY for every secret in one deploy
 	// environment: name, presence, current version, timestamps, and the
 	// deleted/destroyed state of the current version. Never a value.
@@ -256,6 +296,18 @@ type SecretStoreServiceHandler interface {
 // and JSON codecs. They also support gzip compression.
 func NewSecretStoreServiceHandler(svc SecretStoreServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
 	secretStoreServiceMethods := v1.File_services_secret_store_v1_secret_store_proto.Services().ByName("SecretStoreService").Methods()
+	secretStoreServiceGrantHostedHTTPUseHandler := connect.NewUnaryHandler(
+		SecretStoreServiceGrantHostedHTTPUseProcedure,
+		svc.GrantHostedHTTPUse,
+		connect.WithSchema(secretStoreServiceMethods.ByName("GrantHostedHTTPUse")),
+		connect.WithHandlerOptions(opts...),
+	)
+	secretStoreServiceRevokeHostedHTTPUseHandler := connect.NewUnaryHandler(
+		SecretStoreServiceRevokeHostedHTTPUseProcedure,
+		svc.RevokeHostedHTTPUse,
+		connect.WithSchema(secretStoreServiceMethods.ByName("RevokeHostedHTTPUse")),
+		connect.WithHandlerOptions(opts...),
+	)
 	secretStoreServiceListSecretsHandler := connect.NewUnaryHandler(
 		SecretStoreServiceListSecretsProcedure,
 		svc.ListSecrets,
@@ -306,6 +358,10 @@ func NewSecretStoreServiceHandler(svc SecretStoreServiceHandler, opts ...connect
 	)
 	return "/controlplane.v1.SecretStoreService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
+		case SecretStoreServiceGrantHostedHTTPUseProcedure:
+			secretStoreServiceGrantHostedHTTPUseHandler.ServeHTTP(w, r)
+		case SecretStoreServiceRevokeHostedHTTPUseProcedure:
+			secretStoreServiceRevokeHostedHTTPUseHandler.ServeHTTP(w, r)
 		case SecretStoreServiceListSecretsProcedure:
 			secretStoreServiceListSecretsHandler.ServeHTTP(w, r)
 		case SecretStoreServiceGetSecretVersionsProcedure:
@@ -330,6 +386,14 @@ func NewSecretStoreServiceHandler(svc SecretStoreServiceHandler, opts ...connect
 
 // UnimplementedSecretStoreServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedSecretStoreServiceHandler struct{}
+
+func (UnimplementedSecretStoreServiceHandler) GrantHostedHTTPUse(context.Context, *connect.Request[v1.GrantHostedHTTPUseRequest]) (*connect.Response[v1.GrantHostedHTTPUseResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.SecretStoreService.GrantHostedHTTPUse is not implemented"))
+}
+
+func (UnimplementedSecretStoreServiceHandler) RevokeHostedHTTPUse(context.Context, *connect.Request[v1.RevokeHostedHTTPUseRequest]) (*connect.Response[v1.RevokeHostedHTTPUseResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.SecretStoreService.RevokeHostedHTTPUse is not implemented"))
+}
 
 func (UnimplementedSecretStoreServiceHandler) ListSecrets(context.Context, *connect.Request[v1.ListSecretsRequest]) (*connect.Response[v1.ListSecretsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.SecretStoreService.ListSecrets is not implemented"))

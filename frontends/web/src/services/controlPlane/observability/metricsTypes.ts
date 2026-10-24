@@ -122,11 +122,12 @@ const INFRA_PREFIXES = ["k8s.", "container."] as const;
 /**
  * Which catalog group a metric belongs to: a declared one first (the release's
  * own schema), then forge's built-ins, then infrastructure, then everything
- * else. Mirrors obsquery's builtin rule (the `rpc.`, `go.` and `forge.`
- * prefixes, matched on the dot so `rpcx.thing` is not one).
+ * else. Mirrors obsquery's IsBuiltinMetric (pkg/obsquery/catalog.go): the
+ * `rpc.`, `go.` and `forge.` prefixes, matched on the dot so `rpcx.thing` is not
+ * one, and followed by a name — a bare `rpc.` is not a built-in.
  */
 export function catalogGroup(name: string, declared: boolean): MetricGroup {
-  if (BUILTIN_PREFIXES.some((p) => name.startsWith(p))) return "runtime";
+  if (BUILTIN_PREFIXES.some((p) => name.startsWith(p) && name.length > p.length)) return "runtime";
   if (declared) return "declared";
   if (INFRA_PREFIXES.some((p) => name.startsWith(p))) return "infra";
   return "other";

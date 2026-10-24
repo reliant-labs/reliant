@@ -15,6 +15,7 @@ package version
 
 import (
 	"runtime/debug"
+	"strconv"
 	"strings"
 )
 
@@ -24,6 +25,11 @@ var (
 	Commit  = "unknown"
 	Date    = "unknown"
 	Branch  = "unknown"
+	// CommitTime is the committer time of Commit in unix seconds, from
+	// scripts/release-identity.sh --commit-time. It is the key that orders
+	// builds (semver cannot: every build between two tags is the same X.Y.Z).
+	// A string because -X can only write strings; read it via CommitTimeUnix.
+	CommitTime = "unknown"
 )
 
 // Dirty values. "unknown" means the build carried no VCS stamp: release builds
@@ -121,12 +127,28 @@ func Forge() string {
 	return "unknown"
 }
 
+// CommitTimeUnix is CommitTime as a number, 0 when the build is unordered: the
+// stamp is absent or malformed, or the toolchain saw a dirty tree. 0 means
+// "never forced, shown as a dev build".
+func CommitTimeUnix() int64 {
+	if dirty == DirtyTrue {
+		return 0
+	}
+	n, err := strconv.ParseInt(CommitTime, 10, 64)
+	if err != nil || n < 0 {
+		return 0
+	}
+	return n
+}
+
 // BuildInfo contains all build metadata
 type BuildInfo struct {
 	Version string
 	Commit  string
 	Date    string
 	Branch  string
+	// CommitTimeUnix is the build number; see CommitTimeUnix().
+	CommitTimeUnix int64
 	// Dirty is DirtyTrue/DirtyFalse when the toolchain stamped VCS state,
 	// DirtyUnknown otherwise.
 	Dirty string
@@ -143,6 +165,8 @@ func Get() BuildInfo {
 		Branch:  Branch,
 		Dirty:   dirty,
 		Forge:   Forge(),
+
+		CommitTimeUnix: CommitTimeUnix(),
 	}
 }
 

@@ -41,6 +41,10 @@ get_version() {
     fi
 }
 
+# The build number daemons report on registration: the committer time of the
+# commit being built, 0 (unordered) for a dirty tree or a checkout with no git.
+COMMIT_TIME="$(bash "$PROJECT_ROOT/scripts/release-identity.sh" --commit-time 2>/dev/null || echo 0)"
+
 LDFLAGS_BASE="-s -w -X github.com/reliant-labs/reliant/internal/build.BuildType=production"
 
 build_binary() {
@@ -63,7 +67,7 @@ build_binary() {
     # has the full explanation.
     GOOS=$goos GOARCH=$goarch go build \
         -tags exp.winarm64 \
-        -ldflags="$LDFLAGS_BASE -X github.com/reliant-labs/reliant/internal/version.Version=$version" \
+        -ldflags="$LDFLAGS_BASE -X github.com/reliant-labs/reliant/internal/version.Version=$version -X github.com/reliant-labs/reliant/internal/version.CommitTime=$COMMIT_TIME" \
         -o "$output_dir/reliant-backend$ext" \
         ./cmd/reliant/
 }
