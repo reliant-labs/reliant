@@ -15,6 +15,7 @@ import (
 // the user's act, done in the app (Workflows -> the workflow -> Enable), which
 // is where they choose the project, machine and connected accounts. An agent
 // writes and tests the workflow; list_triggers shows what the user has enabled.
+// fire_trigger runs an existing activation once without changing its configuration.
 
 // TriggerLister lists the calling user's triggers. It is implemented over
 // TriggerService by internal/triggertools — this package cannot import the
@@ -22,6 +23,32 @@ import (
 // agent tool creates, enables or re-points an activation.
 type TriggerLister interface {
 	ListTriggers(ctx context.Context, userID string, f TriggerListFilter) ([]TriggerSummary, error)
+}
+
+// TriggerFirer runs an existing activation once as its owner. It cannot create,
+// enable or change a trigger.
+type TriggerFirer interface {
+	FireTrigger(ctx context.Context, userID, triggerID string) (string, error)
+}
+
+// TriggerEventLister reads firing history without exposing event payloads.
+type TriggerEventLister interface {
+	ListTriggerEvents(ctx context.Context, userID, triggerID string, limit int, pageToken string) (TriggerEventPage, error)
+}
+
+type TriggerEventSummary struct {
+	FireWorkflowID string `json:"fire_workflow_id,omitempty"`
+	ID             string `json:"id"`
+	OccurredAt     string `json:"occurred_at"`
+	Outcome        string `json:"outcome"`
+	Detail         string `json:"detail,omitempty"`
+	ChatID         string `json:"chat_id,omitempty"`
+	RunState       string `json:"run_state,omitempty"`
+}
+
+type TriggerEventPage struct {
+	Events        []TriggerEventSummary `json:"events"`
+	NextPageToken string                `json:"next_page_token,omitempty"`
 }
 
 // TriggerListFilter narrows list_triggers.

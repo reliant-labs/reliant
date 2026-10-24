@@ -117,16 +117,24 @@ func EventToProto(ev *core.TriggerEvent) (*reliantv1.TriggerEvent, error) {
 		// matters.
 		payload = nil
 	}
+	fireID := ""
+	switch ev.Kind {
+	case core.TriggerEventKindSchedule:
+		fireID = ev.DedupeKey
+	case core.TriggerEventKindWebhook, core.TriggerEventKindIntegration, core.TriggerEventKindWorkflowEvent:
+		fireID = EventFireWorkflowID(ev.ID)
+	}
 	return &reliantv1.TriggerEvent{
-		Id:            ev.ID,
-		TriggerId:     ev.TriggerID,
-		Kind:          eventKindToProto(ev.Kind),
-		OccurredAt:    ev.OccurredAt.UTC().Format(time.RFC3339),
-		Outcome:       outcomeToProto(ev.Outcome),
-		OutcomeDetail: ev.OutcomeDetail,
-		ChatId:        ev.ChatID,
-		Payload:       payload,
-		Sender:        senderToProto(ev.Sender),
+		FireWorkflowId: fireID,
+		Id:             ev.ID,
+		TriggerId:      ev.TriggerID,
+		Kind:           eventKindToProto(ev.Kind),
+		OccurredAt:     ev.OccurredAt.UTC().Format(time.RFC3339),
+		Outcome:        outcomeToProto(ev.Outcome),
+		OutcomeDetail:  ev.OutcomeDetail,
+		ChatId:         ev.ChatID,
+		Payload:        payload,
+		Sender:         senderToProto(ev.Sender),
 	}, nil
 }
 
