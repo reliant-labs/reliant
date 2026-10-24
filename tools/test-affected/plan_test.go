@@ -693,3 +693,31 @@ func TestNothingToRunRunsNothing(t *testing.T) {
 		t.Fatalf("an inert diff runs nothing, got %v", steps)
 	}
 }
+
+// TestReachDirect pins the merge tier's fan-out: a changed package runs its
+// own tests and those of the packages importing it by name; deeper dependents
+// are Deferred to the full lane, which ReachAll (the default) still runs.
+func TestReachDirect(t *testing.T) {
+	pkg := func(n string) string { return mod + "/" + n }
+	g := testGraph()
+	g.DirectImports = map[string]map[string]bool{
+		pkg("internal/mid"): {pkg("internal/leaf"): true},
+		pkg("cmd/app"):      {pkg("internal/mid"): true},
+	}
+	direct := ClassifyReach([]Change{{Path: "internal/leaf/leaf.go"}}, g, ReachDirect)
+	if want := []string{"./internal/guard", "./internal/leaf", "./internal/mid"}; !slices.Equal(direct.Go.Packages, want) {
+		t.Errorf("direct: packages %v, want %v", direct.Go.Packages, want)
+	}
+	if want := []string{"./cmd/app"}; !slices.Equal(direct.Go.Deferred, want) || direct.Go.Reach != ReachDirect {
+		t.Errorf("direct: reach %q deferred %v, want direct %v", direct.Go.Reach, direct.Go.Deferred, want)
+	}
+	all := classifyIn(g, "internal/leaf/leaf.go")
+	if want := []string{"./cmd/app", "./internal/guard", "./internal/leaf", "./internal/mid"}; !slices.Equal(all.Go.Packages, want) || len(all.Go.Deferred) != 0 || all.Go.Reach != ReachAll {
+		t.Errorf("all: packages %v deferred %v reach %q, want %v", all.Go.Packages, all.Go.Deferred, all.Go.Reach, want)
+	}
+	// A migration still reaches every DB-backed package, however far.
+	mig := ClassifyReach([]Change{{Path: "db/migrations/20260101000000_x.up.sql"}}, g, ReachDirect)
+	if !slices.Contains(mig.Go.Packages, "./internal/db") {
+		t.Errorf("direct: a migration must still select the DB-backed packages, got %v", mig.Go.Packages)
+	}
+}

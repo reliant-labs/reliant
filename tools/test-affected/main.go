@@ -79,6 +79,7 @@ func main() {
 	dry := fs.Bool("dry-run", false, "with run: print the commands instead of executing them")
 	gotestP := fs.Int("p", 0, "go test -p (default: the machine's parallelism)")
 	jobs := fs.Int("jobs", 2, "maximum concurrent test steps (1 serializes; prerequisites always run first)")
+	reachFlag := fs.String("reach", "", "Go lane fan-out: all (every package whose test binary contains a change; the default, also $TEST_REACH) or direct (changed packages + their direct importers: the merge tier)")
 	if err := fs.Parse(args); err != nil {
 		os.Exit(2)
 	}
@@ -92,9 +93,20 @@ func main() {
 	if os.Getenv("TEST_FULL") == "1" {
 		*full = true
 	}
+	if *reachFlag == "" {
+		*reachFlag = os.Getenv("TEST_REACH")
+	}
+	switch *reachFlag {
+	case "", ReachAll:
+		*reachFlag = ReachAll
+	case ReachDirect:
+	default:
+		fmt.Fprintf(os.Stderr, "test-affected: -reach must be %s or %s, not %q\n", ReachAll, ReachDirect, *reachFlag)
+		os.Exit(2)
+	}
 
 	ctx := context.Background()
-	pl, err := plan(ctx, *root, *baseFlag, *full, splitList(*files))
+	pl, err := plan(ctx, *root, *baseFlag, *full, splitList(*files), *reachFlag)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "test-affected:", err)
 		os.Exit(1)
@@ -156,7 +168,7 @@ func laneSet(s string) map[lane]bool {
 }
 
 // plan computes the decision for the tree at root.
-func plan(ctx context.Context, root, baseFlag string, forceFull bool, whatIf []string) (*Plan, error) {
+func plan(ctx context.Context, root, baseFlag string, forceFull bool, whatIf []string, reachMode string) (*Plan, error) {
 	root = mustAbs(root)
 	module, err := moduleOf(root)
 	if err != nil {
@@ -185,7 +197,7 @@ func plan(ctx context.Context, root, baseFlag string, forceFull bool, whatIf []s
 	}
 	g.Web = BuildWebGraph(append(append([]string{}, tracked...), untracked...), diskReader(root))
 	g.ElectronText = electronTexts(root)
-	pl := Classify(changes, g)
+	pl := ClassifyReach(changes, g, reachMode)
 	pl.Base, pl.Head = base, head
 	if pl.ForgeGen.HooksOnly {
 		cmds, err := hookCommands(root, pl.ForgeGen.Hooks)
@@ -400,6 +412,15 @@ func short(s string) string {
 	return s
 }
 
+// goLine heads the Go lane: a -reach direct plan says how many transitive
+// dependents it left to the full lane.
+func goLine(gp GoPlan) string {
+	if gp.Reach == ReachDirect {
+		return fmt.Sprintf("%d package(s), reach direct (%d transitive dependent(s) left to the full lane)", len(gp.Packages), len(gp.Deferred))
+	}
+	return fmt.Sprintf("%d package(s)", len(gp.Packages))
+}
+
 func printTable(w io.Writer, pl *Plan, enabled map[lane]bool) error {
 	p := &printer{w: w}
 	p.f("== test-affected: base %s -> %s (%d changed path(s))\n", short(pl.Base), short(pl.Head), len(pl.Files))
@@ -425,7 +446,7 @@ func printTable(w io.Writer, pl *Plan, enabled map[lane]bool) error {
 		list []string
 		why  map[string]string
 	}{
-		{laneGo, pl.Go.LaneFull, fmt.Sprintf("%d package(s)", len(pl.Go.Packages)), pl.Go.Packages, pl.Go.Why},
+		{laneGo, pl.Go.LaneFull, goLine(pl.Go), pl.Go.Packages, pl.Go.Why},
 		{laneWeb, pl.Web.LaneFull, fmt.Sprintf("%d vitest file(s)", len(pl.Web.Tests)), pl.Web.Tests, pl.Web.Why},
 		{laneElectron, pl.Electron.LaneFull, "electron tests", nil, nil},
 		{laneForgeGen, pl.ForgeGen.LaneFull, "forge generate", nil, nil},
