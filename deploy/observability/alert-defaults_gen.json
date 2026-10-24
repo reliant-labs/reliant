@@ -168,6 +168,26 @@
       "params": []
     },
     {
+      "id": "release-regressed",
+      "alert": "ReleaseRegressed",
+      "title": "A promoted release made the env worse once its health window closed",
+      "severity": "warning",
+      "for": "0s",
+      "interval": "1m",
+      "signal": "platform",
+      "params": []
+    },
+    {
+      "id": "service-anomaly",
+      "alert": "ServiceAnomaly",
+      "title": "A service's traffic, errors or latency left what is usual for this hour of the week",
+      "severity": "warning",
+      "for": "0s",
+      "interval": "5m",
+      "signal": "platform",
+      "params": []
+    },
+    {
       "id": "crash-loop",
       "alert": "WorkloadCrashLooping",
       "title": "A container keeps restarting",
