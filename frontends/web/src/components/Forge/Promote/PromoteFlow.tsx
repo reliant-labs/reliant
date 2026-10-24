@@ -21,7 +21,7 @@
 
 import { CheckCircle2 } from "lucide-react";
 
-import { Button } from "@/components/ui/Button";
+import Button from "@/components/forge-ui/button";
 import type { ApplyPromoteResult } from "@/api/forge-grpc";
 import type { ForgePromotePlan } from "@/services/forge/promote";
 import type { ForgeOutcome } from "@/services/forge/topology";

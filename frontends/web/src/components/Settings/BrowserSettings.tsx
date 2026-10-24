@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Globe, Save, Check, ExternalLink } from "lucide-react";
-import { Button } from "../ui/Button";
+import Button from "@/components/forge-ui/button";
 import { toast } from "../../lib/toast-manager";
 import { api } from "../../api/client";
 import { cn } from "../../lib/utils";

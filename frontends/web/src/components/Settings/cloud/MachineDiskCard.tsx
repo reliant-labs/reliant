@@ -23,7 +23,8 @@ import { formatBytes } from "@/lib/formatBytes";
 import { consumerGroups, diskNotice, usedBytes, usedFraction, volumesFullestFirst } from "@/lib/machineDisk";
 import ProgressBar from "@/components/forge-ui/progress_bar";
 import { FreeDiskSpaceDialog } from "@/components/MachineDisk/FreeDiskSpaceDialog";
-import { Badge, Button, Card, CardContent, CardHeader, CardTitle } from "./ui";
+import Button from "@/components/forge-ui/button";
+import { Badge, Card, CardContent, CardHeader, CardTitle } from "./ui";
 
 function reportedAgo(ms: bigint): string {
   const at = Number(ms);
@@ -62,7 +63,7 @@ export function MachineDiskCard({
           {ago && <span className="text-xs font-normal text-muted-foreground">· reported {ago}</span>}
         </CardTitle>
         {onGrowDisk && (
-          <Button size="sm" variant="outline" disabled={growDisabled} onClick={onGrowDisk}>
+          <Button size="md" variant="outline" disabled={growDisabled} onClick={onGrowDisk}>
             Grow disk
           </Button>
         )}
@@ -144,12 +145,12 @@ function VolumeRow({
       {(canFree || onGrow) && (
         <div className="flex flex-wrap gap-2">
           {canFree && (
-            <Button size="sm" variant="outline" onClick={onFree}>
+            <Button size="md" variant="outline" onClick={onFree}>
               Free up space
             </Button>
           )}
           {onGrow && (
-            <Button size="sm" variant="outline" disabled={growDisabled} onClick={onGrow}>
+            <Button size="md" variant="outline" disabled={growDisabled} onClick={onGrow}>
               Grow disk
             </Button>
           )}

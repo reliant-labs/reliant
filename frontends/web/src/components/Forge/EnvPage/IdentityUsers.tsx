@@ -29,7 +29,7 @@ import { Link2, Lock, MailPlus, Search, ShieldCheck, Users } from "lucide-react"
 
 import Badge from "@/components/forge-ui/badge";
 import ConfirmationDialog from "@/components/forge-ui/confirmation_dialog";
-import { Button } from "@/components/ui/Button";
+import Button from "@/components/forge-ui/button";
 import { useIdentityMutation, useIdentityUsers } from "@/hooks/identity-queries";
 import type {
   IdentityRole,
@@ -429,7 +429,7 @@ function UserRow({
             <Button
               variant="ghost"
               size="xs"
-              className="text-destructive-ink"
+              className="text-destructive-ink!"
               onClick={() => onConfirm("delete")}
               disabled={holdsDeclared}
               title={holdsDeclared ? `Holds a declared role (${DECLARED_ROLE_NOTE}); the next reconcile would recreate them` : undefined}

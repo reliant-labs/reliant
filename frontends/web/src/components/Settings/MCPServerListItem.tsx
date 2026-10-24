@@ -4,7 +4,7 @@ import { ConfigScope } from "../../api/mcp-grpc";
 import { cn } from "../../lib/utils";
 import Badge from "../forge-ui/badge";
 import Tag from "../forge-ui/tag";
-import { Button } from "../ui/Button";
+import Button from "@/components/forge-ui/button";
 import { MCPAvatar } from "./mcpAvatar";
 
 const SCOPE_LABELS: Record<ConfigScope, string> = {
@@ -160,16 +160,15 @@ export function MCPServerListItem({
           <Button
             type="button"
             variant="ghost"
-            size="sm"
-            className="h-8 w-8 p-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100 transition-opacity"
+            size="md"
+            className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
             onClick={() => setSettingsOpen((prev) => !prev)}
+            icon={<Settings />}
             aria-label={`Server settings for ${title}`}
             aria-expanded={settingsOpen}
             aria-haspopup="menu"
             disabled={disabled}
-          >
-            <Settings className="h-4 w-4" />
-          </Button>
+          />
 
           {settingsOpen && (
             <div
@@ -196,8 +195,8 @@ export function MCPServerListItem({
                   <Button
                     type="button"
                     size="sm"
-                    variant={needsSetup ? "default" : "outline"}
-                    className="justify-start"
+                    variant={needsSetup ? "primary" : "outline"}
+                    className="justify-start!"
                     leftIcon={<SlidersHorizontal className="h-3.5 w-3.5" />}
                     onClick={() => closeAndRun(onConfigure)}
                     disabled={disabled || configureDisabled || loadingAction === "scope"}
@@ -210,7 +209,7 @@ export function MCPServerListItem({
                     type="button"
                     size="sm"
                     variant="outline"
-                    className="justify-start"
+                    className="justify-start!"
                     leftIcon={enabled ? <Pause className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
                     onClick={() => closeAndRun(() => onToggleEnabled?.(!enabled))}
                     disabled={disabled || !onToggleEnabled || loadingAction === "scope"}
@@ -223,7 +222,7 @@ export function MCPServerListItem({
                     type="button"
                     size="sm"
                     variant="outline"
-                    className="justify-start"
+                    className="justify-start!"
                     leftIcon={<RefreshCw className="h-3.5 w-3.5" />}
                     onClick={() => closeAndRun(onRestart)}
                     disabled={disabled || !enabled}
@@ -236,7 +235,7 @@ export function MCPServerListItem({
                     type="button"
                     size="sm"
                     variant="outline"
-                    className="justify-start"
+                    className="justify-start!"
                     leftIcon={<Trash2 className="h-3.5 w-3.5" />}
                     onClick={() => closeAndRun(onRemove)}
                     disabled={disabled}

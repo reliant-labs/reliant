@@ -91,7 +91,7 @@ import { workflowDisplayName } from "../../lib/workflowDisplayName";
 import { YamlEditorModal } from "./YamlEditorModal";
 import type { ValidationError } from "../../api/workflow-grpc";
 import { Modal } from "../ui/Modal";
-import { Button } from "../ui/Button";
+import Button from "@/components/forge-ui/button";
 
 import type { BackgroundVariant, SelectionMode } from "@xyflow/react";
 import { WorkflowEditorChatPanel, type PanelSize } from "./WorkflowEditorChatPanel";
@@ -2483,7 +2483,7 @@ function WorkflowBuilderInner({
                 </Button>
               )}
               <Button
-                variant={(workflow.name ?? "").trim() ? "outline" : "destructive"}
+                variant={(workflow.name ?? "").trim() ? "outline" : "danger"}
                 onClick={handleDiscardAndExit}
                 disabled={isSavingBeforeExit}
               >

@@ -24,7 +24,7 @@ import type { LaunchEvent } from "@/api/run-grpc";
 import { useDaemonStatus } from "@/hooks/useDaemonStatus";
 import { isLiveRunStatus, launchKindDisplay, runStatus, type LaunchKindDisplay } from "@/lib/runStatus";
 import { formatAbsoluteTime } from "@/lib/relativeTime";
-import { Button } from "../ui/Button";
+import Button from "@/components/forge-ui/button";
 import { RunStatusBadge } from "./RunStatusIndicator";
 import { daemonLabel } from "../Automations/daemonChoices";
 import { getWorkflowDisplayName } from "../workflow/useWorkflowInputs";

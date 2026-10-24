@@ -12,7 +12,7 @@ import { Copy } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '../../../lib/utils'
 import { Modal } from '../../ui/Modal'
-import { Button } from '../../ui/Button'
+import Button from '@/components/forge-ui/button';
 import type { Preset } from '../../../store/globalDataStore'
 import { presetGrpc } from '../../../api/preset-grpc'
 import { formatValueForDisplay, unwrapProtoValue } from '../../../lib/paramUtils'
@@ -108,16 +108,14 @@ export function PresetViewModal({ preset, projectId, onCopy, onClose }: PresetVi
               </h3>
               <Button
                 variant="ghost"
-                size="sm"
-                className="h-6 w-6 p-0"
+                size="xs"
+                icon={<Copy />}
+                aria-label="Copy system prompt"
                 onClick={() => {
                   navigator.clipboard.writeText(String(systemPrompt))
                   toast.success('System prompt copied to clipboard')
                 }}
-              >
-                <Copy className="w-3.5 h-3.5" />
-                <span className="sr-only">Copy system prompt</span>
-              </Button>
+              />
             </div>
             <div className="bg-muted/50 text-foreground p-4 rounded-lg font-mono text-xs whitespace-pre-wrap max-h-[400px] overflow-y-auto border border-border/50 shadow-inner">
               {String(systemPrompt)}

@@ -5,7 +5,7 @@ import { ExternalLink, Folder, RefreshCw, Terminal } from "lucide-react";
 import Badge from "@/components/forge-ui/badge";
 import Card from "@/components/forge-ui/card";
 import Status from "@/components/forge-ui/status";
-import { Button } from "@/components/ui/Button";
+import Button from "@/components/forge-ui/button";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { projectGrpc } from "@/api/project-grpc";
 import { useChatList } from "@/hooks/chat-queries";

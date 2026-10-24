@@ -14,9 +14,9 @@ import {
   Server,
 } from "lucide-react";
 
+import Button from "@/components/forge-ui/button";
 import {
   Badge,
-  Button,
   Card,
   CardContent,
   EmptyState,
@@ -309,7 +309,7 @@ function CheckoutReturnBanner({
             whenever you&apos;re ready.
           </p>
         </div>
-        <Button size="sm" variant="ghost" onClick={onDismiss}>
+        <Button size="md" variant="ghost" onClick={onDismiss}>
           Dismiss
         </Button>
       </div>
@@ -338,7 +338,7 @@ function CheckoutReturnBanner({
         </div>
       </div>
       {confirmed && (
-        <Button size="sm" variant="ghost" onClick={onDismiss}>
+        <Button size="md" variant="ghost" onClick={onDismiss}>
           Dismiss
         </Button>
       )}
@@ -376,7 +376,7 @@ function BackToSetup({ returnTo }: { returnTo?: string }) {
         You came here from setup. Pick a plan and you can head straight back.
       </p>
       <Button
-        size="sm"
+        size="md"
         variant="outline"
         onClick={() => {
           if (safeReturnTo) {
@@ -389,8 +389,8 @@ function BackToSetup({ returnTo }: { returnTo?: string }) {
           }
           void navigate({ to: "/onboarding", search: {} });
         }}
+        leftIcon={<ArrowLeft />}
       >
-        <ArrowLeft className="h-4 w-4" />
         Back to setup
       </Button>
     </div>
@@ -423,7 +423,7 @@ function BackToEnvironment({ returnTo }: { returnTo?: string }) {
         is active it goes out on its own — nothing to re-run.
       </p>
       <Button
-        size="sm"
+        size="md"
         variant="outline"
         onClick={() => {
           if (safeReturnTo) {
@@ -432,8 +432,8 @@ function BackToEnvironment({ returnTo }: { returnTo?: string }) {
           }
           void navigate({ to: "/forge", search: {} });
         }}
+        leftIcon={<ArrowLeft />}
       >
-        <ArrowLeft className="h-4 w-4" />
         Back to environment
       </Button>
     </div>
@@ -876,7 +876,7 @@ function OverviewTab({
                   />
                   <div>
                     <Button
-                      size="sm"
+                      size="md"
                       variant="ghost"
                       onClick={() => setTopupCents(null)}
                     >
@@ -970,11 +970,11 @@ function OverviewTab({
             <div>
               <Button
                 variant="ghost"
-                size="sm"
+                size="md"
                 onClick={handleManageStripe}
                 disabled={portalMutation.isPending}
+                leftIcon={<ArrowUpRight />}
               >
-                <ArrowUpRight className="h-4 w-4" />
                 {portalMutation.isPending
                   ? "Opening…"
                   : "Manage payment method in Stripe"}
@@ -1031,8 +1031,7 @@ function BillingEmailRow() {
             </p>
           </div>
           {!editing && (
-            <Button size="sm" variant="ghost" onClick={startEdit}>
-              <Pencil className="h-3.5 w-3.5" />
+            <Button size="md" variant="ghost" onClick={startEdit} leftIcon={<Pencil />}>
               {billingEmail ? "Change" : "Set"}
             </Button>
           )}
@@ -1050,15 +1049,15 @@ function BillingEmailRow() {
                 className="min-w-[220px] flex-1 rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               />
               <Button
-                size="sm"
+                size="md"
                 onClick={save}
                 disabled={updateMutation.isPending}
-                isLoading={updateMutation.isPending}
+                loading={updateMutation.isPending}
               >
                 Save
               </Button>
               <Button
-                size="sm"
+                size="md"
                 variant="ghost"
                 onClick={() => setEditing(false)}
                 disabled={updateMutation.isPending}
@@ -1262,7 +1261,7 @@ function PlansTab() {
           />
           <div>
             <Button
-              size="sm"
+              size="md"
               variant="ghost"
               onClick={() => setCheckoutPlanId(null)}
             >

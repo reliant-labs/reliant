@@ -20,7 +20,7 @@ import { useEffect, useRef, useState } from "react";
 import { Check, Copy, KeyRound, ShieldOff } from "lucide-react";
 
 import Modal from "@/components/forge-ui/modal";
-import { Button } from "@/components/ui/Button";
+import Button from "@/components/forge-ui/button";
 import type { IdentityPasswordCode } from "@/services/controlPlane/identity/api";
 import { identityErrorKind, identityErrorMessage } from "@/services/controlPlane/identity/errors";
 

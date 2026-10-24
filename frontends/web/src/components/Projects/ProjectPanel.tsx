@@ -2,7 +2,7 @@ import { useState } from "react";
 import { FolderOpen, Plus, Trash2 } from "lucide-react";
 
 import EmptyState from "../forge-ui/empty_state";
-import { Button } from "../ui/Button";
+import Button from "@/components/forge-ui/button";
 import { Tooltip } from "../ui/Tooltip";
 import { useProjectStore } from "../../store/projectStore";
 import { logger } from "../../lib/logger";

@@ -16,7 +16,7 @@
 import type { ReactNode } from "react";
 import { Lock, ServerOff } from "lucide-react";
 
-import { Button } from "@/components/ui/Button";
+import Button from "@/components/forge-ui/button";
 import { deliveryErrorKind } from "@/services/controlPlane/observability/errors";
 
 import { ObsError } from "./ObsStates";

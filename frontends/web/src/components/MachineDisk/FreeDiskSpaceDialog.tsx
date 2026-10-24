@@ -30,7 +30,7 @@ import {
   usedFraction,
   volumeUsage,
 } from "@/lib/machineDisk";
-import { Button } from "../ui/Button";
+import Button from "@/components/forge-ui/button";
 import { Modal } from "../ui/Modal";
 import ProgressBar from "../forge-ui/progress_bar";
 import { CardInset } from "../forge-ui/card";

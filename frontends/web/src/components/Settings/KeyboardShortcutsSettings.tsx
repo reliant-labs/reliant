@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { cn } from "../../lib/utils";
 import { effectiveBinding, useShortcutsStore } from "../../store/shortcutsStore";
-import { Button } from "../ui/Button";
+import Button from "@/components/forge-ui/button";
 import { RotateCcw, Edit3, Check, X, AlertTriangle, Keyboard, Globe } from "lucide-react";
 import { toast } from "../../lib/toast-manager";
 import {
@@ -251,12 +251,10 @@ function KeyInput({
             // Saving mid-sequence would store a bare prefix, which shadows
             // every sequence that starts with it.
             disabled={!value || !!conflictWarning || !!pendingPrefix}
-          >
-            <Check className="w-4 h-4" />
-          </Button>
-          <Button size="sm" variant="ghost" onClick={onCancel}>
-            <X className="w-4 h-4" />
-          </Button>
+            icon={<Check />}
+            aria-label="Save shortcut"
+          />
+          <Button size="sm" variant="ghost" onClick={onCancel} icon={<X />} aria-label="Cancel" />
         </div>
       </div>
 
@@ -379,13 +377,9 @@ function ShortcutRow({ shortcutId }: { shortcutId: string }) {
             <div className="flex items-center gap-1">
               {!isEditingThis && (
                 <>
-                  <Button size="sm" variant="outline" onClick={handleEdit}>
-                    <Edit3 className="w-3 h-3" />
-                  </Button>
+                  <Button size="sm" variant="outline" onClick={handleEdit} icon={<Edit3 />} aria-label="Edit shortcut" />
                   {!isDefault && (
-                    <Button size="sm" variant="ghost" onClick={handleReset}>
-                      <RotateCcw className="w-3 h-3" />
-                    </Button>
+                    <Button size="sm" variant="ghost" onClick={handleReset} icon={<RotateCcw />} aria-label="Reset to default" />
                   )}
                 </>
               )}
@@ -421,13 +415,9 @@ function ShortcutRow({ shortcutId }: { shortcutId: string }) {
                   {formatAuthored(effective)}
                 </kbd>
                 <div className="flex items-center gap-1">
-                  <Button size="sm" variant="outline" onClick={handleEdit}>
-                    <Edit3 className="w-3 h-3" />
-                  </Button>
+                  <Button size="sm" variant="outline" onClick={handleEdit} icon={<Edit3 />} aria-label="Edit shortcut" />
                   {!isDefault && (
-                    <Button size="sm" variant="ghost" onClick={handleReset}>
-                      <RotateCcw className="w-3 h-3" />
-                    </Button>
+                    <Button size="sm" variant="ghost" onClick={handleReset} icon={<RotateCcw />} aria-label="Reset to default" />
                   )}
                 </div>
               </>
@@ -543,8 +533,7 @@ export function KeyboardShortcutsSettings() {
                 }
               }
             }}
-            className="flex items-center gap-2"
-            rightIcon={<RotateCcw className="w-4 h-4" />}
+            rightIcon={<RotateCcw />}
           >
             Reset All
           </Button>

@@ -11,7 +11,7 @@
  */
 import { act, render, screen, within } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { Sidebar } from "./Sidebar";
@@ -28,12 +28,6 @@ import type { ContextMenuItem } from "../ui/ContextMenu";
 
 vi.mock("../ui/Tooltip", () => ({
   Tooltip: ({ children }: { children: ReactNode }) => <>{children}</>,
-}));
-
-vi.mock("../ui/Button", () => ({
-  Button: ({ children, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) => (
-    <button {...props}>{children}</button>
-  ),
 }));
 
 // The menu renders its items as plain buttons so a test can pick one.

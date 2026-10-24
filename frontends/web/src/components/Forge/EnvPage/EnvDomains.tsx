@@ -17,7 +17,7 @@
 
 import { ExternalLink, Globe } from "lucide-react";
 
-import { Button } from "@/components/ui/Button";
+import Button from "@/components/forge-ui/button";
 import type { DomainsState } from "@/hooks/forge-domain-queries";
 import { DOMAIN_AVAILABILITY_EXPLANATIONS, type ForgeDomain } from "@/services/forge/domains";
 

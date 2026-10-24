@@ -17,7 +17,7 @@ import { ConnectError } from "@connectrpc/connect";
 import { chatGrpc, MessageRole, type Chat } from "@/api/chat-grpc";
 import { loadRunContext } from "@/components/runs/loadRunContext";
 import { Modal } from "../../ui/Modal";
-import { Button } from "../../ui/Button";
+import Button from "@/components/forge-ui/button";
 import { getWorkflowDisplayName } from "../useWorkflowInputs";
 import { RunFormError } from "./RunFormError";
 import { RunWorkflowForm, type RunWorkflowFormStatus } from "./RunWorkflowForm";

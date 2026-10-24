@@ -22,7 +22,7 @@ import { WorktreesDiscoverHint } from "./WorktreesDiscoverHint";
 import { DeleteWorktreeModal } from "./DeleteWorktreeModal";
 import { AddRepoModal } from "./AddRepoModal";
 import { InitializeGitModal } from "../Git/InitializeGitModal";
-import { Button } from "../ui/Button";
+import Button from "@/components/forge-ui/button";
 import EmptyState from "../forge-ui/empty_state";
 import SkeletonLoader from "../forge-ui/skeleton_loader";
 import { chatsForWorkspace, sortActiveWorkspaces } from "./workspaceStatus";

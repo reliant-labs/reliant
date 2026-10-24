@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Modal } from "../ui/Modal";
 import { Input } from "../ui/Input";
-import { Button } from "../ui/Button";
+import Button from "@/components/forge-ui/button";
 import { useUpdatePreferences } from "../../hooks/settings-queries";
 
 interface FileOperationsModalProps {
@@ -140,7 +140,7 @@ export function FileOperationsModal({
               Cancel
             </Button>
             <Button
-              variant="destructive"
+              variant="danger"
               onClick={handleDeleteConfirm}
               disabled={isSubmitting}
             >

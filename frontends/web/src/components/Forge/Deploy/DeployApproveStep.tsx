@@ -30,7 +30,7 @@
  * and there must never be.
  */
 
-import { Button } from "@/components/ui/Button";
+import Button from "@/components/forge-ui/button";
 import {
   approvableDigest,
   approvableRelease,
@@ -121,7 +121,7 @@ export function DeployApproveStep({
         {/* ABSENT until approvable. */}
         {approval && (
           <Button
-            variant="destructive"
+            variant="danger"
             size="sm"
             onClick={() => onApprove(approval)}
             loading={isDeploying}

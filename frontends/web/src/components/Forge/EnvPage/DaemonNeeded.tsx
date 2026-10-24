@@ -16,7 +16,7 @@
 
 import { PowerOff, RefreshCw, Unplug } from "lucide-react";
 
-import { Button } from "@/components/ui/Button";
+import Button from "@/components/forge-ui/button";
 import { FORGE_API_DISABLED_COPY } from "@/lib/forgeApiDisabled";
 
 /** The one sentence, kept as a constant so tests and copy cannot drift. */

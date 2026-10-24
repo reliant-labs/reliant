@@ -9,7 +9,7 @@
 import { useState, useEffect } from 'react'
 import { toast } from 'sonner'
 import { Modal } from '../../ui/Modal'
-import { Button } from '../../ui/Button'
+import Button from '@/components/forge-ui/button';
 import type { Preset } from '../../../store/globalDataStore'
 import { presetGrpc } from '../../../api/preset-grpc'
 import { workflowGrpc } from '../../../api/workflow-grpc'

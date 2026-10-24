@@ -36,7 +36,7 @@ import { automationAnchorId } from "@/lib/workflowsArea";
 import { cn } from "@/lib/utils";
 import { useProjectStore } from "@/store/projectStore";
 import Card, { CardInset } from "../../forge-ui/card";
-import { Button } from "../../ui/Button";
+import Button from "@/components/forge-ui/button";
 import { Toggle } from "../../ui/Toggle";
 import { AutomationCta } from "../../Automations/AutomationCta";
 import { HealthIndicator, AutomationRow } from "../../Automations/AutomationRow";

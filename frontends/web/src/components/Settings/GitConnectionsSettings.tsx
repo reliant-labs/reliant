@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { Github, Loader2, Plus, RefreshCw, Trash2, X, Cloud } from "lucide-react";
-import { Button } from "../ui/Button";
+import Button from "@/components/forge-ui/button";
 import { gitService } from "../../services/controlPlane/git";
 import type {
   GitAppInstallation,

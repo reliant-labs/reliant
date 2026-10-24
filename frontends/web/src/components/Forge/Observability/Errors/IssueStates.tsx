@@ -8,7 +8,7 @@
 import type { ReactNode } from "react";
 import { Bug, SearchX } from "lucide-react";
 
-import { Button } from "@/components/ui/Button";
+import Button from "@/components/forge-ui/button";
 
 function Note({ icon, title, children, testId, action }: { icon: ReactNode; title: string; children: ReactNode; testId: string; action?: ReactNode }) {
   return (

@@ -17,7 +17,7 @@ import { useDeleteTrigger, useSetTriggerEnabled } from "@/hooks/trigger-queries"
 import type { AutomationCtaKind, AutomationCtaSpec } from "@/lib/automationHealth";
 import { workflowEditHref } from "@/lib/workflowsArea";
 import ConfirmationDialog from "../forge-ui/confirmation_dialog";
-import { Button } from "../ui/Button";
+import Button from "@/components/forge-ui/button";
 import { RunNowDialog } from "../workflow/run/RunNowDialog";
 import { SetupDialogFor } from "./SetupDialogFor";
 

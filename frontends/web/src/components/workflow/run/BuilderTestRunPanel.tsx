@@ -25,7 +25,7 @@ import { useChat } from "@/hooks/chat-queries";
 import { isLiveRunStatus, runStatus } from "@/lib/runStatus";
 import { cn } from "@/lib/utils";
 import { RunStatusBadge } from "../../runs/RunStatusIndicator";
-import { Button } from "../../ui/Button";
+import Button from "@/components/forge-ui/button";
 import { ConfigurationPanel } from "../ConfigurationPanel";
 import { RunFormError } from "./RunFormError";
 import { RunWorkflowForm, type RunWorkflowFormStatus } from "./RunWorkflowForm";

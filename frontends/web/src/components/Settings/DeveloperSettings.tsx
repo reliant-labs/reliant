@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Button } from "../../components/ui/Button";
+import Button from "@/components/forge-ui/button";
 import { Input } from "../../components/ui/Input";
 import Card from "../forge-ui/card";
 import { FileText, FolderOpen, RefreshCw, AlertCircle, CheckCircle } from "lucide-react";
@@ -280,9 +280,9 @@ export function DeveloperSettings() {
                         onClick={handleBrowseFile}
                         variant="outline"
                         size="sm"
-                      >
-                        <FolderOpen className="w-4 h-4" />
-                      </Button>
+                        icon={<FolderOpen />}
+                        aria-label="Browse for a replay file"
+                      />
                     </div>
                     {config.replayFile && config.replayFile !== 'none' && (
                       <div className="flex items-center gap-2 text-xs text-muted-foreground">

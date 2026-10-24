@@ -206,8 +206,10 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge obs logs`](#reliant-forge-obs-logs) | Search and tail logs |
 | [`reliant forge obs metrics`](#reliant-forge-obs-metrics) | List and query metrics; print the declared schema |
 | [`reliant forge obs metrics declared`](#reliant-forge-obs-metrics-declared) | Print the metrics a service declares: name, type, unit, attributes, stability |
+| [`reliant forge obs metrics describe`](#reliant-forge-obs-metrics-describe) | One metric: its kind, export interval, attributes and the breakdowns worth trying |
+| [`reliant forge obs metrics exemplars`](#reliant-forge-obs-metrics-exemplars) | Sampled observations of a metric, each with the trace it came from |
 | [`reliant forge obs metrics list`](#reliant-forge-obs-metrics-list) | The metrics collected in a window |
-| [`reliant forge obs metrics query`](#reliant-forge-obs-metrics-query) | One metric as time series |
+| [`reliant forge obs metrics query`](#reliant-forge-obs-metrics-query) | A metrics panel: one or more metrics over time, as the console's explorer runs it |
 | [`reliant forge obs profile`](#reliant-forge-obs-profile) | Export an aggregated continuous profile as pprof, speedscope or collapsed stacks |
 | [`reliant forge obs query`](#reliant-forge-obs-query) | Anything else: raw SQL or a dashboard panel, with the scope bound |
 | [`reliant forge obs status`](#reliant-forge-obs-status) | What is wrong right now? Services, open issues, alerts, telemetry and the release in force |
@@ -1939,57 +1941,71 @@ reliant forge cluster
 Register a Kubernetes cluster the control plane may deploy into, as one env's binding
 
 Register a cluster you operate, by address, and grant ONE env's binding exactly
-what that env's render applies there.
+what the control plane applies there.
 
   forge cluster connect prod-us --context gke_acme_us-central1_prod --env prod
   forge cluster connect prod-us --context ... --env prod --apply-scope namespace:acme-prod,acme-jobs
   forge cluster connect hub --context ... --env prod --apply-scope cluster
+  forge cluster connect prod-us --context ... --env prod --address https://203.0.113.10:6443 --ca-file ca.pem
   forge cluster connect prod-us --context ... --env prod --dry-run
   forge cluster disconnect prod-us --env prod --context ...
 
-A BINDING is one env on one cluster, and it has its OWN identity: a Google
-service account the control plane allocates for it (gcp), or a ServiceAccount
-token forge mints for it (token). Nothing is shared across bindings, and the
-apply runs AS that identity: no impersonation, no bootstrap writes. The only
-objects connect writes in your cluster are the grant itself.
+HOW IT AUTHENTICATES — one way, on any Kubernetes cluster. Your own kube context
+(--context) bootstraps a dedicated ServiceAccount for this binding and applies
+its least-privilege RBAC; forge reads that ServiceAccount's token and uploads it,
+write-only, to the control plane. The control plane authenticates to your cluster
+as that ServiceAccount and nothing else: no cloud identity of ours is trusted in
+your project, and there is no IAM grant for you to run. The token is bounded by
+the RBAC below and revoked by disconnect (which deletes the ServiceAccount).
+Rotation is a re-run of connect.
+
+A BINDING is one env on one cluster, with its OWN ServiceAccount. Nothing is
+shared across bindings. The only objects connect writes in your cluster are the
+grant itself, that ServiceAccount and its token Secret.
+
+ADDRESS — the API server the control plane dials, from its own pods:
+
+  default        the context's cluster.server and CA. On a GKE context, the
+                 cluster's PUBLIC endpoint and CA from GKE (gcloud describe).
+  --address      an https://host[:port] override, port 443 or 6443. Use it when
+                 the control plane reaches the cluster at another address than
+                 your kubeconfig does.
+  --ca-file      a PEM bundle for the API server's certificate, over the CA
+                 forge would otherwise read.
+
+A GKE DNS endpoint (*.gke.goog) is refused: it authenticates Google identities,
+and a ServiceAccount token cannot pass it. Private, VPC, link-local and metadata
+addresses are refused by the control plane unless your organization is exempt.
 
 APPLY SCOPE — YOU choose where the identity may write; the env's render
-chooses what:
+chooses what, and only for what the CONTROL PLANE applies:
 
   namespace:<ns>[,<ns>…]   a Role and RoleBinding in each named namespace. The
                            DEFAULT, over every namespace the render targets.
                            Refused if the render carries cluster-scoped kinds.
-  cluster                  a ClusterRole and ClusterRoleBinding. Equivalent to
-                           cluster-admin (it holds bind and escalate on RBAC),
-                           and forge says so every time.
+  cluster                  a ClusterRole and ClusterRoleBinding over every
+                           namespace, and forge says so every time.
 
-Either way the rules are derived from the render: one rule per resource it
-applies, nothing else. A release that adds a kind is Forbidden by your
-cluster's own access check until you re-run connect — review it first with
---dry-run, which prints the exact RBAC diff against what is on the cluster.
+Either way the rules are derived from the render: one rule per resource the
+control plane applies, nothing else. Delivery units that 'forge env deploy'
+applies itself (bundle.applier = "forge", or units left out of
+bundle.hub_converges) contribute nothing: an env where forge applies everything
+gets NO apply rules, and connect says so. escalate and bind are never granted
+without resourceNames: where the render carries Roles or ClusterRoles they are
+pinned to those exact names, and impersonate is never granted. A release that
+adds a kind is Forbidden by your cluster's own access check until you re-run
+connect — review it first with --dry-run, which prints the exact RBAC diff
+against what is on the cluster.
 
-AUTH — two values, the two ends of a real trade-off rather than two clouds:
-
-  gcp     GKE. The control plane presents the binding's own Google service
-          account; no secret crosses the boundary. forge prints the one-time
-          IAM grant you run; it cannot run it for you.
-  token   A scoped ServiceAccount token forge mints in your cluster. Works on
-          ANY Kubernetes cluster and needs no cloud identity. Strictly worse (a
-          bearer token at rest), bounded by the RBAC forge applies, and revoked
-          by disconnect.
-
---auth auto (the default) picks gcp for a GKE context and token for anything
-else. Re-running connect UPDATES the cluster of that name and prunes grants the
-new plan no longer names. --env names which control plane to talk to AND whose
+Re-running connect UPDATES the cluster of that name and prunes grants the new
+plan no longer names. --env names which control plane to talk to AND whose
 binding this is; the render is read from the project in the current directory.
 
 DRY RUN — contacts no control plane and changes nothing. It renders the env,
 reads the binding's live RBAC through --context (read-only) — or from a capture
 with --live-from <file> (kubectl get clusterrole,clusterrolebinding,role,
 rolebinding -A -l <selector> -o yaml, selector printed by --dry-run) — and
-prints the diff and the permissions this run would newly grant. On gcp the
-subject is unknown until the control plane allocates it; pass --binding-gsa to
-review the exact subject.
+prints the diff and the permissions this run would newly grant.
 
 SECRET DELIVERY — opt-in, off unless named. A Secret the control plane supplies
 and renews (forge.ControlPlaneSecret) needs write access to exactly that
@@ -2036,9 +2052,9 @@ reliant forge cluster connect <name> [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--address` | `string` | - | https://host[:port] the control plane dials, port 443 or 6443 (default: the context's server; on GKE the cluster's public endpoint) |
 | `--apply-scope` | `string` | - | Where the binding's identity may write: namespace:<ns>[,<ns>…] (default: the namespaces the env renders) or cluster (cluster-admin equivalent) |
-| `--auth` | `string` | `auto` | How the control plane authenticates: auto, gcp or token |
-| `--binding-gsa` | `string` | - | With --dry-run on gcp: the binding's GCP service account, to review the exact subject |
+| `--ca-file` | `string` | - | PEM file for the API server's certificate authority (default: read from the context, or GKE) |
 | `--context` | `string` | - | kubectl context addressing the cluster (required) |
 | `--delivery-secret` | `stringArray` | `[]` | <namespace>/<name> of a Secret the control plane may write and renew (repeatable) |
 | `--delivery-subject` | `string` | - | Also bind the delivery grant to this dedicated identity: user:<name> or serviceaccount:<namespace>/<name> |
@@ -8232,8 +8248,10 @@ reliant forge obs metrics
 | Command | Description |
 |---------|-------------|
 | [`declared`](#reliant-forge-obs-metrics-declared) | Print the metrics a service declares: name, type, unit, attributes, stability |
+| [`describe`](#reliant-forge-obs-metrics-describe) | One metric: its kind, export interval, attributes and the breakdowns worth trying |
+| [`exemplars`](#reliant-forge-obs-metrics-exemplars) | Sampled observations of a metric, each with the trace it came from |
 | [`list`](#reliant-forge-obs-metrics-list) | The metrics collected in a window |
-| [`query`](#reliant-forge-obs-metrics-query) | One metric as time series |
+| [`query`](#reliant-forge-obs-metrics-query) | A metrics panel: one or more metrics over time, as the console's explorer runs it |
 
 ---
 
@@ -8278,20 +8296,192 @@ reliant forge obs metrics declared [flags]
 
 ---
 
+#### reliant forge obs metrics describe
+
+One metric: its kind, export interval, attributes and the breakdowns worth trying
+
+What the explorer's side pane shows for one metric: its type, unit, monotonicity
+and temporality; the export interval (the floor of a useful --step); every
+attribute key with an estimate of how many values it takes, and the declared
+closed value set where the schema lists one; the keys worth grouping by; and
+what the project's declared schema says about it. The attribute scan reads at
+most the last 24 hours of the range. [env] defaults to dev.
+
+  cli forge obs metrics describe dev rpc.server.duration
+  cli forge obs metrics describe prod rpc.server.duration --json --fields attributes
+
+JSON schema forge.obs.metric/v1. --fields takes dotted paths of:
+  attributes
+  attributes.distinct_estimate
+  attributes.enumerated
+  attributes.high_cardinality
+  attributes.key
+  attributes.resource
+  declared
+  declared.attributes
+  declared.attributes.key
+  declared.attributes.values
+  declared.description
+  declared.stability
+  interval_seconds
+  metric
+  metric.builtin
+  metric.declared
+  metric.description
+  metric.last_seen
+  metric.monotonic
+  metric.name
+  metric.queryable
+  metric.seen
+  metric.series_estimate
+  metric.service_count
+  metric.services
+  metric.stability
+  metric.temporality
+  metric.type
+  metric.unit
+  mixed_temporality
+  query_mode
+  scope
+  scope.backend
+  scope.env
+  scope.from
+  scope.services
+  scope.to
+  statements
+  statements.params.*
+  statements.purpose
+  statements.sql
+  suggested
+  suggested_breakdowns
+Always kept: schema, ok, exit_code, error, truncated, omitted, next_page_token.
+
+
+```
+reliant forge obs metrics describe [env] <metric> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
+| `--explain` | `bool` | - | print the compiled SQL and its parameters instead of running it (a starting point for obs query --sql) |
+| `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
+| `--filter` | `stringArray` | `[]` | attribute predicate key=value or key!=value over the allowlisted keys (repeatable) |
+| `--from` | `string` | - | range start, RFC 3339 |
+| `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
+| `--limit` | `int` | `200` | most items to return |
+| `--print-sql` | `bool` | - | alias of --explain |
+| `--service` | `stringArray` | `[]` | only this service.name (repeatable) |
+| `--since` | `duration` | `1h0m0s` | how far back to read (ignored with --from) |
+| `--to` | `string` | - | range end, RFC 3339 (default now) |
+
+---
+
+#### reliant forge obs metrics exemplars
+
+Sampled observations of a metric, each with the trace it came from
+
+The exemplars of one metric: a sampled observation with the trace that produced
+it, newest first, the ones whose trace is still stored before the ones sampled
+out. Up to 20, over at most 7 days. [env] defaults to dev.
+
+The exemplars' own timestamps must fall in a window: --at T (with --around, 2m by
+default, either side) or --from and --to. Without them it is the whole range.
+--min-value keeps the tail of a latency histogram.
+
+  cli forge obs metrics exemplars prod rpc.server.duration --at 2026-10-22T11:40:00Z --min-value 500
+  cli forge obs metrics exemplars dev rpc.server.duration --since 1h --where metric.attr.status=error
+
+--where is key=value or key!=value over the metric's attributes (repeatable).
+A stored trace's next command is in "suggested":
+  cli forge obs trace <trace-id> <env>
+
+JSON schema forge.obs.metric_exemplars/v1. --fields takes dotted paths of:
+  exemplars
+  exemplars.attributes.*
+  exemplars.span_id
+  exemplars.time
+  exemplars.trace_id
+  exemplars.trace_stored
+  exemplars.value
+  metric
+  query_mode
+  scope
+  scope.backend
+  scope.env
+  scope.from
+  scope.services
+  scope.to
+  statements
+  statements.params.*
+  statements.purpose
+  statements.sql
+  suggested
+  window
+  window.from
+  window.to
+Always kept: schema, ok, exit_code, error, truncated, omitted, next_page_token.
+
+
+```
+reliant forge obs metrics exemplars [env] <metric> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--around` | `duration` | `2m0s` | with --at: how far either side of it |
+| `--at` | `string` | - | the moment to read exemplars around, RFC 3339 (the bucket a chart point is) |
+| `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
+| `--explain` | `bool` | - | print the compiled SQL and its parameters instead of running it (a starting point for obs query --sql) |
+| `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
+| `--filter` | `stringArray` | `[]` | attribute predicate key=value or key!=value over the allowlisted keys (repeatable) |
+| `--from` | `string` | - | range start, RFC 3339 |
+| `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
+| `--limit` | `int` | `20` | most items to return |
+| `--min-value` | `float64` | `0` | only exemplars at or above this value |
+| `--print-sql` | `bool` | - | alias of --explain |
+| `--service` | `stringArray` | `[]` | only this service.name (repeatable) |
+| `--since` | `duration` | `1h0m0s` | how far back to read (ignored with --from) |
+| `--to` | `string` | - | range end, RFC 3339 (default now) |
+| `--where` | `stringArray` | `[]` | narrow to series matching key=value or key!=value (repeatable) |
+
+---
+
 #### reliant forge obs metrics list
 
 The metrics collected in a window
 
-List the metric names the env's telemetry carries in the window, with type and
-unit. [env] defaults to dev.
+List the metrics the env's telemetry carries in the window: type (and, for a
+counter, whether it is monotonic; for a sum or histogram, its temporality), unit,
+the services that emit it and an estimate of its series. A metric stored as more
+than one kind is listed once per kind. [env] defaults to dev.
+
+Locally, the metrics the project declares (bin/observability/metrics-schema.json,
+written by forge build) are merged in: "declared" says the schema lists it, and
+"seen": false is a declared metric with no data in the window.
 
   cli forge obs metrics list dev --contains rpc
   cli forge obs metrics list dev --service api --json --fields metrics.name
 
 JSON schema forge.obs.metrics_list/v1. --fields takes dotted paths of:
   metrics
+  metrics.builtin
+  metrics.declared
   metrics.description
+  metrics.last_seen
+  metrics.monotonic
   metrics.name
+  metrics.queryable
+  metrics.seen
+  metrics.series_estimate
+  metrics.service_count
+  metrics.services
+  metrics.stability
+  metrics.temporality
   metrics.type
   metrics.unit
   query_mode
@@ -8334,23 +8524,66 @@ reliant forge obs metrics list [env] [flags]
 
 #### reliant forge obs metrics query
 
-One metric as time series
+A metrics panel: one or more metrics over time, as the console's explorer runs it
 
-Read one metric as time series. The metric's type picks the table; --agg picks
-the aggregation (default: avg for gauges, rate for sums, avg for histograms).
+Run the query the metrics explorer builds: a dashboard panel over metrics. The
+positional metric is series A; --query adds more. Locally and on a hosted env the
+same evaluator runs it, so the same panel over the same data returns the same
+numbers.
 
   cli forge obs metrics query dev rpc.server.duration --agg p95 --group-by rpc.method
-  cli forge obs metrics query dev rpc.server.calls --agg rate --group-by service.name --since 6h
+  cli forge obs metrics query dev rpc.server.calls --since 6h --group-by service.name
+  cli forge obs metrics query prod rpc.server.calls --agg rate --where A:status=error \
+      --query B=rpc.server.calls:rate --formula 'A / B * 100' --kind number --compare 24h
   cli forge obs metrics query dev process.runtime.go.mem.heap_alloc --explain
 
---agg is one of avg, sum, min, max, count, increase, rate, p50, p95, p99. --group-by takes the allowlisted
-attribute keys (`forge obs query --help` lists them), the metric's own
-attributes, or metric.attr.<key> / resource.attr.<key>. Percentiles apply to
-histograms only.
+The aggregation of a series defaults to its kind's: rate for a counter, sum for an
+up-down counter, avg for a gauge, p95 for a histogram. --agg is one of
+rate, increase, sum, avg, min, max, last, count, quantile (p50, p95 and p99 are the quantiles 0.5, 0.95 and 0.99).
 
-JSON schema forge.obs.metrics_query/v1. --fields takes dotted paths of:
-  agg
-  metric
+  --query NAME=metric[:agg[:q]]   one more series (repeatable); NAME is its label (B, C, ...)
+  --where NAME:key=value          narrow series NAME alone; key!=value excludes (repeatable)
+  --filter key=value              narrow every series (repeatable); key!=value excludes
+  --group-by KEY                  split by an attribute (repeatable, at most 3)
+  --formula EXPR                  plot an expression of the series: 'B / A * 100'
+  --kind line|number|table|bar    the shape: a line is a time series; number, table and
+                                  bar reduce each series over the whole range
+  --top N                         a table or bar keeps the top N groups
+  --compare DURATION|prev-release also read the same panel over the range shifted back by
+                                  DURATION, or ending when the env's live release was promoted
+  --panel-out FILE|-              write the dashboard panel these flags build and run nothing;
+                                  `cli forge obs query --panel FILE` runs it, and a dashboard holds it
+
+A key is an attribute of the metric (rpc.method), or service.name, or a
+resource.attr.<key> / metric.attr.<key> spelling. A formula names series by
+position: A is the first, B the second. A missing point counts as 0 in a formula
+over counters and is a gap over anything else.
+
+JSON schema forge.obs.metrics_query/v2. --fields takes dotted paths of:
+  compare
+  compare.against
+  compare.from
+  compare.offset_seconds
+  compare.to
+  compare_series
+  compare_series.label
+  compare_series.labels.*
+  compare_series.points
+  compare_series.points.null
+  compare_series.points.partial
+  compare_series.points.time
+  compare_series.points.value
+  compare_series.reduced
+  meta
+  meta.agg
+  meta.label
+  meta.metric
+  meta.monotonic
+  meta.quantile
+  meta.temporality
+  meta.type
+  meta.value_unit
+  panel
   query_mode
   scope
   scope.backend
@@ -8359,18 +8592,22 @@ JSON schema forge.obs.metrics_query/v1. --fields takes dotted paths of:
   scope.services
   scope.to
   series
+  series.label
   series.labels.*
   series.points
+  series.points.null
+  series.points.partial
   series.points.time
   series.points.value
+  series.reduced
+  series_total
   statements
   statements.params.*
   statements.purpose
   statements.sql
   step_seconds
   suggested
-  type
-  unit
+  warnings
 Always kept: schema, ok, exit_code, error, truncated, omitted, next_page_token.
 
 
@@ -8382,20 +8619,28 @@ reliant forge obs metrics query [env] <metric> [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `--agg` | `string` | - | aggregation: avg, sum, min, max, count, increase, rate, p50, p95, p99 |
+| `--agg` | `string` | - | aggregation of series A: rate, increase, sum, avg, min, max, last, count, quantile (p50, p95 and p99 are the quantiles 0.5, 0.95 and 0.99) (default: by the metric's kind) |
 | `--backend` | `string` | - | local | cloud (default: from the env's declaration) |
+| `--compare` | `string` | - | also read the range shifted back by this duration, or prev-release |
 | `--explain` | `bool` | - | print the compiled SQL and its parameters instead of running it (a starting point for obs query --sql) |
 | `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
-| `--filter` | `stringArray` | `[]` | attribute predicate key=value or key!=value over the allowlisted keys (repeatable) |
+| `--filter` | `stringArray` | `[]` | narrow every series: key=value or key!=value (repeatable) |
+| `--formula` | `string` | - | plot an expression of the series, e.g. 'B / A * 100' |
 | `--from` | `string` | - | range start, RFC 3339 |
 | `--group-by` | `stringArray` | `[]` | split by this attribute key (repeatable, at most 3) |
 | `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
-| `--limit` | `int` | `50` | most series to return |
+| `--kind` | `string` | - | line (default), number, table or bar |
+| `--limit` | `int` | `50` | most series to return per panel series |
+| `--panel-out` | `string` | - | write the dashboard panel built from the flags to FILE (- is stdout) and run nothing |
 | `--print-sql` | `bool` | - | alias of --explain |
+| `--quantile` | `float64` | `0` | the level of --agg quantile, in (0, 1] |
+| `--query` | `stringArray` | `[]` | one more series NAME=metric[:agg[:q]] (repeatable) |
 | `--service` | `stringArray` | `[]` | only this service.name (repeatable) |
 | `--since` | `duration` | `1h0m0s` | how far back to read (ignored with --from) |
-| `--step` | `duration` | `0s` | bucket width (default: about 120 points per series) |
+| `--step` | `duration` | `0s` | bucket width (default: about 120 points per series, never below the export interval) |
 | `--to` | `string` | - | range end, RFC 3339 (default now) |
+| `--top` | `int` | `0` | a table or bar keeps the top N groups |
+| `--where` | `stringArray` | `[]` | narrow one series NAME:key=value or NAME:key!=value (repeatable) |
 
 ---
 

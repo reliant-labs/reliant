@@ -37,7 +37,7 @@ import { usePreferencesStore } from "@/store/preferencesStore";
 import { useProjectStore } from "@/store/projectStore";
 import Card, { CardHeader, CardInset } from "../../forge-ui/card";
 import PageHeader from "../../forge-ui/page_header";
-import { Button } from "../../ui/Button";
+import Button from "@/components/forge-ui/button";
 import { AutomationFormDialog } from "../../Automations/AutomationFormDialog";
 import { AutomationStateNotice } from "../../Automations/AutomationStateNotice";
 import { RunList } from "../../runs/RunList";

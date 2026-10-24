@@ -37,7 +37,7 @@ import { useEffect, useId, useState } from "react";
 
 import { cn } from "@/lib/utils";
 
-import { Button } from "../ui";
+import Button from "@/components/forge-ui/button";
 import { buildOverageRequest, formatCents } from "./usageModel";
 
 import type { OverageChoice, OverageRequestFields } from "./usageModel";
@@ -256,7 +256,7 @@ export function BudgetCapControl({
         <p className="text-xs text-muted-foreground">{disabledReason}</p>
       ) : (
         <div>
-          <Button type="submit" size="sm" isLoading={isSubmitting}>
+          <Button type="submit" size="md" loading={isSubmitting}>
             {isSubmitting ? "Saving…" : "Save spending cap"}
           </Button>
         </div>

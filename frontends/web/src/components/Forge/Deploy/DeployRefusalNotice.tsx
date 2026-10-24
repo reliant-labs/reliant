@@ -32,7 +32,7 @@
  * message string. See deployRefusalOf in api/forge-grpc.ts.
  */
 
-import { Button } from "@/components/ui/Button";
+import Button from "@/components/forge-ui/button";
 import { describeActualBinding, type DeployRefusal } from "@/services/forge/deploy";
 
 import { HOSTED_REFUSAL_COPY, REFUSAL_COPY, REFUSAL_ICON } from "./deployVocabulary";

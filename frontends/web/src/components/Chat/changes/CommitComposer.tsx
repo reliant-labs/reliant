@@ -1,7 +1,7 @@
 import { useId } from "react";
 import { ArrowDown, ArrowUp, ArrowUpFromLine, ExternalLink, GitPullRequest, Loader2, X } from "lucide-react";
 import type { ExistingPRResponse } from "../../../api/git";
-import { Button } from "../../ui/Button";
+import Button from "@/components/forge-ui/button";
 import { Tooltip } from "../../ui/Tooltip";
 import { cn } from "../../../lib/utils";
 import { pluralize } from "./fileStatus";

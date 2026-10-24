@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 
-import { Button } from "./ui";
+import Button from "@/components/forge-ui/button";
 import { formatCentsAsDollars } from "./billingUtils";
 import { centsDecimalToDollars, hourlyPriceShort, MACHINE_BILLING_POLICY, type DaemonPricingLike } from "@/components/Billing/daemonUsage";
 import { cn } from "@/lib/utils";
@@ -299,7 +299,7 @@ export function ComputeOverageControl({
 
       <div>
         <Button
-          size="sm"
+          size="md"
           onClick={handleSave}
           disabled={disabled || saving || !dirty || limitInvalid}
         >

@@ -18,7 +18,7 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Search } from "lucide-react";
 
 import Card from "@/components/forge-ui/card";
-import { Button } from "@/components/ui/Button";
+import Button from "@/components/forge-ui/button";
 import { useIssues, type IssueFilters } from "@/hooks/observability-queries";
 import { issuesErrorKind } from "@/services/controlPlane/observability/errors";
 import {

@@ -44,7 +44,7 @@ import Badge from "@/components/forge-ui/badge";
 import { CardInset } from "@/components/forge-ui/card";
 import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
 import Card from "@/components/forge-ui/card";
-import { Button } from "@/components/ui/Button";
+import Button from "@/components/forge-ui/button";
 import { useIdentityMutation, useIdentityOrg, useIdentityStatus } from "@/hooks/identity-queries";
 import type {
   IdentityDeliveryState,

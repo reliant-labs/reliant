@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Loader2, ShieldAlert, Terminal } from "lucide-react";
 import { supabase } from "../../lib/supabase";
 import { getControlPlaneURL } from "../../lib/constants";
-import { Button } from "../ui/Button";
+import Button from "@/components/forge-ui/button";
 import { logger } from "../../lib/logger";
 
 /**

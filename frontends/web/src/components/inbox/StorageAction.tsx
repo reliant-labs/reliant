@@ -26,7 +26,7 @@ import { useCleanupStorage } from "@/hooks/inbox-queries";
 import { formatBytes } from "@/lib/formatBytes";
 import { pressuredVolume } from "@/lib/machineDisk";
 import { FreeDiskSpaceDialog } from "../MachineDisk/FreeDiskSpaceDialog";
-import { Button } from "../ui/Button";
+import Button from "@/components/forge-ui/button";
 import { Modal } from "../ui/Modal";
 import { CardInset } from "../forge-ui/card";
 

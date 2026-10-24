@@ -20,7 +20,7 @@ import { useChat } from "@/hooks/chat-queries";
 import { useAdoptRun, useRunControl } from "@/hooks/run-queries";
 import { useProjectStore } from "@/store/projectStore";
 import Card from "../forge-ui/card";
-import { Button } from "../ui/Button";
+import Button from "@/components/forge-ui/button";
 import { ChatContainer } from "../Chat/ChatContainer";
 import { RunHeader } from "./RunHeader";
 import { useRunRoute } from "./RunRouteLoader";

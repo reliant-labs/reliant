@@ -17,7 +17,7 @@ import { Play, RefreshCw } from "lucide-react";
 import Card, { CardHeader } from "@/components/forge-ui/card";
 import Link from "@/components/forge-ui/link";
 import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
-import { Button } from "@/components/ui/Button";
+import Button from "@/components/forge-ui/button";
 import type { DomainsState } from "@/hooks/forge-domain-queries";
 import { isForgeAPIDisabled } from "@/lib/forgeApiDisabled";
 import type { CloudPromotion } from "@/services/forge/cloudEnvs";

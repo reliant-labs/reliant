@@ -26,7 +26,7 @@ import { AlertTriangle, ArrowLeft, ArrowRight, Bell, CheckCircle2, CircleHelp, G
 
 import Card from "@/components/forge-ui/card";
 import Link from "@/components/forge-ui/link";
-import { Button } from "@/components/ui/Button";
+import Button from "@/components/forge-ui/button";
 import { obsKeys, useReleaseHealth } from "@/hooks/observability-queries";
 import {
   HEALTH_WINDOW_MS,

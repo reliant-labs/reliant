@@ -19,7 +19,7 @@ import { useId, useMemo, useState } from "react";
 import { AlertTriangle, Bell, Globe, Lock, Mail, MessageSquare, Pencil, Plus, Send, Siren, Trash2 } from "lucide-react";
 
 import Card from "@/components/forge-ui/card";
-import { Button } from "@/components/ui/Button";
+import Button from "@/components/forge-ui/button";
 import { Modal } from "@/components/ui/Modal";
 import { useAlertingMutation, useReceivers } from "@/hooks/observability-queries";
 import type {
@@ -383,7 +383,7 @@ function ReceiverRow({
               </Button>
               {confirming ? (
                 <Button
-                  variant="destructive"
+                  variant="danger"
                   size="sm"
                   disabled={remove.isPending}
                   loading={remove.isPending}

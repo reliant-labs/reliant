@@ -28,8 +28,8 @@ import {
 } from "lucide-react";
 
 import { cn } from "../../../lib/utils";
+import Button from "@/components/forge-ui/button";
 import {
-  Button,
   Card,
   CardHeader,
   CardTitle,
@@ -595,7 +595,7 @@ function RevealedKeyBanner({
         </button>
       </div>
       <div className="mt-3 flex justify-end">
-        <Button variant="outline" size="sm" onClick={copy}>
+        <Button variant="outline" size="md" onClick={copy}>
           {copied ? (
             <Check className="mr-1 h-3.5 w-3.5" />
           ) : (
@@ -660,8 +660,7 @@ function LLMKeysCard({
               Anthropic / Vertex SDKs via the Reliant gateway.
             </p>
           </div>
-          <Button onClick={onToggleCreate} variant={createOpen ? "outline" : "primary"}>
-            <Plus className="mr-1.5 h-4 w-4" />
+          <Button onClick={onToggleCreate} variant={createOpen ? "outline" : "primary"} size="xl" leftIcon={<Plus />}>
             {createOpen ? "Cancel" : "Create key"}
           </Button>
         </div>
@@ -729,20 +728,20 @@ function LLMKeysCard({
                         <div className="flex justify-end gap-2">
                           <Button
                             variant="outline"
-                            size="sm"
+                            size="md"
                             onClick={() => onRotate(k)}
                             disabled={rotating}
+                            leftIcon={<RefreshCw />}
                           >
-                            <RefreshCw className="mr-1 h-3.5 w-3.5" />
                             Rotate
                           </Button>
                           <Button
                             variant="outline"
-                            size="sm"
+                            size="md"
                             onClick={() => onRevoke(k)}
                             disabled={revoking === k.id}
+                            leftIcon={<Trash2 />}
                           >
-                            <Trash2 className="mr-1 h-3.5 w-3.5" />
                             Revoke
                           </Button>
                         </div>
@@ -890,8 +889,7 @@ function CreateKeyForm({
       {formError && <p className="text-sm text-destructive-ink">{formError}</p>}
 
       <div className="flex justify-end">
-        <Button onClick={submit} isLoading={creating} disabled={creating}>
-          <Plus className="mr-1.5 h-4 w-4" />
+        <Button onClick={submit} loading={creating} disabled={creating} size="xl" leftIcon={<Plus />}>
           Create key
         </Button>
       </div>

@@ -19,7 +19,7 @@ import { useChatList } from "../../hooks/chat-queries";
 import { useWindowContext } from "../../hooks/useWindowContext";
 import { GitStatus } from "../Git/GitStatus";
 import { CommitHistory } from "../Git/CommitHistory";
-import { Button } from "../ui/Button";
+import Button from "@/components/forge-ui/button";
 import { Tooltip } from "../ui/Tooltip";
 import Badge from "../forge-ui/badge";
 import Status from "../forge-ui/status";

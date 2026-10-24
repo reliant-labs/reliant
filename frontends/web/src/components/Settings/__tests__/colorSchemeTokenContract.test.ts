@@ -188,7 +188,22 @@ function computeAll(env: Map<string, string>): Map<string, string | null> {
 
 const HSL_COLOR = /^hsl\(\s*\d+(\.\d+)?\s+\d+(\.\d+)?%\s+\d+(\.\d+)?%\s*(\/\s*(0|1|0?\.\d+))?\s*\)$/
 
-const FORGE_SCOPE_DECLS = declsOf(INDEX_BLOCKS, '.forge-ui')
+/** The selectors of a rule's selector list (`.a,\n[b]` → ['.a', '[b]']). */
+const selectorList = (b: CssBlock) => b.selector.split(',').map((x) => x.trim())
+
+/** Declarations of every rule whose selector LIST names `selector`. */
+function declsIn(blocks: CssBlock[], selector: string) {
+  const merged = new Map<string, string>()
+  for (const block of blocks) {
+    if (selectorList(block).includes(selector)) for (const [k, v] of block.decls) merged.set(k, v)
+  }
+  return merged
+}
+
+const FORGE_SCOPE_DECLS = declsIn(INDEX_BLOCKS, '.forge-ui')
+// forge's Button renders all over reliant, mostly outside a .forge-ui
+// wrapper, so its element (`data-slot="button"`) carries the scope itself.
+const BUTTON_SCOPE_DECLS = declsIn(INDEX_BLOCKS, '[data-slot="button"]')
 
 describe('forge token bridge in every color scheme', () => {
   it('declares every forge token in the @theme bridge', () => {
@@ -205,6 +220,11 @@ describe('forge token bridge in every color scheme', () => {
       missing,
       'an accent token .forge-ui does not redeclare keeps resolving to reliant\'s muted --accent inside the scope',
     ).toEqual([])
+  })
+
+  it('scopes the forge Button exactly as .forge-ui', () => {
+    expect(BUTTON_SCOPE_DECLS.size, 'no rule scopes [data-slot="button"]').toBeGreaterThan(0)
+    expect(Object.fromEntries(BUTTON_SCOPE_DECLS)).toEqual(Object.fromEntries(FORGE_SCOPE_DECLS))
   })
 
   const cases = COLOR_SCHEMES.flatMap((scheme) => (['light', 'dark'] as const).map((mode) => [scheme, mode] as const))
@@ -238,5 +258,106 @@ describe('forge token bridge in every color scheme', () => {
       expect(html.get('--color-accent'), `${scheme} ${mode} <html>`).toBe(`hsl(${html.get('--accent')})`)
       expect(scoped.get('--color-accent'), `${scheme} ${mode} .forge-ui`).toBe(`hsl(${html.get('--primary')})`)
     }
+  })
+
+  /** `hsl(H S% L% / a)` → sRGB 0..1 and alpha. */
+  function parseHsl(value: string): { rgb: [number, number, number]; a: number } {
+    const m = /^hsl\(\s*([\d.]+)\s+([\d.]+)%\s+([\d.]+)%\s*(?:\/\s*([\d.]+))?\s*\)$/.exec(value)
+    if (!m) throw new Error(`not an hsl color: ${value}`)
+    const [h, sat, l] = [Number(m[1]), Number(m[2]) / 100, Number(m[3]) / 100]
+    const k = (n: number) => (n + h / 30) % 12
+    const f = (n: number) => l - sat * Math.min(l, 1 - l) * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1))
+    return { rgb: [f(0), f(8), f(4)], a: m[4] === undefined ? 1 : Number(m[4]) }
+  }
+  const over = (fg: { rgb: number[]; a: number }, bg: number[]) =>
+    fg.rgb.map((c, i) => fg.a * c + (1 - fg.a) * bg[i]!) as [number, number, number]
+  const luminance = (rgb: number[]) => {
+    const lin = rgb.map((c) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4))
+    return 0.2126 * lin[0]! + 0.7152 * lin[1]! + 0.0722 * lin[2]!
+  }
+  const contrast = (a: number[], b: number[]) => {
+    const [x, y] = [luminance(a), luminance(b)].sort((p, q) => q - p)
+    return (x! + 0.05) / (y! + 0.05)
+  }
+
+  // forge-ui/button.tsx's rest and hover paints: [fill token or null, fill
+  // alpha, text token]. Neutral variants paint `ink` at a low alpha over the
+  // surface the button sits on.
+  const BUTTON_PAINTS: Record<string, Array<[string | null, number, string]>> = {
+    primary: [['accent', 1, 'on-accent'], ['accent-hover', 1, 'on-accent']],
+    secondary: [['ink', 0.06, 'ink'], ['ink', 0.1, 'ink']],
+    outline: [[null, 0, 'ink'], ['ink', 0.05, 'ink']],
+    ghost: [[null, 0, 'ink-muted'], ['ink', 0.06, 'ink']],
+    danger: [['danger', 1, 'on-danger'], ['danger-hover', 1, 'on-danger']],
+  }
+
+  /**
+   * Palette debt the forge Button exposes but does not own: in these schemes
+   * the theme's own `--primary-foreground` on `--primary` is below WCAG AA
+   * 4.5:1, the hover twin (`/ 0.85` alpha in the bridge above) lightens the
+   * fill further, and the focus outline, which is `--primary`, is below 3:1
+   * against the page. Every filled primary element in the
+   * app paints these pairs, and reliant's previous Button painted them too;
+   * the fix is a palette decision, not a Button one.
+   *
+   * This list is a ratchet in both directions: a scheme that gains a failure
+   * fails the test, and so does a palette fix, until its entry is deleted.
+   */
+  const PALETTE_DEBT: Record<string, string[]> = {
+    'professional-blue light': ['primary', 'primary hover'],
+    'modern-teal light': ['focus', 'primary', 'primary hover'],
+    'modern-teal dark': ['primary', 'primary hover'],
+    'slate dark': ['primary', 'primary hover'],
+    'forest light': ['primary', 'primary hover'],
+    'forest dark': ['primary', 'primary hover'],
+    'vibrant-pink light': ['primary', 'primary hover'],
+    'vibrant-pink dark': ['primary', 'primary hover'],
+    'energetic-orange light': ['focus', 'primary', 'primary hover'],
+    'energetic-orange dark': ['primary', 'primary hover'],
+    'bold-red light': ['primary', 'primary hover'],
+    'bold-red dark': ['primary', 'primary hover'],
+    'purple-classic light': ['primary hover'],
+    'purple-classic dark': ['primary', 'primary hover'],
+  }
+
+  function buttonFailures(scheme: string, mode: 'light' | 'dark') {
+    const html = computeAll(htmlDecls(scheme, mode))
+    const inherited = new Map<string, string>()
+    for (const [k, v] of html) if (v !== null) inherited.set(k, v)
+    for (const [k, v] of BUTTON_SCOPE_DECLS) inherited.set(k, v)
+    const scoped = computeAll(inherited)
+    const color = (token: string) => parseHsl(scoped.get(`--color-${token}`)!)
+
+    const owned: string[] = []
+    const palette = new Set<string>()
+    for (const surfaceToken of ['surface', 'surface-muted', 'surface-sunken']) {
+      const surface = over(color(surfaceToken), [1, 1, 1])
+      if (contrast(over(color('accent'), surface), surface) < 3) palette.add('focus')
+      for (const [variant, states] of Object.entries(BUTTON_PAINTS)) {
+        states.forEach(([fillToken, alpha, textToken], i) => {
+          const fill = fillToken ? over({ ...color(fillToken), a: color(fillToken).a * alpha }, surface) : surface
+          const ratio = contrast(over(color(textToken), fill), fill)
+          if (ratio >= 4.5) return
+          const name = i ? `${variant} hover` : variant
+          // A filled variant's label is the theme's own token pair; a neutral
+          // variant's composite is the Button's.
+          if (variant === 'primary' || variant === 'danger') palette.add(name)
+          else owned.push(`${name} on ${surfaceToken}: ${ratio.toFixed(2)}:1`)
+        })
+      }
+    }
+    return { owned, palette: [...palette].sort() }
+  }
+
+  it.each(cases)('keeps the forge Button\'s own variants at WCAG AA in %s %s', (scheme, mode) => {
+    expect(buttonFailures(scheme, mode).owned, `neutral Button variants below 4.5:1 in ${scheme} ${mode}`).toEqual([])
+  })
+
+  it.each(cases)('holds the palette debt the forge Button exposes in %s %s to its recorded list', (scheme, mode) => {
+    const want = [...(PALETTE_DEBT[`${scheme} ${mode}`] ?? [])].sort()
+    expect(
+      buttonFailures(scheme, mode).palette,
+      `palette pairs below their WCAG floor in ${scheme} ${mode} — update PALETTE_DEBT only to delete a fixed entry`,
+    ).toEqual(want)
   })
 })

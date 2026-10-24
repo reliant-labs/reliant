@@ -21,7 +21,7 @@ import { useTriggers } from "@/hooks/trigger-queries";
 import { useProjectStore } from "@/store/projectStore";
 import Card from "../forge-ui/card";
 import PageHeader from "../forge-ui/page_header";
-import { Button } from "../ui/Button";
+import Button from "@/components/forge-ui/button";
 import { WORKFLOWS_AUTOMATIONS_PATH, WORKFLOWS_LIBRARY_PATH } from "@/lib/workflowsArea";
 import { RunList } from "./RunList";
 import { RunFilters, useRunsSearch } from "./RunFilters";

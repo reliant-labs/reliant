@@ -60,7 +60,7 @@ import { useProjectStore } from "../../store/projectStore";
 import { cn } from "../../lib/utils";
 import { toast } from "../../lib/toast-manager";
 import { Tooltip } from "../ui/Tooltip";
-import { Button } from "../ui/Button";
+import Button from "@/components/forge-ui/button";
 import { ContextMenu } from "../ui/ContextMenu";
 import type { ContextMenuItem } from "../ui/ContextMenu";
 import type { Chat } from "../../api/client";

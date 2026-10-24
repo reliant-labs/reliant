@@ -19,7 +19,7 @@ import {
 import { useProjectStore } from "../../store/projectStore";
 import { usePreferencesStore } from "../../store/preferencesStore";
 import { toast } from "sonner";
-import { Button } from "../ui/Button";
+import Button from "@/components/forge-ui/button";
 import { MCPCustomServerModal } from "./MCPCustomServerModal";
 import { MCPTabs } from "./MCPTabs";
 import { MCPInstalledTab } from "./MCPInstalledTab";
@@ -126,7 +126,7 @@ function MCPRefreshStatus({
           type="button"
           variant="ghost"
           size="xs"
-          className="self-start text-destructive-ink hover:bg-destructive/10 hover:text-destructive-ink sm:self-auto"
+          className="self-start text-destructive-ink! not-disabled:hover:bg-destructive/10! sm:self-auto"
           onClick={onRetry}
         >
           Retry

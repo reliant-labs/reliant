@@ -35,7 +35,7 @@ import { loadRunContext } from "@/components/runs/loadRunContext";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useWorkflowLibrary } from "@/hooks/workflow-library-queries";
 import { Modal } from "../../ui/Modal";
-import { Button } from "../../ui/Button";
+import Button from "@/components/forge-ui/button";
 import { SetupSection } from "../../Automations/setup/SetupSection";
 import { cn } from "@/lib/utils";
 import { getWorkflowDisplayName } from "../useWorkflowInputs";

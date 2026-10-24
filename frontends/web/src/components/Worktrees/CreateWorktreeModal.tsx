@@ -6,7 +6,7 @@ import { useWorktreeStore } from "../../store/worktreeStore";
 import { useProjectStore } from "../../store/projectStore";
 import { useBranches } from "../../hooks/useBranches";
 import { InitializeGitModal } from "../Git/InitializeGitModal";
-import { Button } from "../ui/Button";
+import Button from "@/components/forge-ui/button";
 import { cn } from "../../lib/utils";
 import { WorktreeStatus } from "../../gen/reliant/v1/worktree_pb";
 import { useListRepos } from "../../hooks/repo-service-hooks_gen";

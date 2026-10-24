@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { Loader2, ShieldAlert, ExternalLink } from "lucide-react";
 import { supabase } from "../../lib/supabase";
-import { Button } from "../ui/Button";
+import Button from "@/components/forge-ui/button";
 import { logger } from "../../lib/logger";
 import { ConnectorConsent } from "../Settings/ConnectorConsent";
 

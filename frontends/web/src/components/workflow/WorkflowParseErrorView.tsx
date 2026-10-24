@@ -10,7 +10,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { ArrowLeft, Trash2, ChevronDown, ChevronUp, RefreshCw, MessageCircle } from "lucide-react";
-import { Button } from "../ui/Button";
+import Button from "@/components/forge-ui/button";
 import { cn } from "../../lib/utils";
 import { WorkflowEditorChatPanel, type PanelSize } from "./WorkflowEditorChatPanel";
 import { useProjectStore } from "../../store/projectStore";
@@ -70,9 +70,8 @@ export function WorkflowParseErrorView({
             variant="ghost"
             size="sm"
             onClick={onBack}
-            className="gap-2"
+            leftIcon={<ArrowLeft />}
           >
-            <ArrowLeft className="h-4 w-4" />
             Back
           </Button>
           <span className="text-muted-foreground">/</span>
@@ -83,18 +82,16 @@ export function WorkflowParseErrorView({
             variant="outline"
             size="sm"
             onClick={onFixed}
-            className="gap-2"
+            leftIcon={<RefreshCw />}
           >
-            <RefreshCw className="h-4 w-4" />
             Retry Load
           </Button>
           <Button
-            variant="destructive"
+            variant="danger"
             size="sm"
             onClick={onClear}
-            className="gap-2"
+            leftIcon={<Trash2 />}
           >
-            <Trash2 className="h-4 w-4" />
             Clear Workflow
           </Button>
         </div>

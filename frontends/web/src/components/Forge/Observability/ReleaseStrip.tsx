@@ -13,7 +13,7 @@
 import { useState } from "react";
 import { ChevronDown, ChevronRight, GitCommitHorizontal, RefreshCw, Rocket, Undo2 } from "lucide-react";
 
-import { Button } from "@/components/ui/Button";
+import Button from "@/components/forge-ui/button";
 import type { Promotion } from "@/services/controlPlane/observability/deliveryTypes";
 import { deliveryErrorKind, obsErrorMessage } from "@/services/controlPlane/observability/errors";
 import { cn } from "@/lib/utils";

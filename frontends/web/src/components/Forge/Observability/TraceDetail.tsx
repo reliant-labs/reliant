@@ -13,7 +13,7 @@
 import { ArrowLeft, Flame, FileText, LineChart } from "lucide-react";
 
 import Card, { CardHeader } from "@/components/forge-ui/card";
-import { Button } from "@/components/ui/Button";
+import Button from "@/components/forge-ui/button";
 import { useTrace } from "@/hooks/observability-queries";
 import type { ObsScope, Span } from "@/services/controlPlane/observability/types";
 

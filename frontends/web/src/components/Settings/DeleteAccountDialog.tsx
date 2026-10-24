@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { AlertTriangle, Loader2 } from 'lucide-react'
 import { Modal } from '../ui/Modal'
-import { Button } from '../ui/Button'
+import Button from '@/components/forge-ui/button';
 import { Input } from '../ui/Input'
 import { createAccountClient } from '../../api/grpc-client'
 import type {
@@ -232,7 +232,7 @@ export function DeleteAccountDialog({ isOpen, onClose, onDeleted }: DeleteAccoun
             Cancel
           </Button>
           <Button
-            variant="destructive"
+            variant="danger"
             onClick={handleDelete}
             disabled={!preview || !confirmationMatches || isDeleting}
             leftIcon={isDeleting ? <Loader2 className="w-3 h-3 animate-spin" /> : undefined}

@@ -40,7 +40,7 @@ import { useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { RefreshCw } from "lucide-react";
 
-import { Button } from "@/components/ui/Button";
+import Button from "@/components/forge-ui/button";
 import { activityKeys, deliveryKeys, issueKeys, obsKeys, useObservabilityOrg, useServiceOverview } from "@/hooks/observability-queries";
 import type { Promotion } from "@/services/controlPlane/observability/deliveryTypes";
 import type { ObsScope } from "@/services/controlPlane/observability/types";

@@ -11,7 +11,7 @@
 
 import { Bot, Database, User } from "lucide-react";
 
-import { Button } from "@/components/ui/Button";
+import Button from "@/components/forge-ui/button";
 import { useActivity } from "@/hooks/observability-queries";
 import type { ActivityEvent } from "@/services/controlPlane/observability/activityApi";
 import type { DeliveryScope } from "@/services/controlPlane/observability/deliveryTypes";

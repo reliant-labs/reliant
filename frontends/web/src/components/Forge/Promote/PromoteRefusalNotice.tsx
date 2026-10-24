@@ -29,7 +29,7 @@
 
 import { ShieldAlert } from "lucide-react";
 
-import { Button } from "@/components/ui/Button";
+import Button from "@/components/forge-ui/button";
 import { describeActualBinding, type PromoteRefusal } from "@/services/forge/promote";
 
 export interface PromoteRefusalNoticeProps {
