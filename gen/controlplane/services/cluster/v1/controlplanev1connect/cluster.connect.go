@@ -65,10 +65,11 @@ type ClusterServiceClient interface {
 	RemoveCluster(context.Context, *connect.Request[v1.RemoveClusterRequest]) (*connect.Response[v1.RemoveClusterResponse], error)
 	// ConnectCluster registers a cluster BY ADDRESS, with no agent in it.
 	//
-	// The platform is told the address and the CA up front, and authenticates
-	// either as a cloud workload identity (no secret crosses the boundary at
-	// all) or with a scoped ServiceAccount token the owner pasted once. Nothing
-	// is installed in the target cluster.
+	// The platform is told the address, the CA and the scoped ServiceAccount
+	// token up front, all required. The token is the ONLY credential the
+	// platform ever uses against the cluster; a request without one is
+	// InvalidArgument and names `forge cluster connect`. Nothing is installed in
+	// the target cluster.
 	//
 	// DECLARATIVE AND IDEMPOTENT BY NAME. `forge cluster connect <name>` is
 	// re-run from a checkout, so a second call with different values UPDATES
@@ -76,11 +77,6 @@ type ClusterServiceClient interface {
 	// connect command safe to put in a script, and it is why there is no
 	// separate UpdateCluster: a second spelling of the same write could
 	// disagree with this one about what a partial request means.
-	//
-	// THE RESPONSE CARRIES THE HUB'S OWN IDENTITY, which is the half a caller
-	// cannot derive. Workload identity means the TARGET cluster must grant
-	// something to US, so forge prints the one-time IAM + RBAC grant the owner
-	// runs — and it can only print it if it knows which principal to name.
 	ConnectCluster(context.Context, *connect.Request[v1.ConnectClusterRequest]) (*connect.Response[v1.ConnectClusterResponse], error)
 }
 
@@ -162,10 +158,11 @@ type ClusterServiceHandler interface {
 	RemoveCluster(context.Context, *connect.Request[v1.RemoveClusterRequest]) (*connect.Response[v1.RemoveClusterResponse], error)
 	// ConnectCluster registers a cluster BY ADDRESS, with no agent in it.
 	//
-	// The platform is told the address and the CA up front, and authenticates
-	// either as a cloud workload identity (no secret crosses the boundary at
-	// all) or with a scoped ServiceAccount token the owner pasted once. Nothing
-	// is installed in the target cluster.
+	// The platform is told the address, the CA and the scoped ServiceAccount
+	// token up front, all required. The token is the ONLY credential the
+	// platform ever uses against the cluster; a request without one is
+	// InvalidArgument and names `forge cluster connect`. Nothing is installed in
+	// the target cluster.
 	//
 	// DECLARATIVE AND IDEMPOTENT BY NAME. `forge cluster connect <name>` is
 	// re-run from a checkout, so a second call with different values UPDATES
@@ -173,11 +170,6 @@ type ClusterServiceHandler interface {
 	// connect command safe to put in a script, and it is why there is no
 	// separate UpdateCluster: a second spelling of the same write could
 	// disagree with this one about what a partial request means.
-	//
-	// THE RESPONSE CARRIES THE HUB'S OWN IDENTITY, which is the half a caller
-	// cannot derive. Workload identity means the TARGET cluster must grant
-	// something to US, so forge prints the one-time IAM + RBAC grant the owner
-	// runs — and it can only print it if it knows which principal to name.
 	ConnectCluster(context.Context, *connect.Request[v1.ConnectClusterRequest]) (*connect.Response[v1.ConnectClusterResponse], error)
 }
 

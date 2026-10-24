@@ -20,46 +20,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file services/cluster/v1/cluster.proto.
  */
 export const file_services_cluster_v1_cluster: GenFile = /*@__PURE__*/
-  fileDesc("CiFzZXJ2aWNlcy9jbHVzdGVyL3YxL2NsdXN0ZXIucHJvdG8SD2NvbnRyb2xwbGFuZS52MSI2CgtIdWJJZGVudGl0eRIbChNnY3Bfc2VydmljZV9hY2NvdW50GAEgASgJSgQIAhADSgQIAxAEItwCCgdDbHVzdGVyEgoKAmlkGAEgASgJEgwKBG5hbWUYAiABKAkSMgoIcHJvdmlkZXIYAyABKA4yIC5jb250cm9scGxhbmUudjEuQ2x1c3RlclByb3ZpZGVyEjYKCmNvbm5lY3Rpb24YBCABKA4yIi5jb250cm9scGxhbmUudjEuQ2x1c3RlckNvbm5lY3Rpb24SFwoPZW52aXJvbm1lbnRfaWRzGAkgAygJEi4KCmNyZWF0ZWRfYXQYCiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEioKBGF1dGgYDCABKA4yHC5jb250cm9scGxhbmUudjEuQ2x1c3RlckF1dGgSDwoHYWRkcmVzcxgNIAEoCRIVCg1jbG91ZF9jbHVzdGVyGA4gASgJEi4KBmlzc3VlchgPIAEoCzIeLmNvbnRyb2xwbGFuZS52MS5DbHVzdGVySXNzdWVyIhUKE0xpc3RDbHVzdGVyc1JlcXVlc3QiQgoUTGlzdENsdXN0ZXJzUmVzcG9uc2USKgoIY2x1c3RlcnMYASADKAsyGC5jb250cm9scGxhbmUudjEuQ2x1c3RlciIfChFHZXRDbHVzdGVyUmVxdWVzdBIKCgJpZBgBIAEoCSI/ChJHZXRDbHVzdGVyUmVzcG9uc2USKQoHY2x1c3RlchgBIAEoCzIYLmNvbnRyb2xwbGFuZS52MS5DbHVzdGVyIiIKFFJlbW92ZUNsdXN0ZXJSZXF1ZXN0EgoKAmlkGAEgASgJIhcKFVJlbW92ZUNsdXN0ZXJSZXNwb25zZSKKAgoVQ29ubmVjdENsdXN0ZXJSZXF1ZXN0EgwKBG5hbWUYASABKAkSKgoEYXV0aBgCIAEoDjIcLmNvbnRyb2xwbGFuZS52MS5DbHVzdGVyQXV0aBIPCgdhZGRyZXNzGAMgASgJEg4KBmNhX3BlbRgEIAEoCRIVCg1jbG91ZF9jbHVzdGVyGAUgASgJEg0KBXRva2VuGAYgASgJEjQKEHRva2VuX2V4cGlyZXNfYXQYByABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEjoKBmlzc3VlchgIIAEoCzIqLmNvbnRyb2xwbGFuZS52MS5DbHVzdGVySXNzdWVyUmVnaXN0cmF0aW9uIlcKGUNsdXN0ZXJJc3N1ZXJSZWdpc3RyYXRpb24SDgoGaXNzdWVyGAEgASgJEhIKCGRpc2NvdmVyGAIgASgISAASDgoEandrcxgDIAEoCUgAQgYKBGtleXMijgEKDUNsdXN0ZXJJc3N1ZXISGAoQc3RvcmVfY2x1c3Rlcl9pZBgBIAEoCRIOCgZpc3N1ZXIYAiABKAkSEAoIZGlzY292ZXIYAyABKAgSEQoJa2V5X2NvdW50GAQgASgFEi4KCnVwZGF0ZWRfYXQYBSABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIncKFkNvbm5lY3RDbHVzdGVyUmVzcG9uc2USKQoHY2x1c3RlchgBIAEoCzIYLmNvbnRyb2xwbGFuZS52MS5DbHVzdGVyEjIKDGh1Yl9pZGVudGl0eRgCIAEoCzIcLmNvbnRyb2xwbGFuZS52MS5IdWJJZGVudGl0eSpNCg9DbHVzdGVyUHJvdmlkZXISIAocQ0xVU1RFUl9QUk9WSURFUl9VTlNQRUNJRklFRBAAEhgKFENMVVNURVJfUFJPVklERVJfQllPEAEqlwEKEUNsdXN0ZXJDb25uZWN0aW9uEiIKHkNMVVNURVJfQ09OTkVDVElPTl9VTlNQRUNJRklFRBAAEh4KGkNMVVNURVJfQ09OTkVDVElPTl9XQUlUSU5HEAESIAocQ0xVU1RFUl9DT05ORUNUSU9OX0NPTk5FQ1RFRBACEhwKGENMVVNURVJfQ09OTkVDVElPTl9TVEFMRRADKocBCgtDbHVzdGVyQXV0aBIcChhDTFVTVEVSX0FVVEhfVU5TUEVDSUZJRUQQABImCiJDTFVTVEVSX0FVVEhfV09SS0xPQURfSURFTlRJVFlfR0NQEAESJgoiQ0xVU1RFUl9BVVRIX1NFUlZJQ0VfQUNDT1VOVF9UT0tFThAEIgQIAhACIgQIAxADMvIDCg5DbHVzdGVyU2VydmljZRJjCgxMaXN0Q2x1c3RlcnMSJC5jb250cm9scGxhbmUudjEuTGlzdENsdXN0ZXJzUmVxdWVzdBolLmNvbnRyb2xwbGFuZS52MS5MaXN0Q2x1c3RlcnNSZXNwb25zZSIGorsYAggBEl0KCkdldENsdXN0ZXISIi5jb250cm9scGxhbmUudjEuR2V0Q2x1c3RlclJlcXVlc3QaIy5jb250cm9scGxhbmUudjEuR2V0Q2x1c3RlclJlc3BvbnNlIgaiuxgCCAESfwoNUmVtb3ZlQ2x1c3RlchIlLmNvbnRyb2xwbGFuZS52MS5SZW1vdmVDbHVzdGVyUmVxdWVzdBomLmNvbnRyb2xwbGFuZS52MS5SZW1vdmVDbHVzdGVyUmVzcG9uc2UiH6K7GBsIAToXCgZyZW1vdmUSDQoHY2x1c3RlchICaWQSmgEKDkNvbm5lY3RDbHVzdGVyEiYuY29udHJvbHBsYW5lLnYxLkNvbm5lY3RDbHVzdGVyUmVxdWVzdBonLmNvbnRyb2xwbGFuZS52MS5Db25uZWN0Q2x1c3RlclJlc3BvbnNlIjeiuxgzCAE6LwoHY29ubmVjdBIkCgdjbHVzdGVyEhNyZXNwb25zZS5jbHVzdGVyLmlkGgRuYW1lQtUBChNjb20uY29udHJvbHBsYW5lLnYxQgxDbHVzdGVyUHJvdG9QAVpTZ2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vY29udHJvbHBsYW5lL3NlcnZpY2VzL2NsdXN0ZXIvdjE7Y29udHJvbHBsYW5ldjGiAgNDWFiqAg9Db250cm9scGxhbmUuVjHKAg9Db250cm9scGxhbmVcVjHiAhtDb250cm9scGxhbmVcVjFcR1BCTWV0YWRhdGHqAhBDb250cm9scGxhbmU6OlYxYgZwcm90bzM", [file_forge_v1_forge, file_google_protobuf_timestamp]);
-
-/**
- * HubIdentity is the principal the CONTROL PLANE acts as.
- *
- * WHY THIS IS A RESPONSE FIELD AND NOT DOCUMENTATION. Workload identity
- * inverts who holds the credential: instead of the owner handing us a token,
- * the owner grants OUR identity access in THEIR cloud. That grant names a
- * principal, and the principal is a deployment-level fact about the platform
- * the caller has no way to know. So the connect response hands it back and
- * forge renders the exact `gcloud` command plus the target cluster RBAC.
- *
- * ONE FIELD, because there is one workload-identity provider. The AWS and
- * Azure principals are reserved alongside the enum values they would serve:
- * returning an empty `aws_role_arn` today would advertise a capability that
- * does not exist, which is the thing the enum's reservation is avoiding.
- *
- * EMPTY IS THE NORMAL STATE IN DEV, where the control plane has no cloud
- * identity. forge must then say "this deployment has no GCP identity
- * configured" rather than print a grant command with a blank principal in it.
- *
- * @generated from message controlplane.v1.HubIdentity
- */
-export type HubIdentity = Message<"controlplane.v1.HubIdentity"> & {
-  /**
-   * The GCP service account email the hub's workloads run as, e.g.
-   * `control-plane@reliant-labs-475814.iam.gserviceaccount.com`. Granted
-   * `roles/container.clusterViewer` plus target-cluster RBAC.
-   *
-   * @generated from field: string gcp_service_account = 1;
-   */
-  gcpServiceAccount: string;
-};
-
-/**
- * Describes the message controlplane.v1.HubIdentity.
- * Use `create(HubIdentitySchema)` to create a new message.
- */
-export const HubIdentitySchema: GenMessage<HubIdentity> = /*@__PURE__*/
-  messageDesc(file_services_cluster_v1_cluster, 0);
+  fileDesc("CiFzZXJ2aWNlcy9jbHVzdGVyL3YxL2NsdXN0ZXIucHJvdG8SD2NvbnRyb2xwbGFuZS52MSK6AgoHQ2x1c3RlchIKCgJpZBgBIAEoCRIMCgRuYW1lGAIgASgJEjIKCHByb3ZpZGVyGAMgASgOMiAuY29udHJvbHBsYW5lLnYxLkNsdXN0ZXJQcm92aWRlchI2Cgpjb25uZWN0aW9uGAQgASgOMiIuY29udHJvbHBsYW5lLnYxLkNsdXN0ZXJDb25uZWN0aW9uEhcKD2Vudmlyb25tZW50X2lkcxgJIAMoCRIuCgpjcmVhdGVkX2F0GAogASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIPCgdhZGRyZXNzGA0gASgJEi4KBmlzc3VlchgPIAEoCzIeLmNvbnRyb2xwbGFuZS52MS5DbHVzdGVySXNzdWVySgQIDBANSgQIDhAPUgRhdXRoUg1jbG91ZF9jbHVzdGVyIhUKE0xpc3RDbHVzdGVyc1JlcXVlc3QiQgoUTGlzdENsdXN0ZXJzUmVzcG9uc2USKgoIY2x1c3RlcnMYASADKAsyGC5jb250cm9scGxhbmUudjEuQ2x1c3RlciIfChFHZXRDbHVzdGVyUmVxdWVzdBIKCgJpZBgBIAEoCSI/ChJHZXRDbHVzdGVyUmVzcG9uc2USKQoHY2x1c3RlchgBIAEoCzIYLmNvbnRyb2xwbGFuZS52MS5DbHVzdGVyIiIKFFJlbW92ZUNsdXN0ZXJSZXF1ZXN0EgoKAmlkGAEgASgJIhcKFVJlbW92ZUNsdXN0ZXJSZXNwb25zZSLoAQoVQ29ubmVjdENsdXN0ZXJSZXF1ZXN0EgwKBG5hbWUYASABKAkSDwoHYWRkcmVzcxgDIAEoCRIOCgZjYV9wZW0YBCABKAkSDQoFdG9rZW4YBiABKAkSNAoQdG9rZW5fZXhwaXJlc19hdBgHIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASOgoGaXNzdWVyGAggASgLMiouY29udHJvbHBsYW5lLnYxLkNsdXN0ZXJJc3N1ZXJSZWdpc3RyYXRpb25KBAgCEANKBAgFEAZSBGF1dGhSDWNsb3VkX2NsdXN0ZXIiVwoZQ2x1c3Rlcklzc3VlclJlZ2lzdHJhdGlvbhIOCgZpc3N1ZXIYASABKAkSEgoIZGlzY292ZXIYAiABKAhIABIOCgRqd2tzGAMgASgJSABCBgoEa2V5cyKOAQoNQ2x1c3Rlcklzc3VlchIYChBzdG9yZV9jbHVzdGVyX2lkGAEgASgJEg4KBmlzc3VlchgCIAEoCRIQCghkaXNjb3ZlchgDIAEoCBIRCglrZXlfY291bnQYBCABKAUSLgoKdXBkYXRlZF9hdBgFIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiVwoWQ29ubmVjdENsdXN0ZXJSZXNwb25zZRIpCgdjbHVzdGVyGAEgASgLMhguY29udHJvbHBsYW5lLnYxLkNsdXN0ZXJKBAgCEANSDGh1Yl9pZGVudGl0eSpNCg9DbHVzdGVyUHJvdmlkZXISIAocQ0xVU1RFUl9QUk9WSURFUl9VTlNQRUNJRklFRBAAEhgKFENMVVNURVJfUFJPVklERVJfQllPEAEqlwEKEUNsdXN0ZXJDb25uZWN0aW9uEiIKHkNMVVNURVJfQ09OTkVDVElPTl9VTlNQRUNJRklFRBAAEh4KGkNMVVNURVJfQ09OTkVDVElPTl9XQUlUSU5HEAESIAocQ0xVU1RFUl9DT05ORUNUSU9OX0NPTk5FQ1RFRBACEhwKGENMVVNURVJfQ09OTkVDVElPTl9TVEFMRRADMvIDCg5DbHVzdGVyU2VydmljZRJjCgxMaXN0Q2x1c3RlcnMSJC5jb250cm9scGxhbmUudjEuTGlzdENsdXN0ZXJzUmVxdWVzdBolLmNvbnRyb2xwbGFuZS52MS5MaXN0Q2x1c3RlcnNSZXNwb25zZSIGorsYAggBEl0KCkdldENsdXN0ZXISIi5jb250cm9scGxhbmUudjEuR2V0Q2x1c3RlclJlcXVlc3QaIy5jb250cm9scGxhbmUudjEuR2V0Q2x1c3RlclJlc3BvbnNlIgaiuxgCCAESfwoNUmVtb3ZlQ2x1c3RlchIlLmNvbnRyb2xwbGFuZS52MS5SZW1vdmVDbHVzdGVyUmVxdWVzdBomLmNvbnRyb2xwbGFuZS52MS5SZW1vdmVDbHVzdGVyUmVzcG9uc2UiH6K7GBsIAToXCgZyZW1vdmUSDQoHY2x1c3RlchICaWQSmgEKDkNvbm5lY3RDbHVzdGVyEiYuY29udHJvbHBsYW5lLnYxLkNvbm5lY3RDbHVzdGVyUmVxdWVzdBonLmNvbnRyb2xwbGFuZS52MS5Db25uZWN0Q2x1c3RlclJlc3BvbnNlIjeiuxgzCAE6LwoHY29ubmVjdBIkCgdjbHVzdGVyEhNyZXNwb25zZS5jbHVzdGVyLmlkGgRuYW1lQtUBChNjb20uY29udHJvbHBsYW5lLnYxQgxDbHVzdGVyUHJvdG9QAVpTZ2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vY29udHJvbHBsYW5lL3NlcnZpY2VzL2NsdXN0ZXIvdjE7Y29udHJvbHBsYW5ldjGiAgNDWFiqAg9Db250cm9scGxhbmUuVjHKAg9Db250cm9scGxhbmVcVjHiAhtDb250cm9scGxhbmVcVjFcR1BCTWV0YWRhdGHqAhBDb250cm9scGxhbmU6OlYxYgZwcm90bzM", [file_forge_v1_forge, file_google_protobuf_timestamp]);
 
 /**
  * @generated from message controlplane.v1.Cluster
@@ -101,28 +62,12 @@ export type Cluster = Message<"controlplane.v1.Cluster"> & {
   createdAt?: Timestamp | undefined;
 
   /**
-   * How the platform authenticates to this cluster.
-   *
-   * @generated from field: controlplane.v1.ClusterAuth auth = 12;
-   */
-  auth: ClusterAuth;
-
-  /**
    * The API server address, as the hub dials it. https only. Set by
    * ConnectCluster.
    *
    * @generated from field: string address = 13;
    */
   address: string;
-
-  /**
-   * The provider's own resource name for the cluster, set iff auth is a
-   * workload-identity auth (today only WORKLOAD_IDENTITY_GCP). Empty
-   * otherwise.
-   *
-   * @generated from field: string cloud_cluster = 14;
-   */
-  cloudCluster: string;
 
   /**
    * The secret-store issuer registered for this cluster, or unset when none
@@ -138,7 +83,7 @@ export type Cluster = Message<"controlplane.v1.Cluster"> & {
  * Use `create(ClusterSchema)` to create a new message.
  */
 export const ClusterSchema: GenMessage<Cluster> = /*@__PURE__*/
-  messageDesc(file_services_cluster_v1_cluster, 1);
+  messageDesc(file_services_cluster_v1_cluster, 0);
 
 /**
  * @generated from message controlplane.v1.ListClustersRequest
@@ -151,7 +96,7 @@ export type ListClustersRequest = Message<"controlplane.v1.ListClustersRequest">
  * Use `create(ListClustersRequestSchema)` to create a new message.
  */
 export const ListClustersRequestSchema: GenMessage<ListClustersRequest> = /*@__PURE__*/
-  messageDesc(file_services_cluster_v1_cluster, 2);
+  messageDesc(file_services_cluster_v1_cluster, 1);
 
 /**
  * @generated from message controlplane.v1.ListClustersResponse
@@ -170,7 +115,7 @@ export type ListClustersResponse = Message<"controlplane.v1.ListClustersResponse
  * Use `create(ListClustersResponseSchema)` to create a new message.
  */
 export const ListClustersResponseSchema: GenMessage<ListClustersResponse> = /*@__PURE__*/
-  messageDesc(file_services_cluster_v1_cluster, 3);
+  messageDesc(file_services_cluster_v1_cluster, 2);
 
 /**
  * @generated from message controlplane.v1.GetClusterRequest
@@ -187,7 +132,7 @@ export type GetClusterRequest = Message<"controlplane.v1.GetClusterRequest"> & {
  * Use `create(GetClusterRequestSchema)` to create a new message.
  */
 export const GetClusterRequestSchema: GenMessage<GetClusterRequest> = /*@__PURE__*/
-  messageDesc(file_services_cluster_v1_cluster, 4);
+  messageDesc(file_services_cluster_v1_cluster, 3);
 
 /**
  * @generated from message controlplane.v1.GetClusterResponse
@@ -204,7 +149,7 @@ export type GetClusterResponse = Message<"controlplane.v1.GetClusterResponse"> &
  * Use `create(GetClusterResponseSchema)` to create a new message.
  */
 export const GetClusterResponseSchema: GenMessage<GetClusterResponse> = /*@__PURE__*/
-  messageDesc(file_services_cluster_v1_cluster, 5);
+  messageDesc(file_services_cluster_v1_cluster, 4);
 
 /**
  * @generated from message controlplane.v1.RemoveClusterRequest
@@ -221,7 +166,7 @@ export type RemoveClusterRequest = Message<"controlplane.v1.RemoveClusterRequest
  * Use `create(RemoveClusterRequestSchema)` to create a new message.
  */
 export const RemoveClusterRequestSchema: GenMessage<RemoveClusterRequest> = /*@__PURE__*/
-  messageDesc(file_services_cluster_v1_cluster, 6);
+  messageDesc(file_services_cluster_v1_cluster, 5);
 
 /**
  * @generated from message controlplane.v1.RemoveClusterResponse
@@ -234,7 +179,7 @@ export type RemoveClusterResponse = Message<"controlplane.v1.RemoveClusterRespon
  * Use `create(RemoveClusterResponseSchema)` to create a new message.
  */
 export const RemoveClusterResponseSchema: GenMessage<RemoveClusterResponse> = /*@__PURE__*/
-  messageDesc(file_services_cluster_v1_cluster, 7);
+  messageDesc(file_services_cluster_v1_cluster, 6);
 
 /**
  * ConnectClusterRequest declares a cluster by address.
@@ -254,13 +199,6 @@ export type ConnectClusterRequest = Message<"controlplane.v1.ConnectClusterReque
    * @generated from field: string name = 1;
    */
   name: string;
-
-  /**
-   * REQUIRED. UNSPECIFIED is InvalidArgument; see ClusterAuth.
-   *
-   * @generated from field: controlplane.v1.ClusterAuth auth = 2;
-   */
-  auth: ClusterAuth;
 
   /**
    * The API server address the HUB will dial, e.g.
@@ -289,29 +227,12 @@ export type ConnectClusterRequest = Message<"controlplane.v1.ConnectClusterReque
   caPem: string;
 
   /**
-   * The provider's fully-qualified resource name for the cluster. For
-   * WORKLOAD_IDENTITY_GCP that is
-   * `projects/<project>/locations/<location>/clusters/<name>`.
+   * The scoped ServiceAccount token `forge cluster connect` minted in the
+   * target cluster. REQUIRED: a request without one is InvalidArgument.
    *
-   * REQUIRED for a workload-identity auth and REFUSED for
-   * SERVICE_ACCOUNT_TOKEN, which does not use it. Flux's configMapRef needs
-   * it to perform the provider token exchange, and its format is VALIDATED —
-   * a malformed path produces a Flux reconcile error naming a cloud API, two
-   * layers from the typo.
-   *
-   * @generated from field: string cloud_cluster = 5;
-   */
-  cloudCluster: string;
-
-  /**
-   * The ServiceAccount token, for SERVICE_ACCOUNT_TOKEN only.
-   *
-   * WRITE-ONLY. It is REQUIRED iff auth is SERVICE_ACCOUNT_TOKEN, REFUSED on
-   * every other auth (a token on a workload-identity request means the caller
-   * misunderstands which credential is in play, and silently ignoring it
-   * would store a secret nothing reads), and it is NEVER RETURNED by any RPC
-   * on this service — there is no field on Cluster to return it in. A request
-   * carrying one is never logged, in whole or in part.
+   * WRITE-ONLY. It is NEVER RETURNED by any RPC on this service — there is no
+   * field on Cluster to return it in. A request carrying one is never logged,
+   * in whole or in part. Removing the cluster deletes the stored token.
    *
    * @generated from field: string token = 6;
    */
@@ -353,7 +274,7 @@ export type ConnectClusterRequest = Message<"controlplane.v1.ConnectClusterReque
  * Use `create(ConnectClusterRequestSchema)` to create a new message.
  */
 export const ConnectClusterRequestSchema: GenMessage<ConnectClusterRequest> = /*@__PURE__*/
-  messageDesc(file_services_cluster_v1_cluster, 8);
+  messageDesc(file_services_cluster_v1_cluster, 7);
 
 /**
  * ClusterIssuerRegistration declares the service-account issuer of a cluster.
@@ -409,7 +330,7 @@ export type ClusterIssuerRegistration = Message<"controlplane.v1.ClusterIssuerRe
  * Use `create(ClusterIssuerRegistrationSchema)` to create a new message.
  */
 export const ClusterIssuerRegistrationSchema: GenMessage<ClusterIssuerRegistration> = /*@__PURE__*/
-  messageDesc(file_services_cluster_v1_cluster, 9);
+  messageDesc(file_services_cluster_v1_cluster, 8);
 
 /**
  * ClusterIssuer is what is registered for a cluster. The keys themselves are
@@ -461,7 +382,7 @@ export type ClusterIssuer = Message<"controlplane.v1.ClusterIssuer"> & {
  * Use `create(ClusterIssuerSchema)` to create a new message.
  */
 export const ClusterIssuerSchema: GenMessage<ClusterIssuer> = /*@__PURE__*/
-  messageDesc(file_services_cluster_v1_cluster, 10);
+  messageDesc(file_services_cluster_v1_cluster, 9);
 
 /**
  * @generated from message controlplane.v1.ConnectClusterResponse
@@ -471,13 +392,6 @@ export type ConnectClusterResponse = Message<"controlplane.v1.ConnectClusterResp
    * @generated from field: controlplane.v1.Cluster cluster = 1;
    */
   cluster?: Cluster | undefined;
-
-  /**
-   * The hub's own identities, for the IAM grant forge prints. See HubIdentity.
-   *
-   * @generated from field: controlplane.v1.HubIdentity hub_identity = 2;
-   */
-  hubIdentity?: HubIdentity | undefined;
 };
 
 /**
@@ -485,7 +399,7 @@ export type ConnectClusterResponse = Message<"controlplane.v1.ConnectClusterResp
  * Use `create(ConnectClusterResponseSchema)` to create a new message.
  */
 export const ConnectClusterResponseSchema: GenMessage<ConnectClusterResponse> = /*@__PURE__*/
-  messageDesc(file_services_cluster_v1_cluster, 11);
+  messageDesc(file_services_cluster_v1_cluster, 10);
 
 /**
  * ClusterProvider is who runs the cluster. BYO — the customer's own, whether
@@ -552,81 +466,18 @@ export const ClusterConnectionSchema: GenEnum<ClusterConnection> = /*@__PURE__*/
   enumDesc(file_services_cluster_v1_cluster, 1);
 
 /**
- * ClusterAuth is HOW the platform authenticates to a cluster's API server.
- *
- * TWO VALUES, AND THEY ARE THE TWO ENDS OF A REAL TRADE-OFF rather than two
- * clouds.
- *
- * WORKLOAD_IDENTITY_GCP is the good one, where it applies: Flux presents the
- * HUB's own GCP identity through `kubeConfig.configMapRef`, the target
- * cluster's IAM decides whether that identity may act, and NO SECRET EVER
- * CROSSES THE BOUNDARY — there is nothing in our database for a read to leak.
- * Flux's own recommended route.
- *
- * SERVICE_ACCOUNT_TOKEN is the one that works ANYWHERE: an RBAC-scoped
- * ServiceAccount token the owner supplies once, projected into a kubeconfig
- * Secret. It is strictly worse — a replayable bearer token at rest — and it is
- * how a cluster with no cloud identity to trust (Vultr VKE, bare metal, k3s)
- * becomes a target at all. Scoped down by the owner's own RBAC rather than by
- * our promise.
- *
- * EKS AND AKS ARE DELIBERATELY ABSENT, not forgotten. Flux's configMapRef
- * supports `aws` and `azure` providers and adding them is a small change to
- * the validator and one config field each — but there is no user on either
- * cloud today, and an untested code path that LOOKS supported is worse than
- * an absent one: it gets chosen, fails inside a cloud client, and reports a
- * problem with the customer's cluster. Tags 2 and 3 are RESERVED below so
- * those values can be added later without renumbering, and a generic
- * token-authenticated cluster on EKS or AKS already works today.
- *
- * UNSPECIFIED is not a default. A request that does not say how to
- * authenticate is InvalidArgument, because every possible default is wrong:
- * guessing workload identity on a cluster with none produces an auth failure
- * against a healthy cluster, and guessing token with no token produces a
- * kubeconfig authenticating as nobody.
- *
- * @generated from enum controlplane.v1.ClusterAuth
- */
-export enum ClusterAuth {
-  /**
-   * @generated from enum value: CLUSTER_AUTH_UNSPECIFIED = 0;
-   */
-  UNSPECIFIED = 0,
-
-  /**
-   * GKE. cloud_cluster is `projects/<project>/locations/<location>/clusters/<name>`.
-   *
-   * @generated from enum value: CLUSTER_AUTH_WORKLOAD_IDENTITY_GCP = 1;
-   */
-  WORKLOAD_IDENTITY_GCP = 1,
-
-  /**
-   * A scoped ServiceAccount token the owner supplies. Works on ANY Kubernetes
-   * cluster; no cloud identity required, and cloud_cluster is not used.
-   *
-   * @generated from enum value: CLUSTER_AUTH_SERVICE_ACCOUNT_TOKEN = 4;
-   */
-  SERVICE_ACCOUNT_TOKEN = 4,
-}
-
-/**
- * Describes the enum controlplane.v1.ClusterAuth.
- */
-export const ClusterAuthSchema: GenEnum<ClusterAuth> = /*@__PURE__*/
-  enumDesc(file_services_cluster_v1_cluster, 2);
-
-/**
  * === ClusterService ===
  *
  * A CLUSTER is an org-level resource: a row, not a kubectl context. This is
  * the customer-facing surface for connecting one BY ADDRESS (ConnectCluster)
  * and for listing, reading and removing what is connected.
  *
- * ONE WAY IN. A cluster is connected by address and authenticated either as the
- * hub's cloud workload identity or with a scoped ServiceAccount token the
- * owner supplies once. There is no in-cluster agent: nothing is installed in
- * the target cluster, so there is no second registration path to keep in step
- * with this one.
+ * ONE WAY IN. A cluster is connected by address and authenticated ONLY with the
+ * scoped ServiceAccount token that `forge cluster connect <context>` minted
+ * from the owner's own kube context and uploaded. The hub holds no cloud
+ * identity in the owner's cluster and nothing is granted to it. There is no
+ * in-cluster agent: nothing is installed in the target cluster, so there is no
+ * second registration path to keep in step with this one.
  *
  * ORG-SCOPED, AND THE ORG IS NEVER A REQUEST FIELD. Every RPC acts on the
  * caller's org, resolved server-side from the authenticated principal. A
@@ -678,10 +529,11 @@ export const ClusterService: GenService<{
   /**
    * ConnectCluster registers a cluster BY ADDRESS, with no agent in it.
    *
-   * The platform is told the address and the CA up front, and authenticates
-   * either as a cloud workload identity (no secret crosses the boundary at
-   * all) or with a scoped ServiceAccount token the owner pasted once. Nothing
-   * is installed in the target cluster.
+   * The platform is told the address, the CA and the scoped ServiceAccount
+   * token up front, all required. The token is the ONLY credential the
+   * platform ever uses against the cluster; a request without one is
+   * InvalidArgument and names `forge cluster connect`. Nothing is installed in
+   * the target cluster.
    *
    * DECLARATIVE AND IDEMPOTENT BY NAME. `forge cluster connect <name>` is
    * re-run from a checkout, so a second call with different values UPDATES
@@ -689,11 +541,6 @@ export const ClusterService: GenService<{
    * connect command safe to put in a script, and it is why there is no
    * separate UpdateCluster: a second spelling of the same write could
    * disagree with this one about what a partial request means.
-   *
-   * THE RESPONSE CARRIES THE HUB'S OWN IDENTITY, which is the half a caller
-   * cannot derive. Workload identity means the TARGET cluster must grant
-   * something to US, so forge prints the one-time IAM + RBAC grant the owner
-   * runs — and it can only print it if it knows which principal to name.
    *
    * @generated from rpc controlplane.v1.ClusterService.ConnectCluster
    */
