@@ -7,6 +7,9 @@ import (
 	"syscall"
 	"time"
 
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel/propagation"
+
 	"github.com/reliant-labs/reliant/internal/netguard"
 )
 
@@ -21,7 +24,7 @@ var webToolTransport = func(policy netguard.Policy) http.RoundTripper {
 // http.Client: hosted deployments cannot dial private, loopback, link-local or
 // metadata addresses, including via redirects or DNS rebinding.
 func newGuardedHTTPClient(policy netguard.Policy, timeout time.Duration) *http.Client {
-	return &http.Client{Timeout: timeout, Transport: webToolTransport(policy)}
+	return &http.Client{Timeout: timeout, Transport: tracedEgress(webToolTransport(policy))}
 }
 
 // newFetchNetworkClient is newGuardedHTTPClient for fetch running on a daemon:
@@ -44,7 +47,7 @@ func newFetchNetworkClient(n FetchNetwork, timeout time.Duration) *http.Client {
 			return n.CheckIP(net.ParseIP(host))
 		},
 	}
-	return &http.Client{Timeout: timeout, Transport: &http.Transport{
+	return &http.Client{Timeout: timeout, Transport: tracedEgress(&http.Transport{
 		Proxy: nil, // a proxy would be dialed instead of the destination, defeating the checks
 		DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
 			host, _, err := net.SplitHostPort(address)
@@ -60,5 +63,13 @@ func newFetchNetworkClient(n FetchNetwork, timeout time.Duration) *http.Client {
 		MaxIdleConns:        32,
 		IdleConnTimeout:     90 * time.Second,
 		TLSHandshakeTimeout: 10 * time.Second,
-	}}
+	})}
+}
+
+// tracedEgress records a client span for each request a tool makes, so the
+// call shows up in the run's trace. It injects no trace headers: the
+// destination is a URL a user or model chose, and our trace ids are not
+// theirs to see.
+func tracedEgress(base http.RoundTripper) http.RoundTripper {
+	return otelhttp.NewTransport(base, otelhttp.WithPropagators(propagation.NewCompositeTextMapPropagator()))
 }
