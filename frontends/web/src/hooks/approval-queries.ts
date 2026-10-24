@@ -151,17 +151,18 @@ type Rollback = () => void;
 
 /**
  * The optimistic onMutate/onError pair for one chat. onMutate's return value
- * reaches onError as its third argument; the generated hooks type it
- * `unknown` (they take no context type parameter), hence the one narrowing.
+ * reaches onError as its third argument; the generated hook infers its type
+ * (TanStack's TContext) from onMutate, so the rollback is typed end to end.
  */
 function optimistic<Req>(chatId: string | undefined, resolve: (req: Req) => [readonly string[], ApprovalStatus, Partial<Approval>]) {
   return {
-    onMutate: (req: Req): Rollback | undefined => {
-      if (!chatId) return undefined;
+    onMutate: (req: Req): Rollback => {
+      // No chat, no cache entry to patch: nothing to roll back.
+      if (!chatId) return () => {};
       const [ids, status, extra] = resolve(req);
       return optimisticallyResolve(chatId, ids, status, extra);
     },
-    onError: (_err: unknown, _req: Req, rollback: unknown) => (rollback as Rollback | undefined)?.(),
+    onError: (_err: unknown, _req: Req, rollback: Rollback | undefined) => rollback?.(),
   };
 }
 

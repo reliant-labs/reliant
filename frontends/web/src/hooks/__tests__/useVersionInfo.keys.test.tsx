@@ -1,11 +1,12 @@
 /**
- * useVersionInfo's server query lives under the generated SystemService key
- * scope, so invalidating `systemServiceKeys.all` refetches it.
+ * useVersionInfo reads the server version through the generated `useVersion`
+ * query (Version declares NO_SIDE_EFFECTS), so its cache entry is
+ * `systemServiceKeys.version({})`, inside `systemServiceKeys.all`.
  *
  * SystemService has no rpc that changes what Version answers and no stream
  * event, so nothing in the app invalidates it today; this pins that the
- * moment something does (or forge emits `systemServiceKeys.version`), the
- * service scope reaches the cached answer instead of leaving it stale.
+ * moment something does, the service scope reaches the cached answer instead
+ * of leaving it stale.
  */
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -48,6 +49,7 @@ describe("useVersionInfo keys", () => {
     const { result } = renderHook(() => useVersionInfo(), { wrapper });
     await waitFor(() => expect(result.current.server).toEqual({ state: "known", version: "v1.0.0" }));
     expect(calls).toBe(1);
+    expect(queryClient.getQueryData(systemServiceKeys.version({}))).toMatchObject({ version: "1.0.0" });
 
     version = "1.0.1";
     await queryClient.invalidateQueries({ queryKey: systemServiceKeys.all });
