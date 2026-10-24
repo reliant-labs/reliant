@@ -160,6 +160,20 @@ func TestCapabilities_SurviveAFreshWorkerBetweenCallLLMAndExecuteTools(t *testin
 // An orchestrator that spawns and runs orchestrator-only tools works when
 // call_llm and execute_tools share no memory: the spawn offer and its presets
 // — what the workflow dispatches against — and the tier all ride the record.
+func TestCapabilities_FireTriggerCannotEscapeParentTierOrUnattendedPolicy(t *testing.T) {
+	f := setupNoMachineFixture(t, false)
+	cfg := toolsConfig(tools.PermissionOrchestrator, []string{tools.ToolView}, []string{"*"}, nil)
+	capped := throughHistory(t, f.turnAs(t, cfg, RuntimeContext{SpawnDepth: 1, ParentPermission: tools.PermissionMutating}).GetCapabilities())
+	assert.Equal(t, tools.PermissionMutating, capped.GetPermission())
+	loaded := f.execute(t, serverToolExecutor(f.h.Repo()), capped, message.ToolCall{ID: "load-fire", Name: tools.ToolLoadTool, Input: `{"name":"fire_trigger"}`})
+	require.Len(t, loaded.GetToolResults(), 1)
+	assert.True(t, loaded.GetToolResults()[0].GetIsError())
+	unattended := throughHistory(t, f.turnAs(t, cfg, RuntimeContext{Unattended: true}).GetCapabilities())
+	loaded = f.execute(t, serverToolExecutor(f.h.Repo()), unattended, message.ToolCall{ID: "load-fire-unattended", Name: tools.ToolLoadTool, Input: `{"name":"fire_trigger"}`})
+	require.Len(t, loaded.GetToolResults(), 1)
+	assert.True(t, loaded.GetToolResults()[0].GetIsError())
+}
+
 func TestCapabilities_OrchestratorToolRunsWithNoSharedMemory(t *testing.T) {
 	t.Parallel()
 

@@ -48,6 +48,12 @@ const (
 	// ObservabilityServiceQueryMetricProcedure is the fully-qualified name of the
 	// ObservabilityService's QueryMetric RPC.
 	ObservabilityServiceQueryMetricProcedure = "/controlplane.v1.ObservabilityService/QueryMetric"
+	// ObservabilityServiceGetMetricProcedure is the fully-qualified name of the ObservabilityService's
+	// GetMetric RPC.
+	ObservabilityServiceGetMetricProcedure = "/controlplane.v1.ObservabilityService/GetMetric"
+	// ObservabilityServiceListMetricExemplarsProcedure is the fully-qualified name of the
+	// ObservabilityService's ListMetricExemplars RPC.
+	ObservabilityServiceListMetricExemplarsProcedure = "/controlplane.v1.ObservabilityService/ListMetricExemplars"
 	// ObservabilityServiceGetServiceOverviewProcedure is the fully-qualified name of the
 	// ObservabilityService's GetServiceOverview RPC.
 	ObservabilityServiceGetServiceOverviewProcedure = "/controlplane.v1.ObservabilityService/GetServiceOverview"
@@ -96,6 +102,17 @@ type ObservabilityServiceClient interface {
 	// QueryMetric returns time series for one metric: an aggregation, optional
 	// group-by attribute keys, and a step. Max range 30 days.
 	QueryMetric(context.Context, *connect.Request[v1.QueryMetricRequest]) (*connect.Response[v1.QueryMetricResponse], error)
+	// GetMetric is the metric detail the explorer's side pane opens on: the
+	// catalog entry, the export-interval estimate, whether the metric mixes
+	// temporalities, every attribute key with its distinct-value estimate (and
+	// the declared closed value set), and suggested breakdown keys. The range
+	// is capped at 24 hours for the attribute scan. Cached for a minute.
+	GetMetric(context.Context, *connect.Request[v1.GetMetricRequest]) (*connect.Response[v1.GetMetricResponse], error)
+	// ListMetricExemplars returns up to 20 exemplars (a sampled observation with
+	// the trace it came from) of one metric, optionally narrowed to a series
+	// group and a minimum value. Exemplars whose trace is stored sort first.
+	// Max range 7 days.
+	ListMetricExemplars(context.Context, *connect.Request[v1.ListMetricExemplarsRequest]) (*connect.Response[v1.ListMetricExemplarsResponse], error)
 	// GetServiceOverview returns per-service request rate, errors and
 	// p50/p95/p99 latency over server spans: the default landing view. Max range
 	// 7 days.
@@ -212,6 +229,18 @@ func NewObservabilityServiceClient(httpClient connect.HTTPClient, baseURL string
 			connect.WithSchema(observabilityServiceMethods.ByName("QueryMetric")),
 			connect.WithClientOptions(opts...),
 		),
+		getMetric: connect.NewClient[v1.GetMetricRequest, v1.GetMetricResponse](
+			httpClient,
+			baseURL+ObservabilityServiceGetMetricProcedure,
+			connect.WithSchema(observabilityServiceMethods.ByName("GetMetric")),
+			connect.WithClientOptions(opts...),
+		),
+		listMetricExemplars: connect.NewClient[v1.ListMetricExemplarsRequest, v1.ListMetricExemplarsResponse](
+			httpClient,
+			baseURL+ObservabilityServiceListMetricExemplarsProcedure,
+			connect.WithSchema(observabilityServiceMethods.ByName("ListMetricExemplars")),
+			connect.WithClientOptions(opts...),
+		),
 		getServiceOverview: connect.NewClient[v1.GetServiceOverviewRequest, v1.GetServiceOverviewResponse](
 			httpClient,
 			baseURL+ObservabilityServiceGetServiceOverviewProcedure,
@@ -276,6 +305,8 @@ type observabilityServiceClient struct {
 	getTrace              *connect.Client[v1.GetTraceRequest, v1.GetTraceResponse]
 	listMetrics           *connect.Client[v1.ListMetricsRequest, v1.ListMetricsResponse]
 	queryMetric           *connect.Client[v1.QueryMetricRequest, v1.QueryMetricResponse]
+	getMetric             *connect.Client[v1.GetMetricRequest, v1.GetMetricResponse]
+	listMetricExemplars   *connect.Client[v1.ListMetricExemplarsRequest, v1.ListMetricExemplarsResponse]
 	getServiceOverview    *connect.Client[v1.GetServiceOverviewRequest, v1.GetServiceOverviewResponse]
 	getFlamegraph         *connect.Client[v1.GetFlamegraphRequest, v1.GetFlamegraphResponse]
 	queryPanel            *connect.Client[v1.QueryPanelRequest, v1.QueryPanelResponse]
@@ -310,6 +341,16 @@ func (c *observabilityServiceClient) ListMetrics(ctx context.Context, req *conne
 // QueryMetric calls controlplane.v1.ObservabilityService.QueryMetric.
 func (c *observabilityServiceClient) QueryMetric(ctx context.Context, req *connect.Request[v1.QueryMetricRequest]) (*connect.Response[v1.QueryMetricResponse], error) {
 	return c.queryMetric.CallUnary(ctx, req)
+}
+
+// GetMetric calls controlplane.v1.ObservabilityService.GetMetric.
+func (c *observabilityServiceClient) GetMetric(ctx context.Context, req *connect.Request[v1.GetMetricRequest]) (*connect.Response[v1.GetMetricResponse], error) {
+	return c.getMetric.CallUnary(ctx, req)
+}
+
+// ListMetricExemplars calls controlplane.v1.ObservabilityService.ListMetricExemplars.
+func (c *observabilityServiceClient) ListMetricExemplars(ctx context.Context, req *connect.Request[v1.ListMetricExemplarsRequest]) (*connect.Response[v1.ListMetricExemplarsResponse], error) {
+	return c.listMetricExemplars.CallUnary(ctx, req)
 }
 
 // GetServiceOverview calls controlplane.v1.ObservabilityService.GetServiceOverview.
@@ -377,6 +418,17 @@ type ObservabilityServiceHandler interface {
 	// QueryMetric returns time series for one metric: an aggregation, optional
 	// group-by attribute keys, and a step. Max range 30 days.
 	QueryMetric(context.Context, *connect.Request[v1.QueryMetricRequest]) (*connect.Response[v1.QueryMetricResponse], error)
+	// GetMetric is the metric detail the explorer's side pane opens on: the
+	// catalog entry, the export-interval estimate, whether the metric mixes
+	// temporalities, every attribute key with its distinct-value estimate (and
+	// the declared closed value set), and suggested breakdown keys. The range
+	// is capped at 24 hours for the attribute scan. Cached for a minute.
+	GetMetric(context.Context, *connect.Request[v1.GetMetricRequest]) (*connect.Response[v1.GetMetricResponse], error)
+	// ListMetricExemplars returns up to 20 exemplars (a sampled observation with
+	// the trace it came from) of one metric, optionally narrowed to a series
+	// group and a minimum value. Exemplars whose trace is stored sort first.
+	// Max range 7 days.
+	ListMetricExemplars(context.Context, *connect.Request[v1.ListMetricExemplarsRequest]) (*connect.Response[v1.ListMetricExemplarsResponse], error)
 	// GetServiceOverview returns per-service request rate, errors and
 	// p50/p95/p99 latency over server spans: the default landing view. Max range
 	// 7 days.
@@ -489,6 +541,18 @@ func NewObservabilityServiceHandler(svc ObservabilityServiceHandler, opts ...con
 		connect.WithSchema(observabilityServiceMethods.ByName("QueryMetric")),
 		connect.WithHandlerOptions(opts...),
 	)
+	observabilityServiceGetMetricHandler := connect.NewUnaryHandler(
+		ObservabilityServiceGetMetricProcedure,
+		svc.GetMetric,
+		connect.WithSchema(observabilityServiceMethods.ByName("GetMetric")),
+		connect.WithHandlerOptions(opts...),
+	)
+	observabilityServiceListMetricExemplarsHandler := connect.NewUnaryHandler(
+		ObservabilityServiceListMetricExemplarsProcedure,
+		svc.ListMetricExemplars,
+		connect.WithSchema(observabilityServiceMethods.ByName("ListMetricExemplars")),
+		connect.WithHandlerOptions(opts...),
+	)
 	observabilityServiceGetServiceOverviewHandler := connect.NewUnaryHandler(
 		ObservabilityServiceGetServiceOverviewProcedure,
 		svc.GetServiceOverview,
@@ -555,6 +619,10 @@ func NewObservabilityServiceHandler(svc ObservabilityServiceHandler, opts ...con
 			observabilityServiceListMetricsHandler.ServeHTTP(w, r)
 		case ObservabilityServiceQueryMetricProcedure:
 			observabilityServiceQueryMetricHandler.ServeHTTP(w, r)
+		case ObservabilityServiceGetMetricProcedure:
+			observabilityServiceGetMetricHandler.ServeHTTP(w, r)
+		case ObservabilityServiceListMetricExemplarsProcedure:
+			observabilityServiceListMetricExemplarsHandler.ServeHTTP(w, r)
 		case ObservabilityServiceGetServiceOverviewProcedure:
 			observabilityServiceGetServiceOverviewHandler.ServeHTTP(w, r)
 		case ObservabilityServiceGetFlamegraphProcedure:
@@ -600,6 +668,14 @@ func (UnimplementedObservabilityServiceHandler) ListMetrics(context.Context, *co
 
 func (UnimplementedObservabilityServiceHandler) QueryMetric(context.Context, *connect.Request[v1.QueryMetricRequest]) (*connect.Response[v1.QueryMetricResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.ObservabilityService.QueryMetric is not implemented"))
+}
+
+func (UnimplementedObservabilityServiceHandler) GetMetric(context.Context, *connect.Request[v1.GetMetricRequest]) (*connect.Response[v1.GetMetricResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.ObservabilityService.GetMetric is not implemented"))
+}
+
+func (UnimplementedObservabilityServiceHandler) ListMetricExemplars(context.Context, *connect.Request[v1.ListMetricExemplarsRequest]) (*connect.Response[v1.ListMetricExemplarsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.ObservabilityService.ListMetricExemplars is not implemented"))
 }
 
 func (UnimplementedObservabilityServiceHandler) GetServiceOverview(context.Context, *connect.Request[v1.GetServiceOverviewRequest]) (*connect.Response[v1.GetServiceOverviewResponse], error) {

@@ -16,27 +16,37 @@
 import type { AttributeFilter, Dashboard, Panel, Predicate, SeriesIntent } from "@/services/controlPlane/observability/types";
 
 import { attributeClass, ENV_KEY, SERVICE_KEY } from "./attributes";
+import { parseFormula } from "./Dashboards/formula";
 
 export const SPEC_VERSION = "forge.dashboards/v1";
 
 /** Where a promoted dashboard lives in the user's repo. */
 export const DASHBOARDS_DIR = "deploy/observability/dashboards";
 
-export const PANEL_KINDS = ["line", "number", "table", "search", "funnel", "issues", "sessions"] as const;
+export const PANEL_KINDS = ["line", "number", "table", "bar", "search", "funnel", "issues", "sessions"] as const;
 /** The kinds read from the tenant's browser tables, not from series over a signal (C7). */
 export const BROWSER_KINDS = ["funnel", "issues", "sessions"] as const;
 
 export const SIGNALS = ["traces", "metrics", "logs"] as const;
-export const AGGS = ["count", "count_distinct", "sum", "avg", "max", "quantile", "last"] as const;
+export const AGGS = ["count", "count_distinct", "sum", "avg", "min", "max", "quantile", "last", "rate", "increase"] as const;
+/** The aggregations that only mean something over a metric: a rate or an increase of a trace or log field is undefined. */
+export const METRIC_ONLY_AGGS = ["rate", "increase", "min", "last"] as const;
 export const OPS = ["eq", "neq", "in", "not_in", "prefix", "match", "exists", "gte"] as const;
 export const UNITS = ["", "count", "ms", "bytes", "percent", "s"] as const;
-export const METRIC_TYPES = ["sum", "gauge", "histogram"] as const;
+export const METRIC_TYPES = ["sum", "gauge", "histogram", "exp_histogram", "summary"] as const;
+/** The metric types a quantile is defined over: a summary stores fixed quantiles that cannot be merged across series. */
+const QUANTILE_TYPES = ["histogram", "exp_histogram"] as const;
+/** The metric types that count observations: a histogram or a summary. A gauge's points and a counter's increments are not observations. */
+const OBSERVATION_TYPES = ["histogram", "exp_histogram", "summary"] as const;
+/** The metric types rate and increase are defined over: a gauge has no growth. */
+const GROWTH_TYPES = ["sum", "histogram", "exp_histogram", "summary"] as const;
 /** The annotation sources forge knows; `releases` is the only one today. */
 export const ANNOTATION_SOURCES = ["releases"] as const;
 
 /** forge's limits (internal/obsdash/validate.go). */
 const MAX_SERIES = 10;
 const MAX_PANELS = 200;
+const MAX_LIMIT = 200;
 const MAX_GRID_HEIGHT = 60;
 const MIN_FUNNEL_STEPS = 2;
 const MAX_FUNNEL_STEPS = 10;
@@ -48,9 +58,12 @@ export const AGG_LABELS: Record<(typeof AGGS)[number], string> = {
   count_distinct: "count distinct",
   sum: "sum",
   avg: "average",
+  min: "min",
   max: "max",
   quantile: "quantile",
   last: "last value",
+  rate: "rate (per second)",
+  increase: "increase",
 };
 
 export const OP_LABELS: Record<(typeof OPS)[number], string> = {
@@ -173,12 +186,14 @@ export function panelProblems(panel: Panel): string[] {
     if (panel.signal === "metrics") {
       if (!s.field?.trim()) problems.push(`${at}: name the metric.`);
       if (!has(METRIC_TYPES, s.metricType)) problems.push(`${at}: say the metric's type (sum, gauge or histogram).`);
-      if (s.agg === "quantile" && s.metricType !== "histogram") problems.push(`${at}: a quantile over a metric needs a histogram.`);
-      if (s.agg === "count" || s.agg === "count_distinct") problems.push(`${at}: ${s.agg} is not defined over a metric; use sum, avg, max, last or quantile.`);
+      if (s.agg === "quantile" && !has(QUANTILE_TYPES, s.metricType)) problems.push(`${at}: a quantile over a metric needs a histogram.`);
+      if ((s.agg === "rate" || s.agg === "increase") && !has(GROWTH_TYPES, s.metricType)) problems.push(`${at}: ${s.agg} needs a counter or a histogram: a gauge does not grow.`);
+      if (s.agg === "count_distinct") problems.push(`${at}: count distinct is not defined over a metric; use sum, avg, min, max, last, rate, increase or quantile.`);
+      if (s.agg === "count" && !has(OBSERVATION_TYPES, s.metricType)) problems.push(`${at}: count over a metric counts a histogram's observations; use sum, avg, min, max, last, rate or increase.`);
     } else {
       if (s.metricType) problems.push(`${at}: only a metrics series takes a metric type.`);
       if (s.agg !== "count" && !s.field?.trim()) problems.push(`${at}: ${s.agg} needs a field.`);
-      if (s.agg === "last") problems.push(`${at}: last is defined for metrics; use max or avg.`);
+      if ((METRIC_ONLY_AGGS as readonly string[]).includes(s.agg)) problems.push(`${at}: ${s.agg} is defined for metrics; use max or avg.`);
     }
     checkPredicates(s.where, at, problems);
   });
@@ -187,6 +202,22 @@ export function panelProblems(panel: Panel): string[] {
     if (panel.kind !== "line") problems.push("A ratio applies to a line chart.");
   }
   if ((panel.groupBy ?? []).length > 3) problems.push("Group by at most three fields.");
+  if (panel.formula?.trim()) {
+    if (panel.kind !== "line" && panel.kind !== "number") problems.push(`A formula applies to a line or number panel, not a ${panel.kind} panel.`);
+    if (panel.ratio) problems.push("A panel plots a formula or a ratio, not both (the ratio is the formula \"A / B\").");
+    if (series.length > 0 && series.length <= MAX_SERIES) {
+      try {
+        parseFormula(panel.formula, series.length);
+      } catch (e) {
+        problems.push(`Formula: ${(e as Error).message}.`);
+      }
+    }
+  }
+  if (panel.kind === "bar" && !(panel.groupBy ?? []).length) problems.push("A bar panel needs a group-by: it draws one bar group per value.");
+  if (panel.limit !== undefined && panel.limit !== 0) {
+    if (panel.kind !== "table" && panel.kind !== "bar") problems.push("Only a table or bar panel takes a limit.");
+    else if (!Number.isInteger(panel.limit) || panel.limit < 1 || panel.limit > MAX_LIMIT) problems.push(`The limit is a whole number of rows from 1 to ${MAX_LIMIT}.`);
+  }
   if (panel.width !== undefined && panel.width !== 0 && (panel.width < 1 || panel.width > 24 || !Number.isInteger(panel.width))) problems.push("Width is 1 to 24 grid columns.");
   if (panel.height !== undefined && (panel.height < 0 || panel.height > MAX_GRID_HEIGHT || !Number.isInteger(panel.height))) problems.push(`Height is a whole number of rows up to ${MAX_GRID_HEIGHT}.`);
   checkPredicates(panel.where, "Panel", problems);

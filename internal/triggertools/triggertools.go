@@ -1,12 +1,11 @@
 // Copyright (c) 2025 Reliant Labs
 //
-// Package triggertools lets an agent list the triggers of the user it works
-// for. It is the implementation behind the list_triggers tool, which declares
-// the narrow interface this package satisfies (internal/llm/tools cannot
-// import the trigger service: it depends on that package).
+// Package triggertools lets an agent inspect and manually fire existing triggers
+// of the user it works for. The tools declare the narrow interfaces this adapter
+// satisfies (internal/llm/tools cannot import the trigger service).
 //
-// It is read-only on purpose. Enabling a workflow's triggers is the user's act,
-// done in the app, so TriggerAPI has no write method for an agent to reach.
+// Enabling a workflow's triggers remains the user's act, done in the app.
+// TriggerAPI cannot create, enable, edit or delete an activation.
 // Every call goes through TriggerService as the user, so ownership is exactly
 // the API's.
 //
@@ -27,17 +26,21 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 )
 
-// TriggerAPI is the slice of the trigger service the tool reads. It is
+// TriggerAPI is the slice of the trigger service the tools can reach. It is
 // satisfied by *trigger.Service (internal/handlers/trigger), whose handlers
 // authorize the caller from the request context.
 type TriggerAPI interface {
 	ListTriggers(context.Context, *connect.Request[reliantv1.ListTriggersRequest]) (*connect.Response[reliantv1.ListTriggersResponse], error)
+	FireTrigger(context.Context, *connect.Request[reliantv1.FireTriggerRequest]) (*connect.Response[reliantv1.FireTriggerResponse], error)
+	ListTriggerEvents(context.Context, *connect.Request[reliantv1.ListTriggerEventsRequest]) (*connect.Response[reliantv1.ListTriggerEventsResponse], error)
 }
 
 // Triggers implements tools.TriggerLister.
 type Triggers struct{ api TriggerAPI }
 
 var _ tools.TriggerLister = (*Triggers)(nil)
+var _ tools.TriggerFirer = (*Triggers)(nil)
+var _ tools.TriggerEventLister = (*Triggers)(nil)
 
 // New builds the adapter.
 func New(api TriggerAPI) *Triggers { return &Triggers{api: api} }
@@ -68,6 +71,49 @@ func (t *Triggers) ListTriggers(ctx context.Context, userID string, f tools.Trig
 		out = append(out, summarize(tr))
 	}
 	return out, nil
+}
+
+// FireTrigger requests one asynchronous manual fire using only saved settings.
+func (t *Triggers) FireTrigger(ctx context.Context, userID, triggerID string) (string, error) {
+	if t.api == nil {
+		return "", errors.New("no trigger service is configured")
+	}
+	resp, err := t.api.FireTrigger(asOwner(ctx, userID), connect.NewRequest(&reliantv1.FireTriggerRequest{Id: triggerID}))
+	if err != nil {
+		return "", unwrapConnect(err)
+	}
+	return resp.Msg.GetFireWorkflowId(), nil
+}
+
+// ListTriggerEvents projects only operational summaries; source payloads and
+// sender data are deliberately not exposed to the agent.
+func (t *Triggers) ListTriggerEvents(ctx context.Context, userID, triggerID string, limit int, pageToken string) (tools.TriggerEventPage, error) {
+	if t.api == nil {
+		return tools.TriggerEventPage{}, errors.New("no trigger service is configured")
+	}
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 500 {
+		limit = 500
+	}
+	req := &reliantv1.ListTriggerEventsRequest{TriggerId: triggerID, Limit: int32(limit)}
+	if pageToken != "" {
+		req.PageToken = &pageToken
+	}
+	resp, err := t.api.ListTriggerEvents(asOwner(ctx, userID), connect.NewRequest(req))
+	if err != nil {
+		return tools.TriggerEventPage{}, unwrapConnect(err)
+	}
+	page := tools.TriggerEventPage{Events: make([]tools.TriggerEventSummary, 0, len(resp.Msg.GetEvents())), NextPageToken: resp.Msg.GetNextPageToken()}
+	for _, ev := range resp.Msg.GetEvents() {
+		s := tools.TriggerEventSummary{FireWorkflowID: ev.GetFireWorkflowId(), ID: ev.GetId(), OccurredAt: ev.GetOccurredAt(), Outcome: strings.TrimPrefix(ev.GetOutcome().String(), "TRIGGER_EVENT_OUTCOME_"), Detail: ev.GetOutcomeDetail(), ChatID: ev.GetChatId()}
+		if ev.GetRun() != nil {
+			s.RunState = strings.TrimPrefix(ev.GetRun().GetDisplayState().String(), "RUN_DISPLAY_STATE_")
+		}
+		page.Events = append(page.Events, s)
+	}
+	return page, nil
 }
 
 // sameWorkflow compares workflow refs as slugs: "Code Review" names the same

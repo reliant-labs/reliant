@@ -515,6 +515,8 @@ the discovery/reference tools (`list_workflows`, `list_presets`, `get_preset`, `
 | `search_integrations` | Find an integration action ref (GitHub, Slack, HTTP, ...) for a `type: action` node's `uses:` |
 | `get_integration_schema` | Read one integration action's params (`with:`) and output (`nodes.<id>.data`) schemas |
 | `list_triggers` | List the triggers the user has enabled (optionally one workflow's) with health; read-only. BROKEN means the declaration it activates is gone or changed |
+| `fire_trigger` | Manually fire an existing activation once, including a paused one; never creates, enables or changes it. Orchestrator-tier; returns an asynchronous fire_workflow_id, not a successful run |
+| `list_trigger_events` | Read firing history without source payloads. Match fire_workflow_id exactly, then inspect the launched chat_id with get_run; paginate with next_page_token |
 | `list_workflows` | Browse existing workflows for examples and patterns |
 | `list_presets` | Discover available agent presets |
 | `get_preset` | View a preset's full configuration |

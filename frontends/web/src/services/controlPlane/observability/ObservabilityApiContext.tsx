@@ -20,6 +20,7 @@ import * as rpc from "./api";
 import * as dashboards from "./dashboardsApi";
 import * as delivery from "./deliveryApi";
 import * as issues from "./issuesApi";
+import * as metrics from "./metricsApi";
 
 export interface ObservabilityApi {
   /** The caller's current organization — what every request is scoped by. Null while it is still being provisioned. */
@@ -32,6 +33,10 @@ export interface ObservabilityApi {
   getFlamegraph: typeof rpc.getFlamegraph;
   getObservabilityUsage: typeof rpc.getObservabilityUsage;
   listAttributeValues: typeof rpc.listAttributeValues;
+  // Metrics explorer: the catalog, one metric's detail, and its exemplars.
+  listMetricCatalog: typeof metrics.listMetricCatalog;
+  getMetric: typeof metrics.getMetric;
+  listMetricExemplars: typeof metrics.listMetricExemplars;
   listWorkloads: typeof rpc.listWorkloads;
   getWorkload: typeof rpc.getWorkload;
   // Alerting (AlertingService): org-scoped, mutations need admin.
@@ -85,6 +90,9 @@ export const controlPlaneObservabilityApi: ObservabilityApi = {
   getFlamegraph: rpc.getFlamegraph,
   getObservabilityUsage: rpc.getObservabilityUsage,
   listAttributeValues: rpc.listAttributeValues,
+  listMetricCatalog: metrics.listMetricCatalog,
+  getMetric: metrics.getMetric,
+  listMetricExemplars: metrics.listMetricExemplars,
   listWorkloads: rpc.listWorkloads,
   getWorkload: rpc.getWorkload,
   listAlerts: alerting.listAlerts,

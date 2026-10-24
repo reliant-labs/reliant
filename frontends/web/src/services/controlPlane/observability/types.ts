@@ -15,6 +15,8 @@
  * component.
  */
 
+import type { SeriesMeta } from "./metricsTypes";
+
 /** A resolved, absolute time window. `endMs` is exclusive. */
 export interface TimeWindow {
   startMs: number;
@@ -204,6 +206,8 @@ export interface Series {
   group: Record<string, string>;
   timestamps: number[];
   values: (number | null)[];
+  /** Metrics panels: which points' buckets are still open (draw dashed). Absent on every other signal. */
+  partial?: boolean[];
   /** A number panel's value. */
   value: number | null;
 }
@@ -217,6 +221,8 @@ export interface QueryPanelRequest extends ObsScope {
   stepSeconds: number;
   /** Non-empty REPLACES the panel's own group-by (the in-place control). Max 3. */
   groupBy?: string[];
+  /** Compile the panel without running it: the result carries `compiledSql` and no data. */
+  explain?: boolean;
 }
 
 /**
@@ -239,6 +245,20 @@ export interface PanelResult {
   issues: PanelIssue[];
   /** sessions panels: browser sessions that started in the window, newest first. */
   sessions: PanelSession[];
+  /** Metrics panels: what each entry of `series` measures, in order. Empty for every other signal. */
+  seriesMeta: SeriesMeta[];
+  /** Series (groups) that matched before the cap; 0 when unknown. Compare with `series.length`. */
+  seriesTotal: number;
+  /** Non-fatal notes as stable codes: mixed_bounds, mixed_temporality, step_raised, metric_stored_as_n_kinds. */
+  warnings: string[];
+  /** With `explain`: the statements the panel compiles to. Empty otherwise. */
+  compiledSql: CompiledStatement[];
+}
+
+/** One statement a panel compiles to: SQL with {name:Type} placeholders and the parameter values. */
+export interface CompiledStatement {
+  sql: string;
+  params: Record<string, string>;
 }
 
 /** One step of a funnel panel: how many journeys reached it (and every step before it). */
