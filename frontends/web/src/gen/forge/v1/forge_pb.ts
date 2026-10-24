@@ -806,9 +806,13 @@ export type ConfigFieldOptions = Message<"forge.v1.ConfigFieldOptions"> & {
    * `forge generate` refuses two families (or a family and an env_var) of one
    * process that could claim the same variable.
    *
-   * Families are read from the environment and the config file; the KCL
-   * config schema does not project them — set a family's variables in a
-   * workload's `env` (or its secrets, for a sensitive one).
+   * Families are read from the environment and the config file. The KCL
+   * config schema projects one as a map keyed by KEY — `{str: str}`, or
+   * `{str: ConfigSecretRef}` for a sensitive one — and the env projection
+   * expands each entry to its variable: inline for a plain family, one
+   * forge.SecretRef per KEY for a sensitive one, which a workload selects
+   * by naming the family's pattern (APP_OAUTH_<KEY>_CLIENT_SECRET) in
+   * `config_secrets`.
    *
    * @generated from field: string env_prefix = 12;
    */

@@ -168,6 +168,16 @@
       "params": []
     },
     {
+      "id": "release-regressed",
+      "alert": "ReleaseRegressed",
+      "title": "A promoted release made the env worse once its health window closed",
+      "severity": "warning",
+      "for": "0s",
+      "interval": "1m",
+      "signal": "platform",
+      "params": []
+    },
+    {
       "id": "crash-loop",
       "alert": "WorkloadCrashLooping",
       "title": "A container keeps restarting",

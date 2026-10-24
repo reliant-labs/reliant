@@ -180,6 +180,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge generate`](#reliant-forge-generate) | Generate code from proto files |
 | [`reliant forge kcl`](#reliant-forge-kcl) | Evaluate this project's KCL directly |
 | [`reliant forge kcl eval`](#reliant-forge-kcl-eval) | Evaluate one KCL file of this project and print a selected field |
+| [`reliant forge kcl imports`](#reliant-forge-kcl-imports) | Show where each forge project this project's KCL imports resolves to |
 | [`reliant forge ledger`](#reliant-forge-ledger) | Move and inspect deploy ledgers |
 | [`reliant forge ledger export`](#reliant-forge-ledger-export) | Write the selected ledger to a directory, to VERIFY an import |
 | [`reliant forge ledger import`](#reliant-forge-ledger-import) | Import a ledger from a checkout's committed history, or from another ledger directory |
@@ -4789,7 +4790,7 @@ env is created with --bind <name>=<binder>. A frontend binds the same way
                           Restricted profile)
   --bind api=cluster      run api on the env's cluster
   --bind web=hosted       serve the web frontend from the control plane's
-                          static hosting (it owns the bucket and the CDN)
+                          static hosting (it owns the bucket)
   --bind web=bucket       publish the web frontend to your own bucket
 
 Examples:
@@ -6634,6 +6635,7 @@ reliant forge kcl
 | Command | Description |
 |---------|-------------|
 | [`eval`](#reliant-forge-kcl-eval) | Evaluate one KCL file of this project and print a selected field |
+| [`imports`](#reliant-forge-kcl-imports) | Show where each forge project this project's KCL imports resolves to |
 
 ---
 
@@ -6695,6 +6697,39 @@ reliant forge kcl eval <file> [-S <path>]... [flags]
 | `--format` | `string` | `json` | Output format: [json yaml raw] (raw prints a scalar's own text, unquoted and with no trailing newline) |
 | `--option`, `-D` | `stringArray` | `[]` | Bind a top-level KCL option, key=value (repeatable) |
 | `--select`, `-S` | `stringArray` | `[]` | Print only this dotted field path (repeatable; repeated paths yield an object keyed by path) |
+
+---
+
+#### reliant forge kcl imports
+
+Show where each forge project this project's KCL imports resolves to
+
+List the forge projects deploy/kcl/kcl.mod imports under [forge_projects],
+and where each one resolves.
+
+An imported project's KCL is read at the version this project's go.mod pins
+its Go module to — a go.work use or a directory replace reads that directory
+(a sibling checkout), otherwise the module cache at the required version,
+verified against go.sum. There is no separate KCL pin. Resolution refuses an
+imported project that pins a different forge than this one (version skew).
+
+--json prints the resolution as a JSON array: name, module, version (empty
+for a directory), via (the declaration that decided it), module_dir, dir (the
+KCL package root) and forge_pin.
+
+Examples:
+  cli forge kcl imports
+  cli forge kcl imports --json | jq -r '.[].dir'
+
+```
+reliant forge kcl imports [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--json` | `bool` | - | Print the resolution as JSON |
 
 ---
 
@@ -6968,6 +7003,15 @@ config-deps lane gate; {forgeconv-handler-file-size: warn} lets a gating rule
 be adopted gradually; "*" sets every forge rule. Another tool's linters keep
 their own config (.golangci.yml, buf.yaml, eslint), and a key forge does not
 grade — a typo, another tool's rule, a lane's could-not-run — is a lint error.
+
+NEW RULES WARN FIRST: a rule that joined forge lint (or was tightened) in a
+release your forge.yaml forge_version has not been through yet reports its
+findings as WARNINGS — "warn: [rule] is new in v0.1.47 and gates from
+v0.1.48" — and they do not fail the lane, the exit code or --gate-json. Bump
+the pin to the gates-from release and they gate. lint.rules wins: {rule: error}
+gates a new rule today, {rule: warn} keeps it a warning past its gates-from
+release, {rule: off} drops it. --json carries the note as a "grace" object on
+the finding. A project with no pin (or forge's own tree) gates everything.
 
 Examples:
   forge lint                     # Report only: print the diffs, write nothing
@@ -8086,6 +8130,11 @@ Grouped errors: what is failing, how often, since which release
 List the env's error issues: ERROR logs grouped by fingerprint (sfp1), with how
 often each fired, how many traces it touched and when. [env] defaults to dev.
 
+--source <name> lists the issues of an issue source instead: records of any
+level that carry issue.source=<name> (observe.IssueSource), such as the reports
+agents file (--source llm_bug_report). They are grouped the same way, never
+count as errors, and are listed only when asked for.
+
 On a hosted env the control plane keeps the issues, so they have a status
 (new, unresolved, resolved, regressed, ignored) that survives log retention, and
 --since-release / --since-deploy ask "what did this release open". On a local
@@ -8096,6 +8145,7 @@ issue is unresolved, and the counts are those of the range.
   cli forge obs issues prod --status regressed
   cli forge obs issues prod --since-release v1.4.0   # first seen in that release
   cli forge obs issues dev --service api --sort events
+  cli forge obs issues prod --source llm_bug_report  # agent-filed bug reports
 
 JSON schema forge.obs.issues/v1. --fields takes dotted paths of:
   issues
@@ -8115,6 +8165,7 @@ JSON schema forge.obs.issues/v1. --fields takes dotted paths of:
   issues.resolved_at
   issues.resolved_version
   issues.service
+  issues.source
   issues.status
   issues.title
   query_mode
@@ -8157,6 +8208,7 @@ reliant forge obs issues [env] [flags]
 | `--since-deploy` | `string` | - | only issues first seen at or after this promotion id (hosted env) |
 | `--since-release` | `string` | - | only issues first seen in this release version (hosted env) |
 | `--sort` | `string` | `last` | last | first | events |
+| `--source` | `string` | - | list the issues of this issue source (issue.source) instead of errors, e.g. llm_bug_report |
 | `--status` | `stringArray` | `[]` | only issues in this state: new, unresolved, resolved, regressed, ignored (repeatable; default the open ones) |
 | `--to` | `string` | - | range end, RFC 3339 (default now) |
 
@@ -8395,6 +8447,11 @@ default, either side) or --from and --to. Without them it is the whole range.
   cli forge obs metrics exemplars dev rpc.server.duration --since 1h --where metric.attr.status=error
 
 --where is key=value or key!=value over the metric's attributes (repeatable).
+--group KEY=VALUE narrows to one series of a grouped panel: KEY is a --group-by
+key of `cli forge obs metrics query` and VALUE that series' label (repeatable, one per key).
+
+  cli forge obs metrics exemplars dev rpc.server.duration --group rpc.method=List --group service.name=api
+
 A stored trace's next command is in "suggested":
   cli forge obs trace <trace-id> <env>
 
@@ -8440,6 +8497,7 @@ reliant forge obs metrics exemplars [env] <metric> [flags]
 | `--fields` | `string` | - | with --json: keep only these comma-separated dotted fields (the head is always kept) |
 | `--filter` | `stringArray` | `[]` | attribute predicate key=value or key!=value over the allowlisted keys (repeatable) |
 | `--from` | `string` | - | range start, RFC 3339 |
+| `--group` | `stringArray` | `[]` | narrow to one series group: a --group-by KEY=VALUE (repeatable, one per key) |
 | `--json` | `bool` | - | print one JSON document on stdout (see the schema below; progress goes to stderr) |
 | `--limit` | `int` | `20` | most items to return |
 | `--min-value` | `float64` | `0` | only exemplars at or above this value |
