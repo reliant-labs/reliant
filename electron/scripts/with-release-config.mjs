@@ -40,9 +40,8 @@
 // CI never hits this because a fresh runner has none of them set; locally it is
 // the DEFAULT case. So each key is assigned unconditionally.
 //
-// Secrets (the Sentry DSN) are deliberately NOT here. They come from
-// GitHub Actions secrets in CI and are simply absent locally, which leaves
-// telemetry inert in a local build.
+// No secret is involved: main-process telemetry ships to the renderer's
+// OTEL_ENDPOINT, which is part of the release document itself.
 
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";

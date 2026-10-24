@@ -585,8 +585,6 @@ jobs:
       - name: Generate runtime build config
         uses: ./.github/actions/generate-build-config
         with:
-          statsig-client-key: ${{ secrets.STATSIG_CLIENT_KEY }}
-          sentry-dsn: ${{ secrets.SENTRY_DSN }}
           supabase-url: ${{ secrets.VITE_SUPABASE_URL }}
           supabase-anon-key: ${{ secrets.SUPABASE_ANON_KEY }}
           reliant-server-url: ${{ env.RELIANT_SERVER_URL }}
@@ -775,8 +773,6 @@ jobs:
       - name: Generate runtime build config
         uses: ./.github/actions/generate-build-config
         with:
-          statsig-client-key: ${{ secrets.STATSIG_CLIENT_KEY }}
-          sentry-dsn: ${{ secrets.SENTRY_DSN }}
           supabase-url: ${{ secrets.VITE_SUPABASE_URL }}
           supabase-anon-key: ${{ secrets.SUPABASE_ANON_KEY }}
           reliant-server-url: ${{ env.RELIANT_SERVER_URL }}
@@ -924,8 +920,6 @@ jobs:
       - name: Generate runtime build config
         uses: ./.github/actions/generate-build-config
         with:
-          statsig-client-key: ${{ secrets.STATSIG_CLIENT_KEY }}
-          sentry-dsn: ${{ secrets.SENTRY_DSN }}
           supabase-url: ${{ secrets.VITE_SUPABASE_URL }}
           supabase-anon-key: ${{ secrets.SUPABASE_ANON_KEY }}
           reliant-server-url: ${{ env.RELIANT_SERVER_URL }}

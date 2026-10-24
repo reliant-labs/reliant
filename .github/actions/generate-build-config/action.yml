@@ -5,12 +5,6 @@ description: >-
   release jobs so the generation logic exists exactly once.
 
 inputs:
-  statsig-client-key:
-    required: false
-    default: ""
-  sentry-dsn:
-    required: false
-    default: ""
   supabase-url:
     required: false
     default: ""
@@ -34,8 +28,6 @@ runs:
       working-directory: electron
       shell: bash
       env:
-        STATSIG_CLIENT_KEY: ${{ inputs.statsig-client-key }}
-        SENTRY_DSN: ${{ inputs.sentry-dsn }}
         SUPABASE_URL: ${{ inputs.supabase-url }}
         SUPABASE_ANON_KEY: ${{ inputs.supabase-anon-key }}
         RELIANT_SERVER_URL: ${{ inputs.reliant-server-url }}

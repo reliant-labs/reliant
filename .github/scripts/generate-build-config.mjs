@@ -10,8 +10,8 @@
 // declaration of these hostnames; .github/release-config.env was a second
 // hand-maintained copy and is gone.
 //
-// SECRETS still come from process.env (GitHub Actions secrets): the Sentry DSN
-// and the Statsig client key are not in a public repo and not in KCL.
+// Nothing here is secret. Main-process telemetry reads the renderer's
+// OTEL_ENDPOINT from the same release document (electron/src/telemetry.js).
 //
 // Fails the build if an endpoint is unset or targets localhost — see
 // validate-endpoint.mjs for the stronger resolvable/reachable check run
@@ -61,10 +61,6 @@ const endpoints = Object.fromEntries(
 );
 
 const config = {
-  STATSIG_CLIENT_KEY: process.env.STATSIG_CLIENT_KEY || "",
-  SENTRY_DSN: process.env.SENTRY_DSN || "",
-  SENTRY_ENABLED: "true",
-  SENTRY_TRACES_SAMPLE_RATE: "0.1",
   SUPABASE_URL: endpoints.SUPABASE_URL || "",
   SUPABASE_ANON_KEY: endpoints.SUPABASE_ANON_KEY || "",
   RELIANT_SERVER_URL: endpoints.RELIANT_SERVER_URL || "",

@@ -1,4 +1,4 @@
-// Pins the native crash signal path (src/crash-signals.js): one scrubbed event
+// Pins the native crash signal path (src/crash-signals.js): one telemetry record
 // per process death carrying reason and exit code, rate-limited per process
 // type, and never a minidump.
 
@@ -18,7 +18,6 @@ const {
   createCrashSignalReporter,
   installCrashSignals,
 } = require('../src/crash-signals');
-const { sentryMainOptions } = require('../src/sentry-scrub');
 
 const ENV = {
   appVersion: '1.7.0',
@@ -89,22 +88,24 @@ test('the route is only a first path segment shaped like a route name', () => {
   assert.equal(safeRouteName(undefined), '');
 });
 
-test('one Sentry event per crash, grouped by process type and reason', () => {
+test('one telemetry record per crash, one issue per process type and reason', () => {
   const { report, sent } = makeReporter();
   report({ processType: 'gpu', reason: 'crashed', exitCode: 139 });
   report({ processType: 'gpu', reason: 'crashed', exitCode: 11 });
   assert.equal(sent.length, 2);
-  assert.deepEqual(sent[0].fingerprint, ['native-crash', 'gpu', 'crashed']);
-  assert.equal(sent[0].message, 'native-crash gpu crashed');
-  assert.equal(sent[0].level, 'error');
-  assert.equal(sent[0].tags.exitCode, 139);
-  assert.deepEqual(sent[1].fingerprint, sent[0].fingerprint);
+  assert.equal(sent[0].severity, 'ERROR');
+  assert.equal(sent[0].body, 'native-crash gpu crashed');
+  // error.group pins forge's issue grouping, whatever else differs.
+  assert.equal(sent[0].attributes['error.group'], 'native-crash/gpu/crashed');
+  assert.equal(sent[0].attributes['crash.exit_code'], 139);
+  assert.equal(sent[1].attributes['error.group'], sent[0].attributes['error.group']);
+  assert.equal(sent[1].body, sent[0].body);
 });
 
 test('a killed process is a warning, not an error', () => {
   const { report, sent } = makeReporter();
   report({ processType: 'utility', reason: 'killed', exitCode: 9 });
-  assert.equal(sent[0].level, 'warning');
+  assert.equal(sent[0].severity, 'WARN');
 });
 
 test('at most 5 events per 10 minutes per process type, then it recovers', () => {
@@ -122,14 +123,14 @@ test('at most 5 events per 10 minutes per process type, then it recovers', () =>
   advance(RATE_LIMIT_WINDOW_MS + 1);
   report({ processType: 'renderer', reason: 'crashed', exitCode: 1 });
   assert.equal(sent.length, 7);
-  assert.equal(sent[6].tags.suppressedSinceLastReport, 15);
-  assert.equal(sent[5].tags.suppressedSinceLastReport, undefined);
+  assert.equal(sent[6].attributes['crash.suppressed_since_last_report'], 15);
+  assert.equal(sent[5].attributes['crash.suppressed_since_last_report'], undefined);
 });
 
 test('a throwing capture never propagates into the crash handler', () => {
   const { report } = makeReporter({
     capture: () => {
-      throw new Error('sentry down');
+      throw new Error('telemetry down');
     },
   });
   assert.doesNotThrow(() => report({ processType: 'gpu', reason: 'crashed', exitCode: 1 }));
@@ -171,19 +172,26 @@ test('a destroyed web contents does not break the renderer crash report', () => 
   assert.equal(reports[0].route, '');
 });
 
-test('the event survives the Sentry scrubber intact and carries no extra content', () => {
+test('the record carries the event\'s enums, numbers and versions and nothing else', () => {
   const { report, sent } = makeReporter();
   report({ processType: 'renderer', reason: 'oom', exitCode: 137, route: 'chats' });
-
-  const options = sentryMainOptions({
-    dsn: 'https://public@o0.ingest.sentry.io/0',
-    environment: 'production',
-    release: 'reliant@1.7.0',
-    isEnabled: () => true,
+  assert.deepEqual(sent[0], {
+    severity: 'ERROR',
+    body: 'native-crash renderer oom',
+    attributes: {
+      'error.group': 'native-crash/renderer/oom',
+      'crash.signal': true,
+      'crash.process_type': 'renderer',
+      'crash.reason': 'oom',
+      'crash.exit_code': 137,
+      'app.version': '1.7.0',
+      'os.platform': 'darwin',
+      'os.arch': 'arm64',
+      'os.version': '23.3.0',
+      'process.uptime_s': 42,
+      'crash.route': 'chats',
+    },
   });
-  const scrubbed = options.beforeSend(structuredClone(sent[0]));
-  assert.deepEqual(scrubbed.tags, sent[0].tags);
-  assert.equal(scrubbed.message, sent[0].message);
 });
 
 test('Electron details beyond reason, exit code and type are never forwarded', () => {
@@ -205,7 +213,7 @@ test('Electron details beyond reason, exit code and type are never forwarded', (
   const wire = JSON.stringify(sent[0]);
   assert.ok(!wire.includes('refactor'));
   assert.ok(!wire.includes('AAAA'));
-  assert.equal(sent[0].tags.serviceName, 'network.mojom.NetworkService');
+  assert.equal(sent[0].attributes['crash.service_name'], 'network.mojom.NetworkService');
 });
 
 // Minidumps are copies of process memory; crashReporter uploads stay off.

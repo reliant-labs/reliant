@@ -94,8 +94,7 @@ const {
   runAuthWrite,
 } = require("./backend-auth");
 const windowStateClient = require("./window-state-client");
-const Sentry = require("@sentry/electron/main");
-const { sentryMainOptions } = require("./sentry-scrub");
+const { createMainTelemetry, telemetryEndpoint } = require("./telemetry");
 const { createCrashSignalReporter, installCrashSignals, safeRouteName } = require("./crash-signals");
 const { autoUpdater } = require("electron-updater");
 const electronLog = require("electron-log");
@@ -199,35 +198,24 @@ function getAnalyticsEnabled() {
   return settings.analyticsEnabled !== false; // Default to true
 }
 
-// Sentry needs to be initialized before app.ready event fires
-// We'll initialize it early with privacy settings check
-let sentryInitialized = false;
+// Main-process telemetry (telemetry.js): forge's Node runtime over OTLP to the
+// renderer's own keyed ingest. Packaged builds only, and only while the user
+// leaves crash reporting on; turning it off in Settings stops it at once.
+const mainTelemetry = createMainTelemetry({ log });
 
-// Initialize Sentry BEFORE app.ready (required by Sentry SDK)
-function initializeSentry() {
-  // Only initialize in production, if crash reporting is enabled, and not disabled via env
-  if (app.isPackaged && getCrashReportingEnabled() && process.env.SENTRY_ENABLED !== "false") {
-    try {
-      // Set environment based on release type for filtering in Sentry dashboard
-      const sentryEnvironment = isPrerelease ? "prerelease" : "production";
-
-      // sentryMainOptions enforces the same privacy policy as the renderer and
-      // the backend: identifiers, types and stacks leave the app; user
-      // content (console arguments, error payloads, emails, IPs) does not.
-      Sentry.init(sentryMainOptions({
-        dsn: process.env.SENTRY_DSN,
-        environment: sentryEnvironment,
-        release: `reliant@${currentVersion}`,
-        isEnabled: getCrashReportingEnabled,
-      }));
-      sentryInitialized = true;
-      log.info(`[Sentry] Initialized (environment: ${sentryEnvironment}, release: reliant@${currentVersion})`);
-    } catch (error) {
-      log.error("[Sentry] Failed to initialize:", error);
-    }
-  } else {
-    log.info("[Sentry] Disabled (development mode or user opted out)");
+function initializeTelemetry() {
+  if (!app.isPackaged || !getCrashReportingEnabled()) {
+    log.info("[Telemetry] Disabled (development mode or user opted out)");
+    return;
   }
+  const endpoint = telemetryEndpoint({ env: process.env, release: loadReleaseRendererConfig() });
+  const running = mainTelemetry.start({
+    endpoint,
+    version: currentVersion,
+    isPrerelease,
+    appRoot: app.getAppPath(),
+  });
+  log.info(running ? `[Telemetry] Started (release: reliant@${currentVersion})` : "[Telemetry] Off (no ingest endpoint)");
 }
 
 const DEV_HOST = "127.0.0.1";
@@ -1559,15 +1547,10 @@ ipcMain.handle("install:mark-first-launch-reported", () => {
   installRecord.markFirstLaunchReported(app.getPath("userData"));
 });
 
-// The signed-in user, for main-process crash reports. Only the id is kept: the
-// scrubber would drop anything else, and an email has no business here.
+// The signed-in user, for main-process crash reports. Only an opaque id of at
+// most 128 chars is kept (telemetry.js): an email has no business here.
 ipcMain.handle("telemetry:set-user", (_event, userId) => {
-  if (!sentryInitialized) return;
-  if (userId === null) {
-    Sentry.setUser(null);
-  } else if (typeof userId === "string" && userId !== "" && userId.length <= 128) {
-    Sentry.setUser({ id: userId });
-  }
+  mainTelemetry.setUser(userId);
 });
 
 ipcMain.handle("tray:set-status", async (_event, status) => {
@@ -2014,6 +1997,14 @@ ipcMain.handle("update-privacy-settings", async (event, settings) => {
   // TODO: Save to database via backend API instead of file
   // For now, keep file-based storage for backwards compatibility
   writePrivacySettings(settings);
+
+  // Crash reporting applies at once, both ways.
+  if (settings.crashReportingEnabled === false) {
+    await mainTelemetry.stop();
+    log.info("[Privacy] Crash reporting disabled");
+  } else if (settings.crashReportingEnabled === true && !mainTelemetry.running) {
+    initializeTelemetry();
+  }
 
   // TODO: Call hosted API to update database and dynamically switch clients
   // Example: POST ${apiUrl}/api/v2/settings/privacy
@@ -3036,8 +3027,9 @@ ipcMain.handle("install-update", async () => {
 
     // Use standard electron-updater quitAndInstall for native downloads
     // Use setImmediate to ensure IPC response is sent before quitting
-    setImmediate(() => {
+    setImmediate(async () => {
       log.info("[AutoUpdater] Calling quitAndInstall...");
+      await mainTelemetry.flush();
 
       // Set a failsafe timeout to force exit if quitAndInstall hangs
       // This ensures the app actually closes so the updater can run on next launch
@@ -3561,10 +3553,13 @@ async function gracefulShutdown(exitCode = 0) {
       }
     }
 
+    // Last: what the shutdown itself logged goes out too (2s at most).
+    await mainTelemetry.flush();
     clearTimeout(forceQuitTimeout);
     app.exit(exitCode);
   } catch (error) {
     log.error("Error during shutdown:", error);
+    await mainTelemetry.flush();
     clearTimeout(forceQuitTimeout);
     // Force destroy tray on error
     if (tray && !tray.isDestroyed()) {
@@ -3610,28 +3605,11 @@ function ensureDirectoriesExist() {
   }
 }
 
-// Sentry MUST be initialized before we register our own scheme privileges.
-//
-// Electron does not merge the per-privilege scheme lists across separate
-// registerSchemesAsPrivileged calls — the last call wins for each privilege it
-// names. @sentry/electron works around that by registering `sentry-ipc` during
-// init and then PROXYING protocol.registerSchemesAsPrivileged so that every
-// LATER call gets its scheme appended (see @sentry/electron/main/ipc.js,
-// configureProtocol). A call made BEFORE Sentry init never passes through that
-// proxy, so Sentry's own registration silently clobbers ours.
-//
-// Registering first cost us exactly the privileges Sentry also declares. In the
-// shipped 1.7.8 renderer:
-//   --standard-schemes=app        (survived — Sentry declares no `standard`)
-//   --streaming-schemes=app       (survived — Sentry declares no `stream`)
-//   --secure-schemes=sentry-ipc   (CLOBBERED — `app` dropped)
-//   --cors-schemes=sentry-ipc     (CLOBBERED)
-//   --fetch-schemes=sentry-ipc    (CLOBBERED)
-//
-// Losing `secure` made app:// a non-secure context, which removes crypto.subtle
-// and broke Claude/Codex PKCE sign-in ("not running in a secure context").
-// Ordering Sentry first routes our call through the proxy, so both survive.
-initializeSentry();
+// Telemetry starts as early as it can, so an exception during startup is
+// recorded. It registers no scheme of its own: registerSchemePrivileges below
+// is the only registerSchemesAsPrivileged call in the process, which is what
+// keeps app:// secure (Electron does not merge separate calls' lists).
+initializeTelemetry();
 
 // Scheme privileges must be declared before the app is ready, or app:// is
 // treated as an opaque origin and localStorage throws in the renderer.
@@ -3757,10 +3735,6 @@ if (process.platform === 'darwin') {
     pendingLaunchDeepLink = urlArg;
   }
 }
-
-// Sentry is initialized earlier, immediately before registerSchemePrivileges().
-// It must precede that call so our app:// privileges go through Sentry's
-// registerSchemesAsPrivileged proxy instead of being clobbered by it.
 
 // Check for hardware acceleration disable flag (for users with GPU issues causing black screens)
 // Can be enabled via command line: --disable-gpu or environment variable: RELIANT_DISABLE_GPU=1
@@ -4006,14 +3980,12 @@ app.on("child-process-gone", (_e, details) => {
   log.error("[child gone]", details); // can catch GPU process too
 });
 
-// Reason and exit code of every renderer / GPU / utility death, as one Sentry
-// event each. No minidump: see crash-signals.js.
+// Reason and exit code of every renderer / GPU / utility death, as one
+// telemetry record each. No minidump: see crash-signals.js.
 installCrashSignals({
   app,
   report: createCrashSignalReporter({
-    capture: (event) => {
-      if (sentryInitialized) Sentry.captureEvent(event);
-    },
+    capture: (record) => mainTelemetry.record(record),
     log,
     env: () => ({
       appVersion: currentVersion,

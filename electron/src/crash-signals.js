@@ -2,7 +2,7 @@
 // what exit code. Never a minidump.
 //
 // A minidump is a copy of process memory and can hold prompts, file contents and
-// credentials, so dumps stay off (see sentry-scrub.js). Electron still tells the
+// credentials, so dumps stay off: crashReporter is never started. Electron still tells the
 // main process the reason and exit code of every renderer and child-process
 // death. That is enough to see a GPU crash loop or a renderer OOM, and it
 // carries nothing the user typed.
@@ -10,7 +10,7 @@
 // Electron's `details` objects are never forwarded as they are: each field of
 // the event is picked by name, and enums are mapped through an allowlist.
 // JS exceptions in the main process (uncaughtException, unhandledRejection) are
-// already captured by the Sentry integrations main.js keeps enabled, so they are
+// already recorded by forge's Node telemetry runtime (telemetry.js), so they are
 // not reported a second time here.
 
 'use strict';
@@ -91,19 +91,37 @@ function buildCrashEvent(crash, env) {
   return event;
 }
 
-// The Sentry event for a crash signal. The message and fingerprint are fixed
-// strings built from enums, so every crash of one kind groups together.
-function toSentryEvent(event) {
+// The telemetry log record for a crash signal. The body and error.group are
+// fixed strings built from enums, so every crash of one kind is one issue
+// (error.group pins forge's sfp1 grouping; observe.ErrorGroup on the server).
+// Attribute values are the event's enums, numbers and versions, nothing else.
+function toTelemetryRecord(event) {
+  const attributes = {
+    'error.group': `native-crash/${event.processType}/${event.reason}`,
+    'crash.signal': true,
+    'crash.process_type': event.processType,
+    'crash.reason': event.reason,
+    'crash.exit_code': event.exitCode,
+    'app.version': event.appVersion,
+    'os.platform': event.platform,
+    'os.arch': event.arch,
+    'os.version': event.osVersion,
+    'process.uptime_s': event.uptimeSeconds,
+  };
+  if (event.serviceName) attributes['crash.service_name'] = event.serviceName;
+  if (event.route) attributes['crash.route'] = event.route;
+  if (event.suppressedSinceLastReport) {
+    attributes['crash.suppressed_since_last_report'] = event.suppressedSinceLastReport;
+  }
   return {
-    level: ERROR_REASONS.has(event.reason) ? 'error' : 'warning',
-    message: `native-crash ${event.processType} ${event.reason}`,
-    fingerprint: ['native-crash', event.processType, event.reason],
-    tags: { ...event, crashSignal: 'true' },
+    severity: ERROR_REASONS.has(event.reason) ? 'ERROR' : 'WARN',
+    body: `native-crash ${event.processType} ${event.reason}`,
+    attributes,
   };
 }
 
 // Returns report(crash): sends at most `maxEvents` per `windowMs` per process
-// type, so a renderer crash loop cannot flood Sentry. The first event sent after
+// type, so a renderer crash loop cannot flood telemetry. The first event sent after
 // a suppressed stretch says how many were dropped.
 function createCrashSignalReporter({
   capture,
@@ -138,7 +156,7 @@ function createCrashSignalReporter({
     sentAt.set(event.processType, recent);
 
     try {
-      capture(toSentryEvent(event));
+      capture(toTelemetryRecord(event));
     } catch (error) {
       log.error('[CrashSignals] failed to report crash signal:', error);
     }
@@ -181,7 +199,7 @@ module.exports = {
   mapChildProcessType,
   safeRouteName,
   buildCrashEvent,
-  toSentryEvent,
+  toTelemetryRecord,
   createCrashSignalReporter,
   installCrashSignals,
 };
