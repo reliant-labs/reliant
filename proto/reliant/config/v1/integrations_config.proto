@@ -94,6 +94,7 @@ message IntegrationsConfig {
     env_prefix: "RELIANT_OAUTH_"
     env_suffix: "_CLIENT_SECRET"
     sensitive: true
+    optional: true
     description: "Integration OAuth client secrets, RELIANT_OAUTH_<ID>_CLIENT_SECRET"
   }];
 }

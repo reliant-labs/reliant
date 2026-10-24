@@ -126,12 +126,27 @@ _web = forge.Frontend {
 }
 
 # ── Bindings ─────────────────────────────────────────────────────────────────
-_migrate = wl.migrate | {
+# What a host process cannot carry, taken back off workloads.k's pod facts: a
+# local process has no pod to mount into or rank (forge refuses `volumes` and
+# `priorityClassName` on OnHost by name), no kubelet to probe it, and no
+# container limit to size resources or GOMEMLIMIT from. release_dependencies
+# come off too: this local stack is started whole by `forge env up` and never
+# cut as a release, so no cohort is ever planned from them here.
+_host_only = {
+    release_dependencies = Undefined
+    probes = Undefined
+    resources = Undefined
+    volumes = Undefined
+    priorityClassName = Undefined
+    go_memory_limit_percent = Undefined
+}
+
+_migrate = wl.migrate | _host_only | {
     runtime = forge.OnHost {runner = "go-run"}
 }
 _migrate = _migrate | {env = _env(_migrate)}
 
-_api = wl.api_server | {
+_api = wl.api_server | _host_only | {
     runtime = _host(".air.api.toml", [ports.api, ports.api_health])
     if _host_runner != "air":
         command = ["go", "run", "./cmd/reliant"]
@@ -139,14 +154,14 @@ _api = wl.api_server | {
 }
 _api = _api | {env = _env(_api)}
 
-_worker = wl.temporal_worker | {
+_worker = wl.temporal_worker | _host_only | {
     runtime = _host(".air.worker.toml", [ports.worker_health])
     if _host_runner != "air":
         command = ["go", "run", "./cmd/reliant"]
 }
 _worker = _worker | {env = _env(_worker)}
 
-_gateway = wl.daemon_gateway | {
+_gateway = wl.daemon_gateway | _host_only | {
     runtime = _host(".air.gateway.toml", [ports.gateway, ports.gateway_health])
     if _host_runner != "air":
         command = ["go", "run", "./cmd/reliant"]

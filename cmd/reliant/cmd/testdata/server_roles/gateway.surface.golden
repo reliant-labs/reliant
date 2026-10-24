@@ -43,7 +43,7 @@ RELIANT_LLM_STREAM_MID_BLOCK_STALL_TIMEOUT kind=google.protobuf.Duration flag=""
 RELIANT_LLM_STREAM_PROGRESS_TIMEOUT kind=google.protobuf.Duration flag="" default="10m" required=false optional=false sensitive=false allowed=[] aliases=[]
 RELIANT_LOG_LEVEL kind=string flag="log-level" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
 RELIANT_OAUTH_*_CLIENT_ID kind=map flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
-RELIANT_OAUTH_*_CLIENT_SECRET kind=map flag="" default="" required=false optional=false sensitive=true allowed=[] aliases=[]
+RELIANT_OAUTH_*_CLIENT_SECRET kind=map flag="" default="" required=false optional=true sensitive=true allowed=[] aliases=[]
 RELIANT_SLACK_SIGNING_SECRET kind=string flag="" default="" required=false optional=true sensitive=true allowed=[] aliases=[]
 RELIANT_STORAGE_REAPER kind=string flag="" default="auto" required=false optional=false sensitive=false allowed=[auto on off] aliases=[]
 RELIANT_STORAGE_REAPER_GOCACHE_INTERVAL kind=string flag="" default="10m" required=false optional=false sensitive=false allowed=[] aliases=[]
