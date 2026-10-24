@@ -406,7 +406,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       const { useWorktreeStore } = await import('./worktreeStore')
       const { useChatNavigationStore } = await import('./chatNavigationStore')
       const { useAttachmentStore } = await import('./attachmentStore')
-      const { useTasksStore } = await import('./tasksStore')
       const { useProcessStore } = await import('./processStore')
 
       // Reset all stores (order matters: navigation first to trigger chat cleanup, then everything else)
@@ -415,7 +414,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       useProjectStore.getState().reset()
       useWorktreeStore.getState().reset()
       useAttachmentStore.getState().reset()
-      useTasksStore.getState().reset()
       useProcessStore.getState().reset()
 
       // Drop every cached answer about who the user is.

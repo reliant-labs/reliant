@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
 import { WorktreeStatus } from "../../../gen/reliant/v1/worktree_pb";
@@ -68,9 +70,10 @@ vi.mock("../../../api/worktree-grpc", () => ({
   worktreeGrpc: { list: vi.fn(), listAll: vi.fn(), create: vi.fn() },
 }));
 
-vi.mock("../../../api/terminal-grpc", () => ({
-  terminalApi: { closeSession: vi.fn().mockResolvedValue({ success: true, message: "" }) },
-}));
+// Closing a tab calls TerminalService.CloseSession; answer it in memory.
+setTransport(
+  mockTransport({ "TerminalService.CloseSession": { response: { success: true, message: "" } } }),
+);
 
 // xterm renders to canvas, which jsdom cannot do. The stand-in keeps the one
 // thing these tests are about: xterm takes input through a hidden textarea, so

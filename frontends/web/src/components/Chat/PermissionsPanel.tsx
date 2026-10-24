@@ -2,7 +2,7 @@ import { useCallback, useMemo } from 'react';
 import { Shield } from 'lucide-react';
 import { ApprovalActions } from './ApprovalActions';
 import { useActiveChatId } from '../../store/chatStoreHooks';
-import { usePendingApprovals, useBatchApprove, useBatchDeny } from '../../hooks/approval-queries';
+import { usePendingApprovals, useBatchApproveInChat, useBatchDenyInChat } from '../../hooks/approval-queries';
 import { cn } from '../../lib/utils';
 import { useSurface } from '../../lib/surfaceContext';
 
@@ -19,11 +19,11 @@ export function PermissionsPanel({ chatId: propsChatId }: PermissionsPanelProps 
   // The `?? []` fallback would otherwise mint a new array on every render while
   // the query is still loading, re-creating both approve/deny callbacks.
   const pendingApprovals = useMemo(
-    () => pendingApprovalsQuery.data ?? [],
+    () => pendingApprovalsQuery.data?.approvals ?? [],
     [pendingApprovalsQuery.data],
   );
-  const batchApproveMutation = useBatchApprove();
-  const batchDenyMutation = useBatchDeny();
+  const batchApproveMutation = useBatchApproveInChat(chatId ?? undefined);
+  const batchDenyMutation = useBatchDenyInChat(chatId ?? undefined);
   
   // Detect platform for keyboard shortcut hint
   const isMac = typeof window !== 'undefined' && 
@@ -34,7 +34,6 @@ export function PermissionsPanel({ chatId: propsChatId }: PermissionsPanelProps 
   const handleApprove = useCallback(() => {
     if (chatId && pendingApprovals.length > 0) {
       batchApproveMutation.mutate({
-        chatId,
         requestIds: pendingApprovals.map((a) => a.id),
       });
     }
@@ -43,7 +42,6 @@ export function PermissionsPanel({ chatId: propsChatId }: PermissionsPanelProps 
   const handleDeny = useCallback(() => {
     if (chatId && pendingApprovals.length > 0) {
       batchDenyMutation.mutate({
-        chatId,
         requestIds: pendingApprovals.map((a) => a.id),
       });
     }

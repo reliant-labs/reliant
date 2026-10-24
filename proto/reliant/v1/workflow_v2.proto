@@ -728,6 +728,17 @@ message ActionArgs {
 
   // Field 4 is reserved for placement narrowing.
   reserved 4;
+
+  // HostedUse names an explicit owner-approved hosted HTTP use grant. The
+  // secret stays in the controller execution boundary; this is never a value
+  // or a saved connection. Only fixed http/request@1 action nodes accept it.
+  // Mutually exclusive with connection; unavailable to integration tools.
+  CelString hosted_use = 5 [(reliant) = {
+    description: "Hosted HTTP use-grant reference for this fixed action"
+    example: "grant_approved_trader_staging"
+    label: "Hosted use grant"
+    visibility_contexts: "basic"
+  }];
 }
 
 // GitPublishArgs configures a git_publish node: commit a worktree's changes and

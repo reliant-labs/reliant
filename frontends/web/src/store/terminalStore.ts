@@ -1,7 +1,10 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { logger } from "../lib/logger";
-import { terminalApi } from "../api/terminal-grpc";
+import { TerminalService } from "../gen/reliant/v1/terminal_pb";
+import { terminalServiceKeys } from "../hooks/terminal-service-hooks_gen";
+import { connectClient } from "../lib/connect";
+import { queryClient } from "../lib/query-client";
 import { useWorkspaceStateStore } from "./workspaceStateStore";
 
 export interface TerminalSession {
@@ -286,11 +289,21 @@ export const useTerminalStore = create(
     // pod died. Fire-and-forget: the UI drops the tab immediately.
     const daemonSessionId = get().sessions.find((s) => s.id === id)?.daemonSessionId;
     if (daemonSessionId) {
-      terminalApi.closeSession(daemonSessionId).catch((error) => {
-        // Still best-effort: the session may have exited on its own (the shell
-        // was exited, or the daemon restarted) and is genuinely gone already.
-        logger.warn("[TerminalStore] Failed to close session on server (may already be closed)", { id, daemonSessionId, error });
-      });
+      // A store action, not a component, so it calls the client the
+      // generated useCloseSession wraps and applies the same invalidation.
+      connectClient(TerminalService)
+        .closeSession({ sessionId: daemonSessionId })
+        .then((response) => {
+          void queryClient.invalidateQueries({ queryKey: terminalServiceKeys.all });
+          if (!response.success) {
+            logger.warn("[TerminalStore] Close session failed", { id, daemonSessionId, message: response.message });
+          }
+        })
+        .catch((error) => {
+          // Still best-effort: the session may have exited on its own (the shell
+          // was exited, or the daemon restarted) and is genuinely gone already.
+          logger.warn("[TerminalStore] Failed to close session on server (may already be closed)", { id, daemonSessionId, error });
+        });
     } else {
       // No daemon id means "init" never arrived, so no PTY was ever created
       // for this tab. There is nothing to close, and calling CloseSession with

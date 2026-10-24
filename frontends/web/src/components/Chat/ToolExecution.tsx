@@ -33,7 +33,6 @@ import {
   useApproveToolRequest,
   useDenyToolRequest,
 } from "../../hooks/approval-queries";
-import type { ToolApprovalRequest } from "../../api/client";
 import { FileLink } from "./FileLink";
 import { formatToolParams, type ToolInput, isViewOnlyTool, isTaskTool, isReadToolWithResults, isSpawnTool } from "../../lib/toolFormatters";
 import { parseFilePath } from "../../lib/filePath";
@@ -41,7 +40,7 @@ import { openFile, classifyPath } from "../../lib/fileOpener";
 import { toast } from "../../lib/toast-manager";
 import { useTasksForChat, type TaskItem } from "../../hooks/task-queries";
 import { shouldToolBeCollapsed, TOOL_COLLAPSE_SETTINGS_EVENT } from "../Settings/ToolCallSettings";
-import { ApprovalStatus } from "../../gen/reliant/v1/approval_pb";
+import { ApprovalStatus, type Approval } from "../../gen/reliant/v1/approval_pb";
 import {
   ContentBlockType,
   ToolCallStatus,
@@ -283,7 +282,7 @@ interface ToolExecutionProps {
     | "backgrounded"
     | "denied"
     | "failed";
-  approval?: ToolApprovalRequest;
+  approval?: Approval;
   chatId?: string;
   showRichContent?: boolean;
   onSelectThread?: (threadId: string | null) => void;
@@ -361,8 +360,8 @@ function ToolExecutionComponent({
   const toolCallStates = useToolCallStates(chatId || "");
   const liveToolCallState = toolCallStates.get(toolCall.id) || null;
 
-  const approveMutation = useApproveToolRequest();
-  const denyMutation = useDenyToolRequest();
+  const approveMutation = useApproveToolRequest(chatId || undefined);
+  const denyMutation = useDenyToolRequest(chatId || undefined);
 
   // Async spawn returns the tool result the moment the child agent is
   // dispatched, so the tool call's own status reads "completed" while the
@@ -540,7 +539,7 @@ function ToolExecutionComponent({
   // Handlers
   const handleApprove = useCallback(() => {
     if (approval && chatId) {
-      approveMutation.mutate({ chatId, requestId: approval.id });
+      approveMutation.mutate({ requestId: approval.id });
     } else if (onApprove) {
       onApprove(toolCall.id);
     }
@@ -548,7 +547,7 @@ function ToolExecutionComponent({
 
   const handleDeny = useCallback(() => {
     if (approval && chatId) {
-      denyMutation.mutate({ chatId, requestId: approval.id });
+      denyMutation.mutate({ requestId: approval.id });
     } else if (onDeny) {
       onDeny(toolCall.id);
     }
@@ -985,9 +984,9 @@ function ToolExecutionComponent({
         )}
 
         {/* Denial reason */}
-        {approval?.status === ApprovalStatus.DENIED && approval.denial_reason && (
+        {approval?.status === ApprovalStatus.DENIED && approval.denialReason && (
           <div className="px-2 py-1 border-t border-destructive/20 bg-destructive/5 text-xs text-destructive-ink">
-            Denied: {approval.denial_reason}
+            Denied: {approval.denialReason}
           </div>
         )}
 

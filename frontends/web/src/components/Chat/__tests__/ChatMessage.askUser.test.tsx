@@ -7,6 +7,8 @@
 
 import { render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ChatMessage } from "../ChatMessage";
 import { ContentBlockType, MessageRole, StreamingState } from "../../../types/chat";
@@ -40,22 +42,26 @@ vi.mock("../BranchToWorktreeModal", () => ({ BranchToWorktreeModal: () => null }
 vi.mock("../BranchToExistingWorktreeModal", () => ({ BranchToExistingWorktreeModal: () => null }));
 vi.mock("../CodeContextPill", () => ({ CodeContextPill: () => null }));
 vi.mock("../ConnectMachineDialog", () => ({ ConnectMachineDialog: () => null }));
-vi.mock("../../../api/question-grpc", () => ({
-  questionGrpc: {
-    listPendingQuestions: vi.fn().mockResolvedValue([]),
-    listAsyncQuestions: vi.fn().mockResolvedValue([
-      {
-        question_id: "q-1", chat_id: "chat-1", workflow_id: "chat-1", thread_id: "chat-1", step_id: "execute_tools",
-        status: "pending", created_at: "", async: true, tool_call_id: "call-async",
+setTransport(
+  mockTransport({
+    "QuestionService.ListPendingQuestions": { response: { questions: [] } },
+    "QuestionService.ListAsyncQuestions": {
+      response: {
+        questions: [
+          {
+            questionId: "q-1", chatId: "chat-1", workflowId: "chat-1", threadId: "chat-1", stepId: "execute_tools",
+            status: "pending", createdAt: "", async: true, toolCallId: "call-async",
+          },
+          {
+            questionId: "q-prod", chatId: "chat-1", workflowId: "chat-1", threadId: "chat-1", stepId: "execute_tools",
+            status: "pending", createdAt: "", async: true, toolCallId: "toolu_015apcEoACxzEnwZDGZw4LBo",
+          },
+        ],
       },
-      {
-        question_id: "q-prod", chat_id: "chat-1", workflow_id: "chat-1", thread_id: "chat-1", step_id: "execute_tools",
-        status: "pending", created_at: "", async: true, tool_call_id: "toolu_015apcEoACxzEnwZDGZw4LBo",
-      },
-    ]),
-    resolveQuestion: vi.fn(),
-  },
-}));
+    },
+    "QuestionService.ResolveQuestion": { response: {} },
+  }),
+);
 
 function assistantAsking(id: string, input: Record<string, unknown>): Message {
   return {

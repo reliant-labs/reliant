@@ -159,7 +159,7 @@ type ProcessOutputEvent struct {
 
 // Transport-failure error codes. These say the request did not complete a
 // round trip to a daemon, so no result of the tool's came back. They are
-// emitted only by the transport itself:
+// emitted by the transport itself, except ErrorCodeDaemonRestarted:
 //
 //	ErrorCodeDaemonUnreached   — RemoteExecutor, when the router call failed
 //	                             (no daemon connected, NATS timeout, ...)
@@ -169,6 +169,8 @@ type ProcessOutputEvent struct {
 //	ErrorCodeDaemonInterrupted — the NATS bridge, when the daemon's connection
 //	                             closed while the request was in flight: the
 //	                             daemon may have run it, and may still be
+//	ErrorCodeDaemonRestarted   — the daemon, once restarted, for a call it was
+//	                             running when its previous process died
 //
 // Everything the TOOL reports about its own execution — including a command
 // that exited non-zero — comes back Success=true / IsError=false with the exit
@@ -180,6 +182,11 @@ const (
 	ErrorCodeDaemonUnreached   = "DAEMON_EXECUTION_ERROR"
 	ErrorCodeDaemonRoundTrip   = "DAEMON_ERROR"
 	ErrorCodeDaemonInterrupted = "DAEMON_INTERRUPTED"
+	// ErrorCodeDaemonRestarted is the daemon's own answer, after it restarted,
+	// for a call that was running when its previous process died. A running
+	// call cannot be resumed, so the outcome is unknown. It comes from the
+	// daemon (it persisted the fact), not from a transport.
+	ErrorCodeDaemonRestarted = "DAEMON_RESTARTED"
 )
 
 // IsTransportErrorCode reports whether an ErrorCode means no result came back
@@ -189,7 +196,7 @@ const (
 // as a lint/test/build failure.
 func IsTransportErrorCode(code string) bool {
 	switch code {
-	case ErrorCodeDaemonUnreached, ErrorCodeDaemonRoundTrip, ErrorCodeDaemonInterrupted:
+	case ErrorCodeDaemonUnreached, ErrorCodeDaemonRoundTrip, ErrorCodeDaemonInterrupted, ErrorCodeDaemonRestarted:
 		return true
 	default:
 		return false

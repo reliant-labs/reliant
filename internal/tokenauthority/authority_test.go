@@ -95,6 +95,22 @@ func runConformance(t *testing.T, a Authority) {
 		return m
 	}
 
+	t.Run("daemon org capabilities and existing restrictions", func(t *testing.T) {
+		// Both the shared grant model and the migrated self-hosted CHECK must
+		// accept these capabilities without broadening an existing credential.
+		narrow := mint(t, MintRequest{UserID: user, Name: "restricted", Scopes: []fat.Scope{fat.ScopeDaemonConnect, fat.ScopeObsRead}})
+		binding := &fat.Resource{Kind: fat.ResourceDaemon, ID: "daemon-full"}
+		wide := mint(t, MintRequest{UserID: user, Name: "full", Resource: binding,
+			Scopes: []fat.Scope{fat.ScopeDaemonConnect, fat.ScopeClusterManage, fat.ScopeTokenRead, fat.ScopeTokenWrite, fat.ScopeObsWrite}})
+		p, err := a.Introspect(ctx, wide.Plaintext)
+		require.NoError(t, err)
+		require.True(t, p.Scopes.Has(fat.ScopeObsWrite))
+		require.True(t, p.BoundTo(binding.Kind, binding.ID))
+		old, err := a.Introspect(ctx, narrow.Plaintext)
+		require.NoError(t, err)
+		require.Equal(t, fat.SetOf(fat.ScopeDaemonConnect, fat.ScopeObsRead), old.Scopes)
+	})
+
 	t.Run("mint then introspect", func(t *testing.T) {
 		m := mint(t, MintRequest{UserID: user, Name: "ci", Scopes: []fat.Scope{fat.ScopeReliantAPI}})
 		require.True(t, fat.HasFormat(m.Plaintext))

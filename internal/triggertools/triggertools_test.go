@@ -184,26 +184,31 @@ func TestListTriggersScopedToAWorkflowShowsBrokenHealth(t *testing.T) {
 	require.Len(t, listed, 2)
 }
 
-// No registered tool creates, enables, re-points or deletes an activation, and
-// no tool offered to an agent is named for one. This is what "the agent can
-// create but not enable workflows" means in the registry: the only trigger
-// tool is the read-only list.
+// No registered tool creates, enables, re-points or deletes an activation.
+// Manual firing is the only non-read-only trigger operation.
 func TestNoAgentToolActivates(t *testing.T) {
 	var triggerTools []string
 	for _, def := range tools.GetToolRegistry() {
 		lower := strings.ToLower(def.Name)
 		if strings.Contains(lower, "trigger") || strings.Contains(lower, "activat") {
 			triggerTools = append(triggerTools, def.Name)
-			assert.True(t, slices.Contains(def.Tags, tools.TagReadOnly), "%s must be read-only", def.Name)
+			if def.Name == tools.ToolFireTrigger {
+				assert.False(t, slices.Contains(def.Tags, tools.TagReadOnly))
+				assert.Equal(t, tools.PermissionOrchestrator, tools.MinimumPermissionForTool(def.Name))
+			} else {
+				assert.True(t, slices.Contains(def.Tags, tools.TagReadOnly), "%s must be read-only", def.Name)
+			}
 		}
 	}
-	assert.Equal(t, []string{tools.ToolListTriggers}, triggerTools)
+	assert.Equal(t, []string{tools.ToolListTriggers, tools.ToolFireTrigger, tools.ToolListTriggerEvents}, triggerTools)
 }
 
-// triggertools is read-only by construction: its API interface has no write
-// method, so the adapter cannot create or change a trigger.
-func TestTriggerAPIHasNoWriteMethod(t *testing.T) {
+// The adapter cannot create, enable or change an activation.
+func TestTriggerAPIHasNoActivationMutation(t *testing.T) {
 	typ := reflect.TypeOf((*triggertools.TriggerAPI)(nil)).Elem()
-	require.Equal(t, 1, typ.NumMethod())
-	assert.Equal(t, "ListTriggers", typ.Method(0).Name)
+	var names []string
+	for i := 0; i < typ.NumMethod(); i++ {
+		names = append(names, typ.Method(i).Name)
+	}
+	assert.Equal(t, []string{"FireTrigger", "ListTriggerEvents", "ListTriggers"}, names)
 }

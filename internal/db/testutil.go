@@ -10,7 +10,6 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io/fs"
-	"net/url"
 	"sort"
 	"sync"
 	"testing"
@@ -158,6 +157,15 @@ func setupTestRepo(t *testing.T) (*Repo, *sql.DB, func()) {
 	return repoOverTestDB(t, raw, cleanup)
 }
 
+// setupTestRepoWithDSN is setupTestRepo plus the DSN of the database, for a
+// test that opens a pool of its own on it.
+func setupTestRepoWithDSN(t *testing.T) (*Repo, *sql.DB, string, func()) {
+	t.Helper()
+	raw, dsn, cleanup := newTestDatabase(t)
+	repo, raw, cleanup := repoOverTestDB(t, raw, cleanup)
+	return repo, raw, dsn, cleanup
+}
+
 // repoOverTestDB builds a sealing Repo over raw, a database cleanup drops.
 func repoOverTestDB(t *testing.T, raw *sql.DB, cleanup func()) (*Repo, *sql.DB, func()) {
 	t.Helper()
@@ -238,39 +246,6 @@ func testTemplateKey(prefix string, fsys fs.FS, dir, extra string) (string, erro
 	}
 	h.Write([]byte(extra))
 	return prefix + hex.EncodeToString(h.Sum(nil))[:12], nil
-}
-
-// testServerURL is the maintenance DSN of the test server: pgtest's shared
-// embedded one, or FORGE_TEST_POSTGRES_URL. The reference it takes is held for
-// the life of the process, as pgtest holds its own; the pool forgets a process
-// once it exits.
-var testServerURL = sync.OnceValues(func() (string, error) {
-	base, _, err := pgtest.AcquireShared()
-	return base, err
-})
-
-// testServerDSN is the DSN of the database named name on the test server.
-func testServerDSN(name string) (string, error) {
-	base, err := testServerURL()
-	if err != nil {
-		return "", err
-	}
-	u, err := url.Parse(base)
-	if err != nil {
-		return "", fmt.Errorf("parse the test server's DSN: %w", err)
-	}
-	u.Path = "/" + name
-	return u.String(), nil
-}
-
-// testDSNOf is the DSN of the database db is connected to, read back from the
-// connection.
-func testDSNOf(db *sql.DB) (string, error) {
-	var name string
-	if err := db.QueryRow(`SELECT current_database()`).Scan(&name); err != nil {
-		return "", fmt.Errorf("read the test database's name: %w", err)
-	}
-	return testServerDSN(name)
 }
 
 // SeedProviderAccount connects userID to provider with secret, the way a sign-in or an added key

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"sort"
 	"strings"
 
@@ -44,6 +45,12 @@ type llmCallSpec struct {
 	// if there is no fast model". Use this when the second tier is a genuine
 	// fallback rather than a secondary preference.
 	FallbackSelector models.ModelSelector
+
+	// ExcludeProviders are drivers resolution must not pick, as if the user
+	// had not connected them. Only titling sets it, to move a title off a
+	// provider whose every account is limited; a chat turn keeps its provider
+	// and leaves the decision to the workflow's opt-in failover.
+	ExcludeProviders []string
 
 	// RunProviders are the provider(s) the user chose for the run
 	// (RuntimeContext.ProviderPreference). They apply only to a selector that
@@ -232,7 +239,9 @@ func resolveLLMCall(ctx context.Context, resolver drivers.DriverResolver, spec l
 			return nil, lerr
 		}
 		routingDrivers = availableDrivers
-		availableProviders := configuredProviderIDs(availableDrivers)
+		availableProviders := slices.DeleteFunc(configuredProviderIDs(availableDrivers), func(p string) bool {
+			return slices.Contains(spec.ExcludeProviders, p)
+		})
 
 		registry := models.MustGetRegistry().WithAvailability(availableDrivers.Availability)
 		resolve := registry.Resolve

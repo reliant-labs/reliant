@@ -1792,9 +1792,14 @@ type TriggerEvent struct {
 	// Who the source says sent the event: trigger.sender. Unset for a firing
 	// recorded without one (a start a person made themselves, or one recorded
 	// before senders were).
-	Sender        *TriggerSender `protobuf:"bytes,10,opt,name=sender,proto3,oneof" json:"sender,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Sender *TriggerSender `protobuf:"bytes,10,opt,name=sender,proto3,oneof" json:"sender,omitempty"`
+	// Read-only: the asynchronous firing workflow identifier for this event.
+	// Match FireTriggerResponse.fire_workflow_id to find its outcome and chat_id.
+	// Empty for ad hoc launches. An identifier is not proof a workflow started:
+	// an inbound event may be rejected before its fire is launched.
+	FireWorkflowId string `protobuf:"bytes,11,opt,name=fire_workflow_id,json=fireWorkflowId,proto3" json:"fire_workflow_id,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *TriggerEvent) Reset() {
@@ -1895,6 +1900,13 @@ func (x *TriggerEvent) GetSender() *TriggerSender {
 		return x.Sender
 	}
 	return nil
+}
+
+func (x *TriggerEvent) GetFireWorkflowId() string {
+	if x != nil {
+		return x.FireWorkflowId
+	}
+	return ""
 }
 
 // TriggerSender is trigger.sender: who sent the event that fired a trigger,
@@ -4498,7 +4510,7 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\v_last_eventB\x10\n" +
 	"\x0e_connection_idB\x0e\n" +
 	"\f_webhook_urlB\x13\n" +
-	"\x11_workflow_trigger\"\xe2\x03\n" +
+	"\x11_workflow_trigger\"\x8c\x04\n" +
 	"\fTriggerEvent\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\"\n" +
 	"\n" +
@@ -4512,7 +4524,8 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\apayload\x18\b \x01(\v2\x17.google.protobuf.StructR\apayload\x122\n" +
 	"\x03run\x18\t \x01(\v2\x1b.reliant.v1.TriggerEventRunH\x02R\x03run\x88\x01\x01\x126\n" +
 	"\x06sender\x18\n" +
-	" \x01(\v2\x19.reliant.v1.TriggerSenderH\x03R\x06sender\x88\x01\x01B\r\n" +
+	" \x01(\v2\x19.reliant.v1.TriggerSenderH\x03R\x06sender\x88\x01\x01\x12(\n" +
+	"\x10fire_workflow_id\x18\v \x01(\tR\x0efireWorkflowIdB\r\n" +
 	"\v_trigger_idB\n" +
 	"\n" +
 	"\b_chat_idB\x06\n" +
