@@ -1033,7 +1033,7 @@
     {
       "id": "frontend",
       "title": "reliant: frontend",
-      "description": "Browser errors, page loads, web vitals and API calls from the HyperDX browser SDK (service.name reliant-frontend). Panels follow HyperDX's Browser RUM template: a browser span carries the rum.sessionId resource attribute.",
+      "description": "Browser errors, page loads, web vitals and API calls from the HyperDX browser SDK (service.name reliant-web). Panels follow HyperDX's Browser RUM template: a browser span carries the rum.sessionId resource attribute.",
       "filters": [
         {
           "id": "service",
@@ -1065,6 +1065,13 @@
             }
           ],
           "where": [
+            {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "reliant-web"
+              ]
+            },
             {
               "field": "resource.attr.rum.sessionId",
               "op": "exists"
@@ -1101,6 +1108,13 @@
           ],
           "where": [
             {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "reliant-web"
+              ]
+            },
+            {
               "field": "resource.attr.rum.sessionId",
               "op": "exists"
             }
@@ -1121,6 +1135,13 @@
             }
           ],
           "where": [
+            {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "reliant-web"
+              ]
+            },
             {
               "field": "resource.attr.rum.sessionId",
               "op": "exists"
@@ -1151,6 +1172,13 @@
             }
           ],
           "where": [
+            {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "reliant-web"
+              ]
+            },
             {
               "field": "resource.attr.rum.sessionId",
               "op": "exists"
@@ -1186,6 +1214,13 @@
           ],
           "where": [
             {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "reliant-web"
+              ]
+            },
+            {
               "field": "resource.attr.rum.sessionId",
               "op": "exists"
             },
@@ -1215,6 +1250,13 @@
           "signal": "traces",
           "where": [
             {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "reliant-web"
+              ]
+            },
+            {
               "field": "resource.attr.rum.sessionId",
               "op": "exists"
             }
@@ -1229,6 +1271,13 @@
           "kind": "sessions",
           "signal": "traces",
           "where": [
+            {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "reliant-web"
+              ]
+            },
             {
               "field": "resource.attr.rum.sessionId",
               "op": "exists"
@@ -1252,6 +1301,13 @@
             }
           ],
           "where": [
+            {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "reliant-web"
+              ]
+            },
             {
               "field": "resource.attr.rum.sessionId",
               "op": "exists"
@@ -1285,6 +1341,13 @@
           ],
           "where": [
             {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "reliant-web"
+              ]
+            },
+            {
               "field": "resource.attr.rum.sessionId",
               "op": "exists"
             },
@@ -1317,6 +1380,13 @@
           ],
           "where": [
             {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "reliant-web"
+              ]
+            },
+            {
               "field": "resource.attr.rum.sessionId",
               "op": "exists"
             },
@@ -1347,6 +1417,13 @@
             }
           ],
           "where": [
+            {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "reliant-web"
+              ]
+            },
             {
               "field": "resource.attr.rum.sessionId",
               "op": "exists"
@@ -1379,6 +1456,13 @@
             }
           ],
           "where": [
+            {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "reliant-web"
+              ]
+            },
             {
               "field": "resource.attr.rum.sessionId",
               "op": "exists"
@@ -1465,6 +1549,13 @@
           ],
           "where": [
             {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "reliant-web"
+              ]
+            },
+            {
               "field": "resource.attr.rum.sessionId",
               "op": "exists"
             },
@@ -1493,6 +1584,13 @@
             }
           ],
           "where": [
+            {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "reliant-web"
+              ]
+            },
             {
               "field": "resource.attr.rum.sessionId",
               "op": "exists"
@@ -1545,6 +1643,13 @@
           ],
           "where": [
             {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "reliant-web"
+              ]
+            },
+            {
               "field": "resource.attr.rum.sessionId",
               "op": "exists"
             },
@@ -1585,6 +1690,13 @@
             }
           ],
           "where": [
+            {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "reliant-web"
+              ]
+            },
             {
               "field": "resource.attr.rum.sessionId",
               "op": "exists"
@@ -1632,6 +1744,13 @@
           ],
           "where": [
             {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "reliant-web"
+              ]
+            },
+            {
               "field": "resource.attr.rum.sessionId",
               "op": "exists"
             },
@@ -1657,6 +1776,13 @@
           "kind": "search",
           "signal": "traces",
           "where": [
+            {
+              "field": "service.name",
+              "op": "in",
+              "values": [
+                "reliant-web"
+              ]
+            },
             {
               "field": "resource.attr.rum.sessionId",
               "op": "exists"

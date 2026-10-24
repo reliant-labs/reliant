@@ -76,6 +76,9 @@ type RemoteExecutor struct {
 	// placementOf resolves a tool's placement. Nil means tools.PlacementOf;
 	// tests substitute it to declare a tool the registry does not have.
 	placementOf func(name string) (tools.Placement, error)
+
+	// egress bounds the egress tools executeOnServer runs; nil admits all.
+	egress EgressLimiter
 }
 
 // ToolExecutionRequest is the payload sent to daemon over WebSocket
@@ -286,6 +289,15 @@ func notePlacement(toolName string, res *ToolResult, ranAt, reason string) *Tool
 
 // executeOnServer runs a tool in-process via the server executor.
 func (e *RemoteExecutor) executeOnServer(ctx context.Context, req *ToolRequest, startTime time.Time) (*ToolResult, error) {
+	// Every egress tool passes here, so this is the one place its rate and
+	// concurrency are bounded. A refusal is a tool result, not an error: the
+	// model reads "rate limited, retry after Ns" and the run continues.
+	releaseEgress, refusal := e.admitEgress(ctx, req, startTime)
+	if refusal != nil {
+		return refusal, nil
+	}
+	defer releaseEgress()
+
 	timeoutMs := 0
 	if req.Timeout > 0 {
 		timeoutMs = int(req.Timeout.Milliseconds())

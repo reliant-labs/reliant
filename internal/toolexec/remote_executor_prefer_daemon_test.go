@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/daemon"
+	"github.com/reliant-labs/reliant/internal/egresslimit"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/nomachine"
 )
@@ -324,4 +325,35 @@ func mustMetadata(t *testing.T, res *ToolResult) map[string]any {
 	var doc map[string]any
 	require.NoError(t, json.Unmarshal([]byte(res.Metadata), &doc))
 	return doc
+}
+
+// A prefer-daemon call that ends up on the server goes through the same egress
+// admission as any server-run egress tool; one that ran on the daemon is the
+// daemon's own business (see the PR's note on a per-daemon cap).
+func TestPreferDaemon_ServerFallbackIsRateLimitedLikeAnyServerEgress(t *testing.T) {
+	limiter := &countingLimiter{}
+	router := &preferDaemonRouter{err: errors.New("no daemon connected for user")}
+	executor, _ := newPreferDaemonExecutor(router)
+	executor.SetEgressLimiter(limiter)
+
+	_, err := executor.ExecuteTool(nomachine.With(context.Background()), fetchRequest())
+	require.NoError(t, err)
+	_, err = executor.ExecuteTool(context.Background(), fetchRequest())
+	require.NoError(t, err)
+	assert.Equal(t, 2, limiter.acquired, "no-machine and dispatch-failure fallbacks are both admitted by the limiter")
+
+	limiter.acquired = 0
+	daemonOK := &preferDaemonRouter{resp: daemonAnswer("from the daemon")}
+	executor, _ = newPreferDaemonExecutor(daemonOK)
+	executor.SetEgressLimiter(limiter)
+	_, err = executor.ExecuteTool(context.Background(), fetchRequest())
+	require.NoError(t, err)
+	assert.Zero(t, limiter.acquired, "a call that ran on the daemon never touches the server's limiter")
+}
+
+type countingLimiter struct{ acquired int }
+
+func (l *countingLimiter) Acquire(context.Context, egresslimit.Request) (func(), error) {
+	l.acquired++
+	return func() {}, nil
 }

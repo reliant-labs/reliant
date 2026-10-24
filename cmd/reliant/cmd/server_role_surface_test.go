@@ -155,6 +155,12 @@ var serverRoleSurfaceEnv = map[string]string{
 	// worker only
 	"RELIANT_WORKER_MAX_CONCURRENT_WORKFLOW_TASKS": "7",
 	"RELIANT_WORKER_WORKFLOW_TASK_POLLERS":         "3",
+	"RELIANT_WORKER_EGRESS_REPLICAS":               "2",
+	"RELIANT_WORKER_EGRESS_USER_PER_MINUTE":        "11",
+	"RELIANT_WORKER_EGRESS_USER_BURST":             "12",
+	"RELIANT_WORKER_EGRESS_USER_MAX_CONCURRENT":    "15",
+	"RELIANT_WORKER_EGRESS_HOST_MAX_CONCURRENT":    "17",
+	"RELIANT_WORKER_EGRESS_TURN_MAX_PARALLEL":      "18",
 
 	// integrations
 	"PUBLIC_URL":                         " https://public.surface.test ",

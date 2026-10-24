@@ -12,6 +12,7 @@ import (
 
 	"github.com/reliant-labs/forge/pkg/serverkit"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/egresslimit"
 	"github.com/reliant-labs/reliant/internal/natsutil"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
@@ -350,6 +351,60 @@ func TestServerRoleDatabasePool(t *testing.T) {
 		t.Run(name+"="+value, func(t *testing.T) {
 			t.Setenv(name, value)
 			_, err := serverRoles[0].load(t)
+			require.Error(t, err)
+			assert.Contains(t, err.Error(), name)
+		})
+	}
+}
+
+// The worker's egress limits reach the limiter's Limits with the documented
+// defaults when unset, and a value below 1 stops the worker at load rather
+// than silently disabling a limit.
+func TestServerWorkerEgressLimits(t *testing.T) {
+	isolateServerRoleEnv(t)
+	names := []string{
+		"RELIANT_WORKER_EGRESS_REPLICAS",
+		"RELIANT_WORKER_EGRESS_USER_PER_MINUTE", "RELIANT_WORKER_EGRESS_USER_BURST",
+		"RELIANT_WORKER_EGRESS_USER_MAX_CONCURRENT",
+		"RELIANT_WORKER_EGRESS_HOST_MAX_CONCURRENT", "RELIANT_WORKER_EGRESS_TURN_MAX_PARALLEL",
+	}
+	for _, name := range names {
+		t.Setenv(name, "")
+		require.NoError(t, os.Unsetenv(name))
+	}
+	load := func(t *testing.T) (workerOptions, error) {
+		var opts workerOptions
+		err := loadServerWorkerConfig(findServerCmd(t, "worker"), &opts)
+		return opts, err
+	}
+
+	opts, err := load(t)
+	require.NoError(t, err)
+	assert.Equal(t, egresslimit.Limits{
+		Replicas:      1,
+		UserPerMinute: egresslimit.DefaultUserPerMinute, UserBurst: egresslimit.DefaultUserBurst,
+		UserMaxConcurrent: egresslimit.DefaultUserMaxConcurrent,
+		HostMaxConcurrent: egresslimit.DefaultHostMaxConcurrent, TurnMaxParallel: egresslimit.DefaultTurnMaxParallel,
+	}, opts.Egress, "the proto defaults and the limiter's defaults must agree")
+
+	t.Setenv("RELIANT_WORKER_EGRESS_REPLICAS", "3")
+	t.Setenv("RELIANT_WORKER_EGRESS_HOST_MAX_CONCURRENT", "5")
+	opts, err = load(t)
+	require.NoError(t, err)
+	assert.Equal(t, 3, opts.Egress.Replicas)
+	assert.Equal(t, 5, opts.Egress.HostMaxConcurrent)
+
+	// Replicas 0 is "unset": the limiter divides by 1. Every other value must
+	// be positive, or a limit would silently be off.
+	t.Setenv("RELIANT_WORKER_EGRESS_REPLICAS", "0")
+	opts, err = load(t)
+	require.NoError(t, err)
+	assert.Equal(t, 0, opts.Egress.Replicas, "0 reaches the limiter, which treats it as 1")
+
+	for _, name := range names[1:] {
+		t.Run(name+"=0", func(t *testing.T) {
+			t.Setenv(name, "0")
+			_, err := load(t)
 			require.Error(t, err)
 			assert.Contains(t, err.Error(), name)
 		})

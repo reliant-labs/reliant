@@ -91,6 +91,14 @@
     }
     WorkflowTaskSlots: 7
     WorkflowTaskPollers: 3
+    Egress: egresslimit.Limits {
+      Replicas: 2
+      UserPerMinute: 11
+      UserBurst: 12
+      UserMaxConcurrent: 15
+      HostMaxConcurrent: 17
+      TurnMaxParallel: 18
+    }
   }
   {
     github: [
