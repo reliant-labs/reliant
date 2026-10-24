@@ -438,9 +438,7 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig, host Host, guards 
 	// This process IS the machine that runs shell commands, so its own GOOS is
 	// the right answer here — unlike on the server, where reading runtime.GOOS
 	// would describe the wrong machine entirely.
-	toolsFactory := tools.NewToolsFactory(&tools.ToolsOptions{
-		ShellPlatform: tools.ShellPlatformFromGOOS(runtime.GOOS),
-	})
+	toolsFactory := newDaemonToolsFactory(host)
 
 	caps := toolsFactory.ListAvailableToolsForPlacement(tools.PlacementDaemon)
 	sort.Strings(caps)

@@ -2,6 +2,13 @@
 
 package daemonruntime
 
+import (
+	"runtime"
+
+	"github.com/reliant-labs/reliant/internal/llm/tools"
+	"github.com/reliant-labs/reliant/internal/netguard"
+)
+
 // Daemon type as self-reported at registration.
 //
 // This is not cosmetic. The server records it on the daemon row, and it gates
@@ -69,4 +76,28 @@ func resolveDaemonType(declared, fallback string) string {
 		return declared
 	}
 	return fallback
+}
+
+// webToolsPolicy is the dial policy of the web tools that run on this daemon
+// (fetch, a PlacementPreferDaemon tool), chosen by where the daemon runs.
+//
+// A user's own machine and network belong to the user: the localhost dev
+// server or the LAN router they ask the agent to fetch is exactly what they
+// mean, and the server-side policy that refuses those protects the shared
+// worker, which is not here. A managed workspace pod is different: it is on
+// the platform's network, so the strict policy applies as the second layer
+// beside the namespace NetworkPolicy (public 80/443 only).
+func webToolsPolicy(host Host) netguard.Policy {
+	return netguard.Policy{AllowPrivate: !host.Managed()}
+}
+
+// newDaemonToolsFactory builds the registry this daemon executes tools from.
+// This process IS the machine that runs shell commands, so its own GOOS is
+// the right shell platform here, unlike on the server.
+func newDaemonToolsFactory(host Host) *tools.ToolsFactory {
+	policy := webToolsPolicy(host)
+	return tools.NewToolsFactory(&tools.ToolsOptions{
+		ShellPlatform:  tools.ShellPlatformFromGOOS(runtime.GOOS),
+		WebToolsPolicy: &policy,
+	})
 }

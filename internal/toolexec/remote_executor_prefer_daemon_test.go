@@ -265,7 +265,11 @@ func TestPreferDaemon_ASecondToolAdoptsItByDeclarationOnly(t *testing.T) {
 			return tools.PlacementOf(name)
 		}
 	}
-	req := func() *ToolRequest { return placementTestRequest(hypothetical) }
+	req := func() *ToolRequest {
+		r := placementTestRequest(hypothetical)
+		r.ToolInput = `{}`
+		return r
+	}
 	// No server ToolsFactory knows the tool, so reaching the server executor
 	// is visible as TOOL_NOT_FOUND.
 
