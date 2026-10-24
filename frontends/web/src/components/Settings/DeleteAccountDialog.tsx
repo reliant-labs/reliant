@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { AlertTriangle, Loader2 } from 'lucide-react'
-import { Modal } from '../ui/Modal'
+import Modal from '../forge-ui/modal'
+import Input from '../forge-ui/input'
 import Button from '@/components/forge-ui/button';
-import { Input } from '../ui/Input'
 import { createAccountClient } from '../../api/grpc-client'
 import type {
   AccountDeletionWalletQuote,
@@ -124,7 +124,7 @@ export function DeleteAccountDialog({ isOpen, onClose, onDeleted }: DeleteAccoun
 
   if (pendingRefund) {
     return (
-      <Modal isOpen={isOpen} onClose={onDeleted} title="Account deleted" size="md">
+      <Modal open={isOpen} onClose={onDeleted} title="Account deleted" size="md">
         <div className="space-y-5 p-1">
           <p className="text-sm">Your account and its data have been deleted.</p>
           <p className="text-sm text-muted-foreground">
@@ -142,7 +142,7 @@ export function DeleteAccountDialog({ isOpen, onClose, onDeleted }: DeleteAccoun
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Delete account" size="md">
+    <Modal open={isOpen} onClose={onClose} title="Delete account" size="md">
       <div className="space-y-5 p-1">
         <div className="flex items-start gap-3">
           <div className="p-2 bg-destructive/10 rounded-lg shrink-0">
@@ -215,6 +215,7 @@ export function DeleteAccountDialog({ isOpen, onClose, onDeleted }: DeleteAccoun
                   autoComplete="off"
                   spellCheck={false}
                   disabled={isDeleting}
+                  className="forge-ui"
                 />
               </div>
             )}

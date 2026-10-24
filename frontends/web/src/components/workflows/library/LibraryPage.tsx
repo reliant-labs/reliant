@@ -45,8 +45,8 @@ import ConfirmationDialog from "../../forge-ui/confirmation_dialog";
 import DataTable from "../../forge-ui/data_table";
 import EmptyState from "../../forge-ui/empty_state";
 import PageHeader from "../../forge-ui/page_header";
+import Modal from "../../forge-ui/modal";
 import Button from "@/components/forge-ui/button";
-import { Modal } from "../../ui/Modal";
 import { RunNowDialog } from "../../workflow/run/RunNowDialog";
 import { workflowDisplayName } from "../../../lib/workflowDisplayName";
 import { normalizeWorkflowRef } from "../../workflow/useWorkflowInputs";
@@ -237,7 +237,7 @@ function ImportConflictModal({
   };
 
   return (
-    <Modal isOpen onClose={onClose} title="Workflow already exists" size="md">
+    <Modal open onClose={onClose} title="Workflow already exists" size="md">
       <div className="space-y-4">
         <p className="text-sm text-muted-foreground">
           A workflow named <span className="font-mono font-semibold text-foreground">"{slug}"</span> already exists.

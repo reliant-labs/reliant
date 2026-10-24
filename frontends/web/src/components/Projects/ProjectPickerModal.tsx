@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { FolderOpen, GitBranch, AlertCircle } from "lucide-react";
 import { ConnectError, Code } from "@connectrpc/connect";
-import { Modal } from "../ui/Modal";
+import Modal from "../forge-ui/modal";
 import { DirectoryPicker } from "./DirectoryPicker";
 import { useProjectStore } from "../../store/projectStore";
 import { toast } from "../../lib/toast-manager";
@@ -151,7 +151,7 @@ export function ProjectPickerModal({
   return (
     <>
     <Modal 
-      isOpen={isOpen} 
+      open={isOpen} 
       onClose={onClose}
       title="New project"
       size="lg"

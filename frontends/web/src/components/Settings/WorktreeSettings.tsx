@@ -6,7 +6,7 @@ import {
   useUpdateWorktreePreferences,
   type WorktreeArchiveMode,
 } from "../../hooks/settings-queries";
-import { Toggle } from "../ui/Toggle";
+import ToggleSwitch from "../forge-ui/toggle_switch";
 import Card, { CardHeader, CardInset } from "../forge-ui/card";
 
 const ARCHIVE_MODES: Array<{ value: WorktreeArchiveMode; label: string; description: string }> = [
@@ -184,12 +184,13 @@ function PreferenceRow({ title, description, checked, disabled, warning, onChang
         <p className="text-pretty text-xs leading-relaxed text-muted-foreground">{description}</p>
         {warning && <p className="text-xs font-medium text-warning-ink">{warning}</p>}
       </div>
-      <Toggle
+      <ToggleSwitch
         checked={checked}
         onChange={onChange}
         disabled={disabled}
-        srLabel={title}
-        className="mt-0.5 flex-shrink-0"
+        ariaLabel={title}
+        size="lg"
+        className="forge-ui mt-0.5 flex-shrink-0"
       />
     </div>
   );

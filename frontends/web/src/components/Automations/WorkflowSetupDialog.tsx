@@ -68,8 +68,8 @@ import { cn } from "@/lib/utils";
 import { CardInset } from "../forge-ui/card";
 import Button from "@/components/forge-ui/button";
 import { ErrorSummary, focusField, type ErrorSummaryItem } from "./ErrorSummary";
-import { Modal } from "../ui/Modal";
-import { Toggle } from "../ui/Toggle";
+import Modal from "../forge-ui/modal";
+import ToggleSwitch from "../forge-ui/toggle_switch";
 import { ProtoFieldRenderer } from "../workflow/ProtoFieldRenderer";
 import { ConnectionPicker } from "../workflow/connections/ConnectionPicker";
 import { ConnectIntegrationDialog } from "../workflow/connections/ConnectIntegrationDialog";
@@ -458,7 +458,7 @@ function SetupBody({
       .filter((i) => i.scopes.length > 0)
       .flatMap((i) => (Array.isArray(flat[i.name]) ? (flat[i.name] as unknown[]).map(String) : flat[i.name] ? [String(flat[i.name])] : []));
     return (
-      <Modal isOpen onClose={onClose} size="lg" title={mode === "settings" ? `${title} in ${projectName}` : `${title} is on`}>
+      <Modal open onClose={onClose} size="lg" title={mode === "settings" ? `${title} in ${projectName}` : `${title} is on`}>
         <SetupSuccess
           workflowTitle={title}
           projectName={projectName}
@@ -544,7 +544,7 @@ function SetupBody({
   };
 
   return (
-    <Modal isOpen onClose={onClose} size="lg" title={dialogTitle} footer={footer}>
+    <Modal open onClose={onClose} size="lg" title={dialogTitle} footer={footer}>
       <TypedInputsProvider
         value={{
           connectionIds: connections,
@@ -792,12 +792,13 @@ function SetupBody({
           </Disclosure>
 
           <div>
-            <div className="flex items-center gap-2">
-              <Toggle checked={notify} onChange={setNotify} srLabel="Also notify me when a run succeeds" />
-              <span className="text-sm text-foreground" aria-hidden>
-                Also notify me when a run succeeds
-              </span>
-            </div>
+            <ToggleSwitch
+              checked={notify}
+              onChange={setNotify}
+              label="Also notify me when a run succeeds"
+              size="lg"
+              className="forge-ui"
+            />
             <p className={hintClass}>Failures always notify you.</p>
           </div>
 

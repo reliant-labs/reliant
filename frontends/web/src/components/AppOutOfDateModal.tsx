@@ -1,6 +1,6 @@
 import { RefreshCw } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
-import { Modal } from "./ui/Modal";
+import Modal from "./forge-ui/modal";
 import type { AppOutOfDateData } from "../store/modalStore";
 import { logger } from "../lib/logger";
 
@@ -37,7 +37,7 @@ export function AppOutOfDateModal({ isOpen, onClose }: AppOutOfDateModalProps) {
 
   return (
     <Modal
-      isOpen={isOpen}
+      open={isOpen}
       onClose={onClose}
       title={isDesktop ? "Update Reliant to continue" : "Reliant has been updated"}
       size="sm"

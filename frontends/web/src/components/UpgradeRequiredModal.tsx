@@ -1,5 +1,5 @@
 import { ArrowUpRight, Zap } from "lucide-react";
-import { Modal } from "./ui/Modal";
+import Modal from "./forge-ui/modal";
 import type { UpgradeRequiredData } from "../store/modalStore";
 import { useGoToBilling } from "@/hooks/useGoToBilling";
 import { LinkIdentityModal } from "./Billing/LinkIdentityModal";
@@ -117,7 +117,7 @@ export function UpgradeRequiredModal({
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={copy.title} size="sm">
+    <Modal open={isOpen} onClose={onClose} title={copy.title} size="sm">
       <div className="flex flex-col gap-4 p-6">
         <div className="flex items-start gap-3">
           <div className="rounded-full bg-amber-100 p-2 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300">

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { FolderPlus, GitBranch, CheckCircle2 } from "lucide-react";
-import { Modal } from "../ui/Modal";
+import Modal from "../forge-ui/modal";
 
 interface InitializationModalProps {
   isOpen: boolean;
@@ -25,7 +25,7 @@ export function InitializationModal({
 
   return (
     <Modal 
-      isOpen={isOpen} 
+      open={isOpen} 
       onClose={onCancel} 
       title="Initialize Project"
       size="md"

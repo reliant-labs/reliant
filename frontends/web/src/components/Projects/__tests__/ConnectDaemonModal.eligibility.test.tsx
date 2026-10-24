@@ -66,9 +66,9 @@ vi.mock("../../../services/controlPlane/daemon", () => ({
   resumeDaemon: vi.fn(),
 }));
 
-vi.mock("../../ui/Modal", () => ({
-  Modal: ({ isOpen, children }: { isOpen: boolean; children: React.ReactNode }) =>
-    isOpen ? <div>{children}</div> : null,
+vi.mock("../../forge-ui/modal", () => ({
+  default: ({ open, children }: { open: boolean; children: React.ReactNode }) =>
+    open ? <div>{children}</div> : null,
 }));
 
 import { ConnectDaemonModal } from "../ConnectDaemonModal";

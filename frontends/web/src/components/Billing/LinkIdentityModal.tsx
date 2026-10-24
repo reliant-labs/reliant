@@ -28,7 +28,7 @@
  * Offering it here would be a loop dressed as an escape hatch.
  */
 
-import { Modal } from "@/components/ui/Modal";
+import Modal from "@/components/forge-ui/modal";
 import { LinkIdentityForm } from "@/components/LinkIdentityForm";
 
 export interface LinkIdentityModalProps {
@@ -56,7 +56,7 @@ export function LinkIdentityModal({
 }: LinkIdentityModalProps) {
   return (
     <Modal
-      isOpen
+      open
       onClose={onDismiss}
       title="Finish setting up your account"
       size="md"

@@ -13,7 +13,8 @@ import {
   Folder,
 } from "lucide-react";
 import { cn } from "../../lib/utils";
-import { Modal } from "../ui/Modal";
+import { focusChatInput } from "../../hooks/useFocusManager";
+import Modal from "../forge-ui/modal";
 import { LightweightCodeViewer } from "./LightweightCodeViewer";
 import type { RunOutputUpdate } from "../../types/streaming";
 
@@ -234,7 +235,9 @@ function RunStepExecutionComponent({ runOutput }: RunStepExecutionProps) {
 
       {/* Modal for expanded view */}
       <Modal
-        isOpen={showModal}
+        size="xl"
+        open={showModal}
+        fallbackFocus={focusChatInput}
         onClose={() => setShowModal(false)}
         title={`Run: ${formatCommand(runOutput.command)} - ${getStatusText()}`}
       >

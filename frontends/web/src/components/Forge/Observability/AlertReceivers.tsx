@@ -19,8 +19,8 @@ import { useId, useMemo, useState } from "react";
 import { AlertTriangle, Bell, Globe, Lock, Mail, MessageSquare, Pencil, Plus, Send, Siren, Trash2 } from "lucide-react";
 
 import Card from "@/components/forge-ui/card";
+import Modal from "@/components/forge-ui/modal";
 import Button from "@/components/forge-ui/button";
-import { Modal } from "@/components/ui/Modal";
 import { useAlertingMutation, useReceivers } from "@/hooks/observability-queries";
 import type {
   CreateReceiverInput,
@@ -505,7 +505,7 @@ function ReceiverDialog({
   };
 
   return (
-    <Modal isOpen onClose={onClose} title={current ? `Edit ${current.name}` : "New receiver"} size="md">
+    <Modal open onClose={onClose} title={current ? `Edit ${current.name}` : "New receiver"} size="md">
       <form
         className="space-y-4"
         data-testid="obs-receiver-dialog"

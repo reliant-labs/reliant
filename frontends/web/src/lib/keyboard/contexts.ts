@@ -101,7 +101,9 @@ export function detectActiveContexts(
   if (typeof document !== "undefined") {
     // Modal state is a document-level fact, not a focus fact: a modal can be
     // open while focus is still settling into it.
-    if (document.querySelector('[data-modal-open="true"]')) {
+    // `data-modal-open` is reliant's own overlays' marker; `aria-modal` is
+    // every real dialog's, forge-ui/modal included.
+    if (document.querySelector('[data-modal-open="true"], [aria-modal="true"]')) {
       active.push("modal");
     }
     if (document.querySelector('[data-slash-menu-open="true"]')) {

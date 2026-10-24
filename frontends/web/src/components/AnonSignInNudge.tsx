@@ -1,6 +1,6 @@
 import { ArrowUpRight, ShieldCheck } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
-import { Modal } from "./ui/Modal";
+import Modal from "./forge-ui/modal";
 import { useAnonSignInNudge } from "@/hooks/useAnonSignInNudge";
 import { useSurface } from "@/lib/surfaceContext";
 
@@ -44,7 +44,7 @@ export function AnonSignInNudge() {
 
   return (
     <Modal
-      isOpen={open}
+      open={open}
       onClose={dismiss}
       title="Sign in so you don't lose your work"
       size="sm"

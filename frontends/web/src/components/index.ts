@@ -39,7 +39,6 @@ export { Terminal } from "./Terminal/Terminal";
 // Note: FileBrowser component removed - use RightSidebar instead
 
 // UI components
-export { Modal } from "./ui/Modal";
 
 // Error Boundaries
 export { SentryErrorBoundary } from "./ErrorBoundary";

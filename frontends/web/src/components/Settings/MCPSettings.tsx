@@ -25,7 +25,7 @@ import { MCPTabs } from "./MCPTabs";
 import { MCPInstalledTab } from "./MCPInstalledTab";
 import { MCPDiscoverTab } from "./MCPDiscoverTab";
 import { MCPSetupWizard } from "./MCPSetupWizard";
-import { Modal } from "../ui/Modal";
+import Modal from "../forge-ui/modal";
 import { subscribeToRefetch } from "../../store/refetchStore";
 import { SettingsPageHeader } from "./SettingsPageHeader";
 
@@ -836,7 +836,7 @@ export function MCPSettings() {
 
       {toolsModalServer && (
         <Modal
-          isOpen={true}
+          open={true}
           onClose={() => {
             setToolsModalServer(null);
             setToolsModalTools([]);

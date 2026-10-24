@@ -44,7 +44,7 @@ import { useTriggerRailContext, type TriggerRailContextValue } from "../TriggerR
 import { buildHandleClassName } from "./NodeStatusWrapper";
 import { IntegrationLogo } from "../../icons/IntegrationLogo";
 import { NODE_DIMENSIONS } from "../../../lib/workflow-node-dimensions";
-import { Toggle } from "../../ui/Toggle";
+import ToggleSwitch from "../../forge-ui/toggle_switch";
 
 interface TriggerRailNodeProps {
   data: {
@@ -137,12 +137,13 @@ function ChatCard({ rail, compact, hasOtherTriggers }: { rail: TriggerRailContex
           // A wrapper, so the switch's click neither drags the canvas nor
           // selects the node underneath.
           <span className={cn(nodeControlClass, "inline-flex")} onClick={(event) => event.stopPropagation()}>
-            <Toggle
+            <ToggleSwitch
               checked={enabled}
               onChange={(next) => rail.onSetChatEnabled(next)}
               disabled={!canEdit}
-              srLabel="Start from chat"
-              className="h-5 w-9 scale-90"
+              ariaLabel="Start from chat"
+              size="md"
+              className="forge-ui"
             />
           </span>
         )}

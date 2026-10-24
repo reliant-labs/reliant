@@ -14,7 +14,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
-import { Toggle } from "../ui/Toggle";
+import ToggleSwitch from "../forge-ui/toggle_switch";
 import { cn } from "../../lib/utils";
 import { api } from "../../api/client";
 import { useGlobalDataStore } from "../../store/globalDataStore";
@@ -1068,14 +1068,16 @@ export function CombinedGeneralSettings({
                 Disable for faster complete responses.
               </p>
             </div>
-            <Toggle
+            <ToggleSwitch
               id="streaming-toggle"
               checked={streamingEnabled}
               onChange={handleStreamingToggle}
               disabled={loadingPreferences}
-              label={`${
+              ariaLabel={`${
                 streamingEnabled ? "Disable" : "Enable"
               } response streaming`}
+              size="lg"
+              className="forge-ui"
             />
           </div>
 

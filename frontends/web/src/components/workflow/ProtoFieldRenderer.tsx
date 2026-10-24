@@ -2,7 +2,7 @@ import { AlertTriangle, ALargeSmall, Braces, List } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { cn } from '../../lib/utils'
 import { HelpPopover } from '../ui/HelpPopover'
-import { Toggle } from '../ui/Toggle'
+import ToggleSwitch from '../forge-ui/toggle_switch'
 import { CELInput } from './CELInput'
 import { InsertDataMenu } from './InsertDataMenu'
 import { OptionPicker } from './OptionPicker'
@@ -463,12 +463,14 @@ export function ProtoFieldRenderer({
                   <HelpPopover content={popoverText} title={schema.label} />
                 )}
               </div>
-              <Toggle
+              <ToggleSwitch
                 id={inputId}
                 checked={normalizedBooleanValue}
                 onChange={(checked) => onChange(checked)}
                 disabled={disabled}
-                srLabel={schema.label}
+                ariaLabel={schema.label}
+                size="lg"
+                className="forge-ui"
               />
             </div>
           </div>

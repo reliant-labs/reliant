@@ -1,12 +1,57 @@
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Modal } from "../ui/Modal";
+import Modal from "../forge-ui/modal";
+import { ExternalLink } from "lucide-react";
+import { FormError, FormField } from "../forge-ui/form";
+import Input from "../forge-ui/input";
+import Label from "../forge-ui/label";
 import Button from "@/components/forge-ui/button";
-import { Input } from "../ui/Input";
 import Card from "../forge-ui/card";
 import { ConfigScopeSelector, getScopeLabel } from "./ConfigScopeSelector";
 import type { MCPServerConfig, RecommendedServer } from "../../api/mcp-grpc";
 import { ConfigScope } from "../../api/mcp-grpc";
+
+/** Text with its URLs as links: config help text names where to get a key. */
+function withLinks(text: string) {
+  return text.split(/(https?:\/\/[^\s]+)/g).map((part, index) =>
+    /^https?:\/\//.test(part) ? (
+      <a
+        key={index}
+        href={part}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex items-center gap-0.5 text-primary underline hover:text-primary/80"
+      >
+        {part}
+        <ExternalLink className="h-2.5 w-2.5" aria-hidden="true" />
+      </a>
+    ) : (
+      <span key={index}>{part}</span>
+    ),
+  );
+}
+
+/** One labelled field: forge's FormField binds the label to the control. */
+function ConfigField({
+  label,
+  hint,
+  error,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  error?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <FormField className="forge-ui">
+      <Label>{label}</Label>
+      {children}
+      {hint && !error && <p className="mt-1 text-xs text-ink-muted">{withLinks(hint)}</p>}
+      <FormError message={error} />
+    </FormField>
+  );
+}
 
 type WizardMode = "install" | "edit";
 type HTTPAuthPreset = "none" | "bearer";
@@ -218,7 +263,7 @@ export function MCPSetupWizard({
 
   return (
     <Modal
-      isOpen={true}
+      open={true}
       onClose={onClose}
       size="lg"
       title={`${mode === "install" ? "Install" : "Edit"} ${server.displayName}`}
@@ -284,28 +329,28 @@ export function MCPSetupWizard({
             </div>
             {httpAuthPreset === "bearer" && (
               <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
-                <Input
-                  label="Header name"
-                  value={httpHeaderName}
-                  onChange={(e) => {
-                    setHTTPHeaderName(e.target.value);
-                    setHTTPAuthPresetTouched(true);
-                  }}
-                  placeholder="Authorization"
-                  state={errors.http_header_name ? "error" : "default"}
-                  error={errors.http_header_name}
-                />
-                <Input
-                  label="Header value template"
-                  value={httpHeaderValueTemplate}
-                  onChange={(e) => {
-                    setHTTPHeaderValueTemplate(e.target.value);
-                    setHTTPAuthPresetTouched(true);
-                  }}
-                  placeholder={`Bearer \${${inferTokenFieldKey}}`}
-                  state={errors.http_header_value ? "error" : "default"}
-                  error={errors.http_header_value}
-                />
+                <ConfigField label="Header name" error={errors.http_header_name}>
+                  <Input
+                    value={httpHeaderName}
+                    onChange={(e) => {
+                      setHTTPHeaderName(e.target.value);
+                      setHTTPAuthPresetTouched(true);
+                    }}
+                    placeholder="Authorization"
+                    invalid={!!errors.http_header_name}
+                  />
+                </ConfigField>
+                <ConfigField label="Header value template" error={errors.http_header_value}>
+                  <Input
+                    value={httpHeaderValueTemplate}
+                    onChange={(e) => {
+                      setHTTPHeaderValueTemplate(e.target.value);
+                      setHTTPAuthPresetTouched(true);
+                    }}
+                    placeholder={`Bearer \${${inferTokenFieldKey}}`}
+                    invalid={!!errors.http_header_value}
+                  />
+                </ConfigField>
               </div>
             )}
             <div className="rounded-md border border-border/50 bg-background/50 p-3 text-xs text-muted-foreground">
@@ -319,28 +364,26 @@ export function MCPSetupWizard({
         <Card padding="sm" className="space-y-4">
           {server.configFields && server.configFields.length > 0 ? (
             server.configFields.map((field) => (
-              <Input
-                key={field.key}
-                label={field.label}
-                type={field.type || "text"}
-                value={values[field.key] || ""}
-                onChange={(e) => {
-                  const next = e.target.value;
-                  setValues((prev) => ({ ...prev, [field.key]: next }));
-                  if (errors[field.key]) {
-                    setErrors((prev) => {
-                      const copy = { ...prev };
-                      delete copy[field.key];
-                      return copy;
-                    });
-                  }
-                }}
-                placeholder={field.placeholder}
-                description={field.helpText}
-                required={field.required}
-                state={errors[field.key] ? "error" : "default"}
-                error={errors[field.key]}
-              />
+              <ConfigField key={field.key} label={field.label} hint={field.helpText} error={errors[field.key]}>
+                <Input
+                  type={field.type || "text"}
+                  value={values[field.key] || ""}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    setValues((prev) => ({ ...prev, [field.key]: next }));
+                    if (errors[field.key]) {
+                      setErrors((prev) => {
+                        const copy = { ...prev };
+                        delete copy[field.key];
+                        return copy;
+                      });
+                    }
+                  }}
+                  placeholder={field.placeholder}
+                  required={field.required}
+                  invalid={!!errors[field.key]}
+                />
+              </ConfigField>
             ))
           ) : (
             <p className="text-sm text-muted-foreground">

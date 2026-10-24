@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Mail, ArrowUpRight, ShieldCheck } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
-import { Modal } from "./ui/Modal";
+import Modal from "./forge-ui/modal";
 import { BillingService } from "@/gen/controlplane/services/billing/v1/billing_pb";
 import { getControlPlaneClient } from "../services/controlPlane/client";
 import { useAuthStore } from "@/store/authStore";
@@ -107,7 +107,7 @@ export function BillingEmailRequiredModal({
   if (needsIdentity) {
     return (
       <Modal
-        isOpen={isOpen}
+        open={isOpen}
         onClose={onClose}
         title="Verify your email to subscribe"
         size="sm"
@@ -157,7 +157,7 @@ export function BillingEmailRequiredModal({
   // ── State 2: has an account email → confirm / edit the billing email ──
   return (
     <Modal
-      isOpen={isOpen}
+      open={isOpen}
       onClose={onClose}
       title="Set your billing email"
       size="sm"

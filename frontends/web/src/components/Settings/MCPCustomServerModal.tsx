@@ -1,9 +1,11 @@
 import { useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
-import { Modal } from "../ui/Modal";
+import Modal from "../forge-ui/modal";
+import { FormField } from "../forge-ui/form";
+import Input from "../forge-ui/input";
+import Label from "../forge-ui/label";
+import Textarea from "../forge-ui/textarea";
 import Button from "@/components/forge-ui/button";
-import { Input } from "../ui/Input";
-import { Textarea } from "../ui/Textarea";
 import { ConfigScopeSelector } from "./ConfigScopeSelector";
 import { ConfigScope } from "../../api/mcp-grpc";
 import { toast } from "sonner";
@@ -412,7 +414,7 @@ export function MCPCustomServerModal({
 
   return (
     <Modal
-      isOpen={true}
+      open={true}
       onClose={onClose}
       title="Add Custom MCP Server"
       size="lg"
@@ -442,14 +444,19 @@ export function MCPCustomServerModal({
 
         {mode === "form" ? (
           <>
-            <Input
-              label="Server Name"
-              placeholder="my-custom-mcp"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              description="Unique identifier used in tool names"
-              required
-            />
+            <FormField className="forge-ui">
+              <Label>Server Name</Label>
+              <Input
+                placeholder="my-custom-mcp"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                aria-describedby="mcp-custom-name-hint"
+                required
+              />
+              <p id="mcp-custom-name-hint" className="mt-1 text-xs text-ink-muted">
+                Unique identifier used in tool names
+              </p>
+            </FormField>
 
             <div className="space-y-2">
               <label className="block text-sm font-medium text-foreground">
@@ -475,13 +482,15 @@ export function MCPCustomServerModal({
 
             {transportType === "stdio" ? (
               <>
-                <Input
-                  label="Command"
-                  placeholder="npx"
-                  value={command}
-                  onChange={(e) => setCommand(e.target.value)}
-                  required
-                />
+                <FormField className="forge-ui">
+                  <Label>Command</Label>
+                  <Input
+                    placeholder="npx"
+                    value={command}
+                    onChange={(e) => setCommand(e.target.value)}
+                    required
+                  />
+                </FormField>
 
                 <div className="space-y-2">
                   <label className="block text-sm font-medium text-foreground">
@@ -493,7 +502,7 @@ export function MCPCustomServerModal({
                         placeholder={index === 0 ? "-y" : "argument"}
                         value={arg.value}
                         onChange={(e) => updateArg(arg.id, e.target.value)}
-                        className="flex-1"
+                        className="forge-ui flex-1"
                       />
                       <Button
                         type="button"
@@ -524,13 +533,15 @@ export function MCPCustomServerModal({
                 </div>
               </>
             ) : (
-              <Input
-                label="HTTP/SSE URL"
-                placeholder="https://example.com/mcp"
-                value={url}
-                onChange={(e) => setURL(e.target.value)}
-                required
-              />
+              <FormField className="forge-ui">
+                <Label>HTTP/SSE URL</Label>
+                <Input
+                  placeholder="https://example.com/mcp"
+                  value={url}
+                  onChange={(e) => setURL(e.target.value)}
+                  required
+                />
+              </FormField>
             )}
 
             <div className="space-y-2">
@@ -545,7 +556,7 @@ export function MCPCustomServerModal({
                     onChange={(e) =>
                       updateEnvVar(envVar.id, "key", e.target.value)
                     }
-                    className="flex-1 font-mono"
+                    className="forge-ui flex-1 font-mono"
                   />
                   <Input
                     placeholder={index === 0 ? "your_key" : "value"}
@@ -553,7 +564,7 @@ export function MCPCustomServerModal({
                     onChange={(e) =>
                       updateEnvVar(envVar.id, "value", e.target.value)
                     }
-                    className="flex-1 font-mono"
+                    className="forge-ui flex-1 font-mono"
                   />
                   <Button
                     type="button"
@@ -585,13 +596,18 @@ export function MCPCustomServerModal({
           </>
         ) : (
           <>
-            <Input
-              label="Server Name (optional)"
-              placeholder="my-custom-mcp"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              description="Optional when snippet includes mcpServers with a single named server"
-            />
+            <FormField className="forge-ui">
+              <Label>Server Name (optional)</Label>
+              <Input
+                placeholder="my-custom-mcp"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                aria-describedby="mcp-import-name-hint"
+              />
+              <p id="mcp-import-name-hint" className="mt-1 text-xs text-ink-muted">
+                Optional when snippet includes mcpServers with a single named server
+              </p>
+            </FormField>
 
             <div className="space-y-2">
               <label className="block text-sm font-medium text-foreground">
@@ -600,7 +616,7 @@ export function MCPCustomServerModal({
               <Textarea
                 value={jsonSnippet}
                 onChange={(e) => setJsonSnippet(e.target.value)}
-                className="min-h-[220px] font-mono text-xs"
+                className="forge-ui min-h-[220px] font-mono text-xs"
                 placeholder={`{
   "mcpServers": {
     "my-custom-mcp": {
@@ -631,7 +647,7 @@ export function MCPCustomServerModal({
                 placeholder={index === 0 ? "Authorization" : "Header-Name"}
                 value={header.key}
                 onChange={(e) => updateHeader(header.id, "key", e.target.value)}
-                className="flex-1 font-mono"
+                className="forge-ui flex-1 font-mono"
               />
               <Input
                 placeholder={index === 0 ? "Bearer ${TOKEN}" : "value"}
@@ -639,7 +655,7 @@ export function MCPCustomServerModal({
                 onChange={(e) =>
                   updateHeader(header.id, "value", e.target.value)
                 }
-                className="flex-1 font-mono"
+                className="forge-ui flex-1 font-mono"
               />
               <Button
                 type="button"

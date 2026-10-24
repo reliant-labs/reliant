@@ -37,7 +37,7 @@ import { useState } from "react";
 import { AlertCircle, Wallet } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 
-import { Modal } from "@/components/ui/Modal";
+import Modal from "@/components/forge-ui/modal";
 // The sizing rule is shared with the billing page's auto-recharge control.
 // Two copies would be free to recommend different numbers for one account.
 import {
@@ -102,11 +102,15 @@ export function OutOfCreditModal({
 
   return (
     <Modal
-      isOpen={isOpen}
+      open={isOpen}
       onClose={onClose}
       size="md"
-      title="You're out of AI credit"
-      titlePrefix={<AlertCircle className="h-5 w-5 text-destructive-ink" />}
+      title={
+        <span className="flex items-center gap-3">
+          <AlertCircle className="h-5 w-5 shrink-0 text-destructive-ink" aria-hidden="true" />
+          You&apos;re out of AI credit
+        </span>
+      }
     >
       <div className="space-y-5 p-1">
         <p className="text-sm text-muted-foreground">

@@ -7,11 +7,9 @@
  */
 
 import { Tooltip } from "../ui/Tooltip";
-import { useState } from "react";
 import { MoreHorizontal } from "lucide-react";
 
-import { cn } from "@/lib/utils";
-import { Dropdown } from "../ui/Dropdown";
+import DropdownMenu from "../forge-ui/dropdown_menu";
 
 export interface RowMenuAction {
   label: string;
@@ -20,49 +18,33 @@ export interface RowMenuAction {
 }
 
 export function RowMenu({ label, actions }: { label: string; actions: RowMenuAction[] }) {
-  const [open, setOpen] = useState(false);
   if (actions.length === 0) return null;
   return (
-    <Dropdown
-      isOpen={open}
-      onOpenChange={setOpen}
+    <DropdownMenu
       align="right"
-      variant="form"
-      contentClassName="min-w-44 py-1"
-      trigger={
+      label={label}
+      menuClassName="min-w-44"
+      trigger={(props) => (
         <Tooltip content={label} placement="left" delay={300} wrapperClassName="inline-flex">
-        <button
-          type="button"
-          onClick={() => setOpen(!open)}
-          aria-label={label}
-          aria-haspopup="menu"
-          aria-expanded={open}
-          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
-        >
-          <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
-        </button>
-        </Tooltip>
-      }
-    >
-      <div role="menu" aria-label={label}>
-        {actions.map((action) => (
           <button
-            key={action.label}
             type="button"
-            role="menuitem"
-            onClick={() => {
-              setOpen(false);
-              action.onSelect();
-            }}
-            className={cn(
-              "flex w-full items-center px-3 py-1.5 text-left text-sm transition-colors hover:bg-muted/60 focus:bg-muted/60 focus:outline-none",
-              action.destructive ? "text-destructive-ink" : "text-foreground",
-            )}
+            {...props}
+            aria-label={label}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
           >
-            {action.label}
+            <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
           </button>
-        ))}
-      </div>
-    </Dropdown>
+        </Tooltip>
+      )}
+      groups={[
+        {
+          items: actions.map((action) => ({
+            label: action.label,
+            variant: action.destructive ? "danger" : "default",
+            onClick: action.onSelect,
+          })),
+        },
+      ]}
+    />
   );
 }

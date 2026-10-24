@@ -17,8 +17,8 @@ import { ListDaemonsRequestSchema } from "../../gen/reliant/v1/daemon_registry_p
 import type { DaemonInfo } from "../../gen/reliant/v1/daemon_registry_pb";
 import { RepoSelector } from "../Projects/RepoSelector";
 import type { GitRepo } from "../../services/controlPlane/git";
+import Input from "../forge-ui/input";
 import Button from "@/components/forge-ui/button";
-import { Input } from "../ui/Input";
 import Badge from "../forge-ui/badge";
 import { cn } from "../../lib/utils";
 import { useAccountGate } from "@/hooks/useAccountGate";
@@ -606,6 +606,7 @@ export function ConnectorConsent({
             <Input
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
+              className="forge-ui"
             />
           </div>
 
@@ -761,7 +762,7 @@ export function ConnectorConsent({
             <Input
               value={form.pathRoot}
               onChange={(e) => setForm({ ...form, pathRoot: e.target.value })}
-              className="font-mono text-sm"
+              className="forge-ui font-mono text-sm"
               placeholder="/Users/you/code/project"
             />
             {(suggestedRoots.length > 0 || form.daemonId) && (
@@ -863,7 +864,7 @@ export function ConnectorConsent({
                   setForm({ ...form, execAllowlist: e.target.value })
                 }
                 placeholder="git, go, npm"
-                className="font-mono text-sm"
+                className="forge-ui font-mono text-sm"
               />
             )}
 

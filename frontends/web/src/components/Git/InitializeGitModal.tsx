@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { GitBranch, CheckCircle2, Loader2 } from "lucide-react";
-import { Modal } from "../ui/Modal";
+import { focusChatInput } from "../../hooks/useFocusManager";
+import Modal from "../forge-ui/modal";
 import { api } from "../../api/client";
 import { logger } from "../../lib/logger";
 import { toast } from "../../lib/toast-manager";
@@ -120,7 +121,7 @@ export function InitializeGitModal({
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Initialize Git Repository" size="md">
+    <Modal open={isOpen} fallbackFocus={focusChatInput} onClose={onClose} title="Initialize Git Repository" size="md">
       <div className="space-y-4">
         <div className="flex items-start gap-3">
           <div className="p-2 rounded-lg bg-primary/10 ring-1 ring-primary/20">

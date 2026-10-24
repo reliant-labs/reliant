@@ -28,10 +28,10 @@
 import { useEffect, useId, useMemo, useState, type FormEvent } from "react";
 import { Check, Copy, KeyRound, RotateCw } from "lucide-react";
 
-import { Modal } from "../ui/Modal";
+import Modal from "../forge-ui/modal";
 import Button from "@/components/forge-ui/button";
 import { CardInset } from "../forge-ui/card";
-import { Toggle } from "../ui/Toggle";
+import ToggleSwitch from "../forge-ui/toggle_switch";
 import { useProjectStore } from "@/store/projectStore";
 import { useDaemonStatus } from "@/hooks/useDaemonStatus";
 import { useProjectDaemonInstalls, triggerKeys } from "@/hooks/trigger-queries";
@@ -194,7 +194,7 @@ function ActivateBody({ onClose, workflowRef, workflowTitle, declared: initialDe
   const show = (key: string) => attempted && errors[key];
 
   return (
-    <Modal isOpen onClose={onClose} size="lg" title={personal ? `Add a trigger to ${workflowTitle || workflowRef}` : `Activate “${declared.name}”`}>
+    <Modal open onClose={onClose} size="lg" title={personal ? `Add a trigger to ${workflowTitle || workflowRef}` : `Activate “${declared.name}”`}>
       <form onSubmit={onSubmit} noValidate className="space-y-5" aria-label={personal ? "Add a personal trigger" : `Activate ${declared.name}`}>
         <CardInset className="text-sm">
           {personal ? (
@@ -352,14 +352,8 @@ function ActivateBody({ onClose, workflowRef, workflowTitle, declared: initialDe
         <ActingIdentityField value={actingIdentity} onChange={setActingIdentity} />
 
         <div className="flex flex-wrap items-center gap-6">
-          <div className="flex items-center gap-2">
-            <Toggle checked={enabled} onChange={setEnabled} srLabel="Enabled" />
-            <span className="text-sm text-foreground" aria-hidden>Enabled</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <Toggle checked={notify} onChange={setNotify} srLabel="Notify me when a run completes" />
-            <span className="text-sm text-foreground" aria-hidden>Notify me when a run completes</span>
-          </div>
+          <ToggleSwitch checked={enabled} onChange={setEnabled} label="Enabled" size="lg" className="forge-ui" />
+          <ToggleSwitch checked={notify} onChange={setNotify} label="Notify me when a run completes" size="lg" className="forge-ui" />
         </div>
 
         {error && (
@@ -387,7 +381,7 @@ function ActivateBody({ onClose, workflowRef, workflowTitle, declared: initialDe
 
 function ActivatedView({ created, onClose }: { created: { trigger: Trigger; webhook?: WebhookCredential }; onClose: () => void }) {
   return (
-    <Modal isOpen onClose={onClose} size="lg" title={`${created.trigger.name} is active`}>
+    <Modal open onClose={onClose} size="lg" title={`${created.trigger.name} is active`}>
       <div className="space-y-4">
         <WebhookCredentialPanel trigger={created.trigger} credential={created.webhook} />
         <div className="flex justify-end border-t border-border pt-4">

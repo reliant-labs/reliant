@@ -3,8 +3,8 @@
 /**
  * The Workflows area's filter controls: one compact button per filter that
  * says its current value ("State: Failed, Live"), opening a menu of choices.
- * Built on ui/Dropdown (portalled, click-outside, Escape) so it behaves like
- * every other menu in the app.
+ * Built on forge's dropdown_menu (portalled, a real menu button: arrow keys,
+ * Escape, focus back on the trigger) so it behaves like every other menu.
  *
  * They replaced rows of pill chips. Chips spelled out every option all the
  * time, which on Runs meant four rows of buttons above the list; a menu puts
@@ -12,11 +12,11 @@
  * so an active filter never hides (the reason chips were chosen originally).
  */
 
-import { useState } from "react";
-import { Check, ChevronDown, Search } from "lucide-react";
+import { ChevronDown, Search } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { Dropdown } from "../ui/Dropdown";
+import DropdownMenu from "../forge-ui/dropdown_menu";
+import type { PopoverTriggerProps } from "../forge-ui/popover";
 
 export interface FilterOption<T extends string> {
   value: T;
@@ -34,25 +34,22 @@ export function filterSummary(labels: string[], emptyLabel = "Any"): string {
   return `${labels[0]} +${labels.length - 1}`;
 }
 
+/** The filter's button: its label, what is applied, and the menu's chevron. */
 function FilterTrigger({
   label,
   summary,
   active,
-  open,
-  onToggle,
+  triggerProps,
 }: {
   label: string;
   summary: string;
   active: boolean;
-  open: boolean;
-  onToggle: () => void;
+  triggerProps: PopoverTriggerProps;
 }) {
   return (
     <button
       type="button"
-      onClick={onToggle}
-      aria-haspopup="menu"
-      aria-expanded={open}
+      {...triggerProps}
       aria-label={`${label}: ${summary}`}
       className={cn(
         "inline-flex h-8 max-w-[16rem] items-center gap-1.5 rounded-md border px-2.5 text-sm transition-colors",
@@ -65,34 +62,12 @@ function FilterTrigger({
       <span className="shrink-0 text-muted-foreground">{label}</span>
       <span className="truncate font-medium">{summary}</span>
       <ChevronDown
-        className={cn("h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform", open && "rotate-180")}
+        className={cn(
+          "h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform",
+          triggerProps["aria-expanded"] && "rotate-180",
+        )}
         aria-hidden="true"
       />
-    </button>
-  );
-}
-
-function MenuItem({
-  role,
-  checked,
-  onSelect,
-  children,
-}: {
-  role: "menuitemradio" | "menuitemcheckbox";
-  checked: boolean;
-  onSelect: () => void;
-  children: string;
-}) {
-  return (
-    <button
-      type="button"
-      role={role}
-      aria-checked={checked}
-      onClick={onSelect}
-      className="flex w-full items-center gap-2 rounded px-2.5 py-1.5 text-left text-sm text-foreground transition-colors hover:bg-muted/60 focus:bg-muted/60 focus:outline-none"
-    >
-      <Check className={cn("h-3.5 w-3.5 shrink-0 text-primary", !checked && "invisible")} aria-hidden="true" />
-      <span className="truncate">{children}</span>
     </button>
   );
 }
@@ -112,40 +87,26 @@ export function SelectFilter<T extends string>({
   defaultValue: T;
   onChange: (value: T) => void;
 }) {
-  const [open, setOpen] = useState(false);
   const summary = options.find((option) => option.value === value)?.label ?? value;
   return (
-    <Dropdown
-      isOpen={open}
-      onOpenChange={setOpen}
-      variant="form"
-      contentClassName="min-w-44 border p-1"
-      trigger={
-        <FilterTrigger
-          label={label}
-          summary={summary}
-          active={value !== defaultValue}
-          open={open}
-          onToggle={() => setOpen(!open)}
-        />
-      }
-    >
-      <div role="menu" aria-label={label}>
-        {options.map((option) => (
-          <MenuItem
-            key={option.value}
-            role="menuitemradio"
-            checked={option.value === value}
-            onSelect={() => {
-              setOpen(false);
-              onChange(option.value);
-            }}
-          >
-            {option.label}
-          </MenuItem>
-        ))}
-      </div>
-    </Dropdown>
+    <DropdownMenu
+      align="left"
+      label={label}
+      menuClassName="min-w-44"
+      trigger={(props) => (
+        <FilterTrigger label={label} summary={summary} active={value !== defaultValue} triggerProps={props} />
+      )}
+      groups={[
+        {
+          selection: "single",
+          items: options.map((option) => ({
+            label: option.label,
+            checked: option.value === value,
+            onClick: () => onChange(option.value),
+          })),
+        },
+      ]}
+    />
   );
 }
 
@@ -163,54 +124,38 @@ export function MultiSelectFilter<T extends string>({
   onChange: (value: T[]) => void;
   emptyLabel?: string;
 }) {
-  const [open, setOpen] = useState(false);
   // In the menu's order, not the order they were picked, so the button reads the same way twice.
   const picked = options.filter((option) => value.includes(option.value));
   const toggle = (choice: T) =>
     onChange(value.includes(choice) ? value.filter((v) => v !== choice) : [...value, choice]);
   return (
-    <Dropdown
-      isOpen={open}
-      onOpenChange={setOpen}
-      variant="form"
-      contentClassName="min-w-48 border p-1"
-      trigger={
+    <DropdownMenu
+      align="left"
+      label={label}
+      menuClassName="min-w-48"
+      trigger={(props) => (
         <FilterTrigger
           label={label}
           summary={filterSummary(picked.map((option) => option.label), emptyLabel)}
           active={picked.length > 0}
-          open={open}
-          onToggle={() => setOpen(!open)}
+          triggerProps={props}
         />
-      }
-    >
-      <div role="menu" aria-label={label}>
-        {options.map((option) => (
-          <MenuItem
-            key={option.value}
-            role="menuitemcheckbox"
-            checked={value.includes(option.value)}
-            onSelect={() => toggle(option.value)}
-          >
-            {option.label}
-          </MenuItem>
-        ))}
-        {picked.length > 0 && (
-          <div className="mt-1 border-t border-border/60 pt-1">
-            <button
-              type="button"
-              onClick={() => {
-                setOpen(false);
-                onChange([]);
-              }}
-              className="w-full rounded px-2.5 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:bg-muted/60 hover:text-foreground focus:bg-muted/60 focus:outline-none"
-            >
-              Clear {label.toLowerCase()}
-            </button>
-          </div>
-        )}
-      </div>
-    </Dropdown>
+      )}
+      groups={[
+        {
+          selection: "multiple",
+          items: options.map((option) => ({
+            label: option.label,
+            checked: value.includes(option.value),
+            keepOpen: true,
+            onClick: () => toggle(option.value),
+          })),
+        },
+        ...(picked.length > 0
+          ? [{ items: [{ label: `Clear ${label.toLowerCase()}`, onClick: () => onChange([]) }] }]
+          : []),
+      ]}
+    />
   );
 }
 
