@@ -36,9 +36,9 @@ import { Code, ConnectError } from "@connectrpc/connect";
 import { AlertTriangle, CalendarX, CheckCircle2, ChevronDown, HardDrive, HelpCircle, MonitorPause, Settings2, Shield, X } from "lucide-react";
 import { toast } from "sonner";
 
-import { api } from "@/api/client";
 import { InboxItemKind, type InboxItem as InboxItemData, type InboxStorage as InboxStorageData } from "@/gen/reliant/v1/inbox_pb";
-import { answerQuestion } from "@/hooks/approval-queries";
+import { useApprove, useDeny } from "@/hooks/approval-service-hooks_gen";
+import { answerQuestion } from "@/hooks/question-queries";
 import { inboxKeys, removeInboxItems } from "@/hooks/inbox-queries";
 import { useResumeDaemon } from "@/hooks/useOnboardingQueries";
 import { useSetTriggerEnabled, useTriggerById } from "@/hooks/trigger-queries";
@@ -525,11 +525,13 @@ function ApprovalRowAction({
   onFailure: (verb: string) => (error: unknown) => void;
 }) {
   const [busy, setBusy] = useState(false);
+  const approve = useApprove();
+  const deny = useDeny();
   const act = async (verb: "approve" | "deny") => {
     setBusy(true);
     try {
-      if (verb === "approve") await api.approvals.approve(approvalId, undefined);
-      else await api.approvals.deny(approvalId, undefined, undefined);
+      if (verb === "approve") await approve.mutateAsync({ requestId: approvalId });
+      else await deny.mutateAsync({ requestId: approvalId });
       removeInboxItems([itemId]);
     } catch (error) {
       onFailure(verb)(error);

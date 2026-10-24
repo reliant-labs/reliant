@@ -58,7 +58,7 @@ import {
 import { clearLegacyChatParams, peekLegacyChatParams } from "../../lib/legacyChatParams";
 import { pushChatParams } from "../../lib/chatSelection";
 import { Code, ConnectError } from "@connectrpc/connect";
-import { answerQuestion, usePendingQuestions } from "../../hooks/approval-queries";
+import { answerQuestion, usePendingQuestions } from "../../hooks/question-queries";
 import { questionForThread } from "../../lib/pendingQuestions";
 import type { WorkflowExecution } from "./ExecutionSidebar/types";
 import { getThreadColor, formatNodeId, resolveThreadNameFromActiveThreads } from "./thread-views/threadUtils";
@@ -340,7 +340,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
     const pendingQuestion = useMemo(
       () =>
         questionForThread(
-          pendingQuestionsQuery.data,
+          pendingQuestionsQuery.data?.questions,
           chatId,
           selectedThreadId,
           questionMainThreadId
@@ -1229,7 +1229,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
 
     const handleQuestionSubmit = useCallback(async (answer: { answers: Array<{ question: string; selected: string[]; freetext?: string }> }) => {
       if (!chatId || !pendingQuestion) return;
-      await answerQuestion(chatId, pendingQuestion.question_id, answer);
+      await answerQuestion(chatId, pendingQuestion.questionId, answer);
     }, [chatId, pendingQuestion]);
 
     const handleSend = async () => {

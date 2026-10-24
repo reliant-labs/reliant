@@ -14,6 +14,7 @@
  * request), or rows slip between pages as time moves.
  */
 
+import { Code, ConnectError } from "@connectrpc/connect";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { useObservabilityApi, type ObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
@@ -30,6 +31,7 @@ import type {
   IssueStatus,
   UpdateIssueStatusRequest,
 } from "@/services/controlPlane/observability/issuesTypes";
+import type { GetMetricRequest, ListMetricExemplarsRequest, MetricKind } from "@/services/controlPlane/observability/metricsTypes";
 import type {
   ObsScope,
   ListTracesResult,
@@ -56,6 +58,7 @@ export const obsKeys = {
   trace: (scope: ObsScope | null, traceId: string) => [...obsKeys.all(scope), "trace", traceId] as const,
   panel: (scope: ObsScope | null, range: RangePreset, panel: Panel, services: string[], groupBy: string[], offset = "") =>
     [...obsKeys.all(scope), "panel", range, panel, services, groupBy, offset] as const,
+  metrics: (scope: ObsScope | null) => [...obsKeys.all(scope), "metrics"] as const,
   flamegraph: (scope: ObsScope | null, filters: FlamegraphFilters) => [...obsKeys.all(scope), "flamegraph", filters] as const,
   attributeValues: (scope: ObsScope | null, range: RangePreset, key: string, prefix: string, signal: string) =>
     [...obsKeys.all(scope), "attribute-values", range, key, prefix, signal] as const,
@@ -319,6 +322,78 @@ export function useAttributeValues(
     enabled: !!scope && !!key,
     staleTime: 60_000,
     placeholderData: (previous) => previous,
+    retry: obsRetry,
+  });
+}
+
+// ── Metrics explorer ─────────────────────────────────────────────────────────
+
+/**
+ * The metrics explorer's keys. Every one starts with `metricKeys.all(scope)`, which
+ * itself starts with the whole scope, so Refresh (invalidate `obsKeys.all(scope)`)
+ * re-reads them too, and one scope never shares an answer with another.
+ */
+export const metricKeys = {
+  all: (scope: ObsScope | null) => obsKeys.metrics(scope),
+  catalog: (scope: ObsScope | null, range: RangePreset, name: string, limit: number) =>
+    [...metricKeys.all(scope), "catalog", range, name, limit] as const,
+  detail: (scope: ObsScope | null, range: RangePreset, name: string, kind: MetricKind | "") =>
+    [...metricKeys.all(scope), "detail", range, name, kind] as const,
+  exemplars: (scope: ObsScope | null, range: RangePreset, request: ExemplarsQuery) =>
+    [...metricKeys.all(scope), "exemplars", range, request] as const,
+};
+
+/** The catalog's window: the server caps it at 24 hours, so a longer preset would only be clamped there. */
+const CATALOG_MAX_RANGE: RangePreset = "24h";
+
+function catalogRange(range: RangePreset): RangePreset {
+  return range === "7d" ? CATALOG_MAX_RANGE : range;
+}
+
+/**
+ * The metric catalog: every metric the scope's telemetry carries with its kind,
+ * unit, series estimate and services. The window is the explorer's, capped at 24
+ * hours (a metric last seen three days ago is still reachable by name). The
+ * server caches the answer a minute; the client keeps it as long.
+ */
+export function useMetricCatalog(scope: ObsScope | null, range: RangePreset, name = "", limit = 0) {
+  const api = useObservabilityApi();
+  const window = catalogRange(range);
+  return useQuery({
+    queryKey: metricKeys.catalog(scope, window, name, limit),
+    queryFn: () => api.listMetricCatalog({ ...(scope as ObsScope), window: resolveWindow(window), name, limit }),
+    enabled: !!scope,
+    staleTime: 60_000,
+    placeholderData: (previous) => previous,
+    retry: obsRetry,
+  });
+}
+
+/** One metric's detail: attributes with cardinality, export interval and suggested breakdowns. */
+export function useMetric(scope: ObsScope | null, range: RangePreset, name: string | undefined, kind?: GetMetricRequest["kind"]) {
+  const api = useObservabilityApi();
+  const window = catalogRange(range);
+  return useQuery({
+    queryKey: metricKeys.detail(scope, window, name ?? "", kind ?? ""),
+    queryFn: () => api.getMetric({ ...(scope as ObsScope), window: resolveWindow(window), name: name as string, kind }),
+    enabled: !!scope && !!name,
+    staleTime: 60_000,
+    // NotFound is the answer "no data for this metric in this window": a state to show, not a fault to retry.
+    retry: (failureCount, error) => !(error instanceof ConnectError && error.code === Code.NotFound) && obsRetry(failureCount, error),
+  });
+}
+
+/** What an exemplar read is keyed by: the metric, its filters and the bucket asked about (epoch ms, so two clicks on one bucket share an answer). */
+export type ExemplarsQuery = ListMetricExemplarsRequest;
+
+/** Exemplars of one metric (a sampled observation and its trace), stored traces first. Maximum range 7 days. */
+export function useMetricExemplars(scope: ObsScope | null, range: RangePreset, request: ExemplarsQuery | null, options: { enabled?: boolean } = {}) {
+  const api = useObservabilityApi();
+  return useQuery({
+    queryKey: metricKeys.exemplars(scope, range, request ?? ({ name: "" } as ExemplarsQuery)),
+    queryFn: () => api.listMetricExemplars({ ...(scope as ObsScope), window: resolveWindow(range), ...(request as ExemplarsQuery) }),
+    enabled: !!scope && !!request?.name && (options.enabled ?? true),
+    staleTime: 60_000,
     retry: obsRetry,
   });
 }

@@ -42,7 +42,7 @@ Tools are organized by tags for filtering:
 - [Planning & Task Management](#planning--task-management) (10 tools)
 - [File Operations](#file-operations) (8 tools)
 - [Information Retrieval](#information-retrieval) (6 tools)
-- [Workflow Management](#workflow-management) (20 tools)
+- [Workflow Management](#workflow-management) (22 tools)
 - [System & Execution](#system--execution) (4 tools)
 - [Other Tools](#other-tools) (69 tools)
 
@@ -982,24 +982,26 @@ WHEN TO USE THIS TOOL:
 HOW TO USE:
 - Provide the URL to fetch content from
 - Specify the desired output format (text, markdown, or html)
-- Optionally set a timeout for the request
+- Optionally set a timeout for the request (default 30s, hard cap 60s)
 
 FEATURES:
 - Automatic content extraction using Mozilla Readability (strips nav, ads, footers)
 - Supports three output formats: text, markdown, and html
-- Automatically handles HTTP redirects
+- Follows up to 5 HTTP redirects, http/https only
 - Detects likely JavaScript-rendered pages and warns you
 - Sets reasonable timeouts to prevent hanging
 
 PARAMETERS:
-- max_size: Maximum bytes to fetch (default: 16000, ~16KB)
-  Prevents downloading huge files that could overwhelm context
+- max_size: Maximum bytes to read from the response (default: 16000, ~16KB; hard cap: 1048576, 1 MiB).
+  Values above the cap are lowered to it. When the response is longer than the limit it is
+  cut off and a "[Content truncated ...]" note is appended; the call still succeeds. The limit
+  applies to the decompressed body.
 
 IMPORTANT LIMITATIONS:
 - Cannot render JavaScript. Single-page apps (SPAs) will return little or no content.
   The response metadata will include possible_js_rendered=true when this is detected.
   For JS-heavy sites, consider using browser tools instead.
-- Default maximum response size is 16KB (use max_size to adjust)
+- Default maximum response size is 16KB (use max_size to raise it, up to 1 MiB)
 - Only supports HTTP and HTTPS protocols
 - Cannot handle authentication or cookies
 - Some websites may block automated requests
@@ -1011,7 +1013,8 @@ TIPS FOR BETTER RESULTS:
 - Use text or markdown format for documentation (html returns raw markup with all chrome)
 - If the response says possible_js_rendered=true, the page needs JavaScript to render.
   Try finding an alternative URL, a raw content source, or use browser tools.
-- Adjust max_size for larger documents (but consider context limits)
+- Adjust max_size for larger documents, up to the 1 MiB cap (but consider context limits)
+- Pages larger than 1 MiB are always truncated; look for a smaller raw/API URL instead
 
 RESPONSE METADATA:
 - content_length: Size of the extracted content
@@ -1336,6 +1339,7 @@ _Tools for managing and inspecting workflows, presets, and scenarios._
 | [`delete_scenario`](#delete_scenario) | workflow | Delete a test scenario. |
 | [`edit_scenario`](#edit_scenario) | workflow | Make precise text replacements in a scenario's YAML definition. |
 | [`edit_workflow`](#edit_workflow) | workflow | Make precise text replacements in the workflow YAML. |
+| [`fire_trigger`](#fire_trigger) | workflow, runs | Run an existing trigger once now, using its saved workflow, inputs, machine and connections. Neve... |
 | [`get_cel_reference`](#get_cel_reference) | workflow, readonly | Gets the CEL expression reference for workflow development. |
 | [`get_integration_schema`](#get_integration_schema) | workflow, readonly | Get the full schema of one integration action (or trigger type) by ref. |
 | [`get_preset`](#get_preset) | workflow, readonly | Gets the full configuration of a preset. |
@@ -1344,6 +1348,7 @@ _Tools for managing and inspecting workflows, presets, and scenarios._
 | [`get_workflow_suggestions`](#get_workflow_suggestions) | workflow, readonly | Returns static design suggestions for building workflows. |
 | [`list_presets`](#list_presets) | workflow, readonly | Lists available presets for agent nodes. |
 | [`list_scenarios`](#list_scenarios) | workflow, readonly | List all test scenarios for the current workflow. |
+| [`list_trigger_events`](#list_trigger_events) | workflow, readonly | Inspect an existing trigger's firing history, newest first: event id, time, outcome, detail, laun... |
 | [`list_triggers`](#list_triggers) | workflow, readonly | List the user's triggers: what starts runs without anyone typing — schedules, webhooks, integra... |
 | [`list_workflows`](#list_workflows) | workflow, readonly | Lists all available workflows (builtin, project, and user-created). |
 | [`run_scenario`](#run_scenario) | workflow | Run an existing test scenario by name. |
@@ -1480,6 +1485,18 @@ every current error and warning.
   "old_string": "  - id: agent\n    type: call_llm",
   "new_string": "  - id: agent\n    type: call_llm\n    model: \"{{inputs.model}}\""
 }
+
+---
+
+### fire_trigger
+
+**Tags:** `workflow`, `runs`
+
+Run an existing trigger once now, using its saved workflow, inputs, machine and connections. Never creates, enables or changes a trigger.
+
+This is a manual fire: it bypasses enabled and overlap checks, so even a paused trigger may run once without being enabled. It can start real work with the trigger's saved privileges. Use only when the user asks to run or test that activation.
+
+Returns fire_workflow_id: the asynchronous firing was accepted, NOT proof that a run launched or succeeded. Do not retry just because the run is not visible yet: each call starts another fire. Inspect list_trigger_events for this trigger, then get_run with the resulting chat_id.
 
 ---
 
@@ -1646,6 +1663,16 @@ Use this to see what scenarios exist and their current state.
 
 Pass id (required): the workflow UUID, slug, or name, as returned by
 create_workflow or list_workflows.
+
+---
+
+### list_trigger_events
+
+**Tags:** `workflow`, `readonly`
+
+Inspect an existing trigger's firing history, newest first: event id, time, outcome, detail, launched chat_id and current run state. Read-only; never fires or changes a trigger. Raw event payloads are not returned.
+
+Use after fire_trigger to see whether a firing launched, skipped or failed; acceptance of a manual fire is not a successful run. Recording is asynchronous, so an empty page may mean the firing has not been recorded yet. Use get_run with a launched chat_id for details. Concurrent fires can appear: do not assume the newest event necessarily belongs to your call. Match fire_workflow_id from fire_trigger to the event with that exact ID, then use its chat_id; do not guess from ordering. Continue with next_page_token when present.
 
 ---
 

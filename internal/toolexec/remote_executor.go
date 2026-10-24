@@ -400,8 +400,9 @@ func (e *RemoteExecutor) executeOnDaemon(ctx context.Context, req *ToolRequest, 
 		// A transport failure the gateway answered for — the daemon's
 		// connection dropped under the request, or the gateway was too busy
 		// to deliver it — is a reply, but not from the daemon: it proves
-		// nothing about the machine being reachable.
-		RanOnDaemon:  !IsTransportErrorCode(resp.ErrorCode),
+		// nothing about the machine being reachable. A restarted daemon's
+		// "interrupted by restart" is from the daemon, so it does.
+		RanOnDaemon:  !IsTransportErrorCode(resp.ErrorCode) || resp.ErrorCode == ErrorCodeDaemonRestarted,
 		DaemonID:     resp.DaemonID,
 		StartTime:    startTime,
 		EndTime:      time.Now(),

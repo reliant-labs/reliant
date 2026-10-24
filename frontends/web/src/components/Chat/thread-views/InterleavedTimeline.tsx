@@ -24,7 +24,8 @@ import { WorkflowErrorMessage } from "../WorkflowErrorMessage";
 import { WorkflowInfoMessage } from "../WorkflowInfoMessage";
 import { SystemNotificationMessage } from "../SystemNotificationMessage";
 import { RunStepExecution } from "../RunStepExecution";
-import type { Message, ToolApprovalRequest } from "../../../api/client";
+import type { Message } from "../../../api/client";
+import type { Approval } from "../../../gen/reliant/v1/approval_pb";
 import type {
   ErrorUpdate,
   InfoUpdate,
@@ -47,7 +48,7 @@ import {
 
 interface InterleavedTimelineProps {
   messages: Message[];
-  approvals?: ToolApprovalRequest[];
+  approvals?: Approval[];
   errorEvents?: ErrorUpdate[];
   infoEvents?: InfoUpdate[];
   runOutputs?: RunOutputUpdate[];

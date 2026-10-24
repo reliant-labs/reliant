@@ -4,7 +4,9 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -226,6 +228,19 @@ func (a *CompactActivity) saveCompactionMessage(ctx context.Context, chatID, thr
 type GenerateTitleActivity struct {
 	repo           GenerateTitleStore
 	driverResolver drivers.DriverResolver
+	// routing picks which account of the resolved provider titles the chat,
+	// and benches or retires one the provider refuses; nil routes nothing.
+	routing *AccountRouting
+}
+
+// WithAccountRouting wires multi-account routing into titling. Without it the
+// title request always goes to the provider's default account (its first by
+// priority), even while that account is limited or its key rejected and every
+// other account of the provider is healthy, and a refusal records nothing, so
+// the next chat's title meets the same account first again.
+func (a *GenerateTitleActivity) WithAccountRouting(r *AccountRouting) *GenerateTitleActivity {
+	a.routing = r
+	return a
 }
 
 // NewGenerateTitleActivity creates a new GenerateTitleActivity
@@ -442,7 +457,7 @@ func (a *CompactActivity) generateCompactionSummary(ctx context.Context, chat *d
 	// The accumulator will collect all chunks and return the final response
 	response, err := accumulator.StreamAndAccumulate(a.routing.observe(ctx, chat.UserID, resolved.Account), resolved.Driver, compactionPrompts, history, []tools.Tool{})
 	if err != nil {
-		return "", a.routing.usageLimitFailure(ctx, fmt.Errorf("failed to generate summary: %w", err), usageLimitContext{
+		return "", a.routing.providerFailure(ctx, fmt.Errorf("failed to generate summary: %w", err), usageLimitContext{
 			UserID: chat.UserID, ThreadID: thread, Driver: models.DriverID(resolved.ProviderDriver),
 			ModelID: definitionID(resolved.Definition), Account: resolved.Account, Policy: failover,
 		})
@@ -574,7 +589,87 @@ func (a *GenerateTitleActivity) generateTitle(ctx context.Context, userID, first
 		spec.Selector = titleModelSelector()
 		spec.FallbackSelector = titleModelFallbackSelector()
 	}
+	// The account comes from the same router a chat turn's does, so a limited,
+	// benched or signed-out account is skipped before any request. ThreadID
+	// stays empty: a title belongs to no thread, so it reads and writes no
+	// sticky assignment (and never pins the chat's root thread to the account
+	// the title happened to use).
+	spec.Routing = a.routing
 
+	// A refusal benches the refused account or takes its key out of rotation
+	// (providerFailure), so re-resolving routes to another account of the
+	// provider. That is the retry a chat turn gets from its workflow; a title
+	// has no workflow-level failover (a usage-limit failure is not retryable,
+	// and the title workflow settles for the truncated message), so it makes the
+	// retry here.
+	//
+	// When no account of the provider can serve now, the title moves to
+	// another connected provider's fast model. A chat turn deliberately does
+	// not (cross-provider fallback is the chat's opt-in), but a title is a
+	// one-shot request with no conversation, prompt cache or reasoning state to
+	// keep on one provider, and a real title beats the truncated first message.
+	var raw string
+	var err error
+	var lastRefusal error
+	for range titleAttempts {
+		raw, err = a.requestTitle(ctx, spec, firstMessage)
+		var refused *types.UsageLimitFailure
+		if err == nil || !errors.As(err, &refused) {
+			break
+		}
+		lastRefusal = err
+		if refused.Facts.AlternativeAccount {
+			logging.InfoContext(ctx, "[GenerateTitle] Account refused; retrying on another account of the provider",
+				"userID", userID, "provider", refused.Facts.Provider, "accountID", refused.Facts.AccountID)
+			continue
+		}
+		if refused.Facts.Provider == "" || slices.Contains(spec.ExcludeProviders, refused.Facts.Provider) {
+			break
+		}
+		logging.InfoContext(ctx, "[GenerateTitle] Every account of the provider is limited; titling on another provider",
+			"userID", userID, "provider", refused.Facts.Provider)
+		spec.ExcludeProviders = append(spec.ExcludeProviders, refused.Facts.Provider)
+	}
+	// Nothing left to move to: the limit is the failure worth reporting, not
+	// the resolution that found no other provider.
+	var unresolved *resolveFailure
+	if err != nil && lastRefusal != nil && errors.As(err, &unresolved) {
+		err = lastRefusal
+	}
+	if err != nil {
+		return "", err
+	}
+
+	// Clean up the title
+	title := strings.TrimSpace(raw)
+	// Remove quotes if present
+	title = strings.Trim(title, `"`)
+	title = strings.Trim(title, `'`)
+	// Remove newlines and collapse spaces
+	title = strings.ReplaceAll(title, "\n", " ")
+	title = strings.Join(strings.Fields(title), " ")
+
+	// Backstop only — the prompt and schema ask for 4 words. This clamps a
+	// runaway response without mangling a good 5- or 6-word title.
+	words := strings.Fields(title)
+	if len(words) > 8 {
+		title = strings.Join(words[:8], " ") + "..."
+	}
+
+	return truncateRunes(title, 60), nil
+}
+
+// titleAttempts bounds the accounts and providers one title tries. Each
+// refused attempt is a fast 4xx, and an account already known to be limited is
+// never called at all (the router skips it, and a provider with every account
+// limited is refused without a request), so this only caps how many limits a
+// single title can discover in one go.
+const titleAttempts = 4
+
+// requestTitle makes one title request: resolve the model and account, stream,
+// and return the set_title argument. A provider refusal is recorded against the
+// serving account before it is returned.
+func (a *GenerateTitleActivity) requestTitle(ctx context.Context, spec llmCallSpec, firstMessage string) (string, error) {
 	titleTool := tools.NewSetTitleTool()
 	resolved, err := resolveLLMCall(ctx, a.driverResolver, spec)
 	if err != nil {
@@ -621,33 +716,18 @@ func (a *GenerateTitleActivity) generateTitle(ctx context.Context, userID, first
 	// reachable the moment model selection opened up to any "fast" model.
 	// Accumulating yields the same single response and preserves tool calls,
 	// which is all this path reads.
-	response, err := accumulator.StreamAndAccumulate(ctx, driver, prompt, messages, []tools.Tool{titleTool})
+	//
+	// The account's rate-limit observer rides on the request, so its headers
+	// update the account's limit state exactly as a chat turn's do.
+	response, err := accumulator.StreamAndAccumulate(a.routing.observe(ctx, spec.UserID, resolved.Account), driver, prompt, messages, []tools.Tool{titleTool})
 	if err != nil {
-		return "", fmt.Errorf("failed to generate title: %w", err)
+		return "", a.routing.providerFailure(ctx, fmt.Errorf("failed to generate title: %w", err), usageLimitContext{
+			UserID: spec.UserID, Driver: models.DriverID(resolved.ProviderDriver),
+			ModelID: definitionID(resolved.Definition), Account: resolved.Account,
+		})
 	}
 
-	raw, err := titleFromToolCalls(response.ToolCalls)
-	if err != nil {
-		return "", err
-	}
-
-	// Clean up the title
-	title := strings.TrimSpace(raw)
-	// Remove quotes if present
-	title = strings.Trim(title, `"`)
-	title = strings.Trim(title, `'`)
-	// Remove newlines and collapse spaces
-	title = strings.ReplaceAll(title, "\n", " ")
-	title = strings.Join(strings.Fields(title), " ")
-
-	// Backstop only — the prompt and schema ask for 4 words. This clamps a
-	// runaway response without mangling a good 5- or 6-word title.
-	words := strings.Fields(title)
-	if len(words) > 8 {
-		title = strings.Join(words[:8], " ") + "..."
-	}
-
-	return truncateRunes(title, 60), nil
+	return titleFromToolCalls(response.ToolCalls)
 }
 
 // truncateRunes shortens s to at most maxRunes runes, appending an ellipsis

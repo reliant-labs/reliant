@@ -19,7 +19,7 @@
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { renderWithQuery } from "../../../test/renderWithQuery";
-import type { QuestionInfo } from "../../../api/question-grpc";
+import type { QuestionInfo } from "../../../gen/reliant/v1/question_pb";
 
 const CHAT_ID = "chat-abc";
 const SPAWN_A = "thread-spawn-a";
@@ -55,8 +55,8 @@ vi.mock("../../../hooks/chat-queries", async () => {
     getChatFromCache: () => undefined,
   };
 });
-vi.mock("../../../hooks/approval-queries", () => ({
-  usePendingQuestions: () => ({ data: pending.questions, isLoading: false }),
+vi.mock("../../../hooks/question-queries", () => ({
+  usePendingQuestions: () => ({ data: { questions: pending.questions }, isLoading: false }),
   answerQuestion: answerQuestionMock,
 }));
 
@@ -83,13 +83,16 @@ import { ChatInput } from "../ChatInput";
 
 function askUser(id: string, threadId: string, prompt: string): QuestionInfo {
   return {
-    question_id: id,
-    chat_id: CHAT_ID,
-    workflow_id: `wf-${threadId}`,
-    thread_id: threadId,
-    step_id: "ask_user",
+    $typeName: "reliant.v1.QuestionInfo",
+    async: false,
+    toolCallId: "",
+    questionId: id,
+    chatId: CHAT_ID,
+    workflowId: `wf-${threadId}`,
+    threadId: threadId,
+    stepId: "ask_user",
     status: "pending",
-    created_at: "",
+    createdAt: "",
     metadata: JSON.stringify({
       type: "ask_user",
       questions: [{ question: prompt, options: [{ label: "Yes", description: "" }] }],

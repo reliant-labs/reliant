@@ -123,6 +123,8 @@ type Minted struct {
 	DisplayPrefix string
 	ExpiresAt     *time.Time
 	Rotated       bool
+	// Scopes is the authority actually minted, after current org grant clipping.
+	Scopes []string
 }
 
 // MintForUser mints a token acting as req.UserID in their primary org.
@@ -146,6 +148,7 @@ func (c *Client) MintForUser(ctx context.Context, req MintRequest) (Minted, erro
 		DisplayPrefix string     `json:"displayPrefix"`
 		ExpiresAt     *time.Time `json:"expiresAt"`
 		Rotated       bool       `json:"rotated"`
+		Scopes        []string   `json:"scopes"`
 	}
 	if err := c.call(ctx, "MintForUser", body, &out); err != nil {
 		return Minted{}, err
@@ -154,7 +157,7 @@ func (c *Client) MintForUser(ctx context.Context, req MintRequest) (Minted, erro
 		return Minted{}, fmt.Errorf("accesstokenclient: MintForUser returned a malformed token")
 	}
 	return Minted{TokenID: out.TokenID, Plaintext: out.Secret, DisplayPrefix: out.DisplayPrefix,
-		ExpiresAt: out.ExpiresAt, Rotated: out.Rotated}, nil
+		ExpiresAt: out.ExpiresAt, Rotated: out.Rotated, Scopes: out.Scopes}, nil
 }
 
 // RevokeResource revokes every live token bound to resource.

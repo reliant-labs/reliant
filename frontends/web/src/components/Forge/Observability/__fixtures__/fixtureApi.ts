@@ -12,6 +12,7 @@
  * relative to the request's window, so "last hour" always has data in it.
  */
 
+import { fixtureMetricCatalog, fixtureMetricDetail, fixtureMetricEntry, fixtureMetricExemplars, fixtureMetricPanel } from "./metricFixtures";
 import { Code, ConnectError } from "@connectrpc/connect";
 
 import forgeSpecRaw from "./forge-dashboard-spec.json?raw";
@@ -425,12 +426,16 @@ export function fixtureComparePanel(panel: Panel, window: TimeWindow, envIds: st
     truncated: false,
     series: [],
     ...NO_BROWSER_ROWS,
+    ...NO_METRIC_EXTRAS,
     columns,
     rows: [workload("api", regress ? 0.24 : 0.21, regress ? 216 * 2 ** 20 : 182 * 2 ** 20), workload("worker", 0.08, 96 * 2 ** 20)],
   };
 }
 
 const NO_BROWSER_ROWS: Pick<PanelResult, "funnelSteps" | "issues" | "sessions"> = { funnelSteps: [], issues: [], sessions: [] };
+
+/** What only a metrics panel fills in: its series metadata, the pre-cap series count, warnings, and explain output. */
+const NO_METRIC_EXTRAS: Pick<PanelResult, "seriesMeta" | "seriesTotal" | "warnings" | "compiledSql"> = { seriesMeta: [], seriesTotal: 0, warnings: [], compiledSql: [] };
 
 /**
  * The browser kinds (C7) over the fixture app's `web` frontend: a checkout
@@ -533,7 +538,7 @@ export function fixturePanel(
         : fixtureGroups(groupBy.map((key) => key.replace(/^(resource|metric|log|span)\.attr\./, "")), scope).map((group, i) =>
             Object.fromEntries(Object.entries(group).map(([k, v], j) => [groupBy[j] ?? k, v ?? String(i)]))
           );
-  const base = { kind: panel.kind, unit: panel.unit ?? "", stepSeconds: 120, truncated: false, columns: [] as string[], rows: [] as PanelResult["rows"], ...NO_BROWSER_ROWS };
+  const base = { kind: panel.kind, unit: panel.unit ?? "", stepSeconds: 120, truncated: false, columns: [] as string[], rows: [] as PanelResult["rows"], ...NO_BROWSER_ROWS, ...NO_METRIC_EXTRAS };
 
   if (panel.kind === "funnel" || panel.kind === "issues" || panel.kind === "sessions") {
     return { ...base, series: [], ...fixtureBrowserPanel(panel, window, services) };
@@ -902,6 +907,7 @@ export function createFixtureApi(options: FixtureOptions = {}): ObservabilityApi
         if (unsupported) {
           throw new ConnectError(`aggregation "count_distinct" is not supported on field ${unsupported.field}`, Code.InvalidArgument);
         }
+        if (panel.signal === "metrics" && panel.series.some((series) => fixtureMetricEntry(series.field ?? ""))) return fixtureMetricPanel(panel, req.window, req.window.endMs);
         if (panel.id.startsWith("compare-")) return fixtureComparePanel(panel, req.window, req.envIds, delivery.ledger);
         return fixturePanel(panel, req.window, req.services, req.groupBy, req);
       }),
@@ -920,6 +926,14 @@ export function createFixtureApi(options: FixtureOptions = {}): ObservabilityApi
     listReleases: delivery.listReleases,
     getDoraMetrics: delivery.getDoraMetrics,
     ...createIssuesFixture(options, call, delivery.ledger),
+    listMetricCatalog: (req) => call("ListMetrics", req, () => (options.empty ? { metrics: [], truncated: false } : fixtureMetricCatalog(req.window.endMs, req.name, req.limit))),
+    getMetric: (req) =>
+      call("GetMetric", req, () => {
+        const detail = fixtureMetricDetail(req.name, req.window.endMs);
+        if (!detail) throw new ConnectError(`metric "${req.name}" has no data in this window`, Code.NotFound);
+        return detail;
+      }),
+    listMetricExemplars: (req) => call("ListMetricExemplars", req, () => fixtureMetricExemplars(req.window.endMs, req.limit)),
     listAttributeValues: (req) =>
       call("ListAttributeValues", req, () => {
         const values: AttributeValueCount[] = valuesOf(req.key, req)

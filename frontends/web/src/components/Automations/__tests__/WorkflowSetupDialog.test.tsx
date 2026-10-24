@@ -14,6 +14,8 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { create } from "@bufbuild/protobuf";
@@ -65,10 +67,12 @@ vi.mock("@/api/grpc-client", () => ({
     worktree: () => ({ listWorktrees }),
     daemonRegistry: () => ({ listDaemons }),
     project: () => ({ listProjectDaemons }),
-    repo: () => ({ listRepos }),
   },
   getGRPCBaseURLPublic: () => "https://api.example.com",
 }));
+
+// RepoService is on its generated hooks, so it is answered at the transport.
+setTransport(mockTransport({ "RepoService.ListRepos": (req) => listRepos(req) }));
 
 vi.mock("@/store/projectStore", () => {
   const snapshot = () => ({

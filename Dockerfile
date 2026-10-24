@@ -58,7 +58,7 @@ COPY . .
 # published container reported `commit: unknown` / `built: unknown` — verified
 # against the running prod pod.
 #
-# All four are stamped because a partial stamp is worse than none: a version
+# All five are stamped because a partial stamp is worse than none: a version
 # with no commit cannot be traced back to a tree, which is exactly the state
 # prod was in.
 #
@@ -71,13 +71,19 @@ ARG VERSION=dev
 ARG COMMIT=unknown
 ARG BUILD_DATE=unknown
 ARG BRANCH=unknown
+# COMMIT_TIME is the committer time of COMMIT (unix seconds, from
+# scripts/release-identity.sh --commit-time): the build number daemons report
+# on registration. 0 = unordered, which is also what a plain `docker build`
+# gets: the build context has no .git to read it from.
+ARG COMMIT_TIME=0
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/go/pkg \
     CGO_ENABLED=0 GOARCH=${TARGETARCH} go build \
       -ldflags "-X github.com/reliant-labs/reliant/internal/version.Version=${VERSION} \
                 -X github.com/reliant-labs/reliant/internal/version.Commit=${COMMIT} \
                 -X github.com/reliant-labs/reliant/internal/version.Date=${BUILD_DATE} \
-                -X github.com/reliant-labs/reliant/internal/version.Branch=${BRANCH}" \
+                -X github.com/reliant-labs/reliant/internal/version.Branch=${BRANCH} \
+                -X github.com/reliant-labs/reliant/internal/version.CommitTime=${COMMIT_TIME}" \
       -o /reliant ./cmd/reliant/
 
 # ── Runtime ──────────────────────────────────────────────────────────────────

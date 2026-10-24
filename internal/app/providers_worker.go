@@ -19,6 +19,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/chat"
 	"github.com/reliant-labs/reliant/internal/handlers/run"
 	"github.com/reliant-labs/reliant/internal/handlers/trigger"
+	"github.com/reliant-labs/reliant/internal/hosteduse"
 	"github.com/reliant-labs/reliant/internal/integrations/catalog"
 	"github.com/reliant-labs/reliant/internal/integrations/catalogindex"
 	"github.com/reliant-labs/reliant/internal/integrations/connauth"
@@ -44,6 +45,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/workersetup"
 	v2workflow "github.com/reliant-labs/reliant/internal/workflow"
 	"github.com/reliant-labs/reliant/internal/workflow/capacitywake"
+	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/handlers"
 	scenariorunner "github.com/reliant-labs/reliant/internal/workflow/scenario/runner"
 	"github.com/reliant-labs/reliant/internal/worktreesweep"
 	"github.com/reliant-labs/reliant/pkg/config"
@@ -447,8 +449,10 @@ func NewWorkerToolsFactory(d WorkerToolsFactoryDeps) (*WorkerToolsFactory, error
 		RunStarter:   d.AgentRuns,
 		RunLifecycle: d.AgentRuns,
 		RunMessenger: d.AgentRuns,
-		// list_triggers executes here too.
-		TriggerLister: triggertools.New(d.Triggers.Service),
+		// Trigger tools execute here through the owner-authorized service.
+		TriggerLister:      triggertools.New(d.Triggers.Service),
+		TriggerFirer:       triggertools.New(d.Triggers.Service),
+		TriggerEventLister: triggertools.New(d.Triggers.Service),
 		// http__request executes here, inside the ExecuteTools activity, and
 		// resolves its `connection` for the run's owner through the same
 		// source the action node uses: saved connections, plus GitHub tokens
@@ -562,6 +566,20 @@ type TemporalWorkerDeps struct {
 //forge:root-only worker
 func NewTemporalWorker(d TemporalWorkerDeps) (*workersetup.Worker, error) {
 	creds := d.Credentials.Source
+	// Hosted actions have a separate fixed-node execution path. They are never
+	// installed in WorkerIntegrationCredentials or the tool factory.
+	cp := ControlPlaneEndpoint(d.ControlPlane)
+	var hostedActions handlers.HostedActionExecutor
+	if cp.URL != "" && cp.InternalServiceSecret != "" {
+		client, err := hosteduse.NewInstrumented(hosteduse.Deps{
+			Store: d.DB, BaseURL: cp.URL,
+			Sign: func() (string, error) { return auth.SignInternalServiceToken(cp.InternalServiceSecret) },
+		})
+		if err != nil {
+			return nil, fmt.Errorf("hosted HTTP execution: %w", err)
+		}
+		hostedActions = client
+	}
 	worker, _, err := workersetup.NewWorker(&workersetup.Config{
 		AccountLimits:          d.Recorder.Recorder,
 		TemporalClient:         d.Temporal.Client,
@@ -574,6 +592,7 @@ func NewTemporalWorker(d TemporalWorkerDeps) (*workersetup.Worker, error) {
 		ConfigProvider:         d.ConfigProvider,
 		TriggerLauncher:        d.Launcher,
 		IntegrationCredentials: creds,
+		HostedActions:          hostedActions,
 		WriteLedger:            d.WriteLedger,
 		TriggerPollers:         d.Pollers,
 		TriggerCredentials:     triggerCredentials(creds),

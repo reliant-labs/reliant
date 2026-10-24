@@ -13,7 +13,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file forge/v1/forge.proto.
  */
 export const file_forge_v1_forge: GenFile = /*@__PURE__*/
-  fileDesc("ChRmb3JnZS92MS9mb3JnZS5wcm90bxIIZm9yZ2UudjEigAEKDUVudGl0eU9wdGlvbnMSDQoFdGFibGUYASABKAkSEwoLc29mdF9kZWxldGUYAiABKAgSEgoKdGltZXN0YW1wcxgDIAEoCBIjCgdpbmRleGVzGAQgAygLMhIuZm9yZ2UudjEuSW5kZXhEZWYSEgoKbWlkZGxld2FyZRgFIAMoCSI4CghJbmRleERlZhIMCgRuYW1lGAEgASgJEg4KBmZpZWxkcxgCIAMoCRIOCgZ1bmlxdWUYAyABKAgizQEKDEZpZWxkT3B0aW9ucxIKCgJwaxgBIAEoCBIgCgVzdG9yZRgDIAEoDjIRLmZvcmdlLnYxLlN0b3JlQXMSCwoDcmVmGAQgASgJEg4KBnVuaXF1ZRgFIAEoCBINCgVpbmRleBgGIAEoCBIVCg1kZWZhdWx0X3ZhbHVlGAcgASgJEgwKBHNraXAYCCABKAgSKwoIdmFsaWRhdGUYCSABKAsyGS5mb3JnZS52MS5WYWxpZGF0aW9uUnVsZXMSEQoJaW1tdXRhYmxlGAogASgIIq4BCg9WYWxpZGF0aW9uUnVsZXMSEAoIcmVxdWlyZWQYASABKAgSEgoKbWluX2xlbmd0aBgCIAEoBRISCgptYXhfbGVuZ3RoGAMgASgFEg8KB3BhdHRlcm4YBCABKAkSDgoGZm9ybWF0GAUgASgJEgsKA21pbhgGIAEoARILCgNtYXgYByABKAESFgoOYWxsb3dlZF92YWx1ZXMYCCADKAkSDgoGY3VzdG9tGAkgASgJIsEBCg5TZXJ2aWNlT3B0aW9ucxIMCgRuYW1lGAEgASgJEg8KB3ZlcnNpb24YAiABKAkSEwoLZGVzY3JpcHRpb24YAyABKAkSLwoKdmlzaWJpbGl0eRgEIAEoDjIbLmZvcmdlLnYxLlNlcnZpY2VWaXNpYmlsaXR5EhQKDGRlcGVuZGVuY2llcxgFIAMoCRIiCgRhdXRoGAYgASgLMhQuZm9yZ2UudjEuQXV0aENvbmZpZxIQCghhdWRpZW5jZRgHIAEoCSI6CgpBdXRoQ29uZmlnEhUKDWF1dGhfcmVxdWlyZWQYASABKAgSFQoNYXV0aF9wcm92aWRlchgCIAEoCSLTAQoNTWV0aG9kT3B0aW9ucxIaCg1hdXRoX3JlcXVpcmVkGAEgASgISACIAQESEgoKaWRlbXBvdGVudBgDIAEoCBIqCgd0aW1lb3V0GAQgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uEhcKD2lkZW1wb3RlbmN5X2tleRgFIAEoCBIOCgZlcnJvcnMYBiADKAkSKwoIYWN0aXZpdHkYByABKAsyGS5mb3JnZS52MS5BY3Rpdml0eU9wdGlvbnNCEAoOX2F1dGhfcmVxdWlyZWQirQEKD0FjdGl2aXR5T3B0aW9ucxIMCgR2ZXJiGAEgASgJEigKBnRhcmdldBgCIAEoCzIYLmZvcmdlLnYxLkFjdGl2aXR5VGFyZ2V0EgsKA2VudhgDIAEoCRINCgVzY29wZRgEIAEoCRIOCgZkZXRhaWwYBSADKAkSKAoGd3JpdGVyGAYgASgOMhguZm9yZ2UudjEuQWN0aXZpdHlXcml0ZXISDAoEbm9uZRgHIAEoCSI5Cg5BY3Rpdml0eVRhcmdldBIMCgRraW5kGAEgASgJEgoKAmlkGAIgASgJEg0KBWxhYmVsGAMgASgJIsECChJDb25maWdGaWVsZE9wdGlvbnMSDwoHZW52X3ZhchgBIAEoCRIMCgRmbGFnGAIgASgJEhUKDWRlZmF1bHRfdmFsdWUYAyABKAkSEAoIcmVxdWlyZWQYBCABKAgSEwoLZGVzY3JpcHRpb24YBSABKAkSEQoJc2Vuc2l0aXZlGAYgASgIEhAKCGNhdGVnb3J5GAcgASgJEicKBHJvbGUYCCABKA4yGS5mb3JnZS52MS5Db25maWdGaWVsZFJvbGUSFgoOYWxsb3dlZF92YWx1ZXMYCSADKAkSEAoIb3B0aW9uYWwYCiABKAgSLgoPZW52X3Zhcl9hbGlhc2VzGAsgAygLMhUuZm9yZ2UudjEuRW52VmFyQWxpYXMSEgoKZW52X3ByZWZpeBgMIAEoCRISCgplbnZfc3VmZml4GA0gASgJIpEBCgtFbnZWYXJBbGlhcxIMCgRuYW1lGAEgASgJEhIKCmRlcHJlY2F0ZWQYAiABKAgSMQoGdmFsdWVzGAMgAygLMiEuZm9yZ2UudjEuRW52VmFyQWxpYXMuVmFsdWVzRW50cnkaLQoLVmFsdWVzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASJfChNCaW5hcnlDb25maWdPcHRpb25zEg4KBmJpbmFyeRgBIAEoCRIPCgdjb21tYW5kGAIgAygJEicKCHN1YnRyZWVzGAMgAygLMhUuZm9yZ2UudjEuQ29tbWFuZFBhdGgiGwoLQ29tbWFuZFBhdGgSDAoEcGF0aBgBIAMoCSIpChVGcm9udGVuZENvbmZpZ09wdGlvbnMSEAoIZnJvbnRlbmQYASABKAkqcQoHU3RvcmVBcxIYChRTVE9SRV9BU19VTlNQRUNJRklFRBAAEhIKDlNUT1JFX0FTX0pTT05CEAESEQoNU1RPUkVfQVNfVEVYVBACEhEKDVNUT1JFX0FTX0JMT0IQAxISCg5TVE9SRV9BU19UQUJMRRAEKnQKEVNlcnZpY2VWaXNpYmlsaXR5EiIKHlNFUlZJQ0VfVklTSUJJTElUWV9VTlNQRUNJRklFRBAAEhoKFlNFUlZJQ0VfVklTSUJJTElUWV9BUEkQARIfChtTRVJWSUNFX1ZJU0lCSUxJVFlfSU5URVJOQUwQAipvCg5BY3Rpdml0eVdyaXRlchIfChtBQ1RJVklUWV9XUklURVJfVU5TUEVDSUZJRUQQABIfChtBQ1RJVklUWV9XUklURVJfSU5URVJDRVBUT1IQARIbChdBQ1RJVklUWV9XUklURVJfSEFORExFUhACKuEBCg9Db25maWdGaWVsZFJvbGUSIQodQ09ORklHX0ZJRUxEX1JPTEVfVU5TUEVDSUZJRUQQABIaChZDT05GSUdfRklFTERfUk9MRV9NT0RFEAESHgoaQ09ORklHX0ZJRUxEX1JPTEVfVExTX0NFUlQQAhIdChlDT05GSUdfRklFTERfUk9MRV9UTFNfS0VZEAMSIgoeQ09ORklHX0ZJRUxEX1JPTEVfQ09SU19PUklHSU5TEAQSLAooQ09ORklHX0ZJRUxEX1JPTEVfQ09SU19BTExPV19DUkVERU5USUFMUxAFOlIKBmVudGl0eRIfLmdvb2dsZS5wcm90b2J1Zi5NZXNzYWdlT3B0aW9ucxiYiAMgASgLMhcuZm9yZ2UudjEuRW50aXR5T3B0aW9uc1IGZW50aXR5OmUKDWJpbmFyeV9jb25maWcSHy5nb29nbGUucHJvdG9idWYuTWVzc2FnZU9wdGlvbnMYmYgDIAEoCzIdLmZvcmdlLnYxLkJpbmFyeUNvbmZpZ09wdGlvbnNSDGJpbmFyeUNvbmZpZzprCg9mcm9udGVuZF9jb25maWcSHy5nb29nbGUucHJvdG9idWYuTWVzc2FnZU9wdGlvbnMYmogDIAEoCzIfLmZvcmdlLnYxLkZyb250ZW5kQ29uZmlnT3B0aW9uc1IOZnJvbnRlbmRDb25maWc6TQoFZmllbGQSHS5nb29nbGUucHJvdG9idWYuRmllbGRPcHRpb25zGPyIAyABKAsyFi5mb3JnZS52MS5GaWVsZE9wdGlvbnNSBWZpZWxkOlUKBmNvbmZpZxIdLmdvb2dsZS5wcm90b2J1Zi5GaWVsZE9wdGlvbnMY4IkDIAEoCzIcLmZvcmdlLnYxLkNvbmZpZ0ZpZWxkT3B0aW9uc1IGY29uZmlnOlUKB3NlcnZpY2USHy5nb29nbGUucHJvdG9idWYuU2VydmljZU9wdGlvbnMY0IYDIAEoCzIYLmZvcmdlLnYxLlNlcnZpY2VPcHRpb25zUgdzZXJ2aWNlOlEKBm1ldGhvZBIeLmdvb2dsZS5wcm90b2J1Zi5NZXRob2RPcHRpb25zGLSHAyABKAsyFy5mb3JnZS52MS5NZXRob2RPcHRpb25zUgZtZXRob2RCM1oxZ2l0aHViLmNvbS9yZWxpYW50LWxhYnMvZm9yZ2UvcGtnL2ZvcmdlcGI7Zm9yZ2VwYmIGcHJvdG8z", [file_google_protobuf_descriptor, file_google_protobuf_duration]);
+  fileDesc("ChRmb3JnZS92MS9mb3JnZS5wcm90bxIIZm9yZ2UudjEigAEKDUVudGl0eU9wdGlvbnMSDQoFdGFibGUYASABKAkSEwoLc29mdF9kZWxldGUYAiABKAgSEgoKdGltZXN0YW1wcxgDIAEoCBIjCgdpbmRleGVzGAQgAygLMhIuZm9yZ2UudjEuSW5kZXhEZWYSEgoKbWlkZGxld2FyZRgFIAMoCSI4CghJbmRleERlZhIMCgRuYW1lGAEgASgJEg4KBmZpZWxkcxgCIAMoCRIOCgZ1bmlxdWUYAyABKAgizQEKDEZpZWxkT3B0aW9ucxIKCgJwaxgBIAEoCBIgCgVzdG9yZRgDIAEoDjIRLmZvcmdlLnYxLlN0b3JlQXMSCwoDcmVmGAQgASgJEg4KBnVuaXF1ZRgFIAEoCBINCgVpbmRleBgGIAEoCBIVCg1kZWZhdWx0X3ZhbHVlGAcgASgJEgwKBHNraXAYCCABKAgSKwoIdmFsaWRhdGUYCSABKAsyGS5mb3JnZS52MS5WYWxpZGF0aW9uUnVsZXMSEQoJaW1tdXRhYmxlGAogASgIIq4BCg9WYWxpZGF0aW9uUnVsZXMSEAoIcmVxdWlyZWQYASABKAgSEgoKbWluX2xlbmd0aBgCIAEoBRISCgptYXhfbGVuZ3RoGAMgASgFEg8KB3BhdHRlcm4YBCABKAkSDgoGZm9ybWF0GAUgASgJEgsKA21pbhgGIAEoARILCgNtYXgYByABKAESFgoOYWxsb3dlZF92YWx1ZXMYCCADKAkSDgoGY3VzdG9tGAkgASgJIsEBCg5TZXJ2aWNlT3B0aW9ucxIMCgRuYW1lGAEgASgJEg8KB3ZlcnNpb24YAiABKAkSEwoLZGVzY3JpcHRpb24YAyABKAkSLwoKdmlzaWJpbGl0eRgEIAEoDjIbLmZvcmdlLnYxLlNlcnZpY2VWaXNpYmlsaXR5EhQKDGRlcGVuZGVuY2llcxgFIAMoCRIiCgRhdXRoGAYgASgLMhQuZm9yZ2UudjEuQXV0aENvbmZpZxIQCghhdWRpZW5jZRgHIAEoCSI6CgpBdXRoQ29uZmlnEhUKDWF1dGhfcmVxdWlyZWQYASABKAgSFQoNYXV0aF9wcm92aWRlchgCIAEoCSLTAQoNTWV0aG9kT3B0aW9ucxIaCg1hdXRoX3JlcXVpcmVkGAEgASgISACIAQESEgoKaWRlbXBvdGVudBgDIAEoCBIqCgd0aW1lb3V0GAQgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uEhcKD2lkZW1wb3RlbmN5X2tleRgFIAEoCBIOCgZlcnJvcnMYBiADKAkSKwoIYWN0aXZpdHkYByABKAsyGS5mb3JnZS52MS5BY3Rpdml0eU9wdGlvbnNCEAoOX2F1dGhfcmVxdWlyZWQirQEKD0FjdGl2aXR5T3B0aW9ucxIMCgR2ZXJiGAEgASgJEigKBnRhcmdldBgCIAEoCzIYLmZvcmdlLnYxLkFjdGl2aXR5VGFyZ2V0EgsKA2VudhgDIAEoCRINCgVzY29wZRgEIAEoCRIOCgZkZXRhaWwYBSADKAkSKAoGd3JpdGVyGAYgASgOMhguZm9yZ2UudjEuQWN0aXZpdHlXcml0ZXISDAoEbm9uZRgHIAEoCSI5Cg5BY3Rpdml0eVRhcmdldBIMCgRraW5kGAEgASgJEgoKAmlkGAIgASgJEg0KBWxhYmVsGAMgASgJIvMCChJDb25maWdGaWVsZE9wdGlvbnMSDwoHZW52X3ZhchgBIAEoCRIMCgRmbGFnGAIgASgJEhUKDWRlZmF1bHRfdmFsdWUYAyABKAkSEAoIcmVxdWlyZWQYBCABKAgSEwoLZGVzY3JpcHRpb24YBSABKAkSEQoJc2Vuc2l0aXZlGAYgASgIEhAKCGNhdGVnb3J5GAcgASgJEicKBHJvbGUYCCABKA4yGS5mb3JnZS52MS5Db25maWdGaWVsZFJvbGUSFgoOYWxsb3dlZF92YWx1ZXMYCSADKAkSEAoIb3B0aW9uYWwYCiABKAgSLgoPZW52X3Zhcl9hbGlhc2VzGAsgAygLMhUuZm9yZ2UudjEuRW52VmFyQWxpYXMSEgoKZW52X3ByZWZpeBgMIAEoCRISCgplbnZfc3VmZml4GA0gASgJEjAKDXJlcXVpcmVkX3doZW4YDiADKAsyGS5mb3JnZS52MS5Db25maWdDb25kaXRpb24iMAoPQ29uZmlnQ29uZGl0aW9uEg0KBWZpZWxkGAEgASgJEg4KBmVxdWFscxgCIAEoCSKRAQoLRW52VmFyQWxpYXMSDAoEbmFtZRgBIAEoCRISCgpkZXByZWNhdGVkGAIgASgIEjEKBnZhbHVlcxgDIAMoCzIhLmZvcmdlLnYxLkVudlZhckFsaWFzLlZhbHVlc0VudHJ5Gi0KC1ZhbHVlc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiXwoTQmluYXJ5Q29uZmlnT3B0aW9ucxIOCgZiaW5hcnkYASABKAkSDwoHY29tbWFuZBgCIAMoCRInCghzdWJ0cmVlcxgDIAMoCzIVLmZvcmdlLnYxLkNvbW1hbmRQYXRoIhsKC0NvbW1hbmRQYXRoEgwKBHBhdGgYASADKAkiKQoVRnJvbnRlbmRDb25maWdPcHRpb25zEhAKCGZyb250ZW5kGAEgASgJKnEKB1N0b3JlQXMSGAoUU1RPUkVfQVNfVU5TUEVDSUZJRUQQABISCg5TVE9SRV9BU19KU09OQhABEhEKDVNUT1JFX0FTX1RFWFQQAhIRCg1TVE9SRV9BU19CTE9CEAMSEgoOU1RPUkVfQVNfVEFCTEUQBCp0ChFTZXJ2aWNlVmlzaWJpbGl0eRIiCh5TRVJWSUNFX1ZJU0lCSUxJVFlfVU5TUEVDSUZJRUQQABIaChZTRVJWSUNFX1ZJU0lCSUxJVFlfQVBJEAESHwobU0VSVklDRV9WSVNJQklMSVRZX0lOVEVSTkFMEAIqbwoOQWN0aXZpdHlXcml0ZXISHwobQUNUSVZJVFlfV1JJVEVSX1VOU1BFQ0lGSUVEEAASHwobQUNUSVZJVFlfV1JJVEVSX0lOVEVSQ0VQVE9SEAESGwoXQUNUSVZJVFlfV1JJVEVSX0hBTkRMRVIQAirhAQoPQ29uZmlnRmllbGRSb2xlEiEKHUNPTkZJR19GSUVMRF9ST0xFX1VOU1BFQ0lGSUVEEAASGgoWQ09ORklHX0ZJRUxEX1JPTEVfTU9ERRABEh4KGkNPTkZJR19GSUVMRF9ST0xFX1RMU19DRVJUEAISHQoZQ09ORklHX0ZJRUxEX1JPTEVfVExTX0tFWRADEiIKHkNPTkZJR19GSUVMRF9ST0xFX0NPUlNfT1JJR0lOUxAEEiwKKENPTkZJR19GSUVMRF9ST0xFX0NPUlNfQUxMT1dfQ1JFREVOVElBTFMQBTpSCgZlbnRpdHkSHy5nb29nbGUucHJvdG9idWYuTWVzc2FnZU9wdGlvbnMYmIgDIAEoCzIXLmZvcmdlLnYxLkVudGl0eU9wdGlvbnNSBmVudGl0eTplCg1iaW5hcnlfY29uZmlnEh8uZ29vZ2xlLnByb3RvYnVmLk1lc3NhZ2VPcHRpb25zGJmIAyABKAsyHS5mb3JnZS52MS5CaW5hcnlDb25maWdPcHRpb25zUgxiaW5hcnlDb25maWc6awoPZnJvbnRlbmRfY29uZmlnEh8uZ29vZ2xlLnByb3RvYnVmLk1lc3NhZ2VPcHRpb25zGJqIAyABKAsyHy5mb3JnZS52MS5Gcm9udGVuZENvbmZpZ09wdGlvbnNSDmZyb250ZW5kQ29uZmlnOk0KBWZpZWxkEh0uZ29vZ2xlLnByb3RvYnVmLkZpZWxkT3B0aW9ucxj8iAMgASgLMhYuZm9yZ2UudjEuRmllbGRPcHRpb25zUgVmaWVsZDpVCgZjb25maWcSHS5nb29nbGUucHJvdG9idWYuRmllbGRPcHRpb25zGOCJAyABKAsyHC5mb3JnZS52MS5Db25maWdGaWVsZE9wdGlvbnNSBmNvbmZpZzpVCgdzZXJ2aWNlEh8uZ29vZ2xlLnByb3RvYnVmLlNlcnZpY2VPcHRpb25zGNCGAyABKAsyGC5mb3JnZS52MS5TZXJ2aWNlT3B0aW9uc1IHc2VydmljZTpRCgZtZXRob2QSHi5nb29nbGUucHJvdG9idWYuTWV0aG9kT3B0aW9ucxi0hwMgASgLMhcuZm9yZ2UudjEuTWV0aG9kT3B0aW9uc1IGbWV0aG9kQjNaMWdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL2ZvcmdlL3BrZy9mb3JnZXBiO2ZvcmdlcGJiBnByb3RvMw", [file_google_protobuf_descriptor, file_google_protobuf_duration]);
 
 /**
  * EntityOptions defines how a protobuf message maps to a database table.
@@ -821,6 +821,42 @@ export type ConfigFieldOptions = Message<"forge.v1.ConfigFieldOptions"> & {
    * @generated from field: string env_suffix = 13;
    */
   envSuffix: string;
+
+  /**
+   * RequiredWhen makes the field required in a MODE of the config: when any
+   * listed condition holds, the runtime config document must carry a
+   * non-empty value for this field. The field's default does not satisfy
+   * it — the condition names a mode the default is wrong for (a managed
+   * deployment, where the default is a self-hosted value), or the field
+   * would not need the condition.
+   *
+   *   string hosting = 6 [(forge.v1.config) = {
+   *     env_var: "HOSTING", allowed_values: ["cloud"]
+   *   }];
+   *   string api_url = 1 [(forge.v1.config) = {
+   *     env_var: "API_URL"
+   *     required_when: [{field: "hosting", equals: "cloud"}]
+   *   }];
+   *
+   * It is for a (forge.v1.frontend_config) message, whose values arrive in
+   * one document (config.js) that every check can see whole:
+   *   - the generated config_gen.ts refuses the document at boot
+   *     (loadConfig, and missingRequiredConfig for an app that renders its
+   *     own message), naming each missing key and the condition;
+   *   - config_schema_gen.json records it, so a project declaring the
+   *     frontend's environments from ANOTHER repository refuses a
+   *     runtime_config without the key at render, instead of shipping an
+   *     app that boots in the wrong mode;
+   *   - the frontend's typed KCL schema checks it for an in-tree frontend.
+   * `forge generate` refuses it on a binary config (the loader there layers
+   * defaults, files, env and flags, and has no single document to judge),
+   * with `required: true` (redundant), and with a condition naming a field
+   * that is not a sibling string field or a value outside its
+   * allowed_values.
+   *
+   * @generated from field: repeated forge.v1.ConfigCondition required_when = 14;
+   */
+  requiredWhen: ConfigCondition[];
 };
 
 /**
@@ -829,6 +865,38 @@ export type ConfigFieldOptions = Message<"forge.v1.ConfigFieldOptions"> & {
  */
 export const ConfigFieldOptionsSchema: GenMessage<ConfigFieldOptions> = /*@__PURE__*/
   messageDesc(file_forge_v1_forge, 9);
+
+/**
+ * ConfigCondition is a predicate over another field of the same config
+ * message, by its runtime value (see ConfigFieldOptions.required_when).
+ *
+ * @generated from message forge.v1.ConfigCondition
+ */
+export type ConfigCondition = Message<"forge.v1.ConfigCondition"> & {
+  /**
+   * Field is the PROTO name of a sibling string field ("hosting"), not its
+   * env_var: the condition is part of the message, and a rename of the
+   * field's env spelling must not silently detach it.
+   *
+   * @generated from field: string field = 1;
+   */
+  field: string;
+
+  /**
+   * Equals is the value that field must hold for the condition to be true.
+   * When the field declares allowed_values it must be one of them.
+   *
+   * @generated from field: string equals = 2;
+   */
+  equals: string;
+};
+
+/**
+ * Describes the message forge.v1.ConfigCondition.
+ * Use `create(ConfigConditionSchema)` to create a new message.
+ */
+export const ConfigConditionSchema: GenMessage<ConfigCondition> = /*@__PURE__*/
+  messageDesc(file_forge_v1_forge, 10);
 
 /**
  * EnvVarAlias is one fallback environment variable of a config field. See
@@ -888,7 +956,7 @@ export type EnvVarAlias = Message<"forge.v1.EnvVarAlias"> & {
  * Use `create(EnvVarAliasSchema)` to create a new message.
  */
 export const EnvVarAliasSchema: GenMessage<EnvVarAlias> = /*@__PURE__*/
-  messageDesc(file_forge_v1_forge, 10);
+  messageDesc(file_forge_v1_forge, 11);
 
 /**
  * BinaryConfigOptions binds a config message to the BINARY that loads it,
@@ -1009,7 +1077,7 @@ export type BinaryConfigOptions = Message<"forge.v1.BinaryConfigOptions"> & {
  * Use `create(BinaryConfigOptionsSchema)` to create a new message.
  */
 export const BinaryConfigOptionsSchema: GenMessage<BinaryConfigOptions> = /*@__PURE__*/
-  messageDesc(file_forge_v1_forge, 11);
+  messageDesc(file_forge_v1_forge, 12);
 
 /**
  * CommandPath is one cobra command path below a binary's root, one command
@@ -1029,7 +1097,7 @@ export type CommandPath = Message<"forge.v1.CommandPath"> & {
  * Use `create(CommandPathSchema)` to create a new message.
  */
 export const CommandPathSchema: GenMessage<CommandPath> = /*@__PURE__*/
-  messageDesc(file_forge_v1_forge, 12);
+  messageDesc(file_forge_v1_forge, 13);
 
 /**
  * FrontendConfigOptions binds a config message to the FRONTEND that loads
@@ -1086,7 +1154,7 @@ export type FrontendConfigOptions = Message<"forge.v1.FrontendConfigOptions"> & 
  * Use `create(FrontendConfigOptionsSchema)` to create a new message.
  */
 export const FrontendConfigOptionsSchema: GenMessage<FrontendConfigOptions> = /*@__PURE__*/
-  messageDesc(file_forge_v1_forge, 13);
+  messageDesc(file_forge_v1_forge, 14);
 
 /**
  * StoreAs controls how complex or non-scalar protobuf types are persisted

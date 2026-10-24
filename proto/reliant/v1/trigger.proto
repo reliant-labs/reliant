@@ -675,6 +675,12 @@ message TriggerEvent {
   // recorded without one (a start a person made themselves, or one recorded
   // before senders were).
   optional TriggerSender sender = 10;
+
+  // Read-only: the asynchronous firing workflow identifier for this event.
+  // Match FireTriggerResponse.fire_workflow_id to find its outcome and chat_id.
+  // Empty for ad hoc launches. An identifier is not proof a workflow started:
+  // an inbound event may be rejected before its fire is launched.
+  string fire_workflow_id = 11;
 }
 
 // TriggerSender is trigger.sender: who sent the event that fired a trigger,

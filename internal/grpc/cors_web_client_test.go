@@ -40,17 +40,13 @@ const webClientTestOrigin = "https://app.reliantlabs.io"
 // timeout), not by our interceptors, so the source scan cannot see them.
 var connectWebProtocolHeaders = []string{"Content-Type", "Connect-Protocol-Version", "Connect-Timeout-Ms"}
 
-// dynamicRequestHeaders resolves header-name EXPRESSIONS the scanner cannot
-// read as a string literal or a same-file string const. Keyed by
-// "<path under frontends/web/src>:<expression>".
-var dynamicRequestHeaders = map[string][]string{
-	// tracingInterceptor copies whatever the global OTel propagator injects.
-	// Nothing in frontends/web/src installs one, so the HyperDX SDK's provider.register()
-	// leaves the OTel default in place: W3C trace-context plus W3C baggage,
-	// which write exactly these three. requireDefaultPropagator keeps that
-	// assumption honest.
-	"api/transport.ts:key": {"traceparent", "tracestate", "baggage"},
-}
+// traceHeaders are written onto every RPC by the forge web runtime's
+// traceInterceptor and the HyperDX SDK's fetch instrumentation — both inject
+// whatever the global OTel propagator writes (injectTraceContext), which is
+// W3C trace-context plus W3C baggage while nothing installs its own. They live
+// in node_modules, not in frontends/web/src, so the source scan cannot see them.
+// requireDefaultPropagator keeps that assumption honest.
+var traceHeaders = []string{"traceparent", "tracestate", "baggage"}
 
 var (
 	// req.header.set("x-foo", …) / header.append(NAME, …) — the Connect
@@ -67,7 +63,7 @@ func TestCORSAllowsEveryWebClientRequestHeader(t *testing.T) {
 	webSrc := webSourceDir(t)
 	requireDefaultPropagator(t, webSrc)
 
-	sent := scanWebHeaderNames(t, webSrc, requestHeaderSetRe, dynamicRequestHeaders)
+	sent := scanWebHeaderNames(t, webSrc, requestHeaderSetRe, nil)
 	// Guard the scanner itself: a regex that silently matches nothing would
 	// make this test pass vacuously.
 	if _, ok := sent["authorization"]; !ok {
@@ -75,6 +71,9 @@ func TestCORSAllowsEveryWebClientRequestHeader(t *testing.T) {
 	}
 	for _, h := range connectWebProtocolHeaders {
 		sent[strings.ToLower(h)] = append(sent[strings.ToLower(h)], "@connectrpc/connect-web")
+	}
+	for _, h := range traceHeaders {
+		sent[h] = append(sent[h], "@reliantlabs/forge-web-runtime traceInterceptor")
 	}
 
 	handler := newCORSHandler([]string{webClientTestOrigin})(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
@@ -217,11 +216,11 @@ func resolveHeaderName(fileText, expr string) ([]string, bool) {
 	return nil, false
 }
 
-// requireDefaultPropagator pins the assumption behind
-// dynamicRequestHeaders["api/transport.ts:key"]: frontends/web/src never installs its own
-// propagator, so the SDK's default (W3C trace-context and baggage) is the one
-// that injects headers. A custom or composite propagator added here would
-// inject headers this test does not know to check.
+// requireDefaultPropagator pins the assumption behind traceHeaders:
+// frontends/web/src never installs its own propagator, so the SDK's default
+// (W3C trace-context and baggage) is the one that injects headers. A custom or
+// composite propagator added here would inject headers this test does not know
+// to check.
 func requireDefaultPropagator(t *testing.T, webSrc string) {
 	t.Helper()
 	var installs []string
@@ -253,7 +252,7 @@ func requireDefaultPropagator(t *testing.T, webSrc string) {
 		t.Fatalf("scanning frontends/web/src for propagators: %v", err)
 	}
 	if len(installs) != 0 {
-		t.Fatalf("%v installs a global propagator; update dynamicRequestHeaders[\"api/transport.ts:key\"] "+
+		t.Fatalf("%v installs a global propagator; update traceHeaders "+
 			"with every header it injects", installs)
 	}
 }

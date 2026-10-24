@@ -90,6 +90,10 @@ type Config struct {
 	// a credential identically. nil refuses every authenticated call.
 	IntegrationCredentials httpaction.CredentialSource
 
+	// HostedActions is fixed-action-only hosted HTTP execution, never a tool
+	// credential source. nil refuses nodes that request hosted_use.
+	HostedActions handlers.HostedActionExecutor
+
 	// ControlPlaneURL is the control plane hosting this deployment, "" when it
 	// is self-hosted (ServerProcessConfig's ControlPlaneConfig). It decides which
 	// addresses a user-supplied model endpoint may resolve to.
@@ -204,6 +208,7 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	}
 
 	activityDeps.Connections = cfg.IntegrationCredentials
+	activityDeps.HostedActions = cfg.HostedActions
 	activityDeps.ControlPlaneURL = cfg.ControlPlaneURL
 	activityDeps.WriteLedger = cfg.WriteLedger
 	activityDeps.AccountRouting = accountRouting(cfg.Database, cfg.AccountLimits)

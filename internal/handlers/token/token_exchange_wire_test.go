@@ -39,7 +39,7 @@ func TestExchangeToken_RefusalsOnTheWire(t *testing.T) {
 			wantReason: errreason.ScopeMissing,
 			wantScopes: "deploy:write,secret:read",
 			wantMessage: "this Reliant credential cannot authorize deploy:write, secret:read: it holds daemon:connect. " +
-				"Sign in again with `reliant auth login` (it asks for deploy, secret and domain permission), " +
+				"Sign in again with `reliant auth login` (it asks for your control-plane permissions), " +
 				"or grant this credential those permissions in Reliant → Settings → Access Tokens",
 		},
 		{

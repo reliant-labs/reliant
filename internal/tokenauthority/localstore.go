@@ -133,7 +133,8 @@ func (s *LocalStore) insert(ctx context.Context, g fat.Grant) (Minted, error) {
 	if err := store.InsertAccessToken(ctx, s.db, t); err != nil {
 		return Minted{}, fmt.Errorf("tokenauthority: storing token: %w", err)
 	}
-	return Minted{TokenID: t.ID, Plaintext: minted.Plaintext, DisplayPrefix: minted.DisplayPrefix, ExpiresAt: g.ExpiresAt}, nil
+	return Minted{TokenID: t.ID, Plaintext: minted.Plaintext, DisplayPrefix: minted.DisplayPrefix,
+		ExpiresAt: g.ExpiresAt, Scopes: g.Scopes.Strings()}, nil
 }
 
 func tokenInfo(r store.AccessTokenRecord) TokenInfo {

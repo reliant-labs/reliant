@@ -53,6 +53,7 @@ func (s *daemonServer) ConnectGateway(
 			Labels:     d.registerLabels(),
 		}},
 	}
+	stampBuildIdentity(register.GetRegister())
 	if err := stream.Send(register); err != nil {
 		d.recordStream(daemonstate.StreamListening, err.Error())
 		return fmt.Errorf("sending registration: %w", err)

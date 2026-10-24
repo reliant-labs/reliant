@@ -7,7 +7,7 @@ import { useState, useEffect, memo } from 'react';
 import { AlertCircle, ChevronDown, ChevronRight, Eye } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { ToolExecution, type ToolResultData } from './ToolExecution';
-import type { ToolApprovalRequest } from '../../api/client';
+import type { Approval } from '../../gen/reliant/v1/approval_pb';
 import { generateReadOnlyToolsSummary } from '../../lib/toolFormatters';
 import { shouldToolBeCollapsed, TOOL_COLLAPSE_SETTINGS_EVENT } from '../Settings/ToolCallSettings';
 import { useSurface } from '../../lib/surfaceContext';
@@ -27,7 +27,7 @@ interface ToolExecutionCollapsibleGroupProps {
   executions: Array<{
     call: ToolCallData;
     result?: ToolResultData;
-    approval?: ToolApprovalRequest;
+    approval?: Approval;
     status?: 'pending' | 'preparing' | 'requested' | 'writing_input' | 'executing' | 'cancelling' | 'cancelled' | 'completed' | 'backgrounded' | 'denied' | 'failed';
     onCancel?: (id: string) => void;
     onConvertToBackground?: (id: string) => void;

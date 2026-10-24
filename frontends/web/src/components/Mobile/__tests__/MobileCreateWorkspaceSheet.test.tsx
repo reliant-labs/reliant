@@ -4,7 +4,9 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { screen, waitFor } from "@testing-library/react";
+import type { ReactElement } from "react";
+import { mockTransport, renderWithTransport } from "@/lib/test-utils";
 import userEvent from "@testing-library/user-event";
 
 const createWorktree = vi.fn();
@@ -27,9 +29,13 @@ vi.mock("../../../store/projectStore", () => ({
 }));
 
 const repos = vi.hoisted(() => ({ current: [{ id: "r1" }] as Array<{ id: string }> }));
-vi.mock("../../../api/repo-grpc", () => ({
-  repoGrpc: { list: () => Promise.resolve({ repos: repos.current }) },
-}));
+
+// RepoService answers through the real transport seam, so the component's
+// generated useListRepos hook is what is under test.
+const render = (ui: ReactElement) =>
+  renderWithTransport(ui, {
+    transport: mockTransport({ "RepoService.ListRepos": () => ({ repos: repos.current }) }),
+  });
 
 const useBranches = vi.fn();
 vi.mock("../../../hooks/useBranches", () => ({
