@@ -7,6 +7,7 @@ package stories
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -14,6 +15,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"syscall"
 	"testing"
 	"time"
 
@@ -312,8 +314,15 @@ func unusedLoopbackPort(t *testing.T) int {
 		}
 		port := ln4.Addr().(*net.TCPAddr).Port
 		ln4.Close()
-		if ln6, err := net.Listen("tcp6", fmt.Sprintf("[::1]:%d", port)); err == nil {
+		ln6, err := net.Listen("tcp6", fmt.Sprintf("[::1]:%d", port))
+		if err == nil {
 			ln6.Close()
+			return port
+		}
+		// A host without an IPv6 loopback (disable_ipv6, no ::1 on lo) has
+		// nothing listening there by construction: the forwarder's ::1 dial
+		// fails the same way for every port.
+		if errors.Is(err, syscall.EADDRNOTAVAIL) || errors.Is(err, syscall.EAFNOSUPPORT) {
 			return port
 		}
 		// Something owns the port on IPv6; try again.
