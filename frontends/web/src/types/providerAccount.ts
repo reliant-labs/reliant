@@ -1,28 +1,15 @@
-// Copyright (c) 2025 Reliant Labs
-
 /**
- * Thin client over `ProviderAccountService`: the LLM accounts a user has
- * connected (several per provider), their derived status, and their usage.
- *
- * Proto messages become plain frontend types here, so components never touch
- * `$typeName`, bigint or proto enums.
+ * The LLM accounts a user has connected (several per provider), their derived
+ * status and their usage — ProviderAccountService's messages as plain
+ * frontend values, so components never touch `$typeName`, bigint or proto
+ * enums. hooks/provider-account-queries.ts reads and writes them.
  */
 
-import { create } from "@bufbuild/protobuf";
-import { Code, ConnectError, createClient } from "@connectrpc/connect";
+import { Code, ConnectError } from "@connectrpc/connect";
 
-import { getTransport } from "./grpc-client";
 import {
-  AddProviderAPIKeyRequestSchema,
-  DeleteProviderAccountRequestSchema,
-  GetChatProviderAccountRequestSchema,
-  ListProviderAccountsRequestSchema,
-  ProviderAccountService,
   ProviderAccountStatus,
   ProviderAuthKind,
-  RefreshProviderAccountUsageRequestSchema,
-  ReorderProviderAccountsRequestSchema,
-  UpdateProviderAccountRequestSchema,
   UsageSource,
   type ProviderAccount as ProtoProviderAccount,
   type UsageWindow as ProtoUsageWindow,
@@ -127,8 +114,6 @@ export function accountFromProto(a: ProtoProviderAccount): ProviderAccount {
   };
 }
 
-const client = () => createClient(ProviderAccountService, getTransport());
-
 /**
  * True when the server does not serve the account RPCs — a build that predates
  * them (a bare HTTP 404 or a handler answering Unimplemented, which is what
@@ -138,58 +123,3 @@ const client = () => createClient(ProviderAccountService, getTransport());
 export function isProviderAccountsUnavailable(error: unknown): boolean {
   return error instanceof ConnectError && error.code === Code.Unimplemented;
 }
-
-export const providerAccountGrpc = {
-  async listAccounts(): Promise<ProviderAccount[]> {
-    const res = await client().listProviderAccounts(create(ListProviderAccountsRequestSchema, {}));
-    return res.accounts.map(accountFromProto);
-  },
-
-  async updateAccount(
-    accountId: string,
-    patch: { label?: string; paused?: boolean },
-  ): Promise<ProviderAccount | null> {
-    const res = await client().updateProviderAccount(
-      create(UpdateProviderAccountRequestSchema, { accountId, ...patch }),
-    );
-    return res.account ? accountFromProto(res.account) : null;
-  },
-
-  async reorderAccounts(provider: string, accountIds: string[]): Promise<ProviderAccount[]> {
-    const res = await client().reorderProviderAccounts(
-      create(ReorderProviderAccountsRequestSchema, { provider, accountIds }),
-    );
-    return res.accounts.map(accountFromProto);
-  },
-
-  async deleteAccount(accountId: string): Promise<void> {
-    await client().deleteProviderAccount(create(DeleteProviderAccountRequestSchema, { accountId }));
-  },
-
-  async addApiKey(
-    provider: string,
-    apiKey: string,
-    label?: string,
-  ): Promise<{ account: ProviderAccount | null; created: boolean }> {
-    const res = await client().addProviderAPIKey(
-      create(AddProviderAPIKeyRequestSchema, { provider, apiKey, label }),
-    );
-    return { account: res.account ? accountFromProto(res.account) : null, created: res.created };
-  },
-
-  async refreshUsage(
-    accountId: string,
-  ): Promise<{ account: ProviderAccount | null; throttled: boolean }> {
-    const res = await client().refreshProviderAccountUsage(
-      create(RefreshProviderAccountUsageRequestSchema, { accountId }),
-    );
-    return { account: res.account ? accountFromProto(res.account) : null, throttled: res.throttled };
-  },
-
-  async getChatAccount(chatId: string): Promise<ProviderAccount | null> {
-    const res = await client().getChatProviderAccount(
-      create(GetChatProviderAccountRequestSchema, { chatId }),
-    );
-    return res.account ? accountFromProto(res.account) : null;
-  },
-};

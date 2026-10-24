@@ -92,4 +92,8 @@ message Issue {
   // The row version: send it back as expected_version to update only the state
   // you read.
   int32 version = 26;
+  // The issue source its events carry (a log record's issue.source, forge
+  // observe.IssueSource): a report filed like an error without being one, such
+  // as an agent's bug report ("llm_bug_report"). Empty for an error.
+  string source = 27;
 }

@@ -383,7 +383,14 @@ func TestGitPublish_CredentialIsUsedOnceAndNeverLeaks(t *testing.T) {
 	t.Setenv("GITHUB_TOKEN", "ghp_DAEMON_ENV_TOKEN")
 	t.Setenv("GIT_ASKPASS", "/bin/false")
 
-	before := pubSnapshot(t, os.TempDir(), f.clone, os.Getenv("HOME"))
+	// A temp directory of this test's own: the push and every git it runs put
+	// their temp files under $TMPDIR, so this is the "temp" to search. The
+	// machine's /tmp is shared with every other process on it (128k files on a
+	// busy dev box), and reading it twice took minutes.
+	tmp := t.TempDir()
+	t.Setenv("TMPDIR", tmp)
+
+	before := pubSnapshot(t, tmp, f.clone, os.Getenv("HOME"))
 	req := f.pushReq("autopilot/x", prep.HeadSHA)
 	req.RemoteURL = srv.URL + "/remote.git"
 	res := push(t, req)
@@ -396,7 +403,7 @@ func TestGitPublish_CredentialIsUsedOnceAndNeverLeaks(t *testing.T) {
 	}
 
 	// Nowhere on disk: not the repo's config, not the credential files, not temp.
-	for path, content := range pubSnapshot(t, os.TempDir(), f.clone, os.Getenv("HOME")) {
+	for path, content := range pubSnapshot(t, tmp, f.clone, os.Getenv("HOME")) {
 		if before[path] == content {
 			continue
 		}

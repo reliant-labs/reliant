@@ -8,7 +8,10 @@
 import { act, fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { ProviderAccount, UsageWindow } from "../../../api/provider-account-grpc";
+import type { ProviderAccount, UsageWindow } from "../../../types/providerAccount";
+import { setTransport } from "../../../lib/connect";
+import { mockTransport } from "../../../lib/test-utils";
+import { providerAccountHandlers } from "../../../test/providerAccountTransport";
 import { renderWithQuery } from "../../../test/renderWithQuery";
 import { SurfaceProvider } from "../../../lib/surfaceContext";
 import { useAuthStore } from "../../../store/authStore";
@@ -18,13 +21,6 @@ const mocks = vi.hoisted(() => ({
   getChatAccount: vi.fn(),
 }));
 
-vi.mock("../../../api/provider-account-grpc", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../../../api/provider-account-grpc")>();
-  return {
-    ...actual,
-    providerAccountGrpc: { listAccounts: mocks.listAccounts, getChatAccount: mocks.getChatAccount },
-  };
-});
 vi.mock("../../../lib/settingsPersistence", () => ({ readSetting: vi.fn(), upsertStringSetting: vi.fn() }));
 
 import { AccountUsageChip } from "../AccountUsageChip";
@@ -68,8 +64,12 @@ beforeEach(() => {
   mocks.listAccounts.mockReset();
   mocks.getChatAccount.mockReset();
   useAuthStore.setState({ session: { access_token: "t" } as never });
+  setTransport(mockTransport(providerAccountHandlers(mocks)));
 });
-afterEach(() => useAuthStore.setState({ session: null }));
+afterEach(() => {
+  setTransport(null);
+  useAuthStore.setState({ session: null });
+});
 
 describe("AccountUsageChip", () => {
   it("is absent below 80%", async () => {

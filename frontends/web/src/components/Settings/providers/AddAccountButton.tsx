@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { AlertCircle, Check, Eye, EyeOff, Loader2, Plus } from "lucide-react";
 import { cn } from "../../../lib/utils";
-import type { ProviderAccount } from "../../../api/provider-account-grpc";
+import type { ProviderAccount } from "../../../types/providerAccount";
 import {
   useAntigravityOAuth,
   useClaudeOAuth,

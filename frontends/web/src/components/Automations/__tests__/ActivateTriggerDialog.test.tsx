@@ -8,7 +8,11 @@
  * client is the only mock.
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi, afterEach } from "vitest";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
+import { serviceHandlers } from "@/test/serviceTransport";
+import { queryClient as presetQueryClient } from "@/lib/query-client";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { create } from "@bufbuild/protobuf";
@@ -47,7 +51,6 @@ vi.mock("@/api/grpc-client", () => ({
     catalog: () => ({ searchCatalog, getCatalogEntry }),
     trigger: () => ({ createTrigger, rotateWebhookToken }),
     workflow: () => ({ getWorkflow, listWorkflows }),
-    preset: () => ({ listPresetsForWorkflow, getDefaultPresetsBatch }),
     worktree: () => ({ listWorktrees }),
     daemonRegistry: () => ({ listDaemons }),
     project: () => ({ listProjectDaemons }),
@@ -87,6 +90,7 @@ const webhookDeclared = {
 } as unknown as DeclaredTrigger;
 
 beforeEach(() => {
+  setTransport(mockTransport(serviceHandlers("PresetService", { listPresetsForWorkflow, getDefaultPresetsBatch })));
   createTrigger.mockReset();
   rotateWebhookToken.mockReset();
   getWorkflow.mockReset();
@@ -98,6 +102,13 @@ beforeEach(() => {
   listProjectDaemons.mockResolvedValue({
     projectDaemons: [create(ProjectDaemonSchema, { projectId: "proj-1", daemonId: "daemon-1", installState: ProjectInstallState.INSTALLED })],
   });
+});
+
+afterEach(() => {
+  setTransport(null);
+  // The preset reads are cached in the app's query client; no test may see
+  // another's answers.
+  presetQueryClient.clear();
 });
 
 function render(declared: DeclaredTrigger) {

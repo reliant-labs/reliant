@@ -1,11 +1,12 @@
 /**
  * MobileWorkspacePreferencesPanel renders and writes through the same
- * settings-queries hooks (and ultimately the same `api.settings.updatePreferences`
- * call) desktop WorktreeSettings uses.
+ * settings-queries hooks (and ultimately the same generated UpdatePreferences
+ * mutation) desktop WorktreeSettings uses. SettingsService is answered at the
+ * transport.
  */
 
 import { render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
@@ -18,14 +19,8 @@ const mocks = vi.hoisted(() => ({
   updatePreferences: vi.fn(),
 }));
 
-vi.mock("../../../api/client", () => ({
-  api: {
-    settings: {
-      getPreferences: mocks.getPreferences,
-      updatePreferences: mocks.updatePreferences,
-    },
-  },
-}));
+const { setTransport } = await import("@/lib/connect");
+const { mockTransport } = await import("@/lib/test-utils");
 
 // `usePreferences` is gated on having a session — GetPreferences is an
 // authenticated RPC and must not fire on the signed-out sign-in screen. This
@@ -56,13 +51,20 @@ describe("MobileWorkspacePreferencesPanel", () => {
   beforeEach(() => {
     mocks.getPreferences.mockReset();
     mocks.updatePreferences.mockReset();
+    setTransport(
+      mockTransport({
+        "SettingsService.GetPreferences": () => mocks.getPreferences(),
+        "SettingsService.UpdatePreferences": (req) => mocks.updatePreferences(req),
+      }),
+    );
   });
+  afterEach(() => setTransport(null));
 
   it("renders the same archive-mode options desktop WorktreeSettings exposes", async () => {
     mocks.getPreferences.mockResolvedValue({
-      worktree_archive_mode: "ask_me",
-      worktree_default_delete_branch: false,
-      branch_copy_uncommitted_files_default: false,
+      worktreeArchiveMode: "ask_me",
+      worktreeDefaultDeleteBranch: false,
+      branchCopyUncommittedFilesDefault: false,
     });
     renderPanel();
     expect(await screen.findByText(/ask every time/i)).toBeInTheDocument();
@@ -70,31 +72,31 @@ describe("MobileWorkspacePreferencesPanel", () => {
     expect(screen.getByText(/keep files/i)).toBeInTheDocument();
   });
 
-  it("writes archive mode through the same api.settings.updatePreferences call desktop uses", async () => {
+  it("writes archive mode through the same UpdatePreferences call desktop uses", async () => {
     mocks.getPreferences.mockResolvedValue({
-      worktree_archive_mode: "ask_me",
-      worktree_default_delete_branch: false,
-      branch_copy_uncommitted_files_default: false,
+      worktreeArchiveMode: "ask_me",
+      worktreeDefaultDeleteBranch: false,
+      branchCopyUncommittedFilesDefault: false,
     });
-    mocks.updatePreferences.mockResolvedValue({});
+    mocks.updatePreferences.mockResolvedValue({ success: true });
     const { default: userEvent } = await import("@testing-library/user-event");
     renderPanel();
     await screen.findByText(/ask every time/i);
     await userEvent.setup().click(screen.getByText(/^clean up$/i));
     await waitFor(() =>
       expect(mocks.updatePreferences).toHaveBeenCalledWith(
-        expect.objectContaining({ worktree_archive_mode: "always_cleanup" }),
+        expect.objectContaining({ worktreeArchiveMode: "always_cleanup" }),
       ),
     );
   });
 
   it("reveals the branch toggle only when archive mode is always_cleanup, and writes through updatePreferences", async () => {
     mocks.getPreferences.mockResolvedValue({
-      worktree_archive_mode: "always_cleanup",
-      worktree_default_delete_branch: false,
-      branch_copy_uncommitted_files_default: false,
+      worktreeArchiveMode: "always_cleanup",
+      worktreeDefaultDeleteBranch: false,
+      branchCopyUncommittedFilesDefault: false,
     });
-    mocks.updatePreferences.mockResolvedValue({});
+    mocks.updatePreferences.mockResolvedValue({ success: true });
     const { default: userEvent } = await import("@testing-library/user-event");
     renderPanel();
     // The directory is no longer a preference: the machine decides.
@@ -103,7 +105,7 @@ describe("MobileWorkspacePreferencesPanel", () => {
     await userEvent.setup().click(screen.getByRole("switch", { name: /delete git branch/i }));
     await waitFor(() =>
       expect(mocks.updatePreferences).toHaveBeenCalledWith(
-        expect.objectContaining({ worktree_default_delete_branch: true }),
+        expect.objectContaining({ worktreeDefaultDeleteBranch: true }),
       ),
     );
   });

@@ -260,13 +260,11 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     // Touch the project to update last active
     get().touchProject(project.id);
     
-    // Always load workflows and presets for the project (they are project-scoped)
+    // Always load workflows for the project (they are project-scoped). Presets
+    // need no nudge: their reads are keyed by project (hooks/preset-queries).
     const globalDataStore = useGlobalDataStore.getState();
     globalDataStore.refetchWorkflows(project.id).catch((err) => {
       logger.warn("[ProjectStore] Failed to load workflows for project", { projectId: project.id, error: err });
-    });
-    globalDataStore.refetchPresets(project.id).catch((err) => {
-      logger.warn("[ProjectStore] Failed to load presets for project", { projectId: project.id, error: err });
     });
 
     // Always load chats — even with skipClear (e.g. Electron window-context path)

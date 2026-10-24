@@ -36,7 +36,20 @@ type GoPlan struct {
 	// Packages are the packages to test, as ./relative paths.
 	Packages []string          `json:"packages"`
 	Why      map[string]string `json:"why,omitempty"`
+	// Reach is how far a code change fans out: "all" (every package whose
+	// test binary contains it, the default) or "direct" (the changed
+	// packages and the packages that import one by name: the merge tier).
+	// Deferred are the packages "all" would add, left to the full lane
+	// (the release gate).
+	Reach    string   `json:"reach"`
+	Deferred []string `json:"deferred,omitempty"`
 }
+
+// Reach modes (GoPlan.Reach).
+const (
+	ReachAll    = "all"
+	ReachDirect = "direct"
+)
 
 // WebPlan is the vitest lane: `vitest run <Tests...>`.
 type WebPlan struct {
@@ -159,8 +172,9 @@ func (r *reasons) why(key string) string {
 }
 
 type classifier struct {
-	g  *Graph
-	pl *Plan
+	g         *Graph
+	reachMode string
+	pl        *Plan
 
 	full map[lane][]string
 
@@ -189,13 +203,19 @@ type classifier struct {
 	elecReads []string // why the electron lane runs, from tests naming a changed file
 }
 
-// Classify is the whole decision, as a pure function of the diff and the graph.
-func Classify(changes []Change, g *Graph) *Plan {
+// Classify is the whole decision, as a pure function of the diff and the graph,
+// fanning code changes out to every reverse dependency (ReachAll).
+func Classify(changes []Change, g *Graph) *Plan { return ClassifyReach(changes, g, ReachAll) }
+
+// ClassifyReach is Classify with the Go lane's reach chosen (ReachAll or
+// ReachDirect).
+func ClassifyReach(changes []Change, g *Graph, reachMode string) *Plan {
 	c := &classifier{
-		g:    g,
-		pl:   &Plan{},
-		full: map[lane][]string{},
-		code: newReasons(), embed: newReasons(), testOnly: newReasons(), dbSel: newReasons(),
+		reachMode: reachMode,
+		g:         g,
+		pl:        &Plan{},
+		full:      map[lane][]string{},
+		code:      newReasons(), embed: newReasons(), testOnly: newReasons(), dbSel: newReasons(),
 		web:         newReasons(),
 		docGenDeps:  generatorDeps(g, func(dir string) bool { return strings.HasPrefix(dir+"/", docGenDir) }),
 		hookGenDeps: generatorDeps(g, func(dir string) bool { return slices.Contains(forgeHookGenerators, dir) }),
@@ -536,23 +556,41 @@ func (c *classifier) selectGo() {
 	}
 	gp := &c.pl.Go
 	gp.Why = map[string]string{}
-	sel := map[string]string{}
+	sel, deferred := map[string]string{}, []string{}
 	for _, p := range sortedKeys(g.TestDeps) {
 		if c.testOnly.has(p) {
 			sel[p] = c.testOnly.why(p)
 		} else if r := reach(g.TestDeps[p], c.code, c.embed); r != "" {
-			sel[p] = r
+			if c.reachMode != ReachDirect {
+				sel[p] = r
+			} else if d := reachDirect(p, g.DirectImports[p], c.code, c.embed); d != "" {
+				sel[p] = d
+			} else if c.dbSel.has(p) {
+				sel[p] = c.dbSel.why(p)
+			} else {
+				deferred = append(deferred, p)
+			}
 		} else if c.dbSel.has(p) {
 			sel[p] = c.dbSel.why(p)
 		}
 	}
-	for _, p := range sortedKeys(sel) {
-		rp := "./" + rel(g.Module, p)
+	dot := func(p string) string {
 		if p == g.Module {
-			rp = "."
+			return "."
 		}
+		return "./" + rel(g.Module, p)
+	}
+	for _, p := range sortedKeys(sel) {
+		rp := dot(p)
 		gp.Packages = append(gp.Packages, rp)
 		gp.Why[rp] = sel[p]
+	}
+	gp.Reach = ReachAll
+	if c.reachMode == ReachDirect {
+		gp.Reach = ReachDirect
+		for _, p := range deferred {
+			gp.Deferred = append(gp.Deferred, dot(p))
+		}
 	}
 	gp.LaneFull = laneFull(c.full[laneGo])
 }
@@ -579,6 +617,24 @@ func (c *classifier) selectElectron() {
 func laneFull(rs []string) LaneFull {
 	rs = dedupe(rs)
 	return LaneFull{Full: len(rs) > 0, Reasons: rs}
+}
+
+// reachDirect is reach for ReachDirect: p is itself a changed package, or one
+// of its files or tests imports one by name.
+func reachDirect(p string, imports map[string]bool, sets ...*reasons) string {
+	for _, s := range sets {
+		if s.has(p) {
+			return fmt.Sprintf("changed (%s)", s.why(p))
+		}
+	}
+	for _, s := range sets {
+		for _, q := range s.order {
+			if imports[q] {
+				return fmt.Sprintf("imports %s (%s)", lastTwo(q), s.why(q))
+			}
+		}
+	}
+	return ""
 }
 
 // reach returns why a test binary with these deps contains a changed package,

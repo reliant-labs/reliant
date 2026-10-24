@@ -68,6 +68,7 @@ proceed.`,
 		newTriggerFireCmd(),
 		newTriggerEventsCmd(),
 	)
+	cmd.PersistentFlags().Bool("daemon-session", false, "Use this server's existing signed-in daemon account without widening its permissions")
 	return cmd
 }
 

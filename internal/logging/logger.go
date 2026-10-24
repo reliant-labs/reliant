@@ -134,16 +134,13 @@ func resolveLogFormat(format string, defaultJSON bool) (asJSON, recognised bool)
 
 // install is the one place the process logger is built. Every Setup* variant
 // differs only in where lines are written, so they all come here: the format
-// is chosen once, and the error-class policy, the Sentry and the metrics
-// bridges wrap it the same way whichever format it is (withReporting).
+// is chosen once, and the error-class policy and the metrics bridge wrap it
+// the same way whichever format it is (withReporting).
 //
 // It is also where prod's INFO floor is enforced, so no caller can build a
 // DEBUG logger in prod: GetLogLevel already caps what it returns, and install
 // caps whatever it is handed as well. When either cap refused a DEBUG request
 // it logs one WARN saying so, through the handler it just built.
-//
-// The Sentry handler lazily checks the global reporter, so it's safe to create
-// before Sentry is initialised — it will be a no-op until then.
 func install(output io.Writer, s Settings, level slog.Level, options ...installOption) {
 	var cfg installConfig
 	for _, apply := range options {
@@ -215,15 +212,14 @@ type installConfig struct {
 type installOption func(*installConfig)
 
 // withReporting wraps the line-writing handler with everything that routes on a
-// record's level: the Sentry bridge (ERROR and above) and the dead-end error
-// counter. The error-class policy goes OUTSIDE both, so they see the level the
-// policy decided rather than the one the call site wrote: a logging.Error
-// carrying a user error — the user's machine is offline, their provider
-// subscription is spent — is written at INFO with error_class=user, counted as
-// a user error, and never reaches Sentry. See internal/errclass.
+// record's level: the dead-end error counter. The error-class policy goes
+// OUTSIDE it, so it sees the level the policy decided rather than the one the
+// call site wrote: a logging.Error carrying a user error — the user's machine
+// is offline, their provider subscription is spent — is written at INFO with
+// error_class=user, counted as a user error, and never becomes an issue (the
+// issues worker groups ERROR records). See internal/errclass.
 func withReporting(lines slog.Handler) slog.Handler {
-	var handler slog.Handler = newSentryHandler(lines)
-	handler = newMetricsHandler(handler)
+	handler := newMetricsHandler(lines)
 	return observe.NewErrorClassHandler(handler, observe.WithErrorClassifier(errclass.Library))
 }
 

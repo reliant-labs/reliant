@@ -15,7 +15,9 @@ import userEvent from "@testing-library/user-event";
 import { getInputDefault, getInputUI, type InputDef } from "../../../lib/inputHelpers";
 import type { Param } from "../../../types/workflow";
 
-vi.mock("../../../api/preset-grpc", () => ({ presetGrpc: { listPresets: vi.fn(async () => []) } }));
+vi.mock("../../../hooks/preset-queries", () => ({
+  useProjectPresets: () => ({ presets: [], invalidPresets: [], loading: false, error: null }),
+}));
 vi.mock("../../../store/projectStore", () => ({
   useProjectStore: (selector?: any) => {
     const state = { currentProject: null };

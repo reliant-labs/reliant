@@ -20,7 +20,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/natsutil"
-	"github.com/reliant-labs/reliant/internal/telemetry"
 )
 
 // The server configs (proto/reliant/config/v1 ServerProcessConfig, DatabaseConfig and
@@ -165,18 +164,6 @@ func PreviewSettings(cfg *configv1.PreviewConfig) tools.PreviewSettings {
 // internal/analytics takes.
 func AnalyticsSettings(cfg *configv1.AnalyticsConfig) analytics.Settings {
 	return analytics.Settings{Disabled: cfg.GetDisabled()}
-}
-
-// SentrySettings is the shared SentryConfig in the shape internal/telemetry
-// takes. Events are filed under the deployment environment the deploy states
-// (SENTRY_ENVIRONMENT, else ENVIRONMENT).
-func SentrySettings(cfg *configv1.SentryConfig, obs *configv1.ObservabilityConfig) telemetry.SentryConfig {
-	return telemetry.SentryConfig{
-		Enabled:          cfg.GetEnabled(),
-		DSN:              cfg.GetDsn(),
-		Environment:      obs.GetEnvironment(),
-		TracesSampleRate: cfg.GetTracesSampleRate(),
-	}
 }
 
 // TemporalEndpoint is the shared TemporalConfig: host, port and namespace.

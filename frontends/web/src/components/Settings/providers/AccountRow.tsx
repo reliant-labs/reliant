@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState, type DragEvent, type KeyboardEvent } from "react";
 import { GripVertical, MoreHorizontal } from "lucide-react";
 import { cn } from "../../../lib/utils";
-import type { AccountStatus, ProviderAccount } from "../../../api/provider-account-grpc";
+import type { AccountStatus, ProviderAccount } from "../../../types/providerAccount";
 import { PlanBadge } from "./PlanBadge";
 import { UsageBars } from "./UsageBars";
 import { formatResetsIn, limitedLabel } from "./accountFormat";

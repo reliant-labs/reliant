@@ -4,9 +4,9 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
-	"net/url"
 
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	"github.com/reliant-labs/reliant/internal/agentruns"
@@ -16,6 +16,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/configadapter"
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/controlplane"
+	"github.com/reliant-labs/reliant/internal/controlplane/cptransport"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/egresslimit"
 	"github.com/reliant-labs/reliant/internal/handlers/chat"
@@ -576,28 +577,30 @@ type TemporalWorkerDeps struct {
 	WorkflowTaskPollers int32
 }
 
-// newHostedActions is the worker's hosted HTTP action executor: a separate
+// HostedActions is the worker's hosted HTTP action executor: a separate
 // fixed-node execution path, never installed in WorkerIntegrationCredentials
 // or the tool factory. nil when there is no control plane (each hosted action
 // fails closed with "hosted HTTP execution is not configured").
 //
-// A control-plane URL the client refuses (prod's in-cluster plain-HTTP
-// admin-server URL) is never fatal: refusing to boot over one feature's
-// configuration took the whole worker down in prod. The worker boots with a
-// WARN, and every hosted action then fails with the stated reason
-// (disabledHostedActions), so nothing is silently skipped.
-func newHostedActions(log *slog.Logger, store hosteduse.Store, cp controlplane.Endpoint) handlers.HostedActionExecutor {
+// The control-plane URL obeys cptransport.Check: prod's in-cluster
+// http://admin-server.<ns>.svc.cluster.local URL is accepted, an external
+// plaintext one is refused. A refused URL is never fatal: refusing to boot
+// over one feature's configuration took the whole worker down in prod. The
+// worker boots with a WARN, and every hosted action then fails with the
+// stated reason (disabledHostedActions), so nothing is silently skipped.
+func HostedActions(log *slog.Logger, store hosteduse.Store, cp controlplane.Endpoint) handlers.HostedActionExecutor {
 	if cp.URL == "" || cp.InternalServiceSecret == "" {
 		return nil
 	}
+	secret := cp.InternalServiceSecret
 	client, err := hosteduse.NewInstrumented(hosteduse.Deps{
 		Store: store, BaseURL: cp.URL,
-		Sign: func() (string, error) { return auth.SignInternalServiceToken(cp.InternalServiceSecret) },
+		Sign: func() (string, error) { return auth.SignInternalServiceToken(secret) },
 	})
 	if err != nil {
 		reason := "control-plane URL is refused: " + err.Error()
-		if u, perr := url.Parse(cp.URL); perr == nil && u.Scheme != "https" {
-			reason = "control-plane URL is not HTTPS"
+		if errors.Is(err, cptransport.ErrInsecure) {
+			reason = "control-plane URL is plaintext http to a host outside loopback and the cluster"
 		}
 		log.Warn("hosted HTTP actions are DISABLED on this worker; every hosted action will fail until the control-plane URL is accepted", "reason", reason, "error", err)
 		return disabledHostedActions{reason: reason}
@@ -621,7 +624,7 @@ func (d disabledHostedActions) ExecuteAction(context.Context, string, string, st
 //forge:root-only worker
 func NewTemporalWorker(d TemporalWorkerDeps) (*workersetup.Worker, error) {
 	creds := d.Credentials.Source
-	hostedActions := newHostedActions(slog.Default(), d.DB, ControlPlaneEndpoint(d.ControlPlane))
+	hostedActions := HostedActions(slog.Default(), d.DB, ControlPlaneEndpoint(d.ControlPlane))
 	worker, _, err := workersetup.NewWorker(&workersetup.Config{
 		AccountLimits:          d.Recorder.Recorder,
 		TemporalClient:         d.Temporal.Client,

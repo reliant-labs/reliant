@@ -33,9 +33,12 @@ type listPkg struct {
 	XTestEmbedFiles []string
 	EmbedPatterns   []string
 	Deps            []string
+	Imports         []string
+	TestImports     []string
+	XTestImports    []string
 }
 
-const listFields = "ImportPath,Dir,ForTest,GoFiles,TestGoFiles,XTestGoFiles,IgnoredGoFiles,EmbedFiles,TestEmbedFiles,XTestEmbedFiles,EmbedPatterns,Deps"
+const listFields = "ImportPath,Dir,ForTest,GoFiles,TestGoFiles,XTestGoFiles,IgnoredGoFiles,EmbedFiles,TestEmbedFiles,XTestEmbedFiles,EmbedPatterns,Deps,Imports,TestImports,XTestImports"
 
 func goList(ctx context.Context, root string) ([]listPkg, error) {
 	args := []string{"list", "-e", "-test", "-json=" + listFields, "./..."}
@@ -118,6 +121,10 @@ type Graph struct {
 	// BuildDeps[P] is the same for P itself, for every package (tests or not):
 	// the packages `go build` of P compiles.
 	BuildDeps map[string]map[string]bool
+	// DirectImports[P] is the module packages P's own files, test files and
+	// external test files import by name: one hop, not the closure. The
+	// merge tier's -reach direct selects by it.
+	DirectImports map[string]map[string]bool
 	// Readers[P] is the repo paths P's Go sources name: what its tests may read.
 	Readers map[string][]string
 	// Walkers read every Go file of the module (a tree-wide guard test).
@@ -152,12 +159,23 @@ func buildGraph(root, module string, tracked []string, list []listPkg) *Graph {
 		Readers:   map[string][]string{},
 		Walkers:   map[string]bool{},
 		DBTests:   map[string]bool{},
+
+		DirectImports: map[string]map[string]bool{},
 	}
 	ix := &indexer{g: g, root: root, module: module, pkgDirs: map[string]string{}}
 	ix.index(list)
 	for _, p := range list {
 		if ix.ownPackage(p) {
 			g.BuildDeps[p.ImportPath] = depSet(p, module)
+			imp := map[string]bool{}
+			for _, list := range [][]string{p.Imports, p.TestImports, p.XTestImports} {
+				for _, i := range list {
+					if b := base(i); strings.HasPrefix(b, module) && b != p.ImportPath {
+						imp[b] = true
+					}
+				}
+			}
+			g.DirectImports[p.ImportPath] = imp
 			continue
 		}
 		if p.ForTest == "" && strings.HasSuffix(p.ImportPath, ".test") {

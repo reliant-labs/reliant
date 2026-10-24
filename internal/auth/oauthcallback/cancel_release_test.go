@@ -12,23 +12,36 @@ import (
 func TestPortFreedPromptlyAfterCancel(t *testing.T) {
 	cfg := codexShapedConfig(t)
 	orig := openBrowser
-	var held net.Conn
+	// The "browser" holds a connection open at the consent screen. It is
+	// handed over on a channel: openBrowser runs on RunWithConfig's goroutine.
+	held := make(chan net.Conn, 1)
 	openBrowser = func(string) error {
-		if c, err := net.Dial("tcp", listenAddr(cfg)); err == nil {
-			held = c
+		c, err := net.Dial("tcp", listenAddr(cfg))
+		if err != nil {
+			close(held)
+			return nil
 		}
+		held <- c
 		return nil
 	}
-	defer func() {
-		openBrowser = orig
-		if held != nil {
-			_ = held.Close()
-		}
-	}()
+	defer func() { openBrowser = orig }()
 
 	ctx, cancel := context.WithCancel(context.Background())
-	go func() { _, _ = RunWithConfig(ctx, codexAuthorizeTemplate, cfg) }()
-	time.Sleep(300 * time.Millisecond)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_, _ = RunWithConfig(ctx, codexAuthorizeTemplate, cfg)
+	}()
+	defer func() { cancel(); <-done }()
+	select {
+	case c, ok := <-held:
+		if !ok {
+			t.Fatal("the browser could not connect to the callback listener")
+		}
+		defer c.Close()
+	case <-time.After(10 * time.Second):
+		t.Fatal("RunWithConfig never opened the browser")
+	}
 
 	start := time.Now()
 	cancel()

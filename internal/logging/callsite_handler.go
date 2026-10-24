@@ -4,6 +4,8 @@ package logging
 import (
 	"context"
 	"log/slog"
+
+	"github.com/reliant-labs/forge/pkg/svcerr"
 )
 
 // Keys forge's error_inputs (observe.addErrorInputs) writes the call site
@@ -21,9 +23,15 @@ const (
 // This package's Error, the Temporal loggers and the like each record
 // themselves, so every logging.Error in the process would carry
 // code.function.name "logging.Error" and sfp1 would merge every one of them
-// into a single issue. The site is resolved as sentryHandler does (callerFrames:
-// outward from the PC past the logger wrappers), so a Sentry event and a
-// ClickStack issue name the same function.
+// into a single issue. The site is resolved by callerFrames (callsite.go):
+// outward from the PC past the logger wrappers.
+//
+// A server fault that carries a svcerr stack is the exception: its origin
+// frame, where the error was first built or wrapped, is a better grouping key
+// than any logging site (distinct errors logged through one wrapper stay
+// distinct), and forge uses it when the record has no code.* of its own. So
+// the stamp is skipped for such a record. Only an error forge itself would
+// find (the first error-valued attribute of the record) counts.
 //
 // The attributes are the ones forge writes; forge leaves them alone when a
 // record already has them and still adds exception.type and
@@ -38,7 +46,7 @@ func (h callSiteHandler) Enabled(ctx context.Context, l slog.Level) bool {
 }
 
 func (h callSiteHandler) Handle(ctx context.Context, r slog.Record) error {
-	if r.Level >= slog.LevelError && !recordHasAttr(r, attrCodeFunction) {
+	if r.Level >= slog.LevelError && !recordHasAttr(r, attrCodeFunction) && !hasServerFaultStack(r) {
 		if frames := callerFrames(r.PC); len(frames) > 0 && frames[0].Function != "" {
 			site := frames[0]
 			// The record's attribute storage may be shared with the caller's.
@@ -68,4 +76,23 @@ func recordHasAttr(r slog.Record, key string) bool {
 		return !found
 	})
 	return found
+}
+
+// hasServerFaultStack reports whether forge will take the call site from the
+// record's error: the first error-valued attribute has a svcerr stack. It
+// mirrors observe.addErrorInputs, which looks no further.
+func hasServerFaultStack(r slog.Record) bool {
+	var err error
+	r.Attrs(func(a slog.Attr) bool {
+		if e, ok := a.Value.Resolve().Any().(error); ok && e != nil {
+			err = e
+			return false
+		}
+		return true
+	})
+	if err == nil {
+		return false
+	}
+	_, ok := svcerr.StackOf(err)
+	return ok
 }

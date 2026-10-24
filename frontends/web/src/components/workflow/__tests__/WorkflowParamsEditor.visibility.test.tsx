@@ -16,7 +16,9 @@ import { createInput, getInputUI, type InputDef } from "../../../lib/inputHelper
 
 // The editor's type-specific inputs reach for presets, models and the project;
 // none of that is under test here.
-vi.mock("../../../api/preset-grpc", () => ({ presetGrpc: { listPresets: vi.fn(async () => []) } }));
+vi.mock("../../../hooks/preset-queries", () => ({
+  useProjectPresets: () => ({ presets: [], invalidPresets: [], loading: false, error: null }),
+}));
 vi.mock("../../../store/projectStore", () => ({
   useProjectStore: (selector?: any) => {
     const state = { currentProject: null };

@@ -61,21 +61,17 @@ func (f *fakeBugReportLookup) ListDaemonsByUserID(_ context.Context, userID stri
 	return owned, nil
 }
 
-// recordingCapture stands in for telemetry.CaptureBugReport.
+// recordingCapture stands in for telemetry.FileBugReport.
 type recordingCapture struct {
 	mu      sync.Mutex
 	reports []telemetry.BugReport
-	live    bool
 }
 
-func (r *recordingCapture) capture(report telemetry.BugReport) (string, bool) {
+func (r *recordingCapture) capture(_ context.Context, report telemetry.BugReport) string {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.reports = append(r.reports, report)
-	if !r.live {
-		return "", false
-	}
-	return "evt" + string(rune('a'+len(r.reports)-1)), true
+	return "rep" + string(rune('a'+len(r.reports)-1))
 }
 
 func (r *recordingCapture) filed() []telemetry.BugReport {
@@ -90,9 +86,9 @@ type reportBugHarness struct {
 	clock   time.Time
 }
 
-func newReportBugHarness(lookup bugReportLookup, live bool) *reportBugHarness {
+func newReportBugHarness(lookup bugReportLookup) *reportBugHarness {
 	h := &reportBugHarness{
-		capture: &recordingCapture{live: live},
+		capture: &recordingCapture{},
 		clock:   time.Date(2026, 10, 9, 19, 30, 0, 0, time.UTC),
 	}
 	h.tool = newReportBugTool(lookup, h.capture.capture, newBugReportLimiter(30*time.Minute, 3), func() time.Time { return h.clock })
@@ -145,21 +141,21 @@ func TestReportBug_RejectsInvalidInputWithoutFiling(t *testing.T) {
 	for name, mutate := range cases {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			h := newReportBugHarness(nil, true)
+			h := newReportBugHarness(nil)
 			input := validBugReportInput("Message truncated")
 			mutate(input)
 
 			resp, _ := h.call(t, reportBugContext("chat-1"), input)
 
 			assert.True(t, resp.IsError, "invalid input is refused: %s", resp.Content)
-			assert.Empty(t, h.capture.filed(), "nothing reaches Sentry from a refused call")
+			assert.Empty(t, h.capture.filed(), "nothing is filed from a refused call")
 		})
 	}
 }
 
 func TestReportBug_NamesEveryBlankFieldAtOnce(t *testing.T) {
 	t.Parallel()
-	h := newReportBugHarness(nil, true)
+	h := newReportBugHarness(nil)
 	input := validBugReportInput(" ")
 	input["expected"] = ""
 	input["actual"] = ""
@@ -183,7 +179,7 @@ func TestReportBug_FilesReportDescribingWhereItCameFrom(t *testing.T) {
 		latest:  &db.Message{Model: &model},
 		daemons: map[string]*db.Daemon{worktreeDaemon: {ID: worktreeDaemon, DaemonType: &managed, Hostname: &pod}},
 	}
-	h := newReportBugHarness(lookup, true)
+	h := newReportBugHarness(lookup)
 	tc := reportBugContext("chat-1")
 	tc.Context = context.WithValue(tc.Context, auth.UserIDContextKey, "user-from-request")
 	tc.Worktree = &rctx.WorktreeInfo{ID: "wt-1", DaemonID: worktreeDaemon}
@@ -217,9 +213,8 @@ func TestReportBug_FilesReportDescribingWhereItCameFrom(t *testing.T) {
 		ForgeVersion:   version.Forge(),
 	}, filed[0], "the worktree's daemon is the one that ran the call, so it outranks the chat's")
 
-	assert.Equal(t, "evta", meta.EventID)
-	assert.True(t, meta.Delivered)
-	assert.Contains(t, resp.Content, "evta", "the model is handed the event id")
+	assert.Equal(t, "repa", meta.ReportID)
+	assert.Contains(t, resp.Content, "repa", "the model is handed the report id")
 }
 
 // A run on the main checkout is pinned to no machine: its tools go wherever
@@ -235,7 +230,7 @@ func TestReportBug_UnpinnedRunNamesTheUsersOnlyMachine(t *testing.T) {
 			"daemon-only": {ID: "daemon-only", UserID: "user-1", DaemonType: &managed, Hostname: &pod},
 		},
 	}
-	h := newReportBugHarness(lookup, true)
+	h := newReportBugHarness(lookup)
 
 	h.call(t, reportBugContext("chat-1"), validBugReportInput("Workspace volume detached"))
 
@@ -262,7 +257,7 @@ func TestReportBug_DoesNotGuessAMachineOrNameADesktopsHost(t *testing.T) {
 		h := newReportBugHarness(&fakeBugReportLookup{
 			chat:    &db.Chat{ID: "chat-1", UserID: "user-1"},
 			daemons: daemons,
-		}, true)
+		})
 		h.call(t, reportBugContext("chat-1"), validBugReportInput("Shell hangs"))
 		require.Len(t, h.capture.filed(), 1)
 		assert.Empty(t, h.capture.filed()[0].DaemonID)
@@ -274,7 +269,7 @@ func TestReportBug_DoesNotGuessAMachineOrNameADesktopsHost(t *testing.T) {
 		h := newReportBugHarness(&fakeBugReportLookup{
 			chat:    &db.Chat{ID: "chat-1", UserID: "user-1"},
 			daemons: daemons,
-		}, true)
+		})
 		tc := reportBugContext("chat-1")
 		tc.Worktree = &rctx.WorktreeInfo{ID: "wt-1", DaemonID: "daemon-desktop"}
 		h.call(t, tc, validBugReportInput("Shell hangs"))
@@ -288,19 +283,19 @@ func TestReportBug_DoesNotGuessAMachineOrNameADesktopsHost(t *testing.T) {
 // The lookups only enrich a report. None of them failing may cost the report.
 func TestReportBug_FilesEvenWhenNothingAboutTheCallerResolves(t *testing.T) {
 	t.Parallel()
-	h := newReportBugHarness(&fakeBugReportLookup{}, true)
+	h := newReportBugHarness(&fakeBugReportLookup{})
 
 	resp, meta := h.call(t, reportBugContext("chat-unknown"), validBugReportInput("Daemon lost its workspace mount"))
 
 	require.False(t, resp.IsError, resp.Content)
 	require.Len(t, h.capture.filed(), 1)
 	assert.Equal(t, "chat-unknown", h.capture.filed()[0].ChatID)
-	assert.True(t, meta.Delivered)
+	assert.NotEmpty(t, meta.ReportID)
 }
 
 func TestReportBug_RepeatInTheSameChatReturnsTheFirstReport(t *testing.T) {
 	t.Parallel()
-	h := newReportBugHarness(nil, true)
+	h := newReportBugHarness(nil)
 	tc := reportBugContext("chat-1")
 
 	_, first := h.call(t, tc, validBugReportInput("Message truncated in chat 5ffd6bb4"))
@@ -310,11 +305,11 @@ func TestReportBug_RepeatInTheSameChatReturnsTheFirstReport(t *testing.T) {
 	assert.Len(t, h.capture.filed(), 1, "a looping agent files one report, not one per turn")
 	assert.False(t, resp.IsError, "a repeat is answered, not refused")
 	assert.True(t, again.Duplicate)
-	assert.Equal(t, first.EventID, again.EventID)
-	assert.Contains(t, resp.Content, first.EventID)
+	assert.Equal(t, first.ReportID, again.ReportID)
+	assert.Contains(t, resp.Content, first.ReportID)
 
-	// Another chat hitting the same defect is a second sighting worth sending:
-	// Sentry groups it with the first by fingerprint.
+	// Another chat hitting the same defect is a second report worth filing:
+	// its own issue, for the person triaging to deduplicate.
 	h.call(t, reportBugContext("chat-2"), validBugReportInput("Message truncated in chat 5ffd6bb4"))
 	assert.Len(t, h.capture.filed(), 2)
 
@@ -327,51 +322,57 @@ func TestReportBug_RepeatInTheSameChatReturnsTheFirstReport(t *testing.T) {
 
 func TestReportBug_CapsDistinctReportsPerChat(t *testing.T) {
 	t.Parallel()
-	h := newReportBugHarness(nil, true)
+	h := newReportBugHarness(nil)
 	tc := reportBugContext("chat-1")
 
 	for _, title := range []string{"First defect", "Second defect", "Third defect"} {
 		_, meta := h.call(t, tc, validBugReportInput(title))
-		require.True(t, meta.Delivered, title)
+		require.NotEmpty(t, meta.ReportID, title)
 	}
 	resp, meta := h.call(t, tc, validBugReportInput("Fourth defect"))
 
 	assert.Len(t, h.capture.filed(), 3, "the cap stops an agent cycling through titles")
 	assert.True(t, meta.RateLimited)
-	assert.False(t, meta.Delivered)
+	assert.Empty(t, meta.ReportID)
 	assert.False(t, resp.IsError, "being capped is not the agent's error to retry")
 	assert.Contains(t, resp.Content, "tell the user")
 }
 
-// Sentry is off in dev, in tests and wherever no DSN is set. A report must
-// still succeed there, land in the server log with every field, and say
-// plainly that it did not reach Sentry.
+// The production tool files through the process logger: one WARN issue
+// event, redacted, carrying the issue source the issues worker groups on.
 //
 // Not parallel: it swaps the process's default slog handler to read the log.
-func TestReportBug_WithoutSentryLogsTheReportAndSaysSo(t *testing.T) {
+func TestReportBug_FilesAnIssueEventThroughTheProcessLogger(t *testing.T) {
 	var logs bytes.Buffer
 	previous := slog.Default()
-	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	slog.SetDefault(slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelInfo})))
 	t.Cleanup(func() { slog.SetDefault(previous) })
 
-	h := newReportBugHarness(nil, false)
+	tool := newReportBugTool(nil, func(ctx context.Context, report telemetry.BugReport) string {
+		return telemetry.FileBugReport(ctx, nil, report)
+	}, newBugReportLimiter(30*time.Minute, 3), time.Now)
 	input := validBugReportInput("Workspace volume detached")
 	input["evidence"] = "ANTHROPIC_API_KEY=sk-ant-api03-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\nls: /home/workspace: No such file"
+	raw, err := json.Marshal(input)
+	require.NoError(t, err)
 
-	resp, meta := h.call(t, reportBugContext("chat-1"), input)
+	resp, err := tool.Run(reportBugContext("chat-1"), ToolCall{ID: "toolu_report_1", Name: ToolReportBug, Input: string(raw)})
+	require.NoError(t, err)
+	require.False(t, resp.IsError, resp.Content)
+	var meta ReportBugMetadata
+	require.NoError(t, json.Unmarshal([]byte(resp.Metadata), &meta))
 
-	require.False(t, resp.IsError, "a report is never an error just because Sentry is off: %s", resp.Content)
-	assert.False(t, meta.Delivered)
-	assert.Empty(t, meta.EventID)
-	assert.Contains(t, resp.Content, "server log")
-	assert.Contains(t, resp.Content, "Sentry")
-
-	line := logs.String()
-	assert.Contains(t, line, "level=WARN")
-	for _, want := range []string{"Workspace volume detached", "product=reliant", "severity=high", "chat_id=chat-1", "sentry_delivered=false", "No such file"} {
-		assert.Contains(t, line, want)
-	}
-	assert.NotContains(t, line, "sk-ant-api03-AAAA", "the log line is redacted like the Sentry event")
+	var record map[string]any
+	require.NoError(t, json.Unmarshal(logs.Bytes(), &record), "one report is one record: %s", logs.String())
+	assert.Equal(t, "WARN", record["level"])
+	assert.Equal(t, telemetry.BugReportSource, record[telemetry.AttrIssueSource])
+	assert.Equal(t, meta.ReportID, record[telemetry.AttrBugReportID], "the id the model is handed finds the record")
+	assert.Contains(t, resp.Content, meta.ReportID)
+	assert.Equal(t, "[reliant] Workspace volume detached", record["msg"])
+	assert.Equal(t, "chat-1", record["chat_id"])
+	assert.Equal(t, "toolu_report_1", record["tool_call_id"])
+	assert.Contains(t, record[telemetry.AttrBugReportEvidence], "No such file")
+	assert.NotContains(t, logs.String(), "sk-ant-api03-AAAA", "the record is redacted")
 }
 
 func TestReportBug_IsRegisteredForEveryCodingAgent(t *testing.T) {
@@ -379,7 +380,7 @@ func TestReportBug_IsRegisteredForEveryCodingAgent(t *testing.T) {
 
 	def, ok := registryIndex()[ToolReportBug]
 	require.True(t, ok, "report_bug is in the registry")
-	assert.Equal(t, PlacementServer, def.Placement, "it needs no filesystem: it runs in the worker, where the DSN is")
+	assert.Equal(t, PlacementServer, def.Placement, "it needs no filesystem: it runs in the worker, whose logs are ours")
 	assert.True(t, def.hasTag(TagCodingDefault), "preloaded for the coding agent")
 	assert.True(t, def.hasTag(TagCodingPlan), "plan mode hits defects too")
 	assert.Contains(t, names.AllToolNames, names.ToolReportBug)

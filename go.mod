@@ -15,7 +15,6 @@ require (
 	github.com/aymanbagabas/go-pty v0.2.3
 	github.com/aymanbagabas/go-udiff v0.4.1
 	github.com/bmatcuk/doublestar/v4 v4.10.0
-	github.com/getsentry/sentry-go v0.49.0
 	github.com/go-chi/cors v1.2.2
 	github.com/go-git/go-git/v5 v5.19.2
 	github.com/go-shiori/go-readability v0.0.0-20251205110129-5db1dc9836f0
@@ -39,7 +38,7 @@ require (
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2
 	github.com/prometheus/client_golang v1.25.0
 	github.com/prometheus/client_model v0.6.3
-	github.com/reliant-labs/forge v0.1.47-0.20261024123244-1327fc22beae
+	github.com/reliant-labs/forge v0.1.47-0.20261024144430-b7f6407a735a
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/pflag v1.0.10

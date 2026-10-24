@@ -5,7 +5,7 @@ import { useEscapeLayer } from "../../hooks/useEscapeLayer";
 import { ChevronDown, Check, Layers, Code2 } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { Tooltip } from "../ui/Tooltip";
-import type { Preset } from "../../store/globalDataStore";
+import type { Preset } from "../../hooks/preset-queries";
 import { isCelTemplate } from "../../lib/celTemplate";
 
 interface InlinePresetPickerProps {

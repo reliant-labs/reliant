@@ -1,4 +1,4 @@
-import type { ProviderAccount, UsageWindow } from "../../../api/provider-account-grpc";
+import type { ProviderAccount, UsageWindow } from "../../../types/providerAccount";
 
 /** At or above this fraction a window reads amber. */
 export const USAGE_WARN_FRACTION = 0.8;

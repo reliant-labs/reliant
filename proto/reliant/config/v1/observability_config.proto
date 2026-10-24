@@ -2,7 +2,6 @@ syntax = "proto3";
 
 package reliant.config.v1;
 
-import "buf/validate/validate.proto";
 import "forge/v1/forge.proto";
 
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/config/v1;configv1";
@@ -34,41 +33,11 @@ message ObservabilityConfig {
     description: "Serve Reliant's Prometheus metrics"
   }];
 
-  // The deployment environment telemetry and Sentry events are filed under:
-  // SENTRY_ENVIRONMENT, else the deploy layer's typed ENVIRONMENT. Unset: the
-  // process's tier (RELIANT_ENV), else development.
+  // The deployment environment telemetry is filed under: the deploy layer's
+  // typed ENVIRONMENT. Unset: the process's tier (RELIANT_ENV), else
+  // development.
   string environment = 4 [(forge.v1.config) = {
-    env_var: "SENTRY_ENVIRONMENT"
-    env_var_aliases: [{name: "ENVIRONMENT"}]
+    env_var: "ENVIRONMENT"
     description: "Deployment environment telemetry is filed under"
   }];
-}
-
-// SentryConfig is where the API server and the worker report errors. Only a
-// prod-tier process reports at all (internal/runenv).
-message SentryConfig {
-  // A kill switch: unset is on.
-  bool enabled = 1 [(forge.v1.config) = {
-    env_var: "SENTRY_ENABLED"
-    default_value: "true"
-    description: "Report errors to Sentry (when SENTRY_DSN is set and the tier is prod)"
-  }];
-
-  // Unset: nothing to report to.
-  string dsn = 2 [(forge.v1.config) = {
-    env_var: "SENTRY_DSN"
-    sensitive: true
-    optional: true
-    description: "Sentry DSN"
-  }];
-
-  // The share of transactions traced, 0 to 1.
-  double traces_sample_rate = 3 [
-    (forge.v1.config) = {
-      env_var: "SENTRY_TRACES_SAMPLE_RATE"
-      default_value: "0"
-      description: "Share of transactions Sentry traces, 0 to 1"
-    },
-    (buf.validate.field).double = {gte: 0, lte: 1}
-  ];
 }

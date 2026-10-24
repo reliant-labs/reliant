@@ -8,7 +8,7 @@
 // git refuses — from a real failure: git crashed, the disk is full, the
 // repository is broken. It says which with a Reason on the worktree.create
 // response, and the server (internal/workspacecreate) maps the Reason onto a
-// typed error whose class keeps it out of Sentry.
+// typed error whose class keeps it from becoming an issue.
 //
 // The server never reads git's output to decide. That text changes between
 // git versions ("is already checked out at" became "is already used by

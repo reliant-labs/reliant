@@ -20,7 +20,9 @@
 #   generate   pinned forge generate must be a no-op; only when a forge input changed
 #   docs       every docs generator must be a no-op; only when a docs input changed
 #   build      go build ./...
-#   test       tools/test-affected run -lanes go,web,electron (-short, cached, no -race)
+#   test       tools/test-affected run -reach direct -lanes go,web,electron (-short,
+#              cached, no -race): the changed packages and their DIRECT importers;
+#              deeper dependents run in the release gate (MG_REACH=all for all)
 #   lint       forge lint --scope <changed dirs> (unscoped when a pin moved)
 #   migsafety  forge lint --migration-safety, only when a migration changed
 # generate and docs run first, because they can change the tree the others
@@ -165,14 +167,16 @@ gen_docs() {
 }
 
 # ── plan ──────────────────────────────────────────────────────────────────
-phase plan go run ./tools/test-affected plan -json -base "$base" || { cat "$L/plan.log"; exit 1; }
+# The merge tier's Go fan-out: direct importers only (owner, 2026-10-24).
+reach=${MG_REACH:-direct}
+phase plan go run ./tools/test-affected plan -json -reach "$reach" -base "$base" || { cat "$L/plan.log"; exit 1; }
 sed -n '/^{/,$p' "$L/plan.log" >"$L/plan.json"
 j() { jq -r "$1" "$L/plan.json"; }
-gofull=$(j .go.full) ngo=$(j '.go.packages|length') webfull=$(j .web.full) nweb=$(j '.web.tests|length')
+gofull=$(j .go.full) ngo=$(j '.go.packages|length') ndef=$(j '.go.deferred|length') webfull=$(j .web.full) nweb=$(j '.web.tests|length')
 elec=$(j .electron.full) fgen=$(j .forge_generate.full) dgen=$(j .docs_generate.full)
 hooks_only=$(j '.forge_generate.hooks_only // false') hooks=$(j '(.forge_generate.hooks // []) | join(" ")')
 [ "$regen" = 1 ] && { fgen=true; hooks_only=false; }
-notes+=("plan: go $([ "$gofull" = true ] && echo FULL || echo "$ngo package(s)"); web $([ "$webfull" = true ] && echo FULL || echo "$nweb file(s)"); electron $elec; forge-generate $fgen$([ "$hooks_only" = true ] && echo " (hooks only: $hooks)"); docs-generate $dgen")
+notes+=("plan: go $([ "$gofull" = true ] && echo FULL || echo "$ngo package(s), reach $reach, $ndef transitive dependent(s) left to the release gate"); web $([ "$webfull" = true ] && echo FULL || echo "$nweb file(s)"); electron $elec; forge-generate $fgen$([ "$hooks_only" = true ] && echo " (hooks only: $hooks)"); docs-generate $dgen")
 
 # ── npm installs a selected lane needs ────────────────────────────────────
 need=()
@@ -209,7 +213,7 @@ fi
 run_checks() {
   local sfx=${1:-}
   phase "build$sfx" go build ./... & pids+=($!)
-  phase "test$sfx" go run ./tools/test-affected run -base "$base" -lanes go,web,electron & pids+=($!)
+  phase "test$sfx" go run ./tools/test-affected run -reach "$reach" -base "$base" -lanes go,web,electron & pids+=($!)
 }
 if [ "$fail" = 0 ]; then
   run_checks

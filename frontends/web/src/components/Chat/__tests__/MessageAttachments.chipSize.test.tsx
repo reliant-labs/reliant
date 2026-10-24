@@ -21,10 +21,8 @@ const getAttachmentAsBlob = vi.fn(
   async () => new Blob(["png-bytes"], { type: "image/png" }),
 );
 
-vi.mock("../../../api/attachment-grpc", () => ({
-  attachmentGrpc: {
-    getAttachmentAsBlob: (id: string) => getAttachmentAsBlob(id),
-  },
+vi.mock("../../../hooks/attachment-queries", () => ({
+  fetchAttachmentBlob: (id: string) => getAttachmentAsBlob(id),
 }));
 
 const originalCreateObjectURL = URL.createObjectURL;

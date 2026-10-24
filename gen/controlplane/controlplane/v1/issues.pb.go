@@ -233,7 +233,11 @@ type Issue struct {
 	Symbolicated bool `protobuf:"varint,25,opt,name=symbolicated,proto3" json:"symbolicated,omitempty"`
 	// The row version: send it back as expected_version to update only the state
 	// you read.
-	Version       int32 `protobuf:"varint,26,opt,name=version,proto3" json:"version,omitempty"`
+	Version int32 `protobuf:"varint,26,opt,name=version,proto3" json:"version,omitempty"`
+	// The issue source its events carry (a log record's issue.source, forge
+	// observe.IssueSource): a report filed like an error without being one, such
+	// as an agent's bug report ("llm_bug_report"). Empty for an error.
+	Source        string `protobuf:"bytes,27,opt,name=source,proto3" json:"source,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -450,6 +454,13 @@ func (x *Issue) GetVersion() int32 {
 	return 0
 }
 
+func (x *Issue) GetSource() string {
+	if x != nil {
+		return x.Source
+	}
+	return ""
+}
+
 var File_controlplane_v1_issues_proto protoreflect.FileDescriptor
 
 const file_controlplane_v1_issues_proto_rawDesc = "" +
@@ -457,7 +468,7 @@ const file_controlplane_v1_issues_proto_rawDesc = "" +
 	"\x1ccontrolplane/v1/issues.proto\x12\x0fcontrolplane.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"Y\n" +
 	"\x0fIssueTrendPoint\x12.\n" +
 	"\x04hour\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x04hour\x12\x16\n" +
-	"\x06events\x18\x02 \x01(\x03R\x06events\"\x8b\b\n" +
+	"\x06events\x18\x02 \x01(\x03R\x06events\"\xa3\b\n" +
 	"\x05Issue\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12:\n" +
 	"\bplatform\x18\x02 \x01(\x0e2\x1e.controlplane.v1.IssuePlatformR\bplatform\x12\x15\n" +
@@ -489,7 +500,8 @@ const file_controlplane_v1_issues_proto_rawDesc = "" +
 	"\vmerged_into\x18\x18 \x01(\tR\n" +
 	"mergedInto\x12\"\n" +
 	"\fsymbolicated\x18\x19 \x01(\bR\fsymbolicated\x12\x18\n" +
-	"\aversion\x18\x1a \x01(\x05R\aversion*f\n" +
+	"\aversion\x18\x1a \x01(\x05R\aversion\x12\x16\n" +
+	"\x06source\x18\x1b \x01(\tR\x06source*f\n" +
 	"\rIssuePlatform\x12\x1e\n" +
 	"\x1aISSUE_PLATFORM_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16ISSUE_PLATFORM_BROWSER\x10\x01\x12\x19\n" +

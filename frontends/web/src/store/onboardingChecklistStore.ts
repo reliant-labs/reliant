@@ -11,7 +11,7 @@
  * "create-workspace" doesn't un-complete when the workspace is deleted) and
  * with what `completedItems` already persists to the settings table. What
  * changed is not stickiness but WHERE the "earned" signal comes from: it is
- * now derived by reading `settingsKeys.providers()` — the same React Query
+ * now derived by reading `providerStatusesKey()` — the same React Query
  * cache `useProviderStatuses()` (hooks/settings-queries.ts) exposes to the
  * rest of the app — rather than by trusting a UI flow to announce itself via
  * the "api-key:saved" event. See `subscribeToStoreChanges` below for why a
@@ -19,7 +19,6 @@
  */
 
 import { create } from "zustand";
-import { api } from "../api/client";
 import { mcpGrpc } from "../api/mcp-grpc";
 import { logger } from "../lib/logger";
 import {
@@ -41,10 +40,15 @@ import { useGlobalDataStore } from "./globalDataStore";
 import { getEventBus } from "../lib/events";
 import { chatKeys, getCachedChatList } from "../hooks/chat-queries";
 import {
-  settingsKeys,
+  fetchProviderStatuses,
   hasAnyConfiguredProvider,
-  type ProviderStatus,
+  invalidateProviderStatuses,
+  providerStatusesKey,
 } from "../hooks/settings-queries";
+import { hashKey, partialMatchKey } from "@tanstack/react-query";
+import { fetchProjectPresets } from "../hooks/preset-queries";
+import { presetServiceKeys } from "../hooks/preset-service-hooks_gen";
+import type { GetProviderStatusesResponse } from "../gen/reliant/v1/settings_pb";
 import { queryClient } from "../lib/query-client";
 import { useAuthStore } from "./authStore";
 
@@ -364,16 +368,12 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
 
       const projectId = useProjectStore.getState().currentProject?.id;
 
-      // 1. API key — read through the shared React Query cache (settingsKeys.providers())
+      // 1. API key — read through the shared React Query cache (providerStatusesKey())
       // rather than calling the API directly, so this and every other consumer of
       // "is a provider configured?" agree on one in-flight request and one cached answer.
       if (!newItems.has("add-api-key") && hasSession()) {
         try {
-          const providers = await queryClient.fetchQuery({
-            queryKey: settingsKeys.providers(),
-            queryFn: () => api.settings.getProviders(),
-            staleTime: 10_000,
-          });
+          const { providers } = await fetchProviderStatuses(10_000);
           if (hasAnyConfiguredProvider(providers)) {
             newItems.add("add-api-key");
             changed = true;
@@ -456,7 +456,7 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
       // 8. Create a preset
       if (!newItems.has("create-preset") && projectId) {
         try {
-          const presets = useGlobalDataStore.getState().presets;
+          const presets = await fetchProjectPresets(projectId);
           if (presets.some((p) => p.source === "user")) {
             newItems.add("create-preset");
             changed = true;
@@ -539,29 +539,36 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
           ) {
             get().markComplete("create-workflow");
           }
-          if (
-            !get().completedItems.has("create-preset") &&
-            state.presets.some((p) => p.source === "user")
-          ) {
+        }),
+      );
+
+      // "create-preset" derives from any preset read the app makes (the lists
+      // under presetServiceKeys hold PresetInfo rows with their source).
+      unsubscribers.push(
+        queryClient.getQueryCache().subscribe((event) => {
+          if (get().completedItems.has("create-preset")) return;
+          if (!partialMatchKey(event.query.queryKey, presetServiceKeys.all)) return;
+          const presets = (event.query.state.data as { presets?: unknown } | undefined)?.presets;
+          if (Array.isArray(presets) && presets.some((p: { source?: string }) => p.source === "user")) {
             get().markComplete("create-preset");
           }
         }),
       );
 
       // "add-api-key" derives from the provider-status query cache
-      // (settingsKeys.providers()), not from any one save flow announcing
+      // (providerStatusesKey()), not from any one save flow announcing
       // itself. Whenever that cache is written — by a background refetch, a
       // focus refetch, or the invalidation nudge below — re-read it and mark
       // complete if a provider is now configured. This is what makes the
       // completion correct even when nothing ever emits "api-key:saved": the
       // checklist agrees with whatever the settings page or a fresh
       // getProviders() poll would show, on its own schedule.
+      const providerStatusesHash = hashKey(providerStatusesKey());
       unsubscribers.push(
         queryClient.getQueryCache().subscribe((event) => {
           if (get().completedItems.has("add-api-key")) return;
-          const key = event.query.queryKey;
-          if (key[0] !== settingsKeys.all[0] || key[1] !== "providers") return;
-          const providers = event.query.state.data as ProviderStatus[] | undefined;
+          if (event.query.queryHash !== providerStatusesHash) return;
+          const providers = (event.query.state.data as GetProviderStatusesResponse | undefined)?.providers;
           if (providers && hasAnyConfiguredProvider(providers)) {
             get().markComplete("add-api-key");
           }
@@ -577,7 +584,7 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
       // anymore, only for latency.
       try {
         const unsubscribeApiKey = getEventBus().on("api-key:saved", () => {
-          void queryClient.invalidateQueries({ queryKey: settingsKeys.providers() });
+          invalidateProviderStatuses();
         });
         unsubscribers.push(unsubscribeApiKey);
       } catch {
@@ -604,11 +611,7 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
         // 1,096 of prod's 1,183 GetProviderStatuses in a day (2026-10-08,
         // exactly 60s apart for fourteen hours).
         if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
-        void queryClient.fetchQuery({
-          queryKey: settingsKeys.providers(),
-          queryFn: () => api.settings.getProviders(),
-          staleTime: 0,
-        });
+        void fetchProviderStatuses(0).catch(() => undefined);
       }, 15_000);
       unsubscribers.push(() => clearInterval(providerPoll));
 

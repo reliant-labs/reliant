@@ -63,7 +63,7 @@ import { triggerRunsWorkflow } from "@/lib/triggerRail";
 import { workflowPageHref } from "@/lib/workflowsArea";
 import { formatAbsoluteTime } from "@/lib/relativeTime";
 import { useProjectStore } from "@/store/projectStore";
-import { useWorkflowPresets } from "@/store/globalDataStore";
+import { useWorkflowPresets } from "@/hooks/preset-queries";
 import { cn } from "@/lib/utils";
 import { CardInset } from "../forge-ui/card";
 import Button from "@/components/forge-ui/button";

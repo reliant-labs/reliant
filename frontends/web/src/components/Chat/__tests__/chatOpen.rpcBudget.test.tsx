@@ -41,7 +41,7 @@ vi.mock("../WorkflowSelector", () => ({ WorkflowSelector: () => null }));
 import { api } from "../../../api/client";
 import { chatGrpc } from "../../../api/chat-grpc";
 import { workflowGrpc } from "../../../api/workflow-grpc";
-import { presetGrpc } from "../../../api/preset-grpc";
+import { invalidatePresets } from "../../../hooks/preset-queries";
 import { setTransport } from "../../../lib/connect";
 import { queryClient } from "../../../lib/query-client";
 import { mockTransport } from "../../../lib/test-utils";
@@ -69,10 +69,14 @@ function spyRpcs() {
   // Services on their generated hooks are counted where they reach the wire.
   const listPendingQuestions = vi.fn(() => ({ questions: [] }));
   const listApprovalsByChat = vi.fn(() => ({ approvals: [] }));
+  const listPresetsForWorkflow = vi.fn(() => ({ presets: [], invalidPresets: [] }));
+  const getDefaultPresetsBatch = vi.fn(() => ({ presetsByWorkflow: {} }));
   setTransport(
     mockTransport({
       "QuestionService.ListPendingQuestions": listPendingQuestions,
       "ApprovalService.ListApprovalsByChat": listApprovalsByChat,
+      "PresetService.ListPresetsForWorkflow": listPresetsForWorkflow,
+      "PresetService.GetDefaultPresetsBatch": getDefaultPresetsBatch,
     }),
   );
   counters = [
@@ -100,11 +104,8 @@ function spyRpcs() {
       name: "GetWorkflow",
       spy: vi.spyOn(workflowGrpc, "getWorkflow").mockResolvedValue({ workflow: undefined } as never),
     },
-    {
-      name: "ListPresetsForWorkflow",
-      spy: vi.spyOn(presetGrpc, "listPresetsForWorkflow").mockResolvedValue([]),
-    },
-    { name: "GetDefaultPresets", spy: vi.spyOn(presetGrpc, "getDefaultPresets").mockResolvedValue({}) },
+    { name: "ListPresetsForWorkflow", spy: listPresetsForWorkflow },
+    { name: "GetDefaultPresets", spy: getDefaultPresetsBatch },
   ];
   // The model catalog is app-wide (prefetched once per session), not a
   // chat-open read; stub it so the composer can mount.
@@ -224,10 +225,8 @@ describe("RPCs issued by opening a chat", () => {
 
   it("a preset change still reaches the composer", async () => {
     await openChat(CHAT_A);
-    const { useGlobalDataStore } = await import("../../../store/globalDataStore");
-    vi.spyOn(presetGrpc, "listPresets").mockResolvedValue([]);
-
-    await useGlobalDataStore.getState().refetchPresets(PROJECT_ID);
+    // What every preset write does (hooks/preset-queries).
+    await invalidatePresets();
     const issued = await openChat(CHAT_A);
 
     expect(issued.ListPresetsForWorkflow).toBe(1);

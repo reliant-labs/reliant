@@ -58,7 +58,9 @@ message ServerProcessConfig {
 
   IntegrationsConfig integrations = 7;
   ObservabilityConfig observability = 8;
-  SentryConfig sentry = 9;
+  // Sentry was removed: errors reach forge's ClickStack through OTLP.
+  reserved 9;
+  reserved "sentry";
   AnalyticsConfig analytics = 10;
   LLMConfig llm = 11;
   PreviewConfig preview = 12;

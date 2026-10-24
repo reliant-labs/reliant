@@ -336,13 +336,11 @@ func (g *Graph) newProcessSettings() (*ProcessSettings, error) {
 
 func (g *Graph) newProcessRuntime() (*ProcessRuntime, error) {
 	return NewProcessRuntime(ProcessRuntimeDeps{
-		Settings:      g.ProcessSettings(),
-		ControlPlane:  g.ServerProcessConfig.GetControlPlane(),
-		Network:       g.ServerProcessConfig.GetNetwork(),
-		Analytics:     g.ServerProcessConfig.GetAnalytics(),
-		Sentry:        g.ServerProcessConfig.GetSentry(),
-		Observability: g.ServerProcessConfig.GetObservability(),
-		DB:            g.Database(),
+		Settings:     g.ProcessSettings(),
+		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
+		Network:      g.ServerProcessConfig.GetNetwork(),
+		Analytics:    g.ServerProcessConfig.GetAnalytics(),
+		DB:           g.Database(),
 	})
 }
 

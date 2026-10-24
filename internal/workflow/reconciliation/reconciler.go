@@ -89,7 +89,7 @@ import (
 // stranded-spawn repairs, orphaned mailbox resolution — is unconditional too.
 //
 // Every anomaly class increments reliant_reconciler_anomalies_total and logs
-// at ERROR (which the logging package forwards to Sentry).
+// at ERROR (each an issue in forge's ClickStack).
 type Reconciler struct {
 	repo       ReconcilerStore
 	tempClient client.Client
@@ -609,7 +609,7 @@ func (s *passStats) snapshot() (total int, summary string) {
 
 // recordAnomaly increments the Prometheus anomaly counter for the class and
 // adds it to the per-pass summary. Callers pair every recordAnomaly with a
-// context-rich ERROR log (which the logging package forwards to Sentry —
+// context-rich ERROR log (an issue in forge's ClickStack —
 // these classes are actionable and must never be suppressed).
 func (r *Reconciler) recordAnomaly(stats *passStats, class string) {
 	observability.ReconcilerAnomaliesTotal.WithLabelValues(class).Inc()
@@ -972,7 +972,7 @@ func (r *Reconciler) reconcileWorkflow(ctx context.Context, wf *db.Workflow, pol
 			return result // another reconciler already handled this
 		}
 
-		// ERROR (Sentry-visible): the DB believed this workflow was live but
+		// ERROR (an issue): the DB believed this workflow was live but
 		// Temporal has no record of it — state was silently lost somewhere.
 		logging.ErrorContext(ctx, "[Reconciler] Workflow not found in Temporal, marked as completed",
 			"workflowID", wf.ID,
@@ -1914,7 +1914,7 @@ func (r *Reconciler) recoverStuckWorkflowByReset(ctx context.Context, wf *db.Wor
 		return fmt.Errorf("resetting workflow execution: %w", err)
 	}
 
-	// ERROR (Sentry-visible) even though recovery succeeded: a task was LOST
+	// ERROR (an issue) even though recovery succeeded: a task was LOST
 	// from Temporal's queue, which should never happen — the repair working is
 	// not a reason to hide the anomaly.
 	logging.ErrorContext(ctx, "[Reconciler] Recovered stuck workflow via reset (task was lost from queue)",
@@ -3064,7 +3064,7 @@ func (r *Reconciler) silentEnd(ctx context.Context, workflowID string, state *Te
 //     how it ended — and still did not report it: ERROR,
 //     silent_terminal_drift. Unless the failure that ended it is the user's
 //     to act on, which the error-class handler (#686) writes at INFO with
-//     error_class=user and never sends to Sentry; it is counted as expected.
+//     error_class=user so it never becomes an issue; it is counted as expected.
 func (r *Reconciler) logSilentEnd(stats *passStats, message string, wf *db.Workflow, end silentEnd) {
 	fields := []any{
 		"workflowID", wf.ID,

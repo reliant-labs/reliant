@@ -4,7 +4,8 @@
  * remove through ProviderAccountService, and the gate that falls back to
  * today's single-credential view when the server does not serve the RPCs.
  *
- * The client is mocked; the backend handler is a scaffold until P3.2.
+ * ProviderAccountService is answered at the transport (test/providerAccountTransport),
+ * so the generated hooks run for real.
  */
 
 import { screen, waitFor, within } from "@testing-library/react";
@@ -12,7 +13,10 @@ import userEvent from "@testing-library/user-event";
 import { Code, ConnectError } from "@connectrpc/connect";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderWithQuery } from "../../../../test/renderWithQuery";
-import type { ProviderAccount, UsageWindow } from "../../../../api/provider-account-grpc";
+import type { ProviderAccount, UsageWindow } from "../../../../types/providerAccount";
+import { setTransport } from "../../../../lib/connect";
+import { mockTransport } from "../../../../lib/test-utils";
+import { providerAccountHandlers } from "../../../../test/providerAccountTransport";
 
 const mocks = vi.hoisted(() => ({
   listAccounts: vi.fn(),
@@ -25,22 +29,6 @@ const mocks = vi.hoisted(() => ({
   upsertStringSetting: vi.fn(),
   refetchModels: vi.fn(),
 }));
-
-vi.mock("../../../../api/provider-account-grpc", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../../../../api/provider-account-grpc")>();
-  return {
-    ...actual,
-    providerAccountGrpc: {
-      listAccounts: mocks.listAccounts,
-      updateAccount: mocks.updateAccount,
-      reorderAccounts: mocks.reorderAccounts,
-      deleteAccount: mocks.deleteAccount,
-      addApiKey: mocks.addApiKey,
-      refreshUsage: mocks.refreshUsage,
-      getChatAccount: vi.fn(),
-    },
-  };
-});
 
 vi.mock("../../../../lib/settingsPersistence", () => ({
   readSetting: mocks.readSetting,
@@ -176,9 +164,11 @@ beforeEach(() => {
   mocks.refetchModels.mockResolvedValue(undefined);
   mocks.readSetting.mockResolvedValue({ status: "missing" });
   mocks.upsertStringSetting.mockResolvedValue(undefined);
+  setTransport(mockTransport(providerAccountHandlers(mocks)));
 });
 
 afterEach(() => {
+  setTransport(null);
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });

@@ -9,6 +9,9 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
+
+	"github.com/reliant-labs/reliant/internal/auth"
 
 	"connectrpc.com/connect"
 	forgeconfig "github.com/reliant-labs/forge/pkg/config"
@@ -169,6 +172,36 @@ func resolveConnection(cmd *cobra.Command) (*connection, error) {
 	conn, err := resolveServer(cmd)
 	if err != nil {
 		return nil, err
+	}
+	if use, _ := cmd.Flags().GetBool("daemon-session"); use {
+		if conn.envToken != "" {
+			return nil, errors.New("--daemon-session cannot be combined with RELIANT_TOKEN")
+		}
+		creds, err := auth.ReadDaemonCredentials(conn.ServerURL, "")
+		if err != nil {
+			return nil, errors.New("reading the server-bound daemon session failed")
+		}
+		if creds == nil || strings.TrimSpace(creds.PAT) == "" {
+			return nil, errors.New("no unambiguous signed-in daemon session exists for this server")
+		}
+		// Legacy single-account entries may have no Sub hint. The selected
+		// opaque credential is still server-bound; the API authenticates its
+		// acting user. Never derive or override identity from this local hint.
+		normalize := func(s string) string {
+			u, e := url.Parse(s)
+			if e != nil || u.User != nil || u.Scheme == "" || u.Host == "" {
+				return ""
+			}
+			return strings.ToLower(u.Scheme + "://" + u.Host)
+		}
+		if normalize(creds.ServerURL) == "" || normalize(creds.ServerURL) != normalize(conn.ServerURL) {
+			return nil, errors.New("daemon session belongs to a different server")
+		}
+		if creds.ExpiresAt != nil && !creds.ExpiresAt.After(time.Now()) {
+			return nil, errors.New("daemon session has expired; reconnect the signed-in daemon")
+		}
+		conn.Token, conn.TokenFrom = creds.PAT, "daemon-session (server-bound signed-in account)"
+		return conn, nil
 	}
 	if conn.envToken != "" {
 		conn.Token, conn.TokenFrom = conn.envToken, envToken

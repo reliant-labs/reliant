@@ -26,8 +26,7 @@ import { useViewerStore } from "../../store/viewerStore";
 import { useWorktreeStore } from "../../store/worktreeStore";
 import { useWorktreeById } from "../../hooks/useWorktreeById";
 import { useFileClipboardStore } from "../../store/fileClipboardStore";
-import { queryClient } from "../../lib/query-client";
-import { settingsKeys, type UserPreferences } from "../../hooks/settings-queries";
+import { cachedUserPreferences } from "../../hooks/settings-queries";
 import { toast } from "../../lib/toast-manager";
 import { buildFullPath, getRelativePath } from "../../lib/fileUtils";
 
@@ -502,7 +501,7 @@ export const FileTreeItem = memo(function FileTreeItem({
         label: "Delete",
         icon: <Trash2 className="w-4 h-4" />,
         onClick: () => {
-          const skipConfirmation = queryClient.getQueryData<UserPreferences>(settingsKeys.preferences())?.skipDeleteConfirmation ?? false;
+          const skipConfirmation = cachedUserPreferences().skipDeleteConfirmation;
           onFileOperation?.("delete", node, skipConfirmation);
         },
       }

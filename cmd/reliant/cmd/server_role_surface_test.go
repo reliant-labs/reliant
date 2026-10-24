@@ -178,14 +178,11 @@ var serverRoleSurfaceEnv = map[string]string{
 	"RELIANT_OAUTH_GITHUB_CLIENT_SECRET": "gh-secret",
 	"RELIANT_OAUTH_SLACK_CLIENT_ID":      "slack-client",
 
-	// observability, sentry, analytics
+	// observability, analytics
 	"OTEL_EXPORTER_OTLP_ENDPOINT": "http://otel.surface.test:4318",
 	"OTEL_ENABLED":                "true",
 	"PROMETHEUS_ENABLED":          "false",
-	"SENTRY_ENVIRONMENT":          "surface",
-	"SENTRY_ENABLED":              "true",
-	"SENTRY_DSN":                  "https://key@o0.ingest.sentry.io/42",
-	"SENTRY_TRACES_SAMPLE_RATE":   "0.25",
+	"ENVIRONMENT":                 "surface",
 	"RELIANT_ANALYTICS_DISABLED":  "true",
 
 	// llm

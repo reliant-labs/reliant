@@ -19,7 +19,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/natsutil"
 	"github.com/reliant-labs/reliant/internal/observability"
-	"github.com/reliant-labs/reliant/internal/telemetry"
 	"github.com/reliant-labs/reliant/internal/worktreesweep"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
@@ -86,7 +85,6 @@ type apiOptions struct {
 	GitHubAppSlug      string
 	GitHubBot          github.OurBot
 	Observability      observability.Settings
-	Sentry             telemetry.SentryConfig
 	Analytics          analytics.Settings
 	LLM                drivers.Settings
 
@@ -129,7 +127,6 @@ func loadServerAPIConfig(cmd *cobra.Command, opts *apiOptions) error {
 	opts.LLM = app.LLMSettings(process.GetLlm())
 	opts.Preview = app.PreviewSettings(process.GetPreview())
 	opts.DatabasePool = app.DatabasePool(database)
-	opts.Sentry = app.SentrySettings(process.GetSentry(), process.GetObservability())
 	opts.TemporalHost, opts.TemporalPort, opts.TemporalNamespace = app.TemporalEndpoint(process.GetTemporal())
 	opts.GRPCPort = int(api.GetGrpcPort())
 	opts.PprofPort = int(api.GetPprofPort())

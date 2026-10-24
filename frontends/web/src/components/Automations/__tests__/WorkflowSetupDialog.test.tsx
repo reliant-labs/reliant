@@ -15,6 +15,7 @@
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { setTransport } from "@/lib/connect";
+import { serviceHandlers } from "@/test/serviceTransport";
 import { mockTransport } from "@/lib/test-utils";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -63,7 +64,6 @@ vi.mock("@/api/grpc-client", () => ({
     catalog: () => ({ searchCatalog, getCatalogEntry, listInputOptions }),
     trigger: () => ({ enableWorkflow, listTriggers }),
     workflow: () => ({ getWorkflow, listWorkflows }),
-    preset: () => ({ listPresetsForWorkflow, getDefaultPresetsBatch }),
     worktree: () => ({ listWorktrees }),
     daemonRegistry: () => ({ listDaemons }),
     project: () => ({ listProjectDaemons }),
@@ -72,7 +72,13 @@ vi.mock("@/api/grpc-client", () => ({
 }));
 
 // RepoService is on its generated hooks, so it is answered at the transport.
-setTransport(mockTransport({ "RepoService.ListRepos": (req) => listRepos(req) }));
+// PresetService is reached through connectClient (hooks/preset-queries).
+setTransport(
+  mockTransport({
+    "RepoService.ListRepos": (req) => listRepos(req),
+    ...serviceHandlers("PresetService", { listPresetsForWorkflow, getDefaultPresetsBatch }),
+  }),
+);
 
 vi.mock("@/store/projectStore", () => {
   const snapshot = () => ({

@@ -5,12 +5,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"log/slog"
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
@@ -22,7 +20,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/errclass"
 	"github.com/reliant-labs/reliant/internal/logging"
-	"github.com/reliant-labs/reliant/internal/telemetry"
 	"github.com/reliant-labs/reliant/internal/worktreeerr"
 )
 
@@ -145,8 +142,9 @@ func TestFinish_UndiagnosedCheckoutFailureIsAServerFault(t *testing.T) {
 	assert.Empty(t, row.FailureReason, "our own fault is not shown to the user as theirs to fix")
 }
 
-func TestFinish_UserErrorNeverReachesSentry(t *testing.T) {
-	reporter, lines := installProcessLogging(t)
+// Only an ERROR record becomes an issue: a user's own mistake must not be one.
+func TestFinish_UserErrorNeverBecomesAnIssue(t *testing.T) {
+	lines := installProcessLogging(t)
 
 	st, m := &fakeStore{}, &fakeMachine{root: "/w/demo/feat-1", failRepo: "b"}
 	req := twoRepoReq()
@@ -155,8 +153,7 @@ func TestFinish_UserErrorNeverReachesSentry(t *testing.T) {
 	require.NoError(t, err)
 	require.Error(t, Finish(context.Background(), st, m, req, wt))
 
-	time.Sleep(50 * time.Millisecond) // the bridge reports from a goroutine
-	assert.Empty(t, reporter.captured(), "a user's bad base branch must never reach Sentry")
+	assert.Empty(t, errorLines(t, lines), "a user's bad base branch must never be an ERROR")
 	for _, msg := range []string{"Failed to create git worktree", "Worktree creation failed"} {
 		line := logLine(t, lines, msg)
 		assert.Equal(t, "INFO", line["level"], msg)
@@ -164,16 +161,28 @@ func TestFinish_UserErrorNeverReachesSentry(t *testing.T) {
 		assert.Contains(t, line["error"], "feat/telemetry-delivery-c2", "the line still says what went wrong: %s", msg)
 	}
 
-	// The same path with a real fault still reports, so the assertion above
-	// cannot pass by the reporter being disconnected.
+	// The same path with a real fault still logs an ERROR, so the assertion
+	// above cannot pass by the path never logging at all.
 	disk := checkoutResponse{Error: "fatal: write error: No space left on device\n"}
 	st, m = &fakeStore{}, &fakeMachine{root: "/w/demo/feat-2", failRepo: "b", failWith: &disk}
 	req = twoRepoReq()
 	wt, err = Insert(context.Background(), st, req)
 	require.NoError(t, err)
 	require.Error(t, Finish(context.Background(), st, m, req, wt))
-	require.Eventually(t, func() bool { return len(reporter.captured()) > 0 }, 2*time.Second, 5*time.Millisecond,
-		"a server fault on the same path must still reach Sentry")
+	assert.NotEmpty(t, errorLines(t, lines), "a server fault on the same path must still be an ERROR")
+}
+
+// errorLines are the ERROR records in lines.
+func errorLines(t *testing.T, lines *syncBuffer) []map[string]any {
+	t.Helper()
+	var out []map[string]any
+	for _, line := range strings.Split(strings.TrimSpace(lines.String()), "\n") {
+		var rec map[string]any
+		if json.Unmarshal([]byte(line), &rec) == nil && rec["level"] == "ERROR" {
+			out = append(out, rec)
+		}
+	}
+	return out
 }
 
 func TestInsert_RefusalsAreUserErrors(t *testing.T) {
@@ -230,34 +239,6 @@ func (s *racingStore) CreateWorktree(context.Context, *db.Worktree) error {
 	return core.ErrWorktreeNameTaken
 }
 
-// recordingReporter records what the Sentry bridge sends.
-type recordingReporter struct {
-	telemetry.NoopReporter
-	mu   sync.Mutex
-	errs []error
-}
-
-func (r *recordingReporter) CaptureExceptionWithContext(err error, _ map[string]string, _ map[string]interface{}) string {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.errs = append(r.errs, err)
-	return "event"
-}
-
-func (r *recordingReporter) CaptureLogEvent(event telemetry.LogEvent) string {
-	err := event.Err
-	if err == nil {
-		err = errors.New(event.Message)
-	}
-	return r.CaptureExceptionWithContext(err, event.Tags, event.Extra)
-}
-
-func (r *recordingReporter) captured() []error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return append([]error(nil), r.errs...)
-}
-
 type syncBuffer struct {
 	mu  sync.Mutex
 	buf bytes.Buffer
@@ -276,24 +257,19 @@ func (b *syncBuffer) String() string {
 }
 
 // installProcessLogging installs the process logger the servers run — the
-// error-class policy and the Sentry bridge included — writing JSON lines to
-// the returned buffer, with a recording reporter behind the bridge.
-func installProcessLogging(t *testing.T) (*recordingReporter, *syncBuffer) {
+// error-class policy included — writing JSON lines to the returned buffer.
+func installProcessLogging(t *testing.T) *syncBuffer {
 	t.Helper()
 	t.Setenv("LOG_FORMAT", "json")
 	previousLogger, previousOutput := slog.Default(), logging.DefaultOutput
-	previousReporter := telemetry.GetReporter()
 	t.Cleanup(func() {
-		telemetry.SetReporter(previousReporter)
 		logging.DefaultOutput = previousOutput
 		slog.SetDefault(previousLogger)
 	})
 	lines := &syncBuffer{}
 	logging.DefaultOutput = lines
 	logging.Setup(logging.Settings{Format: "json"}, slog.LevelInfo)
-	reporter := &recordingReporter{}
-	telemetry.SetReporter(reporter)
-	return reporter, lines
+	return lines
 }
 
 func logLine(t *testing.T, lines *syncBuffer, msg string) map[string]any {

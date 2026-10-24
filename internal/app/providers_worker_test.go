@@ -105,30 +105,34 @@ func TestCatalogSearch_DelegatedFollowsTheWorkersBrokers(t *testing.T) {
 	assert.False(t, usable["github"], "self-hosted: GitHub needs a saved connection")
 }
 
-// A control plane the hosted HTTP client refuses (prod's in-cluster
-// http://admin-server URL) never fails the worker's boot: v1.7.52's worker
-// crash-looped on exactly this. It boots with a WARN, and every hosted action
-// fails with the stated reason.
+// A control plane the hosted HTTP client refuses (an external plaintext URL)
+// never fails the worker's boot: v1.7.52's worker crash-looped on a refused
+// URL. It boots with a WARN, and every hosted action fails with the stated
+// reason. Prod's in-cluster http://admin-server URL is accepted.
 func TestHostedActionsDegradeInsteadOfFailingTheWorker(t *testing.T) {
 	store := &hosteduse.MockStore{}
 	var logged bytes.Buffer
 	log := slog.New(slog.NewTextHandler(&logged, nil))
 
-	assert.Nil(t, newHostedActions(log, store, controlplane.Endpoint{}), "self-hosted: no control plane, no hosted actions")
+	assert.Nil(t, HostedActions(log, store, controlplane.Endpoint{}), "self-hosted: no control plane, no hosted actions")
 	assert.Empty(t, logged.String(), "no control plane is not an error")
 
-	refused := newHostedActions(log, store, controlplane.Endpoint{URL: "http://admin-server.control-plane-prod.svc.cluster.local:8090", InternalServiceSecret: "s"})
+	refused := HostedActions(log, store, controlplane.Endpoint{URL: "http://cp.reliant.example:8090", InternalServiceSecret: "s"})
 	require.NotNil(t, refused)
 	assert.Contains(t, logged.String(), "level=WARN")
 	assert.Contains(t, logged.String(), "hosted HTTP actions are DISABLED")
-	assert.Contains(t, logged.String(), "control-plane URL is not HTTPS")
+	assert.Contains(t, logged.String(), "control-plane URL is plaintext http to a host outside loopback and the cluster")
 	_, err := refused.ExecuteAction(context.Background(), "run", "node", "grant", hostedhttp.Request{URL: "https://example.com", Method: "POST"})
 	var disabled *handlers.HostedDisabledError
 	require.ErrorAs(t, err, &disabled)
-	assert.Equal(t, "hosted HTTP disabled: control-plane URL is not HTTPS", err.Error())
+	assert.Equal(t, "hosted HTTP disabled: control-plane URL is plaintext http to a host outside loopback and the cluster", err.Error())
 
-	enabled := newHostedActions(log, store, controlplane.Endpoint{URL: "https://admin.example.com", InternalServiceSecret: "s"})
-	require.NotNil(t, enabled)
-	_, isDisabled := enabled.(disabledHostedActions)
-	assert.False(t, isDisabled, "an https control plane gets the real client")
+	for _, u := range []string{"https://admin.example.com", "http://admin-server.control-plane-prod.svc.cluster.local:8090", "http://127.0.0.1:8090"} {
+		logged.Reset()
+		enabled := HostedActions(log, store, controlplane.Endpoint{URL: u, InternalServiceSecret: "s"})
+		require.NotNil(t, enabled, u)
+		_, isDisabled := enabled.(disabledHostedActions)
+		assert.False(t, isDisabled, "%s gets the real client", u)
+		assert.Empty(t, logged.String(), u)
+	}
 }

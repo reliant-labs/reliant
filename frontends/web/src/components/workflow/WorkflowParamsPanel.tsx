@@ -4,9 +4,14 @@ import { useState, useMemo, useCallback, useEffect } from "react";
 import { ChevronDown, ChevronRight, Settings2, Save, Loader2, X, Info } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { Tooltip } from "../ui/Tooltip";
-import { usePresetsForWorkflow, useGlobalDataStore, type Preset } from "../../store/globalDataStore";
+import {
+  createPreset,
+  setDefaultPreset,
+  updatePreset,
+  usePresetsForWorkflow,
+  type Preset,
+} from "../../hooks/preset-queries";
 import { usePreferencesStore } from "../../store/preferencesStore";
-import { presetGrpc } from "../../api/preset-grpc";
 import { PresetPicker } from "./PresetPicker";
 import { ProtoFieldRenderer } from "./ProtoFieldRenderer";
 import { inputDefToSchema } from "../../lib/nodeFieldAdapter";
@@ -100,9 +105,6 @@ export function WorkflowParamsPanel({
   const [presetName, setPresetName] = useState("");
   const [presetDescription, setPresetDescription] = useState("");
   const [isSaving, setIsSaving] = useState(false);
-
-  // Get refetch function from global store
-  const refetchPresets = useGlobalDataStore((state) => state.refetchPresets);
 
   // Fetch presets for this workflow
   const { presets: fetchedPresets, loading: presetsLoading } = usePresetsForWorkflow(workflowName);
@@ -256,7 +258,7 @@ export function WorkflowParamsPanel({
     try {
       const params = getGroupParams(group);
 
-      const result = await presetGrpc.createPreset(projectId, {
+      const result = await createPreset(projectId, {
         name: newPresetName.trim(),
         description: "",
         params,
@@ -274,12 +276,9 @@ export function WorkflowParamsPanel({
         group: group.group
       });
 
-      // Refresh presets
-      await refetchPresets(projectId);
-
       // Auto-set as default for this group
       try {
-        await presetGrpc.setDefaultPreset(projectId, workflowName, group.group, newPresetName.trim());
+        await setDefaultPreset(projectId, workflowName, group.group, newPresetName.trim());
         logger.info("[WorkflowParamsPanel] Set new preset as default", {
           name: newPresetName,
           workflowName,
@@ -299,7 +298,7 @@ export function WorkflowParamsPanel({
     } finally {
       setSavingGroup(null);
     }
-  }, [projectId, newPresetName, getGroupParams, refetchPresets, workflowName]);
+  }, [projectId, newPresetName, getGroupParams, workflowName]);
 
   // Handle update existing preset
   const handleUpdatePreset = useCallback(async (group: ParamGroup) => {
@@ -314,7 +313,7 @@ export function WorkflowParamsPanel({
     try {
       const params = getGroupParams(group);
 
-      const result = await presetGrpc.updatePreset(projectId, selectedPreset.name, {
+      const result = await updatePreset(projectId, selectedPreset.name, {
         newParams: params,
       });
 
@@ -328,9 +327,6 @@ export function WorkflowParamsPanel({
         group: group.group
       });
 
-      // Refresh presets
-      await refetchPresets(projectId);
-
       // Reset save mode
       setSaveMode(null);
     } catch (error) {
@@ -339,7 +335,7 @@ export function WorkflowParamsPanel({
     } finally {
       setSavingGroup(null);
     }
-  }, [projectId, getGroupParams, getSelectedPreset, refetchPresets]);
+  }, [projectId, getGroupParams, getSelectedPreset]);
 
   // Handle preset selection (from incoming version)
   const handlePresetChange = useCallback((preset: Preset | null) => {
@@ -381,7 +377,7 @@ export function WorkflowParamsPanel({
         }
       }
 
-      const result = await presetGrpc.createPreset(projectId, {
+      const result = await createPreset(projectId, {
         name: presetName.trim(),
         description: presetDescription.trim() || "",
         params,
@@ -399,11 +395,6 @@ export function WorkflowParamsPanel({
         paramCount: Object.keys(params).length,
       });
 
-      // Refresh presets
-      if (refetchPresets) {
-        await refetchPresets(projectId);
-      }
-
       // Reset form
       handleCancelSave();
     } catch (error) {
@@ -412,7 +403,7 @@ export function WorkflowParamsPanel({
     } finally {
       setIsSaving(false);
     }
-  }, [projectId, presetName, presetDescription, inputs, values, workflowName, workflowTag, refetchPresets, handleCancelSave]);
+  }, [projectId, presetName, presetDescription, inputs, values, workflowName, workflowTag, handleCancelSave]);
 
 
   // Get value for a param (use current value or default)

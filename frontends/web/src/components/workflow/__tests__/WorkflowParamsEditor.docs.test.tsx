@@ -10,7 +10,9 @@ import { fireEvent, render, screen } from "@testing-library/react";
 
 import { createInput, getInputDescription, getInputExample, type InputDef } from "../../../lib/inputHelpers";
 
-vi.mock("../../../api/preset-grpc", () => ({ presetGrpc: { listPresets: vi.fn(async () => []) } }));
+vi.mock("../../../hooks/preset-queries", () => ({
+  useProjectPresets: () => ({ presets: [], invalidPresets: [], loading: false, error: null }),
+}));
 vi.mock("../../../store/projectStore", () => ({
   useProjectStore: (selector?: any) => {
     const state = { currentProject: null };

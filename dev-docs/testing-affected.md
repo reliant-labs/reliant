@@ -65,6 +65,12 @@ selects it (`docGenInput` in `plan.go`):
   that `DOCGEN_TARGETS` names every docs generator and that CI runs
   `make docs-generate-check` instead of naming targets itself.
 
+`-reach direct` (or `TEST_REACH=direct`) stops the Go fan-out after one hop:
+the changed packages and the packages that import one by name. The plan lists
+what it left out as `deferred`. The merge gate runs that mode
+(`dev-docs/merge-and-release-gates.md`). The default, `-reach all`, is the full
+closure described below.
+
 Knobs (environment): `TEST_BASE=<rev>` moves the diff base (a stacked branch),
 `TEST_FULL=1` runs every lane in full, `LANES=go,web` picks lanes. For other
 flags: `go run ./tools/test-affected -h` (`-json` prints the plan,

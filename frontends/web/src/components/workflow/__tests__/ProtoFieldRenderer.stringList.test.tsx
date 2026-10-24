@@ -13,11 +13,15 @@ import { ActionStepConfig } from '../config/ActionStepConfig'
 import { getActionArgValue } from '../../../lib/actionStepArgs'
 import type { NodeInfo, NodeInputField } from '../../../gen/reliant/v1/catalog_pb'
 
-vi.mock('../../../store/globalDataStore', () => ({
+vi.mock('../../../hooks/preset-queries', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../hooks/preset-queries')>()),
   usePresetsForWorkflow: () => ({ presets: [], loading: false }),
+}))
+
+vi.mock('../../../store/globalDataStore', () => ({
   useModels: () => ({ models: [], loading: false }),
   useGlobalDataStore: (sel: any) =>
-    sel({ refetchPresets: vi.fn(), isInitialized: true, isPrefetching: false, models: [] }),
+    sel({ isInitialized: true, isPrefetching: false, models: [] }),
 }))
 
 /** Mirrors call_llm's `skills` field as the Go catalog reports it. */
