@@ -70,6 +70,7 @@
       URL: "http://cp.surface.test:8080"
       InternalServiceSecret: "cp-secret"
     }
+    AllowPrivateEgress: true
     PublicURL: "https://public.surface.test"
     VaultKey: "v1:c3VyZmFjZS12YXVsdC1rZXktMzItYnl0ZXMtbG9uZyE="
     Webhooks: webhook.RegistryConfig {

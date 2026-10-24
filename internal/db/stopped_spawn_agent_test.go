@@ -99,6 +99,22 @@ func TestGetStoppedSpawnAgent(t *testing.T) {
 	spawnRun("agent-refailed", "agent-refailed", root, "tc-f1", root, Completed(), now.Add(-time.Minute), "")
 	spawnRun("wf-agent-refailed-2", "agent-refailed", root, "tc-f2", root, Failed(), now, `{"agent_id":"agent-refailed","prompt":"again"}`)
 
+	agents, listErr := repo.ListStoppedSpawnAgents(ctx, chatID)
+	if listErr != nil {
+		t.Fatal(listErr)
+	}
+	for i, agent := range agents {
+		if i > 0 && agents[i-1].SpawnDepth > agent.SpawnDepth {
+			t.Fatal("stopped agents must list parents before children")
+		}
+		if agent.ChildThreadID == "agent-done" || agent.ChildThreadID == "agent-cancelled" {
+			t.Fatalf("terminal agent revived: %s", agent.ChildThreadID)
+		}
+	}
+	if len(agents) < 2 {
+		t.Fatalf("expected stopped root and nested agents, got %d", len(agents))
+	}
+
 	got, err := repo.GetStoppedSpawnAgent(ctx, chatID, "agent-a")
 	if err != nil {
 		t.Fatalf("GetStoppedSpawnAgent(agent-a): %v", err)
@@ -106,6 +122,7 @@ func TestGetStoppedSpawnAgent(t *testing.T) {
 	want := StoppedSpawnAgent{
 		ToolCallID: "tc-a", ParentThreadID: root, ChildThreadID: "agent-a", ChildWorkflowID: "agent-a",
 		IssuingWorkflowID: root, SpawnDepth: 1, WorktreePath: "/worktrees/agent-wt", Resumes: 3,
+		LastFailure: FailureReportDigest("report"),
 	}
 	if got == nil {
 		t.Fatalf("stopped top-level agent not found; want %+v", want)

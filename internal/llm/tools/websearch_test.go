@@ -15,7 +15,7 @@ import (
 
 func TestWebSearchTool(t *testing.T) {
 	t.Parallel()
-	tool := NewWebSearchTool(netguard.ForDeployment(""))
+	tool := NewWebSearchTool(netguard.ForDeployment(true))
 
 	assert.Equal(t, WebSearchToolName, tool.Name())
 	assert.NotEmpty(t, tool.Description())
@@ -60,7 +60,7 @@ func TestWebSearchTool(t *testing.T) {
 
 func TestWebSearchToolValidation(t *testing.T) {
 	t.Parallel()
-	tool := NewWebSearchTool(netguard.ForDeployment(""))
+	tool := NewWebSearchTool(netguard.ForDeployment(true))
 	typedTool := tool.(*ToolWrapper[WebSearchParams, ToolResponse])
 
 	toolCtx := &rctx.ToolContext{

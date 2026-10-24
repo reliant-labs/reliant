@@ -247,6 +247,17 @@ message DaemonInfo {
   // disk.reported_at_ms before treating it as current. Unset when the daemon
   // has never reported one.
   DiskReport disk = 23;
+
+  // The build the attached daemon reported when it registered, from the same
+  // attachment lease as the memory telemetry: present only while the daemon is
+  // attached, and empty/zero both for a daemon that predates the fields and for
+  // an unstamped build. Callers treat that as "unknown build", never an error.
+  // version is display only (semver cannot order two builds between the same
+  // pair of tags); commit_time_unix is the ordering key, 0 meaning unordered.
+  string version = 24;
+  string commit = 25;
+  int64 commit_time_unix = 26;
+  string forge_version = 27;
 }
 
 // DaemonStatus is the SINGLE status vocabulary for a daemon in this registry.

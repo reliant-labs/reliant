@@ -53,10 +53,35 @@ type Selection struct {
 	UserID       string
 	WorkflowName string
 	// Params are nested workflow params, shaped as a run's inputs are.
-	Params    map[string]any
-	Policy    ProviderPolicy
-	Version   int64
-	UpdatedAt time.Time
+	Params map[string]any
+	Policy ProviderPolicy
+	// ChatProvider is the one provider the chat is bound to, "" when it is
+	// not bound. Only an explicit provider switch in the root picker binds a
+	// chat, and a local root pick unbinds it; ordinary picks and sends never
+	// write it. Server-owned: no client patch can set it. Stored beside the
+	// policy, stored and returned like it, never interpreted here.
+	ChatProvider string
+	Version      int64
+	UpdatedAt    time.Time
+}
+
+// WithChatProvider is cur with its chat provider set to driver ("" unbinds),
+// the mutate a MutateChatSelection caller hands the store to (re)bind a chat.
+// It returns cur itself when nothing changes, which stores nothing, and nil for
+// a chat with no record that is being unbound. Pure, as mutate must be.
+func WithChatProvider(cur *Selection, chatID, userID, workflowName, driver string) *Selection {
+	if cur != nil && cur.ChatProvider == driver {
+		return cur
+	}
+	if cur == nil && driver == "" {
+		return nil
+	}
+	next := base(cur, chatID, userID, workflowName)
+	if cur != nil {
+		next.WorkflowName = cur.WorkflowName
+	}
+	next.ChatProvider = driver
+	return next
 }
 
 // Store is the persistence the service needs. *db.Repo satisfies it.

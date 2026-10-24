@@ -78,8 +78,14 @@ type WorkflowInput struct {
 
 // ResumeInput carries the position checkpoint of the interrupted predecessor
 // run. A non-nil-but-empty ResumeInput still enables resume mode: the engine
-// falls back to the workflow's resume_node / single top-level loop.
+// falls back to the workflow's resume_node / single top-level loop. Only an
+// explicit RecoveryOnly input opts out of that positional behavior.
 type ResumeInput struct {
+	// RecoveryOnly restores unfinished agents without positional resumption:
+	// execute the root graph from entry, including its setup nodes. Absent in
+	// recorded inputs, so existing empty-NodeID positional resumes retain
+	// their resume_node/single-loop fallback semantics.
+	RecoveryOnly bool `json:"recovery_only,omitempty"`
 	// NodeID is the top-level node recorded in the position checkpoint.
 	// May be empty when the predecessor died before entering any node.
 	NodeID string `json:"node_id,omitempty"`
@@ -119,6 +125,10 @@ type ResumeInput struct {
 	// message arrived (stoppedAgentsSuccessorInput), and by SendAgentMessage
 	// for a chat with no run, from durable state (StoppedSpawnFromDurableState).
 	ResumeStopped []SpawnHandoff `json:"resume_stopped,omitempty"`
+	// ResumeAllStopped means a user resumed one portion while no run was
+	// open: discover and resume its unfinished siblings too. New input only,
+	// so old histories cannot schedule this startup read.
+	ResumeAllStopped bool `json:"resume_all_stopped,omitempty"`
 	// ThreadInputs are the per-thread param changes the user made (a model
 	// switch on one agent's thread), so a thread rebuilt after the boundary
 	// keeps them (ChildWorkflowTracker.threadInputOverrides).
@@ -168,6 +178,13 @@ type SpawnHandoff struct {
 	// can fix (providerCapacityError): a chat-wide capacity wake resumes it
 	// (capacity_wake.go). Carried across a continue-as-new with the record.
 	CapacityStop bool `json:"capacity_stop,omitempty"`
+	// LastFailure is the digest (db.FailureReportDigest) of the failure report
+	// this stopped sub-agent's parent last received from it. A resumed run that
+	// fails again with the same report does not send it a second time
+	// (runDetachedSpawnChild): every message resumes the whole chat, and a
+	// deterministic failure would otherwise give the parent the same report,
+	// and a turn to read it, on every one.
+	LastFailure string `json:"last_failure,omitempty"`
 }
 
 // ChatContext provides chat-level data for CEL evaluation (chat.id)
@@ -234,8 +251,33 @@ func NewChatContext(chatID string) *ChatContext {
 // ChildWorkflowTracker tracks active child workflows for signal forwarding
 // and per-thread input maps for thread-scoped param queries and updates.
 type ChildWorkflowTracker struct {
-	children     map[string]bool                   // Map of child workflow IDs that are currently active
-	threadInputs map[string]map[string]interface{} // Map of thread -> subInputs for per-thread param access
+	// chatProvider is the provider the chat is bound to (provider_switch.go),
+	// "" when unbound; rootThread is the run's own thread, the one call that
+	// is not a descendant's.
+	chatProvider string
+	rootThread   string
+	// providerUpdates, userResumes, durableResumes and lateCandidateChecks
+	// number the observations providerVersion asks about; providerVersions
+	// caches each category's first new-code answer.
+	providerUpdates     int
+	providerVersions    map[string]bool
+	providerPinCleanups map[string]bool
+	userResumes         int
+	durableResumes      int
+	lateCandidateChecks int
+	// durableLookupRunning and durableLookupAgain coalesce chat-wide stopped
+	// lookups (reviveDurableStoppedAsync).
+	durableLookupRunning bool
+	durableLookupAgain   bool
+	// resumeWholeChat resumes every unfinished thread for a user's message;
+	// switchProvider re-routes them after a binding change; retryWaits only
+	// retries every usage-limit wait and provider-switch hold now. Set by the
+	// run.
+	resumeWholeChat func(workflow.Context)
+	switchProvider  func(workflow.Context)
+	retryWaits      func()
+	children        map[string]bool                   // Map of child workflow IDs that are currently active
+	threadInputs    map[string]map[string]interface{} // Map of thread -> subInputs for per-thread param access
 
 	// threadOwnedKeys records, per thread, the input keys that thread set
 	// EXPLICITLY for itself — from its preset or from its node args. A global
@@ -1311,6 +1353,26 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	checkPause := pauser.CheckPause
 	requestPause := pauser.RequestPause
 	usageLimitWaiter := newUsageLimitWaiter(pauser, childTracker, input.ChatID, workflowID, input.WorkflowName)
+	childTracker.chatProvider, _ = input.Inputs[InputKeyProviderSwitch].(string)
+	childTracker.rootThread = thread
+	// A user's message (or a thread-scoped model edit on a bound chat)
+	// resumes the whole unfinished chat: every usage-limit wait and
+	// provider-switch hold retries now, a capacity self-pause is released, and
+	// every stopped descendant this execution holds or the database remembers
+	// is resumed. A thread's fallback lease is kept: an ordinary message is not
+	// a way back to the provider whose limit it is waiting out.
+	childTracker.retryWaits = func() { usageLimitWaiter.retryEpoch++ }
+	childTracker.resumeWholeChat = func(wakeCtx workflow.Context) {
+		usageLimitWaiter.retryEpoch++
+		wakeBlockedThreads(wakeCtx, pauser, childTracker, workflowID, true)
+		childTracker.reviveDurableStoppedAsync(wakeCtx, input.ChatID)
+	}
+	// A binding change also drops every fallback lease: a stay on another
+	// provider is exactly what the switched (or unbound) chat replaces.
+	childTracker.switchProvider = func(wakeCtx workflow.Context) {
+		usageLimitWaiter.leases = map[string]*fallbackLease{}
+		childTracker.resumeWholeChat(wakeCtx)
+	}
 	// A capacity wake (an account added, the provider switched, Resume) goes
 	// on with every thread the provider blocked, not only those in a
 	// usage-limit wait (capacity_wake.go). Histories recorded before it
@@ -1318,6 +1380,9 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	if workflow.GetVersion(ctx, capacityWakeChangeID, workflow.DefaultVersion, 1) != workflow.DefaultVersion {
 		usageLimitWaiter.listenFromStart(func(wakeCtx workflow.Context, sig CapacityWakeSignal) {
 			wakeBlockedThreads(wakeCtx, pauser, childTracker, workflowID, sig.AllStopped)
+			if sig.AllStopped {
+				childTracker.reviveDurableStoppedAsync(wakeCtx, input.ChatID)
+			}
 		})
 	}
 
@@ -1532,6 +1597,10 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		for _, stopped := range input.Resume.ResumeStopped {
 			childTracker.resumeStopped(ctx, stopped.ChildThread)
 		}
+	}
+
+	if input.Resume != nil && input.Resume.ResumeAllStopped {
+		childTracker.reviveDurableStopped(ctx, input.ChatID)
 	}
 
 	// STEP 9: Main workflow loop
@@ -2883,6 +2952,14 @@ func setupThreadWakeHandler(ctx workflow.Context, childTracker *ChildWorkflowTra
 				continue
 			}
 			childTracker.recordThreadWake(sig)
+			if sig.FromUser {
+				childTracker.userResumes++
+			}
+			// Any message from the user resumes the whole unfinished chat,
+			// not only the thread it is for.
+			if sig.FromUser && childTracker.resumeWholeChat != nil && childTracker.providerVersion(gCtx, "resume-whole-chat", childTracker.userResumes) {
+				childTracker.resumeWholeChat(gCtx)
+			}
 			logger.Info("[ThreadWake] Wake notification received",
 				"workflowID", workflowID, "thread", sig.Thread, "reason", string(sig.Reason), "fromUser", sig.FromUser)
 			// The doorbell of a sub-agent that stopped on a failure has no
@@ -2941,6 +3018,11 @@ func setupInputUpdateHandler(ctx workflow.Context, workflowInputs map[string]int
 							)
 							threadInputs[key] = value
 						}
+						// On a bound chat a thread held at a model call
+						// retries on its new model at once.
+						if _, changed := update["model"]; changed && childTracker.chatProvider != "" && childTracker.retryWaits != nil {
+							childTracker.retryWaits()
+						}
 					} else {
 						logger.Info("[Workflow Runtime] Thread-scoped update for a thread that is not running; kept for its next run",
 							"thread", targetThread,
@@ -2948,6 +3030,7 @@ func setupInputUpdateHandler(ctx workflow.Context, workflowInputs map[string]int
 						)
 					}
 				} else {
+					switchedProvider := childTracker.applyProviderSwitch(ctx, workflowInputs, update)
 					// Global update: apply to root workflowInputs
 					for key, value := range update {
 						logger.Debug("[Workflow Runtime] Input updated via signal",
@@ -2988,6 +3071,11 @@ func setupInputUpdateHandler(ctx workflow.Context, workflowInputs map[string]int
 						}
 					}
 
+					// Apply routing state before any wake yields and re-dispatches
+					// a model call. Never cancel in-flight tools.
+					if switchedProvider && childTracker.switchProvider != nil {
+						childTracker.switchProvider(ctx)
+					}
 					// Forward state updates to all active child workflows.
 					// Sort child IDs for deterministic signal ordering across replays.
 					childIDs := make([]string, 0, len(childTracker.children))
@@ -4072,20 +4160,37 @@ func runDetachedSpawnChild(
 		"body":           result.Content,
 		"tool_call_id":   config.reportKey(),
 	}
-	var enqueueOutput map[string]interface{}
-	if err := workflow.ExecuteActivity(enqueueCtx, "EnqueueAgentMessage", enqueueInput).Get(gCtx, &enqueueOutput); err != nil {
-		// Best-effort by the same rule as every other mailbox write: a
-		// failed enqueue here means the parent never learns this spawn
-		// finished until the stranded-spawn reconciler sweep catches it
-		// (spec §7.1) — logged, not fatal to this goroutine or the run.
-		logger.Warn("[SpawnBackground] Failed to enqueue completion to parent mailbox",
+	// The failure a resumed agent stopped on again, word for word, is one its
+	// parent already has: it is not reported twice.
+	failure := ""
+	if result.IsError && !result.Cancelled {
+		failure = failureReportDigest(result.Content)
+	}
+	reported := false
+	if repeatedFailureReport(gCtx, config, childTracker, failure) {
+		logger.Info("[SpawnBackground] Resumed sub-agent failed again with the report its parent already has; not reporting it again",
 			"toolCallID", config.toolCallID,
 			"parentThread", parentThread,
 			"childThread", config.childThread,
-			"error", err,
 		)
+		reported = true
 	} else {
-		childTracker.recordDetachedReport(parentThread)
+		var enqueueOutput map[string]interface{}
+		if err := workflow.ExecuteActivity(enqueueCtx, "EnqueueAgentMessage", enqueueInput).Get(gCtx, &enqueueOutput); err != nil {
+			// Best-effort by the same rule as every other mailbox write: a
+			// failed enqueue here means the parent never learns this spawn
+			// finished until the stranded-spawn reconciler sweep catches it
+			// (spec §7.1) — logged, not fatal to this goroutine or the run.
+			logger.Warn("[SpawnBackground] Failed to enqueue completion to parent mailbox",
+				"toolCallID", config.toolCallID,
+				"parentThread", parentThread,
+				"childThread", config.childThread,
+				"error", err,
+			)
+		} else {
+			childTracker.recordDetachedReport(parentThread)
+			reported = true
+		}
 	}
 
 	if result.terminalStatus != "" {
@@ -4097,8 +4202,18 @@ func runDetachedSpawnChild(
 	// a parent woken by that count already finds the agent resumable.
 	stopped := result.IsError && !result.Cancelled
 	if stopped {
-		childTracker.recordStoppedSpawn(config.toolCallID, result.capacityStop)
+		// Only a report the parent has (or already had) is remembered as
+		// its last: one that never reached the mailbox is sent next time.
+		if !reported {
+			failure = ""
+		}
+		childTracker.recordStoppedSpawn(config.toolCallID, result.capacityStop, failure)
+		delete(childTracker.notStopped, config.childThread)
 	} else {
+		if childTracker.notStopped == nil {
+			childTracker.notStopped = map[string]bool{}
+		}
+		childTracker.notStopped[config.childThread] = true
 		childTracker.forgetLastThreadInputs(config.childThread)
 	}
 	childTracker.completeDetachedSpawn(config.toolCallID, parentThread)
@@ -5111,7 +5226,7 @@ func notifyWorkflowCheckpoint(ctx workflow.Context, chatID, workflowID, nodeID s
 // meaningful for loop targets; 0 when the target differs from the checkpoint
 // node, since the recorded iteration belongs to the checkpoint node).
 func resolveResumeTarget(wf *reliantv1.Workflow, resume *ResumeInput, logger log.Logger) (*reliantv1.Node, int) {
-	if resume == nil {
+	if resume == nil || resume.RecoveryOnly {
 		return nil, 0
 	}
 

@@ -69,6 +69,10 @@ type routingSettings interface {
 // driver's default account exactly as they did before accounts.
 type AccountRouting struct {
 	Router accountrouter.Service
+	// ClearOtherAssignments removes old-provider pins at the next safe model
+	// call after a chat-wide switch. A failure refuses that call rather than
+	// letting stale routing survive unnoticed.
+	ClearOtherAssignments func(ctx context.Context, userID, threadID, provider string) error
 	// Store supplies the limit rows the account-switch notice quotes (the
 	// window, the reset). Optional.
 	Store accountrouter.Store
@@ -149,6 +153,11 @@ func routeAccount(ctx context.Context, spec llmCallSpec, avail models.AvailableD
 		return nil, nil
 	}
 	driver := models.DriverID(providerDriver)
+	if spec.ClearProviderPins && spec.ChatProvider != "" && spec.ThreadID != "" && spec.Routing.ClearOtherAssignments != nil {
+		if err := spec.Routing.ClearOtherAssignments(ctx, spec.UserID, spec.ThreadID, providerDriver); err != nil {
+			return nil, err
+		}
+	}
 	accounts := avail.Accounts[driver]
 	if len(accounts) == 0 {
 		return nil, nil

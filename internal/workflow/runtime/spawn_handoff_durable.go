@@ -103,6 +103,7 @@ func stoppedSpawnHandoff(agent *db.StoppedSpawnAgent) SpawnHandoff {
 		ProjectPath:      agent.WorktreePath,
 		SpawnDepth:       agent.SpawnDepth,
 		Resumes:          agent.Resumes,
+		LastFailure:      agent.LastFailure,
 	}
 	// As for a live spawn: an unparseable input still resumes, under the
 	// default preset.

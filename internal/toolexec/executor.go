@@ -104,7 +104,33 @@ type ToolResult struct {
 	// connection that answered. Recorded on a backgrounded call's row, because
 	// that daemon is the only party that can later say the process ended.
 	DaemonID string
+
+	// ExecutedAt and FallbackReason report where a PlacementPreferDaemon call
+	// actually ran (ExecutedAtDaemon / ExecutedAtServer) and, when that is the
+	// server although a daemon was preferred, why (the Fallback* constants).
+	// Empty for every other placement. They mirror the "_placement" note in
+	// Metadata and the reliant_tool_execution_placement_total metric.
+	ExecutedAt     string
+	FallbackReason string
 }
+
+// Where a PlacementPreferDaemon call ran (ToolResult.ExecutedAt).
+const (
+	ExecutedAtDaemon = "daemon"
+	ExecutedAtServer = "server"
+)
+
+// Why a PlacementPreferDaemon call ran on the server (ToolResult.FallbackReason).
+const (
+	// FallbackNoMachine: the run has no machine, by design.
+	FallbackNoMachine = "no_machine"
+	// FallbackNoRouter: this executor has no daemon transport.
+	FallbackNoRouter = "no_router"
+	// FallbackDispatchFailed: the daemon could not be reached or did not run
+	// the tool: disconnected, suspended or starting, a transport failure, or a
+	// daemon that predates the tool.
+	FallbackDispatchFailed = "dispatch_failed"
+)
 
 // ExecutionMetrics provides telemetry for tool execution
 type ExecutionMetrics struct {
