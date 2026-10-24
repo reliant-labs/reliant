@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/reliant-labs/forge/pkg/testkit"
 )
 
 // both plays the server for an automatic pass and returns the two phases'
@@ -114,6 +116,7 @@ func TestReconcile_ReflogOnlyCommitsAreSavedThenRemoved(t *testing.T) {
 
 // Saving is idempotent: a second pass reuses the refs it made.
 func TestSaveCommits_ReusesItsRefs(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	w := f.worktree("idem", "feat/idem")
@@ -133,6 +136,7 @@ func TestSaveCommits_ReusesItsRefs(t *testing.T) {
 
 // Uncommitted work still holds: nothing is saved and nothing removed.
 func TestReconcile_DirtyStillHoldsWithUnpushedCommits(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	f.idle()
@@ -152,6 +156,7 @@ func TestReconcile_DirtyStillHoldsWithUnpushedCommits(t *testing.T) {
 
 // "Keep everything" removes nothing, so nothing is saved either.
 func TestReconcile_KeepEverythingDoesNotSaveOrRemove(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	f.idle()

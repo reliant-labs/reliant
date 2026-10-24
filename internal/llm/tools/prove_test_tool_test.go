@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/memtemp"
 	"github.com/reliant-labs/reliant/internal/rctx"
@@ -146,6 +147,7 @@ func TestProveTest_ReportsABaselineThatDoesNotCompile(t *testing.T) {
 // Another writer changes the file while the fix is reverted. Their bytes
 // stay; the fix is preserved at the path the result names.
 func TestProveTest_KeepsAConcurrentWritersContent(t *testing.T) {
+	testkit.Slow(t, "runs prove_test's test runner and git as real subprocesses")
 	dir := proveTestRepo(t)
 	const theirs = "package calc\n// another agent's edit\n"
 
@@ -180,6 +182,7 @@ func TestProveTest_KeepsAConcurrentWritersContent(t *testing.T) {
 // machine stretched to 41s (2026-10-22) while both runs still stopped at
 // ~300ms.
 func TestProveTest_RestoresWhenTheCommandTimesOut(t *testing.T) {
+	testkit.Slow(t, "runs prove_test's test runner and git as real subprocesses")
 	dir := proveTestRepo(t)
 	const childRuns = 30 * time.Second
 

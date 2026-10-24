@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/reliant-labs/forge/pkg/testkit"
 )
 
 // An ignored file that is a byte-identical copy of the source checkout's file
@@ -40,6 +42,7 @@ func TestReconcile_IgnoredCopyOfSourceDoesNotHold(t *testing.T) {
 // may hold a credential the source no longer has; one the source does not have
 // at all is the only copy. Both hold, on both paths.
 func TestReconcile_IgnoredFileUnlikeSourceHolds(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	f := newFixture(t)
 	f.idle()
 	ignore(t, f, "secrets/\n")
@@ -64,6 +67,7 @@ func TestReconcile_IgnoredFileUnlikeSourceHolds(t *testing.T) {
 // path that is a symlink back into the worktree reaches the very file being
 // judged, and removing the worktree would delete the only copy.
 func TestReconcile_SourceSymlinkIntoWorktreeIsNotACopy(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	f := newFixture(t)
 	f.idle()
 	ignore(t, f, "secrets\n")
@@ -148,6 +152,7 @@ func TestReconcile_GeneratedIgnoredFile(t *testing.T) {
 // count toward it, or enough of them would hide a real data file behind the
 // cap and let the worktree go.
 func TestReconcile_CopiesDoNotFillTheDataCap(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	f := newFixture(t)
 	f.idle()
 	ignore(t, f, "secrets/\n")

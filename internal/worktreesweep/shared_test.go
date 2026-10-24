@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -36,6 +37,7 @@ func (e *env) liveProject(t *testing.T, dir string, rels ...string) *db.Worktree
 // every worktree on the machine. That must not keep archived worktrees: it
 // kept every one of them forever.
 func TestSweep_ALiveRowAtAParentPathDoesNotShieldArchivedWorktrees(t *testing.T) {
+	testkit.Slow(t, "builds real git worktrees and runs git against them")
 	t.Parallel()
 
 	e := newEnv(t)
@@ -52,6 +54,7 @@ func TestSweep_ALiveRowAtAParentPathDoesNotShieldArchivedWorktrees(t *testing.T)
 // A live row still keeps its OWN checkout: here the archived row's directory is
 // the checkout another project's live row has for its repo "x".
 func TestSweep_ALiveRowStillShieldsItsOwnCheckout(t *testing.T) {
+	testkit.Slow(t, "builds real git worktrees and runs git against them")
 	t.Parallel()
 
 	e := newEnv(t)
@@ -78,6 +81,7 @@ func TestSweep_ALiveRowStillShieldsItsOwnCheckout(t *testing.T) {
 // A live row inside an archived directory keeps it: removing the archived
 // directory would remove the live one.
 func TestSweep_ALiveRowInsideAnArchivedDirectoryShieldsIt(t *testing.T) {
+	testkit.Slow(t, "builds real git worktrees and runs git against them")
 	t.Parallel()
 
 	e := newEnv(t)

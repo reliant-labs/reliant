@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
@@ -42,6 +43,7 @@ func newValidationChat(t *testing.T) (*IdempotencyTestHelper, string) {
 }
 
 func TestExecuteToolsActivity_CapabilityEnforcement(t *testing.T) {
+	testkit.Slow(t, "runs workflow activities against pgtest's Postgres")
 	t.Parallel()
 
 	// A tool outside the preloaded bundle that load_tool granted on an earlier
@@ -202,6 +204,7 @@ func TestExecuteTools_RefusesToolNotOfferedThisTurn(t *testing.T) {
 // A spawn reaches the activity only when the workflow declined to dispatch it
 // (runtime.withCapabilitiesApplied). It is never executed here.
 func TestExecuteToolsActivity_SpawnRoutedHereIsRefused(t *testing.T) {
+	testkit.Slow(t, "runs workflow activities against pgtest's Postgres")
 	t.Parallel()
 
 	spawnCaps := (&tools.Capabilities{

@@ -9,6 +9,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -275,6 +276,7 @@ func (f *inboxFixture) launchedAs(t *testing.T, kind core.TriggerEventKind, even
 }
 
 func TestListInbox_FailingItemIDIsStableAcrossAStreakAndNewForANewOne(t *testing.T) {
+	testkit.Slow(t, "DB-backed: seeds many inbox rows in pgtest's Postgres")
 	f := newInboxFixture(t)
 	f.trigger(t, "trg-s")
 	base := time.Now().UTC().Add(-6 * time.Hour)

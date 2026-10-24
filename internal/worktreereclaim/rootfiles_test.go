@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/reliant-labs/forge/pkg/testkit"
 )
 
 // multiRepo makes a two-checkout workspace the way B1 does.
@@ -71,6 +73,7 @@ func TestRootFiles_ConfirmedPathSavesThemToo(t *testing.T) {
 }
 
 func TestRootFiles_PastTheCapHoldsAndSavesNothing(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	f.idle()

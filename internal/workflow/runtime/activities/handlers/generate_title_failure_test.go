@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -138,6 +139,7 @@ func TestGenerateTitle_UseFallbackWritesTruncatedFirstMessage(t *testing.T) {
 // title: the activity returns early when a title is set, so an empty one would
 // leave the chat permanently untitled.
 func TestGenerateTitle_EmptyGeneratedTitleIsAnError(t *testing.T) {
+	testkit.Slow(t, "runs workflow activities against pgtest's Postgres")
 	t.Parallel()
 
 	repo := setupTestRepo(t)

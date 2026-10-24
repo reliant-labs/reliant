@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -61,6 +62,7 @@ func resolvedQuestionUpdates(t *testing.T, repo *Repo, chatID string) []string {
 }
 
 func TestUpdateThreadStatus_FinishingAThreadClosesItsQuestions(t *testing.T) {
+	testkit.Slow(t, "a DB-backed test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	for _, status := range []ThreadStatus{ThreadStatusCompleted, ThreadStatusCancelled} {

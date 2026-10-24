@@ -14,6 +14,8 @@ version: '3'
 # │   task test:e2e          e2e/stories (Temporal dev server)    │
 # │   task ci                The whole local gate, one table      │
 # │   task ci:checks         Static + build lane of it            │
+# │   task ci:merge          The merge tier (~5 min, affected)    │
+# │   task release:gate      The slow tier, on main, per sha      │
 # │   task generate          forge generate (+ hooks), then docs  │
 # │   task generate:check    Pinned forge generate is a no-op     │
 # │   task generate:docs:check  Docs generators are a no-op       │
@@ -436,6 +438,34 @@ tasks:
     desc: "Static + build lane of the gate (forge ci gate checks)"
     cmds:
       - '{{.FORGE}} ci gate checks'
+
+  ci:merge:
+    # The MERGE tier, the one the merge queue runs on every branch: only what
+    # the diff from origin/main can affect, in about five minutes, inside ONE
+    # host heavy slot. tools/test-affected decides the Go/web/electron tests
+    # and whether forge generate / the docs generators must be checked; then
+    # go build, forge lint --scope <changed dirs> and (for a migration)
+    # migration-safety run at the same time. Prints a per-phase table: slot
+    # wait vs run. `-- --base <rev>` moves the diff base.
+    # dev-docs/merge-and-release-gates.md.
+    desc: "The merge tier: affected tests + build + scoped lint (+ generate/docs checks when their inputs changed), ~5 min"
+    cmds:
+      - ./scripts/merge-gate.sh {{.CLI_ARGS}}
+
+  release:gate:
+    # The SLOW tier: everything ci:merge leaves out (unscoped lint, the full
+    # -race suite with every slow test, integration, e2e, generate and docs
+    # drift), on a commit of main (default origin/main) in a private checkout,
+    # recorded per sha. release:tag refuses a commit without a green record.
+    # 40-70 minutes on a loaded host: run it in the background.
+    desc: "The release gate: the whole suite on origin/main (or `-- <rev>`), recorded per sha; release:tag requires it"
+    cmds:
+      - ./scripts/release-gate.sh run {{.CLI_ARGS}}
+
+  release:gate:check:
+    desc: "Is HEAD (or `-- <rev>`) release-ready? exit 0 green | 1 red | 3 no record"
+    cmds:
+      - ./scripts/release-gate.sh check {{.CLI_ARGS}}
 
   # ── Lint and format ───────────────────────────────────────────────────
 

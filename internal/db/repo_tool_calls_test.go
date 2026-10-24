@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/store"
@@ -338,6 +339,7 @@ func TestListToolCallsByChatOrdersByRequestedAt(t *testing.T) {
 // Input is nullable because tool arguments have not finished arriving while
 // the assistant message is still streaming.
 func TestToolCallWithNullInput(t *testing.T) {
+	testkit.Slow(t, "a DB-backed test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	repo, _, cleanup := setupTestRepo(t)

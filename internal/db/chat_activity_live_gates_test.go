@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/testkit"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 )
 
@@ -170,6 +171,7 @@ func TestChatActivity_QuestionOnRunningThreadWhileOthersRun(t *testing.T) {
 // A question left pending by a run that ended cannot be answered, whichever
 // way the run ended, and must not hold the chat.
 func TestChatActivity_QuestionOnTerminalThreadDoesNotCount(t *testing.T) {
+	testkit.Slow(t, "a DB-backed test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	for name, status := range map[string]WorkflowStatus{

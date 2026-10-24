@@ -8,6 +8,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -114,6 +115,7 @@ func TestEnableWorkflowEnablesEveryDeclaredTrigger(t *testing.T) {
 // One trigger with no connection refuses the lot, names the cause, and writes
 // nothing: no row, no schedule, no webhook token.
 func TestEnableWorkflowIsAllOrNothingWhenAConnectionIsMissing(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	env, _ := setupInboundTriggerTest(t)
@@ -172,6 +174,7 @@ nodes:
 }
 
 func TestEnableWorkflowResumesAPausedActivationAndKeepsItsSettings(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	env, _ := setupInboundTriggerTest(t)
@@ -260,6 +263,7 @@ func TestEnableWorkflowUpdatesTheSettingsOfAnEnabledAutomation(t *testing.T) {
 // Finish setup is the same call on a paused automation: it takes the new
 // settings and resumes.
 func TestEnableWorkflowResumesAPausedAutomationWithNewSettings(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	env, _ := setupInboundTriggerTest(t)
@@ -437,6 +441,7 @@ func resultFor(resp *reliantv1.EnableWorkflowResponse, trigger string) *reliantv
 }
 
 func TestEnableWorkflowOverridesOneTrigger(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	env, _ := setupInboundTriggerTest(t)
@@ -472,6 +477,7 @@ func withUser(ctx context.Context, userID string) context.Context {
 }
 
 func TestEnableWorkflowRefusals(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	env, _ := setupInboundTriggerTest(t)
@@ -502,6 +508,7 @@ func TestEnableWorkflowRefusesAnUnknownMachineWithoutWriting(t *testing.T) {
 }
 
 func TestDisableWorkflowPausesOnlyThatWorkflowsActivations(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	env, _ := setupInboundTriggerTest(t)
@@ -547,6 +554,7 @@ func TestDisableWorkflowReportsAFailureAndPausesTheRest(t *testing.T) {
 
 // One user cannot enable, resume or pause another's activations.
 func TestWorkflowEnableAndDisableAreScopedToTheCaller(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	env, _ := setupInboundTriggerTest(t)

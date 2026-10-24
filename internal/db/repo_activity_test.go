@@ -9,6 +9,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/reliant-labs/forge/pkg/testkit"
 )
 
 // ---------------------------------------------------------------------------
@@ -161,6 +163,7 @@ func TestGetChatActivity_Running(t *testing.T) {
 }
 
 func TestGetChatActivity_RunningWithThreadWorkflow(t *testing.T) {
+	testkit.Slow(t, "a DB-backed test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	repo, cleanup := setupTestDB(t)

@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"slices"
 	"testing"
+
+	"github.com/reliant-labs/forge/pkg/testkit"
 )
 
 // stripFixture is an idle fixture whose main ignores the usual build output.
@@ -33,6 +35,7 @@ func fill(t *testing.T, checkout string) []string {
 // An archived worktree kept for its work loses its regenerable bulk and keeps
 // every tracked, untracked and data file.
 func TestReconcile_HeldWorktreeShedsRegenerableFiles(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := stripFixture(t)
 	w := f.worktree("shed", "feat/shed")
@@ -75,6 +78,7 @@ func TestReconcile_HeldWorktreeShedsRegenerableFiles(t *testing.T) {
 // Shedding never deletes a directory that holds a repository: a nested repo
 // inside node_modules keeps node_modules, while dist still goes.
 func TestReconcile_ShedSkipsPathsHoldingARepository(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := stripFixture(t)
 	w := f.worktree("shed-nested", "feat/shed-nested")

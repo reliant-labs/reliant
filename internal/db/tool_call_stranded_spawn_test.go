@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
@@ -45,6 +46,7 @@ func insertTestSpawnToolCall(t *testing.T, repo *Repo, id, chatID, threadID stri
 // data: a child failed at 22:16:54 and its parent's spawn call was still
 // executing 49 hours later.
 func TestListStrandedSpawnToolCalls(t *testing.T) {
+	testkit.Slow(t, "a DB-backed test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	repo, cleanup := SetupTestDB(t)

@@ -8,6 +8,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/reliant-labs/forge/pkg/testkit"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 )
@@ -39,6 +40,7 @@ import (
 //     `WHERE sequence_number > cursor`, so a hole is indistinguishable from
 //     lost delivery and triggers a spurious resync.
 func TestSaveMessage_ConcurrentWritersSameChat(t *testing.T) {
+	testkit.Slow(t, "DB-backed: builds thread trees in pgtest's Postgres")
 	t.Parallel()
 
 	h := newTestHelper(t)
@@ -133,6 +135,7 @@ func TestSaveMessage_ConcurrentWritersSameChat(t *testing.T) {
 // stream has holes, and it is the STREAM the client resumes from — a gap there
 // is what actually reaches the user as a message that never appears.
 func TestSaveMessage_ChatUpdateSequenceIsContiguous(t *testing.T) {
+	testkit.Slow(t, "DB-backed: builds thread trees in pgtest's Postgres")
 	t.Parallel()
 
 	h := newTestHelper(t)

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -189,6 +190,7 @@ func TestGitPublishActivity_PushesAndRecordsTheIntentBeforeThePush(t *testing.T)
 
 // Policy refusals send nothing to the machine and fetch no credential.
 func TestGitPublishActivity_PolicyRefusalsTouchNothing(t *testing.T) {
+	testkit.Slow(t, "runs workflow activities against pgtest's Postgres")
 	t.Parallel()
 
 	for name, node := range map[string]*reliantv1.Node{
@@ -401,6 +403,7 @@ func TestGitPublishActivity_AppIdentityPushesWithTheBotToken(t *testing.T) {
 // owner credential is requested, no push command is sent, no ledger row is
 // written, and the node does not crash.
 func TestGitPublishActivity_AppIdentityFailsClosed(t *testing.T) {
+	testkit.Slow(t, "runs workflow activities against pgtest's Postgres")
 	t.Parallel()
 
 	for name, err := range map[string]error{

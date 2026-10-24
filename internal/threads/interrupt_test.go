@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -171,6 +172,7 @@ func insertInterruptToolCall(t *testing.T, repo *db.Repo, id, chatID, threadID, 
 }
 
 func TestInterruptThread_CancelsExecutingToolCallsOnThread(t *testing.T) {
+	testkit.Slow(t, "DB-backed: builds thread trees in pgtest's Postgres")
 	t.Parallel()
 
 	repo, cleanup := db.SetupTestDB(t)
@@ -207,6 +209,7 @@ func TestInterruptThread_CancelsExecutingToolCallsOnThread(t *testing.T) {
 }
 
 func TestInterruptThread_LeavesOtherThreadsAlone(t *testing.T) {
+	testkit.Slow(t, "DB-backed: builds thread trees in pgtest's Postgres")
 	t.Parallel()
 
 	repo, cleanup := db.SetupTestDB(t)
@@ -234,6 +237,7 @@ func TestInterruptThread_LeavesOtherThreadsAlone(t *testing.T) {
 }
 
 func TestInterruptThread_IgnoresAlreadyFinishedToolCalls(t *testing.T) {
+	testkit.Slow(t, "DB-backed: builds thread trees in pgtest's Postgres")
 	t.Parallel()
 
 	repo, cleanup := db.SetupTestDB(t)
@@ -296,6 +300,7 @@ func TestInterruptThread_CancelsPendingToolCallsOnThread(t *testing.T) {
 }
 
 func TestInterruptThread_NothingExecutingSucceeds(t *testing.T) {
+	testkit.Slow(t, "DB-backed: builds thread trees in pgtest's Postgres")
 	t.Parallel()
 
 	repo, cleanup := db.SetupTestDB(t)
@@ -320,6 +325,7 @@ func TestInterruptThread_NothingExecutingSucceeds(t *testing.T) {
 }
 
 func TestInterruptThread_ReportsUndeliverableCancels(t *testing.T) {
+	testkit.Slow(t, "DB-backed: builds thread trees in pgtest's Postgres")
 	t.Parallel()
 
 	repo, cleanup := db.SetupTestDB(t)
@@ -347,6 +353,7 @@ func TestInterruptThread_ReportsUndeliverableCancels(t *testing.T) {
 }
 
 func TestInterruptThread_LeavesQueuedMailboxForDelivery(t *testing.T) {
+	testkit.Slow(t, "DB-backed: builds thread trees in pgtest's Postgres")
 	t.Parallel()
 
 	repo, cleanup := db.SetupTestDB(t)

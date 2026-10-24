@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/models/message"
@@ -229,6 +230,7 @@ func createMessageWithToolResult(t *testing.T, repo *db.Repo, chatID, threadID, 
 // =============================================================================
 
 func TestLoadMessagesForLLM_TableDriven(t *testing.T) {
+	testkit.Slow(t, "runs workflow activities against pgtest's Postgres")
 	t.Parallel()
 
 	tests := []struct {
@@ -398,6 +400,7 @@ func TestLoadMessagesForLLM_TableDriven(t *testing.T) {
 // =============================================================================
 
 func TestLoadMessagesForLLM_OrphanedToolCallRepair(t *testing.T) {
+	testkit.Slow(t, "runs workflow activities against pgtest's Postgres")
 	t.Parallel()
 
 	tests := []struct {
@@ -491,6 +494,7 @@ func TestLoadMessagesForLLM_OrphanedToolCallRepair(t *testing.T) {
 // =============================================================================
 
 func TestLoadMessagesForLLM_MessageOrdering(t *testing.T) {
+	testkit.Slow(t, "runs workflow activities against pgtest's Postgres")
 	t.Parallel()
 
 	repo, cleanup := setupTestRepoWithCleanup(t)

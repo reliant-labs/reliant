@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
@@ -19,6 +20,7 @@ func storedIdentity(t *testing.T, repo *Repo, id string) core.ActingIdentity {
 }
 
 func TestTriggerActingIdentityRoundTrip(t *testing.T) {
+	testkit.Slow(t, "a DB-backed test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	repo, cleanup := SetupTestDB(t)
@@ -71,6 +73,7 @@ func TestTriggerActingIdentityEmptyIsTheOwner(t *testing.T) {
 // Every row that existed before the column acts as its owner: the migration's
 // DEFAULT is what makes the previous release's activations keep working.
 func TestTriggerActingIdentityPreMigrationRowIsTheOwner(t *testing.T) {
+	testkit.Slow(t, "a DB-backed test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	repo, raw, cleanup := SetupTestDBWithRawDB(t)

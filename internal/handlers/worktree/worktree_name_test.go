@@ -7,6 +7,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -55,6 +56,7 @@ func TestCreateWorktree_NameRule(t *testing.T) {
 }
 
 func TestUnarchiveWorktree_RefusesWhenTheNameIsTaken(t *testing.T) {
+	testkit.Slow(t, "runs git against a real repository through the handler")
 	t.Parallel()
 
 	repo := db.NewTestRepo(t)

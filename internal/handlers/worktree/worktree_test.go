@@ -15,6 +15,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/svcerr"
+	"github.com/reliant-labs/forge/pkg/testkit"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -289,6 +290,7 @@ func setupTestWorktreeServiceForRevert(t *testing.T) (*Service, string, string) 
 }
 
 func TestRevertFiles_DeletesNestedUntrackedFile(t *testing.T) {
+	testkit.Slow(t, "runs git against a real repository through the handler")
 	t.Parallel()
 
 	svc, userID, worktreeID := setupTestWorktreeServiceForRevert(t)
@@ -316,6 +318,7 @@ func TestRevertFiles_DeletesNestedUntrackedFile(t *testing.T) {
 }
 
 func TestRevertFiles_ReturnsFailedPreconditionWhenAllRequestedFilesFail(t *testing.T) {
+	testkit.Slow(t, "runs git against a real repository through the handler")
 	t.Parallel()
 
 	svc, userID, worktreeID := setupTestWorktreeServiceForRevert(t)

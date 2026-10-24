@@ -7,6 +7,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"testing"
+
+	"github.com/reliant-labs/forge/pkg/testkit"
 )
 
 // setWorktreeTestGitEnv isolates git from the host config. Crucially it does
@@ -34,6 +36,7 @@ func setWorktreeTestGitEnv(t *testing.T) {
 // worktree creation fail with "invalid reference: main". The daemon handler
 // must now seed a root commit and create the worktree successfully.
 func TestHandleWorktreeCreate_UnbornHEAD(t *testing.T) {
+	testkit.Slow(t, "creates real git checkouts and worktrees on disk")
 	// TestMain's git config sets no identity either, and its $HOME keeps the
 	// worktree out of the real one.
 	t.Parallel()

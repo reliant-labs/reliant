@@ -12,6 +12,7 @@ import (
 	"google.golang.org/protobuf/types/known/structpb"
 
 	"github.com/reliant-labs/forge/pkg/svcerr"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	llmdrivers "github.com/reliant-labs/reliant/internal/llm/drivers"
@@ -40,6 +41,7 @@ import (
 // status SendMessage routes on is pinned separately, because each branch
 // persists in its own way.
 func TestSendMessage_RejectedParamsPersistNothing(t *testing.T) {
+	testkit.Slow(t, "a DB-backed chat handler test with many round trips to pgtest's Postgres")
 	cases := []struct {
 		name            string
 		dbStatus        db.WorkflowStatus

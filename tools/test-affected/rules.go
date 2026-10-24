@@ -203,11 +203,23 @@ var rules = []rule{
 	{
 		id: "global-config",
 		patterns: []string{
-			"Taskfile.yml", "Makefile", "buf.yaml", "buf.gen.yaml",
-			"buf.gen.controlplane.yaml",
+			"buf.yaml", "buf.gen.yaml", "buf.gen.controlplane.yaml",
 		},
 		full:   allLanes,
 		reason: "build or generation configuration changed (a subset cannot judge it)",
+	},
+	{
+		// The Taskfile (and the Makefile's one-line forwarders to it) is what
+		// the codegen lanes run: `task generate:forge` and `task
+		// generate:docs`. The Go, web and electron lanes do not go through it
+		// (they run go test, vitest and npm test themselves), so a Taskfile
+		// edit no longer runs the whole module, every vitest file and
+		// electron before a merge (17+ minutes); `task test` itself is
+		// judged by the release gate (dev-docs/merge-and-release-gates.md).
+		id:       "task-runner",
+		patterns: []string{"Taskfile.yml", "Makefile"},
+		full:     []lane{laneForgeGen, laneDocGen},
+		reason:   "the task runner the codegen lanes run changed",
 	},
 	{
 		// The forge pin (forge_version) and forge's own config reach the Go

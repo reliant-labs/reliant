@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/reliant-labs/forge/pkg/testkit"
 )
 
 // A failed `git worktree add` must not leave its directory behind.
@@ -37,6 +39,7 @@ func gitRepoWithConflictingRef(t *testing.T) string {
 }
 
 func TestWorktreeCreate_FailedGitLeavesNoDirectoryBehind(t *testing.T) {
+	testkit.Slow(t, "creates real git checkouts and worktrees on disk")
 	t.Parallel()
 	projectPath := gitRepoWithConflictingRef(t)
 
@@ -112,6 +115,7 @@ func TestWorktreeCreate_FailedGitLeavesNoDirectoryBehind(t *testing.T) {
 // checkout before failing, and under --force the directory can predate the
 // call entirely — deleting it could destroy work this function did not create.
 func TestWorktreeCreate_FailedGitKeepsNonEmptyDirectory(t *testing.T) {
+	testkit.Slow(t, "creates real git checkouts and worktrees on disk")
 	t.Parallel()
 	projectPath := gitRepoWithConflictingRef(t)
 
@@ -147,6 +151,7 @@ func TestWorktreeCreate_FailedGitKeepsNonEmptyDirectory(t *testing.T) {
 
 // The happy path still works, so the rollback cannot pass by breaking creates.
 func TestWorktreeCreate_SucceedsForANonConflictingBranch(t *testing.T) {
+	testkit.Slow(t, "creates real git checkouts and worktrees on disk")
 	t.Parallel()
 	projectPath := gitRepoWithConflictingRef(t)
 

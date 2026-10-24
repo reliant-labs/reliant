@@ -13,6 +13,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/migratekit"
 	"github.com/reliant-labs/forge/pkg/migratekit/compat"
 	"github.com/reliant-labs/forge/pkg/pgtest"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/require"
 
 	forgedb "github.com/reliant-labs/reliant/db"
@@ -116,6 +117,7 @@ func requireCurrent(t *testing.T, db *sql.DB) {
 
 // A fresh database runs the baseline, and everything after it.
 func TestMigrate_FreshDatabaseAppliesEveryMigration(t *testing.T) {
+	testkit.Slow(t, "a DB-backed test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	dsn := newEmptyTestDB(t)
@@ -139,6 +141,7 @@ func TestMigrate_FreshDatabaseAppliesEveryMigration(t *testing.T) {
 // A migrated database is left alone: the next boot applies nothing and runs
 // no DDL.
 func TestMigrate_CurrentDatabaseIsANoOp(t *testing.T) {
+	testkit.Slow(t, "a DB-backed test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	dsn, db := newMigratedTestDB(t)
@@ -156,6 +159,7 @@ func TestMigrate_CurrentDatabaseIsANoOp(t *testing.T) {
 // That leftover table is never read: a run over such a database is a no-op,
 // and leaves the table exactly as it was.
 func TestMigrate_AdoptedDatabaseIsANoOp(t *testing.T) {
+	testkit.Slow(t, "a DB-backed test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	dsn, db := newMigratedTestDB(t)
@@ -187,6 +191,7 @@ func TestMigrate_AdoptedDatabaseIsANoOp(t *testing.T) {
 // that upgrades the first kind, rather than left dirty by a baseline that fails
 // on its first CREATE TABLE.
 func TestMigrate_RefusesReliantTablesWithoutARecord(t *testing.T) {
+	testkit.Slow(t, "a DB-backed test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	dsn, db := newMigratedTestDB(t)
@@ -212,6 +217,7 @@ func TestMigrate_RefusesReliantTablesWithoutARecord(t *testing.T) {
 // api-server — take turns and all succeed: exactly one builds, and the rest
 // find nothing to do.
 func TestMigrate_ConcurrentRunsTakeTurns(t *testing.T) {
+	testkit.Slow(t, "a DB-backed test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	const runners = 4
@@ -243,6 +249,7 @@ func TestMigrate_ConcurrentRunsTakeTurns(t *testing.T) {
 // PlanMigration is what `reliant db migrate status` prints. Its verdict for
 // each state must be what Migrate then does.
 func TestPlanMigration_Verdicts(t *testing.T) {
+	testkit.Slow(t, "a DB-backed test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	verdict := func(t *testing.T, db *sql.DB) (string, bool) {

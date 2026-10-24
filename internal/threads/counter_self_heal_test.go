@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/testkit"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 )
@@ -31,6 +32,7 @@ import (
 // real high-water mark. This test is the contract for that, and it is what
 // lets those three call sites keep working unmodified.
 func TestSeqCounter_HealsAfterDirectMessageInsert(t *testing.T) {
+	testkit.Slow(t, "DB-backed: builds thread trees in pgtest's Postgres")
 	t.Parallel()
 
 	h := newTestHelper(t)

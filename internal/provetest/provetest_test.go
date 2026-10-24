@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -149,6 +150,7 @@ func activeJournalEntries(t *testing.T, dir string) []string {
 }
 
 func TestProve_Proven(t *testing.T) {
+	testkit.Slow(t, "runs the fix's test runner and git as real subprocesses")
 	t.Parallel()
 
 	dir := gitRepo(t)
@@ -170,6 +172,7 @@ func TestProve_Proven(t *testing.T) {
 }
 
 func TestProve_PassesWithoutFix(t *testing.T) {
+	testkit.Slow(t, "runs the fix's test runner and git as real subprocesses")
 	t.Parallel()
 
 	dir := gitRepo(t)
@@ -180,6 +183,7 @@ func TestProve_PassesWithoutFix(t *testing.T) {
 }
 
 func TestProve_FailsWithFix(t *testing.T) {
+	testkit.Slow(t, "runs the fix's test runner and git as real subprocesses")
 	t.Parallel()
 
 	dir := gitRepo(t)
@@ -190,6 +194,7 @@ func TestProve_FailsWithFix(t *testing.T) {
 }
 
 func TestProve_BaselineCompileFailureIsNotProof(t *testing.T) {
+	testkit.Slow(t, "runs the fix's test runner and git as real subprocesses")
 	t.Parallel()
 
 	dir := gitRepo(t)
@@ -208,6 +213,7 @@ func TestProve_BaselineCompileFailureIsNotProof(t *testing.T) {
 }
 
 func TestProve_RestoresWhenTheRunnerTimesOut(t *testing.T) {
+	testkit.Slow(t, "runs the fix's test runner and git as real subprocesses")
 	t.Parallel()
 
 	dir := gitRepo(t)
@@ -224,6 +230,7 @@ func TestProve_RestoresWhenTheRunnerTimesOut(t *testing.T) {
 // A runner that ignores both its own timeout and cancellation must not hold
 // the baseline in place forever: the backstop abandons it and restores.
 func TestProve_RestoresWhenTheRunnerHangs(t *testing.T) {
+	testkit.Slow(t, "runs the fix's test runner and git as real subprocesses")
 	t.Parallel()
 
 	dir := gitRepo(t)
@@ -251,6 +258,7 @@ func TestProve_RestoresWhenTheRunnerHangs(t *testing.T) {
 }
 
 func TestProve_RestoresOnCancellation(t *testing.T) {
+	testkit.Slow(t, "runs the fix's test runner and git as real subprocesses")
 	t.Parallel()
 
 	dir := gitRepo(t)
@@ -281,6 +289,7 @@ func TestProve_RestoresOnCancellation(t *testing.T) {
 }
 
 func TestProve_RestoresWhenTheRunnerPanics(t *testing.T) {
+	testkit.Slow(t, "runs the fix's test runner and git as real subprocesses")
 	t.Parallel()
 
 	dir := gitRepo(t)
@@ -303,6 +312,7 @@ func TestProve_RestoresWhenTheRunnerPanics(t *testing.T) {
 // Not parallel: testHookAfterSwap is package state, and a parallel proof would
 // panic in it too. Parallel tests wait until every serial one has finished.
 func TestProve_RestoresWhenProveItselfPanics(t *testing.T) {
+	testkit.Slow(t, "runs the fix's test runner and git as real subprocesses")
 	dir := gitRepo(t)
 	testHookAfterSwap = func() { panic("boom after swap") }
 	t.Cleanup(func() { testHookAfterSwap = nil })
@@ -321,6 +331,7 @@ func TestProve_RestoresWhenProveItselfPanics(t *testing.T) {
 // Another agent writes the file while it holds the baseline. Their write is
 // kept, never clobbered; the fix is preserved where the result says.
 func TestProve_ConcurrentModificationKeepsTheirContent(t *testing.T) {
+	testkit.Slow(t, "runs the fix's test runner and git as real subprocesses")
 	t.Parallel()
 
 	const theirs = "package calc\n\n// another agent's edit\nfunc Add(a, b int) int { return b + a }\n"
@@ -356,6 +367,7 @@ func TestProve_ConcurrentModificationKeepsTheirContent(t *testing.T) {
 // Rewriting the file with the SAME baseline bytes is still someone else's
 // write — a deliberate revert, say — and must not be overwritten either.
 func TestProve_IdenticalRewriteIsStillAConflict(t *testing.T) {
+	testkit.Slow(t, "runs the fix's test runner and git as real subprocesses")
 	t.Parallel()
 
 	dir := gitRepo(t)
@@ -420,6 +432,7 @@ func TestProve_RefusesPathsOutsideTheWorkspace(t *testing.T) {
 }
 
 func TestProve_SerializesConcurrentCallsOnTheSameFile(t *testing.T) {
+	testkit.Slow(t, "runs the fix's test runner and git as real subprocesses")
 	t.Parallel()
 
 	dir := gitRepo(t)
@@ -488,6 +501,7 @@ func orphanSwap(t *testing.T, dir, rel string) {
 }
 
 func TestProve_RecoversASwapLeftByACrashedRun(t *testing.T) {
+	testkit.Slow(t, "runs the fix's test runner and git as real subprocesses")
 	t.Parallel()
 
 	dir := gitRepo(t)
@@ -509,6 +523,7 @@ func TestProve_RecoversASwapLeftByACrashedRun(t *testing.T) {
 // Recovery is not limited to the files a later call names: any orphan whose
 // lock is free is put back.
 func TestProve_RecoversOrphansOfOtherFiles(t *testing.T) {
+	testkit.Slow(t, "runs the fix's test runner and git as real subprocesses")
 	t.Parallel()
 
 	dir := gitRepo(t)
@@ -529,6 +544,7 @@ func TestProve_RecoversOrphansOfOtherFiles(t *testing.T) {
 // A crashed run that had put back a file the fix deleted — inside directories
 // it created — leaves both behind; recovery removes them again.
 func TestProve_RecoveryRemovesWhatACrashedRunRecreated(t *testing.T) {
+	testkit.Slow(t, "runs the fix's test runner and git as real subprocesses")
 	t.Parallel()
 
 	dir := gitRepo(t)
@@ -550,6 +566,7 @@ func TestProve_RecoveryRemovesWhatACrashedRunRecreated(t *testing.T) {
 // A call that is refused after recovery ran must still say what it
 // recovered: the agent has to learn its file was put back.
 func TestProve_ReportsRecoveryEvenWhenTheCallFails(t *testing.T) {
+	testkit.Slow(t, "runs the fix's test runner and git as real subprocesses")
 	t.Parallel()
 
 	dir := gitRepo(t)
@@ -565,6 +582,7 @@ func TestProve_ReportsRecoveryEvenWhenTheCallFails(t *testing.T) {
 }
 
 func TestProve_RecoveryNeverClobbersALaterEdit(t *testing.T) {
+	testkit.Slow(t, "runs the fix's test runner and git as real subprocesses")
 	t.Parallel()
 
 	dir := gitRepo(t)
@@ -583,6 +601,7 @@ func TestProve_RecoveryNeverClobbersALaterEdit(t *testing.T) {
 }
 
 func TestProve_FileAddedByTheFixIsRemovedForTheBeforeRun(t *testing.T) {
+	testkit.Slow(t, "runs the fix's test runner and git as real subprocesses")
 	t.Parallel()
 
 	dir := gitRepo(t)
@@ -610,6 +629,7 @@ func TestProve_FileAddedByTheFixIsRemovedForTheBeforeRun(t *testing.T) {
 }
 
 func TestProve_FileDeletedByTheFixIsRecreatedForTheBeforeRun(t *testing.T) {
+	testkit.Slow(t, "runs the fix's test runner and git as real subprocesses")
 	t.Parallel()
 
 	dir := gitRepo(t)
@@ -639,6 +659,7 @@ func TestProve_FileDeletedByTheFixIsRecreatedForTheBeforeRun(t *testing.T) {
 }
 
 func TestProve_ExplicitBaselineRevision(t *testing.T) {
+	testkit.Slow(t, "runs the fix's test runner and git as real subprocesses")
 	t.Parallel()
 
 	dir := gitRepo(t)
@@ -654,6 +675,7 @@ func TestProve_ExplicitBaselineRevision(t *testing.T) {
 }
 
 func TestProve_PreservesTheFileMode(t *testing.T) {
+	testkit.Slow(t, "runs the fix's test runner and git as real subprocesses")
 	t.Parallel()
 
 	if runtime.GOOS == "windows" {
@@ -671,6 +693,7 @@ func TestProve_PreservesTheFileMode(t *testing.T) {
 }
 
 func TestProve_SkipsFilesUnchangedFromBaseline(t *testing.T) {
+	testkit.Slow(t, "runs the fix's test runner and git as real subprocesses")
 	t.Parallel()
 
 	dir := gitRepo(t)
@@ -719,6 +742,7 @@ func TestProve_MiscasedPathOnACaseInsensitiveFilesystem(t *testing.T) {
 }
 
 func TestProve_WarnsWhenTheTestFileIsNamed(t *testing.T) {
+	testkit.Slow(t, "runs the fix's test runner and git as real subprocesses")
 	t.Parallel()
 
 	dir := gitRepo(t)
@@ -730,6 +754,7 @@ func TestProve_WarnsWhenTheTestFileIsNamed(t *testing.T) {
 }
 
 func TestProve_RefusesBadRequests(t *testing.T) {
+	testkit.Slow(t, "runs the fix's test runner and git as real subprocesses")
 	t.Parallel()
 
 	dir := gitRepo(t)

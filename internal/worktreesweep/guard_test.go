@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -19,6 +20,7 @@ import (
 // A machine whose disk guard starts acting has its kept workspaces re-checked
 // at the next pass, whatever their back-off — once per episode, not every pass.
 func TestSweep_DiskGuardEpisodeRechecksHeldRowsOnce(t *testing.T) {
+	testkit.Slow(t, "builds real git worktrees and runs git against them")
 	t.Parallel()
 
 	e := newEnv(t)

@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/reliant-labs/forge/pkg/orm"
+	"github.com/reliant-labs/forge/pkg/testkit"
 )
 
 func TestUpdateStreamCountersAreScoped(t *testing.T) {
@@ -118,6 +119,7 @@ func TestChatUpdateCounterRollsBackWithLedgerWrite(t *testing.T) {
 }
 
 func TestConcurrentChatUpdatesAreContiguous(t *testing.T) {
+	testkit.Slow(t, "a DB-backed test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	repo, cleanup := setupTestDB(t)

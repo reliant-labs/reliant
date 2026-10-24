@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/reliant-labs/forge/pkg/accesstoken"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/require"
 )
 
@@ -18,6 +19,7 @@ import (
 // had lagged before (no daemon:resume, cluster:manage, domain:*), so a mint of
 // a newer scope failed the constraint.
 func TestAccessTokensScopesCheckMatchesForge(t *testing.T) {
+	testkit.Slow(t, "a DB-backed test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	_, raw, cleanup := SetupTestDBWithRawDB(t)

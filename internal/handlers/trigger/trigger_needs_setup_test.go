@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -148,6 +149,7 @@ func TestCreateActivationAcceptsACompleteSetup(t *testing.T) {
 // ---- update ----------------------------------------------------------------
 
 func TestUpdateActivationCannotClearARequiredParam(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	env := setupNeedsSetup(t)
@@ -166,6 +168,7 @@ func TestUpdateActivationCannotClearARequiredParam(t *testing.T) {
 // ---- enable: new -----------------------------------------------------------
 
 func TestEnableWorkflowRefusesANewActivationWithoutTheRequiredParam(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	env := setupNeedsSetup(t)
@@ -207,6 +210,7 @@ func TestEnableWorkflowRevalidatesAnExistingActivationAgainstRequiredParams(t *t
 // ---- enable: resume --------------------------------------------------------
 
 func TestEnableWorkflowResumeValidatesParams(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	env := setupNeedsSetup(t)
@@ -225,6 +229,7 @@ func TestEnableWorkflowResumeValidatesParams(t *testing.T) {
 }
 
 func TestSetTriggerEnabledDoesNotResumeAnUnfinishedActivation(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	env := setupNeedsSetup(t)
@@ -258,6 +263,7 @@ func TestRunNowOfAnUnfinishedActivationSaysWhatToFinish(t *testing.T) {
 }
 
 func TestRunNowOfACompleteActivationStillFires(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	env := setupNeedsSetup(t)
@@ -269,6 +275,7 @@ func TestRunNowOfACompleteActivationStillFires(t *testing.T) {
 // ---- health ----------------------------------------------------------------
 
 func TestHealthIsNeedsSetupForAnActivationMissingARequiredParam(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	env := setupNeedsSetup(t)
@@ -320,6 +327,7 @@ nodes:
 }
 
 func TestHealthBrokenOutranksNeedsSetup(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	env := setupNeedsSetup(t)
@@ -364,6 +372,7 @@ func (e *needsSetupEnv) withOptions(t *testing.T, o OptionsChecker) {
 }
 
 func TestEnableFailsOnADefinitelyUnreachableValue(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	env := setupNeedsSetup(t)
@@ -391,6 +400,7 @@ func TestEnableFailsOnADefinitelyUnreachableValue(t *testing.T) {
 }
 
 func TestEnableWarnsButProceedsOnAnUpstreamError(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	env := setupNeedsSetup(t)

@@ -11,6 +11,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/reliant-labs/forge/pkg/testkit"
 )
 
 func run(t *testing.T, dir string, args ...string) string {
@@ -209,6 +211,7 @@ func TestReconcile_IgnoredDataHoldsTheWorktree(t *testing.T) {
 }
 
 func TestReconcile_DirtyIsHeld(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	f.idle()
@@ -277,6 +280,7 @@ func TestReconcile_UnpushedCommitIsHeld_ThenSafeOnceMergedOrPushed(t *testing.T)
 }
 
 func TestReconcile_InUseIsHeld_AndRecheckedRightBeforeRemoval(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	f.idle()
@@ -357,6 +361,7 @@ func TestReconcile_DirectoryLockedForAnotherRowIsNeverRemoved(t *testing.T) {
 // S1: the fence. An unarchive re-locks as active; a request already in flight
 // must then refuse to remove.
 func TestFence_UnarchiveInvalidatesInFlightRemoval(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	f.idle()
@@ -382,6 +387,7 @@ func TestFence_UnarchiveInvalidatesInFlightRemoval(t *testing.T) {
 }
 
 func TestFence_ReArchiveWithNewFenceSupersedesTheOld(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	f.idle()
@@ -429,6 +435,7 @@ func TestReconcile_MissingRootIsForeignNotGone(t *testing.T) {
 }
 
 func TestReconcile_MissingDirectoryPrunesRegistrationAndReportsGone(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	w := f.worktree("w8", "feat/h")
@@ -490,6 +497,7 @@ func TestReconcile_ActiveOnlyPassNeverListsProcesses(t *testing.T) {
 // R-S1: there is no re-lock cache. A worktree that someone unlocked is locked
 // again by the very next request.
 func TestLockActive_AlwaysRewritesTheLock(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	path := filepath.Join(f.root, "proj", "w12")
@@ -507,6 +515,7 @@ func TestLockActive_AlwaysRewritesTheLock(t *testing.T) {
 // <reclaimed>/<id>/ before the workspace goes (rootfiles_test.go); ones past the
 // cap hold it, on both paths, with nothing removed.
 func TestReconcile_MultiRepoRootFilesPastTheCapHoldTheWorkspace(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	f.idle()
@@ -565,6 +574,7 @@ func TestReconcile_MultiRepoWorkspaceWithOnlyEmptyDirsBetweenIsRemoved(t *testin
 
 // B4: a repository inside the worktree, at any depth, in ignored or skip dirs.
 func TestReconcile_NestedRepositoryHoldsAtAnyDepth(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	f.idle()
@@ -597,6 +607,7 @@ func TestReconcile_NestedRepositoryHoldsAtAnyDepth(t *testing.T) {
 
 // B4: the snapshot itself refuses to record a gitlink as a stand-in.
 func TestSnapshot_RefusesAGitlinkStandIn(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	w := f.worktree("gl", "feat/gl")
@@ -611,6 +622,7 @@ func TestSnapshot_RefusesAGitlinkStandIn(t *testing.T) {
 }
 
 func TestSubmoduleIsHeldNotRemoved(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	f.idle()
@@ -671,6 +683,7 @@ func TestSnapshotRemove_SavesWorkThenRemoves(t *testing.T) {
 }
 
 func TestSnapshot_DoesNotTouchHeadIndexOrFiles(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	w := f.worktree("w14", "feat/m")
@@ -742,6 +755,7 @@ func TestSnapshotRemove_WorkChangedAfterSnapshotIsNotRemoved(t *testing.T) {
 
 // S3: no --force. git itself refuses a dirty checkout at removal time.
 func TestRemoval_NeverForcesPastGit(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	f.idle()
@@ -762,6 +776,7 @@ func TestRemoval_NeverForcesPastGit(t *testing.T) {
 }
 
 func TestSnapshotRemove_InUseIsLeftAlone(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	w := f.worktree("w18", "feat/q")
@@ -777,6 +792,7 @@ func TestSnapshotRemove_InUseIsLeftAlone(t *testing.T) {
 }
 
 func TestSnapshotRemove_TooLargeIsHeld(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	w := f.worktree("w19", "feat/r")
@@ -791,6 +807,7 @@ func TestSnapshotRemove_TooLargeIsHeld(t *testing.T) {
 }
 
 func TestReconcile_KeepFilesNeverRemoves(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	f.idle()

@@ -9,6 +9,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/reliant-labs/forge/pkg/testkit"
 )
 
 // bareReclaimer is a Reclaimer over an empty root, for tests that never reach
@@ -197,6 +199,7 @@ func TestReconcile_RepliesAtTheDeadlineWithWhatFinished(t *testing.T) {
 // ---- the probe says when it could not tell ------------------------------
 
 func TestIdleDone_AProbeOutOfTimeIsInconclusiveNotLocked(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	f.idle()

@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -125,6 +126,7 @@ func (e *env) get(t *testing.T, id string) *db.Worktree {
 func exists(p string) bool { _, err := os.Stat(p); return err == nil }
 
 func TestSweep_RemovesCleanArchivedAndRecordsIt(t *testing.T) {
+	testkit.Slow(t, "builds real git worktrees and runs git against them")
 	t.Parallel()
 
 	e := newEnv(t)
@@ -139,6 +141,7 @@ func TestSweep_RemovesCleanArchivedAndRecordsIt(t *testing.T) {
 }
 
 func TestSweep_HoldsDirtyAndRecordsReasonAndSize(t *testing.T) {
+	testkit.Slow(t, "builds real git worktrees and runs git against them")
 	t.Parallel()
 
 	e := newEnv(t)
@@ -154,6 +157,7 @@ func TestSweep_HoldsDirtyAndRecordsReasonAndSize(t *testing.T) {
 }
 
 func TestSweep_LocksActiveWorktreesAndNeverRemovesThem(t *testing.T) {
+	testkit.Slow(t, "builds real git worktrees and runs git against them")
 	t.Parallel()
 
 	e := newEnv(t)
@@ -169,6 +173,7 @@ func TestSweep_LocksActiveWorktreesAndNeverRemovesThem(t *testing.T) {
 }
 
 func TestSweep_AdoptsUnattributedRows(t *testing.T) {
+	testkit.Slow(t, "builds real git worktrees and runs git against them")
 	t.Parallel()
 
 	e := newEnv(t)
@@ -183,6 +188,7 @@ func TestSweep_AdoptsUnattributedRows(t *testing.T) {
 }
 
 func TestSweep_SkipsOfflineDaemon(t *testing.T) {
+	testkit.Slow(t, "builds real git worktrees and runs git against them")
 	t.Parallel()
 
 	e := newEnv(t)
@@ -195,6 +201,7 @@ func TestSweep_SkipsOfflineDaemon(t *testing.T) {
 }
 
 func TestSettle_RemovesImmediately(t *testing.T) {
+	testkit.Slow(t, "builds real git worktrees and runs git against them")
 	t.Parallel()
 
 	e := newEnv(t)
@@ -204,6 +211,7 @@ func TestSettle_RemovesImmediately(t *testing.T) {
 }
 
 func TestStorageView_ShowsHeldAndLowDiskPerMachine(t *testing.T) {
+	testkit.Slow(t, "builds real git worktrees and runs git against them")
 	t.Parallel()
 
 	e := newEnv(t)
@@ -231,6 +239,7 @@ func TestStorageView_ShowsHeldAndLowDiskPerMachine(t *testing.T) {
 }
 
 func TestStorageView_HealthyDiskWithNothingHeldHasNoItem(t *testing.T) {
+	testkit.Slow(t, "builds real git worktrees and runs git against them")
 	t.Parallel()
 
 	e := newEnv(t)
@@ -242,6 +251,7 @@ func TestStorageView_HealthyDiskWithNothingHeldHasNoItem(t *testing.T) {
 }
 
 func TestCleanup_SnapshotsThenRemovesOnlyWhatWasConfirmed(t *testing.T) {
+	testkit.Slow(t, "builds real git worktrees and runs git against them")
 	t.Parallel()
 
 	e := newEnv(t)
@@ -276,6 +286,7 @@ func TestCleanup_SnapshotsThenRemovesOnlyWhatWasConfirmed(t *testing.T) {
 }
 
 func TestCleanup_OfflineMachineIsRefused(t *testing.T) {
+	testkit.Slow(t, "builds real git worktrees and runs git against them")
 	t.Parallel()
 
 	e := newEnv(t)
@@ -290,6 +301,7 @@ func TestCleanup_OfflineMachineIsRefused(t *testing.T) {
 }
 
 func TestCleanup_NeverActsOnAnotherUsersWorktree(t *testing.T) {
+	testkit.Slow(t, "builds real git worktrees and runs git against them")
 	t.Parallel()
 
 	e := newEnv(t)
@@ -306,6 +318,7 @@ func TestCleanup_NeverActsOnAnotherUsersWorktree(t *testing.T) {
 }
 
 func TestSweep_RecordsRegenerableFilesShedFromAHeldWorktree(t *testing.T) {
+	testkit.Slow(t, "builds real git worktrees and runs git against them")
 	t.Parallel()
 
 	e := newEnv(t)
@@ -327,6 +340,7 @@ func TestSweep_RecordsRegenerableFilesShedFromAHeldWorktree(t *testing.T) {
 }
 
 func TestSweep_SavesUnpushedCommitsThenRemovesAndRecordsTheRefs(t *testing.T) {
+	testkit.Slow(t, "builds real git worktrees and runs git against them")
 	t.Parallel()
 
 	e := newEnv(t)
