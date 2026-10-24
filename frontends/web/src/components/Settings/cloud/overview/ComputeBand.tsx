@@ -2,7 +2,7 @@ import { Fragment } from "react";
 
 import { Cpu } from "lucide-react";
 
-import { Button } from "../ui";
+import Button from "@/components/forge-ui/button";
 import type { ComputeCapacity } from "../billingUtils";
 import { formatMachineSecondsShort } from "@/lib/formatMachineMinutes";
 import { cn } from "@/lib/utils";
@@ -120,7 +120,7 @@ export function ComputeBand({
             subscription's stale limits, and blanket-disabling a card on partial
             failure removes the escape route that would have fixed the problem. */}
         <Button
-          size="sm"
+          size="md"
           variant="outline"
           className="w-full sm:w-auto"
           onClick={onChangePlan}
@@ -150,7 +150,7 @@ export function ComputeBand({
                 Machines run on a plan — pick one to get started.
               </p>
             </div>
-            <Button size="sm" onClick={onChangePlan}>
+            <Button size="md" onClick={onChangePlan}>
               Choose a plan
             </Button>
           </div>
@@ -202,7 +202,7 @@ export function ComputeBand({
                     </p>
                   )}
                 </div>
-                <Button size="sm" variant="ghost" onClick={onRetryUsage}>
+                <Button size="md" variant="ghost" onClick={onRetryUsage}>
                   Retry
                 </Button>
               </div>

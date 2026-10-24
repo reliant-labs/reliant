@@ -37,3 +37,20 @@ func TestDaemonProcessSettings(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "child_priority")
 }
+
+// fetch's reach into the user's own network is an explicit opt-in: off unless
+// RELIANT_FETCH_ALLOW_PRIVATE_NETWORK is set, and carried into the daemon's Host.
+func TestDaemonFetchAllowPrivateNetworkIsAnOptIn(t *testing.T) {
+	t.Setenv("RELIANT_FETCH_ALLOW_PRIVATE_NETWORK", "")
+	require.NoError(t, os.Unsetenv("RELIANT_FETCH_ALLOW_PRIVATE_NETWORK"))
+	cfg, err := loadDaemonConfig(daemonCommandWithArgs(t, "start"))
+	require.NoError(t, err)
+	assert.False(t, cfg.GetFetchAllowPrivateNetwork())
+	assert.False(t, daemonHost(cfg).AllowPrivateFetch)
+
+	t.Setenv("RELIANT_FETCH_ALLOW_PRIVATE_NETWORK", "true")
+	cfg, err = loadDaemonConfig(daemonCommandWithArgs(t, "start"))
+	require.NoError(t, err)
+	assert.True(t, cfg.GetFetchAllowPrivateNetwork())
+	assert.True(t, daemonHost(cfg).AllowPrivateFetch)
+}

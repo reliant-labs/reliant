@@ -25,7 +25,7 @@ import { createColumnHelper, tableFeatures, useTable } from "@tanstack/react-tab
 import { ChevronRight, GitBranch, Radio, Search } from "lucide-react";
 
 import Card from "@/components/forge-ui/card";
-import { Button } from "@/components/ui/Button";
+import Button from "@/components/forge-ui/button";
 import { useSearchLogs, useServiceOverview, type LogFilters } from "@/hooks/observability-queries";
 import { obsErrorKind, obsErrorMessage } from "@/services/controlPlane/observability/errors";
 import { SEVERITIES, type ObsScope, type LogRecord, type Severity } from "@/services/controlPlane/observability/types";

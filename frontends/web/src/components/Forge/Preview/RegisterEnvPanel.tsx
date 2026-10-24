@@ -35,7 +35,7 @@
 import { Plus } from "lucide-react";
 
 import Badge from "@/components/forge-ui/badge";
-import { Button } from "@/components/ui/Button";
+import Button from "@/components/forge-ui/button";
 import { useForgeEnvShape, useRegisterEnvironment } from "@/hooks/forge-queries";
 import { liveKindLabel } from "@/services/forge/live";
 import { registerCandidate } from "@/services/forge/register";

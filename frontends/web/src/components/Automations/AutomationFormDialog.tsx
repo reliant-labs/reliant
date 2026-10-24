@@ -21,7 +21,7 @@ import { memo, useEffect, useId, useMemo, useRef, useState, type FormEvent } fro
 import { ChevronRight } from "lucide-react";
 
 import { Modal } from "../ui/Modal";
-import { Button } from "../ui/Button";
+import Button from "@/components/forge-ui/button";
 import { useProjectStore } from "@/store/projectStore";
 import { getWorkflowDisplayName, normalizeWorkflowRef } from "../workflow/useWorkflowInputs";
 import { RunWorkflowForm, type RunWorkflowFormStatus } from "../workflow/run/RunWorkflowForm";
@@ -951,7 +951,7 @@ function AutomationFormBody({
               >
                 Keep editing
               </Button>
-              <Button type="button" variant="destructive" onClick={onClose}>
+              <Button type="button" variant="danger" onClick={onClose}>
                 Discard
               </Button>
             </div>

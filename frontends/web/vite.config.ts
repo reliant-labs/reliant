@@ -1,5 +1,6 @@
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
+import { forgeRuntimeConfig } from "@reliantlabs/forge-web-runtime/vite";
 import os from "node:os";
 import path from "path";
 import { browserLogSink } from "./vite-plugin-browser-logs";
@@ -57,7 +58,11 @@ export default defineConfig({
   // speedscopeStatic serves speedscope's prebuilt viewer at /speedscope/ (dev)
   // and copies it into the build — the Profiles view iframes it, so none of it
   // enters the JS bundle. See vite-plugin-speedscope.ts.
-  plugins: [react(), browserLogSink(), versionJson(), cspPlugin(), speedscopeStatic()],
+  // forgeRuntimeConfig serves config.js from FORGE_RUNTIME_CONFIG_FILE when
+  // the project that declares this frontend's environment rendered it outside
+  // this tree (control-plane's stack: .forge/runtime-config/<fe>/config.js).
+  // Unset, it does nothing and public/config.js (`forge generate`) is served.
+  plugins: [react(), browserLogSink(), versionJson(), cspPlugin(), speedscopeStatic(), forgeRuntimeConfig()],
   // Load .env files from the checkout root instead of frontends/web
   envDir: path.resolve(__dirname, "../.."),
   // Define global constants available in the app

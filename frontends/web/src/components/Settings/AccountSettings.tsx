@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { useAuthStore } from '../../store/authStore'
 import { LogOut, User, CheckCircle, Trash2 } from 'lucide-react'
-import { Button } from '../ui/Button'
+import Button from '@/components/forge-ui/button';
 import { LinkedAccounts } from '../LinkedAccounts'
 import { DeleteAccountDialog } from './DeleteAccountDialog'
 import { SettingsPageHeader } from "./SettingsPageHeader";
@@ -142,7 +142,7 @@ export function AccountSettings() {
 
         <div className="border-t border-border/40 pt-4">
           <Button
-            variant="destructive"
+            variant="danger"
             size="xs"
             onClick={handleSignOut}
             disabled={isSigningOut}
@@ -162,7 +162,7 @@ export function AccountSettings() {
           </p>
         </div>
         <Button
-          variant="destructive"
+          variant="danger"
           size="xs"
           onClick={() => setIsDeleteDialogOpen(true)}
           leftIcon={<Trash2 className="w-3 h-3" />}

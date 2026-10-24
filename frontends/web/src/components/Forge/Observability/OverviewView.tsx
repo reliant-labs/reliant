@@ -18,7 +18,7 @@
 import { ArrowLeft, FileText, GitBranch } from "lucide-react";
 
 import Card, { CardHeader } from "@/components/forge-ui/card";
-import { Button } from "@/components/ui/Button";
+import Button from "@/components/forge-ui/button";
 import { useServiceOverview } from "@/hooks/observability-queries";
 import type { ObsScope, ServiceHealth } from "@/services/controlPlane/observability/types";
 import type { RangePreset } from "@/services/controlPlane/observability/window";

@@ -1,5 +1,5 @@
 import { PauseCircle } from "lucide-react";
-import { Button } from "@/components/ui/Button";
+import Button from "@/components/forge-ui/button";
 
 /**
  * Two cards, one number each, plus the one state that needs a button.

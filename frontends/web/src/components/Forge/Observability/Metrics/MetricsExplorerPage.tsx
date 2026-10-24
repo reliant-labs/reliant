@@ -37,7 +37,7 @@ import { Activity, Bell, Check, Link2, RefreshCw, Terminal, Timer } from "lucide
 import Card from "@/components/forge-ui/card";
 import EmptyState from "@/components/forge-ui/empty_state";
 import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
-import { Button } from "@/components/ui/Button";
+import Button from "@/components/forge-ui/button";
 import { useDashboardIndex } from "@/hooks/dashboard-queries";
 import { obsKeys, useMetric, useMetricCatalog, useMetricExemplars, useObservabilityOrg, useReleases } from "@/hooks/observability-queries";
 import { useDebounce } from "@/hooks/useDebounce";
@@ -372,7 +372,7 @@ export function MetricsExplorer({ project, env, environments, search, onSearch, 
             </option>
           ))}
         </select>
-        <Button variant="ghost" size="sm" onClick={refresh} leftIcon={<RefreshCw className="h-3.5 w-3.5" />} data-testid="metrics-refresh">
+        <Button variant="ghost" size="sm" onClick={refresh} leftIcon={<RefreshCw />} data-testid="metrics-refresh">
           Refresh
         </Button>
       </div>
@@ -679,7 +679,7 @@ function InFlight({ onRetry }: { onRetry: () => void }) {
         <p className="text-xs text-ink-muted">
           You have several queries running at once, and the console runs at most six per person. One will finish in a moment; try again then.
         </p>
-        <Button variant="outline" size="sm" onClick={onRetry} leftIcon={<RefreshCw className="h-3 w-3" />} data-testid="metrics-in-flight-retry">
+        <Button variant="outline" size="sm" onClick={onRetry} leftIcon={<RefreshCw />} data-testid="metrics-in-flight-retry">
           Try again
         </Button>
       </div>

@@ -161,7 +161,7 @@ export interface SetSecretResult {
  *                  handler answers Unavailable on every RPC. Nothing is broken;
  *                  this deployment simply has no managed store.
  *   no-control-plane  reliant is running without a control plane at all (no
- *                  VITE_CONTROL_PLANE_API_URL). Local/OSS deployments live
+ *                  CONTROL_PLANE_API_URL). Local/OSS deployments live
  *                  here, and a managed store is not a thing they have.
  *   unreachable    the RPC failed for a transport reason. Genuinely an error.
  */

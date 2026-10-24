@@ -1,5 +1,5 @@
 import { Modal } from "../ui/Modal";
-import { Button } from "../ui/Button";
+import Button from "@/components/forge-ui/button";
 import { collapseHomePath } from "../../lib/pathUtils";
 import type { Project } from "../../store/projectStore";
 
@@ -50,7 +50,7 @@ export function RemoveProjectModal({
             Cancel
           </Button>
           <Button
-            variant="destructive"
+            variant="danger"
             size="md"
             onClick={onConfirm}
             loading={isRemoving}

@@ -53,6 +53,7 @@ func (s *Service) resumePausedRun(
 	inputUpdate, modelNotices, modelMoves := s.resumeInputUpdate(ctx, userID, chat.ID, chat.ProjectID, workflowName, workflowID,
 		s.underSelection(ctx, chat.ID, workflowName, stateUpdate), runInputs)
 	inputUpdate = s.withProviderPolicy(ctx, userID, chat, runInputs, inputUpdate)
+	inputUpdate = s.refreshLiveChatProvider(ctx, userID, chat, workflowName, inputUpdate)
 
 	// Only add "params changed" message if params actually changed from current workflow state
 	if len(inputUpdate) > 0 && (runInputs == nil || inputsDiffer(runInputs, inputUpdate)) {
@@ -72,7 +73,9 @@ func (s *Service) resumePausedRun(
 	}
 	// A message that resumes the chat resumes all of it: every sub-agent a
 	// provider stopped goes on too, without a message of its own.
-	s.wakeChatBestEffort(ctx, chat, "", "a message resumed the chat")
+	if err := s.resumeWholeChat(ctx, chat); err != nil {
+		logging.WarnContext(ctx, "Could not wake every unfinished thread after a message resumed the chat", "chatID", chat.ID, "error", err)
+	}
 
 	// Told only now: the run that has the moved models is awake. A fresh run
 	// (the caller's recovery) makes and announces its own.

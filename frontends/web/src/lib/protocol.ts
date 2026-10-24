@@ -3,10 +3,19 @@
  * 
  * Priority:
  * 1. In Electron: use RELIANT_CONFIG.useTLS from backend
- * 2. In browser: use VITE_DISABLE_TLS env var
+ * 2. In browser: the runtime config's DISABLE_TLS (config.js)
  * 
  * This matches the backend's DISABLE_TLS pattern.
  */
+
+import { loadConfig } from "./config_gen";
+
+/**
+ * The api-server's listen port when nothing names its origin: GRPC_PORT's
+ * default in proto/reliant/config/v1/api_server_config.proto. Only a loopback
+ * fallback — a deployed environment states API_URL.
+ */
+export const API_SERVER_DEFAULT_PORT = 9090;
 
 /**
  * Check if TLS is disabled (use http instead of https)
@@ -16,8 +25,8 @@ export const isTLSDisabled = (): boolean => {
   if (typeof window !== "undefined" && window.RELIANT_CONFIG?.isElectron) {
     return window.RELIANT_CONFIG.useTLS === false;
   }
-  // In browser dev/prod, use env var
-  return import.meta.env.VITE_DISABLE_TLS === "true";
+  // In the browser, the runtime config
+  return loadConfig().DISABLE_TLS === "true";
 };
 
 /**
@@ -98,7 +107,7 @@ export const isSameOriginTransport = (): boolean => {
   // (Firebase-hosted app.reliantlabs.io / *.web.app) has NO proxy, so a
   // same-origin RPC hits the SPA's own index.html → "unsupported content type
   // text/html" and the app hangs. Prod builds must dial the absolute per-env
-  // backend URLs (VITE_API_URL / VITE_CONTROL_PLANE_API_URL). Packaged Electron
+  // backend URLs (config.js's API_URL / CONTROL_PLANE_API_URL). Packaged Electron
   // (a prod build) is excluded by both checks and uses RELIANT_CONFIG.
   return import.meta.env.DEV && !isPackagedRendererOrigin();
 };

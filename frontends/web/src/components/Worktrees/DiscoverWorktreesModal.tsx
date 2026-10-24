@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { AlertCircle, FolderGit2, Loader2, Lock, Trash2 } from "lucide-react";
 import { Modal } from "../ui/Modal";
-import { Button } from "../ui/Button";
+import Button from "@/components/forge-ui/button";
 import { CardInset } from "../forge-ui/card";
 import { useWorktreeStore } from "../../store/worktreeStore";
 import type { DiscoveredWorktree } from "../../api/worktree-grpc";

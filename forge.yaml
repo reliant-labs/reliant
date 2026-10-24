@@ -31,7 +31,7 @@
 
 name: reliant
 module_path: github.com/reliant-labs/reliant
-forge_version: v0.1.47-0.20261024052328-2ee7da8e47b9
+forge_version: v0.1.47-0.20261024075428-a72dc1798b50
 harness: reliant
 config:
     # Every process setting is typed config (proto/reliant/config/v1, read through

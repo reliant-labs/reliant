@@ -11,7 +11,7 @@ import { useDaemonWait } from "../../../hooks/useDaemonWait";
 import { DaemonWaitState } from "../../DaemonWaitState";
 import { NoMachineState } from "../../NoMachineState";
 import { isNoMachineError } from "../../../lib/daemon-errors";
-import { Button } from "../../ui/Button";
+import Button from "@/components/forge-ui/button";
 import ConfirmationDialog from "../../forge-ui/confirmation_dialog";
 import { PRDialog } from "../../SourceControl/PRDialog";
 import { GitNotInitialized } from "../../Git/GitNotInitialized";

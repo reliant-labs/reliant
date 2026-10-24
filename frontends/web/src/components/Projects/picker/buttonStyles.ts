@@ -4,11 +4,10 @@ import { cn } from "@/lib/utils";
  * Button class strings for the project picker, matching forge's PageHeader
  * action styles (`components/forge-ui/page_header.tsx`).
  *
- * Why not `ui/Button`: the picker renders inside `.forge-ui`, where `accent`
- * is re-pointed at `--primary`. `ui/Button`'s outline and ghost variants hover
- * to `bg-accent`, so inside this wrapper they flood to a solid primary fill on
- * hover. Forge's own vocabulary (accent fill for the one primary action, a
- * bordered surface for secondaries) is what the rest of the page speaks.
+ * The picker renders inside `.forge-ui` and speaks forge's vocabulary (accent
+ * fill for the one primary action, a bordered surface for secondaries). It
+ * predates forge's library Button (`components/forge-ui/button.tsx`), whose
+ * `buttonClasses()` is the replacement when this is next touched.
  *
  * `disabled:pointer-events-none` is deliberate: a disabled button swallows
  * no hover events, so the Tooltip wrapper around it still receives them and

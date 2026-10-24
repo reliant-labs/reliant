@@ -37,7 +37,7 @@ import { useProjectStore } from "@/store/projectStore";
 import Card from "../forge-ui/card";
 import PageHeader from "../forge-ui/page_header";
 import SkeletonLoader from "../forge-ui/skeleton_loader";
-import { Button } from "../ui/Button";
+import Button from "@/components/forge-ui/button";
 import { AreaShell } from "../Layout/AreaShell";
 import { InboxItem, subjectName } from "./InboxItem";
 

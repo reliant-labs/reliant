@@ -886,12 +886,12 @@ const file_reliant_v1_system_proto_rawDesc = "" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\"\x15\n" +
 	"\x13DevAuthClearRequest\"0\n" +
 	"\x14DevAuthClearResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess2\x9f\x05\n" +
-	"\rSystemService\x12G\n" +
-	"\x06Health\x12\x19.reliant.v1.HealthRequest\x1a\x1a.reliant.v1.HealthResponse\"\x06\xa2\xbb\x18\x02\b\x00\x12D\n" +
-	"\x05Ready\x12\x18.reliant.v1.ReadyRequest\x1a\x19.reliant.v1.ReadyResponse\"\x06\xa2\xbb\x18\x02\b\x00\x12A\n" +
-	"\x04Info\x12\x17.reliant.v1.InfoRequest\x1a\x18.reliant.v1.InfoResponse\"\x06\xa2\xbb\x18\x02\b\x00\x12J\n" +
-	"\aVersion\x12\x1a.reliant.v1.VersionRequest\x1a\x1b.reliant.v1.VersionResponse\"\x06\xa2\xbb\x18\x02\b\x00\x12e\n" +
+	"\asuccess\x18\x01 \x01(\bR\asuccess2\xab\x05\n" +
+	"\rSystemService\x12J\n" +
+	"\x06Health\x12\x19.reliant.v1.HealthRequest\x1a\x1a.reliant.v1.HealthResponse\"\t\xa2\xbb\x18\x02\b\x00\x90\x02\x01\x12G\n" +
+	"\x05Ready\x12\x18.reliant.v1.ReadyRequest\x1a\x19.reliant.v1.ReadyResponse\"\t\xa2\xbb\x18\x02\b\x00\x90\x02\x01\x12D\n" +
+	"\x04Info\x12\x17.reliant.v1.InfoRequest\x1a\x18.reliant.v1.InfoResponse\"\t\xa2\xbb\x18\x02\b\x00\x90\x02\x01\x12M\n" +
+	"\aVersion\x12\x1a.reliant.v1.VersionRequest\x1a\x1b.reliant.v1.VersionResponse\"\t\xa2\xbb\x18\x02\b\x00\x90\x02\x01\x12e\n" +
 	"\x10StartOAuthSignIn\x12#.reliant.v1.StartOAuthSignInRequest\x1a$.reliant.v1.StartOAuthSignInResponse\"\x06\xa2\xbb\x18\x02\b\x00\x12V\n" +
 	"\vDevAuthLoad\x12\x1e.reliant.v1.DevAuthLoadRequest\x1a\x1f.reliant.v1.DevAuthLoadResponse\"\x06\xa2\xbb\x18\x02\b\x00\x12V\n" +
 	"\vDevAuthSave\x12\x1e.reliant.v1.DevAuthSaveRequest\x1a\x1f.reliant.v1.DevAuthSaveResponse\"\x06\xa2\xbb\x18\x02\b\x00\x12Y\n" +

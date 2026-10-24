@@ -1,7 +1,7 @@
 /**
- * Which telemetry sinks this build ships to.
+ * Which telemetry sinks this deployment ships to.
  *
- * `VITE_TELEMETRY_SINKS` is a comma list of `sentry` and `clickstack`. The two
+ * The runtime config's `TELEMETRY_SINKS` is a comma list of `sentry` and `clickstack`. The two
  * run in parallel until web Sentry is removed; see the exit criteria in
  * research/frontend-observability/DESIGN.md 6.6.
  *
@@ -10,16 +10,19 @@
  * configures nothing new behaves exactly as before. `clickstack` without an
  * endpoint is off too: there is nowhere to send to.
  *
- * Dependency-free on purpose: sentry.ts, analytics.ts, ErrorBoundary.tsx and
- * telemetry.ts all read it, and none should pull in another's imports.
+ * Dependency-free on purpose (beyond the generated config module):
+ * sentry.ts, analytics.ts, ErrorBoundary.tsx and telemetry.ts all read it,
+ * and none should pull in another's imports.
  */
+
+import { loadConfig } from "./config_gen";
 
 export interface TelemetrySinks {
   sentry: boolean;
   clickstack: boolean;
 }
 
-/** Whether `VITE_OTEL_ENDPOINT` names somewhere to send to. */
+/** Whether `OTEL_ENDPOINT` names somewhere to send to. */
 export function endpointConfigured(endpoint: string | undefined): boolean {
   const value = (endpoint ?? "").trim().toLowerCase();
   return value !== "" && value !== "off";
@@ -46,10 +49,8 @@ export function parseTelemetrySinks(
 }
 
 export function telemetrySinks(): TelemetrySinks {
-  return parseTelemetrySinks(
-    import.meta.env.VITE_TELEMETRY_SINKS,
-    import.meta.env.VITE_OTEL_ENDPOINT,
-  );
+  const config = loadConfig();
+  return parseTelemetrySinks(config.TELEMETRY_SINKS, config.OTEL_ENDPOINT);
 }
 
 export function sentryEnabled(): boolean {

@@ -13,7 +13,7 @@ import { configureMonacoTheme } from '../../lib/monacoTheme';
  */
 
 const sampleCode = `import { useState, useEffect } from 'react';
-import { Button } from './ui/button';
+import Button from '@/components/forge-ui/button';
 
 interface Props {
   name: string;

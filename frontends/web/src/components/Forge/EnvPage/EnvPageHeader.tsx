@@ -27,7 +27,7 @@
 import { Cpu, Rocket, Upload } from "lucide-react";
 
 import Badge from "@/components/forge-ui/badge";
-import { Button } from "@/components/ui/Button";
+import Button from "@/components/forge-ui/button";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { cn } from "@/lib/utils";
 import { liveKindLabel, type LiveEnv } from "@/services/forge/live";

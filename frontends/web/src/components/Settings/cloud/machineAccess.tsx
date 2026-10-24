@@ -34,7 +34,8 @@ import {
   type ConnectorActivity,
   type ConnectorTool,
 } from "@/gen/reliant/v1/connector_pb";
-import { Badge, Button, Card, CardContent, CardHeader, CardInset, CardTitle } from "./ui";
+import Button from "@/components/forge-ui/button";
+import { Badge, Card, CardContent, CardHeader, CardInset, CardTitle } from "./ui";
 
 // ── Data ────────────────────────────────────────────────────────────────────
 
@@ -113,7 +114,7 @@ function CopyField({ label, value }: { label: string; value: string }) {
       </label>
       <div className="flex items-center gap-2">
         <input id={id} value={value} readOnly className={cn(inputCls, "font-mono")} />
-        <Button variant="outline" size="sm" onClick={copy} aria-label={`Copy ${label}`}>
+        <Button variant="outline" size="md" onClick={copy} aria-label={`Copy ${label}`}>
           {copied ? <Check className="h-4 w-4 text-success-ink" /> : <Copy className="h-4 w-4" />}
         </Button>
       </div>
@@ -290,8 +291,8 @@ export function MachineAccess({
             </p>
           </div>
           {!showCreate && (
-            <Button size="sm" onClick={() => setShowCreate(true)}>
-              <Plus className="h-4 w-4" /> Give an app access
+            <Button size="md" onClick={() => setShowCreate(true)} leftIcon={<Plus />}>
+              Give an app access
             </Button>
           )}
         </div>
@@ -311,7 +312,7 @@ export function MachineAccess({
             <p className="text-xs font-medium text-warning-ink">
               This credential is shown only once. Copy it now — it cannot be retrieved later.
             </p>
-            <Button variant="ghost" size="sm" onClick={() => setCreated(null)}>
+            <Button variant="ghost" size="md" onClick={() => setCreated(null)}>
               Done
             </Button>
           </CardInset>
@@ -469,10 +470,10 @@ export function MachineAccess({
             </div>
 
             <div className="flex items-center gap-2 pt-1">
-              <Button size="sm" onClick={() => createMut.mutate()} disabled={!canSubmit} isLoading={createMut.isPending}>
+              <Button size="md" onClick={() => createMut.mutate()} disabled={!canSubmit} loading={createMut.isPending}>
                 Grant access
               </Button>
-              <Button variant="ghost" size="sm" onClick={() => setShowCreate(false)}>
+              <Button variant="ghost" size="md" onClick={() => setShowCreate(false)}>
                 Cancel
               </Button>
             </div>
@@ -528,19 +529,19 @@ export function MachineAccess({
                         <div className="flex items-center gap-2">
                           <Button
                             variant="danger"
-                            size="sm"
-                            isLoading={revokeMut.isPending}
+                            size="md"
+                            loading={revokeMut.isPending}
                             onClick={() => revokeMut.mutate(c.id)}
                           >
                             Confirm
                           </Button>
-                          <Button variant="ghost" size="sm" onClick={() => setRevokingId(null)}>
+                          <Button variant="ghost" size="md" onClick={() => setRevokingId(null)}>
                             Cancel
                           </Button>
                         </div>
                       ) : (
-                        <Button variant="ghost" size="sm" onClick={() => setRevokingId(c.id)}>
-                          <Trash2 className="h-4 w-4 text-destructive" /> Revoke
+                        <Button variant="ghost" size="md" onClick={() => setRevokingId(c.id)} leftIcon={<Trash2 className="text-destructive" />}>
+                          Revoke
                         </Button>
                       )}
                     </div>

@@ -1,8 +1,147 @@
-// Utility for waiting for backend configuration to be ready
-// This is needed in Electron where the config is injected asynchronously
+// Two configuration documents reach the renderer, and this module owns both
+// checks:
+//
+//   window.__FORGE_CONFIG__  the RUNTIME CONFIG (config.js, typed by the
+//                            generated config_gen.ts): per-environment
+//                            endpoints, identity, telemetry. Present before
+//                            the bundle runs. checkWebConfig() below.
+//   window.RELIANT_CONFIG    host facts in the desktop app (the local daemon
+//                            URL, platform), injected asynchronously by
+//                            preload.js. waitForConfig() below.
 
+import { loadConfig } from "./config_gen";
 import { logger } from "./logger";
 import { isPackagedRendererOrigin } from "./protocol";
+
+// ============================================================================
+// Runtime config (config.js)
+// ============================================================================
+
+/** The keys a managed deployment (AUTH_MODE = "cloud") cannot run without. */
+const CLOUD_REQUIRED_KEYS = [
+  "API_URL",
+  "CONTROL_PLANE_API_URL",
+  "SUPABASE_URL",
+  "SUPABASE_ANON_KEY",
+] as const;
+
+/** Fields read as `=== "true"`: anything but "true", "false" or unset is a typo. */
+const FLAG_KEYS = [
+  "DISABLE_TLS",
+  "AUTO_ANON_SIGN_IN",
+  "CLI_DEFAULTS_BAKED",
+  "SENTRY_ENABLED",
+  "OTEL_REPLAY",
+] as const;
+
+const AUTH_MODES = ["", "cloud"];
+
+/**
+ * Why this renderer's runtime config cannot work, or [] when it can.
+ *
+ * The generated loadConfig() checks types and supplies defaults, and every
+ * field has one, so a document that names nothing is the SELF-HOSTED app,
+ * not an error. What it cannot check is that a deployment stated what it
+ * needs, which is decided here:
+ *
+ *   - the packaged desktop app always has a document: its app:// handler
+ *     answers config.js from the main process, so none is a broken build;
+ *   - a managed deployment (AUTH_MODE = "cloud") needs its endpoints and its
+ *     sign-in key, or it would boot against localhost and a missing Supabase
+ *     and fail three screens later with nothing naming the cause;
+ *   - a closed-set value outside its set is a typo that would otherwise
+ *     silently read as off.
+ *
+ * Presence is judged on the raw document, not on loadConfig(): a default
+ * (SUPABASE_URL's local Supabase) is exactly what a managed deployment must
+ * not fall back to.
+ */
+export function checkWebConfig(): string[] {
+  let config;
+  try {
+    config = loadConfig();
+  } catch (err) {
+    return [err instanceof Error ? err.message : String(err)];
+  }
+
+  const raw = typeof window !== "undefined" ? window.__FORGE_CONFIG__ : undefined;
+  if (!raw && isPackagedRendererOrigin()) {
+    return [
+      "config.js did not load. The desktop app's app:// handler serves it from " +
+        "the main process's resolved config (electron/src/app-protocol.js); " +
+        "without it this build has no endpoints at all.",
+    ];
+  }
+
+  const problems: string[] = [];
+  if (!AUTH_MODES.includes(config.AUTH_MODE)) {
+    problems.push(
+      `AUTH_MODE is "${config.AUTH_MODE}"; it must be "cloud" (a managed deployment) or unset.`,
+    );
+  }
+  if (config.AUTH_MODE === "cloud") {
+    const missing = CLOUD_REQUIRED_KEYS.filter((key) => {
+      const value = raw?.[key];
+      return typeof value !== "string" || value.trim() === "";
+    });
+    if (missing.length > 0) {
+      problems.push(
+        `AUTH_MODE is "cloud", which requires ${missing.join(", ")}: ` +
+          "the managed app cannot reach its backends or sign anyone in without them.",
+      );
+    }
+  }
+  for (const key of FLAG_KEYS) {
+    const value = config[key];
+    if (value !== "" && value !== "true" && value !== "false") {
+      problems.push(`${key} is "${value}"; it must be "true", "false" or unset.`);
+    }
+  }
+  return problems;
+}
+
+/**
+ * Replace the page with a plain statement of what is wrong with its runtime
+ * config. Text only (values from the document are never parsed as HTML), and
+ * styled inline because no stylesheet is guaranteed to have loaded.
+ */
+export function renderConfigError(problems: string[], root = document.getElementById("root")): void {
+  if (!root) return;
+  const panel = document.createElement("div");
+  panel.setAttribute("role", "alert");
+  panel.style.cssText =
+    "position:fixed;inset:0;overflow:auto;padding:48px;background:#0b0b0f;color:#e5e5e5;" +
+    "font:14px/1.5 system-ui,sans-serif";
+
+  const title = document.createElement("h1");
+  title.textContent = "Reliant can't start: this deployment's configuration is incomplete";
+  title.style.cssText = "font-size:18px;font-weight:600;margin:0 0 16px";
+  panel.append(title);
+
+  const list = document.createElement("ul");
+  list.style.cssText = "margin:0 0 16px;padding-left:20px";
+  for (const problem of problems) {
+    const item = document.createElement("li");
+    item.textContent = problem;
+    item.style.cssText = "margin-bottom:8px;white-space:pre-wrap";
+    list.append(item);
+  }
+  panel.append(list);
+
+  const hint = document.createElement("p");
+  hint.textContent =
+    "These values come from config.js (window.__FORGE_CONFIG__), rendered per " +
+    "environment from the frontend's runtime_config. The keys it may carry are " +
+    "listed in frontends/web/src/lib/config_schema_gen.json.";
+  hint.style.cssText = "color:#a1a1aa;margin:0";
+  panel.append(hint);
+
+  root.replaceChildren(panel);
+}
+
+// ============================================================================
+// Desktop host config (window.RELIANT_CONFIG)
+// ============================================================================
 
 // Default timeout for waiting for config
 const DEFAULT_TIMEOUT_MS = 5000;
@@ -15,7 +154,8 @@ export const isConfigReady = (): boolean => {
   if (typeof window === "undefined") return false;
 
   // In browser mode (dev server or hosted web), config is always "ready" —
-  // it comes from build-time env vars, not from preload.js.
+  // there is no preload.js; the runtime config (config.js) loaded before
+  // the bundle.
   if (!isPackagedRendererOrigin()) {
     return true;
   }

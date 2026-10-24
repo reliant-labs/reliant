@@ -1,5 +1,5 @@
 import { Modal } from "../ui/Modal";
-import { Button } from "../ui/Button";
+import Button from "@/components/forge-ui/button";
 import { Download, CheckCircle2, AlertCircle } from "lucide-react";
 
 interface UpdateStatus {
@@ -84,7 +84,7 @@ export function UpdateModal({
               <Button
                 onClick={onDownload}
                 disabled={isDownloading}
-                className="min-w-[100px] bg-primary hover:bg-primary/90"
+                className="min-w-[100px]"
               >
                 Download
               </Button>
@@ -205,7 +205,7 @@ export function UpdateModal({
               <Button
                 onClick={onInstall}
                 disabled={isInstalling}
-                className="min-w-[140px] bg-success hover:bg-success/90"
+                className="min-w-[140px]"
               >
                 {isInstalling ? (
                   <>

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { Modal } from "../ui/Modal";
-import { Button } from "../ui/Button";
+import Button from "@/components/forge-ui/button";
 import { Input } from "../ui/Input";
 import { Textarea } from "../ui/Textarea";
 import { GitPullRequest, Loader2, ExternalLink } from "lucide-react";

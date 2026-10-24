@@ -9,7 +9,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { Plus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { Modal } from '../../ui/Modal'
-import { Button } from '../../ui/Button'
+import Button from '@/components/forge-ui/button';
 import { ModelSelector } from '../../Chat/ModelSelector'
 import { ToolsSelector } from '../ToolsSelector'
 import { AgentSelector } from '../../Chat/AgentSelector'

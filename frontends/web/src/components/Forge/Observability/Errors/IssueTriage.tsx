@@ -18,7 +18,7 @@
 import { useState } from "react";
 import { AlertTriangle, BellOff, CheckCircle2, RotateCcw } from "lucide-react";
 
-import { Button } from "@/components/ui/Button";
+import Button from "@/components/forge-ui/button";
 import { useUpdateIssueStatus } from "@/hooks/observability-queries";
 import { issuesErrorKind, obsErrorMessage } from "@/services/controlPlane/observability/errors";
 import type { Issue } from "@/services/controlPlane/observability/issuesTypes";

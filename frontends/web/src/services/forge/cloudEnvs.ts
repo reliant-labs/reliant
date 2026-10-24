@@ -129,7 +129,7 @@ export interface CloudEnvStatus {
  * signal. It lands in `unreachable` with the server's own message as detail.
  *
  *   available         the control plane answered.
- *   no-control-plane  this build has none (no VITE_CONTROL_PLANE_API_URL).
+ *   no-control-plane  this build has none (no CONTROL_PLANE_API_URL).
  *   no-access         PermissionDenied: the caller's role in the organization
  *                     may not read deploy state (deploy reads need org admin).
  *   not-configured    Unimplemented: this control plane does not serve the

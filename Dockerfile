@@ -78,7 +78,7 @@ ARG BRANCH=unknown
 ARG COMMIT_TIME=0
 RUN --mount=type=cache,target=/root/.cache/go-build \
     --mount=type=cache,target=/go/pkg \
-    CGO_ENABLED=0 GOARCH=${TARGETARCH} go build \
+    CGO_ENABLED=0 GOARCH=${TARGETARCH} go build -trimpath \
       -ldflags "-X github.com/reliant-labs/reliant/internal/version.Version=${VERSION} \
                 -X github.com/reliant-labs/reliant/internal/version.Commit=${COMMIT} \
                 -X github.com/reliant-labs/reliant/internal/version.Date=${BUILD_DATE} \

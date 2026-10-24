@@ -29,7 +29,7 @@ import { useEffect, useId, useMemo, useState, type FormEvent } from "react";
 import { Check, Copy, KeyRound, RotateCw } from "lucide-react";
 
 import { Modal } from "../ui/Modal";
-import { Button } from "../ui/Button";
+import Button from "@/components/forge-ui/button";
 import { CardInset } from "../forge-ui/card";
 import { Toggle } from "../ui/Toggle";
 import { useProjectStore } from "@/store/projectStore";
@@ -456,7 +456,7 @@ export function WebhookCredentialPanel({ trigger, credential: initial }: { trigg
           <p className="text-foreground">Rotate the token? Senders using the current one stop working immediately.</p>
           <div className="mt-2 flex gap-2">
             <Button size="sm" variant="ghost" onClick={() => setConfirmRotate(false)}>Keep it</Button>
-            <Button size="sm" variant="destructive" loading={rotating} onClick={() => void rotate()}>Rotate token</Button>
+            <Button size="sm" variant="danger" loading={rotating} onClick={() => void rotate()}>Rotate token</Button>
           </div>
         </div>
       ) : (

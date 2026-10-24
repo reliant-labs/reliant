@@ -53,6 +53,17 @@ func assignmentToCore(r *ThreadProviderAccount) core.Assignment {
 	return core.Assignment{ThreadID: r.ThreadID, Provider: r.Provider, AccountID: r.AccountID, AssignedAt: r.AssignedAt, Reason: r.Reason}
 }
 
+// ClearOtherThreadAssignments removes pins belonging to other providers for
+// a user's thread, before assignment on the newly selected chat provider.
+// Account limits are not touched; the old account may still serve other chats.
+func ClearOtherThreadAssignments(ctx context.Context, db orm.Context, userID, threadID, provider string) error {
+	_, err := db.Bun().NewRaw(`DELETE FROM thread_provider_accounts a
+        USING threads t, chats c
+        WHERE a.thread_id = ?0 AND a.provider <> ?1
+          AND t.id = a.thread_id AND c.id = t.chat_id AND c.user_id = ?2`, threadID, provider, userID).Exec(ctx)
+	return err
+}
+
 // GetThreadAssignment returns the thread's account for provider, or (nil, nil) when it has none.
 func GetThreadAssignment(ctx context.Context, db orm.Context, threadID, provider string) (*core.Assignment, error) {
 	row, err := GetThreadProviderAccountByPK(ctx, db, threadID, provider)

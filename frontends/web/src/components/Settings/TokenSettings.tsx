@@ -11,7 +11,7 @@ import {
   TokenKind,
 } from "../../gen/reliant/v1/token_pb";
 import type { TokenInfo } from "../../gen/reliant/v1/token_pb";
-import { Button } from "../ui/Button";
+import Button from "@/components/forge-ui/button";
 import { Input } from "../ui/Input";
 import { SettingsPageHeader } from "./SettingsPageHeader";
 
@@ -365,7 +365,7 @@ export function TokenSettings() {
                           : "Revoke? This cannot be undone."}
                       </span>
                       <Button
-                        variant="destructive"
+                        variant="danger"
                         size="xs"
                         onClick={() => handleRevoke(token.id)}
                       >

@@ -46,6 +46,8 @@ fixtures make that class of change fail at **test time** instead.
 | `ask_user_async_by_default.json` | `builtin://agent` (`tools: [ask_user]`) | ask_user's default: a call with no flag records `ask-user-async/<tool call>` at `askUserAsyncByDefault`, posts an async question (`QuestionCreate`) and returns with no timer or signal wait; the next `CallLLM` carries on and the run completes with the question still pending. |
 | `capacity_wake_resumes_stopped_agent.json` | `builtin://agent` | A chat-wide capacity wake (`capacity-wake-resumes-chat` marker at run start): the spawned agent's first `CallLLM` is refused for spent credit and fails at once, the agent stops and reports to its parent, and while the parent reads the failure "Retry now" goes through the production `RetryUsageLimitWait` handler. The wake (`signal.usage_limit.retry`) resumes the stopped agent (its row back to "started") with no message to it; its next `CallLLM` is served, it reports a completion under a fresh slot, and the parent finishes. |
 
+| `provider_switch_waiting_spawn.json` | `builtin://agent` | A root model picker update while a general spawn waits on a usage limit. `chat-provider-switch-preserve-tags/update/<n>` binds descendant routing to the chosen provider without creating the old concrete-root-model fallback lease. Durable stopped-descendant lookup and the wait retry are versioned. |
+
 ## Frozen sets
 
 `frozen/<set>/*.json` are histories that runs ALREADY IN FLIGHT were recorded

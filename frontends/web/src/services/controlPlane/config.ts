@@ -9,7 +9,10 @@
  * They consume the chosen implementation through the service module's index.
  */
 
-export const CONTROL_PLANE_API_URL =
-  import.meta.env.VITE_CONTROL_PLANE_API_URL || "";
+import { loadConfig } from "@/lib/config_gen";
+
+// Module scope is right here: config.js is loaded before the bundle runs, and
+// one page load reads one environment's values for its whole lifetime.
+export const CONTROL_PLANE_API_URL = loadConfig().CONTROL_PLANE_API_URL;
 
 export const hasControlPlane = Boolean(CONTROL_PLANE_API_URL);

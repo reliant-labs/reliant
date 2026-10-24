@@ -42,7 +42,7 @@ import { useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from "
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { ChevronDown, ChevronRight, ChevronsDown, ChevronsRight } from "lucide-react";
 
-import { Button } from "@/components/ui/Button";
+import Button from "@/components/forge-ui/button";
 import type { Span } from "@/services/controlPlane/observability/types";
 import { cn } from "@/lib/utils";
 import { useNarrowViewport } from "@/hooks/useNarrowViewport";

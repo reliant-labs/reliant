@@ -15,7 +15,7 @@ import { useIntegrationEventNaming } from "@/hooks/connection-queries";
 import { describeSchedule } from "@/lib/cronText";
 import { describeDeclaredSource, integrationOf, scheduleOf, type DeclaredTrigger } from "@/lib/declaredTriggers";
 import { formatAbsoluteTime } from "@/lib/relativeTime";
-import { Button } from "../../ui/Button";
+import Button from "@/components/forge-ui/button";
 import { WebhookCredentialPanel } from "../ActivateTriggerDialog";
 
 export interface SetupSuccessProps {

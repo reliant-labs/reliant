@@ -372,6 +372,9 @@ func (w *usageLimitWaiter) listen(ch workflow.ReceiveChannel, onWake func(workfl
 // cancelled. The step is NOT re-dispatched here: the caller does that, and if
 // the limit is still there the step fails the same way and parks again.
 func (w *usageLimitWaiter) wait(ctx workflow.Context, req usageLimitWaitRequest, pc *PauseController) usageLimitOutcome {
+	if isProviderSwitchHold(req.Err) {
+		return w.waitForProviderSwitch(ctx, req, pc)
+	}
 	limit, ok := parseUsageLimit(req.Err)
 	if !ok {
 		return usageLimitOutcome{}
@@ -397,6 +400,11 @@ func (w *usageLimitWaiter) wait(ctx workflow.Context, req usageLimitWaitRequest,
 	// recorded the failover gate before them keeps the old behaviour.
 	w.keepStays = failover && workflow.GetVersion(ctx, usageLimitStayChangeID, workflow.DefaultVersion, 1) != workflow.DefaultVersion
 	facts := limit.Facts
+	if w.tracker.chatProvider != "" {
+		// Explicit chat selection is a strict provider constraint, not
+		// permission for an older opt-in fallback policy to change it.
+		facts.FallbackModel = ""
+	}
 	if !failover {
 		facts = types.UsageLimitFacts{}
 	}
@@ -481,7 +489,7 @@ func (w *usageLimitWaiter) wait(ctx workflow.Context, req usageLimitWaitRequest,
 	// carries one when the user switched the chat to another provider; it is a
 	// way out only for a thread that waits on a different provider than the
 	// model's, so a thread already on that provider just retries.
-	alreadyOnIt := w.capacityWake && sameProvider(w.useModel, facts.Provider)
+	alreadyOnIt := (w.capacityWake && sameProvider(w.useModel, facts.Provider)) || w.tracker.chatProvider != ""
 	if failover && w.useModel != "" && w.useModelEpoch > startEpoch && decision.Until.After(workflow.Now(ctx)) && !alreadyOnIt {
 		w.startLease(ctx, req.Thread, limit, facts, w.useModel, decision.Until, decision.Probing)
 	}

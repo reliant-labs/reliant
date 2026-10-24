@@ -68,6 +68,9 @@ services:
       DATA_DIR: /data
       STREAMING_DRIVER: nats
       NATS_URL: "nats://nats:4222"
+      # Local dev stack: fetch and model endpoints may reach this machine's
+      # LAN (an Ollama on the host). Leave unset anywhere but a trusted box.
+      RELIANT_ALLOW_PRIVATE_EGRESS: "true"
       CORS_ALLOWED_ORIGINS: "*"
       HEALTH_PORT: "8081"
       AUTH_MODE: "${AUTH_MODE:-apikey}"
@@ -104,6 +107,7 @@ services:
       DATA_DIR: /data
       STREAMING_DRIVER: nats
       NATS_URL: "nats://nats:4222"
+      RELIANT_ALLOW_PRIVATE_EGRESS: "true"
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       HEALTH_PORT: "8082"
       RELIANT_VAULT_KEY: "${RELIANT_VAULT_KEY:-v1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=}"

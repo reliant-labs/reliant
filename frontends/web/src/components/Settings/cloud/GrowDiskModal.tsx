@@ -24,7 +24,7 @@ import { Modal } from "@/components/ui/Modal";
 import { CardInset } from "@/components/forge-ui/card";
 import { type DaemonPricingLike } from "@/components/Billing/daemonUsage";
 import { cn } from "@/lib/utils";
-import { Button } from "./ui";
+import Button from "@/components/forge-ui/button";
 import { DISK_CEILING_GIB, DISK_GROW_STEP_GIB, diskGrowPrice, diskGrowRange, type DiskGrowStatus } from "./diskGrow";
 import type { RestartStage } from "./machineLifecycle";
 
@@ -120,14 +120,13 @@ export function GrowDiskModal({
             </label>
             <div className="flex items-center gap-3">
               <Button
-                size="sm"
+                size="md"
                 variant="outline"
                 aria-label={`${DISK_GROW_STEP_GIB} GB smaller`}
                 disabled={isPending || chosen <= range.min}
                 onClick={() => step(-DISK_GROW_STEP_GIB)}
-              >
-                <Minus className="h-4 w-4" />
-              </Button>
+                icon={<Minus />}
+              />
               <input
                 id={`${ids}-size`}
                 type="range"
@@ -141,14 +140,13 @@ export function GrowDiskModal({
                 className="min-w-0 flex-1 accent-primary"
               />
               <Button
-                size="sm"
+                size="md"
                 variant="outline"
                 aria-label={`${DISK_GROW_STEP_GIB} GB larger`}
                 disabled={isPending || chosen >= range.max}
                 onClick={() => step(DISK_GROW_STEP_GIB)}
-              >
-                <Plus className="h-4 w-4" />
-              </Button>
+                icon={<Plus />}
+              />
               <span className="w-20 shrink-0 text-right text-sm font-semibold tabular-nums text-foreground" data-testid="grow-disk-target">
                 {whole(chosen)}
               </span>
@@ -251,15 +249,15 @@ export function GrowDiskModal({
         )}
 
         <div className="flex justify-end gap-3">
-          <Button variant="outline" disabled={isPending} onClick={onClose}>
+          <Button variant="outline" disabled={isPending} onClick={onClose} size="xl">
             {range ? "Cancel" : "Close"}
           </Button>
           {range && chosen !== null && (
             <Button
-              isLoading={isPending}
+              loading={isPending}
               disabled={!acknowledged}
               onClick={() => onConfirm(chosen, restartNow)}
-            >
+             size="xl">
               {isPending ? "Growing…" : restartNow ? "Grow and restart" : "Grow disk"}
             </Button>
           )}
@@ -338,7 +336,7 @@ export function DiskGrowNotice({
             Restart {machineName} to use the extra {status.extraGib} GB on its disk.
           </span>
           {restartable && (
-            <Button size="sm" variant="outline" onClick={onRestart}>
+            <Button size="md" variant="outline" onClick={onRestart}>
               Restart
             </Button>
           )}

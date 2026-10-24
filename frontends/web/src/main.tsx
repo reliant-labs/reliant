@@ -3,6 +3,10 @@
 // import would run AFTER every import below (hoisting), missing all of
 // startup — see lib/browser-log-boot.ts.
 import "./lib/browser-log-boot";
+// SECOND, for the same reason: it checks the runtime config (config.js) before
+// any module that reads it evaluates, and on a document that cannot work it
+// shows what is wrong and stops the boot — see lib/configGuard.ts.
+import "./lib/configGuard";
 
 import { createRoot } from "react-dom/client";
 import "./index.css";
@@ -19,8 +23,10 @@ import { shouldPreloadMonaco } from "./lib/monacoPreload";
 import { waitForConfig, isConfigReady } from "./lib/configReady";
 // globalDataStore prefetch is now called from AuthGuard after authentication
 
-// CRITICAL: Wait for Electron backend config BEFORE any gRPC/API calls
-// In production Electron builds, RELIANT_CONFIG is injected asynchronously by preload.js
+// CRITICAL: Wait for Electron's host config BEFORE any gRPC/API calls
+// In production Electron builds, RELIANT_CONFIG (the local daemon URL and other
+// host facts, not the per-environment runtime config) is injected
+// asynchronously by preload.js
 // If we don't wait, gRPC clients throw "not ready" errors and auth/settings fail
 const configStart = performance.now();
 if (!isConfigReady()) {

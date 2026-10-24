@@ -97,7 +97,7 @@
  *            tabs, focus rings). Its text pairing is `on-accent`.
  *   reliant  `--accent` = a muted SURFACE tint. professional-themes.css
  *            literally comments it "Kept in step with --muted", and it is
- *            the ghost/outline hover fill in ui/Button.tsx
+ *            the hover fill of reliant's own menus and list rows
  *            (`hover:bg-accent hover:text-accent-foreground`).
  *
  * Reliant uses `bg-accent` at ~159 call sites. Because `@theme` overrides
@@ -128,7 +128,7 @@
  * Together: (1) fixes the modern path, (2) fixes the fallback path.
  *
  * CONSEQUENCE, so it is not a surprise later: wrap forge components in
- * `.forge-ui`. A forge component rendered outside it still paints — it
+ * `.forge-ui` (the Button excepted — it scopes itself, see below). A forge component rendered outside it still paints — it
  * just draws its primary actions in reliant's muted tint, which reads as
  * "the button lost its color" rather than as an obvious failure.
  * `--accent-foreground` is remapped alongside it inside the scope so the
@@ -208,7 +208,7 @@
   --color-accent-ink: hsl(var(--forge-accent-src));
   /* Danger → reliant's destructive. */
   --color-danger: hsl(var(--destructive));
-  --color-danger-hover: hsl(var(--destructive) / 0.85);
+  --color-danger-hover: hsl(var(--destructive-hover));
   --color-on-danger: hsl(var(--destructive-foreground));
   --color-danger-surface: hsl(var(--destructive) / 0.12);
   --color-danger-border: hsl(var(--destructive) / 0.38);
@@ -245,8 +245,15 @@
  * forge's meaning (the primary action color) — and --accent-foreground moves
  * with it so a reliant primitive nested in this subtree keeps a legible
  * fill/text pair rather than inheriting a mismatched one.
+ *
+ * forge's Button (components/forge-ui/button.tsx) is the one forge component
+ * reliant renders everywhere, mostly outside any `.forge-ui` wrapper, so it
+ * carries the scope itself: it marks its element `data-slot="button"`, and
+ * that element re-declares the accent family below. Its fill, hover and focus
+ * outline then read --primary wherever it is placed.
  */
-.forge-ui {
+.forge-ui,
+[data-slot="button"] {
   /* Half 2: fixes the alpha-modifier fallback path. */
   --forge-accent-src: var(--primary);
   --forge-accent-ink-src: var(--primary-foreground);
@@ -355,6 +362,9 @@
     --accent: 210 40% 96%;           /* Light blue accent */
     --accent-foreground: 217 91% 60%;
     --destructive: 0 70% 50%;
+    /* A destructive fill's hover/pressed step: darker, so its white label
+       gains contrast (an alpha step over a light page would lose it). */
+    --destructive-hover: 0 70% 44%;
     --destructive-ink: 0 70% 40%;
     --destructive-foreground: 0 0% 100%;
     --border: 214 32% 91%;           /* Light blue-gray border */
@@ -461,7 +471,10 @@
     --muted-foreground: 215 20% 65%;
     --accent: 217 33% 21%;           /* Kept in step with --muted */
     --accent-foreground: 210 40% 98%;
-    --destructive: 0 70% 55%;
+    /* 50%, not 55%: white on 55% is 4.40:1, under AA for a filled
+       destructive button's label (colorSchemeTokenContract.test.ts). */
+    --destructive: 0 70% 50%;
+    --destructive-hover: 0 70% 44%;
     --destructive-ink: 0 90% 74%;
     --destructive-foreground: 0 0% 100%;
     --border: 217 33% 32%;           /* Carries the card edge on its own */

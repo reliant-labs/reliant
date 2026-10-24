@@ -4,7 +4,7 @@ import { AlertCircle, FolderPlus, Search } from "lucide-react";
 
 import EmptyState from "@/components/forge-ui/empty_state";
 import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
-import { Button } from "@/components/ui/Button";
+import Button from "@/components/forge-ui/button";
 import { useNavigateToProjectPicker } from "@/hooks/useNavigateToProjectPicker";
 import { logger } from "@/lib/logger";
 import { toast } from "@/lib/toast-manager";

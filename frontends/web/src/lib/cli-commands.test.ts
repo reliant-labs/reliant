@@ -1,15 +1,16 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { setRuntimeConfig } from '@/test/runtimeConfig';
 
 /**
  * The regression these cover: the generated daemon start command used to omit
- * RELIANT_GATEWAY_URL whenever VITE_GATEWAY_URL was unset — which was always,
+ * RELIANT_GATEWAY_URL whenever GATEWAY_URL was unset — which was always,
  * in local dev, since nothing set it. The daemon then derived its gateway from
  * RELIANT_SERVER_URL, and because deriveGatewayURL leaves loopback hosts alone
  * it dialed the api-server for ToolsDaemonService (gateway-only) and died on a
  * 404. The command was copy-pasteable and could never work.
  */
 
-// Re-import per test so module-level env reads are re-evaluated.
+// Re-import per test so module-level reads are re-evaluated.
 async function load() {
   vi.resetModules();
   return import('./cli-commands');
@@ -17,24 +18,27 @@ async function load() {
 
 const ORIGINAL_ENV = { ...import.meta.env };
 
-function setEnv(vars: Record<string, string | undefined>) {
+/**
+ * Set this test's inputs. DEV is Vite's build-mode flag (import.meta.env);
+ * every other key is a runtime config field (config.js). undefined unsets.
+ */
+function setEnv(vars: Record<string, string | boolean | undefined>) {
+  const doc = { ...(window.__FORGE_CONFIG__ as Record<string, string>) };
   for (const [k, v] of Object.entries(vars)) {
-    if (v === undefined) {
-      delete (import.meta.env as Record<string, unknown>)[k];
+    if (k === 'DEV') {
+      if (v === undefined) delete (import.meta.env as Record<string, unknown>)[k];
+      else (import.meta.env as Record<string, unknown>)[k] = v;
+    } else if (v === undefined) {
+      delete doc[k];
     } else {
-      (import.meta.env as Record<string, unknown>)[k] = v;
+      doc[k] = String(v);
     }
   }
+  setRuntimeConfig(doc);
 }
 
 beforeEach(() => {
-  setEnv({
-    VITE_API_URL: 'http://localhost:3091',
-    VITE_GATEWAY_URL: undefined,
-    VITE_CONTROL_PLANE_API_URL: undefined,
-    VITE_SUPABASE_URL: undefined,
-    VITE_SUPABASE_ANON_KEY: undefined,
-  });
+  setRuntimeConfig({ API_URL: 'http://localhost:3091' });
 });
 
 afterEach(() => {
@@ -47,8 +51,8 @@ afterEach(() => {
 });
 
 describe('daemonStartCommand gateway handling', () => {
-  it('emits VITE_GATEWAY_URL when the build provides one', async () => {
-    setEnv({ VITE_GATEWAY_URL: 'http://localhost:29190' });
+  it('emits GATEWAY_URL when the build provides one', async () => {
+    setEnv({ GATEWAY_URL: 'http://localhost:29190' });
     const { daemonStartCommand } = await load();
     expect(daemonStartCommand()).toContain(
       'RELIANT_GATEWAY_URL=http://localhost:29190'
@@ -56,7 +60,7 @@ describe('daemonStartCommand gateway handling', () => {
   });
 
   it('prefers the Electron runtime gateway over the build-time value', async () => {
-    setEnv({ VITE_GATEWAY_URL: 'http://localhost:29190' });
+    setEnv({ GATEWAY_URL: 'http://localhost:29190' });
     vi.stubGlobal('window', {
       RELIANT_CONFIG: { gatewayUrl: 'http://localhost:39190' },
     });
@@ -82,7 +86,7 @@ describe('daemonStartCommand gateway handling', () => {
   });
 
   it('does not flag a command once the gateway is known', async () => {
-    setEnv({ VITE_GATEWAY_URL: 'http://localhost:29190' });
+    setEnv({ GATEWAY_URL: 'http://localhost:29190' });
     const { daemonStartCommandNeedsEditing } = await load();
     expect(daemonStartCommandNeedsEditing()).toBe(false);
   });
@@ -90,7 +94,7 @@ describe('daemonStartCommand gateway handling', () => {
   it('omits the gateway for cloud hosts, where the daemon derives it correctly', async () => {
     // api.example.com -> gateway.example.com is a derivation the daemon makes
     // on its own; forcing a placeholder there would be noise.
-    setEnv({ VITE_API_URL: 'https://api.example.com' });
+    setEnv({ API_URL: 'https://api.example.com' });
     const { daemonStartCommand } = await load();
     expect(daemonStartCommand()).not.toContain('RELIANT_GATEWAY_URL');
   });
@@ -109,7 +113,7 @@ describe('production renders a bare command', () => {
   // compiled in (release.yml stamps them into pkg/config.BuildDefaults via -X),
   // so prod must print `reliant auth serve` with NO env prefix.
   //
-  // This shipped broken: isNonProd() keys off VITE_CLI_DEFAULTS_BAKED and
+  // This shipped broken: isNonProd() keys off CLI_DEFAULTS_BAKED and
   // NOTHING set it — not the release workflow, not the KCL frontend env — so
   // production always took the non-prod branch and told users to paste five
   // RELIANT_*= overrides, including the Supabase anon key, for a binary that
@@ -117,12 +121,12 @@ describe('production renders a bare command', () => {
   it('emits no env prefix when the CLI defaults are baked', async () => {
     setEnv({
       DEV: undefined,
-      VITE_CLI_DEFAULTS_BAKED: 'true',
-      VITE_API_URL: 'https://api.reliantapi.com',
-      VITE_GATEWAY_URL: 'https://gateway.reliantapi.com',
-      VITE_CONTROL_PLANE_API_URL: 'https://admin.reliantapi.com',
-      VITE_SUPABASE_URL: 'https://dash.reliantlabs.io',
-      VITE_SUPABASE_ANON_KEY: 'sb_publishable_example',
+      CLI_DEFAULTS_BAKED: 'true',
+      API_URL: 'https://api.reliantapi.com',
+      GATEWAY_URL: 'https://gateway.reliantapi.com',
+      CONTROL_PLANE_API_URL: 'https://admin.reliantapi.com',
+      SUPABASE_URL: 'https://dash.reliantlabs.io',
+      SUPABASE_ANON_KEY: 'sb_publishable_example',
     });
     const { authServeCommand, daemonStartCommand } = await load();
     expect(authServeCommand()).toBe('reliant auth serve');
@@ -132,8 +136,8 @@ describe('production renders a bare command', () => {
   it('never leaks the auth key into a copy-pasteable prod command', async () => {
     setEnv({
       DEV: undefined,
-      VITE_CLI_DEFAULTS_BAKED: 'true',
-      VITE_SUPABASE_ANON_KEY: 'sb_publishable_secret_looking_value',
+      CLI_DEFAULTS_BAKED: 'true',
+      SUPABASE_ANON_KEY: 'sb_publishable_secret_looking_value',
     });
     const { authServeCommand } = await load();
     expect(authServeCommand()).not.toContain('sb_publishable');
@@ -143,8 +147,8 @@ describe('production renders a bare command', () => {
     // dev and OSS self-hosted CLI builds carry no injected defaults, so their
     // users genuinely need the prefix — the flag is absent there.
     setEnv({
-      VITE_CLI_DEFAULTS_BAKED: undefined,
-      VITE_API_URL: 'https://api.self-hosted.example.com',
+      CLI_DEFAULTS_BAKED: undefined,
+      API_URL: 'https://api.self-hosted.example.com',
     });
     const { daemonStartCommand } = await load();
     expect(daemonStartCommand()).toContain('RELIANT_SERVER_URL=');
@@ -154,7 +158,7 @@ describe('production renders a bare command', () => {
     // `forge env up prod --target reliant-web` serves the PROD KCL env
     // (control-plane deploy/kcl/prod/main.k -> reliant_web_vite_env("prod"))
     // through `npm run dev`, so import.meta.env.DEV is true while every
-    // VITE_* value is prod's. isNonProd() used to check DEV FIRST and return
+    // runtime config value is prod's. isNonProd() used to check DEV FIRST and return
     // early, so that surface printed the prod hostnames AND the prod
     // publishable key behind five RELIANT_*= overrides.
     //
@@ -163,10 +167,10 @@ describe('production renders a bare command', () => {
     // authority that can contradict it is the bug.
     setEnv({
       DEV: true,
-      VITE_CLI_DEFAULTS_BAKED: 'true',
-      VITE_API_URL: 'https://api.reliantapi.com',
-      VITE_GATEWAY_URL: 'https://gateway.reliantapi.com',
-      VITE_SUPABASE_ANON_KEY: 'sb_publishable_KKiB3B0EdEv7nguwKfEE5A_iY9rVXod',
+      CLI_DEFAULTS_BAKED: 'true',
+      API_URL: 'https://api.reliantapi.com',
+      GATEWAY_URL: 'https://gateway.reliantapi.com',
+      SUPABASE_ANON_KEY: 'sb_publishable_KKiB3B0EdEv7nguwKfEE5A_iY9rVXod',
     });
     const { daemonStartCommand } = await load();
     expect(daemonStartCommand()).toBe('reliant daemon start --token');
@@ -179,9 +183,9 @@ describe('production renders a bare command', () => {
     // silently bare-render a command for an unbaked binary.
     setEnv({
       DEV: true,
-      VITE_CLI_DEFAULTS_BAKED: undefined,
-      VITE_API_URL: 'http://localhost:3091',
-      VITE_GATEWAY_URL: 'http://localhost:29190',
+      CLI_DEFAULTS_BAKED: undefined,
+      API_URL: 'http://localhost:3091',
+      GATEWAY_URL: 'http://localhost:29190',
     });
     const { daemonStartCommand } = await load();
     expect(daemonStartCommand()).toContain('RELIANT_SERVER_URL=http://localhost:3091');
@@ -203,8 +207,8 @@ describe('only variables the target binary actually reads are emitted', () => {
     // In cloud envs control-plane's KCL sets it on those SERVER workloads
     // (deploy/kcl/lib/env.k), which is where it belongs.
     setEnv({
-      VITE_CLI_DEFAULTS_BAKED: undefined,
-      VITE_CONTROL_PLANE_API_URL: 'https://admin.reliantapi.com',
+      CLI_DEFAULTS_BAKED: undefined,
+      CONTROL_PLANE_API_URL: 'https://admin.reliantapi.com',
     });
     const { daemonStartCommand } = await load();
     expect(daemonStartCommand()).not.toContain('RELIANT_API_BASE_URL');
@@ -217,11 +221,11 @@ describe('only variables the target binary actually reads are emitted', () => {
     // server/gateway URLs are meaningless here, and the publishable key must
     // never be pasted at a shell.
     setEnv({
-      VITE_CLI_DEFAULTS_BAKED: undefined,
-      VITE_API_URL: 'http://localhost:3091',
-      VITE_GATEWAY_URL: 'http://localhost:29190',
-      VITE_SUPABASE_URL: 'https://dash.reliantlabs.io',
-      VITE_SUPABASE_ANON_KEY: 'sb_publishable_example',
+      CLI_DEFAULTS_BAKED: undefined,
+      API_URL: 'http://localhost:3091',
+      GATEWAY_URL: 'http://localhost:29190',
+      SUPABASE_URL: 'https://dash.reliantlabs.io',
+      SUPABASE_ANON_KEY: 'sb_publishable_example',
     });
     const { authServeCommand } = await load();
     const cmd = authServeCommand();
@@ -243,7 +247,7 @@ describe('only variables the target binary actually reads are emitted', () => {
   // RELIANT_WEB_ORIGIN the browser's request is refused as "origin not
   // allowed" — so a dev command that omits it is one the user cannot use.
   it('passes the web origin so the dev server is CORS-allowed', async () => {
-    setEnv({ VITE_CLI_DEFAULTS_BAKED: undefined });
+    setEnv({ CLI_DEFAULTS_BAKED: undefined });
     const { authServeCommand } = await load();
     expect(authServeCommand()).toContain(
       `RELIANT_WEB_ORIGIN=${window.location.origin}`,
@@ -251,7 +255,7 @@ describe('only variables the target binary actually reads are emitted', () => {
   });
 
   it('renders bare in a production build', async () => {
-    setEnv({ VITE_CLI_DEFAULTS_BAKED: 'true' });
+    setEnv({ CLI_DEFAULTS_BAKED: 'true' });
     const { authServeCommand } = await load();
     expect(authServeCommand()).toBe('reliant auth serve');
   });

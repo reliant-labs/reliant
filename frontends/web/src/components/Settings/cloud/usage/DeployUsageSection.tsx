@@ -30,7 +30,8 @@ import { AlertTriangle } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 
-import { Button, Card, CardContent, CardHeader, CardTitle } from "../ui";
+import Button from "@/components/forge-ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "../ui";
 import { AllowanceMeter } from "./AllowanceMeter";
 import { AttributionTable } from "./AttributionTable";
 import { BudgetCapControl } from "./BudgetCapControl";
@@ -130,7 +131,7 @@ export function DeployUsageSection({
               </p>
               {onRetry ? (
                 <div className="mt-3">
-                  <Button size="sm" variant="outline" onClick={onRetry}>
+                  <Button size="md" variant="outline" onClick={onRetry}>
                     Try again
                   </Button>
                 </div>

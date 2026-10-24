@@ -154,7 +154,7 @@ func newSubAgentFailureEnv(t *testing.T, env *testsuite.TestWorkflowEnvironment,
 		}
 		return LoadedWorkflow{WorkflowJSON: wfJSON}, nil
 	})
-	for _, name := range []string{"WorkflowCheckpoint", "ThreadStatus", "Cleanup"} {
+	for _, name := range []string{"WorkflowCheckpoint", "ThreadStatus", "Cleanup", "LookupStoppedSubAgent"} {
 		register(name, ok)
 	}
 	register("EmitStreamFinalized", func(_ context.Context, _ types.EmitStreamFinalizedInput) (types.EmitStreamFinalizedOutput, error) {

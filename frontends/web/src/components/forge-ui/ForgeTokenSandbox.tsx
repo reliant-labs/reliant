@@ -25,6 +25,11 @@
  *                  onto forge (card, badge/tag, alert_banner, progress_bar),
  *                  rendered with the props those sites pass — real components
  *                  where they are pure, the site's own markup where not
+ *   buttons        forge's Button, every variant at every size and in every
+ *                  state the app uses (icons, icon-only, loading, disabled,
+ *                  expanded), on a card and on the page background. Outside
+ *                  .forge-ui, as almost every Button in the app is: the
+ *                  button scopes the accent family itself (index.css)
  *   ?view=overlays the components that cover the viewport (sidebar_layout,
  *                  modal, confirmation_dialog), each pinned inside its own
  *                  box so all three fit one screenshot
@@ -34,7 +39,7 @@
  */
 import { useState } from "react";
 import { useSearch } from "@tanstack/react-router";
-import { Database, Layers, Settings as SettingsIcon } from "lucide-react";
+import { ChevronRight, Database, Layers, Plus, Settings as SettingsIcon, X } from "lucide-react";
 
 import { ConfigScope } from "../../api/mcp-grpc";
 import { CheckRow } from "../Forge/Status/CheckRow";
@@ -46,6 +51,7 @@ import { checksOf, type ForgeEnvStatusReport } from "../../services/forge/status
 
 import AlertBanner from "./alert_banner";
 import Badge from "./badge";
+import Button, { type ButtonSize, type ButtonVariant } from "./button";
 import Card, { CardBody, CardFooter, CardHeader, CardInset } from "./card";
 import ConfirmationDialog from "./confirmation_dialog";
 import DataTable from "./data_table";
@@ -250,6 +256,50 @@ function ForgeLibrary() {
           <SkeletonLoader variant="card" />
         </div>
       </div>
+    </div>
+  );
+}
+
+const BUTTON_VARIANTS: ButtonVariant[] = ["primary", "secondary", "outline", "ghost", "danger"];
+const BUTTON_SIZES: ButtonSize[] = ["xs", "sm", "md", "lg", "xl"];
+
+/** forge's Button in every variant, size and state, on both page surfaces. */
+function ButtonSites() {
+  return (
+    <div className="space-y-6" data-testid="buttons">
+      {(["bg-card", "bg-background"] as const).map((surface) => (
+        <div key={surface} className={`space-y-3 rounded-lg border border-border p-4 ${surface}`}>
+          <SectionTitle>Button on {surface}</SectionTitle>
+          {BUTTON_VARIANTS.map((variant) => (
+            <div key={variant} className="flex flex-wrap items-center gap-2">
+              {BUTTON_SIZES.map((size) => (
+                <Button key={size} variant={variant} size={size}>
+                  {variant} {size}
+                </Button>
+              ))}
+              <Button variant={variant} size="sm" leftIcon={<Plus />}>
+                New
+              </Button>
+              <Button variant={variant} size="sm" rightIcon={<ChevronRight />}>
+                Next
+              </Button>
+              <Button variant={variant} size="sm" icon={<X />} aria-label="Close" />
+              <Button variant={variant} size="sm" loading>
+                Save
+              </Button>
+              <Button variant={variant} size="sm" loading leftIcon={<Plus />}>
+                Creating
+              </Button>
+              <Button variant={variant} size="sm" disabled>
+                Disabled
+              </Button>
+              <Button variant={variant} size="sm" aria-expanded>
+                Open
+              </Button>
+            </div>
+          ))}
+        </div>
+      ))}
     </div>
   );
 }
@@ -482,6 +532,11 @@ export default function ForgeTokenSandbox() {
       {view !== "overlays" && (
         <div className="mt-12">
           <S1Sites />
+        </div>
+      )}
+      {view !== "overlays" && (
+        <div className="mt-12">
+          <ButtonSites />
         </div>
       )}
     </div>

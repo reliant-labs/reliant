@@ -163,8 +163,17 @@ type DaemonConfig struct {
 	// heavyjob.DefaultCommands (a test pins the two equal); an empty list
 	// ("," in the env, or --config) declares nothing heavy by pattern.
 	HeavyCommands []string `protobuf:"bytes,22,rep,name=heavy_commands,json=heavyCommands,proto3" json:"heavy_commands,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// Let the fetch tool reach this machine's own localhost and private network
+	// (127.0.0.0/8, 10/8, 172.16/12, 192.168/16, fc00::/7, ...). Off by default:
+	// fetch is usually auto-approved and a fetched page can steer the next fetch,
+	// so a default-open policy would be an SSRF into the user's own environment.
+	// Link-local and cloud-metadata addresses (169.254.0.0/16, fe80::/10, the
+	// metadata hostnames, fd00:ec2::254, ...) are refused whatever this says.
+	// A managed daemon ignores it: a workspace pod's network is the platform's,
+	// not the user's. A refused fetch names this setting in its error.
+	FetchAllowPrivateNetwork bool `protobuf:"varint,23,opt,name=fetch_allow_private_network,json=fetchAllowPrivateNetwork,proto3" json:"fetch_allow_private_network,omitempty"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *DaemonConfig) Reset() {
@@ -335,6 +344,13 @@ func (x *DaemonConfig) GetHeavyCommands() []string {
 		return x.HeavyCommands
 	}
 	return nil
+}
+
+func (x *DaemonConfig) GetFetchAllowPrivateNetwork() bool {
+	if x != nil {
+		return x.FetchAllowPrivateNetwork
+	}
+	return false
 }
 
 // DaemonStatusConfig is `reliant daemon status`'s config.
@@ -529,7 +545,7 @@ const file_reliant_config_v1_daemon_config_proto_rawDesc = "" +
 	"\aaccount\x18\x02 \x01(\tB|\x82\xce\x18x\n" +
 	"\x18RELIANT_INSTANCE_ACCOUNT\x12\aaccount*SAccount (user id) this daemon runs as; selects among several accounts on one serverR\aaccount\x12\xa6\x01\n" +
 	"\tworkspace\x18\x03 \x01(\tB\x87\x01\x82\xce\x18\x82\x01\n" +
-	"\x1aRELIANT_INSTANCE_WORKSPACE\x12\tworkspace*YWorkspace this daemon serves (defaults to the git worktree root of the current directory)R\tworkspace\"\x81\x18\n" +
+	"\x1aRELIANT_INSTANCE_WORKSPACE\x12\tworkspace*YWorkspace this daemon serves (defaults to the git worktree root of the current directory)R\tworkspace\"\xf7\x19\n" +
 	"\fDaemonConfig\x12C\n" +
 	"\binstance\x18\x01 \x01(\v2'.reliant.config.v1.DaemonInstanceConfigR\binstance\x12\x9a\x01\n" +
 	"\vgateway_url\x18\x02 \x01(\tBy\x82\xce\x18u\n" +
@@ -576,7 +592,9 @@ const file_reliant_config_v1_daemon_config_proto_rawDesc = "" +
 	"\x0edisk_refuse_at\x18\x15 \x01(\tBr\x82\xce\x18n\n" +
 	"\x16RELIANT_DISK_REFUSE_AT*TDisk use (percent, or off) past which the daemon refuses heavy commands (default 95)R\fdiskRefuseAt\x12\xe4\x02\n" +
 	"\x0eheavy_commands\x18\x16 \x03(\tB\xbc\x02\x82\xce\x18\xb7\x02\n" +
-	"\x16RELIANT_HEAVY_COMMANDS\x1a\xda\x01go build,go test,go vet,go install,golangci-lint run,vitest,npx vitest,npm test,npm run test*,npm run build*,npm ci,forge generate,forge lint,reliant forge generate,reliant forge lint,make test*,task test*,docker build*@Comma-separated commands queued behind the machine's heavy slotsR\rheavyCommands:\x1c\xca\xc1\x18\x18\n" +
+	"\x16RELIANT_HEAVY_COMMANDS\x1a\xda\x01go build,go test,go vet,go install,golangci-lint run,vitest,npx vitest,npm test,npm run test*,npm run build*,npm ci,forge generate,forge lint,reliant forge generate,reliant forge lint,make test*,task test*,docker build*@Comma-separated commands queued behind the machine's heavy slotsR\rheavyCommands\x12\xf3\x01\n" +
+	"\x1bfetch_allow_private_network\x18\x17 \x01(\bB\xb3\x01\x82\xce\x18\xae\x01\n" +
+	"#RELIANT_FETCH_ALLOW_PRIVATE_NETWORK*\x86\x01Let fetch reach this machine's localhost and private network (default off; link-local and cloud-metadata addresses are always refused)R\x18fetchAllowPrivateNetwork:\x1c\xca\xc1\x18\x18\n" +
 	"\areliant\x12\x06daemon\x12\x05start\"x\n" +
 	"\x12DaemonStatusConfig\x12C\n" +
 	"\binstance\x18\x01 \x01(\v2'.reliant.config.v1.DaemonInstanceConfigR\binstance:\x1d\xca\xc1\x18\x19\n" +

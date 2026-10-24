@@ -325,9 +325,9 @@ func daemonRouterOptions(repo toolexec.DaemonRecords, cpURL string) []toolexec.N
 
 // APIToolsFactoryDeps is what the catalog's tool metadata reads.
 type APIToolsFactoryDeps struct {
-	DB           *db.Repo
-	ControlPlane *configv1.ControlPlaneConfig
-	Temporal     *TemporalClient
+	DB       *db.Repo
+	Network  *configv1.NetworkConfig
+	Temporal *TemporalClient
 }
 
 // NewAPIToolsFactory is the tools factory CatalogService lists tools from:
@@ -337,8 +337,8 @@ type APIToolsFactoryDeps struct {
 func NewAPIToolsFactory(d APIToolsFactoryDeps) (*tools.ToolsFactory, error) {
 	repo, temporalClient := d.DB, d.Temporal.Client
 	return tools.NewToolsFactory(&tools.ToolsOptions{
-		Repo:            repo,
-		ControlPlaneURL: ControlPlaneEndpoint(d.ControlPlane).URL,
+		Repo:               repo,
+		AllowPrivateEgress: AllowPrivateEgress(d.Network),
 		// Lets spawn_send wake a parent parked on its sub-agents instead of
 		// leaving the message queued until one of them finishes.
 		AgentMessageNotifier: temporal.NewAgentMessageNotifier(temporalClient, workersetup.ChatWorkflowLookup(repo)),
@@ -1201,14 +1201,6 @@ func alertingProvisioner(a *triggers.Alerting) trigger.AlertingProvisioner {
 		return nil
 	}
 	return a
-}
-
-// modelEndpointControlPlane is the control-plane block in its config shape,
-// trimmed as ControlPlaneEndpoint trims it: its URL picks the dial policy for
-// user-supplied model endpoints.
-func modelEndpointControlPlane(cfg *configv1.ControlPlaneConfig) *configv1.ControlPlaneConfig {
-	cp := ControlPlaneEndpoint(cfg)
-	return &configv1.ControlPlaneConfig{Url: cp.URL, InternalServiceSecret: cp.InternalServiceSecret}
 }
 
 // hostedControlPlane is the control-plane client of a deployment a control

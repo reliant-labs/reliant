@@ -45,7 +45,7 @@ import ConfirmationDialog from "../../forge-ui/confirmation_dialog";
 import DataTable from "../../forge-ui/data_table";
 import EmptyState from "../../forge-ui/empty_state";
 import PageHeader from "../../forge-ui/page_header";
-import { Button } from "../../ui/Button";
+import Button from "@/components/forge-ui/button";
 import { Modal } from "../../ui/Modal";
 import { RunNowDialog } from "../../workflow/run/RunNowDialog";
 import { workflowDisplayName } from "../../../lib/workflowDisplayName";
@@ -265,7 +265,7 @@ function ImportConflictModal({
           <Button variant="outline" onClick={onClose}>
             Cancel
           </Button>
-          <Button variant="destructive" onClick={replace} disabled={importWorkflow.isPending}>
+          <Button variant="danger" onClick={replace} disabled={importWorkflow.isPending}>
             Replace existing
           </Button>
         </div>

@@ -15,9 +15,27 @@ import type { Plugin } from "vite";
  *
  * A meta tag ships INSIDE the bundle, so one artifact carries its own policy to
  * both surfaces. That is the property that matters here: the hosted SPA and the
- * desktop renderer are the SAME bytes (control-plane's `reliant_web_vite_env`
- * feeds both), and a policy attached to only one of them would be exactly the
- * web/desktop drift this plugin exists to prevent.
+ * desktop renderer are the SAME bytes, and a policy attached to only one of
+ * them would be exactly the web/desktop drift this plugin exists to prevent.
+ *
+ * ── connect-src is narrowed at RUNTIME, from config.js ────────────────
+ *
+ * The backends the app may call are the backends its runtime config names
+ * (window.__FORGE_CONFIG__, src/lib/config_gen.ts), and those are not known
+ * at build time: one bundle serves every environment. So there are TWO
+ * policies, and a browser enforces every policy it is given:
+ *
+ *   1. the build-time meta below: every directive, with connect-src at a
+ *      ceiling (`* ws: wss:`, any http/https/ws/wss origin);
+ *   2. a meta the inline bootstrap after `<script src=config.js>` appends,
+ *      whose connect-src is exactly 'self', the origins config.js names, and
+ *      the fixed hosts below (runtimeConnectScript).
+ *
+ * The effective connect-src is their intersection, i.e. policy 2. The
+ * bootstrap runs in <head>, before any module script, so no request the app
+ * makes predates it. It is hashed like the theme bootstrap, from the final
+ * HTML. A missing config.js narrows to 'self' plus the fixed hosts, the same
+ * policy a build with no endpoints got before.
  *
  * The cost is real and bounded: `frame-ancestors`, `report-uri` and `sandbox`
  * are ignored in a meta tag. Clickjacking is covered instead by
@@ -83,62 +101,66 @@ const LOOPBACK = [
   "ws://127.0.0.1:*",
 ];
 
-/** Extract an origin, or "" if the value is absent or unparseable. */
-function originOf(value: string | undefined): string {
-  if (!value) return "";
-  try {
-    return new URL(value).origin;
-  } catch {
-    return "";
-  }
+/**
+ * The runtime-config keys whose values are origins the app calls. Their
+ * names are config_gen.ts's (proto/reliant/config/v1/web_config.proto);
+ * OTEL_ENDPOINT is normally the same-origin `/_otel`, which 'self' covers.
+ */
+export const RUNTIME_ORIGIN_KEYS = [
+  "API_URL",
+  "CONTROL_PLANE_API_URL",
+  "GATEWAY_URL",
+  "SUPABASE_URL",
+  "OTEL_ENDPOINT",
+  "APP_URL",
+] as const;
+
+/** connect-src hosts that are not per environment. */
+const FIXED_CONNECT = [
+  ...LOOPBACK,
+  MONACO_CDN,
+  // Sentry tunnels envelopes to the project's ingest subdomain; the DSN names
+  // it exactly, but session-replay can address a sibling.
+  "https://*.ingest.us.sentry.io",
+  "https://*.ingest.sentry.io",
+  ...ICON_HOSTS,
+];
+
+/**
+ * The inline bootstrap that appends policy 2 (see the file header). Plain
+ * ES5 with no dependencies: it runs before any module, from <head>.
+ *
+ * For each origin key (and SENTRY_DSN, whose credential `URL.host` already
+ * drops) it allows the http(s) origin, plus wss:// for an https one — the
+ * terminal WebSocket rides the API origin, and connect-src matches on scheme,
+ * so an https entry alone does NOT authorise the upgrade. Anything absent,
+ * relative or unparseable contributes nothing rather than a junk token.
+ */
+export function runtimeConnectScript(): string {
+  const keys = JSON.stringify([...RUNTIME_ORIGIN_KEYS, "SENTRY_DSN"]);
+  const fixed = JSON.stringify(FIXED_CONNECT);
+  return (
+    "(function(){" +
+    "var c=window.__FORGE_CONFIG__||{},s=[\"'self'\"],seen={};" +
+    "function add(v){if(v&&!seen[v]){seen[v]=1;s.push(v);}}" +
+    "function origin(v){if(typeof v!==\"string\"||!v)return\"\";" +
+    "try{var u=new URL(v);return u.protocol===\"http:\"||u.protocol===\"https:\"?u.protocol+\"//\"+u.host:\"\";}" +
+    "catch(e){return\"\";}}" +
+    `var k=${keys},f=${fixed},i,o;` +
+    "for(i=0;i<k.length;i++){o=origin(c[k[i]]);add(o);if(o.indexOf(\"https://\")===0)add(\"wss://\"+o.slice(8));}" +
+    "for(i=0;i<f.length;i++)add(f[i]);" +
+    "var m=document.createElement(\"meta\");m.httpEquiv=\"Content-Security-Policy\";" +
+    "m.content=\"connect-src \"+s.join(\" \");document.head.appendChild(m);" +
+    "})();"
+  );
 }
 
 /**
- * A Sentry DSN is `https://<key>@<host>/<project>`; the browser POSTs envelopes
- * to that host's origin. `new URL` keeps the credential in `origin`'s host
- * position, so parse and rebuild rather than string-slicing.
+ * The build-time policy (policy 1). Every directive is final except
+ * connect-src, which is the ceiling runtimeConnectScript narrows. No
+ * endpoint appears here: the build does not know which environment it is for.
  */
-function sentryOrigin(dsn: string | undefined): string {
-  if (!dsn) return "";
-  try {
-    const { protocol, host } = new URL(dsn);
-    return `${protocol}//${host.split("@").pop()}`;
-  } catch {
-    return "";
-  }
-}
-
-function unique(values: string[]): string[] {
-  return [...new Set(values.filter(Boolean))];
-}
-
-/**
- * Build the policy from the same VITE_* environment the bundle is compiled
- * with, so the backends the app is allowed to call are exactly the backends it
- * was built to call. Hardcoding prod hostnames here would be a second endpoint
- * table beside control-plane's KCL — the copy that drifts.
- */
-export function buildCSP(
-  env: NodeJS.ProcessEnv,
-  scriptHashes: string[],
-): string {
-  const apiOrigins = unique([
-    originOf(env.VITE_API_URL),
-    originOf(env.VITE_GRPC_URL),
-    originOf(env.VITE_CONTROL_PLANE_API_URL),
-    originOf(env.VITE_GATEWAY_URL),
-    originOf(env.VITE_SUPABASE_URL),
-    originOf(env.VITE_OTEL_ENDPOINT),
-    originOf(env.VITE_APP_URL),
-  ]);
-
-  // wss:// for every https backend: the terminal WebSocket rides the API
-  // origin, and `connect-src` matches the scheme, so an https entry alone
-  // does NOT authorise the upgrade.
-  const secureSockets = apiOrigins
-    .filter((origin) => origin.startsWith("https://"))
-    .map((origin) => origin.replace("https://", "wss://"));
-
+export function buildCSP(scriptHashes: string[]): string {
   const hashes = scriptHashes.map((hash) => `'${hash}'`);
 
   const directives: Record<string, string[]> = {
@@ -161,19 +183,11 @@ export function buildCSP(
     // place to be permissive; scripts and connections are not.
     "img-src": ["'self'", "data:", "blob:", "https:"],
 
-    "connect-src": unique([
-      "'self'",
-      ...apiOrigins,
-      ...secureSockets,
-      ...LOOPBACK,
-      MONACO_CDN,
-      sentryOrigin(env.VITE_SENTRY_DSN),
-      // Sentry tunnels envelopes to the project's ingest subdomain; the DSN
-      // above names it exactly, but session-replay can address a sibling.
-      "https://*.ingest.us.sentry.io",
-      "https://*.ingest.sentry.io",
-      ...ICON_HOSTS,
-    ]),
+    // The ceiling; the runtime policy names the actual hosts (file header).
+    // `*` matches any http(s) origin, which a self-hosted deployment on a
+    // plain-http hostname needs; ws:/wss: are spelled out because `*` does
+    // not match a WebSocket scheme in every engine.
+    "connect-src": ["'self'", "*", "ws:", "wss:"],
 
     "worker-src": ["'self'", "blob:"],
     "child-src": ["'self'", "blob:"],
@@ -203,6 +217,25 @@ export function sha256(source: string): string {
   return `sha256-${createHash("sha256").update(source, "utf8").digest("base64")}`;
 }
 
+/** The runtime config document's tag in index.html (see index.html). */
+const CONFIG_SCRIPT_TAG = /<script src="[^"]*config\.js"><\/script>/;
+
+/**
+ * Insert the runtime connect-src bootstrap right after config.js's tag: after
+ * it so window.__FORGE_CONFIG__ is set, and before every module script.
+ * A document without that tag is refused rather than shipped with only the
+ * ceiling policy.
+ */
+export function withRuntimeConnectPolicy(html: string): string {
+  if (!CONFIG_SCRIPT_TAG.test(html)) {
+    throw new Error(
+      'reliant:csp: index.html has no <script src="%BASE_URL%config.js"></script>; ' +
+        "the runtime config and the runtime connect-src policy both depend on it",
+    );
+  }
+  return html.replace(CONFIG_SCRIPT_TAG, (tag) => `${tag}\n    <script>${runtimeConnectScript()}</script>`);
+}
+
 export function cspPlugin(): Plugin {
   return {
     name: "reliant:csp",
@@ -213,9 +246,9 @@ export function cspPlugin(): Plugin {
       // would authorise a version of the bootstrap that never ships and
       // white-screen the app on load.
       order: "post",
-      handler(html) {
-        const hashes = inlineScripts(html).map(sha256);
-        const policy = buildCSP(process.env, hashes);
+      handler(source) {
+        const html = withRuntimeConnectPolicy(source);
+        const policy = buildCSP(inlineScripts(html).map(sha256));
 
         return {
           html,

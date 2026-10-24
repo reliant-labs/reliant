@@ -4,8 +4,9 @@ import { useNavigate, useSearch } from '@tanstack/react-router'
 import { useAuthMode } from '@/hooks/useAuthMode'
 import { ApiKeyLogin } from './ApiKeyLogin'
 import { LoadingSpinner } from './Layout/LoadingSpinner'
+import { loadConfig } from '@/lib/config_gen'
 
-const allowAnonymousAutoSignIn = import.meta.env.VITE_AUTO_ANON_SIGN_IN === 'true'
+const allowAnonymousAutoSignIn = (): boolean => loadConfig().AUTO_ANON_SIGN_IN === 'true'
 
 interface AuthGuardProps {
   children: React.ReactNode
@@ -42,7 +43,7 @@ export function AuthGuard({
       if (authMode === 'apikey') return
 
       // Optional zero-friction onboarding: sign in anonymously when explicitly enabled.
-      if (authMode === 'supabase' && allowAnonymousAutoSignIn && !anonSignInAttempted.current) {
+      if (authMode === 'supabase' && allowAnonymousAutoSignIn() && !anonSignInAttempted.current) {
         anonSignInAttempted.current = true
         signInAnonymously().catch(() => {
           navigate({ to: '/auth', search: { redirect: undefined } })

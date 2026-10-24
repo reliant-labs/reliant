@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { AlertCircle, CreditCard } from "lucide-react";
 
-import { Button } from "./ui";
+import Button from "@/components/forge-ui/button";
 import { formatCentsAsDollars, suggestRecharge } from "./billingUtils";
 import {
   useSetWalletAutoRecharge,
@@ -335,8 +335,7 @@ export function WalletAutoRechargeControl({
                 You&apos;ll need a card on file before this can be turned on.
               </p>
               {onAddCard && (
-                <Button size="sm" variant="outline" onClick={onAddCard}>
-                  <CreditCard className="mr-1 h-3.5 w-3.5" />
+                <Button size="md" variant="outline" onClick={onAddCard} leftIcon={<CreditCard />}>
                   Add a card
                 </Button>
               )}
@@ -424,7 +423,7 @@ export function WalletAutoRechargeControl({
 
       <div>
         <Button
-          size="sm"
+          size="md"
           onClick={handleSave}
           disabled={saving || !dirty || invalid || (turningOn && !card)}
         >
@@ -581,7 +580,7 @@ export function WalletAutoRechargeSection({
           Couldn&apos;t load your automatic top-up settings.
         </p>
         <Button
-          size="sm"
+          size="md"
           variant="outline"
           onClick={() => void autoRechargeQ.refetch()}
         >

@@ -324,7 +324,7 @@ export const DOMAIN_TARGET_KIND_LABELS: Record<DomainTargetKind, string> = {
  * fault.
  *
  *   available         it answered.
- *   no-control-plane  this build has none (no VITE_CONTROL_PLANE_API_URL).
+ *   no-control-plane  this build has none (no CONTROL_PLANE_API_URL).
  *   no-access         PermissionDenied: domain reads need org membership, and
  *                     the write side needs org admin.
  *   not-configured    Unimplemented/Unavailable: this control plane does not

@@ -13,7 +13,7 @@
 import type { ReactNode } from "react";
 import { Activity, AlertTriangle, Boxes, Clock, Lock, RefreshCw, SearchX } from "lucide-react";
 
-import { Button } from "@/components/ui/Button";
+import Button from "@/components/forge-ui/button";
 import {
   obsErrorKind,
   obsErrorMessage,

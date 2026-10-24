@@ -102,6 +102,7 @@ func base(cur *Selection, chatID, userID, workflowName string) *Selection {
 	}
 	next.UserID = cur.UserID
 	next.Policy = cur.Policy
+	next.ChatProvider = cur.ChatProvider
 	next.Version = cur.Version
 	for key, value := range cur.Params {
 		next.Params[key] = value

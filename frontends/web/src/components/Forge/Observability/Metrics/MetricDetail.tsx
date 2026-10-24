@@ -14,7 +14,7 @@
 import { Clock, Layers, LayoutGrid } from "lucide-react";
 
 import Tag from "@/components/forge-ui/tag";
-import { Button } from "@/components/ui/Button";
+import Button from "@/components/forge-ui/button";
 import type { MetricCatalogEntry, MetricDetail as MetricDetailModel } from "@/services/controlPlane/observability/metricsTypes";
 import { RANGE_LABELS, type RangePreset } from "@/services/controlPlane/observability/window";
 import { cn } from "@/lib/utils";

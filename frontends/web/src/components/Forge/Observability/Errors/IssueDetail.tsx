@@ -11,7 +11,7 @@ import { useMemo, type ReactNode } from "react";
 import { ArrowLeft, ExternalLink, GitCommitHorizontal } from "lucide-react";
 
 import Card from "@/components/forge-ui/card";
-import { Button } from "@/components/ui/Button";
+import Button from "@/components/forge-ui/button";
 import { useIssue, useIssueEvents } from "@/hooks/observability-queries";
 import { issuesErrorKind } from "@/services/controlPlane/observability/errors";
 import type { IssueDetail as IssueDetailModel, IssueEvent, IssueFrame } from "@/services/controlPlane/observability/issuesTypes";

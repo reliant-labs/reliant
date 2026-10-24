@@ -1,7 +1,7 @@
 import { useMemo } from "react";
-import { Download, RefreshCw } from "lucide-react";
+import { Download } from "lucide-react";
 import { type RecommendedServer } from "../../api/mcp-grpc";
-import { Button } from "../ui/Button";
+import Button from "@/components/forge-ui/button";
 import { getMcpIconUrl, MCPAvatar } from "./mcpAvatar";
 
 function ensureServerIconUrl(server: RecommendedServer): string | undefined {
@@ -76,14 +76,13 @@ export function MCPDiscoverTab({ recommendedServers, installingServers, onInstal
                       <Button
                         type="button"
                         variant="ghost"
-                        size="sm"
-                        className="h-8 w-8 p-0 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100 transition-opacity shrink-0"
+                        size="md"
+                        className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
                         onClick={() => onInstall(server)}
-                        disabled={isInstalling}
+                        loading={isInstalling}
+                        icon={<Download />}
                         aria-label={`${actionLabel} ${server.displayName}`}
-                      >
-                        {isInstalling ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-                      </Button>
+                      />
                     </div>
 
                   </div>

@@ -57,6 +57,11 @@ type llmCallSpec struct {
 	// names no provider of its own (see withRunProviders), and then rank above
 	// the user's tag preference model and the tier's own order.
 	RunProviders []string
+	// ChatProvider is a strict chat-wide selection, not a ranked preference.
+	ChatProvider      string
+	ClearProviderPins bool
+	Descendant        bool
+	PresetModelTags   []string
 
 	// ThreadID is the thread the call belongs to. It is what keeps a thread on
 	// one account of its provider (prompt cache and reasoning envelopes are per
@@ -197,6 +202,11 @@ func resolveLLMCall(ctx context.Context, resolver drivers.DriverResolver, spec l
 	// provider for the run outranks the user's per-tag model preference and
 	// the tier's own order. runPinned records that it did.
 	selector, runPinned := withRunProviders(spec.Selector, spec.RunProviders)
+	if spec.ChatProvider != "" {
+		selector = switchSelector(spec)
+		spec.Selector = selector
+		runPinned = true
+	}
 
 	if resolver != nil {
 		// Probe the injected resolver for its model. Explicit spec values are
@@ -214,6 +224,9 @@ func resolveLLMCall(ctx context.Context, resolver drivers.DriverResolver, spec l
 			effectiveThinkingLevel,
 		)
 	} else if local.IsSelector(spec.Selector) {
+		if spec.ChatProvider != "" && spec.ChatProvider != "local" {
+			return nil, providerSwitchHold(spec.ChatProvider, selector, fmt.Errorf("an explicit local model cannot run on a registry provider"))
+		}
 		var err error
 		legacyModel, definition, modelIDForDriver, effectiveThinkingLevel, localTransport, err = resolveLocalModel(ctx, spec)
 		if err != nil {
@@ -242,6 +255,15 @@ func resolveLLMCall(ctx context.Context, resolver drivers.DriverResolver, spec l
 		availableProviders := slices.DeleteFunc(configuredProviderIDs(availableDrivers), func(p string) bool {
 			return slices.Contains(spec.ExcludeProviders, p)
 		})
+		if spec.ChatProvider != "" {
+			// Providers on ModelSelector are preference-ranked. Restrict the
+			// eligible set as well so neither tag fallback nor user tag prefs
+			// can silently send this call back to the previous provider.
+			availableProviders = nil
+			if cfg, ok := availableDrivers.Drivers[models.DriverID(spec.ChatProvider)]; ok && cfg.IsConfigured() {
+				availableProviders = []string{spec.ChatProvider}
+			}
+		}
 
 		registry := models.MustGetRegistry().WithAvailability(availableDrivers.Availability)
 		resolve := registry.Resolve
@@ -267,6 +289,9 @@ func resolveLLMCall(ctx context.Context, resolver drivers.DriverResolver, spec l
 			var err error
 			resolved, err = resolve(selector, availableProviders)
 			if err != nil {
+				if spec.ChatProvider != "" {
+					return nil, providerSwitchHold(spec.ChatProvider, selector, err)
+				}
 				return nil, resolutionError(err, availableDrivers)
 			}
 		}
@@ -280,6 +305,17 @@ func resolveLLMCall(ctx context.Context, resolver drivers.DriverResolver, spec l
 			tagCompactionThreshold = *prefs.CompactionThreshold
 		}
 
+		if spec.ChatProvider != "" {
+			if resolved.Provider.Driver != spec.ChatProvider {
+				return nil, providerSwitchHold(spec.ChatProvider, selector, fmt.Errorf("resolution selected a different provider %s", resolved.Provider.Driver))
+			}
+			if selector.ID != "" {
+				id, _, _ := strings.Cut(selector.ID, "@")
+				if resolved.Definition.ID != id {
+					return nil, providerSwitchHold(spec.ChatProvider, selector, fmt.Errorf("the exact model is retired or unavailable; choose its replacement explicitly"))
+				}
+			}
+		}
 		resolvedDef := resolved.Definition
 		definition = &resolvedDef
 

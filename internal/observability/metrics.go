@@ -247,6 +247,18 @@ var (
 		},
 		[]string{"error_type"},
 	)
+	// ToolPlacementTotal counts calls of PlacementPreferDaemon tools by where
+	// they ran (daemon or server) and, for the server, why (fallback reason;
+	// "" when the server was not a fallback).
+	ToolPlacementTotal = newCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "reliant",
+			Subsystem: "tool_execution",
+			Name:      "placement_total",
+			Help:      "Calls of prefer-daemon tools by tool, where they ran and why the server ran them.",
+		},
+		[]string{"tool", "ran_at", "reason"},
+	)
 	ToolExecutionErrorsTotal = newCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "reliant",
@@ -393,6 +405,7 @@ func initMetrics() {
 	Registry.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
 
 	// Application metrics.
+	Registry.MustRegister(daemonFleetCollector{})
 	Registry.MustRegister(
 		// HTTP
 		HTTPRequestsTotal,
@@ -424,6 +437,7 @@ func initMetrics() {
 		DeadEndErrorsTotal,
 		StreamingErrorsTotal,
 		ToolExecutionErrorsTotal,
+		ToolPlacementTotal,
 		// Reconciler
 		ReconcilerAnomaliesTotal,
 		// Workflow resume

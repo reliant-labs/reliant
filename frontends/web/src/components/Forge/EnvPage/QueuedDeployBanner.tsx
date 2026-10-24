@@ -34,7 +34,7 @@
 import { useCallback, useState } from "react";
 import { Check, Copy, Hourglass } from "lucide-react";
 
-import { Button } from "@/components/ui/Button";
+import Button from "@/components/forge-ui/button";
 import { useUnmountSafeTimeout } from "@/hooks/useUnmountSafeTimeout";
 import { formatRelativeTime } from "@/lib/relativeTime";
 import { queuedOnLabel, type LiveHold } from "@/services/forge/live";

@@ -38,7 +38,7 @@
 import { RefreshCw } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/Button";
+import Button from "@/components/forge-ui/button";
 import {
   deployCertainty,
   describeDeployCertainty,

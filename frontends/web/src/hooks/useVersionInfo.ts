@@ -1,33 +1,8 @@
 import { useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { requestKey } from "@reliantlabs/forge-web-runtime/service-hooks";
 
-import { SystemService, VersionRequestSchema } from "@/gen/reliant/v1/system_pb";
-import { systemServiceKeys } from "@/hooks/system-service-hooks_gen";
-import { connectClient } from "@/lib/connect";
+import { useVersion } from "@/hooks/system-service-hooks_gen";
 import { appBuild } from "../lib/appBuild";
 import { formatVersion } from "../lib/releaseIdentity";
-
-const systemClient = connectClient(SystemService);
-
-/**
- * The server's Version RPC, as a query.
- *
- * forge generates no query hook for it: it classifies a read by its rpc's
- * NAME (Get/List/Search…), and `Version` is not a read verb, so
- * system-service-hooks_gen.ts offers only `useVersion` as a MUTATION. Until
- * forge also reads a NO_SIDE_EFFECTS idempotency level, this key is built
- * exactly the way the generated factory would build it —
- * `[service, method, protojson(req)]` under `systemServiceKeys.all` — so an
- * invalidation of the service reaches it, and the day forge emits
- * `systemServiceKeys.version` this becomes `useVersion({})` with the same
- * cache entry.
- */
-const versionQueryKey = [
-  ...systemServiceKeys.all,
-  "version",
-  requestKey(VersionRequestSchema, {}),
-] as const;
 
 /**
  * Everything the About screens say about which build the user is running.
@@ -56,10 +31,9 @@ export function useVersionInfo(): VersionInfo {
   const build = appBuild();
   const baked = formatVersion(build?.version, build?.commit);
   const [desktopVersion, setDesktopVersion] = useState<string | null>(null);
-  const versionQuery = useQuery({
-    queryKey: versionQueryKey,
-    queryFn: () => systemClient.version({}),
-  });
+  // Version declares NO_SIDE_EFFECTS, so forge generates it as a query
+  // under systemServiceKeys.version (inside systemServiceKeys.all).
+  const versionQuery = useVersion({});
   const server = serverVersionFrom(versionQuery);
 
   // The packaged desktop app also knows its own version from Electron. The

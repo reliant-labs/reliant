@@ -158,7 +158,9 @@ describe("forge token bridge", () => {
     // forge `accent` = primary action color; reliant `--accent` = a muted
     // hover tint used at ~159 existing call sites. @theme overrides the JS
     // config, so an unscoped mapping would repaint all of them.
-    const scope = /\.forge-ui\s*\{([^}]+)\}/.exec(css);
+    // The rule's selector list may name more than `.forge-ui`: forge's Button
+    // (`[data-slot="button"]`) carries the same scope on its own element.
+    const scope = /\.forge-ui\s*(?:,\s*[^{,]+)*\{([^}]+)\}/.exec(css);
     expect(scope, ".forge-ui scope block should exist").not.toBeNull();
     expect(
       scope![1],

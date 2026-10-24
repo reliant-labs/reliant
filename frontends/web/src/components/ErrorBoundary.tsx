@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import * as Sentry from '@sentry/react';
 import { AlertTriangle, Copy, RefreshCw } from 'lucide-react';
 import { getPrivacySettings } from '../store/privacyStore';
-import { Button } from './ui/Button';
+import Button from '@/components/forge-ui/button';
 import { isDev } from '../lib/constants';
 import { sentryEnabled } from '../lib/telemetrySinks';
 import { reportErrorToTelemetry } from '../lib/telemetry';

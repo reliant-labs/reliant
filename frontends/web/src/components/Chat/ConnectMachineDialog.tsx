@@ -13,7 +13,7 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import Modal from "../forge-ui/modal";
-import { Button } from "../ui/Button";
+import Button from "@/components/forge-ui/button";
 import { useDaemonList } from "@/hooks/useOnboardingQueries";
 import { useChatStore } from "@/store/chatStore";
 import { chatMachineOptions } from "@/lib/chatMachine";

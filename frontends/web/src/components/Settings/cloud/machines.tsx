@@ -51,8 +51,8 @@ import {
 import { cn } from "@/lib/utils";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { capabilities } from "@/services/controlPlane/capabilities";
+import Button from "@/components/forge-ui/button";
 import {
-  Button,
   Badge,
   Card,
   CardContent,
@@ -115,6 +115,7 @@ import { formatMachineSpec } from "@/components/Billing/machineSpecs";
 import { MachineCost } from "@/components/Billing/MachineCost";
 import { CardInset } from "@/components/forge-ui/card";
 import { MachineDiskCard } from "./MachineDiskCard";
+import { machineBuildLabel } from "@/lib/machineBuild";
 import { machineCrashSummary } from "@/lib/machineMemory";
 import { DiskGrowNotice, GrowDiskModal, type GrowStage } from "./GrowDiskModal";
 import { diskGrowStatus, isStorageDenied } from "./diskGrow";
@@ -606,11 +607,11 @@ function EnvironmentsList({ cloud, onOpenDetail }: { cloud: boolean; onOpenDetai
           <option value={String(DaemonStatus.DISCONNECTED)}>Disconnected</option>
         </select>
         {!cloud ? null : canCreate ? (
-          <Button onClick={() => setCreateOpen(true)}>
-            <Plus className="h-4 w-4" /> New Machine
+          <Button onClick={() => setCreateOpen(true)} size="xl" leftIcon={<Plus />}>
+            New Machine
           </Button>
         ) : !eligibilityQ.isLoading ? (
-          <Button variant="outline" onClick={goToBilling}>
+          <Button variant="outline" onClick={goToBilling} size="xl">
             {NO_FUNDING_CTA}
           </Button>
         ) : null}
@@ -627,8 +628,8 @@ function EnvironmentsList({ cloud, onOpenDetail }: { cloud: boolean; onOpenDetai
           <CardContent>
             <p className="text-sm font-medium text-destructive-ink">Failed to load machines</p>
             <p className="mt-1 text-sm text-muted-foreground">{describeError(daemonsQ.error)}</p>
-            <Button variant="outline" size="sm" className="mt-3" onClick={() => daemonsQ.refetch()}>
-              <RefreshCw className="h-3.5 w-3.5" /> Retry
+            <Button variant="outline" size="md" className="mt-3" onClick={() => daemonsQ.refetch()} leftIcon={<RefreshCw />}>
+              Retry
             </Button>
           </CardContent>
         </Card>
@@ -649,11 +650,11 @@ function EnvironmentsList({ cloud, onOpenDetail }: { cloud: boolean; onOpenDetai
           }
           action={
             canCreate ? (
-              <Button onClick={() => setCreateOpen(true)}>
-                <Plus className="h-4 w-4" /> New Machine
+              <Button onClick={() => setCreateOpen(true)} size="xl" leftIcon={<Plus />}>
+                New Machine
               </Button>
             ) : (
-              <Button variant="outline" onClick={goToBilling}>
+              <Button variant="outline" onClick={goToBilling} size="xl">
                 {NO_FUNDING_CTA}
               </Button>
             )
@@ -799,6 +800,7 @@ function ManagedMachinesTable({
                   {daemonDisplayName(d)}
                 </button>
                 <AppAccessIndicator count={appCounts.get(d.daemonId) ?? 0} />
+                <MachineBuild daemon={d} />
               </Td>
               <Td>
                 <StatusDot
@@ -831,7 +833,7 @@ function ManagedMachinesTable({
                   <div className="inline-flex items-center gap-1">
                     <Button
                       variant="ghost"
-                      size="sm"
+                      size="md"
                       disabled={busy}
                       onClick={() => (isSuspended ? onResume(d.daemonId) : onSuspend(d.daemonId))}
                     >
@@ -844,13 +846,12 @@ function ManagedMachinesTable({
                     {cloud && <MachineCost daemonId={d.daemonId} size={d.size} suspended={isSuspended} />}
                     <Button
                       variant="ghost"
-                      size="sm"
+                      size="md"
                       onClick={() => onDelete(d)}
                       aria-label={`Delete ${daemonDisplayName(d)}`}
                       title="Delete machine"
-                    >
-                      <Trash2 className="h-4 w-4 text-destructive-ink" aria-hidden="true" />
-                    </Button>
+                      icon={<Trash2 className="text-destructive-ink" aria-hidden="true" />}
+                    />
                   </div>
                 )}
               </Td>
@@ -860,6 +861,13 @@ function ManagedMachinesTable({
       </Tbody>
     </Table>
   );
+}
+
+/** The daemon's reported build, small and secondary under the machine's name. */
+function MachineBuild({ daemon }: { daemon: Daemon }) {
+  const label = machineBuildLabel(daemon);
+  if (!label) return null;
+  return <p className="mt-0.5 text-xs text-muted-foreground">{label}</p>;
 }
 
 function SelfHostedMachinesTable({
@@ -904,6 +912,7 @@ function SelfHostedMachinesTable({
                   {daemonDisplayName(d)}
                 </button>
                 <AppAccessIndicator count={appCounts.get(d.daemonId) ?? 0} />
+                <MachineBuild daemon={d} />
               </Td>
               <Td>
                 <StatusDot variant={statusDotVariant[status]} label={badge.label} />
@@ -916,11 +925,12 @@ function SelfHostedMachinesTable({
                   const button = (
                     <Button
                       variant="ghost"
-                      size="sm"
+                      size="md"
                       disabled={!removal.allowed}
                       onClick={() => onRemove(d)}
+                      leftIcon={<Trash2 className="text-destructive-ink" />}
                     >
-                      <Trash2 className="h-4 w-4 text-destructive-ink" /> Remove
+                      Remove
                     </Button>
                   );
                   return removal.allowed ? (
@@ -978,8 +988,8 @@ function RemoveMachineModal({
         )}
       </p>
       <div className="mt-6 flex justify-end gap-3">
-        <Button variant="outline" onClick={onClose}>Cancel</Button>
-        <Button variant="danger" isLoading={isPending} onClick={onConfirm}>
+        <Button variant="outline" onClick={onClose} size="xl">Cancel</Button>
+        <Button variant="danger" loading={isPending} onClick={onConfirm} size="xl">
           {isPending ? confirmingLabel : confirmLabel}
         </Button>
       </div>
@@ -1133,7 +1143,7 @@ function CreateEnvironmentModal({
                 analyticsPhase="create_machine"
               />
             </React.Suspense>
-            <Button type="button" variant="ghost" size="sm" onClick={() => setPickingRepo(false)}>
+            <Button type="button" variant="ghost" size="md" onClick={() => setPickingRepo(false)}>
               {repo ? `Keep ${repo.fullName}` : "Start without a repository"}
             </Button>
           </div>
@@ -1146,26 +1156,25 @@ function CreateEnvironmentModal({
                 Cloned onto the machine at {cloudPathForRepo(repo)}
               </div>
             </div>
-            <Button type="button" variant="ghost" size="sm" onClick={() => setPickingRepo(true)}>
+            <Button type="button" variant="ghost" size="md" onClick={() => setPickingRepo(true)}>
               Change
             </Button>
             <Button
               type="button"
               variant="ghost"
-              size="sm"
+              size="md"
               aria-label="Remove repository"
               onClick={() => setRepo(null)}
-            >
-              <X className="h-4 w-4" />
-            </Button>
+              icon={<X />}
+            />
           </CardInset>
         ) : (
           <CardInset className="flex items-center justify-between gap-3">
             <p className="text-xs text-muted-foreground">
               None — the machine starts empty, and you can add projects to it later.
             </p>
-            <Button type="button" variant="outline" size="sm" onClick={() => setPickingRepo(true)}>
-              <Github className="h-4 w-4" /> Choose repository
+            <Button type="button" variant="outline" size="md" onClick={() => setPickingRepo(true)} leftIcon={<Github />}>
+              Choose repository
             </Button>
           </CardInset>
         )}
@@ -1227,13 +1236,13 @@ function CreateEnvironmentModal({
       <ErrorNote message={error} />
 
       <div className="flex justify-end gap-3 border-t border-border pt-4">
-        <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
+        <Button type="button" variant="outline" onClick={onClose} size="xl">Cancel</Button>
         <Button
           type="submit"
           form={formId}
-          isLoading={createMut.isPending}
+          loading={createMut.isPending}
           disabled={!name.trim() || tiers.length === 0}
-        >
+         size="xl">
           {createMut.isPending ? "Creating…" : "Create"}
         </Button>
       </div>
@@ -1326,7 +1335,7 @@ function MachineLifecycleActions({
           disabled={disabled}
           title={reason}
           onClick={onClick[action]}
-        >
+         size="xl">
           {icon[action]} {label[action]}
         </Button>
       ))}
@@ -1375,8 +1384,8 @@ function RestartMachineModal({
         </p>
       )}
       <div className="mt-6 flex justify-end gap-3">
-        <Button variant="outline" disabled={isPending} onClick={onClose}>Cancel</Button>
-        <Button isLoading={isPending} onClick={onConfirm}>
+        <Button variant="outline" disabled={isPending} onClick={onClose} size="xl">Cancel</Button>
+        <Button loading={isPending} onClick={onConfirm} size="xl">
           {isPending ? "Restarting…" : "Restart machine"}
         </Button>
       </div>
@@ -1538,12 +1547,12 @@ function ResizeMachineModal({
       <ErrorNote message={error} />
 
       <div className="mt-6 flex justify-end gap-3">
-        <Button variant="outline" disabled={isPending} onClick={onClose}>Cancel</Button>
+        <Button variant="outline" disabled={isPending} onClick={onClose} size="xl">Cancel</Button>
         <Button
-          isLoading={isPending}
+          loading={isPending}
           disabled={selected === null}
           onClick={() => selected !== null && onConfirm(selected)}
-        >
+         size="xl">
           {isPending ? "Resizing…" : running ? "Resize and restart" : "Resize"}
         </Button>
       </div>
@@ -1897,8 +1906,10 @@ function EnvironmentDetail({
                     variant="danger"
                     disabled={busy || !removal.allowed}
                     onClick={() => setDeleteOpen(true)}
+                   size="xl"
+                    leftIcon={<Trash2 />}
                   >
-                    <Trash2 className="h-4 w-4" /> {external ? "Remove" : "Delete"}
+                    {external ? "Remove" : "Delete"}
                   </Button>
                 );
                 return removal.allowed ? (
@@ -2164,8 +2175,8 @@ function PortAccessPanel({ daemonId, workspaceBaseDomain }: { daemonId: string; 
               <option value={String(PortAccessMode.TOKEN)}>Token</option>
             </select>
           </div>
-          <Button type="submit" isLoading={addMut.isPending} disabled={!port}>
-            <Plus className="h-4 w-4" /> Add
+          <Button type="submit" loading={addMut.isPending} disabled={!port} size="xl" leftIcon={<Plus />}>
+            Add
           </Button>
         </form>
 
@@ -2200,8 +2211,8 @@ function PortAccessPanel({ daemonId, workspaceBaseDomain }: { daemonId: string; 
                         ) : "—"}
                       </Td>
                       <Td className="text-right">
-                        <Button variant="ghost" size="sm" disabled={removing} onClick={() => removeMut.mutate(r.port)}>
-                          <Trash2 className="h-4 w-4 text-destructive-ink" /> {removing ? "Removing…" : "Remove"}
+                        <Button variant="ghost" size="md" disabled={removing} onClick={() => removeMut.mutate(r.port)} leftIcon={<Trash2 className="text-destructive-ink" />}>
+                          {removing ? "Removing…" : "Remove"}
                         </Button>
                       </Td>
                     </Tr>
@@ -2236,12 +2247,12 @@ function TokenRevealModal({ token, onClose, title }: { token: string | null; onC
         </div>
         <div className="flex items-center gap-2">
           <code className="flex-1 overflow-x-auto rounded-md border border-border/60 bg-background px-3 py-2 font-mono text-sm text-foreground">{token}</code>
-          <Button variant="outline" onClick={copy}>
+          <Button variant="outline" onClick={copy} size="xl">
             {copied ? <><Check className="h-4 w-4 text-success-ink" /> Copied</> : <><Copy className="h-4 w-4" /> Copy</>}
           </Button>
         </div>
         <div className="flex justify-end">
-          <Button onClick={() => { setCopied(false); onClose(); }}>Done</Button>
+          <Button onClick={() => { setCopied(false); onClose(); }} size="xl">Done</Button>
         </div>
       </div>
     </Modal>

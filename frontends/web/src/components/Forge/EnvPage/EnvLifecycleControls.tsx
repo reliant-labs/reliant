@@ -17,7 +17,7 @@
 import { useState } from "react";
 import { MoreHorizontal, Play, Square, Trash2 } from "lucide-react";
 
-import { Button } from "@/components/ui/Button";
+import Button from "@/components/forge-ui/button";
 import { Dropdown } from "@/components/ui/Dropdown";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
@@ -243,7 +243,7 @@ export function DeleteEnvironmentDialog({
             Cancel
           </Button>
           <Button
-            variant="destructive"
+            variant="danger"
             size="sm"
             loading={del.isPending}
             disabled={!matches || del.isPending}

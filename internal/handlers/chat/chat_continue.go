@@ -301,7 +301,7 @@ func (s *Service) restartAtCheckpoint(ctx context.Context, chat *db.Chat, root *
 		Inputs:       inputs,
 		ExecContext:  execContext,
 		Trigger:      launch.LoadChatTrigger(ctx, s.deps.Repo, chat.ID),
-		Resume:       v2.ResumeInputFromDurableState(ctx, s.deps.Repo, chat.ID, workflowID),
+		Resume:       resumeWholeChatInput(v2.ResumeInputFromDurableState(ctx, s.deps.Repo, chat.ID, workflowID)),
 	})
 	if err != nil {
 		return "", fmt.Errorf("start run: %w", err)

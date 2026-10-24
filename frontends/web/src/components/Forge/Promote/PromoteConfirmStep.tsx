@@ -48,7 +48,7 @@ import { useId, useState } from "react";
 import { AlertTriangle } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/Button";
+import Button from "@/components/forge-ui/button";
 import {
   confirmationTokenFor,
   describeToken,
@@ -143,7 +143,7 @@ export function PromoteConfirmStep({
           Cancel
         </Button>
         <Button
-          variant={rollback ? "destructive" : "primary"}
+          variant={rollback ? "danger" : "primary"}
           size="sm"
           onClick={onConfirm}
           disabled={!canApply}

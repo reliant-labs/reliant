@@ -168,12 +168,15 @@ func install(output io.Writer, s Settings, level slog.Level, options ...installO
 	} else {
 		handler = slog.NewTextHandler(output, opts)
 	}
-	// Every process gets the trace handler, not only the daemon: it is what
-	// stamps trace_id/span_id on a record logged with a span in its context,
-	// and without it the API server, worker and gateway logs cannot be joined
-	// to their traces at all. It sits inside withReporting, as in serverkit's
-	// logger, so it sees the level the error-class policy decided.
-	handler = observe.NewTraceHandler(handler)
+	// Every process gets forge's log handler, not only the daemon: it stamps
+	// trace_id/span_id on a record logged with a span in its context (without
+	// it the API server, worker and gateway logs cannot be joined to their
+	// traces), and on every ERROR record the attributes an issue is grouped by
+	// (code.*, exception.type: forge's error_inputs). The call-site handler in
+	// front of it names the real call site for those. Both sit inside
+	// withReporting, as in serverkit's logger, so they see the level the
+	// error-class policy decided.
+	handler = newCallSiteHandler(observe.NewLogHandler(handler, observe.Config{}))
 	handler = newUserHandler(handler)
 	handler = withReporting(handler)
 	if cfg.fields != nil {
