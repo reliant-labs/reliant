@@ -18,14 +18,14 @@ import (
 )
 
 // egressExecutor is an executor whose server side runs the real fetch tool
-// (self-hosted dial policy, so an httptest loopback server is reachable)
+// (AllowPrivateEgress, so an httptest loopback server is reachable)
 // behind a real limiter.
 func egressExecutor(t *testing.T, l egresslimit.Limits) *RemoteExecutor {
 	t.Helper()
 	limiter, err := egresslimit.New(egresslimit.Deps{Limits: l})
 	require.NoError(t, err)
 	e := NewRemoteExecutor(&routerStub{})
-	e.SetServerExecutor(NewLocalToolExecutor(tools.NewToolsFactory(&tools.ToolsOptions{})))
+	e.SetServerExecutor(NewLocalToolExecutor(tools.NewToolsFactory(&tools.ToolsOptions{AllowPrivateEgress: true})))
 	e.SetEgressLimiter(limiter)
 	return e
 }
@@ -152,7 +152,7 @@ func (r *recordingLimiter) Acquire(_ context.Context, req egresslimit.Request) (
 func TestEgress_OnlyEgressToolsAreAdmitted(t *testing.T) {
 	rec := &recordingLimiter{}
 	e := NewRemoteExecutor(&routerStub{})
-	e.SetServerExecutor(NewLocalToolExecutor(tools.NewToolsFactory(&tools.ToolsOptions{})))
+	e.SetServerExecutor(NewLocalToolExecutor(tools.NewToolsFactory(&tools.ToolsOptions{AllowPrivateEgress: true})))
 	e.SetEgressLimiter(rec)
 
 	run := func(name, input string) {
@@ -210,7 +210,7 @@ func TestEgress_NoLimiterAdmitsEverything(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { fmt.Fprint(w, "ok") }))
 	defer srv.Close()
 	e := NewRemoteExecutor(&routerStub{})
-	e.SetServerExecutor(NewLocalToolExecutor(tools.NewToolsFactory(&tools.ToolsOptions{})))
+	e.SetServerExecutor(NewLocalToolExecutor(tools.NewToolsFactory(&tools.ToolsOptions{AllowPrivateEgress: true})))
 	res, err := e.executeOnServer(context.Background(), fetchReq("u1", srv.URL), time.Now())
 	require.NoError(t, err)
 	require.False(t, res.IsError, res.Content)
