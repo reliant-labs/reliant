@@ -119,6 +119,10 @@ type ResumeInput struct {
 	// message arrived (stoppedAgentsSuccessorInput), and by SendAgentMessage
 	// for a chat with no run, from durable state (StoppedSpawnFromDurableState).
 	ResumeStopped []SpawnHandoff `json:"resume_stopped,omitempty"`
+	// ResumeAllStopped means a user resumed one portion while no run was
+	// open: discover and resume its unfinished siblings too. New input only,
+	// so old histories cannot schedule this startup read.
+	ResumeAllStopped bool `json:"resume_all_stopped,omitempty"`
 	// ThreadInputs are the per-thread param changes the user made (a model
 	// switch on one agent's thread), so a thread rebuilt after the boundary
 	// keeps them (ChildWorkflowTracker.threadInputOverrides).
@@ -1548,6 +1552,10 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		for _, stopped := range input.Resume.ResumeStopped {
 			childTracker.resumeStopped(ctx, stopped.ChildThread)
 		}
+	}
+
+	if input.Resume != nil && input.Resume.ResumeAllStopped {
+		childTracker.reviveDurableStopped(ctx, input.ChatID)
 	}
 
 	// STEP 9: Main workflow loop

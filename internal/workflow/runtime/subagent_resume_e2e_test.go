@@ -219,6 +219,14 @@ func newSubAgentResumeEnv(t *testing.T, env *testsuite.TestWorkflowEnvironment, 
 			e.mu.Lock()
 			defer e.mu.Unlock()
 			e.lookups = append(e.lookups, thread)
+			if all, _ := input["all"].(bool); all {
+				var agents []*db.StoppedSpawnAgent
+				for _, agent := range e.durableStopped {
+					agents = append(agents, agent)
+				}
+				slices.SortFunc(agents, func(a, b *db.StoppedSpawnAgent) int { return strings.Compare(a.ChildThreadID, b.ChildThreadID) })
+				return map[string]interface{}{"agents": agents}, nil
+			}
 			if agent := e.durableStopped[thread]; agent != nil {
 				return map[string]interface{}{"agent": agent}, nil
 			}
@@ -695,6 +703,27 @@ func (s *SubAgentResumeE2ESuite) TestMessageForAStoppedAgentAsTheRunEndsIsLeftTo
 // whose run had ended, or by the end-of-run check above: it resumes the agent
 // before anything else, and its root waits for the agent's report before its
 // first turn, so the root reads that report instead of answering nothing.
+func (s *SubAgentResumeE2ESuite) TestFreshPortionResumeAlsoResumesDurableSiblings() {
+	env := s.NewTestWorkflowEnvironment()
+	e := newSubAgentResumeEnv(s.T(), env, false)
+	const chatID = "chat-resume-all-durable-siblings"
+	input := spawnE2EWorkflowInput(chatID)
+	input.ExecContext.ThreadMode = model.ThreadModeInherit
+	requested := stoppedBefore(chatID, "requested", "tc-requested", 0)
+	e.durableStopped["sibling"] = stoppedBefore(chatID, "sibling", "tc-sibling", 1)
+	input.Resume = &ResumeInput{AwaitSpawnsFirst: true, ResumeStopped: []SpawnHandoff{stoppedSpawnHandoff(requested)}, ResumeAllStopped: true}
+	e.parentToolCalls[1] = func(string) []map[string]interface{} { return nil }
+	e.mu.Lock()
+	e.parentThread = input.ExecContext.Thread
+	e.mu.Unlock()
+	env.ExecuteWorkflow(DynamicWorkflow, input)
+	s.Require().NoError(env.GetWorkflowError())
+	for _, thread := range []string{"requested", "sibling"} {
+		turns, _ := e.threadTurns(thread)
+		s.Equal(1, turns, "fresh portion resume restarts each unfinished sibling exactly once: %s", thread)
+	}
+}
+
 func (s *SubAgentResumeE2ESuite) TestRunStartedForAStoppedAgentResumesItBeforeTheRootTakesATurn() {
 	env := s.NewTestWorkflowEnvironment()
 	e := newSubAgentResumeEnv(s.T(), env, false)

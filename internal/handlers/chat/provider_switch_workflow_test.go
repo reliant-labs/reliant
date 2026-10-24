@@ -387,7 +387,7 @@ func TestUpdateWorkflowParams_ProviderSwitchReachesTheWorkflowsDescendants(t *te
 		defer close(done)
 		defer close(h.switched)
 		deadline := time.Now().Add(30 * time.Second)
-		for !(h.dispatched("root", 2) && h.dispatched("fast-a", 2) && h.dispatched("flag-a", 2) && h.isParked("waiting")) {
+		for !h.dispatched("root", 2) || !h.dispatched("fast-a", 2) || !h.dispatched("flag-a", 2) || !h.isParked("waiting") {
 			if time.Now().After(deadline) {
 				switchErr = fmt.Errorf("threads never reached the switch point; calls: %v", h.summary())
 				return

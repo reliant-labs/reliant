@@ -4,15 +4,14 @@ package runtime
 import (
 	"context"
 	"testing"
-
-	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
-	"go.temporal.io/sdk/activity"
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/temporal"
 
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
+	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 )
 
 // Unsupported tag/provider mapping visibly holds only its thread. The root
