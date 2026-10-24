@@ -1,8 +1,10 @@
 {
-  "version": "forge.alert-defaults/v2",
+  "version": "forge.alert-defaults/v3",
   "input": {
     "project": "reliant",
-    "frontend_service": "reliant-frontend"
+    "frontend_services": [
+      "reliant-web"
+    ]
   },
   "defaults": [
     {

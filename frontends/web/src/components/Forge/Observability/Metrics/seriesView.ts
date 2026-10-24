@@ -77,6 +77,24 @@ export function splitPartial(values: readonly (number | null)[], partial: readon
   return { complete, open };
 }
 
+/** Aggregations whose values add up across series: a stack of them is their total. */
+const ADDITIVE_AGGS = new Set(["rate", "increase", "sum", "count"]);
+
+/**
+ * How an area chart fills: stacked when every drawn series is an additive
+ * aggregation of a metric (rate, increase, sum, count) in one unit — the top
+ * edge is then a real total — and a plain translucent fill otherwise (a
+ * percentile, an average or a formula does not add, and stacking it would draw a
+ * number nothing measured).
+ */
+export function areaModeFor(meta: readonly SeriesMeta[], labels: readonly string[]): "stacked" | "fill" {
+  if (labels.length < 2) return "fill";
+  const found = labels.map((label) => meta.find((m) => m.label === label));
+  const additive = found.every((m) => !!m && m.metric !== "" && ADDITIVE_AGGS.has(m.agg));
+  const units = new Set(found.map((m) => m?.valueUnit));
+  return additive && units.size === 1 ? "stacked" : "fill";
+}
+
 export interface SeriesFigures {
   /** The newest complete bucket's value; an open bucket is not a reading yet. */
   last: number | null;
