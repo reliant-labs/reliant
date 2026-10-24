@@ -44,10 +44,11 @@ series. It no longer does, because a forge that is not a project's pin hands tha
 project's KCL-reading commands, `lint` and the `ci` judges to the pinned forge
 (forge#908, #1189). control-plane being **ahead** of reliant's forge is now a warning;
 **behind**, or a `forge/pkg` API reliant uses no longer compiling against control-plane's
-forge (control-plane imports `pkg/daemonwire`, `pkg/llmcatalog`, `pkg/config` and
-`gen/reliant/v1`), still fails there. So bump forge here whenever you like, and keep the
-`forge/pkg` packages those four import source-compatible across a forge bump you land
-(or land the adaptation here first). Detail: `control-plane/docs/pinning.md`, "Coherence".
+forge (control-plane imports `pkg/daemonwire`, `pkg/llmcatalog`, `pkg/hostedhttp`,
+`pkg/config` and `gen/reliant/v1[/reliantv1connect]`, derived by an import scan so a new
+one is covered automatically), still fails there. So bump forge here whenever you like,
+and keep the `forge/pkg` APIs those packages use source-compatible across a forge bump
+you land (or land the adaptation here first). Detail: `control-plane/docs/pinning.md`, "Coherence".
 
 ## Why commits, pre-launch
 
