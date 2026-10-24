@@ -164,11 +164,21 @@ type Sweeper struct {
 	// owner names this process in a clean-up's metadata, so a flag left by a
 	// process that died is recognizable as not ours and expires on its own.
 	owner string
+	// cleanups counts the clean-ups StartCleanup runs detached (WaitCleanups).
+	cleanups sync.WaitGroup
 }
 
 // New returns a Sweeper.
 func New(store Store, sender Sender) *Sweeper {
 	return &Sweeper{store: store, sender: sender, now: time.Now, slots: make(chan struct{}, settleSlots), owner: uuid.NewString()}
+}
+
+// WaitCleanups returns once every clean-up StartCleanup has started so far
+// has finished, its result recorded: for a process draining before exit, and
+// for a test that asserts on the outcome instead of guessing how long a real
+// git snapshot takes on a loaded machine.
+func (s *Sweeper) WaitCleanups() {
+	s.cleanups.Wait()
 }
 
 // WithKeepFiles makes the sweep honor the user's "Keep everything" setting.

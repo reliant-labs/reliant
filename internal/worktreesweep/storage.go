@@ -208,7 +208,9 @@ func (s *Sweeper) StartCleanup(ctx context.Context, store StorageStore, userID, 
 		return nil, skipped, nil
 	}
 	bg, cancel := context.WithTimeout(context.WithoutCancel(ctx), cleanupBudget)
+	s.cleanups.Add(1)
 	go func() {
+		defer s.cleanups.Done()
 		defer cancel()
 		stop := s.keepCleaningAlive(bg, cands)
 		defer stop()

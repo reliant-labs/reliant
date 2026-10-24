@@ -11,25 +11,6 @@ import (
 	"github.com/reliant-labs/forge/pkg/testkit"
 )
 
-// setWorktreeTestGitEnv isolates git from the host config. Crucially it does
-// NOT set a user identity: the fix must seed the initial commit with its own
-// fallback identity, exactly as a fresh cloud workspace pod (no git identity)
-// would exercise it.
-func setWorktreeTestGitEnv(t *testing.T) {
-	t.Helper()
-	cfg := filepath.Join(t.TempDir(), "gitconfig")
-	// init.defaultBranch is set to a non-"main" value to prove the worktree
-	// bases off the actual unborn branch, not a hardcoded guess.
-	content := "[init]\n\tdefaultBranch = main\n" + noAutoMaintenanceConfig
-	if err := os.WriteFile(cfg, []byte(content), 0o644); err != nil {
-		t.Fatalf("write gitconfig: %v", err)
-	}
-	t.Setenv("GIT_CONFIG_GLOBAL", cfg)
-	t.Setenv("GIT_CONFIG_SYSTEM", os.DevNull)
-	// worktree.create writes under $HOME/.reliant/worktrees; keep it in temp.
-	t.Setenv("HOME", t.TempDir())
-}
-
 // TestHandleWorktreeCreate_UnbornHEAD reproduces the exact reported failure:
 // a repo created by `git init` with NO commit (unborn HEAD) — both the
 // new-project auto-init path and a user's manual `git init` — previously made

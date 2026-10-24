@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -44,22 +43,6 @@ func (r *realDaemonRouter) SendDaemonCommandToDaemon(ctx context.Context, userID
 func (r *realDaemonRouter) SendDaemonCommand(ctx context.Context, _ string, cmd string, payload []byte, _ int32) ([]byte, error) {
 	r.calls = append(r.calls, cmd)
 	return daemonruntime.DefaultRegistry().Handle(ctx, cmd, payload)
-}
-
-// machine is the one machine the reclaim tests share: the binary's worktree
-// root and its one Reclaimer. A test sets up in parallel (its database, its
-// project) and then holds machine for the rest of its run (holdMachine). The
-// Reclaimer reuses a snapshot of every process's working directory for 30s,
-// so a test whose checkouts another test's sweep could see being worked on
-// (a `git commit` in one) would find them held as in use; and a test's
-// machine lease must not run out while it waits its turn.
-var machine sync.Mutex
-
-// holdMachine takes the machine until t ends.
-func holdMachine(t *testing.T) {
-	t.Helper()
-	machine.Lock()
-	t.Cleanup(machine.Unlock)
 }
 
 func gitIn(t *testing.T, dir string, args ...string) string {
@@ -99,11 +82,9 @@ func newReclaimEnv(t *testing.T) *reclaimEnv {
 	}
 	// The daemon's worktree root is <HOME>/.reliant/worktrees, and HOME is the
 	// binary's own (TestMain), so every test shares the root and its one
-	// Reclaimer, and keeps to a directory of its own under it. A t.Setenv'd
-	// HOME each made the whole of every test serial: nineteen of them in a
-	// row, database setup included, ran the package to 279s of its 300s
-	// budget under -race on a loaded machine. Now only the part on the
-	// machine is (holdMachine).
+	// Reclaimer, and keeps to a directory of its own under it, in parallel. A
+	// t.Setenv'd HOME each made them serial: nineteen in a row ran the
+	// package past its 300s budget under -race in the release gate.
 	t.Parallel()
 	home, err := os.UserHomeDir()
 	require.NoError(t, err)
@@ -124,10 +105,6 @@ func newReclaimEnv(t *testing.T) *reclaimEnv {
 	now := time.Now().UTC()
 	e.project = &db.Project{ID: "p-" + userID, UserID: userID, Name: "proj", Path: projectPath, CreatedAt: now, UpdatedAt: now, LastActive: now}
 	require.NoError(t, repo.CreateProject(e.ctx, e.project))
-
-	// The machine, from here on: connected (a fresh lease) only once it is
-	// this test's turn.
-	holdMachine(t)
 	require.NoError(t, repo.UpsertDaemon(e.ctx, &db.Daemon{ID: e.daemon, UserID: userID}))
 	require.NoError(t, repo.UpsertDaemonAttachment(e.ctx, &db.DaemonAttachment{DaemonID: e.daemon, UserID: userID, Source: db.DaemonAttachmentSourceInbound}))
 

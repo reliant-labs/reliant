@@ -299,7 +299,7 @@ func TestStartCleanup_RunsDetachedAndRecordsSnapshotRefs(t *testing.T) {
 	t.Parallel()
 
 	if testing.Short() {
-		t.Skip("-short: waits up to 20s on a detached clean-up (a real git snapshot, then removal; ~6s idle); runs in task test")
+		t.Skip("-short: waits for a detached clean-up (a real git snapshot, then removal; ~6s idle); runs in task test")
 	}
 	e := newEnv(t)
 	wt, path := e.worktree(t, "async", true)
@@ -312,10 +312,10 @@ func TestStartCleanup_RunsDetachedAndRecordsSnapshotRefs(t *testing.T) {
 	cancel() // the request that started it goes away
 	assert.Equal(t, []string{wt.ID}, accepted)
 	require.Len(t, skipped, 1)
-	assert.Eventually(t, func() bool {
-		m := e.get(t, wt.ID).CleanupMetadata
-		return m != nil && m.DirectoryDeleted && !m.Cleaning && len(m.SnapshotRefs) == 1
-	}, 20*time.Second, 100*time.Millisecond, "the clean-up finishes and its refs are recorded after the request is gone")
+	e.sweeper.WaitCleanups()
+	m := e.get(t, wt.ID).CleanupMetadata
+	assert.True(t, m != nil && m.DirectoryDeleted && !m.Cleaning && len(m.SnapshotRefs) == 1,
+		"the clean-up finishes and its refs are recorded after the request is gone: %+v", m)
 	assert.False(t, exists(path))
 }
 
@@ -365,7 +365,7 @@ func TestCleaning_ExpiresWhenItsOwnerDies(t *testing.T) {
 	t.Parallel()
 
 	if testing.Short() {
-		t.Skip("-short: waits up to 20s on a detached clean-up (a real git snapshot, then removal; ~6s idle); runs in task test")
+		t.Skip("-short: waits for a detached clean-up (a real git snapshot, then removal; ~6s idle); runs in task test")
 	}
 	e := newEnv(t)
 	wt, path := e.worktree(t, "orphancleaning", true)
@@ -388,10 +388,9 @@ func TestCleaning_ExpiresWhenItsOwnerDies(t *testing.T) {
 	accepted, _, err := e.sweeper.StartCleanup(e.ctx, e.repo, e.userID, e.daemon, []string{wt.ID})
 	require.NoError(t, err)
 	assert.Equal(t, []string{wt.ID}, accepted, "Clean up is not blocked by a flag whose owner is gone")
-	assert.Eventually(t, func() bool {
-		m := e.get(t, wt.ID).CleanupMetadata
-		return m != nil && m.DirectoryDeleted
-	}, 20*time.Second, 100*time.Millisecond)
+	e.sweeper.WaitCleanups()
+	m := e.get(t, wt.ID).CleanupMetadata
+	assert.True(t, m != nil && m.DirectoryDeleted, "%+v", m)
 }
 
 // R-S7: a live clean-up is recorded with its owner and a future deadline.

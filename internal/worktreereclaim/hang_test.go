@@ -290,3 +290,35 @@ func TestIdleSince_IgnoresIndexAndReflogRewriteButCountsEvents(t *testing.T) {
 		t.Fatalf("maximum event time must count even with old mtime: %v, %v", got, err)
 	}
 }
+
+// The cwd cache outlives a request by up to cwdCacheTTL. A process that was
+// in the worktree when it was taken, and has exited since, must not hold the
+// worktree as in use: a cached hit is confirmed against a fresh listing. A
+// cached miss still answers on its own.
+func TestInUse_ACachedHitIsConfirmedFresh(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "w")
+	listings := [][]string{{filepath.Join(path, "sub")}, nil}
+	calls := 0
+	r := &Reclaimer{Root: filepath.Dir(path), Cwds: func(context.Context) ([]string, error) {
+		l := listings[min(calls, len(listings)-1)]
+		calls++
+		return l, nil
+	}}
+	w := Worktree{ID: "w", Path: path}
+	ctx := context.Background()
+	if got := r.inUse(ctx, w, true); got == nil || got.Reason != ReasonInUse {
+		t.Fatalf("a process in the worktree: %+v, want held in_use", got)
+	}
+	// The cache now holds that listing; the process has exited.
+	if got := r.inUse(ctx, w, false); got != nil {
+		t.Fatalf("a cached hit for an exited process held the worktree: %+v", got)
+	}
+	if calls != 2 {
+		t.Fatalf("listings taken = %d, want 2 (the hit was confirmed fresh)", calls)
+	}
+	// A cached miss is answered from the cache.
+	if got := r.inUse(ctx, w, false); got != nil || calls != 2 {
+		t.Fatalf("a cached miss: %+v after %d listings, want not in use from the cache", got, calls)
+	}
+}

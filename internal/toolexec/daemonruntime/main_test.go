@@ -62,6 +62,9 @@ func runIsolated(m *testing.M) int {
 	}
 	// A real workspace's repositories live here; the managed heal scans it.
 	managedProjectsDir = filepath.Join(root, "managed-projects")
+	// Pushes go where the production check allows, plus the fixtures a test
+	// opted in to (allowFileRemotes), so the publish tests can run in parallel.
+	publishURLAllowed = allowTestRemotes(publishURLAllowed)
 
 	gitconfig := filepath.Join(home, ".gitconfig")
 	if err := os.WriteFile(gitconfig, []byte(noAutoMaintenanceConfig), 0o644); err != nil {

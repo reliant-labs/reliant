@@ -454,19 +454,37 @@ func (r *Reclaimer) settle(ctx context.Context, w Worktree, confirmed bool) Resu
 
 // inUse reports whether a live process works inside the worktree. It fails
 // closed.
+//
+// A check that need not be fresh may answer "not in use" from the cached
+// listing, but never "in use": a cached hit is confirmed against a fresh one.
+// The cache lives cwdCacheTTL across requests, so a hit can be a process
+// that has long exited — a user's finished `git commit`, or this daemon's
+// own git in the checkout for an earlier request — and it held an idle
+// worktree as in use on that alone.
 func (r *Reclaimer) inUse(ctx context.Context, w Worktree, fresh bool) *Result {
 	cwds, err := r.cwds(ctx, fresh)
+	if err == nil && !fresh && cwdWithin(cwds, w.Path) {
+		cwds, err = r.cwds(ctx, true)
+	}
 	if err != nil {
 		res := held(w, ReasonUnverified, "could not list running processes: "+err.Error())
 		return &res
 	}
-	for _, cwd := range cwds {
-		if samePath(cwd, w.Path) || within(w.Path, cwd) {
-			res := held(w, ReasonInUse, "a running process has its working directory here")
-			return &res
-		}
+	if cwdWithin(cwds, w.Path) {
+		res := held(w, ReasonInUse, "a running process has its working directory here")
+		return &res
 	}
 	return nil
+}
+
+// cwdWithin reports whether any of cwds is path or under it.
+func cwdWithin(cwds []string, path string) bool {
+	for _, cwd := range cwds {
+		if samePath(cwd, path) || within(path, cwd) {
+			return true
+		}
+	}
+	return false
 }
 
 // idleSince combines directory and admin HEAD mtimes with actual reflog event
