@@ -89,6 +89,25 @@ type DaemonAttachment struct {
 	// reach). JSON-encoded in the detected_ports column. Nil/empty when
 	// nothing is listening or the daemon doesn't report (local daemons).
 	DetectedPorts []uint32
+	// Build is the build the daemon reported when its stream registered.
+	// The zero value is "unknown build".
+	Build DaemonBuild
+}
+
+// DaemonBuild is the build a daemon reported in DaemonRegister. Every field is
+// empty/zero for a daemon that predates the report or an unstamped build,
+// which is an unknown build, not an error. CommitTimeUnix is the ordering key
+// (0 = unordered); Version is display only.
+type DaemonBuild struct {
+	Version        string
+	Commit         string
+	CommitTimeUnix int64
+	ForgeVersion   string
+}
+
+// Known reports whether the daemon identified its build at all.
+func (b DaemonBuild) Known() bool {
+	return b.Version != "" || b.Commit != ""
 }
 
 // DaemonIdentity is what the control plane knows about a daemon's existence.

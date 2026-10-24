@@ -134,6 +134,9 @@ var serverRoleSurfaceEnv = map[string]string{
 	"RELIANT_CONTROL_PLANE_URL": "http://cp.surface.test:8080",
 	"INTERNAL_SERVICE_SECRET":   "cp-secret",
 
+	// network
+	"RELIANT_ALLOW_PRIVATE_EGRESS": "true",
+
 	// api only
 	"ALLOWED_EMAIL_DOMAINS":             "a.surface.test, b.surface.test",
 	"CORS_ALLOWED_ORIGINS":              "http://one.surface.test, http://two.surface.test",

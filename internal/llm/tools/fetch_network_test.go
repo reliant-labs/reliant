@@ -143,3 +143,44 @@ func TestFetchWithNetwork_RedirectIsCheckedLikeAnyDial(t *testing.T) {
 	assert.True(t, resp.IsError)
 	assert.True(t, strings.Contains(resp.Content, optInSetting), resp.Content)
 }
+
+// ToolsOptions.AllowPrivateEgress covers the web tools that run in a server
+// role or on the daemon for the user's own network (websearch, sourcegraph,
+// local model endpoints). fetch on a daemon takes FetchNetwork instead and
+// must not inherit it.
+func TestFactoryFetch_FetchNetworkOverridesAllowPrivateEgress(t *testing.T) {
+	srv := serveLoopback(t)
+	run := func(opts *ToolsOptions) ToolResponse {
+		t.Helper()
+		tool := NewToolsFactory(opts).Fetch().(*ToolWrapper[FetchParams, ToolResponse])
+		resp, err := tool.tool.Execute(&rctx.ToolContext{Context: context.Background()}, FetchParams{URL: srv.URL, Format: "text"})
+		require.NoError(t, err)
+		return resp
+	}
+
+	// Without FetchNetwork, the daemon-wide flag is what decides (server roles, self-hosted).
+	assert.False(t, run(&ToolsOptions{AllowPrivateEgress: true}).IsError)
+	assert.True(t, run(&ToolsOptions{}).IsError)
+
+	// With FetchNetwork, AllowPrivateEgress=true opens nothing for fetch.
+	strict := localDefault()
+	resp := run(&ToolsOptions{AllowPrivateEgress: true, FetchNetwork: &strict})
+	assert.True(t, resp.IsError)
+	assert.Contains(t, resp.Content, optInSetting)
+
+	optedIn := localOptedIn()
+	assert.False(t, run(&ToolsOptions{FetchNetwork: &optedIn}).IsError, "the fetch opt-in works with AllowPrivateEgress unset")
+
+	// And never metadata, whichever flag is set.
+	for _, opts := range []*ToolsOptions{
+		{AllowPrivateEgress: true, FetchNetwork: &optedIn},
+		{AllowPrivateEgress: true, FetchNetwork: &strict},
+	} {
+		tool := NewToolsFactory(opts).Fetch().(*ToolWrapper[FetchParams, ToolResponse])
+		resp, err := tool.tool.Execute(&rctx.ToolContext{Context: context.Background()},
+			FetchParams{URL: "http://169.254.169.254/latest/meta-data/", Format: "text"})
+		require.NoError(t, err)
+		assert.True(t, resp.IsError)
+		assert.NotContains(t, resp.Content, optInSetting)
+	}
+}

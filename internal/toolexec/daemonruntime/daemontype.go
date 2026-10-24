@@ -108,6 +108,10 @@ func newDaemonToolsFactory(host Host) *tools.ToolsFactory {
 	network := fetchNetwork(host)
 	return tools.NewToolsFactory(&tools.ToolsOptions{
 		ShellPlatform: tools.ShellPlatformFromGOOS(runtime.GOOS),
-		FetchNetwork:  &network,
+		// A daemon is the user's own machine, where localhost and LAN
+		// addresses are what its other web tools mean. fetch does not take
+		// this: it has its own, stricter policy below.
+		AllowPrivateEgress: true,
+		FetchNetwork:       &network,
 	})
 }
