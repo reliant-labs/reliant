@@ -90,6 +90,29 @@ service ObservabilityService {
     };
   }
 
+  // GetMetric is the metric detail the explorer's side pane opens on: the
+  // catalog entry, the export-interval estimate, whether the metric mixes
+  // temporalities, every attribute key with its distinct-value estimate (and
+  // the declared closed value set), and suggested breakdown keys. The range
+  // is capped at 24 hours for the attribute scan. Cached for a minute.
+  rpc GetMetric(GetMetricRequest) returns (GetMetricResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // ListMetricExemplars returns up to 20 exemplars (a sampled observation with
+  // the trace it came from) of one metric, optionally narrowed to a series
+  // group and a minimum value. Exemplars whose trace is stored sort first.
+  // Max range 7 days.
+  rpc ListMetricExemplars(ListMetricExemplarsRequest) returns (ListMetricExemplarsResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
   // GetServiceOverview returns per-service request rate, errors and
   // p50/p95/p99 latency over server spans: the default landing view. Max range
   // 7 days.
@@ -319,6 +342,17 @@ enum AttributeOp {
 message TimePoint {
   google.protobuf.Timestamp time = 1;
   double value = 2;
+  // The point's bucket is still open (it ends after now minus the metric's
+  // export interval), so its value may still grow: draw it dashed. Metrics
+  // panels only.
+  bool partial = 3;
+  // No value in this bucket: a gap, not a zero. `value` is 0 and must be
+  // ignored. Metrics panels only (a formula over a missing operand).
+  // A flag rather than `optional double value`: the latter turns the Go field
+  // into *float64 for every message that carries a TimePoint (service
+  // overview trends, QueryMetric, sql panels), a source-breaking change for
+  // callers that never see a gap.
+  bool null = 4;
 }
 
 // === Logs ===
@@ -509,7 +543,15 @@ enum MetricType {
   METRIC_TYPE_UNSPECIFIED = 0;
   METRIC_TYPE_GAUGE = 1;
   METRIC_TYPE_SUM = 2; // counters and up-down counters
-  METRIC_TYPE_HISTOGRAM = 3;
+  METRIC_TYPE_HISTOGRAM = 3; // explicit-bounds histogram
+  METRIC_TYPE_EXPONENTIAL_HISTOGRAM = 4;
+  METRIC_TYPE_SUMMARY = 5;
+}
+
+enum MetricTemporality {
+  METRIC_TEMPORALITY_UNSPECIFIED = 0; // gauge, summary, or not known
+  METRIC_TEMPORALITY_DELTA = 1;
+  METRIC_TEMPORALITY_CUMULATIVE = 2;
 }
 
 enum MetricAggregation {
@@ -542,11 +584,134 @@ message ListMetricsResponse {
   bool truncated = 2;
 }
 
+// One catalog entry: what ListMetrics returns and GetMetric echoes. A metric
+// stored as more than one kind appears once per kind.
 message MetricInfo {
   string name = 1;
   MetricType type = 2;
   string unit = 3;
   string description = 4;
+  // Sums only: a counter (true) or an up-down counter (false).
+  bool monotonic = 5;
+  // Sums and histograms: how the SDK exports the value.
+  MetricTemporality temporality = 6;
+  // Up to 10 service.name values that emit the metric, in the scope's range
+  // (the catalog range, capped at 24 hours).
+  repeated string services = 7 [(buf.validate.field).repeated.max_items = 10];
+  // How many distinct services emit it (>= len(services)).
+  int32 service_count = 8;
+  // Newest data point in the range. Unset for a declared metric never seen.
+  google.protobuf.Timestamp last_seen = 9;
+  // Estimated number of distinct series (resource + data-point attributes).
+  int64 series_estimate = 10;
+  // False for a kind the query evaluator cannot run yet.
+  bool queryable = 11;
+  // A runtime or forge built-in metric (rpc., go., forge. prefixes), as
+  // opposed to an application's own.
+  bool builtin = 12;
+  // The release's declared metrics schema lists it; description and stability
+  // then come from the declaration.
+  bool declared = 13;
+  // It has data in the range. false with declared = true: declared but no data
+  // in this window.
+  bool seen = 14;
+  // The declaration's stability: "stable", "experimental" or "deprecated".
+  // Empty when not declared.
+  string stability = 15;
+  // The declared data-point attributes, with the closed value set when the
+  // declaration enumerates one. Empty when not declared.
+  repeated MetricAttributeSpec declared_attributes = 16;
+}
+
+message MetricAttributeSpec {
+  string key = 1;
+  // The declared closed set of values; empty when the attribute is open.
+  repeated string values = 2;
+}
+
+message GetMetricRequest {
+  // The range is capped at the last 24 hours for the attribute scan.
+  QueryScope scope = 1 [(buf.validate.field).required = true];
+  string metric_name = 2 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).string.max_len = 256
+  ];
+  // Unset: looked up from the org's data.
+  optional MetricType metric_type = 3;
+}
+
+message GetMetricResponse {
+  MetricInfo info = 1;
+  // Estimated export interval of the metric's series, in seconds: the floor of
+  // a useful query step. 0 when it cannot be estimated.
+  int32 interval_seconds = 2;
+  // The metric's series report both delta and cumulative temporality.
+  bool mixed_temporality = 3;
+  // At most 200 keys: the data-point attributes and the resource attributes
+  // that vary, most useful breakdown first.
+  repeated MetricAttribute attributes = 4;
+  // Attribute keys worth grouping by, best first: enumerated keys, then keys
+  // with 2 to 50 distinct values.
+  repeated string suggested_breakdowns = 5;
+}
+
+message MetricAttribute {
+  string key = 1;
+  // A resource attribute (service.name, k8s.*), not a data-point attribute.
+  bool resource = 2;
+  // Estimated distinct values over the range.
+  int64 distinct_estimate = 3;
+  // The declared closed value set, when there is one.
+  repeated string enumerated = 4;
+  // Grouping by this key (with the rest of the panel's group-by) could exceed
+  // the series cap; the builder allows it with a top-N.
+  bool high_cardinality = 5;
+}
+
+message ListMetricExemplarsRequest {
+  // Max range 7 days.
+  QueryScope scope = 1 [(buf.validate.field).required = true];
+  string metric_name = 2 [
+    (buf.validate.field).required = true,
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).string.max_len = 256
+  ];
+  // Unset: looked up from the org's data.
+  optional MetricType metric_type = 3;
+  // Narrow to series matching these predicates (same vocabulary as
+  // Panel.where).
+  repeated PanelPredicate where = 4 [(buf.validate.field).repeated.max_items = 10];
+  // Narrow to one series group: attribute key -> value (a PanelSeriesResult.group).
+  map<string, string> group = 5;
+  // The window to read exemplars from, inside scope.time_range (the bucket the
+  // user clicked). Unset: scope.time_range.
+  TimeRange time_range = 6;
+  // Only exemplars whose value is at or above this (the tail of a latency
+  // histogram). Unset: any value.
+  optional double min_value = 7;
+  // Default 20, max 20.
+  int32 limit = 8 [
+    (buf.validate.field).int32.gte = 0,
+    (buf.validate.field).int32.lte = 20
+  ];
+}
+
+message ListMetricExemplarsResponse {
+  // Exemplars whose trace is stored first, then by time.
+  repeated MetricExemplar exemplars = 1;
+}
+
+message MetricExemplar {
+  google.protobuf.Timestamp time = 1;
+  double value = 2;
+  string trace_id = 3;
+  string span_id = 4;
+  // The exemplar's filtered attributes.
+  map<string, string> attributes = 5;
+  // The trace is in the trace store. false: it was sampled out and the trace
+  // view would be empty.
+  bool trace_stored = 6;
 }
 
 message QueryMetricRequest {
@@ -1144,6 +1309,36 @@ message QueryPanelResponse {
   repeated HeatmapCell heatmap = 13;
   // sql panels: the result's columns.
   repeated SqlColumn sql_columns = 14;
+  // metrics panels: what each entry of `series` means, in the same order and
+  // of the same length. Empty for every other signal.
+  repeated PanelSeriesMeta series_meta = 15;
+  // How many series (groups) matched before the cap; compare with
+  // len(series) (or len(rows)) for "showing 10 of 1,204". 0 when unknown or
+  // for a panel that is not capped by series.
+  int32 series_total = 16;
+  // Non-fatal notes about the result, as stable codes: mixed_bounds,
+  // mixed_temporality, step_raised, metric_stored_as_n_kinds. Metrics panels.
+  repeated string warnings = 17;
+}
+
+// What one PanelSeriesResult of a metrics panel measures, so a client can
+// format and label it without re-deriving the metric's semantics.
+message PanelSeriesMeta {
+  // PanelSeriesResult.label of the entry this describes.
+  string label = 1;
+  // The series' metric name. Empty for a formula entry.
+  string metric = 2;
+  MetricType metric_type = 3;
+  bool monotonic = 4;
+  MetricTemporality temporality = 5;
+  // The dashspec agg after defaulting (rate, increase, sum, avg, min, max,
+  // last, count, quantile).
+  string aggregation = 6;
+  // The quantile in (0, 1] when aggregation is "quantile"; 0 otherwise.
+  double quantile = 7;
+  // The unit of the values: <unit>/s for rate, {count} for count, otherwise the
+  // metric's unit.
+  string value_unit = 8;
 }
 
 message FunnelStepResult {

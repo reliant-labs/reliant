@@ -39,7 +39,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant db migrate force`](#reliant-db-migrate-force) | Clear a dirty migration state by recording a version without running SQL |
 | [`reliant db migrate status`](#reliant-db-migrate-status) | Preview what `db migrate up` would do, changing nothing |
 | [`reliant db migrate up`](#reliant-db-migrate-up) | Apply every pending migration |
-| [`reliant forge`](#reliant-forge) | Connect RPC development framework for LLM-optimized applications |
+| [`reliant forge`](#reliant-forge) | Build, run and ship static sites, SPAs, web/mobile apps and APIs, LLM-first |
 | [`reliant forge api`](#reliant-forge-api) | Inspect and exercise Connect RPC endpoints over plain HTTP+JSON |
 | [`reliant forge api curl`](#reliant-forge-api-curl) | Print a copy-pasteable curl command for a Connect RPC method |
 | [`reliant forge build`](#reliant-forge-build) | Compile the project's binaries and frontends locally (never publishes) |
@@ -875,17 +875,22 @@ reliant db migrate up
 
 ## reliant forge
 
-Connect RPC development framework for LLM-optimized applications
+Build, run and ship static sites, SPAs, web/mobile apps and APIs, LLM-first
 
-Forge is a development framework where everything communicates via
-Connect RPC interfaces, purpose-built for LLM-driven development.
+Forge takes a project from an empty directory to production, purpose-built
+for LLM-driven development: environments, build-once releases, hosting,
+observability and linters from day 0.
 
-It enables easy mocking, middleware injection, spec-driven development,
-and component swapping - all while maintaining a single, consistent
-interface pattern throughout the entire stack.
+A landing page, docs site, SPA or PWA with no backend is a complete forge
+project: one static frontend on hosted static hosting, no server to run.
+Adopt an existing Vite or Next.js app with
+'forge project new --in-place --kind site' ('forge skill load
+deploy/static-site').
 
-New here? Run 'forge start' — the whole path from an empty directory to
-authored protos, in one call.
+An app with an API adds Go services defined in proto and wired over Connect
+RPC — generated handlers, typed frontend hooks, mocks and middleware, one
+consistent interface pattern through the stack. 'forge start' walks that path
+from an empty directory to authored protos, in one call.
 
 ```
 reliant forge

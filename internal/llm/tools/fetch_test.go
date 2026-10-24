@@ -2,11 +2,16 @@
 package tools
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/reliant-labs/reliant/internal/netguard"
 
@@ -300,4 +305,184 @@ func TestExtractTextFromHTML(t *testing.T) {
 	// Should NOT have nav/footer (we remove them now)
 	assert.NotContains(t, text, "Navigation links")
 	assert.NotContains(t, text, "Footer content")
+}
+
+func runFetchCaps(t *testing.T, params FetchParams) ToolResponse {
+	t.Helper()
+	tool := NewFetchTool(netguard.ForDeployment("")).(*ToolWrapper[FetchParams, ToolResponse])
+	resp, err := tool.tool.Execute(&rctx.ToolContext{Context: context.Background()}, params)
+	require.NoError(t, err)
+	return resp
+}
+
+// noteSlack bounds the size of the truncation / clamp notes appended to the body.
+const noteSlack = 1024
+
+func TestFetchMaxSizeIsCapped(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		chunk := bytes.Repeat([]byte("a"), 64<<10)
+		for i := 0; i < 64; i++ { // 4 MiB
+			if _, err := w.Write(chunk); err != nil {
+				return
+			}
+		}
+	}))
+	defer srv.Close()
+
+	resp := runFetchCaps(t, FetchParams{URL: srv.URL, Format: "text", MaxSize: 1 << 31})
+	assert.False(t, resp.IsError)
+	assert.LessOrEqual(t, len(resp.Content), fetchMaxSizeCap+noteSlack)
+	assert.GreaterOrEqual(t, len(resp.Content), fetchMaxSizeCap)
+	assert.Contains(t, resp.Content, "[Content truncated")
+	assert.Contains(t, resp.Content, "hard cap")
+	assert.Contains(t, resp.Metadata, `"truncated":true`)
+}
+
+func TestFetchMaxSizeCanLowerButNotRaise(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		fmt.Fprint(w, strings.Repeat("b", 5000))
+	}))
+	defer srv.Close()
+
+	resp := runFetchCaps(t, FetchParams{URL: srv.URL, Format: "text", MaxSize: 100})
+	assert.LessOrEqual(t, len(resp.Content), 100+noteSlack)
+	assert.Contains(t, resp.Content, "[Content truncated")
+	assert.NotContains(t, resp.Content, "hard cap", "no clamp note when the model asked for less than the cap")
+
+	resp = runFetchCaps(t, FetchParams{URL: srv.URL, Format: "text", MaxSize: 100000})
+	assert.NotContains(t, resp.Content, "[Content truncated", "a response smaller than max_size is not truncated")
+	assert.Contains(t, resp.Metadata, `"truncated":false`)
+}
+
+func TestFetchExactlyMaxSizeIsNotTruncated(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		fmt.Fprint(w, strings.Repeat("c", 100))
+	}))
+	defer srv.Close()
+
+	resp := runFetchCaps(t, FetchParams{URL: srv.URL, Format: "text", MaxSize: 100})
+	assert.Equal(t, strings.Repeat("c", 100), resp.Content)
+}
+
+func TestFetchGzipBombStaysWithinCap(t *testing.T) {
+	t.Parallel()
+	var compressed bytes.Buffer
+	zw := gzip.NewWriter(&compressed)
+	zeros := make([]byte, 1<<20)
+	for i := 0; i < 256; i++ { // 256 MiB decompressed, well under 1 MiB on the wire
+		_, err := zw.Write(zeros)
+		require.NoError(t, err)
+	}
+	require.NoError(t, zw.Close())
+	require.Less(t, compressed.Len(), 2<<20)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		w.Header().Set("Content-Encoding", "gzip")
+		w.Header().Set("Content-Length", strconv.Itoa(compressed.Len()))
+		_, _ = w.Write(compressed.Bytes())
+	}))
+	defer srv.Close()
+
+	resp := runFetchCaps(t, FetchParams{URL: srv.URL, Format: "text", MaxSize: 1 << 31})
+	assert.False(t, resp.IsError)
+	assert.LessOrEqual(t, len(resp.Content), fetchMaxSizeCap+noteSlack)
+	assert.Contains(t, resp.Content, "[Content truncated")
+}
+
+func TestFetchLargeHTMLIsBoundedBeforeExtraction(t *testing.T) {
+	t.Parallel()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = fmt.Fprint(w, "<html><body><article><p>")
+		chunk := strings.Repeat("word ", 1<<12)
+		for i := 0; i < 2048; i++ { // ~40 MiB of text
+			if _, err := fmt.Fprint(w, chunk); err != nil {
+				return
+			}
+		}
+	}))
+	defer srv.Close()
+
+	for _, format := range []string{"text", "markdown", "html"} {
+		resp := runFetchCaps(t, FetchParams{URL: srv.URL, Format: format, MaxSize: 1 << 31})
+		assert.False(t, resp.IsError, format)
+		assert.LessOrEqual(t, len(resp.Content), 2*fetchMaxSizeCap+noteSlack, format)
+		assert.Contains(t, resp.Content, "[Content truncated", format)
+		assert.Contains(t, resp.Metadata, `"raw_html_size":`+strconv.Itoa(fetchMaxSizeCap), format)
+	}
+}
+
+func redirectChainServer(hops int) *httptest.Server {
+	mux := http.NewServeMux()
+	var srv *httptest.Server
+	mux.HandleFunc("/hop/", func(w http.ResponseWriter, r *http.Request) {
+		n, _ := strconv.Atoi(strings.TrimPrefix(r.URL.Path, "/hop/"))
+		if n >= hops {
+			w.Header().Set("Content-Type", "text/plain")
+			fmt.Fprint(w, "arrived")
+			return
+		}
+		http.Redirect(w, r, srv.URL+"/hop/"+strconv.Itoa(n+1), http.StatusFound)
+	})
+	srv = httptest.NewServer(mux)
+	return srv
+}
+
+func TestFetchRedirectHopLimit(t *testing.T) {
+	t.Parallel()
+
+	ok := redirectChainServer(fetchMaxRedirectHops)
+	defer ok.Close()
+	resp := runFetchCaps(t, FetchParams{URL: ok.URL + "/hop/0", Format: "text"})
+	assert.False(t, resp.IsError)
+	assert.Contains(t, resp.Content, "arrived")
+
+	tooMany := redirectChainServer(fetchMaxRedirectHops + 1)
+	defer tooMany.Close()
+	resp = runFetchCaps(t, FetchParams{URL: tooMany.URL + "/hop/0", Format: "text"})
+	assert.True(t, resp.IsError)
+	assert.Contains(t, resp.Content, "stopped after 5 redirects")
+	assert.NotContains(t, resp.Content, "arrived")
+}
+
+func TestFetchRefusesNonHTTPRedirectSchemes(t *testing.T) {
+	t.Parallel()
+	for _, target := range []string{"file:///etc/passwd", "gopher://127.0.0.1:70/_x", "ftp://example.com/x"} {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			http.Redirect(w, r, target, http.StatusFound)
+		}))
+		resp := runFetchCaps(t, FetchParams{URL: srv.URL, Format: "text"})
+		srv.Close()
+		assert.True(t, resp.IsError, target)
+		assert.Contains(t, resp.Content, "scheme is not allowed", target)
+	}
+}
+
+func TestFetchTimeoutClamp(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, 0, clampFetchTimeout(0))
+	assert.Equal(t, 0, clampFetchTimeout(-5))
+	assert.Equal(t, 10, clampFetchTimeout(10))
+	assert.Equal(t, 60, clampFetchTimeout(60))
+	assert.Equal(t, 60, clampFetchTimeout(61))
+	assert.Equal(t, 60, clampFetchTimeout(1<<30))
+
+	policy := netguard.ForDeployment("")
+	assert.Equal(t, 60*time.Second, newFetchClient(policy, clampFetchTimeout(100000)).Timeout)
+	assert.Equal(t, time.Duration(fetchDefaultTimeout)*time.Second, NewFetchTool(policy).(*ToolWrapper[FetchParams, ToolResponse]).tool.(*fetchTool).client.Timeout)
+	assert.NotNil(t, newFetchClient(policy, 5).CheckRedirect)
+}
+
+func TestFetchDescriptionStatesTheCaps(t *testing.T) {
+	t.Parallel()
+	tool := NewFetchTool(netguard.ForDeployment(""))
+	assert.Contains(t, tool.Description(), "1048576")
+	assert.Contains(t, tool.Description(), "hard cap")
 }

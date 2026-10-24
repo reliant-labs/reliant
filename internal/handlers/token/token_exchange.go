@@ -18,6 +18,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/cliauth"
 	"github.com/reliant-labs/reliant/internal/errreason"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
@@ -68,16 +69,18 @@ import (
 // this remains, so a command never starts on one about to lapse.
 const exchangeTTL = time.Hour
 
-// exchangeableScopes is the control-plane authority forge presents: deploy,
-// managed secrets, custom domains. Deliberately NOT cluster:manage or token:*
-// (org administration a deploy tool has no business holding), and never the
-// session scopes themselves (reliant:api, daemon:connect) — an exchanged token
-// that could connect a daemon would just be a second copy of the session.
-var exchangeableScopes = []fat.Scope{
-	fat.ScopeDeployRead, fat.ScopeDeployWrite,
-	fat.ScopeSecretRead, fat.ScopeSecretWrite,
-	fat.ScopeDomainRead, fat.ScopeDomainWrite,
-}
+// exchangeableScopes shares the explicit CLI/daemon ceiling. A helper can act
+// with the user's org capabilities, never with session or specialized-resource
+// authority. Resource validation remains authoritative: user-org capabilities
+// may ride a daemon-bound credential, preserving its lifecycle. Never drop
+// that binding to get a mint.
+var exchangeableScopes = func() []fat.Scope {
+	var scopes []fat.Scope
+	for _, scope := range cliauth.ForgeScopes() {
+		scopes = append(scopes, fat.Scope(scope))
+	}
+	return scopes
+}()
 
 // TokenControlPlane is what TokenService knows about the deployment's control
 // plane.
@@ -87,10 +90,9 @@ type TokenControlPlane struct {
 	// the only audience ExchangeToken mints for. Empty on a self-hosted server,
 	// which then issues no control-plane credentials at all.
 	Issuer string
-	// ClipsGrants reports that the authority clips an edited scope set to the
-	// acting user's org permissions — control-plane's UpdateForUser does, the
-	// self-hosted store does not. A DAEMON credential is given the user's
-	// control-plane authority only where that clipping exists.
+	// ClipsGrants reports that MintForUser atomically clips requested scopes
+	// to the acting user's current org grants (control-plane does; self-hosted
+	// stores do not). Only a clipping authority receives the daemon ceiling.
 	ClipsGrants bool
 }
 
@@ -148,7 +150,7 @@ func (s *Service) ExchangeToken(
 		// without parsing this sentence, which stays as it was.
 		return nil, svcerr.WithMetadata(svcerr.WithReason(svcerr.PermissionDenied(fmt.Sprintf(
 			"this Reliant credential cannot authorize %s: it holds %s. "+
-				"Sign in again with `reliant auth login` (it asks for deploy, secret and domain permission), "+
+				"Sign in again with `reliant auth login` (it asks for your control-plane permissions), "+
 				"or grant this credential those permissions in Reliant → Settings → Access Tokens",
 			fat.JoinScopes(requested), describeScopes(subject.Scopes))), fat.ReasonScopeMissing),
 			fat.ScopesHeader, fat.ScopesHeaderValue(requested))
@@ -183,12 +185,13 @@ func (s *Service) ExchangeToken(
 	}
 
 	logging.InfoContext(ctx, "access token exchanged", "user_id", userID, "subject_token_id", subject.TokenID,
-		"token_id", minted.TokenID, "scopes", fat.JoinScopes(granted), "expires_at", expiresAt.UTC().Format(time.RFC3339))
+		"token_id", minted.TokenID, "scopes", strings.Join(minted.Scopes, " "), "expires_at", expiresAt.UTC().Format(time.RFC3339))
 	out := &reliantv1.ExchangeTokenResponse{
 		Token:       minted.Plaintext,
 		TokenPrefix: minted.DisplayPrefix,
 		ExpiresAt:   formatTime(&expiresAt),
-		Scopes:      scopeStrings(granted),
+		// The authority may further narrow to the owner's CURRENT org grants.
+		Scopes: minted.Scopes,
 	}
 	if minted.ExpiresAt != nil {
 		out.ExpiresAt = formatTime(minted.ExpiresAt)
@@ -270,14 +273,6 @@ func describeScopes(set fat.Set) string {
 		return "no permissions"
 	}
 	return set.String()
-}
-
-func scopeStrings(scopes []fat.Scope) []string {
-	out := make([]string, len(scopes))
-	for i, s := range scopes {
-		out[i] = string(s)
-	}
-	return out
 }
 
 // sameControlPlane reports whether audience names the control plane at issuer:
