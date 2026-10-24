@@ -2,19 +2,19 @@
 // target gets its endpoints from electron/release.config.json, which is
 // projected out of control-plane's KCL by .github/scripts/sync-release-config.mjs.
 //
-// The failure this prevents is the v1.7.5 one, and it is silent. `vite build`
-// reads VITE_* straight from the process environment, and `electron-builder`
-// happily packages whatever `frontends/web/dist` contains. So an npm target that runs
-// them WITHOUT exporting the release config produces an installer that builds
-// green, passes every runtime check, and ships with VITE_CONTROL_PLANE_API_URL
-// undefined — which is what made coupons throw "Control plane API URL not
-// configured" on real users' machines. Nothing downstream can detect it,
-// because "unset" and "correctly set to nothing" look identical by then.
+// The failure this prevents is the v1.7.5 one, and it is silent: an npm target
+// that packages WITHOUT the release config produces an installer that builds
+// green and ships with no control-plane URL — which is what made coupons throw
+// "Control plane API URL not configured" on real users' machines. The renderer
+// reads its endpoints from config.js, which the main process answers from
+// src/release-renderer-config.js (generated from the `renderer` block); the
+// main process reads src/build-config.js (the `main` block). Both are written
+// by generate-build-config.mjs, under the wrapper.
 //
-// Worse locally: a dev shell exports RELIANT_API_URL / VITE_API_URL pointing at
-// a local stack (scripts/dev.sh and .dev-ports.sh both do). A target that
-// merely DEFAULTS the config instead of OVERRIDING it bakes localhost into a
-// build labelled "prod". Hence the override assertion below.
+// Worse locally: a dev shell exports RELIANT_API_URL pointing at a local stack
+// (scripts/dev.sh and .dev-ports.sh both do). A target that merely DEFAULTS
+// the config instead of OVERRIDING it bakes localhost into a build labelled
+// "prod". Hence the override assertion below.
 
 const test = require('node:test');
 const assert = require('node:assert');
@@ -100,31 +100,32 @@ test('the wrapper exists and is the only place the release config is expanded', 
 });
 
 test('the wrapper OVERRIDES an ambient dev-shell value rather than deferring to it', () => {
-  // The real regression: building "prod" from a dev shell. RELIANT_API_URL and
-  // VITE_API_URL are already exported and point at a local stack.
+  // The real regression: building "prod" from a dev shell. RELIANT_API_URL is
+  // already exported, and so (from an earlier run) may be the renderer
+  // document, pointing at a local stack.
   const out = execFileSync(
     process.execPath,
     [
       path.join(ELECTRON_DIR, 'scripts', WRAPPER),
       process.execPath,
       '-e',
-      'console.log(JSON.stringify({vite: process.env.VITE_API_URL, main: process.env.RELIANT_API_URL, cp: process.env.VITE_CONTROL_PLANE_API_URL}))',
+      'const r = JSON.parse(process.env.RELIANT_RENDERER_CONFIG); console.log(JSON.stringify({renderer: r.API_URL, main: process.env.RELIANT_API_URL, cp: r.CONTROL_PLANE_API_URL}))',
     ],
     {
       cwd: ELECTRON_DIR,
       encoding: 'utf8',
       env: {
         ...process.env,
-        VITE_API_URL: 'http://localhost:3090',
+        RELIANT_RENDERER_CONFIG: JSON.stringify({ API_URL: 'http://localhost:3090' }),
         RELIANT_API_URL: 'http://localhost:8090',
       },
     },
   );
 
   const seen = JSON.parse(out.trim().split('\n').pop());
-  assert.strictEqual(seen.vite, RELEASE_CONFIG.vite.VITE_API_URL);
+  assert.strictEqual(seen.renderer, RELEASE_CONFIG.renderer.API_URL);
   assert.strictEqual(seen.main, RELEASE_CONFIG.main.RELIANT_API_URL);
-  assert.strictEqual(seen.cp, RELEASE_CONFIG.vite.VITE_CONTROL_PLANE_API_URL);
+  assert.strictEqual(seen.cp, RELEASE_CONFIG.renderer.CONTROL_PLANE_API_URL);
 });
 
 test('a hand-edited release.config.json does NOT reach the build when the KCL is reachable', () => {
@@ -147,7 +148,7 @@ test('a hand-edited release.config.json does NOT reach the build when the KCL is
 
   const original = fs.readFileSync(RELEASE_CONFIG_PATH, 'utf8');
   const poisoned = JSON.parse(original);
-  poisoned.vite.VITE_API_URL = 'https://POISONED.example.com';
+  poisoned.renderer.API_URL = 'https://POISONED.example.com';
 
   try {
     fs.writeFileSync(RELEASE_CONFIG_PATH, JSON.stringify(poisoned, null, 2));
@@ -157,19 +158,19 @@ test('a hand-edited release.config.json does NOT reach the build when the KCL is
         path.join(ELECTRON_DIR, 'scripts', WRAPPER),
         process.execPath,
         '-e',
-        'console.log(JSON.stringify({vite: process.env.VITE_API_URL}))',
+        'console.log(JSON.stringify({renderer: JSON.parse(process.env.RELIANT_RENDERER_CONFIG).API_URL}))',
       ],
       { cwd: ELECTRON_DIR, encoding: 'utf8' },
     );
     const seen = JSON.parse(out.trim().split('\n').pop());
     assert.notStrictEqual(
-      seen.vite,
+      seen.renderer,
       'https://POISONED.example.com',
       'a hand-edit to the generated cache reached the build — KCL is not authoritative',
     );
     assert.strictEqual(
-      seen.vite,
-      RELEASE_CONFIG.vite.VITE_API_URL,
+      seen.renderer,
+      RELEASE_CONFIG.renderer.API_URL,
       'the build must carry the value KCL declares',
     );
   } finally {
@@ -189,7 +190,7 @@ test('the committed config is still used when control-plane is unreachable', () 
       path.join(ELECTRON_DIR, 'scripts', WRAPPER),
       process.execPath,
       '-e',
-      'console.log(JSON.stringify({vite: process.env.VITE_API_URL}))',
+      'console.log(JSON.stringify({renderer: JSON.parse(process.env.RELIANT_RENDERER_CONFIG).API_URL}))',
     ],
     {
       cwd: ELECTRON_DIR,
@@ -198,7 +199,7 @@ test('the committed config is still used when control-plane is unreachable', () 
     },
   );
   const seen = JSON.parse(out.trim().split('\n').pop());
-  assert.strictEqual(seen.vite, RELEASE_CONFIG.vite.VITE_API_URL);
+  assert.strictEqual(seen.renderer, RELEASE_CONFIG.renderer.API_URL);
 });
 
 test('prod-local keeps the three behaviors that make it runnable alongside an installed Reliant', () => {
@@ -235,14 +236,13 @@ test('prod-local keeps the three behaviors that make it runnable alongside an in
 });
 
 test('release.config.json carries every key the packaged app cannot start without', () => {
-  const requiredVite = [
-    'VITE_API_URL',
-    'VITE_GRPC_URL',
-    'VITE_CONTROL_PLANE_API_URL',
-    'VITE_GATEWAY_URL',
-    'VITE_AUTH_MODE',
-    'VITE_SUPABASE_URL',
-    'VITE_SUPABASE_ANON_KEY',
+  const requiredRenderer = [
+    'API_URL',
+    'CONTROL_PLANE_API_URL',
+    'GATEWAY_URL',
+    'AUTH_MODE',
+    'SUPABASE_URL',
+    'SUPABASE_ANON_KEY',
   ];
   const requiredMain = [
     'RELIANT_SERVER_URL',
@@ -251,11 +251,13 @@ test('release.config.json carries every key the packaged app cannot start withou
     'RELIANT_CONTROL_PLANE_URL',
   ];
 
-  for (const key of requiredVite) {
-    const value = RELEASE_CONFIG.vite?.[key];
-    assert.ok(value, `release.config.json vite.${key} is empty`);
-    assert.doesNotMatch(value, /localhost|127\.0\.0\.1/, `vite.${key} targets localhost`);
+  assert.strictEqual(RELEASE_CONFIG.vite, undefined, 'release.config.json still has a `vite` block; the renderer reads config.js');
+  for (const key of requiredRenderer) {
+    const value = RELEASE_CONFIG.renderer?.[key];
+    assert.ok(value, `release.config.json renderer.${key} is empty`);
+    assert.doesNotMatch(value, /localhost|127\.0\.0\.1/, `renderer.${key} targets localhost`);
   }
+  assert.strictEqual(RELEASE_CONFIG.renderer.AUTH_MODE, 'cloud', 'the desktop release is the managed app');
   for (const key of requiredMain) {
     const value = RELEASE_CONFIG.main?.[key];
     assert.ok(value, `release.config.json main.${key} is empty`);
@@ -283,10 +285,11 @@ test('a KCL change reaches the generated main-process config, not just the envir
   if (!fs.existsSync(envK)) return;
 
   const buildConfigPath = path.join(ELECTRON_DIR, 'src', 'build-config.js');
+  const rendererConfigPath = path.join(ELECTRON_DIR, 'src', 'release-renderer-config.js');
   const originalEnvK = fs.readFileSync(envK, 'utf8');
-  const originalConfig = fs.existsSync(buildConfigPath)
-    ? fs.readFileSync(buildConfigPath, 'utf8')
-    : null;
+  const read = (p) => (fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : null);
+  const originalConfig = read(buildConfigPath);
+  const originalRendererConfig = read(rendererConfigPath);
 
   const REAL = 'https://gateway.reliantapi.com';
   const CHANGED = 'https://CHANGED-BY-TEST.reliantapi.com';
@@ -315,9 +318,18 @@ test('a KCL change reaches the generated main-process config, not just the envir
       /CHANGED-BY-TEST\.reliantapi\.com/,
       'a KCL edit did not reach build-config.js — the cached file is still the authority',
     );
+    // And the renderer's config.js, which the main process serves from it.
+    assert.match(
+      fs.readFileSync(rendererConfigPath, 'utf8'),
+      /"GATEWAY_URL": "https:\/\/CHANGED-BY-TEST\.reliantapi\.com"/,
+      'a KCL edit did not reach release-renderer-config.js — the packaged config.js would serve the cached value',
+    );
   } finally {
     // Both files are committed; never leave the tree dirty for other agents.
     fs.writeFileSync(envK, originalEnvK);
-    if (originalConfig !== null) fs.writeFileSync(buildConfigPath, originalConfig);
+    for (const [p, original] of [[buildConfigPath, originalConfig], [rendererConfigPath, originalRendererConfig]]) {
+      if (original !== null) fs.writeFileSync(p, original);
+      else fs.rmSync(p, { force: true });
+    }
   }
 });

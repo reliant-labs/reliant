@@ -7,15 +7,19 @@
 #
 # ── How it works ──────────────────────────────────────────────────────
 #
-# vite.config.ts's proxy targets already read the environment and fall back to
-# localhost:
+# The bundle reads its endpoints from config.js (window.__FORGE_CONFIG__), and
+# the dev server serves the file FORGE_RUNTIME_CONFIG_FILE names
+# (forgeRuntimeConfig() in vite.config.ts). This writes the desktop release's
+# `renderer` document to a temp file and points the dev server at it.
+#
+# The browser calls its own origin; vite.config.ts's proxy forwards, and reads
+# its targets from the environment, falling back to localhost:
 #
 #   "/reliant.v1."      -> process.env.VITE_API_URL              || 127.0.0.1:3090
 #   "/controlplane.v1." -> process.env.VITE_CONTROL_PLANE_API_URL || 127.0.0.1:8090
 #
-# So pointing dev at prod is purely a matter of exporting the right values.
-# They come from electron/release.config.json — the SAME file the release
-# workflow sources — so this cannot drift from what actually ships.
+# Both come from electron/release.config.json — the SAME file the desktop
+# release ships — so this cannot drift from what actually ships.
 #
 # ── Read this before you sign in ──────────────────────────────────────
 #
@@ -36,11 +40,19 @@ command -v jq >/dev/null || { echo "jq is required (brew install jq)" >&2; exit 
 
 PORT="${FRONTEND_PORT:-5173}"
 
-# Assign explicitly rather than sourcing, so a dev shell that already exports
+# Assign explicitly rather than inheriting, so a dev shell that already exports
 # VITE_API_URL=localhost cannot win. Same trap as build-electron-prod-local.sh.
-while IFS='=' read -r k v; do
-  export "$k=$v"
-done < <(jq -er '.vite | to_entries[] | "\(.key)=\(.value)"' "$RELEASE_CONFIG")
+VITE_API_URL="$(jq -er '.renderer.API_URL' "$RELEASE_CONFIG")"
+VITE_CONTROL_PLANE_API_URL="$(jq -er '.renderer.CONTROL_PLANE_API_URL' "$RELEASE_CONFIG")"
+SUPABASE_URL="$(jq -er '.renderer.SUPABASE_URL' "$RELEASE_CONFIG")"
+export VITE_API_URL VITE_CONTROL_PLANE_API_URL
+
+FORGE_RUNTIME_CONFIG_FILE="$(mktemp -t reliant-prod-config.XXXXXX)"
+{
+  echo "// The desktop release's renderer document (electron/release.config.json), for scripts/dev-web-prod.sh."
+  printf 'window.__FORGE_CONFIG__ = %s;\n' "$(jq -e '.renderer' "$RELEASE_CONFIG")"
+} > "$FORGE_RUNTIME_CONFIG_FILE"
+export FORGE_RUNTIME_CONFIG_FILE
 
 export FRONTEND_PORT="$PORT"
 
@@ -61,7 +73,8 @@ cat <<EOF
   app          http://localhost:${PORT}
   reliant api  ${VITE_API_URL}
   control      ${VITE_CONTROL_PLANE_API_URL}
-  supabase     ${VITE_SUPABASE_URL}
+  supabase     ${SUPABASE_URL}
+  config.js    ${FORGE_RUNTIME_CONFIG_FILE}
 
 THIS IS REAL PRODUCTION DATA. Anything you create here is real.
 

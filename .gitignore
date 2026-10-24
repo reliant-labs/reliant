@@ -222,6 +222,7 @@ electron/dist/
 electron/resources/bin/
 electron/resources/server/
 electron/src/build-config.js
+electron/src/release-renderer-config.js
 
 # Cursor
 .cursor/

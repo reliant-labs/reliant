@@ -1,19 +1,18 @@
 {
   "env": "prod",
-  "vite": {
-    "VITE_API_URL": "https://api.reliantapi.com",
-    "VITE_GRPC_URL": "https://api.reliantapi.com",
-    "VITE_CONTROL_PLANE_API_URL": "https://admin.reliantapi.com",
-    "VITE_GATEWAY_URL": "https://gateway.reliantapi.com",
-    "VITE_AUTH_MODE": "cloud",
-    "VITE_SUPABASE_URL": "https://dash.reliantlabs.io",
-    "VITE_SUPABASE_ANON_KEY": "sb_publishable_KKiB3B0EdEv7nguwKfEE5A_iY9rVXod",
-    "VITE_DISABLE_TLS": "false",
-    "VITE_APP_URL": "https://app.reliantlabs.io",
-    "VITE_SENTRY_DSN": "https://c84a8011e134e0b905db7ba5f10dbc8f@o4509000353447936.ingest.us.sentry.io/4509933645856778",
-    "VITE_SENTRY_ENABLED": "true",
-    "VITE_STRIPE_PUBLISHABLE_KEY": "pk_live_51SHoUnPVGOBSO8GiRqnmbDusPSpL70lw1ac5cN1qmrzbNIScnqZdpRekg4CdsGEhmtyKtvyxX6D6qO7gmwpOmaRI00uAf2gIXT",
-    "VITE_CLI_DEFAULTS_BAKED": "true"
+  "renderer": {
+    "API_URL": "https://api.reliantapi.com",
+    "CONTROL_PLANE_API_URL": "https://admin.reliantapi.com",
+    "GATEWAY_URL": "https://gateway.reliantapi.com",
+    "APP_URL": "https://app.reliantlabs.io",
+    "AUTH_MODE": "cloud",
+    "SUPABASE_URL": "https://dash.reliantlabs.io",
+    "SUPABASE_ANON_KEY": "sb_publishable_KKiB3B0EdEv7nguwKfEE5A_iY9rVXod",
+    "DISABLE_TLS": "false",
+    "STRIPE_PUBLISHABLE_KEY": "pk_live_51SHoUnPVGOBSO8GiRqnmbDusPSpL70lw1ac5cN1qmrzbNIScnqZdpRekg4CdsGEhmtyKtvyxX6D6qO7gmwpOmaRI00uAf2gIXT",
+    "SENTRY_DSN": "https://c84a8011e134e0b905db7ba5f10dbc8f@o4509000353447936.ingest.us.sentry.io/4509933645856778",
+    "SENTRY_ENABLED": "true",
+    "CLI_DEFAULTS_BAKED": "true"
   },
   "main": {
     "RELIANT_SERVER_URL": "https://api.reliantapi.com",

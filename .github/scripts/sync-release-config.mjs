@@ -63,6 +63,8 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { rendererProblems } from "./release-renderer-check.mjs";
+
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const OUTPUT_PATH = join(REPO_ROOT, "electron", "release.config.json");
 
@@ -164,22 +166,21 @@ function validate(config, env) {
     problems.push(`rendered env is "${config.env}" but "${env}" was requested`);
   }
 
-  // Every value the packaged renderer cannot start correctly without.
-  const requiredVite = [
-    "VITE_API_URL",
-    "VITE_GRPC_URL",
-    "VITE_CONTROL_PLANE_API_URL",
-    "VITE_GATEWAY_URL",
-    "VITE_AUTH_MODE",
-    "VITE_SUPABASE_URL",
-    "VITE_SUPABASE_ANON_KEY",
-  ];
-  for (const key of requiredVite) {
-    const value = config.vite?.[key];
-    if (!value) problems.push(`vite.${key} is empty — the packaged renderer needs it`);
-    else if (/localhost|127\.0\.0\.1/.test(value)) {
-      problems.push(`vite.${key} is ${value} — a packaged build must not target localhost`);
-    }
+  // The RENDERER block is the packaged app's config.js (the main process
+  // answers app://bundle/config.js with it; electron/src/runtime-config.js),
+  // so it is judged exactly as control-plane's render judges the hosted
+  // SPA's runtime_config: against the web frontend's own generated schema.
+  if (config.vite) {
+    problems.push(
+      "a `vite` block is present — the renderer reads no build-time VITE_* any more; " +
+        "its values belong in `renderer` (config.js keys, e.g. API_URL)",
+    );
+  }
+  const renderer = config.renderer;
+  if (!renderer || typeof renderer !== "object") {
+    problems.push("`renderer` is missing — the packaged renderer would have no config.js");
+  } else {
+    problems.push(...rendererProblems(renderer));
   }
 
   const requiredMain = [
@@ -258,5 +259,5 @@ if (unavailable) fail(`cannot render: ${unavailable}`);
 validate(config, requestedEnv);
 writeFileSync(OUTPUT_PATH, serialize(config));
 console.log(`sync-release-config: wrote electron/release.config.json for env=${requestedEnv}`);
-console.log(`  VITE_CONTROL_PLANE_API_URL = ${config.vite.VITE_CONTROL_PLANE_API_URL}`);
-console.log(`  VITE_GATEWAY_URL           = ${config.vite.VITE_GATEWAY_URL}`);
+console.log(`  renderer.CONTROL_PLANE_API_URL = ${config.renderer.CONTROL_PLANE_API_URL}`);
+console.log(`  renderer.GATEWAY_URL           = ${config.renderer.GATEWAY_URL}`);

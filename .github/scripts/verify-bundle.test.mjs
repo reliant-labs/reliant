@@ -95,7 +95,10 @@ function jobBlock(yml, job) {
 const PR_WEB = jobBlock(read(".github", "workflows", "pr-ci.yml"), "web");
 const RELEASE_PREPARE = jobBlock(read(".github", "workflows", "release.yml"), "prepare");
 
-const EXPORT = `jq -er '.vite | to_entries[] | "\\(.key)=\\(.value)"' electron/release.config.json >> "$GITHUB_ENV"`;
+// The bundle reads its config from config.js at runtime, so a build handed the
+// renderer's release config through the environment is a build reading it
+// again. (`.main` is the main process's, and is exported for its jobs.)
+const EXPORT_RE = /'\.(vite|renderer)\b[^\n]*release\.config\.json[^\n]*>> "\$GITHUB_ENV"/;
 const BUILD = /working-directory: frontends\/web\n\s+run: NODE_ENV=production npm run build\n/;
 const VERIFY_STEP = "run: node .github/scripts/verify-bundle.mjs --dist frontends/web/dist\n";
 
@@ -103,14 +106,13 @@ for (const [name, block] of [
   ["release.yml's prepare job", RELEASE_PREPARE],
   ["pr-ci.yml's web job", PR_WEB],
 ]) {
-  test(`${name} exports .vite, builds with NODE_ENV=production in frontends/web/, then verifies the bundle`, () => {
-    const exported = block.indexOf(EXPORT);
+  test(`${name} builds with NODE_ENV=production in frontends/web/ from no release config, then verifies the bundle`, () => {
     const built = block.search(BUILD);
     const verified = block.indexOf(VERIFY_STEP);
-    assert.notEqual(exported, -1, `${name} no longer exports release.config.json's .vite block with:\n  ${EXPORT}`);
+    assert.ok(!EXPORT_RE.test(block), `${name} still exports release.config.json into the build environment; the bundle reads config.js`);
     assert.notEqual(built, -1, `${name} no longer runs \`NODE_ENV=production npm run build\` in frontends/web/`);
     assert.notEqual(verified, -1, `${name} no longer runs:\n  ${VERIFY_STEP}`);
-    assert.ok(exported < built && built < verified, `${name} must export the config, then build, then verify`);
+    assert.ok(built < verified, `${name} must build, then verify`);
   });
 
   test(`${name} sets NODE_ENV on the build command only, never on npm ci`, () => {

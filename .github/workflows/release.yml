@@ -164,45 +164,18 @@ jobs:
       # "Control plane API URL not configured" on the desktop app.
       #
       # electron/release.config.json is GENERATED from control-plane's
-      # deploy/kcl/lib/env.k by .github/scripts/sync-release-config.mjs, and it
-      # carries the SAME VITE_* list the hosted app is built with. The step
-      # below verifies it has not drifted, then exports it.
-      #
-      # No .env file is written. `vite build` reads VITE_* straight from the
-      # process environment, so $GITHUB_ENV is sufficient and there is no
-      # generated dotfile to leak into an artifact or fall out of date.
+      # deploy/kcl/lib/env.k by .github/scripts/sync-release-config.mjs, and its
+      # `renderer` block carries the SAME runtime_config keys the hosted app is
+      # served. The step below verifies it has not drifted.
       - name: Verify release config matches control-plane KCL
         run: node .github/scripts/sync-release-config.mjs --check
 
-      - name: Export renderer build config
-        env:
-          # Secrets are NOT in KCL and never in this repo. They are merged in
-          # here, on top of the KCL-sourced public values.
-          VITE_SENTRY_DSN: ${{ secrets.VITE_SENTRY_DSN }}
-          VITE_STATSIG_CLIENT_KEY: ${{ secrets.STATSIG_CLIENT_KEY }}
-          VITE_SENTRY_REPLAY_CANVAS: ${{ vars.VITE_SENTRY_REPLAY_CANVAS }}
-        run: |
-          set -euo pipefail
-
-          # KCL-sourced public config (endpoints, auth mode, Supabase URL +
-          # publishable key, Sentry enable flags). jq -e fails if `.vite` is
-          # missing rather than exporting an empty set.
-          jq -er '.vite | to_entries[] | "\(.key)=\(.value)"' \
-            electron/release.config.json >> "$GITHUB_ENV"
-
-          # Secret-backed and CI-tunable values layered on top.
-          {
-            echo "VITE_SENTRY_DSN=${VITE_SENTRY_DSN}"
-            echo "VITE_STATSIG_CLIENT_KEY=${VITE_STATSIG_CLIENT_KEY}"
-            echo "VITE_SENTRY_TRACES_SAMPLE_RATE=0.1"
-            echo "VITE_SENTRY_REPLAYS_SESSION_SAMPLE_RATE=0.1"
-            echo "VITE_SENTRY_REPLAYS_ERROR_SAMPLE_RATE=1.0"
-            echo "VITE_SENTRY_REPLAY_CANVAS=${VITE_SENTRY_REPLAY_CANVAS}"
-          } >> "$GITHUB_ENV"
-
-          echo "Renderer config exported from KCL:"
-          jq -r '.vite | "  VITE_CONTROL_PLANE_API_URL = \(.VITE_CONTROL_PLANE_API_URL)\n  VITE_GATEWAY_URL           = \(.VITE_GATEWAY_URL)"' \
-            electron/release.config.json
+      # No renderer build config is exported: the bundle reads every
+      # per-environment value from config.js at runtime (R2a), and the
+      # packaged app's config.js is answered by its main process from
+      # release.config.json's `renderer` block (electron/src/runtime-config.js,
+      # written by generate-build-config.mjs in each platform job). The one
+      # build-time value is VITE_APP_VERSION, from scripts/release-identity.sh.
 
       # `build`, not `build:alpha` — the difference is `tsc -b`.
       #
