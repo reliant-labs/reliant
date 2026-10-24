@@ -89,9 +89,12 @@ var rangeCases = []struct {
 	{"6to4 2002::/16 metadata", "2002:a9fe:a9fe::1", true},
 	{"6to4 2002::/16 loopback", "2002:7f00:0001::1", true},
 	{"6to4 2002::/16 public", "2002:0808:0808::1", false},
-	{"Teredo 2001::/32 private client", "2001:0:4136:e378:8000:63bf:f5ff:fffe", true}, // client 10.0.0.1
-	{"Teredo 2001::/32 private server", "2001:0:0a00:0001:8000:63bf:3f57:fef7", true}, // server 10.0.0.1, client 192.168.1.8
-	{"Teredo 2001::/32 public", "2001:0:4136:e378:8000:63bf:3f57:fef7", false},        // server 65.54.227.120, client 192.0.2.8 (documented example), see below
+	// Teredo (RFC 4380): server v4 in bytes 4-7, client v4 in bytes 12-15, bit-inverted.
+	{"Teredo 2001::/32 private client 10.0.0.1", "2001:0:4136:e378:8000:63bf:f5ff:fffe", true},
+	{"Teredo 2001::/32 metadata client 169.254.169.254", "2001:0:4136:e378:8000:63bf:5601:5601", true},
+	{"Teredo 2001::/32 private server 10.0.0.1", "2001:0:0a00:0001:8000:63bf:f7f7:f7f7", true},
+	{"Teredo 2001::/32 documentation client 192.0.2.8", "2001:0:4136:e378:8000:63bf:3f57:fef7", true},
+	{"Teredo 2001::/32 public server 65.54.227.120 and client 8.8.8.8", "2001:0:4136:e378:8000:63bf:f7f7:f7f7", false},
 
 	// Public neighbours of the ranges above stay reachable.
 	{"public 8.8.8.8", "8.8.8.8", false},
