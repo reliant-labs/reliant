@@ -4,6 +4,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/configadapter"
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/controlplane"
+	"github.com/reliant-labs/reliant/internal/controlplane/cptransport"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/egresslimit"
 	"github.com/reliant-labs/reliant/internal/handlers/chat"
@@ -51,6 +53,7 @@ import (
 	scenariorunner "github.com/reliant-labs/reliant/internal/workflow/scenario/runner"
 	"github.com/reliant-labs/reliant/internal/worktreesweep"
 	"github.com/reliant-labs/reliant/pkg/config"
+	"github.com/reliant-labs/reliant/pkg/hostedhttp"
 )
 
 // The Temporal worker's providers (the worker root, roots_worker.go).
@@ -574,6 +577,45 @@ type TemporalWorkerDeps struct {
 	WorkflowTaskPollers int32
 }
 
+// HostedActions is the worker's hosted HTTP action executor: a separate
+// fixed-node execution path, never installed in WorkerIntegrationCredentials
+// or the tool factory. nil when there is no control plane (each hosted action
+// fails closed with "hosted HTTP execution is not configured").
+//
+// The control-plane URL obeys cptransport.Check: prod's in-cluster
+// http://admin-server.<ns>.svc.cluster.local URL is accepted, an external
+// plaintext one is refused. A refused URL is never fatal: refusing to boot
+// over one feature's configuration took the whole worker down in prod. The
+// worker boots with a WARN, and every hosted action then fails with the
+// stated reason (disabledHostedActions), so nothing is silently skipped.
+func HostedActions(log *slog.Logger, store hosteduse.Store, cp controlplane.Endpoint) handlers.HostedActionExecutor {
+	if cp.URL == "" || cp.InternalServiceSecret == "" {
+		return nil
+	}
+	secret := cp.InternalServiceSecret
+	client, err := hosteduse.NewInstrumented(hosteduse.Deps{
+		Store: store, BaseURL: cp.URL,
+		Sign: func() (string, error) { return auth.SignInternalServiceToken(secret) },
+	})
+	if err != nil {
+		reason := "control-plane URL is refused: " + err.Error()
+		if errors.Is(err, cptransport.ErrInsecure) {
+			reason = "control-plane URL is plaintext http to a host outside loopback and the cluster"
+		}
+		log.Warn("hosted HTTP actions are DISABLED on this worker; every hosted action will fail until the control-plane URL is accepted", "reason", reason, "error", err)
+		return disabledHostedActions{reason: reason}
+	}
+	return client
+}
+
+// disabledHostedActions refuses every hosted action with its configuration
+// reason, which executeHosted publishes as the action's error.
+type disabledHostedActions struct{ reason string }
+
+func (d disabledHostedActions) ExecuteAction(context.Context, string, string, string, hostedhttp.Request) (*hostedhttp.Result, error) {
+	return nil, &handlers.HostedDisabledError{Reason: d.reason}
+}
+
 // NewTemporalWorker is the Temporal worker on the shared task queue
 // (workersetup.Worker: its Drain releases in-flight activities, its Ready is
 // "polling"). A scheduled trigger fire launches through the same launcher
@@ -582,10 +624,7 @@ type TemporalWorkerDeps struct {
 //forge:root-only worker
 func NewTemporalWorker(d TemporalWorkerDeps) (*workersetup.Worker, error) {
 	creds := d.Credentials.Source
-	hostedActions, err := HostedActions(d.DB, ControlPlaneEndpoint(d.ControlPlane))
-	if err != nil {
-		return nil, err
-	}
+	hostedActions := HostedActions(slog.Default(), d.DB, ControlPlaneEndpoint(d.ControlPlane))
 	worker, _, err := workersetup.NewWorker(&workersetup.Config{
 		AccountLimits:          d.Recorder.Recorder,
 		TemporalClient:         d.Temporal.Client,
@@ -610,26 +649,6 @@ func NewTemporalWorker(d TemporalWorkerDeps) (*workersetup.Worker, error) {
 		return nil, fmt.Errorf("failed to create worker: %w", err)
 	}
 	return worker, nil
-}
-
-// HostedActions is the worker's fixed-node hosted HTTP executor: nil (hosted
-// actions unavailable) without a control plane and its internal-service
-// secret. It is never installed in WorkerIntegrationCredentials or the tool
-// factory. A control-plane URL that breaks the transport rule
-// (cptransport.Check) stops the worker at build.
-func HostedActions(store hosteduse.Store, cp controlplane.Endpoint) (handlers.HostedActionExecutor, error) {
-	if cp.URL == "" || cp.InternalServiceSecret == "" {
-		return nil, nil
-	}
-	secret := cp.InternalServiceSecret
-	client, err := hosteduse.NewInstrumented(hosteduse.Deps{
-		Store: store, BaseURL: cp.URL,
-		Sign: func() (string, error) { return auth.SignInternalServiceToken(secret) },
-	})
-	if err != nil {
-		return nil, fmt.Errorf("hosted HTTP execution: %w", err)
-	}
-	return client, nil
 }
 
 // WorkflowEventRelayDeps is the outbox and the workflows it dispatches to.

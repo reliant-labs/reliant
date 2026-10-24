@@ -2,12 +2,21 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/pkg/hostedhttp"
 	"google.golang.org/protobuf/types/known/structpb"
 )
+
+// HostedDisabledError is an executor's refusal that is safe to publish: hosted
+// HTTP is switched off on this worker for a stated configuration reason. It is
+// the one executor error executeHosted passes through to the run's history;
+// every other cause (remote, storage) stays generic.
+type HostedDisabledError struct{ Reason string }
+
+func (e *HostedDisabledError) Error() string { return "hosted HTTP disabled: " + e.Reason }
 
 // executeHosted is deliberately not a CredentialSource: tools cannot discover
 // or use hosted grants through the shared saved-connection path.
@@ -54,7 +63,12 @@ func (a *ActionActivity) executeHosted(ctx context.Context, uses, grant string, 
 	}
 	result, err := a.hosted.ExecuteAction(ctx, rtx.WorkflowID, rtx.StepID, grant, hostedhttp.Request{URL: rawURL, Method: method, Body: params["body"]})
 	// Remote/storage errors may carry internal details. The executor's own
-	// metadata-only audit records the precise rejection; history gets no cause.
+	// metadata-only audit records the precise rejection; history gets no cause,
+	// except a HostedDisabledError, which names a configuration reason only.
+	var disabled *HostedDisabledError
+	if errors.As(err, &disabled) {
+		return fail("failed_precondition", disabled.Error())
+	}
 	if err != nil || result == nil {
 		return fail("failed_precondition", "hosted HTTP execution was refused or could not be completed")
 	}

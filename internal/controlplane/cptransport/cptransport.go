@@ -63,11 +63,10 @@ func clusterService(host string) bool {
 			return false
 		}
 	}
-	n := len(labels)
-	switch {
-	case n == 3:
+	switch len(labels) {
+	case 3:
 		return labels[2] == "svc"
-	case n == 5:
+	case 5:
 		return labels[2] == "svc" && labels[3] == "cluster" && labels[4] == "local"
 	}
 	return false
