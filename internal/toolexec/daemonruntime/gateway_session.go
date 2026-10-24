@@ -359,7 +359,7 @@ func (d *daemonClient) handleToolStatus(payload []byte) ([]byte, error) {
 	return json.Marshal(toolexec.ToolStatusResponse{State: state})
 }
 
-// Result outbox bounds. A worker waits for a result at most its request's
+// Result outbox bounds, in memory and on disk alike. A worker waits for a result at most its request's
 // timeout plus slack — 20 minutes for the longest shell_wait — so a result
 // held longer than resultHoldTTL has nobody waiting for it. The byte budget
 // only matters if gateways stop acknowledging altogether.
@@ -387,6 +387,46 @@ type resultOutbox struct {
 	held      map[string]*heldResult
 	delivered map[string]time.Time
 	heldBytes int
+
+	// store mirrors running calls and held results to disk so they outlive
+	// the process (result_outbox_store.go). Nil keeps the outbox in memory.
+	store *outboxStore
+	// ttl and budget override resultHoldTTL and resultHoldBudget when set.
+	ttl    time.Duration
+	budget int
+}
+
+func (o *resultOutbox) holdTTL() time.Duration {
+	if o.ttl > 0 {
+		return o.ttl
+	}
+	return resultHoldTTL
+}
+
+func (o *resultOutbox) holdBudget() int {
+	if o.budget > 0 {
+		return o.budget
+	}
+	return resultHoldBudget
+}
+
+// restore reloads what the previous process left in store and keeps writing
+// to it. A result comes back held and unsent; a call that was running then is
+// held as an "interrupted by daemon restart" result. It runs before the
+// outbox is shared, at construction.
+func (o *resultOutbox) restore(store *outboxStore) outboxLoadReport {
+	o.store = store
+	held, report := store.load(time.Now(), o.holdTTL(), o.holdBudget())
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if o.held == nil {
+		o.held = make(map[string]*heldResult)
+	}
+	for _, h := range held {
+		o.held[h.requestID] = h
+		o.heldBytes += h.size
+	}
+	return report
 }
 
 // start records a tool call that began executing.
@@ -402,11 +442,25 @@ func (o *resultOutbox) start(requestID string) {
 	o.running[requestID] = struct{}{}
 }
 
+// persistRunning writes the marker that lets a restarted daemon say a call was
+// interrupted. It is separate from start, which runs on the stream's receive
+// loop and must not wait on a disk; the executing goroutine calls this before
+// it runs the tool.
+func (o *resultOutbox) persistRunning(requestID string) {
+	o.store.markRunning(requestID)
+}
+
 // hold keeps a finished call's result until it is acknowledged.
+//
+// With a store, the result is on disk before it is visible to anything that
+// could send or acknowledge it — a resend racing an ack must not find the file
+// missing and then see it written — so a result a gateway could have seen
+// survives a restart.
 func (o *resultOutbox) hold(requestID string, msg *reliantv1.DaemonMessage, origin *gatewaySession) {
 	now := time.Now()
+	persisted := o.store.putResult(requestID, msg, now) == nil
+
 	o.mu.Lock()
-	defer o.mu.Unlock()
 	delete(o.running, requestID)
 	if o.held == nil {
 		o.held = make(map[string]*heldResult)
@@ -418,6 +472,17 @@ func (o *resultOutbox) hold(requestID string, msg *reliantv1.DaemonMessage, orig
 	o.held[requestID] = h
 	o.heldBytes += h.size
 	o.expireLocked(now)
+	kept := o.held[requestID] == h
+	o.mu.Unlock()
+
+	if !kept {
+		o.store.removeResult(requestID) // over budget on its own
+	}
+	// A result that could not be written keeps its running marker, so a
+	// restart still says the call was interrupted rather than forgetting it.
+	if persisted {
+		o.store.clearRunning(requestID)
+	}
 }
 
 // markSent records the stream a held result last went out on.
@@ -445,6 +510,7 @@ func (o *resultOutbox) ack(requestID string) *heldResult {
 	}
 	o.delivered[requestID] = now
 	o.expireLocked(now)
+	o.store.removeResult(requestID)
 	return h
 }
 
@@ -492,14 +558,15 @@ func (o *resultOutbox) runningCount() int {
 // deliveries as old. Must hold o.mu.
 func (o *resultOutbox) expireLocked(now time.Time) {
 	for id, h := range o.held {
-		if now.Sub(h.heldAt) > resultHoldTTL {
+		if now.Sub(h.heldAt) > o.holdTTL() {
 			logging.Warn(logPrefix+" Dropping a tool result no gateway acknowledged", "request_id", id,
 				"held_for", now.Sub(h.heldAt).Round(time.Second))
 			delete(o.held, id)
 			o.heldBytes -= h.size
+			o.store.removeResult(id)
 		}
 	}
-	for o.heldBytes > resultHoldBudget && len(o.held) > 0 {
+	for o.heldBytes > o.holdBudget() && len(o.held) > 0 {
 		var oldest *heldResult
 		for _, h := range o.held {
 			if oldest == nil || h.heldAt.Before(oldest.heldAt) {
@@ -507,12 +574,13 @@ func (o *resultOutbox) expireLocked(now time.Time) {
 			}
 		}
 		logging.Warn(logPrefix+" Dropping the oldest unacknowledged tool result: the outbox is over budget",
-			"request_id", oldest.requestID, "held_bytes", o.heldBytes, "budget", resultHoldBudget)
+			"request_id", oldest.requestID, "held_bytes", o.heldBytes, "budget", o.holdBudget())
 		delete(o.held, oldest.requestID)
 		o.heldBytes -= oldest.size
+		o.store.removeResult(oldest.requestID)
 	}
 	for id, at := range o.delivered {
-		if now.Sub(at) > resultHoldTTL {
+		if now.Sub(at) > o.holdTTL() {
 			delete(o.delivered, id)
 		}
 	}
