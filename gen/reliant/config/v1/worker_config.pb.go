@@ -55,8 +55,29 @@ type WorkerConfig struct {
 	// max_concurrent_workflow_tasks buys nothing. 1 is refused: the SDK splits
 	// pollers between the sticky and the shared queue and needs two.
 	WorkflowTaskPollers int32 `protobuf:"varint,23,opt,name=workflow_task_pollers,json=workflowTaskPollers,proto3" json:"workflow_task_pollers,omitempty"`
-	unknownFields       protoimpl.UnknownFields
-	sizeCache           protoimpl.SizeCache
+	// Egress limits (internal/egresslimit): what one user, one destination host
+	// and one conversation turn may push through the worker's server-side
+	// egress tools (fetch, websearch, sourcegraph, integration actions such as
+	// http__request). Prod egress shares one NAT address, so an unbounded
+	// caller can get it banned or exhaust its ports for every tenant. A refused
+	// call is a non-fatal tool result ("rate limited, retry after Ns"), never a
+	// failed run.
+	//
+	// The per-minute and burst budgets are FLEET-wide quantities; state is in
+	// process, so each replica enforces 1/egress_replicas of them. Set
+	// egress_replicas to the worker's replica count; unset or 0 means 1 (the
+	// whole budget per replica), so a fleet that forgets it admits up to
+	// replicas times the budget. The worker logs the effective per-replica
+	// budget at startup. The max_concurrent / parallel values bound one process
+	// (and one node's NAT), so they are per replica and not divided.
+	EgressReplicas          int32 `protobuf:"varint,24,opt,name=egress_replicas,json=egressReplicas,proto3" json:"egress_replicas,omitempty"`
+	EgressUserPerMinute     int32 `protobuf:"varint,25,opt,name=egress_user_per_minute,json=egressUserPerMinute,proto3" json:"egress_user_per_minute,omitempty"`
+	EgressUserBurst         int32 `protobuf:"varint,26,opt,name=egress_user_burst,json=egressUserBurst,proto3" json:"egress_user_burst,omitempty"`
+	EgressUserMaxConcurrent int32 `protobuf:"varint,27,opt,name=egress_user_max_concurrent,json=egressUserMaxConcurrent,proto3" json:"egress_user_max_concurrent,omitempty"`
+	EgressHostMaxConcurrent int32 `protobuf:"varint,28,opt,name=egress_host_max_concurrent,json=egressHostMaxConcurrent,proto3" json:"egress_host_max_concurrent,omitempty"`
+	EgressTurnMaxParallel   int32 `protobuf:"varint,29,opt,name=egress_turn_max_parallel,json=egressTurnMaxParallel,proto3" json:"egress_turn_max_parallel,omitempty"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
 }
 
 func (x *WorkerConfig) Reset() {
@@ -145,11 +166,53 @@ func (x *WorkerConfig) GetWorkflowTaskPollers() int32 {
 	return 0
 }
 
+func (x *WorkerConfig) GetEgressReplicas() int32 {
+	if x != nil {
+		return x.EgressReplicas
+	}
+	return 0
+}
+
+func (x *WorkerConfig) GetEgressUserPerMinute() int32 {
+	if x != nil {
+		return x.EgressUserPerMinute
+	}
+	return 0
+}
+
+func (x *WorkerConfig) GetEgressUserBurst() int32 {
+	if x != nil {
+		return x.EgressUserBurst
+	}
+	return 0
+}
+
+func (x *WorkerConfig) GetEgressUserMaxConcurrent() int32 {
+	if x != nil {
+		return x.EgressUserMaxConcurrent
+	}
+	return 0
+}
+
+func (x *WorkerConfig) GetEgressHostMaxConcurrent() int32 {
+	if x != nil {
+		return x.EgressHostMaxConcurrent
+	}
+	return 0
+}
+
+func (x *WorkerConfig) GetEgressTurnMaxParallel() int32 {
+	if x != nil {
+		return x.EgressTurnMaxParallel
+	}
+	return 0
+}
+
 var File_reliant_config_v1_worker_config_proto protoreflect.FileDescriptor
 
 const file_reliant_config_v1_worker_config_proto_rawDesc = "" +
 	"\n" +
-	"%reliant/config/v1/worker_config.proto\x12\x11reliant.config.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x1egoogle/protobuf/duration.proto\"\xa7\v\n" +
+	"%reliant/config/v1/worker_config.proto\x12\x11reliant.config.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x1egoogle/protobuf/duration.proto\"\xff\x12\n" +
 	"\fWorkerConfig\x12l\n" +
 	"\vhealth_port\x18\x0e \x01(\x05BK\xbaH\b\x1a\x06\x18\xff\xff\x03(\x01\x82\xce\x18<\n" +
 	"\vHEALTH_PORT\x12\vhealth-port\x1a\x048081*\x1aHealth check endpoint portR\n" +
@@ -170,7 +233,19 @@ const file_reliant_config_v1_worker_config_proto_rawDesc = "" +
 	"\x1dmax_concurrent_workflow_tasks\x18\x16 \x01(\x05B\x8b\x01\xbaH\a\xd8\x01\x01\x1a\x02(\x02\x82\xce\x18}\n" +
 	",RELIANT_WORKER_MAX_CONCURRENT_WORKFLOW_TASKS*MWorkflow tasks (replays included) run at once; 0 derives max(2, GOMAXPROCS-1)R\x1amaxConcurrentWorkflowTasks\x12\x7f\n" +
 	"\x15workflow_task_pollers\x18\x17 \x01(\x05BK\xbaH\x04\x1a\x02(\x02\x82\xce\x18@\n" +
-	"$RELIANT_WORKER_WORKFLOW_TASK_POLLERS\x1a\x015*\x15Workflow-task pollersR\x13workflowTaskPollers:\x1d\xca\xc1\x18\x19\n" +
+	"$RELIANT_WORKER_WORKFLOW_TASK_POLLERS\x1a\x015*\x15Workflow-task pollersR\x13workflowTaskPollers\x12\x8f\x01\n" +
+	"\x0fegress_replicas\x18\x18 \x01(\x05Bf\xbaH\x04\x1a\x02(\x00\x82\xce\x18[\n" +
+	"\x1eRELIANT_WORKER_EGRESS_REPLICAS\x1a\x011*6Worker replicas sharing the egress rate budgets (0: 1)R\x0eegressReplicas\x12\x9e\x01\n" +
+	"\x16egress_user_per_minute\x18\x19 \x01(\x05Bi\xbaH\x04\x1a\x02(\x01\x82\xce\x18^\n" +
+	"%RELIANT_WORKER_EGRESS_USER_PER_MINUTE\x1a\x0260*1Egress tool calls per minute per user, fleet-wideR\x13egressUserPerMinute\x12\x80\x01\n" +
+	"\x11egress_user_burst\x18\x1a \x01(\x05BT\xbaH\x04\x1a\x02(\x01\x82\xce\x18I\n" +
+	" RELIANT_WORKER_EGRESS_USER_BURST\x1a\x0220*!Egress burst per user, fleet-wideR\x0fegressUserBurst\x12\xa4\x01\n" +
+	"\x1aegress_user_max_concurrent\x18\x1b \x01(\x05Bg\xbaH\x04\x1a\x02(\x01\x82\xce\x18\\\n" +
+	")RELIANT_WORKER_EGRESS_USER_MAX_CONCURRENT\x1a\x016*,Egress calls in flight per user, per replicaR\x17egressUserMaxConcurrent\x12\xb4\x01\n" +
+	"\x1aegress_host_max_concurrent\x18\x1c \x01(\x05Bw\xbaH\x04\x1a\x02(\x01\x82\xce\x18l\n" +
+	")RELIANT_WORKER_EGRESS_HOST_MAX_CONCURRENT\x1a\x0216*;Egress calls in flight to one destination host, per replicaR\x17egressHostMaxConcurrent\x12\xc1\x01\n" +
+	"\x18egress_turn_max_parallel\x18\x1d \x01(\x05B\x87\x01\xbaH\x04\x1a\x02(\x01\x82\xce\x18|\n" +
+	"'RELIANT_WORKER_EGRESS_TURN_MAX_PARALLEL\x1a\x014*NEgress calls of one conversation turn run at once, per replica (the rest wait)R\x15egressTurnMaxParallel:\x1d\xca\xc1\x18\x19\n" +
 	"\areliant\x12\x06server\x12\x06workerJ\x04\b\x01\x10\x02J\x04\b\n" +
 	"\x10\vJ\x04\b\v\x10\fJ\x04\b\f\x10\rJ\x04\b\r\x10\x0eJ\x04\b\x10\x10\x11J\x04\b\x11\x10\x12J\x04\b(\x10)J\x04\b2\x103J\x04\b3\x104J\x04\b<\x10=J\x04\bF\x10GJ\x04\bZ\x10[R\rcontrol_planeR\bdatabaseR\x04natsR\btemporalR\x05drainR\bdata_dirR\x10streaming_driverR\fintegrationsR\robservabilityR\x06sentryR\tanalyticsR\x03llmR\apreviewB@Z>github.com/reliant-labs/reliant/gen/reliant/config/v1;configv1b\x06proto3"
 

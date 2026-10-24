@@ -70,6 +70,9 @@ type RemoteExecutor struct {
 	// preemptGrace overrides defaultPreemptReplyGrace. Zero means the default;
 	// tests shorten it.
 	preemptGrace time.Duration
+
+	// egress bounds the egress tools executeOnServer runs; nil admits all.
+	egress EgressLimiter
 }
 
 // ToolExecutionRequest is the payload sent to daemon over WebSocket
@@ -202,6 +205,15 @@ func (e *RemoteExecutor) ExecuteTool(ctx context.Context, req *ToolRequest) (*To
 
 // executeOnServer runs a tool in-process via the server executor.
 func (e *RemoteExecutor) executeOnServer(ctx context.Context, req *ToolRequest, startTime time.Time) (*ToolResult, error) {
+	// Every egress tool passes here, so this is the one place its rate and
+	// concurrency are bounded. A refusal is a tool result, not an error: the
+	// model reads "rate limited, retry after Ns" and the run continues.
+	releaseEgress, refusal := e.admitEgress(ctx, req, startTime)
+	if refusal != nil {
+		return refusal, nil
+	}
+	defer releaseEgress()
+
 	timeoutMs := 0
 	if req.Timeout > 0 {
 		timeoutMs = int(req.Timeout.Milliseconds())

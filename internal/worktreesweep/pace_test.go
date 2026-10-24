@@ -19,12 +19,14 @@ import (
 // fakeStore is an in-memory Store, so these tests exercise the sweep's
 // scheduling and bookkeeping without a database or a filesystem.
 type fakeStore struct {
-	mu       sync.Mutex
-	rows     map[string]*core.ReclaimCandidate
-	order    []string
-	chats    []*core.Chat
-	archived []string
-	daemon   string
+	mu         sync.Mutex
+	rows       map[string]*core.ReclaimCandidate
+	order      []string
+	chats      []*core.Chat
+	chatErr    error
+	archiveErr error
+	archived   []string
+	daemon     string
 	// disk is each daemon's stored disk report (diskwatch.Encode).
 	disk map[string]string
 }
@@ -99,10 +101,21 @@ func (f *fakeStore) TryAdvisoryLock(context.Context, int64) (func(), bool, error
 }
 
 // AutoArchiveStore.
-func (f *fakeStore) ListChats(context.Context, core.ChatFilters) ([]*core.Chat, error) {
-	return f.chats, nil
+func (f *fakeStore) GetLiveChatIDForWorktree(_ context.Context, id string) (string, error) {
+	if f.chatErr != nil {
+		return "", f.chatErr
+	}
+	for _, c := range f.chats {
+		if c.WorktreeID != nil && *c.WorktreeID == id && c.State != core.ChatStateArchived {
+			return c.ID, nil
+		}
+	}
+	return "", nil
 }
 func (f *fakeStore) ArchiveWorktree(_ context.Context, id string) error {
+	if f.archiveErr != nil {
+		return f.archiveErr
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.archived = append(f.archived, id)
@@ -351,17 +364,35 @@ func TestAutoArchive_ALiveChatKeepsTheWorktree(t *testing.T) {
 	assert.Empty(t, store.archived, "a worktree a live chat is bound to is never archived")
 }
 
-func TestAutoArchive_AnUnsureChatListKeepsTheWorktree(t *testing.T) {
+func TestAutoArchive_MoreThan1000UnrelatedChatsDoNotBlock(t *testing.T) {
 	t.Parallel()
 
-	chats := make([]*core.Chat, liveChatScan)
+	chats := make([]*core.Chat, 1001)
 	for i := range chats {
 		other := "other"
 		chats[i] = &core.Chat{ID: "c", WorktreeID: &other}
 	}
 	store, _, s := autoEnv(t, AutoArchiveOn, chats)
 	require.NoError(t, s.Sweep(context.Background()))
-	assert.Empty(t, store.archived, "a chat list cut at the bound cannot prove no chat uses it")
+	assert.Equal(t, []string{"done"}, store.archived, "unrelated chats cannot hide an unused worktree")
+	assert.EqualValues(t, 1, s.idleDone.Load())
+	assert.EqualValues(t, 0, s.blockedByChat.Load())
+}
+
+func TestAutoArchive_StoreErrorsAreCounted(t *testing.T) {
+	t.Parallel()
+	for _, lookup := range []bool{true, false} {
+		store, _, s := autoEnv(t, AutoArchiveOn, nil)
+		if lookup {
+			store.chatErr = errors.New("lookup failed")
+		} else {
+			store.archiveErr = errors.New("archive failed")
+		}
+		require.NoError(t, s.Sweep(context.Background()))
+		assert.Empty(t, store.archived)
+		assert.EqualValues(t, 1, s.idleDone.Load())
+		assert.EqualValues(t, 1, s.archiveErrors.Load())
+	}
 }
 
 func TestAutoArchive_NeverArchivesTheMainCheckout(t *testing.T) {
