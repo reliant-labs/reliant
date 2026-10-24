@@ -10,6 +10,8 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/hosteduse"
+	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/handlers"
+	"github.com/reliant-labs/reliant/pkg/hostedhttp"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -104,8 +106,9 @@ func TestCatalogSearch_DelegatedFollowsTheWorkersBrokers(t *testing.T) {
 }
 
 // A control plane the hosted HTTP client refuses (prod's in-cluster
-// http://admin-server URL) disables hosted actions, logged, and never fails
-// the worker's boot: v1.7.52's worker crash-looped on exactly this.
+// http://admin-server URL) never fails the worker's boot: v1.7.52's worker
+// crash-looped on exactly this. It boots with a WARN, and every hosted action
+// fails with the stated reason.
 func TestHostedActionsDegradeInsteadOfFailingTheWorker(t *testing.T) {
 	store := &hosteduse.MockStore{}
 	var logged bytes.Buffer
@@ -115,9 +118,17 @@ func TestHostedActionsDegradeInsteadOfFailingTheWorker(t *testing.T) {
 	assert.Empty(t, logged.String(), "no control plane is not an error")
 
 	refused := newHostedActions(log, store, controlplane.Endpoint{URL: "http://admin-server.control-plane-prod.svc.cluster.local:8090", InternalServiceSecret: "s"})
-	assert.Nil(t, refused, "a refused URL leaves hosted actions disabled (they fail closed at use)")
+	require.NotNil(t, refused)
+	assert.Contains(t, logged.String(), "level=WARN")
 	assert.Contains(t, logged.String(), "hosted HTTP actions are DISABLED")
-	assert.Contains(t, logged.String(), "requires HTTPS")
+	assert.Contains(t, logged.String(), "control-plane URL is not HTTPS")
+	_, err := refused.ExecuteAction(context.Background(), "run", "node", "grant", hostedhttp.Request{URL: "https://example.com", Method: "POST"})
+	var disabled *handlers.HostedDisabledError
+	require.ErrorAs(t, err, &disabled)
+	assert.Equal(t, "hosted HTTP disabled: control-plane URL is not HTTPS", err.Error())
 
-	assert.NotNil(t, newHostedActions(log, store, controlplane.Endpoint{URL: "https://admin.example.com", InternalServiceSecret: "s"}))
+	enabled := newHostedActions(log, store, controlplane.Endpoint{URL: "https://admin.example.com", InternalServiceSecret: "s"})
+	require.NotNil(t, enabled)
+	_, isDisabled := enabled.(disabledHostedActions)
+	assert.False(t, isDisabled, "an https control plane gets the real client")
 }
