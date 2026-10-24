@@ -2,13 +2,11 @@
 package tools
 
 import (
-	"context"
 	"fmt"
 	"net"
 	"net/http"
 	"net/netip"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/netguard"
@@ -146,44 +144,10 @@ func (n FetchNetwork) privateBlocked(dest string) error {
 		netguard.ErrBlockedAddress, dest, n.OptInSetting)
 }
 
-func (n FetchNetwork) transport() *http.Transport {
-	dialer := &net.Dialer{
-		Timeout:   10 * time.Second,
-		KeepAlive: 30 * time.Second,
-		// Control runs on the address about to be connected to, after DNS, so
-		// a name that resolves to a forbidden address (or rebinds to one) is
-		// refused at the socket.
-		Control: func(_, address string, _ syscall.RawConn) error {
-			host, _, err := net.SplitHostPort(address)
-			if err != nil {
-				return err
-			}
-			return n.CheckIP(net.ParseIP(host))
-		},
-	}
-	return &http.Transport{
-		Proxy: nil, // a proxy would be dialed instead of the destination, defeating the checks
-		DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
-			host, _, err := net.SplitHostPort(address)
-			if err != nil {
-				return nil, err
-			}
-			if err := n.checkHost(host); err != nil {
-				return nil, err
-			}
-			return dialer.DialContext(ctx, network, address)
-		},
-		ForceAttemptHTTP2:   true,
-		MaxIdleConns:        32,
-		IdleConnTimeout:     90 * time.Second,
-		TLSHandshakeTimeout: 10 * time.Second,
-	}
-}
-
 // NewFetchToolWithNetwork builds fetch for a daemon, under that daemon's FetchNetwork.
 func NewFetchToolWithNetwork(n FetchNetwork) Tool {
 	newClient := func(timeoutSecs int) *http.Client {
-		c := &http.Client{Timeout: time.Duration(timeoutSecs) * time.Second, Transport: n.transport()}
+		c := newFetchNetworkClient(n, time.Duration(timeoutSecs)*time.Second)
 		c.CheckRedirect = fetchCheckRedirect
 		return c
 	}
