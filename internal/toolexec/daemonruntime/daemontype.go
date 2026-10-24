@@ -6,7 +6,6 @@ import (
 	"runtime"
 
 	"github.com/reliant-labs/reliant/internal/llm/tools"
-	"github.com/reliant-labs/reliant/internal/netguard"
 )
 
 // Daemon type as self-reported at registration.
@@ -56,6 +55,10 @@ type Host struct {
 	FrontendPort int
 	// ProjectPath is the project announced at connect; "" means WorkingDir.
 	ProjectPath string
+	// AllowPrivateFetch is the user's opt-in to let fetch reach this
+	// machine's localhost and private network (FetchAllowPrivateSetting).
+	// Ignored on a managed daemon.
+	AllowPrivateFetch bool
 }
 
 // Managed reports whether the PLATFORM has declared this process a managed
@@ -78,26 +81,33 @@ func resolveDaemonType(declared, fallback string) string {
 	return fallback
 }
 
-// webToolsPolicy is the dial policy of the web tools that run on this daemon
-// (fetch, a PlacementPreferDaemon tool), chosen by where the daemon runs.
+// FetchAllowPrivateSetting is the setting that lets fetch reach this machine's
+// own localhost and private network. It is named in fetch's refusal, so the
+// user can choose to opt in.
+const FetchAllowPrivateSetting = "RELIANT_FETCH_ALLOW_PRIVATE_NETWORK"
+
+// fetchNetwork is where fetch may connect from this daemon (tools.FetchNetwork
+// documents the tiers). Link-local and cloud-metadata destinations are refused
+// everywhere; loopback and private ranges are refused unless the user opted in
+// (Host.AllowPrivateFetch) on a machine that is theirs.
 //
-// A user's own machine and network belong to the user: the localhost dev
-// server or the LAN router they ask the agent to fetch is exactly what they
-// mean, and the server-side policy that refuses those protects the shared
-// worker, which is not here. A managed workspace pod is different: it is on
-// the platform's network, so the strict policy applies as the second layer
-// beside the namespace NetworkPolicy (public 80/443 only).
-func webToolsPolicy(host Host) netguard.Policy {
-	return netguard.Policy{AllowPrivate: !host.Managed()}
+// A managed workspace pod is the platform's network, not the user's, so it is
+// strict whatever the setting says and offers no opt-in; its namespace
+// NetworkPolicy (public 80/443 only) sits behind this as the second layer.
+func fetchNetwork(host Host) tools.FetchNetwork {
+	if host.Managed() {
+		return tools.FetchNetwork{}
+	}
+	return tools.FetchNetwork{AllowPrivate: host.AllowPrivateFetch, OptInSetting: FetchAllowPrivateSetting}
 }
 
 // newDaemonToolsFactory builds the registry this daemon executes tools from.
 // This process IS the machine that runs shell commands, so its own GOOS is
 // the right shell platform here, unlike on the server.
 func newDaemonToolsFactory(host Host) *tools.ToolsFactory {
-	policy := webToolsPolicy(host)
+	network := fetchNetwork(host)
 	return tools.NewToolsFactory(&tools.ToolsOptions{
-		ShellPlatform:  tools.ShellPlatformFromGOOS(runtime.GOOS),
-		WebToolsPolicy: &policy,
+		ShellPlatform: tools.ShellPlatformFromGOOS(runtime.GOOS),
+		FetchNetwork:  &network,
 	})
 }

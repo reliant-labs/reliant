@@ -204,8 +204,20 @@ const (
 	// ToolsFactory (the same registry), need no server-only dependency
 	// (database, vault, NATS, a connection's credentials) and apply its own
 	// limits, since they travel with the code. Its network policy is chosen by
-	// the process that executes it (ToolsOptions.WebToolsPolicy on the daemon,
+	// the process that executes it (ToolsOptions.FetchNetwork on the daemon,
 	// netguard.ForDeployment on the server).
+	//
+	// Network reach on the daemon (fetch, the first user): fetch is usually
+	// auto-approved and fetched content can steer the next fetch, so the
+	// daemon's policy (FetchNetwork, daemonruntime.fetchNetwork) is:
+	//   - link-local and cloud-metadata destinations (169.254.0.0/16, fe80::/10,
+	//     the metadata hostnames, fd00:ec2::254, ...) are refused on every
+	//     daemon, with no setting that unblocks them;
+	//   - loopback and private ranges are refused by default, local daemons
+	//     included. A user opts in with RELIANT_FETCH_ALLOW_PRIVATE_NETWORK=true
+	//     (DaemonConfig.fetch_allow_private_network), and a refused fetch names
+	//     that setting in its non-fatal tool error;
+	//   - a managed daemon stays strict whatever that setting says.
 	//
 	// It does not need the user's machine: NeedsMachine is false and static
 	// preflight does not treat it as daemon-bound, so a no-machine run is

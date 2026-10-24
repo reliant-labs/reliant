@@ -47,8 +47,9 @@ type FetchResponseMetadata struct {
 
 type fetchTool struct {
 	client *http.Client
-	// policy is the deployment's dial policy, for a per-call client.
-	policy netguard.Policy
+	// newClient builds the client for a call with its own timeout, under the
+	// same dial policy as client.
+	newClient func(timeoutSecs int) *http.Client
 }
 
 const (
@@ -164,8 +165,8 @@ RESPONSE METADATA:
 // NewFetchTool builds the tool under the deployment's dial policy (netguard.ForDeployment).
 func NewFetchTool(policy netguard.Policy) Tool {
 	tool := &fetchTool{
-		client: newFetchClient(policy, fetchDefaultTimeout),
-		policy: policy,
+		client:    newFetchClient(policy, fetchDefaultTimeout),
+		newClient: func(timeoutSecs int) *http.Client { return newFetchClient(policy, timeoutSecs) },
 	}
 	return NewToolWrapper[FetchParams, ToolResponse](tool)
 }
@@ -200,7 +201,7 @@ func (t *fetchTool) Execute(rctx *rctx.ToolContext, params FetchParams) (ToolRes
 
 	client := t.client
 	if timeout := clampFetchTimeout(params.Timeout); timeout > 0 {
-		client = newFetchClient(t.policy, timeout)
+		client = t.newClient(timeout)
 	}
 
 	req, err := http.NewRequestWithContext(rctx.Context, "GET", params.URL, nil)

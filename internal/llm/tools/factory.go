@@ -26,11 +26,11 @@ type ToolsOptions struct {
 	// tools (netguard.ForDeployment): a hosted deployment's shared worker must
 	// not reach its own network; a self-hosted one is the user's machine.
 	ControlPlaneURL string
-	// WebToolsPolicy, when set, is the web tools' dial policy outright, instead
-	// of one derived from ControlPlaneURL. The daemon sets it: it is not a
-	// deployment of the control plane, and what its fetch may reach is a
-	// decision about the machine it runs on, not about a hosted worker.
-	WebToolsPolicy *netguard.Policy
+	// FetchNetwork, when set, is where fetch may connect, instead of the
+	// policy derived from ControlPlaneURL. The daemon sets it: fetch runs there
+	// (PlacementPreferDaemon), and what it may reach is a decision about the
+	// machine it runs on (see FetchNetwork), not about a hosted worker.
+	FetchNetwork *FetchNetwork
 	// Repo is the database the tools read and write. The factory is
 	// composition: it hands Repo to each tool as the role that tool declares
 	// (deps.go), through store(). Optional: nil means every database-backed
@@ -368,6 +368,9 @@ func (f *ToolsFactory) ProveTest() Tool {
 
 // Network tools
 func (f *ToolsFactory) Fetch() Tool {
+	if f.opts.FetchNetwork != nil {
+		return NewFetchToolWithNetwork(*f.opts.FetchNetwork)
+	}
 	return NewFetchTool(f.netPolicy())
 }
 
@@ -378,9 +381,6 @@ func (f *ToolsFactory) WebSearch() Tool {
 // netPolicy is the dial policy for tools that reach the network from this
 // process: hosted deployments may not dial their own network.
 func (f *ToolsFactory) netPolicy() netguard.Policy {
-	if f.opts.WebToolsPolicy != nil {
-		return *f.opts.WebToolsPolicy
-	}
 	return netguard.ForDeployment(f.opts.ControlPlaneURL)
 }
 
