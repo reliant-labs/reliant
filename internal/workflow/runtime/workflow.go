@@ -245,6 +245,7 @@ type ChildWorkflowTracker struct {
 	providerPinCleanups map[string]bool
 	userResumes         int
 	durableResumes      int
+	lateCandidateChecks int
 	providerWake        func(workflow.Context)
 	children            map[string]bool                   // Map of child workflow IDs that are currently active
 	threadInputs        map[string]map[string]interface{} // Map of thread -> subInputs for per-thread param access

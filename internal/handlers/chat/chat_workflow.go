@@ -114,8 +114,19 @@ func (s *Service) UpdateWorkflowParams(
 		}
 	}
 	var moves []launch.ModelSubstitution
-	if live && !explicitModelPick {
-		moves = s.moveUnservableModels(ctx, userID, req.Msg.ChatId, chat.ProjectID, workflowName, workflowID, stateUpdate)
+	if live {
+		// Preserve the root picker choice, but retain send-time recovery for
+		// unrelated grouped model inputs changed in the same request.
+		recoverable := make(map[string]interface{}, len(stateUpdate))
+		for key, value := range stateUpdate {
+			if key != "model" || !explicitModelPick {
+				recoverable[key] = value
+			}
+		}
+		moves = s.moveUnservableModels(ctx, userID, req.Msg.ChatId, chat.ProjectID, workflowName, workflowID, recoverable)
+		for key, value := range recoverable {
+			stateUpdate[key] = value
+		}
 	}
 	sel, err := s.recordSelection(ctx, userID, chat, workflowName, req.Msg.Params, stateUpdate, moves, req.Msg.GetExpectedVersion())
 	if err != nil {
