@@ -35,6 +35,7 @@
       URL: "http://cp.surface.test:8080"
       InternalServiceSecret: "cp-secret"
     }
+    AllowPrivateEgress: true
     Log: logging.Settings {
       Level: "warn"
       Format: "json"
