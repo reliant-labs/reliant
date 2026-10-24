@@ -13,7 +13,7 @@
  *   error-normalize → timeout → auth → missing-token → daemon-last-seen → trace
  *     → error-logging → upgrade-modal → machine-wake → 401-signout
  * (error-normalize and auth are the runtime's; daemon-last-seen only on reliant
- * api-server transports — see TransportBackend; trace is the D7 seam below).
+ * api-server transports — see TransportBackend; trace is the runtime's).
  *
  * Why this order:
  *   - error-normalize outermost so EVERY failure a caller sees — a server
@@ -25,12 +25,13 @@
  *     `.message` drops connect's "[code] " prefix (`rawMessage` is unchanged);
  *   - timeout next so the full request lifecycle (incl. retries through
  *     inner interceptors) is bounded;
- *   - auth attaches the bearer before any header injection (tracing);
+ *   - auth attaches the bearer before the trace stage;
  *   - daemon-last-seen header is independent of auth ordering but cheap to
  *     leave just after auth;
- *   - tracing wraps the actual `next(req)` so spans capture network time;
- *   - errorInterceptor logs/reports to Sentry — wraps tracing so it sees the
- *     real failure (tracing would otherwise mark OK and rethrow);
+ *   - trace stamps the W3C traceparent; the span it names is the HyperDX
+ *     SDK's fetch span, opened below this chain, so it covers network time;
+ *   - errorInterceptor logs/reports to Sentry — sees the real failure the
+ *     inner stages raise;
  *   - upgradeInterceptor opens the modal on ResourceExhausted + reason header
  *     before propagating;
  *   - machineWakeInterceptor records a machine the server woke for the request
@@ -50,15 +51,8 @@ import type { Interceptor } from "@connectrpc/connect";
 import {
   authInterceptor as runtimeAuthInterceptor,
   errorNormalizeInterceptor,
+  traceInterceptor,
 } from "@reliantlabs/forge-web-runtime/interceptors";
-import {
-  trace,
-  context,
-  SpanStatusCode,
-  SpanKind,
-  propagation,
-  type Span,
-} from "@opentelemetry/api";
 import * as Sentry from "@sentry/react";
 import { logger } from "../lib/logger";
 import { getAuthTokenProvider } from "./authProvider";
@@ -304,59 +298,12 @@ export function describeInFlight(): string {
 
 const timeoutInterceptor: Interceptor = deadline.interceptor;
 
-// OTel tracing interceptor — creates a span per RPC and injects W3C
-// traceparent/tracestate headers.
-export const tracingInterceptor: Interceptor = (next) => async (req) => {
-  const tracer = trace.getTracer("reliant-frontend");
-  const spanName = `grpc.${req.service.typeName}/${req.method.name}`;
-
-  return tracer.startActiveSpan(
-    spanName,
-    { kind: SpanKind.CLIENT },
-    async (span: Span) => {
-      try {
-        // Inject W3C trace context into request headers
-        const carrier: Record<string, string> = {};
-        propagation.inject(context.active(), carrier);
-        for (const [key, value] of Object.entries(carrier)) {
-          req.header.set(key, value);
-        }
-
-        span.setAttribute("rpc.system", "connect");
-        span.setAttribute("rpc.service", req.service.typeName);
-        span.setAttribute("rpc.method", req.method.name);
-
-        const result = await next(req);
-        span.setStatus({ code: SpanStatusCode.OK });
-        return result;
-      } catch (error) {
-        span.setStatus({
-          code: SpanStatusCode.ERROR,
-          message: error instanceof Error ? error.message : String(error),
-        });
-        span.recordException(
-          error instanceof Error ? error : new Error(String(error)),
-        );
-        throw error;
-      } finally {
-        span.end();
-      }
-    },
-  );
-};
-
-// ─── D7 SEAM: which interceptor propagates the trace ─────────────────
-//
-// OWNER DECISION D7 IS PENDING (research/forge-migration/13-p9-frontend-plan.md
-// §11): delete reliant's tracingInterceptor above in favour of the forge
-// runtime's `traceInterceptor()` (which propagates the HyperDX browser span
-// the runtime already starts). Until it is decided, reliant's stays.
-//
-// This constant is the ONLY place the choice is made. To flip it:
-//   import { traceInterceptor } from "@reliantlabs/forge-web-runtime/interceptors";
-//   export const traceStage: Interceptor = traceInterceptor();
-// then delete tracingInterceptor and its @opentelemetry/api imports.
-export const traceStage: Interceptor = tracingInterceptor;
+// Trace propagation is the forge web runtime's: it writes a valid W3C
+// `traceparent` on every request (waiting, bounded, for browser telemetry to
+// finish starting so the call goes through the SDK's patched fetch). The span
+// itself is the HyperDX SDK's fetch span, so one RPC is one browser span whose
+// context the interceptor and the SDK agree on.
+export const traceStage: Interceptor = traceInterceptor();
 
 // Warn when a unary RPC takes at least this long. Streams are excluded —
 // their duration is the lifetime of the subscription, not a latency.

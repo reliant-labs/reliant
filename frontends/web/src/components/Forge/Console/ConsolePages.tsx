@@ -7,9 +7,8 @@
  * The BODIES are the components the console already had, mounted unchanged
  * where the new IA puts them — Activity gets its own design in a later PR
  * (the Overview, Releases and Dashboards have theirs: ../Workloads,
- * ../Releases, ../Observability/Dashboards). A
- * page shows a placeholder only where nothing existed (Metrics, Monitoring
- * settings).
+ * ../Releases, ../Observability/Dashboards, ../Observability/Metrics). A
+ * page shows a placeholder only where nothing existed (Monitoring settings).
  *
  * Every list page honours the top-bar scope (useForgeConsole().env): one
  * environment, or all of them.
@@ -37,6 +36,7 @@ import { CloudNotice } from "../SourceNotices";
 import { useForgeConsole } from "./consoleContext";
 import { ENV_ALL, envsInScope } from "./envScope";
 import { DashboardsPage, ObservabilityHomePage } from "../Observability/Dashboards/DashboardsPages";
+import { MetricsExplorerPage } from "../Observability/Metrics/MetricsExplorerPage";
 import { ObservabilityHost } from "./ObservabilityHost";
 import { OBS_NAV_LABELS } from "./paths";
 
@@ -148,28 +148,20 @@ function NothingDeployed({ what }: { what: string }) {
 export const ObservabilityOverviewPage = ObservabilityHomePage;
 
 /**
- * Logs, Traces, Profiles, Alerts — and Metrics, which has no view yet.
- * Dashboards has a route of its own (observability/dashboards), which wins.
+ * Logs, Traces, Profiles, Alerts — and Metrics, the explorer
+ * (../Observability/Metrics). Dashboards has a route of its own
+ * (observability/dashboards), which wins.
  */
 export function ObservabilityViewPage() {
-  const { page, href } = useForgeConsole();
+  const { page } = useForgeConsole();
   if (page.kind !== "obs-view") return null;
   if (page.view === "dashboards") return <DashboardsPage />;
   if (page.view === "metrics") {
     return (
-      <Placeholder
-        testId="console-metrics"
-        title="Metrics"
-        line={
-          <>
-            A metrics explorer — any metric, filtered and grouped — lands here. Until then, metric panels live in{" "}
-            <Link href={href({ kind: "obs-view", view: "dashboards" })} className="text-ink underline-offset-2 hover:underline">
-              Dashboards
-            </Link>
-            .
-          </>
-        }
-      />
+      <Page testId="console-metrics">
+        <Header title={OBS_NAV_LABELS.metrics} />
+        <MetricsExplorerPage />
+      </Page>
     );
   }
   return (

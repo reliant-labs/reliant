@@ -62,7 +62,7 @@ describe('buildInterceptors factory', () => {
     // error-normalize → timeout → auth → missing-token → daemon-last-seen →
     // trace → error-log → upgrade → machine-wake → unauth
     expect(chain).toHaveLength(10)
-    // The D7 seam is the one trace stage, at its documented position.
+    // The trace stage (the forge runtime's traceInterceptor) is at its documented position.
     expect(chain[5]).toBe(traceStage)
     // Every entry must be a function (Connect Interceptor shape).
     for (const entry of chain) {

@@ -297,6 +297,19 @@ func (r *AccountRouting) usageLimitFailure(ctx context.Context, err error, uc us
 	return &types.UsageLimitFailure{Err: err, Facts: facts}
 }
 
+// providerFailure is what every activity that streams from a routed account
+// does with the provider's refusal, so a refused account is judged the same
+// way whoever met it: a rejected API key leaves rotation (credentialRejection),
+// a usage limit benches the account (usageLimitFailure), and anything else
+// comes back unchanged. The next request, from any activity, then routes
+// around the account instead of meeting it first again.
+func (r *AccountRouting) providerFailure(ctx context.Context, err error, uc usageLimitContext) error {
+	if rejected := r.credentialRejection(ctx, err, uc); rejected != nil {
+		return rejected
+	}
+	return r.usageLimitFailure(ctx, err, uc)
+}
+
 // usageLimitOf reads a usage-limit refusal's reset and window, from the typed
 // error when it survived the wraps, else from the marker every wrap keeps.
 func usageLimitOf(err error) (resetAt time.Time, window string, ok bool) {

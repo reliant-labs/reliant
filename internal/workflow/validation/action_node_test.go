@@ -38,6 +38,38 @@ func TestActionNodeValidUses(t *testing.T) {
 	}
 }
 
+func TestHostedUseRequiresFixedHTTPAndNoOtherAuth(t *testing.T) {
+	literal := func(s string) *reliantv1.CelString {
+		return &reliantv1.CelString{Value: &reliantv1.CelString_Literal{Literal: s}}
+	}
+	for _, tc := range []struct {
+		name, uses, extra, connection string
+		valid                         bool
+	}{
+		{name: "valid", uses: "http/request@1", valid: true},
+		{name: "other action", uses: "github/issue.create@1"},
+		{name: "headers", uses: "http/request@1", extra: "headers"},
+		{name: "connection parameter", uses: "http/request@1", extra: "connection"},
+		{name: "connection field", uses: "http/request@1", connection: "saved"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			wf := actionWorkflow(tc.uses, map[string]*structpb.Value{"url": structpb.NewStringValue("https://example.com/rpc")})
+			args := wf.Nodes[0].GetAction()
+			args.HostedUse = literal("grant")
+			if tc.connection != "" {
+				args.Connection = literal(tc.connection)
+			}
+			if tc.extra != "" {
+				args.With[tc.extra] = structpb.NewStringValue("forbidden")
+			}
+			r := StaticAnalysis(wf, nil)
+			if tc.valid == r.HasErrors() {
+				t.Fatalf("valid=%v errors=%s", tc.valid, errorsText(r))
+			}
+		})
+	}
+}
+
 func TestActionNodeUnknownUsesFailsValidation(t *testing.T) {
 	for _, uses := range []string{"nope/request@1", "http/nope@1", "http/request@9", "http/request", ""} {
 		r := StaticAnalysis(actionWorkflow(uses, nil), nil)

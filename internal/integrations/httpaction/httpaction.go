@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -20,6 +19,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/integrations/manifest"
 	"github.com/reliant-labs/reliant/internal/integrations/tmpl"
 	"github.com/reliant-labs/reliant/internal/netguard"
+	"github.com/reliant-labs/reliant/pkg/guardedhttp"
 
 	gojsonschema "github.com/google/jsonschema-go/jsonschema"
 )
@@ -492,32 +492,11 @@ func (r *Runner) do(ctx context.Context, client *http.Client, method string, u *
 	if err := checkURL(u, allowed, anyHost); err != nil {
 		return nil, err
 	}
-	var reader io.Reader
-	if body != nil {
-		reader = bytes.NewReader(body)
-	}
-	httpReq, err := http.NewRequestWithContext(ctx, method, u.String(), reader)
+	resp, err := guardedhttp.Do(ctx, client, method, u, headers, body, maxBytes, cred)
 	if err != nil {
 		return nil, err
 	}
-	httpReq.Header = headers.Clone()
-	if cred != nil {
-		if err := cred.Apply(httpReq); err != nil {
-			return nil, fmt.Errorf("applying credential: %w", err)
-		}
-	}
-	resp, err := client.Do(httpReq)
-	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
-	}
-	defer resp.Body.Close()
-	raw, err := io.ReadAll(io.LimitReader(resp.Body, maxBytes+1))
-	if err != nil {
-		return nil, fmt.Errorf("reading response: %w", err)
-	}
-	if int64(len(raw)) > maxBytes {
-		return nil, fmt.Errorf("response body exceeds the %d byte limit", maxBytes)
-	}
+	raw := resp.Body
 	p := &page{status: resp.StatusCode, headers: resp.Header, raw: raw}
 	if responseFormat != manifest.ResponseFormatText && len(bytes.TrimSpace(raw)) > 0 {
 		var parsed any
