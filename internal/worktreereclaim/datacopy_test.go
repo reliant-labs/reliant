@@ -16,6 +16,7 @@ import (
 // That is how a worktree gets its dev secrets and .env, and it held every such
 // worktree forever. Both paths remove it.
 func TestReconcile_IgnoredCopyOfSourceDoesNotHold(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("builds 2 git fixtures and removes them; TestCopyInSource_RefusesPathsThatLeaveTheSource covers the rule under -short")
 	}
@@ -42,6 +43,7 @@ func TestReconcile_IgnoredCopyOfSourceDoesNotHold(t *testing.T) {
 // may hold a credential the source no longer has; one the source does not have
 // at all is the only copy. Both hold, on both paths.
 func TestReconcile_IgnoredFileUnlikeSourceHolds(t *testing.T) {
+	t.Parallel()
 	testkit.Slow(t, "builds real git repositories and runs git against them")
 	f := newFixture(t)
 	f.idle()
@@ -67,6 +69,7 @@ func TestReconcile_IgnoredFileUnlikeSourceHolds(t *testing.T) {
 // path that is a symlink back into the worktree reaches the very file being
 // judged, and removing the worktree would delete the only copy.
 func TestReconcile_SourceSymlinkIntoWorktreeIsNotACopy(t *testing.T) {
+	t.Parallel()
 	testkit.Slow(t, "builds real git repositories and runs git against them")
 	f := newFixture(t)
 	f.idle()
@@ -123,6 +126,7 @@ func TestCopyInSource_RefusesPathsThatLeaveTheSource(t *testing.T) {
 // marker) is rebuilt by that tool: forge's runtime config.js. The never-list
 // still wins, and the marker counts only on the first line.
 func TestReconcile_GeneratedIgnoredFile(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("builds 3 git fixtures; TestGeneratedMarker covers the rule under -short")
 	}
@@ -152,6 +156,7 @@ func TestReconcile_GeneratedIgnoredFile(t *testing.T) {
 // count toward it, or enough of them would hide a real data file behind the
 // cap and let the worktree go.
 func TestReconcile_CopiesDoNotFillTheDataCap(t *testing.T) {
+	t.Parallel()
 	testkit.Slow(t, "builds real git repositories and runs git against them")
 	f := newFixture(t)
 	f.idle()
@@ -177,6 +182,7 @@ func TestReconcile_CopiesDoNotFillTheDataCap(t *testing.T) {
 // venv's bin/python3 -> /usr/bin/python3.12 was reported as a file outside
 // every checkout, which holds the workspace for good. The target survives.
 func TestReconcile_SymlinkOutOfCheckoutIsInsideIt(t *testing.T) {
+	t.Parallel()
 	heavyUnderShort(t, "~36 git processes")
 	f := newFixture(t)
 	f.idle()

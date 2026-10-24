@@ -135,6 +135,7 @@ func applied(t *testing.T, cred httpaction.Credential, rawURL string) string {
 // THE property: the token used is the RUN OWNER's — read from the run record —
 // and nothing else. Alice's run gets Alice's token; Bob's run gets Bob's.
 func TestResolvesOnlyForTheRunOwner(t *testing.T) {
+	t.Parallel()
 	e := newEnv(t)
 	src := e.source(APIHost)
 
@@ -154,6 +155,7 @@ func TestResolvesOnlyForTheRunOwner(t *testing.T) {
 // really someone's user id resolves as no connection and is refused, and the
 // delegated path reads the owner from the run.
 func TestRequestCannotNameAnotherUser(t *testing.T) {
+	t.Parallel()
 	e := newEnv(t)
 	req := githubReq(t, e.newRun("idp|alice"))
 	req.ConnectionID = "idp|bob"
@@ -170,6 +172,7 @@ func TestRequestCannotNameAnotherUser(t *testing.T) {
 
 // A run that does not exist, or has no owner, resolves for no one.
 func TestUnknownRunResolvesForNoOne(t *testing.T) {
+	t.Parallel()
 	e := newEnv(t)
 	_, err := e.source(APIHost).Credential(context.Background(), githubReq(t, uuid.NewString()))
 	var ce *httpaction.CredentialError
@@ -180,6 +183,7 @@ func TestUnknownRunResolvesForNoOne(t *testing.T) {
 
 // A token must never leave the server.
 func TestDaemonPlacedCallIsRefused(t *testing.T) {
+	t.Parallel()
 	e := newEnv(t)
 	req := githubReq(t, e.newRun("idp|alice"))
 	req.ServerPlaced = false
@@ -191,6 +195,7 @@ func TestDaemonPlacedCallIsRefused(t *testing.T) {
 }
 
 func TestOwnerWithoutGitHub_IsNotConnected(t *testing.T) {
+	t.Parallel()
 	e := newEnv(t)
 	_, err := e.source(APIHost).Credential(context.Background(), githubReq(t, e.newRun("idp|carol")))
 	var ce *httpaction.CredentialError
@@ -200,6 +205,7 @@ func TestOwnerWithoutGitHub_IsNotConnected(t *testing.T) {
 }
 
 func TestControlPlaneErrorsMapToCredentialCodes(t *testing.T) {
+	t.Parallel()
 	cases := map[string]struct {
 		err  error
 		want string
@@ -209,6 +215,7 @@ func TestControlPlaneErrorsMapToCredentialCodes(t *testing.T) {
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			e := newEnv(t)
 			e.cp.err = tc.err
 			_, err := e.source(APIHost).Credential(context.Background(), githubReq(t, e.newRun("idp|alice")))
@@ -224,6 +231,7 @@ func TestControlPlaneErrorsMapToCredentialCodes(t *testing.T) {
 // only when the owner has no saved connection. Self-hosted (no broker
 // registered) `github` is a saved connection or nothing.
 func TestBrokerOnlyForItsIntegrationAndSelfHostedFallsThrough(t *testing.T) {
+	t.Parallel()
 	e := newEnv(t)
 	run := e.newRun("idp|alice")
 
@@ -248,6 +256,7 @@ func TestBrokerOnlyForItsIntegrationAndSelfHostedFallsThrough(t *testing.T) {
 // A saved GitHub connection (a pasted token, or reliant's own OAuth app) wins
 // over the delegated authority: an explicit choice the owner made.
 func TestSavedConnectionWinsOverDelegated(t *testing.T) {
+	t.Parallel()
 	e := newEnv(t)
 	conn, err := e.svc.CreateAPIKey(context.Background(), connections.CreateAPIKeyParams{
 		UserID: "idp|alice", IntegrationID: "github", Name: "pat", Kind: connections.APIKeyKindAPIKey,
@@ -264,6 +273,7 @@ func TestSavedConnectionWinsOverDelegated(t *testing.T) {
 // An explicit connection id that does not resolve is an error, never a
 // silent switch to the owner's delegated token.
 func TestExplicitMissingConnectionIsNotRedirectedToBroker(t *testing.T) {
+	t.Parallel()
 	e := newEnv(t)
 	req := githubReq(t, e.newRun("idp|alice"))
 	req.ConnectionID = "conn_nope"
@@ -274,6 +284,7 @@ func TestExplicitMissingConnectionIsNotRedirectedToBroker(t *testing.T) {
 
 // The credential is pinned: it is applied only to https://api.github.com.
 func TestCredentialIsPinnedToAPIGitHubCom(t *testing.T) {
+	t.Parallel()
 	e := newEnv(t)
 	cred, err := e.source(APIHost).Credential(context.Background(), githubReq(t, e.newRun("idp|alice")))
 	require.NoError(t, err)
@@ -297,6 +308,7 @@ func TestCredentialIsPinnedToAPIGitHubCom(t *testing.T) {
 // bearer, never a second host, and is scrubbed from everything the call
 // returns — including a hostile upstream that echoes it back.
 func TestEndToEnd_BearerAppliedPinnedAndScrubbed(t *testing.T) {
+	t.Parallel()
 	e := newEnv(t)
 	var seen string
 	srv := netguardtest.NewTLSServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -326,6 +338,7 @@ func TestEndToEnd_BearerAppliedPinnedAndScrubbed(t *testing.T) {
 // The credential refuses a manifest that points somewhere other than the
 // pinned host, even though the runtime would allow that host.
 func TestEndToEnd_ManifestPointingElsewhereGetsNoToken(t *testing.T) {
+	t.Parallel()
 	e := newEnv(t)
 	var seen string
 	srv := netguardtest.NewTLSServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

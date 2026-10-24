@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -488,7 +489,13 @@ func TestKilledDaemonsRunningCallIsAnsweredAsInterrupted(t *testing.T) {
 
 	require.Eventually(t, func() bool { return first.results.state("req-long") == toolexec.ToolRequestRunning },
 		20*time.Second, 5*time.Millisecond)
-	require.Equal(t, []string{"req-long.running"}, outboxFiles(t, filepath.Join(killedDir, outboxDirName)))
+	// The call is running in memory as soon as the receive loop takes it; its
+	// marker is written by the goroutine that executes it, just before the
+	// tool runs (persistRunning: the receive loop never waits on a disk). So
+	// the marker follows the state, and is what the restart below needs.
+	require.Eventually(t, func() bool {
+		return slices.Equal([]string{"req-long.running"}, outboxFiles(t, filepath.Join(killedDir, outboxDirName)))
+	}, 20*time.Second, 5*time.Millisecond, "the running call's marker is on disk: %v", outboxFiles(t, filepath.Join(killedDir, outboxDirName)))
 
 	survivor := t.TempDir()
 	copyDir(t, filepath.Join(killedDir, outboxDirName), filepath.Join(survivor, outboxDirName))

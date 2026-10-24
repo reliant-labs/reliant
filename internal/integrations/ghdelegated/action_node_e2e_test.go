@@ -38,6 +38,7 @@ import (
 // the request reaches the GitHub fake as that owner's bearer token. The
 // result, with the token scrubbed, reaches the workflow outputs.
 func TestHostedGitHubActionNodeEndToEnd(t *testing.T) {
+	t.Parallel()
 	e := newEnv(t)
 	runID := e.newRun("idp|alice")
 
