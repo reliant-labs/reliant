@@ -140,17 +140,17 @@ func TestMintForUser_SendsTheGrantAndDecodes(t *testing.T) {
 		if res["kind"] != "daemon" || res["id"] != "d-1" {
 			t.Fatalf("resource %v", body["resource"])
 		}
-		return 200, `{"tokenId":"tok-9","secret":"` + liveToken + `","displayPrefix":"rlat_A1b2A1b2","rotated":true}`
+		return 200, `{"tokenId":"tok-9","secret":"` + liveToken + `","displayPrefix":"rlat_A1b2A1b2","rotated":true,"scopes":["daemon:connect"]}`
 	})
 	defer srv.Close()
 	m, err := New(Deps{BaseURL: srv.URL, Sign: sign}).MintForUser(context.Background(), MintRequest{
-		UserID: "u-1", Name: "laptop", Scopes: []fat.Scope{fat.ScopeDaemonConnect},
+		UserID: "u-1", Name: "laptop", Scopes: []fat.Scope{fat.ScopeDaemonConnect, fat.ScopeDeployWrite},
 		Resource: &fat.Resource{Kind: fat.ResourceDaemon, ID: "d-1"}, Rotate: true,
 	})
 	if err != nil {
 		t.Fatalf("MintForUser: %v", err)
 	}
-	if m.TokenID != "tok-9" || m.Plaintext != liveToken || !m.Rotated {
+	if m.TokenID != "tok-9" || m.Plaintext != liveToken || !m.Rotated || strings.Join(m.Scopes, ",") != "daemon:connect" {
 		t.Fatalf("minted %+v", m)
 	}
 }
