@@ -269,8 +269,7 @@ func stringOrEmpty(s *string) string {
 // a looping agent cannot flood the issues.
 //
 // It is per process. With N worker replicas, a defect reported in a loop is
-// filed at most N times per window, and the issue grouping folds those into
-// the one issue regardless.
+// filed at most N times per window; each filed report is its own issue.
 type bugReportLimiter struct {
 	mu      sync.Mutex
 	window  time.Duration

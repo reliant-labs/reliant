@@ -21,9 +21,11 @@ import (
 //
 // The record is an issue event, not an error. It is written at WARN, so it never
 // counts toward an error rate, an error alert or a release-health gate, and it
-// carries issue.source=llm_bug_report: the control plane's issues worker groups
-// every record of that source into issues — one per error.group, the report's
-// fingerprint — and `forge obs issues --source llm_bug_report` lists them.
+// carries issue.source=llm_bug_report: the control plane's issues worker makes
+// each record of that source an issue — one per report, like a GitHub issue,
+// because error.group is the report's own id — and `forge obs issues --source
+// llm_bug_report` lists them. Deduplicating reports is a person's call, made
+// while triaging them.
 //
 // The report's text was written by the model FOR engineering, as a defect
 // report, and is the whole point of the record, so it is kept — redacted of
@@ -120,7 +122,7 @@ func BugReportMessage(product, title string) string {
 func bugReportAttrs(ctx context.Context, id string, report BugReport) []slog.Attr {
 	attrs := []slog.Attr{
 		slog.String(AttrIssueSource, BugReportSource),
-		observe.ErrorGroup(ctx, BugReportGroup(report.Product, report.Title)),
+		observe.ErrorGroup(ctx, BugReportGroup(id)),
 		slog.String(AttrBugReportID, id),
 	}
 	for _, field := range []struct{ key, value string }{
@@ -152,20 +154,21 @@ func bugReportAttrs(ctx context.Context, id string, report BugReport) []slog.Att
 	return attrs
 }
 
-// BugReportFingerprint is the grouping key of a report: the source, the
-// product and the normalized title. Two agents describing one defect in
-// different case or punctuation, or naming a different chat while doing it,
-// land in one issue rather than two. The title is redacted first, so a
-// credential pasted into one can never become part of the key.
+// BugReportFingerprint names the defect a report describes: the source, the
+// product and the normalized title. Two reports from one chat describing one
+// defect in different case or punctuation share it, which is how report_bug
+// answers a looping agent's repeat with the first report. It does NOT group
+// issues: every report is its own (BugReportGroup). The title is redacted
+// first, so a credential pasted into one can never become part of the key.
 func BugReportFingerprint(product, title string) []string {
 	return []string{BugReportSource, product, normalizeBugTitle(redactSecrets(title))}
 }
 
-// BugReportGroup is the fingerprint as the record's error.group:
-// "llm_bug_report/<product>/<normalized title>". The normalized title holds
-// only letters and spaces, so the separator is unambiguous.
-func BugReportGroup(product, title string) string {
-	return strings.Join(BugReportFingerprint(product, title), "/")
+// BugReportGroup is a report's error.group, "llm_bug_report/<report id>": the
+// key the issues worker groups by (sfp1 hashes error.group when a record has
+// one), so each report is exactly one issue.
+func BugReportGroup(reportID string) string {
+	return BugReportSource + "/" + reportID
 }
 
 // normalizeBugTitle lowercases title and keeps its words, dropping every word

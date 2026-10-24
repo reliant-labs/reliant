@@ -12052,6 +12052,7 @@ reliant project
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--daemon-session` | `bool` | - | Use this server's existing signed-in daemon account without widening its permissions |
 | `--gateway` | `string` | `https://gateway.reliantapi.com` | Daemon gateway URL (a non-default server derives its own gateway unless this is set) [env: RELIANT_GATEWAY_URL] |
 | `--server` | `string` | `https://api.reliantapi.com` | Reliant API server URL [env: RELIANT_SERVER_URL] |
 
@@ -12251,6 +12252,7 @@ reliant trigger
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--daemon-session` | `bool` | - | Use this server's existing signed-in daemon account without widening its permissions |
 | `--gateway` | `string` | `https://gateway.reliantapi.com` | Daemon gateway URL (a non-default server derives its own gateway unless this is set) [env: RELIANT_GATEWAY_URL] |
 | `--server` | `string` | `https://api.reliantapi.com` | Reliant API server URL [env: RELIANT_SERVER_URL] |
 

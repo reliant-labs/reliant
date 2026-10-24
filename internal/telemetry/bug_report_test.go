@@ -73,8 +73,7 @@ func TestFileBugReport_WritesOneGroupedIssueEvent(t *testing.T) {
 		"a report is an issue event, never an ERROR: it must not count as an error or fail a release gate")
 	assert.Equal(t, "[reliant] User message delivered to the model as [content trimmed]", record["msg"])
 	assert.Equal(t, BugReportSource, record[AttrIssueSource], "the issues worker groups records by issue source")
-	assert.Equal(t, "llm_bug_report/reliant/user message delivered to the model as content trimmed", record["error.group"],
-		"repeats of one defect group into one issue")
+	assert.Equal(t, "llm_bug_report/"+id, record["error.group"], "a report is grouped by its own id")
 
 	for key, want := range map[string]string{
 		AttrBugReportProduct:  "reliant",
@@ -113,10 +112,15 @@ func TestFileBugReport_OmitsUnsetIdentifiers(t *testing.T) {
 	}
 }
 
-func TestFileBugReport_EveryReportHasItsOwnID(t *testing.T) {
-	first, _ := fileToJSON(t, sampleBugReport())
-	second, _ := fileToJSON(t, sampleBugReport())
+// Every report is its own issue, even one identical to another: deduplicating
+// is the person triaging them's call.
+func TestFileBugReport_EveryReportIsItsOwnIssue(t *testing.T) {
+	first, a := fileToJSON(t, sampleBugReport())
+	second, b := fileToJSON(t, sampleBugReport())
 	assert.NotEqual(t, first, second)
+	assert.NotEqual(t, a["error.group"], b["error.group"], "two identical reports must not group into one issue")
+	assert.Equal(t, "llm_bug_report/"+first, a["error.group"])
+	assert.Equal(t, "llm_bug_report/"+second, b["error.group"])
 }
 
 func TestFileBugReport_RedactsCredentialsAndBoundsText(t *testing.T) {

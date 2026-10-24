@@ -308,8 +308,8 @@ func TestReportBug_RepeatInTheSameChatReturnsTheFirstReport(t *testing.T) {
 	assert.Equal(t, first.ReportID, again.ReportID)
 	assert.Contains(t, resp.Content, first.ReportID)
 
-	// Another chat hitting the same defect is a second sighting worth sending:
-	// the issue grouping folds it into the first by fingerprint.
+	// Another chat hitting the same defect is a second report worth filing:
+	// its own issue, for the person triaging to deduplicate.
 	h.call(t, reportBugContext("chat-2"), validBugReportInput("Message truncated in chat 5ffd6bb4"))
 	assert.Len(t, h.capture.filed(), 2)
 
