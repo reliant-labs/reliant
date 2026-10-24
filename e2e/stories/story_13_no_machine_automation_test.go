@@ -69,8 +69,13 @@ func TestStory13_NoMachineAutomationFiresEndToEnd(t *testing.T) {
 
 	// The production executor with no daemon transport at all: server- and
 	// any-placed tools run in-process, and nothing can reach a daemon.
+	//
+	// The "status page" is an httptest server on loopback, which a server
+	// role refuses to dial by default (netguard.ForDeployment(false)); the
+	// story's server is a self-hosted one that opts in, as
+	// ServerProcessConfig.network.allow_private_egress does.
 	executor := toolexec.NewRemoteExecutor(nil)
-	server := toolexec.NewLocalToolExecutor(tools.NewToolsFactory(&tools.ToolsOptions{}))
+	server := toolexec.NewLocalToolExecutor(tools.NewToolsFactory(&tools.ToolsOptions{AllowPrivateEgress: true}))
 	executor.SetServerExecutor(server)
 
 	// Counts every bind, so the story sees that a no-machine run never asked
