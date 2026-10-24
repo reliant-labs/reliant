@@ -228,6 +228,25 @@ describe("traces and panels", () => {
     expect(req.panel).toMatchObject({ id: "p", ratio: true, groupBy: ["service.name"], series: [{ agg: "count", where: [{ field: "span.status", op: "eq", value: "error", values: [] }] }, { label: "requests" }] });
     expect(result.series[0]).toMatchObject({ label: "ratio", group: { "service.name": "api" }, timestamps: [window.startMs / 1000], values: [0.02] });
     expect(result.rows[0]).toEqual({ group: { "span.name": "a/B" }, values: [12] });
+    expect(result.columns).toEqual(["requests"]);
+  });
+
+  it("preserves SQL numeric column metadata separately from string group attributes", async () => {
+    client.queryPanel.mockResolvedValue({
+      panelId: "event-mix", kind: "sql", unit: "", stepSeconds: 0, truncated: true,
+      columns: ["events", "users"],
+      rows: [{ group: { event: "page_visited", clients: "electron,web" }, values: [120, Number.NaN] }],
+      series: [], funnelSteps: [], issues: [], sessions: [],
+    });
+    const result = await queryPanel({
+      ...env, window, services: [], stepSeconds: 0,
+      panel: { id: "event-mix", title: "Event mix", kind: "sql", signal: "traces", series: [], sql: "SELECT EventName AS event, count() AS events, uniqExact(UserId) AS users, arrayStringConcat(groupUniqArray(Client), ',') AS clients FROM product_events GROUP BY EventName" },
+    });
+    expect(result).toMatchObject({
+      kind: "sql", truncated: true, columns: ["events", "users"], series: [],
+      rows: [{ group: { event: "page_visited", clients: "electron,web" }, values: [120, null] }],
+    });
+    expect(client.queryPanel.mock.calls[0][0].panel).toMatchObject({ kind: "sql", series: [], groupBy: [], sql: expect.stringContaining("AS clients") });
   });
 
   it("sends a funnel's steps and a sessions panel's has-error, and maps the browser kinds back (C7)", async () => {

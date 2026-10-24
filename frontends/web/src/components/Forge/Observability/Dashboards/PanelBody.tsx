@@ -12,6 +12,7 @@
  *   number    the headline figure (one per series × group), with the change
  *             against the comparison when one is on.
  *   table     one row per group, one column per series.
+ *   sql       response-shaped: time series, rows, or ungrouped aggregate figures.
  *   search    a list of rows, which is what Logs and Traces do: a way in.
  *   funnel    product events in order: how many journeys reached each step,
  *             of the first, and of the previous (C7, windowFunnel).
@@ -120,19 +121,32 @@ export function PanelBody({ panel, query, compare, groupBy, bands, links, height
     );
   }
   const unit = unitOf(panel, data);
-  const keys = groupBy?.length ? groupBy : (panel.groupBy ?? []);
-  const truncated =
-    data.truncated && !compact ? <p className="mt-2 text-xs text-ink-muted">Only the largest {TRUNCATED_WHAT[panel.kind] ?? "series"} are shown.</p> : null;
+  // SQL has no declared series or groupBy: Columns names the numeric values,
+  // while every non-numeric column lives in the returned groups. Include keys
+  // from ALL rows (not just the first row or the compact preview's three).
+  const keys = panel.kind === "sql"
+    ? [...new Set([...data.rows, ...data.series].flatMap((row) => Object.keys(row.group)))]
+    : groupBy?.length ? groupBy : (panel.groupBy ?? []);
+  const kind = panel.kind === "sql"
+    ? data.series.length > 0 ? "line" : sqlAggregate(data) ? "number" : "table"
+    : panel.kind;
+  const truncated = data.truncated && !compact ? (
+    <p className="mt-2 text-xs text-ink-muted">
+      {panel.kind === "sql"
+        ? `Only the first returned ${kind === "table" ? "rows" : "series or points"} are shown.`
+        : `Only the largest ${TRUNCATED_WHAT[panel.kind] ?? "series"} are shown.`}
+    </p>
+  ) : null;
 
-  switch (panel.kind) {
+  switch (kind) {
     case "number":
       return (
         <NumberFigures
           panel={panel}
-          data={data}
+          data={panel.kind === "sql" ? sqlFigures(data) : data}
           unit={unit}
           keys={keys}
-          compare={compare?.query.data}
+          compare={panel.kind === "sql" && compare?.query.data ? sqlFigures(compare.query.data) : compare?.query.data}
           compareLabel={compare?.label}
           compact={compact}
         />
@@ -180,7 +194,21 @@ export function PanelBody({ panel, query, compare, groupBy, bands, links, height
   }
 }
 
-const KNOWN_KINDS = new Set(["line", "number", "table", "search", "funnel", "issues", "sessions"]);
+const KNOWN_KINDS = new Set(["line", "number", "table", "sql", "search", "funnel", "issues", "sessions"]);
+
+/** A single numeric-only row is an aggregate; never collapse multiple rows or groups. */
+function sqlAggregate(data: PanelResult): boolean {
+  return !data.truncated && data.rows.length === 1 && data.columns.length > 0 && Object.keys(data.rows[0].group).length === 0;
+}
+
+/** NumberFigures consumes Series.value, whereas SQL aggregates arrive as table values. */
+function sqlFigures(data: PanelResult): PanelResult {
+  if (!sqlAggregate(data)) return { ...data, series: [] };
+  return {
+    ...data,
+    series: data.columns.map((label, index) => ({ label, group: {}, timestamps: [], values: [], value: data.rows[0].values[index] ?? null })),
+  };
+}
 
 const EMPTY_COPY: Record<string, string> = {
   funnel: "No journeys entered this funnel in the window",
@@ -224,7 +252,9 @@ export function unitOf(panel: Panel, result: PanelResult): Unit {
 export function seriesLabel(series: Series, panel: Panel, keys: string[] = []): string {
   const group = Object.keys(series.group).length ? groupLabel(series.group, keys.filter((k) => k in series.group)) : "";
   if (!group) return series.label;
-  if (series.label === "ratio" || panel.series.length <= 1) return group;
+  // SQL may return several numeric columns for each group without declaring
+  // panel.series. Keep their response labels, even when one is named "ratio".
+  if (panel.kind !== "sql" && (series.label === "ratio" || panel.series.length <= 1)) return group;
   return `${group} — ${series.label}`;
 }
 
@@ -411,6 +441,7 @@ function PanelTable({
   compact: boolean;
 }) {
   const columnUnit = (index: number): Unit => {
+    if (panel.kind === "sql") return unitOf(panel, result);
     const intent = panel.series[index];
     if (intent?.agg === "quantile" && intent.field === "span.duration") return "ms";
     if (intent?.agg === "count" || intent?.agg === "count_distinct") return "count";
