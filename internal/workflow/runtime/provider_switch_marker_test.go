@@ -4,14 +4,14 @@ package runtime
 import (
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/workflow"
 )
 
 func TestProviderSwitchVersionMarkersAreBoundedAfterFirstNewAnswer(t *testing.T) {
 	t.Parallel()
-	var suite testsuite.WorkflowTestSuite
+	var suite temporaltest.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 	const id = providerSwitchChangeID + "/update/1"
 	env.OnGetVersion(id, workflow.DefaultVersion, 1).Return(workflow.Version(1)).Once()

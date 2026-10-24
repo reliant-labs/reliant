@@ -652,13 +652,13 @@ func LatestSpawnRunForThread(ctx context.Context, db orm.Context, chatID, thread
 func ListStoppedSpawnRecords(ctx context.Context, db orm.Context, chatID string) ([]core.StoppedSpawnRecord, error) {
 	var records []core.StoppedSpawnRecord
 	err := db.Bun().NewRaw(`WITH RECURSIVE latest AS (
-        SELECT DISTINCT ON (w.thread) w.*
+        SELECT DISTINCT ON (w.thread) w.id, w.thread, w.parent_id, w.state, w.stop_reason, w.created_at
         FROM workflows w
         WHERE w.chat_id = ?0
           AND EXISTS (SELECT 1 FROM tool_calls tc WHERE tc.child_workflow_id = w.id AND tc.tool_name = 'spawn')
         ORDER BY w.thread, w.created_at DESC, w.id DESC
     ), failed AS (
-        SELECT l.* FROM latest l JOIN threads t ON t.id = l.thread
+        SELECT l.id, l.thread, l.parent_id FROM latest l JOIN threads t ON t.id = l.thread
         WHERE l.state = 3 AND l.stop_reason = 2 AND t.status = 4 AND t.origin = 'spawn'
     ), ancestors AS (
         SELECT f.id AS child, p.id, p.parent_id, 1 AS depth FROM failed f JOIN workflows p ON p.id = f.parent_id
