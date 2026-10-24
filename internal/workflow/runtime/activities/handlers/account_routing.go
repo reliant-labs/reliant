@@ -153,7 +153,7 @@ func routeAccount(ctx context.Context, spec llmCallSpec, avail models.AvailableD
 		return nil, nil
 	}
 	driver := models.DriverID(providerDriver)
-	if spec.ChatProvider != "" && spec.ThreadID != "" && spec.Routing.ClearOtherAssignments != nil {
+	if spec.ClearProviderPins && spec.ChatProvider != "" && spec.ThreadID != "" && spec.Routing.ClearOtherAssignments != nil {
 		if err := spec.Routing.ClearOtherAssignments(ctx, spec.UserID, spec.ThreadID, providerDriver); err != nil {
 			return nil, err
 		}

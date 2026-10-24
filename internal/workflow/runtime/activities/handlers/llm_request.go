@@ -58,9 +58,10 @@ type llmCallSpec struct {
 	// the user's tag preference model and the tier's own order.
 	RunProviders []string
 	// ChatProvider is a strict chat-wide selection, not a ranked preference.
-	ChatProvider    string
-	Descendant      bool
-	PresetModelTags []string
+	ChatProvider      string
+	ClearProviderPins bool
+	Descendant        bool
+	PresetModelTags   []string
 
 	// ThreadID is the thread the call belongs to. It is what keeps a thread on
 	// one account of its provider (prompt cache and reasoning envelopes are per

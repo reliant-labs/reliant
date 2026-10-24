@@ -57,6 +57,20 @@ type ToolGrant struct {
 	Tools    []string
 }
 
+// StoppedSpawnRecord is a failed latest spawn plus its highest prior report
+// slot, read by a single set-based query for whole-chat resume.
+type StoppedSpawnRecord struct {
+	ToolCallID        string
+	ParentThreadID    string
+	ToolInput         string
+	ChildThreadID     string
+	ChildWorkflowID   string
+	IssuingWorkflowID string
+	SpawnDepth        int
+	WorktreePath      string
+	Resumes           int
+}
+
 // SpawnRun is the latest spawn run of the sub-agent on one thread: the spawn
 // tool call that started it, joined to that run's workflow row, the thread,
 // and the thread's own worktree. db.Repo.GetStoppedSpawnAgent decides from it

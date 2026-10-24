@@ -431,6 +431,7 @@ func (s *Service) resurrectGhostWorkflow(
 	}
 	modelMoves := s.fallBackFromUnservableModels(ctx, userID, req.Msg.ChatId, chat.ProjectID, workflowName, workflowID, targetThread, initialData,
 		s.selectionStoredModelIsCurrent(ctx, req.Msg.ChatId, initialData))
+	s.launcher().RefreshSelectedProvider(ctx, userID, initialData)
 	_, _ = s.recordSelection(ctx, userID, chat, workflowName, req.Msg.WorkflowParams, initialData, modelMoves, 0)
 
 	// Step 4: Build execution context - inheriting existing thread
@@ -1228,6 +1229,7 @@ func (s *Service) SendMessage(
 	// so a composer still sending the original pin does not repeat the notice.
 	modelMoves := s.fallBackFromUnservableModels(ctx, userID, req.Msg.ChatId, chat.ProjectID, workflowName, workflowID, targetThread, initialData,
 		s.selectionStoredModelIsCurrent(ctx, req.Msg.ChatId, initialData))
+	s.launcher().RefreshSelectedProvider(ctx, userID, initialData)
 	_, _ = s.recordSelection(ctx, userID, chat, workflowName, req.Msg.WorkflowParams, initialData, modelMoves, 0)
 
 	// Inject session daemon if set on chat

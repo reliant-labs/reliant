@@ -169,6 +169,19 @@ func (l *Launcher) primaryDriver(ctx context.Context, userID string, inputs map[
 	return resolvedDriver(selector, available)
 }
 
+// RefreshSelectedProvider rebinds an already-bound launch only after send-time
+// recovery has finalized its model. It never creates a new binding, so ordinary
+// unbound chat sends retain their existing routing semantics.
+func (l *Launcher) RefreshSelectedProvider(ctx context.Context, userID string, inputs map[string]interface{}) {
+	if driver, _ := inputs[v2.InputKeyProviderSwitch].(string); driver == "" {
+		return
+	}
+	delete(inputs, v2.InputKeyProviderSwitch)
+	if selected := l.ResolvedModelAtDriver(ctx, userID, inputs["model"]); selected != "" {
+		inputs[v2.InputKeyProviderSwitch] = v2.FallbackDriver(selected)
+	}
+}
+
 // resolvedDriver is the driver a model selector value resolves to over the
 // providers available, "" when it resolves to none.
 func resolvedDriver(selector interface{}, available models.AvailableDrivers) string {

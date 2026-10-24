@@ -23,6 +23,23 @@ const (
 	inputKeyPresetModel    = "__preset_model"
 )
 
+// providerVersion stops creating marker IDs after the first new-code answer.
+// During old-history replay, DefaultVersion advances the observation index;
+// the first live event records one marker, and all later events reuse it.
+func (t *ChildWorkflowTracker) providerVersion(ctx workflow.Context, category string, observation int) bool {
+	if t.providerVersions[category] {
+		return true
+	}
+	if workflow.GetVersion(ctx, fmt.Sprintf("%s/%s/%d", providerSwitchChangeID, category, observation), workflow.DefaultVersion, 1) == workflow.DefaultVersion {
+		return false
+	}
+	if t.providerVersions == nil {
+		t.providerVersions = map[string]bool{}
+	}
+	t.providerVersions[category] = true
+	return true
+}
+
 // selectedProvider is the one provider explicitly named by the root model.
 // Multi-provider preferences and tag-only picks are not a chat-wide switch to
 // one provider. The handler supplies a resolved driver for those picks.
@@ -52,7 +69,7 @@ func (t *ChildWorkflowTracker) applyProviderSwitch(ctx workflow.Context, inputs 
 		return false
 	}
 	t.providerUpdates++
-	if workflow.GetVersion(ctx, fmt.Sprintf("%s/update/%d", providerSwitchChangeID, t.providerUpdates), workflow.DefaultVersion, 1) == workflow.DefaultVersion {
+	if !t.providerVersion(ctx, "update", t.providerUpdates) {
 		return false
 	}
 	driver := selectedProvider(update)
@@ -60,6 +77,7 @@ func (t *ChildWorkflowTracker) applyProviderSwitch(ctx workflow.Context, inputs 
 		return false
 	}
 	t.chatProvider = driver
+	t.providerPinCleanups = map[string]bool{}
 	inputs[InputKeyProviderSwitch] = driver
 	return true
 }
@@ -87,7 +105,7 @@ func presetModelTags(inputs map[string]interface{}) []string {
 // at the wake, not startup, so an old run can act on its next live user action.
 func (t *ChildWorkflowTracker) reviveDurableStopped(ctx workflow.Context, chatID string) {
 	t.durableResumes++
-	if workflow.GetVersion(ctx, fmt.Sprintf("%s/durable-resume/%d", providerSwitchChangeID, t.durableResumes), workflow.DefaultVersion, 1) == workflow.DefaultVersion {
+	if !t.providerVersion(ctx, "durable-resume", t.durableResumes) {
 		return
 	}
 	// End-of-run waits for durable lookup work just as it does for a
@@ -139,6 +157,7 @@ func (w *usageLimitWaiter) waitForProviderSwitch(ctx workflow.Context, req usage
 	_ = workflow.ExecuteActivity(markerContext(ctx), "WorkflowError", map[string]interface{}{
 		"chat_id": w.chatID, "workflow_id": w.workflowID, "workflow_name": w.workflowName,
 		"thread": req.Thread, "error_message": req.Err.Error(), "error_summary": req.Err.Error(),
+		"error_id": "provider-switch-hold/" + w.chatID + "/" + req.Thread,
 	}).Get(ctx, nil)
 	err := workflow.Await(ctx, func() bool {
 		return w.retryEpoch > epoch || w.tracker.threadWakeCount(req.Thread) > wakes ||

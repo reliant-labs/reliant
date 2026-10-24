@@ -710,6 +710,7 @@ func (s *SubAgentResumeE2ESuite) TestFreshPortionResumeAlsoResumesDurableSibling
 	input := spawnE2EWorkflowInput(chatID)
 	input.ExecContext.ThreadMode = model.ThreadModeInherit
 	requested := stoppedBefore(chatID, "requested", "tc-requested", 0)
+	e.durableStopped["requested"] = requested
 	e.durableStopped["sibling"] = stoppedBefore(chatID, "sibling", "tc-sibling", 1)
 	input.Resume = &ResumeInput{AwaitSpawnsFirst: true, ResumeStopped: []SpawnHandoff{stoppedSpawnHandoff(requested)}, ResumeAllStopped: true}
 	e.parentToolCalls[1] = func(string) []map[string]interface{} { return nil }

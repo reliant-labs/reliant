@@ -160,7 +160,7 @@ func (a *CompactActivity) Execute(ctx context.Context, input ActivityInput) (Com
 	a.emitThreadUpdate(ctx, rtx.ChatID, thread, "active", "Compact")
 
 	// Generate summary of messages to be compacted
-	summary, err := a.generateCompactionSummaryOnProvider(ctx, chat, thread, rtx.FallbackModel, rtx.Failover, currentContextMessages, summarizeWith, rtx.ChatProvider)
+	summary, err := a.generateCompactionSummaryOnProvider(ctx, chat, thread, rtx.FallbackModel, rtx.Failover, currentContextMessages, summarizeWith, rtx)
 	if err != nil {
 		return CompactOutput{}, fmt.Errorf("failed to generate compaction summary: %w", err)
 	}
@@ -390,10 +390,11 @@ var compactionModelTier = []models.ModelID{
 // request-construction path as a normal CallLLM turn (resolveLLMCall +
 // prepareHistoryForLLM), so provider constraints are handled in one place.
 func (a *CompactActivity) generateCompactionSummary(ctx context.Context, chat *db.Chat, thread, fallbackModel string, failover types.FailoverPolicy, messages []message.Message, summarizeWith *reliantv1.ModelSelector) (string, error) {
-	return a.generateCompactionSummaryOnProvider(ctx, chat, thread, fallbackModel, failover, messages, summarizeWith, "")
+	return a.generateCompactionSummaryOnProvider(ctx, chat, thread, fallbackModel, failover, messages, summarizeWith, types.RuntimeContext{})
 }
 
-func (a *CompactActivity) generateCompactionSummaryOnProvider(ctx context.Context, chat *db.Chat, thread, fallbackModel string, failover types.FailoverPolicy, messages []message.Message, summarizeWith *reliantv1.ModelSelector, provider string) (string, error) {
+func (a *CompactActivity) generateCompactionSummaryOnProvider(ctx context.Context, chat *db.Chat, thread, fallbackModel string, failover types.FailoverPolicy, messages []message.Message, summarizeWith *reliantv1.ModelSelector, rtx types.RuntimeContext) (string, error) {
+	provider := rtx.ChatProvider
 	if len(messages) == 0 {
 		return "", fmt.Errorf("no messages to summarize")
 	}
@@ -406,17 +407,19 @@ func (a *CompactActivity) generateCompactionSummaryOnProvider(ctx context.Contex
 		Temperature: &temperature,
 		// The summary is a request over this thread's own prefix, so it goes to
 		// the thread's account.
-		ThreadID:     thread,
-		ChatProvider: provider,
-		Descendant:   provider != "",
-		Routing:      a.routing,
-		Failover:     failover,
+		ThreadID:          thread,
+		ChatProvider:      provider,
+		ClearProviderPins: rtx.ClearProviderPins,
+		Descendant:        rtx.Descendant,
+		PresetModelTags:   rtx.PresetModelTags,
+		Routing:           a.routing,
+		Failover:          failover,
 	}
 
 	// Pick the summarization model. With an injected resolver (tests) the
 	// resolver supplies its own driver/model, mirroring CallLLM.
 	if a.driverResolver == nil {
-		selector, reason, err := resolveCompactionModel(ctx, chat.UserID, summarizeWith)
+		selector, reason, err := resolveCompactionModelForCall(ctx, chat.UserID, summarizeWith, spec)
 		if err != nil {
 			return "", err
 		}
@@ -490,9 +493,19 @@ func (a *CompactActivity) generateCompactionSummaryOnProvider(ctx context.Contex
 // The tier list remains the fallback for nodes that declare no model and for
 // an agent model that no longer resolves against the user's providers.
 func resolveCompactionModel(ctx context.Context, userID string, preferred *reliantv1.ModelSelector) (models.ModelSelector, string, error) {
+	return resolveCompactionModelForCall(ctx, userID, preferred, llmCallSpec{})
+}
+
+func resolveCompactionModelForCall(ctx context.Context, userID string, preferred *reliantv1.ModelSelector, spec llmCallSpec) (models.ModelSelector, string, error) {
 	availableDrivers := getAvailableDrivers(ctx, userID)
 	availableProviders := configuredProviderIDs(availableDrivers)
 	registry := models.MustGetRegistry().WithAvailability(availableDrivers.Availability)
+	if spec.ChatProvider != "" {
+		availableProviders = nil
+		if cfg, ok := availableDrivers.Drivers[models.DriverID(spec.ChatProvider)]; ok && cfg.IsConfigured() {
+			availableProviders = []string{spec.ChatProvider}
+		}
+	}
 
 	if preferred != nil && (preferred.GetId() != "" || len(preferred.GetTags()) > 0) {
 		selector := models.ModelSelector{
@@ -503,6 +516,14 @@ func resolveCompactionModel(ctx context.Context, userID string, preferred *relia
 			// preference and degrades gracefully, so this hard filter keeps it
 			// off an image-generation model.
 			RequireOutputModality: models.ModalityText,
+		}
+		if spec.ChatProvider != "" {
+			spec.Selector = selector
+			selector = switchSelector(spec)
+			if _, err := registry.Resolve(selector, availableProviders); err != nil {
+				return models.ModelSelector{}, "", providerSwitchHold(spec.ChatProvider, selector, err)
+			}
+			return selector, "agent selector on the selected chat provider", nil
 		}
 		if _, err := registry.Resolve(selector, availableProviders); err == nil {
 			return selector, "agent model (summarizes in the window that filled)", nil
@@ -517,6 +538,9 @@ func resolveCompactionModel(ctx context.Context, userID string, preferred *relia
 		if _, err := registry.Resolve(selector, availableProviders); err == nil {
 			return selector, "best available from tier list", nil
 		}
+	}
+	if spec.ChatProvider != "" {
+		return models.ModelSelector{}, "", providerSwitchHold(spec.ChatProvider, models.ModelSelector{Tags: spec.PresetModelTags}, fmt.Errorf("no compaction model is available on the selected provider"))
 	}
 	return models.ModelSelector{}, "", fmt.Errorf("no available models for compaction (user has no API keys configured)")
 }

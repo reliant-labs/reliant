@@ -4,7 +4,6 @@ package db
 import (
 	"context"
 	"fmt"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -244,26 +243,19 @@ func (r *Repo) GetStoppedSpawnAgent(ctx context.Context, chatID, threadID string
 // ListStoppedSpawnAgents lists only the latest failed spawn per thread.
 // Completed and user-cancelled agents are never resurrected by chat resume.
 func (r *Repo) ListStoppedSpawnAgents(ctx context.Context, chatID string) ([]*StoppedSpawnAgent, error) {
-	threads, err := r.ListThreadsByConversation(ctx, chatID)
+	rows, err := store.ListStoppedSpawnRecords(ctx, r.ORM(), chatID)
 	if err != nil {
 		return nil, err
 	}
-	var agents []*StoppedSpawnAgent
-	for _, thread := range threads {
-		agent, err := r.GetStoppedSpawnAgent(ctx, chatID, thread.ID)
-		if err != nil {
-			return nil, err
-		}
-		if agent != nil {
-			agents = append(agents, agent)
-		}
+	agents := make([]*StoppedSpawnAgent, 0, len(rows))
+	for _, row := range rows {
+		agents = append(agents, &StoppedSpawnAgent{
+			ToolCallID: row.ToolCallID, ParentThreadID: row.ParentThreadID, ToolInput: row.ToolInput,
+			ChildThreadID: row.ChildThreadID, ChildWorkflowID: row.ChildWorkflowID,
+			IssuingWorkflowID: row.IssuingWorkflowID, SpawnDepth: row.SpawnDepth,
+			WorktreePath: row.WorktreePath, Resumes: row.Resumes,
+		})
 	}
-	sort.Slice(agents, func(i, j int) bool {
-		if agents[i].SpawnDepth != agents[j].SpawnDepth {
-			return agents[i].SpawnDepth < agents[j].SpawnDepth
-		}
-		return agents[i].ChildThreadID < agents[j].ChildThreadID
-	})
 	return agents, nil
 }
 

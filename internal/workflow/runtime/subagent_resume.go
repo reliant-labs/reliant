@@ -237,6 +237,17 @@ func stoppedAgentsAwaitingResume(ctx workflow.Context, chatID, rootThread string
 	// A lookup still in flight adopts what it finds; the run is ending, so
 	// it does not resume it.
 	_ = workflow.Await(ctx, func() bool { return !tracker.stoppedLookupsInFlight() })
+	if tracker.providerVersion(ctx, "late-stopped-candidates", 1) {
+		// A whole-chat lookup may have discovered sibling wakes during the
+		// await. Rebuild, rather than lose them when this run is ending.
+		candidates = nil
+		for thread := range tracker.threadWakes {
+			if thread != rootThread && tracker.wakeSinceLastTurn(thread) && tracker.liveSpawnFor(thread) == nil {
+				candidates = append(candidates, thread)
+			}
+		}
+		sort.Strings(candidates)
+	}
 
 	var stopped []SpawnHandoff
 	for _, thread := range candidates {

@@ -238,14 +238,16 @@ func NewChatContext(chatID string) *ChatContext {
 // ChildWorkflowTracker tracks active child workflows for signal forwarding
 // and per-thread input maps for thread-scoped param queries and updates.
 type ChildWorkflowTracker struct {
-	chatProvider    string
-	rootThread      string
-	providerUpdates int
-	userResumes     int
-	durableResumes  int
-	providerWake    func(workflow.Context)
-	children        map[string]bool                   // Map of child workflow IDs that are currently active
-	threadInputs    map[string]map[string]interface{} // Map of thread -> subInputs for per-thread param access
+	chatProvider        string
+	rootThread          string
+	providerUpdates     int
+	providerVersions    map[string]bool
+	providerPinCleanups map[string]bool
+	userResumes         int
+	durableResumes      int
+	providerWake        func(workflow.Context)
+	children            map[string]bool                   // Map of child workflow IDs that are currently active
+	threadInputs        map[string]map[string]interface{} // Map of thread -> subInputs for per-thread param access
 
 	// threadOwnedKeys records, per thread, the input keys that thread set
 	// EXPLICITLY for itself — from its preset or from its node args. A global
@@ -2910,7 +2912,7 @@ func setupThreadWakeHandler(ctx workflow.Context, childTracker *ChildWorkflowTra
 			if sig.FromUser {
 				childTracker.userResumes++
 			}
-			if sig.FromUser && workflow.GetVersion(gCtx, fmt.Sprintf("%s/resume-whole-chat/%d", providerSwitchChangeID, childTracker.userResumes), workflow.DefaultVersion, 1) != workflow.DefaultVersion && childTracker.providerWake != nil {
+			if sig.FromUser && childTracker.providerVersion(gCtx, "resume-whole-chat", childTracker.userResumes) && childTracker.providerWake != nil {
 				childTracker.providerWake(gCtx)
 				for _, thread := range childTracker.stoppedThreadsToWake(true) {
 					if childTracker.resumeStopped != nil {
@@ -3016,9 +3018,6 @@ func setupInputUpdateHandler(ctx workflow.Context, workflowInputs map[string]int
 							// root's value must not replace it — that is what
 							// silently demoted preset-pinned models to the
 							// root's own model mid-run.
-							if key == "model" && childTracker.chatProvider != "" && threadID != childTracker.rootThread {
-								continue // Preserve the descendant's selector, including schema defaults.
-							}
 							if childTracker.threadOwnsKey(threadID, key) {
 								logger.Debug("[Workflow Runtime] Global update skipped for thread-owned input",
 									"thread", threadID,

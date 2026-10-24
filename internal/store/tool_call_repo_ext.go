@@ -646,6 +646,41 @@ func LatestSpawnRunForThread(ctx context.Context, db orm.Context, chatID, thread
 	}, nil
 }
 
+// ListStoppedSpawnRecords reads all failed latest spawn runs, ancestry and
+// report-slot counters in one round trip. Ranking happens before status
+// filtering, so an old failure behind a completed/resumed run is not revived.
+func ListStoppedSpawnRecords(ctx context.Context, db orm.Context, chatID string) ([]core.StoppedSpawnRecord, error) {
+	var records []core.StoppedSpawnRecord
+	err := db.Bun().NewRaw(`WITH RECURSIVE latest AS (
+        SELECT DISTINCT ON (w.thread) w.*
+        FROM workflows w
+        WHERE w.chat_id = ?0
+          AND EXISTS (SELECT 1 FROM tool_calls tc WHERE tc.child_workflow_id = w.id AND tc.tool_name = 'spawn')
+        ORDER BY w.thread, w.created_at DESC, w.id DESC
+    ), failed AS (
+        SELECT l.* FROM latest l JOIN threads t ON t.id = l.thread
+        WHERE l.state = 3 AND l.stop_reason = 2 AND t.status = 4 AND t.origin = 'spawn'
+    ), ancestors AS (
+        SELECT f.id AS child, p.id, p.parent_id, 1 AS depth FROM failed f JOIN workflows p ON p.id = f.parent_id
+        UNION ALL
+        SELECT a.child, p.id, p.parent_id, a.depth + 1 FROM ancestors a JOIN workflows p ON p.id = a.parent_id WHERE a.depth < 64
+    )
+    SELECT tc.id AS tool_call_id, tc.thread_id AS parent_thread_id, tc.input::text AS tool_input,
+           f.thread AS child_thread_id, f.id AS child_workflow_id, f.parent_id AS issuing_workflow_id,
+           COALESCE((SELECT MAX(depth) FROM ancestors a WHERE a.child = f.id), 0)::int AS spawn_depth,
+           COALESCE(wt.path, '') AS worktree_path,
+           COALESCE((SELECT MAX(substring(am.tool_call_id FROM length(tc.id) + 9)::int)
+                     FROM agent_messages am WHERE am.chat_id = ?0 AND am.kind IN (2,3,4)
+                       AND starts_with(am.tool_call_id, tc.id || '#resume-')
+                       AND substring(am.tool_call_id FROM length(tc.id) + 9) ~ '^[0-9]+$'), 0)::int AS resumes
+    FROM failed f JOIN threads t ON t.id = f.thread
+    JOIN LATERAL (SELECT tc.id,tc.thread_id,tc.input FROM tool_calls tc WHERE tc.child_workflow_id=f.id AND tc.tool_name='spawn' ORDER BY tc.requested_at DESC LIMIT 1) tc ON true
+    LEFT JOIN worktrees wt ON wt.id=t.worktree_id AND wt.deleted_at IS NULL
+    WHERE tc.thread_id IS NOT NULL
+    ORDER BY spawn_depth, f.thread`, chatID).Scan(ctx, &records)
+	return records, err
+}
+
 // SpawnResumeReportIDs is the report slots a spawn's resumed runs have
 // written in chatID: the terminal mailbox reports whose id starts with
 // slotPrefix (<tool_call_id>#resume-, see runtime.SpawnHandoff.ReportID). The
