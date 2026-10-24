@@ -85,6 +85,7 @@ Run an integration action (for example an HTTP request)
 | `uses` | string | No | - | Which integration action to run, as integration/action@major |
 | `with` | map | No | - | Action parameters, keyed as in the action's schema. Values may be literals or {{ }} templates |
 | `connection` | string | No | - | Id of the saved connection to authenticate with. Leave it empty to use your default connection |
+| `hosted_use` | string | No | - | Hosted HTTP use-grant reference for this fixed action |
 
 ### Outputs
 
