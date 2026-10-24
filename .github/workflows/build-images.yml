@@ -108,6 +108,7 @@ jobs:
             STAMP_VERSION="$(bash scripts/release-identity.sh --commit "$GITHUB_SHA")"
           fi
           echo "version=$STAMP_VERSION" >> "$GITHUB_OUTPUT"
+          echo "commit_time=$(bash scripts/release-identity.sh --commit-time --commit "$GITHUB_SHA")" >> "$GITHUB_OUTPUT"
           echo "date=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"
           echo "Stamping version=$STAMP_VERSION"
 
@@ -146,6 +147,7 @@ jobs:
             COMMIT=${{ github.sha }}
             BUILD_DATE=${{ steps.stamp.outputs.date }}
             BRANCH=${{ github.ref_name }}
+            COMMIT_TIME=${{ steps.stamp.outputs.commit_time }}
           cache-from: type=gha,scope=reliant
           cache-to: type=gha,scope=reliant,mode=max
 

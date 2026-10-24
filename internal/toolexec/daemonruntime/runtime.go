@@ -1016,6 +1016,7 @@ func (d *daemonClient) runSession(ctx context.Context) error {
 			MovesOnDrain: true,
 		}},
 	}
+	stampBuildIdentity(register.GetRegister())
 	if err := sendRegistration(stream, register); err != nil {
 		close(sessionOver)
 		return fmt.Errorf("sending daemon registration to %s: %w", baseURL, err)

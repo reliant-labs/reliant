@@ -63,4 +63,23 @@ func TestShippedBuildsStampTheReleaseIdentity(t *testing.T) {
 	if strings.Contains(read(".github/workflows/build-images.yml"), "0.0.0-dev-") {
 		t.Error("build-images.yml invents a 0.0.0-dev-<sha> stamp again; use scripts/release-identity.sh")
 	}
+
+	// The build number daemons report on registration (DaemonRegister.
+	// commit_time_unix) rides the same stamp. A path that stamps Version but not
+	// CommitTime ships a daemon the platform cannot order.
+	for _, rel := range []string{
+		"Dockerfile",
+		"Taskfile.yml",
+		"scripts/build-electron.sh",
+		".github/workflows/release.yml",
+		".github/workflows/build-images.yml",
+	} {
+		body := read(rel)
+		if !strings.Contains(body, "CommitTime") && !strings.Contains(body, "COMMIT_TIME") {
+			t.Errorf("%s does not stamp internal/version.CommitTime; derive it with scripts/release-identity.sh --commit-time", rel)
+		}
+		if !strings.Contains(body, "commit-time") && rel != "Dockerfile" {
+			t.Errorf("%s does not derive the build number from scripts/release-identity.sh --commit-time", rel)
+		}
+	}
 }

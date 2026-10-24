@@ -234,6 +234,21 @@ message DaemonRegister {
   // a daemon without it is ended at once, so it redials straight away rather
   // than sitting unreachable until the drain deadline.
   bool moves_on_drain = 12;
+  // The build this daemon runs, so the platform can tell which daemons are
+  // behind. All four are empty/zero from a daemon that predates them or a build
+  // that was not stamped, and a server must treat that as "unknown build", not
+  // as an error. Nothing here is trusted for authorisation.
+  //
+  // version is scripts/release-identity.sh's output (display only; semver
+  // cannot order two builds between the same pair of tags).
+  string version = 13;
+  // commit is the git sha the binary was built from.
+  string commit = 14;
+  // commit_time_unix is the committer time of `commit`, in unix seconds: the
+  // key that orders builds. 0 means unordered (a dirty or unstamped build).
+  int64 commit_time_unix = 15;
+  // forge_version is the forge module version linked into the binary.
+  string forge_version = 16;
 }
 
 // ToolResponse contains the result of tool execution. The daemon keeps it until

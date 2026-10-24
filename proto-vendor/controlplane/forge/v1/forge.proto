@@ -566,6 +566,51 @@ message ConfigFieldOptions {
   // EnvSuffix is the fixed tail of an env_prefix family's variable names
   // ("_CLIENT_ID"); empty when the KEY runs to the end of the name.
   string env_suffix = 13;
+
+  // RequiredWhen makes the field required in a MODE of the config: when any
+  // listed condition holds, the runtime config document must carry a
+  // non-empty value for this field. The field's default does not satisfy
+  // it — the condition names a mode the default is wrong for (a managed
+  // deployment, where the default is a self-hosted value), or the field
+  // would not need the condition.
+  //
+  //   string hosting = 6 [(forge.v1.config) = {
+  //     env_var: "HOSTING", allowed_values: ["cloud"]
+  //   }];
+  //   string api_url = 1 [(forge.v1.config) = {
+  //     env_var: "API_URL"
+  //     required_when: [{field: "hosting", equals: "cloud"}]
+  //   }];
+  //
+  // It is for a (forge.v1.frontend_config) message, whose values arrive in
+  // one document (config.js) that every check can see whole:
+  //   - the generated config_gen.ts refuses the document at boot
+  //     (loadConfig, and missingRequiredConfig for an app that renders its
+  //     own message), naming each missing key and the condition;
+  //   - config_schema_gen.json records it, so a project declaring the
+  //     frontend's environments from ANOTHER repository refuses a
+  //     runtime_config without the key at render, instead of shipping an
+  //     app that boots in the wrong mode;
+  //   - the frontend's typed KCL schema checks it for an in-tree frontend.
+  // `forge generate` refuses it on a binary config (the loader there layers
+  // defaults, files, env and flags, and has no single document to judge),
+  // with `required: true` (redundant), and with a condition naming a field
+  // that is not a sibling string field or a value outside its
+  // allowed_values.
+  repeated ConfigCondition required_when = 14;
+}
+
+// ConfigCondition is a predicate over another field of the same config
+// message, by its runtime value (see ConfigFieldOptions.required_when).
+message ConfigCondition {
+  // Field is the PROTO name of a sibling string field ("hosting"), not its
+  // env_var: the condition is part of the message, and a rename of the
+  // field's env spelling must not silently detach it.
+  string field = 1;
+
+  // Equals is the value that field must hold for the condition to be true.
+  // When the field declares allowed_values it must be one of them.
+  string equals = 2;
 }
 
 // EnvVarAlias is one fallback environment variable of a config field. See
