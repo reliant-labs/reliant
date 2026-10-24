@@ -2,7 +2,10 @@
 package daemonruntime
 
 import (
+	"context"
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -10,6 +13,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/netguard"
+	"github.com/reliant-labs/reliant/internal/rctx"
 )
 
 func fetchAllows(host Host, ip string) error {
@@ -72,4 +76,44 @@ func TestDaemonToolsFactoryAdvertisesFetch(t *testing.T) {
 	assert.Contains(t, factory.ListAvailableToolsForPlacement(tools.PlacementDaemon), tools.ToolFetch,
 		"a prefer-daemon tool must be advertised in the daemon's capabilities")
 	assert.NotNil(t, factory.GetToolByName(tools.ToolFetch, nil))
+}
+
+// The daemon's other web tools and its local model endpoints may reach the
+// user's own network (a daemon-wide egress setting), but fetch does not
+// inherit it: it has its own policy. Built through the daemon's real factory,
+// fetch refuses loopback and cloud metadata, and names its own setting.
+func TestDaemonFetchDoesNotInheritTheDaemonWideEgressPolicy(t *testing.T) {
+	local := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		_, _ = w.Write([]byte("private service"))
+	}))
+	defer local.Close()
+
+	run := func(host Host, url string) tools.ToolResponse {
+		t.Helper()
+		resp, err := newDaemonToolsFactory(host).GetToolByName(tools.ToolFetch, nil).Run(
+			&rctx.ToolContext{Context: context.Background()},
+			tools.ToolCall{ID: "c", Name: tools.ToolFetch, Input: `{"url":"` + url + `","format":"text"}`})
+		require.NoError(t, err)
+		return resp
+	}
+
+	for _, host := range []Host{{}, {DaemonType: daemonTypeSelfHosted}, {DaemonType: daemonTypeManaged}} {
+		resp := run(host, local.URL)
+		assert.True(t, resp.IsError, "%+v", host)
+		assert.NotContains(t, resp.Content, "private service", "%+v", host)
+
+		for _, url := range []string{"http://169.254.169.254/latest/meta-data/", "http://[fd00:ec2::254]/", "http://metadata.google.internal/"} {
+			resp := run(Host{AllowPrivateFetch: true}, url)
+			assert.True(t, resp.IsError, url)
+			assert.NotContains(t, resp.Content, FetchAllowPrivateSetting, "no setting unblocks %s", url)
+		}
+	}
+
+	resp := run(Host{}, local.URL)
+	assert.Contains(t, resp.Content, FetchAllowPrivateSetting, "the refusal names the opt-in")
+
+	resp = run(Host{AllowPrivateFetch: true}, local.URL)
+	assert.False(t, resp.IsError, resp.Content)
+	assert.Contains(t, resp.Content, "private service")
 }
