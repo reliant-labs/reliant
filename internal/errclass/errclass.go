@@ -7,7 +7,7 @@
 // svcerr.WithClass, or a typed error with an ErrorClass method is a user error;
 // a cancellation is canceled; everything else is a server fault. A user error
 // is the system working correctly — the user's machine is offline, their
-// provider subscription is spent — so it logs at INFO and never reaches Sentry.
+// provider subscription is spent — so it logs at INFO and never becomes an issue.
 //
 // What svcerr cannot see is Temporal. An activity error crosses a
 // serialization boundary on its way to the workflow, and every Go type and
@@ -37,7 +37,7 @@ func Classify(err error) svcerr.Class {
 }
 
 // IsServerError reports whether err is a server fault: the only class that is
-// worth an ERROR line and a Sentry event. nil is not.
+// worth an ERROR line, and so an issue. nil is not.
 func IsServerError(err error) bool { return Classify(err) == svcerr.ClassServer }
 
 // Library is the part of Classify svcerr cannot derive — the Temporal

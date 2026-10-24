@@ -36,19 +36,14 @@ func (d *countingSummaryDriver) resolver() drivers.DriverResolver {
 	}
 }
 
-// capturedSkips records what compactionSkipNotices would send to Sentry.
+// capturedSkips records what compactionSkipNotices would report.
 type capturedSkips struct {
-	errs  []error
-	tags  []map[string]string
-	extra []map[string]interface{}
+	skips []compactionSkip
 }
 
 func (c *capturedSkips) notices() *compactionSkipNotices {
-	return &compactionSkipNotices{capture: func(err error, tags map[string]string, extra map[string]interface{}) string {
-		c.errs = append(c.errs, err)
-		c.tags = append(c.tags, tags)
-		c.extra = append(c.extra, extra)
-		return "event"
+	return &compactionSkipNotices{notify: func(skip compactionSkip) {
+		c.skips = append(c.skips, skip)
 	}}
 }
 
@@ -110,10 +105,9 @@ func TestCompact_SkipsCompactionThatCannotShrinkTheContext(t *testing.T) {
 	require.NoError(t, err)
 	assert.Zero(t, seq, "no new context window may be opened")
 
-	require.Len(t, captured.errs, 1, "the stuck window is reported once, not once per turn")
-	assert.ErrorIs(t, captured.errs[0], errCompactionCannotReclaim)
-	assert.Equal(t, 246_838, captured.extra[0]["window_floor_tokens"])
-	assert.Equal(t, "gpt-5.6-terra", captured.tags[0]["model"])
+	require.Len(t, captured.skips, 1, "the stuck window is reported once, not once per turn")
+	assert.Equal(t, 246_838, captured.skips[0].Reclaim.Floor)
+	assert.Equal(t, "gpt-5.6-terra", captured.skips[0].Model)
 }
 
 // A compaction the user asked for (the internal "compact" workflow behind
@@ -142,7 +136,7 @@ func TestCompact_ForceCompactsEvenWhenItCannotShrinkTheContext(t *testing.T) {
 
 	assert.Empty(t, out.GetSkippedReason())
 	assert.EqualValues(t, 1, driver.calls.Load())
-	assert.Empty(t, captured.errs)
+	assert.Empty(t, captured.skips)
 }
 
 // The guard must not stand in the way of a thread whose history is what fills
@@ -175,7 +169,7 @@ func TestCompact_CompactsWhenHistoryIsReclaimable(t *testing.T) {
 	seq, err := h.Repo().GetMaxSequenceForThread(ctx, thread)
 	require.NoError(t, err)
 	assert.Equal(t, 1, seq, "compaction opens the next context window")
-	assert.Empty(t, captured.errs)
+	assert.Empty(t, captured.skips)
 }
 
 func TestCompactionSkipNotices_ReportOncePerWindow(t *testing.T) {
@@ -189,7 +183,7 @@ func TestCompactionSkipNotices_ReportOncePerWindow(t *testing.T) {
 	assert.False(t, notices.report(compactionSkip{Thread: "a", ContextSequence: 1, Reclaim: reclaim}), "same window")
 	assert.True(t, notices.report(compactionSkip{Thread: "a", ContextSequence: 2, Reclaim: reclaim}), "a later window that is just as stuck")
 	assert.True(t, notices.report(compactionSkip{Thread: "b", ContextSequence: 1, Reclaim: reclaim}), "another thread")
-	assert.Len(t, captured.errs, 3)
+	assert.Len(t, captured.skips, 3)
 }
 
 func TestNewCompactionSkip_NamesTheWindowAndModel(t *testing.T) {

@@ -49,7 +49,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/natsutil"
 	"github.com/reliant-labs/reliant/internal/streaming"
-	"github.com/reliant-labs/reliant/internal/telemetry"
 	"github.com/reliant-labs/reliant/internal/temporal"
 	"github.com/reliant-labs/reliant/internal/temporal/claimcheck"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
@@ -374,18 +373,15 @@ type ProcessRuntime struct {
 // ProcessRuntimeDeps is what that state reads. Settings orders it after the
 // config-only globals (drivers.Configure before the key provider).
 type ProcessRuntimeDeps struct {
-	Settings      *ProcessSettings
-	DB            *db.Repo
-	ControlPlane  *configv1.ControlPlaneConfig
-	Network       *configv1.NetworkConfig
-	Analytics     *configv1.AnalyticsConfig
-	Sentry        *configv1.SentryConfig
-	Observability *configv1.ObservabilityConfig
+	Settings     *ProcessSettings
+	DB           *db.Repo
+	ControlPlane *configv1.ControlPlaneConfig
+	Network      *configv1.NetworkConfig
+	Analytics    *configv1.AnalyticsConfig
 }
 
 // NewProcessRuntime installs the database-backed process globals.
 func NewProcessRuntime(d ProcessRuntimeDeps) (*ProcessRuntime, error) {
-	sentry := SentrySettings(d.Sentry, d.Observability)
 	warnPrivateEgress(d.Network, slog.Default())
 	cp := ControlPlaneEndpoint(d.ControlPlane)
 	repo := d.DB
@@ -393,9 +389,6 @@ func NewProcessRuntime(d ProcessRuntimeDeps) (*ProcessRuntime, error) {
 	drivers.InitializeAPIKeyProvider(repo)
 	healer := drivers.InstallReliantKeyHealer(repo, cp.URL, cp.InternalServiceSecret)
 	analytics.Start(AnalyticsSettings(d.Analytics), repo)
-	// Sentry in prod (when SENTRY_DSN is set), a no-op in dev and test; the
-	// root policy flushes it after the last node stopped.
-	telemetry.SetReporter(telemetry.NewReporter(sentry))
 	return &ProcessRuntime{KeyHealer: healer}, nil
 }
 

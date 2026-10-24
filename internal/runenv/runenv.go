@@ -4,7 +4,7 @@
 // running in — dev, test or prod.
 //
 // It is the ONLY place that decides the tier. Auth bypass, feature flags,
-// analytics, the Sentry reporter and the log level all ask it, so they cannot
+// analytics and the log level all ask it, so they cannot
 // disagree about where they are running. That is not hypothetical: the logger
 // once kept its own copy that tested RELIANT_ENV for "prod", which prod never
 // sets, so its "never DEBUG in prod" guard did not fire in prod while

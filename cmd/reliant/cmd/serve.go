@@ -42,7 +42,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/observability"
 	"github.com/reliant-labs/reliant/internal/runenv"
-	"github.com/reliant-labs/reliant/internal/telemetry"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
@@ -159,12 +158,10 @@ func runRoot(ctx context.Context, deps Deps, root rootSpec) error {
 }
 
 // flushTelemetry is the root's last step, after every node has stopped: the
-// pending Sentry events (a no-op where no reporter is installed), then the
 // OTel providers. Product events need no flush: each is written to the log as
 // it happens.
 func flushTelemetry(obs *observability.Provider) func(context.Context) error {
 	return func(context.Context) error {
-		telemetry.Flush(5)
 		return obs.Shutdown()
 	}
 }

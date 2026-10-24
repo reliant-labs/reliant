@@ -136,10 +136,10 @@ func NewUserChain(deps UserChainDeps) (*UserChain, error) {
 		Trace:    interceptors.RequestScope(trace),
 		Audit:    serverkit.NoAudit,
 		Activity: activityIC,
-		// A failed RPC reaches Sentry once, as forge's "rpc failed" line
-		// through the slog bridge (internal/logging), grouped per procedure
-		// and code. The process handler trusts a record that already carries
-		// error_class, so the same classifier must run here: without it a
+		// A failed RPC is one issue event, forge's "rpc failed" ERROR line,
+		// grouped per procedure (sfp1). The process handler trusts a record
+		// that already carries error_class, so the same classifier must run
+		// here: without it a
 		// failure Temporal carries as Benign — nobody has to act — logged at
 		// ERROR, error_class=server, and counted as a dead-end error.
 		LogOptions: []observe.LogOption{observe.WithErrorClassifier(errclass.Library)},

@@ -44,9 +44,3 @@ func TestBindUserWithoutScopeOrIDIsSafe(t *testing.T) {
 	assert.Equal(t, ctx, BindUser(ctx, ""))
 	assert.Equal(t, "u", UserIDFromContext(BindUser(ctx, "u")))
 }
-
-func TestLogEventCarriesItsUser(t *testing.T) {
-	event := logEventToSentry(LogEvent{Message: "boom", UserID: "user-7"})
-	assert.Equal(t, "user-7", event.User.ID)
-	assert.Empty(t, logEventToSentry(LogEvent{Message: "boom"}).User.ID)
-}

@@ -16,13 +16,13 @@ import (
 // The daemon-gateway ends every daemon stream it holds with
 // Unavailable("gateway draining") at shutdown — deliberately: it is what puts
 // each daemon on its reconnect path toward a live replica. Through the shared
-// interceptor chain that was a "stream failed" record at ERROR, one Sentry
+// interceptor chain that was a "stream failed" record at ERROR, one issue
 // event per connected daemon, on every rollout (20 in prod over 7 days).
 //
 // A drain is an expected outcome, so it is logged the way a success is:
 // written, at INFO, with expected=true — and never reported.
 func TestDrainingStreamIsAnExpectedOutcomeNotAFailure(t *testing.T) {
-	recorder, lines := installProcessReporting(t)
+	lines := installProcessLogging(t)
 	draining := connect.NewError(connect.CodeUnavailable, svcerr.Draining(
 		"gateway draining: this daemon-gateway replica is shutting down; reconnect to reach a live replica"))
 	api := newFailingAPI(t, map[string]error{
@@ -39,11 +39,11 @@ func TestDrainingStreamIsAnExpectedOutcomeNotAFailure(t *testing.T) {
 		"the client still receives Unavailable: that is its reconnect signal")
 	require.NoError(t, stream.Close())
 
-	// A real fault after the drain: once its event is in, the drain's would
-	// have been too.
+	// A real fault after the drain: the only ERROR, so the only issue event.
 	api.call(t, sendMessageProcedure, "req-fault")
-	events := recorder.awaitExactly(t, 1)
-	assert.Equal(t, sendMessageProcedure, events[0].Tags["procedure"], "only the real fault reaches Sentry")
+	errs := lines.errors()
+	require.Len(t, errs, 1, "%v", errs)
+	assert.Equal(t, sendMessageProcedure, errs[0]["procedure"], "only the real fault is an ERROR")
 
 	var drained []map[string]any
 	for _, record := range lines.records(t, "stream failed") {

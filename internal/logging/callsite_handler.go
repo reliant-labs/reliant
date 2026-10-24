@@ -21,9 +21,8 @@ const (
 // This package's Error, the Temporal loggers and the like each record
 // themselves, so every logging.Error in the process would carry
 // code.function.name "logging.Error" and sfp1 would merge every one of them
-// into a single issue. The site is resolved as sentryHandler does (callerFrames:
-// outward from the PC past the logger wrappers), so a Sentry event and a
-// ClickStack issue name the same function.
+// into a single issue. The site is resolved by callerFrames (callsite.go):
+// outward from the PC past the logger wrappers.
 //
 // The attributes are the ones forge writes; forge leaves them alone when a
 // record already has them and still adds exception.type and

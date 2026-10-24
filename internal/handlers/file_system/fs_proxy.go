@@ -615,7 +615,7 @@ func (s *Service) previewInfo(ctx context.Context, userID string, target machine
 	if err := s.sendCommand(ctx, userID, target, "fs.preview_info", map[string]any{"path": resolvedPath}, &info, 30000); err != nil {
 		// Requesting preview info for a directory is a client-input condition
 		// (e.g. the UI asking for a tree folder), not a server failure. Return
-		// a typed FailedPrecondition so it stays out of ERROR logs / Sentry.
+		// a typed FailedPrecondition so it stays out of ERROR logs (and issues).
 		// The daemon-side error text is the contract
 		// here (cmd_fs.go returns "path is a directory: <path>").
 		if strings.Contains(err.Error(), "path is a directory") {

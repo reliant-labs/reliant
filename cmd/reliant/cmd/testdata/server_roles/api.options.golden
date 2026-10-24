@@ -91,14 +91,6 @@
       OTLPEnabled: true
       PrometheusEnabled: false
     }
-    Sentry: telemetry.SentryConfig {
-      DSN: "https://key@o0.ingest.sentry.io/42"
-      Environment: "surface"
-      Release: ""
-      Debug: false
-      Enabled: true
-      TracesSampleRate: 0.25
-    }
     Analytics: analytics.Settings {
       Disabled: true
     }

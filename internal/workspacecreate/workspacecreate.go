@@ -318,7 +318,7 @@ func Finish(ctx context.Context, store Store, m Machine, req Request, wt *db.Wor
 		wt.Status = int32(reliantv1.WorktreeStatus_WORKTREE_STATUS_FAILED)
 		// A create from the UI settles in the background, so the row is how
 		// the reason reaches the user. Only a reason that is theirs to fix
-		// is written: ours stays in the logs (and Sentry), and the UI says
+		// is written: ours stays in the logs (and its issue), and the UI says
 		// the create did not finish.
 		wt.FailureReason = ""
 		if svcerr.IsUserError(reason) {
@@ -392,7 +392,7 @@ func Finish(ctx context.Context, store Store, m Machine, req Request, wt *db.Wor
 			err := checkoutError(createResp, repo.Name, wt.Branch, adopting)
 			// The error VALUE, not the daemon's text: the log policy
 			// classifies it, so a user's mistake is an INFO line and never
-			// reaches Sentry.
+			// becomes an issue.
 			logging.ErrorContext(ctx, "Failed to create git worktree", "error", err,
 				"git_output", strings.TrimSpace(createResp.Error), "repo", repo.ID)
 			return repoCreateResult{}, err
@@ -554,7 +554,7 @@ type checkoutResponse struct {
 // A reason the daemon diagnosed (worktreeerr) is the caller's input — a base
 // branch that does not exist, a branch name git refuses — so it is a typed
 // client-fault kind: svcerr classifies it as a user error, it logs at INFO and
-// never reaches Sentry, the wire carries its code and this message, and the
+// never becomes an issue, the wire carries its code and this message, and the
 // message says what to change. Anything else is a server fault and keeps
 // git's output.
 func checkoutError(resp checkoutResponse, repoName, branch string, adopting bool) error {

@@ -314,8 +314,8 @@ var (
 	//                              outright (terminate, timeout), or the failure
 	//                              that ended it is the user's to act on.
 	//                              Expected; logged at INFO
-	// Every increment of the fault classes is paired with a Sentry-visible
-	// ERROR log; alert on any sustained non-zero rate of those.
+	// Every increment of the fault classes is paired with an ERROR log (an
+	// issue); alert on any sustained non-zero rate of those.
 	ReconcilerAnomaliesTotal = newCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "reliant",

@@ -2,53 +2,26 @@
 package telemetry
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"log/slog"
 	"strings"
-	"sync"
 	"testing"
-	"time"
 
-	"github.com/getsentry/sentry-go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// captureTransport records what the client would have sent. Events reach it
-// after BeforeSend, so a test reads exactly the payload Sentry would get.
-type captureTransport struct {
-	mu     sync.Mutex
-	events []*sentry.Event
-}
+const (
+	anthropicKey = "sk-ant-api03-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+	reliantToken = "rlat_0123456789abcdefghij"
 
-func (t *captureTransport) Flush(time.Duration) bool              { return true }
-func (t *captureTransport) FlushWithContext(context.Context) bool { return true }
-func (t *captureTransport) Configure(sentry.ClientOptions)        {}
-func (t *captureTransport) Close()                                {}
-func (t *captureTransport) SendEvent(event *sentry.Event) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	t.events = append(t.events, event)
-}
-
-func (t *captureTransport) only(tb testing.TB) *sentry.Event {
-	tb.Helper()
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	require.Len(tb, t.events, 1, "exactly one event should have been sent")
-	return t.events[0]
-}
-
-// newCapturingReporter is a live SentryReporter wired through the production
-// client options — BeforeSend included — onto a transport the test can read.
-func newCapturingReporter(t *testing.T) (*SentryReporter, *captureTransport) {
-	t.Helper()
-	transport := &captureTransport{}
-	opts := clientOptions(SentryConfig{Enabled: true, DSN: "https://public@example.ingest.sentry.io/1"})
-	opts.Transport = transport
-	client, err := sentry.NewClient(opts)
-	require.NoError(t, err)
-	return &SentryReporter{initialized: true, hub: sentry.NewHub(client, sentry.NewScope())}, transport
-}
+	chatID     = "3f2a8c1e-9b7d-4e2f-8a6b-1c2d3e4f5a6b"
+	toolCallID = "toolu_01AbCdEfGhIjKlMn"
+	threadID   = "thr_7c9e6679"
+	userID     = "user-8d7f"
+)
 
 func sampleBugReport() BugReport {
 	return BugReport{
@@ -77,33 +50,49 @@ func sampleBugReport() BugReport {
 	}
 }
 
-func TestCaptureBugReport_BuildsATaggedGroupedEvent(t *testing.T) {
-	reporter, transport := newCapturingReporter(t)
+// fileToJSON files report through a JSON logger and returns the one record it
+// wrote, as the collector would read it.
+func fileToJSON(t *testing.T, report BugReport) (string, map[string]any) {
+	t.Helper()
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	id := FileBugReport(context.Background(), logger, report)
+	lines := strings.Split(strings.TrimSpace(buf.String()), "\n")
+	require.Len(t, lines, 1, "one report is one record")
+	var record map[string]any
+	require.NoError(t, json.Unmarshal([]byte(lines[0]), &record))
+	return id, record
+}
 
-	eventID := reporter.CaptureBugReport(sampleBugReport())
+func TestFileBugReport_WritesOneGroupedIssueEvent(t *testing.T) {
+	id, record := fileToJSON(t, sampleBugReport())
 
-	event := transport.only(t)
-	require.NotEmpty(t, eventID, "the model is handed the event id")
-	assert.Equal(t, string(event.EventID), eventID)
-	assert.Equal(t, sentry.LevelError, event.Level, "high severity is an error")
-	assert.Equal(t, "[reliant] User message delivered to the model as [content trimmed]", event.Message)
-	assert.Equal(t,
-		[]string{"llm_bug_report", "reliant", "user message delivered to the model as content trimmed"},
-		event.Fingerprint, "repeats of one defect group into one issue")
+	require.NotEmpty(t, id, "the model is handed the report's id")
+	assert.Equal(t, id, record[AttrBugReportID])
+	assert.Equal(t, "WARN", record["level"],
+		"a report is an issue event, never an ERROR: it must not count as an error or fail a release gate")
+	assert.Equal(t, "[reliant] User message delivered to the model as [content trimmed]", record["msg"])
+	assert.Equal(t, BugReportSource, record[AttrIssueSource], "the issues worker groups records by issue source")
+	assert.Equal(t, "llm_bug_report/reliant/user message delivered to the model as content trimmed", record["error.group"],
+		"repeats of one defect group into one issue")
 
 	for key, want := range map[string]string{
-		"source":       "llm_bug_report",
-		"product":      "reliant",
-		"severity":     "high",
-		"chat_id":      chatID,
-		"thread_id":    threadID,
-		"tool_call_id": toolCallID,
-		"project_id":   "d70701a6-8aa9-4fb8-8d13-9c41b708201d",
-		"user_id":      userID,
-		"workflow":     "builtin://agent",
-		"model":        "gpt-5.6-terra",
-		"daemon_id":    "daemon-2aab1465",
-		"daemon_type":  "managed",
+		AttrBugReportProduct:  "reliant",
+		AttrBugReportSeverity: "high",
+		AttrBugReportTitle:    "User message delivered to the model as [content trimmed]",
+		AttrBugReportSummary:  "The newest user message reached the model as the literal [content trimmed].",
+		AttrBugReportExpected: "The model receives the user's message intact.",
+		AttrBugReportActual:   "The model replied that the message was truncated.",
+		AttrBugReportEvidence: "chat 5ffd6bb4: messages.token_count alternates 520k / 696k\nmodel window is 272000",
+		"chat_id":             chatID,
+		"thread_id":           threadID,
+		"tool_call_id":        toolCallID,
+		"project_id":          "d70701a6-8aa9-4fb8-8d13-9c41b708201d",
+		AttrUserID:            userID,
+		"workflow":            "builtin://agent",
+		"model":               "gpt-5.6-terra",
+		"daemon_id":           "daemon-2aab1465",
+		"daemon_type":         "managed",
 		// The machine, and the build, are what make a report actionable:
 		// without them a workspace defect cannot be tied to a pod.
 		"worktree_id":     "1ddeaaf3-ffa8-43e0-a99e-08f219670a2c",
@@ -111,39 +100,26 @@ func TestCaptureBugReport_BuildsATaggedGroupedEvent(t *testing.T) {
 		"reliant_version": "v0.9.3",
 		"forge_version":   "v0.1.28-0.20261009201500-abcdef123456",
 	} {
-		assert.Equal(t, want, event.Tags[key], "tag %s", key)
-	}
-	assert.Equal(t, userID, event.User.ID)
-
-	report := event.Contexts[bugReportContext]
-	require.NotNil(t, report, "the authored report is the point of the event and must survive BeforeSend")
-	assert.Equal(t, "User message delivered to the model as [content trimmed]", report["title"])
-	assert.Equal(t, "The newest user message reached the model as the literal [content trimmed].", report["summary"])
-	assert.Equal(t, "The model receives the user's message intact.", report["expected"])
-	assert.Equal(t, "The model replied that the message was truncated.", report["actual"])
-	assert.Equal(t, "chat 5ffd6bb4: messages.token_count alternates 520k / 696k\nmodel window is 272000", report["evidence"],
-		"evidence keeps every line: unlike an error string, it was written to be read")
-}
-
-func TestCaptureBugReport_LevelFollowsSeverity(t *testing.T) {
-	for severity, level := range map[string]sentry.Level{
-		"low":      sentry.LevelInfo,
-		"medium":   sentry.LevelWarning,
-		"high":     sentry.LevelError,
-		"critical": sentry.LevelFatal,
-	} {
-		t.Run(severity, func(t *testing.T) {
-			reporter, transport := newCapturingReporter(t)
-			report := sampleBugReport()
-			report.Severity = severity
-			reporter.CaptureBugReport(report)
-			assert.Equal(t, level, transport.only(t).Level)
-		})
+		assert.Equal(t, want, record[key], "attribute %s", key)
 	}
 }
 
-func TestCaptureBugReport_RedactsCredentialsAndBoundsText(t *testing.T) {
-	reporter, transport := newCapturingReporter(t)
+func TestFileBugReport_OmitsUnsetIdentifiers(t *testing.T) {
+	report := sampleBugReport()
+	report.Pod, report.DaemonID, report.Evidence = "", "", ""
+	_, record := fileToJSON(t, report)
+	for _, key := range []string{"pod", "daemon_id", AttrBugReportEvidence} {
+		assert.NotContains(t, record, key)
+	}
+}
+
+func TestFileBugReport_EveryReportHasItsOwnID(t *testing.T) {
+	first, _ := fileToJSON(t, sampleBugReport())
+	second, _ := fileToJSON(t, sampleBugReport())
+	assert.NotEqual(t, first, second)
+}
+
+func TestFileBugReport_RedactsCredentialsAndBoundsText(t *testing.T) {
 	report := sampleBugReport()
 	report.Title = "forge env deploy leaks " + anthropicKey
 	report.Evidence = strings.Join([]string{
@@ -156,78 +132,31 @@ func TestCaptureBugReport_RedactsCredentialsAndBoundsText(t *testing.T) {
 	// is redacted outright, which is a different rule.
 	report.Summary = strings.Repeat("the daemon lost its mount ", maxBugReportFieldRunes/10)
 
-	reporter.CaptureBugReport(report)
-
-	event := transport.only(t)
-	wire := marshalEvent(t, event)
+	var buf bytes.Buffer
+	FileBugReport(context.Background(), slog.New(slog.NewJSONHandler(&buf, nil)), report)
+	wire := buf.String()
 	for _, secret := range []string{anthropicKey, reliantToken, "hunter2pass"} {
-		assert.NotContains(t, wire, secret, "a credential in an authored report reached Sentry")
+		assert.NotContains(t, wire, secret, "a credential in an authored report left the process")
 	}
 
-	fields := event.Contexts[bugReportContext]
-	require.NotNil(t, fields)
-	evidence, _ := fields["evidence"].(string)
+	var record map[string]any
+	require.NoError(t, json.Unmarshal(buf.Bytes(), &record))
+	evidence, _ := record[AttrBugReportEvidence].(string)
 	assert.Contains(t, evidence, "error: context deadline exceeded", "the diagnostic text itself is kept")
 	assert.Contains(t, evidence, "https://api.reliantapi.com/x")
 	assert.Equal(t, 4, strings.Count(evidence, "\n")+1, "every line of evidence survives redaction")
 
-	summary, _ := fields["summary"].(string)
+	summary, _ := record[AttrBugReportSummary].(string)
 	assert.True(t, strings.HasSuffix(summary, truncatedMarker), "an overlong field is cut and says so")
 	assert.LessOrEqual(t, len([]rune(summary)), maxBugReportFieldRunes+len(truncatedMarker))
 }
 
-// The bug-report exception to the scrub policy is keyed on the event being a
-// bug report. An ordinary error event cannot smuggle free text out by naming
-// its context the same way, or by setting the report's tag keys.
-func TestScrubEvent_BugReportExceptionIsNarrow(t *testing.T) {
-	event := &sentry.Event{
-		Level:   sentry.LevelError,
-		Message: "activity failed",
-		Tags:    map[string]string{"product": "reliant", "severity": "high", "workflow": "builtin://agent"},
-		Contexts: map[string]sentry.Context{
-			bugReportContext: {"summary": userPrompt, "evidence": fileContentLine},
-		},
-	}
-
-	got := clientOptions(SentryConfig{Enabled: true}).BeforeSend(event, &sentry.EventHint{})
-	require.NotNil(t, got)
-
-	wire := marshalEvent(t, got)
-	assert.NotContains(t, wire, userPrompt)
-	assert.NotContains(t, wire, fileContentLine)
-	for _, key := range []string{"product", "severity", "workflow"} {
-		assert.NotContains(t, got.Tags, key, "bug-report tag %s is not part of the general allowlist", key)
-	}
-}
-
 func TestBugReportFingerprint_GroupsRewordingsOfOneDefect(t *testing.T) {
-	first := BugReportFingerprint("reliant", "Message truncated to [content trimmed] in chat 5ffd6bb4")
-	again := BugReportFingerprint("reliant", "  message TRUNCATED to `content trimmed` in chat d221a691!  ")
-	assert.Equal(t, first, again, "case, punctuation and ids do not split one defect into two issues")
-	assert.Equal(t, []string{"llm_bug_report", "reliant", "message truncated to content trimmed in chat"}, first)
-
-	assert.NotEqual(t, first, BugReportFingerprint("forge", "Message truncated to [content trimmed] in chat 5ffd6bb4"),
-		"the same words about another product are another issue")
-	assert.NotEqual(t, first, BugReportFingerprint("reliant", "Workspace volume detached"))
-}
-
-func TestCaptureBugReport_GlobalNoopReporterIsNotLive(t *testing.T) {
-	previous := GetReporter()
-	t.Cleanup(func() { SetReporter(previous) })
-	SetReporter(NewNoopReporter())
-
-	eventID, live := CaptureBugReport(sampleBugReport())
-	assert.False(t, live, "with Sentry off the caller must know the report went nowhere")
-	assert.Empty(t, eventID)
-}
-
-func TestCaptureBugReport_GlobalSentryReporterIsLive(t *testing.T) {
-	previous := GetReporter()
-	t.Cleanup(func() { SetReporter(previous) })
-	reporter, transport := newCapturingReporter(t)
-	SetReporter(reporter)
-
-	eventID, live := CaptureBugReport(sampleBugReport())
-	assert.True(t, live)
-	assert.Equal(t, string(transport.only(t).EventID), eventID)
+	a := BugReportFingerprint("reliant", "Workspace /home/user vanished after 3 retries (chat 5ffd6bb4)")
+	b := BugReportFingerprint("reliant", "workspace /home/user VANISHED after 7 retries, chat 9a1c0e2f")
+	assert.Equal(t, a, b, "case, punctuation and numbers must not split one defect into two issues")
+	assert.NotEqual(t, a, BugReportFingerprint("forge", "Workspace /home/user vanished after 3 retries"),
+		"the same title in another product is another defect")
+	assert.Equal(t, []string{BugReportSource, "reliant", "untitled"}, BugReportFingerprint("reliant", "1234 5678"))
+	assert.NotContains(t, strings.Join(BugReportFingerprint("forge", "leaks "+anthropicKey), " "), "sk-ant")
 }

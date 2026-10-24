@@ -50,7 +50,6 @@ type ServerProcessConfig struct {
 	StreamingDriver string               `protobuf:"bytes,6,opt,name=streaming_driver,json=streamingDriver,proto3" json:"streaming_driver,omitempty"`
 	Integrations    *IntegrationsConfig  `protobuf:"bytes,7,opt,name=integrations,proto3" json:"integrations,omitempty"`
 	Observability   *ObservabilityConfig `protobuf:"bytes,8,opt,name=observability,proto3" json:"observability,omitempty"`
-	Sentry          *SentryConfig        `protobuf:"bytes,9,opt,name=sentry,proto3" json:"sentry,omitempty"`
 	Analytics       *AnalyticsConfig     `protobuf:"bytes,10,opt,name=analytics,proto3" json:"analytics,omitempty"`
 	Llm             *LLMConfig           `protobuf:"bytes,11,opt,name=llm,proto3" json:"llm,omitempty"`
 	Preview         *PreviewConfig       `protobuf:"bytes,12,opt,name=preview,proto3" json:"preview,omitempty"`
@@ -141,13 +140,6 @@ func (x *ServerProcessConfig) GetIntegrations() *IntegrationsConfig {
 func (x *ServerProcessConfig) GetObservability() *ObservabilityConfig {
 	if x != nil {
 		return x.Observability
-	}
-	return nil
-}
-
-func (x *ServerProcessConfig) GetSentry() *SentryConfig {
-	if x != nil {
-		return x.Sentry
 	}
 	return nil
 }
@@ -430,7 +422,7 @@ var File_reliant_config_v1_server_config_proto protoreflect.FileDescriptor
 
 const file_reliant_config_v1_server_config_proto_rawDesc = "" +
 	"\n" +
-	"%reliant/config/v1/server_config.proto\x12\x11reliant.config.v1\x1a(reliant/config/v1/analytics_config.proto\x1a,reliant/config/v1/control_plane_config.proto\x1a+reliant/config/v1/integrations_config.proto\x1a\"reliant/config/v1/llm_config.proto\x1a,reliant/config/v1/observability_config.proto\x1a&reliant/config/v1/preview_config.proto\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\"\xb8\a\n" +
+	"%reliant/config/v1/server_config.proto\x12\x11reliant.config.v1\x1a(reliant/config/v1/analytics_config.proto\x1a,reliant/config/v1/control_plane_config.proto\x1a+reliant/config/v1/integrations_config.proto\x1a\"reliant/config/v1/llm_config.proto\x1a,reliant/config/v1/observability_config.proto\x1a&reliant/config/v1/preview_config.proto\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\"\x8d\a\n" +
 	"\x13ServerProcessConfig\x12J\n" +
 	"\rcontrol_plane\x18\x01 \x01(\v2%.reliant.config.v1.ControlPlaneConfigR\fcontrolPlane\x121\n" +
 	"\x04nats\x18\x02 \x01(\v2\x1d.reliant.config.v1.NatsConfigR\x04nats\x12=\n" +
@@ -441,15 +433,15 @@ const file_reliant_config_v1_server_config_proto_rawDesc = "" +
 	"\x10streaming_driver\x18\x06 \x01(\tBM\x82\xce\x18I\n" +
 	"\x10STREAMING_DRIVER\x12\x10streaming-driver\x1a\x04nats*\x17Streaming driver (nats)J\x04natsR\x0fstreamingDriver\x12I\n" +
 	"\fintegrations\x18\a \x01(\v2%.reliant.config.v1.IntegrationsConfigR\fintegrations\x12L\n" +
-	"\robservability\x18\b \x01(\v2&.reliant.config.v1.ObservabilityConfigR\robservability\x127\n" +
-	"\x06sentry\x18\t \x01(\v2\x1f.reliant.config.v1.SentryConfigR\x06sentry\x12@\n" +
+	"\robservability\x18\b \x01(\v2&.reliant.config.v1.ObservabilityConfigR\robservability\x12@\n" +
 	"\tanalytics\x18\n" +
 	" \x01(\v2\".reliant.config.v1.AnalyticsConfigR\tanalytics\x12.\n" +
 	"\x03llm\x18\v \x01(\v2\x1c.reliant.config.v1.LLMConfigR\x03llm\x12:\n" +
 	"\apreview\x18\f \x01(\v2 .reliant.config.v1.PreviewConfigR\apreview\x12:\n" +
 	"\anetwork\x18\r \x01(\v2 .reliant.config.v1.NetworkConfigR\anetwork:\x17\xca\xc1\x18\x13\n" +
 	"\areliant\x1a\b\n" +
-	"\x06server\"\x83\x02\n" +
+	"\x06serverJ\x04\b\t\x10\n" +
+	"R\x06sentry\"\x83\x02\n" +
 	"\rNetworkConfig\x12\xf1\x01\n" +
 	"\x14allow_private_egress\x18\x01 \x01(\bB\xbe\x01\x82\xce\x18\xb9\x01\n" +
 	"\x1cRELIANT_ALLOW_PRIVATE_EGRESS*\x98\x01Let user-steered server-side requests (fetch, websearch, model endpoints) reach private, loopback and link-local addresses; self-hosted deployments onlyR\x12allowPrivateEgress\"\xec\x01\n" +
@@ -498,10 +490,9 @@ var file_reliant_config_v1_server_config_proto_goTypes = []any{
 	(*ControlPlaneConfig)(nil),  // 5: reliant.config.v1.ControlPlaneConfig
 	(*IntegrationsConfig)(nil),  // 6: reliant.config.v1.IntegrationsConfig
 	(*ObservabilityConfig)(nil), // 7: reliant.config.v1.ObservabilityConfig
-	(*SentryConfig)(nil),        // 8: reliant.config.v1.SentryConfig
-	(*AnalyticsConfig)(nil),     // 9: reliant.config.v1.AnalyticsConfig
-	(*LLMConfig)(nil),           // 10: reliant.config.v1.LLMConfig
-	(*PreviewConfig)(nil),       // 11: reliant.config.v1.PreviewConfig
+	(*AnalyticsConfig)(nil),     // 8: reliant.config.v1.AnalyticsConfig
+	(*LLMConfig)(nil),           // 9: reliant.config.v1.LLMConfig
+	(*PreviewConfig)(nil),       // 10: reliant.config.v1.PreviewConfig
 }
 var file_reliant_config_v1_server_config_proto_depIdxs = []int32{
 	5,  // 0: reliant.config.v1.ServerProcessConfig.control_plane:type_name -> reliant.config.v1.ControlPlaneConfig
@@ -510,16 +501,15 @@ var file_reliant_config_v1_server_config_proto_depIdxs = []int32{
 	4,  // 3: reliant.config.v1.ServerProcessConfig.tls:type_name -> reliant.config.v1.ServerTLSConfig
 	6,  // 4: reliant.config.v1.ServerProcessConfig.integrations:type_name -> reliant.config.v1.IntegrationsConfig
 	7,  // 5: reliant.config.v1.ServerProcessConfig.observability:type_name -> reliant.config.v1.ObservabilityConfig
-	8,  // 6: reliant.config.v1.ServerProcessConfig.sentry:type_name -> reliant.config.v1.SentryConfig
-	9,  // 7: reliant.config.v1.ServerProcessConfig.analytics:type_name -> reliant.config.v1.AnalyticsConfig
-	10, // 8: reliant.config.v1.ServerProcessConfig.llm:type_name -> reliant.config.v1.LLMConfig
-	11, // 9: reliant.config.v1.ServerProcessConfig.preview:type_name -> reliant.config.v1.PreviewConfig
-	1,  // 10: reliant.config.v1.ServerProcessConfig.network:type_name -> reliant.config.v1.NetworkConfig
-	11, // [11:11] is the sub-list for method output_type
-	11, // [11:11] is the sub-list for method input_type
-	11, // [11:11] is the sub-list for extension type_name
-	11, // [11:11] is the sub-list for extension extendee
-	0,  // [0:11] is the sub-list for field type_name
+	8,  // 6: reliant.config.v1.ServerProcessConfig.analytics:type_name -> reliant.config.v1.AnalyticsConfig
+	9,  // 7: reliant.config.v1.ServerProcessConfig.llm:type_name -> reliant.config.v1.LLMConfig
+	10, // 8: reliant.config.v1.ServerProcessConfig.preview:type_name -> reliant.config.v1.PreviewConfig
+	1,  // 9: reliant.config.v1.ServerProcessConfig.network:type_name -> reliant.config.v1.NetworkConfig
+	10, // [10:10] is the sub-list for method output_type
+	10, // [10:10] is the sub-list for method input_type
+	10, // [10:10] is the sub-list for extension type_name
+	10, // [10:10] is the sub-list for extension extendee
+	0,  // [0:10] is the sub-list for field type_name
 }
 
 func init() { file_reliant_config_v1_server_config_proto_init() }
