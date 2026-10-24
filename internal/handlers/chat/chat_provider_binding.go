@@ -29,7 +29,7 @@ import (
 // siblings, even when its root has no checkpoint to resume.
 func resumeWholeChatInput(resume *v2.ResumeInput) *v2.ResumeInput {
 	if resume == nil {
-		resume = &v2.ResumeInput{}
+		resume = &v2.ResumeInput{RecoveryOnly: true}
 	}
 	resume.ResumeAllStopped = true
 	return resume

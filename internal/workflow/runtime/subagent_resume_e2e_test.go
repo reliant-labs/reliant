@@ -725,6 +725,69 @@ func (s *SubAgentResumeE2ESuite) TestFreshPortionResumeAlsoResumesDurableSibling
 	}
 }
 
+func (s *SubAgentResumeE2ESuite) TestRecoveryOnlyRunsSetupBeforeLoopAndRecoversSibling() {
+	env := s.NewTestWorkflowEnvironment()
+	e := newSubAgentResumeEnv(s.T(), env, false)
+	const chatID = "recovery-setup-loop"
+	input := spawnE2EWorkflowInput(chatID)
+	input.Resume = &ResumeInput{RecoveryOnly: true, ResumeAllStopped: true}
+	e.durableStopped["sibling"] = stoppedBefore(chatID, "sibling", "tc-sibling", 0)
+	e.parentThread = input.ExecContext.Thread
+	root := resumeTestWorkflow(s.T(), `
+name: setup-loop
+entry: [improve_prompt]
+nodes:
+  - id: improve_prompt
+    type: call_llm
+    args:
+      thinking_level: setup
+  - id: implementations
+    type: loop
+    while: false
+    inline:
+      entry: [work]
+      nodes:
+        - id: work
+          type: call_llm
+          args:
+            thinking_level: loop
+edges:
+  - from: improve_prompt
+    default: implementations
+`)
+	child := resumeTestWorkflow(s.T(), subAgentResumeYAML)
+	env.RegisterActivityWithOptions(func(_ context.Context, values map[string]string) (LoadedWorkflow, error) {
+		wf := root
+		if values["workflow_name"] == "builtin://agent" {
+			wf = child
+		}
+		raw, err := protojson.Marshal(wf)
+		return LoadedWorkflow{WorkflowJSON: raw}, err
+	}, activity.RegisterOptions{Name: "ActivityLoadWorkflow"})
+	var rootSteps []string
+	env.RegisterActivityWithOptions(func(ctx context.Context, in types.ActivityInput) (map[string]interface{}, error) {
+		if in.Runtime.Thread != input.ExecContext.Thread {
+			return e.callLLM(ctx, in)
+		}
+		e.mu.Lock()
+		rootSteps = append(rootSteps, in.Runtime.StepID)
+		e.mu.Unlock()
+		return map[string]interface{}{"message": map[string]interface{}{"text": "prepared"}, "response_text": "prepared"}, nil
+	}, activity.RegisterOptions{Name: "CallLLM"})
+	input.WorkflowName = "setup-loop"
+	env.ExecuteWorkflow(DynamicWorkflow, input)
+	s.Require().NoError(env.GetWorkflowError())
+	e.mu.Lock()
+	s.Require().GreaterOrEqual(len(rootSteps), 2)
+	s.Equal("improve_prompt", rootSteps[0], "setup must execute before the root loop")
+	for _, step := range rootSteps[1:] {
+		s.Equal("work", step, "only the loop may take additional turns to read the recovered sibling report")
+	}
+	e.mu.Unlock()
+	turns, _ := e.threadTurns("sibling")
+	s.Equal(1, turns)
+}
+
 func (s *SubAgentResumeE2ESuite) TestFreshRootMessageResumesDurableSiblings() {
 	env := s.NewTestWorkflowEnvironment()
 	e := newSubAgentResumeEnv(s.T(), env, false)

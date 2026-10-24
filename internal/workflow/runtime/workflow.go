@@ -78,8 +78,14 @@ type WorkflowInput struct {
 
 // ResumeInput carries the position checkpoint of the interrupted predecessor
 // run. A non-nil-but-empty ResumeInput still enables resume mode: the engine
-// falls back to the workflow's resume_node / single top-level loop.
+// falls back to the workflow's resume_node / single top-level loop. Only an
+// explicit RecoveryOnly input opts out of that positional behavior.
 type ResumeInput struct {
+	// RecoveryOnly restores unfinished agents without positional resumption:
+	// execute the root graph from entry, including its setup nodes. Absent in
+	// recorded inputs, so existing empty-NodeID positional resumes retain
+	// their resume_node/single-loop fallback semantics.
+	RecoveryOnly bool `json:"recovery_only,omitempty"`
 	// NodeID is the top-level node recorded in the position checkpoint.
 	// May be empty when the predecessor died before entering any node.
 	NodeID string `json:"node_id,omitempty"`
@@ -5220,7 +5226,7 @@ func notifyWorkflowCheckpoint(ctx workflow.Context, chatID, workflowID, nodeID s
 // meaningful for loop targets; 0 when the target differs from the checkpoint
 // node, since the recorded iteration belongs to the checkpoint node).
 func resolveResumeTarget(wf *reliantv1.Workflow, resume *ResumeInput, logger log.Logger) (*reliantv1.Node, int) {
-	if resume == nil {
+	if resume == nil || resume.RecoveryOnly {
 		return nil, 0
 	}
 

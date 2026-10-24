@@ -36,6 +36,27 @@
 5. Model patch and binding are persisted by one MutateChatSelection under the same expected-version check; conflict regression verifies neither partially changes.
 6. Fixture generator sends the server binding key. Previous histories frozen under 2026-10-24-explicit-provider-binding, current fixture regenerated. Explicit-binding and async-lookup version gates retain old recorded commands.
 
+## Final high blocker: recovery-only startup (2026-10-24)
+
+`resumeWholeChatInput(nil)` now creates `ResumeInput{RecoveryOnly:true}` rather
+than an empty positional resume. `resolveResumeTarget` returns graph entry only
+for that explicitly new flag. Existing recorded empty ResumeInput values still
+use resume_node/checkpoint/single-loop fallback, unchanged: the new boolean is
+absent/false in every existing history, so no recorded command changes.
+
+Regressions cover: a real DynamicWorkflow setup call before its sole root loop
+while a durable sibling recovers once; the actual embedded parallel-compete
+workflow retaining improve_prompt entry for recovery while empty positional
+resume still selects implementations; and both root-send/agent-message fresh
+launch payloads explicitly carrying RecoveryOnly. Scoped regressions passed
+three times. `make test-affected` passed; full runtime/chat/replay packages passed
+`-race -count=1`; all current and frozen replay fixtures passed; all 26 lint
+gates passed. Logs: `recovery-affected.log`, `recovery-repeat.log`,
+`recovery-race-final.log`, `recovery-chat-race-retry.log`, and
+`recovery-lint-retry.log` in the external verification directory. An unrelated
+chat greenfield probe deadline under load and a shared-cache eviction interrupted
+initial attempts; neither assertion nor production timeout was changed.
+
 ## Verification
 
 - `make test-affected`: PASS after fixing star-select and Temporal harness guards. Includes generated/docs no-op checks and affected Go lane.
