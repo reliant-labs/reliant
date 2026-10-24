@@ -18,7 +18,7 @@ import type { GitRepo } from "../../services/controlPlane/git";
 import { projectGrpc } from "../../api/project-grpc";
 import { cloudPathForRepo, repoNameFromUrl } from "../../lib/cloudProjectPath";
 import { settingsSync, SETTINGS_KEYS } from "../../services/settingsSync";
-import { Modal } from "../ui/Modal";
+import Modal from "../forge-ui/modal";
 import { Tooltip } from "../ui/Tooltip";
 
 import { ProjectPickerModal } from "./ProjectPickerModal";
@@ -777,7 +777,7 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
 
       {/* Clone a GitHub repo onto a cloud machine */}
       <Modal
-        isOpen={isCloneModalOpen}
+        open={isCloneModalOpen}
         onClose={() => setIsCloneModalOpen(false)}
         title="Clone a repository"
         size="lg"

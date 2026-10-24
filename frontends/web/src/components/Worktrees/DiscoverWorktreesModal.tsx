@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { AlertCircle, FolderGit2, Loader2, Lock, Trash2 } from "lucide-react";
-import { Modal } from "../ui/Modal";
+import { focusChatInput } from "../../hooks/useFocusManager";
+import Modal from "../forge-ui/modal";
 import Button from "@/components/forge-ui/button";
 import { CardInset } from "../forge-ui/card";
 import { useWorktreeStore } from "../../store/worktreeStore";
@@ -103,7 +104,7 @@ export function DiscoverWorktreesModal({
 
   return (
     <>
-      <Modal isOpen={isOpen} onClose={onClose} title="Worktrees made outside Reliant" size="xl">
+      <Modal open={isOpen} fallbackFocus={focusChatInput} onClose={onClose} title="Worktrees made outside Reliant" size="xl">
         <div className="space-y-4">
           {error && (
             <div
@@ -218,7 +219,7 @@ export function DiscoverWorktreesModal({
       </Modal>
 
       {pending && (
-        <Modal isOpen onClose={() => !adopting && setPending(null)} title="Adopt this worktree?" size="md">
+        <Modal open fallbackFocus={focusChatInput} onClose={() => !adopting && setPending(null)} title="Adopt this worktree?" size="md">
           <div className="space-y-3">
             <p className="text-sm text-foreground">{adoptConfirmation(pending, workspacesRoot, name.trim() || pending.name)}</p>
             {pendingBlocked && (

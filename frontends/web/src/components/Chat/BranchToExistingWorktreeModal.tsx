@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { AlertTriangle, FolderSync, FolderGit2 } from "lucide-react";
-import { Modal } from "../ui/Modal";
+import { focusChatInput } from "../../hooks/useFocusManager";
+import Modal from "../forge-ui/modal";
 import { useWorktreeStore, type Worktree } from "../../store/worktreeStore";
 import { useChatStore } from "../../store/chatStore";
 import { useBranchChat } from "../../hooks/message-queries";
@@ -110,7 +111,8 @@ export function BranchToExistingWorktreeModal({
 
   return (
     <Modal
-      isOpen={isOpen}
+      open={isOpen}
+      fallbackFocus={focusChatInput}
       onClose={onClose}
       title="Branch to Existing Workspace"
       size="md"

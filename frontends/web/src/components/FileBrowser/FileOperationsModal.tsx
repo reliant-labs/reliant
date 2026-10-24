@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { Modal } from "../ui/Modal";
-import { Input } from "../ui/Input";
+import { focusChatInput } from "../../hooks/useFocusManager";
+import Modal from "../forge-ui/modal";
+import Input from "../forge-ui/input";
 import Button from "@/components/forge-ui/button";
 import { useUpdatePreferences } from "../../hooks/settings-queries";
 
@@ -102,7 +103,7 @@ export function FileOperationsModal({
 
   if (operation === "delete") {
     return (
-      <Modal isOpen={isOpen} onClose={handleClose} title={getTitle()} size="sm">
+      <Modal open={isOpen} fallbackFocus={focusChatInput} onClose={handleClose} title={getTitle()} size="sm">
         <div className="space-y-4">
           <p className="text-sm text-muted-foreground font-mono">
             Are you sure you want to delete <strong>{fileName}</strong>?
@@ -153,7 +154,7 @@ export function FileOperationsModal({
   }
 
   return (
-    <Modal isOpen={isOpen} onClose={handleClose} title={getTitle()} size="sm">
+    <Modal open={isOpen} fallbackFocus={focusChatInput} onClose={handleClose} title={getTitle()} size="sm">
       <form onSubmit={handleSubmit} className="space-y-4">
         {currentPath && (
           <p className="text-xs text-muted-foreground font-mono">
@@ -171,7 +172,7 @@ export function FileOperationsModal({
             placeholder={getPlaceholder()}
             autoFocus
             disabled={isSubmitting}
-            className="font-mono"
+            className="forge-ui font-mono"
           />
         </div>
         <div className="flex justify-end gap-2">

@@ -70,11 +70,15 @@ export function ImagePreviewModal({
     // binding, so Escape dismisses the top-most overlay instead of pausing the
     // chat behind it.
     window.addEventListener("keydown", handleEscape, true);
+    // Restore what was there, not "unset": the preview often opens over a
+    // dialog that holds its own scroll lock, and clearing it would let the
+    // page scroll behind that dialog once the preview closes.
+    const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
 
     return () => {
       window.removeEventListener("keydown", handleEscape, true);
-      document.body.style.overflow = "unset";
+      document.body.style.overflow = previousOverflow;
     };
   }, [isOpen, handleClose]);
 

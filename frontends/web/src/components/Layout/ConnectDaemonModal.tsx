@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { ArrowLeft, Check, RefreshCw } from "lucide-react";
-import { Modal } from "../ui/Modal";
+import { focusChatInput } from "../../hooks/useFocusManager";
+import Modal from "../forge-ui/modal";
 import { ComputeStep } from "../OnboardingFlow/steps/ComputeStep";
 import { isCloudCompute } from "../OnboardingFlow/types";
 import type { LaunchPlan } from "../OnboardingFlow/types";
@@ -65,7 +66,7 @@ export function ConnectDaemonModal({ isOpen, onClose }: ConnectDaemonModalProps)
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Connect a daemon" size="xl">
+    <Modal open={isOpen} fallbackFocus={focusChatInput} onClose={onClose} title="Connect a daemon" size="xl">
       {phase === "choose" ? (
         <ComputeStep
           plan={plan}

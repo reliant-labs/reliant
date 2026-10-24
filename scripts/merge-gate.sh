@@ -185,7 +185,14 @@ if [ "$elec" = true ]; then need+=(. electron); fi
 if [ "$fgen" = true ] && [ "$hooks_only" != true ]; then need+=(tools/protoc-gen-es); fi
 for d in $(printf '%s\n' "${need[@]}" | sort -u); do
   [ -f "$d/package-lock.json" ] || continue
-  [ "$d/node_modules/.package-lock.json" -nt "$d/package-lock.json" ] && continue
+  # An install is current when npm's lockfile copy is newer than the lockfile,
+  # and, for electron, its postinstall also fetched the binary: an interrupted
+  # install leaves node_modules current but no node_modules/electron/path.txt,
+  # and every electron test then fails "Electron failed to install correctly".
+  if [ "$d/node_modules/.package-lock.json" -nt "$d/package-lock.json" ] \
+    && { [ "$d" != electron ] || [ -f "$d/node_modules/electron/path.txt" ]; }; then
+    continue
+  fi
   n=npm-$(echo "$d" | tr '/.' '-r')
   # electron's own install script fetches the Electron binary its tests load.
   scripts=--ignore-scripts; [ "$d" = electron ] && scripts=

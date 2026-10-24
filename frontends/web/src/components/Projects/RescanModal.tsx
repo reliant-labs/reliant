@@ -1,5 +1,5 @@
 import { RefreshCw, GitCommit, CheckCircle2 } from "lucide-react";
-import { Modal } from "../ui/Modal";
+import Modal from "../forge-ui/modal";
 
 interface RescanModalProps {
   isOpen: boolean;
@@ -20,7 +20,7 @@ export function RescanModal({
 }: RescanModalProps) {
   return (
     <Modal 
-      isOpen={isOpen} 
+      open={isOpen} 
       onClose={onCancel} 
       title="Project Rescan Recommended"
       size="md"

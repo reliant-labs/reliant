@@ -16,7 +16,7 @@ import { ConnectError } from "@connectrpc/connect";
 
 import { chatGrpc, MessageRole, type Chat } from "@/api/chat-grpc";
 import { loadRunContext } from "@/components/runs/loadRunContext";
-import { Modal } from "../../ui/Modal";
+import Modal from "../../forge-ui/modal";
 import Button from "@/components/forge-ui/button";
 import { getWorkflowDisplayName } from "../useWorkflowInputs";
 import { RunFormError } from "./RunFormError";
@@ -128,7 +128,7 @@ function RunWorkflowDialogBody({
   };
 
   return (
-    <Modal isOpen onClose={starting ? () => undefined : onClose} title={title} size="lg">
+    <Modal open onClose={starting ? () => undefined : onClose} title={title} size="lg">
       <form onSubmit={onSubmit} noValidate className="space-y-5" aria-label={title}>
         {formError && <RunFormError message={formError} onNavigate={onClose} />}
 

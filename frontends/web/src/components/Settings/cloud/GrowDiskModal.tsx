@@ -20,7 +20,7 @@
 import { useEffect, useId, useState } from "react";
 import { Minus, Plus } from "lucide-react";
 
-import { Modal } from "@/components/ui/Modal";
+import Modal from "@/components/forge-ui/modal";
 import { CardInset } from "@/components/forge-ui/card";
 import { type DaemonPricingLike } from "@/components/Billing/daemonUsage";
 import { cn } from "@/lib/utils";
@@ -105,7 +105,7 @@ export function GrowDiskModal({
   const step = (delta: number) => range && chosen !== null && setTarget(chosen + delta);
 
   return (
-    <Modal isOpen={open} onClose={() => !isPending && onClose()} title="Grow disk" size="md">
+    <Modal open={open} onClose={() => !isPending && onClose()} title="Grow disk" size="md">
       <div className="flex flex-col gap-4" data-testid="grow-disk-dialog">
         <p className="text-sm text-muted-foreground">
           <span className="font-semibold text-foreground">{machineName}</span>&apos;s disk is {provisionedGib === null ? "not yet measured" : `${provisionedGib} GB`}. Requested size: {whole(currentGib)}.

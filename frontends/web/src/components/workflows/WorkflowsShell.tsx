@@ -37,7 +37,7 @@
 
 import { useCallback, useEffect, useMemo, useState, type Dispatch, type ReactNode, type SetStateAction } from "react";
 import { Outlet, useLocation, useNavigate, useSearch } from "@tanstack/react-router";
-import { Activity, ArrowLeft, CalendarClock, Check, ChevronDown, Library, X } from "lucide-react";
+import { Activity, ArrowLeft, CalendarClock, ChevronDown, Library, X } from "lucide-react";
 
 import SidebarLayout from "@/components/forge-ui/sidebar_layout";
 import { useRouteProjectResolution } from "@/hooks/useRouteProjectResolution";
@@ -53,7 +53,7 @@ import {
 import { useProjectStore } from "@/store/projectStore";
 import { useTriggers } from "@/hooks/trigger-queries";
 import { automationUnits, unitsNeedingYou } from "@/lib/automationUnits";
-import { Dropdown } from "../ui/Dropdown";
+import DropdownMenu from "../forge-ui/dropdown_menu";
 import { Tooltip } from "../ui/Tooltip";
 
 const TAB_ICONS: Record<WorkflowsTab, typeof Library> = {
@@ -254,17 +254,17 @@ function ProjectSwitcher() {
   };
 
   return (
-    <Dropdown
-      isOpen={open}
+    <DropdownMenu
+      open={open}
       onOpenChange={onOpenChange}
-      variant="form"
-      contentClassName="max-h-80 w-72 overflow-y-auto border p-1"
-      trigger={
+      align="left"
+      label="Projects"
+      menuClassName="max-h-80 w-72 overflow-y-auto"
+      emptyMessage="No projects yet."
+      trigger={(props) => (
         <button
           type="button"
-          onClick={() => onOpenChange(!open)}
-          aria-haspopup="menu"
-          aria-expanded={open}
+          {...props}
           data-testid="workflows-project-switcher"
           className="inline-flex h-8 max-w-[18rem] items-center gap-2 rounded-md border border-border px-2.5 text-sm text-foreground transition-colors hover:border-muted-foreground/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
         >
@@ -272,34 +272,23 @@ function ProjectSwitcher() {
           <span className="truncate font-medium">{currentProject?.name ?? "Choose…"}</span>
           <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
         </button>
-      }
-    >
-      <div role="menu" aria-label="Projects">
-        {projects.length === 0 ? (
-          <p className="px-3 py-2 text-sm text-muted-foreground">No projects yet.</p>
-        ) : (
-          projects.map((project) => {
+      )}
+      groups={[
+        {
+          selection: "single",
+          items: projects.map((project) => {
             const active = project.id === currentProject?.id;
-            return (
-              <button
-                key={project.id}
-                type="button"
-                role="menuitemradio"
-                aria-checked={active}
-                onClick={() => {
-                  setOpen(false);
-                  if (!active) void selectProject(project);
-                }}
-                className="flex w-full items-center gap-2 rounded-md px-2.5 py-1.5 text-left text-sm text-foreground transition-colors hover:bg-muted/70 focus:bg-muted/70 focus:outline-none"
-              >
-                <Check className={cn("h-3.5 w-3.5 shrink-0", !active && "invisible")} aria-hidden="true" />
-                <span className="truncate">{project.name}</span>
-              </button>
-            );
-          })
-        )}
-      </div>
-    </Dropdown>
+            return {
+              label: project.name,
+              checked: active,
+              onClick: () => {
+                if (!active) void selectProject(project);
+              },
+            };
+          }),
+        },
+      ]}
+    />
   );
 }
 

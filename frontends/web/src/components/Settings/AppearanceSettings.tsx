@@ -5,7 +5,7 @@ import { ColorSchemeSelector } from "./ColorSchemeSelector";
 import { useEditorStore } from "../../store/editorStore";
 import { useUIStore } from "../../store/uiStore";
 import { settingsSync, SETTINGS_KEYS, type SettingKey } from "../../services/settingsSync";
-import { Toggle } from "../ui/Toggle";
+import ToggleSwitch from "../forge-ui/toggle_switch";
 import { ToolCallSettingsCompact } from "./ToolCallSettings";
 import { getSpawnDisplayMode, setSpawnDisplayMode as saveSpawnDisplayMode, type SpawnDisplayMode } from "./SpawnDisplaySettings";
 
@@ -72,7 +72,7 @@ function SettingToggle({
         <label className="text-sm font-medium">{label}</label>
         <p className="text-xs text-muted-foreground mt-0.5">{description}</p>
       </div>
-      <Toggle checked={checked} onChange={onChange} label={label} />
+      <ToggleSwitch checked={checked} onChange={onChange} ariaLabel={label} size="lg" className="forge-ui" />
     </div>
   );
 }

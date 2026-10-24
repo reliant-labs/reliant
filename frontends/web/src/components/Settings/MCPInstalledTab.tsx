@@ -1,8 +1,8 @@
 import { Search } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { type MCPServer, type RecommendedServer, ConfigScope } from "../../api/mcp-grpc";
+import Input from "../forge-ui/input";
 import Button from "@/components/forge-ui/button";
-import { Input } from "../ui/Input";
 import { MCPServerListItem } from "./MCPServerListItem";
 import { MCPTabs } from "./MCPTabs";
 import { getMcpIconUrl } from "./mcpAvatar";
@@ -138,13 +138,20 @@ export function MCPInstalledTab({
 
   return (
     <div className="space-y-4">
-      <Input
-        value={query}
-        onChange={(event) => setQuery(event.target.value)}
-        placeholder="Search installed servers"
-        leftIcon={<Search className="h-4 w-4" />}
-        aria-label="Search installed MCP servers"
-      />
+      <div className="forge-ui relative">
+        <Search
+          className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted"
+          aria-hidden="true"
+        />
+        <Input
+          type="search"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder="Search installed servers"
+          aria-label="Search installed MCP servers"
+          className="pl-10"
+        />
+      </div>
 
       <MCPTabs
         tabs={tabItems}

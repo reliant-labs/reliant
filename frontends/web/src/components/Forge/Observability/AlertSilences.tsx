@@ -14,8 +14,8 @@ import { useId, useState } from "react";
 import { BellOff, Plus, Trash2 } from "lucide-react";
 
 import Card from "@/components/forge-ui/card";
+import Modal from "@/components/forge-ui/modal";
 import Button from "@/components/forge-ui/button";
-import { Modal } from "@/components/ui/Modal";
 import { useAlertingMutation, useSilences } from "@/hooks/observability-queries";
 import type { CreateSilenceInput, Matcher, Silence } from "@/services/controlPlane/observability/alertingTypes";
 import { alertingErrorKind, obsErrorMessage } from "@/services/controlPlane/observability/errors";
@@ -222,7 +222,7 @@ export function SilenceDialog({
   };
 
   return (
-    <Modal isOpen onClose={onClose} title={title} size="lg">
+    <Modal open onClose={onClose} title={title} size="lg">
       <div className="space-y-4" data-testid="obs-silence-dialog">
         <p className="text-xs text-muted-foreground">
           Matching alerts keep being evaluated and recorded; they stop notifying until the silence ends. It applies to this organization

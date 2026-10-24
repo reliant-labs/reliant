@@ -78,16 +78,21 @@ function Field({ label, htmlFor, problem, hint, children, className }: { label: 
 
 /**
  * Opened from the panel menu or from inside the panel drawer. In the drawer the
- * dialog must sit above it (the drawer is z-60, Modal z-50), and Escape must
+ * dialog must sit above it (the drawer is z-60, Modal z-50), so the Modal
+ * renders in place (`portal={false}`) inside this z-70 layer. Escape must
  * close only the dialog: the drawer's own Escape handler would otherwise close
- * it too and throw away the draft being edited.
+ * it too and throw away the draft being edited. So this layer takes the key —
+ * it closes the dialog and marks the event handled, which the drawer's
+ * handler (useEscapeLayer) and the Modal's both honour.
  */
 export function AlertFromPanelDialog(props: AlertFromPanelDialogProps) {
   return (
     <div
       className="relative z-[70]"
       onKeyDown={(event) => {
-        if (event.key === "Escape") event.nativeEvent.preventDefault();
+        if (event.key !== "Escape") return;
+        event.nativeEvent.preventDefault();
+        props.onClose();
       }}
     >
       <AlertFromPanelBody {...props} />
@@ -124,6 +129,7 @@ function AlertFromPanelBody({ panel, dashboardTitle, environments, env, services
     return (
       <Modal
         open
+        portal={false}
         onClose={onClose}
         size="lg"
         title={title}
@@ -164,6 +170,7 @@ function AlertFromPanelBody({ panel, dashboardTitle, environments, env, services
   return (
     <Modal
       open
+      portal={false}
       onClose={onClose}
       size="xl"
       title={title}

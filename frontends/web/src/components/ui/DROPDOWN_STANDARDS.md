@@ -102,7 +102,11 @@ No special handling needed in dropdown components.
 
 ## Reusable Component
 
-Use `web/src/components/ui/Dropdown.tsx` for new dropdowns with consistent behavior out of the box.
+Don't hand-roll a new one. A menu of commands or choices is forge's
+`components/forge-ui/dropdown_menu.tsx` (a WAI-ARIA menu button: roles, arrow
+keys, Escape and focus back on the trigger, radio/checkbox items); any other
+panel anchored to a trigger is `components/forge-ui/popover.tsx`. Both portal
+to `<body>` so a scrolling ancestor never clips them.
 
 ## Testing Checklist
 

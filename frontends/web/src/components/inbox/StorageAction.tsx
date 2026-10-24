@@ -26,8 +26,8 @@ import { useCleanupStorage } from "@/hooks/inbox-queries";
 import { formatBytes } from "@/lib/formatBytes";
 import { pressuredVolume } from "@/lib/machineDisk";
 import { FreeDiskSpaceDialog } from "../MachineDisk/FreeDiskSpaceDialog";
+import Modal from "../forge-ui/modal";
 import Button from "@/components/forge-ui/button";
-import { Modal } from "../ui/Modal";
 import { CardInset } from "../forge-ui/card";
 
 const REASON_LABEL: Record<string, string> = {
@@ -174,7 +174,7 @@ function CleanupWorkspacesAction({ storage, label }: { storage: InboxStorage; la
       >
         {cleaning > 0 ? "Cleaning up…" : "Clean up"}
       </Button>
-      <Modal isOpen={open} onClose={() => !cleanup.isPending && setOpen(false)} title={`Clean up ${label}`} size="md">
+      <Modal open={open} onClose={() => !cleanup.isPending && setOpen(false)} title={`Clean up ${label}`} size="md">
         <div className="flex flex-col gap-4">
           <p className="text-pretty text-sm text-muted-foreground">
             Removing these archived workspaces frees about{" "}

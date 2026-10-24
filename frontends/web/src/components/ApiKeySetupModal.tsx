@@ -6,7 +6,7 @@ import {
   CheckCircle2,
   XCircle,
 } from "lucide-react";
-import { Modal } from "./ui/Modal";
+import Modal from "./forge-ui/modal";
 import { api } from "../api/client";
 import { useApiKeySetupStore } from "../store/apiKeySetupStore";
 import { cn } from "../lib/utils";
@@ -385,7 +385,7 @@ export function ApiKeySetupModal({ isOpen, onClose }: ApiKeySetupModalProps = {}
 
   return (
     <Modal
-      isOpen={showModal}
+      open={showModal}
       onClose={() => handleDismiss(false)}
       title="Add an API key"
       size="lg"

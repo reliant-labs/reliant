@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { Modal } from "../ui/Modal";
+import { focusChatInput } from "../../hooks/useFocusManager";
+import Modal from "../forge-ui/modal";
 import Button from "@/components/forge-ui/button";
 import type { Worktree } from "../../store/worktreeStore";
 import { usePreferences } from "../../hooks/settings-queries";
@@ -43,7 +44,7 @@ export function DeleteWorktreeModal({
 
   if (worktree.is_main) {
     return (
-      <Modal isOpen={isOpen} onClose={onClose} title="The main checkout can't be archived" size="sm">
+      <Modal open={isOpen} fallbackFocus={focusChatInput} onClose={onClose} title="The main checkout can't be archived" size="sm">
         <div className="flex flex-col gap-4">
           <p className="text-pretty text-sm text-muted-foreground">
             <span className="font-mono text-foreground">{worktree.name}</span> is your project's own
@@ -83,7 +84,8 @@ export function DeleteWorktreeModal({
 
   return (
     <Modal
-      isOpen={isOpen}
+      open={isOpen}
+      fallbackFocus={focusChatInput}
       onClose={onClose}
       title={isArchived ? "Delete workspace permanently?" : "Archive workspace?"}
       size="sm"

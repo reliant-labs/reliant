@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
-import { Modal } from '../ui/Modal'
+import Modal from '../forge-ui/modal'
 import Button from '@/components/forge-ui/button';
 import { LightweightCodeViewer } from '../Chat/LightweightCodeViewer'
 import { Pencil, Eye, Copy, Check, AlertTriangle } from 'lucide-react'
@@ -97,7 +97,7 @@ export function YamlEditorModal({
 
   return (
     <Modal
-      isOpen={isOpen}
+      open={isOpen}
       onClose={onClose}
       title="Workflow YAML"
       size="xl"

@@ -6,7 +6,7 @@
  */
 
 import { useState, useEffect } from "react";
-import { Toggle } from "../ui/Toggle";
+import ToggleSwitch from "../forge-ui/toggle_switch";
 import {
   Eye,
   FileEdit,
@@ -190,10 +190,12 @@ function ToolCategoryToggle({
         <span className="text-xs text-muted-foreground">
           {collapsed ? "Collapsed" : "Expanded"}
         </span>
-        <Toggle
+        <ToggleSwitch
           checked={!collapsed}
           onChange={(checked) => onChange(!checked)}
-          label={`${label} default state`}
+          ariaLabel={`${label} default state`}
+          size="lg"
+          className="forge-ui"
         />
       </div>
     </div>

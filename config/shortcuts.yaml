@@ -641,7 +641,14 @@ shortcuts:
   # about the modals ModernApp happens to own, so every other modal — the shared
   # ui/Modal, the image preview, the prompt picker — fell through to "pause the
   # chat". Detecting the modal from the DOM covers all of them at once, and the
-  # `data-modal-open` marker that powers it already existed.
+  # `data-modal-open` marker that powers it already existed; a dialog that
+  # sets `aria-modal="true"` (forge-ui/modal) is detected the same way.
+  #
+  # `passthrough`: the shortcut only has to SHADOW stopStreaming. Claiming the
+  # key outright (stopImmediatePropagation at document capture) killed every
+  # dialog's own Escape listener, so in the workspace a dialog ModernApp does
+  # not own never closed on Escape. Passing it on lets the dialog close itself;
+  # onDismissModal still closes the ones ModernApp holds.
   - id: dismissModal
     name: Close Modal
     description: Close the open dialog or overlay
@@ -649,6 +656,7 @@ shortcuts:
     binding: Escape
     context: modal
     allow_in_input: true
+    passthrough: true
     handler: onDismissModal
 
   # Escape must close the slash menu rather than stopping the AI response.

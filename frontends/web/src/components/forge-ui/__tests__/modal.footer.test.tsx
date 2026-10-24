@@ -3,12 +3,12 @@
 import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
 
-import { Modal } from "../Modal";
+import Modal from "../modal";
 
 describe("Modal footer and sheet", () => {
   it("pins the footer outside the scrolling body and marks large dialogs as sheets on a phone", () => {
     render(
-      <Modal isOpen onClose={() => undefined} title="Set up PR review" size="lg" footer={<button type="button">Turn on</button>}>
+      <Modal open onClose={() => undefined} title="Set up PR review" size="lg" footer={<button type="button">Turn on</button>}>
         <p>Body</p>
       </Modal>,
     );
@@ -20,7 +20,7 @@ describe("Modal footer and sheet", () => {
 
   it("keeps small dialogs floating", () => {
     render(
-      <Modal isOpen onClose={() => undefined} title="Confirm" size="sm">
+      <Modal open onClose={() => undefined} title="Confirm" size="sm">
         <p>Body</p>
       </Modal>,
     );

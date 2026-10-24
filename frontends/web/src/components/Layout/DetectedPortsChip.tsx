@@ -15,7 +15,7 @@ import {
   PortAccessMode,
 } from "../../services/controlPlane/environments";
 import { useGlobalUpdatesStore } from "../../store/globalUpdatesStore";
-import { Dropdown } from "../ui/Dropdown";
+import Popover from "../forge-ui/popover";
 
 /**
  * DetectedPortsChip — a small header affordance next to DaemonStatusDot that
@@ -106,25 +106,31 @@ export function DetectedPortsChip() {
 
   return (
     <div style={{ WebkitAppRegion: "no-drag" } as CSSProperties}>
-      <Dropdown
-        tooltip={
-          ports.length === 1
-            ? `Port ${ports[0]} detected — open preview`
-            : `${ports.length} ports detected — open preview`
-        }
+      <Popover
         align="right"
-        trigger={
-          <button
-            type="button"
-            aria-label={ports.length === 1 ? `Port ${ports[0]} detected` : `${ports.length} ports detected`}
-            className="header-icon-btn relative flex h-7 items-center gap-1 rounded px-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
+        label="Detected ports"
+        trigger={(props) => (
+          <Tooltip
+            content={
+              ports.length === 1
+                ? `Port ${ports[0]} detected — open preview`
+                : `${ports.length} ports detected — open preview`
+            }
+            placement="top"
           >
-            <Globe className="h-4 w-4 text-primary" aria-hidden="true" />
-            <span className="font-mono">
-              {ports.length === 1 ? ports[0] : ports.length}
-            </span>
-          </button>
-        }
+            <button
+              type="button"
+              {...props}
+              aria-label={ports.length === 1 ? `Port ${ports[0]} detected` : `${ports.length} ports detected`}
+              className="header-icon-btn relative flex h-7 items-center gap-1 rounded px-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
+            >
+              <Globe className="h-4 w-4 text-primary" aria-hidden="true" />
+              <span className="font-mono">
+                {ports.length === 1 ? ports[0] : ports.length}
+              </span>
+            </button>
+          </Tooltip>
+        )}
       >
         <div className="min-w-[16rem] py-1">
           {canManageAccess && (
@@ -233,7 +239,7 @@ export function DetectedPortsChip() {
             );
           })}
         </div>
-      </Dropdown>
+      </Popover>
     </div>
   );
 }
