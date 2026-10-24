@@ -30,7 +30,17 @@ function getWorktreeName(): string {
 //    count (25 tests hit "timed out in 5000ms" at load 97 on 16 cores) a timeout
 //    says the host is busy, not that the code regressed. Scales 1x..6x with the
 //    1-minute load per core.
-// VITEST_MAX_WORKERS / VITEST_TIMEOUT_MS override both (CI, debugging a hang).
+//  - waits: Testing Library's findBy*/waitFor give up after a fixed 1s
+//    (asyncUtilTimeout), whatever the host is doing. That is the same idle-box
+//    assumption, one level down: on a loaded host, rendering a fixture-backed
+//    view (an Observability table, a dialog fed by five mocked queries) is
+//    honest CPU work that takes longer than 1s, and the test failed while
+//    the element was on its way. A wait gets half its test's budget: a first
+//    wait that spent all of it would time the test out anyway, and the other
+//    half is the test's remaining steps. Only a wait that would otherwise
+//    have FAILED is affected — one whose element arrives returns at once.
+// VITEST_MAX_WORKERS / VITEST_TIMEOUT_MS / VITEST_ASYNC_UTIL_TIMEOUT_MS
+// override them (CI, debugging a hang).
 function intEnv(name: string): number | undefined {
   const n = Number.parseInt(process.env[name] ?? "", 10);
   return Number.isFinite(n) && n > 0 ? n : undefined;
@@ -39,6 +49,7 @@ const cores = os.availableParallelism();
 const maxWorkers = intEnv("VITEST_MAX_WORKERS") ?? Math.max(2, Math.min(8, cores));
 const loadFactor = Math.min(6, Math.max(1, Math.ceil(os.loadavg()[0] / cores)));
 const testTimeout = intEnv("VITEST_TIMEOUT_MS") ?? 5_000 * loadFactor;
+const asyncUtilTimeout = intEnv("VITEST_ASYNC_UTIL_TIMEOUT_MS") ?? Math.round(testTimeout / 2);
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -233,6 +244,8 @@ export default defineConfig({
     maxWorkers,
     testTimeout,
     hookTimeout: Math.max(10_000, testTimeout * 2),
+    // Read by src/test/setup.ts, which configures Testing Library with it.
+    env: { RELIANT_ASYNC_UTIL_TIMEOUT_MS: String(asyncUtilTimeout) },
     setupFiles: "./src/test/setup.ts",
     exclude: [
       "**/node_modules/**",

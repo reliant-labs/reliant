@@ -1,4 +1,5 @@
 import '@testing-library/jest-dom'
+import { configure } from '@testing-library/react'
 import { afterEach, beforeEach, vi } from 'vitest'
 import { resetConfigForTests } from '@/lib/config_gen'
 
@@ -14,6 +15,12 @@ beforeEach(() => {
   window.__FORGE_CONFIG__ = {}
   resetConfigForTests()
 })
+
+// findBy*/waitFor budget, scaled with host load like the test timeout (see
+// "Vitest sizing" in vite.config.ts). The fixed 1s default failed tests on a
+// loaded host while the element they waited for was still rendering.
+const asyncUtilTimeout = Number(import.meta.env.RELIANT_ASYNC_UTIL_TIMEOUT_MS)
+if (asyncUtilTimeout > 0) configure({ asyncUtilTimeout })
 
 // Web Storage polyfill.
 //
