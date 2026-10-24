@@ -75,6 +75,9 @@ func propagateProviderPreference(parent, child map[string]interface{}) {
 	if child == nil {
 		return
 	}
+	if driver, _ := parent[InputKeyProviderSwitch].(string); driver != "" {
+		child[InputKeyProviderSwitch] = driver
+	}
 	if own := registryProviders(stringList(child[InputKeyProviderPreference])); len(own) > 0 {
 		child[InputKeyProviderPreference] = own
 	} else if preferred := ProviderPreference(parent); len(preferred) > 0 {

@@ -945,13 +945,14 @@ func (g *Graph) newWorktree() (*worktree.Service, error) {
 // newChat constructs the chat handler (internal/handlers/chat).
 func (g *Graph) newChat() (*chat.Service, error) {
 	return chat.New(chat.Deps{
-		Logger:    g.Log,
-		Config:    g.Cfg,
-		Repo:      g.Database(),
-		Temporal:  g.TemporalClient().Client,
-		Pause:     g.PauseService(),
-		TaskQueue: v2workflow.SharedTaskQueue,
-		Router:    g.APIDaemonRouter().NATSDaemonRouter,
+		Logger:      g.Log,
+		Config:      g.Cfg,
+		Repo:        g.Database(),
+		Temporal:    g.TemporalClient().Client,
+		Pause:       g.PauseService(),
+		TaskQueue:   v2workflow.SharedTaskQueue,
+		Router:      g.APIDaemonRouter().NATSDaemonRouter,
+		LocalModels: local.NewRepoDirectory(g.Database()),
 	})
 }
 

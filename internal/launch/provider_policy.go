@@ -9,6 +9,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/chatselection"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
+	"github.com/reliant-labs/reliant/internal/llm/drivers/local"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/logging"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
@@ -89,6 +90,14 @@ func (l *Launcher) injectProviderPolicy(ctx context.Context, userID, chatID stri
 			logging.WarnContext(ctx, "Could not read the chat's provider policy; using the default", "chatID", chatID, "error", err)
 		} else if sel != nil {
 			chat = sel.Policy
+			// The provider an explicit switch bound the chat to reaches every
+			// run built for it, so a fresh execution (and the descendants it
+			// rebuilds) stays on it. Only the binding is injected: a stored
+			// model pick on its own binds nothing (a chat that never switched
+			// keeps its tag preferences, failover and local presets).
+			if sel.ChatProvider != "" {
+				inputs[v2.InputKeyProviderSwitch] = sel.ChatProvider
+			}
 		}
 	}
 	var defaults ProviderPolicyDefaults
@@ -162,6 +171,19 @@ func (l *Launcher) primaryDriver(ctx context.Context, userID string, inputs map[
 	return resolvedDriver(selector, available)
 }
 
+// RefreshSelectedProvider preserves an explicit binding during ordinary send
+// recovery. Only a root-picker action may switch or clear it.
+func (l *Launcher) RefreshSelectedProvider(ctx context.Context, userID string, inputs map[string]interface{}) (before, after string) {
+	before, _ = inputs[v2.InputKeyProviderSwitch].(string)
+	if before == "" {
+		delete(inputs, v2.InputKeyProviderSwitch)
+		return "", ""
+	}
+	// Recovery is not a picker action. In particular neither a local model
+	// in an ordinary send nor an unavailable provider may clear this binding.
+	return before, before
+}
+
 // resolvedDriver is the driver a model selector value resolves to over the
 // providers available, "" when it resolves to none.
 func resolvedDriver(selector interface{}, available models.AvailableDrivers) string {
@@ -191,20 +213,63 @@ func (l *Launcher) ResolvedModelAtDriver(ctx context.Context, userID string, sel
 }
 
 func resolveSelector(selector interface{}, available models.AvailableDrivers) *models.ResolvedModel {
-	var ms models.ModelSelector
-	data, err := json.Marshal(selector)
-	if err != nil || json.Unmarshal(data, &ms) != nil {
+	ms, ok := toSelector(selector)
+	if !ok {
 		return nil
 	}
-	var providers []string
-	for id, cfg := range available.Drivers {
-		if cfg.IsConfigured() {
-			providers = append(providers, string(id))
-		}
+	return resolveOn(ms, available, configuredProviders(available))
+}
+
+// resolveOn resolves ms over exactly providers. The registry treats a
+// selector's own providers as a preference and falls through to any provider
+// it is handed, so restricting what it is handed is what makes a provider
+// strict.
+func resolveOn(ms models.ModelSelector, available models.AvailableDrivers, providers []string) *models.ResolvedModel {
+	if len(providers) == 0 {
+		return nil
 	}
 	resolved, err := models.MustGetRegistry().WithAvailability(available.Availability).Resolve(ms, providers)
 	if err != nil {
 		return nil
 	}
 	return resolved
+}
+
+func toSelector(selector interface{}) (models.ModelSelector, bool) {
+	var ms models.ModelSelector
+	data, err := json.Marshal(selector)
+	if err != nil || json.Unmarshal(data, &ms) != nil {
+		return models.ModelSelector{}, false
+	}
+	return ms, true
+}
+
+// configuredProviders is every provider the user has connected.
+func configuredProviders(available models.AvailableDrivers) []string {
+	var providers []string
+	for id, cfg := range available.Drivers {
+		if cfg.IsConfigured() {
+			providers = append(providers, string(id))
+		}
+	}
+	return providers
+}
+
+// connectedAmong is the providers of want the user has connected.
+func connectedAmong(available models.AvailableDrivers, want []string) []string {
+	var out []string
+	for _, id := range want {
+		if cfg, ok := available.Drivers[models.DriverID(id)]; ok && cfg.IsConfigured() {
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
+// isLocalSelector reports whether a model input value names a local model
+// (a daemon's server or a configured endpoint), which no registry provider
+// serves.
+func isLocalSelector(selector interface{}) bool {
+	ms, ok := toSelector(selector)
+	return ok && local.IsSelector(ms)
 }

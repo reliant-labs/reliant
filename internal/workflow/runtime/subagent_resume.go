@@ -237,6 +237,18 @@ func stoppedAgentsAwaitingResume(ctx workflow.Context, chatID, rootThread string
 	// A lookup still in flight adopts what it finds; the run is ending, so
 	// it does not resume it.
 	_ = workflow.Await(ctx, func() bool { return !tracker.stoppedLookupsInFlight() })
+	tracker.lateCandidateChecks++
+	if tracker.providerVersion(ctx, "late-stopped-candidates", tracker.lateCandidateChecks) {
+		// A whole-chat lookup may have discovered sibling wakes during the
+		// await. Rebuild, rather than lose them when this run is ending.
+		candidates = nil
+		for thread := range tracker.threadWakes {
+			if thread != rootThread && tracker.wakeSinceLastTurn(thread) && tracker.liveSpawnFor(thread) == nil {
+				candidates = append(candidates, thread)
+			}
+		}
+		sort.Strings(candidates)
+	}
 
 	var stopped []SpawnHandoff
 	for _, thread := range candidates {
@@ -297,7 +309,9 @@ func stoppedAgentsSuccessorInput(input WorkflowInput, awaiting []SpawnHandoff, t
 // failure. Called while it is still registered live, so its handoff — the
 // relaunch recipe — is still there to keep. capacityStop says the failure is
 // one capacity can fix, so a capacity wake resumes it (capacity_wake.go).
-func (t *ChildWorkflowTracker) recordStoppedSpawn(toolCallID string, capacityStop bool) {
+// lastFailure is the digest of the failure report its parent now has from it
+// (SpawnHandoff.LastFailure), "" when none reached it.
+func (t *ChildWorkflowTracker) recordStoppedSpawn(toolCallID string, capacityStop bool, lastFailure string) {
 	rec := t.liveDetachedSpawns[toolCallID]
 	if rec == nil || rec.ChildThread == "" {
 		return
@@ -309,6 +323,7 @@ func (t *ChildWorkflowTracker) recordStoppedSpawn(toolCallID string, capacitySto
 	stopped.parked = false
 	stopped.resumeArmed = false
 	stopped.handoff.CapacityStop = capacityStop
+	stopped.handoff.LastFailure = lastFailure
 	t.stoppedSpawns[rec.ChildThread] = &stopped
 }
 
@@ -501,6 +516,7 @@ func resumeStoppedSpawn(ctx workflow.Context, thread string, deps stoppedSpawnRe
 	}
 
 	tracker.forgetStoppedSpawn(thread)
+	delete(tracker.notStopped, thread)
 	// The resumed run's first turn reads everything rung for it so far. Were
 	// it to fail before taking that turn, those rings must not resume it
 	// again — one message buys one resume.

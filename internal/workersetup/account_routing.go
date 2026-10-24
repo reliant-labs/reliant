@@ -63,12 +63,13 @@ func (s accountRouterStore) RecentAssignmentCounts(ctx context.Context, accountI
 func accountRouting(repo AccountRoutingStore, recorder handlers.AccountLimitRecorder) *handlers.AccountRouting {
 	store := accountRouterStore{repo: repo}
 	return &handlers.AccountRouting{
-		Router:      accountrouter.NewInstrumented(accountrouter.Deps{Store: store}),
-		Store:       store,
-		Settings:    repo,
-		DriverFor:   accountDriverFor,
-		Recorder:    recorder,
-		Credentials: credentialMarker{repo: repo},
+		Router:                accountrouter.NewInstrumented(accountrouter.Deps{Store: store}),
+		ClearOtherAssignments: repo.ClearOtherThreadAssignments,
+		Store:                 store,
+		Settings:              repo,
+		DriverFor:             accountDriverFor,
+		Recorder:              recorder,
+		Credentials:           credentialMarker{repo: repo},
 	}
 }
 

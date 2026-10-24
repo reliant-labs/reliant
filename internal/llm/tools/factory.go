@@ -21,13 +21,21 @@ type ToolsOptions struct {
 	// NewToolsFactory supplies one, and every factory cloned from this one
 	// shares it.
 	MCPToolCache *MCPToolCache
-	// AllowPrivateEgress lets the web tools (fetch, websearch, sourcegraph)
-	// dial private, loopback and link-local addresses (netguard.ForDeployment).
-	// False, the zero value, is the server roles' setting: a shared process
-	// must not reach its own network. The daemon sets it, because a daemon IS
-	// the user's machine; a self-hosted server opts in with
-	// ServerProcessConfig.network.allow_private_egress.
+	// AllowPrivateEgress lets the web tools (websearch, sourcegraph, and fetch
+	// when it runs on a server role) dial private, loopback and link-local
+	// addresses (netguard.ForDeployment). False, the zero value, is the server
+	// roles' setting: a shared process must not reach its own network. The
+	// daemon sets it, because a daemon IS the user's machine; a self-hosted
+	// server opts in with ServerProcessConfig.network.allow_private_egress.
+	//
+	// fetch on a daemon does NOT read it: see FetchNetwork.
 	AllowPrivateEgress bool
+	// FetchNetwork, when set, is where fetch may connect, instead of the
+	// policy derived from AllowPrivateEgress. The daemon sets it: fetch runs
+	// there (PlacementPreferDaemon) and is usually auto-approved, so its reach
+	// is its own decision, independent of the daemon-wide egress setting that
+	// also covers local model endpoints (see FetchNetwork).
+	FetchNetwork *FetchNetwork
 	// Repo is the database the tools read and write. The factory is
 	// composition: it hands Repo to each tool as the role that tool declares
 	// (deps.go), through store(). Optional: nil means every database-backed
@@ -365,6 +373,9 @@ func (f *ToolsFactory) ProveTest() Tool {
 
 // Network tools
 func (f *ToolsFactory) Fetch() Tool {
+	if f.opts.FetchNetwork != nil {
+		return NewFetchToolWithNetwork(*f.opts.FetchNetwork)
+	}
 	return NewFetchTool(f.netPolicy())
 }
 
@@ -769,12 +780,13 @@ Usage notes:
 }
 
 // ListAvailableToolsForPlacement returns tool names that can run at the given location.
-// Tools with PlacementAny are included for all locations.
+// Tools with PlacementAny or PlacementPreferDaemon are included for all
+// locations (Placement.RunsAt).
 func (f *ToolsFactory) ListAvailableToolsForPlacement(location Placement) []string {
 	registry := GetToolRegistry()
 	var names []string
 	for _, def := range registry {
-		if def.Placement == location || def.Placement == PlacementAny || location == "" {
+		if location == "" || def.Placement.RunsAt(location) {
 			names = append(names, def.Name)
 		}
 	}

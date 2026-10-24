@@ -1286,6 +1286,7 @@ func (e *InlineLoopExecutor) buildIterationInputs() (map[string]interface{}, err
 		}
 	}
 
+	rememberPresetModel(iterInputs)
 	for key, value := range model.NodeMergedSubWorkflowInputs(evalResult) {
 		if key == "loop" {
 			continue

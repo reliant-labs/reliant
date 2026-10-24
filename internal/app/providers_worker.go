@@ -31,6 +31,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/llm/accountlimits"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
+	"github.com/reliant-labs/reliant/internal/llm/drivers/local"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -299,13 +300,14 @@ type WorkerChatDeps struct {
 //forge:root-only worker
 func NewWorkerChat(d WorkerChatDeps) (*WorkerChat, error) {
 	svc, err := chat.New(chat.Deps{
-		Logger:    d.Logger,
-		Config:    d.Config,
-		Repo:      d.DB,
-		Temporal:  d.Temporal.Client,
-		Pause:     d.Pause,
-		TaskQueue: v2workflow.SharedTaskQueue,
-		Router:    d.Router,
+		Logger:      d.Logger,
+		Config:      d.Config,
+		Repo:        d.DB,
+		Temporal:    d.Temporal.Client,
+		Pause:       d.Pause,
+		TaskQueue:   v2workflow.SharedTaskQueue,
+		Router:      d.Router,
+		LocalModels: local.NewRepoDirectory(d.DB),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("chat service: %w", err)

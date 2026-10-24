@@ -101,7 +101,7 @@ func UpsertChatSelection(ctx context.Context, db orm.Context, chatID string, sel
 	if err != nil {
 		return nil, fmt.Errorf("failed to encode chat selection params: %w", err)
 	}
-	policy, err := json.Marshal(sel.Policy)
+	policy, err := json.Marshal(storedProviderPolicy{ProviderPolicy: sel.Policy, ChatProvider: sel.ChatProvider})
 	if err != nil {
 		return nil, fmt.Errorf("failed to encode chat selection policy: %w", err)
 	}
@@ -151,10 +151,22 @@ func chatSelectionFromRow(row *ChatSelection) (*chatselection.Selection, error) 
 	if sel.Params == nil {
 		sel.Params = map[string]any{}
 	}
-	if err := json.Unmarshal(row.ProviderPolicy, &sel.Policy); err != nil {
+	var policy storedProviderPolicy
+	if err := json.Unmarshal(row.ProviderPolicy, &policy); err != nil {
 		return nil, fmt.Errorf("failed to decode chat selection policy: %w", err)
 	}
+	sel.Policy, sel.ChatProvider = policy.ProviderPolicy, policy.ChatProvider
 	return sel, nil
+}
+
+// storedProviderPolicy is the provider_policy column: the chat's on-limit
+// policy and, beside it, the provider an explicit switch bound the chat to
+// (chatselection.Selection.ChatProvider). Both say how the chat uses
+// providers, and the binding needs no column of its own: a record written
+// before it existed decodes as unbound.
+type storedProviderPolicy struct {
+	chatselection.ProviderPolicy
+	ChatProvider string `json:"chat_provider,omitempty"`
 }
 
 // ChatSelectionExtra carries fields on ChatSelection that are NOT columns — computed

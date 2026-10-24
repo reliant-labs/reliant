@@ -73,6 +73,10 @@ func ClassifyError(err error) error {
 		return nil
 	}
 
+	var app *temporal.ApplicationError
+	if errors.As(err, &app) && app.Type() == "ProviderSwitchHold" {
+		return err
+	}
 	// Check if already classified
 	var terminalErr *TerminalError
 	if errors.As(err, &terminalErr) {

@@ -248,10 +248,12 @@ func (s *Service) startRunResumingStoppedAgent(ctx context.Context, userID strin
 		}
 	}
 	s.fallBackFromUnservableModels(ctx, userID, chat.ID, chat.ProjectID, workflowName, workflowID, workflowID, inputs, nil)
+	s.refreshChatProvider(ctx, userID, chat, workflowName, inputs)
 	launch.InjectSessionDaemonID(inputs, chat)
 
 	resume := v2.ResumeInputFromDurableState(ctx, s.deps.Repo, chat.ID, workflowID)
 	resume.ResumeStopped = []v2.SpawnHandoff{*stopped}
+	resume.ResumeAllStopped = true
 	resume.AwaitSpawnsFirst = true
 
 	execContext := &v2.ExecutionContext{

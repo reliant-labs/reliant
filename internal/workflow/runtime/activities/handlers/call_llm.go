@@ -1066,7 +1066,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	// While the thread is on a fallback model (its own provider hit a usage
 	// limit and the chat allows another), that model replaces the selector.
 	// The workflow only sets it inside the lease, so this needs no clock.
-	if rtx.FallbackModel != "" {
+	if rtx.FallbackModel != "" && rtx.ChatProvider == "" {
 		modelSelector = models.ModelSelector{ID: rtx.FallbackModel}
 	}
 
@@ -1128,19 +1128,23 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	// When a custom driver resolver is injected (e.g., in tests), it skips
 	// registry resolution and probes the resolver for its model.
 	resolved, err := resolveLLMCall(ctx, a.driverResolver, llmCallSpec{
-		UserID:         chat.UserID,
-		SessionID:      chat.ID,
-		Selector:       modelSelector,
-		RunProviders:   rtx.ProviderPreference,
-		ThreadID:       thread,
-		Routing:        a.routing,
-		Failover:       rtx.Failover,
-		Temperature:    explicitTemperature,
-		ThinkingLevel:  explicitThinkingLevel,
-		MaxTokens:      explicitMaxTokens,
-		WorkingDir:     workingDir,
-		TagPrefsReader: a.repo,
-		Local:          a.localModelSpec(worktreeDaemonID, chat.NoMachine),
+		UserID:            chat.UserID,
+		SessionID:         chat.ID,
+		Selector:          modelSelector,
+		RunProviders:      rtx.ProviderPreference,
+		ChatProvider:      rtx.ChatProvider,
+		ClearProviderPins: rtx.ClearProviderPins,
+		Descendant:        rtx.Descendant,
+		PresetModelTags:   rtx.PresetModelTags,
+		ThreadID:          thread,
+		Routing:           a.routing,
+		Failover:          rtx.Failover,
+		Temperature:       explicitTemperature,
+		ThinkingLevel:     explicitThinkingLevel,
+		MaxTokens:         explicitMaxTokens,
+		WorkingDir:        workingDir,
+		TagPrefsReader:    a.repo,
+		Local:             a.localModelSpec(worktreeDaemonID, chat.NoMachine),
 	})
 	if err != nil {
 		return nil, err

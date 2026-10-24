@@ -89,6 +89,13 @@ type RuntimeContext struct {
 	// resolves on the provider the user picked instead of whichever connected
 	// provider leads the tier. Set on call_llm nodes only.
 	ProviderPreference []string `json:"provider_preference,omitempty"`
+	// ChatProvider strictly binds the next model call to the provider the
+	// user selected chat-wide. Descendants keep their original semantic tags;
+	// PresetModelTags is provenance captured before an exact override.
+	ChatProvider      string   `json:"chat_provider,omitempty"`
+	ClearProviderPins bool     `json:"clear_provider_pins,omitempty"`
+	Descendant        bool     `json:"descendant,omitempty"`
+	PresetModelTags   []string `json:"preset_model_tags,omitempty"`
 
 	// Failover is what the run allows when a provider's accounts are all
 	// limited (see FailoverPolicy). Set on call_llm nodes only.

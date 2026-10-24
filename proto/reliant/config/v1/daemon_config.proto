@@ -218,6 +218,19 @@ message DaemonConfig {
     default_value: "go build,go test,go vet,go install,golangci-lint run,vitest,npx vitest,npm test,npm run test*,npm run build*,npm ci,forge generate,forge lint,reliant forge generate,reliant forge lint,make test*,task test*,docker build"
     description: "Comma-separated commands queued behind the machine's heavy slots"
   }];
+
+  // Let the fetch tool reach this machine's own localhost and private network
+  // (127.0.0.0/8, 10/8, 172.16/12, 192.168/16, fc00::/7, ...). Off by default:
+  // fetch is usually auto-approved and a fetched page can steer the next fetch,
+  // so a default-open policy would be an SSRF into the user's own environment.
+  // Link-local and cloud-metadata addresses (169.254.0.0/16, fe80::/10, the
+  // metadata hostnames, fd00:ec2::254, ...) are refused whatever this says.
+  // A managed daemon ignores it: a workspace pod's network is the platform's,
+  // not the user's. A refused fetch names this setting in its error.
+  bool fetch_allow_private_network = 23 [(forge.v1.config) = {
+    env_var: "RELIANT_FETCH_ALLOW_PRIVATE_NETWORK"
+    description: "Let fetch reach this machine's localhost and private network (default off; link-local and cloud-metadata addresses are always refused)"
+  }];
 }
 
 // DaemonStatusConfig is `reliant daemon status`'s config.

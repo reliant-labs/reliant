@@ -268,6 +268,16 @@ type RunningStep struct {
 	// workflow assembled the output itself and writes the message on
 	// completion.
 	SaveDelegated bool
+	// ProviderPinsKey identifies the dispatch routing epoch; an old in-flight
+	// call completing after a switch must not acknowledge the new cleanup.
+	ProviderPinsKey string
+}
+
+func (e *StepExecutor) providerPinsKey() string {
+	if e.childTracker == nil || e.childTracker.chatProvider == "" {
+		return ""
+	}
+	return fmt.Sprintf("%s/%s/%d", e.GetThread(), e.childTracker.chatProvider, e.childTracker.providerUpdates)
 }
 
 // removeRunningStep removes a step from the slice using pointer comparison.
@@ -439,6 +449,7 @@ func (e *StepExecutor) Start(triggeredStep *core.TriggeredNode) *RunningStep {
 		PreallocatedMessageID: preallocatedMessageID,
 		ThreadInterruptEpoch:  threadInterruptEpoch,
 		SaveDelegated:         saveDelegated,
+		ProviderPinsKey:       e.providerPinsKey(),
 	}
 }
 
@@ -565,6 +576,12 @@ func (e *StepExecutor) handleActivityCompletion(running *RunningStep, eventID st
 		}
 	}
 
+	if (running.ActivityName == "CallLLM" || running.ActivityName == "Compact") && running.ProviderPinsKey != "" {
+		if e.childTracker.providerPinCleanups == nil {
+			e.childTracker.providerPinCleanups = map[string]bool{}
+		}
+		e.childTracker.providerPinCleanups[running.ProviderPinsKey] = true
+	}
 	// Normalize output against schema
 	normalizedOutput := e.normalizeOutput(rawOutput, running.ActivityName)
 
@@ -1147,6 +1164,10 @@ func (e *StepExecutor) buildRuntimeContext(node *reliantv1.Node) types.RuntimeCo
 	}
 
 	// Who this run's integration writes speak as (see InputKeyActingIdentity).
+	if e.childTracker != nil && e.childTracker.chatProvider != "" && (model.NodeType(node) == model.NodeTypeCallLLM || model.NodeType(node) == model.NodeTypeCompact) {
+		key := e.providerPinsKey()
+		rtx.ClearProviderPins = !e.childTracker.providerPinCleanups[key]
+	}
 	rtx.ActingIdentity = ActingIdentity(e.workflowInputs)
 	rtx.Automation, _ = e.workflowInputs[InputKeyAutomation].(string)
 
@@ -1163,6 +1184,14 @@ func (e *StepExecutor) buildRuntimeContext(node *reliantv1.Node) types.RuntimeCo
 		// The provider the user chose for the run: what a tier selector with
 		// no provider of its own resolves on (propagateProviderPreference).
 		rtx.ProviderPreference = ProviderPreference(e.workflowInputs)
+		if driver := e.childTracker.chatProvider; driver != "" {
+			rtx.ChatProvider = driver
+			rtx.Descendant = rtx.Thread != e.childTracker.rootThread
+			rtx.PresetModelTags = presetModelTags(e.workflowInputs)
+			// Kept for query/observability consumers too; strict enforcement
+			// happens at the activity's model-resolution boundary.
+			rtx.ProviderPreference = []string{driver}
+		}
 		rtx.Failover = failoverPolicy(e.workflowInputs)
 		// While the thread is on a fallback model (a usage limit on its own
 		// provider), the lease replaces the chat's selector; the first turn
@@ -1179,6 +1208,9 @@ func (e *StepExecutor) buildRuntimeContext(node *reliantv1.Node) types.RuntimeCo
 	// refused by the same limit call_llm is, so it decides the same way: it
 	// carries the chat's failover policy too.
 	if model.NodeType(node) == model.NodeTypeCompact {
+		rtx.ChatProvider = e.childTracker.chatProvider
+		rtx.Descendant = rtx.Thread != e.childTracker.rootThread
+		rtx.PresetModelTags = presetModelTags(e.workflowInputs)
 		rtx.FallbackModel = e.pauseCtrl.liveFallback(e.ctx, rtx.Thread)
 		rtx.Failover = failoverPolicy(e.workflowInputs)
 	}

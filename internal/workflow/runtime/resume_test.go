@@ -7,6 +7,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
+	"github.com/reliant-labs/reliant/internal/workflow/builtin"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 	wfyaml "github.com/reliant-labs/reliant/internal/workflow/yaml"
@@ -145,6 +146,39 @@ nodes:
 		require.NotNil(t, node)
 		assert.Equal(t, "agent_loop", node.GetId())
 		assert.Equal(t, 0, iter, "fallback target must not inherit the checkpoint iteration")
+	})
+
+	t.Run("recovery-only executes graph entry despite checkpoint and resume override", func(t *testing.T) {
+		wf := resumeTestWorkflow(t, `
+name: setup-loop
+entry: [setup]
+resume_node: agent_loop
+nodes:
+  - id: setup
+    type: call_llm
+  - id: agent_loop
+    type: loop
+    inline:
+      entry: [work]
+      nodes:
+        - id: work
+          type: call_llm
+`)
+		node, iteration := resolveResumeTarget(wf, &ResumeInput{RecoveryOnly: true, NodeID: "agent_loop", LoopIteration: 7}, logger)
+		assert.Nil(t, node, "recovery must not bypass setup via override, checkpoint or loop heuristic")
+		assert.Zero(t, iteration)
+	})
+
+	t.Run("parallel-compete recovery preserves improve_prompt entry", func(t *testing.T) {
+		raw, err := builtin.BuiltinWorkflowsFS.ReadFile("parallel-compete.yaml")
+		require.NoError(t, err)
+		wf := resumeTestWorkflow(t, string(raw))
+		assert.Equal(t, []string{"improve_prompt"}, wf.GetEntry())
+		positional, _ := resolveResumeTarget(wf, &ResumeInput{}, logger)
+		require.NotNil(t, positional)
+		assert.Equal(t, "implementations", positional.GetId(), "pin the old positional behavior")
+		recovery, _ := resolveResumeTarget(wf, &ResumeInput{RecoveryOnly: true, ResumeAllStopped: true}, logger)
+		assert.Nil(t, recovery, "recovery must execute improve_prompt, not jump to implementations")
 	})
 
 	t.Run("empty resume falls back to single top-level loop", func(t *testing.T) {

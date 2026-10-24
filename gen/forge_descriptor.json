@@ -38425,6 +38425,20 @@
           "Sensitive": false,
           "Category": "",
           "ProtoFile": "reliant/config/v1/daemon_config.proto"
+        },
+        {
+          "Name": "fetch_allow_private_network",
+          "GoName": "FetchAllowPrivateNetwork",
+          "GoType": "bool",
+          "ProtoType": "bool",
+          "EnvVar": "RELIANT_FETCH_ALLOW_PRIVATE_NETWORK",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "Let fetch reach this machine's localhost and private network (default off; link-local and cloud-metadata addresses are always refused)",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "reliant/config/v1/daemon_config.proto"
         }
       ],
       "Binary": "reliant",
@@ -38461,7 +38475,7 @@
         "status"
       ],
       "ProtoFile": "reliant/config/v1/daemon_config.proto",
-      "Line": 225,
+      "Line": 238,
       "GoImportPath": "github.com/reliant-labs/reliant/gen/reliant/config/v1"
     },
     {
@@ -38489,7 +38503,7 @@
         "stop"
       ],
       "ProtoFile": "reliant/config/v1/daemon_config.proto",
-      "Line": 235,
+      "Line": 248,
       "GoImportPath": "github.com/reliant-labs/reliant/gen/reliant/config/v1"
     },
     {
@@ -38517,7 +38531,7 @@
         "logs"
       ],
       "ProtoFile": "reliant/config/v1/daemon_config.proto",
-      "Line": 245,
+      "Line": 258,
       "GoImportPath": "github.com/reliant-labs/reliant/gen/reliant/config/v1"
     },
     {
@@ -38544,7 +38558,7 @@
         "register"
       ],
       "ProtoFile": "reliant/config/v1/daemon_config.proto",
-      "Line": 255,
+      "Line": 268,
       "GoImportPath": "github.com/reliant-labs/reliant/gen/reliant/config/v1"
     },
     {
@@ -39897,7 +39911,7 @@
     "reliant/config/v1/cli_config.proto": "8322a3c3d237061fd60e217ec3056224b68449c6b3104510dc00fec5d5bb0b8e",
     "reliant/config/v1/config.proto": "c360c049f5c3342e9862a95e05d8e54f2f16c2379a37e5390bb1d99c5a93dc9f",
     "reliant/config/v1/control_plane_config.proto": "5c26daf1c213883e634d445dd4305044d2d2c8f21e6366c73cb2707bf6ee46f7",
-    "reliant/config/v1/daemon_config.proto": "0ac05b9b14836bfe77e60774315d1336b99b6b5f7b07a781692616cb182beeab",
+    "reliant/config/v1/daemon_config.proto": "f9cf54241e2834ca5aa027632968d9c24e1b5f8b60b20100e24bca988c8b1772",
     "reliant/config/v1/db_config.proto": "76de83f344d5d26833532cef3a50ce593d2463f00981971b6fdc1a8ccb6fa886",
     "reliant/config/v1/gateway_config.proto": "040bb180fa87e028678bdec8b6205b7b60ecf5066f3f564914940bc062352ac2",
     "reliant/config/v1/integrations_config.proto": "33a9bfa080d0e13ab6092e3598eff4fc2d7229ef4a623c873c73a97fbee46ed9",
