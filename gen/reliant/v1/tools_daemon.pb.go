@@ -1135,7 +1135,22 @@ type DaemonRegister struct {
 	// until ToolResultAck. A draining replica waits for such a daemon to move;
 	// a daemon without it is ended at once, so it redials straight away rather
 	// than sitting unreachable until the drain deadline.
-	MovesOnDrain  bool `protobuf:"varint,12,opt,name=moves_on_drain,json=movesOnDrain,proto3" json:"moves_on_drain,omitempty"`
+	MovesOnDrain bool `protobuf:"varint,12,opt,name=moves_on_drain,json=movesOnDrain,proto3" json:"moves_on_drain,omitempty"`
+	// The build this daemon runs, so the platform can tell which daemons are
+	// behind. All four are empty/zero from a daemon that predates them or a build
+	// that was not stamped, and a server must treat that as "unknown build", not
+	// as an error. Nothing here is trusted for authorisation.
+	//
+	// version is scripts/release-identity.sh's output (display only; semver
+	// cannot order two builds between the same pair of tags).
+	Version string `protobuf:"bytes,13,opt,name=version,proto3" json:"version,omitempty"`
+	// commit is the git sha the binary was built from.
+	Commit string `protobuf:"bytes,14,opt,name=commit,proto3" json:"commit,omitempty"`
+	// commit_time_unix is the committer time of `commit`, in unix seconds: the
+	// key that orders builds. 0 means unordered (a dirty or unstamped build).
+	CommitTimeUnix int64 `protobuf:"varint,15,opt,name=commit_time_unix,json=commitTimeUnix,proto3" json:"commit_time_unix,omitempty"`
+	// forge_version is the forge module version linked into the binary.
+	ForgeVersion  string `protobuf:"bytes,16,opt,name=forge_version,json=forgeVersion,proto3" json:"forge_version,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1231,6 +1246,34 @@ func (x *DaemonRegister) GetMovesOnDrain() bool {
 		return x.MovesOnDrain
 	}
 	return false
+}
+
+func (x *DaemonRegister) GetVersion() string {
+	if x != nil {
+		return x.Version
+	}
+	return ""
+}
+
+func (x *DaemonRegister) GetCommit() string {
+	if x != nil {
+		return x.Commit
+	}
+	return ""
+}
+
+func (x *DaemonRegister) GetCommitTimeUnix() int64 {
+	if x != nil {
+		return x.CommitTimeUnix
+	}
+	return 0
+}
+
+func (x *DaemonRegister) GetForgeVersion() string {
+	if x != nil {
+		return x.ForgeVersion
+	}
+	return ""
 }
 
 // ToolResponse contains the result of tool execution. The daemon keeps it until
@@ -4985,7 +5028,7 @@ const file_reliant_v1_tools_daemon_proto_rawDesc = "" +
 	"\x05error\x18\a \x01(\tR\x05error\x1a:\n" +
 	"\fHeadersEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x80\x03\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x81\x04\n" +
 	"\x0eDaemonRegister\x12\x1a\n" +
 	"\bhostname\x18\x03 \x01(\tR\bhostname\x12\x1a\n" +
 	"\bplatform\x18\x04 \x01(\tR\bplatform\x12\x1f\n" +
@@ -4998,7 +5041,11 @@ const file_reliant_v1_tools_daemon_proto_rawDesc = "" +
 	" \x01(\tR\n" +
 	"daemonType\x12\x1b\n" +
 	"\tdaemon_id\x18\v \x01(\tR\bdaemonId\x12$\n" +
-	"\x0emoves_on_drain\x18\f \x01(\bR\fmovesOnDrain\x1a9\n" +
+	"\x0emoves_on_drain\x18\f \x01(\bR\fmovesOnDrain\x12\x18\n" +
+	"\aversion\x18\r \x01(\tR\aversion\x12\x16\n" +
+	"\x06commit\x18\x0e \x01(\tR\x06commit\x12(\n" +
+	"\x10commit_time_unix\x18\x0f \x01(\x03R\x0ecommitTimeUnix\x12#\n" +
+	"\rforge_version\x18\x10 \x01(\tR\fforgeVersion\x1a9\n" +
 	"\vLabelsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x80\x02\n" +
