@@ -58,8 +58,11 @@ func (r *Reclaimer) shed(ctx context.Context, w Worktree, sc scan, res *Result) 
 	if len(checkouts) == 0 {
 		return
 	}
-	if r.IdleFloor > 0 && r.now().Sub(idleSince(w.Path, checkouts)) < r.IdleFloor {
-		return
+	if r.IdleFloor > 0 {
+		last, err := idleSince(ctx, w.Path, checkouts)
+		if err != nil || r.now().Sub(last) < r.IdleFloor {
+			return
+		}
 	}
 	if hold := r.inUse(ctx, w, false); hold != nil {
 		return

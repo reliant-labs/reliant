@@ -4,7 +4,6 @@ package worktreereclaim
 import (
 	"context"
 	"errors"
-	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -264,36 +263,27 @@ func TestDataWalk_VisitingAPathTwiceCountsItOnce(t *testing.T) {
 	}
 }
 
-func TestIdleSince_IgnoresTheIndexButNotHeadOrTheReflog(t *testing.T) {
+func TestIdleSince_IgnoresIndexAndReflogRewriteButCountsEvents(t *testing.T) {
 	t.Parallel()
-	base := t.TempDir()
-	path := filepath.Join(base, "w")
-	admin := filepath.Join(base, "admin")
-	write(t, filepath.Join(path, ".git"), "gitdir: "+admin+"\n")
-	for _, n := range []string{"index", "HEAD", filepath.Join("logs", "HEAD")} {
-		write(t, filepath.Join(admin, n), "x")
+	path, checkouts, admins := idleFixture(t, 1)
+	ctx := context.Background()
+	old := time.Unix(1700000000, 0)
+	recent := old.Add(72 * time.Hour)
+	log := filepath.Join(admins[0], "logs", "HEAD")
+	before, err := idleSince(ctx, path, checkouts)
+	if err != nil || !before.Equal(old) {
+		t.Fatalf("fixture: idle clock = %v, %v, want %v", before, err, old)
 	}
-	old := time.Now().Add(-72 * time.Hour)
-	for _, p := range []string{path, filepath.Join(path, ".git"), admin, filepath.Join(admin, "index"), filepath.Join(admin, "HEAD"), filepath.Join(admin, "logs", "HEAD"), filepath.Join(admin, "logs")} {
-		if err := os.Chtimes(p, old, old); err != nil {
-			t.Fatal(err)
-		}
+	setIdleMtime(t, filepath.Join(admins[0], "index"), recent)
+	// gc/reflog expire can rewrite the same records and refresh only the mtime.
+	write(t, log, activityRecord(old, "+0000"))
+	setIdleMtime(t, log, recent)
+	if got, err := idleSince(ctx, path, checkouts); err != nil || !got.Equal(before) {
+		t.Fatalf("maintenance reset idle clock: %v, %v", got, err)
 	}
-	before := idleSince(path, []string{path})
-	if before.After(old.Add(time.Second)) {
-		t.Fatalf("fixture: idle clock = %v, want about %v", before, old)
-	}
-	now := time.Now()
-	if err := os.Chtimes(filepath.Join(admin, "index"), now, now); err != nil {
-		t.Fatal(err)
-	}
-	if got := idleSince(path, []string{path}); !got.Equal(before) {
-		t.Fatalf("touching the index moved the idle clock to %v: a plain `git status` resets every clock", got)
-	}
-	if err := os.Chtimes(filepath.Join(admin, "logs", "HEAD"), now, now); err != nil {
-		t.Fatal(err)
-	}
-	if got := idleSince(path, []string{path}); got.Before(now.Add(-time.Second)) {
-		t.Fatalf("a new reflog entry must count as activity: %v", got)
+	write(t, log, activityRecord(recent, "-0730")+activityRecord(old, "+0530"))
+	setIdleMtime(t, log, old)
+	if got, err := idleSince(ctx, path, checkouts); err != nil || !got.Equal(recent) {
+		t.Fatalf("maximum event time must count even with old mtime: %v, %v", got, err)
 	}
 }

@@ -469,29 +469,39 @@ func (r *Reclaimer) inUse(ctx context.Context, w Worktree, fresh bool) *Result {
 	return nil
 }
 
-// idle returns when the worktree was last touched: its directory, and the
-// index, HEAD and reflog of each checkout's git admin directory.
-func idleSince(path string, checkouts []string) time.Time {
+// idleSince combines directory and admin HEAD mtimes with actual reflog event
+// times. Index refreshes and reflog maintenance rewrites are not user activity.
+// An uncertain reflog must not make a checkout look ancient.
+func idleSince(ctx context.Context, path string, checkouts []string) (time.Time, error) {
 	newest := time.Time{}
-	if fi, err := os.Stat(path); err == nil {
-		newest = fi.ModTime()
-	}
-	bump := func(p string) {
-		if fi, err := os.Stat(p); err == nil && fi.ModTime().After(newest) {
-			newest = fi.ModTime()
+	bumpTime := func(t time.Time) {
+		if t.After(newest) {
+			newest = t
 		}
 	}
+	bump := func(p string) {
+		if fi, err := os.Stat(p); err == nil {
+			bumpTime(fi.ModTime())
+		}
+	}
+	bump(path)
 	for _, c := range checkouts {
+		if err := ctx.Err(); err != nil {
+			return time.Time{}, err
+		}
 		bump(c)
 		admin := adminDir(c)
 		if admin == "" {
 			continue
 		}
-		for _, name := range []string{"HEAD", filepath.Join("logs", "HEAD")} {
-			bump(filepath.Join(admin, name))
+		bump(filepath.Join(admin, "HEAD"))
+		event, err := reflogActivity(ctx, filepath.Join(admin, "logs", "HEAD"))
+		if err != nil {
+			return time.Time{}, err
 		}
+		bumpTime(event)
 	}
-	return newest
+	return newest, ctx.Err()
 }
 
 func adminDir(checkout string) string {
@@ -599,7 +609,11 @@ func (r *Reclaimer) autoPhase(ctx context.Context, w Worktree) Result {
 		return held(w, ReasonUnverified, "no git checkout found under the workspace")
 	}
 	if r.IdleFloor > 0 {
-		if age := r.now().Sub(idleSince(w.Path, checkouts)); age < r.IdleFloor {
+		last, err := idleSince(ctx, w.Path, checkouts)
+		if err != nil {
+			return held(w, ReasonUnverified, "could not determine quiet time: "+err.Error())
+		}
+		if age := r.now().Sub(last); age < r.IdleFloor {
 			return held(w, ReasonRecentlyActive, fmt.Sprintf("touched %s ago", age.Round(time.Minute)))
 		}
 	}
@@ -652,7 +666,11 @@ func (r *Reclaimer) autoRemove(ctx context.Context, w Worktree) Result {
 		return held(w, ReasonStale, "nothing is claimed for removal")
 	}
 	if r.IdleFloor > 0 {
-		if age := r.now().Sub(idleSince(w.Path, checkouts)); age < r.IdleFloor {
+		last, err := idleSince(ctx, w.Path, checkouts)
+		if err != nil {
+			return held(w, ReasonUnverified, "could not determine quiet time: "+err.Error())
+		}
+		if age := r.now().Sub(last); age < r.IdleFloor {
 			return held(w, ReasonRecentlyActive, fmt.Sprintf("touched %s ago", age.Round(time.Minute)))
 		}
 	}
@@ -1103,7 +1121,11 @@ func (r *Reclaimer) finished(ctx context.Context, w Worktree) probeAnswer {
 	if floor <= 0 {
 		floor = DefaultActiveIdleFloor
 	}
-	if r.now().Sub(idleSince(w.Path, checkouts)) < floor {
+	last, err := idleSince(ctx, w.Path, checkouts)
+	if err != nil {
+		return probeInconclusive
+	}
+	if r.now().Sub(last) < floor {
 		return probeUnfinished
 	}
 	if hold := r.inUse(ctx, w, true); hold != nil {
