@@ -8,6 +8,16 @@
  *           with a comparison, each series again, dashed, from the earlier
  *           window; hidden series left out (their colour kept, so the rest do
  *           not change colour when one is hidden).
+ *   area    the same, filled: stacked when the series are additive and share a
+ *           unit (their top edge is a real total), a translucent overlap
+ *           otherwise. A stack has no dashed tail — a still-open bucket is
+ *           stacked with the rest and named in the note — and no comparison:
+ *           with one, the area is the overlapping fill so the dashed lines
+ *           still sit at the values they compare.
+ *
+ * Exemplars are dots on the chart at their true value; those the axis does not
+ * reach (and every one, on a stack, whose axis is a total) go on a strip under
+ * it, so none is lost.
  *   bar     one bar per group, the heaviest first.
  *   number  the headline figures (Dashboards/PanelBody), with the change.
  *   table   one row per group (PanelBody).
@@ -16,17 +26,19 @@
  * cap cut the result, and the warnings it raised — as one line of chips.
  */
 
-import type { ReactNode } from "react";
+import { useCallback, useMemo, useState, type ReactNode } from "react";
 import { AlertTriangle, Info } from "lucide-react";
 
-import type { MetricAttribute } from "@/services/controlPlane/observability/metricsTypes";
+import type { MetricAttribute, MetricExemplar } from "@/services/controlPlane/observability/metricsTypes";
 import type { Panel, PanelResult, Series } from "@/services/controlPlane/observability/types";
 import { cn } from "@/lib/utils";
 
-import { UPlotChart, type ChartSeries, type ChartTone } from "../charts/UPlotChart";
+import { UPlotChart, type ChartExemplar, type ChartSeries, type ChartTone } from "../charts/UPlotChart";
 import { alignShifted, alignTo, PanelBody, seriesLabel, unionTimestamps, type PanelQuery } from "../Dashboards/PanelBody";
 import { formatCount, formatValue, type ValueUnit } from "../format";
-import { capNote, fieldLabel, panelUnitOf, splitPartial, warningText } from "./seriesView";
+import { ExemplarRail, exemplarLabel } from "./ExemplarPopover";
+import type { ChartKind } from "./model/explorerState";
+import { areaModeFor, capNote, fieldLabel, panelUnitOf, splitPartial, warningText } from "./seriesView";
 
 /** The categorical order UPlotChart cycles through; the legend's swatches use the same. */
 export const TONES: ChartTone[] = ["primary", "secondary", "success", "warning", "destructive", "muted"];
@@ -82,20 +94,25 @@ export interface ExplorerChartProps {
   /** The open metric's attributes: a group-by on a high-cardinality one is called out. */
   attributes: readonly MetricAttribute[];
   height?: number;
-  /** Drawn under a line chart: the exemplar rail. */
-  footer?: ReactNode;
+  /** "area" fills a line chart (the panel's own kind is still `line`). */
+  chart?: ChartKind;
+  /** A histogram's sampled observations, drawn on a line chart. */
+  exemplars?: ExemplarOverlay;
 }
 
-export function ExplorerChart({ panel, query, compare, unit, hidden, attributes, height = 260, footer }: ExplorerChartProps) {
+export interface ExemplarOverlay {
+  items: readonly MetricExemplar[];
+  stepSeconds: number;
+  onOpen: (exemplar: MetricExemplar, at: { x: number; y: number }) => void;
+}
+
+export function ExplorerChart({ panel, query, compare, unit, hidden, attributes, height = 260, chart, exemplars }: ExplorerChartProps) {
   const data = query.data;
   return (
     <div className="space-y-2" data-testid="metrics-chart" data-kind={panel.kind}>
       {data && <ResultNotes panel={panel} result={data} attributes={attributes} />}
       {panel.kind === "line" && data && !query.isLoading && !query.error && data.series.some((s) => s.values.some((v) => v !== null)) ? (
-        <>
-          <LineChart panel={panel} result={data} compare={compare} unit={unit} hidden={hidden} height={height} />
-          {footer}
-        </>
+        <LineChart panel={panel} result={data} compare={compare} unit={unit} hidden={hidden} height={height} chart={chart} exemplars={exemplars} />
       ) : panel.kind === "bar" && data && !query.isLoading && !query.error && (data.rows.length > 0 || data.series.length > 0) ? (
         <Bars panel={panel} result={data} unit={unit} />
       ) : (
@@ -113,6 +130,8 @@ function LineChart({
   unit,
   hidden,
   height,
+  chart,
+  exemplars,
 }: {
   panel: Panel;
   result: PanelResult;
@@ -120,12 +139,21 @@ function LineChart({
   unit: ValueUnit;
   hidden: readonly string[];
   height: number;
+  chart?: ChartKind;
+  exemplars?: ExemplarOverlay;
 }) {
   const { timestamps, series } = displaySeries(panel, result);
   const shown = series.filter((s) => !hidden.includes(s.label));
   const previous = compare?.query.data?.series ?? [];
+  const areaMode = chart === "area" ? areaModeFor(result.seriesMeta, shown.map((s) => s.label)) : undefined;
+  const area = areaMode === "stacked" && compare ? "fill" : areaMode;
+  const stacked = area === "stacked";
   const lines: ChartSeries[] = [];
   for (const s of shown) {
+    if (stacked) {
+      lines.push({ label: s.label, values: s.values, tone: s.tone });
+      continue;
+    }
     const { complete, open } = splitPartial(s.values, s.partial);
     lines.push({ label: s.label, values: complete, tone: s.tone });
     if (open.some((v) => v !== null)) lines.push({ label: `${s.label} (still filling)`, values: open, tone: s.tone, dashed: true });
@@ -137,6 +165,26 @@ function LineChart({
     }
   }
   const caption = `${panel.title || "Metrics"}${compare ? `, compared with the ${compare.label}` : ""}`;
+  const stillFilling = stacked && shown.some((s) => s.partial.some(Boolean));
+
+  // A stack's axis is a running total, so an exemplar's own value has no place on it: its dots all go to the strip.
+  const onCanvas = !!exemplars && !stacked;
+  const items = exemplars?.items;
+  const chartExemplars = useMemo<ChartExemplar[] | undefined>(
+    () => (onCanvas && items ? items.map((e) => ({ timeSec: e.timeMs / 1000, value: e.value, solid: e.traceStored, label: exemplarLabel(e, unit) })) : undefined),
+    [onCanvas, items, unit]
+  );
+  const [placed, setPlaced] = useState<readonly number[] | null>(null);
+  const onPlaced = useCallback((next: readonly number[]) => setPlaced((prev) => (prev && prev.length === next.length && prev.every((v, i) => v === next[i]) ? prev : next)), []);
+  const onOpen = exemplars?.onOpen;
+  const onOpenDot = useCallback(
+    (index: number, at: { x: number; y: number }) => {
+      const e = items?.[index];
+      if (e) onOpen?.(e, at);
+    },
+    [items, onOpen]
+  );
+  const stripped = !exemplars ? [] : onCanvas ? (placed === null ? [] : exemplars.items.filter((_, i) => !placed.includes(i))) : exemplars.items;
   return (
     <div>
       {shown.length === 0 ? (
@@ -144,11 +192,26 @@ function LineChart({
           Every series is hidden. Show one from the table below.
         </p>
       ) : (
-        <UPlotChart height={height} timestamps={timestamps} series={lines} unit={unit} label={caption} legend={false} />
+        <UPlotChart
+          height={height}
+          timestamps={timestamps}
+          series={lines}
+          unit={unit}
+          label={caption}
+          legend={false}
+          area={area}
+          exemplars={chartExemplars}
+          onExemplarOpen={onOpenDot}
+          onExemplarsPlaced={onPlaced}
+        />
+      )}
+      {exemplars && stripped.length > 0 && (
+        <ExemplarRail exemplars={stripped} timestamps={timestamps} stepSeconds={exemplars.stepSeconds} unit={unit} onOpen={exemplars.onOpen} outside={onCanvas} />
       )}
       <p className="mt-1 text-xs text-ink-muted">
         {result.stepSeconds > 0 && <>One point per {stepText(result.stepSeconds)}. </>}
         {lines.some((l) => l.dashed && l.label.endsWith("(still filling)")) && <>Dashed at the end: buckets still filling. </>}
+        {stillFilling && <>The newest bucket is still filling. </>}
         {compare && <>Dashed: the {compare.label}.</>}
       </p>
     </div>

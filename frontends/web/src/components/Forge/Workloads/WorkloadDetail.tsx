@@ -48,6 +48,8 @@ import { useDefaultBranch } from "@/services/forge/RepoMetaContext";
 import { workloadLastError, workloadLink, type ForgeHostedWorkload } from "@/services/forge/topology";
 
 import { UPlotChart, type ChartMarker } from "../Observability/charts/UPlotChart";
+import { ExploreLink } from "../Observability/Metrics/ExploreLink";
+import { workloadPivot, useExploreHref } from "../Observability/Metrics/pivots";
 import { unionTimestamps } from "../Observability/Dashboards/PanelBody";
 import { VariableSelect } from "../Observability/Dashboards/parts";
 import { formatAgo, formatBytes, formatCores, formatCount, formatPercent } from "../Observability/format";
@@ -739,8 +741,8 @@ function OverviewTab({
         >
           <UPlotChart height={140} timestamps={timestamps} series={[{ label: "error rate", values: ratioSeries(errors, requests), tone: "destructive" }]} unit="percent" label={`Error rate of ${name}`} markers={markers} legend={false} />
         </ChartPanel>
-        <UsageChart title="CPU vs limit" series={cpu} now={cpuNow} format={formatCores} unit="cores" markers={markers} name={name} />
-        <UsageChart title="Memory vs limit" series={memory} now={memNow} format={formatBytes} unit="bytes" markers={markers} name={name} />
+        <UsageChart title="CPU vs limit" series={cpu} now={cpuNow} format={formatCores} unit="cores" markers={markers} name={name} envName={env.name} range={range} />
+        <UsageChart title="Memory vs limit" series={memory} now={memNow} format={formatBytes} unit="bytes" markers={markers} name={name} envName={env.name} range={range} />
       </div>
       <PodsPanel summary={summary} onLogs={onLogs} />
     </>
@@ -764,6 +766,7 @@ function ChartPanel({
   empty,
   loading,
   testId,
+  explore,
   children,
 }: {
   title: string;
@@ -772,12 +775,19 @@ function ChartPanel({
   empty: string | null;
   loading: boolean;
   testId: string;
+  /** The explorer link for this chart's metric, when it has one. */
+  explore?: string | null;
   children: ReactNode;
 }) {
   return (
     <Card padding="none" className="min-w-0" data-testid={testId}>
       <div className="flex items-baseline justify-between gap-3 px-4 pt-3">
         <h2 className="text-sm font-medium text-ink">{title}</h2>
+        {explore && (
+          <ExploreLink href={explore} testId={`${testId}-explore`} className="mr-auto">
+            Explore
+          </ExploreLink>
+        )}
         {figure === null ? (
           <span className="h-4 w-16 animate-pulse rounded bg-ink/5 motion-reduce:animate-none" aria-label={`Loading ${title}`} />
         ) : (
@@ -805,6 +815,8 @@ function UsageChart({
   unit,
   markers,
   name,
+  envName,
+  range,
 }: {
   title: string;
   series: WorkloadSeries | null;
@@ -813,7 +825,11 @@ function UsageChart({
   unit: "cores" | "bytes";
   markers: readonly ChartMarker[];
   name: string;
+  envName: string;
+  range: RangePreset;
 }) {
+  const exploreHref = useExploreHref();
+  const explore = exploreHref?.(workloadPivot(name, unit === "cores" ? "cpu" : "memory"), { env: envName, range }) ?? null;
   const limit = now?.limit ?? null;
   const figure = now ? (
     <>
@@ -837,6 +853,7 @@ function UsageChart({
       empty={!series || series.timestamps.length < 2 ? `Reliant received no ${unit === "cores" ? "CPU" : "memory"} samples for ${name} in the window.` : null}
       loading={false}
       testId={`workload-chart-${unit === "cores" ? "cpu" : "memory"}`}
+      explore={explore}
     >
       {series && <UPlotChart height={140} timestamps={series.timestamps} series={lines} unit={unit} label={`${title} for ${name}`} markers={markers} legend={false} />}
     </ChartPanel>
