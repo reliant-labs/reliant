@@ -466,7 +466,7 @@ func (w *worktreeTool) handleDelete(ctx context.Context, p *WorktreeParams, rc *
 	case row.Status == int32(reliantv1.WorktreeStatus_WORKTREE_STATUS_CREATING):
 		return fail("'%s' is still being created", p.Name)
 	}
-	if busy, err := w.liveChatIn(ctx, userID, project.ID, row.ID); err != nil {
+	if busy, err := w.liveChatIn(ctx, row.ID); err != nil {
 		return fail("%v", err)
 	} else if busy != "" {
 		return fail("chat %s is working in '%s'; archive that chat or the worktree from the Reliant UI", busy, p.Name)
@@ -620,19 +620,13 @@ func (w *worktreeTool) byName(ctx context.Context, projectID, name string) (*db.
 	return w.repo.GetLiveWorktreeByName(ctx, projectID, name)
 }
 
-// liveChatIn returns the id of a non-archived chat of userID bound to the
-// worktree, or "".
-func (w *worktreeTool) liveChatIn(ctx context.Context, userID, projectID, worktreeID string) (string, error) {
-	chats, err := w.repo.ListChats(ctx, db.ChatFilters{UserID: userID, ProjectID: &projectID, ExcludeArchived: true, Limit: 1000})
+// liveChatIn returns the id of a non-archived chat bound to the worktree, or "".
+func (w *worktreeTool) liveChatIn(ctx context.Context, worktreeID string) (string, error) {
+	id, err := w.repo.GetLiveChatIDForWorktree(ctx, worktreeID)
 	if err != nil {
 		return "", fmt.Errorf("look up chats using the worktree: %w", err)
 	}
-	for _, chat := range chats {
-		if chat.WorktreeID != nil && *chat.WorktreeID == worktreeID {
-			return chat.ID, nil
-		}
-	}
-	return "", nil
+	return id, nil
 }
 
 // emitChanged tells the user's connected clients the worktree list changed.
