@@ -11,9 +11,12 @@
  *            "Open trace" goes to the console's trace view; a trace the tail
  *            sampler dropped says so instead of linking to an empty page.
  *
- * The rail is its own strip rather than dots on the canvas: uPlot's scales are
- * internal to the chart, and a dot drawn at a guessed y would lie about the
- * value. Time is shared, so a dot sits under the bucket it belongs to.
+ * A dot is drawn on the chart itself, at its true value (UPlotChart's
+ * `exemplars`), whenever the value is inside the axis. The rail is the fallback
+ * for the rest — a value above the axis has no honest position on the canvas —
+ * so it shows only the exemplars the chart did not place. Its height is the
+ * value relative to the other dots on the rail, not an axis; time is shared, so
+ * a dot sits under the bucket it belongs to.
  */
 
 import { useEffect, useRef } from "react";
@@ -33,6 +36,11 @@ export function orderExemplars(exemplars: readonly MetricExemplar[]): MetricExem
   return [...exemplars].sort((a, b) => Number(b.traceStored) - Number(a.traceStored) || b.timeMs - a.timeMs);
 }
 
+/** A dot's accessible name, on the chart or the rail. */
+export function exemplarLabel(e: MetricExemplar, unit: ValueUnit): string {
+  return `Exemplar ${formatValue(e.value, unit)} at ${formatTimestamp(e.timeMs)}${e.traceStored ? "" : ", trace sampled out"}`;
+}
+
 export interface ExemplarRailProps {
   exemplars: readonly MetricExemplar[];
   /** The chart's x axis (epoch seconds) and its step: the rail spans the same time. */
@@ -40,12 +48,14 @@ export interface ExemplarRailProps {
   stepSeconds: number;
   unit: ValueUnit;
   onOpen: (exemplar: MetricExemplar, at: { x: number; y: number }) => void;
+  /** These are the ones the chart could not place on its axis, not every exemplar. */
+  outside?: boolean;
 }
 
 /** The chart's plot starts after its value axis (UPlotChart's `size: 64`). */
 const AXIS_GUTTER = "pl-16";
 
-export function ExemplarRail({ exemplars, timestamps, stepSeconds, unit, onOpen }: ExemplarRailProps) {
+export function ExemplarRail({ exemplars, timestamps, stepSeconds, unit, onOpen, outside }: ExemplarRailProps) {
   if (timestamps.length === 0 || exemplars.length === 0) return null;
   const start = timestamps[0]! * 1000;
   const end = (timestamps[timestamps.length - 1]! + Math.max(stepSeconds, 1)) * 1000;
@@ -73,14 +83,16 @@ export function ExemplarRail({ exemplars, timestamps, stepSeconds, unit, onOpen 
                 "absolute h-2.5 w-2.5 -translate-x-1/2 rounded-full border border-primary transition-transform hover:scale-125 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent",
                 e.traceStored ? "bg-primary" : "bg-background"
               )}
-              aria-label={`Exemplar ${formatValue(e.value, unit)} at ${formatTimestamp(e.timeMs)}${e.traceStored ? "" : ", trace sampled out"}`}
+              aria-label={exemplarLabel(e, unit)}
               data-testid="metrics-exemplar-dot"
               data-stored={e.traceStored || undefined}
             />
           );
         })}
       </div>
-      <p className="mt-1 text-2xs text-ink-muted">Exemplars: a dot is one sampled observation; open it for its trace.</p>
+      <p className="mt-1 text-2xs text-ink-muted">
+        {outside ? "Exemplars outside the chart's axis: a dot is one sampled observation; open it for its trace." : "Exemplars: a dot is one sampled observation; open it for its trace."}
+      </p>
     </div>
   );
 }

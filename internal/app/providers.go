@@ -377,6 +377,7 @@ type ProcessRuntimeDeps struct {
 	Settings      *ProcessSettings
 	DB            *db.Repo
 	ControlPlane  *configv1.ControlPlaneConfig
+	Network       *configv1.NetworkConfig
 	Analytics     *configv1.AnalyticsConfig
 	Sentry        *configv1.SentryConfig
 	Observability *configv1.ObservabilityConfig
@@ -385,6 +386,7 @@ type ProcessRuntimeDeps struct {
 // NewProcessRuntime installs the database-backed process globals.
 func NewProcessRuntime(d ProcessRuntimeDeps) (*ProcessRuntime, error) {
 	sentry := SentrySettings(d.Sentry, d.Observability)
+	warnPrivateEgress(d.Network, slog.Default())
 	cp := ControlPlaneEndpoint(d.ControlPlane)
 	repo := d.DB
 	// LLM drivers resolve per-user keys from the database.

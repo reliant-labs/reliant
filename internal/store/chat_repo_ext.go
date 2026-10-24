@@ -49,6 +49,17 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
+// GetLiveChatIDForWorktree returns one non-archived bound chat, or an empty
+// string. Query the base table by its indexed binding, never a project-sized list.
+func GetLiveChatIDForWorktree(ctx context.Context, db orm.Context, worktreeID string) (string, error) {
+	var id string
+	err := db.Bun().NewRaw(`SELECT id FROM chats WHERE worktree_id = ? AND state <> ? LIMIT 1`, worktreeID, core.ChatStateArchived).Scan(ctx, &id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	return id, err
+}
+
 // The chats writes (P5b L1b). Reads go through the view — see
 // chats_with_activity_repo_ext.go.
 

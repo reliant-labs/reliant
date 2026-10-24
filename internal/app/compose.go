@@ -30,6 +30,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemonevents"
 	"github.com/reliant-labs/reliant/internal/daemonstate"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/egresslimit"
 	grpcserver "github.com/reliant-labs/reliant/internal/grpc"
 	"github.com/reliant-labs/reliant/internal/handlers/account"
 	"github.com/reliant-labs/reliant/internal/handlers/approval"
@@ -337,6 +338,7 @@ func (g *Graph) newProcessRuntime() (*ProcessRuntime, error) {
 	return NewProcessRuntime(ProcessRuntimeDeps{
 		Settings:      g.ProcessSettings(),
 		ControlPlane:  g.ServerProcessConfig.GetControlPlane(),
+		Network:       g.ServerProcessConfig.GetNetwork(),
 		Analytics:     g.ServerProcessConfig.GetAnalytics(),
 		Sentry:        g.ServerProcessConfig.GetSentry(),
 		Observability: g.ServerProcessConfig.GetObservability(),
@@ -496,7 +498,7 @@ func (g *Graph) newWorkerTrigger() (*WorkerTrigger, error) {
 
 func (g *Graph) newWorkerToolsFactory() (*WorkerToolsFactory, error) {
 	return NewWorkerToolsFactory(WorkerToolsFactoryDeps{
-		ControlPlane:  g.ServerProcessConfig.GetControlPlane(),
+		Network:       g.ServerProcessConfig.GetNetwork(),
 		Temporal:      g.TemporalClient(),
 		AgentRuns:     g.AgentRuns(),
 		Triggers:      g.WorkerTrigger(),
@@ -512,6 +514,16 @@ func (g *Graph) newRemoteExecutor() (*toolexec.RemoteExecutor, error) {
 	return NewRemoteExecutor(RemoteExecutorDeps{
 		Router: g.WorkerDaemonRouter(),
 		Tools:  g.WorkerToolsFactory(),
+		// Read here, not in the provider, so the worker root's config reach
+		// names them (pkg/config Roots).
+		Egress: egresslimit.Limits{
+			Replicas:          int(g.WorkerConfig.GetEgressReplicas()),
+			UserPerMinute:     int(g.WorkerConfig.GetEgressUserPerMinute()),
+			UserBurst:         int(g.WorkerConfig.GetEgressUserBurst()),
+			UserMaxConcurrent: int(g.WorkerConfig.GetEgressUserMaxConcurrent()),
+			HostMaxConcurrent: int(g.WorkerConfig.GetEgressHostMaxConcurrent()),
+			TurnMaxParallel:   int(g.WorkerConfig.GetEgressTurnMaxParallel()),
+		},
 	})
 }
 
@@ -534,6 +546,7 @@ func (g *Graph) newTemporalWorker() (*workersetup.Worker, error) {
 		WriteLedger:    g.WriteLedger(),
 		Pollers:        g.TriggerPollers(),
 		ControlPlane:   g.ServerProcessConfig.GetControlPlane(),
+		Network:        g.ServerProcessConfig.GetNetwork(),
 		Recorder:       g.AccountRecorder(),
 		DB:             g.Database(),
 		// Read here, not in workersetup, so the worker root's config reach
@@ -642,9 +655,9 @@ func (g *Graph) newAPIDaemonRouter() (*APIDaemonRouter, error) {
 
 func (g *Graph) newAPIToolsFactory() (*tools.ToolsFactory, error) {
 	return NewAPIToolsFactory(APIToolsFactoryDeps{
-		ControlPlane: g.ServerProcessConfig.GetControlPlane(),
-		Temporal:     g.TemporalClient(),
-		DB:           g.Database(),
+		Network:  g.ServerProcessConfig.GetNetwork(),
+		Temporal: g.TemporalClient(),
+		DB:       g.Database(),
 	})
 }
 
@@ -1067,12 +1080,12 @@ func (g *Graph) newMessage() (*message.Service, error) {
 // answers ErrCredentialStoreUnavailable.
 func (g *Graph) newModelEndpoint() (*model_endpoint.Service, error) {
 	return model_endpoint.New(model_endpoint.Deps{
-		Logger:       g.Log,
-		Config:       g.Cfg,
-		Repo:         g.Database(),
-		Router:       g.APIDaemonRouter().NATSDaemonRouter,
-		Credentials:  nil,
-		ControlPlane: modelEndpointControlPlane(g.ServerProcessConfig.GetControlPlane()),
+		Logger:      g.Log,
+		Config:      g.Cfg,
+		Repo:        g.Database(),
+		Router:      g.APIDaemonRouter().NATSDaemonRouter,
+		Credentials: nil,
+		Network:     g.ServerProcessConfig.GetNetwork(),
 	})
 }
 

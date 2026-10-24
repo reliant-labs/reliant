@@ -66,6 +66,24 @@ func TestGoldenWire(t *testing.T) {
 			want: `{"daemon_id":"d-1","user_id":"u-1","type":"connected","at":"2026-10-07T09:30:00Z","daemon_type":"self_hosted"}`,
 		},
 		{
+			name: "connected event carries the build the daemon reported",
+			value: &daemonwire.Event{
+				DaemonID:   "d-1",
+				UserID:     "u-1",
+				Type:       daemonwire.EventConnected,
+				At:         goldenAt,
+				DaemonType: "managed",
+				Build: &daemonwire.Build{
+					Version:        "1.8.3-dev+b675d224",
+					Commit:         "b675d22417c3",
+					CommitTimeUnix: 1792800000,
+					ForgeVersion:   "v0.1.47",
+				},
+			},
+			want: `{"daemon_id":"d-1","user_id":"u-1","type":"connected","at":"2026-10-07T09:30:00Z","daemon_type":"managed",` +
+				`"build":{"version":"1.8.3-dev+b675d224","commit":"b675d22417c3","commit_time_unix":1792800000,"forge_version":"v0.1.47"}}`,
+		},
+		{
 			name: "activity event carries its reason",
 			value: &daemonwire.Event{
 				DaemonID:   "d-1",

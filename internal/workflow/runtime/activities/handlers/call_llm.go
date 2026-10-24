@@ -130,9 +130,9 @@ type CallLLMActivity struct {
 	// localRelay carries local-model HTTP to the daemon that serves it; nil
 	// where no daemon router exists, in which case local models are unavailable.
 	localRelay toolexec.LocalModelRelay
-	// controlPlaneURL is the control plane hosting this deployment, "" when it
-	// is self-hosted; see WithControlPlane.
-	controlPlaneURL string
+	// allowPrivateEgress is the dial policy for user-supplied model endpoint
+	// URLs; see WithPrivateEgress.
+	allowPrivateEgress bool
 	// routing picks the account of a provider that serves a thread and
 	// handles an account that is refused; nil routes nothing.
 	routing *AccountRouting
@@ -146,12 +146,11 @@ func (a *CallLLMActivity) WithAccountRouting(r *AccountRouting) *CallLLMActivity
 	return a
 }
 
-// WithControlPlane records the control plane hosting this deployment, which
-// picks the dial policy for user-supplied model endpoint URLs: a hosted
-// deployment's shared worker must not be pointed at its own network. Unset is
-// self-hosted.
-func (a *CallLLMActivity) WithControlPlane(controlPlaneURL string) *CallLLMActivity {
-	a.controlPlaneURL = controlPlaneURL
+// WithPrivateEgress sets whether a user-supplied model endpoint URL may
+// resolve to a private, loopback or link-local address (netguard.ForDeployment).
+// Unset refuses them: the shared worker must not be pointed at its own network.
+func (a *CallLLMActivity) WithPrivateEgress(allow bool) *CallLLMActivity {
+	a.allowPrivateEgress = allow
 	return a
 }
 
@@ -178,7 +177,7 @@ func (a *CallLLMActivity) localModelSpec(preferDaemonID string, noMachine bool) 
 		PreferDaemonID: preferDaemonID,
 		Custom: &local.CustomRoutes{
 			Relay:  relay,
-			Policy: netguard.ForDeployment(a.controlPlaneURL),
+			Policy: netguard.ForDeployment(a.allowPrivateEgress),
 		},
 	}
 }

@@ -51,6 +51,12 @@ func (r *Repo) GetChatWithUserCheck(ctx context.Context, id string, userID strin
 	return store.GetChatWithUserCheck(ctx, r.ORM(), id, userID)
 }
 
+// GetLiveChatIDForWorktree returns a non-archived chat bound to this worktree,
+// or an empty string when it is unused.
+func (r *Repo) GetLiveChatIDForWorktree(ctx context.Context, worktreeID string) (string, error) {
+	return store.GetLiveChatIDForWorktree(ctx, r.ORM(), worktreeID)
+}
+
 func (r *Repo) ListChats(ctx context.Context, filters ChatFilters) ([]*Chat, error) {
 	return store.ListChats(ctx, r.ORM(), filters)
 }

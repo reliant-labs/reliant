@@ -134,6 +134,9 @@ var serverRoleSurfaceEnv = map[string]string{
 	"RELIANT_CONTROL_PLANE_URL": "http://cp.surface.test:8080",
 	"INTERNAL_SERVICE_SECRET":   "cp-secret",
 
+	// network
+	"RELIANT_ALLOW_PRIVATE_EGRESS": "true",
+
 	// api only
 	"ALLOWED_EMAIL_DOMAINS":             "a.surface.test, b.surface.test",
 	"CORS_ALLOWED_ORIGINS":              "http://one.surface.test, http://two.surface.test",
@@ -155,6 +158,12 @@ var serverRoleSurfaceEnv = map[string]string{
 	// worker only
 	"RELIANT_WORKER_MAX_CONCURRENT_WORKFLOW_TASKS": "7",
 	"RELIANT_WORKER_WORKFLOW_TASK_POLLERS":         "3",
+	"RELIANT_WORKER_EGRESS_REPLICAS":               "2",
+	"RELIANT_WORKER_EGRESS_USER_PER_MINUTE":        "11",
+	"RELIANT_WORKER_EGRESS_USER_BURST":             "12",
+	"RELIANT_WORKER_EGRESS_USER_MAX_CONCURRENT":    "15",
+	"RELIANT_WORKER_EGRESS_HOST_MAX_CONCURRENT":    "17",
+	"RELIANT_WORKER_EGRESS_TURN_MAX_PARALLEL":      "18",
 
 	// integrations
 	"PUBLIC_URL":                         " https://public.surface.test ",

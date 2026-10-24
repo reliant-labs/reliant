@@ -21,11 +21,13 @@ type ToolsOptions struct {
 	// NewToolsFactory supplies one, and every factory cloned from this one
 	// shares it.
 	MCPToolCache *MCPToolCache
-	// ControlPlaneURL is the control plane hosting this deployment, "" when it
-	// is self-hosted (the daemon, tests). It picks the dial policy of the web
-	// tools (netguard.ForDeployment): a hosted deployment's shared worker must
-	// not reach its own network; a self-hosted one is the user's machine.
-	ControlPlaneURL string
+	// AllowPrivateEgress lets the web tools (fetch, websearch, sourcegraph)
+	// dial private, loopback and link-local addresses (netguard.ForDeployment).
+	// False, the zero value, is the server roles' setting: a shared process
+	// must not reach its own network. The daemon sets it, because a daemon IS
+	// the user's machine; a self-hosted server opts in with
+	// ServerProcessConfig.network.allow_private_egress.
+	AllowPrivateEgress bool
 	// Repo is the database the tools read and write. The factory is
 	// composition: it hands Repo to each tool as the role that tool declares
 	// (deps.go), through store(). Optional: nil means every database-backed
@@ -373,7 +375,7 @@ func (f *ToolsFactory) WebSearch() Tool {
 // netPolicy is the dial policy for tools that reach the network from this
 // process: hosted deployments may not dial their own network.
 func (f *ToolsFactory) netPolicy() netguard.Policy {
-	return netguard.ForDeployment(f.opts.ControlPlaneURL)
+	return netguard.ForDeployment(f.opts.AllowPrivateEgress)
 }
 
 // Media tools

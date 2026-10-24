@@ -22,7 +22,7 @@ import (
 
 func TestFetchTool(t *testing.T) {
 	t.Parallel()
-	tool := NewFetchTool(netguard.ForDeployment(""))
+	tool := NewFetchTool(netguard.ForDeployment(true))
 
 	assert.Equal(t, FetchToolName, tool.Name())
 	assert.NotEmpty(t, tool.Description())
@@ -32,7 +32,7 @@ func TestFetchTool(t *testing.T) {
 
 func TestFetchToolValidation(t *testing.T) {
 	t.Parallel()
-	tool := NewFetchTool(netguard.ForDeployment(""))
+	tool := NewFetchTool(netguard.ForDeployment(true))
 	typedTool := tool.(*ToolWrapper[FetchParams, ToolResponse])
 
 	toolCtx := &rctx.ToolContext{
@@ -123,7 +123,7 @@ func TestFetchReadabilityExtraction(t *testing.T) {
 	}))
 	defer server.Close()
 
-	tool := NewFetchTool(netguard.ForDeployment(""))
+	tool := NewFetchTool(netguard.ForDeployment(true))
 	typedTool := tool.(*ToolWrapper[FetchParams, ToolResponse])
 	toolCtx := &rctx.ToolContext{Context: context.Background()}
 
@@ -201,7 +201,7 @@ func TestFetchJSRenderedDetection(t *testing.T) {
 	}))
 	defer server.Close()
 
-	tool := NewFetchTool(netguard.ForDeployment(""))
+	tool := NewFetchTool(netguard.ForDeployment(true))
 	typedTool := tool.(*ToolWrapper[FetchParams, ToolResponse])
 	toolCtx := &rctx.ToolContext{Context: context.Background()}
 
@@ -226,7 +226,7 @@ func TestFetchNonHTMLContent(t *testing.T) {
 	}))
 	defer server.Close()
 
-	tool := NewFetchTool(netguard.ForDeployment(""))
+	tool := NewFetchTool(netguard.ForDeployment(true))
 	typedTool := tool.(*ToolWrapper[FetchParams, ToolResponse])
 	toolCtx := &rctx.ToolContext{Context: context.Background()}
 
@@ -309,7 +309,7 @@ func TestExtractTextFromHTML(t *testing.T) {
 
 func runFetchCaps(t *testing.T, params FetchParams) ToolResponse {
 	t.Helper()
-	tool := NewFetchTool(netguard.ForDeployment("")).(*ToolWrapper[FetchParams, ToolResponse])
+	tool := NewFetchTool(netguard.ForDeployment(true)).(*ToolWrapper[FetchParams, ToolResponse])
 	resp, err := tool.tool.Execute(&rctx.ToolContext{Context: context.Background()}, params)
 	require.NoError(t, err)
 	return resp
@@ -474,7 +474,7 @@ func TestFetchTimeoutClamp(t *testing.T) {
 	assert.Equal(t, 60, clampFetchTimeout(61))
 	assert.Equal(t, 60, clampFetchTimeout(1<<30))
 
-	policy := netguard.ForDeployment("")
+	policy := netguard.ForDeployment(true)
 	assert.Equal(t, 60*time.Second, newFetchClient(policy, clampFetchTimeout(100000)).Timeout)
 	assert.Equal(t, time.Duration(fetchDefaultTimeout)*time.Second, NewFetchTool(policy).(*ToolWrapper[FetchParams, ToolResponse]).tool.(*fetchTool).client.Timeout)
 	assert.NotNil(t, newFetchClient(policy, 5).CheckRedirect)
@@ -482,7 +482,7 @@ func TestFetchTimeoutClamp(t *testing.T) {
 
 func TestFetchDescriptionStatesTheCaps(t *testing.T) {
 	t.Parallel()
-	tool := NewFetchTool(netguard.ForDeployment(""))
+	tool := NewFetchTool(netguard.ForDeployment(true))
 	assert.Contains(t, tool.Description(), "1048576")
 	assert.Contains(t, tool.Description(), "hard cap")
 }

@@ -10,7 +10,7 @@
  * slow call in a trace of four hundred.
  */
 
-import { ArrowLeft, Flame, FileText } from "lucide-react";
+import { ArrowLeft, Flame, FileText, LineChart } from "lucide-react";
 
 import Card, { CardHeader } from "@/components/forge-ui/card";
 import { Button } from "@/components/ui/Button";
@@ -18,6 +18,8 @@ import { useTrace } from "@/hooks/observability-queries";
 import type { ObsScope, Span } from "@/services/controlPlane/observability/types";
 
 import { AttributeTable } from "./AttributeTable";
+import { ExploreLink } from "./Metrics/ExploreLink";
+import { tracePivot, useExploreHref } from "./Metrics/pivots";
 import { formatDuration, formatTimestamp } from "./format";
 import { shortId } from "./LogsView";
 import type { ObsNavigate } from "./obsSearch";
@@ -43,6 +45,8 @@ export function TraceDetail({
   const root = spans.find((span) => !span.parentSpanId) ?? spans[0];
   const selected = spans.find((span) => span.spanId === spanId) ?? null;
   const extent = trace.data ? traceExtent(spans) : null;
+  const exploreHref = useExploreHref();
+  const metricsHref = (span: Span | undefined) => (span ? (exploreHref?.(tracePivot(span), { range: "1h" }) ?? null) : null);
 
   const back = (
     <Button
@@ -115,6 +119,12 @@ export function TraceDetail({
           >
             Logs for this trace
           </Button>
+          {metricsHref(selected ?? root) && (
+            <ExploreLink href={metricsHref(selected ?? root)!} testId="trace-metrics">
+              <LineChart className="h-3.5 w-3.5" aria-hidden="true" />
+              Metrics for {(selected ?? root)!.service}
+            </ExploreLink>
+          )}
           <Button
             variant="outline"
             size="sm"

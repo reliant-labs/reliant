@@ -32,6 +32,7 @@ PROMETHEUS_ENABLED kind=bool flag="" default="true" required=false optional=fals
 PROXY_HOST kind=string flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
 PUBLIC_URL kind=string flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
 READINESS_PATHS kind=string flag="" default="/ready,/readyz" required=false optional=false sensitive=false allowed=[] aliases=[]
+RELIANT_ALLOW_PRIVATE_EGRESS kind=bool flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
 RELIANT_ANALYTICS_DISABLED kind=bool flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
 RELIANT_API_BASE_URL kind=string flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]
 RELIANT_AUTHORIZATION_SERVER kind=string flag="" default="" required=false optional=false sensitive=false allowed=[] aliases=[]

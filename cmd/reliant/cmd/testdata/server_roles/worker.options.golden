@@ -35,6 +35,7 @@
       URL: "http://cp.surface.test:8080"
       InternalServiceSecret: "cp-secret"
     }
+    AllowPrivateEgress: true
     Log: logging.Settings {
       Level: "warn"
       Format: "json"
@@ -91,6 +92,14 @@
     }
     WorkflowTaskSlots: 7
     WorkflowTaskPollers: 3
+    Egress: egresslimit.Limits {
+      Replicas: 2
+      UserPerMinute: 11
+      UserBurst: 12
+      UserMaxConcurrent: 15
+      HostMaxConcurrent: 17
+      TurnMaxParallel: 18
+    }
   }
   {
     github: [

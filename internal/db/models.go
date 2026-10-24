@@ -179,6 +179,7 @@ type (
 	DaemonLifecycleUpdate  = core.DaemonLifecycleUpdate
 	DaemonAttachmentSource = core.DaemonAttachmentSource
 	DaemonAttachment       = core.DaemonAttachment
+	DaemonBuild            = core.DaemonBuild
 )
 
 const (

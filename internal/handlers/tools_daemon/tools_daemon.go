@@ -151,8 +151,12 @@ type daemonConnection struct {
 	// connect wrote it (renewLease).
 	attachedAt   time.Time
 	attachSource db.DaemonAttachmentSource
-	podIP        *string
-	podPort      *int
+	// build is the build the daemon reported at registration (zero = unknown
+	// build). It is constant for the session, so renewLease re-creating a lost
+	// lease row writes it back.
+	build   db.DaemonBuild
+	podIP   *string
+	podPort *int
 	// leaseMu orders lease renewals against teardown's release, so a renewal
 	// can never land after teardownConnection released the row and leave a
 	// lease for a stream that is gone.
@@ -1034,6 +1038,7 @@ func (s *Service) ConnectDaemon(
 		Source:             db.DaemonAttachmentSourceInbound,
 		AttachedAt:         now,
 		LastStreamActivity: now,
+		Build:              daemonBuildFromRegister(reg),
 	}); err != nil {
 		// The stream is still accepted: the first keepalive re-creates the
 		// lease (renewLease) and says so. Until then the registry reports
@@ -1066,6 +1071,7 @@ func (s *Service) ConnectDaemon(
 		stream:              &inboundStream{stream: stream, ctx: ctx},
 		attachSource:        db.DaemonAttachmentSourceInbound,
 		movesOnDrain:        reg.GetMovesOnDrain(),
+		build:               daemonBuildFromRegister(reg),
 		sendCh:              make(chan *reliantv1.ServerMessage, 256),
 		done:                make(chan struct{}),
 		pendingCommands:     make(map[string]chan *reliantv1.DaemonCommandResponse),
@@ -1103,7 +1109,7 @@ func (s *Service) ConnectDaemon(
 	// Notify listeners outside the mutex.
 	s.notifyConnected(userID, daemonID, conn.name, conn.hostname, conn.platform)
 	if s.deps.StatePublisher != nil {
-		s.deps.StatePublisher.Connected(daemonID, userID, conn.daemonType)
+		s.deps.StatePublisher.Connected(daemonID, userID, conn.daemonType, wireBuild(conn.build))
 	}
 
 	// Publish an immediate heartbeat so the frontend knows the daemon is
@@ -1211,6 +1217,7 @@ func (s *Service) RegisterOutboundConnection(
 		PodPort:            &podPort,
 		AttachedAt:         now,
 		LastStreamActivity: now,
+		Build:              daemonBuildFromRegister(reg),
 	}); err != nil {
 		// See the inbound path: the first keepalive re-creates it.
 		logging.ErrorContext(ctx, LOG_PREFIX_TOOLS_DAEMON+" Failed to write the reachability lease for a new daemon stream; "+
@@ -1262,7 +1269,7 @@ func (s *Service) RegisterOutboundConnection(
 
 	s.notifyConnected(userID, daemonID, conn.name, conn.hostname, conn.platform)
 	if s.deps.StatePublisher != nil {
-		s.deps.StatePublisher.Connected(daemonID, userID, conn.daemonType)
+		s.deps.StatePublisher.Connected(daemonID, userID, conn.daemonType, wireBuild(conn.build))
 	}
 	s.publishDaemonHeartbeat(context.Background(), userID, daemonID, time.Now().UTC(), nil)
 	s.publishDaemonListChanged(userID, daemonID)
@@ -1524,6 +1531,7 @@ func (s *Service) renewLease(ctx context.Context, conn *daemonConnection, stream
 			PodPort:            conn.podPort,
 			AttachedAt:         conn.attachedAt,
 			LastStreamActivity: leaseTime(time.Now()),
+			Build:              conn.build,
 		})
 	}()
 	if err != nil {

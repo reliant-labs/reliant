@@ -115,6 +115,7 @@ import { formatMachineSpec } from "@/components/Billing/machineSpecs";
 import { MachineCost } from "@/components/Billing/MachineCost";
 import { CardInset } from "@/components/forge-ui/card";
 import { MachineDiskCard } from "./MachineDiskCard";
+import { machineBuildLabel } from "@/lib/machineBuild";
 import { machineCrashSummary } from "@/lib/machineMemory";
 import { DiskGrowNotice, GrowDiskModal, type GrowStage } from "./GrowDiskModal";
 import { diskGrowStatus, isStorageDenied } from "./diskGrow";
@@ -799,6 +800,7 @@ function ManagedMachinesTable({
                   {daemonDisplayName(d)}
                 </button>
                 <AppAccessIndicator count={appCounts.get(d.daemonId) ?? 0} />
+                <MachineBuild daemon={d} />
               </Td>
               <Td>
                 <StatusDot
@@ -862,6 +864,13 @@ function ManagedMachinesTable({
   );
 }
 
+/** The daemon's reported build, small and secondary under the machine's name. */
+function MachineBuild({ daemon }: { daemon: Daemon }) {
+  const label = machineBuildLabel(daemon);
+  if (!label) return null;
+  return <p className="mt-0.5 text-xs text-muted-foreground">{label}</p>;
+}
+
 function SelfHostedMachinesTable({
   daemons,
   appCounts,
@@ -904,6 +913,7 @@ function SelfHostedMachinesTable({
                   {daemonDisplayName(d)}
                 </button>
                 <AppAccessIndicator count={appCounts.get(d.daemonId) ?? 0} />
+                <MachineBuild daemon={d} />
               </Td>
               <Td>
                 <StatusDot variant={statusDotVariant[status]} label={badge.label} />

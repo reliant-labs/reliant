@@ -77,17 +77,18 @@ type apiOptions struct {
 	MaxUploadSize       int64
 	WorktreeAutoArchive worktreesweep.AutoArchiveMode
 
-	Log           logging.Settings
-	ControlPlane  controlplane.Endpoint
-	PublicURL     string
-	VaultKey      string
-	Webhooks      webhook.RegistryConfig
-	GitHubAppSlug string
-	GitHubBot     github.OurBot
-	Observability observability.Settings
-	Sentry        telemetry.SentryConfig
-	Analytics     analytics.Settings
-	LLM           drivers.Settings
+	Log                logging.Settings
+	ControlPlane       controlplane.Endpoint
+	AllowPrivateEgress bool
+	PublicURL          string
+	VaultKey           string
+	Webhooks           webhook.RegistryConfig
+	GitHubAppSlug      string
+	GitHubBot          github.OurBot
+	Observability      observability.Settings
+	Sentry             telemetry.SentryConfig
+	Analytics          analytics.Settings
+	LLM                drivers.Settings
 
 	PayloadGCHorizon time.Duration
 	Preview          tools.PreviewSettings
@@ -158,6 +159,7 @@ func loadServerAPIConfig(cmd *cobra.Command, opts *apiOptions) error {
 	opts.WorktreeAutoArchive = worktreesweep.ParseAutoArchiveMode(api.GetWorktreeAutoArchive())
 	opts.Log = logSettings(base)
 	opts.ControlPlane = app.ControlPlaneEndpoint(process.GetControlPlane())
+	opts.AllowPrivateEgress = app.AllowPrivateEgress(process.GetNetwork())
 	opts.PublicURL, opts.VaultKey, opts.Webhooks = in.PublicURL, in.VaultKey, in.Webhooks
 	opts.GitHubAppSlug, opts.GitHubBot = in.GitHubAppSlug, in.GitHubBot
 	opts.Observability = observabilitySettings(process.GetObservability(), base)
