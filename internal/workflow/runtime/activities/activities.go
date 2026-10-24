@@ -41,6 +41,9 @@ type Activities struct {
 	// Optional: nil makes an action that names a connection fail rather than
 	// run unauthenticated.
 	Connections httpaction.CredentialSource
+	// HostedActions dispatches only explicitly granted fixed HTTP action nodes.
+	// It is intentionally separate from generic integration-tool credentials.
+	HostedActions handlers.HostedActionExecutor
 	// AllowPrivateEgress picks the dial policy for user-supplied model
 	// endpoint URLs (netguard.ForDeployment); false refuses private targets.
 	AllowPrivateEgress bool

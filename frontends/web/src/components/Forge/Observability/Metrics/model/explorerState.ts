@@ -34,6 +34,14 @@ export interface ExplorerState {
   hidden: string[];
   chart: ChartKind;
   compare: CompareMode;
+  /** Which tab is open: the chart (default) or the SQL tab. */
+  tab?: "sql";
+  /**
+   * A `kind: "sql"` panel the SQL tab is editing and running: what "Open as SQL
+   * panel" makes of the compiled statements, or what a pivot opens (an alert
+   * rule's expr). Set, the SQL tab opens on it.
+   */
+  sqlPanel?: Panel;
 }
 
 /** The panel the explorer opens on with nothing chosen. */
@@ -90,7 +98,15 @@ export function stateFromSearch(search: Record<string, string | undefined>): Exp
   };
   if (search.m) state.detailMetric = search.m;
   if (search.bd) state.breakdownKey = search.bd;
+  const sqlPanel = decodePanelParam(search.sql);
+  if (sqlPanel?.kind === "sql" && sqlPanel.sql) state.sqlPanel = sqlPanel;
+  if (search.tab === "sql" || state.sqlPanel) state.tab = "sql";
   return state;
+}
+
+/** A SQL panel as the URL carries it: the statement alone, so it can be edited without a query attached. */
+export function sqlPanelOf(sql: string, title = "SQL"): Panel {
+  return { id: "explore-sql", title, kind: "sql", signal: "metrics", series: [], sql };
 }
 
 /**
@@ -108,7 +124,15 @@ export function searchFromState(s: ExplorerState): Record<string, string | undef
     hide: encodeLabels(s.hidden),
     chart: s.chart === "area" ? "area" : undefined,
     compare: s.compare === "off" ? undefined : s.compare,
+    ...sqlSearch(s),
   };
+}
+
+/** The SQL tab's keys: `sql` carries the panel when it fits a link, and `tab` only when nothing else implies it. */
+function sqlSearch(s: ExplorerState): { tab?: string; sql?: string } {
+  const sql = s.sqlPanel?.sql ? encodePanelParam(s.sqlPanel) : undefined;
+  const fits = sql !== undefined && sql.length <= MAX_PANEL_PARAM_CHARS;
+  return { sql: fits ? sql : undefined, tab: s.tab === "sql" && !fits ? "sql" : undefined };
 }
 
 /** Why the state cannot be a link, in words for the reader; null when it can. */

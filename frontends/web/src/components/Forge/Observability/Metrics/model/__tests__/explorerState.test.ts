@@ -20,6 +20,7 @@ import {
   flagsProblem,
   linkProblem,
   searchFromState,
+  sqlPanelOf,
   stateFromSearch,
   topSeries,
   type ExplorerState,
@@ -115,6 +116,8 @@ describe("catalogGroup", () => {
     expect(catalogGroup("go.goroutine.count", false)).toBe("runtime");
     expect(catalogGroup("forge.metrics.rejected_attributes", false)).toBe("runtime");
     expect(catalogGroup("rpcx.thing", false)).toBe("other");
+    // IsBuiltinMetric needs a name after the prefix.
+    expect(catalogGroup("rpc.", false)).toBe("other");
     expect(catalogGroup("orders.created", true)).toBe("declared");
     expect(catalogGroup("k8s.container.ready", false)).toBe("infra");
     expect(catalogGroup("anything", false)).toBe("other");
@@ -232,6 +235,24 @@ describe("URL state", () => {
 
   it("decodes only a q within the cap", () => {
     expect(stateFromSearch({ q: "e".repeat(MAX_PANEL_PARAM_CHARS + 1) }).panel.series).toEqual([]);
+  });
+
+  it("round-trips the SQL tab and its panel, which implies the tab", () => {
+    const sql = "SELECT 1 AS value FROM otel_metrics_sum WHERE TimeUnix >= {from:DateTime64(9)}";
+    const withSql = state({ sqlPanel: sqlPanelOf(sql), tab: "sql" });
+    const search = searchFromState(withSql);
+    expect(search.tab).toBeUndefined();
+    const back = stateFromSearch(search);
+    expect(back.tab).toBe("sql");
+    expect(back.sqlPanel).toEqual(canonicalPanel(sqlPanelOf(sql)));
+    expect(stateFromSearch(searchFromState(state({ tab: "sql" }))).tab).toBe("sql");
+    expect(stateFromSearch(searchFromState(state())).tab).toBeUndefined();
+  });
+
+  it("ignores a sql key that is not a SQL panel", () => {
+    const notSql = searchFromState(state()).q;
+    expect(stateFromSearch({ sql: notSql }).sqlPanel).toBeUndefined();
+    expect(stateFromSearch({ sql: "garbage" }).tab).toBeUndefined();
   });
 });
 

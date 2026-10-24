@@ -90,6 +90,10 @@ type Config struct {
 	// a credential identically. nil refuses every authenticated call.
 	IntegrationCredentials httpaction.CredentialSource
 
+	// HostedActions is fixed-action-only hosted HTTP execution, never a tool
+	// credential source. nil refuses nodes that request hosted_use.
+	HostedActions handlers.HostedActionExecutor
+
 	// AllowPrivateEgress is ServerProcessConfig.network.allow_private_egress:
 	// whether a user-supplied model endpoint may resolve to a private,
 	// loopback or link-local address. False is the default.
@@ -204,6 +208,7 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	}
 
 	activityDeps.Connections = cfg.IntegrationCredentials
+	activityDeps.HostedActions = cfg.HostedActions
 	activityDeps.AllowPrivateEgress = cfg.AllowPrivateEgress
 	activityDeps.WriteLedger = cfg.WriteLedger
 	activityDeps.AccountRouting = accountRouting(cfg.Database, cfg.AccountLimits)

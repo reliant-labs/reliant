@@ -91,6 +91,8 @@ const ConsolePrimitivesPreview = lazyRoute(
   () => import('./components/Forge/__preview__/ConsolePrimitivesPreview'), 'default')
 const DashboardsPreview = lazyRoute(
   () => import('./components/Forge/Observability/Dashboards/__preview__/DashboardsPreview'), 'default')
+const MetricsExplorerPreview = lazyRoute(
+  () => import('./components/Forge/Observability/Metrics/__preview__/MetricsExplorerPreview'), 'default')
 const ReleasesPreview = lazyRoute(
   () => import('./components/Forge/Releases/__preview__/ReleasesPreview'), 'default')
 const WorkloadsPreview = lazyRoute(
@@ -562,6 +564,14 @@ const forgeDashboardsPreviewRoute = createRoute({
   component: () => <DevOnlyRoute><DashboardsPreview /></DevOnlyRoute>,
 })
 
+// The metrics explorer, inside the real console chrome, against the explorer's
+// fixture app — every state in every scheme, no backend.
+const forgeMetricsPreviewRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/forge-metrics-preview',
+  component: () => <DevOnlyRoute><MetricsExplorerPreview /></DevOnlyRoute>,
+})
+
 // (`/checkout/embed` removed with the embedded-checkout path. It existed to
 // host Stripe's hosted checkout page in a bare Electron BrowserWindow, because
 // payment-method domains are registered by HOSTNAME and app://bundle cannot be
@@ -864,6 +874,7 @@ const routeTree = rootRoute.addChildren([
   forgeReleasesPreviewRoute,
   forgeWorkloadsPreviewRoute,
   forgeDashboardsPreviewRoute,
+  forgeMetricsPreviewRoute,
   projectPickerRedirectRoute,
   mobileIndexRoute,
   authenticatedLayoutRoute.addChildren([

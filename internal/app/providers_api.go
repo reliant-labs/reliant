@@ -204,6 +204,7 @@ type HTTPRoutesDeps struct {
 //
 //forge:root-only api
 func NewHTTPRoutes(d HTTPRoutesDeps) (*grpcserver.APIHTTPRoutes, error) {
+	cp := ControlPlaneEndpoint(d.ControlPlane)
 	return grpcserver.NewAPIHTTPRoutes(grpcserver.APIHTTPRoutesDeps{
 		Auth:                d.Auth,
 		Repo:                d.DB,
@@ -215,7 +216,8 @@ func NewHTTPRoutes(d HTTPRoutesDeps) (*grpcserver.APIHTTPRoutes, error) {
 		PublicURL:           d.Integrations.PublicURL,
 		OAuthIssuers:        d.OAuthIssuers,
 		AuthorizationServer: d.Settings.AuthorizationServer,
-		ControlPlaneURL:     ControlPlaneEndpoint(d.ControlPlane).URL,
+		ControlPlaneURL:     cp.URL,
+		HostedHTTPRedeem:    grpcserver.NewHostedHTTPRedeemHandler(d.DB, cp.InternalServiceSecret),
 	})
 }
 
