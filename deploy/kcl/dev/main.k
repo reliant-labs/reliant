@@ -148,23 +148,17 @@ _migrate = _migrate | {env = _env(_migrate)}
 
 _api = wl.api_server | _host_only | {
     runtime = _host(".air.api.toml", [ports.api, ports.api_health])
-    if _host_runner != "air":
-        command = ["go", "run", "./cmd/reliant"]
     env = {PUBLIC_URL = "http://localhost:${ports.api}"}
 }
 _api = _api | {env = _env(_api)}
 
 _worker = wl.temporal_worker | _host_only | {
     runtime = _host(".air.worker.toml", [ports.worker_health])
-    if _host_runner != "air":
-        command = ["go", "run", "./cmd/reliant"]
 }
 _worker = _worker | {env = _env(_worker)}
 
 _gateway = wl.daemon_gateway | _host_only | {
     runtime = _host(".air.gateway.toml", [ports.gateway, ports.gateway_health])
-    if _host_runner != "air":
-        command = ["go", "run", "./cmd/reliant"]
 }
 _gateway = _gateway | {env = _env(_gateway)}
 
