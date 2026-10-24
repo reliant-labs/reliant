@@ -159,9 +159,10 @@ func MinimumPermissionForTool(toolName string) string {
 	// list_runs and get_run only read, and sit at the base tier.
 	//
 	// No tool creates or enables a trigger: that is the user's act, in the
-	// app. list_triggers only reads.
+	// app. list_triggers and list_trigger_events only read. fire_trigger can
+	// launch a saved workflow with wider privileges, so it is orchestrator-only.
 	switch toolName {
-	case ToolStartRun, ToolControlRun, ToolSendToRun:
+	case ToolStartRun, ToolControlRun, ToolSendToRun, ToolFireTrigger:
 		return PermissionOrchestrator
 	}
 

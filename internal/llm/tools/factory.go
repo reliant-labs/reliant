@@ -72,6 +72,10 @@ type ToolsOptions struct {
 	// Optional: nil means the tool reports it is unavailable here (the daemon
 	// runtime has no trigger service).
 	TriggerLister TriggerLister
+	// TriggerFirer and TriggerEventLister operate on existing activations only.
+	// Optional, as above: nil reports an unavailable runtime.
+	TriggerFirer       TriggerFirer
+	TriggerEventLister TriggerEventLister
 	// ShellPlatform is the shell family of the DAEMON that will execute shell
 	// commands, which is frequently not this process's own platform: the
 	// server and worker run Linux while the daemon may be Windows. The shell
@@ -479,6 +483,14 @@ func (f *ToolsFactory) SendToRun() Tool {
 
 func (f *ToolsFactory) ListTriggers() Tool {
 	return NewListTriggersTool(f.store(), f.opts.TriggerLister)
+}
+
+func (f *ToolsFactory) FireTrigger() Tool {
+	return NewFireTriggerTool(f.store(), f.opts.TriggerFirer)
+}
+
+func (f *ToolsFactory) ListTriggerEvents() Tool {
+	return NewListTriggerEventsTool(f.store(), f.opts.TriggerEventLister)
 }
 
 // Analysis tools

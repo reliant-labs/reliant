@@ -17,7 +17,7 @@
 // is permanent and can connect as that daemon; a forge deploy passes its
 // token to a registry login and to subprocesses. So the session is EXCHANGED
 // at the server the session belongs to, for a token holding only what forge
-// asked for (deploy, secret, domain), only what the session itself holds, and
+// asked for (control-plane capabilities), only what the session itself holds, and
 // for at most an hour — and only for the control plane that server's tokens
 // are valid at, which the SERVER checks (forge's endpoint comes from a repo's
 // KCL, and a repo is not a trusted party).

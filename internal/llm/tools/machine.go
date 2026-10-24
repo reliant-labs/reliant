@@ -98,7 +98,9 @@ var serverSafeTools = map[string]struct{}{
 	// Catalog search and trigger listing: database and embedded-catalog
 	// reads only.
 	ToolSearchIntegrations: {}, ToolGetIntegrationSchema: {},
-	ToolListTriggers: {},
+	// Fire delegates to the saved activation's machine choice, not this run's;
+	// all trigger tool operations execute through the server-side service.
+	ToolListTriggers: {}, ToolFireTrigger: {}, ToolListTriggerEvents: {},
 	// Returns a fixed text; the offer is the rendered call itself.
 	ToolRequestMachine: {},
 	// Database reads and a Sentry event.

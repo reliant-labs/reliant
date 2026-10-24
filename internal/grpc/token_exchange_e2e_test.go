@@ -28,7 +28,7 @@ import (
 // control-plane's STORAGE faked (fakeControlPlane, Memory under real grant
 // rules):
 //
-//	app session ─► TokenService.CreateToken(DAEMON) ─► MintForUser + clipped UpdateForUser
+//	app session ─► TokenService.CreateToken(DAEMON) ─► atomically clipped MintForUser
 //	daemon credential ─► TokenService.ExchangeToken (public at the interceptor,
 //	                     authenticated in the handler) ─► MintForUser ─► `rlat_`
 //

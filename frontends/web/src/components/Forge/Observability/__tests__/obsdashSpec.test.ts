@@ -59,6 +59,100 @@ describe("validation", () => {
   });
 });
 
+describe("metric aggregations (MX-F1's vocabulary)", () => {
+  const metricPanel = (series: Panel["series"], over: Partial<Panel> = {}): Panel => ({ id: "m", title: "Metric", kind: "line", signal: "metrics", series, ...over });
+  const s = (agg: string, metricType: string, extra: Record<string, unknown> = {}) => ({ label: "A", agg, field: "some.metric", metricType, ...extra });
+
+  it.each([
+    ["rate", "sum"],
+    ["rate", "histogram"],
+    ["rate", "exp_histogram"],
+    ["rate", "summary"],
+    ["increase", "sum"],
+    ["increase", "histogram"],
+    ["min", "gauge"],
+    ["min", "sum"],
+    ["count", "histogram"],
+    ["count", "exp_histogram"],
+    ["count", "summary"],
+    ["avg", "summary"],
+    ["last", "gauge"],
+    ["sum", "gauge"],
+    ["max", "histogram"],
+  ])("accepts %s over a %s", (agg, type) => {
+    expect(panelProblems(metricPanel([s(agg, type)]))).toEqual([]);
+  });
+
+  it.each([0.5, 0.9, 0.95, 0.99, 0.999, 1])("accepts any quantile level: %s", (q) => {
+    expect(panelProblems(metricPanel([s("quantile", "histogram", { quantile: q })]))).toEqual([]);
+    expect(panelProblems(metricPanel([s("quantile", "exp_histogram", { quantile: q })]))).toEqual([]);
+  });
+
+  it.each<[string, string, string, string]>([
+    ["rate", "gauge", "", "does not grow"],
+    ["increase", "gauge", "", "does not grow"],
+    ["quantile", "sum", "", "needs a histogram"],
+    ["quantile", "gauge", "", "needs a histogram"],
+    ["quantile", "summary", "", "needs a histogram"],
+    ["count", "gauge", "", "counts a histogram's observations"],
+    ["count", "sum", "", "counts a histogram's observations"],
+    ["count_distinct", "histogram", "", "not defined over a metric"],
+    ["median", "sum", "", "not an aggregation"],
+  ])("refuses %s over a %s", (agg, type, _x, message) => {
+    expect(panelProblems(metricPanel([s(agg, type, agg === "quantile" ? { quantile: 0.9 } : {})])).join(" ")).toContain(message);
+  });
+
+  it("refuses an unknown metric type, naming the five kinds", () => {
+    expect(panelProblems(metricPanel([s("avg", "counter")])).join(" ")).toContain("metric's type");
+  });
+
+  it("refuses rate, increase, min and last over traces and logs, which have no growth or level", () => {
+    for (const agg of ["rate", "increase", "min", "last"]) {
+      const problems = panelProblems({ id: "t", title: "T", kind: "line", signal: "traces", series: [{ label: "A", agg, field: "span.duration" }] }).join(" ");
+      expect(problems, agg).toContain("defined for metrics");
+    }
+  });
+
+  it("still accepts min and count over traces' own aggregations that existed before", () => {
+    expect(panelProblems({ id: "t", title: "T", kind: "line", signal: "traces", series: [{ label: "A", agg: "count" }] })).toEqual([]);
+    expect(panelProblems({ id: "t", title: "T", kind: "line", signal: "traces", series: [{ label: "A", agg: "max", field: "span.duration" }] })).toEqual([]);
+  });
+
+  it("validates a formula with forge's parser: a reference past the series is refused", () => {
+    expect(panelProblems(metricPanel([s("rate", "sum"), { ...s("rate", "sum"), label: "B" }], { formula: "A / B * 100" }))).toEqual([]);
+    expect(panelProblems(metricPanel([s("rate", "sum")], { formula: "A / C" })).join(" ")).toContain("Formula:");
+    expect(panelProblems(metricPanel([s("rate", "sum")], { formula: "A +" })).join(" ")).toContain("Formula:");
+  });
+
+  it("refuses a formula on a table, and with a ratio", () => {
+    expect(panelProblems(metricPanel([s("rate", "sum")], { kind: "table", formula: "A" })).join(" ")).toContain("line or number");
+    expect(panelProblems(metricPanel([s("rate", "sum"), { ...s("rate", "sum"), label: "B" }], { ratio: true, formula: "A / B" })).join(" ")).toContain("formula or a ratio");
+  });
+
+  it("accepts a table and a bar over metrics, with a limit; a bar needs a group-by", () => {
+    expect(panelProblems(metricPanel([s("rate", "sum")], { kind: "table", limit: 20 }))).toEqual([]);
+    expect(panelProblems(metricPanel([s("rate", "sum")], { kind: "bar", groupBy: ["status"], limit: 10 }))).toEqual([]);
+    expect(panelProblems(metricPanel([s("rate", "sum")], { kind: "bar" })).join(" ")).toContain("needs a group-by");
+  });
+
+  it.each<[Partial<Panel>, string]>([
+    [{ kind: "line", limit: 5 }, "Only a table or bar panel takes a limit"],
+    [{ kind: "table", limit: 201 }, "from 1 to 200"],
+    [{ kind: "table", limit: 2.5 }, "from 1 to 200"],
+    [{ kind: "table", limit: -1 }, "from 1 to 200"],
+  ])("refuses limit %j", (patch, message) => {
+    expect(panelProblems(metricPanel([s("rate", "sum")], patch)).join(" ")).toContain(message);
+  });
+
+  it("treats a zero limit as unset", () => {
+    expect(panelProblems(metricPanel([s("rate", "sum")], { limit: 0 }))).toEqual([]);
+  });
+
+  it("keeps the old rule: a count over a metric is not defined for a counter", () => {
+    expect(panelProblems(metricPanel([s("count", "sum")])).join(" ")).toContain("histogram");
+  });
+});
+
 describe("the browser kinds (C7)", () => {
   const funnel: Panel = { id: "f", title: "Checkout", kind: "funnel", signal: "traces", series: [], funnel: { steps: ["view", "buy"], window: "1h", by: "session" } };
 

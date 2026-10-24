@@ -167,6 +167,12 @@ var generatedToolParams = map[string]ToolParams{
 		},
 		Unbindable: map[string]string{},
 	},
+	"fire_trigger": {
+		Bindable: map[string]struct{}{
+			"trigger_id": {},
+		},
+		Unbindable: map[string]string{},
+	},
 	"generate_image": {
 		Bindable: map[string]struct{}{
 			"background": {},
@@ -601,6 +607,14 @@ var generatedToolParams = map[string]ToolParams{
 	},
 	"list_tasks": {
 		Bindable:   map[string]struct{}{},
+		Unbindable: map[string]string{},
+	},
+	"list_trigger_events": {
+		Bindable: map[string]struct{}{
+			"limit":      {},
+			"page_token": {},
+			"trigger_id": {},
+		},
 		Unbindable: map[string]string{},
 	},
 	"list_triggers": {
