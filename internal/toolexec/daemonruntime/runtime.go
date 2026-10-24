@@ -440,6 +440,9 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig, host Host, guards 
 	// would describe the wrong machine entirely.
 	toolsFactory := tools.NewToolsFactory(&tools.ToolsOptions{
 		ShellPlatform: tools.ShellPlatformFromGOOS(runtime.GOOS),
+		// A daemon is the user's own machine, where localhost and LAN
+		// addresses are what they mean.
+		AllowPrivateEgress: true,
 	})
 
 	caps := toolsFactory.ListAvailableToolsForPlacement(tools.PlacementDaemon)

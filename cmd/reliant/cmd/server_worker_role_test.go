@@ -28,34 +28,35 @@ import (
 // golden shows the same settings landing in the same places, plus what the
 // root added: the probe address and paths.
 type workerOptions struct {
-	DatabaseDriver    string
-	DatabaseURL       string
-	DatabaseDirectURL string
-	DatabasePool      db.Pool
-	DataDir           string
-	TemporalHost      string
-	TemporalPort      int
-	TemporalNamespace string
-	NATS              natsutil.Endpoint
-	StreamingDriver   string
-	HealthAddr        string
-	LivenessPaths     []string
-	ReadinessPaths    []string
-	PreStopDelay      time.Duration
-	ShutdownTimeout   time.Duration
-	PprofPort         int
-	ControlPlane      controlplane.Endpoint
-	Log               logging.Settings
-	PublicURL         string
-	VaultKey          string
-	Webhooks          webhook.RegistryConfig
-	GitHubAppSlug     string
-	GitHubBot         github.OurBot
-	Observability     observability.Settings
-	Sentry            telemetry.SentryConfig
-	Analytics         analytics.Settings
-	LLM               drivers.Settings
-	Preview           tools.PreviewSettings
+	DatabaseDriver     string
+	DatabaseURL        string
+	DatabaseDirectURL  string
+	DatabasePool       db.Pool
+	DataDir            string
+	TemporalHost       string
+	TemporalPort       int
+	TemporalNamespace  string
+	NATS               natsutil.Endpoint
+	StreamingDriver    string
+	HealthAddr         string
+	LivenessPaths      []string
+	ReadinessPaths     []string
+	PreStopDelay       time.Duration
+	ShutdownTimeout    time.Duration
+	PprofPort          int
+	ControlPlane       controlplane.Endpoint
+	AllowPrivateEgress bool
+	Log                logging.Settings
+	PublicURL          string
+	VaultKey           string
+	Webhooks           webhook.RegistryConfig
+	GitHubAppSlug      string
+	GitHubBot          github.OurBot
+	Observability      observability.Settings
+	Sentry             telemetry.SentryConfig
+	Analytics          analytics.Settings
+	LLM                drivers.Settings
+	Preview            tools.PreviewSettings
 	// As NewTemporalWorker hands them to workersetup (0: its default).
 	WorkflowTaskSlots   int
 	WorkflowTaskPollers int
@@ -107,6 +108,7 @@ func loadServerWorkerConfig(cmd *cobra.Command, opts *workerOptions) error {
 	opts.WorkflowTaskSlots = int(worker.GetMaxConcurrentWorkflowTasks())
 	opts.WorkflowTaskPollers = int(worker.GetWorkflowTaskPollers())
 	opts.ControlPlane = app.ControlPlaneEndpoint(process.GetControlPlane())
+	opts.AllowPrivateEgress = app.AllowPrivateEgress(process.GetNetwork())
 	opts.Log = logSettings(base)
 	opts.PublicURL, opts.VaultKey, opts.Webhooks = in.PublicURL, in.VaultKey, in.Webhooks
 	opts.GitHubAppSlug, opts.GitHubBot = in.GitHubAppSlug, in.GitHubBot

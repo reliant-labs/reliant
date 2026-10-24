@@ -9,7 +9,7 @@ import (
 
 // webToolTransport builds the dial-guarded transport for every outbound HTTP
 // client of an in-process (PlacementServer/PlacementAny) tool, under the
-// deployment's policy (ToolsOptions.ControlPlaneURL). Tests override it.
+// deployment's policy (ToolsOptions.AllowPrivateEgress). Tests override it.
 var webToolTransport = func(policy netguard.Policy) http.RoundTripper {
 	return policy.Transport()
 }

@@ -17,7 +17,7 @@ import (
 
 func TestFetchTool(t *testing.T) {
 	t.Parallel()
-	tool := NewFetchTool(netguard.ForDeployment(""))
+	tool := NewFetchTool(netguard.ForDeployment(true))
 
 	assert.Equal(t, FetchToolName, tool.Name())
 	assert.NotEmpty(t, tool.Description())
@@ -27,7 +27,7 @@ func TestFetchTool(t *testing.T) {
 
 func TestFetchToolValidation(t *testing.T) {
 	t.Parallel()
-	tool := NewFetchTool(netguard.ForDeployment(""))
+	tool := NewFetchTool(netguard.ForDeployment(true))
 	typedTool := tool.(*ToolWrapper[FetchParams, ToolResponse])
 
 	toolCtx := &rctx.ToolContext{
@@ -118,7 +118,7 @@ func TestFetchReadabilityExtraction(t *testing.T) {
 	}))
 	defer server.Close()
 
-	tool := NewFetchTool(netguard.ForDeployment(""))
+	tool := NewFetchTool(netguard.ForDeployment(true))
 	typedTool := tool.(*ToolWrapper[FetchParams, ToolResponse])
 	toolCtx := &rctx.ToolContext{Context: context.Background()}
 
@@ -196,7 +196,7 @@ func TestFetchJSRenderedDetection(t *testing.T) {
 	}))
 	defer server.Close()
 
-	tool := NewFetchTool(netguard.ForDeployment(""))
+	tool := NewFetchTool(netguard.ForDeployment(true))
 	typedTool := tool.(*ToolWrapper[FetchParams, ToolResponse])
 	toolCtx := &rctx.ToolContext{Context: context.Background()}
 
@@ -221,7 +221,7 @@ func TestFetchNonHTMLContent(t *testing.T) {
 	}))
 	defer server.Close()
 
-	tool := NewFetchTool(netguard.ForDeployment(""))
+	tool := NewFetchTool(netguard.ForDeployment(true))
 	typedTool := tool.(*ToolWrapper[FetchParams, ToolResponse])
 	toolCtx := &rctx.ToolContext{Context: context.Background()}
 

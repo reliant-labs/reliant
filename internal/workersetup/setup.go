@@ -90,10 +90,10 @@ type Config struct {
 	// a credential identically. nil refuses every authenticated call.
 	IntegrationCredentials httpaction.CredentialSource
 
-	// ControlPlaneURL is the control plane hosting this deployment, "" when it
-	// is self-hosted (ServerProcessConfig's ControlPlaneConfig). It decides which
-	// addresses a user-supplied model endpoint may resolve to.
-	ControlPlaneURL string
+	// AllowPrivateEgress is ServerProcessConfig.network.allow_private_egress:
+	// whether a user-supplied model endpoint may resolve to a private,
+	// loopback or link-local address. False is the default.
+	AllowPrivateEgress bool
 	// WriteLedger records the action node's mutating integration calls, so an
 	// event they cause can be attributed. nil records nothing.
 	WriteLedger writeledger.Service
@@ -204,7 +204,7 @@ func NewWorker(cfg *Config) (*Worker, *v2.ActivityRegistry, error) {
 	}
 
 	activityDeps.Connections = cfg.IntegrationCredentials
-	activityDeps.ControlPlaneURL = cfg.ControlPlaneURL
+	activityDeps.AllowPrivateEgress = cfg.AllowPrivateEgress
 	activityDeps.WriteLedger = cfg.WriteLedger
 	activityDeps.AccountRouting = accountRouting(cfg.Database, cfg.AccountLimits)
 
