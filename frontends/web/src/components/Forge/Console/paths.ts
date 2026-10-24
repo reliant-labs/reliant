@@ -214,8 +214,8 @@ export function obsViewOfPage(page: ConsolePage): ObsView | null {
     case "settings":
       return "usage";
     case "obs-view":
-      // Metrics has no panel view yet (the page is a placeholder), and
-      // Dashboards are pages of their own (decision DB).
+      // Metrics (the explorer, ../Observability/Metrics) and Dashboards
+      // (decision DB) are console pages of their own, not panel views.
       return page.view === "metrics" || page.view === "dashboards" ? null : page.view;
     default:
       return null;
