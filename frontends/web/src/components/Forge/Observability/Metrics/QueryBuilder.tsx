@@ -52,9 +52,10 @@ export function quantileLabel(q: number): string {
   return `p${Math.round(q * 1000) / 10}`;
 }
 
-/** The chart kinds the builder offers. An area is drawn as a line today, so it is not offered as a separate choice. */
+/** The chart kinds the builder offers. */
 export const CHART_OPTIONS: { value: ChartKind; label: string }[] = [
   { value: "line", label: "Line" },
+  { value: "area", label: "Area" },
   { value: "bar", label: "Bar" },
   { value: "number", label: "Number" },
   { value: "table", label: "Table" },
@@ -190,7 +191,7 @@ export function QueryBuilder({ panel, chart, catalog, attributes, scope, range, 
       </div>
 
       <div className="flex flex-wrap items-center gap-2 border-t border-border/70 pt-3">
-        <Segmented label="Chart" value={chart === "area" ? "line" : chart} options={CHART_OPTIONS} onChange={onChart} testId="metrics-chart-kind" />
+        <Segmented label="Chart" value={chart} options={CHART_OPTIONS} onChange={onChart} testId="metrics-chart-kind" />
         {(chart === "table" || chart === "bar") && (
           <label className="inline-flex items-center gap-1.5 text-xs text-ink-muted">
             Top

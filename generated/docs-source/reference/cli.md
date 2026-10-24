@@ -195,6 +195,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge obs changes`](#reliant-forge-obs-changes) | What changed? Promotions, rollbacks, failed deploys and activity, newest first |
 | [`reliant forge obs check`](#reliant-forge-obs-check) | Did the deploy work? Judge a release by the window after it against the window before |
 | [`reliant forge obs dashboards`](#reliant-forge-obs-dashboards) | Work with the dashboards a release carries |
+| [`reliant forge obs dashboards add-panel`](#reliant-forge-obs-dashboards-add-panel) | Append a panel to a dashboard you own, creating it when missing |
 | [`reliant forge obs dashboards check`](#reliant-forge-obs-dashboards-check) | Validate the dashboards a release bundle would carry |
 | [`reliant forge obs endpoints`](#reliant-forge-obs-endpoints) | The slowest or most failing endpoints |
 | [`reliant forge obs issue`](#reliant-forge-obs-issue) | Everything needed to fix one issue; resolve, ignore and unresolve triage it |
@@ -2840,7 +2841,18 @@ The connection follows the workload (`--workload`, default "api"):
                       (AppDatabaseService.QueryDatabase), as forge_ro, and
                       records it in the audit log and the activity feed
 The databases of real (not scratch) cluster envs are not reachable from forge
-yet (exit 2).
+yet (exit 2), unless you bring your own route: --addr.
+
+--addr <host:port> dials that address directly instead of any transport above,
+for a database forge cannot route to itself. The route (a VPN, a kubectl
+port-forward, a bastion) is yours; forge builds none. Credentials and policy are
+the transport's own: a cluster database's read-only forge_ro role is read from
+its Secret through your kube context, an OnHost / OnCompose workload keeps its
+DATABASE_URL with the host and port replaced. TLS is sslmode=verify-full against
+the cluster CA (<database>-ca) with server name <database>-rw.<namespace>.svc, a
+name CloudNativePG's certificate carries, so it verifies through a tunnel to
+localhost; --sslmode require|disable overrides it. A hosted env refuses --addr:
+the control plane executes its queries.
 
 The env's data_access policy (forge.DataAccess) decides who may query:
 open (the default of a local or ephemeral env), audited (the default of any
@@ -2862,6 +2874,8 @@ connection lost).
   cli forge db query dev "select count(*) from jobs where crew_id is null"
   cli forge db query dev -f report.sql --format csv > report.csv
   cli forge db query staging "select * from jobs limit 5" --confirm-env staging --reason "ISS-7f3a"
+  kubectl -n app-prod port-forward svc/ledger-rw 5432:5432 &
+  cli forge db query prod "select 1" --addr localhost:5432 --confirm-env prod --reason "ISS-7f3a"
 
 ```
 reliant forge db query <env> ["<sql>" | -f FILE] [flags]
@@ -2871,6 +2885,7 @@ reliant forge db query <env> ["<sql>" | -f FILE] [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--addr` | `string` | - | Dial host:port directly (your VPN, kubectl port-forward or bastion) instead of forge's own transport; not for a hosted env |
 | `--confirm-env` | `string` | - | Required on a real env: the env name again |
 | `--database` | `string` | - | ManagedDatabase to query, when a cluster env declares several |
 | `--file`, `-f` | `string` | - | Read the statement from FILE (- for stdin) |
@@ -2878,6 +2893,7 @@ reliant forge db query <env> ["<sql>" | -f FILE] [flags]
 | `--json` | `bool` | - | Same as --format json |
 | `--max-rows` | `int` | `200` | Row cap (at most 10000) |
 | `--reason` | `string` | - | Required on a real env: why you are reading it (at most 500 characters) |
+| `--sslmode` | `string` | - | With --addr on a cluster database: verify-full (default, against the cluster CA), require or disable |
 | `--timeout` | `duration` | `5s` | Statement timeout (at most 30s) |
 | `--workload` | `string` | `api` | Workload whose database to query |
 
@@ -7467,7 +7483,45 @@ reliant forge obs dashboards
 
 | Command | Description |
 |---------|-------------|
+| [`add-panel`](#reliant-forge-obs-dashboards-add-panel) | Append a panel to a dashboard you own, creating it when missing |
 | [`check`](#reliant-forge-obs-dashboards-check) | Validate the dashboards a release bundle would carry |
+
+---
+
+#### reliant forge obs dashboards add-panel
+
+Append a panel to a dashboard you own, creating it when missing
+
+Add one panel to deploy/observability/dashboards/<slug>.json, the dashboard a
+release ships for the Reliant console. The file is created when it does not
+exist (id is the slug; title is --title, or the slug).
+
+--panel is a file, or "-" for stdin, holding ONE panel object in the dashboard
+vocabulary (for example the document 'forge obs metrics query --panel-out'
+writes). It is validated exactly as 'forge obs dashboards check' validates it,
+and an error carries the panel file's own line and column.
+
+The panel's id comes from --id, else the panel's own "id", else is made from its
+title and made unique within the dashboard. An id the dashboard already holds is
+an error unless --replace, which swaps that panel in place. Nothing is written
+when anything fails, and a repeated run with the same inputs leaves the file
+byte-identical.
+
+A slug equal to a generated dashboard's name (shop-overview for
+shop-overview_gen.json) replaces that dashboard in releases; a warning says so.
+
+```
+reliant forge obs dashboards add-panel <slug> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--id` | `string` | - | id for the panel, overriding the panel's own |
+| `--panel` | `string` | - | file holding one panel object, or "-" for stdin (required) |
+| `--replace` | `bool` | - | replace the panel that has the same id instead of failing |
+| `--title` | `string` | - | title of a dashboard being created; default: the slug |
 
 ---
 

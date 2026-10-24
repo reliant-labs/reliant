@@ -1170,29 +1170,54 @@ func (r *Repo) GetUserUpdatesSince(ctx context.Context, userID string, sinceSeq 
 
 // UpdateChatState updates a chat's state and emits a user update
 func (r *Repo) UpdateChatState(ctx context.Context, chatID string, state ChatState, reason string) error {
-	// Get the chat first to get user_id and project_id
-	chat, err := r.GetChat(ctx, chatID)
-	if err != nil {
-		return fmt.Errorf("failed to get chat: %w", err)
-	}
-
-	previousState := chat.State
-
-	// If we're archiving, capture the worktree name onto the chat so archived chat
-	// display remains stable even if the worktree row is later deleted.
-	archivedWorktreeName := chat.ArchivedWorktreeName
-	if state == ChatStateArchived && archivedWorktreeName == nil {
+	var chat *Chat
+	// The chat and worktree move together or neither moves. Serializable also
+	// protects the shared-binding read/check/write against concurrent changes.
+	err := r.RunTx(ctx, orm.Serializable, func(ctx context.Context) error {
+		var err error
+		chat, err = r.GetChat(ctx, chatID)
+		if err != nil {
+			return fmt.Errorf("failed to get chat: %w", err)
+		}
+		var wt *Worktree
 		if chat.WorktreeID != nil {
-			if wt, err := r.GetWorktree(ctx, *chat.WorktreeID); err == nil {
-				archivedWorktreeName = &wt.Name
+			wt, err = r.GetWorktree(ctx, *chat.WorktreeID)
+			if err != nil && !errors.Is(err, sql.ErrNoRows) {
+				return fmt.Errorf("get bound worktree: %w", err)
 			}
 		}
-	}
-
-	// Update the chat state
-	now := time.Now().UTC()
-	if err := store.UpdateChatState(ctx, r.ORM(), chatID, state, archivedWorktreeName, now); err != nil {
+		name := chat.ArchivedWorktreeName
+		if state == ChatStateArchived && name == nil && wt != nil {
+			name = &wt.Name
+		}
+		if err := store.UpdateChatState(ctx, r.ORM(), chatID, state, name, time.Now().UTC()); err != nil {
+			return err
+		}
+		if wt == nil || wt.IsMain {
+			return nil
+		}
+		if state == ChatStateArchived {
+			live, err := r.GetLiveChatIDForWorktree(ctx, wt.ID)
+			if err != nil {
+				return fmt.Errorf("check shared worktree: %w", err)
+			}
+			if live == "" && wt.DeletedAt == nil {
+				// Only archive the row: the reaper still protects dirty/unpushed files.
+				return r.ArchiveWorktree(ctx, wt.ID)
+			}
+		} else if state == ChatStateIdle && chat.State == ChatStateArchived && wt.DeletedAt != nil {
+			return r.UnarchiveWorktree(ctx, wt.ID)
+		}
+		return nil
+	})
+	if err != nil {
 		return err
+	}
+	previousState := chat.State
+	if chat.WorktreeID != nil {
+		if err := r.EmitUserRefetch(ctx, chat.UserID, RefetchWorktreeChanges, RefetchOpts{ProjectID: &chat.ProjectID, WorktreeID: chat.WorktreeID}); err != nil {
+			logging.WarnContext(ctx, "Failed to notify worktree state change", "chatID", chatID, "error", err)
+		}
 	}
 
 	// Create user update for the state change
