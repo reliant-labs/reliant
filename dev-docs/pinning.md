@@ -36,6 +36,19 @@ It edits `go.mod`, `go.sum` and that generated output, and **stops**. It does
 not commit — this checkout is shared with other agents, and staging paths in a
 tree holding someone else's in-flight work is how that work gets lost.
 
+## reliant may bump forge without waiting for control-plane
+
+control-plane's pin gate used to FAIL unless its forge equalled the forge in the reliant
+it pins, which forced every forge bump through forge -> reliant -> control-plane in
+series. It no longer does, because a forge that is not a project's pin hands that
+project's KCL-reading commands, `lint` and the `ci` judges to the pinned forge
+(forge#908, #1189). control-plane being **ahead** of reliant's forge is now a warning;
+**behind**, or a `forge/pkg` API reliant uses no longer compiling against control-plane's
+forge (control-plane imports `pkg/daemonwire`, `pkg/llmcatalog`, `pkg/config` and
+`gen/reliant/v1`), still fails there. So bump forge here whenever you like, and keep the
+`forge/pkg` packages those four import source-compatible across a forge bump you land
+(or land the adaptation here first). Detail: `control-plane/docs/pinning.md`, "Coherence".
+
 ## Why commits, pre-launch
 
 Prod is the only real environment, and every bug we chase has only ever
