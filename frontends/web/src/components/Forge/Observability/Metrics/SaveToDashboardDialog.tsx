@@ -18,6 +18,8 @@
 
 import { useId, useState } from "react";
 import { Check, Copy, LayoutDashboard } from "lucide-react";
+
+import { useUnmountSafeTimeout } from "@/hooks/useUnmountSafeTimeout";
 import { Code, ConnectError } from "@connectrpc/connect";
 
 import Link from "@/components/forge-ui/link";
@@ -95,6 +97,7 @@ export interface SaveToDashboardProps {
 export function SaveToDashboard(props: SaveToDashboardProps) {
   const [open, setOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const later = useUnmountSafeTimeout();
   if (!props.canWrite) {
     return (
       <button
@@ -105,7 +108,7 @@ export function SaveToDashboard(props: SaveToDashboardProps) {
         onClick={() =>
           void navigator.clipboard?.writeText(JSON.stringify(props.panel, null, 2)).then(() => {
             setCopied(true);
-            window.setTimeout(() => setCopied(false), 1500);
+            later(() => setCopied(false), 1500);
           })
         }
         data-testid="metrics-copy-panel-json"

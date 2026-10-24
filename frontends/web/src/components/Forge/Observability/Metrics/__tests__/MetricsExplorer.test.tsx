@@ -147,6 +147,19 @@ describe("picking a metric", () => {
     expect(screen.queryByTestId("metrics-exemplar-popover")).not.toBeInTheDocument();
   });
 
+  it("offers Area beside Line, and writes it to the URL", async () => {
+    const user = userEvent.setup();
+    const { current } = renderExplorer();
+    await pick(user, "orders.created");
+    const kinds = within(screen.getByTestId("metrics-chart-kind"));
+    expect(kinds.getAllByRole("button").map((b) => b.textContent)).toEqual(["Line", "Area", "Bar", "Number", "Table"]);
+    await user.click(kinds.getByRole("button", { name: "Area" }));
+    expect(kinds.getByRole("button", { name: "Area" })).toHaveAttribute("aria-pressed", "true");
+    expect(kinds.getByRole("button", { name: "Line" })).toHaveAttribute("aria-pressed", "false");
+    expect(stateFromSearch(current.search as Record<string, string>).chart).toBe("area");
+    expect(screen.getByTestId("metrics-chart")).toHaveAttribute("data-kind", "line");
+  });
+
   it("never offers an up-down counter a rate", async () => {
     const user = userEvent.setup();
     renderExplorer();

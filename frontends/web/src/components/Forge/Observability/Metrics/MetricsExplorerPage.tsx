@@ -51,6 +51,7 @@ import { DEFAULT_RANGE, RANGE_LABELS, RANGE_PRESETS, type RangePreset } from "@/
 import { useForgeConsole } from "../../Console/consoleContext";
 import { ENV_ALL } from "../../Console/envScope";
 import { CloudNotice } from "../../SourceNotices";
+import { useUnmountSafeTimeout } from "@/hooks/useUnmountSafeTimeout";
 import { ObsChartMarkersProvider } from "../charts/UPlotChart";
 import { AlertFromPanelDialog } from "../Dashboards/AlertFromPanelDialog";
 import { compareTarget, rangeParam, COMPARE_LABELS, type CompareMode } from "../Dashboards/dashboardModel";
@@ -63,7 +64,7 @@ import { ObsError, ObsLoadingRows, ObsNoData, ObsNotSetUp } from "../ObsStates";
 import { useReleaseMarkers } from "../releaseMarkers";
 import { Breakdown } from "./Breakdown";
 import { Catalog } from "./Catalog";
-import { ExemplarPopover, ExemplarRail } from "./ExemplarPopover";
+import { ExemplarPopover } from "./ExemplarPopover";
 import { displaySeries, ExplorerChart } from "./ExplorerChart";
 import { useDebouncedPanel, useExplorerPanelQuery } from "./explorerQueries";
 import { MetricDetail } from "./MetricDetail";
@@ -295,10 +296,11 @@ export function MetricsExplorer({ project, env, environments, search, onSearch, 
   const index = useDashboardIndex(orgId, project, envId ?? undefined);
   const [alertOpen, setAlertOpen] = useState(false);
   const [copied, setCopied] = useState<"cli" | "link" | null>(null);
+  const later = useUnmountSafeTimeout();
   const copy = (what: "cli" | "link", text: string) =>
     void navigator.clipboard?.writeText(text).then(() => {
       setCopied(what);
-      window.setTimeout(() => setCopied(null), 1500);
+      later(() => setCopied(null), 1500);
     });
   const savePanel = useMemo(() => canonicalPanel({ ...queryPanel, id: "explore", title }), [queryPanel, title]);
   const tooLarge = linkProblem(state);
@@ -506,21 +508,20 @@ export function MetricsExplorer({ project, env, environments, search, onSearch, 
                           unit={unit}
                           hidden={state.hidden}
                           attributes={attributes}
-                          footer={
-                            lines && rail.data?.length ? (
-                              <ExemplarRail
-                                exemplars={rail.data}
-                                timestamps={lines.timestamps}
-                                stepSeconds={main.data?.stepSeconds ?? 60}
-                                unit={unit}
-                                onOpen={(exemplar, at) => {
-                                  const step = Math.max(main.data?.stepSeconds ?? 60, 1);
-                                  const first = lines.timestamps[0] ?? 0;
-                                  const startSec = first + Math.floor((exemplar.timeMs / 1000 - first) / step) * step;
-                                  setExemplarAt({ exemplar, at, bucketStartMs: startSec * 1000 });
-                                }}
-                              />
-                            ) : null
+                          chart={state.chart}
+                          exemplars={
+                            lines && rail.data?.length
+                              ? {
+                                  items: rail.data,
+                                  stepSeconds: main.data?.stepSeconds ?? 60,
+                                  onOpen: (exemplar, at) => {
+                                    const step = Math.max(main.data?.stepSeconds ?? 60, 1);
+                                    const first = lines.timestamps[0] ?? 0;
+                                    const startSec = first + Math.floor((exemplar.timeMs / 1000 - first) / step) * step;
+                                    setExemplarAt({ exemplar, at, bucketStartMs: startSec * 1000 });
+                                  },
+                                }
+                              : undefined
                           }
                         />
                       </div>
