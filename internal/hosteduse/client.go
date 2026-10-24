@@ -5,8 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -16,7 +16,6 @@ import (
 	"github.com/reliant-labs/forge/pkg/observe"
 	"go.temporal.io/sdk/activity"
 
-	"github.com/reliant-labs/reliant/internal/controlplane/cptransport"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/pkg/hostedhttp"
 )
@@ -33,17 +32,18 @@ type Client struct {
 	http     *http.Client
 }
 
-// New constructs a fixed-action client. The controller URL obeys the
-// control-plane transport rule (cptransport.Check): HTTPS, or plaintext only to
-// loopback or an in-cluster Service. Auth tokens are minted at use; missing
-// configuration fails closed.
+// New constructs a fixed-action client. Verified HTTPS is required outside
+// loopback development, including for cluster Service names. Auth tokens are
+// minted at use; missing configuration fails closed.
 func New(d Deps) (Service, error) {
 	u, err := url.Parse(d.BaseURL)
 	if err != nil || u.Host == "" || u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || u.Opaque != "" || (u.Path != "" && u.Path != "/") {
 		return nil, errors.New("hosted HTTP controller URL is invalid")
 	}
-	if err := cptransport.Check(u); err != nil {
-		return nil, fmt.Errorf("hosted HTTP controller: %w", err)
+	ip := net.ParseIP(u.Hostname())
+	loopback := u.Hostname() == "localhost" || ip != nil && ip.IsLoopback()
+	if u.Scheme != "https" && (u.Scheme != "http" || !loopback || d.CAFile != "") {
+		return nil, errors.New("hosted HTTP controller requires HTTPS")
 	}
 	if d.Store == nil || d.Sign == nil {
 		return nil, errors.New("hosted HTTP store and signer are required")
@@ -54,6 +54,13 @@ func New(d Deps) (Service, error) {
 		if h.Timeout <= 0 {
 			h.Timeout = 45 * time.Second
 		}
+	}
+	if d.CAFile != "" {
+		transport, err := privateControllerTransport(d.CAFile)
+		if err != nil {
+			return nil, err
+		}
+		h.Transport = transport
 	}
 	h.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	return &Client{store: d.Store, endpoint: strings.TrimRight(d.BaseURL, "/") + executePath, sign: d.Sign, http: &h}, nil

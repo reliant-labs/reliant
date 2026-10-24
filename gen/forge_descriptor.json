@@ -40065,6 +40065,36 @@
       "Name": "WorkerConfig",
       "Fields": [
         {
+          "Name": "hosted_actions_url",
+          "GoName": "HostedActionsUrl",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "RELIANT_WORKER_HOSTED_ACTIONS_URL",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "Private HTTPS workspace-controller endpoint for fixed hosted actions",
+          "Sensitive": false,
+          "Category": "",
+          "Optional": true,
+          "ProtoFile": "reliant/config/v1/worker_config.proto"
+        },
+        {
+          "Name": "hosted_actions_ca_file",
+          "GoName": "HostedActionsCaFile",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "RELIANT_WORKER_HOSTED_ACTIONS_CA_FILE",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "PEM trust bundle for the private hosted-action controller; reloaded for each connection",
+          "Sensitive": false,
+          "Category": "",
+          "Optional": true,
+          "ProtoFile": "reliant/config/v1/worker_config.proto"
+        },
+        {
           "Name": "health_port",
           "GoName": "HealthPort",
           "GoType": "int32",
@@ -40267,7 +40297,7 @@
         "worker"
       ],
       "ProtoFile": "reliant/config/v1/worker_config.proto",
-      "Line": 16,
+      "Line": 29,
       "GoImportPath": "github.com/reliant-labs/reliant/gen/reliant/config/v1"
     }
   ],
@@ -40288,7 +40318,7 @@
     "reliant/config/v1/server_config.proto": "dbb2a79cb172226c5ec4c48b07950e0446ff6e7f04e1b1057d4c85306d49e86c",
     "reliant/config/v1/vault_config.proto": "e0c1e732880cc444791cb314c802fb5af73ee007c6a37c6333f6f4367a45d192",
     "reliant/config/v1/web_config.proto": "a265cf8fa479b2018e0b05bc50e492b3dcf26855c581a66890a88a25a7790aeb",
-    "reliant/config/v1/worker_config.proto": "503a77d05a9e96aa0509df8ed88dff2c24e454c8672696bea47d7bb018eaf9f0",
+    "reliant/config/v1/worker_config.proto": "630ac749dd4f3e91502a5a5c77ea16f25fa30d2f7cf16f9198aa15a5cbde59ab",
     "reliant/v1/account.proto": "d7e5ce0de4321d271532eb749a53e2001e692bdf208a4b7b71d4816673eebf35",
     "reliant/v1/annotations.proto": "378abb26b00cc86e8b14aef65e3e78467130da6a7787cd66b9a7d59ade949b57",
     "reliant/v1/approval.proto": "4ebbca862a2a5f88bb7f603d52d09933c296cbdc89e55d2abd1f58b76ecad6ce",

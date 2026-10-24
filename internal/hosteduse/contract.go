@@ -33,6 +33,10 @@ type Deps struct {
 	Store   Store
 	BaseURL string
 	Sign    func() (string, error)
+	// CAFile is a dedicated PEM trust bundle for the private controller.
+	// It is re-read on each new TLS connection to follow projected CA updates.
+	//forge:optional-dep
+	CAFile string
 	// HTTPClient is optional; the client is copied and redirects disabled.
 	//forge:optional-dep
 	HTTPClient *http.Client

@@ -16,7 +16,6 @@ import (
 	"go.temporal.io/sdk/activity"
 	"google.golang.org/protobuf/types/known/structpb"
 
-	"github.com/reliant-labs/reliant/internal/controlplane/cptransport"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/pkg/hostedhttp"
 )
@@ -204,21 +203,17 @@ func TestRedeemMismatchDoesNotConsumeAndConcurrentSingleUse(t *testing.T) {
 }
 
 func TestNewFailsClosed(t *testing.T) {
-	for _, base := range []string{"", "http://external.example", "http://10.0.0.8:8090", "http://admin-server:8090", "https://user:pass@controller.example", "https://controller.example/path", "https://controller.example?query=1"} {
+	for _, base := range []string{"", "http://external.example", "http://controller.ns.svc.cluster.local:9443", "http://controller.ns.svc:9443", "http://10.0.0.8:8090", "http://admin-server:8090", "https://user:pass@controller.example", "https://controller.example/path", "https://controller.example?query=1"} {
 		_, err := New(Deps{Store: &memoryStore{}, BaseURL: base, Sign: func() (string, error) { return "", errors.New("no token") }})
 		require.Error(t, err, base)
 	}
 	_, err := New(Deps{Store: &memoryStore{}, BaseURL: "http://external.example", Sign: func() (string, error) { return "t", nil }})
-	require.ErrorIs(t, err, cptransport.ErrInsecure, "an operator-misconfigured external http URL is refused")
+	require.ErrorContains(t, err, "requires HTTPS", "plaintext controller URLs are refused")
 }
 
-// Prod's worker reaches control-plane's admin-server over its in-cluster
-// Service in plaintext, as every other control-plane call does; dev reaches it
-// on loopback. Both build a client.
-func TestNewAcceptsInClusterAndLoopbackHTTP(t *testing.T) {
+// Only loopback development may use HTTP. Cluster DNS does not provide TLS.
+func TestNewAcceptsVerifiedHTTPSAndLoopbackHTTP(t *testing.T) {
 	for _, base := range []string{
-		"http://admin-server.control-plane-prod.svc.cluster.local:8090",
-		"http://admin-server.control-plane-e2e.svc:8090",
 		"http://127.0.0.1:8090",
 		"http://localhost:8090/",
 		"https://controller.example",

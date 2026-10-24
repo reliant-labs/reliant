@@ -551,6 +551,8 @@ func (g *Graph) newTemporalWorker() (*workersetup.Worker, error) {
 		// names them (pkg/config Roots).
 		WorkflowTaskSlots:   g.WorkerConfig.GetMaxConcurrentWorkflowTasks(),
 		WorkflowTaskPollers: g.WorkerConfig.GetWorkflowTaskPollers(),
+		HostedActionsURL:    g.WorkerConfig.GetHostedActionsUrl(),
+		HostedActionsCAFile: g.WorkerConfig.GetHostedActionsCaFile(),
 	})
 }
 

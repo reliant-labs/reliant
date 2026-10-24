@@ -29,9 +29,13 @@ const (
 // ServerProcessConfig and DatabaseConfig (config.proto, whose header has the
 // rules every config here follows).
 type WorkerConfig struct {
-	state      protoimpl.MessageState `protogen:"open.v1"`
-	HealthPort int32                  `protobuf:"varint,14,opt,name=health_port,json=healthPort,proto3" json:"health_port,omitempty"`
-	PprofPort  int32                  `protobuf:"varint,15,opt,name=pprof_port,json=pprofPort,proto3" json:"pprof_port,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Separate from the general control-plane API: only the private controller
+	// can redeem hosted action grants. Unset leaves these actions unavailable.
+	HostedActionsUrl    string `protobuf:"bytes,30,opt,name=hosted_actions_url,json=hostedActionsUrl,proto3" json:"hosted_actions_url,omitempty"`
+	HostedActionsCaFile string `protobuf:"bytes,31,opt,name=hosted_actions_ca_file,json=hostedActionsCaFile,proto3" json:"hosted_actions_ca_file,omitempty"`
+	HealthPort          int32  `protobuf:"varint,14,opt,name=health_port,json=healthPort,proto3" json:"health_port,omitempty"`
+	PprofPort           int32  `protobuf:"varint,15,opt,name=pprof_port,json=pprofPort,proto3" json:"pprof_port,omitempty"`
 	// The rollout drain budget, read as ApiServerConfig's is (its comment has
 	// the rules). Each role declares its own, so one role's may differ.
 	PreStopDelay    *durationpb.Duration `protobuf:"bytes,18,opt,name=pre_stop_delay,json=preStopDelay,proto3" json:"pre_stop_delay,omitempty"`
@@ -108,6 +112,20 @@ func (x *WorkerConfig) ProtoReflect() protoreflect.Message {
 // Deprecated: Use WorkerConfig.ProtoReflect.Descriptor instead.
 func (*WorkerConfig) Descriptor() ([]byte, []int) {
 	return file_reliant_config_v1_worker_config_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *WorkerConfig) GetHostedActionsUrl() string {
+	if x != nil {
+		return x.HostedActionsUrl
+	}
+	return ""
+}
+
+func (x *WorkerConfig) GetHostedActionsCaFile() string {
+	if x != nil {
+		return x.HostedActionsCaFile
+	}
+	return ""
 }
 
 func (x *WorkerConfig) GetHealthPort() int32 {
@@ -212,8 +230,12 @@ var File_reliant_config_v1_worker_config_proto protoreflect.FileDescriptor
 
 const file_reliant_config_v1_worker_config_proto_rawDesc = "" +
 	"\n" +
-	"%reliant/config/v1/worker_config.proto\x12\x11reliant.config.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x1egoogle/protobuf/duration.proto\"\xff\x12\n" +
-	"\fWorkerConfig\x12l\n" +
+	"%reliant/config/v1/worker_config.proto\x12\x11reliant.config.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\x1a\x1egoogle/protobuf/duration.proto\"\xdf\x15\n" +
+	"\fWorkerConfig\x12\x9d\x01\n" +
+	"\x12hosted_actions_url\x18\x1e \x01(\tBo\x82\xce\x18k\n" +
+	"!RELIANT_WORKER_HOSTED_ACTIONS_URL*DPrivate HTTPS workspace-controller endpoint for fixed hosted actionsP\x01R\x10hostedActionsUrl\x12\xbd\x01\n" +
+	"\x16hosted_actions_ca_file\x18\x1f \x01(\tB\x87\x01\x82\xce\x18\x82\x01\n" +
+	"%RELIANT_WORKER_HOSTED_ACTIONS_CA_FILE*WPEM trust bundle for the private hosted-action controller; reloaded for each connectionP\x01R\x13hostedActionsCaFile\x12l\n" +
 	"\vhealth_port\x18\x0e \x01(\x05BK\xbaH\b\x1a\x06\x18\xff\xff\x03(\x01\x82\xce\x18<\n" +
 	"\vHEALTH_PORT\x12\vhealth-port\x1a\x048081*\x1aHealth check endpoint portR\n" +
 	"healthPort\x12\x7f\n" +
