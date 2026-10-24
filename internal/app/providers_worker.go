@@ -16,6 +16,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/egresslimit"
 	"github.com/reliant-labs/reliant/internal/handlers/chat"
 	"github.com/reliant-labs/reliant/internal/handlers/run"
 	"github.com/reliant-labs/reliant/internal/handlers/trigger"
@@ -493,6 +494,9 @@ func resolveVideoGenerator(ctx context.Context, userID string, selector models.M
 type RemoteExecutorDeps struct {
 	Router *WorkerDaemonRouter
 	Tools  *WorkerToolsFactory
+	// Egress bounds the egress tools the executor runs in this process.
+	// compose.go builds it from WorkerConfig's RELIANT_WORKER_EGRESS_*.
+	Egress egresslimit.Limits
 }
 
 // NewRemoteExecutor is the worker's tool executor: daemon-placed tools go to
@@ -508,6 +512,15 @@ func NewRemoteExecutor(d RemoteExecutorDeps) (*toolexec.RemoteExecutor, error) {
 	server.SetMCPContextBinder(toolexec.NewDaemonMCPContextBinder(d.Router))
 	executor.SetServerExecutor(server)
 	executor.SetDaemonClientFactory(toolexec.RemoteDaemonClients(d.Router))
+	// Fetch, websearch, sourcegraph and the integration actions leave through
+	// one shared NAT address; bound what one user, org, host and turn may
+	// push through it. In-process state, budgets divided by Replicas: see
+	// internal/egresslimit.
+	limiter, err := egresslimit.NewInstrumented(egresslimit.Deps{Logger: slog.Default(), Limits: d.Egress})
+	if err != nil {
+		return nil, fmt.Errorf("egress limiter: %w", err)
+	}
+	executor.SetEgressLimiter(limiter)
 	return executor, nil
 }
 

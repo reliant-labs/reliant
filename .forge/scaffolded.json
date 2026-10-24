@@ -145,6 +145,9 @@
     "internal/app/providers.go": {
       "scaffolded_at": "2026-10-21T14:18:41Z"
     },
+    "internal/egresslimit/contract_test.go": {
+      "scaffolded_at": "2026-10-24T00:46:19Z"
+    },
     "internal/handlers/account/handlers_scaffold_delete_account_test.go": {
       "scaffolded_at": "2026-10-13T12:24:49Z"
     },

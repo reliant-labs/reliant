@@ -13,6 +13,22 @@ import (
 	"github.com/prometheus/client_golang/prometheus/collectors"
 )
 
+// ─── Egress limiter ─────────────────────────────────────────────────────────
+
+var (
+	// EgressLimitedTotal counts egress tool calls the limiter refused
+	// (internal/egresslimit), by tool and which limit tripped.
+	EgressLimitedTotal = newCounterVec(
+		prometheus.CounterOpts{
+			Namespace: "reliant",
+			Subsystem: "egress",
+			Name:      "limited_total",
+			Help:      "Egress tool calls refused by the egress limiter, by tool and limit scope.",
+		},
+		[]string{"tool", "scope"},
+	)
+)
+
 // ─── HTTP Metrics ───────────────────────────────────────────────────────────
 
 var (
@@ -392,6 +408,8 @@ func initMetrics() {
 		NATSReceiveTotal,
 		NATSRequestDuration,
 		NATSErrorsTotal,
+		// Egress
+		EgressLimitedTotal,
 		// DB
 		DBQueryDuration,
 		DBErrorsTotal,
