@@ -193,7 +193,7 @@ applies; you do not run it yourself. 'reliant forge' and the daemon set it.
 
 It exchanges this machine's Reliant session (a daemon's credential, or a
 'reliant auth login') at the Reliant server for a token that carries only
-deploy, secret and domain authority, only what the session itself holds, for
+control-plane authority, only what the session itself holds, for
 at most an hour, and only for the control plane that server belongs to.
 Tokens are cached in ~/.reliant/forge-token-cache.json (0600) and reused
 while at least half their life remains. Nothing it prints to stderr contains

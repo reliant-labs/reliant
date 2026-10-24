@@ -112,7 +112,7 @@ func (m *Memory) MintForUser(_ context.Context, req MintRequest) (Minted, error)
 		actingID: req.UserID, hash: minted.Hash,
 	}
 	return Minted{TokenID: id, Plaintext: minted.Plaintext, DisplayPrefix: minted.DisplayPrefix,
-		ExpiresAt: req.ExpiresAt, Rotated: rotated}, nil
+		ExpiresAt: req.ExpiresAt, Rotated: rotated, Scopes: scopes.Strings()}, nil
 }
 
 // ListForUser implements Authority.
