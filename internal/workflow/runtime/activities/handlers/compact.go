@@ -492,10 +492,6 @@ func (a *CompactActivity) generateCompactionSummaryOnProvider(ctx context.Contex
 //
 // The tier list remains the fallback for nodes that declare no model and for
 // an agent model that no longer resolves against the user's providers.
-func resolveCompactionModel(ctx context.Context, userID string, preferred *reliantv1.ModelSelector) (models.ModelSelector, string, error) {
-	return resolveCompactionModelForCall(ctx, userID, preferred, llmCallSpec{})
-}
-
 func resolveCompactionModelForCall(ctx context.Context, userID string, preferred *reliantv1.ModelSelector, spec llmCallSpec) (models.ModelSelector, string, error) {
 	availableDrivers := getAvailableDrivers(ctx, userID)
 	availableProviders := configuredProviderIDs(availableDrivers)

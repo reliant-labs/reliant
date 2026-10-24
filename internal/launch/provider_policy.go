@@ -220,20 +220,6 @@ func resolveSelector(selector interface{}, available models.AvailableDrivers) *m
 	return resolveOn(ms, available, configuredProviders(available))
 }
 
-// resolvedDriverOn is the driver selector resolves to when only providers may
-// serve it (and are connected), "" when none of them can.
-func resolvedDriverOn(selector interface{}, available models.AvailableDrivers, providers []string) string {
-	ms, ok := toSelector(selector)
-	if !ok {
-		return ""
-	}
-	resolved := resolveOn(ms, available, connectedAmong(available, providers))
-	if resolved == nil {
-		return ""
-	}
-	return resolved.Provider.Driver
-}
-
 // resolveOn resolves ms over exactly providers. The registry treats a
 // selector's own providers as a preference and falls through to any provider
 // it is handed, so restricting what it is handed is what makes a provider
