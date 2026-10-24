@@ -96,6 +96,7 @@ const {
 const windowStateClient = require("./window-state-client");
 const Sentry = require("@sentry/electron/main");
 const { sentryMainOptions } = require("./sentry-scrub");
+const { createCrashSignalReporter, installCrashSignals, safeRouteName } = require("./crash-signals");
 const { autoUpdater } = require("electron-updater");
 const electronLog = require("electron-log");
 const ChunkedDownloader = require("./chunked-downloader");
@@ -4003,6 +4004,32 @@ app.on("browser-window-created", (_e, win) => {
 
 app.on("child-process-gone", (_e, details) => {
   log.error("[child gone]", details); // can catch GPU process too
+});
+
+// Reason and exit code of every renderer / GPU / utility death, as one Sentry
+// event each. No minidump: see crash-signals.js.
+installCrashSignals({
+  app,
+  report: createCrashSignalReporter({
+    capture: (event) => {
+      if (sentryInitialized) Sentry.captureEvent(event);
+    },
+    log,
+    env: () => ({
+      appVersion: currentVersion,
+      platform: process.platform,
+      arch: process.arch,
+      osVersion: require("os").release(),
+      uptimeSeconds: process.uptime(),
+    }),
+  }),
+  getActiveRoute: () => {
+    try {
+      return mainWindow && !mainWindow.isDestroyed() ? safeRouteName(mainWindow.webContents.getURL()) : "";
+    } catch {
+      return "";
+    }
+  },
 });
 
 app.on("window-all-closed", () => {
