@@ -9,21 +9,13 @@
 //                            URL, platform), injected asynchronously by
 //                            preload.js. waitForConfig() below.
 
-import { loadConfig } from "./config_gen";
+import { loadConfig, missingRequiredConfig } from "./config_gen";
 import { logger } from "./logger";
 import { isPackagedRendererOrigin } from "./protocol";
 
 // ============================================================================
 // Runtime config (config.js)
 // ============================================================================
-
-/** The keys a managed deployment (AUTH_MODE = "cloud") cannot run without. */
-const CLOUD_REQUIRED_KEYS = [
-  "API_URL",
-  "CONTROL_PLANE_API_URL",
-  "SUPABASE_URL",
-  "SUPABASE_ANON_KEY",
-] as const;
 
 /** Fields read as `=== "true"`: anything but "true", "false" or unset is a typo. */
 const FLAG_KEYS = [
@@ -48,22 +40,15 @@ const AUTH_MODES = ["", "cloud"];
  *     answers config.js from the main process, so none is a broken build;
  *   - a managed deployment (AUTH_MODE = "cloud") needs its endpoints and its
  *     sign-in key, or it would boot against localhost and a missing Supabase
- *     and fail three screens later with nothing naming the cause;
+ *     and fail three screens later with nothing naming the cause. Which keys
+ *     is the proto's `required_when` (web_config.proto), judged by the
+ *     generated missingRequiredConfig() on the raw document: a default
+ *     (SUPABASE_URL's local Supabase) is exactly what a managed deployment
+ *     must not fall back to;
  *   - a closed-set value outside its set is a typo that would otherwise
  *     silently read as off.
- *
- * Presence is judged on the raw document, not on loadConfig(): a default
- * (SUPABASE_URL's local Supabase) is exactly what a managed deployment must
- * not fall back to.
  */
 export function checkWebConfig(): string[] {
-  let config;
-  try {
-    config = loadConfig();
-  } catch (err) {
-    return [err instanceof Error ? err.message : String(err)];
-  }
-
   const raw = typeof window !== "undefined" ? window.__FORGE_CONFIG__ : undefined;
   if (!raw && isPackagedRendererOrigin()) {
     return [
@@ -73,23 +58,34 @@ export function checkWebConfig(): string[] {
     ];
   }
 
+  // loadConfig() throws on these too, as one combined message; name them by
+  // the mode that requires them instead.
+  const missing = missingRequiredConfig();
+  if (missing.length > 0) {
+    const byMode = new Map<string, string[]>();
+    for (const m of missing) {
+      const mode = `${m.when.key} is "${m.when.equals}"`;
+      byMode.set(mode, [...(byMode.get(mode) ?? []), m.key]);
+    }
+    return [...byMode].map(
+      ([mode, keys]) =>
+        `${mode}, which requires ${keys.join(", ")}: ` +
+        "the managed app cannot reach its backends or sign anyone in without them.",
+    );
+  }
+
+  let config;
+  try {
+    config = loadConfig();
+  } catch (err) {
+    return [err instanceof Error ? err.message : String(err)];
+  }
+
   const problems: string[] = [];
   if (!AUTH_MODES.includes(config.AUTH_MODE)) {
     problems.push(
       `AUTH_MODE is "${config.AUTH_MODE}"; it must be "cloud" (a managed deployment) or unset.`,
     );
-  }
-  if (config.AUTH_MODE === "cloud") {
-    const missing = CLOUD_REQUIRED_KEYS.filter((key) => {
-      const value = raw?.[key];
-      return typeof value !== "string" || value.trim() === "";
-    });
-    if (missing.length > 0) {
-      problems.push(
-        `AUTH_MODE is "cloud", which requires ${missing.join(", ")}: ` +
-          "the managed app cannot reach its backends or sign anyone in without them.",
-      );
-    }
   }
   for (const key of FLAG_KEYS) {
     const value = config[key];

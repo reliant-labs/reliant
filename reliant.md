@@ -37,6 +37,26 @@ There might be 10 reliant processes running at a time, each for a different feat
 
 For the usual `forge env up` stack, every log — backend, browser console, Electron — is under `../control-plane/.forge/logs/dev/` (`reliant-temporal-worker.log` = tool execution / call_llm / spawns, `reliant-api-server.log` = RPC handlers, `frontend_reliant-web.log` = UI `[browser:<level>]` lines), NOT `./data/`. Only this repo's own `scripts/dev.sh` stack logs to `./data/logs*`. Never add another log location. Load the `dev-logs` skill before debugging: full file map, DB queries, and how to prove a sink is live before trusting a zero-hit grep.
 
+## Merging to main: the merge-gate status is required
+
+GitHub refuses any merge into `main` whose commit lacks a SUCCESS `merge-gate`
+commit status (ruleset "main: merge-gate required", head must be up to date
+with main, **no bypass actors** — `gh pr merge --admin` is refused too). The
+merge queue posts it on the exact squashed commit its gate verified:
+
+```bash
+/home/workspace/.reliant/worktrees/reliant-labs/migrate-reliant-to-forge-758c83c8/.fm-tools/merge_queue3.sh <remote-branch>
+```
+
+The only other way in is an audited waiver — a hotfix that cannot wait, or a
+gate failure that reproduces identically on main. It posts `WAIVED: <reason>`,
+comments on the PR and appends to `/home/workspace/fm-logs/merge-gate-waivers.log`:
+
+```bash
+.fm-tools/merge_gate_waive.sh --by "<agent/thread or human>" --reason "<check + evidence>" <pr>
+gh pr merge <pr> --squash
+```
+
 ## Load these skills before touching their area
 
 - `web-styling` — any styling/layout change under `frontends/web/src` (semantic tokens, the `bg-muted` elevation trap).

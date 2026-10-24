@@ -7,7 +7,13 @@
     {
       "name": "API_URL",
       "type": "string",
-      "source": "config"
+      "source": "config",
+      "required_when": [
+        {
+          "key": "AUTH_MODE",
+          "equals": "cloud"
+        }
+      ]
     },
     {
       "name": "APP_URL",
@@ -37,7 +43,13 @@
     {
       "name": "CONTROL_PLANE_API_URL",
       "type": "string",
-      "source": "config"
+      "source": "config",
+      "required_when": [
+        {
+          "key": "AUTH_MODE",
+          "equals": "cloud"
+        }
+      ]
     },
     {
       "name": "DISABLE_TLS",
@@ -117,12 +129,25 @@
     {
       "name": "SUPABASE_ANON_KEY",
       "type": "string",
-      "source": "config"
+      "source": "config",
+      "required_when": [
+        {
+          "key": "AUTH_MODE",
+          "equals": "cloud"
+        }
+      ]
     },
     {
       "name": "SUPABASE_URL",
       "type": "string",
-      "source": "config"
+      "source": "config",
+      "required_when": [
+        {
+          "key": "AUTH_MODE",
+          "equals": "cloud"
+        }
+      ],
+      "default": "http://127.0.0.1:54321"
     },
     {
       "name": "TELEMETRY_SINKS",

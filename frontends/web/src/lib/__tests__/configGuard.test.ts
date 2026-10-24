@@ -62,6 +62,11 @@ describe("checkWebConfig", () => {
     expect(problem).not.toMatch(/requires API_URL/);
   });
 
+  it("treats a value equal to the self-hosted default as missing", () => {
+    setRuntimeConfig({ ...CLOUD, SUPABASE_URL: "http://127.0.0.1:54321" });
+    expect(checkWebConfig().join("\n")).toContain("requires SUPABASE_URL");
+  });
+
   it("treats a blank value as missing", () => {
     setRuntimeConfig({ ...CLOUD, SUPABASE_ANON_KEY: "  " });
     expect(checkWebConfig().join("\n")).toContain("SUPABASE_ANON_KEY");

@@ -279,12 +279,14 @@ var File_reliant_config_v1_web_config_proto protoreflect.FileDescriptor
 
 const file_reliant_config_v1_web_config_proto_rawDesc = "" +
 	"\n" +
-	"\"reliant/config/v1/web_config.proto\x12\x11reliant.config.v1\x1a\x14forge/v1/forge.proto\"\x8e(\n" +
-	"\x10ReliantWebConfig\x12\x8c\x03\n" +
-	"\aapi_url\x18\x01 \x01(\tB\xf2\x02\x82\xce\x18\xed\x02\n" +
-	"\aAPI_URL*\xe1\x02Origin of the reliant api-server (Connect RPCs, the terminal WebSocket). Also what the onboarding's `reliant daemon start` command tells a daemon to dial. Unset: the generated dev floor (src/lib/apiurl_gen.ts). Under the Vite dev server the browser calls its own origin and the dev proxy forwards to the API, so this is only the CLI-command value there.R\x06apiUrl\x12\xa8\x02\n" +
-	"\x15control_plane_api_url\x18\x02 \x01(\tB\xf4\x01\x82\xce\x18\xef\x01\n" +
-	"\x15CONTROL_PLANE_API_URL*\xd5\x01Origin of the control plane's admin-server. Set: the cloud features (billing, managed daemons, coupons, Forge cloud envs) are wired up. Unset: the self-hosted implementations (src/services/controlPlane/config.ts).R\x12controlPlaneApiUrl\x12\xf6\x01\n" +
+	"\"reliant/config/v1/web_config.proto\x12\x11reliant.config.v1\x1a\x14forge/v1/forge.proto\"\xdf(\n" +
+	"\x10ReliantWebConfig\x12\xa0\x03\n" +
+	"\aapi_url\x18\x01 \x01(\tB\x86\x03\x82\xce\x18\x81\x03\n" +
+	"\aAPI_URL*\xe1\x02Origin of the reliant api-server (Connect RPCs, the terminal WebSocket). Also what the onboarding's `reliant daemon start` command tells a daemon to dial. Unset: the generated dev floor (src/lib/apiurl_gen.ts). Under the Vite dev server the browser calls its own origin and the dev proxy forwards to the API, so this is only the CLI-command value there.r\x12\n" +
+	"\tauth_mode\x12\x05cloudR\x06apiUrl\x12\xbc\x02\n" +
+	"\x15control_plane_api_url\x18\x02 \x01(\tB\x88\x02\x82\xce\x18\x83\x02\n" +
+	"\x15CONTROL_PLANE_API_URL*\xd5\x01Origin of the control plane's admin-server. Set: the cloud features (billing, managed daemons, coupons, Forge cloud envs) are wired up. Unset: the self-hosted implementations (src/services/controlPlane/config.ts).r\x12\n" +
+	"\tauth_mode\x12\x05cloudR\x12controlPlaneApiUrl\x12\xf6\x01\n" +
 	"\vgateway_url\x18\x03 \x01(\tB\xd4\x01\x82\xce\x18\xcf\x01\n" +
 	"\vGATEWAY_URL*\xbf\x01Origin of the daemon gateway (ToolsDaemonService). The browser never dials it; the onboarding renders it into the `reliant daemon start` command, which cannot derive it for a loopback server.R\n" +
 	"gatewayUrl\x12\x98\x02\n" +
@@ -294,11 +296,13 @@ const file_reliant_config_v1_web_config_proto_rawDesc = "" +
 	"\vDISABLE_TLS*\xa1\x01\"true\": build loopback and WebSocket URLs with http/ws instead of https/wss (a plain-http local stack). The desktop app takes this from its main process instead.R\n" +
 	"disableTls\x12\xb3\x02\n" +
 	"\tauth_mode\x18\x06 \x01(\tB\x95\x02\x82\xce\x18\x90\x02\n" +
-	"\tAUTH_MODE*\xfb\x01\"cloud\": the managed deployment. Sessions use browser storage, and the document must also carry API_URL, CONTROL_PLANE_API_URL, SUPABASE_URL and SUPABASE_ANON_KEY, or the app refuses to start and names what is missing. Unset: self-hosted or local dev.J\x05cloudR\bauthMode\x12\xa5\x01\n" +
-	"\fsupabase_url\x18\a \x01(\tB\x81\x01\x82\xce\x18}\n" +
-	"\fSUPABASE_URL\x1a\x16http://127.0.0.1:54321*UThe Supabase project the browser signs in against. Default: a local `supabase start`.R\vsupabaseUrl\x12\xc3\x01\n" +
-	"\x11supabase_anon_key\x18\b \x01(\tB\x96\x01\x82\xce\x18\x91\x01\n" +
-	"\x11SUPABASE_ANON_KEY*|The Supabase project's PUBLISHABLE (anon) key. Public by design. Unset: Supabase sign-in is unavailable and the app says so.R\x0fsupabaseAnonKey\x12\xca\x01\n" +
+	"\tAUTH_MODE*\xfb\x01\"cloud\": the managed deployment. Sessions use browser storage, and the document must also carry API_URL, CONTROL_PLANE_API_URL, SUPABASE_URL and SUPABASE_ANON_KEY, or the app refuses to start and names what is missing. Unset: self-hosted or local dev.J\x05cloudR\bauthMode\x12\xba\x01\n" +
+	"\fsupabase_url\x18\a \x01(\tB\x96\x01\x82\xce\x18\x91\x01\n" +
+	"\fSUPABASE_URL\x1a\x16http://127.0.0.1:54321*UThe Supabase project the browser signs in against. Default: a local `supabase start`.r\x12\n" +
+	"\tauth_mode\x12\x05cloudR\vsupabaseUrl\x12\xd7\x01\n" +
+	"\x11supabase_anon_key\x18\b \x01(\tB\xaa\x01\x82\xce\x18\xa5\x01\n" +
+	"\x11SUPABASE_ANON_KEY*|The Supabase project's PUBLISHABLE (anon) key. Public by design. Unset: Supabase sign-in is unavailable and the app says so.r\x12\n" +
+	"\tauth_mode\x12\x05cloudR\x0fsupabaseAnonKey\x12\xca\x01\n" +
 	"\x11auto_anon_sign_in\x18\t \x01(\tB\x9e\x01\x82\xce\x18\x99\x01\n" +
 	"\x11AUTO_ANON_SIGN_IN*\x83\x01\"true\": sign a visitor in anonymously instead of showing the sign-in screen (local demos). Never set it for a deployed environment.R\x0eautoAnonSignIn\x12\xbb\x02\n" +
 	"\x16stripe_publishable_key\x18\n" +

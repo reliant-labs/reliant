@@ -48,11 +48,13 @@ message ReliantWebConfig {
   // ── Endpoints ─────────────────────────────────────────────────────────
   string api_url = 1 [(forge.v1.config) = {
     env_var: "API_URL"
+    required_when: [{field: "auth_mode", equals: "cloud"}]
     description: "Origin of the reliant api-server (Connect RPCs, the terminal WebSocket). Also what the onboarding's `reliant daemon start` command tells a daemon to dial. Unset: the generated dev floor (src/lib/apiurl_gen.ts). Under the Vite dev server the browser calls its own origin and the dev proxy forwards to the API, so this is only the CLI-command value there."
   }];
 
   string control_plane_api_url = 2 [(forge.v1.config) = {
     env_var: "CONTROL_PLANE_API_URL"
+    required_when: [{field: "auth_mode", equals: "cloud"}]
     description: "Origin of the control plane's admin-server. Set: the cloud features (billing, managed daemons, coupons, Forge cloud envs) are wired up. Unset: the self-hosted implementations (src/services/controlPlane/config.ts)."
   }];
 
@@ -80,12 +82,14 @@ message ReliantWebConfig {
 
   string supabase_url = 7 [(forge.v1.config) = {
     env_var: "SUPABASE_URL"
+    required_when: [{field: "auth_mode", equals: "cloud"}]
     default_value: "http://127.0.0.1:54321"
     description: "The Supabase project the browser signs in against. Default: a local `supabase start`."
   }];
 
   string supabase_anon_key = 8 [(forge.v1.config) = {
     env_var: "SUPABASE_ANON_KEY"
+    required_when: [{field: "auth_mode", equals: "cloud"}]
     description: "The Supabase project's PUBLISHABLE (anon) key. Public by design. Unset: Supabase sign-in is unavailable and the app says so."
   }];
 
