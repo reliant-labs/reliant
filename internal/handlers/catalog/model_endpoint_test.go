@@ -23,15 +23,15 @@ import (
 )
 
 // newModelEndpoint builds the endpoint handler with no daemon router and no
-// credential store, under the network policy of a deployment hosted by
-// controlPlaneURL ("" is self-hosted).
-func newModelEndpoint(t *testing.T, repo *db.Repo, controlPlaneURL string) *model_endpoint.Service {
+// credential store, under a network policy that refuses private targets
+// unless allowPrivateEgress opts a self-hosted deployment in.
+func newModelEndpoint(t *testing.T, repo *db.Repo, allowPrivateEgress bool) *model_endpoint.Service {
 	t.Helper()
 	svc, err := model_endpoint.New(model_endpoint.Deps{
-		Logger:       slog.New(slog.DiscardHandler),
-		Config:       &typedconfig.Config{},
-		Repo:         repo,
-		ControlPlane: &configv1.ControlPlaneConfig{Url: controlPlaneURL},
+		Logger:  slog.New(slog.DiscardHandler),
+		Config:  &typedconfig.Config{},
+		Repo:    repo,
+		Network: &configv1.NetworkConfig{AllowPrivateEgress: allowPrivateEgress},
 	})
 	require.NoError(t, err)
 	return svc
@@ -61,12 +61,12 @@ func openAIModels(t *testing.T, ids ...string) *httptest.Server {
 	return srv
 }
 
-// No control plane configured == self-hosted: loopback httptest servers are
-// legitimate targets.
+// A self-hosted deployment that opted in to private egress: loopback httptest
+// servers are legitimate targets.
 func TestModelEndpointServiceCRUDOverTheHandler(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
-	svc := newModelEndpoint(t, repo, "")
+	svc := newModelEndpoint(t, repo, true)
 	srv := openAIModels(t, "llama", "mixtral")
 
 	create, err := svc.CreateModelEndpoint(ctxFor("svc-user-a"), connect.NewRequest(&reliantv1.CreateModelEndpointRequest{
@@ -158,10 +158,10 @@ func TestModelEndpointServiceCRUDOverTheHandler(t *testing.T) {
 	})
 }
 
-func TestModelEndpointServiceRefusesPrivateTargetsWhenHosted(t *testing.T) {
+func TestModelEndpointServiceRefusesPrivateTargetsByDefault(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	defer cleanup()
-	svc := newModelEndpoint(t, repo, "http://admin-server.cluster.local:8090")
+	svc := newModelEndpoint(t, repo, false)
 	srv := openAIModels(t, "m") // 127.0.0.1
 
 	for _, url := range []string{srv.URL + "/v1", "http://169.254.169.254/v1", "http://10.0.0.1/v1", "http://localhost:11434/v1"} {

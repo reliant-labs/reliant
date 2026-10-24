@@ -407,7 +407,7 @@ type WorkerToolsFactory struct{ *tools.ToolsFactory }
 // reaches.
 type WorkerToolsFactoryDeps struct {
 	DB            *db.Repo
-	ControlPlane  *configv1.ControlPlaneConfig
+	Network       *configv1.NetworkConfig
 	Temporal      *TemporalClient
 	AgentRuns     *agentruns.Runs
 	Triggers      *WorkerTrigger
@@ -424,8 +424,8 @@ func NewWorkerToolsFactory(d WorkerToolsFactoryDeps) (*WorkerToolsFactory, error
 	repo, temporalClient := d.DB, d.Temporal.Client
 	runMachine := toolexec.NewRunMachine(d.Router)
 	return &WorkerToolsFactory{tools.NewToolsFactory(&tools.ToolsOptions{
-		Repo:            repo,
-		ControlPlaneURL: ControlPlaneEndpoint(d.ControlPlane).URL,
+		Repo:               repo,
+		AllowPrivateEgress: AllowPrivateEgress(d.Network),
 		// The worker is where spawn_send actually executes (inside the
 		// ExecuteTools activity), so this is the wiring that matters most for
 		// agent-to-agent delivery.
@@ -563,6 +563,7 @@ type TemporalWorkerDeps struct {
 	WriteLedger    writeledger.Service
 	Pollers        *webhook.Registry
 	ControlPlane   *configv1.ControlPlaneConfig
+	Network        *configv1.NetworkConfig
 	Recorder       *AccountRecorder
 	// WorkflowTaskSlots and WorkflowTaskPollers are WorkerConfig's
 	// RELIANT_WORKER_MAX_CONCURRENT_WORKFLOW_TASKS and
@@ -609,7 +610,7 @@ func NewTemporalWorker(d TemporalWorkerDeps) (*workersetup.Worker, error) {
 		WriteLedger:            d.WriteLedger,
 		TriggerPollers:         d.Pollers,
 		TriggerCredentials:     triggerCredentials(creds),
-		ControlPlaneURL:        ControlPlaneEndpoint(d.ControlPlane).URL,
+		AllowPrivateEgress:     AllowPrivateEgress(d.Network),
 		WorkflowTaskSlots:      int(d.WorkflowTaskSlots),
 		WorkflowTaskPollers:    int(d.WorkflowTaskPollers),
 	})

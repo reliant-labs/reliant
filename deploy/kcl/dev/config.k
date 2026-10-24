@@ -85,6 +85,11 @@ server_process_config: config_gen.ServerProcessConfig = {
     }
     # Logs and certs, under the checkout's gitignored .forge/.
     data_dir = ".forge/data/dev"
+    # A developer's machine: fetch and model endpoints may reach localhost and
+    # the LAN (an Ollama on the host). Every other env leaves this off.
+    network = {
+        allow_private_egress = True
+    }
 }
 
 # The `reliant server worker` process.

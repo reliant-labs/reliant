@@ -39481,6 +39481,21 @@
           "Category": "",
           "MessageType": "PreviewConfig",
           "ProtoFile": "reliant/config/v1/server_config.proto"
+        },
+        {
+          "Name": "network",
+          "GoName": "Network",
+          "GoType": "",
+          "ProtoType": "message",
+          "EnvVar": "",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "",
+          "Sensitive": false,
+          "Category": "",
+          "MessageType": "NetworkConfig",
+          "ProtoFile": "reliant/config/v1/server_config.proto"
         }
       ],
       "Binary": "reliant",
@@ -39491,6 +39506,28 @@
       ],
       "ProtoFile": "reliant/config/v1/server_config.proto",
       "Line": 32,
+      "GoImportPath": "github.com/reliant-labs/reliant/gen/reliant/config/v1"
+    },
+    {
+      "Name": "NetworkConfig",
+      "Fields": [
+        {
+          "Name": "allow_private_egress",
+          "GoName": "AllowPrivateEgress",
+          "GoType": "bool",
+          "ProtoType": "bool",
+          "EnvVar": "RELIANT_ALLOW_PRIVATE_EGRESS",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "Let user-steered server-side requests (fetch, websearch, model endpoints) reach private, loopback and link-local addresses; self-hosted deployments only",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "reliant/config/v1/server_config.proto"
+        }
+      ],
+      "ProtoFile": "reliant/config/v1/server_config.proto",
+      "Line": 71,
       "GoImportPath": "github.com/reliant-labs/reliant/gen/reliant/config/v1"
     },
     {
@@ -39541,7 +39578,7 @@
         }
       ],
       "ProtoFile": "reliant/config/v1/server_config.proto",
-      "Line": 69,
+      "Line": 87,
       "GoImportPath": "github.com/reliant-labs/reliant/gen/reliant/config/v1"
     },
     {
@@ -39591,7 +39628,7 @@
         }
       ],
       "ProtoFile": "reliant/config/v1/server_config.proto",
-      "Line": 93,
+      "Line": 111,
       "GoImportPath": "github.com/reliant-labs/reliant/gen/reliant/config/v1"
     },
     {
@@ -39641,7 +39678,7 @@
         }
       ],
       "ProtoFile": "reliant/config/v1/server_config.proto",
-      "Line": 123,
+      "Line": 141,
       "GoImportPath": "github.com/reliant-labs/reliant/gen/reliant/config/v1"
     },
     {
@@ -39868,7 +39905,7 @@
     "reliant/config/v1/observability_config.proto": "2c6c722905e6adabd402caa30069702dd3dd9e98504a43d1617bc0c138113f42",
     "reliant/config/v1/preview_config.proto": "ffbf20088c49cac7e5cd913d17d2f2d30e992df459998d706e6b96f0f5a2ab73",
     "reliant/config/v1/preview_url_config.proto": "e9ff64e47a61c04e8f2a63311bfd4e41acb28ef0811581d527b88fbff20e3306",
-    "reliant/config/v1/server_config.proto": "35d746867279548a913e21f7be321451dab6225abccdf1319ed48f70a0966010",
+    "reliant/config/v1/server_config.proto": "737f9184116615f327c4437f2550eee5a13cd79d75b14f811ec754bd53ab5b16",
     "reliant/config/v1/worker_config.proto": "503a77d05a9e96aa0509df8ed88dff2c24e454c8672696bea47d7bb018eaf9f0",
     "reliant/v1/account.proto": "d7e5ce0de4321d271532eb749a53e2001e692bdf208a4b7b71d4816673eebf35",
     "reliant/v1/annotations.proto": "378abb26b00cc86e8b14aef65e3e78467130da6a7787cd66b9a7d59ade949b57",
