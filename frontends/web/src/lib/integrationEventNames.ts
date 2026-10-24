@@ -13,7 +13,7 @@
  * wildcard like "issues.*") reads as recorded rather than guessed.
  */
 
-import type { CatalogEntrySummary } from "../api/catalog-search-grpc";
+import type { CatalogEntrySummary } from "../hooks/catalog-queries";
 
 export interface IntegrationEventNaming {
   /** "github" → "GitHub". */

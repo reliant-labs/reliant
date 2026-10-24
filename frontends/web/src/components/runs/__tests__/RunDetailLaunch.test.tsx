@@ -52,6 +52,8 @@ import {
   worktreesResponse,
 } from "../../workflow/run/__tests__/runFormFixtures";
 import { renderRunsAt } from "./runTestUtils";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
 
 const rpc = vi.hoisted(() => ({
   getChat: vi.fn(),
@@ -90,6 +92,9 @@ vi.mock("@/api/grpc-client", () => ({
   },
   setDaemonLastSeen: vi.fn(),
 }));
+
+// Integration events are named from the catalog's trigger types; none here.
+setTransport(mockTransport({ "CatalogService.SearchCatalog": { response: {} } }));
 
 // The run's chat is "loaded" straight from GetChat; the stores the real
 // loader drives are not under test here.

@@ -33,6 +33,8 @@ import {
   WorkflowStopReason,
 } from "@/gen/reliant/v1/chat_pb";
 import { HOUR, isoFromNow, renderAtRoute } from "./automationTestUtils";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
 
 const getTrigger = vi.fn();
 const listTriggerEvents = vi.fn();
@@ -52,6 +54,9 @@ vi.mock("@/api/grpc-client", () => ({
     workflow: () => ({ listWorkflows: vi.fn(async () => ({ workflows: [], invalidWorkflows: [] })) }),
   },
 }));
+
+// Integration events are named from the catalog's trigger types; none here.
+setTransport(mockTransport({ "CatalogService.SearchCatalog": { response: {} } }));
 
 const toastSuccess = vi.fn();
 const toastError = vi.fn();

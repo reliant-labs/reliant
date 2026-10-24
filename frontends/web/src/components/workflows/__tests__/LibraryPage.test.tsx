@@ -18,6 +18,8 @@ import { RunDisplayState } from "@/gen/reliant/v1/run_pb";
 import { WorkflowDraftStatus } from "@/gen/reliant/v1/workflow_pb";
 import { ScheduleSourceSchema, TriggerHealthSchema, TriggerHealthStatus, TriggerSchema, WorkflowTriggerSchema } from "@/gen/reliant/v1/trigger_pb";
 import { libraryResponse, protoRun, protoTrigger, renderWorkflowsPage } from "./workflowsTestUtils";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
 
 const mocks = vi.hoisted(() => ({
   listWorkflows: vi.fn(),
@@ -46,6 +48,9 @@ vi.mock("@/api/grpc-client", () => ({
     project: () => ({ listProjectDaemons: mocks.listProjectDaemons }),
   },
 }));
+
+// Integration events are named from the catalog's trigger types; none here.
+setTransport(mockTransport({ "CatalogService.SearchCatalog": { response: {} } }));
 
 vi.mock("@/store/projectStore", () => {
   const state = { currentProject: { id: "proj-1", name: "Reliant" }, projects: [], isLoading: false };

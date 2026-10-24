@@ -35,8 +35,8 @@ vi.mock("../../lib/settingsPersistence", () => ({
 vi.mock("../../api/client", () => ({
   api: { settings: { getProviders: vi.fn(async () => []) } },
 }));
-vi.mock("../../api/mcp-grpc", () => ({
-  mcpGrpc: { listServers: vi.fn(async () => ({ servers: [] })) },
+vi.mock("../../hooks/mcp-queries", () => ({
+  fetchMcpServers: vi.fn(async () => []),
 }));
 vi.mock("../../lib/logger", () => ({
   logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },

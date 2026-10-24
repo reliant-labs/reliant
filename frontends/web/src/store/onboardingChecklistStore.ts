@@ -20,7 +20,7 @@
 
 import { create } from "zustand";
 import { api } from "../api/client";
-import { mcpGrpc } from "../api/mcp-grpc";
+import { fetchMcpServers } from "../hooks/mcp-queries";
 import { logger } from "../lib/logger";
 import {
   readSetting,
@@ -443,8 +443,8 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
       // 7. Install an MCP server
       if (!newItems.has("install-mcp") && projectId) {
         try {
-          const result = await mcpGrpc.listServers(projectId);
-          if (result.servers.length > 0) {
+          const servers = await fetchMcpServers(queryClient, projectId);
+          if (servers.length > 0) {
             newItems.add("install-mcp");
             changed = true;
           }

@@ -19,12 +19,16 @@ vi.mock('@/lib/constants', async () => ({
   getIsDev: () => state.isDev,
 }))
 
-vi.mock('@/hooks/connection-queries', () => ({
+vi.mock('@/hooks/catalog-queries', () => ({
   useCatalogEntry: () => ({
     isLoading: false,
     isError: false,
     data: { connection: { methods: state.methods, params: [] } },
   }),
+}))
+
+vi.mock('@/hooks/connection-queries', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/hooks/connection-queries')>()),
   useCreateApiKeyConnection: () => ({ mutateAsync: vi.fn(), isPending: false }),
   invalidateConnectionQueries: vi.fn(),
 }))

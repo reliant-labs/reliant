@@ -25,6 +25,8 @@ import {
 } from "@/gen/reliant/v1/catalog_pb";
 import { ConnectionAuthKind, IntegrationAuthMethodSchema, IntegrationSchema } from "@/gen/reliant/v1/connection_pb";
 import { renderWithQuery } from "@/test/renderWithQuery";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
 
 const searchCatalog = vi.fn();
 const getCatalogEntry = vi.fn();
@@ -34,12 +36,20 @@ const listIntegrations = vi.fn();
 
 vi.mock("@/api/grpc-client", () => ({
   grpcClient: {
-    catalog: () => ({ searchCatalog, getCatalogEntry, listCatalogIntegrations }),
-    connection: () => ({ listIntegrations }),
   },
   getCatalogClient: () => ({ listNodes }),
   getGRPCBaseURLPublic: () => null,
 }));
+
+// CatalogService and ConnectionService are on their generated hooks, so they are answered at the transport.
+setTransport(
+  mockTransport({
+    "CatalogService.SearchCatalog": (req) => searchCatalog(req),
+    "CatalogService.GetCatalogEntry": (req) => getCatalogEntry(req),
+    "CatalogService.ListCatalogIntegrations": (req) => listCatalogIntegrations(req),
+    "ConnectionService.ListIntegrations": (req) => listIntegrations(req),
+  }),
+);
 
 import { StepPalette, type StepPaletteProps } from "../StepPalette";
 
@@ -155,7 +165,6 @@ describe("StepPalette: browsing (nothing typed)", () => {
     expect(within(list).queryByText("Generic action")).not.toBeInTheDocument();
     expect(listCatalogIntegrations).toHaveBeenCalledWith(
       expect.objectContaining({ kinds: [CatalogEntryKind.ACTION], pageSize: 20, pageToken: "" }),
-      expect.anything(),
     );
     // Browsing lists integrations; it does not fetch a page of raw entries.
     expect(searchCatalog).not.toHaveBeenCalled();
@@ -178,7 +187,6 @@ describe("StepPalette: browsing (nothing typed)", () => {
     expect(await screen.findByText("Create issue")).toBeInTheDocument();
     expect(searchCatalog).toHaveBeenCalledWith(
       expect.objectContaining({ query: "", integration: "github", kinds: [CatalogEntryKind.ACTION] }),
-      expect.anything(),
     );
     expect(optionNamed("GitHub")).toHaveTextContent("expanded");
     // Nested under GitHub, so the row does not repeat GitHub's name or logo.
@@ -335,7 +343,7 @@ describe("StepPalette: browsing (nothing typed)", () => {
     expect(within(list).getByText("Webhook")).toBeInTheDocument();
     expect(within(list).getByText("When a workflow finishes")).toBeInTheDocument();
     expect(await within(list).findByText("1 trigger · Engineering")).toBeInTheDocument();
-    expect(listCatalogIntegrations).toHaveBeenCalledWith(expect.objectContaining({ kinds: [CatalogEntryKind.TRIGGER] }), expect.anything());
+    expect(listCatalogIntegrations).toHaveBeenCalledWith(expect.objectContaining({ kinds: [CatalogEntryKind.TRIGGER] }));
 
     await user.keyboard("{Enter}");
     expect(handlers.onChooseBuiltinTrigger).toHaveBeenCalledWith("schedule");
@@ -419,7 +427,7 @@ describe("StepPalette: searching", () => {
 
     for (let i = 0; i < 5; i++) await user.keyboard("{ArrowDown}");
     await screen.findByText("Last action");
-    expect(searchCatalog).toHaveBeenCalledWith(expect.objectContaining({ pageToken: "p2" }), expect.anything());
+    expect(searchCatalog).toHaveBeenCalledWith(expect.objectContaining({ pageToken: "p2" }));
     expect(screen.getByText(/6 of 6/)).toBeInTheDocument();
   });
 

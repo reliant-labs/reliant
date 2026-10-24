@@ -23,6 +23,7 @@
 //
 // See the `frontend-testing` skill for recipes and anti-patterns.
 
+import { create, type DescMessage } from "@bufbuild/protobuf";
 import { Code, ConnectError } from "@connectrpc/connect";
 import {
   QueryClient,
@@ -71,7 +72,7 @@ function toConnectError(err: Error | string | ConnectError): ConnectError {
 }
 
 function makeUnaryResponse(
-  method: { name: string; parent: { typeName: string } },
+  method: { name: string; parent: { typeName: string }; output: DescMessage },
   message: unknown,
 ): UnaryResponse<never, never> {
   return {
@@ -79,7 +80,9 @@ function makeUnaryResponse(
     method: method as never,
     stream: false,
     header: new Headers(),
-    message: message as never,
+    // A real transport parses the response into a full message (every field
+    // set, repeated fields []), so a fixture may be written as an init shape.
+    message: create(method.output, (message ?? {}) as never) as never,
     trailer: new Headers(),
   };
 }
@@ -120,7 +123,10 @@ export function mockTransport(handlers: MockHandlers = {}): Transport {
         );
       }
       if (typeof handler === "function") {
-        const result = await handler(input as unknown);
+        // A real transport serializes the request, so the server always sees
+        // every field (an unset repeated field is [], not undefined). Hand the
+        // handler the same: the full message, not the caller's init shape.
+        const result = await handler(create(method.input, input as never) as unknown);
         return makeUnaryResponse(method, result);
       }
       if ("error" in handler) {

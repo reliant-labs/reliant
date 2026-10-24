@@ -167,7 +167,7 @@ const MARKERS: MarkerCase[] = [
     legacy: new Error("no git credential found for provider github"),
     read: isMissingGitCredentialError,
   },
-  // #11 (processStore reads hasErrorReason directly)
+  // #11 (CommandsViewerTab's kill reads hasErrorReason directly)
   {
     name: "#11 process already stopped",
     reason: "process_not_running",

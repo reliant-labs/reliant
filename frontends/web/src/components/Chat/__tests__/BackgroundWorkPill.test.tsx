@@ -49,11 +49,14 @@ vi.mock("../../../hooks/useWorkflowExecutions", () => ({
 }));
 
 import { useThreadActivityStore } from "../../../store/threadActivityStore";
-import { useProcessStore } from "../../../store/processStore";
 import { useActivityStore } from "../../../store/activityStore";
 import { useChatStore } from "../../../store/chatStore";
 import { ChatActivity, WorkflowState, WorkflowStopReason } from "../../../gen/reliant/v1/chat_pb";
-import { BackgroundProcessStatus } from "../../../api/background-grpc";
+import { BackgroundProcessStatus } from "../../../hooks/background-queries";
+import type { MessageInitShape } from "@bufbuild/protobuf";
+import type { BackgroundProcessSchema } from "../../../gen/reliant/v1/background_pb";
+import { setTransport } from "../../../lib/connect";
+import { mockTransport } from "../../../lib/test-utils";
 import { BackgroundWorkPill, DISMISSED_FAILED_AGENTS_KEY } from "../BackgroundWorkPill";
 import { chatGrpc } from "../../../api/chat-grpc";
 import { toast } from "../../../lib/toast-manager";
@@ -115,6 +118,9 @@ function setChatRunning(running: boolean) {
     .setActivity(CHAT_ID, running ? ChatActivity.RUNNING : ChatActivity.IDLE);
 }
 
+/** What BackgroundService.ListProcesses answers for the test that is running. */
+let daemonProcesses: MessageInitShape<typeof BackgroundProcessSchema>[] = [];
+
 function renderPill(props: Partial<React.ComponentProps<typeof BackgroundWorkPill>> = {}) {
   return renderWithQuery(
     <BackgroundWorkPill
@@ -131,7 +137,9 @@ beforeEach(() => {
   usePendingQuestionsMock.mockReturnValue({ data: { questions: [] } });
   useWorkflowExecutionsMock.mockReturnValue({ allWorkflows: [] });
   useThreadActivityStore.getState().clearAll();
-  useProcessStore.getState().reset();
+  // BackgroundService is on its generated hooks: its process list is answered at the transport.
+  daemonProcesses = [];
+  setTransport(mockTransport({ "BackgroundService.ListProcesses": () => ({ processes: daemonProcesses }) }));
   useChatStore.setState({ cancelToolCall: originalCancelToolCall });
   setChatRunning(true);
 });
@@ -431,36 +439,34 @@ describe("BackgroundWorkPill", () => {
     expect(screen.queryByTestId("background-work-pill")).toBeNull();
   });
 
-  it("shows a running command for this chat and excludes another chat's", () => {
-    useProcessStore.setState({
-      processes: [
-        {
-          id: "proc-mine",
-          command: "npm run dev",
-          status: BackgroundProcessStatus.RUNNING,
-          start_time: new Date().toISOString(),
-          working_dir: "/tmp",
-          session_id: "s",
-          worktree_id: WORKTREE_ID,
-          chat_id: CHAT_ID,
-        },
-        {
-          id: "proc-other",
-          command: "npm run other",
-          status: BackgroundProcessStatus.RUNNING,
-          start_time: new Date().toISOString(),
-          working_dir: "/tmp",
-          session_id: "s",
-          worktree_id: WORKTREE_ID,
-          chat_id: "some-other-chat",
-        },
-      ],
-    });
+  it("shows a running command for this chat and excludes another chat's", async () => {
+    daemonProcesses = [
+      {
+        id: "proc-mine",
+        command: "npm run dev",
+        status: BackgroundProcessStatus.RUNNING,
+        startTime: new Date().toISOString(),
+        workingDir: "/tmp",
+        sessionId: "s",
+        worktreeId: WORKTREE_ID,
+        chatId: CHAT_ID,
+      },
+      {
+        id: "proc-other",
+        command: "npm run other",
+        status: BackgroundProcessStatus.RUNNING,
+        startTime: new Date().toISOString(),
+        workingDir: "/tmp",
+        sessionId: "s",
+        worktreeId: WORKTREE_ID,
+        chatId: "some-other-chat",
+      },
+    ];
 
     const onSelectCommand = vi.fn();
     renderPill({ onSelectCommand });
 
-    expect(screen.getByTestId("background-work-pill")).toHaveTextContent("1 command");
+    expect(await screen.findByTestId("background-work-pill")).toHaveTextContent("1 command");
 
     fireEvent.click(screen.getByTestId("background-work-pill"));
     expect(screen.getByTestId("background-work-command-proc-mine")).toBeTruthy();

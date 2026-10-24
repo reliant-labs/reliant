@@ -20,10 +20,9 @@ import { AlertTriangle, Plus } from "lucide-react";
 import { useId, useState } from "react";
 
 import { CardInset } from "../../forge-ui/card";
-import type { CatalogEntry } from "../../../api/catalog-search-grpc";
-import type { Connection } from "../../../api/connection-grpc";
+import type { CatalogEntry } from "../../../hooks/catalog-queries";
 import { methodsUnavailableHere } from "../../../lib/integrationAvailability";
-import { useConnections } from "../../../hooks/connection-queries";
+import { useConnections, type Connection } from "../../../hooks/connection-queries";
 import { cn } from "../../../lib/utils";
 
 export interface ConnectionPickerProps {

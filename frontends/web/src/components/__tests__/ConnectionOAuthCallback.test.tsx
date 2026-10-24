@@ -3,15 +3,16 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 
+import { setTransport } from '@/lib/connect'
+import { mockTransport } from '@/lib/test-utils'
+
 const { completeOAuth, search } = vi.hoisted(() => ({
   completeOAuth: vi.fn(),
   search: { current: {} as Record<string, string | undefined> },
 }))
 
-vi.mock('@/api/connection-grpc', () => ({
-  connectionGrpc: { completeOAuth },
-  connectionErrorMessage: (err: unknown) => (err instanceof Error ? err.message : String(err)),
-}))
+// CompleteOAuth, answered at the transport with the server's response.
+setTransport(mockTransport({ 'ConnectionService.CompleteOAuth': (req) => completeOAuth(req) }))
 
 vi.mock('@tanstack/react-router', () => ({
   useSearch: () => search.current,
@@ -43,7 +44,7 @@ describe('ConnectionOAuthCallback', () => {
 
     await waitFor(() => expect(replace).toHaveBeenCalledWith('/workflow/x?tab=1&connection=conn_1'))
     expect(completeOAuth).toHaveBeenCalledTimes(1)
-    expect(completeOAuth).toHaveBeenCalledWith({ state: 'the-state', code: 'the-code' })
+    expect(completeOAuth).toHaveBeenCalledWith(expect.objectContaining({ state: 'the-state', code: 'the-code' }))
   })
 
   it('never follows an off-origin redirect_after', async () => {

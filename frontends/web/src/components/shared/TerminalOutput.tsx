@@ -22,7 +22,7 @@ import { AnsiUp } from "ansi_up";
 import DOMPurify from "dompurify";
 import { cn } from "../../lib/utils";
 import { PortsDisplay } from "./PortsDisplay";
-import { BackgroundProcessStatus } from "../../api/background-grpc";
+import { BackgroundProcessStatus } from "../../hooks/background-queries";
 
 // ============================================
 // Types

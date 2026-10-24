@@ -20,34 +20,38 @@ import {
 import { RunDisplayState } from "@/gen/reliant/v1/run_pb";
 import { ChatActivity, WorkflowState, WorkflowStopReason } from "@/gen/reliant/v1/chat_pb";
 import type { RunSummary } from "@/api/run-grpc";
-import type { CatalogEntrySummary } from "@/api/catalog-search-grpc";
+import { create } from "@bufbuild/protobuf";
+import { CatalogEntryKind, SearchCatalogResponseSchema, type SearchCatalogResponse } from "@/gen/reliant/v1/catalog_pb";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
 import { runsSearchSchema } from "@/routeSchemas";
 
 /**
  * The catalog's GitHub trigger types, as SearchCatalog lists them: what names
- * an integration event in run wording ("GitHub: Issue opened"). Return it from
- * a `catalogSearchGrpc.search` mock.
+ * an integration event in run wording ("GitHub: Issue opened").
  */
-export function githubTriggerTypes(): { entries: CatalogEntrySummary[]; nextPageToken: string; totalSize: number; categoryFacets: [] } {
+export function githubTriggerTypes(): SearchCatalogResponse {
   const integration = { id: "github", version: 1, displayName: "GitHub", icon: "github", category: "engineering" };
-  const trigger = (id: string, displayName: string, events: string[]): CatalogEntrySummary => ({
+  const trigger = (id: string, displayName: string, events: string[]) => ({
     ref: `github/${id}@1`,
-    kind: "trigger",
+    kind: CatalogEntryKind.TRIGGER,
     id,
     displayName,
-    summary: "",
     integration,
-    authKinds: [],
     connectionRequired: true,
     connected: true,
-    mutates: false,
     events,
   });
   const entries = [
     trigger("issue.opened", "Issue opened", ["issues.opened"]),
     trigger("pull_request.opened", "Pull request opened", ["pull_request.opened"]),
   ];
-  return { entries, nextPageToken: "", totalSize: entries.length, categoryFacets: [] };
+  return create(SearchCatalogResponseSchema, { entries, totalSize: entries.length });
+}
+
+/** Answer SearchCatalog with githubTriggerTypes at the transport; undo with setTransport(null). */
+export function answerGithubTriggerTypes(): void {
+  setTransport(mockTransport({ "CatalogService.SearchCatalog": () => githubTriggerTypes() }));
 }
 
 export function renderRunsAt(ui: ReactNode, path = "/workflows/runs") {

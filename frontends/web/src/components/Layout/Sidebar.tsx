@@ -55,7 +55,6 @@ import { isForgeUIEnabled } from "../../lib/forgeFeature";
 import { useMarkUnread } from "../../hooks/message-queries";
 import { activityNeedsAttention, useChatNavigationStore } from "../../store/chatNavigationStore";
 import { useWorktreeStore } from "../../store/worktreeStore";
-import { useProcessStore } from "../../store/processStore";
 import { useProjectStore } from "../../store/projectStore";
 import { cn } from "../../lib/utils";
 import { toast } from "../../lib/toast-manager";
@@ -772,9 +771,6 @@ function SidebarComponent({
   const { data: archivedChats = [] } = useArchivedChats();
   
   const switchWorktreeContext = useWorktreeStore((state) => state.switchWorktreeContext);
-  const fetchProcesses = useProcessStore(
-    (state) => state.fetchProcesses
-  );
   const adoptRunMutation = useAdoptRun();
   const unadoptRunMutation = useUnadoptRun();
 
@@ -822,17 +818,6 @@ function SidebarComponent({
     if (!currentProject) return [];
     return archivedChats.filter((c) => c.projectId === currentProject.id);
   }, [archivedChats, currentProject]);
-
-  // Initialize background tasks monitoring for all chats
-  // Fetch processes once on mount - subsequent updates come through gRPC stream
-  // (process_started, process_completed, process_failed events in globalUpdatesStore)
-  const hasInitializedProcesses = useRef(false);
-  useEffect(() => {
-    if (!hasInitializedProcesses.current && chats.length > 0) {
-      hasInitializedProcesses.current = true;
-      fetchProcesses();
-    }
-  }, [chats.length, fetchProcesses]);
 
   // Activity detection - reads directly from activityStore (SINGLE SOURCE OF TRUTH)
   const getChatActivity = useCallback(

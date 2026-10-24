@@ -22,10 +22,10 @@ import {
   type ListInputOptionsRequest,
 } from "@/gen/reliant/v1/catalog_pb";
 
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
+
 const listInputOptions = vi.fn();
-vi.mock("@/api/grpc-client", () => ({
-  grpcClient: { catalog: () => ({ listInputOptions }) },
-}));
 
 import { IntegrationValuePicker, type IntegrationValuePickerProps } from "../IntegrationValuePicker";
 
@@ -85,6 +85,7 @@ const activeOption = () => {
 };
 
 beforeEach(() => {
+  setTransport(mockTransport({ "CatalogService.ListInputOptions": (req) => listInputOptions(req) }));
   listInputOptions.mockReset();
   listInputOptions.mockImplementation(async (req: ListInputOptionsRequest) => {
     if (req.resolve.length > 0) return page([]);

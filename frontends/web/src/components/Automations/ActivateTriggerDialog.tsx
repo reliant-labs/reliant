@@ -52,7 +52,7 @@ import { fieldClass, hintClass, labelClass, textareaClass, errorTextClass } from
 import { buildDaemonChoices, defaultDaemonId } from "./daemonChoices";
 import { ConnectionPicker } from "../workflow/connections/ConnectionPicker";
 import { ConnectIntegrationDialog } from "../workflow/connections/ConnectIntegrationDialog";
-import { useCatalogEntry, useDeclaredTriggerRef } from "@/hooks/connection-queries";
+import { useCatalogEntry, useDeclaredTriggerRef } from "@/hooks/catalog-queries";
 import { integrationOf, promptOf, sourceCase, type DeclaredTrigger } from "@/lib/declaredTriggers";
 import { TriggerSourceFields } from "../workflow/config/DeclaredTriggerPanel";
 import { OnlyFromControl } from "../workflow/config/OnlyFromControl";

@@ -5,8 +5,8 @@ import Button from "@/components/forge-ui/button";
 import { Input } from "../ui/Input";
 import Card from "../forge-ui/card";
 import { ConfigScopeSelector, getScopeLabel } from "./ConfigScopeSelector";
-import type { MCPServerConfig, RecommendedServer } from "../../api/mcp-grpc";
-import { ConfigScope } from "../../api/mcp-grpc";
+import type { MCPServerConfig, RecommendedServer } from "../../hooks/mcp-queries";
+import { ConfigScope } from "../../hooks/mcp-queries";
 
 type WizardMode = "install" | "edit";
 type HTTPAuthPreset = "none" | "bearer";

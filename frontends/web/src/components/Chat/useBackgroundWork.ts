@@ -6,9 +6,9 @@
  *
  *   - Spawns are chat-scoped. The live chat stream supplies immediate rows,
  *     while the workflow execution tree is the durable title/lifecycle source.
- *   - Background bash processes are worktree-scoped and polled through
- *     processStore, and a single worktree is shared by every chat open
- *     against it.
+ *   - Background bash processes are worktree-scoped and read from
+ *     BackgroundService (useBackgroundProcesses, kept live by the stream),
+ *     and a single worktree is shared by every chat open against it.
  *
  * Failed spawns come from the workflow tree alone. A sub-agent whose step
  * fails stops on its own — the rest of the chat keeps running — and reports to
@@ -34,8 +34,7 @@
 
 import { useMemo } from "react";
 import { useActiveThreads } from "../../store/threadActivityStore";
-import { useProcessStore } from "../../store/processStore";
-import { BackgroundProcessStatus } from "../../api/background-grpc";
+import { BackgroundProcessStatus, useBackgroundProcesses } from "../../hooks/background-queries";
 import { usePendingQuestions } from "../../hooks/question-queries";
 import { questionThreadId, viewedThreadId } from "../../lib/pendingQuestions";
 import { useWorkflowExecutions } from "../../hooks/useWorkflowExecutions";
@@ -257,7 +256,7 @@ export function useBackgroundWork(
   mainThreadId?: string | null,
 ): BackgroundWork {
   const activeThreads = useActiveThreads(chatId ?? "");
-  const processes = useProcessStore((state) => state.processes);
+  const { data: processes } = useBackgroundProcesses();
   const pendingQuestions = usePendingQuestions(chatId).data?.questions;
   const { allWorkflows } = useWorkflowExecutions(chatId ?? null);
 

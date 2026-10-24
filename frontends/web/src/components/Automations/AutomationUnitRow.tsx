@@ -17,7 +17,7 @@ import { AlertOctagon } from "lucide-react";
 import { toast } from "sonner";
 
 import { sourceKindLabel, triggerErrorMessage, type Trigger } from "@/api/trigger-grpc";
-import { useIntegrationEventNaming } from "@/hooks/connection-queries";
+import { useIntegrationEventNaming } from "@/hooks/catalog-queries";
 import { useDisableWorkflow, useSetTriggerEnabled } from "@/hooks/trigger-queries";
 import { unitLastEvent, unitNextFireAt, type AutomationUnit } from "@/lib/automationUnits";
 import { describeTriggerSource } from "@/lib/cronText";

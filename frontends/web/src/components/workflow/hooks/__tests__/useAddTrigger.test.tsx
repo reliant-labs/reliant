@@ -9,12 +9,18 @@ import { act, renderHook } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
+import { create } from "@bufbuild/protobuf";
+
+import { CatalogEntrySchema, CatalogEntrySummarySchema, GetCatalogEntryResponseSchema } from "@/gen/reliant/v1/catalog_pb";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
+import { catalogServiceKeys } from "@/hooks/catalog-service-hooks_gen";
+
 const getCatalogEntry = vi.fn();
-vi.mock("@/api/grpc-client", () => ({ grpcClient: { catalog: () => ({ getCatalogEntry }) } }));
+setTransport(mockTransport({ "CatalogService.GetCatalogEntry": (req) => getCatalogEntry(req) }));
 
 import { useAddTrigger } from "../useAddTrigger";
-import { connectionKeys } from "@/hooks/connection-queries";
-import type { CatalogEntrySummary } from "@/api/catalog-search-grpc";
+import type { CatalogEntrySummary } from "@/hooks/catalog-queries";
 import type { DeclaredTrigger } from "@/lib/declaredTriggers";
 
 const existing = [{ name: "schedule", source: { case: "schedule", value: { cron: ["0 9 * * *"] } } }] as unknown as DeclaredTrigger[];
@@ -29,9 +35,15 @@ const issueOpened = {
 function setup(canEditDefinition: boolean) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   // The catalog entry is already cached, as the palette leaves it: no RPC.
-  queryClient.setQueryData(connectionKeys.catalogEntry(issueOpened.ref), {
-    payloadSchema: { properties: { event: { enum: ["issues.opened", "issues.labeled"] } } },
-  });
+  queryClient.setQueryData(
+    catalogServiceKeys.getCatalogEntry({ ref: issueOpened.ref }),
+    create(GetCatalogEntryResponseSchema, {
+      entry: create(CatalogEntrySchema, {
+        summary: create(CatalogEntrySummarySchema, { ref: issueOpened.ref }),
+        payloadSchema: { properties: { event: { enum: ["issues.opened", "issues.labeled"] } } },
+      }),
+    }),
+  );
   const declare = vi.fn();
   const closePalette = vi.fn();
   const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;

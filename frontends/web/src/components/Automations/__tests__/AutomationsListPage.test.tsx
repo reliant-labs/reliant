@@ -25,6 +25,8 @@ import {
 } from "@/gen/reliant/v1/trigger_pb";
 import { RunDisplayState } from "@/gen/reliant/v1/run_pb";
 import { HOUR, isoFromNow, renderAtRoute } from "./automationTestUtils";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
 
 const listTriggers = vi.fn();
 const setTriggerEnabled = vi.fn();
@@ -37,6 +39,9 @@ vi.mock("@/api/grpc-client", () => ({
     workflow: () => ({ listWorkflows: vi.fn(async () => ({ workflows: [], invalidWorkflows: [] })) }),
   },
 }));
+
+// Integration events are named from the catalog's trigger types; none here.
+setTransport(mockTransport({ "CatalogService.SearchCatalog": { response: {} } }));
 
 vi.mock("@/hooks/useTitleBarChrome", () => ({
   useTitleBarChrome: () => ({

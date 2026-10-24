@@ -10,6 +10,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { create } from "@bufbuild/protobuf";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
 
 vi.mock("../../../../lib/monacoManager", () => ({ useMonaco: () => null }));
 
@@ -36,11 +38,17 @@ const listConnections = vi.fn();
 
 vi.mock("@/api/grpc-client", () => ({
   grpcClient: {
-    catalog: () => ({ getCatalogEntry }),
-    connection: () => ({ listConnections }),
   },
   getGRPCBaseURLPublic: () => null,
 }));
+
+// CatalogService and ConnectionService are on their generated hooks, so they are answered at the transport.
+setTransport(
+  mockTransport({
+    "CatalogService.GetCatalogEntry": (req) => getCatalogEntry(req),
+    "ConnectionService.ListConnections": (req) => listConnections(req),
+  }),
+);
 
 import { IntegrationActionConfig } from "../IntegrationActionConfig";
 import { getActionConnection, getActionParams, newActionStep } from "@/lib/actionNodeArgs";

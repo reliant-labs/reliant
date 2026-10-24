@@ -9,7 +9,6 @@ import { WorktreeStatus } from "../../gen/reliant/v1/worktree_pb";
 import { useChatStore } from "../../store/chatStore";
 import { useActivityStore } from "../../store/activityStore";
 import { useWorktreeStore } from "../../store/worktreeStore";
-import { useProcessStore } from "../../store/processStore";
 import { useProjectStore } from "../../store/projectStore";
 import { useChatListPreferencesStore } from "../../store/chatListPreferencesStore";
 
@@ -88,7 +87,6 @@ vi.mock("../../hooks/message-queries", () => ({
 }));
 
 describe("Sidebar selected chat scroll", () => {
-  const fetchProcesses = vi.fn();
   const switchWorktreeContext = vi.fn(async () => undefined);
   const scrollIntoViewMock = vi.fn();
 
@@ -133,10 +131,6 @@ describe("Sidebar selected chat scroll", () => {
       currentWorktree: null,
       switchWorktreeContext,
     } as Partial<ReturnType<typeof useWorktreeStore.getState>>);
-
-    useProcessStore.setState({
-      fetchProcesses,
-    } as Partial<ReturnType<typeof useProcessStore.getState>>);
 
     useProjectStore.setState({
       currentProject: {

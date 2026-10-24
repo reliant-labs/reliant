@@ -7,9 +7,18 @@ const { startOAuth, completeOAuth } = vi.hoisted(() => ({
   completeOAuth: vi.fn(),
 }))
 
-vi.mock('@/api/connection-grpc', () => ({
-  connectionGrpc: { startOAuth, completeOAuth },
-}))
+import { ConnectionAuthKind, ConnectionStatus } from '@/gen/reliant/v1/connection_pb'
+import { setTransport } from '@/lib/connect'
+import { mockTransport } from '@/lib/test-utils'
+
+// The two OAuth RPCs, answered at the transport: startOAuth resolves the
+// provider URL, completeOAuth the server's CompleteOAuthResponse.
+setTransport(
+  mockTransport({
+    'ConnectionService.StartOAuth': async (req) => ({ authorizeUrl: await startOAuth(req) }),
+    'ConnectionService.CompleteOAuth': (req) => completeOAuth(req),
+  }),
+)
 
 import {
   CONNECTION_OAUTH_CALLBACK_PATH,
@@ -28,10 +37,14 @@ import {
  */
 
 const input = { integrationId: 'slack', name: 'work', redirectAfter: '/workflow/x', params: {} }
+const protoConnection = {
+  id: 'conn_1', integrationId: 'slack', authKind: ConnectionAuthKind.OAUTH2, name: 'work',
+  accountLabel: 'Acme', status: ConnectionStatus.ACTIVE, isDefault: true,
+}
 const connection = {
   id: 'conn_1', integrationId: 'slack', authKind: 'oauth2', name: 'work',
-  accountLabel: 'Acme', status: 'active', isDefault: true,
-} as const
+  accountLabel: 'Acme', senderId: '', status: 'active', isDefault: true,
+}
 
 const setBridge = (bridge: unknown) => {
   ;(window as unknown as { electronAPI?: unknown }).electronAPI = bridge
@@ -43,7 +56,7 @@ describe('connectWithOAuth', () => {
 
   beforeEach(() => {
     startOAuth.mockReset().mockResolvedValue('https://slack.com/oauth/v2/authorize?state=s')
-    completeOAuth.mockReset().mockResolvedValue({ connection, redirectAfter: '/workflow/x' })
+    completeOAuth.mockReset().mockResolvedValue({ connection: protoConnection, redirectAfter: '/workflow/x' })
     assign = vi.fn()
     vi.stubGlobal('location', { ...window.location, assign, origin: 'https://app.reliant.example' })
     vi.stubGlobal('fetch', fetchSpy)
@@ -65,8 +78,8 @@ describe('connectWithOAuth', () => {
       const outcome = await connectWithOAuth(input)
 
       expect(outcome).toEqual({ kind: 'redirecting' })
-      expect(startOAuth).toHaveBeenCalledWith(input)
-      expect(startOAuth.mock.calls[0][0]).not.toHaveProperty('loopbackRedirect')
+      expect(startOAuth).toHaveBeenCalledWith(expect.objectContaining(input))
+      expect(startOAuth.mock.calls[0][0].loopbackRedirect).toBe('')
       expect(assign).toHaveBeenCalledWith('https://slack.com/oauth/v2/authorize?state=s')
       expect(completeOAuth).not.toHaveBeenCalled()
       // No cross-site fetch to an API route that would need a cookie.
@@ -101,10 +114,10 @@ describe('connectWithOAuth', () => {
       expect(outcome).toEqual({ kind: 'connected', connection })
       // The receiver is bound before the flow starts: the API needs its address.
       expect(bridge.startConnectionOAuthReceiver.mock.invocationCallOrder[0]).toBeLessThan(startOAuth.mock.invocationCallOrder[0])
-      expect(startOAuth).toHaveBeenCalledWith({ ...input, loopbackRedirect: 'http://127.0.0.1:51000/callback' })
+      expect(startOAuth).toHaveBeenCalledWith(expect.objectContaining({ ...input, loopbackRedirect: 'http://127.0.0.1:51000/callback' }))
       expect(bridge.openExternal).toHaveBeenCalledWith('https://slack.com/oauth/v2/authorize?state=s')
       expect(bridge.waitForProviderOAuth).toHaveBeenCalledWith('f1')
-      expect(completeOAuth).toHaveBeenCalledWith({ code: 'the-code', state: 'the-state' })
+      expect(completeOAuth).toHaveBeenCalledWith(expect.objectContaining({ code: 'the-code', state: 'the-state' }))
       // The page never navigates away from the app.
       expect(assign).not.toHaveBeenCalled()
       expect(bridge.cancelProviderOAuth).not.toHaveBeenCalled()

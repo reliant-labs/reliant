@@ -19,8 +19,7 @@
 import { useCallback, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
-import { catalogSearchGrpc, type CatalogEntry, type CatalogEntrySummary } from "../../../api/catalog-search-grpc";
-import { connectionKeys } from "../../../hooks/connection-queries";
+import { cachedCatalogEntry, fetchCatalogEntry, type CatalogEntry, type CatalogEntrySummary } from "../../../hooks/catalog-queries";
 import { triggerFromBuiltin, triggerFromCatalog, type DeclaredTrigger } from "../../../lib/declaredTriggers";
 
 export interface PersonalTriggerDraft {
@@ -61,14 +60,10 @@ export function useAddTrigger({ canEditDefinition, declared, declare, closePalet
   /** A catalog trigger type: its events are the type's event list (the payload schema's `event` enum). */
   const chooseCatalog = useCallback(
     async (entry: CatalogEntrySummary) => {
-      let full = queryClient.getQueryData<CatalogEntry>(connectionKeys.catalogEntry(entry.ref));
+      let full: CatalogEntry | undefined = cachedCatalogEntry(queryClient, entry.ref);
       if (!full) {
         try {
-          full = await queryClient.fetchQuery({
-            queryKey: connectionKeys.catalogEntry(entry.ref),
-            queryFn: () => catalogSearchGrpc.get(entry.ref),
-            staleTime: 5 * 60_000,
-          });
+          full = await fetchCatalogEntry(queryClient, entry.ref);
         } catch {
           full = undefined;
         }

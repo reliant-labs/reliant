@@ -21,6 +21,9 @@ import {
   TriggerSchema,
 } from "@/gen/reliant/v1/trigger_pb";
 import { renderWithQuery } from "@/test/renderWithQuery";
+import { SearchCatalogResponseSchema } from "@/gen/reliant/v1/catalog_pb";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
 import type { Trigger } from "@/api/trigger-grpc";
 import { TriggerRailProvider, type TriggerRailContextValue } from "../../TriggerRailContext";
 
@@ -31,6 +34,9 @@ vi.mock("@/api/grpc-client", () => ({
     trigger: () => ({ listTriggers }),
   },
 }));
+
+// Integration events are named from the catalog's trigger types; none here.
+setTransport(mockTransport({ "CatalogService.SearchCatalog": { response: create(SearchCatalogResponseSchema) } }));
 
 // The handle's connected styling reads the node id from React Flow's internal
 // node context, which only <ReactFlow> provides. The rail's content is what is

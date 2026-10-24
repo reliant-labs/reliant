@@ -5,7 +5,7 @@
  * link to what started it), and the actions the run's state allows.
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
@@ -13,17 +13,16 @@ import { ChatActivity, WorkflowState, WorkflowStopReason } from "@/gen/reliant/v
 import type { Chat } from "@/api/client";
 import type { LaunchEvent } from "@/api/run-grpc";
 import { RunHeader, type RunHeaderActions } from "../RunHeader";
-import { githubTriggerTypes, renderRunsAt } from "./runTestUtils";
+import { answerGithubTriggerTypes, renderRunsAt } from "./runTestUtils";
+import { setTransport } from "@/lib/connect";
 
 vi.mock("@/hooks/useDaemonStatus", () => ({
   useDaemonStatus: () => ({ daemons: [{ daemonId: "d-1", hostname: "laptop" }] }),
 }));
 
 // The catalog's trigger types name an integration event.
-vi.mock("@/api/catalog-search-grpc", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/api/catalog-search-grpc")>()),
-  catalogSearchGrpc: { search: async () => githubTriggerTypes() },
-}));
+beforeEach(() => answerGithubTriggerTypes());
+afterEach(() => setTransport(null));
 
 function chat(overrides: Partial<Chat> = {}): Chat {
   return {

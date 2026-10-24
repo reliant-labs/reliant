@@ -1,6 +1,6 @@
 import { AlertCircle, Pause, Play, RefreshCw, Settings, SlidersHorizontal, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { ConfigScope } from "../../api/mcp-grpc";
+import { ConfigScope } from "../../hooks/mcp-queries";
 import { cn } from "../../lib/utils";
 import Badge from "../forge-ui/badge";
 import Tag from "../forge-ui/tag";

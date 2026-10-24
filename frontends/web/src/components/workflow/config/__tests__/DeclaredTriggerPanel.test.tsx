@@ -9,6 +9,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { create } from "@bufbuild/protobuf";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
 
 vi.mock("../../../../lib/monacoManager", () => ({ useMonaco: () => null }));
 
@@ -29,12 +31,19 @@ const listConnections = vi.fn();
 const resolveTriggerSenders = vi.fn();
 vi.mock("@/api/grpc-client", () => ({
   grpcClient: {
-    catalog: () => ({ searchCatalog, getCatalogEntry }),
     trigger: () => ({ setTriggerEnabled, resolveTriggerSenders }),
-    connection: () => ({ listConnections }),
   },
   getGRPCBaseURLPublic: () => null,
 }));
+
+// CatalogService and ConnectionService are on their generated hooks, so they are answered at the transport.
+setTransport(
+  mockTransport({
+    "CatalogService.SearchCatalog": (req) => searchCatalog(req),
+    "CatalogService.GetCatalogEntry": (req) => getCatalogEntry(req),
+    "ConnectionService.ListConnections": (req) => listConnections(req),
+  }),
+);
 
 import { DeclaredTriggerPanel } from "../DeclaredTriggerPanel";
 import { WorkflowMutationProvider } from "../../WorkflowMutationContext";

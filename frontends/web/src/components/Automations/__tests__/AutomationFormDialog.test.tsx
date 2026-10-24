@@ -37,6 +37,8 @@ import {
   worktreesResponse,
 } from "@/components/workflow/run/__tests__/runFormFixtures";
 import { renderAtRoute } from "./automationTestUtils";
+import { setTransport } from "@/lib/connect";
+import { mockTransport } from "@/lib/test-utils";
 
 const createTrigger = vi.fn();
 const updateTrigger = vi.fn();
@@ -52,7 +54,6 @@ const listConnections = vi.fn(async () => ({ connections: [] }));
 
 vi.mock("@/api/grpc-client", () => ({
   grpcClient: {
-    connection: () => ({ listConnections }),
     trigger: () => ({ createTrigger, updateTrigger }),
     workflow: () => ({ listWorkflows, getWorkflow }),
     preset: () => ({ listPresetsForWorkflow, getDefaultPresetsBatch }),
@@ -61,6 +62,9 @@ vi.mock("@/api/grpc-client", () => ({
     project: () => ({ listProjectDaemons }),
   },
 }));
+
+// ConnectionService is on its generated hooks, so it is answered at the transport.
+setTransport(mockTransport({ "ConnectionService.ListConnections": (req) => listConnections(req) }));
 
 function daemon(daemonId: string, hostname: string, status = DaemonStatus.ACTIVE) {
   return create(DaemonInfoSchema, { daemonId, hostname, status });

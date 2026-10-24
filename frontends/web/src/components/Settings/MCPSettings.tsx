@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import * as Sentry from "@sentry/react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   AlertCircle,
   CheckCircle2,
@@ -9,13 +10,24 @@ import {
   Server,
 } from "lucide-react";
 import {
-  mcpGrpc,
+  configToProto,
+  fetchMcpServerTools,
+  useMcpRecommended,
+  useMcpServers,
   type MCPServer,
   type MCPTool,
   type MCPServerConfig,
   type RecommendedServer,
   ConfigScope,
-} from "../../api/mcp-grpc";
+} from "../../hooks/mcp-queries";
+import {
+  useInstallServer,
+  useMoveServerScope,
+  useRestartServer,
+  useSetServerEnabled,
+  useUninstallServer,
+  useUpdateServerConfig,
+} from "../../hooks/mcp-service-hooks_gen";
 import { useProjectStore } from "../../store/projectStore";
 import { usePreferencesStore } from "../../store/preferencesStore";
 import { toast } from "sonner";
@@ -26,37 +38,18 @@ import { MCPInstalledTab } from "./MCPInstalledTab";
 import { MCPDiscoverTab } from "./MCPDiscoverTab";
 import { MCPSetupWizard } from "./MCPSetupWizard";
 import { Modal } from "../ui/Modal";
-import { subscribeToRefetch } from "../../store/refetchStore";
 import { SettingsPageHeader } from "./SettingsPageHeader";
 
 type MainTab = "installed" | "discover";
 type WizardMode = "install" | "edit";
 
-type MCPSettingsCacheEntry = {
-  installedServers: MCPServer[];
-  recommendedServers: RecommendedServer[];
-  updatedAt: number;
-};
-
-const MCP_SETTINGS_CACHE_TTL_MS = 30_000;
-const mcpSettingsCache = new Map<string, MCPSettingsCacheEntry>();
-
-const getCachedMcpSettings = (projectId: string | null) => {
-  if (!projectId) return null;
-  return mcpSettingsCache.get(projectId) ?? null;
-};
-
-const isMcpSettingsCacheFresh = (cacheEntry: MCPSettingsCacheEntry) =>
-  Date.now() - cacheEntry.updatedAt < MCP_SETTINGS_CACHE_TTL_MS;
+const NO_SERVERS: MCPServer[] = [];
+const NO_RECOMMENDED: RecommendedServer[] = [];
 
 const getErrorMessage = (error: unknown): string => {
   if (error instanceof Error) return error.message;
   return String(error);
 };
-
-export function resetMCPSettingsCacheForTests() {
-  mcpSettingsCache.clear();
-}
 
 function MCPInitialLoadingState() {
   return (
@@ -157,25 +150,35 @@ function MCPRefreshStatus({
 export function MCPSettings() {
   const currentProject = useProjectStore((state) => state.currentProject);
   const currentProjectId = currentProject?.id ?? null;
-  const cachedMcpData = getCachedMcpSettings(currentProjectId);
+  const queryClient = useQueryClient();
+
+  // The servers and the recommendations are generated MCPService reads: the
+  // cache is React Query's, every write below invalidates mcpServiceKeys.all,
+  // and the stream's config_health refetch does too (invalidateMcpQueries).
+  const serversQuery = useMcpServers(currentProjectId);
+  const recommendedQuery = useMcpRecommended(currentProjectId);
+  const installedServers = serversQuery.data ?? NO_SERVERS;
+  const recommendedServers = recommendedQuery.data ?? NO_RECOMMENDED;
+  const hasLoadedData = serversQuery.isSuccess && recommendedQuery.isSuccess;
+  const isFetching = serversQuery.isFetching || recommendedQuery.isFetching;
+  const isInitialLoading = !!currentProjectId && !hasLoadedData && (serversQuery.isPending || recommendedQuery.isPending) && isFetching;
+  const isRefreshing = hasLoadedData && isFetching;
+  const queryError = serversQuery.error ?? recommendedQuery.error;
+  const loadError = queryError && !isFetching ? getErrorMessage(queryError) : null;
+  const lastLoadedAt = hasLoadedData ? Math.max(serversQuery.dataUpdatedAt, recommendedQuery.dataUpdatedAt) : null;
+  const refetchAll = () => {
+    void serversQuery.refetch();
+    void recommendedQuery.refetch();
+  };
+
+  const installServer = useInstallServer();
+  const restartServer = useRestartServer();
+  const uninstallServer = useUninstallServer();
+  const setServerEnabled = useSetServerEnabled();
+  const moveServerScope = useMoveServerScope();
+  const updateServerConfig = useUpdateServerConfig();
 
   const [activeTab, setActiveTab] = useState<MainTab>("installed");
-  const [installedServers, setInstalledServers] = useState<MCPServer[]>(
-    () => cachedMcpData?.installedServers ?? [],
-  );
-  const [recommendedServers, setRecommendedServers] = useState<
-    RecommendedServer[]
-  >(() => cachedMcpData?.recommendedServers ?? []);
-  const [isInitialLoading, setIsInitialLoading] = useState(
-    () => !cachedMcpData,
-  );
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [lastLoadedAt, setLastLoadedAt] = useState<number | null>(
-    () => cachedMcpData?.updatedAt ?? null,
-  );
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const latestLoadRequestRef = useRef(0);
-  const activeProjectRef = useRef(currentProjectId);
   const [installingServers, setInstallingServers] = useState<Set<string>>(
     new Set(),
   );
@@ -215,145 +218,22 @@ export function MCPSettings() {
     return new Map(recommendedServers.map((server) => [server.name, server]));
   }, [recommendedServers]);
 
-  const applyMcpData = useCallback(
-    (
-      projectId: string,
-      servers: MCPServer[],
-      recommended: RecommendedServer[],
-      updatedAt = Date.now(),
-    ) => {
-      mcpSettingsCache.set(projectId, {
-        installedServers: servers,
-        recommendedServers: recommended,
-        updatedAt,
-      });
-      setInstalledServers(servers);
-      setRecommendedServers(recommended);
-      setLastLoadedAt(updatedAt);
-      setLoadError(null);
-      setActiveTab((currentTab) =>
-        currentTab === "installed" && servers.length === 0
-          ? "discover"
-          : currentTab,
-      );
-    },
-    [],
-  );
-
-  const loadData = useCallback(
-    async (options: { force?: boolean; showRefreshIndicator?: boolean } = {}) => {
-      const projectId = currentProjectId;
-      if (!projectId) return;
-
-      activeProjectRef.current = projectId;
-      const cachedData = getCachedMcpSettings(projectId);
-      if (cachedData && !options.force && isMcpSettingsCacheFresh(cachedData)) {
-        applyMcpData(
-          projectId,
-          cachedData.installedServers,
-          cachedData.recommendedServers,
-          cachedData.updatedAt,
-        );
-        setIsInitialLoading(false);
-        setIsRefreshing(false);
-        return;
-      }
-
-      const requestId = latestLoadRequestRef.current + 1;
-      latestLoadRequestRef.current = requestId;
-      setLoadError(null);
-
-      if (cachedData) {
-        setIsInitialLoading(false);
-        setIsRefreshing(options.showRefreshIndicator !== false);
-      } else {
-        setIsInitialLoading(true);
-      }
-
-      try {
-        const [serversData, recommendedData] = await Promise.all([
-          mcpGrpc.listServers(projectId),
-          mcpGrpc.listRecommended(projectId),
-        ]);
-
-        if (
-          latestLoadRequestRef.current !== requestId ||
-          activeProjectRef.current !== projectId
-        ) {
-          return;
-        }
-
-        applyMcpData(
-          projectId,
-          serversData.servers,
-          recommendedData.recommended,
-        );
-      } catch (error) {
-        if (
-          latestLoadRequestRef.current !== requestId ||
-          activeProjectRef.current !== projectId
-        ) {
-          return;
-        }
-
-        console.error("Failed to load MCP data:", error);
-        const message = getErrorMessage(error);
-        setLoadError(message);
-        toast.error("Failed to load MCP servers");
-      } finally {
-        if (
-          latestLoadRequestRef.current === requestId &&
-          activeProjectRef.current === projectId
-        ) {
-          setIsInitialLoading(false);
-          setIsRefreshing(false);
-        }
-      }
-    },
-    [applyMcpData, currentProjectId],
-  );
-
+  // A project with nothing installed opens on Discover.
+  const noServersInstalled = serversQuery.isSuccess && installedServers.length === 0;
   useEffect(() => {
-    activeProjectRef.current = currentProjectId;
-
-    if (!currentProjectId) {
-      setInstalledServers([]);
-      setRecommendedServers([]);
-      setLastLoadedAt(null);
-      setLoadError(null);
-      setIsInitialLoading(false);
-      setIsRefreshing(false);
-      return;
+    if (noServersInstalled) {
+      setActiveTab((currentTab) => (currentTab === "installed" ? "discover" : currentTab));
     }
+  }, [noServersInstalled, serversQuery.dataUpdatedAt]);
 
-    const cachedData = getCachedMcpSettings(currentProjectId);
-    if (cachedData) {
-      applyMcpData(
-        currentProjectId,
-        cachedData.installedServers,
-        cachedData.recommendedServers,
-        cachedData.updatedAt,
-      );
-      setIsInitialLoading(false);
-      setIsRefreshing(false);
-    } else {
-      setInstalledServers([]);
-      setRecommendedServers([]);
-      setLastLoadedAt(null);
-      setLoadError(null);
-      setIsInitialLoading(true);
-    }
-
-    if (!cachedData || !isMcpSettingsCacheFresh(cachedData)) {
-      void loadData({ force: true, showRefreshIndicator: Boolean(cachedData) });
-    }
-
-    const unsubscribe = subscribeToRefetch("config_health", () => {
-      void loadData({ force: true });
-    });
-
-    return () => unsubscribe();
-  }, [applyMcpData, currentProjectId, loadData]);
+  // Say so once per failed load (a retry that fails again says so again).
+  const errorUpdatedAt = Math.max(serversQuery.errorUpdatedAt, recommendedQuery.errorUpdatedAt);
+  useEffect(() => {
+    if (!queryError) return;
+    console.error("Failed to load MCP data:", queryError);
+    toast.error("Failed to load MCP servers");
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on when the error happened, not its identity
+  }, [errorUpdatedAt]);
 
   const rememberDefaultScope = async (scope: ConfigScope) => {
     try {
@@ -406,12 +286,12 @@ export function MCPSettings() {
         if (overrides.headers !== undefined) config.headers = overrides.headers;
       }
 
-      const response = await mcpGrpc.installServer(
-        currentProjectId,
-        server.name,
-        config,
+      const response = await installServer.mutateAsync({
+        projectId: currentProjectId,
+        name: server.name,
+        config: configToProto(config),
         scope,
-      );
+      });
 
       if (!response.success) {
         throw new Error(
@@ -425,8 +305,6 @@ export function MCPSettings() {
       }
 
       toast.success(`${server.displayName} installed successfully`);
-
-      await loadData({ force: true });
     } catch (error) {
       console.error("Failed to install server:", error);
       Sentry.captureException(error, {
@@ -451,9 +329,8 @@ export function MCPSettings() {
 
     setServerActions((prev) => ({ ...prev, [serverName]: "restart" }));
     try {
-      await mcpGrpc.restartServer(currentProjectId, serverName);
+      await restartServer.mutateAsync({ projectId: currentProjectId, name: serverName });
       toast.success("Server restarted successfully");
-      await loadData({ force: true });
     } catch (error) {
       console.error("Failed to restart server:", error);
       Sentry.captureException(error, {
@@ -475,9 +352,8 @@ export function MCPSettings() {
 
     setServerActions((prev) => ({ ...prev, [serverName]: "remove" }));
     try {
-      await mcpGrpc.uninstallServer(currentProjectId, serverName);
+      await uninstallServer.mutateAsync({ projectId: currentProjectId, name: serverName });
       toast.success("Server removed successfully");
-      await loadData({ force: true });
     } catch (error) {
       console.error("Failed to uninstall server:", error);
       Sentry.captureException(error, {
@@ -502,17 +378,16 @@ export function MCPSettings() {
 
     setServerActions((prev) => ({ ...prev, [serverName]: "toggle" }));
     try {
-      const response = await mcpGrpc.setServerEnabled(
-        currentProjectId,
-        serverName,
+      const response = await setServerEnabled.mutateAsync({
+        projectId: currentProjectId,
+        name: serverName,
         enabled,
-      );
+      });
       if (!response.success) {
         throw new Error(response.message || "Failed to update server state");
       }
 
       toast.success(enabled ? "Server enabled" : "Server disabled");
-      await loadData({ force: true });
     } catch (error) {
       console.error("Failed to toggle server enabled state:", error);
       Sentry.captureException(error, {
@@ -546,17 +421,16 @@ export function MCPSettings() {
 
     setServerActions((prev) => ({ ...prev, [serverName]: "scope" }));
     try {
-      const response = await mcpGrpc.moveServerScope(
-        currentProjectId,
-        serverName,
+      const response = await moveServerScope.mutateAsync({
+        projectId: currentProjectId,
+        name: serverName,
         scope,
-      );
+      });
       if (!response.success) {
         throw new Error(response.message || "Failed to move server scope");
       }
 
       toast.success("Install location updated");
-      await loadData({ force: true });
     } catch (error) {
       console.error("Failed to move server scope:", error);
       Sentry.captureException(error, {
@@ -580,12 +454,9 @@ export function MCPSettings() {
 
     setServerActions((prev) => ({ ...prev, [serverName]: "tools" }));
     try {
-      const response = await mcpGrpc.getServerTools(
-        currentProjectId,
-        serverName,
-      );
+      const tools = await fetchMcpServerTools(queryClient, currentProjectId, serverName);
       setToolsModalServer(serverName);
-      setToolsModalTools(response.tools);
+      setToolsModalTools(tools);
     } catch (error) {
       console.error("Failed to load server tools:", error);
       toast.error(`Failed to load tools: ${getErrorMessage(error)}`);
@@ -650,13 +521,12 @@ export function MCPSettings() {
     });
 
     try {
-      await mcpGrpc.updateServerConfig(
-        currentProjectId,
-        wizardServer.name,
-        filteredConfig,
-      );
+      await updateServerConfig.mutateAsync({
+        projectId: currentProjectId,
+        name: wizardServer.name,
+        env: filteredConfig,
+      });
       toast.success("Configuration updated successfully");
-      await loadData({ force: true });
       setWizardServer(null);
     } catch (error) {
       console.error("Failed to update configuration:", error);
@@ -684,12 +554,12 @@ export function MCPSettings() {
   ) => {
     if (!currentProjectId) return;
 
-    const response = await mcpGrpc.installServer(
-      currentProjectId,
+    const response = await installServer.mutateAsync({
+      projectId: currentProjectId,
       name,
-      config,
+      config: configToProto(config),
       scope,
-    );
+    });
     if (!response.success) {
       throw new Error(
         response.message ||
@@ -702,12 +572,9 @@ export function MCPSettings() {
     }
 
     toast.success(`Custom MCP server "${name}" installed`);
-    await loadData({ force: true });
   };
 
-  const hasLoadedData = lastLoadedAt !== null;
-
-  if (isInitialLoading && !hasLoadedData) {
+  if (isInitialLoading) {
     return <MCPInitialLoadingState />;
   }
 
@@ -739,7 +606,7 @@ export function MCPSettings() {
                 isRefreshing={isRefreshing}
                 loadError={loadError}
                 lastLoadedAt={lastLoadedAt}
-                onRetry={() => void loadData({ force: true })}
+                onRetry={refetchAll}
               />
               <Button
                 size="sm"

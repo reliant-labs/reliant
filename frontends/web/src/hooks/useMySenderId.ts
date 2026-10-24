@@ -14,9 +14,8 @@
  * resolve that id, "Me" is not offered there and the hint says what to do.
  */
 
-import type { Connection } from "../api/connection-grpc";
 import { isGitHubUserId, normalizeSenderId } from "../lib/onlyFromFilter";
-import { useConnections } from "./connection-queries";
+import { useConnections, type Connection } from "./connection-queries";
 import { useGitHubCredential } from "./useGitHubCredential";
 
 export interface MySender {

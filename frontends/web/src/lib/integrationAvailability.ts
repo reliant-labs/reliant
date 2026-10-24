@@ -12,7 +12,7 @@
  * so a Connect button could only open "nothing is set up here".
  */
 
-import type { AuthMethod, Integration } from "../api/connection-grpc";
+import type { AuthMethod, Integration } from "../hooks/connection-queries";
 
 /** Every method that takes a credential is unavailable here (and there is at least one). */
 export function methodsUnavailableHere(methods: readonly Pick<AuthMethod, "kind" | "available">[]): boolean {
