@@ -15,6 +15,21 @@
     <link rel="preload" href="/fonts/Inter-roman.woff2" as="font" type="font/woff2" crossorigin />
     <link rel="preload" href="/fonts/JetBrainsMono-variable.woff2" as="font" type="font/woff2" crossorigin />
     <title>Reliant</title>
+    <!--
+      Runtime configuration for THIS environment: config.js assigns
+      window.__FORGE_CONFIG__, which src/lib/config_gen.ts reads. A blocking,
+      classic <script> in <head>, so the global exists before the module
+      bundle evaluates (a type="module" script is deferred: too late).
+
+      This is what lets one build promote between environments: nothing is
+      inlined at build time, and each environment serves its own config.js
+      beside the bundle. The hosted SPA gets it from the control plane after
+      every sync; the desktop app from its app:// handler; a dev server from
+      public/ (`forge generate`) or FORGE_RUNTIME_CONFIG_FILE (see the
+      config file's forgeRuntimeConfig plugin). %BASE_URL% is Vite's `base`.
+      A public-dir script without type="module" is never bundled.
+    -->
+    <script src="%BASE_URL%config.js"></script>
     <script>
       (function(){
         try{

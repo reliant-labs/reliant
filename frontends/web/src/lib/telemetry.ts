@@ -2,7 +2,7 @@
  * Browser telemetry on forge's web runtime (the HyperDX / ClickStack SDK).
  *
  * Errors, page loads, fetch/XHR spans and masked session replay go to the
- * ingest URL in VITE_OTEL_ENDPOINT. Nothing starts unless that is set AND the
+ * runtime config's OTEL_ENDPOINT. Nothing starts unless that is set AND the
  * `clickstack` sink is on (telemetrySinks.ts), so a build that configures
  * neither is unchanged. Sentry runs beside this until it is removed.
  *
@@ -27,6 +27,7 @@ import {
 } from "@reliantlabs/forge-web-runtime/telemetry";
 import { getPrivacySettings, usePrivacyStore } from "../store/privacyStore";
 import { appBuild } from "./appBuild";
+import { loadConfig, type ReliantWebConfig } from "./config_gen";
 import { isDev } from "./constants";
 import { reportFirstLaunch } from "./appFirstLaunch";
 import { clickstackEnabled } from "./telemetrySinks";
@@ -98,8 +99,20 @@ export function replaySampleRate(input: ReplayRateInput): number {
 }
 
 export interface TelemetryConfigInput {
-  env: Record<string, string | undefined>;
+  /** The runtime config's fields this module reads (config_gen.ts). */
+  config: Partial<
+    Pick<
+      ReliantWebConfig,
+      | "OTEL_ENDPOINT"
+      | "OTEL_REPLAY"
+      | "API_URL"
+      | "CONTROL_PLANE_API_URL"
+      | "GATEWAY_URL"
+    >
+  >;
   prerelease: boolean;
+  /** forge's frontend build id (VITE_APP_VERSION), when forge built the bundle. */
+  appVersion?: string;
   /** This bundle's baked build version (appBuild().version). */
   buildVersion: string;
   /** True in the Electron renderer (window.electronAPI is present). */
@@ -112,17 +125,16 @@ export interface TelemetryConfigInput {
 export function buildTelemetryConfig(
   input: TelemetryConfigInput,
 ): BrowserTelemetryConfig {
-  const { env } = input;
+  const { config } = input;
   return {
     serviceName: "reliant-web",
-    serviceVersion: env.VITE_APP_VERSION || input.buildVersion,
+    serviceVersion: input.appVersion || input.buildVersion,
     environment: input.prerelease ? "prerelease" : "prod",
-    endpoint: env.VITE_OTEL_ENDPOINT,
+    endpoint: config.OTEL_ENDPOINT || undefined,
     apiOrigins: [
-      env.VITE_API_URL,
-      env.VITE_GRPC_URL,
-      env.VITE_CONTROL_PLANE_API_URL,
-      env.VITE_GATEWAY_URL,
+      config.API_URL || undefined,
+      config.CONTROL_PLANE_API_URL || undefined,
+      config.GATEWAY_URL || undefined,
       ...(input.extraApiOrigins ?? []),
     ],
     // The product-event contract's client tag (dev-docs/product-events.md).
@@ -131,7 +143,7 @@ export function buildTelemetryConfig(
     appClient: input.desktop ? "electron" : "web",
     consoleCapture: false,
     advancedNetworkCapture: false,
-    replay: env.VITE_OTEL_REPLAY === "true",
+    replay: config.OTEL_REPLAY === "true",
     replaySampleRate: input.replayRate,
   };
 }
@@ -185,7 +197,7 @@ export function initTelemetry(): Promise<boolean> {
 }
 
 async function start(): Promise<boolean> {
-  const env = import.meta.env as Record<string, string | undefined>;
+  const runtime = loadConfig();
   const desktop = typeof window !== "undefined" && !!window.electronAPI;
 
   let prerelease = false;
@@ -202,14 +214,20 @@ async function start(): Promise<boolean> {
 
   const buildVersion = appBuild()?.version ?? "unknown";
   const config = buildTelemetryConfig({
-    env,
+    config: runtime,
+    // BUILD-TIME ON PURPOSE, the one VITE_ read left: forge stamps its
+    // frontend build id when it builds the bundle. It names these bytes, so
+    // it is the same in every environment the build is promoted to, and the
+    // runtime config (per environment) is the wrong home for it.
+    // forge:lint-disable-next-line forgeconv-frontend-process-env: a build stamp, not deployment config
+    appVersion: import.meta.env.VITE_APP_VERSION as string | undefined,
     prerelease,
     buildVersion,
     desktop,
     replayRate: replaySampleRate({
       prerelease,
-      policy: env.VITE_OTEL_REPLAY_SAMPLE_POLICY,
-      rateOverride: env.VITE_OTEL_REPLAY_SAMPLE_RATE,
+      policy: runtime.OTEL_REPLAY_SAMPLE_POLICY,
+      rateOverride: runtime.OTEL_REPLAY_SAMPLE_RATE,
       now: Date.now(),
       local: safeStorage("localStorage"),
       session: safeStorage("sessionStorage"),

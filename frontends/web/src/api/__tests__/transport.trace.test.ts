@@ -120,7 +120,7 @@ describe("an RPC through the full interceptor chain", () => {
       });
     }) as typeof fetch;
     const config = buildTelemetryConfig({
-      env: { VITE_OTEL_ENDPOINT: INGEST, VITE_API_URL: API },
+      config: { OTEL_ENDPOINT: INGEST, API_URL: API },
       prerelease: false,
       buildVersion: "1.8.1",
       desktop: false,

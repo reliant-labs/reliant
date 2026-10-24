@@ -52,8 +52,10 @@ import { createClient, type Client, type Transport } from "@connectrpc/connect";
 import { createConnectTransport } from "@connectrpc/connect-web";
 import type { DescMethod, DescService } from "@bufbuild/protobuf";
 import { buildInterceptors, setCurrentBaseURL, type TransportBackend } from "@/api/transport";
+import { loadConfig } from "@/lib/config_gen";
 import { logger } from "@/lib/logger";
 import {
+  API_SERVER_DEFAULT_PORT,
   buildLocalhostUrl,
   isPackagedRendererOrigin,
   isSameOriginTransport,
@@ -117,7 +119,7 @@ export function reliantApiBaseUrl(): string | null {
   // renderer is served over http(s) (web-dev AND electron-dev), reliant.v1.*
   // RPCs go to the document origin and Vite's `/reliant.v1.*` proxy forwards
   // them to reliant-api. This is first-party ⇒ ZERO CORS, and it short-circuits
-  // BEFORE RELIANT_CONFIG.grpcUrl / the absolute VITE_* fallbacks below so
+  // BEFORE RELIANT_CONFIG.grpcUrl / config.js's API_URL fallback below so
   // electron-dev never dials a cross-origin backend port. The packaged app
   // falls through to the daemon URL.
   if (isSameOriginTransport()) {
@@ -138,11 +140,9 @@ export function reliantApiBaseUrl(): string | null {
     return null;
   }
 
-  return (
-    import.meta.env.VITE_GRPC_URL ||
-    import.meta.env.VITE_API_URL ||
-    buildLocalhostUrl(import.meta.env.VITE_GRPC_PORT || "9090")
-  );
+  // The runtime config's API origin (config.js), else the api-server's
+  // default port on loopback (protocol per DISABLE_TLS).
+  return loadConfig().API_URL || buildLocalhostUrl(API_SERVER_DEFAULT_PORT);
 }
 
 /** True once the reliant api-server's URL is known. */
@@ -152,7 +152,7 @@ export function isApiReady(): boolean {
 
 /**
  * control-plane's admin-server base URL, or null when this deployment has no
- * control plane (`VITE_CONTROL_PLANE_API_URL` unset).
+ * control plane (config.js's `CONTROL_PLANE_API_URL` unset).
  *
  * An http(s)-served renderer (web-dev AND electron-dev) uses the document
  * origin, so Vite's `/controlplane.v1.*` proxy forwards to admin-server —
@@ -202,7 +202,7 @@ const ROUTES: Record<TransportRoute, RouteSpec> = {
   },
   "control-plane": {
     baseUrl: controlPlaneBaseUrl,
-    notReady: "Control plane API URL not configured (VITE_CONTROL_PLANE_API_URL)",
+    notReady: "Control plane API URL not configured (CONTROL_PLANE_API_URL)",
     withAuth: true,
     backend: "control-plane",
     useBinaryFormat: false,

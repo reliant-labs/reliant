@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Breadcrumb, ErrorEvent, TransactionEvent } from "@sentry/react";
 
 // What the browser hands Sentry is pinned here through the real initSentry():
@@ -19,6 +19,12 @@ vi.mock("../../store/privacyStore", () => ({
 
 import * as Sentry from "@sentry/react";
 import { initSentry, setSentryUser } from "../sentry";
+import { setRuntimeConfig } from "@/test/runtimeConfig";
+
+const SENTRY_ON = {
+  SENTRY_ENABLED: "true",
+  SENTRY_DSN: "https://public@o0.ingest.sentry.io/0",
+};
 
 type InitOptions = {
   integrations: Array<{ name: string; options?: Record<string, unknown> }>;
@@ -54,12 +60,7 @@ function expectNoUserContent(payload: unknown) {
 describe("Sentry privacy boundary (web)", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.stubEnv("VITE_SENTRY_ENABLED", "true");
-    vi.stubEnv("VITE_SENTRY_DSN", "https://public@o0.ingest.sentry.io/0");
-    vi.stubEnv("VITE_SENTRY_REPLAY_CANVAS", "true");
-  });
-  afterEach(() => {
-    vi.unstubAllEnvs();
+    setRuntimeConfig(SENTRY_ON);
   });
 
   it("session replay masks all text and inputs and blocks media", async () => {
@@ -196,15 +197,21 @@ describe("Sentry privacy boundary (web)", () => {
   });
 
   it("does not start when the sinks flag leaves Sentry out of the build", async () => {
-    vi.stubEnv("VITE_TELEMETRY_SINKS", "clickstack");
-    vi.stubEnv("VITE_OTEL_ENDPOINT", "https://ingest.example.dev/k/rbk_x");
+    setRuntimeConfig({
+      ...SENTRY_ON,
+      TELEMETRY_SINKS: "clickstack",
+      OTEL_ENDPOINT: "https://ingest.example.dev/k/rbk_x",
+    });
     await initSentry();
     expect(Sentry.init).not.toHaveBeenCalled();
   });
 
   it("starts when the flag names Sentry", async () => {
-    vi.stubEnv("VITE_TELEMETRY_SINKS", "sentry,clickstack");
-    vi.stubEnv("VITE_OTEL_ENDPOINT", "https://ingest.example.dev/k/rbk_x");
+    setRuntimeConfig({
+      ...SENTRY_ON,
+      TELEMETRY_SINKS: "sentry,clickstack",
+      OTEL_ENDPOINT: "https://ingest.example.dev/k/rbk_x",
+    });
     await initSentry();
     expect(Sentry.init).toHaveBeenCalledTimes(1);
   });

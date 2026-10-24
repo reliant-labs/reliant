@@ -1,4 +1,5 @@
-import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { setRuntimeConfig } from "@/test/runtimeConfig"
 
 // A boundary-caught error goes to every sink the build ships to. The runtime
 // skips an error its SDK already recorded, so dual reporting is one record.
@@ -32,13 +33,9 @@ describe("reportCaughtError", () => {
     vi.clearAllMocks();
     mocks.crashReportingEnabled = true;
   });
-  afterEach(() => {
-    vi.unstubAllEnvs();
-  });
 
   it("reports to both sinks while they run in parallel", () => {
-    vi.stubEnv("VITE_OTEL_ENDPOINT", ENDPOINT);
-    vi.stubEnv("VITE_TELEMETRY_SINKS", "sentry,clickstack");
+    setRuntimeConfig({ OTEL_ENDPOINT: ENDPOINT, TELEMETRY_SINKS: "sentry,clickstack" });
     const err = new Error("boom");
 
     reportCaughtError(err, "\n    at Foo");
@@ -50,8 +47,7 @@ describe("reportCaughtError", () => {
   });
 
   it("reports only to ClickStack once Sentry is out of the build", () => {
-    vi.stubEnv("VITE_OTEL_ENDPOINT", ENDPOINT);
-    vi.stubEnv("VITE_TELEMETRY_SINKS", "clickstack");
+    setRuntimeConfig({ OTEL_ENDPOINT: ENDPOINT, TELEMETRY_SINKS: "clickstack" });
 
     reportCaughtError(new Error("boom"));
 
@@ -60,8 +56,7 @@ describe("reportCaughtError", () => {
   });
 
   it("reports nothing without crash-reporting consent", () => {
-    vi.stubEnv("VITE_OTEL_ENDPOINT", ENDPOINT);
-    vi.stubEnv("VITE_TELEMETRY_SINKS", "sentry,clickstack");
+    setRuntimeConfig({ OTEL_ENDPOINT: ENDPOINT, TELEMETRY_SINKS: "sentry,clickstack" });
     mocks.crashReportingEnabled = false;
 
     reportCaughtError(new Error("boom"));

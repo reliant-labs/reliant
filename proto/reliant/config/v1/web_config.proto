@@ -1,0 +1,165 @@
+syntax = "proto3";
+
+package reliant.config.v1;
+
+import "forge/v1/forge.proto";
+
+option go_package = "github.com/reliant-labs/reliant/gen/reliant/config/v1;configv1";
+
+// ReliantWebConfig is the RUNTIME configuration of the web frontend
+// (frontends/web): the hosted SPA, the packaged desktop renderer and every
+// dev server serve the same bundle, and this is the part that differs.
+//
+// Every field arrives at runtime in config.js, which assigns
+// window.__FORGE_CONFIG__ before the bundle runs; frontends/web/src/lib/
+// config_gen.ts (generated from this message) types and defaults it, and
+// lib/configReady.ts checkWebConfig() refuses a document that cannot work.
+// Nothing here is inlined at build time, so one build promotes between
+// environments, and the desktop app gets its values from its main process
+// (Electron's app:// handler answers config.js) instead of a rebuild.
+//
+// WHERE VALUES COME FROM. reliant declares no deployed environments.
+// control-plane declares this frontend in each of its envs and sets these
+// keys as the frontend's `runtime_config` (deploy/kcl). The key names are the
+// env_var spellings below; control-plane's render checks its keys against
+// the generated frontends/web/src/lib/config_schema_gen.json, so a key this
+// message does not declare is refused there rather than silently ignored.
+// A dev stack's document is `forge generate`'s public/config.js (from
+// deploy/kcl/dev/config.k when one declares values), or the file
+// FORGE_RUNTIME_CONFIG_FILE names when another project renders it.
+//
+// THE DEFAULTS ARE SELF-HOSTED, never a hosted hostname: this repo is the OSS
+// product, and a document that names nothing gives the self-hosted app (no
+// control plane, a local Supabase, the dev API floor in lib/apiurl_gen.ts).
+// A MANAGED deployment states AUTH_MODE = "cloud", and checkWebConfig() then
+// requires the keys the managed app cannot run without (see auth_mode).
+//
+// FLAGS ARE STRINGS, "true" or unset, read with `=== "true"` exactly as the
+// VITE_* reads they replace. Not proto bools: forge's generated zod coerces
+// a bool with z.coerce.boolean(), which turns the STRING "false" — the only
+// form a cross-repo runtime_config value can take — into true.
+//
+// EVERYTHING HERE IS PUBLIC. It is served to every browser that loads the
+// app. A secret never belongs on this message (forge refuses a `sensitive`
+// field at generate time).
+message ReliantWebConfig {
+  option (forge.v1.frontend_config) = {frontend: "web"};
+
+  // ── Endpoints ─────────────────────────────────────────────────────────
+  string api_url = 1 [(forge.v1.config) = {
+    env_var: "API_URL"
+    description: "Origin of the reliant api-server (Connect RPCs, the terminal WebSocket). Also what the onboarding's `reliant daemon start` command tells a daemon to dial. Unset: the generated dev floor (src/lib/apiurl_gen.ts). Under the Vite dev server the browser calls its own origin and the dev proxy forwards to the API, so this is only the CLI-command value there."
+  }];
+
+  string control_plane_api_url = 2 [(forge.v1.config) = {
+    env_var: "CONTROL_PLANE_API_URL"
+    description: "Origin of the control plane's admin-server. Set: the cloud features (billing, managed daemons, coupons, Forge cloud envs) are wired up. Unset: the self-hosted implementations (src/services/controlPlane/config.ts)."
+  }];
+
+  string gateway_url = 3 [(forge.v1.config) = {
+    env_var: "GATEWAY_URL"
+    description: "Origin of the daemon gateway (ToolsDaemonService). The browser never dials it; the onboarding renders it into the `reliant daemon start` command, which cannot derive it for a loopback server."
+  }];
+
+  string app_url = 4 [(forge.v1.config) = {
+    env_var: "APP_URL"
+    description: "This app's own public origin: the base of every URL that leaves the process and comes back (the OAuth redirectTo). Unset: the document origin in a browser; in the desktop app, whose origin no system browser can reach, the hosted default."
+  }];
+
+  string disable_tls = 5 [(forge.v1.config) = {
+    env_var: "DISABLE_TLS"
+    description: "\"true\": build loopback and WebSocket URLs with http/ws instead of https/wss (a plain-http local stack). The desktop app takes this from its main process instead."
+  }];
+
+  // ── Identity ──────────────────────────────────────────────────────────
+  string auth_mode = 6 [(forge.v1.config) = {
+    env_var: "AUTH_MODE"
+    description: "\"cloud\": the managed deployment. Sessions use browser storage, and the document must also carry API_URL, CONTROL_PLANE_API_URL, SUPABASE_URL and SUPABASE_ANON_KEY, or the app refuses to start and names what is missing. Unset: self-hosted or local dev."
+    allowed_values: ["cloud"]
+  }];
+
+  string supabase_url = 7 [(forge.v1.config) = {
+    env_var: "SUPABASE_URL"
+    default_value: "http://127.0.0.1:54321"
+    description: "The Supabase project the browser signs in against. Default: a local `supabase start`."
+  }];
+
+  string supabase_anon_key = 8 [(forge.v1.config) = {
+    env_var: "SUPABASE_ANON_KEY"
+    description: "The Supabase project's PUBLISHABLE (anon) key. Public by design. Unset: Supabase sign-in is unavailable and the app says so."
+  }];
+
+  string auto_anon_sign_in = 9 [(forge.v1.config) = {
+    env_var: "AUTO_ANON_SIGN_IN"
+    description: "\"true\": sign a visitor in anonymously instead of showing the sign-in screen (local demos). Never set it for a deployed environment."
+  }];
+
+  // ── Billing ───────────────────────────────────────────────────────────
+  string stripe_publishable_key = 10 [(forge.v1.config) = {
+    env_var: "STRIPE_PUBLISHABLE_KEY"
+    description: "The Stripe account's PUBLISHABLE key (pk_live_/pk_test_), paired with the control plane's secret key of the same account and mode. Unset: embedded checkout reports itself unavailable rather than mounting a form that cannot work."
+  }];
+
+  // ── Telemetry ─────────────────────────────────────────────────────────
+  string sentry_dsn = 11 [(forge.v1.config) = {
+    env_var: "SENTRY_DSN"
+    description: "Sentry DSN for this surface (the hosted SPA and the desktop app report to different projects). Browser-public by design. Unset: no Sentry."
+  }];
+
+  string sentry_enabled = 12 [(forge.v1.config) = {
+    env_var: "SENTRY_ENABLED"
+    description: "\"false\" turns Sentry off even with a DSN. Anything else leaves it to SENTRY_DSN, TELEMETRY_SINKS and the user's privacy setting."
+  }];
+
+  string sentry_traces_sample_rate = 13 [(forge.v1.config) = {
+    env_var: "SENTRY_TRACES_SAMPLE_RATE"
+    description: "Sentry trace sample rate, 0-1. Unset or 0: 1.0 for a prerelease desktop build, else 0.1."
+  }];
+
+  string sentry_replays_session_sample_rate = 14 [(forge.v1.config) = {
+    env_var: "SENTRY_REPLAYS_SESSION_SAMPLE_RATE"
+    description: "Sentry session-replay sample rate, 0-1, overriding the new-user funnel policy. Unset: the policy (1.0 for a new user's first sessions, then 0.1)."
+  }];
+
+  string sentry_replays_error_sample_rate = 15 [(forge.v1.config) = {
+    env_var: "SENTRY_REPLAYS_ERROR_SAMPLE_RATE"
+    description: "Sentry on-error replay sample rate, 0-1. Unset or 0: 1.0."
+  }];
+
+  string otel_endpoint = 16 [(forge.v1.config) = {
+    env_var: "OTEL_ENDPOINT"
+    description: "Browser telemetry (ClickStack) ingest base, normally the same-origin `/_otel`. Empty or `off`: none. forge's generated otel_gen.ts reads the same key."
+  }];
+
+  string telemetry_sinks = 17 [(forge.v1.config) = {
+    env_var: "TELEMETRY_SINKS"
+    description: "Comma-separated sinks: `sentry`, `clickstack`. Unset or unrecognised: Sentry, plus ClickStack when OTEL_ENDPOINT is set (src/lib/telemetrySinks.ts)."
+  }];
+
+  string otel_replay = 18 [(forge.v1.config) = {
+    env_var: "OTEL_REPLAY"
+    description: "\"true\": record masked session replay to ClickStack. Unset: off."
+  }];
+
+  string otel_replay_sample_policy = 19 [(forge.v1.config) = {
+    env_var: "OTEL_REPLAY_SAMPLE_POLICY"
+    description: "ClickStack replay sampling policy: `new-user-funnel` records a new user's first sessions in full. Unset: the default rate."
+  }];
+
+  string otel_replay_sample_rate = 20 [(forge.v1.config) = {
+    env_var: "OTEL_REPLAY_SAMPLE_RATE"
+    description: "ClickStack replay sample rate, 0-1, overriding the policy."
+  }];
+
+  // ── Product ───────────────────────────────────────────────────────────
+  string download_base_url = 21 [(forge.v1.config) = {
+    env_var: "DOWNLOAD_BASE_URL"
+    default_value: "https://downloads.reliantlabs.io"
+    description: "Where the desktop and CLI downloads the UI links to are published."
+  }];
+
+  string cli_defaults_baked = 22 [(forge.v1.config) = {
+    env_var: "CLI_DEFAULTS_BAKED"
+    description: "\"true\": the `reliant` binary released beside this deployment has its server, gateway and auth defaults compiled in, so the copy-paste CLI commands render bare instead of behind RELIANT_*= overrides. Only the release knows this; set it where that release is the one users download."
+  }];
+}

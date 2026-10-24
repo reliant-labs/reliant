@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { setRuntimeConfig } from "@/test/runtimeConfig";
 
 // The option matrix is pinned through the real initTelemetry(): what reaches
 // the runtime's initBrowserTelemetry is the privacy boundary, so the test
@@ -78,8 +79,9 @@ function lastConfig(): Config {
   return calls[calls.length - 1][0];
 }
 
-function stubEnv(env: Record<string, string>) {
-  for (const [k, v] of Object.entries(env)) vi.stubEnv(k, v);
+/** Layer values over this test's runtime config document (config.js). */
+function stubConfig(values: Record<string, string>) {
+  setRuntimeConfig({ ...(window.__FORGE_CONFIG__ as Record<string, string>), ...values });
 }
 
 beforeEach(() => {
@@ -92,7 +94,7 @@ beforeEach(() => {
   localStorage.clear();
   sessionStorage.clear();
   delete (window as { electronAPI?: unknown }).electronAPI;
-  stubEnv({ VITE_OTEL_ENDPOINT: ENDPOINT, VITE_TELEMETRY_SINKS: "sentry,clickstack" });
+  setRuntimeConfig({ OTEL_ENDPOINT: ENDPOINT, TELEMETRY_SINKS: "sentry,clickstack" });
 });
 
 afterEach(() => {
@@ -107,19 +109,19 @@ describe("initTelemetry: when it starts", () => {
   });
 
   it("does not initialise when the clickstack sink is off", async () => {
-    stubEnv({ VITE_TELEMETRY_SINKS: "sentry" });
+    stubConfig({ TELEMETRY_SINKS: "sentry" });
     expect(await initTelemetry()).toBe(false);
     expect(runtime.initBrowserTelemetry).not.toHaveBeenCalled();
   });
 
   it("does not initialise without an endpoint, so merging changes nothing by itself", async () => {
-    stubEnv({ VITE_OTEL_ENDPOINT: "" });
+    stubConfig({ OTEL_ENDPOINT: "" });
     expect(await initTelemetry()).toBe(false);
     expect(runtime.initBrowserTelemetry).not.toHaveBeenCalled();
   });
 
   it("does not initialise with the flag unset and no endpoint (the default build)", async () => {
-    stubEnv({ VITE_OTEL_ENDPOINT: "", VITE_TELEMETRY_SINKS: "" });
+    stubConfig({ OTEL_ENDPOINT: "", TELEMETRY_SINKS: "" });
     expect(await initTelemetry()).toBe(false);
     expect(runtime.initBrowserTelemetry).not.toHaveBeenCalled();
   });
@@ -169,23 +171,21 @@ describe("initTelemetry: the options it passes", () => {
     expect(lastConfig().serviceVersion).toBe("1.8.1");
 
     resetTelemetryForTests();
-    stubEnv({ VITE_APP_VERSION: "build-42" });
+    vi.stubEnv("VITE_APP_VERSION", "build-42");
     await initTelemetry();
     expect(lastConfig().serviceVersion).toBe("build-42");
   });
 
   it("lists the app's backends so their requests carry a traceparent", async () => {
-    stubEnv({
-      VITE_API_URL: "https://api.example.dev",
-      VITE_GRPC_URL: "https://grpc.example.dev",
-      VITE_CONTROL_PLANE_API_URL: "https://cp.example.dev",
-      VITE_GATEWAY_URL: "https://gw.example.dev",
+    stubConfig({
+      API_URL: "https://api.example.dev",
+      CONTROL_PLANE_API_URL: "https://cp.example.dev",
+      GATEWAY_URL: "https://gw.example.dev",
     });
     await initTelemetry();
     expect(lastConfig().apiOrigins).toEqual(
       expect.arrayContaining([
         "https://api.example.dev",
-        "https://grpc.example.dev",
         "https://cp.example.dev",
         "https://gw.example.dev",
       ]),
@@ -196,7 +196,7 @@ describe("initTelemetry: the options it passes", () => {
     (window as { electronAPI?: unknown }).electronAPI = {
       getVersion: async () => "1.9.0-rc.2",
     };
-    stubEnv({ VITE_OTEL_REPLAY: "true", VITE_OTEL_REPLAY_SAMPLE_POLICY: "new-user-funnel" });
+    stubConfig({ OTEL_REPLAY: "true", OTEL_REPLAY_SAMPLE_POLICY: "new-user-funnel" });
     await initTelemetry();
     expect(lastConfig()).toMatchObject({ environment: "prerelease", replaySampleRate: 1 });
   });
@@ -220,24 +220,24 @@ describe("initTelemetry: the options it passes", () => {
 });
 
 describe("replay decision", () => {
-  it("keeps replay off unless VITE_OTEL_REPLAY is 'true'", async () => {
+  it("keeps replay off unless OTEL_REPLAY is 'true'", async () => {
     await initTelemetry();
     expect(lastConfig().replay).toBe(false);
 
     resetTelemetryForTests();
-    stubEnv({ VITE_OTEL_REPLAY: "true" });
+    stubConfig({ OTEL_REPLAY: "true" });
     await initTelemetry();
     expect(lastConfig().replay).toBe(true);
   });
 
   it("records a new user's sessions in full under the new-user-funnel policy", async () => {
-    stubEnv({ VITE_OTEL_REPLAY: "true", VITE_OTEL_REPLAY_SAMPLE_POLICY: "new-user-funnel" });
+    stubConfig({ OTEL_REPLAY: "true", OTEL_REPLAY_SAMPLE_POLICY: "new-user-funnel" });
     await initTelemetry();
     expect(lastConfig().replaySampleRate).toBe(1);
   });
 
   it("falls to 10% without the policy", async () => {
-    stubEnv({ VITE_OTEL_REPLAY: "true" });
+    stubConfig({ OTEL_REPLAY: "true" });
     await initTelemetry();
     expect(lastConfig().replaySampleRate).toBe(0.1);
   });
@@ -342,7 +342,7 @@ describe("user and error reporting", () => {
   });
 
   it("leaves the user alone when the clickstack sink is off", () => {
-    stubEnv({ VITE_TELEMETRY_SINKS: "sentry" });
+    stubConfig({ TELEMETRY_SINKS: "sentry" });
     setTelemetryUserId({ id: "u-1" });
     expect(runtime.setTelemetryUser).not.toHaveBeenCalled();
   });
@@ -367,16 +367,16 @@ describe("user and error reporting", () => {
     privacy.state.crashReportingEnabled = false;
     reportErrorToTelemetry(new Error("boom"));
     privacy.state.crashReportingEnabled = true;
-    stubEnv({ VITE_TELEMETRY_SINKS: "sentry" });
+    stubConfig({ TELEMETRY_SINKS: "sentry" });
     reportErrorToTelemetry(new Error("boom"));
     expect(runtime.reportException).not.toHaveBeenCalled();
   });
 });
 
 describe("buildTelemetryConfig", () => {
-  it("fixes the privacy options regardless of env", () => {
+  it("fixes the privacy options regardless of config", () => {
     const config = buildTelemetryConfig({
-      env: { VITE_OTEL_REPLAY: "true" },
+      config: { OTEL_REPLAY: "true" },
       prerelease: false,
       buildVersion: "1",
       replayRate: 1,

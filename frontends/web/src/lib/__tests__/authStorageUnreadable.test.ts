@@ -1,4 +1,5 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
+import { setRuntimeConfig } from '@/test/runtimeConfig'
 
 /**
  * The half-authenticated state, reproduced at the seam that produced it.
@@ -53,8 +54,7 @@ describe('Electron auth storage: unreadable session vs no session', () => {
     // credentials for tests (the global mock in src/test/setup.ts exists to
     // dodge exactly this). A syntactically valid dummy is enough — these tests
     // never reach the network; every read is served by the stubbed authLoad.
-    vi.stubEnv('VITE_SUPABASE_URL', 'http://127.0.0.1:54321')
-    vi.stubEnv('VITE_SUPABASE_ANON_KEY', 'test-anon-key')
+    setRuntimeConfig({ SUPABASE_URL: 'http://127.0.0.1:54321', SUPABASE_ANON_KEY: 'test-anon-key' })
     // Attach to the REAL jsdom window rather than replacing it: supabase.ts
     // transitively reads window.location (constants → protocol) at import time,
     // and a plain object stub would leave that undefined.
@@ -77,8 +77,7 @@ describe('Electron auth storage: unreadable session vs no session', () => {
       // Import failed (e.g. a test that never got that far) — nothing to stop.
     }
     delete (window as unknown as Record<string, unknown>).electronAPI
-    vi.unstubAllEnvs()
-  })
+    })
 
   it('hands the stored session to Supabase when the blob reads cleanly', async () => {
     authLoad.mockResolvedValue({ success: true, session: storedSession() })

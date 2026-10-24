@@ -1,6 +1,7 @@
 import * as Sentry from "@sentry/react";
 import { getPrivacySettings } from "../store/privacyStore";
 import { appBuild } from "./appBuild";
+import { loadConfig } from "./config_gen";
 import { isDev } from "./constants";
 import { sentryEnabled } from "./telemetrySinks";
 import { scrubBreadcrumb, scrubEvent, scrubRecordingEvent } from "./sentryScrub";
@@ -28,8 +29,8 @@ function getReplaySessionSampleRate(isPrerelease: boolean): number {
   // Prerelease always captures everything
   if (isPrerelease) return 1.0;
 
-  // Env var override takes precedence
-  const envRate = parseFloat(import.meta.env.VITE_SENTRY_REPLAYS_SESSION_SAMPLE_RATE);
+  // A configured rate takes precedence
+  const envRate = parseFloat(loadConfig().SENTRY_REPLAYS_SESSION_SAMPLE_RATE);
   if (!isNaN(envRate)) return envRate;
 
   try {
@@ -59,11 +60,12 @@ function getReplaySessionSampleRate(isPrerelease: boolean): number {
 
 export async function initSentry() {
   // Skip Sentry initialization in development or if explicitly disabled
-  if (isDev || import.meta.env.VITE_SENTRY_ENABLED === "false") {
+  const config = loadConfig();
+  if (isDev || config.SENTRY_ENABLED === "false") {
     return;
   }
 
-  // VITE_TELEMETRY_SINKS can take Sentry out of the build ahead of its removal.
+  // TELEMETRY_SINKS can take Sentry out ahead of its removal.
   if (!sentryEnabled()) {
     return;
   }
@@ -74,7 +76,7 @@ export async function initSentry() {
     return;
   }
 
-  const dsn = import.meta.env.VITE_SENTRY_DSN;
+  const dsn = config.SENTRY_DSN;
 
   if (!dsn) {
     console.warn("Sentry DSN not configured. Error tracking disabled.");
@@ -123,9 +125,9 @@ export async function initSentry() {
         beforeAddRecordingEvent: scrubRecordingEvent,
       }),
     ],
-    tracesSampleRate: parseFloat(import.meta.env.VITE_SENTRY_TRACES_SAMPLE_RATE) || (isPrerelease ? 1.0 : 0.1),
+    tracesSampleRate: parseFloat(config.SENTRY_TRACES_SAMPLE_RATE) || (isPrerelease ? 1.0 : 0.1),
     replaysSessionSampleRate: replaySessionRate,
-    replaysOnErrorSampleRate: parseFloat(import.meta.env.VITE_SENTRY_REPLAYS_ERROR_SAMPLE_RATE) || 1.0,
+    replaysOnErrorSampleRate: parseFloat(config.SENTRY_REPLAYS_ERROR_SAMPLE_RATE) || 1.0,
     tracePropagationTargets: ["localhost", /^\//],
     // Every payload passes the policy in sentryScrub.ts: identifiers, types
     // and stacks leave the app; user content does not. beforeBreadcrumb runs

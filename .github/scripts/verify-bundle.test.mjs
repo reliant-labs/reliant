@@ -26,18 +26,13 @@ const read = (...parts) => readFileSync(join(REPO_ROOT, ...parts), "utf8");
 
 // ── 1. verify-bundle.mjs ────────────────────────────────────────────────────
 
-const CONFIG = JSON.parse(read("electron", "release.config.json"));
-
-/** A minimal dist that passes every check: index.html, a hashed chunk, every configured host. */
-function fakeDist(t, extraJs = "") {
+/** A minimal dist that passes every check: index.html loading config.js, then a hashed chunk. */
+function fakeDist(t, extraJs = "", head = '<script src="/config.js"></script>\n') {
   const dir = mkdtempSync(join(tmpdir(), "verify-bundle-"));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   mkdirSync(join(dir, "assets"));
-  writeFileSync(join(dir, "index.html"), '<script type="module" crossorigin src="/assets/index-Ab12Cd.js"></script>\n');
-  const hosts = Object.values(CONFIG.vite)
-    .filter((v) => typeof v === "string" && /^https?:\/\//.test(v))
-    .map((v) => new URL(v).hostname);
-  writeFileSync(join(dir, "assets", "index-Ab12Cd.js"), `const h=[${hosts.map((h) => `"https://${h}"`).join(",")}];${extraJs}\n`);
+  writeFileSync(join(dir, "index.html"), `${head}<script type="module" crossorigin src="/assets/index-Ab12Cd.js"></script>\n`);
+  writeFileSync(join(dir, "assets", "index-Ab12Cd.js"), `const c=window.__FORGE_CONFIG__;${extraJs}\n`);
   return dir;
 }
 
@@ -58,6 +53,27 @@ test("the same bundle without it passes every check", (t) => {
   const { status, stdout, stderr } = verify(dir);
   assert.equal(status, 0, stdout + stderr);
   assert.match(stdout, /verify-bundle: all checks passed/);
+});
+
+test("a bundle that does not load config.js fails [3/4]", (t) => {
+  const dir = fakeDist(t, "", "");
+  const { status, stdout, stderr } = verify(dir);
+  assert.equal(status, 1, stdout + stderr);
+  assert.match(stderr, /does not load \/config\.js/);
+});
+
+test("a bundle that loads config.js after the module bundle fails [3/4]", (t) => {
+  const dir = mkdtempSync(join(tmpdir(), "verify-bundle-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  mkdirSync(join(dir, "assets"));
+  writeFileSync(
+    join(dir, "index.html"),
+    '<script type="module" crossorigin src="/assets/index-Ab12Cd.js"></script>\n<script src="/config.js"></script>\n',
+  );
+  writeFileSync(join(dir, "assets", "index-Ab12Cd.js"), "const c=1;\n");
+  const { status, stdout, stderr } = verify(dir);
+  assert.equal(status, 1, stdout + stderr);
+  assert.match(stderr, /before \/config\.js/);
 });
 
 // ── 2. PR CI builds what the release builds ─────────────────────────────────
