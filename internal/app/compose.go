@@ -30,6 +30,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemonevents"
 	"github.com/reliant-labs/reliant/internal/daemonstate"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/egresslimit"
 	grpcserver "github.com/reliant-labs/reliant/internal/grpc"
 	"github.com/reliant-labs/reliant/internal/handlers/account"
 	"github.com/reliant-labs/reliant/internal/handlers/approval"
@@ -512,6 +513,19 @@ func (g *Graph) newRemoteExecutor() (*toolexec.RemoteExecutor, error) {
 	return NewRemoteExecutor(RemoteExecutorDeps{
 		Router: g.WorkerDaemonRouter(),
 		Tools:  g.WorkerToolsFactory(),
+		// Read here, not in the provider, so the worker root's config reach
+		// names them (pkg/config Roots).
+		Egress: egresslimit.Limits{
+			Replicas:          int(g.WorkerConfig.GetEgressReplicas()),
+			UserPerMinute:     int(g.WorkerConfig.GetEgressUserPerMinute()),
+			UserBurst:         int(g.WorkerConfig.GetEgressUserBurst()),
+			OrgPerMinute:      int(g.WorkerConfig.GetEgressOrgPerMinute()),
+			OrgBurst:          int(g.WorkerConfig.GetEgressOrgBurst()),
+			UserMaxConcurrent: int(g.WorkerConfig.GetEgressUserMaxConcurrent()),
+			OrgMaxConcurrent:  int(g.WorkerConfig.GetEgressOrgMaxConcurrent()),
+			HostMaxConcurrent: int(g.WorkerConfig.GetEgressHostMaxConcurrent()),
+			TurnMaxParallel:   int(g.WorkerConfig.GetEgressTurnMaxParallel()),
+		},
 	})
 }
 
