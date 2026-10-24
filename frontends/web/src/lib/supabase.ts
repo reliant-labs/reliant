@@ -1,15 +1,19 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js'
 import type { SupportedStorage } from '@supabase/auth-js'
 import { devAuthGrpc } from '@/api/grpc-unauth'
+import { loadConfig } from './config_gen'
 import { getIsDev } from './constants'
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || 'http://127.0.0.1:54321'
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || ''
+// Read per call, not at module scope: the runtime config (config.js) is the
+// one source, and a module-scope copy is what a test resetting it never sees.
+const supabaseUrl = (): string => loadConfig().SUPABASE_URL
+const supabaseAnonKey = (): string => loadConfig().SUPABASE_ANON_KEY
 
 export const MISSING_ANON_KEY_MESSAGE =
-  'VITE_SUPABASE_ANON_KEY is not set in this build, so authentication is unavailable. ' +
-  'Source builds get it from the environment; released builds get it from ' +
-  'electron/release.config.json via the workflow\'s "Export renderer build config" step.'
+  'SUPABASE_ANON_KEY is not set in this environment\'s runtime config (config.js), ' +
+  'so authentication is unavailable. A deployed environment gets it from the ' +
+  'runtime_config its KCL declares for this frontend; the desktop app from its ' +
+  'main process; a dev stack from deploy/kcl/dev/config.k.'
 
 const isElectron = !!window.electronAPI
 
@@ -254,7 +258,7 @@ const getStorage = (): SupportedStorage => {
   if (isElectron) {
     return electronStorage
   }
-  if (getIsDev() && import.meta.env.VITE_AUTH_MODE !== 'cloud') {
+  if (getIsDev() && loadConfig().AUTH_MODE !== 'cloud') {
     // In browser dev mode, use gRPC storage to access global auth file on backend
     // (falls back to localStorage if DevAuth endpoints aren't available)
     return grpcStorage
@@ -264,7 +268,7 @@ const getStorage = (): SupportedStorage => {
 }
 
 /** True when this build carries the config Supabase needs to start. */
-export const isSupabaseConfigured = (): boolean => Boolean(supabaseAnonKey)
+export const isSupabaseConfigured = (): boolean => Boolean(supabaseAnonKey())
 
 let client: SupabaseClient | null = null
 
@@ -284,20 +288,21 @@ let client: SupabaseClient | null = null
  *
  * We do NOT substitute a fallback anon key. There is no local Supabase in this
  * repo to fall back TO — no supabase/config.toml, no compose service, and
- * scripts/dev.sh sets no VITE_SUPABASE_*, so the pre-existing
+ * scripts/dev.sh sets no SUPABASE_*, so the pre-existing
  * `http://127.0.0.1:54321` URL default already points at nothing. Inventing a
  * credential would make a misconfigured build look healthy while pointing
  * somewhere useless, which is the exact failure sync-release-config.mjs was
  * written to prevent ("a packaged app that silently ships pointing at
  * localhost or at nothing — it builds green and fails on a user's machine").
- * A released artifact still cannot reach this path: that script fails the
- * build when vite.VITE_SUPABASE_ANON_KEY is empty.
+ * A managed deployment cannot reach this path: with AUTH_MODE = "cloud" a
+ * document without the key fails at boot (lib/configReady.ts checkWebConfig).
  */
 const getClient = (): SupabaseClient => {
   if (client) return client
-  if (!supabaseAnonKey) throw new Error(MISSING_ANON_KEY_MESSAGE)
+  const anonKey = supabaseAnonKey()
+  if (!anonKey) throw new Error(MISSING_ANON_KEY_MESSAGE)
 
-  client = createClient(supabaseUrl, supabaseAnonKey, {
+  client = createClient(supabaseUrl(), anonKey, {
     auth: {
       autoRefreshToken: true,
       persistSession: true,

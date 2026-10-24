@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/db"
@@ -55,6 +56,7 @@ func TestThreadStatus_StartedEmitsRunningForTheUI(t *testing.T) {
 // Terminal verbs must survive untouched — the UI compares those by name to
 // decide a thread has finished.
 func TestThreadStatus_TerminalVerbsPassThrough(t *testing.T) {
+	testkit.Slow(t, "runs workflow activities against pgtest's Postgres")
 	t.Parallel()
 
 	// No "expired": nothing ever produced that verb, so it was removed along

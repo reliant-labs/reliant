@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/reliant-labs/forge/pkg/testkit"
 )
 
 // setTestGitEnv isolates git from the host's config and provides the
@@ -221,6 +223,7 @@ func setIdentitylessGitEnv(t *testing.T) {
 }
 
 func TestEnsureInitialCommit_SeedsUnbornRepoWithoutIdentity(t *testing.T) {
+	testkit.Slow(t, "runs real git commands against a repository on disk")
 	setIdentitylessGitEnv(t)
 	dir := t.TempDir()
 	if out, err := exec.Command("git", "-C", dir, "init", "-b", "trunk", ".").CombinedOutput(); err != nil {
@@ -254,6 +257,7 @@ func TestEnsureInitialCommit_SeedsUnbornRepoWithoutIdentity(t *testing.T) {
 // / never-configured-git failure: the manual "Initialize Git" flow asks for
 // InitialCommit and used to fail with exit 128 "Author identity unknown".
 func TestInitGitRepository_InitialCommitWithoutIdentity(t *testing.T) {
+	testkit.Slow(t, "runs real git commands against a repository on disk")
 	setIdentitylessGitEnv(t)
 	dir := t.TempDir()
 	if err := os.WriteFile(filepath.Join(dir, "main.go"), []byte("package x"), 0o644); err != nil {

@@ -10,6 +10,7 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/svcerr"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -114,6 +115,7 @@ func stoppedSpawnRun(t *testing.T, repo *db.Repo, ctx context.Context, fx sendAg
 // anything else, and its root waits on the agent's report before taking a
 // turn. (It used to be refused: "this chat's run has since ended".)
 func TestSendAgentMessage_StoppedSubAgentOfAnEndedRunStartsARunThatResumesIt(t *testing.T) {
+	testkit.Slow(t, "a DB-backed chat handler test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	repo, cleanup := db.SetupTestDB(t)

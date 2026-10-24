@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/stretchr/testify/require"
 )
@@ -47,6 +48,7 @@ func seedBackgroundSpawnToolCall(
 // landing must be found -- and only that case, not a live or already-
 // reported one.
 func TestListStrandedBackgroundSpawnToolCalls_FindsUnreportedTerminalChild(t *testing.T) {
+	testkit.Slow(t, "a DB-backed test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	repo, cleanup := SetupTestDB(t)
@@ -82,6 +84,7 @@ func TestListStrandedBackgroundSpawnToolCalls_FindsUnreportedTerminalChild(t *te
 // fabricating a completion for a live spawn writes a lie into the parent's
 // mailbox that no later pass can distinguish from a real one.
 func TestListStrandedBackgroundSpawnToolCalls_FailClosed(t *testing.T) {
+	testkit.Slow(t, "a DB-backed test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	repo, cleanup := SetupTestDB(t)
@@ -153,6 +156,7 @@ func TestListStrandedBackgroundSpawnToolCalls_FailClosed(t *testing.T) {
 // call reporting inserted=false rather than erroring -- the everyday
 // "someone already reported this" outcome under concurrency, not a failure.
 func TestEnqueueAgentMessageIfAbsent_IdempotentUnderUniqueConstraint(t *testing.T) {
+	testkit.Slow(t, "a DB-backed test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	repo, cleanup := SetupTestDB(t)

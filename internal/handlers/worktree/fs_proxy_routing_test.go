@@ -10,6 +10,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -175,6 +176,7 @@ func TestFileSystemProxy_ChatInOwnedWorktree_ReadsFromOwner(t *testing.T) {
 
 // The chat's pin beats its worktree's owner, as it does for the chat's tools.
 func TestFileSystemProxy_ChatPinBeatsItsWorktreeOwner(t *testing.T) {
+	testkit.Slow(t, "runs git against a real repository through the handler")
 	t.Parallel()
 
 	f := newFSRoutingFixture(t)
@@ -212,6 +214,7 @@ func TestFileSystemProxy_OtherOwnedWorktree_ReadsFromItsOwner(t *testing.T) {
 
 // Nothing names a machine: default resolution, as before.
 func TestFileSystemProxy_NoMachineNamed_UsesDefault(t *testing.T) {
+	testkit.Slow(t, "runs git against a real repository through the handler")
 	t.Parallel()
 
 	f := newFSRoutingFixture(t)
@@ -246,6 +249,7 @@ func TestFileSystemProxy_ChatOnMachineB_WritesToB(t *testing.T) {
 // A chat that names a machine is a routing input now, so another user's chat
 // must not steer a request. It is refused before anything is sent.
 func TestFileSystemProxy_RefusesAnotherUsersChat(t *testing.T) {
+	testkit.Slow(t, "runs git against a real repository through the handler")
 	t.Parallel()
 
 	f := newFSRoutingFixture(t)
@@ -260,6 +264,7 @@ func TestFileSystemProxy_RefusesAnotherUsersChat(t *testing.T) {
 // A chat the UI still names after deleting it degrades to the routing a
 // request without a chat gets, rather than failing the tree.
 func TestFileSystemProxy_DeletedChat_FallsBackToDefault(t *testing.T) {
+	testkit.Slow(t, "runs git against a real repository through the handler")
 	t.Parallel()
 
 	f := newFSRoutingFixture(t)
@@ -272,6 +277,7 @@ func TestFileSystemProxy_DeletedChat_FallsBackToDefault(t *testing.T) {
 // A chat from another project is stale UI context (a project switch racing
 // the tree): it neither routes the request nor scopes it to its worktree.
 func TestFileSystemProxy_ChatFromAnotherProject_IsIgnored(t *testing.T) {
+	testkit.Slow(t, "runs git against a real repository through the handler")
 	t.Parallel()
 
 	f := newFSRoutingFixture(t)

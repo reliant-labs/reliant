@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/url"
 
 	configv1 "github.com/reliant-labs/reliant/gen/reliant/config/v1"
 	"github.com/reliant-labs/reliant/internal/agentruns"
@@ -51,6 +52,7 @@ import (
 	scenariorunner "github.com/reliant-labs/reliant/internal/workflow/scenario/runner"
 	"github.com/reliant-labs/reliant/internal/worktreesweep"
 	"github.com/reliant-labs/reliant/pkg/config"
+	"github.com/reliant-labs/reliant/pkg/hostedhttp"
 )
 
 // The Temporal worker's providers (the worker root, roots_worker.go).
@@ -574,6 +576,43 @@ type TemporalWorkerDeps struct {
 	WorkflowTaskPollers int32
 }
 
+// newHostedActions is the worker's hosted HTTP action executor: a separate
+// fixed-node execution path, never installed in WorkerIntegrationCredentials
+// or the tool factory. nil when there is no control plane (each hosted action
+// fails closed with "hosted HTTP execution is not configured").
+//
+// A control-plane URL the client refuses (prod's in-cluster plain-HTTP
+// admin-server URL) is never fatal: refusing to boot over one feature's
+// configuration took the whole worker down in prod. The worker boots with a
+// WARN, and every hosted action then fails with the stated reason
+// (disabledHostedActions), so nothing is silently skipped.
+func newHostedActions(log *slog.Logger, store hosteduse.Store, cp controlplane.Endpoint) handlers.HostedActionExecutor {
+	if cp.URL == "" || cp.InternalServiceSecret == "" {
+		return nil
+	}
+	client, err := hosteduse.NewInstrumented(hosteduse.Deps{
+		Store: store, BaseURL: cp.URL,
+		Sign: func() (string, error) { return auth.SignInternalServiceToken(cp.InternalServiceSecret) },
+	})
+	if err != nil {
+		reason := "control-plane URL is refused: " + err.Error()
+		if u, perr := url.Parse(cp.URL); perr == nil && u.Scheme != "https" {
+			reason = "control-plane URL is not HTTPS"
+		}
+		log.Warn("hosted HTTP actions are DISABLED on this worker; every hosted action will fail until the control-plane URL is accepted", "reason", reason, "error", err)
+		return disabledHostedActions{reason: reason}
+	}
+	return client
+}
+
+// disabledHostedActions refuses every hosted action with its configuration
+// reason, which executeHosted publishes as the action's error.
+type disabledHostedActions struct{ reason string }
+
+func (d disabledHostedActions) ExecuteAction(context.Context, string, string, string, hostedhttp.Request) (*hostedhttp.Result, error) {
+	return nil, &handlers.HostedDisabledError{Reason: d.reason}
+}
+
 // NewTemporalWorker is the Temporal worker on the shared task queue
 // (workersetup.Worker: its Drain releases in-flight activities, its Ready is
 // "polling"). A scheduled trigger fire launches through the same launcher
@@ -582,20 +621,7 @@ type TemporalWorkerDeps struct {
 //forge:root-only worker
 func NewTemporalWorker(d TemporalWorkerDeps) (*workersetup.Worker, error) {
 	creds := d.Credentials.Source
-	// Hosted actions have a separate fixed-node execution path. They are never
-	// installed in WorkerIntegrationCredentials or the tool factory.
-	cp := ControlPlaneEndpoint(d.ControlPlane)
-	var hostedActions handlers.HostedActionExecutor
-	if cp.URL != "" && cp.InternalServiceSecret != "" {
-		client, err := hosteduse.NewInstrumented(hosteduse.Deps{
-			Store: d.DB, BaseURL: cp.URL,
-			Sign: func() (string, error) { return auth.SignInternalServiceToken(cp.InternalServiceSecret) },
-		})
-		if err != nil {
-			return nil, fmt.Errorf("hosted HTTP execution: %w", err)
-		}
-		hostedActions = client
-	}
+	hostedActions := newHostedActions(slog.Default(), d.DB, ControlPlaneEndpoint(d.ControlPlane))
 	worker, _, err := workersetup.NewWorker(&workersetup.Config{
 		AccountLimits:          d.Recorder.Recorder,
 		TemporalClient:         d.Temporal.Client,

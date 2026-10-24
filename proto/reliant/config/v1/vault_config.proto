@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+package reliant.config.v1;
+
+import "forge/v1/forge.proto";
+
+option go_package = "github.com/reliant-labs/reliant/gen/reliant/config/v1;configv1";
+
+// VaultMaintenanceConfig is `reliant db vault`'s config: the commands that
+// rotate the credential vault's key-encryption key. They read the same
+// RELIANT_VAULT_KEY the servers read, so running one inside a server pod uses
+// exactly the keyring that pod serves with. The rules every config here
+// follows are in config.proto's header.
+message VaultMaintenanceConfig {
+  option (forge.v1.binary_config) = {
+    binary: "reliant"
+    subtrees: [{path: ["db", "vault"]}]
+  };
+
+  // The KEK keyring, "id:<base64>[,id:<base64>...]", first entry primary.
+  // Rotating: put the new key first and keep the old one after it until
+  // `db vault rewrap` has moved every data key off it.
+  string vault_key = 1 [(forge.v1.config) = {
+    env_var: "RELIANT_VAULT_KEY"
+    sensitive: true
+    required: true
+    description: "Credential vault keyring (id:<base64>[,id:<base64>...], first entry primary)"
+  }];
+}

@@ -1,3 +1,4 @@
+import kcl_plugin.forge as plugin
 # Per-environment app config VALUES for reliant's own dev stack (user-owned —
 # edit here). One typed instance per binary subcommand, each carrying only the
 # values THAT process reads; the schemas and env projections are generated
@@ -112,4 +113,14 @@ reliant_process: config_gen.ReliantProcess = {
     gateway_config = gateway_config
     worker_config = worker_config
     preview_url_config = preview_url_config
+}
+
+# ── Frontend runtime config (PUBLIC — served to the browser) ──────────
+# Projected into each frontend's config.js. These values reach the browser
+# at RUNTIME, not baked into the bundle, so one built bundle can be
+# promoted between environments.
+import frontend_config_gen
+
+reliant_web_config: frontend_config_gen.ReliantWebConfig = {
+    api_url = "http://localhost:" + str(plugin.resolve_port("reliant-dev-api", 8085))
 }

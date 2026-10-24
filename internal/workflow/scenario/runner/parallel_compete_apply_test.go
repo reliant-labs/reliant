@@ -15,6 +15,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/require"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -365,6 +366,7 @@ func (s *sandbox) requireWinnerApplied(t *testing.T, n int) {
 // deterministic scenario runner, takes the command the runtime rendered for
 // apply_winner, and runs it in the sandbox.
 func TestParallelCompete_UseWinnerWritesOnlyInsideTheProject(t *testing.T) {
+	testkit.Slow(t, "runs the parallel-compete workflow over real git worktrees")
 	s := newSandbox(t)
 
 	wf := loadBuiltin(t, "parallel-compete")

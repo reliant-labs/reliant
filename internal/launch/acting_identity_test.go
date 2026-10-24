@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -34,6 +35,7 @@ func triggerEvent(kind core.TriggerEventKind) Event {
 // An automation whose activation chose the App records it, and the automation's
 // name, on the run it starts.
 func TestLaunch_ActingAsAppIsRecordedOnTheRun(t *testing.T) {
+	testkit.Slow(t, "launches a DB-backed run per trigger kind")
 	for _, kind := range []core.TriggerEventKind{
 		core.TriggerEventKindSchedule, core.TriggerEventKindWebhook, core.TriggerEventKindIntegration, core.TriggerEventKindWorkflowEvent,
 	} {

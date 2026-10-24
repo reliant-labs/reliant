@@ -5,6 +5,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/reliant-labs/forge/pkg/testkit"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 )
 
@@ -25,6 +26,7 @@ import (
 // time. SeedSeqCounterForFork does that walk once per fork instead of once per
 // message.
 func TestForkedThread_SeqContinuesAboveInheritedHistory(t *testing.T) {
+	testkit.Slow(t, "DB-backed: builds thread trees in pgtest's Postgres")
 	t.Parallel()
 
 	h := newTestHelper(t)

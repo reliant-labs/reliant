@@ -109,6 +109,8 @@ A cluster you operate is registered once with the control plane, so it can conve
 forge cluster connect acme-prod --context gke_acme_us-central1_prod --env prod
 ```
 
+There is one way in, on any Kubernetes cluster. forge uses your own kubectl context to create a dedicated ServiceAccount with least-privilege RBAC, then uploads that ServiceAccount's token to the control plane, write-only. The control plane authenticates to your cluster as that ServiceAccount and nothing else: it holds no cloud identity in your project, and there is no `--auth` choice and no IAM grant for you to run. The control plane dials the address you registered, so it must be reachable over HTTPS from the control plane. forge takes it from your kubectl context; pass `--address <https-url>` (and `--ca-file <pem>` if the CA is not in your kubeconfig) to register a different one. Re-run the command to rotate the token or fix an endpoint, and `forge cluster disconnect` revokes it.
+
 Or derive a new environment with some workloads moved: `forge env new cloud --from prod --bind api=cluster`, then `forge env new cloud --check` once its placeholders are filled. On a cluster you operate, forge checks before applying that every image and every referenced Secret key exists, and it applies only to the kubectl context the environment's KCL names, never whatever context your shell has selected.
 
 ## Related topics

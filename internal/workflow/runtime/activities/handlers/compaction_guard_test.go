@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/reliant-labs/forge/pkg/testkit"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
@@ -77,6 +78,7 @@ func saveTurn(t *testing.T, svc *threads.Service, chatID, thread, callID string,
 // minutes. The guard must decline that compaction: no summarization call, no
 // new context window, one report however many turns ask.
 func TestCompact_SkipsCompactionThatCannotShrinkTheContext(t *testing.T) {
+	testkit.Slow(t, "runs workflow activities against pgtest's Postgres")
 	t.Parallel()
 
 	h := NewIdempotencyTestHelper(t)

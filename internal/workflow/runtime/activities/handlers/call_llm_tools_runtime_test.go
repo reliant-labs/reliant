@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -336,6 +337,7 @@ func (p *recordingProjectResolver) ResolveProjectConfig(ctx context.Context, pro
 }
 
 func TestCallLLMActivity_UsesWorkingDirForMCPEnumerationScope(t *testing.T) {
+	testkit.Slow(t, "runs workflow activities against pgtest's Postgres")
 	t.Parallel()
 
 	h := NewIdempotencyTestHelper(t)
@@ -413,6 +415,7 @@ func TestCallLLMActivity_UsesWorkingDirForMCPEnumerationScope(t *testing.T) {
 // configured to spawn children. A plain root agent has neither, and handing it a
 // mailbox tool it can never use costs schema on every single request.
 func TestCallLLMActivity_SpawnToolsOfferedOnlyWhenReachable(t *testing.T) {
+	testkit.Slow(t, "runs workflow activities against pgtest's Postgres")
 	t.Parallel()
 
 	// spawn_stop rides the same grant but on the STRICTLY TIGHTER condition:
@@ -537,6 +540,7 @@ func TestCallLLMActivity_SpawnToolsOfferedOnlyWhenReachable(t *testing.T) {
 // Before the first spawn, spawn_status stays off the request: it costs schema
 // on every turn of an agent that may never fan out.
 func TestCallLLMActivity_SpawnManagementToolsOfferedOnceThreadHasSpawned(t *testing.T) {
+	testkit.Slow(t, "runs workflow activities against pgtest's Postgres")
 	t.Parallel()
 
 	tests := []struct {

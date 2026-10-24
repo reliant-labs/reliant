@@ -196,7 +196,7 @@ describe("one transport per route, through the real chain", () => {
   it("control-plane without a configured URL fails the call, naming the variable", async () => {
     const { connectClient } = await load();
     await expect(connectClient(UserService).getCurrentUser({})).rejects.toThrow(
-      /VITE_CONTROL_PLANE_API_URL/,
+      /CONTROL_PLANE_API_URL/,
     );
     expect(sent).toHaveLength(0);
   });

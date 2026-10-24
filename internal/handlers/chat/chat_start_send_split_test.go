@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"connectrpc.com/connect"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/enums/v1"
@@ -72,6 +73,7 @@ func TestSendMessage_PendingChatIsRejected(t *testing.T) {
 // same pair, so a chat whose fields were left unset looked neither pending nor
 // paused, whatever its run was doing.
 func TestChatProto_CarriesRootWorkflowState(t *testing.T) {
+	testkit.Slow(t, "a DB-backed chat handler test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	cases := []struct {

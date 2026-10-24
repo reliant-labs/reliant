@@ -61,6 +61,8 @@ const METADATA_KEYS = new Set([
   // Electron's own crash and process vocabulary.
   'reason', 'exitcode', 'processtype', 'crashedprocess', 'crashedurl', 'eventprocess',
   'eventenvironment', 'exitreason', 'trigger', 'event',
+  // Native crash signals (crash-signals.js): enums, versions and a route name.
+  'appversion', 'platform', 'arch', 'osversion', 'servicename', 'crashsignal',
 ]);
 
 // Keys that may carry a query string or fragment (OAuth codes, signed URLs).

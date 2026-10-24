@@ -202,6 +202,7 @@ records it without checking that the schema is the one it builds.`,
 	// migrate command inherits the flag.
 	config.RegisterDatabaseConfigFlags(migrateCmd)
 	dbCmd.AddCommand(migrateCmd)
+	dbCmd.AddCommand(newDBVaultCmd())
 	return dbCmd
 }
 

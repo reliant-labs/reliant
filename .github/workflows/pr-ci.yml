@@ -1410,13 +1410,12 @@ jobs:
       # runs the same gate. `npm run build` is `tsc -b && vite build`, and that
       # `tsc -b` IS `npm run typecheck`, so type errors fail this step.
       #
-      # NO SECRETS. Every hostname verify-bundle's [3/4] check expects comes
-      # from release.config.json's `.vite` block, the file this step exports.
+      # NO CONFIG. The bundle reads every per-environment value from config.js
+      # at runtime, so the build takes none; verify-bundle's [3/4] check
+      # asserts it loads config.js before the module bundle.
       #
       # .github/scripts/verify-bundle.test.mjs pins these steps to
       # release.yml's, so the two builds cannot drift apart silently.
-      - name: Export renderer build config
-        run: jq -er '.vite | to_entries[] | "\(.key)=\(.value)"' electron/release.config.json >> "$GITHUB_ENV"
 
       # NODE_ENV=production is scoped to this command, exactly as in
       # release.yml. Never set it on `npm ci`, which would skip devDependencies,
@@ -1527,11 +1526,17 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ hashFiles('frontends/web/package-lock.json') }}
 
-      # The public KCL-sourced values only (VITE_SUPABASE_ANON_KEY is a
+      # The public KCL-sourced renderer document (SUPABASE_ANON_KEY is a
       # publishable client-side key committed in electron/release.config.json);
-      # without it the auth-dependent tests cannot exercise auth.
-      - name: Export renderer build config
-        run: jq -er '.vite | to_entries[] | "\(.key)=\(.value)"' electron/release.config.json >> "$GITHUB_ENV"
+      # without it the auth-dependent tests cannot exercise auth. `vite
+      # preview` serves it as config.js (forgeRuntimeConfig() reads
+      # FORGE_RUNTIME_CONFIG_FILE).
+      - name: Write the e2e runtime config document
+        run: |
+          set -euo pipefail
+          doc="$RUNNER_TEMP/config.js"
+          printf 'window.__FORGE_CONFIG__ = %s;\n' "$(jq -e '.renderer' electron/release.config.json)" > "$doc"
+          echo "FORGE_RUNTIME_CONFIG_FILE=$doc" >> "$GITHUB_ENV"
 
       - name: Build (alpha)
         working-directory: frontends/web

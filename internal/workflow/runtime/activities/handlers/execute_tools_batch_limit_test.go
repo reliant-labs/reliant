@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/stretchr/testify/assert"
@@ -12,6 +13,7 @@ import (
 )
 
 func TestExecuteToolsActivity_CapsAggregateToolResultBatch(t *testing.T) {
+	testkit.Slow(t, "runs workflow activities against pgtest's Postgres")
 	t.Parallel()
 
 	f := setupDurableStatusFixture(t)

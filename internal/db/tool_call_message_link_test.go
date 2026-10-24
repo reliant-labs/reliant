@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/ptr"
@@ -60,6 +61,7 @@ func seedToolCallBlock(t *testing.T, repo *Repo, ctx context.Context, toolCallID
 //
 // The link is recoverable because the block is written BEFORE the call row.
 func TestUpsertToolCallStatus_ResolvesMessageIDFromBlock(t *testing.T) {
+	testkit.Slow(t, "a DB-backed test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	repo, cleanup := setupTestDB(t)

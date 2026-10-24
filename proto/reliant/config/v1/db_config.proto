@@ -25,7 +25,8 @@ message DatabaseConfig {
     binary: "reliant"
     subtrees: [
       {path: ["server"]},
-      {path: ["db", "migrate"]}
+      {path: ["db", "migrate"]},
+      {path: ["db", "vault"]}
     ]
   };
 

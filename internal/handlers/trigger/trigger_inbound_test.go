@@ -11,6 +11,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -87,6 +88,7 @@ func (e *triggerTestEnv) createConnection(t *testing.T, userID, integration, acc
 }
 
 func TestCreateWebhookTriggerReturnsItsTokenOnceAndStoresOnlyAHash(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	env, _ := setupInboundTriggerTest(t)
@@ -114,6 +116,7 @@ func TestCreateWebhookTriggerReturnsItsTokenOnceAndStoresOnlyAHash(t *testing.T)
 }
 
 func TestRotateWebhookTokenInvalidatesTheOldOne(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	env, _ := setupInboundTriggerTest(t)
@@ -138,6 +141,7 @@ func TestRotateWebhookTokenInvalidatesTheOldOne(t *testing.T) {
 }
 
 func TestRotateWebhookTokenRejectsANonWebhookTrigger(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	env, _ := setupInboundTriggerTest(t)
@@ -242,6 +246,7 @@ func TestCreateIntegrationTriggerBindsTheCallersConnection(t *testing.T) {
 }
 
 func TestCreateIntegrationTriggerRequiresAnInboundIntegration(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	env, _ := setupInboundTriggerTest(t)
@@ -285,6 +290,7 @@ func TestWorkflowTriggerReferenceToAnUndeclaredTrigger(t *testing.T) {
 }
 
 func TestFireInboundTriggerGoesThroughIntake(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	env, intake := setupInboundTriggerTest(t)
@@ -315,6 +321,7 @@ func (texterCatalog) UserConfiguredURL(integration string) bool { return integra
 // them the URL to paste into the provider's console; one whose app-level
 // webhook the operator registers does not.
 func TestIntegrationTriggerShowsTheWebhookURLTheUserMustConfigure(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	env := setupTriggerTest(t)

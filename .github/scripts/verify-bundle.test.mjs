@@ -26,18 +26,13 @@ const read = (...parts) => readFileSync(join(REPO_ROOT, ...parts), "utf8");
 
 // ── 1. verify-bundle.mjs ────────────────────────────────────────────────────
 
-const CONFIG = JSON.parse(read("electron", "release.config.json"));
-
-/** A minimal dist that passes every check: index.html, a hashed chunk, every configured host. */
-function fakeDist(t, extraJs = "") {
+/** A minimal dist that passes every check: index.html loading config.js, then a hashed chunk. */
+function fakeDist(t, extraJs = "", head = '<script src="/config.js"></script>\n') {
   const dir = mkdtempSync(join(tmpdir(), "verify-bundle-"));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
   mkdirSync(join(dir, "assets"));
-  writeFileSync(join(dir, "index.html"), '<script type="module" crossorigin src="/assets/index-Ab12Cd.js"></script>\n');
-  const hosts = Object.values(CONFIG.vite)
-    .filter((v) => typeof v === "string" && /^https?:\/\//.test(v))
-    .map((v) => new URL(v).hostname);
-  writeFileSync(join(dir, "assets", "index-Ab12Cd.js"), `const h=[${hosts.map((h) => `"https://${h}"`).join(",")}];${extraJs}\n`);
+  writeFileSync(join(dir, "index.html"), `${head}<script type="module" crossorigin src="/assets/index-Ab12Cd.js"></script>\n`);
+  writeFileSync(join(dir, "assets", "index-Ab12Cd.js"), `const c=window.__FORGE_CONFIG__;${extraJs}\n`);
   return dir;
 }
 
@@ -60,6 +55,27 @@ test("the same bundle without it passes every check", (t) => {
   assert.match(stdout, /verify-bundle: all checks passed/);
 });
 
+test("a bundle that does not load config.js fails [3/4]", (t) => {
+  const dir = fakeDist(t, "", "");
+  const { status, stdout, stderr } = verify(dir);
+  assert.equal(status, 1, stdout + stderr);
+  assert.match(stderr, /does not load \/config\.js/);
+});
+
+test("a bundle that loads config.js after the module bundle fails [3/4]", (t) => {
+  const dir = mkdtempSync(join(tmpdir(), "verify-bundle-"));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  mkdirSync(join(dir, "assets"));
+  writeFileSync(
+    join(dir, "index.html"),
+    '<script type="module" crossorigin src="/assets/index-Ab12Cd.js"></script>\n<script src="/config.js"></script>\n',
+  );
+  writeFileSync(join(dir, "assets", "index-Ab12Cd.js"), "const c=1;\n");
+  const { status, stdout, stderr } = verify(dir);
+  assert.equal(status, 1, stdout + stderr);
+  assert.match(stderr, /before \/config\.js/);
+});
+
 // ── 2. PR CI builds what the release builds ─────────────────────────────────
 
 /** One job's lines, with comments dropped and `\`-continued lines joined. */
@@ -79,7 +95,10 @@ function jobBlock(yml, job) {
 const PR_WEB = jobBlock(read(".github", "workflows", "pr-ci.yml"), "web");
 const RELEASE_PREPARE = jobBlock(read(".github", "workflows", "release.yml"), "prepare");
 
-const EXPORT = `jq -er '.vite | to_entries[] | "\\(.key)=\\(.value)"' electron/release.config.json >> "$GITHUB_ENV"`;
+// The bundle reads its config from config.js at runtime, so a build handed the
+// renderer's release config through the environment is a build reading it
+// again. (`.main` is the main process's, and is exported for its jobs.)
+const EXPORT_RE = /'\.(vite|renderer)\b[^\n]*release\.config\.json[^\n]*>> "\$GITHUB_ENV"/;
 const BUILD = /working-directory: frontends\/web\n\s+run: NODE_ENV=production npm run build\n/;
 const VERIFY_STEP = "run: node .github/scripts/verify-bundle.mjs --dist frontends/web/dist\n";
 
@@ -87,14 +106,13 @@ for (const [name, block] of [
   ["release.yml's prepare job", RELEASE_PREPARE],
   ["pr-ci.yml's web job", PR_WEB],
 ]) {
-  test(`${name} exports .vite, builds with NODE_ENV=production in frontends/web/, then verifies the bundle`, () => {
-    const exported = block.indexOf(EXPORT);
+  test(`${name} builds with NODE_ENV=production in frontends/web/ from no release config, then verifies the bundle`, () => {
     const built = block.search(BUILD);
     const verified = block.indexOf(VERIFY_STEP);
-    assert.notEqual(exported, -1, `${name} no longer exports release.config.json's .vite block with:\n  ${EXPORT}`);
+    assert.ok(!EXPORT_RE.test(block), `${name} still exports release.config.json into the build environment; the bundle reads config.js`);
     assert.notEqual(built, -1, `${name} no longer runs \`NODE_ENV=production npm run build\` in frontends/web/`);
     assert.notEqual(verified, -1, `${name} no longer runs:\n  ${VERIFY_STEP}`);
-    assert.ok(exported < built && built < verified, `${name} must export the config, then build, then verify`);
+    assert.ok(built < verified, `${name} must build, then verify`);
   });
 
   test(`${name} sets NODE_ENV on the build command only, never on npm ci`, () => {

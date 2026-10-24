@@ -111,6 +111,7 @@
     "deploy/observability/spec/service-tools_daemon_gen.json": "4e351c0f26bff4341ea285238c862266254f62a3c7b7ec5954a00dc1aa7d7450",
     "deploy/observability/spec/service-trigger_gen.json": "ffa006f20955e09985a21d974dc0bd6b6823b6a693d7c25108d97ce4adf6b39f",
     "deploy/observability/spec/service-workflow_gen.json": "ad4e6ee0bdd6fce9a578024331c968ca939c48679033300134c5204b288d4be4",
-    "deploy/observability/spec/service-worktree_gen.json": "ae17da499526ee311202a72696d78ec1749ab6c1c644b1bab51209ba4a23e477"
+    "deploy/observability/spec/service-worktree_gen.json": "ae17da499526ee311202a72696d78ec1749ab6c1c644b1bab51209ba4a23e477",
+    "frontends/web/src/lib/config_schema_gen.json": "b45b107c09b0aabb7ee25566ae994cb49dbdf3e5b46a1c7e066eeaa2a0fba1af"
   }
 }

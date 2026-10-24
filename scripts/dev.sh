@@ -363,7 +363,6 @@ export API_PORT="$BACKEND_PORT"  # V2 backend uses API_PORT
 export GRPC_PORT="$GRPC_PORT"  # gRPC/Connect server port
 export TOOLS_DAEMON_PORT="$TOOLS_DAEMON_PORT"  # Dedicated daemon gRPC listener
 export DAEMON_FRONTEND_PORT="$DAEMON_FRONTEND_PORT"
-export VITE_GRPC_PORT="$GRPC_PORT"  # Expose to Vite/frontend
 export TEMPORAL_FRONTEND_PORT="$TEMPORAL_FRONTEND_PORT"
 export TEMPORAL_UI_PORT="$TEMPORAL_UI_PORT"
 export PPROF_PORT="$PPROF_PORT"

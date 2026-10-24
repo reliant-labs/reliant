@@ -8,6 +8,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/reliant-labs/forge/pkg/svcerr"
+	"github.com/reliant-labs/forge/pkg/testkit"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -76,6 +77,7 @@ func finishAcrossTheBoundary(t *testing.T, base string) (*db.Worktree, error) {
 }
 
 func TestWorktreeCreate_UserErrorClassSurvivesTheDaemonBoundary(t *testing.T) {
+	testkit.Slow(t, "creates real git checkouts and worktrees on disk")
 	t.Parallel()
 	row, err := finishAcrossTheBoundary(t, "feat/telemetry-delivery-c2")
 	if err == nil {
@@ -102,6 +104,7 @@ func TestWorktreeCreate_UserErrorClassSurvivesTheDaemonBoundary(t *testing.T) {
 // The same path succeeds for a base that exists, so the test above cannot
 // pass by the boundary being broken in some other way.
 func TestWorktreeCreate_SucceedsAcrossTheDaemonBoundary(t *testing.T) {
+	testkit.Slow(t, "creates real git checkouts and worktrees on disk")
 	t.Parallel()
 	row, err := finishAcrossTheBoundary(t, "main")
 	if err != nil {

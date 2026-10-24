@@ -49,25 +49,30 @@ NC='\033[0m'
 
 DRY_RUN=false
 REQUESTED_TAG=""
+SKIP_RELEASE_GATE=false
 
 for arg in "$@"; do
     case "$arg" in
         --dry-run)
             DRY_RUN=true
             ;;
+        --skip-release-gate)
+            SKIP_RELEASE_GATE=true
+            ;;
         v[0-9]*)
             REQUESTED_TAG="$arg"
             ;;
         -h|--help)
-            echo "Usage: $0 [vX.Y.Z] [--dry-run]"
+            echo "Usage: $0 [vX.Y.Z] [--dry-run] [--skip-release-gate]"
             echo ""
-            echo "  vX.Y.Z     Tag this specific version (default: read from origin/main)"
-            echo "  --dry-run  Print exactly what would happen, create and push nothing"
+            echo "  vX.Y.Z               Tag this specific version (default: read from origin/main)"
+            echo "  --dry-run            Print exactly what would happen, create and push nothing"
+            echo "  --skip-release-gate  Tag without a green release-gate record (a hotfix; say so in the notes)"
             exit 0
             ;;
         *)
             echo -e "${RED}Error: unrecognized argument '$arg'${NC}" >&2
-            echo "Usage: $0 [vX.Y.Z] [--dry-run]" >&2
+            echo "Usage: $0 [vX.Y.Z] [--dry-run] [--skip-release-gate]" >&2
             exit 1
             ;;
     esac
@@ -181,6 +186,32 @@ if [[ ! "$NEW_VERSION" =~ -rc ]]; then
     if ! git cat-file -e "$RELEASE_COMMIT:docs/data/releases/${RELEASE_TAG}.yaml" 2>/dev/null; then
         echo -e "${RED}Error: docs/data/releases/${RELEASE_TAG}.yaml is not present at ${RELEASE_COMMIT:0:9}${NC}" >&2
         echo -e "${YELLOW}  The release notes did not land with the version bump.${NC}" >&2
+        exit 1
+    fi
+fi
+
+# ── THE RELEASE GATE ────────────────────────────────────────────────────────
+#
+# A merge runs only what its diff can affect (scripts/merge-gate.sh), so main
+# is judged in pieces. The other half of that bargain: the WHOLE suite must
+# have passed on the commit a release is cut from (scripts/release-gate.sh:
+# unscoped lint, the -race suite with every slow test, integration, e2e,
+# generate and docs drift). A green on an ancestor carries when everything
+# since is release metadata (this release PR's own version bump and notes).
+# dev-docs/merge-and-release-gates.md.
+if [[ "$SKIP_RELEASE_GATE" == "true" ]]; then
+    echo -e "${YELLOW}⚠️  --skip-release-gate: tagging ${RELEASE_COMMIT:0:9} WITHOUT a green release-gate record. Say so in the release notes.${NC}" >&2
+else
+    echo -e "${YELLOW}🔎 Checking the release gate for ${RELEASE_COMMIT:0:9}...${NC}"
+    set +e
+    "$(dirname "$0")/release-gate.sh" check "$RELEASE_COMMIT"
+    GATE_RC=$?
+    set -e
+    if [[ "$GATE_RC" != 0 ]]; then
+        echo -e "${RED}✖ REFUSING TO TAG: ${RELEASE_COMMIT:0:9} has no green release-gate record${NC}" >&2
+        echo -e "${YELLOW}  Run the slow tier on it (40-70 min; it holds one heavy slot):${NC}" >&2
+        echo -e "${BLUE}    ./scripts/release-gate.sh run ${RELEASE_COMMIT}${NC}" >&2
+        echo -e "${YELLOW}  then run this again. A hotfix that cannot wait: --skip-release-gate.${NC}" >&2
         exit 1
     fi
 fi

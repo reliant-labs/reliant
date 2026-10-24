@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -32,6 +33,7 @@ const (
 // machine; the next call that reaches a daemon clears it. The error here is
 // wrapped, exactly as the router returns it.
 func TestExecuteTools_DaemonPendingSetsAndSuccessClears(t *testing.T) {
+	testkit.Slow(t, "runs workflow activities against pgtest's Postgres")
 	t.Parallel()
 
 	f := setupDurableStatusFixture(t)
@@ -64,6 +66,7 @@ func TestExecuteTools_DaemonPendingSetsAndSuccessClears(t *testing.T) {
 // The typed error can also arrive as the executor's error return rather than
 // inside a result; errors.Is must see through the wrapping.
 func TestExecuteTools_DaemonPendingFromWrappedExecutorError(t *testing.T) {
+	testkit.Slow(t, "runs workflow activities against pgtest's Postgres")
 	t.Parallel()
 
 	f := setupDurableStatusFixture(t)
@@ -106,6 +109,7 @@ func TestExecuteTools_ReconnectWaitShowsWaitingForDaemon(t *testing.T) {
 
 // A failure that is not "machine pending" must not touch the state.
 func TestExecuteTools_OtherFailuresDoNotMarkDaemonPending(t *testing.T) {
+	testkit.Slow(t, "runs workflow activities against pgtest's Postgres")
 	t.Parallel()
 
 	f := setupDurableStatusFixture(t)

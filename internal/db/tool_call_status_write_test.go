@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/stretchr/testify/require"
 )
@@ -258,6 +259,7 @@ func TestUpsertToolCallStatusFirstTerminalWriteWins(t *testing.T) {
 // above let it overwrite a COMPLETED row. The tool's real output was then gone
 // from the durable record, and a reload showed a finished tool as cancelled.
 func TestUpsertToolCallStatusCompletedIsNotDowngradedToCancelled(t *testing.T) {
+	testkit.Slow(t, "a DB-backed test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	repo, _, cleanup := setupTestRepo(t)

@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/reliant-labs/forge/pkg/testkit"
 )
 
 // A worktree whose branch was squash-merged and whose PR branch was then
@@ -129,6 +131,7 @@ func TestMerged_AnUnpushedLocalCommitIsStillHeld(t *testing.T) {
 }
 
 func TestMerged_APurelyLocalBranchNeverPushedIsHeld(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	f.idle()
@@ -140,6 +143,7 @@ func TestMerged_APurelyLocalBranchNeverPushedIsHeld(t *testing.T) {
 }
 
 func TestMerged_ADirtyCheckoutIsHeldEvenWhenItsBranchWasSquashMerged(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	f.idle()
@@ -157,6 +161,7 @@ func TestMerged_ADirtyCheckoutIsHeldEvenWhenItsBranchWasSquashMerged(t *testing.
 }
 
 func TestMerged_InUseAndRecentlyActiveStillHoldAMergedWorktree(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	f.idle()
@@ -180,6 +185,7 @@ func TestMerged_InUseAndRecentlyActiveStillHoldAMergedWorktree(t *testing.T) {
 // A user-locked worktree (someone else's `git worktree lock`) is never theirs
 // to reap, merged or not.
 func TestMerged_ALockedByTheUserWorktreeIsNotReaped(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	f.idle()
@@ -327,6 +333,7 @@ func TestMerged_AMultiRepoWorkspaceNeedsEveryCheckoutDone(t *testing.T) {
 // changes to one path would look identical. A branch that touches a binary file
 // is therefore never recognised by patch, and stays held.
 func TestMerged_ABranchThatTouchesABinaryFileIsNotRecognisedByPatch(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	f.idle()
@@ -351,6 +358,7 @@ func TestMerged_ABranchThatTouchesABinaryFileIsNotRecognisedByPatch(t *testing.T
 }
 
 func TestMerged_PatchesOnBaseHandlesWhatItCannotCompare(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	w := f.worktree("pb", "feat/pb")

@@ -60,6 +60,14 @@ func TestHostedActionEmptyGrantNeverFallsBack(t *testing.T) {
 	require.Zero(t, f.calls)
 }
 
+func TestHostedActionPublishesOnlyTheDisabledReason(t *testing.T) {
+	f := &hostedFake{err: &HostedDisabledError{Reason: "control-plane URL is not HTTPS"}}
+	out := NewActionActivity(nil).WithHostedExecutor(f).executeHosted(context.Background(), "http/request@1", "grant", map[string]any{"url": "https://example.com/rpc"}, RuntimeContext{WorkflowID: "run", StepID: "fixed"})
+	require.True(t, out.IsError)
+	require.Equal(t, "failed_precondition", out.ErrorCode)
+	require.Equal(t, "hosted HTTP disabled: control-plane URL is not HTTPS", out.Content)
+}
+
 func TestHostedActionFailsClosedAndDoesNotPublishRemoteError(t *testing.T) {
 	a := NewActionActivity(nil)
 	out := a.executeHosted(context.Background(), "http/request@1", "grant", map[string]any{"url": "https://example.com/rpc"}, RuntimeContext{WorkflowID: "run", StepID: "fixed"})

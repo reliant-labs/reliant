@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -91,6 +92,7 @@ func TestActingAsApp_MintsAScopedTokenForTheRunOwner(t *testing.T) {
 }
 
 func TestActingAsApp_PermissionsFollowTheAction(t *testing.T) {
+	testkit.Slow(t, "DB-backed acting-as-app runs, one per case")
 	for action, want := range map[string]map[string]string{
 		"issue.create":            {"issues": "write"},
 		"issue.labels.add":        {"issues": "write"},
@@ -112,6 +114,7 @@ func TestActingAsApp_PermissionsFollowTheAction(t *testing.T) {
 // A mint that cannot be done must FAIL the write. It never falls through to the
 // owner's token: the activation said the bot makes this write.
 func TestActingAsApp_RefusalsNeverFallBackToTheOwner(t *testing.T) {
+	testkit.Slow(t, "DB-backed acting-as-app runs, one per case")
 	cases := map[string]struct {
 		err      error
 		wantCode string
@@ -306,6 +309,7 @@ func TestActingAsApp_GitPushMintsContentsWrite(t *testing.T) {
 // A call that names no repository has nothing to scope a bot token to. It is
 // refused, never widened to "every repository the App reaches".
 func TestActingAsApp_RequiresARepository(t *testing.T) {
+	testkit.Slow(t, "DB-backed acting-as-app runs, one per case")
 	for name, params := range map[string]map[string]any{
 		"none":       nil,
 		"no repo":    {"owner": "acme"},
@@ -353,6 +357,7 @@ func TestFooter(t *testing.T) {
 // END TO END through the real runner and the real catalog: the bot's bearer
 // reaches the host, the body carries the footer, and the token is scrubbed.
 func TestActingAsApp_EndToEndWriteCarriesTheBotTokenAndTheFooter(t *testing.T) {
+	testkit.Slow(t, "DB-backed acting-as-app runs, one per case")
 	cases := []struct {
 		name   string
 		action string

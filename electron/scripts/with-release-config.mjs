@@ -16,9 +16,13 @@
 // The two blocks land in different consumers, and neither reads the JSON file
 // itself, which is why they have to become environment variables here:
 //
-//   .vite -> read straight out of the environment by `vite build`
-//   .main -> read by generate-build-config.mjs, which writes
-//            electron/src/build-config.js (the main-process endpoints)
+//   .renderer -> handed to generate-build-config.mjs as RELIANT_RENDERER_CONFIG
+//                (one JSON value), which writes it to
+//                electron/src/release-renderer-config.js: the document the main
+//                process serves as app://bundle/config.js. The web bundle
+//                itself reads nothing at build time.
+//   .main     -> read by generate-build-config.mjs, which writes
+//                electron/src/build-config.js (the main-process endpoints)
 //
 // This is the same expansion release.yml performs with jq into $GITHUB_ENV.
 // CI keeps using jq because $GITHUB_ENV has to outlive the step; locally a
@@ -40,18 +44,19 @@
 // GitHub Actions secrets in CI and are simply absent locally, which leaves
 // telemetry inert in a local build.
 
-import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { spawnSync } from "node:child_process";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+
+import { ReleaseConfigRenderError, renderReleaseConfig } from "../../.github/scripts/release-config-kcl.mjs";
+import { rendererProblems } from "../../.github/scripts/release-renderer-check.mjs";
 
 const ELECTRON_DIR = join(dirname(fileURLToPath(import.meta.url)), "..");
 const REPO_ROOT = join(ELECTRON_DIR, "..");
 const RELEASE_CONFIG_PATH = join(ELECTRON_DIR, "release.config.json");
 const CONTROL_PLANE_DIR =
   process.env.CONTROL_PLANE_DIR || resolve(REPO_ROOT, "..", "control-plane");
-const KCL_ENTRYPOINT = "deploy/kcl/desktop_release.k";
 
 // Which environment's endpoints this build carries. The committed file records
 // the env it was generated for, so a build that does not say defers to it.
@@ -68,30 +73,24 @@ const BUILD_ENV = process.env.RELIANT_RELEASE_ENV || "";
  * reach a packaged build — verified: poisoning VITE_API_URL in the JSON put
  * "https://POISONED.example.com" into the build environment with no complaint.
  *
- * Returns null (not an error) when the KCL is genuinely unreachable, so an OSS
- * contributor with no control-plane checkout still builds from the cache.
+ * Rendered through forge's own KCL module, exactly as sync-release-config.mjs
+ * renders it (.github/scripts/release-config-kcl.mjs) — a bare `kcl run`
+ * cannot resolve control-plane's `import forge`.
+ *
+ * Returns null (not an error) when the KCL is genuinely unreachable — no
+ * checkout, no forge, no kcl — so an OSS contributor with no control-plane
+ * checkout still builds from the cache.
  */
 function renderFromKCL(env) {
-  const entry = join(CONTROL_PLANE_DIR, KCL_ENTRYPOINT);
-  if (!existsSync(entry)) return null;
-  // The JSON goes to a file, not stdout: kcl prints "waiting for package-cache
-  // lock..." to stdout while another kcl holds the shared package cache.
-  const out = join(mkdtempSync(join(tmpdir(), "release-config-")), "release_config.json");
   try {
-    execFileSync(
-      "kcl",
-      ["run", KCL_ENTRYPOINT, "-D", `env=${env}`, "-S", "release_config", "--format", "json", "-o", out],
-      { cwd: CONTROL_PLANE_DIR, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] },
-    );
-    return JSON.parse(readFileSync(out, "utf8"));
+    const { config, unavailable } = renderReleaseConfig(CONTROL_PLANE_DIR, env);
+    if (unavailable) console.log(`==> release config: live KCL unavailable — ${unavailable}`);
+    return config ?? null;
   } catch (err) {
-    if (err.code === "ENOENT") return null; // kcl not installed
+    if (!(err instanceof ReleaseConfigRenderError)) throw err;
     // The KCL is present but does not render: that is a real defect in the
     // source of truth, not a reason to fall back to a stale copy of it.
-    console.error(
-      `with-release-config: control-plane KCL failed to render for env=${env}:\n` +
-        `${err.stderr || err.message}`,
-    );
+    console.error(`with-release-config: control-plane KCL failed to render:\n${err.message}`);
     process.exit(1);
   }
 }
@@ -134,7 +133,7 @@ if (rendered) {
   // but a stale committed file will ship from CI — where the KCL is
   // unreachable — so it must be regenerated and committed, and saying so here
   // is the only place a human sees it before that happens.
-  const flat = (c) => JSON.stringify({ ...(c.vite || {}), ...(c.main || {}) }, Object.keys({ ...(c.vite || {}), ...(c.main || {}) }).sort());
+  const flat = (c) => JSON.stringify({ renderer: c.renderer || {}, main: c.main || {} });
   if (flat(rendered) !== flat(committed)) {
     console.warn(
       `with-release-config: WARNING — electron/release.config.json is STALE.\n` +
@@ -148,24 +147,22 @@ if (rendered) {
   source = "committed release.config.json (control-plane not reachable)";
 }
 
-const exported = { ...(release.vite || {}), ...(release.main || {}) };
+const exported = { ...(release.main || {}), RELIANT_RENDERER_CONFIG: JSON.stringify(release.renderer || {}) };
 
 // Fail loudly rather than package a mislabelled build. generate-build-config.mjs
-// and sync-release-config.mjs guard the same values at their own boundaries;
-// this is the guard for the renderer path, which otherwise has none — `vite
-// build` treats an unset VITE_* as legitimately empty and reports nothing.
+// and sync-release-config.mjs guard the same values at their own boundaries.
 const REQUIRED = [
-  "VITE_API_URL",
-  "VITE_CONTROL_PLANE_API_URL",
-  "VITE_GATEWAY_URL",
   "RELIANT_API_URL",
   "RELIANT_SERVER_URL",
   "RELIANT_GATEWAY_URL",
   "RELIANT_CONTROL_PLANE_URL",
 ];
-const problems = REQUIRED.filter(
-  (key) => !exported[key] || /localhost|127\.0\.0\.1/.test(exported[key]),
-).map((key) => `${key} is "${exported[key] ?? ""}"`);
+const problems = [
+  ...REQUIRED.filter((key) => !exported[key] || /localhost|127\.0\.0\.1/.test(exported[key])).map(
+    (key) => `${key} is "${exported[key] ?? ""}"`,
+  ),
+  ...(release.renderer ? rendererProblems(release.renderer) : ["the release config has no `renderer` block"]),
+];
 
 if (problems.length) {
   console.error(
@@ -177,8 +174,11 @@ if (problems.length) {
 }
 
 console.log(`==> release config: env=${release.env} — source: ${source}`);
-for (const key of ["VITE_API_URL", "VITE_CONTROL_PLANE_API_URL", "RELIANT_API_URL", "RELIANT_GATEWAY_URL"]) {
+for (const key of ["RELIANT_API_URL", "RELIANT_GATEWAY_URL", "RELIANT_CONTROL_PLANE_URL"]) {
   console.log(`    ${key.padEnd(26)} = ${exported[key]}`);
+}
+for (const key of ["API_URL", "CONTROL_PLANE_API_URL", "AUTH_MODE"]) {
+  console.log(`    renderer.${key.padEnd(17)} = ${release.renderer?.[key]}`);
 }
 
 const result = spawnSync(command, commandArgs, {

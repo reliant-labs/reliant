@@ -11,6 +11,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -113,6 +114,7 @@ func (f *discoverFixture) discover(t *testing.T) *reliantv1.DiscoverWorktreesRes
 }
 
 func TestDiscoverWorktrees_SendsRepoPathsAndExcludesTrackedRows(t *testing.T) {
+	testkit.Slow(t, "runs git against a real repository through the handler")
 	t.Parallel()
 
 	f := newDiscoverTestFixture(t, "a", "b")
@@ -148,6 +150,7 @@ func TestDiscoverWorktrees_SendsRepoPathsAndExcludesTrackedRows(t *testing.T) {
 }
 
 func TestDiscoverWorktrees_MovesOnImport(t *testing.T) {
+	testkit.Slow(t, "runs git against a real repository through the handler")
 	t.Parallel()
 
 	cases := []struct {
@@ -181,6 +184,7 @@ func TestDiscoverWorktrees_MovesOnImport(t *testing.T) {
 }
 
 func TestDiscoverWorktrees_SplitsStale(t *testing.T) {
+	testkit.Slow(t, "runs git against a real repository through the handler")
 	t.Parallel()
 
 	f := newDiscoverTestFixture(t, "a", "b")
@@ -199,6 +203,7 @@ func TestDiscoverWorktrees_SplitsStale(t *testing.T) {
 }
 
 func TestDiscoverWorktrees_RejectsAnotherUsersProject(t *testing.T) {
+	testkit.Slow(t, "runs git against a real repository through the handler")
 	t.Parallel()
 
 	f := newDiscoverTestFixture(t, "")
@@ -209,6 +214,7 @@ func TestDiscoverWorktrees_RejectsAnotherUsersProject(t *testing.T) {
 }
 
 func TestPruneWorktrees_SendsReposAndReturnsPruned(t *testing.T) {
+	testkit.Slow(t, "runs git against a real repository through the handler")
 	t.Parallel()
 
 	f := newDiscoverTestFixture(t, "a", "b")
@@ -276,6 +282,7 @@ func TestImportWorktree_MultiRepoNeedsConfirmMove(t *testing.T) {
 }
 
 func TestImportWorktree_RefusesPathsTheDaemonDoesNotReport(t *testing.T) {
+	testkit.Slow(t, "runs git against a real repository through the handler")
 	t.Parallel()
 
 	f := newDiscoverTestFixture(t, "")
@@ -290,6 +297,7 @@ func TestImportWorktree_RefusesPathsTheDaemonDoesNotReport(t *testing.T) {
 }
 
 func TestImportWorktree_DetachedHeadIsRefused(t *testing.T) {
+	testkit.Slow(t, "runs git against a real repository through the handler")
 	t.Parallel()
 
 	f := newDiscoverTestFixture(t, "")
@@ -303,6 +311,7 @@ func TestImportWorktree_DetachedHeadIsRefused(t *testing.T) {
 }
 
 func TestImportWorktree_SingleRepoRegistersInPlace(t *testing.T) {
+	testkit.Slow(t, "runs git against a real repository through the handler")
 	t.Parallel()
 
 	f := newDiscoverTestFixture(t, "")

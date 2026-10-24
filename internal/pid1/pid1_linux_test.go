@@ -17,6 +17,8 @@ import (
 	"time"
 
 	"golang.org/x/sys/unix"
+
+	"github.com/reliant-labs/forge/pkg/testkit"
 )
 
 // The tests run this test binary as the process under test. roleEnv picks
@@ -230,6 +232,7 @@ func openPTY(t *testing.T) (master, slave *os.File) {
 // container runtime; where they are disabled the test skips and the
 // subreaper test below still covers the init loop.
 func TestInit_AsPID1ReapsOrphansAndPassesSignalsAndStatus(t *testing.T) {
+	testkit.Slow(t, "forks real processes to reap and signal")
 	t.Parallel()
 	cmd, lines := helper(t, "pid1")
 	cmd.SysProcAttr = &syscall.SysProcAttr{
@@ -247,6 +250,7 @@ func TestInit_AsPID1ReapsOrphansAndPassesSignalsAndStatus(t *testing.T) {
 // TestSupervise_AsSubreaperReapsOrphansAndPassesSignalsAndStatus runs the
 // same init loop without namespaces, adopting orphans as a subreaper.
 func TestSupervise_AsSubreaperReapsOrphansAndPassesSignalsAndStatus(t *testing.T) {
+	testkit.Slow(t, "forks real processes to reap and signal")
 	t.Parallel()
 	cmd, lines := helper(t, "subreaper")
 	if err := cmd.Start(); err != nil {

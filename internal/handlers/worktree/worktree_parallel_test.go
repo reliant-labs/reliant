@@ -11,6 +11,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -184,6 +185,7 @@ func createWorkspace(t *testing.T, svc *Service, userID, projectID, name string)
 // The fake daemon holds each create until all three are in flight; a
 // sequential fan-out can never get there, so it reports a peak of 1.
 func TestCreateWorktreeChecksOutSiblingReposConcurrently(t *testing.T) {
+	testkit.Slow(t, "runs git against a real repository through the handler")
 	t.Parallel()
 
 	repo := db.NewTestRepo(t)
@@ -210,6 +212,7 @@ func TestCreateWorktreeChecksOutSiblingReposConcurrently(t *testing.T) {
 // constraint left: a repo nested inside another lands inside its checkout, so
 // the container must finish first. Unrelated repos still run together.
 func TestCreateWorktreeChecksOutContainerBeforeNestedRepo(t *testing.T) {
+	testkit.Slow(t, "runs git against a real repository through the handler")
 	t.Parallel()
 
 	repo := db.NewTestRepo(t)
@@ -238,6 +241,7 @@ func TestCreateWorktreeChecksOutContainerBeforeNestedRepo(t *testing.T) {
 // waiting — the daemon's git finishes anyway, at a path the server never
 // learns — so both must run to completion and BOTH must be rolled back.
 func TestCreateWorktreeFailureTearsDownEverySiblingCheckout(t *testing.T) {
+	testkit.Slow(t, "runs git against a real repository through the handler")
 	t.Parallel()
 
 	repo := db.NewTestRepo(t)

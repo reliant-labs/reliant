@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"connectrpc.com/connect"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -74,6 +75,7 @@ func (e *triggerTestEnv) enableOncall(t *testing.T) *reliantv1.EnableWorkflowRes
 
 // One click: Enable provisions the receiver and returns no token to show.
 func TestEnableAlertingWorkflowProvisionsAndShowsNoToken(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	env, fa := setupAlertingTest(t)

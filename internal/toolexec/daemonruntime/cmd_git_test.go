@@ -12,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/reliant-labs/forge/pkg/testkit"
 )
 
 // setGitCloneTestEnv gives one test its own git config with an identity. A
@@ -100,6 +102,7 @@ func buildTestOriginRepo(root string) (string, error) {
 // itself refuses to run into an existing non-empty directory and the retry
 // reports failure even though req.Path is a valid, complete clone.
 func TestHandleGitClone_RedeliveryAfterSuccessIsIdempotent(t *testing.T) {
+	testkit.Slow(t, "creates real git checkouts and worktrees on disk")
 	t.Parallel()
 	origin := newTestOriginRepo(t)
 	dest := filepath.Join(t.TempDir(), "dest")
@@ -149,6 +152,7 @@ func TestHandleGitClone_RedeliveryAfterSuccessIsIdempotent(t *testing.T) {
 // clone destination — must still fail loudly rather than being silently
 // treated as an already-completed clone.
 func TestHandleGitClone_NonGitConflictStillFails(t *testing.T) {
+	testkit.Slow(t, "creates real git checkouts and worktrees on disk")
 	t.Parallel()
 	origin := newTestOriginRepo(t)
 	dest := filepath.Join(t.TempDir(), "dest")
@@ -230,6 +234,7 @@ func TestHandleGitClone_KilledCloneLeavesNoPartialCheckout(t *testing.T) {
 // (git removes a destination it created itself on this kind of failure, so
 // this guards the atomic path's own cleanup rather than a git behavior.)
 func TestHandleGitClone_FailedCloneLeavesNoDirectory(t *testing.T) {
+	testkit.Slow(t, "creates real git checkouts and worktrees on disk")
 	t.Parallel()
 	origin := newTestOriginRepo(t)
 	parent := t.TempDir()
@@ -255,6 +260,7 @@ func TestHandleGitClone_FailedCloneLeavesNoDirectory(t *testing.T) {
 // natively; the atomic path renames onto it instead, which fails on an
 // existing directory unless it is cleared first — this pins that it is.
 func TestHandleGitClone_EmptyTargetIsAdopted(t *testing.T) {
+	testkit.Slow(t, "creates real git checkouts and worktrees on disk")
 	t.Parallel()
 	origin := newTestOriginRepo(t)
 	parent := t.TempDir()
@@ -281,6 +287,7 @@ func TestHandleGitClone_EmptyTargetIsAdopted(t *testing.T) {
 // target sweeps it rather than letting them accumulate — and lands the
 // checkout at the real path, never at the stale staging one.
 func TestHandleGitClone_SweepsStagingLeftByAKilledClone(t *testing.T) {
+	testkit.Slow(t, "creates real git checkouts and worktrees on disk")
 	t.Parallel()
 	origin := newTestOriginRepo(t)
 	parent := t.TempDir()

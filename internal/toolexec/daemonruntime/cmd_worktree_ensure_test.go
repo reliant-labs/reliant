@@ -11,6 +11,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
@@ -114,6 +115,7 @@ func commitIn(t *testing.T, dir, file string) {
 // nothing ever repairs it. After an ensure the workspace is back on its branch
 // with its commits, and the same command runs.
 func TestEnsure_DeletedWorktreeIsRecreatedAndCommandsRunAgain(t *testing.T) {
+	testkit.Slow(t, "creates real git checkouts and worktrees on disk")
 	t.Parallel()
 	f := newEnsureFixture(t, "")
 	commitIn(t, f.root, "committed.txt")
@@ -161,6 +163,7 @@ func TestEnsure_DeletedWorktreeIsRecreatedAndCommandsRunAgain(t *testing.T) {
 // A multi-repo workspace is one directory holding a checkout per nested repo;
 // losing it means rebuilding every one, each from its own repository.
 func TestEnsure_RecreatesEveryCheckoutOfAMultiRepoWorkspace(t *testing.T) {
+	testkit.Slow(t, "creates real git checkouts and worktrees on disk")
 	t.Parallel()
 	f := newEnsureFixture(t, "api", "web")
 	commitIn(t, filepath.Join(f.root, "web"), "web-work.txt")
@@ -188,6 +191,7 @@ func TestEnsure_RecreatesEveryCheckoutOfAMultiRepoWorkspace(t *testing.T) {
 // One nested checkout deleted while its siblings survive: only that one is
 // rebuilt, and nothing that was there is touched.
 func TestEnsure_RebuildsOnlyTheMissingNestedCheckout(t *testing.T) {
+	testkit.Slow(t, "creates real git checkouts and worktrees on disk")
 	t.Parallel()
 	f := newEnsureFixture(t, "api", "web")
 	dirty := filepath.Join(f.root, "api", "dirty.txt")
@@ -210,6 +214,7 @@ func TestEnsure_RebuildsOnlyTheMissingNestedCheckout(t *testing.T) {
 // The branch is gone too, so there is nothing to recreate from. The call
 // still runs — in the project's main checkout — and the notice says why.
 func TestEnsure_FallsBackToTheMainCheckoutWhenTheBranchIsGone(t *testing.T) {
+	testkit.Slow(t, "creates real git checkouts and worktrees on disk")
 	t.Parallel()
 	f := newEnsureFixture(t, "")
 	if err := os.RemoveAll(f.root); err != nil {
@@ -238,6 +243,7 @@ func TestEnsure_FallsBackToTheMainCheckoutWhenTheBranchIsGone(t *testing.T) {
 // worktrees is gone. There is nothing to recreate from and no main checkout;
 // calls run in $HOME rather than not at all.
 func TestEnsure_FallsBackToHomeWhenTheProjectIsGoneToo(t *testing.T) {
+	testkit.Slow(t, "creates real git checkouts and worktrees on disk")
 	t.Parallel()
 	f := newEnsureFixture(t, "api", "web")
 	if err := os.RemoveAll(f.root); err != nil {
@@ -259,6 +265,7 @@ func TestEnsure_FallsBackToHomeWhenTheProjectIsGoneToo(t *testing.T) {
 // A directory where the checkout belongs, holding files that are not a
 // checkout (agents in prod created one to "recover"): never overwritten.
 func TestEnsure_NeverOverwritesADirectoryThatIsNotACheckout(t *testing.T) {
+	testkit.Slow(t, "creates real git checkouts and worktrees on disk")
 	t.Parallel()
 	f := newEnsureFixture(t, "")
 	if err := os.RemoveAll(f.root); err != nil {
@@ -285,6 +292,7 @@ func TestEnsure_NeverOverwritesADirectoryThatIsNotACheckout(t *testing.T) {
 // on the same worktree, so it is told about the repair it did not trigger; a
 // caller with no audience (the user's repair button) consumes nothing.
 func TestEnsure_NoticeReachesEachThreadExactlyOnce(t *testing.T) {
+	testkit.Slow(t, "creates real git checkouts and worktrees on disk")
 	t.Parallel()
 	f := newEnsureFixture(t, "")
 	if err := os.RemoveAll(f.root); err != nil {
@@ -338,6 +346,7 @@ func TestEnsure_ReportsAWorkspaceThatCameBack(t *testing.T) {
 
 // A healthy workspace costs a stat and changes nothing.
 func TestEnsure_PresentWorkspaceIsANoOp(t *testing.T) {
+	testkit.Slow(t, "creates real git checkouts and worktrees on disk")
 	t.Parallel()
 	f := newEnsureFixture(t, "api", "web")
 	resp := ensureVia(t, newWorkspaceEnsurer(), f.request("thread-a"))
@@ -350,6 +359,7 @@ func TestEnsure_PresentWorkspaceIsANoOp(t *testing.T) {
 // workspace and say which one is missing, rather than moving the chat away
 // from the checkout that survived.
 func TestEnsure_ReportsAnIncompleteWorkspaceInPlace(t *testing.T) {
+	testkit.Slow(t, "creates real git checkouts and worktrees on disk")
 	t.Parallel()
 	f := newEnsureFixture(t, "api", "web")
 	web := filepath.Join(f.root, "web")

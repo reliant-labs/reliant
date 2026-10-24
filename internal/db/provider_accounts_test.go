@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -865,6 +866,7 @@ func TestMergeOnIdentityRewrite(t *testing.T) {
 // S9: an account with a distinct identity must never be deleted by an identity merge, whatever
 // the relative ages of the rows, and what the user set on it (pause, bench, poll schedule) stays.
 func TestIdentityMergeNeverDeletesTheAccountWithADistinctIdentity(t *testing.T) {
+	testkit.Slow(t, "a DB-backed test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	ctx := context.Background()

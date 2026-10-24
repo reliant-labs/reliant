@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/enums/v1"
@@ -90,6 +91,7 @@ func TestSendMessage_DoesNotWaitOnASlowParamsQuery(t *testing.T) {
 // SendMessage p50 was 1.7s, StartChat 2.3s. A spy used to count that read;
 // now Repository simply does not declare it, so no send can make it.
 func TestSendMessage_DoesNotReadTheWholeProjectConfigRow(t *testing.T) {
+	testkit.Slow(t, "a DB-backed chat handler test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	cases := []struct {

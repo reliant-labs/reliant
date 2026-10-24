@@ -10,6 +10,7 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -87,6 +88,7 @@ func TestAccessGatedTriggerNeedsNoConnectionAndRefreshesAccess(t *testing.T) {
 // With a saved connection the trigger still binds it (self-hosted), and an
 // explicitly named one must be the caller's.
 func TestAccessGatedTriggerBindsASavedConnectionWhenThereIsOne(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	env, _ := setupAccessTriggerTest(t)

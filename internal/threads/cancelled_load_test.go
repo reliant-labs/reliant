@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/reliant-labs/forge/pkg/testkit"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 )
 
@@ -37,6 +38,7 @@ import (
 // as retryable, rather than silently becoming a well-formed "there is nothing
 // here" that every downstream layer trusts.
 func TestLoadCurrentMessages_CancelledReadIsNotEmptyThread(t *testing.T) {
+	testkit.Slow(t, "DB-backed: builds thread trees in pgtest's Postgres")
 	t.Parallel()
 
 	h := newTestHelper(t)

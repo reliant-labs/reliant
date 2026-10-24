@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -39,6 +40,7 @@ func spawnReport(chatID, from, to, body string) *AgentMessage {
 // used to leave a row that claimed to be A's while carrying B's thread, input
 // and status — which A's transcript then rendered as its own.
 func TestToolCallIDIsolation_UpsertDoesNotOverwriteAnotherChatsCall(t *testing.T) {
+	testkit.Slow(t, "a DB-backed test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	repo, cleanup := SetupTestDB(t)
@@ -74,6 +76,7 @@ func TestToolCallIDIsolation_UpsertDoesNotOverwriteAnotherChatsCall(t *testing.T
 // the existing row and inherits its fields. Inheriting from ANOTHER chat's row
 // is how chat B's call used to acquire chat A's thread and message.
 func TestToolCallIDIsolation_StatusWriteDoesNotMergeIntoAnotherChatsCall(t *testing.T) {
+	testkit.Slow(t, "a DB-backed test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	repo, cleanup := SetupTestDB(t)
@@ -106,6 +109,7 @@ func TestToolCallIDIsolation_StatusWriteDoesNotMergeIntoAnotherChatsCall(t *test
 // call holds satisfied the foreign key against A's call and replaced A's
 // result; the writer must now prove it is the call's chat.
 func TestToolCallIDIsolation_ResultWriteDoesNotReplaceAnotherChatsResult(t *testing.T) {
+	testkit.Slow(t, "a DB-backed test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	repo, cleanup := SetupTestDB(t)

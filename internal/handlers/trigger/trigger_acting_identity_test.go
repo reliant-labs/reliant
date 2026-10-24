@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"connectrpc.com/connect"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -71,6 +72,7 @@ func TestCreateTrigger_AppIdentityIsRefusedWithoutAControlPlane(t *testing.T) {
 
 // The owner identity is always available, hosted or not.
 func TestCreateTrigger_ExplicitOwnerWorksEverywhere(t *testing.T) {
+	testkit.Slow(t, "a DB-backed trigger handler test with many round trips to pgtest's Postgres")
 	t.Parallel()
 
 	env := setupTriggerTest(t)

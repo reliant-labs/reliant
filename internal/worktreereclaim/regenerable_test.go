@@ -5,6 +5,8 @@ import (
 	"context"
 	"path/filepath"
 	"testing"
+
+	"github.com/reliant-labs/forge/pkg/testkit"
 )
 
 // Regenerable tool output in a checkout does not hold it: forge's scratch and
@@ -149,6 +151,7 @@ func TestReconcile_OtherNestedRepositoriesStillHold(t *testing.T) {
 }
 
 func TestToolClone_NeedsAnOwnerThatIgnoresIt(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	ignore(t, f, ".tools/\n")

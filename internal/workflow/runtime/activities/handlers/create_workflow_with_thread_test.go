@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/threads"
@@ -501,6 +502,7 @@ func TestCreateWorkflowWithThread_DoesNotAnnounceRootThread(t *testing.T) {
 }
 
 func TestCreateWorkflowWithThread_DefaultThreadID(t *testing.T) {
+	testkit.Slow(t, "runs workflow activities against pgtest's Postgres")
 	t.Parallel()
 
 	ctx := context.Background()

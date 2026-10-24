@@ -74,6 +74,7 @@ const {
   registerAppProtocol,
   registerSchemePrivileges,
 } = require("./app-protocol");
+const { configScript, loadReleaseRendererConfig, resolveRendererConfig } = require("./runtime-config");
 const oauthLoopback = require("./oauth-loopback");
 const oauthProviderLogin = require("./oauth-provider-login");
 const { openStripeCheckout } = require("./stripe-checkout");
@@ -95,6 +96,7 @@ const {
 const windowStateClient = require("./window-state-client");
 const Sentry = require("@sentry/electron/main");
 const { sentryMainOptions } = require("./sentry-scrub");
+const { createCrashSignalReporter, installCrashSignals, safeRouteName } = require("./crash-signals");
 const { autoUpdater } = require("electron-updater");
 const electronLog = require("electron-log");
 const ChunkedDownloader = require("./chunked-downloader");
@@ -3780,7 +3782,21 @@ app.whenReady().then(async () => {
   // first window loads.
   if (app.isPackaged) {
     const webRoot = path.join(process.resourcesPath, "web");
-    registerAppProtocol(protocol, webRoot, log);
+    // app://bundle/config.js is answered from the main process: the release
+    // renderer document with this process's resolved endpoints over it
+    // (runtime-config.js). backendManager is created below, before any
+    // window loads; until then the environment alone supplies them.
+    const releaseRendererConfig = loadReleaseRendererConfig();
+    registerAppProtocol(protocol, webRoot, log, {
+      configScript: () =>
+        configScript(
+          resolveRendererConfig({
+            release: releaseRendererConfig,
+            status: backendManager ? backendManager.getStatus() : {},
+            env: process.env,
+          })
+        ),
+    });
     log.info("[App] ✓ app:// protocol registered for", webRoot);
   }
 
@@ -3988,6 +4004,32 @@ app.on("browser-window-created", (_e, win) => {
 
 app.on("child-process-gone", (_e, details) => {
   log.error("[child gone]", details); // can catch GPU process too
+});
+
+// Reason and exit code of every renderer / GPU / utility death, as one Sentry
+// event each. No minidump: see crash-signals.js.
+installCrashSignals({
+  app,
+  report: createCrashSignalReporter({
+    capture: (event) => {
+      if (sentryInitialized) Sentry.captureEvent(event);
+    },
+    log,
+    env: () => ({
+      appVersion: currentVersion,
+      platform: process.platform,
+      arch: process.arch,
+      osVersion: require("os").release(),
+      uptimeSeconds: process.uptime(),
+    }),
+  }),
+  getActiveRoute: () => {
+    try {
+      return mainWindow && !mainWindow.isDestroyed() ? safeRouteName(mainWindow.webContents.getURL()) : "";
+    } catch {
+      return "";
+    }
+  },
 });
 
 app.on("window-all-closed", () => {

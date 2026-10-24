@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/testkit"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -701,6 +702,7 @@ func TestDrainAgentMessages_CompletionHiddenBodyPlusVisibleNotification(t *testi
 // TestDrainAgentMessages_CancelledAndFailedNotificationText pins the exact
 // wording for the other two terminal kinds.
 func TestDrainAgentMessages_CancelledAndFailedNotificationText(t *testing.T) {
+	testkit.Slow(t, "runs workflow activities against pgtest's Postgres")
 	t.Parallel()
 
 	tests := []struct {

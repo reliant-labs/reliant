@@ -9,6 +9,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/reliant-labs/forge/pkg/testkit"
 )
 
 func (f *fixture) probeIdle(w Worktree) Result {
@@ -20,6 +22,7 @@ func (f *fixture) probeIdle(w Worktree) Result {
 // An active worktree is reported finished only when everything the automatic
 // removal needs holds, with the longer floor. The daemon never removes it.
 func TestIdleDone_ReportsOnlyAFinishedWorktree(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	f.idle()
@@ -92,6 +95,7 @@ func TestIdleDone_RecentlyTouchedIsNotFinished(t *testing.T) {
 }
 
 func TestIdleDone_NeedsTheServerToAsk(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	f.idle()
@@ -104,6 +108,7 @@ func TestIdleDone_NeedsTheServerToAsk(t *testing.T) {
 }
 
 func TestIdleDone_AWorktreeBeingRestoredIsNeverProbed(t *testing.T) {
+	testkit.Slow(t, "builds real git repositories and runs git against them")
 	t.Parallel()
 	f := newFixture(t)
 	f.idle()
