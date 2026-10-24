@@ -57,34 +57,8 @@ func kindForScopes(scopes []string) reliantv1.TokenKind {
 // provisions for a managed daemon (requestedDaemonScopes), so the app's daemon
 // is not the one machine where a deploy needs a second login. Not reliant:api:
 // a daemon's credential stays a daemon's, not an API credential.
-func daemonCeiling() fat.Set {
-	set := fat.SetOf(fat.ScopeDaemonConnect)
-	for _, s := range exchangeableScopes {
-		set[s] = struct{}{}
-	}
-	return set
-}
-
-// widenDaemonCredential gives a just-minted daemon credential the user's own
-// control-plane authority, clipped by the control plane to their org grants.
-//
-// TWO STEPS, NARROW FIRST, ON PURPOSE. MintForUser does not clip, so minting
-// the ceiling directly would hand a member without a deploy grant a token that
-// has one. UpdateForUser does clip (control-plane's access_token_internal), so
-// mint narrow, then widen through the clip. A failed widen leaves a working,
-// narrower daemon credential and is logged, never surfaced: the daemon still
-// connects, and ExchangeToken will say what it lacks.
-func (s *Service) widenDaemonCredential(ctx context.Context, userID, tokenID string) []string {
-	if !s.deps.ControlPlane.ClipsGrants {
-		return nil
-	}
-	info, err := s.deps.Authority.UpdateForUser(ctx, userID, tokenID, nil, daemonCeiling())
-	if err != nil {
-		logging.WarnContext(ctx, "daemon credential minted without control-plane authority", "user_id", userID,
-			"token_id", tokenID, "error", tokenauthority.Describe(err))
-		return nil
-	}
-	return info.Scopes
+func daemonCeiling() []fat.Scope {
+	return append([]fat.Scope{fat.ScopeDaemonConnect}, exchangeableScopes...)
 }
 
 // callerUser returns the authenticated user and whether the caller is a
@@ -175,18 +149,19 @@ func (s *Service) CreateToken(
 		expiresAt = &at
 	}
 
+	requested := []fat.Scope{scope}
+	if scope == fat.ScopeDaemonConnect && s.deps.ControlPlane.ClipsGrants {
+		requested = daemonCeiling()
+	}
+	// MintForUser clips atomically to current org grants. Never widen later:
+	// UpdateForUser refuses excess grants and must not reset opt-in restrictions.
 	minted, err := s.deps.Authority.MintForUser(ctx, tokenauthority.MintRequest{
-		UserID: userID, Name: name, Scopes: []fat.Scope{scope}, ExpiresAt: expiresAt,
+		UserID: userID, Name: name, Scopes: requested, ExpiresAt: expiresAt,
 	})
 	if err != nil {
 		return nil, authorityError("create", err)
 	}
-	scopes := []string{string(scope)}
-	if scope == fat.ScopeDaemonConnect {
-		if widened := s.widenDaemonCredential(ctx, userID, minted.TokenID); widened != nil {
-			scopes = widened
-		}
-	}
+	scopes := minted.Scopes
 	logging.InfoContext(ctx, "access token created", "user_id", userID, "token_id", minted.TokenID, "scopes", strings.Join(scopes, " "))
 	return connect.NewResponse(&reliantv1.CreateTokenResponse{
 		Info: &reliantv1.TokenInfo{

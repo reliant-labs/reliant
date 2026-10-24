@@ -1881,10 +1881,7 @@ streamLoop:
 			UserID: chat.UserID, ThreadID: thread, Driver: models.DriverID(resolved.ProviderDriver),
 			ModelID: definitionID(resolved.Definition), Account: resolved.Account, Policy: rtx.Failover,
 		}
-		if rejected := a.routing.credentialRejection(ctx, streamErr, failedCall); rejected != nil {
-			return nil, rejected
-		}
-		return nil, a.routing.usageLimitFailure(ctx, streamErr, failedCall)
+		return nil, a.routing.providerFailure(ctx, streamErr, failedCall)
 	}
 
 	// A heartbeat RPC that merely timed out is NOT an instruction to stop.
