@@ -38129,7 +38129,7 @@
         }
       ],
       "ProtoFile": "reliant/config/v1/daemon_config.proto",
-      "Line": 28,
+      "Line": 29,
       "GoImportPath": "github.com/reliant-labs/reliant/gen/reliant/config/v1"
     },
     {
@@ -38443,6 +38443,62 @@
           "Sensitive": false,
           "Category": "",
           "ProtoFile": "reliant/config/v1/daemon_config.proto"
+        },
+        {
+          "Name": "egress_user_per_minute",
+          "GoName": "EgressUserPerMinute",
+          "GoType": "int32",
+          "ProtoType": "int32",
+          "EnvVar": "RELIANT_DAEMON_EGRESS_USER_PER_MINUTE",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "Egress tool calls per minute this daemon may make (0: default 600; managed daemons: 60, fixed)",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "reliant/config/v1/daemon_config.proto"
+        },
+        {
+          "Name": "egress_user_burst",
+          "GoName": "EgressUserBurst",
+          "GoType": "int32",
+          "ProtoType": "int32",
+          "EnvVar": "RELIANT_DAEMON_EGRESS_USER_BURST",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "Egress burst this daemon may make at once (0: default 100; managed daemons: 20, fixed)",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "reliant/config/v1/daemon_config.proto"
+        },
+        {
+          "Name": "egress_user_max_concurrent",
+          "GoName": "EgressUserMaxConcurrent",
+          "GoType": "int32",
+          "ProtoType": "int32",
+          "EnvVar": "RELIANT_DAEMON_EGRESS_USER_MAX_CONCURRENT",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "Egress calls this daemon may have in flight (0: default 32; managed daemons: 6, fixed)",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "reliant/config/v1/daemon_config.proto"
+        },
+        {
+          "Name": "egress_host_max_concurrent",
+          "GoName": "EgressHostMaxConcurrent",
+          "GoType": "int32",
+          "ProtoType": "int32",
+          "EnvVar": "RELIANT_DAEMON_EGRESS_HOST_MAX_CONCURRENT",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "Egress calls this daemon may have in flight to one destination host (0: default 32; managed daemons: 16, fixed)",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "reliant/config/v1/daemon_config.proto"
         }
       ],
       "Binary": "reliant",
@@ -38451,7 +38507,7 @@
         "start"
       ],
       "ProtoFile": "reliant/config/v1/daemon_config.proto",
-      "Line": 59,
+      "Line": 60,
       "GoImportPath": "github.com/reliant-labs/reliant/gen/reliant/config/v1"
     },
     {
@@ -38479,7 +38535,7 @@
         "status"
       ],
       "ProtoFile": "reliant/config/v1/daemon_config.proto",
-      "Line": 238,
+      "Line": 278,
       "GoImportPath": "github.com/reliant-labs/reliant/gen/reliant/config/v1"
     },
     {
@@ -38507,7 +38563,7 @@
         "stop"
       ],
       "ProtoFile": "reliant/config/v1/daemon_config.proto",
-      "Line": 248,
+      "Line": 288,
       "GoImportPath": "github.com/reliant-labs/reliant/gen/reliant/config/v1"
     },
     {
@@ -38535,7 +38591,7 @@
         "logs"
       ],
       "ProtoFile": "reliant/config/v1/daemon_config.proto",
-      "Line": 258,
+      "Line": 298,
       "GoImportPath": "github.com/reliant-labs/reliant/gen/reliant/config/v1"
     },
     {
@@ -38562,7 +38618,7 @@
         "register"
       ],
       "ProtoFile": "reliant/config/v1/daemon_config.proto",
-      "Line": 268,
+      "Line": 308,
       "GoImportPath": "github.com/reliant-labs/reliant/gen/reliant/config/v1"
     },
     {
@@ -40221,7 +40277,7 @@
     "reliant/config/v1/cli_config.proto": "8322a3c3d237061fd60e217ec3056224b68449c6b3104510dc00fec5d5bb0b8e",
     "reliant/config/v1/config.proto": "c360c049f5c3342e9862a95e05d8e54f2f16c2379a37e5390bb1d99c5a93dc9f",
     "reliant/config/v1/control_plane_config.proto": "5c26daf1c213883e634d445dd4305044d2d2c8f21e6366c73cb2707bf6ee46f7",
-    "reliant/config/v1/daemon_config.proto": "f9cf54241e2834ca5aa027632968d9c24e1b5f8b60b20100e24bca988c8b1772",
+    "reliant/config/v1/daemon_config.proto": "fbc8b5bedf7491cb111cc6f92c4e496673907a04548f0b64da6e3405f8e0919c",
     "reliant/config/v1/db_config.proto": "dd8fd3b93c7988133b62480f364c94abf6545d002e24b7f8e8e3177d17357f02",
     "reliant/config/v1/gateway_config.proto": "040bb180fa87e028678bdec8b6205b7b60ecf5066f3f564914940bc062352ac2",
     "reliant/config/v1/integrations_config.proto": "33a9bfa080d0e13ab6092e3598eff4fc2d7229ef4a623c873c73a97fbee46ed9",

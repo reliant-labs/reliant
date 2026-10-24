@@ -219,6 +219,14 @@ const (
 	//     that setting in its non-fatal tool error;
 	//   - a managed daemon stays strict whatever that setting says.
 	//
+	// Rate on the daemon: the server's egress limiter (internal/egresslimit)
+	// wraps only server-executed calls, so the daemon bounds its own
+	// (toolexec.LocalToolExecutor.SetEgressLimiter; daemonruntime.daemonEgressLimits):
+	// the server's defaults on a managed daemon, a higher user-configurable
+	// ceiling on a local one. A call over it returns the same EGRESS_RATE_LIMITED
+	// result and is not retried on the server. It is an abuse brake for a
+	// well-behaved daemon, not a security boundary.
+	//
 	// It does not need the user's machine: NeedsMachine is false and static
 	// preflight does not treat it as daemon-bound, so a no-machine run is
 	// still offered the tool.

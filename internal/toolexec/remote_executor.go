@@ -236,6 +236,7 @@ func (e *RemoteExecutor) executePreferDaemon(ctx context.Context, req *ToolReque
 	// An abandoned call stays the daemon's: re-running it on the server would
 	// do the work nobody is waiting for.
 	if !preferDaemonDispatchFailed(res) || ctx.Err() != nil {
+		noteDaemonRefusal(req.ToolName, res)
 		return notePlacement(req.ToolName, res, ExecutedAtDaemon, ""), nil
 	}
 	logging.WarnContext(ctx, "Prefer-daemon tool could not run on the daemon; running it on the server",

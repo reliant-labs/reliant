@@ -7,6 +7,7 @@
 package configv1
 
 import (
+	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	_ "github.com/reliant-labs/forge/pkg/forgepb"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
@@ -172,8 +173,22 @@ type DaemonConfig struct {
 	// A managed daemon ignores it: a workspace pod's network is the platform's,
 	// not the user's. A refused fetch names this setting in its error.
 	FetchAllowPrivateNetwork bool `protobuf:"varint,23,opt,name=fetch_allow_private_network,json=fetchAllowPrivateNetwork,proto3" json:"fetch_allow_private_network,omitempty"`
-	unknownFields            protoimpl.UnknownFields
-	sizeCache                protoimpl.SizeCache
+	// Egress limits for the tools this daemon runs that dial a third party
+	// (fetch, websearch, sourcegraph, integration actions), so one daemon
+	// cannot hammer a site, or exhaust a shared NAT's ports, on its own. A
+	// refused call is a non-fatal tool result ("rate limited, retry after Ns").
+	// 0 (unset) takes the daemon's default: generous on a machine whose traffic
+	// leaves from the user's own address. A managed daemon ignores all four and
+	// always runs the platform defaults: its traffic leaves through a shared
+	// NAT. This is an abuse brake for a well-behaved daemon, not a security
+	// boundary; the daemon is user-controlled, and the server-side NAT
+	// protections are the backstop.
+	EgressUserPerMinute     int32 `protobuf:"varint,24,opt,name=egress_user_per_minute,json=egressUserPerMinute,proto3" json:"egress_user_per_minute,omitempty"`
+	EgressUserBurst         int32 `protobuf:"varint,25,opt,name=egress_user_burst,json=egressUserBurst,proto3" json:"egress_user_burst,omitempty"`
+	EgressUserMaxConcurrent int32 `protobuf:"varint,26,opt,name=egress_user_max_concurrent,json=egressUserMaxConcurrent,proto3" json:"egress_user_max_concurrent,omitempty"`
+	EgressHostMaxConcurrent int32 `protobuf:"varint,27,opt,name=egress_host_max_concurrent,json=egressHostMaxConcurrent,proto3" json:"egress_host_max_concurrent,omitempty"`
+	unknownFields           protoimpl.UnknownFields
+	sizeCache               protoimpl.SizeCache
 }
 
 func (x *DaemonConfig) Reset() {
@@ -351,6 +366,34 @@ func (x *DaemonConfig) GetFetchAllowPrivateNetwork() bool {
 		return x.FetchAllowPrivateNetwork
 	}
 	return false
+}
+
+func (x *DaemonConfig) GetEgressUserPerMinute() int32 {
+	if x != nil {
+		return x.EgressUserPerMinute
+	}
+	return 0
+}
+
+func (x *DaemonConfig) GetEgressUserBurst() int32 {
+	if x != nil {
+		return x.EgressUserBurst
+	}
+	return 0
+}
+
+func (x *DaemonConfig) GetEgressUserMaxConcurrent() int32 {
+	if x != nil {
+		return x.EgressUserMaxConcurrent
+	}
+	return 0
+}
+
+func (x *DaemonConfig) GetEgressHostMaxConcurrent() int32 {
+	if x != nil {
+		return x.EgressHostMaxConcurrent
+	}
+	return 0
 }
 
 // DaemonStatusConfig is `reliant daemon status`'s config.
@@ -538,14 +581,14 @@ var File_reliant_config_v1_daemon_config_proto protoreflect.FileDescriptor
 
 const file_reliant_config_v1_daemon_config_proto_rawDesc = "" +
 	"\n" +
-	"%reliant/config/v1/daemon_config.proto\x12\x11reliant.config.v1\x1a\x14forge/v1/forge.proto\"\xe5\x03\n" +
+	"%reliant/config/v1/daemon_config.proto\x12\x11reliant.config.v1\x1a\x1bbuf/validate/validate.proto\x1a\x14forge/v1/forge.proto\"\xe5\x03\n" +
 	"\x14DaemonInstanceConfig\x12\x8a\x01\n" +
 	"\bdata_dir\x18\x01 \x01(\tBo\x82\xce\x18k\n" +
 	"\x0fDAEMON_DATA_DIR\x12\bdata-dir*NData directory (default: this instance's directory under ~/.reliant/instances)R\adataDir\x12\x96\x01\n" +
 	"\aaccount\x18\x02 \x01(\tB|\x82\xce\x18x\n" +
 	"\x18RELIANT_INSTANCE_ACCOUNT\x12\aaccount*SAccount (user id) this daemon runs as; selects among several accounts on one serverR\aaccount\x12\xa6\x01\n" +
 	"\tworkspace\x18\x03 \x01(\tB\x87\x01\x82\xce\x18\x82\x01\n" +
-	"\x1aRELIANT_INSTANCE_WORKSPACE\x12\tworkspace*YWorkspace this daemon serves (defaults to the git worktree root of the current directory)R\tworkspace\"\xf7\x19\n" +
+	"\x1aRELIANT_INSTANCE_WORKSPACE\x12\tworkspace*YWorkspace this daemon serves (defaults to the git worktree root of the current directory)R\tworkspace\"\xb1 \n" +
 	"\fDaemonConfig\x12C\n" +
 	"\binstance\x18\x01 \x01(\v2'.reliant.config.v1.DaemonInstanceConfigR\binstance\x12\x9a\x01\n" +
 	"\vgateway_url\x18\x02 \x01(\tBy\x82\xce\x18u\n" +
@@ -594,7 +637,15 @@ const file_reliant_config_v1_daemon_config_proto_rawDesc = "" +
 	"\x0eheavy_commands\x18\x16 \x03(\tB\xbc\x02\x82\xce\x18\xb7\x02\n" +
 	"\x16RELIANT_HEAVY_COMMANDS\x1a\xda\x01go build,go test,go vet,go install,golangci-lint run,vitest,npx vitest,npm test,npm run test*,npm run build*,npm ci,forge generate,forge lint,reliant forge generate,reliant forge lint,make test*,task test*,docker build*@Comma-separated commands queued behind the machine's heavy slotsR\rheavyCommands\x12\xf3\x01\n" +
 	"\x1bfetch_allow_private_network\x18\x17 \x01(\bB\xb3\x01\x82\xce\x18\xae\x01\n" +
-	"#RELIANT_FETCH_ALLOW_PRIVATE_NETWORK*\x86\x01Let fetch reach this machine's localhost and private network (default off; link-local and cloud-metadata addresses are always refused)R\x18fetchAllowPrivateNetwork:\x1c\xca\xc1\x18\x18\n" +
+	"#RELIANT_FETCH_ALLOW_PRIVATE_NETWORK*\x86\x01Let fetch reach this machine's localhost and private network (default off; link-local and cloud-metadata addresses are always refused)R\x18fetchAllowPrivateNetwork\x12\xc9\x01\n" +
+	"\x16egress_user_per_minute\x18\x18 \x01(\x05B\x93\x01\xbaH\x04\x1a\x02(\x00\x82\xce\x18\x87\x01\n" +
+	"%RELIANT_DAEMON_EGRESS_USER_PER_MINUTE*^Egress tool calls per minute this daemon may make (0: default 600; managed daemons: 60, fixed)R\x13egressUserPerMinute\x12\xb2\x01\n" +
+	"\x11egress_user_burst\x18\x19 \x01(\x05B\x85\x01\xbaH\x04\x1a\x02(\x00\x82\xce\x18z\n" +
+	" RELIANT_DAEMON_EGRESS_USER_BURST*VEgress burst this daemon may make at once (0: default 100; managed daemons: 20, fixed)R\x0fegressUserBurst\x12\xcd\x01\n" +
+	"\x1aegress_user_max_concurrent\x18\x1a \x01(\x05B\x8f\x01\xbaH\x04\x1a\x02(\x00\x82\xce\x18\x83\x01\n" +
+	")RELIANT_DAEMON_EGRESS_USER_MAX_CONCURRENT*VEgress calls this daemon may have in flight (0: default 32; managed daemons: 6, fixed)R\x17egressUserMaxConcurrent\x12\xe6\x01\n" +
+	"\x1aegress_host_max_concurrent\x18\x1b \x01(\x05B\xa8\x01\xbaH\x04\x1a\x02(\x00\x82\xce\x18\x9c\x01\n" +
+	")RELIANT_DAEMON_EGRESS_HOST_MAX_CONCURRENT*oEgress calls this daemon may have in flight to one destination host (0: default 32; managed daemons: 16, fixed)R\x17egressHostMaxConcurrent:\x1c\xca\xc1\x18\x18\n" +
 	"\areliant\x12\x06daemon\x12\x05start\"x\n" +
 	"\x12DaemonStatusConfig\x12C\n" +
 	"\binstance\x18\x01 \x01(\v2'.reliant.config.v1.DaemonInstanceConfigR\binstance:\x1d\xca\xc1\x18\x19\n" +

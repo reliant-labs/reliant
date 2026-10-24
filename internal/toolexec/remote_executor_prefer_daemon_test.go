@@ -7,6 +7,7 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/egresslimit"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/nomachine"
+	"github.com/reliant-labs/reliant/internal/observability"
 )
 
 // A PlacementPreferDaemon tool runs on the run's machine when it has one and on
@@ -329,7 +331,7 @@ func mustMetadata(t *testing.T, res *ToolResult) map[string]any {
 
 // A prefer-daemon call that ends up on the server goes through the same egress
 // admission as any server-run egress tool; one that ran on the daemon is the
-// daemon's own business (see the PR's note on a per-daemon cap).
+// daemon's own business: the daemon bounds it (LocalToolExecutor.SetEgressLimiter).
 func TestPreferDaemon_ServerFallbackIsRateLimitedLikeAnyServerEgress(t *testing.T) {
 	limiter := &countingLimiter{}
 	router := &preferDaemonRouter{err: errors.New("no daemon connected for user")}
@@ -356,4 +358,30 @@ type countingLimiter struct{ acquired int }
 func (l *countingLimiter) Acquire(context.Context, egresslimit.Request) (func(), error) {
 	l.acquired++
 	return func() {}, nil
+}
+
+// A daemon that refused a fetch for its own egress limit has answered. Running
+// the call on the server instead would side-step the cap onto the shared NAT,
+// so the refusal is returned as the tool's result, not treated as a dispatch
+// failure, and the server counts it.
+func TestPreferDaemon_DaemonEgressRefusalIsReturnedNotRetriedOnTheServer(t *testing.T) {
+	router := &preferDaemonRouter{resp: &ToolExecutionResponse{
+		Success: false, IsError: true, ErrorCode: ErrorCodeEgressRateLimited,
+		Content: "rate limited: this account is making outbound requests too fast; retry after 3s",
+	}}
+	executor, _ := newPreferDaemonExecutor(router)
+	limiter := &countingLimiter{}
+	executor.SetEgressLimiter(limiter)
+
+	counter := observability.EgressLimitedTotal.WithLabelValues(tools.ToolFetch, ScopeDaemon)
+	before := testutil.ToFloat64(counter)
+
+	res, err := executor.ExecuteTool(context.Background(), fetchRequest())
+	require.NoError(t, err)
+	assert.Equal(t, []string{tools.ToolFetch}, router.toolsSent, "asked once, on the daemon")
+	assert.Equal(t, ErrorCodeEgressRateLimited, res.ErrorCode)
+	assert.Contains(t, res.Content, "retry after 3s")
+	assert.Equal(t, ExecutedAtDaemon, res.ExecutedAt)
+	assert.Zero(t, limiter.acquired, "never re-run on the server")
+	assert.Equal(t, before+1, testutil.ToFloat64(counter), "the worker counts what its daemons refuse")
 }

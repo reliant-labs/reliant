@@ -7,6 +7,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/reliant-labs/reliant/internal/diskguard"
+	"github.com/reliant-labs/reliant/internal/egresslimit"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/toolexec/daemonruntime"
 	"github.com/reliant-labs/reliant/pkg/config"
@@ -53,6 +54,12 @@ func daemonHost(cfg *config.DaemonConfig) daemonruntime.Host {
 		ProjectPath:  cfg.GetProjectPath(),
 
 		AllowPrivateFetch: cfg.GetFetchAllowPrivateNetwork(),
+		Egress: egresslimit.Limits{
+			UserPerMinute:     int(cfg.GetEgressUserPerMinute()),
+			UserBurst:         int(cfg.GetEgressUserBurst()),
+			UserMaxConcurrent: int(cfg.GetEgressUserMaxConcurrent()),
+			HostMaxConcurrent: int(cfg.GetEgressHostMaxConcurrent()),
+		},
 	}
 }
 

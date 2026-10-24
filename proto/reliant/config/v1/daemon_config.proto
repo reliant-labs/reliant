@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package reliant.config.v1;
 
+import "buf/validate/validate.proto";
 import "forge/v1/forge.proto";
 
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/config/v1;configv1";
@@ -231,6 +232,45 @@ message DaemonConfig {
     env_var: "RELIANT_FETCH_ALLOW_PRIVATE_NETWORK"
     description: "Let fetch reach this machine's localhost and private network (default off; link-local and cloud-metadata addresses are always refused)"
   }];
+
+  // Egress limits for the tools this daemon runs that dial a third party
+  // (fetch, websearch, sourcegraph, integration actions), so one daemon
+  // cannot hammer a site, or exhaust a shared NAT's ports, on its own. A
+  // refused call is a non-fatal tool result ("rate limited, retry after Ns").
+  // 0 (unset) takes the daemon's default: generous on a machine whose traffic
+  // leaves from the user's own address. A managed daemon ignores all four and
+  // always runs the platform defaults: its traffic leaves through a shared
+  // NAT. This is an abuse brake for a well-behaved daemon, not a security
+  // boundary; the daemon is user-controlled, and the server-side NAT
+  // protections are the backstop.
+  int32 egress_user_per_minute = 24 [
+    (forge.v1.config) = {
+      env_var: "RELIANT_DAEMON_EGRESS_USER_PER_MINUTE"
+      description: "Egress tool calls per minute this daemon may make (0: default 600; managed daemons: 60, fixed)"
+    },
+    (buf.validate.field).int32 = {gte: 0}
+  ];
+  int32 egress_user_burst = 25 [
+    (forge.v1.config) = {
+      env_var: "RELIANT_DAEMON_EGRESS_USER_BURST"
+      description: "Egress burst this daemon may make at once (0: default 100; managed daemons: 20, fixed)"
+    },
+    (buf.validate.field).int32 = {gte: 0}
+  ];
+  int32 egress_user_max_concurrent = 26 [
+    (forge.v1.config) = {
+      env_var: "RELIANT_DAEMON_EGRESS_USER_MAX_CONCURRENT"
+      description: "Egress calls this daemon may have in flight (0: default 32; managed daemons: 6, fixed)"
+    },
+    (buf.validate.field).int32 = {gte: 0}
+  ];
+  int32 egress_host_max_concurrent = 27 [
+    (forge.v1.config) = {
+      env_var: "RELIANT_DAEMON_EGRESS_HOST_MAX_CONCURRENT"
+      description: "Egress calls this daemon may have in flight to one destination host (0: default 32; managed daemons: 16, fixed)"
+    },
+    (buf.validate.field).int32 = {gte: 0}
+  ];
 }
 
 // DaemonStatusConfig is `reliant daemon status`'s config.

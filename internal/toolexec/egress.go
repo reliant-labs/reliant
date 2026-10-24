@@ -16,6 +16,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/integrations/manifest"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/observability"
 )
 
 // ErrorCodeEgressRateLimited marks a tool result for an egress call the
@@ -69,6 +70,54 @@ func (e *RemoteExecutor) admitEgress(ctx context.Context, req *ToolRequest, star
 		ErrorCode:    code,
 		StartTime:    startTime,
 		EndTime:      time.Now(),
+	}
+}
+
+// noteDaemonRefusal counts, on the worker, an egress call a daemon refused
+// under its own limits: the daemon process has no metrics endpoint, so this is
+// the only place the refusal is visible to an operator.
+func noteDaemonRefusal(toolName string, res *ToolResult) {
+	if res.ErrorCode == ErrorCodeEgressRateLimited {
+		observability.EgressLimitedTotal.WithLabelValues(toolName, ScopeDaemon).Inc()
+	}
+}
+
+// ScopeDaemon labels, in EgressLimitedTotal, a refusal a daemon made for its
+// own limits and reported back to this process.
+const ScopeDaemon = "daemon"
+
+// admitEgress is admitEgress (RemoteExecutor) for a tool this process runs on
+// its own machine: the daemon's cap. The refusal has the same shape, so the
+// model reads one message wherever the limit was.
+func (e *LocalToolExecutor) admitEgress(ctx context.Context, toolName, toolInput string) (release func(), refusal *ExecutionResult) {
+	if e.egress == nil {
+		return func() {}, nil
+	}
+	host, isEgress := egressDestination(toolName, toolInput)
+	if !isEgress {
+		return func() {}, nil
+	}
+	// No TurnKey: the turn bound makes a call wait for a slot, and a daemon
+	// has no fair-queueing to protect, only a rate to hold.
+	release, err := e.egress.Acquire(ctx, egresslimit.Request{
+		Tool:   toolName,
+		UserID: DaemonEgressSubject,
+		Host:   host,
+	})
+	if err == nil {
+		return release, nil
+	}
+	code := ErrorCodeEgressRateLimited
+	var limited *egresslimit.LimitedError
+	if !errors.As(err, &limited) {
+		code = "EGRESS_WAIT_CANCELLED"
+	}
+	return nil, &ExecutionResult{
+		Success:      false,
+		IsError:      true,
+		Content:      err.Error(),
+		ErrorMessage: err.Error(),
+		ErrorCode:    code,
 	}
 }
 

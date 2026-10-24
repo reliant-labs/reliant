@@ -22,6 +22,7 @@ type LocalToolExecutor struct {
 	toolsFactory *tools.ToolsFactory
 	daemon       daemon.Client
 	mcpBinder    MCPContextBinder
+	egress       EgressLimiter
 }
 
 // NewLocalToolExecutor creates a new local tool executor
@@ -36,6 +37,22 @@ func NewLocalToolExecutor(toolsFactory *tools.ToolsFactory) *LocalToolExecutor {
 func (e *LocalToolExecutor) SetDaemonClient(d daemon.Client) {
 	e.daemon = d
 }
+
+// DaemonEgressSubject is the one subject every egress call through a
+// LocalToolExecutor is keyed on. A daemon serves one user, so its rate and
+// in-flight budgets are the daemon's own; there is no second account to tell
+// apart from the first.
+const DaemonEgressSubject = "daemon"
+
+// SetEgressLimiter bounds the egress tools this executor runs (fetch,
+// websearch, sourcegraph, integration actions): the daemon's cap on what one
+// machine pushes at a third party, and out of the hub's shared NAT when it is a
+// managed daemon. Nil (the default) admits everything.
+//
+// An abuse brake for a well-behaved daemon, not a security boundary: the
+// daemon is user-controlled and can run without it. The server-side NAT
+// protections are the backstop.
+func (e *LocalToolExecutor) SetEgressLimiter(l EgressLimiter) { e.egress = l }
 
 // SetMCPContextBinder sets the execution-time MCP binder.
 func (e *LocalToolExecutor) SetMCPContextBinder(binder MCPContextBinder) {
@@ -213,6 +230,14 @@ func (e *LocalToolExecutor) executeTool(
 			ErrorCode:    "TOOL_NOT_FOUND",
 		}
 	}
+
+	// Admitted only once the tool is known to exist, so a daemon without it
+	// still answers TOOL_NOT_FOUND (which is how prefer-daemon falls back).
+	releaseEgress, refusal := e.admitEgress(ctx, toolName, toolInput)
+	if refusal != nil {
+		return refusal
+	}
+	defer releaseEgress()
 
 	// Apply timeout
 	if timeoutMs > 0 {

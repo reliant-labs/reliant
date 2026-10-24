@@ -33,6 +33,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/diskguard"
 	"github.com/reliant-labs/reliant/internal/diskwatch"
+	"github.com/reliant-labs/reliant/internal/egresslimit"
 	"github.com/reliant-labs/reliant/internal/heavyjob"
 	"github.com/reliant-labs/reliant/internal/instanceid"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
@@ -475,6 +476,11 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig, host Host, guards 
 	SetHeavyGate(heavyGate)
 
 	localExec := toolexec.NewLocalToolExecutor(toolsFactory)
+	egressLimiter, err := egresslimit.New(egresslimit.Deps{Limits: daemonEgressLimits(host)})
+	if err != nil {
+		return nil, fmt.Errorf("creating egress limiter: %w", err)
+	}
+	localExec.SetEgressLimiter(egressLimiter)
 	localExec.SetMCPContextBinder(toolexec.NewLocalMCPContextBinder(mcpManager))
 	// The daemon runtime IS the local machine, so give the executor a
 	// LocalClient so filesystem tools (glob, view, etc.) can operate.

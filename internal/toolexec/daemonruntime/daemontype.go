@@ -5,6 +5,7 @@ package daemonruntime
 import (
 	"runtime"
 
+	"github.com/reliant-labs/reliant/internal/egresslimit"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 )
 
@@ -59,6 +60,10 @@ type Host struct {
 	// machine's localhost and private network (FetchAllowPrivateSetting).
 	// Ignored on a managed daemon.
 	AllowPrivateFetch bool
+	// Egress is the user's ceiling for the daemon's egress tools
+	// (DaemonConfig egress_*); a zero field takes the default. Ignored on a
+	// managed daemon.
+	Egress egresslimit.Limits
 }
 
 // Managed reports whether the PLATFORM has declared this process a managed
@@ -114,4 +119,43 @@ func newDaemonToolsFactory(host Host) *tools.ToolsFactory {
 		AllowPrivateEgress: true,
 		FetchNetwork:       &network,
 	})
+}
+
+// Local daemons' egress defaults. A local daemon's traffic leaves from the
+// user's own address, so a runaway costs the user and nobody else; the ceiling
+// is high enough that ordinary agent use never meets it and low enough that a
+// loop is stopped in minutes, not hours.
+const (
+	localEgressUserPerMinute     = 600
+	localEgressUserBurst         = 100
+	localEgressUserMaxConcurrent = 32
+	localEgressHostMaxConcurrent = 32
+)
+
+// daemonEgressLimits is what this daemon's egress tools are held to.
+//
+// A managed daemon leaves through the hub's shared Cloud NAT, so a user's
+// abuse is everyone's: it runs the server's defaults, and the user's settings
+// do not reach it. Any other daemon runs the local ceiling, which the user
+// may move. A daemon is one process serving one user, so nothing shares its
+// rate budget (Replicas is 1).
+//
+// This is an abuse brake for a well-behaved daemon, not a security boundary:
+// the daemon is user-controlled. Server-side NAT protections are the backstop.
+func daemonEgressLimits(host Host) egresslimit.Limits {
+	if host.Managed() {
+		return egresslimit.Limits{Replicas: 1}.WithDefaults()
+	}
+	l := host.Egress
+	fill := func(v *int, d int) {
+		if *v <= 0 {
+			*v = d
+		}
+	}
+	fill(&l.UserPerMinute, localEgressUserPerMinute)
+	fill(&l.UserBurst, localEgressUserBurst)
+	fill(&l.UserMaxConcurrent, localEgressUserMaxConcurrent)
+	fill(&l.HostMaxConcurrent, localEgressHostMaxConcurrent)
+	l.Replicas = 1
+	return l.WithDefaults()
 }
