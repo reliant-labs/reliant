@@ -1163,6 +1163,14 @@ func (e *StepExecutor) buildRuntimeContext(node *reliantv1.Node) types.RuntimeCo
 		// The provider the user chose for the run: what a tier selector with
 		// no provider of its own resolves on (propagateProviderPreference).
 		rtx.ProviderPreference = ProviderPreference(e.workflowInputs)
+		if driver := e.childTracker.chatProvider; driver != "" {
+			rtx.ChatProvider = driver
+			rtx.Descendant = rtx.Thread != e.childTracker.rootThread
+			rtx.PresetModelTags = presetModelTags(e.workflowInputs)
+			// Kept for query/observability consumers too; strict enforcement
+			// happens at the activity's model-resolution boundary.
+			rtx.ProviderPreference = []string{driver}
+		}
 		rtx.Failover = failoverPolicy(e.workflowInputs)
 		// While the thread is on a fallback model (a usage limit on its own
 		// provider), the lease replaces the chat's selector; the first turn
@@ -1179,6 +1187,7 @@ func (e *StepExecutor) buildRuntimeContext(node *reliantv1.Node) types.RuntimeCo
 	// refused by the same limit call_llm is, so it decides the same way: it
 	// carries the chat's failover policy too.
 	if model.NodeType(node) == model.NodeTypeCompact {
+		rtx.ChatProvider = e.childTracker.chatProvider
 		rtx.FallbackModel = e.pauseCtrl.liveFallback(e.ctx, rtx.Thread)
 		rtx.Failover = failoverPolicy(e.workflowInputs)
 	}

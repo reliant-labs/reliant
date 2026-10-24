@@ -21,6 +21,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	rtemporal "github.com/reliant-labs/reliant/internal/temporal"
 	"github.com/reliant-labs/reliant/internal/workflow"
+	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 )
 
 // UpdateWorkflowParams updates workflow parameters for a running chat
@@ -106,8 +107,14 @@ func (s *Service) UpdateWorkflowParams(
 	// provider that cannot serve it first, exactly as a send moves it, so what
 	// is stored is what runs.
 	live := s.rootRunIsLive(ctx, workflowID)
+	_, explicitModelPick := req.Msg.Params["model"]
+	if explicitModelPick {
+		if err := s.launcher().ValidateSelectedModel(ctx, userID, stateUpdate["model"]); err != nil {
+			return nil, svcerr.FailedPrecondition("The selected model/provider cannot be served. Your previous selection has not changed: " + err.Error())
+		}
+	}
 	var moves []launch.ModelSubstitution
-	if live {
+	if live && !explicitModelPick {
 		moves = s.moveUnservableModels(ctx, userID, req.Msg.ChatId, chat.ProjectID, workflowName, workflowID, stateUpdate)
 	}
 	sel, err := s.recordSelection(ctx, userID, chat, workflowName, req.Msg.Params, stateUpdate, moves, req.Msg.GetExpectedVersion())
@@ -130,6 +137,11 @@ func (s *Service) UpdateWorkflowParams(
 		modelChanged := false
 		if newModel, ok := stateUpdate["model"]; ok {
 			modelChanged = s.checkParamsActuallyChanged(ctx, workflowID, map[string]interface{}{"model": newModel})
+		}
+		if modelChanged {
+			if driver := v2.FallbackDriver(s.launcher().ResolvedModelAtDriver(ctx, userID, stateUpdate["model"])); driver != "" {
+				stateUpdate[v2.InputKeyProviderSwitch] = driver
+			}
 		}
 		if err := s.signalParamUpdate(ctx, workflowID, stateUpdate); err != nil {
 			return nil, err

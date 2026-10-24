@@ -160,7 +160,7 @@ func (a *CompactActivity) Execute(ctx context.Context, input ActivityInput) (Com
 	a.emitThreadUpdate(ctx, rtx.ChatID, thread, "active", "Compact")
 
 	// Generate summary of messages to be compacted
-	summary, err := a.generateCompactionSummary(ctx, chat, thread, rtx.FallbackModel, rtx.Failover, currentContextMessages, summarizeWith)
+	summary, err := a.generateCompactionSummaryOnProvider(ctx, chat, thread, rtx.FallbackModel, rtx.Failover, currentContextMessages, summarizeWith, rtx.ChatProvider)
 	if err != nil {
 		return CompactOutput{}, fmt.Errorf("failed to generate compaction summary: %w", err)
 	}
@@ -390,6 +390,10 @@ var compactionModelTier = []models.ModelID{
 // request-construction path as a normal CallLLM turn (resolveLLMCall +
 // prepareHistoryForLLM), so provider constraints are handled in one place.
 func (a *CompactActivity) generateCompactionSummary(ctx context.Context, chat *db.Chat, thread, fallbackModel string, failover types.FailoverPolicy, messages []message.Message, summarizeWith *reliantv1.ModelSelector) (string, error) {
+	return a.generateCompactionSummaryOnProvider(ctx, chat, thread, fallbackModel, failover, messages, summarizeWith, "")
+}
+
+func (a *CompactActivity) generateCompactionSummaryOnProvider(ctx context.Context, chat *db.Chat, thread, fallbackModel string, failover types.FailoverPolicy, messages []message.Message, summarizeWith *reliantv1.ModelSelector, provider string) (string, error) {
 	if len(messages) == 0 {
 		return "", fmt.Errorf("no messages to summarize")
 	}
@@ -402,9 +406,11 @@ func (a *CompactActivity) generateCompactionSummary(ctx context.Context, chat *d
 		Temperature: &temperature,
 		// The summary is a request over this thread's own prefix, so it goes to
 		// the thread's account.
-		ThreadID: thread,
-		Routing:  a.routing,
-		Failover: failover,
+		ThreadID:     thread,
+		ChatProvider: provider,
+		Descendant:   provider != "",
+		Routing:      a.routing,
+		Failover:     failover,
 	}
 
 	// Pick the summarization model. With an injected resolver (tests) the
@@ -415,7 +421,7 @@ func (a *CompactActivity) generateCompactionSummary(ctx context.Context, chat *d
 			return "", err
 		}
 		spec.Selector = selector
-		if fallbackModel != "" {
+		if fallbackModel != "" && provider == "" {
 			// The thread is on another provider until its own resets.
 			spec.Selector = models.ModelSelector{ID: fallbackModel, RequireOutputModality: models.ModalityText}
 		}

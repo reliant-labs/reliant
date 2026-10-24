@@ -82,6 +82,8 @@ func (l *Launcher) injectProviderPolicy(ctx context.Context, userID, chatID stri
 	if inputs == nil {
 		return
 	}
+	// A persisted chat model pick also applies when a fresh execution
+	// rebuilds stopped descendants; the selector itself stays unchanged.
 	var chat chatselection.ProviderPolicy
 	if chatID != "" {
 		sel, err := l.repo.GetChatSelection(ctx, chatID)
@@ -89,6 +91,11 @@ func (l *Launcher) injectProviderPolicy(ctx context.Context, userID, chatID stri
 			logging.WarnContext(ctx, "Could not read the chat's provider policy; using the default", "chatID", chatID, "error", err)
 		} else if sel != nil {
 			chat = sel.Policy
+			if _, picked := sel.Params["model"]; picked {
+				if modelAtDriver := l.ResolvedModelAtDriver(ctx, userID, inputs["model"]); modelAtDriver != "" {
+					inputs[v2.InputKeyProviderSwitch] = v2.FallbackDriver(modelAtDriver)
+				}
+			}
 		}
 	}
 	var defaults ProviderPolicyDefaults

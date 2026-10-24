@@ -501,6 +501,7 @@ func resumeStoppedSpawn(ctx workflow.Context, thread string, deps stoppedSpawnRe
 	}
 
 	tracker.forgetStoppedSpawn(thread)
+	delete(tracker.notStopped, thread)
 	// The resumed run's first turn reads everything rung for it so far. Were
 	// it to fail before taking that turn, those rings must not resume it
 	// again — one message buys one resume.

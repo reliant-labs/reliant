@@ -234,8 +234,14 @@ func NewChatContext(chatID string) *ChatContext {
 // ChildWorkflowTracker tracks active child workflows for signal forwarding
 // and per-thread input maps for thread-scoped param queries and updates.
 type ChildWorkflowTracker struct {
-	children     map[string]bool                   // Map of child workflow IDs that are currently active
-	threadInputs map[string]map[string]interface{} // Map of thread -> subInputs for per-thread param access
+	chatProvider    string
+	rootThread      string
+	providerUpdates int
+	userResumes     int
+	durableResumes  int
+	providerWake    func(workflow.Context)
+	children        map[string]bool                   // Map of child workflow IDs that are currently active
+	threadInputs    map[string]map[string]interface{} // Map of thread -> subInputs for per-thread param access
 
 	// threadOwnedKeys records, per thread, the input keys that thread set
 	// EXPLICITLY for itself — from its preset or from its node args. A global
@@ -1311,6 +1317,13 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	checkPause := pauser.CheckPause
 	requestPause := pauser.RequestPause
 	usageLimitWaiter := newUsageLimitWaiter(pauser, childTracker, input.ChatID, workflowID, input.WorkflowName)
+	childTracker.chatProvider, _ = input.Inputs[InputKeyProviderSwitch].(string)
+	childTracker.rootThread = thread
+	childTracker.providerWake = func(wakeCtx workflow.Context) {
+		usageLimitWaiter.leases = map[string]*fallbackLease{}
+		usageLimitWaiter.retryEpoch++
+		wakeBlockedThreads(wakeCtx, pauser, childTracker, workflowID, false)
+	}
 	// A capacity wake (an account added, the provider switched, Resume) goes
 	// on with every thread the provider blocked, not only those in a
 	// usage-limit wait (capacity_wake.go). Histories recorded before it
@@ -1318,6 +1331,9 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	if workflow.GetVersion(ctx, capacityWakeChangeID, workflow.DefaultVersion, 1) != workflow.DefaultVersion {
 		usageLimitWaiter.listenFromStart(func(wakeCtx workflow.Context, sig CapacityWakeSignal) {
 			wakeBlockedThreads(wakeCtx, pauser, childTracker, workflowID, sig.AllStopped)
+			if sig.AllStopped {
+				childTracker.reviveDurableStopped(wakeCtx, input.ChatID)
+			}
 		})
 	}
 
@@ -2883,6 +2899,21 @@ func setupThreadWakeHandler(ctx workflow.Context, childTracker *ChildWorkflowTra
 				continue
 			}
 			childTracker.recordThreadWake(sig)
+			if sig.FromUser {
+				childTracker.userResumes++
+			}
+			if sig.FromUser && workflow.GetVersion(gCtx, fmt.Sprintf("%s/resume-whole-chat/%d", providerSwitchChangeID, childTracker.userResumes), workflow.DefaultVersion, 1) != workflow.DefaultVersion && childTracker.providerWake != nil {
+				childTracker.providerWake(gCtx)
+				for _, thread := range childTracker.stoppedThreadsToWake(true) {
+					if childTracker.resumeStopped != nil {
+						childTracker.resumeStopped(gCtx, thread)
+					}
+				}
+				// Durable records cover siblings stopped in an earlier run.
+				if childTracker.chatID != "" {
+					childTracker.reviveDurableStopped(gCtx, childTracker.chatID)
+				}
+			}
 			logger.Info("[ThreadWake] Wake notification received",
 				"workflowID", workflowID, "thread", sig.Thread, "reason", string(sig.Reason), "fromUser", sig.FromUser)
 			// The doorbell of a sub-agent that stopped on a failure has no
@@ -2941,6 +2972,9 @@ func setupInputUpdateHandler(ctx workflow.Context, workflowInputs map[string]int
 							)
 							threadInputs[key] = value
 						}
+						if _, changed := update["model"]; changed && childTracker.chatProvider != "" && childTracker.providerWake != nil {
+							childTracker.providerWake(ctx)
+						}
 					} else {
 						logger.Info("[Workflow Runtime] Thread-scoped update for a thread that is not running; kept for its next run",
 							"thread", targetThread,
@@ -2948,6 +2982,7 @@ func setupInputUpdateHandler(ctx workflow.Context, workflowInputs map[string]int
 						)
 					}
 				} else {
+					switchedProvider := childTracker.applyProviderSwitch(ctx, workflowInputs, update)
 					// Global update: apply to root workflowInputs
 					for key, value := range update {
 						logger.Debug("[Workflow Runtime] Input updated via signal",
@@ -2973,6 +3008,9 @@ func setupInputUpdateHandler(ctx workflow.Context, workflowInputs map[string]int
 							// root's value must not replace it — that is what
 							// silently demoted preset-pinned models to the
 							// root's own model mid-run.
+							if key == "model" && childTracker.chatProvider != "" && threadID != childTracker.rootThread {
+								continue // Preserve the descendant's selector, including schema defaults.
+							}
 							if childTracker.threadOwnsKey(threadID, key) {
 								logger.Debug("[Workflow Runtime] Global update skipped for thread-owned input",
 									"thread", threadID,
@@ -2988,6 +3026,12 @@ func setupInputUpdateHandler(ctx workflow.Context, workflowInputs map[string]int
 						}
 					}
 
+					// Apply routing state before any wake yields and re-dispatches
+					// a model call. Never cancel in-flight tools.
+					if switchedProvider && childTracker.providerWake != nil {
+						childTracker.providerWake(ctx)
+						childTracker.reviveDurableStopped(ctx, childTracker.chatID)
+					}
 					// Forward state updates to all active child workflows.
 					// Sort child IDs for deterministic signal ordering across replays.
 					childIDs := make([]string, 0, len(childTracker.children))
@@ -4098,7 +4142,12 @@ func runDetachedSpawnChild(
 	stopped := result.IsError && !result.Cancelled
 	if stopped {
 		childTracker.recordStoppedSpawn(config.toolCallID, result.capacityStop)
+		delete(childTracker.notStopped, config.childThread)
 	} else {
+		if childTracker.notStopped == nil {
+			childTracker.notStopped = map[string]bool{}
+		}
+		childTracker.notStopped[config.childThread] = true
 		childTracker.forgetLastThreadInputs(config.childThread)
 	}
 	childTracker.completeDetachedSpawn(config.toolCallID, parentThread)
