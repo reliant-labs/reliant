@@ -287,6 +287,12 @@ func TestServerHeartbeatAcknowledgesTheNewestDaemonHeartbeatRead(t *testing.T) {
 // The stream stays open until the test closes it or ends.
 func dialDaemon(t *testing.T, svc *Service, userID, daemonID string) *connect.BidiStreamForClient[reliantv1.DaemonMessage, reliantv1.ServerMessage] {
 	t.Helper()
+	return dialDaemonAs(t, svc, userID, &reliantv1.DaemonRegister{DaemonId: daemonID, Hostname: "ws-" + daemonID[:8], Platform: "linux", DaemonType: "local"})
+}
+
+// dialDaemonAs is dialDaemon with the registration the test chooses.
+func dialDaemonAs(t *testing.T, svc *Service, userID string, reg *reliantv1.DaemonRegister) *connect.BidiStreamForClient[reliantv1.DaemonMessage, reliantv1.ServerMessage] {
+	t.Helper()
 	routes := http.NewServeMux()
 	svc.Register(routes) // the production mount
 	// Streams.Install is the listener's edge: the abortable request body
@@ -313,7 +319,7 @@ func dialDaemon(t *testing.T, svc *Service, userID, daemonID string) *connect.Bi
 	stream.RequestHeader().Set("X-Test-User", userID)
 	t.Cleanup(func() { _ = stream.CloseRequest(); _ = stream.CloseResponse() })
 	require.NoError(t, stream.Send(&reliantv1.DaemonMessage{Message: &reliantv1.DaemonMessage_Register{
-		Register: &reliantv1.DaemonRegister{DaemonId: daemonID, Hostname: "ws-" + daemonID[:8], Platform: "linux", DaemonType: "local"},
+		Register: reg,
 	}}))
 	msg, err := stream.Receive()
 	require.NoError(t, err)

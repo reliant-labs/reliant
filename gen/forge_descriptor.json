@@ -15747,6 +15747,22 @@
             "name": "disk",
             "kind": "message",
             "type_name": "reliant.v1.DiskReport"
+          },
+          {
+            "name": "version",
+            "kind": "string"
+          },
+          {
+            "name": "commit",
+            "kind": "string"
+          },
+          {
+            "name": "commit_time_unix",
+            "kind": "int64"
+          },
+          {
+            "name": "forge_version",
+            "kind": "string"
           }
         ],
         "reliant.v1.DiscoveredProject": [
@@ -39781,7 +39797,7 @@
     "reliant/v1/connection.proto": "31ef55ce12e0a3862f02156e159049a5f84142b7f9978f2c5c939afa52a50b64",
     "reliant/v1/connector.proto": "604b069c652292d84d3c220ad54815a01b9d28670accd4fc75b042ffae8efcfe",
     "reliant/v1/daemon.proto": "81f841647a83dc20c756913fe6c358b77b00a2c686acdb05252818b415e8e8a1",
-    "reliant/v1/daemon_registry.proto": "3907ab3737af202ca408a7449f4b08d66be5137e99316f2fc226e991f1dbc699",
+    "reliant/v1/daemon_registry.proto": "409712b58dea048c4ccb419cf8af241d8f78a1313d95351c9a36d506126be93a",
     "reliant/v1/filesystem.proto": "140d121cbc7cebc799860129abf98389a867d0b128fbe36b0d6c000bf9b92a6d",
     "reliant/v1/forge.proto": "a065ade3885e8671952b6908f2986727eb1b4b478304dfe7772bc62be4078a00",
     "reliant/v1/inbox.proto": "3674d17a4999e2cbdece60fcf227f1a52068616f22a28efff18b9c34f70608d3",

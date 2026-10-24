@@ -534,6 +534,10 @@ func daemonToProto(d *db.Daemon, att *db.DaemonAttachment) *reliantv1.DaemonInfo
 	}
 	if att != nil {
 		info.DetectedPorts = att.DetectedPorts
+		info.Version = att.Build.Version
+		info.Commit = att.Build.Commit
+		info.CommitTimeUnix = att.Build.CommitTimeUnix
+		info.ForgeVersion = att.Build.ForgeVersion
 	}
 	return info
 }
