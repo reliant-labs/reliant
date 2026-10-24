@@ -46,7 +46,7 @@ func TestProviderSwitchReachesNestedAndFutureSpawns(t *testing.T) {
 		return map[string]interface{}{"response_text": "done"}, nil
 	}
 	env.RegisterDelayedCallback(func() {
-		env.SignalWorkflow("update_workflow_state", map[string]interface{}{"model": map[string]interface{}{"id": "gpt-6.1-sol@codex"}})
+		env.SignalWorkflow("update_workflow_state", map[string]interface{}{"model": map[string]interface{}{"id": "gpt-6.1-sol@codex"}, InputKeyProviderSwitch: "codex"})
 		env.SignalWorkflow(CapacityWakeSignalName, CapacityWakeSignal{UseModel: "gpt-6.1-sol@codex"})
 	}, 10*time.Minute)
 	env.ExecuteWorkflow(DynamicWorkflow, input)
@@ -99,7 +99,7 @@ func TestProviderSwitchResumesStoppedSpawnsOnTheirPresetTags(t *testing.T) {
 	go awaitReports(e, "stopped-reported", "stopped")
 	env.RegisterDelayedCallback(func() {
 		c.restore()
-		env.SignalWorkflow("update_workflow_state", map[string]interface{}{"model": map[string]interface{}{"id": "gpt-6.1-sol@codex"}})
+		env.SignalWorkflow("update_workflow_state", map[string]interface{}{"model": map[string]interface{}{"id": "gpt-6.1-sol@codex"}, InputKeyProviderSwitch: "codex"})
 	}, 10*time.Minute)
 	env.ExecuteWorkflow(DynamicWorkflow, input)
 	require.NoError(t, env.GetWorkflowError())

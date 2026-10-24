@@ -431,7 +431,7 @@ func (s *Service) resurrectGhostWorkflow(
 	}
 	modelMoves := s.fallBackFromUnservableModels(ctx, userID, req.Msg.ChatId, chat.ProjectID, workflowName, workflowID, targetThread, initialData,
 		s.selectionStoredModelIsCurrent(ctx, req.Msg.ChatId, initialData))
-	s.launcher().RefreshSelectedProvider(ctx, userID, initialData)
+	s.refreshChatProvider(ctx, userID, chat, workflowName, initialData)
 	_, _ = s.recordSelection(ctx, userID, chat, workflowName, req.Msg.WorkflowParams, initialData, modelMoves, 0)
 
 	// Step 4: Build execution context - inheriting existing thread
@@ -460,7 +460,7 @@ func (s *Service) resurrectGhostWorkflow(
 		Trigger:      launch.LoadChatTrigger(ctx, s.deps.Repo, req.Msg.ChatId),
 		// A ghost (Temporal lost the running execution) is an infra failure,
 		// not user intent — the fresh execution resumes at position.
-		Resume: v2.ResumeInputFromDurableState(ctx, s.deps.Repo, req.Msg.ChatId, workflowID),
+		Resume: resumeWholeChatInput(v2.ResumeInputFromDurableState(ctx, s.deps.Repo, req.Msg.ChatId, workflowID)),
 	}
 
 	// Step 5: Start fresh Temporal execution
@@ -869,6 +869,7 @@ func (s *Service) SendMessage(
 					modelMoves := s.fallBackFromUnservableModels(ctx, userID, req.Msg.ChatId, chat.ProjectID, existingWorkflow.WorkflowName, workflowID, targetThread, stateUpdate, func(input string) bool {
 						return s.checkParamsActuallyChanged(ctx, workflowID, map[string]interface{}{input: stateUpdate[input]})
 					})
+					s.refreshLiveChatProvider(ctx, userID, chat, existingWorkflow.WorkflowName, stateUpdate)
 					_, _ = s.recordSelection(ctx, userID, chat, existingWorkflow.WorkflowName, req.Msg.WorkflowParams, stateUpdate, modelMoves, 0)
 
 					// Only add "params changed" message if params actually changed from current workflow state
@@ -991,6 +992,7 @@ func (s *Service) SendMessage(
 					inputUpdate, modelNotices, modelMoves = s.resumeInputUpdate(ctx, userID, req.Msg.ChatId, chat.ProjectID, existingWorkflow.WorkflowName, workflowID,
 						s.underSelection(ctx, chat.ID, activeWorkflowNameForResume(chat, existingWorkflow), stateUpdate), recorded)
 					inputUpdate = s.withProviderPolicy(ctx, userID, chat, recorded, inputUpdate)
+					inputUpdate = s.refreshLiveChatProvider(ctx, userID, chat, existingWorkflow.WorkflowName, inputUpdate)
 				}
 
 				// A run that died parked on an unanswered ask_question wakes on
@@ -1229,7 +1231,7 @@ func (s *Service) SendMessage(
 	// so a composer still sending the original pin does not repeat the notice.
 	modelMoves := s.fallBackFromUnservableModels(ctx, userID, req.Msg.ChatId, chat.ProjectID, workflowName, workflowID, targetThread, initialData,
 		s.selectionStoredModelIsCurrent(ctx, req.Msg.ChatId, initialData))
-	s.launcher().RefreshSelectedProvider(ctx, userID, initialData)
+	s.refreshChatProvider(ctx, userID, chat, workflowName, initialData)
 	_, _ = s.recordSelection(ctx, userID, chat, workflowName, req.Msg.WorkflowParams, initialData, modelMoves, 0)
 
 	// Inject session daemon if set on chat
@@ -1253,7 +1255,7 @@ func (s *Service) SendMessage(
 		Inputs:       initialData,
 		ExecContext:  execContext,
 		Trigger:      launch.LoadChatTrigger(ctx, s.deps.Repo, req.Msg.ChatId),
-		Resume:       resumeInput,
+		Resume:       resumeWholeChatInput(resumeInput),
 
 		GreenfieldProbe: greenfieldProbe,
 	}
@@ -1689,6 +1691,7 @@ func (s *Service) startRunForQueuedRow(ctx context.Context, chat *db.Chat, threa
 		Inputs:       inputs,
 		ExecContext:  execContext,
 		Trigger:      launch.LoadChatTrigger(ctx, s.deps.Repo, chat.ID),
+		Resume:       resumeWholeChatInput(nil),
 	})
 	if err != nil {
 		return refuse(err)

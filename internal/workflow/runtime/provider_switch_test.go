@@ -45,7 +45,8 @@ func TestProviderSwitchReachesAnExistingTaggedSpawn(t *testing.T) {
 	}
 	env.RegisterDelayedCallback(func() {
 		env.SignalWorkflow("update_workflow_state", map[string]interface{}{
-			"model": map[string]interface{}{"id": "gpt-6.1-sol@codex"},
+			"model":                map[string]interface{}{"id": "gpt-6.1-sol@codex"},
+			InputKeyProviderSwitch: "codex",
 		})
 		env.SignalWorkflow(CapacityWakeSignalName, CapacityWakeSignal{})
 	}, 10*time.Minute)

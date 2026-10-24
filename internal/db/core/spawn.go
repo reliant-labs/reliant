@@ -69,6 +69,9 @@ type StoppedSpawnRecord struct {
 	SpawnDepth        int
 	WorktreePath      string
 	Resumes           int
+	// LastFailure is the body of the latest real failure report the spawn
+	// sent its parent, "" when none.
+	LastFailure string
 }
 
 // SpawnRun is the latest spawn run of the sub-agent on one thread: the spawn

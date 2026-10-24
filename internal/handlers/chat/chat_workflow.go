@@ -88,6 +88,21 @@ func (s *Service) UpdateWorkflowParams(
 	}
 
 	if threadScoped {
+		// While the chat is bound to a provider every thread runs on it, so
+		// a sub-agent's pick on another provider (or a local one) is refused
+		// here rather than accepted and then held at its next model call.
+		if value, picked := stateUpdate["model"]; picked {
+			if bound := s.chatProvider(ctx, chat.ID); bound != "" {
+				pick, err := s.launcher().ValidateSelectedModel(ctx, userID, value, s.selectionCheck(chat, bound))
+				if err != nil {
+					return nil, svcerr.FailedPrecondition("The selected model cannot be served. The agent's model has not changed: " + err.Error())
+				}
+				if pick.Local || pick.Driver != bound {
+					return nil, svcerr.FailedPrecondition(fmt.Sprintf(
+						"This chat runs on %s, so its agents do too. Pick a model %s serves for this agent, or switch the whole chat's model to change provider.", bound, bound))
+				}
+			}
+		}
 		// A thread's params are that run's state, not the chat's choice: they
 		// are signalled and remembered by the run, never stored as the
 		// selection (which would hand the sub-agent's model to the next root run).
@@ -108,9 +123,22 @@ func (s *Service) UpdateWorkflowParams(
 	// is stored is what runs.
 	live := s.rootRunIsLive(ctx, workflowID)
 	_, explicitModelPick := req.Msg.Params["model"]
+	// The provider binding is decided here and nowhere else (see
+	// chat_provider_binding.go): a pick that names another provider than the
+	// root runs on switches the chat to it, a local pick unbinds it, and any
+	// other pick leaves it as it was.
+	bound := s.chatProvider(ctx, chat.ID)
+	binding := bound
 	if explicitModelPick {
-		if err := s.launcher().ValidateSelectedModel(ctx, userID, stateUpdate["model"]); err != nil {
+		pick, err := s.launcher().ValidateSelectedModel(ctx, userID, stateUpdate["model"], s.selectionCheck(chat, bound))
+		if err != nil {
 			return nil, svcerr.FailedPrecondition("The selected model/provider cannot be served. Your previous selection has not changed: " + err.Error())
+		}
+		switch {
+		case pick.Local:
+			binding = ""
+		case pick.NamesProvider && pick.Driver != s.launcher().RootProvider(ctx, userID, chat, workflowName):
+			binding = pick.Driver
 		}
 	}
 	var moves []launch.ModelSubstitution
@@ -128,9 +156,18 @@ func (s *Service) UpdateWorkflowParams(
 			stateUpdate[key] = value
 		}
 	}
-	sel, err := s.recordSelection(ctx, userID, chat, workflowName, req.Msg.Params, stateUpdate, moves, req.Msg.GetExpectedVersion())
+	var bindingPatch *string
+	if explicitModelPick {
+		bindingPatch = &binding
+	}
+	sel, err := s.recordSelection(ctx, userID, chat, workflowName, req.Msg.Params, stateUpdate, moves, req.Msg.GetExpectedVersion(), bindingPatch)
 	if err != nil {
 		return nil, svcerr.WrapOr(err, svcerr.Internal("failed to record the chat's selection"))
+	}
+	if binding != bound {
+		// The run learns of the switch with the model it switched to
+		// (runtime applyProviderSwitch); "" unbinds it.
+		stateUpdate[v2.InputKeyProviderSwitch] = binding
 	}
 	if sel == nil {
 		sel, _ = s.selections().Get(ctx, chat.ID)
@@ -148,11 +185,6 @@ func (s *Service) UpdateWorkflowParams(
 		modelChanged := false
 		if newModel, ok := stateUpdate["model"]; ok {
 			modelChanged = s.checkParamsActuallyChanged(ctx, workflowID, map[string]interface{}{"model": newModel})
-		}
-		if modelChanged {
-			if driver := v2.FallbackDriver(s.launcher().ResolvedModelAtDriver(ctx, userID, stateUpdate["model"])); driver != "" {
-				stateUpdate[v2.InputKeyProviderSwitch] = driver
-			}
 		}
 		if err := s.signalParamUpdate(ctx, workflowID, stateUpdate); err != nil {
 			return nil, err

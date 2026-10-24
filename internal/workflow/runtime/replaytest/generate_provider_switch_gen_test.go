@@ -48,7 +48,7 @@ func TestGenerateFixture_ProviderSwitchWaitingSpawn(t *testing.T) {
 	})
 	capacity.Store(true)
 	require.NoError(t, h.Stack.Temporal.SignalWorkflow(h.Ctx, created.WorkflowId, "", "update_workflow_state",
-		map[string]interface{}{"model": map[string]interface{}{"id": "gpt-6.1-sol@codex"}}))
+		map[string]interface{}{"model": map[string]interface{}{"id": "gpt-6.1-sol@codex"}, runtime.InputKeyProviderSwitch: "codex"}))
 	require.NoError(t, h.Stack.Temporal.SignalWorkflow(h.Ctx, created.WorkflowId, "", runtime.CapacityWakeSignalName,
 		runtime.CapacityWakeSignal{UseModel: "gpt-6.1-sol@codex"}))
 	h.WaitTemporalWorkflowDone(created.WorkflowId)

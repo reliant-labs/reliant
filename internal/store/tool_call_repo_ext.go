@@ -672,13 +672,41 @@ func ListStoppedSpawnRecords(ctx context.Context, db orm.Context, chatID string)
            COALESCE((SELECT MAX(substring(am.tool_call_id FROM length(tc.id) + 9)::int)
                      FROM agent_messages am WHERE am.chat_id = ?0 AND am.kind IN (2,3,4)
                        AND starts_with(am.tool_call_id, tc.id || '#resume-')
-                       AND substring(am.tool_call_id FROM length(tc.id) + 9) ~ '^[0-9]+$'), 0)::int AS resumes
+                       AND substring(am.tool_call_id FROM length(tc.id) + 9) ~ '^[0-9]+$'), 0)::int AS resumes,
+           COALESCE((SELECT am.body FROM agent_messages am
+                     WHERE am.chat_id = ?0 AND am.kind = 4 AND NOT am.synthesized
+                       AND (am.tool_call_id = tc.id OR starts_with(am.tool_call_id, tc.id || '#resume-'))
+                     ORDER BY am.created_at DESC, am.id DESC LIMIT 1), '') AS last_failure
     FROM failed f JOIN threads t ON t.id = f.thread
     JOIN LATERAL (SELECT tc.id,tc.thread_id,tc.input FROM tool_calls tc WHERE tc.child_workflow_id=f.id AND tc.tool_name='spawn' ORDER BY tc.requested_at DESC LIMIT 1) tc ON true
     LEFT JOIN worktrees wt ON wt.id=t.worktree_id AND wt.deleted_at IS NULL
     WHERE tc.thread_id IS NOT NULL
     ORDER BY spawn_depth, f.thread`, chatID).Scan(ctx, &records)
 	return records, err
+}
+
+// LatestSpawnFailureReport is the body of the latest real failure report a
+// spawn's runs have written in chatID, under its own slot (toolCallID) or a
+// resumed run's (toolCallID#resume-N); "" when it has none. A reconciler's
+// synthesized placeholder is not one: no run wrote it.
+func LatestSpawnFailureReport(ctx context.Context, db orm.Context, chatID, toolCallID string) (string, error) {
+	var bodies []string
+	err := db.Bun().NewSelect().Model((*AgentMessage)(nil)).
+		ColumnExpr("body").
+		Where("chat_id = ?", chatID).
+		Where("kind = 4").
+		Where("NOT synthesized").
+		Where("(tool_call_id = ? OR starts_with(tool_call_id, ?))", toolCallID, toolCallID+"#resume-").
+		OrderExpr("created_at DESC, id DESC").
+		Limit(1).
+		Scan(ctx, &bodies)
+	if err != nil {
+		return "", fmt.Errorf("failed to read the latest failure report of %s: %w", toolCallID, err)
+	}
+	if len(bodies) == 0 {
+		return "", nil
+	}
+	return bodies[0], nil
 }
 
 // SpawnResumeReportIDs is the report slots a spawn's resumed runs have

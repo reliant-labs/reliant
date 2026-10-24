@@ -20,7 +20,7 @@ func TestProviderSwitchRebindingUsesFinalSendInputs(t *testing.T) {
 		v2.InputKeyProviderSwitch: "codex",
 	}
 	svc.launcher().RefreshSelectedProvider(ctx, "test-user", inputs)
-	require.Equal(t, "anthropic", inputs[v2.InputKeyProviderSwitch])
+	require.Equal(t, "codex", inputs[v2.InputKeyProviderSwitch], "ordinary recovery cannot override an explicit provider binding")
 	unbound := map[string]interface{}{"model": map[string]interface{}{"id": sonnetOnClaude}}
 	svc.launcher().RefreshSelectedProvider(ctx, "test-user", unbound)
 	require.NotContains(t, unbound, v2.InputKeyProviderSwitch)

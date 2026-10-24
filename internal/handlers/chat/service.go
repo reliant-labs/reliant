@@ -15,6 +15,7 @@ import (
 	pb "github.com/reliant-labs/reliant/gen/reliant/v1"
 	reliantv1connect "github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/launch"
+	"github.com/reliant-labs/reliant/internal/llm/drivers/local"
 	"github.com/reliant-labs/reliant/internal/runs"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/workflow"
@@ -49,6 +50,11 @@ type Deps struct {
 	// tool calls wait for the machine.
 	// forge:optional-dep
 	Router Router
+	// LocalModels lists the models the user's machines and endpoints serve,
+	// so an explicit pick of a local model is checked the way its run will
+	// resolve it. Without it a local pick cannot be checked and is refused.
+	// forge:optional-dep
+	LocalModels local.Directory
 }
 
 // Temporal is the slice of the Temporal client the chat handlers use, and

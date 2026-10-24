@@ -53,6 +53,7 @@ func (s *Service) resumePausedRun(
 	inputUpdate, modelNotices, modelMoves := s.resumeInputUpdate(ctx, userID, chat.ID, chat.ProjectID, workflowName, workflowID,
 		s.underSelection(ctx, chat.ID, workflowName, stateUpdate), runInputs)
 	inputUpdate = s.withProviderPolicy(ctx, userID, chat, runInputs, inputUpdate)
+	inputUpdate = s.refreshLiveChatProvider(ctx, userID, chat, workflowName, inputUpdate)
 
 	// Only add "params changed" message if params actually changed from current workflow state
 	if len(inputUpdate) > 0 && (runInputs == nil || inputsDiffer(runInputs, inputUpdate)) {

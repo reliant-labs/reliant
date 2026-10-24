@@ -248,7 +248,7 @@ func (s *Service) startRunResumingStoppedAgent(ctx context.Context, userID strin
 		}
 	}
 	s.fallBackFromUnservableModels(ctx, userID, chat.ID, chat.ProjectID, workflowName, workflowID, workflowID, inputs, nil)
-	s.launcher().RefreshSelectedProvider(ctx, userID, inputs)
+	s.refreshChatProvider(ctx, userID, chat, workflowName, inputs)
 	launch.InjectSessionDaemonID(inputs, chat)
 
 	resume := v2.ResumeInputFromDurableState(ctx, s.deps.Repo, chat.ID, workflowID)

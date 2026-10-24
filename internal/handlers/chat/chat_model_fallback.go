@@ -44,6 +44,12 @@ func (s *Service) fallBackFromUnservableModels(ctx context.Context, userID, chat
 // moved. It tells no one; the caller posts the notices once the run that will
 // use the inputs is known to be getting them.
 func (s *Service) moveUnservableModels(ctx context.Context, userID, chatID, projectID, workflowName, workflowID string, inputs map[string]interface{}) []launch.ModelSubstitution {
+	// An ordinary send cannot authorize spending on a different provider.
+	// Bound chats keep their explicit binding; an unservable selector holds
+	// visibly at its model-call boundary until the user edits the root picker.
+	if s.chatProvider(ctx, chatID) != "" {
+		return nil
+	}
 	subs := s.launcher().SubstituteUnservableModels(ctx, userID, workflowName, projectID, inputs)
 	for _, sub := range subs {
 		logging.InfoContext(ctx, "Send moved a model input off a provider that cannot serve it",

@@ -122,6 +122,7 @@ func TestGetStoppedSpawnAgent(t *testing.T) {
 	want := StoppedSpawnAgent{
 		ToolCallID: "tc-a", ParentThreadID: root, ChildThreadID: "agent-a", ChildWorkflowID: "agent-a",
 		IssuingWorkflowID: root, SpawnDepth: 1, WorktreePath: "/worktrees/agent-wt", Resumes: 3,
+		LastFailure: FailureReportDigest("report"),
 	}
 	if got == nil {
 		t.Fatalf("stopped top-level agent not found; want %+v", want)

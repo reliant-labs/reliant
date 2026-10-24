@@ -36,7 +36,7 @@ func TestProviderSwitchUnsupportedMappingHoldsUntilEdited(t *testing.T) {
 		return map[string]interface{}{"response_text": "done"}, nil
 	}
 	env.RegisterDelayedCallback(func() {
-		env.SignalWorkflow("update_workflow_state", map[string]interface{}{"model": map[string]interface{}{"id": "gpt-6.1-sol@codex"}})
+		env.SignalWorkflow("update_workflow_state", map[string]interface{}{"model": map[string]interface{}{"id": "gpt-6.1-sol@codex"}, InputKeyProviderSwitch: "codex"})
 	}, 10*time.Minute)
 	env.ExecuteWorkflow(DynamicWorkflow, input)
 	require.NoError(t, env.GetWorkflowError())
@@ -65,7 +65,7 @@ func TestProviderSwitchDoesNotCancelInFlightSideEffectTools(t *testing.T) {
 	calls := 0
 	env.RegisterActivityWithOptions(func(ctx context.Context, _ types.ActivityInput) (map[string]interface{}, error) {
 		calls++
-		env.SignalWorkflow("update_workflow_state", map[string]interface{}{"model": map[string]interface{}{"id": "gpt-6.1-sol@codex"}})
+		env.SignalWorkflow("update_workflow_state", map[string]interface{}{"model": map[string]interface{}{"id": "gpt-6.1-sol@codex"}, InputKeyProviderSwitch: "codex"})
 		require.NoError(t, ctx.Err(), "the model switch must not cancel the tool")
 		return map[string]interface{}{"tool_results": []interface{}{}}, nil
 	}, activity.RegisterOptions{Name: "ExecuteTools", DisableAlreadyRegisteredCheck: true})

@@ -309,7 +309,9 @@ func stoppedAgentsSuccessorInput(input WorkflowInput, awaiting []SpawnHandoff, t
 // failure. Called while it is still registered live, so its handoff — the
 // relaunch recipe — is still there to keep. capacityStop says the failure is
 // one capacity can fix, so a capacity wake resumes it (capacity_wake.go).
-func (t *ChildWorkflowTracker) recordStoppedSpawn(toolCallID string, capacityStop bool) {
+// lastFailure is the digest of the failure report its parent now has from it
+// (SpawnHandoff.LastFailure), "" when none reached it.
+func (t *ChildWorkflowTracker) recordStoppedSpawn(toolCallID string, capacityStop bool, lastFailure string) {
 	rec := t.liveDetachedSpawns[toolCallID]
 	if rec == nil || rec.ChildThread == "" {
 		return
@@ -321,6 +323,7 @@ func (t *ChildWorkflowTracker) recordStoppedSpawn(toolCallID string, capacitySto
 	stopped.parked = false
 	stopped.resumeArmed = false
 	stopped.handoff.CapacityStop = capacityStop
+	stopped.handoff.LastFailure = lastFailure
 	t.stoppedSpawns[rec.ChildThread] = &stopped
 }
 

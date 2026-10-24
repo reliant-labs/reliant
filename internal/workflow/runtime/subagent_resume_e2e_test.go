@@ -725,6 +725,23 @@ func (s *SubAgentResumeE2ESuite) TestFreshPortionResumeAlsoResumesDurableSibling
 	}
 }
 
+func (s *SubAgentResumeE2ESuite) TestFreshRootMessageResumesDurableSiblings() {
+	env := s.NewTestWorkflowEnvironment()
+	e := newSubAgentResumeEnv(s.T(), env, false)
+	const chatID = "fresh-root-resumes-siblings"
+	input := spawnE2EWorkflowInput(chatID)
+	input.Resume = &ResumeInput{ResumeAllStopped: true}
+	e.durableStopped["sibling"] = stoppedBefore(chatID, "sibling", "tc-sibling", 0)
+	e.parentToolCalls[1] = func(string) []map[string]interface{} { return nil }
+	e.mu.Lock()
+	e.parentThread = input.ExecContext.Thread
+	e.mu.Unlock()
+	env.ExecuteWorkflow(DynamicWorkflow, input)
+	s.Require().NoError(env.GetWorkflowError())
+	turns, _ := e.threadTurns("sibling")
+	s.Equal(1, turns)
+}
+
 func (s *SubAgentResumeE2ESuite) TestRunStartedForAStoppedAgentResumesItBeforeTheRootTakesATurn() {
 	env := s.NewTestWorkflowEnvironment()
 	e := newSubAgentResumeEnv(s.T(), env, false)

@@ -1257,6 +1257,13 @@ func (w *ActivityWrapper[I, O]) writeErrorEvent(
 	}
 
 	errorID := activityErrorEventID(workflowID, activityID)
+	if isProviderSwitchHold(err) {
+		// The workflow's visible hold card and every held retry are the
+		// same event, not one wrapper card plus another workflow card.
+		if thread := extractThread(input); thread != "" {
+			errorID = "provider-switch-hold/" + chatID + "/" + thread
+		}
+	}
 
 	// Build error data matching the ErrorUpdate interface expected by frontend
 	// See frontends/web/src/types/streaming.ts ErrorUpdate interface
