@@ -3,8 +3,10 @@
 package egresslimit
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"log/slog"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -50,10 +52,7 @@ func roomy(l Limits) Limits {
 	}
 	def(&l.UserPerMinute, 1_000_000)
 	def(&l.UserBurst, 1_000_000)
-	def(&l.OrgPerMinute, 1_000_000)
-	def(&l.OrgBurst, 1_000_000)
 	def(&l.UserMaxConcurrent, 1_000_000)
-	def(&l.OrgMaxConcurrent, 1_000_000)
 	def(&l.HostMaxConcurrent, 1_000_000)
 	def(&l.TurnMaxParallel, 1_000_000)
 	return l
@@ -129,37 +128,6 @@ func TestTwoUsersAreIndependent(t *testing.T) {
 	relB()
 }
 
-func TestOrgLimitSpansUsers(t *testing.T) {
-	svc, _ := newTest(t, roomy(Limits{OrgPerMinute: 60, OrgBurst: 2}))
-	for _, u := range []string{"u1", "u2"} {
-		release, err := svc.Acquire(context.Background(), Request{Tool: "fetch", UserID: u, OrgID: "acme"})
-		require.NoError(t, err)
-		release()
-	}
-	_, err := svc.Acquire(context.Background(), Request{Tool: "fetch", UserID: "u3", OrgID: "acme"})
-	mustLimited(t, err, ScopeOrgRate)
-
-	release, err := svc.Acquire(context.Background(), Request{Tool: "fetch", UserID: "u4", OrgID: "other"})
-	require.NoError(t, err, "another org is unaffected")
-	release()
-	release, err = svc.Acquire(context.Background(), Request{Tool: "fetch", UserID: "u5"})
-	require.NoError(t, err, "a caller with no org is not charged to one")
-	release()
-}
-
-func TestOrgRefusalRefundsTheUsersToken(t *testing.T) {
-	svc, _ := newTest(t, roomy(Limits{UserPerMinute: 60, UserBurst: 2, OrgPerMinute: 60, OrgBurst: 1}))
-	release, err := svc.Acquire(context.Background(), Request{Tool: "fetch", UserID: "u1", OrgID: "acme"})
-	require.NoError(t, err)
-	release()
-	_, err = svc.Acquire(context.Background(), Request{Tool: "fetch", UserID: "u1", OrgID: "acme"})
-	mustLimited(t, err, ScopeOrgRate)
-	// The refused call took nothing from u1: with no org it still has its second token.
-	release, err = svc.Acquire(context.Background(), Request{Tool: "fetch", UserID: "u1"})
-	require.NoError(t, err)
-	release()
-}
-
 func TestUserConcurrencyCap(t *testing.T) {
 	svc, _ := newTest(t, roomy(Limits{UserMaxConcurrent: 2}))
 	req := Request{Tool: "fetch", UserID: "u1"}
@@ -178,18 +146,6 @@ func TestUserConcurrencyCap(t *testing.T) {
 	mustLimited(t, err, ScopeUserConcurrency)
 	r2()
 	r3()
-}
-
-func TestOrgConcurrencyCap(t *testing.T) {
-	svc, _ := newTest(t, roomy(Limits{OrgMaxConcurrent: 2}))
-	r1, err := svc.Acquire(context.Background(), Request{Tool: "fetch", UserID: "u1", OrgID: "acme"})
-	require.NoError(t, err)
-	r2, err := svc.Acquire(context.Background(), Request{Tool: "fetch", UserID: "u2", OrgID: "acme"})
-	require.NoError(t, err)
-	_, err = svc.Acquire(context.Background(), Request{Tool: "fetch", UserID: "u3", OrgID: "acme"})
-	mustLimited(t, err, ScopeOrgConcurrency)
-	r1()
-	r2()
 }
 
 func TestPerHostCapHoldsAcrossUsers(t *testing.T) {
@@ -353,7 +309,7 @@ func TestIdleBucketsAreSwept(t *testing.T) {
 	svc, clk := newTest(t, roomy(Limits{}))
 	s := svc.(*service)
 	for _, u := range []string{"a", "b", "c"} {
-		r, err := svc.Acquire(context.Background(), Request{Tool: "fetch", UserID: u, OrgID: "o-" + u})
+		r, err := svc.Acquire(context.Background(), Request{Tool: "fetch", UserID: u})
 		require.NoError(t, err)
 		r()
 	}
@@ -365,7 +321,6 @@ func TestIdleBucketsAreSwept(t *testing.T) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	require.Len(t, s.users, 1)
-	require.Empty(t, s.orgs)
 	require.Empty(t, s.hosts)
 	require.Empty(t, s.turns)
 }
@@ -381,7 +336,7 @@ func TestConcurrentAcquireReleaseKeepsCountsExact(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for j := 0; j < 50; j++ {
-				release, err := svc.Acquire(context.Background(), Request{Tool: "fetch", UserID: "u", OrgID: "o", Host: "h", TurnKey: "t"})
+				release, err := svc.Acquire(context.Background(), Request{Tool: "fetch", UserID: "u", Host: "h", TurnKey: "t"})
 				if err != nil {
 					continue
 				}
@@ -397,7 +352,42 @@ func TestConcurrentAcquireReleaseKeepsCountsExact(t *testing.T) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	require.Zero(t, s.users["u"].inFlight)
-	require.Zero(t, s.orgs["o"].inFlight)
 	require.Empty(t, s.hosts)
 	require.Empty(t, s.turns)
+}
+
+// Replicas unset (0) or negative divides by 1: the whole fleet budget per
+// replica, which is the pre-existing behaviour.
+func TestReplicasUnsetMeansWholeBudget(t *testing.T) {
+	for _, replicas := range []int{0, -3, 1} {
+		svc, _ := newTest(t, roomy(Limits{Replicas: replicas, UserPerMinute: 60, UserBurst: 20}))
+		admitted := 0
+		for i := 0; i < 100; i++ {
+			if release, err := svc.Acquire(context.Background(), Request{Tool: "fetch", UserID: "u1"}); err == nil {
+				admitted++
+				release()
+			}
+		}
+		require.Equal(t, 20, admitted, "replicas=%d", replicas)
+	}
+}
+
+func TestStartupLogsEffectiveBudget(t *testing.T) {
+	var buf bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&buf, nil))
+	_, err := New(Deps{Logger: logger, Limits: Limits{Replicas: 0, UserPerMinute: 60, UserBurst: 20}})
+	require.NoError(t, err)
+	out := buf.String()
+	require.Contains(t, out, "egress limiter configured")
+	require.Contains(t, out, "configured_replicas=0")
+	require.Contains(t, out, "effective_replicas=1")
+	require.Contains(t, out, "user_per_minute_this_replica=60")
+
+	buf.Reset()
+	_, err = New(Deps{Logger: logger, Limits: Limits{Replicas: 4, UserPerMinute: 60, UserBurst: 20}})
+	require.NoError(t, err)
+	out = buf.String()
+	require.Contains(t, out, "configured_replicas=4")
+	require.Contains(t, out, "user_per_minute_this_replica=15")
+	require.Contains(t, out, "user_burst_this_replica=5")
 }

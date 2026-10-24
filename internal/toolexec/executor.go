@@ -41,11 +41,7 @@ type ToolRequest struct {
 	ContentBlockID string // Database content block ID
 
 	// Required identifiers
-	UserID string // User who owns this execution (REQUIRED for routing)
-	// OrgID is the user's organization, for the egress limiter's per-org
-	// budgets. Empty when the caller does not know it (the org limits are
-	// then skipped and only the per-user limits apply).
-	OrgID      string
+	UserID     string // User who owns this execution (REQUIRED for routing)
 	ChatID     string // Chat this execution belongs to (REQUIRED)
 	ProjectID  string // Project ID (REQUIRED)
 	WorktreeID string // Worktree ID (optional, empty if none)

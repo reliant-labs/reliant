@@ -48,7 +48,6 @@ func (e *RemoteExecutor) admitEgress(ctx context.Context, req *ToolRequest, star
 	release, err := e.egress.Acquire(ctx, egresslimit.Request{
 		Tool:    req.ToolName,
 		UserID:  req.UserID,
-		OrgID:   req.OrgID,
 		Host:    host,
 		TurnKey: req.ChatID + "/" + req.Thread,
 	})

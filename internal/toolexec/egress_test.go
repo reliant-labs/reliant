@@ -43,10 +43,7 @@ func roomyLimits(l egresslimit.Limits) egresslimit.Limits {
 	if l.UserPerMinute == 0 {
 		l.UserPerMinute, l.UserBurst = 1_000_000, 1_000_000
 	}
-	if l.OrgPerMinute == 0 {
-		l.OrgPerMinute, l.OrgBurst = 1_000_000, 1_000_000
-	}
-	for _, p := range []*int{&l.UserMaxConcurrent, &l.OrgMaxConcurrent, &l.HostMaxConcurrent, &l.TurnMaxParallel} {
+	for _, p := range []*int{&l.UserMaxConcurrent, &l.HostMaxConcurrent, &l.TurnMaxParallel} {
 		if *p == 0 {
 			*p = 1_000_000
 		}
@@ -160,7 +157,7 @@ func TestEgress_OnlyEgressToolsAreAdmitted(t *testing.T) {
 
 	run := func(name, input string) {
 		_, err := e.executeOnServer(context.Background(), &ToolRequest{
-			ToolName: name, ToolInput: input, ToolCallID: "c", UserID: "u1", OrgID: "acme",
+			ToolName: name, ToolInput: input, ToolCallID: "c", UserID: "u1",
 			ChatID: "chat-9", ProjectID: "p", Thread: "th-3",
 		}, time.Now())
 		require.NoError(t, err)
@@ -178,7 +175,7 @@ func TestEgress_OnlyEgressToolsAreAdmitted(t *testing.T) {
 		got[r.Tool] = r
 	}
 	require.Len(t, got, 5, "view and unknown tools are not egress")
-	require.Equal(t, egresslimit.Request{Tool: "fetch", UserID: "u1", OrgID: "acme", Host: "example.com", TurnKey: "chat-9/th-3"}, got["fetch"])
+	require.Equal(t, egresslimit.Request{Tool: "fetch", UserID: "u1", Host: "example.com", TurnKey: "chat-9/th-3"}, got["fetch"])
 	require.Equal(t, "html.duckduckgo.com", got["websearch"].Host)
 	require.Equal(t, "sourcegraph.com", got["sourcegraph"].Host)
 	require.Equal(t, "api.example.org", got["http__request"].Host)

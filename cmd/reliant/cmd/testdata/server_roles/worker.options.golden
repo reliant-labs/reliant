@@ -95,10 +95,7 @@
       Replicas: 2
       UserPerMinute: 11
       UserBurst: 12
-      OrgPerMinute: 13
-      OrgBurst: 14
       UserMaxConcurrent: 15
-      OrgMaxConcurrent: 16
       HostMaxConcurrent: 17
       TurnMaxParallel: 18
     }

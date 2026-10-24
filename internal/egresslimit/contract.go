@@ -1,7 +1,7 @@
 // Copyright (c) 2025 Reliant Labs
 //
 // Package egresslimit bounds how much outbound traffic one user, one
-// organization, one destination host and one conversation turn may push
+// destination host and one conversation turn may push
 // through the worker's server-side egress tools (fetch, websearch,
 // sourcegraph, integration actions such as http__request).
 //
@@ -20,7 +20,7 @@
 //     over the fleet gets the whole budget and one pinned to a single replica
 //     gets only its share. The limit can therefore under-admit, never admit
 //     more than the budget once Replicas is right.
-//   - Concurrency caps (per user, per org, per host, per turn) bound what one
+//   - Concurrency caps (per user, per host, per turn) bound what one
 //     PROCESS holds open (goroutines, sockets) and what one NODE's NAT can
 //     allocate, so they are per replica by nature and are not divided.
 //
@@ -64,8 +64,6 @@ type Request struct {
 	Tool string
 	// UserID is the caller the per-user limits key on. Required.
 	UserID string
-	// OrgID is the caller's organization. Empty skips the org limits.
-	OrgID string
 	// Host is the destination host, lowercase without port. Empty skips the
 	// per-host cap (the destination could not be determined).
 	Host string
@@ -77,9 +75,7 @@ type Request struct {
 // The scopes a LimitedError names.
 const (
 	ScopeUserRate        = "user_rate"
-	ScopeOrgRate         = "org_rate"
 	ScopeUserConcurrency = "user_concurrency"
-	ScopeOrgConcurrency  = "org_concurrency"
 	ScopeHostConcurrency = "host_concurrency"
 )
 
@@ -107,12 +103,8 @@ func (e *LimitedError) Error() string {
 	switch e.Scope {
 	case ScopeUserRate:
 		what = "this account is making outbound requests too fast"
-	case ScopeOrgRate:
-		what = "this organization is making outbound requests too fast"
 	case ScopeUserConcurrency:
 		what = "this account has too many outbound requests in flight"
-	case ScopeOrgConcurrency:
-		what = "this organization has too many outbound requests in flight"
 	case ScopeHostConcurrency:
 		what = fmt.Sprintf("too many outbound requests to %s are in flight", e.Host)
 	default:

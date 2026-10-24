@@ -365,8 +365,7 @@ func TestServerWorkerEgressLimits(t *testing.T) {
 	names := []string{
 		"RELIANT_WORKER_EGRESS_REPLICAS",
 		"RELIANT_WORKER_EGRESS_USER_PER_MINUTE", "RELIANT_WORKER_EGRESS_USER_BURST",
-		"RELIANT_WORKER_EGRESS_ORG_PER_MINUTE", "RELIANT_WORKER_EGRESS_ORG_BURST",
-		"RELIANT_WORKER_EGRESS_USER_MAX_CONCURRENT", "RELIANT_WORKER_EGRESS_ORG_MAX_CONCURRENT",
+		"RELIANT_WORKER_EGRESS_USER_MAX_CONCURRENT",
 		"RELIANT_WORKER_EGRESS_HOST_MAX_CONCURRENT", "RELIANT_WORKER_EGRESS_TURN_MAX_PARALLEL",
 	}
 	for _, name := range names {
@@ -384,8 +383,7 @@ func TestServerWorkerEgressLimits(t *testing.T) {
 	assert.Equal(t, egresslimit.Limits{
 		Replicas:      1,
 		UserPerMinute: egresslimit.DefaultUserPerMinute, UserBurst: egresslimit.DefaultUserBurst,
-		OrgPerMinute: egresslimit.DefaultOrgPerMinute, OrgBurst: egresslimit.DefaultOrgBurst,
-		UserMaxConcurrent: egresslimit.DefaultUserMaxConcurrent, OrgMaxConcurrent: egresslimit.DefaultOrgMaxConcurrent,
+		UserMaxConcurrent: egresslimit.DefaultUserMaxConcurrent,
 		HostMaxConcurrent: egresslimit.DefaultHostMaxConcurrent, TurnMaxParallel: egresslimit.DefaultTurnMaxParallel,
 	}, opts.Egress, "the proto defaults and the limiter's defaults must agree")
 
@@ -396,7 +394,14 @@ func TestServerWorkerEgressLimits(t *testing.T) {
 	assert.Equal(t, 3, opts.Egress.Replicas)
 	assert.Equal(t, 5, opts.Egress.HostMaxConcurrent)
 
-	for _, name := range names {
+	// Replicas 0 is "unset": the limiter divides by 1. Every other value must
+	// be positive, or a limit would silently be off.
+	t.Setenv("RELIANT_WORKER_EGRESS_REPLICAS", "0")
+	opts, err = load(t)
+	require.NoError(t, err)
+	assert.Equal(t, 0, opts.Egress.Replicas, "0 reaches the limiter, which treats it as 1")
+
+	for _, name := range names[1:] {
 		t.Run(name+"=0", func(t *testing.T) {
 			t.Setenv(name, "0")
 			_, err := load(t)

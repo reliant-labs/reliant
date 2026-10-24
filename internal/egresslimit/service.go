@@ -16,20 +16,17 @@ import (
 
 // Limits are the egress budgets. Zero fields take the defaults.
 type Limits struct {
-	// Replicas is how many replicas share the rate budgets (min 1). Each
-	// replica enforces 1/Replicas of every *PerMinute and *Burst value.
+	// Replicas is how many replicas share the rate budgets. Each replica
+	// enforces 1/Replicas of every *PerMinute and *Burst value. Zero or
+	// negative (unset) means 1: the whole budget per replica.
 	Replicas int
 
 	// UserPerMinute and UserBurst are the fleet-wide per-user token bucket.
 	UserPerMinute int
 	UserBurst     int
-	// OrgPerMinute and OrgBurst are the fleet-wide per-org token bucket.
-	OrgPerMinute int
-	OrgBurst     int
 
-	// UserMaxConcurrent and OrgMaxConcurrent are per-replica in-flight caps.
+	// UserMaxConcurrent is the per-replica in-flight cap per user.
 	UserMaxConcurrent int
-	OrgMaxConcurrent  int
 	// HostMaxConcurrent is the per-replica in-flight cap on one destination
 	// host across all users: it keeps one third party (api.github.com) from
 	// exhausting the node's NAT ports for every tenant.
@@ -43,10 +40,7 @@ type Limits struct {
 const (
 	DefaultUserPerMinute     = 60
 	DefaultUserBurst         = 20
-	DefaultOrgPerMinute      = 300
-	DefaultOrgBurst          = 60
 	DefaultUserMaxConcurrent = 6
-	DefaultOrgMaxConcurrent  = 24
 	DefaultHostMaxConcurrent = 16
 	DefaultTurnMaxParallel   = 4
 
@@ -67,10 +61,7 @@ func (l Limits) WithDefaults() Limits {
 	def(&l.Replicas, 1)
 	def(&l.UserPerMinute, DefaultUserPerMinute)
 	def(&l.UserBurst, DefaultUserBurst)
-	def(&l.OrgPerMinute, DefaultOrgPerMinute)
-	def(&l.OrgBurst, DefaultOrgBurst)
 	def(&l.UserMaxConcurrent, DefaultUserMaxConcurrent)
-	def(&l.OrgMaxConcurrent, DefaultOrgMaxConcurrent)
 	def(&l.HostMaxConcurrent, DefaultHostMaxConcurrent)
 	def(&l.TurnMaxParallel, DefaultTurnMaxParallel)
 	return l
@@ -89,7 +80,7 @@ type wallClock struct{}
 
 func (wallClock) Now() time.Time { return time.Now() }
 
-// bucket is one subject's (user's or org's) rate limiter and in-flight count.
+// bucket is one user's rate limiter and in-flight count.
 type bucket struct {
 	limiter  *rate.Limiter
 	inFlight int
@@ -105,14 +96,13 @@ type service struct {
 	deps  Deps
 	limit Limits
 
-	// userRate and orgRate are the per-replica shares of the fleet budgets.
-	userRate, orgRate   rate.Limit
-	userBurst, orgBurst int
-	idleTTL             time.Duration
+	// userRate and userBurst are this replica's share of the fleet budget.
+	userRate  rate.Limit
+	userBurst int
+	idleTTL   time.Duration
 
 	mu        sync.Mutex
 	users     map[string]*bucket
-	orgs      map[string]*bucket
 	hosts     map[string]int
 	turns     map[string]*turn
 	lastSweep time.Time
@@ -134,11 +124,8 @@ func New(deps Deps) (Service, error) {
 		deps:      deps,
 		limit:     l,
 		userRate:  rate.Limit(float64(l.UserPerMinute) / 60.0 / replicas),
-		orgRate:   rate.Limit(float64(l.OrgPerMinute) / 60.0 / replicas),
 		userBurst: share(l.UserBurst, l.Replicas),
-		orgBurst:  share(l.OrgBurst, l.Replicas),
 		users:     map[string]*bucket{},
-		orgs:      map[string]*bucket{},
 		hosts:     map[string]int{},
 		turns:     map[string]*turn{},
 	}
@@ -147,7 +134,13 @@ func New(deps Deps) (Service, error) {
 	refill := func(burst int, r rate.Limit) time.Duration {
 		return time.Duration(float64(burst) / float64(r) * float64(time.Second))
 	}
-	s.idleTTL = max(minIdleTTL, 2*refill(s.userBurst, s.userRate), 2*refill(s.orgBurst, s.orgRate))
+	s.idleTTL = max(minIdleTTL, 2*refill(s.userBurst, s.userRate))
+	deps.Logger.Info("egress limiter configured",
+		"configured_replicas", deps.Limits.Replicas, "effective_replicas", l.Replicas,
+		"user_per_minute_fleet", l.UserPerMinute, "user_burst_fleet", l.UserBurst,
+		"user_per_minute_this_replica", float64(l.UserPerMinute)/float64(l.Replicas), "user_burst_this_replica", s.userBurst,
+		"user_max_concurrent", l.UserMaxConcurrent, "host_max_concurrent", l.HostMaxConcurrent,
+		"turn_max_parallel", l.TurnMaxParallel)
 	return s, nil
 }
 
@@ -172,34 +165,21 @@ func (s *service) Acquire(ctx context.Context, req Request) (func(), error) {
 		}
 	}
 
-	// 1. Rate: user, then org.
+	// 1. Rate.
 	s.mu.Lock()
 	s.sweepLocked(now)
 	user := s.bucketLocked(s.users, req.UserID, s.userRate, s.userBurst, now)
-	var org *bucket
-	if req.OrgID != "" {
-		org = s.bucketLocked(s.orgs, req.OrgID, s.orgRate, s.orgBurst, now)
-	}
-	for _, step := range []struct {
-		b     *bucket
-		scope string
-	}{{user, ScopeUserRate}, {org, ScopeOrgRate}} {
-		if step.b == nil {
-			continue
+	r := user.limiter.ReserveN(now, 1)
+	if !r.OK() || r.DelayFrom(now) > 0 {
+		retry := r.DelayFrom(now)
+		if !r.OK() {
+			retry = time.Minute
 		}
-		r := step.b.limiter.ReserveN(now, 1)
-		if !r.OK() || r.DelayFrom(now) > 0 {
-			retry := r.DelayFrom(now)
-			if !r.OK() {
-				retry = time.Minute
-			}
-			r.CancelAt(now)
-			s.mu.Unlock()
-			rollback()
-			return nil, s.limited(req, &LimitedError{Scope: step.scope, RetryAfter: retry})
-		}
-		undo = append(undo, func() { r.CancelAt(now) })
+		r.CancelAt(now)
+		s.mu.Unlock()
+		return nil, s.limited(req, &LimitedError{Scope: ScopeUserRate, RetryAfter: retry})
 	}
+	undo = append(undo, func() { r.CancelAt(now) })
 	s.mu.Unlock()
 
 	// 2. Turn slot: the only step that waits.
@@ -211,14 +191,12 @@ func (s *service) Acquire(ctx context.Context, req Request) (func(), error) {
 		return nil, err
 	}
 
-	// 3. In-flight slots: user, org, host. Refused, never queued.
+	// 3. In-flight slots: user, host. Refused, never queued.
 	s.mu.Lock()
 	var lerr *LimitedError
 	switch {
 	case user.inFlight >= s.limit.UserMaxConcurrent:
 		lerr = &LimitedError{Scope: ScopeUserConcurrency, RetryAfter: concurrencyRetryAfter}
-	case org != nil && org.inFlight >= s.limit.OrgMaxConcurrent:
-		lerr = &LimitedError{Scope: ScopeOrgConcurrency, RetryAfter: concurrencyRetryAfter}
 	case req.Host != "" && s.hosts[req.Host] >= s.limit.HostMaxConcurrent:
 		lerr = &LimitedError{Scope: ScopeHostConcurrency, RetryAfter: concurrencyRetryAfter, Host: req.Host}
 	}
@@ -230,10 +208,6 @@ func (s *service) Acquire(ctx context.Context, req Request) (func(), error) {
 	}
 	user.inFlight++
 	user.lastSeen = now
-	if org != nil {
-		org.inFlight++
-		org.lastSeen = now
-	}
 	if req.Host != "" {
 		s.hosts[req.Host]++
 	}
@@ -244,9 +218,6 @@ func (s *service) Acquire(ctx context.Context, req Request) (func(), error) {
 		once.Do(func() {
 			s.mu.Lock()
 			user.inFlight--
-			if org != nil {
-				org.inFlight--
-			}
 			if req.Host != "" {
 				if s.hosts[req.Host]--; s.hosts[req.Host] <= 0 {
 					delete(s.hosts, req.Host)
@@ -261,7 +232,7 @@ func (s *service) Acquire(ctx context.Context, req Request) (func(), error) {
 func (s *service) limited(req Request, e *LimitedError) error {
 	observability.EgressLimitedTotal.WithLabelValues(req.Tool, e.Scope).Inc()
 	s.deps.Logger.Warn("egress call rate limited",
-		"tool", req.Tool, "scope", e.Scope, "user_id", req.UserID, "org_id", req.OrgID,
+		"tool", req.Tool, "scope", e.Scope, "user_id", req.UserID,
 		"host", req.Host, "retry_after", e.RetryAfter)
 	return e
 }
@@ -284,11 +255,9 @@ func (s *service) sweepLocked(now time.Time) {
 		return
 	}
 	s.lastSweep = now
-	for _, m := range []map[string]*bucket{s.users, s.orgs} {
-		for k, b := range m {
-			if b.inFlight == 0 && now.Sub(b.lastSeen) > s.idleTTL {
-				delete(m, k)
-			}
+	for k, b := range s.users {
+		if b.inFlight == 0 && now.Sub(b.lastSeen) > s.idleTTL {
+			delete(s.users, k)
 		}
 	}
 }

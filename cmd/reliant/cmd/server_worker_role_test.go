@@ -113,10 +113,7 @@ func loadServerWorkerConfig(cmd *cobra.Command, opts *workerOptions) error {
 		Replicas:          int(worker.GetEgressReplicas()),
 		UserPerMinute:     int(worker.GetEgressUserPerMinute()),
 		UserBurst:         int(worker.GetEgressUserBurst()),
-		OrgPerMinute:      int(worker.GetEgressOrgPerMinute()),
-		OrgBurst:          int(worker.GetEgressOrgBurst()),
 		UserMaxConcurrent: int(worker.GetEgressUserMaxConcurrent()),
-		OrgMaxConcurrent:  int(worker.GetEgressOrgMaxConcurrent()),
 		HostMaxConcurrent: int(worker.GetEgressHostMaxConcurrent()),
 		TurnMaxParallel:   int(worker.GetEgressTurnMaxParallel()),
 	}
