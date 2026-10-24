@@ -992,24 +992,26 @@ WHEN TO USE THIS TOOL:
 HOW TO USE:
 - Provide the URL to fetch content from
 - Specify the desired output format (text, markdown, or html)
-- Optionally set a timeout for the request
+- Optionally set a timeout for the request (default 30s, hard cap 60s)
 
 FEATURES:
 - Automatic content extraction using Mozilla Readability (strips nav, ads, footers)
 - Supports three output formats: text, markdown, and html
-- Automatically handles HTTP redirects
+- Follows up to 5 HTTP redirects, http/https only
 - Detects likely JavaScript-rendered pages and warns you
 - Sets reasonable timeouts to prevent hanging
 
 PARAMETERS:
-- max_size: Maximum bytes to fetch (default: 16000, ~16KB)
-  Prevents downloading huge files that could overwhelm context
+- max_size: Maximum bytes to read from the response (default: 16000, ~16KB; hard cap: 1048576, 1 MiB).
+  Values above the cap are lowered to it. When the response is longer than the limit it is
+  cut off and a "[Content truncated ...]" note is appended; the call still succeeds. The limit
+  applies to the decompressed body.
 
 IMPORTANT LIMITATIONS:
 - Cannot render JavaScript. Single-page apps (SPAs) will return little or no content.
   The response metadata will include possible_js_rendered=true when this is detected.
   For JS-heavy sites, consider using browser tools instead.
-- Default maximum response size is 16KB (use max_size to adjust)
+- Default maximum response size is 16KB (use max_size to raise it, up to 1 MiB)
 - Only supports HTTP and HTTPS protocols
 - Cannot handle authentication or cookies
 - Some websites may block automated requests
@@ -1021,7 +1023,8 @@ TIPS FOR BETTER RESULTS:
 - Use text or markdown format for documentation (html returns raw markup with all chrome)
 - If the response says possible_js_rendered=true, the page needs JavaScript to render.
   Try finding an alternative URL, a raw content source, or use browser tools.
-- Adjust max_size for larger documents (but consider context limits)
+- Adjust max_size for larger documents, up to the 1 MiB cap (but consider context limits)
+- Pages larger than 1 MiB are always truncated; look for a smaller raw/API URL instead
 
 RESPONSE METADATA:
 - content_length: Size of the extracted content
