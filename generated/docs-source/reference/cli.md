@@ -4029,7 +4029,7 @@ records this checkout's clean tree and this forge version, covers every
 artifact the env declares, and every image it pins still resolves in its
 registry, nothing is built or cut: forge prints "reusing release <v>" and
 deploys it. Otherwise it prints "cutting new release <v> because …" before
-building. A dirty checkout, another forge version, a -D option, an artifact the
+building. A dirty checkout, another forge version, an artifact the
 release lacks, or an image the registry no longer holds each cut a new one. A nested git checkout inside the
 project (a parked worktree, a cloned repo) is another repository, not a change
 to this one, and does not make the checkout dirty; the decision line names the
@@ -4304,7 +4304,7 @@ reliant forge env deploy <environment> [version] [flags]
 | `--no-wait` | `bool` | - | Record and apply, but do NOT wait for health. Gate on it later with 'forge env status <env> --wait' |
 | `--note` | `string` | - | Why — recorded on the ledger entry (most valuable on a deploy that moves the env BEHIND) |
 | `--offline-ledger` | `bool` | - | Break-glass for a control plane that is down: deploy the env's cached CURRENT release by its recorded digests (nothing is built, the ledger is not contacted) and queue the promotion record, replayed idempotently on the next successful ledger contact. Refuses a hosted tier and a hub-converged env, and a move to any other release. Prints the cache's age; the cache is refreshed by every successful ledger read or write |
-| `--option`, `-D` | `stringArray` | `[]` | Set a render option the env's KCL declares, as name=value (repeatable). Relayed to KCL verbatim — forge does not interpret the value. List an env's options with 'forge env options <env>'. |
+| `--option`, `-D` | `stringArray` | `[]` | REFUSED on deploy: a deploy renders from the repo alone, and a release records no render options. Use it on 'forge env up' or 'forge env build', or declare the value in the env's KCL. |
 | `--plan` | `bool` | - | Compute and print the full change set WITHOUT writing the binding or applying anything |
 | `--plan-only` | `bool` | - | Build, push and cut as usual, print the plan, and STOP without writing the promotion (exit 0). The first stage of a two-stage pipeline |
 | `--prune` | `bool` | - | Delete forge-managed Deployments in the namespace that the current KCL render no longer produces (opt-in) |
