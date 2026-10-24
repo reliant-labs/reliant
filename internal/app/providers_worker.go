@@ -582,19 +582,9 @@ type TemporalWorkerDeps struct {
 //forge:root-only worker
 func NewTemporalWorker(d TemporalWorkerDeps) (*workersetup.Worker, error) {
 	creds := d.Credentials.Source
-	// Hosted actions have a separate fixed-node execution path. They are never
-	// installed in WorkerIntegrationCredentials or the tool factory.
-	cp := ControlPlaneEndpoint(d.ControlPlane)
-	var hostedActions handlers.HostedActionExecutor
-	if cp.URL != "" && cp.InternalServiceSecret != "" {
-		client, err := hosteduse.NewInstrumented(hosteduse.Deps{
-			Store: d.DB, BaseURL: cp.URL,
-			Sign: func() (string, error) { return auth.SignInternalServiceToken(cp.InternalServiceSecret) },
-		})
-		if err != nil {
-			return nil, fmt.Errorf("hosted HTTP execution: %w", err)
-		}
-		hostedActions = client
+	hostedActions, err := HostedActions(d.DB, ControlPlaneEndpoint(d.ControlPlane))
+	if err != nil {
+		return nil, err
 	}
 	worker, _, err := workersetup.NewWorker(&workersetup.Config{
 		AccountLimits:          d.Recorder.Recorder,
@@ -620,6 +610,26 @@ func NewTemporalWorker(d TemporalWorkerDeps) (*workersetup.Worker, error) {
 		return nil, fmt.Errorf("failed to create worker: %w", err)
 	}
 	return worker, nil
+}
+
+// HostedActions is the worker's fixed-node hosted HTTP executor: nil (hosted
+// actions unavailable) without a control plane and its internal-service
+// secret. It is never installed in WorkerIntegrationCredentials or the tool
+// factory. A control-plane URL that breaks the transport rule
+// (cptransport.Check) stops the worker at build.
+func HostedActions(store hosteduse.Store, cp controlplane.Endpoint) (handlers.HostedActionExecutor, error) {
+	if cp.URL == "" || cp.InternalServiceSecret == "" {
+		return nil, nil
+	}
+	secret := cp.InternalServiceSecret
+	client, err := hosteduse.NewInstrumented(hosteduse.Deps{
+		Store: store, BaseURL: cp.URL,
+		Sign: func() (string, error) { return auth.SignInternalServiceToken(secret) },
+	})
+	if err != nil {
+		return nil, fmt.Errorf("hosted HTTP execution: %w", err)
+	}
+	return client, nil
 }
 
 // WorkflowEventRelayDeps is the outbox and the workflows it dispatches to.

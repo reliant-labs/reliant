@@ -5,8 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -16,6 +16,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/observe"
 	"go.temporal.io/sdk/activity"
 
+	"github.com/reliant-labs/reliant/internal/controlplane/cptransport"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/pkg/hostedhttp"
 )
@@ -32,17 +33,17 @@ type Client struct {
 	http     *http.Client
 }
 
-// New constructs a fixed-action client. HTTPS is mandatory outside loopback
-// development. Auth tokens are minted at use; missing configuration fails closed.
+// New constructs a fixed-action client. The controller URL obeys the
+// control-plane transport rule (cptransport.Check): HTTPS, or plaintext only to
+// loopback or an in-cluster Service. Auth tokens are minted at use; missing
+// configuration fails closed.
 func New(d Deps) (Service, error) {
 	u, err := url.Parse(d.BaseURL)
 	if err != nil || u.Host == "" || u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || u.Opaque != "" || (u.Path != "" && u.Path != "/") {
 		return nil, errors.New("hosted HTTP controller URL is invalid")
 	}
-	ip := net.ParseIP(u.Hostname())
-	loopbackHTTP := u.Scheme == "http" && (u.Hostname() == "localhost" || ip != nil && ip.IsLoopback())
-	if u.Scheme != "https" && !loopbackHTTP {
-		return nil, errors.New("hosted HTTP controller requires HTTPS")
+	if err := cptransport.Check(u); err != nil {
+		return nil, fmt.Errorf("hosted HTTP controller: %w", err)
 	}
 	if d.Store == nil || d.Sign == nil {
 		return nil, errors.New("hosted HTTP store and signer are required")
